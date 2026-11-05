@@ -36,7 +36,7 @@ from blizzard.hub.domain.observability.tracing.facts import (
     TracedRouteRelease,
 )
 from blizzard.hub.domain.observability.tracing.steps import StepKind, identify_steps
-from tests import trace_fixtures as fx
+from tests.support import trace_fixtures as fx
 
 SENTINEL = "SENTINEL-do-not-leak"
 

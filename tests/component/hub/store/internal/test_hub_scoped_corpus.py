@@ -28,8 +28,8 @@ from blizzard.hub.store.internal.egress_store import EgressStore
 from blizzard.hub.store.internal.fact_families import Projection, tables
 from blizzard.hub.store.internal.hub_scoped_reads import build_hub_scoped_reads
 from blizzard.hub.tenancy import HUB_SCOPED_OPTION, TenantId
-from tests.hub_event_rows import hub_events_of
-from tests.support import (
+from tests.support.hub_event_rows import hub_events_of
+from tests.support.scaffolding import (
     close_tenant,
     count_queries,
     default_project,

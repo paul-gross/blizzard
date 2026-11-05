@@ -40,8 +40,8 @@ from blizzard.hub.store.internal.chunk_terminal_predicates import maybe_live, se
 from blizzard.hub.store.locking import lock_chunk_row
 from blizzard.hub.store.scoped import ScopedConnections
 from blizzard.hub.tenancy import StoreScope, TenantId
-from tests.support import HubHarness, hub_store_connections, stamp
-from tests.support_chunk_world import every_branch, hub_with_graph
+from tests.support.chunk_world import every_branch, hub_with_graph
+from tests.support.scaffolding import HubHarness, hub_store_connections, stamp
 
 _EPOCH = 99
 

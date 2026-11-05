@@ -11,8 +11,8 @@ from pathlib import Path
 
 from fastapi.testclient import TestClient
 
-from tests.oauth_login_double import ADA, FakeOAuthProvider, known_ada, state_from_redirect
-from tests.support import HubHarness, build_hub
+from tests.support.oauth_login_double import ADA, FakeOAuthProvider, known_ada, state_from_redirect
+from tests.support.scaffolding import HubHarness, build_hub
 
 _PROXY_IP = "10.0.0.4"
 _DIRECT_IP = "203.0.113.9"

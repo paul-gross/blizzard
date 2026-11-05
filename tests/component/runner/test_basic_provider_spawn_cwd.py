@@ -19,9 +19,9 @@ from blizzard.runner.harness.spawn_cwd import SpawnCwd
 from blizzard.runner.hub.identity import RunnerIdentity
 from blizzard.runner.leases.model import NewLease
 from blizzard.runner.loop_wiring import LoopWiring
-from tests.host_files import one_workspace
-from tests.runner_client import runner_client, runner_seams
-from tests.runner_fakes import FIXTURE_RUNNER_ID, FakeHub, make_store, migrated_store_at
+from tests.support.host_files import one_workspace
+from tests.support.runner_client import runner_client, runner_seams
+from tests.support.runner_fakes import FIXTURE_RUNNER_ID, FakeHub, make_store, migrated_store_at
 
 _NOW = datetime(2026, 7, 17, 12, 0, 0, tzinfo=UTC)
 

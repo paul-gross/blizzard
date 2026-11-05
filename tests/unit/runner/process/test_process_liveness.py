@@ -17,7 +17,7 @@ from blizzard.runner.process.internal.linux_process_probe import (
     _read_stat,  # pyright: ignore[reportPrivateUsage]  # the zombie read has no public accessor; these tests pin it
 )
 from blizzard.runner.process.owned_process import interrupt_owned_process, kill_owned_process
-from tests.runner_fakes import FakeProbe
+from tests.support.runner_fakes import FakeProbe
 
 _START = "start-token"
 

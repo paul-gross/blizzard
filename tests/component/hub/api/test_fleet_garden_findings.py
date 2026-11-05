@@ -17,7 +17,7 @@ from blizzard.hub.domain.garden.run_context import RunContext
 from blizzard.hub.store import schema as s
 from blizzard.hub.store.internal.finding_store import FindingStore
 from blizzard.hub.store.internal.run_context_store import RunContextStore
-from tests.support import (
+from tests.support.scaffolding import (
     HubHarness,
     build_hub,
     default_project,

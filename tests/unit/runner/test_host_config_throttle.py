@@ -19,8 +19,8 @@ from blizzard.runner.throttle.settings import (
     ThrottleSettings,
     UtilizationSettings,
 )
-from tests.config_inputs import load_host_config
-from tests.host_files import write_minimal_host
+from tests.support.config_inputs import load_host_config
+from tests.support.host_files import write_minimal_host
 
 _TOKEN = {"BZ_HUB_TOKEN_RUNNER_LOCAL": "tok"}
 _SUBSCRIPTION = '[[subscription]]\nslug = "plan"\nname = "Plan"\nprovider = "{provider}"\n'

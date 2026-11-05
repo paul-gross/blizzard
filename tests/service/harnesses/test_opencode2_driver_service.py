@@ -39,9 +39,9 @@ from blizzard.runner.harness.opencode_v2.shapes import parse_message, parse_sess
 from blizzard.runner.harness.opencode_v2.transport import UrllibServiceTransport
 from blizzard.runner.process.child_env import AllowlistedEnv
 from blizzard.runner.process.internal.linux_process_probe import LinuxProcessProbe
-from tests.mock_fleet_support import require_mock_fleet, service_gate
-from tests.runner_fakes import make_envelope
-from tests.support_child_launch import CHILDREN, version_probe
+from tests.support.child_launch import CHILDREN, version_probe
+from tests.support.mock_fleet import require_mock_fleet, service_gate
+from tests.support.runner_fakes import make_envelope
 
 pytestmark = [pytest.mark.service, service_gate]
 

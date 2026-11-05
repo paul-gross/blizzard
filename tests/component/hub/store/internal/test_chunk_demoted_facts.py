@@ -16,7 +16,7 @@ from blizzard.hub.domain.chunk.model import Chunk
 from blizzard.hub.domain.chunk.ports.queue import BACKLOG_RANKING_LOCK
 from blizzard.hub.domain.chunk.ports.stores import ChunkStores
 from blizzard.hub.store import schema as s
-from tests.support import chunk_stores, migrate_to, ranking_unit, seed_chunk_record, seed_graph, stamp
+from tests.support.scaffolding import chunk_stores, migrate_to, ranking_unit, seed_chunk_record, seed_graph, stamp
 
 _T0 = datetime(2026, 1, 1, tzinfo=UTC)
 

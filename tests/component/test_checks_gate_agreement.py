@@ -19,7 +19,7 @@ from blizzard.runner.leases.model import NewLease
 from blizzard.runner.lifecycle.judgement.check_runner import CheckOutcome
 from blizzard.runner.loop.steps import Advance, Pull
 from blizzard.runner.node_steps.submissions import ApplyReply
-from tests.runner_fakes import (
+from tests.support.runner_fakes import (
     FakeCheckRunner,
     FakeHarness,
     FakeHub,
@@ -29,7 +29,7 @@ from tests.runner_fakes import (
     make_envelope,
     make_store,
 )
-from tests.support import build_hub, make_ready, pointer_token, report_lease
+from tests.support.scaffolding import build_hub, make_ready, pointer_token, report_lease
 
 _POINTER = {"source": "default", "ref": "9"}
 _CHOICES = [("pass", "complete and green"), ("fail", "incomplete")]

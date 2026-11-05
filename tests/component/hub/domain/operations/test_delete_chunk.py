@@ -26,7 +26,7 @@ from blizzard.hub.domain.runners.route import Route
 from blizzard.hub.store.internal.chunk_rows import record_grouped_row_conn
 from blizzard.hub.store.internal.work_item_store import WorkItemStore
 from blizzard.hub.store.transactions import HubTransactions
-from tests.support import (
+from tests.support.scaffolding import (
     build_hub,
     chunk_stores,
     hub_store_connections,

@@ -18,7 +18,7 @@ from blizzard.hub.store.internal.finding_store import FindingStore
 from blizzard.hub.store.internal.garden_proposal_closure_store import insert_garden_proposal_closure_row
 from blizzard.hub.store.internal.garden_proposal_store import GardenProposalStore
 from blizzard.hub.store.internal.routine_store import RoutineStore
-from tests.support import HubHarness, build_hub, default_project, hub_store_connections, stamp
+from tests.support.scaffolding import HubHarness, build_hub, default_project, hub_store_connections, stamp
 
 _CTX = ChangeContext(actor="operator", door=Door.API)
 

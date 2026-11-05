@@ -37,8 +37,8 @@ from blizzard.hub.egress.writer import (
     ManifestCommitted,
     PlacedFile,
 )
-from tests.egress_recipes import LOAD_NDJSON, LOAD_PARQUET, load
-from tests.egress_world import PASS, SCHEMA, batch, row
+from tests.support.egress_recipes import LOAD_NDJSON, LOAD_PARQUET, load
+from tests.support.egress_world import PASS, SCHEMA, batch, row
 
 SETTINGS = EgressWriterSettings(max_rows_per_file=2, min_free_bytes=0)
 type EgressFormat = Literal["ndjson", "parquet"]

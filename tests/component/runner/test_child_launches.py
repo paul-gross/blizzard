@@ -15,7 +15,7 @@ from blizzard.runner.environments.internal.git import SubprocessEnvGit
 from blizzard.runner.environments.internal.winter_cli import SubprocessWinterCli
 from blizzard.runner.harness.internal.version_probe import VersionProbe
 from blizzard.runner.lifecycle.judgement.internal.subprocess_check_runner import SubprocessCheckRunner
-from tests.support_child_launch import CHILDREN, tool_env
+from tests.support.child_launch import CHILDREN, tool_env
 
 _TOKEN_VARIABLE = hub_token_variable("r-launch")
 

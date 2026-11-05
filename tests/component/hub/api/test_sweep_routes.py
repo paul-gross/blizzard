@@ -18,7 +18,7 @@ from blizzard.hub.domain.chunk.ports.stores import ChunkStores
 from blizzard.hub.domain.sweeps.names import SweepMode, SweepModes, SweepName
 from blizzard.hub.domain.work_items.closure import CloseIntentDrainer
 from blizzard.hub.tenancy import TenantId
-from tests.support import (
+from tests.support.scaffolding import (
     HubHarness,
     build_hub,
     default_tenant,
@@ -28,7 +28,7 @@ from tests.support import (
     seed_session,
     seed_user,
 )
-from tests.tenant_sweeps import close_events, landed_hub_ref
+from tests.support.tenant_sweeps import close_events, landed_hub_ref
 
 _TENANT_PASS = "/api/sweeps/{}/passes"
 _HUB_PASS = "/api/admin/sweeps/{}/passes"

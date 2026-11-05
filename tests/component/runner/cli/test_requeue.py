@@ -13,9 +13,9 @@ from pathlib import Path
 from blizzard.runner.cli import runner as runner_group
 from blizzard.runner.harness.identity import CLAUDE_CODE_HARNESS_ID, SessionReference
 from blizzard.runner.leases.model import NewLease
-from tests.runner_cli_home import init_runner_home, registered_store, serve_local_api
-from tests.runner_fakes import SqlAlchemyRunnerStore
-from tests.worker_http import bind_local_only
+from tests.support.runner_cli_home import init_runner_home, registered_store, serve_local_api
+from tests.support.runner_fakes import SqlAlchemyRunnerStore
+from tests.support.worker_http import bind_local_only
 
 _NOW = datetime(2026, 7, 17, 12, 0, 0, tzinfo=UTC)
 

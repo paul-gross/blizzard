@@ -14,8 +14,8 @@ from blizzard.foundation.trace_export.config import TracingConfig
 from blizzard.hub.domain.observability.tracing.facts import StepFacts, TracedTransition
 from blizzard.hub.domain.observability.tracing.replay import ReplayUnavailable, ReplayWindowRefused, TraceReplay
 from blizzard.hub.domain.observability.tracing.repository import ClosingCandidates, IReadTraceSteps
-from tests.support import InMemoryTraceExporter
-from tests.trace_fixtures import make_facts, runner_epoch
+from tests.support.scaffolding import InMemoryTraceExporter
+from tests.support.trace_fixtures import make_facts, runner_epoch
 
 _T0 = datetime(2026, 7, 13, tzinfo=UTC)
 _CONFIG = TracingConfig(settle_seconds=0, sweep_seconds=60, max_lag_seconds=3600, replay_max_window=3600)

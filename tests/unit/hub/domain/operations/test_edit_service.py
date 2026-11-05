@@ -43,7 +43,7 @@ from blizzard.hub.domain.operations.edit import (
     MigrationTargetIsCurrentPin,
     is_graph_editable,
 )
-from tests.support import make_graph
+from tests.support.scaffolding import make_graph
 
 _T0 = datetime(2026, 1, 1, tzinfo=UTC)
 _CHUNK = Chunk(chunk_id="chk_1", graph_id="gr_1", work_refs=[], minted_at=_T0)

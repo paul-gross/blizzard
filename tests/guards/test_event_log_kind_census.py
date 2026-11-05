@@ -11,10 +11,10 @@ import pytest
 from blizzard.foundation.event_log import EVENT_LOG_SEVERITY, EventLogKind, EventLogSeverity
 from blizzard.hub.domain.chunk.model import PROJECTED_EVENT_KINDS
 from blizzard.hub.domain.observability.hub_events import HUB_EVENT_SEVERITY, HubEventKind
-from tests.event_log_kind_census import EVENT_LOG_KIND_CENSUS as CENSUS
-from tests.event_log_kind_census import HUB_EVENT_KIND_CENSUS as HUB_CENSUS
-from tests.event_log_kind_census import HubOnly, Projected, Recorded
-from tests.repo_files import repo_root
+from tests.support.event_log_kind_census import EVENT_LOG_KIND_CENSUS as CENSUS
+from tests.support.event_log_kind_census import HUB_EVENT_KIND_CENSUS as HUB_CENSUS
+from tests.support.event_log_kind_census import HubOnly, Projected, Recorded
+from tests.support.repo_files import repo_root
 
 _REPO_ROOT = repo_root()
 _OPERATIONS_MD = _REPO_ROOT.parent / "blizzard-context" / "domain" / "operations.md"

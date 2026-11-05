@@ -17,8 +17,8 @@ from blizzard.runner.composition import HostProcess, build_host_process, build_r
 from blizzard.runner.config import RunnerConfig
 from blizzard.runner.host_config import BuiltRunner, ResolvedToken
 from blizzard.runner.host_layout import HostLayout
-from tests.host_files import host_config_of
-from tests.runner_fakes import migrated_store_at
+from tests.support.host_files import host_config_of
+from tests.support.runner_fakes import migrated_store_at
 
 pytestmark = pytest.mark.component
 

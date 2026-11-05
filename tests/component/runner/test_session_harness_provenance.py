@@ -11,7 +11,7 @@ from blizzard.runner.harness.fingerprint import PreambleFingerprint
 from blizzard.runner.harness.identity import CLAUDE_CODE_HARNESS_ID, SessionReference
 from blizzard.runner.harness.usage import UsageSample
 from blizzard.runner.leases.model import NewLease
-from tests.runner_fakes import make_store, record_usage
+from tests.support.runner_fakes import make_store, record_usage
 
 _NOW = datetime(2026, 9, 11, 12, 0, tzinfo=UTC)
 

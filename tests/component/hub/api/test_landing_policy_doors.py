@@ -17,7 +17,7 @@ from sqlalchemy import func, select
 from blizzard.foundation.landing_policy import LandingPolicy
 from blizzard.hub.domain.config.landing_policies import POLICY_CAPABILITIES
 from blizzard.hub.store.schema import project_repository_positions
-from tests.support import HubHarness, build_hub, default_tenant
+from tests.support.scaffolding import HubHarness, build_hub, default_tenant
 
 
 @pytest.fixture

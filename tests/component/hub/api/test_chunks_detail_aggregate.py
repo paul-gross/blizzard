@@ -18,7 +18,7 @@ from blizzard.hub.domain.chunk.model import ChunkVerb, WorkRef, decide_close_enq
 from blizzard.hub.domain.chunk.ports.artifacts import IWriteChunkArtifactsRepository
 from blizzard.hub.domain.chunk.ports.fence import EpochAdmission
 from blizzard.hub.domain.config.forges import ConfiguredForge, ForgeId
-from tests.support import (
+from tests.support.scaffolding import (
     FakeWorkSource,
     HubHarness,
     RepositorySeed,

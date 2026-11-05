@@ -9,9 +9,9 @@ from pathlib import Path
 
 from blizzard.runner.harness.opencode.plugin import PLUGIN_DIRNAME, PLUGIN_FILENAME, render_plugin_source
 from blizzard.runner.harness.opencode.shapes import parse_worker_config
-from tests.config_inputs import host_runtime_of, init_host
-from tests.harness_sections import opencode, with_opencode
-from tests.host_files import init_runner_environment, load_runner_config, write_host_file
+from tests.support.config_inputs import host_runtime_of, init_host
+from tests.support.harness_sections import opencode, with_opencode
+from tests.support.host_files import init_runner_environment, load_runner_config, write_host_file
 
 
 def test_init_scaffolds_the_plugin_and_references_it_from_the_worker_config(tmp_path: Path) -> None:

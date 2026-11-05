@@ -22,7 +22,7 @@ from blizzard.hub.api.auth_session import TENANT_HEADER
 from blizzard.hub.api.events import RESERVED_COMMENT
 from blizzard.hub.auth.hashing import SessionId
 from blizzard.hub.auth.models import User
-from tests.support import HubHarness, build_hub, default_tenant, parse_sse_frames, seed_session, seed_user
+from tests.support.scaffolding import HubHarness, build_hub, default_tenant, parse_sse_frames, seed_session, seed_user
 
 
 def _until(condition: Callable[[], bool], *, within: float = 5.0) -> None:

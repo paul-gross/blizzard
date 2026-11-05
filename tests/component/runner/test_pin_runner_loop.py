@@ -14,7 +14,14 @@ from blizzard.foundation.node_steps import ApplyOutcome
 from blizzard.runner.harness.adapter import ResumeHandle, WorkerHandle, WorkerPreamble
 from blizzard.runner.loop.steps import Advance
 from blizzard.runner.node_steps.submissions import ApplyReply
-from tests.runner_fakes import (
+from tests.support.pin_runner_loop import (
+    _CHOICES,  # pyright: ignore[reportPrivateUsage]
+    _HANDLE,  # pyright: ignore[reportPrivateUsage]
+    _NOW,  # pyright: ignore[reportPrivateUsage]
+    _seed_running_lease,  # pyright: ignore[reportPrivateUsage]
+    _store,  # pyright: ignore[reportPrivateUsage]
+)
+from tests.support.runner_fakes import (
     FakeHarness,
     FakeHub,
     FakeProbe,
@@ -23,13 +30,6 @@ from tests.runner_fakes import (
     SqlAlchemyRunnerStore,
     make_context,
     make_envelope,
-)
-from tests.support_pin_runner_loop import (
-    _CHOICES,  # pyright: ignore[reportPrivateUsage]
-    _HANDLE,  # pyright: ignore[reportPrivateUsage]
-    _NOW,  # pyright: ignore[reportPrivateUsage]
-    _seed_running_lease,  # pyright: ignore[reportPrivateUsage]
-    _store,  # pyright: ignore[reportPrivateUsage]
 )
 
 

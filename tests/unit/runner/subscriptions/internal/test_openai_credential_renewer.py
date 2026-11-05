@@ -17,7 +17,7 @@ from blizzard.runner.process.child_env import ChildEnv
 from blizzard.runner.subscriptions.credential_renewer import RenewalFailureReason, RenewalOutcomeKind
 from blizzard.runner.subscriptions.internal.openai_credential_renewer import OpenAICredentialRenewer
 from blizzard.runner.subscriptions.one_shot_process import OneShotResult
-from tests.support_child_launch import tool_env
+from tests.support.child_launch import tool_env
 
 _NOW = datetime(2026, 9, 22, 12, 0, 0, tzinfo=UTC)
 

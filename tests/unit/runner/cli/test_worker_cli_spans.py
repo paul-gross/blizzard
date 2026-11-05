@@ -21,7 +21,7 @@ from blizzard.foundation import cli_spans
 from blizzard.foundation.span_clock import Clock
 from blizzard.foundation.trace_ids import DerivedContext, format_traceparent, parse_traceparent
 from blizzard.runner.cli import runner as runner_group
-from tests.worker_http import Bound, bind_transport
+from tests.support.worker_http import Bound, bind_transport
 
 _TRACE = "0af7651916cd43dd8448eb211c80319c"
 _PARENT_SPAN = "b7ad6b7169203331"
@@ -282,7 +282,7 @@ def test_the_module_set_after_import_is_the_same_with_tracing_on_and_off() -> No
 
 
 def test_an_untraced_command_invocation_never_loads_the_span_emitter() -> None:
-    from tests.loaded_modules import loaded_after_running
+    from tests.support.loaded_modules import loaded_after_running
 
     for argv in (["runner", "chunk", "--help"], ["hub", "chunk", "--help"]):
         loaded = loaded_after_running(argv, {"BLIZZARD_TRACEPARENT": "", "BLIZZARD_RUNNER_URL": ""})

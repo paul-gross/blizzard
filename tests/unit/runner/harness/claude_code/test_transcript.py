@@ -20,7 +20,7 @@ from blizzard.runner.harness.claude_code import transcript as source_module
 from blizzard.runner.harness.claude_code.normalizer import NORMALIZER_VERSION
 from blizzard.runner.harness.claude_code.transcript import ClaudeCodeTranscriptSource
 from blizzard.runner.harness.transcript import TranscriptErrorFactory, TranscriptPosition
-from tests import transcript_fixtures as fx
+from tests.support import transcript_fixtures as fx
 
 
 def _error_factory() -> TranscriptErrorFactory:

@@ -13,7 +13,7 @@ from blizzard.runner.cli.control import (
     _UnenforceableGate,  # pyright: ignore[reportPrivateUsage]  # the flag wire shape has no public name
     gate_decision_lines,
 )
-from tests.runner_cli_home import (
+from tests.support.runner_cli_home import (
     init_runner_home,
 )
 

@@ -12,7 +12,7 @@ from blizzard.runner.harness.adapter import WorkerHandle
 from blizzard.runner.harness.identity import CLAUDE_CODE_HARNESS_ID, SessionReference
 from blizzard.runner.leases.model import NewLease
 from blizzard.runner.loop.steps import Resume, ResumeIntents
-from tests.runner_fakes import (
+from tests.support.runner_fakes import (
     FakeHarness,
     FakeHub,
     FakeProbe,
@@ -22,7 +22,7 @@ from tests.runner_fakes import (
     make_store,
     make_stores,
 )
-from tests.runner_resume_world import running_chunk
+from tests.support.runner_resume_world import running_chunk
 
 _NOW = datetime(2026, 7, 13, 12, 0, 0, tzinfo=UTC)
 _HANDLE = WorkerHandle(session_id="sess-a", pid=100, process_start_time="start-100", pgid=100)

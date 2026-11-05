@@ -30,7 +30,7 @@ from blizzard.hub.store.tenant_guard import (
     install_tenant_guard,
 )
 from blizzard.hub.tenancy import HUB_SCOPED_OPTION, StoreScope, TenantId
-from tests.support import close_tenant, default_tenant, migrate_to
+from tests.support.scaffolding import close_tenant, default_tenant, migrate_to
 
 _AT = datetime(2026, 10, 8, tzinfo=UTC)
 _SECOND = TenantId("ten_SECOND")

@@ -22,9 +22,9 @@ from blizzard.runner.subscriptions.credential_renewer import RenewalOutcomeKind
 from blizzard.runner.subscriptions.internal.openai_credential_renewer import OpenAICredentialRenewer
 from blizzard.runner.subscriptions.internal.subprocess_one_shot_process import SubprocessOneShotProcess
 from blizzard.runner.usage.credential_renewal import CredentialRenewalPass, RenewableSubscription
-from tests.mock_fleet_support import require_codex_app_server_surface, require_mock_fleet, service_gate
-from tests.runner_fakes import make_store
-from tests.support_child_launch import CHILDREN, tool_env
+from tests.support.child_launch import CHILDREN, tool_env
+from tests.support.mock_fleet import require_codex_app_server_surface, require_mock_fleet, service_gate
+from tests.support.runner_fakes import make_store
 
 pytestmark = [pytest.mark.service, service_gate]
 

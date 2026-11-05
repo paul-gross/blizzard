@@ -14,7 +14,14 @@ from blizzard.foundation.garden_proposals import GardenProposalOrigin
 from blizzard.hub.domain.projects.model import ProjectId
 from blizzard.hub.store import schema as s
 from blizzard.hub.store.internal.garden_proposal_store import GardenProposalStore
-from tests.support import HubHarness, build_hub, default_project, default_tenant, hub_store_connections, seed_project
+from tests.support.scaffolding import (
+    HubHarness,
+    build_hub,
+    default_project,
+    default_tenant,
+    hub_store_connections,
+    seed_project,
+)
 
 _NOW = datetime(2026, 7, 16, 12, 0, 0, tzinfo=UTC)
 

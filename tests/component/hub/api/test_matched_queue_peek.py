@@ -12,8 +12,8 @@ from pathlib import Path
 import pytest
 from fastapi.testclient import TestClient
 
-from tests.hub_request_auth import bearer, enroll_runner, register_runner
-from tests.support import HubHarness, build_hub, count_queries
+from tests.support.hub_request_auth import bearer, enroll_runner, register_runner
+from tests.support.scaffolding import HubHarness, build_hub, count_queries
 
 
 def _token(hub: HubHarness, runner_id: str = "runner-a", workspace_id: str = "ws-a") -> str:

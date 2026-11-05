@@ -22,7 +22,7 @@ from blizzard.hub.domain.chunk.model import ChunkFacts, MigrationFact, Transitio
 from blizzard.hub.domain.graph.authoring import Reification
 from blizzard.hub.domain.graph.model import Graph, GraphDoc, GraphSummary
 from blizzard.hub.store import schema as s
-from tests.support import build_hub, stamp
+from tests.support.scaffolding import build_hub, stamp
 
 _T0 = datetime(2026, 1, 1, tzinfo=UTC)
 

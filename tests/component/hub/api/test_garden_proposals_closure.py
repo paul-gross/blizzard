@@ -18,7 +18,14 @@ from blizzard.hub.domain.garden.proposals.closure import compose_minted_body
 from blizzard.hub.store import schema as s
 from blizzard.hub.store.internal.finding_store import FindingStore
 from blizzard.hub.store.internal.garden_proposal_store import GardenProposalStore
-from tests.support import HubHarness, build_hub, default_project, emitted_events, hub_store_connections, stamp
+from tests.support.scaffolding import (
+    HubHarness,
+    build_hub,
+    default_project,
+    emitted_events,
+    hub_store_connections,
+    stamp,
+)
 
 _PROJECT = "proj_test"
 

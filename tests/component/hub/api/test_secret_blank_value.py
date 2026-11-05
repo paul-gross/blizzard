@@ -9,7 +9,7 @@ from pathlib import Path
 import pytest
 from fastapi.testclient import TestClient
 
-from tests.config_inputs import build_hosted_hub_app, init_hub
+from tests.support.config_inputs import build_hosted_hub_app, init_hub
 
 
 @pytest.fixture

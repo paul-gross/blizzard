@@ -20,7 +20,7 @@ from blizzard.hub.domain.config.secrets import SecretName
 from blizzard.hub.domain.config.work_sources import WorkSourceDraft, WorkSourceEdit
 from blizzard.hub.secrets import hub_key_provider, secret_cipher
 from blizzard.hub.tenancy import StoreScope
-from tests.support import OP, config_authoring, default_tenant, migrated_hub_at
+from tests.support.scaffolding import OP, config_authoring, default_tenant, migrated_hub_at
 
 _NOW = datetime(2026, 10, 4, 12, 0, 0, tzinfo=UTC)
 _FIELDS = WorkSourceDraft(provider="github", locator="acme/demo", annotate=False, secret="gh")

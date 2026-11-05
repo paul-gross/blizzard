@@ -23,7 +23,7 @@ from blizzard.hub.domain.garden.review.materialize import (
 from blizzard.hub.store.internal.review_findings_store import ReviewFindingsStore
 from blizzard.hub.store.schema import artifacts, chunks, config_changes, finding_facts, findings, scopes
 from blizzard.hub.store.scoped import ScopedStatements
-from tests.support import hub_scoped, hub_store_connections, migrated_hub_at, seed_chunk, seed_graph, stamp
+from tests.support.scaffolding import hub_scoped, hub_store_connections, migrated_hub_at, seed_chunk, seed_graph, stamp
 
 _NOW = datetime(2026, 7, 16, 12, 0, 0, tzinfo=UTC)
 

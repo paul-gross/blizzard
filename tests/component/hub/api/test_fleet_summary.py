@@ -9,7 +9,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from tests.support import HubHarness, build_hub, ingest
+from tests.support.scaffolding import HubHarness, build_hub, ingest
 
 
 def _claim_route(hub: HubHarness, chunk_id: str) -> None:

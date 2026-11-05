@@ -23,7 +23,7 @@ from blizzard.runner.harness.wiring import HarnessSections, declared
 from blizzard.runner.hub.internal.token_file import HubTokenFile
 from blizzard.tools.config_contract import document_from_registry
 from blizzard.tools.contracts import CONFIGS
-from tests.repo_files import repo_root
+from tests.support.repo_files import repo_root
 
 
 @pytest.mark.parametrize(("name", "registry"), CONFIGS, ids=[name for name, _ in CONFIGS])

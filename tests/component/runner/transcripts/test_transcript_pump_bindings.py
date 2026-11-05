@@ -15,7 +15,7 @@ from blizzard.runner.harness.transcript import TranscriptBatch, TranscriptPositi
 from blizzard.runner.leases.model import NewLease
 from blizzard.runner.loop.context import LoopConfig, LoopContext
 from blizzard.runner.transcripts.transcript_pump import TranscriptPump
-from tests.runner_fakes import (
+from tests.support.runner_fakes import (
     FakeHarness,
     FakeHub,
     FakeProbe,
@@ -25,8 +25,8 @@ from tests.runner_fakes import (
     make_context,
     make_store,
 )
-from tests.support import capture_statements, count_rows_read
-from tests.transcript_batches import incomplete_batch, normalized_turn, transcript_batch
+from tests.support.scaffolding import capture_statements, count_rows_read
+from tests.support.transcript_batches import incomplete_batch, normalized_turn, transcript_batch
 
 _NOW = datetime(2026, 7, 13, 12, 0, 0, tzinfo=UTC)
 

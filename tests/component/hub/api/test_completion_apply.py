@@ -11,7 +11,7 @@ from typing import Any
 
 import pytest
 
-from tests.support import HubHarness, build_hub, make_ready, pointer_token, report_lease
+from tests.support.scaffolding import HubHarness, build_hub, make_ready, pointer_token, report_lease
 
 _POINTER = {"source": "default", "ref": "9"}
 

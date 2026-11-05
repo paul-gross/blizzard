@@ -13,8 +13,16 @@ from click.testing import Result
 from blizzard.auth_core import Role
 from blizzard.foundation.event_log import EventLogSeverity
 from blizzard.hub.cli import hub as hub_group
-from tests.support import HubHarness, build_hub, chunk_stores, seed_chunk, seed_graph, seed_session, seed_user
-from tests.worker_http import Bound, bind_stubs
+from tests.support.scaffolding import (
+    HubHarness,
+    build_hub,
+    chunk_stores,
+    seed_chunk,
+    seed_graph,
+    seed_session,
+    seed_user,
+)
+from tests.support.worker_http import Bound, bind_stubs
 
 _HUB_URL = "http://hub.local:8421"
 

@@ -10,8 +10,8 @@ import sqlalchemy as sa
 
 from blizzard.foundation.store.engine import create_engine_from_url
 from blizzard.hub.store import schema as s
-from tests.migration_support_store_migrations import schema_snapshot
-from tests.support import default_tenant, migrate_to
+from tests.support.migrations.store_migrations import schema_snapshot
+from tests.support.scaffolding import default_tenant, migrate_to
 
 pytestmark = [pytest.mark.component]
 

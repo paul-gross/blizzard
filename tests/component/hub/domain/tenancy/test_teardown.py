@@ -35,7 +35,7 @@ from blizzard.hub.store import schema
 from blizzard.hub.store.internal.tenant_teardown_store import DRAIN_ORDER, TenantTeardownStore
 from blizzard.hub.store.scoped import is_tenant_owned
 from blizzard.hub.tenancy import HUB_SCOPED_OPTION, TenantClosed, TenantId, UnknownTenant
-from tests.support import (
+from tests.support.scaffolding import (
     HubHarness,
     added_runner,
     build_hub,

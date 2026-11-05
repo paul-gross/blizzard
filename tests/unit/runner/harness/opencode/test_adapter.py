@@ -2,7 +2,7 @@
 
 Unit tests drive command building and model/effort/compaction resolution against a
 monkeypatched ``subprocess.Popen``; component tests launch a fake ``opencode`` binary
-(``tests/support_opencode_binary.py``)."""
+(``tests/support/opencode_binary.py``)."""
 
 from __future__ import annotations
 
@@ -51,12 +51,12 @@ from blizzard.runner.harness.registry import HarnessBinding, HarnessRegistry
 from blizzard.runner.lifecycle.session import HarnessSelection, HarnessSelector, SkippedHarness
 from blizzard.runner.node_steps.envelope import GraphArtifact
 from blizzard.runner.process.child_env import AllowlistedEnv
-from tests.opencode_usage_limit_fixture import USAGE_LIMIT_EVENT
-from tests.repo_files import repo_root
-from tests.runner_fakes import FakeProbe, make_envelope
-from tests.support_child_launch import CHILDREN, version_probe
-from tests.support_opencode_adapter import adapter as _adapter
-from tests.support_opencode_adapter import preamble as _preamble
+from tests.support.child_launch import CHILDREN, version_probe
+from tests.support.opencode_adapter import adapter as _adapter
+from tests.support.opencode_adapter import preamble as _preamble
+from tests.support.opencode_usage_limit_fixture import USAGE_LIMIT_EVENT
+from tests.support.repo_files import repo_root
+from tests.support.runner_fakes import FakeProbe, make_envelope
 
 # The oldest committed corpus inside the admitted range — stays correct as corpora are added.
 _AN_ADMITTED_OPENCODE_VERSION = admitted_corpus_versions(CommittedCorpus(), "opencode", ADMITTED_OPENCODE_RANGE)[0]

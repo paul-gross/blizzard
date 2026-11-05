@@ -31,8 +31,8 @@ from blizzard.hub.store.internal.graph_store import GraphStore
 from blizzard.hub.store.scoped import ScopedConnections
 from blizzard.hub.work_sources.internal.hub_work_source import HubWorkSource
 from blizzard.hub.work_sources.registry import BuiltWorkSource, StoreWorkSourceRegistry
-from tests.ingest_queue_graphs import BUILD_REVIEW_DELIVER_YAML, pass_node
-from tests.support import (
+from tests.support.ingest_queue_graphs import BUILD_REVIEW_DELIVER_YAML, pass_node
+from tests.support.scaffolding import (
     FakeWorkSource,
     HubHarness,
     build_hub,

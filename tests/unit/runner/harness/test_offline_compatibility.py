@@ -28,7 +28,7 @@ from blizzard.runner.harness.offline_compatibility import (
 )
 from blizzard.runner.harness.opencode.compatibility.probe import ADMITTED_OPENCODE_RANGE, PINNED_OPENCODE_VERSION
 from blizzard.runner.harness.opencode.version import normalize_opencode_version
-from tests.repo_files import repo_root
+from tests.support.repo_files import repo_root
 
 _PACKAGE_ROOT = repo_root() / "src" / "blizzard" / "runner" / "harness"
 # Keyed off the admitted range's own committed corpus, not a hardcoded

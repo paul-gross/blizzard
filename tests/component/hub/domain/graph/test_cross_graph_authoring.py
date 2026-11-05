@@ -10,7 +10,7 @@ from __future__ import annotations
 from pathlib import Path
 
 from blizzard.hub.domain.graph.model import GraphDoc
-from tests.support import build_hub
+from tests.support.scaffolding import build_hub
 
 # Component — mint warning, store round-trip, interim fall-through
 # --------------------------------------------------------------------------- #

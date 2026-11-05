@@ -9,7 +9,7 @@ from click.testing import CliRunner
 
 from blizzard.cli.main import blizzard
 from blizzard.hub.cli import runtime as hub_cli_runtime
-from tests.config_inputs import init_hub
+from tests.support.config_inputs import init_hub
 
 
 def test_a_hub_below_its_floor_exits_naming_its_version_and_the_floor(

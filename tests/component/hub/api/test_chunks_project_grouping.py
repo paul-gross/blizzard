@@ -6,7 +6,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from tests.support import HubHarness, build_hub, ingest, link_project, seed_project
+from tests.support.scaffolding import HubHarness, build_hub, ingest, link_project, seed_project
 
 
 def _two_project_hub(tmp_path: Path) -> HubHarness:

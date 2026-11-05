@@ -16,8 +16,8 @@ from tests.crash.support import (
     forge_daemon,
     mock_bin_dir,
 )
-from tests.fleet_world import mint_world
-from tests.support import url_of
+from tests.support.fleet_world import mint_world
+from tests.support.scaffolding import url_of
 
 pytestmark = pytest.mark.crash_sweep
 

@@ -19,7 +19,7 @@ from blizzard.hub.auth.models import User
 from blizzard.hub.auth.permissions import HUB_PERMISSIONS, Permission
 from blizzard.hub.store import schema
 from blizzard.hub.tenancy import TenantId
-from tests.support import (
+from tests.support.scaffolding import (
     HubHarness,
     add_tenant,
     build_hub,

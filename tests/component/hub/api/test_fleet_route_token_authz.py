@@ -12,7 +12,7 @@ from pathlib import Path
 import httpx2
 
 from blizzard.hub.domain.execution.auth.route import ROUTE_TOKEN_ENFORCE
-from tests.support import HubHarness, build_hub, pointer_token, report_lease, runner_token
+from tests.support.scaffolding import HubHarness, build_hub, pointer_token, report_lease, runner_token
 
 _POINTER = {"source": "default", "ref": "84"}
 

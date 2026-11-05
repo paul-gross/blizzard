@@ -19,9 +19,15 @@ from blizzard.runner.hub.identity import RunnerIdentity
 from blizzard.runner.loop_wiring import LoopWiring
 from blizzard.runner.tracing.config import RunnerTracingConfig
 from blizzard.runner.tracing.sweep import LeaseTraceSweep, announce_rejected_tracing
-from tests.runner_fakes import FIXTURE_RUNNER_ID, REGISTERED_AT, SqlAlchemyRunnerStore, make_store, migrated_store_at
-from tests.runner_trace_leases import closed_lease
-from tests.support import InMemoryTraceExporter
+from tests.support.runner_fakes import (
+    FIXTURE_RUNNER_ID,
+    REGISTERED_AT,
+    SqlAlchemyRunnerStore,
+    make_store,
+    migrated_store_at,
+)
+from tests.support.runner_trace_leases import closed_lease
+from tests.support.scaffolding import InMemoryTraceExporter
 
 _ENDPOINT = {"OTEL_EXPORTER_OTLP_ENDPOINT": "http://127.0.0.1:4318"}
 

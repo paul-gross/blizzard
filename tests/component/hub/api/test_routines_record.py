@@ -15,7 +15,7 @@ from blizzard.auth_core import Role
 from blizzard.hub.domain.config.changes import ChangeContext, Door
 from blizzard.hub.domain.garden.scopes import ScopeSlug
 from blizzard.hub.store.schema import config_changes
-from tests.support import (
+from tests.support.scaffolding import (
     HubHarness,
     build_hub,
     default_project,

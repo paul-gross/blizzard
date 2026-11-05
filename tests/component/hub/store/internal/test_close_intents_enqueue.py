@@ -18,7 +18,7 @@ from blizzard.hub.domain.chunk.ports.delivery import IWriteChunkDeliveryReposito
 from blizzard.hub.domain.chunk.ports.fence import EpochAdmission
 from blizzard.hub.store import schema as s
 from blizzard.hub.store.internal import chunk_lifecycle_store
-from tests.support import HubHarness, build_hub, chunk_stores, emitted_events, hub_scoped, ingest
+from tests.support.scaffolding import HubHarness, build_hub, chunk_stores, emitted_events, hub_scoped, ingest
 
 
 def _land(hub: HubHarness, chunk_id: str, *, repo: str = "widget") -> None:

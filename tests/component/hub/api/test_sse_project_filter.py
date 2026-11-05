@@ -23,8 +23,8 @@ from blizzard.foundation.event_log import EventLogSeverity
 from blizzard.hub.api.events import events_stream
 from blizzard.hub.domain.projects.model import ProjectId
 from blizzard.hub.events.broker import EventBroker
-from tests.repo_files import repo_root
-from tests.support import build_hub, default_project, emitted_events, ingest
+from tests.support.repo_files import repo_root
+from tests.support.scaffolding import build_hub, default_project, emitted_events, ingest
 
 _MINE = ProjectId("proj_mine")
 _THEIRS = ProjectId("proj_theirs")

@@ -62,7 +62,7 @@ from blizzard.hub.store.internal.secret_referrers import SecretReferrersStore
 from blizzard.hub.store.internal.secret_store import SecretStore
 from blizzard.hub.store.internal.work_source_record_store import WorkSourceRecordStore
 from blizzard.hub.store.schema import config_changes
-from tests.support import OP, config_authoring, hub_store_connections, migrated_hub_at
+from tests.support.scaffolding import OP, config_authoring, hub_store_connections, migrated_hub_at
 
 _NOW = datetime(2026, 10, 4, 12, 0, 0, tzinfo=UTC)
 #: The forge every record below names, stored by the world before any of them.

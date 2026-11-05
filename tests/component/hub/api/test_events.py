@@ -7,7 +7,7 @@ import json
 from pathlib import Path
 
 from blizzard.hub.events.broker import EventBroker
-from tests.support import (
+from tests.support.scaffolding import (
     HubHarness,
     build_hub,
     chunk_stores,

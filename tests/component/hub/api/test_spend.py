@@ -14,8 +14,8 @@ from typing import Any
 import pytest
 
 from blizzard.foundation.store.utc import iso_utc
-from tests.hub_request_auth import seed_enrolled
-from tests.support import HubHarness, build_hub, make_ready, pointer_token, report_lease
+from tests.support.hub_request_auth import seed_enrolled
+from tests.support.scaffolding import HubHarness, build_hub, make_ready, pointer_token, report_lease
 
 _POINTER_A = {"source": "default", "ref": "7"}
 _POINTER_B = {"source": "default", "ref": "8"}

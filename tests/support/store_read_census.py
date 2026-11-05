@@ -1,0 +1,2986 @@
+"""Read-method census for the store-read-index gate.
+
+Maps every reflected ``IRead*`` Protocol method to a recipe that exercises it against a production-wired,
+migrated-to-head store, seeded once per gate run entirely through each concept's own write Protocol
+(``bzh:matrix-tier-rules``), never raw SQL. Split by store (``RUNNER_CENSUS``/``RUNNER_EXEMPTIONS`` and
+``HUB_CENSUS``/``HUB_EXEMPTIONS``) so each store's own census reads and edits independently of the other's."""
+
+from __future__ import annotations
+
+import json
+from collections.abc import Callable
+from dataclasses import dataclass
+from datetime import UTC, datetime, timedelta
+from pathlib import Path
+
+from sqlalchemy import Engine
+
+from blizzard.auth_core import Role
+from blizzard.foundation.artifacts import ArtifactKind
+from blizzard.foundation.clock import FixedClock
+from blizzard.foundation.event_log import EventLogSeverity
+from blizzard.foundation.garden_proposals import GardenProposalOrigin
+from blizzard.foundation.logging import get_logger
+from blizzard.foundation.migration_source import MigrationSource
+from blizzard.foundation.run_mode import RunMode
+from blizzard.foundation.tokens import TokenHash
+from blizzard.hub.auth.auth_state import IReadAuthStateRepository
+from blizzard.hub.auth.errors import RepoErrorFactory
+from blizzard.hub.auth.facts import IReadAuthFactsRepository
+from blizzard.hub.auth.hub_admins import HubAdminFact, IReadHubAdminRepository
+from blizzard.hub.auth.identities import IReadIdentityRepository
+from blizzard.hub.auth.internal.auth_facts_repository import AuthFactsRepository
+from blizzard.hub.auth.internal.auth_state_repository import AuthStateRepository
+from blizzard.hub.auth.internal.hub_admin_repository import HubAdminRepository
+from blizzard.hub.auth.internal.identity_repository import IdentityRepository
+from blizzard.hub.auth.internal.membership_repository import MembershipRepository
+from blizzard.hub.auth.internal.superuser_bootstrap_repository import SuperuserBootstrapRepository
+from blizzard.hub.auth.internal.user_repository import UserRepository
+from blizzard.hub.auth.invitations import (
+    Invitation,
+    InvitationOutcome,
+    InvitationOutcomeKind,
+    InvitationToken,
+    IReadInvitationRepository,
+)
+from blizzard.hub.auth.memberships import IReadMembershipRepository, MembershipFact
+from blizzard.hub.auth.models import AuthStateEntry, Identity, SuperuserBootstrap, User
+from blizzard.hub.auth.sessions import IReadSessionRepository
+from blizzard.hub.auth.superuser_bootstrap import IReadSuperuserBootstrapRepository
+from blizzard.hub.auth.users import IReadUserRepository
+from blizzard.hub.domain.chunk.model import (
+    Chunk,
+    CloseEnqueueDecision,
+    DecisionChoice,
+    WorkItemAuthor,
+    WorkRef,
+    decide_close_enqueue,
+)
+from blizzard.hub.domain.chunk.ports.artifacts import IReadChunkArtifactsRepository
+from blizzard.hub.domain.chunk.ports.commit_links import IReadLandedCommitLinks
+from blizzard.hub.domain.chunk.ports.decisions import IReadChunkDecisionsRepository
+from blizzard.hub.domain.chunk.ports.delivery import IReadChunkDeliveryRepository
+from blizzard.hub.domain.chunk.ports.dependencies import IReadChunkDependenciesRepository
+from blizzard.hub.domain.chunk.ports.escalations import IReadChunkEscalationsRepository
+from blizzard.hub.domain.chunk.ports.events import FeedLens, IReadChunkEventsRepository
+from blizzard.hub.domain.chunk.ports.facts import IReadChunkFactsRepository
+from blizzard.hub.domain.chunk.ports.fence import Claimant, EpochAdmission
+from blizzard.hub.domain.chunk.ports.lifecycle import IReadChunkLifecycleRepository
+from blizzard.hub.domain.chunk.ports.movement import IReadChunkMovementRepository
+from blizzard.hub.domain.chunk.ports.questions import IReadChunkQuestionsRepository
+from blizzard.hub.domain.chunk.ports.queue import READY_RANKING_LOCK, IReadChunkQueueRepository
+from blizzard.hub.domain.chunk.ports.record import IReadChunkRecordRepository
+from blizzard.hub.domain.chunk.ports.route import IReadChunkRouteRepository
+from blizzard.hub.domain.chunk.ports.stores import ChunkReadStores, ChunkStores
+from blizzard.hub.domain.chunk.ports.usage import IReadChunkUsageRepository
+from blizzard.hub.domain.chunk.ports.work_refs import IReadChunkWorkRefsRepository, IReadWorkRefsCorpus
+from blizzard.hub.domain.config.authoring import ConfigAuthoring
+from blizzard.hub.domain.config.carry_over import IReadConfigImports
+from blizzard.hub.domain.config.changes import ChangeContext, Door, IReadConfigChanges, RecordKind
+from blizzard.hub.domain.config.forges import (
+    ForgeEdit,
+    ForgeFields,
+    ForgeId,
+    ForgeKindOffers,
+    ForgeSlug,
+    IReadForgeRepository,
+)
+from blizzard.hub.domain.config.repositories import (
+    IReadRepositoryRecordRepository,
+    RepositoryEdit,
+    RepositoryFields,
+    RepositoryId,
+    RepositorySlug,
+)
+from blizzard.hub.domain.config.revisions import IReadConfigRevisions
+from blizzard.hub.domain.config.secrets import ISecretCatalog, SecretName
+from blizzard.hub.domain.config.work_sources import (
+    IReadWorkSourceRepository,
+    WorkSourceEdit,
+    WorkSourceFields,
+    WorkSourceId,
+    WorkSourceSlug,
+)
+from blizzard.hub.domain.delivery.flows import FlowResource
+from blizzard.hub.domain.delivery.ports.flows import IReadFlowLinesCorpus, IReadFlows, IReadFlowViews
+from blizzard.hub.domain.garden.delivery.materialize import (
+    DeliveryPlan,
+    DeltaMaterialization,
+    IReadGardenDeliveryRepository,
+    NewFindingSet,
+)
+from blizzard.hub.domain.garden.findings.model import IReadFindingRepository, IReadFindingSetRepository
+from blizzard.hub.domain.garden.findings.trend import IReadGardenTrendRepository
+from blizzard.hub.domain.garden.proposals.closure import IReadGardenProposalClosureRepository
+from blizzard.hub.domain.garden.proposals.model import IReadGardenProposalRepository
+from blizzard.hub.domain.garden.proposals.resolution import resolve_proposal_findings
+from blizzard.hub.domain.garden.review.materialize import (
+    IReadReviewFindingsRepository,
+    NewReviewFinding,
+    NewReviewFindingFact,
+    ReviewFindingsPlan,
+)
+from blizzard.hub.domain.garden.routines import IReadRoutineRepository, IReadRoutineScopeRepository
+from blizzard.hub.domain.garden.run_context import IReadRunContextRepository, RunContext
+from blizzard.hub.domain.garden.runs.history import IReadGardenRunRepository
+from blizzard.hub.domain.garden.runs.sweeps import IReadGardenSweepsRepository
+from blizzard.hub.domain.garden.scopes import IReadScopeRepository, ScopeSlug
+from blizzard.hub.domain.graph.model import (
+    Graph,
+    IReadGraphBodies,
+    IReadGraphRepository,
+    IReadManyGraphs,
+    IReadNodeExecutors,
+)
+from blizzard.hub.domain.observability.analytics.derivation import IReadDerivationCorpus
+from blizzard.hub.domain.observability.analytics.events import IReadTranscriptEvents
+from blizzard.hub.domain.observability.analytics.extraction import EXTRACTOR_VERSION
+from blizzard.hub.domain.observability.analytics.operational import IReadOperationalAnalytics, OperationalCriteria
+from blizzard.hub.domain.observability.analytics.queries import EventQueryCriteria, IReadAnalyticsEventQueries
+from blizzard.hub.domain.observability.egress.repository import (
+    EgressCheckpoint,
+    EpochKey,
+    EventsPosition,
+    IReadEgress,
+    IReadEgressEvents,
+    IReadUsageCorpus,
+    UsagePosition,
+)
+from blizzard.hub.domain.observability.forge_status import IReadAnnotatedSources
+from blizzard.hub.domain.observability.hub_events import HubEventLogService, IReadHubEventLog
+from blizzard.hub.domain.observability.tracing.cursor import CursorKey
+from blizzard.hub.domain.observability.tracing.repository import (
+    IReadProjectLabels,
+    IReadRunnerNames,
+    IReadStepCorpus,
+    IReadTraceStatus,
+    IReadTraceSteps,
+    StepHydration,
+    TraceCheckpoint,
+)
+from blizzard.hub.domain.observability.transcripts import IReadTranscriptSegments
+from blizzard.hub.domain.projects.links import IReadProjectLinks
+from blizzard.hub.domain.projects.model import IReadProjectRepository, ProjectEdit, ProjectId, ProjectSlug
+from blizzard.hub.domain.projects.order import IReadProjectPositions
+from blizzard.hub.domain.runners.host import IReadHostRegistry
+from blizzard.hub.domain.runners.registration import IReadRunnerRegistry
+from blizzard.hub.domain.runners.route import Route
+from blizzard.hub.domain.tenancy.administration import IReadTenantDirectory
+from blizzard.hub.domain.tenancy.teardown import IReadTenantTeardowns
+from blizzard.hub.domain.work_items.closure import IReadCloseIntentCorpus
+from blizzard.hub.domain.work_items.ports import IReadWorkItemRepository
+from blizzard.hub.secrets import hub_key_provider, secret_cipher
+from blizzard.hub.store import schema as s
+from blizzard.hub.store.internal.chunk_rows import MARKER_PREFIX
+from blizzard.hub.store.internal.config_apply_store import ConfigApplyStore
+from blizzard.hub.store.internal.config_import_store import ConfigImportStore
+from blizzard.hub.store.internal.config_revisions_store import ConfigRevisionsStore
+from blizzard.hub.store.internal.egress_store import EgressStore
+from blizzard.hub.store.internal.finding_store import FindingSetStore, FindingStore
+from blizzard.hub.store.internal.flow_store import FlowStore
+from blizzard.hub.store.internal.forge_annotation_store import ForgeAnnotationStore
+from blizzard.hub.store.internal.forge_record_store import ForgeRecordStore
+from blizzard.hub.store.internal.garden_delivery_store import GardenDeliveryStore
+from blizzard.hub.store.internal.garden_proposal_store import GardenProposalStore
+from blizzard.hub.store.internal.garden_run_store import GardenRunStore
+from blizzard.hub.store.internal.garden_sweeps_store import GardenSweepsStore
+from blizzard.hub.store.internal.garden_trend_store import GardenTrendStore
+from blizzard.hub.store.internal.hub_event_log_store import HubEventLogStore
+from blizzard.hub.store.internal.hub_scoped_credentials import CredentialReads
+from blizzard.hub.store.internal.hub_scoped_invitations import InvitationReads
+from blizzard.hub.store.internal.invitation_store import InvitationStore
+from blizzard.hub.store.internal.repository_record_store import RepositoryRecordStore
+from blizzard.hub.store.internal.review_findings_store import ReviewFindingsStore
+from blizzard.hub.store.internal.secret_store import SecretStore
+from blizzard.hub.store.internal.tenant_teardown_store import TenantTeardownStore
+from blizzard.hub.store.internal.trace_store import ProjectLabels, TraceStore
+from blizzard.hub.store.internal.transcript_event_store import TranscriptEventStore
+from blizzard.hub.store.internal.work_item_store import WorkItemStore
+from blizzard.hub.store.internal.work_source_record_store import WorkSourceRecordStore
+from blizzard.hub.store.scoped import ScopedConnections
+from blizzard.hub.store.transactions import HubTransactions
+from blizzard.hub.tenancy import TenantId
+from blizzard.runner.auth.tokens import IReadTokenRepository
+from blizzard.runner.composition import build_host_stores, build_stores
+from blizzard.runner.environments.repository import IReadEnvironmentRepository
+from blizzard.runner.harness.fingerprint import PreambleFingerprint
+from blizzard.runner.harness.health_cache import IReadHarnessHealth
+from blizzard.runner.harness.identity import CLAUDE_CODE_HARNESS_ID, SessionReference
+from blizzard.runner.harness.selftest_result import IReadSelfTestResultRepository
+from blizzard.runner.harness.usage import UsageSample
+from blizzard.runner.harness.workspace_prompts import IReadWorkspacePromptRepository
+from blizzard.runner.hub.host_identity import HostIdentity, IReadHostIdentityRepository
+from blizzard.runner.hub.identity import IReadRunnerIdentityRepository, RunnerIdentity
+from blizzard.runner.hub.outbound_buffer import IReadOutboundRepository
+from blizzard.runner.hub.served_projects import IReadServedProjectsRepository, ServedProject
+from blizzard.runner.leases.asks import IReadAskRepository
+from blizzard.runner.leases.elicitation import IReadElicitationRepository
+from blizzard.runner.leases.escalations import IReadEscalationRepository
+from blizzard.runner.leases.git_commit_declaration import IReadGitCommitDeclarationRepository
+from blizzard.runner.leases.liveness import IReadLeaseLivenessRepository
+from blizzard.runner.leases.model import NewLease
+from blizzard.runner.leases.operator_requests import IReadAttachmentRepository, IReadRequeueRepository
+from blizzard.runner.leases.overload import IReadOverloadRepository
+from blizzard.runner.leases.record import IReadChunkLeaseRepository, IReadLeaseRecordRepository
+from blizzard.runner.leases.resume_intent import IReadLeaseResumeIntentRepository
+from blizzard.runner.leases.session import IReadLeaseSessionRepository
+from blizzard.runner.lifecycle.artifacts import IReadGraphArtifactRepository, PinnedGraphArtifact
+from blizzard.runner.lifecycle.daemon_liveness import IReadDaemonLivenessRepository
+from blizzard.runner.lifecycle.judgement.checks import ExecutedCheck, IReadCheckRepository
+from blizzard.runner.lifecycle.takeover import IReadTakeoverRepository
+from blizzard.runner.store.errors import RunnerStoreErrorFactory
+from blizzard.runner.stores import HostReadStores, HostStores, RunnerReadStores, RunnerStores
+from blizzard.runner.throttle.pause import IReadPauseRepository
+from blizzard.runner.throttle.usage_limits import (
+    FloorClear,
+    IReadRunnerUsageLimitRepository,
+    IReadSubscriptionUsageLimitRepository,
+    UsageLimitMark,
+)
+from blizzard.runner.tracing.cursor import LeaseCursorKey
+from blizzard.runner.tracing.repository import IReadLeaseTraceCursor, IReadLeaseTraceFacts, LeaseTraceCheckpoint
+from blizzard.runner.transcripts.archived_repository import IReadArchivedTranscriptRepository
+from blizzard.runner.transcripts.invocation_boundaries import IReadInvocationBoundaryRepository
+from blizzard.runner.transcripts.ledger import IReadTranscriptLedgerRepository
+from blizzard.runner.transcripts.repository import IReadTranscriptRepository
+from blizzard.runner.transfer.rows import IReadHostIngestRepository
+from blizzard.runner.usage.repository import (
+    IReadCredentialRenewalRepository,
+    IReadExternalUsageRepository,
+    IReadHostLaneRepository,
+    IReadUsageRepository,
+)
+from tests.support.runner_fakes import record_usage
+from tests.support.scaffolding import (
+    HubHarness,
+    added_runner,
+    build_hub,
+    chunk_stores,
+    chunk_unit,
+    default_project,
+    default_tenant,
+    hub_level_connections,
+    hub_store_connections,
+    project_record,
+    seed_chunk_record,
+    seed_runner,
+    seed_work_item,
+    stamp,
+)
+
+_BASE = datetime(2026, 9, 14, 12, 0, 0, tzinfo=UTC)
+
+
+def _t(offset_seconds: float) -> datetime:
+    """A deterministic, strictly-ordered stamp — the seed's own injected-clock stand-in
+    (``bzh:injected-clock``): every write below stamps explicitly, never a driver default."""
+    return _BASE + timedelta(seconds=offset_seconds)
+
+
+RUNNER_ID = "r1"
+GRAPH_ID = "gr_1"
+
+
+@dataclass(frozen=True)
+class RunnerWorld:
+    """The runner store's module-scoped seeded world — one instance built once
+    (:func:`build_runner_world`) and driven by every recipe in :data:`RUNNER_CENSUS`. ``stores``/``read`` are the
+    same production-wired adapters, the latter narrowed to ``RunnerReadStores`` — recipes read through
+    ``read``, the one collaborator every controller-facing caller resolves through in production."""
+
+    engine: Engine
+    stores: RunnerStores
+    read: RunnerReadStores
+    host: HostStores
+    host_read: HostReadStores
+    chunk_1: str
+    chunk_2: str
+    chunk_3: str
+    chunk_4: str
+    chunk_5: str
+    chunk_6: str
+    chunk_7: str
+    node_a: str
+    lease_1: str
+    lease_2: str
+    lease_3: str
+    lease_5: str
+    lease_7: str
+    lease_8: str
+    session_1: SessionReference
+    transcript_segment_id: str
+    workspace_id: str
+    usage_slug: str
+
+
+def _usage_limit_mark(lease_id: str, generation: int, at: datetime) -> UsageLimitMark:
+    return UsageLimitMark(
+        marked_at=at,
+        resets_at=at + timedelta(hours=5),
+        window="five_hour",
+        window_resets_at=at + timedelta(hours=5),
+        harness_id=CLAUDE_CODE_HARNESS_ID,
+        detail="limit reached",
+        lease_id=lease_id,
+        epoch=1,
+        generation=generation,
+        invocation_kind="worker",
+    )
+
+
+def build_runner_world(engine: Engine, runner_id: str = RUNNER_ID) -> RunnerWorld:
+    """Seed a migrated-to-head runner store through its own write Protocols, so every
+    read method in :data:`RUNNER_CENSUS` reaches real, non-empty behavior — the store
+    bundle comes from :func:`~blizzard.runner.composition.build_stores`, the production
+    wiring, never a hand-rolled adapter or ``tests/support/runner_fakes.py``'s flat fake."""
+    stores = build_stores(engine, errors=RunnerStoreErrorFactory(get_logger("test")), runner_id=runner_id)
+    host = build_host_stores(
+        engine, errors=RunnerStoreErrorFactory(get_logger("test")), clock=FixedClock(_BASE), runner_id=runner_id
+    )
+
+    chunk_1, chunk_2, chunk_3 = "ch_1", "ch_2", "ch_3"
+    chunk_4, chunk_5, chunk_6, chunk_7 = "ch_4", "ch_5", "ch_6", "ch_7"
+    node_a, node_b, node_c, node_d = "nd_a", "nd_b", "nd_c", "nd_d"
+    node_e, node_f, node_g = "nd_e", "nd_f", "nd_g"
+
+    # --- chunk 1: a closed-then-active lease pair sharing one resumed session ---------
+    lease_1, lease_2 = "lease_1a", "lease_1b"
+    stores.lease_record.record_lease(
+        NewLease(
+            lease_id=lease_1,
+            chunk_id=chunk_1,
+            graph_id=GRAPH_ID,
+            node_id=node_a,
+            node_name="build",
+            epoch=1,
+            retries_max=3,
+            created_at=_t(0),
+            session_name="pool-a",
+            resolved_model="model-a",
+            resolved_effort="medium",
+        )
+    )
+    stores.liveness.record_spawn(
+        lease_1,
+        pid=100,
+        process_start_time="st-100",
+        session=SessionReference(CLAUDE_CODE_HARNESS_ID, "sess-1"),
+        spawned_at=_t(1),
+    )
+    stores.liveness.record_heartbeat(lease_id=lease_1, beat_at=_t(2))
+    record_usage(
+        stores.usage,
+        lease_id=lease_1,
+        chunk_id=chunk_1,
+        node_id=node_a,
+        epoch=1,
+        generation=1,
+        sample=UsageSample(
+            kind="spawn",
+            model="model-a",
+            input_tokens=10,
+            output_tokens=20,
+            cache_read_tokens=0,
+            cache_create_tokens=0,
+            cost_usd=0.01,
+        ),
+        recorded_at=_t(3),
+    )
+    stores.usage.record_context_sample(
+        lease_id=lease_1,
+        chunk_id=chunk_1,
+        session=SessionReference(CLAUDE_CODE_HARNESS_ID, "sess-1"),
+        context_tokens=500,
+        sampled_at=_t(3),
+    )
+    stores.session.record_session_end(lease_id=lease_1, ended_at=_t(4))
+    stores.lease_record.record_closure(
+        lease_id=lease_1, chunk_id=chunk_1, node_id=node_a, reason="transitioned", closed_at=_t(5)
+    )
+
+    stores.environments.record_binding(chunk_id=chunk_1, environment_id="env-1", workdir="/ws/env-1", bound_at=_t(6))
+    stores.tokens.set_route_token(chunk_1, token="route-token-1", at=_t(6))
+
+    stores.lease_record.record_lease(
+        NewLease(
+            lease_id=lease_2,
+            chunk_id=chunk_1,
+            graph_id=GRAPH_ID,
+            node_id=node_a,
+            node_name="build",
+            epoch=2,
+            retries_max=3,
+            created_at=_t(7),
+            session_name="pool-a",
+            resolved_model="model-b",
+            resolved_effort="high",
+        )
+    )
+    # Same session id as lease_1: a resume, which finalizes lease_1's still-open segment
+    # and opens a fresh one for lease_2 (``LeaseLivenessStore.record_spawn``).
+    stores.liveness.record_spawn(
+        lease_2,
+        pid=200,
+        process_start_time="st-200",
+        session=SessionReference(CLAUDE_CODE_HARNESS_ID, "sess-1"),
+        spawned_at=_t(8),
+        harness_version="rc-1.0",
+    )
+    stores.liveness.record_heartbeat(lease_id=lease_2, beat_at=_t(9))
+    stores.invocation_boundaries.record_boundary_open(
+        lease_id=lease_2,
+        chunk_id=chunk_1,
+        node_id=node_a,
+        epoch=2,
+        generation=2,
+        kind="resume",
+        start_position=None,
+        opened_at=_t(9),
+    )
+    stores.invocation_boundaries.record_boundary_advance(
+        lease_id=lease_2,
+        generation=2,
+        kind="resume",
+        superseded_invocation="el-1",
+        start_position=None,
+        advanced_at=_t(9),
+    )
+    record_usage(
+        stores.usage,
+        lease_id=lease_2,
+        chunk_id=chunk_1,
+        node_id=node_a,
+        epoch=2,
+        generation=2,
+        sample=UsageSample(
+            kind="resume",
+            model="model-b",
+            input_tokens=15,
+            output_tokens=25,
+            cache_read_tokens=5,
+            cache_create_tokens=0,
+            cost_usd=0.02,
+        ),
+        recorded_at=_t(9),
+    )
+    stores.session.record_session_preamble(
+        SessionReference(CLAUDE_CODE_HARNESS_ID, "sess-1"),
+        fingerprint=PreambleFingerprint(blizzard="digest-b", workspace="digest-w"),
+        at=_t(9),
+    )
+    stores.attachments.record_attachment(
+        lease_id=lease_2,
+        chunk_id=chunk_1,
+        node_id=node_a,
+        epoch=2,
+        name="asset-a",
+        content="content-a",
+        attached_at=_t(10),
+    )
+    stores.attachments.record_attachment(
+        lease_id=lease_2,
+        chunk_id=chunk_1,
+        node_id=node_a,
+        epoch=2,
+        name="asset-b",
+        content="content-b",
+        attached_at=_t(10),
+    )
+    stores.git_commit_declarations.record_git_commit_declaration(
+        lease_id=lease_2,
+        chunk_id=chunk_1,
+        node_id=node_a,
+        epoch=2,
+        environment_id="env-1",
+        repo="repoA",
+        branch="main",
+        commit="abc123",
+        declared_at=_t(11),
+    )
+    stores.git_commit_declarations.record_git_commit_declaration(
+        lease_id=lease_2,
+        chunk_id=chunk_1,
+        node_id=node_a,
+        epoch=2,
+        environment_id="env-1",
+        repo="repoB",
+        branch="main",
+        commit="def456",
+        declared_at=_t(11),
+    )
+    stores.checks.record_check_results(
+        lease_id=lease_2,
+        chunk_id=chunk_1,
+        node_id=node_a,
+        epoch=2,
+        results=[
+            ExecutedCheck(command="pytest", passed=True, output_tail="ok"),
+            ExecutedCheck(command="lint", passed=False, output_tail="fail"),
+        ],
+        at=_t(12),
+    )
+    stores.checks.record_checks_ran(lease_id=lease_2, epoch=2, at=_t(12))
+    stores.checks.record_nudge_fired(lease_id=lease_2, epoch=2, at=_t(12))
+    stores.asks.record_ask(
+        lease_id=lease_2,
+        chunk_id=chunk_1,
+        question_id="qn_open1",
+        question="need input?",
+        options=["yes", "no"],
+        session=SessionReference(CLAUDE_CODE_HARNESS_ID, "sess-1"),
+        asked_at=_t(13),
+    )
+    stores.tokens.record_lease_token(lease_2, "hash-lease2", _t(13))
+
+    segments = stores.transcript_ledger.transcript_segments_for_chunk(chunk_1)
+    open_segment = next(s for s in segments if s.finalized_at is None)
+    stores.transcript_ledger.record_transcript_deltas(
+        segment_id=open_segment.segment_id,
+        chunk_id=chunk_1,
+        cursor="cur-1",
+        shipped_bytes=100,
+        shipped_turns=2,
+        normalizer_version="v1",
+        harness_version="h1",
+        payloads=['{"turn": 1}', '{"turn": 2}'],
+        created_at=_t(14),
+    )
+
+    # --- chunk 2: an ask parked (no resume) -------------------------------------------
+    lease_3 = "lease_2a"
+    stores.lease_record.record_lease(
+        NewLease(
+            lease_id=lease_3,
+            chunk_id=chunk_2,
+            graph_id=GRAPH_ID,
+            node_id=node_b,
+            node_name="review",
+            epoch=1,
+            retries_max=2,
+            created_at=_t(20),
+        )
+    )
+    stores.liveness.record_spawn(
+        lease_3,
+        pid=300,
+        process_start_time="st-300",
+        session=SessionReference(CLAUDE_CODE_HARNESS_ID, "sess-2"),
+        spawned_at=_t(21),
+    )
+    stores.environments.record_binding(chunk_id=chunk_2, environment_id="env-2", workdir="/ws/env-2", bound_at=_t(21))
+    stores.asks.record_ask(
+        lease_id=lease_3,
+        chunk_id=chunk_2,
+        question_id="qn_parked1",
+        question="parked?",
+        options=[],
+        session=SessionReference(CLAUDE_CODE_HARNESS_ID, "sess-2"),
+        asked_at=_t(22),
+    )
+    stores.asks.record_park(lease_id=lease_3, chunk_id=chunk_2, question_id="qn_parked1", parked_at=_t(23))
+
+    # --- chunk 3: an open escalation ---------------------------------------------------
+    lease_4 = "lease_3a"
+    stores.lease_record.record_lease(
+        NewLease(
+            lease_id=lease_4,
+            chunk_id=chunk_3,
+            graph_id=GRAPH_ID,
+            node_id=node_c,
+            node_name="judge",
+            epoch=1,
+            retries_max=2,
+            created_at=_t(30),
+        )
+    )
+    stores.lease_record.record_closure(
+        lease_id=lease_4, chunk_id=chunk_3, node_id=node_c, reason="escalated", closed_at=_t(31)
+    )
+
+    # --- chunk 4: an open takeover ------------------------------------------------------
+    lease_5 = "lease_4a"
+    stores.lease_record.record_lease(
+        NewLease(
+            lease_id=lease_5,
+            chunk_id=chunk_4,
+            graph_id=GRAPH_ID,
+            node_id=node_d,
+            node_name="build",
+            epoch=1,
+            retries_max=2,
+            created_at=_t(40),
+            session_name="pool-d",
+        )
+    )
+    stores.liveness.record_spawn(
+        lease_5,
+        pid=400,
+        process_start_time="st-400",
+        session=SessionReference(CLAUDE_CODE_HARNESS_ID, "sess-4"),
+        spawned_at=_t(41),
+    )
+    stores.takeover.record_takeover(
+        takeover_id="tko_1",
+        chunk_id=chunk_4,
+        lease_id=lease_5,
+        session=SessionReference(CLAUDE_CODE_HARNESS_ID, "sess-4"),
+        workdir="/ws/env-4",
+        fence_epoch=None,
+        opened_at=_t(42),
+    )
+
+    # --- chunk 5: a local requeue, no later lease minted --------------------------------
+    lease_6 = "lease_5a"
+    stores.lease_record.record_lease(
+        NewLease(
+            lease_id=lease_6,
+            chunk_id=chunk_5,
+            graph_id=GRAPH_ID,
+            node_id=node_e,
+            node_name="judge",
+            epoch=1,
+            retries_max=2,
+            created_at=_t(50),
+        )
+    )
+    stores.lease_record.record_closure(
+        lease_id=lease_6, chunk_id=chunk_5, node_id=node_e, reason="escalated", closed_at=_t(51)
+    )
+    stores.requeue.record_requeue(chunk_id=chunk_5, at=_t(52))
+
+    # --- chunk 6: an in-flight elicitation ----------------------------------------------
+    lease_7 = "lease_6a"
+    stores.lease_record.record_lease(
+        NewLease(
+            lease_id=lease_7,
+            chunk_id=chunk_6,
+            graph_id=GRAPH_ID,
+            node_id=node_f,
+            node_name="build",
+            epoch=1,
+            retries_max=2,
+            created_at=_t(60),
+        )
+    )
+    stores.elicitations.record_elicitation_launch(lease_7, 1, output_path="/tmp/elicit-1", at=_t(61))
+    stores.elicitations.record_elicitation_started(lease_7, 1, pid=500, process_start_time="st-500")
+
+    # --- chunk 7: an operator pause-park --------------------------------------------------
+    lease_8 = "lease_7a"
+    stores.lease_record.record_lease(
+        NewLease(
+            lease_id=lease_8,
+            chunk_id=chunk_7,
+            graph_id=GRAPH_ID,
+            node_id=node_g,
+            node_name="build",
+            epoch=1,
+            retries_max=2,
+            created_at=_t(70),
+        )
+    )
+    stores.pause.record_pause_park(lease_id=lease_8, chunk_id=chunk_7, parked_at=_t(71))
+
+    # --- runner-wide facts, not chunk-keyed ----------------------------------------------
+    host.daemon_liveness.record_daemon_liveness(alive_at=_t(80))
+    stores.pause.set_hub_paused(paused=False, at=_t(81))
+    stores.pause.record_local_pause(
+        paused=False, at=_t(82), by="operator", report_kind="runner.locally_resumed", report_payload="{}"
+    )
+    stores.identity.record_runner_identity(RunnerIdentity(runner_id, "runner-local", _t(82)))
+    stores.served_projects.record_served_projects((ServedProject("default", "prj_1", "default", "Default"),), at=_t(82))
+    stores.resume_intent.record_resume_intent(lease_id=lease_8, marked_at=_t(83))
+    workspace_id = "ws_1"
+    host.workspace_prompt.set_workspace_prompt(workspace_id, prompt="hello", at=_t(84))
+    host.graph_artifacts.record_graph_artifacts(
+        graph_id=GRAPH_ID,
+        artifacts=[
+            PinnedGraphArtifact(name="a1", ordinal=0, kind=ArtifactKind.ASSET, content="c1"),
+            PinnedGraphArtifact(name="a2", ordinal=1, kind=ArtifactKind.GIT_COMMIT, content="c2"),
+        ],
+        recorded_at=_t(85),
+    )
+    usage_slug = "anthropic"
+    host.external_usage.record_external_usage_attempt(
+        slug=usage_slug, sampled_at=_t(86), payload="{}", report_kind="", report_payload=""
+    )
+    stores.selftest_results.record_selftest_result(
+        harness_id=CLAUDE_CODE_HARNESS_ID,
+        status="passed",
+        error=None,
+        recorded_at=_t(87),
+    )
+
+    stores.overload.record_overload(
+        lease_id=lease_2,
+        chunk_id=chunk_1,
+        epoch=1,
+        generation=1,
+        invocation_kind="worker",
+        invocation_identity="1",
+        streak_ordinal=1,
+        observed_at=_t(88),
+        resume_after=_t(88) + timedelta(seconds=60),
+    )
+
+    seq_a = stores.outbound.enqueue_outbound(
+        kind="lease.minted", chunk_id=chunk_1, lease_id=lease_2, payload="{}", created_at=_t(90)
+    )
+    stores.outbound.enqueue_outbound(
+        kind="completion.submitted", chunk_id=chunk_1, lease_id=lease_2, payload="{}", created_at=_t(91)
+    )
+    stores.outbound.ack_outbound(seq_a, acked_at=_t(92))
+    stores.lease_traces.append_trace_cursor(LeaseTraceCheckpoint(LeaseCursorKey.opening(_t(0)), 0, _t(93)))
+    stores.lease_traces.record_trace_latch(
+        "trace-export-failed", at=_t(94), report_kind="event.recorded", report_payload="{}"
+    )
+
+    host.host_identity.record_host_identity(
+        HostIdentity(host_id="hs_census", tenant_id="tn_census", registered_at=_t(95))
+    )
+    host.host_lane.record_host_external_usage_attempt(
+        slug="census-host", sampled_at=_t(96), payload=None, report_kind="census.kind", report_payload="{}"
+    )
+    host.host_lane.record_host_high_water(seq=0, at=_t(97))
+    for generation, at in ((1, _t(98)), (2, _t(99))):
+        mark = _usage_limit_mark(lease_2, generation, at)
+        host.usage_limits.record_usage_limit_mark(usage_slug, mark)
+        stores.usage_limits.record_usage_limit_mark(mark)
+        host.usage_limits.record_floor_clear(usage_slug, FloorClear(cleared_at=at, by="operator"))
+        stores.usage_limits.record_floor_clear(FloorClear(cleared_at=at, by="operator"))
+
+    read = RunnerReadStores.of(stores)
+    return RunnerWorld(
+        engine=engine,
+        stores=stores,
+        read=read,
+        host=host,
+        host_read=HostReadStores.of(host),
+        chunk_1=chunk_1,
+        chunk_2=chunk_2,
+        chunk_3=chunk_3,
+        chunk_4=chunk_4,
+        chunk_5=chunk_5,
+        chunk_6=chunk_6,
+        chunk_7=chunk_7,
+        node_a=node_a,
+        lease_1=lease_1,
+        lease_2=lease_2,
+        lease_3=lease_3,
+        lease_5=lease_5,
+        lease_7=lease_7,
+        lease_8=lease_8,
+        session_1=SessionReference(CLAUDE_CODE_HARNESS_ID, "sess-1"),
+        transcript_segment_id=open_segment.segment_id,
+        workspace_id=workspace_id,
+        usage_slug=usage_slug,
+    )
+
+
+RunnerRecipe = Callable[[RunnerWorld], object]
+
+
+#: Every reflected runner ``(Protocol, method)``, mapped to a recipe run against :func:`build_runner_world`'s world.
+RUNNER_CENSUS: dict[tuple[type, str], RunnerRecipe] = {
+    (IReadLeaseRecordRepository, "list_active_leases"): lambda w: w.read.lease_record.list_active_leases(),
+    (IReadLeaseRecordRepository, "active_lease_for_chunk"): lambda w: w.read.lease_record.active_lease_for_chunk(
+        w.chunk_1
+    ),
+    (IReadLeaseRecordRepository, "active_lease"): lambda w: w.read.lease_record.active_lease(w.lease_2),
+    (IReadLeaseRecordRepository, "latest_lease_for_chunk"): lambda w: w.read.lease_record.latest_lease_for_chunk(
+        w.chunk_1
+    ),
+    (IReadLeaseRecordRepository, "latest_lease_with_session_for_chunk"): lambda w: (
+        w.read.lease_record.latest_lease_with_session_for_chunk(w.chunk_1)
+    ),
+    (IReadLeaseRecordRepository, "lease"): lambda w: w.read.lease_record.lease(w.lease_1),
+    (IReadLeaseRecordRepository, "list_closed_leases"): lambda w: w.read.lease_record.list_closed_leases(10),
+    (IReadLeaseRecordRepository, "attempt_count"): lambda w: w.read.lease_record.attempt_count(w.chunk_1, w.node_a),
+    (IReadLeaseRecordRepository, "latest_epoch"): lambda w: w.read.lease_record.latest_epoch(w.chunk_1),
+    (IReadLeaseRecordRepository, "has_lease_in_binding_tenure"): lambda w: (
+        w.read.lease_record.has_lease_in_binding_tenure(w.chunk_1, _t(0))
+    ),
+    (IReadLeaseRecordRepository, "lease_ids_for_chunk"): lambda w: w.read.lease_record.lease_ids_for_chunk(w.chunk_1),
+    (IReadLeaseRecordRepository, "active_lease_chunk_ids"): lambda w: w.read.lease_record.active_lease_chunk_ids(),
+    (IReadChunkLeaseRepository, "chunk_leases"): lambda w: w.read.lease_record.chunk_leases(w.chunk_1),
+    (IReadLeaseSessionRepository, "latest_session"): lambda w: w.read.session.latest_session(w.chunk_1, None),
+    (IReadLeaseSessionRepository, "pool_head"): lambda w: w.read.session.pool_head(w.chunk_1, "pool-a"),
+    (IReadLeaseSessionRepository, "session_invocation_count"): lambda w: w.read.session.session_invocation_count(
+        w.session_1
+    ),
+    (IReadLeaseSessionRepository, "lease_for_session"): lambda w: w.read.session.lease_for_session(w.session_1),
+    (IReadLeaseSessionRepository, "session_ended_lease_ids"): lambda w: w.read.session.session_ended_lease_ids(),
+    (IReadLeaseSessionRepository, "session_preamble_fingerprint"): lambda w: (
+        w.read.session.session_preamble_fingerprint(w.session_1)
+    ),
+    (IReadLeaseLivenessRepository, "latest_heartbeat"): lambda w: w.read.liveness.latest_heartbeat(w.lease_2),
+    (IReadLeaseLivenessRepository, "latest_spawn"): lambda w: w.read.liveness.latest_spawn(w.lease_2),
+    (IReadLeaseLivenessRepository, "lease_generation"): lambda w: w.read.liveness.lease_generation(w.lease_2),
+    (IReadLeaseLivenessRepository, "latest_spawn_harness_version"): lambda w: (
+        w.read.liveness.latest_spawn_harness_version(w.lease_2)
+    ),
+    (IReadLeaseLivenessRepository, "liveness_facts"): lambda w: w.read.liveness.liveness_facts([w.lease_2]),
+    (IReadLeaseLivenessRepository, "lease_generations"): lambda w: w.read.liveness.lease_generations([w.lease_2]),
+    (IReadLeaseLivenessRepository, "latest_spawn_harness_versions"): lambda w: (
+        w.read.liveness.latest_spawn_harness_versions([w.lease_2])
+    ),
+    (IReadLeaseResumeIntentRepository, "resume_intent_lease_ids"): lambda w: (
+        w.read.resume_intent.resume_intent_lease_ids()
+    ),
+    (IReadEnvironmentRepository, "held_environment_ids"): lambda w: w.read.environments.held_environment_ids(),
+    (IReadEnvironmentRepository, "bindings_for_chunk"): lambda w: w.read.environments.bindings_for_chunk(w.chunk_1),
+    (IReadEnvironmentRepository, "newest_binding_for_chunk"): lambda w: w.read.environments.newest_binding_for_chunk(
+        w.chunk_1
+    ),
+    (IReadEnvironmentRepository, "held_bindings_for"): lambda w: w.read.environments.held_bindings_for([w.chunk_1]),
+    (IReadEnvironmentRepository, "newest_bindings_for"): lambda w: w.read.environments.newest_bindings_for([w.chunk_1]),
+    (IReadEnvironmentRepository, "chunk_project_ids"): lambda w: w.read.environments.chunk_project_ids([w.chunk_1]),
+    (IReadEnvironmentRepository, "live_tenure_chunk_ids"): lambda w: w.read.environments.live_tenure_chunk_ids(),
+    (IReadEnvironmentRepository, "held_bindings"): lambda w: w.read.environments.held_bindings(),
+    (IReadEnvironmentRepository, "incomplete_held_bindings"): lambda w: w.read.environments.incomplete_held_bindings(),
+    (IReadEnvironmentRepository, "open_lease_holds"): lambda w: w.read.environments.open_lease_holds(),
+    (IReadTranscriptLedgerRepository, "transcript_segment"): lambda w: w.read.transcript_ledger.transcript_segment(
+        w.transcript_segment_id
+    ),
+    (IReadTranscriptLedgerRepository, "transcript_segments"): lambda w: w.read.transcript_ledger.transcript_segments(
+        [w.transcript_segment_id]
+    ),
+    (IReadTranscriptLedgerRepository, "open_transcript_segments"): lambda w: (
+        w.read.transcript_ledger.open_transcript_segments()
+    ),
+    (IReadTranscriptLedgerRepository, "open_transcript_segments_for_lease"): lambda w: (
+        w.read.transcript_ledger.open_transcript_segments_for_lease(w.lease_1)
+    ),
+    (IReadTranscriptLedgerRepository, "transcript_segments_for_chunk"): lambda w: (
+        w.read.transcript_ledger.transcript_segments_for_chunk(w.chunk_1)
+    ),
+    (IReadTranscriptLedgerRepository, "chunk_transcript_shipped_bytes"): lambda w: (
+        w.read.transcript_ledger.chunk_transcript_shipped_bytes([w.chunk_1])
+    ),
+    (IReadTranscriptLedgerRepository, "outstanding_transcript_buffer_bytes"): lambda w: (
+        w.read.transcript_ledger.outstanding_transcript_buffer_bytes()
+    ),
+    (IReadTranscriptLedgerRepository, "has_unshipped_transcript_content"): lambda w: (
+        w.read.transcript_ledger.has_unshipped_transcript_content(w.chunk_1)
+    ),
+    (IReadTranscriptLedgerRepository, "pending_transcript_outbound"): lambda w: (
+        w.read.transcript_ledger.pending_transcript_outbound()
+    ),
+    (IReadTranscriptLedgerRepository, "transcript_backfill_leases"): lambda w: (
+        w.read.transcript_ledger.transcript_backfill_leases()
+    ),
+    (IReadTokenRepository, "route_token"): lambda w: w.read.tokens.route_token(w.chunk_1),
+    (IReadTokenRepository, "lease_token_hash"): lambda w: w.read.tokens.lease_token_hash(w.lease_2),
+    (IReadTokenRepository, "lease_for_token_hash"): lambda w: w.read.tokens.lease_for_token_hash("absent"),
+    (IReadWorkspacePromptRepository, "workspace_prompt_override"): lambda w: (
+        w.host_read.workspace_prompt.workspace_prompt_override(w.workspace_id)
+    ),
+    (IReadOutboundRepository, "pending_submission_lease_ids"): lambda w: w.read.outbound.pending_submission_lease_ids(),
+    (IReadOutboundRepository, "pending_outbound"): lambda w: w.read.outbound.pending_outbound(),
+    (IReadOutboundRepository, "pending_outbound_count"): lambda w: w.read.outbound.pending_outbound_count(),
+    (IReadOutboundRepository, "recent_outbound"): lambda w: w.read.outbound.recent_outbound(10),
+    (IReadAskRepository, "unforwarded_ask"): lambda w: w.read.asks.unforwarded_ask(w.lease_2),
+    (IReadAskRepository, "parked_lease_ids"): lambda w: w.read.asks.parked_lease_ids(),
+    (IReadAskRepository, "ask_parked_lease_ids"): lambda w: w.read.asks.ask_parked_lease_ids(),
+    (IReadAskRepository, "open_park"): lambda w: w.read.asks.open_park(w.lease_3),
+    (IReadAskRepository, "open_asks"): lambda w: w.read.asks.open_asks(),
+    (IReadPauseRepository, "hub_contact_at"): lambda w: w.read.pause.hub_contact_at(),
+    (IReadPauseRepository, "hub_paused"): lambda w: w.read.pause.hub_paused(),
+    (IReadPauseRepository, "local_paused"): lambda w: w.read.pause.local_paused(),
+    (IReadPauseRepository, "local_pause_reason"): lambda w: w.read.pause.local_pause_reason(),
+    (IReadRunnerIdentityRepository, "runner_identity"): lambda w: w.read.identity.runner_identity(),
+    (IReadServedProjectsRepository, "served_projects_answer"): lambda w: (
+        w.read.served_projects.served_projects_answer()
+    ),
+    (IReadDaemonLivenessRepository, "last_daemon_liveness"): lambda w: (
+        w.host_read.daemon_liveness.last_daemon_liveness()
+    ),
+    (IReadPauseRepository, "pause_parked_lease_ids"): lambda w: w.read.pause.pause_parked_lease_ids(),
+    (IReadPauseRepository, "open_pause_parks"): lambda w: w.read.pause.open_pause_parks(),
+    (IReadTakeoverRepository, "lease_for_open_takeover"): lambda w: w.read.takeover.lease_for_open_takeover(w.lease_5),
+    (IReadTakeoverRepository, "open_takeover_for_chunk"): lambda w: w.read.takeover.open_takeover_for_chunk(w.chunk_4),
+    (IReadTakeoverRepository, "open_takeovers_for"): lambda w: w.read.takeover.open_takeovers_for(
+        [w.chunk_3, w.chunk_4]
+    ),
+    (IReadTakeoverRepository, "open_takeover_chunk_ids"): lambda w: w.read.takeover.open_takeover_chunk_ids(),
+    (IReadTakeoverRepository, "open_takeovers"): lambda w: w.read.takeover.open_takeovers(),
+    (IReadRequeueRepository, "pending_requeue_chunk_ids"): lambda w: w.read.requeue.pending_requeue_chunk_ids(),
+    (IReadEscalationRepository, "open_escalations"): lambda w: w.read.escalations.open_escalations(),
+    (IReadEscalationRepository, "open_escalation_for_chunk"): lambda w: w.read.escalations.open_escalation_for_chunk(
+        w.chunk_3
+    ),
+    (IReadEscalationRepository, "open_escalations_for"): lambda w: w.read.escalations.open_escalations_for(
+        [w.chunk_3, w.chunk_4]
+    ),
+    (IReadEscalationRepository, "closed_escalations"): lambda w: w.read.escalations.closed_escalations(10),
+    (IReadUsageRepository, "session_cost_basis"): lambda w: w.read.usage.session_cost_basis(w.lease_1),
+    (IReadUsageRepository, "usage_since"): lambda w: w.read.usage.usage_since(_BASE),
+    (IReadUsageRepository, "context_sample_state"): lambda w: w.read.usage.context_sample_state(w.lease_1),
+    (IReadUsageRepository, "context_sample_states"): lambda w: w.read.usage.context_sample_states([w.lease_1]),
+    (IReadUsageRepository, "lease_usage_facts"): lambda w: w.read.usage.lease_usage_facts(w.lease_1),
+    (IReadUsageRepository, "invocations_for_chunk"): lambda w: w.read.usage.invocations_for_chunk(
+        w.chunk_3, limit=10, offset=0
+    ),
+    (IReadExternalUsageRepository, "last_external_usage_attempt_at"): lambda w: (
+        w.host_read.external_usage.last_external_usage_attempt_at(w.usage_slug)
+    ),
+    (IReadExternalUsageRepository, "latest_external_usage_attempt"): lambda w: (
+        w.host_read.external_usage.latest_external_usage_attempt(w.usage_slug)
+    ),
+    (IReadExternalUsageRepository, "latest_external_usage_windows"): lambda w: (
+        w.host_read.external_usage.latest_external_usage_windows(w.usage_slug)
+    ),
+    (IReadExternalUsageRepository, "latest_external_usage_windows_by_slug"): lambda w: (
+        w.host_read.external_usage.latest_external_usage_windows_by_slug([w.usage_slug])
+    ),
+    (IReadExternalUsageRepository, "latest_external_usage_samples_by_slug"): lambda w: (
+        w.host_read.external_usage.latest_external_usage_samples_by_slug([w.usage_slug])
+    ),
+    (IReadExternalUsageRepository, "external_usage_sample_at"): lambda w: (
+        w.host_read.external_usage.external_usage_sample_at(w.usage_slug, _BASE + timedelta(days=1))
+    ),
+    (IReadExternalUsageRepository, "latest_external_usage_attempts_by_slug"): lambda w: (
+        w.host_read.external_usage.latest_external_usage_attempts_by_slug([w.usage_slug])
+    ),
+    (IReadHostIdentityRepository, "host_identity"): lambda w: w.host_read.host_identity.host_identity(),
+    (IReadHostIngestRepository, "latest_host_ingest"): lambda w: w.host_read.host_ingests.latest_host_ingest("rn_x"),
+    (IReadSubscriptionUsageLimitRepository, "latest_usage_limit_mark"): lambda w: (
+        w.host_read.usage_limits.latest_usage_limit_mark(w.usage_slug)
+    ),
+    (IReadSubscriptionUsageLimitRepository, "latest_floor_clear"): lambda w: (
+        w.host_read.usage_limits.latest_floor_clear(w.usage_slug)
+    ),
+    (IReadRunnerUsageLimitRepository, "latest_usage_limit_mark"): lambda w: (
+        w.read.usage_limits.latest_usage_limit_mark()
+    ),
+    (IReadRunnerUsageLimitRepository, "latest_floor_clear"): lambda w: w.read.usage_limits.latest_floor_clear(),
+    (IReadHostLaneRepository, "host_buffered_count"): lambda w: w.host_read.host_lane.host_buffered_count(),
+    (IReadHostLaneRepository, "host_high_water_seen"): lambda w: w.host_read.host_lane.host_high_water_seen(),
+    (IReadHostLaneRepository, "pending_host_facts"): lambda w: w.host_read.host_lane.pending_host_facts(limit=10),
+    (IReadCredentialRenewalRepository, "last_credential_renewal_claim_at"): lambda w: (
+        w.host_read.external_usage.last_credential_renewal_claim_at(w.usage_slug)
+    ),
+    (IReadCredentialRenewalRepository, "latest_credential_renewals_by_slug"): lambda w: (
+        w.host_read.external_usage.latest_credential_renewals_by_slug([w.usage_slug])
+    ),
+    (IReadAttachmentRepository, "attachments_for_lease"): lambda w: w.read.attachments.attachments_for_lease(w.lease_2),
+    (IReadAttachmentRepository, "attachment_names_for_lease"): lambda w: w.read.attachments.attachment_names_for_lease(
+        w.lease_2
+    ),
+    (IReadGitCommitDeclarationRepository, "git_commit_declarations_for_lease"): lambda w: (
+        w.read.git_commit_declarations.git_commit_declarations_for_lease(w.lease_2)
+    ),
+    (IReadGitCommitDeclarationRepository, "git_commit_declarations_for_leases"): lambda w: (
+        w.read.git_commit_declarations.git_commit_declarations_for_leases([w.lease_2])
+    ),
+    (IReadCheckRepository, "nudge_fired"): lambda w: w.read.checks.nudge_fired(w.lease_2, 2),
+    (IReadCheckRepository, "checks_ran"): lambda w: w.read.checks.checks_ran(w.lease_2, 2),
+    (IReadCheckRepository, "check_results_for_lease"): lambda w: w.read.checks.check_results_for_lease(w.lease_2, 2),
+    (IReadGraphArtifactRepository, "graph_artifacts_for_graph"): lambda w: (
+        w.host_read.graph_artifacts.graph_artifacts_for_graph(GRAPH_ID)
+    ),
+    (IReadElicitationRepository, "in_flight_elicitation"): lambda w: w.read.elicitations.in_flight_elicitation(
+        w.lease_7, 1
+    ),
+    (IReadElicitationRepository, "in_flight_elicitation_lease_ids"): lambda w: (
+        w.read.elicitations.in_flight_elicitation_lease_ids()
+    ),
+    (IReadElicitationRepository, "in_flight_elicitations"): lambda w: w.read.elicitations.in_flight_elicitations(
+        [(w.lease_7, 1)]
+    ),
+    (IReadElicitationRepository, "in_flight_elicitations_by_lease"): lambda w: (
+        w.read.elicitations.in_flight_elicitations_by_lease()
+    ),
+    (IReadInvocationBoundaryRepository, "boundary"): lambda w: w.read.invocation_boundaries.boundary(
+        w.lease_2, 2, "resume"
+    ),
+    (IReadInvocationBoundaryRepository, "current_start"): lambda w: w.read.invocation_boundaries.current_start(
+        w.lease_2, 2, "resume"
+    ),
+    (IReadInvocationBoundaryRepository, "open_boundaries_for_lease"): lambda w: (
+        w.read.invocation_boundaries.open_boundaries_for_lease(w.lease_2)
+    ),
+    (IReadSelfTestResultRepository, "latest_selftest_result"): lambda w: w.read.selftest_results.latest_selftest_result(
+        CLAUDE_CODE_HARNESS_ID
+    ),
+    (IReadOverloadRepository, "overload_streak"): lambda w: w.read.overload.overload_streak(w.lease_2, 1),
+    (IReadOverloadRepository, "open_overload_facts"): lambda w: w.read.overload.open_overload_facts(),
+    (IReadLeaseTraceFacts, "lease_trace_facts"): lambda w: w.read.lease_traces.lease_trace_facts(w.lease_1),
+    (IReadLeaseTraceFacts, "lease_trace_facts_for"): lambda w: w.read.lease_traces.lease_trace_facts_for(
+        [w.lease_1, w.lease_2]
+    ),
+    (IReadLeaseTraceCursor, "closed_leases_after"): lambda w: w.read.lease_traces.closed_leases_after(
+        LeaseCursorKey.opening(_t(0)), _t(100), 200
+    ),
+    (IReadLeaseTraceCursor, "oldest_unsent_lease"): lambda w: w.read.lease_traces.oldest_unsent_lease(
+        LeaseCursorKey.opening(_t(0)), _t(100)
+    ),
+    (IReadLeaseTraceCursor, "newest_trace_cursor"): lambda w: w.read.lease_traces.newest_trace_cursor(),
+    (IReadLeaseTraceCursor, "newest_trace_latch"): lambda w: w.read.lease_traces.newest_trace_latch(),
+    (IReadLeaseTraceCursor, "newest_export_cursor"): lambda w: w.read.lease_traces.newest_export_cursor(),
+    (IReadLeaseTraceCursor, "newest_export_failure"): lambda w: w.read.lease_traces.newest_export_failure(),
+}
+
+#: Runner ``IRead*`` methods with no SQL behind them at all, each reasoned below.
+_HARNESS_HEALTH_EXEMPTION = (
+    "blizzard.runner.harness.health_cache.HarnessHealthCache implements this over an in-memory "
+    "per-harness result table — no SQL, and not part of blizzard.runner.composition.build_stores's "
+    "bundle."
+)
+
+RUNNER_EXEMPTIONS: dict[tuple[type, str], str] = {
+    (IReadHarnessHealth, "get"): _HARNESS_HEALTH_EXEMPTION,
+    (IReadHarnessHealth, "displayed_version"): _HARNESS_HEALTH_EXEMPTION,
+    (IReadHarnessHealth, "admitted_range"): _HARNESS_HEALTH_EXEMPTION,
+    (IReadArchivedTranscriptRepository, "read_turns"): (
+        "blizzard.runner.transcripts.internal.http_archived_transcript_repository."
+        "HttpArchivedTranscriptRepository implements this over httpx2 against the hub's "
+        "HTTP API — no SQL, and not part of blizzard.runner.composition.build_stores's "
+        "bundle."
+    ),
+    (IReadTranscriptRepository, "read_turns"): (
+        "blizzard.runner.transcripts.internal.projected_transcript_repository."
+        "ProjectedTranscriptRepository implements this over IHarnessTranscriptSource, a "
+        "filesystem read of the harness's own session directory — no SQL, and not part of "
+        "blizzard.runner.composition.build_stores's bundle."
+    ),
+}
+
+
+# --- Hub -----------------------------------------------------------------------------------
+
+_HUB_BASE = datetime(2026, 7, 20, 12, 0, 0, tzinfo=UTC)
+_HUB_UNTIL = _HUB_BASE + timedelta(days=365)
+
+
+def _label(ref: WorkRef) -> str | None:
+    return f"{ref.source}#{ref.ref}"
+
+
+def _window_in_one_snapshot(reads: IReadTraceSteps) -> None:
+    """A window's candidates and their step facts, read inside one snapshot."""
+    with reads.snapshot() as snapshot:
+        snapshot.step_facts_for(snapshot.closing_candidates(_HUB_BASE, _ht(10_000), 50).chunk_ids)
+
+
+def _corpus_window_in_one_snapshot(corpus: IReadStepCorpus) -> None:
+    """The corpus's candidates and their step facts, read inside one snapshot."""
+    with corpus.snapshot() as snapshot:
+        snapshot.step_facts_for(snapshot.closing_candidates(_HUB_BASE, _ht(10_000), 50).chunk_ids, lambda _: _label)
+
+
+def _trace_store_of(connections: ScopedConnections, hub: HubHarness) -> TraceStore:
+    return TraceStore(
+        connections,
+        hub_events=_hub_events_of(hub),
+        corpus=hub.hub_services.hub_scoped_reads.corpus,
+        hydration=lambda _tenant: StepHydration(
+            graphs=hub.services.graphs,
+            names=hub.services.registry,
+            projects=ProjectLabels(hub.services.projects),
+            label=_label,
+            source_label=hub.services.work_sources.source_label,
+        ),
+        tenant_name=hub.hub_services.tenants.open_tenants.name,
+    )
+
+
+def _egress_store_of(connections: ScopedConnections, hub: HubHarness) -> EgressStore:
+    return EgressStore(connections, hub_events=_hub_events_of(hub), usage=hub.hub_services.hub_scoped_reads.corpus)
+
+
+def _hub_events_of(hub: HubHarness) -> HubEventLogStore:
+    return HubEventLogStore(hub_level_connections(hub.engine))
+
+
+def _teardowns_of(hub: HubHarness) -> TenantTeardownStore:
+    return TenantTeardownStore(hub_level_connections(hub.engine))
+
+
+def _memberships_of(hub: HubHarness) -> MembershipRepository:
+    return MembershipRepository(hub_level_connections(hub.engine))
+
+
+def _hub_admins_of(hub: HubHarness) -> HubAdminRepository:
+    return HubAdminRepository(hub_level_connections(hub.engine))
+
+
+def _ht(offset_seconds: float) -> datetime:
+    """The hub world's own deterministic, strictly-ordered stamp — mirrors :func:`_t`
+    (kept separate so the runner and hub worlds' own offsets never have to stay in
+    lockstep with one another)."""
+    return _HUB_BASE + timedelta(seconds=offset_seconds)
+
+
+HUB_RUNNER_ID = "r1"
+HUB_RUNNER_ID_2 = "r2"
+
+#: A two-node graph (build judged into deliver) minted fresh so every chunk-domain recipe has a real node id to cite.
+_HUB_GRAPH_NAME = "hub-gate-graph"
+_HUB_GRAPH_YAML = f"""
+name: {_HUB_GRAPH_NAME}
+entry: build
+nodes:
+  build:
+    executor: runner
+    prompt: |
+      Build the change.
+    judgement:
+      prompt: |
+        Assess the build.
+      choices:
+        pass:
+          description: Complete and green.
+          to: deliver
+        fail:
+          description: Incomplete.
+          to: build
+  deliver:
+    executor: hub
+    action: pass
+    judgement:
+      choices:
+        success:
+          description: Delivered.
+          to: done
+        failure:
+          description: Failed to deliver.
+          to: build
+"""
+
+_HUB_RETIRED_GRAPH_NAME = "hub-gate-graph-retiree"
+_HUB_RETIRED_GRAPH_YAML = _HUB_GRAPH_YAML.replace(_HUB_GRAPH_NAME, _HUB_RETIRED_GRAPH_NAME, 1)
+
+
+def _tool_turn(index: int, name: str, tool_input: dict[str, object]) -> dict[str, object]:
+    """One transcript tool-call turn shaped for the analytics extractors — mirrors
+    ``tests/component/hub/api/test_analytics_events.py``'s own ``_tool_turn``, the smallest shape the
+    file_read/skill_invocation/agent_spawn extractors parse."""
+    return {
+        "index": index,
+        "kind": "tool",
+        "timestamp": "2026-07-20T09:00:00Z",
+        "text": "",
+        "tool": {
+            "name": name,
+            "input": tool_input,
+            "input_unparsed": None,
+            "input_shape": "object",
+            "tool_use_id": f"t{index}",
+            "output": None,
+            "output_truncated": False,
+        },
+        "thinking_redacted": False,
+        "sidechain": None,
+        "truncated": False,
+    }
+
+
+@dataclass(frozen=True)
+class HubWorld:
+    """The hub store's module-scoped seeded world — one instance built once
+    (:func:`build_hub_world`) and driven by every recipe in :data:`HUB_CENSUS`. ``hub`` carries the production-wired
+    :class:`~tests.support.scaffolding.HubHarness`; ``write`` is a second, write-typed :class:`ChunkStores` instance recipes
+    never read through, only seeding does (``hub.services.chunks`` is typed read-only, ``bzh:controller-read-only``)."""
+
+    hub: HubHarness
+    engine: Engine
+    clock: FixedClock
+    store_connections: ScopedConnections
+    write: ChunkStores
+    read: ChunkReadStores
+    auth_state: IReadAuthStateRepository
+    auth_facts: IReadAuthFactsRepository
+    superuser_bootstrap: IReadSuperuserBootstrapRepository
+    transcript_events: IReadTranscriptEvents
+    annotated_sources: IReadAnnotatedSources
+    garden_run: IReadGardenRunRepository
+    garden_sweeps: IReadGardenSweepsRepository
+    garden_trend: IReadGardenTrendRepository
+    garden_delivery: IReadGardenDeliveryRepository
+    review_findings: IReadReviewFindingsRepository
+    work_items: IReadWorkItemRepository
+    secrets: ISecretCatalog
+    invitations: IReadInvitationRepository
+    config_revisions: IReadConfigRevisions
+    config_imports: IReadConfigImports
+    default_graph: Graph
+    graph: Graph
+    retired_graph: Graph
+    build_node_id: str
+    deliver_node_id: str
+    user_1: User
+    user_2: User
+    session_id_hash: str
+    auth_state_value: str
+    runner_token_hash: str
+    host_id: str
+    host_token_hash: str
+    revoked_host_token_hash: str
+    invitation_id: str
+    invitation_token_hash: str
+    routine_id: str
+    scope_a: str
+    scope_a_id: str
+    scope_c: str
+    finding_1: str
+    finding_2: str
+    garden_proposal_1: str
+    garden_proposal_2: str
+    materialized_source: str
+    materialized_ref: str
+    work_item_ref_1: str
+    work_item_ref_2: str
+    run_chunk_1: str
+    run_chunk_1_chunk: Chunk
+    chunk_ready_1: str
+    chunk_ready_2: str
+    chunk_transition: str
+    chunk_migration: str
+    delivery_chunk: str
+    delivery_epoch: int
+    chunk_decision_1: str
+    chunk_decision_2: str
+    question_1: str
+    chunk_question: str
+    chunk_artifacts: str
+    chunk_delivery_a: str
+    chunk_dependency_dependent: str
+    chunk_dependency_prerequisite: str
+    chunk_lifecycle_merged: str
+    chunk_route_a: str
+    chunk_route_b: str
+    transcript_chunk: str
+    transcript_segment_id: str
+    #: The tenant's one project, renamed ``default`` -> ``census``, linked to ``census-source`` (unlinked, then
+    #: relinked) and to the repository ``census-repo``, renamed to ``census-repository``; the work source is renamed
+    #: ``census-work-source`` after.
+    project_id: ProjectId
+    repository_id: RepositoryId
+    work_source_id: WorkSourceId
+    #: The forge both name, created ``census-forge`` and renamed ``census-github``.
+    forge_id: ForgeId
+    #: A visit submitted to two flows, with an open turn; a second visit beside it is closed.
+    flow_chunk: str
+    flow_submission_id: str
+    #: The first flow that visit holds.
+    flow_id: str
+
+
+def build_hub_world(tmp_path: Path) -> HubWorld:
+    """Seed a migrated-to-head hub store through its own write Protocols and production services, so every read
+    method in :data:`HUB_CENSUS` reaches real, non-empty behavior. Every id below is a plain literal — the
+    store enforces no foreign key (``create_engine_from_url`` never turns ``PRAGMA foreign_keys`` on), so a fact's
+    own node id only has to be real where a fact family's OWN read resolves it against the graph, never where a
+    chunk-fact seam merely carries it."""
+    hub = build_hub(tmp_path)
+    engine = hub.engine
+    clock = hub.clock
+    store_connections = hub_store_connections(engine)
+    write = chunk_stores(engine, clock)
+    read = hub.services.chunks
+    auth_errors = RepoErrorFactory(get_logger("test"))
+
+    auth_state_store = AuthStateRepository(store_connections, auth_errors)
+    auth_facts_store = AuthFactsRepository(store_connections)
+    superuser_bootstrap_store = SuperuserBootstrapRepository(store_connections)
+    identity_store = IdentityRepository(store_connections, auth_errors)
+    transcript_events = TranscriptEventStore(store_connections)
+    annotated_sources = ForgeAnnotationStore(store_connections)
+    garden_run_store = GardenRunStore(store_connections)
+    garden_sweeps_store = GardenSweepsStore(store_connections)
+    garden_trend_store = GardenTrendStore(store_connections)
+    garden_delivery_store = GardenDeliveryStore(store_connections)
+    review_findings_store = ReviewFindingsStore(store_connections)
+    work_items = WorkItemStore(store_connections)
+    finding_store = FindingStore(store_connections)
+    finding_set_store = FindingSetStore(store_connections)
+    garden_proposal_store = GardenProposalStore(store_connections)
+    user_store = UserRepository(store_connections, auth_errors)
+
+    def _mint(chunk_id: str, ref: str, *, at: datetime) -> None:
+        assert graph is not None
+        seed_chunk_record(
+            write,
+            Chunk(
+                chunk_id=chunk_id, graph_id=graph.graph_id, work_refs=[WorkRef(source="default", ref=ref)], minted_at=at
+            ),
+        )
+
+    def _close_decision(chunk_id: str) -> CloseEnqueueDecision:
+        chunk = read.record.get(chunk_id)
+        assert chunk is not None
+        return decide_close_enqueue(chunk.work_refs, lambda _source: True)
+
+    # --- graphs -------------------------------------------------------------------------
+    default_graph = hub.services.graph_mint.ensure_default(
+        hub.services.default_graph_doc, definition_yaml=hub.services.default_graph_yaml
+    )
+    minted = hub.client.post("/api/graphs", json={"definition_yaml": _HUB_GRAPH_YAML})
+    assert minted.status_code == 201, minted.text
+    graph = hub.services.graphs.get_enabled_by_name(_HUB_GRAPH_NAME)
+    assert graph is not None
+    hub.services.graph_lifecycle.set_follow_latest(graph, follow_latest=True, by="operator")
+    minted_retiree = hub.client.post("/api/graphs", json={"definition_yaml": _HUB_RETIRED_GRAPH_YAML})
+    assert minted_retiree.status_code == 201, minted_retiree.text
+    retired_graph = hub.services.graphs.get_enabled_by_name(_HUB_RETIRED_GRAPH_NAME)
+    assert retired_graph is not None
+    hub.services.graph_lifecycle.retire(retired_graph, by="operator")
+    build_node = next(n for n in graph.nodes if n.name == "build")
+    deliver_node = next(n for n in graph.nodes if n.name == "deliver")
+
+    # --- auth: users, sessions, identities, auth-state, auth-facts, superuser bootstrap --
+    user_1 = User(
+        user_id="usr_hub_1",
+        username="alice",
+        display_name="Alice",
+        email="alice@example.com",
+        created_at=_ht(0),
+    )
+    user_2 = User(
+        user_id="usr_hub_2",
+        username="bob",
+        display_name="Bob",
+        email="bob@example.com",
+        created_at=_ht(1),
+    )
+    user_store.create(user_1)
+    user_store.create(user_2)
+
+    _plaintext, session_1 = hub.hub_services.auth.mint_session(user_1)
+    session_id_hash = session_1.id_hash
+
+    identity_store.link(
+        Identity(provider_name="github", subject="12345", user_id=user_1.user_id, handle="alice-gh", created_at=_ht(2))
+    )
+    identity_store.link(
+        Identity(provider_name="github", subject="67890", user_id=user_2.user_id, handle="bob-gh", created_at=_ht(3))
+    )
+
+    auth_state_value = "state_hub_1"
+    auth_state_store.create(
+        AuthStateEntry(
+            state=auth_state_value,
+            kind="login",
+            provider_name="github",
+            return_to="/",
+            code_challenge=None,
+            created_at=_ht(4),
+            expires_at=_ht(304),
+        )
+    )
+
+    hub.hub_services.auth_facts.login_failed(actor="anon", subject="alice@example.com", detail="bad state")
+    hub.hub_services.auth_facts.sso_refused(actor="anon", subject="alice@example.com", detail="wrong provider")
+
+    superuser_bootstrap_store.upsert(
+        SuperuserBootstrap(email="root@example.com", claimed_user_id=None, updated_at=_ht(5))
+    )
+
+    # --- registry -------------------------------------------------------------------------
+    seed_runner(hub, HUB_RUNNER_ID, register=False)
+    seed_runner(hub, HUB_RUNNER_ID_2, register=False)
+    hub.services.fleet.register(
+        added_runner(hub, HUB_RUNNER_ID),
+        "workspace-1",
+        env_capacity=2,
+        public_url="http://r1.local",
+        redirect_uris=("http://r1.local/cb",),
+    )
+    hub.services.fleet.register(added_runner(hub, HUB_RUNNER_ID_2), "workspace-2")
+    registration = hub.services.registry.get_runner(HUB_RUNNER_ID)
+    assert registration is not None
+    runner_token = hub.services.enrollment.enroll(registration)
+    runner_token_hash = TokenHash(runner_token).hex
+
+    # --- hosts ------------------------------------------------------------------------------
+    added_host = hub.services.host_enrollment.add("census-box", by="operator")
+    host_token_hash = TokenHash(added_host.token).hex
+    revoked_host = hub.services.host_enrollment.add("census-revoked", by="operator")
+    revoked_host_token_hash = TokenHash(revoked_host.token).hex
+    revoked_record = hub.services.hosts.get_host(revoked_host.host_id)
+    assert revoked_record is not None
+    hub.services.host_enrollment.revoke_token(revoked_record, by="operator")
+    hub.services.fleet.set_paused(registration, paused=True, by="operator")
+    hub.services.fleet.record_local_pause(HUB_RUNNER_ID_2, paused=True, at=_ht(6), by="runner", reason="disk full")
+
+    # --- scopes and routines ---------------------------------------------------------------
+    operator = ChangeContext(actor="operator", door=Door.API)
+    garden_project = default_project(hub.engine)
+    garden_project_record = project_record(hub, garden_project)
+    scope_a = hub.services.scope_registry.ensure(
+        garden_project_record, ScopeSlug.parse("blizzard"), operator, description="core"
+    )
+    scope_b = hub.services.scope_registry.ensure(
+        garden_project_record, ScopeSlug.parse("runner-scope"), operator, description="runner side"
+    )
+    scope_c = hub.services.scope_registry.ensure(
+        garden_project_record, ScopeSlug.parse("legacy"), operator, description="retired"
+    )
+    hub.services.scope_lifecycle.retire(scope_c, operator, by="operator")
+
+    # --- secrets ----------------------------------------------------------------------------
+    secret_store = SecretStore(store_connections)
+    config = ConfigAuthoring(
+        work_sources=WorkSourceRecordStore(store_connections),
+        repositories=RepositoryRecordStore(store_connections),
+        forges=ForgeRecordStore(store_connections),
+        offers=ForgeKindOffers(),
+        secrets=secret_store,
+        cipher=secret_cipher(hub_key_provider({}, data_dir=tmp_path / "data")),
+        apply_writer=ConfigApplyStore(store_connections),
+        import_writer=ConfigImportStore(store_connections),
+        events=None,
+        clock=clock,
+    )
+    config.create_secret(SecretName.parse("gh-token"), "tok-a", operator)
+    retired_secret = config.create_secret(SecretName.parse("old-token"), "tok-b", operator)
+    config.retire_secret(retired_secret, operator)
+    # A forge renamed ``census-forge`` -> ``census-github``, so its former slug resolves too.
+    census_forge = config.create_forge(
+        "census-forge", None, "github", ForgeFields(api_base="https://api.github.com", web_base=None), operator
+    )
+    census_forge = config.edit_forge(census_forge, ForgeEdit(slug="census-github"), operator)
+    config.create_work_source(
+        "census-source",
+        None,
+        WorkSourceFields(
+            provider="github", locator="acme/census", forge_id=census_forge.forge_id, annotate=False, secret="gh-token"
+        ),
+        operator,
+    )
+    config.create_repository(
+        "census-repo",
+        None,
+        RepositoryFields(
+            forge_id=census_forge.forge_id,
+            owner="acme",
+            repo="census",
+            base_branch="master",
+            secret_name="gh-token",
+        ),
+        operator,
+    )
+
+    routine = hub.services.routine_authoring.create(
+        project=garden_project_record,
+        ctx=operator,
+        name="gardening",
+        graph_name=default_graph.name,
+        default_scope_slug=ScopeSlug.parse("blizzard"),
+        default_model=["opus"],
+        default_effort="high",
+    )
+    hub.services.routine_scope_membership.link(routine, scope_b, operator)
+    routine_2 = hub.services.routine_authoring.create(
+        project=garden_project_record,
+        ctx=operator,
+        name="nightly",
+        graph_name=default_graph.name,
+        default_scope_slug=ScopeSlug.parse("runner-scope"),
+    )
+
+    # --- routine runs: garden_run/run_context's own source ---------------------------------
+    run_1 = hub.services.routine_run.run(
+        routine,
+        scope=scope_a,
+        mode=RunMode.FULL,
+        note=None,
+        author=WorkItemAuthor.user(user_1.user_id),
+    )
+    # A second run is all `runs_in_window`/`list_all` need (>=2 rows) — its own chunk is
+    # never referenced by any recipe, so its return value is deliberately discarded.
+    hub.services.routine_run.run(
+        routine_2,
+        scope=scope_b,
+        mode=RunMode.FULL,
+        note="second run",
+        author=WorkItemAuthor.user(user_1.user_id),
+    )
+    run_chunk_1 = run_1.chunk_id
+    run_chunk_1_chunk = hub.services.chunks.record.get(run_chunk_1)
+    assert run_chunk_1_chunk is not None
+
+    # --- findings, finding sets (garden_run/garden_sweeps/garden_trend's own source) -------
+    finding_1 = "fin_hub_1"
+    finding_store.add(
+        finding_1,
+        project_id=garden_project,
+        routine_name="gardening",
+        scope_slug="blizzard",
+        class_="stale-docstring",
+        locus="a.py:1",
+        summary="s1",
+        introduced=None,
+        at=_ht(10),
+    )
+    finding_store.record_fact(finding_1, kind="add", at=_ht(10))
+
+    finding_2 = "fin_hub_2"
+    finding_store.add(
+        finding_2,
+        project_id=garden_project,
+        routine_name="gardening",
+        scope_slug="blizzard",
+        class_="dead-code",
+        locus="b.py:2",
+        summary="s2",
+        introduced=None,
+        at=_ht(11),
+    )
+    finding_store.record_fact(finding_2, kind="add", at=_ht(11))
+
+    garden_proposal_1 = "gprop_hub_1"
+    garden_proposal_store.create(
+        garden_proposal_1,
+        project_id=garden_project,
+        origin=GardenProposalOrigin.ROUTINE_RUN,
+        routine_name="gardening",
+        class_="remediate",
+        title="fix 1",
+        body="body 1",
+        findings=[finding_1],
+        at=_ht(12),
+    )
+    garden_proposal_2 = "gprop_hub_2"
+    garden_proposal_store.create(
+        garden_proposal_2,
+        project_id=garden_project,
+        origin=GardenProposalOrigin.ROUTINE_RUN,
+        routine_name="gardening",
+        class_="remediate",
+        title="fix 2",
+        body="body 2",
+        findings=[finding_2],
+        at=_ht(13),
+    )
+
+    finding_store.record_fact(
+        finding_2, kind="resolved", at=_ht(14), note="landed", actor="operator", proposal_id=garden_proposal_2
+    )
+
+    proposal_1 = garden_proposal_store.get(garden_proposal_1)
+    assert proposal_1 is not None
+    hub.services.garden_proposal_closure.pass_(proposal_1, reason="not worth it", by="operator")
+
+    proposal_2 = garden_proposal_store.get(garden_proposal_2)
+    assert proposal_2 is not None
+    resolved_findings = resolve_proposal_findings(hub.services.findings, proposal_2.findings)
+    accepted = hub.services.garden_proposal_closure.accept(
+        proposal_2, reason=None, by="operator", body=None, mint=True, findings=resolved_findings
+    )
+    assert accepted.closure.source is not None
+    assert accepted.closure.ref is not None
+    materialized_source = accepted.closure.source
+    materialized_ref = accepted.closure.ref
+
+    # --- delivered finding sets over run_chunk_1's own artifacts ----------------------------
+    write.artifacts.record_hub_artifact(
+        run_chunk_1,
+        node_id="nd_survey",
+        node_name="survey",
+        epoch=1,
+        name="findings",
+        content=json.dumps(
+            {"scope": "blizzard", "revisions": {"blizzard": "aaa"}, "measurement": None, "findings": []}
+        ),
+        at=_ht(20),
+        admission=EpochAdmission.AT_OR_ABOVE,
+        close_decision=_close_decision(run_chunk_1),
+    )
+    artifact_1 = write.artifacts.latest_artifact(run_chunk_1, "findings")
+    assert artifact_1 is not None
+    finding_set_store.create(
+        "fins_hub_1",
+        project_id=garden_project,
+        artifact_id=artifact_1.artifact_id,
+        chunk_id=run_chunk_1,
+        scope_slug="blizzard",
+        routine_name="gardening",
+        revisions={"blizzard": "aaa"},
+        measurement=None,
+    )
+    write.artifacts.record_hub_artifact(
+        run_chunk_1,
+        node_id="nd_survey",
+        node_name="survey",
+        epoch=1,
+        name="findings-runner",
+        content=json.dumps({"scope": "runner-scope", "revisions": {}, "measurement": None, "findings": []}),
+        at=_ht(21),
+        admission=EpochAdmission.AT_OR_ABOVE,
+        close_decision=_close_decision(run_chunk_1),
+    )
+    artifact_2 = write.artifacts.latest_artifact(run_chunk_1, "findings-runner")
+    assert artifact_2 is not None
+    finding_set_store.create(
+        "fins_hub_2",
+        project_id=garden_project,
+        artifact_id=artifact_2.artifact_id,
+        chunk_id=run_chunk_1,
+        scope_slug="runner-scope",
+        routine_name="gardening",
+        revisions={},
+        measurement=None,
+    )
+
+    # --- transcripts + derived analytics events ---------------------------------------------
+    transcript_chunk = run_chunk_1
+    transcript_segment_id = "seg_hub_1"
+    turns = [
+        _tool_turn(0, "Read", {"file_path": "src/a.py"}),
+        _tool_turn(1, "Skill", {"skill": "wf-commit"}),
+        _tool_turn(2, "Agent", {"subagent_type": "explorer"}),
+    ]
+    record = {
+        "seq": 1,
+        "segment_id": transcript_segment_id,
+        "chunk_id": transcript_chunk,
+        "node_id": build_node.node_id,
+        "epoch": 1,
+        "spawn_generation": 1,
+        "turn_range_start": 0,
+        "turn_range_end": len(turns) - 1,
+        "final": True,
+        "normalizer_version": "claude-code-jsonl/2",
+        "harness_version": "claude-code-1.0",
+        "turns": turns,
+    }
+    pushed = hub.client.post(
+        "/api/fleet/transcripts",
+        json={"records": [record]},
+        headers={"Authorization": f"Bearer {runner_token}"},
+    )
+    assert pushed.status_code == 200, pushed.text
+    hub.hub_services.event_derivation.sweep()
+
+    # --- chunk record / queue ----------------------------------------------------------------
+    chunk_ready_1 = "ch_hub_ready_1"
+    chunk_ready_2 = "ch_hub_ready_2"
+    _mint(chunk_ready_1, "1001", at=_ht(30))
+    _mint(chunk_ready_2, "1002", at=_ht(31))
+    transactions = HubTransactions(hub_store_connections(engine))
+    for chunk_id, position, at in ((chunk_ready_1, 1.0, _ht(32)), (chunk_ready_2, 2.0, _ht(33))):
+        with transactions.begin() as transaction:
+            locked = transaction.lock_set(chunks=[chunk_id], keys=[READY_RANKING_LOCK])
+            write.queue.record_promote_with_position(chunk_id, position=position, at=at, transaction=locked)
+    chunk_not_ready = "ch_hub_not_ready"
+    _mint(chunk_not_ready, "1003", at=_ht(34))
+
+    # --- movement ------------------------------------------------------------------------------
+    chunk_transition = "ch_hub_transition"
+    _mint(chunk_transition, "1004", at=_ht(35))
+    write.movement.record_transition(
+        transition_id="tr_hub_1",
+        chunk_id=chunk_transition,
+        from_node_id=None,
+        to_node_id=build_node.node_id,
+        choice_name=None,
+        epoch=1,
+        runner_id=HUB_RUNNER_ID,
+        at=_ht(36),
+        artifacts=[],
+        admission=EpochAdmission.AT_OR_ABOVE,
+        close_decision=_close_decision(chunk_transition),
+    )
+    write.movement.record_transition(
+        transition_id="tr_hub_2",
+        chunk_id=chunk_transition,
+        from_node_id=build_node.node_id,
+        to_node_id=deliver_node.node_id,
+        choice_name="pass",
+        epoch=2,
+        runner_id=HUB_RUNNER_ID,
+        at=_ht(37),
+        artifacts=[],
+        admission=EpochAdmission.AT_OR_ABOVE,
+        close_decision=_close_decision(chunk_transition),
+    )
+
+    # --- garden / review delivery markers: each store's own replay probe reads these ---------------
+    delivery_chunk = "ch_hub_delivery"
+    delivery_epoch = 1
+    _mint(delivery_chunk, "1006", at=_ht(38))
+    delivery_run = RunContext(
+        project_id=garden_project, routine_name="gardening", scope_slug=scope_a.slug, mode="dry_run"
+    )
+    garden_delivery_store.deliver(
+        DeliveryPlan(
+            chunk_id=delivery_chunk,
+            node_id=deliver_node.node_id,
+            node_name=deliver_node.name,
+            epoch=delivery_epoch,
+            at=_ht(38),
+            run=delivery_run,
+            deltas=[
+                DeltaMaterialization(
+                    finding_set=NewFindingSet(
+                        finding_set_id="fins_hub_delivery",
+                        artifact_id="art_hub_delivery",
+                        scope_slug=scope_a.slug,
+                        revisions={},
+                        measurement=None,
+                    )
+                )
+            ],
+            proposals=[],
+        ),
+        admission=EpochAdmission.AT_OR_ABOVE,
+    )
+    review_findings_store.deliver(
+        ReviewFindingsPlan(
+            chunk_id=delivery_chunk,
+            node_id=deliver_node.node_id,
+            node_name=deliver_node.name,
+            epoch=delivery_epoch,
+            at=_ht(39),
+            new_findings=[
+                NewReviewFinding(
+                    finding_id="fin_hub_review",
+                    scope_slug=scope_a.slug,
+                    class_="correctness",
+                    locus="a.py:1",
+                    summary="s",
+                    severity="should-fix",
+                    raised_by_chunk_id=delivery_chunk,
+                )
+            ],
+            facts=[NewReviewFindingFact(finding_id="fin_hub_review", ref="F1")],
+        ),
+        admission=EpochAdmission.AT_OR_ABOVE,
+    )
+
+    chunk_migration = "ch_hub_migration"
+    _mint(chunk_migration, "1005", at=_ht(40))
+    write.movement.record_migration(
+        chunk_migration,
+        from_node_id=build_node.node_id,
+        from_graph_id=graph.graph_id,
+        to_graph_id=default_graph.graph_id,
+        landed_node_id=None,
+        choice_name=None,
+        decision_id=None,
+        model=None,
+        epoch=1,
+        at=_ht(41),
+        artifacts=[],
+        source=MigrationSource.AUTHORED_EDGE,
+        admission=EpochAdmission.AT_OR_ABOVE,
+        close_decision=_close_decision(chunk_migration),
+    )
+
+    # --- decisions -----------------------------------------------------------------------------
+    chunk_decision_1 = "ch_hub_decision_1"
+    chunk_decision_2 = "ch_hub_decision_2"
+    _mint(chunk_decision_1, "1006", at=_ht(42))
+    _mint(chunk_decision_2, "1007", at=_ht(43))
+    write.decisions.record_decision(
+        imposed_by_runner_id=None,
+        decision_id="dec_hub_1",
+        chunk_id=chunk_decision_1,
+        node_id=build_node.node_id,
+        node_name="build",
+        epoch=1,
+        choices=[
+            DecisionChoice(name="approve", description="do it"),
+            DecisionChoice(name="reject", description="don't"),
+        ],
+        at=_ht(44),
+        artifacts=[],
+        admission=EpochAdmission.AT_OR_ABOVE,
+        close_decision=_close_decision(chunk_decision_1),
+    )
+    write.decisions.record_decision(
+        imposed_by_runner_id=None,
+        decision_id="dec_hub_2",
+        chunk_id=chunk_decision_2,
+        node_id=build_node.node_id,
+        node_name="build",
+        epoch=1,
+        choices=[DecisionChoice(name="approve", description="do it")],
+        at=_ht(45),
+        artifacts=[],
+        admission=EpochAdmission.AT_OR_ABOVE,
+        close_decision=_close_decision(chunk_decision_2),
+    )
+
+    # --- escalations ---------------------------------------------------------------------------
+    chunk_escalation_1 = "ch_hub_escalation_1"
+    chunk_escalation_2 = "ch_hub_escalation_2"
+    _mint(chunk_escalation_1, "1008", at=_ht(46))
+    _mint(chunk_escalation_2, "1009", at=_ht(47))
+    write.escalations.record_escalation(
+        chunk_escalation_1,
+        epoch=1,
+        takeover_command="resume",
+        at=_ht(48),
+        wrapped_takeover_command="wrapped-resume",
+        admission=EpochAdmission.AT_OR_ABOVE,
+        cause=None,
+        detail=None,
+    )
+    write.escalations.record_escalation(
+        chunk_escalation_2,
+        epoch=1,
+        takeover_command="resume",
+        at=_ht(49),
+        wrapped_takeover_command="wrapped-resume",
+        admission=EpochAdmission.AT_OR_ABOVE,
+        cause=None,
+        detail=None,
+    )
+
+    # --- questions -----------------------------------------------------------------------------
+    chunk_question = "ch_hub_question"
+    _mint(chunk_question, "1010", at=_ht(50))
+    question_1 = "qn_hub_1"
+    question_2 = "qn_hub_2"
+    write.questions.record_question(
+        question_id=question_1,
+        chunk_id=chunk_question,
+        node_id=build_node.node_id,
+        session_id="sess-hub-1",
+        runner_id=HUB_RUNNER_ID,
+        epoch=1,
+        question="proceed?",
+        options=["yes", "no"],
+        asked_at=_ht(51),
+        admission=EpochAdmission.AT_OR_ABOVE,
+    )
+    write.questions.record_question(
+        question_id=question_2,
+        chunk_id=chunk_question,
+        node_id=build_node.node_id,
+        session_id="sess-hub-1",
+        runner_id=HUB_RUNNER_ID,
+        epoch=1,
+        question="also?",
+        options=[],
+        asked_at=_ht(52),
+        admission=EpochAdmission.AT_OR_ABOVE,
+    )
+    with chunk_unit(store_connections, chunk_question) as unit:
+        write.questions.answer_question(
+            question_1, answer="yes", answered_by=user_1.user_id, at=_ht(53), transaction=unit
+        )
+    write.questions.record_answer_delivered(question_id=question_1, chunk_id=chunk_question, at=_ht(54))
+
+    # --- usage ---------------------------------------------------------------------------------
+    chunk_usage = "ch_hub_usage"
+    _mint(chunk_usage, "1011", at=_ht(55))
+    write.usage.record_usage(
+        chunk_usage,
+        node_id=build_node.node_id,
+        epoch=1,
+        runner_id=HUB_RUNNER_ID,
+        kind="spawn",
+        model="model-a",
+        input_tokens=10,
+        output_tokens=5,
+        cache_read_tokens=0,
+        cache_create_tokens=0,
+        cost_usd=0.01,
+        at=_ht(56),
+    )
+    write.usage.record_usage(
+        chunk_usage,
+        node_id=build_node.node_id,
+        epoch=1,
+        runner_id=HUB_RUNNER_ID,
+        kind="resume",
+        model="model-b",
+        input_tokens=20,
+        output_tokens=8,
+        cache_read_tokens=1,
+        cache_create_tokens=0,
+        cost_usd=0.02,
+        at=_ht(57),
+    )
+
+    # --- events --------------------------------------------------------------------------------
+    chunk_events = "ch_hub_events"
+    _mint(chunk_events, "1012", at=_ht(58))
+    write.events.record_event(
+        severity=EventLogSeverity.INFO,
+        kind="chunk.transitioned",
+        runner_id=HUB_RUNNER_ID,
+        chunk_id=chunk_events,
+        lease_id=None,
+        node_name="build",
+        message="moved",
+        detail={"a": 1},
+        at=_ht(59),
+    )
+    write.events.record_event(
+        severity=EventLogSeverity.WARNING,
+        kind="chunk.paused",
+        runner_id=None,
+        chunk_id=chunk_events,
+        lease_id=None,
+        node_name=None,
+        message="paused",
+        detail=None,
+        at=_ht(60),
+    )
+
+    # --- hub_exec --------------------------------------------------------------------------------
+    chunk_hub_exec_live = "ch_hub_exec_live"
+    chunk_hub_exec_released = "ch_hub_exec_released"
+    _mint(chunk_hub_exec_live, "1013", at=_ht(61))
+    _mint(chunk_hub_exec_released, "1014", at=_ht(62))
+    with write.exclusive.locked([chunk_hub_exec_released]) as handle:
+        write.hub_exec.record_hub_node_poll_locked(
+            handle, chunk_hub_exec_released, node_id=deliver_node.node_id, epoch=1, kind="pending", at=_ht(64)
+        )
+    hub_exec_close_decision = _close_decision(chunk_hub_exec_released)
+    with write.exclusive.locked([chunk_hub_exec_released]) as handle:
+        write.hub_exec.record_hub_step_transition_locked(
+            handle,
+            chunk_hub_exec_released,
+            from_node_id=deliver_node.node_id,
+            to_node_id="done",
+            choice_name="success",
+            epoch=1,
+            runner_id="hub",
+            transition_id="tr_hub_exec_1",
+            at=_ht(65),
+            artifacts=[],
+            release_route=True,
+            admission=EpochAdmission.ABOVE,
+            close_decision=hub_exec_close_decision,
+        )
+    with write.exclusive.locked([chunk_hub_exec_live]) as handle:
+        write.hub_exec.record_hub_node_poll_locked(
+            handle, chunk_hub_exec_live, node_id=deliver_node.node_id, epoch=1, kind="pending", at=_ht(68)
+        )
+
+    # --- delivery + close intents -----------------------------------------------------------------
+    chunk_delivery_a = "ch_hub_delivery_a"
+    chunk_delivery_b = "ch_hub_delivery_b"
+    _mint(chunk_delivery_a, "1015", at=_ht(69))
+    _mint(chunk_delivery_b, "1016", at=_ht(70))
+    write.delivery.record_delivery_repo_landed(
+        chunk_delivery_a,
+        repo="acme/widget",
+        commit_hash="c1",
+        repository_id=None,
+        at=_ht(71),
+        close_decision=_close_decision(chunk_delivery_a),
+    )
+    write.delivery.record_delivery_repo_landed(
+        chunk_delivery_a,
+        repo="acme/other",
+        commit_hash="c2",
+        repository_id=None,
+        at=_ht(72),
+        close_decision=_close_decision(chunk_delivery_a),
+    )
+    write.delivery.record_delivery_repo_landed(
+        chunk_delivery_b,
+        repo="acme/widget",
+        commit_hash="c3",
+        repository_id=None,
+        at=_ht(73),
+        close_decision=_close_decision(chunk_delivery_b),
+    )
+    write.delivery.record_delivery_landed(
+        chunk_delivery_a, at=_ht(74), close_decision=_close_decision(chunk_delivery_a)
+    )
+    write.artifacts.record_hub_artifact(
+        chunk_delivery_a,
+        node_id=deliver_node.node_id,
+        node_name="deliver",
+        epoch=1,
+        name=f"{MARKER_PREFIX}acme/widget",
+        content="merged",
+        at=_ht(75),
+        admission=EpochAdmission.AT_OR_ABOVE,
+        close_decision=_close_decision(chunk_delivery_a),
+    )
+    write.artifacts.record_hub_artifact(
+        chunk_delivery_b,
+        node_id=deliver_node.node_id,
+        node_name="deliver",
+        epoch=1,
+        name=f"{MARKER_PREFIX}acme/widget",
+        content="merged",
+        at=_ht(76),
+        admission=EpochAdmission.AT_OR_ABOVE,
+        close_decision=_close_decision(chunk_delivery_b),
+    )
+
+    # --- dependencies --------------------------------------------------------------------------
+    chunk_dependency_dependent = "ch_hub_dep_dependent"
+    chunk_dependency_prerequisite = "ch_hub_dep_prerequisite"
+    _mint(chunk_dependency_dependent, "1017", at=_ht(77))
+    _mint(chunk_dependency_prerequisite, "1018", at=_ht(78))
+    _mint("ch_hub_dep_dependent_2", "1019", at=_ht(79))
+    _mint("ch_hub_dep_prerequisite_2", "1020", at=_ht(80))
+    with write.exclusive.locked([chunk_dependency_dependent, chunk_dependency_prerequisite]) as handle:
+        write.dependencies.declare_locked(
+            handle, chunk_dependency_dependent, chunk_dependency_prerequisite, by="operator", at=_ht(81)
+        )
+    with write.exclusive.locked(["ch_hub_dep_dependent_2", "ch_hub_dep_prerequisite_2"]) as handle:
+        write.dependencies.declare_locked(
+            handle, "ch_hub_dep_dependent_2", "ch_hub_dep_prerequisite_2", by="operator", at=_ht(82)
+        )
+
+    # --- lifecycle (ephemeral via a real fold) ---------------------------------------------------
+    chunk_lifecycle_survivor = "ch_hub_lifecycle_survivor"
+    chunk_lifecycle_merged = "ch_hub_lifecycle_merged"
+    _mint(chunk_lifecycle_survivor, "1021", at=_ht(83))
+    _mint(chunk_lifecycle_merged, "1022", at=_ht(84))
+    hub.services.group.group(chunk_lifecycle_survivor, [chunk_lifecycle_merged])
+
+    # --- route ---------------------------------------------------------------------------------
+    chunk_route_a = "ch_hub_route_a"
+    chunk_route_b = "ch_hub_route_b"
+    _mint(chunk_route_a, "1023", at=_ht(86))
+    _mint(chunk_route_b, "1024", at=_ht(87))
+    with write.exclusive.locked([chunk_route_a]) as handle:
+        write.route.record_route_locked(
+            handle,
+            Route(
+                chunk_id=chunk_route_a,
+                runner_id=HUB_RUNNER_ID,
+                workspace_id="workspace-1",
+                environment_ids=["e1"],
+                created_at=_ht(88),
+            ),
+            token_hash="route-hash-a",
+            at=_ht(88),
+        )
+    write.route.record_lease_minted(chunk_route_a, epoch=1, claimant=Claimant(HUB_RUNNER_ID), at=_ht(89))
+    with transactions.begin() as unit:
+        write.route.set_runner_high_water(HUB_RUNNER_ID, seq=7, expected=0, at=_ht(90), transaction=unit)
+    with write.exclusive.locked([chunk_route_a]) as handle:
+        write.route.record_route_token_locked(handle, chunk_route_a, token_hash="route-hash-a2", at=_ht(91))
+    with write.exclusive.locked([chunk_route_b]) as handle:
+        write.route.record_route_locked(
+            handle,
+            Route(
+                chunk_id=chunk_route_b,
+                runner_id=HUB_RUNNER_ID_2,
+                workspace_id="workspace-2",
+                environment_ids=["e2"],
+                created_at=_ht(92),
+            ),
+            token_hash="route-hash-b",
+            at=_ht(92),
+        )
+
+    # --- artifacts -------------------------------------------------------------------------------
+    chunk_artifacts = "ch_hub_artifacts"
+    _mint(chunk_artifacts, "1025", at=_ht(93))
+    write.artifacts.record_hub_artifact(
+        chunk_artifacts,
+        node_id=deliver_node.node_id,
+        node_name="deliver",
+        epoch=1,
+        name="asset-1",
+        content="c1",
+        at=_ht(94),
+        admission=EpochAdmission.AT_OR_ABOVE,
+        close_decision=_close_decision(chunk_artifacts),
+    )
+    write.artifacts.record_hub_artifact(
+        chunk_artifacts,
+        node_id=deliver_node.node_id,
+        node_name="deliver",
+        epoch=1,
+        name="asset-2",
+        content="c2",
+        at=_ht(95),
+        admission=EpochAdmission.AT_OR_ABOVE,
+        close_decision=_close_decision(chunk_artifacts),
+    )
+
+    # --- extra work ref -----------------------------------------------------------------------
+    chunk_work_refs_extra = "ch_hub_work_refs_extra"
+    _mint(chunk_work_refs_extra, "1026", at=_ht(96))
+    with write.exclusive.locked([chunk_work_refs_extra]) as handle:
+        write.work_refs.add_work_refs_locked(
+            handle, chunk_work_refs_extra, [WorkRef(source="secondary", ref="99")], at=_ht(97)
+        )
+
+    # --- hub-owned work items ------------------------------------------------------------------
+    work_item_1 = seed_work_item(
+        store_connections,
+        source="hub",
+        graph_id=default_graph.graph_id,
+        title="w1",
+        body="b1",
+        author=WorkItemAuthor.user(user_1.user_id),
+        stated_priority="p1",
+        at=_ht(98),
+    )
+    work_item_2 = seed_work_item(
+        store_connections,
+        source="hub",
+        graph_id=default_graph.graph_id,
+        title="w2",
+        body="b2",
+        author=WorkItemAuthor.user(user_1.user_id),
+        stated_priority=None,
+        at=_ht(99),
+    )
+
+    # --- trace export cursor ----------------------------------------------------------
+    _trace_store_of(store_connections, hub).append_cursor(TraceCheckpoint(CursorKey.opening(_ht(0)), 0, _ht(100)))
+    _egress_store_of(store_connections, hub).append_cursor(
+        EgressCheckpoint("steps", CursorKey.opening(_ht(0)), UsagePosition(_ht(0)), 0, (), _ht(100))
+    )
+
+    # --- the hub's own event log ------------------------------------------------------
+    hub_event_log = HubEventLogService(events=_hub_events_of(hub))
+    hub_event_log.record(kind="trace-export-failed", message="failed", detail=None, at=_ht(101))
+    hub_event_log.record(kind="egress-write-recovered", message="recovered", detail=None, at=_ht(102))
+
+    # --- memberships and hub administrators -------------------------------------------
+    memberships = _memberships_of(hub)
+    tenant = default_tenant(engine)
+    memberships.record(MembershipFact(tenant, user_1.user_id, Role.GUEST, _ht(103), "bootstrap"))
+    memberships.record(MembershipFact(tenant, user_1.user_id, Role.ADMIN, _ht(104), user_2.user_id))
+    memberships.record(MembershipFact(tenant, user_2.user_id, Role.CONTRIBUTOR, _ht(105), user_1.user_id))
+    hub_admins = _hub_admins_of(hub)
+    hub_admins.record(HubAdminFact(user_1.user_id, True, _ht(106), "bootstrap"))
+    hub_admins.record(HubAdminFact(user_2.user_id, True, _ht(107), user_1.user_id))
+    hub_admins.record(HubAdminFact(user_2.user_id, False, _ht(108), user_1.user_id))
+
+    # --- invitations: one live, one revoked -----------------------------------------------------
+    invitation_store = InvitationStore(store_connections)
+    invitation_token_hash = InvitationToken("census-invitation-1").hash
+    for invitation_id, token_hash in (
+        ("inv_census_1", invitation_token_hash),
+        ("inv_census_2", InvitationToken("census-invitation-2").hash),
+    ):
+        invitation_store.create(
+            Invitation(
+                invitation_id=invitation_id,
+                tenant=default_tenant(engine),
+                email="invitee@example.com",
+                role=Role.CONTRIBUTOR,
+                token_hash=token_hash,
+                created_by=user_1.user_id,
+                created_at=_ht(109),
+                expires_at=_ht(109 + 7 * 86400),
+            )
+        )
+    invitation_store.record(InvitationOutcome("inv_census_2", InvitationOutcomeKind.REVOKED, user_1.user_id, _ht(110)))
+
+    # --- flows: one open submission holding two flows, with a turn planted open; one closed -----------
+    flow_store = FlowStore(store_connections, clock)
+    flow_chunk = "ch_hub_flow_open"
+    flow_closed_chunk = "ch_hub_flow_closed"
+    _mint(flow_chunk, "1040", at=_ht(111))
+    _mint(flow_closed_chunk, "1041", at=_ht(112))
+    with chunk_unit(store_connections, flow_chunk, flow_closed_chunk) as unit:
+        flow_submission = flow_store.submit(
+            flow_chunk,
+            node_id=deliver_node.node_id,
+            epoch=1,
+            generation=0,
+            resources=[FlowResource("repo_census", "main"), FlowResource("repo_census_2", "main")],
+            at=_ht(113),
+            transaction=unit,
+        )
+        closed_submission = flow_store.submit(
+            flow_closed_chunk,
+            node_id=deliver_node.node_id,
+            epoch=1,
+            generation=0,
+            resources=[FlowResource("repo_census", "main")],
+            at=_ht(114),
+            transaction=unit,
+        )
+    assert flow_submission is not None and closed_submission is not None
+    flow_store.close(closed_submission.submission_id, outcome="superseded", at=_ht(115))
+    # No production write starts a turn yet, so the census plants the one open turn it reads.
+    with engine.begin() as conn:
+        conn.execute(
+            s.hub_turns.insert().values(
+                stamp(
+                    s.hub_turns, turn_id="htn_census", submission_id=flow_submission.submission_id, started_at=_ht(116)
+                )
+            )
+        )
+
+    # --- projects and their links: last, so every write above lands in the tenant's one project ----
+    [project] = hub.services.projects.list_all()
+    census_source = hub.services.work_source_records.resolve("census-source")
+    census_repo = hub.services.repository_records.resolve("census-repo")
+    assert census_source is not None and census_repo is not None
+    source_link = hub.services.project_authoring.link_source(project, census_source, operator)
+    hub.services.project_authoring.unlink_source(source_link, operator)
+    hub.services.project_authoring.link_source(project, census_source, operator)
+    hub.services.project_authoring.link_repository(project, census_repo, operator)
+    hub.services.project_authoring.position_repository(project, census_repo, operator)
+    hub.services.config_authoring.edit_repository(census_repo, RepositoryEdit(slug="census-repository"), operator)
+    hub.services.config_authoring.edit_work_source(census_source, WorkSourceEdit(slug="census-work-source"), operator)
+    project = hub.services.project_authoring.edit(project, ProjectEdit(slug="census"), operator)
+
+    return HubWorld(
+        hub=hub,
+        engine=engine,
+        clock=clock,
+        store_connections=store_connections,
+        write=write,
+        read=read,
+        auth_state=auth_state_store,
+        auth_facts=auth_facts_store,
+        superuser_bootstrap=superuser_bootstrap_store,
+        transcript_events=transcript_events,
+        annotated_sources=annotated_sources,
+        garden_run=garden_run_store,
+        garden_sweeps=garden_sweeps_store,
+        garden_trend=garden_trend_store,
+        garden_delivery=garden_delivery_store,
+        review_findings=review_findings_store,
+        work_items=work_items,
+        secrets=secret_store,
+        invitations=invitation_store,
+        config_revisions=ConfigRevisionsStore(store_connections),
+        config_imports=ConfigImportStore(store_connections),
+        default_graph=default_graph,
+        graph=graph,
+        retired_graph=retired_graph,
+        build_node_id=build_node.node_id,
+        deliver_node_id=deliver_node.node_id,
+        user_1=user_1,
+        user_2=user_2,
+        session_id_hash=session_id_hash,
+        auth_state_value=auth_state_value,
+        runner_token_hash=runner_token_hash,
+        host_id=added_host.host_id,
+        host_token_hash=host_token_hash,
+        revoked_host_token_hash=revoked_host_token_hash,
+        invitation_id="inv_census_1",
+        invitation_token_hash=invitation_token_hash,
+        routine_id=routine.routine_id,
+        scope_a="blizzard",
+        scope_a_id=scope_a.scope_id,
+        scope_c="legacy",
+        finding_1=finding_1,
+        finding_2=finding_2,
+        garden_proposal_1=garden_proposal_1,
+        garden_proposal_2=garden_proposal_2,
+        materialized_source=materialized_source,
+        materialized_ref=materialized_ref,
+        work_item_ref_1=work_item_1.ref,
+        work_item_ref_2=work_item_2.ref,
+        run_chunk_1=run_chunk_1,
+        run_chunk_1_chunk=run_chunk_1_chunk,
+        chunk_ready_1=chunk_ready_1,
+        chunk_ready_2=chunk_ready_2,
+        chunk_transition=chunk_transition,
+        chunk_migration=chunk_migration,
+        delivery_chunk=delivery_chunk,
+        delivery_epoch=delivery_epoch,
+        chunk_decision_1=chunk_decision_1,
+        chunk_decision_2=chunk_decision_2,
+        question_1=question_1,
+        chunk_question=chunk_question,
+        chunk_artifacts=chunk_artifacts,
+        chunk_delivery_a=chunk_delivery_a,
+        chunk_dependency_dependent=chunk_dependency_dependent,
+        chunk_dependency_prerequisite=chunk_dependency_prerequisite,
+        chunk_lifecycle_merged=chunk_lifecycle_merged,
+        chunk_route_a=chunk_route_a,
+        chunk_route_b=chunk_route_b,
+        transcript_chunk=transcript_chunk,
+        transcript_segment_id=transcript_segment_id,
+        project_id=project.project_id,
+        repository_id=census_repo.repository_id,
+        work_source_id=census_source.work_source_id,
+        forge_id=census_forge.forge_id,
+        flow_chunk=flow_chunk,
+        flow_submission_id=flow_submission.submission_id,
+        flow_id=flow_submission.flows[0].flow_id,
+    )
+
+
+HubRecipe = Callable[[HubWorld], object]
+
+#: Every reflected hub ``(Protocol, method)``, mapped to a recipe against :func:`build_hub_world`'s world.
+#: Hub read seams named outside the ``IRead*`` convention, reflected beside it.
+HUB_NAMED_READ_SEAMS: tuple[type, ...] = (ISecretCatalog, CredentialReads, InvitationReads)
+
+HUB_CENSUS: dict[tuple[type, str], HubRecipe] = {
+    (IReadAuthStateRepository, "get"): lambda w: w.auth_state.get(w.auth_state_value),
+    (IReadAuthFactsRepository, "list_recent"): lambda w: w.auth_facts.list_recent(limit=50),
+    (IReadIdentityRepository, "get"): lambda w: w.hub.hub_services.identities.get("github", "12345"),
+    (IReadIdentityRepository, "list_for_user"): lambda w: w.hub.hub_services.identities.list_for_user(w.user_1.user_id),
+    (IReadIdentityRepository, "list_for_users"): lambda w: w.hub.hub_services.identities.list_for_users(
+        [w.user_1.user_id, w.user_2.user_id]
+    ),
+    (IReadIdentityRepository, "distinct_provider_names"): lambda w: (
+        w.hub.hub_services.identities.distinct_provider_names()
+    ),
+    (IReadSessionRepository, "get_by_hash"): lambda w: w.hub.hub_services.sessions.get_by_hash(w.session_id_hash),
+    (IReadSuperuserBootstrapRepository, "get"): lambda w: w.superuser_bootstrap.get(),
+    (IReadUserRepository, "get"): lambda w: w.hub.services.users.get(w.user_1.user_id),
+    (IReadUserRepository, "get_by_username"): lambda w: w.hub.services.users.get_by_username("alice"),
+    (IReadUserRepository, "get_by_email"): lambda w: w.hub.services.users.get_by_email("alice@example.com"),
+    (IReadUserRepository, "list_by_email_any_case"): lambda w: w.hub.services.users.list_by_email_any_case(
+        "Alice@Example.com"
+    ),
+    (IReadUserRepository, "username_exists"): lambda w: w.hub.services.users.username_exists("alice"),
+    (IReadUserRepository, "get_many"): lambda w: w.hub.services.users.get_many([w.user_1.user_id, w.user_2.user_id]),
+    (IReadUserRepository, "list_all"): lambda w: w.hub.services.users.list_all(),
+    (IReadTranscriptEvents, "visible_segment_ids"): lambda w: w.transcript_events.visible_segment_ids(),
+    (IReadTranscriptEvents, "derived_segment_ids"): lambda w: w.transcript_events.derived_segment_ids(),
+    (IReadTranscriptEvents, "candidacy"): lambda w: w.transcript_events.candidacy(
+        EXTRACTOR_VERSION, chunk_id=w.transcript_chunk
+    ),
+    (IReadTranscriptEvents, "derivation_signature"): lambda w: w.transcript_events.derivation_signature(),
+    (IReadTranscriptEvents, "segment_derivation_input"): lambda w: w.transcript_events.segment_derivation_input(
+        w.transcript_segment_id
+    ),
+    (IReadTranscriptEvents, "derivation_marker"): lambda w: w.transcript_events.derivation_marker(
+        w.transcript_segment_id, EXTRACTOR_VERSION
+    ),
+    (IReadTranscriptEvents, "derivation_markers"): lambda w: w.transcript_events.derivation_markers(EXTRACTOR_VERSION),
+    (IReadTranscriptEvents, "segment_derivation_inputs"): lambda w: w.transcript_events.segment_derivation_inputs(
+        [w.transcript_segment_id]
+    ),
+    (IReadTranscriptEvents, "segment_contexts"): lambda w: w.transcript_events.segment_contexts(
+        [w.transcript_segment_id]
+    ),
+    (IReadDerivationCorpus, "derivation_signature"): lambda w: (
+        w.hub.hub_services.hub_scoped_reads.corpus.derivation_signature()
+    ),
+    (IReadDerivationCorpus, "candidacy"): lambda w: w.hub.hub_services.hub_scoped_reads.corpus.candidacy(
+        EXTRACTOR_VERSION
+    ),
+    (IReadDerivationCorpus, "derived_segment_ids"): lambda w: (
+        w.hub.hub_services.hub_scoped_reads.corpus.derived_segment_ids()
+    ),
+    (IReadWorkRefsCorpus, "live_work_refs"): lambda w: w.hub.hub_services.hub_scoped_reads.corpus.live_work_refs(),
+    (IReadWorkRefsCorpus, "live_work_refs_signature"): lambda w: (
+        w.hub.hub_services.hub_scoped_reads.corpus.live_work_refs_signature()
+    ),
+    (IReadWorkRefsCorpus, "work_source_changes_signature"): lambda w: (
+        w.hub.hub_services.hub_scoped_reads.corpus.work_source_changes_signature()
+    ),
+    (IReadFlowLinesCorpus, "flow_lines_signature"): lambda w: (
+        w.hub.hub_services.hub_scoped_reads.corpus.flow_lines_signature()
+    ),
+    (IReadCloseIntentCorpus, "pending_close_intents"): lambda w: (
+        w.hub.hub_services.hub_scoped_reads.corpus.pending_close_intents()
+    ),
+    (IReadOperationalAnalytics, "durations_by_node"): lambda w: (
+        w.hub.services.operational_analytics.durations_by_node(OperationalCriteria()),
+        w.hub.services.operational_analytics.durations_by_node(OperationalCriteria(project=w.project_id)),
+    ),
+    (IReadOperationalAnalytics, "durations_by_graph"): lambda w: (
+        w.hub.services.operational_analytics.durations_by_graph(OperationalCriteria()),
+        w.hub.services.operational_analytics.durations_by_graph(OperationalCriteria(project=w.project_id)),
+    ),
+    (IReadOperationalAnalytics, "spend_by_node"): lambda w: (
+        w.hub.services.operational_analytics.spend_by_node(OperationalCriteria()),
+        w.hub.services.operational_analytics.spend_by_node(OperationalCriteria(project=w.project_id)),
+    ),
+    (IReadOperationalAnalytics, "spend_by_graph"): lambda w: (
+        w.hub.services.operational_analytics.spend_by_graph(OperationalCriteria()),
+        w.hub.services.operational_analytics.spend_by_graph(OperationalCriteria(project=w.project_id)),
+    ),
+    (IReadOperationalAnalytics, "spend_by_model"): lambda w: (
+        w.hub.services.operational_analytics.spend_by_model(OperationalCriteria()),
+        w.hub.services.operational_analytics.spend_by_model(OperationalCriteria(project=w.project_id)),
+    ),
+    (IReadOperationalAnalytics, "spend_by_chunk"): lambda w: (
+        w.hub.services.operational_analytics.spend_by_chunk(OperationalCriteria(), limit=50),
+        w.hub.services.operational_analytics.spend_by_chunk(OperationalCriteria(project=w.project_id), limit=50),
+    ),
+    (IReadOperationalAnalytics, "outcomes_by_node"): lambda w: (
+        w.hub.services.operational_analytics.outcomes_by_node(OperationalCriteria()),
+        w.hub.services.operational_analytics.outcomes_by_node(OperationalCriteria(project=w.project_id)),
+    ),
+    (IReadAnalyticsEventQueries, "events"): lambda w: (
+        w.hub.services.analytics_events.events(EventQueryCriteria(extractor_version=EXTRACTOR_VERSION), limit=50),
+        w.hub.services.analytics_events.events(
+            EventQueryCriteria(extractor_version=EXTRACTOR_VERSION, project=w.project_id), limit=50
+        ),
+    ),
+    (IReadAnalyticsEventQueries, "counts_by_file"): lambda w: (
+        w.hub.services.analytics_events.counts_by_file(EventQueryCriteria(extractor_version=EXTRACTOR_VERSION)),
+        w.hub.services.analytics_events.counts_by_file(
+            EventQueryCriteria(extractor_version=EXTRACTOR_VERSION, project=w.project_id)
+        ),
+    ),
+    (IReadAnalyticsEventQueries, "counts_by_skill"): lambda w: (
+        w.hub.services.analytics_events.counts_by_skill(EventQueryCriteria(extractor_version=EXTRACTOR_VERSION)),
+        w.hub.services.analytics_events.counts_by_skill(
+            EventQueryCriteria(extractor_version=EXTRACTOR_VERSION, project=w.project_id)
+        ),
+    ),
+    (IReadAnalyticsEventQueries, "counts_by_agent_type"): lambda w: (
+        w.hub.services.analytics_events.counts_by_agent_type(EventQueryCriteria(extractor_version=EXTRACTOR_VERSION)),
+        w.hub.services.analytics_events.counts_by_agent_type(
+            EventQueryCriteria(extractor_version=EXTRACTOR_VERSION, project=w.project_id)
+        ),
+    ),
+    (IReadAnalyticsEventQueries, "counts_by_node"): lambda w: (
+        w.hub.services.analytics_events.counts_by_node(EventQueryCriteria(extractor_version=EXTRACTOR_VERSION)),
+        w.hub.services.analytics_events.counts_by_node(
+            EventQueryCriteria(extractor_version=EXTRACTOR_VERSION, project=w.project_id)
+        ),
+    ),
+    (IReadChunkArtifactsRepository, "load_artifacts"): lambda w: w.read.artifacts.load_artifacts(w.chunk_artifacts),
+    (IReadChunkArtifactsRepository, "load_artifacts_for"): lambda w: w.read.artifacts.load_artifacts_for(
+        [w.chunk_artifacts]
+    ),
+    (IReadChunkArtifactsRepository, "delivery_sources_for"): lambda w: w.read.artifacts.delivery_sources_for(
+        [w.chunk_artifacts]
+    ),
+    (IReadChunkArtifactsRepository, "latest_artifact"): lambda w: w.read.artifacts.latest_artifact(
+        w.chunk_artifacts, "asset-1"
+    ),
+    (IReadChunkArtifactsRepository, "latest_artifacts"): lambda w: w.read.artifacts.latest_artifacts(
+        w.chunk_artifacts, ["asset-1", "no-such-asset"]
+    ),
+    (IReadChunkArtifactsRepository, "has_hub_artifact"): lambda w: w.read.artifacts.has_hub_artifact(
+        w.chunk_artifacts, node_id=w.deliver_node_id, epoch=1, name="asset-1"
+    ),
+    (IReadChunkDecisionsRepository, "get_decision"): lambda w: w.read.decisions.get_decision("dec_hub_1"),
+    (IReadChunkDecisionsRepository, "find_decision"): lambda w: w.read.decisions.find_decision(
+        w.chunk_decision_1, node_id=w.build_node_id, epoch=1
+    ),
+    (IReadChunkDecisionsRepository, "decision_for_chunk"): lambda w: w.read.decisions.decision_for_chunk(
+        w.chunk_decision_1
+    ),
+    (IReadChunkDecisionsRepository, "resolutions_for_chunk"): lambda w: w.read.decisions.resolutions_for_chunk(
+        w.chunk_decision_1
+    ),
+    (IReadChunkDecisionsRepository, "list_open_decisions"): lambda w: w.read.decisions.list_open_decisions(),
+    (IReadChunkDecisionsRepository, "live_decisions_for"): lambda w: w.read.decisions.live_decisions_for(
+        [w.chunk_decision_1, w.chunk_decision_2]
+    ),
+    (IReadChunkDeliveryRepository, "landing_facts"): lambda w: w.read.delivery.landing_facts(
+        w.chunk_delivery_a, after=0, limit=2
+    ),
+    (IReadChunkDeliveryRepository, "close_intents"): lambda w: w.read.delivery.close_intents(
+        w.chunk_delivery_a, after=0, limit=2
+    ),
+    (IReadChunkDeliveryRepository, "close_closures"): lambda w: w.read.delivery.close_closures(
+        w.chunk_delivery_a, after=0, limit=2
+    ),
+    (IReadChunkDeliveryRepository, "close_attempts"): lambda w: w.read.delivery.close_attempts(
+        w.chunk_delivery_a, 1, after=0, limit=2
+    ),
+    (IReadChunkDeliveryRepository, "count_landed_since"): lambda w: w.read.delivery.count_landed_since(
+        "acme/widget", _HUB_BASE
+    ),
+    (IReadChunkDeliveryRepository, "pending_close_intents"): lambda w: w.read.delivery.pending_close_intents(),
+    (IReadChunkDependenciesRepository, "list_standing_edges"): lambda w: w.read.dependencies.list_standing_edges(),
+    (IReadChunkDependenciesRepository, "standing_edge"): lambda w: w.read.dependencies.standing_edge(
+        w.chunk_dependency_dependent, w.chunk_dependency_prerequisite
+    ),
+    (IReadChunkDependenciesRepository, "standing_edges_for"): lambda w: w.read.dependencies.standing_edges_for(
+        w.chunk_dependency_dependent
+    ),
+    (IReadChunkDependenciesRepository, "standing_edges_for_dependents"): lambda w: (
+        w.read.dependencies.standing_edges_for_dependents([w.chunk_dependency_dependent])
+    ),
+    (IReadChunkEscalationsRepository, "list_open_escalations"): lambda w: (
+        w.read.escalations.list_open_escalations(),
+        w.read.escalations.list_open_escalations(project=w.project_id),
+    ),
+    (IReadChunkEventsRepository, "list_events"): lambda w: (
+        w.read.events.list_events(),
+        w.read.events.list_events(lens=FeedLens(w.project_id, frozenset({HUB_RUNNER_ID}))),
+    ),
+    (IReadChunkEventsRepository, "activity_facts_since"): lambda w: (
+        w.read.events.activity_facts_since(_HUB_BASE, limit=50),
+        w.read.events.activity_facts_since(_HUB_BASE, limit=50, project=w.project_id),
+    ),
+    (IReadChunkEventsRepository, "activity_events_since"): lambda w: (
+        w.read.events.activity_events_since(_HUB_BASE, limit=50),
+        w.read.events.activity_events_since(
+            _HUB_BASE, limit=50, lens=FeedLens(w.project_id, frozenset({HUB_RUNNER_ID}))
+        ),
+    ),
+    (IReadChunkFactsRepository, "load_facts"): lambda w: w.read.facts.load_facts(w.chunk_ready_1),
+    (IReadChunkFactsRepository, "load_all_facts"): lambda w: w.read.facts.load_all_facts(),
+    (IReadChunkFactsRepository, "load_facts_for"): lambda w: w.read.facts.load_facts_for(
+        [w.chunk_ready_1, w.chunk_ready_2]
+    ),
+    (IReadChunkFactsRepository, "movement_facts_for"): lambda w: w.read.facts.movement_facts_for(
+        [w.chunk_ready_1, w.chunk_ready_2]
+    ),
+    (IReadChunkFactsRepository, "load_live_statuses"): lambda w: w.read.facts.load_live_statuses(),
+    (IReadChunkFactsRepository, "status_counts"): lambda w: (
+        w.read.facts.status_counts(),
+        w.read.facts.status_counts(project=w.project_id),
+    ),
+    (IReadChunkFactsRepository, "done_since_count"): lambda w: (
+        w.read.facts.done_since_count(datetime(2000, 1, 1, tzinfo=UTC)),
+        w.read.facts.done_since_count(datetime(2000, 1, 1, tzinfo=UTC), project=w.project_id),
+    ),
+    (IReadChunkFactsRepository, "status_facts_for"): lambda w: w.read.facts.status_facts_for(
+        [w.chunk_ready_1, w.chunk_ready_2]
+    ),
+    (IReadFlows, "open_submissions_from"): lambda w: w.hub.services.flows.open_submissions_from(1),
+    (IReadFlows, "open_turns"): lambda w: w.hub.services.flows.open_turns(),
+    (IReadFlows, "submission_for_visit"): lambda w: w.hub.services.flows.submission_for_visit(
+        w.flow_chunk, node_id=w.deliver_node_id, epoch=1
+    ),
+    (IReadFlows, "submissions_of"): lambda w: w.hub.services.flows.submissions_of(w.flow_chunk),
+    (IReadFlows, "submissions_of_chunks"): lambda w: w.hub.services.flows.submissions_of_chunks([w.flow_chunk]),
+    (IReadFlows, "submission_belongs_to"): lambda w: w.hub.services.flows.submission_belongs_to(
+        w.flow_submission_id, w.flow_chunk
+    ),
+    (IReadFlows, "turns_page"): lambda w: w.hub.services.flows.turns_page(w.flow_submission_id, before=None, limit=2),
+    (IReadFlows, "facts_of"): lambda w: w.hub.services.flows.facts_of(w.flow_submission_id),
+    (IReadFlows, "turn_outcomes"): lambda w: w.hub.services.flows.turn_outcomes(
+        w.flow_chunk, node_id=w.deliver_node_id, epoch=1
+    ),
+    (IReadFlows, "visit_standing"): lambda w: w.hub.services.flows.visit_standing(
+        w.flow_chunk, node_id=w.deliver_node_id, epoch=1
+    ),
+    (IReadFlowViews, "flow_overviews"): lambda w: w.hub.services.flow_views.flow_overviews(),
+    (IReadFlowViews, "flow_overview"): lambda w: w.hub.services.flow_views.flow_overview(w.flow_id),
+    (IReadFlowViews, "record_page"): lambda w: w.hub.services.flow_views.record_page(w.flow_id, before=1000, limit=50),
+    (IReadFlowViews, "open_submissions_on"): lambda w: w.hub.services.flow_views.open_submissions_on([w.flow_id]),
+    (IReadFlowViews, "open_submissions_of"): lambda w: w.hub.services.flow_views.open_submissions_of([w.flow_chunk]),
+    (IReadFlowViews, "chunk_records"): lambda w: w.hub.services.flow_views.chunk_records([w.flow_chunk]),
+    (IReadFlows, "terms_of"): lambda w: w.hub.services.flows.terms_of(w.flow_submission_id),
+    (IReadFlows, "first_turn_at"): lambda w: w.hub.services.flows.first_turn_at(
+        w.flow_chunk, node_id=w.deliver_node_id, epoch=1
+    ),
+    (IReadChunkLifecycleRepository, "is_ephemeral"): lambda w: w.read.lifecycle.is_ephemeral(w.chunk_lifecycle_merged),
+    (IReadChunkMovementRepository, "accepted_transition_target"): lambda w: w.read.movement.accepted_transition_target(
+        w.chunk_transition, from_node_id=w.build_node_id, epoch=2
+    ),
+    (IReadChunkMovementRepository, "accepted_migration"): lambda w: w.read.movement.accepted_migration(
+        w.chunk_migration, from_node_id=w.build_node_id, epoch=1
+    ),
+    (IReadChunkQuestionsRepository, "get_question"): lambda w: w.read.questions.get_question(w.question_1),
+    (IReadChunkQuestionsRepository, "list_open_questions"): lambda w: w.read.questions.list_open_questions(),
+    (IReadChunkQuestionsRepository, "load_questions"): lambda w: w.read.questions.load_questions(w.chunk_question),
+    (IReadChunkQueueRepository, "queue_positions"): lambda w: w.read.queue.queue_positions(
+        [w.chunk_ready_1, w.chunk_ready_2]
+    ),
+    (IReadChunkQueueRepository, "promoted_ats"): lambda w: w.read.queue.promoted_ats(
+        [w.chunk_ready_1, w.chunk_ready_2]
+    ),
+    (IReadChunkRecordRepository, "get"): lambda w: w.read.record.get(w.chunk_ready_1),
+    (IReadChunkRecordRepository, "get_many"): lambda w: w.read.record.get_many([w.chunk_ready_1, w.chunk_ready_2]),
+    (IReadChunkRecordRepository, "graph_id_of_many"): lambda w: w.read.record.graph_id_of_many(
+        [w.chunk_ready_1, w.chunk_ready_2]
+    ),
+    (IReadChunkRecordRepository, "list_ready"): lambda w: w.read.record.list_ready(
+        statuses=w.read.facts.load_live_statuses()
+    ),
+    (IReadChunkRecordRepository, "list_not_ready"): lambda w: w.read.record.list_not_ready(
+        statuses=w.read.facts.load_live_statuses()
+    ),
+    (IReadChunkRecordRepository, "list_all"): lambda w: w.read.record.list_all(),
+    (IReadChunkRecordRepository, "pinned_to_actionless_hub_nodes"): lambda w: (
+        w.read.record.pinned_to_actionless_hub_nodes()
+    ),
+    (IReadChunkRecordRepository, "newest_done"): lambda w: (
+        w.read.record.newest_done(limit=10),
+        w.read.record.newest_done(limit=10, project=w.project_id),
+    ),
+    (IReadChunkRecordRepository, "list_page"): lambda w: (
+        w.read.record.list_page(limit=50, done_since=_HUB_BASE),
+        w.read.record.list_page(limit=50, done_since=_HUB_BASE, project=w.project_id),
+    ),
+    (IReadChunkRouteRepository, "route_of"): lambda w: w.read.route.route_of(w.chunk_route_a),
+    (IReadChunkRouteRepository, "load_all_routes"): lambda w: w.read.route.load_all_routes(),
+    (IReadChunkRouteRepository, "routes_for"): lambda w: w.read.route.routes_for([w.chunk_route_a, w.chunk_route_b]),
+    (IReadChunkRouteRepository, "runner_high_water"): lambda w: w.read.route.runner_high_water(HUB_RUNNER_ID),
+    (IReadChunkRouteRepository, "live_routes_of_runner"): lambda w: w.read.route.live_routes_of_runner(HUB_RUNNER_ID),
+    (IReadChunkUsageRepository, "usage_total_since"): lambda w: (
+        w.read.usage.usage_total_since(_HUB_BASE),
+        w.read.usage.usage_total_since(_HUB_BASE, project=w.project_id),
+    ),
+    (IReadChunkWorkRefsRepository, "find_live_holder"): lambda w: w.read.work_refs.find_live_holder(
+        WorkRef(source="default", ref="1001")
+    ),
+    (IReadChunkWorkRefsRepository, "live_holders"): lambda w: w.read.work_refs.live_holders(
+        [WorkRef(source="default", ref="1001"), WorkRef(source="default", ref="1002")]
+    ),
+    (IReadChunkWorkRefsRepository, "live_work_refs"): lambda w: w.read.work_refs.live_work_refs(),
+    (IReadChunkWorkRefsRepository, "live_work_refs_signature"): lambda w: w.read.work_refs.live_work_refs_signature(),
+    (IReadAnnotatedSources, "annotated_sources"): lambda w: w.annotated_sources.annotated_sources(),
+    (IReadFindingRepository, "get"): lambda w: w.hub.services.findings.get(w.finding_1),
+    (IReadFindingRepository, "get_many"): lambda w: w.hub.services.findings.get_many([w.finding_1, w.finding_2]),
+    (IReadFindingRepository, "get_with_facts"): lambda w: w.hub.services.findings.get_with_facts(w.finding_1),
+    (IReadFindingRepository, "list_for"): lambda w: w.hub.services.findings.list_for(
+        w.project_id, "gardening", "blizzard"
+    ),
+    (IReadFindingRepository, "list_for_routine"): lambda w: (
+        w.hub.services.findings.list_for_routine(w.project_id, "gardening"),
+        w.hub.services.findings.list_for_routine(w.project_id, "gardening", include_gone=True, exclude_exited=True),
+    ),
+    (IReadFindingRepository, "list_by_source"): lambda w: (
+        w.hub.services.findings.list_by_source(w.project_id, scope_slug="blizzard", source="review"),
+        w.hub.services.findings.list_by_source(
+            w.project_id, scope_slug="blizzard", source="review", include_gone=True, exclude_exited=True
+        ),
+    ),
+    (IReadFindingRepository, "list_across_routines"): lambda w: w.hub.services.findings.list_across_routines(
+        w.project_id
+    ),
+    (IReadFindingRepository, "list_page"): lambda w: w.hub.services.findings.list_page(
+        project_id=None, routine_name=None, scope_slug=None, limit=50
+    ),
+    (IReadFindingRepository, "distinct_classes"): lambda w: (
+        w.hub.services.findings.distinct_classes(project_id=None, routine_name=None, scope_slug=None),
+        w.hub.services.findings.distinct_classes(
+            project_id=w.project_id, routine_name="gardening", scope_slug="blizzard"
+        ),
+    ),
+    (IReadFindingRepository, "count_by_class"): lambda w: w.hub.services.findings.count_by_class(
+        w.project_id, "gardening", "stale-docstring"
+    ),
+    (IReadFindingRepository, "has_delivery_for_proposal"): lambda w: w.hub.services.findings.has_delivery_for_proposal(
+        w.garden_proposal_2
+    ),
+    (IReadFindingSetRepository, "get"): lambda w: w.hub.services.finding_sets.get("fins_hub_1"),
+    (IReadFindingSetRepository, "list_for_chunk"): lambda w: w.hub.services.finding_sets.list_for_chunk(w.run_chunk_1),
+    (IReadFindingSetRepository, "newest_for_routine_scope"): lambda w: (
+        w.hub.services.finding_sets.newest_for_routine_scope(w.project_id, "gardening", "blizzard")
+    ),
+    (IReadFindingSetRepository, "newest_by_scope_for_routine"): lambda w: (
+        w.hub.services.finding_sets.newest_by_scope_for_routine(w.project_id, "gardening")
+    ),
+    (IReadGardenProposalClosureRepository, "get"): lambda w: w.hub.services.garden_proposal_closures.get(
+        w.garden_proposal_1
+    ),
+    (IReadGardenProposalClosureRepository, "get_many"): lambda w: w.hub.services.garden_proposal_closures.get_many(
+        [w.garden_proposal_1, w.garden_proposal_2]
+    ),
+    (IReadGardenProposalClosureRepository, "find_by_item"): lambda w: (
+        w.hub.services.garden_proposal_closures.find_by_item(w.materialized_source, w.materialized_ref)
+    ),
+    (IReadGardenProposalRepository, "get"): lambda w: w.hub.services.garden_proposals.get(w.garden_proposal_1),
+    (IReadGardenProposalRepository, "list_all"): lambda w: w.hub.services.garden_proposals.list_all(),
+    (IReadGardenProposalRepository, "list_page"): lambda w: (
+        w.hub.services.garden_proposals.list_page(limit=50),
+        w.hub.services.garden_proposals.list_page(limit=50, project_id=w.project_id),
+    ),
+    (IReadGardenProposalRepository, "list_for_routine"): lambda w: w.hub.services.garden_proposals.list_for_routine(
+        w.project_id, "gardening"
+    ),
+    (IReadGardenProposalRepository, "counts_by_class"): lambda w: w.hub.services.garden_proposals.counts_by_class(
+        since=_ht(11), until=_ht(14)
+    ),
+    (IReadGardenRunRepository, "runs_in_window"): lambda w: (
+        w.garden_run.runs_in_window(since=_HUB_BASE, until=_HUB_UNTIL),
+        w.garden_run.runs_in_window(since=_HUB_BASE, until=_HUB_UNTIL, project_id=w.project_id),
+    ),
+    (IReadGardenRunRepository, "run_identity"): lambda w: w.garden_run.run_identity(w.run_chunk_1),
+    (IReadGardenRunRepository, "delivered_sets"): lambda w: w.garden_run.delivered_sets(w.run_chunk_1),
+    (IReadGardenSweepsRepository, "last_swept_by_scope"): lambda w: w.garden_sweeps.last_swept_by_scope(
+        w.project_id, "gardening"
+    ),
+    (IReadGardenSweepsRepository, "measurements_in_window"): lambda w: w.garden_sweeps.measurements_in_window(
+        w.project_id, "gardening", since=_HUB_BASE, until=_HUB_UNTIL
+    ),
+    (IReadGardenTrendRepository, "facts_for_trend"): lambda w: w.garden_trend.facts_for_trend(
+        w.project_id, "gardening", since=_HUB_BASE, until=_HUB_UNTIL
+    ),
+    (IReadGardenDeliveryRepository, "already_delivered"): lambda w: w.garden_delivery.already_delivered(
+        chunk_id=w.delivery_chunk, node_id=w.deliver_node_id, epoch=w.delivery_epoch
+    ),
+    (IReadReviewFindingsRepository, "already_delivered"): lambda w: w.review_findings.already_delivered(
+        chunk_id=w.delivery_chunk
+    ),
+    (IReadGraphRepository, "get"): lambda w: w.hub.services.graphs.get(w.graph.graph_id),
+    (IReadGraphRepository, "get_enabled_by_name"): lambda w: w.hub.services.graphs.get_enabled_by_name(_HUB_GRAPH_NAME),
+    (IReadGraphRepository, "enabled_names"): lambda w: w.hub.services.graphs.enabled_names([_HUB_GRAPH_NAME]),
+    (IReadGraphRepository, "any_minted"): lambda w: w.hub.services.graphs.any_minted(_HUB_GRAPH_NAME),
+    (IReadGraphRepository, "newest_definition_yaml"): lambda w: w.hub.services.graphs.newest_definition_yaml(
+        _HUB_GRAPH_NAME
+    ),
+    (IReadGraphBodies, "definition_yaml"): lambda w: w.hub.services.graph_bodies.definition_yaml(
+        w.retired_graph.graph_id
+    ),
+    (IReadGraphRepository, "is_retired"): lambda w: w.hub.services.graphs.is_retired(w.retired_graph.graph_id),
+    (IReadGraphRepository, "retired_graph_ids"): lambda w: w.hub.services.graphs.retired_graph_ids(),
+    (IReadGraphRepository, "follow_latest"): lambda w: w.hub.services.graphs.follow_latest(w.graph.graph_id),
+    (IReadGraphRepository, "load_graph_summaries"): lambda w: w.hub.services.graphs.load_graph_summaries(
+        [w.graph.graph_id, w.default_graph.graph_id]
+    ),
+    (IReadGraphRepository, "load_node_names"): lambda w: w.hub.services.graphs.load_node_names([w.graph.graph_id]),
+    (IReadGraphRepository, "list_summaries"): lambda w: w.hub.services.graphs.list_summaries(),
+    (IReadGraphRepository, "graph_id_of_enabled_name"): lambda w: w.hub.services.graphs.graph_id_of_enabled_name(
+        _HUB_GRAPH_NAME
+    ),
+    (IReadNodeExecutors, "executors_by_node_name"): lambda w: w.hub.services.node_executors.executors_by_node_name(),
+    (IReadManyGraphs, "get_many"): lambda w: w.hub.services.graphs.get_many(
+        [w.graph.graph_id, w.default_graph.graph_id]
+    ),
+    (IReadRunnerRegistry, "get_runner"): lambda w: w.hub.services.registry.get_runner(HUB_RUNNER_ID),
+    (IReadRunnerRegistry, "get_runners"): lambda w: w.hub.services.registry.get_runners([HUB_RUNNER_ID]),
+    (IReadRunnerRegistry, "runners_serving"): lambda w: w.hub.services.registry.runners_serving("proj_census"),
+    (IReadRunnerRegistry, "is_retired"): lambda w: w.hub.services.registry.is_retired(HUB_RUNNER_ID),
+    (IReadRunnerRegistry, "list_runners"): lambda w: w.hub.services.registry.list_runners(),
+    (CredentialReads, "runner_for_token_hash"): lambda w: (
+        w.hub.hub_services.hub_scoped_reads.credentials.runner_for_token_hash(w.runner_token_hash)
+    ),
+    (CredentialReads, "revoked_token_runner"): lambda w: (
+        w.hub.hub_services.hub_scoped_reads.credentials.revoked_token_runner(w.runner_token_hash)
+    ),
+    (CredentialReads, "runner_by_id"): lambda w: w.hub.hub_services.hub_scoped_reads.credentials.runner_by_id(
+        HUB_RUNNER_ID
+    ),
+    (IReadHostRegistry, "get_host"): lambda w: w.hub.services.hosts.get_host(w.host_id),
+    (IReadHostRegistry, "list_hosts"): lambda w: w.hub.services.hosts.list_hosts(),
+    (IReadHostRegistry, "get_hosts"): lambda w: w.hub.services.hosts.get_hosts([w.host_id]),
+    (IReadHostRegistry, "live_names"): lambda w: w.hub.services.hosts.live_names(),
+    (CredentialReads, "host_by_id"): lambda w: w.hub.hub_services.hub_scoped_reads.credentials.host_by_id(w.host_id),
+    (IReadHostRegistry, "high_water"): lambda w: w.hub.services.hosts.high_water(w.host_id),
+    (IReadHostRegistry, "usage_of"): lambda w: w.hub.services.hosts.usage_of([w.host_id]),
+    (CredentialReads, "host_for_token_hash"): lambda w: (
+        w.hub.hub_services.hub_scoped_reads.credentials.host_for_token_hash(w.host_token_hash)
+    ),
+    (CredentialReads, "revoked_token_host"): lambda w: (
+        w.hub.hub_services.hub_scoped_reads.credentials.revoked_token_host(w.revoked_host_token_hash)
+    ),
+    (IReadRunnerRegistry, "list_pause_facts_since"): lambda w: w.hub.services.registry.list_pause_facts_since(
+        _HUB_BASE, limit=50
+    ),
+    (IReadRunnerRegistry, "names_for"): lambda w: w.hub.services.registry.names_for([HUB_RUNNER_ID]),
+    (IReadRunnerNames, "names_for"): lambda w: w.hub.services.registry.names_for([HUB_RUNNER_ID]),
+    (IReadProjectLabels, "labels_for"): lambda w: ProjectLabels(w.hub.services.projects).labels_for([w.project_id]),
+    (IReadRoutineRepository, "get"): lambda w: w.hub.services.routines.get(w.routine_id),
+    (IReadRoutineRepository, "get_by_name"): lambda w: w.hub.services.routines.get_by_name(w.project_id, "gardening"),
+    (IReadRoutineRepository, "get_many_by_name"): lambda w: w.hub.services.routines.get_many_by_name(
+        w.project_id, ["gardening"]
+    ),
+    (IReadRoutineRepository, "list_all"): lambda w: (
+        w.hub.services.routines.list_all(),
+        w.hub.services.routines.list_all(w.project_id),
+    ),
+    (IReadRoutineRepository, "is_retired"): lambda w: w.hub.services.routines.is_retired(w.routine_id),
+    (IReadRoutineRepository, "retired_ids"): lambda w: w.hub.services.routines.retired_ids(),
+    (IReadRoutineScopeRepository, "list_scopes"): lambda w: w.hub.services.routine_scopes.list_scopes(w.routine_id),
+    (IReadRoutineScopeRepository, "list_scopes_for"): lambda w: w.hub.services.routine_scopes.list_scopes_for(
+        [w.routine_id]
+    ),
+    (IReadRoutineScopeRepository, "list_routines"): lambda w: w.hub.services.routine_scopes.list_routines(w.scope_a_id),
+    (IReadRunContextRepository, "for_chunk"): lambda w: w.hub.services.run_context.for_chunk(w.run_chunk_1_chunk),
+    (ISecretCatalog, "get"): lambda w: w.secrets.get("gh-token"),
+    (ISecretCatalog, "get_many"): lambda w: w.secrets.get_many(["gh-token", "old-token"]),
+    (ISecretCatalog, "list_all"): lambda w: w.secrets.list_all(),
+    (ISecretCatalog, "is_retired"): lambda w: w.secrets.is_retired("old-token"),
+    (ISecretCatalog, "retired_names"): lambda w: (
+        w.secrets.retired_names(),
+        w.secrets.retired_names(["gh-token", "old-token"]),
+    ),
+    (ISecretCatalog, "key_ids_in_use"): lambda w: w.secrets.key_ids_in_use(),
+    (IReadWorkSourceRepository, "get"): lambda w: w.hub.services.work_source_records.get(w.work_source_id),
+    (IReadWorkSourceRepository, "get_many"): lambda w: w.hub.services.work_source_records.get_many([w.work_source_id]),
+    (IReadWorkSourceRepository, "get_by_slug"): lambda w: w.hub.services.work_source_records.get_by_slug(
+        WorkSourceSlug.parse("census-work-source")
+    ),
+    (IReadWorkSourceRepository, "get_by_former_slug"): lambda w: w.hub.services.work_source_records.get_by_former_slug(
+        WorkSourceSlug.parse("census-source")
+    ),
+    (IReadWorkSourceRepository, "resolve"): lambda w: w.hub.services.work_source_records.resolve("census-source"),
+    (IReadWorkSourceRepository, "list_all"): lambda w: w.hub.services.work_source_records.list_all(
+        include_retired=True
+    ),
+    (IReadRepositoryRecordRepository, "get"): lambda w: w.hub.services.repository_records.get(w.repository_id),
+    (IReadRepositoryRecordRepository, "get_many"): lambda w: w.hub.services.repository_records.get_many(
+        [w.repository_id]
+    ),
+    (IReadRepositoryRecordRepository, "get_by_slug"): lambda w: w.hub.services.repository_records.get_by_slug(
+        RepositorySlug.parse("census-repository")
+    ),
+    (IReadRepositoryRecordRepository, "get_by_former_slug"): lambda w: (
+        w.hub.services.repository_records.get_by_former_slug(RepositorySlug.parse("census-repo"))
+    ),
+    (IReadRepositoryRecordRepository, "resolve"): lambda w: w.hub.services.repository_records.resolve("census-repo"),
+    (IReadRepositoryRecordRepository, "list_all"): lambda w: w.hub.services.repository_records.list_all(
+        include_retired=True
+    ),
+    (IReadForgeRepository, "get"): lambda w: w.hub.services.forge_records.get(w.forge_id),
+    (IReadForgeRepository, "get_many"): lambda w: w.hub.services.forge_records.get_many([w.forge_id]),
+    (IReadForgeRepository, "list_all"): lambda w: w.hub.services.forge_records.list_all(include_retired=True),
+    (IReadForgeRepository, "get_by_slug"): lambda w: w.hub.services.forge_records.get_by_slug(
+        ForgeSlug.parse("census-github")
+    ),
+    (IReadForgeRepository, "get_by_former_slug"): lambda w: w.hub.services.forge_records.get_by_former_slug(
+        ForgeSlug.parse("census-forge")
+    ),
+    (IReadForgeRepository, "get_by_api_base"): lambda w: w.hub.services.forge_records.get_by_api_base(
+        "https://api.github.com"
+    ),
+    (IReadForgeRepository, "resolve"): lambda w: w.hub.services.forge_records.resolve("census-forge"),
+    (IReadConfigRevisions, "revisions"): lambda w: w.config_revisions.revisions(RecordKind.REPOSITORY, w.repository_id),
+    (IReadConfigRevisions, "revisions_for"): lambda w: (
+        w.config_revisions.revisions_for(RecordKind.REPOSITORY, [w.repository_id]),
+        w.config_revisions.revisions_for(RecordKind.WORK_SOURCE, [w.work_source_id]),
+        w.config_revisions.revisions_for(RecordKind.SECRET, ["gh-token"]),
+    ),
+    (IReadConfigImports, "recorded"): lambda w: w.config_imports.recorded(),
+    (IReadProjectRepository, "get"): lambda w: w.hub.services.projects.get(w.project_id),
+    (IReadProjectRepository, "get_many"): lambda w: w.hub.services.projects.get_many([w.project_id]),
+    (IReadProjectRepository, "list_all"): lambda w: w.hub.services.projects.list_all(),
+    (IReadProjectRepository, "get_by_slug"): lambda w: w.hub.services.projects.get_by_slug(ProjectSlug.parse("census")),
+    (IReadProjectRepository, "get_by_former_slug"): lambda w: w.hub.services.projects.get_by_former_slug(
+        ProjectSlug.parse("default")
+    ),
+    (IReadProjectRepository, "resolve"): lambda w: w.hub.services.projects.resolve("default"),
+    (IReadLandedCommitLinks, "for_chunks"): lambda w: w.hub.services.commit_links.for_chunks(
+        [chunk for chunk in [w.hub.services.chunks.record.get(w.flow_chunk)] if chunk is not None]
+    ),
+    (IReadProjectLinks, "source_link"): lambda w: w.hub.services.project_links.source_link(
+        w.project_id, w.work_source_id
+    ),
+    (IReadProjectLinks, "repository_link"): lambda w: w.hub.services.project_links.repository_link(
+        w.project_id, w.repository_id
+    ),
+    (IReadProjectLinks, "sources_of"): lambda w: w.hub.services.project_links.sources_of(w.project_id),
+    (IReadProjectLinks, "repositories_of"): lambda w: w.hub.services.project_links.repositories_of(w.project_id),
+    (IReadProjectLinks, "projects_linking_source"): lambda w: w.hub.services.project_links.projects_linking_source(
+        w.work_source_id
+    ),
+    (IReadProjectLinks, "source_links_for"): lambda w: w.hub.services.project_links.source_links_for(
+        [(w.project_id, w.work_source_id)]
+    ),
+    (IReadProjectLinks, "repository_links_for"): lambda w: w.hub.services.project_links.repository_links_for(
+        [(w.project_id, w.repository_id)]
+    ),
+    (IReadProjectLinks, "sources_of_projects"): lambda w: w.hub.services.project_links.sources_of_projects(
+        [w.project_id]
+    ),
+    (IReadProjectLinks, "repositories_of_projects"): lambda w: w.hub.services.project_links.repositories_of_projects(
+        [w.project_id]
+    ),
+    (IReadProjectLinks, "projects_linking_sources"): lambda w: w.hub.services.project_links.projects_linking_sources(
+        [w.work_source_id]
+    ),
+    (IReadProjectPositions, "landing_links"): lambda w: w.hub.services.project_positions.landing_links(w.project_id),
+    (IReadProjectPositions, "landing_seqs"): lambda w: w.hub.services.project_positions.landing_seqs([w.project_id]),
+    (IReadProjectLinks, "linked_at"): lambda w: w.hub.services.project_links.linked_at(
+        w.project_id, w.work_source_id, w.clock.now()
+    ),
+    (IReadConfigImports, "commit_coordinates"): lambda w: w.config_imports.commit_coordinates(),
+    (IReadConfigChanges, "page"): lambda w: w.hub.services.config_changes.page(
+        before=None, limit=10, record_kind=None, record_key=None
+    ),
+    (IReadConfigChanges, "count"): lambda w: w.hub.services.config_changes.count(
+        record_kind=None, record_key=None, project_id=w.project_id
+    ),
+    (IReadScopeRepository, "get"): lambda w: w.hub.services.scopes.get(w.project_id, w.scope_a),
+    (IReadScopeRepository, "list_all"): lambda w: (
+        w.hub.services.scopes.list_all(),
+        w.hub.services.scopes.list_all(w.project_id),
+    ),
+    (IReadScopeRepository, "is_retired"): lambda w: w.hub.services.scopes.is_retired(w.project_id, w.scope_c),
+    (IReadScopeRepository, "retired_slugs"): lambda w: w.hub.services.scopes.retired_slugs(w.project_id),
+    (IReadTranscriptSegments, "segments_for_chunk"): lambda w: w.hub.services.transcripts.segments_for_chunk(
+        w.transcript_chunk
+    ),
+    (IReadTranscriptSegments, "records_for_segment"): lambda w: w.hub.services.transcripts.records_for_segment(
+        w.transcript_chunk, w.transcript_segment_id
+    ),
+    (IReadTranscriptSegments, "runner_id_for_lease"): lambda w: w.hub.services.transcripts.runner_id_for_lease(
+        w.transcript_chunk, w.build_node_id, 1
+    ),
+    (IReadTranscriptSegments, "records_for_lease"): lambda w: w.hub.services.transcripts.records_for_lease(
+        w.transcript_chunk, w.build_node_id, 1, HUB_RUNNER_ID
+    ),
+    (IReadTraceSteps, "closing_candidates"): lambda w: _trace_store_of(w.store_connections, w.hub).closing_candidates(
+        _HUB_BASE, _ht(10_000), 50
+    ),
+    (IReadTraceSteps, "step_facts_for"): lambda w: _trace_store_of(w.store_connections, w.hub).step_facts_for(
+        [
+            w.chunk_transition,
+            w.chunk_migration,
+            w.chunk_decision_1,
+            w.chunk_question,
+            w.chunk_dependency_dependent,
+            w.chunk_route_a,
+        ]
+    ),
+    (IReadStepCorpus, "closing_candidates"): lambda w: w.hub.hub_services.hub_scoped_reads.corpus.closing_candidates(
+        _HUB_BASE, _ht(10_000), 50
+    ),
+    (IReadStepCorpus, "step_facts_for"): lambda w: w.hub.hub_services.hub_scoped_reads.corpus.step_facts_for(
+        [w.chunk_transition, w.chunk_question, w.chunk_dependency_dependent], lambda _tenant: _label
+    ),
+    (IReadTraceSteps, "snapshot"): lambda w: _window_in_one_snapshot(_trace_store_of(w.store_connections, w.hub)),
+    (IReadStepCorpus, "snapshot"): lambda w: _corpus_window_in_one_snapshot(w.hub.hub_services.hub_scoped_reads.corpus),
+    (IReadUsageCorpus, "usage_after"): lambda w: w.hub.hub_services.hub_scoped_reads.corpus.usage_after(
+        UsagePosition(_HUB_BASE), _HUB_UNTIL, 50
+    ),
+    (IReadTraceSteps, "newest_cursor"): lambda w: _trace_store_of(w.store_connections, w.hub).newest_cursor(),
+    (IReadTraceSteps, "newest_export_latch"): lambda w: _trace_store_of(
+        w.store_connections, w.hub
+    ).newest_export_latch(),
+    (IReadEgress, "newest_cursor"): lambda w: _egress_store_of(w.store_connections, w.hub).newest_cursor("steps"),
+    (IReadEgress, "usage_after"): lambda w: _egress_store_of(w.store_connections, w.hub).usage_after(
+        UsagePosition(_HUB_BASE), _HUB_UNTIL, 50
+    ),
+    (IReadEgress, "newest_cursor_with_files"): lambda w: _egress_store_of(
+        w.store_connections, w.hub
+    ).newest_cursor_with_files(),
+    (IReadEgress, "newest_egress_failure"): lambda w: _egress_store_of(
+        w.store_connections, w.hub
+    ).newest_egress_failure(),
+    (IReadEgress, "newest_egress_latch"): lambda w: _egress_store_of(w.store_connections, w.hub).newest_egress_latch(),
+    (IReadMembershipRepository, "role_in"): lambda w: _memberships_of(w.hub).role_in(
+        default_tenant(w.engine), w.user_1.user_id
+    ),
+    (IReadMembershipRepository, "memberships_for"): lambda w: _memberships_of(w.hub).memberships_for(w.user_1.user_id),
+    (IReadMembershipRepository, "members"): lambda w: _memberships_of(w.hub).members(default_tenant(w.engine)),
+    (IReadMembershipRepository, "admin_count"): lambda w: _memberships_of(w.hub).admin_count(default_tenant(w.engine)),
+    (IReadMembershipRepository, "only_tenant"): lambda w: _memberships_of(w.hub).only_tenant(),
+    (IReadHubAdminRepository, "is_hub_admin"): lambda w: _hub_admins_of(w.hub).is_hub_admin(w.user_1.user_id),
+    (IReadHubAdminRepository, "holders"): lambda w: _hub_admins_of(w.hub).holders(),
+    (IReadInvitationRepository, "get"): lambda w: w.invitations.get(w.invitation_id),
+    (IReadInvitationRepository, "list"): lambda w: w.invitations.list(),
+    (InvitationReads, "invitation_for_token_hash"): lambda w: (
+        w.hub.hub_services.hub_scoped_reads.invitations.invitation_for_token_hash(w.invitation_token_hash)
+    ),
+    (IReadHubEventLog, "newest"): lambda w: _hub_events_of(w.hub).newest(
+        ("egress-write-failed", "trace-export-failed")
+    ),
+    (IReadHubEventLog, "recent"): lambda w: _hub_events_of(w.hub).recent(50),
+    (IReadTenantTeardowns, "underway"): lambda w: _teardowns_of(w.hub).underway(),
+    (IReadTenantTeardowns, "deletion"): lambda w: _teardowns_of(w.hub).deletion(TenantId("ten_census_missing")),
+    (IReadTenantDirectory, "list_tenants"): lambda w: w.hub.hub_services.tenant_admin.list_tenants(),
+    (IReadEgressEvents, "markers_after"): lambda w: w.hub.hub_services.hub_scoped_reads.corpus.markers_after(
+        EventsPosition(_HUB_BASE), _HUB_UNTIL, 50, extractor_version=EXTRACTOR_VERSION
+    ),
+    (IReadEgressEvents, "drops_after"): lambda w: w.hub.hub_services.hub_scoped_reads.corpus.drops_after(
+        EventsPosition(_HUB_BASE), _HUB_UNTIL, 50
+    ),
+    (IReadEgressEvents, "derivations"): lambda w: (
+        lambda events: events.derivations(
+            events.markers_after(EventsPosition(_HUB_BASE), _HUB_UNTIL, 50, extractor_version=None)
+        )
+    )(w.hub.hub_services.hub_scoped_reads.corpus),
+    (IReadEgressEvents, "epochs_minted_between"): lambda w: (
+        w.hub.hub_services.hub_scoped_reads.corpus.epochs_minted_between(
+            _HUB_BASE, _HUB_UNTIL, EpochKey(w.transcript_chunk, 0), 50
+        )
+    ),
+    (IReadEgressEvents, "epoch_markers"): lambda w: w.hub.hub_services.hub_scoped_reads.corpus.epoch_markers(
+        [EpochKey(w.transcript_chunk, 1)], extractor_version=EXTRACTOR_VERSION
+    ),
+    (IReadEgressEvents, "epoch_drops"): lambda w: w.hub.hub_services.hub_scoped_reads.corpus.epoch_drops(
+        [EpochKey(w.transcript_chunk, 1)]
+    ),
+    (IReadTraceStatus, "newest_export_cursor"): lambda w: _trace_store_of(
+        w.store_connections, w.hub
+    ).newest_export_cursor(),
+    (IReadTraceStatus, "newest_export_failure"): lambda w: _trace_store_of(
+        w.store_connections, w.hub
+    ).newest_export_failure(),
+    (IReadWorkItemRepository, "get"): lambda w: w.work_items.get("hub", w.work_item_ref_1),
+    (IReadWorkItemRepository, "list"): lambda w: w.work_items.list("hub", limit=200),
+    (IReadWorkItemRepository, "get_many"): lambda w: w.work_items.get_many(
+        [WorkRef(source="hub", ref=w.work_item_ref_1), WorkRef(source="hub", ref=w.work_item_ref_2)]
+    ),
+}
+
+#: Hub ``IRead*`` methods with no SQL behind them at all, each reasoned below.
+HUB_EXEMPTIONS: dict[tuple[type, str], str] = {}

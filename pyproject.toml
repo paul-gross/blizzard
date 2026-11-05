@@ -148,7 +148,7 @@ testpaths = [
     "src/blizzard/runner/store/migrations/tests",
     "exemplars/python/exemplar/hub/store/migrations/tests",
 ]
-# The exemplar tests import the `exemplar` package beside them and `tests.support`.
+# The exemplar tests import the `exemplar` package beside them and `tests.support.scaffolding`.
 pythonpath = [".", "exemplars/python"]
 asyncio_mode = "auto"
 # pytest's default list with `node_modules` written out, so the Playwright package's dependencies stay unwalked even if a
@@ -175,9 +175,9 @@ markers = [
 
 [tool.mutmut]
 # If a test reads a new non-Python repo file, add its path here.
-# tests/repo_files.py guards reads (including during collection); Python files
+# tests/support/repo_files.py guards reads (including during collection); Python files
 # in src/ and tests/ are already copied by mutmut. scripts/mutation.py creates
-# destination parent dirs itself (tests.repo_files.prepare_mutant_tree) before
+# destination parent dirs itself (tests.support.repo_files.prepare_mutant_tree) before
 # the first mutmut run — no manual step needed.
 # scripts/mutation.py reads this list and layers each scope's own exclusions on top.
 do_not_mutate = [

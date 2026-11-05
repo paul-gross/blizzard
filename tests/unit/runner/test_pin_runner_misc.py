@@ -20,8 +20,8 @@ from blizzard.runner.auth.session import RunnerSession, SessionCookie
 from blizzard.runner.cli import runner as runner_group
 from blizzard.runner.cli.worker_call import READ_TIMEOUT
 from blizzard.runner.config import RunnerConfig
-from tests.config_inputs import create_runner_app
-from tests.worker_http import bind_stubs
+from tests.support.config_inputs import create_runner_app
+from tests.support.worker_http import bind_stubs
 
 
 def test_an_unconfigured_session_minted_before_a_restart_is_refused_after_it() -> None:

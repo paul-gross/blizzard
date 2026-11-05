@@ -18,7 +18,7 @@ from blizzard.runner.harness.opencode_v2.driver import (
     bind_service,
 )
 from blizzard.runner.harness.opencode_v2.registration import RegistrationError, ServiceRegistration
-from tests.opencode_v2_fakes import REGISTRATION, FakeService, FakeTransport
+from tests.support.opencode_v2_fakes import REGISTRATION, FakeService, FakeTransport
 
 pytestmark = pytest.mark.unit
 

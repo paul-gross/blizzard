@@ -13,7 +13,7 @@ from pathlib import Path
 
 import pytest
 
-from tests.fleet_launchers import (
+from tests.support.fleet_launchers import (
     MOCK_HARNESS_FENCE_VAR,
     REPO,
     drive_until_done,
@@ -23,9 +23,9 @@ from tests.fleet_launchers import (
     run_hub,
     runner_config,
 )
-from tests.fleet_world import FIXTURE_ENV, REPO_NAME, graph_yaml
-from tests.host_files import with_workspace, write_host_file
-from tests.support import bound_socket, url_of
+from tests.support.fleet_world import FIXTURE_ENV, REPO_NAME, graph_yaml
+from tests.support.host_files import with_workspace, write_host_file
+from tests.support.scaffolding import bound_socket, url_of
 from tests.winter.support import require_winter_source, winter_binding_gate
 
 pytestmark = [pytest.mark.winter_binding, winter_binding_gate]

@@ -22,7 +22,7 @@ from blizzard.foundation.events.stream import DEFAULT_KEEPALIVE_SECONDS, Stream
 from blizzard.foundation.leases import LeaseClosureReason
 from blizzard.runner.api.events import RESERVED_COMMENT, events_stream
 from blizzard.runner.events.broker import EventBroker as RunnerEventBroker
-from tests.config_inputs import export_runner_app
+from tests.support.config_inputs import export_runner_app
 
 
 def _request(

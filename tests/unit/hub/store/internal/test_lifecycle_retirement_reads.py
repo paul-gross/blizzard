@@ -16,7 +16,7 @@ from blizzard.hub.store.internal.newest_fact import newest_fact_select
 from blizzard.hub.store.internal.repository_record_store import retirements
 from blizzard.hub.store.internal.work_source_record_store import retired_ids
 from blizzard.hub.store.scoped import statements_of
-from tests.support import hub_store_connections, migrate_to, stamp
+from tests.support.scaffolding import hub_store_connections, migrate_to, stamp
 
 _T0 = datetime(2026, 1, 1, tzinfo=UTC)
 

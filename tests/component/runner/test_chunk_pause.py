@@ -45,7 +45,7 @@ from blizzard.runner.node_steps.chunk_state import ChunkPause, ChunkState
 from blizzard.runner.node_steps.submissions import ApplyReply
 from blizzard.runner.store import schema as runner_schema
 from blizzard.runner.throttle.gate import StartKind
-from tests.runner_fakes import (
+from tests.support.runner_fakes import (
     FIXTURE_RUNNER_ID,
     FakeHarness,
     FakeHub,
@@ -164,7 +164,7 @@ def _make_ctx(
 def _pause_locally(store: SqlAlchemyRunnerStore, ctx: LoopContext, *, paused: bool) -> None:
     """Set the runner's own brake, the way `PATCH /runner` does — fact + report, one write.
 
-    The twin of `tests/support_paused.py`'s helper, kept local rather than imported across
+    The twin of `tests/support/paused.py`'s helper, kept local rather than imported across
     test modules.
     """
     store.record_local_pause(

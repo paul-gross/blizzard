@@ -16,8 +16,8 @@ from blizzard.runner.harness.transcript import (
     TranscriptPosition,
 )
 from blizzard.runner.process.child_env import AllowlistedEnv
-from tests.runner_fakes import FakeProbe
-from tests.support_child_launch import CHILDREN, version_probe
+from tests.support.child_launch import CHILDREN, version_probe
+from tests.support.runner_fakes import FakeProbe
 
 
 def test_transcript_position_round_trips_its_opaque_token() -> None:

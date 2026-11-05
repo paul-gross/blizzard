@@ -19,7 +19,7 @@ from blizzard.hub.domain.observability.egress.status import egress_state
 from blizzard.hub.domain.observability.lane_failure import failure_ongoing
 from blizzard.hub.domain.observability.tracing.cursor import CursorKey
 from blizzard.hub.domain.observability.tracing.window import TraceWindow
-from tests.trace_fixtures import at, scenarios, usage
+from tests.support.trace_fixtures import at, scenarios, usage
 
 _NOW = at(3600)
 _SETTLE = timedelta(seconds=60)

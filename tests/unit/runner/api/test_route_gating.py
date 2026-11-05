@@ -25,9 +25,9 @@ from blizzard.runner.api.federation import HumanLane
 from blizzard.runner.api.wiring import RunnerWiring
 from blizzard.runner.auth.session import CookieNames, RunnerSession, SessionCookie
 from blizzard.runner.config import RunnerConfig
-from tests.config_inputs import create_runner_app
-from tests.runner_client import live_api_routes
-from tests.runner_fakes import registered_identity
+from tests.support.config_inputs import create_runner_app
+from tests.support.runner_client import live_api_routes
+from tests.support.runner_fakes import registered_identity
 
 # --- The two-lane table -----------------------------------------------------
 

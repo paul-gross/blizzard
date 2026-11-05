@@ -4,7 +4,7 @@ process holder every consumer reads."""
 from __future__ import annotations
 
 from blizzard.runner.hub.host_identity import HostIdentityHolder
-from tests.support_host_identity import (
+from tests.support.host_identity import (
     _IDENTITY,  # pyright: ignore[reportPrivateUsage]
 )
 

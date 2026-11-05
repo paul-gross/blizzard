@@ -9,7 +9,7 @@ from pathlib import Path
 from blizzard.foundation.garden_proposals import GardenProposalOrigin
 from blizzard.hub.store import schema as s
 from blizzard.hub.store.internal.garden_proposal_store import GardenProposalStore
-from tests.support import build_hub, hub_store_connections, stamp
+from tests.support.scaffolding import build_hub, hub_store_connections, stamp
 
 _PROJECT = "proj_test"
 

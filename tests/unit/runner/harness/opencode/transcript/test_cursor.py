@@ -18,7 +18,7 @@ from blizzard.runner.harness.opencode.transcript.cursor import (
     MessagePartRevision,
     records_for_export,
 )
-from tests.repo_files import repo_root
+from tests.support.repo_files import repo_root
 
 # The oldest committed corpus inside the admitted range — stays correct as corpora are added.
 _AN_ADMITTED_OPENCODE_VERSION = admitted_corpus_versions(CommittedCorpus(), "opencode", ADMITTED_OPENCODE_RANGE)[0]

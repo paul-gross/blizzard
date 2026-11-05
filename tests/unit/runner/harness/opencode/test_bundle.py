@@ -33,10 +33,10 @@ from blizzard.runner.harness.opencode.bundle import (
 from blizzard.runner.harness.opencode.declaration import OPENCODE_DECLARATION
 from blizzard.runner.harness.opencode.section import OpenCodeSection
 from blizzard.runner.harness.wiring import HarnessSections, publish_harness_bundle, shared_inputs
-from tests.config_inputs import init_host
-from tests.harness_sections import opencode, sections, with_claude_code
-from tests.runner_fakes import NO_TRACING, FakeProbe
-from tests.support_child_launch import CHILDREN
+from tests.support.child_launch import CHILDREN
+from tests.support.config_inputs import init_host
+from tests.support.harness_sections import opencode, sections, with_claude_code
+from tests.support.runner_fakes import NO_TRACING, FakeProbe
 
 _COLLABORATORS = InitCollaborators.http(CliCollaborators.production().client_factory)
 

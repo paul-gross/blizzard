@@ -16,13 +16,13 @@ from blizzard.hub.config import HubConfig
 from blizzard.runner.app import build_hosted_app
 from blizzard.runner.composition import build_host_process
 from blizzard.runner.host_config import BuiltRunner
-from tests.config_inputs import load_host_config
-from tests.host_files import write_minimal_host
-from tests.support import build_hub
-from tests.support_flag_registry import (
+from tests.support.config_inputs import load_host_config
+from tests.support.flag_registry import (
     _TOKEN,  # pyright: ignore[reportPrivateUsage]
     _fixture,  # pyright: ignore[reportPrivateUsage]
 )
+from tests.support.host_files import write_minimal_host
+from tests.support.scaffolding import build_hub
 
 
 @pytest.fixture

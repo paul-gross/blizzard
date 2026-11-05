@@ -9,7 +9,7 @@ from pathlib import Path
 import pytest
 
 from blizzard.hub.config import AUTH_MODE_NONE, AUTH_MODE_OAUTH, ConfigError, HubConfig
-from tests.config_inputs import load_hub_config
+from tests.support.config_inputs import load_hub_config
 
 
 def _write(root: Path, body: str) -> None:

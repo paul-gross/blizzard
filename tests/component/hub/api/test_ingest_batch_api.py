@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from tests.support import build_hub
+from tests.support.scaffolding import build_hub
 
 _P1 = {"source": "default", "ref": "1"}
 _P2 = {"source": "default", "ref": "2"}

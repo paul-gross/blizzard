@@ -10,8 +10,8 @@ from click.testing import CliRunner, Result
 from blizzard.cli.main import blizzard
 from blizzard.foundation.store.engine import create_engine_from_url
 from blizzard.hub.config import HubConfig
-from tests.config_inputs import init_hub, migrate_hub
-from tests.forge_check_support import seed_addresses
+from tests.support.config_inputs import init_hub, migrate_hub
+from tests.support.forge_check import seed_addresses
 
 #: The revision before the forge migration: the store the check reads is the one the build being replaced serves.
 _BEFORE_FORGES = "20261024_0900_hub_legacy_run"

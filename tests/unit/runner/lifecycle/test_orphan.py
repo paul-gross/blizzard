@@ -23,7 +23,7 @@ from blizzard.runner.lifecycle.takeover import TakeoverOpenScope, TakeoverServic
 from blizzard.runner.loop.context import LoopContext
 from blizzard.runner.loop.steps import Advance, Pull, Reap, Resume, ResumeIntents
 from blizzard.runner.node_steps.chunk_state import ChunkState
-from tests.runner_fakes import (
+from tests.support.runner_fakes import (
     FakeHarness,
     FakeHub,
     FakeProbe,

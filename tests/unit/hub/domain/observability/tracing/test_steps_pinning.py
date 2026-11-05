@@ -39,7 +39,7 @@ from blizzard.hub.domain.observability.tracing.steps import (
     terminal_candidates,
     with_preceded_by,
 )
-from tests import trace_fixtures as fx
+from tests.support import trace_fixtures as fx
 
 US = timedelta(microseconds=1)
 START = fx.at(10)

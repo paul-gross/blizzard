@@ -14,7 +14,15 @@ from typing import NoReturn
 from blizzard.foundation.event_log import EventLogSeverity
 from blizzard.foundation.store.utc import iso_utc
 from blizzard.hub.domain.chunk.ports.fence import EpochAdmission
-from tests.support import HubHarness, build_hub, chunk_stores, count_rows_read, seed_chunk, seed_graph, seed_lease
+from tests.support.scaffolding import (
+    HubHarness,
+    build_hub,
+    chunk_stores,
+    count_rows_read,
+    seed_chunk,
+    seed_graph,
+    seed_lease,
+)
 
 
 def _events(hub: HubHarness, **params: str | int) -> list[dict[str, object]]:
@@ -305,7 +313,7 @@ def test_chunk_filtered_escalations_do_not_read_other_open_chunks(tmp_path: Path
 def test_noncritical_and_runner_filtered_events_skip_escalation_store(tmp_path: Path) -> None:
     from dataclasses import replace
 
-    from tests.support import serve_default_tenant
+    from tests.support.scaffolding import serve_default_tenant
 
     hub = build_hub(tmp_path)
 

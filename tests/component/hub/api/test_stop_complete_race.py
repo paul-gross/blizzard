@@ -11,7 +11,7 @@ from __future__ import annotations
 import threading
 from pathlib import Path
 
-from tests.support import HubHarness, build_hub, ingest, report_lease
+from tests.support.scaffolding import HubHarness, build_hub, ingest, report_lease
 
 
 def _claim_and_lease(hub: HubHarness, chunk_id: str) -> None:

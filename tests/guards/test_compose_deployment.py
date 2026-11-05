@@ -11,7 +11,7 @@ from typing import Any
 
 import yaml
 
-from tests.repo_files import repo_root
+from tests.support.repo_files import repo_root
 
 _REPO_ROOT = repo_root()
 _DOCKER_DIR = _REPO_ROOT / "packaging" / "docker"

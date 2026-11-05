@@ -27,10 +27,10 @@ from blizzard.runner.hub.client import (
 from blizzard.runner.hub.internal.token_file import HubTokenFile
 from blizzard.runner.hub.token_file import ENV_FILENAME
 from blizzard.runner.runtime import sqlite_store_file
-from tests.host_files import load_runner_config
-from tests.runner_init_fakes import FakeInitHub, FakeTokenIdentityReader, init_runner
-from tests.runner_join import DEFAULT_TOKEN_ENV
-from tests.session_store_fakes import InMemorySessionStore
+from tests.support.host_files import load_runner_config
+from tests.support.runner_init_fakes import FakeInitHub, FakeTokenIdentityReader, init_runner
+from tests.support.runner_join import DEFAULT_TOKEN_ENV
+from tests.support.session_store_fakes import InMemorySessionStore
 
 _HUB = "http://hub.test:8421"
 

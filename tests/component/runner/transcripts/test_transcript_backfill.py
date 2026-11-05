@@ -20,7 +20,7 @@ from blizzard.runner.leases.model import NewLease
 from blizzard.runner.loop.context import LoopConfig, LoopContext
 from blizzard.runner.transcripts.transcript_backfill import TranscriptBackfill, TranscriptReshipError
 from blizzard.runner.transcripts.transcript_pump import MAX_BUFFERED_BYTES
-from tests.runner_fakes import (
+from tests.support.runner_fakes import (
     FIXTURE_RUNNER_ID,
     FakeHarness,
     FakeHub,

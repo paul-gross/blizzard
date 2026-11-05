@@ -23,7 +23,7 @@ from blizzard.hub.config import HubConfig, parse_egress_config, read_legacy_keys
 from blizzard.hub.domain.config.legacy_keys import LegacyKeys, WorkSourceConfig
 from blizzard.hub.domain.execution.auth.produces import PRODUCES_ENFORCE
 from blizzard.hub.domain.observability.egress.config import EgressConfig
-from tests.config_inputs import STRICT, init_hub, load_hub_config, migrate_hub
+from tests.support.config_inputs import STRICT, init_hub, load_hub_config, migrate_hub
 
 
 def test_hub_default_db_url_is_sqlite_under_data_dir(tmp_path: Path) -> None:

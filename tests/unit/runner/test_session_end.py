@@ -13,7 +13,7 @@ import pytest
 from blizzard.runner.cli import runner as runner_group
 from blizzard.runner.harness.claude_code.worker_settings import WorkerSettings
 from blizzard.runner.harness.worker_hooks import SESSION_END_HOOK_COMMAND
-from tests.worker_http import bind_stubs
+from tests.support.worker_http import bind_stubs
 
 
 class _FakeResponse:

@@ -19,7 +19,7 @@ from blizzard.hub.domain.graph.model import GraphDoc
 from blizzard.hub.domain.graph.validation import ValidationResult, Validator
 from blizzard.hub.store import schema as s
 from blizzard.tools.invariants import hub_invariants
-from tests.support import TEST_CATALOGUE, HubHarness, build_hub, hub_scoped, pointer_token, report_lease
+from tests.support.scaffolding import TEST_CATALOGUE, HubHarness, build_hub, hub_scoped, pointer_token, report_lease
 
 _LEGACY_RUN = json.dumps([{"command": "./ship.sh --now", "name": "ship", "produces": None}])
 

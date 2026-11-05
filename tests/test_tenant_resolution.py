@@ -23,8 +23,16 @@ from blizzard.hub.api.auth_session import TENANT_HEADER, TenantRequest, implicit
 from blizzard.hub.auth.models import User
 from blizzard.hub.store import schema
 from blizzard.hub.tenancy import StoreScope, TenantId
-from tests.support import HubHarness, add_tenant, build_hub, default_tenant, runner_token, seed_runner, seed_session
-from tests.support import seed_user as _seed_user
+from tests.support.scaffolding import (
+    HubHarness,
+    add_tenant,
+    build_hub,
+    default_tenant,
+    runner_token,
+    seed_runner,
+    seed_session,
+)
+from tests.support.scaffolding import seed_user as _seed_user
 
 pytestmark = pytest.mark.component
 

@@ -31,7 +31,7 @@ from blizzard.runner.tracing.receiver_limits import (
     ReceiverCounter,
     SpanRateLimiter,
 )
-from tests.runner_fakes import REGISTERED_AT
+from tests.support.runner_fakes import REGISTERED_AT
 
 _NOW = datetime(2026, 7, 21, 12, 0, 0, tzinfo=UTC)
 _ALLOWLIST = Allowlist(scope=SCOPE_NAME, attributes=CLI_ATTRIBUTES)

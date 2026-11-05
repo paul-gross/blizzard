@@ -7,7 +7,7 @@ from __future__ import annotations
 
 from blizzard.runner.harness.transcript import TranscriptBatch
 from blizzard.runner.transcripts.internal.projected_transcript_repository import ProjectedTranscriptRepository
-from tests.runner_fakes import FakeTranscriptSource
+from tests.support.runner_fakes import FakeTranscriptSource
 
 
 def _scripted_batch(*, truncated: bool, sidechain_truncated: bool) -> TranscriptBatch:

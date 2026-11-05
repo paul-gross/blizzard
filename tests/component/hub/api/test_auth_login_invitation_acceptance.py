@@ -33,9 +33,9 @@ from blizzard.hub.auth.invitations import InvitationToken, TenantInvitation
 from blizzard.hub.auth.models import Identity, ProviderIdentity
 from blizzard.hub.store import schema
 from blizzard.hub.tenancy import TenantClosed, TenantId
-from tests.invitation_reads import resolved_after_first_read
-from tests.oauth_login_double import FakeOAuthProvider, state_from_redirect
-from tests.support import (
+from tests.support.invitation_reads import resolved_after_first_read
+from tests.support.oauth_login_double import FakeOAuthProvider, state_from_redirect
+from tests.support.scaffolding import (
     HubHarness,
     build_hub,
     close_tenant,

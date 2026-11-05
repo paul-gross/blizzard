@@ -23,10 +23,10 @@ from blizzard.hub.store.tenant_guard import UnscopedTenantStatement
 from blizzard.hub.tenancy import StoreScope
 from blizzard.runner.store import schema as runner
 from blizzard.tools.invariants import hub_invariants, runner_invariants
-from tests.config_inputs import init_host, init_hub
-from tests.migration_support_invariant_checker import NOW, insert
-from tests.runner_fakes import FIXTURE_RUNNER_ID, FakeProbe
-from tests.support import default_tenant, hub_level_connections, hub_scoped, stamp
+from tests.support.config_inputs import init_host, init_hub
+from tests.support.migrations.invariant_checker import NOW, insert
+from tests.support.runner_fakes import FIXTURE_RUNNER_ID, FakeProbe
+from tests.support.scaffolding import default_tenant, hub_level_connections, hub_scoped, stamp
 
 
 def _land_once_after(

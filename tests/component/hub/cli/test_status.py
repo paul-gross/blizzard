@@ -12,7 +12,7 @@ from typing import Any, cast
 
 from blizzard.hub.cli import hub as hub_group
 from blizzard.hub.cli.context import DEFAULT_HUB_URL
-from tests.worker_http import Bound, bind_stubs
+from tests.support.worker_http import Bound, bind_stubs
 
 
 class _FakeResponse:

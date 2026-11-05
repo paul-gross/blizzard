@@ -7,7 +7,7 @@ from pathlib import Path
 
 import pytest
 
-from tests.revision_age import (
+from tests.support.revision_age import (
     RUN_RETIRED_ENV,
     InvalidRevisionTest,
     Retired,

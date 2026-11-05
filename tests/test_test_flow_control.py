@@ -14,8 +14,8 @@ from blizzard.foundation.clock import ControlledClock
 from blizzard.hub.api.test_flow_control import flow_control_router
 from blizzard.hub.config import AUTH_MODE_OAUTH
 from blizzard.hub.delivery.flow_driver import FlowDriver, TickResult
-from tests.config_inputs import build_hosted_hub_app, create_hub_app, init_hub
-from tests.support import build_hub, runner_token, seed_hub_admin, seed_runner, seed_session, seed_user
+from tests.support.config_inputs import build_hosted_hub_app, create_hub_app, init_hub
+from tests.support.scaffolding import build_hub, runner_token, seed_hub_admin, seed_runner, seed_session, seed_user
 
 pytestmark = pytest.mark.component
 

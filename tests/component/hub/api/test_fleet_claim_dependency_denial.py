@@ -16,7 +16,7 @@ from blizzard.hub.domain.chunk.dependencies import PrerequisiteScope
 from blizzard.hub.domain.chunk.model import DependencyEdge
 from blizzard.hub.domain.chunk.ports.dependencies import IWriteChunkDependenciesRepository
 from blizzard.hub.domain.chunk.ports.exclusive import ILockedChunkRead
-from tests.support import HubHarness, build_hub, count_queries, ingest
+from tests.support.scaffolding import HubHarness, build_hub, count_queries, ingest
 
 
 def _resolve(hub: HubHarness, chunk_id: str):

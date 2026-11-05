@@ -10,7 +10,7 @@ import json
 from pathlib import Path
 
 from blizzard.foundation.hub_event_types import HubEventType
-from tests.support import HubHarness, build_hub, emitted_events, ingest, report_lease
+from tests.support.scaffolding import HubHarness, build_hub, emitted_events, ingest, report_lease
 
 _POINTER = {"source": "default", "ref": "364"}
 

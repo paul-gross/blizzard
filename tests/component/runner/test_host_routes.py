@@ -32,10 +32,11 @@ from blizzard.runner.process.internal.linux_process_probe import LinuxProcessPro
 from blizzard.runner.route_paths import is_api_path
 from blizzard.runner.status.view import RunnerStatusService
 from blizzard.runner.stores import RunnerStores
-from tests.config_inputs import create_runner_app, export_runner_app
-from tests.host_files import one_workspace
-from tests.runner_client import live_api_routes
-from tests.runner_fakes import (
+from tests.support.child_launch import CHILDREN
+from tests.support.config_inputs import create_runner_app, export_runner_app
+from tests.support.host_files import one_workspace
+from tests.support.runner_client import live_api_routes
+from tests.support.runner_fakes import (
     FakeProvider,
     SqlAlchemyRunnerStore,
     make_host_stores,
@@ -44,7 +45,6 @@ from tests.runner_fakes import (
     registered_identity,
     single_workspace,
 )
-from tests.support_child_launch import CHILDREN
 
 _NOW = datetime(2026, 7, 16, 12, 0, 0, tzinfo=UTC)
 

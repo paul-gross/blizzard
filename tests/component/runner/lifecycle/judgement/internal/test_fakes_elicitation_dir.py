@@ -10,7 +10,7 @@ from pathlib import Path
 from blizzard.runner.harness.adapter import WorkerHandle
 from blizzard.runner.lifecycle.judgement.internal.elicitation_files import ElicitationFiles
 from blizzard.runner.loop.context import LoopContext
-from tests.runner_fakes import FakeHarness, FakeHub, FakeProbe, FakeProvider, make_context, make_store
+from tests.support.runner_fakes import FakeHarness, FakeHub, FakeProbe, FakeProvider, make_context, make_store
 
 
 def _context(tmp_path: Path) -> LoopContext:

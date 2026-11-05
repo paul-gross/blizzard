@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import json
 
-from tests.repo_files import repo_root
+from tests.support.repo_files import repo_root
 
 _ANGULAR = repo_root() / "web" / "angular.json"
 _SHELL_SWEEP_GLOB = "**/*.shell-sweep.spec.ts"

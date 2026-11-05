@@ -37,7 +37,7 @@ from blizzard.hub.store import schema
 from blizzard.hub.store.errors import HubStoreErrorFactory
 from blizzard.hub.store.internal.tenant_admin_store import TenantAdministrationStore
 from blizzard.hub.tenancy import HUB_SCOPED_OPTION, StoreScope, TenantId, UnknownTenant
-from tests.support import (
+from tests.support.scaffolding import (
     HubHarness,
     build_hub,
     close_tenant,

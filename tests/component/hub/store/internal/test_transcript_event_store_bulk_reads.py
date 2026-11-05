@@ -24,8 +24,14 @@ from blizzard.hub.store import schema as s
 from blizzard.hub.store.internal.transcript_event_store import TranscriptEventStore, segment_contexts_stmt
 from blizzard.hub.store.scoped import ScopedStatements
 from blizzard.hub.tenancy import StoreScope, TenantId
-from tests.factory_fields import TranscriptSliceFields
-from tests.support import SeedingTranscriptSegmentStore, hub_store_connections, migrated_hub_at, seed_chunk, seed_graph
+from tests.support.factory_fields import TranscriptSliceFields
+from tests.support.scaffolding import (
+    SeedingTranscriptSegmentStore,
+    hub_store_connections,
+    migrated_hub_at,
+    seed_chunk,
+    seed_graph,
+)
 
 _T0 = datetime(2026, 1, 1, tzinfo=UTC)
 _EXTRACTOR_VERSION = "blizzard-analytics/1"

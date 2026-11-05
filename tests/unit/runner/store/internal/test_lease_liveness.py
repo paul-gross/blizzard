@@ -16,7 +16,7 @@ from sqlalchemy import insert, select
 from blizzard.runner.harness.identity import SessionReference
 from blizzard.runner.leases.model import NewLease
 from blizzard.runner.store import schema as runner
-from tests.runner_fakes import FIXTURE_RUNNER_ID, SqlAlchemyRunnerStore, make_store
+from tests.support.runner_fakes import FIXTURE_RUNNER_ID, SqlAlchemyRunnerStore, make_store
 
 _NOW = datetime(2026, 7, 14, tzinfo=UTC)
 

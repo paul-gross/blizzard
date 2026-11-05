@@ -11,7 +11,7 @@ import pytest
 from sqlalchemy import select
 
 from blizzard.hub.store import schema as s
-from tests.garden_delivery_world import (
+from tests.support.garden_delivery_world import (
     SCOPE,
     add_op,
     finding_count,
@@ -21,7 +21,7 @@ from tests.garden_delivery_world import (
     seed_chunk,
     seed_scope,
 )
-from tests.support import build_hub, hub_scoped
+from tests.support.scaffolding import build_hub, hub_scoped
 
 
 def test_a_missing_delta_beside_a_resolving_one_refuses_the_delivery(tmp_path: Path) -> None:

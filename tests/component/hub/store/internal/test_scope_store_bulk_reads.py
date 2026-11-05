@@ -12,7 +12,7 @@ from sqlalchemy import Engine
 from blizzard.hub.domain.config.changes import ChangeContext, Door
 from blizzard.hub.domain.garden.scopes import Scope, ScopeSlug
 from blizzard.hub.store.internal.scope_store import ScopeStore
-from tests.support import default_project, hub_store_connections, migrate_to
+from tests.support.scaffolding import default_project, hub_store_connections, migrate_to
 
 _T0 = datetime(2026, 1, 1, tzinfo=UTC)
 

@@ -8,7 +8,7 @@ from __future__ import annotations
 from pathlib import Path
 
 from blizzard.hub.store import schema as s
-from tests.support import HubHarness, build_hub, chunk_rows, ingest, report_lease
+from tests.support.scaffolding import HubHarness, build_hub, chunk_rows, ingest, report_lease
 
 _YAML = """
 name: default-delivery

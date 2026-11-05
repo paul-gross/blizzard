@@ -12,7 +12,7 @@ import pytest
 from blizzard.hub.domain.chunk.model import Chunk, DecisionChoice, decide_close_enqueue
 from blizzard.hub.domain.chunk.ports.fence import EpochAdmission
 from blizzard.hub.domain.projects.model import ProjectId
-from tests.support import (
+from tests.support.scaffolding import (
     HubHarness,
     build_hub,
     chunk_stores,

@@ -34,7 +34,7 @@ from blizzard.runner.hub.client import (
 from blizzard.runner.lifecycle.claim import InterruptedClaims, ReadyQueue
 from blizzard.runner.loop.context import LoopConfig
 from blizzard.runner.node_steps.chunk_state import ChunkPause, ChunkState
-from tests.runner_fakes import (
+from tests.support.runner_fakes import (
     FIXTURE_RUNNER_ID,
     FakeHarness,
     FakeHub,

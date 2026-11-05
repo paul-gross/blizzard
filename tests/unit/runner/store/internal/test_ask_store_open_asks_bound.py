@@ -11,7 +11,7 @@ from sqlalchemy import Row, Select
 from blizzard.runner.store.internal.ask_store import AskStore
 from blizzard.runner.store.schema import lease_closures
 from blizzard.runner.store.scoped import RunnerStoreConnections
-from tests.runner_fakes import (
+from tests.support.runner_fakes import (
     FIXTURE_RUNNER_ID,
     create_all,
     create_engine_from_url,

@@ -16,7 +16,7 @@ from packaging.version import Version
 
 from blizzard.hub.domain.observability.analytics.dialects import DIALECTS
 from blizzard.runner.harness.wiring import declared_normalizer_versions
-from tests.repo_files import repo_root
+from tests.support.repo_files import repo_root
 
 _PACKAGE_ROOT = repo_root() / "src" / "blizzard" / "runner" / "harness"
 

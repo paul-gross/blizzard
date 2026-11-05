@@ -12,7 +12,7 @@ from typing import Any
 
 import httpx2
 
-from tests.support import HubHarness, build_hub, pointer_token, report_lease
+from tests.support.scaffolding import HubHarness, build_hub, pointer_token, report_lease
 
 _POINTER = {"source": "default", "ref": "9"}
 

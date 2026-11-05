@@ -35,12 +35,12 @@ from blizzard.runner.process.child_processes import (
     Stream,
     StreamTarget,
 )
-from tests import transcript_fixtures
-from tests.runner_fakes import FakeProbe, make_envelope
-from tests.suite_plugin import DAEMON_ENV
-from tests.support_child_launch import CHILDREN, tool_env, version_probe
-from tests.support_claude_code_adapter import SENTINEL_UNLISTED_VAR as _SENTINEL_UNLISTED_VAR
-from tests.support_claude_code_adapter import adapter as _adapter
+from tests.support import transcript_fixtures
+from tests.support.child_launch import CHILDREN, tool_env, version_probe
+from tests.support.claude_code_adapter import SENTINEL_UNLISTED_VAR as _SENTINEL_UNLISTED_VAR
+from tests.support.claude_code_adapter import adapter as _adapter
+from tests.support.runner_fakes import FakeProbe, make_envelope
+from tests.support.suite_plugin import DAEMON_ENV
 
 _JSON_PASS = '{"type":"result","subtype":"success","is_error":false,"result":"Looks good. <Choice>pass</Choice>","session_id":"s1"}'
 

@@ -15,7 +15,7 @@ from typing import cast
 from blizzard.hub.domain.chunk.model import WorkRef
 from blizzard.hub.domain.chunk.ports.exclusive import ILockedChunkRead
 from blizzard.hub.domain.chunk.ports.work_refs import IWriteChunkWorkRefsRepository
-from tests.support import build_hub, ingest
+from tests.support.scaffolding import build_hub, ingest
 
 
 def _claim_body(chunk_id: str, runner: str = "r1") -> dict[str, object]:

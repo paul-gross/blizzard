@@ -22,7 +22,7 @@ from blizzard.hub.auth.internal.superuser_bootstrap_repository import SuperuserB
 from blizzard.hub.auth.internal.user_repository import UserRepository
 from blizzard.hub.auth.models import AuthFact, AuthStateEntry, Identity, Session, SuperuserBootstrap, User
 from blizzard.hub.store.scoped import ScopedConnections
-from tests.support import hub_store_connections, migrated_hub_at
+from tests.support.scaffolding import hub_store_connections, migrated_hub_at
 
 _T0 = datetime(2026, 1, 1, tzinfo=UTC)
 

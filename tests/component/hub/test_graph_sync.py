@@ -17,7 +17,7 @@ from blizzard.hub.documents import YAML_CODEC
 from blizzard.hub.domain.graph.model import GraphArtifact, GraphDoc
 from blizzard.hub.graph_sync import GraphReconciliation, GraphSyncOutcome, GraphSyncStatus
 from blizzard.hub.graphs import PACKAGED
-from tests.support import HubHarness, build_hub
+from tests.support.scaffolding import HubHarness, build_hub
 
 _GRAPH_YAML = """
 name: {name}

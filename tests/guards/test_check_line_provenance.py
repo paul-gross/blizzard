@@ -7,7 +7,7 @@ from typing import TypedDict
 
 import pytest
 
-from tests.repo_files import repo_root
+from tests.support.repo_files import repo_root
 
 
 class _Line(TypedDict):

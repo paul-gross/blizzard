@@ -14,7 +14,7 @@ import sqlalchemy as sa
 from blizzard.foundation.store.engine import create_engine_from_url
 from blizzard.foundation.store.migrations import MigrationRunner
 from blizzard.runner import runtime as runner_runtime
-from tests.config_inputs import init_host
+from tests.support.config_inputs import init_host
 
 pytestmark = [pytest.mark.component]
 

@@ -28,8 +28,8 @@ from blizzard.runner.host_layout import HostLayout
 from blizzard.runner.listeners import AdoptedTcp, Uds
 from blizzard.runner.loop_wiring import LoopWiring
 from blizzard.runner.process.child_env import AllowlistedEnv
-from tests.host_files import host_config_of
-from tests.runner_fakes import FIXTURE_RUNNER_ID, FakeHub, migrated_store_at
+from tests.support.host_files import host_config_of
+from tests.support.runner_fakes import FIXTURE_RUNNER_ID, FakeHub, migrated_store_at
 
 pytestmark = pytest.mark.component
 

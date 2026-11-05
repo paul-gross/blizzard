@@ -7,7 +7,7 @@ a whole, so a drifted ``_IHUBCLIENT_ENDPOINTS`` entry would only trip under
 
 from __future__ import annotations
 
-from tests.ihubclient_parity import assert_ihubclient_endpoint_table_matches_protocol
+from tests.support.ihubclient_parity import assert_ihubclient_endpoint_table_matches_protocol
 
 
 def test_ihubclient_endpoint_table_matches_the_protocol_method_set() -> None:

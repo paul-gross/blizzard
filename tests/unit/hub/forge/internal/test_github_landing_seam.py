@@ -13,7 +13,7 @@ from blizzard.hub.domain.config.forges import FORGE_KIND_CAPABILITIES
 from blizzard.hub.forge.internal.github_landing import GitHubLanding
 from blizzard.hub.forge.internal.github_reads import ANSWERS_MAX, COMPARISONS_MAX, KeptAnswers, KeptComparisons
 from blizzard.hub.forge.landing import Comparison, ComparisonStatus, ForgeRejected, MergeMethod
-from tests.github_landing_harness import REPO, Harness, pull, reply, workflow_run
+from tests.support.github_landing_harness import REPO, Harness, pull, reply, workflow_run
 
 _TIP = {"object": {"sha": "a" * 40}}
 _REF = f"{REPO}/git/ref/heads/main"

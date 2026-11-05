@@ -9,7 +9,7 @@ from blizzard.foundation.config_keys import ConfigView
 from blizzard.hub.config import ConfigError, parse_sweep_modes
 from blizzard.hub.domain.sweeps.locks import SweepInProgress, SweepLock, SweepLocks, admits
 from blizzard.hub.domain.sweeps.names import SweepMode, SweepModes, SweepName
-from tests.support_sweep_roster import A, B
+from tests.support.sweep_roster import A, B
 
 
 def test_each_sweep_name_knows_its_logger_segment_and_whether_one_tenant_serves_it() -> None:

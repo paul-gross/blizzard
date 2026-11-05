@@ -25,7 +25,7 @@ from blizzard.runner.loop.steps import Advance, Fill
 from blizzard.runner.transcripts.repository import Transcript
 from blizzard.runner.transcripts.service import TranscriptService
 from blizzard.runner.usage.recorder import UsageRecorder
-from tests.runner_fakes import (
+from tests.support.runner_fakes import (
     FIXTURE_RUNNER_ID,
     FakeArchivedTranscriptRepository,
     FakeHarness,

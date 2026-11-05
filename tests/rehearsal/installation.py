@@ -15,9 +15,9 @@ from pathlib import Path
 import httpx2
 
 from blizzard.tools.release_install import Installation
-from tests.fleet_launchers import await_http, terminate
-from tests.runner_join import runner_spawn_env
-from tests.support import (
+from tests.support.fleet_launchers import await_http, terminate
+from tests.support.runner_join import runner_spawn_env
+from tests.support.scaffolding import (
     LISTENING_FILE,
     await_listening_url,
     daemon_log_sink,

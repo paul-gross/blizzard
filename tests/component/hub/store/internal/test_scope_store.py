@@ -21,7 +21,7 @@ from blizzard.hub.domain.garden.scopes import Scope, ScopeEdit, ScopeSlug
 from blizzard.hub.store.errors import HubStoreError
 from blizzard.hub.store.internal.scope_store import ScopeStore
 from blizzard.hub.store.schema import config_changes, scope_lifecycle_facts, scopes
-from tests.support import default_project, hub_store_connections, migrated_hub_at, seed_project
+from tests.support.scaffolding import default_project, hub_store_connections, migrated_hub_at, seed_project
 
 _NOW = datetime(2026, 7, 16, 12, 0, 0, tzinfo=UTC)
 

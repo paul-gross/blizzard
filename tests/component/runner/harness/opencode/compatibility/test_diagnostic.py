@@ -70,7 +70,7 @@ from blizzard.runner.harness.opencode.compatibility.scratch_git import Subproces
 from blizzard.runner.harness.opencode.compatibility.transcript import TranscriptExportSample
 from blizzard.runner.harness.opencode.shapes import OpenCodeShapeError, parse_run_jsonl
 from blizzard.runner.process.child_processes import ChildLaunchError, IPtyChild
-from tests.support_child_launch import CHILDREN, tool_env
+from tests.support.child_launch import CHILDREN, tool_env
 
 requires_landlock = pytest.mark.skipif(
     landlock_version() < 3,

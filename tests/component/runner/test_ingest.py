@@ -40,9 +40,9 @@ from blizzard.runner.ingest import RunnerIngest
 from blizzard.runner.runtime import migration_runner
 from blizzard.runner.store.errors import RunnerStoreErrorFactory
 from blizzard.runner.store.schema import OUTBOX_LANE_OUTBOUND
-from tests.baseline_floor_trees import make_tree
-from tests.config_inputs import STRICT, init_host, load_host_config
-from tests.runner_ingest_support import (
+from tests.support.baseline_floor_trees import make_tree
+from tests.support.config_inputs import STRICT, init_host, load_host_config
+from tests.support.runner_ingest import (
     HERE_HOST,
     MOVING,
     MOVING_ID,
@@ -58,9 +58,9 @@ from tests.runner_ingest_support import (
     seed_runner,
     two_hosts,
 )
-from tests.runner_init_fakes import FakeInitHub, init_runner
-from tests.runner_scope_seeding import T0, reflect, seed_tables
-from tests.session_store_fakes import InMemorySessionStore
+from tests.support.runner_init_fakes import FakeInitHub, init_runner
+from tests.support.runner_scope_seeding import T0, reflect, seed_tables
+from tests.support.session_store_fakes import InMemorySessionStore
 
 _HERE_ID = "rn_init1"
 _NEW_WORKSPACE = "ws-there"

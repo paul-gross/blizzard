@@ -79,7 +79,7 @@ from blizzard.runner.harness.opencode.transcript.cursor import (
     MessagePartRevision,
     records_for_export,
 )
-from tests.repo_files import repo_root
+from tests.support.repo_files import repo_root
 
 _PACKAGE_ROOT = repo_root() / "src" / "blizzard" / "runner" / "harness"
 # Keyed off the admitted range's own committed corpus — there is exactly

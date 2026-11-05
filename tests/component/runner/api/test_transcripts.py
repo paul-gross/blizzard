@@ -17,15 +17,15 @@ from blizzard.runner.harness.registry import HarnessRegistry
 from blizzard.runner.leases.model import NewLease
 from blizzard.runner.transcripts.archived_repository import ArchivedTranscript
 from blizzard.runner.transcripts.repository import Transcript, Turn
-from tests.config_inputs import create_runner_app
-from tests.factory_fields import NewLeaseFields
-from tests.runner_client import runner_client
-from tests.runner_fakes import (
+from tests.support.config_inputs import create_runner_app
+from tests.support.factory_fields import NewLeaseFields
+from tests.support.runner_client import runner_client
+from tests.support.runner_fakes import (
     FakeArchivedTranscriptRepository,
     SqlAlchemyRunnerStore,
 )
-from tests.support import assert_all_timestamps_utc
-from tests.support_transcripts_api import FakeTranscriptRepository, app_with_transcripts
+from tests.support.scaffolding import assert_all_timestamps_utc
+from tests.support.transcripts_api import FakeTranscriptRepository, app_with_transcripts
 
 _NOW = datetime(2026, 7, 16, 12, 0, 0, tzinfo=UTC)
 

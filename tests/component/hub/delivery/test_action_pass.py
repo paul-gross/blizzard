@@ -29,7 +29,7 @@ from blizzard.hub.domain.graph.actions import ActionSpec
 from blizzard.hub.forge.landing import VisitForges
 from blizzard.hub.store import schema as s
 from blizzard.hub.store.internal.run_context_store import RunContextStore
-from tests.support import (
+from tests.support.scaffolding import (
     TEST_HUB_ACTIONS,
     HubHarness,
     RepositorySeed,

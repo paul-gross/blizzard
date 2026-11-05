@@ -29,8 +29,8 @@ from blizzard.runner.tracing.facts import (
     TakeoverEndFact,
     TakeoverFact,
 )
-from tests import runner_trace_fixtures as fx
-from tests.trace_contract_support import dictionary
+from tests.support import runner_trace_fixtures as fx
+from tests.support.trace_contract import dictionary
 
 _KEY = StepKey.attempt(fx.CHUNK_ID, fx.EPOCH)
 _MEASURES = {

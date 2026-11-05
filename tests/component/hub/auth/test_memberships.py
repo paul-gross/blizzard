@@ -44,7 +44,7 @@ from blizzard.hub.auth.permissions import Permission, permissions_for
 from blizzard.hub.store import schema as s
 from blizzard.hub.store.errors import HubStoreErrorFactory
 from blizzard.hub.tenancy import TenantId
-from tests.support import default_tenant, hub_level_connections, hub_migration_prototype
+from tests.support.scaffolding import default_tenant, hub_level_connections, hub_migration_prototype
 
 _T0 = datetime(2026, 1, 1, tzinfo=UTC)
 _OTHER = TenantId("ten_01J9Z3M0P8QK7V2S4W6X8Y0A1C")

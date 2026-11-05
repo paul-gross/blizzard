@@ -31,7 +31,7 @@ from blizzard.hub.domain.garden.formats import (
 )
 from blizzard.hub.domain.garden.run_context import RunContext
 from blizzard.hub.domain.graph.model import Node
-from tests.garden_artifacts import add_op, candidate
+from tests.support.garden_artifacts import add_op, candidate
 
 _PROJECT = "proj_test"
 

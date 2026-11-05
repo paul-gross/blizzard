@@ -10,7 +10,7 @@ from typing import TypedDict, Unpack
 import httpx2
 
 from blizzard.hub.cli import hub as hub_group
-from tests.worker_http import bind_stubs
+from tests.support.worker_http import bind_stubs
 
 
 class _FakeResponse:

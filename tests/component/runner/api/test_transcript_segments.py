@@ -17,9 +17,9 @@ from blizzard.runner.leases.model import NewLease
 from blizzard.runner.transcripts.archived_repository import ArchivedTranscript
 from blizzard.runner.transcripts.repository import Transcript, Turn
 from blizzard.runner.transcripts.service import TranscriptService
-from tests.config_inputs import create_runner_app
-from tests.runner_client import runner_client
-from tests.runner_fakes import (
+from tests.support.config_inputs import create_runner_app
+from tests.support.runner_client import runner_client
+from tests.support.runner_fakes import (
     FakeProvider,
     SqlAlchemyRunnerStore,
     StaticTranscriptRepositoryResolver,
@@ -28,7 +28,7 @@ from tests.runner_fakes import (
     make_stores,
     single_workspace,
 )
-from tests.support import assert_all_timestamps_utc
+from tests.support.scaffolding import assert_all_timestamps_utc
 
 _NOW = datetime(2026, 7, 16, 12, 0, 0, tzinfo=UTC)
 

@@ -47,7 +47,7 @@ from blizzard.hub.secrets import hub_key_provider
 from blizzard.hub.store.internal.forge_record_store import ForgeRecordStore
 from blizzard.hub.store.internal.repository_record_store import RepositoryRecordStore
 from blizzard.hub.store.schema import config_changes, repositories
-from tests.support import OP, config_authoring, hub_store_connections, migrated_hub_at
+from tests.support.scaffolding import OP, config_authoring, hub_store_connections, migrated_hub_at
 
 _NOW = datetime(2026, 10, 29, 12, 0, 0, tzinfo=UTC)
 #: Offers every capability.

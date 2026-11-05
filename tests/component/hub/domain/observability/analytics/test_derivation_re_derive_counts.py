@@ -10,9 +10,9 @@ from sqlalchemy import Table, func
 
 from blizzard.hub.domain.observability.analytics.derivation import FORCED_FULL_PASS_FLOOR, ReDeriveScope
 from blizzard.hub.store import schema as s
-from tests.analytics_events_world import record_transcript, tool_turn
-from tests.hub_request_auth import ingest_chunk
-from tests.support import HubHarness, build_hub, hub_store_connections
+from tests.support.analytics_events_world import record_transcript, tool_turn
+from tests.support.hub_request_auth import ingest_chunk
+from tests.support.scaffolding import HubHarness, build_hub, hub_store_connections
 
 
 def _hub_with_one_segment(tmp_path: Path) -> tuple[HubHarness, str]:

@@ -41,10 +41,10 @@ from blizzard.hub.store.internal.forge_record_store import ForgeRecordStore
 from blizzard.hub.store.internal.repository_record_store import RepositoryRecordStore
 from blizzard.hub.tenancy import TenantId
 from blizzard.tools.invariants import hub_invariants
-from tests.migration_support_project_columns_migration import NOW, insert, query, run_step
-from tests.migration_support_store_migrations import schema_snapshot
-from tests.repo_files import repo_root
-from tests.support import scoped_connections
+from tests.support.migrations.project_columns_migration import NOW, insert, query, run_step
+from tests.support.migrations.store_migrations import schema_snapshot
+from tests.support.repo_files import repo_root
+from tests.support.scaffolding import scoped_connections
 
 pytestmark = [pytest.mark.component]
 

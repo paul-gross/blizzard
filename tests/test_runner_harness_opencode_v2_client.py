@@ -26,7 +26,7 @@ from blizzard.runner.harness.opencode_v2.registration import (
     registration_path,
 )
 from blizzard.runner.harness.opencode_v2.transport import NonLoopbackServiceError, ServiceRequest, require_loopback
-from tests.opencode_v2_fakes import REGISTRATION, FakeService, FakeTransport
+from tests.support.opencode_v2_fakes import REGISTRATION, FakeService, FakeTransport
 
 pytestmark = pytest.mark.unit
 

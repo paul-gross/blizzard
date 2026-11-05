@@ -20,8 +20,8 @@ from blizzard.runner.harness.claude_code.ambient import (
 )
 from blizzard.runner.harness.claude_code.health import ClaudeCodeHealthProbe
 from blizzard.runner.harness.health import HarnessHealthCause, HarnessHealthEvidence, evaluate_harness_health
-from tests.runner_init_fakes import init_runner
-from tests.support_child_launch import version_probe
+from tests.support.child_launch import version_probe
+from tests.support.runner_init_fakes import init_runner
 
 _SECRET = "sentinel-secret-value"
 

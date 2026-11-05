@@ -26,7 +26,7 @@ from blizzard.hub.domain.delivery.flows import (
 )
 from blizzard.hub.domain.graph.model import Edge, Graph, Node
 from blizzard.hub.domain.graph.progress import NodeVisit, node_progress, order_nodes
-from tests.support import make_graph
+from tests.support.scaffolding import make_graph
 
 pytestmark = pytest.mark.unit
 

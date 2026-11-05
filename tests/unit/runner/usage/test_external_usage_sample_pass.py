@@ -22,7 +22,7 @@ from blizzard.runner.subscriptions.subscription_sampler import (
 )
 from blizzard.runner.throttle.resample import FloorResampleTriggers
 from blizzard.runner.usage.external_usage_sample import ExternalUsageSamplePass, SampledSubscription
-from tests.runner_fakes import (
+from tests.support.runner_fakes import (
     FakeSubscriptionSampler,
     SqlAlchemyRunnerStore,
     make_host_stores,

@@ -31,7 +31,7 @@ from blizzard.runner.throttle.settings import (
     ThrottleSettings,
     UtilizationSettings,
 )
-from tests.runner_fakes import (
+from tests.support.runner_fakes import (
     FIXTURE_RUNNER_ID,
     FakeHarness,
     FakeHub,

@@ -9,9 +9,9 @@ from typing import Any
 
 import pytest
 
-from tests.hub_request_auth import bearer
-from tests.project_ingest import ingest_project, two_projects
-from tests.support import count_queries, emitted_events
+from tests.support.hub_request_auth import bearer
+from tests.support.project_ingest import ingest_project, two_projects
+from tests.support.scaffolding import count_queries, emitted_events
 
 _CAPABILITIES = [{"harness_id": "claude", "default": True}]
 _REPORT: dict[str, Any] = {

@@ -16,7 +16,7 @@ from blizzard.runner.leases.activity import HEARTBEAT_STALENESS_THRESHOLD
 from blizzard.runner.leases.model import NewLease
 from blizzard.runner.loop.steps import Resume, ResumeIntents
 from blizzard.runner.loop.tick import tick
-from tests.runner_fakes import (
+from tests.support.runner_fakes import (
     FakeHarness,
     FakeHub,
     FakeProbe,
@@ -26,7 +26,7 @@ from tests.runner_fakes import (
     make_store,
     make_stores,
 )
-from tests.runner_resume_world import running_chunk
+from tests.support.runner_resume_world import running_chunk
 
 _NOW = datetime(2026, 7, 13, 12, 0, 0, tzinfo=UTC)
 _STALE_LATER = _NOW + timedelta(hours=2)  # past HEARTBEAT_STALENESS_THRESHOLD (~1h)

@@ -28,7 +28,7 @@ from blizzard.hub.domain.kernel.hub_source import RESERVED_HUB_SOURCE_NAME
 from blizzard.hub.domain.projects.model import ProjectId
 from blizzard.hub.domain.work_items.editing import prepare_mint
 from blizzard.hub.domain.work_items.ports import IWriteWorkItemRepository
-from tests.support import make_graph
+from tests.support.scaffolding import make_graph
 
 _T0 = datetime(2026, 1, 1, tzinfo=UTC)
 _ALPHA = ProjectId("proj_alpha")

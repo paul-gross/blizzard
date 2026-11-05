@@ -13,7 +13,7 @@ from blizzard.tools.change_notes.cli import main
 from blizzard.tools.change_notes.contract import Failure, Note, check_note
 from blizzard.tools.change_notes.tree import parse_note
 from blizzard.tools.change_notes.validate import validate
-from tests.repo_files import repo_root
+from tests.support.repo_files import repo_root
 
 _VALID = "---\nkind: added\n---\n\nAdds a thing.\n"
 

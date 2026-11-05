@@ -8,7 +8,7 @@ from typing import Any
 import httpx2
 
 from blizzard.hub.cli import hub as hub_group
-from tests.worker_http import Bound, bind_stubs
+from tests.support.worker_http import Bound, bind_stubs
 
 _ENV = {"BZ_HUB_URL": "http://hub.local:8421"}
 

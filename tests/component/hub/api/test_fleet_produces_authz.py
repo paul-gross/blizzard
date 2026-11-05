@@ -12,7 +12,7 @@ from pathlib import Path
 import httpx2
 
 from blizzard.hub.domain.execution.auth.produces import PRODUCES_ENFORCE
-from tests.support import HubHarness, build_hub, pointer_token, report_lease
+from tests.support.scaffolding import HubHarness, build_hub, pointer_token, report_lease
 
 _POINTER = {"source": "default", "ref": "113"}
 

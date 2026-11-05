@@ -22,7 +22,7 @@ from blizzard.runner.harness.usage import UsageKind, UsageSample
 from blizzard.runner.leases.model import Lease, NewLease
 from blizzard.runner.store.schema import usage_facts
 from blizzard.runner.usage.recorder import UsageRecorder
-from tests.runner_fakes import FIXTURE_RUNNER_ID, make_store, make_usage_recorder
+from tests.support.runner_fakes import FIXTURE_RUNNER_ID, make_store, make_usage_recorder
 
 _NOW = datetime(2026, 10, 5, 12, 0, 0, tzinfo=UTC)
 _REJECTED = "harness cost figure reads below what its session already banked"

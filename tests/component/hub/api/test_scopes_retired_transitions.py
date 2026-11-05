@@ -6,7 +6,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from tests.support import build_hub
+from tests.support.scaffolding import build_hub
 
 _GRAPH = """
 name: alpha

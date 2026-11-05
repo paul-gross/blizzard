@@ -13,11 +13,11 @@ import pytest
 from blizzard.runner.api.host import subscription_list
 from blizzard.runner.config import SubscriptionDeclaration
 from blizzard.runner.subscriptions.subscription_sampler import PROVIDER_ANTHROPIC
-from tests.runner_fakes import (
+from tests.support.runner_fakes import (
     SqlAlchemyRunnerStore,
     make_store,
 )
-from tests.support import count_queries
+from tests.support.scaffolding import count_queries
 
 _NOW = datetime(2026, 9, 22, 12, 0, 0, tzinfo=UTC)
 

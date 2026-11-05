@@ -22,16 +22,7 @@ from blizzard.runner.hub.client import (
 )
 from blizzard.runner.loop.steps import Fill, SpendCeiling
 from blizzard.runner.loop.tick import tick
-from tests.runner_fakes import (
-    FakeHarness,
-    FakeHub,
-    FakeProbe,
-    FakeProvider,
-    claimed_outcome,
-    make_context,
-    make_envelope,
-)
-from tests.support_paused import (
+from tests.support.paused import (
     _CHOICES,  # pyright: ignore[reportPrivateUsage]
     _HANDLE,  # pyright: ignore[reportPrivateUsage]
     _NOW,  # pyright: ignore[reportPrivateUsage]
@@ -41,6 +32,15 @@ from tests.support_paused import (
     _running_chunk,  # pyright: ignore[reportPrivateUsage]
     _seed_running_lease,  # pyright: ignore[reportPrivateUsage]
     _store,  # pyright: ignore[reportPrivateUsage]
+)
+from tests.support.runner_fakes import (
+    FakeHarness,
+    FakeHub,
+    FakeProbe,
+    FakeProvider,
+    claimed_outcome,
+    make_context,
+    make_envelope,
 )
 
 

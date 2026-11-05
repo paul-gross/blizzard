@@ -14,10 +14,10 @@ from blizzard.foundation.trace_export.config import TracingConfig
 from blizzard.foundation.trace_export.settings import TracingSettings
 from blizzard.hub.cli import hub as hub_group
 from blizzard.wire.traces import TraceStatusResponse
-from tests.support import HubHarness, InMemoryTraceExporter
-from tests.trace_export_world import closed_pair, trace_export_sweep
-from tests.trace_hub import trace_hub
-from tests.worker_http import bind_stubs
+from tests.support.scaffolding import HubHarness, InMemoryTraceExporter
+from tests.support.trace_export_world import closed_pair, trace_export_sweep
+from tests.support.trace_hub import trace_hub
+from tests.support.worker_http import bind_stubs
 
 _CREDENTIALS = ("SECRET1", "SECRET2", "SECRET3")
 _ENV = {

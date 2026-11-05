@@ -26,7 +26,7 @@ from blizzard.runner.leases.model import Lease, NewLease
 from blizzard.runner.loop.steps import Advance
 from blizzard.runner.node_steps.chunk_state import ChunkState
 from blizzard.runner.usage.recorder import UsageRecorder
-from tests.runner_fakes import (
+from tests.support.runner_fakes import (
     FakeHarness,
     FakeHub,
     FakeProbe,

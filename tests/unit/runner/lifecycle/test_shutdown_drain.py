@@ -10,8 +10,8 @@ from typing import Unpack
 from blizzard.foundation.clock import FixedClock
 from blizzard.runner.leases.model import Lease
 from blizzard.runner.lifecycle.shutdown_drain import SHUTDOWN_DRAIN_DEADLINE, ShutdownDrain
-from tests.factory_fields import LeaseFields
-from tests.runner_fakes import FakeProbe
+from tests.support.factory_fields import LeaseFields
+from tests.support.runner_fakes import FakeProbe
 
 _NOW = datetime(2026, 7, 13, 12, 0, 0, tzinfo=UTC)
 

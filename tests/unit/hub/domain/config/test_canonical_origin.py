@@ -8,7 +8,7 @@ from typing import Any
 import pytest
 
 from blizzard.hub.domain.config.forges import OriginRefused, canonical_origin
-from tests.repo_files import repo_root
+from tests.support.repo_files import repo_root
 
 _CASES: list[dict[str, Any]] = json.loads(
     (repo_root() / "tests" / "fixtures" / "canonical_origin_cases.json").read_text()

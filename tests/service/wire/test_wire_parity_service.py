@@ -23,9 +23,9 @@ from blizzard.runner.environments.repository import EnvBinding
 from blizzard.runner.harness.capability_snapshot import HarnessCapability
 from blizzard.runner.hub.client import ClaimRequest, PushedFact
 from blizzard.runner.loop_wiring import LoopWiring
-from tests.fleet_launchers import REPO, runner_config
-from tests.fleet_world import mint_world
-from tests.mock_fleet_support import (
+from tests.support.fleet_launchers import REPO, runner_config
+from tests.support.fleet_world import mint_world
+from tests.support.mock_fleet import (
     http_hub_client,
     mock_hub,
     mock_hub_chunk_spec,
@@ -33,9 +33,9 @@ from tests.mock_fleet_support import (
     require_mock_fleet,
     service_gate,
 )
-from tests.runner_fakes import daemon_store
-from tests.runner_join import fleet_headers
-from tests.support import url_of
+from tests.support.runner_fakes import daemon_store
+from tests.support.runner_join import fleet_headers
+from tests.support.scaffolding import url_of
 
 pytestmark = [pytest.mark.service, service_gate]
 

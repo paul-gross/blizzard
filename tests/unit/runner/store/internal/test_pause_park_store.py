@@ -16,7 +16,7 @@ from blizzard.runner.harness.identity import CLAUDE_CODE_HARNESS_ID, SessionRefe
 from blizzard.runner.leases.activity import HEARTBEAT_STALENESS_THRESHOLD
 from blizzard.runner.leases.model import NewLease
 from blizzard.runner.loop.steps import Reap, ResumeIntents
-from tests.runner_fakes import (
+from tests.support.runner_fakes import (
     FakeHarness,
     FakeHub,
     FakeProbe,
@@ -250,7 +250,7 @@ def test_open_pause_parks_reads_a_re_parked_leases_newest_park(tmp_path: Path):
 
 
 def test_open_pause_parks_reads_one_row_per_lease_whatever_the_repark_depth(tmp_path: Path):
-    from tests.support import count_rows_read
+    from tests.support.scaffolding import count_rows_read
 
     def parks_at(depth: int, path: Path):
         path.mkdir()

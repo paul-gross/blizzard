@@ -20,8 +20,15 @@ from blizzard.runner.lifecycle.judgement.judgement import Judgement
 from blizzard.runner.loop.context import DEFAULT_RETRIES_MAX, LoopContext
 from blizzard.runner.loop.steps import Resume
 from blizzard.runner.node_steps.chunk_state import ChunkPause, ChunkState
-from tests.host_files import one_workspace
-from tests.runner_fakes import (
+from tests.support.host_files import one_workspace
+from tests.support.pin_runner_loop import (
+    _CHOICES,  # pyright: ignore[reportPrivateUsage]
+    _HANDLE,  # pyright: ignore[reportPrivateUsage]
+    _NOW,  # pyright: ignore[reportPrivateUsage]
+    _seed_running_lease,  # pyright: ignore[reportPrivateUsage]
+    _store,  # pyright: ignore[reportPrivateUsage]
+)
+from tests.support.runner_fakes import (
     FakeCheckRunner,
     FakeHarness,
     FakeHub,
@@ -31,13 +38,6 @@ from tests.runner_fakes import (
     make_context,
     make_envelope,
     migrated_store_at,
-)
-from tests.support_pin_runner_loop import (
-    _CHOICES,  # pyright: ignore[reportPrivateUsage]
-    _HANDLE,  # pyright: ignore[reportPrivateUsage]
-    _NOW,  # pyright: ignore[reportPrivateUsage]
-    _seed_running_lease,  # pyright: ignore[reportPrivateUsage]
-    _store,  # pyright: ignore[reportPrivateUsage]
 )
 
 

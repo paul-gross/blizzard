@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import yaml
 
-from tests.repo_files import repo_root
+from tests.support.repo_files import repo_root
 
 _WORKFLOW = yaml.safe_load((repo_root() / ".github" / "workflows" / "pr.yml").read_text())
 

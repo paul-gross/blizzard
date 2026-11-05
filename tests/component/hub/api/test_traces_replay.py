@@ -18,11 +18,11 @@ from blizzard.foundation.trace_export.settings import TracingSettings
 from blizzard.foundation.trace_spans import FinishedSpan
 from blizzard.hub.cli import hub as hub_group
 from blizzard.hub.store import schema
-from tests.hub_event_rows import hub_event_rows
-from tests.support import HubHarness, InMemoryTraceExporter, hub_scoped
-from tests.trace_export_world import closed_pair, trace_export_sweep
-from tests.trace_hub import trace_hub
-from tests.worker_http import Bound, bind_stubs
+from tests.support.hub_event_rows import hub_event_rows
+from tests.support.scaffolding import HubHarness, InMemoryTraceExporter, hub_scoped
+from tests.support.trace_export_world import closed_pair, trace_export_sweep
+from tests.support.trace_hub import trace_hub
+from tests.support.worker_http import Bound, bind_stubs
 
 _T0 = datetime(2026, 7, 13, tzinfo=UTC)
 _CONFIG = TracingConfig(settle_seconds=0, sweep_seconds=60, max_lag_seconds=3600, replay_max_window=3600)

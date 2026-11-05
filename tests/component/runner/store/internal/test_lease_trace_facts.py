@@ -29,9 +29,9 @@ from blizzard.runner.tracing.facts import (
     TakeoverFact,
 )
 from blizzard.runner.usage.repository import InvocationCost
-from tests import runner_trace_fixtures as fx
-from tests.runner_fakes import SqlAlchemyRunnerStore, make_store
-from tests.support import capture_statements, count_queries, offending_index_scans
+from tests.support import runner_trace_fixtures as fx
+from tests.support.runner_fakes import SqlAlchemyRunnerStore, make_store
+from tests.support.scaffolding import capture_statements, count_queries, offending_index_scans
 
 _NODE_ID = "g1-build"
 _HARNESS = "claude-code"

@@ -13,7 +13,7 @@ import pytest
 from blizzard.runner.environments.internal.git import ENV_GIT_TIMEOUT
 from blizzard.runner.environments.internal.winter_cli import SubprocessWinterCli, WinterCliError
 from blizzard.runner.environments.internal.winter_provider import WinterWorkspaceProvider
-from tests.support_child_launch import CHILDREN, env_git, tool_env
+from tests.support.child_launch import CHILDREN, env_git, tool_env
 from tests.winter.support import require_winter_source, winter_binding_gate
 
 pytestmark = [pytest.mark.winter_binding, winter_binding_gate]

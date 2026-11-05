@@ -34,7 +34,7 @@ from blizzard.runner.throttle.gate import StartKind
 from blizzard.runner.throttle.pause import PausePark, RunnerBrakes
 from blizzard.runner.throttle.settings import HoldOrRelease, ThrottleSettings
 from blizzard.runner.usage.recorder import UsageRecorder
-from tests.runner_fakes import (
+from tests.support.runner_fakes import (
     FIXTURE_RUNNER_ID,
     FakeHarness,
     FakeHub,

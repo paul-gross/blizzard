@@ -13,7 +13,13 @@ from blizzard.hub.api.forge_warnings import DEPRECATION_HEADER
 from blizzard.hub.domain.config.changes import ChangeContext, Door
 from blizzard.hub.domain.config.forges import ConfiguredForge, ForgeFields
 from blizzard.hub.store import schema
-from tests.support import FIXTURE_FORGE_SECRET, HubHarness, build_hub, ensure_fixture_secret, hub_store_connections
+from tests.support.scaffolding import (
+    FIXTURE_FORGE_SECRET,
+    HubHarness,
+    build_hub,
+    ensure_fixture_secret,
+    hub_store_connections,
+)
 
 _GHE = "https://ghe.acme.internal/api/v3"
 _OPERATOR = ChangeContext(actor="alice", door=Door.CLI)

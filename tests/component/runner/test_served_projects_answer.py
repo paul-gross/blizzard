@@ -27,8 +27,8 @@ from blizzard.runner.hub.served_projects import (
 )
 from blizzard.runner.lifecycle.registration import Registration
 from blizzard.runner.loop.context import LoopConfig, LoopContext
-from tests.host_files import load_runner_config
-from tests.runner_fakes import (
+from tests.support.host_files import load_runner_config
+from tests.support.runner_fakes import (
     FIXTURE_RUNNER_ID,
     FakeHarness,
     FakeHub,
@@ -38,8 +38,8 @@ from tests.runner_fakes import (
     make_store,
     serving,
 )
-from tests.runner_init_fakes import FakeInitHub, init_runner
-from tests.support_served_projects_answer import (
+from tests.support.runner_init_fakes import FakeInitHub, init_runner
+from tests.support.served_projects_answer import (
     _AT,  # pyright: ignore[reportPrivateUsage]
     _BLIZZARD,  # pyright: ignore[reportPrivateUsage]
     _UNRESOLVED,  # pyright: ignore[reportPrivateUsage]

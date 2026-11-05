@@ -16,7 +16,7 @@ from blizzard.hub.domain.observability.tracing.cursor import CursorKey
 from blizzard.hub.domain.observability.tracing.facts import StepFacts, TracedChunkStop, TracedEpochOwner, TracedLease
 from blizzard.hub.domain.observability.tracing.steps import identify_steps
 from blizzard.hub.domain.observability.tracing.window import TraceWindow, select_window
-from tests import trace_fixtures as fx
+from tests.support import trace_fixtures as fx
 
 _LAG = timedelta(hours=24)
 

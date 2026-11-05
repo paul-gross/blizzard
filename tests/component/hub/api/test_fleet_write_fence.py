@@ -18,13 +18,13 @@ from blizzard.hub.domain.artifact.model import StoredArtifact
 from blizzard.hub.domain.chunk.model import WorkRef, decide_close_enqueue
 from blizzard.hub.domain.chunk.ports.fence import EpochAdmission, FenceRefusal
 from blizzard.hub.store import schema as s
-from tests.support import (
+from tests.support.scaffolding import (
     FactAck,
     build_hub,
     report_escalation,
     report_question,
 )
-from tests.write_fence_locks import Chunk, held_by_a_writer, restart_under_lock, stop_under_lock
+from tests.support.write_fence_locks import Chunk, held_by_a_writer, restart_under_lock, stop_under_lock
 
 _STALE = "stale epoch 1; chunk is at 2"
 _TERMINAL = "chunk is terminal"

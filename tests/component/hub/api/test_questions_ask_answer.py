@@ -14,7 +14,7 @@ from pathlib import Path
 import pytest
 
 from blizzard.foundation.hub_event_types import HubEventType
-from tests.support import (
+from tests.support.scaffolding import (
     HubHarness,
     assert_all_timestamps_utc,
     build_hub,

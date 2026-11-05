@@ -24,7 +24,7 @@ from blizzard.hub.store.errors import HubStoreErrorFactory
 from blizzard.hub.store.internal.chunk_rows import next_artifact_seq
 from blizzard.hub.store.scoped import ScopedConnections
 from blizzard.hub.tenancy import StoreScope, TenantId
-from tests.support import hub_store_connections, migrated_hub_at, stamp
+from tests.support.scaffolding import hub_store_connections, migrated_hub_at, stamp
 
 _NOW = datetime(2026, 9, 30, tzinfo=UTC)
 

@@ -16,8 +16,8 @@ from blizzard.runner.hub.identity import RunnerIdentity
 from blizzard.runner.lifecycle.identity_check import IdentityCheck
 from blizzard.runner.lifecycle.registration import Registration
 from blizzard.runner.store import schema as runner_schema
-from tests.migration_support_runner_identity_tenant import NOW, REGISTERED, RUNNER, started_context, tenant_hub
-from tests.runner_fakes import (
+from tests.support.migrations.runner_identity_tenant import NOW, REGISTERED, RUNNER, started_context, tenant_hub
+from tests.support.runner_fakes import (
     make_store,
     migrated_store_at,
 )

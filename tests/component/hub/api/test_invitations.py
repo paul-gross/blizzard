@@ -17,8 +17,8 @@ from blizzard.auth_core import Role
 from blizzard.hub.api.auth_session import TENANT_HEADER
 from blizzard.hub.auth.invitations import InvitationToken
 from blizzard.hub.store import schema
-from tests.invitation_reads import resolved_after_first_read
-from tests.support import (
+from tests.support.invitation_reads import resolved_after_first_read
+from tests.support.scaffolding import (
     HubHarness,
     build_hub,
     default_tenant,

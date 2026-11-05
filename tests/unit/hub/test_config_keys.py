@@ -18,8 +18,8 @@ from blizzard.hub import config as hub_config
 from blizzard.hub.config import HubConfig
 from blizzard.hub.config_keys import HUB_REGISTRY
 from blizzard.hub.domain.sweeps.names import SweepName
-from tests.config_inputs import load_hub_config
-from tests.config_key_documents import document_carrying_every_key
+from tests.support.config_inputs import load_hub_config
+from tests.support.config_key_documents import document_carrying_every_key
 
 _SAMPLES: dict[str, object] = {
     "route_token_mode": "warn",

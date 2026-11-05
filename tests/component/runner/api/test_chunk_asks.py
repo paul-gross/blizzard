@@ -16,11 +16,11 @@ from fastapi import FastAPI
 from blizzard.foundation.tokens import TokenHash
 from blizzard.runner.config import RunnerConfig
 from blizzard.runner.leases.model import NewLease
-from tests.config_inputs import create_runner_app
-from tests.factory_fields import NewLeaseFields
-from tests.runner_client import runner_client
-from tests.runner_fakes import SqlAlchemyRunnerStore, make_host_stores, make_store, make_stores, no_retry_clock
-from tests.support_chunk_asks_api import CHUNK, DETAIL
+from tests.support.chunk_asks_api import CHUNK, DETAIL
+from tests.support.config_inputs import create_runner_app
+from tests.support.factory_fields import NewLeaseFields
+from tests.support.runner_client import runner_client
+from tests.support.runner_fakes import SqlAlchemyRunnerStore, make_host_stores, make_store, make_stores, no_retry_clock
 
 _NOW = datetime(2026, 7, 21, 12, 0, 0, tzinfo=UTC)
 

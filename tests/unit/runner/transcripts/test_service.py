@@ -17,8 +17,8 @@ from blizzard.runner.leases.model import NewLease
 from blizzard.runner.transcripts.archived_repository import ArchivedTranscript
 from blizzard.runner.transcripts.repository import Transcript, Turn
 from blizzard.runner.transcripts.service import TranscriptService
-from tests.factory_fields import NewLeaseFields
-from tests.runner_fakes import (
+from tests.support.factory_fields import NewLeaseFields
+from tests.support.runner_fakes import (
     FakeArchivedTranscriptRepository,
     FakeProvider,
     SqlAlchemyRunnerStore,

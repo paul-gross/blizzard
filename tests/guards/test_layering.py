@@ -18,8 +18,8 @@ from pathlib import Path
 import pytest
 
 from blizzard.runner.harness.wiring import HARNESS_SECTION_KINDS
-from tests.loaded_modules import loaded_after_running
-from tests.repo_files import repo_root
+from tests.support.loaded_modules import loaded_after_running
+from tests.support.repo_files import repo_root
 
 
 def _production_files(root: Path) -> list[Path]:

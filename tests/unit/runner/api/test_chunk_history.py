@@ -9,7 +9,7 @@ from blizzard.foundation.migration_source import MigrationSource
 from blizzard.runner.api.history import rows
 from blizzard.wire.chunk import BounceView, MigrationView, TransitionView
 from blizzard.wire.history import ChunkHistoryView
-from tests.support_chunk_history_api import DETAIL
+from tests.support.chunk_history_api import DETAIL
 
 
 def test_history_rows_merges_all_three_kinds_oldest_first() -> None:

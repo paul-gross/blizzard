@@ -17,7 +17,7 @@ from blizzard.hub.domain.observability.egress.events_window import (
 from blizzard.hub.domain.observability.egress.repository import EventsPosition
 from blizzard.hub.domain.observability.egress.schema import EVENTS_SCHEMA, events_position_text
 from blizzard.hub.tenancy import TenantId
-from tests import trace_fixtures as fx
+from tests.support import trace_fixtures as fx
 
 _T0 = datetime(2026, 8, 12, tzinfo=UTC)
 

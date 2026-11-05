@@ -24,7 +24,7 @@ from blizzard.hub.store.internal.chunk_decisions_store import ChunkDecisionsStor
 from blizzard.hub.store.internal.chunk_facts_store import ChunkFactsStore
 from blizzard.hub.store.internal.chunk_route_store import ChunkRouteStore
 from blizzard.hub.store.scoped import ScopedConnections
-from tests.support import (
+from tests.support.scaffolding import (
     HubHarness,
     build_hub,
     count_queries,

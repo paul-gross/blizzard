@@ -24,20 +24,20 @@ from blizzard.hub.store.scoped import is_tenant_owned
 from blizzard.hub.tenancy import TenantId
 from blizzard.runner.store import schema as runner
 from blizzard.tools.invariants import hub_invariants, runner_invariants
-from tests.config_inputs import init_host
-from tests.invariant_checker_world import (
-    _flow,  # pyright: ignore[reportPrivateUsage]  # shared test helper, imported from tests.invariant_checker_world
-    _forge_repository,  # pyright: ignore[reportPrivateUsage]  # shared test helper, imported from tests.invariant_checker_world
-    _hub_engine,  # pyright: ignore[reportPrivateUsage]  # shared test helper, imported from tests.invariant_checker_world
-    _link,  # pyright: ignore[reportPrivateUsage]  # shared test helper, imported from tests.invariant_checker_world
-    _open_turn,  # pyright: ignore[reportPrivateUsage]  # shared test helper, imported from tests.invariant_checker_world
-    _seed_at_deliver,  # pyright: ignore[reportPrivateUsage]  # shared test helper, imported from tests.invariant_checker_world
-    _submit,  # pyright: ignore[reportPrivateUsage]  # shared test helper, imported from tests.invariant_checker_world
-    _terms,  # pyright: ignore[reportPrivateUsage]  # shared test helper, imported from tests.invariant_checker_world
+from tests.support.config_inputs import init_host
+from tests.support.invariant_checker_world import (
+    _flow,  # pyright: ignore[reportPrivateUsage]  # shared test helper, imported from tests.support.invariant_checker_world
+    _forge_repository,  # pyright: ignore[reportPrivateUsage]  # shared test helper, imported from tests.support.invariant_checker_world
+    _hub_engine,  # pyright: ignore[reportPrivateUsage]  # shared test helper, imported from tests.support.invariant_checker_world
+    _link,  # pyright: ignore[reportPrivateUsage]  # shared test helper, imported from tests.support.invariant_checker_world
+    _open_turn,  # pyright: ignore[reportPrivateUsage]  # shared test helper, imported from tests.support.invariant_checker_world
+    _seed_at_deliver,  # pyright: ignore[reportPrivateUsage]  # shared test helper, imported from tests.support.invariant_checker_world
+    _submit,  # pyright: ignore[reportPrivateUsage]  # shared test helper, imported from tests.support.invariant_checker_world
+    _terms,  # pyright: ignore[reportPrivateUsage]  # shared test helper, imported from tests.support.invariant_checker_world
 )
-from tests.migration_support_invariant_checker import NOW, PROJECT_INVARIANTS, insert
-from tests.runner_fakes import FIXTURE_RUNNER_ID, FakeProbe
-from tests.support import (
+from tests.support.migrations.invariant_checker import NOW, PROJECT_INVARIANTS, insert
+from tests.support.runner_fakes import FIXTURE_RUNNER_ID, FakeProbe
+from tests.support.scaffolding import (
     add_tenant,
     close_tenant,
     default_project,

@@ -10,7 +10,15 @@ from pathlib import Path
 from fastapi.testclient import TestClient
 
 from blizzard.foundation.hub_event_types import HubEventType
-from tests.support import HubHarness, build_hub, count_queries, emitted_events, ingest, runner_token, seed_runner
+from tests.support.scaffolding import (
+    HubHarness,
+    build_hub,
+    count_queries,
+    emitted_events,
+    ingest,
+    runner_token,
+    seed_runner,
+)
 
 _RUNNER = "rn_01J9Z3QK7M4X8V2N5R6T1W0YAB"
 

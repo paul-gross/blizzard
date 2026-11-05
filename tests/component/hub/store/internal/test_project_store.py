@@ -31,7 +31,7 @@ from blizzard.hub.store.internal.project_store import ProjectStore
 from blizzard.hub.store.schema import config_changes, project_former_slugs, project_source_link_facts
 from blizzard.hub.store.scoped import ScopedConnections
 from blizzard.hub.tenancy import TenantId
-from tests.support import (
+from tests.support.scaffolding import (
     OP,
     add_tenant,
     config_authoring,

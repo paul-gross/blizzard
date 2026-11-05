@@ -22,7 +22,7 @@ from blizzard.hub.domain.graph.validation import Validator
 from blizzard.hub.store.internal.graph_store import GraphStore
 from blizzard.hub.store.schema import metadata, tenants
 from blizzard.hub.tenancy import TenantId
-from tests.support import TEST_CATALOGUE, scoped_connections
+from tests.support.scaffolding import TEST_CATALOGUE, scoped_connections
 
 
 def _doc(*, artifacts: dict[str, Any] | None = None, produces: list[Any] | None = None) -> dict[str, Any]:

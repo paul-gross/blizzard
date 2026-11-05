@@ -21,8 +21,8 @@ from blizzard.runner.composition import build_host_process
 from blizzard.runner.config import DEFAULT_HUB_URL
 from blizzard.runner.config_keys import HOST_REGISTRY
 from blizzard.runner.host_config import BuiltRunner, HostConfig, HostConfigError
-from tests.config_inputs import load_host_config, load_hub_config
-from tests.host_files import write_minimal_host
+from tests.support.config_inputs import load_host_config, load_hub_config
+from tests.support.host_files import write_minimal_host
 
 _FLAGS = FlagRegistry.parse(
     """

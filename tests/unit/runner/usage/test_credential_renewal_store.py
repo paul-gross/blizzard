@@ -10,7 +10,7 @@ from pathlib import Path
 from blizzard.foundation.credential_renewal import RenewalFailureReason, RenewalResult
 from blizzard.runner.subscriptions.credential_renewer import RenewalOutcome, RenewalOutcomeKind
 from blizzard.runner.usage.repository import CredentialRenewalSummary
-from tests.runner_fakes import SqlAlchemyRunnerStore, make_store
+from tests.support.runner_fakes import SqlAlchemyRunnerStore, make_store
 
 _NOW = datetime(2026, 10, 5, 12, 0, 0, tzinfo=UTC)
 

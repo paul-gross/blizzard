@@ -13,7 +13,7 @@ import pytest
 
 from blizzard.hub.cli import hub as hub_group
 from blizzard.hub.cli.events import FeedListing
-from tests.worker_http import Bound, bind_stubs
+from tests.support.worker_http import Bound, bind_stubs
 
 _EVENT = {
     "id": "ev_1",

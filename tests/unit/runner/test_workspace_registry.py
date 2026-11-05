@@ -19,8 +19,8 @@ from blizzard.runner.environments.workspaces import (
     held_workspace_id,
     home_workspace_id,
 )
-from tests.runner_fakes import FakeProvider
-from tests.support_child_launch import workspace_launch
+from tests.support.child_launch import workspace_launch
+from tests.support.runner_fakes import FakeProvider
 
 
 def _registry() -> WorkspaceRegistry:

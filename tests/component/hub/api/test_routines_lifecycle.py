@@ -11,7 +11,7 @@ from pathlib import Path
 from typing import Any, TypedDict, Unpack
 
 from blizzard.auth_core import Role
-from tests.support import HubHarness, build_hub, seed_session, seed_user
+from tests.support.scaffolding import HubHarness, build_hub, seed_session, seed_user
 
 _GRAPH_A = """
 name: alpha

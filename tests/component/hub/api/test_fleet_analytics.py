@@ -17,7 +17,7 @@ import pytest
 from blizzard.hub.domain.chunk.model import WorkItemAuthor
 from blizzard.hub.domain.garden.run_context import RunContext
 from blizzard.hub.store.internal.run_context_store import RunContextStore
-from tests.support import (
+from tests.support.scaffolding import (
     HubHarness,
     build_hub,
     default_project,

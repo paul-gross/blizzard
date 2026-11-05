@@ -19,7 +19,7 @@ from blizzard.runner.harness.transcript import TranscriptErrorFactory
 from blizzard.runner.transcripts.internal import projected_transcript_repository as projection_module
 from blizzard.runner.transcripts.internal.projected_transcript_repository import ProjectedTranscriptRepository
 from blizzard.runner.transcripts.repository import Transcript
-from tests import transcript_fixtures as fx
+from tests.support import transcript_fixtures as fx
 
 
 def _repository(tmp_path: Path) -> ProjectedTranscriptRepository:

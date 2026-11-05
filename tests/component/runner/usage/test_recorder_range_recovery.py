@@ -19,7 +19,7 @@ from blizzard.runner.leases.internal.worker_stdout_files import WorkerStdoutFile
 from blizzard.runner.leases.model import NewLease
 from blizzard.runner.transcripts.invocation_boundaries import InvocationBoundaryKind
 from blizzard.runner.usage.recorder import UsageRecorder
-from tests.runner_fakes import (
+from tests.support.runner_fakes import (
     FakeHarness,
     FakeProvider,
     FakeTranscriptSource,

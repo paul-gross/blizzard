@@ -32,7 +32,7 @@ from blizzard.runner.lifecycle.spawn import Spawner
 from blizzard.runner.loop.context import LoopContext
 from blizzard.runner.loop.steps import Advance
 from blizzard.runner.throttle.usage_limits import FloorClear
-from tests.runner_fakes import (
+from tests.support.runner_fakes import (
     FakeHarness,
     FakeHub,
     FakeProbe,

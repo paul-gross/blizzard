@@ -36,7 +36,8 @@ from blizzard.runner.node_steps.chunk_state import ChunkState
 from blizzard.runner.process.child_env import AllowlistedEnv
 from blizzard.runner.throttle.pause import PausePark
 from blizzard.runner.usage.recorder import UsageRecorder
-from tests.runner_fakes import (
+from tests.support.child_launch import CHILDREN, version_probe
+from tests.support.runner_fakes import (
     FIXTURE_RUNNER_ID,
     FakeHarness,
     FakeHub,
@@ -50,7 +51,6 @@ from tests.runner_fakes import (
     make_stores,
     single_workspace,
 )
-from tests.support_child_launch import CHILDREN, version_probe
 
 _NOW = datetime(2026, 7, 13, 12, 0, 0, tzinfo=UTC)
 _HANDLE = WorkerHandle(session_id="sess-a", pid=100, process_start_time="start-100", pgid=100)

@@ -16,7 +16,14 @@ from blizzard.hub.api import deps as hub_deps
 from exemplar.hub.api import deps, permits
 from exemplar.hub.api.permit_params import path_permit
 from exemplar.hub.composition import build_tenant_services, build_tenant_stores
-from tests.support import HubHarness, build_hub, default_project, default_tenant, scoped_connections, seed_runner
+from tests.support.scaffolding import (
+    HubHarness,
+    build_hub,
+    default_project,
+    default_tenant,
+    scoped_connections,
+    seed_runner,
+)
 
 _PERMITS = importlib.import_module("exemplar.hub.store.migrations.versions.20261015_0900_permits")
 _PERMIT_REVISION = importlib.import_module("exemplar.hub.store.migrations.versions.20261103_0900_permit_revision")

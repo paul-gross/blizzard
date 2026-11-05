@@ -23,8 +23,8 @@ from blizzard.hub.store.internal.egress_store import EgressStore
 from blizzard.hub.store.internal.hub_scoped_corpus import SweepCorpusReads
 from blizzard.hub.store.internal.hub_scoped_reads import build_hub_scoped_reads
 from blizzard.hub.store.internal.transcript_event_store import TranscriptEventStore
-from tests.hub_event_rows import hub_events_of
-from tests.support import (
+from tests.support.hub_event_rows import hub_events_of
+from tests.support.scaffolding import (
     SeedingTranscriptSegmentStore,
     add_tenant,
     count_queries,

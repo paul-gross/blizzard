@@ -8,7 +8,7 @@ import pytest
 from blizzard.foundation.chunk_status import ChunkStatus
 from blizzard.hub.domain.execution import detach as detach_module
 from blizzard.hub.domain.runners.route import Route
-from tests.support import build_hub, ingest, report_lease
+from tests.support.scaffolding import build_hub, ingest, report_lease
 
 
 def _claim_body(chunk_id: str, runner: str) -> dict[str, object]:

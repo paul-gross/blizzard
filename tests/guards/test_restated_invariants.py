@@ -18,7 +18,7 @@ from typing import Any
 
 import pytest
 
-from tests.repo_files import repo_root
+from tests.support.repo_files import repo_root
 
 _REPO_ROOT = repo_root()
 _SCRIPTS = _REPO_ROOT / "scripts"

@@ -22,8 +22,8 @@ from blizzard.runner.cli.daemon import Door
 from blizzard.runner.host_layout import HostLayout, HostLock
 from blizzard.runner.runtime import sqlite_url
 from blizzard.runner.store import MIGRATIONS_DIR
-from tests.config_inputs import load_host_config
-from tests.runner_ingest_support import (
+from tests.support.config_inputs import load_host_config
+from tests.support.runner_ingest import (
     HUB,
     RUNNER_TABLES,
     contents,
@@ -34,7 +34,7 @@ from tests.runner_ingest_support import (
     seed_host,
     seed_runner,
 )
-from tests.runner_init_fakes import FakeInitHub
+from tests.support.runner_init_fakes import FakeInitHub
 
 _STAYING = "rn_init1"
 _RESET = "rn_init2"

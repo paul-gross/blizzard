@@ -12,7 +12,7 @@ from blizzard.hub.domain.delivery.flows import PollPolicy
 from blizzard.hub.domain.graph.actions import SHIPPED_CATALOGUE, TEST_ANSWER, HubActionCatalogue
 from blizzard.hub.domain.graph.model import GraphDoc
 from blizzard.hub.domain.graph.validation import Validator
-from tests.support import TEST_CATALOGUE
+from tests.support.scaffolding import TEST_CATALOGUE
 
 _BUILD = {
     "executor": "runner",

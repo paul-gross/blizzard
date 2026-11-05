@@ -22,7 +22,7 @@ from blizzard.hub.domain.garden.scopes import Scope, ScopeSlug
 from blizzard.hub.domain.graph.model import Graph
 from blizzard.hub.store import schema as s
 from blizzard.hub.store.internal.finding_store import FindingSetStore
-from tests.support import (
+from tests.support.scaffolding import (
     HubHarness,
     build_hub,
     default_project,

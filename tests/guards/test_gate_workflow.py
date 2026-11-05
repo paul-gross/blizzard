@@ -6,7 +6,7 @@ from typing import Any
 
 import yaml
 
-from tests.repo_files import repo_root
+from tests.support.repo_files import repo_root
 
 _WORKFLOW_PATH = repo_root() / ".github" / "workflows" / "gate.yml"
 

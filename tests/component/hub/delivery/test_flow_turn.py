@@ -34,7 +34,7 @@ from blizzard.hub.forge.registry import BudgetGate, ForgeCallRefused, RefsHandle
 from blizzard.hub.store import schema as s
 from blizzard.hub.store.internal.flow_store import FlowStore
 from blizzard.tools.invariants import hub_invariants
-from tests.support import (
+from tests.support.scaffolding import (
     OP,
     TEST_HUB_ACTIONS,
     HubHarness,

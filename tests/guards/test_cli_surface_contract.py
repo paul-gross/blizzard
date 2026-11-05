@@ -17,7 +17,7 @@ import pytest
 from typing_extensions import TypeIs
 
 from blizzard.tools.cli_surface import ROOTS, build
-from tests.repo_files import repo_root
+from tests.support.repo_files import repo_root
 
 _CONTRACTS_DIR = repo_root() / "contracts" / "cli"
 

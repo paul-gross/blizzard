@@ -18,7 +18,7 @@ from blizzard.hub.domain.observability.egress.config import EgressConfig
 from blizzard.hub.domain.observability.egress.event_rows import FilePathPolicy
 from blizzard.hub.egress.writer import EgressFailure, EgressFailureCause
 from blizzard.hub.store.internal.hub_scoped_reads import build_hub_scoped_reads
-from tests.egress_world import (
+from tests.support.egress_world import (
     OLD_VERSION,
     SETTLED,
     Events,
@@ -32,9 +32,9 @@ from tests.egress_world import (
     kinds,
     project_of,
 )
-from tests.support import HubHarness, InMemoryEgressWriter, default_tenant, hub_level_connections
-from tests.trace_hub import seed_open_tenant_chunk, trace_store
-from tests.worker_http import bind_stubs
+from tests.support.scaffolding import HubHarness, InMemoryEgressWriter, default_tenant, hub_level_connections
+from tests.support.trace_hub import seed_open_tenant_chunk, trace_store
+from tests.support.worker_http import bind_stubs
 
 _ENV = {"BZ_HUB_URL": "http://hub.local:8421"}
 

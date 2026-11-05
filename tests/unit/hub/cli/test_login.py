@@ -16,7 +16,7 @@ import pytest
 from blizzard.cli.collaborators import ClientFactory
 from blizzard.hub.cli import hub as hub_group
 from blizzard.hub.cli import login as cli_login
-from tests.worker_http import bind_stubs
+from tests.support.worker_http import bind_stubs
 
 
 class _FakeResponse:

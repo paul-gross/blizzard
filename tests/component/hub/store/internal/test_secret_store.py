@@ -26,7 +26,7 @@ from blizzard.hub.domain.config.secrets import (
 from blizzard.hub.secrets import StoreSecretReader, hub_key_provider, secret_cipher
 from blizzard.hub.store.internal.secret_store import SecretStore
 from blizzard.hub.store.schema import secrets
-from tests.support import OP, config_authoring, hub_store_connections, migrated_hub_at
+from tests.support.scaffolding import OP, config_authoring, hub_store_connections, migrated_hub_at
 
 _NOW = datetime(2026, 10, 4, 12, 0, 0, tzinfo=UTC)
 

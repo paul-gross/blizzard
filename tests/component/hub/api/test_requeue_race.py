@@ -13,7 +13,7 @@ import threading
 from datetime import timedelta
 from pathlib import Path
 
-from tests.support import HubHarness, build_hub, ingest, report_escalation, report_lease
+from tests.support.scaffolding import HubHarness, build_hub, ingest, report_escalation, report_lease
 
 
 def _escalated_chunk(hub: HubHarness, tmp_path: Path) -> str:

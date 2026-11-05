@@ -15,8 +15,8 @@ from blizzard.runner.harness.identity import CLAUDE_CODE_HARNESS_ID, SessionRefe
 from blizzard.runner.store import schema as runner
 from blizzard.runner.stores import RunnerStores
 from blizzard.tools.invariants import runner_invariants
-from tests.config_inputs import init_host
-from tests.runner_fakes import runner_store_errors
+from tests.support.config_inputs import init_host
+from tests.support.runner_fakes import runner_store_errors
 
 _NOW = datetime(2026, 10, 1, 12, tzinfo=UTC)
 _RUNNERS = ("rn_a", "rn_b")

@@ -17,7 +17,7 @@ from blizzard.runner.leases.model import NewLease
 from blizzard.runner.lifecycle.judgement.check_runner import DEFAULT_CHECK_TIMEOUT, CheckOutcome
 from blizzard.runner.loop.steps import Advance, Pull
 from blizzard.runner.node_steps.submissions import ApplyReply
-from tests.runner_fakes import (
+from tests.support.runner_fakes import (
     FakeCheckRunner,
     FakeHarness,
     FakeHub,

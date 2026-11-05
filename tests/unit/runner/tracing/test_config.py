@@ -13,7 +13,7 @@ from blizzard.foundation.trace_export.config import TracingConfig, toml_literal
 from blizzard.runner import config as runner_config
 from blizzard.runner.host_config import HostConfig, HostConfigError
 from blizzard.runner.tracing.config import RESERVED_SERVICE_NAMES, RunnerTracingConfig
-from tests.config_inputs import load_host_config
+from tests.support.config_inputs import load_host_config
 
 pytestmark = pytest.mark.usefixtures("clean_seeds")
 

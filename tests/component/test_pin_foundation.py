@@ -14,9 +14,9 @@ from blizzard.foundation.store.engine import create_engine_from_url
 from blizzard.hub.store import schema as hub
 from blizzard.runner.store import schema as runner
 from blizzard.tools.invariants import hub_invariants, runner_invariants
-from tests.config_inputs import init_host, init_hub
-from tests.runner_fakes import FIXTURE_RUNNER_ID
-from tests.support import hub_scoped, stamp
+from tests.support.config_inputs import init_host, init_hub
+from tests.support.runner_fakes import FIXTURE_RUNNER_ID
+from tests.support.scaffolding import hub_scoped, stamp
 
 _NOW = datetime(2026, 7, 14, tzinfo=UTC)
 

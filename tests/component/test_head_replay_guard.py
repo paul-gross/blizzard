@@ -6,8 +6,8 @@ from pathlib import Path
 
 from blizzard.hub.config import HubConfig
 from blizzard.hub.runtime import migration_runner as hub_migration_runner
-from tests.repo_files import repo_root
-from tests.support import migrate_to
+from tests.support.repo_files import repo_root
+from tests.support.scaffolding import migrate_to
 
 
 def test_a_tail_upgrade_and_a_migration_module_replay_pass(tmp_path: Path) -> None:

@@ -6,7 +6,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from tests.support import build_hub
+from tests.support.scaffolding import build_hub
 
 
 def test_empty_scope_registry_is_an_empty_list(tmp_path: Path) -> None:

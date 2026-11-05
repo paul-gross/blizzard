@@ -30,7 +30,7 @@ from blizzard.hub.domain.garden.run_context import RunContext
 from blizzard.hub.store.internal.finding_store import FindingStore
 from blizzard.hub.store.internal.garden_delivery_store import GardenDeliveryStore
 from blizzard.hub.store.schema import artifacts, finding_facts
-from tests.support import (
+from tests.support.scaffolding import (
     default_project,
     default_tenant,
     hub_store_connections,

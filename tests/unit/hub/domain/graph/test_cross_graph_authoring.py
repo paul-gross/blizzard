@@ -14,7 +14,7 @@ from blizzard.foundation.graph_targets import ChoiceTargetKind
 from blizzard.hub.domain.graph.authoring import Reification
 from blizzard.hub.domain.graph.model import ChoiceTarget, GraphDoc
 from blizzard.hub.domain.graph.validation import Validator
-from tests.support import TEST_CATALOGUE
+from tests.support.scaffolding import TEST_CATALOGUE
 
 _T0 = datetime(2026, 1, 1, tzinfo=UTC)
 

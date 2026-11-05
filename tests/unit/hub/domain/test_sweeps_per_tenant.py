@@ -35,7 +35,7 @@ from blizzard.hub.domain.work_items.closure import (
     fair_share,
 )
 from blizzard.hub.tenancy import TenantClosed, TenantId
-from tests.pass_isolation import (
+from tests.support.pass_isolation import (
     HEALTHY,
     POISONED,
     Poison,
@@ -45,8 +45,8 @@ from tests.pass_isolation import (
     assert_tenant_pass_isolates,
     build_sweep,
 )
-from tests.tenant_sweeps import (
-    _NOW,  # pyright: ignore[reportPrivateUsage]  # shared test helper, imported from tests.tenant_sweeps
+from tests.support.tenant_sweeps import (
+    _NOW,  # pyright: ignore[reportPrivateUsage]  # shared test helper, imported from tests.support.tenant_sweeps
 )
 
 _A = TenantId("ten_a")

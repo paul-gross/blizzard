@@ -33,8 +33,8 @@ from blizzard.runner.harness.opencode_v2.driver import (
 )
 from blizzard.runner.harness.opencode_v2.registration import read_registration
 from blizzard.runner.harness.opencode_v2.transport import ServiceUnreachableError, UrllibServiceTransport
-from tests.mock_fleet_support import require_mock_fleet, require_opencode2_cli_surface, service_gate
-from tests.support_child_launch import CHILDREN, tool_env
+from tests.support.child_launch import CHILDREN, tool_env
+from tests.support.mock_fleet import require_mock_fleet, require_opencode2_cli_surface, service_gate
 
 pytestmark = [pytest.mark.service, service_gate]
 

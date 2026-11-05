@@ -10,7 +10,7 @@ from pathlib import Path
 
 import pytest
 
-from tests.repo_files import repo_root
+from tests.support.repo_files import repo_root
 
 _SCRIPT = repo_root() / "scripts" / "verify-release.sh"
 _TAG = "v0.2.0"

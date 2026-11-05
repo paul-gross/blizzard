@@ -16,7 +16,7 @@ from blizzard.hub.domain.runners.registration import (
     RunnerCapability,
     RunnerDeclining,
 )
-from tests.support import HubHarness, build_hub, seed_runner
+from tests.support.scaffolding import HubHarness, build_hub, seed_runner
 
 _RUNNER = "runner-a"
 

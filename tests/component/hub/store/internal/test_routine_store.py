@@ -24,7 +24,7 @@ from blizzard.hub.store.internal.finding_store import FindingStore
 from blizzard.hub.store.internal.routine_scope_store import RoutineScopeStore
 from blizzard.hub.store.internal.routine_store import RoutineStore
 from blizzard.hub.store.internal.scope_store import ScopeStore
-from tests.support import default_project, hub_scoped, hub_store_connections, migrated_hub_at, stamp
+from tests.support.scaffolding import default_project, hub_scoped, hub_store_connections, migrated_hub_at, stamp
 
 _NOW = datetime(2026, 7, 16, 12, 0, 0, tzinfo=UTC)
 

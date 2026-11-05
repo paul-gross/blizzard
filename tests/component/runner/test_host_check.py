@@ -15,9 +15,9 @@ from blizzard.foundation.runner_tokens import RunnerTokenRefusalReason
 from blizzard.runner.host_layout import HostLayout, migrate_remedy
 from blizzard.runner.hub.client import HubClientError, TokenIdentity, TokenRefusal
 from blizzard.runner.runtime import migration_runner, sqlite_store_file
-from tests.config_inputs import host_runtime_of
-from tests.host_files import load_runner_config
-from tests.runner_init_fakes import FakeInitHub, FakeTokenIdentityReader, InitRunner, init_runner
+from tests.support.config_inputs import host_runtime_of
+from tests.support.host_files import load_runner_config
+from tests.support.runner_init_fakes import FakeInitHub, FakeTokenIdentityReader, InitRunner, init_runner
 
 _HUB = "http://hub.test:8421"
 

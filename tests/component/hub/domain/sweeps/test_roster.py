@@ -20,9 +20,9 @@ from blizzard.hub.domain.sweeps.locks import SweepInProgress, SweepLocks
 from blizzard.hub.domain.sweeps.names import SweepMode, SweepModes, SweepName
 from blizzard.hub.domain.sweeps.roster import SweepRoster, SweepServesNoTenant, UnknownSweep
 from blizzard.hub.tenancy import TenantId
-from tests.config_inputs import load_hub_config
-from tests.support import build_hub
-from tests.support_sweep_roster import NOW, A, B
+from tests.support.config_inputs import load_hub_config
+from tests.support.scaffolding import build_hub
+from tests.support.sweep_roster import NOW, A, B
 
 
 class _Reconciler:

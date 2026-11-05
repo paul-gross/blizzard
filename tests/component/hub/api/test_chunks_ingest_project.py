@@ -12,8 +12,8 @@ from blizzard.hub.domain.chunk.ingest import IngestSourceNotLinked
 from blizzard.hub.domain.chunk.model import WorkItemAuthor, WorkRef
 from blizzard.hub.domain.projects.model import ProjectId
 from blizzard.wire.chunk import ChunkIngestConflict
-from tests.project_ingest import ingest_project, two_projects
-from tests.support import (
+from tests.support.project_ingest import ingest_project, two_projects
+from tests.support.scaffolding import (
     HubHarness,
     hub_store_connections,
     seed_graph,

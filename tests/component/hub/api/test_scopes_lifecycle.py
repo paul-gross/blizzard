@@ -10,7 +10,7 @@ from pathlib import Path
 
 import pytest
 
-from tests.support import HubHarness, build_hub, count_queries
+from tests.support.scaffolding import HubHarness, build_hub, count_queries
 
 
 def test_create_mints_a_scope(tmp_path: Path) -> None:

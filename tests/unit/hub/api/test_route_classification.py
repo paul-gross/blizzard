@@ -18,8 +18,8 @@ from fastapi.routing import APIRoute
 
 from blizzard.hub.api.auth_session import TenantBoundAdmitting, require_either
 from blizzard.hub.auth.permissions import Permission
-from tests.route_classes import FLEET, FLEET_CLAIM, HUB_LEVEL, HUMAN, api_routes, dependency_names, live_routes
-from tests.support import build_hub
+from tests.support.route_classes import FLEET, FLEET_CLAIM, HUB_LEVEL, HUMAN, api_routes, dependency_names, live_routes
+from tests.support.scaffolding import build_hub
 
 # --- The three-plane table --------------------------------------------------
 

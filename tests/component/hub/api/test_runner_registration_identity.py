@@ -18,8 +18,8 @@ from blizzard import __version__
 from blizzard.hub.domain.runners.version_window import line_of
 from blizzard.hub.store import schema
 from blizzard.hub.tenancy import TenantId
-from tests.config_inputs import VERSION_WINDOW
-from tests.support import HubHarness, add_tenant, build_hub, default_project, default_tenant, seed_runner
+from tests.support.config_inputs import VERSION_WINDOW
+from tests.support.scaffolding import HubHarness, add_tenant, build_hub, default_project, default_tenant, seed_runner
 
 #: What a registration answers when the runner sent no bindings.
 _NO_BINDINGS: dict[str, object] = {

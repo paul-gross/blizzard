@@ -15,7 +15,7 @@ from sqlalchemy.sql.dml import Update
 
 from blizzard.foundation.store.engine import create_engine_from_url
 from blizzard.hub.store.internal.work_item_store import WorkItemStore
-from tests.support import hub_store_connections, migrated_hub_at
+from tests.support.scaffolding import hub_store_connections, migrated_hub_at
 
 
 def test_next_ref_increment_locks_the_source_row_for_update() -> None:

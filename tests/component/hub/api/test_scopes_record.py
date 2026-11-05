@@ -10,7 +10,7 @@ from pathlib import Path
 import pytest
 
 from blizzard.auth_core import Role
-from tests.support import HubHarness, build_hub, default_project, seed_project, seed_session, seed_user
+from tests.support.scaffolding import HubHarness, build_hub, default_project, seed_project, seed_session, seed_user
 
 
 def _changes(hub: HubHarness, headers: dict[str, str] | None = None) -> list[dict[str, object]]:

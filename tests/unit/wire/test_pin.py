@@ -18,7 +18,7 @@ from blizzard.wire.git_commits import GitCommitDeclarationRequest
 from blizzard.wire.graph import GraphPolicyRequest
 from blizzard.wire.history import ChunkHistoryView
 from blizzard.wire.transcript_segment import ToolCallSegmentView
-from tests.config_inputs import export_hub_app, export_runner_app
+from tests.support.config_inputs import export_hub_app, export_runner_app
 
 
 def _runner_schemas() -> dict[str, Any]:

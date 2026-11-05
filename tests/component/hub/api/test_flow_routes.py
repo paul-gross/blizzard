@@ -17,12 +17,12 @@ from blizzard.hub.domain.actions.effects import ActionEscalation, Pass
 from blizzard.hub.domain.chunk.model import CloseEnqueueDecision, WorkRef
 from blizzard.hub.domain.delivery.flows import Submission, SubmissionRecord
 from blizzard.hub.store.internal.flow_store import FlowStore
-from tests.flow_driver_world import (
-    _GRAPH,  # pyright: ignore[reportPrivateUsage]  # shared test helper, imported from tests.flow_driver_world
+from tests.support.flow_driver_world import (
+    _GRAPH,  # pyright: ignore[reportPrivateUsage]  # shared test helper, imported from tests.support.flow_driver_world
     World,
 )
-from tests.flow_route_lines import Line
-from tests.support import chunk_stores, hub_store_connections, report_lease, seed_runner
+from tests.support.flow_route_lines import Line
+from tests.support.scaffolding import chunk_stores, hub_store_connections, report_lease, seed_runner
 
 
 @pytest.fixture

@@ -20,7 +20,7 @@ from blizzard.runner.throttle.floor import FloorAnswer, FloorHold, HoldKind
 from blizzard.runner.throttle.gate import ClaimsAnswer, GateVerdict, ThrottleGate
 from blizzard.runner.throttle.pause import RunnerBrakes
 from blizzard.runner.throttle.report import DecliningReason, declining_report
-from tests.runner_fakes import (
+from tests.support.runner_fakes import (
     FIXTURE_RUNNER_ID,
     FakeHarness,
     FakeHub,

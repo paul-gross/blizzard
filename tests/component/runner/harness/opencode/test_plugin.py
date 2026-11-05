@@ -22,9 +22,9 @@ from blizzard.runner.harness.opencode.plugin import (
 from blizzard.runner.harness.opencode.worker_config import write_worker_config
 from blizzard.runner.process.child_env import AllowlistedEnv
 from blizzard.runner.process.internal.linux_process_probe import LinuxProcessProbe
-from tests.runner_fakes import make_envelope
-from tests.support_child_launch import CHILDREN, version_probe, wait_for_exit
-from tests.support_opencode_binary import worker_binary
+from tests.support.child_launch import CHILDREN, version_probe, wait_for_exit
+from tests.support.opencode_binary import worker_binary
+from tests.support.runner_fakes import make_envelope
 
 
 def _preamble(workdir: str, *, stdout_path: str) -> WorkerPreamble:

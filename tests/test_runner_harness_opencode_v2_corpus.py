@@ -25,7 +25,7 @@ from blizzard.runner.harness.opencode_v2.compatibility.proof import (
 from blizzard.runner.harness.opencode_v2.compatibility.rows import DEGRADABLE_ROWS, ROW_ROSTER
 from blizzard.runner.harness.opencode_v2.transport import ServiceRequest
 from blizzard.runner.harness.opencode_v2.version import ADMITTED_OPENCODE_V2_RANGE
-from tests.opencode_v2_fakes import REGISTRATION, FakeService, FakeTransport
+from tests.support.opencode_v2_fakes import REGISTRATION, FakeService, FakeTransport
 
 pytestmark = pytest.mark.unit
 

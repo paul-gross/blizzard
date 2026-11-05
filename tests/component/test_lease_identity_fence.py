@@ -31,7 +31,7 @@ from blizzard.runner.lifecycle.session import HarnessSelector
 from blizzard.runner.loop.context import LoopConfig, LoopContext
 from blizzard.runner.loop.steps import Fill
 from blizzard.runner.process.internal.worker_scratch_dirs import WorkerScratchDirs
-from tests.runner_fakes import (
+from tests.support.runner_fakes import (
     FIXTURE_RUNNER_ID,
     REGISTERED_AT,
     FakeHarness,
@@ -49,7 +49,7 @@ from tests.runner_fakes import (
     serving,
     single_workspace,
 )
-from tests.support import HubHarness, RunnerFleetClient, build_hub, default_project, hub_scoped, ingest
+from tests.support.scaffolding import HubHarness, RunnerFleetClient, build_hub, default_project, hub_scoped, ingest
 
 _HANDLE = WorkerHandle(session_id="sess-1", pid=200, process_start_time="start-200", pgid=200)
 

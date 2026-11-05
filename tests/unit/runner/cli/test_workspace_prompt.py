@@ -15,9 +15,9 @@ from click.testing import CliRunner, Result
 from blizzard.cli.main import blizzard
 from blizzard.foundation.store.engine import create_engine_from_url
 from blizzard.runner.harness.workspace_prompts import WORKSPACE_PROMPT_FILENAME
-from tests.host_files import load_runner_config
-from tests.runner_fakes import SqlAlchemyRunnerStore, runner_store_errors
-from tests.runner_init_fakes import init_runner
+from tests.support.host_files import load_runner_config
+from tests.support.runner_fakes import SqlAlchemyRunnerStore, runner_store_errors
+from tests.support.runner_init_fakes import init_runner
 
 
 def _runtime(tmp_path: Path) -> Path:

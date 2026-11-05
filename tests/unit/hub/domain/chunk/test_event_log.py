@@ -20,8 +20,8 @@ from blizzard.hub.domain.chunk.ports.stores import ChunkStores
 from blizzard.hub.domain.graph.model import RESERVED_TERMINAL
 from blizzard.hub.store import schema as s
 from blizzard.hub.store.internal.chunk_escalations_store import ChunkEscalationsStore
-from tests.migration_support_event_log import T0
-from tests.support import (
+from tests.support.migrations.event_log import T0
+from tests.support.scaffolding import (
     chunk_stores,
     migrate_to,
     seed_chunk,

@@ -12,7 +12,7 @@ from blizzard.hub.domain.observability.egress.rows import step_row
 from blizzard.hub.domain.observability.tracing.facts import StepFacts, TracedEpochOwner
 from blizzard.hub.domain.observability.tracing.steps import NodeStep, StepKind, identify_steps
 from blizzard.hub.domain.observability.tracing.summary import node_executor, runner_id, summarize_step
-from tests import trace_fixtures as fx
+from tests.support import trace_fixtures as fx
 
 _EXPORTED = datetime(2026, 2, 1, tzinfo=UTC)
 

@@ -17,7 +17,7 @@ import pytest
 from click.testing import CliRunner
 
 from blizzard.runner.cli import runner as runner_group
-from tests.worker_http import bind_stubs
+from tests.support.worker_http import bind_stubs
 
 
 @contextlib.contextmanager

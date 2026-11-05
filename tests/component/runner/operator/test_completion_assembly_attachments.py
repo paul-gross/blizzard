@@ -21,9 +21,9 @@ from blizzard.runner.node_steps.submissions import ApplyReply
 from blizzard.runner.operator.attachments import AttachmentService
 from blizzard.runner.store.internal.lease_trace_facts_store import LeaseTraceFactsStore
 from blizzard.runner.tracing.assembly import assemble_lease
-from tests.config_inputs import create_runner_app
-from tests.runner_client import runner_client
-from tests.runner_fakes import (
+from tests.support.config_inputs import create_runner_app
+from tests.support.runner_client import runner_client
+from tests.support.runner_fakes import (
     FakeHarness,
     FakeHub,
     FakeProbe,

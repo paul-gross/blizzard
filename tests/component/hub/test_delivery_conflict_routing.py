@@ -17,14 +17,14 @@ from blizzard.hub.domain.chunk.ports.artifacts import IWriteChunkArtifactsReposi
 from blizzard.hub.domain.chunk.ports.fence import EpochAdmission
 from blizzard.hub.domain.graph.model import DEFAULT_BOUNCE_CAP
 from blizzard.hub.forge.landing import Mergeability
-from tests.delivery_conflict_world import (
-    _COMMIT,  # pyright: ignore[reportPrivateUsage]  # shared test helper, imported from tests.delivery_conflict_world
+from tests.support.delivery_conflict_world import (
+    _COMMIT,  # pyright: ignore[reportPrivateUsage]  # shared test helper, imported from tests.support.delivery_conflict_world
     github_double,
     mint_and_claim,
     seed_at_deliver_with_an_unlanded_commit,
 )
-from tests.github_double import RED, change
-from tests.support import (
+from tests.support.github_double import RED, change
+from tests.support.scaffolding import (
     DEFAULT_FIXTURE_REPOSITORIES,
     HubHarness,
     build_hub,

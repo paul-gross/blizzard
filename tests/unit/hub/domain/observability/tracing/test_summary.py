@@ -17,7 +17,7 @@ from blizzard.hub.domain.observability.tracing.facts import (
 )
 from blizzard.hub.domain.observability.tracing.steps import StepKind, identify_steps
 from blizzard.hub.domain.observability.tracing.summary import IntervalKind, StepSummary, summarize_step
-from tests import trace_fixtures as fx
+from tests.support import trace_fixtures as fx
 
 _WAIT_ATTRS = {
     "queue wait": attr.WAIT_QUEUE_MS,

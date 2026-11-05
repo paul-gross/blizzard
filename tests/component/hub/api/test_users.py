@@ -18,7 +18,7 @@ from blizzard.hub.api.auth_session import TENANT_HEADER
 from blizzard.hub.auth.errors import RepoErrorFactory
 from blizzard.hub.auth.internal.identity_repository import IdentityRepository
 from blizzard.hub.auth.models import Identity, User
-from tests.support import (
+from tests.support.scaffolding import (
     HubHarness,
     build_hub,
     count_queries,

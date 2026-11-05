@@ -13,7 +13,7 @@ from typing import cast
 import pytest
 import yaml
 
-from tests.repo_files import repo_root
+from tests.support.repo_files import repo_root
 
 #: Files under ``tests/`` whose subject is a pre-action document or a hub that cannot read ``action:``.
 RUN_STEP_ALLOWLIST = frozenset(

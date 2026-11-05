@@ -34,11 +34,11 @@ from blizzard.runner.host_config import (
     parse,
 )
 from blizzard.runner.host_layout import HostLayout
-from tests.config_inputs import FLAG_REGISTRY, load_host_config
-from tests.config_key_documents import document_carrying_every_key
-from tests.harness_sections import claude_code, opencode
-from tests.host_files import write_minimal_host
-from tests.runner_fakes import NO_TRACING
+from tests.support.config_inputs import FLAG_REGISTRY, load_host_config
+from tests.support.config_key_documents import document_carrying_every_key
+from tests.support.harness_sections import claude_code, opencode
+from tests.support.host_files import write_minimal_host
+from tests.support.runner_fakes import NO_TRACING
 
 _TOKEN = {"BZ_HUB_TOKEN_RUNNER_LOCAL": "tok"}
 

@@ -16,8 +16,8 @@ from blizzard.foundation.chunk_status import TERMINAL_STATUSES
 from blizzard.hub.domain.chunk.model import Chunk, WorkRef
 from blizzard.hub.domain.graph.model import RESERVED_TERMINAL
 from blizzard.hub.store import schema as s
-from tests.hub_request_auth import bearer, enroll_runner, register_runner
-from tests.support import (
+from tests.support.hub_request_auth import bearer, enroll_runner, register_runner
+from tests.support.scaffolding import (
     HubHarness,
     build_hub,
     capture_statements,

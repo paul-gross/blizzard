@@ -9,7 +9,7 @@ from blizzard.foundation.artifacts import ArtifactKind
 from blizzard.hub.documents import YAML_CODEC
 from blizzard.hub.domain.graph.model import GraphArtifact, ProducesSpec
 from blizzard.hub.graphs import PACKAGED, GraphFile
-from tests.support import build_hub
+from tests.support.scaffolding import build_hub
 
 _VALID_GRAPH = """
 name: tiny

@@ -26,8 +26,8 @@ from blizzard.runner.hub.internal.http_hub import (
     HttpHubRunnerAdmin,
 )
 from blizzard.wire.user import CallerTenantsView, CallerTenantView
-from tests.runner_init_fakes import FakeHubRunnerAdmin, FakeTokenIdentityReader
-from tests.support_runner_init_tenant import (
+from tests.support.runner_init_fakes import FakeHubRunnerAdmin, FakeTokenIdentityReader
+from tests.support.runner_init_tenant import (
     _ALPHA,  # pyright: ignore[reportPrivateUsage]
     _BRAVO,  # pyright: ignore[reportPrivateUsage]
 )

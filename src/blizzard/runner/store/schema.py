@@ -1018,7 +1018,7 @@ selftest_results = Table(
 # Append-only, one row per exit classified overloaded; `overload_resets` closes a streak on
 # a later clean exit — mirrors `pause_parks`/`pause_park_resumes`'s own open/close pair.
 # Deliberately unindexed — one environment's own local runner store stays small for that
-# environment's lifetime (`tests/store_scan_allowlist.py`'s env-scoped-history reason), the
+# environment's lifetime (`tests/support/store_scan_allowlist.py`'s env-scoped-history reason), the
 # same ground `usage_facts`/`nudge_facts` above lean on, not the #520 near-empty six's own.
 
 overload_facts = Table(

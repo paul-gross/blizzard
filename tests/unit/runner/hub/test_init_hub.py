@@ -29,8 +29,8 @@ from blizzard.runner.hub.client import (
 )
 from blizzard.runner.hub.internal.token_file import HubTokenFile
 from blizzard.runner.hub.token_file import ENV_FILENAME, assigned_token, with_token
-from tests.runner_init_fakes import FakeHubRunnerAdmin, FakeTokenIdentityReader
-from tests.runner_join import DEFAULT_TOKEN_ENV
+from tests.support.runner_init_fakes import FakeHubRunnerAdmin, FakeTokenIdentityReader
+from tests.support.runner_join import DEFAULT_TOKEN_ENV
 
 _FROM_FILE = HeldToken("t", from_process_env=False)
 

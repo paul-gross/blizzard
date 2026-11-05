@@ -15,7 +15,7 @@ from blizzard.hub.domain.chunk.delivery_read import DeliveryRead
 from blizzard.hub.domain.chunk.model import ChunkFacts, WorkRef, decide_close_enqueue
 from blizzard.hub.domain.chunk.ports.artifacts import IWriteChunkArtifactsRepository
 from blizzard.hub.domain.chunk.ports.fence import EpochAdmission
-from tests.support import build_hub, ingest
+from tests.support.scaffolding import build_hub, ingest
 
 # Same millisecond prefix; the later write gets the lexically smaller id.
 _INVERTED_IDS = ("01K6DZZZZZZZZZZZZZZZZZZZZZ", "01K6DZZZZZ0000000000000000")

@@ -58,7 +58,7 @@ def _load_module_by_path(name: str, path: Path) -> ModuleType:
     """Load a module by file path under a private name, never the real dotted package.
 
     mutmut later runs pytest against mutants/tests/, in the same process, importing
-    modules under the real `tests.*` names. Reaching tests/repo_files.py through a
+    modules under the real `tests.*` names. Reaching tests/support/repo_files.py through a
     real `import tests...` here would cache `sys.modules["tests"]` against this repo's
     tests/ first, and pytest's conftest loader raises ImportPathMismatchError the moment
     it tries to load mutants/tests/conftest.py under that already-bound name.
@@ -74,7 +74,7 @@ def _load_module_by_path(name: str, path: Path) -> ModuleType:
 
 @functools.cache
 def _load_tier_layout() -> ModuleType:
-    return _load_module_by_path("_mutation_tier_layout", REPO_ROOT / "tests" / "tier_layout.py")
+    return _load_module_by_path("_mutation_tier_layout", REPO_ROOT / "tests" / "support" / "tier_layout.py")
 
 
 @dataclass(frozen=True)
@@ -373,7 +373,7 @@ def ensure_mutant_tree_for_scope(
     fingerprints it, and any change to it discards every cached verdict. A frozen test file
     since deleted from the tree is dropped rather than handed to pytest.
     """
-    repo_files = _load_module_by_path("_mutation_repo_files", REPO_ROOT / "tests" / "repo_files.py")
+    repo_files = _load_module_by_path("_mutation_repo_files", REPO_ROOT / "tests" / "support" / "repo_files.py")
     prepare_mutant_tree = repo_files.prepare_mutant_tree
 
     marker = mutants_dir / SCOPE_MARKER_NAME

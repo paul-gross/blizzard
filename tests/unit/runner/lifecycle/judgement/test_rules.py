@@ -27,7 +27,7 @@ from blizzard.runner.lifecycle.judgement.exit_route import (
 )
 from blizzard.runner.lifecycle.judgement.verdict import Verdict, VerdictOutcome
 from blizzard.runner.node_steps.envelope import Choice
-from tests.runner_fakes import make_envelope
+from tests.support.runner_fakes import make_envelope
 
 _LAUNCHED = datetime(2026, 7, 13, 12, 0, 0, tzinfo=UTC)
 _FRESH = _LAUNCHED + timedelta(minutes=1)

@@ -34,7 +34,7 @@ from blizzard.hub.store import schema as s
 from blizzard.hub.store.internal.hub_scoped_corpus import SweepCorpusReads
 from blizzard.hub.store.internal.hub_scoped_reads import build_hub_scoped_reads
 from blizzard.hub.store.internal.work_item_store import WorkItemStore
-from tests.support import (
+from tests.support.scaffolding import (
     FakeCloser,
     HubHarness,
     WorkSourceRegistry,
@@ -46,7 +46,7 @@ from tests.support import (
     hub_store_connections,
     ingest,
 )
-from tests.support_work_closure import sweep_over
+from tests.support.work_closure import sweep_over
 
 
 def _event_log(hub: HubHarness) -> EventLogService:

@@ -35,10 +35,11 @@ from blizzard.runner.hub.served_projects import ServedProject
 from blizzard.runner.leases.model import NewLease
 from blizzard.runner.process.child_env import AllowlistedEnv
 from blizzard.runner.status.view import RunnerStatusService
-from tests.config_inputs import create_runner_app
-from tests.factory_fields import NewLeaseFields
-from tests.runner_client import runner_client
-from tests.runner_fakes import (
+from tests.support.child_launch import CHILDREN, version_probe
+from tests.support.config_inputs import create_runner_app
+from tests.support.factory_fields import NewLeaseFields
+from tests.support.runner_client import runner_client
+from tests.support.runner_fakes import (
     FIXTURE_PROJECT_ID,
     TEST_WORKSPACE_ID,
     FakeHarness,
@@ -52,8 +53,7 @@ from tests.runner_fakes import (
     serving,
     single_workspace,
 )
-from tests.support import assert_all_timestamps_utc
-from tests.support_child_launch import CHILDREN, version_probe
+from tests.support.scaffolding import assert_all_timestamps_utc
 
 _NOW = datetime(2026, 7, 16, 12, 0, 0, tzinfo=UTC)
 

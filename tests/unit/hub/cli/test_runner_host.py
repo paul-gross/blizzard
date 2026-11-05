@@ -12,8 +12,8 @@ import pytest
 from blizzard.foundation.runner_token_names import HOST_TOKEN_VARIABLE
 from blizzard.hub.cli import hub as hub_group
 from blizzard.hub.cli.runner_host import token_lines
-from tests.support_hub_cli_runner import ENV, HUB_URL
-from tests.worker_http import Bound, bind_stubs
+from tests.support.hub_cli_runner import ENV, HUB_URL
+from tests.support.worker_http import Bound, bind_stubs
 
 _ADDED: dict[str, object] = {
     "host_id": "hs_01JC4Z8Q3XKQ1V5W2M7N9P0R6T",

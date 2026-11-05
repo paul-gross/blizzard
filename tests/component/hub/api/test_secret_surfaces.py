@@ -25,8 +25,8 @@ from blizzard.hub.domain.observability.tracing.attributes import (
     PLATFORM_INSTRUMENTATION_SCOPE_VERSION,
     resource_attributes,
 )
-from tests.config_inputs import build_hosted_hub_app, init_hub
-from tests.worker_http import Bound, bind_stubs
+from tests.support.config_inputs import build_hosted_hub_app, init_hub
+from tests.support.worker_http import Bound, bind_stubs
 
 _SENTINEL = "tok-planted-839"
 _HUB = "http://hub.local:8421"

@@ -14,7 +14,7 @@ import pytest
 from blizzard.runner.harness.claude_code import normalizer as normalizer_module
 from blizzard.runner.harness.claude_code.normalizer import NormalizedFile, Run, TranscriptEntry
 from blizzard.runner.harness.json_value import JsonObject
-from tests import transcript_fixtures as fx
+from tests.support import transcript_fixtures as fx
 
 # --- TranscriptEntry collapse — env/asst/tool ---
 

@@ -10,9 +10,9 @@ from typing import cast
 
 import pytest
 
-from tests import suite_plugin
-from tests.repo_files import repo_root
-from tests.tier_layout import (
+from tests.support import suite_plugin
+from tests.support.repo_files import repo_root
+from tests.support.tier_layout import (
     declared_layout_marker,
     misplaced_root_module,
     non_package_folder,
@@ -146,3 +146,14 @@ def _collected(marker: str) -> str:
 def test_a_markerless_module_under_a_tier_folder_is_selected_by_that_tier_alone() -> None:
     assert "test_tier_layout.py::test_a_tier_folder_gives_its_tier" in _collected("unit")
     assert "test_tier_layout.py::test_a_tier_folder_gives_its_tier" not in _collected("component")
+
+
+def test_the_tests_root_holds_no_helper_module() -> None:
+    """Shared helpers live in ``tests/support/``; the root holds only ``conftest.py``, ``__init__.py`` and
+    test modules (``bzh:mirrored-test-layout``). Collection cannot see an uncollected helper, so this reads the folder."""
+    stray = sorted(
+        path.name
+        for path in (repo_root() / "tests").glob("*.py")
+        if path.name not in {"conftest.py", "__init__.py"} and not path.name.startswith("test_")
+    )
+    assert not stray, f"helper modules at the tests root, move them under tests/support/: {stray}"

@@ -7,7 +7,7 @@ from __future__ import annotations
 
 from blizzard.runner.api.chunk_asks import rows
 from blizzard.wire.chunk_asks import ChunkAsksSource
-from tests.support_chunk_asks_api import DETAIL, question_row
+from tests.support.chunk_asks_api import DETAIL, question_row
 
 
 def test_rows_are_oldest_first_and_list_open_and_answered_alike() -> None:

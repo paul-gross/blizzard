@@ -16,7 +16,7 @@ from blizzard.foundation.store.migrations import RevisionMismatchError
 from blizzard.hub.store import schema as hub_schema
 from blizzard.runner.store import schema as runner_schema
 from tests.conftest import Daemon
-from tests.migration_support_store_migrations import (
+from tests.support.migrations.store_migrations import (
     schema_snapshot,
 )
 
@@ -105,7 +105,7 @@ def test_ensure_current_revision_passes_at_head(daemon: Daemon, tmp_path: Path) 
 def test_migrated_store_matches_declared_schema(daemon: Daemon, tmp_path: Path) -> None:
     """Head equivalence (``bzh:frozen-revisions``) — a fresh ``base -> head`` store is
     schema-identical to ``metadata.create_all()``, under the normalization above. This is
-    what keeps ``tests/runner_fakes.py`` and friends valid stand-ins for the real store."""
+    what keeps ``tests/support/runner_fakes.py`` and friends valid stand-ins for the real store."""
     config = daemon.init(tmp_path)
     migrated = create_engine_from_url(config.db_url)
     declared = create_engine_from_url(f"sqlite:///{tmp_path / f'{daemon.name}-declared.db'}")

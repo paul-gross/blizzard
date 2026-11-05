@@ -35,8 +35,8 @@ from blizzard.runner.store.schema import host_outbound_buffer
 from blizzard.runner.stores import RunnerStores
 from blizzard.runner.subscriptions.subscription_sampler import PROVIDER_ANTHROPIC, ExternalSubscriptionUsageSnapshot
 from blizzard.runner.usage.credential_renewal import CredentialRenewalPass
-from tests.host_files import host_config_of
-from tests.runner_fakes import FakeSubscriptionSampler, migrated_store_at
+from tests.support.host_files import host_config_of
+from tests.support.runner_fakes import FakeSubscriptionSampler, migrated_store_at
 
 _RUNNER_OWNED = (
     RunnerStores,

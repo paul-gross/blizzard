@@ -17,8 +17,8 @@ from blizzard.runner.config import HostWorkspace
 from blizzard.runner.environments.factory import WORKSPACE_PROVIDERS, WorkspaceSettings, build_workspace_provider
 from blizzard.runner.environments.internal import git as env_git_module
 from blizzard.runner.environments.provider import IWorkspaceProvider, WorkspaceRepo
-from tests.runner_fakes import FakeProvider
-from tests.support_child_launch import workspace_launch
+from tests.support.child_launch import workspace_launch
+from tests.support.runner_fakes import FakeProvider
 
 
 @dataclass(frozen=True)

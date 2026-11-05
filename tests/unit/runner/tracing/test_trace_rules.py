@@ -51,7 +51,7 @@ from blizzard.runner.tracing.replay import ReplayWindow, ReplayWindowRefused
 from blizzard.runner.tracing.repository import LeaseTraceCheckpoint, LeaseTraceExportFailure
 from blizzard.runner.tracing.status import cursor_lag, export_failure_ongoing
 from blizzard.runner.tracing.sweep import cursor_after, rejected_tracing_report, skipped_window_report
-from tests.runner_fakes import REGISTERED_AT
+from tests.support.runner_fakes import REGISTERED_AT
 
 _RUNNER = RunnerIdentity(runner_id="r1", runner_name="r-claude", registered_at=REGISTERED_AT)
 

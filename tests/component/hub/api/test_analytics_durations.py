@@ -18,9 +18,9 @@ from blizzard.foundation.migration_source import MigrationSource
 from blizzard.hub.domain.chunk.model import WorkRef, decide_close_enqueue
 from blizzard.hub.domain.chunk.ports.fence import EpochAdmission
 from blizzard.hub.domain.chunk.ports.movement import IWriteChunkMovementRepository
-from tests.analytics_durations_world import complete_node, mint_chunk, seeded_hub
-from tests.hub_request_auth import cookie, seed_enrolled
-from tests.support import (
+from tests.support.analytics_durations_world import complete_node, mint_chunk, seeded_hub
+from tests.support.hub_request_auth import cookie, seed_enrolled
+from tests.support.scaffolding import (
     FakeWorkSource,
     HubHarness,
     build_hub,

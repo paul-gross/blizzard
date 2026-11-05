@@ -8,7 +8,7 @@ from pathlib import Path
 
 import pytest
 
-from tests.repo_files import repo_root
+from tests.support.repo_files import repo_root
 
 _FIXTURES = repo_root() / "tests" / "fixtures" / "ui_surface"
 _ROOT = repo_root()

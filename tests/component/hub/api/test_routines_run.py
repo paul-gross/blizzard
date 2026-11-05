@@ -8,7 +8,7 @@ import json
 from pathlib import Path
 
 from blizzard.foundation.hub_event_types import HubEventType
-from tests.support import HubHarness, build_hub, emitted_events
+from tests.support.scaffolding import HubHarness, build_hub, emitted_events
 
 _GRAPH = """
 name: alpha

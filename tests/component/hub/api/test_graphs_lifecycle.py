@@ -14,7 +14,7 @@ from pathlib import Path
 import pytest
 
 from blizzard.hub.domain.graph.authoring import DefaultGraphRetired
-from tests.support import HubHarness, build_hub, count_queries
+from tests.support.scaffolding import HubHarness, build_hub, count_queries
 
 _GRAPH_A = """
 name: alpha

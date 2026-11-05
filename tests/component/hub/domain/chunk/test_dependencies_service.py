@@ -20,7 +20,7 @@ from blizzard.hub.domain.chunk.dependencies import (
 from blizzard.hub.domain.chunk.errors import ChunkNotFound
 from blizzard.hub.domain.chunk.model import DependencyEdge
 from blizzard.hub.store import schema as s
-from tests.support import HubHarness, build_hub, claim_route, hub_scoped, ingest
+from tests.support.scaffolding import HubHarness, build_hub, claim_route, hub_scoped, ingest
 
 
 def _resolve(hub: HubHarness, chunk_id: str):

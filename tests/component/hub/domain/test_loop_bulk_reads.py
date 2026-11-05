@@ -32,9 +32,9 @@ from blizzard.hub.store import schema as s
 from blizzard.hub.store.internal.transcript_segment_store import TranscriptSegmentStore
 from blizzard.hub.store.internal.work_item_store import WorkItemStore
 from blizzard.hub.store.transactions import HubTransactions
-from tests.analytics_events_world import record_transcript, tool_turn
-from tests.hub_request_auth import ingest_chunk
-from tests.support import (
+from tests.support.analytics_events_world import record_transcript, tool_turn
+from tests.support.hub_request_auth import ingest_chunk
+from tests.support.scaffolding import (
     HubHarness,
     build_hub,
     capture_statements,

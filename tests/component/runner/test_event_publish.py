@@ -36,9 +36,9 @@ from blizzard.runner.loop.context import LoopConfig
 from blizzard.runner.loop.steps import Advance, ContextSample, Fill, Pull, SpendCeiling
 from blizzard.runner.node_steps.chunk_state import ChunkPause, ChunkState
 from blizzard.runner.status.view import RunnerStatusService
-from tests.config_inputs import create_runner_app
-from tests.runner_client import runner_client
-from tests.runner_fakes import (
+from tests.support.config_inputs import create_runner_app
+from tests.support.runner_client import runner_client
+from tests.support.runner_fakes import (
     FIXTURE_RUNNER_ID,
     FakeHarness,
     FakeHub,

@@ -13,7 +13,7 @@ import pytest
 from click.testing import CliRunner, Result
 
 from blizzard.runner.cli import runner as runner_group
-from tests.worker_http import bind_stubs
+from tests.support.worker_http import bind_stubs
 
 _ENV = {
     "BLIZZARD_LEASE_ID": "lease_9",

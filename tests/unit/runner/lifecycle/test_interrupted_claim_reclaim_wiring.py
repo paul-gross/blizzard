@@ -21,7 +21,7 @@ from blizzard.runner.harness.identity import SessionReference
 from blizzard.runner.leases.model import NewLease
 from blizzard.runner.lifecycle.claim import InterruptedClaims
 from blizzard.runner.lifecycle.spawn import Spawner
-from tests.runner_fakes import (
+from tests.support.runner_fakes import (
     FakeHarness,
     FakeHub,
     FakeProbe,

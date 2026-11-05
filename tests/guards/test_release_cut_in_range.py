@@ -6,7 +6,7 @@ from pathlib import Path
 
 import pytest
 
-from tests.repo_files import repo_root
+from tests.support.repo_files import repo_root
 
 _SCRIPT = repo_root() / "scripts" / "release-cut-in-range.sh"
 _GIT_ENV = {

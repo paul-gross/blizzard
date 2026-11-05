@@ -9,7 +9,7 @@ from __future__ import annotations
 from blizzard.foundation.artifacts import ArtifactKind
 from blizzard.runner.lifecycle.judgement.produces import ProducesReconciler
 from blizzard.runner.node_steps.envelope import ProducesSpec
-from tests.runner_fakes import (
+from tests.support.runner_fakes import (
     make_envelope,
 )
 

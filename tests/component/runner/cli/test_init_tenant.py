@@ -25,14 +25,14 @@ from blizzard.runner.hub.internal.http_hub import (
 )
 from blizzard.runner.hub.internal.token_file import HubTokenFile
 from blizzard.runner.hub.token_file import ENV_FILENAME
-from tests.runner_init_fakes import FakeInitHub, FakeTokenIdentityReader, init_runner
-from tests.runner_join import DEFAULT_TOKEN_ENV
-from tests.session_store_fakes import InMemorySessionStore
-from tests.support import build_hub, default_tenant
-from tests.support_runner_init_tenant import (
+from tests.support.runner_init_fakes import FakeInitHub, FakeTokenIdentityReader, init_runner
+from tests.support.runner_init_tenant import (
     _ALPHA,  # pyright: ignore[reportPrivateUsage]
     _BRAVO,  # pyright: ignore[reportPrivateUsage]
 )
+from tests.support.runner_join import DEFAULT_TOKEN_ENV
+from tests.support.scaffolding import build_hub, default_tenant
+from tests.support.session_store_fakes import InMemorySessionStore
 
 _HUB = "http://hub.test:8421"
 

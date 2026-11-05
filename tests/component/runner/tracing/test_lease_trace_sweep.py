@@ -20,10 +20,10 @@ from blizzard.runner.hub.identity import RunnerIdentityHolder
 from blizzard.runner.tracing.cursor import LeaseCursorKey
 from blizzard.runner.tracing.repository import LeaseTraceCheckpoint
 from blizzard.runner.tracing.sweep import LeaseTraceSweep, announce_rejected_tracing
-from tests import runner_trace_fixtures as fx
-from tests.runner_fakes import SqlAlchemyRunnerStore, make_store
-from tests.runner_trace_leases import closed_lease
-from tests.support import InMemoryTraceExporter
+from tests.support import runner_trace_fixtures as fx
+from tests.support.runner_fakes import SqlAlchemyRunnerStore, make_store
+from tests.support.runner_trace_leases import closed_lease
+from tests.support.scaffolding import InMemoryTraceExporter
 
 _SETTLED = TracingConfig(settle_seconds=0, sweep_seconds=60, max_lag_seconds=3600)
 

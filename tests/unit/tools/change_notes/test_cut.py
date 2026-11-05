@@ -12,7 +12,7 @@ from blizzard.tools.change_notes.contract import Note
 from blizzard.tools.change_notes.schedule import latest_released_schedule, line_order, release_line
 from blizzard.tools.change_notes.upgrade_doc import UpgradeDocError, move_boundaries
 from blizzard.tools.change_notes.validate import validate
-from tests.compat_stub import entry, stub_compat
+from tests.support.compat_stub import entry, stub_compat
 
 _DOC = """# Upgrading
 

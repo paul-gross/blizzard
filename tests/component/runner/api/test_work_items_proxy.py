@@ -12,10 +12,10 @@ import httpx2
 from fastapi.testclient import TestClient
 
 from blizzard.runner.config import RunnerConfig
-from tests.config_inputs import create_runner_app
-from tests.runner_client import runner_client
-from tests.runner_fakes import no_retry_clock
-from tests.support_work_items_proxy import CHUNK
+from tests.support.config_inputs import create_runner_app
+from tests.support.runner_client import runner_client
+from tests.support.runner_fakes import no_retry_clock
+from tests.support.work_items_proxy import CHUNK
 
 _HUB_URL = "http://hub.local:8421"
 

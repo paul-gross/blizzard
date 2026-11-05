@@ -14,7 +14,15 @@ from sqlalchemy import Connection, event
 from blizzard.hub.domain.chunk.no_code import no_code_marker
 from blizzard.hub.domain.config.forges import ConfiguredForge, ForgeId
 from blizzard.hub.store import schema as s
-from tests.support import HubHarness, build_hub, count_queries, create_repositories, fixture_repository, ingest, stamp
+from tests.support.scaffolding import (
+    HubHarness,
+    build_hub,
+    count_queries,
+    create_repositories,
+    fixture_repository,
+    ingest,
+    stamp,
+)
 
 _NOW = datetime(2026, 1, 1, tzinfo=UTC)
 

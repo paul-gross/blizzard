@@ -23,7 +23,7 @@ from blizzard.hub.store.internal.chunk_facts_store import ChunkFactsStore
 from blizzard.hub.store.internal.chunk_record_store import ChunkRecordStore
 from blizzard.hub.store.scoped import ScopedConnections
 from blizzard.hub.store.transactions import HubTransactions
-from tests.support import (
+from tests.support.scaffolding import (
     HubHarness,
     build_hub,
     capture_statements,

@@ -26,12 +26,12 @@ from blizzard.runner.tracing.receiver_limits import ReceiverCount, ReceiverCount
 from blizzard.runner.tracing.replay import LeaseTraceReplay, ReplayUnavailable, ReplayWindowRefused
 from blizzard.runner.tracing.status import LeaseTraceStatusReader
 from blizzard.runner.tracing.sweep import LeaseTraceSweep
-from tests import runner_trace_fixtures as fx
-from tests.config_inputs import create_runner_app
-from tests.runner_client import UntimedTestClient, runner_client
-from tests.runner_fakes import SqlAlchemyRunnerStore, make_store
-from tests.runner_trace_leases import closed_lease
-from tests.support import InMemoryTraceExporter
+from tests.support import runner_trace_fixtures as fx
+from tests.support.config_inputs import create_runner_app
+from tests.support.runner_client import UntimedTestClient, runner_client
+from tests.support.runner_fakes import SqlAlchemyRunnerStore, make_store
+from tests.support.runner_trace_leases import closed_lease
+from tests.support.scaffolding import InMemoryTraceExporter
 
 _CONFIG = TracingConfig(settle_seconds=0, sweep_seconds=60, max_lag_seconds=3600, replay_max_window=3600)
 _SECRET = "https://user:hunter2@collector.example:4318/v1/traces?key=abc"

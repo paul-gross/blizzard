@@ -17,7 +17,7 @@ from blizzard.hub.domain.config_apply.entries import DeclaredRepository, Documen
 from blizzard.hub.domain.config_apply.service import ConfigApplication
 from blizzard.hub.domain.projects.declarations import ProjectDeclaration
 from blizzard.hub.domain.projects.model import ProjectEdit
-from tests.support import HubHarness, build_hub
+from tests.support.scaffolding import HubHarness, build_hub
 
 _AT = datetime(2031, 5, 6, 7, 8, 9, tzinfo=UTC)
 

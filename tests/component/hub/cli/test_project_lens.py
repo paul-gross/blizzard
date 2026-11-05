@@ -15,8 +15,8 @@ import pytest
 from click.testing import Result
 
 from blizzard.hub.cli import hub as hub_group
-from tests.support import HubHarness, build_hub, default_project, ingest, link_project, seed_project
-from tests.worker_http import Bound, bind_stubs
+from tests.support.scaffolding import HubHarness, build_hub, default_project, ingest, link_project, seed_project
+from tests.support.worker_http import Bound, bind_stubs
 
 _HUB_URL = "http://testserver"
 _REFUSAL = "name the one to act in with --project <id|slug>"

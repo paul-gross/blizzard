@@ -14,7 +14,7 @@ from fastapi.testclient import TestClient
 from blizzard.foundation.store import batching as batching_module
 from blizzard.hub.api.runners import hosts_of
 from blizzard.hub.store.internal.runner_registry_store import RunnerRegistryStore
-from tests.support import HubHarness, build_hub, count_queries, seed_runner
+from tests.support.scaffolding import HubHarness, build_hub, count_queries, seed_runner
 
 
 def _add_host(client: TestClient, name: str) -> str:

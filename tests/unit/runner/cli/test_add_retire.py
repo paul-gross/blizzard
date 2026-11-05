@@ -7,11 +7,11 @@ from pathlib import Path
 import pytest
 
 from blizzard.runner.host_config import HostConfigError
-from tests.config_inputs import load_host_config
-from tests.runner_init_fakes import FakeInitHub
-from tests.support_runner_add_retire import (
+from tests.support.config_inputs import load_host_config
+from tests.support.runner_add_retire import (
     _registered,  # pyright: ignore[reportPrivateUsage]
 )
+from tests.support.runner_init_fakes import FakeInitHub
 
 
 def test_the_host_binds_each_project_to_its_workspace_or_refuses_by_value(

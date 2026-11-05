@@ -24,7 +24,7 @@ from blizzard.hub.store import MIGRATIONS_DIR as HUB_MIGRATIONS_DIR
 from blizzard.hub.store import schema as hub_schema
 from blizzard.runner.store import MIGRATIONS_DIR as RUNNER_MIGRATIONS_DIR
 from blizzard.runner.store import schema as runner_schema
-from tests.support import MIGRATION_CLOCK
+from tests.support.scaffolding import MIGRATION_CLOCK
 
 _LIMIT = postgresql.dialect().max_identifier_length
 _CONSTRAINT_OR_INDEX_NAME = re.compile(r"^(ix|uq|fk|pk|ck)_\w+$")

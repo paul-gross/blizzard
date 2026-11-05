@@ -2,7 +2,7 @@
 
 from pathlib import Path
 
-from tests.support import build_hub
+from tests.support.scaffolding import build_hub
 
 FORGE = {"slug": "enterprise", "kind": "github", "api_base": "https://api.example.test"}
 REPO = {

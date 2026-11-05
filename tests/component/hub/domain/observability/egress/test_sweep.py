@@ -45,10 +45,10 @@ from blizzard.hub.store import schema
 from blizzard.hub.store.internal import corpus_rows
 from blizzard.hub.store.internal.egress_store import EgressStore
 from blizzard.hub.store.internal.hub_scoped_reads import build_hub_scoped_reads
-from tests.egress_world import (
-    _SEQ,  # pyright: ignore[reportPrivateUsage]  # shared test helper, imported from tests.egress_world
+from tests.support.egress_world import (
+    _SEQ,  # pyright: ignore[reportPrivateUsage]  # shared test helper, imported from tests.support.egress_world
     SETTLED,
-    _push_usage,  # pyright: ignore[reportPrivateUsage]  # shared test helper, imported from tests.egress_world
+    _push_usage,  # pyright: ignore[reportPrivateUsage]  # shared test helper, imported from tests.support.egress_world
     closed_step,
     egress_cursor_rows,
     egress_hub,
@@ -60,8 +60,8 @@ from tests.egress_world import (
     kinds,
     project_of,
 )
-from tests.hub_event_rows import hub_event_detail, hub_event_rows, hub_events_of
-from tests.support import (
+from tests.support.hub_event_rows import hub_event_detail, hub_event_rows, hub_events_of
+from tests.support.scaffolding import (
     HubHarness,
     InMemoryEgressWriter,
     added_runner,
@@ -75,7 +75,7 @@ from tests.support import (
     seed_project,
     seed_runner,
 )
-from tests.trace_hub import claim, pass_build, seed_open_tenant_chunk, trace_store
+from tests.support.trace_hub import claim, pass_build, seed_open_tenant_chunk, trace_store
 
 _LOW_DISK = EgressFailure(EgressFailureCause.LOW_DISK, "low", free_bytes=5, required_bytes=10)
 _IO = EgressFailure(EgressFailureCause.IO_ERROR, "no such directory")

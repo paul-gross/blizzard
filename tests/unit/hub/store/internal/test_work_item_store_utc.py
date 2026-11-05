@@ -15,7 +15,7 @@ from blizzard.foundation.work_items import WorkItemClosure
 from blizzard.hub.domain.chunk.model import WorkItemAuthor
 from blizzard.hub.store.internal.work_item_store import WorkItemStore
 from blizzard.hub.store.scoped import ScopedConnections
-from tests.support import hub_store_connections, migrated_hub_at, seed_graph, seed_work_item
+from tests.support.scaffolding import hub_store_connections, migrated_hub_at, seed_graph, seed_work_item
 
 _NOW = datetime(2026, 7, 16, 12, 0, 0, tzinfo=UTC)
 

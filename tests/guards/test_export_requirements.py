@@ -13,7 +13,7 @@ from pathlib import Path
 
 import pytest
 
-from tests.repo_files import repo_root
+from tests.support.repo_files import repo_root
 
 _ROOT = repo_root()
 _SCRIPT = _ROOT / "scripts" / "export-requirements.sh"

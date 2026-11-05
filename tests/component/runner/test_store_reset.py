@@ -23,8 +23,8 @@ from blizzard.runner.runtime import (
     set_aside_sqlite,
     sqlite_store_file,
 )
-from tests.host_files import load_runner_config
-from tests.runner_init_fakes import init_runner
+from tests.support.host_files import load_runner_config
+from tests.support.runner_init_fakes import init_runner
 
 _NOW = datetime(2026, 10, 8, 12, 30, 5, tzinfo=UTC)
 

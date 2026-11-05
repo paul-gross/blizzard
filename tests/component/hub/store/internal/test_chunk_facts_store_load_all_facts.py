@@ -38,15 +38,15 @@ from blizzard.hub.store.internal import chunk_rows as chunk_rows_module
 from blizzard.hub.store.internal.chunk_facts_store import ALL_FAMILIES, STATUS_FAMILIES, ChunkFactsStore
 from blizzard.hub.store.internal.chunk_record_store import ChunkRecordStore
 from blizzard.hub.store.scoped import ScopedConnections
-from tests.load_all_facts_seed import (
+from tests.support.load_all_facts_seed import (
     LIVE_CHUNK_IDS,
     T0,
-    _mint,  # pyright: ignore[reportPrivateUsage]  # shared test helper, imported from tests.load_all_facts_seed
-    _seed_node,  # pyright: ignore[reportPrivateUsage]  # shared test helper, imported from tests.load_all_facts_seed
+    _mint,  # pyright: ignore[reportPrivateUsage]  # shared test helper, imported from tests.support.load_all_facts_seed
+    _seed_node,  # pyright: ignore[reportPrivateUsage]  # shared test helper, imported from tests.support.load_all_facts_seed
     seed_fixture,
     seeded_chunk_stores,
 )
-from tests.support import (
+from tests.support.scaffolding import (
     build_hub,
     capture_statements,
     count_queries,

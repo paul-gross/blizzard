@@ -8,7 +8,7 @@ from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 from blizzard.runner.store.internal.host_runner_audit import RunnerAudit
-from tests.runner_fakes import SqlAlchemyRunnerStore, make_store, runner_store_errors
+from tests.support.runner_fakes import SqlAlchemyRunnerStore, make_store, runner_store_errors
 
 _T0 = datetime(2026, 7, 13, 12, 0, 0, tzinfo=UTC)
 

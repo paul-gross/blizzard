@@ -22,7 +22,7 @@ from blizzard.hub.domain.observability.tracing.facts import (
 )
 from blizzard.hub.domain.observability.tracing.position import position_at
 from blizzard.hub.domain.observability.tracing.steps import PrecededBy, StepKind, StepOutcome, identify_steps
-from tests import trace_fixtures as fx
+from tests.support import trace_fixtures as fx
 
 
 def test_runner_step_starts_at_earliest_lease_and_owner_is_the_runner() -> None:

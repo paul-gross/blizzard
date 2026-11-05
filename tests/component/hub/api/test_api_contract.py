@@ -11,8 +11,8 @@ from pathlib import Path
 
 from fastapi.testclient import TestClient
 
-from tests.config_inputs import export_hub_app
-from tests.support import FakeWorkSource, build_hub, pointer_token
+from tests.support.config_inputs import export_hub_app
+from tests.support.scaffolding import FakeWorkSource, build_hub, pointer_token
 
 _NEW_PATHS = [
     "/api/graphs",

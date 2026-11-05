@@ -24,8 +24,8 @@ from blizzard.hub.api.events import RESERVED_COMMENT, Cursor, Stream, events_str
 from blizzard.hub.events.broker import EventBroker
 from blizzard.hub.events.brokers import TenantBrokers
 from blizzard.hub.tenancy import TenantId
-from tests.config_inputs import export_hub_app
-from tests.support import add_tenant, build_hub, default_tenant, parse_sse_frames, runner_token, seed_runner
+from tests.support.config_inputs import export_hub_app
+from tests.support.scaffolding import add_tenant, build_hub, default_tenant, parse_sse_frames, runner_token, seed_runner
 
 
 def _scope() -> Scope:

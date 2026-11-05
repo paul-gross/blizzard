@@ -72,7 +72,8 @@ from blizzard.runner.process.internal.worker_scratch_dirs import WorkerScratchDi
 from blizzard.runner.store.errors import RunnerStoreErrorFactory
 from blizzard.runner.store.schema import lease_spawns
 from blizzard.runner.store.schema import metadata as runner_metadata
-from tests.runner_fakes import (
+from tests.support.child_launch import CHILDREN, version_probe
+from tests.support.runner_fakes import (
     FIXTURE_RUNNER_ID,
     FakeHarness,
     FakeHub,
@@ -89,7 +90,6 @@ from tests.runner_fakes import (
     runner_store_errors,
     serving,
 )
-from tests.support_child_launch import CHILDREN, version_probe
 
 _NOW = datetime(2026, 7, 13, 12, 0, 0, tzinfo=UTC)
 _ALIVE = (100, "start-100")  # (pid, start_time) for a running worker
@@ -1990,7 +1990,7 @@ def test_resumed_preamble_reuses_the_same_scratch_directory_a_fresh_spawn_got(tm
 def test_advance_review_harvests_findings_asset_from_assessment(tmp_path: Path):
     """A node that `produces` a name no git commit covers emits the assessment as an asset."""
     from blizzard.foundation.artifacts import ArtifactKind
-    from tests.runner_fakes import make_envelope
+    from tests.support.runner_fakes import make_envelope
 
     store = _store(tmp_path)
     # Seed a review lease (produces review-findings) already spawned into e1.

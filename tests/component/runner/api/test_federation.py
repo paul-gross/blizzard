@@ -33,9 +33,9 @@ from blizzard.runner.status.view import RunnerStatusService
 from blizzard.runner.store.internal.host_jti_cache_store import JtiCacheRepository
 from blizzard.runner.store.schema import metadata
 from blizzard.runner.store.scoped import RunnerStoreConnections
-from tests.config_inputs import create_runner_app
-from tests.runner_client import runner_base_url
-from tests.runner_fakes import (
+from tests.support.config_inputs import create_runner_app
+from tests.support.runner_client import runner_base_url
+from tests.support.runner_fakes import (
     FakeProvider,
     SqlAlchemyRunnerStore,
     make_host_stores,

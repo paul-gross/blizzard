@@ -30,8 +30,8 @@ from blizzard.hub.store.internal.transcript_segment_store import TranscriptSegme
 from blizzard.hub.store.scoped import ScopedStatements
 from blizzard.hub.store.transactions import HubTransactions
 from blizzard.hub.tenancy import StoreScope, TenantId
-from tests.factory_fields import TranscriptSliceFields
-from tests.support import SeedingTranscriptSegmentStore, hub_store_connections, migrated_hub_at
+from tests.support.factory_fields import TranscriptSliceFields
+from tests.support.scaffolding import SeedingTranscriptSegmentStore, hub_store_connections, migrated_hub_at
 
 _STMTS = ScopedStatements(StoreScope(TenantId("ten_transcripts")))
 

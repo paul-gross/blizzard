@@ -51,7 +51,7 @@ from blizzard.hub.store.internal.chunk_events_store import (
 from blizzard.hub.store.internal.transcript_event_store import visible_segment_ids_stmt
 from blizzard.hub.store.scoped import ScopedStatements
 from blizzard.hub.tenancy import StoreScope, TenantId
-from tests.support import hub_store_connections, migrated_hub_at, seed_chunk, seed_graph
+from tests.support.scaffolding import hub_store_connections, migrated_hub_at, seed_chunk, seed_graph
 
 _NOW = datetime(2026, 8, 29, 12, 0, 0, tzinfo=UTC)
 

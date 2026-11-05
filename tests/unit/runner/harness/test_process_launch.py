@@ -25,8 +25,8 @@ from blizzard.runner.harness.process_launch import LaunchedProcess
 from blizzard.runner.process.child_env import ChildEnv
 from blizzard.runner.process.child_processes import Stream
 from blizzard.runner.process.internal.linux_process_probe import LinuxProcessProbe
-from tests.repo_files import repo_root
-from tests.support_child_launch import CHILDREN
+from tests.support.child_launch import CHILDREN
+from tests.support.repo_files import repo_root
 
 
 def _daemon_env() -> ChildEnv:

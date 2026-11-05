@@ -21,13 +21,13 @@ from blizzard.runner.hub.client import HostRunnerRetireRefused
 from blizzard.runner.hub.internal.token_file import HubTokenFile
 from blizzard.runner.hub.token_file import ENV_FILENAME
 from blizzard.runner.loop_wiring import LoopWiring
-from tests.config_inputs import load_host_config
-from tests.runner_init_fakes import FakeInitHub
-from tests.support_runner_add_retire import (
+from tests.support.config_inputs import load_host_config
+from tests.support.runner_add_retire import (
     _HUB,  # pyright: ignore[reportPrivateUsage]
     _registered,  # pyright: ignore[reportPrivateUsage]
     _run,  # pyright: ignore[reportPrivateUsage]
 )
+from tests.support.runner_init_fakes import FakeInitHub
 
 
 def _runner_names(root: Path) -> list[str]:

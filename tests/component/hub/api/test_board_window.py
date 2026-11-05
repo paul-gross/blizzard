@@ -21,8 +21,7 @@ from blizzard.hub.api.board_window import BOARD_DONE_WINDOW
 from blizzard.hub.api.chunks import BOARD_DONE_FLOOR
 from blizzard.hub.domain.operations.promote import is_promotable
 from blizzard.hub.store import schema as s
-from tests.support import HubHarness, count_queries, default_tenant, seed_project
-from tests.support_chunk_world import (
+from tests.support.chunk_world import (
     OLD,
     complete,
     done_by_transition,
@@ -32,6 +31,7 @@ from tests.support_chunk_world import (
     stop,
     transition,
 )
+from tests.support.scaffolding import HubHarness, count_queries, default_tenant, seed_project
 
 
 def _listed(hub: HubHarness, *, board_window: bool, limit: int = 200) -> list[str]:

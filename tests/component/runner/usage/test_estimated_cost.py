@@ -11,7 +11,7 @@ import sqlalchemy as sa
 
 from blizzard.runner.harness.usage import UsageSample
 from blizzard.runner.store.schema import outbound_buffer, usage_facts
-from tests.runner_fakes import FIXTURE_RUNNER_ID, SqlAlchemyRunnerStore, make_store, record_usage
+from tests.support.runner_fakes import FIXTURE_RUNNER_ID, SqlAlchemyRunnerStore, make_store, record_usage
 
 _NOW = datetime(2026, 7, 13, 12, 0, 0, tzinfo=UTC)
 

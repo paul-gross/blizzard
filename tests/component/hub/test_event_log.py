@@ -17,9 +17,15 @@ from blizzard.hub import runtime as hub_runtime
 from blizzard.hub.domain.observability.hub_events import HubEvent
 from blizzard.hub.secrets import ENV_SECRET_KEY
 from blizzard.hub.store import schema
-from tests.config_inputs import build_hosted_hub_app, init_hub, load_hub_config, migrate_hub
-from tests.hub_event_rows import hub_event_detail, hub_event_kinds, hub_event_log_of, hub_event_rows, hub_events_of
-from tests.support import build_hub, hub_scoped
+from tests.support.config_inputs import build_hosted_hub_app, init_hub, load_hub_config, migrate_hub
+from tests.support.hub_event_rows import (
+    hub_event_detail,
+    hub_event_kinds,
+    hub_event_log_of,
+    hub_event_rows,
+    hub_events_of,
+)
+from tests.support.scaffolding import build_hub, hub_scoped
 
 _T0 = datetime(2026, 1, 1, tzinfo=UTC)
 

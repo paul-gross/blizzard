@@ -9,8 +9,8 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from tests.graph_yaml import GRAPH_YAML
-from tests.support import build_hub
+from tests.support.graph_yaml import GRAPH_YAML
+from tests.support.scaffolding import build_hub
 
 
 def test_anonymous_mint_still_succeeds(tmp_path: Path) -> None:
@@ -20,7 +20,7 @@ def test_anonymous_mint_still_succeeds(tmp_path: Path) -> None:
 
 
 def test_runner_bearer_token_is_rejected_on_mint_graph(tmp_path: Path) -> None:
-    from tests.hub_request_auth import bearer, seed_enrolled
+    from tests.support.hub_request_auth import bearer, seed_enrolled
 
     token = seed_enrolled(tmp_path)
     hub = build_hub(tmp_path)
@@ -30,7 +30,7 @@ def test_runner_bearer_token_is_rejected_on_mint_graph(tmp_path: Path) -> None:
 
 
 def test_runner_bearer_token_is_rejected_on_list_and_get_graph(tmp_path: Path) -> None:
-    from tests.hub_request_auth import bearer, seed_enrolled
+    from tests.support.hub_request_auth import bearer, seed_enrolled
 
     token = seed_enrolled(tmp_path)
     warn_hub = build_hub(tmp_path)

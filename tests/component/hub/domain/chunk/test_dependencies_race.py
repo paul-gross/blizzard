@@ -17,7 +17,7 @@ from blizzard.hub.domain.chunk.dependencies import DependencyWouldCloseCycle, Pr
 from blizzard.hub.domain.chunk.model import Chunk, DependencyEdge
 from blizzard.hub.domain.chunk.ports.dependencies import FoldTarget, IWriteChunkDependenciesRepository
 from blizzard.hub.domain.chunk.ports.exclusive import ILockedChunkRead
-from tests.support import HubHarness, build_hub, ingest
+from tests.support.scaffolding import HubHarness, build_hub, ingest
 
 
 def _writable_dependencies(hub: HubHarness) -> IWriteChunkDependenciesRepository:

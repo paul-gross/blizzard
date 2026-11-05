@@ -12,8 +12,8 @@ from blizzard.hub.app import Sweep
 from blizzard.hub.composition import build_flow_driver, build_hub_core
 from blizzard.hub.domain.sweeps.names import SweepMode, SweepModes, SweepName
 from blizzard.hub.tenancy import StoreScope
-from tests.config_inputs import build_hosted_hub_app, init_hub
-from tests.hub_event_rows import hub_event_rows
+from tests.support.config_inputs import build_hosted_hub_app, init_hub
+from tests.support.hub_event_rows import hub_event_rows
 
 
 @pytest.mark.parametrize(

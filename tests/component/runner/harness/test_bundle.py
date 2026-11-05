@@ -25,12 +25,12 @@ from blizzard.runner.harness.internal.bundle_publisher import published_snapshot
 from blizzard.runner.harness.opencode.bundle import check_ambient_plugins, plugin_identity
 from blizzard.runner.harness.wiring import publish_harness_bundle
 from blizzard.runner.host_layout import HOST_CONFIG_FILENAME
-from tests.config_inputs import load_host_config
-from tests.host_files import load_runner_config
-from tests.runner_init_fakes import FakeInitHub, init_runner
-from tests.support_harness_bundle import SECRET as _SECRET
-from tests.support_harness_bundle import bundle as _bundle
-from tests.support_harness_bundle import runtime as _runtime
+from tests.support.config_inputs import load_host_config
+from tests.support.harness_bundle import SECRET as _SECRET
+from tests.support.harness_bundle import bundle as _bundle
+from tests.support.harness_bundle import runtime as _runtime
+from tests.support.host_files import load_runner_config
+from tests.support.runner_init_fakes import FakeInitHub, init_runner
 
 
 def _http_collaborators(**overrides: Any) -> InitCollaborators:

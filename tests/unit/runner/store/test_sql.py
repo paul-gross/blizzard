@@ -7,7 +7,7 @@ from pathlib import Path
 
 import pytest
 
-from tests.runner_store_sql import insert, load_contract, select, utc_text
+from tests.support.runner_store_sql import insert, load_contract, select, utc_text
 
 
 def _store(path: Path, revision: str | None = None) -> Path:

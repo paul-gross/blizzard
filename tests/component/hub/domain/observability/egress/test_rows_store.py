@@ -12,9 +12,9 @@ from blizzard.hub.domain.observability.egress.rows import AttributedUsage, Expor
 from blizzard.hub.domain.observability.tracing.steps import StepKind, identify_steps
 from blizzard.hub.domain.observability.tracing.summary import summarize_step
 from blizzard.hub.store import schema as s
-from tests import trace_fixtures as fx
-from tests.support import HubHarness, ingest, stamp
-from tests.trace_hub import claim, pass_build, trace_hub, trace_store
+from tests.support import trace_fixtures as fx
+from tests.support.scaffolding import HubHarness, ingest, stamp
+from tests.support.trace_hub import claim, pass_build, trace_hub, trace_store
 
 SENTINELS = {
     "ask": "SENTINEL-ask-text",

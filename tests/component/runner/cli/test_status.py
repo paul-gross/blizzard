@@ -33,21 +33,21 @@ from blizzard.runner.subscriptions.credential_renewer import (
     RenewalOutcome,
     RenewalOutcomeKind,
 )
-from tests.config_inputs import load_host_config
-from tests.host_files import load_runner_config
-from tests.runner_cli_home import (
-    _NOW,  # pyright: ignore[reportPrivateUsage]  # shared test helper, imported from tests.runner_cli_home
+from tests.support.config_inputs import load_host_config
+from tests.support.host_files import load_runner_config
+from tests.support.runner_cli_home import (
+    _NOW,  # pyright: ignore[reportPrivateUsage]  # shared test helper, imported from tests.support.runner_cli_home
     TWO_RUNNERS,
-    _await_socket,  # pyright: ignore[reportPrivateUsage]  # shared test helper, imported from tests.runner_cli_home
-    _edit_host_file,  # pyright: ignore[reportPrivateUsage]  # shared test helper, imported from tests.runner_cli_home
-    _store,  # pyright: ignore[reportPrivateUsage]  # shared test helper, imported from tests.runner_cli_home
+    _await_socket,  # pyright: ignore[reportPrivateUsage]  # shared test helper, imported from tests.support.runner_cli_home
+    _edit_host_file,  # pyright: ignore[reportPrivateUsage]  # shared test helper, imported from tests.support.runner_cli_home
+    _store,  # pyright: ignore[reportPrivateUsage]  # shared test helper, imported from tests.support.runner_cli_home
     host_of,
     init_runner_home,
     registered_store,
     serve_local_api,
 )
-from tests.runner_fakes import SqlAlchemyRunnerStore
-from tests.worker_http import Bound, bind_local_only
+from tests.support.runner_fakes import SqlAlchemyRunnerStore
+from tests.support.worker_http import Bound, bind_local_only
 
 
 def _configure_runner_id(root: Path, runner_id: str) -> None:

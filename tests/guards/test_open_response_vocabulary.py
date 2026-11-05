@@ -21,7 +21,7 @@ from pydantic import BaseModel
 from blizzard.foundation.unrecognized import Unrecognized
 from blizzard.tools.compat.surfaces.wire import is_any_operation, reachable_schemas
 from blizzard.wire.vocabulary import OPEN, DeclaredClosed, OpenVocabulary, ToleratedRequestVocabulary
-from tests.repo_files import repo_root
+from tests.support.repo_files import repo_root
 
 _REPO_ROOT = repo_root()
 _SRC = _REPO_ROOT / "src" / "blizzard"

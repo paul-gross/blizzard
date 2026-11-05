@@ -31,9 +31,9 @@ from blizzard.runner.tracing.platform import (
 from blizzard.runner.tracing.platform import (
     PLATFORM_INSTRUMENTATION_SCOPE_VERSION as RUNNER_SCOPE_VERSION,
 )
-from tests.config_inputs import build_hosted_hub_app, create_runner_app, init_hub
-from tests.runner_client import UntimedTestClient, runner_client
-from tests.runner_fakes import make_host_stores, make_store, make_stores, no_retry_clock
+from tests.support.config_inputs import build_hosted_hub_app, create_runner_app, init_hub
+from tests.support.runner_client import UntimedTestClient, runner_client
+from tests.support.runner_fakes import make_host_stores, make_store, make_stores, no_retry_clock
 
 _ENDPOINT = {"OTEL_EXPORTER_OTLP_ENDPOINT": "http://127.0.0.1:4318"}
 _NOW = datetime(2026, 7, 21, 12, 0, 0, tzinfo=UTC)

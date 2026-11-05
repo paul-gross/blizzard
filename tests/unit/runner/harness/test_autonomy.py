@@ -33,11 +33,11 @@ from blizzard.runner.harness.process_launch import LaunchedProcess
 from blizzard.runner.host_layout import HOST_CONFIG_FILENAME
 from blizzard.runner.process.child_env import AllowlistedEnv, ChildEnv
 from blizzard.runner.process.child_processes import StreamTarget
-from tests.config_inputs import host_runtime_of
-from tests.harness_sections import claude_code
-from tests.host_files import load_runner_config, write_minimal_host
-from tests.runner_fakes import FakeProbe, make_envelope
-from tests.support_child_launch import version_probe
+from tests.support.child_launch import version_probe
+from tests.support.config_inputs import host_runtime_of
+from tests.support.harness_sections import claude_code
+from tests.support.host_files import load_runner_config, write_minimal_host
+from tests.support.runner_fakes import FakeProbe, make_envelope
 
 _ALL = list(Autonomy)
 

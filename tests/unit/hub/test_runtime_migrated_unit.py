@@ -19,7 +19,7 @@ from blizzard.hub.domain.observability.hub_events import (
     HubEventKind,
     HubEventLogService,
 )
-from tests.config_inputs import FLAG_REGISTRY, STRICT, init_hub
+from tests.support.config_inputs import FLAG_REGISTRY, STRICT, init_hub
 
 _AT = datetime(2026, 3, 4, 5, 6, tzinfo=UTC)
 

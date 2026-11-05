@@ -13,7 +13,7 @@ from blizzard.foundation.store.engine import create_engine_from_url
 from blizzard.foundation.tokens import TokenHash
 from blizzard.hub.domain.runners.registration import RunnerAddition
 from blizzard.hub.store.internal.runner_registry_store import RunnerRegistryStore, locked_token_hash
-from tests.support import HubHarness, build_hub, hub_store_connections, migrated_hub_at, runner_token
+from tests.support.scaffolding import HubHarness, build_hub, hub_store_connections, migrated_hub_at, runner_token
 
 
 def _enroll(hub: HubHarness) -> str:

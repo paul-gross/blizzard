@@ -28,11 +28,11 @@ from blizzard.runner.lifecycle.judgement.git_commit_declaration import (
     GitCommitDeclarationService,
 )
 from blizzard.runner.loop_wiring import LoopWiring
-from tests.config_inputs import create_runner_app
-from tests.factory_fields import NewLeaseFields
-from tests.host_files import one_workspace
-from tests.runner_client import runner_client
-from tests.runner_fakes import (
+from tests.support.config_inputs import create_runner_app
+from tests.support.factory_fields import NewLeaseFields
+from tests.support.host_files import one_workspace
+from tests.support.runner_client import runner_client
+from tests.support.runner_fakes import (
     FIXTURE_RUNNER_ID,
     FakeHub,
     FakeProvider,
@@ -43,7 +43,7 @@ from tests.runner_fakes import (
     migrated_store_at,
     single_workspace,
 )
-from tests.winter_provider_fakes import FakeGit, FakeWinter
+from tests.support.winter_provider_fakes import FakeGit, FakeWinter
 
 _NOW = datetime(2026, 7, 22, 12, 0, 0, tzinfo=UTC)
 _TOKEN = "the-lease-token"

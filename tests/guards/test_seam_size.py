@@ -13,7 +13,7 @@ import ast
 from collections import Counter
 from pathlib import Path
 
-from tests.repo_files import repo_root
+from tests.support.repo_files import repo_root
 
 _REPO_ROOT = repo_root()
 _SRC_DIR = _REPO_ROOT / "src" / "blizzard"

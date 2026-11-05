@@ -22,8 +22,8 @@ from blizzard.runner.store.schema import (
     pause_parks,
     requeues,
 )
-from tests.runner_fakes import FIXTURE_RUNNER_ID, SqlAlchemyRunnerStore, make_store
-from tests.support_pin_store import NOW
+from tests.support.pin_store import NOW
+from tests.support.runner_fakes import FIXTURE_RUNNER_ID, SqlAlchemyRunnerStore, make_store
 
 
 def _store(tmp_path: Path):

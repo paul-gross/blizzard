@@ -13,7 +13,7 @@ import pytest
 
 from blizzard.cli.operator_trace import UNTRACED
 from blizzard.hub.cli.context import TENANT_HEADER, CliContext
-from tests.worker_http import Bound, bind_stubs
+from tests.support.worker_http import Bound, bind_stubs
 
 
 class _FakeSessionReader:

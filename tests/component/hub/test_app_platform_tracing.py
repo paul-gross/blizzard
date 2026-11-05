@@ -37,9 +37,16 @@ from blizzard.hub.domain.observability.tracing.attributes import (
 )
 from blizzard.hub.store.internal.hub_scoped_credentials import CredentialReads, TenantRunner
 from blizzard.hub.tenancy import TenantId
-from tests.config_inputs import build_hosted_hub_app, init_hub
-from tests.support import RunnerFleetClient, hub_scoped, hub_scoped_engine, seed_runner, seed_user, tenant_services_of
-from tests.worker_http import bind_transport
+from tests.support.config_inputs import build_hosted_hub_app, init_hub
+from tests.support.scaffolding import (
+    RunnerFleetClient,
+    hub_scoped,
+    hub_scoped_engine,
+    seed_runner,
+    seed_user,
+    tenant_services_of,
+)
+from tests.support.worker_http import bind_transport
 
 _ENDPOINT = {"OTEL_EXPORTER_OTLP_ENDPOINT": "http://127.0.0.1:4318"}
 _CALLER = "blizzard.caller"

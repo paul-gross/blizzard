@@ -9,7 +9,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from tests.support import HubHarness, build_hub, default_project, emitted_events, ingest
+from tests.support.scaffolding import HubHarness, build_hub, default_project, emitted_events, ingest
 
 _POINTER = {"source": "default", "ref": "12"}
 

@@ -16,8 +16,8 @@ from blizzard.hub.config import HubConfig
 from blizzard.hub.runtime import migration_runner as hub_migration_runner
 from blizzard.runner.config import RunnerConfig
 from blizzard.runner.runtime import migration_runner as runner_migration_runner
-from tests.runner_fakes import runner_migration_prototype
-from tests.support import build_hub, checkpoint_sqlite, hub_migration_prototype
+from tests.support.runner_fakes import runner_migration_prototype
+from tests.support.scaffolding import build_hub, checkpoint_sqlite, hub_migration_prototype
 
 
 def _normalize_ddl(sql: str) -> str:
@@ -67,7 +67,7 @@ def test_the_runner_prototype_matches_a_fresh_migration(tmp_path: Path) -> None:
 
 
 def test_a_second_build_hub_over_the_same_directory_keeps_the_first_ones_state(tmp_path: Path) -> None:
-    from tests.graph_yaml import GRAPH_YAML
+    from tests.support.graph_yaml import GRAPH_YAML
 
     first = build_hub(tmp_path)
     graph_id = first.client.post("/api/graphs", json={"definition_yaml": GRAPH_YAML}).json()["graph_id"]

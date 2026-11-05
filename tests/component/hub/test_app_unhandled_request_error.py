@@ -14,8 +14,8 @@ from structlog.testing import capture_logs
 
 from blizzard.auth_core import Role
 from blizzard.hub.api.auth_session import tenant_bound
-from tests.support import HubHarness, build_hub, default_tenant, seed_session
-from tests.support import seed_user as _seed_user
+from tests.support.scaffolding import HubHarness, build_hub, default_tenant, seed_session
+from tests.support.scaffolding import seed_user as _seed_user
 
 _EVENT = "unhandled request error"
 

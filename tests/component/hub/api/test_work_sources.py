@@ -25,7 +25,7 @@ from blizzard.hub.store.internal.chunk_facts_store import ChunkFactsStore
 from blizzard.hub.store.internal.chunk_work_refs_store import ChunkWorkRefsStore
 from blizzard.hub.store.internal.work_item_store import WorkItemStore
 from blizzard.hub.store.scoped import ScopedConnections
-from tests.support import (
+from tests.support.scaffolding import (
     FakeWorkSource,
     HubHarness,
     build_hub,
@@ -616,7 +616,7 @@ def test_patch_with_a_blank_title_or_body_is_422(tmp_path: Path) -> None:
 
 
 def test_runner_bearer_token_is_rejected_on_every_work_source_route(tmp_path: Path) -> None:
-    from tests.hub_request_auth import bearer, seed_enrolled
+    from tests.support.hub_request_auth import bearer, seed_enrolled
 
     token = seed_enrolled(tmp_path)
     warn_hub = build_hub(tmp_path)

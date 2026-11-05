@@ -26,12 +26,12 @@ from blizzard.hub.work_sources.annotator import WorkStatusMarker
 from blizzard.hub.work_sources.internal.github_work_source import GitHubWorkSource
 from blizzard.hub.work_sources.registry import BuiltWorkSource, StoreWorkSourceRegistry
 from blizzard.hub.work_sources.source import IWorkSourceRegistry, WorkSourceError
-from tests.config_inputs import build_hosted_hub_app, init_hub
-from tests.support import OP, ForgeDouble, forge_state, hub_store_connections
-from tests.work_source_registry_ops import (
-    _id,  # pyright: ignore[reportPrivateUsage]  # shared test helper, imported from tests.work_source_registry_ops
-    _ingest,  # pyright: ignore[reportPrivateUsage]  # shared test helper, imported from tests.work_source_registry_ops
-    _tenant,  # pyright: ignore[reportPrivateUsage]  # shared test helper, imported from tests.work_source_registry_ops
+from tests.support.config_inputs import build_hosted_hub_app, init_hub
+from tests.support.scaffolding import OP, ForgeDouble, forge_state, hub_store_connections
+from tests.support.work_source_registry_ops import (
+    _id,  # pyright: ignore[reportPrivateUsage]  # shared test helper, imported from tests.support.work_source_registry_ops
+    _ingest,  # pyright: ignore[reportPrivateUsage]  # shared test helper, imported from tests.support.work_source_registry_ops
+    _tenant,  # pyright: ignore[reportPrivateUsage]  # shared test helper, imported from tests.support.work_source_registry_ops
     create,
     forge,
     promote,

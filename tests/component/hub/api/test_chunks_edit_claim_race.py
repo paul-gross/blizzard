@@ -20,7 +20,7 @@ from blizzard.hub.domain.chunk.ports.exclusive import ILockedChunkRead
 from blizzard.hub.domain.chunk.ports.record import IWriteChunkRecordRepository
 from blizzard.hub.domain.chunk.ports.route import IWriteChunkRouteRepository
 from blizzard.hub.domain.runners.route import Route
-from tests.support import HubHarness, build_hub, ingest
+from tests.support.scaffolding import HubHarness, build_hub, ingest
 
 
 def _writable_record(hub: HubHarness) -> IWriteChunkRecordRepository:

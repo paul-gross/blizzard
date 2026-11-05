@@ -19,7 +19,14 @@ from blizzard.hub.domain.chunk.model import ChunkFacts
 from blizzard.hub.domain.kernel.transactions import Transaction
 from blizzard.hub.store.internal.chunk_facts_store import ChunkFactsStore
 from blizzard.hub.store.scoped import ScopedConnections
-from tests.support import HubHarness, build_hub, count_queries, hub_store_connections, ingest, serve_default_tenant
+from tests.support.scaffolding import (
+    HubHarness,
+    build_hub,
+    count_queries,
+    hub_store_connections,
+    ingest,
+    serve_default_tenant,
+)
 
 _DEPENDENT = {"source": "default", "ref": "dependent"}
 _PREREQUISITE = {"source": "default", "ref": "prereq"}

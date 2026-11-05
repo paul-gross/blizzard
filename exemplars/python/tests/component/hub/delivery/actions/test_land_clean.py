@@ -22,7 +22,7 @@ from blizzard.hub.domain.config.repositories import (
 )
 from blizzard.hub.forge.landing import Mergeability
 from exemplar.hub.delivery.actions.land_clean import LandClean
-from tests.github_double import DoubleRepo, GitHubDouble, change
+from tests.support.github_double import DoubleRepo, GitHubDouble, change
 
 _WIDGET = "acme/widget"
 _GADGET = "acme/gadget"

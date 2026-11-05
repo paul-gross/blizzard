@@ -12,7 +12,7 @@ from blizzard.foundation.chunk_status import ChunkStatus
 from blizzard.foundation.node_steps import Executor, JudgedBy, SessionMode
 from blizzard.hub.domain.chunk.model import CHUNK_VERB_LEGALITY, ChunkFacts, ChunkVerb, TransitionFact
 from blizzard.hub.domain.graph.model import Node
-from tests.support import make_graph
+from tests.support.scaffolding import make_graph
 
 _T0 = datetime(2026, 1, 1, tzinfo=UTC)
 

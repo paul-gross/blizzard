@@ -27,10 +27,10 @@ from blizzard.runner.harness.wiring import (
 )
 from blizzard.runner.process.child_env import AllowlistedEnv, ChildEnv
 from blizzard.runner.process.child_processes import StreamTarget
-from tests.config_inputs import host_runtime_of
-from tests.harness_sections import sections
-from tests.runner_fakes import NO_TRACING, FakeProbe, make_envelope
-from tests.support_child_launch import version_probe
+from tests.support.child_launch import version_probe
+from tests.support.config_inputs import host_runtime_of
+from tests.support.harness_sections import sections
+from tests.support.runner_fakes import NO_TRACING, FakeProbe, make_envelope
 
 CAPTURED = HarnessTelemetryOutcome.CAPTURED
 YIELDED = HarnessTelemetryOutcome.OPERATOR_CONFIGURED

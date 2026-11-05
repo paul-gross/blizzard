@@ -16,7 +16,7 @@ from blizzard.hub.domain.chunk.ports.dependencies import IWriteChunkDependencies
 from blizzard.hub.domain.kernel.transactions import Transaction
 from blizzard.hub.store.internal.chunk_facts_store import ChunkFactsStore
 from blizzard.hub.store.scoped import ScopedConnections
-from tests.support import (
+from tests.support.scaffolding import (
     HubHarness,
     build_hub,
     chunk_stores,

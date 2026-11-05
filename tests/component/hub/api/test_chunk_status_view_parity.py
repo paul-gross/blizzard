@@ -10,7 +10,7 @@ from typing import Any
 
 import pytest
 
-from tests.support import HubHarness, build_hub, ingest, report_lease
+from tests.support.scaffolding import HubHarness, build_hub, ingest, report_lease
 
 _YAML = """
 name: default-delivery

@@ -30,8 +30,8 @@ from blizzard.hub.store.internal.host_registry_store import HostRegistryStore
 from blizzard.hub.store.internal.project_store import ProjectStore
 from blizzard.hub.store.internal.runner_registry_store import RunnerRegistryStore
 from blizzard.hub.store.transactions import HubTransactions
-from tests.config_inputs import VERSION_WINDOW
-from tests.support import build_hub, chunk_stores, emitted_events, hub_store_connections, migrate_to
+from tests.support.config_inputs import VERSION_WINDOW
+from tests.support.scaffolding import build_hub, chunk_stores, emitted_events, hub_store_connections, migrate_to
 
 _T0 = datetime(2026, 8, 1, 12, 0, 0, tzinfo=UTC)
 

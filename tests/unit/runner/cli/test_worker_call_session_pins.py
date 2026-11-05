@@ -15,8 +15,8 @@ from blizzard.foundation.clock import SystemClock, SystemMonotonicClock
 from blizzard.foundation.otlp_destination import TRACES_PATH
 from blizzard.foundation.span_clock import Clock
 from blizzard.runner.cli.worker_call import LEASE_TOKEN_HEADER, WorkerCall, WorkerSession
-from tests.loaded_modules import loaded_after_running
-from tests.worker_http import StubClient
+from tests.support.loaded_modules import loaded_after_running
+from tests.support.worker_http import StubClient
 
 _PARENT = "00-" + "1" * 32 + "-" + "2" * 16 + "-01"
 _ENV = {

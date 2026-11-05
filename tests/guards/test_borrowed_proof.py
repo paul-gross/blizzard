@@ -11,7 +11,7 @@ from pathlib import Path
 
 import pytest
 
-from tests.repo_files import repo_root
+from tests.support.repo_files import repo_root
 
 _SCRIPT = repo_root() / "scripts" / "borrowed-proof.sh"
 _SHA = "a" * 40

@@ -2,7 +2,7 @@
 
 Unit tests drive command building and model/effort/compaction resolution against a
 monkeypatched ``subprocess.Popen``; component tests launch a fake ``opencode`` binary
-(``tests/support_opencode_binary.py``)."""
+(``tests/support/opencode_binary.py``)."""
 
 from __future__ import annotations
 
@@ -18,11 +18,11 @@ from blizzard.runner.harness.opencode.adapter import (
     PendingOpenCodeIdentity,
 )
 from blizzard.runner.process.internal.linux_process_probe import LinuxProcessProbe
-from tests.runner_fakes import FakeProbe, make_envelope
-from tests.support_child_launch import wait_for_exit
-from tests.support_opencode_adapter import adapter as _adapter
-from tests.support_opencode_adapter import preamble as _preamble
-from tests.support_opencode_binary import worker_binary
+from tests.support.child_launch import wait_for_exit
+from tests.support.opencode_adapter import adapter as _adapter
+from tests.support.opencode_adapter import preamble as _preamble
+from tests.support.opencode_binary import worker_binary
+from tests.support.runner_fakes import FakeProbe, make_envelope
 
 
 def test_real_child_process_receives_effective_bundle_on_every_launch(tmp_path: Path, spawn_executor: Executor) -> None:

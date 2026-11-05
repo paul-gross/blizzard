@@ -12,8 +12,8 @@ import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
-from tests.hub_request_auth import bearer, seed_enrolled
-from tests.support import build_hub, seed_runner
+from tests.support.hub_request_auth import bearer, seed_enrolled
+from tests.support.scaffolding import build_hub, seed_runner
 
 # A valid runner token succeeds on a fleet verb
 # --------------------------------------------------------------------------- #

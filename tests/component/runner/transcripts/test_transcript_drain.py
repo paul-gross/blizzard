@@ -28,7 +28,7 @@ from blizzard.runner.transcripts.ledger import (
 from blizzard.runner.transcripts.transcript_drain import TranscriptDrain
 from blizzard.runner.transcripts.transcript_pump import TranscriptPump
 from blizzard.wire.transcript_segment import TranscriptSegmentBatch, TranscriptSegmentRecord
-from tests.runner_fakes import (
+from tests.support.runner_fakes import (
     FIXTURE_RUNNER_ID,
     FakeHarness,
     FakeHub,

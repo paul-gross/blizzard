@@ -15,7 +15,7 @@ from blizzard.hub.store.errors import HubStoreError
 from blizzard.hub.store.internal.chunk_exclusive_store import ChunkExclusiveWrites
 from blizzard.hub.tenancy import StoreScope, TenantId
 from blizzard.hub.work_sources.internal.hub_work_source import HubWorkSource
-from tests.support import add_tenant, build_hub, default_tenant, tenant_services_of
+from tests.support.scaffolding import add_tenant, build_hub, default_tenant, tenant_services_of
 
 
 def test_services_share_the_cores_stores(tmp_path: Path) -> None:

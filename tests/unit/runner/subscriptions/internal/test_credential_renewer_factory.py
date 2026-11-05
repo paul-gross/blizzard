@@ -16,7 +16,7 @@ from blizzard.runner.subscriptions.internal.credential_renewer_factory import se
 from blizzard.runner.subscriptions.internal.openai_credential_renewer import OpenAICredentialRenewer
 from blizzard.runner.subscriptions.one_shot_process import OneShotResult
 from blizzard.runner.subscriptions.subscription_sampler import PROVIDER_ANTHROPIC, PROVIDER_OPENAI
-from tests.support_child_launch import tool_env
+from tests.support.child_launch import tool_env
 
 _NOW = datetime(2026, 9, 22, 12, 0, tzinfo=UTC)
 

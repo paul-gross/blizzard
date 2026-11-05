@@ -21,7 +21,7 @@ from blizzard.runner.hub.client import ClaimRequest, HubClientError, QueueEntry,
 from blizzard.runner.lifecycle.claim import ReadyQueue
 from blizzard.runner.loop.context import LoopConfig
 from blizzard.runner.loop.tick import tick
-from tests.runner_fakes import (
+from tests.support.runner_fakes import (
     FIXTURE_PROJECT_ID,
     FakeHarness,
     FakeHub,

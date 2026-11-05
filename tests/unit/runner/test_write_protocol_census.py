@@ -5,7 +5,7 @@ write-only members — declared on its own class body or inherited from a concep
 such as :class:`~blizzard.runner.leases.record.IWriteLeaseRecordRepository`, but
 never a member also reachable through :class:`~blizzard.runner.stores.IReadRunnerStore`
 — and likewise each ``IWrite*`` Protocol a :class:`~blizzard.runner.stores.HostStores` field is typed to, and
-asserts ``tests/runner_event_census.py`` names exactly that set — exhaustiveness by test, not review."""
+asserts ``tests/support/runner_event_census.py`` names exactly that set — exhaustiveness by test, not review."""
 
 from __future__ import annotations
 
@@ -17,7 +17,7 @@ from blizzard.runner.stores import (
     IReadRunnerStore,
     IWriteRunnerStore,
 )
-from tests.runner_event_census import WRITE_PROTOCOL_CENSUS, Published, Silent
+from tests.support.runner_event_census import WRITE_PROTOCOL_CENSUS, Published, Silent
 
 
 def _reachable_members(protocol: type) -> set[str]:
