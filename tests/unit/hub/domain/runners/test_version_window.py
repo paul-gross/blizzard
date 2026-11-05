@@ -18,7 +18,7 @@ _SOURCE = "window.toml"
 
 
 def test_the_packaged_window_is_the_committed_one() -> None:
-    assert packaged_version_window() == VersionWindow(floor="0.2", opening=None)
+    assert packaged_version_window() == VersionWindow(floor="0.3", opening=None)
 
 
 def test_opening_is_read_when_present() -> None:

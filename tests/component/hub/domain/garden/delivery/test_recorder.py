@@ -1,9 +1,6 @@
-"""Garden delivery route — the hub-executed delivery node's own POST.
-Seeds a chunk via ``seed_work_item`` (its own resting chunk),
-records a run context through ``RunContextStore``, and posts delta/proposal
-artifacts recorded via ``services.chunks.record_hub_artifact`` — the
-``tests/component/hub/api/test_chunks_marker_auth.py`` shape, minus the OAuth gate (``build_hub``'s default
-``auth_mode=none`` grants everything without a session)."""
+"""The garden delivery recorder a ``garden-deliver`` pass records through (component tier). Seeds a chunk via
+``seed_work_item`` (its own resting chunk), records a run context through ``RunContextStore``, records its delta and
+proposal artifacts through the artifacts repository, and delivers them through the recorder over the hub's store."""
 
 from __future__ import annotations
 
@@ -21,10 +18,11 @@ from tests.support.garden_delivery_world import (
     _NOW,  # pyright: ignore[reportPrivateUsage]  # shared test helper, imported from tests.support.garden_delivery_world
     _ROUTINE,  # pyright: ignore[reportPrivateUsage]  # shared test helper, imported from tests.support.garden_delivery_world
     SCOPE,
+    Delivered,
     add_op,
+    deliver,
     finding_count,
     garden_delta,
-    post,
     record_artifact,
     seed_chunk,
     seed_scope,
@@ -106,10 +104,9 @@ def test_a_clean_addition_is_recorded(tmp_path: Path) -> None:
     chunk_id = seed_chunk(hub)
     record_artifact(hub, chunk_id, name="delta", content=garden_delta(findings=[add_op()]))
 
-    resp = post(hub, chunk_id, delta=["delta"])
+    delivered = deliver(hub, chunk_id, delta=["delta"])
 
-    assert resp.status_code == 200, resp.text
-    assert resp.json() == {"outcome": "recorded", "detail": ""}
+    assert delivered == Delivered("recorded")
     assert finding_count(hub) == 1
 
 
@@ -121,10 +118,9 @@ def test_additions_only_mints_every_finding(tmp_path: Path) -> None:
         hub, chunk_id, name="delta", content=garden_delta(findings=[add_op(locus="a.py:1"), add_op(locus="b.py:2")])
     )
 
-    resp = post(hub, chunk_id, delta=["delta"])
+    delivered = deliver(hub, chunk_id, delta=["delta"])
 
-    assert resp.status_code == 200, resp.text
-    assert resp.json()["outcome"] == "recorded"
+    assert delivered.outcome == "recorded"
     assert finding_count(hub) == 2
 
 
@@ -136,10 +132,9 @@ def test_transformations_only_mints_no_new_finding(tmp_path: Path) -> None:
     _seed_finding(hub, finding_id)
     record_artifact(hub, chunk_id, name="delta", content=garden_delta(findings=[_observed_op(finding_id)]))
 
-    resp = post(hub, chunk_id, delta=["delta"])
+    delivered = deliver(hub, chunk_id, delta=["delta"])
 
-    assert resp.status_code == 200, resp.text
-    assert resp.json()["outcome"] == "recorded"
+    assert delivered.outcome == "recorded"
     assert finding_count(hub) == 1  # the pre-seeded finding alone — nothing new minted
 
 
@@ -152,10 +147,9 @@ def test_a_mixed_delta_with_proposals_is_recorded(tmp_path: Path) -> None:
     record_artifact(hub, chunk_id, name="delta", content=garden_delta(findings=[add_op(), _gone_op(finding_id)]))
     record_artifact(hub, chunk_id, name="docket", content=_proposals(findings=[finding_id]))
 
-    resp = post(hub, chunk_id, delta=["delta"], proposals=["docket"])
+    delivered = deliver(hub, chunk_id, delta=["delta"], proposals=["docket"])
 
-    assert resp.status_code == 200, resp.text
-    assert resp.json()["outcome"] == "recorded"
+    assert delivered.outcome == "recorded"
     assert finding_count(hub) == 2  # the pre-seeded one plus the freshly-added one
     with hub.engine.begin() as conn:
         assert conn.execute(hub_scoped(select(s.garden_proposals))).all()
@@ -171,10 +165,9 @@ def test_a_docket_citing_its_own_runs_add_ref_materializes_with_the_minted_id(tm
     record_artifact(hub, chunk_id, name="delta", content=garden_delta(findings=[add_op(ref="new-1")]))
     record_artifact(hub, chunk_id, name="docket", content=_proposals(findings=["new-1"]))
 
-    resp = post(hub, chunk_id, delta=["delta"], proposals=["docket"])
+    delivered = deliver(hub, chunk_id, delta=["delta"], proposals=["docket"])
 
-    assert resp.status_code == 200, resp.text
-    assert resp.json()["outcome"] == "recorded"
+    assert delivered.outcome == "recorded"
     with hub.engine.begin() as conn:
         minted_finding_id = conn.execute(hub_scoped(select(s.findings.c.finding_id))).scalar_one()
         link_finding_ids = [row.finding_id for row in conn.execute(hub_scoped(select(s.garden_proposal_findings)))]
@@ -191,10 +184,9 @@ def test_a_docket_citing_a_prior_runs_live_id_still_works_unchanged(tmp_path: Pa
     record_artifact(hub, chunk_id, name="delta", content=garden_delta())
     record_artifact(hub, chunk_id, name="docket", content=_proposals(findings=[finding_id]))
 
-    resp = post(hub, chunk_id, delta=["delta"], proposals=["docket"])
+    delivered = deliver(hub, chunk_id, delta=["delta"], proposals=["docket"])
 
-    assert resp.status_code == 200, resp.text
-    assert resp.json()["outcome"] == "recorded"
+    assert delivered.outcome == "recorded"
     with hub.engine.begin() as conn:
         link_finding_ids = [row.finding_id for row in conn.execute(hub_scoped(select(s.garden_proposal_findings)))]
     assert link_finding_ids == [finding_id]
@@ -207,10 +199,9 @@ def test_a_proposal_citing_no_findings_is_recorded_with_no_links(tmp_path: Path)
     record_artifact(hub, chunk_id, name="delta", content=garden_delta())
     record_artifact(hub, chunk_id, name="docket", content=_proposals(findings=[]))
 
-    resp = post(hub, chunk_id, delta=["delta"], proposals=["docket"])
+    delivered = deliver(hub, chunk_id, delta=["delta"], proposals=["docket"])
 
-    assert resp.status_code == 200, resp.text
-    assert resp.json()["outcome"] == "recorded"
+    assert delivered.outcome == "recorded"
     with hub.engine.begin() as conn:
         proposals = conn.execute(hub_scoped(select(s.garden_proposals))).all()
         assert len(proposals) == 1
@@ -224,10 +215,9 @@ def test_an_empty_docket_is_recorded(tmp_path: Path) -> None:
     record_artifact(hub, chunk_id, name="delta", content=garden_delta(findings=[add_op()]))
     record_artifact(hub, chunk_id, name="docket", content="[]")
 
-    resp = post(hub, chunk_id, delta=["delta"], proposals=["docket"])
+    delivered = deliver(hub, chunk_id, delta=["delta"], proposals=["docket"])
 
-    assert resp.status_code == 200, resp.text
-    assert resp.json() == {"outcome": "recorded", "detail": ""}
+    assert delivered == Delivered("recorded")
     with hub.engine.begin() as conn:
         assert conn.execute(hub_scoped(select(s.garden_proposals))).all() == []
 
@@ -243,10 +233,9 @@ def test_an_observed_op_admits_a_review_sourced_finding_on_the_runs_own_scope(tm
     _seed_review_finding(hub, finding_id)
     record_artifact(hub, chunk_id, name="delta", content=garden_delta(findings=[_observed_op(finding_id)]))
 
-    resp = post(hub, chunk_id, delta=["delta"])
+    delivered = deliver(hub, chunk_id, delta=["delta"])
 
-    assert resp.status_code == 200, resp.text
-    assert resp.json()["outcome"] == "recorded"
+    assert delivered.outcome == "recorded"
 
 
 def test_a_docket_can_cite_a_review_sourced_finding_on_the_runs_own_scope(tmp_path: Path) -> None:
@@ -258,10 +247,9 @@ def test_a_docket_can_cite_a_review_sourced_finding_on_the_runs_own_scope(tmp_pa
     record_artifact(hub, chunk_id, name="delta", content=garden_delta())
     record_artifact(hub, chunk_id, name="docket", content=_proposals(findings=[finding_id]))
 
-    resp = post(hub, chunk_id, delta=["delta"], proposals=["docket"])
+    delivered = deliver(hub, chunk_id, delta=["delta"], proposals=["docket"])
 
-    assert resp.status_code == 200, resp.text
-    assert resp.json()["outcome"] == "recorded"
+    assert delivered.outcome == "recorded"
     with hub.engine.begin() as conn:
         links = conn.execute(hub_scoped(select(s.garden_proposal_findings))).all()
     assert [link.finding_id for link in links] == [finding_id]
@@ -276,11 +264,9 @@ def test_a_review_sourced_finding_on_another_scope_is_out_of_scope(tmp_path: Pat
     _seed_review_finding(hub, finding_id, scope_slug="other-scope")
     record_artifact(hub, chunk_id, name="delta", content=garden_delta(findings=[_observed_op(finding_id)]))
 
-    resp = post(hub, chunk_id, delta=["delta"])
+    delivered = deliver(hub, chunk_id, delta=["delta"])
 
-    assert resp.status_code == 200, resp.text
-    body = resp.json()
-    assert body["outcome"] == "invalid"
+    assert delivered.outcome == "invalid"
 
 
 # --- invalid -----------------------------------------------------------------
@@ -292,27 +278,10 @@ def test_a_malformed_artifact_is_invalid(tmp_path: Path) -> None:
     chunk_id = seed_chunk(hub)
     record_artifact(hub, chunk_id, name="delta", content="not valid json")
 
-    resp = post(hub, chunk_id, delta=["delta"])
+    delivered = deliver(hub, chunk_id, delta=["delta"])
 
-    assert resp.status_code == 200, resp.text
-    body = resp.json()
-    assert body["outcome"] == "invalid"
-    assert "delta" in body["detail"]
-    assert finding_count(hub) == 0
-
-
-def test_an_unknown_node_id_is_invalid(tmp_path: Path) -> None:
-    hub = build_hub(tmp_path)
-    seed_scope(hub, SCOPE)
-    chunk_id = seed_chunk(hub)
-    record_artifact(hub, chunk_id, name="delta", content=garden_delta(findings=[add_op()]))
-
-    resp = post(hub, chunk_id, delta=["delta"], node_id="nd_ghost")
-
-    assert resp.status_code == 200, resp.text
-    body = resp.json()
-    assert body["outcome"] == "invalid"
-    assert "nd_ghost" in body["detail"]
+    assert delivered.outcome == "invalid"
+    assert "delta" in delivered.detail
     assert finding_count(hub) == 0
 
 
@@ -323,13 +292,11 @@ def test_a_delta_declaring_a_scope_other_than_the_runs_own_is_invalid(tmp_path: 
     chunk_id = seed_chunk(hub)
     record_artifact(hub, chunk_id, name="delta", content=garden_delta(scope="other-scope", findings=[add_op()]))
 
-    resp = post(hub, chunk_id, delta=["delta"])
+    delivered = deliver(hub, chunk_id, delta=["delta"])
 
-    assert resp.status_code == 200, resp.text
-    body = resp.json()
-    assert body["outcome"] == "invalid"
-    assert "other-scope" in body["detail"]
-    assert SCOPE in body["detail"]
+    assert delivered.outcome == "invalid"
+    assert "other-scope" in delivered.detail
+    assert SCOPE in delivered.detail
     assert finding_count(hub) == 0
 
 
@@ -339,10 +306,9 @@ def test_a_repeated_delta_artifact_name_still_records_cleanly(tmp_path: Path) ->
     chunk_id = seed_chunk(hub)
     record_artifact(hub, chunk_id, name="delta", content=garden_delta(findings=[add_op()]))
 
-    resp = post(hub, chunk_id, delta=["delta", "delta"])
+    delivered = deliver(hub, chunk_id, delta=["delta", "delta"])
 
-    assert resp.status_code == 200, resp.text
-    assert resp.json() == {"outcome": "recorded", "detail": ""}
+    assert delivered == Delivered("recorded")
     assert finding_count(hub) == 1
 
 
@@ -360,10 +326,9 @@ def test_an_observed_op_revives_a_previously_gone_finding(tmp_path: Path) -> Non
     assert [f.finding_id for f in hub.services.findings.list_for_routine(project, _ROUTINE)] == []
     record_artifact(hub, chunk_id, name="delta", content=garden_delta(findings=[_observed_op(finding_id)]))
 
-    resp = post(hub, chunk_id, delta=["delta"])
+    delivered = deliver(hub, chunk_id, delta=["delta"])
 
-    assert resp.status_code == 200, resp.text
-    assert resp.json() == {"outcome": "recorded", "detail": ""}
+    assert delivered == Delivered("recorded")
     # "Gone is reversible" is a liveness claim, not just a route outcome: the delivered
     # `observed` fact must actually restore the finding to the live set.
     assert [f.finding_id for f in hub.services.findings.list_for_routine(project, _ROUTINE)] == [finding_id]
@@ -376,12 +341,10 @@ def test_an_unknown_finding_id_is_invalid(tmp_path: Path) -> None:
     ghost = Id.mint(IdPrefix.FINDING, hub.clock).value
     record_artifact(hub, chunk_id, name="delta", content=garden_delta(findings=[_observed_op(ghost)]))
 
-    resp = post(hub, chunk_id, delta=["delta"])
+    delivered = deliver(hub, chunk_id, delta=["delta"])
 
-    assert resp.status_code == 200, resp.text
-    body = resp.json()
-    assert body["outcome"] == "invalid"
-    assert ghost in body["detail"]
+    assert delivered.outcome == "invalid"
+    assert ghost in delivered.detail
     assert finding_count(hub) == 0
 
 
@@ -394,12 +357,10 @@ def test_an_out_of_scope_transformation_is_invalid(tmp_path: Path) -> None:
     _seed_finding(hub, finding_id, scope_slug="other-scope")
     record_artifact(hub, chunk_id, name="delta", content=garden_delta(scope=SCOPE, findings=[_observed_op(finding_id)]))
 
-    resp = post(hub, chunk_id, delta=["delta"])
+    delivered = deliver(hub, chunk_id, delta=["delta"])
 
-    assert resp.status_code == 200, resp.text
-    body = resp.json()
-    assert body["outcome"] == "invalid"
-    assert "scope" in body["detail"]
+    assert delivered.outcome == "invalid"
+    assert "scope" in delivered.detail
 
 
 def test_an_unresolved_delta_artifact_is_invalid_naming_it(tmp_path: Path) -> None:
@@ -407,18 +368,16 @@ def test_an_unresolved_delta_artifact_is_invalid_naming_it(tmp_path: Path) -> No
     seed_scope(hub, SCOPE)
     chunk_id = seed_chunk(hub)
 
-    resp = post(hub, chunk_id, delta=["ghost-artifact"])
+    delivered = deliver(hub, chunk_id, delta=["ghost-artifact"])
 
-    assert resp.status_code == 200, resp.text
-    body = resp.json()
-    assert body["outcome"] == "invalid"
-    assert "ghost-artifact" in body["detail"]
+    assert delivered.outcome == "invalid"
+    assert "ghost-artifact" in delivered.detail
 
 
 def test_a_proposals_artifact_naming_one_ref_twice_is_invalid(tmp_path: Path) -> None:
     """A duplicated `ref` collides on the very pair the store dedupes against, so it is
     rejected as a legible `invalid` the graph can bounce on — never a raw store fault the
-    script can only report as a failed request."""
+    pass can only report as a failure."""
     hub = build_hub(tmp_path)
     seed_scope(hub, SCOPE)
     chunk_id = seed_chunk(hub)
@@ -433,12 +392,10 @@ def test_a_proposals_artifact_naming_one_ref_twice_is_invalid(tmp_path: Path) ->
     record_artifact(hub, chunk_id, name="delta", content=garden_delta())
     record_artifact(hub, chunk_id, name="docket", content=twice)
 
-    resp = post(hub, chunk_id, delta=["delta"], proposals=["docket"])
+    delivered = deliver(hub, chunk_id, delta=["delta"], proposals=["docket"])
 
-    assert resp.status_code == 200, resp.text
-    body = resp.json()
-    assert body["outcome"] == "invalid"
-    assert "docket" in body["detail"] and "p1" in body["detail"]
+    assert delivered.outcome == "invalid"
+    assert "docket" in delivered.detail and "p1" in delivered.detail
     with hub.engine.begin() as conn:
         assert conn.execute(hub_scoped(select(s.garden_proposals))).all() == []
 
@@ -454,12 +411,10 @@ def test_a_docket_citing_the_same_finding_twice_is_invalid(tmp_path: Path) -> No
     record_artifact(hub, chunk_id, name="delta", content=garden_delta())
     record_artifact(hub, chunk_id, name="docket", content=_proposals(findings=[finding_id, finding_id]))
 
-    resp = post(hub, chunk_id, delta=["delta"], proposals=["docket"])
+    delivered = deliver(hub, chunk_id, delta=["delta"], proposals=["docket"])
 
-    assert resp.status_code == 200, resp.text
-    body = resp.json()
-    assert body["outcome"] == "invalid"
-    assert finding_id in body["detail"]
+    assert delivered.outcome == "invalid"
+    assert finding_id in delivered.detail
     with hub.engine.begin() as conn:
         assert conn.execute(hub_scoped(select(s.garden_proposals))).all() == []
 
@@ -471,12 +426,10 @@ def test_a_docket_citing_a_ref_absent_from_the_delta_is_invalid_naming_it(tmp_pa
     record_artifact(hub, chunk_id, name="delta", content=garden_delta(findings=[add_op(ref="new-1")]))
     record_artifact(hub, chunk_id, name="docket", content=_proposals(findings=["ghost-ref"]))
 
-    resp = post(hub, chunk_id, delta=["delta"], proposals=["docket"])
+    delivered = deliver(hub, chunk_id, delta=["delta"], proposals=["docket"])
 
-    assert resp.status_code == 200, resp.text
-    body = resp.json()
-    assert body["outcome"] == "invalid"
-    assert "ghost-ref" in body["detail"]
+    assert delivered.outcome == "invalid"
+    assert "ghost-ref" in delivered.detail
     assert finding_count(hub) == 0
     with hub.engine.begin() as conn:
         assert conn.execute(hub_scoped(select(s.garden_proposals))).all() == []
@@ -489,12 +442,10 @@ def test_an_add_ops_ref_shaped_like_a_finding_id_is_invalid(tmp_path: Path) -> N
     disguised_ref = Id.mint(IdPrefix.FINDING, hub.clock).value
     record_artifact(hub, chunk_id, name="delta", content=garden_delta(findings=[add_op(ref=disguised_ref)]))
 
-    resp = post(hub, chunk_id, delta=["delta"])
+    delivered = deliver(hub, chunk_id, delta=["delta"])
 
-    assert resp.status_code == 200, resp.text
-    body = resp.json()
-    assert body["outcome"] == "invalid"
-    assert disguised_ref in body["detail"]
+    assert delivered.outcome == "invalid"
+    assert disguised_ref in delivered.detail
     assert finding_count(hub) == 0
 
 
@@ -505,12 +456,10 @@ def test_an_add_ref_duplicated_across_the_deliverys_deltas_is_invalid(tmp_path: 
     record_artifact(hub, chunk_id, name="delta-a", content=garden_delta(findings=[add_op(locus="a.py:1", ref="new-1")]))
     record_artifact(hub, chunk_id, name="delta-b", content=garden_delta(findings=[add_op(locus="b.py:2", ref="new-1")]))
 
-    resp = post(hub, chunk_id, delta=["delta-a", "delta-b"])
+    delivered = deliver(hub, chunk_id, delta=["delta-a", "delta-b"])
 
-    assert resp.status_code == 200, resp.text
-    body = resp.json()
-    assert body["outcome"] == "invalid"
-    assert "new-1" in body["detail"]
+    assert delivered.outcome == "invalid"
+    assert "new-1" in delivered.detail
     assert finding_count(hub) == 0
 
 
@@ -523,14 +472,13 @@ def test_a_replayed_delivery_still_reports_recorded_and_mints_nothing_new(tmp_pa
     chunk_id = seed_chunk(hub)
     record_artifact(hub, chunk_id, name="delta", content=garden_delta(findings=[add_op()]))
 
-    first = post(hub, chunk_id, delta=["delta"])
-    assert first.status_code == 200 and first.json()["outcome"] == "recorded"
+    first = deliver(hub, chunk_id, delta=["delta"])
+    assert first == Delivered("recorded")
     assert finding_count(hub) == 1
 
-    second = post(hub, chunk_id, delta=["delta"])
+    second = deliver(hub, chunk_id, delta=["delta"])
 
-    assert second.status_code == 200, second.text
-    assert second.json()["outcome"] == "recorded"
+    assert second.outcome == "recorded"
     assert finding_count(hub) == 1  # nothing new minted on replay
 
 
@@ -547,8 +495,8 @@ def test_a_replayed_delivery_stays_recorded_even_after_one_of_its_findings_exits
     _seed_finding(hub, finding_id, at=hub.clock.now())
     record_artifact(hub, chunk_id, name="delta", content=garden_delta(findings=[_observed_op(finding_id)]))
 
-    first = post(hub, chunk_id, delta=["delta"])
-    assert first.status_code == 200 and first.json()["outcome"] == "recorded"
+    first = deliver(hub, chunk_id, delta=["delta"])
+    assert first == Delivered("recorded")
 
     findings = FindingStore(hub_store_connections(hub.engine))
     finding = findings.get(finding_id)
@@ -557,10 +505,9 @@ def test_a_replayed_delivery_stays_recorded_even_after_one_of_its_findings_exits
     resolved = findings.get(finding_id)
     assert resolved is not None and resolved.state == "resolved"
 
-    second = post(hub, chunk_id, delta=["delta"])
+    second = deliver(hub, chunk_id, delta=["delta"])
 
-    assert second.status_code == 200, second.text
-    assert second.json()["outcome"] == "recorded"
+    assert second.outcome == "recorded"
 
 
 def test_a_later_delivery_adding_a_second_delta_still_lands_the_new_ones_findings(tmp_path: Path) -> None:
@@ -573,13 +520,12 @@ def test_a_later_delivery_adding_a_second_delta_still_lands_the_new_ones_finding
     record_artifact(hub, chunk_id, name="delta-a", content=garden_delta(findings=[add_op(locus="a.py:1")]))
     record_artifact(hub, chunk_id, name="delta-b", content=garden_delta(findings=[add_op(locus="b.py:2")]))
 
-    first = post(hub, chunk_id, delta=["delta-a"])
-    assert first.status_code == 200 and first.json()["outcome"] == "recorded"
+    first = deliver(hub, chunk_id, delta=["delta-a"])
+    assert first == Delivered("recorded")
 
-    second = post(hub, chunk_id, delta=["delta-a", "delta-b"], epoch=_EPOCH + 1)
+    second = deliver(hub, chunk_id, delta=["delta-a", "delta-b"], epoch=_EPOCH + 1)
 
-    assert second.status_code == 200, second.text
-    assert second.json()["outcome"] == "recorded"
+    assert second.outcome == "recorded"
     with hub.engine.begin() as conn:
         assert sorted(r.locus for r in conn.execute(hub_scoped(select(s.findings)))) == ["a.py:1", "b.py:2"]
         set_rows = conn.execute(hub_scoped(select(s.finding_sets))).all()
@@ -597,15 +543,14 @@ def test_a_later_delivery_re_carrying_the_same_proposals_mints_no_duplicate(tmp_
     record_artifact(hub, chunk_id, name="delta", content=garden_delta())  # a clean delta
     record_artifact(hub, chunk_id, name="docket", content=_proposals(findings=[finding_id]))
 
-    first = post(hub, chunk_id, delta=["delta"], proposals=["docket"])
-    assert first.status_code == 200 and first.json()["outcome"] == "recorded"
+    first = deliver(hub, chunk_id, delta=["delta"], proposals=["docket"])
+    assert first == Delivered("recorded")
     with hub.engine.begin() as conn:
         assert conn.execute(hub_scoped(select(s.garden_proposals))).all().__len__() == 1
 
-    second = post(hub, chunk_id, delta=["delta"], proposals=["docket"], epoch=_EPOCH + 1)
+    second = deliver(hub, chunk_id, delta=["delta"], proposals=["docket"], epoch=_EPOCH + 1)
 
-    assert second.status_code == 200, second.text
-    assert second.json()["outcome"] == "recorded"
+    assert second.outcome == "recorded"
     with hub.engine.begin() as conn:
         assert conn.execute(hub_scoped(select(s.garden_proposals))).all().__len__() == 1  # not minted twice
 
@@ -620,18 +565,17 @@ def test_a_republished_dockets_ref_citation_still_resolves_after_its_delta_is_dr
     record_artifact(hub, chunk_id, name="delta", content=garden_delta(findings=[add_op(ref="F1")]))
     record_artifact(hub, chunk_id, name="docket", content=_proposals(findings=["F1"]))
 
-    first = post(hub, chunk_id, delta=["delta"], proposals=["docket"])
-    assert first.status_code == 200 and first.json()["outcome"] == "recorded"
+    first = deliver(hub, chunk_id, delta=["delta"], proposals=["docket"])
+    assert first == Delivered("recorded")
     assert finding_count(hub) == 1
     with hub.engine.begin() as conn:
         minted_finding_id = conn.execute(hub_scoped(select(s.findings.c.finding_id))).scalar_one()
 
     # Republish only the docket, at a fresh epoch — a new artifact, same `ref`.
     record_artifact(hub, chunk_id, name="docket", content=_proposals(findings=["F1"]), epoch=_EPOCH + 1)
-    second = post(hub, chunk_id, delta=["delta"], proposals=["docket"], epoch=_EPOCH + 1)
+    second = deliver(hub, chunk_id, delta=["delta"], proposals=["docket"], epoch=_EPOCH + 1)
 
-    assert second.status_code == 200, second.text
-    assert second.json()["outcome"] == "recorded"
+    assert second.outcome == "recorded"
     assert finding_count(hub) == 1  # the delta is unchanged — nothing new minted
     with hub.engine.begin() as conn:
         proposals = conn.execute(hub_scoped(select(s.garden_proposals))).all()
@@ -640,31 +584,7 @@ def test_a_republished_dockets_ref_citation_still_resolves_after_its_delta_is_dr
         assert [link.finding_id for link in links] == [minted_finding_id, minted_finding_id]
 
 
-# --- edges -----------------------------------------------------------------
-
-
-def test_an_unknown_chunk_is_404(tmp_path: Path) -> None:
-    hub = build_hub(tmp_path)
-
-    resp = post(hub, "ch_ghost", delta=["delta"])
-
-    assert resp.status_code == 404, resp.text
-
-
-def test_a_chunk_with_no_run_context_is_invalid(tmp_path: Path) -> None:
-    hub = build_hub(tmp_path)
-    seed_scope(hub, SCOPE)
-    chunk_id = seed_chunk(hub, with_run_context=False)
-
-    resp = post(hub, chunk_id, delta=["delta"])
-
-    assert resp.status_code == 200, resp.text
-    body = resp.json()
-    assert body["outcome"] == "invalid"
-    assert chunk_id in body["detail"]
-
-
-# --- one bucket, two routes -------------------------------------------------
+# --- one bucket, two readers ------------------------------------------------
 
 
 def test_every_finding_the_worker_read_shows_is_a_citable_proposal_finding(tmp_path: Path) -> None:
@@ -686,29 +606,29 @@ def test_every_finding_the_worker_read_shows_is_a_citable_proposal_finding(tmp_p
     assert set(shown) == {own, neighbour, review}
 
     record_artifact(hub, chunk_id, name="delta", content=garden_delta(findings=[_observed_op(neighbour)]))
-    refused = post(hub, chunk_id, delta=["delta"])
-    assert refused.json()["outcome"] == "invalid"
-    assert "outside the declared scope" in refused.json()["detail"]
+    refused = deliver(hub, chunk_id, delta=["delta"])
+    assert refused.outcome == "invalid"
+    assert "outside the declared scope" in refused.detail
 
     record_artifact(hub, chunk_id, name="delta", content=garden_delta(), epoch=_EPOCH + 1)
     record_artifact(hub, chunk_id, name="proposals", content=_proposals(findings=shown), epoch=_EPOCH + 1)
-    admitted = post(hub, chunk_id, delta=["delta"], proposals=["proposals"], epoch=_EPOCH + 1)
-    assert admitted.json()["outcome"] == "recorded", admitted.text
+    admitted = deliver(hub, chunk_id, delta=["delta"], proposals=["proposals"], epoch=_EPOCH + 1)
+    assert admitted == Delivered("recorded")
 
 
 # --- fenced ------------------------------------------------------------------
 
 
-def test_a_delivery_for_a_stopped_chunk_is_a_409_and_lands_nothing(tmp_path: Path) -> None:
+def test_a_delivery_for_a_stopped_chunk_is_fenced_and_lands_nothing(tmp_path: Path) -> None:
     hub = build_hub(tmp_path)
     seed_scope(hub, SCOPE)
     chunk_id = seed_chunk(hub)
     record_artifact(hub, chunk_id, name="delta", content=garden_delta(findings=[add_op()]))
     assert hub.client.post(f"/api/chunks/{chunk_id}/stop", json={"by": "operator"}).status_code == 202
 
-    resp = post(hub, chunk_id, delta=["delta"])
+    delivered = deliver(hub, chunk_id, delta=["delta"])
 
-    assert resp.status_code == 409, resp.text
+    assert delivered == Delivered("fenced")
     assert finding_count(hub) == 0
     with hub.engine.begin() as conn:
         assert (
@@ -717,16 +637,16 @@ def test_a_delivery_for_a_stopped_chunk_is_a_409_and_lands_nothing(tmp_path: Pat
         )
 
 
-def test_a_delivery_a_restart_superseded_is_a_409_and_lands_nothing(tmp_path: Path) -> None:
+def test_a_delivery_a_restart_superseded_is_fenced_and_lands_nothing(tmp_path: Path) -> None:
     hub = build_hub(tmp_path)
     seed_scope(hub, SCOPE)
     chunk_id = seed_chunk(hub)
     record_artifact(hub, chunk_id, name="delta", content=garden_delta(findings=[add_op()]))
     seed_lease(hub.engine, chunk_id, epoch=2, runner_id="r1", at=hub.clock.now())
 
-    resp = post(hub, chunk_id, delta=["delta"], epoch=1)
+    delivered = deliver(hub, chunk_id, delta=["delta"], epoch=1)
 
-    assert resp.status_code == 409, resp.text
+    assert delivered == Delivered("fenced")
     assert finding_count(hub) == 0
 
 
@@ -740,9 +660,8 @@ def test_artifact_lookups_are_flat_as_the_delta_names_grow(tmp_path: Path) -> No
         for name in names:
             record_artifact(hub, chunk_id, name=name, content=garden_delta())
         with capture_statements(hub.engine) as statements:
-            resp = post(hub, chunk_id, delta=names, proposals=["missing"])
-        assert resp.status_code == 200, resp.text
-        assert resp.json()["outcome"] == "recorded"
+            delivered = deliver(hub, chunk_id, delta=names, proposals=["missing"])
+        assert delivered.outcome == "recorded"
         return sum(1 for statement, _ in statements if "FROM artifacts" in statement)
 
     assert artifact_selects("one", 1) == artifact_selects("many", 5)

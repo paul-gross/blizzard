@@ -1,50 +1,106 @@
 # Recorded allowances for blizzard-compat, each keyed on a release line. README.md beside this file owns the format.
 
 [[allowance]]
-line = "0.2"
-surface = "http-api"
-where = "HostRegistrationState"
-reason = "response enum gained value(s) ['version_refused']"
-because = "0.2's only consumer of HostRegistrationState is the runner panel, served by that same runner: a panel tab loaded before its runner host upgraded and left open throws on the new value, in the LABEL[view.state] destructure of v0.2.0:web/projects/runner/src/app/host/host-registration.model.ts:26, so it survives only after a reload, which loads the new panel. 0.2's runner CLI never reads GET /api/host/registration."
-
-[[allowance]]
-line = "0.2"
-surface = "http-api"
-where = "IdentityState"
-reason = "response enum gained value(s) ['version_refused']"
-because = "Both of 0.2's consumers of IdentityState tolerate the new value without failing, though neither names it: the runner CLI's status compares the state as a string and prints no identity line for an unmatched one (v0.2.0:src/blizzard/runner/cli/control.py:151-162), and the runner panel's @switch on verdict.state falls to its @default, which shows the runner's identity as unchecked (v0.2.0:web/projects/runner/src/app/machine/app-info-view.html:16-41)."
-
-[[allowance]]
-line = "0.2"
-surface = "http-api"
-where = "HistoryRowView.kind"
-reason = "response enum gained value(s) ['requeue', 'resolution', 'restart']"
-because = "0.2's only consumer of GET /leases/{lease_id}/history is the worker CLI's chunk history, which echoes the response body unparsed (v0.2.0:src/blizzard/runner/cli/worker.py:64-65), so a row of a new kind reaches the worker as text; no 0.2 web code calls the route."
-
-[[allowance]]
-line = "0.2"
+line = "0.3"
 surface = "http-api"
 where = "ProjectDocument.landing_order"
 reason = "property added to a forbid schema a response reaches"
-because = "0.2's only consumer of GET /api/config/export's body is the hub CLI's config export, which decodes the response as untyped JSON and re-encodes it to the operator unparsed (v0.2.0:src/blizzard/hub/cli/config.py:137-138), so the new landing_order reaches the printed document as data; no 0.2 runner or board code reads the export."
+because = "0.3's only consumer of GET /api/config/export's body is the hub CLI's config export, which decodes the response as untyped JSON and re-encodes it to the operator unparsed (v0.3.0:src/blizzard/hub/cli/config.py:138-139), so the new landing_order reaches the printed document as data; no 0.3 runner or board code reads the export."
 
 [[allowance]]
-line = "0.2"
+line = "0.3"
 surface = "http-api"
 where = "RepositoryDocument.landing_policy"
 reason = "property added to a forbid schema a response reaches"
-because = "0.2's only consumer of GET /api/config/export's body is the hub CLI's config export, which decodes the response as untyped JSON and re-encodes it to the operator unparsed (v0.2.0:src/blizzard/hub/cli/config.py:137-138), so the new landing_policy reaches the printed document as data; no 0.2 runner or board code reads the export (the board names RepositoryDocument only as a request body type, v0.2.0:web/projects/hub/src/app/admin/repositories/repositories.mutations.ts:39, and the board is served by the hub it calls)."
+because = "0.3's only consumer of GET /api/config/export's body is the hub CLI's config export, which decodes the response as untyped JSON and re-encodes it to the operator unparsed (v0.3.0:src/blizzard/hub/cli/config.py:138-139), so the new landing_policy reaches the printed document as data; no 0.3 runner or board code reads the export (the board names RepositoryDocument only as a request body type, v0.3.0:web/projects/hub/src/app/admin/repositories/repositories.mutations.ts:39, and the board is served by the hub it calls)."
 
 [[allowance]]
-line = "0.2"
+line = "0.3"
 surface = "http-api"
 where = "RepositoryDocument.park_timeout_hours"
 reason = "property added to a forbid schema a response reaches"
-because = "0.2's only consumer of GET /api/config/export's body is the hub CLI's config export, which decodes the response as untyped JSON and re-encodes it to the operator unparsed (v0.2.0:src/blizzard/hub/cli/config.py:137-138), so the new park_timeout_hours reaches the printed document as data; no 0.2 runner or board code reads the export (the board names RepositoryDocument only as a request body type, v0.2.0:web/projects/hub/src/app/admin/repositories/repositories.mutations.ts:39, and the board is served by the hub it calls)."
+because = "0.3's only consumer of GET /api/config/export's body is the hub CLI's config export, which decodes the response as untyped JSON and re-encodes it to the operator unparsed (v0.3.0:src/blizzard/hub/cli/config.py:138-139), so the new park_timeout_hours reaches the printed document as data; no 0.3 runner or board code reads the export (the board names RepositoryDocument only as a request body type, v0.3.0:web/projects/hub/src/app/admin/repositories/repositories.mutations.ts:39, and the board is served by the hub it calls)."
 
 [[allowance]]
-line = "0.2"
+line = "0.3"
 surface = "http-api"
-where = "ChoiceTargetKind"
-reason = "response enum gained value(s) ['escalate']"
-because = "0.2's only consumer of a choice's target_kind is the hub board's graph diagram, served by that same hub: its resolveEdges falls through to the node lookup for a kind it does not list (v0.2.0:web/projects/hub/src/app/graphs/graph-edge-target.ts:66-67), finds no node named escalate, and returns null, so layoutGraph reports not-ok (v0.2.0:web/projects/hub/src/app/graphs/graph-layout.ts:185-186) and the diagram is not drawn for a graph carrying the edge; a tab loaded before its hub upgraded recovers on reload, which loads the new board. 0.2's hub CLI prints the edge's to_node_name as text (v0.2.0:src/blizzard/hub/cli/graph.py:68), and neither its runner nor its fleet board reads target_kind."
+where = "HubMarkerRequest"
+reason = "component schema deleted"
+because = "HubMarkerRequest is the request body of the deprecated POST /api/chunks/{chunk_id}/hub-markers alone, read and written only by that route in the hub that serves it (v0.3.0:src/blizzard/hub/api/chunks.py:456); no 0.3 runner, CLI or board code names the schema outside its generated client, and the route itself goes with it, deprecated in every supported release."
+
+[[allowance]]
+line = "0.3"
+surface = "http-api"
+where = "HubMarkerResponse"
+reason = "component schema deleted"
+because = "HubMarkerResponse is the response of the deprecated POST /api/chunks/{chunk_id}/hub-markers alone, read and written only by that route in the hub that serves it (v0.3.0:src/blizzard/hub/api/chunks.py:458); no 0.3 runner, CLI or board code names the schema outside its generated client, and the route itself goes with it, deprecated in every supported release."
+
+[[allowance]]
+line = "0.3"
+surface = "http-api"
+where = "GardenDeliveryRequest"
+reason = "component schema deleted"
+because = "GardenDeliveryRequest is the request body of the deprecated POST /api/chunks/{chunk_id}/garden-delivery alone, read and written only by that route in the hub that serves it (v0.3.0:src/blizzard/hub/api/chunks.py:491); no 0.3 runner, CLI or board code names the schema outside its generated client, and the route itself goes with it, deprecated in every supported release."
+
+[[allowance]]
+line = "0.3"
+surface = "http-api"
+where = "GardenDeliveryResponse"
+reason = "component schema deleted"
+because = "GardenDeliveryResponse is the response of the deprecated POST /api/chunks/{chunk_id}/garden-delivery alone, read and written only by that route in the hub that serves it (v0.3.0:src/blizzard/hub/api/chunks.py:493); no 0.3 runner, CLI or board code names the schema outside its generated client, and the route itself goes with it, deprecated in every supported release."
+
+[[allowance]]
+line = "0.3"
+surface = "http-api"
+where = "ReviewFindingsDeliveryResponse"
+reason = "component schema deleted"
+because = "ReviewFindingsDeliveryResponse is the response of the deprecated POST /api/chunks/{chunk_id}/review-findings-delivery alone, read and written only by that route in the hub that serves it (v0.3.0:src/blizzard/hub/api/chunks.py:540); no 0.3 runner, CLI or board code names the schema outside its generated client, and the route itself goes with it, deprecated in every supported release."
+
+[[allowance]]
+line = "0.3"
+surface = "cli"
+where = "hub record-marker"
+reason = "command removed"
+because = "0.3's record-marker refuses on every invocation, recording nothing (v0.3.0:src/blizzard/hub/cli/marker.py:8-17), and nothing in 0.3 runs it: a hub node runs no commands, so its only caller, a hub node's run: script, no longer exists; a person running it is told it is removed in either release."
+
+[[allowance]]
+line = "0.4"
+surface = "http-api"
+where = "HubMarkerRequest"
+reason = "component schema deleted"
+because = "HubMarkerRequest is the request body of the deprecated POST /api/chunks/{chunk_id}/hub-markers alone, read and written only by that route in the hub that serves it (v0.4.0-rc.1:src/blizzard/hub/api/chunks.py:479); no 0.4 runner, CLI or board code names the schema outside its generated client, and the route itself goes with it, deprecated in every supported release."
+
+[[allowance]]
+line = "0.4"
+surface = "http-api"
+where = "HubMarkerResponse"
+reason = "component schema deleted"
+because = "HubMarkerResponse is the response of the deprecated POST /api/chunks/{chunk_id}/hub-markers alone, read and written only by that route in the hub that serves it (v0.4.0-rc.1:src/blizzard/hub/api/chunks.py:481); no 0.4 runner, CLI or board code names the schema outside its generated client, and the route itself goes with it, deprecated in every supported release."
+
+[[allowance]]
+line = "0.4"
+surface = "http-api"
+where = "GardenDeliveryRequest"
+reason = "component schema deleted"
+because = "GardenDeliveryRequest is the request body of the deprecated POST /api/chunks/{chunk_id}/garden-delivery alone, read and written only by that route in the hub that serves it (v0.4.0-rc.1:src/blizzard/hub/api/chunks.py:514); no 0.4 runner, CLI or board code names the schema outside its generated client, and the route itself goes with it, deprecated in every supported release."
+
+[[allowance]]
+line = "0.4"
+surface = "http-api"
+where = "GardenDeliveryResponse"
+reason = "component schema deleted"
+because = "GardenDeliveryResponse is the response of the deprecated POST /api/chunks/{chunk_id}/garden-delivery alone, read and written only by that route in the hub that serves it (v0.4.0-rc.1:src/blizzard/hub/api/chunks.py:516); no 0.4 runner, CLI or board code names the schema outside its generated client, and the route itself goes with it, deprecated in every supported release."
+
+[[allowance]]
+line = "0.4"
+surface = "http-api"
+where = "ReviewFindingsDeliveryResponse"
+reason = "component schema deleted"
+because = "ReviewFindingsDeliveryResponse is the response of the deprecated POST /api/chunks/{chunk_id}/review-findings-delivery alone, read and written only by that route in the hub that serves it (v0.4.0-rc.1:src/blizzard/hub/api/chunks.py:563); no 0.4 runner, CLI or board code names the schema outside its generated client, and the route itself goes with it, deprecated in every supported release."
+
+[[allowance]]
+line = "0.4"
+surface = "cli"
+where = "hub record-marker"
+reason = "command removed"
+because = "0.4's record-marker refuses on every invocation, recording nothing (v0.4.0-rc.1:src/blizzard/hub/cli/marker.py:8-17), and nothing in 0.4 runs it: a hub node runs no commands, so its only caller, a hub node's run: script, no longer exists; a person running it is told it is removed in either release."

@@ -22,6 +22,6 @@ def test_a_hub_below_its_floor_exits_naming_its_version_and_the_floor(
     result = CliRunner().invoke(blizzard, ["hub", "host", "--dir", str(root)])
 
     assert result.exit_code != 0, result.output
-    assert "0.1.9" in result.output and "0.2" in result.output, result.output
+    assert "0.1.9" in result.output and "0.3" in result.output, result.output
     assert "Traceback" not in result.output
     assert "serving blizzard-hub" not in result.output

@@ -577,7 +577,7 @@ configures, with no daemon in between.
 - **When it is on.** Only when an OTLP endpoint is set, `OTEL_SDK_DISABLED` is not `true` and `OTEL_TRACES_EXPORTER` is
   not `none`. A worker's own environment never takes this path: a process that carries `BLIZZARD_TRACEPARENT` or
   `BLIZZARD_RUNNER_URL` records only the [worker span](#worker-spans), if any. `host` in either group, a bare
-  `blizzard hub` or `blizzard runner`, and `hub record-marker` are never traced.
+  `blizzard hub` or `blizzard runner` are never traced.
 - **What it records.** Each command is one root span with a trace of its own, always sampled, named for the command,
   such as `hub chunk list` or `runner status`, whichever alias ran it. It carries `blizzard.cli.command` and
   `process.exit.code`, and an error status for a non-zero exit. It never records an argument or option value, and no

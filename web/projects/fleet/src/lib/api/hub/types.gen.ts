@@ -4513,41 +4513,6 @@ export type ForgesListView = {
 };
 
 /**
- * GardenDeliveryRequest
- *
- * The garden-delivery route's body — the delta and proposal artifact
- * names to deliver, each independently optional.
- */
-export type GardenDeliveryRequest = {
-    /**
-     * Delta
-     */
-    delta?: Array<string>;
-    /**
-     * Proposals
-     */
-    proposals?: Array<string>;
-};
-
-/**
- * GardenDeliveryResponse
- *
- * The result of one garden delivery — ``recorded`` durably means it, materialized
- * now or replayed; ``invalid`` carries the rejection reason in
- * ``detail``.
- */
-export type GardenDeliveryResponse = {
-    /**
-     * Detail
-     */
-    detail: string;
-    /**
-     * Outcome
-     */
-    outcome: 'recorded' | 'invalid';
-};
-
-/**
  * GardenProposalAcceptRequest
  *
  * `POST /api/garden-proposals/{proposal_id}/accept`. `mint_work_item`
@@ -5995,42 +5960,6 @@ export type HubEventView = {
      * Severity
      */
     severity: string;
-};
-
-/**
- * HubMarkerRequest
- *
- * The mid-run marker callback's body.
- */
-export type HubMarkerRequest = {
-    /**
-     * Content
-     */
-    content?: string;
-    /**
-     * Name
-     */
-    name: string;
-};
-
-/**
- * HubMarkerResponse
- *
- * The recorded marker — ``recorded=False`` iff it already existed (idempotent).
- */
-export type HubMarkerResponse = {
-    /**
-     * Chunk Id
-     */
-    chunk_id: string;
-    /**
-     * Name
-     */
-    name: string;
-    /**
-     * Recorded
-     */
-    recorded: boolean;
 };
 
 /**
@@ -8157,23 +8086,6 @@ export type RestartView = {
      * To Node Name
      */
     to_node_name: string | null;
-};
-
-/**
- * ReviewFindingsDeliveryResponse
- *
- * The result of one `record-findings` materialization — the
- * `GardenDeliveryResponse` shape.
- */
-export type ReviewFindingsDeliveryResponse = {
-    /**
-     * Detail
-     */
-    detail: string;
-    /**
-     * Outcome
-     */
-    outcome: 'recorded' | 'invalid';
 };
 
 /**
@@ -13881,45 +13793,6 @@ export type ListSubmissionTurnsApiChunksChunkIdFlowSubmissionsSubmissionIdTurnsG
 
 export type ListSubmissionTurnsApiChunksChunkIdFlowSubmissionsSubmissionIdTurnsGetResponse = ListSubmissionTurnsApiChunksChunkIdFlowSubmissionsSubmissionIdTurnsGetResponses[keyof ListSubmissionTurnsApiChunksChunkIdFlowSubmissionsSubmissionIdTurnsGetResponses];
 
-export type RecordGardenDeliveryApiChunksChunkIdGardenDeliveryPostData = {
-    body: GardenDeliveryRequest;
-    path: {
-        /**
-         * Chunk Id
-         */
-        chunk_id: string;
-    };
-    query: {
-        /**
-         * Node Id
-         */
-        node_id: string;
-        /**
-         * Epoch
-         */
-        epoch: number;
-    };
-    url: '/api/chunks/{chunk_id}/garden-delivery';
-};
-
-export type RecordGardenDeliveryApiChunksChunkIdGardenDeliveryPostErrors = {
-    /**
-     * Validation Error
-     */
-    422: HttpValidationError;
-};
-
-export type RecordGardenDeliveryApiChunksChunkIdGardenDeliveryPostError = RecordGardenDeliveryApiChunksChunkIdGardenDeliveryPostErrors[keyof RecordGardenDeliveryApiChunksChunkIdGardenDeliveryPostErrors];
-
-export type RecordGardenDeliveryApiChunksChunkIdGardenDeliveryPostResponses = {
-    /**
-     * Successful Response
-     */
-    200: GardenDeliveryResponse;
-};
-
-export type RecordGardenDeliveryApiChunksChunkIdGardenDeliveryPostResponse = RecordGardenDeliveryApiChunksChunkIdGardenDeliveryPostResponses[keyof RecordGardenDeliveryApiChunksChunkIdGardenDeliveryPostResponses];
-
 export type GroupChunksApiChunksChunkIdGroupPostData = {
     body: ChunkGroupRequest;
     path: {
@@ -13949,45 +13822,6 @@ export type GroupChunksApiChunksChunkIdGroupPostResponses = {
 };
 
 export type GroupChunksApiChunksChunkIdGroupPostResponse = GroupChunksApiChunksChunkIdGroupPostResponses[keyof GroupChunksApiChunksChunkIdGroupPostResponses];
-
-export type RecordHubMarkerApiChunksChunkIdHubMarkersPostData = {
-    body: HubMarkerRequest;
-    path: {
-        /**
-         * Chunk Id
-         */
-        chunk_id: string;
-    };
-    query: {
-        /**
-         * Node Id
-         */
-        node_id: string;
-        /**
-         * Epoch
-         */
-        epoch: number;
-    };
-    url: '/api/chunks/{chunk_id}/hub-markers';
-};
-
-export type RecordHubMarkerApiChunksChunkIdHubMarkersPostErrors = {
-    /**
-     * Validation Error
-     */
-    422: HttpValidationError;
-};
-
-export type RecordHubMarkerApiChunksChunkIdHubMarkersPostError = RecordHubMarkerApiChunksChunkIdHubMarkersPostErrors[keyof RecordHubMarkerApiChunksChunkIdHubMarkersPostErrors];
-
-export type RecordHubMarkerApiChunksChunkIdHubMarkersPostResponses = {
-    /**
-     * Successful Response
-     */
-    200: HubMarkerResponse;
-};
-
-export type RecordHubMarkerApiChunksChunkIdHubMarkersPostResponse = RecordHubMarkerApiChunksChunkIdHubMarkersPostResponses[keyof RecordHubMarkerApiChunksChunkIdHubMarkersPostResponses];
 
 export type LandingFactsApiChunksChunkIdLandingFactsGetData = {
     body?: never;
@@ -14213,45 +14047,6 @@ export type ResumeChunkApiChunksChunkIdResumePostResponses = {
 };
 
 export type ResumeChunkApiChunksChunkIdResumePostResponse = ResumeChunkApiChunksChunkIdResumePostResponses[keyof ResumeChunkApiChunksChunkIdResumePostResponses];
-
-export type RecordReviewFindingsDeliveryApiChunksChunkIdReviewFindingsDeliveryPostData = {
-    body?: never;
-    path: {
-        /**
-         * Chunk Id
-         */
-        chunk_id: string;
-    };
-    query: {
-        /**
-         * Node Id
-         */
-        node_id: string;
-        /**
-         * Epoch
-         */
-        epoch: number;
-    };
-    url: '/api/chunks/{chunk_id}/review-findings-delivery';
-};
-
-export type RecordReviewFindingsDeliveryApiChunksChunkIdReviewFindingsDeliveryPostErrors = {
-    /**
-     * Validation Error
-     */
-    422: HttpValidationError;
-};
-
-export type RecordReviewFindingsDeliveryApiChunksChunkIdReviewFindingsDeliveryPostError = RecordReviewFindingsDeliveryApiChunksChunkIdReviewFindingsDeliveryPostErrors[keyof RecordReviewFindingsDeliveryApiChunksChunkIdReviewFindingsDeliveryPostErrors];
-
-export type RecordReviewFindingsDeliveryApiChunksChunkIdReviewFindingsDeliveryPostResponses = {
-    /**
-     * Successful Response
-     */
-    200: ReviewFindingsDeliveryResponse;
-};
-
-export type RecordReviewFindingsDeliveryApiChunksChunkIdReviewFindingsDeliveryPostResponse = RecordReviewFindingsDeliveryApiChunksChunkIdReviewFindingsDeliveryPostResponses[keyof RecordReviewFindingsDeliveryApiChunksChunkIdReviewFindingsDeliveryPostResponses];
 
 export type StopChunkApiChunksChunkIdStopPostData = {
     body: ChunkStopRequest;

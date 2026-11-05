@@ -18,7 +18,6 @@ _COMMANDS = {
     "migrate": f"{_CLI}.runtime:migrate_cmd",
     "host": f"{_CLI}.runtime:host",
     "status": f"{_CLI}.status:status",
-    "record-marker": f"{_CLI}.marker:record_marker",
     "rotate-signing-key": f"{_CLI}.auth:rotate_signing_key",
     "login": f"{_CLI}.auth:login",
     "logout": f"{_CLI}.auth:logout",

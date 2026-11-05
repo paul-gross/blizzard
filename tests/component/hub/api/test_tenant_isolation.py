@@ -118,8 +118,6 @@ def _list(**params: str) -> _Probe:
     return _Probe("listing", params=params or None)
 
 
-#: A hub-executed node's marker coordinates; a request naming another tenant's chunk never reaches them.
-_MARKER = {"node_id": "nd_x", "epoch": "1"}
 _WINDOW = {"since": "2026-01-01T00:00:00Z", "until": "2026-12-31T00:00:00Z"}
 _SINCE = {"since": "2026-01-01T00:00:00Z"}
 _SEGMENT = {"node_id": "{node_id}", "epoch": "1"}
@@ -194,16 +192,13 @@ _PROBES: dict[tuple[str, str], _Probe] = {
     ("POST", "/api/chunks/{chunk_id}/detach"): _f(),
     ("GET", "/api/chunks/{chunk_id}/flow-submissions"): _f(),
     ("GET", "/api/chunks/{chunk_id}/flow-submissions/{submission_id}/turns"): _f(),
-    ("POST", "/api/chunks/{chunk_id}/garden-delivery"): _f({}, params=_MARKER),
     ("POST", "/api/chunks/{chunk_id}/group"): _f({"merge_chunk_ids": ["{chunk_id}"]}),
-    ("POST", "/api/chunks/{chunk_id}/hub-markers"): _f({"name": "m"}, params=_MARKER),
     ("POST", "/api/chunks/{chunk_id}/pause"): _f({}),
     ("GET", "/api/chunks/{chunk_id}/pm-items"): _f(),
     ("POST", "/api/chunks/{chunk_id}/promote"): _f(),
     ("POST", "/api/chunks/{chunk_id}/requeues"): _f(),
     ("POST", "/api/chunks/{chunk_id}/restart"): _f({}),
     ("POST", "/api/chunks/{chunk_id}/resume"): _f({}),
-    ("POST", "/api/chunks/{chunk_id}/review-findings-delivery"): _f(params=_MARKER),
     ("POST", "/api/chunks/{chunk_id}/stop"): _f({}),
     ("GET", "/api/chunks/{chunk_id}/transcripts"): _f(),
     ("GET", "/api/chunks/{chunk_id}/transcripts/{segment_id}"): _f(),

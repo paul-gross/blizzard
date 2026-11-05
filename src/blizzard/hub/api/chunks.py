@@ -34,7 +34,6 @@ from blizzard.hub.auth.models import ResolvedIdentity
 from blizzard.hub.auth.permissions import Permission
 from blizzard.hub.composition import TenantServices
 from blizzard.hub.delivery.flow_changes import publish_flow_facts
-from blizzard.hub.delivery.marker_auth import AmbiguousMarkerRepository
 from blizzard.hub.domain.chunk.delivery_read import DeliveryRead, DeliverySources
 from blizzard.hub.domain.chunk.dependencies import (
     ChunkNeighbor,
@@ -54,10 +53,6 @@ from blizzard.hub.domain.chunk.ingest import (
 from blizzard.hub.domain.chunk.model import Chunk, ChunkFacts, FleetSummary, WorkRef
 from blizzard.hub.domain.execution.decisions import NotEscalated
 from blizzard.hub.domain.execution.detach import NotRouted
-from blizzard.hub.domain.garden.delivery.materialize import DeliveryOutcome
-from blizzard.hub.domain.garden.delivery.validation import GardenDeliveryRejected
-from blizzard.hub.domain.garden.review.materialize import ReviewFindingsOutcome
-from blizzard.hub.domain.garden.review.validation import ReviewFindingsRejected
 from blizzard.hub.domain.graph.authoring import DefaultGraphRetired
 from blizzard.hub.domain.graph.model import TargetGraphRetired
 from blizzard.hub.domain.kernel.pagination import DEFAULT_LIMIT, MAX_LIMIT, MalformedCursor
@@ -106,11 +101,6 @@ from blizzard.wire.chunk import (
     ChunksPageView,
     ChunkStopRequest,
     ChunkSummary,
-    GardenDeliveryRequest,
-    GardenDeliveryResponse,
-    HubMarkerRequest,
-    HubMarkerResponse,
-    ReviewFindingsDeliveryResponse,
     WorkItemsView,
 )
 from blizzard.wire.fleet import FleetSummaryView
@@ -123,9 +113,6 @@ BOARD_DONE_FLOOR = 10
 router = APIRouter(
     prefix="/api", tags=["chunks"], dependencies=[Depends(reject_runner_principal), Depends(tenant_bound)]
 )
-
-#: A delivery the write fence refused — a 409, never ``invalid``, which would write a failure marker.
-_FENCED_DELIVERY_DETAIL = "delivery superseded: the chunk is terminal or was restarted"
 
 
 @dataclass(frozen=True)
@@ -570,125 +557,6 @@ def _detail_graph_ids(chunk: Chunk, facts: ChunkFacts) -> set[str]:
     if chunk.intended_migration is not None:
         graph_ids.add(chunk.intended_migration.graph_id)
     return graph_ids
-
-
-@router.post(
-    "/chunks/{chunk_id}/hub-markers",
-    response_model=HubMarkerResponse,
-    dependencies=[Depends(require(Permission.CHUNK_CONTROL))],
-    deprecated=True,
-)
-def record_hub_marker(
-    chunk_id: str,
-    node_id: str,
-    epoch: int,
-    request_body: HubMarkerRequest,
-    services: Services,
-) -> HubMarkerResponse:
-    """Record a marker artifact on a hub node's visit, for a person holding ``chunk:control``. Deprecated:
-    a hub node's action records its own markers. Idempotent per ``(chunk, node, name, epoch)``."""
-    chunk = services.chunks.record.get(chunk_id)
-    if chunk is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"unknown chunk {chunk_id}")
-    graph = services.graphs.get(chunk.graph_id)
-    node = graph.node_by_id(node_id) if graph is not None else None
-    node_name = node.name if node is not None else node_id
-    try:
-        recorded = services.hub_markers.record_marker(
-            chunk_id,
-            node_id=node_id,
-            node_name=node_name,
-            epoch=epoch,
-            name=request_body.name,
-            content=request_body.content,
-        )
-    except AmbiguousMarkerRepository as exc:
-        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
-    return HubMarkerResponse(recorded=recorded, chunk_id=chunk_id, name=request_body.name)
-
-
-@router.post(
-    "/chunks/{chunk_id}/garden-delivery",
-    response_model=GardenDeliveryResponse,
-    dependencies=[Depends(require(Permission.CHUNK_CONTROL))],
-    deprecated=True,
-)
-def record_garden_delivery(
-    chunk_id: str,
-    node_id: str,
-    epoch: int,
-    request_body: GardenDeliveryRequest,
-    services: Services,
-) -> GardenDeliveryResponse:
-    """The garden delivery node's own route — validates a delivering node's
-    ``--delta``/``--proposals`` artifacts and, on success, materializes them in one
-    transaction. An unresolvable run context or a failed validation is an ``invalid``
-    outcome at a 200, never an error response — the graph's own ``invalid`` edge reads
-    and routes on it. A delivery the chunk has since been stopped or restarted past is a 409."""
-    chunk = services.chunks.record.get(chunk_id)
-    if chunk is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"unknown chunk {chunk_id}")
-    graph = services.graphs.get(chunk.graph_id)
-    node = graph.node_by_id(node_id) if graph is not None else None
-    if node is None:
-        return GardenDeliveryResponse(outcome="invalid", detail=f"unknown node {node_id!r} for chunk {chunk_id}")
-
-    run = services.run_context.for_chunk(chunk)
-    if run is None:
-        return GardenDeliveryResponse(outcome="invalid", detail=f"no run context for chunk {chunk_id}")
-
-    try:
-        outcome = services.garden_delivery.record(
-            chunk=chunk,
-            node=node,
-            epoch=epoch,
-            run=run,
-            delta_names=request_body.delta,
-            proposal_names=request_body.proposals,
-        )
-    except GardenDeliveryRejected as exc:
-        return GardenDeliveryResponse(outcome="invalid", detail=str(exc))
-    # Both recorded `DeliveryOutcome` members mean "durably recorded" to this route's
-    # caller — a replay minting nothing is not itself news.
-    if outcome is DeliveryOutcome.FENCED:
-        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=_FENCED_DELIVERY_DETAIL)
-    return GardenDeliveryResponse(outcome="recorded", detail="")
-
-
-@router.post(
-    "/chunks/{chunk_id}/review-findings-delivery",
-    response_model=ReviewFindingsDeliveryResponse,
-    dependencies=[Depends(require(Permission.CHUNK_CONTROL))],
-    deprecated=True,
-)
-def record_review_findings_delivery(
-    chunk_id: str,
-    node_id: str,
-    epoch: int,
-    services: Services,
-) -> ReviewFindingsDeliveryResponse:
-    """The `record-findings` node's own route — validates the chunk's
-    newest `review-finding-delta` artifact and, on success, materializes its `deferred`
-    entries in one transaction. A malformed delta or an unresolvable node is an
-    ``invalid`` outcome at a 200, never an error response; a delivery the chunk has since been
-    stopped or restarted past is a 409. Idempotent per chunk."""
-    chunk = services.chunks.record.get(chunk_id)
-    if chunk is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"unknown chunk {chunk_id}")
-    graph = services.graphs.get(chunk.graph_id)
-    node = graph.node_by_id(node_id) if graph is not None else None
-    if node is None:
-        return ReviewFindingsDeliveryResponse(
-            outcome="invalid", detail=f"unknown node {node_id!r} for chunk {chunk_id}"
-        )
-
-    try:
-        outcome = services.review_findings.record(chunk=chunk, node=node, epoch=epoch)
-    except ReviewFindingsRejected as exc:
-        return ReviewFindingsDeliveryResponse(outcome="invalid", detail=str(exc))
-    if outcome is ReviewFindingsOutcome.FENCED:
-        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=_FENCED_DELIVERY_DETAIL)
-    return ReviewFindingsDeliveryResponse(outcome="recorded", detail="")
 
 
 @router.post(

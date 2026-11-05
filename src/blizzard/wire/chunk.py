@@ -11,7 +11,6 @@ from pydantic import BaseModel, Field
 from blizzard.foundation.artifacts import ArtifactKind
 from blizzard.foundation.chunk_migration import MigrationMode
 from blizzard.foundation.chunk_status import ChunkDeleteRefusal, ChunkStatus
-from blizzard.foundation.delivery_outcomes import DeliveryOutcome
 from blizzard.foundation.graph_progress_state import GraphProgressState
 from blizzard.foundation.migration_source import MigrationSource
 from blizzard.foundation.unrecognized import Unrecognized
@@ -446,46 +445,6 @@ class PendingView(WireModel):
     next_poll_at: str
     kind: str = "pending"
     since: str | None = None
-
-
-class HubMarkerRequest(BaseModel):
-    """The mid-run marker callback's body."""
-
-    name: str
-    content: str = ""
-
-
-class HubMarkerResponse(BaseModel):
-    """The recorded marker — ``recorded=False`` iff it already existed (idempotent)."""
-
-    recorded: bool
-    chunk_id: str
-    name: str
-
-
-class GardenDeliveryRequest(BaseModel):
-    """The garden-delivery route's body — the delta and proposal artifact
-    names to deliver, each independently optional."""
-
-    delta: list[str] = []
-    proposals: list[str] = []
-
-
-class GardenDeliveryResponse(WireModel):
-    """The result of one garden delivery — ``recorded`` durably means it, materialized
-    now or replayed; ``invalid`` carries the rejection reason in
-    ``detail``."""
-
-    outcome: Annotated[DeliveryOutcome | Unrecognized, OPEN]
-    detail: str = ""
-
-
-class ReviewFindingsDeliveryResponse(WireModel):
-    """The result of one `record-findings` materialization — the
-    `GardenDeliveryResponse` shape."""
-
-    outcome: Annotated[DeliveryOutcome | Unrecognized, OPEN]
-    detail: str = ""
 
 
 class ChunkPauseRequest(BaseModel):

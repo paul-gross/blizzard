@@ -21,6 +21,7 @@ from blizzard.hub.domain.graph.model import RESERVED_TERMINAL
 from blizzard.hub.domain.runners.route import Route
 from blizzard.hub.store import schema as s
 from blizzard.hub.store.internal.chunk_rows import record_deleted_row, record_grouped_row_conn
+from tests.support.hub_node_artifacts import record_landing
 from tests.support.scaffolding import (
     chunk_stores,
     chunk_unit,
@@ -281,11 +282,11 @@ def seed_fixture(store: ChunkStores, engine: Engine, clock: FixedClock) -> None:
     )
     with chunk_unit(hub_store_connections(engine), "ch_kitchen_sink") as unit:
         store.decisions.record_decision_resolution("dec_1", choice="ok", resolved_by="op", at=_at(1), transaction=unit)
-    store.delivery.record_delivery_repo_landed(
+    record_landing(
+        store.artifacts,
         "ch_kitchen_sink",
         repo="r1",
         commit_hash="c1",
-        repository_id=None,
         at=T0,
         close_decision=decide_close_enqueue([], lambda _: True),
     )

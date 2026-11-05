@@ -161,12 +161,11 @@ def test_nothing_is_sent_and_no_request_is_traced_when_the_gate_is_closed(env: d
     assert all("traceparent" not in h for h in hub.headers)
 
 
-@pytest.mark.parametrize("argv", [["host", "--help"], ["record-marker", "--help"]])
-def test_a_daemon_or_marker_command_is_never_traced(argv: list[str]) -> None:
+def test_the_daemon_command_is_never_traced() -> None:
     collector = _Collector()
     bound = _bind(collector)
 
-    _hub(bound, argv)
+    _hub(bound, ["host", "--help"])
 
     assert collector.requests == []
 

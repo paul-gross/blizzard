@@ -7609,54 +7609,6 @@
         "title": "ForgesListView",
         "type": "object"
       },
-      "GardenDeliveryRequest": {
-        "description": "The garden-delivery route's body \u2014 the delta and proposal artifact\nnames to deliver, each independently optional.",
-        "properties": {
-          "delta": {
-            "default": [],
-            "items": {
-              "type": "string"
-            },
-            "title": "Delta",
-            "type": "array"
-          },
-          "proposals": {
-            "default": [],
-            "items": {
-              "type": "string"
-            },
-            "title": "Proposals",
-            "type": "array"
-          }
-        },
-        "title": "GardenDeliveryRequest",
-        "type": "object"
-      },
-      "GardenDeliveryResponse": {
-        "description": "The result of one garden delivery \u2014 ``recorded`` durably means it, materialized\nnow or replayed; ``invalid`` carries the rejection reason in\n``detail``.",
-        "properties": {
-          "detail": {
-            "default": "",
-            "title": "Detail",
-            "type": "string"
-          },
-          "outcome": {
-            "enum": [
-              "recorded",
-              "invalid"
-            ],
-            "title": "Outcome",
-            "type": "string",
-            "x-blizzard-open": true
-          }
-        },
-        "required": [
-          "outcome",
-          "detail"
-        ],
-        "title": "GardenDeliveryResponse",
-        "type": "object"
-      },
       "GardenProposalAcceptRequest": {
         "additionalProperties": false,
         "description": "`POST /api/garden-proposals/{proposal_id}/accept`. `mint_work_item`\ndefaults to `True`: minting a linked hub work item is the default, and declining it\nis the deliberate act. `body` replaces the proposal's own body as the minted item's\nbody, wrapped in the \"Related findings\" template when the proposal cites findings and\nminted bare otherwise; refused (422) when `mint_work_item` is `False`. A blank\n`reason` is stored as none.",
@@ -10006,49 +9958,6 @@
           "detail"
         ],
         "title": "HubEventView",
-        "type": "object"
-      },
-      "HubMarkerRequest": {
-        "description": "The mid-run marker callback's body.",
-        "properties": {
-          "content": {
-            "default": "",
-            "title": "Content",
-            "type": "string"
-          },
-          "name": {
-            "title": "Name",
-            "type": "string"
-          }
-        },
-        "required": [
-          "name"
-        ],
-        "title": "HubMarkerRequest",
-        "type": "object"
-      },
-      "HubMarkerResponse": {
-        "description": "The recorded marker \u2014 ``recorded=False`` iff it already existed (idempotent).",
-        "properties": {
-          "chunk_id": {
-            "title": "Chunk Id",
-            "type": "string"
-          },
-          "name": {
-            "title": "Name",
-            "type": "string"
-          },
-          "recorded": {
-            "title": "Recorded",
-            "type": "boolean"
-          }
-        },
-        "required": [
-          "recorded",
-          "chunk_id",
-          "name"
-        ],
-        "title": "HubMarkerResponse",
         "type": "object"
       },
       "IdPrefix": {
@@ -13365,31 +13274,6 @@
           "note"
         ],
         "title": "RestartView",
-        "type": "object"
-      },
-      "ReviewFindingsDeliveryResponse": {
-        "description": "The result of one `record-findings` materialization \u2014 the\n`GardenDeliveryResponse` shape.",
-        "properties": {
-          "detail": {
-            "default": "",
-            "title": "Detail",
-            "type": "string"
-          },
-          "outcome": {
-            "enum": [
-              "recorded",
-              "invalid"
-            ],
-            "title": "Outcome",
-            "type": "string",
-            "x-blizzard-open": true
-          }
-        },
-        "required": [
-          "outcome",
-          "detail"
-        ],
-        "title": "ReviewFindingsDeliveryResponse",
         "type": "object"
       },
       "Role": {
@@ -24176,78 +24060,6 @@
         ]
       }
     },
-    "/api/chunks/{chunk_id}/garden-delivery": {
-      "post": {
-        "deprecated": true,
-        "description": "The garden delivery node's own route \u2014 validates a delivering node's\n``--delta``/``--proposals`` artifacts and, on success, materializes them in one\ntransaction. An unresolvable run context or a failed validation is an ``invalid``\noutcome at a 200, never an error response \u2014 the graph's own ``invalid`` edge reads\nand routes on it. A delivery the chunk has since been stopped or restarted past is a 409.",
-        "operationId": "record_garden_delivery_api_chunks__chunk_id__garden_delivery_post",
-        "parameters": [
-          {
-            "in": "path",
-            "name": "chunk_id",
-            "required": true,
-            "schema": {
-              "title": "Chunk Id",
-              "type": "string"
-            }
-          },
-          {
-            "in": "query",
-            "name": "node_id",
-            "required": true,
-            "schema": {
-              "title": "Node Id",
-              "type": "string"
-            }
-          },
-          {
-            "in": "query",
-            "name": "epoch",
-            "required": true,
-            "schema": {
-              "title": "Epoch",
-              "type": "integer"
-            }
-          }
-        ],
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/GardenDeliveryRequest"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/GardenDeliveryResponse"
-                }
-              }
-            },
-            "description": "Successful Response"
-          },
-          "422": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            },
-            "description": "Validation Error"
-          }
-        },
-        "summary": "Record Garden Delivery",
-        "tags": [
-          "chunks"
-        ]
-      }
-    },
     "/api/chunks/{chunk_id}/group": {
       "post": {
         "description": "Merge unacquired chunks into ``chunk_id``. Accepts ``not_ready`` and ``ready``\nparticipants alike; 409 names the first chunk a runner holds, or one\nalready finished, or one of another project than the survivor's. The survivor also\nabsorbs each folded chunk's standing dependency edges; 409 refuses a fold that would\nclose a cycle.",
@@ -24298,78 +24110,6 @@
         "summary": "Group Chunks",
         "tags": [
           "queue"
-        ]
-      }
-    },
-    "/api/chunks/{chunk_id}/hub-markers": {
-      "post": {
-        "deprecated": true,
-        "description": "Record a marker artifact on a hub node's visit, for a person holding ``chunk:control``. Deprecated:\na hub node's action records its own markers. Idempotent per ``(chunk, node, name, epoch)``.",
-        "operationId": "record_hub_marker_api_chunks__chunk_id__hub_markers_post",
-        "parameters": [
-          {
-            "in": "path",
-            "name": "chunk_id",
-            "required": true,
-            "schema": {
-              "title": "Chunk Id",
-              "type": "string"
-            }
-          },
-          {
-            "in": "query",
-            "name": "node_id",
-            "required": true,
-            "schema": {
-              "title": "Node Id",
-              "type": "string"
-            }
-          },
-          {
-            "in": "query",
-            "name": "epoch",
-            "required": true,
-            "schema": {
-              "title": "Epoch",
-              "type": "integer"
-            }
-          }
-        ],
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/HubMarkerRequest"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HubMarkerResponse"
-                }
-              }
-            },
-            "description": "Successful Response"
-          },
-          "422": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            },
-            "description": "Validation Error"
-          }
-        },
-        "summary": "Record Hub Marker",
-        "tags": [
-          "chunks"
         ]
       }
     },
@@ -24757,68 +24497,6 @@
           }
         },
         "summary": "Resume Chunk",
-        "tags": [
-          "chunks"
-        ]
-      }
-    },
-    "/api/chunks/{chunk_id}/review-findings-delivery": {
-      "post": {
-        "deprecated": true,
-        "description": "The `record-findings` node's own route \u2014 validates the chunk's\nnewest `review-finding-delta` artifact and, on success, materializes its `deferred`\nentries in one transaction. A malformed delta or an unresolvable node is an\n``invalid`` outcome at a 200, never an error response; a delivery the chunk has since been\nstopped or restarted past is a 409. Idempotent per chunk.",
-        "operationId": "record_review_findings_delivery_api_chunks__chunk_id__review_findings_delivery_post",
-        "parameters": [
-          {
-            "in": "path",
-            "name": "chunk_id",
-            "required": true,
-            "schema": {
-              "title": "Chunk Id",
-              "type": "string"
-            }
-          },
-          {
-            "in": "query",
-            "name": "node_id",
-            "required": true,
-            "schema": {
-              "title": "Node Id",
-              "type": "string"
-            }
-          },
-          {
-            "in": "query",
-            "name": "epoch",
-            "required": true,
-            "schema": {
-              "title": "Epoch",
-              "type": "integer"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ReviewFindingsDeliveryResponse"
-                }
-              }
-            },
-            "description": "Successful Response"
-          },
-          "422": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            },
-            "description": "Validation Error"
-          }
-        },
-        "summary": "Record Review Findings Delivery",
         "tags": [
           "chunks"
         ]

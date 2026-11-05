@@ -22,6 +22,7 @@ from tests.support.flow_driver_world import (
     World,
 )
 from tests.support.flow_route_lines import Line
+from tests.support.hub_node_artifacts import record_landing
 from tests.support.scaffolding import chunk_stores, hub_store_connections, report_lease, seed_runner
 
 
@@ -31,13 +32,13 @@ def line(tmp_path: Path) -> Line:
 
 
 def test_chunk_landing_fact_pages(line: Line) -> None:
-    delivery = chunk_stores(line.world.hub.engine, line.world.hub.clock).delivery
+    artifacts = chunk_stores(line.world.hub.engine, line.world.hub.clock).artifacts
     for repo in ("z", "a"):
-        delivery.record_delivery_repo_landed(
+        record_landing(
+            artifacts,
             line.first,
             repo=repo,
             commit_hash=repo,
-            repository_id=None,
             at=line.world.hub.clock.now(),
             close_decision=CloseEnqueueDecision(
                 closable=frozenset({WorkRef(source="default", ref="1")}), skipped=frozenset()

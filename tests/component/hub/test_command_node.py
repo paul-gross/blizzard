@@ -29,7 +29,6 @@ from blizzard.hub.domain.chunk.ports.fence import EpochAdmission
 from blizzard.hub.domain.graph.actions import ActionSpec
 from blizzard.hub.domain.graph.model import Graph
 from blizzard.hub.forge.landing import VisitForges
-from blizzard.hub.store import schema as s
 from tests.support.hub_command_graphs import (
     _POINTER,  # pyright: ignore[reportPrivateUsage]  # shared test helper, imported from tests.support.hub_command_graphs
     _POLL_GRAPH_YAML,  # pyright: ignore[reportPrivateUsage]  # shared test helper, imported from tests.support.hub_command_graphs
@@ -39,13 +38,13 @@ from tests.support.hub_command_graphs import (
     submit_build_pass,
     to_merge_node,
 )
+from tests.support.hub_node_artifacts import record_hub_asset
 from tests.support.scaffolding import (
     TEST_HUB_ACTIONS,
     FakeWorkSource,
     HubHarness,
     build_hub,
     chunk_stores,
-    hub_store_connections,
     pointer_token,
     report_lease,
 )
@@ -72,8 +71,7 @@ _BUILD_TO_MERGE = {
 
 
 def test_a_restart_mid_hub_node_run_fences_out_a_stale_marker_write(tmp_path: Path) -> None:
-    """A restart during a visit fences a stale merged marker and its landing
-    side effect (``bzh:epoch-fencing``)."""
+    """A restart during a visit fences a stale merged marker and its close intents (``bzh:epoch-fencing``)."""
     hub = build_hub(tmp_path)
     chunk_id, _build_node_id, graph = to_merge_node(hub)
     merge_node = graph.node_by_name("merge")
@@ -82,7 +80,8 @@ def test_a_restart_mid_hub_node_run_fences_out_a_stale_marker_write(tmp_path: Pa
 
     assert hub.client.post(f"/api/chunks/{chunk_id}/restart", json={}).status_code == 202
 
-    recorded = hub.services.hub_markers.record_marker(
+    recorded = record_hub_asset(
+        hub,
         chunk_id,
         node_id=merge_node.node_id,
         node_name="merge",
@@ -97,12 +96,11 @@ def test_a_restart_mid_hub_node_run_fences_out_a_stale_marker_write(tmp_path: Pa
     assert hub.services.chunks.delivery.count_landed_since("acme-widget", before) == 0
 
 
-def test_a_blank_landing_marker_is_stored_but_records_no_landing(tmp_path: Path) -> None:
+def test_a_blank_landing_marker_is_stored_but_owes_no_close_intent(tmp_path: Path) -> None:
     hub = build_hub(tmp_path)
     chunk_id, _build_node_id, graph = to_merge_node(hub)
     merge_node = graph.node_by_name("merge")
     assert merge_node is not None
-    before = hub.clock.now() - timedelta(seconds=1)  # landed_at is read strictly after
 
     def intents() -> list[int]:
         return [i.intent_id for i in hub.services.chunks.delivery.pending_close_intents() if i.chunk_id == chunk_id]
@@ -110,21 +108,19 @@ def test_a_blank_landing_marker_is_stored_but_records_no_landing(tmp_path: Path)
     intents_before = intents()
 
     def record(name: str, content: str) -> bool:
-        return hub.services.hub_markers.record_marker(
-            chunk_id, node_id=merge_node.node_id, node_name="merge", epoch=1, name=name, content=content
+        return record_hub_asset(
+            hub, chunk_id, node_id=merge_node.node_id, node_name="merge", epoch=1, name=name, content=content
         )
 
     assert record("merged/acme-blank", "  ") is True
     names = {a.name for a in hub.services.chunks.artifacts.load_artifacts(chunk_id)}
     assert "merged/acme-blank" in names
-    assert hub.services.chunks.delivery.count_landed_since("acme-blank", before) == 0
     assert intents() == intents_before
     assert not [
         e for e in hub.services.chunks.events.list_events(chunk_id=chunk_id) if e.kind == "work-item-close-skipped"
     ]
 
     assert record("merged/acme-widget", "sha:abc123") is True
-    assert hub.services.chunks.delivery.count_landed_since("acme-widget", before) == 1
     assert intents() == intents_before
     assert (
         len(
@@ -149,7 +145,8 @@ def test_a_stopped_chunk_fences_out_a_still_running_marker_write(tmp_path: Path)
 
     assert hub.client.post(f"/api/chunks/{chunk_id}/stop", json={"by": "operator"}).status_code == 202
 
-    recorded = hub.services.hub_markers.record_marker(
+    recorded = record_hub_asset(
+        hub,
         chunk_id,
         node_id=merge_node.node_id,
         node_name="merge",
@@ -442,90 +439,6 @@ nodes:
     assert detail["landed"] is True
 
 
-def test_mid_run_marker_callback_records_a_marker(tmp_path: Path) -> None:
-    hub = build_hub(tmp_path)
-    assert hub.client.post("/api/graphs", json={"definition_yaml": HUB_CMD_GRAPH_YAML}).status_code == 201
-    resp = hub.client.post("/api/chunks", json={"tokens": [pointer_token(_POINTER)]})
-    chunk_id = resp.json()["chunk_id"]
-    chunk = hub.services.chunks.record.get(chunk_id)
-    assert chunk is not None
-    graph = hub.services.graphs.get(chunk.graph_id)
-    assert graph is not None
-    merge_node = graph.node_by_name("merge")
-    assert merge_node is not None
-
-    marker = hub.client.post(
-        f"/api/chunks/{chunk_id}/hub-markers?node_id={merge_node.node_id}&epoch=1",
-        json={"name": "merged/acme-widget", "content": "sha:abc123"},
-    )
-    assert marker.status_code == 200, marker.text
-    assert marker.json()["recorded"] is True
-
-    # Idempotent per (chunk, node, name, epoch) — a second post is a harmless no-op.
-    replay = hub.client.post(
-        f"/api/chunks/{chunk_id}/hub-markers?node_id={merge_node.node_id}&epoch=1",
-        json={"name": "merged/acme-widget", "content": "sha:abc123"},
-    )
-    assert replay.json()["recorded"] is False
-
-    detail = hub.client.get(f"/api/chunks/{chunk_id}").json()
-    assert any(a["name"] == "merged/acme-widget" for a in detail["artifacts"])
-
-
-def test_a_fresh_merged_marker_records_the_delivery_landed_fact(tmp_path: Path) -> None:
-    """A `merged/<repo>` marker is the sole production choke point for
-    `count_landed_since` — a fresh write records it, a replay never double-counts, and a
-    non-`merged/` marker never touches it at all."""
-    hub = build_hub(tmp_path)
-    assert hub.client.post("/api/graphs", json={"definition_yaml": HUB_CMD_GRAPH_YAML}).status_code == 201
-    resp = hub.client.post("/api/chunks", json={"tokens": [pointer_token(_POINTER)]})
-    chunk_id = resp.json()["chunk_id"]
-    chunk = hub.services.chunks.record.get(chunk_id)
-    assert chunk is not None
-    graph = hub.services.graphs.get(chunk.graph_id)
-    assert graph is not None
-    merge_node = graph.node_by_name("merge")
-    assert merge_node is not None
-
-    since = hub.clock.now() - timedelta(seconds=1)
-
-    other_marker = hub.client.post(
-        f"/api/chunks/{chunk_id}/hub-markers?node_id={merge_node.node_id}&epoch=1",
-        json={"name": "hub-log.land", "content": "irrelevant"},
-    )
-    assert other_marker.status_code == 200, other_marker.text
-    assert hub.services.chunks.delivery.count_landed_since("acme-widget", since) == 0
-
-    marker = hub.client.post(
-        f"/api/chunks/{chunk_id}/hub-markers?node_id={merge_node.node_id}&epoch=1",
-        json={"name": "merged/acme-widget", "content": "sha:abc123"},
-    )
-    assert marker.status_code == 200, marker.text
-    assert marker.json()["recorded"] is True
-    assert hub.services.chunks.delivery.count_landed_since("acme-widget", since) == 1
-    with hub.engine.begin() as conn:
-        row = conn.execute(
-            hub_store_connections(hub.engine).select(
-                s.delivery_repo_landed,
-                s.delivery_repo_landed.c.repo,
-                s.delivery_repo_landed.c.commit_hash,
-                s.delivery_repo_landed.c.landed_at,
-            )
-        ).one()
-        assert row.repo == "acme-widget"
-        assert row.commit_hash == "sha:abc123"
-        assert row.landed_at == hub.clock.now()
-
-    # Idempotent per (chunk, node, name, epoch) — a replay's `record_hub_artifact` returns
-    # False, so the delivery-landed count must not move (crash-recovery double-count).
-    replay = hub.client.post(
-        f"/api/chunks/{chunk_id}/hub-markers?node_id={merge_node.node_id}&epoch=1",
-        json={"name": "merged/acme-widget", "content": "sha:abc123"},
-    )
-    assert replay.json()["recorded"] is False
-    assert hub.services.chunks.delivery.count_landed_since("acme-widget", since) == 1
-
-
 def test_hub_advance_endpoint_no_ops_off_a_non_hub_command_node(tmp_path: Path) -> None:
     hub = build_hub(tmp_path)
     assert hub.client.post("/api/graphs", json={"definition_yaml": HUB_CMD_GRAPH_YAML}).status_code == 201
@@ -705,8 +618,14 @@ def test_a_poll_timeout_envelope_lists_a_seeded_commit_until_its_repo_lands(tmp_
     merge_node = graph.node_by_name("merge")
     assert merge_node is not None
     if landed:
-        assert hub.services.hub_markers.record_marker(
-            chunk_id, node_id=merge_node.node_id, node_name="merge", epoch=1, name="merged/acme/widget", content="sha"
+        assert record_hub_asset(
+            hub,
+            chunk_id,
+            node_id=merge_node.node_id,
+            node_name="merge",
+            epoch=1,
+            name="merged/acme/widget",
+            content="sha",
         )
 
     hub.clock.advance(timedelta(seconds=91))

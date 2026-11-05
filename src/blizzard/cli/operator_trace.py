@@ -27,8 +27,8 @@ ENV_RUNNER_URL = "BLIZZARD_RUNNER_URL"
 SERVICE_DEFAULT = "blizzard-cli"
 TRACEPARENT_HEADER = "traceparent"
 
-# Commands never wrapped in an operator span: `host` traces as a daemon, `record-marker` does no work.
-_NEVER_TRACED = frozenset({"host", "record-marker"})
+# Commands never wrapped in an operator span: `host` traces as a daemon.
+_NEVER_TRACED = frozenset({"host"})
 _META_KEY = "blizzard.cli.operator_trace"
 
 

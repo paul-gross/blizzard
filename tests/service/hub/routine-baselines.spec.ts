@@ -2,9 +2,10 @@ import { expect, test as base } from '../../harness/fixtures';
 
 // exemplar: bzh:service-fixtures-only, bzh:service-clients-only, bzh:service-isolation-earned.
 
-// `GET /api/routines/{routine_id}/baselines` over a real hub: the shape a delivered garden run's baseline serves, one
-// entry per scope however many sweeps there are, and the 404 on an unknown routine. FLEET_VIEW enforcement on the
-// route is the permission matrix's own concern.
+// `GET /api/routines/{routine_id}/baselines` over a real hub: one entry per scope however many sweeps there are, and
+// the 404 on an unknown routine. What lands against a baseline needs a real commit to land, so
+// `tests/service/fleet/routine-baselines.spec.ts` owns it. FLEET_VIEW enforcement on the route is the permission
+// matrix's own concern.
 
 const SCOPE = 'garden-svc';
 
@@ -18,24 +19,14 @@ const test = base.extend<{
     routineId: string;
     repoName: string;
     head: string;
-    /** One routine run's whole delivery: mint the run, claim it as the mock runner, submit its artifacts, then post the hub's garden-delivery route. */
-    deliver: (ops: unknown[]) => Promise<{ status: number; body: { outcome: string } }>;
-    /** Posts a `merged/<repo>` hub-marker on a throwaway chunk: the one production choke point that records a repo landing, which the garden graph's own deliver node never does. */
-    land: (commit: string) => Promise<void>;
+    /** One routine run's whole delivery: mint the run, claim it as the mock runner and walk it to the graph's `deliver` node, whose `garden-deliver` action records the delta; resolves to the choice the action answered. */
+    deliver: (ops: unknown[]) => Promise<string | undefined>;
   };
 }>({
   garden: async ({ api, forge, repository, mockRunner }, use) => {
     const repo = await repository();
     const commit = await forge.call('GET', `/repos/${repo.owner}/${repo.name}/commits/main`);
     const head: string = commit.body.sha;
-
-    // Tenant creation mints the packaged graphs, so the test finds the garden graph rather than minting one.
-    const listed = await api.get('/api/graphs');
-    const summary = listed.body.find((graph: { name: string; effective: boolean }) => graph.name === 'garden-routine' && graph.effective);
-    expect(summary).toBeDefined();
-    const graph = await api.get(`/api/graphs/${summary.graph_id}`);
-    const deliverNode = graph.body.nodes.find((node: { name: string }) => node.name === 'deliver');
-    expect(deliverNode).toBeDefined();
 
     const created = await api.post('/api/routines', {
       data: { name: 'garden-service', graph_name: 'garden-routine', default_scope_slug: SCOPE, default_model: [], default_effort: null },
@@ -52,39 +43,35 @@ const test = base.extend<{
       expect((await api.post(`/api/chunks/${chunkId}/promote`)).status).toBe(202);
       expect((await runner.drive('claim', { chunk_id: chunkId })).body.claimed).toBe(true);
 
-      const delta = { scope: SCOPE, revisions: { [repo.name]: head }, measurement: 'service sweep', findings: ops };
-      const completed = await runner.drive('complete', {
+      const delta = JSON.stringify({ scope: SCOPE, revisions: { [repo.name]: head }, measurement: 'service sweep', findings: ops });
+      const surveyed = await runner.drive('complete', {
         chunk_id: chunkId,
         choice: 'found',
         artifacts: [
           { name: 'survey', kind: 'asset', content: '{}', attached: true },
-          { name: 'delta', kind: 'asset', content: JSON.stringify(delta), attached: true },
+          { name: 'delta', kind: 'asset', content: delta, attached: true },
         ],
       });
-      expect(completed.body.response?.outcome).toBe('next');
-
-      const detail = await api.get(`/api/chunks/${chunkId}`);
-      return api.post(`/api/chunks/${chunkId}/garden-delivery`, {
-        params: { node_id: deliverNode.node_id, epoch: detail.body.latest_epoch },
-        data: { delta: ['delta'], proposals: [] },
+      expect(surveyed.body.response?.outcome).toBe('next');
+      const reconciled = await runner.drive('complete', {
+        chunk_id: chunkId,
+        choice: 'nothing-to-propose',
+        artifacts: [{ name: 'delta', kind: 'asset', content: delta, attached: true }],
       });
+      expect(reconciled.body.response?.outcome).toBe('hub_node_taken');
+
+      // The deliver node's pass ends the run at `done` on `recorded`, or routes it back to a runner node.
+      await expect
+        .poll(async () => (await api.get(`/api/chunks/${chunkId}`)).body.current_node_name, { timeout: 60_000 })
+        .not.toBe('deliver');
+      const detail = await api.get(`/api/chunks/${chunkId}`);
+      const exit = (detail.body.history as { from_node_name: string; choice_name: string | null }[])
+        .filter((transition) => transition.from_node_name === 'deliver')
+        .at(-1);
+      return exit?.choice_name ?? undefined;
     };
 
-    const land = async (landed: string) => {
-      const minted = await api.post(`/api/routines/${routineId}/run`, { data: { scope_slug: SCOPE, mode: 'full', note: 'land' } });
-      expect(minted.status).toBe(201);
-      const chunkId: string = minted.body.chunk_id;
-      const detail = await api.get(`/api/chunks/${chunkId}`);
-      const chunkGraph = await api.get(`/api/graphs/${detail.body.graph_id}`);
-      const marked = await api.post(`/api/chunks/${chunkId}/hub-markers`, {
-        params: { node_id: chunkGraph.body.entry_node_id, epoch: 1 },
-        data: { name: `merged/${repo.name}`, content: landed },
-      });
-      expect(marked.status).toBe(200);
-      expect(marked.body.recorded).toBe(true);
-    };
-
-    await use({ routineId, repoName: repo.name, head, deliver, land });
+    await use({ routineId, repoName: repo.name, head, deliver });
   },
 });
 
@@ -92,29 +79,10 @@ test.describe('a delivered garden run', () => {
   // The runner and the repository the delivery needs are tenant-wide, so each test owns its tenant.
   test.use({ isolation: 'fresh-tenant' });
 
-  test('test_baselines_serves_the_swept_scopes_recorded_revision', async ({ api, garden }) => {
-    const recorded = await garden.deliver([addOp('src/app.py:0')]);
-    expect(recorded.status).toBe(200);
-    expect(recorded.body.outcome).toBe('recorded');
-    await garden.land('deadbeef');
-
-    const response = await api.get(`/api/routines/${garden.routineId}/baselines`);
-
-    expect(response.status).toBe(200);
-    expect(response.body).toHaveLength(1);
-    const [baseline] = response.body;
-    expect(baseline.scope_slug).toBe(SCOPE);
-    expect(baseline.finding_set_id).toMatch(/^fins_/);
-    expect(baseline.recorded_at).toBeTruthy();
-    expect(baseline.repos).toEqual([{ repo: garden.repoName, revision: garden.head, landed_since: 1 }]);
-  });
-
   test('test_baselines_after_a_second_sweep_still_serves_one_newest_entry', async ({ api, garden }) => {
     // One entry per scope, never one per sweep.
     for (const locus of ['src/app.py:0', 'src/app.py:second']) {
-      const recorded = await garden.deliver([addOp(locus)]);
-      expect(recorded.status).toBe(200);
-      expect(recorded.body.outcome).toBe('recorded');
+      expect(await garden.deliver([addOp(locus)])).toBe('recorded');
     }
 
     const baselines = await api.get(`/api/routines/${garden.routineId}/baselines`);

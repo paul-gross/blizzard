@@ -70,7 +70,7 @@ from blizzard.hub.delivery.action_pass import ACTION_PASS_GRACE, ActionPassDrive
 from blizzard.hub.delivery.action_registry import HUB_ACTIONS, HubActions
 from blizzard.hub.delivery.flow_driver import FlowDriver, FlowLineStores, ITurnRunner, StepWake
 from blizzard.hub.delivery.flow_turn import TurnRunner
-from blizzard.hub.delivery.hub_node import HubMarkerWriter, HubNodeRouter
+from blizzard.hub.delivery.hub_node import HubNodeRouter
 from blizzard.hub.documents import YAML_CODEC
 from blizzard.hub.documents.codec import IConfigCodec
 from blizzard.hub.domain.chunk.dependencies import DependencyService
@@ -322,8 +322,6 @@ class TenantServices:
     host_enrollment: HostEnrollmentService
     host_report: HostReportService
     host_retirement: HostRetirementService
-    #: The deprecated marker route's writer — a marker written outside any turn.
-    hub_markers: HubMarkerWriter
     #: Wakes the hosted hub's flow driver; nothing elsewhere.
     hub_step_wake: StepWake
     events: EventBroker
@@ -437,14 +435,10 @@ class TenantServices:
     answered_findings: AnsweredFindingsReader
     #: A run's finding bucket — what it is shown and may cite.
     finding_bucket: FindingBucketReader
-    #: Records a delivering node-step's garden delivery: validate, then materialize in one transaction.
-    garden_delivery: GardenDeliveryRecorder
     #: Judges content offered for staging against the formats its chunk's graph owes the artifact's name.
     garden_stage_check: GardenStageCheck
     #: Issue, list and revoke the tenant's invitations.
     invitations: InvitationService
-    #: Record a delivery lane's deferred review findings, once per chunk.
-    review_findings: ReviewFindingsRecorder
     #: A project's resolver of a cited commit, against the forge of a repository the project links.
     commit_resolver_for: Callable[[ProjectId], CommitResolver]
     #: A routine's finding inflow-against-outflow over a window.
@@ -1287,13 +1281,6 @@ def build_tenant_services(stores: TenantStores, parts: TenantServiceParts, *, ev
         host_enrollment=host_enrollment,
         host_report=host_report,
         host_retirement=host_retirement,
-        hub_markers=HubMarkerWriter(
-            artifacts=chunk_artifacts,
-            delivery=chunk_delivery,
-            clock=clock,
-            record=chunk_record,
-            work_sources=work_sources,
-        ),
         hub_step_wake=parts.step_wake,
         events=events,
         event_log=event_log,
@@ -1411,9 +1398,7 @@ def build_tenant_services(stores: TenantStores, parts: TenantServiceParts, *, ev
             closures=garden_proposal_closure_store, proposals=garden_proposal_store, findings=finding_store
         ),
         finding_bucket=finding_bucket,
-        garden_delivery=garden_delivery,
         garden_stage_check=GardenStageCheck(formats=garden_formats, catalogue=parts.actions.catalogue),
-        review_findings=review_findings,
         commit_resolver_for=commit_resolver_for,
         garden_trend=GardenTrendService(repo=garden_trend_store),
         garden_sweeps=GardenSweepsService(
