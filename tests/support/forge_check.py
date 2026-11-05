@@ -15,7 +15,7 @@ _AT = datetime(2026, 10, 6, 9, 0, tzinfo=UTC)
 _SECRET = "forge-token"
 
 # The address-bearing tables as a store before the forge migration holds them, frozen to the columns a seed writes:
-# a later revision drops the address columns from ``schema.py``.
+# a later revision drops the address columns from ``src/blizzard/hub/store/schema.py``.
 _frozen = sa.MetaData()
 repositories = sa.Table(
     "repositories",
