@@ -32,3 +32,18 @@ traced('a stepped runner completes a chunk', async ({ api, issue, repository, ru
   assertIdentity(tracesOf(spans));
   assertRunnerNesting(spans, 1);
 });
+
+test.describe('a traced test on a controlled stack', () => {
+  test.use({ clockMode: 'controlled' });
+  traced('a controlled stack exports hub and runner spans on a stepped sweep', async ({ api, flushTraces, issue, repository, runnerHost, traceSink }) => {
+    const created = await api.post('/api/graphs', { data: { definition_yaml: graph } });
+    if (!created.ok) throw new Error(`creating the graph answered ${created.status}`);
+    const repo = await repository('toy-api');
+    const { chunk } = await issue('trace companion', { repository: repo });
+    await api.post(`/api/chunks/${chunk.chunk_id}/promote`);
+    await stepChunkUntil(runnerHost, api, chunk.chunk_id, (status) => status === 'done');
+    await flushTraces(runnerHost);
+    const spans = traceSink.spans().filter(isFleet).filter((span) => span.attributes['blizzard.chunk.id'] === chunk.chunk_id);
+    expect([spans.some((span) => roleOf(span) === 'step'), spans.some((span) => roleOf(span) === 'runner/invocation')]).toEqual([true, true]);
+  });
+});

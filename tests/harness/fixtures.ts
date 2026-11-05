@@ -24,6 +24,7 @@ import {
 } from './factories';
 import { binDir, daemonEnv, requireBinary, TESTS_ROOT } from './env';
 import { type OriginReads, originReads } from './runner-git';
+import type { RunnerHost } from './runner-host';
 import { type HubLog, hubLog as readHubLog } from './logs';
 import { uniqueName } from './base';
 import { mockWorld } from './mock-world';
@@ -373,12 +374,27 @@ export const test = mergeTests(tenancy, runnerWorld, uiWorld).extend<Fixtures>({
   },
 });
 
-/** A traced companion owns its hub and sink; both daemons export to that same sink. */
-const traceTest = test.extend<{ traceSink: OtlpSink }>({
+/**
+ * A traced companion owns its hub and sink; both daemons export to that same sink. On a controlled stack the hub's
+ * export is stepped. Its first pass only opens the export cursor at the clock's reading, so the fixture runs that pass
+ * before the test can move the clock. `flushTraces` exports what the test produced and returns once the sink holds it.
+ */
+const traceTest = test.extend<{ traceSink: OtlpSink; traceCursor: void; flushTraces: (...hosts: RunnerHost[]) => Promise<void> }>({
   isolation: 'fresh-hub',
   traceSink: async ({ otlpSink }, use) => { await use(await otlpSink()); },
+  traceCursor: [async ({ api, clockMode }, use) => {
+    if (clockMode === 'controlled') await api.sweep('trace_export', { allTenants: true });
+    await use();
+  }, { auto: true }],
+  flushTraces: async ({ api, clockMode }, use) => {
+    await use(async (...hosts) => {
+      if (clockMode !== 'controlled') throw new Error('flushTraces steps the export, which only a controlled stack runs stepped');
+      for (const host of hosts) await host.step();
+      await api.sweep('trace_export', { allTenants: true });
+    });
+  },
   hubEnv: async ({ hubEnv, traceSink }, use) => { await use({ ...hubEnv, OTEL_EXPORTER_OTLP_ENDPOINT: traceSink.endpoint }); },
-  hubConfig: async ({ hubConfig }, use) => { await use(mergeProfile(hubConfig, { tracing: { sweep_seconds: 1n, settle_seconds: 0n, platform: true, platform_sample_ratio: 0 }, sweeps: { trace_export: { mode: 'timed' } } })); },
+  hubConfig: async ({ hubConfig, clockMode }, use) => { await use(mergeProfile(hubConfig, { tracing: { sweep_seconds: 1n, settle_seconds: 0n, platform: true, platform_sample_ratio: 0 }, sweeps: { trace_export: { mode: clockMode === 'controlled' ? 'stepped' : 'timed' } } })); },
   runnerConfig: async ({ runnerConfig }, use) => { await use(mergeHostProfile(runnerConfig, { tracing: { sweep_seconds: 1n, settle_seconds: 0n, platform: true, platform_sample_ratio: 0 } })); },
   runnerTraceEndpoint: async ({ traceSink }, use) => { await use(traceSink.endpoint); },
 });
