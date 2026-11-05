@@ -151,6 +151,11 @@ testpaths = [
 # The exemplar tests import the `exemplar` package beside them and `tests.support.scaffolding`.
 pythonpath = [".", "exemplars/python"]
 asyncio_mode = "auto"
+# Each test that builds a hub copies a migrated hub.db into its tmp_path, so a full run writes several GB; pytest's
+# default keeps every test's directory for the last three runs, which exhausts a tmpfs /tmp. Keep only the most recent
+# run's failures — the directories worth inspecting.
+tmp_path_retention_count = 1
+tmp_path_retention_policy = "failed"
 # pytest's default list with `node_modules` written out, so the Playwright package's dependencies stay unwalked even if a
 # later edit to this setting drops the default.
 norecursedirs = ["*.egg", ".*", "_darcs", "build", "CVS", "dist", "node_modules", "venv", "{arch}"]
