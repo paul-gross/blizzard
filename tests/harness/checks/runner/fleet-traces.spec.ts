@@ -24,7 +24,7 @@ function span(name: string, role: string, overrides: Partial<ReceivedSpan> = {})
     startTimeUnixNano: '10', endTimeUnixNano: '20', status: { code: 0, message: '' }, flags: 1,
     droppedAttributesCount: 0, droppedEventsCount: 0, droppedLinksCount: 0, events: [], links: [],
     attributes: { ...attrs(role), 'blizzard.chunk.id': chunk },
-    scope: { name: role.startsWith('runner/') ? 'blizzard.runner.runner_spans' : 'blizzard.hub.fleet_spans', version: '3' },
+    scope: { name: role.startsWith('runner/') ? 'blizzard.runner.runner_spans' : 'blizzard.hub.fleet_spans', version: '4' },
     resource: { 'service.name': role.startsWith('chunk/') ? 'blizzard-chunk' : 'blizzard-hub', 'service.version': '1', 'blizzard.trace.schema_version': dictionary.schema_version },
     ...overrides,
   };

@@ -10,7 +10,7 @@ from collections.abc import Mapping
 from blizzard.foundation import trace_attributes as shared
 
 INSTRUMENTATION_SCOPE = "blizzard.hub.fleet_spans"
-INSTRUMENTATION_SCOPE_VERSION = "3"
+INSTRUMENTATION_SCOPE_VERSION = "4"
 #: The scope the hub's own platform spans (sweep roots) are opened under.
 PLATFORM_INSTRUMENTATION_SCOPE = "blizzard.hub.platform"
 PLATFORM_INSTRUMENTATION_SCOPE_VERSION = "1"

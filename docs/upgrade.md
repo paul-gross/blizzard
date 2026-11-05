@@ -122,8 +122,11 @@ replaced it:
 - The hub store's `graph_nodes.run` column is dropped: a hub node is taken by its `action`, and a command the carry-over
   could not translate is kept in `graph_nodes.legacy_run`.
 - `blizzard hub record-marker` is gone: a hub node's action records its own markers.
-- A `bounce-envelope` artifact's `step` is gone: a bounce names the `action` whose pass answered it. Each of these
-  answered only a script, and a client still calling a removed path or command is answered as an unknown one.
+- A `bounce-envelope` artifact's `step` is gone: a bounce names the `action` whose pass answered it.
+- The `blizzard.hub.run_step.name` and `blizzard.hub.run_step.exit_code` span attributes leave the trace contract, which
+  rises to schema 4: read `blizzard.hub.action.name` and `blizzard.hub.action.choice` on the `hub action pass` span
+  ([Upgrading from trace schema 3](./deployment/tracing.md#upgrading-from-trace-schema-3)). Each of these answered only
+  a script, and a client still calling a removed path or command is answered as an unknown one.
 
 ## Upgrading to 0.2.0
 

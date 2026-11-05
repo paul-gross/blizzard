@@ -6,6 +6,7 @@ import hashlib
 import json
 import os
 import re
+from collections.abc import Mapping, Sequence
 from dataclasses import replace
 from datetime import UTC, datetime
 from typing import Any, cast
@@ -623,8 +624,6 @@ def test_the_platform_section_is_the_code_constants() -> None:
         cli_spans.ATTR_LEASE_ID,
         hub_platform.ACTION_CHOICE,
         hub_platform.ACTION_NAME,
-        hub_platform.RUN_STEP_EXIT_CODE,
-        hub_platform.RUN_STEP_NAME,
         attr.RUNNER_ID,
         attr.RUNNER_NAME,
         platform_attr.TENANT,
@@ -635,19 +634,33 @@ def test_the_platform_section_is_the_code_constants() -> None:
     assert attr.RUNNER_ID == runner_attr.RUNNER_ID
     assert attr.RUNNER_NAME == runner_attr.RUNNER_NAME
     declared = {a["name"]: a["type"] for a in platform["attributes"]}
-    assert declared.pop(hub_platform.RUN_STEP_EXIT_CODE) == "int"
     assert all(declared[name] == type_ for name, type_ in CLI_ATTRIBUTES.items())
     assert all(t == "string" for n, t in declared.items() if n not in CLI_ATTRIBUTES)
 
 
+def _deprecated_without_a_live_replacement(declared: Sequence[Mapping[str, object]]) -> set[str]:
+    attributes = {str(a["name"]): a for a in declared}
+    unreplaced: set[str] = set()
+    for name, attribute in attributes.items():
+        if attribute.get("deprecated") is not True:
+            continue
+        named = set(re.findall(r"`([^`]+)`", str(attribute["meaning"]))) & set(attributes)
+        if not named or any(attributes[n].get("deprecated") is True for n in named):
+            unreplaced.add(name)
+    return unreplaced
+
+
 def test_a_deprecated_platform_attribute_names_the_live_attribute_that_replaces_it() -> None:
-    attributes = {a["name"]: a for a in dictionary()["platform"]["attributes"]}
-    deprecated = {name for name, a in attributes.items() if a.get("deprecated") is True}
-    assert deprecated == {hub_platform.RUN_STEP_EXIT_CODE, hub_platform.RUN_STEP_NAME}
-    for name in deprecated:
-        named = set(re.findall(r"`([^`]+)`", attributes[name]["meaning"])) & set(attributes)
-        assert named, name
-        assert all(attributes[n].get("deprecated") is not True for n in named), name
+    assert _deprecated_without_a_live_replacement(dictionary()["platform"]["attributes"]) == set()
+
+
+def test_a_deprecated_attribute_naming_no_live_replacement_is_found() -> None:
+    live = {"name": "blizzard.live", "type": "string", "meaning": "A live attribute."}
+    replaced = {"name": "blizzard.old", "type": "string", "deprecated": True, "meaning": "Read `blizzard.live`."}
+    orphaned = {"name": "blizzard.orphan", "type": "string", "deprecated": True, "meaning": "Read nothing."}
+    chained = {"name": "blizzard.chained", "type": "string", "deprecated": True, "meaning": "Read `blizzard.old`."}
+    found = _deprecated_without_a_live_replacement([live, replaced, orphaned, chained])
+    assert found == {"blizzard.orphan", "blizzard.chained"}
 
 
 def test_the_published_platform_attribute_table_is_thedictionary() -> None:
