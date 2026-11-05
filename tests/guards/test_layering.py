@@ -1934,7 +1934,6 @@ _DOMAIN_CORE_FORBIDDEN = (*_DOMAIN_CORE_FRAMEWORKS, *_DOMAIN_CORE_STDLIB_DRIVERS
 
 #: The harness binding nodes: adapters, held to the framework imports only; a binding without a layer row fails the gate.
 _HARNESS_BINDING_NODES = tuple(f"harness/{package}" for package in _ADAPTER_PACKAGES)
-_HARNESS_ID_NODES = tuple(f"harness/{harness_id}" for harness_id in _HARNESS_IDS)
 
 #: Runner module -> the stdlib driver packages admitted for it, each a reasoned exception; an entry that
 #: admits a package its module no longer imports is stale and fails the gate.
@@ -2924,7 +2923,7 @@ _RUNNER_PACKAGE_LAYERS: dict[str, frozenset[str]] = {
     "harness/claude_code": frozenset({"config_table", "harness", "node_steps", "process", "subscriptions"}),
     "harness/opencode": frozenset({"config_table", "harness", "node_steps", "process"}),
     "harness/opencode_v2": frozenset({"harness", "node_steps", "process"}),
-    "harness/wiring": frozenset({"config_table", "harness", "process", *_HARNESS_ID_NODES}),
+    "harness/wiring": frozenset({"config_table", "harness", "process", *_HARNESS_BINDING_NODES}),
     "stores": frozenset(
         {
             "auth",
@@ -3012,8 +3011,8 @@ def _declaration_packages(harness_dir: Path) -> set[str]:
 
 def test_the_harness_ids_are_the_declaration_packages() -> None:
     """A harness id is its package's name: every catalog id names a ``harness/<id>/`` package holding its
-    ``src/blizzard/runner/harness/<id>/declaration.py``, and no other ``harness/`` package holds one."""
-    assert _declaration_packages(_RUNNER_DIR / "harness") == set(_HARNESS_IDS)
+    ``src/blizzard/runner/harness/<id>/declaration.py``, and only a version-chosen binding package holds another."""
+    assert _declaration_packages(_RUNNER_DIR / "harness") == set(_ADAPTER_PACKAGES)
 
 
 def test_the_declaration_pin_fails_closed_both_ways(tmp_path: Path) -> None:

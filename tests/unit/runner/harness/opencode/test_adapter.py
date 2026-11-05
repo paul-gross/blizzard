@@ -19,6 +19,7 @@ import pytest
 from structlog.testing import capture_logs
 
 from blizzard.foundation.artifacts import ArtifactKind
+from blizzard.foundation.clock import SystemClock
 from blizzard.runner.harness.adapter import HarnessSpawnError, ResumeHandle
 from blizzard.runner.harness.autonomy import Autonomy
 from blizzard.runner.harness.declaration import SharedHarnessInputs
@@ -328,6 +329,7 @@ def test_production_binding_reads_limits_from_worker_cache_for_launch(
         process=process,
         launcher=ProcessLauncher(process, executor=spawn_executor, children=CHILDREN),
         children=CHILDREN,
+        clock=SystemClock(),
     )
     assert binding.adapter is not None
     binding.adapter.resume_with_message(

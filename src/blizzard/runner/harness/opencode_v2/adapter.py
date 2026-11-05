@@ -18,6 +18,7 @@ from blizzard.foundation.node_steps import TIER_PREFIX
 from blizzard.runner.harness import harness_shared
 from blizzard.runner.harness.adapter import (
     HarnessSpawnError,
+    HarnessVersionChangedError,
     IHarnessAdapter,
     ResumeHandle,
     WorkerHandle,
@@ -38,6 +39,8 @@ from blizzard.runner.harness.opencode_v2.service import IServiceKeeper, ServiceU
 from blizzard.runner.harness.opencode_v2.shapes import STEP_TYPES, Message, OpenCodeTwoShapeError, parse_message
 from blizzard.runner.harness.opencode_v2.transcript.source import OpenCodeTwoTranscriptSource
 from blizzard.runner.harness.opencode_v2.transport import UrllibServiceTransport
+from blizzard.runner.harness.opencode_v2.version import ADMITTED_OPENCODE_V2_RANGE_TEXT, normalize_opencode_v2_version
+from blizzard.runner.harness.opencode_v2.version_hold import VersionHold
 from blizzard.runner.harness.overload import ProviderOverload
 from blizzard.runner.harness.process_launch import IProcessLauncher, LaunchedProcess
 from blizzard.runner.harness.spawn_cwd import SpawnCwd
@@ -76,6 +79,7 @@ class OpenCodeTwoAdapter:
         launcher: IProcessLauncher,
         keeper: IServiceKeeper,
         versions: VersionProbe,
+        hold: VersionHold,
         request_dir: Path,
         clock: IClock,
         binary: str = DEFAULT_OPENCODE_BINARY,
@@ -94,6 +98,7 @@ class OpenCodeTwoAdapter:
         self._launcher = launcher
         self._keeper = keeper
         self._versions = versions
+        self._hold = hold
         self._request_dir = request_dir
         self._clock = clock
         self._binary = binary
@@ -111,13 +116,22 @@ class OpenCodeTwoAdapter:
             runner_id=runner_id,
         )
         self._orphaner: ISessionOrphaner = orphaner or SessionOrphaner(self._registration, UrllibServiceTransport())
+        # The version launches are held to: the one last observed, which is the one the runner advertises.
+        self._advertised: str | None = None
 
     @property
     def autonomy(self) -> Autonomy:
         return self._autonomy
 
     def observe_version(self) -> str | None:
-        return self._versions.observe_version(self._binary)
+        """The answering service's version, which the runner advertises and records; with none answering, the
+        binary's, whose service the next launch starts."""
+        identity = self._keeper.answering()
+        raw = identity.version if identity is not None else self._versions.observe_version(self._binary)
+        version = normalize_opencode_v2_version(raw) or raw
+        self._hold.observe(version)
+        self._advertised = version
+        return version
 
     # -- model resolution -------------------------------------------------------------------------------------------
 
@@ -184,9 +198,10 @@ class OpenCodeTwoAdapter:
         """Write ``request`` and launch its driver, deferred until the caller's durable record lands. Every failure
         before the driver exists is the seam's :class:`HarnessSpawnError`."""
         try:
-            self._keeper.ensure()
+            identity = self._keeper.ensure()
         except ServiceUnavailableError as exc:
             raise HarnessSpawnError(f"no OpenCode service to drive the turn on: {exc}") from exc
+        self._hold_to_advertised(normalize_opencode_v2_version(identity.version) or identity.version)
         try:
             path = write_request(self._request_dir, request)
         except OSError as exc:
@@ -210,6 +225,20 @@ class OpenCodeTwoAdapter:
             raise HarnessSpawnError(f"failed to launch the OpenCode 2 driver in {request.directory}: {exc}") from exc
         _log.info("launched opencode driver", kind=request.kind.value, session_id=request.session_id, pid=launched.pid)
         return launched
+
+    def _hold_to_advertised(self, version: str) -> None:
+        """Refuse a launch on a service whose version is not the one the runner advertised, which the next
+        observation advertises afresh; any launch once a version outside the range was seen is refused for good."""
+        self._hold.observe(version)
+        if self._hold.foreign is not None:
+            raise HarnessVersionChangedError(
+                f"the OpenCode service reported version {self._hold.foreign}, outside"
+                f" {ADMITTED_OPENCODE_V2_RANGE_TEXT}; restart the runner to take it up"
+            )
+        if self._advertised is not None and self._advertised != version:
+            raise HarnessVersionChangedError(
+                f"the OpenCode service now reports version {version}, not {self._advertised}"
+            )
 
     def _request(
         self,

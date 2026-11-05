@@ -8,6 +8,7 @@ from typing import cast
 
 import pytest
 
+from blizzard.foundation.clock import SystemClock
 from blizzard.runner.config import RunnerConfig
 from blizzard.runner.harness.adapter import WorkerHandle
 from blizzard.runner.harness.capability_snapshot import capability_snapshot, default_harness_id
@@ -150,6 +151,7 @@ def test_production_registry_shares_one_process_launcher_across_both_bindings(
         process=LinuxProcessProbe(),
         executor=spawn_executor,
         children=CHILDREN,
+        clock=SystemClock(),
     )
 
     claude_launcher = vars(registry.lifecycle(CLAUDE_CODE_HARNESS_ID))["_launcher"]
@@ -164,6 +166,7 @@ def test_production_registry_wires_a_real_opencode_transcript_source(tmp_path: P
         process=LinuxProcessProbe(),
         executor=spawn_executor,
         children=CHILDREN,
+        clock=SystemClock(),
     )
 
     source = registry.transcript_source(OPENCODE_HARNESS_ID)
@@ -182,7 +185,11 @@ def test_production_registry_injects_a_file_price_catalog_from_worker_env_passth
     config = RunnerConfig(root=tmp_path, db_url="sqlite://", worker_env_passthrough=("XDG_CACHE_HOME",))
 
     registry = build_production_harness_registry(
-        config.harness_settings(NO_TRACING), process=LinuxProcessProbe(), executor=spawn_executor, children=CHILDREN
+        config.harness_settings(NO_TRACING),
+        process=LinuxProcessProbe(),
+        executor=spawn_executor,
+        children=CHILDREN,
+        clock=SystemClock(),
     )
 
     catalog = vars(registry.lifecycle(OPENCODE_HARNESS_ID))["_price_catalog"]
@@ -200,7 +207,11 @@ def test_production_registry_binds_no_price_catalog_with_an_unresolvable_cache_r
     config = RunnerConfig(root=tmp_path, db_url="sqlite://")
 
     registry = build_production_harness_registry(
-        config.harness_settings(NO_TRACING), process=LinuxProcessProbe(), executor=spawn_executor, children=CHILDREN
+        config.harness_settings(NO_TRACING),
+        process=LinuxProcessProbe(),
+        executor=spawn_executor,
+        children=CHILDREN,
+        clock=SystemClock(),
     )
 
     assert vars(registry.lifecycle(OPENCODE_HARNESS_ID))["_price_catalog"] is None
@@ -211,7 +222,11 @@ def test_production_registry_omits_a_disabled_claude_code_and_defaults_to_openco
 ) -> None:
     config = with_claude_code(RunnerConfig(root=tmp_path, db_url="sqlite://"), enabled=False)
     registry = build_production_harness_registry(
-        config.harness_settings(NO_TRACING), process=LinuxProcessProbe(), executor=spawn_executor, children=CHILDREN
+        config.harness_settings(NO_TRACING),
+        process=LinuxProcessProbe(),
+        executor=spawn_executor,
+        children=CHILDREN,
+        clock=SystemClock(),
     )
 
     assert default_harness_id(registry) == OPENCODE_HARNESS_ID
@@ -227,6 +242,7 @@ def test_production_registry_omits_a_disabled_opencode(tmp_path: Path, spawn_exe
         process=LinuxProcessProbe(),
         executor=spawn_executor,
         children=CHILDREN,
+        clock=SystemClock(),
     )
 
     assert default_harness_id(registry) == CLAUDE_CODE_HARNESS_ID
@@ -243,6 +259,7 @@ def test_production_registry_defaults_to_claude_code_with_both_enabled(
             process=LinuxProcessProbe(),
             executor=spawn_executor,
             children=CHILDREN,
+            clock=SystemClock(),
         )
     ) == (CLAUDE_CODE_HARNESS_ID)
 

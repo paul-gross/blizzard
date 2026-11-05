@@ -12,6 +12,7 @@ import click
 import pytest
 
 from blizzard.cli.collaborators import CliCollaborators
+from blizzard.foundation.clock import SystemClock
 from blizzard.runner.cli.runtime import InitCollaborators, publish_runner_bundle
 from blizzard.runner.config import RunnerConfig
 from blizzard.runner.harness.autonomy import Autonomy
@@ -106,6 +107,7 @@ def test_registry_binds_published_config_and_generated_config_without_bundle(
         process=probe,
         launcher=launcher,
         children=CHILDREN,
+        clock=SystemClock(),
     )
     assert isinstance(binding.adapter, OpenCodeAdapter)
     env = binding.adapter.config_env()
@@ -121,6 +123,7 @@ def test_registry_binds_published_config_and_generated_config_without_bundle(
         process=probe,
         launcher=launcher,
         children=CHILDREN,
+        clock=SystemClock(),
     )
     assert isinstance(plain.adapter, OpenCodeAdapter)
     plain_env = plain.adapter.config_env()

@@ -24,9 +24,28 @@ export const SOCKET_PATH_LIMIT = 107;
 /** The variable that arms the mock harness; the host's workers must carry it, and no `runnerEnv` may take it away. */
 export const FENCE_VAR = 'BLIZZARD_MOCK_HARNESS_FENCE';
 const FENCE_FILE = '.blizzard-mock-harness-fence';
-const PLACEHOLDERS = ['workspace', 'origins', 'forgeOrigins', 'mockBin', 'usageBase', 'bundle', 'stubs'];
+const PLACEHOLDERS = ['workspace', 'origins', 'forgeOrigins', 'mockBin', 'mockOpencode2', 'usageBase', 'bundle', 'stubs'];
 const RUNNER_BINARY = 'blizzard-runner';
 const FIRST_RUNNER = 'runner-local';
+
+/** Whether any string anywhere in `value` names the `${name}` placeholder. */
+function namesPlaceholder(value: unknown, name: string): boolean {
+  if (typeof value === 'string') return value.includes(`\${${name}}`);
+  if (Array.isArray(value)) return value.some((item) => namesPlaceholder(item, name));
+  if (value !== null && typeof value === 'object') return Object.values(value).some((item) => namesPlaceholder(item, name));
+  return false;
+}
+
+/**
+ * The engine-backed `mock-opencode-2`, emitted once into `dir` as an `opencode` binary a profile names as
+ * `${mockOpencode2}`: a managed service answering like OpenCode 2, each turn's prompt run as a fenced script.
+ */
+async function emitMockOpencode2(dir: string, levers: string[], run: (command: string, args: string[], home: string) => Promise<unknown>, home: string): Promise<string> {
+  const binary = path.join(dir, 'opencode');
+  fs.mkdirSync(dir, { recursive: true });
+  await run(requireBinary(mockBinDir(), 'mock-opencode-2'), ['emit-engine', '--out', binary, ...levers.flatMap((lever) => ['--lever', lever])], home);
+  return binary;
+}
 
 /** What a test hands a host: the options of the runner-world and hub-world fixtures, one set per host. */
 export interface RunnerHostOptions {
@@ -54,6 +73,8 @@ export interface RunnerHostOptions {
    * directory before the host boots. A profile names the directory as `${bundle}`, as in `harness.config_dir`.
    */
   runnerBundle: Record<string, string>;
+  /** The failure levers the `${mockOpencode2}` service is emitted with, by name (`NEVER_REGISTERED`). */
+  runnerOpencode2Levers: string[];
   /**
    * Executable scripts by file name, written into a test-owned directory before the host boots; a profile names the
    * directory as `${stubs}`, as in `runner[].worker.path_prepend`. A script, and a `runnerBundle` file, names the
@@ -99,6 +120,7 @@ export const DEFAULT_RUNNER_OPTIONS: RunnerHostOptions = {
   runnerOtlp: false,
   runnerTraceEndpoint: undefined,
   runnerBundle: {},
+  runnerOpencode2Levers: [],
   runnerStubs: {},
   runnerModelPrices: {},
   runnerWinterTrap: false,
@@ -397,6 +419,8 @@ export function runnerHostBuilder(given: BuilderContext): RunnerHostBuilder {
     let daemon: LiveDaemon | undefined;
     let disposed = false;
     let otlp: OtlpSink | undefined;
+    // The emitted OpenCode 2 service, stopped with the host: it detaches from whatever started it.
+    let opencode2: { binary: string; env: NodeJS.ProcessEnv } | undefined;
     let membership: Membership | undefined;
     const leaveClock = (): void => {
       membership?.leave();
@@ -408,6 +432,7 @@ export function runnerHostBuilder(given: BuilderContext): RunnerHostBuilder {
       disposed = true;
       leaveClock();
       if (daemon !== undefined) await stopDaemon(daemon);
+      if (opencode2 !== undefined) await runCommand(opencode2.binary, ['service', 'stop'], { env: opencode2.env, cwd: root });
       await otlp?.close();
       const refusals = scanLog(logPath).map((line) => line.raw);
       if (failed && fs.existsSync(logPath)) await testInfo.attach(`runner host ${index} log`, { body: logTail(logPath), contentType: 'text/plain' });
@@ -569,7 +594,9 @@ export function runnerHostBuilder(given: BuilderContext): RunnerHostBuilder {
           worker: { env_passthrough: [FENCE_VAR, 'BZ_TRANSCRIPTS_ROOT'] },
         })),
       };
-      const expanded = expandProfile(profile, { workspace, origins, forgeOrigins: ctx.hub.forgeOrigins ?? '', mockBin: mockBinDir(), usageBase: ctx.vendor.url, bundle, stubs });
+      const mockOpencode2 = namesPlaceholder(profile, 'mockOpencode2') ? await emitMockOpencode2(path.join(root, 'opencode2'), options.runnerOpencode2Levers, run, home) : '';
+      if (mockOpencode2 !== '') opencode2 = { binary: mockOpencode2, env: { ...env, [FENCE_VAR]: '1' } };
+      const expanded = expandProfile(profile, { workspace, origins, forgeOrigins: ctx.hub.forgeOrigins ?? '', mockBin: mockBinDir(), mockOpencode2, usageBase: ctx.vendor.url, bundle, stubs });
       const merged = mergeHostProfile(mergeHostProfile(written, baseline), expanded);
       fs.writeFileSync(path.join(dir, 'blizzard-host.toml'), stringify(merged));
 

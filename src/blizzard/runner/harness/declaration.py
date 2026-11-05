@@ -10,8 +10,9 @@ from __future__ import annotations
 from collections.abc import Mapping
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Protocol, TypeVar
+from typing import Protocol, TypeVar, runtime_checkable
 
+from blizzard.foundation.clock import IClock
 from blizzard.foundation.config_keys import ConfigKey, ConfigView
 from blizzard.foundation.roles import domain_model
 from blizzard.runner.harness.adapter import IHarnessHealthProbe
@@ -109,6 +110,8 @@ class SharedHarnessInputs:
     harness_telemetry_enabled: bool = False
     #: The runner's own environ, where a binding finds whether it has a destination to capture a signal to.
     runner_environ: Mapping[str, str] = field(default_factory=dict[str, str])
+    #: The id the runner is served under, which a binding stamps on what it creates.
+    runner_id: str = ""
 
 
 class IHarnessDeclaration(Protocol[SectionT_contra]):
@@ -144,9 +147,10 @@ class IHarnessDeclaration(Protocol[SectionT_contra]):
         process: IProcessProbe,
         launcher: IProcessLauncher,
         children: IChildProcesses,
+        clock: IClock,
     ) -> HarnessBinding:
         """The binding's adapter and transcript source; ``launcher`` starts its worker, judge and resume children,
-        ``children`` every other child it runs (version probes, exports, resolvers)."""
+        ``children`` every other child it runs (version probes, exports, resolvers), and ``clock`` is the runner's."""
         ...
 
     def health_probe(
@@ -181,4 +185,23 @@ class IHarnessDeclaration(Protocol[SectionT_contra]):
         ...
 
 
-__all__ = ["HarnessSection", "IHarnessDeclaration", "IHarnessSectionKind", "SharedHarnessInputs"]
+@runtime_checkable
+class IVersionSelectedDeclaration(IHarnessDeclaration[SectionT_contra], Protocol[SectionT_contra]):
+    """A declaration one of several sharing a harness id, chosen by the version its configured binary reports."""
+
+    def version_binary(self, section: SectionT_contra) -> str:
+        """The binary whose ``--version`` chooses among the harness id's declarations."""
+        ...
+
+    def admits_version(self, raw: str | None) -> bool:
+        """Whether one raw ``--version`` output is a version this declaration binds."""
+        ...
+
+
+__all__ = [
+    "HarnessSection",
+    "IHarnessDeclaration",
+    "IHarnessSectionKind",
+    "IVersionSelectedDeclaration",
+    "SharedHarnessInputs",
+]

@@ -3,7 +3,8 @@
 from __future__ import annotations
 
 import uuid
-from collections.abc import Sequence
+from collections.abc import Callable, Generator, Sequence
+from contextlib import contextmanager
 from dataclasses import dataclass
 from datetime import datetime
 from enum import StrEnum
@@ -22,11 +23,12 @@ from blizzard.runner.environments.workspaces import IWorkspaceSpawnSettings
 from blizzard.runner.harness.adapter import (
     DEFAULT_IDENTITY_AWAIT_TIMEOUT_SECONDS,
     HarnessSpawnError,
+    HarnessVersionChangedError,
     IHarnessWorkerLifecycle,
     WorkerIdentityError,
     WorkerPreamble,
 )
-from blizzard.runner.harness.capability_snapshot import default_harness_id
+from blizzard.runner.harness.capability_snapshot import HarnessVersionCache, default_harness_id
 from blizzard.runner.harness.identity import SessionReference
 from blizzard.runner.harness.preamble import Preamble
 from blizzard.runner.harness.registry import IHarnessRegistry, UnavailableHarnessError, UnknownHarnessError
@@ -203,6 +205,8 @@ class SpawnContext(TranscriptPumpContext, GateContext, OrphanContext, Protocol):
     def harness_selector(self) -> HarnessSelector: ...
     @property
     def harnesses(self) -> IHarnessRegistry: ...
+    @property
+    def harness_versions(self) -> HarnessVersionCache | None: ...
     @property
     def hub(self) -> IHubClient: ...
     @property
@@ -396,17 +400,18 @@ class Spawner:
         _CP_AFTER_BOUNDARY.reached()
         # Observed before the spawn: a hang or raise here costs only this generation's
         # `harness_version` observation, never runs after the worker is already live and unrecorded.
-        version = harness.observe_version()
+        version = self.advertised_version(owner, harness.observe_version)
         try:
-            pending = harness.spawn(
-                envelope,
-                self._worker_preamble(chunk_id, lease, environments, rendered, workspace_id),
-                session_hint=str(uuid.uuid4()),
-                resume_from=resume_from.session_id if resume_from is not None else None,
-                model=lease.model,
-                effort=lease.effort,
-                compaction_window=lease.compaction_window,
-            )
+            with self.reobserving_a_changed_version(owner):
+                pending = harness.spawn(
+                    envelope,
+                    self._worker_preamble(chunk_id, lease, environments, rendered, workspace_id),
+                    session_hint=str(uuid.uuid4()),
+                    resume_from=resume_from.session_id if resume_from is not None else None,
+                    model=lease.model,
+                    effort=lease.effort,
+                    compaction_window=lease.compaction_window,
+                )
         except HarnessSpawnError as exc:
             # Surface the launch-time failure then RE-RAISE: nothing was ever
             # launched, but the lease minted above is durable — REAP reaps it (a retry), below.
@@ -578,6 +583,23 @@ class Spawner:
         ``None`` when the row names none."""
         binding = self.ctx.stores.environments.newest_binding_for_chunk(chunk_id)
         return binding.workspace_id if binding is not None else None
+
+    def advertised_version(self, harness_id: str, observe: Callable[[], str | None]) -> str | None:
+        """The version this runner advertises for ``harness_id``, which every launch records: the cross-tick cache's
+        when the loop wires one, else observed now."""
+        versions = self.ctx.harness_versions
+        return versions.get(harness_id, observe) if versions is not None else observe()
+
+    @contextmanager
+    def reobserving_a_changed_version(self, harness_id: str) -> Generator[None]:
+        """A launch inside refused because ``harness_id``'s version changed since it was advertised has the next
+        snapshot observe it afresh."""
+        try:
+            yield
+        except HarnessVersionChangedError:
+            if self.ctx.harness_versions is not None:
+                self.ctx.harness_versions.forget(harness_id)
+            raise
 
     def generation(self, lease_id: str) -> int:
         """The spawn generation this lease's next start is about to mint — one past the

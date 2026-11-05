@@ -29,6 +29,8 @@ from blizzard.foundation.store.migrations import MigrationRunner
 from blizzard.hub.store import MIGRATIONS_DIR as HUB_MIGRATIONS_DIR
 from blizzard.runner.cli.daemon import LOCAL_CLIENT_TIMEOUT, Door, daemon_holding
 from blizzard.runner.cli.runtime import InitCollaborators
+from blizzard.runner.harness.binding_selection import BindingSelection
+from blizzard.runner.harness.wiring import first_bindings, publish_harness_bundle
 from blizzard.runner.host_layout import HostLayout, HostLock
 from blizzard.runner.store import MIGRATIONS_DIR as RUNNER_MIGRATIONS_DIR
 from blizzard.runner.store import schema as runner_schema
@@ -665,6 +667,48 @@ def test_runner_host_without_a_token_names_both_ways_to_get_one(tmp_path: Path) 
     assert "runner runner-local" in result.output and "is halted: has no hub token" in result.output
     assert "`blizzard runner init` adds the runner" in result.output
     assert "`blizzard hub runner enroll <id>` prints the line to put there" in result.output
+
+
+def test_runner_host_probes_the_bindings_once_and_publishes_and_composes_that_one_selection(tmp_path: Path) -> None:
+    """The bindings a runner's binaries choose are probed once as it starts, and the bundle it publishes and the
+    process it composes both take that one selection."""
+    runner = init_runner()
+    root = tmp_path / "runner"
+    assert runner.invoke(blizzard, ["runner", "init", str(root)]).exit_code == 0
+    bundle = tmp_path / "bundle"
+    bundle.mkdir()
+    config_path = root / "blizzard-host.toml"
+    config_path.write_text(
+        config_path.read_text().replace("[runner.harness]\n", f'[runner.harness]\nconfig_dir = "{bundle}"\n', 1)
+    )
+    selection = first_bindings()
+    probed: list[object] = []
+    published: list[object] = []
+    composed: list[object] = []
+
+    def select(config: object) -> BindingSelection:
+        probed.append(config)
+        return selection
+
+    def publish(*args: object, **kwargs: object) -> object:
+        published.append(kwargs["selection"])
+        return publish_harness_bundle(*args, **kwargs)  # pyright: ignore[reportArgumentType]
+
+    def stop(*_args: object, **kwargs: object) -> None:
+        composed.append(kwargs["selections"])
+        raise RuntimeError("stop before serving")
+
+    collaborators = InitCollaborators(runner.hub.clients, runner.hub.host_clients, runner.sessions)
+    result = runner.invoke(
+        blizzard,
+        ["runner", "host", "--dir", str(root), "--port", "0"],
+        obj=replace(collaborators, select_bindings=select, publish_harness_bundle=publish, build_host_process=stop),
+    )
+
+    assert isinstance(result.exception, RuntimeError), result.output
+    assert len(probed) == 1
+    assert published == [selection]
+    assert [list(selections.values()) for selections in composed] == [[selection]]  # pyright: ignore[reportAttributeAccessIssue, reportUnknownMemberType, reportUnknownArgumentType]
 
 
 def test_runner_host_reports_a_missing_runner_prompt_file_as_a_clean_error(tmp_path: Path) -> None:

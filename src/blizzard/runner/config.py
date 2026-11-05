@@ -933,6 +933,7 @@ class RunnerConfig:
             worker_env=self.worker_env(tracing),
             transcripts_root=self.transcripts_root,
             sections=self.harness_sections,
+            runner_id=self.served_id(),
         )
 
     @property

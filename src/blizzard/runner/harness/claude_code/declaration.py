@@ -6,6 +6,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from pathlib import Path
 
+from blizzard.foundation.clock import IClock
 from blizzard.foundation.logging import get_logger
 from blizzard.foundation.roles import domain_model
 from blizzard.runner.harness.adapter import IHarnessHealthProbe
@@ -78,7 +79,9 @@ class ClaudeCodeDeclaration:
         process: IProcessProbe,
         launcher: IProcessLauncher,
         children: IChildProcesses,
+        clock: IClock,
     ) -> HarnessBinding:
+        del clock
         projects_root = shared.transcripts_root or str(Path.home() / ".claude" / "projects")
         transcript_source = ClaudeCodeTranscriptSource(
             projects_root, TranscriptErrorFactory(get_logger("blizzard.runner.harness.transcript"))
