@@ -102,13 +102,17 @@ _FORGE_KEYED = (RecordKind.FORGE,)
 
 def _version_retired(loc: list[str], version: object) -> HTTPException:
     """422 on ``loc`` for a document version this hub no longer reads."""
-    stated = "no version" if version is None else f"version {version if isinstance(version, int) else repr(version)}"
+    if version is None:
+        msg = f"a document must name version {DOCUMENT_VERSION}"
+    else:
+        stated = version if isinstance(version, int) else repr(version)
+        msg = f"version {stated} is retired; send a version {DOCUMENT_VERSION} document"
     return HTTPException(
         status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
         detail=[
             {
                 "loc": loc,
-                "msg": f"{stated} is retired; send a version {DOCUMENT_VERSION} document",
+                "msg": msg,
                 "type": VERSION_RETIRED,
             }
         ],
