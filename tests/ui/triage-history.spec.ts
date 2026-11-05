@@ -1,4 +1,4 @@
-import { expect, test } from '../harness/fixtures';
+import { expect, test, RUNNER_VERSION } from '../harness/fixtures';
 
 // A packaged triage migration selects its producing step on the board's Node history tab: the authored-edge migration
 // row names its origin step, and selecting it opens that step's transcript and artifact, at the wide viewport and at
@@ -16,7 +16,7 @@ test('test_triage_migration_selects_transcript_and_artifact', async ({ api, flee
 
   const runner = await fleet('r1');
   const registered = await runner.post('/api/fleet/runners', {
-    data: { name: 'r1', workspace_id: 'w1', capabilities: [{ harness_id: 'claude', default: true }] },
+    data: { name: 'r1', version: RUNNER_VERSION, workspace_id: 'w1', capabilities: [{ harness_id: 'claude', default: true }] },
   });
   expect(registered.status).toBe(201);
   const claim = await runner.post('/api/fleet/routes', { data: { chunk_id: chunkId, workspace_id: 'w1', environment_ids: ['e'] } });

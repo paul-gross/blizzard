@@ -1,4 +1,4 @@
-import { expect, test } from '../harness/fixtures';
+import { expect, test, RUNNER_VERSION } from '../harness/fixtures';
 
 // Cost and usage render on the board and the chunk detail and update live over the event stream, with no reload, as
 // `usage.recorded` facts land: a billed figure, a cost-absent fact marking the total a lower bound, and a
@@ -18,7 +18,7 @@ interface Usage {
 test('test_board_renders_cost_and_updates_live_over_sse', async ({ api, fleet, issue, page, wideViewport }) => {
   const runner = await fleet('r1');
   const registered = await runner.post('/api/fleet/runners', {
-    data: { name: 'r1', workspace_id: 'w1', capabilities: [{ harness_id: 'claude', default: true }] },
+    data: { name: 'r1', version: RUNNER_VERSION, workspace_id: 'w1', capabilities: [{ harness_id: 'claude', default: true }] },
   });
   expect(registered.status).toBe(201);
 

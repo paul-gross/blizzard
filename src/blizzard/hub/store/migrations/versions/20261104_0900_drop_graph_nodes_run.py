@@ -17,7 +17,7 @@ import sqlalchemy as sa
 from alembic import op
 
 revision: str = "20261104_0900_drop_graph_nodes_run"
-down_revision: str | None = "20261101_0900_turn_page"
+down_revision: str | None = "20261102_0900_drop_hub_exec_slot"
 branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
 

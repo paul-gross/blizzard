@@ -5,7 +5,7 @@ retires: deprecate-graph-nodes-run
 breaking: true
 breaks:
   - graph_nodes.run
-upgrade-guide: runners-below-03-are-refused
+upgrade-guide: runners-below-04-are-refused
 ---
 
 Drops the hub store's `graph_nodes.run` column, which the hub has neither read nor written since 0.3: a hub node is

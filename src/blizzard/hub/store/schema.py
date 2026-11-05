@@ -1449,22 +1449,6 @@ Index(
     "ix_chunk_bounces_tenant_chunk_id_epoch", chunk_bounces.c.tenant_id, chunk_bounces.c.chunk_id, chunk_bounces.c.epoch
 )
 
-# --- The hub-execution slot, deprecated --------------------------------------
-# Hub steps take turns (``hub_turns``); the rows are the history of steps run before turns, read by the trace corpus.
-
-hub_exec_slot = Table(
-    "hub_exec_slot",
-    metadata,
-    Column("slot_id", String, primary_key=True, info={"hub_unique": True}),  # hes_<ulid>
-    Column("holder_chunk_id", String, ForeignKey("chunks.chunk_id"), nullable=False),
-    Column("node_id", String, nullable=False),
-    Column("acquired_at", UtcDateTime, nullable=False),
-    Column("released_at", UtcDateTime, nullable=True),  # null while live
-    Column("tenant_id", String, ForeignKey("tenants.tenant_id", name="fk_hub_exec_slot_tenant_id"), nullable=False),
-    info={"deprecated": "0.3"},
-)
-Index("ix_hub_exec_slot_tenant_id", hub_exec_slot.c.tenant_id)
-
 # --- The generic hub command node's pending-poll attempts (#66) --------------
 # One append-only row per poll attempt; pending-ness derives from them, never memory.
 

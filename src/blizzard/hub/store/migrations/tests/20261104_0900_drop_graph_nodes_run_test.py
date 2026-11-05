@@ -19,7 +19,7 @@ from tests.support.scaffolding import default_tenant, migrate_to
 
 pytestmark = [pytest.mark.component]
 
-_PARENT = "20261101_0900_turn_page"
+_PARENT = "20261102_0900_drop_hub_exec_slot"
 _DROP = "20261104_0900_drop_graph_nodes_run"
 
 _AT = datetime(2026, 11, 4, tzinfo=UTC)

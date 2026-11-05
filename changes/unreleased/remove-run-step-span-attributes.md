@@ -3,7 +3,7 @@ kind: removed
 surfaces: [trace]
 retires: deprecate-run-step-span-attributes
 breaking: true
-upgrade-guide: runners-below-03-are-refused
+upgrade-guide: runners-below-04-are-refused
 ---
 
 The `blizzard.hub.run_step.name` and `blizzard.hub.run_step.exit_code` span attributes, deprecated and no longer emitted

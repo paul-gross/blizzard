@@ -3,7 +3,7 @@ kind: removed
 surfaces: [http-api]
 retires: deprecate-bounce-step
 breaking: true
-upgrade-guide: runners-below-03-are-refused
+upgrade-guide: runners-below-04-are-refused
 ---
 
 A `bounce-envelope` artifact no longer carries `step`, which the hub has written only as `null` since 0.3: a bounce

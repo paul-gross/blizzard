@@ -124,7 +124,6 @@ FACT_TABLES: tuple[FactTable, ...] = (
     _entry(s.delivery_landed, "delivery_landed", _F, time="landed_at"),
     _entry(s.delivery_repo_landed, "landed_repos", _F, time="landed_at"),
     _entry(s.chunk_work_refs, None, _T, time=None),
-    _entry(s.hub_exec_slot, None, _T, key="holder_chunk_id", row_id="slot_id", time="acquired_at"),
     _entry(s.chunk_dependencies, None, _T, key="dependent_chunk_id", row_id="dependency_id", time="declared_at"),
     _entry(s.flow_submissions, None, _T, row_id="submission_id", time="submitted_at"),
     _entry(s.chunk_grouped, None, _E, time="grouped_at", ephemeral=True),

@@ -339,14 +339,6 @@ def test_step_facts_leave_out_a_closed_tenants_row_in_every_table_they_read(worl
         resolved_at=_AT,
     )
     world.insert(
-        s.hub_exec_slot,
-        tenant_id=_CLOSED,
-        slot_id="sl_closed",
-        holder_chunk_id=chunk,
-        node_id="nd_1",
-        acquired_at=_AT,
-    )
-    world.insert(
         s.chunk_dependencies,
         tenant_id=_CLOSED,
         dependency_id="dp_closed",
@@ -355,7 +347,7 @@ def test_step_facts_leave_out_a_closed_tenants_row_in_every_table_they_read(worl
         declared_at=_AT,
         declared_by="test",
     )
-    held = {*seeded, s.decision_resolutions, s.hub_exec_slot, s.chunk_dependencies}
+    held = {*seeded, s.decision_resolutions, s.chunk_dependencies}
     from_seed = {s.transitions, s.lease_facts, s.usage_facts, s.chunk_work_refs}
     assert set(tables(Projection.TRACE)) <= held | from_seed
     assert world.corpus.step_facts_for([chunk], _tenant_label) == {}

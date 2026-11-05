@@ -21,8 +21,6 @@ from blizzard.hub.domain.observability.tracing.facts import (
     TracedDecisionResolution,
     TracedEpochOwner,
     TracedEscalation,
-    TracedHubExecSlot,
-    TracedHubPoll,
     TracedHubTurn,
     TracedLease,
     TracedMigration,
@@ -246,33 +244,6 @@ def test_pause_runs_to_its_lift_or_the_step_end() -> None:
     assert (first.name, first.start, first.end) == ("pause", fx.at(15), fx.at(18))
     assert (second.start, second.end) == (fx.at(35), fx.at(40))
     assert root.attributes[attr.WAIT_PAUSE_MS] == 8000
-
-
-def test_hub_step_correlates_polls_and_slots_by_node_and_window_then_a_bounce() -> None:
-    facts = fx.hub_facts(
-        hub_polls=(
-            TracedHubPoll("h1", "g1-poll", 1, fx.at(20)),
-            TracedHubPoll("h2", "g1-poll", 1, fx.at(40)),
-            TracedHubPoll("h3", "g1-other", 1, fx.at(41)),
-            TracedHubPoll("h4", "g1-poll", 1, fx.at(105)),
-        ),
-        hub_exec_slots=(
-            TracedHubExecSlot("s1", "g1-poll", fx.at(10), fx.at(30)),
-            TracedHubExecSlot("s2", "g1-poll", fx.at(50), fx.at(500)),
-            TracedHubExecSlot("s3", "g1-other", fx.at(12), fx.at(13)),
-        ),
-        bounces=(TracedBounce(2, "conflict", fx.at(90)),),
-        transitions=(fx.to("g1", "build", 100, 2),),
-    )
-    root, first, second = _step(facts)
-    assert root.name == "step poll"
-    assert root.attributes[shared.NODE_EXECUTOR] == "hub"
-    assert attr.RUNNER_ID not in root.attributes
-    assert [e.name for e in root.events] == ["hub poll pending", "hub poll pending", "bounce"]
-    assert root.events[-1].attributes[attr.BOUNCE_CAUSE] == "conflict"
-    assert (first.name, first.start, first.end) == ("hub exec", fx.at(10), fx.at(30))
-    assert (second.start, second.end) == (fx.at(50), fx.at(100))
-    assert first.context != second.context
 
 
 def test_hub_step_spans_each_turn_on_its_node_by_window_keyed_by_the_turn() -> None:

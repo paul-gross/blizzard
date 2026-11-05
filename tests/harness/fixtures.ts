@@ -420,6 +420,7 @@ export type { Clock } from './clock-stack';
 export type { WorkerCheckpoint } from './worker-checkpoint';
 export type { Viewport } from './ui';
 export { expect };
+export { RUNNER_VERSION } from './env';
 export { packagedSystemArtifact } from './system-artifacts';
 export { chunkTraceId, chunkSpanId, lifetimeTraceId, lifetimeSpanId, spanId, stepKeyText } from './trace-ids';
 export type { StepKey } from './trace-ids';

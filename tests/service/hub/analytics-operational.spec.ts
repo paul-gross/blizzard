@@ -1,4 +1,4 @@
-import { expect, test } from '../../harness/fixtures';
+import { expect, test, RUNNER_VERSION } from '../../harness/fixtures';
 
 // The analytics operational-datasets routes over a real hub: durations, spend (by node and by model), and outcomes each
 // reflect a real completed step over the packaged default graph's own entry node. The routes read tenant-wide
@@ -17,7 +17,7 @@ test('test_the_three_datasets_reflect_a_real_completed_step_over_a_live_hub', as
   expect((await api.post(`/api/chunks/${chunkId}/promote`)).status).toBe(202);
   const runner = await fleet('r1');
   const registered = await runner.post('/api/fleet/runners', {
-    data: { name: 'r1', workspace_id: 'w1', capabilities: [{ harness_id: 'claude', default: true }] },
+    data: { name: 'r1', version: RUNNER_VERSION, workspace_id: 'w1', capabilities: [{ harness_id: 'claude', default: true }] },
   });
   expect(registered.status).toBe(201);
   // The claim reserves epoch 1 for r1 — the epoch its mint and completion land at.

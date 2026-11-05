@@ -101,18 +101,21 @@ older hub then runs each node's untouched `run:` again. A chunk escalated meanwh
 
 ## Upgrading to the next release
 
-### Runners below 0.3 are refused
+### Runners below 0.4 are refused
 
-The hub↔runner floor rises from 0.2 to 0.3, so the hub refuses a runner older than 0.3. This reverses the usual
-hub-first order: move every runner host onto 0.3 or later before the hub takes this release.
+The hub↔runner floor rises from 0.2 to 0.4, so the hub refuses a runner older than 0.4. This reverses the usual
+hub-first order: move every runner host onto 0.4 or later before the hub takes this release.
 
 A runner that lags is refused at registration with `409 RunnerVersionRefusal`, and the runner halts. Upgrade that host
 and restart its runner; nothing on the hub needs to change.
 
-The same release removes the surfaces 0.3 deprecated, which only a hub node's `run:` script used. A hub node runs no
-commands since 0.3, so a hub that has carried every node onto an action
-([Hub nodes run no commands](#hub-nodes-run-no-commands)) loses nothing it still uses. Each removed surface and what
-replaced it:
+The same release drops the `hub_exec_slot` table, so a hub step run before turns loses its slot-keyed `hub exec` spans.
+To go back, walk the hub store down on this image first ([`docs/rollback.md`](./rollback.md)); the downgrade recreates
+the table empty.
+
+It also removes the surfaces 0.3 deprecated, which only a hub node's `run:` script used. A hub node runs no commands
+since 0.3, so a hub that has carried every node onto an action ([Hub nodes run no commands](#hub-nodes-run-no-commands))
+loses nothing it still uses. Each removed surface and what replaced it:
 
 - `POST /api/chunks/{chunk_id}/hub-markers` is gone: a hub node's action records its own markers.
 - `POST /api/chunks/{chunk_id}/garden-delivery` is gone: the `garden-deliver` action delivers a routine run's delta and
