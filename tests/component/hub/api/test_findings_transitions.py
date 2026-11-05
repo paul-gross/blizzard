@@ -13,7 +13,7 @@ from sqlalchemy import insert
 
 from blizzard.hub.store import schema as s
 from blizzard.hub.store.internal.finding_store import FindingStore
-from tests.support import HubHarness, build_hub, default_project, hub_scoped, hub_store_connections, stamp
+from tests.support.scaffolding import HubHarness, build_hub, default_project, hub_scoped, hub_store_connections, stamp
 
 
 def _seed_finding(hub: HubHarness, finding_id: str, *, scope: str = "blizzard") -> None:

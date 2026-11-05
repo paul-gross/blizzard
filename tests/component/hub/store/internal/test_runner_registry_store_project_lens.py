@@ -9,7 +9,7 @@ from pathlib import Path
 from blizzard.foundation.tokens import TokenHash
 from blizzard.hub.domain.runners.registration import RunnerAddition, ServedEntry
 from blizzard.hub.store.internal.runner_registry_store import RunnerRegistryStore
-from tests.support import HubHarness, build_hub, count_queries, count_rows_read, runner_token
+from tests.support.scaffolding import HubHarness, build_hub, count_queries, count_rows_read, runner_token
 
 _MINE = "proj_mine"
 _THEIRS = "proj_theirs"

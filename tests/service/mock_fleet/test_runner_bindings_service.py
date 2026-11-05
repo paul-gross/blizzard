@@ -13,7 +13,7 @@ from blizzard.wire.runner import (
     RunnerRegistrationRequest,
     RunnerRegistrationResponse,
 )
-from tests.mock_fleet_support import mock_hub, mock_hub_chunk_spec, require_mock_fleet, service_gate
+from tests.support.mock_fleet import mock_hub, mock_hub_chunk_spec, require_mock_fleet, service_gate
 
 pytestmark = [pytest.mark.service, service_gate]
 

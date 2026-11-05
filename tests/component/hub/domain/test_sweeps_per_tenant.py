@@ -9,13 +9,13 @@ from pathlib import Path
 import sqlalchemy as sa
 
 from blizzard.hub.store import schema as s
-from tests.support import (
+from tests.support.scaffolding import (
     build_hub,
     close_tenant,
     default_tenant,
     hub_scoped,
 )
-from tests.tenant_sweeps import (
+from tests.support.tenant_sweeps import (
     close_events,
     landed_hub_ref,
 )

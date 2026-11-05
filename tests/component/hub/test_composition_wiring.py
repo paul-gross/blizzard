@@ -6,7 +6,7 @@ from __future__ import annotations
 from pathlib import Path
 
 from blizzard.hub.domain.garden.findings.bucket import FindingBucketReader
-from tests.support import build_hub
+from tests.support.scaffolding import build_hub
 
 
 def test_the_finding_bucket_is_a_reader_bound_to_the_finding_store(tmp_path: Path) -> None:

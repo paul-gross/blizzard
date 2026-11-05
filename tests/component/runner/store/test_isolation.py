@@ -78,8 +78,8 @@ from blizzard.runner.usage.repository import (
     IWriteHostLaneMarkRepository,
     IWriteUsageRepository,
 )
-from tests.runner_fakes import record_usage, runner_migration_prototype
-from tests.store_read_census import GRAPH_ID, RUNNER_CENSUS, RunnerWorld, build_runner_world
+from tests.support.runner_fakes import record_usage, runner_migration_prototype
+from tests.support.store_read_census import GRAPH_ID, RUNNER_CENSUS, RunnerWorld, build_runner_world
 
 RUNNER_A = "rn_a"
 RUNNER_B = "rn_b"

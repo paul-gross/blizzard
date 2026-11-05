@@ -8,7 +8,7 @@ from pathlib import Path
 
 import pytest
 
-from tests.support import HubHarness, build_hub
+from tests.support.scaffolding import HubHarness, build_hub
 
 
 def _calls(graph_name: str) -> list[tuple[str, str, dict[str, object] | None]]:

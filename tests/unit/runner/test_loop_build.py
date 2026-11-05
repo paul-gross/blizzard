@@ -59,11 +59,11 @@ from blizzard.runner.subscriptions.internal.openai_subscription_sampler import O
 from blizzard.runner.subscriptions.internal.usage_http_client import LazyUsageHttpClient
 from blizzard.runner.subscriptions.subscription_sampler import PROVIDER_ANTHROPIC, PROVIDER_OPENAI
 from blizzard.runner.tracing.config import RunnerTracingConfig
-from tests.config_inputs import create_runner_app
-from tests.harness_sections import sections
-from tests.host_files import load_runner_config, one_workspace, write_minimal_host
-from tests.runner_client import runner_client, runner_seams
-from tests.runner_fakes import (
+from tests.support.config_inputs import create_runner_app
+from tests.support.harness_sections import sections
+from tests.support.host_files import load_runner_config, one_workspace, write_minimal_host
+from tests.support.runner_client import runner_client, runner_seams
+from tests.support.runner_fakes import (
     FIXTURE_RUNNER_ID,
     FakeHarness,
     FakeHub,
@@ -75,7 +75,7 @@ from tests.runner_fakes import (
     make_stores,
     migrated_store_at,
 )
-from tests.support import InMemoryTraceExporter
+from tests.support.scaffolding import InMemoryTraceExporter
 
 _NO_HARNESSES = HarnessRegistry({})
 _NOW = datetime(2026, 7, 13, 12, 0, 0, tzinfo=UTC)

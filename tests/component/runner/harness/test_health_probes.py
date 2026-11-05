@@ -17,8 +17,8 @@ from blizzard.runner.harness.internal.committed_corpus import DEFAULT_CORPUS_ROO
 from blizzard.runner.harness.offline_compatibility import admitted_corpus_versions
 from blizzard.runner.harness.opencode.compatibility.probe import ADMITTED_OPENCODE_RANGE
 from blizzard.runner.harness.opencode.health import OpenCodeHealthProbe
-from tests.repo_files import repo_root
-from tests.support_child_launch import version_probe
+from tests.support.child_launch import version_probe
+from tests.support.repo_files import repo_root
 
 _PACKAGE_ROOT = repo_root() / "src" / "blizzard" / "runner" / "harness"
 # Keyed off the admitted range's own committed corpus — there is exactly

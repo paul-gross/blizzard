@@ -18,9 +18,9 @@ from blizzard.runner.harness.selftest_result import (
 from blizzard.runner.lifecycle.judgement.internal.elicitation_files import ElicitationFiles
 from blizzard.runner.selftest.internal.subprocess_scratch_git import SubprocessScratchGit
 from blizzard.runner.selftest.service import SelfTestService
-from tests.runner_fakes import make_store
-from tests.selftest_probes import FixedPidAdapter, RecordingProcessProbe
-from tests.support_child_launch import CHILDREN, tool_env
+from tests.support.child_launch import CHILDREN, tool_env
+from tests.support.runner_fakes import make_store
+from tests.support.selftest_probes import FixedPidAdapter, RecordingProcessProbe
 
 
 def test_recording_a_result_and_reading_it_back_round_trips_it(tmp_path: Path) -> None:

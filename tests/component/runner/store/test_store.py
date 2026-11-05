@@ -14,8 +14,8 @@ import sqlalchemy as sa
 from blizzard.runner.harness.identity import CLAUDE_CODE_HARNESS_ID, SessionReference
 from blizzard.runner.leases.model import NewLease
 from blizzard.runner.store.schema import external_usage_samples, heartbeats
-from tests.runner_fakes import FIXTURE_RUNNER_ID, SqlAlchemyRunnerStore
-from tests.support_runner_store import (
+from tests.support.runner_fakes import FIXTURE_RUNNER_ID, SqlAlchemyRunnerStore
+from tests.support.runner_store import (
     _NOW,  # pyright: ignore[reportPrivateUsage]
     _mint,  # pyright: ignore[reportPrivateUsage]
     _mint_with_session,  # pyright: ignore[reportPrivateUsage]

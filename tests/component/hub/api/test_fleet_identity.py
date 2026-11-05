@@ -17,8 +17,8 @@ from blizzard.foundation.flags import FlagRegistry, resolve_flags
 from blizzard.hub.secrets import ENV_SECRET_KEY
 from blizzard.hub.store import schema as s
 from blizzard.hub.tenancy import TenantId
-from tests.config_inputs import build_hosted_hub_app, init_hub, load_hub_config
-from tests.support import HubHarness, add_tenant, build_hub, default_tenant, hub_scoped, seed_runner
+from tests.support.config_inputs import build_hosted_hub_app, init_hub, load_hub_config
+from tests.support.scaffolding import HubHarness, add_tenant, build_hub, default_tenant, hub_scoped, seed_runner
 
 
 def _plain(hub: HubHarness) -> TestClient:

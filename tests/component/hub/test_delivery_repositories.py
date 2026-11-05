@@ -26,8 +26,8 @@ from blizzard.hub.forge.budget import ForgeBudgets
 from blizzard.hub.forge.registry import ForgeBinding, ForgeRegistry, IForgeAdapter
 from blizzard.hub.graphs import PACKAGED
 from blizzard.hub.store import schema
-from tests.github_double import GitHubDouble
-from tests.support import (
+from tests.support.github_double import GitHubDouble
+from tests.support.scaffolding import (
     FIXTURE_FORGE_SECRET,
     HubHarness,
     build_hub,

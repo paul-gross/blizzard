@@ -15,7 +15,7 @@ from sqlalchemy import Engine, insert
 from blizzard.hub.store import schema as s
 from blizzard.hub.store.errors import HubStoreError
 from blizzard.hub.store.internal.finding_store import FindingSetStore
-from tests.support import default_project, hub_store_connections, migrate_to, seed_chunk, seed_graph, stamp
+from tests.support.scaffolding import default_project, hub_store_connections, migrate_to, seed_chunk, seed_graph, stamp
 
 _NOW = datetime(2026, 7, 16, 12, 0, 0, tzinfo=UTC)
 

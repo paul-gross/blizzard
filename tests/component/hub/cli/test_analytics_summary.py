@@ -17,13 +17,13 @@ from click.testing import Result
 
 from blizzard.hub.cli import hub as hub_group
 from blizzard.hub.cli.analytics import DATASETS
-from tests.analytics_events_world import seeded_hub
-from tests.analytics_spend_world import mint_chunk, push_usage
-from tests.analytics_spend_world import seeded_hub as _seeded_spend_hub
-from tests.hub_request_auth import cookie
-from tests.repo_files import repo_root
-from tests.support import HubHarness
-from tests.worker_http import Bound, bind_stubs
+from tests.support.analytics_events_world import seeded_hub
+from tests.support.analytics_spend_world import mint_chunk, push_usage
+from tests.support.analytics_spend_world import seeded_hub as _seeded_spend_hub
+from tests.support.hub_request_auth import cookie
+from tests.support.repo_files import repo_root
+from tests.support.scaffolding import HubHarness
+from tests.support.worker_http import Bound, bind_stubs
 
 _HUB_URL = "http://hub.local:8421"
 

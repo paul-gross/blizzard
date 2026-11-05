@@ -29,11 +29,11 @@ from blizzard.runner.harness.wiring import (
     build_production_harness_registry,
 )
 from blizzard.runner.process.internal.linux_process_probe import LinuxProcessProbe
-from tests.config_inputs import export_runner_app
-from tests.harness_sections import with_claude_code, with_opencode
-from tests.runner_client import runner_seams
-from tests.runner_fakes import NO_TRACING, FakeHarness, FakeTranscriptSource
-from tests.support_child_launch import CHILDREN
+from tests.support.child_launch import CHILDREN
+from tests.support.config_inputs import export_runner_app
+from tests.support.harness_sections import with_claude_code, with_opencode
+from tests.support.runner_client import runner_seams
+from tests.support.runner_fakes import NO_TRACING, FakeHarness, FakeTranscriptSource
 
 
 def _harness() -> FakeHarness:

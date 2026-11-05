@@ -20,8 +20,16 @@ from blizzard.hub.auth.pkce import Pkce
 from blizzard.hub.cli import hub as hub_group
 from blizzard.hub.cli.command import AdminCommand, FleetCommand
 from blizzard.hub.config import AUTH_MODE_OAUTH
-from tests.support import HubHarness, build_hub, default_tenant, seed_membership, seed_runner, seed_session, seed_user
-from tests.worker_http import Bound, bind_stubs
+from tests.support.scaffolding import (
+    HubHarness,
+    build_hub,
+    default_tenant,
+    seed_membership,
+    seed_runner,
+    seed_session,
+    seed_user,
+)
+from tests.support.worker_http import Bound, bind_stubs
 
 _HUB_URL = "http://testserver"
 _LOOPBACK_REDIRECT = "http://127.0.0.1:54321/callback"

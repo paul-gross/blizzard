@@ -26,7 +26,7 @@ from blizzard.runner.lifecycle.registration import Registration
 from blizzard.runner.loop.context import LoopConfig, LoopContext
 from blizzard.runner.loop.steps import Fill, Pull, Reap, Resume
 from blizzard.runner.status.view import RunnerStatusService
-from tests.runner_fakes import (
+from tests.support.runner_fakes import (
     FIXTURE_PROJECT_ID,
     FakeHarness,
     FakeHub,

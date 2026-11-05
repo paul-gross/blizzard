@@ -18,7 +18,7 @@ import pytest
 from blizzard.hub.domain.chunk.model import ChunkFacts
 from blizzard.hub.domain.projects.model import ProjectId
 from blizzard.hub.store.internal.chunk_facts_store import ChunkFactsStore
-from tests.support import (
+from tests.support.scaffolding import (
     HubHarness,
     build_hub,
     capture_statements,

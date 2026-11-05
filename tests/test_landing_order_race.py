@@ -14,7 +14,7 @@ from typing import Any
 import pytest
 
 from blizzard.hub.domain.projects.order import LandingOrderConflict
-from tests.support import HubHarness, build_hub
+from tests.support.scaffolding import HubHarness, build_hub
 
 pytestmark = pytest.mark.component
 

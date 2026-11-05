@@ -12,9 +12,9 @@ from typing import Any
 
 import pytest
 
-from tests.analytics_durations_world import complete_node, mint_chunk, seeded_hub
-from tests.hub_request_auth import cookie
-from tests.support import HubHarness, report_lease
+from tests.support.analytics_durations_world import complete_node, mint_chunk, seeded_hub
+from tests.support.hub_request_auth import cookie
+from tests.support.scaffolding import HubHarness, report_lease
 
 _SEQ = itertools.count(1)  # one monotone seq per runner, shared by lease and usage facts
 

@@ -29,7 +29,7 @@ from blizzard.runner.harness.transcript import TranscriptBatch, TranscriptPositi
 from blizzard.runner.leases.model import Lease, PoolHead
 from blizzard.runner.lifecycle.session import SessionResolver
 from blizzard.runner.node_steps.envelope import EnvelopeNode, RotateBounds
-from tests.runner_fakes import make_envelope
+from tests.support.runner_fakes import make_envelope
 
 _CWD = "/ws/e1"
 

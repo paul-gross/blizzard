@@ -17,7 +17,7 @@ import pytest
 
 from blizzard.auth_core import Role
 from blizzard.hub.domain.runners.registration import RunnerRegistration
-from tests.support import HubHarness, build_hub, emitted_events, seed_runner, seed_session, seed_user
+from tests.support.scaffolding import HubHarness, build_hub, emitted_events, seed_runner, seed_session, seed_user
 
 
 def _add(hub: HubHarness, name: str = "r-claude", **kwargs: Any) -> dict[str, Any]:
@@ -148,7 +148,7 @@ def test_get_runner_reflects_pause_state(tmp_path: Path) -> None:
 
 
 def test_runner_bearer_token_is_rejected_on_get_runner(tmp_path: Path) -> None:
-    from tests.hub_request_auth import seed_enrolled
+    from tests.support.hub_request_auth import seed_enrolled
 
     token = seed_enrolled(tmp_path, runner_id="r1", workspace_id="w1")
     hub = build_hub(tmp_path)

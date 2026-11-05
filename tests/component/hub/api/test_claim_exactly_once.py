@@ -9,7 +9,7 @@ from __future__ import annotations
 import threading
 from pathlib import Path
 
-from tests.support import HubHarness, build_hub, make_ready, pointer_token
+from tests.support.scaffolding import HubHarness, build_hub, make_ready, pointer_token
 
 _POINTER = {"source": "default", "ref": "2"}
 

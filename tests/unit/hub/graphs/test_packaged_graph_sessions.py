@@ -13,8 +13,8 @@ from blizzard.foundation.node_steps import SessionMode
 from blizzard.hub.domain.graph.model import ChoiceDoc, GraphDoc, SessionRef
 from blizzard.hub.domain.graph.validation import Validator
 from blizzard.hub.graphs import GraphFile
-from tests.repo_files import repo_root
-from tests.support import TEST_CATALOGUE
+from tests.support.repo_files import repo_root
+from tests.support.scaffolding import TEST_CATALOGUE
 
 _GRAPHS_ROOT = repo_root() / "src" / "blizzard" / "hub" / "graphs"
 _PACKAGED = ("advanced-development-workflow", "default", "basic-development-workflow")

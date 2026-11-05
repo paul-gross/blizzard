@@ -15,8 +15,8 @@ from blizzard.hub.domain.config.changes import ChangeContext, Door
 from blizzard.hub.domain.garden.routines import Routine
 from blizzard.hub.domain.garden.scopes import ScopeSlug
 from blizzard.hub.domain.graph.model import Graph
-from tests.support import HubHarness, build_hub, default_project, project_record
-from tests.worker_http import Bound, bind_stubs
+from tests.support.scaffolding import HubHarness, build_hub, default_project, project_record
+from tests.support.worker_http import Bound, bind_stubs
 
 _CTX = ChangeContext(actor="operator", door=Door.API)
 

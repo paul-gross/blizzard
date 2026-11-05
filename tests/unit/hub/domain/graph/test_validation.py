@@ -12,7 +12,7 @@ import pytest
 
 from blizzard.hub.domain.graph.model import GraphDoc, NodeDoc, SessionDecl
 from blizzard.hub.domain.graph.validation import Validator
-from tests.support import TEST_CATALOGUE
+from tests.support.scaffolding import TEST_CATALOGUE
 
 
 @pytest.mark.parametrize("value, expected", [("3", 3), (2.5, 2), (b"4", 4), (True, 1)])

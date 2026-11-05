@@ -31,7 +31,7 @@ from blizzard.runner.throttle.gate import GateVerdict, StartKind, ThrottleGate
 from blizzard.runner.throttle.pause import RunnerBrakes
 from blizzard.runner.throttle.settings import HoldOrRelease, ThrottleSettings
 from blizzard.runner.throttle.usage_limits import FloorClear
-from tests.runner_fakes import (
+from tests.support.runner_fakes import (
     FIXTURE_RUNNER_ID,
     FakeHarness,
     FakeHub,

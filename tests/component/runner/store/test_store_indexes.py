@@ -23,9 +23,9 @@ from blizzard.runner.leases.model import NewLease
 from blizzard.runner.loop.tick import tick
 from blizzard.runner.node_steps.chunk_state import ChunkState
 from blizzard.runner.node_steps.submissions import ApplyReply
-from tests import support
-from tests.config_inputs import init_host
-from tests.runner_fakes import (
+from tests.support import scaffolding as support
+from tests.support.config_inputs import init_host
+from tests.support.runner_fakes import (
     FakeHarness,
     FakeHub,
     FakeProbe,

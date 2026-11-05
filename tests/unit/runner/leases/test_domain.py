@@ -23,8 +23,8 @@ from blizzard.runner.leases.activity import (
     lease_display_status,
 )
 from blizzard.runner.leases.model import Lease, NewLease
-from tests.factory_fields import LeaseFields
-from tests.runner_fakes import FakeProbe, SqlAlchemyRunnerStore, make_store
+from tests.support.factory_fields import LeaseFields
+from tests.support.runner_fakes import FakeProbe, SqlAlchemyRunnerStore, make_store
 
 _NOW = datetime(2026, 7, 16, 12, 0, 0, tzinfo=UTC)
 

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from blizzard.hub.domain.chunk.model import WorkRef
 from blizzard.hub.work_sources.registry import SelectedWorkSources
-from tests.support import FakeWorkSource, WorkSourceRegistry
+from tests.support.scaffolding import FakeWorkSource, WorkSourceRegistry
 
 
 class Labels(FakeWorkSource):

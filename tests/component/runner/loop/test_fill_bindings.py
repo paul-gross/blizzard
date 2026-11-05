@@ -25,7 +25,7 @@ from blizzard.runner.lifecycle.routing import RoutingConflict
 from blizzard.runner.loop.context import LoopConfig, LoopContext
 from blizzard.runner.loop.steps import Fill
 from blizzard.runner.status.view import RunnerStatusService
-from tests.runner_fakes import (
+from tests.support.runner_fakes import (
     FIXTURE_RUNNER_ID,
     FakeHarness,
     FakeHub,

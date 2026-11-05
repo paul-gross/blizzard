@@ -11,10 +11,10 @@ from blizzard.runner.environments.factory import build_workspace_provider
 from blizzard.runner.environments.internal.basic_provider import BasicWorkspaceProvider
 from blizzard.runner.environments.internal.git import EnvGitError
 from blizzard.runner.environments.provider import EnvironmentPreparationError, WorkspaceAcquisitionError, WorkspaceRepo
-from tests.config_inputs import init_host
-from tests.host_files import load_runner_config
-from tests.support_basic_provider import git
-from tests.support_child_launch import env_git, workspace_launch
+from tests.support.basic_provider import git
+from tests.support.child_launch import env_git, workspace_launch
+from tests.support.config_inputs import init_host
+from tests.support.host_files import load_runner_config
 
 
 def origin(tmp_path: Path) -> WorkspaceRepo:

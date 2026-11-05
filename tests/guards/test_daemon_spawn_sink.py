@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import re
 
-from tests.repo_files import repo_root
+from tests.support.repo_files import repo_root
 
 _TESTS_DIR = repo_root() / "tests"
 
@@ -30,5 +30,5 @@ def test_no_test_spawns_a_daemon_onto_an_undrained_pipe() -> None:
     ]
     assert offenders == [], (
         "these spawn sites pipe a daemon's stdout to a buffer nothing drains; "
-        f"use tests.support.daemon_log_sink instead: {offenders}"
+        f"use tests.support.scaffolding.daemon_log_sink instead: {offenders}"
     )

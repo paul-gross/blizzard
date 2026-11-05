@@ -22,9 +22,9 @@ from blizzard.runner.store import schema
 from blizzard.runner.store.errors import RunnerStoreErrorFactory
 from blizzard.runner.transfer.rows import HostIngest, WorkspacePromptConflict
 from blizzard.tools.invariants import runner_invariants
-from tests.config_inputs import init_host
-from tests.runner_fakes import FakeProbe
-from tests.runner_scope_seeding import T0, reflect, seed_tables
+from tests.support.config_inputs import init_host
+from tests.support.runner_fakes import FakeProbe
+from tests.support.runner_scope_seeding import T0, reflect, seed_tables
 
 _HERE = "rn_01JX00000000000000000000AA"
 _MOVING = "rn_01JX00000000000000000000BB"

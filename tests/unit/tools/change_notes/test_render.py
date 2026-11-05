@@ -14,12 +14,12 @@ from blizzard.tools.change_notes.breaks import BreakEntry, NamedBreak
 from blizzard.tools.change_notes.cli import main
 from blizzard.tools.change_notes.contract import Note
 from blizzard.tools.change_notes.render import render
-from tests.change_notes_repo import (
+from tests.support.change_notes_repo import (
     commit,
     git,
     repo,
 )
-from tests.compat_stub import entry, stub_compat
+from tests.support.compat_stub import entry, stub_compat
 
 # Re-exported so pytest resolves the shared `repo` fixture here; the tests request it by name.
 _FIXTURES = (repo,)

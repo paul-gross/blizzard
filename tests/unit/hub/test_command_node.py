@@ -27,10 +27,10 @@ from blizzard.hub.domain.delivery.flows import DEFAULT_POLL_INTERVAL, DEFAULT_PO
 from blizzard.hub.domain.graph.authoring import Reification
 from blizzard.hub.domain.graph.model import GraphDoc
 from blizzard.hub.domain.graph.validation import Validator
-from tests.hub_command_graphs import (
+from tests.support.hub_command_graphs import (
     HUB_CMD_GRAPH_YAML,
 )
-from tests.support import (
+from tests.support.scaffolding import (
     TEST_CATALOGUE,
 )
 

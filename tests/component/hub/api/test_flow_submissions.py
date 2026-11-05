@@ -13,8 +13,8 @@ from blizzard.hub.api.auth_session import TENANT_HEADER
 from blizzard.hub.domain.delivery.flows import FlowResource, LandingTerms, Submission, TurnEvent
 from blizzard.hub.store import schema as s
 from blizzard.hub.store.internal.flow_store import FlowStore
-from tests.hub_request_auth import bearer, cookie, enrolled_runner_token, ingest_chunk
-from tests.support import (
+from tests.support.hub_request_auth import bearer, cookie, enrolled_runner_token, ingest_chunk
+from tests.support.scaffolding import (
     HubHarness,
     add_tenant,
     build_hub,

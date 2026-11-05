@@ -1,6 +1,6 @@
 """The hub refuses to start when a stored secret's key generation is missing (component tier).
 
-Proven on ``build_hosted_app`` itself — ``tests/support.py::build_hub`` bypasses it —
+Proven on ``build_hosted_app`` itself — ``tests/support/scaffolding.py::build_hub`` bypasses it —
 the ``tests/component/hub/test_app_platform_tracing.py`` shape."""
 
 from __future__ import annotations
@@ -21,8 +21,8 @@ from blizzard.hub.secrets import (
     secret_keys_dir,
 )
 from blizzard.hub.store.internal.secret_store import SecretStore
-from tests.config_inputs import build_hosted_hub_app, init_hub
-from tests.support import OP, config_authoring, hub_store_connections
+from tests.support.config_inputs import build_hosted_hub_app, init_hub
+from tests.support.scaffolding import OP, config_authoring, hub_store_connections
 
 _NOW = datetime(2026, 10, 4, tzinfo=UTC)
 _ENV_KEY = "AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8="

@@ -43,8 +43,8 @@ from blizzard.runner.tracing.receiver import (
     admit_data_points,
     admit_log_records,
 )
-from tests import claude_code_telemetry
-from tests.runner_fakes import REGISTERED_AT
+from tests.support import claude_code_telemetry
+from tests.support.runner_fakes import REGISTERED_AT
 
 _NOW = datetime(2026, 7, 21, 12, 0, 0, tzinfo=UTC)
 _METRICS_SCOPE = "com.anthropic.claude_code"

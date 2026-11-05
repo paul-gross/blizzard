@@ -14,7 +14,7 @@ from blizzard.runner.hub.bootstrap import JoinedRunner
 from blizzard.runner.hub.client import HubClientError, TokenIdentity, TokenRefusal
 from blizzard.runner.hub.identity import RunnerIdentity, proves_retired
 from blizzard.runner.hub.identity_service import RetiredRunnerWatch, RunnerIdentityService
-from tests.runner_init_fakes import FakeTokenIdentityReader
+from tests.support.runner_init_fakes import FakeTokenIdentityReader
 
 pytestmark = pytest.mark.unit
 

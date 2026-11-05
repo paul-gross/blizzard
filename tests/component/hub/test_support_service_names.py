@@ -6,7 +6,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from tests.support import build_hub, tenant_services_of
+from tests.support.scaffolding import build_hub, tenant_services_of
 
 
 def test_hub_services_is_the_apps_hub_level_bag(tmp_path: Path) -> None:

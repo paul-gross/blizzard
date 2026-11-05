@@ -21,8 +21,8 @@ from blizzard.hub.api.auth_session import TENANT_HEADER
 from blizzard.hub.cli import hub as hub_group
 from blizzard.hub.cli.project_option import project_option, project_query
 from blizzard.hub.domain.projects.order import LandingOrderConflict
-from tests.support import HubHarness, build_hub, default_project, seed_project
-from tests.worker_http import Bound, bind_stubs
+from tests.support.scaffolding import HubHarness, build_hub, default_project, seed_project
+from tests.support.worker_http import Bound, bind_stubs
 
 _HUB_URL = "http://testserver"
 

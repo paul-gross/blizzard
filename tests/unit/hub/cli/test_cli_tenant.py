@@ -8,7 +8,7 @@ import httpx2
 from click.testing import Result
 
 from blizzard.hub.cli import hub as hub_group
-from tests.worker_http import bind_stubs
+from tests.support.worker_http import bind_stubs
 
 _HUB_URL = "http://testserver"
 

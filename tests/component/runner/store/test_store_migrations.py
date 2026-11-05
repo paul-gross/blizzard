@@ -6,13 +6,13 @@ from pathlib import Path
 
 from blizzard.foundation.store.engine import create_engine_from_url
 from blizzard.runner.hub.identity import RunnerIdentity
-from tests.config_inputs import init_host
-from tests.migration_support_runner_store_migrations import (
+from tests.support.config_inputs import init_host
+from tests.support.migrations.runner_store_migrations import (
     LATER,
     NEW,
     rows_of,
 )
-from tests.runner_fakes import SqlAlchemyRunnerStore, runner_store_errors
+from tests.support.runner_fakes import SqlAlchemyRunnerStore, runner_store_errors
 
 
 def test_rebuilt_store_holds_no_identity_until_a_registration_records_the_hubs(tmp_path: Path) -> None:

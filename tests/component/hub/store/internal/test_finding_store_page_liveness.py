@@ -16,7 +16,7 @@ from blizzard.foundation.store.engine import create_engine_from_url
 from blizzard.hub.domain.garden.findings.model import EXIT_KINDS, FACT_KINDS, FindingFact, derive_liveness
 from blizzard.hub.store import schema as s
 from blizzard.hub.store.internal.finding_store import FindingStore
-from tests.support import (
+from tests.support.scaffolding import (
     count_queries,
     count_rows_read,
     default_project,

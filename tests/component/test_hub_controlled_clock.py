@@ -19,8 +19,8 @@ from blizzard.hub.delivery.flow_driver import FlowDriver, TickResult
 from blizzard.hub.domain.delivery.flows import RECONCILE_FLOOR
 from blizzard.hub.runtime import migration_runner
 from blizzard.wire.clock import ClockMoveRequest
-from tests.config_inputs import build_hosted_hub_app, create_hub_app, init_hub
-from tests.support import build_hub, runner_token, seed_hub_admin, seed_runner, seed_session, seed_user
+from tests.support.config_inputs import build_hosted_hub_app, create_hub_app, init_hub
+from tests.support.scaffolding import build_hub, runner_token, seed_hub_admin, seed_runner, seed_session, seed_user
 
 
 @pytest.mark.asyncio

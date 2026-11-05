@@ -28,7 +28,7 @@ from blizzard.hub.domain.garden.review.validation import (
     require_review_delta,
 )
 from blizzard.hub.domain.graph.model import Node
-from tests.garden_artifacts import deferred_entry
+from tests.support.garden_artifacts import deferred_entry
 
 _AT = datetime(2026, 7, 16, 12, 0, tzinfo=UTC)
 _CHUNK = Chunk(chunk_id="ch_9", graph_id="gr_1", work_refs=[WorkRef(source="default", ref="1")], minted_at=_AT)

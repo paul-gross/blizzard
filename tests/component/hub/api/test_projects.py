@@ -15,7 +15,7 @@ from fastapi.testclient import TestClient
 from blizzard.auth_core import Role
 from blizzard.hub.auth.memberships import MEMBERSHIP_ROLES
 from blizzard.hub.auth.permissions import ROLE_PERMISSIONS, Permission
-from tests.support import HubHarness, build_hub, seed_session, seed_user
+from tests.support.scaffolding import HubHarness, build_hub, seed_session, seed_user
 
 
 @pytest.fixture

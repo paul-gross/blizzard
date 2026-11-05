@@ -20,15 +20,15 @@ from blizzard.hub.domain.chunk.ports.fence import EpochAdmission
 from blizzard.hub.domain.chunk.ports.movement import IWriteChunkMovementRepository
 from blizzard.hub.domain.kernel.pagination import encode_cursor
 from blizzard.hub.domain.observability.analytics.operational import OperationalCriteria
-from tests.analytics_spend_world import (
-    _GRAPH_YAML,  # pyright: ignore[reportPrivateUsage]  # shared test helper, imported from tests.analytics_spend_world
-    _cookie,  # pyright: ignore[reportPrivateUsage]  # shared test helper, imported from tests.analytics_spend_world
+from tests.support.analytics_spend_world import (
+    _GRAPH_YAML,  # pyright: ignore[reportPrivateUsage]  # shared test helper, imported from tests.support.analytics_spend_world
+    _cookie,  # pyright: ignore[reportPrivateUsage]  # shared test helper, imported from tests.support.analytics_spend_world
     mint_chunk,
     push_usage,
     seeded_hub,
 )
-from tests.hub_request_auth import seed_enrolled
-from tests.support import FakeWorkSource, build_hub, claim_route, seed_session, seed_user
+from tests.support.hub_request_auth import seed_enrolled
+from tests.support.scaffolding import FakeWorkSource, build_hub, claim_route, seed_session, seed_user
 
 #: Every route this module holds to the auth triad — one list, three sweeps over it.
 _ROUTES = [

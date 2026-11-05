@@ -9,8 +9,8 @@ import pytest
 from blizzard.auth_core import Role
 from blizzard.hub.api.auth_session import TENANT_HEADER
 from blizzard.hub.domain.chunk.model import CloseEnqueueDecision, WorkRef
-from tests.hub_request_auth import bearer, cookie, enrolled_runner_token, ingest_chunk
-from tests.support import (
+from tests.support.hub_request_auth import bearer, cookie, enrolled_runner_token, ingest_chunk
+from tests.support.scaffolding import (
     add_tenant,
     build_hub,
     chunk_stores,

@@ -31,7 +31,7 @@ from blizzard.runner.hub.identity import HostStanding, IdentityVerdictHolder, Ru
 from blizzard.runner.hub.verified import IdentityNotVerified, VerifiedHubClient
 from blizzard.runner.lifecycle.host_lane_drain import HOST_LANE_DRAIN_LIMIT, HostLaneDrain
 from blizzard.runner.stores import HostStores
-from tests.runner_fakes import FakeHub, make_host_stores, make_store
+from tests.support.runner_fakes import FakeHub, make_host_stores, make_store
 
 _AT = datetime(2026, 10, 1, 12, tzinfo=UTC)
 _HOST = "hs_1"

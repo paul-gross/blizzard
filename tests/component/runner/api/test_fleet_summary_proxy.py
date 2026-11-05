@@ -13,9 +13,9 @@ from fastapi.testclient import TestClient
 from structlog.testing import capture_logs
 
 from blizzard.runner.config import RunnerConfig
-from tests.config_inputs import create_runner_app
-from tests.runner_client import runner_client
-from tests.runner_fakes import no_retry_clock
+from tests.support.config_inputs import create_runner_app
+from tests.support.runner_client import runner_client
+from tests.support.runner_fakes import no_retry_clock
 
 _HUB_URL = "http://hub.local:8421"
 _COUNTS: dict[str, object] = {"ready": 4, "running": 3, "waiting": 2, "needs": 1}

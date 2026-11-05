@@ -12,7 +12,7 @@ from pathlib import Path
 import pytest
 
 from blizzard.auth_core import Role
-from tests.support import HubHarness, build_hub, pointer_token, seed_session, seed_user
+from tests.support.scaffolding import HubHarness, build_hub, pointer_token, seed_session, seed_user
 
 _POINTER = {"source": "default", "ref": "1"}
 _NODE_ID = "nd_merge"

@@ -9,7 +9,7 @@ from pathlib import Path
 
 import pytest
 
-from tests.support import build_hub, chunk_stores, ingest, ranking_unit
+from tests.support.scaffolding import build_hub, chunk_stores, ingest, ranking_unit
 
 _POINTER = {"source": "default", "ref": "41"}
 

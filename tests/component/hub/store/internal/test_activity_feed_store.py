@@ -25,7 +25,7 @@ from blizzard.hub.domain.runners.registration import IReadRunnerRegistry, Runner
 from blizzard.hub.domain.runners.route import Route
 from blizzard.hub.store.internal.chunk_rows import record_deleted_row, record_grouped_row_conn
 from blizzard.hub.store.internal.runner_registry_store import RunnerRegistryStore
-from tests.support import (
+from tests.support.scaffolding import (
     chunk_stores,
     chunk_unit,
     hub_store_connections,

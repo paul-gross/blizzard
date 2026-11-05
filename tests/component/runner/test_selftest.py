@@ -46,15 +46,15 @@ from blizzard.runner.selftest.checks import SelfTest
 from blizzard.runner.selftest.internal.subprocess_scratch_git import SubprocessScratchGit
 from blizzard.runner.selftest.scratch_git import ScratchRepo
 from blizzard.runner.selftest.service import SelfTestService
-from tests.config_inputs import create_runner_app
-from tests.harness_sections import sections
-from tests.host_files import load_runner_config
-from tests.runner_client import runner_client
-from tests.runner_fakes import NO_TRACING
-from tests.runner_init_fakes import init_runner
-from tests.selftest_probes import FixedPidAdapter, RecordingProcessProbe
-from tests.support_child_launch import CHILDREN, tool_env, version_probe
-from tests.worker_http import bind_local_only, bind_transport
+from tests.support.child_launch import CHILDREN, tool_env, version_probe
+from tests.support.config_inputs import create_runner_app
+from tests.support.harness_sections import sections
+from tests.support.host_files import load_runner_config
+from tests.support.runner_client import runner_client
+from tests.support.runner_fakes import NO_TRACING
+from tests.support.runner_init_fakes import init_runner
+from tests.support.selftest_probes import FixedPidAdapter, RecordingProcessProbe
+from tests.support.worker_http import bind_local_only, bind_transport
 
 # A fake harness binary mimicking `mock-claude-code`'s CLI surface, extended to actually
 # perform the trivial task: on a fresh spawn it edits and commits a file in its cwd.

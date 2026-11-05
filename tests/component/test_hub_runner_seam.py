@@ -26,7 +26,7 @@ from blizzard.runner.loop.context import LoopConfig, LoopContext
 from blizzard.runner.loop.steps import Fill, Pull
 from blizzard.runner.process.internal.worker_scratch_dirs import WorkerScratchDirs
 from blizzard.runner.usage.recorder import UsageRecorder
-from tests.runner_fakes import (
+from tests.support.runner_fakes import (
     FIXTURE_PROJECT_ID,
     FIXTURE_RUNNER_ID,
     FakeHarness,
@@ -43,7 +43,7 @@ from tests.runner_fakes import (
     serving,
     single_workspace,
 )
-from tests.support import HubHarness, build_hub, pointer_token, report_lease
+from tests.support.scaffolding import HubHarness, build_hub, pointer_token, report_lease
 
 _POINTER = {"source": "default", "ref": "38"}
 _HANDLE = WorkerHandle(session_id="sess-a", pid=100, process_start_time="start-100", pgid=100)

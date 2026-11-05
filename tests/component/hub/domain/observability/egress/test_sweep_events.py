@@ -18,15 +18,15 @@ from blizzard.hub.domain.observability.egress.event_rows import derivation_id
 from blizzard.hub.domain.observability.egress.repository import EventsPosition
 from blizzard.hub.store.internal.egress_store import EgressStore
 from blizzard.hub.store.internal.hub_scoped_reads import build_hub_scoped_reads
-from tests.egress_world import (
-    _PLANTED,  # pyright: ignore[reportPrivateUsage]  # shared test helper, imported from tests.egress_world
+from tests.support.egress_world import (
+    _PLANTED,  # pyright: ignore[reportPrivateUsage]  # shared test helper, imported from tests.support.egress_world
     OLD_VERSION,
     Events,
-    _config,  # pyright: ignore[reportPrivateUsage]  # shared test helper, imported from tests.egress_world
+    _config,  # pyright: ignore[reportPrivateUsage]  # shared test helper, imported from tests.support.egress_world
     kinds,
 )
-from tests.hub_event_rows import hub_event_detail, hub_event_rows, hub_events_of
-from tests.support import HubHarness, hub_level_connections, hub_store_connections
+from tests.support.hub_event_rows import hub_event_detail, hub_event_rows, hub_events_of
+from tests.support.scaffolding import HubHarness, hub_level_connections, hub_store_connections
 
 
 def _derivations(rows: list[dict[str, object]]) -> list[tuple[object, ...]]:

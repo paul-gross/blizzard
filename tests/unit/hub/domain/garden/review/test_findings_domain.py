@@ -20,7 +20,7 @@ from blizzard.hub.domain.garden.review.validation import (
     validate_review_findings,
 )
 from blizzard.wire.finding import DeferredReviewFindingEntry
-from tests.garden_artifacts import deferred_entry
+from tests.support.garden_artifacts import deferred_entry
 
 _FORMATS = GardenFormats()
 

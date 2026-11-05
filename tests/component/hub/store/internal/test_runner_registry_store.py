@@ -14,7 +14,7 @@ from blizzard.hub.domain.runners.registration import RunnerAddition, RunnerRegis
 from blizzard.hub.store import schema
 from blizzard.hub.store.errors import HubStoreError
 from blizzard.hub.store.internal.runner_registry_store import RunnerRegistryStore
-from tests.support import count_queries, default_tenant, hub_store_connections, migrated_hub_at
+from tests.support.scaffolding import count_queries, default_tenant, hub_store_connections, migrated_hub_at
 
 _T0 = datetime(2026, 10, 6, 12, 0, tzinfo=UTC)
 _LATER = _T0 + timedelta(minutes=5)

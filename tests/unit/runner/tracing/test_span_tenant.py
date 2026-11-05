@@ -16,8 +16,8 @@ from blizzard.runner.tracing.attributes import DECLARED_ATTRIBUTES, RUNNER_ID, R
 from blizzard.runner.tracing.facts import RunnerFact
 from blizzard.runner.tracing.platform import identity_stamp
 from blizzard.runner.tracing.receiver import CLI_ATTRIBUTES, Allowlist, admit, admit_log_records
-from tests import runner_trace_fixtures as rfx
-from tests.runner_fakes import REGISTERED_AT
+from tests.support import runner_trace_fixtures as rfx
+from tests.support.runner_fakes import REGISTERED_AT
 
 _NOW = datetime(2026, 7, 21, 12, 0, 0, tzinfo=UTC)
 _BRAVO = RunnerIdentity(

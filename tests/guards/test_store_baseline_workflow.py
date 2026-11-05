@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import yaml
 
-from tests.repo_files import repo_root
+from tests.support.repo_files import repo_root
 
 _WORKFLOW = yaml.safe_load((repo_root() / ".github" / "workflows" / "store-baseline.yml").read_text())
 _JOB = _WORKFLOW["jobs"]["store-baseline"]

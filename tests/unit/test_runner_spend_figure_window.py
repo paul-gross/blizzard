@@ -18,7 +18,7 @@ from blizzard.runner.harness.usage import UsageSample
 from blizzard.runner.lifecycle.model import spend_cap_detail, spend_cap_reached
 from blizzard.runner.node_steps.chunk_state import ChunkSpend
 from blizzard.runner.throttle.pause import spend_ceiling_reason
-from tests.runner_fakes import make_store, record_usage
+from tests.support.runner_fakes import make_store, record_usage
 
 _T0 = datetime(2026, 7, 13, 12, 0, 0, tzinfo=UTC)
 

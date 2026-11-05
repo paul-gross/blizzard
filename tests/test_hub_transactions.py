@@ -21,7 +21,7 @@ from blizzard.hub.store.internal.runner_registry_store import RunnerRegistryStor
 from blizzard.hub.store.scoped import ScopedConnections
 from blizzard.hub.store.transactions import HubTransactions, chunk_handle_connection, work_ref_handle_connection
 from blizzard.hub.tenancy import StoreScope, TenantId
-from tests.support import hub_store_connections, migrate_to, seed_chunk_record, seed_graph
+from tests.support.scaffolding import hub_store_connections, migrate_to, seed_chunk_record, seed_graph
 
 pytestmark = pytest.mark.component
 

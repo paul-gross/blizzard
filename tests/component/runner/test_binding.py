@@ -21,10 +21,10 @@ from blizzard.runner.loop.tick import tick
 from blizzard.runner.loop_wiring import LoopWiring
 from blizzard.runner.store import schema
 from blizzard.runner.store.scoped import RUNNER_UNSCOPED_OPTION, RunnerAlreadyBound, RunnerUnbound
-from tests.config_inputs import create_runner_app, init_host
-from tests.host_files import load_runner_config, with_workspace
-from tests.runner_client import runner_client
-from tests.runner_fakes import FakeHarness, FakeHub, SqlAlchemyRunnerStore, loop_graph, make_store
+from tests.support.config_inputs import create_runner_app, init_host
+from tests.support.host_files import load_runner_config, with_workspace
+from tests.support.runner_client import runner_client
+from tests.support.runner_fakes import FakeHarness, FakeHub, SqlAlchemyRunnerStore, loop_graph, make_store
 
 _NOW = datetime(2026, 10, 11, 12, 0, tzinfo=UTC)
 

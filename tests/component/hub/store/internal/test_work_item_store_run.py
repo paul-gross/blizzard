@@ -19,7 +19,7 @@ from blizzard.hub.domain.projects.model import ProjectId
 from blizzard.hub.store.errors import HubStoreError
 from blizzard.hub.store.internal.run_context_store import RunContextStore
 from blizzard.hub.store.internal.work_item_store import WorkItemStore
-from tests.support import (
+from tests.support.scaffolding import (
     chunk_stores,
     default_project,
     hub_store_connections,

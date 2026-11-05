@@ -27,8 +27,8 @@ from blizzard.hub.secrets import (
 from blizzard.hub.secrets.rotation import rotate_keys
 from blizzard.hub.store import schema
 from blizzard.hub.store.internal.secret_store import SecretStore
-from tests.config_inputs import init_hub
-from tests.support import OP, config_authoring, hub_scoped, hub_store_connections
+from tests.support.config_inputs import init_hub
+from tests.support.scaffolding import OP, config_authoring, hub_scoped, hub_store_connections
 
 _NOW = datetime(2026, 10, 4, tzinfo=UTC)
 _KEY_A = base64.b64encode(bytes(range(32))).decode()

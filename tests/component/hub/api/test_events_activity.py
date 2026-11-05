@@ -14,8 +14,8 @@ from typing import Any
 from blizzard.foundation.event_log import EventLogSeverity
 from blizzard.foundation.store.utc import iso_utc
 from blizzard.hub.store.internal.chunk_rows import record_deleted_row
-from tests.hub_request_auth import bearer, seed_enrolled
-from tests.support import HubHarness, build_hub, chunk_stores, hub_store_connections, seed_chunk, seed_graph
+from tests.support.hub_request_auth import bearer, seed_enrolled
+from tests.support.scaffolding import HubHarness, build_hub, chunk_stores, hub_store_connections, seed_chunk, seed_graph
 
 
 def _activity(hub: HubHarness, **params: str | int) -> list[dict[str, Any]]:

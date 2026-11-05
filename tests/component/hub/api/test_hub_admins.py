@@ -11,7 +11,7 @@ from blizzard.auth_core import Role
 from blizzard.hub.api.auth_session import TENANT_HEADER
 from blizzard.hub.auth.models import User
 from blizzard.hub.tenancy import TenantId
-from tests.support import HubHarness, build_hub, default_tenant, seed_membership, seed_session, seed_user
+from tests.support.scaffolding import HubHarness, build_hub, default_tenant, seed_membership, seed_session, seed_user
 
 
 def _as(hub: HubHarness, user: User, tenant: TenantId | None = None) -> dict[str, str]:

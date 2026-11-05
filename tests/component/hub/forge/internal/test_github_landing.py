@@ -12,7 +12,7 @@ from blizzard.hub.domain.config.forges import ForgeId
 from blizzard.hub.domain.config.repositories import RepositoryId, ResolvedRepository
 from blizzard.hub.forge.internal.github_landing import GitHubLanding
 from blizzard.hub.forge.landing import RepositoryForge
-from tests.github_landing_harness import REPO, Harness, reply
+from tests.support.github_landing_harness import REPO, Harness, reply
 
 
 def test_pending_polls_make_one_conditional_filtered_lookup_each() -> None:

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from tests.support_transcripts_api import app_with_transcripts
+from tests.support.transcripts_api import app_with_transcripts
 
 
 def test_transcript_openapi_declares_the_owner_unavailable_response(tmp_path: Path) -> None:

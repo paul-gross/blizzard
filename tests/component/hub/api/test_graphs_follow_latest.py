@@ -10,7 +10,14 @@ import httpx2
 
 from blizzard.foundation.migration_source import MigrationSource
 from blizzard.hub.store.schema import artifacts, graph_policy_facts
-from tests.support import HubHarness, build_hub, chunk_rows, hub_store_connections, pointer_token, report_lease
+from tests.support.scaffolding import (
+    HubHarness,
+    build_hub,
+    chunk_rows,
+    hub_store_connections,
+    pointer_token,
+    report_lease,
+)
 
 _POINTER = {"source": "default", "ref": "9"}
 

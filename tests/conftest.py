@@ -2,7 +2,7 @@
 
 The hub and the runner expose identical offline-admin surfaces, so store tests
 parametrize over both via the ``daemon`` fixture. The suite-wide hooks and isolation fixtures live in
-``tests/suite_plugin.py``, registered by the root ``conftest.py``.
+``tests/support/suite_plugin.py``, registered by the root ``conftest.py``.
 """
 
 from __future__ import annotations
@@ -22,7 +22,7 @@ from blizzard.hub import runtime as hub_runtime
 from blizzard.runner import app as runner_app
 from blizzard.runner import runtime as runner_runtime
 from blizzard.runner.host_config import HostConfig
-from tests.config_inputs import (
+from tests.support.config_inputs import (
     build_hosted_hub_app,
     export_hub_app,
     export_runner_app,
@@ -31,7 +31,7 @@ from tests.config_inputs import (
     migrate_host,
     migrate_hub,
 )
-from tests.support import refused_address
+from tests.support.scaffolding import refused_address
 
 
 @pytest.fixture

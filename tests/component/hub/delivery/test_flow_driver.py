@@ -55,14 +55,14 @@ from blizzard.hub.store.internal.chunk_movement_store import ChunkMovementStore
 from blizzard.hub.store.internal.flow_store import FlowStore
 from blizzard.hub.tenancy import TenantId
 from blizzard.wire.clock import ClockMoveRequest
-from tests.config_inputs import create_hub_app
-from tests.flow_driver_world import (
-    _GRAPH,  # pyright: ignore[reportPrivateUsage]  # shared test helper, imported from tests.flow_driver_world
-    _REPO,  # pyright: ignore[reportPrivateUsage]  # shared test helper, imported from tests.flow_driver_world
+from tests.support.config_inputs import create_hub_app
+from tests.support.flow_driver_world import (
+    _GRAPH,  # pyright: ignore[reportPrivateUsage]  # shared test helper, imported from tests.support.flow_driver_world
+    _REPO,  # pyright: ignore[reportPrivateUsage]  # shared test helper, imported from tests.support.flow_driver_world
     World,
-    _HeldLanding,  # pyright: ignore[reportPrivateUsage]  # shared test helper, imported from tests.flow_driver_world
+    _HeldLanding,  # pyright: ignore[reportPrivateUsage]  # shared test helper, imported from tests.support.flow_driver_world
 )
-from tests.support import (
+from tests.support.scaffolding import (
     TEST_HUB_ACTIONS,
     build_hub,
     capture_statements,

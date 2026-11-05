@@ -3,7 +3,7 @@ the kind-agnostic core shared with the hub. The history/replay/live-fanout
 machinery — id minting, the bounded ring, per-connection queues — lives in
 :mod:`blizzard.foundation.events.broker`; this module owns only what is runner-specific: the
 event-type names, their payload shapes, and the ``publish_*`` helpers each mutation seam
-calls — each wiring is covered by ``tests/runner_event_census.py``."""
+calls — each wiring is covered by ``tests/support/runner_event_census.py``."""
 
 from __future__ import annotations
 

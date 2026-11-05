@@ -14,7 +14,7 @@ from sqlalchemy import func
 from blizzard.hub.domain.delivery.flows import FlowResource
 from blizzard.hub.store import schema as s
 from blizzard.hub.store.internal.flow_store import FlowStore
-from tests.support import (
+from tests.support.scaffolding import (
     HubHarness,
     assert_all_timestamps_utc,
     build_hub,

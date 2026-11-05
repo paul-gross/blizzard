@@ -29,7 +29,7 @@ from blizzard.hub.domain.graph.model import (
     TargetGraphRetired,
 )
 from blizzard.hub.domain.graph.validation import GraphValidationError, Validator, cross_graph_warnings
-from tests.support import TEST_CATALOGUE, make_graph
+from tests.support.scaffolding import TEST_CATALOGUE, make_graph
 
 _T0 = datetime(2026, 1, 1, tzinfo=UTC)
 _AT = datetime(2026, 2, 1, tzinfo=UTC)

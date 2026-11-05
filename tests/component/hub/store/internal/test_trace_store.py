@@ -37,8 +37,8 @@ from blizzard.hub.store.internal import corpus_rows
 from blizzard.hub.store.internal.fact_families import FactTable
 from blizzard.hub.store.internal.trace_store import ProjectLabels, TraceStore
 from blizzard.hub.tenancy import TenantId
-from tests.hub_event_rows import hub_event_log_of
-from tests.support import (
+from tests.support.hub_event_rows import hub_event_log_of
+from tests.support.scaffolding import (
     SEEDED_CAPABILITIES,
     HubHarness,
     added_runner,
@@ -47,7 +47,7 @@ from tests.support import (
     default_tenant,
     seed_runner,
 )
-from tests.trace_hub import seed_open_tenant_chunk, stop, trace_hub, trace_store, transitioned_and_stopped
+from tests.support.trace_hub import seed_open_tenant_chunk, stop, trace_hub, trace_store, transitioned_and_stopped
 
 
 def test_hydrated_facts_identify_the_same_steps_as_a_hand_built_fixture(tmp_path: Path) -> None:

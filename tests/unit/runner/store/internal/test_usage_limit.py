@@ -18,7 +18,7 @@ from blizzard.runner.store.runner_guard import UnscopedRunnerStatement
 from blizzard.runner.store.schema import runner_usage_limits
 from blizzard.runner.store.scoped import RunnerStoreConnections, RunnerUnbound
 from blizzard.runner.throttle.usage_limits import FloorClear, UsageLimitMark
-from tests.runner_fakes import SqlAlchemyRunnerStore, make_store, runner_store_errors
+from tests.support.runner_fakes import SqlAlchemyRunnerStore, make_store, runner_store_errors
 
 _T0 = datetime(2026, 10, 1, 12, 0, tzinfo=UTC)
 

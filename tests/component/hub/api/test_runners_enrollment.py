@@ -16,7 +16,7 @@ from fastapi.testclient import TestClient
 from sqlalchemy import func, select
 
 from blizzard.hub.store import schema as s
-from tests.support import HubHarness, build_hub, hub_scoped, seed_runner
+from tests.support.scaffolding import HubHarness, build_hub, hub_scoped, seed_runner
 
 
 def _register(

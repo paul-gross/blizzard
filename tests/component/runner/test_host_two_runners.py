@@ -34,9 +34,9 @@ from blizzard.runner.tracing.platform import (
     host_stamp,
 )
 from blizzard.runner.tracing.received_export import build_received_telemetry_export
-from tests import claude_code_telemetry
-from tests.host_files import host_config_of
-from tests.runner_fakes import REGISTERED_AT, FakeHub, migrated_store_at
+from tests.support import claude_code_telemetry
+from tests.support.host_files import host_config_of
+from tests.support.runner_fakes import REGISTERED_AT, FakeHub, migrated_store_at
 
 _ENDPOINT = {"OTEL_EXPORTER_OTLP_ENDPOINT": "http://127.0.0.1:4318"}
 _RUNNERS = ("rn_a", "rn_b")

@@ -16,7 +16,7 @@ from blizzard.hub.domain.chunk.ports.dependencies import FoldMint, FoldTarget, I
 from blizzard.hub.domain.chunk.ports.exclusive import IChunkExclusiveWrites
 from blizzard.hub.store import schema as s
 from blizzard.hub.store.errors import HubStoreError
-from tests.support import chunk_stores, hub_store_connections, migrate_to, seed_chunk, seed_graph
+from tests.support.scaffolding import chunk_stores, hub_store_connections, migrate_to, seed_chunk, seed_graph
 
 _NOW = datetime(2026, 9, 2, 12, 0, 0, tzinfo=UTC)
 

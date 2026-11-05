@@ -46,7 +46,7 @@ from blizzard.hub.domain.execution.submissions import CompletionArtifact, GateSu
 from blizzard.hub.domain.graph.model import RESERVED_TERMINAL
 from blizzard.hub.domain.kernel.transactions import IHubTransactions
 from blizzard.hub.domain.runners.registration import RetiredRunnerGuard
-from tests.completion_facts import (
+from tests.support.completion_facts import (
     AT_BUILD,
     BUILD,
     CHUNK,

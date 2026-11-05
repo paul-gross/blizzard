@@ -37,10 +37,10 @@ from blizzard.hub.store.scoped import ScopedConnections
 from blizzard.hub.tenancy import StoreScope, TenantId
 from blizzard.runner.harness.identity import CLAUDE_CODE_HARNESS_ID, SessionReference
 from blizzard.runner.leases.model import NewLease
-from tests.config_inputs import init_host
-from tests.hub_event_rows import hub_events_of
-from tests.runner_fakes import SqlAlchemyRunnerStore, runner_store_errors
-from tests.support import (
+from tests.support.config_inputs import init_host
+from tests.support.hub_event_rows import hub_events_of
+from tests.support.runner_fakes import SqlAlchemyRunnerStore, runner_store_errors
+from tests.support.scaffolding import (
     HubHarness,
     build_hub,
     count_rows_read,

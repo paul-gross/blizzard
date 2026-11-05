@@ -14,7 +14,7 @@ from typing import Any
 import pytest
 
 from blizzard.hub.domain.runners.registration import RunnerRegistration
-from tests.support import HubHarness, build_hub, emitted_events, pointer_token
+from tests.support.scaffolding import HubHarness, build_hub, emitted_events, pointer_token
 
 pytestmark = pytest.mark.component
 

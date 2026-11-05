@@ -31,7 +31,7 @@ from blizzard.runner.store.schema import (
     subscription_usage_limits,
 )
 from blizzard.runner.throttle.usage_limits import FloorClear, UsageLimitMark
-from tests.runner_fakes import (
+from tests.support.runner_fakes import (
     FIXTURE_RUNNER_ID,
     FakeHarness,
     FakeHub,

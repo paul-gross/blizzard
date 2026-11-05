@@ -24,7 +24,7 @@ from blizzard.runner.throttle.release import (
     releases_usage_limited,
 )
 from blizzard.runner.throttle.settings import HoldOrRelease, ThrottleSettings
-from tests.runner_fakes import (
+from tests.support.runner_fakes import (
     FakeHub,
     ReleaseCall,
 )

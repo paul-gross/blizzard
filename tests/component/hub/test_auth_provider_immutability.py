@@ -17,7 +17,7 @@ from sqlalchemy import insert
 from blizzard.foundation.store.engine import create_engine_from_url
 from blizzard.hub.config import AuthConfig, ConfigError, HubConfig, OAuthProviderConfig
 from blizzard.hub.store import schema as s
-from tests.config_inputs import build_hosted_hub_app, init_hub, load_hub_config
+from tests.support.config_inputs import build_hosted_hub_app, init_hub, load_hub_config
 
 _T0 = datetime(2026, 1, 1, tzinfo=UTC)
 

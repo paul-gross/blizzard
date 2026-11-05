@@ -20,7 +20,7 @@ from blizzard.hub.config import AUTH_MODE_NONE, AUTH_MODE_OAUTH
 from blizzard.hub.domain.runners.host import HostAddition, HostLifecycleFact, HostReport, IWriteHostRegistry
 from blizzard.hub.domain.runners.lifecycle_version import HostLifecycleVersion
 from blizzard.hub.domain.runners.registration import IWriteRunnerRegistry
-from tests.support import (
+from tests.support.scaffolding import (
     HubHarness,
     TenantHarness,
     added_runner,
@@ -141,7 +141,7 @@ def test_authorize_with_session_delivers_a_signed_jwt_via_form_post(tmp_path: Pa
 
 
 def test_authorize_with_no_session_bounces_into_the_single_configured_provider(tmp_path: Path) -> None:
-    from tests.oauth_login_double import FakeOAuthProvider
+    from tests.support.oauth_login_double import FakeOAuthProvider
 
     provider = FakeOAuthProvider(name="github")
     hub = build_hub(tmp_path, auth_mode=AUTH_MODE_OAUTH, oauth_providers={"github": provider})
@@ -159,7 +159,7 @@ def test_authorize_with_no_session_bounces_into_the_single_configured_provider(t
 
 
 def test_authorize_with_no_session_and_multiple_providers_bounces_to_the_login_chooser(tmp_path: Path) -> None:
-    from tests.oauth_login_double import FakeOAuthProvider
+    from tests.support.oauth_login_double import FakeOAuthProvider
 
     hub = build_hub(
         tmp_path,

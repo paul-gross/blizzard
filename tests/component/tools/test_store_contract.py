@@ -19,9 +19,9 @@ from blizzard.foundation.store.migrations import MigrationRunner
 from blizzard.hub.store import MIGRATIONS_DIR as HUB_MIGRATIONS_DIR
 from blizzard.runner.store import MIGRATIONS_DIR as RUNNER_MIGRATIONS_DIR
 from blizzard.tools.store_contract import Document, document_from_engine, document_from_metadata
-from tests.repo_files import repo_root
-from tests.runner_fakes import migrated_store_at
-from tests.support import migrated_hub_at
+from tests.support.repo_files import repo_root
+from tests.support.runner_fakes import migrated_store_at
+from tests.support.scaffolding import migrated_hub_at
 
 _STORES = {
     "hub": (migrated_hub_at, HUB_MIGRATIONS_DIR),

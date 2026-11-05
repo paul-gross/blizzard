@@ -15,7 +15,7 @@ from blizzard.hub.domain.chunk.model import Chunk, WorkItemAuthor, WorkRef
 from blizzard.hub.domain.garden.run_context import RunContext
 from blizzard.hub.store.internal.run_context_store import RunContextStore
 from blizzard.hub.store.internal.work_item_store import WorkItemStore
-from tests.support import (
+from tests.support.scaffolding import (
     default_project,
     default_tenant,
     hub_store_connections,

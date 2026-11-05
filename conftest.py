@@ -3,4 +3,4 @@ tests colocated beside their revisions under ``src/``."""
 
 # The fakes import the runner's CLI, which reads packaged files at import; the suite plugin's repo-read guard installs
 # after them, as it did when both lived in ``tests/conftest.py``.
-pytest_plugins = ("tests.runner_init_fakes", "tests.suite_plugin")
+pytest_plugins = ("tests.support.runner_init_fakes", "tests.support.suite_plugin")

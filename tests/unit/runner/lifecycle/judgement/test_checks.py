@@ -14,7 +14,7 @@ from blizzard.runner.lifecycle.judgement.check_runner import DEFAULT_CHECK_TIMEO
 from blizzard.runner.lifecycle.judgement.checks import ExecutedCheck
 from blizzard.runner.lifecycle.judgement.judgement import Judgement
 from blizzard.runner.lifecycle.judgement.judgement_prompt import JudgementPrompt
-from tests.runner_fakes import (
+from tests.support.runner_fakes import (
     FakeCheckRunner,
     FakeHarness,
     FakeHub,

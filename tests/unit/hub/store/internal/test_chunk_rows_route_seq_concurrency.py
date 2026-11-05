@@ -25,7 +25,7 @@ from blizzard.hub.store.internal.chunk_rows import next_route_seq
 from blizzard.hub.store.locking import lock_chunk_row
 from blizzard.hub.store.scoped import ScopedConnections
 from blizzard.hub.tenancy import StoreScope, TenantId
-from tests.support import hub_store_connections, migrated_hub_at, stamp
+from tests.support.scaffolding import hub_store_connections, migrated_hub_at, stamp
 
 _NOW = datetime(2026, 7, 16, tzinfo=UTC)
 

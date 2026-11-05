@@ -40,7 +40,7 @@
     "reason": "An example of the relative-path shape the function returns, not a reference to a real module."
   },
   {
-    "file": "tests/head_replay_guard.py",
+    "file": "tests/support/head_replay_guard.py",
     "symbol": "upgrade",
     "target": "mutants/",
     "count": 1,
@@ -48,7 +48,7 @@
     "reason": "Names mutmut's working copy, created by a mutation run and git-ignored; never tracked."
   },
   {
-    "file": "tests/repo_files.py",
+    "file": "tests/support/repo_files.py",
     "symbol": "repo_root",
     "target": "mutants/",
     "count": 1,

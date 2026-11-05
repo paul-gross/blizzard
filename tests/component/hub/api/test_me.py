@@ -16,7 +16,7 @@ from blizzard.hub.auth.models import User
 from blizzard.hub.auth.permissions import HUB_PERMISSIONS, Permission, expand
 from blizzard.hub.config import AUTH_MODE_NONE
 from blizzard.hub.tenancy import TenantId
-from tests.support import (
+from tests.support.scaffolding import (
     HubHarness,
     add_tenant,
     build_hub,

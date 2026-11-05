@@ -16,7 +16,14 @@ from blizzard.hub.domain.chunk.model import WorkItemAuthor
 from blizzard.hub.domain.graph.model import Graph, Node
 from blizzard.hub.store import schema as s
 from blizzard.hub.store.internal.graph_store import GraphStore
-from tests.support import HubHarness, build_hub, hub_scoped, hub_store_connections, seed_lease, seed_work_item
+from tests.support.scaffolding import (
+    HubHarness,
+    build_hub,
+    hub_scoped,
+    hub_store_connections,
+    seed_lease,
+    seed_work_item,
+)
 
 _NODE_ID = "nd_record_findings"
 _EPOCH = 1

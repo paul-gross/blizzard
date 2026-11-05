@@ -19,7 +19,7 @@ from blizzard.hub.store import schema as s
 from blizzard.hub.store.internal.garden_sweeps_store import GardenSweepsStore
 from blizzard.hub.store.internal.routine_scope_store import RoutineScopeStore
 from blizzard.hub.store.internal.scope_store import ScopeStore
-from tests.support import default_project, hub_store_connections, migrate_to, seed_chunk, seed_graph, stamp
+from tests.support.scaffolding import default_project, hub_store_connections, migrate_to, seed_chunk, seed_graph, stamp
 
 _NOW = datetime(2026, 7, 16, 12, 0, 0, tzinfo=UTC)
 _SINCE = datetime(2026, 1, 1, tzinfo=UTC)

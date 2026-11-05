@@ -5,7 +5,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from tests.support import HubHarness, build_hub, pointer_token, report_lease, runner_token
+from tests.support.scaffolding import HubHarness, build_hub, pointer_token, report_lease, runner_token
 
 _YAML = """
 name: default-delivery

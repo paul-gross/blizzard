@@ -8,7 +8,7 @@ from pathlib import Path
 from sqlalchemy import select
 
 from blizzard.hub.store import schema as s
-from tests.support import HubHarness, build_hub, hub_scoped, make_ready, pointer_token, report_lease
+from tests.support.scaffolding import HubHarness, build_hub, hub_scoped, make_ready, pointer_token, report_lease
 
 _POINTER = {"source": "default", "ref": "7"}
 

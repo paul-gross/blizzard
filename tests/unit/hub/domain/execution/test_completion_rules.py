@@ -50,23 +50,23 @@ from blizzard.hub.domain.execution.completion import (
 )
 from blizzard.hub.domain.execution.submissions import CheckOutcome, Completion, CompletionArtifact
 from blizzard.hub.domain.graph.model import RESERVED_TERMINAL, Edge, FollowLatest, Node, ProducesSpec
-from tests.completion_facts import (
-    _GATE,  # pyright: ignore[reportPrivateUsage]  # shared test helper, imported from tests.completion_facts
-    _LAND,  # pyright: ignore[reportPrivateUsage]  # shared test helper, imported from tests.completion_facts
-    _REVIEW,  # pyright: ignore[reportPrivateUsage]  # shared test helper, imported from tests.completion_facts
-    _T0,  # pyright: ignore[reportPrivateUsage]  # shared test helper, imported from tests.completion_facts
+from tests.support.completion_facts import (
+    _GATE,  # pyright: ignore[reportPrivateUsage]  # shared test helper, imported from tests.support.completion_facts
+    _LAND,  # pyright: ignore[reportPrivateUsage]  # shared test helper, imported from tests.support.completion_facts
+    _REVIEW,  # pyright: ignore[reportPrivateUsage]  # shared test helper, imported from tests.support.completion_facts
+    _T0,  # pyright: ignore[reportPrivateUsage]  # shared test helper, imported from tests.support.completion_facts
     AT_BUILD,
     BUILD,
     CHUNK,
     DELIVERY,
     GRAPH,
     T1,
-    _node,  # pyright: ignore[reportPrivateUsage]  # shared test helper, imported from tests.completion_facts
+    _node,  # pyright: ignore[reportPrivateUsage]  # shared test helper, imported from tests.support.completion_facts
     completion_submission,
     gate_decision,
     migration_fact,
 )
-from tests.support import make_graph
+from tests.support.scaffolding import make_graph
 
 # --- Attempt coherence -------------------------------------------------------
 

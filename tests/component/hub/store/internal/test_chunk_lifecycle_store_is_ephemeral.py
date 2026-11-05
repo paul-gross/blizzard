@@ -9,7 +9,7 @@ from pathlib import Path
 
 from blizzard.foundation.clock import FixedClock
 from blizzard.hub.store.internal.chunk_rows import record_deleted_row, record_grouped_row_conn
-from tests.support import chunk_stores, hub_store_connections, migrate_to, seed_chunk, seed_graph
+from tests.support.scaffolding import chunk_stores, hub_store_connections, migrate_to, seed_chunk, seed_graph
 
 _NOW = datetime(2026, 9, 2, tzinfo=UTC)
 

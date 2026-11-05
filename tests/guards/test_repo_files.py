@@ -7,7 +7,7 @@ from pathlib import Path
 import pytest
 
 import tests
-from tests.repo_files import check_repo_read, copied_repo_files, prepare_mutant_tree, repo_root
+from tests.support.repo_files import check_repo_read, copied_repo_files, prepare_mutant_tree, repo_root
 
 
 def test_root_is_the_checkout_containing_the_test_package() -> None:

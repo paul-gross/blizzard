@@ -29,7 +29,7 @@ from blizzard.hub.domain.observability.tracing.facts import (
 from blizzard.hub.domain.observability.tracing.steps import StepKind, StepOutcome, identify_steps
 from blizzard.hub.domain.observability.tracing.summary import StepSummary, summarize_step
 from blizzard.hub.tenancy import TenantId
-from tests import trace_fixtures as fx
+from tests.support import trace_fixtures as fx
 
 SENTINEL = "SENTINEL-do-not-leak"
 EXPORTED = datetime(2026, 2, 1, tzinfo=UTC)

@@ -67,7 +67,7 @@ from blizzard.hub.domain.operations.restart import (
     restart_landing,
 )
 from blizzard.hub.domain.operations.stop import ChunkNotStoppable, require_stoppable
-from tests.support import make_graph
+from tests.support.scaffolding import make_graph
 
 _T0 = datetime(2026, 1, 1, tzinfo=UTC)
 _NON_TERMINAL = frozenset(ChunkStatus) - TERMINAL_STATUSES

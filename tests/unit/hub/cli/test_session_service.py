@@ -5,7 +5,7 @@ against a small fake store rather than through the CLI (that's ``tests/unit/hub/
 from __future__ import annotations
 
 from blizzard.hub.cli.session_service import SessionService
-from tests.session_store_fakes import InMemorySessionStore
+from tests.support.session_store_fakes import InMemorySessionStore
 
 
 def test_login_saves_the_token_to_the_underlying_store() -> None:

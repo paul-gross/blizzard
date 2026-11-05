@@ -10,7 +10,7 @@ from __future__ import annotations
 from pathlib import Path
 
 from blizzard.hub.system_artifacts import PackagedSystemArtifacts
-from tests.support import build_hub
+from tests.support.scaffolding import build_hub
 
 
 def _packaged(tmp_path: Path) -> PackagedSystemArtifacts:

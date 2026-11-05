@@ -21,7 +21,7 @@ from blizzard.runner.hub.internal.http_hub import chunk_state
 from blizzard.runner.lifecycle.model import HeldChunkMove, held_chunk_move, owns_node_entry
 from blizzard.tools.invariants import hub_invariants
 from blizzard.wire.chunk import ChunkStatusView
-from tests.support import (
+from tests.support.scaffolding import (
     HubHarness,
     assert_all_timestamps_utc,
     build_hub,

@@ -14,7 +14,7 @@ from blizzard.foundation.clock import FixedClock
 from blizzard.hub.domain.chunk.model import CloseEnqueueDecision
 from blizzard.hub.domain.chunk.ports.delivery import IWriteChunkDeliveryRepository
 from blizzard.hub.store import schema
-from tests.support import chunk_stores, default_tenant, migrate_to, seed_chunk, seed_graph
+from tests.support.scaffolding import chunk_stores, default_tenant, migrate_to, seed_chunk, seed_graph
 
 _NOW = datetime(2026, 7, 16, 12, 0, 0, tzinfo=UTC)
 _NO_REFS = CloseEnqueueDecision(closable=frozenset(), skipped=frozenset())

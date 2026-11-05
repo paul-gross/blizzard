@@ -28,8 +28,8 @@ from blizzard.hub.store.schema import (
     secrets,
     work_sources,
 )
-from tests.config_inputs import init_hub
-from tests.support import (
+from tests.support.config_inputs import init_hub
+from tests.support.scaffolding import (
     default_project,
     hub_scoped,
     hub_store_connections,

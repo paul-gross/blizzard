@@ -12,7 +12,7 @@ from blizzard.hub.domain.config.legacy_keys import LEGACY_FORGE_VARIABLES
 from blizzard.hub.store import tenant_guard
 from blizzard.runner.config import ENV_HUB_URL
 from blizzard.runner.store import runner_guard
-from tests.suite_plugin import DAEMON_ENV
+from tests.support.suite_plugin import DAEMON_ENV
 
 
 def test_guard_variables_equal_each_guard_modules_variable() -> None:

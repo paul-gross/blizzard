@@ -17,8 +17,8 @@ from blizzard.hub.domain.projects.model import ProjectId
 from blizzard.hub.store.internal.chunk_events_store import ChunkEventsStore
 from blizzard.hub.store.internal.chunk_usage_store import ChunkUsageStore
 from blizzard.hub.store.internal.runner_registry_store import RunnerRegistryStore
-from tests.analytics_events_world import record_transcript, tool_turn
-from tests.support import (
+from tests.support.analytics_events_world import record_transcript, tool_turn
+from tests.support.scaffolding import (
     HubHarness,
     build_hub,
     claim_route,

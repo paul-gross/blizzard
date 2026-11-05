@@ -18,7 +18,7 @@ from blizzard.hub.api.auth_session import TENANT_HEADER
 from blizzard.hub.auth.models import User
 from blizzard.hub.store import schema
 from blizzard.hub.tenancy import TenantId
-from tests.support import (
+from tests.support.scaffolding import (
     HubHarness,
     build_hub,
     default_tenant,

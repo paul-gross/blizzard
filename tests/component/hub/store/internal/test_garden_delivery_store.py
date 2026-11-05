@@ -34,7 +34,7 @@ from blizzard.hub.store.schema import (
     garden_proposal_findings,
     garden_proposals,
 )
-from tests.support import (
+from tests.support.scaffolding import (
     default_project,
     default_tenant,
     hub_scoped,

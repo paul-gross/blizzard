@@ -19,7 +19,14 @@ from blizzard.hub.store.internal.finding_store import FindingStore
 from blizzard.hub.store.internal.garden_proposal_closure_store import GardenProposalClosureStore
 from blizzard.hub.store.internal.garden_proposal_store import GardenProposalStore
 from blizzard.hub.store.internal.run_context_store import RunContextStore
-from tests.support import HubHarness, build_hub, default_project, hub_store_connections, seed_scope, seed_work_item
+from tests.support.scaffolding import (
+    HubHarness,
+    build_hub,
+    default_project,
+    hub_store_connections,
+    seed_scope,
+    seed_work_item,
+)
 
 _NOW = datetime(2026, 9, 2, 12, 0, 0, tzinfo=UTC)
 _ROUTINE = "nightly"

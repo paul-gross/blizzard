@@ -13,7 +13,7 @@ import httpx2
 import pytest
 
 from blizzard.hub.cli import login as cli_login
-from tests.worker_http import bind_stubs
+from tests.support.worker_http import bind_stubs
 
 _NO_HTTP = bind_stubs().collaborators.client_factory
 

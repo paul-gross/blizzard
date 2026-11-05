@@ -31,7 +31,7 @@ from blizzard.hub.auth.internal.user_repository import UserRepository
 from blizzard.hub.auth.models import User
 from blizzard.hub.store import schema as s
 from blizzard.hub.store.errors import HubStoreErrorFactory
-from tests.support import hub_level_connections, hub_migration_prototype
+from tests.support.scaffolding import hub_level_connections, hub_migration_prototype
 
 _T0 = datetime(2026, 1, 1, tzinfo=UTC)
 

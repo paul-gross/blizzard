@@ -9,11 +9,11 @@ from pathlib import Path
 import pytest
 
 from blizzard.runner.hub.host_identity import HostIdentity, HostIdentityAlreadyRecorded
-from tests.runner_fakes import make_host_stores, make_store
-from tests.support_host_identity import (
+from tests.support.host_identity import (
     _AT,  # pyright: ignore[reportPrivateUsage]
     _IDENTITY,  # pyright: ignore[reportPrivateUsage]
 )
+from tests.support.runner_fakes import make_host_stores, make_store
 
 
 def test_a_fresh_store_holds_no_host_identity(tmp_path: Path) -> None:

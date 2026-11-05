@@ -18,7 +18,7 @@ from blizzard.hub.domain.observability.analytics.queries import EventQueryCriter
 from blizzard.hub.store import schema as s
 from blizzard.hub.store.internal.analytics_event_query_store import AnalyticsEventQueryStore
 from blizzard.hub.store.internal.transcript_event_store import TranscriptEventStore
-from tests.support import count_rows_read, hub_store_connections, migrated_hub_at, mint_graph, stamp
+from tests.support.scaffolding import count_rows_read, hub_store_connections, migrated_hub_at, mint_graph, stamp
 
 _VERSION = "blizzard-analytics/2"
 _OTHER_VERSION = "blizzard-analytics/1"

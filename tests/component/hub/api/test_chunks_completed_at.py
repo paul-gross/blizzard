@@ -14,7 +14,7 @@ from sqlalchemy import insert as sa_insert
 
 from blizzard.foundation.store.engine import create_engine_from_url
 from blizzard.hub.store import schema
-from tests.support import HubHarness, assert_all_timestamps_utc, build_hub, ingest, report_lease, stamp
+from tests.support.scaffolding import HubHarness, assert_all_timestamps_utc, build_hub, ingest, report_lease, stamp
 
 _POINTER = {"source": "default", "ref": "12"}
 

@@ -34,7 +34,7 @@ from blizzard.runner.store.scoped import (
     RunnerStoreConnections,
     RunnerUnbound,
 )
-from tests.runner_fakes import runner_store_errors
+from tests.support.runner_fakes import runner_store_errors
 
 _A = "rn_a"
 _AT = sa.literal("2026-01-01")

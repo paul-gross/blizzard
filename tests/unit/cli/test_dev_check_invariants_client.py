@@ -11,7 +11,7 @@ import httpx2
 import pytest
 
 from blizzard.cli.main import blizzard
-from tests.worker_http import bind_transport
+from tests.support.worker_http import bind_transport
 
 HUB = "http://hub.example"
 HOST = "http://host.example"

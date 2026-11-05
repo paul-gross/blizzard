@@ -13,7 +13,7 @@ import pytest
 from blizzard.hub.domain.config.changes import ChangeContext, Door
 from blizzard.hub.domain.projects.model import ProjectEdit, ProjectId
 from blizzard.hub.store.internal.chunk_usage_store import ChunkUsageStore
-from tests.support import (
+from tests.support.scaffolding import (
     HubHarness,
     build_hub,
     count_queries,

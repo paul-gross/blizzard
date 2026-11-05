@@ -12,7 +12,7 @@ from typing import TypedDict, Unpack
 from fastapi.testclient import TestClient
 from httpx2 import Response
 
-from tests.support import HubHarness, build_hub, seed_runner
+from tests.support.scaffolding import HubHarness, build_hub, seed_runner
 
 
 class _RegistrationFields(TypedDict, total=False):

@@ -12,7 +12,7 @@ from typing import TypedDict
 from blizzard.foundation.garden_proposals import GardenProposalOrigin
 from blizzard.hub.store.internal.finding_store import FindingStore
 from blizzard.hub.store.internal.garden_proposal_store import GardenProposalStore
-from tests.support import HubHarness, build_hub, default_project, hub_store_connections
+from tests.support.scaffolding import HubHarness, build_hub, default_project, hub_store_connections
 
 _GRAPH = """
 name: alpha

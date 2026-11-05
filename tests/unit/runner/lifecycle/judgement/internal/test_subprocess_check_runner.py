@@ -13,7 +13,7 @@ import pytest
 from blizzard.foundation.runner_token_names import hub_token_variable
 from blizzard.runner.lifecycle.judgement.internal.subprocess_check_runner import SubprocessCheckRunner
 from blizzard.runner.process.child_env import AllowlistedEnv
-from tests.support_child_launch import CHILDREN
+from tests.support.child_launch import CHILDREN
 
 
 def _runner(env: AllowlistedEnv | None = None) -> SubprocessCheckRunner:

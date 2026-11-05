@@ -31,7 +31,7 @@ from blizzard.hub.work_sources.closer import WorkCloseError, WorkItemGoneError
 from blizzard.hub.work_sources.internal.factory import WorkSourceEntry
 from blizzard.hub.work_sources.internal.github_work_source import GitHubWorkSource
 from blizzard.hub.work_sources.source import IWorkSourceRegistry
-from tests.support import (
+from tests.support.scaffolding import (
     OMIT_TITLE,
     OP,
     ForgeDouble,

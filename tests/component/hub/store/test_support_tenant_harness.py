@@ -14,7 +14,14 @@ from blizzard.foundation.store.engine import create_engine_from_url
 from blizzard.hub.store import schema
 from blizzard.hub.store.errors import HubStoreConnections
 from blizzard.hub.tenancy import HUB_SCOPED_OPTION
-from tests.support import default_tenant, hub_level_connections, hub_scoped, hub_scoped_engine, migrated_hub_at, stamp
+from tests.support.scaffolding import (
+    default_tenant,
+    hub_level_connections,
+    hub_scoped,
+    hub_scoped_engine,
+    migrated_hub_at,
+    stamp,
+)
 
 _T0 = datetime(2026, 1, 1, tzinfo=UTC)
 

@@ -11,9 +11,9 @@ from blizzard.auth_core import Role
 from blizzard.hub.api.analytics import EventScopeFilters, ScopeFilters, ndjson_lines
 from blizzard.hub.domain.kernel.pagination import encode_cursor
 from blizzard.hub.domain.observability.analytics.extraction import EXTRACTOR_VERSION
-from tests.analytics_events_world import record_transcript, seeded_hub, tool_turn
-from tests.hub_request_auth import cookie, ingest_chunk, seed_enrolled
-from tests.support import build_hub, seed_session, seed_user
+from tests.support.analytics_events_world import record_transcript, seeded_hub, tool_turn
+from tests.support.hub_request_auth import cookie, ingest_chunk, seed_enrolled
+from tests.support.scaffolding import build_hub, seed_session, seed_user
 
 #: Every route this module holds to the auth triad — one list, three sweeps over it.
 _ROUTES = [

@@ -6,7 +6,7 @@ from pathlib import Path
 
 import pytest
 
-from tests.repo_files import repo_root
+from tests.support.repo_files import repo_root
 
 _SCRIPT = repo_root() / ".github" / "actions" / "resolve-mock-ref" / "resolve-mock-ref.sh"
 _GIT_ENV = {

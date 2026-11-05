@@ -8,7 +8,7 @@ import sqlalchemy as sa
 
 from blizzard.hub.store import schema as s
 from blizzard.tools.invariants import hub_invariants
-from tests.support import migrate_to, stamp
+from tests.support.scaffolding import migrate_to, stamp
 
 pytestmark = [pytest.mark.component]
 

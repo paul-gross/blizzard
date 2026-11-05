@@ -47,7 +47,7 @@ from blizzard.hub.forge.landing import (
     ForgeUnavailable,
     Mergeability,
 )
-from tests.github_double import DoubleRepo, GitHubDouble, change, check, comparison
+from tests.support.github_double import DoubleRepo, GitHubDouble, change, check, comparison
 
 _REPO = "acme/widget"
 _BRANCH = "feature-branch"

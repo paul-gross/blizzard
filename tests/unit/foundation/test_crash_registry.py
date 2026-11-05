@@ -12,7 +12,7 @@ import os
 import pytest
 
 from blizzard.foundation import crash
-from tests.crash_points import discover_crash_points
+from tests.support.crash_points import discover_crash_points
 
 
 def test_registry_enumerates_the_daemon_loop_points() -> None:

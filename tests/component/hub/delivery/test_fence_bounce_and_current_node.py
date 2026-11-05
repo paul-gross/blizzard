@@ -26,8 +26,8 @@ from blizzard.hub.domain.graph.model import Graph, Node
 from blizzard.hub.store import schema as s
 from blizzard.hub.store.internal.chunk_escalations_store import ChunkEscalationsStore
 from blizzard.hub.store.internal.chunk_exclusive_store import LockedChunkTransaction
-from tests.hub_command_graphs import post_build_pass
-from tests.support import (
+from tests.support.hub_command_graphs import post_build_pass
+from tests.support.scaffolding import (
     HubHarness,
     build_hub,
     chunk_facts_of,
@@ -36,7 +36,7 @@ from tests.support import (
     pointer_token,
     report_lease,
 )
-from tests.write_fence_locks import Chunk, held_by_a_writer, restart_under_lock, stop_under_lock
+from tests.support.write_fence_locks import Chunk, held_by_a_writer, restart_under_lock, stop_under_lock
 
 
 def _count(hub: HubHarness, table: Table, chunk_id: str, **where: object) -> int:

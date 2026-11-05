@@ -18,10 +18,10 @@ from blizzard.runner.harness.identity import CLAUDE_CODE_HARNESS_ID, SessionRefe
 from blizzard.runner.harness.registry import HarnessBinding, HarnessRegistry
 from blizzard.runner.leases.model import NewLease
 from blizzard.runner.lifecycle.takeover import TakeoverService
-from tests.config_inputs import create_runner_app
-from tests.factory_fields import NewLeaseFields
-from tests.runner_client import runner_client
-from tests.runner_fakes import (
+from tests.support.config_inputs import create_runner_app
+from tests.support.factory_fields import NewLeaseFields
+from tests.support.runner_client import runner_client
+from tests.support.runner_fakes import (
     FakeHarness,
     FakeProbe,
     FakeProvider,

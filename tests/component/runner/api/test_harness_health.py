@@ -34,10 +34,10 @@ from blizzard.runner.harness.opencode.section import OpenCodeSection
 from blizzard.runner.harness.registry import HarnessBinding, HarnessRegistry
 from blizzard.runner.process.child_env import AllowlistedEnv
 from blizzard.runner.process.internal.linux_process_probe import LinuxProcessProbe
-from tests.config_inputs import create_runner_app
-from tests.harness_sections import claude_code, opencode, sections
-from tests.runner_client import runner_client
-from tests.support_child_launch import CHILDREN, version_probe
+from tests.support.child_launch import CHILDREN, version_probe
+from tests.support.config_inputs import create_runner_app
+from tests.support.harness_sections import claude_code, opencode, sections
+from tests.support.runner_client import runner_client
 
 
 class _HealthyWithDegradationProbe:

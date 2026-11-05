@@ -15,7 +15,7 @@ from pathlib import Path
 from blizzard.foundation.store.engine import create_engine_from_url
 from blizzard.hub.domain.runners.registration import RunnerAddition, RunnerCapability
 from blizzard.hub.store.internal.runner_registry_store import RunnerRegistryStore
-from tests.support import hub_store_connections, migrated_hub_at
+from tests.support.scaffolding import hub_store_connections, migrated_hub_at
 
 _NOW = datetime(2026, 7, 16, 12, 0, 0, tzinfo=UTC)
 

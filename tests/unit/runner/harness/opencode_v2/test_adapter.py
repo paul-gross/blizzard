@@ -30,8 +30,8 @@ from blizzard.runner.harness.process_launch import LaunchedProcess
 from blizzard.runner.node_steps.envelope import Envelope
 from blizzard.runner.process.child_env import AllowlistedEnv, ChildEnv
 from blizzard.runner.process.child_processes import StreamTarget
-from tests.runner_fakes import make_envelope
-from tests.support_child_launch import CHILDREN, tool_env
+from tests.support.child_launch import CHILDREN, tool_env
+from tests.support.runner_fakes import make_envelope
 
 NOW = datetime(2026, 11, 4, 12, 0, tzinfo=UTC)
 

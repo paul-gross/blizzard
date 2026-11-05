@@ -15,7 +15,7 @@ import pytest
 
 from blizzard.runner.environments.internal.subprocess_worktree_git import WORKTREE_GIT_TIMEOUT, SubprocessWorktreeGit
 from blizzard.runner.environments.worktree import IWorktreeGit
-from tests.support_child_launch import env_git
+from tests.support.child_launch import env_git
 
 
 def _adapter() -> SubprocessWorktreeGit:

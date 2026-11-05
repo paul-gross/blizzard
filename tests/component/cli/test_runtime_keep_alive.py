@@ -14,7 +14,7 @@ from typing import Any
 import httpx2
 
 from blizzard.cli.runtime import build_early_shutdown_server
-from tests.support import bound_socket
+from tests.support.scaffolding import bound_socket
 
 _REQUEST = b"GET / HTTP/1.1\r\nHost: daemon\r\n\r\n"
 

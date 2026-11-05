@@ -7,8 +7,8 @@ from __future__ import annotations
 import pytest
 
 from blizzard.runner.cli import runner as runner_group
-from tests.support_work_items_proxy import CHUNK
-from tests.worker_http import bind_stubs
+from tests.support.work_items_proxy import CHUNK
+from tests.support.worker_http import bind_stubs
 
 
 class _FakeLocalResponse:

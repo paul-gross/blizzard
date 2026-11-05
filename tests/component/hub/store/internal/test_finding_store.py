@@ -23,7 +23,14 @@ from blizzard.hub.domain.garden.findings.model import FactEntry, Finding, Findin
 from blizzard.hub.store import schema as s
 from blizzard.hub.store.errors import HubStoreError
 from blizzard.hub.store.internal.finding_store import FindingStore, lock_findings
-from tests.support import count_queries, default_project, default_tenant, hub_store_connections, migrated_hub_at, stamp
+from tests.support.scaffolding import (
+    count_queries,
+    default_project,
+    default_tenant,
+    hub_store_connections,
+    migrated_hub_at,
+    stamp,
+)
 
 _NOW = datetime(2026, 7, 16, 12, 0, 0, tzinfo=UTC)
 _LATER = _NOW.replace(hour=13)

@@ -19,12 +19,12 @@ from blizzard.runner.config import RunnerConfig
 from blizzard.runner.harness.identity import CLAUDE_CODE_HARNESS_ID, SessionReference
 from blizzard.runner.leases.model import NewLease
 from blizzard.wire.history import ChunkHistoryView
-from tests.config_inputs import create_runner_app
-from tests.factory_fields import NewLeaseFields
-from tests.runner_client import runner_client
-from tests.runner_fakes import SqlAlchemyRunnerStore, make_host_stores, make_store, make_stores, no_retry_clock
-from tests.support import build_hub, make_ready, pointer_token, report_lease
-from tests.support_chunk_history_api import CHUNK, DETAIL
+from tests.support.chunk_history_api import CHUNK, DETAIL
+from tests.support.config_inputs import create_runner_app
+from tests.support.factory_fields import NewLeaseFields
+from tests.support.runner_client import runner_client
+from tests.support.runner_fakes import SqlAlchemyRunnerStore, make_host_stores, make_store, make_stores, no_retry_clock
+from tests.support.scaffolding import build_hub, make_ready, pointer_token, report_lease
 
 _NOW = datetime(2026, 7, 21, 12, 0, 0, tzinfo=UTC)
 

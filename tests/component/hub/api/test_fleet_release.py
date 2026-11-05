@@ -12,7 +12,7 @@ import pytest
 
 from blizzard.foundation.hub_event_types import HubEventType
 from blizzard.hub.domain.execution.auth.route import ROUTE_TOKEN_ENFORCE
-from tests.support import HubHarness, build_hub, emitted_events, pointer_token
+from tests.support.scaffolding import HubHarness, build_hub, emitted_events, pointer_token
 
 _GRAPH_YAML = """
 name: two-step

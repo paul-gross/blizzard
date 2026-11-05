@@ -11,8 +11,8 @@ import httpx2
 import pytest
 
 from blizzard.hub.cli import hub as hub_group
-from tests.support_hub_cli_runner import ENV, HUB_URL
-from tests.worker_http import Bound, bind_stubs
+from tests.support.hub_cli_runner import ENV, HUB_URL
+from tests.support.worker_http import Bound, bind_stubs
 
 _ADDED = {"runner_id": "rn_01JC4Z8Q3XKQ1V5W2M7N9P0R6T", "runner_name": "r-claude", "token": "sekrit-token"}
 

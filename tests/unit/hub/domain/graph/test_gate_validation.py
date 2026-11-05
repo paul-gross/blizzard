@@ -10,7 +10,7 @@ import yaml
 
 from blizzard.hub.domain.graph.model import GraphDoc
 from blizzard.hub.domain.graph.validation import Validator
-from tests.support import TEST_CATALOGUE
+from tests.support.scaffolding import TEST_CATALOGUE
 
 
 def _doc(graph: dict[str, object]):

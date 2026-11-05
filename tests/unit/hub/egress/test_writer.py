@@ -15,8 +15,8 @@ from blizzard.hub.egress.writer import (
     ManifestCommitted,
     mint_process_token,
 )
-from tests.egress_world import PASS, RowFields, batch, row
-from tests.support import InMemoryEgressWriter
+from tests.support.egress_world import PASS, RowFields, batch, row
+from tests.support.scaffolding import InMemoryEgressWriter
 
 
 def test_a_conforming_batch_is_recorded_and_its_manifest_lists_what_was_passed() -> None:

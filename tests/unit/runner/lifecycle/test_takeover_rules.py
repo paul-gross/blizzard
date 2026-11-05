@@ -36,7 +36,7 @@ from blizzard.runner.lifecycle.takeover import (
     takeover_closing,
 )
 from blizzard.runner.node_steps.chunk_state import ChunkState
-from tests.runner_fakes import FakeHarness
+from tests.support.runner_fakes import FakeHarness
 
 _NOW = datetime(2026, 10, 4, 12, 0, tzinfo=UTC)
 _BINDING = EnvBinding(chunk_id="ch_1", environment_id="e1", workdir="/ws/e1", bound_at=_NOW)

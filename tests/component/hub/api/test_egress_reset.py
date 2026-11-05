@@ -16,7 +16,7 @@ from blizzard.hub.cli import hub as hub_group
 from blizzard.hub.domain.observability.egress.config import EgressConfig
 from blizzard.hub.domain.observability.egress.repository import UsagePosition
 from blizzard.hub.domain.observability.egress.reset import EgressReset
-from tests.egress_world import (
+from tests.support.egress_world import (
     SETTLED,
     closed_step,
     egress_cursor_rows,
@@ -25,9 +25,9 @@ from tests.egress_world import (
     egress_store,
     egress_sweep,
 )
-from tests.hub_event_rows import hub_event_log_of, hub_event_rows
-from tests.support import HubHarness, InMemoryEgressWriter
-from tests.worker_http import bind_stubs
+from tests.support.hub_event_rows import hub_event_log_of, hub_event_rows
+from tests.support.scaffolding import HubHarness, InMemoryEgressWriter
+from tests.support.worker_http import bind_stubs
 
 _ENV = {"BZ_HUB_URL": "http://hub.local:8421"}
 

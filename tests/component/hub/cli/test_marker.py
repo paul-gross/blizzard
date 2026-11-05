@@ -6,7 +6,7 @@ from __future__ import annotations
 import pytest
 
 from blizzard.hub.cli import hub as hub_group
-from tests.worker_http import bind_stubs
+from tests.support.worker_http import bind_stubs
 
 
 def test_record_marker_refuses_naming_its_removal_and_posts_nothing(monkeypatch: pytest.MonkeyPatch) -> None:

@@ -27,7 +27,14 @@ from blizzard.hub.store.internal.project_position_store import ProjectPositionSt
 from blizzard.hub.store.internal.project_store import ProjectStore
 from blizzard.hub.store.schema import config_changes, project_repository_positions
 from blizzard.hub.store.scoped import ScopedConnections
-from tests.support import OP, config_authoring, default_tenant, first_color, hub_migration_prototype, scoped_connections
+from tests.support.scaffolding import (
+    OP,
+    config_authoring,
+    default_tenant,
+    first_color,
+    hub_migration_prototype,
+    scoped_connections,
+)
 
 _T0 = datetime(2026, 10, 29, 12, 0, tzinfo=UTC)
 

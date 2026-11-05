@@ -18,9 +18,9 @@ from typing import Any
 import httpx2
 import pytest
 
-from tests.fleet_launchers import await_http, terminate
-from tests.mock_fleet_support import require_mock_fleet, service_gate
-from tests.support import LISTENING_FILE, await_listening_url, daemon_log_sink, listening_args
+from tests.support.fleet_launchers import await_http, terminate
+from tests.support.mock_fleet import require_mock_fleet, service_gate
+from tests.support.scaffolding import LISTENING_FILE, await_listening_url, daemon_log_sink, listening_args
 
 pytestmark = [pytest.mark.service, service_gate]
 
@@ -32,7 +32,7 @@ def _require_mock_data_binary() -> Path:
     """The provisioned sibling ``blizzard-mock`` venv bin with ``blizzard-mock-data``,
     or skip.
 
-    Distinct from :func:`~tests.mock_fleet_support.require_mock_fleet`'s hub/runner probe:
+    Distinct from :func:`~tests.support.mock_fleet.require_mock_fleet`'s hub/runner probe:
     this module drives the mock-data seeder specifically."""
     bin_dir = require_mock_fleet()
     if not (bin_dir / "blizzard-mock-data").is_file():
@@ -46,7 +46,7 @@ def _require_mock_data_binary() -> Path:
 def _zero_work_source_hub(hub_dir: Path) -> Generator[httpx2.Client]:
     """Host a real hub with **zero** configured work sources.
 
-    Mirrors ``tests.fleet_launchers.run_hub`` minus ``create_work_sources`` — every
+    Mirrors ``tests.support.fleet_launchers.run_hub`` minus ``create_work_sources`` — every
     chunk here is seeded directly, never ingested, so no work source is needed."""
     hub_bin = str(Path(sys.executable).parent / "blizzard-hub")
     subprocess.run([hub_bin, "init", str(hub_dir)], check=True, capture_output=True, text=True)

@@ -22,7 +22,7 @@ from blizzard.hub.domain.chunk.ports.exclusive import ILockedWorkRefRead
 from blizzard.hub.domain.graph.model import Graph, ILockedGraphNameRead
 from blizzard.hub.domain.operations.promote import ChunkNotPromotable
 from blizzard.hub.store import schema as s
-from tests.support import HubHarness, build_hub, hub_scoped, ingest, pointer_token, with_test_lock_wait
+from tests.support.scaffolding import HubHarness, build_hub, hub_scoped, ingest, pointer_token, with_test_lock_wait
 
 
 def _live_chunks_holding(hub: HubHarness, source: str, ref: str) -> list[str]:

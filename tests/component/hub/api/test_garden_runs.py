@@ -18,7 +18,7 @@ from blizzard.hub.domain.garden.routines import Routine
 from blizzard.hub.domain.garden.scopes import ScopeSlug
 from blizzard.hub.domain.graph.model import Graph
 from blizzard.hub.store import schema as s
-from tests.support import HubHarness, build_hub, count_queries, default_project, project_record, stamp
+from tests.support.scaffolding import HubHarness, build_hub, count_queries, default_project, project_record, stamp
 
 _CTX = ChangeContext(actor="operator", door=Door.API)
 

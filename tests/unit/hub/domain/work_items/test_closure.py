@@ -39,11 +39,11 @@ from blizzard.hub.domain.work_items.closure import (
     TenantCloseIntent,
     close_intent_is_due,
 )
-from tests.support import (
+from tests.support.scaffolding import (
     FakeCloser,
     WorkSourceRegistry,
 )
-from tests.support_work_closure import FAKE_TENANT, NOW, sweep_over
+from tests.support.work_closure import FAKE_TENANT, NOW, sweep_over
 
 
 @pytest.mark.parametrize(

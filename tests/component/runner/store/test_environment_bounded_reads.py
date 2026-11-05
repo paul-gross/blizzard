@@ -9,8 +9,8 @@ from pathlib import Path
 import pytest
 
 from blizzard.foundation.store import batching
-from tests.runner_fakes import SqlAlchemyRunnerStore, make_store
-from tests.support import count_queries, count_rows_read
+from tests.support.runner_fakes import SqlAlchemyRunnerStore, make_store
+from tests.support.scaffolding import count_queries, count_rows_read
 
 _T0 = datetime(2026, 7, 13, 12, 0, 0, tzinfo=UTC)
 

@@ -21,9 +21,9 @@ from blizzard.hub.domain.kernel.transactions import Transaction
 from blizzard.hub.store.internal.chunk_facts_store import ChunkFactsStore
 from blizzard.hub.store.internal.chunk_questions_store import ChunkQuestionsStore
 from blizzard.hub.store.scoped import ScopedConnections
-from tests.chunk_questions import ask_question
-from tests.gate_decisions import GATE_YAML
-from tests.support import (
+from tests.support.chunk_questions import ask_question
+from tests.support.gate_decisions import GATE_YAML
+from tests.support.scaffolding import (
     HubHarness,
     build_hub,
     hub_store_connections,

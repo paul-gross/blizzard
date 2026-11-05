@@ -20,7 +20,7 @@ from blizzard.runner.loop.tick import tick
 from blizzard.runner.subscriptions.credential_renewer import RenewalOutcome, RenewalOutcomeKind
 from blizzard.runner.usage.credential_renewal import CredentialRenewalPass, RenewableSubscription
 from blizzard.runner.usage.repository import CredentialRenewalSummary, IWriteCredentialRenewalRepository
-from tests.runner_fakes import (
+from tests.support.runner_fakes import (
     FIXTURE_RUNNER_ID,
     FakeCredentialRenewer,
     FakeHarness,

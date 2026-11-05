@@ -11,8 +11,8 @@ from blizzard.runner.harness.opencode.health import OpenCodeHealthProbe
 from blizzard.runner.harness.wiring import (
     build_production_harness_health_probes,
 )
-from tests.runner_fakes import NO_TRACING
-from tests.support_child_launch import CHILDREN
+from tests.support.child_launch import CHILDREN
+from tests.support.runner_fakes import NO_TRACING
 
 
 def test_the_production_opencode_probe_admits_against_the_injected_corpus(tmp_path: Path) -> None:

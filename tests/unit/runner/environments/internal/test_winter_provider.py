@@ -12,7 +12,7 @@ import pytest
 
 from blizzard.runner.environments.internal.winter_provider import WinterWorkspaceProvider
 from blizzard.runner.environments.provider import EnvironmentPreparationError, WorkspaceAcquisitionError
-from tests.winter_provider_fakes import FakeGit, FakeWinter
+from tests.support.winter_provider_fakes import FakeGit, FakeWinter
 
 
 def _provider(root: str, pool: Sequence[str]) -> WinterWorkspaceProvider:

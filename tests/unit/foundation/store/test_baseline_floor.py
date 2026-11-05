@@ -12,7 +12,7 @@ from alembic.util import CommandError
 from blizzard.foundation.store.migrations import MigrationRunner, RevisionMismatchError, StoreBelowFloorError
 from blizzard.hub.store import MIGRATIONS_DIR as HUB_MIGRATIONS_DIR
 from blizzard.runner.store import MIGRATIONS_DIR
-from tests.baseline_floor_trees import make_tree
+from tests.support.baseline_floor_trees import make_tree
 
 
 @pytest.fixture

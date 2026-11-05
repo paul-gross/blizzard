@@ -9,7 +9,7 @@ import pytest
 from pydantic import BaseModel
 
 from blizzard.foundation.flags import FlagGuarded, FlagOffError, without_off_fields
-from tests.support_flag_guard import flags_for as _flags
+from tests.support.flag_guard import flags_for as _flags
 
 
 def test_require_on_raises_for_an_off_flag_and_checks_the_name_as_on_does() -> None:

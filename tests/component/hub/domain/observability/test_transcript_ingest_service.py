@@ -32,7 +32,7 @@ from blizzard.hub.domain.runners.registration import IReadRunnerRegistry, Retire
 from blizzard.hub.store import schema as s
 from blizzard.hub.store.internal.transcript_segment_store import TranscriptSegmentStore
 from blizzard.hub.store.transactions import HubTransactions
-from tests.support import HubHarness, build_hub, hub_store_connections, seed_chunk, seed_graph, stamp
+from tests.support.scaffolding import HubHarness, build_hub, hub_store_connections, seed_chunk, seed_graph, stamp
 
 _T0 = datetime(2026, 8, 9, tzinfo=UTC)
 

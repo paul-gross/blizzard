@@ -12,8 +12,8 @@ from blizzard.hub.config import HubConfig
 from blizzard.hub.runtime import migration_runner as hub_migration_runner
 from blizzard.runner.config import RunnerConfig
 from blizzard.runner.runtime import migration_runner as runner_migration_runner
-from tests.repo_files import repo_root
-from tests.support import hub_migration_prototype, migrate_to
+from tests.support.repo_files import repo_root
+from tests.support.scaffolding import hub_migration_prototype, migrate_to
 
 
 @pytest.mark.parametrize("tree, helper", [("hub", "migrated_hub_at"), ("runner", "migrated_store_at")])
@@ -40,7 +40,7 @@ def test_a_module_under_a_tier_folder_cannot_replay_from_empty(tmp_path: Path, f
 
 
 def test_a_frame_resolving_to_the_tests_dir_itself_is_not_a_test_module(tmp_path: Path) -> None:
-    from tests.head_replay_guard import _in_test_tree  # pyright: ignore[reportPrivateUsage]
+    from tests.support.head_replay_guard import _in_test_tree  # pyright: ignore[reportPrivateUsage]
 
     assert not _in_test_tree(tmp_path, tmp_path)
 

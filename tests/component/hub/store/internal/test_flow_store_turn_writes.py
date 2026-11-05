@@ -32,7 +32,15 @@ from blizzard.hub.domain.delivery.flows import (
 )
 from blizzard.hub.store import schema as s
 from blizzard.hub.store.internal.flow_store import FlowStore
-from tests.support import HubHarness, build_hub, chunk_stores, chunk_unit, hub_scoped, hub_store_connections, ingest
+from tests.support.scaffolding import (
+    HubHarness,
+    build_hub,
+    chunk_stores,
+    chunk_unit,
+    hub_scoped,
+    hub_store_connections,
+    ingest,
+)
 
 _MAIN = FlowResource("re_a", "main")
 _OTHER = FlowResource("re_b", "master")

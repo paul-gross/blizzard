@@ -16,10 +16,10 @@ from click.testing import Result
 
 from blizzard.auth_core import Role
 from blizzard.hub.cli import hub as hub_group
-from tests.analytics_events_world import seeded_hub
-from tests.hub_request_auth import cookie
-from tests.support import HubHarness, seed_session, seed_user
-from tests.worker_http import Bound, bind_stubs
+from tests.support.analytics_events_world import seeded_hub
+from tests.support.hub_request_auth import cookie
+from tests.support.scaffolding import HubHarness, seed_session, seed_user
+from tests.support.worker_http import Bound, bind_stubs
 
 _HUB_URL = "http://hub.local:8421"
 
@@ -115,7 +115,7 @@ def test_ndjson_streams_every_line_unmodified_and_untruncated(tmp_path: Path) ->
 
 
 def test_the_auth_triad_returns_the_apis_own_detail(tmp_path: Path) -> None:
-    from tests.support import build_hub
+    from tests.support.scaffolding import build_hub
 
     hub = build_hub(tmp_path, auth_mode="oauth")
 

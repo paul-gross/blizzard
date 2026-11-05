@@ -17,8 +17,8 @@ from blizzard.runner.subscriptions.credential_renewer import (
     RenewalOutcomeKind,
 )
 from blizzard.runner.subscriptions.subscription_sampler import PROVIDER_ANTHROPIC, PROVIDER_OPENAI
-from tests.config_inputs import create_runner_app
-from tests.runner_fakes import SqlAlchemyRunnerStore, make_host_stores, make_store, make_stores
+from tests.support.config_inputs import create_runner_app
+from tests.support.runner_fakes import SqlAlchemyRunnerStore, make_host_stores, make_store, make_stores
 
 _NOW = datetime(2026, 9, 22, 12, 0, 0, tzinfo=UTC)
 

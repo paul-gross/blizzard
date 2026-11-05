@@ -27,7 +27,7 @@ from blizzard.runner.loop.steps import Advance
 from blizzard.runner.node_steps.chunk_state import ChunkPause, ChunkState
 from blizzard.runner.throttle.pause import USAGE_LIMIT_PARK_CAUSE, RunnerBrakes
 from blizzard.runner.throttle.settings import HoldOrRelease, ThrottleSettings
-from tests.runner_fakes import (
+from tests.support.runner_fakes import (
     FIXTURE_RUNNER_ID,
     FakeHarness,
     FakeHub,

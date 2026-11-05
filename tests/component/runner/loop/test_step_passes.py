@@ -28,9 +28,9 @@ from blizzard.runner.loop.host_tick import HostTick
 from blizzard.runner.loop.mode import LoopMode
 from blizzard.runner.loop.step_passes import HostPassStepper, PassResult, TickInProgress
 from blizzard.runner.loop_wiring import RunnerStepper
-from tests.config_inputs import create_runner_app
-from tests.host_files import host_config_of, one_workspace
-from tests.runner_fakes import FIXTURE_RUNNER_ID, loop_graph, migrated_store_at
+from tests.support.config_inputs import create_runner_app
+from tests.support.host_files import host_config_of, one_workspace
+from tests.support.runner_fakes import FIXTURE_RUNNER_ID, loop_graph, migrated_store_at
 
 _NOW = datetime(2026, 8, 1, 12, 0, tzinfo=UTC)
 _LOG = get_logger("tests.step_passes")

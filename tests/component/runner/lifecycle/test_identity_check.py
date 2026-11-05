@@ -44,9 +44,9 @@ from blizzard.runner.lifecycle.identity_check import IdentityCheck, ProxyIdentit
 from blizzard.runner.lifecycle.registration import Registration
 from blizzard.runner.loop.context import LoopContext
 from blizzard.runner.loop.tick import tick
-from tests.config_inputs import create_runner_app
-from tests.runner_client import runner_client
-from tests.runner_fakes import (
+from tests.support.config_inputs import create_runner_app
+from tests.support.runner_client import runner_client
+from tests.support.runner_fakes import (
     FakeHarness,
     FakeHub,
     FakeProbe,
@@ -55,8 +55,8 @@ from tests.runner_fakes import (
     make_store,
     no_retry_clock,
 )
-from tests.runner_join import DEFAULT_TOKEN_ENV
-from tests.support import RunnerFleetClient, build_hub
+from tests.support.runner_join import DEFAULT_TOKEN_ENV
+from tests.support.scaffolding import RunnerFleetClient, build_hub
 
 _NOW = datetime(2026, 7, 13, 12, 0, 0, tzinfo=UTC)
 _RESET = "blizzard runner store reset /runner"

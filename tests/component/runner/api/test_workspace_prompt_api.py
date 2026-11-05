@@ -14,10 +14,10 @@ from fastapi.testclient import TestClient
 
 from blizzard.runner.composition import build_workspaces
 from blizzard.runner.config import DEFAULT_WORKSPACE_ID, RunnerConfig
-from tests.config_inputs import create_runner_app
-from tests.host_files import one_workspace
-from tests.runner_fakes import make_host_stores, make_store, make_stores
-from tests.support_child_launch import workspace_launch
+from tests.support.child_launch import workspace_launch
+from tests.support.config_inputs import create_runner_app
+from tests.support.host_files import one_workspace
+from tests.support.runner_fakes import make_host_stores, make_store, make_stores
 
 _PROMPT = f"/api/host/workspaces/{DEFAULT_WORKSPACE_ID}/prompt"
 

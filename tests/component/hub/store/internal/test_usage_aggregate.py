@@ -13,7 +13,7 @@ from blizzard.foundation.clock import FixedClock
 from blizzard.hub.domain.observability.analytics.operational import OperationalCriteria
 from blizzard.hub.store.internal.analytics_operational_store import AnalyticsOperationalStore
 from blizzard.hub.store.internal.chunk_usage_store import ChunkUsageStore
-from tests.support import hub_store_connections, migrate_to, seed_chunk, seed_graph
+from tests.support.scaffolding import hub_store_connections, migrate_to, seed_chunk, seed_graph
 
 _T0 = datetime(2026, 1, 1, tzinfo=UTC)
 

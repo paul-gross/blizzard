@@ -28,7 +28,7 @@ from blizzard.runner.loop.steps import Advance, Pull
 from blizzard.runner.node_steps.envelope import ProducesSpec
 from blizzard.runner.node_steps.submissions import ApplyReply
 from blizzard.runner.operator.attachments import AttachmentService, AttachmentTooLate
-from tests.runner_fakes import (
+from tests.support.runner_fakes import (
     CountingAttachmentStore,
     FakeCheckRunner,
     FakeHarness,

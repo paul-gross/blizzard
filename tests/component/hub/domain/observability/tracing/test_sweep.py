@@ -27,9 +27,9 @@ from blizzard.hub.domain.observability.tracing.cursor import CursorKey
 from blizzard.hub.domain.observability.tracing.repository import TraceCheckpoint
 from blizzard.hub.domain.sweeps.names import SweepName
 from blizzard.hub.store import schema
-from tests.config_inputs import build_hosted_hub_app, init_hub
-from tests.hub_event_rows import hub_event_detail, hub_event_kinds, hub_event_rows
-from tests.support import (
+from tests.support.config_inputs import build_hosted_hub_app, init_hub
+from tests.support.hub_event_rows import hub_event_detail, hub_event_kinds, hub_event_rows
+from tests.support.scaffolding import (
     HubHarness,
     InMemoryTraceExporter,
     count_queries,
@@ -37,8 +37,8 @@ from tests.support import (
     hub_scoped,
     ingest,
 )
-from tests.trace_export_world import closed_pair, trace_export_sweep
-from tests.trace_hub import claim, pass_build, trace_hub, trace_store
+from tests.support.trace_export_world import closed_pair, trace_export_sweep
+from tests.support.trace_hub import claim, pass_build, trace_hub, trace_store
 
 _SETTLED = TracingConfig(settle_seconds=0, sweep_seconds=60, max_lag_seconds=3600)
 

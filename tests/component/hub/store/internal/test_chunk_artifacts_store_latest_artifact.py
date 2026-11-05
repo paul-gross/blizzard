@@ -13,7 +13,7 @@ from blizzard.hub.domain.chunk.model import WorkRef, decide_close_enqueue
 from blizzard.hub.domain.chunk.ports.artifacts import IWriteChunkArtifactsRepository
 from blizzard.hub.domain.chunk.ports.fence import EpochAdmission
 from blizzard.hub.store.schema import artifacts
-from tests.support import HubHarness, build_hub, ingest, stamp
+from tests.support.scaffolding import HubHarness, build_hub, ingest, stamp
 
 
 def _writable(hub: HubHarness) -> IWriteChunkArtifactsRepository:

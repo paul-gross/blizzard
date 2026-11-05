@@ -14,7 +14,7 @@ from typing import Any
 import sqlalchemy as sa
 
 from blizzard.hub.store import schema as s
-from tests.support import (
+from tests.support.scaffolding import (
     HubHarness,
     assert_all_timestamps_utc,
     build_hub,

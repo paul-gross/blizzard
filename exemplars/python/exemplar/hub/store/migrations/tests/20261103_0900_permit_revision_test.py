@@ -18,8 +18,8 @@ from alembic.operations import Operations
 
 from blizzard.foundation.store.engine import create_engine_from_url
 from exemplar.hub.store import schema as s
-from tests.migration_support_store_migrations import schema_snapshot
-from tests.support import default_project, default_tenant, migrate_to
+from tests.support.migrations.store_migrations import schema_snapshot
+from tests.support.scaffolding import default_project, default_tenant, migrate_to
 
 pytestmark = pytest.mark.component
 

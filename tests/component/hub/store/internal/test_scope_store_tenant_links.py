@@ -33,7 +33,7 @@ from blizzard.hub.store.internal.run_context_store import RunContextStore
 from blizzard.hub.store.internal.scope_store import ScopeStore
 from blizzard.hub.store.scoped import ScopedConnections
 from blizzard.hub.tenancy import TenantId
-from tests.support import default_project, default_tenant, hub_scoped, migrated_hub_at, scoped_connections
+from tests.support.scaffolding import default_project, default_tenant, hub_scoped, migrated_hub_at, scoped_connections
 
 _PROJECT = "proj_test"
 

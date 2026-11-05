@@ -20,8 +20,8 @@ from blizzard.runner.hub.internal.http_hub import HttpHubClient
 from blizzard.runner.hub.outbound import COMPLETION_KIND
 from blizzard.runner.lifecycle.drain import OutboundDrain
 from blizzard.runner.loop.context import LoopConfig
-from tests.github_double import GitHubDouble, forge_holding
-from tests.runner_fakes import (
+from tests.support.github_double import GitHubDouble, forge_holding
+from tests.support.runner_fakes import (
     FIXTURE_RUNNER_ID,
     FakeHarness,
     FakeHub,
@@ -31,7 +31,7 @@ from tests.runner_fakes import (
     make_store,
     registered_identity,
 )
-from tests.support import HubHarness, build_hub, make_ready, pointer_token, report_lease
+from tests.support.scaffolding import HubHarness, build_hub, make_ready, pointer_token, report_lease
 
 _POINTER = {"source": "default", "ref": "7"}
 _COMMIT = "a" * 40

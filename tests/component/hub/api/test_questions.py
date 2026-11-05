@@ -9,12 +9,12 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from tests.chunk_questions import (
-    _GRAPH_YAML,  # pyright: ignore[reportPrivateUsage]  # shared test helper, imported from tests.chunk_questions
-    _POINTER,  # pyright: ignore[reportPrivateUsage]  # shared test helper, imported from tests.chunk_questions
+from tests.support.chunk_questions import (
+    _GRAPH_YAML,  # pyright: ignore[reportPrivateUsage]  # shared test helper, imported from tests.support.chunk_questions
+    _POINTER,  # pyright: ignore[reportPrivateUsage]  # shared test helper, imported from tests.support.chunk_questions
     ask_question,
 )
-from tests.support import build_hub, make_ready, pointer_token
+from tests.support.scaffolding import build_hub, make_ready, pointer_token
 
 # --- POST /api/questions/{id}/answers — primary -----------------------------
 
@@ -144,7 +144,7 @@ def test_equal_raw_session_ids_are_isolated_across_harnesses(tmp_path: Path) -> 
 
 
 def test_runner_bearer_token_is_rejected_on_answers(tmp_path: Path) -> None:
-    from tests.hub_request_auth import bearer, seed_enrolled
+    from tests.support.hub_request_auth import bearer, seed_enrolled
 
     token = seed_enrolled(tmp_path)
     warn_hub = build_hub(tmp_path)

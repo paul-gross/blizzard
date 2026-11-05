@@ -14,7 +14,7 @@ import pytest
 from sqlalchemy import Connection
 
 from blizzard.hub.store.internal import chunk_record_store as work_item_store_module
-from tests.support import added_runner, build_hub, ingest, seed_runner
+from tests.support.scaffolding import added_runner, build_hub, ingest, seed_runner
 
 
 def _claim_body(chunk_id: str, runner: str = "r1") -> dict[str, object]:

@@ -86,11 +86,11 @@ from blizzard.runner.tracing.receiver_limits import (
 )
 from blizzard.runner.tracing.receiving import TelemetryReceiver
 from blizzard.runner.tracing.status import LeaseTraceStatusReader
-from tests import claude_code_telemetry
-from tests.config_inputs import create_runner_app
-from tests.harness_sections import sections
-from tests.runner_client import runner_client
-from tests.runner_fakes import (
+from tests.support import claude_code_telemetry
+from tests.support.config_inputs import create_runner_app
+from tests.support.harness_sections import sections
+from tests.support.runner_client import runner_client
+from tests.support.runner_fakes import (
     NO_TRACING,
     REGISTERED_AT,
     FakeHarness,

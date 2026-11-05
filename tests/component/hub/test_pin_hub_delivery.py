@@ -17,9 +17,9 @@ from blizzard.hub.domain.actions.visit import UnconvergedDeliveryError
 from blizzard.hub.domain.artifact.model import StoredArtifact
 from blizzard.hub.domain.chunk.model import WorkRef, decide_close_enqueue
 from blizzard.hub.domain.chunk.ports.fence import EpochAdmission
-from tests.github_double import GitHubDouble
-from tests.pin_hub_delivery_world import mint_and_claim, writable
-from tests.support import HubHarness, build_hub, report_lease
+from tests.support.github_double import GitHubDouble
+from tests.support.pin_hub_delivery_world import mint_and_claim, writable
+from tests.support.scaffolding import HubHarness, build_hub, report_lease
 
 # -- hub_node: an unconverged delivery routes the failure edge ------------------------
 

@@ -17,7 +17,7 @@ from blizzard.runner.leases.model import NewLease, NewMint
 from blizzard.runner.lifecycle.artifacts import PinnedGraphArtifact
 from blizzard.runner.loop.steps import Fill
 from blizzard.runner.node_steps.envelope import Envelope, GraphArtifact
-from tests.runner_fakes import (
+from tests.support.runner_fakes import (
     FakeHarness,
     FakeHub,
     FakeProbe,

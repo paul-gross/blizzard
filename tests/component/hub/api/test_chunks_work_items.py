@@ -8,7 +8,7 @@ from blizzard.hub.domain.chunk.model import Chunk, WorkItemAuthor, WorkRef
 from blizzard.hub.store.internal.chunk_facts_store import ChunkFactsStore
 from blizzard.hub.store.internal.chunk_work_refs_store import ChunkWorkRefsStore
 from blizzard.hub.work_sources.source import WorkItem
-from tests.support import (
+from tests.support.scaffolding import (
     FakeWorkSource,
     build_hub,
     chunk_stores,

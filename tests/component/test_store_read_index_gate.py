@@ -2,7 +2,7 @@
 
 Drives every read method of every runner/hub ``IRead*`` Protocol against a real, migrated-to-head sqlite store and
 fails if any reads a table whole — a scan, an automatic index, an ordered walk of a named index, or a search on the
-tenant prefix alone — where ``tests/store_scan_allowlist.py``'s allow-lists name no reason for it, coverage enforced by reflection equality against ``tests/store_read_census.py``'s census/exemptions.
+tenant prefix alone — where ``tests/support/store_scan_allowlist.py``'s allow-lists name no reason for it, coverage enforced by reflection equality against ``tests/support/store_read_census.py``'s census/exemptions.
 ``tests/component/runner/store/test_store_indexes.py``/``tests/component/hub/store/internal/test_chunk_fact_table_indexes.py`` keep their own narrower purpose."""
 
 from __future__ import annotations
@@ -28,9 +28,9 @@ from blizzard.hub.domain.observability.tracing.repository import IReadStepCorpus
 from blizzard.hub.domain.observability.transcripts import IReadTranscriptSegments
 from blizzard.hub.store import schema as hub_schema
 from blizzard.runner.store import schema as runner_schema
-from tests import support
-from tests.runner_fakes import runner_migration_prototype
-from tests.store_read_census import (
+from tests.support import scaffolding as support
+from tests.support.runner_fakes import runner_migration_prototype
+from tests.support.store_read_census import (
     HUB_CENSUS,
     HUB_EXEMPTIONS,
     HUB_NAMED_READ_SEAMS,
@@ -41,7 +41,7 @@ from tests.store_read_census import (
     build_hub_world,
     build_runner_world,
 )
-from tests.store_scan_allowlist import (
+from tests.support.store_scan_allowlist import (
     HUB_ALLOWED_SCANS,
     ROW_THRESHOLD,
     RUNNER_ALLOWED_SCANS,
@@ -214,8 +214,8 @@ def test_runner_census_is_exhaustive() -> None:
     declared = set(RUNNER_CENSUS.keys()) | set(RUNNER_EXEMPTIONS.keys())
     assert reflected == declared, (
         "the reflected runner IRead* Protocol methods no longer match "
-        "tests/store_read_census.py's RUNNER_CENSUS | RUNNER_EXEMPTIONS — edit "
-        f"tests/store_read_census.py. Missing from the census/exemptions: {reflected - declared}. "
+        "tests/support/store_read_census.py's RUNNER_CENSUS | RUNNER_EXEMPTIONS — edit "
+        f"tests/support/store_read_census.py. Missing from the census/exemptions: {reflected - declared}. "
         f"Stale in the census/exemptions (no longer reflected): {declared - reflected}."
     )
 
@@ -237,7 +237,7 @@ def test_runner_read_methods_never_scan_an_unallowed_table(runner_world: RunnerW
         if not _covered(RUNNER_ALLOWED_SCANS, protocol, method, table, row.detail)
     ]
     assert not uncovered, (
-        "an offending whole-table read is not covered by tests/store_scan_allowlist.py's "
+        "an offending whole-table read is not covered by tests/support/store_scan_allowlist.py's "
         f"RUNNER_ALLOWED_SCANS: {uncovered}"
     )
 
@@ -250,8 +250,8 @@ def test_hub_census_is_exhaustive() -> None:
     declared = set(HUB_CENSUS.keys()) | set(HUB_EXEMPTIONS.keys())
     assert reflected == declared, (
         "the reflected hub IRead* Protocol methods no longer match "
-        "tests/store_read_census.py's HUB_CENSUS | HUB_EXEMPTIONS — edit "
-        f"tests/store_read_census.py. Missing from the census/exemptions: {reflected - declared}. "
+        "tests/support/store_read_census.py's HUB_CENSUS | HUB_EXEMPTIONS — edit "
+        f"tests/support/store_read_census.py. Missing from the census/exemptions: {reflected - declared}. "
         f"Stale in the census/exemptions (no longer reflected): {declared - reflected}."
     )
 
@@ -273,7 +273,7 @@ def test_hub_read_methods_never_scan_an_unallowed_table(hub_world: HubWorld) -> 
         if not _covered(HUB_ALLOWED_SCANS, protocol, method, table, row.detail)
     ]
     assert not uncovered, (
-        "an offending whole-table read is not covered by tests/store_scan_allowlist.py's "
+        "an offending whole-table read is not covered by tests/support/store_scan_allowlist.py's "
         f"HUB_ALLOWED_SCANS: {uncovered}"
     )
 

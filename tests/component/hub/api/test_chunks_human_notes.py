@@ -14,7 +14,7 @@ import pytest
 import sqlalchemy as sa
 
 from blizzard.hub.store import schema as s
-from tests.support import HubHarness, build_hub, hub_scoped, pointer_token, report_escalation, report_lease
+from tests.support.scaffolding import HubHarness, build_hub, hub_scoped, pointer_token, report_escalation, report_lease
 
 _POINTER = {"source": "default", "ref": "9"}
 

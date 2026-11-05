@@ -58,18 +58,18 @@ from blizzard.hub.forge.registry import ForgeBinding
 from blizzard.hub.runtime import Migrations
 from blizzard.hub.store import schema as s
 from blizzard.hub.store.internal.chunk_artifacts_store import ChunkArtifactsStore
-from tests.github_double import GREEN, GitHubDouble, change, check, comparison
-from tests.land_action_doubles import (
-    _GADGET,  # pyright: ignore[reportPrivateUsage]  # shared test helper, imported from tests.land_action_doubles
-    _SUBMITTED,  # pyright: ignore[reportPrivateUsage]  # shared test helper, imported from tests.land_action_doubles
-    _WIDGET,  # pyright: ignore[reportPrivateUsage]  # shared test helper, imported from tests.land_action_doubles
-    _forge,  # pyright: ignore[reportPrivateUsage]  # shared test helper, imported from tests.land_action_doubles
-    _land,  # pyright: ignore[reportPrivateUsage]  # shared test helper, imported from tests.land_action_doubles
-    _row,  # pyright: ignore[reportPrivateUsage]  # shared test helper, imported from tests.land_action_doubles
-    _Sink,  # pyright: ignore[reportPrivateUsage]  # shared test helper, imported from tests.land_action_doubles
-    _visit,  # pyright: ignore[reportPrivateUsage]  # shared test helper, imported from tests.land_action_doubles
+from tests.support.github_double import GREEN, GitHubDouble, change, check, comparison
+from tests.support.land_action_doubles import (
+    _GADGET,  # pyright: ignore[reportPrivateUsage]  # shared test helper, imported from tests.support.land_action_doubles
+    _SUBMITTED,  # pyright: ignore[reportPrivateUsage]  # shared test helper, imported from tests.support.land_action_doubles
+    _WIDGET,  # pyright: ignore[reportPrivateUsage]  # shared test helper, imported from tests.support.land_action_doubles
+    _forge,  # pyright: ignore[reportPrivateUsage]  # shared test helper, imported from tests.support.land_action_doubles
+    _land,  # pyright: ignore[reportPrivateUsage]  # shared test helper, imported from tests.support.land_action_doubles
+    _row,  # pyright: ignore[reportPrivateUsage]  # shared test helper, imported from tests.support.land_action_doubles
+    _Sink,  # pyright: ignore[reportPrivateUsage]  # shared test helper, imported from tests.support.land_action_doubles
+    _visit,  # pyright: ignore[reportPrivateUsage]  # shared test helper, imported from tests.support.land_action_doubles
 )
-from tests.support import (
+from tests.support.scaffolding import (
     HubHarness,
     RepositorySeed,
     build_hub,

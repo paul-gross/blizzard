@@ -12,7 +12,7 @@ from pathlib import Path
 
 import pytest
 
-from tests.repo_files import repo_root
+from tests.support.repo_files import repo_root
 
 _SCRIPT = repo_root() / "scripts" / "release-inventory.sh"
 _DIGEST = "sha256:" + "ab" * 32

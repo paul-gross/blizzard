@@ -46,7 +46,7 @@ from blizzard.hub.store.internal.work_source_record_store import WorkSourceRecor
 from blizzard.hub.store.scoped import is_project_keyed
 from blizzard.hub.store.transactions import HubTransactions
 from blizzard.hub.tenancy import TenantId
-from tests.support import (
+from tests.support.scaffolding import (
     RecordedEvents,
     chunk_unit,
     default_project,

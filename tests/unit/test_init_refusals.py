@@ -10,7 +10,7 @@ from blizzard.hub.config import ConfigError as HubConfigError
 from blizzard.hub.config import HubConfig
 from blizzard.runner.config import ConfigError as RunnerConfigError
 from blizzard.runner.host_config import HostConfig
-from tests.config_inputs import init_host, init_hub
+from tests.support.config_inputs import init_host, init_hub
 
 type _Init = Callable[[Path], HubConfig | HostConfig]
 

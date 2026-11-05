@@ -32,7 +32,7 @@ from blizzard.hub.store import schema as s
 from blizzard.hub.store.errors import HubStoreErrorFactory
 from blizzard.hub.store.scoped import statements_of
 from blizzard.hub.tenancy import StoreScope, TenantId, UnknownTenant
-from tests.support import default_tenant, hub_level_connections, hub_migration_prototype, seed_invitation
+from tests.support.scaffolding import default_tenant, hub_level_connections, hub_migration_prototype, seed_invitation
 
 _T0 = datetime(2026, 1, 1, tzinfo=UTC)
 _WRITTEN = (

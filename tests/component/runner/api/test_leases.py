@@ -21,10 +21,10 @@ from blizzard.runner.harness.identity import CLAUDE_CODE_HARNESS_ID, SessionRefe
 from blizzard.runner.leases.activity import LocalLeaseService
 from blizzard.runner.leases.model import NewLease
 from blizzard.wire.lease import LeaseView
-from tests.config_inputs import create_runner_app
-from tests.factory_fields import NewLeaseFields
-from tests.runner_client import runner_client
-from tests.runner_fakes import (
+from tests.support.config_inputs import create_runner_app
+from tests.support.factory_fields import NewLeaseFields
+from tests.support.runner_client import runner_client
+from tests.support.runner_fakes import (
     FakeProbe,
     SqlAlchemyRunnerStore,
     make_host_stores,
@@ -32,7 +32,7 @@ from tests.runner_fakes import (
     make_stores,
     runner_store_errors,
 )
-from tests.support import assert_all_timestamps_utc, count_queries
+from tests.support.scaffolding import assert_all_timestamps_utc, count_queries
 
 _NOW = datetime(2026, 7, 16, 12, 0, 0, tzinfo=UTC)
 

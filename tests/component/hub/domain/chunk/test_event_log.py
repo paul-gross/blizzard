@@ -13,8 +13,8 @@ from sqlalchemy import Engine
 from blizzard.foundation.clock import FixedClock
 from blizzard.hub.domain.chunk.ports.fence import EpochAdmission
 from blizzard.hub.domain.chunk.ports.stores import ChunkStores
-from tests.migration_support_event_log import T0
-from tests.support import (
+from tests.support.migrations.event_log import T0
+from tests.support.scaffolding import (
     chunk_stores,
     count_queries,
     migrate_to,

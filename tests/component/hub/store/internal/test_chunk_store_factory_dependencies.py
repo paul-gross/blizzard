@@ -12,7 +12,7 @@ from pathlib import Path
 from blizzard.foundation.clock import FixedClock
 from blizzard.hub.domain.chunk.ports.dependencies import IReadChunkDependenciesRepository
 from blizzard.hub.store.internal.chunk_dependencies_store import ChunkDependenciesStore
-from tests.support import build_hub, chunk_stores, migrate_to
+from tests.support.scaffolding import build_hub, chunk_stores, migrate_to
 
 _NOW = datetime(2026, 9, 2, tzinfo=UTC)
 

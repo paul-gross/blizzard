@@ -10,7 +10,7 @@ from __future__ import annotations
 from datetime import timedelta
 from pathlib import Path
 
-from tests.support import HubHarness, build_hub, capture_statements, pointer_token, write_chunk_pause_facts
+from tests.support.scaffolding import HubHarness, build_hub, capture_statements, pointer_token, write_chunk_pause_facts
 
 
 def _declare(hub: HubHarness, dependent_id: str, prerequisite_id: str):

@@ -34,8 +34,15 @@ from blizzard.hub.secrets import hub_key_provider
 from blizzard.hub.store import schema
 from blizzard.hub.tenancy import HUB_SCOPED_OPTION, StoreScope, TenantClosed, TenantId, UnknownTenant
 from blizzard.hub.work_sources.source import IWorkSourceRegistry
-from tests.config_inputs import VERSION_WINDOW
-from tests.support import WorkSourceRegistry, add_tenant, close_tenant, count_queries, default_tenant, migrate_to
+from tests.support.config_inputs import VERSION_WINDOW
+from tests.support.scaffolding import (
+    WorkSourceRegistry,
+    add_tenant,
+    close_tenant,
+    count_queries,
+    default_tenant,
+    migrate_to,
+)
 
 _AT = datetime(2026, 10, 8, tzinfo=UTC)
 _SECOND = TenantId("ten_SECOND")

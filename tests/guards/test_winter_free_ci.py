@@ -15,7 +15,7 @@ from typing import Any
 import pytest
 import yaml
 
-from tests.repo_files import repo_root
+from tests.support.repo_files import repo_root
 
 _ROOT = repo_root()
 _PLATFORM_TIERS = ("service", "crash")
@@ -43,7 +43,7 @@ def _platform_modules() -> list[Path]:
 def test_a_platform_tier_module_is_not_winter_bound(module: Path) -> None:
     hit = _WINTER_BOUND.search(module.read_text())
     assert hit is None, (
-        f"{module.relative_to(_ROOT)} binds to winter ({hit and hit.group(0)!r}); use tests/fleet_world.py"
+        f"{module.relative_to(_ROOT)} binds to winter ({hit and hit.group(0)!r}); use tests/support/fleet_world.py"
     )
 
 

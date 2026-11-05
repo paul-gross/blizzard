@@ -21,7 +21,7 @@ from blizzard.runner.leases.activity import (
 from blizzard.runner.leases.model import NewLease
 from blizzard.runner.store.errors import RunnerStoreErrorFactory
 from blizzard.runner.store.schema import metadata as runner_metadata
-from tests.runner_fakes import FakeProbe, SqlAlchemyRunnerStore, make_store, runner_store_errors
+from tests.support.runner_fakes import FakeProbe, SqlAlchemyRunnerStore, make_store, runner_store_errors
 
 _NOW = datetime(2026, 7, 16, 12, 0, 0, tzinfo=UTC)
 

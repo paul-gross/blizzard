@@ -21,7 +21,15 @@ from blizzard.hub.domain.tenancy import teardown
 from blizzard.hub.graphs import PACKAGED, GraphFile
 from blizzard.hub.store import schema
 from blizzard.hub.tenancy import StoreScope, TenantId
-from tests.support import HubHarness, build_hub, default_tenant, seed_hub_admin, seed_runner, seed_session, seed_user
+from tests.support.scaffolding import (
+    HubHarness,
+    build_hub,
+    default_tenant,
+    seed_hub_admin,
+    seed_runner,
+    seed_session,
+    seed_user,
+)
 
 _PACKAGED_NAMES = sorted(GraphFile(path).doc.name for path in PACKAGED.paths)
 

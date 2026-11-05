@@ -50,7 +50,18 @@ from blizzard.runner.node_steps.chunk_state import ChunkPause, ChunkState
 from blizzard.runner.node_steps.submissions import ApplyReply
 from blizzard.runner.throttle.pause import ILockedBrakes, LocalBrake, PauseService
 from blizzard.runner.throttle.usage_limits import FloorClear
-from tests.runner_fakes import (
+from tests.support.paused import (
+    _CHOICES,  # pyright: ignore[reportPrivateUsage]
+    _HANDLE,  # pyright: ignore[reportPrivateUsage]
+    _NOW,  # pyright: ignore[reportPrivateUsage]
+    _ceiling_config,  # pyright: ignore[reportPrivateUsage]
+    _pause_locally,  # pyright: ignore[reportPrivateUsage]
+    _record_usage,  # pyright: ignore[reportPrivateUsage]
+    _running_chunk,  # pyright: ignore[reportPrivateUsage]
+    _seed_running_lease,  # pyright: ignore[reportPrivateUsage]
+    _store,  # pyright: ignore[reportPrivateUsage]
+)
+from tests.support.runner_fakes import (
     FIXTURE_RUNNER_ID,
     FakeHarness,
     FakeHub,
@@ -64,17 +75,6 @@ from tests.runner_fakes import (
     runner_store_errors,
     serving,
     single_workspace,
-)
-from tests.support_paused import (
-    _CHOICES,  # pyright: ignore[reportPrivateUsage]
-    _HANDLE,  # pyright: ignore[reportPrivateUsage]
-    _NOW,  # pyright: ignore[reportPrivateUsage]
-    _ceiling_config,  # pyright: ignore[reportPrivateUsage]
-    _pause_locally,  # pyright: ignore[reportPrivateUsage]
-    _record_usage,  # pyright: ignore[reportPrivateUsage]
-    _running_chunk,  # pyright: ignore[reportPrivateUsage]
-    _seed_running_lease,  # pyright: ignore[reportPrivateUsage]
-    _store,  # pyright: ignore[reportPrivateUsage]
 )
 
 

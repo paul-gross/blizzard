@@ -13,8 +13,8 @@ import pytest
 from click.testing import Result
 
 from blizzard.hub.cli import hub as hub_group
-from tests.flow_route_lines import Line
-from tests.worker_http import Bound, bind_stubs
+from tests.support.flow_route_lines import Line
+from tests.support.worker_http import Bound, bind_stubs
 
 _HUB_URL = "http://hub.local:8421"
 

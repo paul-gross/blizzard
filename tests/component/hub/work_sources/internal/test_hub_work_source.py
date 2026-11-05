@@ -45,7 +45,7 @@ from blizzard.hub.work_sources.closer import WorkItemGoneError
 from blizzard.hub.work_sources.editor import WorkItemRefUnknownError
 from blizzard.hub.work_sources.internal.hub_work_source import HubWorkSource
 from blizzard.hub.work_sources.source import WorkSourceError
-from tests.support import (
+from tests.support.scaffolding import (
     chunk_stores,
     default_project,
     hub_store_connections,

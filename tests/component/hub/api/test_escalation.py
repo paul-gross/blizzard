@@ -9,7 +9,7 @@ from __future__ import annotations
 from datetime import timedelta
 from pathlib import Path
 
-from tests.support import HubHarness, build_hub, make_ready, pointer_token, report_escalation, report_lease
+from tests.support.scaffolding import HubHarness, build_hub, make_ready, pointer_token, report_escalation, report_lease
 
 _POINTER = {"source": "default", "ref": "9"}
 _TAKEOVER = "cd /ws/e1 && mock-claude-code --resume sess-abc"

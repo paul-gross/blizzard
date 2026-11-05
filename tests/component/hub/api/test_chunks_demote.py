@@ -13,7 +13,7 @@ import pytest
 from sqlalchemy import Connection
 
 from blizzard.hub.store.internal import chunk_queue_store as chunk_queue_store_module
-from tests.support import HubHarness, build_hub, ingest, report_lease
+from tests.support.scaffolding import HubHarness, build_hub, ingest, report_lease
 
 
 def _chunk(hub: HubHarness, ref: str, *, promote: bool) -> str:

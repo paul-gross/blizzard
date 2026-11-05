@@ -18,7 +18,7 @@ from blizzard.runner.loop.context import LoopConfig, LoopContext
 from blizzard.runner.transcripts.transcript_backfill import TranscriptBackfill
 from blizzard.runner.transcripts.transcript_drain import TranscriptDrain
 from blizzard.runner.transcripts.transcript_pump import TranscriptPump
-from tests.runner_fakes import (
+from tests.support.runner_fakes import (
     FIXTURE_RUNNER_ID,
     FakeHarness,
     FakeHub,

@@ -22,11 +22,11 @@ from blizzard.runner.harness.opencode.usage.descendant_usage import OpenCodeDesc
 from blizzard.runner.harness.opencode.usage.price_cache import OpenCodeModelPrice, OpenCodeRate
 from blizzard.runner.harness.transcript import TranscriptErrorFactory
 from blizzard.runner.process.child_env import AllowlistedEnv
-from tests.opencode_export_fakes import FakeExporter
-from tests.opencode_subagent_events import opencode_events, opencode_session, opencode_task, step
-from tests.repo_files import repo_root
-from tests.runner_fakes import FakeProbe
-from tests.support_child_launch import CHILDREN, version_probe
+from tests.support.child_launch import CHILDREN, version_probe
+from tests.support.opencode_export_fakes import FakeExporter
+from tests.support.opencode_subagent_events import opencode_events, opencode_session, opencode_task, step
+from tests.support.repo_files import repo_root
+from tests.support.runner_fakes import FakeProbe
 
 _CAPTURE = repo_root() / "src" / "blizzard" / "runner" / "harness" / "contracts" / "opencode" / "1.18.32"
 _LEGACY = repo_root() / "src" / "blizzard" / "runner" / "harness" / "contracts" / "opencode" / "1.18.25"

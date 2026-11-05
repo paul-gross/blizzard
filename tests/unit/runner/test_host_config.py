@@ -23,7 +23,7 @@ from blizzard.runner.host_config import (
 from blizzard.runner.host_layout import HostLayout
 from blizzard.runner.hub.held_token import HubTokenHolder, TokenReread
 from blizzard.runner.loop.mode import LoopMode
-from tests.config_inputs import FLAG_REGISTRY, STRICT, load_host_config
+from tests.support.config_inputs import FLAG_REGISTRY, STRICT, load_host_config
 
 _TOKEN = {"BZ_HUB_TOKEN_R_ONE": "tok-one"}
 

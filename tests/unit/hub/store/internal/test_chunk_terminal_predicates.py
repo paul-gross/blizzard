@@ -20,7 +20,8 @@ from blizzard.foundation.clock import FixedClock
 from blizzard.hub.domain.graph.model import RESERVED_TERMINAL
 from blizzard.hub.store import schema as s
 from blizzard.hub.store.internal.chunk_terminal_predicates import done_completed_at, settled_done
-from tests.support import (
+from tests.support.chunk_world import complete, migration, restart, stop, transition
+from tests.support.scaffolding import (
     add_tenant,
     chunk_stores,
     default_tenant,
@@ -30,7 +31,6 @@ from tests.support import (
     seed_graph,
     stamp,
 )
-from tests.support_chunk_world import complete, migration, restart, stop, transition
 
 _NOW = datetime(2026, 3, 1, tzinfo=UTC)
 _AGO = timedelta(hours=1)

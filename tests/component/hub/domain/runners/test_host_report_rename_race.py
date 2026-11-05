@@ -11,7 +11,7 @@ import pytest
 from blizzard.hub.domain.runners.host import HostNameTaken, HostReport
 from blizzard.hub.domain.runners.host_report import HostReportService
 from blizzard.hub.store.internal.host_registry_store import HostRegistryStore
-from tests.support import build_hub
+from tests.support.scaffolding import build_hub
 
 
 def test_a_rename_onto_a_name_taken_after_the_domain_check_is_refused_in_the_write(tmp_path: Path) -> None:

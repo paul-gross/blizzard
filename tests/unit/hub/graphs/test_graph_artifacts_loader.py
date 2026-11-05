@@ -18,7 +18,7 @@ from blizzard.hub.documents.codec import ConfigDecodeError
 from blizzard.hub.domain.graph.model import GraphDoc
 from blizzard.hub.domain.graph.validation import Validator
 from blizzard.hub.graphs import GraphArtifactFileMissing, GraphFile
-from tests.support import TEST_CATALOGUE
+from tests.support.scaffolding import TEST_CATALOGUE
 
 _GRAPH_YAML = """
 name: t

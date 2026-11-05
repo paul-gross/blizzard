@@ -12,7 +12,7 @@ from blizzard.runner.environments.internal import basic_provider
 from blizzard.runner.environments.internal import git as env_git_module
 from blizzard.runner.environments.internal.basic_provider import BasicWorkspaceProvider
 from blizzard.runner.environments.provider import WorkspaceRepo
-from tests.support_child_launch import workspace_launch
+from tests.support.child_launch import workspace_launch
 
 
 class _RecordingGit:

@@ -19,8 +19,15 @@ from blizzard.hub.domain.observability.transcripts import (
     stored_turns,
 )
 from blizzard.wire.transcript_segment import TranscriptSegmentContentView, TurnSegmentView
-from tests.hub_request_auth import bearer, cookie, enroll_runner, enrolled_runner_token, ingest_chunk, register_runner
-from tests.support import HubHarness, build_hub, seed_runner, seed_session, seed_user
+from tests.support.hub_request_auth import (
+    bearer,
+    cookie,
+    enroll_runner,
+    enrolled_runner_token,
+    ingest_chunk,
+    register_runner,
+)
+from tests.support.scaffolding import HubHarness, build_hub, seed_runner, seed_session, seed_user
 
 
 def _turn(index: int, text: str = "hi") -> dict[str, object]:

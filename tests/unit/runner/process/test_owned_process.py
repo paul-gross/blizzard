@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from blizzard.runner.process.owned_process import KillTarget, OwnedProcess, owned_process_alive
-from tests.runner_fakes import FakeProbe
+from tests.support.runner_fakes import FakeProbe
 
 _GROUPED = OwnedProcess(pid=10, process_start_time="100", pgid=10)
 _UNGROUPED = OwnedProcess(pid=10, process_start_time="100", pgid=None)

@@ -20,7 +20,7 @@ from blizzard.hub.domain.chunk.ports.route import IWriteChunkRouteRepository
 from blizzard.hub.domain.runners.route import Route
 from blizzard.hub.store.internal import chunk_lifecycle_store as chunk_lifecycle_store_module
 from blizzard.tools.invariants import hub_invariants
-from tests.support import HubHarness, build_hub, ingest, report_lease
+from tests.support.scaffolding import HubHarness, build_hub, ingest, report_lease
 
 
 def _claim_body(chunk_id: str, runner: str = "r1") -> dict[str, object]:

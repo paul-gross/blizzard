@@ -13,7 +13,7 @@ from blizzard.hub.domain.graph.model import GraphDoc, IReadGraphRepository, RunS
 from blizzard.hub.domain.graph.validation import Validator
 from blizzard.hub.graph_sync import GraphReconciliation
 from blizzard.hub.graphs import PACKAGED
-from tests.support import TEST_CATALOGUE
+from tests.support.scaffolding import TEST_CATALOGUE
 
 #: Every hub-node ``run:`` body the packaged graphs shipped, with the action and ``with:`` it was.
 _SHIPPED_RUN_BODIES: list[tuple[list[dict[str, str]], str, dict[str, tuple[str, ...]]]] = [

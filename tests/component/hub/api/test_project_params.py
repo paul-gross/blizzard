@@ -14,7 +14,7 @@ import pytest
 from fastapi import HTTPException
 
 from blizzard.hub.api.project_params import UNKNOWN_PROJECT, body_project
-from tests.support import HubHarness, build_hub, default_project
+from tests.support.scaffolding import HubHarness, build_hub, default_project
 
 
 @pytest.fixture

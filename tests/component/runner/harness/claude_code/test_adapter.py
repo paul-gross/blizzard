@@ -19,9 +19,9 @@ import pytest
 from blizzard.runner.environments.provider import AcquiredEnvironment
 from blizzard.runner.harness.adapter import WorkerPreamble
 from blizzard.runner.process.internal.linux_process_probe import LinuxProcessProbe
-from tests.runner_fakes import make_envelope
-from tests.support_claude_code_adapter import SENTINEL_UNLISTED_VAR as _SENTINEL_UNLISTED_VAR
-from tests.support_claude_code_adapter import adapter as _adapter
+from tests.support.claude_code_adapter import SENTINEL_UNLISTED_VAR as _SENTINEL_UNLISTED_VAR
+from tests.support.claude_code_adapter import adapter as _adapter
+from tests.support.runner_fakes import make_envelope
 
 
 def test_judge_child_env_excludes_the_hub_token_and_an_unlisted_sentinel(

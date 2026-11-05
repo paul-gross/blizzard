@@ -8,8 +8,8 @@ import httpx2
 import pytest
 
 from blizzard.hub.cli import hub as hub_group
-from tests.transcript_bodies import content_body, index_body
-from tests.worker_http import Bound, bind_transport
+from tests.support.transcript_bodies import content_body, index_body
+from tests.support.worker_http import Bound, bind_transport
 
 pytestmark = pytest.mark.unit
 

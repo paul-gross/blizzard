@@ -13,7 +13,7 @@ import pytest
 from blizzard.foundation.graph_lifecycle import GraphLifecycle
 from blizzard.foundation.node_steps import SessionMode
 from blizzard.hub.domain.graph.model import Mint, Mints, SessionRef
-from tests.support import make_graph
+from tests.support.scaffolding import make_graph
 
 # SessionRef — the pure `session:` syntax parser.
 

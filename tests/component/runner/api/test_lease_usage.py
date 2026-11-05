@@ -7,10 +7,10 @@ from typing import Any
 from blizzard.runner.config import RunnerConfig
 from blizzard.runner.harness.usage import UsageKind, UsageSample
 from blizzard.runner.leases.model import NewLease
-from tests.config_inputs import create_runner_app
-from tests.runner_client import runner_client
-from tests.runner_fakes import make_host_stores, make_store, make_stores, record_usage
-from tests.support import assert_all_timestamps_utc
+from tests.support.config_inputs import create_runner_app
+from tests.support.runner_client import runner_client
+from tests.support.runner_fakes import make_host_stores, make_store, make_stores, record_usage
+from tests.support.scaffolding import assert_all_timestamps_utc
 
 _NOW = datetime(2026, 7, 16, 12, 0, 0, tzinfo=UTC)
 

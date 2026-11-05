@@ -23,7 +23,8 @@ from blizzard.runner.harness.opencode.transcript.normalizer import NORMALIZER_VE
 from blizzard.runner.harness.opencode.transcript.transcript_source import OpenCodeTranscriptSource
 from blizzard.runner.harness.transcript import TranscriptPosition
 from blizzard.runner.process.child_env import AllowlistedEnv
-from tests.opencode_export_fakes import (
+from tests.support.child_launch import CHILDREN, version_probe
+from tests.support.opencode_export_fakes import (
     FakeExporter,
     assistant_message,
     error_factory,
@@ -31,9 +32,8 @@ from tests.opencode_export_fakes import (
     tool_part,
     user_message,
 )
-from tests.repo_files import repo_root
-from tests.runner_fakes import FakeProbe
-from tests.support_child_launch import CHILDREN, version_probe
+from tests.support.repo_files import repo_root
+from tests.support.runner_fakes import FakeProbe
 
 _PACKAGE_ROOT = repo_root() / "src" / "blizzard" / "runner" / "harness"
 # The oldest committed corpus inside the admitted range — stays correct as corpora are added.

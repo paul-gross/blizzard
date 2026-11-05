@@ -33,7 +33,7 @@ from blizzard.runner.loop.context import LoopConfig
 from blizzard.runner.loop.steps import Advance
 from blizzard.runner.node_steps.chunk_state import ChunkState
 from blizzard.runner.store.internal import lease_liveness_store, lease_record_store
-from tests.runner_fakes import (
+from tests.support.runner_fakes import (
     FIXTURE_RUNNER_ID,
     FakeHarness,
     FakeHub,

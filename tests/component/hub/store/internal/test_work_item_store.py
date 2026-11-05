@@ -22,7 +22,13 @@ from blizzard.hub.domain.work_items.ports import IReadWorkItemRepository
 from blizzard.hub.store import schema as s
 from blizzard.hub.store.errors import HubStoreError
 from blizzard.hub.store.internal.work_item_store import WorkItemStore
-from tests.support import default_project, hub_store_connections, migrated_hub_at, seed_graph, seed_work_item
+from tests.support.scaffolding import (
+    default_project,
+    hub_store_connections,
+    migrated_hub_at,
+    seed_graph,
+    seed_work_item,
+)
 
 _NOW = datetime(2026, 7, 16, 12, 0, 0, tzinfo=UTC)
 

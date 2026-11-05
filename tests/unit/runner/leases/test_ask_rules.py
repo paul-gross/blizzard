@@ -143,8 +143,8 @@ def test_only_an_unforwarded_ask_can_be_superseded() -> None:
 def test_unforwarded_ask_reads_a_flat_number_of_rows_whatever_the_ask_history(tmp_path: Path):
     from datetime import UTC, datetime
 
-    from tests.runner_fakes import make_store
-    from tests.support import count_rows_read
+    from tests.support.runner_fakes import make_store
+    from tests.support.scaffolding import count_rows_read
 
     at = datetime(2026, 7, 16, tzinfo=UTC)
 

@@ -10,7 +10,7 @@ from __future__ import annotations
 from pathlib import Path
 
 from blizzard.auth_core import Role
-from tests.support import HubHarness, build_hub, seed_runner, seed_session, seed_user
+from tests.support.scaffolding import HubHarness, build_hub, seed_runner, seed_session, seed_user
 
 _GRAPH_YAML = """
 name: default-delivery

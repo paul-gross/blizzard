@@ -18,7 +18,14 @@ from blizzard.foundation.store import batching as batching_module
 from blizzard.hub.domain.chunk.model import Chunk, WorkRef
 from blizzard.hub.domain.chunk.ports.stores import ChunkStores
 from blizzard.hub.store.internal.chunk_rows import record_deleted_row, record_grouped_row_conn
-from tests.support import chunk_stores, count_queries, hub_store_connections, migrate_to, seed_chunk_record, seed_graph
+from tests.support.scaffolding import (
+    chunk_stores,
+    count_queries,
+    hub_store_connections,
+    migrate_to,
+    seed_chunk_record,
+    seed_graph,
+)
 
 _T0 = datetime(2026, 1, 1, tzinfo=UTC)
 

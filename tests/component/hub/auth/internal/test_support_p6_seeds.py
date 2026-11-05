@@ -15,7 +15,7 @@ from blizzard.auth_core import Role
 from blizzard.hub.auth.internal.hub_admin_repository import HubAdminRepository
 from blizzard.hub.store import schema
 from blizzard.hub.tenancy import TenantClosed
-from tests.support import (
+from tests.support.scaffolding import (
     build_hub,
     close_tenant,
     default_tenant,

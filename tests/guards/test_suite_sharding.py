@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import pytest
 
-from tests.suite_plugin import parse_shard, shard_of
+from tests.support.suite_plugin import parse_shard, shard_of
 
 _NODEIDS = [f"tests/test_mod_{m}.py::test_case[{p}]" for m in range(40) for p in range(25)]
 

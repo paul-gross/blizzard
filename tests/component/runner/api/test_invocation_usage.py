@@ -8,9 +8,9 @@ from pathlib import Path
 from blizzard.runner.config import RunnerConfig
 from blizzard.runner.harness.usage import UsageKind, UsageSample
 from blizzard.runner.usage.repository import InvocationCost
-from tests.config_inputs import create_runner_app
-from tests.runner_client import runner_client
-from tests.runner_fakes import make_host_stores, make_store, make_stores
+from tests.support.config_inputs import create_runner_app
+from tests.support.runner_client import runner_client
+from tests.support.runner_fakes import make_host_stores, make_store, make_stores
 
 
 def test_invocation_usage_is_chunk_filtered_paged_and_attributed(tmp_path: Path) -> None:

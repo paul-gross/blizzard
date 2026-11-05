@@ -30,7 +30,7 @@ from blizzard.hub.domain.observability.tracing.facts import StepFacts
 from blizzard.hub.domain.observability.tracing.steps import identify_steps
 from blizzard.hub.domain.observability.tracing.summary import summarize_step
 from blizzard.hub.tenancy import TenantId
-from tests import trace_fixtures as fx
+from tests.support import trace_fixtures as fx
 
 EXPORTED = datetime(2026, 2, 1, tzinfo=UTC)
 DERIVED = datetime(2026, 1, 1, 0, 1, 2, 3, tzinfo=UTC)

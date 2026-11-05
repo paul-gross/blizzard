@@ -13,8 +13,8 @@ from blizzard.foundation.clock import FixedClock
 from blizzard.runner.config import RunnerConfig, SubscriptionDeclaration
 from blizzard.runner.subscriptions.subscription_sampler import PROVIDER_ANTHROPIC
 from blizzard.runner.throttle.usage_limits import FloorClear
-from tests.config_inputs import create_runner_app
-from tests.runner_fakes import SqlAlchemyRunnerStore, make_host_stores, make_store, make_stores
+from tests.support.config_inputs import create_runner_app
+from tests.support.runner_fakes import SqlAlchemyRunnerStore, make_host_stores, make_store, make_stores
 
 _NOW = datetime(2026, 10, 22, 12, 0, 0, tzinfo=UTC)
 _PLAN = SubscriptionDeclaration(slug="team-plan", name="Team plan", provider=PROVIDER_ANTHROPIC)

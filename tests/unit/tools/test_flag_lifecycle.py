@@ -8,7 +8,7 @@ import yaml
 from blizzard.foundation.flags.registry import FlagRegistry
 from blizzard.tools.compat.releases import parse_release
 from blizzard.tools.flag_lifecycle_domain import Mode, Snapshot, derive
-from tests.repo_files import repo_root
+from tests.support.repo_files import repo_root
 
 
 def registry(*, on: bool | None = None, retired: bool = False) -> FlagRegistry:

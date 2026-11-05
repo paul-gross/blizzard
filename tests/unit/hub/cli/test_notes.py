@@ -9,7 +9,7 @@ import httpx2
 import pytest
 
 from blizzard.hub.cli import hub as hub_group
-from tests.worker_http import Bound, bind_stubs
+from tests.support.worker_http import Bound, bind_stubs
 
 _RESOLVED = {"decision_id": "dec_1", "choice": "pass", "resolved_by": "operator"}
 _SUMMARY = {"chunk_id": "ch_1", "status": "ready", "current_node_name": "build"}

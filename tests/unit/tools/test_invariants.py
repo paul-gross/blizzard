@@ -10,9 +10,9 @@ import sqlalchemy as sa
 from blizzard.foundation.store.engine import create_engine_from_url
 from blizzard.runner.store import schema as runner
 from blizzard.tools.invariants import runner_invariants
-from tests.config_inputs import init_host
-from tests.migration_support_invariant_checker import NOW
-from tests.runner_fakes import FIXTURE_RUNNER_ID
+from tests.support.config_inputs import init_host
+from tests.support.migrations.invariant_checker import NOW
+from tests.support.runner_fakes import FIXTURE_RUNNER_ID
 
 
 def _runner_engine(tmp_path: Path) -> sa.Engine:

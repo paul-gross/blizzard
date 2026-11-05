@@ -17,7 +17,7 @@ from sqlalchemy import func
 from blizzard.hub.domain.runners.host import IWriteHostRegistry
 from blizzard.hub.domain.runners.registration import RunnerRegistration
 from blizzard.hub.store import schema as s
-from tests.support import HubHarness, build_hub, emitted_events, hub_store_connections, seed_runner
+from tests.support.scaffolding import HubHarness, build_hub, emitted_events, hub_store_connections, seed_runner
 
 pytestmark = pytest.mark.component
 

@@ -25,7 +25,7 @@ from blizzard.hub.domain.runners.registration import (
 from blizzard.hub.store.internal.host_registry_store import HostRegistryStore
 from blizzard.hub.store.internal.runner_registry_store import RunnerRegistryStore
 from blizzard.hub.store.transactions import HubTransactions
-from tests.support import build_hub, hub_store_connections
+from tests.support.scaffolding import build_hub, hub_store_connections
 
 pytestmark = pytest.mark.component
 

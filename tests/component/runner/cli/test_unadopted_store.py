@@ -13,8 +13,8 @@ from click.testing import Result
 
 from blizzard.cli.main import blizzard
 from blizzard.runner.host_layout import HostLayout, migrate_remedy
-from tests.baseline_floor_trees import make_tree
-from tests.runner_init_fakes import FakeInitHub, init_runner
+from tests.support.baseline_floor_trees import make_tree
+from tests.support.runner_init_fakes import FakeInitHub, init_runner
 
 _HUB = "http://hub.test:8421"
 

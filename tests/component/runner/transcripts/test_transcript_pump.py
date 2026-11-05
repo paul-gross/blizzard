@@ -47,7 +47,7 @@ from blizzard.runner.transcripts.transcript_pump import (
     turn_wire,
 )
 from blizzard.wire.transcript_segment import TurnSegmentView
-from tests.runner_fakes import (
+from tests.support.runner_fakes import (
     FIXTURE_RUNNER_ID,
     FakeHarness,
     FakeHub,
@@ -58,8 +58,8 @@ from tests.runner_fakes import (
     make_context,
     make_store,
 )
-from tests.transcript_batches import (
-    _NOW,  # pyright: ignore[reportPrivateUsage]  # shared test helper, imported from tests.transcript_batches
+from tests.support.transcript_batches import (
+    _NOW,  # pyright: ignore[reportPrivateUsage]  # shared test helper, imported from tests.support.transcript_batches
     incomplete_batch,
     normalized_turn,
     transcript_batch,

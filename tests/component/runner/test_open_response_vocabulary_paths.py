@@ -29,9 +29,9 @@ from blizzard.runner.node_steps.chunk_state import ChunkState
 from blizzard.runner.node_steps.submissions import Completion
 from blizzard.wire.envelope import ApplyResponse
 from blizzard.wire.vocabulary import OPEN
-from tests.config_inputs import create_runner_app
-from tests.runner_client import runner_client
-from tests.runner_fakes import (
+from tests.support.config_inputs import create_runner_app
+from tests.support.runner_client import runner_client
+from tests.support.runner_fakes import (
     FakeHarness,
     FakeHub,
     FakeProbe,

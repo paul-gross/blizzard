@@ -13,8 +13,8 @@ from blizzard.runner.config import RunnerConfig
 from blizzard.runner.harness.claude_code.section import ClaudeCodeSection
 from blizzard.runner.harness.opencode.section import OpenCodeSection
 from blizzard.runner.host_config import RUNNER_PATH_KEYS, RunnerPathKey
-from tests.config_inputs import load_host_config
-from tests.host_files import write_minimal_host
+from tests.support.config_inputs import load_host_config
+from tests.support.host_files import write_minimal_host
 
 #: The classes a ``[[runner]]`` is parsed onto, by the name a path key's field is declared under.
 _OWNERS: dict[str, type] = {

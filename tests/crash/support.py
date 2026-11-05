@@ -27,19 +27,19 @@ from blizzard.runner.config import RunnerConfig
 from blizzard.runner.route_paths import runner_prefix
 from blizzard.runner.store import schema as runner_schema
 from blizzard.wire.work_source import WorkSourceDocument
-from tests.fleet_world import REPO_NAME, basic_workspace, scripted_build
-from tests.harness_sections import claude_code, opencode, sections
-from tests.host_files import (
+from tests.support.fleet_world import REPO_NAME, basic_workspace, scripted_build
+from tests.support.harness_sections import claude_code, opencode, sections
+from tests.support.host_files import (
     init_runner_environment,
     load_runner_config,
     sampler_without_credentials,
     write_host_file,
 )
-from tests.runner_fakes import (
+from tests.support.runner_fakes import (
     runner_store_errors,
 )
-from tests.runner_join import join_runner, runner_spawn_env
-from tests.support import (
+from tests.support.runner_join import join_runner, runner_spawn_env
+from tests.support.scaffolding import (
     LISTENING_FILE,
     await_listening_url,
     create_repositories,

@@ -20,8 +20,8 @@ from blizzard.hub.store.internal.forge_annotation_store import ForgeAnnotationSt
 from blizzard.hub.store.internal.hub_scoped_reads import build_hub_scoped_reads
 from blizzard.hub.tenancy import StoreScope, TenantId
 from blizzard.hub.work_sources.annotator import IWorkAnnotator, WorkAnnotateError, WorkStatusMarker
-from tests.config_inputs import build_hosted_hub_app, init_hub
-from tests.support import (
+from tests.support.config_inputs import build_hosted_hub_app, init_hub
+from tests.support.scaffolding import (
     FakeAnnotator,
     FakeWorkSource,
     ForgeDouble,
@@ -36,7 +36,7 @@ from tests.support import (
     ingest,
     scoped_connections,
 )
-from tests.work_source_registry_ops import create, forge, promote
+from tests.support.work_source_registry_ops import create, forge, promote
 
 # Re-exported so pytest resolves the registry suite's `forge` fixture here; the tests request it by name.
 _FIXTURES = (forge,)

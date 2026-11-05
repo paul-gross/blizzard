@@ -14,8 +14,13 @@ from pathlib import Path
 import pytest
 
 from blizzard.hub.delivery import hub_node
-from tests.hub_command_graphs import ALWAYS_PENDING_GRAPH_YAML, HUB_CMD_GRAPH_YAML, submit_build_pass, to_merge_node
-from tests.support import HubHarness, build_hub
+from tests.support.hub_command_graphs import (
+    ALWAYS_PENDING_GRAPH_YAML,
+    HUB_CMD_GRAPH_YAML,
+    submit_build_pass,
+    to_merge_node,
+)
+from tests.support.scaffolding import HubHarness, build_hub
 
 _CROSS = HUB_CMD_GRAPH_YAML.replace(
     "description: Landed.\n          to: done", "description: Landed.\n          to: graph:@TARGET@"

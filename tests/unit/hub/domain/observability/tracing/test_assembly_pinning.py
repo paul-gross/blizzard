@@ -33,7 +33,7 @@ from blizzard.hub.domain.observability.tracing.window import (
     assemble_window,
     select_window,
 )
-from tests import trace_fixtures as fx
+from tests.support import trace_fixtures as fx
 
 US = timedelta(microseconds=1)
 

@@ -13,7 +13,7 @@ import httpx2
 import pytest
 
 from blizzard.hub.domain.execution.auth.route import ROUTE_TOKEN_ENFORCE
-from tests.support import HubHarness, build_hub, emitted_events, pointer_token, report_lease
+from tests.support.scaffolding import HubHarness, build_hub, emitted_events, pointer_token, report_lease
 
 _POINTER = {"source": "default", "ref": "9"}
 

@@ -37,7 +37,7 @@ from blizzard.runner.throttle.overload import (
     classify_worker_overload,
     record_worker_overload,
 )
-from tests.runner_fakes import FakeHarness, make_store
+from tests.support.runner_fakes import FakeHarness, make_store
 
 _NOW = datetime(2026, 7, 13, 12, 0, 0, tzinfo=UTC)
 

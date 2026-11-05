@@ -15,7 +15,7 @@ from blizzard.foundation.hub_event_types import HubEventType
 from blizzard.hub.api.chunk_events import ChunkChanged
 from blizzard.hub.api.ingest_broadcast import IngestBroadcast, pushed_facts
 from blizzard.wire.facts import RunnerFact, RunnerFactBatch
-from tests.support import HubHarness, build_hub, capture_statements, count_queries, emitted_events, ingest
+from tests.support.scaffolding import HubHarness, build_hub, capture_statements, count_queries, emitted_events, ingest
 
 _YAML = """
 name: default-delivery

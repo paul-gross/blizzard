@@ -9,7 +9,7 @@ from pathlib import Path
 import yaml
 
 from blizzard.hub.domain.kernel.pagination import DEFAULT_LIMIT
-from tests.support import HubHarness, build_hub, count_queries
+from tests.support.scaffolding import HubHarness, build_hub, count_queries
 
 _GRAPH_A = """
 name: alpha

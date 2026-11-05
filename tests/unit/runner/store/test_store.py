@@ -20,8 +20,8 @@ from blizzard.runner.harness.identity import CLAUDE_CODE_HARNESS_ID, SessionRefe
 from blizzard.runner.harness.usage import UsageKind, UsageSample
 from blizzard.runner.store.schema import transcript_outbound_buffer
 from blizzard.runner.usage.repository import InvocationCost
-from tests.runner_fakes import FIXTURE_RUNNER_ID, SqlAlchemyRunnerStore, record_usage
-from tests.support_runner_store import (
+from tests.support.runner_fakes import FIXTURE_RUNNER_ID, SqlAlchemyRunnerStore, record_usage
+from tests.support.runner_store import (
     _NOW,  # pyright: ignore[reportPrivateUsage]
     _mint,  # pyright: ignore[reportPrivateUsage]
     _mint_with_session,  # pyright: ignore[reportPrivateUsage]

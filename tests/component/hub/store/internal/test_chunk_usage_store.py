@@ -13,7 +13,7 @@ from blizzard.foundation.store.engine import create_engine_from_url
 from blizzard.hub.store.internal import chunk_usage_store as store_module
 from blizzard.hub.store.scoped import ScopedStatements
 from blizzard.hub.tenancy import StoreScope, TenantId
-from tests.support import migrated_hub_at, seed_chunk, seed_graph
+from tests.support.scaffolding import migrated_hub_at, seed_chunk, seed_graph
 
 _SINCE = datetime(2026, 8, 12, tzinfo=UTC)
 _STMTS = ScopedStatements(StoreScope(TenantId("ten_usage")))

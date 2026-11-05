@@ -28,7 +28,7 @@ from blizzard.runner.auth.validate import (
 from blizzard.runner.store.internal.host_jti_cache_store import JtiCacheRepository
 from blizzard.runner.store.schema import metadata
 from blizzard.runner.store.scoped import RunnerStoreConnections
-from tests.runner_fakes import runner_store_errors
+from tests.support.runner_fakes import runner_store_errors
 
 _KID = "test-kid"
 _RUNNER_ID = "runner-a"

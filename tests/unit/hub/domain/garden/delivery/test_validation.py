@@ -42,7 +42,7 @@ from blizzard.hub.domain.garden.formats import (
 )
 from blizzard.hub.domain.garden.run_context import RunContext
 from blizzard.hub.domain.kernel.garden_delivery_fault import GardenDeliveryFault
-from tests.garden_artifacts import add_op, candidate, wire_json
+from tests.support.garden_artifacts import add_op, candidate, wire_json
 
 _PROJECT = "proj_test"
 

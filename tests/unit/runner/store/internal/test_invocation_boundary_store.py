@@ -6,7 +6,7 @@ from __future__ import annotations
 from datetime import UTC, datetime
 
 from blizzard.runner.transcripts.invocation_boundaries import InvocationBoundaryKind
-from tests.runner_fakes import SqlAlchemyRunnerStore, make_store
+from tests.support.runner_fakes import SqlAlchemyRunnerStore, make_store
 
 _T0 = datetime(2026, 1, 1, tzinfo=UTC)
 

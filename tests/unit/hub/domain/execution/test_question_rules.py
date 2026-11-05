@@ -33,7 +33,7 @@ from blizzard.hub.domain.execution.payload import Payload
 from blizzard.hub.domain.execution.questions import parse_instant
 from blizzard.hub.domain.execution.usage_facts import subscription_identity
 from blizzard.hub.domain.graph.model import RESERVED_TERMINAL, Node
-from tests.support import make_graph
+from tests.support.scaffolding import make_graph
 
 _T0 = datetime(2026, 1, 1, tzinfo=UTC)
 _NOW = _T0 + timedelta(hours=1)

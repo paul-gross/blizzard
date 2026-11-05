@@ -71,10 +71,10 @@ from blizzard.runner.tracing import platform as runner_platform
 from blizzard.runner.tracing.assembly import assemble_lease
 from blizzard.runner.tracing.facts import LeaseTraceFacts
 from blizzard.runner.tracing.receiver import CLI_ATTRIBUTES
-from tests import runner_trace_fixtures as rfx
-from tests import trace_fixtures as fx
-from tests.repo_files import repo_root
-from tests.trace_contract_support import PARAMETERIZED_NAMES, dictionary, otlp_type, required_by_role, role_of_name
+from tests.support import runner_trace_fixtures as rfx
+from tests.support import trace_fixtures as fx
+from tests.support.repo_files import repo_root
+from tests.support.trace_contract import PARAMETERIZED_NAMES, dictionary, otlp_type, required_by_role, role_of_name
 
 _ROOT = repo_root()
 _CONTRACT_DIR = _ROOT / "contracts" / "traces"

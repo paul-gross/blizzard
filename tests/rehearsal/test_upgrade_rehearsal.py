@@ -22,8 +22,6 @@ import yaml
 
 from blizzard.tools.compat.releases import parse_release
 from blizzard.tools.release_install import Installation, download_release, install
-from tests.fleet_launchers import REPO, mock_bin_dir, run_forge
-from tests.fleet_world import REPO_NAME, mint_world
 from tests.rehearsal.comparison import (
     Rows,
     project,
@@ -41,8 +39,10 @@ from tests.rehearsal.stores import (
     reflect,
     seeded_only,
 )
-from tests.repo_files import repo_root
-from tests.support import ensure_fixture_secret, fixture_repositories, fixture_work_source, url_of
+from tests.support.fleet_launchers import REPO, mock_bin_dir, run_forge
+from tests.support.fleet_world import REPO_NAME, mint_world
+from tests.support.repo_files import repo_root
+from tests.support.scaffolding import ensure_fixture_secret, fixture_repositories, fixture_work_source, url_of
 
 _GATE = "BLIZZARD_REHEARSAL"
 _BASELINE = "BLIZZARD_REHEARSAL_BASELINE"

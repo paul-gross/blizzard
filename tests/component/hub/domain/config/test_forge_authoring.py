@@ -44,7 +44,7 @@ from blizzard.hub.store.internal.forge_record_store import ForgeRecordStore
 from blizzard.hub.store.internal.repository_record_store import RepositoryRecordStore
 from blizzard.hub.store.internal.work_source_record_store import WorkSourceRecordStore
 from blizzard.hub.store.schema import repositories, work_sources
-from tests.support import OP, RecordedEvents, config_authoring, hub_store_connections, migrated_hub_at
+from tests.support.scaffolding import OP, RecordedEvents, config_authoring, hub_store_connections, migrated_hub_at
 
 _NOW = datetime(2026, 10, 25, 12, 0, 0, tzinfo=UTC)
 _CLI = ChangeContext(actor="alice", door=Door.CLI)

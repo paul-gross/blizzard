@@ -10,8 +10,8 @@ from pathlib import Path
 from blizzard.hub.domain.chunk.model import Chunk
 from blizzard.hub.domain.chunk.ports.stores import ChunkStores
 from blizzard.hub.domain.runners.route import Route
-from tests.load_all_facts_seed import LIVE_CHUNK_IDS, T0, seed_fixture, seeded_chunk_stores
-from tests.support import count_queries, seed_chunk_record
+from tests.support.load_all_facts_seed import LIVE_CHUNK_IDS, T0, seed_fixture, seeded_chunk_stores
+from tests.support.scaffolding import count_queries, seed_chunk_record
 
 
 def test_bulk_read_matches_per_chunk_route_of_across_the_fixture(tmp_path: Path) -> None:

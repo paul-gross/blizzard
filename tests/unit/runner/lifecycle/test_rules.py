@@ -119,7 +119,7 @@ from blizzard.runner.lifecycle.takeover import OpenTakeover
 from blizzard.runner.node_steps.chunk_state import ChunkGate, ChunkPause, ChunkSpend, ChunkState
 from blizzard.runner.node_steps.envelope import EnvelopeNode, RotateBounds
 from blizzard.runner.throttle.pause import PausePark
-from tests.runner_fakes import make_envelope
+from tests.support.runner_fakes import make_envelope
 
 _NOW = datetime(2026, 10, 4, 12, 0, tzinfo=UTC)
 _ME = "r1"

@@ -5,7 +5,7 @@ from __future__ import annotations
 import pytest
 import yaml
 
-from tests.repo_files import repo_root
+from tests.support.repo_files import repo_root
 
 _WORKFLOW = yaml.safe_load((repo_root() / ".github" / "workflows" / "upper-tiers.yml").read_text())
 _JOBS = _WORKFLOW["jobs"]

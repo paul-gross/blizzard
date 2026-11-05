@@ -22,7 +22,7 @@ from blizzard.hub.domain.runners.registration import (
     SubscriptionUsageMiss,
     SubscriptionUsageSample,
 )
-from tests.support import assert_utc_iso
+from tests.support.scaffolding import assert_utc_iso
 
 _NOW = datetime(2026, 8, 1, 12, 0, 0, tzinfo=UTC)
 

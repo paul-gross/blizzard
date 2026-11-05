@@ -13,7 +13,7 @@ from blizzard.hub.domain.chunk.model import decide_close_enqueue
 from blizzard.hub.domain.chunk.ports.fence import EpochAdmission
 from blizzard.hub.domain.chunk.ports.movement import IWriteChunkMovementRepository
 from blizzard.hub.store import schema as s
-from tests.support import build_hub, default_tenant, pointer_token, report_lease
+from tests.support.scaffolding import build_hub, default_tenant, pointer_token, report_lease
 
 # Component — hub-advance re-drives a chunk waiting at a node naming an action
 

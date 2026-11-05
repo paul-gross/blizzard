@@ -16,7 +16,7 @@ from fastapi.testclient import TestClient
 from blizzard.hub.domain.runners.lifecycle_version import HostLifecycleVersion
 from blizzard.hub.domain.runners.registration import STALE_AFTER
 from blizzard.hub.store.internal.host_registry_store import HostRegistryStore
-from tests.support import (
+from tests.support.scaffolding import (
     HubHarness,
     TenantHarness,
     build_hub,

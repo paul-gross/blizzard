@@ -17,7 +17,7 @@ from blizzard.hub.api import chunk_dependencies as chunk_dependencies_module
 from blizzard.hub.composition import TenantServices
 from blizzard.hub.domain.chunk.dependencies import PrerequisiteScope
 from blizzard.hub.store import schema as s
-from tests.support import HubHarness, build_hub, hub_scoped, ingest, report_lease, stamp
+from tests.support.scaffolding import HubHarness, build_hub, hub_scoped, ingest, report_lease, stamp
 
 _DEPENDENT = {"source": "default", "ref": "dependent"}
 _PREREQUISITE = {"source": "default", "ref": "prereq"}

@@ -16,10 +16,10 @@ from sqlalchemy import insert, select
 from blizzard.foundation.ids import Id, IdPrefix
 from blizzard.hub.store import schema as s
 from blizzard.hub.store.internal.finding_store import FindingStore
-from tests.garden_delivery_world import (
-    _EPOCH,  # pyright: ignore[reportPrivateUsage]  # shared test helper, imported from tests.garden_delivery_world
-    _NOW,  # pyright: ignore[reportPrivateUsage]  # shared test helper, imported from tests.garden_delivery_world
-    _ROUTINE,  # pyright: ignore[reportPrivateUsage]  # shared test helper, imported from tests.garden_delivery_world
+from tests.support.garden_delivery_world import (
+    _EPOCH,  # pyright: ignore[reportPrivateUsage]  # shared test helper, imported from tests.support.garden_delivery_world
+    _NOW,  # pyright: ignore[reportPrivateUsage]  # shared test helper, imported from tests.support.garden_delivery_world
+    _ROUTINE,  # pyright: ignore[reportPrivateUsage]  # shared test helper, imported from tests.support.garden_delivery_world
     SCOPE,
     add_op,
     finding_count,
@@ -29,7 +29,7 @@ from tests.garden_delivery_world import (
     seed_chunk,
     seed_scope,
 )
-from tests.support import (
+from tests.support.scaffolding import (
     HubHarness,
     build_hub,
     capture_statements,

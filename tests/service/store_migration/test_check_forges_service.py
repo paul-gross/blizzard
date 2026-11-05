@@ -12,9 +12,9 @@ from pathlib import Path
 
 import pytest
 
-from tests.config_inputs import init_hub, migrate_hub
-from tests.forge_check_support import seed_addresses
-from tests.mock_fleet_support import service_gate
+from tests.support.config_inputs import init_hub, migrate_hub
+from tests.support.forge_check import seed_addresses
+from tests.support.mock_fleet import service_gate
 
 pytestmark = [pytest.mark.service, service_gate]
 

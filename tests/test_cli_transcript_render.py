@@ -5,7 +5,7 @@ from __future__ import annotations
 import pytest
 
 from blizzard.cli.transcript_render import SegmentContentLines, SegmentIndexLines
-from tests.transcript_bodies import content_body, index_body, tool, turn
+from tests.support.transcript_bodies import content_body, index_body, tool, turn
 
 pytestmark = pytest.mark.unit
 

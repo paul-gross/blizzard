@@ -30,7 +30,7 @@ from blizzard.runner.operator.requeue import (
     RequeueService,
 )
 from blizzard.runner.store.schema import leases, requeues
-from tests.runner_fakes import (
+from tests.support.runner_fakes import (
     FIXTURE_RUNNER_ID,
     FakeHarness,
     FakeHub,

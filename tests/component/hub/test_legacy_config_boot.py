@@ -11,8 +11,8 @@ from blizzard.hub import app as hub_app
 from blizzard.hub.config import ConfigError, HubConfig
 from blizzard.hub.domain.kernel.hub_source import RESERVED_HUB_SOURCE_NAME
 from blizzard.hub.secrets import ENV_SECRET_KEY
-from tests.config_inputs import build_hosted_hub_app, init_hub, load_hub_config
-from tests.support import tenant_services_of
+from tests.support.config_inputs import build_hosted_hub_app, init_hub, load_hub_config
+from tests.support.scaffolding import tenant_services_of
 
 _TOKEN_ENV = "BZ_WORK_SOURCE_TOKEN"
 _LEGACY_BLOCK = f"""

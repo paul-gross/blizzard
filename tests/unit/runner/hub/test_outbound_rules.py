@@ -33,8 +33,8 @@ from blizzard.runner.hub.outbound_buffer import (
 )
 from blizzard.runner.leases.asks import OpenAsk
 from blizzard.runner.leases.model import Lease
-from tests.factory_fields import LeaseFields
-from tests.runner_fakes import make_envelope
+from tests.support.factory_fields import LeaseFields
+from tests.support.runner_fakes import make_envelope
 
 _T0 = datetime(2026, 1, 1, tzinfo=UTC)
 

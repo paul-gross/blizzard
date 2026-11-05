@@ -19,8 +19,8 @@ import sqlalchemy as sa
 from blizzard.hub.composition import TenantStores, build_hub_core
 from blizzard.hub.store import schema
 from blizzard.hub.tenancy import StoreScope
-from tests.support import build_hub, hub_scoped
-from tests.tenant_isolation_world import Two, seeded
+from tests.support.scaffolding import build_hub, hub_scoped
+from tests.support.tenant_isolation_world import Two, seeded
 
 
 @pytest.fixture

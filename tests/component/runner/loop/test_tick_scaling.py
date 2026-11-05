@@ -24,8 +24,8 @@ from blizzard.runner.leases.model import NewLease
 from blizzard.runner.loop.context import LoopConfig
 from blizzard.runner.loop.tick import tick
 from blizzard.runner.node_steps.chunk_state import ChunkState
-from tests import support
-from tests.runner_fakes import (
+from tests.support import scaffolding as support
+from tests.support.runner_fakes import (
     FIXTURE_RUNNER_ID,
     FakeHarness,
     FakeHub,
@@ -37,7 +37,7 @@ from tests.runner_fakes import (
     runner_store_errors,
     serving,
 )
-from tests.runner_tick_engines import migrated_engine
+from tests.support.runner_tick_engines import migrated_engine
 
 _NOW = datetime(2026, 9, 26, 12, 0, 0, tzinfo=UTC)
 _SIZES = (1, 2, 4)

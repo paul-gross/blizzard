@@ -7,7 +7,7 @@ from pathlib import Path
 import pytest
 import sqlalchemy as sa
 
-from tests.support import migrate_to
+from tests.support.scaffolding import migrate_to
 
 pytestmark = pytest.mark.component
 

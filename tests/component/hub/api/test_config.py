@@ -19,7 +19,7 @@ from blizzard.hub.domain.config.changes import ChangeContext, Door
 from blizzard.hub.store.internal import repository_record_store, work_source_record_store
 from blizzard.hub.store.internal.former_slugs import SlugTables
 from blizzard.hub.store.internal.secret_store import SecretStore, record_lifecycle_fact
-from tests.support import HubHarness, build_hub, hub_store_connections, seed_session, seed_user
+from tests.support.scaffolding import HubHarness, build_hub, hub_store_connections, seed_session, seed_user
 
 _SENTINEL = "tok-planted-840"
 

@@ -28,7 +28,15 @@ from blizzard.hub.auth.models import ResolvedIdentity
 from blizzard.hub.auth.permissions import Permission
 from blizzard.hub.config import AUTH_MODE_OAUTH
 from blizzard.hub.tenancy import TenantId
-from tests.support import HubHarness, build_hub, close_tenant, default_tenant, seed_hub_admin, seed_session, seed_user
+from tests.support.scaffolding import (
+    HubHarness,
+    build_hub,
+    close_tenant,
+    default_tenant,
+    seed_hub_admin,
+    seed_session,
+    seed_user,
+)
 
 _ADMITTED = Permission.MEMBERSHIP_GRANT_ANY
 

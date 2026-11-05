@@ -30,8 +30,8 @@ from blizzard.hub.store.internal.chunk_facts_store import ChunkFactsStore
 from blizzard.hub.store.internal.chunk_record_store import ChunkRecordStore
 from blizzard.hub.store.internal.flow_store import FlowStore
 from blizzard.hub.store.transactions import HubTransactions
-from tests.github_double import DoubleRepo, GitHubDouble
-from tests.support import (
+from tests.support.github_double import DoubleRepo, GitHubDouble
+from tests.support.scaffolding import (
     HubHarness,
     RepositorySeed,
     build_hub,

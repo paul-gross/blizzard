@@ -27,7 +27,7 @@ from blizzard.hub.store import schema as s
 from blizzard.hub.store.internal.finding_store import FindingStore
 from blizzard.hub.store.internal.garden_delivery_store import GardenDeliveryStore
 from blizzard.hub.store.internal.garden_proposal_store import GardenProposalStore
-from tests.support import (
+from tests.support.scaffolding import (
     HubHarness,
     build_hub,
     default_project,

@@ -5,7 +5,7 @@ from __future__ import annotations
 from blizzard.foundation.migration_source import MigrationSource
 from blizzard.hub.domain.observability.tracing.facts import TracedMigration, TracedRestart
 from blizzard.hub.domain.observability.tracing.position import movement_arrivals, position_at
-from tests import trace_fixtures as fx
+from tests.support import trace_fixtures as fx
 
 
 def _cross_graph_restart(from_node: str | None = "g1-review"):

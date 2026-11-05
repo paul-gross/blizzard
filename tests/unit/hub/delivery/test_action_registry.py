@@ -29,7 +29,7 @@ from blizzard.hub.domain.config.forges import ConfiguredForge, ForgeFields, Forg
 from blizzard.hub.domain.config.repositories import RepositoryOutcome, RepositoryResolution, ResolvedRepository
 from blizzard.hub.domain.graph.actions import SHIPPED_CATALOGUE, TEST_ACTION_SPECS
 from blizzard.hub.domain.projects.model import ProjectId
-from tests.repo_files import repo_root
+from tests.support.repo_files import repo_root
 
 _ACTIONS_DIR = repo_root() / "src" / "blizzard" / "hub" / "delivery" / "actions"
 

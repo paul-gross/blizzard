@@ -12,7 +12,7 @@ from pathlib import Path
 
 from blizzard.auth_core import Role
 from blizzard.hub.auth.hashing import SessionId
-from tests.support import build_hub, pointer_token, seed_session, seed_user
+from tests.support.scaffolding import build_hub, pointer_token, seed_session, seed_user
 
 _POINTER = {"source": "default", "ref": "7"}
 

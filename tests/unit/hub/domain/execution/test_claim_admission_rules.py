@@ -50,7 +50,7 @@ from blizzard.hub.domain.runners.registration import (
     ServedEntry,
 )
 from blizzard.hub.domain.runners.route import Route
-from tests.support import make_graph
+from tests.support.scaffolding import make_graph
 
 _T0 = datetime(2026, 1, 1, tzinfo=UTC)
 _NON_TERMINAL = frozenset(ChunkStatus) - TERMINAL_STATUSES

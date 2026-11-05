@@ -21,7 +21,7 @@ from blizzard.hub.store.internal.chunk_escalations_store import ChunkEscalations
 from blizzard.hub.store.internal.chunk_facts_store import ChunkFactsStore
 from blizzard.hub.store.internal.chunk_route_store import ChunkRouteStore
 from blizzard.hub.store.internal.graph_store import GraphStore
-from tests.support import count_rows_read, hub_store_connections, migrate_to, seed_chunk, seed_graph, stamp
+from tests.support.scaffolding import count_rows_read, hub_store_connections, migrate_to, seed_chunk, seed_graph, stamp
 
 _T0 = datetime(2026, 1, 1, tzinfo=UTC)
 _SHALLOW, _DEEP = 1, 8

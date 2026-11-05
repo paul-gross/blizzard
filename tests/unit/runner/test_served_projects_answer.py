@@ -24,7 +24,7 @@ from blizzard.runner.hub.served_projects import (
     served_projects_status,
 )
 from blizzard.runner.lifecycle.model import ClaimVerdict, claim_denial_fields, claim_verdict
-from tests.support_served_projects_answer import (
+from tests.support.served_projects_answer import (
     _AT,  # pyright: ignore[reportPrivateUsage]
     _BLIZZARD,  # pyright: ignore[reportPrivateUsage]
     _UNRESOLVED,  # pyright: ignore[reportPrivateUsage]

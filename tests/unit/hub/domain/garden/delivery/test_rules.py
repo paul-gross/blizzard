@@ -33,7 +33,7 @@ from blizzard.hub.domain.garden.formats import DeliveredDelta, ProposalCandidate
 from blizzard.hub.domain.garden.run_context import RunContext
 from blizzard.hub.domain.graph.model import Node
 from blizzard.hub.domain.kernel.garden_delivery_fault import GardenDeliveryFault
-from tests.garden_artifacts import candidate, delivered_delta
+from tests.support.garden_artifacts import candidate, delivered_delta
 
 _PROJECT = "proj_test"
 

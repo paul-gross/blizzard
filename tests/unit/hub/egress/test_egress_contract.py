@@ -69,9 +69,9 @@ from blizzard.hub.egress.writer import (
     rfc3339_utc,
 )
 from blizzard.hub.tenancy import TenantId
-from tests import trace_fixtures as fx
-from tests.egress_recipes import COST_BY_NODE_BY_DAY, SLOWEST_STATION_OF_THE_WEEK, recipe
-from tests.repo_files import repo_root
+from tests.support import trace_fixtures as fx
+from tests.support.egress_recipes import COST_BY_NODE_BY_DAY, SLOWEST_STATION_OF_THE_WEEK, recipe
+from tests.support.repo_files import repo_root
 
 _ROOT = repo_root()
 _CONTRACT_DIR = _ROOT / "contracts" / "egress"

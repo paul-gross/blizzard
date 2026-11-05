@@ -16,8 +16,8 @@ from click.testing import CliRunner, Result
 from blizzard.cli.main import blizzard
 from blizzard.foundation.subscription_miss import SampleMissReason
 from blizzard.runner.host_layout import HOST_CONFIG_FILENAME
-from tests.runner_init_fakes import init_runner
-from tests.worker_http import Bound, bind_transport
+from tests.support.runner_init_fakes import init_runner
+from tests.support.worker_http import Bound, bind_transport
 
 
 def _runtime(tmp_path: Path) -> Path:

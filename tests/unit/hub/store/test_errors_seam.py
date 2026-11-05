@@ -61,7 +61,7 @@ from blizzard.hub.store.internal.transcript_event_store import TranscriptEventSt
 from blizzard.hub.store.internal.transcript_segment_store import TranscriptSegmentStore
 from blizzard.hub.store.internal.work_item_store import WorkItemStore
 from blizzard.hub.tenancy import TenantId
-from tests.support import migrated_hub_at, scoped_connections
+from tests.support.scaffolding import migrated_hub_at, scoped_connections
 
 _NOW = datetime(2026, 1, 1, tzinfo=UTC)
 _MARKER = DerivationMarker("sg_x", "v", "fp", _NOW, 0, True)

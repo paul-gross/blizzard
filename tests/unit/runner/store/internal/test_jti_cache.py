@@ -13,7 +13,7 @@ from blizzard.foundation.store.engine import create_engine_from_url
 from blizzard.runner.store.internal.host_jti_cache_store import JtiCacheRepository
 from blizzard.runner.store.schema import jwt_jti_seen, metadata
 from blizzard.runner.store.scoped import RunnerStoreConnections
-from tests.runner_fakes import runner_store_errors
+from tests.support.runner_fakes import runner_store_errors
 
 
 def _repository(tmp_path: Path) -> JtiCacheRepository:

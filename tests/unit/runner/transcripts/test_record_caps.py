@@ -17,7 +17,7 @@ from blizzard.hub.config import HubConfig
 from blizzard.hub.domain.observability.transcripts import RECORD_MAX_BYTES
 from blizzard.runner.host_config import HostConfig
 from blizzard.runner.transcripts.caps import TRANSCRIPT_RECORD_MAX_BYTES
-from tests.repo_files import repo_root
+from tests.support.repo_files import repo_root
 
 _DEPLOYMENT_DOC = repo_root() / "docs" / "deployment" / "transcripts.md"
 

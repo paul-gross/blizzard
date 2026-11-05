@@ -16,8 +16,8 @@ from blizzard.hub.config import HubConfig
 from blizzard.runner.api.flag_guard import flag_guard as runner_flag_guard
 from blizzard.runner.config import RunnerConfig
 from blizzard.wire.flags import FlagOff
-from tests.config_inputs import create_hub_app, create_runner_app
-from tests.support_flag_guard import flags_for as _flags
+from tests.support.config_inputs import create_hub_app, create_runner_app
+from tests.support.flag_guard import flags_for as _flags
 
 
 def _router(guard: Any, name: str) -> APIRouter:

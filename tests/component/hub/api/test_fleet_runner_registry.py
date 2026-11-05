@@ -12,7 +12,7 @@ from pathlib import Path
 import sqlalchemy as sa
 
 from blizzard.hub.domain.runners.registration import STALE_AFTER
-from tests.support import (
+from tests.support.scaffolding import (
     HubHarness,
     assert_all_timestamps_utc,
     build_hub,

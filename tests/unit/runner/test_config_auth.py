@@ -14,8 +14,8 @@ from blizzard.runner.config import ENV_PUBLIC_URL, ConfigError, RunnerConfig
 from blizzard.runner.harness.claude_code.section import ClaudeCodeSection
 from blizzard.runner.harness.opencode.section import OpenCodeSection
 from blizzard.runner.host_config import HostConfig
-from tests.harness_sections import claude_code, opencode, sections
-from tests.host_files import host_config_of, load_runner_config, write_host_file, write_minimal_host
+from tests.support.harness_sections import claude_code, opencode, sections
+from tests.support.host_files import host_config_of, load_runner_config, write_host_file, write_minimal_host
 
 
 def _round_trip(tmp_path: Path, config: RunnerConfig) -> RunnerConfig:

@@ -23,7 +23,7 @@ from blizzard.hub.domain.chunk.model import Chunk
 from blizzard.hub.domain.chunk.ports.queue import BACKLOG_RANKING_LOCK
 from blizzard.hub.domain.operations.promote import PromoteService
 from blizzard.hub.store.internal.chunk_queue_store import ChunkQueueStore
-from tests.support import HubHarness, build_hub, chunk_stores, pointer_token, ranking_unit
+from tests.support.scaffolding import HubHarness, build_hub, chunk_stores, pointer_token, ranking_unit
 
 pytestmark = pytest.mark.component
 

@@ -17,7 +17,7 @@ from blizzard.hub.domain.garden.routines import Routine
 from blizzard.hub.domain.garden.runs.baselines import RepoLandings, RoutineBaselineService
 from blizzard.hub.store import schema as s
 from blizzard.hub.store.internal.finding_store import FindingSetStore
-from tests.support import (
+from tests.support.scaffolding import (
     chunk_stores,
     default_project,
     hub_store_connections,

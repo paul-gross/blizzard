@@ -9,7 +9,7 @@ import httpx2
 import pytest
 
 from blizzard.hub.cli import hub as hub_group
-from tests.worker_http import bind_stubs
+from tests.support.worker_http import bind_stubs
 
 
 def _ok(body: object) -> httpx2.Response:

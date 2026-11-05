@@ -32,9 +32,9 @@ from blizzard.runner.cli.runtime import InitCollaborators
 from blizzard.runner.host_layout import HostLayout, HostLock
 from blizzard.runner.store import MIGRATIONS_DIR as RUNNER_MIGRATIONS_DIR
 from blizzard.runner.store import schema as runner_schema
-from tests.host_files import load_runner_config
-from tests.runner_fakes import FIXTURE_RUNNER_ID
-from tests.runner_init_fakes import init_runner
+from tests.support.host_files import load_runner_config
+from tests.support.runner_fakes import FIXTURE_RUNNER_ID
+from tests.support.runner_init_fakes import init_runner
 
 
 @pytest.mark.parametrize(("daemon", "tree"), [("hub", HUB_MIGRATIONS_DIR), ("runner", RUNNER_MIGRATIONS_DIR)])

@@ -8,8 +8,8 @@ from pathlib import Path
 
 import pytest
 
-from tests.fleet_launchers import REPO
-from tests.mock_fleet_support import (
+from tests.support.fleet_launchers import REPO
+from tests.support.mock_fleet import (
     SegmentRecordPayload,
     mock_hub,
     mock_hub_chunk_spec,
@@ -17,7 +17,7 @@ from tests.mock_fleet_support import (
     service_gate,
     transcript_segment_record,
 )
-from tests.runner_join import fleet_headers
+from tests.support.runner_join import fleet_headers
 
 pytestmark = [pytest.mark.service, service_gate]
 

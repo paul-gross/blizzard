@@ -24,7 +24,7 @@ from blizzard.runner.host_file import (
     write_scaffold,
 )
 from blizzard.runner.host_layout import Graduation, HostHeld, HostLayout, HostLock, hold_host
-from tests.config_inputs import STRICT
+from tests.support.config_inputs import STRICT
 
 _FILE = """# kept comment
 hub_url = "https://hub.example"

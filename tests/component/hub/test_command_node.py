@@ -30,16 +30,16 @@ from blizzard.hub.domain.graph.actions import ActionSpec
 from blizzard.hub.domain.graph.model import Graph
 from blizzard.hub.forge.landing import VisitForges
 from blizzard.hub.store import schema as s
-from tests.hub_command_graphs import (
-    _POINTER,  # pyright: ignore[reportPrivateUsage]  # shared test helper, imported from tests.hub_command_graphs
-    _POLL_GRAPH_YAML,  # pyright: ignore[reportPrivateUsage]  # shared test helper, imported from tests.hub_command_graphs
+from tests.support.hub_command_graphs import (
+    _POINTER,  # pyright: ignore[reportPrivateUsage]  # shared test helper, imported from tests.support.hub_command_graphs
+    _POLL_GRAPH_YAML,  # pyright: ignore[reportPrivateUsage]  # shared test helper, imported from tests.support.hub_command_graphs
     ALWAYS_PENDING_GRAPH_YAML,
     HUB_CMD_GRAPH_YAML,
     post_build_pass,
     submit_build_pass,
     to_merge_node,
 )
-from tests.support import (
+from tests.support.scaffolding import (
     TEST_HUB_ACTIONS,
     FakeWorkSource,
     HubHarness,

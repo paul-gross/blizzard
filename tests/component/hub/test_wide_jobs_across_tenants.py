@@ -45,8 +45,8 @@ from blizzard.hub.secrets import (
 from blizzard.hub.secrets.rotation import rotate_keys
 from blizzard.hub.store import schema
 from blizzard.hub.tenancy import StoreScope, TenantId
-from tests.config_inputs import build_hosted_hub_app, init_hub
-from tests.support import (
+from tests.support.config_inputs import build_hosted_hub_app, init_hub
+from tests.support.scaffolding import (
     OP,
     add_tenant,
     close_tenant,

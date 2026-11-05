@@ -29,7 +29,7 @@ from blizzard.runner.hub.client import (
 )
 from blizzard.runner.hub.internal.http_hub import HttpHostHubClient, HttpHubClient, HttpHubRunnerAdmin
 from blizzard.runner.node_steps.submissions import Completion, GateSubmission
-from tests.repo_files import repo_root
+from tests.support.repo_files import repo_root
 
 _ROOT = repo_root()
 _SPEC: dict[str, Any] = json.loads((_ROOT / "openapi" / "hub.openapi.json").read_text())

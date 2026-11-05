@@ -21,10 +21,18 @@ from blizzard.runner.harness.adapter import WorkerHandle
 from blizzard.runner.leases.model import NewLease
 from blizzard.runner.lifecycle.judgement.git_commits import DeclaredCommits
 from blizzard.runner.node_steps.submissions import CompletionArtifact
-from tests.github_double import GitHubDouble
-from tests.pin_hub_delivery_world import mint_and_claim, writable
-from tests.runner_fakes import FakeHarness, FakeHub, FakeProbe, FakeProvider, FakeWorktreeGit, make_context, make_store
-from tests.support import DEFAULT_FIXTURE_REPOSITORIES, build_hub, report_lease
+from tests.support.github_double import GitHubDouble
+from tests.support.pin_hub_delivery_world import mint_and_claim, writable
+from tests.support.runner_fakes import (
+    FakeHarness,
+    FakeHub,
+    FakeProbe,
+    FakeProvider,
+    FakeWorktreeGit,
+    make_context,
+    make_store,
+)
+from tests.support.scaffolding import DEFAULT_FIXTURE_REPOSITORIES, build_hub, report_lease
 
 _NOW = datetime(2026, 7, 13, 12, 0, 0, tzinfo=UTC)
 

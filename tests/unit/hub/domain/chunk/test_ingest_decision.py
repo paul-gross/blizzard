@@ -17,7 +17,7 @@ from blizzard.hub.domain.chunk.ingest import (
 )
 from blizzard.hub.domain.chunk.model import WorkRef
 from blizzard.hub.domain.projects.model import ProjectId
-from tests.support import make_graph
+from tests.support.scaffolding import make_graph
 
 _T0 = datetime(2026, 1, 1, tzinfo=UTC)
 _A = WorkRef(source="forge", ref="1")

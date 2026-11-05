@@ -23,7 +23,7 @@ from blizzard.hub.domain.garden.review.materialize import (
 )
 from blizzard.hub.domain.garden.review.validation import ValidatedReviewFindings
 from blizzard.hub.domain.graph.model import Node
-from tests.garden_artifacts import deferred_entry
+from tests.support.garden_artifacts import deferred_entry
 
 _T0 = datetime(2026, 1, 1, tzinfo=UTC)
 

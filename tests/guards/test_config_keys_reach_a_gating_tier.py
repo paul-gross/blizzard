@@ -13,7 +13,7 @@ import re
 import pytest
 
 from blizzard.runner.harness.wiring import HARNESS_SECTION_KINDS
-from tests.repo_files import repo_root
+from tests.support.repo_files import repo_root
 
 _ROOT = repo_root()
 

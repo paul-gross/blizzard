@@ -36,8 +36,8 @@ from blizzard.hub.store.internal.chunk_record_store import ChunkRecordStore
 from blizzard.hub.store.internal.hub_scoped_reads import build_hub_scoped_reads
 from blizzard.hub.store.internal.transcript_event_store import TranscriptEventStore
 from blizzard.hub.store.scoped import ScopedConnections
-from tests.factory_fields import TranscriptSliceFields
-from tests.support import (
+from tests.support.factory_fields import TranscriptSliceFields
+from tests.support.scaffolding import (
     SeedingTranscriptSegmentStore,
     chunk_stores,
     count_queries,

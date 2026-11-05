@@ -22,7 +22,7 @@ from exemplar.foundation.permits import PermitState
 from exemplar.hub.domain.permits.model import Permit, PermitAlreadyRequested, PermitChanged
 from exemplar.hub.store.internal.permit_store import PermitStore
 from exemplar.hub.store.schema import permit_facts
-from tests.support import (
+from tests.support.scaffolding import (
     add_tenant,
     count_queries,
     default_project,

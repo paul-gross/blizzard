@@ -15,7 +15,7 @@ from sqlalchemy import DateTime
 from blizzard.foundation.store.utc import UtcDateTime
 from blizzard.hub.store import schema as hub_schema
 from blizzard.runner.store import schema as runner_schema
-from tests.repo_files import repo_root
+from tests.support.repo_files import repo_root
 
 _REPO_ROOT = repo_root()
 _SRC_DIR = _REPO_ROOT / "src" / "blizzard"

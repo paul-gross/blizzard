@@ -12,7 +12,7 @@ from pathlib import Path
 from blizzard.hub.domain.graph.model import Graph
 from blizzard.hub.store.internal.graph_store import GraphStore
 from blizzard.hub.store.scoped import ScopedConnections
-from tests.support import build_hub, hub_store_connections, ingest, serve_default_tenant
+from tests.support.scaffolding import build_hub, hub_store_connections, ingest, serve_default_tenant
 
 
 class _CountingGraphStore(GraphStore):

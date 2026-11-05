@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import subprocess
 
-from tests.repo_files import repo_root
+from tests.support.repo_files import repo_root
 
 _SCRIPT = repo_root() / "scripts" / "release-notes.sh"
 

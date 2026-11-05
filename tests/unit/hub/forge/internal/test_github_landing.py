@@ -32,11 +32,11 @@ from blizzard.hub.forge.landing import (
     UpdateMethod,
     UpdateOutcome,
 )
-from tests.github_landing_harness import (
-    _NOW,  # pyright: ignore[reportPrivateUsage]  # shared test helper, imported from tests.github_landing_harness
+from tests.support.github_landing_harness import (
+    _NOW,  # pyright: ignore[reportPrivateUsage]  # shared test helper, imported from tests.support.github_landing_harness
     REPO,
     Harness,
-    _Answer,  # pyright: ignore[reportPrivateUsage]  # shared test helper, imported from tests.github_landing_harness
+    _Answer,  # pyright: ignore[reportPrivateUsage]  # shared test helper, imported from tests.support.github_landing_harness
     pull,
     reply,
     workflow_run,

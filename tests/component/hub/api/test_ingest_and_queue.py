@@ -7,8 +7,8 @@ from pathlib import Path
 
 from blizzard.hub.domain.chunk.model import WorkRef, mint_chunk
 from blizzard.hub.domain.projects.model import ProjectId
-from tests.ingest_queue_graphs import BUILD_REVIEW_DELIVER_YAML, pass_node
-from tests.support import (
+from tests.support.ingest_queue_graphs import BUILD_REVIEW_DELIVER_YAML, pass_node
+from tests.support.scaffolding import (
     FakeWorkSource,
     build_hub,
     chunk_stores,

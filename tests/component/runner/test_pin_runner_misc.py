@@ -15,8 +15,8 @@ from fastapi.testclient import TestClient
 from blizzard.auth_core import Role
 from blizzard.runner.auth.session import RunnerSession, SessionCookie
 from blizzard.runner.config import RunnerConfig
-from tests.config_inputs import create_runner_app
-from tests.support_child_launch import env_git
+from tests.support.child_launch import env_git
+from tests.support.config_inputs import create_runner_app
 
 
 def test_a_configured_session_secret_survives_a_restart_and_the_fallback_does_not(tmp_path: Path) -> None:

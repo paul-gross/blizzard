@@ -22,7 +22,14 @@ from blizzard.hub.domain.chunk.model import (
 from blizzard.hub.domain.chunk.ports.fence import EpochAdmission
 from blizzard.hub.domain.chunk.ports.stores import ChunkStores
 from blizzard.hub.domain.graph.model import RESERVED_TERMINAL
-from tests.support import chunk_stores, chunk_unit, hub_store_connections, migrate_to, seed_chunk_record, seed_graph
+from tests.support.scaffolding import (
+    chunk_stores,
+    chunk_unit,
+    hub_store_connections,
+    migrate_to,
+    seed_chunk_record,
+    seed_graph,
+)
 
 _T0 = datetime(2026, 1, 1, tzinfo=UTC)
 

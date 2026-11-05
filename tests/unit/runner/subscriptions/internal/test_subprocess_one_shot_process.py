@@ -16,7 +16,7 @@ import pytest
 from blizzard.runner.process.child_env import ChildEnv
 from blizzard.runner.process.internal import subprocess_child_processes
 from blizzard.runner.subscriptions.internal.subprocess_one_shot_process import SubprocessOneShotProcess
-from tests.support_child_launch import CHILDREN
+from tests.support.child_launch import CHILDREN
 
 _INHERITED_ENV = ChildEnv(tuple(os.environ.items()))
 

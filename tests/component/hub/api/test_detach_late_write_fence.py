@@ -10,7 +10,7 @@ from __future__ import annotations
 from datetime import timedelta
 from pathlib import Path
 
-from tests.support import build_hub, pointer_token, report_lease
+from tests.support.scaffolding import build_hub, pointer_token, report_lease
 
 _POINTER = {"source": "default", "ref": "38"}
 

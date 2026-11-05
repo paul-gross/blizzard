@@ -26,7 +26,7 @@ from blizzard.hub.domain.garden.proposals.model import (
 from blizzard.hub.store.internal.finding_store import FindingStore
 from blizzard.hub.store.internal.garden_proposal_closure_store import insert_garden_proposal_closure_row
 from blizzard.hub.store.internal.garden_proposal_store import GardenProposalStore
-from tests.support import (
+from tests.support.scaffolding import (
     count_queries,
     count_rows_read,
     default_project,

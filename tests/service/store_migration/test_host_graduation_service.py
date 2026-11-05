@@ -18,12 +18,12 @@ import pytest
 from blizzard.foundation.runner_token_names import hub_token_variable
 from blizzard.runner.host_layout import HostLayout
 from blizzard.runner.runtime import migration_runner
-from tests.config_inputs import init_host
-from tests.fleet_launchers import await_http, terminate
-from tests.mock_fleet_support import mock_hub, poll_until, require_mock_fleet, service_gate
-from tests.runner_join import RUNNER_BIN, JoinedRunner, runner_spawn_env, seed_pinned_runner
-from tests.runner_store_sql import select, utc_text
-from tests.support import (
+from tests.support.config_inputs import init_host
+from tests.support.fleet_launchers import await_http, terminate
+from tests.support.mock_fleet import mock_hub, poll_until, require_mock_fleet, service_gate
+from tests.support.runner_join import RUNNER_BIN, JoinedRunner, runner_spawn_env, seed_pinned_runner
+from tests.support.runner_store_sql import select, utc_text
+from tests.support.scaffolding import (
     LISTENING_FILE,
     await_listening_url,
     daemon_log_sink,

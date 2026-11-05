@@ -13,7 +13,7 @@ import pytest
 from blizzard.auth_core import Role
 from blizzard.hub.cli import hub as hub_group
 from blizzard.hub.forge.budget import BudgetKey, BudgetReading
-from tests.support import (
+from tests.support.scaffolding import (
     FIXTURE_FORGE_SECRET,
     HubHarness,
     build_hub,
@@ -22,7 +22,7 @@ from tests.support import (
     seed_session,
     seed_user,
 )
-from tests.worker_http import bind_stubs
+from tests.support.worker_http import bind_stubs
 
 
 @pytest.fixture

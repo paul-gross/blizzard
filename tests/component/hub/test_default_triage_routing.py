@@ -14,7 +14,7 @@ import pytest
 
 from blizzard.hub.documents import YAML_CODEC
 from blizzard.hub.graph_sync import GraphReconciliation, GraphSyncStatus
-from tests.support import HubHarness, build_hub, pointer_token, report_lease
+from tests.support.scaffolding import HubHarness, build_hub, pointer_token, report_lease
 
 
 def _reconciled_hub(tmp_path: Path):

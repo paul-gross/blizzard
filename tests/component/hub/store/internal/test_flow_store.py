@@ -20,7 +20,7 @@ from blizzard.hub.domain.delivery.flows import FlowResource, LandingTerms, Submi
 from blizzard.hub.domain.kernel.transactions import TransactionMisuse
 from blizzard.hub.store import schema as s
 from blizzard.hub.store.internal.flow_store import FlowStore
-from tests.support import build_hub, chunk_unit, hub_scoped, hub_store_connections, stamp
+from tests.support.scaffolding import build_hub, chunk_unit, hub_scoped, hub_store_connections, stamp
 
 _AT = datetime(2026, 10, 27, 12, 0, 0, tzinfo=UTC)
 _MAIN = FlowResource("repo_a", "main")

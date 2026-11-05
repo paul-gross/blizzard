@@ -25,7 +25,7 @@ from blizzard.hub.config import ConfigError, HubConfig
 from blizzard.hub.layout import CONFIG_FILENAME
 from blizzard.runner.config import RunnerConfig
 from blizzard.runner.host_config import HostConfigError
-from tests.config_inputs import (
+from tests.support.config_inputs import (
     FLAG_REGISTRY,
     create_hub_app,
     create_runner_app,
@@ -34,12 +34,12 @@ from tests.config_inputs import (
     load_host_config,
     load_hub_config,
 )
-from tests.host_files import write_minimal_host
-from tests.repo_files import repo_root
-from tests.support_flag_registry import (
+from tests.support.flag_registry import (
     _TOKEN,  # pyright: ignore[reportPrivateUsage]
     _fixture,  # pyright: ignore[reportPrivateUsage]
 )
+from tests.support.host_files import write_minimal_host
+from tests.support.repo_files import repo_root
 
 _SRC = repo_root() / "src" / "blizzard"
 

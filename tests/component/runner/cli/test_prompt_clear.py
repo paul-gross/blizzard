@@ -9,10 +9,10 @@ from click.testing import Result
 
 from blizzard.cli.main import blizzard
 from blizzard.foundation.store.engine import create_engine_from_url
-from tests.host_files import load_runner_config
-from tests.runner_cli_home import init_runner_home, serve_local_api
-from tests.runner_fakes import SqlAlchemyRunnerStore, runner_store_errors
-from tests.worker_http import bind_local_only
+from tests.support.host_files import load_runner_config
+from tests.support.runner_cli_home import init_runner_home, serve_local_api
+from tests.support.runner_fakes import SqlAlchemyRunnerStore, runner_store_errors
+from tests.support.worker_http import bind_local_only
 
 
 def _run(*args: str) -> Result:

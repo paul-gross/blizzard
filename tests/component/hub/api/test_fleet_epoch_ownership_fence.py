@@ -12,7 +12,7 @@ from sqlalchemy import Table, func
 
 from blizzard.hub.domain.execution.auth.route import ROUTE_TOKEN_WARN
 from blizzard.hub.store import schema as s
-from tests.support import HubHarness, build_hub, hub_store_connections, ingest
+from tests.support.scaffolding import HubHarness, build_hub, hub_store_connections, ingest
 
 _YAML = """
 name: default-delivery

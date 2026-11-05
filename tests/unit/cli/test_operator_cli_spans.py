@@ -26,7 +26,7 @@ from blizzard.hub.cli import hub as hub_group
 from blizzard.runner.cli import external_usage
 from blizzard.runner.cli import runner as runner_group
 from blizzard.runner.cli.daemon import Door
-from tests.worker_http import Bound, bind_transport
+from tests.support.worker_http import Bound, bind_transport
 
 _ENDPOINT = "http://collector.local:4318"
 _OPERATOR_ENV = {"OTEL_EXPORTER_OTLP_ENDPOINT": _ENDPOINT, "BZ_HUB_URL": "http://hub.local:8421"}

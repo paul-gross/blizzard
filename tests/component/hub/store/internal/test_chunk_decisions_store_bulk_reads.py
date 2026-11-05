@@ -16,7 +16,7 @@ from blizzard.hub.domain.chunk.model import Chunk, DecisionChoice, decide_close_
 from blizzard.hub.domain.chunk.ports.fence import EpochAdmission
 from blizzard.hub.domain.chunk.ports.stores import ChunkStores
 from blizzard.hub.store import schema as s
-from tests.support import (
+from tests.support.scaffolding import (
     chunk_stores,
     chunk_unit,
     count_queries,

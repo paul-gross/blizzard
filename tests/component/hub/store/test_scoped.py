@@ -31,7 +31,7 @@ from blizzard.hub.store.scoped import (
     statements_of,
 )
 from blizzard.hub.tenancy import HUB_SCOPED_OPTION, StoreScope, TenantClosed, TenantId, UnknownTenant
-from tests.support import close_tenant
+from tests.support.scaffolding import close_tenant
 
 TEN_A = TenantId("ten_A")
 TEN_B = TenantId("ten_B")

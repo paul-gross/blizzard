@@ -12,7 +12,7 @@ from pathlib import Path
 from typing import Any
 
 from blizzard.foundation.hub_event_types import HubEventType
-from tests.support import (
+from tests.support.scaffolding import (
     HubHarness,
     build_hub,
     emitted_events,

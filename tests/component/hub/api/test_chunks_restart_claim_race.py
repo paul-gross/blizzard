@@ -17,7 +17,7 @@ from sqlalchemy import Connection
 
 from blizzard.hub.domain.chunk.flow_writes import LeverWrite
 from blizzard.hub.store.internal.chunk_movement_store import ChunkMovementStore
-from tests.support import build_hub, ingest
+from tests.support.scaffolding import build_hub, ingest
 
 
 def _claim_body(chunk_id: str, runner: str = "r1") -> dict[str, object]:

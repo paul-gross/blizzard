@@ -7,7 +7,7 @@ the default run instead of the gap failing a run outright.
 
 from __future__ import annotations
 
-from tests.suite_plugin import UNMARKED_TEST_NODEIDS
+from tests.support.suite_plugin import UNMARKED_TEST_NODEIDS
 
 
 def test_every_collected_test_carries_a_tier_marker() -> None:

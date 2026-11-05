@@ -9,7 +9,7 @@ from pathlib import Path
 from blizzard.foundation.clock import FixedClock
 from blizzard.hub.domain.chunk.model import Chunk
 from blizzard.hub.domain.chunk.ports.fence import EpochAdmission
-from tests.support import chunk_stores, migrate_to, seed_chunk_record, seed_graph
+from tests.support.scaffolding import chunk_stores, migrate_to, seed_chunk_record, seed_graph
 
 _T0 = datetime(2026, 1, 1, tzinfo=UTC)
 

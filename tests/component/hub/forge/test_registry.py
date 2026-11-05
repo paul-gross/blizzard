@@ -41,7 +41,7 @@ from blizzard.hub.forge.registry import ForgeBinding, ForgeRegistry, TurnCutOff
 from blizzard.hub.secrets import hub_key_provider, secret_cipher
 from blizzard.hub.store.internal.repository_record_store import RepositoryRecordStore
 from blizzard.hub.tenancy import StoreScope
-from tests.support import (
+from tests.support.scaffolding import (
     OP,
     build_hub,
     config_authoring,

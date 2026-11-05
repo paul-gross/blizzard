@@ -12,7 +12,7 @@ from blizzard.foundation.clock import FixedClock
 from blizzard.foundation.store import batching
 from blizzard.hub.store import schema as s
 from blizzard.hub.store.internal.chunk_artifacts_store import ChunkArtifactsStore
-from tests.support import hub_store_connections, migrate_to, seed_chunk, seed_graph, stamp
+from tests.support.scaffolding import hub_store_connections, migrate_to, seed_chunk, seed_graph, stamp
 
 _T0 = datetime(2026, 1, 1, tzinfo=UTC)
 

@@ -22,7 +22,7 @@ from blizzard.hub.store import schema as s
 from blizzard.hub.store.errors import HubStoreError
 from blizzard.hub.store.internal.chunk_route_store import ChunkRouteStore
 from blizzard.hub.store.transactions import HubTransactions
-from tests.support import (
+from tests.support.scaffolding import (
     HubHarness,
     build_hub,
     emitted_events,

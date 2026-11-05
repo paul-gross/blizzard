@@ -19,7 +19,7 @@ from blizzard.hub.domain.graph.model import Node, ProducesSpec
 from blizzard.runner.lifecycle.judgement.produces import ProducesReconciler
 from blizzard.runner.node_steps.envelope import ProducesSpec as RunnerProducesSpec
 from blizzard.runner.node_steps.submissions import CompletionArtifact
-from tests.runner_fakes import make_envelope
+from tests.support.runner_fakes import make_envelope
 
 
 def _node(*, produces: list[str | ProducesSpec]) -> Node:

@@ -5,7 +5,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from tests.support import HubHarness, build_hub, ingest, report_lease
+from tests.support.scaffolding import HubHarness, build_hub, ingest, report_lease
 
 _POINTER = {"source": "default", "ref": "7"}
 _LABELLED = [{**_POINTER, "label": "default#7"}]

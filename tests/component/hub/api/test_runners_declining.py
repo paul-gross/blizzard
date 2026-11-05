@@ -13,7 +13,7 @@ from pydantic import BaseModel
 from blizzard.hub.api import runners as runners_api
 from blizzard.hub.domain.runners.registration import RunnerDeclining
 from blizzard.wire.runner import RunnerRegistrationRequest
-from tests.support import HubHarness, build_hub, seed_runner
+from tests.support.scaffolding import HubHarness, build_hub, seed_runner
 
 _RUNNER = "runner-a"
 _RESET = datetime(2026, 10, 22, 14, tzinfo=UTC)

@@ -43,8 +43,8 @@ from blizzard.hub.domain.projects.authoring import ProjectAuthoring
 from blizzard.hub.domain.projects.model import Project, ProjectEdit, ProjectId
 from blizzard.hub.store import schema
 from blizzard.hub.tenancy import StoreScope
-from tests.route_classes import FLEET, FLEET_CLAIM, HUB_LEVEL, HUMAN, live_routes
-from tests.support import (
+from tests.support.route_classes import FLEET, FLEET_CLAIM, HUB_LEVEL, HUMAN, live_routes
+from tests.support.scaffolding import (
     OP,
     HubHarness,
     InMemoryTraceExporter,
@@ -58,16 +58,16 @@ from tests.support import (
     seed_session,
     seed_user,
 )
-from tests.tenant_isolation_world import (
-    _GRAPH,  # pyright: ignore[reportPrivateUsage]  # shared test helper, imported from tests.tenant_isolation_world
-    _SHARED_QUESTION,  # pyright: ignore[reportPrivateUsage]  # shared test helper, imported from tests.tenant_isolation_world
-    _SHARED_SEGMENT,  # pyright: ignore[reportPrivateUsage]  # shared test helper, imported from tests.tenant_isolation_world
+from tests.support.tenant_isolation_world import (
+    _GRAPH,  # pyright: ignore[reportPrivateUsage]  # shared test helper, imported from tests.support.tenant_isolation_world
+    _SHARED_QUESTION,  # pyright: ignore[reportPrivateUsage]  # shared test helper, imported from tests.support.tenant_isolation_world
+    _SHARED_SEGMENT,  # pyright: ignore[reportPrivateUsage]  # shared test helper, imported from tests.support.tenant_isolation_world
     Two,
-    _ok,  # pyright: ignore[reportPrivateUsage]  # shared test helper, imported from tests.tenant_isolation_world
-    _Tenant,  # pyright: ignore[reportPrivateUsage]  # shared test helper, imported from tests.tenant_isolation_world
+    _ok,  # pyright: ignore[reportPrivateUsage]  # shared test helper, imported from tests.support.tenant_isolation_world
+    _Tenant,  # pyright: ignore[reportPrivateUsage]  # shared test helper, imported from tests.support.tenant_isolation_world
     seeded,
 )
-from tests.tenant_sweeps import close_events, landed_hub_ref
+from tests.support.tenant_sweeps import close_events, landed_hub_ref
 
 Kind = Literal["listing", "foreign", "own", "stream", "global"]
 

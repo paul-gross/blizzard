@@ -13,8 +13,8 @@ from pathlib import Path
 
 import pytest
 
-from tests.ci_workflows import Job, Step, load_workflow
-from tests.repo_files import repo_root
+from tests.support.ci_workflows import Job, Step, load_workflow
+from tests.support.repo_files import repo_root
 
 _REPO_ROOT = repo_root()
 _WORKFLOW_PATH = _REPO_ROOT / ".github" / "workflows" / "push.yml"

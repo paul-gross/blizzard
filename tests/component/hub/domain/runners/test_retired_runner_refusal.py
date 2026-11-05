@@ -24,7 +24,7 @@ from blizzard.hub.domain.runners.registration import (
 )
 from blizzard.hub.domain.runners.route import Route
 from blizzard.wire.transcript_segment import TranscriptSegmentRecord
-from tests.support import HubHarness, build_hub, make_ready, report_lease, seed_runner
+from tests.support.scaffolding import HubHarness, build_hub, make_ready, report_lease, seed_runner
 
 _RUNNER = "runner-a"
 

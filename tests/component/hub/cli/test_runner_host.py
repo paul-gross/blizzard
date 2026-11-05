@@ -10,9 +10,9 @@ from typing import Any
 import httpx2
 
 from blizzard.hub.cli import hub as hub_group
-from tests.support import HubHarness, build_hub, seed_runner
-from tests.support_hub_cli_runner import ENV, HUB_URL
-from tests.worker_http import Bound, bind_stubs
+from tests.support.hub_cli_runner import ENV, HUB_URL
+from tests.support.scaffolding import HubHarness, build_hub, seed_runner
+from tests.support.worker_http import Bound, bind_stubs
 
 
 def _against(hub: HubHarness) -> Bound:

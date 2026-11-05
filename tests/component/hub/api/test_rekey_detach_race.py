@@ -7,7 +7,7 @@ from typing import Any
 
 import pytest
 
-from tests.support import build_hub, pointer_token, runner_token
+from tests.support.scaffolding import build_hub, pointer_token, runner_token
 
 _YAML = """
 name: default-delivery

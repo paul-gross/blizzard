@@ -27,15 +27,15 @@ from blizzard.tools.store_fold.history import history_store
 from blizzard.tools.store_fold.seeds import normalize
 from tests.rehearsal.comparison import reflection_drift
 from tests.rehearsal.stores import baseline_contract, postgres_database, reflect
-from tests.repo_files import repo_root
-from tests.store_baseline_support import (
+from tests.support.repo_files import repo_root
+from tests.support.scaffolding import MIGRATION_CLOCK
+from tests.support.store_baseline import (
     autoincrement_of,
     row_differences,
     rows_of,
     schema_differences,
     schema_of,
 )
-from tests.support import MIGRATION_CLOCK
 
 _GATE = "BLIZZARD_STORE_BASELINE"
 _PG_URL = "BLIZZARD_STORE_BASELINE_PG_URL"

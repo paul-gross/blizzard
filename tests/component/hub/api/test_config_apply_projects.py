@@ -10,7 +10,7 @@ import pytest
 
 from blizzard.hub.domain.config.changes import ChangeContext, Door
 from blizzard.hub.domain.projects.model import ProjectEdit, ProjectId, ProjectSlug
-from tests.support import HubHarness, build_hub
+from tests.support.scaffolding import HubHarness, build_hub
 
 _SOURCE = {"slug": "demo", "provider": "github", "locator": "acme/demo", "secret": "gh", "annotate": True}
 _OTHER_SOURCE = {**_SOURCE, "slug": "infra", "locator": "acme/infra"}

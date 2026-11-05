@@ -28,7 +28,7 @@ from blizzard.hub.store.internal.garden_proposal_store import GardenProposalStor
 from blizzard.hub.store.schema import garden_proposal_findings, garden_proposals
 from blizzard.hub.store.scoped import ScopedConnections
 from blizzard.hub.tenancy import StoreScope, TenantId
-from tests.support import hub_store_connections, migrated_hub_at, stamp
+from tests.support.scaffolding import hub_store_connections, migrated_hub_at, stamp
 
 _PROJECT = "proj_test"
 

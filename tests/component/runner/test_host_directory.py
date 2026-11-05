@@ -23,8 +23,8 @@ from blizzard.cli.main import blizzard
 from blizzard.runner.config_table import ConfigError
 from blizzard.runner.host_layout import HostLayout, HostLock
 from blizzard.runner.runtime import migration_runner
-from tests.config_inputs import host_runtime_of
-from tests.runner_init_fakes import init_runner
+from tests.support.config_inputs import host_runtime_of
+from tests.support.runner_init_fakes import init_runner
 
 _NOW = datetime(2026, 10, 13, 9, 0, 0, tzinfo=UTC)
 _STAMP = "20261013T090000Z"

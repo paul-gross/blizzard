@@ -12,12 +12,12 @@ import re
 import pytest
 
 from blizzard.runner.hub.client import IHostHubClient, IHubRunnerAdmin, ITokenIdentityReader
-from tests.ihubclient_parity import (
-    _IHUBCLIENT_ENDPOINTS,  # pyright: ignore[reportPrivateUsage]  # shared test helper, imported from tests.ihubclient_parity
-    _protocol_method_names,  # pyright: ignore[reportPrivateUsage]  # shared test helper, imported from tests.ihubclient_parity
+from tests.support.ihubclient_parity import (
+    _IHUBCLIENT_ENDPOINTS,  # pyright: ignore[reportPrivateUsage]  # shared test helper, imported from tests.support.ihubclient_parity
+    _protocol_method_names,  # pyright: ignore[reportPrivateUsage]  # shared test helper, imported from tests.support.ihubclient_parity
     assert_ihubclient_endpoint_table_matches_protocol,
 )
-from tests.mock_fleet_support import mock_hub, mock_runner, require_mock_fleet, service_gate
+from tests.support.mock_fleet import mock_hub, mock_runner, require_mock_fleet, service_gate
 
 pytestmark = [pytest.mark.service, service_gate]
 

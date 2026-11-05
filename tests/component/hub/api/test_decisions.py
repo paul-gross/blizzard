@@ -9,10 +9,10 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from tests.gate_decisions import (
-    _open_decision,  # pyright: ignore[reportPrivateUsage]  # shared test helper, imported from tests.gate_decisions
+from tests.support.gate_decisions import (
+    _open_decision,  # pyright: ignore[reportPrivateUsage]  # shared test helper, imported from tests.support.gate_decisions
 )
-from tests.support import build_hub
+from tests.support.scaffolding import build_hub
 
 # --- POST /api/decisions/{id}/resolutions — primary -------------------------
 
@@ -57,7 +57,7 @@ def test_resolutions_unknown_choice_is_400(tmp_path: Path) -> None:
 
 
 def test_runner_bearer_token_is_rejected_on_resolutions(tmp_path: Path) -> None:
-    from tests.hub_request_auth import bearer, seed_enrolled
+    from tests.support.hub_request_auth import bearer, seed_enrolled
 
     token = seed_enrolled(tmp_path)
     warn_hub = build_hub(tmp_path)

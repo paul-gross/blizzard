@@ -12,7 +12,7 @@ import pytest
 from blizzard.foundation.node_steps import Executor, SessionMode
 from blizzard.hub.domain.graph.validation import Validator
 from blizzard.hub.graphs import PACKAGED
-from tests.support import TEST_CATALOGUE
+from tests.support.scaffolding import TEST_CATALOGUE
 
 
 def test_default_graph_validates_with_no_errors_or_warnings() -> None:

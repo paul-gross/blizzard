@@ -7,7 +7,7 @@ from __future__ import annotations
 import httpx2
 
 from blizzard.hub.cli import hub as hub_group
-from tests.worker_http import Bound, bind_stubs
+from tests.support.worker_http import Bound, bind_stubs
 
 
 class _FakeResponse:

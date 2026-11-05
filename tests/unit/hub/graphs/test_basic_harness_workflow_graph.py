@@ -11,7 +11,7 @@ from blizzard.foundation.node_steps import Executor, SessionMode
 from blizzard.hub.domain.graph.model import GraphDoc, NodeDoc
 from blizzard.hub.domain.graph.validation import Validator
 from blizzard.hub.graphs import PACKAGED
-from tests.support import TEST_CATALOGUE
+from tests.support.scaffolding import TEST_CATALOGUE
 
 _GRAPH = PACKAGED.named("basic-harness-workflow")
 

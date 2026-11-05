@@ -17,8 +17,8 @@ from httpx2 import Response
 from blizzard.hub.auth.models import ProviderIdentity
 from blizzard.hub.config import LoginThrottleConfig
 from blizzard.hub.store import schema
-from tests.oauth_login_double import ADA, FakeOAuthProvider, known_ada, state_from_redirect
-from tests.support import HubHarness, build_hub, hub_scoped
+from tests.support.oauth_login_double import ADA, FakeOAuthProvider, known_ada, state_from_redirect
+from tests.support.scaffolding import HubHarness, build_hub, hub_scoped
 
 # --- providers ------------------------------------------------------------------
 

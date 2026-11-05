@@ -15,7 +15,7 @@ from blizzard.foundation.run_mode import RunMode
 from blizzard.hub.domain.chunk.model import WorkItemAuthor
 from blizzard.hub.domain.config.changes import ChangeContext, Door
 from blizzard.hub.domain.garden.scopes import ScopeSlug
-from tests.support import HubHarness, build_hub, project_record
+from tests.support.scaffolding import HubHarness, build_hub, project_record
 
 _CTX = ChangeContext(actor="operator", door=Door.API)
 #: A month around the harness clock: runs and proposals minted at its instant fall inside it.

@@ -10,9 +10,9 @@ import pytest
 
 from blizzard.runner.config import DEFAULT_RUNNER_NAME, SCAFFOLD_PROJECTS, ProjectBinding
 from blizzard.runner.host_config import BuiltRunner, HaltedRunner, HostConfig, HostConfigError
-from tests import harness_sections
-from tests.config_inputs import load_host_config
-from tests.host_files import TEST_RUNNER_ID, write_minimal_host
+from tests.support import harness_sections
+from tests.support.config_inputs import load_host_config
+from tests.support.host_files import TEST_RUNNER_ID, write_minimal_host
 
 _TOKEN = {"BZ_HUB_TOKEN_RUNNER_LOCAL": "tok", "BZ_HUB_TOKEN_R_CLAUDE": "tok-claude"}
 
