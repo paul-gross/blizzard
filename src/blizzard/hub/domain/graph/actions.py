@@ -7,7 +7,8 @@ in, never a global read, so a test can hand its own."""
 from __future__ import annotations
 
 from collections.abc import Iterable, Mapping
-from dataclasses import dataclass
+from dataclasses import dataclass, field
+from enum import StrEnum
 from types import MappingProxyType
 
 from blizzard.foundation.roles import domain_model
@@ -22,6 +23,14 @@ CONFLICT = "conflict"
 #: Answers that send a submission back as routine rework — a step the graph authors to take it up — rather than a
 #: failure of the work.
 REWORK_ANSWERS: frozenset[str] = frozenset({CONFLICT})
+
+
+class ArtifactFormat(StrEnum):
+    """A content format a hub action's arg owes the artifact it names — the shape that artifact must parse
+    as. Hub-domain vocabulary; no wire model carries it."""
+
+    FINDING_DELTA = "finding-delta"
+    GARDEN_PROPOSAL_CANDIDATES = "garden-proposal-candidates"
 
 
 @domain_model
@@ -39,6 +48,8 @@ class ActionSpec:
     answers_from_arg: str | None
     # Whether a visit is handed forge handles and holds its branches.
     lands: bool
+    # The format each arg's named artifacts must satisfy, for the args that owe one.
+    arg_formats: Mapping[str, ArtifactFormat] = field(default_factory=dict[str, ArtifactFormat])
 
     def answers_for(self, action_args: Mapping[str, tuple[str, ...]]) -> frozenset[str]:
         """The choices a node passing ``action_args`` may be answered with."""
@@ -98,6 +109,9 @@ GARDEN_DELIVER = ActionSpec(
     answers=frozenset({"recorded", "invalid", "invalid-proposals", "failure"}),
     answers_from_arg=None,
     lands=False,
+    arg_formats=MappingProxyType(
+        {"delta": ArtifactFormat.FINDING_DELTA, "proposals": ArtifactFormat.GARDEN_PROPOSAL_CANDIDATES}
+    ),
 )
 PASS = ActionSpec(
     name="pass",

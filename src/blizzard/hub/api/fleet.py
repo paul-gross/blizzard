@@ -89,6 +89,7 @@ from blizzard.hub.domain.runners.registration import (
 from blizzard.hub.domain.runners.version import RunnerVersionRefused
 from blizzard.hub.tenancy import StoreScope
 from blizzard.wire.analytics import AnalyticsCountsResponse, AnalyticsSpendResponse
+from blizzard.wire.attachments import ArtifactCheckRequest, ArtifactCheckResponse
 from blizzard.wire.chunk import (
     ChunkDetail,
     ChunkPauseRequest,
@@ -380,6 +381,20 @@ def get_envelope(chunk_id: str, services: Services) -> NodeEnvelope:
     except NoCurrentNode as exc:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
     return node_steps.node_envelope(envelope)
+
+
+@router.post("/chunks/{chunk_id}/artifact-check", response_model=ArtifactCheckResponse)
+def check_artifact(chunk_id: str, body: ArtifactCheckRequest, services: Services) -> ArtifactCheckResponse:
+    """The verdict on content a worker is about to stage under ``body.name``: the delivery-time refusal when
+    the chunk's graph owes the name a format the content fails. The verdict rides a ``200`` body — a
+    ``4xx`` here is a failed request, never a refusal. 404 for an unknown chunk."""
+    chunk = services.chunks.record.get(chunk_id)
+    if chunk is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"unknown chunk {chunk_id}")
+    graph = services.graphs.get(chunk.graph_id)
+    if graph is None:
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="chunk's pinned graph is missing")
+    return ArtifactCheckResponse(refusal=services.garden_stage_check.refusal(graph, body.name, body.content))
 
 
 def _routine_run_or_404(chunk_id: str, services: TenantServices) -> RunContext:

@@ -74,6 +74,16 @@ class AttachmentService:
         self._outbound = outbound
         self._clock = clock
 
+    def require_attachable(self, worker: WorkerLease, *, name: str, content: str) -> None:
+        """Raise the :class:`AttachmentRefused` :meth:`attach` would, writing nothing — so a caller can
+        let a lifecycle refusal take precedence over any other judgement of the content."""
+        check_attachable(
+            worker,
+            name=name,
+            content=content,
+            outcome_pending=worker.lease.lease_id in self._outbound.pending_submission_lease_ids(),
+        )
+
     def attach(self, worker: WorkerLease, *, name: str, content: str) -> None:
         """Record ``content`` under ``name`` for ``worker``'s lease, or raise the
         :class:`AttachmentRefused` :func:`check_attachable` names. ``worker`` is already

@@ -386,6 +386,7 @@ _PROBES: dict[tuple[str, str], _Probe] = {
         {"from_node_id": "build", "epoch": 1, "route_token": "{route_token}"}
     ),
     ("GET", "/api/fleet/chunks/{chunk_id}/envelope"): _f(),
+    ("POST", "/api/fleet/chunks/{chunk_id}/artifact-check"): _f({"name": "delta", "content": "x"}),
     ("GET", "/api/fleet/chunks/{chunk_id}/findings"): _f(ids=_GARDEN),
     ("GET", "/api/fleet/chunks/{chunk_id}/findings/{finding_id}"): _f(ids=_GARDEN),
     ("GET", "/api/fleet/chunks/{chunk_id}/garden/findings"): _f(ids=_RUN),

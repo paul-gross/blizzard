@@ -6,6 +6,8 @@ from __future__ import annotations
 
 from pydantic import BaseModel
 
+from blizzard.wire.base import WireModel
+
 
 class AttachmentRequest(BaseModel):
     """A worker's explicit artifact submission for one ``produces:`` name."""
@@ -29,3 +31,17 @@ class StagedAttachment(BaseModel):
 
     name: str
     content: str
+
+
+class ArtifactCheckRequest(BaseModel):
+    """``POST /api/fleet/chunks/{chunk_id}/artifact-check`` — content a worker is about to stage under ``name``."""
+
+    name: str
+    content: str
+
+
+class ArtifactCheckResponse(WireModel):
+    """The hub's verdict on a staging offer: ``refusal`` is the delivery-time message when the content fails
+    the format its graph owes ``name``, and absent otherwise."""
+
+    refusal: str | None = None

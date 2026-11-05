@@ -7,9 +7,13 @@ and the round-trip it delegates to :class:`~blizzard.runner.operator.attachments
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Unpack
+
+import httpx2
+from fastapi import FastAPI
 
 from blizzard.foundation.clock import FixedClock
 from blizzard.foundation.tokens import TokenHash
@@ -20,7 +24,13 @@ from blizzard.runner.operator.attachments import AttachmentService
 from tests.support.config_inputs import create_runner_app
 from tests.support.factory_fields import NewLeaseFields
 from tests.support.runner_client import runner_client
-from tests.support.runner_fakes import SqlAlchemyRunnerStore, make_host_stores, make_store, make_stores
+from tests.support.runner_fakes import (
+    SqlAlchemyRunnerStore,
+    make_host_stores,
+    make_store,
+    make_stores,
+    no_retry_clock,
+)
 
 _NOW = datetime(2026, 7, 19, 12, 0, 0, tzinfo=UTC)
 _TOKEN = "the-lease-token"
@@ -325,3 +335,103 @@ def test_409_once_the_leases_outcome_is_buffered(tmp_path: Path) -> None:
     assert resp.status_code == 409, resp.text
     assert "declare assets before the node-step's verdict" in resp.json()["detail"]
     assert store.attachments_for_lease("lease_1") == {}
+
+
+# --------------------------------------------------------------------------- #
+# The hub's stage-time format check
+
+_HUB_URL = "http://hub.local:8421"
+_REFUSAL = "artifact 'delta' does not match the finding-delta shape: measurement: Input should be a valid string"
+
+
+def _app_with_hub(tmp_path: Path, handler: Callable[[httpx2.Request], httpx2.Response]):
+    store = make_store(f"sqlite:///{tmp_path / 'runner.db'}")
+    config = RunnerConfig(root=tmp_path, db_url=f"sqlite:///{tmp_path / 'runner.db'}", hub_url=_HUB_URL)
+    service = AttachmentService(store, FixedClock(_NOW), store)
+    app = create_runner_app(
+        config,
+        runner_stores=make_stores(store),
+        host_stores=make_host_stores(store),
+        attachments=service,
+        hub_proxy_client=httpx2.Client(transport=httpx2.MockTransport(handler)),
+        hub_retry_clock=no_retry_clock(),
+    )
+    return app, store
+
+
+def _stage(app: FastAPI, content: str) -> httpx2.Response:
+    with runner_client(app) as client:
+        return client.post(
+            "/api/leases/lease_1/attachments",
+            json={"name": "delta", "content": content},
+            headers={"X-Blizzard-Lease-Token": _TOKEN},
+        )
+
+
+def test_a_hub_refusal_is_422_with_the_refusal_and_leaves_the_prior_content(tmp_path: Path) -> None:
+    seen: list[httpx2.Request] = []
+
+    def handler(request: httpx2.Request) -> httpx2.Response:
+        seen.append(request)
+        refuse = b"bad" in request.content
+        return httpx2.Response(200, json={"refusal": _REFUSAL if refuse else None})
+
+    app, store = _app_with_hub(tmp_path, handler)
+    _seed_lease(store)
+    assert _stage(app, "good").status_code == 200
+
+    resp = _stage(app, "bad")
+
+    assert resp.status_code == 422
+    assert resp.json()["detail"] == _REFUSAL
+    assert store.attachments_for_lease("lease_1") == {"delta": "good"}
+    assert {r.url.path for r in seen} == {"/api/fleet/chunks/ch_1/artifact-check"}
+
+
+def test_a_no_refusal_verdict_stages_the_content(tmp_path: Path) -> None:
+    app, store = _app_with_hub(tmp_path, lambda _request: httpx2.Response(200, json={"refusal": None}))
+    _seed_lease(store)
+    assert _stage(app, "fine").status_code == 200
+    assert store.attachments_for_lease("lease_1") == {"delta": "fine"}
+
+
+def test_an_unreachable_hub_or_a_404_stages_the_content(tmp_path: Path) -> None:
+    (tmp_path / "0").mkdir()
+    (tmp_path / "1").mkdir()
+
+    def down(request: httpx2.Request) -> httpx2.Response:
+        raise httpx2.ConnectError("hub is down", request=request)
+
+    def missing(_request: httpx2.Request) -> httpx2.Response:
+        return httpx2.Response(404, json={"detail": "unknown chunk"})
+
+    handlers: list[Callable[[httpx2.Request], httpx2.Response]] = [down, missing]
+    for index, handler in enumerate(handlers):
+        app, store = _app_with_hub(tmp_path / str(index), handler)
+        _seed_lease(store)
+        assert _stage(app, "unchecked").status_code == 200
+        assert store.attachments_for_lease("lease_1") == {"delta": "unchecked"}
+
+
+def test_a_lifecycle_refusal_takes_precedence_over_a_hub_format_refusal(tmp_path: Path) -> None:
+    asked: list[httpx2.Request] = []
+
+    def refusing(request: httpx2.Request) -> httpx2.Response:
+        asked.append(request)
+        return httpx2.Response(200, json={"refusal": _REFUSAL})
+
+    app, store = _app_with_hub(tmp_path, refusing)
+    _seed_lease(store)
+    store.record_closure(lease_id="lease_1", chunk_id="ch_1", node_id="nd_build", reason="escalated", closed_at=_NOW)
+    store.record_takeover(
+        takeover_id="tko_1",
+        chunk_id="ch_1",
+        lease_id="lease_1",
+        session=SessionReference(CLAUDE_CODE_HARNESS_ID, "sess-a"),
+        workdir="/ws/e1",
+        fence_epoch=None,
+        opened_at=_NOW,
+    )
+
+    assert _stage(app, "bad").status_code == 409
+    assert asked == []

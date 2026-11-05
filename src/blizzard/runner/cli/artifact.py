@@ -240,8 +240,9 @@ def artifact_create(name: str, scope: str | None) -> None:
     """Worker: durably submit an asset artifact for a ``produces:`` NAME (content on stdin), node
     scope only. A submission *stages* the content, published into the envelope only on completion
     — read it back with ``artifact staged``. Empty stdin, a body that fails its asset's
-    registered format (``review-finding-delta``), and any rejection exit non-zero rather than
-    silently losing the submission."""
+    registered format (``review-finding-delta``), content that fails the format the graph's delivery
+    applies to NAME (the delivery-time message, with nothing stored), and any rejection exit non-zero
+    rather than silently losing the submission."""
     _refuse_read_only_scope("create", scope)
     worker = WorkerCall.of("artifact create")
     content = click.get_text_stream("stdin").read()
@@ -256,6 +257,7 @@ def artifact_create(name: str, scope: str | None) -> None:
     resp = worker.post(
         worker.leased("attachments"),
         failure=f"could not record {name!r}",
+        rejected=f"could not record {name!r}, nothing was stored",
         json_body={"name": name, "content": content},
     )
     body = resp.json()
