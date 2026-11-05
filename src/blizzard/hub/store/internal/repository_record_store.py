@@ -4,8 +4,7 @@ All ``sqlalchemy`` usage is confined here (``bzh:dependency-inversion``). Retire
 from the append-only ``repository_lifecycle_facts`` table, newest-fact-wins per id
 (``bzh:facts-not-status``). Every write commits its change row in the same transaction.
 
-Every write takes the named forge's row lock after the tenant's, refuses a forge that is gone or retired, and stores the
-forge's API origin in the deprecated ``forge_api_url`` column, which the coordinate constraint keys on."""
+Every write takes the named forge's row lock after the tenant's, refuses a forge that is gone or retired."""
 
 from __future__ import annotations
 
@@ -19,7 +18,7 @@ from blizzard.foundation.landing_policy import LandingPolicy
 from blizzard.foundation.store.batching import id_batches
 from blizzard.hub.domain.config.changes import ConfigChange
 from blizzard.hub.domain.config.errors import ConfigFieldError, ConfigRevisionConflict
-from blizzard.hub.domain.config.forges import ForgeId, ForgeOriginTaken, ForgeSlugTaken, NewForge
+from blizzard.hub.domain.config.forges import ForgeId
 from blizzard.hub.domain.config.repositories import (
     ConfiguredRepository,
     IWriteRepositoryRecordRepository,
@@ -36,14 +35,9 @@ from blizzard.hub.domain.config.repositories import (
 # ast-grep-ignore: bzh:hub-store-adapter-imports
 from blizzard.hub.store.internal.config_change_store import append_change
 
-# Shares forge resolution and insertion on the caller's connection.
+# Shares forge resolution on the caller's connection.
 # ast-grep-ignore: bzh:hub-store-adapter-imports
-from blizzard.hub.store.internal.forge_record_store import (
-    StandingForge,
-    insert_new_forge,
-    referred_forge,
-    standing_forge,
-)
+from blizzard.hub.store.internal.forge_record_store import referred_forge, standing_forge
 from blizzard.hub.store.internal.former_slugs import SlugTables
 from blizzard.hub.store.internal.newest_fact import newest_retired_select
 
@@ -52,9 +46,6 @@ from blizzard.hub.store.internal.newest_fact import newest_retired_select
 from blizzard.hub.store.internal.secret_store import lock_secret_row, secret_unavailable
 from blizzard.hub.store.schema import repositories, repository_former_slugs, repository_lifecycle_facts
 from blizzard.hub.store.scoped import ScopedConnections, statements_of
-
-#: What creating the forge a write names refuses when another forge holds its origin or slug.
-_FORGE_REFUSALS = (ForgeOriginTaken, ForgeSlugTaken)
 
 _SLUGS = SlugTables(repositories, repository_former_slugs, "repository_id", RepositorySlugTaken)
 
@@ -99,13 +90,12 @@ def _coordinate_taken(conn: Connection, record: ConfiguredRepository, holder: st
     return RepositoryCoordinateTaken(forge.label if forge else f.forge_id, f.owner, f.repo, holder=holder)
 
 
-def _columns(record: ConfiguredRepository, forge: StandingForge) -> dict[str, object]:
+def _columns(record: ConfiguredRepository) -> dict[str, object]:
     f = record.fields
     return {
         "slug": record.slug,
         "name": record.name,
         "forge_id": f.forge_id,
-        "forge_api_url": forge.api_base,
         "owner": f.owner,
         "repo": f.repo,
         "base_branch": f.base_branch,
@@ -119,7 +109,7 @@ def insert_record(conn: Connection, record: ConfiguredRepository, change: Config
     """The create body, inside the caller's transaction. :class:`RepositorySecretUnavailable`,
     :class:`RepositorySlugTaken` or :class:`RepositoryCoordinateTaken` when refused, and the forge refusals of
     :func:`referred_forge`."""
-    forge = referred_forge(conn, record.fields.forge_id, enabled=not record.retired)
+    referred_forge(conn, record.fields.forge_id, enabled=not record.retired)
     _check_secret(conn, record.fields.secret_name)
     _SLUGS.claim(conn, record.repository_id, record.slug)
     holder = _coordinate_holder(conn, record)
@@ -130,7 +120,7 @@ def insert_record(conn: Connection, record: ConfiguredRepository, change: Config
         .insert(repositories)
         .values(
             repository_id=record.repository_id,
-            **_columns(record, forge),
+            **_columns(record),
             revision=record.revision,
             created_at=record.created_at,
             created_by=record.created_by,
@@ -143,7 +133,7 @@ def update_record(
     conn: Connection, record: ConfiguredRepository, from_revision: int, left_slug: str | None, change: ConfigChange
 ) -> None:
     """The compare-and-set edit body, inside the caller's transaction, moving the slug when ``left_slug`` is set."""
-    forge = referred_forge(conn, record.fields.forge_id, enabled=not record.retired)
+    referred_forge(conn, record.fields.forge_id, enabled=not record.retired)
     _check_secret(conn, record.fields.secret_name)
     if left_slug is not None:
         _SLUGS.claim(conn, record.repository_id, record.slug)
@@ -154,7 +144,7 @@ def update_record(
         statements_of(conn)
         .update(repositories)
         .where(repositories.c.repository_id == record.repository_id, repositories.c.revision == from_revision)
-        .values(**_columns(record, forge), revision=record.revision)
+        .values(**_columns(record), revision=record.revision)
     ).rowcount
     if moved != 1:
         raise ConfigRevisionConflict("repository", record.repository_id, current=_revision(conn, record.repository_id))
@@ -208,9 +198,7 @@ class RepositoryRecordStore:
     def __init__(self, store: ScopedConnections) -> None:
         self._store = store
 
-    def create(
-        self, record: ConfiguredRepository, *, change: ConfigChange, forge: NewForge | None = None
-    ) -> ConfiguredRepository:
+    def create(self, record: ConfiguredRepository, *, change: ConfigChange) -> ConfiguredRepository:
         try:
             with self._store.write(
                 "create",
@@ -219,11 +207,8 @@ class RepositoryRecordStore:
                     RepositorySlugTaken,
                     RepositoryCoordinateTaken,
                     IntegrityError,
-                    *_FORGE_REFUSALS,
                 ),
             ) as conn:
-                if forge is not None:
-                    insert_new_forge(conn, forge)
                 insert_record(conn, record, change)
         except IntegrityError as exc:
             raise self._lost_race(record) from exc
@@ -236,13 +221,11 @@ class RepositoryRecordStore:
         from_revision: int,
         left_slug: str | None,
         change: ConfigChange,
-        forge: NewForge | None = None,
     ) -> ConfiguredRepository:
         try:
             with self._store.write(
                 "update",
                 expect=(
-                    *_FORGE_REFUSALS,
                     ConfigFieldError,
                     RepositoryCoordinateTaken,
                     RepositorySlugTaken,
@@ -250,8 +233,6 @@ class RepositoryRecordStore:
                     IntegrityError,
                 ),
             ) as conn:
-                if forge is not None:
-                    insert_new_forge(conn, forge)
                 update_record(conn, record, from_revision, left_slug, change)
         except IntegrityError as exc:
             raise self._lost_race(record) from exc

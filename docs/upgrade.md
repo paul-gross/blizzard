@@ -133,6 +133,36 @@ loses nothing it still uses. Each removed surface and what replaced it:
   ([Upgrading from trace schema 3](./deployment/tracing.md#upgrading-from-trace-schema-3)). Each of these answered only
   a script, and a client still calling a removed path or command is answered as an unknown one.
 
+### Forges replace the address fields
+
+This release removes what 0.4 kept beside the forge while it deprecated the old way of naming one. A repository and a
+work source name their forge only with `forge`, an id or a slug, and the forge alone carries the API and web origins.
+Each removed surface and its replacement:
+
+- `forge_api_url` on a repository, and `api_base` and `web_base` on a work source, leave the create and edit requests
+  and the responses. A write that sends one is refused `422 field_moved_to_forge`, naming the forge that carries it: set
+  the origin on that forge and name it with `forge`. Read `forge_id`, `forge_slug` and `forge_name` instead.
+- A repository or work-source create without `forge` is refused `422 forge_required`; a work source no longer defaults
+  to the `https://api.github.com` forge.
+- `blizzard hub repo create` and `edit` lose `--forge-api-url`, and `blizzard hub source create` and `edit` lose
+  `--api-base`, `--web-base`, `--clear api-base` and `--clear web-base`: pass `--forge`.
+- Version 1 of the configuration document is retired. `POST /api/config/apply` refuses any `version` but 2, a missing
+  one included, with `422 config_version_retired`, and `GET /api/config/export` and `/api/config/schema/{kind}` answer
+  version 2 by default and refuse `version=1` the same way. `blizzard hub config export` already exported version 2.
+- The `config-old-field-used` event is no longer recorded; rows already stored keep their severity.
+- The hub store drops `repositories.forge_api_url`, `work_sources.api_base` and `work_sources.web_base`, and holds every
+  record's `forge_id` to a forge of its own tenant.
+- The `warnings` list on the repository, work-source and apply responses is always empty, and is deprecated.
+
+Before the move, carry every kept configuration document onto version 2 (`blizzard hub config export` writes one from
+the running hub) and every runbook or script onto `--forge`. A store whose repository or work source names no forge, a
+missing one, or another tenant's refuses the migration, naming each record; repoint each with `--forge` on the running
+release first.
+
+To go back, walk the hub store down on this image first ([`docs/rollback.md`](./rollback.md)): the downgrade fills the
+three columns from each record's forge. It refuses a tenant holding one work-source provider and locator on two forges,
+naming each pair; change the locator of one of each pair by hand, then walk down again.
+
 ## Upgrading to 0.2.0
 
 `0.2.0` is reached from `v0.1.0-rc.1` or any `edge` build, stepping through no intermediate release, since none exists.

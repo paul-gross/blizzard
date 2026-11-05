@@ -286,7 +286,7 @@ test('test_an_exported_document_applies_back_writing_nothing', async ({ reposito
   const library = await repository();
   const unranked = await repository();
   await order(api, project.slug, [library, consumer]);
-  const exported = await api.get<Wire.ConfigDocument>('/api/config/export');
+  const exported = await api.get<Wire.ConfigDocumentV2>('/api/config/export');
   expect(exported.status).toBe(200);
   expect(exported.body.projects?.find((row) => row.slug === project.slug)?.landing_order).toEqual([library.name, consumer.name]);
   const applied = await api.post<{ outcomes: { op: string }[] }>('/api/config/apply', { data: exported.body });

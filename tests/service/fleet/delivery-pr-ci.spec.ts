@@ -379,7 +379,9 @@ test('test_pr_ci_escalates_a_repository_the_forge_does_not_know_as_forge_config'
   expect((await api.post(`/api/chunks/${chunk.chunk_id}/promote`)).status).toBe(202);
   await drive(host, api, chunk.chunk_id, (s) => s.pending !== null);
   const nowhere = `${forge.url}/no-such-api`;
-  const moved = await api.patch(`/api/repositories/${repo.name}`, { data: { forge_api_url: nowhere } });
+  const declared = await api.post('/api/forges', { data: { slug: 'nowhere', kind: 'github', api_base: nowhere } });
+  expect(declared.status, JSON.stringify(declared.body)).toBe(201);
+  const moved = await api.patch(`/api/repositories/${repo.name}`, { data: { forge: 'nowhere' } });
   expect(moved.status, JSON.stringify(moved.body)).toBe(200);
   const escalated = await drive(host, api, chunk.chunk_id, (s) => s.status === 'needs_human');
   expect(escalated.escalation).not.toBeNull();

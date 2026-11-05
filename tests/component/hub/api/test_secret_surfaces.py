@@ -147,11 +147,13 @@ def test_secret_set_refuses_an_unknown_name_and_creates_nothing(client: TestClie
 def test_an_active_repository_refuses_its_secret_s_retire_and_shows_under_used_by(client: TestClient) -> None:
     _route_cli_through(client)
     assert _cli(["create", "gh-test"], stdin=f"{_SENTINEL}\n").exit_code == 0
+    forge = {"slug": "github", "kind": "github", "api_base": "https://api.github.com"}
+    assert client.post("/api/forges", json=forge).status_code == 201
     created = client.post(
         "/api/repositories",
         json={
             "slug": "blizzard",
-            "forge_api_url": "https://api.github.com",
+            "forge": "github",
             "owner": "acme",
             "repo": "blizzard",
             "base_branch": "master",

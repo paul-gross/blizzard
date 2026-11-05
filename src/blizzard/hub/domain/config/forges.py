@@ -447,10 +447,6 @@ class ConfiguredForge:
         return ConfigChange.of(ctx, RecordKind.FORGE, self.forge_id, self.revision, op, changes, at)
 
 
-#: A forge a repository or work-source write creates in its own transaction, with the change that records it.
-type NewForge = tuple[ConfiguredForge, ConfigChange]
-
-
 def forge_for_origin(
     api_base: str,
     web_base: str | None,

@@ -13,7 +13,6 @@ from blizzard.cli.collaborators import Response
 from blizzard.cli.config_inputs import packaged_flag_registry, strict_config
 from blizzard.hub.cli.command import FleetCommand
 from blizzard.hub.cli.context import CliContext, RawBody
-from blizzard.hub.cli.forge_warnings import echo_warnings
 from blizzard.hub.cli.project_option import project_option, project_query
 from blizzard.hub.cli.views import Listing
 from blizzard.hub.documents import accepted_extensions, codec_for_path
@@ -110,8 +109,8 @@ def config_apply(cli: CliContext, file: Path, dry_run: bool) -> None:
     """Apply the declarative document FILE (.yaml, .yml or .json) in one transaction.
 
     Creates what is absent, edits only the fields the document states, enables what is retired, and never
-    touches a record it leaves out. Any refusal leaves everything unchanged; --dry-run prints the same outcome. An
-    entry's address field is resolved to the forge holding that origin and warned about."""
+    touches a record it leaves out. Any refusal leaves everything unchanged; --dry-run prints the same outcome. The
+    hub applies a version-2 document only."""
     codec = codec_for_path(file)
     if codec is None:
         raise click.UsageError(f"{file.name}: unknown extension; use one of {', '.join(accepted_extensions())}")
@@ -126,7 +125,6 @@ def config_apply(cli: CliContext, file: Path, dry_run: bool) -> None:
         raise click.ClickException(_refusal(cli, resp))
     cli.check(resp, "POST /config/apply")
     payload = resp.json()
-    echo_warnings(payload)
     cli.show(payload, ApplyListing(payload["outcomes"]))
 
 
@@ -149,10 +147,15 @@ def config_apply(cli: CliContext, file: Path, dry_run: bool) -> None:
 def config_export(cli: CliContext, fmt: str, version: str) -> None:
     """Print every active work source, repository and secret name as a document that applies back unchanged.
 
-    Retired records are left out, since applying one would enable it."""
+    Retired records are left out, since applying one would enable it. The hub exports version 2 only, and refuses
+    version 1 naming it."""
     codec = codec_for_path(f"export.{fmt}")
     assert codec is not None
-    document = cli.get("/api/config/export", "GET /config/export", params={"version": version}).json()
+    resp = cli.send("get", "/api/config/export", params={"version": version})
+    if resp.status_code in _REFUSED:
+        raise click.ClickException(_refusal(cli, resp))
+    cli.check(resp, "GET /config/export")
+    document = resp.json()
     click.echo(codec.encode(document).decode("utf-8"), nl=False)
 
 

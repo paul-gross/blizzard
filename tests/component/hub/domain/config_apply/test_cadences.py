@@ -29,7 +29,7 @@ def _graph(hub: HubHarness) -> str:
 
 
 def _apply(hub: HubHarness, document: dict[str, Any], *, dry_run: bool = False) -> Any:
-    return hub.client.post("/api/config/apply", params={"dry_run": dry_run}, json={"version": 1, **document})
+    return hub.client.post("/api/config/apply", params={"dry_run": dry_run}, json={"version": 2, **document})
 
 
 def _cadences(hub: HubHarness) -> list[dict[str, Any]]:

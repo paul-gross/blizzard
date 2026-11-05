@@ -1,0 +1,98 @@
+{
+  "version": 2,
+  "projects": [
+    {
+      "slug": "default",
+      "name": "Default",
+      "description": "",
+      "color": "red",
+      "sources": [],
+      "repositories": []
+    }
+  ],
+  "forges": [
+    {
+      "slug": "enterprise",
+      "name": "enterprise",
+      "kind": "github",
+      "api_base": "https://api.enterprise.test",
+      "web_base": "https://enterprise.test"
+    },
+    {
+      "slug": "internal",
+      "name": "internal",
+      "kind": "github",
+      "api_base": "https://api.internal.test",
+      "web_base": null
+    }
+  ],
+  "secrets": [
+    "gh"
+  ],
+  "work_sources": [
+    {
+      "slug": "issues",
+      "name": "issues",
+      "provider": "github",
+      "locator": "acme/code",
+      "forge": "enterprise",
+      "annotate": false,
+      "secret": "gh"
+    },
+    {
+      "slug": "old-issues",
+      "name": "old-issues",
+      "provider": "github",
+      "locator": "acme/old-code",
+      "forge": "enterprise",
+      "annotate": true,
+      "secret": "gh"
+    },
+    {
+      "slug": "ops-issues",
+      "name": "ops-issues",
+      "provider": "github",
+      "locator": "ops/tools",
+      "forge": "internal",
+      "annotate": false,
+      "secret": "gh"
+    }
+  ],
+  "repositories": [
+    {
+      "slug": "code",
+      "name": "code",
+      "forge": "enterprise",
+      "owner": "acme",
+      "repo": "code",
+      "base_branch": "main",
+      "secret_name": "gh",
+      "landing_policy": "merge-on-checks",
+      "park_timeout_hours": null
+    },
+    {
+      "slug": "old-code",
+      "name": "old-code",
+      "forge": "enterprise",
+      "owner": "acme",
+      "repo": "old-code",
+      "base_branch": "main",
+      "secret_name": "gh",
+      "landing_policy": "merge-on-checks",
+      "park_timeout_hours": null
+    },
+    {
+      "slug": "tools",
+      "name": "tools",
+      "forge": "internal",
+      "owner": "ops",
+      "repo": "tools",
+      "base_branch": "trunk",
+      "secret_name": "gh",
+      "landing_policy": "merge-on-checks",
+      "park_timeout_hours": null
+    }
+  ],
+  "scopes": [],
+  "routines": []
+}

@@ -334,7 +334,6 @@ def import_legacy_config(
         authoring = build_config_authoring(
             stores,
             cipher=secret_cipher(hub_key_provider(environ, data_dir=config.data_dir)),
-            events=None,
             offers=ForgeKindOffers(),
         )
         existing = ExistingConfig(

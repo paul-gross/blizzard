@@ -64,7 +64,7 @@ nodes:
 
 _REPOSITORIES = tuple(
     RepositorySeed(
-        forge_api_url="http://forge.one",
+        api_base="http://forge.one",
         owner="acme",
         repo=name,
         base_branch="main",

@@ -22,6 +22,7 @@ from blizzard.hub.domain.projects.authoring import ProjectAuthoring
 from blizzard.hub.domain.projects.model import Project
 from blizzard.hub.domain.projects.order import LandingOrderConflict, PositionFact, RepositoryNotLinked
 from blizzard.hub.secrets import hub_key_provider
+from blizzard.hub.store.internal.forge_record_store import ForgeRecordStore
 from blizzard.hub.store.internal.project_link_store import ProjectLinkStore
 from blizzard.hub.store.internal.project_position_store import ProjectPositionStore
 from blizzard.hub.store.internal.project_store import ProjectStore
@@ -33,7 +34,9 @@ from tests.support.scaffolding import (
     default_tenant,
     first_color,
     hub_migration_prototype,
+    hub_store_connections,
     scoped_connections,
+    seed_forge,
 )
 
 _T0 = datetime(2026, 10, 29, 12, 0, tzinfo=UTC)
@@ -66,8 +69,7 @@ class _World:
 
     def _repository(self, name: str) -> ConfiguredRepository:
         draft = RepositoryDraft(owner="acme", repo=name, base_branch="main", secret_name="forge-token")
-        choice = ForgeChoice(api_base="https://api.github.com")
-        return self.config.create_repository_naming(name, None, draft, choice, OP).record
+        return self.config.create_repository_naming(name, None, draft, _on_github(self.engine), OP)
 
     def order(self) -> list[tuple[str, float | None]]:
         return [(link.slug, link.position) for link in self.positions.landing_links(self.project.project_id).links]
@@ -219,3 +221,10 @@ def test_an_unlinked_repository_cannot_be_ordered(world: _World) -> None:
     world.authoring.unlink_repository(link, OP)
     with pytest.raises(RepositoryNotLinked):
         world.put("web")
+
+
+def _on_github(engine: Engine) -> ForgeChoice:
+    """The forge choice naming the forge holding GitHub's API origin, made when none does."""
+    forge = ForgeRecordStore(hub_store_connections(engine)).get(seed_forge(engine, "https://api.github.com"))
+    assert forge is not None
+    return ForgeChoice(forge=forge.forge_id, named=forge)

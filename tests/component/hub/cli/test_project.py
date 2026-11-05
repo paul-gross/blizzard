@@ -21,7 +21,7 @@ from blizzard.hub.api.auth_session import TENANT_HEADER
 from blizzard.hub.cli import hub as hub_group
 from blizzard.hub.cli.project_option import project_option, project_query
 from blizzard.hub.domain.projects.order import LandingOrderConflict
-from tests.support.scaffolding import HubHarness, build_hub, default_project, seed_project
+from tests.support.scaffolding import HubHarness, build_hub, default_project, ensure_fixture_forge, seed_project
 from tests.support.worker_http import Bound, bind_stubs
 
 _HUB_URL = "http://testserver"
@@ -38,12 +38,19 @@ def _seed_records(client: TestClient) -> None:
     _ok(client.post("/api/secrets", json={"name": "token", "value": "v"}))
     _ok(
         client.post(
-            "/api/work-sources", json={"slug": "acme", "provider": "github", "locator": "a/w", "secret": "token"}
+            "/api/work-sources",
+            json={
+                "slug": "acme",
+                "provider": "github",
+                "locator": "a/w",
+                "secret": "token",
+                "forge": ensure_fixture_forge(client, "https://api.github.com"),
+            },
         )
     )
     repository = {
         "slug": "acme-repo",
-        "forge_api_url": "https://forge.example",
+        "forge": ensure_fixture_forge(client, "https://forge.example"),
         "owner": "acme",
         "repo": "widgets",
         "base_branch": "main",
@@ -295,7 +302,7 @@ def test_a_hex_color_is_stated_on_create_and_edit_and_a_malformed_one_is_refused
 def _seed_second_repository(client: TestClient) -> None:
     repository = {
         "slug": "acme-lib",
-        "forge_api_url": "https://forge.example",
+        "forge": ensure_fixture_forge(client, "https://forge.example"),
         "owner": "acme",
         "repo": "lib",
         "base_branch": "main",

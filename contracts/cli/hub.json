@@ -3225,7 +3225,7 @@
     "config": {
       "commands": {
         "apply": {
-          "help": "Apply the declarative document FILE (.yaml, .yml or .json) in one transaction.\n\nCreates what is absent, edits only the fields the document states, enables what is retired, and never\ntouches a record it leaves out. Any refusal leaves everything unchanged; --dry-run prints the same outcome. An\nentry's address field is resolved to the forge holding that origin and warned about.",
+          "help": "Apply the declarative document FILE (.yaml, .yml or .json) in one transaction.\n\nCreates what is absent, edits only the fields the document states, enables what is retired, and never\ntouches a record it leaves out. Any refusal leaves everything unchanged; --dry-run prints the same outcome. The\nhub applies a version-2 document only.",
           "params": [
             {
               "hidden": false,
@@ -3413,7 +3413,7 @@
           "short_help": "Name every record the forge migration would refuse \u2014 offline, read-only, while the hub serves."
         },
         "export": {
-          "help": "Print every active work source, repository and secret name as a document that applies back unchanged.\n\nRetired records are left out, since applying one would enable it.",
+          "help": "Print every active work source, repository and secret name as a document that applies back unchanged.\n\nRetired records are left out, since applying one would enable it. The hub exports version 2 only, and refuses\nversion 1 naming it.",
           "params": [
             {
               "help": "Configuration document version to print.",
@@ -8000,7 +8000,7 @@
       ],
       "commands": {
         "create": {
-          "help": "Add repository SLUG at revision 1, named NAME, else its slug, on the forge --forge names.\n\nExactly one of --forge and --forge-api-url names the forge; --forge-api-url is the old way, resolved to the forge\nholding that origin \u2014 made when none does \u2014 and warned about.\n\nRefused when SLUG is another repository's current slug, when the forge, owner and repo are already taken \u2014 a\nretired repository keeps its claim \u2014 when the secret is missing or retired, or when the forge cannot honour\n--policy. The hub resolves a chunk's commits against the record on its next deliver.",
+          "help": "Add repository SLUG at revision 1, named NAME, else its slug, on the forge --forge names.\n\nRefused when no --forge names the forge, when SLUG is another repository's current slug, when the forge, owner\nand repo are already taken \u2014 a retired repository keeps its claim \u2014 when the secret is missing or retired, or\nwhen the forge cannot honour --policy. The hub resolves a chunk's commits against the record on its next deliver.",
           "params": [
             {
               "hidden": false,
@@ -8032,18 +8032,6 @@
               "name": "forge",
               "opts": [
                 "--forge"
-              ],
-              "required": false,
-              "secondary_opts": [],
-              "type": "text"
-            },
-            {
-              "help": "Deprecated \u2014 use --forge. The forge's API origin, an http(s) URL, resolved to the forge holding it.",
-              "hidden": false,
-              "kind": "option",
-              "name": "forge_api_url",
-              "opts": [
-                "--forge-api-url"
               ],
               "required": false,
               "secondary_opts": [],
@@ -8206,18 +8194,6 @@
               "name": "forge",
               "opts": [
                 "--forge"
-              ],
-              "required": false,
-              "secondary_opts": [],
-              "type": "text"
-            },
-            {
-              "help": "Deprecated \u2014 use --forge. The new forge API origin.",
-              "hidden": false,
-              "kind": "option",
-              "name": "forge_api_url",
-              "opts": [
-                "--forge-api-url"
               ],
               "required": false,
               "secondary_opts": [],
@@ -11821,7 +11797,7 @@
       ],
       "commands": {
         "create": {
-          "help": "Add work source SLUG at revision 1, named NAME, else its slug, on the forge --forge names.\n\nWithout --forge the source names its forge the old way \u2014 --api-base, or GitHub's API when it is left out \u2014 resolved\nto the forge holding that origin, made when none does, and warned about.\n\nRefused when SLUG is another source's current slug or ``hub`` (the built-in source's), when the provider and\nlocator are already taken \u2014 a retired source keeps its claim \u2014 or when the secret is missing or retired. The hub\nreads the record on its next use of the source.",
+          "help": "Add work source SLUG at revision 1, named NAME, else its slug, on the forge --forge names.\n\nRefused when no --forge names the forge, when SLUG is another source's current slug or ``hub`` (the built-in\nsource's), when the provider and locator are already taken \u2014 a retired source keeps its claim \u2014 or when the\nsecret is missing or retired. The hub\nreads the record on its next use of the source.",
           "params": [
             {
               "hidden": false,
@@ -11889,30 +11865,6 @@
               "name": "forge",
               "opts": [
                 "--forge"
-              ],
-              "required": false,
-              "secondary_opts": [],
-              "type": "text"
-            },
-            {
-              "help": "Deprecated \u2014 use --forge. Puts the source on the forge holding this API origin, made when none does.",
-              "hidden": false,
-              "kind": "option",
-              "name": "api_base",
-              "opts": [
-                "--api-base"
-              ],
-              "required": false,
-              "secondary_opts": [],
-              "type": "text"
-            },
-            {
-              "help": "Deprecated \u2014 use --forge. Must be that forge's web origin, or the create is refused; it sets nothing.",
-              "hidden": false,
-              "kind": "option",
-              "name": "web_base",
-              "opts": [
-                "--web-base"
               ],
               "required": false,
               "secondary_opts": [],
@@ -12059,30 +12011,6 @@
               "type": "text"
             },
             {
-              "help": "Deprecated \u2014 use --forge. Moves the source to the forge holding this API origin, made when none does.",
-              "hidden": false,
-              "kind": "option",
-              "name": "api_base",
-              "opts": [
-                "--api-base"
-              ],
-              "required": false,
-              "secondary_opts": [],
-              "type": "text"
-            },
-            {
-              "help": "Deprecated \u2014 use --forge. Must be the source's forge's web origin, or the edit is refused; it sets nothing.",
-              "hidden": false,
-              "kind": "option",
-              "name": "web_base",
-              "opts": [
-                "--web-base"
-              ],
-              "required": false,
-              "secondary_opts": [],
-              "type": "text"
-            },
-            {
               "help": "Turn forge annotation on or off.",
               "hidden": false,
               "kind": "option",
@@ -12097,7 +12025,7 @@
               "type": "boolean"
             },
             {
-              "help": "Clear a field; repeatable. Clearing secret unsets it; clearing api-base moves the source to GitHub's forge; clearing web-base changes nothing, since the web origin is the forge's, and is warned about.",
+              "help": "Clear a field; repeatable. Clearing secret unsets it.",
               "hidden": false,
               "kind": "option",
               "name": "clear",

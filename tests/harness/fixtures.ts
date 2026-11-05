@@ -84,10 +84,11 @@ interface Fixtures {
   openedSubscriptions: Subscription[];
 }
 
-/** The hub's wire types, for a spec that builds a typed literal: `satisfies Wire.WorkSourceDocument`. */
+/** The hub's wire types, for a spec that builds a typed literal: `satisfies Wire.WorkSourceCreateRequest`. */
 export type * as Wire from './client/wire/hub/types.gen';
 export type { ForgeApi, HubApi };
 export type { Repository };
+export { FIXTURE_FORGE } from './hubs';
 
 /** The package's `test` and `expect`, and the wire types: the only module a spec imports. */
 export const test = mergeTests(tenancy, runnerWorld, uiWorld).extend<Fixtures>({

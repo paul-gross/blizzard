@@ -2,7 +2,7 @@
 
 Creates `cadences`, `cadence_chores`, `cadence_chore_scopes`, and `cadence_lifecycle_facts`, empty, each tenant-keyed
 with a tenant-led index. Touches no existing table and writes no `config_changes` row. Downgrade drops the four.
-Revision ID: 20261105_1200_cadences
+Revision ID: 20261105_1300_cadences
 Revises: 20261105_0900_routine_slug
 """
 
@@ -15,8 +15,8 @@ from alembic import op
 
 from blizzard.foundation.store.utc import UtcDateTime
 
-revision: str = "20261105_1200_cadences"
-down_revision: str | None = "20261105_0900_routine_slug"
+revision: str = "20261105_1300_cadences"
+down_revision: str | None = "20261105_1200_forge_references_required"
 branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
 

@@ -15,8 +15,8 @@ from tests.support.scaffolding import migrate_to
 
 pytestmark = [pytest.mark.component]
 
-_PARENT = "20261105_0900_routine_slug"
-_CADENCES = "20261105_1200_cadences"
+_PARENT = "20261105_1200_forge_references_required"
+_CADENCES = "20261105_1300_cadences"
 _CREATED = ("cadences", "cadence_chores", "cadence_chore_scopes", "cadence_lifecycle_facts")
 
 

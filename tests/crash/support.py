@@ -26,7 +26,6 @@ from blizzard.runner.composition import build_host_stores
 from blizzard.runner.config import RunnerConfig
 from blizzard.runner.route_paths import runner_prefix
 from blizzard.runner.store import schema as runner_schema
-from blizzard.wire.work_source import WorkSourceDocument
 from tests.support.fleet_world import REPO_NAME, basic_workspace, scripted_build
 from tests.support.harness_sections import claude_code, opencode, sections
 from tests.support.host_files import (
@@ -41,10 +40,12 @@ from tests.support.runner_fakes import (
 from tests.support.runner_join import join_runner, runner_spawn_env
 from tests.support.scaffolding import (
     LISTENING_FILE,
+    RecordBody,
     await_listening_url,
     create_repositories,
     create_work_sources,
     daemon_log_sink,
+    ensure_fixture_forge,
     fixture_repositories,
     fixture_work_source,
     listening_args,
@@ -59,9 +60,9 @@ REPO = f"{OWNER}/{REPO_NAME}"
 TICK_SECONDS = "0.3"
 
 
-def default_work_sources(forge_url: str) -> tuple[WorkSourceDocument, ...]:
-    """The one source the crash sweep's ``build -> deliver`` scenarios ingest against."""
-    return (fixture_work_source(REPO_NAME, REPO, forge_url),)
+def default_work_sources(forge: str) -> tuple[RecordBody, ...]:
+    """The one source the crash sweep's ``build -> deliver`` scenarios ingest against, on ``forge``."""
+    return (fixture_work_source(REPO_NAME, REPO, forge),)
 
 
 # Env var names the crash mechanism and the mock-harness fence read.
@@ -731,7 +732,7 @@ def start_hub(
     *,
     forge_url: str,
     crash_point: str | None,
-    work_sources: Sequence[WorkSourceDocument] | None = None,
+    work_sources: Sequence[RecordBody] | None = None,
     new_session: bool = False,
     extra_env: dict[str, str] | None = None,
 ) -> subprocess.Popen[str]:
@@ -768,9 +769,10 @@ def start_hub(
         if first_start:
             with httpx2.Client(base_url=url, timeout=30.0) as hub:
                 await_http(hub, "/api/health", proc=proc)
-                seeded = work_sources if work_sources is not None else default_work_sources(forge_url)
+                forge = ensure_fixture_forge(hub, forge_url)
+                seeded = work_sources if work_sources is not None else default_work_sources(forge)
                 create_work_sources(hub, seeded)
-                create_repositories(hub, fixture_repositories(seeded, forge_url))
+                create_repositories(hub, fixture_repositories(seeded, forge))
     return proc
 
 

@@ -10,11 +10,9 @@ from pydantic import BaseModel, ConfigDict, Field
 from blizzard.foundation.landing_policy import LandingPolicy
 from blizzard.wire.base import WireModel
 from blizzard.wire.cadence import CadenceDocument
-from blizzard.wire.forge import OldFieldWarning
-from blizzard.wire.repository import RepositoryDocument
+from blizzard.wire.forge import DEPRECATED_FIELD, OldFieldWarning
 from blizzard.wire.routine import RoutineDocument
 from blizzard.wire.scope import ScopeDocument
-from blizzard.wire.work_source import WorkSourceDocument
 
 
 class FieldChangeView(WireModel):
@@ -102,26 +100,6 @@ class CadenceEntry(CadenceDocument):
     project: str | None = None
 
 
-class ConfigDocument(BaseModel):
-    """A declarative configuration document. Each entry is the kind's own document model, so a field an
-    entry omits is left as stored; projects reconcile before scopes and routines, and scopes before
-    routines, so an entry may name a project or a scope the same document declares; cadences reconcile after
-    routines, so a document may declare a routine and the cadence that keeps it; ``secrets`` lists
-    secret names that must already be active. ``GET /api/config/export`` writes every field of every
-    entry, ``projects`` first, and names every project by its slug."""
-
-    model_config = ConfigDict(extra="forbid")
-
-    version: Literal[1]
-    projects: list[ProjectDocument] = []
-    secrets: list[str] = []
-    work_sources: list[WorkSourceDocument] = []
-    repositories: list[RepositoryDocument] = []
-    scopes: list[ScopeEntry] = []
-    routines: list[RoutineEntry] = []
-    cadences: list[CadenceEntry] = []
-
-
 class ForgeEntry(BaseModel):
     """A forge declared by slug; an omitted mutable field stays as stored."""
 
@@ -165,7 +143,12 @@ class WorkSourceEntry(BaseModel):
 
 
 class ConfigDocumentV2(BaseModel):
-    """A declarative document whose forge records and references are explicit."""
+    """A declarative configuration document, version 2 — the one version a hub applies and exports. Each entry is the
+    kind's own document model, so a field an entry omits is left as stored; forges reconcile before the records that
+    name them, projects before scopes and routines, and scopes before routines, so an entry may name a forge, a
+    project or a scope the same document declares; ``secrets`` lists secret names that must already be active.
+    ``GET /api/config/export`` writes every field of every entry, ``projects`` first, and names every project by its
+    slug."""
 
     model_config = ConfigDict(extra="forbid")
 
@@ -192,11 +175,10 @@ class ConfigApplyOutcome(WireModel):
 
 class ConfigApplyResponse(WireModel):
     """What an apply did, or — under ``dry_run`` — would do, with the identical ``outcomes``.
-    ``apply_id`` groups the change rows a real apply wrote; ``None`` for a dry run. ``warnings`` names each old address
-    field an entry used and the forge it resolved to."""
+    ``apply_id`` groups the change rows a real apply wrote; ``None`` for a dry run."""
 
     dry_run: bool
     apply_id: str | None = None
     outcomes: list[ConfigApplyOutcome]
-    #: One entry per old address field an entry used, naming the forge it resolved to.
-    warnings: list[OldFieldWarning] = []
+    #: Always empty.
+    warnings: list[OldFieldWarning] = Field(default=[], json_schema_extra=DEPRECATED_FIELD)

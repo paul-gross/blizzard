@@ -5,9 +5,6 @@ per-kind verbs decide, and hands the whole ordered plan to :class:`IConfigApplyW
 transaction. It never retires a record the document leaves out. A record the document omits a field of keeps
 that field (sparse merge, ``bzh:configured-record``); a record that already stands as declared writes nothing.
 
-The forges the entries name by an old address field that no forge holds are planned beside them, one per origin, and
-commit first, each attributed to the first entry naming it.
-
 A section of a kind owned by a package that builds on this one — the ``projects`` section — is planned by its owner
 and handed in already planned; its writes commit after the repositories and before the scopes."""
 
@@ -124,18 +121,6 @@ class ForgeDeclaration:
 
 @domain_model
 @dataclass(frozen=True)
-class PlannedForge:
-    """A forge an apply creates for an origin its entries name that no forge holds, attributed to the first entry —
-    ``section`` and ``index`` — that names it."""
-
-    section: str
-    index: int
-    record: ConfiguredForge
-    change: ConfigChange
-
-
-@domain_model
-@dataclass(frozen=True)
 class DeclaredReferences:
     """What an entry's reference checks read: every ``(project id, slug)`` of a scope stored or declared in the
     document, the graph names that resolve to an enabled graph, and each stored routine's linked scope set by its
@@ -235,8 +220,6 @@ class ApplyPlan:
 @dataclass(frozen=True)
 class ConfigDeclaration:
     secrets: tuple[str, ...] = ()
-    #: The forges the entries need created, committed before any entry.
-    forges: tuple[PlannedForge, ...] = ()
     declared_forges: tuple[ForgeDeclaration, ...] = ()
     work_sources: tuple[WorkSourceDeclaration, ...] = ()
     repositories: tuple[RepositoryDeclaration, ...] = ()
@@ -298,9 +281,6 @@ def reconcile(declaration: ConfigDeclaration, stored: StoredConfig, ctx: ChangeC
             raise ApplyEntryRefused(SECRETS_SECTION, index, SecretNotActive(name, retired=state is not None))
     plan = _Accumulator()
     _reconcile_section(_ForgeSection(declaration.declared_forges, stored, ctx, at), stored.forges, plan)
-    for forge in declaration.forges:
-        plan.writes.append(PlannedWrite(forge.section, forge.index, forge.record, None, forge.change))
-        plan.outcomes.append(EntryOutcome(RecordKind.FORGE, forge.record.slug, forge.change.op, forge.change.diff))
     _reconcile_section(_WorkSourceSection(declaration.work_sources, stored, ctx, at), stored.work_sources, plan)
     _reconcile_section(_RepositorySection(declaration.repositories, stored, ctx, at), stored.repositories, plan)
     plan.writes.extend(declaration.projects.writes)

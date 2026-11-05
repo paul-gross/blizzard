@@ -106,7 +106,7 @@ def _deliver(
         tmp_path / "hub",
         forges=double.forges,
         repositories=[
-            replace(DEFAULT_FIXTURE_REPOSITORIES[0], owner=owner, forge_api_url=forge)
+            replace(DEFAULT_FIXTURE_REPOSITORIES[0], owner=owner, api_base=forge)
             for owner, forge in itertools.product(owners, forges or ("https://api.github.com",))
         ],
     )

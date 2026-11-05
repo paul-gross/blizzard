@@ -1,24 +1,55 @@
-"""Forge wire models — what a repository or work-source write answers about the forge it named the old way."""
+"""Forge wire models — the ``/api/forges`` record verbs, and how a repository or work-source write records the
+address fields the forge now carries."""
 
 from __future__ import annotations
 
-from pydantic import BaseModel, ConfigDict
+from typing import Any, ClassVar, Self, cast
+
+from pydantic import BaseModel, ConfigDict, ModelWrapValidatorHandler, PrivateAttr, model_validator
 from pydantic.config import JsonDict
 
 from blizzard.wire.base import WireModel
 
-#: The JSON Schema mark of an old address field, kept through the forge transition beside the ``forge`` reference.
+#: The JSON Schema mark of a field kept on the wire only until a later release removes it.
 DEPRECATED_FIELD: JsonDict = {"deprecated": True}
 
 
 class OldFieldWarning(WireModel):
-    """One old address field a write used — ``forge_api_url``, ``api_base`` or ``web_base`` — and the forge it
-    resolved to, by id and slug."""
+    """A warning a write once answered about an address field — ``field``, and the forge it resolved to, by id and
+    slug. No write answers one now."""
 
     field: str
     forge_id: str
     forge_slug: str
     message: str
+
+
+class MovedFieldsRequest(BaseModel):
+    """A request body that records which of ``moved_fields`` — the address fields the forge now carries — it was sent,
+    with the values sent, as ``moved``, so the domain can refuse them naming the forge. None of them is part of the
+    body's schema, and every other undeclared field is refused as ever."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    moved_fields: ClassVar[tuple[str, ...]] = ()
+    _moved: tuple[tuple[str, object], ...] = PrivateAttr(default=())
+
+    @model_validator(mode="wrap")
+    @classmethod
+    def _record_moved(cls, data: Any, handler: ModelWrapValidatorHandler[Self]) -> Self:
+        moved: tuple[tuple[str, object], ...] = ()
+        if isinstance(data, dict):
+            body = cast(dict[str, object], data)
+            moved = tuple((name, body[name]) for name in cls.moved_fields if name in body)
+            data = {key: value for key, value in body.items() if key not in cls.moved_fields}
+        model = handler(data)
+        model._moved = moved
+        return model
+
+    @property
+    def moved(self) -> tuple[tuple[str, object], ...]:
+        """Each moved field the body carried, in the order ``moved_fields`` lists them, with the value sent."""
+        return self._moved
 
 
 class ForgeCreateRequest(BaseModel):

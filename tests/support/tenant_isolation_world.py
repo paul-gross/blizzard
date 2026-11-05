@@ -19,6 +19,7 @@ from tests.support.scaffolding import (
     TenantHarness,
     chunk_unit,
     default_project,
+    ensure_fixture_forge,
     scoped_connections,
     seed_membership,
     seed_session,
@@ -202,7 +203,7 @@ def _seed(hub: HubHarness, harness: TenantHarness, label: str) -> _Tenant:
     t.keep("secret", _ok(c.post("/api/secrets", json={"name": f"{label}-secret", "value": "v"}), 201)["name"])
     repository = {
         "slug": f"{label}-repo",
-        "forge_api_url": "https://forge.example",
+        "forge": ensure_fixture_forge(c, "https://forge.example"),
         "owner": "acme",
         "repo": f"{label}-repo",
         "base_branch": "main",
@@ -224,7 +225,13 @@ def _seed(hub: HubHarness, harness: TenantHarness, label: str) -> _Tenant:
     assert flow is not None
     t.keep("flow_id", flow.flows[0].flow_id)
     t.keep("submission_id", flow.submission_id)
-    source = {"slug": f"{label}-source", "provider": "github", "locator": f"acme/{label}", "secret": f"{label}-secret"}
+    source = {
+        "slug": f"{label}-source",
+        "provider": "github",
+        "locator": f"acme/{label}",
+        "forge": created_repository["forge_slug"],
+        "secret": f"{label}-secret",
+    }
     t.keep("source", _ok(c.post("/api/work-sources", json=source), 201)["work_source_id"])
     FindingStore(scoped_connections(hub.engine, harness.tenant)).add(
         t.keep("finding_id", f"fin_{label}"),

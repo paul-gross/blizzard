@@ -8,7 +8,6 @@ file. `blizzard hub config apply` reconciles the hub's stored records to it in a
 blizzard hub config apply config.yaml --dry-run
 blizzard hub config apply config.yaml
 blizzard hub config export --format json > config.json
-blizzard hub config export --version 1 > legacy.yaml
 ```
 
 ## The document
@@ -68,13 +67,15 @@ cadences:
         scopes: all
 ```
 
-`version` is `1` or `2`. Version 2 declares forges and names them in repository and work-source entries; version 1
-retains its address fields. Each entry carries the fields its own record takes, so [work sources](./work-sources.md),
-[repositories](./repositories.md), [scopes and routines](./routines-and-scopes.md), and [cadences](./cadences.md) own
-the field meanings, and `GET /api/config/schema/work-sources`, `/repositories`, `/scopes`, `/routines`, and `/cadences`
-serve each entry's JSON Schema. Pass `?version=2` for the new entry shapes and `/api/config/schema/forges?version=2` for
-forge entries; the default is version 1. An unknown field is refused. `secrets` lists secret names that must already
-exist and be active; a document never carries a secret's value, so set one first with `blizzard hub secret create`.
+`version` is `2`: a document with any other `version`, or none, is refused `422 config_version_retired` at `version`,
+naming version 2. Version 1, whose entries carried the forge's address in place of `forge`, is retired
+([upgrade.md](../upgrade.md#forges-replace-the-address-fields)). Each entry carries the fields its own record takes, so
+[work sources](./work-sources.md), [repositories](./repositories.md), [scopes and routines](./routines-and-scopes.md),
+and [cadences](./cadences.md) own the field meanings, and `GET /api/config/schema/work-sources`, `/repositories`,
+`/scopes`, `/routines`, and `/cadences` serve each entry's JSON Schema, and `/api/config/schema/forges` serves forge
+entries; `?version=1` is refused `config_version_retired`. An unknown field is refused. `secrets` lists secret names
+that must already exist and be active; a document never carries a secret's value, so set one first with
+`blizzard hub secret create`.
 
 A scope entry is keyed by its `slug`, and so is a routine entry; a routine's `name` is its editable display name. An
 entry states its `slug`, its `name`, or both. A `name`-only entry is the older form: it is keyed by the name as the
@@ -94,13 +95,12 @@ work source entry whose slug is `hub`, the built-in source's, is refused `422` a
 carry `landing_policy` and `park_timeout_hours` ([repositories.md](./repositories.md#fields)); an unknown policy, or one
 the repository's forge cannot honour, is refused `422` at the entry's `landing_policy`.
 
-A version-1 entry that carries an address (`forge_api_url`, `api_base`, or `web_base`) applies as it always did, but
-each address resolves to the forge with that origin, created when none exists, and the apply result lists a warning for
-it ([forges.md](./forges.md#the-old-address-fields)). A version-2 entry names its forge with `forge`, an id or a slug.
+A work source or repository entry names its forge with `forge`, an id or a slug; the forge carries the API and web
+origins, so an entry carrying `forge_api_url`, `api_base`, or `web_base` is refused as an unknown field.
 
-A version-2 forge entry is keyed by `slug` and carries `kind`, `api_base`, and optional `name` and `web_base`. The kind
-of an existing forge cannot change. A slug another forge left is refused, naming its holder. Forge entries reconcile
-after the secret check and before sources and repositories, so those entries may name a forge declared in the same file.
+A forge entry is keyed by `slug` and carries `kind`, `api_base`, and optional `name` and `web_base`. The kind of an
+existing forge cannot change. A slug another forge left is refused, naming its holder. Forge entries reconcile after the
+secret check and before sources and repositories, so those entries may name a forge declared in the same file.
 [forges.md](./forges.md) owns the forge record.
 
 A project entry is keyed by its `slug`; one the document creates needs a `name`. A `color` it states is stored, and one
@@ -169,10 +169,9 @@ Each work source and repository is written with its `slug` and `name`, each repo
 repository also gets its `landing_order`; one that ranks nothing gets none. The built-in `hub` work source is never
 exported.
 
-The CLI exports version 2 by default; `--version 1` exports the old address-based shape. `GET /api/config/export`
-defaults to version 1 for existing clients; pass `?version=2` for the forge-based shape. In version 2, `forges` follows
-`projects`, references use forge slugs instead of address fields, and even an unreferenced active forge is exported. A
-version-2 export applies back unchanged.
+An export is a version-2 document, from the CLI and from `GET /api/config/export` alike; `--version 1`, or `?version=1`,
+is refused `config_version_retired`. `forges` follows `projects`, references use forge slugs, and even an unreferenced
+active forge is exported. An export applies back unchanged.
 
 ## Recording
 

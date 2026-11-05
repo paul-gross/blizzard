@@ -4,12 +4,9 @@ All ``sqlalchemy`` usage is confined here (``bzh:dependency-inversion``). Retire
 ``forge_lifecycle_facts`` table, newest-fact-wins per id (``bzh:facts-not-status``). Every write commits its change row
 in the same transaction, and every address it stores is canonical.
 
-A forge an old address field names is created in the transaction of the repository or work-source write that names it
-(:func:`insert_new_forge`). A forge's row is locked as a secret's is (:func:`lock_forge_row`): its retire and enable,
-and every repository or work-source write naming it, take the lock first, so a retire and an enable racing on one forge
-wait for each other's commit.
-Through the forge transition every record naming a forge keeps its deprecated address columns equal to the forge's, so
-a forge edit rewrites them on each referrer in the same transaction."""
+A forge's row is locked as a secret's is (:func:`lock_forge_row`): its retire and enable, and every repository or
+work-source write naming it, take the lock first, so a retire and an enable racing on one forge wait for each other's
+commit."""
 
 from __future__ import annotations
 
@@ -35,7 +32,6 @@ from blizzard.hub.domain.config.forges import (
     ForgeSlugTaken,
     ForgeUnavailable,
     IWriteForgeRepository,
-    NewForge,
     canonical_origin,
     require_unused,
     resolve_forge_reference,
@@ -51,8 +47,6 @@ from blizzard.hub.store.schema import (
     forge_former_slugs,
     forge_lifecycle_facts,
     forges,
-    repositories,
-    work_sources,
 )
 from blizzard.hub.store.scoped import ScopedConnections, statements_of
 
@@ -160,34 +154,21 @@ def insert_forge(conn: Connection, record: ConfiguredForge, change: ConfigChange
 def update_forge(
     conn: Connection, record: ConfiguredForge, from_revision: int, left_slug: str | None, change: ConfigChange
 ) -> None:
-    """The compare-and-set edit body, inside the caller's transaction, moving the slug when ``left_slug`` is set and
-    rewriting every referrer's address columns."""
+    """The compare-and-set edit body, inside the caller's transaction, moving the slug when ``left_slug`` is set."""
     lock_forge_row(conn, record.forge_id)
     if left_slug is not None:
         _SLUGS.claim(conn, record.forge_id, record.slug)
     holder = _origin_holder(conn, record)
     if holder is not None:
         raise ForgeOriginTaken(record.fields.api_base, holder=holder)
-    columns = _columns(record)
     moved = conn.execute(
         statements_of(conn)
         .update(forges)
         .where(forges.c.forge_id == record.forge_id, forges.c.revision == from_revision)
-        .values(**columns, revision=record.revision)
+        .values(**_columns(record), revision=record.revision)
     ).rowcount
     if moved != 1:
         raise ConfigRevisionConflict("forge", record.forge_id, current=_revision(conn, record.forge_id))
-    stmts = statements_of(conn)
-    conn.execute(
-        stmts.update(repositories)
-        .where(repositories.c.forge_id == record.forge_id)
-        .values(forge_api_url=columns["api_base"])
-    )
-    conn.execute(
-        stmts.update(work_sources)
-        .where(work_sources.c.forge_id == record.forge_id)
-        .values(api_base=columns["api_base"], web_base=columns["web_base"])
-    )
     if left_slug is not None:
         _SLUGS.release(conn, record.forge_id, left_slug, left_at=change.recorded_at)
     append_change(conn, change)
@@ -234,21 +215,6 @@ def forge_holding(conn: Connection, api_base: str) -> ConfiguredForge | None:
     """The forge, retired or not, whose API origin is ``api_base``, inside the caller's transaction."""
     row = conn.execute(statements_of(conn).select(forges).where(forges.c.api_base == api_base)).first()
     return None if row is None else _reconstituted(conn, row)
-
-
-def insert_new_forge(conn: Connection, forge: NewForge) -> None:
-    """Create the forge a repository or work-source write makes, inside that write's transaction and in a savepoint of
-    its own, so a refused insert leaves the write's transaction usable on Postgres. :class:`ForgeOriginTaken` or
-    :class:`ForgeSlugTaken` when another forge holds its origin or slug — the caller decides the write again."""
-    record, change = forge
-    try:
-        with conn.begin_nested():
-            insert_forge(conn, record, change)
-    except IntegrityError as exc:
-        holder = _origin_holder(conn, record)
-        if holder is not None:
-            raise ForgeOriginTaken(record.fields.api_base, holder=holder) from exc
-        raise ForgeSlugTaken(record.slug) from exc
 
 
 class ForgeRecordStore:

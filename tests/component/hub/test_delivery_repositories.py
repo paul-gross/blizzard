@@ -34,6 +34,7 @@ from tests.support.scaffolding import (
     create_repositories,
     default_tenant,
     emitted_events,
+    ensure_fixture_forge,
     fixture_repository,
     link_project,
     pointer_token,
@@ -179,7 +180,10 @@ def _artifact_names(hub: HubHarness, chunk_id: str) -> list[str]:
 
 def test_a_resolved_visit_hands_land_a_forge_built_from_the_repository(tmp_path: Path) -> None:
     hub, forge = _hub(tmp_path)
-    create_repositories(hub.client, [fixture_repository("widget", _FORGE, owner="acme", base_branch="trunk")])
+    create_repositories(
+        hub.client,
+        [fixture_repository("widget", ensure_fixture_forge(hub.client, _FORGE), owner="acme", base_branch="trunk")],
+    )
     forge.push("acme/widget")
     chunk_id, nodes = _mint_and_claim(hub)
     _seed_at_deliver(hub, chunk_id, nodes, [("widget", None)])
@@ -192,7 +196,9 @@ def test_a_resolved_visit_hands_land_a_forge_built_from_the_repository(tmp_path:
 
 def test_a_secret_replaced_between_visits_reaches_the_next_visit(tmp_path: Path) -> None:
     hub, forge = _hub(tmp_path)
-    create_repositories(hub.client, [fixture_repository("widget", _FORGE, owner="acme")])
+    create_repositories(
+        hub.client, [fixture_repository("widget", ensure_fixture_forge(hub.client, _FORGE), owner="acme")]
+    )
     forge.push("acme/widget")
     chunk_id, nodes = _mint_and_claim(hub)
     _seed_at_deliver(hub, chunk_id, nodes, [("widget", None)])
@@ -210,7 +216,9 @@ def test_a_secret_replaced_between_visits_reaches_the_next_visit(tmp_path: Path)
 
 def test_an_unresolved_repository_reaches_no_forge_routes_failure_and_is_recorded(tmp_path: Path) -> None:
     hub, forge = _hub(tmp_path)
-    create_repositories(hub.client, [fixture_repository("widget", _FORGE, owner="acme")])
+    create_repositories(
+        hub.client, [fixture_repository("widget", ensure_fixture_forge(hub.client, _FORGE), owner="acme")]
+    )
     chunk_id, nodes = _mint_and_claim(hub)
     _seed_at_deliver(hub, chunk_id, nodes, [("gadget", None)])
 
@@ -226,7 +234,9 @@ def test_a_repository_retired_after_the_chunk_minted_still_resolves_but_a_chunk_
     tmp_path: Path,
 ) -> None:
     hub, forge = _hub(tmp_path)
-    create_repositories(hub.client, [fixture_repository("widget", _FORGE, owner="acme")])
+    create_repositories(
+        hub.client, [fixture_repository("widget", ensure_fixture_forge(hub.client, _FORGE), owner="acme")]
+    )
     forge.push("acme/widget")
     earlier, earlier_nodes = _mint_and_claim(hub)
     _seed_at_deliver(hub, earlier, earlier_nodes, [("widget", None)])
@@ -264,8 +274,8 @@ def test_records_differing_in_base_branch_each_get_their_own_forge(tmp_path: Pat
     create_repositories(
         hub.client,
         [
-            fixture_repository("widget", _FORGE, owner="acme"),
-            fixture_repository("gadget", _FORGE, owner="acme", base_branch="develop"),
+            fixture_repository("widget", ensure_fixture_forge(hub.client, _FORGE), owner="acme"),
+            fixture_repository("gadget", ensure_fixture_forge(hub.client, _FORGE), owner="acme", base_branch="develop"),
         ],
     )
     forge.push("acme/widget", "acme/gadget")
@@ -289,8 +299,9 @@ def test_records_differing_in_secret_each_get_their_own_token(tmp_path: Path) ->
     create_repositories(
         hub.client,
         [
-            fixture_repository("widget", _FORGE, owner="acme"),
-            fixture_repository("gadget", _FORGE, owner="acme") | {"secret_name": "other-forge-token"},
+            fixture_repository("widget", ensure_fixture_forge(hub.client, _FORGE), owner="acme"),
+            fixture_repository("gadget", ensure_fixture_forge(hub.client, _FORGE), owner="acme")
+            | {"secret_name": "other-forge-token"},
         ],
     )
     forge.push("acme/widget", "acme/gadget")
@@ -304,7 +315,9 @@ def test_records_differing_in_secret_each_get_their_own_token(tmp_path: Path) ->
 
 def test_an_action_that_lands_nothing_is_handed_no_forge(tmp_path: Path) -> None:
     hub, forge = _hub(tmp_path)
-    create_repositories(hub.client, [fixture_repository("widget", _FORGE, owner="acme")])
+    create_repositories(
+        hub.client, [fixture_repository("widget", ensure_fixture_forge(hub.client, _FORGE), owner="acme")]
+    )
     chunk_id, nodes = _mint_and_claim(hub)
     _seed_at_deliver(hub, chunk_id, nodes, [("widget", None)], at="record-findings")
 
@@ -321,8 +334,9 @@ def test_an_unavailable_secret_of_any_record_refuses_the_visit_naming_the_reposi
     create_repositories(
         hub.client,
         [
-            fixture_repository("widget", _FORGE, owner="acme"),
-            fixture_repository("gadget", _FORGE, owner="acme") | {"secret_name": "other-forge-token"},
+            fixture_repository("widget", ensure_fixture_forge(hub.client, _FORGE), owner="acme"),
+            fixture_repository("gadget", ensure_fixture_forge(hub.client, _FORGE), owner="acme")
+            | {"secret_name": "other-forge-token"},
         ],
     )
     secrets = hub.services.forges.secrets
@@ -348,8 +362,13 @@ def _two_hosts_one_name(hub: HubHarness) -> None:
     create_repositories(
         hub.client,
         [
-            fixture_repository("widget", "https://api.github.com", owner="acme"),
-            fixture_repository("widget-mirror", "https://git.example.test/api/v3", owner="acme", base_branch="develop")
+            fixture_repository("widget", ensure_fixture_forge(hub.client, "https://api.github.com"), owner="acme"),
+            fixture_repository(
+                "widget-mirror",
+                ensure_fixture_forge(hub.client, "https://git.example.test/api/v3"),
+                owner="acme",
+                base_branch="develop",
+            )
             | {"repo": "widget"},
         ],
     )
@@ -392,8 +411,12 @@ def test_a_chunk_with_no_commits_reaches_no_forge_and_completes(tmp_path: Path) 
 
 def test_a_name_ambiguous_across_the_tenant_lands_in_the_record_its_project_links(tmp_path: Path) -> None:
     hub, forge = _hub(tmp_path)
-    create_repositories(hub.client, [fixture_repository("widget", _FORGE, owner="acme")], project=None)
-    fork = fixture_repository("widget", _FORGE, owner="other") | {"slug": "widget-fork"}
+    create_repositories(
+        hub.client, [fixture_repository("widget", ensure_fixture_forge(hub.client, _FORGE), owner="acme")], project=None
+    )
+    fork = fixture_repository("widget", ensure_fixture_forge(hub.client, _FORGE), owner="other") | {
+        "slug": "widget-fork"
+    }
     create_repositories(hub.client, [fork])
     forge.push("other/widget")
     chunk_id, nodes = _mint_and_claim(hub)
@@ -409,7 +432,9 @@ def test_a_repository_its_project_does_not_link_reaches_no_forge_and_is_recorded
     tmp_path: Path,
 ) -> None:
     hub, forge = _hub(tmp_path)
-    create_repositories(hub.client, [fixture_repository("widget", _FORGE, owner="acme")], project=None)
+    create_repositories(
+        hub.client, [fixture_repository("widget", ensure_fixture_forge(hub.client, _FORGE), owner="acme")], project=None
+    )
     chunk_id, nodes = _mint_and_claim(hub)
     _seed_at_deliver(hub, chunk_id, nodes, [("widget", None)])
 
@@ -433,7 +458,9 @@ def test_a_repository_its_project_does_not_link_reaches_no_forge_and_is_recorded
 
 def test_a_hub_node_that_lands_nothing_still_refuses_a_repository_its_project_does_not_link(tmp_path: Path) -> None:
     hub, forge = _hub(tmp_path)
-    create_repositories(hub.client, [fixture_repository("widget", _FORGE, owner="acme")], project=None)
+    create_repositories(
+        hub.client, [fixture_repository("widget", ensure_fixture_forge(hub.client, _FORGE), owner="acme")], project=None
+    )
     chunk_id, nodes = _mint_and_claim(hub)
     _seed_at_deliver(hub, chunk_id, nodes, [("widget", None)])
 
@@ -446,7 +473,9 @@ def test_a_hub_node_that_lands_nothing_still_refuses_a_repository_its_project_do
 
 def test_a_landing_names_the_record_its_visit_started_against_though_unlinked_mid_pass(tmp_path: Path) -> None:
     hub, forge = _hub(tmp_path)
-    create_repositories(hub.client, [fixture_repository("widget", _FORGE, owner="acme")])
+    create_repositories(
+        hub.client, [fixture_repository("widget", ensure_fixture_forge(hub.client, _FORGE), owner="acme")]
+    )
     forge.push("acme/widget")
     chunk_id, nodes = _mint_and_claim(hub)
     _seed_at_deliver(hub, chunk_id, nodes, [("widget", None)])
@@ -464,7 +493,10 @@ def test_a_landing_names_the_record_its_visit_started_against_though_unlinked_mi
 def test_two_projects_linking_one_repository_land_onto_its_one_base_branch_and_record(tmp_path: Path) -> None:
     """Nothing per project separates landings: each project's chunk delivers onto the same record's base branch."""
     hub, forge = _hub(tmp_path)
-    create_repositories(hub.client, [fixture_repository("widget", _FORGE, owner="acme", base_branch="trunk")])
+    create_repositories(
+        hub.client,
+        [fixture_repository("widget", ensure_fixture_forge(hub.client, _FORGE), owner="acme", base_branch="trunk")],
+    )
     second = seed_project(hub.engine, "second")
     link_project(hub.engine, project=second, source="default")
     linked = hub.client.put("/api/projects/second/repository-links/widget")

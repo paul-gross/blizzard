@@ -1,5 +1,5 @@
 {
-  "head_revision": "20261105_1200_cadences",
+  "head_revision": "20261105_1300_cadences",
   "store": "hub",
   "tables": {
     "answer_deliveries": {
@@ -6572,15 +6572,9 @@
           "server_default": false,
           "type": "String"
         },
-        "forge_api_url": {
-          "deprecated": "0.3",
-          "nullable": false,
-          "server_default": false,
-          "type": "String"
-        },
         "forge_id": {
           "deprecated": null,
-          "nullable": true,
+          "nullable": false,
           "server_default": false,
           "type": "String"
         },
@@ -6649,6 +6643,17 @@
       "foreign_keys": [
         {
           "columns": [
+            "forge_id"
+          ],
+          "references": {
+            "columns": [
+              "forge_id"
+            ],
+            "table": "forges"
+          }
+        },
+        {
+          "columns": [
             "tenant_id"
           ],
           "references": {
@@ -6678,7 +6683,7 @@
       "unique": [
         [
           "tenant_id",
-          "forge_api_url",
+          "forge_id",
           "owner",
           "repo"
         ],
@@ -9935,12 +9940,6 @@
           "server_default": false,
           "type": "Boolean"
         },
-        "api_base": {
-          "deprecated": "0.3",
-          "nullable": true,
-          "server_default": false,
-          "type": "String"
-        },
         "created_at": {
           "deprecated": null,
           "nullable": false,
@@ -9955,7 +9954,7 @@
         },
         "forge_id": {
           "deprecated": null,
-          "nullable": true,
+          "nullable": false,
           "server_default": false,
           "type": "String"
         },
@@ -10001,12 +10000,6 @@
           "server_default": false,
           "type": "String"
         },
-        "web_base": {
-          "deprecated": "0.3",
-          "nullable": true,
-          "server_default": false,
-          "type": "String"
-        },
         "work_source_id": {
           "deprecated": null,
           "nullable": false,
@@ -10016,6 +10009,17 @@
       },
       "deprecated": null,
       "foreign_keys": [
+        {
+          "columns": [
+            "forge_id"
+          ],
+          "references": {
+            "columns": [
+              "forge_id"
+            ],
+            "table": "forges"
+          }
+        },
         {
           "columns": [
             "tenant_id"
@@ -10048,6 +10052,7 @@
         [
           "tenant_id",
           "provider",
+          "forge_id",
           "locator"
         ],
         [

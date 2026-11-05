@@ -89,7 +89,6 @@ from blizzard.hub.domain.chunk.ports.stores import ChunkReadStores, ChunkStores
 from blizzard.hub.domain.config.authoring import ConfigAuthoring
 from blizzard.hub.domain.config.capabilities import IForgeOffers
 from blizzard.hub.domain.config.changes import IReadConfigChanges, ISecretReferences
-from blizzard.hub.domain.config.forge_resolution import IEventRecorder
 from blizzard.hub.domain.config.forges import IReadForgeRepository
 from blizzard.hub.domain.config.repositories import IReadRepositoryRecordRepository
 from blizzard.hub.domain.config.secrets import IHubKeyProvider, ISecretCatalog, ISecretCipher, ISecretReader
@@ -875,12 +874,9 @@ def build_live_config(stores: TenantStores, *, cipher: ISecretCipher) -> LiveCon
     )
 
 
-def build_config_authoring(
-    stores: TenantStores, *, cipher: ISecretCipher, events: IEventRecorder | None, offers: IForgeOffers
-) -> ConfigAuthoring:
-    """The one configured-record writer of the tenant ``stores`` serve, sealing with ``cipher``, recording the old
-    address fields a door's write used through ``events`` — ``None`` where no door writes — and checking a repository's
-    landing policy against what ``offers`` says its forge offers."""
+def build_config_authoring(stores: TenantStores, *, cipher: ISecretCipher, offers: IForgeOffers) -> ConfigAuthoring:
+    """The one configured-record writer of the tenant ``stores`` serve, sealing with ``cipher`` and checking a
+    repository's landing policy against what ``offers`` says its forge offers."""
     return ConfigAuthoring(
         work_sources=stores.work_source_records,
         repositories=stores.repository_records,
@@ -890,7 +886,6 @@ def build_config_authoring(
         cipher=cipher,
         apply_writer=stores.config_apply,
         import_writer=stores.config_import,
-        events=events,
         clock=stores.clock,
     )
 
@@ -1074,7 +1069,7 @@ def build_tenant_services(stores: TenantStores, parts: TenantServiceParts, *, ev
     routine_store = RoutineStore(tenant_connections)
     routine_scope_store = RoutineScopeStore(tenant_connections)
     cadence_store = CadenceStore(tenant_connections)
-    config_authoring = build_config_authoring(stores, cipher=parts.secret_cipher, events=event_log, offers=forges)
+    config_authoring = build_config_authoring(stores, cipher=parts.secret_cipher, offers=forges)
     finding_set_store = FindingSetStore(tenant_connections)
     run_context_store = RunContextStore(tenant_connections)
     garden_delivery_store = GardenDeliveryStore(tenant_connections)

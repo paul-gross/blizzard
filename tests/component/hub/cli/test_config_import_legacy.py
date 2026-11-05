@@ -21,6 +21,7 @@ from blizzard.hub.store.schema import (
     artifacts,
     config_changes,
     config_import_facts,
+    forges,
     project_repository_links,
     project_source_links,
     repositories,
@@ -68,6 +69,7 @@ _COMMITS = (
     ("git@github.com:acme/widget.git", "widget"),
 )
 _TABLES = (
+    forges,
     secrets,
     work_sources,
     repositories,
@@ -144,8 +146,9 @@ def test_the_import_writes_the_expected_records_change_rows_and_one_fact(hub: Hu
         ("blizzard", "paul-gross/blizzard", "bz-shared-token", True),
         ("infra", "paul-gross/blizzard-infra", "bz-shared-token", False),
     }
+    api_base = {r["forge_id"]: r["api_base"] for r in rows["forges"]}
     assert {
-        (r["slug"], r["forge_api_url"], r["owner"], r["repo"], r["base_branch"], r["secret_name"])
+        (r["slug"], api_base[r["forge_id"]], r["owner"], r["repo"], r["base_branch"], r["secret_name"])
         for r in rows["repositories"]
     } == {
         ("widget", "https://api.github.com", "acme", "widget", "master", "bz-forge-token"),

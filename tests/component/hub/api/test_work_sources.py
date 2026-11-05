@@ -31,6 +31,7 @@ from tests.support.scaffolding import (
     build_hub,
     count_queries,
     emitted_events,
+    ensure_fixture_forge,
     hub_store_connections,
     make_ready,
     seed_session,
@@ -98,9 +99,17 @@ def test_sources_listing_renders_capability_booleans(tmp_path: Path) -> None:
     not listed (its rows arrive by import), though its items stay served."""
     hub = build_hub(tmp_path, work_sources={"forge": FakeWorkSource(name="forge")}, link=False)
     hub.client.post("/api/secrets", json={"name": "gh", "value": "v"})
+    forge = ensure_fixture_forge(hub.client, "https://api.github.com")
     hub.client.post(
         "/api/work-sources",
-        json={"slug": "stored", "provider": "github", "locator": "acme/stored", "secret": "gh", "annotate": True},
+        json={
+            "slug": "stored",
+            "provider": "github",
+            "locator": "acme/stored",
+            "forge": forge,
+            "secret": "gh",
+            "annotate": True,
+        },
     )
 
     sources = {row["name"]: row for row in hub.client.get("/api/work-sources").json()["sources"]}

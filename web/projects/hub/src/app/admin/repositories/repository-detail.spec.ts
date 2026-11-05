@@ -19,7 +19,6 @@ const CORE: RepositorySummary = {
   owner: 'acme',
   repo: 'core',
   base_branch: 'main',
-  forge_api_url: 'https://api.github.com',
   secret_name: 'gh',
   landing_policy: 'merge-on-checks',
   park_timeout_hours: null,
