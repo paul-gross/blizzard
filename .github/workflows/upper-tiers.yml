@@ -69,8 +69,8 @@ jobs:
         id: mock
         uses: ./blizzard/.github/actions/resolve-mock-ref
 
-  # Sharded like gate.yml's pytest tier: disjoint `BLIZZARD_TEST_SHARD` slices in parallel,
-  # reported under the single check name by `service-tier-result`.
+  # Disjoint `BLIZZARD_TEST_SHARD` slices in parallel, split by `test` (docs/ci.md), reported under
+  # the single check name by `service-tier-result`.
   service-tier:
     needs: [mock-ref]
     name: service tier (blizzard:service-test) — shard ${{ matrix.shard }}/${{ matrix.shards }}

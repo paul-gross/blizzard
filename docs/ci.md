@@ -32,11 +32,16 @@ seams-mocked and token-free, needing no real forge, no tokens, and no network be
 on `master`.
 
 The pytest tier runs as six parallel shard jobs. The service tier below runs three Python shards and six Playwright
-shards. `BLIZZARD_TEST_SHARD=<index>/<count>` (`tests/support/suite_plugin.py`) keeps one disjoint slice of the
-collected suite, chosen by a stable hash of each test's nodeid, so the shards together run every test exactly once. A
+shards. `BLIZZARD_TEST_SHARD=<index>/<count>` (`tests/support/suite_plugin.py`) keeps one disjoint slice of the suite,
+so the shards together run every test exactly once. `BLIZZARD_TEST_SHARD_BY` names what the slice is cut by: `test`, the
+default, collects every module and keeps the tests whose nodeid hashes to the shard; `file` skips, before import, every
+test module whose repo-relative path hashes to another shard, so a shard pays to import only its own modules. The pytest
+tier splits by `file`, across its many modules; the service tier's Python half splits by `test`, since a few of its
+modules hold most of its tests. A test that carries no tier marker fails collection in whichever shard collects it. A
 `*-result` job reports each sharded tier under its single check name — `gate / pytest (unit + component)`,
 `upper-tiers / service tier (blizzard:service-test)` — so a required-check list names the tier, not its shard count.
-Unset, the variable keeps the whole suite; the local commands below run unsharded.
+With `BLIZZARD_TEST_SHARD` unset the whole suite runs, and a `BLIZZARD_TEST_SHARD_BY` other than `test` or `file` is a
+usage error; the local commands below run unsharded.
 
 `mise run gate` ([`scripts/ci-gate.sh`](../scripts/ci-gate.sh)) reproduces the whole merge gate in one command before
 pushing. The gate's exact individual commands:
