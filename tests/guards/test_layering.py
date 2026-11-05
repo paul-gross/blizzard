@@ -4396,6 +4396,9 @@ def _plant_roles(tmp_path: Path, files: Mapping[str, str]) -> Path:
     for rel, text in planted.items():
         (src / rel).parent.mkdir(parents=True, exist_ok=True)
         (src / rel).write_text(text)
+    # pytest removes a passing test's tmp_path, so a later test can be handed the same path; a scan
+    # cached for it would read the tree an earlier test planted there.
+    _role_scan.cache_clear()
     return src
 
 
