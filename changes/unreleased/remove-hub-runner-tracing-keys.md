@@ -16,5 +16,5 @@ still carries one fails the hub's config load with an error naming `blizzard-hos
 
 ## Upgrade
 
-Delete the keys from `blizzard-hub.toml`'s `[tracing]` table, or move them to `blizzard-host.toml` where the runner reads
-them.
+Delete the keys from `blizzard-hub.toml`'s `[tracing]` table, or move them to `blizzard-host.toml` where the runner
+reads them.
