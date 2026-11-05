@@ -1,11 +1,13 @@
 """Suite-wide pytest wiring, registered by the root ``conftest.py`` so it reaches every collected directory:
-the tier-marker record, store-revision retirement, sharding, the statement guards, and the autouse isolation fixtures."""
+the tier-marker refusal, store-revision retirement, sharding, the statement guards, and the autouse isolation fixtures."""
 
 from __future__ import annotations
 
+import fnmatch
 import json
 import os
 import zlib
+from collections.abc import Mapping
 from datetime import UTC, datetime
 from pathlib import Path
 
@@ -41,15 +43,14 @@ _TIER_MARKERS = frozenset(
     {"unit", "component", "service", "crash_sweep", "rehearsal", "store_baseline", "winter_binding"}
 )
 
-#: Every collected item's nodeid missing every tier marker, populated by
-#: ``pytest_collection_modifyitems`` below. A normal test can't see its siblings'
-#: markers on its own, so ``tests/guards/test_default_suite_markers.py`` reads this back instead.
-UNMARKED_TEST_NODEIDS: list[str] = []
-
-
 #: ``<index>/<count>`` (1-based) keeps only that shard of the collected suite, so CI splits
 #: one tier across parallel jobs; unset keeps everything.
 SHARD_ENV = "BLIZZARD_TEST_SHARD"
+
+#: The unit a shard is cut by, ``test`` (the default) or ``file``; ``docs/ci.md`` owns which tier uses which and why.
+SHARD_BY_ENV = "BLIZZARD_TEST_SHARD_BY"
+SHARD_BY_TEST = "test"
+SHARD_BY_FILE = "file"
 
 
 #: The two trees the folder layout governs: tests root, the package root its folders mirror, and the flat modules
@@ -62,23 +63,16 @@ LAYOUT_TREES: tuple[tuple[Path, Path, frozenset[str]], ...] = (
 
 @pytest.hookimpl(tryfirst=True)
 def pytest_collection_modifyitems(config: pytest.Config, items: list[pytest.Item]) -> None:
-    """Apply the folder layout, record every collected test that carries none of the tier
-    markers, then keep only this run's shard.
+    """Apply the folder layout, refuse an unmarked test, then keep only this run's shard.
 
     The layout step runs first, so a folder's tier marker is on each item before pytest's ``-m``
-    deselection and before the unmarked record.
-
-    An unmarked test still runs in the default suite but is invisible to both ``-m
-    unit`` and ``-m component`` -- a gap neither tier's total would catch. The record is
-    taken before sharding, so whichever shard runs the marker check sees the whole suite.
+    deselection and before the unmarked refusal.
     """
     apply_folder_layout(items)
-    UNMARKED_TEST_NODEIDS[:] = [
-        item.nodeid for item in items if not (_TIER_MARKERS & {mark.name for mark in item.iter_markers()})
-    ]
+    refuse_unmarked(items)
     _retire_aged_revision_tests(items)
     spec = os.environ.get(SHARD_ENV)
-    if not spec:
+    if not spec or shard_by(os.environ) == SHARD_BY_FILE:
         return
     index, count = parse_shard(spec)
     deselected = [item for item in items if shard_of(item.nodeid, count) != index]
@@ -87,36 +81,82 @@ def pytest_collection_modifyitems(config: pytest.Config, items: list[pytest.Item
         items[:] = [item for item in items if shard_of(item.nodeid, count) == index]
 
 
+def pytest_ignore_collect(collection_path: Path, config: pytest.Config) -> bool | None:
+    """Skip a test module another file shard owns, before it is imported.
+
+    Only under ``BLIZZARD_TEST_SHARD_BY=file``. ``None`` leaves every other path to pytest's own rules, so pytest's
+    discovery still decides what a test module is.
+    """
+    spec = os.environ.get(SHARD_ENV)
+    if not spec or shard_by(os.environ) != SHARD_BY_FILE:
+        return None
+    patterns: list[str] = config.getini("python_files")
+    is_test_module = any(fnmatch.fnmatch(collection_path.name, pattern) for pattern in patterns)
+    if not is_test_module or not collection_path.is_file() or not collection_path.is_relative_to(config.rootpath):
+        return None
+    index, count = parse_shard(spec)
+    return True if shard_of(collection_path.relative_to(config.rootpath).as_posix(), count) != index else None
+
+
 def apply_folder_layout(items: list[pytest.Item]) -> None:
     """Give each test under a tier folder that folder's tier; refuse a misplaced or self-marked file.
 
-    Refusals are judged on the collected items, so a narrowed run judges only what it collects.
+    Refusals are judged on the collected items, so a narrowed run judges only what it collects. A file's place is
+    judged once, however many tests it holds.
     """
+    file_tiers: dict[Path, tuple[str, ...]] = {}
     for item in items:
-        for tests_root, package_root, root_modules in LAYOUT_TREES:
-            if misplaced_root_module(item.path, tests_root, root_modules):
-                raise pytest.UsageError(
-                    f"{item.nodeid}: a flat test module under {tests_root.name}/; place it in unit/, component/ or guards/"
-                )
-            tier = tier_of(item.path, tests_root)
-            if tier is None:
-                continue
+        if item.path not in file_tiers:
+            file_tiers[item.path] = _tiers_of_file(item.path, item.nodeid)
+        for tier in file_tiers[item.path]:
             declared = declared_layout_marker(mark.name for mark in item.iter_markers())
             if declared is not None:
                 raise pytest.UsageError(
                     f"{item.nodeid}: declares the {declared!r} marker; its folder gives the tier, so drop the marker"
                 )
-            if (folder := non_package_folder(item.path, tests_root)) is not None:
-                raise pytest.UsageError(f"{item.nodeid}: {folder} has no __init__.py; every tier folder is a package")
-            if (folder := unmirrored_folder(item.path, tests_root, package_root)) is not None:
-                raise pytest.UsageError(f"{item.nodeid}: {folder} mirrors no package under {package_root.name}/")
             item.add_marker(getattr(pytest.mark, tier))
+
+
+def _tiers_of_file(path: Path, nodeid: str) -> tuple[str, ...]:
+    """The tier each layout tree's folders give ``path``; refuse it when it sits where no tier folder may.
+
+    ``nodeid`` is the first collected test in the file, named by a refusal.
+    """
+    tiers: list[str] = []
+    for tests_root, package_root, root_modules in LAYOUT_TREES:
+        if misplaced_root_module(path, tests_root, root_modules):
+            raise pytest.UsageError(
+                f"{nodeid}: a flat test module under {tests_root.name}/; place it in unit/, component/ or guards/"
+            )
+        tier = tier_of(path, tests_root)
+        if tier is None:
+            continue
+        if (folder := non_package_folder(path, tests_root)) is not None:
+            raise pytest.UsageError(f"{nodeid}: {folder} has no __init__.py; every tier folder is a package")
+        if (folder := unmirrored_folder(path, tests_root, package_root)) is not None:
+            raise pytest.UsageError(f"{nodeid}: {folder} mirrors no package under {package_root.name}/")
+        tiers.append(tier)
+    return tuple(tiers)
+
+
+def refuse_unmarked(items: list[pytest.Item]) -> None:
+    """Refuse the run when a collected test carries none of the tier markers.
+
+    An unmarked test still runs in the default suite but is invisible to both ``-m unit`` and ``-m component``. Judged
+    on what this run collects, before any test split, so every shard together judges the whole suite.
+    """
+    unmarked = [item.nodeid for item in items if not (_TIER_MARKERS & {mark.name for mark in item.iter_markers()})]
+    if unmarked:
+        raise pytest.UsageError(
+            f"these collected tests carry none of {', '.join(sorted(_TIER_MARKERS))}: {', '.join(unmarked)}"
+        )
 
 
 def _retire_aged_revision_tests(items: list[pytest.Item]) -> None:
     """Skip each colocated store-migration test whose revision has aged out; refuse a file naming no sibling revision.
 
-    Runs before sharding, so a bad name fails every shard and shard membership stays a nodeid hash.
+    Judged per file before the test split, so a bad name fails whichever shard collects the file, and a shard's
+    membership stays a hash of the nodeid or path alone.
     """
     today = datetime.now(UTC).date()
     decided: dict[Path, Retired | None] = {}
@@ -141,10 +181,18 @@ def parse_shard(spec: str) -> tuple[int, int]:
     raise pytest.UsageError(f"{SHARD_ENV}={spec!r}: expected <index>/<count> with 1 <= index <= count")
 
 
-def shard_of(nodeid: str, count: int) -> int:
-    """The 1-based shard a test belongs to — a stable hash of its nodeid, identical in every
-    process, so xdist workers agree on the collection and every test lands in exactly one shard."""
-    return zlib.crc32(nodeid.encode()) % count + 1
+def shard_by(environ: Mapping[str, str]) -> str:
+    """The unit ``BLIZZARD_TEST_SHARD_BY`` names, ``test`` when unset; any other value is a usage error."""
+    unit = environ.get(SHARD_BY_ENV) or SHARD_BY_TEST
+    if unit not in (SHARD_BY_TEST, SHARD_BY_FILE):
+        raise pytest.UsageError(f"{SHARD_BY_ENV}={unit!r}: expected {SHARD_BY_TEST!r} or {SHARD_BY_FILE!r}")
+    return unit
+
+
+def shard_of(key: str, count: int) -> int:
+    """The 1-based shard a test or test module belongs to — a stable hash of its nodeid or repo-relative path,
+    identical in every process, so xdist workers agree on the collection and each lands in exactly one shard."""
+    return zlib.crc32(key.encode()) % count + 1
 
 
 #: The environment every daemon the suite spawns inherits, declared once so the Playwright harness reads the same file.

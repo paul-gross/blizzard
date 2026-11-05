@@ -132,6 +132,24 @@ def test_the_layout_step_refuses_a_folder_that_is_not_a_package(
         _apply(_Item(tests / "guards" / "bare" / "test_a.py"))
 
 
+def test_the_layout_step_judges_a_files_place_once_however_many_tests_it_holds(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    tests, package = _tree(tmp_path)
+    monkeypatch.setattr(suite_plugin, "LAYOUT_TREES", _layout(tests, package))
+    judged: list[Path] = []
+
+    def counting_tier_of(path: Path, tests_root: Path) -> str | None:
+        judged.append(path)
+        return tier_of(path, tests_root)
+
+    monkeypatch.setattr(suite_plugin, "tier_of", counting_tier_of)
+    items = [_Item(tests / "unit" / "hub" / "test_a.py") for _ in range(3)]
+    _apply(*items)
+    assert judged == [tests / "unit" / "hub" / "test_a.py"]
+    assert [item.added for item in items] == [["unit"]] * 3
+
+
 def _collected(marker: str) -> str:
     result = subprocess.run(
         [sys.executable, "-m", "pytest", "--collect-only", "-q", "-m", marker, str(Path(__file__))],
