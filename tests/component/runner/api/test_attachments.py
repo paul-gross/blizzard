@@ -411,3 +411,27 @@ def test_an_unreachable_hub_or_a_404_stages_the_content(tmp_path: Path) -> None:
         _seed_lease(store)
         assert _stage(app, "unchecked").status_code == 200
         assert store.attachments_for_lease("lease_1") == {"delta": "unchecked"}
+
+
+def test_a_lifecycle_refusal_takes_precedence_over_a_hub_format_refusal(tmp_path: Path) -> None:
+    asked: list[httpx2.Request] = []
+
+    def refusing(request: httpx2.Request) -> httpx2.Response:
+        asked.append(request)
+        return httpx2.Response(200, json={"refusal": _REFUSAL})
+
+    app, store = _app_with_hub(tmp_path, refusing)
+    _seed_lease(store)
+    store.record_closure(lease_id="lease_1", chunk_id="ch_1", node_id="nd_build", reason="escalated", closed_at=_NOW)
+    store.record_takeover(
+        takeover_id="tko_1",
+        chunk_id="ch_1",
+        lease_id="lease_1",
+        session=SessionReference(CLAUDE_CODE_HARNESS_ID, "sess-a"),
+        workdir="/ws/e1",
+        fence_epoch=None,
+        opened_at=_NOW,
+    )
+
+    assert _stage(app, "bad").status_code == 409
+    assert asked == []

@@ -58,10 +58,13 @@ def record_attachment(lease_id: str, request_body: AttachmentRequest, request: R
     """Record a worker's explicit artifact for ``request_body.name`` against its lease."""
     service = RunnerWiring.of(request).attachments()
     worker = authorized_worker_lease(lease_id, request)
-    refusal = _hub_refusal(request, worker.lease.chunk_id, request_body)
-    if refusal is not None:
-        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail=refusal)
     try:
+        # Lifecycle refusals (empty, closed lease, outcome already buffered) take precedence over the
+        # hub's judgement of the content's format.
+        service.require_attachable(worker, name=request_body.name, content=request_body.content)
+        refusal = _hub_refusal(request, worker.lease.chunk_id, request_body)
+        if refusal is not None:
+            raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail=refusal)
         service.attach(worker, name=request_body.name, content=request_body.content)
     except AttachmentEmpty as exc:
         raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail=str(exc)) from exc
