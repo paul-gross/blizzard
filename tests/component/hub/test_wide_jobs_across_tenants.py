@@ -25,7 +25,7 @@ from blizzard.hub.config import ConfigError, HubConfig
 from blizzard.hub.domain.config.authoring import ConfigAuthoring
 from blizzard.hub.domain.config.carry_over import ImportStatus
 from blizzard.hub.domain.config.forge_resolution import ForgeChoice
-from blizzard.hub.domain.config.forges import ForgeKindOffers
+from blizzard.hub.domain.config.forges import GITHUB_API_BASE, ForgeFields, ForgeKindOffers
 from blizzard.hub.domain.config.secrets import (
     IResealSecretRepository,
     Reseal,
@@ -86,9 +86,7 @@ class _Hub:
 
     def authoring(self, tenant: TenantId) -> ConfigAuthoring:
         keys = hub_key_provider({}, data_dir=self.config.data_dir)
-        return build_config_authoring(
-            self.stores(tenant), cipher=secret_cipher(keys), events=None, offers=ForgeKindOffers()
-        )
+        return build_config_authoring(self.stores(tenant), cipher=secret_cipher(keys), offers=ForgeKindOffers())
 
     def reveal(self, tenant: TenantId, name: str) -> str:
         """``name``'s value in ``tenant``, opened as a running hub opens it."""
@@ -304,8 +302,11 @@ def test_a_hub_whose_import_one_tenant_recorded_refuses_to_start_naming_the_keys
 def test_a_work_source_cannot_name_a_secret_only_another_tenant_holds(hub: _Hub) -> None:
     hub.authoring(hub.first).create_secret(SecretName.parse("gh"), "tok-first", OP)
 
+    second = hub.authoring(hub.second)
+    forge = second.create_forge("github", "GitHub", "github", ForgeFields(GITHUB_API_BASE, None), OP)
+
     with pytest.raises(WorkSourceSecretUnavailable):
-        hub.authoring(hub.second).create_work_source_naming("demo", None, _SOURCE, ForgeChoice(), OP)
+        second.create_work_source_naming("demo", None, _SOURCE, ForgeChoice(forge=forge.forge_id, named=forge), OP)
 
     assert hub.stores(hub.second).work_source_records.list_all(include_retired=True) == []
 

@@ -283,7 +283,7 @@ _PROBES: dict[tuple[str, str], _Probe] = {
     ("POST", "/api/repositories"): _own(
         {
             "slug": "beta-extra",
-            "forge_api_url": "https://forge.example",
+            "forge": "{forge}",
             "owner": "acme",
             "repo": "beta-extra",
             "base_branch": "main",
@@ -303,7 +303,14 @@ _PROBES: dict[tuple[str, str], _Probe] = {
     ("PUT", "/api/secrets/{name}/value"): _f({"value": "stolen"}),
     ("GET", "/api/work-sources"): _LIST,
     ("POST", "/api/work-sources"): _own(
-        {"slug": "beta-extra", "provider": "github", "locator": "acme/beta-extra", "secret": "{secret}"}, status=201
+        {
+            "slug": "beta-extra",
+            "provider": "github",
+            "locator": "acme/beta-extra",
+            "forge": "{forge}",
+            "secret": "{secret}",
+        },
+        status=201,
     ),
     ("GET", "/api/work-sources/{source}"): _f(),
     ("PATCH", "/api/work-sources/{source}"): _f({}),

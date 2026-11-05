@@ -25,15 +25,14 @@ const WINTER: WorkSourceSummary = {
   secret: 'gh-winter',
   revision: 2,
   created_by: 'pgross',
-  api_base: null,
+ 
   built_in: false,
   created_at: null,
   created_by_name: null,
   retired: false,
-  web_base: null,
 };
 const OLD: WorkSourceSummary = { ...WINTER, work_source_id: 'wsrc_o', slug: 'old', name: 'Old one', annotate: false, retired: true, revision: 3 };
-const HUB: WorkSourceSummary = { forge_id: null, forge_slug: null, forge_name: null, warnings: [], name: 'hub', slug: 'hub', work_source_id: null, annotate: false, edit: true, built_in: true, api_base: null, created_at: null, created_by: null, created_by_name: null, locator: null, provider: null, retired: false, revision: null, secret: null, web_base: null };
+const HUB: WorkSourceSummary = { forge_id: null, forge_slug: null, forge_name: null, warnings: [], name: 'hub', slug: 'hub', work_source_id: null, annotate: false, edit: true, built_in: true, created_at: null, created_by: null, created_by_name: null, locator: null, provider: null, retired: false, revision: null, secret: null, };
 
 describe('workSourceBadges', () => {
   it('badges the built-in source and a retired one', () => {

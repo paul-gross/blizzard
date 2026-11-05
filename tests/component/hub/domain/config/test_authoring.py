@@ -32,7 +32,6 @@ from blizzard.hub.domain.config.changes import (
     RecordState,
 )
 from blizzard.hub.domain.config.errors import ConfigRevisionConflict
-from blizzard.hub.domain.config.forge_resolution import ForgeChoice
 from blizzard.hub.domain.config.forges import GITHUB_API_BASE, ConfiguredForge, ForgeFields, ForgeId
 from blizzard.hub.domain.config.repositories import (
     ConfiguredRepository,
@@ -46,7 +45,6 @@ from blizzard.hub.domain.config.repositories import (
 from blizzard.hub.domain.config.secrets import SecretName, SecretReferenced
 from blizzard.hub.domain.config.work_sources import (
     ConfiguredWorkSource,
-    WorkSourceDraft,
     WorkSourceEdit,
     WorkSourceFields,
     WorkSourceId,
@@ -235,20 +233,6 @@ def test_a_stale_revision_conflicts_and_writes_nothing(world: _World) -> None:
     assert world.count() == before
 
 
-def test_a_cleared_address_moves_the_source_to_github_and_its_own_web_origin_with_it(world: _World) -> None:
-    record = world.authoring.create_work_source_naming(
-        "demo",
-        None,
-        WorkSourceDraft("github", "acme/demo", False, "gh"),
-        ForgeChoice(api_base="https://api.x", web_base="https://web.x"),
-        OP,
-    ).record
-    ghe = world.forges.get(record.fields.forge_id)
-    assert ghe is not None and ghe.fields == ForgeFields("https://api.x", "https://web.x")
-    world.authoring.edit_work_source_naming(record, WorkSourceEdit(), ForgeChoice(api_base=None), OP)
-    assert world.source().fields.forge_id == _FORGE_ID
-
-
 def test_a_taken_name_or_locator_is_refused_and_names_the_holder(world: _World) -> None:
     world.authoring.create_work_source("demo", None, _FIELDS, OP)
     before = world.count()
@@ -259,6 +243,15 @@ def test_a_taken_name_or_locator_is_refused_and_names_the_holder(world: _World) 
         world.authoring.create_work_source("demo2", None, _FIELDS, OP)
     assert caught.value.holder == "demo"
     assert world.count() == before
+
+
+def test_one_locator_is_held_once_on_each_forge(world: _World) -> None:
+    ghe = world.authoring.create_forge("ghe", "GHE", "github", ForgeFields("https://ghe.acme.example/api/v3", None), OP)
+    world.authoring.create_work_source("demo", None, _FIELDS, OP)
+
+    twin = world.authoring.create_work_source("demo2", None, replace(_FIELDS, forge_id=ghe.forge_id), OP)
+
+    assert (twin.fields.locator, twin.fields.forge_id) == (_FIELDS.locator, ghe.forge_id)
 
 
 def test_a_retired_source_keeps_its_locator_claim(world: _World) -> None:

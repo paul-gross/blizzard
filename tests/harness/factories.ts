@@ -10,7 +10,7 @@ import { mockClock } from './client/clock';
 import { startMockRunner } from './daemons/mock-runner';
 import { type DaemonRecord, stopDaemon } from './daemons/process';
 import { runDir } from './env';
-import { COMMON_OWNER, COMMON_REPOSITORY, COMMON_SOURCE, FIXTURE_SECRET } from './hubs';
+import { COMMON_OWNER, COMMON_REPOSITORY, COMMON_SOURCE, FIXTURE_FORGE, FIXTURE_SECRET } from './hubs';
 import { scanLog } from './logs';
 import { type Level, type Project, sharesTenant, type TestHub } from './tenancy';
 
@@ -106,21 +106,22 @@ async function declare(context: FactoryContext, repository: string, linked: stri
   }
   const applied = await context.api.post('/api/config/apply', {
     data: {
-      version: 1,
+      version: 2,
       secrets: [FIXTURE_SECRET],
+      forges: [{ slug: FIXTURE_FORGE, kind: 'github', api_base: context.forge.url }],
       work_sources: [
         {
           slug: repository,
           provider: 'github',
           locator: `${COMMON_OWNER}/${repository}`,
-          api_base: context.forge.url,
+          forge: FIXTURE_FORGE,
           secret: FIXTURE_SECRET,
         },
       ],
       repositories: [
         {
           slug: repository,
-          forge_api_url: context.forge.url,
+          forge: FIXTURE_FORGE,
           owner: COMMON_OWNER,
           repo: repository,
           base_branch: 'main',

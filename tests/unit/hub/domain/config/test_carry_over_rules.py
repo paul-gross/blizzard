@@ -199,6 +199,27 @@ def test_records_the_store_already_holds_are_skipped() -> None:
     }
 
 
+def test_a_locator_held_on_another_forge_is_imported_on_its_own() -> None:
+    elsewhere = ConfiguredWorkSource(
+        work_source_id=WorkSourceId("wsrc_other"),
+        slug="other",
+        name="other",
+        fields=WorkSourceFields(
+            provider="github", locator="acme/a", forge_id=_EXAMPLE.forge_id, annotate=False, secret="x"
+        ),
+        revision=1,
+        created_at=_AT,
+        created_by="op",
+    )
+    existing = ExistingConfig(
+        secrets=frozenset(), work_sources=(elsewhere,), repositories=(), forges=(_GITHUB, _EXAMPLE)
+    )
+    plan = _plan(_legacy(_source("a", "acme/a")), {"BZ_SHARED_TOKEN": "tok"}, existing=existing)
+    assert [(record.fields.locator, record.fields.forge_id) for record, _ in plan.work_sources] == [
+        ("acme/a", _GITHUB.forge_id)
+    ]
+
+
 @pytest.mark.parametrize("value", [None, "", "   "])
 def test_an_unset_or_blank_token_variable_is_refused_naming_it(value: str | None) -> None:
     values = {} if value is None else {"BZ_SHARED_TOKEN": value}

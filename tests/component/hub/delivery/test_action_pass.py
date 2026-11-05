@@ -37,6 +37,7 @@ from tests.support.scaffolding import (
     build_hub,
     create_repositories,
     default_project,
+    ensure_fixture_forge,
     fixture_repository,
     hub_scoped,
     hub_store_connections,
@@ -480,7 +481,10 @@ def test_a_repository_secret_is_revealed_only_for_an_action_that_lands(
 ) -> None:
     spec = _spec("test.lands", "done", "failure", lands=lands)
     hub = _hub(tmp_path, _Answers(spec, Pass(choice="done")), repositories=())
-    create_repositories(hub.client, [fixture_repository("widget", "http://forge.example", owner="acme")])
+    create_repositories(
+        hub.client,
+        [fixture_repository("widget", ensure_fixture_forge(hub.client, "http://forge.example"), owner="acme")],
+    )
     revealed: list[str] = []
 
     def retired(name: SecretName):

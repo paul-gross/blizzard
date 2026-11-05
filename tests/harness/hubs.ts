@@ -12,6 +12,8 @@ import { expandProfile, type TomlTable } from './profiles';
 
 /** The fixture credential the common tenant's work source and repository name; the forge accepts any token. */
 export const FIXTURE_SECRET = 'fixture-forge-token';
+/** The forge every fixture repository and work source of a hub names: the hub's own mock forge. */
+export const FIXTURE_FORGE = 'fixture-forge';
 export const COMMON_OWNER = 'blizzard';
 export const COMMON_REPOSITORY = 'common';
 /** The work-source slug whose token prefix an ingest names, `<slug>:<number>`. */
@@ -155,21 +157,22 @@ export async function furnishCommonTenant(hub: HubCoordinates, admin: HubInterna
   });
   if (created.status !== 201) throw new Error(`creating ${COMMON_OWNER}/${COMMON_REPOSITORY} answered ${created.status}: ${await created.text()}`);
   await admin.applyConfig(tenant.tenant_id, {
-    version: 1,
+    version: 2,
     secrets: [FIXTURE_SECRET],
+    forges: [{ slug: FIXTURE_FORGE, kind: 'github', api_base: hub.forgeUrl }],
     work_sources: [
       {
         slug: COMMON_SOURCE,
         provider: 'github',
         locator: `${COMMON_OWNER}/${COMMON_REPOSITORY}`,
-        api_base: hub.forgeUrl,
+        forge: FIXTURE_FORGE,
         secret: FIXTURE_SECRET,
       },
     ],
     repositories: [
       {
         slug: COMMON_REPOSITORY,
-        forge_api_url: hub.forgeUrl,
+        forge: FIXTURE_FORGE,
         owner: COMMON_OWNER,
         repo: COMMON_REPOSITORY,
         base_branch: 'main',

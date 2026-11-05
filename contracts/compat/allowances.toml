@@ -76,3 +76,108 @@ surface = "http-api"
 where = "RoutineEntry.name"
 reason = "response property stopped being required"
 because = "0.4's only reader of the config export response is the CLI, which echoes the decoded document without a model (v0.4.0-rc.1:src/blizzard/hub/cli/config.py:155-156); the export always writes the name, so it is always present."
+
+[[allowance]]
+line = "0.4"
+surface = "http-api"
+where = "ConfigDocument"
+reason = "component schema deleted"
+because = "ConfigDocument is the version-1 configuration document alone; 0.4's only readers of the version-1 configuration document are the CLI's config export, which echoes the decoded document without a model and asks for version 2 by default (v0.4.0-rc.1:src/blizzard/hub/cli/config.py:134-139 and :155-156), and its config apply, which sends the file's bytes unparsed and prints a refusal's message (v0.4.0-rc.1:src/blizzard/hub/cli/config.py:115-126 and :60-71), so a version-1 request meets the hub's coded refusal naming version 2; the board ships no reader of it, and 0.4.0 deprecates the document version for removal in 0.5."
+
+[[allowance]]
+line = "0.4"
+surface = "http-api"
+where = "RepositoryDocument"
+reason = "component schema deleted"
+because = "RepositoryDocument is the version-1 document's repository entry alone; 0.4's only readers of the version-1 configuration document are the CLI's config export, which echoes the decoded document without a model and asks for version 2 by default (v0.4.0-rc.1:src/blizzard/hub/cli/config.py:134-139 and :155-156), and its config apply, which sends the file's bytes unparsed and prints a refusal's message (v0.4.0-rc.1:src/blizzard/hub/cli/config.py:115-126 and :60-71), so a version-1 request meets the hub's coded refusal naming version 2; the board ships no reader of it, and 0.4.0 deprecates the document version for removal in 0.5."
+
+[[allowance]]
+line = "0.4"
+surface = "http-api"
+where = "WorkSourceDocument"
+reason = "component schema deleted"
+because = "WorkSourceDocument is the version-1 document's work-source entry alone; 0.4's only readers of the version-1 configuration document are the CLI's config export, which echoes the decoded document without a model and asks for version 2 by default (v0.4.0-rc.1:src/blizzard/hub/cli/config.py:134-139 and :155-156), and its config apply, which sends the file's bytes unparsed and prints a refusal's message (v0.4.0-rc.1:src/blizzard/hub/cli/config.py:115-126 and :60-71), so a version-1 request meets the hub's coded refusal naming version 2; the board ships no reader of it, and 0.4.0 deprecates the document version for removal in 0.5."
+
+[[allowance]]
+line = "0.4"
+surface = "cli"
+where = "hub repo create --forge-api-url"
+reason = "option removed"
+because = "0.4 ships the option deprecated in its help text (v0.4.0-rc.1:src/blizzard/hub/cli/repo.py:71-76), and 0.4.0 deprecates it for removal in 0.5; nothing in 0.4 passes it, since no runner, board or script invokes the CLI with it, and the field it sends is refused by the hub that drops it, so a person or script still passing it is told the option is unknown in place of a refusal."
+
+[[allowance]]
+line = "0.4"
+surface = "cli"
+where = "hub repo edit --forge-api-url"
+reason = "option removed"
+because = "0.4 ships the option deprecated in its help text (v0.4.0-rc.1:src/blizzard/hub/cli/repo.py:160-162), and 0.4.0 deprecates it for removal in 0.5; nothing in 0.4 passes it, since no runner, board or script invokes the CLI with it, and the field it sends is refused by the hub that drops it, so a person or script still passing it is told the option is unknown in place of a refusal."
+
+[[allowance]]
+line = "0.4"
+surface = "cli"
+where = "hub source create --api-base"
+reason = "option removed"
+because = "0.4 ships the option deprecated in its help text (v0.4.0-rc.1:src/blizzard/hub/cli/source.py:63-68), and 0.4.0 deprecates it for removal in 0.5; nothing in 0.4 passes it, since no runner, board or script invokes the CLI with it, and the field it sends is refused by the hub that drops it, so a person or script still passing it is told the option is unknown in place of a refusal."
+
+[[allowance]]
+line = "0.4"
+surface = "cli"
+where = "hub source create --web-base"
+reason = "option removed"
+because = "0.4 ships the option deprecated in its help text (v0.4.0-rc.1:src/blizzard/hub/cli/source.py:69-74), and 0.4.0 deprecates it for removal in 0.5; nothing in 0.4 passes it, since no runner, board or script invokes the CLI with it, and the field it sends is refused by the hub that drops it, so a person or script still passing it is told the option is unknown in place of a refusal."
+
+[[allowance]]
+line = "0.4"
+surface = "cli"
+where = "hub source edit --api-base"
+reason = "option removed"
+because = "0.4 ships the option deprecated in its help text (v0.4.0-rc.1:src/blizzard/hub/cli/source.py:159-164), and 0.4.0 deprecates it for removal in 0.5; nothing in 0.4 passes it, since no runner, board or script invokes the CLI with it, and the field it sends is refused by the hub that drops it, so a person or script still passing it is told the option is unknown in place of a refusal."
+
+[[allowance]]
+line = "0.4"
+surface = "cli"
+where = "hub source edit --web-base"
+reason = "option removed"
+because = "0.4 ships the option deprecated in its help text (v0.4.0-rc.1:src/blizzard/hub/cli/source.py:165-170), and 0.4.0 deprecates it for removal in 0.5; nothing in 0.4 passes it, since no runner, board or script invokes the CLI with it, and the field it sends is refused by the hub that drops it, so a person or script still passing it is told the option is unknown in place of a refusal."
+
+[[allowance]]
+line = "0.4"
+surface = "store"
+where = "repositories.forge_id"
+reason = "column made NOT NULL without a server default"
+because = "0.4 hubs refuse to start on a store whose revision is not their own (v0.4.0-rc.1:src/blizzard/hub/runtime.py:54-56 and :166-167), so no 0.4 hub writes a repository beside the tightened forge_id, and the walk back restores the old shape."
+
+[[allowance]]
+line = "0.4"
+surface = "store"
+where = "repositories"
+reason = "unique constraint added to an existing table"
+because = "0.4 hubs refuse to start on a store whose revision is not their own (v0.4.0-rc.1:src/blizzard/hub/runtime.py:54-56 and :166-167), so no 0.4 hub writes a repository beside the new unique constraint, and the walk back restores the old shape."
+
+[[allowance]]
+line = "0.4"
+surface = "store"
+where = "repositories"
+reason = "foreign key changed"
+because = "0.4 hubs refuse to start on a store whose revision is not their own (v0.4.0-rc.1:src/blizzard/hub/runtime.py:54-56 and :166-167), so no 0.4 hub writes a repository beside the new foreign key, and the walk back restores the old shape."
+
+[[allowance]]
+line = "0.4"
+surface = "store"
+where = "work_sources.forge_id"
+reason = "column made NOT NULL without a server default"
+because = "0.4 hubs refuse to start on a store whose revision is not their own (v0.4.0-rc.1:src/blizzard/hub/runtime.py:54-56 and :166-167), so no 0.4 hub writes a work source beside the tightened forge_id, and the walk back restores the old shape."
+
+[[allowance]]
+line = "0.4"
+surface = "store"
+where = "work_sources"
+reason = "unique constraint added to an existing table"
+because = "0.4 hubs refuse to start on a store whose revision is not their own (v0.4.0-rc.1:src/blizzard/hub/runtime.py:54-56 and :166-167), so no 0.4 hub writes a work source beside the new unique constraint, and the walk back restores the old shape."
+
+[[allowance]]
+line = "0.4"
+surface = "store"
+where = "work_sources"
+reason = "foreign key changed"
+because = "0.4 hubs refuse to start on a store whose revision is not their own (v0.4.0-rc.1:src/blizzard/hub/runtime.py:54-56 and :166-167), so no 0.4 hub writes a work source beside the new foreign key, and the walk back restores the old shape."

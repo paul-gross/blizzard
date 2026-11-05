@@ -26,7 +26,7 @@ from blizzard.hub.domain.chunk.model import AnswerOutcome, WorkRef
 from blizzard.hub.domain.config.authoring import ConfigAuthoring
 from blizzard.hub.domain.config.changes import ChangeContext, Door
 from blizzard.hub.domain.config.forge_resolution import ForgeChoice
-from blizzard.hub.domain.config.forges import ForgeKindOffers
+from blizzard.hub.domain.config.forges import GITHUB_API_BASE, ForgeFields, ForgeKindOffers
 from blizzard.hub.domain.config.repositories import RepositoryCoordinateTaken, RepositoryDraft, RepositorySlugTaken
 from blizzard.hub.domain.config.secrets import SecretAlreadyExists, SecretName
 from blizzard.hub.domain.config.work_sources import WorkSourceDraft, WorkSourceLocatorTaken, WorkSourceSlugTaken
@@ -47,7 +47,6 @@ from blizzard.hub.store.scoped import is_project_keyed
 from blizzard.hub.store.transactions import HubTransactions
 from blizzard.hub.tenancy import TenantId
 from tests.support.scaffolding import (
-    RecordedEvents,
     chunk_unit,
     default_project,
     default_tenant,
@@ -60,7 +59,6 @@ _AT = datetime(2026, 10, 8, 12, 0, 0, tzinfo=UTC)
 _SECOND = TenantId("ten_01KTENANTKEYSSECOND000000")
 _CLI = ChangeContext(actor="alice", door=Door.CLI)
 _SOURCE = WorkSourceDraft(provider="github", locator="acme/demo", annotate=False, secret="gh")
-_GITHUB = ForgeChoice(api_base="https://api.github.com")
 _REPO = RepositoryDraft(owner="acme", repo="demo", base_branch="master", secret_name="gh")
 
 
@@ -129,9 +127,9 @@ def _row(table: sa.Table, key: Mapping[str, object], n: int) -> dict[str, object
 _KEYS: list[tuple[str, dict[str, object]]] = [
     ("secrets", {"name": "gh"}),
     ("work_sources", {"slug": "acme"}),
-    ("work_sources", {"provider": "github", "locator": "acme/demo"}),
+    ("work_sources", {"provider": "github", "forge_id": "frg_github", "locator": "acme/demo"}),
     ("repositories", {"slug": "demo"}),
-    ("repositories", {"forge_api_url": "https://api.github.com", "owner": "acme", "repo": "demo"}),
+    ("repositories", {"forge_id": "frg_github", "owner": "acme", "repo": "demo"}),
     ("keyed_locks", {"namespace": "graph_name", "key": "release"}),
     ("routines", {"name": "nightly"}),
     ("work_items", {"source": "hub", "ref": "1"}),
@@ -183,7 +181,6 @@ def _authoring(tenants: _Tenants, tenant: TenantId) -> ConfigAuthoring:
         cipher=secret_cipher(hub_key_provider({}, data_dir=tenants.tmp_path / "data")),
         apply_writer=ConfigApplyStore(store),
         import_writer=ConfigImportStore(store),
-        events=RecordedEvents(),
         clock=FixedClock(_AT),
     )
 
@@ -191,23 +188,27 @@ def _authoring(tenants: _Tenants, tenant: TenantId) -> ConfigAuthoring:
 def test_two_tenants_each_configure_a_same_named_secret_source_and_repository_on_one_forge_repository(
     tenants: _Tenants,
 ) -> None:
+    on_github: dict[TenantId, ForgeChoice] = {}
     for tenant in (tenants.first, tenants.second):
         authoring = _authoring(tenants, tenant)
         authoring.create_secret(SecretName.parse("gh"), f"token-of-{tenant}", _CLI)
-        authoring.create_work_source_naming("acme", None, _SOURCE, ForgeChoice(), _CLI)
-        authoring.create_repository_naming("demo", None, _REPO, _GITHUB, _CLI)
+        forge = authoring.create_forge("github", "GitHub", "github", ForgeFields(GITHUB_API_BASE, None), _CLI)
+        on_github[tenant] = ForgeChoice(forge=forge.forge_id, named=forge)
+        authoring.create_work_source_naming("acme", None, _SOURCE, on_github[tenant], _CLI)
+        authoring.create_repository_naming("demo", None, _REPO, on_github[tenant], _CLI)
 
     first = _authoring(tenants, tenants.first)
+    github = on_github[tenants.first]
     with pytest.raises(SecretAlreadyExists):
         first.create_secret(SecretName.parse("gh"), "again", _CLI)
     with pytest.raises(WorkSourceSlugTaken):
-        first.create_work_source_naming("acme", None, _SOURCE, ForgeChoice(), _CLI)
+        first.create_work_source_naming("acme", None, _SOURCE, github, _CLI)
     with pytest.raises(WorkSourceLocatorTaken):
-        first.create_work_source_naming("acme-again", None, _SOURCE, ForgeChoice(), _CLI)
+        first.create_work_source_naming("acme-again", None, _SOURCE, github, _CLI)
     with pytest.raises(RepositorySlugTaken):
-        first.create_repository_naming("demo", None, _REPO, _GITHUB, _CLI)
+        first.create_repository_naming("demo", None, _REPO, github, _CLI)
     with pytest.raises(RepositoryCoordinateTaken):
-        first.create_repository_naming("demo-again", None, _REPO, _GITHUB, _CLI)
+        first.create_repository_naming("demo-again", None, _REPO, github, _CLI)
 
 
 def test_each_tenants_hub_source_numbers_its_work_items_from_one(tenants: _Tenants) -> None:

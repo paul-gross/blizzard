@@ -1,4 +1,4 @@
-import { expect, type ForgeApi, type HubApi, type Repository, test, type Wire } from '../../harness/fixtures';
+import { expect, FIXTURE_FORGE, type ForgeApi, type HubApi, type Repository, test, type Wire } from '../../harness/fixtures';
 
 // exemplar: bzh:service-fixtures-only, bzh:service-clients-only, bzh:service-isolation-earned.
 
@@ -75,9 +75,9 @@ async function twoProjects(api: HubApi, forge: ForgeApi, repository: () => Promi
     slug: name,
     provider: 'github',
     locator: `blizzard/${name}`,
-    api_base: forge.url,
+    forge: FIXTURE_FORGE,
     secret: 'second-forge-token',
-  } satisfies Wire.WorkSourceDocument;
+  } satisfies Wire.WorkSourceCreateRequest;
   const added = await api.post('/api/work-sources', { data: source });
   expect(added.status).toBe(201);
   const linked = await api.put(`/api/projects/second/source-links/${name}`);

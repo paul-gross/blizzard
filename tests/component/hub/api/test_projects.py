@@ -15,7 +15,7 @@ from fastapi.testclient import TestClient
 from blizzard.auth_core import Role
 from blizzard.hub.auth.memberships import MEMBERSHIP_ROLES
 from blizzard.hub.auth.permissions import ROLE_PERMISSIONS, Permission
-from tests.support.scaffolding import HubHarness, build_hub, seed_session, seed_user
+from tests.support.scaffolding import HubHarness, build_hub, ensure_fixture_forge, seed_session, seed_user
 
 
 @pytest.fixture
@@ -40,11 +40,12 @@ def _create(client: TestClient, slug: str, name: str | None = None, **extra: Unp
 def _seed_records(client: TestClient) -> str:
     """A secret, the work source ``acme`` and the repository ``acme-repo`` that name it; the source's id."""
     _ok(client.post("/api/secrets", json={"name": "token", "value": "v"}), 201)
-    source = {"slug": "acme", "provider": "github", "locator": "acme/widgets", "secret": "token"}
+    github = ensure_fixture_forge(client, "https://api.github.com")
+    source = {"slug": "acme", "provider": "github", "locator": "acme/widgets", "secret": "token", "forge": github}
     source_id = _ok(client.post("/api/work-sources", json=source), 201)["work_source_id"]
     repository = {
         "slug": "acme-repo",
-        "forge_api_url": "https://forge.example",
+        "forge": ensure_fixture_forge(client, "https://forge.example"),
         "owner": "acme",
         "repo": "widgets",
         "base_branch": "main",

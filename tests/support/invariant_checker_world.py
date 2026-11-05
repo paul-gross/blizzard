@@ -21,7 +21,7 @@ def _hub_engine(tmp_path: Path) -> sa.Engine:  # pyright: ignore[reportUnusedFun
 
 
 def _forge_repository(  # pyright: ignore[reportUnusedFunction]  # imported by the test modules that share it
-    conn: sa.Connection, repository_id: str, *, tenant: str, forge_id: str | None, forge_api_url: str
+    conn: sa.Connection, repository_id: str, *, tenant: str, forge_id: str
 ) -> None:
     conn.execute(
         hub_scoped(insert(hub.repositories)).values(
@@ -29,7 +29,6 @@ def _forge_repository(  # pyright: ignore[reportUnusedFunction]  # imported by t
             repository_id=repository_id,
             slug=repository_id,
             name=repository_id,
-            forge_api_url=forge_api_url,
             owner="acme",
             repo=repository_id,
             base_branch="main",

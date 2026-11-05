@@ -2,6 +2,8 @@
 
 from pathlib import Path
 
+import pytest
+
 from tests.support.scaffolding import build_hub
 
 FORGE = {"slug": "enterprise", "kind": "github", "api_base": "https://api.example.test"}
@@ -38,9 +40,7 @@ def test_v2_apply_dry_run_export_round_trip_and_noop(tmp_path: Path) -> None:
     again = hub.client.post("/api/config/apply", json=exported)
     assert again.status_code == 200, again.text
     assert all(o["op"] == "unchanged" for o in again.json()["outcomes"])
-    legacy = hub.client.get("/api/config/export").json()
-    assert legacy["version"] == 1 and "forges" not in legacy
-    assert legacy["repositories"][0]["forge_api_url"] == FORGE["api_base"]
+    assert hub.client.get("/api/config/export").json() == exported
 
 
 def test_v2_refusals_are_located_and_atomic(tmp_path: Path) -> None:
@@ -62,7 +62,7 @@ def test_v2_refusals_are_located_and_atomic(tmp_path: Path) -> None:
     assert forbidden.status_code == 422
     schema = hub.client.get("/api/config/schema/forges?version=2")
     assert schema.status_code == 200, schema.text
-    assert hub.client.get("/api/config/schema/forges").status_code == 404
+    assert hub.client.get("/api/config/schema/forges").json() == schema.json()
 
 
 def test_v2_forge_edits_enable_and_former_slug_refusal(tmp_path: Path) -> None:
@@ -94,3 +94,37 @@ def test_v2_can_enable_a_declared_retired_forge_before_references(tmp_path: Path
     applied = hub.client.post("/api/config/apply", json={"version": 2, "forges": [FORGE], "repositories": [REPO]})
     assert applied.status_code == 200, applied.text
     assert [(o["kind"], o["op"]) for o in applied.json()["outcomes"]] == [("forge", "enable"), ("repository", "create")]
+
+
+@pytest.mark.parametrize("version", [1, None, 3, "2"])
+def test_a_document_of_any_version_but_2_is_refused_naming_version_2(tmp_path: Path, version: object) -> None:
+    hub = build_hub(tmp_path, repositories=(), link=False)
+    document: dict[str, object] = {"forges": [FORGE]}
+    if version is not None:
+        document["version"] = version
+    refused = hub.client.post("/api/config/apply", json=document)
+    assert refused.status_code == 422, refused.text
+    (detail,) = refused.json()["detail"]
+    assert detail["loc"] == ["body", "version"]
+    assert detail["type"] == "config_version_retired"
+    assert "version 2" in detail["msg"]
+    assert hub.services.forge_records.list_all(include_retired=True) == []
+
+
+@pytest.mark.parametrize("path", ["/api/config/export", "/api/config/schema/repositories"])
+def test_version_1_of_the_export_and_a_schema_is_refused_naming_version_2(tmp_path: Path, path: str) -> None:
+    hub = build_hub(tmp_path, repositories=(), link=False)
+    refused = hub.client.get(path, params={"version": 1})
+    assert refused.status_code == 422, refused.text
+    (detail,) = refused.json()["detail"]
+    assert (detail["loc"], detail["type"]) == (["query", "version"], "config_version_retired")
+    assert "version 2" in detail["msg"]
+
+
+def test_the_export_and_each_schema_answer_version_2_by_default(tmp_path: Path) -> None:
+    hub = build_hub(tmp_path, repositories=(), link=False)
+    assert hub.client.get("/api/config/export").json()["version"] == 2
+    repositories = hub.client.get("/api/config/schema/repositories").json()
+    assert "forge" in repositories["properties"] and "forge_api_url" not in repositories["properties"]
+    sources = hub.client.get("/api/config/schema/work-sources").json()
+    assert "forge" in sources["properties"] and "api_base" not in sources["properties"]

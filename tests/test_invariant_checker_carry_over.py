@@ -32,7 +32,7 @@ def test_carried_over_delivery_and_later_delivery_hold_landing_invariants(tmp_pa
     engine = _hub_engine(tmp_path)
     tenant, project = default_tenant(engine), default_project(engine)
     with engine.begin() as conn:
-        _forge_repository(conn, "repo_a", tenant=tenant, forge_id=None, forge_api_url="https://a.example")
+        _forge_repository(conn, "repo_a", tenant=tenant, forge_id="frg_github")
         _link(conn, project, "repo_a", tenant=tenant)
         _flow(conn)
         for n in (1, 2):

@@ -27,6 +27,12 @@ def hub(tmp_path: Path) -> HubHarness:
     hub = build_hub(tmp_path, link=False)
     _ok(hub.client.post("/api/secrets", json={"name": "token", "value": "v"}), 201)
     _ok(hub.client.post("/api/projects", json={"slug": "widgets", "name": "Widgets"}), 201)
+    _ok(
+        hub.client.post(
+            "/api/forges", json={"slug": "forge-example", "kind": "github", "api_base": "https://forge.example"}
+        ),
+        201,
+    )
     for slug in ("a", "b", "c"):
         _ok(hub.client.post("/api/repositories", json=_repository(slug)), 201)
         _ok(hub.client.put(f"{_PROJECT}/repository-links/{slug}"))
@@ -37,7 +43,7 @@ def hub(tmp_path: Path) -> HubHarness:
 def _repository(slug: str) -> dict[str, object]:
     return {
         "slug": slug,
-        "forge_api_url": "https://forge.example",
+        "forge": "forge-example",
         "owner": "acme",
         "repo": slug,
         "base_branch": "main",
@@ -139,7 +145,7 @@ def test_an_apply_whose_sequence_read_follows_a_put_applies_on_the_order_it_left
         _ok(hub.client.put(f"{_PROJECT}/landing-order", json={"repositories": ["b", "c", "a"]}))
 
     _once(monkeypatch, hub.services.project_positions, "landing_seqs", put_b_c_a, before=True)
-    document = {"version": 1, "projects": [{"slug": "widgets", "landing_order": ["a", "c", "b"]}]}
+    document = {"version": 2, "projects": [{"slug": "widgets", "landing_order": ["a", "c", "b"]}]}
 
     applied = _ok(hub.client.post("/api/config/apply", json=document))
 
@@ -156,7 +162,7 @@ def test_an_apply_whose_put_lands_between_the_sequence_and_link_reads_is_refused
         _ok(hub.client.put(f"{_PROJECT}/landing-order", json={"repositories": ["b", "c", "a"]}))
 
     _once_after(monkeypatch, hub.services.project_positions, "landing_seqs", put_b_c_a)
-    document = {"version": 1, "projects": [{"slug": "widgets", "landing_order": ["a", "c", "b"]}]}
+    document = {"version": 2, "projects": [{"slug": "widgets", "landing_order": ["a", "c", "b"]}]}
 
     refused = hub.client.post("/api/config/apply", params={"dry_run": str(dry_run).lower()}, json=document)
 
@@ -173,7 +179,7 @@ def test_an_apply_planned_before_a_whole_order_put_is_refused_at_its_project_ent
         _ok(hub.client.put(f"{_PROJECT}/landing-order", json={"repositories": ["b", "c", "a"]}))
 
     _once_after(monkeypatch, hub.services.project_links, "repositories_of_projects", put_b_c_a)
-    document = {"version": 1, "projects": [{"slug": "widgets", "landing_order": ["a", "c", "b"]}]}
+    document = {"version": 2, "projects": [{"slug": "widgets", "landing_order": ["a", "c", "b"]}]}
 
     refused = hub.client.post("/api/config/apply", params={"dry_run": str(dry_run).lower()}, json=document)
 

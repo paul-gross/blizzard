@@ -20,6 +20,7 @@ from tests.support.worker_http import Bound, bind_stubs
 
 _HUB = "http://hub.local:8421"
 _SENTINEL = "tok-planted-840"
+_ON_GITHUB = ["--provider", "github", "--forge", "github"]
 
 
 _bound: dict[str, Bound] = {}
@@ -48,9 +49,16 @@ def _source(args: list[str]):
     return _cli("source", args)
 
 
+def _seed_forges() -> None:
+    for slug, api_base in (("github", "https://api.github.com"), ("ghe-example", "https://ghe.example/api/v3")):
+        created = _cli("forge", ["create", slug, "--kind", "github", "--api-base", api_base])
+        assert created.exit_code == 0, created.output
+
+
 def _seed(client: TestClient) -> None:
     assert _cli("secret", ["create", "gh-demo"], stdin=_SENTINEL).exit_code == 0
-    created = _source(["create", "demo", "--provider", "github", "--locator", "acme/demo", "--secret", "gh-demo"])
+    _seed_forges()
+    created = _source(["create", "demo", *_ON_GITHUB, "--locator", "acme/demo", "--secret", "gh-demo"])
     assert created.exit_code == 0, created.output
 
 
@@ -74,9 +82,8 @@ def test_create_list_and_show_with_and_without_json(client: TestClient) -> None:
 
 def test_create_takes_a_slug_and_a_name_and_edit_renames(client: TestClient) -> None:
     assert _cli("secret", ["create", "gh-demo"], stdin=_SENTINEL).exit_code == 0
-    created = _source(
-        ["create", "acme", "--name", "Acme", "--provider", "github", "--locator", "acme/a", "--secret", "gh-demo"]
-    )
+    _seed_forges()
+    created = _source(["create", "acme", "--name", "Acme", *_ON_GITHUB, "--locator", "acme/a", "--secret", "gh-demo"])
     assert created.exit_code == 0, created.output
     assert "work source acme created at revision 1 — id wsrc_" in created.output
     renamed = _source(["edit", "acme", "--slug", "acme-core", "--name", "Acme core"])
@@ -84,21 +91,21 @@ def test_create_takes_a_slug_and_a_name_and_edit_renames(client: TestClient) -> 
     assert "work source acme-core is at revision 2" in renamed.output
     assert "acme-core  Acme core  revision 2" in _source(["get", "acme"]).output
     assert _source(["edit", "acme-core", "--slug", "hub"]).exit_code != 0
-    refused = _source(["create", "hub", "--provider", "github", "--locator", "acme/h", "--secret", "gh-demo"])
+    refused = _source(["create", "hub", *_ON_GITHUB, "--locator", "acme/h", "--secret", "gh-demo"])
     assert refused.exit_code != 0
 
 
 def test_edit_sets_clears_and_refuses_a_stale_if_match(client: TestClient) -> None:
     _seed(client)
 
-    assert "revision 2" in _source(["edit", "demo", "--api-base", "https://ghe.example/api/v3"]).output
-    assert "revision 3" in _source(["edit", "demo", "--clear", "api-base"]).output
-    assert json.loads(_source(["get", "demo", "--json"]).stdout)["api_base"] == "https://api.github.com"
+    assert "revision 2" in _source(["edit", "demo", "--forge", "ghe-example"]).output
+    assert "revision 3" in _source(["edit", "demo", "--forge", "github"]).output
+    assert json.loads(_source(["get", "demo", "--json"]).stdout)["forge_slug"] == "github"
     stale = _source(["edit", "demo", "--if-match", "1", "--no-annotate"])
     assert stale.exit_code != 0
     assert "revision 3" in stale.output
     assert _source(["edit", "demo"]).exit_code != 0
-    assert _source(["edit", "demo", "--api-base", "x", "--clear", "api-base"]).exit_code != 0
+    assert _source(["edit", "demo", "--secret", "x", "--clear", "secret"]).exit_code != 0
     refused = _source(["edit", "demo", "--clear", "secret"])
     assert refused.exit_code != 0
     assert "secret" in refused.output
@@ -120,7 +127,7 @@ def test_retire_and_enable_and_the_secret_reference_guard(client: TestClient) ->
     assert "retired" in _source(["retire", "demo"]).output
     assert "demo" not in _source(["list"]).output
     assert "demo" in _source(["list", "--include-retired"]).output
-    clash = _source(["create", "demo2", "--provider", "github", "--locator", "acme/demo", "--secret", "gh-demo"])
+    clash = _source(["create", "demo2", *_ON_GITHUB, "--locator", "acme/demo", "--secret", "gh-demo"])
     assert clash.exit_code != 0
     assert "demo" in clash.output
     assert "enabled" in _source(["enable", "demo"]).output
@@ -135,8 +142,9 @@ def test_config_changes_carry_the_cli_door_and_no_secret_value(client: TestClien
     lines = text.output.strip().splitlines()
     assert "api  work_source demo  r2  edit  annotate" in lines[0]
     assert "cli  work_source demo  r1  create" in lines[1]
-    assert "cli  forge github  r1  create" in lines[2]
-    assert "cli  secret gh-demo  r1  create" in lines[3]
+    assert "cli  forge ghe-example  r1  create" in lines[2]
+    assert "cli  forge github  r1  create" in lines[3]
+    assert "cli  secret gh-demo  r1  create" in lines[4]
     assert _SENTINEL not in text.output
 
     raw = json.loads(_cli("config", ["changes", "--json", "--kind", "secret", "--all"]).stdout)
@@ -148,12 +156,14 @@ def test_config_changes_carry_the_cli_door_and_no_secret_value(client: TestClien
 # --- config apply and export --------------------------------------------------------
 
 _APPLY_YAML = """\
-version: 1
+version: 2
 secrets: [gh-demo]
+forges:
+  - {slug: github, kind: github, api_base: "https://api.github.com"}
 work_sources:
-  - {slug: demo, provider: github, locator: acme/demo, secret: gh-demo}
+  - {slug: demo, provider: github, locator: acme/demo, forge: github, secret: gh-demo}
 repositories:
-  - {slug: blizzard, forge_api_url: "https://api.github.com", owner: acme, repo: blizzard, base_branch: master, secret_name: gh-demo}
+  - {slug: blizzard, forge: github, owner: acme, repo: blizzard, base_branch: master, secret_name: gh-demo}
 """
 
 
@@ -172,8 +182,10 @@ def _changes_count() -> int:
 def test_yaml_yml_and_json_files_apply(client: TestClient, tmp_path: Path) -> None:
     assert _cli("secret", ["create", "gh-demo"], stdin=_SENTINEL).exit_code == 0
     as_json = {
-        "version": 1,
-        "work_sources": [{"slug": "from-json", "provider": "github", "locator": "acme/j", "secret": "gh-demo"}],
+        "version": 2,
+        "work_sources": [
+            {"slug": "from-json", "provider": "github", "locator": "acme/j", "forge": "github", "secret": "gh-demo"}
+        ],
     }
     (tmp_path / "a.yaml").write_text(_APPLY_YAML)
     (tmp_path / "b.json").write_text(json.dumps(as_json))
@@ -186,7 +198,7 @@ def test_yaml_yml_and_json_files_apply(client: TestClient, tmp_path: Path) -> No
     assert len(_lines(from_json.output, "create")) == 1
     from_yml = _config(["apply", str(tmp_path / "c.yml")])
     assert from_yml.exit_code == 0, from_yml.output
-    assert len(_lines(from_yml.output, "unchanged")) == 2
+    assert len(_lines(from_yml.output, "unchanged")) == 3
 
 
 def test_an_unknown_extension_is_refused_before_any_request(client: TestClient, tmp_path: Path) -> None:
@@ -244,32 +256,23 @@ def test_a_refused_apply_reports_the_hub_s_refusal(client: TestClient, tmp_path:
     assert "secrets.0: secret gh-demo is unknown" in result.output
 
 
-def test_forge_names_the_source_s_forge_and_the_old_flags_warn(client: TestClient) -> None:
+def test_a_source_names_its_forge_by_forge_and_the_hub_refuses_one_naming_none(client: TestClient) -> None:
     _seed(client)
-    moved = _source(["edit", "demo", "--api-base", "https://ghe.example/api/v3"])
+    moved = _source(["edit", "demo", "--forge", "ghe-example"])
     assert moved.exit_code == 0, moved.output
-    assert "warning: api_base is deprecated; it resolved to forge ghe-example" in moved.stderr
     assert "forge ghe-example" in _source(["get", "demo"]).output
 
-    back = _source(["edit", "demo", "--forge", "github"])
-    assert back.exit_code == 0, back.output
-    assert "warning:" not in back.stderr
-    assert json.loads(_source(["get", "demo", "--json"]).stdout)["forge_slug"] == "github"
+    neither = _source(["create", "other", "--provider", "github", "--locator", "acme/o", "--secret", "gh-demo"])
+    assert neither.exit_code == 1
+    assert client.get("/api/work-sources/other").status_code == 404
+    for old in (["--api-base", "https://ghe.example/api/v3"], ["--web-base", "https://ghe.example"]):
+        refused = _source(["edit", "demo", *old])
+        assert refused.exit_code == 2
+        assert "No such option" in refused.output
+    assert _source(["edit", "demo", "--clear", "api-base"]).exit_code == 2
 
-    created = _source(
-        [
-            "create",
-            "other",
-            "--provider",
-            "github",
-            "--locator",
-            "acme/o",
-            "--secret",
-            "gh-demo",
-            "--forge",
-            "ghe-example",
-        ]
-    )
-    assert created.exit_code == 0, created.output
-    assert "warning:" not in created.stderr
-    assert json.loads(_source(["get", "other", "--json"]).stdout)["api_base"] == "https://ghe.example/api/v3"
+
+def test_an_export_of_version_1_prints_the_hubs_refusal(client: TestClient) -> None:
+    refused = _config(["export", "--version", "1"])
+    assert refused.exit_code != 0
+    assert "version 2" in refused.output

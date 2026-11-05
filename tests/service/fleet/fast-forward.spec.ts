@@ -34,9 +34,10 @@ test('test_fast_forward_stands_when_second_forge_refuses_merge_method', async ({
   const made = await secondForge.createRepository(first.owner, name);
   const second: Repository = { name, owner: first.owner, tokenPrefix: name, origin: made.origin };
   const applied = await api.post('/api/config/apply', { data: {
-    version: 1, secrets: ['fixture-forge-token'],
-    work_sources: [{ slug: name, provider: 'github', locator: fullName(second), api_base: secondForge.url, secret: 'fixture-forge-token' }],
-    repositories: [{ slug: name, forge_api_url: secondForge.url, owner: second.owner, repo: name, base_branch: 'main', secret_name: 'fixture-forge-token' }],
+    version: 2, secrets: ['fixture-forge-token'],
+    forges: [{ slug: 'second-forge', kind: 'github', api_base: secondForge.url }],
+    work_sources: [{ slug: name, provider: 'github', locator: fullName(second), forge: 'second-forge', secret: 'fixture-forge-token' }],
+    repositories: [{ slug: name, forge: 'second-forge', owner: second.owner, repo: name, base_branch: 'main', secret_name: 'fixture-forge-token' }],
     projects: [{ slug: project.slug, repositories: [first.name, name], sources: [first.name, name] }],
   } });
   expect(applied.status, JSON.stringify(applied.body)).toBe(200);

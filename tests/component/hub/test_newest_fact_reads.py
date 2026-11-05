@@ -251,12 +251,19 @@ def _linked_hub(tmp_path: Path, *, depth: int) -> HubHarness:
     tmp_path.mkdir()
     hub = build_hub(tmp_path, repositories=(), link=False)
     assert hub.client.post("/api/secrets", json={"name": "gh", "value": "v"}).status_code == 201
-    sources = [{"slug": s, "provider": "github", "locator": f"acme/{s}", "secret": "gh"} for s in ("s0", "s1")]
+    forges = [{"slug": "github", "kind": "github", "api_base": "https://api.github.com"}]
+    sources = [
+        {"slug": s, "provider": "github", "locator": f"acme/{s}", "forge": "github", "secret": "gh"}
+        for s in ("s0", "s1")
+    ]
     both = [{"slug": p, "name": p, "sources": ["s0", "s1"]} for p in ("p0", "p1")]
     without = [both[0], {"slug": "p1", "sources": ["s1"]}]
-    for document in [{"work_sources": sources, "projects": both}, *[{"projects": without}, {"projects": both}] * depth]:
-        assert hub.client.post("/api/config/apply", json={"version": 1, **document}).status_code == 200
-    assert hub.client.post("/api/config/apply", json={"version": 1, "projects": without}).status_code == 200
+    for document in [
+        {"forges": forges, "work_sources": sources, "projects": both},
+        *[{"projects": without}, {"projects": both}] * depth,
+    ]:
+        assert hub.client.post("/api/config/apply", json={"version": 2, **document}).status_code == 200
+    assert hub.client.post("/api/config/apply", json={"version": 2, "projects": without}).status_code == 200
     return hub
 
 
