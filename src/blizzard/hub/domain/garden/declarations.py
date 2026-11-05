@@ -89,7 +89,11 @@ class RoutineDeclaration:
 
     @property
     def handle(self) -> str:
-        """The slug the entry states, else its name — the key the stored routine is found by."""
+        """The key the stored routine is found by."""
+        return self._stated_handle()
+
+    def _stated_handle(self) -> str:
+        """The slug the entry states, else its name."""
         handle = self.slug if self.slug is not None else self.name
         assert handle is not None
         return handle
