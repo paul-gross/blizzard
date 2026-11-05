@@ -33,6 +33,21 @@ def _seed(conn: sa.Connection) -> None:
             ),
             {"id": f"fin_{index}", "name": name},
         )
+        conn.execute(
+            sa.text(
+                "INSERT INTO finding_sets (finding_set_id, artifact_id, chunk_id, scope_id, scope_slug, "
+                "routine_name, revisions, tenant_id, project_id) VALUES (:id, :id, 'ch_1', 'sc_1', 'core', :name, "
+                "'{}', 'tenant_1', 'prj_1')"
+            ),
+            {"id": f"fins_{index}", "name": name},
+        )
+        conn.execute(
+            sa.text(
+                "INSERT INTO work_item_runs (work_item_id, routine_name, scope_id, mode, tenant_id, project_id) "
+                "VALUES (:id, :name, 'sc_1', 'full', 'tenant_1', 'prj_1')"
+            ),
+            {"id": f"wi_{index}", "name": name},
+        )
 
 
 def _slugs(engine: sa.Engine) -> dict[str, str]:
@@ -40,9 +55,15 @@ def _slugs(engine: sa.Engine) -> dict[str, str]:
         return {str(r.name): str(r.slug) for r in conn.execute(sa.text("SELECT name, slug FROM routines"))}
 
 
-def _lineage(engine: sa.Engine) -> list[str]:
+_LINEAGE_TABLES = ("findings", "finding_sets", "work_item_runs")
+
+
+def _lineage(engine: sa.Engine) -> dict[str, list[str]]:
     with engine.connect() as conn:
-        return sorted(conn.execute(sa.text("SELECT routine_name FROM findings")).scalars())
+        return {
+            table: sorted(conn.execute(sa.text(f"SELECT routine_name FROM {table}")).scalars())
+            for table in _LINEAGE_TABLES
+        }
 
 
 def test_upgrade_fills_slug_from_name_and_round_trips(tmp_path: Path) -> None:
@@ -53,7 +74,7 @@ def test_upgrade_fills_slug_from_name_and_round_trips(tmp_path: Path) -> None:
     runner.upgrade(_REVISION)
     inspector = sa.inspect(engine)
     assert _slugs(engine) == {name: name for name in _NAMES}
-    assert _lineage(engine) == sorted(_NAMES)
+    assert _lineage(engine) == {table: sorted(_NAMES) for table in _LINEAGE_TABLES}
     assert {u["name"] for u in inspector.get_unique_constraints("routines")} == {"uq_routines_project_slug"}
     assert {i["name"]: i["column_names"] for i in inspector.get_indexes("routines")} == {
         "ix_routines_tenant_slug": ["tenant_id", "slug"]
