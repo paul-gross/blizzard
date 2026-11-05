@@ -641,6 +641,35 @@ export type ApplyResponse = {
 };
 
 /**
+ * ArtifactCheckRequest
+ *
+ * ``POST /api/fleet/chunks/{chunk_id}/artifact-check`` — content a worker is about to stage under ``name``.
+ */
+export type ArtifactCheckRequest = {
+    /**
+     * Content
+     */
+    content: string;
+    /**
+     * Name
+     */
+    name: string;
+};
+
+/**
+ * ArtifactCheckResponse
+ *
+ * The hub's verdict on a staging offer: ``refusal`` is the delivery-time message when the content fails
+ * the format its graph owes ``name``, and absent otherwise.
+ */
+export type ArtifactCheckResponse = {
+    /**
+     * Refusal
+     */
+    refusal: string | null;
+};
+
+/**
  * ArtifactKind
  *
  * The union discriminator.
@@ -15304,6 +15333,36 @@ export type GetChunkAnalyticsSpendNodesApiFleetChunksChunkIdAnalyticsSpendNodesG
 };
 
 export type GetChunkAnalyticsSpendNodesApiFleetChunksChunkIdAnalyticsSpendNodesGetResponse = GetChunkAnalyticsSpendNodesApiFleetChunksChunkIdAnalyticsSpendNodesGetResponses[keyof GetChunkAnalyticsSpendNodesApiFleetChunksChunkIdAnalyticsSpendNodesGetResponses];
+
+export type CheckArtifactApiFleetChunksChunkIdArtifactCheckPostData = {
+    body: ArtifactCheckRequest;
+    path: {
+        /**
+         * Chunk Id
+         */
+        chunk_id: string;
+    };
+    query?: never;
+    url: '/api/fleet/chunks/{chunk_id}/artifact-check';
+};
+
+export type CheckArtifactApiFleetChunksChunkIdArtifactCheckPostErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type CheckArtifactApiFleetChunksChunkIdArtifactCheckPostError = CheckArtifactApiFleetChunksChunkIdArtifactCheckPostErrors[keyof CheckArtifactApiFleetChunksChunkIdArtifactCheckPostErrors];
+
+export type CheckArtifactApiFleetChunksChunkIdArtifactCheckPostResponses = {
+    /**
+     * Successful Response
+     */
+    200: ArtifactCheckResponse;
+};
+
+export type CheckArtifactApiFleetChunksChunkIdArtifactCheckPostResponse = CheckArtifactApiFleetChunksChunkIdArtifactCheckPostResponses[keyof CheckArtifactApiFleetChunksChunkIdArtifactCheckPostResponses];
 
 export type SubmitCompletionApiFleetChunksChunkIdCompletionsPostData = {
     body: CompletionSubmission;

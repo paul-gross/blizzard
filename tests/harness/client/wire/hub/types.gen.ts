@@ -614,7 +614,7 @@ export type ArtifactCheckResponse = {
     /**
      * Refusal
      */
-    refusal?: string | null;
+    refusal: string | null;
 };
 
 /**

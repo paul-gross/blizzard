@@ -1031,6 +1031,9 @@
             "title": "Refusal"
           }
         },
+        "required": [
+          "refusal"
+        ],
         "title": "ArtifactCheckResponse",
         "type": "object"
       },

@@ -6,6 +6,8 @@ from __future__ import annotations
 
 from pydantic import BaseModel
 
+from blizzard.wire.base import WireModel
+
 
 class AttachmentRequest(BaseModel):
     """A worker's explicit artifact submission for one ``produces:`` name."""
@@ -38,7 +40,7 @@ class ArtifactCheckRequest(BaseModel):
     content: str
 
 
-class ArtifactCheckResponse(BaseModel):
+class ArtifactCheckResponse(WireModel):
     """The hub's verdict on a staging offer: ``refusal`` is the delivery-time message when the content fails
     the format its graph owes ``name``, and absent otherwise."""
 
