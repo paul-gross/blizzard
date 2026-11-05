@@ -1,8 +1,8 @@
 import { Component, provideZonelessChangeDetection } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { QueryClient, provideTanStackQuery } from '@tanstack/angular-query-experimental';
-import { BoardHeader, hubApi, hubClient } from 'fleet';
-import { OPERATOR_ME_RESPONSE, chunkCountsView, fleetSpendView, stubRequestClient } from 'fleet/testing';
+import { BoardHeader, hubApi } from 'fleet';
+import { OPERATOR_ME_RESPONSE, chunkCountsView, fleetSpendView, stubHubClient } from 'fleet/testing';
 import { page } from 'vitest/browser';
 
 import { AppNavMenu } from './app-nav-menu';
@@ -91,7 +91,7 @@ describe('hub shell sweep (web:shell-sweep, issue #163/#171)', () => {
     window.addEventListener('error', onError);
     window.addEventListener('unhandledrejection', onRejection);
 
-    const stub = stubRequestClient(hubClient, (_method, path) => (path === '/api/me' ? OPERATOR_ME_RESPONSE : {}));
+    const stub = stubHubClient({ 'GET /api/me': () => OPERATOR_ME_RESPONSE });
     await TestBed.configureTestingModule({
       imports: [TestHubShell],
       providers: [provideZonelessChangeDetection(), provideTanStackQuery(new QueryClient())],

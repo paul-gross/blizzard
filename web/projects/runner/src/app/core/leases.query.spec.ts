@@ -1,16 +1,16 @@
 import { ChangeDetectionStrategy, Component, provideZonelessChangeDetection } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { QueryClient, injectQuery, provideTanStackQuery } from '@tanstack/angular-query-experimental';
-import { RUNNER_LIVE_COVERED_POLL_BACKSTOP_MS, runnerClient } from 'fleet';
-import { type RequestClientStub, settle, stubError, stubRequestClient } from 'fleet/testing';
+import { RUNNER_LIVE_COVERED_POLL_BACKSTOP_MS, type runnerApi } from 'fleet';
+import { type RequestClientStub, runnerLeaseView, settle, stubError, stubRunnerClient } from 'fleet/testing';
 import { vi } from 'vitest';
 
 import { runnerLeasesQueryOptions } from './leases.query';
 import { runnerLeasesKey } from './query-keys';
 
-const LEASES = {
+const LEASES: runnerApi.LeaseListResponse = {
   items: [
-    {
+    runnerLeaseView({
       lease_id: 'L-903',
       chunk_id: 'C-125',
       graph_id: 'gr_1',
@@ -24,7 +24,7 @@ const LEASES = {
       created_at: '2026-07-16T11:00:00+00:00',
       last_heartbeat_at: '2026-07-16T11:59:26+00:00',
       state: 'running',
-    },
+    }),
   ],
 };
 
@@ -51,7 +51,7 @@ describe('runnerLeasesQueryOptions', () => {
   });
 
   it('reads GET /runners/{runner_id}/api/leases through the generated runner client and returns its items', async () => {
-    stub = stubRequestClient(runnerClient, (method, path) => (method === 'GET' && path === '/runners/rn_1/api/leases' ? LEASES : {}));
+    stub = stubRunnerClient({ 'GET /runners/{runner_id}/api/leases': () => LEASES });
     await TestBed.configureTestingModule({
       imports: [LeasesQueryHost],
       providers: [
@@ -67,7 +67,7 @@ describe('runnerLeasesQueryOptions', () => {
   });
 
   it('returns an empty array when the runner genuinely holds no active leases', async () => {
-    stub = stubRequestClient(runnerClient, (method, path) => (method === 'GET' && path === '/runners/rn_1/api/leases' ? { items: [] } : {}));
+    stub = stubRunnerClient({ 'GET /runners/{runner_id}/api/leases': () => ({ items: [] }) });
     await TestBed.configureTestingModule({
       imports: [LeasesQueryHost],
       providers: [
@@ -90,7 +90,7 @@ describe('runnerLeasesQueryOptions', () => {
     // on RUNNER_LIVE_COVERED_POLL_BACKSTOP_MS), not as a bare constant equality.
     vi.useFakeTimers();
     try {
-      stub = stubRequestClient(runnerClient, (method, path) => (method === 'GET' && path === '/runners/rn_1/api/leases' ? LEASES : {}));
+      stub = stubRunnerClient({ 'GET /runners/{runner_id}/api/leases': () => LEASES });
       await TestBed.configureTestingModule({
         imports: [LeasesQueryHost],
         providers: [
@@ -120,9 +120,8 @@ describe('runnerLeasesQueryOptions', () => {
   });
 
   it('surfaces a 503 (store unwired) as an error — never a silent empty list', async () => {
-    stub = stubRequestClient(runnerClient, (method, path) => {
-      if (method === 'GET' && path === '/runners/rn_1/api/leases') return stubError(503, { detail: 'lease store not wired' });
-      return {};
+    stub = stubRunnerClient({
+      'GET /runners/{runner_id}/api/leases': () => stubError(503, { detail: 'lease store not wired' }),
     });
     await TestBed.configureTestingModule({
       imports: [LeasesQueryHost],

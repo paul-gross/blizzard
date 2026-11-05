@@ -2,8 +2,23 @@ import { provideZonelessChangeDetection } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { provideRouter } from '@angular/router';
 import { QueryClient, provideTanStackQuery } from '@tanstack/angular-query-experimental';
-import { runnerClient } from 'fleet';
-import { settle, stubRequestClient } from 'fleet/testing';
+import {
+  capacitiesView,
+  harnessHealthView,
+  hostEnvironmentView,
+  hostRegistrationView,
+  hostRunnerView,
+  hostSubscriptionView,
+  hubConnectivityView,
+  pauseStateView,
+  runnerDashboardView,
+  runnerLeaseView,
+  runnerStatusView,
+  servedProjectStatusView,
+  settle,
+  stubError,
+  stubRunnerClient,
+} from 'fleet/testing';
 import { page } from 'vitest/browser';
 
 import { HostPage } from './host-page';
@@ -31,28 +46,25 @@ const CHUNK_ID = 'ch_01KXKVVF1J3D6H6VYZ3XYN3YJ9';
 
 const RUNNERS = {
   items: [
-    {
+    hostRunnerView({
       runner_id: RUNNER_ID,
       name: 'r-claude',
-      state: 'serving',
-      served: true,
-      halted_reasons: [],
-      pause: { local: false, hub: true, effective: true, local_reason: null },
+      pause: pauseStateView({ hub: true, effective: true }),
       agents_in_use: 2,
       max_agents: 2,
       bindings: [
         { project: 'blizzard', workspace_id: 'blizzard-workspace-with-a-long-identifier', agents: 2 },
         { project: 'blizzard-context', workspace_id: 'blizzard-workspace-with-a-long-identifier', agents: 1 },
       ],
-    },
-    {
+    }),
+    hostRunnerView({
       runner_id: null,
       name: 'r-chatgpt',
       state: 'halted',
       served: false,
-      bindings: [],
+      pause: null,
       halted_reasons: ['the hub refused this runner’s token: it was revoked or never minted for this host'],
-    },
+    }),
   ],
 };
 
@@ -68,25 +80,25 @@ const ENVIRONMENTS = {
     {
       workspace_id: 'blizzard-workspace-with-a-long-identifier',
       items: [
-        {
+        hostEnvironmentView({
           environment_id: 'r1',
           held: true,
           chunk_id: CHUNK_ID,
           held_since: '2026-07-16T11:18:00.000Z',
           runner_id: RUNNER_ID,
           project: 'blizzard-context',
-        },
-        { environment_id: 'r2', held: false },
-        { environment_id: 'r3', held: false },
+        }),
+        hostEnvironmentView({ environment_id: 'r2' }),
+        hostEnvironmentView({ environment_id: 'r3' }),
       ],
     },
-    { workspace_id: 'scratch', items: [{ environment_id: 's1', held: false }] },
+    { workspace_id: 'scratch', items: [hostEnvironmentView({ environment_id: 's1' })] },
   ],
 };
 
 const SUBSCRIPTIONS = {
   items: [
-    {
+    hostSubscriptionView({
       slug: 'claude-max',
       name: 'Claude Max',
       provider: 'anthropic',
@@ -94,61 +106,51 @@ const SUBSCRIPTIONS = {
       miss_reason: 'credential_lapsed',
       sampled_at: '2026-07-16T11:59:26.000Z',
       spenders: [RUNNER_ID],
-    },
-    { slug: 'chatgpt-pro', name: 'ChatGPT Pro', provider: 'openai', ok: true, sampled_at: '2026-07-16T11:59:26.000Z', spenders: [] },
+    }),
+    hostSubscriptionView({ slug: 'chatgpt-pro', name: 'ChatGPT Pro', provider: 'openai', sampled_at: '2026-07-16T11:59:26.000Z' }),
   ],
 };
 
-const REGISTRATION = {
+const REGISTRATION = hostRegistrationView({
   state: 'registered',
   host_id: 'hs_01KXKVVF1J3D6H6VYZ3XYN3YJ9',
   tenant_id: 'tn_01KXKVVF1J3D6H6VYZ3XYN3YJ9',
   host_name: 'workstation-with-a-long-hostname',
   answered_at: '2026-07-16T11:59:26.000Z',
   held_runner_ids: [RUNNER_ID],
-  detail: null,
-  buffered_facts: 0,
-};
+});
 
-const DASHBOARD = {
-  runner: {
+const DASHBOARD = runnerDashboardView({
+  runner: runnerStatusView({
     runner_id: RUNNER_ID,
     workspace_id: 'blizzard-workspace-with-a-long-identifier',
-    pause: { local: false, hub: true, effective: true, local_reason: null },
-    capacities: {
+    pause: pauseStateView({ hub: true, effective: true }),
+    capacities: capacitiesView({
       used: 1,
       bindings: [
         { project: 'blizzard', project_id: 'proj_b', workspace_id: 'blizzard-workspace-with-a-long-identifier', agents: 2, used: 0, free: 2 },
         { project: 'blizzard-context', project_id: 'proj_c', workspace_id: 'blizzard-workspace-with-a-long-identifier', agents: 1, used: 1, free: 0 },
       ],
-    },
-    hub: { endpoint: 'http://127.0.0.1:8421', reachable: true, last_contact_at: '2026-07-16T11:59:26.000Z', buffer_depth: 0 },
+    }),
+    hub: hubConnectivityView({ endpoint: 'http://127.0.0.1:8421', last_contact_at: '2026-07-16T11:59:26.000Z' }),
     last_tick_at: '2026-07-16T11:59:26.000Z',
     gates: ['review'],
     served_projects: [
-      { entry: 'blizzard', project_id: 'proj_b', slug: 'blizzard', name: 'Blizzard', color: 'amber', resolved: true, answered: true },
-      { entry: 'blizzard-context', project_id: 'proj_c', slug: 'blizzard-context', name: 'Blizzard Context', color: 'teal', resolved: true, answered: true },
+      servedProjectStatusView({ entry: 'blizzard', project_id: 'proj_b', slug: 'blizzard', name: 'Blizzard', color: 'amber' }),
+      servedProjectStatusView({ entry: 'blizzard-context', project_id: 'proj_c', slug: 'blizzard-context', name: 'Blizzard Context', color: 'teal' }),
     ],
-  },
-  asks: { items: [] },
-  escalations: { items: [] },
-  takeovers: { items: [] },
-  facts: { items: [] },
+  }),
   harness_health: {
-    items: [{ harness_id: 'claude_code', version: '2.1.278', available: true, cause: null, degradations: [], admitted_range: '>=2.1,<3.0' }],
+    items: [harnessHealthView({ harness_id: 'claude_code', version: '2.1.278', admitted_range: '>=2.1,<3.0' })],
   },
-  fleet_summary: null,
-};
+});
 
 const LEASES = {
   items: [
-    {
+    runnerLeaseView({
       lease_id: 'lease_01KXKVVF1J3D6H6VYZ3XYNZPRR',
       chunk_id: CHUNK_ID,
-      graph_id: 'gr_1',
-      node_id: 'nd_build',
       node_name: 'build-with-a-long-node-name',
-      epoch: 1,
       session_id: 'sess-1',
       harness_id: 'claude_code',
       pid: 4821,
@@ -156,28 +158,30 @@ const LEASES = {
       workdir: '/ws/r1',
       created_at: '2026-07-16T11:00:00.000Z',
       last_heartbeat_at: '2026-07-16T11:59:26.000Z',
-      state: 'running',
-      display_status: 'running',
-      closed_at: null,
-      closure_reason: null,
-    },
+    }),
   ],
 };
 
 /** A registration state a newer runner host may report that this build's generated vocabulary does not list. */
 const UNKNOWN_STATE = 'suspended_for_review';
 
-function route(method: string, path: string): unknown {
-  if (method !== 'GET') return {};
-  if (path === '/api/host/runners') return RUNNERS;
-  if (path === '/api/host/workspaces') return WORKSPACES;
-  if (path === '/api/host/environments') return ENVIRONMENTS;
-  if (path === '/api/host/subscriptions') return SUBSCRIPTIONS;
-  if (path === '/api/host/registration') return REGISTRATION;
-  if (path === `/runners/${RUNNER_ID}/api/dashboard`) return DASHBOARD;
-  if (path === `/runners/${RUNNER_ID}/api/leases`) return LEASES;
-  return {};
-}
+const ROUTES: Parameters<typeof stubRunnerClient>[0] = {
+  'GET /api/host/runners': () => RUNNERS,
+  'GET /api/host/workspaces': () => WORKSPACES,
+  'GET /api/host/environments': () => ENVIRONMENTS,
+  'GET /api/host/subscriptions': () => SUBSCRIPTIONS,
+  'GET /api/host/registration': () => REGISTRATION,
+  'GET /runners/{runner_id}/api/dashboard': (_request, { runner_id }) =>
+    runner_id === RUNNER_ID ? DASHBOARD : stubError(404, { detail: 'unknown runner' }),
+  'GET /runners/{runner_id}/api/leases': (_request, { runner_id }) =>
+    runner_id === RUNNER_ID ? LEASES : stubError(404, { detail: 'unknown runner' }),
+};
+
+/**
+ * The registration as a newer host sends it: typed as this build's view, but serialized onto the wire with a
+ * `state` the generated vocabulary does not list — the off-contract answer the badge must survive.
+ */
+const UNKNOWN_STATE_REGISTRATION = { ...REGISTRATION, toJSON: () => ({ ...REGISTRATION, state: UNKNOWN_STATE }) };
 
 describe('runner host page shell sweep (web:shell-sweep)', () => {
   it('lays runner rows and environment lines out inside the viewport at every width, facts beside held chunks only when wide', async () => {
@@ -186,7 +190,7 @@ describe('runner host page shell sweep (web:shell-sweep)', () => {
     const onRejection = (e: PromiseRejectionEvent) => pageErrors.push(String(e.reason));
     window.addEventListener('error', onError);
     window.addEventListener('unhandledrejection', onRejection);
-    const stub = stubRequestClient(runnerClient, route);
+    const stub = stubRunnerClient(ROUTES);
 
     await TestBed.configureTestingModule({
       imports: [HostPage],
@@ -267,9 +271,7 @@ describe('runner host page shell sweep (web:shell-sweep)', () => {
     const onRejection = (e: PromiseRejectionEvent) => pageErrors.push(String(e.reason));
     window.addEventListener('error', onError);
     window.addEventListener('unhandledrejection', onRejection);
-    const stub = stubRequestClient(runnerClient, (method, path) =>
-      method === 'GET' && path === '/api/host/registration' ? { ...REGISTRATION, state: UNKNOWN_STATE } : route(method, path),
-    );
+    const stub = stubRunnerClient({ ...ROUTES, 'GET /api/host/registration': () => UNKNOWN_STATE_REGISTRATION });
 
     TestBed.resetTestingModule();
     await TestBed.configureTestingModule({

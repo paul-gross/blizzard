@@ -2,8 +2,17 @@ import { Component, provideZonelessChangeDetection } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { Router, RouterOutlet, provideRouter } from '@angular/router';
 import { QueryClient, provideTanStackQuery } from '@tanstack/angular-query-experimental';
-import { hubClient } from 'fleet';
-import { type RequestClientStub, settle, stubRequestClient } from 'fleet/testing';
+import type { GardenProposalView } from 'fleet';
+import {
+  type RequestClientStub,
+  gardenProjectView,
+  gardenProposalClosureView,
+  gardenProposalView,
+  gardenRoutineView,
+  gardenScopeView,
+  settle,
+  stubHubClient,
+} from 'fleet/testing';
 
 import { ProjectLens, provideProjectLens } from '../core/project-lens';
 import { GardeningPage } from './gardening-page';
@@ -13,13 +22,12 @@ describe('GardeningPage (blizzard#397)', () => {
 
   afterEach(() => stub.restore());
 
-  async function render(proposals: readonly unknown[]) {
-    stub = stubRequestClient(hubClient, (method, path) => {
-      if (method === 'GET' && path === '/api/garden-proposals') return { proposals, next_cursor: null };
-      if (method === 'GET' && path === '/api/scopes') return [{ slug: 'a' }, { slug: 'b' }];
-      if (method === 'GET' && path === '/api/routines') return [{ name: 'nightly' }];
-      if (method === 'GET' && path === '/api/runs') return [];
-      return {};
+  async function render(proposals: GardenProposalView[]) {
+    stub = stubHubClient({
+      'GET /api/garden-proposals': () => ({ proposals, next_cursor: null }),
+      'GET /api/scopes': () => [gardenScopeView({ slug: 'a' }), gardenScopeView({ slug: 'b' })],
+      'GET /api/routines': () => [gardenRoutineView({ routine_id: 'rtn_1', name: 'nightly' })],
+      'GET /api/runs': () => [],
     });
     await TestBed.configureTestingModule({
       imports: [GardeningPage],
@@ -55,16 +63,8 @@ describe('GardeningPage (blizzard#397)', () => {
 
   it('counts complete lists and waiting proposals in amber, without a partial Findings badge', async () => {
     const fixture = await render([
-      { proposal_id: 'gp_1', routine_name: 'comments', class: 'x', body: 'b', created_at: '2026-01-01T00:00:00Z', findings: [] },
-      {
-        proposal_id: 'gp_2',
-        routine_name: 'comments',
-        class: 'x',
-        body: 'b',
-        created_at: '2026-01-01T00:00:00Z',
-        findings: [],
-        closure: { closure: 'passed', reason: 'r', closed_by: 'u', closed_at: '2026-01-02T00:00:00Z', item_outcome: null, source: null, ref: null },
-      },
+      gardenProposalView({ proposal_id: 'gp_1' }),
+      gardenProposalView({ proposal_id: 'gp_2', closure: gardenProposalClosureView({ reason: 'r' }) }),
     ]);
     const el = fixture.nativeElement as HTMLElement;
     const count = (surface: string) => el.querySelector(`[data-testid="gardening-tab-count-${surface}"]`);
@@ -91,27 +91,17 @@ describe('GardeningPage under a project lens', () => {
   afterEach(() => stub.restore());
 
   const PROJECTS = [
-    { project_id: 'proj_b', slug: 'blizzard', name: 'Blizzard' },
-    { project_id: 'proj_w', slug: 'winter', name: 'Winter' },
+    gardenProjectView({ project_id: 'proj_b', slug: 'blizzard', name: 'Blizzard' }),
+    gardenProjectView({ project_id: 'proj_w', slug: 'winter', name: 'Winter' }),
   ];
-  const waiting = (id: string, project_id: string) => ({
-    proposal_id: id,
-    project_id,
-    routine_name: 'comments',
-    class: 'x',
-    body: 'b',
-    created_at: '2026-01-01T00:00:00Z',
-    findings: [],
-  });
+  const waiting = (id: string, project_id: string) => gardenProposalView({ proposal_id: id, project_id });
   const TENANT_PROPOSALS = [waiting('gp_1', 'proj_w'), waiting('gp_2', 'proj_w'), waiting('gp_3', 'proj_b')];
 
   async function render(url = '/p/blizzard/gardening/scopes') {
-    stub = stubRequestClient(hubClient, (method, path) => {
-      if (method !== 'GET') return {};
-      if (path === '/api/projects') return { projects: PROJECTS };
-      if (path === '/api/garden-proposals') return { proposals: TENANT_PROPOSALS, next_cursor: null };
-      if (path.endsWith('/garden-proposals')) return { proposals: [], next_cursor: null };
-      return {};
+    stub = stubHubClient({
+      'GET /api/projects': () => ({ projects: PROJECTS }),
+      'GET /api/garden-proposals': () => ({ proposals: TENANT_PROPOSALS, next_cursor: null }),
+      'GET /api/projects/{project}/garden-proposals': () => ({ proposals: [], next_cursor: null }),
     });
     await TestBed.configureTestingModule({
       imports: [TestGardenPageHost],

@@ -2,8 +2,17 @@ import { provideZonelessChangeDetection } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { provideRouter } from '@angular/router';
 import { QueryClient, provideTanStackQuery } from '@tanstack/angular-query-experimental';
-import { hubClient } from 'fleet';
-import { type RequestClientStub, settle, stubRequestClient } from 'fleet/testing';
+import {
+  gardenProjectView,
+  gardenProposalsPageView,
+  gardenProposalView,
+  gardenRoutineView,
+  gardenScopeView,
+  type RequestClientStub,
+  runRowView,
+  settle,
+  stubHubClient,
+} from 'fleet/testing';
 import { page } from 'vitest/browser';
 
 import { GardeningDoorway } from './gardening-doorway';
@@ -21,43 +30,39 @@ import { GardeningDoorway } from './gardening-doorway';
  */
 const LONG = 'a-project-with-a-very-long-name-that-should-wrap-inside-its-card';
 const PROJECTS = [
-  { project_id: 'proj_1', slug: 'blizzard', name: 'Blizzard' },
-  { project_id: 'proj_2', slug: 'long', name: LONG },
-  { project_id: 'proj_3', slug: 'winter', name: 'Winter' },
+  gardenProjectView({ project_id: 'proj_1', slug: 'blizzard', name: 'Blizzard' }),
+  gardenProjectView({ project_id: 'proj_2', slug: 'long', name: LONG }),
+  gardenProjectView({ project_id: 'proj_3', slug: 'winter', name: 'Winter' }),
 ];
-const ROUTINES = ['garden-weekly', 'mutation-sweep', 'a-very-long-routine-name-that-should-wrap-too'].map(
-  (name, i) => ({ name, routine_id: `rt_${i}`, project_id: 'proj_2', retired: false }),
+const ROUTINES = ['garden-weekly', 'mutation-sweep', 'a-very-long-routine-name-that-should-wrap-too'].map((name, i) =>
+  gardenRoutineView({ name, routine_id: `rt_${i}`, project_id: 'proj_2' }),
 );
 
-function route(method: string, path: string): unknown {
-  if (method !== 'GET') return {};
-  if (path === '/api/projects') return { projects: PROJECTS };
-  if (path === '/api/routines') return ROUTINES;
-  if (path === '/api/scopes') return [{ slug: 'hub-api', project_id: 'proj_2', retired: false }];
-  if (path === '/api/garden-proposals') {
-    return { proposals: [{ proposal_id: 'gp_1', project_id: 'proj_2', closure: null }], next_cursor: null };
-  }
-  if (path === '/api/runners') return { runners: [] };
-  if (path === '/api/runs') {
-    return [
-      {
+type DoorwayRoutes = Parameters<typeof stubHubClient>[0];
+
+function routes(): DoorwayRoutes {
+  return {
+    'GET /api/projects': () => ({ projects: PROJECTS }),
+    'GET /api/routines': () => ROUTINES,
+    'GET /api/scopes': () => [gardenScopeView({ slug: 'hub-api', project_id: 'proj_2' })],
+    'GET /api/garden-proposals': () =>
+      gardenProposalsPageView({ proposals: [gardenProposalView({ proposal_id: 'gp_1', project_id: 'proj_2' })] }),
+    'GET /api/runners': () => ({ runners: [] }),
+    'GET /api/runs': () => [
+      runRowView({
         chunk_id: 'ch_1',
         project_id: 'proj_2',
         routine_name: 'garden-weekly',
         scope_slug: 'hub-api',
         mode: 'delta',
-        outcome: 'done',
-        escalation: null,
         minted_at: new Date(Date.now() - 3 * 24 * 60 * 60 * 1000).toISOString(),
-        delivered: [],
-      },
-    ];
-  }
-  return [];
+      }),
+    ],
+  };
 }
 
-async function mount(override: (method: string, path: string) => unknown = route) {
-  stubbed = stubRequestClient(hubClient, override);
+async function mount(overrides: DoorwayRoutes = {}) {
+  stubbed = stubHubClient({ ...routes(), ...overrides });
   await TestBed.configureTestingModule({
     imports: [GardeningDoorway],
     providers: [
@@ -87,7 +92,7 @@ describe('gardening doorway layout shell sweep (web:shell-sweep)', () => {
     window.addEventListener('error', onError);
     window.addEventListener('unhandledrejection', onRejection);
 
-    stub = stubRequestClient(hubClient, route);
+    stub = stubHubClient(routes());
     await TestBed.configureTestingModule({
       imports: [GardeningDoorway],
       providers: [
@@ -142,7 +147,7 @@ describe('gardening doorway layout shell sweep (web:shell-sweep)', () => {
   it.each([1280, 390])('renders loading until the reads answer, then the no-projects state, at %ipx', async (width) => {
     await page.viewport(width, 900);
     const never = new Promise<never>(() => undefined);
-    const loading = await mount((method, path) => (path === '/api/projects' ? never : route(method, path)));
+    const loading = await mount({ 'GET /api/projects': () => never });
     stub = stubbed!;
     try {
       await settle(loading.fixture, 4);
@@ -154,7 +159,7 @@ describe('gardening doorway layout shell sweep (web:shell-sweep)', () => {
     }
 
     TestBed.resetTestingModule();
-    const empty = await mount((method, path) => (path === '/api/projects' ? { projects: [] } : route(method, path)));
+    const empty = await mount({ 'GET /api/projects': () => ({ projects: [] }) });
     stub = stubbed!;
     try {
       await settle(empty.fixture, 8);

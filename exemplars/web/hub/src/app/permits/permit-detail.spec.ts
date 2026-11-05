@@ -6,8 +6,8 @@ import { provideRouter } from '@angular/router';
 import { RouterTestingHarness } from '@angular/router/testing';
 import { QueryClient, provideTanStackQuery } from '@tanstack/angular-query-experimental';
 
-import { type PermitView, hubClient } from 'fleet';
-import { type RequestClientStub, settle, stubError, stubRequestClient } from 'fleet/testing';
+import { type PermitView } from 'fleet';
+import { type RequestClientStub, settle, stubError, stubHubClient } from 'fleet/testing';
 import { PermitDetail } from './permit-detail';
 
 const REVOKED: PermitView = {
@@ -26,14 +26,14 @@ const REVOKED: PermitView = {
   revocation_note: 'left the team',
 };
 
-type Answer = (method: string, path: string) => unknown;
+type Routes = Parameters<typeof stubHubClient>[0];
 
 describe('PermitDetail', () => {
   let stub: RequestClientStub;
   afterEach(() => stub?.restore());
 
-  async function mount(url: string, answer: Answer = () => REVOKED) {
-    stub = stubRequestClient(hubClient, answer);
+  async function mount(url: string, routes: Routes = { 'GET /api/permits/{permit_id}': () => REVOKED }) {
+    stub = stubHubClient(routes);
     TestBed.configureTestingModule({
       providers: [
         provideZonelessChangeDetection(),
@@ -68,7 +68,9 @@ describe('PermitDetail', () => {
   });
 
   it('renders the error state when the permit is not found', async () => {
-    const el = await mount('/permits/pmt_9', () => stubError(404, { detail: 'no permit pmt_9' }));
+    const el = await mount('/permits/pmt_9', {
+      'GET /api/permits/{permit_id}': () => stubError(404, { detail: 'no permit pmt_9' }),
+    });
 
     expect(el.querySelector('[data-testid="permit-detail-error"]')).toBeTruthy();
   });

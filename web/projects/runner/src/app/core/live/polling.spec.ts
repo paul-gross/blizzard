@@ -2,7 +2,7 @@ import { ChangeDetectionStrategy, Component, provideZonelessChangeDetection } fr
 import { TestBed } from '@angular/core/testing';
 import { QueryClient, injectQuery, provideTanStackQuery } from '@tanstack/angular-query-experimental';
 import { RUNNER_LIVE_COVERED_POLL_BACKSTOP_MS, injectChunkDetailQuery, runnerClient } from 'fleet';
-import { type RequestClientStub, stubRequestClient } from 'fleet/testing';
+import { type RequestClientStub, runnerDashboardView, stubRunnerClient } from 'fleet/testing';
 import { vi } from 'vitest';
 
 import { injectRunnerSessionQuery } from '../identity/auth.query';
@@ -44,11 +44,10 @@ describe('the panel\'s poll floors, idle and unselected', () => {
 
   it('re-fires only dashboard and leases across two backstop intervals; session polls once, chunk-detail never', async () => {
     vi.useFakeTimers();
-    stub = stubRequestClient(runnerClient, (method, path) => {
-      if (method === 'GET' && path === '/runners/rn_1/api/dashboard') return {};
-      if (method === 'GET' && path === '/runners/rn_1/api/leases') return { items: [] };
-      if (method === 'GET' && path === '/api/auth/session') return { auth_enabled: true, username: 'alice' };
-      return {};
+    stub = stubRunnerClient({
+      'GET /runners/{runner_id}/api/dashboard': () => runnerDashboardView(),
+      'GET /runners/{runner_id}/api/leases': () => ({ items: [] }),
+      'GET /api/auth/session': () => ({ auth_enabled: true, username: 'alice' }),
     });
     await TestBed.configureTestingModule({
       imports: [PollingHost],

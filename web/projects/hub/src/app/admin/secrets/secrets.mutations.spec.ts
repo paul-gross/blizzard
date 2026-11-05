@@ -3,8 +3,8 @@ import { TestBed } from '@angular/core/testing';
 import { QueryClient, provideTanStackQuery } from '@tanstack/angular-query-experimental';
 import { vi } from 'vitest';
 
-import { hubClient, hubConfigKey } from 'fleet';
-import { type RequestClientStub, stubRequestClient } from 'fleet/testing';
+import { hubConfigKey } from 'fleet';
+import { type RequestClientStub, secretView, stubHubClient } from 'fleet/testing';
 import {
   injectCreateSecretMutation,
   injectReplaceSecretMutation,
@@ -16,7 +16,12 @@ describe('secret mutations', () => {
   let queryClient: QueryClient;
 
   beforeEach(() => {
-    stub = stubRequestClient(hubClient, () => ({}));
+    stub = stubHubClient({
+      'POST /api/secrets': () => secretView({ name: 'tok' }),
+      'PUT /api/secrets/{name}/value': () => secretView({ name: 'tok', revision: 5 }),
+      'POST /api/secrets/{name}/retire': () => secretView({ name: 'tok', retired: true }),
+      'POST /api/secrets/{name}/enable': () => secretView({ name: 'tok' }),
+    });
     queryClient = new QueryClient({
       defaultOptions: { queries: { retry: false } },
     });

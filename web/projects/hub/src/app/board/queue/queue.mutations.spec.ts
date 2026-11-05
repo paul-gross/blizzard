@@ -3,8 +3,14 @@ import { TestBed } from '@angular/core/testing';
 import { QueryClient, provideTanStackQuery } from '@tanstack/angular-query-experimental';
 import { vi } from 'vitest';
 
-import { hubClient, hubQueueKey } from 'fleet';
-import { type RequestClientStub, stubError, stubRequestClient } from 'fleet/testing';
+import { hubQueueKey, type QueuePeekResponse } from 'fleet';
+import {
+  type RequestClientStub,
+  type StubDetailBody,
+  type StubHttpError,
+  stubError,
+  stubHubClient,
+} from 'fleet/testing';
 import { injectRepositionBacklogMutation, injectRepositionQueueMutation } from './queue.mutations';
 
 function deferred<T>(): { readonly promise: Promise<T>; readonly resolve: (value: T) => void } {
@@ -17,7 +23,10 @@ describe('injectRepositionQueueMutation', () => {
   let queryClient: QueryClient;
 
   beforeEach(() => {
-    stub = stubRequestClient(hubClient, () => ({ entries: [] }));
+    stub = stubHubClient({
+      'POST /api/queue/position': () => ({ entries: [] }),
+      'POST /api/backlog/position': () => ({ entries: [] }),
+    });
     queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
     TestBed.configureTestingModule({
       providers: [provideZonelessChangeDetection(), provideTanStackQuery(queryClient)],
@@ -40,15 +49,12 @@ describe('injectRepositionQueueMutation', () => {
   });
 
   it('preserves submission order across hook instances when the first POST is slow', async () => {
-    const firstPost = deferred<unknown>();
-    const secondPost = deferred<unknown>();
+    const firstPost = deferred<QueuePeekResponse>();
+    const secondPost = deferred<QueuePeekResponse>();
     let postCount = 0;
     stub.restore();
-    stub = stubRequestClient(hubClient, (method, path) => {
-      if (method === 'POST' && path === '/api/queue/position') {
-        return postCount++ === 0 ? firstPost.promise : secondPost.promise;
-      }
-      return {};
+    stub = stubHubClient({
+      'POST /api/queue/position': () => (postCount++ === 0 ? firstPost.promise : secondPost.promise),
     });
     const refreshResolvers: (() => void)[] = [];
     const invalidateSpy = vi.spyOn(queryClient, 'invalidateQueries').mockImplementation(
@@ -145,14 +151,11 @@ describe('injectRepositionQueueMutation', () => {
   });
 
   it('runs the next reposition after an earlier POST is rejected and refreshed', async () => {
-    const firstPost = deferred<ReturnType<typeof stubError>>();
+    const firstPost = deferred<StubHttpError<number, StubDetailBody>>();
     let postCount = 0;
     stub.restore();
-    stub = stubRequestClient(hubClient, (method, path) => {
-      if (method === 'POST' && path === '/api/queue/position' && postCount++ === 0) {
-        return firstPost.promise;
-      }
-      return { entries: [] };
+    stub = stubHubClient({
+      'POST /api/queue/position': () => (postCount++ === 0 ? firstPost.promise : { entries: [] }),
     });
     const refreshResolvers: (() => void)[] = [];
     vi.spyOn(queryClient, 'invalidateQueries').mockImplementation(

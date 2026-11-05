@@ -2,8 +2,7 @@ import { ChangeDetectionStrategy, Component, provideZonelessChangeDetection } fr
 import { TestBed } from '@angular/core/testing';
 import { QueryClient, provideTanStackQuery } from '@tanstack/angular-query-experimental';
 
-import { hubClient } from 'fleet';
-import { type RequestClientStub, stubRequestClient, settle } from 'fleet/testing';
+import { gardenProposalView, gardenProposalsPageView, type RequestClientStub, settle, stubHubClient } from 'fleet/testing';
 import { injectHubGardenProposalsQuery } from './garden-proposals.query';
 
 @Component({
@@ -20,16 +19,9 @@ describe('injectHubGardenProposalsQuery', () => {
   afterEach(() => stub?.restore());
 
   it('reads the docket off GET /api/garden-proposals — one request when next_cursor is already null', async () => {
-    stub = stubRequestClient(hubClient, (method, path) => {
-      if (method === 'GET' && path === '/api/garden-proposals') {
-        return {
-          proposals: [
-            { proposal_id: 'gp_1', routine_name: 'comments', class: 'x', body: 'b', created_at: '2026-01-01T00:00:00Z', findings: [] },
-          ],
-          next_cursor: null,
-        };
-      }
-      return {};
+    stub = stubHubClient({
+      'GET /api/garden-proposals': () =>
+        gardenProposalsPageView({ proposals: [gardenProposalView({ proposal_id: 'gp_1', class: 'x', body: 'b' })] }),
     });
     TestBed.configureTestingModule({
       imports: [TestGardenProposalsQueryHost],
@@ -44,24 +36,16 @@ describe('injectHubGardenProposalsQuery', () => {
 
   it('drains a multi-page docket and concatenates the pages in order (blizzard#526)', async () => {
     let calls = 0;
-    stub = stubRequestClient(hubClient, (method, path) => {
-      if (method === 'GET' && path === '/api/garden-proposals') {
+    stub = stubHubClient({
+      'GET /api/garden-proposals': () => {
         calls += 1;
         return calls === 1
-          ? {
-              proposals: [
-                { proposal_id: 'gp_1', routine_name: 'comments', class: 'x', body: 'b', created_at: '2026-01-01T00:00:00Z', findings: [] },
-              ],
+          ? gardenProposalsPageView({
+              proposals: [gardenProposalView({ proposal_id: 'gp_1', class: 'x', body: 'b' })],
               next_cursor: 'cursor-1',
-            }
-          : {
-              proposals: [
-                { proposal_id: 'gp_2', routine_name: 'comments', class: 'x', body: 'b', created_at: '2026-01-01T00:00:00Z', findings: [] },
-              ],
-              next_cursor: null,
-            };
-      }
-      return {};
+            })
+          : gardenProposalsPageView({ proposals: [gardenProposalView({ proposal_id: 'gp_2', class: 'x', body: 'b' })] });
+      },
     });
     TestBed.configureTestingModule({
       imports: [TestGardenProposalsQueryHost],

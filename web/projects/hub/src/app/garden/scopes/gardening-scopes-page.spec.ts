@@ -2,12 +2,12 @@ import { ChangeDetectionStrategy, Component, provideZonelessChangeDetection } fr
 import { TestBed } from '@angular/core/testing';
 import { provideRouter, Router, RouterOutlet, type Routes } from '@angular/router';
 import { QueryClient, provideTanStackQuery } from '@tanstack/angular-query-experimental';
-import { hubClient, ViewportService } from 'fleet';
-import { type RequestClientStub, settle, stubRequestClient } from 'fleet/testing';
+import { type ScopeView, ViewportService } from 'fleet';
+import { gardenScopeView, type RequestClientStub, settle, stubHubClient } from 'fleet/testing';
 
 import { GardeningScopesPage } from './gardening-scopes-page';
 
-const SCOPE = { slug: 'blizzard', description: 'the blizzard monorepo', retired: false, created_at: '2026-01-01T00:00:00Z' };
+const SCOPE = gardenScopeView({ slug: 'blizzard', description: 'the blizzard monorepo' });
 
 /** Stands in for `GardeningScopeDetail`, whose own behavior is
  * `gardening-scope-detail.spec.ts`'s — this spec only cares that the parent keeps
@@ -51,12 +51,11 @@ describe('GardeningScopesPage', () => {
 
   afterEach(() => stub?.restore());
 
-  async function render(opts: { scopes?: readonly unknown[]; url?: string; mobile?: boolean } = {}) {
+  async function render(opts: { scopes?: ScopeView[]; url?: string; mobile?: boolean } = {}) {
     const scopes = opts.scopes ?? [SCOPE];
-    stub = stubRequestClient(hubClient, (method, path) => {
-      if (method === 'GET' && path === '/api/scopes') return scopes;
-      if (method === 'GET' && path === '/api/runs') return [];
-      return {};
+    stub = stubHubClient({
+      'GET /api/scopes': () => scopes,
+      'GET /api/runs': () => [],
     });
     await TestBed.configureTestingModule({
       imports: [TestScopesHost],
@@ -76,7 +75,7 @@ describe('GardeningScopesPage', () => {
 
   it('lists every scope by slug, marking a retired one distinctly', async () => {
     const { el } = await render({
-      scopes: [SCOPE, { slug: 'stale-scope', description: 'no longer tended', retired: true, created_at: '2026-01-01T00:00:00Z' }],
+      scopes: [SCOPE, gardenScopeView({ slug: 'stale-scope', description: 'no longer tended', retired: true })],
     });
 
     const row = el.querySelector('[data-testid="gardening-scope-row-blizzard"]');

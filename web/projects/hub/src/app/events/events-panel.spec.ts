@@ -3,12 +3,12 @@ import { type ComponentFixture, TestBed } from '@angular/core/testing';
 import { Router, provideRouter } from '@angular/router';
 import { QueryClient, provideTanStackQuery } from '@tanstack/angular-query-experimental';
 
-import { settle, type RequestClientStub, stubRequestClient } from 'fleet/testing';
-import { hubClient } from 'fleet';
+import type { EventView } from 'fleet';
+import { eventView, settle, type RequestClientStub, stubHubClient } from 'fleet/testing';
 import { EventsPanel } from './events-panel';
 
 const EVENTS = [
-  {
+  eventView({
     id: 2,
     recorded_at: '2026-07-16T00:00:02Z',
     severity: 'critical',
@@ -16,15 +16,15 @@ const EVENTS = [
     runner_id: 'rn_02',
     chunk_id: 'ch_01KXKVVF1J3D6H6VYZ3XYN3YAB',
     message: 'Runner escalated: build failed three times',
-  },
-  {
+  }),
+  eventView({
     id: 1,
     recorded_at: '2026-07-16T00:00:01Z',
     severity: 'info',
     kind: 'lease-minted',
     runner_id: 'rn_01',
     message: 'Lease minted',
-  },
+  }),
 ];
 
 /** The select's popup renders into a CDK overlay on `document.body`, not the fixture. */
@@ -38,8 +38,8 @@ async function openSelect(fixture: ComponentFixture<unknown>, testid: string) {
 describe('EventsPanel', () => {
   let stub: RequestClientStub;
 
-  const render = async (events: unknown = EVENTS, url = '/events') => {
-    stub = stubRequestClient(hubClient, (method, path) => (method === 'GET' && path === '/api/events' ? { events } : {}));
+  const render = async (events: EventView[] = EVENTS, url = '/events') => {
+    stub = stubHubClient({ 'GET /api/events': () => ({ events }) });
     await TestBed.configureTestingModule({
       imports: [EventsPanel],
       providers: [
@@ -118,7 +118,7 @@ describe('EventsPanel', () => {
     // A row with `runner_id: null` must not become a
     // label-less chip whose value collides with the "All" reset sentinel.
     const WITH_ESCALATION = [
-      { id: -1, recorded_at: '2026-07-16T00:00:03Z', severity: 'critical', kind: 'needs-human', runner_id: null, chunk_id: 'ch_01KXKVVF1J3D6H6VYZ3XYN3YAB', message: 'chunk needs a human' },
+      eventView({ id: -1, recorded_at: '2026-07-16T00:00:03Z', severity: 'critical', kind: 'needs-human', runner_id: null, chunk_id: 'ch_01KXKVVF1J3D6H6VYZ3XYN3YAB', message: 'chunk needs a human' }),
       ...EVENTS,
     ];
     const fixture = await render(WITH_ESCALATION);
@@ -137,7 +137,7 @@ describe('EventsPanel', () => {
     // names no runner (blizzard-context:/domain/operations.md). Same stripping rule, same
     // reset-sentinel hazard, a different source row.
     const WITH_HUB_AUTHORED = [
-      { id: 3, recorded_at: '2026-07-16T00:00:03Z', severity: 'info', kind: 'work-item-closed', runner_id: null, chunk_id: 'ch_01KXKVVF1J3D6H6VYZ3XYN3YAB', message: 'closed' },
+      eventView({ id: 3, recorded_at: '2026-07-16T00:00:03Z', severity: 'info', kind: 'work-item-closed', runner_id: null, chunk_id: 'ch_01KXKVVF1J3D6H6VYZ3XYN3YAB', message: 'closed' }),
       ...EVENTS,
     ];
     const fixture = await render(WITH_HUB_AUTHORED);
@@ -153,9 +153,9 @@ describe('EventsPanel', () => {
     // A feed spanning two distinct chunks (plus a runner-scoped, chunk-less event to prove
     // the null chunk_id is stripped from the universe rather than becoming an empty chip).
     const TWO_CHUNKS = [
-      { id: 3, recorded_at: '2026-07-16T00:00:03Z', severity: 'critical', kind: 'worker-lost', runner_id: 'rn_01', chunk_id: 'ch_01KXKVVF1J3D6H6VYZ3XYN3YAB', message: 'lost a' },
-      { id: 2, recorded_at: '2026-07-16T00:00:02Z', severity: 'warning', kind: 'attempt-failed', runner_id: 'rn_01', chunk_id: 'ch_01KXKVVF1J3D6H6VYZ3XYN3ZZZ', message: 'retried b' },
-      { id: 1, recorded_at: '2026-07-16T00:00:01Z', severity: 'info', kind: 'lease-minted', runner_id: 'rn_01', message: 'minted' },
+      eventView({ id: 3, recorded_at: '2026-07-16T00:00:03Z', severity: 'critical', kind: 'worker-lost', runner_id: 'rn_01', chunk_id: 'ch_01KXKVVF1J3D6H6VYZ3XYN3YAB', message: 'lost a' }),
+      eventView({ id: 2, recorded_at: '2026-07-16T00:00:02Z', severity: 'warning', kind: 'attempt-failed', runner_id: 'rn_01', chunk_id: 'ch_01KXKVVF1J3D6H6VYZ3XYN3ZZZ', message: 'retried b' }),
+      eventView({ id: 1, recorded_at: '2026-07-16T00:00:01Z', severity: 'info', kind: 'lease-minted', runner_id: 'rn_01', message: 'minted' }),
     ];
     const fixture = await render(TWO_CHUNKS);
     const el = fixture.nativeElement as HTMLElement;

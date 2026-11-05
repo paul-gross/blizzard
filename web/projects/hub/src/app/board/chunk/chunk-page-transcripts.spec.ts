@@ -3,8 +3,24 @@ import { TestBed } from '@angular/core/testing';
 import { Router, provideRouter } from '@angular/router';
 import { RouterTestingHarness } from '@angular/router/testing';
 import { QueryClient, provideTanStackQuery } from '@tanstack/angular-query-experimental';
-import { ChunkPage, hubClient, ViewportService } from 'fleet';
-import { stubError, OPERATOR_ME_RESPONSE, type RequestClientStub, settle, stubRequestClient } from 'fleet/testing';
+import { ChunkPage, ViewportService, type hubApi } from 'fleet';
+import {
+  assetArtifactView,
+  chunkDetail,
+  commitArtifactView,
+  OPERATOR_ME_RESPONSE,
+  type RequestClientStub,
+  settle,
+  sidechainSegmentView,
+  stubError,
+  stubHubClient,
+  transcriptSegmentContentView,
+  transcriptSegmentIndexEntry,
+  transitionView,
+  turnSegmentView,
+  workItemEntry,
+  workRefView,
+} from 'fleet/testing';
 
 import { ArtifactPage } from './artifact-page';
 import { HUB_CHUNK_PAGE_PROVIDERS } from './hub-chunk-actions';
@@ -12,7 +28,7 @@ import { HUB_CHUNK_PAGE_PROVIDERS } from './hub-chunk-actions';
 /** The chunk page's Transcripts tab, mounted as in `chunk-page.spec.ts`. */
 const CHUNK_ID = 'ch_01KXKVVF1J3D6H6VYZ3XYN3YJ9';
 
-const DETAIL = {
+const DETAIL: hubApi.ChunkDetail = chunkDetail({
   chunk_id: CHUNK_ID,
   graph_id: 'gr_1',
   graph_name: 'default',
@@ -22,11 +38,10 @@ const DETAIL = {
   open_prs: [],
   closed_prs: [],
   landed_repos: [],
-  model: 'claude-opus-5',
   status: 'running',
-  work_refs: [{ source: 'blizzard', ref: '26', url: null }],
+  work_refs: [workRefView({ source: 'blizzard', ref: '26', label: null, web_url: null })],
   history: [
-    {
+    transitionView({
       choice_name: 'pass',
       epoch: 1,
       from_node_id: 'nd_build',
@@ -36,10 +51,10 @@ const DETAIL = {
       recorded_at: '2026-07-16T11:00:00.000Z',
       to_node_id: 'nd_review',
       to_node_name: 'review',
-    },
+    }),
   ],
   artifacts: [
-    {
+    assetArtifactView({
       key: 'review.findings.2',
       kind: 'asset',
       name: 'findings',
@@ -48,8 +63,8 @@ const DETAIL = {
       epoch: 2,
       content: 'THE FINDINGS BODY',
       recorded_at: '2026-07-16T11:30:00.000Z',
-    },
-    {
+    }),
+    commitArtifactView({
       key: 'build.branch.1',
       kind: 'git_commit',
       name: 'branch',
@@ -61,9 +76,9 @@ const DETAIL = {
       branch_url: 'https://example.test/branch',
       commit_hash: 'abc1234',
       recorded_at: '2026-07-16T11:10:00.000Z',
-    },
+    }),
   ],
-};
+});
 
 /** Stands in for the real board page — only its route resolving matters here,
  * so the back link's `/board?chunk=…` navigation actually lands. */
@@ -80,12 +95,12 @@ describe('Chunk page Transcripts tab', () => {
   let stub: RequestClientStub;
 
   beforeEach(() => {
-    stub = stubRequestClient(hubClient, (method, path) => {
-      if (method === 'GET' && path === '/api/me') return OPERATOR_ME_RESPONSE;
-      if (method === 'GET' && path.endsWith('/work-items')) {
-        return { items: [{ ref: 'blizzard#26', title: 'Make the board mobile', state: 'open', web_url: null }] };
-      }
-      return DETAIL;
+    stub = stubHubClient({
+      'GET /api/me': () => OPERATOR_ME_RESPONSE,
+      'GET /api/chunks/{chunk_id}': () => DETAIL,
+      'GET /api/chunks/{chunk_id}/work-items': () => ({
+        items: [workItemEntry({ source: 'blizzard', ref: '26', label: 'Make the board mobile', web_url: null })],
+      }),
     });
     TestBed.configureTestingModule({
       providers: [
@@ -109,11 +124,11 @@ describe('Chunk page Transcripts tab', () => {
 
   it('shows the Transcripts tab option and switches to it, fetching the segment index', async () => {
     stub.restore();
-    stub = stubRequestClient(hubClient, (method, path) => {
-      if (method === 'GET' && path === '/api/me') return OPERATOR_ME_RESPONSE;
-      if (method === 'GET' && path.endsWith('/work-items')) return { items: [] };
-      if (path === `/api/chunks/${CHUNK_ID}/transcripts`) return { chunk_id: CHUNK_ID, segments: [] };
-      return DETAIL;
+    stub = stubHubClient({
+      'GET /api/me': () => OPERATOR_ME_RESPONSE,
+      'GET /api/chunks/{chunk_id}': () => DETAIL,
+      'GET /api/chunks/{chunk_id}/work-items': () => ({ items: [] }),
+      'GET /api/chunks/{chunk_id}/transcripts': () => ({ chunk_id: CHUNK_ID, segments: [] }),
     });
     const harness = await RouterTestingHarness.create();
     await harness.navigateByUrl(`/board/chunk/${CHUNK_ID}`);
@@ -139,10 +154,10 @@ describe('Chunk page Transcripts tab', () => {
 
   it('hides the Transcripts tab option for an identity without transcript:read', async () => {
     stub.restore();
-    stub = stubRequestClient(hubClient, (method, path) => {
-      if (method === 'GET' && path === '/api/me') return { ...OPERATOR_ME_RESPONSE, permissions: [] };
-      if (method === 'GET' && path.endsWith('/work-items')) return { items: [] };
-      return DETAIL;
+    stub = stubHubClient({
+      'GET /api/me': () => ({ ...OPERATOR_ME_RESPONSE, permissions: [] }),
+      'GET /api/chunks/{chunk_id}': () => DETAIL,
+      'GET /api/chunks/{chunk_id}/work-items': () => ({ items: [] }),
     });
     const el = await open(`/board/chunk/${CHUNK_ID}`);
 
@@ -154,11 +169,11 @@ describe('Chunk page Transcripts tab', () => {
     // renders off the URL, not off which options are visible) — the backend's own 403
     // is what actually gates a viewer-role identity, not this client-side hide.
     stub.restore();
-    stub = stubRequestClient(hubClient, (method, path) => {
-      if (method === 'GET' && path === '/api/me') return { ...OPERATOR_ME_RESPONSE, permissions: [] };
-      if (method === 'GET' && path.endsWith('/work-items')) return { items: [] };
-      if (path === `/api/chunks/${CHUNK_ID}/transcripts`) return stubError(403, { detail: 'forbidden' });
-      return DETAIL;
+    stub = stubHubClient({
+      'GET /api/me': () => ({ ...OPERATOR_ME_RESPONSE, permissions: [] }),
+      'GET /api/chunks/{chunk_id}': () => DETAIL,
+      'GET /api/chunks/{chunk_id}/work-items': () => ({ items: [] }),
+      'GET /api/chunks/{chunk_id}/transcripts': () => stubError(403, { detail: 'forbidden' }),
     });
     const el = await open(`/board/chunk/${CHUNK_ID}?tab=transcripts`);
 
@@ -168,22 +183,33 @@ describe('Chunk page Transcripts tab', () => {
 
   it('on mobile, deep-links a sidechain as transcript detail only and clears segment plus sidechain on back', async () => {
     stub.restore();
-    stub = stubRequestClient(hubClient, (method, path) => {
-      if (method === 'GET' && path === '/api/me') return OPERATOR_ME_RESPONSE;
-      if (method === 'GET' && path.endsWith('/work-items')) return { items: [] };
-      if (path === `/api/chunks/${CHUNK_ID}/transcripts`) {
-        return {
-          chunk_id: CHUNK_ID,
-          segments: [{ segment_id: 'sg_1', node_id: 'nd_build', epoch: 1, spawn_generation: 0, turn_range_start: 0, turn_range_end: 1, final: true, truncated: false, byte_count: 40, normalizer_version: 'v1', harness_version: null, received_at: '2026-07-16T11:05:00.000Z' }],
-        };
-      }
-      if (path === `/api/chunks/${CHUNK_ID}/transcripts/sg_1`) {
-        return {
+    stub = stubHubClient({
+      'GET /api/me': () => OPERATOR_ME_RESPONSE,
+      'GET /api/chunks/{chunk_id}': () => DETAIL,
+      'GET /api/chunks/{chunk_id}/work-items': () => ({ items: [] }),
+      'GET /api/chunks/{chunk_id}/transcripts': () => ({
+        chunk_id: CHUNK_ID,
+        segments: [
+          transcriptSegmentIndexEntry({
+            segment_id: 'sg_1', node_id: 'nd_build', epoch: 1, spawn_generation: 0, turn_range_start: 0, turn_range_end: 1,
+            final: true, truncated: false, byte_count: 40, normalizer_version: 'v1', harness_version: null,
+            received_at: '2026-07-16T11:05:00.000Z',
+          }),
+        ],
+      }),
+      'GET /api/chunks/{chunk_id}/transcripts/{segment_id}': () =>
+        transcriptSegmentContentView({
           segment_id: 'sg_1', final: true, truncated: false,
-          turns: [{ index: 0, kind: 'sidechain', text: null, timestamp: null, tool: null, thinking_redacted: false, truncated: false, sidechain: { agent_id: null, agent_type: null, link: 'unlinked', turns: [{ index: 0, kind: 'asst', text: 'sidechain deep link', timestamp: null, tool: null, thinking_redacted: false, truncated: false, sidechain: null }] } }],
-        };
-      }
-      return DETAIL;
+          turns: [
+            turnSegmentView({
+              index: 0, kind: 'sidechain', text: '', timestamp: null, tool: null, thinking_redacted: false, truncated: false,
+              sidechain: sidechainSegmentView({
+                agent_id: null, agent_type: null, link: 'unlinked',
+                turns: [turnSegmentView({ index: 0, kind: 'asst', text: 'sidechain deep link', timestamp: null, tool: null, thinking_redacted: false, truncated: false, sidechain: null })],
+              }),
+            }),
+          ],
+        }),
     });
     TestBed.inject(ViewportService).setOverride('mobile');
     const harness = await RouterTestingHarness.create();

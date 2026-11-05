@@ -2,8 +2,23 @@ import { Component, provideZonelessChangeDetection } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { provideRouter, Router, RouterOutlet, type Routes } from '@angular/router';
 import { QueryClient, provideTanStackQuery } from '@tanstack/angular-query-experimental';
-import { hubClient, ViewportService } from 'fleet';
-import { settle, stubRequestClient } from 'fleet/testing';
+import { type MeResponse, ViewportService } from 'fleet';
+import {
+  OPERATOR_ME_RESPONSE,
+  gardenGraphSummaryView,
+  gardenMeasurementReadingView,
+  gardenProposalCountsView,
+  gardenRoutineView,
+  gardenScopeSweepView,
+  gardenScopeView,
+  gardenSweepsView,
+  gardenTrendPeriodView,
+  gardenTrendView,
+  graphNodeView,
+  graphView,
+  settle,
+  stubHubClient,
+} from 'fleet/testing';
 import { commands, page } from 'vitest/browser';
 
 import { GardeningRoutineDetail } from './gardening-routine-detail';
@@ -42,7 +57,7 @@ function tokenColor(token: string): string {
  * it needs `--browsers=ChromiumHeadless`, not jsdom — run it via `npm run shell-sweep`
  * (`web/scripts/shell-sweep.js`).
  */
-const ROUTINE = {
+const ROUTINE = gardenRoutineView({
   routine_id: 'rtn_1',
   name: 'nightly',
   slug: 'nightly',
@@ -51,39 +66,33 @@ const ROUTINE = {
   default_model: ['claude-sonnet-5'],
   default_effort: 'medium',
   created_at: '2026-01-01T00:00:00Z',
-};
+});
 
-const EFFECTIVE_GRAPH_SUMMARY = {
-  graph_id: 'gr_1',
-  name: 'garden-routine',
-  entry_node_id: 'nd_1',
-  created_at: '2026-01-01T00:00:00Z',
-  effective: true,
-};
+const EFFECTIVE_GRAPH_SUMMARY = gardenGraphSummaryView();
 
-const GRAPH_DETAIL = {
+const GRAPH_DETAIL = graphView({
   graph_id: 'gr_1',
   name: 'garden-routine',
   entry_node_id: 'nd_1',
   enabled: true,
-  nodes: [{ node_id: 'nd_1', name: 'survey', executor: 'claude', judged_by: 'none', prompt: 'Survey the repo.' }],
-};
+  nodes: [graphNodeView({ node_id: 'nd_1', name: 'survey', prompt: 'Survey the repo.' })],
+  edges: [],
+});
 
-const SWEEPS = {
+const SWEEPS = gardenSweepsView({
   routine_name: 'nightly',
-  since: '2026-01-01T00:00:00Z',
-  until: '2026-01-29T00:00:00Z',
   last_swept: [
-    { scope_slug: 'blizzard', finding_set_id: 'fins_1', produced_at: '2026-01-10T00:00:00Z', revisions: { blizzard: 'abc123' } },
+    gardenScopeSweepView({ finding_set_id: 'fins_1', produced_at: '2026-01-10T00:00:00Z', revisions: { blizzard: 'abc123' } }),
   ],
-  measurements: [{ scope_slug: 'blizzard', produced_at: '2026-01-10T00:00:00Z', measurement: '3 findings' }],
-};
+  measurements: [gardenMeasurementReadingView({ measurement: '3 findings' })],
+});
 
 const SCOPES = [
-  { slug: 'blizzard', description: 'the hub, runner, CLI and board', created_at: '2026-01-01T00:00:00Z', retired: false },
+  gardenScopeView({ slug: 'blizzard', description: 'the hub, runner, CLI and board', created_at: '2026-01-01T00:00:00Z' }),
 ];
 
-const ME = {
+const ME: MeResponse = {
+  ...OPERATOR_ME_RESPONSE,
   user_id: 'usr_1',
   username: 'gardener',
   display_name: 'Gardener',
@@ -91,23 +100,13 @@ const ME = {
   permissions: ['graph:edit'],
 };
 
-const TREND = {
+const TREND = gardenTrendView({
   routine_name: 'nightly',
-  since: '2026-01-01T00:00:00Z',
-  until: '2026-01-29T00:00:00Z',
-  period_days: 7,
-  periods: [
-    { period_start: '2026-01-01T00:00:00Z', period_end: '2026-01-08T00:00:00Z', created: 2, exits: {}, outflow: 1, withdrawn: 0, reopened: 0 },
-  ],
+  periods: [gardenTrendPeriodView({ created: 2, outflow: 1 })],
   age: { boundary: '2026-01-01T00:00:00Z', recent: 2, older: 0, unattributed: 0 },
-};
+});
 
-const PROPOSAL_COUNTS = {
-  since: '2026-01-01T00:00:00Z',
-  until: '2026-01-29T00:00:00Z',
-  routine: 'nightly',
-  rows: [],
-};
+const PROPOSAL_COUNTS = gardenProposalCountsView({ routine: 'nightly' });
 
 /**
  * Stands in for `GardeningPage`'s own shell around the tab — `gardening-page.css`'s
@@ -168,18 +167,17 @@ const realDetailRoutes: Routes = [
 ];
 
 async function render() {
-  const stub = stubRequestClient(hubClient, (method, path) => {
-    if (method === 'GET' && path === '/api/routines') return [ROUTINE];
-    if (method === 'GET' && path === '/api/graphs') return [EFFECTIVE_GRAPH_SUMMARY];
-    if (method === 'GET' && path === '/api/graphs/gr_1') return GRAPH_DETAIL;
-    if (method === 'GET' && path === '/api/routines/rtn_1/sweeps') return SWEEPS;
-    if (method === 'GET' && path === '/api/routines/rtn_1/scopes') return [ROUTINE.default_scope_slug];
-    if (method === 'GET' && path === '/api/routines/trend') return TREND;
-    if (method === 'GET' && path === '/api/routines/proposal-counts') return PROPOSAL_COUNTS;
-    if (method === 'GET' && path === '/api/scopes') return SCOPES;
-    if (method === 'GET' && path === '/api/me') return ME;
-    if (method === 'GET' && path === '/api/runs') return [];
-    return {};
+  const stub = stubHubClient({
+    'GET /api/routines': () => [ROUTINE],
+    'GET /api/graphs': () => [EFFECTIVE_GRAPH_SUMMARY],
+    'GET /api/graphs/{graph_id}': () => GRAPH_DETAIL,
+    'GET /api/routines/{routine_id}/sweeps': () => SWEEPS,
+    'GET /api/routines/{routine_id}/scopes': () => [ROUTINE.default_scope_slug],
+    'GET /api/routines/trend': () => TREND,
+    'GET /api/routines/proposal-counts': () => PROPOSAL_COUNTS,
+    'GET /api/scopes': () => SCOPES,
+    'GET /api/me': () => ME,
+    'GET /api/runs': () => [],
   });
   await TestBed.configureTestingModule({
     imports: [TestRoutinesShellHost],
@@ -274,18 +272,17 @@ describe('gardening routines page retired-marker shell sweep (web:shell-sweep)',
     await loadDesignTokens();
     const RETIRED_ROUTINE = { ...ROUTINE, routine_id: 'rtn_2', slug: 'weekly-audit', name: 'weekly-audit', retired: true };
     const BLOCKED_ROUTINE = { ...ROUTINE, routine_id: 'rtn_3', slug: 'unminted', name: 'unminted', graph_name: 'never-minted-graph' };
-    const stub = stubRequestClient(hubClient, (method, path) => {
-      if (method === 'GET' && path === '/api/routines') return [ROUTINE, RETIRED_ROUTINE, BLOCKED_ROUTINE];
-      if (method === 'GET' && path === '/api/graphs') return [EFFECTIVE_GRAPH_SUMMARY];
-      if (method === 'GET' && path === '/api/graphs/gr_1') return GRAPH_DETAIL;
-      if (method === 'GET' && path === '/api/routines/rtn_1/sweeps') return SWEEPS;
-      if (method === 'GET' && path === '/api/routines/rtn_1/scopes') return [ROUTINE.default_scope_slug];
-      if (method === 'GET' && path === '/api/routines/trend') return TREND;
-      if (method === 'GET' && path === '/api/scopes') return SCOPES;
-      if (method === 'GET' && path === '/api/me') return ME;
-      if (method === 'GET' && path === '/api/runs') return [];
-      if (method === 'GET' && path === '/api/runs') return [];
-    return {};
+    const stub = stubHubClient({
+      'GET /api/routines': () => [ROUTINE, RETIRED_ROUTINE, BLOCKED_ROUTINE],
+      'GET /api/graphs': () => [EFFECTIVE_GRAPH_SUMMARY],
+      'GET /api/graphs/{graph_id}': () => GRAPH_DETAIL,
+      'GET /api/routines/{routine_id}/sweeps': () => SWEEPS,
+      'GET /api/routines/{routine_id}/scopes': () => [ROUTINE.default_scope_slug],
+      'GET /api/routines/trend': () => TREND,
+      'GET /api/routines/proposal-counts': () => PROPOSAL_COUNTS,
+      'GET /api/scopes': () => SCOPES,
+      'GET /api/me': () => ME,
+      'GET /api/runs': () => [],
     });
     await TestBed.configureTestingModule({
       imports: [TestRoutinesShellHost],
@@ -338,26 +335,25 @@ describe('gardening routines page independent-scroll shell sweep (web:shell-swee
       routine_id: `rtn_${i}`,
       name: `routine-${i}`,
     }));
-    const MANY_MEASUREMENTS = Array.from({ length: 30 }, (_, i) => ({
-      scope_slug: 'blizzard',
-      produced_at: `2026-01-${String((i % 28) + 1).padStart(2, '0')}T00:00:00Z`,
-      measurement: `Measurement ${i} of a long-running sweep window.`,
-    }));
+    const MANY_MEASUREMENTS = Array.from({ length: 30 }, (_, i) =>
+      gardenMeasurementReadingView({
+        produced_at: `2026-01-${String((i % 28) + 1).padStart(2, '0')}T00:00:00Z`,
+        measurement: `Measurement ${i} of a long-running sweep window.`,
+      }),
+    );
     const SWEEPS_LONG = { ...SWEEPS, measurements: MANY_MEASUREMENTS };
 
-    const stub = stubRequestClient(hubClient, (method, path) => {
-      if (method === 'GET' && path === '/api/routines') return MANY_ROUTINES;
-      if (method === 'GET' && path === '/api/graphs') return [EFFECTIVE_GRAPH_SUMMARY];
-      if (method === 'GET' && path === '/api/graphs/gr_1') return GRAPH_DETAIL;
-      if (method === 'GET' && path === '/api/routines/rtn_0/sweeps') return SWEEPS_LONG;
-      if (method === 'GET' && path === '/api/routines/rtn_0/scopes') return [ROUTINE.default_scope_slug];
-      if (method === 'GET' && path === '/api/routines/trend') return TREND;
-      if (method === 'GET' && path === '/api/routines/proposal-counts') return PROPOSAL_COUNTS;
-      if (method === 'GET' && path === '/api/scopes') return SCOPES;
-      if (method === 'GET' && path === '/api/me') return ME;
-      if (method === 'GET' && path === '/api/runs') return [];
-      if (method === 'GET' && path === '/api/runs') return [];
-    return {};
+    const stub = stubHubClient({
+      'GET /api/routines': () => MANY_ROUTINES,
+      'GET /api/graphs': () => [EFFECTIVE_GRAPH_SUMMARY],
+      'GET /api/graphs/{graph_id}': () => GRAPH_DETAIL,
+      'GET /api/routines/{routine_id}/sweeps': (_request, { routine_id }) => (routine_id === 'rtn_0' ? SWEEPS_LONG : SWEEPS),
+      'GET /api/routines/{routine_id}/scopes': () => [ROUTINE.default_scope_slug],
+      'GET /api/routines/trend': () => TREND,
+      'GET /api/routines/proposal-counts': () => PROPOSAL_COUNTS,
+      'GET /api/scopes': () => SCOPES,
+      'GET /api/me': () => ME,
+      'GET /api/runs': () => [],
     });
 
     await TestBed.configureTestingModule({

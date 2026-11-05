@@ -1,16 +1,8 @@
-import { hubClient } from 'fleet';
-import { type RequestClientStub, stubError, stubRequestClient } from 'fleet/testing';
+import { projectView, type RequestClientStub, stubError, stubHubClient } from 'fleet/testing';
 
 import { readProject, readProjects } from './projects.query';
 
-const BLIZZARD = {
-  project_id: 'proj_b',
-  slug: 'blizzard',
-  name: 'Blizzard',
-  description: '',
-  revision: 1,
-  created_at: '2026-10-01T00:00:00Z',
-};
+const BLIZZARD = projectView({ created_at: '2026-10-01T00:00:00Z' });
 
 describe('the projects reads', () => {
   let stub: RequestClientStub;
@@ -18,15 +10,15 @@ describe('the projects reads', () => {
   afterEach(() => stub.restore());
 
   it('lists the tenant’s projects', async () => {
-    stub = stubRequestClient(hubClient, (_method, path) => (path === '/api/projects' ? { projects: [BLIZZARD] } : {}));
+    stub = stubHubClient({ 'GET /api/projects': () => ({ projects: [BLIZZARD] }) });
 
     await expect(readProjects()).resolves.toEqual([BLIZZARD]);
   });
 
   it('reads one project by the segment a URL names, and answers none for a project the tenant does not hold', async () => {
-    stub = stubRequestClient(hubClient, (_method, path) => {
-      if (path === '/api/projects/old-blizzard') return BLIZZARD;
-      return stubError(404, { detail: 'no such project' });
+    stub = stubHubClient({
+      'GET /api/projects/{project}': (_request, { project }) =>
+        project === 'old-blizzard' ? BLIZZARD : stubError(404, { detail: 'no such project' }),
     });
 
     await expect(readProject('old-blizzard')).resolves.toEqual(BLIZZARD);
@@ -34,7 +26,7 @@ describe('the projects reads', () => {
   });
 
   it('throws any other failure', async () => {
-    stub = stubRequestClient(hubClient, () => stubError(500, { detail: 'boom' }));
+    stub = stubHubClient({ 'GET /api/projects/{project}': () => stubError(500, { detail: 'boom' }) });
 
     await expect(readProject('blizzard')).rejects.toBeTruthy();
   });

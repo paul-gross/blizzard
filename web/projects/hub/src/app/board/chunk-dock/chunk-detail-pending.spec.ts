@@ -4,8 +4,16 @@ import { provideRouter } from '@angular/router';
 import { QueryClient, provideTanStackQuery } from '@tanstack/angular-query-experimental';
 import { vi } from 'vitest';
 
-import { type ChunkDetail as ChunkDetailModel, hubClient } from 'fleet';
-import { settle, OPERATOR_ME_RESPONSE, chunkDetail, type RequestClientStub, stubRequestClient } from 'fleet/testing';
+import { type ChunkDetail as ChunkDetailModel } from 'fleet';
+import {
+  settle,
+  OPERATOR_ME_RESPONSE,
+  chunkDetail,
+  chunkSummary,
+  type RequestClientStub,
+  stubError,
+  stubHubClient,
+} from 'fleet/testing';
 import { ChunkDetail } from './chunk-detail';
 
 const BASE: ChunkDetailModel = chunkDetail({
@@ -48,12 +56,14 @@ describe('ChunkDetail pending scope', () => {
   let stub: RequestClientStub;
 
   beforeEach(async () => {
-    stub = stubRequestClient(hubClient, (method, path) => {
-      if (method === 'GET' && path === '/api/me') return OPERATOR_ME_RESPONSE;
-      const read = /^\/api\/chunks\/([^/]+)$/.exec(path);
-      if (method === 'GET' && read && DETAILS[read[1]]) return DETAILS[read[1]];
-      if (method === 'GET' && path.endsWith('/work-items')) return { items: [] };
-      return {};
+    const summary = (chunkId: string) => chunkSummary({ chunk_id: chunkId, graph_id: 'gr_1', status: 'running' });
+    stub = stubHubClient({
+      'GET /api/me': () => OPERATOR_ME_RESPONSE,
+      'GET /api/chunks/{chunk_id}': (_request, { chunk_id }) =>
+        DETAILS[chunk_id] ?? stubError(404, { detail: `unknown chunk ${chunk_id}` }),
+      'GET /api/chunks/{chunk_id}/work-items': () => ({ items: [] }),
+      'POST /api/chunks/{chunk_id}/pause': (_request, { chunk_id }) => summary(chunk_id),
+      'POST /api/chunks/{chunk_id}/detach': (_request, { chunk_id }) => summary(chunk_id),
     });
     await TestBed.configureTestingModule({
       imports: [ChunkDetail],

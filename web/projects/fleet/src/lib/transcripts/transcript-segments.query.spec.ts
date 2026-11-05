@@ -7,7 +7,12 @@ import { client as runnerClient } from '../api/runner/client.gen';
 import type { DaemonTarget } from '../core/daemon-target/daemon-target';
 import { hubChunkKey } from '../core/query-keys';
 import { settle } from '../testing/settle';
-import { type RequestClientStub, stubError, stubRequestClient } from '../testing/stub-request-client';
+import {
+  type RequestClientStub,
+  stubError,
+  stubHubClient,
+  stubRunnerClient,
+} from '../testing/stub-request-client';
 import {
   TranscriptFetchError,
   injectChunkTranscriptSegmentQuery,
@@ -32,6 +37,22 @@ describe('shouldRetryTranscriptFetch', () => {
 
 const HUB_TARGET: DaemonTarget = { plane: 'hub', client: hubClient };
 const RUNNER_TARGET: DaemonTarget = { plane: 'runner', client: runnerClient, runnerId: 'rn_1' };
+
+const SEGMENT_S1 = { segment_id: 's1', final: true, truncated: false, turns: [] };
+const INDEX = { chunk_id: 'ch_1', segments: [] };
+
+/** Stub the given plane's transcript index and segment reads. */
+function stubPlane(plane: DaemonTarget['plane']): RequestClientStub {
+  return plane === 'hub'
+    ? stubHubClient({
+        'GET /api/chunks/{chunk_id}/transcripts': () => INDEX,
+        'GET /api/chunks/{chunk_id}/transcripts/{segment_id}': () => SEGMENT_S1,
+      })
+    : stubRunnerClient({
+        'GET /runners/{runner_id}/api/chunks/{chunk_id}/transcripts': () => INDEX,
+        'GET /runners/{runner_id}/api/chunks/{chunk_id}/transcripts/{segment_id}': () => SEGMENT_S1,
+      });
+}
 
 @Component({
   selector: 'fleet-test-transcripts-query-host',
@@ -68,7 +89,9 @@ describe('injectChunkTranscriptsQuery — hub plane', () => {
   afterEach(() => stub?.restore());
 
   it('renders a 403 as a TranscriptFetchError, not a generic network error', async () => {
-    stub = stubRequestClient(hubClient, () => stubError(403, { detail: 'forbidden' }));
+    stub = stubHubClient({
+      'GET /api/chunks/{chunk_id}/transcripts': () => stubError(403, { detail: 'forbidden' }),
+    });
     TestBed.configureTestingModule({
       imports: [TestTranscriptsQueryHost],
       providers: [provideZonelessChangeDetection(), provideTanStackQuery(new QueryClient())],
@@ -87,7 +110,7 @@ describe('injectChunkTranscriptSegmentQuery — hub plane', () => {
   afterEach(() => stub?.restore());
 
   it('fires no request until a segment id is set — the lazy per-segment read (D8)', async () => {
-    stub = stubRequestClient(hubClient, () => ({ segment_id: 's1', final: true, truncated: false, turns: [] }));
+    stub = stubPlane('hub');
     TestBed.configureTestingModule({
       imports: [TestTranscriptSegmentQueryHost],
       providers: [provideZonelessChangeDetection(), provideTanStackQuery(new QueryClient())],
@@ -105,7 +128,7 @@ describe('injectChunkTranscriptSegmentQuery — hub plane', () => {
   });
 
   it('fires no request while finality is unknown, then exactly one once it resolves', async () => {
-    stub = stubRequestClient(hubClient, () => ({ segment_id: 's1', final: true, truncated: false, turns: [] }));
+    stub = stubPlane('hub');
     TestBed.configureTestingModule({
       imports: [TestTranscriptSegmentQueryHost],
       providers: [provideZonelessChangeDetection(), provideTanStackQuery(new QueryClient())],
@@ -129,7 +152,9 @@ describe('injectChunkTranscriptSegmentQuery — hub plane', () => {
   });
 
   it("refetches an open segment on the chunk key's invalidation, but never a final one", async () => {
-    stub = stubRequestClient(hubClient, () => ({ segment_id: 's', final: false, truncated: false, turns: [] }));
+    stub = stubHubClient({
+      'GET /api/chunks/{chunk_id}/transcripts/{segment_id}': () => ({ segment_id: 's', final: false, truncated: false, turns: [] }),
+    });
     const queryClient = new QueryClient();
     TestBed.configureTestingModule({
       imports: [TestTranscriptSegmentQueryHost],
@@ -178,7 +203,7 @@ describe('injectChunkTranscriptsQuery — plane-generic (D5)', () => {
     ['hub', HUB_TARGET, '/api/chunks/ch_1/transcripts'] as const,
     ['runner', RUNNER_TARGET, '/runners/rn_1/api/chunks/ch_1/transcripts'] as const,
   ])('resolves against the %s target’s own generated route', async (_plane, target, route) => {
-    stub = stubRequestClient(target.client, () => ({ chunk_id: 'ch_1', segments: [] }));
+    stub = stubPlane(target.plane);
     const HostComponent = definePlaneTranscriptsQueryHost(target);
     TestBed.configureTestingModule({
       imports: [HostComponent],
@@ -193,7 +218,7 @@ describe('injectChunkTranscriptsQuery — plane-generic (D5)', () => {
   });
 
   it('holds the read while the target is null', async () => {
-    stub = stubRequestClient(runnerClient, () => ({ chunk_id: 'ch_1', segments: [] }));
+    stub = stubPlane('runner');
 
     @Component({
       selector: 'fleet-test-null-target-transcripts-query-host',
@@ -225,7 +250,7 @@ describe('injectChunkTranscriptSegmentQuery — plane-generic (D5)', () => {
     ['hub', HUB_TARGET, '/api/chunks/ch_1/transcripts/seg-1'] as const,
     ['runner', RUNNER_TARGET, '/runners/rn_1/api/chunks/ch_1/transcripts/seg-1'] as const,
   ])('resolves against the %s target’s own generated route', async (_plane, target, route) => {
-    stub = stubRequestClient(target.client, () => ({ segment_id: 's1', final: true, truncated: false, turns: [] }));
+    stub = stubPlane(target.plane);
 
     @Component({
       selector: 'fleet-test-plane-transcript-segment-query-host',

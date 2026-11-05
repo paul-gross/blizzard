@@ -3,8 +3,7 @@ import { TestBed } from '@angular/core/testing';
 import { QueryClient, provideTanStackQuery } from '@tanstack/angular-query-experimental';
 import { vi } from 'vitest';
 
-import { hubClient } from 'fleet';
-import { type RequestClientStub, stubRequestClient } from 'fleet/testing';
+import { type RequestClientStub, chunkSummary, stubHubClient } from 'fleet/testing';
 import { injectCompleteChunkMutation } from './complete.mutations';
 
 describe('injectCompleteChunkMutation (issue #294)', () => {
@@ -12,7 +11,9 @@ describe('injectCompleteChunkMutation (issue #294)', () => {
   let queryClient: QueryClient;
 
   beforeEach(() => {
-    stub = stubRequestClient(hubClient, () => ({}));
+    stub = stubHubClient({
+      'POST /api/chunks/{chunk_id}/complete': (_request, { chunk_id }) => chunkSummary({ chunk_id, graph_id: 'gr_1', status: 'ready' }),
+    });
     queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
     TestBed.configureTestingModule({
       providers: [provideZonelessChangeDetection(), provideTanStackQuery(queryClient)],

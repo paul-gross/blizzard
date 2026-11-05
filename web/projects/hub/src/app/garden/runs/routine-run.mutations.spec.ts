@@ -3,8 +3,7 @@ import { TestBed } from '@angular/core/testing';
 import { QueryClient, provideTanStackQuery } from '@tanstack/angular-query-experimental';
 import { vi } from 'vitest';
 
-import { hubClient } from 'fleet';
-import { type RequestClientStub, stubError, stubRequestClient } from 'fleet/testing';
+import { type RequestClientStub, routineRunResponse, stubError, stubHubClient } from 'fleet/testing';
 import { injectRunRoutineMutation } from './routine-run.mutations';
 
 describe('injectRunRoutineMutation', () => {
@@ -21,24 +20,10 @@ describe('injectRunRoutineMutation', () => {
   afterEach(() => stub.restore());
 
   it('POSTs /api/routines/{routine_id}/run with the scope, mode, and note, and invalidates the routine list', async () => {
-    stub = stubRequestClient(hubClient, (method, path) =>
-      method === 'POST' && path === '/api/routines/rtn_1/run'
-        ? {
-            chunk_id: 'ch_1',
-            source: 'hub',
-            ref: '1',
-            title: 'gardening run (full)',
-            body: 'Routine: gardening',
-            routine_name: 'gardening',
-            scope_slug: 'blizzard',
-            effective_mode: 'full',
-            downgraded: false,
-            baseline_finding_set_id: null,
-            baseline_revisions: null,
-            created_at: '2026-01-01T00:00:00Z',
-          }
-        : {},
-    );
+    stub = stubHubClient({
+      'POST /api/routines/{routine_id}/run': () =>
+        routineRunResponse({ chunk_id: 'ch_1', created_at: '2026-01-01T00:00:00Z' }),
+    });
     const invalidateSpy = vi.spyOn(queryClient, 'invalidateQueries');
     const mutation = TestBed.runInInjectionContext(() => injectRunRoutineMutation());
 
@@ -53,9 +38,9 @@ describe('injectRunRoutineMutation', () => {
   });
 
   it('surfaces a refused run (503, a retired scope) as the mutation error', async () => {
-    stub = stubRequestClient(hubClient, (method, path) =>
-      method === 'POST' && path === '/api/routines/rtn_1/run' ? stubError(503, { detail: "scope 'cold' is retired" }) : {},
-    );
+    stub = stubHubClient({
+      'POST /api/routines/{routine_id}/run': () => stubError(503, { detail: "scope 'cold' is retired" }),
+    });
     const mutation = TestBed.runInInjectionContext(() => injectRunRoutineMutation());
 
     await expect(

@@ -2,8 +2,8 @@ import { provideZonelessChangeDetection } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { provideRouter, Router } from '@angular/router';
 import { QueryClient, provideTanStackQuery } from '@tanstack/angular-query-experimental';
-import { runnerClient, type runnerApi, ViewportService } from 'fleet';
-import { type RequestClientStub, settle, stubError, stubRequestClient } from 'fleet/testing';
+import { type runnerApi, ViewportService } from 'fleet';
+import { type RequestClientStub, settle, stubError, stubRunnerClient, workItemEntry } from 'fleet/testing';
 import { type MockInstance, vi } from 'vitest';
 
 import { LocalPanel } from './app-panel';
@@ -96,28 +96,28 @@ function dashboardBody(runnerId: string, overrides: Partial<runnerApi.DashboardV
   };
 }
 
+type RunnerRoutes = Parameters<typeof stubRunnerClient>[0];
+
 interface Fixture {
   /** Each runner's leases, by runner id; a runner with no entry holds none. */
-  readonly leases?: Record<string, unknown[]>;
+  readonly leases?: Record<string, runnerApi.LeaseView[]>;
   /** Each runner's dashboard sections, by runner id. */
   readonly dashboards?: Record<string, Partial<runnerApi.DashboardView>>;
-  /** Answers a path ahead of the defaults; `undefined` falls through. */
-  readonly extra?: (method: string, path: string) => unknown;
+  /** Routes answered ahead of the defaults. */
+  readonly extra?: RunnerRoutes;
 }
 
-/** The panel's whole read surface: the host's runners, then each runner's leases and dashboard under `/runners/{id}`. */
-function routes(fixture: Fixture = {}): (method: string, path: string) => unknown {
-  return (method, path) => {
-    const special = fixture.extra?.(method, path);
-    if (special !== undefined) return special;
-    if (method !== 'GET') return {};
-    if (path === '/api/host/runners') return { items: RUNNERS };
-    if (path === '/api/host/environments') return { workspaces: [] };
-    const leases = /^\/runners\/([^/]+)\/api\/leases$/.exec(path);
-    if (leases) return { items: fixture.leases?.[leases[1]] ?? [] };
-    const dashboard = /^\/runners\/([^/]+)\/api\/dashboard$/.exec(path);
-    if (dashboard) return dashboardBody(dashboard[1], fixture.dashboards?.[dashboard[1]]);
-    return { items: [] };
+/** The panel's whole read surface: the host's runners, then each runner's leases, dashboard and work items under `/runners/{id}`. */
+function routes(fixture: Fixture = {}): RunnerRoutes {
+  return {
+    'GET /api/host/runners': () => ({ items: RUNNERS }),
+    'GET /api/host/environments': () => ({ workspaces: [] }),
+    'GET /api/host/workspaces': () => ({ items: [] }),
+    'GET /api/host/subscriptions': () => ({ items: [] }),
+    'GET /runners/{runner_id}/api/leases': (_request, { runner_id }) => ({ items: fixture.leases?.[runner_id] ?? [] }),
+    'GET /runners/{runner_id}/api/dashboard': (_request, { runner_id }) => dashboardBody(runner_id, fixture.dashboards?.[runner_id]),
+    'GET /runners/{runner_id}/api/chunks/{chunk_id}/work-items': () => ({ items: [] }),
+    ...fixture.extra,
   };
 }
 
@@ -206,7 +206,7 @@ describe('LocalPanel', () => {
 
   describe('reads across the host', () => {
     it("reads the host's runners first, then each serving runner's leases under its own id", async () => {
-      stub = stubRequestClient(runnerClient, routes({ leases: { rn_1: [LEASE()] } }));
+      stub = stubRunnerClient(routes({ leases: { rn_1: [LEASE()] } }));
       await render();
 
       expect(stub.forRoute('/api/host/runners', 'GET').length).toBeGreaterThan(0);
@@ -216,7 +216,7 @@ describe('LocalPanel', () => {
     });
 
     it("reads each runner's dashboard exactly once for the whole board, however many panels read it", async () => {
-      stub = stubRequestClient(runnerClient, routes({ leases: { rn_1: [LEASE()] } }));
+      stub = stubRunnerClient(routes({ leases: { rn_1: [LEASE()] } }));
       await render();
 
       expect(stub.forRoute('/runners/rn_1/api/dashboard', 'GET')).toHaveLength(1);
@@ -224,8 +224,7 @@ describe('LocalPanel', () => {
     });
 
     it("merges every runner's chunks into one board, each card naming its runner", async () => {
-      stub = stubRequestClient(
-        runnerClient,
+      stub = stubRunnerClient(
         routes({ leases: { rn_1: [LEASE()], rn_2: [LEASE({ lease_id: 'lease_r2', chunk_id: R2_CHUNK })] } }),
       );
       const el = await render();
@@ -239,11 +238,13 @@ describe('LocalPanel', () => {
     });
 
     it('keeps the other runners on the board when one runner cannot be read', async () => {
-      stub = stubRequestClient(
-        runnerClient,
+      stub = stubRunnerClient(
         routes({
           leases: { rn_1: [LEASE()] },
-          extra: (method, path) => (method === 'GET' && path === '/runners/rn_2/api/leases' ? stubError(503, { detail: 'down' }) : undefined),
+          extra: {
+            'GET /runners/{runner_id}/api/leases': (_request, { runner_id }) =>
+              runner_id === 'rn_2' ? stubError(503, { detail: 'down' }) : { items: [LEASE()] },
+          },
         }),
       );
       const el = await render();
@@ -259,7 +260,7 @@ describe('LocalPanel', () => {
     };
 
     it("reads only the runner the Runner filter names, and shows only its chunks", async () => {
-      stub = stubRequestClient(runnerClient, routes(BOTH));
+      stub = stubRunnerClient(routes(BOTH));
       const el = await render({ runner: 'r2' });
 
       expect(chunkIds(el)).toEqual([R2_CHUNK]);
@@ -267,7 +268,7 @@ describe('LocalPanel', () => {
     });
 
     it("shows only the chunks of the project the Project filter names", async () => {
-      stub = stubRequestClient(runnerClient, routes(BOTH));
+      stub = stubRunnerClient(routes(BOTH));
       const el = await render({ project: 'p' });
 
       expect(chunkIds(el)).toEqual([CHUNK]);
@@ -276,7 +277,7 @@ describe('LocalPanel', () => {
 
   describe('async states', () => {
     it('shows a loading line before the first read resolves, not the empty state', async () => {
-      stub = stubRequestClient(runnerClient, routes());
+      stub = stubRunnerClient(routes());
       await setUp();
       const fixture = TestBed.createComponent(LocalPanel);
       fixture.detectChanges();
@@ -288,7 +289,7 @@ describe('LocalPanel', () => {
     });
 
     it('shows the empty state only once every read resolves with no chunk', async () => {
-      stub = stubRequestClient(runnerClient, routes());
+      stub = stubRunnerClient(routes());
       const el = await render();
 
       expect(el.querySelector('[data-testid="chunks-empty"]')?.textContent).toContain('NO CHUNKS ON THESE RUNNERS');
@@ -296,9 +297,8 @@ describe('LocalPanel', () => {
     });
 
     it('shows a degraded line once every runner fails — never the empty state', async () => {
-      stub = stubRequestClient(
-        runnerClient,
-        routes({ extra: (method, path) => (method === 'GET' && /\/api\/leases$/.test(path) ? stubError(503, { detail: 'down' }) : undefined) }),
+      stub = stubRunnerClient(
+        routes({ extra: { 'GET /runners/{runner_id}/api/leases': () => stubError(503, { detail: 'down' }) } }),
       );
       const el = await render();
 
@@ -310,14 +310,14 @@ describe('LocalPanel', () => {
   describe('the board folds leases into chunks', () => {
     it('renders one card per distinct chunk, its older attempts folded away', async () => {
       const older = LEASE({ lease_id: 'lease_01KXKVVF1J3D6H6VYZ3XYNBBBB', epoch: 1, state: 'closed', closure_reason: 'failed', display_status: 'closed' });
-      stub = stubRequestClient(runnerClient, routes({ leases: { rn_1: [LEASE(), older] } }));
+      stub = stubRunnerClient(routes({ leases: { rn_1: [LEASE(), older] } }));
       const el = await render();
 
       expect(chunkIds(el)).toEqual([CHUNK]);
     });
 
     it("carries the chunk's live worker on its card — no separate worker rail", async () => {
-      stub = stubRequestClient(runnerClient, routes({ leases: { rn_1: [LEASE()] } }));
+      stub = stubRunnerClient(routes({ leases: { rn_1: [LEASE()] } }));
       const el = await render();
 
       expect(el.querySelector('[data-testid="chunk-card"] [data-testid="chunk-row-worker"] [data-testid="worker-env"]')?.textContent?.trim()).toBe(
@@ -336,7 +336,7 @@ describe('LocalPanel', () => {
         closure_healthy: true,
         closed_at: '2026-07-16T11:30:00.000Z',
       });
-      stub = stubRequestClient(runnerClient, routes({ leases: { rn_1: [LEASE(), done] } }));
+      stub = stubRunnerClient(routes({ leases: { rn_1: [LEASE(), done] } }));
       const el = await render();
 
       expect(chunkIds(el.querySelector('[data-testid="lane-progress"]'))).toEqual([CHUNK]);
@@ -346,8 +346,7 @@ describe('LocalPanel', () => {
     });
 
     it('puts an escalated chunk in Needs human, outranking its closed lease', async () => {
-      stub = stubRequestClient(
-        runnerClient,
+      stub = stubRunnerClient(
         routes({
           leases: { rn_1: [LEASE({ state: 'closed', closure_reason: 'escalated', display_status: 'needs-human' })] },
           dashboards: { rn_1: { escalations: { items: [ESCALATION] } } },
@@ -362,7 +361,7 @@ describe('LocalPanel', () => {
 
   describe('the Board/List layout rides the URL', () => {
     it('renders the ranked list for ?layout=list', async () => {
-      stub = stubRequestClient(runnerClient, routes({ leases: { rn_1: [LEASE()] } }));
+      stub = stubRunnerClient(routes({ leases: { rn_1: [LEASE()] } }));
       const el = await render({ layout: 'list' });
 
       expect(el.querySelector('[data-testid="board"]')).toBeNull();
@@ -370,7 +369,7 @@ describe('LocalPanel', () => {
     });
 
     it('writes the layout to the URL, keeping every other param, and drops it again for Board', async () => {
-      stub = stubRequestClient(runnerClient, routes({ leases: { rn_1: [LEASE()] } }));
+      stub = stubRunnerClient(routes({ leases: { rn_1: [LEASE()] } }));
       const el = await mount({ chunk: CHUNK });
 
       await click(el.querySelector<HTMLElement>('[data-testid="board-layout-list"]'));
@@ -386,14 +385,14 @@ describe('LocalPanel', () => {
 
   describe('selection drives the detail dock', () => {
     it('shows the SELECT A CHUNK placeholder before anything is selected', async () => {
-      stub = stubRequestClient(runnerClient, routes({ leases: { rn_1: [LEASE()] } }));
+      stub = stubRunnerClient(routes({ leases: { rn_1: [LEASE()] } }));
       const el = await render();
 
       expect(el.querySelector('[data-testid="detail-empty"]')?.textContent).toContain('SELECT A CHUNK');
     });
 
     it('selecting a chunk card writes it to the URL and opens its execution facts', async () => {
-      stub = stubRequestClient(runnerClient, routes({ leases: { rn_1: [LEASE()] } }));
+      stub = stubRunnerClient(routes({ leases: { rn_1: [LEASE()] } }));
       const el = await mount();
 
       await click(el.querySelector<HTMLElement>('[data-testid="chunk-card"]'));
@@ -409,7 +408,7 @@ describe('LocalPanel', () => {
 
     it('shows facts for the newest attempt of a multi-attempt chunk', async () => {
       const older = LEASE({ lease_id: 'lease_01KXKVVF1J3D6H6VYZ3XYNBBBB', epoch: 1, state: 'closed', closure_reason: 'failed', session_id: 'sess-old' });
-      stub = stubRequestClient(runnerClient, routes({ leases: { rn_1: [LEASE(), older] } }));
+      stub = stubRunnerClient(routes({ leases: { rn_1: [LEASE(), older] } }));
       const el = await render({ chunk: CHUNK });
 
       const facts = el.querySelector('[data-testid="detail-facts"]')?.textContent ?? '';
@@ -418,7 +417,7 @@ describe('LocalPanel', () => {
     });
 
     it("reads the selected chunk's detail off its own runner", async () => {
-      stub = stubRequestClient(runnerClient, routes({ leases: { rn_2: [LEASE({ lease_id: 'lease_r2', chunk_id: R2_CHUNK })] } }));
+      stub = stubRunnerClient(routes({ leases: { rn_2: [LEASE({ lease_id: 'lease_r2', chunk_id: R2_CHUNK })] } }));
       await render({ chunk: R2_CHUNK });
 
       expect(stub.forRoute(`/runners/rn_2/api/chunks/${R2_CHUNK}`, 'GET').length).toBeGreaterThan(0);
@@ -426,8 +425,7 @@ describe('LocalPanel', () => {
     });
 
     it("shows the resume command of the escalation its own runner holds", async () => {
-      stub = stubRequestClient(
-        runnerClient,
+      stub = stubRunnerClient(
         routes({
           leases: { rn_1: [LEASE({ state: 'closed', closure_reason: 'escalated', display_status: 'needs-human' })] },
           dashboards: {
@@ -444,7 +442,7 @@ describe('LocalPanel', () => {
     });
 
     it('hydrates the selection from the URL on load without rewriting it', async () => {
-      stub = stubRequestClient(runnerClient, routes({ leases: { rn_1: [LEASE()] } }));
+      stub = stubRunnerClient(routes({ leases: { rn_1: [LEASE()] } }));
       const el = await render({ chunk: CHUNK });
 
       expect(el.querySelector('[data-testid="detail-chunk-ref"]')?.textContent).toContain(CHUNK);
@@ -454,7 +452,7 @@ describe('LocalPanel', () => {
 
     it('touches no param but its own when a different chunk is selected', async () => {
       const other = LEASE({ lease_id: 'lease_01KXKVVF1J3D6H6VYZ3XYNCCCC', chunk_id: OTHER_CHUNK });
-      stub = stubRequestClient(runnerClient, routes({ leases: { rn_1: [LEASE(), other] } }));
+      stub = stubRunnerClient(routes({ leases: { rn_1: [LEASE(), other] } }));
       const el = await mount({ chunk: CHUNK, attempt: 'lease_01KXKVVF1J3D6H6VYZ3XYNBBBB' });
 
       await click(el.querySelector<HTMLElement>(`[data-testid="chunk-card"][data-chunk="${OTHER_CHUNK}"]`));
@@ -463,7 +461,7 @@ describe('LocalPanel', () => {
     });
 
     it('degrades an unknown chunk id to no selection, leaving the URL untouched', async () => {
-      stub = stubRequestClient(runnerClient, routes({ leases: { rn_1: [LEASE()] } }));
+      stub = stubRunnerClient(routes({ leases: { rn_1: [LEASE()] } }));
       const el = await render({ chunk: 'ch_GONE00000000000000000000' });
 
       expect(el.querySelector('[data-testid="detail-empty"]')?.textContent).toContain('SELECT A CHUNK');
@@ -474,11 +472,10 @@ describe('LocalPanel', () => {
 
   describe('the work-item enrichment stays severable', () => {
     it('renders chunk cards on chunk_id alone when every work-items read 502s', async () => {
-      stub = stubRequestClient(
-        runnerClient,
+      stub = stubRunnerClient(
         routes({
           leases: { rn_1: [LEASE()] },
-          extra: (method, path) => (method === 'GET' && WORK_ITEMS_ROUTE.test(path) ? stubError(502, { detail: 'stubbed route error (502)' }) : undefined),
+          extra: { 'GET /runners/{runner_id}/api/chunks/{chunk_id}/work-items': () => stubError(502, { detail: 'stubbed route error (502)' }) },
         }),
       );
       const el = await render();
@@ -488,25 +485,23 @@ describe('LocalPanel', () => {
     });
 
     it("renders each linked item's label and title on the card", async () => {
-      stub = stubRequestClient(
-        runnerClient,
+      stub = stubRunnerClient(
         routes({
           leases: { rn_1: [LEASE()] },
-          extra: (method, path) =>
-            method === 'GET' && WORK_ITEMS_ROUTE.test(path)
-              ? {
-                  items: [
-                    {
-                      source: 'blizzard',
-                      ref: '61',
-                      label: 'blizzard#61',
-                      web_url: 'https://github.com/paul-gross/blizzard/issues/61',
-                      fetched_at: '2026-07-16T11:00:00.000Z',
-                      title: 'runner machine panel',
-                    },
-                  ],
-                }
-              : undefined,
+          extra: {
+            'GET /runners/{runner_id}/api/chunks/{chunk_id}/work-items': () => ({
+              items: [
+                workItemEntry({
+                  source: 'blizzard',
+                  ref: '61',
+                  label: 'blizzard#61',
+                  web_url: 'https://github.com/paul-gross/blizzard/issues/61',
+                  fetched_at: '2026-07-16T11:00:00.000Z',
+                  title: 'runner machine panel',
+                }),
+              ],
+            }),
+          },
         }),
       );
       const el = await render();
@@ -518,7 +513,7 @@ describe('LocalPanel', () => {
 
     it('issues one work-items request per distinct chunk, on its own runner, even with several leases for it', async () => {
       const older = LEASE({ lease_id: 'lease_01KXKVVF1J3D6H6VYZ3XYNBBBB', epoch: 1, state: 'closed' });
-      stub = stubRequestClient(runnerClient, routes({ leases: { rn_1: [LEASE(), older] } }));
+      stub = stubRunnerClient(routes({ leases: { rn_1: [LEASE(), older] } }));
       await render();
 
       expect(stub.requests.filter((r) => WORK_ITEMS_ROUTE.test(r.path)).map((r) => r.path)).toEqual([
@@ -529,8 +524,7 @@ describe('LocalPanel', () => {
 
   describe('the right rail', () => {
     it('renders the hub, host, and open-asks panels beside the board', async () => {
-      stub = stubRequestClient(
-        runnerClient,
+      stub = stubRunnerClient(
         routes({
           dashboards: {
             rn_1: {
@@ -571,7 +565,7 @@ describe('LocalPanel', () => {
     afterEach(() => localStorage.removeItem('blizzard.viewport.override'));
 
     it('desktop mode renders the board and rail layout', async () => {
-      stub = stubRequestClient(runnerClient, routes());
+      stub = stubRunnerClient(routes());
       await setUp();
       TestBed.inject(ViewportService).setOverride('desktop');
       const fixture = TestBed.createComponent(LocalPanel);
@@ -583,7 +577,7 @@ describe('LocalPanel', () => {
     });
 
     it('mobile mode renders the deferred mobile stack instead, off the same reads', async () => {
-      stub = stubRequestClient(runnerClient, routes({ leases: { rn_1: [LEASE()] } }));
+      stub = stubRunnerClient(routes({ leases: { rn_1: [LEASE()] } }));
       await setUp();
       TestBed.inject(ViewportService).setOverride('mobile');
       const fixture = TestBed.createComponent(LocalPanel);

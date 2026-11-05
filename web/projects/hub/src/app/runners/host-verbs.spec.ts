@@ -5,60 +5,45 @@ import { provideRouter } from '@angular/router';
 import { RouterTestingHarness } from '@angular/router/testing';
 import { vi } from 'vitest';
 
-import { hubClient, hubHostsKey, hubRunnersKey } from 'fleet';
-import { OPERATOR_ME_RESPONSE, type RequestClientStub, settle, stubError, stubRequestClient } from 'fleet/testing';
+import { type MeResponse, hubHostsKey, hubRunnersKey } from 'fleet';
+import {
+  OPERATOR_ME_RESPONSE,
+  type RequestClientStub,
+  hostRegistryView,
+  runnerRegistryView,
+  settle,
+  stubError,
+  stubHubClient,
+} from 'fleet/testing';
 import { FleetPage } from './fleet-page';
 
 /** The operator's identity with `runner:retire` — the permission the host verbs need. */
-const RETIRE_ME = {
+const RETIRE_ME: MeResponse = {
   ...OPERATOR_ME_RESPONSE,
   permissions: [...OPERATOR_ME_RESPONSE.permissions, 'runner:retire' as const],
 };
 
 const NOW = new Date().toISOString();
-const runner = (id: string, over: Partial<Record<string, unknown>> = {}) => ({
-  runner_id: id,
-  runner_name: id,
-  workspace_id: 'ws_a',
-  registered_at: NOW,
-  last_seen_at: NOW,
-  online: true,
-  hub_paused: false,
-  locally_paused: false,
-  capabilities: [],
-  gates: [],
-  subscription_unrostered: false,
-  ...over,
-});
-const RUNNERS = { runners: [runner('rA', { host_id: 'h1' }), runner('rC')] };
-const HOST = {
-  host_id: 'h1',
-  host_name: 'build-box',
-  connection: 'online',
-  online: true,
-  last_seen_at: NOW,
-  workspaces: [],
-  subscriptions: [],
-  subscription_usage: [],
-};
+const runner = (id: string, host_id: string | null = null) =>
+  runnerRegistryView({ runner_id: id, registered_at: NOW, last_seen_at: NOW, host_id });
+const RUNNERS = { runners: [runner('rA', 'h1'), runner('rC')] };
+const HOST = hostRegistryView({ host_id: 'h1', host_name: 'build-box', last_seen_at: NOW });
 const HOSTS = { hosts: [HOST] };
 const REFUSAL = 'runner rA holds chunk ch_live';
 const TOKEN = 'bzh_host_secret_token';
 
-type Route = (method: string, path: string) => unknown;
+type Routes = Parameters<typeof stubHubClient>[0];
 
-function routes(over: Route = () => undefined, me: unknown = RETIRE_ME): Route {
-  return (method, path) => {
-    const hit = over(method, path);
-    if (hit !== undefined) return hit;
-    if (method === 'GET' && path === '/api/me') return me;
-    if (method === 'GET' && path === '/api/runners') return RUNNERS;
-    if (method === 'GET' && path === '/api/hosts') return HOSTS;
-    if (method === 'GET' && path === '/api/chunks') return { chunks: [], next_cursor: null };
-    if (path === '/api/hosts/h1/retire') return { host: HOST, released_chunk_ids: [] };
-    if (path === '/api/hosts/h1/token-revocations') return { host: HOST };
-    if (path === '/api/hosts/h1/enrollments') return { host_id: 'h1', token: TOKEN };
-    return {};
+function routes(over: Routes = {}, me: MeResponse = RETIRE_ME): Routes {
+  return {
+    'GET /api/me': () => me,
+    'GET /api/runners': () => RUNNERS,
+    'GET /api/hosts': () => HOSTS,
+    'GET /api/chunks': () => ({ chunks: [], next_cursor: null }),
+    'POST /api/hosts/{host_id}/retire': () => ({ host: HOST, released_chunk_ids: [] }),
+    'POST /api/hosts/{host_id}/token-revocations': () => ({ host: HOST }),
+    'POST /api/hosts/{host_id}/enrollments': () => ({ host_id: 'h1', token: TOKEN }),
+    ...over,
   };
 }
 
@@ -70,8 +55,8 @@ for (const [name, container, release, hostCard] of [
   describe(`${name} host verbs`, () => {
     let stub: RequestClientStub;
 
-    async function render(route: Route) {
-      stub = stubRequestClient(hubClient, route);
+    async function render(route: Routes) {
+      stub = stubHubClient(route);
       await TestBed.configureTestingModule({
         imports: [container as Type<unknown>],
         providers: [
@@ -119,11 +104,12 @@ for (const [name, container, release, hostCard] of [
 
     it("asks again on the hub's 409, showing its refusal, and forces the retire when confirmed", async () => {
       const { fixture, el } = await render(
-        routes((method, path) =>
-          path === '/api/hosts/h1/retire' && stub.forRoute(path, 'POST').length === 1
-            ? stubError(409, { detail: REFUSAL })
-            : undefined,
-        ),
+        routes({
+          'POST /api/hosts/{host_id}/retire': (request) =>
+            stub.forRoute(request.path, 'POST').length === 1
+              ? stubError(409, { detail: REFUSAL })
+              : { host: HOST, released_chunk_ids: [] },
+        }),
       );
 
       click(el, '[data-testid="host-retire"]');
@@ -175,7 +161,7 @@ for (const [name, container, release, hostCard] of [
 
     it('withholds every host verb without runner:retire', async () => {
       expect(OPERATOR_ME_RESPONSE.permissions).not.toContain('runner:retire' as const);
-      const { el } = await render(routes(undefined, OPERATOR_ME_RESPONSE));
+      const { el } = await render(routes({}, OPERATOR_ME_RESPONSE));
 
       expect(el.querySelector(`[data-testid="${hostCard}"]`)).not.toBeNull();
       expect(el.querySelector('[data-testid="host-verbs"]')).toBeNull();

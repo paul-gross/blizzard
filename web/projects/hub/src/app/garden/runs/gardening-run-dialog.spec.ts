@@ -3,28 +3,41 @@ import { TestBed } from '@angular/core/testing';
 import { provideRouter } from '@angular/router';
 import { QueryClient, provideTanStackQuery } from '@tanstack/angular-query-experimental';
 
-import { hubClient } from 'fleet';
-import { type RequestClientStub, settle, stubError, stubRequestClient } from 'fleet/testing';
+import type { RoutineRunResponse } from 'fleet';
+import {
+  gardenScopeView,
+  type RequestClientStub,
+  routineBaselineView,
+  routineRunResponse,
+  settle,
+  stubError,
+  stubHubClient,
+} from 'fleet/testing';
 
 import { GardeningRunDialog } from './gardening-run-dialog';
 
 const SCOPES = [
-  { slug: 'blizzard', description: 'the hub itself', created_at: '2026-01-01T00:00:00Z', retired: false },
-  { slug: 'web', description: 'the frontend', created_at: '2026-01-01T00:00:00Z', retired: false },
-  { slug: 'retired-scope', description: 'old ground', created_at: '2026-01-01T00:00:00Z', retired: true },
-  { slug: 'unrelated', description: 'not this routine\'s own', created_at: '2026-01-01T00:00:00Z', retired: false },
+  gardenScopeView({ slug: 'blizzard', description: 'the hub itself', created_at: '2026-01-01T00:00:00Z' }),
+  gardenScopeView({ slug: 'web', description: 'the frontend', created_at: '2026-01-01T00:00:00Z' }),
+  gardenScopeView({ slug: 'retired-scope', description: 'old ground', created_at: '2026-01-01T00:00:00Z', retired: true }),
+  gardenScopeView({ slug: 'unrelated', description: 'not this routine\'s own', created_at: '2026-01-01T00:00:00Z' }),
 ];
 
 const ROUTINE_SCOPES = ['blizzard', 'retired-scope', 'web'];
 
 const BASELINES = [
-  {
+  routineBaselineView({
     scope_slug: 'web',
     finding_set_id: 'fins_02XYZ',
     recorded_at: '2026-02-01T00:00:00Z',
     repos: [{ repo: 'blizzard', revision: 'abc123d', landed_since: 5 }],
-  },
+  }),
 ];
+
+/** What a run against `web` answers with, minting `chunkId`. */
+function runResponse(chunkId: string): RoutineRunResponse {
+  return routineRunResponse({ chunk_id: chunkId, scope_slug: 'web', created_at: '2026-03-01T00:00:00Z' });
+}
 
 /** Like `settle`, but never calls `whenStable()` — a pending mutation registers itself
  * as an Angular `PendingTasks` entry (`@tanstack/angular-query-experimental`'s own
@@ -39,8 +52,8 @@ async function pump(fixture: { detectChanges(): void }, ticks = 5): Promise<void
   fixture.detectChanges();
 }
 
-async function mount(route: (method: string, path: string) => unknown) {
-  const stub = stubRequestClient(hubClient, route);
+async function mount(routes: Parameters<typeof stubHubClient>[0] = {}) {
+  const stub = stubHubClient({ ...defaultRoutes(), ...routes });
   await TestBed.configureTestingModule({
     imports: [GardeningRunDialog],
     providers: [
@@ -56,27 +69,13 @@ async function mount(route: (method: string, path: string) => unknown) {
   return { fixture, stub, el: fixture.nativeElement as HTMLElement };
 }
 
-function defaultRoute(method: string, path: string): unknown {
-  if (method === 'GET' && path === '/api/scopes') return SCOPES;
-  if (method === 'GET' && path === '/api/routines/rtn_1/scopes') return ROUTINE_SCOPES;
-  if (method === 'GET' && path === '/api/routines/rtn_1/baselines') return BASELINES;
-  if (method === 'POST' && path === '/api/routines/rtn_1/run') {
-    return {
-      chunk_id: 'ch_new',
-      source: 'hub',
-      ref: '1',
-      title: 'gardening run (full)',
-      body: 'Routine: gardening',
-      routine_name: 'gardening',
-      scope_slug: 'web',
-      effective_mode: 'full',
-      downgraded: false,
-      baseline_finding_set_id: null,
-      baseline_revisions: null,
-      created_at: '2026-03-01T00:00:00Z',
-    };
-  }
-  return {};
+function defaultRoutes(): Parameters<typeof stubHubClient>[0] {
+  return {
+    'GET /api/scopes': () => SCOPES,
+    'GET /api/routines/{routine_id}/scopes': () => ROUTINE_SCOPES,
+    'GET /api/routines/{routine_id}/baselines': () => BASELINES,
+    'POST /api/routines/{routine_id}/run': () => runResponse('ch_new'),
+  };
 }
 
 describe('GardeningRunDialog', () => {
@@ -84,7 +83,7 @@ describe('GardeningRunDialog', () => {
   afterEach(() => stub?.restore());
 
   it('offers exactly three fields — scope, mode, and a charge note', async () => {
-    const mounted = await mount(defaultRoute);
+    const mounted = await mount();
     stub = mounted.stub;
 
     expect(mounted.el.querySelector('[data-testid="run-scope-field"]')).not.toBeNull();
@@ -93,7 +92,7 @@ describe('GardeningRunDialog', () => {
   });
 
   it('lists only the routine\'s related, non-retired scopes with their descriptions, previously-swept first', async () => {
-    const mounted = await mount(defaultRoute);
+    const mounted = await mount();
     stub = mounted.stub;
 
     const rows = Array.from(mounted.el.querySelectorAll('[data-testid^="run-scope-option-"]'));
@@ -108,10 +107,7 @@ describe('GardeningRunDialog', () => {
   });
 
   it('renders the empty state, and no scope field, for a routine with no runnable related scope', async () => {
-    const mounted = await mount((method, path) => {
-      if (method === 'GET' && path === '/api/routines/rtn_1/scopes') return [];
-      return defaultRoute(method, path);
-    });
+    const mounted = await mount({ 'GET /api/routines/{routine_id}/scopes': () => [] });
     stub = mounted.stub;
     const { el } = mounted;
 
@@ -122,10 +118,7 @@ describe('GardeningRunDialog', () => {
   });
 
   it('renders the empty state when the routine\'s only related scope is retired', async () => {
-    const mounted = await mount((method, path) => {
-      if (method === 'GET' && path === '/api/routines/rtn_1/scopes') return ['retired-scope'];
-      return defaultRoute(method, path);
-    });
+    const mounted = await mount({ 'GET /api/routines/{routine_id}/scopes': () => ['retired-scope'] });
     stub = mounted.stub;
     const { el } = mounted;
 
@@ -134,7 +127,7 @@ describe('GardeningRunDialog', () => {
   });
 
   it('displays the recorded baseline revision, its instant, and how much has landed since, once delta is selected', async () => {
-    const mounted = await mount(defaultRoute);
+    const mounted = await mount();
     stub = mounted.stub;
     const { el, fixture } = mounted;
 
@@ -153,7 +146,7 @@ describe('GardeningRunDialog', () => {
   });
 
   it('says a never-swept pair has no baseline and steers to full — no delta submission is possible', async () => {
-    const mounted = await mount(defaultRoute);
+    const mounted = await mount();
     stub = mounted.stub;
     const { el, fixture } = mounted;
 
@@ -166,7 +159,7 @@ describe('GardeningRunDialog', () => {
   });
 
   it('switching off a swept scope steers a selected delta mode back to full', async () => {
-    const mounted = await mount(defaultRoute);
+    const mounted = await mount();
     stub = mounted.stub;
     const { el, fixture } = mounted;
 
@@ -183,7 +176,7 @@ describe('GardeningRunDialog', () => {
   });
 
   it('runs against the selected related scope and confirms the chunk id and a board link — no board of its own', async () => {
-    const mounted = await mount(defaultRoute);
+    const mounted = await mount();
     stub = mounted.stub;
     const { el, fixture } = mounted;
 
@@ -209,26 +202,11 @@ describe('GardeningRunDialog', () => {
 
   it('surfaces a refused run and never renders a confirmation, then lets a resubmit reach the run', async () => {
     let runAttempts = 0;
-    const mounted = await mount((method, path) => {
-      if (method === 'POST' && path === '/api/routines/rtn_1/run') {
+    const mounted = await mount({
+      'POST /api/routines/{routine_id}/run': () => {
         runAttempts += 1;
-        if (runAttempts === 1) return stubError(503, { detail: "scope 'web' is retired" });
-        return {
-          chunk_id: 'ch_retry',
-          source: 'hub',
-          ref: '1',
-          title: 'gardening run (full)',
-          body: 'Routine: gardening',
-          routine_name: 'gardening',
-          scope_slug: 'web',
-          effective_mode: 'full',
-          downgraded: false,
-          baseline_finding_set_id: null,
-          baseline_revisions: null,
-          created_at: '2026-03-01T00:00:00Z',
-        };
-      }
-      return defaultRoute(method, path);
+        return runAttempts === 1 ? stubError(503, { detail: "scope 'web' is retired" }) : runResponse('ch_retry');
+      },
     });
     stub = mounted.stub;
     const { el, fixture } = mounted;
@@ -251,30 +229,14 @@ describe('GardeningRunDialog', () => {
   });
 
   it('keeps a submitting run mounted through Escape, a backdrop click, and a disabled Cancel', async () => {
-    const mounted = await mount(defaultRoute);
-    stub = mounted.stub;
-    const { el, fixture } = mounted;
-
-    let resolveRun!: (response: Response) => void;
-    const pendingRun = new Promise<Response>((resolve) => {
+    // The run POST hangs until resolved below, so the mutation stays genuinely pending.
+    let resolveRun!: (response: RoutineRunResponse) => void;
+    const pendingRun = new Promise<RoutineRunResponse>((resolve) => {
       resolveRun = resolve;
     });
-    // Overrides the mount's own stub so the run POST hangs until resolved below —
-    // `stubRequestClient`'s `route` callback is read synchronously (never awaited), so
-    // it cannot itself model a request that stays in flight.
-    hubClient.setConfig({
-      baseUrl: 'http://localhost',
-      fetch: (async (input: Request) => {
-        const url = new URL(input.url);
-        if (input.method.toUpperCase() === 'POST' && url.pathname === '/api/routines/rtn_1/run') {
-          return pendingRun;
-        }
-        return new Response(JSON.stringify(defaultRoute(input.method.toUpperCase(), url.pathname)), {
-          status: 200,
-          headers: { 'Content-Type': 'application/json' },
-        });
-      }) as typeof fetch,
-    });
+    const mounted = await mount({ 'POST /api/routines/{routine_id}/run': () => pendingRun });
+    stub = mounted.stub;
+    const { el, fixture } = mounted;
 
     el.querySelector<HTMLButtonElement>('[data-testid="run-dialog-submit"]')!.click();
     await pump(fixture);
@@ -288,25 +250,7 @@ describe('GardeningRunDialog', () => {
     expect(el.querySelector('[data-testid="gardening-run-dialog"]')).not.toBeNull();
     expect(el.querySelector('[data-testid="run-confirmation"]')).toBeNull();
 
-    resolveRun(
-      new Response(
-        JSON.stringify({
-          chunk_id: 'ch_new',
-          source: 'hub',
-          ref: '1',
-          title: 'gardening run (full)',
-          body: 'Routine: gardening',
-          routine_name: 'gardening',
-          scope_slug: 'web',
-          effective_mode: 'full',
-          downgraded: false,
-          baseline_finding_set_id: null,
-          baseline_revisions: null,
-          created_at: '2026-03-01T00:00:00Z',
-        }),
-        { status: 200, headers: { 'Content-Type': 'application/json' } },
-      ),
-    );
+    resolveRun(runResponse('ch_new'));
     await settle(fixture);
 
     expect(el.querySelector('[data-testid="run-confirmation"]')).not.toBeNull();

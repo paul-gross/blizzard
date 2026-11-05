@@ -8,7 +8,9 @@ import { readFileSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-const root = join(dirname(fileURLToPath(import.meta.url)), '..', 'projects', 'fleet', 'src', 'lib');
+// An optional first argument names another `projects/` directory (the exemplar gate's scratch overlay).
+const projects = process.argv[2] ?? join(dirname(fileURLToPath(import.meta.url)), '..', 'projects');
+const root = join(projects, 'fleet', 'src', 'lib');
 const METHODS = ['Get', 'Post', 'Put', 'Patch', 'Delete'];
 
 function table(plane, interfaceName) {

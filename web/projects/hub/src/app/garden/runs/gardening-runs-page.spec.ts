@@ -3,39 +3,36 @@ import { TestBed } from '@angular/core/testing';
 import { By } from '@angular/platform-browser';
 import { provideRouter, Router, RouterOutlet, type Routes } from '@angular/router';
 import { QueryClient, provideTanStackQuery } from '@tanstack/angular-query-experimental';
-import { FLEET_CLOCK, hubClient, ViewportService } from 'fleet';
-import { type RequestClientStub, settle, stubError, stubRequestClient } from 'fleet/testing';
+import { FLEET_CLOCK, ViewportService } from 'fleet';
+import {
+  deliveredSetView,
+  type RequestClientStub,
+  runEscalationView,
+  runRowView,
+  settle,
+  stubError,
+  stubHubClient,
+} from 'fleet/testing';
 
 import { GardeningRunsPage } from './gardening-runs-page';
 
-const RUN_ROW = {
+const RUN_ROW = runRowView({
   chunk_id: 'ch_1',
-  routine_name: 'nightly',
-  scope_slug: 'blizzard',
-  mode: 'full',
   minted_at: '2026-01-10T00:00:00Z',
-  outcome: 'done',
-  escalation: null,
   delivered: [
-    { finding_set_id: 'fins_1', revisions: { blizzard: 'abc123' }, measurement: '3 findings', added_count: 1, observed_count: 11, gone_count: 0 },
-    { finding_set_id: 'fins_2', revisions: { blizzard: 'def456' }, measurement: null, added_count: 0, observed_count: 0, gone_count: 2 },
+    deliveredSetView({ finding_set_id: 'fins_1', revisions: { blizzard: 'abc123' }, measurement: '3 findings', added_count: 1, observed_count: 11, gone_count: 0 }),
+    deliveredSetView({ finding_set_id: 'fins_2', revisions: { blizzard: 'def456' }, added_count: 0, observed_count: 0, gone_count: 2 }),
   ],
-};
+});
 
-const ESCALATED_RUN_ROW = {
+const ESCALATED_RUN_ROW = runRowView({
   chunk_id: 'ch_2',
-  routine_name: 'nightly',
   scope_slug: 'web',
   mode: 'delta',
   minted_at: '2026-01-11T00:00:00Z',
   outcome: 'needs_human',
-  escalation: {
-    node_name: 'survey',
-    takeover_command: 'blizzard hub chunk takeover ch_2',
-    wrapped_takeover_command: '',
-  },
-  delivered: [],
-};
+  escalation: runEscalationView({ node_name: 'survey', takeover_command: 'blizzard hub chunk takeover ch_2' }),
+});
 
 /** Stands in for `GardeningRunDetail`, whose own behavior is
  * `gardening-run-detail.spec.ts`'s. */
@@ -79,14 +76,12 @@ describe('GardeningRunsPage', () => {
   afterEach(() => stub?.restore());
 
   async function mount(
-    opts: { url?: string; routeOverride?: (method: string, path: string) => unknown; mobile?: boolean } = {},
+    opts: { url?: string; routes?: Parameters<typeof stubHubClient>[0]; mobile?: boolean } = {},
   ) {
-    stub = stubRequestClient(hubClient, (method, path) => {
-      const overridden = opts.routeOverride?.(method, path);
-      if (overridden !== undefined) return overridden;
-      if (method === 'GET' && path === '/api/runs') return [RUN_ROW, ESCALATED_RUN_ROW];
-      if (method === 'GET' && path === '/api/routines') return [];
-      return {};
+    stub = stubHubClient({
+      'GET /api/runs': () => [RUN_ROW, ESCALATED_RUN_ROW],
+      'GET /api/routines': () => [],
+      ...opts.routes,
     });
     await TestBed.configureTestingModule({
       imports: [TestRunsHost],
@@ -106,7 +101,7 @@ describe('GardeningRunsPage', () => {
 
   it('renders its own empty state with no runs recorded', async () => {
     const { el } = await mount({
-      routeOverride: (method, path) => (method === 'GET' && path === '/api/runs' ? [] : undefined),
+      routes: { 'GET /api/runs': () => [] },
     });
 
     expect(el.querySelector('[data-testid="gardening-runs-empty"]')?.textContent).toContain(
@@ -182,7 +177,7 @@ describe('GardeningRunsPage', () => {
 
   it('resolves a run-list read failure to the error state', async () => {
     const { fixture, el } = await mount({
-      routeOverride: (method, path) => (method === 'GET' && path === '/api/runs' ? stubError(500, {}) : undefined),
+      routes: { 'GET /api/runs': () => stubError(500, { detail: 'the store is down' }) },
     });
 
     const list = fixture.debugElement.query(By.css('app-run-list'));

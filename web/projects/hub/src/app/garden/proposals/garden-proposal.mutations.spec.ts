@@ -3,8 +3,13 @@ import { TestBed } from '@angular/core/testing';
 import { QueryClient, provideTanStackQuery } from '@tanstack/angular-query-experimental';
 import { vi } from 'vitest';
 
-import { hubClient } from 'fleet';
-import { type RequestClientStub, stubRequestClient } from 'fleet/testing';
+import {
+  gardenProposalAcceptResponse,
+  gardenProposalClosureView,
+  gardenProposalView,
+  type RequestClientStub,
+  stubHubClient,
+} from 'fleet/testing';
 import { injectAcceptGardenProposalMutation, injectPassGardenProposalMutation } from './garden-proposal.mutations';
 
 describe('injectPassGardenProposalMutation', () => {
@@ -12,16 +17,16 @@ describe('injectPassGardenProposalMutation', () => {
   let queryClient: QueryClient;
 
   beforeEach(() => {
-    stub = stubRequestClient(hubClient, () => ({
-      proposal_id: 'gp_1',
-      routine_name: 'comments',
-      class: 'x',
-      title: 't',
-      body: 'b',
-      created_at: '2026-01-01T00:00:00Z',
-      findings: [],
-      closure: { closure: 'passed', reason: 'not worth it', closed_by: 'u_1', closed_at: '2026-01-02T00:00:00Z', item_outcome: null, source: null, ref: null },
-    }));
+    stub = stubHubClient({
+      'POST /api/garden-proposals/{proposal_id}/pass': () =>
+        gardenProposalView({
+          proposal_id: 'gp_1',
+          class: 'x',
+          title: 't',
+          body: 'b',
+          closure: gardenProposalClosureView({ reason: 'not worth it' }),
+        }),
+    });
     queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
     TestBed.configureTestingModule({
       providers: [provideZonelessChangeDetection(), provideTanStackQuery(queryClient)],
@@ -58,25 +63,10 @@ describe('injectAcceptGardenProposalMutation', () => {
   let queryClient: QueryClient;
 
   beforeEach(() => {
-    stub = stubRequestClient(hubClient, () => ({
-      proposal_id: 'gp_1',
-      routine_name: 'comments',
-      class: 'x',
-      title: 't',
-      body: 'b',
-      created_at: '2026-01-01T00:00:00Z',
-      findings: [],
-      chunk_id: 'ch_1',
-      closure: {
-        closure: 'accepted',
-        reason: null,
-        closed_by: 'u_1',
-        closed_at: '2026-01-02T00:00:00Z',
-        item_outcome: 'minted',
-        source: 'hub',
-        ref: '42',
-      },
-    }));
+    stub = stubHubClient({
+      'POST /api/garden-proposals/{proposal_id}/accept': () =>
+        gardenProposalAcceptResponse({ proposal_id: 'gp_1', class: 'x', title: 't', body: 'b' }),
+    });
     queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
     TestBed.configureTestingModule({
       providers: [provideZonelessChangeDetection(), provideTanStackQuery(queryClient)],

@@ -1,8 +1,17 @@
 import { provideZonelessChangeDetection } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { QueryClient, provideTanStackQuery } from '@tanstack/angular-query-experimental';
-import { runnerClient } from 'fleet';
-import { type RequestClientStub, settle, stubError, stubRequestClient } from 'fleet/testing';
+import {
+  pauseStateView,
+  type RequestClientStub,
+  runnerDashboardView,
+  runnerStatusView,
+  settle,
+  stubError,
+  type StubDetailBody,
+  type StubHttpError,
+  stubRunnerClient,
+} from 'fleet/testing';
 import { vi } from 'vitest';
 
 import { LocalPauseControl } from './app-pause-control';
@@ -13,34 +22,26 @@ import { LocalPauseControl } from './app-pause-control';
  * failure instead. */
 async function render(
   pause: { local: boolean; hub: boolean; local_reason?: string | null },
-  patchError?: ReturnType<typeof stubError>,
+  patchError?: StubHttpError<number, StubDetailBody>,
   compact = false,
 ) {
-  const stub = stubRequestClient(runnerClient, (method, path) => {
-    if (method === 'GET' && path === '/runners/rn_1/api/dashboard') {
-      return {
-        runner: {
-          pause: {
+  const stub = stubRunnerClient({
+    'GET /runners/{runner_id}/api/dashboard': () =>
+      runnerDashboardView({
+        runner: runnerStatusView({
+          pause: pauseStateView({
             local: pause.local,
             hub: pause.hub,
             effective: pause.local || pause.hub,
             local_reason: pause.local_reason ?? null,
-          },
-        },
-        asks: { items: [] },
-        escalations: { items: [] },
-        takeovers: { items: [] },
-        facts: { items: [] },
-        harness_health: { items: [] },
-        fleet_summary: null,
-      };
-    }
-    if (method === 'PATCH' && path === '/runners/rn_1/api/runner') {
+          }),
+        }),
+      }),
+    'PATCH /runners/{runner_id}/api/runner': () => {
       if (patchError) return patchError;
       const flipped = !pause.local;
-      return { runner_id: 'runner-1', local_paused: flipped, hub_paused: pause.hub, paused: flipped || pause.hub };
-    }
-    return {};
+      return { runner_id: 'runner-1', runner_name: 'r1', local_paused: flipped, hub_paused: pause.hub, paused: flipped || pause.hub };
+    },
   });
   await TestBed.configureTestingModule({
     imports: [LocalPauseControl],

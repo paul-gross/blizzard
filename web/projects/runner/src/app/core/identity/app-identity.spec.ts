@@ -1,8 +1,8 @@
 import { provideZonelessChangeDetection } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { QueryClient, provideTanStackQuery } from '@tanstack/angular-query-experimental';
-import { runnerClient } from 'fleet';
-import { type RequestClientStub, settle, stubError, stubRequestClient } from 'fleet/testing';
+import { type runnerApi } from 'fleet';
+import { type RequestClientStub, settle, stubError, stubRunnerClient } from 'fleet/testing';
 import { vi } from 'vitest';
 
 import { RunnerLogout } from './runner-logout';
@@ -10,11 +10,10 @@ import { LocalIdentity } from './app-identity';
 
 /** Render `LocalIdentity` with `GET /api/auth/session` answered by `session` and
  * `POST /api/auth/logout` a 204 no-op. */
-async function render(session: unknown) {
-  const stub = stubRequestClient(runnerClient, (method, path) => {
-    if (method === 'GET' && path === '/api/auth/session') return session;
-    if (method === 'POST' && path === '/api/auth/logout') return {};
-    return {};
+async function render(session: runnerApi.RunnerAuthSessionView) {
+  const stub = stubRunnerClient({
+    'GET /api/auth/session': () => session,
+    'POST /api/auth/logout': () => undefined,
   });
   await TestBed.configureTestingModule({
     imports: [LocalIdentity],
@@ -108,10 +107,9 @@ describe('LocalIdentity', () => {
   it('renders a failed logout in the control shape only, never inside the label shape a menu hosts', async () => {
     const { fixture, stub: s } = await render({ auth_enabled: true, username: 'alice' });
     s.restore();
-    stub = stubRequestClient(runnerClient, (method, path) => {
-      if (method === 'GET' && path === '/api/auth/session') return { auth_enabled: true, username: 'alice' };
-      if (method === 'POST' && path === '/api/auth/logout') return stubError(500, { detail: 'nope' });
-      return {};
+    stub = stubRunnerClient({
+      'GET /api/auth/session': () => ({ auth_enabled: true, username: 'alice' }),
+      'POST /api/auth/logout': () => stubError(500, { detail: 'nope' }),
     });
     const el = fixture.nativeElement as HTMLElement;
     await TestBed.inject(RunnerLogout).logout();

@@ -3,8 +3,7 @@ import { TestBed } from '@angular/core/testing';
 import { QueryClient, provideTanStackQuery } from '@tanstack/angular-query-experimental';
 import { vi } from 'vitest';
 
-import { hubClient } from 'fleet';
-import { type RequestClientStub, stubRequestClient } from 'fleet/testing';
+import { type RequestClientStub, chunkSummary, stubHubClient } from 'fleet/testing';
 import { injectChunkPauseMutation } from './pause.mutations';
 
 describe('injectChunkPauseMutation (issue #46)', () => {
@@ -12,10 +11,9 @@ describe('injectChunkPauseMutation (issue #46)', () => {
   let queryClient: QueryClient;
 
   beforeEach(() => {
-    stub = stubRequestClient(hubClient, (method, path) => {
-      if (path === '/api/chunks/ch_1/pause') return {};
-      if (path === '/api/chunks/ch_1/resume') return {};
-      return {};
+    stub = stubHubClient({
+      'POST /api/chunks/{chunk_id}/pause': (_request, { chunk_id }) => chunkSummary({ chunk_id, graph_id: 'gr_1', status: 'ready' }),
+      'POST /api/chunks/{chunk_id}/resume': (_request, { chunk_id }) => chunkSummary({ chunk_id, graph_id: 'gr_1', status: 'ready' }),
     });
     queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
     TestBed.configureTestingModule({

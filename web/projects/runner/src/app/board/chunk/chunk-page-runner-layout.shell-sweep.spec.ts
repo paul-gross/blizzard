@@ -3,8 +3,18 @@ import { TestBed } from '@angular/core/testing';
 import { provideRouter } from '@angular/router';
 import { RouterTestingHarness } from '@angular/router/testing';
 import { QueryClient, provideTanStackQuery } from '@tanstack/angular-query-experimental';
-import { runnerClient } from 'fleet';
-import { settle, stubError, stubRequestClient } from 'fleet/testing';
+import { type runnerApi } from 'fleet';
+import {
+  assetArtifactView,
+  chunkDetail,
+  hostRunnerView,
+  runnerLeaseView,
+  settle,
+  stubError,
+  stubRunnerClient,
+  transitionView,
+  workRefView,
+} from 'fleet/testing';
 import { page } from 'vitest/browser';
 
 import { RunnerChunkPage } from './runner-chunk-page';
@@ -39,7 +49,7 @@ import { RunnerChunkPage } from './runner-chunk-page';
  */
 const CHUNK_ID = 'ch_01KXKVVF1J3D6H6VYZ3XYN3YJ9';
 
-const DETAIL = {
+const DETAIL: runnerApi.ChunkDetail = chunkDetail({
   chunk_id: CHUNK_ID,
   graph_id: 'gr_1',
   graph_name: 'default',
@@ -47,93 +57,69 @@ const DETAIL = {
   current_node_name: 'review',
   latest_epoch: 1,
   status: 'running',
-  // A bare, unbroken token far wider than a 320px phone — the same defect
-  // class `chunk-page-layout.shell-sweep.spec.ts`'s own long-repo-path case
-  // proves against, here for the artifact key column instead.
   open_prs: [],
   closed_prs: [],
   landed_repos: [],
-  work_refs: [{ source: 'blizzard', ref: '318', label: 'blizzard#318', web_url: null }],
+  work_refs: [workRefView({ source: 'blizzard', ref: '318', label: 'blizzard#318', web_url: null })],
   history: [
-    {
+    transitionView({
       choice_name: 'pass',
       epoch: 1,
       from_node_id: null,
       to_node_id: 'nd_review',
       to_node_name: 'review',
       recorded_at: '2026-07-16T11:00:00.000Z',
-    },
+    }),
   ],
   artifacts: [
-    {
+    // A bare, unbroken token far wider than a 320px phone — the same defect
+    // class `chunk-page-layout.shell-sweep.spec.ts`'s own long-repo-path case
+    // proves against, here for the artifact key column instead.
+    assetArtifactView({
       key: 'a-very-long-unbroken-artifact-key-that-would-overflow-a-narrow-phone-viewport-if-nothing-wrapped-it.retrospective.1',
-      kind: 'asset',
       name: 'retrospective',
       node_id: 'nd_review',
       node_name: 'review',
       epoch: 1,
       recorded_at: '2026-07-16T11:00:00.000Z',
-    },
+    }),
   ],
-};
+});
 
 /** The host's one runner — the chunk page finds the chunk's runner off its leases. */
-const HOST_RUNNERS = {
-  items: [
-    {
-      runner_id: 'rn_1',
-      name: 'r1',
-      state: 'serving',
-      served: true,
-      halted_reasons: [],
-      pause: { local: false, hub: false, effective: false, local_reason: null },
-      bindings: [{ project: 'p', workspace_id: 'ws', agents: 4 }],
-      agents_in_use: 1,
-      max_agents: 4,
-    },
-  ],
+const HOST_RUNNERS: runnerApi.HostRunnerListResponse = {
+  items: [hostRunnerView({ bindings: [{ project: 'p', workspace_id: 'ws', agents: 4 }], agents_in_use: 1, max_agents: 4 })],
 };
 
 /** `rn_1`'s lease on the chunk — what makes it the chunk's owner. */
-const LEASES = {
+const LEASES: runnerApi.LeaseListResponse = {
   items: [
-    {
+    runnerLeaseView({
       lease_id: 'lease_01KXKVVF1J3D6H6VYZ3XYNZPRR',
       chunk_id: CHUNK_ID,
-      graph_id: 'gr_1',
       node_id: 'nd_review',
       node_name: 'review',
-      epoch: 1,
       session_id: 'sess-1',
       pid: 4821,
       environment_id: 'e1',
       workdir: '/ws/e1',
       created_at: '2026-07-16T11:00:00.000Z',
       last_heartbeat_at: '2026-07-16T11:59:26.000Z',
-      state: 'running',
-      display_status: 'running',
       closure_healthy: false,
-      closed_at: null,
-      closure_reason: null,
       stale_after_seconds: 3600,
-      resolved_model: null,
-      resolved_effort: null,
-      harness_version: null,
-      git_commits: [],
-    },
+    }),
   ],
 };
 
-function routes(method: string, path: string): unknown {
-  if (method !== 'GET') return {};
-  if (path === '/api/host/runners') return HOST_RUNNERS;
-  if (path === '/api/host/environments') return { workspaces: [] };
-  if (path === '/runners/rn_1/api/leases') return LEASES;
-  if (path === `/runners/rn_1/api/chunks/${CHUNK_ID}`) return DETAIL;
-  if (path === `/runners/rn_1/api/chunks/${CHUNK_ID}/work-items`) return { items: [] };
-  if (path === `/runners/rn_1/api/chunks/${CHUNK_ID}/transcripts`) return { chunk_id: CHUNK_ID, segments: [] };
-  return {};
-}
+/** Every read the runner chunk page makes against `rn_1`; a case overrides one with a refusal. */
+const ROUTES = {
+  'GET /api/host/runners': () => HOST_RUNNERS,
+  'GET /api/host/environments': () => ({ workspaces: [] }),
+  'GET /runners/{runner_id}/api/leases': () => LEASES,
+  'GET /runners/{runner_id}/api/chunks/{chunk_id}': () => DETAIL,
+  'GET /runners/{runner_id}/api/chunks/{chunk_id}/work-items': () => ({ items: [] }),
+  'GET /runners/{runner_id}/api/chunks/{chunk_id}/transcripts': () => ({ chunk_id: CHUNK_ID, segments: [] }),
+};
 
 const WIDTHS = [390, 320];
 
@@ -152,7 +138,7 @@ describe('runner chunk page shell sweep (web:shell-sweep)', () => {
     window.addEventListener('error', onError);
     window.addEventListener('unhandledrejection', onRejection);
 
-    const stub = stubRequestClient(runnerClient, routes);
+    const stub = stubRunnerClient(ROUTES);
     await TestBed.configureTestingModule({
       providers: [
         provideZonelessChangeDetection(),
@@ -217,10 +203,7 @@ describe('runner chunk page shell sweep (web:shell-sweep)', () => {
    * which fills the space below it.
    */
   it('keeps the page-level error status clear of the back bar', async () => {
-    const stub = stubRequestClient(runnerClient, (method: string, path: string): unknown => {
-      if (method === 'GET' && path === `/runners/rn_1/api/chunks/${CHUNK_ID}`) return stubError(404, { detail: 'unknown chunk' });
-      return routes(method, path);
-    });
+    const stub = stubRunnerClient({ ...ROUTES, 'GET /runners/{runner_id}/api/chunks/{chunk_id}': () => stubError(404, { detail: 'unknown chunk' }) });
     await TestBed.configureTestingModule({
       providers: [
         provideZonelessChangeDetection(),
@@ -261,10 +244,7 @@ describe('runner chunk page shell sweep (web:shell-sweep)', () => {
    * returns 503 for `/work-items`).
    */
   it('keeps the issue pane error status text within its section at phone widths', async () => {
-    const stub = stubRequestClient(runnerClient, (method: string, path: string): unknown => {
-      if (method === 'GET' && path === `/runners/rn_1/api/chunks/${CHUNK_ID}/work-items`) return stubError(503, { detail: 'no work source is configured' });
-      return routes(method, path);
-    });
+    const stub = stubRunnerClient({ ...ROUTES, 'GET /runners/{runner_id}/api/chunks/{chunk_id}/work-items': () => stubError(503, { detail: 'no work source is configured' }) });
     await TestBed.configureTestingModule({
       providers: [
         provideZonelessChangeDetection(),

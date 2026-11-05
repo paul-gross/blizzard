@@ -3,11 +3,10 @@ import { TestBed } from '@angular/core/testing';
 import { QueryClient, provideTanStackQuery } from '@tanstack/angular-query-experimental';
 import { vi } from 'vitest';
 
-import { hubClient } from 'fleet';
-import { type RequestClientStub, stubError, stubRequestClient } from 'fleet/testing';
+import { memberView, type RequestClientStub, stubError, stubHubClient } from 'fleet/testing';
 import { injectMemberRoleMutation, injectRevokeMemberMutation } from './members.mutations';
 
-const GRACE = {
+const GRACE = memberView({
   user_id: 'usr_2',
   username: 'grace',
   display_name: 'Grace',
@@ -15,7 +14,7 @@ const GRACE = {
   role: 'contributor',
   hub_admin: false,
   created_at: '2026-07-21T00:00:00Z',
-};
+});
 
 describe('membership mutations', () => {
   let stub: RequestClientStub;
@@ -35,9 +34,7 @@ describe('membership mutations', () => {
   }
 
   it('PUTs /api/members/{id} with the role and re-reads the listing', async () => {
-    stub = stubRequestClient(hubClient, (method, path) =>
-      path === '/api/members/usr_2' && method === 'PUT' ? GRACE : {},
-    );
+    stub = stubHubClient({ 'PUT /api/members/{user_id}': () => GRACE });
     const invalidateSpy = vi.spyOn(queryClient, 'invalidateQueries');
     const mutation = TestBed.runInInjectionContext(() => injectMemberRoleMutation());
 
@@ -51,16 +48,16 @@ describe('membership mutations', () => {
   });
 
   it('rejects a refused role change (409, the last admin)', async () => {
-    stub = stubRequestClient(hubClient, (method, path) =>
-      path === '/api/members/usr_2' ? stubError(409, { detail: 'a tenant keeps at least one admin' }) : {},
-    );
+    stub = stubHubClient({
+      'PUT /api/members/{user_id}': () => stubError(409, { detail: 'a tenant keeps at least one admin' }),
+    });
     const mutation = TestBed.runInInjectionContext(() => injectMemberRoleMutation());
 
     await expect(mutation.mutateAsync({ userId: 'usr_2', role: 'guest' })).rejects.toBeTruthy();
   });
 
   it('DELETEs /api/members/{id} and re-reads the listing', async () => {
-    stub = stubRequestClient(hubClient, () => ({}));
+    stub = stubHubClient({ 'DELETE /api/members/{user_id}': () => undefined });
     const invalidateSpy = vi.spyOn(queryClient, 'invalidateQueries');
     const mutation = TestBed.runInInjectionContext(() => injectRevokeMemberMutation());
 
@@ -71,9 +68,9 @@ describe('membership mutations', () => {
   });
 
   it('rejects a refused revocation (403, your own membership)', async () => {
-    stub = stubRequestClient(hubClient, (method, path) =>
-      path === '/api/members/usr_2' && method === 'DELETE' ? stubError(403, { detail: 'cannot change your own role' }) : {},
-    );
+    stub = stubHubClient({
+      'DELETE /api/members/{user_id}': () => stubError(403, { detail: 'cannot change your own role' }),
+    });
     const mutation = TestBed.runInInjectionContext(() => injectRevokeMemberMutation());
 
     await expect(mutation.mutateAsync({ userId: 'usr_2' })).rejects.toBeTruthy();

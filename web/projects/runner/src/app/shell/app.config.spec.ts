@@ -1,6 +1,6 @@
 import { TestBed } from '@angular/core/testing';
 import { runnerApi, runnerClient } from 'fleet';
-import { type RequestClientStub, stubError, stubRequestClient } from 'fleet/testing';
+import { type RequestClientStub, stubError, stubRunnerClient } from 'fleet/testing';
 import { SessionRecovery } from '../core/identity/session-recovery';
 import { vi } from 'vitest';
 
@@ -49,9 +49,10 @@ describe('runner appConfig wires session recovery', () => {
       .spyOn(recovery as unknown as { navigate(url: string): void }, 'navigate')
       .mockImplementation(() => undefined);
 
-    stub = stubRequestClient(runnerClient, (_method, path) =>
-      path === '/api/auth/session' ? { auth_enabled: true, username: null } : stubError(401, { detail: 'not authenticated' }),
-    );
+    stub = stubRunnerClient({
+      'GET /api/auth/session': () => ({ auth_enabled: true, username: null }),
+      'GET /runners/{runner_id}/api/leases': () => stubError(401, { detail: 'not authenticated' }),
+    });
 
     await runnerApi.listLeasesRunnersRunnerIdApiLeasesGet({ path: { runner_id: 'rn_1' }, throwOnError: false });
 

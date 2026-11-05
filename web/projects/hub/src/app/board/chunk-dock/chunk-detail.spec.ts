@@ -4,8 +4,23 @@ import { provideRouter } from '@angular/router';
 import { QueryClient, provideTanStackQuery } from '@tanstack/angular-query-experimental';
 import { vi } from 'vitest';
 
-import { type ChunkControl, type ChunkDetail as ChunkDetailModel, formatWhen, hubClient } from 'fleet';
-import { settle, OPERATOR_ME_RESPONSE, chunkDetail, decisionView, questionView, type RequestClientStub, stubError, stubRequestClient } from 'fleet/testing';
+import { type ChunkControl, type ChunkDetail as ChunkDetailModel, formatWhen, type hubApi } from 'fleet';
+import {
+  settle,
+  OPERATOR_ME_RESPONSE,
+  chunkDetail,
+  chunkSummary,
+  decisionView,
+  questionView,
+  type RequestClientStub,
+  stubError,
+  stubUndeclaredError,
+  type StubDetailBody,
+  type StubUndeclaredError,
+  stubHubClient,
+  type StubHttpError,
+  workItemEntry,
+} from 'fleet/testing';
 import { ChunkDetail } from './chunk-detail';
 
 const ROUTED_DETAIL: ChunkDetailModel = chunkDetail({
@@ -141,16 +156,19 @@ async function clickMenuAction(fixture: ReturnType<typeof TestBed.createComponen
   await fixture.whenStable();
 }
 
+/** A verb's canned refusal — the `{ detail }` envelope at any status. */
+type Refusal = StubHttpError<number, StubDetailBody>;
+
 describe('ChunkDetail container', () => {
   let stub: RequestClientStub;
   // Each verb's response, mutated per-test; the stub closure below reads them live, so a
   // test can set one after the fixture is mounted. A null resolve falls back to a canned success.
-  let detachResponse: unknown = {};
-  let pauseResponse: unknown = {};
-  let completeResponse: unknown = {};
-  let deleteResponse: unknown = {};
-  let answerResponse: unknown = {};
-  let resolveResponse: unknown | null = null;
+  let detachResponse: Refusal | null = null;
+  let pauseResponse: Refusal | null = null;
+  let completeResponse: Refusal | null = null;
+  let deleteResponse: Refusal | null = null;
+  let answerResponse: Refusal | StubUndeclaredError | null = null;
+  let resolveResponse: Refusal | StubHttpError<409, hubApi.DecisionResolutionConflict> | null = null;
   // Whether the chunk read for `ch_ask` has been answered yet, so a test can make the
   // post-answer re-read return the settled row the way the live hub would.
   let askAnswered = false;
@@ -158,58 +176,61 @@ describe('ChunkDetail container', () => {
   let chunkDeleted = false;
 
   beforeEach(async () => {
-    detachResponse = {};
-    pauseResponse = {};
-    completeResponse = {};
-    deleteResponse = {};
-    answerResponse = {};
+    detachResponse = null;
+    pauseResponse = null;
+    completeResponse = null;
+    deleteResponse = null;
+    answerResponse = null;
     resolveResponse = null;
     askAnswered = false;
     chunkDeleted = false;
     // The generated client's transport is stubbed so we can assert the exact call the button fires.
-    stub = stubRequestClient(hubClient, (method, path) => {
-      if (method === 'GET' && path === '/api/me') return OPERATOR_ME_RESPONSE;
-      if (method === 'GET' && path === '/api/chunks/ch_gate') return GATE_DETAIL;
-      if (method === 'GET' && path === '/api/chunks/ch_routed') return ROUTED_DETAIL;
-      if (method === 'GET' && path === '/api/chunks/ch_paused') return PAUSED_ASKING_DETAIL;
-      if (method === 'GET' && path === '/api/chunks/ch_ready') return NOT_READY_DETAIL;
-      if (method === 'GET' && path === '/api/chunks/ch_deletable') {
-        return chunkDeleted ? stubError(404, { detail: 'unknown chunk' }) : DELETABLE_DETAIL;
-      }
-      if (method === 'GET' && path === '/api/chunks/ch_ask') return askAnswered ? ASK_ANSWERED_DETAIL : ASK_DETAIL;
-      if (method === 'GET' && path === '/api/chunks/ch_missing') return stubError(404, { detail: 'unknown chunk' });
-      if (method === 'POST' && path === '/api/questions/qn_77/answers') return answerResponse;
-      if (method === 'POST' && (path === '/api/chunks/ch_routed/pause' || path === '/api/chunks/ch_paused/resume')) {
-        return pauseResponse;
-      }
-      if (method === 'GET' && path.endsWith('/work-items')) {
-        return {
-          items: [
-            {
-              source: 'widget',
-              ref: '42',
-              label: 'widget#42',
-              web_url: 'https://github.com/acme/widget/issues/42',
-              fetched_at: '2026-07-15T00:00:00Z',
-              body: 'the widget flake reproduces under load',
-              comments: ['seen it too'],
-              error: null,
-            },
-          ],
-        };
-      }
-      if (path === '/api/decisions/de_42/resolutions') {
-        return (
-          resolveResponse ?? { decision_id: 'de_42', choice: 'approve', resolved_at: 'x', resolved_by: 'operator' }
-        );
-      }
-      if (method === 'POST' && path === '/api/chunks/ch_routed/detach') return detachResponse;
-      if (method === 'POST' && path === '/api/chunks/ch_routed/complete') return completeResponse;
-      if (method === 'DELETE' && path === '/api/chunks/ch_deletable') {
-        chunkDeleted = !(typeof deleteResponse === 'object' && deleteResponse !== null && 'status' in deleteResponse);
-        return deleteResponse;
-      }
-      return {};
+    const details: Record<string, () => ChunkDetailModel | Refusal> = {
+      ch_gate: () => GATE_DETAIL,
+      ch_routed: () => ROUTED_DETAIL,
+      ch_paused: () => PAUSED_ASKING_DETAIL,
+      ch_ready: () => NOT_READY_DETAIL,
+      ch_deletable: () => (chunkDeleted ? stubError(404, { detail: 'unknown chunk' }) : DELETABLE_DETAIL),
+      ch_ask: () => (askAnswered ? ASK_ANSWERED_DETAIL : ASK_DETAIL),
+    };
+    const summary = (chunkId: string): hubApi.ChunkSummary => chunkSummary({ chunk_id: chunkId, graph_id: 'gr_1', status: 'running' });
+    stub = stubHubClient({
+      'GET /api/me': () => OPERATOR_ME_RESPONSE,
+      'GET /api/chunks/{chunk_id}': (_request, { chunk_id }) =>
+        details[chunk_id]?.() ?? stubError(404, { detail: 'unknown chunk' }),
+      'POST /api/questions/{question_id}/answers': (_request, { question_id }) =>
+        answerResponse ?? { won: true, question_id, answer: 'rest', answered_by: 'operator', answered_at: '2026-07-13T00:00:00Z' },
+      'POST /api/chunks/{chunk_id}/pause': (_request, { chunk_id }) => pauseResponse ?? summary(chunk_id),
+      'POST /api/chunks/{chunk_id}/resume': (_request, { chunk_id }) => pauseResponse ?? summary(chunk_id),
+      'GET /api/chunks/{chunk_id}/work-items': () => ({
+        items: [
+          workItemEntry({
+            source: 'widget',
+            ref: '42',
+            label: 'widget#42',
+            web_url: 'https://github.com/acme/widget/issues/42',
+            fetched_at: '2026-07-15T00:00:00Z',
+            body: 'the widget flake reproduces under load',
+            comments: ['seen it too'],
+            error: null,
+          }),
+        ],
+      }),
+      'POST /api/decisions/{decision_id}/resolutions': () =>
+        resolveResponse ?? {
+          decision_id: 'de_42',
+          choice: 'approve',
+          note: null,
+          overrode_red_checks: false,
+          resolved_at: 'x',
+          resolved_by: 'operator',
+        },
+      'POST /api/chunks/{chunk_id}/detach': (_request, { chunk_id }) => detachResponse ?? summary(chunk_id),
+      'POST /api/chunks/{chunk_id}/complete': (_request, { chunk_id }) => completeResponse ?? summary(chunk_id),
+      'DELETE /api/chunks/{chunk_id}': (_request, { chunk_id }) => {
+        chunkDeleted = deleteResponse === null;
+        return deleteResponse ?? { chunk_id };
+      },
     });
     await TestBed.configureTestingModule({
       imports: [ChunkDetail],
@@ -476,7 +497,7 @@ describe('ChunkDetail container', () => {
 
   it('renders the winner’s name and answer as an outcome when the answer race is lost', async () => {
     // A lost first-write-wins race's 409 body is the winning row, not a `{detail}` error.
-    answerResponse = stubError(409, {
+    answerResponse = stubUndeclaredError(409, {
       won: false,
       question_id: 'qn_77',
       answer: 'rest',
@@ -514,7 +535,7 @@ describe('ChunkDetail container', () => {
   });
 
   it('clears a stale answer outcome when a different chunk is opened', async () => {
-    answerResponse = stubError(409, {
+    answerResponse = stubUndeclaredError(409, {
       won: false,
       question_id: 'qn_77',
       answer: 'rest',
@@ -536,7 +557,7 @@ describe('ChunkDetail container', () => {
   it('clears a stale answer outcome when any other dock action fires', async () => {
     // Otherwise a later action's failure renders the red notice *beside* the leftover
     // cyan "alice answered first", which reads as though the two are about each other.
-    answerResponse = stubError(409, {
+    answerResponse = stubUndeclaredError(409, {
       won: false,
       question_id: 'qn_77',
       answer: 'rest',

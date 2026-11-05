@@ -1,17 +1,16 @@
 import { provideZonelessChangeDetection } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { QueryClient, provideTanStackQuery } from '@tanstack/angular-query-experimental';
-import { runnerClient, type runnerApi } from 'fleet';
-import { type RequestClientStub, settle, stubError, stubRequestClient } from 'fleet/testing';
+import { type runnerApi } from 'fleet';
+import { harnessHealthView, type RequestClientStub, runnerDashboardView, selfTestView, settle, stubError, stubRunnerClient } from 'fleet/testing';
 import { vi } from 'vitest';
 
 import { LocalSelftest } from './selftest';
 import { SELFTEST_POLL_MS } from './selftest.query';
 
-const health = (harness_id: string): runnerApi.HarnessHealthView => ({
-  harness_id, available: true, admitted_range: null, cause: null, degradations: [], version: null,
+const DASHBOARD = runnerDashboardView({
+  harness_health: { items: [harnessHealthView({ harness_id: 'mock' }), harnessHealthView({ harness_id: 'claude_code' })] },
 });
-const DASHBOARD = { harness_health: { items: [health('mock'), health('claude_code')] } };
 const CHECKS: runnerApi.SelfTestCheckView[] = [
   { name: 'spawn', passed: true, detail: 'spawned' },
   { name: 'resume', passed: false, detail: 'no session' },
@@ -20,8 +19,8 @@ const CHECKS: runnerApi.SelfTestCheckView[] = [
 let stub: RequestClientStub;
 afterEach(() => stub.restore());
 
-async function mount(routes: (method: string, path: string) => unknown) {
-  stub = stubRequestClient(runnerClient, routes);
+async function mount(routes: Parameters<typeof stubRunnerClient>[0]) {
+  stub = stubRunnerClient({ 'GET /runners/{runner_id}/api/dashboard': () => DASHBOARD, ...routes });
   await TestBed.configureTestingModule({
     imports: [LocalSelftest],
     providers: [provideZonelessChangeDetection(), provideTanStackQuery(new QueryClient({ defaultOptions: { queries: { retry: false } } }))],
@@ -37,16 +36,12 @@ async function mount(routes: (method: string, path: string) => unknown) {
 describe('LocalSelftest', () => {
   it('starts a run, polls it until terminal, renders its checks and error, and re-reads the dashboard', async () => {
     let reads = 0;
-    const { fixture, el, button } = await mount((method, path) => {
-      if (path === '/runners/rn_1/api/dashboard') return DASHBOARD;
-      if (method === 'POST' && path === '/runners/rn_1/api/selftests') return { id: 'st_1', harness: 'mock', status: 'running', checks: [], error: null };
-      if (path === '/runners/rn_1/api/selftests/st_1') {
+    const { fixture, el, button } = await mount({
+      'POST /runners/{runner_id}/api/selftests': () => selfTestView(),
+      'GET /runners/{runner_id}/api/selftests/{selftest_id}': () => {
         reads += 1;
-        return reads < 2
-          ? { id: 'st_1', harness: 'mock', status: 'running', checks: [], error: null }
-          : { id: 'st_1', harness: 'mock', status: 'failed', checks: CHECKS, error: 'resume failed' };
-      }
-      return {};
+        return reads < 2 ? selfTestView() : selfTestView({ status: 'failed', checks: CHECKS, error: 'resume failed' });
+      },
     });
     expect(el.querySelectorAll('[data-testid="selftest"]')).toHaveLength(2);
 
@@ -73,10 +68,8 @@ describe('LocalSelftest', () => {
   });
 
   it('renders a refused start on that harness alone', async () => {
-    const { fixture, el, button } = await mount((method, path) => {
-      if (path === '/runners/rn_1/api/dashboard') return DASHBOARD;
-      if (method === 'POST') return stubError(503, { detail: 'harness mock is unavailable' });
-      return {};
+    const { fixture, el, button } = await mount({
+      'POST /runners/{runner_id}/api/selftests': () => stubError(503, { detail: 'harness mock is unavailable' }),
     });
 
     button('mock').click();

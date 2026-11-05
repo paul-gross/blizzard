@@ -2,8 +2,16 @@ import { provideZonelessChangeDetection } from '@angular/core';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { provideRouter, Router } from '@angular/router';
 import { QueryClient, provideTanStackQuery } from '@tanstack/angular-query-experimental';
-import { runnerClient, type runnerApi } from 'fleet';
-import { type RequestClientStub, settle, stubError, stubRequestClient } from 'fleet/testing';
+import { type runnerApi } from 'fleet';
+import {
+  capacitiesView,
+  type RequestClientStub,
+  runnerDashboardView,
+  runnerStatusView,
+  settle,
+  stubError,
+  stubRunnerClient,
+} from 'fleet/testing';
 
 import { HostPanel } from './host-panel';
 
@@ -38,29 +46,26 @@ const RUNNERS: runnerApi.HostRunnerView[] = [
   },
 ];
 
-const DASHBOARD_RN_1 = {
-  runner: {
+const DASHBOARD_RN_1 = runnerDashboardView({
+  runner: runnerStatusView({
     runner_id: 'rn_1',
     workspace_id: 'workspace-local',
-    pause: { local: false, hub: false, effective: false, local_reason: null },
-    capacities: {
+    capacities: capacitiesView({
       used: 3,
       bindings: [
         { project: 'console', project_id: 'proj_console', workspace_id: 'workspace-web', agents: 4, used: 2, free: 2 },
         { project: 'ops', project_id: 'proj_ops', workspace_id: 'workspace-local', agents: 2, used: 1, free: 1 },
       ],
-    },
-    hub: { endpoint: 'http://127.0.0.1:4522', reachable: true, last_contact_at: null, buffer_depth: 0 },
-    last_tick_at: null,
-  },
-};
+    }),
+  }),
+});
 
 /** `rn_2`'s dashboard: its brake holds it, so its slot accounting names no binding in use. */
-const DASHBOARD_RN_2 = {
-  runner: { ...DASHBOARD_RN_1.runner, runner_id: 'rn_2', capacities: { used: 0, bindings: [] } },
-};
+const DASHBOARD_RN_2 = runnerDashboardView({
+  runner: { ...DASHBOARD_RN_1.runner, runner_id: 'rn_2', capacities: capacitiesView() },
+});
 
-const ENVIRONMENTS = {
+const ENVIRONMENTS: runnerApi.HostEnvironmentListResponse = {
   workspaces: [
     {
       workspace_id: 'workspace-local',
@@ -77,26 +82,14 @@ let stub: RequestClientStub;
 afterEach(() => stub.restore());
 
 async function render(
-  options: { runners?: () => unknown; url?: string } = {},
+  options: { runners?: () => runnerApi.HostRunnerListResponse | ReturnType<typeof stubError<502, { detail: string }>>; url?: string } = {},
 ): Promise<{ fixture: ComponentFixture<HostPanel>; el: HTMLElement }> {
-  stub = stubRequestClient(runnerClient, (method, path) => {
-    if (method !== 'GET') return {};
-    switch (path) {
-      case '/api/host/runners':
-        return options.runners ? options.runners() : { items: RUNNERS };
-      case '/api/host/subscriptions':
-        return { items: [] };
-      case '/api/host/workspaces':
-        return { items: [{ workspace_id: 'workspace-local', max_environments: 2 }] };
-      case '/api/host/environments':
-        return ENVIRONMENTS;
-      case '/runners/rn_1/api/dashboard':
-        return DASHBOARD_RN_1;
-      case '/runners/rn_2/api/dashboard':
-        return DASHBOARD_RN_2;
-      default:
-        return {};
-    }
+  stub = stubRunnerClient({
+    'GET /api/host/runners': () => (options.runners ? options.runners() : { items: RUNNERS }),
+    'GET /api/host/subscriptions': () => ({ items: [] }),
+    'GET /api/host/workspaces': () => ({ items: [{ workspace_id: 'workspace-local', max_environments: 2 }] }),
+    'GET /api/host/environments': () => ENVIRONMENTS,
+    'GET /runners/{runner_id}/api/dashboard': (_request, { runner_id }) => (runner_id === 'rn_2' ? DASHBOARD_RN_2 : DASHBOARD_RN_1),
   });
   await TestBed.configureTestingModule({
     imports: [HostPanel],

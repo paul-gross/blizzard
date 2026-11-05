@@ -3,12 +3,29 @@ import { TestBed } from '@angular/core/testing';
 import { provideRouter, Router } from '@angular/router';
 import { RouterTestingHarness } from '@angular/router/testing';
 import { QueryClient, provideTanStackQuery } from '@tanstack/angular-query-experimental';
-import { hubClient, type ProjectView } from 'fleet';
+import type { MeResponse, ProjectView, RunnerRegistryView, SourceLinkView } from 'fleet';
 import type { InAppLink } from 'fleet/shell';
-import { OPERATOR_ME_RESPONSE, type RequestClientStub, settle, stubError, stubRequestClient } from 'fleet/testing';
+import {
+  chunkCountsView,
+  configChangesPage,
+  configChangeView,
+  OPERATOR_ME_RESPONSE,
+  type RequestClientStub,
+  repositorySummary,
+  runnerRegistryView,
+  settle,
+  sourceLinkView,
+  type StubDetailBody,
+  type StubHttpError,
+  stubError,
+  stubHubClient,
+  workSourceSummary,
+} from 'fleet/testing';
 
 import { ProjectLens, lensLink } from '../../core/project-lens';
 import { ProjectDetail } from './project-detail';
+
+type Routes = Parameters<typeof stubHubClient>[0];
 
 const BLIZZARD: ProjectView = {
   project_id: 'proj_b',
@@ -21,8 +38,19 @@ const BLIZZARD: ProjectView = {
 };
 const SOURCES = {
   sources: [
-    { name: 'hub', slug: 'hub', work_source_id: null, built_in: true, annotate: false, edit: false },
-    {
+    workSourceSummary({
+      name: 'hub',
+      slug: 'hub',
+      work_source_id: null,
+      provider: null,
+      built_in: true,
+      annotate: false,
+      edit: false,
+      revision: null,
+      created_at: null,
+      created_by: null,
+    }),
+    workSourceSummary({
       work_source_id: 'wsrc_j',
       slug: 'jira',
       name: 'jira',
@@ -31,8 +59,8 @@ const SOURCES = {
       annotate: false,
       edit: true,
       revision: 1,
-    },
-    {
+    }),
+    workSourceSummary({
       work_source_id: 'wsrc_g',
       slug: 'gh',
       name: 'gh',
@@ -41,12 +69,12 @@ const SOURCES = {
       annotate: false,
       edit: true,
       revision: 1,
-    },
+    }),
   ],
 };
 const REPOSITORIES = {
   repositories: [
-    {
+    repositorySummary({
       repository_id: 'repo_c',
       slug: 'core',
       name: 'Core',
@@ -54,18 +82,18 @@ const REPOSITORIES = {
       repo: 'core',
       base_branch: 'main',
       revision: 1,
-    },
+    }),
   ],
 };
 const SOURCE_LINKS = {
   source_links: [
-    { project_id: 'proj_b', name: 'hub', slug: 'hub', linked: true, built_in: true },
-    { project_id: 'proj_b', name: 'wsrc_j', slug: 'jira', linked: true, revision: 2 },
+    sourceLinkView({ project_id: 'proj_b', name: 'hub', slug: 'hub', linked: true, built_in: true, revision: null }),
+    sourceLinkView({ project_id: 'proj_b', name: 'wsrc_j', slug: 'jira', linked: true, revision: 2 }),
   ],
 };
-const HISTORY = {
+const HISTORY = configChangesPage({
   changes: [
-    {
+    configChangeView({
       id: 7,
       actor: 'ada',
       actor_name: 'Ada Lovelace',
@@ -75,13 +103,13 @@ const HISTORY = {
       record_kind: 'project',
       recorded_at: '2026-10-02T00:00:00Z',
       revision: 2,
-      diff: [{ field: 'slug', old: 'default', new: 'blizzard' }],
-    },
+      diff: [{ field: 'slug', old: 'default', new: 'blizzard', old_label: null, new_label: null }],
+    }),
   ],
-};
+});
 
 /** An operator who may change configuration and read the members. */
-const EDITOR = {
+const EDITOR: MeResponse = {
   ...OPERATOR_ME_RESPONSE,
   permissions: [...OPERATOR_ME_RESPONSE.permissions, 'config:edit', 'user:manage'],
 };
@@ -110,29 +138,22 @@ describe('ProjectDetail', () => {
     document.querySelectorAll('dialog').forEach((d) => d.remove());
   });
 
-  async function open(
-    url: string,
-    runners: unknown[] = [],
-    patched?: () => unknown,
-    override?: (method: string, path: string) => unknown,
-    holding = false,
-  ) {
-    stub = stubRequestClient(hubClient, (method, path) => {
-      const overridden = override?.(method, path);
-      if (overridden !== undefined) return overridden;
-      if (path === '/api/me') return EDITOR;
-      if (path === '/api/projects/proj_b' || path === '/api/projects/default') {
-        if (method === 'PATCH' && patched) return patched();
-        return method === 'PATCH' ? { ...BLIZZARD, slug: 'blizzard-hub', revision: 4 } : BLIZZARD;
-      }
-      if (path === '/api/projects/proj_b/source-links') return SOURCE_LINKS;
-      if (path === '/api/projects/proj_b/repository-links') return { repository_links: [] };
-      if (path === '/api/work-sources') return SOURCES;
-      if (path === '/api/repositories') return REPOSITORIES;
-      if (path === '/api/runners') return { runners };
-      if (path === '/api/config/changes') return HISTORY;
-      if (path === '/api/chunk-counts') return { ready: 2, running: 1, done: 40, done_since: 4 };
-      return {};
+  async function open(url: string, runners: RunnerRegistryView[] = [], overrides: Routes = {}, holding = false) {
+    stub = stubHubClient({
+      'GET /api/me': () => EDITOR,
+      'GET /api/projects/{project}': () => BLIZZARD,
+      'PATCH /api/projects/{project}': () => ({ ...BLIZZARD, slug: 'blizzard-hub', revision: 4 }),
+      'GET /api/projects/{project}/source-links': () => SOURCE_LINKS,
+      'GET /api/projects/{project}/repository-links': () => ({ repository_links: [] }),
+      'PUT /api/projects/{project}/source-links/{source}': (_request, { source }) => sourceLinkView({ name: source }),
+      'POST /api/projects/{project}/source-links/{source}/retire': (_request, { source }) =>
+        sourceLinkView({ name: source, linked: false, revision: 3 }),
+      'GET /api/work-sources': () => SOURCES,
+      'GET /api/repositories': () => REPOSITORIES,
+      'GET /api/runners': () => ({ runners }),
+      'GET /api/config/changes': () => HISTORY,
+      'GET /api/chunk-counts': () => chunkCountsView({ ready: 2, running: 1, done: 40, done_since: 4 }),
+      ...overrides,
     });
     TestBed.configureTestingModule({
       providers: [
@@ -212,15 +233,15 @@ describe('ProjectDetail', () => {
   });
 
   it('names the runners that serve it and drops the runner from the callout', async () => {
-    const serving = {
+    const serving = runnerRegistryView({
       runner_id: 'rnr_1',
       runner_name: 'desk',
       added_at: '2026-10-01T00:00:00Z',
       connection: 'online',
       hub_paused: false,
       online: true,
-      projects: [{ entry: 'blizzard', project_id: 'proj_b', claimable: true }],
-    };
+      projects: [{ entry: 'blizzard', project_id: 'proj_b', claimable: true, color: null, name: null, slug: null }],
+    });
     const { el } = await open('/admin/projects/proj_b', [serving]);
     expect(text(el, 'admin-projects-served-by')).toContain('desk');
     expect(text(el, 'admin-projects-served-by')).toContain('online');
@@ -287,7 +308,7 @@ describe('ProjectDetail', () => {
     const refusal = stubError(422, {
       detail: [{ loc: ['body', 'color'], msg: 'must be one of red, or a #rrggbb hex color', type: 'value_error' }],
     });
-    const { harness, el } = await open('/admin/projects/proj_b', [], () => refusal);
+    const { harness, el } = await open('/admin/projects/proj_b', [], { 'PATCH /api/projects/{project}': () => refusal });
     el.querySelector<HTMLElement>('[data-testid="admin-projects-color-open"]')!.click();
     await settle(harness.fixture);
     document.querySelector<HTMLElement>('[data-testid="project-color-pink"]')!.click();
@@ -316,12 +337,14 @@ describe('ProjectDetail', () => {
 
   it('shows loading, not the empty copy, while the link and runner reads are pending', async () => {
     const never = new Promise<never>(() => undefined);
-    const { el } = await open('/admin/projects/proj_b', [], undefined, (_method, path) =>
-      path === '/api/projects/proj_b/source-links' ||
-      path === '/api/projects/proj_b/repository-links' ||
-      path === '/api/runners'
-        ? never
-        : undefined,
+    const { el } = await open(
+      '/admin/projects/proj_b',
+      [],
+      {
+        'GET /api/projects/{project}/source-links': () => never,
+        'GET /api/projects/{project}/repository-links': () => never,
+        'GET /api/runners': () => never,
+      },
       true,
     );
     for (const card of ['admin-projects-draws', 'admin-projects-lands', 'admin-projects-served-by']) {
@@ -337,21 +360,18 @@ describe('ProjectDetail', () => {
     const links = {
       source_links: [
         ...SOURCE_LINKS.source_links,
-        { project_id: 'proj_b', name: 'wsrc_g', slug: 'gh', linked: true, revision: 5 },
+        sourceLinkView({ project_id: 'proj_b', name: 'wsrc_g', slug: 'gh', linked: true, revision: 5 }),
       ],
     };
-    const { harness, el } = await open('/admin/projects/proj_b', [], undefined, (method, path) => {
-      if (path === '/api/projects/proj_b/source-links') return links;
-      const retire = /source-links\/(\w+)\/retire$/.exec(path);
-      if (method === 'POST' && retire) {
-        return new Promise((resolve) => {
-          retires.set(retire[1], {
-            resolve: () => resolve({}),
+    const { harness, el } = await open('/admin/projects/proj_b', [], {
+      'GET /api/projects/{project}/source-links': () => links,
+      'POST /api/projects/{project}/source-links/{source}/retire': (_request, { source }) =>
+        new Promise<SourceLinkView | StubHttpError<number, StubDetailBody>>((resolve) => {
+          retires.set(source, {
+            resolve: () => resolve(sourceLinkView({ name: source, linked: false })),
             reject: () => resolve(stubError(409, { detail: 'stale revision' })),
           });
-        });
-      }
-      return undefined;
+        }),
     });
     await click(harness, el, 'admin-projects-tab-sources');
     const unlink = (name: string) => el.querySelector<HTMLButtonElement>(`[data-testid="admin-projects-sources-unlink-${name}"]`)!;

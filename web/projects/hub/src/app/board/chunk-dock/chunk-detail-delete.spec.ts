@@ -4,8 +4,8 @@ import { provideRouter } from '@angular/router';
 import { QueryClient, provideTanStackQuery } from '@tanstack/angular-query-experimental';
 import { vi } from 'vitest';
 
-import { type ChunkDetail as ChunkDetailModel, hubChunkKey, hubChunkWorkItemsKey, hubClient } from 'fleet';
-import { settle, OPERATOR_ME_RESPONSE, chunkDetail, type RequestClientStub, stubRequestClient } from 'fleet/testing';
+import { type ChunkDetail as ChunkDetailModel, hubChunkKey, hubChunkWorkItemsKey } from 'fleet';
+import { settle, OPERATOR_ME_RESPONSE, chunkDetail, type RequestClientStub, stubHubClient } from 'fleet/testing';
 import { ChunkDetail } from './chunk-detail';
 
 // An unacquired chunk the Delete verb reaches.
@@ -45,11 +45,11 @@ describe('ChunkDetail delete invalidation', () => {
   let stub: RequestClientStub;
 
   beforeEach(async () => {
-    stub = stubRequestClient(hubClient, (method, path) => {
-      if (method === 'GET' && path === '/api/me') return OPERATOR_ME_RESPONSE;
-      if (method === 'GET' && path === '/api/chunks/ch_deletable') return DELETABLE_DETAIL;
-      if (method === 'GET' && path.endsWith('/work-items')) return { items: [] };
-      return {};
+    stub = stubHubClient({
+      'GET /api/me': () => OPERATOR_ME_RESPONSE,
+      'GET /api/chunks/{chunk_id}': () => DELETABLE_DETAIL,
+      'GET /api/chunks/{chunk_id}/work-items': () => ({ items: [] }),
+      'DELETE /api/chunks/{chunk_id}': (_request, { chunk_id }) => ({ chunk_id }),
     });
     await TestBed.configureTestingModule({
       imports: [ChunkDetail],

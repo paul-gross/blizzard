@@ -2,12 +2,12 @@ import { provideZonelessChangeDetection } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { QueryClient, provideTanStackQuery } from '@tanstack/angular-query-experimental';
 
-import { settle, type RequestClientStub, stubRequestClient } from 'fleet/testing';
-import { hubClient } from 'fleet';
+import type { DecisionView } from 'fleet';
+import { decisionView, settle, type RequestClientStub, stubHubClient } from 'fleet/testing';
 import { GatesPanel } from './gates-panel';
 
 const GATES = [
-  {
+  decisionView({
     decision_id: 'dc_01',
     chunk_id: 'ch_01KXKVVF1J3D6H6VYZ3XYN3YJ9',
     node_id: 'nd_01',
@@ -15,17 +15,17 @@ const GATES = [
     epoch: 1,
     submitted_at: '2026-07-16T00:00:01Z',
     choices: [
-      { name: 'approve', description: '' },
-      { name: 'reject', description: '' },
+      { name: 'approve', description: '', requires_checks: false, would_override_red_checks: false },
+      { name: 'reject', description: '', requires_checks: false, would_override_red_checks: false },
     ],
-  },
+  }),
 ];
 
 describe('GatesPanel', () => {
   let stub: RequestClientStub;
 
-  const render = async (gates: unknown = GATES) => {
-    stub = stubRequestClient(hubClient, (method, path) => (method === 'GET' && path === '/api/decisions' ? { decisions: gates } : {}));
+  const render = async (gates: DecisionView[] = GATES) => {
+    stub = stubHubClient({ 'GET /api/decisions': () => ({ decisions: gates }) });
     await TestBed.configureTestingModule({
       imports: [GatesPanel],
       providers: [

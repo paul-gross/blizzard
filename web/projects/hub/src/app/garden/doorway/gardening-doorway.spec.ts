@@ -2,81 +2,81 @@ import { provideZonelessChangeDetection } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { provideRouter } from '@angular/router';
 import { QueryClient, provideTanStackQuery } from '@tanstack/angular-query-experimental';
-import { type GardenProposalView, type ProjectView, type RoutineView, type RunRowView, type ScopeView, hubClient } from 'fleet';
-import { type RequestClientStub, settle, stubError, stubRequestClient } from 'fleet/testing';
+import {
+  deliveredSetView,
+  gardenProjectView,
+  gardenProposalClosureView,
+  gardenProposalsPageView,
+  gardenProposalView,
+  gardenRoutineView,
+  gardenScopeView,
+  OPERATOR_ME_RESPONSE,
+  type RequestClientStub,
+  runRowView,
+  settle,
+  stubError,
+  stubHubClient,
+} from 'fleet/testing';
 
 import { GardeningDoorway } from './gardening-doorway';
 import { doorwayCards, openGardenLabel, sweepingLabel, waitingLabel } from './gardening-doorway.model';
 
 /** The doorway's tenant-wide reads, for a tenant of two projects — `blizzard` planted and served, `winter` neither. */
 const DOORWAY_PROJECTS = [
-  { project_id: 'proj_w', slug: 'winter', name: 'Winter' },
-  { project_id: 'proj_b', slug: 'blizzard', name: 'Blizzard' },
-] as ProjectView[];
+  gardenProjectView({ project_id: 'proj_w', slug: 'winter', name: 'Winter' }),
+  gardenProjectView({ project_id: 'proj_b', slug: 'blizzard', name: 'Blizzard' }),
+];
 
 const DOORWAY_SCOPES = [
-  { slug: 'hub-api', project_id: 'proj_b', retired: false },
-  { slug: 'web', project_id: 'proj_b', retired: false },
-  { slug: 'old', project_id: 'proj_b', retired: true },
-] as ScopeView[];
+  gardenScopeView({ slug: 'hub-api', project_id: 'proj_b' }),
+  gardenScopeView({ slug: 'web', project_id: 'proj_b' }),
+  gardenScopeView({ slug: 'old', project_id: 'proj_b', retired: true }),
+];
 
 const DOORWAY_ROUTINES = [
-  { name: 'garden-weekly', slug: 'garden-weekly', routine_id: 'rt_1', project_id: 'proj_b', retired: false },
-  { name: 'retired-one', slug: 'retired-one', routine_id: 'rt_2', project_id: 'proj_b', retired: true },
-] as RoutineView[];
+  gardenRoutineView({ name: 'garden-weekly', routine_id: 'rt_1', project_id: 'proj_b' }),
+  gardenRoutineView({ name: 'retired-one', routine_id: 'rt_2', project_id: 'proj_b', retired: true }),
+];
 
 const DOORWAY_RUNS = [
-  {
-    chunk_id: 'ch_1',
-    project_id: 'proj_b',
-    outcome: 'running',
-    minted_at: '2026-03-09T00:00:00Z',
-    delivered: [],
-  },
-  {
+  runRowView({ chunk_id: 'ch_1', project_id: 'proj_b', outcome: 'running', minted_at: '2026-03-09T00:00:00Z' }),
+  runRowView({
     chunk_id: 'ch_2',
     project_id: 'proj_b',
     outcome: 'done',
     minted_at: '2026-03-05T00:00:00Z',
-    delivered: [{ finding_set_id: 'fs_1', added_count: 3, gone_count: 0 }],
-  },
-  {
+    delivered: [deliveredSetView({ finding_set_id: 'fs_1', added_count: 3, gone_count: 0 })],
+  }),
+  runRowView({
     chunk_id: 'ch_3',
     project_id: 'proj_b',
     outcome: 'done',
     minted_at: '2026-03-01T00:00:00Z',
     delivered: [
-      { finding_set_id: 'fs_1', added_count: 1, gone_count: 2 },
-      { finding_set_id: 'fs_2', added_count: 1, gone_count: 0 },
+      deliveredSetView({ finding_set_id: 'fs_1', added_count: 1, gone_count: 2 }),
+      deliveredSetView({ finding_set_id: 'fs_2', added_count: 1, gone_count: 0 }),
     ],
-  },
-] as unknown as RunRowView[];
+  }),
+];
 
 const DOORWAY_PROPOSALS = [
-  { proposal_id: 'gp_1', project_id: 'proj_b', closure: null },
-  { proposal_id: 'gp_2', project_id: 'proj_b', closure: { kind: 'accepted' } },
-  { proposal_id: 'gp_3', project_id: 'proj_w', closure: null },
-] as unknown as GardenProposalView[];
+  gardenProposalView({ proposal_id: 'gp_1', project_id: 'proj_b' }),
+  gardenProposalView({ proposal_id: 'gp_2', project_id: 'proj_b', closure: gardenProposalClosureView({ closure: 'accepted' }) }),
+  gardenProposalView({ proposal_id: 'gp_3', project_id: 'proj_w' }),
+];
+
+type DoorwayRoutes = Parameters<typeof stubHubClient>[0];
 
 /** A stub table answering the doorway's reads on All. */
-function doorwayRoute(method: string, path: string): unknown {
-  if (method !== 'GET') return {};
-  switch (path) {
-    case '/api/projects':
-      return { projects: DOORWAY_PROJECTS };
-    case '/api/scopes':
-      return DOORWAY_SCOPES;
-    case '/api/routines':
-      return DOORWAY_ROUTINES;
-    case '/api/runs':
-      return DOORWAY_RUNS;
-    case '/api/garden-proposals':
-      return { proposals: DOORWAY_PROPOSALS, next_cursor: null };
-    case '/api/me':
-      return { tenants: [{ tenant_id: 't_1', name: 'grosscode', role: 'owner', permissions: [] }] };
-    default:
-      return {};
-  }
+function doorwayRoutes(): DoorwayRoutes {
+  return {
+    'GET /api/projects': () => ({ projects: DOORWAY_PROJECTS }),
+    'GET /api/scopes': () => DOORWAY_SCOPES,
+    'GET /api/routines': () => DOORWAY_ROUTINES,
+    'GET /api/runs': () => DOORWAY_RUNS,
+    'GET /api/garden-proposals': () => gardenProposalsPageView({ proposals: DOORWAY_PROPOSALS }),
+    'GET /api/me': () => OPERATOR_ME_RESPONSE,
+  };
 }
 
 const READS = {
@@ -145,8 +145,8 @@ describe('GardeningDoorway', () => {
   let stub: RequestClientStub;
   afterEach(() => stub.restore());
 
-  async function render(route: (method: string, path: string) => unknown = doorwayRoute) {
-    stub = stubRequestClient(hubClient, route);
+  async function render(routes: DoorwayRoutes = {}) {
+    stub = stubHubClient({ ...doorwayRoutes(), ...routes });
     TestBed.configureTestingModule({
       imports: [GardeningDoorway],
       providers: [
@@ -194,21 +194,21 @@ describe('GardeningDoorway', () => {
 
   it('says it is loading until the reads answer', async () => {
     const never = new Promise<never>(() => undefined);
-    const el = await render((method, path) => (path === '/api/projects' ? never : doorwayRoute(method, path)));
+    const el = await render({ 'GET /api/projects': () => never });
 
     expect(el.querySelector('[data-testid="gardening-doorway-loading"]')).not.toBeNull();
     expect(el.querySelector('app-gardening-doorway-cards')).toBeNull();
   });
 
   it('says so when a read fails', async () => {
-    const el = await render((method, path) => (path === '/api/scopes' ? stubError(500, { detail: 'the store is down' }) : doorwayRoute(method, path)));
+    const el = await render({ 'GET /api/scopes': () => stubError(500, { detail: 'the store is down' }) });
 
     expect(el.querySelector('[data-testid="gardening-doorway-error"]')).not.toBeNull();
     expect(el.querySelector('app-gardening-doorway-cards')).toBeNull();
   });
 
   it('says so when the tenant has no projects', async () => {
-    const el = await render((method, path) => (path === '/api/projects' ? { projects: [] } : doorwayRoute(method, path)));
+    const el = await render({ 'GET /api/projects': () => ({ projects: [] }) });
 
     expect(el.querySelector('[data-testid="gardening-doorway-empty"]')?.textContent).toContain('NO PROJECTS IN THIS TENANT');
   });

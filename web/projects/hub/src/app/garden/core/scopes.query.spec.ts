@@ -2,8 +2,7 @@ import { ChangeDetectionStrategy, Component, provideZonelessChangeDetection } fr
 import { TestBed } from '@angular/core/testing';
 import { QueryClient, provideTanStackQuery } from '@tanstack/angular-query-experimental';
 
-import { hubClient } from 'fleet';
-import { type RequestClientStub, stubRequestClient, settle } from 'fleet/testing';
+import { gardenScopeView, type RequestClientStub, stubHubClient, settle } from 'fleet/testing';
 import { injectHubScopesQuery } from './scopes.query';
 
 @Component({
@@ -20,11 +19,8 @@ describe('injectHubScopesQuery', () => {
   afterEach(() => stub?.restore());
 
   it('reads the scope list off GET /api/scopes', async () => {
-    stub = stubRequestClient(hubClient, (method, path) => {
-      if (method === 'GET' && path === '/api/scopes') {
-        return [{ slug: 'blizzard', description: 'the hub itself', created_at: '2026-01-01T00:00:00Z', retired: false }];
-      }
-      return {};
+    stub = stubHubClient({
+      'GET /api/scopes': () => [gardenScopeView({ slug: 'blizzard', description: 'the hub itself' })],
     });
     TestBed.configureTestingModule({
       imports: [TestScopesQueryHost],

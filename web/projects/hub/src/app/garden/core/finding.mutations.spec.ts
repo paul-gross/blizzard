@@ -3,8 +3,7 @@ import { TestBed } from '@angular/core/testing';
 import { QueryClient, provideTanStackQuery } from '@tanstack/angular-query-experimental';
 import { vi } from 'vitest';
 
-import { hubClient } from 'fleet';
-import { type RequestClientStub, stubRequestClient } from 'fleet/testing';
+import { gardenFindingView, type RequestClientStub, stubHubClient } from 'fleet/testing';
 import {
   injectConfirmGoneFindingsMutation,
   injectNotAFindingFindingsMutation,
@@ -14,7 +13,7 @@ import {
   injectWontFixFindingsMutation,
 } from './finding.mutations';
 
-const FINDING = {
+const FINDING = gardenFindingView({
   finding_id: 'fin_1',
   routine_name: 'comments',
   scope_slug: 'blizzard',
@@ -25,7 +24,19 @@ const FINDING = {
   live: true,
   observed_count: 1,
   last_seen_at: '2026-01-01T00:00:00Z',
-};
+});
+
+/** Every finding verb, answering with the finding it moved. */
+function stubFindingVerbs(): RequestClientStub {
+  return stubHubClient({
+    'POST /api/findings/resolve': () => [FINDING],
+    'POST /api/findings/confirm-gone': () => [FINDING],
+    'POST /api/findings/wont-fix': () => [FINDING],
+    'POST /api/findings/not-a-finding': () => [FINDING],
+    'POST /api/findings/reopen': () => [FINDING],
+    'POST /api/findings/supersede': () => [FINDING],
+  });
+}
 
 /** Each of these mutations' cases: send the right route + body, and invalidate both
  * the findings-bucket prefix and the by-id `hubFindingsKey` prefix on success —
@@ -74,7 +85,7 @@ for (const testCase of CASES) {
     let queryClient: QueryClient;
 
     beforeEach(() => {
-      stub = stubRequestClient(hubClient, () => [FINDING]);
+      stub = stubFindingVerbs();
       queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
       TestBed.configureTestingModule({
         providers: [provideZonelessChangeDetection(), provideTanStackQuery(queryClient)],
@@ -111,7 +122,7 @@ describe('injectSupersedeFindingsMutation', () => {
   let queryClient: QueryClient;
 
   beforeEach(() => {
-    stub = stubRequestClient(hubClient, () => [FINDING]);
+    stub = stubFindingVerbs();
     queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
     TestBed.configureTestingModule({
       providers: [provideZonelessChangeDetection(), provideTanStackQuery(queryClient)],

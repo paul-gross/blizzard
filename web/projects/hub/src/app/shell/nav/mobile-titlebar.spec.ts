@@ -4,8 +4,8 @@ import { Router, provideRouter } from '@angular/router';
 import { QueryClient, provideTanStackQuery } from '@tanstack/angular-query-experimental';
 import { vi } from 'vitest';
 
-import { type MeResponse, hubClient } from 'fleet';
-import { OPERATOR_ME_RESPONSE, type RequestClientStub, settle, stubRequestClient } from 'fleet/testing';
+import type { MeResponse } from 'fleet';
+import { OPERATOR_ME_RESPONSE, projectView, type RequestClientStub, settle, stubHubClient } from 'fleet/testing';
 import { LAST_TENANT_KEY, PAGE_RELOAD, TAB_TENANT_KEY } from '../../core/auth/tenant-context';
 import { provideProjectLens } from '../../core/project-lens';
 import { MobileTitlebar } from './mobile-titlebar';
@@ -13,14 +13,7 @@ import { MobileTitlebar } from './mobile-titlebar';
 @Component({ selector: 'app-test-titlebar-view', template: '' })
 class TestView {}
 
-const GLACIER = {
-  project_id: 'proj_glacier',
-  slug: 'glacier',
-  name: 'Glacier',
-  description: '',
-  revision: 1,
-  created_at: '2026-10-01T00:00:00Z',
-};
+const GLACIER = projectView({ project_id: 'proj_glacier', slug: 'glacier', name: 'Glacier', created_at: '2026-10-01T00:00:00Z' });
 
 /** A caller holding two memberships — the only caller the switcher is offered to. */
 const TWO_TENANTS: MeResponse = {
@@ -44,10 +37,9 @@ describe('MobileTitlebar', () => {
     localStorage.clear();
     sessionStorage.clear();
     me = OPERATOR_ME_RESPONSE;
-    stub = stubRequestClient(hubClient, (_method, path) => {
-      if (path === '/api/me') return me;
-      if (path === '/api/projects') return { projects: [GLACIER] };
-      return {};
+    stub = stubHubClient({
+      'GET /api/me': () => me,
+      'GET /api/projects': () => ({ projects: [GLACIER] }),
     });
     reload = vi.fn();
     await TestBed.configureTestingModule({

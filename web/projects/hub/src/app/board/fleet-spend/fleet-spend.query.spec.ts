@@ -17,9 +17,8 @@ const SPEND_BODY = {
   cost_partial: false,
 };
 
-/** A fetch stub capturing each request's full URL (query string included) — unlike
- * the shared `stubRequestClient` helper, which drops the query string, this spec needs
- * it to prove `until` reaches the request when given and is omitted when not. */
+/** A fetch stub capturing each request's full URL (query string included), so this
+ * spec can prove `until` reaches the request when given and is omitted when not. */
 function stubFetchCapturingUrl(): { urls: string[]; restore: () => void } {
   const urls: string[] = [];
   const previousFetch = globalThis.fetch;

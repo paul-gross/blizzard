@@ -3,7 +3,7 @@ import { TestBed } from '@angular/core/testing';
 import { provideRouter, Router } from '@angular/router';
 import { QueryClient, provideTanStackQuery } from '@tanstack/angular-query-experimental';
 import { EVENT_SOURCE_FACTORY, type EventSourceFactory, type FleetEventSource, runnerApi, runnerClient } from 'fleet';
-import { settle, stubError, stubRequestClient } from 'fleet/testing';
+import { settle, stubError, stubRunnerClient } from 'fleet/testing';
 import { SessionRecovery } from '../core/identity/session-recovery';
 import { vi } from 'vitest';
 
@@ -26,18 +26,34 @@ class FakeEventSource {
   }
 }
 
-/** A host with no session: the session probe answers, the flags read is exempt (it is not what these cases count), and
- * every other call is a no-session 401. */
-function noSession(path: string): unknown {
-  if (path === '/api/auth/session') return { auth_enabled: true, username: null };
-  if (path === '/api/flags') return { flags: {}, overridden: [] };
-  return stubError(401, { detail: 'no session' });
+type RunnerRoutes = Parameters<typeof stubRunnerClient>[0];
+
+/** The reads mounting `App` on `/board` fires (and the leases read these cases fire by hand), each refused with a 401. */
+function refusedReads(detail: string): RunnerRoutes {
+  const refuse = () => stubError(401, { detail });
+  return {
+    'GET /api/host/runners': refuse,
+    'GET /api/host/environments': refuse,
+    'GET /api/host/registration': refuse,
+    'GET /api/host/workspaces': refuse,
+    'GET /api/host/subscriptions': refuse,
+    'GET /runners/{runner_id}/api/dashboard': refuse,
+    'GET /runners/{runner_id}/api/leases': refuse,
+  };
 }
+
+/** A host with no session: the session probe answers, the flags read is exempt (it is not what these cases count), and
+ * every other read is a no-session 401. */
+const NO_SESSION: RunnerRoutes = {
+  ...refusedReads('no session'),
+  'GET /api/auth/session': () => ({ auth_enabled: true, username: null }),
+  'GET /api/flags': () => ({ flags: {}, overridden: [] }),
+};
 
 /** Registers a fresh `SessionRecovery`'s interceptor, spying its navigation so no
  * case actually leaves jsdom — see `core/identity/session-recovery.spec.ts`
  * for why each case owns (and ejects) its own registration. */
-async function setUp(route: (method: string, path: string) => unknown) {
+async function setUp(stubRoutes: RunnerRoutes) {
   const factory: EventSourceFactory = () => new FakeEventSource() as unknown as FleetEventSource;
   await TestBed.configureTestingModule({
     imports: [App],
@@ -54,7 +70,7 @@ async function setUp(route: (method: string, path: string) => unknown) {
     .spyOn(recovery as unknown as { navigate(url: string): void }, 'navigate')
     .mockImplementation(() => undefined);
   const interceptorId = runnerClient.interceptors.response.use((response, request) => recovery.handle(response, request));
-  const stub = stubRequestClient(runnerClient, route);
+  const stub = stubRunnerClient(stubRoutes);
   return {
     recovery,
     navigateSpy,
@@ -82,9 +98,10 @@ describe('runner App session-recovery fork', () => {
   });
 
   it('renders app-panel through an upstream 401 whose session resolves a username', async () => {
-    const { restore: r } = await setUp((_method, path) =>
-      path === '/api/auth/session' ? { auth_enabled: true, username: 'alice' } : stubError(401, { detail: 'upstream' }),
-    );
+    const { restore: r } = await setUp({
+      ...refusedReads('upstream'),
+      'GET /api/auth/session': () => ({ auth_enabled: true, username: 'alice' }),
+    });
     restore = r;
 
     const fixture = TestBed.createComponent(App);
@@ -98,7 +115,7 @@ describe('runner App session-recovery fork', () => {
   });
 
   it('renders the recovery view instead of app-panel once the seam sets recovering', async () => {
-    const { recovery, restore: r } = await setUp((_method, path) => noSession(path));
+    const { recovery, restore: r } = await setUp(NO_SESSION);
     restore = r;
 
     // First no-session 401: mark set, the (mocked) bounce is "attempted".
@@ -117,7 +134,7 @@ describe('runner App session-recovery fork', () => {
   });
 
   it('re-attempts the bounce when the recovery view is retried', async () => {
-    const { recovery, navigateSpy, restore: r } = await setUp((_method, path) => noSession(path));
+    const { recovery, navigateSpy, restore: r } = await setUp(NO_SESSION);
     restore = r;
 
     await runnerApi.listLeasesRunnersRunnerIdApiLeasesGet({ path: { runner_id: 'rn_1' }, throwOnError: false });

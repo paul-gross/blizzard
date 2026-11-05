@@ -2,9 +2,17 @@ import { provideZonelessChangeDetection, signal } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { ActivatedRoute, convertToParamMap, type ParamMap } from '@angular/router';
 import { QueryClient, provideTanStackQuery } from '@tanstack/angular-query-experimental';
-import { hubClient, type MeResponse } from 'fleet';
+import { type MeResponse, type RoutineView, type ScopeView } from 'fleet';
 import { HUB_PROJECT_FILTER } from 'fleet/shell';
-import { OPERATOR_ME_RESPONSE, type RequestClientStub, settle, stubError, stubRequestClient } from 'fleet/testing';
+import {
+  gardenRoutineView,
+  gardenScopeView,
+  OPERATOR_ME_RESPONSE,
+  type RequestClientStub,
+  settle,
+  stubError,
+  stubHubClient,
+} from 'fleet/testing';
 import { BehaviorSubject } from 'rxjs';
 import { vi } from 'vitest';
 
@@ -18,9 +26,12 @@ const VIEWER_ME_RESPONSE: MeResponse = {
   permissions: OPERATOR_ME_RESPONSE.permissions.filter((p) => p !== 'graph:edit'),
 };
 
-const SCOPE = { slug: 'blizzard', description: 'the blizzard monorepo', retired: false, created_at: '2026-01-01T00:00:00Z' };
+const SCOPE = gardenScopeView({ slug: 'blizzard', description: 'the blizzard monorepo' });
 
-const ROUTINE = {
+/** The hub routes a render serves, any of them overridable. */
+type HubRoutes = Parameters<typeof stubHubClient>[0];
+
+const ROUTINE = gardenRoutineView({
   routine_id: 'rtn_1',
   name: 'nightly',
   slug: 'nightly',
@@ -29,7 +40,7 @@ const ROUTINE = {
   default_model: ['claude-sonnet-5'],
   default_effort: 'medium',
   created_at: '2026-01-01T00:00:00Z',
-};
+});
 
 /**
  * Exercises the `/gardening/scopes` detail child — the selected scope's
@@ -47,25 +58,27 @@ describe('GardeningScopeDetail', () => {
 
   async function render(
     opts: {
-      scopes?: readonly unknown[];
-      routines?: readonly unknown[];
+      scopes?: ScopeView[];
+      routines?: RoutineView[];
       me?: MeResponse;
-      routeOverride?: (method: string, path: string) => unknown;
+      routeOverride?: HubRoutes;
       params?: Record<string, string>;
     } = {},
   ) {
     const scopes = opts.scopes ?? [SCOPE];
     const routines = opts.routines ?? [ROUTINE];
     const me = opts.me ?? VIEWER_ME_RESPONSE;
-    stub = stubRequestClient(hubClient, (method, path) => {
-      const overridden = opts.routeOverride?.(method, path);
-      if (overridden !== undefined) return overridden;
-      if (method === 'GET' && path === '/api/projects/acme/scopes') return scopes;
-      if (method === 'GET' && path === '/api/projects/acme/routines') return routines;
-      if (method === 'GET' && path === '/api/projects/acme/scopes/blizzard/routines') return [ROUTINE.routine_id];
-      if (method === 'GET' && path === '/api/projects/acme/runs') return [];
-      if (method === 'GET' && path === '/api/me') return me;
-      return {};
+    stub = stubHubClient({
+      'GET /api/projects/{project}/scopes': () => scopes,
+      'GET /api/projects/{project}/routines': () => routines,
+      'GET /api/projects/{project}/scopes/{slug}/routines': (_request, { slug }) =>
+        slug === 'blizzard' ? [ROUTINE.routine_id] : [],
+      'GET /api/projects/{project}/runs': () => [],
+      'GET /api/me': () => me,
+      'PATCH /api/projects/{project}/scopes/{slug}': (_request, { slug }) => scopes.find((s) => s.slug === slug) ?? SCOPE,
+      'POST /api/projects/{project}/scopes/{slug}/retire': () => ({ ...SCOPE, retired: true }),
+      'POST /api/projects/{project}/scopes/{slug}/enable': () => SCOPE,
+      ...opts.routeOverride,
     });
     paramMap$ = new BehaviorSubject(convertToParamMap(opts.params ?? {}));
     await TestBed.configureTestingModule({
@@ -121,7 +134,7 @@ describe('GardeningScopeDetail', () => {
   it('says so when no routine is related to the selected scope', async () => {
     const fixture = await render({
       params: { scopeSlug: 'blizzard' },
-      routeOverride: (method, path) => (method === 'GET' && path === '/api/projects/acme/scopes/blizzard/routines' ? [] : undefined),
+      routeOverride: { 'GET /api/projects/{project}/scopes/{slug}/routines': () => [] },
     });
     const el = fixture.nativeElement as HTMLElement;
 
@@ -177,7 +190,6 @@ describe('GardeningScopeDetail', () => {
         me: OPERATOR_ME_RESPONSE,
         scopes: [SCOPE, OTHER_SCOPE],
         params: { scopeSlug: 'blizzard' },
-        routeOverride: (method, path) => (method === 'GET' && path === '/api/projects/acme/scopes/other/routines' ? [] : undefined),
       });
       vi.spyOn(TestBed.inject(QueryClient), 'invalidateQueries').mockReturnValue(new Promise<void>(() => undefined));
       return fixture;
@@ -244,10 +256,7 @@ describe('GardeningScopeDetail', () => {
     const fixture = await render({
       me: OPERATOR_ME_RESPONSE,
       params: { scopeSlug: 'blizzard' },
-      routeOverride: (method, path) =>
-        method === 'POST' && path === '/api/projects/acme/scopes/blizzard/retire'
-          ? stubError(404, { detail: 'unknown scope blizzard' })
-          : undefined,
+      routeOverride: { 'POST /api/projects/{project}/scopes/{slug}/retire': () => stubError(404, { detail: 'unknown scope blizzard' }) },
     });
     const el = fixture.nativeElement as HTMLElement;
     const queryClient = TestBed.inject(QueryClient);
@@ -286,10 +295,7 @@ describe('GardeningScopeDetail', () => {
       scopes: [{ ...SCOPE, retired: true }],
       me: OPERATOR_ME_RESPONSE,
       params: { scopeSlug: 'blizzard' },
-      routeOverride: (method, path) =>
-        method === 'POST' && path === '/api/projects/acme/scopes/blizzard/enable'
-          ? stubError(404, { detail: 'unknown scope blizzard' })
-          : undefined,
+      routeOverride: { 'POST /api/projects/{project}/scopes/{slug}/enable': () => stubError(404, { detail: 'unknown scope blizzard' }) },
     });
     const el = fixture.nativeElement as HTMLElement;
     const queryClient = TestBed.inject(QueryClient);
@@ -324,10 +330,7 @@ describe('GardeningScopeDetail', () => {
     const fixture = await render({
       me: OPERATOR_ME_RESPONSE,
       params: { scopeSlug: 'blizzard' },
-      routeOverride: (method, path) =>
-        method === 'PATCH' && path === '/api/projects/acme/scopes/blizzard'
-          ? stubError(404, { detail: 'unknown scope blizzard' })
-          : undefined,
+      routeOverride: { 'PATCH /api/projects/{project}/scopes/{slug}': () => stubError(404, { detail: 'unknown scope blizzard' }) },
     });
     const el = fixture.nativeElement as HTMLElement;
 

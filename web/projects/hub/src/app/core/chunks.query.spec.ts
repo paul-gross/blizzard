@@ -2,8 +2,8 @@ import { ChangeDetectionStrategy, Component, provideZonelessChangeDetection } fr
 import { TestBed } from '@angular/core/testing';
 import { QueryClient, provideTanStackQuery } from '@tanstack/angular-query-experimental';
 
-import { hubClient } from 'fleet';
-import { settle, type RequestClientStub, stubError, stubRequestClient } from 'fleet/testing';
+import type { ChunkSummary } from 'fleet';
+import { chunkSummary, settle, type RequestClientStub, stubError, stubHubClient } from 'fleet/testing';
 import { injectHubBoardChunksQuery } from './chunks.query';
 
 @Component({
@@ -15,8 +15,8 @@ class TestChunksQueryHost {
   readonly query = injectHubBoardChunksQuery();
 }
 
-function chunk(id: string): unknown {
-  return { chunk_id: id, graph_id: 'gr_1', status: 'ready', current_node_id: null };
+function chunk(id: string): ChunkSummary {
+  return chunkSummary({ chunk_id: id, graph_id: 'gr_1', status: 'ready' });
 }
 
 function mount() {
@@ -35,10 +35,7 @@ describe('injectHubBoardChunksQuery', () => {
   afterEach(() => stub?.restore());
 
   it('reads a single-page GET /api/chunks whole (blizzard#526) — one request when next_cursor is already null', async () => {
-    stub = stubRequestClient(hubClient, (method, path) => {
-      if (method === 'GET' && path === '/api/chunks') return { chunks: [chunk('ch_1')], next_cursor: null };
-      return {};
-    });
+    stub = stubHubClient({ 'GET /api/chunks': () => ({ chunks: [chunk('ch_1')], next_cursor: null }) });
     const fixture = mount();
     await settle(fixture);
 
@@ -48,14 +45,13 @@ describe('injectHubBoardChunksQuery', () => {
 
   it('drains every page of a multi-page response and concatenates them in order', async () => {
     let calls = 0;
-    stub = stubRequestClient(hubClient, (method, path) => {
-      if (method === 'GET' && path === '/api/chunks') {
+    stub = stubHubClient({
+      'GET /api/chunks': () => {
         calls += 1;
         return calls === 1
           ? { chunks: [chunk('ch_1'), chunk('ch_2')], next_cursor: 'cursor-1' }
           : { chunks: [chunk('ch_3')], next_cursor: null };
-      }
-      return {};
+      },
     });
     const fixture = mount();
     await settle(fixture);
@@ -66,14 +62,11 @@ describe('injectHubBoardChunksQuery', () => {
 
   it('surfaces a mid-drain error as the query error, not a partial result', async () => {
     let calls = 0;
-    stub = stubRequestClient(hubClient, (method, path) => {
-      if (method === 'GET' && path === '/api/chunks') {
+    stub = stubHubClient({
+      'GET /api/chunks': () => {
         calls += 1;
-        return calls === 1
-          ? { chunks: [chunk('ch_1')], next_cursor: 'cursor-1' }
-          : stubError(503, { detail: 'unavailable' });
-      }
-      return {};
+        return calls === 1 ? { chunks: [chunk('ch_1')], next_cursor: 'cursor-1' } : stubError(503, { detail: 'unavailable' });
+      },
     });
     const fixture = mount();
     await settle(fixture);

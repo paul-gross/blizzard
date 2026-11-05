@@ -3,8 +3,8 @@ import { TestBed } from '@angular/core/testing';
 import { QueryClient, QueryObserver, provideTanStackQuery } from '@tanstack/angular-query-experimental';
 import { vi } from 'vitest';
 
-import { type PermitView, hubClient, hubPermitKey, hubPermitsKey } from 'fleet';
-import { type RequestClientStub, stubError, stubRequestClient } from 'fleet/testing';
+import { type PermitView, hubPermitKey, hubPermitsKey } from 'fleet';
+import { type RequestClientStub, stubError, stubHubClient } from 'fleet/testing';
 import { injectPermitMoveMutation, injectPermitRevokeMutation } from './permits.mutations';
 
 const GRANTED: PermitView = {
@@ -41,7 +41,7 @@ describe('permit mutations', () => {
   }
 
   it('POSTs the verb its vars name and re-reads the listing and the permit', async () => {
-    stub = stubRequestClient(hubClient, () => GRANTED);
+    stub = stubHubClient({ 'POST /api/permits/{permit_id}/grant': () => GRANTED });
     const invalidateSpy = vi.spyOn(queryClient, 'invalidateQueries');
     const mutation = TestBed.runInInjectionContext(() => injectPermitMoveMutation());
 
@@ -53,7 +53,7 @@ describe('permit mutations', () => {
 
   it('stays pending until the active listing has refetched', async () => {
     let releaseListing: () => void = () => undefined;
-    stub = stubRequestClient(hubClient, () => GRANTED);
+    stub = stubHubClient({ 'POST /api/permits/{permit_id}/suspend': () => GRANTED });
     const listing = new QueryObserver(queryClient, {
       queryKey: [...hubPermitsKey, 'ada'],
       queryFn: () => new Promise<PermitView[]>((resolve) => (releaseListing = () => resolve([GRANTED]))),
@@ -76,14 +76,18 @@ describe('permit mutations', () => {
   });
 
   it('rejects a refused verb (409, not from that state)', async () => {
-    stub = stubRequestClient(hubClient, () => stubError(409, { detail: 'permit pmt_1 is granted — grant refused' }));
+    stub = stubHubClient({
+      'POST /api/permits/{permit_id}/grant': () => stubError(409, { detail: 'permit pmt_1 is granted — grant refused' }),
+    });
     const mutation = TestBed.runInInjectionContext(() => injectPermitMoveMutation());
 
     await expect(mutation.mutateAsync({ permitId: 'pmt_1', verb: 'grant' })).rejects.toBeTruthy();
   });
 
   it('POSTs a revocation with its note', async () => {
-    stub = stubRequestClient(hubClient, () => ({ ...GRANTED, state: 'revoked', verbs: [] }));
+    stub = stubHubClient({
+      'POST /api/permits/{permit_id}/revoke': () => ({ ...GRANTED, state: 'revoked', verbs: [] }),
+    });
     const mutation = TestBed.runInInjectionContext(() => injectPermitRevokeMutation());
 
     await mutation.mutateAsync({ permitId: 'pmt_1', note: 'left the team' });

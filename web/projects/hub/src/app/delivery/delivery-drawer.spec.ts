@@ -3,8 +3,8 @@ import { TestBed } from '@angular/core/testing';
 import { provideRouter } from '@angular/router';
 import { QueryClient, provideTanStackQuery } from '@tanstack/angular-query-experimental';
 
-import { FLEET_CLOCK, hubClient } from 'fleet';
-import { bounceView, chunkDetail, FIXTURE_NOW, fixtureInstant, type RequestClientStub, settle, stubError, stubRequestClient } from 'fleet/testing';
+import { type ChunkDetail, FLEET_CLOCK } from 'fleet';
+import { bounceView, chunkDetail, FIXTURE_NOW, fixtureInstant, type RequestClientStub, settle, stubError, stubHubClient, type StubHttpError } from 'fleet/testing';
 import { DeliveryDrawer } from './delivery-drawer';
 
 const CHUNK = 'ch_01drawer000000000000000000';
@@ -20,8 +20,8 @@ const ENVELOPE = JSON.stringify({
 describe('DeliveryDrawer', () => {
   let stub: RequestClientStub;
 
-  function configure(detail: unknown): void {
-    stub = stubRequestClient(hubClient, (_method, path) => (path === `/api/chunks/${CHUNK}` ? detail : {}));
+  function configure(detail: ChunkDetail | StubHttpError<number, { detail: string }>): void {
+    stub = stubHubClient({ 'GET /api/chunks/{chunk_id}': () => detail });
     TestBed.configureTestingModule({
       imports: [DeliveryDrawer],
       providers: [

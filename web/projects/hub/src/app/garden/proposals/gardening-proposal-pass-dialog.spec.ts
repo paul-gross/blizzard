@@ -1,13 +1,19 @@
 import { provideZonelessChangeDetection } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { QueryClient, provideTanStackQuery } from '@tanstack/angular-query-experimental';
-import { hubClient } from 'fleet';
-import { type RequestClientStub, settle, stubError, stubRequestClient } from 'fleet/testing';
+import {
+  gardenProposalClosureView,
+  gardenProposalView,
+  type RequestClientStub,
+  settle,
+  stubError,
+  stubHubClient,
+} from 'fleet/testing';
 
 import { GardeningProposalPassDialog } from './gardening-proposal-pass-dialog';
 
-async function mount(route: (method: string, path: string) => unknown) {
-  const stub = stubRequestClient(hubClient, route);
+async function mount(routes: Parameters<typeof stubHubClient>[0]) {
+  const stub = stubHubClient(routes);
   await TestBed.configureTestingModule({
     imports: [GardeningProposalPassDialog],
     providers: [
@@ -27,7 +33,7 @@ describe('GardeningProposalPassDialog', () => {
   afterEach(() => stub?.restore());
 
   it('disables submit until a reason is entered', async () => {
-    const mounted = await mount(() => ({}));
+    const mounted = await mount({});
     stub = mounted.stub;
     const { el, fixture } = mounted;
 
@@ -42,16 +48,16 @@ describe('GardeningProposalPassDialog', () => {
   });
 
   it('submits only with the entered reason, closing on success', async () => {
-    const mounted = await mount(() => ({
-      proposal_id: 'gp_1',
-      routine_name: 'comments',
-      class: 'x',
-      title: 't',
-      body: 'b',
-      created_at: '2026-01-01T00:00:00Z',
-      findings: [],
-      closure: { closure: 'passed', reason: 'not worth it yet', closed_by: 'u_1', closed_at: '2026-01-02T00:00:00Z', item_outcome: null, source: null, ref: null },
-    }));
+    const mounted = await mount({
+      'POST /api/garden-proposals/{proposal_id}/pass': () =>
+        gardenProposalView({
+          proposal_id: 'gp_1',
+          class: 'x',
+          title: 't',
+          body: 'b',
+          closure: gardenProposalClosureView({ reason: 'not worth it yet' }),
+        }),
+    });
     stub = mounted.stub;
     const { el, fixture } = mounted;
     let closed = false;
@@ -71,11 +77,9 @@ describe('GardeningProposalPassDialog', () => {
   });
 
   it('renders a 409 (already closed) as an action error rather than closing', async () => {
-    const mounted = await mount((method, path) =>
-      method === 'POST' && path === '/api/garden-proposals/gp_1/pass'
-        ? stubError(409, { detail: 'garden proposal gp_1 already carries a closure' })
-        : {},
-    );
+    const mounted = await mount({
+      'POST /api/garden-proposals/{proposal_id}/pass': () => stubError(409, { detail: 'garden proposal gp_1 already carries a closure' }),
+    });
     stub = mounted.stub;
     const { el, fixture } = mounted;
     let closed = false;

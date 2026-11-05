@@ -2,8 +2,18 @@ import { Component, provideZonelessChangeDetection } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { Router, RouterOutlet, type Routes, provideRouter } from '@angular/router';
 import { QueryClient, provideTanStackQuery } from '@tanstack/angular-query-experimental';
-import { type ProjectView, hubClient } from 'fleet';
-import { OPERATOR_ME_RESPONSE, type RequestClientStub, settle, stubError, stubRequestClient } from 'fleet/testing';
+import type { ProjectView } from 'fleet';
+import {
+  OPERATOR_ME_RESPONSE,
+  type RequestClientStub,
+  gardenFindingDetailView,
+  gardenProjectView,
+  gardenProposalView,
+  runDeltaView,
+  settle,
+  stubError,
+  stubHubClient,
+} from 'fleet/testing';
 
 import { ProjectLens, provideProjectLens } from '../core/project-lens';
 import { gardenPathOf } from './garden-lens.guard';
@@ -23,7 +33,7 @@ class TestLensedGarden {}
 const LANDING_ONLY: Routes = [{ path: '**', component: TestLensedGarden }];
 
 function project(slug: string, name: string): ProjectView {
-  return { project_id: `proj_${slug}`, slug, name } as ProjectView;
+  return gardenProjectView({ project_id: `proj_${slug}`, slug, name });
 }
 
 const SOLO = [project('solo', 'Solo')];
@@ -39,18 +49,21 @@ describe('the gardening guards on All', () => {
 
   async function boot(
     projects: readonly ProjectView[],
-    records: Record<string, unknown> = {},
+    records: Parameters<typeof stubHubClient>[0] = {},
     lensedGarden: Routes = GARDENING_ROUTES,
   ) {
-    stub = stubRequestClient(hubClient, (method, path) => {
-      if (method !== 'GET') return {};
-      if (path === '/api/projects') return { projects };
-      if (path === '/api/me') return OPERATOR_ME_RESPONSE;
-      if (path in records) return records[path];
-      if (path.endsWith('/garden-proposals')) return { proposals: [], next_cursor: null };
-      if (path.endsWith('/findings')) return { findings: [], next_cursor: null };
-      if (path === '/api/runners') return { runners: [] };
-      return [];
+    stub = stubHubClient({
+      'GET /api/projects': () => ({ projects: [...projects] }),
+      'GET /api/me': () => OPERATOR_ME_RESPONSE,
+      'GET /api/garden-proposals': () => ({ proposals: [], next_cursor: null }),
+      'GET /api/projects/{project}/garden-proposals': () => ({ proposals: [], next_cursor: null }),
+      'GET /api/findings': () => ({ findings: [], next_cursor: null }),
+      'GET /api/projects/{project}/findings': () => ({ findings: [], next_cursor: null }),
+      'GET /api/runners': () => ({ runners: [] }),
+      'GET /api/scopes': () => [],
+      'GET /api/routines': () => [],
+      'GET /api/runs': () => [],
+      ...records,
     });
     TestBed.configureTestingModule({
       imports: [TestGardenLensHost],
@@ -116,7 +129,7 @@ describe('the gardening guards on All', () => {
   it('opens a run\'s un-lensed link under the lens of the project its own read names', async () => {
     const { fixture, router } = await boot(
       SEVERAL,
-      { '/api/runs/ch_1': { chunk_id: 'ch_1', project_slug: 'winter' } },
+      { 'GET /api/runs/{chunk_id}': () => runDeltaView({ chunk_id: 'ch_1', project_slug: 'winter' }) },
       LANDING_ONLY,
     );
 
@@ -130,8 +143,8 @@ describe('the gardening guards on All', () => {
     const { fixture, router } = await boot(
       SEVERAL,
       {
-        '/api/findings/fnd_1': { finding_id: 'fnd_1', project_slug: 'blizzard' },
-        '/api/garden-proposals/gprop_1': { proposal_id: 'gprop_1', project_slug: 'winter' },
+        'GET /api/findings/{finding_id}': () => gardenFindingDetailView({ finding_id: 'fnd_1', project_slug: 'blizzard' }),
+        'GET /api/garden-proposals/{proposal_id}': () => gardenProposalView({ proposal_id: 'gprop_1', project_slug: 'winter' }),
       },
       LANDING_ONLY,
     );
@@ -147,7 +160,7 @@ describe('the gardening guards on All', () => {
 
   it('opens the doorway with a notice for a record the tenant does not hold', async () => {
     const { fixture, router, lens } = await boot(SEVERAL, {
-      '/api/runs/ch_gone': stubError(404, { detail: 'no such run' }),
+      'GET /api/runs/{chunk_id}': () => stubError(404, { detail: 'no such run' }),
     });
 
     await router.navigateByUrl('/gardening/runs/ch_gone');

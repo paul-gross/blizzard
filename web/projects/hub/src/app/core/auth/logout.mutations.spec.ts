@@ -3,8 +3,7 @@ import { TestBed } from '@angular/core/testing';
 import { QueryClient, provideTanStackQuery } from '@tanstack/angular-query-experimental';
 import { vi } from 'vitest';
 
-import { hubClient } from 'fleet';
-import { type RequestClientStub, stubRequestClient } from 'fleet/testing';
+import { type RequestClientStub, stubHubClient } from 'fleet/testing';
 import { injectLogoutMutation } from './logout.mutations';
 
 describe('injectLogoutMutation', () => {
@@ -12,7 +11,7 @@ describe('injectLogoutMutation', () => {
   let queryClient: QueryClient;
 
   beforeEach(() => {
-    stub = stubRequestClient(hubClient, (method, path) => (path === '/api/auth/logout' && method === 'POST' ? {} : {}));
+    stub = stubHubClient({ 'POST /api/auth/logout': () => undefined });
     queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
     TestBed.configureTestingModule({
       providers: [provideZonelessChangeDetection(), provideTanStackQuery(queryClient)],

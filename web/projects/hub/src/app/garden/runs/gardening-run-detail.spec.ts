@@ -3,60 +3,53 @@ import { TestBed } from '@angular/core/testing';
 import { By } from '@angular/platform-browser';
 import { ActivatedRoute, convertToParamMap, provideRouter } from '@angular/router';
 import { QueryClient, provideTanStackQuery } from '@tanstack/angular-query-experimental';
-import { hubClient } from 'fleet';
-import { type RequestClientStub, settle, stubError, stubRequestClient } from 'fleet/testing';
+import {
+  deliveredSetDeltaView,
+  deliveredSetView,
+  type RequestClientStub,
+  runDeltaView,
+  runEscalationView,
+  runRowView,
+  settle,
+  stubError,
+  stubHubClient,
+} from 'fleet/testing';
 import { BehaviorSubject } from 'rxjs';
 
 import { GardeningRunDetail } from './gardening-run-detail';
 import { GardeningRunsState } from './gardening-runs-state';
 
-const RUN_ROW = {
+const RUN_ROW = runRowView({
   chunk_id: 'ch_1',
-  routine_name: 'nightly',
-  scope_slug: 'blizzard',
-  mode: 'full',
   minted_at: '2026-01-10T00:00:00Z',
-  outcome: 'done',
-  escalation: null,
   delivered: [
-    { finding_set_id: 'fins_1', revisions: { blizzard: 'abc123' }, measurement: '3 findings', added_count: 1, observed_count: 11, gone_count: 0 },
-    { finding_set_id: 'fins_2', revisions: { blizzard: 'def456' }, measurement: null, added_count: 0, observed_count: 0, gone_count: 2 },
+    deliveredSetView({ finding_set_id: 'fins_1', revisions: { blizzard: 'abc123' }, measurement: '3 findings', added_count: 1, observed_count: 11, gone_count: 0 }),
+    deliveredSetView({ finding_set_id: 'fins_2', revisions: { blizzard: 'def456' }, added_count: 0, observed_count: 0, gone_count: 2 }),
   ],
-};
+});
 
-const ESCALATED_RUN_ROW = {
+const ESCALATED_RUN_ROW = runRowView({
   chunk_id: 'ch_2',
-  routine_name: 'nightly',
   scope_slug: 'web',
   mode: 'delta',
   minted_at: '2026-01-11T00:00:00Z',
   outcome: 'needs_human',
-  escalation: {
-    node_name: 'survey',
-    takeover_command: 'blizzard hub chunk takeover ch_2',
-    wrapped_takeover_command: '',
-  },
-  delivered: [],
-};
+  escalation: runEscalationView({ node_name: 'survey', takeover_command: 'blizzard hub chunk takeover ch_2' }),
+});
 
-const RUN_DELTA = {
+const RUN_DELTA = runDeltaView({
   chunk_id: 'ch_1',
-  routine_name: 'nightly',
-  scope_slug: 'blizzard',
-  mode: 'full',
-  outcome: 'done',
-  escalation: null,
   sets: [
-    {
+    deliveredSetDeltaView({
       finding_set_id: 'fins_1',
       revisions: { blizzard: 'abc123' },
       measurement: '3 findings',
       added: [{ finding_id: 'fnd_1', class: 'style', locus: 'a.py:1', summary: 'unused import', introduced: null }],
       observed: [{ finding_id: 'fnd_2', class: 'perf', locus: 'b.py:7', summary: 'still reproducing' }],
       gone: [{ finding_id: 'fnd_3', note: 'resolved' }],
-    },
+    }),
   ],
-};
+});
 
 /**
  * Exercises the `/gardening/runs` detail child — the selected run's delta pane.
@@ -72,15 +65,13 @@ describe('GardeningRunDetail', () => {
 
   afterEach(() => stub?.restore());
 
-  async function mount(chunkId: string | null, opts: { routeOverride?: (method: string, path: string) => unknown } = {}) {
+  async function mount(chunkId: string | null, opts: { routes?: Parameters<typeof stubHubClient>[0] } = {}) {
     paramMap$ = new BehaviorSubject(convertToParamMap(chunkId === null ? {} : { chunkId }));
-    stub = stubRequestClient(hubClient, (method, path) => {
-      const overridden = opts.routeOverride?.(method, path);
-      if (overridden !== undefined) return overridden;
-      if (method === 'GET' && path === '/api/runs') return [RUN_ROW, ESCALATED_RUN_ROW];
-      if (method === 'GET' && path === '/api/routines') return [];
-      if (method === 'GET' && path === '/api/runs/ch_1') return RUN_DELTA;
-      return {};
+    stub = stubHubClient({
+      'GET /api/runs': () => [RUN_ROW, ESCALATED_RUN_ROW],
+      'GET /api/routines': () => [],
+      'GET /api/runs/{chunk_id}': () => RUN_DELTA,
+      ...opts.routes,
     });
     await TestBed.configureTestingModule({
       imports: [GardeningRunDetail],
@@ -142,8 +133,10 @@ describe('GardeningRunDetail', () => {
 
   it('resolves an unknown chunkId to the run delta’s error state', async () => {
     const { fixture } = await mount('ch_missing', {
-      routeOverride: (method, path) =>
-        method === 'GET' && path === '/api/runs/ch_missing' ? stubError(404, { detail: 'unknown run' }) : undefined,
+      routes: {
+        'GET /api/runs/{chunk_id}': (_request, { chunk_id }) =>
+          chunk_id === 'ch_1' ? RUN_DELTA : stubError(404, { detail: 'unknown run' }),
+      },
     });
 
     const delta = fixture.debugElement.query(By.css('app-run-delta'));

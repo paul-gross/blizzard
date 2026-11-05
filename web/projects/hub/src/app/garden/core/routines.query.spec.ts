@@ -2,8 +2,16 @@ import { ChangeDetectionStrategy, Component, provideZonelessChangeDetection } fr
 import { TestBed } from '@angular/core/testing';
 import { QueryClient, provideTanStackQuery } from '@tanstack/angular-query-experimental';
 
-import { hubClient } from 'fleet';
-import { type RequestClientStub, stubRequestClient, settle } from 'fleet/testing';
+import {
+  gardenProposalCountsRowView,
+  gardenProposalCountsView,
+  gardenRoutineView,
+  gardenSweepsView,
+  gardenTrendView,
+  type RequestClientStub,
+  stubHubClient,
+  settle,
+} from 'fleet/testing';
 import {
   injectHubRoutineProposalCountsQuery,
   injectHubRoutineSweepsQuery,
@@ -92,22 +100,10 @@ describe('injectHubRoutinesQuery', () => {
   afterEach(() => stub?.restore());
 
   it('reads the routine list off GET /api/routines', async () => {
-    stub = stubRequestClient(hubClient, (method, path) => {
-      if (method === 'GET' && path === '/api/routines') {
-        return [
-          {
-            routine_id: 'rtn_1',
-            name: 'nightly',
-            slug: 'nightly',
-            graph_name: 'garden',
-            default_scope_slug: 'blizzard',
-            default_model: [],
-            default_effort: null,
-            created_at: '2026-01-01T00:00:00Z',
-          },
-        ];
-      }
-      return {};
+    stub = stubHubClient({
+      'GET /api/routines': () => [
+        gardenRoutineView({ routine_id: 'rtn_1', name: 'nightly', slug: 'nightly', graph_name: 'garden', revision: null }),
+      ],
     });
     TestBed.configureTestingModule({
       imports: [TestRoutinesQueryHost],
@@ -126,18 +122,8 @@ describe('injectHubRoutineTrendQuery', () => {
   afterEach(() => stub?.restore());
 
   it('reads the trend off GET /api/routines/trend', async () => {
-    stub = stubRequestClient(hubClient, (method, path) => {
-      if (method === 'GET' && path === '/api/routines/trend') {
-        return {
-          routine_name: 'nightly',
-          since: '2026-01-01T00:00:00Z',
-          until: '2026-01-15T00:00:00Z',
-          period_days: 7,
-          periods: [],
-          age: { boundary: '2026-01-01T00:00:00Z', recent: 0, older: 0, unattributed: 0 },
-        };
-      }
-      return {};
+    stub = stubHubClient({
+      'GET /api/routines/trend': () => gardenTrendView({ until: '2026-01-15T00:00:00Z' }),
     });
     TestBed.configureTestingModule({
       imports: [TestRoutineTrendQueryHost],
@@ -156,17 +142,8 @@ describe('injectHubRoutineSweepsQuery', () => {
   afterEach(() => stub?.restore());
 
   it('reads the sweeps off GET /api/routines/{routine_id}/sweeps', async () => {
-    stub = stubRequestClient(hubClient, (method, path) => {
-      if (method === 'GET' && path === '/api/routines/rtn_1/sweeps') {
-        return {
-          routine_name: 'nightly',
-          since: '2026-01-01T00:00:00Z',
-          until: '2026-01-15T00:00:00Z',
-          last_swept: [],
-          measurements: [],
-        };
-      }
-      return {};
+    stub = stubHubClient({
+      'GET /api/routines/{routine_id}/sweeps': () => gardenSweepsView({ until: '2026-01-15T00:00:00Z' }),
     });
     TestBed.configureTestingModule({
       imports: [TestRoutineSweepsQueryHost],
@@ -180,7 +157,7 @@ describe('injectHubRoutineSweepsQuery', () => {
   });
 
   it('stays disabled while no routine id is selected', async () => {
-    stub = stubRequestClient(hubClient);
+    stub = stubHubClient({});
     TestBed.configureTestingModule({
       imports: [TestRoutineSweepsDisabledQueryHost],
       providers: [provideZonelessChangeDetection(), provideTanStackQuery(new QueryClient())],
@@ -198,26 +175,13 @@ describe('injectHubRoutineProposalCountsQuery', () => {
   afterEach(() => stub?.restore());
 
   it('reads the counts off GET /api/routines/proposal-counts', async () => {
-    stub = stubRequestClient(hubClient, (method, path) => {
-      if (method === 'GET' && path === '/api/routines/proposal-counts') {
-        return {
-          since: '2026-01-01T00:00:00Z',
+    stub = stubHubClient({
+      'GET /api/routines/proposal-counts': () =>
+        gardenProposalCountsView({
           until: '2026-01-15T00:00:00Z',
           routine: 'nightly',
-          rows: [
-            {
-              routine_name: 'nightly',
-              class: 'stale-docstring',
-              open: 2,
-              passed: 1,
-              accepted_with_item: 3,
-              accepted_without_item: 0,
-              created: 6,
-            },
-          ],
-        };
-      }
-      return {};
+          rows: [gardenProposalCountsRowView({ open: 2, passed: 1, accepted_with_item: 3, created: 6 })],
+        }),
     });
     TestBed.configureTestingModule({
       imports: [TestRoutineProposalCountsQueryHost],
@@ -232,7 +196,7 @@ describe('injectHubRoutineProposalCountsQuery', () => {
   });
 
   it('stays disabled while no routine is selected', async () => {
-    stub = stubRequestClient(hubClient);
+    stub = stubHubClient({});
     TestBed.configureTestingModule({
       imports: [TestRoutineProposalCountsDisabledQueryHost],
       providers: [provideZonelessChangeDetection(), provideTanStackQuery(new QueryClient())],

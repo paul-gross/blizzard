@@ -30,7 +30,7 @@ export interface StubHttpError<S extends number = number, B = unknown> {
 }
 
 /** Build a {@link StubHttpError} a `route` callback can return to make
- * {@link stubRequestClient} answer with a non-200 status, e.g. the hub's 409
+ * the stub answer with a non-200 status, e.g. the hub's 409
  * "no live route" / 404 "unknown chunk" responses, or the runner's 503
  * "store not wired" fault. */
 export function stubError<S extends number, B>(status: S, body: B): StubHttpError<S, B> {
@@ -52,6 +52,18 @@ function isStubHttpError(value: unknown): value is StubHttpError {
  * runner) it stubs, rather than importing either generated module's types. */
 interface StubbableClient {
   setConfig(config: { baseUrl: string; fetch: typeof fetch }): unknown;
+}
+
+/** A refusal whose body the hub's OpenAPI document does not model (e.g. the lost answer race's 409, which carries the
+ * winning answer). The one deliberate opening in the typed contract: use it only where the wire sends a body the
+ * generated types cannot express, and prefer {@link stubError} everywhere else. */
+export interface StubUndeclaredError extends StubHttpError<number, unknown> {
+  readonly undeclared: true;
+}
+
+/** Build a {@link StubUndeclaredError} — see there. */
+export function stubUndeclaredError(status: number, body: unknown): StubUndeclaredError {
+  return { status, body, undeclared: true };
 }
 
 /** The body FastAPI's `HTTPException` sends — the envelope every domain refusal rides, declared or not. */
@@ -76,7 +88,8 @@ type RouteParams<P> = [P] extends [undefined] ? Record<never, never> : NonNullab
  * `{ detail }` envelope (a 422 the document models as a validation list is sent as a string by domain refusals). */
 type RouteError<E> =
   | { [S in keyof E & number]: StubHttpError<S, E[S]> }[keyof E & number]
-  | StubHttpError<number, StubDetailBody>;
+  | StubHttpError<number, StubDetailBody>
+  | StubUndeclaredError;
 
 /** What a route handler returns, sync or async: the operation's success body or one of its refusals. */
 type RouteResult<O extends StubOperation> = SuccessBody<O['responses']> | RouteError<O['errors']>;
@@ -175,24 +188,9 @@ export function stubRunnerClient(routes: StubRoutes<RunnerOperations>): RequestC
 }
 
 /**
- * Stub a generated client's (hub or runner) transport with a fake `fetch` so
- * component tests can assert the exact call a button fires and hand back
- * canned responses — the TestBed-friendly seam (the Angular unit-test system
- * forbids `vi.mock` on relative imports). `route` maps a `METHOD /path` to the
- * JSON body to return (200), or to a {@link stubError} for a non-200 status;
- * unmatched routes return `{}` (200). Every request is captured for
- * assertions.
- *
- * Takes the generated client instance itself (`hubClient`/`runnerClient`) so
- * one helper serves both libraries' specs with a single error convention.
+ * The shared transport: a fake `fetch` on a generated client that captures every request and answers with whatever
+ * `route` returns — a body (200) or a {@link StubHttpError}. The typed entry points are the only callers.
  */
-export function stubRequestClient(
-  client: StubbableClient,
-  route: (method: string, path: string, search: string) => unknown | Promise<unknown> = () => ({}),
-): RequestClientStub {
-  return stubTransport(client, (request) => route(request.method, request.path, request.search));
-}
-
 function stubTransport(
   client: StubbableClient,
   route: (request: CapturedRequest) => unknown | Promise<unknown>,

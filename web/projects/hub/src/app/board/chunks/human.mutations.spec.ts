@@ -3,20 +3,30 @@ import { TestBed } from '@angular/core/testing';
 import { QueryClient, provideTanStackQuery } from '@tanstack/angular-query-experimental';
 import { vi } from 'vitest';
 
-import { formatWhen, hubClient, hubDecisionsKey } from 'fleet';
-import { type RequestClientStub, stubError, stubRequestClient } from 'fleet/testing';
+import {
+  type DecisionResolutionConflict,
+  type DecisionResolutionResponse,
+  formatWhen,
+  hubDecisionsKey,
+} from 'fleet';
+import { type RequestClientStub, type StubHttpError, stubError, stubHubClient } from 'fleet/testing';
 import { injectResolveDecisionMutation, readDecisionFailure } from './human.mutations';
 
 describe('injectResolveDecisionMutation', () => {
   let stub: RequestClientStub;
   let queryClient: QueryClient;
-  let resolveResponse: unknown;
+  let resolveResponse: DecisionResolutionResponse | StubHttpError<409, DecisionResolutionConflict>;
 
   beforeEach(() => {
-    resolveResponse = { decision_id: 'dc_1', choice: 'approve', resolved_by: 'operator', resolved_at: '2026-07-16T00:00:00Z' };
-    stub = stubRequestClient(hubClient, (method, path) =>
-      method === 'POST' && path === '/api/decisions/dc_1/resolutions' ? resolveResponse : {},
-    );
+    resolveResponse = {
+      decision_id: 'dc_1',
+      choice: 'approve',
+      note: null,
+      overrode_red_checks: false,
+      resolved_by: 'operator',
+      resolved_at: '2026-07-16T00:00:00Z',
+    };
+    stub = stubHubClient({ 'POST /api/decisions/{decision_id}/resolutions': () => resolveResponse });
     queryClient = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } });
     TestBed.configureTestingModule({
       providers: [provideZonelessChangeDetection(), provideTanStackQuery(queryClient)],
@@ -58,6 +68,7 @@ describe('injectResolveDecisionMutation', () => {
       already_resolved_by: 'alice',
       resolved_choice: 'reject',
       resolved_at: '2026-07-16T00:00:00Z',
+      detail: 'decision already resolved',
     });
 
     const keys = await keysAfter();

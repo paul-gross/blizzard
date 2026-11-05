@@ -1,17 +1,14 @@
 import { provideZonelessChangeDetection } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { QueryClient, provideTanStackQuery } from '@tanstack/angular-query-experimental';
-import { runnerClient } from 'fleet';
-import { type RequestClientStub, settle, stubError, stubRequestClient } from 'fleet/testing';
+import { type runnerApi } from 'fleet';
+import { type RequestClientStub, settle, stubError, stubRunnerClient, workItemEntry } from 'fleet/testing';
 
 import { type MachineChunkRow, machineChunkRows } from '../../core/chunk-rows.model';
 import type { PanelLease, PanelProject } from '../../core/panel-reads.model';
 import { ChunkRow } from './chunk-row';
 
 const CHUNK_ID = 'ch_01KXKVVF1J3D6H6VYZ3XYN3YJ9';
-
-/** Matches `GET /runners/{runner_id}/api/chunks/{chunk_id}/work-items`, capturing the runner id. */
-const WORK_ITEMS_ROUTE = /^\/runners\/([^/]+)\/api\/chunks\/[^/]+\/work-items$/;
 
 const PROJECTS: PanelProject[] = [
   { slug: 'blizzard', name: 'Blizzard', entries: ['blizzard'], color: 'cyan' },
@@ -55,13 +52,10 @@ let stub: RequestClientStub | undefined;
 afterEach(() => stub?.restore());
 
 async function render(
-  workItemsResponse: () => unknown = () => ({ items: [] }),
+  workItemsResponse: () => runnerApi.WorkItemsView | ReturnType<typeof stubError<502, { detail: string }>> = () => ({ items: [] }),
   inputs: { row?: MachineChunkRow; layout?: 'board' | 'list' } = {},
 ) {
-  stub = stubRequestClient(runnerClient, (method, path) => {
-    if (method === 'GET' && WORK_ITEMS_ROUTE.test(path)) return workItemsResponse();
-    return {};
-  });
+  stub = stubRunnerClient({ 'GET /runners/{runner_id}/api/chunks/{chunk_id}/work-items': () => workItemsResponse() });
   await TestBed.configureTestingModule({
     imports: [ChunkRow],
     providers: [
@@ -76,16 +70,16 @@ async function render(
   return { fixture, el: fixture.nativeElement as HTMLElement };
 }
 
-const WORK_ITEMS = {
+const WORK_ITEMS: runnerApi.WorkItemsView = {
   items: [
-    {
+    workItemEntry({
       source: 'blizzard',
       ref: '61',
       label: 'blizzard#61',
       web_url: 'https://github.com/paul-gross/blizzard/issues/61',
       fetched_at: '2026-07-16T11:00:00.000Z',
       title: 'runner machine panel',
-    },
+    }),
   ],
 };
 

@@ -4,57 +4,42 @@ import { provideRouter } from '@angular/router';
 import { RouterTestingHarness } from '@angular/router/testing';
 import { QueryClient, provideTanStackQuery } from '@tanstack/angular-query-experimental';
 import { vi } from 'vitest';
-import { hubClient } from 'fleet';
-import { OPERATOR_ME_RESPONSE, type RequestClientStub, settle, stubError, stubRequestClient } from 'fleet/testing';
+import { type MeResponse, type RunnerRegistryView } from 'fleet';
+import {
+  OPERATOR_ME_RESPONSE,
+  type RequestClientStub,
+  chunkSummary,
+  hostRegistryView,
+  runnerRegistryView,
+  settle,
+  stubError,
+  stubHubClient,
+} from 'fleet/testing';
 
 import { RunnersPage } from './runners-page';
 
 /** An admin's `/api/me` — `runner:retire` too, so a host verb would render anywhere it is offered. */
-const ADMIN_ME = {
+const ADMIN_ME: MeResponse = {
   ...OPERATOR_ME_RESPONSE,
   permissions: [...OPERATOR_ME_RESPONSE.permissions, 'runner:retire' as const],
 };
 /** A `contributor`'s `/api/me` — every day-to-day operating permission, but not
  * the admin-tier `runner:pause`. */
-const CONTRIBUTOR_ME = {
+const CONTRIBUTOR_ME: MeResponse = {
   ...OPERATOR_ME_RESPONSE,
   role: 'contributor',
   permissions: OPERATOR_ME_RESPONSE.permissions.filter((p) => p !== 'runner:pause' && p !== 'graph:edit' && p !== 'user:manage'),
 };
 
 const NOW = new Date().toISOString();
-const runner = (id: string, over: Record<string, unknown> = {}) => ({
-  runner_id: id,
-  runner_name: id,
-  workspace_id: 'ws_a',
-  registered_at: NOW,
-  last_seen_at: NOW,
-  online: true,
-  connection: 'online',
-  hub_paused: false,
-  locally_paused: false,
-  capabilities: [],
-  gates: [],
-  subscription_unrostered: false,
-  ...over,
-});
+const runner = (id: string, over: Partial<RunnerRegistryView> = {}) =>
+  runnerRegistryView({ runner_id: id, registered_at: NOW, last_seen_at: NOW, ...over });
 const RUNNERS = {
   runners: [runner('rn_online', { host_id: 'hs_h1', env_capacity: 4 }), runner('rn_paused', { hub_paused: true })],
 };
-const HOST = {
-  host_id: 'hs_h1',
-  host_name: 'build-box',
-  connection: 'online',
-  online: true,
-  enrolled: true,
-  added_at: NOW,
-  last_seen_at: NOW,
-  workspaces: [],
-  subscriptions: [],
-  subscription_usage: [],
-};
+const HOST = hostRegistryView({ host_id: 'hs_h1', host_name: 'build-box', added_at: NOW, last_seen_at: NOW });
 const CHUNKS = [
-  {
+  chunkSummary({
     chunk_id: 'ch_01claim000000000000000000000',
     graph_id: 'gr_1',
     status: 'running',
@@ -62,7 +47,7 @@ const CHUNKS = [
     current_node_name: 'build',
     runner_id: 'rn_online',
     environment_count: 2,
-  },
+  }),
 ];
 
 /**
@@ -70,18 +55,18 @@ const CHUNKS = [
  * `/api/hosts` and `/api/chunks` reads: a bare `/fleet` is the overview, `/fleet/:id` the opened
  * host's or hostless runner's breakdown.
  */
+type Routes = Parameters<typeof stubHubClient>[0];
+
 describe('RunnersPage (mobile Fleet screen)', () => {
   let stub: RequestClientStub;
 
-  async function open(url: string, me: unknown = OPERATOR_ME_RESPONSE, over: (method: string, path: string) => unknown = () => undefined) {
-    stub = stubRequestClient(hubClient, (method, path) => {
-      const hit = over(method, path);
-      if (hit !== undefined) return hit;
-      if (path === '/api/me') return me;
-      if (path === '/api/runners') return RUNNERS;
-      if (path === '/api/hosts') return { hosts: [HOST] };
-      if (path === '/api/chunks') return { chunks: CHUNKS, next_cursor: null };
-      return {};
+  async function open(url: string, me: MeResponse = OPERATOR_ME_RESPONSE, over: Routes = {}) {
+    stub = stubHubClient({
+      'GET /api/me': () => me,
+      'GET /api/runners': () => RUNNERS,
+      'GET /api/hosts': () => ({ hosts: [HOST] }),
+      'GET /api/chunks': () => ({ chunks: CHUNKS, next_cursor: null }),
+      ...over,
     });
     TestBed.configureTestingModule({
       providers: [
@@ -112,9 +97,9 @@ describe('RunnersPage (mobile Fleet screen)', () => {
     });
 
     it('labels each toggle by its runner\'s hub brake, and pauses through the client call', async () => {
-      const { harness, el } = await open('/fleet', OPERATOR_ME_RESPONSE, (_method, path) =>
-        path === '/api/runners/rn_online/pause' ? RUNNERS.runners[0] : undefined,
-      );
+      const { harness, el } = await open('/fleet', OPERATOR_ME_RESPONSE, {
+        'POST /api/runners/{runner_id}/pause': () => RUNNERS.runners[0],
+      });
 
       expect(toggle(el, 'rn_online')?.textContent?.trim()).toBe('Pause');
       expect(toggle(el, 'rn_paused')?.textContent?.trim()).toBe('Resume');
@@ -135,9 +120,9 @@ describe('RunnersPage (mobile Fleet screen)', () => {
     });
 
     it("disables only the tapped runner's toggle while its mutation is pending, re-enabling once it settles", async () => {
-      const { harness, el } = await open('/fleet', OPERATOR_ME_RESPONSE, (_method, path) =>
-        path === '/api/runners/rn_online/pause' ? RUNNERS.runners[0] : undefined,
-      );
+      const { harness, el } = await open('/fleet', OPERATOR_ME_RESPONSE, {
+        'POST /api/runners/{runner_id}/pause': () => RUNNERS.runners[0],
+      });
       const queryClient = TestBed.inject(QueryClient);
       let resolveInvalidate!: () => void;
       vi.spyOn(queryClient, 'invalidateQueries').mockReturnValue(new Promise<void>((resolve) => (resolveInvalidate = resolve)));
@@ -158,9 +143,9 @@ describe('RunnersPage (mobile Fleet screen)', () => {
     });
 
     it('reports a pause failure in a visible notice, without disabling a sibling runner', async () => {
-      const { harness, el } = await open('/fleet', OPERATOR_ME_RESPONSE, (_method, path) =>
-        path === '/api/runners/rn_online/pause' ? stubError(409, { detail: 'runner already paused' }) : undefined,
-      );
+      const { harness, el } = await open('/fleet', OPERATOR_ME_RESPONSE, {
+        'POST /api/runners/{runner_id}/pause': () => stubError(409, { detail: 'runner already paused' }),
+      });
 
       toggle(el, 'rn_online')?.click();
       await settle(harness.fixture);
