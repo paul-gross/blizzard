@@ -16,6 +16,10 @@ CLOCK_DERIVED_FIELDS: frozenset[str] = frozenset()
 
 _ABSENT = "<absent>"
 
+#: Columns a downgrade is specified to refill on rows that left them NULL, so a NULL becoming a value there is
+#: the restore working, not a loss: an action-taken node carries no ``run`` at head, and the downgrade rebuilds one.
+BACKFILLED_ON_DOWNGRADE: frozenset[tuple[str, str]] = frozenset({("graph_nodes", "run")})
+
 
 def response_schema(openapi: Schema, path: str, method: str = "get") -> Schema:
     """The JSON schema of the success response ``openapi`` declares for ``method path``."""
@@ -75,7 +79,7 @@ def row_losses(before: Rows, after: Rows) -> list[str]:
                 continue
             for column, value in sorted(values.items()):
                 now = kept[key].get(column, _ABSENT)
-                if now != value:
+                if now != value and not ((table, column) in BACKFILLED_ON_DOWNGRADE and value == "None"):
                     found.append(f"table {table}: row {key} column {column}: {value} became {now}")
     return found
 
