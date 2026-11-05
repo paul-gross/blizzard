@@ -50,6 +50,10 @@ class HarnessVersionCache:
         self._observed[harness_id] = (version, now)
         return version
 
+    def forget(self, harness_id: str) -> None:
+        """Drop ``harness_id``'s cached version, so the next read observes it afresh."""
+        self._observed.pop(harness_id, None)
+
 
 def default_harness_id(harnesses: IHarnessRegistry) -> str | None:
     """The runner's own default harness — the registry's own binding order

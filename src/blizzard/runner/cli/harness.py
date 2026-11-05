@@ -16,9 +16,9 @@ from blizzard.runner.environments.factory import WorkspaceLaunch, build_workspac
 from blizzard.runner.harness.bundle import HarnessBundleNotPublished, require_published
 from blizzard.runner.harness.wiring import (
     declared,
-    harness_catalog,
     inspect_harness_bundle,
     published_harness_snapshot,
+    select_harness_bindings,
     shared_inputs,
 )
 
@@ -48,12 +48,15 @@ def harness_status(ctx: click.Context, directory: str, runner: str | None) -> No
         click.echo(f"autonomy: {config.autonomy} (from {config.autonomy_source})")
         tracing = TracingSettings.of(os.environ)
         shared = shared_inputs(config.harness_settings(tracing))
+        selection = select_harness_bindings(
+            config.harness_sections, worker_env=config.worker_env(tracing), children=command_children(ctx)
+        )
         launch = WorkspaceLaunch(children=command_children(ctx), env=config.tool_env(tracing))
         spawn_roots = dict.fromkeys(
             build_workspace_provider(workspace.settings(config.root), launch=launch).spawn_root()
             for workspace in config.bound_workspaces
         )
-        for declaration, section in declared(config.harness_sections):
+        for declaration, section in declared(config.harness_sections, selection):
             _echo(
                 tuple(
                     dict.fromkeys(
@@ -65,11 +68,11 @@ def harness_status(ctx: click.Context, directory: str, runner: str | None) -> No
             )
         if config.harness_config_dir is None:
             click.echo("config_dir: none")
-            for declaration, section in declared(config.harness_sections):
+            for declaration, section in declared(config.harness_sections, selection):
                 _echo(declaration.unbundled_status(section))
             return
         click.echo(f"config_dir: {config.harness_config_dir}")
-        sources = inspect_harness_bundle(config.harness_config_dir)
+        sources = inspect_harness_bundle(config.harness_config_dir, selection)
         for source in sources:
             click.echo(f"{source.dirname}: source {source.source_dir}; entry points: {', '.join(source.entry_points)}")
     except ConfigError as exc:
@@ -79,7 +82,7 @@ def harness_status(ctx: click.Context, directory: str, runner: str | None) -> No
     except HarnessBundleNotPublished as exc:
         raise click.ClickException(str(exc)) from exc
     click.echo(f"snapshot: {snapshot}")
-    for declaration in harness_catalog():
+    for declaration, _ in declared(config.harness_sections, selection):
         _echo(declaration.snapshot_status(snapshot, sources))
 
 

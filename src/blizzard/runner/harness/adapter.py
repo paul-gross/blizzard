@@ -30,6 +30,11 @@ class HarnessSpawnError(RuntimeError):
     """The harness binary could not be launched (missing binary, bad workdir); ``spawn`` raises it."""
 
 
+class HarnessVersionChangedError(HarnessSpawnError):
+    """The harness now reports another version than the runner last advertised for it; the launch is refused before
+    anything starts, and the advertised version is to be observed afresh."""
+
+
 class WorkerIdentityError(RuntimeError):
     """``PendingWorkerHandle.await_identity`` could not confirm the launch's session id.
     Distinct from :class:`HarnessSpawnError`: a real process already exists, so the

@@ -63,8 +63,9 @@ from blizzard.runner.composition import (
 from blizzard.runner.config import DEFAULT_RUNNER_NAME, RunnerConfig, worker_shell_refusal
 from blizzard.runner.config_table import ConfigError
 from blizzard.runner.events.broker import EventBroker
+from blizzard.runner.harness.binding_selection import BindingSelection
 from blizzard.runner.harness.bundle import BundleSnapshot
-from blizzard.runner.harness.wiring import publish_harness_bundle
+from blizzard.runner.harness.wiring import publish_harness_bundle, select_harness_bindings
 from blizzard.runner.host_config import (
     BuiltRunner,
     HaltedRunner,
@@ -125,6 +126,7 @@ from blizzard.runner.loop.mode import LoopMode
 from blizzard.runner.loop.periodic_pass_driver import PeriodicPassDriver
 from blizzard.runner.loop.step_passes import HostPassStepper
 from blizzard.runner.loop_wiring import LoopWiring, PeriodicDriver, RunnerStepper, host_pass_stepper
+from blizzard.runner.process.internal.subprocess_child_processes import SubprocessChildProcesses
 from blizzard.runner.runtime import (
     StoreResetRefused,
     ensure_current_revision,
@@ -184,6 +186,8 @@ class InitCollaborators:
     store_migrations: Callable[[str], MigrationRunner] = runner_store_migrations
     build_host_process: Callable[..., HostProcess] = build_host_process
     publish_harness_bundle: Callable[..., BundleSnapshot] = publish_harness_bundle
+    #: The bindings a runner's configured binaries choose, probed once as it starts.
+    select_bindings: Callable[[RunnerConfig], BindingSelection] = lambda config: select_runner_bindings(config)
 
     @classmethod
     def of(cls, ctx: click.Context) -> InitCollaborators:
@@ -968,7 +972,8 @@ def start(
     for built in runners:
         if refusal := worker_shell_refusal(built.config.worker_shell):
             raise click.ClickException(f"runner {built.config.name}: {refusal}")
-    bundles = {built.id: publish_runner_bundle(built.config, collaborators) for built in runners}
+    selections = {built.id: collaborators.select_bindings(built.config) for built in runners}
+    bundles = {built.id: publish_runner_bundle(built.config, collaborators, selections[built.id]) for built in runners}
     tracing = TracingSettings.of(os.environ)
     for built in runners:
         for missing in built.config.missing_worker_path_prepend_entries:
@@ -988,6 +993,7 @@ def start(
         halted=halted,
         events=broker,
         bundles=bundles,
+        selections=selections,
         trace_platform=True,
         tcp_socket=tcp_socket,
     )
@@ -1067,10 +1073,19 @@ def _resolve_token(collaborators: InitCollaborators, hub_url: str, built: BuiltR
     return None
 
 
-def publish_runner_bundle(config: RunnerConfig, collaborators: InitCollaborators) -> BundleSnapshot | None:
+def select_runner_bindings(config: RunnerConfig) -> BindingSelection:
+    """The bindings ``config``'s binaries choose, each version-chosen one's ``--version`` run once."""
+    worker_env = config.worker_env(TracingSettings.of(os.environ))
+    return select_harness_bindings(config.harness_sections, worker_env=worker_env, children=SubprocessChildProcesses())
+
+
+def publish_runner_bundle(
+    config: RunnerConfig, collaborators: InitCollaborators, selection: BindingSelection | None = None
+) -> BundleSnapshot | None:
     """Load the operator's harness-config bundle and publish its snapshot before any work is
     accepted, returning it for the process graph to deliver; a runtime with no
-    `[harness] config_dir` is left untouched."""
+    `[harness] config_dir` is left untouched. ``selection`` is the bindings the runner composes, each harness's first
+    when absent."""
     if config.harness_config_dir is None:
         return None
     with click_exception_on(ConfigError):
@@ -1079,6 +1094,7 @@ def publish_runner_bundle(config: RunnerConfig, collaborators: InitCollaborators
             config.root,
             autonomy=config.autonomy,
             sections=config.harness_sections,
+            selection=selection,
         )
     click.echo(snapshot.summary())
     return snapshot
@@ -1283,10 +1299,13 @@ def tick_cmd(ctx: click.Context, directory: str, runner: str | None, host_pass: 
         configured=tuple(entry.id for entry in config.runners if entry.id is not None),
         refuse_foreign=True,
     ):
-        bundle = publish_runner_bundle(runner_built.config, InitCollaborators.of(ctx))
+        collaborators = InitCollaborators.of(ctx)
+        selection = collaborators.select_bindings(runner_built.config)
+        bundle = publish_runner_bundle(runner_built.config, collaborators, selection)
         graph = build_runner_process(
             runner_built.config,
             bundle=bundle,
+            selection=selection,
             runner_id=runner_built.id,
             token=runner_built.token,
             host_token=config.host_token.value,

@@ -1,4 +1,4 @@
-"""The OpenCode binding's declaration — the one approved site constructing
+"""The OpenCode 1 binding's declaration — the one approved site constructing
 :class:`OpenCodeAdapter` and its health probe (``tests/guards/test_layering.py``)."""
 
 from __future__ import annotations
@@ -6,9 +6,11 @@ from __future__ import annotations
 from dataclasses import dataclass
 from pathlib import Path
 
+from blizzard.foundation.clock import IClock
 from blizzard.foundation.logging import get_logger
 from blizzard.foundation.roles import domain_model
 from blizzard.runner.harness.adapter import IHarnessHealthProbe
+from blizzard.runner.harness.admission import version_admitted
 from blizzard.runner.harness.autonomy import Autonomy
 from blizzard.runner.harness.bundle import HarnessLayout, HarnessSource
 from blizzard.runner.harness.declaration import SharedHarnessInputs
@@ -19,6 +21,7 @@ from blizzard.runner.harness.internal.version_probe import VersionProbe
 from blizzard.runner.harness.offline_compatibility import ICompatibilityCorpus
 from blizzard.runner.harness.opencode.adapter import OpenCodeAdapter
 from blizzard.runner.harness.opencode.bundle import OPENCODE_BUNDLE_LAYOUT, opencode_bundle_layout
+from blizzard.runner.harness.opencode.compatibility.probe import ADMITTED_OPENCODE_RANGE
 from blizzard.runner.harness.opencode.health import OpenCodeHealthProbe
 from blizzard.runner.harness.opencode.model_limits import FileOpenCodeModelLimitsCatalog
 from blizzard.runner.harness.opencode.paths import resolve_opencode_auth_path
@@ -35,6 +38,7 @@ from blizzard.runner.harness.opencode.transcript.normalizer import NORMALIZER_VE
 from blizzard.runner.harness.opencode.transcript.transcript_source import OpenCodeTranscriptSource
 from blizzard.runner.harness.opencode.usage.descendant_usage import OpenCodeDescendantUsage
 from blizzard.runner.harness.opencode.usage.price_cache import FileOpenCodePriceCatalog, resolve_price_cache_path
+from blizzard.runner.harness.opencode.version import normalize_opencode_version
 from blizzard.runner.harness.opencode.worker_config import write_worker_config
 from blizzard.runner.harness.process_launch import IProcessLauncher
 from blizzard.runner.harness.registry import HarnessBinding
@@ -67,6 +71,13 @@ class OpenCodeDeclaration:
     def telemetry_plan(self, section: OpenCodeSection, shared: SharedHarnessInputs) -> HarnessTelemetryPlan:
         return HarnessTelemetryPlan()
 
+    def version_binary(self, section: OpenCodeSection) -> str:
+        return section.binary
+
+    def admits_version(self, raw: str | None) -> bool:
+        version = normalize_opencode_version(raw)
+        return version is not None and version_admitted(version, ADMITTED_OPENCODE_RANGE)
+
     def binding(
         self,
         section: OpenCodeSection,
@@ -75,9 +86,11 @@ class OpenCodeDeclaration:
         process: IProcessProbe,
         launcher: IProcessLauncher,
         children: IChildProcesses,
+        clock: IClock,
     ) -> HarnessBinding:
         """Build the adapter over the one runner-owned ``process``/``launcher`` pair every binding
         receives."""
+        del clock
         worker_env = shared.worker_env
         tool_env = worker_env.tool()
         exporter = SubprocessOpenCodeExporter(binary=section.binary, children=children, env=tool_env)

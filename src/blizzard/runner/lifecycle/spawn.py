@@ -22,11 +22,12 @@ from blizzard.runner.environments.workspaces import IWorkspaceSpawnSettings
 from blizzard.runner.harness.adapter import (
     DEFAULT_IDENTITY_AWAIT_TIMEOUT_SECONDS,
     HarnessSpawnError,
+    HarnessVersionChangedError,
     IHarnessWorkerLifecycle,
     WorkerIdentityError,
     WorkerPreamble,
 )
-from blizzard.runner.harness.capability_snapshot import default_harness_id
+from blizzard.runner.harness.capability_snapshot import HarnessVersionCache, default_harness_id
 from blizzard.runner.harness.identity import SessionReference
 from blizzard.runner.harness.preamble import Preamble
 from blizzard.runner.harness.registry import IHarnessRegistry, UnavailableHarnessError, UnknownHarnessError
@@ -203,6 +204,8 @@ class SpawnContext(TranscriptPumpContext, GateContext, OrphanContext, Protocol):
     def harness_selector(self) -> HarnessSelector: ...
     @property
     def harnesses(self) -> IHarnessRegistry: ...
+    @property
+    def harness_versions(self) -> HarnessVersionCache | None: ...
     @property
     def hub(self) -> IHubClient: ...
     @property
@@ -408,6 +411,8 @@ class Spawner:
                 compaction_window=lease.compaction_window,
             )
         except HarnessSpawnError as exc:
+            if isinstance(exc, HarnessVersionChangedError) and self.ctx.harness_versions is not None:
+                self.ctx.harness_versions.forget(owner)
             # Surface the launch-time failure then RE-RAISE: nothing was ever
             # launched, but the lease minted above is durable — REAP reaps it (a retry), below.
             OutboundFacts(self.ctx).command_failed(

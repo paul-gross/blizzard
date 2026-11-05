@@ -125,6 +125,15 @@ class ServiceInfo:
     pid: int
 
 
+def parse_service_info(answer: JsonValue) -> ServiceInfo:
+    """The service's version and pid from one ``GET /api/info`` answer."""
+    record = _object(answer, "server.info")
+    version, pid = record.get("version"), record.get("pid")
+    if not isinstance(version, str) or not isinstance(pid, int) or isinstance(pid, bool):
+        raise ServiceShapeError("OpenCode server.info lacks a version or pid")
+    return ServiceInfo(version=version, pid=pid)
+
+
 def _object(value: JsonValue, operation: str) -> JsonObject:
     if not isinstance(value, dict):
         raise ServiceShapeError(f"OpenCode {operation} did not answer an object")
@@ -198,11 +207,7 @@ class OpenCodeServiceClient:
         return f"/api/session/{quote(session_id, safe='')}{suffix}"
 
     def info(self) -> ServiceInfo:
-        answer = _object(self._call("server.info", "GET", "/api/info"), "server.info")
-        version, pid = answer.get("version"), answer.get("pid")
-        if not isinstance(version, str) or not isinstance(pid, int) or isinstance(pid, bool):
-            raise ServiceShapeError("OpenCode server.info lacks a version or pid")
-        return ServiceInfo(version=version, pid=pid)
+        return parse_service_info(self._call("server.info", "GET", "/api/info"))
 
     def models(self) -> list[JsonObject]:
         return _objects(_data(self._call("model.list", "GET", "/api/model"), "model.list"), "model.list")
@@ -361,4 +366,5 @@ __all__ = [
     "SessionCreate",
     "basic_authorization",
     "parse_message_page",
+    "parse_service_info",
 ]

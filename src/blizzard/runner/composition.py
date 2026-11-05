@@ -51,6 +51,7 @@ from blizzard.runner.environments.workspaces import (
 )
 from blizzard.runner.events.broker import EventBroker, RunnerEventPublisher
 from blizzard.runner.events.publisher import IRunnerEventPublisher
+from blizzard.runner.harness.binding_selection import BindingSelection
 from blizzard.runner.harness.bundle import BundleSnapshot
 from blizzard.runner.harness.capability_snapshot import default_harness_id
 from blizzard.runner.harness.harness_telemetry_plan import HarnessTelemetryNames, HarnessTelemetryPlan
@@ -63,6 +64,7 @@ from blizzard.runner.harness.wiring import (
     combined_telemetry_plan,
     configured_tiers,
     declared_telemetry_names,
+    select_harness_bindings,
 )
 from blizzard.runner.host_config import BuiltRunner, HaltedRunner, HostConfig, ResolvedToken
 from blizzard.runner.host_file import HostFileEditor
@@ -538,6 +540,7 @@ def build_host_process(
     halted: Sequence[HaltedRunner] = (),
     events: EventBroker | None = None,
     bundles: Mapping[str, BundleSnapshot | None] | None = None,
+    selections: Mapping[str, BindingSelection] | None = None,
     environ: Mapping[str, str] | None = None,
     trace_exporter: ITraceExporter | None = None,
     platform_tracing: IPlatformTracing | None = None,
@@ -552,7 +555,8 @@ def build_host_process(
     ``environ`` decides whether tracing is enabled; ``trace_exporter`` replaces the OTLP binding an enabled sweep would
     otherwise build. ``trace_platform`` builds the platform-tracing and received-telemetry handles the config and
     environment decide, stamped from the host's runners; otherwise ``platform_tracing`` and ``received_telemetry`` are
-    used as given. ``bundles`` are the harness-config snapshots each runner published, by runner id. ``tcp_socket``
+    used as given. ``bundles`` are the harness-config snapshots each runner published, and ``selections`` the bindings
+    each chose, by runner id. ``tcp_socket``
     is a TCP listener already bound at ``host``'s port, adopted rather than bound again."""
     graph = _build_host_graph(
         host.host_view(),
@@ -574,6 +578,7 @@ def build_host_process(
                     built.config,
                     graph,
                     bundle=(bundles or {}).get(built.id),
+                    selection=(selections or {}).get(built.id),
                     environ=environ,
                     trace_exporter=trace_exporter,
                     identity=None,
@@ -599,6 +604,7 @@ def build_runner_process(
     *,
     events: EventBroker | None = None,
     bundle: BundleSnapshot | None = None,
+    selection: BindingSelection | None = None,
     environ: Mapping[str, str] | None = None,
     trace_exporter: ITraceExporter | None = None,
     platform_tracing: IPlatformTracing | None = None,
@@ -628,6 +634,7 @@ def build_runner_process(
             config,
             graph,
             bundle=bundle,
+            selection=selection,
             environ=environ,
             trace_exporter=trace_exporter,
             identity=identity,
@@ -648,6 +655,7 @@ def add_runner(
     *,
     runner_id: str,
     bundle: BundleSnapshot | None = None,
+    selection: BindingSelection | None = None,
     environ: Mapping[str, str] | None = None,
     trace_exporter: ITraceExporter | None = None,
 ) -> RunnerProcess:
@@ -656,6 +664,7 @@ def add_runner(
         config,
         host,
         bundle=bundle,
+        selection=selection,
         environ=environ,
         trace_exporter=trace_exporter,
         identity=None,
@@ -858,6 +867,7 @@ def _build_runner(
     host: HostProcess,
     *,
     bundle: BundleSnapshot | None,
+    selection: BindingSelection | None,
     environ: Mapping[str, str] | None,
     trace_exporter: ITraceExporter | None,
     identity: RunnerIdentityHolder | None,
@@ -865,7 +875,8 @@ def _build_runner(
     token: ResolvedToken | None,
     closes_host: bool,
 ) -> RunnerProcess:
-    """One runner over ``host``'s engine, its stores bound to ``runner_id`` before anything reads or writes them."""
+    """One runner over ``host``'s engine, its stores bound to ``runner_id`` before anything reads or writes them;
+    ``selection`` is the bindings its start chose, chosen here when none was."""
     if runner_id is None:
         raise ConfigError(f"runner {config.name} has no id: bind it to the hub-minted id of its [[runner]] entry")
     identity = identity or RunnerIdentityHolder()
@@ -883,19 +894,25 @@ def _build_runner(
             identity.hold(registered)
         runner_environ = os.environ if environ is None else environ
         tracing = TracingSettings.of(runner_environ)
-        harness_settings = config.harness_settings(tracing)
+        harness_settings = replace(config.harness_settings(tracing), runner_id=runner_id)
+        selection = selection or select_harness_bindings(
+            config.harness_sections, worker_env=harness_settings.worker_env, children=host.children
+        )
         telemetry_enabled = config.tracing.harness_telemetry and platform_tracing.enabled
         plan = combined_telemetry_plan(
             harness_settings,
+            selection=selection,
             bundle=bundle,
             harness_telemetry_enabled=telemetry_enabled,
             runner_environ=runner_environ,
         )
         harnesses = build_production_harness_registry(
             harness_settings,
+            selection=selection,
             executor=executor,
             process=host.process,
             children=host.children,
+            clock=clock,
             bundle=bundle,
             harness_telemetry_enabled=telemetry_enabled,
             runner_environ=runner_environ,
@@ -909,6 +926,7 @@ def _build_runner(
             clock=clock,
             probes=build_production_harness_health_probes(
                 harness_settings,
+                selection=selection,
                 spawn_roots=bound_spawn_roots(config, host.workspaces),
                 corpus=corpus,
                 children=host.children,

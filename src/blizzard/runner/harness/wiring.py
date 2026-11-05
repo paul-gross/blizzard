@@ -1,7 +1,7 @@
-"""The one harness module naming both adapter packages, :mod:`.claude_code` and :mod:`.opencode`
-(``bzh:pluggable-seams``). :data:`HARNESS_SECTION_KINDS` declares the harness order once, and
-:func:`harness_catalog` pairs each section kind with its binding's declaration by id. Importing it loads only each
-adapter's ``section`` module; a declaration's own graph loads on first use."""
+"""The one harness module naming the adapter packages, :mod:`.claude_code`, :mod:`.opencode` and :mod:`.opencode_v2`
+(``bzh:pluggable-seams``). :data:`HARNESS_SECTION_KINDS` declares the harness order once; :func:`harness_families`
+pairs each section kind with its declarations by id, several where the binary's version chooses, and a
+:class:`BindingSelection` names the one each runner composes. A declaration's own graph loads on first use."""
 
 from __future__ import annotations
 
@@ -12,11 +12,13 @@ from functools import cache
 from pathlib import Path
 from typing import Any
 
+from blizzard.foundation.clock import IClock
 from blizzard.foundation.config_keys import ConfigView
 from blizzard.foundation.roles import domain_model
 from blizzard.runner.config_table import ConfigError
 from blizzard.runner.harness.adapter import EverySpawnRootProbe, IHarnessHealthProbe
 from blizzard.runner.harness.autonomy import Autonomy
+from blizzard.runner.harness.binding_selection import HarnessFamilies, BindingSelection, select_bindings
 from blizzard.runner.harness.bundle import BundleSnapshot, HarnessLayout, HarnessSource
 from blizzard.runner.harness.claude_code.section import CLAUDE_CODE_SECTION, WORKER_SETTINGS_FILENAME
 from blizzard.runner.harness.declaration import (
@@ -28,6 +30,7 @@ from blizzard.runner.harness.declaration import (
 from blizzard.runner.harness.harness_telemetry_plan import HarnessTelemetryNames, HarnessTelemetryPlan
 from blizzard.runner.harness.internal.bundle_publisher import inspect_bundle, publish_bundle, published_snapshot
 from blizzard.runner.harness.internal.process_launcher import ProcessLauncher
+from blizzard.runner.harness.internal.version_probe import VersionProbe
 from blizzard.runner.harness.offline_compatibility import ICompatibilityCorpus
 from blizzard.runner.harness.opencode.plugin import PLUGIN_DIRNAME, PLUGIN_FILENAME
 from blizzard.runner.harness.opencode.section import OPENCODE_SECTION, OPENCODE_WORKER_CONFIG_FILENAME
@@ -101,7 +104,7 @@ class HarnessSections:
 class HarnessSettings:
     """The runner-wide values every binding is built from: the runner ``root``, the worker
     ``autonomy``, the operator bundle's ``config_dir``, the allowlisted ``worker_env``, the
-    ``transcripts_root``, and every binding's parsed ``sections``."""
+    ``transcripts_root``, every binding's parsed ``sections``, and the ``runner_id`` it is served under."""
 
     root: Path
     autonomy: Autonomy
@@ -109,31 +112,60 @@ class HarnessSettings:
     worker_env: AllowlistedEnv
     transcripts_root: str
     sections: HarnessSections
+    #: The id the runner is served under.
+    runner_id: str = ""
 
 
 @cache
-def harness_catalog() -> tuple[IHarnessDeclaration[Any], ...]:
-    """Every harness declaration, in catalog order — each adapter's graph loads on the first call."""
+def harness_families() -> HarnessFamilies:
+    """Each harness id's declarations in catalog order, the first chosen unless the binary's version names another —
+    each adapter's graph loads on the first call."""
     from blizzard.runner.harness.claude_code.declaration import CLAUDE_CODE_DECLARATION
     from blizzard.runner.harness.opencode.declaration import OPENCODE_DECLARATION
+    from blizzard.runner.harness.opencode_v2.declaration import OPENCODE_V2_DECLARATION
 
-    declarations = {
-        declaration.harness_id: declaration for declaration in (CLAUDE_CODE_DECLARATION, OPENCODE_DECLARATION)
-    }
-    if set(declarations) != {kind.harness_id for kind in HARNESS_SECTION_KINDS}:
-        raise RuntimeError("every harness section kind needs exactly one declaration, and every declaration a section")
-    return tuple(declarations[kind.harness_id] for kind in HARNESS_SECTION_KINDS)
-
-
-def declared(sections: HarnessSections) -> Iterator[tuple[IHarnessDeclaration[Any], HarnessSection]]:
-    """Each declaration paired with its parsed section, in catalog order."""
-    for declaration in harness_catalog():
-        yield declaration, sections.of(declaration.harness_id)
+    families: dict[str, tuple[IHarnessDeclaration[Any], ...]] = {}
+    for declaration in (CLAUDE_CODE_DECLARATION, OPENCODE_DECLARATION, OPENCODE_V2_DECLARATION):
+        families[declaration.harness_id] = (*families.get(declaration.harness_id, ()), declaration)
+    if set(families) != {kind.harness_id for kind in HARNESS_SECTION_KINDS}:
+        raise RuntimeError("every harness section kind needs a declaration, and every declaration a section")
+    return {kind.harness_id: families[kind.harness_id] for kind in HARNESS_SECTION_KINDS}
 
 
-def enabled(sections: HarnessSections) -> Iterator[tuple[IHarnessDeclaration[Any], HarnessSection]]:
+def harness_catalog() -> tuple[IHarnessDeclaration[Any], ...]:
+    """Every harness declaration, in catalog order — each version-chosen declaration among them."""
+    return tuple(declaration for family in harness_families().values() for declaration in family)
+
+
+def select_harness_bindings(
+    sections: HarnessSections, *, worker_env: AllowlistedEnv, children: IChildProcesses
+) -> BindingSelection:
+    """The declaration each harness id binds for ``sections``, its binary's ``--version`` run once where it chooses
+    — made once when a runner is composed, and passed to everything composing it."""
+    by_id = {section.harness_id: section for section in sections}
+    return select_bindings(harness_families(), by_id, VersionProbe(children, worker_env.tool()))
+
+
+def first_bindings() -> BindingSelection:
+    """Each harness id's first declaration, for a caller composing no runner."""
+    return BindingSelection.first(harness_families())
+
+
+def declared(
+    sections: HarnessSections, selection: BindingSelection | None = None
+) -> Iterator[tuple[IHarnessDeclaration[Any], HarnessSection]]:
+    """Each chosen declaration paired with its parsed section, in catalog order; with no ``selection``, each harness
+    id's first."""
+    chosen = selection or first_bindings()
+    for harness_id in harness_families():
+        yield chosen.of(harness_id), sections.of(harness_id)
+
+
+def enabled(
+    sections: HarnessSections, selection: BindingSelection | None = None
+) -> Iterator[tuple[IHarnessDeclaration[Any], HarnessSection]]:
     """:func:`declared`, narrowed to the bindings their sections enable."""
-    return ((declaration, section) for declaration, section in declared(sections) if section.enabled)
+    return ((declaration, section) for declaration, section in declared(sections, selection) if section.enabled)
 
 
 def declared_normalizer_versions() -> tuple[str, ...]:
@@ -146,9 +178,10 @@ def configured_tiers(sections: HarnessSections) -> dict[str, tuple[tuple[str, st
     return {declaration.harness_id: section.configured_tiers for declaration, section in declared(sections)}
 
 
-def bundle_layouts() -> tuple[HarnessLayout, ...]:
-    """Every binding's bundle layout, without runner composition."""
-    return tuple(declaration.bundle_layout for declaration in harness_catalog())
+def bundle_layouts(selection: BindingSelection | None = None) -> tuple[HarnessLayout, ...]:
+    """Each harness id's bundle layout, without runner composition — its first declaration's with no ``selection``."""
+    chosen = selection or first_bindings()
+    return tuple(chosen.of(harness_id).bundle_layout for harness_id in harness_families())
 
 
 def declared_telemetry_names() -> tuple[HarnessTelemetryNames, ...]:
@@ -157,12 +190,14 @@ def declared_telemetry_names() -> tuple[HarnessTelemetryNames, ...]:
     Catalog-wide on purpose: the telemetry receiver admitting these names is one host-level singleton,
     built before any runner and serving every runner's leases, so it cannot narrow to one runner's
     enabled bindings. :func:`combined_telemetry_plan` is the per-runner, enabled-only status read."""
-    return tuple(names for declaration in harness_catalog() if (names := declaration.telemetry_names) is not None)
+    named = (declaration.telemetry_names for declaration in harness_catalog())
+    return tuple(dict.fromkeys(names for names in named if names is not None))
 
 
 def combined_telemetry_plan(
     settings: HarnessSettings,
     *,
+    selection: BindingSelection | None = None,
     bundle: BundleSnapshot | None = None,
     harness_telemetry_enabled: bool = False,
     runner_environ: Mapping[str, str] | None = None,
@@ -179,7 +214,7 @@ def combined_telemetry_plan(
         runner_environ=runner_environ,
     )
     return HarnessTelemetryPlan.combine(
-        declaration.telemetry_plan(section, shared) for declaration, section in enabled(settings.sections)
+        declaration.telemetry_plan(section, shared) for declaration, section in enabled(settings.sections, selection)
     )
 
 
@@ -200,15 +235,18 @@ def shared_inputs(
         bundle=bundle,
         harness_telemetry_enabled=harness_telemetry_enabled,
         runner_environ=runner_environ or {},
+        runner_id=settings.runner_id,
     )
 
 
 def build_production_harness_registry(
     settings: HarnessSettings,
     *,
+    selection: BindingSelection | None = None,
     executor: Executor,
     process: IProcessProbe,
     children: IChildProcesses,
+    clock: IClock,
     bundle: BundleSnapshot | None = None,
     harness_telemetry_enabled: bool = False,
     runner_environ: Mapping[str, str] | None = None,
@@ -227,15 +265,20 @@ def build_production_harness_registry(
     )
     bindings: dict[str, HarnessBinding] = {
         declaration.harness_id: declaration.binding(
-            section, shared, process=process, launcher=launcher, children=children
+            section, shared, process=process, launcher=launcher, children=children, clock=clock
         )
-        for declaration, section in enabled(settings.sections)
+        for declaration, section in enabled(settings.sections, selection)
     }
     return HarnessRegistry(bindings)
 
 
 def build_production_harness_health_probes(
-    settings: HarnessSettings, *, spawn_roots: Sequence[str], corpus: ICompatibilityCorpus, children: IChildProcesses
+    settings: HarnessSettings,
+    *,
+    selection: BindingSelection | None = None,
+    spawn_roots: Sequence[str],
+    corpus: ICompatibilityCorpus,
+    children: IChildProcesses,
 ) -> dict[str, IHarnessHealthProbe]:
     """Every enabled harness binding's own :class:`~blizzard.runner.harness.adapter.
     IHarnessHealthProbe`, symmetric with :func:`build_production_harness_registry` — checking ambient
@@ -247,7 +290,7 @@ def build_production_harness_health_probes(
             declaration.health_probe(section, shared, spawn_root=root, corpus=corpus, children=children)
             for root in roots
         )
-        for declaration, section in enabled(settings.sections)
+        for declaration, section in enabled(settings.sections, selection)
     }
     return {harness_id: each[0] if len(each) == 1 else EverySpawnRootProbe(each) for harness_id, each in probes.items()}
 
@@ -258,6 +301,7 @@ def publish_harness_bundle(
     *,
     autonomy: Autonomy = Autonomy.Dangerous,
     sections: HarnessSections | None = None,
+    selection: BindingSelection | None = None,
 ) -> BundleSnapshot:
     """Load ``config_dir`` against every binding's layout and publish it under ``runtime_root``,
     composing each binding's runner wiring in from its own section (each defaulted when
@@ -265,14 +309,14 @@ def publish_harness_bundle(
     parsed = sections or HarnessSections.defaults()
     layouts = tuple(
         declaration.publish_layout(section, autonomy=autonomy, runtime_root=runtime_root)
-        for declaration, section in declared(parsed)
+        for declaration, section in declared(parsed, selection)
     )
     return publish_bundle(config_dir, runtime_root, layouts)
 
 
-def inspect_harness_bundle(config_dir: Path) -> tuple[HarnessSource, ...]:
-    """Validate ``config_dir`` against every binding's layout without publishing."""
-    return inspect_bundle(config_dir, bundle_layouts())
+def inspect_harness_bundle(config_dir: Path, selection: BindingSelection | None = None) -> tuple[HarnessSource, ...]:
+    """Validate ``config_dir`` against each chosen binding's layout without publishing."""
+    return inspect_bundle(config_dir, bundle_layouts(selection))
 
 
 def published_harness_snapshot(runtime_root: Path) -> Path | None:
@@ -294,9 +338,12 @@ __all__ = [
     "declared_normalizer_versions",
     "declared_telemetry_names",
     "enabled",
+    "first_bindings",
     "harness_catalog",
+    "harness_families",
     "inspect_harness_bundle",
     "publish_harness_bundle",
     "published_harness_snapshot",
+    "select_harness_bindings",
     "shared_inputs",
 ]

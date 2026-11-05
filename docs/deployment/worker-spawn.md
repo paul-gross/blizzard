@@ -315,6 +315,18 @@ answer it, and `blizzard runner ask` is its lease-authenticated replacement — 
 identity" above) for OpenCode to load. Effort reasserts on every OpenCode invocation exactly as it does for Claude Code,
 for the same reason: a mint-only value would silently drop across a resume.
 
+The same section drives OpenCode 2: the configured binary's `--version`, read once as the runner starts, chooses the
+binding — a 1.x binary composes OpenCode 1 exactly as above, a `>=2.0,<3.0` binary composes OpenCode 2, and any other
+version composes OpenCode 1, whose health refuses it. A runner holds one major version until it restarts; to move one,
+stop it, upgrade OpenCode, and start it. On OpenCode 2 every turn is a `blizzard runner opencode drive` on the
+operator's own managed service, under the operator's own login and configuration: `auth_path` and `worker_config_path`
+are ignored, the runner writes no worker config and loads no plugin, and a bundle's `opencode/` directory must be empty.
+Before each launch the runner checks the service through `GET /api/info`, starts it with `opencode service start` when
+none answers, and fails the turn as a spawn failure when none answers within 30 seconds. The version it advertises and
+records on every spawn is the service's own; a launch on a service whose version changed since is refused once while the
+runner observes it afresh — a version still inside `>=2.0,<3.0` is then available again, any other unavailable until
+restart — and a binary and service of different major versions leave the capability unavailable as a config conflict.
+
 ## Compaction windows
 
 A `sessions:` entry can carry an optional compaction window facet — one of five, alongside model, effort, rotation

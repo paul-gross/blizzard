@@ -630,7 +630,11 @@ def test_both_production_bindings_pass_every_selftest_check(tmp_path: Path, spaw
         ),
     )
     harnesses = build_production_harness_registry(
-        config.harness_settings(NO_TRACING), process=LinuxProcessProbe(), executor=spawn_executor, children=CHILDREN
+        config.harness_settings(NO_TRACING),
+        process=LinuxProcessProbe(),
+        executor=spawn_executor,
+        children=CHILDREN,
+        clock=SystemClock(),
     )
     client = runner_client(create_runner_app(config, harnesses=harnesses))
 

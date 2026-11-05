@@ -33,7 +33,7 @@ from blizzard.foundation.tokens import TokenHash
 from blizzard.foundation.trace_ids import step_traceparent
 from blizzard.runner.environments.provider import AcquiredEnvironment
 from blizzard.runner.environments.worktree import IWorktreeGit
-from blizzard.runner.harness.adapter import HarnessSpawnError, WorkerHandle
+from blizzard.runner.harness.adapter import HarnessSpawnError, HarnessVersionChangedError, WorkerHandle
 from blizzard.runner.harness.capability_snapshot import HarnessCapability, HarnessVersionCache
 from blizzard.runner.harness.claude_code.adapter import ClaudeCodeAdapter
 from blizzard.runner.harness.health_cache import HARNESS_VERSION_REFRESH_SECONDS, HarnessHealthCache
@@ -2680,6 +2680,37 @@ def test_reap_orphan_requeue_removes_the_failed_leases_scratch_directory_and_cre
     assert lease is not None and lease.lease_id != "lease_1"
     assert not os.path.exists(scratch.path("lease_1"))  # the closed, orphaned lease's directory is gone
     assert os.path.isdir(scratch.path(lease.lease_id))  # the requeued fresh lease got its own
+
+
+class _VersionChangedHarness(FakeHarness):
+    def spawn(self, *args: object, **kwargs: object) -> WorkerHandle:
+        raise HarnessVersionChangedError("the service now reports version 2.2.0, not 2.1.4")
+
+
+def test_a_launch_refused_for_a_changed_version_drops_the_advertised_version(tmp_path: Path):
+    """A harness that refuses a launch because its version changed leaves the cached version to be observed afresh,
+    so the next tick advertises, and its health judges, the version the harness now runs."""
+    store = _store(tmp_path)
+    clock = FixedClock(datetime(2026, 11, 5, 12, 0, 0, tzinfo=UTC))
+    versions = HarnessVersionCache(clock=clock)
+    assert versions.get(CLAUDE_CODE_HARNESS_ID, lambda: "2.1.4") == "2.1.4"
+    harness = _VersionChangedHarness(handle=_HANDLE, verdict="pass")
+    ctx = make_context(
+        store,
+        hub=FakeHub(),
+        provider=FakeProvider({"e1": "/ws/e1"}),
+        harness=harness,
+        probe=FakeProbe(),
+        clock=clock,
+        harness_versions=versions,
+    )
+
+    with pytest.raises(HarnessVersionChangedError):
+        Spawner(ctx).spawn(
+            "ch_1", _build_envelope(), [AcquiredEnvironment(environment_id="e1", workdir="/ws/e1")], via="test"
+        )
+
+    assert versions.get(CLAUDE_CODE_HARNESS_ID, lambda: "2.2.0") == "2.2.0"
 
 
 def test_a_real_identity_handshake_failure_kills_the_launch_and_leaves_a_durably_provisional_lease(

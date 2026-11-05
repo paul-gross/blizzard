@@ -29,6 +29,10 @@ class ServiceUnavailableError(RuntimeError):
 
 
 class IServiceKeeper(Protocol):
+    def answering(self) -> ServiceIdentity | None:
+        """The answering service's identity, or ``None`` when none answers; never starts one."""
+        ...
+
     def ensure(self) -> ServiceIdentity:
         """The answering service's identity, starting one first when none answers; raises
         :class:`ServiceUnavailableError` when none answers within the bound."""
@@ -63,7 +67,7 @@ class ServiceKeeper:
             raise ServiceUnavailableError("neither XDG_STATE_HOME nor HOME locates the OpenCode service registration")
         return path
 
-    def _answering(self) -> ServiceIdentity | None:
+    def answering(self) -> ServiceIdentity | None:
         path = self._registration_file()
         try:
             _, identity = bind_service(lambda: read_registration(path), self._transport)
@@ -73,7 +77,7 @@ class ServiceKeeper:
 
     def ensure(self) -> ServiceIdentity:
         """The answering service's identity, starting one first when none answers."""
-        identity = self._answering()
+        identity = self.answering()
         if identity is not None:
             return identity
         try:
@@ -88,7 +92,7 @@ class ServiceKeeper:
             raise ServiceUnavailableError(f"cannot run `{self._binary} service start`: {exc}") from exc
         deadline = self._monotonic() + self._reach_seconds
         while True:
-            identity = self._answering()
+            identity = self.answering()
             if identity is not None:
                 return identity
             if self._monotonic() >= deadline:

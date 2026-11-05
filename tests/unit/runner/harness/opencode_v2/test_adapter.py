@@ -16,7 +16,7 @@ import pytest
 
 from blizzard.foundation.ids import Id
 from blizzard.runner.environments.provider import AcquiredEnvironment
-from blizzard.runner.harness.adapter import HarnessSpawnError, WorkerPreamble
+from blizzard.runner.harness.adapter import HarnessSpawnError, HarnessVersionChangedError, WorkerPreamble
 from blizzard.runner.harness.autonomy import Autonomy
 from blizzard.runner.harness.internal.version_probe import VersionProbe
 from blizzard.runner.harness.opencode_v2.adapter import OpenCodeTwoAdapter, window_tokens
@@ -70,15 +70,19 @@ class _Launcher:
 
 
 class _Keeper:
-    def __init__(self, *, up: bool = True) -> None:
+    def __init__(self, *, up: bool = True, version: str = "2.1.4") -> None:
         self.up = up
+        self.version = version
         self.ensured = 0
+
+    def answering(self) -> ServiceIdentity | None:
+        return ServiceIdentity("svc-1", 100, self.version) if self.up else None
 
     def ensure(self) -> ServiceIdentity:
         self.ensured += 1
         if not self.up:
             raise ServiceUnavailableError("nothing answers")
-        return ServiceIdentity("svc-1", 100, "2.1.4")
+        return ServiceIdentity("svc-1", 100, self.version)
 
 
 def _adapter(tmp_path: Path, *, keeper: _Keeper | None = None, **kwargs: Any) -> tuple[OpenCodeTwoAdapter, _Launcher]:
@@ -172,6 +176,30 @@ class _Orphaner:
 
     def orphan(self, session_id: str) -> None:
         self.orphaned.append(session_id)
+
+
+def test_the_advertised_version_is_the_services_and_the_binarys_while_none_answers(tmp_path: Path) -> None:
+    keeper = _Keeper(up=False)
+    binary = tmp_path / "opencode"
+    binary.write_text("#!/bin/sh\necho 'opencode v2.1.3'\n")
+    binary.chmod(0o755)
+    adapter, _ = _adapter(tmp_path, keeper=keeper, binary=str(binary))
+    assert adapter.observe_version() == "2.1.3"
+    keeper.up = True
+    assert adapter.observe_version() == "2.1.4"
+
+
+def test_a_launch_on_a_service_whose_version_changed_is_refused_once_then_accepted(tmp_path: Path) -> None:
+    keeper = _Keeper()
+    adapter, launcher = _adapter(tmp_path, keeper=keeper)
+    assert adapter.observe_version() == "2.1.4"
+    adapter.spawn(_envelope(), _preamble(tmp_path), None)
+    keeper.version = "2.2.0"
+    with pytest.raises(HarnessVersionChangedError, match=r"2\.2\.0, not 2\.1\.4"):
+        adapter.spawn(_envelope(), _preamble(tmp_path), None)
+    assert len(launcher.requests) == 1
+    adapter.spawn(_envelope(), _preamble(tmp_path), None)
+    assert len(launcher.requests) == 2
 
 
 def test_orphan_hands_the_session_to_the_orphaner(tmp_path: Path) -> None:

@@ -12,8 +12,7 @@ Three harnesses produce this lane's content, each behind its own `IHarnessTransc
 own on-disk JSONL session file; OpenCode 1, read via a bounded `opencode export <session-id>` subprocess
 (`OpenCodeTranscriptSource`); and OpenCode 2, read through the managed service's message listing, paged forward by
 cursor and never starting or continuing a turn (`OpenCodeTwoTranscriptSource`) — a child session ships as a subagent
-conversation under the call that spawned it. The runner does not dispatch OpenCode 2 turns yet, so that source has
-nothing to read until it does. Everything below applies to all three alike unless stated otherwise.
+conversation under the call that spawned it. Everything below applies to all three alike unless stated otherwise.
 
 `[transcripts]` `ship` defaults to false: with no table or `ship` omitted, the runner reads no session content and
 enqueues no non-final record. `ship` gates non-final records alone: every open segment still ships its final record at
