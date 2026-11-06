@@ -386,6 +386,9 @@ class _HangingAdapter:
     def orphan(self, session_id: str) -> None:
         raise AssertionError("unreachable — spawn never returns")
 
+    def reconcile(self, session_ids: Sequence[str]) -> None:
+        raise AssertionError("unreachable — spawn never returns")
+
     def judge(
         self,
         session_cwd: str,

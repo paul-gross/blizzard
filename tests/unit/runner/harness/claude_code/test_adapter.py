@@ -1616,3 +1616,17 @@ def test_with_no_declared_list_the_built_in_vocabulary_is_accepted_and_reported(
     assert adapter.resolve_model_strict(["claude-opus-5"]) == "claude-opus-5"
     assert adapter.resolve_model_strict(["gpt-5"]) is None
     assert adapter.supported_models() == ("fable", "opus", "sonnet", "haiku", "claude-*")
+
+
+def test_orphan_and_reconcile_touch_nothing_a_worker_that_owned_its_turn_took_with_it(spawn_executor: Executor) -> None:
+    probe = FakeProbe()
+    adapter = ClaudeCodeAdapter(
+        binary="claude",
+        worker_env=AllowlistedEnv.of(()),
+        process=probe,
+        launcher=ProcessLauncher(probe, executor=spawn_executor, children=CHILDREN),
+        versions=version_probe(),
+    )
+    adapter.orphan("ses_1")
+    adapter.reconcile(("ses_1", "ses_2"))
+    assert probe.killed == [] and probe.killed_groups == [] and probe.interrupted_groups == []

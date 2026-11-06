@@ -243,6 +243,13 @@ def test_orphan_hands_the_session_to_the_orphaner(tmp_path: Path) -> None:
     assert orphaner.orphaned == ["ses_1"] and launcher.requests == []
 
 
+def test_reconcile_interrupts_each_session_it_is_handed_and_no_other(tmp_path: Path) -> None:
+    orphaner = _Orphaner()
+    adapter, launcher = _adapter(tmp_path, orphaner=orphaner)
+    adapter.reconcile(("ses_1", "ses_2"))
+    assert orphaner.orphaned == ["ses_1", "ses_2"] and launcher.requests == []
+
+
 def test_models_and_efforts_resolve_and_takeover_goes_through_attend(tmp_path: Path) -> None:
     adapter, _ = _adapter(tmp_path, model_aliases=[("tier:fast", "openai/gpt-6-mini")], effort_aliases=[("x", "max")])
     assert adapter.resolve_model(["tier:fast"]) == "openai/gpt-6-mini"

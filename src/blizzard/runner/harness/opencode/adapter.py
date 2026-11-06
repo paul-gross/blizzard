@@ -555,6 +555,10 @@ class OpenCodeAdapter:
         """A no-op: the worker owns its turn's processes, so killing it stopped the turn."""
         del session_id
 
+    def reconcile(self, session_ids: Sequence[str]) -> None:
+        """A no-op: a worker that owned its turn's processes took the turn with it when it died."""
+        del session_ids
+
     def identity_env(
         self, preamble: WorkerPreamble, chunk_id: str, session_id: str, *, elicitation: bool = False
     ) -> dict[str, str]:

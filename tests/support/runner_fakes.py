@@ -1175,6 +1175,7 @@ class FakeHarness:
         self.judge_output_paths: list[str] = []  # one entry per judge (launch) call
         self.orphaned: list[str] = []  # each `orphan` call's session id, in call order
         self.orphan_error: Exception | None = None  # raised by `orphan` when set
+        self.reconciled: list[tuple[str, ...]] = []  # each `reconcile` call's session ids, in call order
         self.judge_preambles: list[WorkerPreamble | None] = []  # one entry per judge call
         self.resumed: list[tuple[str, str, str]] = []  # (session_cwd, session_id, message)
         self.resumed_identity: list[tuple[WorkerPreamble | None, str]] = []  # (preamble, chunk_id) per resume
@@ -1350,6 +1351,9 @@ class FakeHarness:
         self.orphaned.append(session_id)
         if self.orphan_error is not None:
             raise self.orphan_error
+
+    def reconcile(self, session_ids: Sequence[str]) -> None:
+        self.reconciled.append(tuple(session_ids))
 
     def identity_env(self, preamble: WorkerPreamble, chunk_id: str, session_id: str) -> dict[str, str]:
         # Mirrors the real adapter's shape: BLIZZARD_* identity on top of an

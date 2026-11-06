@@ -365,6 +365,12 @@ class OpenCodeTwoAdapter:
         service."""
         self._orphaner.orphan(session_id)
 
+    def reconcile(self, session_ids: Sequence[str]) -> None:
+        """Interrupt each session tree still running on the service after its driver died with the daemon; best effort,
+        each bounded, and never starting a service."""
+        for session_id in session_ids:
+            self._orphaner.orphan(session_id)
+
     def resume_command(
         self,
         session_cwd: str,
