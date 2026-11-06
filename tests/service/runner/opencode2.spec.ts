@@ -153,23 +153,16 @@ test('test_opencode2_takeover_hands_the_session_to_attend_and_stop_closes_the_le
   await stepUntil(runnerHost, leases, (held) => held.every((lease) => lease.state === 'closed'), { stallPasses: STALL_PASSES, progress: leaseProgress });
 });
 
-test.describe('with a service that never answers', () => {
-  test('test_opencode2_an_unreachable_service_fails_the_turn_as_a_spawn_failure', async ({ mockHub, runnerHosts }) => {
+test.describe('with a service that never registers', () => {
+  test('test_opencode2_an_unreachable_service_leaves_the_capability_unavailable_by_name', async ({ mockHub, runnerHosts }) => {
     const host = await runnerHosts.create({ runnerOpencode2Levers: ['NEVER_REGISTERED'] });
     const { runner, leases } = await seeded(mockHub, host, single('gr_opencode2_unreachable', BUILD, 0));
-    // The launch's spawn failure fails the pass it happens in; the next pass reaps the lease it left.
-    const outcomes: string[] = [];
-    let held = await leases();
-    while (!held.some((lease) => lease.state === 'closed') && outcomes.length < 4) {
-      outcomes.push((await host.step()).outcome);
-      held = await leases();
-    }
+    for (let pass = 0; pass < 3; pass += 1) await host.step();
 
-    expect(outcomes[0], 'the pass that tried the launch').toBe('failed');
-    expect(held.map((lease) => lease.state)).toEqual(['closed']);
-    expect(held[0]!.session_id, 'no session was minted on a service that never answered').toBeNull();
-    expect(host.logTail()).toContain('no OpenCode service to drive the turn on');
-    const facts = (await runner.facts({ limit: 200 })).body.items;
-    expect(facts.map((fact) => fact.kind), 'with no retry left, the chunk escalates').toContain('escalation.recorded');
+    // Health ran `opencode service start` and no service registered, so the runner offers no OpenCode capability.
+    const health = (await runner.harnessHealth()).body.items.find((item) => item.harness_id === 'opencode');
+    expect([health?.available, health?.cause], JSON.stringify(health)).toEqual([false, 'config_conflict']);
+    expect(await leases(), 'no lease was taken').toEqual([]);
+    expect(host.logTail()).toContain('no OpenCode service answers');
   });
 });

@@ -1,5 +1,6 @@
 """Keeping the managed service up: an answering service is left alone, a missing one is started with
-``opencode service start`` under the tool profile, and one that never answers fails within the bound."""
+``opencode service start`` under the tool profile unless the operator has disabled it, one that never answers fails
+within the bound, and the model listing is read from the answering service."""
 
 from __future__ import annotations
 
@@ -10,7 +11,8 @@ from typing import IO
 
 import pytest
 
-from blizzard.runner.harness.opencode_v2.service import ServiceKeeper, ServiceUnavailableError
+from blizzard.runner.harness.opencode_v2.service import ServiceDisabledError, ServiceKeeper, ServiceUnavailableError
+from blizzard.runner.harness.opencode_v2.shapes import ListedModel
 from blizzard.runner.process.child_env import AllowlistedEnv, ChildEnv
 from blizzard.runner.process.child_processes import ChildRun, ShellCommand
 from tests.support.opencode_v2_session_service import REGISTRATION, SessionService, SessionTransport
@@ -19,6 +21,7 @@ from tests.support.opencode_v2_session_service import REGISTRATION, SessionServi
 @dataclass
 class _Children:
     on_run: Callable[[], None] = lambda: None
+    disabled: str = "false\n"
     runs: list[tuple[list[str], dict[str, str]]] = field(default_factory=list[tuple[list[str], dict[str, str]]])
 
     def run(
@@ -34,6 +37,8 @@ class _Children:
     ) -> ChildRun:
         assert not isinstance(command, ShellCommand)
         self.runs.append((list(command), env.variables))
+        if list(command)[1:] == ["service", "get", "disabled"]:
+            return ChildRun(exit_code=0, stdout=self.disabled, stderr="", timed_out=False)
         self.on_run()
         return ChildRun(exit_code=0, stdout="", stderr="", timed_out=False)
 
@@ -86,9 +91,11 @@ def test_a_missing_service_is_started_under_the_tool_profile(tmp_path: Path, mon
     children = _Children(on_run=lambda: _register(tmp_path))
     keeper, _ = _keeper(tmp_path, monkeypatch, children)
     assert keeper.ensure().registration_id == REGISTRATION.id
-    argv, env = children.runs[0]
-    assert argv == ["opencode", "service", "start"]
-    assert not any(name.startswith("BLIZZARD_") for name in env)
+    assert [argv for argv, _ in children.runs] == [
+        ["opencode", "service", "get", "disabled"],
+        ["opencode", "service", "start"],
+    ]
+    assert not any(name.startswith("BLIZZARD_") for _, env in children.runs for name in env)
 
 
 def test_a_service_that_never_answers_fails_within_the_bound(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -96,3 +103,34 @@ def test_a_service_that_never_answers_fails_within_the_bound(tmp_path: Path, mon
     with pytest.raises(ServiceUnavailableError):
         keeper.ensure()
     assert clock.now >= 5.0
+
+
+def test_a_disabled_service_is_refused_by_name_and_never_started(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    children = _Children(on_run=lambda: _register(tmp_path), disabled="true\n")
+    keeper, _ = _keeper(tmp_path, monkeypatch, children)
+    assert keeper.disabled()
+    with pytest.raises(ServiceDisabledError, match="disabled"):
+        keeper.ensure()
+    assert ["opencode", "service", "start"] not in [argv for argv, _ in children.runs]
+
+
+@pytest.mark.parametrize("answer", ["false\n", "", "Unknown service config key: disabled\n"])
+def test_a_setting_that_does_not_read_true_is_not_disabled(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, answer: str
+) -> None:
+    keeper, _ = _keeper(tmp_path, monkeypatch, _Children(disabled=answer))
+    assert not keeper.disabled()
+
+
+def test_the_model_listing_is_read_from_the_answering_service(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    _register(tmp_path)
+    keeper, _ = _keeper(tmp_path, monkeypatch, _Children())
+    assert keeper.listed_models() == (ListedModel("openai", "gpt-6-luna", ("low", "high")),)
+
+
+def test_no_answering_service_lists_no_models(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    keeper, _ = _keeper(tmp_path, monkeypatch, _Children())
+    with pytest.raises(ServiceUnavailableError, match="model listing"):
+        keeper.listed_models()

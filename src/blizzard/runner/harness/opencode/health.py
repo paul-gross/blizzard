@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import sqlite3
+from contextlib import closing
 from pathlib import Path
 
 from packaging.specifiers import SpecifierSet
@@ -26,6 +28,24 @@ from blizzard.runner.harness.opencode.version import normalize_opencode_version
 _log = get_logger("blizzard.runner.harness.opencode")
 
 _HARNESS_ID = "opencode"
+#: The ``kv`` key OpenCode 2 writes into a 1.x store it has migrated in place.
+MIGRATION_KV_KEY = "migration.v1-v2"
+
+
+def store_migrated(store: Path) -> bool:
+    """Whether OpenCode 2 has migrated the store at ``store``, read without writing or locking it; a store that is
+    absent or unreadable reads as not migrated."""
+    if not store.is_file():
+        return False
+    try:
+        with closing(sqlite3.connect(f"{store.resolve().as_uri()}?mode=ro", uri=True, timeout=1.0)) as db:
+            row = db.execute("select 1 from sqlite_master where type = 'table' and name = 'kv'").fetchone()
+            return (
+                row is not None
+                and db.execute("select 1 from kv where key = ?", (MIGRATION_KV_KEY,)).fetchone() is not None
+            )
+    except sqlite3.Error:
+        return False
 
 
 def _degradations_from_manifest(corpus: ICompatibilityCorpus, version: str) -> tuple[DeclaredDegradation, ...]:
@@ -59,9 +79,16 @@ class OpenCodeHealthProbe:
     Dumb, like the adapter it stands beside: reports evidence, never decides availability."""
 
     def __init__(
-        self, binary: str = "opencode", *, auth_path: Path | None, corpus: ICompatibilityCorpus, versions: VersionProbe
+        self,
+        binary: str = "opencode",
+        *,
+        auth_path: Path | None,
+        corpus: ICompatibilityCorpus,
+        versions: VersionProbe,
+        store_path: Path | None = None,
     ) -> None:
         self._binary = binary
+        self._store_path = store_path
         self._versions = versions
         # `None` reads as no credential.
         self._auth_path = auth_path
@@ -92,7 +119,14 @@ class OpenCodeHealthProbe:
             return False
 
     def config_conflicts(self) -> tuple[str, ...]:
-        return ()
+        """A store OpenCode 2 has migrated beneath this runner: nothing OpenCode 1 writes to it afterward reaches
+        OpenCode 2, so the binding refuses rather than let the two views diverge."""
+        if self._store_path is None or not store_migrated(self._store_path):
+            return ()
+        return (
+            f"the OpenCode store {self._store_path} was migrated to OpenCode 2 (kv {MIGRATION_KV_KEY});"
+            " upgrade the runner's OpenCode to 2 and restart it",
+        )
 
     def supported_version(self) -> SpecifierSet:
         return ADMITTED_OPENCODE_RANGE
@@ -121,4 +155,4 @@ class OpenCodeHealthProbe:
 _harness_health_probe_conforms: type[IHarnessHealthProbe] = OpenCodeHealthProbe
 
 
-__all__ = ["OpenCodeHealthProbe"]
+__all__ = ["MIGRATION_KV_KEY", "OpenCodeHealthProbe", "store_migrated"]

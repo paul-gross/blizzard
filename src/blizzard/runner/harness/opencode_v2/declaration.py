@@ -141,6 +141,8 @@ class OpenCodeTwoDeclaration:
             hold=version_hold(section.binary),
             corpus=corpus,
             versions=VersionProbe(children, shared.worker_env.tool()),
+            model_aliases=section.model_aliases,
+            effort_aliases=section.effort_aliases,
         )
 
     def publish_layout(

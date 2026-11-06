@@ -154,6 +154,16 @@ def test_an_observed_version_change_forces_an_immediate_recompute() -> None:
     assert probe.calls == 2
 
 
+def test_an_invalidated_harness_recomputes_on_its_next_refresh_with_nothing_changed() -> None:
+    clock = FixedClock(_NOW)
+    probe = _FakeProbe()
+    cache = _cache(probe, _FakeSelftestResults(), clock=clock)
+    cache.refresh(_HARNESS_ID, adapter=_FakeAdapter(), observed_version="1.0")
+    cache.invalidate(_HARNESS_ID)
+    cache.refresh(_HARNESS_ID, adapter=_FakeAdapter(), observed_version="1.0")
+    assert probe.calls == 2
+
+
 def test_a_new_selftest_result_forces_an_immediate_recompute() -> None:
     clock = FixedClock(_NOW)
     probe = _FakeProbe()

@@ -26,7 +26,7 @@ from blizzard.runner.harness.opencode_v2.errors import ErrorKind, TurnError
 from blizzard.runner.harness.opencode_v2.request import DriveKind, DriveRequest
 from blizzard.runner.harness.opencode_v2.result import Outcome, ResultWriter, Step
 from blizzard.runner.harness.opencode_v2.service import ServiceUnavailableError
-from blizzard.runner.harness.opencode_v2.shapes import Tokens
+from blizzard.runner.harness.opencode_v2.shapes import ListedModel, Tokens
 from blizzard.runner.harness.opencode_v2.version_hold import VersionHold
 from blizzard.runner.harness.process_launch import LaunchedProcess
 from blizzard.runner.node_steps.envelope import Envelope
@@ -84,6 +84,12 @@ class _Keeper:
         if not self.up:
             raise ServiceUnavailableError("nothing answers")
         return ServiceIdentity("svc-1", 100, self.version)
+
+    def disabled(self) -> bool:
+        return False
+
+    def listed_models(self) -> tuple[ListedModel, ...]:
+        raise AssertionError("the adapter leaves the model listing to its driver")
 
 
 def _adapter(

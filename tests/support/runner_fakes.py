@@ -51,6 +51,7 @@ from blizzard.runner.harness.adapter import (
 )
 from blizzard.runner.harness.capability_snapshot import HarnessCapability, HarnessVersionCache
 from blizzard.runner.harness.health import HarnessHealthResult
+from blizzard.runner.harness.health_cache import HarnessHealthCache
 from blizzard.runner.harness.identity import CLAUDE_CODE_HARNESS_ID
 from blizzard.runner.harness.overload import ProviderOverload
 from blizzard.runner.harness.registry import HarnessBinding, HarnessRegistry
@@ -1682,6 +1683,7 @@ def make_context(
     subscriptions: tuple[ResolvedSubscription, ...] = (),
     chunk_views: IChunkViews | None = None,
     harness_versions: HarnessVersionCache | None = None,
+    harness_health: HarnessHealthCache | None = None,
     worker_scratch: WorkerScratchDirs | None = None,
     registered: bool = True,
     identity_verdict: IdentityVerdictHolder | None = None,
@@ -1801,6 +1803,7 @@ def make_context(
         events=publisher,
         harnesses=_harnesses,
         harness_versions=harness_versions,
+        harness_health=harness_health,
     )
     return context
 

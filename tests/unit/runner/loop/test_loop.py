@@ -2705,6 +2705,43 @@ def test_reap_orphan_requeue_removes_the_failed_leases_scratch_directory_and_cre
     assert os.path.isdir(scratch.path(lease.lease_id))  # the requeued fresh lease got its own
 
 
+class _CountingHealthProbe:
+    """A healthy probe counting the evaluations it was asked for."""
+
+    def __init__(self) -> None:
+        self.calls = 0
+
+    def binary_present(self) -> bool:
+        self.calls += 1
+        return True
+
+    def probe_authentication(self) -> bool:
+        return True
+
+    def config_conflicts(self) -> tuple[str, ...]:
+        return ()
+
+    def supported_version(self) -> None:
+        return None
+
+    def supported_version_display(self) -> None:
+        return None
+
+    def normalize_version(self, raw: str | None) -> str | None:
+        return raw
+
+    def classifies_offline(self) -> bool:
+        return False
+
+    def declared_degradations(self) -> tuple[()]:
+        return ()
+
+
+class _ResolvesAll:
+    def resolve_model_strict(self, preferences: object) -> str | None:
+        return "native"
+
+
 class _VersionChangedHarness(FakeHarness):
     def spawn(self, *args: object, **kwargs: object) -> WorkerHandle:
         raise HarnessVersionChangedError("the service now reports version 2.2.0, not 2.1.4")
@@ -2712,11 +2749,17 @@ class _VersionChangedHarness(FakeHarness):
 
 def test_a_launch_refused_for_a_changed_version_drops_the_advertised_version(tmp_path: Path):
     """A harness that refuses a launch because its version changed leaves the cached version to be observed afresh,
-    so the next tick advertises, and its health judges, the version the harness now runs."""
+    so the next tick advertises the version the harness now runs, and recalculates its health even when that version
+    reads back unchanged."""
     store = _store(tmp_path)
     clock = FixedClock(datetime(2026, 11, 5, 12, 0, 0, tzinfo=UTC))
     versions = HarnessVersionCache(clock=clock)
     assert versions.get(CLAUDE_CODE_HARNESS_ID, lambda: "2.1.4") == "2.1.4"
+    probe = _CountingHealthProbe()
+    health = HarnessHealthCache(
+        clock=clock, probes={CLAUDE_CODE_HARNESS_ID: probe}, corpus=CommittedCorpus(), selftest_results=None
+    )
+    health.refresh(CLAUDE_CODE_HARNESS_ID, adapter=_ResolvesAll(), observed_version="2.1.4")
     harness = _VersionChangedHarness(handle=_HANDLE, verdict="pass")
     ctx = make_context(
         store,
@@ -2726,6 +2769,7 @@ def test_a_launch_refused_for_a_changed_version_drops_the_advertised_version(tmp
         probe=FakeProbe(),
         clock=clock,
         harness_versions=versions,
+        harness_health=health,
     )
 
     with pytest.raises(HarnessVersionChangedError):
@@ -2734,6 +2778,8 @@ def test_a_launch_refused_for_a_changed_version_drops_the_advertised_version(tmp
         )
 
     assert versions.get(CLAUDE_CODE_HARNESS_ID, lambda: "2.2.0") == "2.2.0"
+    health.refresh(CLAUDE_CODE_HARNESS_ID, adapter=_ResolvesAll(), observed_version="2.1.4")
+    assert probe.calls == 2
 
 
 def test_a_real_identity_handshake_failure_kills_the_launch_and_leaves_a_durably_provisional_lease(

@@ -82,7 +82,7 @@ class HarnessHealthCache:
     ) -> HarnessHealthResult | None:
         """Recompute (or reuse) ``harness_id``'s health; ``None`` for a harness this
         composition wired no health probe for. Recomputes when the refresh window elapses,
-        the observed version changes, or a new selftest result lands — never merely because
+        the observed version changes, a new selftest result lands, or :meth:`invalidate` asked — never merely because
         a peek asked; the first call for a harness always computes, since an empty cache is
         always stale (covering "at daemon start" with no separate startup hook)."""
         probe = self.probes.get(harness_id)
@@ -129,6 +129,11 @@ class HarnessHealthCache:
         self._last_version[harness_id] = observed_version
         self._last_selftest[harness_id] = selftest_marker
         return result
+
+    def invalidate(self, harness_id: str) -> None:
+        """Have the next :meth:`refresh` for ``harness_id`` recompute whatever it observes — a launch refused because
+        the harness's version changed may find the version back where it was."""
+        self._computed_at.pop(harness_id, None)
 
     def get(self, harness_id: str) -> HarnessHealthResult | None:
         """The last-computed result, or ``None`` when :meth:`refresh` has never run for

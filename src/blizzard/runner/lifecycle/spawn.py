@@ -29,6 +29,7 @@ from blizzard.runner.harness.adapter import (
     WorkerPreamble,
 )
 from blizzard.runner.harness.capability_snapshot import HarnessVersionCache, default_harness_id
+from blizzard.runner.harness.health_cache import HarnessHealthCache
 from blizzard.runner.harness.identity import SessionReference
 from blizzard.runner.harness.preamble import Preamble
 from blizzard.runner.harness.registry import IHarnessRegistry, UnavailableHarnessError, UnknownHarnessError
@@ -207,6 +208,8 @@ class SpawnContext(TranscriptPumpContext, GateContext, OrphanContext, Protocol):
     def harnesses(self) -> IHarnessRegistry: ...
     @property
     def harness_versions(self) -> HarnessVersionCache | None: ...
+    @property
+    def harness_health(self) -> HarnessHealthCache | None: ...
     @property
     def hub(self) -> IHubClient: ...
     @property
@@ -593,12 +596,14 @@ class Spawner:
     @contextmanager
     def reobserving_a_changed_version(self, harness_id: str) -> Generator[None]:
         """A launch inside refused because ``harness_id``'s version changed since it was advertised has the next
-        snapshot observe it afresh."""
+        snapshot observe it afresh and recalculate its availability."""
         try:
             yield
         except HarnessVersionChangedError:
             if self.ctx.harness_versions is not None:
                 self.ctx.harness_versions.forget(harness_id)
+            if self.ctx.harness_health is not None:
+                self.ctx.harness_health.invalidate(harness_id)
             raise
 
     def generation(self, lease_id: str) -> int:

@@ -24,7 +24,7 @@ from blizzard.runner.harness.opencode.bundle import OPENCODE_BUNDLE_LAYOUT, open
 from blizzard.runner.harness.opencode.compatibility.probe import ADMITTED_OPENCODE_RANGE
 from blizzard.runner.harness.opencode.health import OpenCodeHealthProbe
 from blizzard.runner.harness.opencode.model_limits import FileOpenCodeModelLimitsCatalog
-from blizzard.runner.harness.opencode.paths import resolve_opencode_auth_path
+from blizzard.runner.harness.opencode.paths import resolve_opencode_auth_path, resolve_opencode_store_path
 from blizzard.runner.harness.opencode.permissions.permission_resolver import SubprocessOpenCodePermissionResolver
 from blizzard.runner.harness.opencode.plugin import (
     PLUGIN_DIRNAME,
@@ -146,6 +146,7 @@ class OpenCodeDeclaration:
             auth_path=auth_path,
             corpus=corpus,
             versions=VersionProbe(children, shared.worker_env.tool()),
+            store_path=resolve_opencode_store_path(shared.worker_env.variables),
         )
 
     def publish_layout(self, section: OpenCodeSection, *, autonomy: Autonomy, runtime_root: Path) -> HarnessLayout:
