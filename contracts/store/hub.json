@@ -1,5 +1,5 @@
 {
-  "head_revision": "20261105_1300_cadences",
+  "head_revision": "20261106_0900_errand_marks",
   "store": "hub",
   "tables": {
     "answer_deliveries": {
@@ -7245,6 +7245,12 @@
     "routine_scopes": {
       "checks": [],
       "columns": {
+        "linked_at": {
+          "deprecated": null,
+          "nullable": true,
+          "server_default": false,
+          "type": "DateTime"
+        },
         "routine_id": {
           "deprecated": null,
           "nullable": false,
@@ -9529,6 +9535,18 @@
     "work_item_runs": {
       "checks": [],
       "columns": {
+        "cadence_id": {
+          "deprecated": null,
+          "nullable": true,
+          "server_default": false,
+          "type": "String"
+        },
+        "chore_id": {
+          "deprecated": null,
+          "nullable": true,
+          "server_default": false,
+          "type": "String"
+        },
         "mode": {
           "deprecated": null,
           "nullable": false,

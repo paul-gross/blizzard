@@ -410,6 +410,12 @@ class IReadRoutineScopeRepository(Protocol):
         its list empty when nothing links to it."""
         ...
 
+    def links_for(self, routine_ids: Sequence[str]) -> dict[str, dict[str, datetime | None]]:
+        """Every link of ``routine_ids`` in one read, by routine id then scope slug in slug order, each beside when
+        it was made — ``None`` for a link made before links were stamped; each id present, its map empty when
+        nothing links to it."""
+        ...
+
     def list_routines(self, scope_id: str) -> list[str]:
         """Every routine id linked to the scope ``scope_id``, sorted — the reverse direction
         of :meth:`list_scopes`."""

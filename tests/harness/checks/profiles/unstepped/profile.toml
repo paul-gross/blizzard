@@ -12,3 +12,6 @@ mode = "stepped"
 
 [sweeps.trace_export]
 mode = "stepped"
+
+[sweeps.cadence]
+mode = "stepped"

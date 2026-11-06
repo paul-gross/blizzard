@@ -6,7 +6,7 @@ from __future__ import annotations
 import pytest
 
 from blizzard.hub.store import schema as s
-from blizzard.hub.store.internal import chunk_events_store, chunk_facts_store, corpus_rows
+from blizzard.hub.store.internal import chunk_events_store, chunk_fact_loading, corpus_rows
 from blizzard.hub.store.internal.fact_families import EXCLUDED, FACT_TABLES, Projection, families, tables
 
 pytestmark = pytest.mark.unit
@@ -46,13 +46,13 @@ def test_each_table_is_registered_once() -> None:
 
 
 def test_the_facts_load_has_a_mapper_for_each_family_the_registry_carries() -> None:
-    assert chunk_facts_store.LOADED_FAMILIES == families(Projection.FACTS) == chunk_facts_store.ALL_FAMILIES
+    assert chunk_fact_loading.LOADED_FAMILIES == families(Projection.FACTS) == chunk_fact_loading.ALL_FAMILIES
 
 
 def test_the_status_families_are_among_the_loaded_ones() -> None:
-    assert chunk_facts_store.STATUS_FAMILIES <= chunk_facts_store.ALL_FAMILIES
-    assert chunk_facts_store.TICK_STATUS_FAMILIES <= chunk_facts_store.ALL_FAMILIES
-    assert chunk_facts_store.MOVEMENT_FAMILIES <= chunk_facts_store.ALL_FAMILIES
+    assert chunk_fact_loading.STATUS_FAMILIES <= chunk_fact_loading.ALL_FAMILIES
+    assert chunk_fact_loading.TICK_STATUS_FAMILIES <= chunk_fact_loading.ALL_FAMILIES
+    assert chunk_fact_loading.MOVEMENT_FAMILIES <= chunk_fact_loading.ALL_FAMILIES
 
 
 def test_the_trace_reads_the_tables_the_registry_says() -> None:

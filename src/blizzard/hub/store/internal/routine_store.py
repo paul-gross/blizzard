@@ -67,9 +67,10 @@ def _columns(stmts: ScopedStatements, routine: Routine) -> dict[str, object]:
     }
 
 
-def link_scope(conn: Connection, routine: Routine, scope_slug: str) -> None:
+def link_scope(conn: Connection, routine: Routine, scope_slug: str, *, at: datetime) -> None:
     """Link the scope ``scope_slug`` names in ``routine``'s project into its set inside the
-    caller's transaction; a no-op when already linked."""
+    caller's transaction, stamping ``linked_at`` with ``at``; a no-op, keeping the first stamp,
+    when already linked."""
     stmts = statements_of(conn)
     links = stmts.scope_join(routine_scopes, scopes, routine_scopes.c.scope_id == scopes.c.scope_id)
     linked = conn.execute(
@@ -82,7 +83,9 @@ def link_scope(conn: Connection, routine: Routine, scope_slug: str) -> None:
     if linked is None:
         conn.execute(
             stmts.insert(routine_scopes).values(
-                routine_id=routine.routine_id, scope_id=scope_id_of(stmts, scope_slug, routine.project_id)
+                routine_id=routine.routine_id,
+                scope_id=scope_id_of(stmts, scope_slug, routine.project_id),
+                linked_at=at,
             )
         )
 
@@ -117,14 +120,14 @@ def insert_routine(conn: Connection, routine: Routine, change: ConfigChange) -> 
             revision=routine.revision,
         )
     )
-    link_scope(conn, routine, routine.default_scope_slug)
+    link_scope(conn, routine, routine.default_scope_slug, at=change.recorded_at)
     append_change(conn, change)
 
 
 def update_routine(conn: Connection, routine: Routine, from_revision: int, change: ConfigChange) -> None:
     """The edit body, inside the caller's transaction: the compare-and-set, the default-scope link, the change."""
     move_revision(conn, routine, from_revision, **_columns(statements_of(conn), routine))
-    link_scope(conn, routine, routine.default_scope_slug)
+    link_scope(conn, routine, routine.default_scope_slug, at=change.recorded_at)
     append_change(conn, change)
 
 
@@ -164,7 +167,7 @@ def set_linked_scopes(
         )
     )
     for slug in linked:
-        link_scope(conn, routine, slug)
+        link_scope(conn, routine, slug, at=change.recorded_at)
     append_change(conn, change)
 
 

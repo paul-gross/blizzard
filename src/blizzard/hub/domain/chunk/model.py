@@ -68,12 +68,13 @@ def decide_close_enqueue(refs: Sequence[WorkRef], closer_available: Callable[[st
 
 
 class WorkItemAuthorKind(StrEnum):
-    """Who filed a hub-owned work item — a hub user by id, or the fleet
-    itself. Persisted as ``work_items.author_kind`` plus a JSON payload
+    """Who filed a hub-owned work item — a hub user by id, the fleet
+    itself, or a cadence's chore. Persisted as ``work_items.author_kind`` plus a JSON payload
     (``bzh:sql-portable``), never a DB enum."""
 
     USER = "user"
     FLEET = "fleet"
+    CADENCE = "cadence"
 
 
 @domain_model
@@ -82,13 +83,16 @@ class WorkItemAuthor:
     """One hub-owned work item's author — the variant :class:`WorkItemAuthorKind`
     discriminates. ``user_id`` is set only for :attr:`WorkItemAuthorKind.USER`;
     ``runner_id``/``chunk_id``/``node_name`` — the proposing runner, chunk, and node —
-    are set only for :attr:`WorkItemAuthorKind.FLEET`."""
+    are set only for :attr:`WorkItemAuthorKind.FLEET`; ``cadence_id``/``chore_id`` — the minting
+    cadence and its chore — are set only for :attr:`WorkItemAuthorKind.CADENCE`."""
 
     kind: WorkItemAuthorKind
     user_id: str | None = None
     runner_id: str | None = None
     chunk_id: str | None = None
     node_name: str | None = None
+    cadence_id: str | None = None
+    chore_id: str | None = None
 
     @classmethod
     def user(cls, user_id: str) -> WorkItemAuthor:
@@ -97,6 +101,19 @@ class WorkItemAuthor:
     @classmethod
     def fleet(cls, *, runner_id: str, chunk_id: str, node_name: str) -> WorkItemAuthor:
         return cls(kind=WorkItemAuthorKind.FLEET, runner_id=runner_id, chunk_id=chunk_id, node_name=node_name)
+
+    @classmethod
+    def cadence(cls, cadence_id: str, chore_id: str) -> WorkItemAuthor:
+        return cls(kind=WorkItemAuthorKind.CADENCE, cadence_id=cadence_id, chore_id=chore_id)
+
+
+@domain_model
+@dataclass(frozen=True)
+class ErrandMark:
+    """The cadence errand a run was minted for — the cadence and its chore; the run's scope completes the errand."""
+
+    cadence_id: str
+    chore_id: str
 
 
 @domain_model
@@ -1400,6 +1417,11 @@ class ChunkFacts:
         route, not landed on a hub node — so a pause is the only thing withholding it
         from the ready queue. Answered by :meth:`status` itself, never a recomposed branch."""
         return replace(self, pauses=[]).status() is ChunkStatus.READY
+
+    def started_at(self) -> datetime | None:
+        """The instant the chunk's work first began — its earliest lease mint — or ``None`` when no
+        lease was ever minted."""
+        return min((lease.minted_at for lease in self.leases), default=None)
 
     def completed_at(self) -> datetime | None:
         """The instant a terminal chunk finished, or ``None`` — render-only,

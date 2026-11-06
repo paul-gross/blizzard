@@ -11,6 +11,7 @@ from blizzard.foundation.hub_event_types import ChunkChangeCause
 from blizzard.foundation.roles import dto
 from blizzard.hub.composition import TenantServices
 from blizzard.hub.delivery.flow_driver import ITurnRunner
+from blizzard.hub.domain.cadence.mint import MintedErrand
 from blizzard.hub.domain.chunk.model import Chunk, ChunkChange, ChunkFacts
 from blizzard.hub.domain.delivery.flows import Submission, Turn
 from blizzard.hub.domain.graph.model import Graph
@@ -225,3 +226,11 @@ class AnnouncedTurns:
         moved = change.facts is None or len(state.facts.transitions) != len(change.facts.transitions)
         if moved or state.facts.status().value != change.prev_status:
             change.publish_from(state, cause="hub-advanced")
+
+
+def announce_minted(services: TenantServices, minted: MintedErrand) -> None:
+    """Publish a committed cadence mint as a hand-started run's mint is published: its chunk's ``minted`` frame,
+    and the queue's change, since the chunk joins a list."""
+    chunk_id = minted.chunk.chunk_id
+    ChunkChanged.of(services, chunk_id, prev_status=None).publish(cause="minted", key=f"chunks:{chunk_id}")
+    services.events.publish_queue_changed()

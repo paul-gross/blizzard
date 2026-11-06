@@ -204,6 +204,36 @@ def test_pending_close_intents_are_the_open_tenants_rows_each_with_its_tenant(wo
     assert rows == {(world.carried, _live(world.carried)), (_OPEN, _live(_OPEN))}
 
 
+def _cadence(world: _World, tenant: TenantId, cadence_id: str, *retired: bool) -> None:
+    """A cadence of ``tenant`` whose lifecycle facts read ``retired`` in order, newest last."""
+    world.insert(
+        s.cadences,
+        tenant_id=tenant,
+        project_id=f"proj_{tenant}" if tenant != world.carried else default_project(world.engine, tenant),
+        cadence_id=cadence_id,
+        slug=cadence_id,
+        name=cadence_id,
+        spacing_minutes=60,
+        created_at=_AT,
+    )
+    for fact in retired:
+        world.insert(
+            s.cadence_lifecycle_facts, tenant_id=tenant, cadence_id=cadence_id, retired=fact, set_at=_AT, set_by="t"
+        )
+
+
+def test_tenants_with_live_cadences_are_the_open_tenants_holding_one_not_retired(world: _World) -> None:
+    _cadence(world, world.carried, "cad_retired", True)
+    _cadence(world, world.carried, "cad_enabled_again", True, False)
+    _cadence(world, _OPEN, "cad_retired_open", False, True)
+    _cadence(world, _CLOSED, "cad_closed", False)
+
+    assert world.corpus.tenants_with_live_cadences() == [world.carried]
+
+    _cadence(world, _OPEN, "cad_never_braked")
+    assert world.corpus.tenants_with_live_cadences() == sorted([world.carried, _OPEN])
+
+
 def test_pending_close_intents_count_no_deferred_attempt_and_carry_its_resume_at(world: _World) -> None:
     [intent] = [row.intent for row in world.corpus.pending_close_intents() if row.tenant == _OPEN]
     resume_at = _AT + timedelta(minutes=5)
@@ -496,6 +526,7 @@ def test_every_corpus_statement_carries_the_hub_scoped_marker(world: _World) -> 
         world.corpus.live_work_refs()
         world.corpus.live_work_refs_signature()
         world.corpus.pending_close_intents()
+        world.corpus.tenants_with_live_cadences()
         world.corpus.derivation_signature()
         world.corpus.candidacy(_EXTRACTOR)
         world.corpus.derived_segment_ids()

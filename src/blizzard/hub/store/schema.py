@@ -762,6 +762,8 @@ routine_scopes = Table(
     Column("routine_id", String, ForeignKey("routines.routine_id"), nullable=False),
     Column("scope_id", String, ForeignKey("scopes.scope_id", name="fk_routine_scopes_scopes"), nullable=False),
     Column("tenant_id", String, ForeignKey("tenants.tenant_id", name="fk_routine_scopes_tenant_id"), nullable=False),
+    # When the scope was linked; null for a link written before the stamp existed, read as linked before any chore.
+    Column("linked_at", UtcDateTime, nullable=True),
     PrimaryKeyConstraint("routine_id", "scope_id", name="pk_routine_scopes"),
 )
 
@@ -2986,7 +2988,7 @@ work_items = Table(
     # Discriminator + one JSON payload read whole, matching artifacts.kind/data and
     # transcript_events.kind/payload (`bzh:sql-portable`) — a hub user by id, or the
     # fleet itself.
-    Column("author_kind", String, nullable=False),  # user | fleet
+    Column("author_kind", String, nullable=False),  # user | fleet | cadence
     Column("author_payload", Text, nullable=False),  # JSON object, author_kind-shaped
     # A plain, comment-documented value set rather than a DB enum (`bzh:sql-portable`):
     # low | normal | high. Null — the author stated none.
@@ -3022,8 +3024,17 @@ work_item_runs = Table(
     Column("mode", String, nullable=False),
     Column("tenant_id", String, ForeignKey("tenants.tenant_id", name="fk_work_item_runs_tenant_id"), nullable=False),
     Column("project_id", String, ForeignKey("projects.project_id", name="fk_work_item_runs_projects"), nullable=False),
+    # The cadence errand that minted the run — both set or both null; null for a hand-started run.
+    Column("cadence_id", String, nullable=True),
+    Column("chore_id", String, nullable=True),
 )
 Index("ix_work_item_runs_tenant_id", work_item_runs.c.tenant_id)
+Index(
+    "ix_work_item_runs_tenant_chore_scope",
+    work_item_runs.c.tenant_id,
+    work_item_runs.c.chore_id,
+    work_item_runs.c.scope_id,
+)
 
 # A per-source allocation counter, one row per source, so ``ref`` allocation never
 # reads ``MAX(ref)+1`` (two concurrent first allocations on an empty source would both

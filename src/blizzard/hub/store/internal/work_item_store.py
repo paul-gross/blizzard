@@ -21,6 +21,7 @@ from blizzard.foundation.work_items import WorkItemClosure
 from blizzard.hub.domain.chunk.ingest import IWorkItemProjectRead
 from blizzard.hub.domain.chunk.model import (
     Chunk,
+    ErrandMark,
     HubWorkItem,
     WorkItemAuthor,
     WorkItemAuthorKind,
@@ -154,12 +155,15 @@ class WorkItemStore:
         project_id: str,
         at: datetime,
         chunk: Chunk,
+        errand: ErrandMark | None = None,
+        transaction: Transaction | None = None,
     ) -> HubWorkItem:
         """:meth:`create_with_chunk` plus the run's own identity row
-        (:func:`~blizzard.hub.store.internal.run_context_store.insert_run_context_row`) and
-        the item's run columns, on one ``engine.begin()`` connection — a routine run's own
-        one-act mint. No promote rows are written: the chunk rests ``not_ready``."""
-        with self._store.write("create_run_with_chunk") as conn:
+        (:func:`~blizzard.hub.store.internal.run_context_store.insert_run_context_row`), marked
+        with ``errand`` when given, and the item's run columns, on one connection — the caller's
+        ``transaction`` when it passes one, else a write of its own: a routine run's own one-act
+        mint. No promote rows are written: the chunk rests ``not_ready``."""
+        with connection_in(self._store, transaction, "create_run_with_chunk", write=True) as conn:
             work_item_id = self._insert_item(
                 conn,
                 source=pointer.source,
@@ -178,7 +182,13 @@ class WorkItemStore:
             insert_run_context_row(
                 conn,
                 work_item_id,
-                RunContext(routine_name=routine_name, scope_slug=scope_slug, mode=run_mode, project_id=project_id),
+                RunContext(
+                    routine_name=routine_name,
+                    scope_slug=scope_slug,
+                    mode=run_mode,
+                    project_id=project_id,
+                    errand=errand,
+                ),
             )
         record = HubWorkItem(
             work_item_id=work_item_id,
@@ -218,11 +228,7 @@ class WorkItemStore:
         ``routine_name``/``scope_slug``/``run_mode`` are a routine run's own indexed
         values — ``None`` for every other item."""
         work_item_id = Id.mint_at(IdPrefix.WORK_ITEM, at).value
-        author_payload = (
-            {"user_id": author.user_id}
-            if author.kind is WorkItemAuthorKind.USER
-            else {"runner_id": author.runner_id, "chunk_id": author.chunk_id, "node_name": author.node_name}
-        )
+        author_payload = _author_payload(author)
         conn.execute(
             statements_of(conn)
             .insert(s.work_items)
@@ -372,13 +378,7 @@ class WorkItemStore:
     def _record(row: Row[Any]) -> HubWorkItem:
         payload = json.loads(row.author_payload)
         author_kind = WorkItemAuthorKind(row.author_kind)
-        author = (
-            WorkItemAuthor.user(payload["user_id"])
-            if author_kind is WorkItemAuthorKind.USER
-            else WorkItemAuthor.fleet(
-                runner_id=payload["runner_id"], chunk_id=payload["chunk_id"], node_name=payload["node_name"]
-            )
-        )
+        author = _author_of(author_kind, payload)
         return HubWorkItem(
             work_item_id=row.work_item_id,
             source=row.source,
@@ -396,6 +396,30 @@ class WorkItemStore:
             run_mode=row.run_mode,
             project_id=row.project_id,
         )
+
+
+def _author_payload(author: WorkItemAuthor) -> dict[str, str | None]:
+    """``author``'s ``author_payload`` JSON object, shaped by its kind."""
+    match author.kind:
+        case WorkItemAuthorKind.USER:
+            return {"user_id": author.user_id}
+        case WorkItemAuthorKind.FLEET:
+            return {"runner_id": author.runner_id, "chunk_id": author.chunk_id, "node_name": author.node_name}
+        case WorkItemAuthorKind.CADENCE:
+            return {"cadence_id": author.cadence_id, "chore_id": author.chore_id}
+
+
+def _author_of(kind: WorkItemAuthorKind, payload: dict[str, Any]) -> WorkItemAuthor:
+    """The author an ``author_kind`` and its decoded ``author_payload`` name."""
+    match kind:
+        case WorkItemAuthorKind.USER:
+            return WorkItemAuthor.user(payload["user_id"])
+        case WorkItemAuthorKind.FLEET:
+            return WorkItemAuthor.fleet(
+                runner_id=payload["runner_id"], chunk_id=payload["chunk_id"], node_name=payload["node_name"]
+            )
+        case WorkItemAuthorKind.CADENCE:
+            return WorkItemAuthor.cadence(payload["cadence_id"], payload["chore_id"])
 
 
 _work_item_store_conforms: type[IWriteWorkItemRepository] = WorkItemStore

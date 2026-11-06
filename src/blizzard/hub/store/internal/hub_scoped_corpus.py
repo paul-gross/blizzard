@@ -22,6 +22,7 @@ from typing import Any
 
 from sqlalchemy import CompoundSelect, Connection, Select, Table, and_, func, literal, null
 
+from blizzard.hub.domain.cadence.ports import IReadCadenceCorpus
 from blizzard.hub.domain.chunk.model import PendingCloseIntent, WorkRef, WorkRefLabel
 from blizzard.hub.domain.chunk.ports.work_refs import IReadWorkRefsCorpus, TenantWorkRef, WorkRefsSignature
 from blizzard.hub.domain.config.changes import RecordKind
@@ -188,6 +189,24 @@ class SweepCorpusReads:
             TenantId(tenant): tuple((table.name, *by_table.get(table.name, (0, None))) for table in tables)
             for tenant, by_table in seen.items()
         }
+
+    # --- cadence sweep ----------------------------------------------------------------
+
+    def tenants_with_live_cadences(self) -> list[TenantId]:
+        """Every open tenant holding a cadence whose newest lifecycle fact, if it has one, is not retiring."""
+        facts, cadences = s.cadence_lifecycle_facts, s.cadences
+        newest = OPEN_TENANTS.select(facts, func.max(facts.c.id)).group_by(facts.c.cadence_id)
+        retired = OPEN_TENANTS.select(facts, facts.c.cadence_id).where(
+            facts.c.id.in_(newest), facts.c.retired.is_(True)
+        )
+        with self._read("corpus tenants with live cadences") as conn:
+            rows = conn.execute(
+                OPEN_TENANTS.select(cadences, cadences.c.tenant_id)
+                .where(cadences.c.cadence_id.not_in(retired))
+                .distinct()
+                .order_by(cadences.c.tenant_id)
+            ).scalars()
+            return [TenantId(tenant) for tenant in rows]
 
     # --- close drain ------------------------------------------------------------------
 
@@ -386,6 +405,7 @@ class SweepCorpusReads:
 
 _read_work_refs_corpus_conforms: type[IReadWorkRefsCorpus] = SweepCorpusReads
 _read_close_intent_corpus_conforms: type[IReadCloseIntentCorpus] = SweepCorpusReads
+_read_cadence_corpus_conforms: type[IReadCadenceCorpus] = SweepCorpusReads
 _read_derivation_corpus_conforms: type[IReadDerivationCorpus] = SweepCorpusReads
 _read_step_corpus_conforms: type[IReadStepCorpus] = SweepCorpusReads
 _read_usage_corpus_conforms: type[IReadUsageCorpus] = SweepCorpusReads

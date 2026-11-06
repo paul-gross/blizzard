@@ -126,6 +126,7 @@ def test_the_hubs_roster_holds_every_sweep_it_built(tmp_path: Path) -> None:
         SweepName.EVENT_DERIVATION,
         SweepName.CLOSE_DRAIN,
         SweepName.TENANT_TEARDOWN,
+        SweepName.CADENCE,
     ]
 
 
@@ -139,6 +140,7 @@ def test_a_stepped_sweep_runs_no_pass_at_boot_or_after_its_interval(tmp_path: Pa
     assert [sweep.config_name for sweep in Sweep.all(hub.app)] == [
         SweepName.FORGE_STATUS,
         SweepName.TENANT_TEARDOWN,
+        SweepName.CADENCE,
     ]
 
     app = hub.app

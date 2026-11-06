@@ -27,7 +27,7 @@ test.describe('a pass at fresh-tenant', () => {
   test.use({ isolation: 'fresh-tenant' });
 
   test('completes for the tenant, and the all-tenant form is refused with the level before any request', async ({ api, level, testHub }, testInfo) => {
-    for (const name of ['forge_status', 'event_derivation', 'close_drain'] as const) {
+    for (const name of ['forge_status', 'event_derivation', 'close_drain', 'cadence'] as const) {
       expect((await api.sweep(name)).outcome).toBe('completed');
     }
     if (level.served === 'fresh-hub') return;
@@ -43,7 +43,7 @@ test.describe('a pass at fresh-hub', () => {
   test.use({ isolation: 'fresh-hub' });
 
   test('over every tenant completes for each sweep the hub builds, and the unconfigured exports answer 404', async ({ api }) => {
-    for (const name of ['forge_status', 'event_derivation', 'close_drain', 'tenant_teardown'] as const) {
+    for (const name of ['forge_status', 'event_derivation', 'close_drain', 'cadence', 'tenant_teardown'] as const) {
       expect((await api.sweep(name, { allTenants: true })).outcome, name).toBe('completed');
     }
     // trace_export and egress are unconfigured, so this hub does not build them.

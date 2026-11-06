@@ -156,17 +156,18 @@ exactly the chunks the unfiltered list pages over — the counts ignore the wind
 
 ## The hub's sweeps
 
-The hub keeps its derived state current with six sweeps. Each makes one pass over every tenant on its own timer. A pass
-that finds a tenant unchanged since it last converged skips that tenant.
+The hub keeps its derived state current with seven sweeps. Each makes one pass over every tenant on its own timer. A
+pass that finds a tenant unchanged since it last converged skips that tenant.
 
-| Sweep              | What a pass does                                                                 | Cadence                                    |
-| ------------------ | -------------------------------------------------------------------------------- | ------------------------------------------ |
-| `forge_status`     | Projects chunk status onto forge labels ([work-sources.md](./work-sources.md))   | `annotation_interval_seconds`, default 120 |
-| `event_derivation` | Derives transcript events from new or changed segments                           | 60 seconds                                 |
-| `close_drain`      | Closes the work items of delivered chunks ([work-sources.md](./work-sources.md)) | 60 seconds                                 |
-| `tenant_teardown`  | Drains each tenant deletion underway ([tenants.md](./tenants.md))                | 30 seconds                                 |
-| `trace_export`     | Exports settled fleet traces, when tracing is on ([tracing.md](./tracing.md))    | `[tracing] sweep_seconds`                  |
-| `egress`           | Writes the fact export, when a directory is set ([egress.md](./egress.md))       | `[egress] sweep_seconds`                   |
+| Sweep              | What a pass does                                                                            | Cadence                                    |
+| ------------------ | ------------------------------------------------------------------------------------------- | ------------------------------------------ |
+| `forge_status`     | Projects chunk status onto forge labels ([work-sources.md](./work-sources.md))              | `annotation_interval_seconds`, default 120 |
+| `event_derivation` | Derives transcript events from new or changed segments                                      | 60 seconds                                 |
+| `close_drain`      | Closes the work items of delivered chunks ([work-sources.md](./work-sources.md))            | 60 seconds                                 |
+| `tenant_teardown`  | Drains each tenant deletion underway ([tenants.md](./tenants.md))                           | 30 seconds                                 |
+| `trace_export`     | Exports settled fleet traces, when tracing is on ([tracing.md](./tracing.md))               | `[tracing] sweep_seconds`                  |
+| `egress`           | Writes the fact export, when a directory is set ([egress.md](./egress.md))                  | `[egress] sweep_seconds`                   |
+| `cadence`          | Mints each due errand's run, while the `cadences` flag is on ([cadences.md](./cadences.md)) | 60 seconds                                 |
 
 Each sweep logs under its own logger, and two names differ from the table: `event_derivation` logs as
 `blizzard.hub.transcript_events` and `close_drain` as `blizzard.hub.work_closure`. The last segment of the logger name
@@ -191,10 +192,10 @@ mode set for a sweep this hub does not build, such as `trace_export` with tracin
 Two routes run one pass and answer once it has finished, so every write the pass makes is readable when the answer
 arrives. Both serve a sweep in either mode, and both refuse a runner's credential.
 
-| Route                                  | Runs                                                                                      | Who may call        |
-| -------------------------------------- | ----------------------------------------------------------------------------------------- | ------------------- |
-| `POST /api/sweeps/{name}/passes`       | One pass of `forge_status`, `event_derivation` or `close_drain` over the request's tenant | A tenant `admin`    |
-| `POST /api/admin/sweeps/{name}/passes` | One pass of any built sweep over every tenant, exactly as a timed pass                    | A hub administrator |
+| Route                                  | Runs                                                                                                 | Who may call        |
+| -------------------------------------- | ---------------------------------------------------------------------------------------------------- | ------------------- |
+| `POST /api/sweeps/{name}/passes`       | One pass of `forge_status`, `event_derivation`, `close_drain` or `cadence` over the request's tenant | A tenant `admin`    |
+| `POST /api/admin/sweeps/{name}/passes` | One pass of any built sweep over every tenant, exactly as a timed pass                               | A hub administrator |
 
 A pass for one tenant reads the same data as a pass over every tenant and acts in its own tenant alone. It skips a
 tenant that is not due, just as a timed pass does, and still answers `completed`.

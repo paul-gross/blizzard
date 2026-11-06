@@ -12,6 +12,7 @@ from dataclasses import dataclass
 from blizzard.hub.auth.hub_admins import IReadHubAdminRepository
 from blizzard.hub.auth.invitations import IReadInvitationRepository
 from blizzard.hub.auth.memberships import IReadMembershipRepository
+from blizzard.hub.domain.cadence.ports import IReadCadenceCorpus
 from blizzard.hub.domain.chunk.ports.decisions import IReadChunkDecisionsRepository
 from blizzard.hub.domain.chunk.ports.delivery import IReadChunkDeliveryRepository
 from blizzard.hub.domain.chunk.ports.dependencies import IReadChunkDependenciesRepository
@@ -130,6 +131,13 @@ _TENANT_FLOWS_REASON = (
     "the tenant's every flow, by design — the board's Delivery page and `blizzard hub flow list` show each branch the "
     "tenant lands on; a flow is one per repository branch, so the walk is bounded by the tenant's repositories and "
     "their base branches, never by its chunks or its facts."
+)
+
+# The cadence sweep's corpus: which open tenants hold a cadence still live.
+_CADENCE_CORPUS_REASON = (
+    "the cadence sweep's corpus read — every open tenant's cadence lifecycle facts, grouped to each cadence's newest, "
+    "to name the tenants holding a live cadence; no id narrows a read whose subject is every tenant, and the facts are "
+    "bounded by the fleet's cadences and their operator-paced retire and enable history."
 )
 
 # `ORDER BY ... DESC LIMIT 1` along the index's own order — the plan text cannot show the LIMIT.
@@ -768,4 +776,7 @@ HUB_ALLOWED_SCANS: list[Allowance] = [
         _SIGNATURE_REASON,
     ),
     IndexWalkAllowance(IReadWorkRefsCorpus, "work_source_changes_signature", ("config_changes",), _SIGNATURE_REASON),
+    IndexWalkAllowance(
+        IReadCadenceCorpus, "tenants_with_live_cadences", ("cadence_lifecycle_facts",), _CADENCE_CORPUS_REASON
+    ),
 ]

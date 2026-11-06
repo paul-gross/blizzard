@@ -1,5 +1,6 @@
-"""A run's identity — the routine, scope, and mode a work item's run executes under.
-This seam resolves it from a chunk's first work ref, to its ``work_item_runs`` row."""
+"""A run's identity — the routine, scope, and mode a work item's run executes under, and the
+cadence errand that minted it, if one did. This seam resolves it from a chunk's first work ref,
+to its ``work_item_runs`` row."""
 
 from __future__ import annotations
 
@@ -7,7 +8,7 @@ from dataclasses import dataclass
 from typing import Protocol
 
 from blizzard.foundation.roles import domain_model
-from blizzard.hub.domain.chunk.model import Chunk
+from blizzard.hub.domain.chunk.model import Chunk, ErrandMark
 
 
 @domain_model
@@ -17,6 +18,7 @@ class RunContext:
     scope_slug: str
     mode: str
     project_id: str  # the routine's project
+    errand: ErrandMark | None = None  # None for a hand-started run
 
 
 # --- Repository seams (I-prefix, read/write split — bzh:repository-split) ----

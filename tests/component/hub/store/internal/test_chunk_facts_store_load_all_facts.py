@@ -35,7 +35,8 @@ from blizzard.hub.domain.chunk.ports.fence import EpochAdmission
 from blizzard.hub.domain.chunk.ports.stores import ChunkStores
 from blizzard.hub.domain.kernel.transactions import Transaction
 from blizzard.hub.store.internal import chunk_rows as chunk_rows_module
-from blizzard.hub.store.internal.chunk_facts_store import ALL_FAMILIES, STATUS_FAMILIES, ChunkFactsStore
+from blizzard.hub.store.internal.chunk_fact_loading import ALL_FAMILIES, STATUS_FAMILIES
+from blizzard.hub.store.internal.chunk_facts_store import ChunkFactsStore
 from blizzard.hub.store.internal.chunk_record_store import ChunkRecordStore
 from blizzard.hub.store.scoped import ScopedConnections
 from tests.support.load_all_facts_seed import (

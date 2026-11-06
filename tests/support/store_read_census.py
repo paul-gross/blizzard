@@ -48,8 +48,10 @@ from blizzard.hub.auth.models import AuthStateEntry, Identity, SuperuserBootstra
 from blizzard.hub.auth.sessions import IReadSessionRepository
 from blizzard.hub.auth.superuser_bootstrap import IReadSuperuserBootstrapRepository
 from blizzard.hub.auth.users import IReadUserRepository
+from blizzard.hub.domain.cadence.errands import ErrandKey, errands
 from blizzard.hub.domain.cadence.model import CadenceShape, ChoreShape
-from blizzard.hub.domain.cadence.ports import IReadCadenceRepository
+from blizzard.hub.domain.cadence.ports import IReadCadenceCorpus, IReadCadenceRepository, IReadErrandRunsRepository
+from blizzard.hub.domain.cadence.services import CadenceAttention
 from blizzard.hub.domain.chunk.model import (
     Chunk,
     CloseEnqueueDecision,
@@ -1241,6 +1243,8 @@ class HubWorld:
     invitation_token_hash: str
     routine_id: str
     cadence_id: str
+    #: The census cadence's errands over every scope of ``nightly``, each minted once.
+    errand_keys: tuple[ErrandKey, ...]
     scope_a: str
     scope_a_id: str
     scope_c: str
@@ -2261,6 +2265,18 @@ def build_hub_world(tmp_path: Path) -> HubWorld:
     hub.services.config_authoring.edit_work_source(census_source, WorkSourceEdit(slug="census-work-source"), operator)
     project = hub.services.project_authoring.edit(project, ProjectEdit(slug="census"), operator)
 
+    # --- cadence errand runs: the census cadence's `all` chore minted once per errand ----------
+    census_facts = CadenceAttention(
+        routines=hub.services.routines,
+        routine_scopes=hub.services.routine_scopes,
+        scopes=hub.services.scopes,
+        graphs=hub.services.graphs,
+    ).facts([cadence])[cadence.project_id]
+    census_errands = [e for e in errands(cadence, census_facts) if e.chore.spec.key == "every"]
+    census_inputs = hub.services.errand_planning.inputs([(e, census_facts) for e in census_errands])
+    for errand in census_errands:
+        hub.services.cadence_mint.mint(errand, judged=None, inputs=census_inputs[errand.key])
+
     return HubWorld(
         hub=hub,
         engine=engine,
@@ -2300,6 +2316,7 @@ def build_hub_world(tmp_path: Path) -> HubWorld:
         invitation_token_hash=invitation_token_hash,
         routine_id=routine.routine_id,
         cadence_id=cadence.cadence_id,
+        errand_keys=tuple(errand.key for errand in census_errands),
         scope_a="blizzard",
         scope_a_id=scope_a.scope_id,
         scope_c="legacy",
@@ -2805,6 +2822,7 @@ HUB_CENSUS: dict[tuple[type, str], HubRecipe] = {
     (IReadRoutineScopeRepository, "list_scopes_for"): lambda w: w.hub.services.routine_scopes.list_scopes_for(
         [w.routine_id]
     ),
+    (IReadRoutineScopeRepository, "links_for"): lambda w: w.hub.services.routine_scopes.links_for([w.routine_id]),
     (IReadRoutineScopeRepository, "list_routines"): lambda w: w.hub.services.routine_scopes.list_routines(w.scope_a_id),
     (IReadRunContextRepository, "for_chunk"): lambda w: w.hub.services.run_context.for_chunk(w.run_chunk_1_chunk),
     (ISecretCatalog, "get"): lambda w: w.secrets.get("gh-token"),
@@ -2916,6 +2934,10 @@ HUB_CENSUS: dict[tuple[type, str], HubRecipe] = {
         w.project_id, [w.scope_a, w.scope_c, "runner-scope"]
     ),
     (IReadCadenceRepository, "get"): lambda w: w.hub.services.cadences.get(w.cadence_id),
+    (IReadErrandRunsRepository, "last_runs"): lambda w: w.hub.services.errand_runs.last_runs(w.errand_keys),
+    (IReadCadenceCorpus, "tenants_with_live_cadences"): lambda w: (
+        w.hub.hub_services.hub_scoped_reads.corpus.tenants_with_live_cadences()
+    ),
     (IReadCadenceRepository, "get_by_slug"): lambda w: w.hub.services.cadences.get_by_slug(
         w.project_id, "census-cadence"
     ),

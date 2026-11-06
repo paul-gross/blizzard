@@ -9,91 +9,37 @@ the union of every other seam's own writes, so this adapter has no write half.
 
 from __future__ import annotations
 
-from collections import Counter, defaultdict
+from collections import Counter
 from collections.abc import Sequence
 from datetime import datetime
-from typing import Any
 
-from sqlalchemy import Column, Connection, Row, Table, and_, func
+from sqlalchemy import Connection, Table, and_, func
 
 from blizzard.foundation.chunk_status import TERMINAL_STATUSES, ChunkStatus
 from blizzard.foundation.clock import IClock
-from blizzard.foundation.migration_source import MigrationSource
-from blizzard.foundation.node_steps import Executor
-from blizzard.foundation.store.batching import id_batches
 from blizzard.hub.domain.chunk.model import (
-    BounceFact,
     ChunkFacts,
-    DecisionFact,
-    EpochOwnerFact,
-    EscalationFact,
-    HubNodePollFact,
-    LeaseFact,
-    MigrationFact,
-    PauseFact,
-    QuestionFact,
-    RequeueFact,
-    RestartFact,
-    RouteCreatedFact,
-    RouteReleasedFact,
-    RouteTokenMintedFact,
-    TransitionFact,
-    UsageFact,
 )
 from blizzard.hub.domain.chunk.ports.facts import IReadChunkFactsRepository
 from blizzard.hub.domain.kernel.transactions import Transaction
 from blizzard.hub.domain.projects.model import ProjectId
 from blizzard.hub.store import schema as s
-
-# Reads decision closure ids from the decisions adapter.
-# ast-grep-ignore: bzh:hub-store-adapter-imports
-from blizzard.hub.store.internal.chunk_decisions_store import decision_closure_ids
-from blizzard.hub.store.internal.chunk_rows import currently_promoted_ats, ephemeral_ids_select, graph_id_of_batch
+from blizzard.hub.store.internal.chunk_fact_loading import (
+    MOVEMENT_FAMILIES,
+    STATUS_FAMILIES,
+    TICK_STATUS_FAMILIES,
+    load_chunk_facts,
+)
+from blizzard.hub.store.internal.chunk_rows import ephemeral_ids_select
 from blizzard.hub.store.internal.chunk_terminal_predicates import (
     done_completed_at,
     maybe_live,
     settled_done,
     settled_stopped,
 )
-from blizzard.hub.store.internal.fact_families import Projection, families, tables
-from blizzard.hub.store.scoped import ScopedConnections, ScopedStatements, statements_of
+from blizzard.hub.store.internal.fact_families import Projection, tables
+from blizzard.hub.store.scoped import ScopedConnections
 from blizzard.hub.store.transactions import connection_in
-
-#: Every fact family `ChunkFacts` carries — the default selection for `load_facts` and kin.
-ALL_FAMILIES: frozenset[str] = families(Projection.FACTS)
-
-#: Exactly the families `ChunkFacts.status()` reaches — pinned by a mechanical equivalence test.
-STATUS_FAMILIES: frozenset[str] = families(Projection.STATUS)
-
-#: The families `_load_batch` has a mapper for — equal to :data:`ALL_FAMILIES`, which
-#: `tests/test_fact_families.py` checks.
-LOADED_FAMILIES: frozenset[str] = frozenset(
-    {
-        "promoted",
-        "stopped",
-        "operator_completed",
-        "delivery_landed",
-        "landed_repos",
-        "escalations",
-        "leases",
-        "epoch_owners",
-        "transitions",
-        "routes_created",
-        "routes_released",
-        "route_tokens_minted",
-        "questions",
-        "decisions",
-        "requeues",
-        "migrations",
-        "restarts",
-        "pauses",
-        "usage",
-        "bounces",
-        "hub_node_polls",
-    }
-)
-
-MOVEMENT_FAMILIES: frozenset[str] = frozenset({"transitions", "migrations", "restarts"})
 
 
 def status_family_tables() -> tuple[Table, ...]:
@@ -101,24 +47,6 @@ def status_family_tables() -> tuple[Table, ...]:
     by_name = {t.name: t for t in tables(Projection.STATUS)}
     by_name["chunks"] = s.chunks
     return tuple(by_name[name] for name in sorted(by_name))
-
-
-#: The families a :class:`~blizzard.wire.chunk.ChunkStatusView` reaches — :attr:`STATUS_FAMILIES`
-#: plus ``usage`` (for :meth:`~blizzard.hub.domain.chunk.model.ChunkFacts.usage_total`) and
-#: ``epoch_owners`` (for :meth:`~blizzard.hub.domain.chunk.model.ChunkFacts.latest_epoch`), the
-#: reaches ``status()`` itself doesn't make. :meth:`ChunkFactsStore.status_facts_for`'s narrowing.
-TICK_STATUS_FAMILIES: frozenset[str] = STATUS_FAMILIES | frozenset({"usage", "epoch_owners"})
-
-
-def _rows(
-    stmts: ScopedStatements, conn: Connection, table: Table, batch: Sequence[str] | None, *columns: Column[Any]
-) -> Sequence[Row[Any]]:
-    """``table``'s rows (or just ``columns`` of them) for the chunks in ``batch`` — every chunk's
-    when ``batch`` is ``None`` — confined to ``stmts``'s tenant."""
-    stmt = stmts.select(table, *columns)
-    if batch is not None:
-        stmt = stmt.where(table.c.chunk_id.in_(batch))
-    return conn.execute(stmt).all()
 
 
 class ChunkFactsStore:
@@ -131,25 +59,25 @@ class ChunkFactsStore:
     def load_facts(self, chunk_id: str, *, transaction: Transaction | None = None) -> ChunkFacts | None:
         connection = connection_in(self._store, transaction, "load_facts")
         with connection as conn:
-            result = self._load(conn, [chunk_id])
+            result = load_chunk_facts(conn, [chunk_id])
         return result.get(chunk_id)
 
     def load_facts_conn(self, conn: Connection, chunk_id: str) -> ChunkFacts | None:
         """`load_facts`'s already-open-connection sibling — the locked-transaction seam's
         own read (``bzh:store-exclusive-write``), resolved on the caller's connection
         rather than a fresh one."""
-        return self._load(conn, [chunk_id]).get(chunk_id)
+        return load_chunk_facts(conn, [chunk_id]).get(chunk_id)
 
     def load_facts_for_conn(self, conn: Connection, chunk_ids: Sequence[str]) -> dict[str, ChunkFacts]:
         """`load_facts_for`'s already-open-connection sibling — see :meth:`load_facts_conn`."""
         if not chunk_ids:
             return {}
-        return self._load(conn, chunk_ids)
+        return load_chunk_facts(conn, chunk_ids)
 
     def load_all_facts(self) -> dict[str, ChunkFacts]:
         """`src/blizzard/hub/domain/chunk/ports/facts.py`'s `IReadChunkFactsRepository.load_all_facts`."""
         with self._store.read("load_all_facts") as conn:
-            return self._load(conn, None)
+            return load_chunk_facts(conn, None)
 
     def load_facts_for(self, chunk_ids: Sequence[str]) -> dict[str, ChunkFacts]:
         """`load_facts`'s batched sibling — every id's
@@ -157,14 +85,14 @@ class ChunkFactsStore:
         if not chunk_ids:
             return {}
         with self._store.read("load_facts_for") as conn:
-            return self._load(conn, chunk_ids)
+            return load_chunk_facts(conn, chunk_ids)
 
     def movement_facts_for(self, chunk_ids: Sequence[str]) -> dict[str, ChunkFacts]:
         """Only the transition, migration and restart rows used to derive the current node."""
         if not chunk_ids:
             return {}
         with self._store.read("movement_facts_for") as conn:
-            return self._load(conn, chunk_ids, families=MOVEMENT_FAMILIES)
+            return load_chunk_facts(conn, chunk_ids, families=MOVEMENT_FAMILIES)
 
     def status_facts_for(
         self, chunk_ids: Sequence[str], *, transaction: Transaction | None = None
@@ -176,13 +104,13 @@ class ChunkFactsStore:
         if not chunk_ids:
             return {}
         with connection_in(self._store, transaction, "status_facts_for") as conn:
-            return self._load(conn, chunk_ids, families=TICK_STATUS_FAMILIES)
+            return load_chunk_facts(conn, chunk_ids, families=TICK_STATUS_FAMILIES)
 
     def status_facts_for_conn(self, conn: Connection, chunk_ids: Sequence[str]) -> dict[str, ChunkFacts]:
         """`status_facts_for`'s already-open-connection sibling — see :meth:`load_facts_conn`."""
         if not chunk_ids:
             return {}
-        return self._load(conn, chunk_ids, families=TICK_STATUS_FAMILIES)
+        return load_chunk_facts(conn, chunk_ids, families=TICK_STATUS_FAMILIES)
 
     def load_live_statuses(self, *, transaction: Transaction | None = None) -> dict[str, ChunkStatus]:
         """Every non-ephemeral, non-terminal chunk's derived :class:`ChunkStatus`, keyed by
@@ -229,7 +157,9 @@ class ChunkFactsStore:
             )
             if project is not None:
                 candidates = candidates.where(s.chunks.c.project_id == project)
-            facts_by_id = self._load(conn, [r.chunk_id for r in conn.execute(candidates)], families=STATUS_FAMILIES)
+            facts_by_id = load_chunk_facts(
+                conn, [r.chunk_id for r in conn.execute(candidates)], families=STATUS_FAMILIES
+            )
         residue = 0
         for facts in facts_by_id.values():
             finished = facts.completed_at() if facts.status() is ChunkStatus.DONE else None
@@ -247,352 +177,8 @@ class ChunkFactsStore:
         if project is not None:
             candidates = candidates.where(s.chunks.c.project_id == project)
         candidate_ids = [r.chunk_id for r in conn.execute(candidates)]
-        facts_by_id = self._load(conn, candidate_ids, families=STATUS_FAMILIES)
+        facts_by_id = load_chunk_facts(conn, candidate_ids, families=STATUS_FAMILIES)
         return {chunk_id: facts.status() for chunk_id, facts in facts_by_id.items()}
-
-    def _load(
-        self,
-        conn: Connection,
-        chunk_ids: Sequence[str] | None,
-        *,
-        families: frozenset[str] | None = None,
-    ) -> dict[str, ChunkFacts]:
-        selected = families if families is not None else ALL_FAMILIES
-        if chunk_ids is None:
-            return self._load_batch(conn, None, selected)
-        result: dict[str, ChunkFacts] = {}
-        for batch in id_batches(chunk_ids):
-            result.update(self._load_batch(conn, batch, selected))
-        return result
-
-    def _load_batch(
-        self, conn: Connection, batch: Sequence[str] | None, families: frozenset[str]
-    ) -> dict[str, ChunkFacts]:
-        graph_id_of = graph_id_of_batch(conn, batch)
-        if not graph_id_of:
-            return {}
-        # The connection's scope governs every read on it — a ``*_conn`` sibling's connection is
-        # the caller's, opened through the caller's own scoped seam.
-        stmts = statements_of(conn)
-
-        transition_rows: Sequence[Row[Any]] = (
-            _rows(stmts, conn, s.transitions, batch) if "transitions" in families else []
-        )
-        migration_rows: Sequence[Row[Any]] = (
-            _rows(stmts, conn, s.chunk_migrations, batch) if "migrations" in families else []
-        )
-        restart_rows: Sequence[Row[Any]] = _rows(stmts, conn, s.chunk_restarts, batch) if "restarts" in families else []
-
-        # The executor map spans every graph any fetched movement fact touched, keyed by
-        # (graph_id, node_id) so a node id shared by two graphs never collides — built
-        # only when a movement family was actually requested.
-        executors: dict[tuple[str, str], Executor] = {}
-        if {"transitions", "migrations", "restarts"} & families:
-            graph_ids = (
-                set(graph_id_of.values())
-                | {t.graph_id for t in transition_rows}
-                | {m.to_graph_id for m in migration_rows}
-                | {r.graph_id for r in restart_rows}
-                | {r.from_graph_id for r in restart_rows if r.from_graph_id is not None}
-            )
-            executors = {
-                (r.graph_id, r.node_id): Executor(r.executor)
-                for graph_batch in id_batches(sorted(graph_ids))
-                for r in conn.execute(
-                    stmts.select(
-                        s.graph_nodes, s.graph_nodes.c.graph_id, s.graph_nodes.c.node_id, s.graph_nodes.c.executor
-                    ).where(s.graph_nodes.c.graph_id.in_(graph_batch))
-                ).all()
-            }
-
-        transitions: dict[str, list[TransitionFact]] = defaultdict(list)
-        for t in transition_rows:
-            transitions[t.chunk_id].append(
-                TransitionFact(
-                    to_node_id=t.to_node_id,
-                    to_node_executor=executors.get((t.graph_id, t.to_node_id), Executor.RUNNER),
-                    epoch=t.epoch,
-                    recorded_at=t.recorded_at,
-                    from_node_id=t.from_node_id,
-                    choice_name=t.choice_name,
-                    graph_id=t.graph_id,
-                )
-            )
-
-        leases: dict[str, list[LeaseFact]] = defaultdict(list)
-        if "leases" in families:
-            for lease in _rows(stmts, conn, s.lease_facts, batch):
-                leases[lease.chunk_id].append(LeaseFact(epoch=lease.epoch, minted_at=lease.minted_at))
-
-        epoch_owners: dict[str, list[EpochOwnerFact]] = defaultdict(list)
-        if "epoch_owners" in families:
-            for owner in _rows(stmts, conn, s.epoch_owners, batch):
-                epoch_owners[owner.chunk_id].append(EpochOwnerFact(epoch=owner.epoch, runner_id=owner.runner_id))
-
-        escalations: dict[str, list[EscalationFact]] = defaultdict(list)
-        if "escalations" in families:
-            for e in _rows(stmts, conn, s.escalations, batch):
-                escalations[e.chunk_id].append(
-                    EscalationFact(
-                        epoch=e.epoch,
-                        recorded_at=e.recorded_at,
-                        takeover_command=e.takeover_command or "",
-                        wrapped_takeover_command=e.wrapped_takeover_command or "",
-                        cause=e.cause,
-                        detail=e.detail,
-                    )
-                )
-
-        routes_created: dict[str, list[RouteCreatedFact]] = defaultdict(list)
-        if "routes_created" in families:
-            for r in _rows(stmts, conn, s.route_created, batch):
-                routes_created[r.chunk_id].append(RouteCreatedFact(created_at=r.created_at, seq=r.seq))
-
-        routes_released: dict[str, list[RouteReleasedFact]] = defaultdict(list)
-        if "routes_released" in families:
-            for r in _rows(stmts, conn, s.route_released, batch):
-                routes_released[r.chunk_id].append(RouteReleasedFact(released_at=r.released_at, seq=r.seq))
-
-        route_tokens_minted: dict[str, list[RouteTokenMintedFact]] = defaultdict(list)
-        if "route_tokens_minted" in families:
-            for t in _rows(stmts, conn, s.route_token_minted, batch):
-                route_tokens_minted[t.chunk_id].append(
-                    RouteTokenMintedFact(token_hash=t.token_hash, minted_at=t.minted_at, seq=t.seq)
-                )
-
-        questions: dict[str, list[QuestionFact]] = defaultdict(list)
-        if "questions" in families:
-            # Scoped to the requested batch's own questions; the whole-fleet
-            # call leaves this unfiltered, building the answered set for every chunk at once.
-            answered_stmt = stmts.select(
-                stmts.scope_join(
-                    s.question_answers,
-                    s.questions,
-                    (s.questions.c.tenant_id == s.question_answers.c.tenant_id)
-                    & (s.questions.c.question_id == s.question_answers.c.question_id),
-                ),
-                s.question_answers.c.question_id,
-            )
-            if batch is not None:
-                answered_stmt = answered_stmt.where(s.questions.c.chunk_id.in_(batch))
-            answered = {a.question_id for a in conn.execute(answered_stmt).all()}
-            for q in _rows(stmts, conn, s.questions, batch):
-                questions[q.chunk_id].append(
-                    QuestionFact(
-                        question_id=q.question_id,
-                        asked_at=q.asked_at,
-                        answered=q.question_id in answered,
-                        epoch=q.epoch,
-                    )
-                )
-
-        decisions: dict[str, list[DecisionFact]] = defaultdict(list)
-        if "decisions" in families:
-            decision_rows = _rows(stmts, conn, s.decisions, batch)
-            # A decision can also resolve via an operator restart superseding it — only signaled
-            # when `restarts` is itself among the requested families, true of every current caller.
-            if batch is None:
-                resolved_ids = {
-                    r.decision_id
-                    for r in conn.execute(
-                        stmts.select(s.decision_resolutions, s.decision_resolutions.c.decision_id)
-                    ).all()
-                } | {r.decision_id for r in restart_rows if r.decision_id is not None}
-            else:
-                decision_ids = [d.decision_id for d in decision_rows]
-                resolved_ids = self._resolved_ids(conn, decision_ids) | {
-                    r.decision_id for r in restart_rows if r.decision_id is not None
-                }
-            closed_ids = decision_closure_ids(conn, None if batch is None else [d.decision_id for d in decision_rows])
-            for d in decision_rows:
-                decisions[d.chunk_id].append(
-                    DecisionFact(
-                        decision_id=d.decision_id,
-                        submitted_at=d.submitted_at,
-                        resolved=d.decision_id in resolved_ids,
-                        closed=d.decision_id in closed_ids,
-                    )
-                )
-
-        requeues: dict[str, list[RequeueFact]] = defaultdict(list)
-        if "requeues" in families:
-            for r in _rows(stmts, conn, s.requeues, batch):
-                requeues[r.chunk_id].append(
-                    RequeueFact(requeued_at=r.requeued_at, requeued_by=r.requeued_by, note=r.note)
-                )
-
-        migrations: dict[str, list[MigrationFact]] = defaultdict(list)
-        for m in migration_rows:
-            migrations[m.chunk_id].append(
-                MigrationFact(
-                    from_node_id=m.from_node_id,
-                    from_graph_id=m.from_graph_id,
-                    to_graph_id=m.to_graph_id,
-                    landed_node_id=m.landed_node_id,
-                    choice_name=m.choice_name,
-                    model=m.model_after,
-                    epoch=m.epoch,
-                    recorded_at=m.recorded_at,
-                    landed_node_executor=executors.get((m.to_graph_id, m.landed_node_id), Executor.RUNNER),
-                    # Null for a row predating the discriminator — read as unrecorded, never
-                    # guessed at.
-                    source=MigrationSource(m.source) if m.source else None,
-                )
-            )
-
-        restarts: dict[str, list[RestartFact]] = defaultdict(list)
-        for r in restart_rows:
-            restarts[r.chunk_id].append(
-                RestartFact(
-                    to_node_id=r.to_node_id,
-                    from_node_id=r.from_node_id,
-                    graph_id=r.graph_id,
-                    epoch=r.epoch,
-                    recorded_at=r.recorded_at,
-                    from_graph_id=r.from_graph_id,
-                    to_node_executor=executors.get((r.graph_id, r.to_node_id), Executor.RUNNER),
-                    restarted_by=r.restarted_by,
-                    note=r.note,
-                    decision_id=r.decision_id,
-                )
-            )
-
-        pauses: dict[str, list[PauseFact]] = defaultdict(list)
-        if "pauses" in families:
-            stmt = stmts.select(s.chunk_pause_facts).order_by(s.chunk_pause_facts.c.id)
-            if batch is not None:
-                stmt = stmt.where(s.chunk_pause_facts.c.chunk_id.in_(batch))
-            for p in conn.execute(stmt).all():
-                pauses[p.chunk_id].append(PauseFact(paused=p.paused, set_at=p.set_at, set_by=p.set_by))
-
-        usage: dict[str, list[UsageFact]] = defaultdict(list)
-        if "usage" in families:
-            for u in _rows(stmts, conn, s.usage_facts, batch):
-                usage[u.chunk_id].append(
-                    UsageFact(
-                        node_id=u.node_id,
-                        epoch=u.epoch,
-                        kind=u.kind,
-                        model=u.model,
-                        input_tokens=u.input_tokens,
-                        output_tokens=u.output_tokens,
-                        cache_read_tokens=u.cache_read_tokens,
-                        cache_create_tokens=u.cache_create_tokens,
-                        cost_usd=u.cost_usd,
-                        recorded_at=u.recorded_at,
-                        harness_id=u.harness_id,
-                        harness_version=u.harness_version,
-                        estimated_cost_usd=u.estimated_cost_usd,
-                        runner_id=u.runner_id,
-                    )
-                )
-
-        landed_repos: dict[str, set[str]] = defaultdict(set)
-        if "landed_repos" in families:
-            for r in _rows(stmts, conn, s.delivery_repo_landed, batch):
-                landed_repos[r.chunk_id].add(r.repo)
-
-        bounces: dict[str, list[BounceFact]] = defaultdict(list)
-        if "bounces" in families:
-            for b in _rows(stmts, conn, s.chunk_bounces, batch):
-                bounces[b.chunk_id].append(
-                    BounceFact(epoch=b.epoch, cause=b.cause, envelope=b.envelope, recorded_at=b.recorded_at)
-                )
-
-        hub_node_polls: dict[str, list[HubNodePollFact]] = defaultdict(list)
-        if "hub_node_polls" in families:
-            for p in _rows(stmts, conn, s.hub_node_poll, batch):
-                hub_node_polls[p.chunk_id].append(
-                    HubNodePollFact(
-                        node_id=p.node_id,
-                        epoch=p.epoch,
-                        polled_at=p.polled_at,
-                        next_poll_at=p.next_poll_at,
-                        kind=p.kind,
-                        last_polled_at=p.last_polled_at,
-                    )
-                )
-
-        stopped_ats: dict[str, list[datetime]] = defaultdict(list)
-        if "stopped" in families:
-            for r in _rows(
-                stmts, conn, s.chunk_stopped, batch, s.chunk_stopped.c.chunk_id, s.chunk_stopped.c.stopped_at
-            ):
-                stopped_ats[r.chunk_id].append(r.stopped_at)
-
-        completed_ats: dict[str, list[datetime]] = defaultdict(list)
-        if "operator_completed" in families:
-            for r in _rows(
-                stmts, conn, s.chunk_completed, batch, s.chunk_completed.c.chunk_id, s.chunk_completed.c.completed_at
-            ):
-                completed_ats[r.chunk_id].append(r.completed_at)
-
-        promoted_ids: set[str] = set()
-        if "promoted" in families:
-            promoted_ids = set(currently_promoted_ats(conn, batch))
-
-        delivery_landed_ids: set[str] = set()
-        if "delivery_landed" in families:
-            delivery_landed_ids = {
-                r.chunk_id for r in _rows(stmts, conn, s.delivery_landed, batch, s.delivery_landed.c.chunk_id)
-            }
-
-        return {
-            chunk_id: ChunkFacts(
-                minted=True,
-                promoted=chunk_id in promoted_ids,
-                stopped=bool(stopped_ats[chunk_id]),
-                stopped_at=max(stopped_ats[chunk_id], default=None),
-                operator_completed=bool(completed_ats[chunk_id]),
-                operator_completed_at=max(completed_ats[chunk_id], default=None),
-                delivery_landed=chunk_id in delivery_landed_ids,
-                landed_repos=frozenset(landed_repos[chunk_id]),
-                escalations=escalations[chunk_id],
-                leases=leases[chunk_id],
-                epoch_owners=epoch_owners[chunk_id],
-                transitions=transitions[chunk_id],
-                routes_created=routes_created[chunk_id],
-                routes_released=routes_released[chunk_id],
-                route_tokens_minted=route_tokens_minted[chunk_id],
-                questions=questions[chunk_id],
-                decisions=decisions[chunk_id],
-                requeues=requeues[chunk_id],
-                migrations=migrations[chunk_id],
-                restarts=restarts[chunk_id],
-                pauses=pauses[chunk_id],
-                usage=usage[chunk_id],
-                bounces=bounces[chunk_id],
-                hub_node_polls=hub_node_polls[chunk_id],
-            )
-            for chunk_id in graph_id_of
-        }
-
-    @staticmethod
-    def _resolved_ids(conn: Connection, decision_ids: list[str]) -> set[str]:
-        """The decisions among ``decision_ids`` that carry a resolution row, or that an
-        operator restart superseded (#370) — the two ways one stops deriving open.
-        ``decision_ids`` can outgrow one chunk-id batch's worth of decisions, so each
-        ``IN`` runs through :func:`id_batches` rather than a single unbounded clause."""
-        resolved: set[str] = set()
-        for batch in id_batches(decision_ids):
-            resolved |= {
-                r.decision_id
-                for r in conn.execute(
-                    statements_of(conn)
-                    .select(s.decision_resolutions, s.decision_resolutions.c.decision_id)
-                    .where(s.decision_resolutions.c.decision_id.in_(batch))
-                ).all()
-            }
-        for batch in id_batches(decision_ids):
-            resolved |= {
-                r.decision_id
-                for r in conn.execute(
-                    statements_of(conn)
-                    .select(s.chunk_restarts, s.chunk_restarts.c.decision_id)
-                    .where(s.chunk_restarts.c.decision_id.in_(batch))
-                ).all()
-            }
-        return resolved
 
 
 _facts_conforms: type[IReadChunkFactsRepository] = ChunkFactsStore

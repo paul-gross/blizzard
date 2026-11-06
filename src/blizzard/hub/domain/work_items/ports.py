@@ -5,7 +5,7 @@ from datetime import datetime
 from typing import Protocol
 
 from blizzard.foundation.work_items import WorkItemClosure
-from blizzard.hub.domain.chunk.model import Chunk, HubWorkItem, WorkItemAuthor, WorkRef
+from blizzard.hub.domain.chunk.model import Chunk, ErrandMark, HubWorkItem, WorkItemAuthor, WorkRef
 from blizzard.hub.domain.kernel.transactions import Transaction
 
 
@@ -59,8 +59,11 @@ class IWriteWorkItemRepository(IReadWorkItemRepository, Protocol):
         project_id: str,
         at: datetime,
         chunk: Chunk,
+        errand: ErrandMark | None = None,
+        transaction: Transaction | None = None,
     ) -> HubWorkItem:
-        """Atomically insert the item, resting chunk and routine run identity."""
+        """Atomically insert the item, resting chunk and routine run identity, marked with ``errand``
+        when a cadence mints it; joins ``transaction`` when given, else opens its own write."""
         ...
 
     def edit(

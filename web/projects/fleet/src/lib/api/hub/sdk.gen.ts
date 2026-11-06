@@ -2960,8 +2960,8 @@ export const fleetSpendApiSpendGet = <ThrowOnError extends boolean = false>(opti
 /**
  * Run Tenant Pass
  *
- * One pass of ``forge_status``, ``event_derivation`` or ``close_drain`` over the request's tenant alone:
- * ``failed`` with the fault its tenant met.
+ * One pass of ``forge_status``, ``event_derivation``, ``close_drain`` or ``cadence`` over the request's tenant
+ * alone: ``failed`` with the fault its tenant met.
  */
 export const runTenantPassApiSweepsNamePassesPost = <ThrowOnError extends boolean = false>(options: Options<RunTenantPassApiSweepsNamePassesPostData, ThrowOnError>): RequestResult<RunTenantPassApiSweepsNamePassesPostResponses, RunTenantPassApiSweepsNamePassesPostErrors, ThrowOnError> => (options.client ?? client).post<RunTenantPassApiSweepsNamePassesPostResponses, RunTenantPassApiSweepsNamePassesPostErrors, ThrowOnError>({ url: '/api/sweeps/{name}/passes', ...options });
 

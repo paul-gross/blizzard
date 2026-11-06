@@ -60,6 +60,16 @@ class CadenceAttention:
 
     def views(self, cadences: Sequence[Cadence]) -> list[CadenceView]:
         """Each of ``cadences``, in order, with its attention."""
+        facts = self.facts(cadences)
+        return [
+            CadenceView(cadence, () if cadence.retired else cadence.attention(facts[cadence.project_id]))
+            for cadence in cadences
+        ]
+
+    def facts(self, cadences: Sequence[Cadence]) -> dict[str, AttentionFacts]:
+        """What the live cadences among ``cadences`` are judged against, by project id: the routines their chores
+        name, those routines' links and when each was made, which of their graphs resolve, and the scopes the chores
+        and links name."""
         by_project: dict[str, list[Cadence]] = defaultdict(list)
         for cadence in cadences:
             if not cadence.retired:
@@ -71,7 +81,14 @@ class CadenceAttention:
             for project_id, held in by_project.items()
         }
         found = [routine for held in routines.values() for routine in held.values()]
-        linked = self._routine_scopes.list_scopes_for([routine.routine_id for routine in found])
+        routine_ids = [routine.routine_id for routine in found]
+        links = self._routine_scopes.links_for(routine_ids)
+        linked = {routine_id: list(held) for routine_id, held in links.items()}
+        linked_at = {
+            routine_id: stamped
+            for routine_id, held in links.items()
+            if (stamped := {slug: at for slug, at in held.items() if at is not None})
+        }
         enabled = self._graphs.enabled_names(sorted({routine.graph_name for routine in found}))
         facts: dict[str, AttentionFacts] = {}
         for project_id, held in by_project.items():
@@ -90,11 +107,9 @@ class CadenceAttention:
                 scopes=self._scopes.get_many(project_id, sorted(named)),
                 linked=linked,
                 enabled_graphs=enabled,
+                linked_at=linked_at,
             )
-        return [
-            CadenceView(cadence, () if cadence.retired else cadence.attention(facts[cadence.project_id]))
-            for cadence in cadences
-        ]
+        return facts
 
 
 class CadenceReading:

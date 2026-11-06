@@ -16,3 +16,6 @@ mode = "stepped"
 
 [sweeps.egress]
 mode = "stepped"
+
+[sweeps.cadence]
+mode = "stepped"

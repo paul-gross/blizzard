@@ -7,6 +7,7 @@ stored by ``scope_id`` and read back as the scope's slug, joined within the tena
 from __future__ import annotations
 
 from collections.abc import Sequence
+from datetime import datetime
 
 from sqlalchemy.sql.selectable import Join
 
@@ -65,6 +66,23 @@ class RoutineScopeStore:
                     linked[row.routine_id].append(row.slug)
         return linked
 
+    def links_for(self, routine_ids: Sequence[str]) -> dict[str, dict[str, datetime | None]]:
+        links: dict[str, dict[str, datetime | None]] = {routine_id: {} for routine_id in routine_ids}
+        if not routine_ids:
+            return links
+        with self._store.read("links_for") as conn:
+            for batch in id_batches(routine_ids):
+                rows = conn.execute(
+                    self._store.select(
+                        _links(self._store), routine_scopes.c.routine_id, scopes.c.slug, routine_scopes.c.linked_at
+                    )
+                    .where(routine_scopes.c.routine_id.in_(batch))
+                    .order_by(routine_scopes.c.routine_id, scopes.c.slug)
+                ).all()
+                for row in rows:
+                    links[row.routine_id][row.slug] = row.linked_at
+        return links
+
     def list_routines(self, scope_id: str) -> list[str]:
         with self._store.read("list_routines") as conn:
             rows = conn.execute(
@@ -77,7 +95,7 @@ class RoutineScopeStore:
     def link(self, routine: Routine, scope_slug: str, *, from_revision: int, change: ConfigChange) -> Routine:
         with self._store.write("link", expect=(ConfigRevisionConflict,)) as conn:
             move_revision(conn, routine, from_revision)
-            link_scope(conn, routine, scope_slug)
+            link_scope(conn, routine, scope_slug, at=change.recorded_at)
             append_change(conn, change)
         return routine
 

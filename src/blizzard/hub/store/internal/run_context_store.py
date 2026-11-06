@@ -8,7 +8,7 @@ from __future__ import annotations
 
 from sqlalchemy.engine import Connection
 
-from blizzard.hub.domain.chunk.model import Chunk
+from blizzard.hub.domain.chunk.model import Chunk, ErrandMark
 from blizzard.hub.domain.garden.run_context import IWriteRunContextRepository, RunContext
 from blizzard.hub.store import schema as s
 
@@ -28,6 +28,8 @@ def insert_run_context_row(conn: Connection, work_item_id: str, context: RunCont
             routine_name=context.routine_name,
             scope_id=scope_id_of(stmts, context.scope_slug, context.project_id),
             mode=context.mode,
+            cadence_id=context.errand.cadence_id if context.errand is not None else None,
+            chore_id=context.errand.chore_id if context.errand is not None else None,
         )
     )
 
@@ -60,12 +62,22 @@ class RunContextStore:
                     s.scopes.c.slug.label("scope_slug"),
                     s.work_item_runs.c.mode,
                     s.work_item_runs.c.project_id,
+                    s.work_item_runs.c.cadence_id,
+                    s.work_item_runs.c.chore_id,
                 ).where(s.work_item_runs.c.work_item_id == item_row.work_item_id)
             ).one_or_none()
         if row is None:
             return None
         return RunContext(
-            routine_name=row.routine_name, scope_slug=row.scope_slug, mode=row.mode, project_id=row.project_id
+            routine_name=row.routine_name,
+            scope_slug=row.scope_slug,
+            mode=row.mode,
+            project_id=row.project_id,
+            errand=(
+                ErrandMark(cadence_id=row.cadence_id, chore_id=row.chore_id)
+                if row.cadence_id is not None and row.chore_id is not None
+                else None
+            ),
         )
 
     def record(self, work_item_id: str, context: RunContext) -> None:

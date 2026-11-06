@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import re
 from collections.abc import Collection, Mapping, Sequence
-from dataclasses import dataclass, replace
+from dataclasses import dataclass, field, replace
 from datetime import datetime
 from enum import StrEnum
 from typing import Literal
@@ -268,24 +268,31 @@ class Attention:
 class AttentionFacts:
     """What attention reads, resolved in bulk for the cadences of one project: its routines and scopes by slug,
     the scope slugs each routine sweeps by routine id, and the names of the graphs that resolve to an enabled
-    mint."""
+    mint. ``linked_at`` holds, by routine id then scope slug, the instant each link was made; a link made before
+    links were stamped is absent, and reads as linked before any chore."""
 
     routines: Mapping[str, Routine]
     scopes: Mapping[str, Scope]
     linked: Mapping[str, Collection[str]]
     enabled_graphs: Collection[str]
+    linked_at: Mapping[str, Mapping[str, datetime]] = field(default_factory=dict[str, Mapping[str, datetime]])
+
+
+def swept_slugs(routine: Routine, linked: Mapping[str, Collection[str]]) -> frozenset[str]:
+    """The scope slugs ``routine`` sweeps now — those linked to it, with its default scope always among them —
+    before any is checked against the project's scopes."""
+    return frozenset({*linked.get(routine.routine_id, ()), routine.default_scope_slug})
 
 
 def _scope_attention(chore: ChoreSpec, routine: Routine, facts: AttentionFacts) -> list[Attention]:
-    swept = {*facts.linked.get(routine.routine_id, ()), routine.default_scope_slug}
+    swept = swept_slugs(routine, facts.linked)
     if chore.selection is ScopeSelection.DEFAULT:
         default = facts.scopes.get(routine.default_scope_slug)
         if default is not None and default.retired:
             return [Attention(AttentionReason.SCOPE_RETIRED, chore.key, routine.default_scope_slug)]
         return []
     if chore.selection is ScopeSelection.ALL:
-        live = [slug for slug in swept if (scope := facts.scopes.get(slug)) is not None and not scope.retired]
-        return [] if live else [Attention(AttentionReason.NO_SCOPES, chore.key)]
+        return [] if live_swept_scopes(routine, facts) else [Attention(AttentionReason.NO_SCOPES, chore.key)]
     found: list[Attention] = []
     for slug in chore.scopes:
         scope = facts.scopes.get(slug)
@@ -296,6 +303,13 @@ def _scope_attention(chore: ChoreSpec, routine: Routine, facts: AttentionFacts) 
         elif slug not in swept:
             found.append(Attention(AttentionReason.SCOPE_UNLINKED, chore.key, slug))
     return found
+
+
+def live_swept_scopes(routine: Routine, facts: AttentionFacts) -> tuple[Scope, ...]:
+    """The scopes ``routine`` sweeps that its project knows and has not retired, by slug — the set an ``all`` chore
+    runs over."""
+    swept = swept_slugs(routine, facts.linked)
+    return tuple(scope for slug in sorted(swept) if (scope := facts.scopes.get(slug)) is not None and not scope.retired)
 
 
 def attention(chores: Sequence[Chore], *, retired: bool, facts: AttentionFacts) -> tuple[Attention, ...]:

@@ -7,7 +7,7 @@ Migrated-to-head sqlite-on-disk — the ``tests/component/hub/store/internal/tes
 from __future__ import annotations
 
 from dataclasses import replace
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import TypedDict, Unpack
 
@@ -332,6 +332,32 @@ def test_link_then_list_scopes_round_trips_moving_the_revision(tmp_path: Path) -
     assert _changes(engine)[-1] == ("routine", "nightly", 2, "edit")
 
 
+def _linked_at(engine: Engine) -> dict[str, datetime | None]:
+    links = s.routine_scopes.join(s.scopes, s.routine_scopes.c.scope_id == s.scopes.c.scope_id)
+    with engine.connect() as conn:
+        rows = conn.execute(hub_scoped(select(s.scopes.c.slug, s.routine_scopes.c.linked_at).select_from(links))).all()
+    return {row.slug: row.linked_at for row in rows}
+
+
+def test_each_link_is_stamped_when_written_and_a_relink_keeps_the_first_stamp(tmp_path: Path) -> None:
+    store, routine, engine = _routine_scope_store(tmp_path)
+    later = _NOW + timedelta(hours=1)
+    transition = routine.with_scopes(["blizzard"], ["blizzard", "other"], _CTX, if_match=None, at=later)
+    assert transition is not None
+    moved, change = transition
+
+    store.link(moved, "other", from_revision=routine.revision, change=change)
+    edited = replace(moved, graph_name="beta", revision=moved.revision + 1)
+    edit = ConfigChange.of(
+        _CTX, RecordKind.ROUTINE, edited.name, edited.revision, ChangeOp.EDIT, (), later + timedelta(hours=1)
+    )
+    RoutineStore(hub_store_connections(engine)).update(
+        edited, from_revision=moved.revision, change=edit, scope_mint=None
+    )
+
+    assert _linked_at(engine) == {"blizzard": _NOW, "other": later}
+
+
 def test_unlink_removes_the_link(tmp_path: Path) -> None:
     store, routine, engine = _routine_scope_store(tmp_path)
     linked = _relink(store, routine, "other", link=True)
@@ -359,6 +385,24 @@ def test_list_scopes_for_an_unlinked_routine_is_empty(tmp_path: Path) -> None:
     store, _, _ = _routine_scope_store(tmp_path)
 
     assert store.list_scopes("rtn_ghost") == []
+
+
+def test_links_for_reads_every_link_beside_its_stamp_and_keeps_an_unlinked_id(tmp_path: Path) -> None:
+    store, routine, engine = _routine_scope_store(tmp_path)
+    _relink(store, routine, "other", link=True)
+    with engine.begin() as conn:
+        conn.execute(
+            hub_scoped(
+                s.routine_scopes.update()
+                .where(s.routine_scopes.c.scope_id == _scope_id(engine, "other"))
+                .values(linked_at=None)
+            )
+        )
+
+    assert store.links_for(["rtn_1", "rtn_ghost"]) == {
+        "rtn_1": {"blizzard": _NOW, "other": None},
+        "rtn_ghost": {},
+    }
 
 
 def test_list_routines_returns_the_linked_routine_ids(tmp_path: Path) -> None:
