@@ -3,17 +3,18 @@ import { TestBed } from '@angular/core/testing';
 import { QueryClient, provideTanStackQuery } from '@tanstack/angular-query-experimental';
 import { vi } from 'vitest';
 
-import { runnerClient } from 'fleet';
-import { stubError, stubRequestClient, type RequestClientStub } from 'fleet/testing';
+import { stubError, stubRunnerClient, type RequestClientStub } from 'fleet/testing';
 import { RunnerLogout } from './runner-logout';
 
 describe('RunnerLogout', () => {
   let stub: RequestClientStub;
-  let respond: () => unknown;
+  let fail = false;
 
   beforeEach(() => {
-    respond = () => ({});
-    stub = stubRequestClient(runnerClient, () => respond());
+    fail = false;
+    stub = stubRunnerClient({
+      'POST /api/auth/logout': () => (fail ? stubError(500, { detail: 'session store down' }) : undefined),
+    });
     TestBed.configureTestingModule({
       providers: [
         provideZonelessChangeDetection(),
@@ -35,7 +36,7 @@ describe('RunnerLogout', () => {
   });
 
   it('records the failure, does not reload, and does not reject', async () => {
-    respond = () => stubError(500, { detail: 'session store down' });
+    fail = true;
     const owner = TestBed.inject(RunnerLogout);
     TestBed.tick();
     const reload = vi.spyOn(owner as unknown as { reload: () => void }, 'reload').mockImplementation(() => undefined);

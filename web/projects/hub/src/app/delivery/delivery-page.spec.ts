@@ -5,19 +5,22 @@ import { Router, provideRouter } from '@angular/router';
 import { RouterTestingHarness } from '@angular/router/testing';
 import { QueryClient, provideTanStackQuery } from '@tanstack/angular-query-experimental';
 
-import { FLEET_CLOCK, hubClient } from 'fleet';
+import { FLEET_CLOCK, type FlowFactView } from 'fleet';
 import {
   bounceView,
   FIXTURE_NOW,
   chunkDetail,
   chunkSummary,
   fixtureInstant,
+  flowFactView,
+  flowView,
   landedRepoView,
   prView,
+  repositorySummary,
   type RequestClientStub,
   settle,
   stubError,
-  stubRequestClient,
+  stubHubClient,
 } from 'fleet/testing';
 import { DeliveryPage } from './delivery-page';
 
@@ -41,33 +44,40 @@ const CHUNKS = [
   chunkSummary({ chunk_id: IDLE, graph_id: 'gr_1', status: 'ready' }),
 ];
 
-const fact = (id: number, chunkId: string, kind: string, secondsAgo: number, outcome: string | null = null) => ({
-  id,
-  flow_id: 'fl_a',
-  chunk_id: chunkId,
-  kind,
-  at: fixtureInstant(-secondsAgo),
-  outcome,
-  revision: null,
-  submission_id: `sub-${chunkId}`,
-  verdict: kind === 'turn-ended' ? 'bounced' : null,
-});
+const fact = (id: number, chunkId: string, kind: FlowFactView['kind'], secondsAgo: number, outcome: string | null = null) =>
+  flowFactView({
+    id,
+    flow_id: 'fl_a',
+    chunk_id: chunkId,
+    kind,
+    at: fixtureInstant(-secondsAgo),
+    outcome,
+    revision: null,
+    submission_id: `sub-${chunkId}`,
+    verdict: kind === 'turn-ended' ? 'bounced' : null,
+  });
 
-/** The page's reads; everything unnamed falls through to `{}`. `flows` answers the active-flows read. */
-function hubRoutes(flows: () => unknown = () => ({ flows: [{ flow_id: 'fl_a', repository_id: 'rp_a', line: [], resource: 'rp_a:master', branch: 'master' }] })) {
-  return (method: string, path: string): unknown => {
-    if (method !== 'GET') return {};
-    if (path === '/api/flows') return flows();
-    if (path === '/api/repositories') return { repositories: [{ repository_id: 'rp_a', owner: 'paul-gross', repo: 'blizzard', name: 'blizzard' }] };
-    if (path === '/api/chunks') return { chunks: CHUNKS, next_cursor: null };
-    if (path === '/api/flows/fl_a/record') {
-      return { facts: [fact(3, BOUNCED, 'turn-ended', 600, 'failure'), fact(2, IN_LINE, 'submitted', 1800), fact(1, LANDED, 'landed', 7200)], next_before: null };
-    }
-    if (path === '/api/work-items') return { chunks: {} };
-    if (path === `/api/chunks/${IN_LINE}`) {
-      return chunkDetail({ chunk_id: IN_LINE, open_prs: [prView({ number: 41 })], flow_places: [PLACE], bounces: [bounceView({ recorded_at: fixtureInstant(-7200) })], flow_record: [] });
-    }
-    return {};
+type HubRoutes = Parameters<typeof stubHubClient>[0];
+
+/** The page's reads. `flows` answers the active-flows read; `overrides` replaces any route. */
+function hubRoutes(
+  flows: NonNullable<HubRoutes['GET /api/flows']> = () => ({ flows: [flowView({ flow_id: 'fl_a', repository_id: 'rp_a', line: [], resource: 'rp_a:master', branch: 'master' })] }),
+  overrides: HubRoutes = {},
+): HubRoutes {
+  return {
+    'GET /api/flows': flows,
+    'GET /api/repositories': () => ({ repositories: [repositorySummary({ repository_id: 'rp_a', owner: 'paul-gross', repo: 'blizzard', name: 'blizzard' })] }),
+    'GET /api/chunks': () => ({ chunks: CHUNKS, next_cursor: null }),
+    'GET /api/flows/{flow_id}/record': () => ({
+      facts: [fact(3, BOUNCED, 'turn-ended', 600, 'failure'), fact(2, IN_LINE, 'submitted', 1800), fact(1, LANDED, 'landed', 7200)],
+      next_before: null,
+    }),
+    'GET /api/work-items': () => ({ chunks: {} }),
+    'GET /api/chunks/{chunk_id}': (_request, { chunk_id }) =>
+      chunk_id === IN_LINE
+        ? chunkDetail({ chunk_id: IN_LINE, open_prs: [prView({ number: 41 })], flow_places: [PLACE], bounces: [bounceView({ recorded_at: fixtureInstant(-7200) })], flow_record: [] })
+        : stubError(404, { detail: `unknown chunk ${chunk_id}` }),
+    ...overrides,
   };
 }
 
@@ -75,7 +85,7 @@ describe('DeliveryPage', () => {
   let stub: RequestClientStub;
 
   function configure(routes = hubRoutes()): void {
-    stub = stubRequestClient(hubClient, routes);
+    stub = stubHubClient(routes);
     TestBed.configureTestingModule({
       providers: [
         provideZonelessChangeDetection(),
@@ -138,7 +148,7 @@ describe('DeliveryPage', () => {
   });
 
   it('says so when nothing is delivering or delivered', async () => {
-    configure((method, path) => (path === '/api/chunks' ? { chunks: [], next_cursor: null } : hubRoutes()(method, path)));
+    configure(hubRoutes(undefined, { 'GET /api/chunks': () => ({ chunks: [], next_cursor: null }) }));
     const { el } = await open();
 
     expect(el.querySelector('[data-testid="delivery-empty"]')?.textContent).toContain('Nothing delivering or delivered.');

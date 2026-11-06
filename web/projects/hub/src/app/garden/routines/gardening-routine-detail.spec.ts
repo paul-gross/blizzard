@@ -2,8 +2,26 @@ import { provideZonelessChangeDetection } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { ActivatedRoute, convertToParamMap, type ParamMap } from '@angular/router';
 import { QueryClient, provideTanStackQuery } from '@tanstack/angular-query-experimental';
-import { FLEET_CLOCK, hubClient, type MeResponse } from 'fleet';
-import { OPERATOR_ME_RESPONSE, settle, stubError, stubRequestClient, type RequestClientStub } from 'fleet/testing';
+import { FLEET_CLOCK, type GraphSummaryView, type MeResponse, type RoutineView } from 'fleet';
+import {
+  OPERATOR_ME_RESPONSE,
+  gardenGraphSummaryView,
+  gardenMeasurementReadingView,
+  gardenProposalCountsRowView,
+  gardenProposalCountsView,
+  gardenRoutineView,
+  gardenScopeSweepView,
+  gardenSweepsView,
+  gardenTrendPeriodView,
+  gardenTrendView,
+  graphNodeView,
+  graphView,
+  runRowView,
+  settle,
+  stubError,
+  stubHubClient,
+  type RequestClientStub,
+} from 'fleet/testing';
 import { BehaviorSubject } from 'rxjs';
 import { vi } from 'vitest';
 
@@ -18,7 +36,7 @@ const VIEWER_ME_RESPONSE: MeResponse = {
   permissions: OPERATOR_ME_RESPONSE.permissions.filter((p) => p !== 'graph:edit'),
 };
 
-const ROUTINE = {
+const ROUTINE = gardenRoutineView({
   routine_id: 'rtn_1',
   name: 'Nightly sweep',
   slug: 'nightly',
@@ -27,63 +45,40 @@ const ROUTINE = {
   default_model: ['claude-sonnet-5'],
   default_effort: 'medium',
   created_at: '2026-01-01T00:00:00Z',
-};
+});
 
-const EFFECTIVE_GRAPH_SUMMARY = {
-  graph_id: 'gr_1',
-  name: 'garden-routine',
-  entry_node_id: 'nd_1',
-  created_at: '2026-01-01T00:00:00Z',
-  effective: true,
-};
+const EFFECTIVE_GRAPH_SUMMARY = gardenGraphSummaryView();
 
-const GRAPH_DETAIL = {
+const GRAPH_DETAIL = graphView({
   graph_id: 'gr_1',
   name: 'garden-routine',
   entry_node_id: 'nd_1',
   enabled: true,
-  nodes: [{ node_id: 'nd_1', name: 'survey', executor: 'claude', judged_by: 'none', prompt: 'Survey the repo.' }],
-};
+  nodes: [graphNodeView({ node_id: 'nd_1', name: 'survey', prompt: 'Survey the repo.' })],
+  edges: [],
+});
 
-const SWEEPS = {
+const SWEEPS = gardenSweepsView({
   routine_name: 'nightly',
-  since: '2026-01-01T00:00:00Z',
-  until: '2026-01-29T00:00:00Z',
   last_swept: [
-    { scope_slug: 'blizzard', finding_set_id: 'fins_1', produced_at: '2026-01-10T00:00:00Z', revisions: { blizzard: 'abc123' } },
-    { scope_slug: 'never-swept', finding_set_id: null, produced_at: null, revisions: {} },
+    gardenScopeSweepView({ finding_set_id: 'fins_1', produced_at: '2026-01-10T00:00:00Z', revisions: { blizzard: 'abc123' } }),
+    gardenScopeSweepView({ scope_slug: 'never-swept' }),
   ],
-  measurements: [{ scope_slug: 'blizzard', produced_at: '2026-01-10T00:00:00Z', measurement: '3 findings' }],
-};
+  measurements: [gardenMeasurementReadingView({ measurement: '3 findings' })],
+});
 
-const TREND = {
+const TREND = gardenTrendView({
   routine_name: 'nightly',
-  since: '2026-01-01T00:00:00Z',
-  until: '2026-01-29T00:00:00Z',
-  period_days: 7,
-  periods: [
-    { period_start: '2026-01-01T00:00:00Z', period_end: '2026-01-08T00:00:00Z', created: 2, exits: {}, outflow: 1, withdrawn: 0, reopened: 0 },
-  ],
+  periods: [gardenTrendPeriodView({ created: 2, outflow: 1 })],
   age: { boundary: '2026-01-01T00:00:00Z', recent: 2, older: 0, unattributed: 0 },
-};
+});
 
-const PROPOSAL_COUNTS = {
-  since: '2026-01-01T00:00:00Z',
-  until: '2026-01-29T00:00:00Z',
+const PROPOSAL_COUNTS = gardenProposalCountsView({
   routine: 'nightly',
-  rows: [
-    {
-      origin: 'routine-run',
-      routine_name: 'nightly',
-      class: 'stale-docstring',
-      open: 2,
-      passed: 1,
-      accepted_with_item: 3,
-      accepted_without_item: 0,
-      created: 6,
-    },
-  ],
-};
+  rows: [gardenProposalCountsRowView({ open: 2, passed: 1, accepted_with_item: 3, created: 6 })],
+});
+
+type HubRoutes = Parameters<typeof stubHubClient>[0];
 
 /**
  * Exercises the `/gardening/routines` detail child — the selected routine's
@@ -100,34 +95,36 @@ describe('GardeningRoutineDetail', () => {
 
   async function render(
     opts: {
-      routines?: readonly unknown[];
-      graphs?: readonly unknown[];
+      routines?: RoutineView[];
+      graphs?: GraphSummaryView[];
       me?: MeResponse;
-      routeOverride?: (method: string, path: string) => unknown;
+      routes?: HubRoutes;
       params?: Record<string, string>;
     } = {},
   ) {
     const routines = opts.routines ?? [ROUTINE];
     const graphs = opts.graphs ?? [EFFECTIVE_GRAPH_SUMMARY];
     const me = opts.me ?? VIEWER_ME_RESPONSE;
-    stub = stubRequestClient(hubClient, (method, path) => {
-      const overridden = opts.routeOverride?.(method, path);
-      if (overridden !== undefined) return overridden;
-      if (method === 'GET' && path === '/api/routines') return routines;
-      if (method === 'GET' && path === '/api/graphs') return graphs;
-      if (method === 'GET' && path === '/api/graphs/gr_1') return GRAPH_DETAIL;
-      if (method === 'GET' && path === '/api/routines/rtn_1/sweeps') return SWEEPS;
-      if (method === 'GET' && path === '/api/routines/rtn_1/scopes') return ['blizzard'];
-      if (method === 'GET' && path === '/api/routines/trend') return TREND;
-      if (method === 'GET' && path === '/api/routines/proposal-counts') return PROPOSAL_COUNTS;
+    stub = stubHubClient({
+      'GET /api/routines': () => routines,
+      'GET /api/graphs': () => graphs,
+      'GET /api/graphs/{graph_id}': () => GRAPH_DETAIL,
+      'GET /api/routines/{routine_id}/sweeps': () => SWEEPS,
+      'GET /api/routines/{routine_id}/scopes': () => ['blizzard'],
+      'GET /api/routines/trend': () => TREND,
+      'GET /api/routines/proposal-counts': () => PROPOSAL_COUNTS,
       // The gardening run dialog's own baselines read, fired only once its Run trigger opens it.
-      if (method === 'GET' && path === '/api/routines/rtn_1/baselines') return [];
+      'GET /api/routines/{routine_id}/baselines': () => [],
       // The run dialog's own scope picker (`gardening-run-dialog.ts`) injects
       // `injectHubScopesQuery` independently of this pane.
-      if (method === 'GET' && path === '/api/scopes') return [];
-      if (method === 'GET' && path === '/api/runs') return [];
-      if (method === 'GET' && path === '/api/me') return me;
-      return {};
+      'GET /api/scopes': () => [],
+      'GET /api/runs': () => [],
+      'GET /api/me': () => me,
+      'POST /api/routines/{routine_id}/retire': (_request, { routine_id }) =>
+        gardenRoutineView({ ...ROUTINE, routine_id, retired: true }),
+      'POST /api/routines/{routine_id}/enable': (_request, { routine_id }) => gardenRoutineView({ ...ROUTINE, routine_id }),
+      'PATCH /api/routines/{routine_id}': () => gardenRoutineView({ ...ROUTINE, graph_name: 'garden-delta' }),
+      ...opts.routes,
     });
     paramMap$ = new BehaviorSubject(convertToParamMap(opts.params ?? {}));
     await TestBed.configureTestingModule({
@@ -172,7 +169,7 @@ describe('GardeningRoutineDetail', () => {
   });
 
   it("lists the routine's recent runs, matched by the slug each run carries", async () => {
-    const run = {
+    const run = runRowView({
       chunk_id: 'ch_1',
       routine_name: 'nightly',
       scope_slug: 'blizzard',
@@ -181,11 +178,10 @@ describe('GardeningRoutineDetail', () => {
       outcome: 'done',
       escalation: null,
       delivered: [],
-    };
+    });
     const fixture = await render({
       params: { routineSlug: 'nightly' },
-      routeOverride: (method, path) =>
-        method === 'GET' && path === '/api/runs' ? [run, { ...run, chunk_id: 'ch_2', routine_name: 'Nightly sweep' }] : undefined,
+      routes: { 'GET /api/runs': () => [run, { ...run, chunk_id: 'ch_2', routine_name: 'Nightly sweep' }] },
     });
     const el = fixture.nativeElement as HTMLElement;
 
@@ -372,10 +368,10 @@ describe('GardeningRoutineDetail', () => {
       me: OPERATOR_ME_RESPONSE,
       routines: [ROUTINE, OTHER_ROUTINE],
       params: { routineSlug: 'nightly' },
-      routeOverride: (method, path) => {
-        if (method === 'GET' && path === '/api/routines/rtn_2/sweeps') return { ...SWEEPS, routine_name: 'weekly' };
-        if (method === 'GET' && path === '/api/routines/rtn_2/scopes') return [];
-        return undefined;
+      routes: {
+        'GET /api/routines/{routine_id}/sweeps': (_request, { routine_id }) =>
+          routine_id === 'rtn_2' ? { ...SWEEPS, routine_name: 'weekly' } : SWEEPS,
+        'GET /api/routines/{routine_id}/scopes': (_request, { routine_id }) => (routine_id === 'rtn_2' ? [] : ['blizzard']),
       },
     });
     vi.spyOn(TestBed.inject(QueryClient), 'invalidateQueries').mockReturnValue(new Promise<void>(() => undefined));
@@ -407,10 +403,7 @@ describe('GardeningRoutineDetail', () => {
     const fixture = await render({
       me: OPERATOR_ME_RESPONSE,
       params: { routineSlug: 'nightly' },
-      routeOverride: (method, path) =>
-        method === 'POST' && path === '/api/routines/rtn_1/retire'
-          ? stubError(404, { detail: 'unknown routine rtn_1' })
-          : undefined,
+      routes: { 'POST /api/routines/{routine_id}/retire': () => stubError(404, { detail: 'unknown routine rtn_1' }) },
     });
     const el = fixture.nativeElement as HTMLElement;
     const queryClient = TestBed.inject(QueryClient);

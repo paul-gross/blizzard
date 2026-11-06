@@ -4,8 +4,8 @@ import { ChangeDetectionStrategy, Component, provideZonelessChangeDetection, sig
 import { TestBed } from '@angular/core/testing';
 import { QueryClient, provideTanStackQuery } from '@tanstack/angular-query-experimental';
 
-import { type PermitView, hubClient } from 'fleet';
-import { type RequestClientStub, settle, stubRequestClient } from 'fleet/testing';
+import { type PermitView } from 'fleet';
+import { type RequestClientStub, settle, stubHubClient } from 'fleet/testing';
 import { injectPermitQuery } from './permits.query';
 
 const GRANTED: PermitView = {
@@ -39,7 +39,7 @@ describe('injectPermitQuery', () => {
   afterEach(() => stub?.restore());
 
   function mount() {
-    stub = stubRequestClient(hubClient, () => GRANTED);
+    stub = stubHubClient({ 'GET /api/permits/{permit_id}': () => GRANTED });
     TestBed.configureTestingModule({
       providers: [
         provideZonelessChangeDetection(),

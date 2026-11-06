@@ -3,8 +3,14 @@ import { TestBed } from '@angular/core/testing';
 import { QueryClient, provideTanStackQuery } from '@tanstack/angular-query-experimental';
 import { vi } from 'vitest';
 
-import { hubClient, hubConfigKey, hubProjectLinksKey } from 'fleet';
-import { type RequestClientStub, stubRequestClient } from 'fleet/testing';
+import { hubConfigKey, hubProjectLinksKey } from 'fleet';
+import {
+  projectView,
+  type RequestClientStub,
+  repositoryLinkView,
+  sourceLinkView,
+  stubHubClient,
+} from 'fleet/testing';
 import {
   injectCreateProjectMutation,
   injectEditProjectMutation,
@@ -17,7 +23,16 @@ describe('project mutations', () => {
   let queryClient: QueryClient;
 
   beforeEach(() => {
-    stub = stubRequestClient(hubClient, () => ({ project_id: 'proj_b', slug: 'blizzard' }));
+    stub = stubHubClient({
+      'POST /api/projects': () => projectView(),
+      'PATCH /api/projects/{project}': () => projectView({ slug: 'blizzard-hub', revision: 5 }),
+      'PUT /api/projects/{project}/source-links/{source}': () => sourceLinkView(),
+      'POST /api/projects/{project}/source-links/{source}/retire': () => sourceLinkView({ linked: false, revision: 3 }),
+      'PUT /api/projects/{project}/repository-links/{repository}': () => repositoryLinkView(),
+      'POST /api/projects/{project}/repository-links/{repository}/retire': () =>
+        repositoryLinkView({ linked: false, revision: 6 }),
+      'POST /api/projects/{project}/landing-order/position': () => ({ repository_links: [] }),
+    });
     queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
     TestBed.configureTestingModule({
       providers: [provideZonelessChangeDetection(), provideTanStackQuery(queryClient)],

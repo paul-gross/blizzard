@@ -3,50 +3,46 @@ import { TestBed } from '@angular/core/testing';
 import { QueryClient, provideTanStackQuery } from '@tanstack/angular-query-experimental';
 import { vi } from 'vitest';
 
-import { settle, OPERATOR_ME_RESPONSE, type RequestClientStub, stubError, stubRequestClient } from 'fleet/testing';
-import { hubClient } from 'fleet';
+import type { MeResponse } from 'fleet';
+import {
+  graphEdgeView,
+  graphNodeView,
+  graphView,
+  OPERATOR_ME_RESPONSE,
+  type RequestClientStub,
+  settle,
+  stubError,
+  stubHubClient,
+} from 'fleet/testing';
 import { GraphDetail } from './graph-detail';
 
-const GRAPH = {
+const GRAPH = graphView({
   graph_id: 'gr_build_v2',
   name: 'build',
   enabled: true,
   entry_node_id: 'n_build',
   nodes: [
-    {
+    graphNodeView({
       node_id: 'n_build',
       name: 'build',
-      executor: 'runner',
-      session: 'fresh',
-      judged_by: 'worker',
-      choices: [{ choice_id: 'c_pass', name: 'pass', description: 'Build succeeded' }],
-    },
-    {
-      node_id: 'n_review',
-      name: 'review',
-      executor: 'runner',
-      session: 'fresh',
-      judged_by: 'worker',
-      choices: [],
-    },
+      choices: [{ choice_id: 'c_pass', name: 'pass', description: 'Build succeeded', requires_checks: false }],
+    }),
+    graphNodeView({ node_id: 'n_review', name: 'review' }),
   ],
-  edges: [
-    { from_node_id: 'n_build', choice_id: 'c_pass', to_node_name: 'review', prompt_addendum: 'Focus on tests.' },
-  ],
+  edges: [graphEdgeView({ from_node_id: 'n_build', choice_id: 'c_pass', to_node_name: 'review', prompt_addendum: 'Focus on tests.' })],
   warnings: [],
-};
+});
+const RETIRED_GRAPH = graphView({ ...GRAPH, enabled: false, retired: true });
+const OTHER_GRAPH = graphView({ ...GRAPH, graph_id: 'gr_other', retired: false });
 
 describe('GraphDetail', () => {
   let stub: RequestClientStub;
 
-  async function mount(graphId: string, route: (m: string, p: string) => unknown, me: unknown = OPERATOR_ME_RESPONSE) {
+  async function mount(graphId: string, routes: Parameters<typeof stubHubClient>[0], me: MeResponse = OPERATOR_ME_RESPONSE) {
     // Every mount resolves `/api/me` (the graph-edit gate reads it); the per-test
     // `route` handles the graph reads. `me` defaults to the full-permission operator so
     // the lifecycle controls render.
-    stub = stubRequestClient(hubClient, (m, p) => {
-      if (m === 'GET' && p === '/api/me') return me;
-      return route(m, p);
-    });
+    stub = stubHubClient({ 'GET /api/me': () => me, ...routes });
     await TestBed.configureTestingModule({
       imports: [GraphDetail],
       providers: [
@@ -63,7 +59,7 @@ describe('GraphDetail', () => {
   afterEach(() => stub?.restore());
 
   it('shows an error state for an unknown graph id', async () => {
-    const fixture = await mount('gr_missing', () => stubError(404, { detail: 'unknown graph' }));
+    const fixture = await mount('gr_missing', { 'GET /api/graphs/{graph_id}': () => stubError(404, { detail: 'unknown graph' }) });
     const el = fixture.nativeElement as HTMLElement;
 
     expect(el.querySelector('[data-testid="graph-detail-error"]')).toBeTruthy();
@@ -73,9 +69,9 @@ describe('GraphDetail', () => {
   // --- Retire / re-enable mutation wiring -----------------------------
 
   it('fires the retire client call once the header emits retire (operator confirmed)', async () => {
-    const fixture = await mount('gr_build_v2', (method, path) => {
-      if (method === 'GET' && path === '/api/graphs/gr_build_v2') return GRAPH;
-      return {};
+    const fixture = await mount('gr_build_v2', {
+      'GET /api/graphs/{graph_id}': () => GRAPH,
+      'POST /api/graphs/{graph_id}/retire': () => RETIRED_GRAPH,
     });
     const el = fixture.nativeElement as HTMLElement;
 
@@ -90,9 +86,9 @@ describe('GraphDetail', () => {
   });
 
   it('fires the enable client call for a retired graph once the header emits enable (operator confirmed)', async () => {
-    const fixture = await mount('gr_build_v2', (method, path) => {
-      if (method === 'GET' && path === '/api/graphs/gr_build_v2') return { ...GRAPH, enabled: false, retired: true };
-      return {};
+    const fixture = await mount('gr_build_v2', {
+      'GET /api/graphs/{graph_id}': () => RETIRED_GRAPH,
+      'POST /api/graphs/{graph_id}/enable': () => GRAPH,
     });
     const el = fixture.nativeElement as HTMLElement;
 
@@ -107,12 +103,9 @@ describe('GraphDetail', () => {
   });
 
   it('surfaces a 409 refusal from retire rather than swallowing it', async () => {
-    const fixture = await mount('gr_build_v2', (method, path) => {
-      if (method === 'GET' && path === '/api/graphs/gr_build_v2') return GRAPH;
-      if (method === 'POST' && path === '/api/graphs/gr_build_v2/retire') {
-        return stubError(409, { detail: 'graph gr_build_v2 already retired somehow' });
-      }
-      return {};
+    const fixture = await mount('gr_build_v2', {
+      'GET /api/graphs/{graph_id}': () => GRAPH,
+      'POST /api/graphs/{graph_id}/retire': () => stubError(409, { detail: 'graph gr_build_v2 already retired somehow' }),
     });
     const el = fixture.nativeElement as HTMLElement;
 
@@ -137,12 +130,9 @@ describe('GraphDetail', () => {
   // keeps the window a real assertion can land in (`chunk-detail.spec.ts`'s own idiom).
 
   it('renders the retired override while a retire is pending, reverting to enabled on rejection', async () => {
-    const fixture = await mount('gr_build_v2', (method, path) => {
-      if (method === 'GET' && path === '/api/graphs/gr_build_v2') return GRAPH;
-      if (method === 'POST' && path === '/api/graphs/gr_build_v2/retire') {
-        return stubError(409, { detail: 'graph gr_build_v2 already retired somehow' });
-      }
-      return {};
+    const fixture = await mount('gr_build_v2', {
+      'GET /api/graphs/{graph_id}': () => GRAPH,
+      'POST /api/graphs/{graph_id}/retire': () => stubError(409, { detail: 'graph gr_build_v2 already retired somehow' }),
     });
     const el = fixture.nativeElement as HTMLElement;
     const queryClient = TestBed.inject(QueryClient);
@@ -171,12 +161,9 @@ describe('GraphDetail', () => {
   });
 
   it('renders the enabled override while an enable is pending, reverting to retired on rejection', async () => {
-    const fixture = await mount('gr_build_v2', (method, path) => {
-      if (method === 'GET' && path === '/api/graphs/gr_build_v2') return { ...GRAPH, enabled: false, retired: true };
-      if (method === 'POST' && path === '/api/graphs/gr_build_v2/enable') {
-        return stubError(409, { detail: 'graph gr_build_v2 already enabled somehow' });
-      }
-      return {};
+    const fixture = await mount('gr_build_v2', {
+      'GET /api/graphs/{graph_id}': () => RETIRED_GRAPH,
+      'POST /api/graphs/{graph_id}/enable': () => stubError(409, { detail: 'graph gr_build_v2 already enabled somehow' }),
     });
     const el = fixture.nativeElement as HTMLElement;
     const queryClient = TestBed.inject(QueryClient);
@@ -203,11 +190,9 @@ describe('GraphDetail', () => {
   });
 
   it("scopes the override to the pending graph — navigating to a different graph mid-flight shows that graph's own real badge, not the stale prediction", async () => {
-    const fixture = await mount('gr_build_v2', (method, path) => {
-      if (method === 'GET' && path === '/api/graphs/gr_build_v2') return GRAPH;
-      if (method === 'GET' && path === '/api/graphs/gr_other') return { ...GRAPH, graph_id: 'gr_other', retired: false };
-      if (method === 'POST' && path === '/api/graphs/gr_build_v2/retire') return {};
-      return {};
+    const fixture = await mount('gr_build_v2', {
+      'GET /api/graphs/{graph_id}': (_request, { graph_id }) => (graph_id === 'gr_other' ? OTHER_GRAPH : GRAPH),
+      'POST /api/graphs/{graph_id}/retire': () => RETIRED_GRAPH,
     });
     const el = fixture.nativeElement as HTMLElement;
     const queryClient = TestBed.inject(QueryClient);
@@ -238,10 +223,9 @@ describe('GraphDetail', () => {
   });
 
   it('scopes the disabled lifecycle control to the pending graph across a graph change', async () => {
-    const fixture = await mount('gr_build_v2', (method, path) => {
-      if (method === 'GET' && path === '/api/graphs/gr_build_v2') return GRAPH;
-      if (method === 'GET' && path === '/api/graphs/gr_other') return { ...GRAPH, graph_id: 'gr_other', retired: false };
-      return {};
+    const fixture = await mount('gr_build_v2', {
+      'GET /api/graphs/{graph_id}': (_request, { graph_id }) => (graph_id === 'gr_other' ? OTHER_GRAPH : GRAPH),
+      'POST /api/graphs/{graph_id}/retire': () => RETIRED_GRAPH,
     });
     const el = fixture.nativeElement as HTMLElement;
     const queryClient = TestBed.inject(QueryClient);

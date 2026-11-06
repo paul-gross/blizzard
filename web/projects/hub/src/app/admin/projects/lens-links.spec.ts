@@ -3,9 +3,18 @@ import { TestBed } from '@angular/core/testing';
 import { provideRouter } from '@angular/router';
 import { RouterTestingHarness } from '@angular/router/testing';
 import { QueryClient, provideTanStackQuery } from '@tanstack/angular-query-experimental';
-import { hubClient, type ProjectView } from 'fleet';
+import type { ProjectView } from 'fleet';
 import { HUB_PROJECT_FILTER, type InAppLink } from 'fleet/shell';
-import { OPERATOR_ME_RESPONSE, type RequestClientStub, settle, stubRequestClient } from 'fleet/testing';
+import {
+  configChangesPage,
+  OPERATOR_ME_RESPONSE,
+  type RequestClientStub,
+  repositorySummary,
+  settle,
+  sourceLinkView,
+  stubHubClient,
+  workSourceSummary,
+} from 'fleet/testing';
 
 import { ProjectLens, lensLink } from '../../core/project-lens';
 import { ChangesPage } from '../changes/changes-page';
@@ -32,38 +41,31 @@ describe('admin lists under the project lens', () => {
 
   async function open(url: string, lens: ProjectView | null) {
     const slug = lens?.slug ?? null;
-    stub = stubRequestClient(hubClient, (_method, path) => {
-      if (path === '/api/me') return OPERATOR_ME_RESPONSE;
-      if (path === '/api/work-sources') {
-        return {
-          sources: [
-            { name: 'hub', built_in: true, annotate: false, edit: false },
-            { name: 'jira', provider: 'jira', annotate: false, edit: true, revision: 1 },
-            { name: 'gh', provider: 'github', annotate: false, edit: true, revision: 1 },
-          ],
-        };
-      }
-      if (path === '/api/repositories') {
-        return {
-          repositories: [
-            { name: 'core', owner: 'a', repo: 'core', base_branch: 'main', revision: 1 },
-            { name: 'archive', owner: 'a', repo: 'archive', base_branch: 'main', revision: 1 },
-          ],
-        };
-      }
-      if (path === '/api/projects') return { projects: [WINTER] };
-      if (path === '/api/projects/winter/source-links') {
-        return {
-          source_links: [
-            { project_id: 'proj_w', name: 'hub', linked: true, built_in: true },
-            { project_id: 'proj_w', name: 'jira', linked: true, revision: 1 },
-            { project_id: 'proj_w', name: 'gh', linked: false, revision: 2 },
-          ],
-        };
-      }
-      if (path === '/api/projects/winter/repository-links') return { repository_links: [] };
-      if (path === '/api/config/changes') return { changes: [] };
-      return {};
+    stub = stubHubClient({
+      'GET /api/me': () => OPERATOR_ME_RESPONSE,
+      'GET /api/work-sources': () => ({
+        sources: [
+          workSourceSummary({ name: 'hub', slug: 'hub', work_source_id: null, provider: null, built_in: true, annotate: false, edit: false, revision: null }),
+          workSourceSummary({ name: 'jira', slug: 'jira', work_source_id: null, provider: 'jira', annotate: false, edit: true, revision: 1 }),
+          workSourceSummary({ name: 'gh', slug: 'gh', work_source_id: null, provider: 'github', annotate: false, edit: true, revision: 1 }),
+        ],
+      }),
+      'GET /api/repositories': () => ({
+        repositories: [
+          repositorySummary({ repository_id: 'repo_c', name: 'core', slug: 'core', owner: 'a', repo: 'core', base_branch: 'main', revision: 1 }),
+          repositorySummary({ repository_id: 'repo_a', name: 'archive', slug: 'archive', owner: 'a', repo: 'archive', base_branch: 'main', revision: 1 }),
+        ],
+      }),
+      'GET /api/projects': () => ({ projects: [WINTER] }),
+      'GET /api/projects/{project}/source-links': () => ({
+        source_links: [
+          sourceLinkView({ project_id: 'proj_w', name: 'hub', slug: 'hub', linked: true, built_in: true, revision: null }),
+          sourceLinkView({ project_id: 'proj_w', name: 'jira', slug: 'jira', linked: true, revision: 1 }),
+          sourceLinkView({ project_id: 'proj_w', name: 'gh', slug: 'gh', linked: false, revision: 2 }),
+        ],
+      }),
+      'GET /api/projects/{project}/repository-links': () => ({ repository_links: [] }),
+      'GET /api/config/changes': () => configChangesPage(),
     });
     TestBed.configureTestingModule({
       providers: [

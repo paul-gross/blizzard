@@ -3,8 +3,8 @@ import { TestBed } from '@angular/core/testing';
 import { Router, provideRouter } from '@angular/router';
 import { QueryClient, provideTanStackQuery } from '@tanstack/angular-query-experimental';
 
-import { hubClient } from 'fleet';
-import { type RequestClientStub, settle, stubRequestClient } from 'fleet/testing';
+import type { ProjectView } from 'fleet';
+import { projectView, type RequestClientStub, settle, stubHubClient } from 'fleet/testing';
 import { provideProjectLens } from './project-lens';
 import { injectShowProjectColors, showsProjectColors } from './project-lens-colors';
 
@@ -35,10 +35,10 @@ class ColorsHost {
 
 describe('injectShowProjectColors', () => {
   let stub: RequestClientStub;
-  let projects: { slug: string }[];
+  let projects: ProjectView[];
 
   beforeEach(async () => {
-    stub = stubRequestClient(hubClient, (_method, path) => (path === '/api/projects' ? { projects } : {}));
+    stub = stubHubClient({ 'GET /api/projects': () => ({ projects }) });
     await TestBed.configureTestingModule({
       imports: [ColorsHost],
       providers: [
@@ -55,7 +55,7 @@ describe('injectShowProjectColors', () => {
   afterEach(() => stub.restore());
 
   async function showAt(url: string, count: number): Promise<boolean> {
-    projects = Array.from({ length: count }, (_, i) => ({ slug: `p${i}`, project_id: `proj_${i}`, name: `P${i}` }));
+    projects = Array.from({ length: count }, (_, i) => projectView({ slug: `p${i}`, project_id: `proj_${i}`, name: `P${i}` }));
     await TestBed.inject(Router).navigateByUrl(url);
     const fixture = TestBed.createComponent(ColorsHost);
     await settle(fixture);

@@ -1,8 +1,8 @@
 import { provideZonelessChangeDetection } from '@angular/core';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { QueryClient, provideTanStackQuery } from '@tanstack/angular-query-experimental';
-import { type KitAsyncStateValue, runnerClient } from 'fleet';
-import { type RequestClientStub, settle, stubRequestClient } from 'fleet/testing';
+import { type KitAsyncStateValue } from 'fleet';
+import { type RequestClientStub, settle, stubRunnerClient } from 'fleet/testing';
 
 import { type MachineChunkRow, machineChunkRows } from '../../core/chunk-rows.model';
 import type { PanelLease } from '../../core/panel-reads.model';
@@ -54,7 +54,7 @@ afterEach(() => stub.restore());
 async function render(
   inputs: Partial<{ rows: readonly MachineChunkRow[]; layout: BoardLayout; state: KitAsyncStateValue; selectedChunkId: string | null; stacked: boolean }> = {},
 ): Promise<{ fixture: ComponentFixture<ChunkBoard>; el: HTMLElement }> {
-  stub = stubRequestClient(runnerClient, () => ({ items: [] }));
+  stub = stubRunnerClient({ 'GET /runners/{runner_id}/api/chunks/{chunk_id}/work-items': () => ({ items: [] }) });
   await TestBed.configureTestingModule({
     imports: [ChunkBoard],
     providers: [

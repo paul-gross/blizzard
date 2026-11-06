@@ -3,8 +3,16 @@ import { TestBed } from '@angular/core/testing';
 import { provideRouter, Router } from '@angular/router';
 import { RouterTestingHarness } from '@angular/router/testing';
 import { QueryClient, provideTanStackQuery } from '@tanstack/angular-query-experimental';
-import { hubClient, type WorkSourceSummary } from 'fleet';
-import { OPERATOR_ME_RESPONSE, type RequestClientStub, settle, stubRequestClient } from 'fleet/testing';
+import { type MeResponse, type WorkSourceSummary } from 'fleet';
+import {
+  configChangesPage,
+  configChangeView,
+  OPERATOR_ME_RESPONSE,
+  type RequestClientStub,
+  settle,
+  stubError,
+  stubHubClient,
+} from 'fleet/testing';
 
 import { WorkSourceDetail } from './work-source-detail';
 
@@ -29,9 +37,9 @@ const JIRA: WorkSourceSummary = {
   retired: false,
 };
 const HUB: WorkSourceSummary = { forge_id: null, forge_slug: null, forge_name: null, warnings: [], name: 'hub', slug: 'hub', work_source_id: null, built_in: true, annotate: false, edit: false, created_at: null, created_by: null, created_by_name: null, locator: null, provider: null, retired: false, revision: null, secret: null, };
-const HISTORY = {
+const HISTORY = configChangesPage({
   changes: [
-    {
+    configChangeView({
       id: 7,
       actor: 'ada',
       door: 'board',
@@ -41,11 +49,11 @@ const HISTORY = {
       record_kind: 'work_source',
       recorded_at: '2026-10-02T00:00:00Z',
       revision: 2,
-      diff: [{ field: 'slug', old: 'tracker', new: 'jira' }],
-    },
+      diff: [{ field: 'slug', old: 'tracker', new: 'jira', old_label: null, new_label: null }],
+    }),
   ],
-};
-const EDITOR = { ...OPERATOR_ME_RESPONSE, permissions: [...OPERATOR_ME_RESPONSE.permissions, 'config:edit'] };
+});
+const EDITOR: MeResponse = { ...OPERATOR_ME_RESPONSE, permissions: [...OPERATOR_ME_RESPONSE.permissions, 'config:edit'] };
 
 describe('WorkSourceDetail', () => {
   let stub: RequestClientStub;
@@ -55,14 +63,12 @@ describe('WorkSourceDetail', () => {
   });
 
   async function open(url: string) {
-    stub = stubRequestClient(hubClient, (method, path) => {
-      if (path === '/api/me') return EDITOR;
-      if (path === '/api/work-sources/hub') return HUB;
-      if (path === '/api/work-sources/wsrc_j' || path === '/api/work-sources/jira' || path === '/api/work-sources/tracker') {
-        return method === 'PATCH' ? { ...JIRA, slug: 'jira-2', revision: 4 } : JIRA;
-      }
-      if (path === '/api/config/changes') return HISTORY;
-      return {};
+    stub = stubHubClient({
+      'GET /api/me': () => EDITOR,
+      'GET /api/work-sources/{source}': (_request, { source }) =>
+        source === 'hub' ? HUB : ['wsrc_j', 'jira', 'tracker'].includes(source) ? JIRA : stubError(404, { detail: 'no such work source' }),
+      'PATCH /api/work-sources/{source}': () => ({ ...JIRA, slug: 'jira-2', revision: 4 }),
+      'GET /api/config/changes': () => HISTORY,
     });
     TestBed.configureTestingModule({
       providers: [

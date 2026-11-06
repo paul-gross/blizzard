@@ -2,8 +2,7 @@ import { ChangeDetectionStrategy, Component, provideZonelessChangeDetection, sig
 import { TestBed } from '@angular/core/testing';
 import { QueryClient, provideTanStackQuery } from '@tanstack/angular-query-experimental';
 
-import { hubClient } from 'fleet';
-import { settle, type RequestClientStub, stubError, stubRequestClient } from 'fleet/testing';
+import { gardenWorkItemView, settle, type RequestClientStub, stubError, stubHubClient } from 'fleet/testing';
 import { injectHubWorkItemQuery, injectHubWorkItemsQuery, type WorkItemPointer } from './work-item.query';
 
 @Component({
@@ -31,20 +30,7 @@ class TestWorkItemsQueryHost {
 }
 
 function workItem(source: string, ref: string, label: string) {
-  return {
-    source,
-    ref,
-    title: 't',
-    body: 'b',
-    author: { kind: 'user', user_id: 'u_1' },
-    closure: null,
-    closed_at: null,
-    created_at: '2026-01-01T00:00:00Z',
-    edited_at: '2026-01-01T00:00:00Z',
-    label,
-    stated_priority: null,
-    web_url: null,
-  };
+  return gardenWorkItemView({ source, ref, label });
 }
 
 describe('injectHubWorkItemQuery', () => {
@@ -52,7 +38,7 @@ describe('injectHubWorkItemQuery', () => {
   afterEach(() => stub?.restore());
 
   it('stays disabled while the source/ref pair is incomplete', async () => {
-    stub = stubRequestClient(hubClient, () => ({}));
+    stub = stubHubClient({});
     TestBed.configureTestingModule({
       imports: [TestWorkItemQueryHost],
       providers: [provideZonelessChangeDetection(), provideTanStackQuery(new QueryClient())],
@@ -66,24 +52,8 @@ describe('injectHubWorkItemQuery', () => {
   });
 
   it('reads one work item off GET /api/work-sources/{source}/items/{ref}', async () => {
-    stub = stubRequestClient(hubClient, (method, path) => {
-      if (method === 'GET' && path === '/api/work-sources/hub/items/42') {
-        return {
-          source: 'hub',
-          ref: '42',
-          title: 't',
-          body: 'b',
-          author: { kind: 'user', user_id: 'u_1' },
-          closure: null,
-          closed_at: null,
-          created_at: '2026-01-01T00:00:00Z',
-          edited_at: '2026-01-01T00:00:00Z',
-          label: 'hub#42',
-          stated_priority: null,
-          web_url: '/board/chunk/ch_1',
-        };
-      }
-      return {};
+    stub = stubHubClient({
+      'GET /api/work-sources/{source}/items/{ref}': () => gardenWorkItemView({ web_url: '/board/chunk/ch_1' }),
     });
     TestBed.configureTestingModule({
       imports: [TestWorkItemQueryHost],
@@ -104,7 +74,7 @@ describe('injectHubWorkItemsQuery', () => {
   afterEach(() => stub?.restore());
 
   it('stays disabled for an empty pointer list', async () => {
-    stub = stubRequestClient(hubClient, () => ({}));
+    stub = stubHubClient({});
     TestBed.configureTestingModule({
       imports: [TestWorkItemsQueryHost],
       providers: [provideZonelessChangeDetection(), provideTanStackQuery(new QueryClient())],
@@ -117,10 +87,8 @@ describe('injectHubWorkItemsQuery', () => {
   });
 
   it('reads every pointer independently, live, and joins the results', async () => {
-    stub = stubRequestClient(hubClient, (method, path) => {
-      if (method === 'GET' && path === '/api/work-sources/hub/items/1') return workItem('hub', '1', 'hub#1');
-      if (method === 'GET' && path === '/api/work-sources/hub/items/2') return workItem('hub', '2', 'hub#2');
-      return {};
+    stub = stubHubClient({
+      'GET /api/work-sources/{source}/items/{ref}': (_request, { source, ref }) => workItem(source, ref, `${source}#${ref}`),
     });
     TestBed.configureTestingModule({
       imports: [TestWorkItemsQueryHost],
@@ -140,10 +108,9 @@ describe('injectHubWorkItemsQuery', () => {
   });
 
   it("drops a failed pointer's row rather than failing the whole join", async () => {
-    stub = stubRequestClient(hubClient, (method, path) => {
-      if (method === 'GET' && path === '/api/work-sources/hub/items/1') return workItem('hub', '1', 'hub#1');
-      if (method === 'GET' && path === '/api/work-sources/hub/items/2') return stubError(404, { detail: 'not found' });
-      return {};
+    stub = stubHubClient({
+      'GET /api/work-sources/{source}/items/{ref}': (_request, { source, ref }) =>
+        ref === '1' ? workItem(source, ref, 'hub#1') : stubError(404, { detail: 'not found' }),
     });
     TestBed.configureTestingModule({
       imports: [TestWorkItemsQueryHost],

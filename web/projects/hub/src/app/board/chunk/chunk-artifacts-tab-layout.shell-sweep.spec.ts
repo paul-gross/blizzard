@@ -3,8 +3,8 @@ import { TestBed } from '@angular/core/testing';
 import { provideRouter } from '@angular/router';
 import { RouterTestingHarness } from '@angular/router/testing';
 import { QueryClient, provideTanStackQuery } from '@tanstack/angular-query-experimental';
-import { ChunkPage, hubClient, type hubApi } from 'fleet';
-import { assetArtifactView, chunkDetail, OPERATOR_ME_RESPONSE, stubRequestClient } from 'fleet/testing';
+import { ChunkPage, type hubApi } from 'fleet';
+import { assetArtifactView, chunkDetail, OPERATOR_ME_RESPONSE, stubHubClient } from 'fleet/testing';
 import { page } from 'vitest/browser';
 
 import { HUB_CHUNK_PAGE_PROVIDERS } from './hub-chunk-actions';
@@ -74,10 +74,10 @@ function mountInAppShell(root: HTMLElement): void {
 
 describe('chunk page Artifacts tab composed-chain layout shell sweep (web:shell-sweep, review M1)', () => {
   it('keeps the nav list scrollable, bounded by the tab’s real box, not clipped with no scroll container', async () => {
-    const stub = stubRequestClient(hubClient, (method, path) => {
-      if (method === 'GET' && path === '/api/me') return OPERATOR_ME_RESPONSE;
-      if (method === 'GET' && path.endsWith('/work-items')) return { items: [] };
-      return CHAIN_DETAIL;
+    const stub = stubHubClient({
+      'GET /api/me': () => OPERATOR_ME_RESPONSE,
+      'GET /api/chunks/{chunk_id}': () => CHAIN_DETAIL,
+      'GET /api/chunks/{chunk_id}/work-items': () => ({ items: [] }),
     });
 
     try {

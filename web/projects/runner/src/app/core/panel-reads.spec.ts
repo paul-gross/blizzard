@@ -2,8 +2,19 @@ import { ChangeDetectionStrategy, Component, provideZonelessChangeDetection } fr
 import { TestBed } from '@angular/core/testing';
 import { Router, provideRouter } from '@angular/router';
 import { QueryClient, provideTanStackQuery } from '@tanstack/angular-query-experimental';
-import { runnerClient, type runnerApi } from 'fleet';
-import { type RequestClientStub, settle, stubError, stubRequestClient } from 'fleet/testing';
+import { type runnerApi } from 'fleet';
+import {
+  type RequestClientStub,
+  hostRunnerView,
+  runnerAskView,
+  runnerDashboardView,
+  runnerFactView,
+  runnerLeaseView,
+  runnerStatusView,
+  settle,
+  stubError,
+  stubRunnerClient,
+} from 'fleet/testing';
 
 import { injectPanelAsks, injectPanelDashboards, injectPanelFacts, injectPanelLeases } from './panel-reads';
 
@@ -21,52 +32,59 @@ class PanelReadsHost {
 }
 
 function hostRunner(runnerId: string, name: string, overrides: Partial<runnerApi.HostRunnerView> = {}): runnerApi.HostRunnerView {
-  return {
+  return hostRunnerView({
     runner_id: runnerId,
     name,
-    state: 'serving',
-    served: true,
-    halted_reasons: [],
-    pause: { local: false, hub: false, effective: false, local_reason: null },
-    throttle: null,
     bindings: [{ project: `proj-of-${name}`, workspace_id: 'ws', agents: 4 }],
-    agents_in_use: 0,
     max_agents: 4,
     ...overrides,
-  };
+  });
 }
 
-function dashboard(runnerId: string): unknown {
-  const project_id = `proj-of-r${runnerId.slice('rn_'.length)}`;
-  return {
-    runner: { runner_id: runnerId },
-    asks: { items: [{ question_id: `q-of-${runnerId}`, chunk_id: 'ch_1', project_id, lease_id: null, session_id: null, question: '?', asked_at: '2026-07-16T11:00:00+00:00' }] },
-    escalations: { items: [] },
+function projectOf(runnerId: string): string {
+  return `proj-of-r${runnerId.slice('rn_'.length)}`;
+}
+
+function dashboard(runnerId: string): runnerApi.DashboardView {
+  const project_id = projectOf(runnerId);
+  return runnerDashboardView({
+    runner: runnerStatusView({ runner_id: runnerId }),
+    asks: {
+      items: [runnerAskView({ question_id: `q-of-${runnerId}`, chunk_id: 'ch_1', project_id, asked_at: '2026-07-16T11:00:00+00:00' })],
+    },
     // A fact on a chunk no lease in the window names — attributed by its own project all the same.
-    facts: { items: [{ seq: 1, kind: 'note', chunk_id: 'ch_unleased', project_id, lease_id: null, created_at: '2026-07-16T11:00:00+00:00', acked_at: null }] },
-  };
+    facts: {
+      items: [runnerFactView({ seq: 1, kind: 'note', chunk_id: 'ch_unleased', project_id, created_at: '2026-07-16T11:00:00+00:00' })],
+    },
+  });
 }
 
 /** A host serving `rn_1` (`r1`) and `rn_2` (`r2`), holding `rn_3` halted; `failing` names a
  * runner whose every read answers 503. */
-function routeFor(failing: string | null) {
-  return (method: string, path: string): unknown => {
-    if (method !== 'GET') return {};
-    if (path === '/api/host/runners') {
-      return { items: [hostRunner('rn_1', 'r1'), hostRunner('rn_2', 'r2'), hostRunner('rn_3', 'r3', { state: 'halted', served: false })] };
-    }
-    if (path === '/api/host/environments') return { workspaces: [] };
-    const match = /^\/runners\/([^/]+)\/api\/(.+)$/.exec(path);
-    if (match === null) return {};
-    const [, runnerId, rest] = match;
-    if (runnerId === failing) return stubError(503, { detail: 'runner unreachable' });
-    if (rest === 'dashboard') return dashboard(runnerId);
-    if (rest === 'leases') {
-      const project_id = `proj-of-r${runnerId.slice('rn_'.length)}`;
-      return { items: [{ lease_id: `lease-of-${runnerId}`, chunk_id: 'ch_1', project_id, state: 'running', created_at: '2026-07-16T11:00:00+00:00' }] };
-    }
-    return {};
-  };
+function stubHost(failing: string | null): RequestClientStub {
+  const unreachable = () => stubError(503, { detail: 'runner unreachable' });
+  return stubRunnerClient({
+    'GET /api/host/runners': () => ({
+      items: [hostRunner('rn_1', 'r1'), hostRunner('rn_2', 'r2'), hostRunner('rn_3', 'r3', { state: 'halted', served: false })],
+    }),
+    'GET /api/host/environments': () => ({ workspaces: [] }),
+    'GET /runners/{runner_id}/api/dashboard': (_request, { runner_id }) =>
+      runner_id === failing ? unreachable() : dashboard(runner_id),
+    'GET /runners/{runner_id}/api/leases': (_request, { runner_id }) =>
+      runner_id === failing
+        ? unreachable()
+        : {
+            items: [
+              runnerLeaseView({
+                lease_id: `lease-of-${runner_id}`,
+                chunk_id: 'ch_1',
+                project_id: projectOf(runner_id),
+                state: 'running',
+                created_at: '2026-07-16T11:00:00+00:00',
+              }),
+            ],
+          },
+  });
 }
 
 describe('the panel’s fan-out reads', () => {
@@ -75,7 +93,7 @@ describe('the panel’s fan-out reads', () => {
   afterEach(() => stub.restore());
 
   async function mount(failing: string | null, url = '/') {
-    stub = stubRequestClient(runnerClient, routeFor(failing));
+    stub = stubHost(failing);
     await TestBed.configureTestingModule({
       imports: [PanelReadsHost],
       providers: [

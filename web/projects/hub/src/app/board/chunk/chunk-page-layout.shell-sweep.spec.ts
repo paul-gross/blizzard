@@ -3,7 +3,7 @@ import { type ComponentFixture, TestBed } from '@angular/core/testing';
 import { provideRouter } from '@angular/router';
 import { RouterTestingHarness } from '@angular/router/testing';
 import { QueryClient, provideTanStackQuery } from '@tanstack/angular-query-experimental';
-import { ChunkPage, ChunkGeneralTab, ChunkTranscriptsTab, hubClient, type hubApi, ViewportService } from 'fleet';
+import { ChunkPage, ChunkGeneralTab, ChunkTranscriptsTab, type hubApi, ViewportService } from 'fleet';
 import {
   assetArtifactView,
   chunkDetail,
@@ -14,8 +14,11 @@ import {
   questionView,
   settle,
   stubError,
-  stubRequestClient,
+  stubHubClient,
+  transcriptSegmentContentView,
+  transcriptSegmentIndexEntry,
   transitionView,
+  turnSegmentView,
   workRefView,
 } from 'fleet/testing';
 import { page } from 'vitest/browser';
@@ -481,29 +484,41 @@ function mountInAppShell(root: HTMLElement): void {
 
 /** A tail-heavy segment: enough turns, each long enough, to overflow any viewport this
  * sweep uses — the load-bearing fixture for the "a long segment is unreachable" claim. */
-function overflowingTurns(): unknown[] {
-  return Array.from({ length: 60 }, (_, i) => ({
-    index: i,
-    kind: 'asst',
-    timestamp: null,
-    text: `turn ${i} — long enough, repeated enough times, to overflow a phone-height viewport on its own`,
-    tool: null,
-    thinking_redacted: false,
-    sidechain: null,
-    truncated: false,
-  }));
+function overflowingTurns(): hubApi.TurnSegmentViewOutput[] {
+  return Array.from({ length: 60 }, (_, i) =>
+    turnSegmentView({
+      index: i,
+      kind: 'asst',
+      timestamp: null,
+      text: `turn ${i} — long enough, repeated enough times, to overflow a phone-height viewport on its own`,
+      tool: null,
+      thinking_redacted: false,
+      sidechain: null,
+      truncated: false,
+    }),
+  );
+}
+
+type HubRoutes = Parameters<typeof stubHubClient>[0];
+
+/** The routes the composed chain reads — the operator, the chunk, its work items — plus the test's transcript routes. */
+function chainRoutes(detail: hubApi.ChunkDetail, extra: HubRoutes): HubRoutes {
+  return {
+    'GET /api/me': () => OPERATOR_ME_RESPONSE,
+    'GET /api/chunks/{chunk_id}': () => detail,
+    'GET /api/chunks/{chunk_id}/work-items': () => ({ items: [] }),
+    ...extra,
+  };
 }
 
 describe('chunk page Transcripts tab composed-chain layout shell sweep (web:shell-sweep, review:F1/F2)', () => {
   it("keeps a long segment's own view scrollable, bounded by the tab's real box, not clipped with no scroll container (review:F1)", async () => {
-    const stub = stubRequestClient(hubClient, (method, path) => {
-      if (method === 'GET' && path === '/api/me') return OPERATOR_ME_RESPONSE;
-      if (method === 'GET' && path.endsWith('/work-items')) return { items: [] };
-      if (path === `/api/chunks/${CHUNK_ID}/transcripts`) {
-        return {
+    const stub = stubHubClient(
+      chainRoutes(CHAIN_DETAIL, {
+        'GET /api/chunks/{chunk_id}/transcripts': () => ({
           chunk_id: CHUNK_ID,
           segments: [
-            {
+            transcriptSegmentIndexEntry({
               segment_id: 'sg_1',
               node_id: 'nd_build',
               epoch: 1,
@@ -516,15 +531,13 @@ describe('chunk page Transcripts tab composed-chain layout shell sweep (web:shel
               normalizer_version: 'v1',
               harness_version: null,
               received_at: '2026-08-09T00:00:00+00:00',
-            },
+            }),
           ],
-        };
-      }
-      if (path === `/api/chunks/${CHUNK_ID}/transcripts/sg_1`) {
-        return { segment_id: 'sg_1', final: true, truncated: false, turns: overflowingTurns() };
-      }
-      return CHAIN_DETAIL;
-    });
+        }),
+        'GET /api/chunks/{chunk_id}/transcripts/{segment_id}': () =>
+          transcriptSegmentContentView({ segment_id: 'sg_1', final: true, truncated: false, turns: overflowingTurns() }),
+      }),
+    );
 
     try {
       await TestBed.configureTestingModule({
@@ -574,11 +587,11 @@ describe('chunk page Transcripts tab composed-chain layout shell sweep (web:shel
   });
 
   it("centers the tab's own permission-denied state inside the tab, not the browser viewport (review:F2)", async () => {
-    const stub = stubRequestClient(hubClient, (method, path) => {
-      if (method === 'GET' && path === '/api/me') return { ...OPERATOR_ME_RESPONSE, permissions: [] };
-      if (method === 'GET' && path.endsWith('/work-items')) return { items: [] };
-      if (path === `/api/chunks/${CHUNK_ID}/transcripts`) return stubError(403, { detail: 'forbidden' });
-      return CHAIN_DETAIL;
+    const stub = stubHubClient({
+      ...chainRoutes(CHAIN_DETAIL, {
+        'GET /api/chunks/{chunk_id}/transcripts': () => stubError(403, { detail: 'forbidden' }),
+      }),
+      'GET /api/me': () => ({ ...OPERATOR_ME_RESPONSE, permissions: [] }),
     });
 
     try {
@@ -669,27 +682,22 @@ function expectNoOverflow(element: HTMLElement, label: string): void {
 
 describe('ChunkPage mobile drill-down composed-chain shell sweep (web:shell-sweep)', () => {
   it('keeps General history-free and each selected tab list-only or detail-only without overflow at phone widths', async () => {
-    const stub = stubRequestClient(hubClient, (method, path) => {
-      if (method === 'GET' && path === '/api/me') return OPERATOR_ME_RESPONSE;
-      if (method === 'GET' && path.endsWith('/work-items')) return { items: [] };
-      if (path === `/api/chunks/${CHUNK_ID}/transcripts`) {
-        return {
+    const stub = stubHubClient(
+      chainRoutes(DRILLDOWN_DETAIL, {
+        'GET /api/chunks/{chunk_id}/transcripts': () => ({
           chunk_id: CHUNK_ID,
-          segments: [{
+          segments: [transcriptSegmentIndexEntry({
             segment_id: 'sg_1', node_id: 'nd_build', epoch: 1, spawn_generation: 0,
             turn_range_start: 0, turn_range_end: 1, final: true, truncated: false, byte_count: 100,
             normalizer_version: 'v1', harness_version: null, received_at: '2026-08-09T00:00:00.000Z',
-          }],
-        };
-      }
-      if (path === `/api/chunks/${CHUNK_ID}/transcripts/sg_1`) {
-        return {
+          })],
+        }),
+        'GET /api/chunks/{chunk_id}/transcripts/{segment_id}': () => transcriptSegmentContentView({
           segment_id: 'sg_1', final: true, truncated: false,
-          turns: [{ index: 0, kind: 'asst', timestamp: null, tool: null, thinking_redacted: false, sidechain: null, truncated: false, text: 'A transcript turn long enough to prove the selected mobile pane lays out inside its own width.' }],
-        };
-      }
-      return DRILLDOWN_DETAIL;
-    });
+          turns: [turnSegmentView({ index: 0, kind: 'asst', timestamp: null, tool: null, thinking_redacted: false, sidechain: null, truncated: false, text: 'A transcript turn long enough to prove the selected mobile pane lays out inside its own width.' })],
+        }),
+      }),
+    );
 
     try {
       await TestBed.configureTestingModule({

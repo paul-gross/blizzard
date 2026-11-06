@@ -3,9 +3,16 @@ import { TestBed } from '@angular/core/testing';
 import { provideRouter } from '@angular/router';
 import { RouterTestingHarness } from '@angular/router/testing';
 import { QueryClient, provideTanStackQuery } from '@tanstack/angular-query-experimental';
-import { hubClient } from 'fleet';
+import type { ProjectView } from 'fleet';
 import type { InAppLink } from 'fleet/shell';
-import { OPERATOR_ME_RESPONSE, type RequestClientStub, settle, stubRequestClient } from 'fleet/testing';
+import {
+  chunkCountsView,
+  configChangesPage,
+  OPERATOR_ME_RESPONSE,
+  type RequestClientStub,
+  settle,
+  stubHubClient,
+} from 'fleet/testing';
 import { page } from 'vitest/browser';
 
 import { ProjectLens, lensLink } from '../../core/project-lens';
@@ -17,7 +24,7 @@ import { ProjectDetail } from './project-detail';
  * in flight (no `0`, no empty copy), and a project with no revisions — each without
  * horizontal overflow. Run via `npm run shell-sweep` (`web/scripts/shell-sweep.js`).
  */
-const PROJECT = {
+const PROJECT: ProjectView = {
   project_id: 'proj_b',
   slug: 'blizzard',
   name: 'Blizzard',
@@ -41,16 +48,18 @@ describe('ProjectDetail overview shell sweep', () => {
   /** Mounts the detail at `url`; `answered` false holds the counts and history reads in flight. */
   async function open(width: number, url: string, answered: boolean) {
     await page.viewport(width, 800);
-    const pending = new Promise<unknown>(() => undefined);
-    stub = stubRequestClient(hubClient, (_method, path) => {
-      if (path === '/api/me') return { ...OPERATOR_ME_RESPONSE, permissions: [...OPERATOR_ME_RESPONSE.permissions, 'config:edit'] };
-      if (path === '/api/projects/proj_b') return PROJECT;
-      if (path.endsWith('/source-links')) return { source_links: [] };
-      if (path.endsWith('/repository-links')) return { repository_links: [] };
-      if (path === '/api/runners') return { runners: [] };
-      if (path === '/api/config/changes') return answered ? { changes: [], total: 0 } : pending;
-      if (path === '/api/chunk-counts') return answered ? { ready: 0, running: 0, done: 0, done_since: 0 } : pending;
-      return {};
+    const pending = new Promise<never>(() => undefined);
+    stub = stubHubClient({
+      'GET /api/me': () => ({ ...OPERATOR_ME_RESPONSE, permissions: [...OPERATOR_ME_RESPONSE.permissions, 'config:edit'] }),
+      'GET /api/projects/{project}': () => PROJECT,
+      'GET /api/projects/{project}/source-links': () => ({ source_links: [] }),
+      'GET /api/projects/{project}/repository-links': () => ({ repository_links: [] }),
+      'GET /api/work-sources': () => ({ sources: [] }),
+      'GET /api/repositories': () => ({ repositories: [] }),
+      'GET /api/runners': () => ({ runners: [] }),
+      'GET /api/config/changes': () => (answered ? configChangesPage() : pending),
+      'GET /api/chunk-counts': () =>
+        answered ? chunkCountsView({ ready: 0, running: 0, done: 0, done_since: 0 }) : pending,
     });
     TestBed.configureTestingModule({
       providers: [

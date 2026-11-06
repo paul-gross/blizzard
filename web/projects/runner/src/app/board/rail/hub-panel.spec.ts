@@ -2,8 +2,16 @@ import { provideZonelessChangeDetection } from '@angular/core';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { provideRouter } from '@angular/router';
 import { QueryClient, provideTanStackQuery } from '@tanstack/angular-query-experimental';
-import { runnerClient, type runnerApi } from 'fleet';
-import { type RequestClientStub, settle, stubRequestClient } from 'fleet/testing';
+import { type runnerApi } from 'fleet';
+import {
+  hubConnectivityView,
+  type RequestClientStub,
+  runnerDashboardView,
+  runnerStatusView,
+  settle,
+  stubError,
+  stubRunnerClient,
+} from 'fleet/testing';
 
 import { HubPanel } from './hub-panel';
 
@@ -22,18 +30,15 @@ function hostRunner(runnerId: string, name: string): runnerApi.HostRunnerView {
   };
 }
 
-function dashboard(hub: Partial<runnerApi.DashboardView['runner']['hub']>, fleet: runnerApi.FleetSummaryView | null): unknown {
-  return {
+function dashboard(hub: Partial<runnerApi.HubConnectivityView>, fleet: runnerApi.FleetSummaryView | null): runnerApi.DashboardView {
+  return runnerDashboardView({
     fleet_summary: fleet,
-    runner: {
+    runner: runnerStatusView({
       runner_id: 'rn',
       workspace_id: 'ws',
-      pause: { local: false, hub: false, effective: false, local_reason: null },
-      capacities: { used: 0, bindings: [] },
-      hub: { endpoint: 'http://127.0.0.1:4522', reachable: true, last_contact_at: '2026-10-19T19:27:08.227Z', buffer_depth: 0, ...hub },
-      last_tick_at: null,
-    },
-  };
+      hub: hubConnectivityView({ last_contact_at: '2026-10-19T19:27:08.227Z', ...hub }),
+    }),
+  });
 }
 
 const FLEET: runnerApi.FleetSummaryView = { ready: 3, running: 5, waiting: 1, needs: 2 };
@@ -46,13 +51,12 @@ afterEach(() => stub.restore());
  * read afresh on every request so a refetch sees a swapped answer. */
 async function render(
   runners: readonly runnerApi.HostRunnerView[],
-  dashboards: Record<string, unknown>,
+  dashboards: Record<string, runnerApi.DashboardView>,
 ): Promise<{ fixture: ComponentFixture<HubPanel>; el: HTMLElement }> {
-  stub = stubRequestClient(runnerClient, (method, path) => {
-    if (method !== 'GET') return {};
-    if (path === '/api/host/runners') return { items: runners };
-    const match = /^\/runners\/([^/]+)\/api\/dashboard$/.exec(path);
-    return match ? dashboards[match[1]] : {};
+  stub = stubRunnerClient({
+    'GET /api/host/runners': () => ({ items: [...runners] }),
+    'GET /runners/{runner_id}/api/dashboard': (_request, { runner_id }) =>
+      dashboards[runner_id] ?? stubError(404, { detail: `no dashboard for ${runner_id}` }),
   });
   await TestBed.configureTestingModule({
     imports: [HubPanel],
@@ -110,7 +114,7 @@ describe('HubPanel', () => {
   });
 
   it('dims the fleet strip to its last-known counts once the hub stops answering', async () => {
-    const dashboards: Record<string, unknown> = { rn_1: dashboard({}, FLEET) };
+    const dashboards: Record<string, runnerApi.DashboardView> = { rn_1: dashboard({}, FLEET) };
     const { fixture, el } = await render([hostRunner('rn_1', 'r1')], dashboards);
     expect(text(el, 'fleet-running')).toBe('5running');
 

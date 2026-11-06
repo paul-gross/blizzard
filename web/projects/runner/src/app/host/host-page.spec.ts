@@ -2,94 +2,81 @@ import { provideZonelessChangeDetection } from '@angular/core';
 import { type ComponentFixture, TestBed } from '@angular/core/testing';
 import { provideRouter, Router } from '@angular/router';
 import { QueryClient, provideTanStackQuery } from '@tanstack/angular-query-experimental';
-import { runnerClient } from 'fleet';
-import { type RequestClientStub, settle, stubError, stubRequestClient } from 'fleet/testing';
+import {
+  hostEnvironmentView,
+  hostRegistrationView,
+  hostRunnerView,
+  hubConnectivityView,
+  type RequestClientStub,
+  runnerDashboardView,
+  runnerStatusView,
+  servedProjectStatusView,
+  settle,
+  stubError,
+  stubRunnerClient,
+} from 'fleet/testing';
 
 import { HostPage } from './host-page';
 
-const RUNNER = (runnerId: string, name: string, project: string) => ({
-  runner_id: runnerId,
-  name,
-  state: 'serving',
-  served: true,
-  halted_reasons: [],
-  pause: { local: false, hub: false, effective: false, local_reason: null },
-  bindings: [{ project, workspace_id: 'ws', agents: 4 }],
-  agents_in_use: 0,
-  max_agents: 4,
-});
+type RunnerRoutes = Parameters<typeof stubRunnerClient>[0];
+
+const RUNNER = (runnerId: string, name: string, project: string) =>
+  hostRunnerView({ runner_id: runnerId, name, bindings: [{ project, workspace_id: 'ws', agents: 4 }], max_agents: 4 });
 
 const RUNNERS = {
   items: [
     RUNNER('rn_1', 'r1', 'console'),
     RUNNER('rn_2', 'r2', 'ops'),
-    { runner_id: null, name: 'r-halted', state: 'halted', served: false, halted_reasons: ['no hub token'], bindings: [] },
+    hostRunnerView({ runner_id: null, name: 'r-halted', state: 'halted', served: false, halted_reasons: ['no hub token'], pause: null }),
   ],
 };
 
-const DASHBOARD = (runnerId: string, slug: string, name: string) => ({
-  runner: {
-    runner_id: runnerId,
-    workspace_id: 'ws',
-    pause: { local: false, hub: false, effective: false, local_reason: null },
-    capacities: { used: 0, bindings: [] },
-    hub: { endpoint: 'http://hub', reachable: true, last_contact_at: null, buffer_depth: 0 },
-    last_tick_at: null,
-    served_projects: [{ entry: slug, project_id: `proj_${slug}`, slug, name, color: 'amber', resolved: true, answered: true }],
-  },
-  asks: { items: [] },
-  escalations: { items: [] },
-  takeovers: { items: [] },
-  facts: { items: [] },
-  harness_health: { items: [] },
-  fleet_summary: null,
-});
+const DASHBOARD = (runnerId: string, slug: string, name: string) =>
+  runnerDashboardView({
+    runner: runnerStatusView({
+      runner_id: runnerId,
+      workspace_id: 'ws',
+      hub: hubConnectivityView({ endpoint: 'http://hub' }),
+      served_projects: [servedProjectStatusView({ entry: slug, project_id: `proj_${slug}`, slug, name, color: 'amber' })],
+    }),
+  });
+
+const DASHBOARDS: Record<string, ReturnType<typeof DASHBOARD>> = {
+  rn_1: DASHBOARD('rn_1', 'console', 'Console'),
+  rn_2: DASHBOARD('rn_2', 'ops', 'Ops'),
+};
 
 const ENVIRONMENTS = {
   workspaces: [
     {
       workspace_id: 'ws',
       items: [
-        { environment_id: 'e1', held: true, chunk_id: 'ch_01KXKVVF1J3D6H6VYZ3XYN3YJ9', runner_id: 'rn_1', project: 'console' },
-        { environment_id: 'e2', held: false },
+        hostEnvironmentView({ environment_id: 'e1', held: true, chunk_id: 'ch_01KXKVVF1J3D6H6VYZ3XYN3YJ9', runner_id: 'rn_1', project: 'console' }),
+        hostEnvironmentView({ environment_id: 'e2' }),
       ],
     },
   ],
 };
 
-const REGISTRATION = {
+const REGISTRATION = hostRegistrationView({
   state: 'registered',
   host_id: 'hs_01KXKVVF1J3D6H6VYZ3XYN3YJ9',
   host_name: 'xps',
   answered_at: '2026-07-16T11:59:26.000Z',
   held_runner_ids: ['rn_1', 'rn_2'],
-};
+});
 
-function route(overrides: Record<string, unknown> = {}) {
-  return (method: string, path: string): unknown => {
-    if (method !== 'GET') return {};
-    if (path in overrides) return overrides[path];
-    switch (path) {
-      case '/api/host/runners':
-        return RUNNERS;
-      case '/api/host/workspaces':
-        return { items: [{ workspace_id: 'ws', max_environments: 2 }] };
-      case '/api/host/environments':
-        return ENVIRONMENTS;
-      case '/api/host/subscriptions':
-        return { items: [] };
-      case '/api/host/registration':
-        return REGISTRATION;
-      case '/runners/rn_1/api/dashboard':
-        return DASHBOARD('rn_1', 'console', 'Console');
-      case '/runners/rn_2/api/dashboard':
-        return DASHBOARD('rn_2', 'ops', 'Ops');
-      case '/runners/rn_1/api/leases':
-      case '/runners/rn_2/api/leases':
-        return { items: [] };
-      default:
-        return {};
-    }
+function route(overrides: RunnerRoutes = {}): RunnerRoutes {
+  return {
+    'GET /api/host/runners': () => RUNNERS,
+    'GET /api/host/workspaces': () => ({ items: [{ workspace_id: 'ws', max_environments: 2 }] }),
+    'GET /api/host/environments': () => ENVIRONMENTS,
+    'GET /api/host/subscriptions': () => ({ items: [] }),
+    'GET /api/host/registration': () => REGISTRATION,
+    'GET /runners/{runner_id}/api/dashboard': (_request, { runner_id }) =>
+      DASHBOARDS[runner_id] ?? stubError(404, { detail: 'unknown runner' }),
+    'GET /runners/{runner_id}/api/leases': () => ({ items: [] }),
+    ...overrides,
   };
 }
 
@@ -99,7 +86,7 @@ describe('HostPage', () => {
   afterEach(() => stub?.restore());
 
   async function render(url = '/', handler = route()): Promise<{ fixture: ComponentFixture<HostPage>; el: HTMLElement }> {
-    stub = stubRequestClient(runnerClient, handler);
+    stub = stubRunnerClient(handler);
     await TestBed.configureTestingModule({
       imports: [HostPage],
       providers: [
@@ -161,19 +148,19 @@ describe('HostPage', () => {
   });
 
   it('says no workspaces are declared while none is reported', async () => {
-    const { el } = await render('/', route({ '/api/host/workspaces': { items: [] }, '/api/host/environments': { workspaces: [] } }));
+    const { el } = await render('/', route({ 'GET /api/host/workspaces': () => ({ items: [] }), 'GET /api/host/environments': () => ({ workspaces: [] }) }));
 
     expect(el.querySelector('[data-testid="host-environments-empty"]')).not.toBeNull();
   });
 
   it('shows the error state when the runner list fails', async () => {
-    const { el } = await render('/', (method, path) => (path === '/api/host/runners' ? stubError(503, { detail: 'down' }) : route()(method, path)));
+    const { el } = await render('/', route({ 'GET /api/host/runners': () => stubError(503, { detail: 'down' }) }));
 
     expect(el.querySelector('[data-testid="host-runners"]')?.textContent).toContain('RUNNERS UNAVAILABLE');
   });
 
   it('shows the loading state before the runner list lands', async () => {
-    const { el } = await render('/', (method, path) => (path === '/api/host/runners' ? new Promise(() => undefined) : route()(method, path)));
+    const { el } = await render('/', route({ 'GET /api/host/runners': () => new Promise(() => undefined) }));
 
     expect(el.querySelector('[data-testid="host-runners"]')?.textContent).toContain('LOADING…');
   });

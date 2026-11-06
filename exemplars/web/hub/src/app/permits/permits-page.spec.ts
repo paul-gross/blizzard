@@ -7,9 +7,9 @@ import { RouterTestingHarness } from '@angular/router/testing';
 import { QueryClient, provideTanStackQuery } from '@tanstack/angular-query-experimental';
 import { vi } from 'vitest';
 
-import { type MeResponse, type PermitState, type PermitVerb, type PermitView, hubClient } from 'fleet';
+import { type MeResponse, type PermitState, type PermitVerb, type PermitView } from 'fleet';
 import { HUB_PROJECT_FILTER } from 'fleet/shell';
-import { OPERATOR_ME_RESPONSE, type RequestClientStub, settle, stubError, stubRequestClient } from 'fleet/testing';
+import { OPERATOR_ME_RESPONSE, type RequestClientStub, settle, stubError, stubHubClient } from 'fleet/testing';
 import { PermitsPage } from './permits-page';
 
 const REQUESTED: PermitView = {
@@ -32,17 +32,16 @@ const SUSPENDED: PermitView = { ...REQUESTED, permit_id: 'pmt_2', capability: 'r
 
 const EDITOR: MeResponse = { ...OPERATOR_ME_RESPONSE, permissions: [...OPERATOR_ME_RESPONSE.permissions, 'config:edit'] };
 
-type Answer = (method: string, path: string) => unknown;
+type Routes = Parameters<typeof stubHubClient>[0];
 
-const listing: Answer = (_method, path) =>
-  path === '/api/permits' ? { permits: [REQUESTED, SUSPENDED], next_cursor: null } : {};
+const listing: Routes = { 'GET /api/permits': () => ({ permits: [REQUESTED, SUSPENDED], next_cursor: null }) };
 
 describe('PermitsPage', () => {
   let stub: RequestClientStub;
   afterEach(() => stub?.restore());
 
-  async function mount(url: string, answer: Answer = listing, lens: string | null = null, me: MeResponse = EDITOR) {
-    stub = stubRequestClient(hubClient, (method, path) => (path === '/api/me' ? me : answer(method, path)));
+  async function mount(url: string, routes: Routes = listing, lens: string | null = null, me: MeResponse = EDITOR) {
+    stub = stubHubClient({ 'GET /api/me': () => me, ...routes });
     TestBed.configureTestingModule({
       providers: [
         provideZonelessChangeDetection(),
@@ -80,20 +79,22 @@ describe('PermitsPage', () => {
       { permits: [REQUESTED], next_cursor: 'c1' },
       { permits: [SUSPENDED], next_cursor: null },
     ];
-    const { el } = await mount('/permits', (_method, path) => (path === '/api/permits' ? pages.shift() : {}));
+    const { el } = await mount('/permits', {
+      'GET /api/permits': () => pages.shift()!,
+    });
 
     expect(el.querySelectorAll('[data-testid="permits-row"]')).toHaveLength(2);
     expect(stub.forRoute('/api/permits', 'GET')[1].search).toBe('?cursor=c1&limit=1000');
   });
 
   it('shows the empty state for a listing with no permits', async () => {
-    const { el } = await mount('/permits', () => ({ permits: [], next_cursor: null }));
+    const { el } = await mount('/permits', { 'GET /api/permits': () => ({ permits: [], next_cursor: null }) });
 
     expect(el.querySelector('[data-testid="permits-empty"]')?.textContent).toContain('No permits.');
   });
 
   it('renders the error state when the listing is refused', async () => {
-    const { el } = await mount('/permits', () => stubError(403, { detail: "missing permission 'fleet:view'" }));
+    const { el } = await mount('/permits', { 'GET /api/permits': () => stubError(403, { detail: "missing permission 'fleet:view'" }) });
 
     expect(el.querySelector('[data-testid="permits-error"]')).toBeTruthy();
   });
@@ -108,7 +109,7 @@ describe('PermitsPage', () => {
 
   it('shows a state a newer hub sends raw, and offers no control for a verb this build does not know', async () => {
     const lapsed: PermitView = { ...REQUESTED, state: 'lapsed' as PermitState, verbs: ['renew' as PermitVerb, 'grant', 'revoke'] };
-    const { el } = await mount('/permits', (_method, path) => (path === '/api/permits' ? { permits: [lapsed], next_cursor: null } : {}));
+    const { el } = await mount('/permits', { 'GET /api/permits': () => ({ permits: [lapsed], next_cursor: null }) });
 
     expect(row(el, 'pmt_1').querySelector('[data-testid="permits-state"]')?.textContent).toContain('lapsed');
     expect(row(el, 'pmt_1').querySelector('[data-testid="permits-grant"]')).toBeTruthy();
@@ -117,11 +118,11 @@ describe('PermitsPage', () => {
 
   it("disables only the acted-on row's controls while its verb is in flight", async () => {
     let answerGrant: () => void = () => undefined;
-    const { harness, el } = await mount('/permits', (method, path) =>
-      path === '/api/permits/pmt_1/grant'
-        ? new Promise((resolve) => (answerGrant = () => resolve({ ...REQUESTED, state: 'granted' })))
-        : listing(method, path),
-    );
+    const { harness, el } = await mount('/permits', {
+      ...listing,
+      'POST /api/permits/{permit_id}/grant': () =>
+        new Promise<PermitView>((resolve) => (answerGrant = () => resolve({ ...REQUESTED, state: 'granted' }))),
+    });
 
     row(el, 'pmt_1').querySelector<HTMLElement>('[data-testid="permits-grant"]')!.click();
     await vi.waitFor(() => {
@@ -136,11 +137,10 @@ describe('PermitsPage', () => {
   });
 
   it('surfaces a refused verb instead of appearing to succeed', async () => {
-    const { harness, el } = await mount('/permits', (method, path) =>
-      path === '/api/permits/pmt_2/resume'
-        ? stubError(409, { detail: 'permit pmt_2 is granted — resume refused' })
-        : listing(method, path),
-    );
+    const { harness, el } = await mount('/permits', {
+      ...listing,
+      'POST /api/permits/{permit_id}/resume': () => stubError(409, { detail: 'permit pmt_2 is granted — resume refused' }),
+    });
 
     row(el, 'pmt_2').querySelector<HTMLElement>('[data-testid="permits-resume"]')!.click();
     await settle(harness.fixture);
@@ -149,7 +149,10 @@ describe('PermitsPage', () => {
   });
 
   it('revokes with the note the dialog was given', async () => {
-    const { harness, el } = await mount('/permits');
+    const { harness, el } = await mount('/permits', {
+      ...listing,
+      'POST /api/permits/{permit_id}/revoke': () => ({ ...REQUESTED, state: 'revoked', verbs: [] }),
+    });
 
     row(el, 'pmt_1').querySelector<HTMLElement>('[data-testid="permits-revoke"]')!.click();
     await settle(harness.fixture);

@@ -2,7 +2,7 @@ import { provideZonelessChangeDetection } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { provideTanStackQuery, QueryClient } from '@tanstack/angular-query-experimental';
 import { runnerApi, runnerClient } from 'fleet';
-import { stubError, stubRequestClient } from 'fleet/testing';
+import { type StubDetailBody, type StubHttpError, stubError, stubRunnerClient } from 'fleet/testing';
 import { vi } from 'vitest';
 
 import { injectRunnerLogoutMutation, readRunnerSession } from './auth.query';
@@ -16,16 +16,19 @@ function unauthorized() {
 
 /**
  * Registers a fresh `SessionRecovery`'s interceptor on `runnerClient`, stubs the
- * transport with `route`, and spies its (protected) `navigate` so specs can assert
+ * transport with `session` answering the session read and `leases` the leases read, and spies its (protected) `navigate` so specs can assert
  * what it was called with instead of actually leaving jsdom — mirroring how
  * `app-identity.spec.ts` spies `reload`.
  *
- * `runnerClient` is a module-level singleton and `stubRequestClient`'s `restore()`
+ * `runnerClient` is a module-level singleton and `stubRunnerClient`'s `restore()`
  * only resets its `fetch`, never the registered interceptor — so every case
  * registers (and the matching `afterEach` ejects) its own, and clears the
  * `sessionStorage` mark, to keep specs isolated.
  */
-function setUp(route: (method: string, path: string) => unknown) {
+type SessionResult = runnerApi.RunnerAuthSessionView | StubHttpError<number, StubDetailBody>;
+type LeasesResult = runnerApi.LeaseListResponse | StubHttpError<number, StubDetailBody>;
+
+function setUp(session: () => SessionResult, leases: () => LeasesResult = unauthorized) {
   TestBed.configureTestingModule({
     providers: [provideZonelessChangeDetection(), provideTanStackQuery(new QueryClient())],
   });
@@ -34,7 +37,10 @@ function setUp(route: (method: string, path: string) => unknown) {
     .spyOn(recovery as unknown as { navigate(url: string): void }, 'navigate')
     .mockImplementation(() => undefined);
   const interceptorId = runnerClient.interceptors.response.use((response, request) => recovery.handle(response, request));
-  const stub = stubRequestClient(runnerClient, route);
+  const stub = stubRunnerClient({
+    'GET /api/auth/session': () => session(),
+    'GET /runners/{runner_id}/api/leases': () => leases(),
+  });
   return {
     recovery,
     navigateSpy,
@@ -56,9 +62,7 @@ describe('SessionRecovery', () => {
 
   it('navigates to /api/auth/login with the live pathname+search on a no-session 401', async () => {
     history.pushState({}, '', '/?chunk=ch_1');
-    const { navigateSpy, restore: r } = setUp((_method, path) =>
-      path === '/api/auth/session' ? { auth_enabled: true, username: null } : unauthorized(),
-    );
+    const { navigateSpy, restore: r } = setUp(() => ({ auth_enabled: true, username: null }));
     restore = r;
 
     await runnerApi.listLeasesRunnersRunnerIdApiLeasesGet({ path: { runner_id: 'rn_1' }, throwOnError: false });
@@ -69,9 +73,7 @@ describe('SessionRecovery', () => {
 
   it('coalesces ten concurrent no-session 401s into one navigation', async () => {
     history.pushState({}, '', '/?chunk=ch_2');
-    const { navigateSpy, restore: r } = setUp((_method, path) =>
-      path === '/api/auth/session' ? { auth_enabled: true, username: null } : unauthorized(),
-    );
+    const { navigateSpy, restore: r } = setUp(() => ({ auth_enabled: true, username: null }));
     restore = r;
 
     await Promise.all(Array.from({ length: 10 }, () => runnerApi.listLeasesRunnersRunnerIdApiLeasesGet({ path: { runner_id: 'rn_1' }, throwOnError: false })));
@@ -81,9 +83,7 @@ describe('SessionRecovery', () => {
 
   it('navigates on a direct recoverFromUnauthenticated() call — the shape RunnerLiveUpdates drives on a stream 401 (D9)', async () => {
     history.pushState({}, '', '/?chunk=ch_live');
-    const { recovery, navigateSpy, restore: r } = setUp((_method, path) =>
-      path === '/api/auth/session' ? { auth_enabled: true, username: null } : unauthorized(),
-    );
+    const { recovery, navigateSpy, restore: r } = setUp(() => ({ auth_enabled: true, username: null }));
     restore = r;
 
     // No Response/Request at all — the stream's transport never produces either,
@@ -95,9 +95,7 @@ describe('SessionRecovery', () => {
   });
 
   it('reports read-failed, and does not navigate, when the session read itself errors', async () => {
-    const { navigateSpy, recovery, restore: r } = setUp((_method, path) =>
-      path === '/api/auth/session' ? stubError(503, { detail: 'upstream unavailable' }) : unauthorized(),
-    );
+    const { navigateSpy, recovery, restore: r } = setUp(() => stubError(503, { detail: 'upstream unavailable' }));
     restore = r;
 
     const outcome = await recovery.recoverFromUnauthenticated();
@@ -108,9 +106,7 @@ describe('SessionRecovery', () => {
   });
 
   it('leaves a 401 untouched when the session read still resolves a username — an upstream rejection, not an expiry', async () => {
-    const { navigateSpy, recovery, restore: r } = setUp((_method, path) =>
-      path === '/api/auth/session' ? { auth_enabled: true, username: 'alice' } : unauthorized(),
-    );
+    const { navigateSpy, recovery, restore: r } = setUp(() => ({ auth_enabled: true, username: 'alice' }));
     restore = r;
 
     const result = await runnerApi.listLeasesRunnersRunnerIdApiLeasesGet({ path: { runner_id: 'rn_1' }, throwOnError: false });
@@ -121,9 +117,7 @@ describe('SessionRecovery', () => {
   });
 
   it('leaves a 401 untouched on an authless surface (auth_enabled: false)', async () => {
-    const { navigateSpy, recovery, restore: r } = setUp((_method, path) =>
-      path === '/api/auth/session' ? { auth_enabled: false, username: null } : unauthorized(),
-    );
+    const { navigateSpy, recovery, restore: r } = setUp(() => ({ auth_enabled: false, username: null }));
     restore = r;
 
     const result = await runnerApi.listLeasesRunnersRunnerIdApiLeasesGet({ path: { runner_id: 'rn_1' }, throwOnError: false });
@@ -134,11 +128,10 @@ describe('SessionRecovery', () => {
   });
 
   it('acts on neither a 403 nor a success', async () => {
-    const { navigateSpy, restore: r } = setUp((_method, path) => {
-      if (path === '/api/auth/session') return { auth_enabled: true, username: null };
-      if (path === '/runners/rn_1/api/leases') return stubError(403, { detail: 'forbidden' });
-      return {};
-    });
+    const { navigateSpy, restore: r } = setUp(
+      () => ({ auth_enabled: true, username: null }),
+      () => stubError(403, { detail: 'forbidden' }),
+    );
     restore = r;
 
     await runnerApi.listLeasesRunnersRunnerIdApiLeasesGet({ path: { runner_id: 'rn_1' }, throwOnError: false });
@@ -149,9 +142,7 @@ describe('SessionRecovery', () => {
 
   it('does not navigate again while the mark from a prior attempt still stands, and sets recovering instead', async () => {
     history.pushState({}, '', '/?chunk=ch_3');
-    const first = setUp((_method, path) =>
-      path === '/api/auth/session' ? { auth_enabled: true, username: null } : unauthorized(),
-    );
+    const first = setUp(() => ({ auth_enabled: true, username: null }));
 
     // The initial attempt: mark set, one navigation.
     await runnerApi.listLeasesRunnersRunnerIdApiLeasesGet({ path: { runner_id: 'rn_1' }, throwOnError: false });
@@ -163,9 +154,7 @@ describe('SessionRecovery', () => {
     // (a document-wide store, not component state) survives across it, which is
     // the mark's whole point.
     TestBed.resetTestingModule();
-    const second = setUp((_method, path) =>
-      path === '/api/auth/session' ? { auth_enabled: true, username: null } : unauthorized(),
-    );
+    const second = setUp(() => ({ auth_enabled: true, username: null }));
     restore = second.restore;
 
     // An ordinary session poll resolving no username along the way must not clear
@@ -182,10 +171,8 @@ describe('SessionRecovery', () => {
 
   it('clears the mark and recovering state only on a session read that resolves a username', async () => {
     history.pushState({}, '', '/?chunk=ch_4');
-    let sessionBody: unknown = { auth_enabled: true, username: null };
-    const { navigateSpy, recovery, restore: r } = setUp((_method, path) =>
-      path === '/api/auth/session' ? sessionBody : unauthorized(),
-    );
+    let sessionBody: runnerApi.RunnerAuthSessionView = { auth_enabled: true, username: null };
+    const { navigateSpy, recovery, restore: r } = setUp(() => sessionBody);
     restore = r;
 
     await runnerApi.listLeasesRunnersRunnerIdApiLeasesGet({ path: { runner_id: 'rn_1' }, throwOnError: false });

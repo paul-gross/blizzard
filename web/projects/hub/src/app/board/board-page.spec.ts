@@ -7,9 +7,32 @@ import { Router, provideRouter, withRouterConfig } from '@angular/router';
 import { RouterTestingHarness } from '@angular/router/testing';
 import { QueryClient, provideTanStackQuery } from '@tanstack/angular-query-experimental';
 import { BoardShell } from './board-shell/board-shell';
-import { compactRef, hubClient, hubQueueKey, lensedKey } from 'fleet';
+import {
+  type ChunkStatus,
+  type ChunkSummary,
+  compactRef,
+  hubQueueKey,
+  lensedKey,
+  type MeResponse,
+  type QueuePeekResponse,
+} from 'fleet';
 import { injectDeleteChunkMutation } from './chunks/delete.mutations';
-import { fleetSpendView, OPERATOR_ME_RESPONSE, type RequestClientStub, settle, stubError, stubRequestClient } from 'fleet/testing';
+import {
+  backlogPeekEntry,
+  chunkCountsView,
+  chunkDetail,
+  chunkSummary,
+  decisionView,
+  fleetSpendView,
+  OPERATOR_ME_RESPONSE,
+  questionView,
+  queuePeekEntry,
+  type RequestClientStub,
+  settle,
+  stubError,
+  stubHubClient,
+  transitionView,
+} from 'fleet/testing';
 import { vi } from 'vitest';
 
 import { BoardPage } from './board-page';
@@ -39,22 +62,24 @@ function deferred<T>(): { readonly promise: Promise<T>; readonly resolve: (value
   return { promise: new Promise<T>((done) => (resolve = done)), resolve: (value) => resolve(value) };
 }
 
-const CHUNK = (chunkId: string, status: string) => ({
-  chunk_id: chunkId,
-  graph_id: 'gr_1',
-  status, terminal: status === 'done' || status === 'stopped', promotable: status === 'not_ready',
-  current_node_id: 'nd_build',
-  current_node_name: 'build',
-  model: 'claude-opus-5',
-  work_refs: [],
-  runner_id: 'runner-local',
-  environment_count: 1,
-  graph_name: 'default',
-  graph_progress: [],
-});
+const CHUNK = (chunkId: string, status: ChunkStatus): ChunkSummary =>
+  chunkSummary({
+    chunk_id: chunkId,
+    graph_id: 'gr_1',
+    status,
+    terminal: status === 'done' || status === 'stopped',
+    promotable: status === 'not_ready',
+    current_node_id: 'nd_build',
+    current_node_name: 'build',
+    work_refs: [],
+    runner_id: 'runner-local',
+    environment_count: 1,
+    graph_name: 'default',
+    graph_progress: [],
+  });
 
 /** All-time counts — `done` far above the board list's card count, since the list is windowed. */
-const COUNTS = {
+const COUNTS = chunkCountsView({
   total: 46,
   not_ready: 2,
   ready: 2,
@@ -64,95 +89,104 @@ const COUNTS = {
   needs_human: 0,
   paused: 0,
   stopped: 0,
-  done: 40, terminal: 40,
-};
-
-const DETAIL = (chunkId: string) => ({
-  ...CHUNK(chunkId, 'running'),
-  graph_name: 'default',
-  latest_epoch: 1,
-  history: [
-    { node_id: 'nd_build', node_name: 'build', epoch: 1, at: '2026-07-16T11:00:00.000Z', outcome: 'transitioned' },
-  ],
-  artifacts: [], open_prs: [], closed_prs: [], landed_repos: [],
+  done: 40,
+  terminal: 40,
 });
 
+const DETAIL = (chunkId: string) =>
+  chunkDetail({
+    ...CHUNK(chunkId, 'running'),
+    graph_name: 'default',
+    latest_epoch: 1,
+    history: [
+      transitionView({ to_node_id: 'nd_build', to_node_name: 'build', epoch: 1, recorded_at: '2026-07-16T11:00:00.000Z', graph_id: 'gr_1', graph_name: 'default' }),
+    ],
+    artifacts: [],
+    open_prs: [],
+    closed_prs: [],
+    landed_repos: [],
+  });
+
+type HubRoutes = Parameters<typeof stubHubClient>[0];
+
 /**
- * The reads the board's panels and its dock issue, answered off the three
- * chunks above. Everything unnamed falls through to `{}` — the envelope reads
- * (`/api/runners`, `/api/events`) unwrap that to their empty list, so the rail
- * renders as an idle fleet rather than an error.
+ * The reads the board's panels and its dock issue, answered off the chunks
+ * above, plus the lane writes the board fires — each a typed route; the
+ * runner and event envelopes answer empty, so the rail renders as an idle
+ * fleet rather than an error.
  *
  * `me` is a parameter (defaulting to the full-permission fixture) rather than
  * baked in, so a spec asserting the withheld-`queue:reorder` case can answer
  * `/api/me` with a narrower identity without duplicating every other route.
  */
-function hubRoutes(me: object = OPERATOR_ME_RESPONSE) {
-  return (method: string, path: string): unknown => {
-    if (method !== 'GET') return {};
-    if (path === '/api/me') return me;
-    if (path === '/api/queue') {
-      return {
-        entries: [
-          { chunk_id: READY, graph_id: 'gr_1', position: 0, work_refs: [] },
-          { chunk_id: READY_NEXT, graph_id: 'gr_1', position: 1, work_refs: [] },
-        ],
-      };
-    }
-    if (path === '/api/backlog') {
-      return {
-        entries: [
-          { chunk_id: BACKLOG, graph_id: 'gr_1', position: 0, work_refs: [] },
-          { chunk_id: BACKLOG_NEXT, graph_id: 'gr_1', position: 1, work_refs: [] },
-        ],
-      };
-    }
-    if (path === '/api/chunks') {
-      return {
-        chunks: [
-          CHUNK(RUNNING, 'running'),
-          CHUNK(ASKED, 'waiting_on_human'),
-          CHUNK(GATED, 'waiting_on_human'),
-          CHUNK(READY, 'ready'),
-          CHUNK(READY_NEXT, 'ready'),
-          CHUNK(BACKLOG, 'not_ready'),
-          CHUNK(BACKLOG_NEXT, 'not_ready'),
-        ],
-        next_cursor: null,
-      };
-    }
-    if (path === '/api/chunk-counts') return COUNTS;
-    if (path === '/api/questions') {
-      return [
-        {
-          chunk_id: ASKED,
-          runner_id: 'runner-local',
-          lease_id: 'lease_01KXKVVF1J3D6H6VYZ3XYNZPRR',
-          question: 'Which branch?',
-          asked_at: '2026-07-16T11:30:00.000Z',
-        },
-      ];
-    }
-    if (path === '/api/decisions') {
-      return {
-        decisions: [
-          {
-            decision_id: 'dc_01',
-            chunk_id: GATED,
-            node_id: 'nd_gate',
-            node_name: 'approve-gate',
-            epoch: 1,
-            submitted_at: '2026-07-16T11:30:00.000Z',
-            choices: [{ name: 'approve', description: '' }],
-          },
-        ],
-      };
-    }
-    if (path === '/api/spend') return fleetSpendView();
-    if (path.endsWith('/work-items')) return { items: [] };
-    const detail = /^\/api\/chunks\/([^/]+)$/.exec(path);
-    if (detail !== null) return detail[1] === GONE ? stubError(404, { detail: 'not found' }) : DETAIL(detail[1]);
-    return {};
+function hubRoutes(me: MeResponse = OPERATOR_ME_RESPONSE): HubRoutes {
+  return {
+    'GET /api/me': () => me,
+    'GET /api/queue': () => ({
+      entries: [
+        queuePeekEntry({ chunk_id: READY, graph_id: 'gr_1', position: 0 }),
+        queuePeekEntry({ chunk_id: READY_NEXT, graph_id: 'gr_1', position: 1 }),
+      ],
+      next_cursor: null,
+    }),
+    'GET /api/backlog': () => ({
+      entries: [
+        backlogPeekEntry({ chunk_id: BACKLOG, graph_id: 'gr_1', position: 0 }),
+        backlogPeekEntry({ chunk_id: BACKLOG_NEXT, graph_id: 'gr_1', position: 1 }),
+      ],
+      next_cursor: null,
+    }),
+    'GET /api/chunks': () => ({
+      chunks: [
+        CHUNK(RUNNING, 'running'),
+        CHUNK(ASKED, 'waiting_on_human'),
+        CHUNK(GATED, 'waiting_on_human'),
+        CHUNK(READY, 'ready'),
+        CHUNK(READY_NEXT, 'ready'),
+        CHUNK(BACKLOG, 'not_ready'),
+        CHUNK(BACKLOG_NEXT, 'not_ready'),
+      ],
+      next_cursor: null,
+    }),
+    'GET /api/chunk-counts': () => COUNTS,
+    'GET /api/questions': () => [
+      questionView({
+        chunk_id: ASKED,
+        runner_id: 'runner-local',
+        question: 'Which branch?',
+        options: [],
+        asked_at: '2026-07-16T11:30:00.000Z',
+      }),
+    ],
+    'GET /api/decisions': () => ({
+      decisions: [
+        decisionView({
+          decision_id: 'dc_01',
+          chunk_id: GATED,
+          node_id: 'nd_gate',
+          node_name: 'approve-gate',
+          epoch: 1,
+          submitted_at: '2026-07-16T11:30:00.000Z',
+          choices: [{ name: 'approve', description: '', requires_checks: false, would_override_red_checks: false }],
+          check_results: [],
+        }),
+      ],
+    }),
+    'GET /api/spend': () => fleetSpendView(),
+    'GET /api/work-items': () => ({ chunks: {} }),
+    'GET /api/runners': () => ({ runners: [] }),
+    'GET /api/hosts': () => ({ hosts: [] }),
+    'GET /api/projects': () => ({ projects: [] }),
+    'GET /api/chunks/{chunk_id}/work-items': () => ({ items: [] }),
+    'GET /api/events': () => ({ events: [] }),
+    'GET /api/activity': () => ({ activity: [] }),
+    'GET /api/chunks/{chunk_id}': (_request, { chunk_id }) =>
+      chunk_id === GONE ? stubError(404, { detail: 'not found' }) : DETAIL(chunk_id),
+    'POST /api/chunks/{chunk_id}/demote': (_request, { chunk_id }) => CHUNK(chunk_id, 'not_ready'),
+    'POST /api/chunks/{chunk_id}/promote': (_request, { chunk_id }) => CHUNK(chunk_id, 'ready'),
+    'DELETE /api/chunks/{chunk_id}': (_request, { chunk_id }) => ({ chunk_id }),
+    'POST /api/queue/position': () => ({ entries: [] }),
+    'POST /api/backlog/position': () => ({ entries: [] }),
   };
 }
 
@@ -160,7 +194,7 @@ describe('BoardPage', () => {
   let stub: RequestClientStub;
 
   beforeEach(() => {
-    stub = stubRequestClient(hubClient, hubRoutes());
+    stub = stubHubClient(hubRoutes());
     TestBed.configureTestingModule({
       providers: [
         provideZonelessChangeDetection(),
@@ -293,11 +327,12 @@ describe('BoardPage', () => {
       harness.fixture.debugElement.query(By.css('app-board-shell')).componentInstance as BoardShell;
 
     it('demotes a READY card with the drop anchor and shows it in BACKLOG while pending', async () => {
-      const pendingPost = deferred<object>();
+      const pendingPost = deferred<ChunkSummary>();
       stub.restore();
-      stub = stubRequestClient(hubClient, (method, path) => {
-        if (method === 'POST' && path === `/api/chunks/${READY}/demote`) return pendingPost.promise;
-        return hubRoutes()(method, path);
+      stub = stubHubClient({
+        ...hubRoutes(),
+        'POST /api/chunks/{chunk_id}/demote': (_request, { chunk_id }) =>
+          chunk_id === READY ? pendingPost.promise : CHUNK(chunk_id, 'not_ready'),
       });
       const { el, harness } = await open();
 
@@ -308,7 +343,7 @@ describe('BoardPage', () => {
       expect(stub.forRoute(`/api/chunks/${READY}/demote`, 'POST')[0].body).toEqual({ after_chunk_id: BACKLOG });
       expect(laneIds(el, 'notready')).toEqual([compactRef(BACKLOG), compactRef(READY), compactRef(BACKLOG_NEXT)]);
       expect(laneIds(el, 'ready')).toEqual([compactRef(READY_NEXT)]);
-      pendingPost.resolve({});
+      pendingPost.resolve(CHUNK(READY, 'not_ready'));
       await settle(harness.fixture);
     });
 
@@ -323,11 +358,10 @@ describe('BoardPage', () => {
 
     it('reverts the card and reports the refusal inline when the demote fails', async () => {
       stub.restore();
-      stub = stubRequestClient(hubClient, (method, path) => {
-        if (method === 'POST' && path === `/api/chunks/${READY}/demote`) {
-          return stubError(409, { detail: 'chunk is running, not demotable' });
-        }
-        return hubRoutes()(method, path);
+      stub = stubHubClient({
+        ...hubRoutes(),
+        'POST /api/chunks/{chunk_id}/demote': (_request, { chunk_id }) =>
+          chunk_id === READY ? stubError(409, { detail: 'chunk is running, not demotable' }) : CHUNK(chunk_id, 'not_ready'),
       });
       const { el, harness } = await open();
 
@@ -379,7 +413,7 @@ describe('BoardPage', () => {
         permissions: OPERATOR_ME_RESPONSE.permissions.filter((p) => p !== 'queue:reorder'),
       };
       stub.restore();
-      stub = stubRequestClient(hubClient, hubRoutes(restrictedMe));
+      stub = stubHubClient(hubRoutes(restrictedMe));
 
       const { el } = await open();
 
@@ -428,11 +462,10 @@ describe('BoardPage', () => {
 
     it('restores the row when the delete is rejected', async () => {
       stub.restore();
-      stub = stubRequestClient(hubClient, (method, path) => {
-        if (method === 'DELETE' && path === `/api/chunks/${BACKLOG}`) {
-          return stubError(409, { detail: 'chunk has dependents' });
-        }
-        return hubRoutes()(method, path);
+      stub = stubHubClient({
+        ...hubRoutes(),
+        'DELETE /api/chunks/{chunk_id}': (_request, { chunk_id }) =>
+          chunk_id === BACKLOG ? stubError(409, { detail: 'chunk has dependents' }) : { chunk_id },
       });
       const { el, harness } = await open();
 
@@ -451,12 +484,9 @@ describe('BoardPage', () => {
       [...el.querySelectorAll(`[data-col="${column}"] [data-testid="chunk-id"]`)].map((n) => n.textContent?.trim());
 
     it('renders the requested position before the POST returns', async () => {
-      const pendingPost = deferred<object>();
+      const pendingPost = deferred<QueuePeekResponse>();
       stub.restore();
-      stub = stubRequestClient(hubClient, (method, path) => {
-        if (method === 'POST' && path === '/api/queue/position') return pendingPost.promise;
-        return hubRoutes()(method, path);
-      });
+      stub = stubHubClient({ ...hubRoutes(), 'POST /api/queue/position': () => pendingPost.promise });
       const { el, harness } = await open();
       const shell = harness.fixture.debugElement.query(By.css('app-board-shell')).componentInstance as BoardShell;
 
@@ -539,12 +569,7 @@ describe('BoardPage', () => {
 
     it('reverts the BACKLOG lane to its prior order when the reposition is rejected', async () => {
       stub.restore();
-      stub = stubRequestClient(hubClient, (method, path) => {
-        if (method === 'POST' && path === '/api/backlog/position') {
-          return stubError(409, { detail: 'stale anchor' });
-        }
-        return hubRoutes()(method, path);
-      });
+      stub = stubHubClient({ ...hubRoutes(), 'POST /api/backlog/position': () => stubError(409, { detail: 'stale anchor' }) });
       const { el, harness } = await open();
 
       const shell = harness.fixture.debugElement.query(By.css('app-board-shell')).componentInstance as BoardShell;

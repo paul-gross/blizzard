@@ -2,8 +2,8 @@ import { type WritableSignal, provideZonelessChangeDetection, signal } from '@an
 import { TestBed } from '@angular/core/testing';
 import { QueryClient, provideTanStackQuery } from '@tanstack/angular-query-experimental';
 
-import { type ActivityView, hubClient, FleetLiveUpdates, type LoggedEvent, type SseStatus } from 'fleet';
-import { settle, type RequestClientStub, stubRequestClient } from 'fleet/testing';
+import { type ActivityView, FleetLiveUpdates, type LoggedEvent, type SseStatus } from 'fleet';
+import { settle, type RequestClientStub, stubHubClient } from 'fleet/testing';
 import { ActivityPanel } from './activity-panel';
 
 const activityView = (overrides: Partial<ActivityView>): ActivityView => ({
@@ -42,7 +42,7 @@ describe('ActivityPanel', () => {
       status: () => status(),
       authFailed: () => authFailed(),
     } as unknown as FleetLiveUpdates;
-    stub = stubRequestClient(hubClient, (method, path) => (method === 'GET' && path === '/api/activity' ? { activity } : {}));
+    stub = stubHubClient({ 'GET /api/activity': () => ({ activity: [...activity] }) });
     await TestBed.configureTestingModule({
       imports: [ActivityPanel],
       providers: [
@@ -71,7 +71,7 @@ describe('ActivityPanel', () => {
       status: () => 'open' as SseStatus,
       authFailed: () => false,
     } as unknown as FleetLiveUpdates;
-    stub = stubRequestClient(hubClient, () => ({ activity: [] }));
+    stub = stubHubClient({ 'GET /api/activity': () => ({ activity: [] }) });
     await TestBed.configureTestingModule({
       imports: [ActivityPanel],
       providers: [

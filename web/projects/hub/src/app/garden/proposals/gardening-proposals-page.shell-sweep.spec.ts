@@ -2,8 +2,15 @@ import { Component, provideZonelessChangeDetection } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { provideRouter, Router, RouterOutlet, type Routes } from '@angular/router';
 import { QueryClient, provideTanStackQuery } from '@tanstack/angular-query-experimental';
-import { hubClient, ViewportService } from 'fleet';
-import { OPERATOR_ME_RESPONSE, settle, stubRequestClient } from 'fleet/testing';
+import { type GardenProposalView, ViewportService } from 'fleet';
+import {
+  gardenEvidenceFindingView,
+  gardenProposalsPageView,
+  gardenProposalView,
+  OPERATOR_ME_RESPONSE,
+  settle,
+  stubHubClient,
+} from 'fleet/testing';
 import { page } from 'vitest/browser';
 
 import { GardeningProposalDetail } from './gardening-proposal-detail';
@@ -26,29 +33,30 @@ import { GardeningProposalsPage } from './gardening-proposals-page';
  * that above 720px the list and panel genuinely scroll independently rather than
  * as one shared unit (`gardening-page.css`'s own per-column split).
  */
-const PROPOSAL = {
+const PROPOSAL = gardenProposalView({
   proposal_id: 'gp_1',
-  routine_name: 'comments',
   class: 'fix-the-source',
   title: 'Author a docstring standard covering change-history narration in module docstrings',
   body: 'Seventeen modules narrate their own change history in the docstring rather than stating the contract.',
   created_at: '2026-01-01T00:00:00Z',
   findings: ['fin_1'],
-  closure: null,
-};
+});
 
-const FINDING = {
+const FINDING = gardenEvidenceFindingView({
   finding_id: 'fin_1',
-  routine_name: 'comments',
-  scope_slug: 'blizzard',
-  class: 'stale-docstring',
   locus: 'src/blizzard/hub/store/internal/a-rather-long-module-path/invoice_ledger_reconciliation.py:142',
   summary: 'Module docstring narrates the change history rather than stating the contract.',
-  state: 'live',
-  live: true,
-  observed_count: 1,
-  last_seen_at: '2026-01-01T00:00:00Z',
-};
+});
+
+/** Stub the docket's reads over `proposals`, citing {@link FINDING}. */
+function stubDocket(proposals: GardenProposalView[]) {
+  return stubHubClient({
+    'GET /api/me': () => OPERATOR_ME_RESPONSE,
+    'GET /api/routines': () => [],
+    'GET /api/garden-proposals': () => gardenProposalsPageView({ proposals }),
+    'GET /api/findings/{finding_id}': () => FINDING,
+  });
+}
 
 /**
  * Stands in for `GardeningPage`'s own shell around the tab — `gardening-page.css`'s
@@ -109,12 +117,7 @@ const realDetailRoutes: Routes = [
 ];
 
 async function render() {
-  const stub = stubRequestClient(hubClient, (method, path) => {
-    if (method === 'GET' && path === '/api/me') return OPERATOR_ME_RESPONSE;
-    if (method === 'GET' && path === '/api/garden-proposals') return { proposals: [PROPOSAL], next_cursor: null };
-    if (method === 'GET' && path === '/api/findings/fin_1') return FINDING;
-    return {};
-  });
+  const stub = stubDocket([PROPOSAL]);
   await TestBed.configureTestingModule({
     imports: [TestProposalsShellHost],
     providers: [
@@ -211,17 +214,7 @@ describe('gardening proposals page independent-scroll shell sweep (web:shell-swe
     }));
     const LONG_BODY = Array.from({ length: 400 }, (_, i) => `Paragraph ${i} of a long proposal case.`).join(' ');
 
-    const stub = stubRequestClient(hubClient, (method, path) => {
-      if (method === 'GET' && path === '/api/me') return OPERATOR_ME_RESPONSE;
-      if (method === 'GET' && path === '/api/garden-proposals') {
-        return {
-          proposals: [{ ...MANY_PROPOSALS[0], body: LONG_BODY }, ...MANY_PROPOSALS.slice(1)],
-          next_cursor: null,
-        };
-      }
-      if (method === 'GET' && path === '/api/findings/fin_1') return FINDING;
-      return {};
-    });
+    const stub = stubDocket([{ ...MANY_PROPOSALS[0], body: LONG_BODY }, ...MANY_PROPOSALS.slice(1)]);
 
     await TestBed.configureTestingModule({
       imports: [TestProposalsShellHost],
@@ -303,14 +296,7 @@ describe('gardening proposals page independent-scroll shell sweep (web:shell-swe
 describe('gardening proposals page no-findings evidence gating (web:shell-sweep)', () => {
   it('withholds the Evidence section for a proposal that cites no findings, without breaking the narrow layout', async () => {
     const NO_FINDINGS_PROPOSAL = { ...PROPOSAL, proposal_id: 'gp_none', findings: [], closure: null };
-    const stub = stubRequestClient(hubClient, (method, path) => {
-      if (method === 'GET' && path === '/api/me') return OPERATOR_ME_RESPONSE;
-      if (method === 'GET' && path === '/api/garden-proposals') {
-        return { proposals: [PROPOSAL, NO_FINDINGS_PROPOSAL], next_cursor: null };
-      }
-      if (method === 'GET' && path === '/api/findings/fin_1') return FINDING;
-      return {};
-    });
+    const stub = stubDocket([PROPOSAL, NO_FINDINGS_PROPOSAL]);
 
     await TestBed.configureTestingModule({
       imports: [TestProposalsShellHost],

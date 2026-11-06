@@ -3,8 +3,8 @@ import { TestBed } from '@angular/core/testing';
 import { QueryClient, provideTanStackQuery } from '@tanstack/angular-query-experimental';
 import { vi } from 'vitest';
 
-import { hubClient, hubConfigKey } from 'fleet';
-import { type RequestClientStub, stubRequestClient } from 'fleet/testing';
+import { hubConfigKey } from 'fleet';
+import { type RequestClientStub, repositorySummary, stubHubClient } from 'fleet/testing';
 import {
   injectCreateRepositoryMutation,
   injectEditRepositoryMutation,
@@ -16,7 +16,12 @@ describe('repository mutations', () => {
   let queryClient: QueryClient;
 
   beforeEach(() => {
-    stub = stubRequestClient(hubClient, () => ({}));
+    stub = stubHubClient({
+      'POST /api/repositories': () => repositorySummary({ repository_id: 'a', slug: 'a' }),
+      'PATCH /api/repositories/{repository}': () => repositorySummary({ repository_id: 'a', revision: 4 }),
+      'POST /api/repositories/{repository}/retire': () => repositorySummary({ repository_id: 'a', retired: true }),
+      'POST /api/repositories/{repository}/enable': () => repositorySummary({ repository_id: 'a' }),
+    });
     queryClient = new QueryClient({
       defaultOptions: { queries: { retry: false } },
     });

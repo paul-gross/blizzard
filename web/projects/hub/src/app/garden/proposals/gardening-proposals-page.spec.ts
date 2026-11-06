@@ -2,9 +2,20 @@ import { ChangeDetectionStrategy, Component, EnvironmentInjector, provideZoneles
 import { type ComponentFixture, TestBed } from '@angular/core/testing';
 import { provideRouter, Router, RouterOutlet, type Routes } from '@angular/router';
 import { QueryClient, provideTanStackQuery } from '@tanstack/angular-query-experimental';
-import { hubClient, type MeResponse, ViewportService } from 'fleet';
+import { type GardenProposalView, type MeResponse, ViewportService } from 'fleet';
 import { injectAcceptGardenProposalMutation, injectPassGardenProposalMutation } from './garden-proposal.mutations';
-import { OPERATOR_ME_RESPONSE, type RequestClientStub, settle, stubError, stubRequestClient } from 'fleet/testing';
+import {
+  gardenEvidenceFindingView,
+  gardenProposalAcceptResponse,
+  gardenProposalClosureView,
+  gardenProposalsPageView,
+  gardenProposalView,
+  OPERATOR_ME_RESPONSE,
+  type RequestClientStub,
+  settle,
+  stubError,
+  stubHubClient,
+} from 'fleet/testing';
 import { vi } from 'vitest';
 
 import { GardeningProposalsPage } from './gardening-proposals-page';
@@ -16,48 +27,35 @@ const VIEWER_ME_RESPONSE: MeResponse = {
   permissions: OPERATOR_ME_RESPONSE.permissions.filter((p) => p !== 'chunk:control'),
 };
 
-const WAITING_A = {
+const WAITING_A = gardenProposalView({
   proposal_id: 'gp_1',
-  routine_name: 'comments',
   class: 'fix-the-source',
   title: 'Author a docstring standard',
   body: 'Seventeen modules narrate their own change history.',
   created_at: '2026-01-01T00:00:00Z',
   findings: ['fin_1', 'fin_2'],
-  closure: null,
-};
+});
 
-const WAITING_B = {
+const WAITING_B = gardenProposalView({
   proposal_id: 'gp_2',
-  routine_name: 'comments',
   class: 'remediate',
   title: 'Delete the dead helper',
   body: 'Nothing calls it.',
   created_at: '2026-01-02T00:00:00Z',
   findings: ['fin_3'],
-  closure: null,
-};
+});
 
-const PASSED = {
+const PASSED = gardenProposalView({
   proposal_id: 'gp_3',
-  routine_name: 'comments',
   class: 'fix-the-source',
   title: 'Rewrite the whole module',
   body: 'Too large for this pass.',
   created_at: '2026-01-03T00:00:00Z',
   findings: ['fin_4'],
-  closure: {
-    closure: 'passed',
-    reason: 'not worth it yet',
-    closed_by: 'u_1',
-    closed_at: '2026-01-04T00:00:00Z',
-    item_outcome: null,
-    source: null,
-    ref: null,
-  },
-};
+  closure: gardenProposalClosureView({ closed_at: '2026-01-04T00:00:00Z' }),
+});
 
-const ARCHITECTURE_WAITING = {
+const ARCHITECTURE_WAITING = gardenProposalView({
   proposal_id: 'gp_4',
   routine_name: 'architecture',
   class: 'remediate',
@@ -65,23 +63,7 @@ const ARCHITECTURE_WAITING = {
   body: 'Two modules duplicate the same adapter.',
   created_at: '2026-01-05T00:00:00Z',
   findings: ['fin_5'],
-  closure: null,
-};
-
-function findingFixture(findingId: string) {
-  return {
-    finding_id: findingId,
-    routine_name: 'comments',
-    scope_slug: 'blizzard',
-    class: 'stale-docstring',
-    locus: `src/${findingId}.py:1`,
-    summary: `summary for ${findingId}`,
-    state: 'live',
-    live: true,
-    observed_count: 1,
-    last_seen_at: '2026-01-01T00:00:00Z',
-  };
-}
+});
 
 /** Stands in for `GardeningProposalDetail`, whose own behavior is
  * `gardening-proposal-detail.spec.ts`'s. */
@@ -139,20 +121,22 @@ describe('GardeningProposalsPage', () => {
   afterEach(() => stub?.restore());
 
   async function render(
-    proposals: readonly unknown[] = [WAITING_A, WAITING_B, PASSED],
+    proposals: GardenProposalView[] = [WAITING_A, WAITING_B, PASSED],
     me: MeResponse = VIEWER_ME_RESPONSE,
     url = '/gardening/proposals',
     mobile = false,
-    routeOverride?: (method: string, path: string) => unknown,
+    extraRoutes: Parameters<typeof stubHubClient>[0] = {},
   ) {
-    stub = stubRequestClient(hubClient, (method, path) => {
-      const overridden = routeOverride?.(method, path);
-      if (overridden !== undefined) return overridden;
-      if (method === 'GET' && path === '/api/garden-proposals') return { proposals, next_cursor: null };
-      if (method === 'GET' && path === '/api/me') return me;
-      if (method === 'GET' && path === '/api/routines') return [];
-      if (method === 'GET' && path.startsWith('/api/findings/')) return findingFixture(path.split('/').pop()!);
-      return {};
+    stub = stubHubClient({
+      'GET /api/garden-proposals': () => gardenProposalsPageView({ proposals }),
+      'GET /api/me': () => me,
+      'GET /api/routines': () => [],
+      'GET /api/findings/{finding_id}': (_request, { finding_id }) => gardenEvidenceFindingView({ finding_id }),
+      'POST /api/garden-proposals/{proposal_id}/pass': (_request, { proposal_id }) =>
+        gardenProposalView({ proposal_id, closure: gardenProposalClosureView() }),
+      'POST /api/garden-proposals/{proposal_id}/accept': (_request, { proposal_id }) =>
+        gardenProposalAcceptResponse({ proposal_id }),
+      ...extraRoutes,
     });
     await TestBed.configureTestingModule({
       imports: [TestProposalsHost],
@@ -396,10 +380,10 @@ describe('GardeningProposalsPage', () => {
         VIEWER_ME_RESPONSE,
         '/gardening/proposals',
         false,
-        (method, path) =>
-          method === 'POST' && path === '/api/garden-proposals/gp_1/pass'
-            ? stubError(409, { detail: 'garden proposal gp_1 already carries a closure' })
-            : undefined,
+        {
+          'POST /api/garden-proposals/{proposal_id}/pass': () =>
+            stubError(409, { detail: 'garden proposal gp_1 already carries a closure' }),
+        },
       );
       expect(el.querySelector('[data-testid="gardening-proposal-row-gp_1"]')).toBeTruthy();
 

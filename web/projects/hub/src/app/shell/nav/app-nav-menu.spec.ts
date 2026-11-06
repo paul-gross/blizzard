@@ -3,8 +3,8 @@ import { TestBed } from '@angular/core/testing';
 import { QueryClient, provideTanStackQuery } from '@tanstack/angular-query-experimental';
 import { vi } from 'vitest';
 
-import { type MeResponse, hubClient } from 'fleet';
-import { OPERATOR_ME_RESPONSE, type RequestClientStub, settle, stubRequestClient } from 'fleet/testing';
+import type { MeResponse } from 'fleet';
+import { OPERATOR_ME_RESPONSE, type RequestClientStub, settle, stubHubClient } from 'fleet/testing';
 import { LAST_TENANT_KEY, PAGE_RELOAD, TAB_TENANT_KEY } from '../../core/auth/tenant-context';
 import { AppNavMenu } from './app-nav-menu';
 
@@ -30,7 +30,7 @@ describe('AppNavMenu', () => {
     localStorage.clear();
     sessionStorage.clear();
     me = OPERATOR_ME_RESPONSE;
-    stub = stubRequestClient(hubClient, (_method, path) => (path === '/api/me' ? me : {}));
+    stub = stubHubClient({ 'GET /api/me': () => me });
     reload = vi.fn();
     await TestBed.configureTestingModule({
       imports: [AppNavMenu],

@@ -17,7 +17,7 @@ import { provideAuthInterceptor } from '../core/auth/auth.interceptor';
 import { LAST_TENANT_KEY, TAB_TENANT_KEY, TenantContext } from '../core/auth/tenant-context';
 import { provideTenantInterceptor } from '../core/auth/tenant.interceptor';
 import type { MeTenant } from 'fleet/shell';
-import { OPERATOR_ME_RESPONSE, type RequestClientStub, settle, stubError, stubRequestClient } from 'fleet/testing';
+import { OPERATOR_ME_RESPONSE, chunkCountsView, fleetSpendView, projectView, type RequestClientStub, settle, stubError, stubHubClient } from 'fleet/testing';
 import { vi } from 'vitest';
 import { FLEET_CLOCK } from 'fleet';
 
@@ -42,9 +42,30 @@ class FakeEventSource {
   }
 }
 
+/** The reads the shell and its board make at rest, each answering its empty shape — the board, rail and explorer iterate
+ * theirs, and `BoardHeader` calls `.toFixed` on the spend's `cost_usd`. */
+const IDLE_BOARD: Parameters<typeof stubHubClient>[0] = {
+  'GET /api/health': () => ({ status: 'ok', service: 'blizzard-hub', version: '0.0.0', overridden: [] }),
+  'GET /api/flags': () => ({ flags: {}, overridden: [] }),
+  'GET /api/projects': () => ({ projects: LENS_PROJECTS }),
+  'GET /api/chunk-counts': () =>
+    chunkCountsView({ not_ready: 0, ready: 0, running: 0, delivering: 0, needs_human: 0, done: 0, terminal: 0, total: 0 }),
+  'GET /api/chunks': () => ({ chunks: [], next_cursor: null }),
+  'GET /api/queue': () => ({ entries: [], next_cursor: null }),
+  'GET /api/backlog': () => ({ entries: [], next_cursor: null }),
+  'GET /api/questions': () => [],
+  'GET /api/decisions': () => ({ decisions: [] }),
+  'GET /api/activity': () => ({ activity: [] }),
+  'GET /api/graphs': () => [],
+  'GET /api/runners': () => ({ runners: [] }),
+  'GET /api/hosts': () => ({ hosts: [] }),
+  'GET /api/spend': () =>
+    fleetSpendView({ cost_usd: 0, input_tokens: 0, output_tokens: 0, cache_read_tokens: 0, cache_create_tokens: 0 }),
+};
+
 /** Stubs `/api/me` and `/api/auth/providers` — the two reads the app root's session
- * gate (`authState`) depends on — plus every other route the app touches
- * (health/chunks/fleet-spend/queue/etc, all default to `{}` via `stubRequestClient`).
+ * gate (`authState`) depends on — plus the flags and every read the board makes at
+ * rest ({@link IDLE_BOARD}).
  * `me` defaults to the full-permission operator identity (`auth.mode = "none"`'s
  * shape); a spec that cares about auth overrides one or both. */
 function stubAuth(
@@ -52,35 +73,25 @@ function stubAuth(
   providers: readonly ProviderSummary[] = [],
   flags: FlagsResponse = { flags: {}, overridden: [] },
 ): RequestClientStub {
-  return stubRequestClient(hubClient, (method, path) => {
-    if (path === '/api/me') return me === null ? stubError(401, { detail: 'not authenticated' }) : me;
-    if (path === '/api/auth/providers') return providers;
-    if (path === '/api/flags') return flags;
-    // The board/rail/graphs reads unwrap their response as a raw array
-    // (`data ?? []`) — `{}` would resolve truthy-but-not-iterable and crash the
-    // header/board/explorer's own `for…of`, so these need their real empty shape.
-    if (path === '/api/chunks') return { chunks: [], next_cursor: null };
-      if (path === '/api/questions' || path === '/api/graphs') return [];
-    // `BoardHeader` renders its spend cell whenever the read resolves truthy at all
-    // (`{}` included) and calls `.toFixed` on `cost_usd` unconditionally.
-    if (path === '/api/spend') return { cost_usd: 0, cost_partial: false, input_tokens: 0, output_tokens: 0, cache_read_tokens: 0, cache_create_tokens: 0 };
-    if (path === '/api/projects') return { projects: LENS_PROJECTS };
-    return {};
+  return stubHubClient({
+    ...IDLE_BOARD,
+    'GET /api/me': () => (me === null ? stubError(401, { detail: 'not authenticated' }) : me),
+    'GET /api/auth/providers': () => [...providers],
+    'GET /api/flags': () => flags,
   });
 }
 
-const LENS_PROJECTS = ['zeta', 'blizzard'].map((slug) => ({
-  project_id: `proj_${slug}`,
-  slug,
-  name: slug[0].toUpperCase() + slug.slice(1),
-  description: '',
-  revision: 1,
-  created_at: '2026-10-01T00:00:00Z',
-}));
+const LENS_PROJECTS = ['zeta', 'blizzard'].map((slug) =>
+  projectView({
+    project_id: `proj_${slug}`,
+    slug,
+    name: slug[0].toUpperCase() + slug.slice(1),
+    created_at: '2026-10-01T00:00:00Z',
+  }),
+);
 
 /** Same shape as {@link stubAuth}, but also captures each `/api/spend` request's
- * full URL (query string included) — unlike `stubRequestClient`'s `CapturedRequest`,
- * which drops it, this spec needs the raw `since`/`until` params to prove the
+ * full URL (query string included) — this spec needs the raw `since`/`until` params to prove the
  * yesterday window reaches the request. Conforms to
  * {@link RequestClientStub} (`requests`/`forRoute` unused, kept trivial) so it can
  * stand in for `authStub` in this file's shared `afterEach`. */
@@ -490,19 +501,16 @@ describe('hub App', () => {
     it('logs out from the no-access screen and lands back on /login', async () => {
       authStub.restore();
       let loggedOut = false;
-      authStub = stubRequestClient(hubClient, (method, path) => {
-        if (path === '/api/me') return loggedOut ? stubError(401, { detail: 'not authenticated' }) : MEMBERLESS;
-        if (path === '/api/auth/providers') return [];
-        if (path === '/api/auth/logout' && method === 'POST') {
+      // Once logged out, `authState` briefly still shows whatever route was last
+      // active while the redirect to /login lands — the idle board's empty shapes
+      // keep that transient render from crashing.
+      authStub = stubHubClient({
+        ...IDLE_BOARD,
+        'GET /api/me': () => (loggedOut ? stubError(401, { detail: 'not authenticated' }) : MEMBERLESS),
+        'GET /api/auth/providers': () => [],
+        'POST /api/auth/logout': () => {
           loggedOut = true;
-          return {};
-        }
-        // Once logged out, `authState` briefly still shows whatever route was last
-        // active while the redirect to /login lands — same empty-shape need as
-        // `stubAuth` above, so that transient render does not crash.
-        if (path === '/api/chunks') return { chunks: [], next_cursor: null };
-        if (path === '/api/questions' || path === '/api/graphs') return [];
-        return {};
+        },
       });
 
       const fixture = TestBed.createComponent(App);

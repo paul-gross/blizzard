@@ -2,8 +2,7 @@ import { provideZonelessChangeDetection, signal } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { provideRouter } from '@angular/router';
 import { QueryClient, provideTanStackQuery } from '@tanstack/angular-query-experimental';
-import { runnerClient } from 'fleet';
-import { stubError, stubRequestClient } from 'fleet/testing';
+import { stubError, stubRunnerClient } from 'fleet/testing';
 import { RunnerLogout } from '../../core/identity/runner-logout';
 import { RunnerLiveUpdates } from '../../core/live/runner-live-updates';
 import { page } from 'vitest/browser';
@@ -32,6 +31,19 @@ import { runnerFlagsRead } from '../../core/flags.query';
  * drives both this file and the hub shell's counterpart
  * (`hub/src/app/shell/nav/app-nav-menu.shell-sweep.spec.ts`).
  */
+type RunnerRoutes = Parameters<typeof stubRunnerClient>[0];
+
+/** The header's reads answered empty — no runners, no environments, no session, no flags — with `overrides` on top. */
+function headerRoutes(overrides: RunnerRoutes = {}): RunnerRoutes {
+  return {
+    'GET /api/host/runners': () => ({ items: [] }),
+    'GET /api/host/environments': () => ({ workspaces: [] }),
+    'GET /api/auth/session': () => ({ auth_enabled: false, username: null }),
+    'GET /api/flags': () => ({ flags: {}, overridden: [] }),
+    ...overrides,
+  };
+}
+
 async function render(degradedConnection = false) {
   await TestBed.configureTestingModule({
     imports: [AppHeader],
@@ -79,10 +91,7 @@ describe('runner AppHeader shell sweep (web:shell-sweep)', () => {
 
       const session =
         length === 0 ? { auth_enabled: false, username: null } : { auth_enabled: true, username: usernameOfLength(length) };
-      const stub = stubRequestClient(runnerClient, (method, path) => {
-        if (method === 'GET' && path === '/api/auth/session') return session;
-        return { items: [] };
-      });
+      const stub = stubRunnerClient(headerRoutes({ 'GET /api/auth/session': () => session }));
 
       const fixture = await render();
       const root = fixture.nativeElement as HTMLElement;
@@ -138,10 +147,9 @@ describe('runner AppHeader shell sweep (web:shell-sweep)', () => {
     window.addEventListener('error', onError);
     window.addEventListener('unhandledrejection', onRejection);
 
-    const stub = stubRequestClient(runnerClient, (method, path) => {
-      if (method === 'GET' && path === '/api/auth/session') return { auth_enabled: true, username: usernameOfLength(20) };
-      return { items: [] };
-    });
+    const stub = stubRunnerClient(
+      headerRoutes({ 'GET /api/auth/session': () => ({ auth_enabled: true, username: usernameOfLength(20) }) }),
+    );
 
     // `degraded` is longer than every other string the connection cell ever
     // renders (`ok`/`offline`/`connecting…`/`reconnecting…`) — the shape this
@@ -189,11 +197,12 @@ describe('runner AppHeader shell sweep (web:shell-sweep)', () => {
   });
 
   it('shows the overridden-flags marker in the connection cell, overflow-free, at every width', async () => {
-    const stub = stubRequestClient(runnerClient, (method, path) => {
-      if (method === 'GET' && path === '/api/auth/session') return { auth_enabled: true, username: usernameOfLength(20) };
-      if (path === '/api/flags') return { flags: { alpha: true, beta: false }, overridden: ['alpha', 'beta'] };
-      return { items: [] };
-    });
+    const stub = stubRunnerClient(
+      headerRoutes({
+        'GET /api/auth/session': () => ({ auth_enabled: true, username: usernameOfLength(20) }),
+        'GET /api/flags': () => ({ flags: { alpha: true, beta: false }, overridden: ['alpha', 'beta'] }),
+      }),
+    );
     const fixture = await render();
     const root = fixture.nativeElement as HTMLElement;
     document.body.appendChild(root);
@@ -232,11 +241,12 @@ describe('runner AppHeader shell sweep (web:shell-sweep)', () => {
     window.addEventListener('error', onError);
     window.addEventListener('unhandledrejection', onRejection);
 
-    const stub = stubRequestClient(runnerClient, (method, path) => {
-      if (method === 'GET' && path === '/api/auth/session') return { auth_enabled: true, username: usernameOfLength(38) };
-      if (method === 'POST' && path === '/api/auth/logout') return stubError(500, { detail: 'nope' });
-      return { items: [] };
-    });
+    const stub = stubRunnerClient(
+      headerRoutes({
+        'GET /api/auth/session': () => ({ auth_enabled: true, username: usernameOfLength(38) }),
+        'POST /api/auth/logout': () => stubError(500, { detail: 'nope' }),
+      }),
+    );
 
     const fixture = await render();
     const root = fixture.nativeElement as HTMLElement;

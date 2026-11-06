@@ -2,8 +2,17 @@ import { provideZonelessChangeDetection } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { provideRouter, Router } from '@angular/router';
 import { QueryClient, provideTanStackQuery } from '@tanstack/angular-query-experimental';
-import { runnerClient } from 'fleet';
-import { type RequestClientStub, settle, stubRequestClient } from 'fleet/testing';
+import { type runnerApi } from 'fleet';
+import {
+  capacitiesView,
+  hostRunnerView,
+  hubConnectivityView,
+  type RequestClientStub,
+  runnerDashboardView,
+  runnerStatusView,
+  settle,
+  stubRunnerClient,
+} from 'fleet/testing';
 import { RunnerLogout } from '../../core/identity/runner-logout';
 import { vi } from 'vitest';
 
@@ -11,36 +20,31 @@ import { MobileTitlebar } from './mobile-titlebar';
 
 /** Two serving runners on the host. */
 const RUNNERS = {
-  items: ['rn_1', 'rn_2'].map((runnerId, i) => ({
-    runner_id: runnerId,
-    name: `r${i + 1}`,
-    state: 'serving',
-    served: true,
-    halted_reasons: [],
-    pause: { local: false, hub: false, effective: false, local_reason: null },
-    bindings: [{ project: 'p', workspace_id: 'ws', agents: 4 }],
-    agents_in_use: 0,
-    max_agents: 4,
-  })),
+  items: ['rn_1', 'rn_2'].map((runnerId, i) =>
+    hostRunnerView({ runner_id: runnerId, name: `r${i + 1}`, bindings: [{ project: 'p', workspace_id: 'ws', agents: 4 }], max_agents: 4 }),
+  ),
 };
 
 /** A runner's dashboard whose hub link reads `reachable`. */
 function dashboard(reachable: boolean) {
-  return {
-    runner: {
+  return runnerDashboardView({
+    runner: runnerStatusView({
       runner_id: 'runner-local',
       workspace_id: 'workspace-local',
-      hub: { endpoint: 'http://127.0.0.1:8421', reachable, last_contact_at: null, buffer_depth: 0 },
-      capacities: { used: 0, bindings: [{ project: 'p', project_id: 'p', workspace_id: 'ws', agents: 4, used: 0, free: 4 }] },
-      pause: { local: false, hub: false, effective: false },
-      last_tick_at: null,
-    },
-    asks: { items: [] },
-    escalations: { items: [] },
-    takeovers: { items: [] },
-    facts: { items: [] },
-    harness_health: { items: [] },
-    fleet_summary: null,
+      hub: hubConnectivityView({ endpoint: 'http://127.0.0.1:8421', reachable }),
+      capacities: capacitiesView({ bindings: [{ project: 'p', project_id: 'p', workspace_id: 'ws', agents: 4, used: 0, free: 4 }] }),
+    }),
+  });
+}
+
+type RunnerRoutes = Parameters<typeof stubRunnerClient>[0];
+
+/** The titlebar's reads answered empty — no runners, no session — with `overrides` on top. */
+function titlebarRoutes(overrides: RunnerRoutes = {}): RunnerRoutes {
+  return {
+    'GET /api/host/runners': () => ({ items: [] }),
+    'GET /api/auth/session': () => ({ auth_enabled: false, username: null }),
+    ...overrides,
   };
 }
 
@@ -62,7 +66,7 @@ describe('MobileTitlebar (runner)', () => {
   let stub: RequestClientStub;
 
   beforeEach(() => {
-    stub = stubRequestClient(runnerClient, () => ({ items: [] }));
+    stub = stubRunnerClient(titlebarRoutes());
   });
 
   afterEach(() => stub.restore());
@@ -87,13 +91,12 @@ describe('MobileTitlebar (runner)', () => {
 
   const withHubs = (reachable: Record<string, boolean>) => {
     stub.restore();
-    stub = stubRequestClient(runnerClient, (method, path) => {
-      if (method !== 'GET') return { items: [] };
-      if (path === '/api/host/runners') return RUNNERS;
-      const match = /^\/runners\/(rn_\d)\/api\/dashboard$/.exec(path);
-      if (match) return dashboard(reachable[match[1]] ?? false);
-      return { items: [] };
-    });
+    stub = stubRunnerClient(
+      titlebarRoutes({
+        'GET /api/host/runners': () => RUNNERS,
+        'GET /runners/{runner_id}/api/dashboard': (_request, { runner_id }) => dashboard(reachable[runner_id] ?? false),
+      }),
+    );
   };
   const liveDot = (el: HTMLElement) =>
     el.querySelector('[data-testid="local-panel-mobile-titlebar-livedot"]')?.classList.contains('active');
@@ -128,13 +131,11 @@ describe('MobileTitlebar (runner)', () => {
    * out exactly where a mobile operator most needs it.
    */
   describe('the signed-in identity inside the titlebar menu', () => {
-    const withSession = (session: unknown) => {
+    const withSession = (session: runnerApi.RunnerAuthSessionView) => {
       stub.restore();
-      stub = stubRequestClient(runnerClient, (method, path) => {
-        if (method === 'GET' && path === '/api/auth/session') return session;
-        if (method === 'POST' && path === '/api/auth/logout') return {};
-        return { items: [] };
-      });
+      stub = stubRunnerClient(
+        titlebarRoutes({ 'GET /api/auth/session': () => session, 'POST /api/auth/logout': () => undefined }),
+      );
     };
 
     const openMenu = async (fixture: Awaited<ReturnType<typeof render>>) => {

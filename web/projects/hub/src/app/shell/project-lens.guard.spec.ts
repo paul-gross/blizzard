@@ -4,8 +4,7 @@ import { Location } from '@angular/common';
 import { SpyLocation } from '@angular/common/testing';
 import { Router, provideRouter } from '@angular/router';
 import { QueryClient, provideTanStackQuery } from '@tanstack/angular-query-experimental';
-import { hubClient } from 'fleet';
-import { OPERATOR_ME_RESPONSE, type RequestClientStub, stubError, stubRequestClient } from 'fleet/testing';
+import { OPERATOR_ME_RESPONSE, projectView, type RequestClientStub, stubError, stubHubClient } from 'fleet/testing';
 
 import { PAGE_RELOAD, TAB_TENANT_KEY, TenantContext } from '../core/auth/tenant-context';
 import { provideTenantInterceptor } from '../core/auth/tenant.interceptor';
@@ -15,14 +14,7 @@ import { projectLensGuard } from './project-lens.guard';
 @Component({ selector: 'app-test-lensed-view', template: '' })
 class TestLensedView {}
 
-const BLIZZARD = {
-  project_id: 'proj_b',
-  slug: 'blizzard',
-  name: 'Blizzard',
-  description: '',
-  revision: 2,
-  created_at: '2026-10-01T00:00:00Z',
-};
+const BLIZZARD = projectView({ revision: 2, created_at: '2026-10-01T00:00:00Z' });
 
 describe('the project lens guard', () => {
   let stub: RequestClientStub;
@@ -33,13 +25,15 @@ describe('the project lens guard', () => {
     localStorage.clear();
     sessionStorage.setItem(TAB_TENANT_KEY, 'ten_operator');
     reloads = 0;
-    stub = stubRequestClient(hubClient, (method, path) => {
-      if (path === '/api/me') return OPERATOR_ME_RESPONSE;
-      if (path === '/api/projects') return { projects: [BLIZZARD] };
-      if (path === '/api/projects/old-blizzard') return BLIZZARD;
-      if (path === '/api/projects/fresh') return { ...BLIZZARD, project_id: 'proj_f', slug: 'fresh', name: 'Fresh' };
-      if (path === '/api/projects/broken') return stubError(500, { detail: 'the store is down' });
-      return stubError(404, { detail: 'no such project' });
+    stub = stubHubClient({
+      'GET /api/me': () => OPERATOR_ME_RESPONSE,
+      'GET /api/projects': () => ({ projects: [BLIZZARD] }),
+      'GET /api/projects/{project}': (_request, { project }) => {
+        if (project === 'old-blizzard') return BLIZZARD;
+        if (project === 'fresh') return { ...BLIZZARD, project_id: 'proj_f', slug: 'fresh', name: 'Fresh' };
+        if (project === 'broken') return stubError(500, { detail: 'the store is down' });
+        return stubError(404, { detail: 'no such project' });
+      },
     });
     TestBed.configureTestingModule({
       providers: [

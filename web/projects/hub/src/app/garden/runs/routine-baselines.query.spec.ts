@@ -2,8 +2,7 @@ import { ChangeDetectionStrategy, Component, provideZonelessChangeDetection, sig
 import { TestBed } from '@angular/core/testing';
 import { QueryClient, provideTanStackQuery } from '@tanstack/angular-query-experimental';
 
-import { hubClient } from 'fleet';
-import { type RequestClientStub, stubRequestClient, settle } from 'fleet/testing';
+import { type RequestClientStub, routineBaselineView, settle, stubHubClient } from 'fleet/testing';
 import { injectHubRoutineBaselinesQuery } from './routine-baselines.query';
 
 @Component({
@@ -21,7 +20,7 @@ describe('injectHubRoutineBaselinesQuery', () => {
   afterEach(() => stub?.restore());
 
   it('fires no request while no routine is selected', async () => {
-    stub = stubRequestClient(hubClient, () => ({}));
+    stub = stubHubClient({});
     TestBed.configureTestingModule({
       imports: [TestRoutineBaselinesQueryHost],
       providers: [provideZonelessChangeDetection(), provideTanStackQuery(new QueryClient())],
@@ -33,18 +32,15 @@ describe('injectHubRoutineBaselinesQuery', () => {
   });
 
   it('reads the swept scopes off GET /api/routines/{routine_id}/baselines once a routine is selected', async () => {
-    stub = stubRequestClient(hubClient, (method, path) => {
-      if (method === 'GET' && path === '/api/routines/rtn_1/baselines') {
-        return [
-          {
-            scope_slug: 'blizzard',
-            finding_set_id: 'fins_1',
-            recorded_at: '2026-01-01T00:00:00Z',
-            repos: [{ repo: 'blizzard', revision: 'a1b2c3d', landed_since: 3 }],
-          },
-        ];
-      }
-      return {};
+    stub = stubHubClient({
+      'GET /api/routines/{routine_id}/baselines': () => [
+        routineBaselineView({
+          scope_slug: 'blizzard',
+          finding_set_id: 'fins_1',
+          recorded_at: '2026-01-01T00:00:00Z',
+          repos: [{ repo: 'blizzard', revision: 'a1b2c3d', landed_since: 3 }],
+        }),
+      ],
     });
     TestBed.configureTestingModule({
       imports: [TestRoutineBaselinesQueryHost],

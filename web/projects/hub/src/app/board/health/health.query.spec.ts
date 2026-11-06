@@ -3,8 +3,8 @@ import { TestBed } from '@angular/core/testing';
 import { QueryClient, provideTanStackQuery } from '@tanstack/angular-query-experimental';
 import { vi } from 'vitest';
 
-import { hubClient, LIVE_COVERED_POLL_BACKSTOP_MS } from 'fleet';
-import { type RequestClientStub, stubRequestClient } from 'fleet/testing';
+import { LIVE_COVERED_POLL_BACKSTOP_MS } from 'fleet';
+import { type RequestClientStub, stubHubClient } from 'fleet/testing';
 import { injectHubHealthQuery } from './health.query';
 
 /** A minimal host mounting the health read in an injection context. */
@@ -27,7 +27,9 @@ describe('injectHubHealthQuery', () => {
 
   it('re-reads /api/health well inside the live-covered backstop, with no SSE event', async () => {
     vi.useFakeTimers();
-    stub = stubRequestClient(hubClient, () => ({ status: 'ok' }));
+    stub = stubHubClient({
+      'GET /api/health': () => ({ status: 'ok', service: 'hub', version: '0.0.0', overridden: [] }),
+    });
     await TestBed.configureTestingModule({
       imports: [HealthHost],
       providers: [

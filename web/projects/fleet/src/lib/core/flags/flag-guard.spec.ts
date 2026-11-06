@@ -4,8 +4,14 @@ import { Router, provideRouter } from '@angular/router';
 import { QueryClient, provideTanStackQuery } from '@tanstack/angular-query-experimental';
 
 import { flagsApiFlagsGet } from '../../api/hub';
-import { client as hubClient } from '../../api/hub/client.gen';
-import { type RequestClientStub, stubError, stubRequestClient } from '../../testing/stub-request-client';
+import type { FlagsResponse } from '../../api/hub';
+import {
+  type RequestClientStub,
+  type StubDetailBody,
+  type StubHttpError,
+  stubError,
+  stubHubClient,
+} from '../../testing/stub-request-client';
 import { IN_APP_LINK } from '../lens-link';
 import { flagGuard } from './flag-guard';
 import { FlagStore, type FlagsRead, provideFlags } from './flag-store';
@@ -34,8 +40,11 @@ class Nav {
 describe('flagGuard', () => {
   let stub: RequestClientStub;
 
-  const setup = async (answer: unknown, lens: string | null = null) => {
-    stub = stubRequestClient(hubClient, (_method, path) => (path === '/api/flags' ? answer : {}));
+  const setup = async (
+    answer: FlagsResponse | StubHttpError<number, StubDetailBody>,
+    lens: string | null = null,
+  ) => {
+    stub = stubHubClient({ 'GET /api/flags': () => answer });
     TestBed.configureTestingModule({
       providers: [
         provideZonelessChangeDetection(),
@@ -65,7 +74,12 @@ describe('flagGuard', () => {
   });
 
   it('redirects to the app root while the flag is off, or unknown, or the read failed', async () => {
-    for (const answer of [{ flags: { shiny: false }, overridden: [] }, { flags: {}, overridden: [] }, stubError(500, {})]) {
+    const answers: (FlagsResponse | StubHttpError<number, StubDetailBody>)[] = [
+      { flags: { shiny: false }, overridden: [] },
+      { flags: {}, overridden: [] },
+      stubError(500, { detail: 'down' }),
+    ];
+    for (const answer of answers) {
       TestBed.resetTestingModule();
       const router = await setup(answer);
 

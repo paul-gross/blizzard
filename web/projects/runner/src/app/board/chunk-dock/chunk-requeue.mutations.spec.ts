@@ -1,8 +1,7 @@
 import { ChangeDetectionStrategy, Component, provideZonelessChangeDetection } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { QueryClient, provideTanStackQuery } from '@tanstack/angular-query-experimental';
-import { runnerClient } from 'fleet';
-import { type RequestClientStub, stubRequestClient } from 'fleet/testing';
+import { type RequestClientStub, stubRunnerClient } from 'fleet/testing';
 import { vi } from 'vitest';
 
 import { runnerChunkDetailKey, runnerDashboardKey, runnerLeasesKey } from '../../core/query-keys';
@@ -16,7 +15,9 @@ class RequeueHost {
 describe('injectChunkRequeueMutation', () => {
   let stub: RequestClientStub;
   beforeEach(() => {
-    stub = stubRequestClient(runnerClient, () => ({ chunk_id: 'ch_1', requeued: true }));
+    stub = stubRunnerClient({
+      'POST /runners/{runner_id}/api/chunks/{chunk_id}/requeues': () => ({ chunk_id: 'ch_1', requeued: true }),
+    });
   });
   afterEach(() => stub.restore());
 

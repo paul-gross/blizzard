@@ -1,13 +1,12 @@
 import { provideZonelessChangeDetection } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { QueryClient, provideTanStackQuery } from '@tanstack/angular-query-experimental';
-import { hubClient } from 'fleet';
 import { type FindingTriageVerb } from '../core/finding-list';
-import { type RequestClientStub, settle, stubError, stubRequestClient } from 'fleet/testing';
+import { gardenFindingView, type RequestClientStub, settle, stubError, stubHubClient } from 'fleet/testing';
 
 import { GardeningFindingTriageDialog } from './gardening-finding-triage-dialog';
 
-const FINDING = {
+const FINDING = gardenFindingView({
   finding_id: 'fnd_1',
   routine_name: 'nightly',
   scope_slug: 'blizzard',
@@ -18,14 +17,26 @@ const FINDING = {
   live: false,
   observed_count: 1,
   last_seen_at: '2026-01-01T00:00:00Z',
+});
+
+type HubRoutes = Parameters<typeof stubHubClient>[0];
+
+/** Every triage verb's route, each answering with the triaged finding. */
+const TRIAGE_ROUTES: HubRoutes = {
+  'POST /api/findings/resolve': () => [FINDING],
+  'POST /api/findings/confirm-gone': () => [FINDING],
+  'POST /api/findings/wont-fix': () => [FINDING],
+  'POST /api/findings/not-a-finding': () => [FINDING],
+  'POST /api/findings/supersede': () => [FINDING],
+  'POST /api/findings/reopen': () => [FINDING],
 };
 
 async function mount(
   verb: FindingTriageVerb,
   findingIds: readonly string[],
-  route: (method: string, path: string) => unknown,
+  routes: HubRoutes = {},
 ) {
-  const stub = stubRequestClient(hubClient, route);
+  const stub = stubHubClient({ ...TRIAGE_ROUTES, ...routes });
   await TestBed.configureTestingModule({
     imports: [GardeningFindingTriageDialog],
     providers: [
@@ -79,7 +90,7 @@ describe('GardeningFindingTriageDialog', () => {
 
   for (const testCase of CASES) {
     it(`issues exactly one ${testCase.verb} request carrying every selected id and the note`, async () => {
-      const mounted = await mount(testCase.verb, ['fnd_1', 'fnd_2', 'fnd_3'], () => [FINDING]);
+      const mounted = await mount(testCase.verb, ['fnd_1', 'fnd_2', 'fnd_3']);
       stub = mounted.stub;
       const { el, fixture } = mounted;
 
@@ -100,7 +111,7 @@ describe('GardeningFindingTriageDialog', () => {
   }
 
   it('refuses submission while the note is blank or whitespace-only', async () => {
-    const mounted = await mount('resolve', ['fnd_1'], () => [FINDING]);
+    const mounted = await mount('resolve', ['fnd_1']);
     stub = mounted.stub;
     const { el, fixture } = mounted;
 
@@ -118,7 +129,7 @@ describe('GardeningFindingTriageDialog', () => {
   });
 
   it("supersede also requires the absorbing finding's id", async () => {
-    const mounted = await mount('supersede', ['fnd_1'], () => [FINDING]);
+    const mounted = await mount('supersede', ['fnd_1']);
     stub = mounted.stub;
     const { el, fixture } = mounted;
 
@@ -134,11 +145,9 @@ describe('GardeningFindingTriageDialog', () => {
   });
 
   it('surfaces a rejected batch as an error, keeping the dialog open and the selection intact', async () => {
-    const mounted = await mount('resolve', ['fnd_1', 'fnd_2'], (method, path) =>
-      method === 'POST' && path === '/api/findings/resolve'
-        ? stubError(404, { detail: 'unknown finding among fnd_1, fnd_2' })
-        : {},
-    );
+    const mounted = await mount('resolve', ['fnd_1', 'fnd_2'], {
+      'POST /api/findings/resolve': () => stubError(404, { detail: 'unknown finding among fnd_1, fnd_2' }),
+    });
     stub = mounted.stub;
     const { el, fixture } = mounted;
     let closed = false;
@@ -157,7 +166,7 @@ describe('GardeningFindingTriageDialog', () => {
   });
 
   it('closes on a successful submission', async () => {
-    const mounted = await mount('reopen', ['fnd_1'], () => [FINDING]);
+    const mounted = await mount('reopen', ['fnd_1']);
     stub = mounted.stub;
     const { el, fixture } = mounted;
     let closed = false;
@@ -172,7 +181,7 @@ describe('GardeningFindingTriageDialog', () => {
   });
 
   it('emits succeeded on a successful submission, distinct from a plain cancel (F1)', async () => {
-    const mounted = await mount('reopen', ['fnd_1'], () => [FINDING]);
+    const mounted = await mount('reopen', ['fnd_1']);
     stub = mounted.stub;
     const { el, fixture } = mounted;
     let succeeded = false;
@@ -190,9 +199,9 @@ describe('GardeningFindingTriageDialog', () => {
   });
 
   it('does not emit succeeded when the batch is rejected', async () => {
-    const mounted = await mount('resolve', ['fnd_1'], (method, path) =>
-      method === 'POST' && path === '/api/findings/resolve' ? stubError(404, { detail: 'unknown finding' }) : {},
-    );
+    const mounted = await mount('resolve', ['fnd_1'], {
+      'POST /api/findings/resolve': () => stubError(404, { detail: 'unknown finding' }),
+    });
     stub = mounted.stub;
     const { el, fixture } = mounted;
     let succeeded = false;

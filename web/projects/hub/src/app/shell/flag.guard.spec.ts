@@ -2,9 +2,8 @@ import { Component, provideZonelessChangeDetection } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { Router, provideRouter } from '@angular/router';
 import { QueryClient, provideTanStackQuery } from '@tanstack/angular-query-experimental';
-import { hubClient } from 'fleet';
 import { type FlagsResponse, flagGuard, provideFlags } from 'fleet/shell';
-import { type RequestClientStub, stubRequestClient } from 'fleet/testing';
+import { type RequestClientStub, stubHubClient } from 'fleet/testing';
 
 import { hubFlagsRead } from '../core/flags.query';
 import { provideProjectLens } from '../core/project-lens';
@@ -17,7 +16,7 @@ describe('the flag guard on the hub', () => {
 
   /** Opens `url` after landing on `from`, the way a person moves inside the board: the lens is the page they are on. */
   async function open(url: string, answer: FlagsResponse, from = '/') {
-    stub = stubRequestClient(hubClient, (_method, path) => (path === '/api/flags' ? answer : {}));
+    stub = stubHubClient({ 'GET /api/flags': () => answer });
     TestBed.configureTestingModule({
       providers: [
         provideZonelessChangeDetection(),
