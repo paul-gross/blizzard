@@ -51,6 +51,7 @@ owns what that assumption still costs.
 | [`deployment/artifacts.md`](./deployment/artifacts.md)                           | You are authoring a graph's `produces:` or `artifacts:` keys, or flipping `produces_mode` to `enforce`                                                                                                |
 | [`deployment/transcripts.md`](./deployment/transcripts.md)                       | You are turning on either transcript lane — the context warn lane, or shipping session content to the hub; both off by default                                                                        |
 | [`deployment/routines-and-scopes.md`](./deployment/routines-and-scopes.md)       | You are authoring a routine's graph and run defaults, or a scope's slug and description                                                                                                               |
+| [`deployment/cadences.md`](./deployment/cadences.md)                             | You are keeping routines on a rhythm: a cadence's schedule and spacing, its chores, its attention, and the `cadence` verbs                                                                            |
 | [`deployment/findings-and-proposals.md`](./deployment/findings-and-proposals.md) | You are reading a routine's findings bucket, or listing the garden proposals waiting on a decision                                                                                                    |
 
 ### Operating a running fleet

@@ -30,7 +30,7 @@ class Permission(StrEnum):
     RUNNER_RETIRE = "runner:retire"
     #: Add a runner, or rotate its token; both mint a credential.
     RUNNER_ADD = "runner:add"
-    #: Author a workflow graph, including its scope and routines.
+    #: Author a workflow graph, including its scope, routines, and cadences.
     GRAPH_EDIT = "graph:edit"
     #: Administer users and their roles.
     USER_MANAGE = "user:manage"
@@ -113,3 +113,9 @@ def permissions_for(role: Role | None, hub_admin: bool) -> frozenset[Permission]
     :data:`HUB_PERMISSIONS` when ``hub_admin`` is true."""
     held: frozenset[Permission] = frozenset() if role is None else expand(role)
     return (held | HUB_PERMISSIONS) if hub_admin else held
+
+
+def may_admit(permissions: frozenset[Permission]) -> bool:
+    """Whether a principal holding ``permissions`` may admit work to the ready queue — what promoting a chunk by
+    hand asks for, and so what a write leaving a cadence promoting its runs asks for beside its own permission."""
+    return Permission.CHUNK_CONTROL in permissions

@@ -199,6 +199,28 @@ class ScopeStore:
                 return None
             return self._of(row, retired=_is_retired(conn, row.scope_id))
 
+    def get_many(self, project_id: str, slugs: Sequence[str]) -> dict[str, Scope]:
+        found: dict[str, Scope] = {}
+        if not slugs:
+            return found
+        with self._store.read("get_many") as conn:
+            for batch in id_batches(sorted(set(slugs))):
+                rows = conn.execute(
+                    self._store.select(scopes).where(scopes.c.project_id == project_id, scopes.c.slug.in_(batch))
+                ).all()
+                retired = set(
+                    conn.execute(
+                        newest_retired_select(
+                            self._store,
+                            scope_lifecycle_facts,
+                            scope_lifecycle_facts.c.scope_id,
+                            [row.scope_id for row in rows],
+                        )
+                    ).scalars()
+                )
+                found.update({row.slug: self._of(row, retired=row.scope_id in retired) for row in rows})
+        return found
+
     def list_all(self, project_id: str | None = None) -> list[Scope]:
         stmt = self._store.select(scopes)
         if project_id is not None:

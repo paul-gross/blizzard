@@ -9,6 +9,7 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from blizzard.foundation.landing_policy import LandingPolicy
 from blizzard.wire.base import WireModel
+from blizzard.wire.cadence import CadenceDocument
 from blizzard.wire.forge import DEPRECATED_FIELD, OldFieldWarning
 from blizzard.wire.routine import RoutineDocument
 from blizzard.wire.scope import ScopeDocument
@@ -92,6 +93,13 @@ class RoutineEntry(RoutineDocument):
     project: str | None = None
 
 
+class CadenceEntry(CadenceDocument):
+    """A cadence entry of a document: the cadence, in ``project`` — an id or a slug; named as a scope entry's is.
+    Its chores name routines and scopes of that project, by slug."""
+
+    project: str | None = None
+
+
 class ForgeEntry(BaseModel):
     """A forge declared by slug; an omitted mutable field stays as stored."""
 
@@ -152,6 +160,7 @@ class ConfigDocumentV2(BaseModel):
     repositories: list[RepositoryEntry] = []
     scopes: list[ScopeEntry] = []
     routines: list[RoutineEntry] = []
+    cadences: list[CadenceEntry] = []
 
 
 class ConfigApplyOutcome(WireModel):

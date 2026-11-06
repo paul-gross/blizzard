@@ -17,13 +17,15 @@ from starlette.concurrency import run_in_threadpool
 from blizzard.foundation.store.utc import iso_utc
 from blizzard.hub.api.auth import reject_runner_principal
 from blizzard.hub.api.auth_session import require, tenant_bound
+from blizzard.hub.api.cadences import admission_refused, cadence_shape, chore_scopes, chore_shapes, schedule_shape
 from blizzard.hub.api.deps import Services
 from blizzard.hub.api.project_params import PROJECT_REQUIRED, QueryProject
 from blizzard.hub.api.user_names import user_names
 from blizzard.hub.auth.models import ResolvedIdentity
-from blizzard.hub.auth.permissions import Permission
+from blizzard.hub.auth.permissions import Permission, may_admit
 from blizzard.hub.composition import TenantServices
 from blizzard.hub.documents import ConfigDecodeError, codec_for_media_type
+from blizzard.hub.domain.cadence.model import Cadence, CadenceAdmissionRefused, CadenceEdit, Spacing
 from blizzard.hub.domain.config.apply import ApplyEntryRefused, EntryOutcome
 from blizzard.hub.domain.config.changes import ConfigChange, RecordKind
 from blizzard.hub.domain.config.errors import ConfigFieldError
@@ -33,6 +35,7 @@ from blizzard.hub.domain.config.landing_policies import DEFAULT_LANDING_POLICY, 
 from blizzard.hub.domain.config.repositories import RepositoryDraft, RepositoryEdit, RepositoryId
 from blizzard.hub.domain.config.work_sources import WorkSourceDraft, WorkSourceEdit, WorkSourceId
 from blizzard.hub.domain.config_apply.entries import (
+    DeclaredCadence,
     DeclaredForge,
     DeclaredRepository,
     DeclaredRoutine,
@@ -46,7 +49,9 @@ from blizzard.hub.domain.kernel.unset import UNSET
 from blizzard.hub.domain.projects.declarations import EntryProjectRequired, ProjectDeclaration
 from blizzard.hub.domain.projects.links import RepositoryLink
 from blizzard.hub.domain.projects.model import ProjectEdit, ProjectId
+from blizzard.wire.cadence import CadenceDocument, CadenceScheduleDocument, ChoreDocument
 from blizzard.wire.config import (
+    CadenceEntry,
     ConfigApplyOutcome,
     ConfigApplyResponse,
     ConfigChangesPage,
@@ -90,6 +95,7 @@ _SCHEMAS = {
     "repositories": RepositoryEntry,
     "scopes": ScopeDocument,
     "routines": RoutineDocument,
+    "cadences": CadenceDocument,
 }
 
 
@@ -342,6 +348,7 @@ def _entries(document: ConfigDocumentV2) -> DocumentEntries:
             )
         )
     return DocumentEntries(
+        cadences=tuple(_declared_cadence(entry) for entry in document.cadences),
         secrets=tuple(document.secrets),
         forges=tuple(
             DeclaredForge(
@@ -358,6 +365,23 @@ def _entries(document: ConfigDocumentV2) -> DocumentEntries:
         projects=tuple(_project_declaration(entry) for entry in document.projects),
         scopes=tuple(scopes),
         routines=tuple(routines),
+    )
+
+
+def _declared_cadence(entry: CadenceEntry) -> DeclaredCadence:
+    """A cadence entry's create shape and the sparse edit of what it states; a ``name`` stated ``null`` is left as
+    stored, as one the entry omits is."""
+    stated = entry.model_fields_set
+    return DeclaredCadence(
+        shape=cadence_shape(entry),
+        edit=CadenceEdit(
+            name=entry.name if "name" in stated and entry.name is not None else UNSET,
+            schedule=schedule_shape(entry.schedule) if "schedule" in stated else UNSET,
+            spacing=entry.spacing if "spacing" in stated else UNSET,
+            anchor=entry.anchor if "anchor" in stated else UNSET,
+            chores=chore_shapes(entry.chores) if "chores" in stated else UNSET,
+        ),
+        project=entry.project,
     )
 
 
@@ -453,9 +477,13 @@ def _apply(
     dry_run: bool,
 ) -> ConfigApplyResponse:
     try:
-        applied = services.config_application.apply(_entries(document), actor=identity.user_id, dry_run=dry_run)
+        applied = services.config_application.apply(
+            _entries(document), actor=identity.user_id, dry_run=dry_run, may_admit=may_admit(identity.permissions)
+        )
     except ApplyEntryRefused as exc:
         raise _refusal(exc) from exc
+    except CadenceAdmissionRefused as exc:
+        raise admission_refused(exc) from exc
     return ConfigApplyResponse(
         dry_run=dry_run,
         apply_id=applied.apply_id,
@@ -491,7 +519,8 @@ async def apply_config(
     edit only the fields an entry states, enable what is retired, leave unnamed records alone. Forges are declared,
     and every work source and repository names its forge by id or slug. `dry_run` rolls the same transaction back,
     with the same `outcomes` and no `apply_id`. 422 invalid — `config_version_retired` for any `version` but 2, a
-    missing one included — 409 conflict, 415 unknown `Content-Type`; a refusal leaves the store unchanged."""
+    missing one included — 409 conflict, 415 unknown `Content-Type`; a refusal leaves the store unchanged. 403 when a
+    cadence write would leave it promoting its runs and the caller may not promote chunks."""
     document = _document(await request.body(), request.headers.get("content-type"))
     return await run_in_threadpool(_apply, document, identity, services, dry_run=dry_run)
 
@@ -501,9 +530,9 @@ def export_config(
     services: Services, version: Annotated[int, Query(ge=1, le=2)] = DOCUMENT_VERSION
 ) -> ConfigDocumentV2:
     """Every project with its standing links, every active forge, every active, non-built-in work source and
-    repository, and every active scope and routine (its linked scope set included) named in its project by slug, with
-    every field, and every active secret name, as a version-2 document that applies back as a no-op. Retired records
-    are left out, since applying one would enable it. 422 `config_version_retired` for `version=1`."""
+    repository, and every active scope, routine (its linked scope set included), and cadence named in its project by
+    slug, with every field, and every active secret name, as a version-2 document that applies back as a no-op.
+    Retired records are left out, since applying one would enable it. 422 `config_version_retired` for `version=1`."""
     if version != DOCUMENT_VERSION:
         raise _version_retired(["query", "version"], version)
     retired = services.secret_catalog.retired_names()
@@ -513,6 +542,9 @@ def export_config(
         r for r in sorted(services.routines.list_all(), key=lambda r: (slug_of[r.project_id], r.slug)) if not r.retired
     ]
     scope_links = services.routine_scopes.list_scopes_for([r.routine_id for r in live_routines])
+    live_cadences = sorted(
+        (c for c in services.cadences.list_all() if not c.retired), key=lambda c: (slug_of[c.project_id], c.slug)
+    )
     sources = services.work_source_records.list_all(include_retired=False)
     repositories = services.repository_records.list_all(include_retired=False)
     forges = services.forge_records.get_many(
@@ -559,6 +591,7 @@ def export_config(
             )
             for r in live_routines
         ],
+        cadences=[_cadence_entry(c, slug_of[c.project_id]) for c in live_cadences],
         forges=[
             ForgeEntry(slug=f.slug, name=f.name, kind=f.kind, api_base=f.fields.api_base, web_base=f.fields.web_base)
             for f in services.forge_records.list_all(include_retired=False)
@@ -599,3 +632,37 @@ def _landing_order(links: list[RepositoryLink], slugs: Mapping[RepositoryId, str
         key=lambda link: landing_sort_key(link.position, slugs[link.repository_id]),
     )
     return [slugs[link.repository_id] for link in ranked] or None
+
+
+def _spacing(spacing: Spacing) -> str:
+    """``spacing`` written in its largest whole unit."""
+    for unit, minutes in (("d", 24 * 60), ("h", 60)):
+        if spacing.minutes % minutes == 0:
+            return f"{spacing.minutes // minutes}{unit}"
+    return f"{spacing.minutes}m"
+
+
+def _cadence_entry(cadence: Cadence, project: str) -> CadenceEntry:
+    """``cadence`` as the entry that declares it, every field written."""
+    rhythm = cadence.rhythm
+    return CadenceEntry(
+        slug=cadence.slug,
+        name=cadence.name,
+        schedule=None
+        if rhythm.schedule is None
+        else CadenceScheduleDocument(cron=rhythm.schedule.cron, zone=rhythm.schedule.zone),
+        spacing=None if rhythm.spacing is None else _spacing(rhythm.spacing),
+        anchor=None if rhythm.anchor is None else rhythm.anchor.value,
+        chores=[
+            ChoreDocument(
+                key=chore.key,
+                routine=chore.spec.routine_slug,
+                scopes=chore_scopes(chore),
+                mode=chore.spec.mode,
+                note=chore.spec.note,
+                promote=chore.spec.promote,
+            )
+            for chore in cadence.chores
+        ],
+        project=project,
+    )

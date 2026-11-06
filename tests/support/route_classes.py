@@ -96,6 +96,13 @@ HUMAN: dict[tuple[str, str], Permission] = {
     ("POST", "/api/routines/{routine_id}/run"): Permission.CHUNK_CONTROL,
     # The per-scope delta baseline a routine has swept — a read, Permission.FLEET_VIEW.
     ("GET", "/api/routines/{routine_id}/baselines"): Permission.FLEET_VIEW,
+    ("POST", "/api/projects/{project}/cadences"): Permission.GRAPH_EDIT,
+    ("GET", "/api/projects/{project}/cadences"): Permission.FLEET_VIEW,
+    ("GET", "/api/cadences"): Permission.FLEET_VIEW,
+    ("GET", "/api/cadences/{cadence_id}"): Permission.FLEET_VIEW,
+    ("PATCH", "/api/cadences/{cadence_id}"): Permission.GRAPH_EDIT,
+    ("POST", "/api/cadences/{cadence_id}/retire"): Permission.GRAPH_EDIT,
+    ("POST", "/api/cadences/{cadence_id}/enable"): Permission.GRAPH_EDIT,
     # The run list and one run's own delta — reads, Permission.FLEET_VIEW.
     ("GET", "/api/runs"): Permission.FLEET_VIEW,
     ("GET", "/api/runs/{chunk_id}"): Permission.FLEET_VIEW,

@@ -181,3 +181,10 @@ surface = "store"
 where = "work_sources"
 reason = "foreign key changed"
 because = "0.4 hubs refuse to start on a store whose revision is not their own (v0.4.0-rc.1:src/blizzard/hub/runtime.py:54-56 and :166-167), so no 0.4 hub writes a work source beside the new foreign key, and the walk back restores the old shape."
+
+[[allowance]]
+line = "0.4"
+surface = "http-api"
+where = "ConfigDocumentV2.cadences"
+reason = "property added to a forbid schema a response reaches"
+because = "0.4's only reader of the config export response is the CLI, which echoes the decoded document without a model (v0.4.0-rc.1:src/blizzard/hub/cli/config.py:155-156); the board ships no reader of it."

@@ -1,7 +1,7 @@
 # Configuration documents
 
-A configuration document declares forges, work sources, repositories, scopes, and routines in one YAML or JSON file.
-`blizzard hub config apply` reconciles the hub's stored records to it in a single transaction, and
+A configuration document declares forges, work sources, repositories, scopes, routines, and cadences in one YAML or JSON
+file. `blizzard hub config apply` reconciles the hub's stored records to it in a single transaction, and
 `blizzard hub config export` writes the current records back out as a document.
 
 ```bash
@@ -54,14 +54,25 @@ routines:
     default_model: [claude-opus]
     project: blizzard
     scopes: [blizzard]
+cadences:
+  - slug: evening
+    project: blizzard
+    schedule:
+      cron: "0 20 * * *"
+      zone: America/Chicago
+    spacing: 10d
+    chores:
+      - key: arch
+        routine: architecture-drift
+        scopes: all
 ```
 
 `version` is `2`: a document with any other `version`, or none, is refused `422 config_version_retired` at `version`,
 naming version 2. Version 1, whose entries carried the forge's address in place of `forge`, is retired
 ([upgrade.md](../upgrade.md#forges-replace-the-address-fields)). Each entry carries the fields its own record takes, so
-[work sources](./work-sources.md), [repositories](./repositories.md), and
-[scopes and routines](./routines-and-scopes.md) own the field meanings, and `GET /api/config/schema/work-sources`,
-`/repositories`, `/scopes`, and `/routines` serve each entry's JSON Schema, and `/api/config/schema/forges` serves forge
+[work sources](./work-sources.md), [repositories](./repositories.md), [scopes and routines](./routines-and-scopes.md),
+and [cadences](./cadences.md) own the field meanings, and `GET /api/config/schema/work-sources`, `/repositories`,
+`/scopes`, `/routines`, and `/cadences` serve each entry's JSON Schema, and `/api/config/schema/forges` serves forge
 entries; `?version=1` is refused `config_version_retired`. An unknown field is refused. `secrets` lists secret names
 that must already exist and be active; a document never carries a secret's value, so set one first with
 `blizzard hub secret create`.
@@ -105,13 +116,20 @@ rank it, and an entry that leaves it out keeps the stored order. A scope or rout
 `project`, an id or a slug; an entry without one belongs to the tenant's only project, and is refused `project_required`
 when the tenant holds several.
 
+A cadence entry is keyed by its `slug` within its project, and names its project with `project` as a scope entry does. A
+`chores` list it states is the cadence's whole list, matched to the stored chores by `key`; one it leaves out keeps the
+stored chores. A chore's routine and scopes are named by slug and need not resolve: an entry naming a routine nobody
+declared is applied, and the cadence's view shows it as attention ([cadences.md](./cadences.md#attention)). A cadence
+entry is compared by its effective value, so a spacing stated as `240m` matches a stored `4h`, and an entry leaving
+`anchor`, `promote`, or `name` out matches their defaults.
+
 The file's extension picks the format: `.yaml` and `.yml` read as YAML, `.json` as JSON. Over HTTP the `Content-Type`
 does: `POST /api/config/apply` takes `application/yaml` or `application/json`, and any other type is refused with 415.
 
 ## What an apply does
 
-An apply looks at each record the document names, forges before work sources and repositories, and scopes before
-routines:
+An apply looks at each record the document names, forges before work sources and repositories, scopes before routines,
+and cadences after routines:
 
 | The record is…                        | The apply…                                           | Outcome row |
 | ------------------------------------- | ---------------------------------------------------- | ----------- |
@@ -143,10 +161,10 @@ The response lists `outcomes`, each with a `kind`, `key`, `op` and the changed f
 
 ## Export
 
-`config export` prints every active forge, work source, repository, scope, and routine with every field (a routine with
-both its `slug` and `name`), and every active secret name, as a document that applies back as a no-op. `--format` is
-`yaml` (the default) or `json`. Retired records are left out, because applying one would enable it again. Each work
-source and repository is written with its `slug` and `name`, each repository with its `landing_policy` and any
+`config export` prints every active forge, work source, repository, scope, routine, and cadence with every field (a
+routine with both its `slug` and `name`), and every active secret name, as a document that applies back as a no-op.
+`--format` is `yaml` (the default) or `json`. Retired records are left out, because applying one would enable it again.
+Each work source and repository is written with its `slug` and `name`, each repository with its `landing_policy` and any
 `park_timeout_hours`, and each project's `color`, `sources` and `repositories` as slugs. A project that ranks a
 repository also gets its `landing_order`; one that ranks nothing gets none. The built-in `hub` work source is never
 exported.

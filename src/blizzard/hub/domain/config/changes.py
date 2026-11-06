@@ -44,6 +44,7 @@ class RecordKind(StrEnum):
     FORGE = "forge"
     SCOPE = "scope"
     ROUTINE = "routine"
+    CADENCE = "cadence"
     PROJECT = "project"
     PROJECT_SOURCE_LINK = "project_source_link"
     PROJECT_REPOSITORY_LINK = "project_repository_link"

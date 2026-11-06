@@ -9,7 +9,11 @@ from dataclasses import dataclass, field, replace
 from blizzard.foundation.clock import IClock
 from blizzard.foundation.ids import Id, IdPrefix
 from blizzard.foundation.roles import domain_model
+from blizzard.hub.domain.cadence.declarations import CadenceDeclaration
+from blizzard.hub.domain.cadence.model import Cadence
+from blizzard.hub.domain.cadence.ports import IReadCadenceRepository
 from blizzard.hub.domain.config.apply import (
+    CADENCES_SECTION,
     FORGES_SECTION,
     REPOSITORIES_SECTION,
     ROUTINES_SECTION,
@@ -140,6 +144,7 @@ class ConfigApplication:
         scopes: IReadScopeRepository,
         routines: IReadRoutineRepository,
         routine_scopes: IReadRoutineScopeRepository,
+        cadences: IReadCadenceRepository,
         graphs: IReadGraphRepository,
         secrets: ISecretCatalog,
         pick: ColorPick,
@@ -155,14 +160,16 @@ class ConfigApplication:
         self._scopes = scopes
         self._routines = routines
         self._routine_scopes = routine_scopes
+        self._cadences = cadences
         self._graphs = graphs
         self._secrets = secrets
         self._pick = pick
         self._clock = clock
 
-    def apply(self, entries: DocumentEntries, *, actor: str, dry_run: bool) -> ApplyResult:
+    def apply(self, entries: DocumentEntries, *, actor: str, dry_run: bool, may_admit: bool) -> ApplyResult:
         """Apply ``entries`` as ``actor`` through the apply door. :class:`ApplyEntryRefused` names the entry that
-        refused, and the store is left as it was."""
+        refused, and the store is left as it was; a planned write leaving a cadence admitting work raises
+        :class:`~blizzard.hub.domain.cadence.model.CadenceAdmissionRefused` unless ``may_admit``."""
         apply_id = None if dry_run else Id.mint(IdPrefix.CONFIG_APPLY, self._clock).value
         ctx = ChangeContext(actor=actor, door=Door.APPLY, apply_id=apply_id)
         repositories = self._held_repositories(entries)
@@ -171,10 +178,11 @@ class ConfigApplication:
         held_forges = {f.slug: f for f in self._forges.list_all(include_retired=True)}
         declared_forges, lookup, former_forges = self._held_forges(entries, held_forges, ctx)
         declaration = self._declaration(entries, projects, repositories, sources, lookup)
-        declaration = replace(declaration, declared_forges=declared_forges)
+        cadences, held_cadences = self._cadence_declarations(entries, projects, may_admit=may_admit)
+        declaration = replace(declaration, declared_forges=declared_forges, cadences=cadences)
         outcomes = self._authoring.apply(
             declaration,
-            self._stored(declaration, repositories, sources, held_forges, former_forges),
+            self._stored(declaration, repositories, sources, held_forges, former_forges, held_cadences),
             ctx,
             dry_run=dry_run,
         )
@@ -278,7 +286,9 @@ class ConfigApplication:
         projects = self._projects.list_all()
         current = {project.slug: project for project in projects}
         named = {entry.slug for entry in entries.projects} | {
-            entry.project for entry in (*entries.scopes, *entries.routines) if entry.project is not None
+            entry.project
+            for entry in (*entries.scopes, *entries.routines, *entries.cadences)
+            if entry.project is not None
         }
         former: dict[str, Project] = {}
         for value in sorted(named - current.keys()):
@@ -441,6 +451,30 @@ class ConfigApplication:
             ),
         )
 
+    def _cadence_declarations(
+        self, entries: DocumentEntries, projects: ProjectsPlan, *, may_admit: bool
+    ) -> tuple[tuple[CadenceDeclaration, ...], dict[tuple[str, str], Cadence]]:
+        """Each cadence entry within the project it names, beside the revision of the stored cadence it names, and
+        those stored cadences by key — one read per project the entries name."""
+        keyed = [
+            (projects.project_of(CADENCES_SECTION, index, entry.project).project_id, entry)
+            for index, entry in enumerate(entries.cadences)
+        ]
+        held: dict[tuple[str, str], Cadence] = {}
+        for project_id in sorted({project_id for project_id, _ in keyed}):
+            held.update({(project_id, c.slug): c for c in self._cadences.list_all(project_id)})
+        declarations = tuple(
+            CadenceDeclaration(
+                shape=entry.shape,
+                edit=entry.edit,
+                project_id=project_id,
+                may_admit=may_admit,
+                stored_revision=stored.revision if (stored := held.get((project_id, entry.shape.slug or ""))) else None,
+            )
+            for project_id, entry in keyed
+        )
+        return declarations, held
+
     def _stored(
         self,
         declaration: ConfigDeclaration,
@@ -448,6 +482,7 @@ class ConfigApplication:
         sources_held: _WorkSources,
         forges: dict[str, ConfiguredForge],
         former_forges: dict[str, ConfiguredForge],
+        cadences: dict[tuple[str, str], Cadence],
     ) -> StoredConfig:
         secrets = self._secrets.get_many(list(declaration.secrets))
         declared_slugs = {d.slug for d in declaration.repositories}
@@ -483,6 +518,7 @@ class ConfigApplication:
             secrets={name: RecordState.of(name in retired) for name in secrets},
             scopes={d.key: scopes[d.key] for d in declared_scopes if d.key in scopes},
             routines=routines,
+            cadences=dict(cadences),
             references=DeclaredReferences(
                 scopes=frozenset(scopes) | {d.key for d in declared_scopes},
                 enabled_graphs=frozenset(self._graphs.enabled_names(sorted(graph_names))),

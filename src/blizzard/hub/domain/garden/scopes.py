@@ -9,7 +9,7 @@ whose retire/enable is a newest-fact-wins brake (``bzh:facts-not-status``)."""
 from __future__ import annotations
 
 import re
-from collections.abc import Mapping
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, replace
 from datetime import datetime
 from enum import StrEnum
@@ -194,6 +194,11 @@ class IReadScopeRepository(Protocol):
     project of the tenant unless it is given one."""
 
     def get(self, project_id: str, slug: str) -> Scope | None: ...
+
+    def get_many(self, project_id: str, slugs: Sequence[str]) -> dict[str, Scope]:
+        """The scopes of ``project_id`` named ``slugs``, keyed by slug — :meth:`get`'s batched plural
+        (``bzh:bulk-reconstitution``); a slug no scope holds is absent."""
+        ...
 
     def list_all(self, project_id: str | None = None) -> list[Scope]:
         """Every scope, newest first — of ``project_id`` only when it is given."""

@@ -95,6 +95,8 @@ def test_upgrade_recovers_only_outstanding_legacy_terminal_refs(tmp_path: Path) 
     assert [r.ref for r in rows] == ["existing", "failed", "missing"]
     assert rows[0].retired_at is not None
     assert all(r.retired_at is None for r in rows[1:])
+    # The invariants read the whole current schema, so they run at head.
+    runner.upgrade("head")
     assert not [v for v in hub_invariants(engine).run() if v.invariant == "hub:no-unenqueued-closable-ref"]
 
     # A new writer that omits the enqueue after the migration is still caught.

@@ -48,6 +48,8 @@ from blizzard.hub.auth.models import AuthStateEntry, Identity, SuperuserBootstra
 from blizzard.hub.auth.sessions import IReadSessionRepository
 from blizzard.hub.auth.superuser_bootstrap import IReadSuperuserBootstrapRepository
 from blizzard.hub.auth.users import IReadUserRepository
+from blizzard.hub.domain.cadence.model import CadenceShape, ChoreShape
+from blizzard.hub.domain.cadence.ports import IReadCadenceRepository
 from blizzard.hub.domain.chunk.model import (
     Chunk,
     CloseEnqueueDecision,
@@ -1238,6 +1240,7 @@ class HubWorld:
     invitation_id: str
     invitation_token_hash: str
     routine_id: str
+    cadence_id: str
     scope_a: str
     scope_a_id: str
     scope_c: str
@@ -1496,6 +1499,28 @@ def build_hub_world(tmp_path: Path) -> HubWorld:
         graph_name=default_graph.name,
         default_scope_slug=ScopeSlug.parse("runner-scope"),
     )
+
+    # --- cadences: one keeping a listed chore and one over every scope, the second retired ----
+    cadence = hub.services.cadence_authoring.create(
+        CadenceShape(
+            slug="census-cadence",
+            spacing="1d",
+            chores=(
+                ChoreShape("listed", "gardening", scopes=["blizzard", "runner-scope"]),
+                ChoreShape("every", "nightly", scopes="all"),
+            ),
+        ),
+        project=garden_project_record,
+        ctx=operator,
+        may_admit=True,
+    )
+    retired_cadence = hub.services.cadence_authoring.create(
+        CadenceShape(slug="census-retired", spacing="7d", chores=(ChoreShape("plain", "gardening"),)),
+        project=garden_project_record,
+        ctx=operator,
+        may_admit=True,
+    )
+    hub.services.cadence_lifecycle.retire(retired_cadence, operator, by="operator")
 
     # --- routine runs: garden_run/run_context's own source ---------------------------------
     run_1 = hub.services.routine_run.run(
@@ -2274,6 +2299,7 @@ def build_hub_world(tmp_path: Path) -> HubWorld:
         invitation_id="inv_census_1",
         invitation_token_hash=invitation_token_hash,
         routine_id=routine.routine_id,
+        cadence_id=cadence.cadence_id,
         scope_a="blizzard",
         scope_a_id=scope_a.scope_id,
         scope_c="legacy",
@@ -2886,6 +2912,17 @@ HUB_CENSUS: dict[tuple[type, str], HubRecipe] = {
         record_kind=None, record_key=None, project_id=w.project_id
     ),
     (IReadScopeRepository, "get"): lambda w: w.hub.services.scopes.get(w.project_id, w.scope_a),
+    (IReadScopeRepository, "get_many"): lambda w: w.hub.services.scopes.get_many(
+        w.project_id, [w.scope_a, w.scope_c, "runner-scope"]
+    ),
+    (IReadCadenceRepository, "get"): lambda w: w.hub.services.cadences.get(w.cadence_id),
+    (IReadCadenceRepository, "get_by_slug"): lambda w: w.hub.services.cadences.get_by_slug(
+        w.project_id, "census-cadence"
+    ),
+    (IReadCadenceRepository, "list_all"): lambda w: (
+        w.hub.services.cadences.list_all(),
+        w.hub.services.cadences.list_all(w.project_id),
+    ),
     (IReadScopeRepository, "list_all"): lambda w: (
         w.hub.services.scopes.list_all(),
         w.hub.services.scopes.list_all(w.project_id),

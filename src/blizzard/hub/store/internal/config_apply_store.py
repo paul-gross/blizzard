@@ -12,6 +12,7 @@ from typing import cast
 from sqlalchemy.engine import Connection
 from sqlalchemy.exc import IntegrityError
 
+from blizzard.hub.domain.cadence.model import Cadence, CadenceSlugTakenError
 from blizzard.hub.domain.config.apply import (
     ApplyEntryRefused,
     IConfigApplyWriter,
@@ -33,6 +34,10 @@ from blizzard.hub.domain.garden.scopes import Scope, ScopeSlugTakenError
 from blizzard.hub.domain.projects.links import RepositoryLink, SourceLink
 from blizzard.hub.domain.projects.model import Project, ProjectId, ProjectSlugTaken
 from blizzard.hub.domain.projects.order import LandingOrderConflict
+
+# Shares the cadence adapter's create, edit, and lifecycle bodies on the caller's connection.
+# ast-grep-ignore: bzh:hub-store-adapter-imports
+from blizzard.hub.store.internal import cadence_store as cadence_writes
 
 # Shares forge resolution and insertion on the caller's connection.
 # ast-grep-ignore: bzh:hub-store-adapter-imports
@@ -76,6 +81,7 @@ _REFUSALS = (
     RepositorySlugTaken,
     RepositoryCoordinateTaken,
     RoutineSlugTakenError,
+    CadenceSlugTakenError,
     ScopeSlugTakenError,
     ProjectSlugTaken,
     LandingOrderConflict,
@@ -90,6 +96,8 @@ def _taken(record: object) -> Exception:
         return WorkSourceSlugTaken(record.slug)
     if isinstance(record, Routine):
         return RoutineSlugTakenError(record.slug)
+    if isinstance(record, Cadence):
+        return CadenceSlugTakenError(record.slug)
     if isinstance(record, Scope):
         return ScopeSlugTakenError(record.name)
     if isinstance(record, Project):
@@ -157,6 +165,8 @@ class ConfigApplyStore:
             _run_scope(conn, record, from_revision, change, lifecycle=lifecycle, retired=retired)
         elif isinstance(record, Routine):
             _run_routine(conn, record, from_revision, change, lifecycle=lifecycle, retired=retired)
+        elif isinstance(record, Cadence):
+            _run_cadence(conn, record, from_revision, change, lifecycle=lifecycle, retired=retired)
         elif isinstance(record, Project):
             _run_project(conn, record, from_revision, change)
         elif isinstance(record, SourceLink | RepositoryLink):
@@ -286,6 +296,31 @@ def _run_routine(
             routine_writes.set_linked_scopes(
                 conn, record, cast(list[str], linked), from_revision=from_revision, change=change
             )
+
+
+def _run_cadence(
+    conn: Connection,
+    record: Cadence,
+    from_revision: int | None,
+    change: ConfigChange,
+    *,
+    lifecycle: bool,
+    retired: bool,
+) -> None:
+    if from_revision is None:
+        cadence_writes.insert_cadence(conn, record, change)
+    elif lifecycle:
+        cadence_writes.record_cadence_lifecycle(
+            conn,
+            record,
+            retired=retired,
+            from_revision=from_revision,
+            at=change.recorded_at,
+            by=change.actor,
+            change=change,
+        )
+    else:
+        cadence_writes.update_cadence(conn, record, from_revision, change)
 
 
 def _run_project(conn: Connection, record: Project, from_revision: int | None, change: ConfigChange) -> None:

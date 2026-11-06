@@ -18,8 +18,9 @@ import sqlalchemy as sa
 
 from blizzard.hub.composition import TenantStores, build_hub_core
 from blizzard.hub.store import schema
+from blizzard.hub.store.internal.cadence_store import CadenceStore
 from blizzard.hub.tenancy import StoreScope
-from tests.support.scaffolding import build_hub, hub_scoped
+from tests.support.scaffolding import build_hub, hub_scoped, scoped_connections
 from tests.support.tenant_isolation_world import Two, seeded
 
 
@@ -87,3 +88,13 @@ def test_each_tenants_adapters_read_back_none_of_the_others_records(two: Two) ->
                 leaked = {marker for marker in other.markers if len(marker) > 6 and marker in text}
                 assert not leaked, f"{reader.label}'s {adapter_name}.{read} reads {other.label}'s {sorted(leaked)}"
     assert len(called) >= 15, sorted(called)
+
+
+def test_each_tenants_cadence_store_reads_back_none_of_the_others_cadences(two: Two) -> None:
+    for reader, other in ((two.first, two.second), (two.second, two.first)):
+        store = CadenceStore(scoped_connections(two.hub.engine, reader.harness.tenant))
+        own = store.list_all()
+        assert [cadence.cadence_id for cadence in own] == [reader.ids["cadence_id"]]
+        assert store.get(other.ids["cadence_id"]) is None
+        text = repr(own)
+        assert not {marker for marker in other.markers if len(marker) > 6 and marker in text}

@@ -283,7 +283,7 @@ _TOMBSTONE_NO_KEY_INDEX_REASON = (
 
 # Every table below holds an operator-created fleet entity, bounded by entity count, not chunk/work-item volume.
 _FLEET_CONFIG_REASON = (
-    "an operator-created fleet entity (registered runner, scope, secret, work source, routine, graph, hub "
+    "an operator-created fleet entity (registered runner, scope, secret, work source, routine, cadence, graph, hub "
     "user) or an auth event about one — bounded by how many of those entities exist "
     "across the whole fleet's lifetime, not by chunk/work-item volume."
 )
@@ -332,6 +332,7 @@ HUB_ALLOWED_SCANS: list[Allowance] = [
     TableWideAllowance("projects", 200, _FLEET_CONFIG_REASON),
     TableWideAllowance("repositories", 200, _FLEET_CONFIG_REASON),
     TableWideAllowance("repository_lifecycle_facts", 200, _FLEET_CONFIG_REASON),
+    TableWideAllowance("cadences", 200, _FLEET_CONFIG_REASON),
     TableWideAllowance("routine_lifecycle_facts", 200, _FLEET_CONFIG_REASON),
     TableWideAllowance("routine_scopes", 200, _FLEET_CONFIG_REASON),
     TableWideAllowance("routines", 200, _FLEET_CONFIG_REASON),

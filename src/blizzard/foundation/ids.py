@@ -61,6 +61,8 @@ class IdPrefix(StrEnum):
     FLOW = "flw"  # a flow — one branch's delivery line, named by its resource
     FLOW_SUBMISSION = "fsub"  # one hub-node visit's place in the flows it lands on
     HUB_TURN = "htn"  # one turn a submission takes at the head of its flows
+    CADENCE = "cad"  # a cadence — its slug is a name unique within its project, never its id
+    CHORE = "chr"  # a chore of a cadence — minted when its key first appears there, kept while the key stays
 
 
 @domain_model

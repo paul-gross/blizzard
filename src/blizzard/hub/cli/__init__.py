@@ -35,6 +35,7 @@ _COMMANDS = {
     "project": f"{_CLI}.project:project_group",
     "config": f"{_CLI}.config:config_group",
     "routine": f"{_CLI}.routine:routine_group",
+    "cadence": f"{_CLI}.cadence:cadence_group",
     "run": f"{_CLI}.garden_run:run_group",
     "finding": f"{_CLI}.finding:finding_group",
     "garden-proposal": f"{_CLI}.garden_proposal:garden_proposal_group",

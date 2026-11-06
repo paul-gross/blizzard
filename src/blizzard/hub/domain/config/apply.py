@@ -52,6 +52,7 @@ WORK_SOURCES_SECTION = "work_sources"
 REPOSITORIES_SECTION = "repositories"
 SCOPES_SECTION = "scopes"
 ROUTINES_SECTION = "routines"
+CADENCES_SECTION = "cadences"
 
 
 class SecretNotActive(ConfigFieldError):
@@ -226,6 +227,7 @@ class ConfigDeclaration:
     projects: ApplyPlan = ApplyPlan()
     scopes: tuple[RecordDeclaration, ...] = ()
     routines: tuple[RecordDeclaration, ...] = ()
+    cadences: tuple[RecordDeclaration, ...] = ()
 
 
 @domain_model
@@ -244,11 +246,14 @@ class StoredConfig:
     former_repositories: Mapping[str, ConfiguredRepository] = field(default_factory=dict[str, ConfiguredRepository])
     #: For each declared work-source slug no work source holds, the work source that left it.
     former_work_sources: Mapping[str, ConfiguredWorkSource] = field(default_factory=dict[str, ConfiguredWorkSource])
-    #: Stored scopes and routines, by their entries' ``key``.
+    #: Stored scopes, routines, and cadences, by their entries' ``key``.
     scopes: Mapping[tuple[str, str], NamedRetirableConfiguredRecord] = field(
         default_factory=dict[tuple[str, str], NamedRetirableConfiguredRecord]
     )
     routines: Mapping[tuple[str, str], NamedRetirableConfiguredRecord] = field(
+        default_factory=dict[tuple[str, str], NamedRetirableConfiguredRecord]
+    )
+    cadences: Mapping[tuple[str, str], NamedRetirableConfiguredRecord] = field(
         default_factory=dict[tuple[str, str], NamedRetirableConfiguredRecord]
     )
     references: DeclaredReferences = DeclaredReferences()
@@ -280,10 +285,12 @@ def reconcile(declaration: ConfigDeclaration, stored: StoredConfig, ctx: ChangeC
     _reconcile_section(_RepositorySection(declaration.repositories, stored, ctx, at), stored.repositories, plan)
     plan.writes.extend(declaration.projects.writes)
     plan.outcomes.extend(declaration.projects.outcomes)
-    # Scopes reconcile first, so a routine may name a scope the same document declares.
+    # Scopes reconcile first, so a routine may name a scope the same document declares, and cadences last, so a
+    # document may declare a routine and the cadence that keeps it.
     for section, kind, declared, stored_records in (
         (SCOPES_SECTION, RecordKind.SCOPE, declaration.scopes, stored.scopes),
         (ROUTINES_SECTION, RecordKind.ROUTINE, declaration.routines, stored.routines),
+        (CADENCES_SECTION, RecordKind.CADENCE, declaration.cadences, stored.cadences),
     ):
         _reconcile_section(_DeclaredRecordSection(section, kind, declared, stored, ctx, at), stored_records, plan)
     return ApplyPlan(writes=tuple(plan.writes), outcomes=tuple(plan.outcomes), positions=declaration.projects.positions)
@@ -423,8 +430,8 @@ class _RepositorySection(_SlugSection[RepositoryDeclaration, ConfiguredRepositor
 
 
 class _DeclaredRecordSection:
-    """A kind owned outside this package — the garden's scopes and routines — whose entries bring their own
-    reference checks, create and settle."""
+    """A kind owned outside this package — the garden's scopes and routines, and the cadences — whose entries
+    bring their own reference checks, create and settle."""
 
     handle_field = "name"
 

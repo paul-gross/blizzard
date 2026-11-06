@@ -8,7 +8,10 @@ from typing import Any
 import httpx2
 
 from blizzard.auth_core import Role
+from blizzard.hub.domain.cadence.model import CadenceShape, ChoreShape
+from blizzard.hub.domain.config.changes import ChangeContext, Door
 from blizzard.hub.domain.delivery.flows import FlowResource
+from blizzard.hub.domain.projects.model import Project, ProjectId
 from blizzard.hub.store.internal.finding_store import FindingStore
 from blizzard.hub.store.internal.flow_store import FlowStore
 from tests.support.scaffolding import (
@@ -74,6 +77,13 @@ class _Tenant:
 def _ok(response: httpx2.Response, status: int) -> dict[str, Any]:
     assert response.status_code == status, f"{response.request.method} {response.request.url}: {response.text}"
     return response.json() if response.content else {}
+
+
+def _project(harness: TenantHarness, project_id: str) -> Project:
+    """The stored ``Project`` ``project_id`` names in ``harness``'s tenant."""
+    project = harness.services.projects.get(ProjectId(project_id))
+    assert project is not None, f"{project_id} is not stored"
+    return project
 
 
 def _seed(hub: HubHarness, harness: TenantHarness, label: str) -> _Tenant:
@@ -174,6 +184,20 @@ def _seed(hub: HubHarness, harness: TenantHarness, label: str) -> _Tenant:
     )
     t.keep("routine_id", routine["routine_id"])
     t.keep("routine_name", f"{label}-routine")
+    # Written through the tenant's own services, so its chore can name the routine created above.
+    cadence = harness.services.cadence_authoring.create(
+        CadenceShape(
+            slug=f"{label}-cadence",
+            spacing="1d",
+            chores=(ChoreShape(f"{label}-chore", f"{label}-routine", scopes=[f"{label}-scope"]),),
+        ),
+        project=_project(harness, default_project(hub.engine, harness.tenant)),
+        ctx=ChangeContext(actor=f"{label}-operator", door=Door.API),
+        may_admit=True,
+    )
+    t.keep("cadence_id", cadence.cadence_id)
+    t.keep("chore_id", cadence.chores[0].chore_id)
+    t.keep("cadence_slug", cadence.slug)
     run = t.keep("run_chunk_id", _ok(c.post(f"/api/routines/{routine['routine_id']}/run", json={}), 201)["chunk_id"])
     _ok(c.post(f"/api/chunks/{run}/promote"), 202)
     t.keep("secret", _ok(c.post("/api/secrets", json={"name": f"{label}-secret", "value": "v"}), 201)["name"])

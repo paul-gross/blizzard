@@ -785,6 +785,94 @@ routine_lifecycle_facts = Table(
 )
 Index("ix_routine_lifecycle_facts_tenant_id", routine_lifecycle_facts.c.tenant_id)
 
+# --- Cadences (a project's rhythm and the chores sharing it; surrogate id) ---
+
+cadences = Table(
+    "cadences",
+    metadata,
+    Column("cadence_id", String, primary_key=True, info={"hub_unique": True}),  # cad_<ulid>
+    Column("slug", String, nullable=False),  # the immutable handle
+    Column("name", String, nullable=False),  # the editable display name
+    Column("schedule_cron", String, nullable=True),
+    Column("schedule_zone", String, nullable=True),
+    Column("spacing_minutes", Integer, nullable=True),
+    Column("anchor", String, nullable=True),  # null reads started
+    Column("created_at", UtcDateTime, nullable=False),
+    Column("revision", Integer, nullable=False, server_default="1"),
+    Column("tenant_id", String, ForeignKey("tenants.tenant_id", name="fk_cadences_tenant_id"), nullable=False),
+    Column("project_id", String, ForeignKey("projects.project_id", name="fk_cadences_projects"), nullable=False),
+    UniqueConstraint("project_id", "slug", name="uq_cadences_project_slug"),
+)
+
+Index("ix_cadences_tenant_project_slug", cadences.c.tenant_id, cadences.c.project_id, cadences.c.slug)
+
+# A cadence's chores, in the order written; routine and scopes are named by slug, never by id.
+cadence_chores = Table(
+    "cadence_chores",
+    metadata,
+    Column("chore_id", String, primary_key=True, info={"hub_unique": True}),  # chr_<ulid>
+    Column("cadence_id", String, ForeignKey("cadences.cadence_id", name="fk_cadence_chores_cadences"), nullable=False),
+    Column("key", String, nullable=False),
+    Column("routine_slug", String, nullable=False),
+    Column("scope_selection", String, nullable=False),  # all | listed | default
+    Column("scopes_set_at", UtcDateTime, nullable=False),
+    Column("mode", String, nullable=False),
+    Column("note", Text, nullable=True),
+    Column("promote", Boolean, nullable=False),
+    Column("position", Integer, nullable=False),
+    Column("created_at", UtcDateTime, nullable=False),
+    Column("tenant_id", String, ForeignKey("tenants.tenant_id", name="fk_cadence_chores_tenant_id"), nullable=False),
+    UniqueConstraint("cadence_id", "key", name="uq_cadence_chores_cadence_key"),
+)
+
+Index("ix_cadence_chores_tenant_cadence_id", cadence_chores.c.tenant_id, cadence_chores.c.cadence_id)
+
+# The scopes a listed chore names, by slug; no row for an all or default chore.
+cadence_chore_scopes = Table(
+    "cadence_chore_scopes",
+    metadata,
+    Column(
+        "chore_id",
+        String,
+        ForeignKey("cadence_chores.chore_id", name="fk_cadence_chore_scopes_chores"),
+        nullable=False,
+    ),
+    Column("scope_slug", String, nullable=False),
+    Column(
+        "tenant_id", String, ForeignKey("tenants.tenant_id", name="fk_cadence_chore_scopes_tenant_id"), nullable=False
+    ),
+    PrimaryKeyConstraint("chore_id", "scope_slug", name="pk_cadence_chore_scopes"),
+)
+
+Index("ix_cadence_chore_scopes_tenant_chore_id", cadence_chore_scopes.c.tenant_id, cadence_chore_scopes.c.chore_id)
+
+# The cadence's reversible retire/enable brake — routine_lifecycle_facts's own shape.
+cadence_lifecycle_facts = Table(
+    "cadence_lifecycle_facts",
+    metadata,
+    Column("id", Integer, primary_key=True, autoincrement=True),
+    Column(
+        "cadence_id",
+        String,
+        ForeignKey("cadences.cadence_id", name="fk_cadence_lifecycle_facts_cadences"),
+        nullable=False,
+    ),
+    Column("retired", Boolean, nullable=False),  # retired derives from the newest fact
+    Column("set_at", UtcDateTime, nullable=False),
+    Column("set_by", String, nullable=False),
+    Column(
+        "tenant_id",
+        String,
+        ForeignKey("tenants.tenant_id", name="fk_cadence_lifecycle_facts_tenant_id"),
+        nullable=False,
+    ),
+)
+Index(
+    "ix_cadence_lifecycle_facts_tenant_cadence_id",
+    cadence_lifecycle_facts.c.tenant_id,
+    cadence_lifecycle_facts.c.cadence_id,
+)
+
 # --- Chunks and their work refs (chunk.minted) ------------------------------
 
 chunks = Table(

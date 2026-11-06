@@ -56,6 +56,7 @@ def _application(hub: HubHarness, clock: FixedClock) -> ConfigApplication:
         scopes=services.scopes,
         routines=services.routines,
         routine_scopes=services.routine_scopes,
+        cadences=services.cadences,
         graphs=services.graphs,
         secrets=services.secret_catalog,
         pick=services.color_pick,
@@ -64,7 +65,7 @@ def _application(hub: HubHarness, clock: FixedClock) -> ConfigApplication:
 
 
 def test_a_real_apply_mints_its_apply_id_and_record_ids_from_the_clock(hub: HubHarness) -> None:
-    applied = _application(hub, FixedClock(_AT)).apply(_ENTRIES, actor="operator", dry_run=False)
+    applied = _application(hub, FixedClock(_AT)).apply(_ENTRIES, actor="operator", dry_run=False, may_admit=True)
 
     assert applied.apply_id is not None
     minted = Id.parse(applied.apply_id)
@@ -86,7 +87,7 @@ def test_a_real_apply_mints_its_apply_id_and_record_ids_from_the_clock(hub: HubH
 def test_a_dry_run_mints_no_apply_id_and_rolls_back(hub: HubHarness) -> None:
     before = hub.services.config_changes.count(record_kind=None, record_key=None, project_id=None)
 
-    applied = _application(hub, FixedClock(_AT)).apply(_ENTRIES, actor="operator", dry_run=True)
+    applied = _application(hub, FixedClock(_AT)).apply(_ENTRIES, actor="operator", dry_run=True, may_admit=True)
 
     assert applied.apply_id is None
     assert [(o.kind.value, o.key, o.op.value if o.op else None) for o in applied.outcomes] == [
