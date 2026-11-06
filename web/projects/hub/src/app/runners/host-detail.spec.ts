@@ -104,8 +104,16 @@ describe('HostDetail', () => {
 
     expect(text(el, 'fleet-fact-last-report')).toBe('Jul 16 11:59 [4s]');
     expect(text(el, 'fleet-fact-url')).toBe('https://atlas.example');
+    const link = el.querySelector('[data-testid="fleet-fact-url"] a');
+    expect(link?.getAttribute('href')).toBe('https://atlas.example');
+    expect(link?.getAttribute('target')).toBe('_blank');
+    expect(link?.getAttribute('rel')).toBe('noopener noreferrer');
     expect(text(el, 'fleet-fact-token')).toBe('ENROLLED');
     expect(text(el, 'fleet-fact-agents')).toBe('3 / 5 busy across 2 runners');
+
+    const hostless = await render(vm(card({ url: null })));
+    expect(text(hostless, 'fleet-fact-url')).toBe('—');
+    expect(hostless.querySelector('[data-testid="fleet-fact-url"] a')).toBeNull();
 
     const unenrolled = await render(vm(card({ enrolled: false })));
     expect(text(unenrolled, 'fleet-fact-token')).toBe('UNENROLLED');
