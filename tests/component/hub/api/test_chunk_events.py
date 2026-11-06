@@ -11,10 +11,10 @@ import json
 from dataclasses import replace
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 from blizzard.foundation.hub_event_types import HubEventType
-from blizzard.hub.api.chunk_events import _new_keyed_frames
+from blizzard.hub.api.chunk_events import new_keyed_frames
 from blizzard.hub.domain.chunk.model import ChunkFacts, EscalationFact, MigrationFact
 from tests.support.scaffolding import (
     HubHarness,
@@ -570,9 +570,10 @@ nodes:
 
 
 def _activity_rows(body: object) -> list[dict[str, object]]:
-    rows = body["activity"] if isinstance(body, dict) else body
+    payload = cast("dict[str, object] | list[dict[str, object]]", body)
+    rows = payload["activity"] if isinstance(payload, dict) else payload
     assert isinstance(rows, list)
-    return rows
+    return cast("list[dict[str, object]]", rows)
 
 
 def test_loaded_escalation_id_keys_the_same_row_the_backfill_reads(tmp_path: Path) -> None:
@@ -588,12 +589,12 @@ def test_loaded_escalation_id_keys_the_same_row_the_backfill_reads(tmp_path: Pat
     assert [r["cause"] for r in matching] == ["escalated"]
 
 
-def test_new_keyed_frames_name_a_new_escalation_and_migration_like_the_backfill() -> None:
+def testnew_keyed_frames_name_a_new_escalation_and_migration_like_the_backfill() -> None:
     t0 = datetime(2026, 1, 1, tzinfo=UTC)
     base = ChunkFacts.or_default(None)
     escalated = replace(base, escalations=[EscalationFact(epoch=1, recorded_at=t0, id=7)])
-    assert _new_keyed_frames(base, escalated) == [("escalations:7", "escalated")]
-    assert _new_keyed_frames(escalated, escalated) == []
+    assert new_keyed_frames(base, escalated) == [("escalations:7", "escalated")]
+    assert new_keyed_frames(escalated, escalated) == []
     migration = MigrationFact(
         from_node_id=None,
         from_graph_id="g1",
@@ -606,4 +607,4 @@ def test_new_keyed_frames_name_a_new_escalation_and_migration_like_the_backfill(
         migration_id="mg_1",
     )
     migrated = replace(base, migrations=[migration])
-    assert _new_keyed_frames(base, migrated) == [("chunk_migrations:mg_1", "migrated")]
+    assert new_keyed_frames(base, migrated) == [("chunk_migrations:mg_1", "migrated")]

@@ -227,7 +227,7 @@ class AnnouncedTurns:
         state = ChunkFrameState.load(self.services, change.chunk_id)
         before = change.facts
         if before is not None:
-            frames = _new_keyed_frames(before, state.facts)
+            frames = new_keyed_frames(before, state.facts)
             if frames:
                 for key, cause in frames:
                     change.publish_from(state, cause=cause, key=key)
@@ -237,7 +237,7 @@ class AnnouncedTurns:
             change.publish_from(state, cause="hub-advanced")
 
 
-def _new_keyed_frames(before: ChunkFacts, after: ChunkFacts) -> list[tuple[str, ChunkChangeCause]]:
+def new_keyed_frames(before: ChunkFacts, after: ChunkFacts) -> list[tuple[str, ChunkChangeCause]]:
     """The key and cause the activity backfill gives each transition, escalation or migration a turn newly wrote,
     in ``recorded_at`` order — so a live frame and its refetched row are one row."""
     seen_transitions = {t.transition_id for t in before.transitions}
