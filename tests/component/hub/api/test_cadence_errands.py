@@ -1,6 +1,7 @@
 """A cadence's errands, their counts, and the cadence a run names (component tier): the errands route reads each
 errand's state, last run, and next due instant against the hub's own clock; the cadence views count errands by
-state and carry the schedule's next five moments — none unscheduled or retired; a run's views name the cadence and chore that minted it — nothing for a hand run, no key for a removed chore —
+state and carry the schedule's next five moments — none unscheduled or retired; a run's views name the cadence
+and chore that minted it — nothing for a hand run, no key for a removed chore —
 and the cadence and run lists stay flat in statements as they grow."""
 
 from __future__ import annotations
