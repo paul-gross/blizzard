@@ -59,6 +59,23 @@ class CadenceTally:
     refused: int = 0
     failed: int = 0
 
+    def add(self, other: CadenceTally) -> None:
+        """Fold ``other``'s mint outcomes into this tally; its ``due`` is not folded, this tally counting its own."""
+        self.minted += other.minted
+        self.moved += other.moved
+        self.refused += other.refused
+        self.failed += other.failed
+
+    def fields(self) -> dict[str, int]:
+        """The counts as log fields."""
+        return {
+            "due": self.due,
+            "minted": self.minted,
+            "moved": self.moved,
+            "refused": self.refused,
+            "failed": self.failed,
+        }
+
 
 class TenantCadence:
     """One tenant's half of the cadence sweep: judge its errands, and mint the due ones it is handed."""
@@ -108,9 +125,10 @@ class TenantCadence:
 
     def mint(self, due: Sequence[DueErrand], tally: CadenceTally) -> None:
         """Mint each of ``due``, its planning inputs read in bulk; each errand's refusal or fault stops it alone.
-        Each mint is announced once its unit has committed."""
+        Each mint is announced once its unit has committed; a failed announcement is logged, the mint still
+        counted."""
         inputs = self._planning.inputs([(item.errand, item.facts) for item in due])
-        mine = CadenceTally()
+        mine = CadenceTally(due=len(due))
         for item in due:
             errand = item.errand
             fields = {"cadence_id": errand.cadence_id, "chore_id": errand.chore.chore_id, "scope": errand.scope_slug}
@@ -130,19 +148,12 @@ class TenantCadence:
                 continue
             mine.minted += 1
             _log.info("cadence errand minted", chunk_id=minted.chunk.chunk_id, promoted=minted.promoted, **fields)
-            self._announce(minted)
-        _log.info(
-            "cadence tenant pass tallied",
-            due=len(due),
-            minted=mine.minted,
-            moved=mine.moved,
-            refused=mine.refused,
-            failed=mine.failed,
-        )
-        tally.minted += mine.minted
-        tally.moved += mine.moved
-        tally.refused += mine.refused
-        tally.failed += mine.failed
+            try:
+                self._announce(minted)
+            except Exception as exc:
+                _log.warning("cadence errand mint announcement failed", fault=repr(exc), **fields)
+        _log.info("cadence tenant pass tallied", **mine.fields())
+        tally.add(mine)
 
 
 class CadenceSweep:
@@ -228,13 +239,4 @@ class CadenceSweep:
 
     @staticmethod
     def _completed(tally: CadenceTally, *, minting: bool, **outcome: object) -> None:
-        _log.info(
-            "cadence sweep completed",
-            minting=minting,
-            due=tally.due,
-            minted=tally.minted,
-            moved=tally.moved,
-            refused=tally.refused,
-            failed=tally.failed,
-            **outcome,
-        )
+        _log.info("cadence sweep completed", minting=minting, **tally.fields(), **outcome)

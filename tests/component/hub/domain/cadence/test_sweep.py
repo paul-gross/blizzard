@@ -8,17 +8,23 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import pytest
 import sqlalchemy as sa
+from structlog.testing import capture_logs
 
 from blizzard.foundation.chunk_status import ChunkStatus
 from blizzard.foundation.flags import resolve_flags
 from blizzard.foundation.run_mode import RunMode
 from blizzard.hub.composition import TenantServices
+from blizzard.hub.domain.cadence.errands import Errand, ErrandRun
+from blizzard.hub.domain.cadence.mint import ErrandInputs, MintedErrand
 from blizzard.hub.domain.cadence.model import CadenceShape, ChoreShape
 from blizzard.hub.domain.cadence.sweep import CADENCE_PASS_LIMIT
-from blizzard.hub.domain.chunk.model import WorkItemAuthor, WorkItemAuthorKind
+from blizzard.hub.domain.chunk.ingest import IngestConflict
+from blizzard.hub.domain.chunk.model import WorkItemAuthor, WorkItemAuthorKind, WorkRef
 from blizzard.hub.domain.config.changes import ChangeContext, Door
 from blizzard.hub.domain.garden.routines import Routine
+from blizzard.hub.domain.garden.runs.run import RoutineRetiredError
 from blizzard.hub.domain.garden.scopes import ScopeSlug
 from blizzard.hub.domain.projects.model import Project, ProjectId
 from blizzard.hub.store import schema as s
@@ -153,3 +159,61 @@ def test_a_hand_started_run_neither_counts_as_the_errands_run_nor_holds_it(tmp_p
     _sweep(hub)
 
     assert sorted(_runs(hub, tenant)) == [("cadence", "sweep"), (WorkItemAuthorKind.USER.value, "sweep")]
+
+
+def test_a_refused_errand_counts_as_refused_and_the_pass_mints_the_others(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    hub = _hub(tmp_path)
+    tenant = default_tenant(hub.engine)
+    project = _project(hub, hub.services, tenant)
+    _routine(hub.services, project, "sweep", "retired", "taken")
+    _cadence(hub.services, project, ChoreShape("every", "sweep", scopes="all"))
+    mint = hub.services.cadence_mint.mint
+    refusals = {
+        "retired": RoutineRetiredError("sweep"),
+        "taken": IngestConflict(existing_chunk_id="chk_held", pointer=WorkRef(source="hub", ref="1")),
+    }
+
+    def refusing(errand: Errand, *, judged: ErrandRun | None, inputs: ErrandInputs) -> MintedErrand | None:
+        refusal = refusals.get(errand.scope_slug)
+        if refusal is not None:
+            raise refusal
+        return mint(errand, judged=judged, inputs=inputs)
+
+    monkeypatch.setattr(hub.services.cadence_mint, "mint", refusing)
+
+    with capture_logs() as logs:
+        _sweep(hub)
+
+    assert _runs(hub, tenant) == [("cadence", "sweep")]
+    refused = sorted(log["scope"] for log in logs if log["event"] == "cadence errand refused")
+    assert refused == ["retired", "taken"]
+    tallied = next(log for log in logs if log["event"] == "cadence tenant pass tallied")
+    assert (tallied["due"], tallied["minted"], tallied["refused"], tallied["failed"]) == (3, 1, 2, 0)
+
+
+def test_a_failed_announcement_is_logged_and_the_committed_mint_still_counts(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    hub = _hub(tmp_path)
+    tenant = default_tenant(hub.engine)
+    project = _project(hub, hub.services, tenant)
+    _routine(hub.services, project, "sweep", "runner")
+    _cadence(hub.services, project, ChoreShape("every", "sweep", scopes="all"))
+
+    def refuse() -> None:
+        raise RuntimeError("broker down")
+
+    monkeypatch.setattr(hub.services.events, "publish_queue_changed", refuse)
+
+    with capture_logs() as logs:
+        _sweep(hub)
+
+    assert sorted(_runs(hub, tenant)) == [("cadence", "runner"), ("cadence", "sweep")]
+    assert [log["log_level"] for log in logs if log["event"] == "cadence errand mint announcement failed"] == [
+        "warning",
+        "warning",
+    ]
+    completed = next(log for log in logs if log["event"] == "cadence sweep completed")
+    assert (completed["minted"], completed["failed"], completed["tenants_failed"]) == (2, 0, [])
