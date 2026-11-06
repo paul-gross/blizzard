@@ -153,6 +153,12 @@ class IHarnessDeclaration(Protocol[SectionT_contra]):
         ``children`` every other child it runs (version probes, exports, resolvers), and ``clock`` is the runner's."""
         ...
 
+    @property
+    def health_varies_by_spawn_root(self) -> bool:
+        """Whether this binding's health reads anything of the root its workers start in; one that does not is probed
+        once for every root, so a check reaching a service runs once per evaluation."""
+        ...
+
     def health_probe(
         self,
         section: SectionT_contra,

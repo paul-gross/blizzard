@@ -33,7 +33,7 @@ class _Service:
 
     version: str | None = "2.1.4"
     starts: bool = True
-    is_disabled: bool = False
+    is_disabled: bool | None = False
     models: tuple[ListedModel, ...] | None = (_LUNA,)
     started: list[str] = field(default_factory=list[str])
 
@@ -50,7 +50,7 @@ class _Service:
             self.version = "2.1.4"
         return ServiceIdentity("svc", 1, self.version)
 
-    def disabled(self) -> bool:
+    def disabled(self) -> bool | None:
         return self.is_disabled
 
     def listed_models(self) -> tuple[ListedModel, ...]:
@@ -158,6 +158,12 @@ def test_the_first_failing_check_is_named(
 def test_a_disabled_service_is_refused_even_while_it_runs(tmp_path: Path) -> None:
     (conflict,) = _probe(tmp_path, _Service(is_disabled=True)).config_conflicts()
     assert "disabled" in conflict
+
+
+def test_a_setting_that_cannot_be_read_is_never_taken_for_enabled(tmp_path: Path) -> None:
+    service = _Service(version=None, is_disabled=None)
+    (conflict,) = _probe(tmp_path, service).config_conflicts()
+    assert "neither true nor false" in conflict and service.started == []
 
 
 def test_checks_run_in_order_and_stop_at_the_first_that_fails(tmp_path: Path) -> None:

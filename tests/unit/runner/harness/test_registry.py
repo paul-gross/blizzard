@@ -10,7 +10,7 @@ import pytest
 
 from blizzard.foundation.clock import SystemClock
 from blizzard.runner.config import RunnerConfig
-from blizzard.runner.harness.adapter import WorkerHandle
+from blizzard.runner.harness.adapter import EverySpawnRootProbe, WorkerHandle
 from blizzard.runner.harness.capability_snapshot import capability_snapshot, default_harness_id
 from blizzard.runner.harness.health import HarnessHealthResult
 from blizzard.runner.harness.health_cache import HarnessHealthCache
@@ -286,6 +286,17 @@ def test_production_health_probes_omit_a_disabled_harness(tmp_path: Path) -> Non
             no_opencode.harness_settings(NO_TRACING), spawn_roots=("",), corpus=CommittedCorpus(), children=CHILDREN
         )
     ) == [CLAUDE_CODE_HARNESS_ID]
+
+
+def test_a_binding_whose_health_reads_no_spawn_root_is_probed_once_for_every_root(tmp_path: Path) -> None:
+    probes = build_production_harness_health_probes(
+        RunnerConfig(root=tmp_path, db_url="sqlite://").harness_settings(NO_TRACING),
+        spawn_roots=(str(tmp_path / "a"), str(tmp_path / "b")),
+        corpus=CommittedCorpus(),
+        children=CHILDREN,
+    )
+    assert isinstance(probes[OPENCODE_HARNESS_ID], OpenCodeHealthProbe)
+    assert isinstance(probes[CLAUDE_CODE_HARNESS_ID], EverySpawnRootProbe)
 
 
 def _probe_auth_path(config: RunnerConfig) -> Path | None:

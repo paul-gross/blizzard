@@ -126,6 +126,10 @@ class OpenCodeDeclaration:
         )
         return HarnessBinding(adapter=adapter, transcript_source=transcript_source)
 
+    @property
+    def health_varies_by_spawn_root(self) -> bool:
+        return False
+
     def health_probe(
         self,
         section: OpenCodeSection,

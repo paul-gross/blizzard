@@ -81,3 +81,8 @@ def test_scaffold_writes_nothing_and_publish_admits_no_opencode_entry(tmp_path: 
     (bundle / "opencode" / "opencode.json").write_text("{}")
     with pytest.raises(HarnessBundleError, match="not a recognized entry point"):
         publish_harness_bundle(bundle, root, sections=sections, selection=selection)
+
+
+def test_health_reads_no_spawn_root_so_one_probe_serves_every_root() -> None:
+    """Every check reaches the one managed service, so a probe per root would only repeat it."""
+    assert OPENCODE_V2_DECLARATION.health_varies_by_spawn_root is False

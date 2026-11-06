@@ -32,10 +32,14 @@ class ServiceUnavailableError(RuntimeError):
 
 
 DISABLED_DETAIL = "the operator has disabled the managed OpenCode service; `opencode service unset disabled` enables it"
+UNREADABLE_DETAIL = (
+    "`opencode service get disabled` answered neither true nor false; the runner treats the service as disabled"
+)
 
 
 class ServiceDisabledError(ServiceUnavailableError):
-    """The operator has disabled the managed service, so OpenCode's own clients run private servers instead."""
+    """The operator has disabled the managed service, so OpenCode's own clients run private servers instead — or
+    whether they have cannot be read, so the runner starts none."""
 
 
 class IServiceKeeper(Protocol):
@@ -49,8 +53,9 @@ class IServiceKeeper(Protocol):
         answers within the bound."""
         ...
 
-    def disabled(self) -> bool:
-        """Whether the operator has disabled the managed service; ``False`` when the setting cannot be read."""
+    def disabled(self) -> bool | None:
+        """Whether the operator has disabled the managed service; ``None`` when the setting cannot be read, which no
+        caller takes for enabled."""
         ...
 
     def listed_models(self) -> tuple[ListedModel, ...]:
@@ -95,7 +100,7 @@ class ServiceKeeper:
             return None
         return identity
 
-    def disabled(self) -> bool:
+    def disabled(self) -> bool | None:
         try:
             run = self._children.run(
                 [self._binary, "service", "get", "disabled"],
@@ -104,8 +109,10 @@ class ServiceKeeper:
                 timeout=SETTING_TIMEOUT_SECONDS,
             )
         except ChildLaunchError:
-            return False
-        return run.exit_code == 0 and not run.timed_out and run.stdout.strip() == "true"
+            return None
+        if run.exit_code != 0 or run.timed_out:
+            return None
+        return {"true": True, "false": False}.get(run.stdout.strip())
 
     def listed_models(self) -> tuple[ListedModel, ...]:
         path = self._registration_file()
@@ -121,8 +128,9 @@ class ServiceKeeper:
         identity = self.answering()
         if identity is not None:
             return identity
-        if self.disabled():
-            raise ServiceDisabledError(DISABLED_DETAIL)
+        disabled = self.disabled()
+        if disabled is not False:
+            raise ServiceDisabledError(DISABLED_DETAIL if disabled else UNREADABLE_DETAIL)
         try:
             # `service start` detaches the service itself; the run's own group keeps any lease's kill off it.
             self._children.run(
@@ -148,6 +156,7 @@ class ServiceKeeper:
 __all__ = [
     "DEFAULT_REACH_SECONDS",
     "DISABLED_DETAIL",
+    "UNREADABLE_DETAIL",
     "IServiceKeeper",
     "ServiceDisabledError",
     "ServiceKeeper",

@@ -6,7 +6,6 @@ its model does not offer. Each is reported as a configuration conflict, so the r
 
 from __future__ import annotations
 
-import re
 from collections.abc import Sequence
 
 from packaging.specifiers import SpecifierSet
@@ -22,8 +21,10 @@ from blizzard.runner.harness.offline_compatibility import (
     ICompatibilityCorpus,
     assert_admitted_range_has_corpus,
 )
+from blizzard.runner.harness.opencode_v2.client import ModelReference
 from blizzard.runner.harness.opencode_v2.service import (
     DISABLED_DETAIL,
+    UNREADABLE_DETAIL,
     IServiceKeeper,
     ServiceDisabledError,
     ServiceUnavailableError,
@@ -37,7 +38,6 @@ from blizzard.runner.harness.opencode_v2.version import (
 from blizzard.runner.harness.opencode_v2.version_hold import VersionHold
 
 _log = get_logger("blizzard.runner.harness.opencode")
-_MODEL = re.compile(r"(?P<provider>[^/\s]+)/(?P<model>\S+)")
 
 
 class OpenCodeTwoHealthProbe:
@@ -86,8 +86,9 @@ class OpenCodeTwoHealthProbe:
         if held is not None:
             return held
         # Checked even while a service runs: a disabled one is the operator's word that fleet sessions stay off it.
-        if self._keeper.disabled():
-            return DISABLED_DETAIL
+        disabled = self._keeper.disabled()
+        if disabled is not False:
+            return DISABLED_DETAIL if disabled else UNREADABLE_DETAIL
         try:
             identity = self._keeper.ensure()
         except ServiceDisabledError as exc:
@@ -105,18 +106,20 @@ class OpenCodeTwoHealthProbe:
         return self._model_failure()
 
     def _model_failure(self) -> str | None:
-        """A configured tier whose model no provider the service is authenticated to lists, or a configured variant
-        a tier's model does not offer — read from the model listing alone, never the service's credentials."""
-        tiers = [(tier, match) for tier, model in self._model_aliases if (match := _MODEL.fullmatch(model)) is not None]
+        """A configured tier whose model no provider the service is authenticated to lists, or a variant
+        ``[opencode.effort.aliases]`` names that a tier's model does not offer — read from the model listing alone,
+        never the service's credentials. The identity mapping of an effort with no alias is left to the launch, which
+        refuses the one lease that asks for a variant its model lacks."""
+        tiers = [(tier, ref) for tier, model in self._model_aliases if (ref := ModelReference.parse(model)) is not None]
         if not tiers:
             return None
         try:
             listed = {(model.provider_id, model.id): model for model in self._keeper.listed_models()}
         except ServiceUnavailableError as exc:
             return str(exc)
-        for tier, match in tiers:
-            model: ListedModel | None = listed.get((match["provider"], match["model"]))
-            reference = f"{match['provider']}/{match['model']}"
+        for tier, ref in tiers:
+            model: ListedModel | None = listed.get((ref.provider_id, ref.id))
+            reference = ref.reference()
             if model is None:
                 return (
                     f"tier {tier} names {reference}, which no provider the OpenCode service is authenticated to lists"

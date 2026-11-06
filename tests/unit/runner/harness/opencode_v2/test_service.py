@@ -116,12 +116,20 @@ def test_a_disabled_service_is_refused_by_name_and_never_started(
     assert ["opencode", "service", "start"] not in [argv for argv, _ in children.runs]
 
 
-@pytest.mark.parametrize("answer", ["false\n", "", "Unknown service config key: disabled\n"])
-def test_a_setting_that_does_not_read_true_is_not_disabled(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, answer: str
+@pytest.mark.parametrize(("answer", "disabled"), [("true\n", True), ("false\n", False), ("", None), ("yes\n", None)])
+def test_the_setting_reads_true_false_or_unreadable(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, answer: str, disabled: bool | None
 ) -> None:
     keeper, _ = _keeper(tmp_path, monkeypatch, _Children(disabled=answer))
-    assert not keeper.disabled()
+    assert keeper.disabled() is disabled
+
+
+def test_an_unreadable_setting_starts_no_service(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    children = _Children(on_run=lambda: _register(tmp_path), disabled="Unknown service config key: disabled\n")
+    keeper, _ = _keeper(tmp_path, monkeypatch, children)
+    with pytest.raises(ServiceDisabledError, match="neither true nor false"):
+        keeper.ensure()
+    assert ["opencode", "service", "start"] not in [argv for argv, _ in children.runs]
 
 
 def test_the_model_listing_is_read_from_the_answering_service(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:

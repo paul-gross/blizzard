@@ -1,9 +1,6 @@
-"""The runner selftest and capability health against the engine-backed ``mock-opencode-2``, service tier.
-
-The binding is composed by the production OpenCode 2 declaration, as ``blizzard runner selftest opencode`` composes it
-on a runner whose binary is OpenCode 2, so the selftest's seven checks run through the OpenCode 2 adapter unchanged: each
-turn a ``blizzard runner opencode drive`` on the managed service the mock registers under an isolated home. The mock
-answers the selftest's prose prompts past its fence, which needs the fence variable in the worker passthrough and a
+"""The runner selftest and capability health against the engine-backed ``mock-opencode-2``, service tier: the binding
+the production OpenCode 2 declaration composes, each selftest turn a driver on the service the mock registers under an
+isolated home. The mock answers the selftest's prose past its fence — the fence variable in the worker passthrough and a
 marker in the scratch repo's ancestry, carried by ``TMPDIR``."""
 
 from __future__ import annotations

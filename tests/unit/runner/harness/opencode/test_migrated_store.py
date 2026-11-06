@@ -80,3 +80,9 @@ def test_an_unmigrated_store_raises_no_conflict(tmp_path: Path) -> None:
 class _Tiers:
     def resolve_model_strict(self, preferences: object) -> str | None:
         return "native"
+
+
+def test_both_bindings_name_the_one_migration_key() -> None:
+    from blizzard.runner.harness.opencode_v2.compatibility.store_migration import MIGRATION_KV_KEY as PROVEN
+
+    assert MIGRATION_KV_KEY == PROVEN

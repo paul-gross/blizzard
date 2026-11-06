@@ -327,25 +327,32 @@ restarts; to move one, stop it, upgrade OpenCode, and start it. On OpenCode 2 ev
 `blizzard runner opencode drive` on the operator's own managed service, under the operator's own login and
 configuration: `auth_path` and `worker_config_path` are ignored, the runner writes no worker config and loads no plugin,
 and a bundle's `opencode/` directory must be empty. Before each launch the runner checks the service through
-`GET /api/info`, starts it with `opencode service start` when none answers, and fails the turn as a spawn failure when
-none answers within 30 seconds. The version it advertises and records on every spawn is the service's own; a launch on a
-service whose version changed since it was advertised is refused, and the runner observes it afresh — a version still
-inside OpenCode 2's range is then available again, while a service once seen outside it leaves the capability
-unavailable as a config conflict until the runner restarts, even after the service returns — and a binary and service of
-different major versions leave the capability unavailable as a config conflict while they differ.
+`GET /api/info` and, when none answers, starts it with `opencode service start` — unless the operator has disabled it,
+or `opencode service get disabled` answers neither `true` nor `false` — and fails the turn as a spawn failure when none
+answers within 30 seconds. The version it advertises and records on every spawn is the service's own; a launch on a
+service whose version changed since it was advertised is refused, and the runner observes the version afresh and
+recalculates the capability's health at once, rather than at the end of its refresh window.
 
 OpenCode 2's health runs its checks against the service in order and reports the first that fails as a config conflict,
-naming it in the runner's log: a service seen outside the range since the runner started; a managed service the operator
-has disabled (`opencode service set disabled true`), which the runner never starts; no service answering once
-`opencode service start` has run; a binary and service of different major versions; a tier in
-`[runner.opencode.models.aliases]` naming a model the service's model listing does not hold, since it lists only the
-models of providers it is signed in to; and a variant in `[runner.opencode.effort.aliases]` that a tier's model does not
-offer. The runner reads the listing alone, never the service's credentials, and a health check starts a service that is
-not running, as a launch does. A launch refused because the service's version changed also recalculates the capability's
-health, so health never waits out its refresh window on a refusal. On OpenCode 1, a store OpenCode 2 has migrated in
-place — its `opencode.db` holding the `kv` key `migration.v1-v2` — leaves the capability unavailable as a config
-conflict naming the store, since nothing OpenCode 1 writes to it afterward reaches OpenCode 2; restart the runner on
-OpenCode 2 to carry on. `blizzard runner selftest opencode` tests whichever major version the runner holds.
+naming it in the runner's log:
+
+- a service seen outside OpenCode 2's range since the runner started, which holds until the runner restarts, even after
+  the service returns;
+- a managed service the operator has disabled (`opencode service set disabled true`), even one still running, or a
+  setting that cannot be read — the runner starts neither;
+- no service answering once `opencode service start` has run;
+- a binary and service of different major versions, while they differ;
+- a tier in `[runner.opencode.models.aliases]` naming a model the service's model listing does not hold, since it lists
+  only the models of providers it is signed in to;
+- a variant in `[runner.opencode.effort.aliases]` that a tier's model does not offer — an effort with no alias passes
+  through as its own variant, which only the launch that asks for it checks.
+
+The runner reads the listing alone, never the service's credentials, and a health check starts a service that is not
+running, as a launch does; a version still inside OpenCode 2's range is available again once observed. On OpenCode 1, a
+store OpenCode 2 has migrated in place — its `opencode.db` holding the `kv` key `migration.v1-v2` — leaves the
+capability unavailable as a config conflict naming the store, since nothing OpenCode 1 writes to it afterward reaches
+OpenCode 2; restart the runner on OpenCode 2 to carry on. `blizzard runner selftest opencode` tests whichever major
+version the runner holds.
 
 A turn runs on the service, not in the worker, so killing a driver never stops it. Wherever the runner kills a driver,
 or a driver exits without a result, it interrupts that session's running tree through the service, best effort and
