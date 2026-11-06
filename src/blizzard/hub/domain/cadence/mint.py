@@ -165,7 +165,8 @@ class CadenceMint:
     def mint(self, errand: Errand, *, judged: ErrandRun | None, inputs: ErrandInputs) -> MintedErrand | None:
         """Mint ``errand``'s run, planned from ``inputs``, unless its last run moved since the pass ``judged`` it —
         then ``None``, with nothing written. A planning refusal raises before anything is allocated; the work ref is
-        allocated before the transaction, so a crash between them burns one ref and nothing more.
+        allocated before the transaction, so a crash between them, or a lost re-read inside it, burns that one ref and
+        nothing more.
 
         One lock declaration takes the errand's lock and, for a promoting chore, both lists' ranking locks, beside
         the fresh chunk's id, which names no row yet and so contends with nothing but is what the promote write
