@@ -86,9 +86,9 @@ class CadenceAttention:
 
     def facts(self, cadences: Sequence[Cadence], *, include_retired: bool = False) -> dict[str, AttentionFacts]:
         """What the live cadences among ``cadences`` — retired ones too when ``include_retired`` — are judged
-        against, by project id: the routines their chores
-        name, those routines' links and when each was made, which of their graphs resolve, and the scopes the chores
-        and links name."""
+        against, by project id: the routines their
+        chores name, those routines' links and when each was made, which of their graphs resolve, and the scopes the
+        chores and links name."""
         by_project: dict[str, list[Cadence]] = defaultdict(list)
         for cadence in cadences:
             if include_retired or not cadence.retired:

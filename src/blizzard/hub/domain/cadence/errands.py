@@ -209,7 +209,8 @@ def eligible_at(rhythm: Rhythm, last_run: LastRun | None) -> datetime | None:
 
 def is_due(rhythm: Rhythm, errand: Errand, last_run: LastRun | None, now: datetime) -> bool:
     """Whether ``errand`` is due at ``now``. An unfinished last run holds it. Otherwise a spacing alone is due at
-    or past eligibility — at once with no last run; a schedule alone when its latest moment at or before ``now``
+    or past eligibility — with no last run, once ``now`` reaches the instant the errand joined, which no read
+    precedes; a schedule alone when its latest moment at or before ``now``
     falls after the reference (the last run's minted instant, or the instant a never-run errand joined); both when
     that moment falls after the reference and at or past eligibility. A moment missed is owed one run, however
     many fell since the reference."""
