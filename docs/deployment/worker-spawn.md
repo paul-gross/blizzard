@@ -333,6 +333,14 @@ inside OpenCode 2's range is then available again, while a service once seen out
 unavailable as a config conflict until the runner restarts, even after the service returns — and a binary and service of
 different major versions leave the capability unavailable as a config conflict while they differ.
 
+A turn runs on the service, not in the worker, so killing a driver never stops it. Wherever the runner kills a driver,
+or a driver exits without a result, it interrupts that session's running tree through the service, best effort and
+bounded — except for a forced takeover, whose session the operator is about to attend. Each start of the runner, before
+any restart resume, does the same for every session its own records hold unfinished with no live worker and no takeover,
+so a turn that outlived a crashed daemon is interrupted before restart resume re-attaches its session, and the start
+prints how many turns it stopped. Neither reads a listing of the service's sessions, so neither touches the operator's
+own sessions or another runner's.
+
 ## Compaction windows
 
 A `sessions:` entry can carry an optional compaction window facet — one of five, alongside model, effort, rotation

@@ -18,8 +18,9 @@ DEFAULT_ORPHAN_BOUND_SECONDS = 5.0
 
 
 class ISessionOrphaner(Protocol):
-    def orphan(self, session_id: str) -> None:
-        """Interrupt ``session_id``'s running tree, best effort and bounded; never raises."""
+    def orphan(self, session_id: str) -> bool:
+        """Interrupt ``session_id``'s running tree, best effort and bounded, and return whether it interrupted one;
+        never raises."""
         ...
 
 
@@ -37,23 +38,25 @@ class SessionOrphaner:
         self._bound_seconds = bound_seconds
         self._monotonic = monotonic
 
-    def orphan(self, session_id: str) -> None:
-        """Interrupt ``session_id``'s running descendants, deepest first, then the session, when its tree runs."""
+    def orphan(self, session_id: str) -> bool:
+        """Interrupt ``session_id``'s running descendants, deepest first, then the session, when its tree runs; whether
+        it did."""
         transport = BoundedTransport(self._transport, self._monotonic() + self._bound_seconds, self._monotonic)
         try:
             core = DriverCore(self._source, transport, poll_seconds=0.0)
             state = core.tree_state(session_id)
             if not state.running:
                 _log.debug("an orphaned OpenCode 2 session runs nothing", session_id=session_id)
-                return
+                return False
             running = set(state.running)
             stopped = [sid for sid in reversed(state.session_ids[1:]) if sid in running]
             for sid in (*stopped, session_id):
                 core.client.interrupt(sid)
         except (*BIND_FAULTS, OSError) as exc:
             _log.warning("could not interrupt an orphaned OpenCode 2 session", session_id=session_id, detail=str(exc))
-            return
+            return False
         _log.info("interrupted an orphaned OpenCode 2 session", session_id=session_id, interrupted=len(stopped) + 1)
+        return True
 
 
 __all__ = ["DEFAULT_ORPHAN_BOUND_SECONDS", "ISessionOrphaner", "SessionOrphaner"]

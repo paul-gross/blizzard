@@ -44,6 +44,7 @@ from blizzard.runner.lifecycle.judgement.internal.elicitation_files import Elici
 from blizzard.runner.lifecycle.judgement.internal.subprocess_check_runner import SubprocessCheckRunner
 from blizzard.runner.lifecycle.orphan import orphan_session
 from blizzard.runner.lifecycle.session import HarnessSelector, SessionResolver
+from blizzard.runner.lifecycle.session_reconcile import SessionReconcile
 from blizzard.runner.lifecycle.shutdown_drain import ShutdownDrain
 from blizzard.runner.lifecycle.takeover import TakeoverRecovery
 from blizzard.runner.loop.context import LoopConfig, LoopContext, ResolvedSubscription
@@ -342,6 +343,11 @@ class ResumeMarking:
         return ResumeIntents(self.stores).mark_crashed(
             process=self.process, liveness=self.host_stores.daemon_liveness, now=self.clock.now()
         )
+
+    def reconcile_sessions(self) -> int:
+        """Stop every turn a crash left running without its worker, returning how many — run after
+        :meth:`recover_takeovers` (so an interrupted takeover no longer holds) and before any restart resume."""
+        return SessionReconcile(self.stores, self.harnesses, self.process).run()
 
     def recover_takeovers(self) -> int:
         """Finish and end every takeover a crash interrupted mid-entry — run after :meth:`on_startup` (whose

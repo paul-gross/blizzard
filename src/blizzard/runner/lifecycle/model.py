@@ -847,6 +847,13 @@ def crash_orphaned(lease: Lease, *, session_ended: bool, alive: bool, stale: boo
     return not session_ended and not alive and not stale
 
 
+def reconcilable(lease: Lease, *, session_ended: bool, alive: bool, taken_over: bool) -> bool:
+    """Whether the daemon's start stops ``lease``'s session through its harness: a session whose current generation
+    is unfinished — it never declared itself done — with no live worker or judge on it, and no person holding it. Its
+    driver may have died with the daemon and left the turn running."""
+    return lease.session is not None and not session_ended and not alive and not taken_over
+
+
 class LeaseReconcileMove(StrEnum):
     ABANDON = "abandon"
     PARK = "park"

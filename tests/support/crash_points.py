@@ -15,6 +15,7 @@ from blizzard.foundation.crash import CrashPoint
 _INSTRUMENTED_MODULES = (
     "blizzard.runner.loop.steps",
     "blizzard.runner.lifecycle.spawn",
+    "blizzard.runner.harness.opencode_v2.drive",
     "blizzard.runner.lifecycle.attempt",
     "blizzard.runner.lifecycle.judgement.judgement",
     "blizzard.runner.lifecycle.drain",

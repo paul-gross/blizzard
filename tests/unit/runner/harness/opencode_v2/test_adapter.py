@@ -175,11 +175,13 @@ def test_no_service_fails_the_launch_before_any_request_is_written(tmp_path: Pat
 
 
 class _Orphaner:
-    def __init__(self) -> None:
+    def __init__(self, running: frozenset[str] = frozenset()) -> None:
         self.orphaned: list[str] = []
+        self.running = running
 
-    def orphan(self, session_id: str) -> None:
+    def orphan(self, session_id: str) -> bool:
         self.orphaned.append(session_id)
+        return session_id in self.running
 
 
 def test_the_advertised_version_is_the_services_and_the_binarys_while_none_answers(tmp_path: Path) -> None:
@@ -241,6 +243,13 @@ def test_orphan_hands_the_session_to_the_orphaner(tmp_path: Path) -> None:
     adapter, launcher = _adapter(tmp_path, orphaner=orphaner)
     adapter.orphan("ses_1")
     assert orphaner.orphaned == ["ses_1"] and launcher.requests == []
+
+
+def test_reconcile_interrupts_each_session_it_is_handed_and_no_other(tmp_path: Path) -> None:
+    orphaner = _Orphaner(running=frozenset({"ses_2"}))
+    adapter, launcher = _adapter(tmp_path, orphaner=orphaner)
+    assert adapter.reconcile(("ses_1", "ses_2")) == 1, "only the tree that ran counts as stopped"
+    assert orphaner.orphaned == ["ses_1", "ses_2"] and launcher.requests == []
 
 
 def test_models_and_efforts_resolve_and_takeover_goes_through_attend(tmp_path: Path) -> None:

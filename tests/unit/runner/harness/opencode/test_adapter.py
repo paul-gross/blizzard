@@ -1601,3 +1601,17 @@ def test_with_no_declared_list_any_provider_model_is_accepted_and_reported(spawn
     assert adapter.resolve_model_strict(["openai/gpt-5.6-luna"]) == "openai/gpt-5.6-luna"
     assert adapter.resolve_model_strict(["opus"]) is None
     assert adapter.supported_models() == ("*/*",)
+
+
+def test_orphan_and_reconcile_touch_nothing_a_worker_that_owned_its_turn_took_with_it(spawn_executor: Executor) -> None:
+    probe = FakeProbe()
+    adapter = OpenCodeAdapter(
+        worker_env=AllowlistedEnv.of(()),
+        binary="opencode",
+        process=probe,
+        launcher=ProcessLauncher(probe, executor=spawn_executor, children=CHILDREN),
+        versions=version_probe(),
+    )
+    adapter.orphan("ses_1")
+    assert adapter.reconcile(("ses_1", "ses_2")) == 0
+    assert probe.killed == [] and probe.killed_groups == [] and probe.interrupted_groups == []

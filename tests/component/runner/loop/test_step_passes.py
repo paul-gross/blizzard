@@ -335,6 +335,7 @@ class _Resume:
     def __init__(self) -> None:
         self.startups = 0
         self.shutdowns = 0
+        self.reconciles = 0
 
     def on_startup(self) -> int:
         self.startups += 1
@@ -345,6 +346,10 @@ class _Resume:
         return 0
 
     def recover_takeovers(self) -> int:
+        return 0
+
+    def reconcile_sessions(self) -> int:
+        self.reconciles += 1
         return 0
 
 
@@ -389,6 +394,7 @@ def test_a_stepped_host_starts_no_timer_yet_reconciles_reports_once_and_marks_at
     def serving() -> None:
         seen["threads"] = {thread.name for thread in threading.enumerate()} & _LOOP_THREADS
         seen["startups"], seen["reports"], seen["shutdowns"] = resume.startups, registration.runs, resume.shutdowns
+        seen["reconciles"] = resume.reconciles
         if loop is LoopMode.STEPPED:
             seen["result"] = hosted.steppers[0].request()
 
@@ -403,7 +409,7 @@ def test_a_stepped_host_starts_no_timer_yet_reconciles_reports_once_and_marks_at
         hosted.close()
         host.close()
 
-    assert (seen["startups"], seen["shutdowns"]) == (1, 0)
+    assert (seen["startups"], seen["reconciles"], seen["shutdowns"]) == (1, 1, 0)
     assert resume.shutdowns == 1
     if loop is LoopMode.TIMED:
         assert seen["threads"] == _LOOP_THREADS
