@@ -53,6 +53,7 @@ export function runEscalationView(overrides: Partial<RunEscalationView> = {}): R
 /** One run-list row: a full `nightly` sweep of `blizzard` that finished, delivering nothing, under no project. */
 export function runRowView(overrides: Pick<RunRowView, 'chunk_id'> & Partial<RunRowView>): RunRowView {
   return {
+    cadence: null,
     delivered: [],
     escalation: null,
     minted_at: fixtureInstant(-24 * 3600),
@@ -70,6 +71,7 @@ export function runRowView(overrides: Pick<RunRowView, 'chunk_id'> & Partial<Run
 /** One run's delta: a full `nightly` sweep of `blizzard` that finished, delivering no sets. */
 export function runDeltaView(overrides: Pick<RunDeltaView, 'chunk_id'> & Partial<RunDeltaView>): RunDeltaView {
   return {
+    cadence: null,
     escalation: null,
     mode: 'full',
     outcome: 'done',
