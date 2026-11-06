@@ -109,6 +109,17 @@ def test_a_spent_budget_refuses_every_caller_until_it_lifts() -> None:
     assert all(_admitted(budgets, priority) for priority in ForgePriority)
 
 
+def test_a_turn_away_during_a_standing_refusal_queues_no_budget_low_notice() -> None:
+    budgets, _ = _budgets()
+    budgets.learn(_KEY, _rate(90))
+    budgets.spent(_KEY, _NOW + timedelta(seconds=120))
+
+    with pytest.raises(ForgeBudgetLow):
+        budgets.admit(_KEY, ForgePriority.SWEEPING)
+
+    assert [notice.kind for notice in budgets.drain_notices()] == [BudgetNoticeKind.RATE_LIMITED]
+
+
 def test_budgets_are_kept_apart_by_forge_and_secret() -> None:
     budgets, _ = _budgets()
     budgets.learn(_KEY, _rate(0))

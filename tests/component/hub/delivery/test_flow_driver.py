@@ -936,10 +936,10 @@ def test_a_failed_notice_write_requeues_it_and_the_ones_after_for_the_next_drain
     clock = FixedClock(datetime(2026, 10, 29, 12, 0, tzinfo=UTC))
     budgets = ForgeBudgets(clock=clock, dialects=rate_dialect)
     key = BudgetKey("github", None)
-    budgets.spent(key, clock.now() + timedelta(minutes=1))
     budgets.learn(key, BudgetReading("core", 100, 10, clock.now() + timedelta(minutes=1)))
     with pytest.raises(ForgeBudgetLow):
         budgets.admit(key, ForgePriority.SWEEPING)
+    budgets.spent(key, clock.now() + timedelta(minutes=1))
 
     class _Log:
         def __init__(self) -> None:
@@ -958,7 +958,7 @@ def test_a_failed_notice_write_requeues_it_and_the_ones_after_for_the_next_drain
         drain.drain(clock.now())
     recorded = drain.drain(clock.now())
 
-    assert (recorded, log.kinds) == (2, ["forge-rate-limited", "forge-budget-low"])
+    assert (recorded, log.kinds) == (2, ["forge-budget-low", "forge-rate-limited"])
 
 
 def _set_test_legacy_run(world: World, legacy_run: str | None) -> None:

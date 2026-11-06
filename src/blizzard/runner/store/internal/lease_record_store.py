@@ -11,7 +11,6 @@ from datetime import datetime
 
 from sqlalchemy import Connection, and_, func
 
-from blizzard.foundation.leases import LeaseClosureReason
 from blizzard.foundation.logging import get_logger
 from blizzard.foundation.store.utc import as_utc
 from blizzard.runner.leases import closure
@@ -139,16 +138,11 @@ class LeaseRecordStore:
         return sorted([*opened, *closed], key=minted)
 
     def attempt_count(self, chunk_id: str, node_id: str) -> int:
-        # A preempted attempt was superseded, not spent: counting it would carry
-        # the node toward exhaustion and escalate the very chunk the operator is rescuing.
+        # A superseded, released or mint-only lease is not a failed attempt: counting it would carry
+        # the node toward exhaustion and escalate the very chunk the operator is rescuing or let go.
         st = self._store
-        preempted = st.select(lease_closures, lease_closures.c.lease_id).where(
-            lease_closures.c.reason == LeaseClosureReason.PREEMPTED
-        )
-        # A never-spawned escalation-mint lease isn't spent either — its own closure
-        # reason marks it, distinct from an ordinary exhausted-retries `escalated` closure.
-        escalation_mints = st.select(lease_closures, lease_closures.c.lease_id).where(
-            lease_closures.c.reason.in_(sorted(closure.MINT_REASONS))
+        unspent = st.select(lease_closures, lease_closures.c.lease_id).where(
+            lease_closures.c.reason.in_(sorted(closure.UNSPENT_REASONS))
         )
         # A visit ends when its node-step completes: the newest completed-step closure at this node is the
         # boundary, and only leases minted after it (by epoch, never wall clock) belong to the current visit.
@@ -171,8 +165,7 @@ class LeaseRecordStore:
             st.select(lease_context, func.count())
             .where(and_(lease_context.c.chunk_id == chunk_id, lease_context.c.node_id == node_id))
             .where(lease_context.c.lease_id.in_(in_visit))
-            .where(lease_context.c.lease_id.not_in(preempted))
-            .where(lease_context.c.lease_id.not_in(escalation_mints))
+            .where(lease_context.c.lease_id.not_in(unspent))
         )
         with self._store.connect() as conn:
             return int(conn.execute(stmt).scalar_one())
