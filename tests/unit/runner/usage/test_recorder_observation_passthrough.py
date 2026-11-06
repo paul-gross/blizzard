@@ -23,6 +23,7 @@ from tests.support.runner_fakes import (
     make_store,
     single_workspace,
 )
+from tests.support.runner_mint import new_mint
 
 _NOW = datetime(2026, 10, 5, 12, 0, 0, tzinfo=UTC)
 _SESSION_ID = "ses_a"
@@ -32,17 +33,19 @@ _BINDINGS = [EnvBinding(chunk_id="ch_1", environment_id="e1", workdir="/wd/e1", 
 
 
 def _lease(store: SqlAlchemyRunnerStore, *, resolved_model: str | None) -> Lease:
-    store.record_lease(
-        NewLease(
-            lease_id="lease_1",
-            chunk_id="ch_1",
-            graph_id="gr_1",
-            node_id="nd_build",
-            node_name="build",
-            epoch=1,
-            retries_max=2,
-            created_at=_NOW,
-            resolved_model=resolved_model,
+    store.record_mint(
+        new_mint(
+            NewLease(
+                lease_id="lease_1",
+                chunk_id="ch_1",
+                graph_id="gr_1",
+                node_id="nd_build",
+                node_name="build",
+                epoch=1,
+                retries_max=2,
+                created_at=_NOW,
+                resolved_model=resolved_model,
+            )
         )
     )
     store.record_spawn(

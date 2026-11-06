@@ -29,6 +29,7 @@ from tests.support.runner_fakes import (
     make_store,
     strip_transcript_segments,
 )
+from tests.support.runner_mint import new_mint
 
 _NOW = datetime(2026, 9, 14, 12, 0, 0, tzinfo=UTC)
 _SHARED_SESSION_ID = "shared-raw-session"
@@ -103,16 +104,18 @@ def _seed_open_segment(ctx: LoopContext, *, chunk_id: str, lease_id: str, env_id
     ctx.stores.environments.record_binding(
         chunk_id=chunk_id, environment_id=env_id, workdir=f"/ws/{env_id}", bound_at=_NOW
     )
-    ctx.stores.lease_record.record_lease(
-        NewLease(
-            lease_id=lease_id,
-            chunk_id=chunk_id,
-            graph_id="gr_1",
-            node_id="nd_build",
-            node_name="build",
-            epoch=1,
-            retries_max=2,
-            created_at=_NOW,
+    ctx.stores.lease_record.record_mint(
+        new_mint(
+            NewLease(
+                lease_id=lease_id,
+                chunk_id=chunk_id,
+                graph_id="gr_1",
+                node_id="nd_build",
+                node_name="build",
+                epoch=1,
+                retries_max=2,
+                created_at=_NOW,
+            )
         )
     )
     ctx.stores.liveness.record_spawn(
@@ -159,16 +162,18 @@ def test_backfill_imports_both_owners_of_the_same_raw_session_id() -> None:
         ("ch_a", "lease_a", CLAUDE_CODE_HARNESS_ID),
         ("ch_b", "lease_b", _OTHER_HARNESS_ID),
     ):
-        ctx.stores.lease_record.record_lease(
-            NewLease(
-                lease_id=lease_id,
-                chunk_id=chunk_id,
-                graph_id="gr_1",
-                node_id="nd_build",
-                node_name="build",
-                epoch=1,
-                retries_max=2,
-                created_at=_NOW,
+        ctx.stores.lease_record.record_mint(
+            new_mint(
+                NewLease(
+                    lease_id=lease_id,
+                    chunk_id=chunk_id,
+                    graph_id="gr_1",
+                    node_id="nd_build",
+                    node_name="build",
+                    epoch=1,
+                    retries_max=2,
+                    created_at=_NOW,
+                )
             )
         )
         ctx.stores.liveness.record_spawn(

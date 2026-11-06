@@ -39,6 +39,7 @@ from tests.support.runner_fakes import (
     registered_identity,
     single_workspace,
 )
+from tests.support.runner_mint import new_mint
 
 _NOW = datetime(2026, 7, 16, 12, 0, 0, tzinfo=UTC)
 _HUB_URL = "http://hub.local:8421"
@@ -94,7 +95,7 @@ def _seed_lease(store: SqlAlchemyRunnerStore, **overrides: Unpack[NewLeaseFields
         "created_at": _NOW,
     }
     fields.update(overrides)
-    store.record_lease(NewLease(**fields))
+    store.record_mint(new_mint(NewLease(**fields)))
 
 
 def _seed_all_sections(store: SqlAlchemyRunnerStore) -> None:
@@ -110,7 +111,6 @@ def _seed_all_sections(store: SqlAlchemyRunnerStore) -> None:
         session=SessionReference(CLAUDE_CODE_HARNESS_ID, "sess-a"),
         asked_at=_NOW,
     )
-    store.enqueue_outbound(kind="lease.minted", chunk_id="ch_1", lease_id="lease_1", payload="{}", created_at=_NOW)
     store.record_takeover(
         takeover_id="tko_1",
         chunk_id="ch_1",
@@ -154,7 +154,7 @@ def test_the_composed_payload_includes_all_seven_sections_with_real_data(tmp_pat
     assert [a["question_id"] for a in body["asks"]["items"]] == ["qn_1"]
     assert [e["chunk_id"] for e in body["escalations"]["items"]] == ["ch_2"]
     assert [t["takeover_id"] for t in body["takeovers"]["items"]] == ["tko_1"]
-    assert [f["kind"] for f in body["facts"]["items"]] == ["lease.minted"]
+    assert [f["kind"] for f in body["facts"]["items"]] == ["lease.minted", "lease.minted"]
     # No harness is wired onto `create_app` itself here (only `RunnerStatusService`'s own
     # registry above carries one) — an empty configured set reports no health entries.
     assert body["harness_health"] == {"items": []}

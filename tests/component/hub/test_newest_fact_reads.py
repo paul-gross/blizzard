@@ -40,6 +40,7 @@ from blizzard.runner.leases.model import NewLease
 from tests.support.config_inputs import init_host
 from tests.support.hub_event_rows import hub_events_of
 from tests.support.runner_fakes import SqlAlchemyRunnerStore, runner_store_errors
+from tests.support.runner_mint import new_mint
 from tests.support.scaffolding import (
     HubHarness,
     build_hub,
@@ -349,16 +350,18 @@ def _runner_history(tmp_path: Path, *, depth: int) -> tuple[SqlAlchemyRunnerStor
                 session=SessionReference(CLAUDE_CODE_HARNESS_ID, f"sess-{key}-{n}"),
             )
             lease_id = f"lease_{key}_{n}"
-            store.record_lease(
-                NewLease(
-                    lease_id=lease_id,
-                    chunk_id=key,
-                    graph_id="gr_1",
-                    node_id="nd_build",
-                    node_name="build",
-                    epoch=n + 1,
-                    retries_max=2,
-                    created_at=at,
+            store.record_mint(
+                new_mint(
+                    NewLease(
+                        lease_id=lease_id,
+                        chunk_id=key,
+                        graph_id="gr_1",
+                        node_id="nd_build",
+                        node_name="build",
+                        epoch=n + 1,
+                        retries_max=2,
+                        created_at=at,
+                    )
                 )
             )
             store.record_closure(lease_id=lease_id, chunk_id=key, node_id="nd_build", reason="escalated", closed_at=at)

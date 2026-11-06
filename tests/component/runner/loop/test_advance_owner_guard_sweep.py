@@ -36,6 +36,7 @@ from tests.support.runner_fakes import (
     make_envelope,
     make_store,
 )
+from tests.support.runner_mint import new_mint
 
 _NOW = datetime(2026, 7, 13, 12, 0, 0, tzinfo=UTC)
 _FOREIGN_HARNESS_ID = "foreign"
@@ -90,16 +91,18 @@ def _assert_escalated_once_with_no_takeover(store: SqlAlchemyRunnerStore, chunk_
 @pytest.mark.parametrize("unavailable", [False, True], ids=["unknown-owner", "unavailable-owner"])
 def test_judgement_launch_blocked_by_unresolvable_owner_escalates_in_place(tmp_path: Path, unavailable: bool) -> None:
     store = _store(tmp_path)
-    store.record_lease(
-        NewLease(
-            lease_id="lease_blocked",
-            chunk_id="ch_blocked",
-            graph_id="gr_1",
-            node_id="nd_build",
-            node_name="build",
-            epoch=1,
-            retries_max=2,
-            created_at=_NOW,
+    store.record_mint(
+        new_mint(
+            NewLease(
+                lease_id="lease_blocked",
+                chunk_id="ch_blocked",
+                graph_id="gr_1",
+                node_id="nd_build",
+                node_name="build",
+                epoch=1,
+                retries_max=2,
+                created_at=_NOW,
+            )
         )
     )
     store.record_spawn(
@@ -150,16 +153,18 @@ def test_judgement_collect_blocked_by_unresolvable_owner_escalates_in_place(tmp_
     operator mid-repair. ``collect`` must not misread that as a lost write and relaunch — it
     escalates instead: no other runner can resume this exact session either."""
     store = _store(tmp_path)
-    store.record_lease(
-        NewLease(
-            lease_id="lease_1",
-            chunk_id="ch_1",
-            graph_id="gr_1",
-            node_id="nd_build",
-            node_name="build",
-            epoch=1,
-            retries_max=2,
-            created_at=_NOW,
+    store.record_mint(
+        new_mint(
+            NewLease(
+                lease_id="lease_1",
+                chunk_id="ch_1",
+                graph_id="gr_1",
+                node_id="nd_build",
+                node_name="build",
+                epoch=1,
+                retries_max=2,
+                created_at=_NOW,
+            )
         )
     )
     store.record_spawn(
@@ -213,16 +218,18 @@ def test_judgement_collect_blocked_by_unresolvable_owner_defers_while_locally_pa
     ADVANCE's sweep still reaches `collect`, but the escalation itself defers rather than
     closing the lease, exactly as `fail`'s own paused branch defers."""
     store = _store(tmp_path)
-    store.record_lease(
-        NewLease(
-            lease_id="lease_1",
-            chunk_id="ch_1",
-            graph_id="gr_1",
-            node_id="nd_build",
-            node_name="build",
-            epoch=1,
-            retries_max=2,
-            created_at=_NOW,
+    store.record_mint(
+        new_mint(
+            NewLease(
+                lease_id="lease_1",
+                chunk_id="ch_1",
+                graph_id="gr_1",
+                node_id="nd_build",
+                node_name="build",
+                epoch=1,
+                retries_max=2,
+                created_at=_NOW,
+            )
         )
     )
     store.record_spawn(
@@ -273,16 +280,18 @@ def test_judgement_collect_blocked_by_unresolvable_owner_abandons_a_detached_chu
     """`escalate_owner_unresolvable` takes the same detached precedence `fail` takes: a chunk
     the hub no longer routes here abandons instead of escalating."""
     store = _store(tmp_path)
-    store.record_lease(
-        NewLease(
-            lease_id="lease_1",
-            chunk_id="ch_1",
-            graph_id="gr_1",
-            node_id="nd_build",
-            node_name="build",
-            epoch=1,
-            retries_max=2,
-            created_at=_NOW,
+    store.record_mint(
+        new_mint(
+            NewLease(
+                lease_id="lease_1",
+                chunk_id="ch_1",
+                graph_id="gr_1",
+                node_id="nd_build",
+                node_name="build",
+                epoch=1,
+                retries_max=2,
+                created_at=_NOW,
+            )
         )
     )
     store.record_spawn(
@@ -331,16 +340,18 @@ def test_escalate_blocked_by_unresolvable_owner_still_escalates_with_no_takeover
     composed, so an unresolvable owner cannot undo it — the chunk still escalates, with the
     same empty takeover command the no-session/no-bindings branch already uses."""
     store = _store(tmp_path)
-    store.record_lease(
-        NewLease(
-            lease_id="lease_blocked",
-            chunk_id="ch_blocked",
-            graph_id="gr_1",
-            node_id="nd_build",
-            node_name="build",
-            epoch=1,
-            retries_max=0,  # exhausted on the first failure
-            created_at=_NOW,
+    store.record_mint(
+        new_mint(
+            NewLease(
+                lease_id="lease_blocked",
+                chunk_id="ch_blocked",
+                graph_id="gr_1",
+                node_id="nd_build",
+                node_name="build",
+                epoch=1,
+                retries_max=0,  # exhausted on the first failure
+                created_at=_NOW,
+            )
         )
     )
     store.record_spawn(
@@ -383,16 +394,18 @@ def test_fail_owner_block_short_circuits_a_retry_the_budget_would_otherwise_allo
     ordinarily requeue, but an unresolvable recorded owner blocks that — the chunk escalates
     in place instead, on the same tick, consuming no retry."""
     store = _store(tmp_path)
-    store.record_lease(
-        NewLease(
-            lease_id="lease_blocked",
-            chunk_id="ch_blocked",
-            graph_id="gr_1",
-            node_id="nd_build",
-            node_name="build",
-            epoch=1,
-            retries_max=2,  # budget still open — the owner block must pre-empt it
-            created_at=_NOW,
+    store.record_mint(
+        new_mint(
+            NewLease(
+                lease_id="lease_blocked",
+                chunk_id="ch_blocked",
+                graph_id="gr_1",
+                node_id="nd_build",
+                node_name="build",
+                epoch=1,
+                retries_max=2,  # budget still open — the owner block must pre-empt it
+                created_at=_NOW,
+            )
         )
     )
     store.record_spawn(
@@ -462,17 +475,19 @@ def test_pool_head_owner_unresolvable_at_node_entry_escalates_but_a_sibling_chun
     that chunk in place, never spawning or substituting a default harness — and never blocks
     a sibling the SAME ``Advance.run()`` sweep also drives into a fresh node."""
     store = _store(tmp_path)
-    store.record_lease(
-        NewLease(
-            lease_id="lease_head",
-            chunk_id="ch_pool",
-            graph_id="gr_1",
-            node_id="nd_build",
-            node_name="build",
-            epoch=1,
-            retries_max=2,
-            session_name="code",
-            created_at=_NOW,
+    store.record_mint(
+        new_mint(
+            NewLease(
+                lease_id="lease_head",
+                chunk_id="ch_pool",
+                graph_id="gr_1",
+                node_id="nd_build",
+                node_name="build",
+                epoch=1,
+                retries_max=2,
+                session_name="code",
+                created_at=_NOW,
+            )
         )
     )
     store.record_spawn(
@@ -489,16 +504,18 @@ def test_pool_head_owner_unresolvable_at_node_entry_escalates_but_a_sibling_chun
     store.record_binding(
         chunk_id="ch_sibling", environment_id="e2", workdir="/ws/e2", bound_at=_NOW, workspace_id="ws1"
     )
-    store.record_lease(
-        NewLease(
-            lease_id="lease_sibling_prior",
-            chunk_id="ch_sibling",
-            graph_id="gr_1",
-            node_id="nd_build",
-            node_name="build",
-            epoch=1,
-            retries_max=2,
-            created_at=_NOW,
+    store.record_mint(
+        new_mint(
+            NewLease(
+                lease_id="lease_sibling_prior",
+                chunk_id="ch_sibling",
+                graph_id="gr_1",
+                node_id="nd_build",
+                node_name="build",
+                epoch=1,
+                retries_max=2,
+                created_at=_NOW,
+            )
         )
     )
     store.record_closure(
@@ -549,16 +566,18 @@ def test_a_plain_resumes_unresolvable_owner_escalates_node_entry_but_a_sibling_s
     escalates the chunk in place at node entry too, exactly as a named pool's breached head
     does, while a sibling the SAME sweep also drives still spawns."""
     store = _store(tmp_path)
-    store.record_lease(
-        NewLease(
-            lease_id="lease_head",
-            chunk_id="ch_plain",
-            graph_id="gr_1",
-            node_id="nd_build",
-            node_name="build",
-            epoch=1,
-            retries_max=2,
-            created_at=_NOW,
+    store.record_mint(
+        new_mint(
+            NewLease(
+                lease_id="lease_head",
+                chunk_id="ch_plain",
+                graph_id="gr_1",
+                node_id="nd_build",
+                node_name="build",
+                epoch=1,
+                retries_max=2,
+                created_at=_NOW,
+            )
         )
     )
     store.record_spawn(
@@ -575,16 +594,18 @@ def test_a_plain_resumes_unresolvable_owner_escalates_node_entry_but_a_sibling_s
     store.record_binding(
         chunk_id="ch_sibling", environment_id="e2", workdir="/ws/e2", bound_at=_NOW, workspace_id="ws1"
     )
-    store.record_lease(
-        NewLease(
-            lease_id="lease_sibling_prior",
-            chunk_id="ch_sibling",
-            graph_id="gr_1",
-            node_id="nd_build",
-            node_name="build",
-            epoch=1,
-            retries_max=2,
-            created_at=_NOW,
+    store.record_mint(
+        new_mint(
+            NewLease(
+                lease_id="lease_sibling_prior",
+                chunk_id="ch_sibling",
+                graph_id="gr_1",
+                node_id="nd_build",
+                node_name="build",
+                epoch=1,
+                retries_max=2,
+                created_at=_NOW,
+            )
         )
     )
     store.record_closure(

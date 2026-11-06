@@ -185,22 +185,6 @@ def _at(seconds: float) -> datetime:
     return _WRITES_FROM + timedelta(seconds=seconds)
 
 
-def _new_lease(w: RunnerWorld) -> None:
-    w.stores.lease_record.record_lease(
-        NewLease(
-            lease_id=_LEASE,
-            chunk_id=w.chunk_1,
-            graph_id=GRAPH_ID,
-            node_id=w.node_a,
-            node_name="build",
-            epoch=9,
-            retries_max=3,
-            created_at=_at(0),
-            session_name="pool-a",
-        )
-    )
-
-
 def _new_mint(w: RunnerWorld) -> None:
     w.stores.lease_record.record_mint(
         NewMint(
@@ -266,7 +250,6 @@ def _engage_under_lock(w: RunnerWorld) -> None:
 
 
 WRITE_CENSUS: dict[tuple[type, str], WriteRecipe] = {
-    (IWriteLeaseRecordRepository, "record_lease"): _new_lease,
     (IWriteLeaseRecordRepository, "record_mint"): _new_mint,
     (IWriteLeaseRecordRepository, "record_closure"): lambda w: w.stores.lease_record.record_closure(
         lease_id=w.lease_2,

@@ -22,6 +22,7 @@ from blizzard.runner.leases.model import NewLease
 from blizzard.runner.store.errors import RunnerStoreErrorFactory
 from blizzard.runner.store.schema import metadata as runner_metadata
 from tests.support.runner_fakes import FakeProbe, SqlAlchemyRunnerStore, make_store, runner_store_errors
+from tests.support.runner_mint import new_mint
 
 _NOW = datetime(2026, 7, 16, 12, 0, 0, tzinfo=UTC)
 
@@ -36,16 +37,18 @@ def _store(tmp_path: Path) -> SqlAlchemyRunnerStore:
 def _seed_lease(
     store: SqlAlchemyRunnerStore, *, chunk: str = "ch_1", lease: str = "lease_1", created_at: datetime = _NOW
 ) -> None:
-    store.record_lease(
-        NewLease(
-            lease_id=lease,
-            chunk_id=chunk,
-            graph_id="gr_1",
-            node_id="nd_build",
-            node_name="build",
-            epoch=1,
-            retries_max=2,
-            created_at=created_at,
+    store.record_mint(
+        new_mint(
+            NewLease(
+                lease_id=lease,
+                chunk_id=chunk,
+                graph_id="gr_1",
+                node_id="nd_build",
+                node_name="build",
+                epoch=1,
+                retries_max=2,
+                created_at=created_at,
+            )
         )
     )
 

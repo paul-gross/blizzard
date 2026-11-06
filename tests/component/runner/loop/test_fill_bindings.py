@@ -38,6 +38,7 @@ from tests.support.runner_fakes import (
     make_store,
     registered_identity,
 )
+from tests.support.runner_mint import new_mint
 
 _NOW = datetime(2026, 7, 13, 12, 0, 0, tzinfo=UTC)
 _HANDLE = WorkerHandle(session_id="sess-a", pid=100, process_start_time="start-100", pgid=100)
@@ -105,16 +106,18 @@ def _hold_open_lease(
     environment_id: str = "a1",
     workdir: str = "/root-a/a1",
 ) -> None:
-    store.record_lease(
-        NewLease(
-            lease_id=f"lease_{chunk_id}",
-            chunk_id=chunk_id,
-            graph_id="gr_1",
-            node_id="nd_build",
-            node_name="build",
-            epoch=1,
-            retries_max=2,
-            created_at=_NOW,
+    store.record_mint(
+        new_mint(
+            NewLease(
+                lease_id=f"lease_{chunk_id}",
+                chunk_id=chunk_id,
+                graph_id="gr_1",
+                node_id="nd_build",
+                node_name="build",
+                epoch=1,
+                retries_max=2,
+                created_at=_NOW,
+            )
         )
     )
     store.record_binding(

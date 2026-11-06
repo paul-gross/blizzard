@@ -90,6 +90,7 @@ from tests.support.runner_fakes import (
     runner_store_errors,
     serving,
 )
+from tests.support.runner_mint import new_mint
 
 _NOW = datetime(2026, 7, 13, 12, 0, 0, tzinfo=UTC)
 _ALIVE = (100, "start-100")  # (pid, start_time) for a running worker
@@ -120,16 +121,18 @@ def _seed_running_lease(
     epoch: int = 1,
 ):
     """A build lease already spawned into env e1, plus its binding."""
-    store.record_lease(
-        NewLease(
-            lease_id=lease,
-            chunk_id=chunk,
-            graph_id="gr_1",
-            node_id="nd_build",
-            node_name="build",
-            epoch=epoch,
-            retries_max=2,
-            created_at=_NOW,
+    store.record_mint(
+        new_mint(
+            NewLease(
+                lease_id=lease,
+                chunk_id=chunk,
+                graph_id="gr_1",
+                node_id="nd_build",
+                node_name="build",
+                epoch=epoch,
+                retries_max=2,
+                created_at=_NOW,
+            )
         )
     )
     store.record_spawn(
@@ -385,16 +388,18 @@ def test_requeue_after_a_pre_spawn_failure_keeps_the_minted_owner(tmp_path: Path
     retry must still requeue under that same minted owner, never the default harness a
     session-keyed read would fall back to once ``session_id`` stays null."""
     store = _store(tmp_path)
-    store.record_lease(
-        NewLease(
-            lease_id="lease_1",
-            chunk_id="ch_1",
-            graph_id="gr_1",
-            node_id="nd_build",
-            node_name="build",
-            epoch=1,
-            retries_max=2,
-            created_at=_NOW,
+    store.record_mint(
+        new_mint(
+            NewLease(
+                lease_id="lease_1",
+                chunk_id="ch_1",
+                graph_id="gr_1",
+                node_id="nd_build",
+                node_name="build",
+                epoch=1,
+                retries_max=2,
+                created_at=_NOW,
+            )
         )
     )
     store.record_mint_owner("lease_1", "other")
@@ -783,18 +788,20 @@ def test_a_pool_heads_model_drift_is_judged_by_the_strictness_of_its_harness_set
     tmp_path: Path, harnesses: list[str] | None, head_model: str, resumed: bool
 ):
     store = _store(tmp_path)
-    store.record_lease(
-        NewLease(
-            lease_id="lease_head",
-            chunk_id="ch_1",
-            graph_id="gr_1",
-            node_id="nd_build",
-            node_name="build",
-            epoch=1,
-            retries_max=2,
-            session_name="code",
-            resolved_model=head_model,
-            created_at=_NOW,
+    store.record_mint(
+        new_mint(
+            NewLease(
+                lease_id="lease_head",
+                chunk_id="ch_1",
+                graph_id="gr_1",
+                node_id="nd_build",
+                node_name="build",
+                epoch=1,
+                retries_max=2,
+                session_name="code",
+                resolved_model=head_model,
+                created_at=_NOW,
+            )
         )
     )
     store.record_spawn(
@@ -832,16 +839,18 @@ def test_requeue_escalates_when_the_failed_harness_falls_out_of_the_acceptable_s
     failed lease before calling `requeue`, so `requeue` is driven directly here — its own
     membership check needs no closed lease to reach, unlike the still-open-lease guard `fail` uses."""
     store = _store(tmp_path)
-    store.record_lease(
-        NewLease(
-            lease_id="lease_1",
-            chunk_id="ch_1",
-            graph_id="gr_1",
-            node_id="nd_build",
-            node_name="build",
-            epoch=1,
-            retries_max=2,
-            created_at=_NOW,
+    store.record_mint(
+        new_mint(
+            NewLease(
+                lease_id="lease_1",
+                chunk_id="ch_1",
+                graph_id="gr_1",
+                node_id="nd_build",
+                node_name="build",
+                epoch=1,
+                retries_max=2,
+                created_at=_NOW,
+            )
         )
     )
     store.record_mint_owner("lease_1", "dropped")
@@ -1994,16 +2003,18 @@ def test_advance_review_harvests_findings_asset_from_assessment(tmp_path: Path):
 
     store = _store(tmp_path)
     # Seed a review lease (produces review-findings) already spawned into e1.
-    store.record_lease(
-        NewLease(
-            lease_id="lease_r",
-            chunk_id="ch_1",
-            graph_id="gr_1",
-            node_id="nd_review",
-            node_name="review",
-            epoch=1,
-            retries_max=2,
-            created_at=_NOW,
+    store.record_mint(
+        new_mint(
+            NewLease(
+                lease_id="lease_r",
+                chunk_id="ch_1",
+                graph_id="gr_1",
+                node_id="nd_review",
+                node_name="review",
+                epoch=1,
+                retries_max=2,
+                created_at=_NOW,
+            )
         )
     )
     store.record_spawn(
@@ -2052,16 +2063,18 @@ def test_advance_review_node_drives_no_git_commit_verify_or_artifact(tmp_path: P
     declaration or verify at all — ``verify`` is never invoked and no ``GIT_COMMIT``
     artifact is produced, while findings still ride the asset path."""
     store = _store(tmp_path)
-    store.record_lease(
-        NewLease(
-            lease_id="lease_r",
-            chunk_id="ch_1",
-            graph_id="gr_1",
-            node_id="nd_review",
-            node_name="review",
-            epoch=1,
-            retries_max=2,
-            created_at=_NOW,
+    store.record_mint(
+        new_mint(
+            NewLease(
+                lease_id="lease_r",
+                chunk_id="ch_1",
+                graph_id="gr_1",
+                node_id="nd_review",
+                node_name="review",
+                epoch=1,
+                retries_max=2,
+                created_at=_NOW,
+            )
         )
     )
     store.record_spawn(
@@ -2211,7 +2224,7 @@ def test_advance_skips_running_worker(tmp_path: Path):
 
     Advance(ctx).run()  # worker alive -> nothing judged, nothing polled
 
-    assert store.pending_outbound() == []
+    assert [b.kind for b in store.pending_outbound()] == ["lease.minted"]
     assert store.active_lease_for_chunk("ch_1") is not None
 
 
@@ -2239,7 +2252,7 @@ def test_completion_survives_hub_outage_and_applies_once(tmp_path: Path):
     hub.down = True
     Pull(ctx).run()  # flush fails — the completion stays buffered
     assert hub.completions == []
-    assert [b.kind for b in store.pending_outbound()] == ["completion.submitted"]
+    assert [b.kind for b in store.pending_outbound()] == ["lease.minted", "completion.submitted"]
     assert store.active_lease_for_chunk("ch_1") is not None  # not advanced
 
     hub.down = False
@@ -2264,16 +2277,18 @@ def test_fill_only_adopts_the_current_restart_epoch(
 ):
     store = _store(tmp_path)
     store.record_binding(chunk_id="ch_1", environment_id="e1", workdir="/ws/e1", bound_at=_NOW, workspace_id="ws1")
-    store.record_lease(
-        NewLease(
-            lease_id="lease_prior",
-            chunk_id="ch_1",
-            graph_id="gr_1",
-            node_id="nd_build",
-            node_name="build",
-            epoch=prior_epoch,
-            retries_max=2,
-            created_at=_NOW,
+    store.record_mint(
+        new_mint(
+            NewLease(
+                lease_id="lease_prior",
+                chunk_id="ch_1",
+                graph_id="gr_1",
+                node_id="nd_build",
+                node_name="build",
+                epoch=prior_epoch,
+                retries_max=2,
+                created_at=_NOW,
+            )
         )
     )
     store.record_spawn(
@@ -2490,16 +2505,18 @@ def test_advance_held_chunk_spawns_into_post_merge_node(tmp_path: Path):
     # A chunk held at the (former) deliver hub node: its prior build lease is closed, the
     # binding retained; the coordinator advanced it into ``verify`` at a HIGHER hub_epoch.
     store.record_binding(chunk_id="ch_1", environment_id="e1", workdir="/ws/e1", bound_at=_NOW, workspace_id="ws1")
-    store.record_lease(
-        NewLease(
-            lease_id="lease_build",
-            chunk_id="ch_1",
-            graph_id="gr_1",
-            node_id="nd_build",
-            node_name="build",
-            epoch=1,
-            retries_max=2,
-            created_at=_NOW,
+    store.record_mint(
+        new_mint(
+            NewLease(
+                lease_id="lease_build",
+                chunk_id="ch_1",
+                graph_id="gr_1",
+                node_id="nd_build",
+                node_name="build",
+                epoch=1,
+                retries_max=2,
+                created_at=_NOW,
+            )
         )
     )
     store.record_closure(
@@ -2534,16 +2551,18 @@ def test_advance_held_chunk_does_not_respawn_a_buffered_escalation(tmp_path: Pat
     store = _store(tmp_path)
     # The runner minted a build lease at epoch 2, it failed retries-exhausted, the lease is
     # closed and the escalation buffered (not asserted here). The binding is retained.
-    store.record_lease(
-        NewLease(
-            lease_id="lease_esc",
-            chunk_id="ch_1",
-            graph_id="gr_1",
-            node_id="nd_build",
-            node_name="build",
-            epoch=2,
-            retries_max=2,
-            created_at=_NOW,
+    store.record_mint(
+        new_mint(
+            NewLease(
+                lease_id="lease_esc",
+                chunk_id="ch_1",
+                graph_id="gr_1",
+                node_id="nd_build",
+                node_name="build",
+                epoch=2,
+                retries_max=2,
+                created_at=_NOW,
+            )
         )
     )
     store.record_closure(lease_id="lease_esc", chunk_id="ch_1", node_id="nd_build", reason="failed", closed_at=_NOW)
@@ -2612,16 +2631,18 @@ def test_verdict_less_exit_fails_and_requeues(tmp_path: Path):
 def test_reap_orphan_requeues(tmp_path: Path):
     store = _store(tmp_path)
     # A lease minted but never spawned (pid None) with its binding already recorded.
-    store.record_lease(
-        NewLease(
-            lease_id="lease_1",
-            chunk_id="ch_1",
-            graph_id="gr_1",
-            node_id="nd_build",
-            node_name="build",
-            epoch=1,
-            retries_max=2,
-            created_at=_NOW,
+    store.record_mint(
+        new_mint(
+            NewLease(
+                lease_id="lease_1",
+                chunk_id="ch_1",
+                graph_id="gr_1",
+                node_id="nd_build",
+                node_name="build",
+                epoch=1,
+                retries_max=2,
+                created_at=_NOW,
+            )
         )
     )
     store.record_binding(chunk_id="ch_1", environment_id="e1", workdir="/ws/e1", bound_at=_NOW, workspace_id="ws1")
@@ -2645,16 +2666,18 @@ def test_reap_orphan_requeue_removes_the_failed_leases_scratch_directory_and_cre
     """`Attempt.close`'s removal, reached through REAP's own orphan-requeue path: the closed
     lease's scratch directory is gone, and the fresh lease `requeue` spawns gets its own."""
     store = _store(tmp_path)
-    store.record_lease(
-        NewLease(
-            lease_id="lease_1",
-            chunk_id="ch_1",
-            graph_id="gr_1",
-            node_id="nd_build",
-            node_name="build",
-            epoch=1,
-            retries_max=2,
-            created_at=_NOW,
+    store.record_mint(
+        new_mint(
+            NewLease(
+                lease_id="lease_1",
+                chunk_id="ch_1",
+                graph_id="gr_1",
+                node_id="nd_build",
+                node_name="build",
+                epoch=1,
+                retries_max=2,
+                created_at=_NOW,
+            )
         )
     )
     store.record_binding(chunk_id="ch_1", environment_id="e1", workdir="/ws/e1", bound_at=_NOW, workspace_id="ws1")
@@ -2920,18 +2943,20 @@ def test_escalation_resumes_under_the_lease_stamps_and_carries_no_wrap_without_a
     """The raw command resumes in the configuration the lease was minted with, and an unknown
     runner dir leaves the wrapped command empty rather than absent."""
     store = _store(tmp_path)
-    store.record_lease(
-        NewLease(
-            lease_id="lease_1",
-            chunk_id="ch_1",
-            graph_id="gr_1",
-            node_id="nd_build",
-            node_name="build",
-            epoch=1,
-            retries_max=2,
-            created_at=_NOW,
-            resolved_model="stamped-model",
-            resolved_effort="high",
+    store.record_mint(
+        new_mint(
+            NewLease(
+                lease_id="lease_1",
+                chunk_id="ch_1",
+                graph_id="gr_1",
+                node_id="nd_build",
+                node_name="build",
+                epoch=1,
+                retries_max=2,
+                created_at=_NOW,
+                resolved_model="stamped-model",
+                resolved_effort="high",
+            )
         )
     )
     store.record_spawn(
@@ -2973,16 +2998,18 @@ def test_an_exhausted_failure_defers_on_the_brake_it_was_handed_over_the_stores(
     """A brake handed to the attempt decides alone; only without one does the store's fresh
     local brake decide whether the exhausted escalation waits."""
     store = _store(tmp_path)
-    store.record_lease(
-        NewLease(
-            lease_id="lease_1",
-            chunk_id="ch_1",
-            graph_id="gr_1",
-            node_id="nd_build",
-            node_name="build",
-            epoch=1,
-            retries_max=0,
-            created_at=_NOW,
+    store.record_mint(
+        new_mint(
+            NewLease(
+                lease_id="lease_1",
+                chunk_id="ch_1",
+                graph_id="gr_1",
+                node_id="nd_build",
+                node_name="build",
+                epoch=1,
+                retries_max=0,
+                created_at=_NOW,
+            )
         )
     )
     store.record_binding(chunk_id="ch_1", environment_id="e1", workdir="/ws/e1", bound_at=_NOW, workspace_id="ws1")
@@ -3020,16 +3047,18 @@ def test_escalation_without_a_session_composes_neither_takeover_command(tmp_path
     composes no takeover command at all — with nothing to resume there is no raw command
     to build, so nothing for the wrapped verb to wrap either."""
     store = _store(tmp_path)
-    store.record_lease(
-        NewLease(
-            lease_id="lease_1",
-            chunk_id="ch_1",
-            graph_id="gr_1",
-            node_id="nd_build",
-            node_name="build",
-            epoch=1,
-            retries_max=2,
-            created_at=_NOW,
+    store.record_mint(
+        new_mint(
+            NewLease(
+                lease_id="lease_1",
+                chunk_id="ch_1",
+                graph_id="gr_1",
+                node_id="nd_build",
+                node_name="build",
+                epoch=1,
+                retries_max=2,
+                created_at=_NOW,
+            )
         )
     )
     store.record_binding(chunk_id="ch_1", environment_id="e1", workdir="/ws/e1", bound_at=_NOW, workspace_id="ws1")
@@ -3063,16 +3092,18 @@ def test_escalation_with_a_session_but_no_binding_composes_neither_takeover_comm
     neither command and raises nothing: `and bindings` guards the `IndexError`. The
     *released*-binding shape is its own case below."""
     store = _store(tmp_path)
-    store.record_lease(
-        NewLease(
-            lease_id="lease_1",
-            chunk_id="ch_1",
-            graph_id="gr_1",
-            node_id="nd_build",
-            node_name="build",
-            epoch=1,
-            retries_max=2,
-            created_at=_NOW,
+    store.record_mint(
+        new_mint(
+            NewLease(
+                lease_id="lease_1",
+                chunk_id="ch_1",
+                graph_id="gr_1",
+                node_id="nd_build",
+                node_name="build",
+                epoch=1,
+                retries_max=2,
+                created_at=_NOW,
+            )
         )
     )
     store.record_spawn(
@@ -3112,16 +3143,18 @@ def test_escalation_after_its_bindings_were_released_still_escalates(tmp_path: P
     and then *released*, as `abandon` releases it. It escalates anyway — the chunk still needs a
     human — and warns which of `humans/escalation.md`'s origins produced a command-less escalation."""
     store = _store(tmp_path)
-    store.record_lease(
-        NewLease(
-            lease_id="lease_1",
-            chunk_id="ch_1",
-            graph_id="gr_1",
-            node_id="nd_build",
-            node_name="build",
-            epoch=1,
-            retries_max=2,
-            created_at=_NOW,
+    store.record_mint(
+        new_mint(
+            NewLease(
+                lease_id="lease_1",
+                chunk_id="ch_1",
+                graph_id="gr_1",
+                node_id="nd_build",
+                node_name="build",
+                epoch=1,
+                retries_max=2,
+                created_at=_NOW,
+            )
         )
     )
     store.record_spawn(
@@ -3361,7 +3394,7 @@ def test_cost_cap_never_kills_a_live_worker(tmp_path: Path):
 
     # ADVANCE never even looked at this lease — still running, no judgement, no park.
     assert harness.judged == []
-    assert store.pending_outbound() == []
+    assert [b.kind for b in store.pending_outbound()] == ["lease.minted"]
     assert store.active_lease_for_chunk("ch_1") is not None
     assert probe.killed == []
 

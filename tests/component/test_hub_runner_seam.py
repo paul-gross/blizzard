@@ -43,6 +43,7 @@ from tests.support.runner_fakes import (
     serving,
     single_workspace,
 )
+from tests.support.runner_mint import new_mint
 from tests.support.scaffolding import HubHarness, build_hub, pointer_token, report_lease
 
 _POINTER = {"source": "default", "ref": "38"}
@@ -155,16 +156,18 @@ def test_detach_at_the_real_hub_is_learned_by_a_real_pull_tick(tmp_path: Path) -
     # would hold, stamped off the same clock the hub uses (`bzh:facts-not-status`).
     seed_time = hub.clock.now()
     store = make_store(f"sqlite:///{tmp_path / 'runner.db'}")
-    store.record_lease(
-        NewLease(
-            lease_id="lease_1",
-            chunk_id=chunk_id,
-            graph_id=envelope["graph_id"],
-            node_id=node["node_id"],
-            node_name=node["node_name"],
-            epoch=1,
-            retries_max=2,
-            created_at=seed_time,
+    store.record_mint(
+        new_mint(
+            NewLease(
+                lease_id="lease_1",
+                chunk_id=chunk_id,
+                graph_id=envelope["graph_id"],
+                node_id=node["node_id"],
+                node_name=node["node_name"],
+                epoch=1,
+                retries_max=2,
+                created_at=seed_time,
+            )
         )
     )
     store.record_spawn(
@@ -222,16 +225,18 @@ def test_stop_at_the_real_hub_is_learned_by_a_real_pull_tick(tmp_path: Path) -> 
 
     seed_time = hub.clock.now()
     store = make_store(f"sqlite:///{tmp_path / 'runner.db'}")
-    store.record_lease(
-        NewLease(
-            lease_id="lease_1",
-            chunk_id=chunk_id,
-            graph_id=envelope["graph_id"],
-            node_id=node["node_id"],
-            node_name=node["node_name"],
-            epoch=1,
-            retries_max=2,
-            created_at=seed_time,
+    store.record_mint(
+        new_mint(
+            NewLease(
+                lease_id="lease_1",
+                chunk_id=chunk_id,
+                graph_id=envelope["graph_id"],
+                node_id=node["node_id"],
+                node_name=node["node_name"],
+                epoch=1,
+                retries_max=2,
+                created_at=seed_time,
+            )
         )
     )
     store.record_spawn(

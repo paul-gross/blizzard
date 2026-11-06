@@ -12,6 +12,7 @@ from blizzard.runner.harness.identity import CLAUDE_CODE_HARNESS_ID, SessionRefe
 from blizzard.runner.harness.usage import UsageSample
 from blizzard.runner.leases.model import NewLease
 from tests.support.runner_fakes import make_store, record_usage
+from tests.support.runner_mint import new_mint
 
 _NOW = datetime(2026, 9, 11, 12, 0, tzinfo=UTC)
 
@@ -23,17 +24,19 @@ def test_equal_raw_session_ids_are_isolated_across_runner_session_repositories(t
 
     for ordinal, (lease_id, session) in enumerate((("lease_a", claude), ("lease_b", other)), start=1):
         at = _NOW + timedelta(minutes=ordinal)
-        store.record_lease(
-            NewLease(
-                lease_id=lease_id,
-                chunk_id="chunk_1",
-                graph_id="graph_1",
-                node_id="node_1",
-                node_name="build",
-                epoch=ordinal,
-                retries_max=1,
-                created_at=at,
-                session_name="shared-pool",
+        store.record_mint(
+            new_mint(
+                NewLease(
+                    lease_id=lease_id,
+                    chunk_id="chunk_1",
+                    graph_id="graph_1",
+                    node_id="node_1",
+                    node_name="build",
+                    epoch=ordinal,
+                    retries_max=1,
+                    created_at=at,
+                    session_name="shared-pool",
+                )
             )
         )
         store.record_spawn(
@@ -118,18 +121,20 @@ def test_transcript_segment_freezes_the_leases_own_resolved_model_and_effort(tmp
     """The pair is read off `lease_context` at segment open, exactly as
     `harness_id` already is — not re-resolved at send time."""
     store = make_store(f"sqlite:///{tmp_path / 'runner.db'}")
-    store.record_lease(
-        NewLease(
-            lease_id="lease_a",
-            chunk_id="chunk_1",
-            graph_id="graph_1",
-            node_id="node_1",
-            node_name="build",
-            epoch=1,
-            retries_max=1,
-            created_at=_NOW,
-            resolved_model="claude-sonnet-5",
-            resolved_effort="high",
+    store.record_mint(
+        new_mint(
+            NewLease(
+                lease_id="lease_a",
+                chunk_id="chunk_1",
+                graph_id="graph_1",
+                node_id="node_1",
+                node_name="build",
+                epoch=1,
+                retries_max=1,
+                created_at=_NOW,
+                resolved_model="claude-sonnet-5",
+                resolved_effort="high",
+            )
         )
     )
 
@@ -150,16 +155,18 @@ def test_transcript_segment_freezes_the_leases_own_resolved_model_and_effort(tmp
 
 def test_transcript_segment_leaves_model_and_effort_unset_when_unresolved(tmp_path: Path) -> None:
     store = make_store(f"sqlite:///{tmp_path / 'runner.db'}")
-    store.record_lease(
-        NewLease(
-            lease_id="lease_a",
-            chunk_id="chunk_1",
-            graph_id="graph_1",
-            node_id="node_1",
-            node_name="build",
-            epoch=1,
-            retries_max=1,
-            created_at=_NOW,
+    store.record_mint(
+        new_mint(
+            NewLease(
+                lease_id="lease_a",
+                chunk_id="chunk_1",
+                graph_id="graph_1",
+                node_id="node_1",
+                node_name="build",
+                epoch=1,
+                retries_max=1,
+                created_at=_NOW,
+            )
         )
     )
 
@@ -179,16 +186,18 @@ def test_transcript_segment_leaves_model_and_effort_unset_when_unresolved(tmp_pa
 
 def test_identified_spawn_freezes_the_spawn_cwd_onto_its_segment(tmp_path: Path) -> None:
     store = make_store(f"sqlite:///{tmp_path / 'runner.db'}")
-    store.record_lease(
-        NewLease(
-            lease_id="lease_a",
-            chunk_id="chunk_1",
-            graph_id="graph_1",
-            node_id="node_1",
-            node_name="build",
-            epoch=1,
-            retries_max=1,
-            created_at=_NOW,
+    store.record_mint(
+        new_mint(
+            NewLease(
+                lease_id="lease_a",
+                chunk_id="chunk_1",
+                graph_id="graph_1",
+                node_id="node_1",
+                node_name="build",
+                epoch=1,
+                retries_max=1,
+                created_at=_NOW,
+            )
         )
     )
     store.record_provisional_spawn(

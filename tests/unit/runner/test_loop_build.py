@@ -75,6 +75,7 @@ from tests.support.runner_fakes import (
     make_stores,
     migrated_store_at,
 )
+from tests.support.runner_mint import new_mint
 from tests.support.scaffolding import InMemoryTraceExporter
 
 _NO_HARNESSES = HarnessRegistry({})
@@ -126,16 +127,18 @@ def _seeded_running_lease_store(tmp_path: Path):
     """A store holding one live, session-bearing build lease — the shape both restart-resume
     hooks mark, seeded exactly as ``tests/unit/runner/loop/test_restart_resume.py`` does."""
     store = make_store(f"sqlite:///{tmp_path / 'runner.db'}")
-    store.record_lease(
-        NewLease(
-            lease_id="lease_1",
-            chunk_id="ch_1",
-            graph_id="gr_1",
-            node_id="nd_build",
-            node_name="build",
-            epoch=1,
-            retries_max=2,
-            created_at=_NOW,
+    store.record_mint(
+        new_mint(
+            NewLease(
+                lease_id="lease_1",
+                chunk_id="ch_1",
+                graph_id="gr_1",
+                node_id="nd_build",
+                node_name="build",
+                epoch=1,
+                retries_max=2,
+                created_at=_NOW,
+            )
         )
     )
     store.record_spawn(
@@ -978,16 +981,18 @@ def test_hosted_app_composes_the_escalation_takeover_command_over_the_runner_roo
     store.record_runner_identity(RunnerIdentity(FIXTURE_RUNNER_ID, "runner-local", _NOW))
     hosted = build_hosted_app(config)
     try:
-        store.record_lease(
-            NewLease(
-                lease_id="lease_1",
-                chunk_id="ch_1",
-                graph_id="gr_1",
-                node_id="nd_build",
-                node_name="build",
-                epoch=1,
-                retries_max=2,
-                created_at=_NOW,
+        store.record_mint(
+            new_mint(
+                NewLease(
+                    lease_id="lease_1",
+                    chunk_id="ch_1",
+                    graph_id="gr_1",
+                    node_id="nd_build",
+                    node_name="build",
+                    epoch=1,
+                    retries_max=2,
+                    created_at=_NOW,
+                )
             )
         )
         store.record_spawn(

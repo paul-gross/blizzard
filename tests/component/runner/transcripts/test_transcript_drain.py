@@ -38,6 +38,7 @@ from tests.support.runner_fakes import (
     make_context,
     make_store,
 )
+from tests.support.runner_mint import new_mint
 
 _NOW = datetime(2026, 7, 13, 12, 0, 0, tzinfo=UTC)
 
@@ -78,18 +79,20 @@ def _ctx(hub: FakeHub, *, clock: FixedClock | None = None, record_max_bytes: int
 
 def _spawn_one_segment(ctx: LoopContext) -> str:
     ctx.stores.environments.record_binding(chunk_id="ch_1", environment_id="e1", workdir="/ws/e1", bound_at=_NOW)
-    ctx.stores.lease_record.record_lease(
-        NewLease(
-            lease_id="lease_1",
-            chunk_id="ch_1",
-            graph_id="gr_1",
-            node_id="nd_build",
-            node_name="build",
-            epoch=1,
-            retries_max=2,
-            created_at=_NOW,
-            resolved_model="claude-sonnet-5",
-            resolved_effort="high",
+    ctx.stores.lease_record.record_mint(
+        new_mint(
+            NewLease(
+                lease_id="lease_1",
+                chunk_id="ch_1",
+                graph_id="gr_1",
+                node_id="nd_build",
+                node_name="build",
+                epoch=1,
+                retries_max=2,
+                created_at=_NOW,
+                resolved_model="claude-sonnet-5",
+                resolved_effort="high",
+            )
         )
     )
     ctx.stores.liveness.record_spawn(
@@ -370,8 +373,9 @@ def test_drain_surfaces_a_hub_cap_rejection_never_silently() -> None:
     assert segment is not None
     assert segment.truncated_reason == "hub_capped"
     fact_events = ctx.stores.outbound.pending_outbound()
-    assert len(fact_events) == 1
-    payload = json.loads(fact_events[0].payload)
+    assert len(fact_events) == 2
+    assert fact_events[0].kind == "lease.minted"
+    payload = json.loads(fact_events[1].payload)
     assert payload["kind"] == "transcript-truncated"
     assert payload["detail"] == {"segment_id": segment_id, "reason": "hub_capped"}
 
@@ -407,8 +411,9 @@ def test_drain_marks_a_hub_refused_record_truncated_with_one_fact() -> None:
     assert segment is not None
     assert segment.truncated_reason == "hub_refused"
     fact_events = ctx.stores.outbound.pending_outbound()
-    assert len(fact_events) == 1  # the second refusal changes nothing, so sends no second fact
-    payload = json.loads(fact_events[0].payload)
+    assert len(fact_events) == 2  # the second refusal changes nothing, so sends no second fact
+    assert fact_events[0].kind == "lease.minted"
+    payload = json.loads(fact_events[1].payload)
     assert payload["kind"] == "transcript-truncated"
     assert payload["detail"] == {"segment_id": segment_id, "reason": "hub_refused"}
 
@@ -454,8 +459,9 @@ def test_drain_marks_a_hub_cap_rejection_on_replay_after_a_lost_ack() -> None:
     assert segment is not None
     assert segment.truncated_reason == "hub_capped"
     fact_events = ctx.stores.outbound.pending_outbound()
-    assert len(fact_events) == 1
-    assert json.loads(fact_events[0].payload)["kind"] == "transcript-truncated"
+    assert len(fact_events) == 2
+    assert fact_events[0].kind == "lease.minted"
+    assert json.loads(fact_events[1].payload)["kind"] == "transcript-truncated"
 
 
 def test_drain_acks_an_already_applied_record_without_redelivering() -> None:
@@ -856,16 +862,18 @@ def test_deliver_batch_reads_final_marker_segments_through_one_batched_call() ->
     ctx = _ctx(hub)
     segment_1 = _spawn_one_segment(ctx)
     ctx.stores.environments.record_binding(chunk_id="ch_2", environment_id="e2", workdir="/ws/e2", bound_at=_NOW)
-    ctx.stores.lease_record.record_lease(
-        NewLease(
-            lease_id="lease_2",
-            chunk_id="ch_2",
-            graph_id="gr_1",
-            node_id="nd_build",
-            node_name="build",
-            epoch=1,
-            retries_max=2,
-            created_at=_NOW,
+    ctx.stores.lease_record.record_mint(
+        new_mint(
+            NewLease(
+                lease_id="lease_2",
+                chunk_id="ch_2",
+                graph_id="gr_1",
+                node_id="nd_build",
+                node_name="build",
+                epoch=1,
+                retries_max=2,
+                created_at=_NOW,
+            )
         )
     )
     ctx.stores.liveness.record_spawn(

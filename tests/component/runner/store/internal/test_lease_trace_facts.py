@@ -31,6 +31,7 @@ from blizzard.runner.tracing.facts import (
 from blizzard.runner.usage.repository import InvocationCost
 from tests.support import runner_trace_fixtures as fx
 from tests.support.runner_fakes import SqlAlchemyRunnerStore, make_store
+from tests.support.runner_mint import new_mint
 from tests.support.scaffolding import capture_statements, count_queries, offending_index_scans
 
 _NODE_ID = "g1-build"
@@ -63,24 +64,26 @@ def _session(lease_id: str, generation: int) -> SessionReference:
 def _write_lease(store: SqlAlchemyRunnerStore, lease_id: str, chunk_id: str, *, close: bool = True) -> None:
     """One lease's life through every writer the trace facts are read from."""
     keys = {"lease_id": lease_id, "chunk_id": chunk_id}
-    store.record_lease(
-        NewLease(
-            lease_id=lease_id,
-            chunk_id=chunk_id,
-            graph_id="g1",
-            node_id=_NODE_ID,
-            node_name="build",
-            epoch=fx.EPOCH,
-            retries_max=2,
-            created_at=fx.at(0),
-            session_name="builder",
-            resolved_model="opus",
-            resolved_effort="high",
-            graph_name="flow",
-            work_refs=(
-                WorkRefStamp(source="github", ref="paul-gross/blizzard#745", label="blizzard#745"),
-                WorkRefStamp(source="unconfigured", ref="x-1"),
-            ),
+    store.record_mint(
+        new_mint(
+            NewLease(
+                lease_id=lease_id,
+                chunk_id=chunk_id,
+                graph_id="g1",
+                node_id=_NODE_ID,
+                node_name="build",
+                epoch=fx.EPOCH,
+                retries_max=2,
+                created_at=fx.at(0),
+                session_name="builder",
+                resolved_model="opus",
+                resolved_effort="high",
+                graph_name="flow",
+                work_refs=(
+                    WorkRefStamp(source="github", ref="paul-gross/blizzard#745", label="blizzard#745"),
+                    WorkRefStamp(source="unconfigured", ref="x-1"),
+                ),
+            )
         )
     )
     store.record_spawn(

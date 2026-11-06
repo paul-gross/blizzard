@@ -35,6 +35,7 @@ from tests.support.runner_fakes import (
     make_stores,
     single_workspace,
 )
+from tests.support.runner_mint import new_mint
 
 _NOW = datetime(2026, 7, 13, 12, 0, 0, tzinfo=UTC)
 _HANDLE = WorkerHandle(session_id="sess-b", pid=200, process_start_time="start-200", pgid=200)
@@ -44,17 +45,19 @@ _ALIVE = (100, "start-100")
 
 def _store(tmp_path: Path) -> SqlAlchemyRunnerStore:
     store = make_store(f"sqlite:///{tmp_path / 'runner.db'}")
-    store.record_lease(
-        NewLease(
-            lease_id="lease_1",
-            chunk_id="ch_1",
-            graph_id="gr_1",
-            node_id="nd_build",
-            node_name="build",
-            epoch=1,
-            retries_max=2,
-            session_name="main",
-            created_at=_NOW,
+    store.record_mint(
+        new_mint(
+            NewLease(
+                lease_id="lease_1",
+                chunk_id="ch_1",
+                graph_id="gr_1",
+                node_id="nd_build",
+                node_name="build",
+                epoch=1,
+                retries_max=2,
+                session_name="main",
+                created_at=_NOW,
+            )
         )
     )
     store.record_spawn("lease_1", pid=100, process_start_time="start-100", pgid=100, session=_SESSION, spawned_at=_NOW)

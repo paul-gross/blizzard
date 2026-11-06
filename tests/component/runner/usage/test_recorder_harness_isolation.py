@@ -25,6 +25,7 @@ from tests.support.runner_fakes import (
     make_store,
     single_workspace,
 )
+from tests.support.runner_mint import new_mint
 
 _NOW = datetime(2026, 9, 14, 12, 0, 0, tzinfo=UTC)
 _SHARED_SESSION_ID = "shared-usage-session"
@@ -36,16 +37,18 @@ def _usage_payloads_by_lease(store: SqlAlchemyRunnerStore):
 
 
 def _seed_lease(store: SqlAlchemyRunnerStore, *, lease_id: str, chunk_id: str, harness_id: str, pid: int) -> None:
-    store.record_lease(
-        NewLease(
-            lease_id=lease_id,
-            chunk_id=chunk_id,
-            graph_id="gr_1",
-            node_id="nd_build",
-            node_name="build",
-            epoch=1,
-            retries_max=2,
-            created_at=_NOW,
+    store.record_mint(
+        new_mint(
+            NewLease(
+                lease_id=lease_id,
+                chunk_id=chunk_id,
+                graph_id="gr_1",
+                node_id="nd_build",
+                node_name="build",
+                epoch=1,
+                retries_max=2,
+                created_at=_NOW,
+            )
         )
     )
     store.record_spawn(

@@ -37,6 +37,7 @@ from tests.support.runner_fakes import (
     runner_store_errors,
     serving,
 )
+from tests.support.runner_mint import new_mint
 from tests.support.runner_tick_engines import migrated_engine
 
 _NOW = datetime(2026, 9, 26, 12, 0, 0, tzinfo=UTC)
@@ -60,16 +61,18 @@ class _Run:
 def _seed_lease(store: SqlAlchemyRunnerStore, i: int) -> None:
     """One active, spawned, beating, bound lease whose worker pid is never in the probe: dead."""
     lease_id, chunk_id = f"lease_{i}", f"ch_{i}"
-    store.record_lease(
-        NewLease(
-            lease_id=lease_id,
-            chunk_id=chunk_id,
-            graph_id="gr_1",
-            node_id="nd_build",
-            node_name="build",
-            epoch=1,
-            retries_max=2,
-            created_at=_NOW,
+    store.record_mint(
+        new_mint(
+            NewLease(
+                lease_id=lease_id,
+                chunk_id=chunk_id,
+                graph_id="gr_1",
+                node_id="nd_build",
+                node_name="build",
+                epoch=1,
+                retries_max=2,
+                created_at=_NOW,
+            )
         )
     )
     store.record_spawn(

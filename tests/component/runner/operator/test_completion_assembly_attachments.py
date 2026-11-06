@@ -35,6 +35,7 @@ from tests.support.runner_fakes import (
     make_store,
     make_stores,
 )
+from tests.support.runner_mint import new_mint
 
 _NOW = datetime(2026, 7, 19, 12, 0, 0, tzinfo=UTC)
 _TOKEN = "the-lease-token"
@@ -52,16 +53,18 @@ def test_advance_prefers_a_real_attachment_and_falls_back_for_the_rest(tmp_path:
         config, runner_stores=make_stores(store), host_stores=make_host_stores(store), attachments=attachments
     )
 
-    store.record_lease(
-        NewLease(
-            lease_id="lease_r",
-            chunk_id="ch_1",
-            graph_id="gr_1",
-            node_id="nd_review",
-            node_name="review",
-            epoch=1,
-            retries_max=2,
-            created_at=_NOW,
+    store.record_mint(
+        new_mint(
+            NewLease(
+                lease_id="lease_r",
+                chunk_id="ch_1",
+                graph_id="gr_1",
+                node_id="nd_review",
+                node_name="review",
+                epoch=1,
+                retries_max=2,
+                created_at=_NOW,
+            )
         )
     )
     store.record_lease_token("lease_r", TokenHash(_TOKEN).hex, _NOW)

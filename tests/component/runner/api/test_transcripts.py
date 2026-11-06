@@ -24,6 +24,7 @@ from tests.support.runner_fakes import (
     FakeArchivedTranscriptRepository,
     SqlAlchemyRunnerStore,
 )
+from tests.support.runner_mint import new_mint
 from tests.support.scaffolding import assert_all_timestamps_utc
 from tests.support.transcripts_api import FakeTranscriptRepository, app_with_transcripts
 
@@ -42,7 +43,7 @@ def _seed_lease(store: SqlAlchemyRunnerStore, **overrides: Unpack[NewLeaseFields
         "created_at": _NOW,
     }
     fields.update(overrides)
-    store.record_lease(NewLease(**fields))
+    store.record_mint(new_mint(NewLease(**fields)))
 
 
 def test_200_with_turns_for_an_active_lease(tmp_path: Path) -> None:

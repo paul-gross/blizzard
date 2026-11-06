@@ -210,13 +210,6 @@ class LeaseRecordStore:
 
     # --- writes -------------------------------------------------------------
 
-    def record_lease(self, lease: NewLease) -> None:
-        with self._store.begin() as conn:
-            self._insert_lease(conn, lease)
-        _log.info(
-            "lease minted", lease_id=lease.lease_id, chunk_id=lease.chunk_id, node=lease.node_name, epoch=lease.epoch
-        )
-
     def record_mint(self, mint: NewMint) -> int:
         # The lease, its mint owner, its token hash and its `lease.minted` fact commit together or
         # not at all: no `kill -9` can leave a lease missing the owner or token a retry relies on.

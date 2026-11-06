@@ -23,6 +23,7 @@ from blizzard.runner.leases.model import Lease, NewLease
 from blizzard.runner.store.schema import usage_facts
 from blizzard.runner.usage.recorder import UsageRecorder
 from tests.support.runner_fakes import FIXTURE_RUNNER_ID, make_store, make_usage_recorder
+from tests.support.runner_mint import new_mint
 
 _NOW = datetime(2026, 10, 5, 12, 0, 0, tzinfo=UTC)
 _REJECTED = "harness cost figure reads below what its session already banked"
@@ -43,16 +44,18 @@ def _sample(kind: UsageKind, *, tokens: int, cost: float | None, scope: int | No
 
 def _setup(tmp_path: Path) -> tuple[UsageRecorder, EventBroker, Lease]:
     store = make_store(f"sqlite:///{tmp_path / 'runner.db'}")
-    store.record_lease(
-        NewLease(
-            lease_id="lease_1",
-            chunk_id="ch_1",
-            graph_id="gr_1",
-            node_id="nd_build",
-            node_name="build",
-            epoch=3,
-            retries_max=2,
-            created_at=_NOW,
+    store.record_mint(
+        new_mint(
+            NewLease(
+                lease_id="lease_1",
+                chunk_id="ch_1",
+                graph_id="gr_1",
+                node_id="nd_build",
+                node_name="build",
+                epoch=3,
+                retries_max=2,
+                created_at=_NOW,
+            )
         )
     )
     store.record_spawn(
@@ -147,16 +150,18 @@ def test_a_figure_below_the_banked_basis_is_persisted_costless_and_warned_once(t
 
 def test_a_sessionless_lease_records_the_samples_own_identity_unstamped(tmp_path: Path) -> None:
     store = make_store(f"sqlite:///{tmp_path / 'runner.db'}")
-    store.record_lease(
-        NewLease(
-            lease_id="lease_1",
-            chunk_id="ch_1",
-            graph_id="gr_1",
-            node_id="nd_build",
-            node_name="build",
-            epoch=1,
-            retries_max=2,
-            created_at=_NOW,
+    store.record_mint(
+        new_mint(
+            NewLease(
+                lease_id="lease_1",
+                chunk_id="ch_1",
+                graph_id="gr_1",
+                node_id="nd_build",
+                node_name="build",
+                epoch=1,
+                retries_max=2,
+                created_at=_NOW,
+            )
         )
     )
     lease = store.active_lease("lease_1")

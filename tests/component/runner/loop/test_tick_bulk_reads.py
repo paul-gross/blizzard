@@ -49,6 +49,7 @@ from tests.support.runner_fakes import (
     serving,
     single_workspace,
 )
+from tests.support.runner_mint import new_mint
 from tests.support.runner_tick_engines import migrated_engine
 
 _NOW = datetime(2026, 9, 26, 12, 0, 0, tzinfo=UTC)
@@ -105,16 +106,18 @@ def test_liveness_facts_statement_count_is_flat_across_id_set_sizes(tmp_path: Pa
 
 
 def _mint(store: SqlAlchemyRunnerStore, lease_id: str, chunk_id: str) -> None:
-    store.record_lease(
-        NewLease(
-            lease_id=lease_id,
-            chunk_id=chunk_id,
-            graph_id="gr_1",
-            node_id="nd_build",
-            node_name="build",
-            epoch=1,
-            retries_max=2,
-            created_at=_NOW,
+    store.record_mint(
+        new_mint(
+            NewLease(
+                lease_id=lease_id,
+                chunk_id=chunk_id,
+                graph_id="gr_1",
+                node_id="nd_build",
+                node_name="build",
+                epoch=1,
+                retries_max=2,
+                created_at=_NOW,
+            )
         )
     )
 
@@ -261,16 +264,18 @@ def _seed_steady_state_lease(store: SqlAlchemyRunnerStore, i: int, *, at: dateti
     statements regardless of i."""
     lease_id, chunk_id, session_id = f"lease_{i}", f"ch_{i}", f"sess-{i}"
     session = SessionReference(CLAUDE_CODE_HARNESS_ID, session_id)
-    store.record_lease(
-        NewLease(
-            lease_id=lease_id,
-            chunk_id=chunk_id,
-            graph_id="gr_1",
-            node_id="nd_build",
-            node_name="build",
-            epoch=1,
-            retries_max=2,
-            created_at=at,
+    store.record_mint(
+        new_mint(
+            NewLease(
+                lease_id=lease_id,
+                chunk_id=chunk_id,
+                graph_id="gr_1",
+                node_id="nd_build",
+                node_name="build",
+                epoch=1,
+                retries_max=2,
+                created_at=at,
+            )
         )
     )
     store.record_spawn(lease_id, pid=1000 + i, process_start_time=f"t{i}", session=session, spawned_at=at)
@@ -398,16 +403,18 @@ def _status_service(spawn_executor: Executor, store: SqlAlchemyRunnerStore) -> R
 
 def _seed_escalated_lease(store: SqlAlchemyRunnerStore, i: int, *, at: datetime) -> None:
     lease_id, chunk_id, session_id = f"lease_{i}", f"ch_{i}", f"sess-{i}"
-    store.record_lease(
-        NewLease(
-            lease_id=lease_id,
-            chunk_id=chunk_id,
-            graph_id="gr_1",
-            node_id="nd_build",
-            node_name="build",
-            epoch=1,
-            retries_max=2,
-            created_at=at,
+    store.record_mint(
+        new_mint(
+            NewLease(
+                lease_id=lease_id,
+                chunk_id=chunk_id,
+                graph_id="gr_1",
+                node_id="nd_build",
+                node_name="build",
+                epoch=1,
+                retries_max=2,
+                created_at=at,
+            )
         )
     )
     store.record_spawn(

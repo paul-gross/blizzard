@@ -9,7 +9,7 @@ from datetime import datetime
 from typing import Protocol
 
 from blizzard.foundation.roles import domain_model
-from blizzard.runner.leases.model import ClosedLease, Lease, NewLease, NewMint
+from blizzard.runner.leases.model import ClosedLease, Lease, NewMint
 
 
 @domain_model
@@ -111,10 +111,6 @@ class IReadChunkLeaseRepository(IReadLeaseRecordRepository, Protocol):
 
 class IWriteLeaseRecordRepository(IReadChunkLeaseRepository, Protocol):
     """Read-write lease-identity store — held only by the domain (the loop steps)."""
-
-    def record_lease(self, lease: NewLease) -> None:
-        """Persist a minted lease and its node context, atomically."""
-        ...
 
     def record_mint(self, mint: NewMint) -> int:
         """Persist a lease mint whole, in one transaction: the lease and its context, the mint owner

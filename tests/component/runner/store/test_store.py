@@ -15,6 +15,7 @@ from blizzard.runner.harness.identity import CLAUDE_CODE_HARNESS_ID, SessionRefe
 from blizzard.runner.leases.model import NewLease
 from blizzard.runner.store.schema import external_usage_samples, heartbeats
 from tests.support.runner_fakes import FIXTURE_RUNNER_ID, SqlAlchemyRunnerStore
+from tests.support.runner_mint import new_mint
 from tests.support.runner_store import (
     _NOW,  # pyright: ignore[reportPrivateUsage]
     _mint,  # pyright: ignore[reportPrivateUsage]
@@ -55,16 +56,18 @@ def test_latest_session_returns_most_recent_session_bearing_lease(tmp_path: Path
         spawned_at=_NOW,
     )
 
-    store.record_lease(
-        NewLease(
-            lease_id="lease_2",
-            chunk_id="ch_1",
-            graph_id="gr_1",
-            node_id="nd_review",
-            node_name="review",
-            epoch=2,
-            retries_max=2,
-            created_at=_NOW + timedelta(minutes=5),
+    store.record_mint(
+        new_mint(
+            NewLease(
+                lease_id="lease_2",
+                chunk_id="ch_1",
+                graph_id="gr_1",
+                node_id="nd_review",
+                node_name="review",
+                epoch=2,
+                retries_max=2,
+                created_at=_NOW + timedelta(minutes=5),
+            )
         )
     )
     store.record_spawn(
@@ -142,16 +145,18 @@ def test_latest_session_breaks_created_at_ties_by_lease_id(tmp_path: Path):
         spawned_at=_NOW,
     )
 
-    store.record_lease(
-        NewLease(
-            lease_id="lease_2",
-            chunk_id="ch_1",
-            graph_id="gr_1",
-            node_id="nd_build",
-            node_name="build",
-            epoch=2,
-            retries_max=2,
-            created_at=_NOW,
+    store.record_mint(
+        new_mint(
+            NewLease(
+                lease_id="lease_2",
+                chunk_id="ch_1",
+                graph_id="gr_1",
+                node_id="nd_build",
+                node_name="build",
+                epoch=2,
+                retries_max=2,
+                created_at=_NOW,
+            )
         )
     )
     store.record_spawn(

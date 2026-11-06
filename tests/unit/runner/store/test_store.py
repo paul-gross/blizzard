@@ -403,10 +403,9 @@ def test_record_usage_lands_fact_and_buffers_outbound(tmp_path: Path):
     assert totals.cost_usd == 1.5
     assert totals.cost_partial is False
     pending = store.pending_outbound()
-    assert len(pending) == 1
-    assert pending[0].kind == "usage.recorded"
-    assert pending[0].chunk_id == "ch_1"
-    assert pending[0].lease_id == "lease_1"
+    assert [f.kind for f in pending] == ["lease.minted", "usage.recorded"]
+    assert pending[1].chunk_id == "ch_1"
+    assert pending[1].lease_id == "lease_1"
 
 
 def test_record_usage_stamps_the_samples_own_harness_identity_onto_the_outbound_payload(tmp_path: Path):
@@ -425,7 +424,7 @@ def test_record_usage_stamps_the_samples_own_harness_identity_onto_the_outbound_
         sample=sample,
         recorded_at=_NOW,
     )
-    payload = json.loads(store.pending_outbound()[0].payload)
+    payload = json.loads(store.pending_outbound()[1].payload)
     assert payload["harness_id"] == "claude_code"
     assert payload["harness_version"] == "1.2.3"
 
@@ -445,7 +444,7 @@ def test_record_usage_with_no_stamped_harness_identity_reads_back_null(tmp_path:
         sample=_sample(),
         recorded_at=_NOW,
     )
-    payload = json.loads(store.pending_outbound()[0].payload)
+    payload = json.loads(store.pending_outbound()[1].payload)
     assert payload["harness_id"] is None
     assert payload["harness_version"] is None
 
@@ -466,7 +465,7 @@ def test_record_usage_carries_an_estimate_on_the_payload_and_into_the_window(tmp
         sample=sample,
         recorded_at=_NOW,
     )
-    payload = json.loads(store.pending_outbound()[0].payload)
+    payload = json.loads(store.pending_outbound()[1].payload)
     assert payload["cost_usd"] is None
     assert payload["estimated_cost_usd"] == pytest.approx(0.0308)
     totals = store.usage_since(_NOW)
@@ -491,7 +490,7 @@ def test_record_usage_persists_the_handed_cost_verbatim(tmp_path: Path):
         cost=InvocationCost(cost_usd=0.75, estimated_cost_usd=None),
         recorded_at=_NOW,
     )
-    payload = json.loads(store.pending_outbound()[0].payload)
+    payload = json.loads(store.pending_outbound()[1].payload)
     assert payload["cost_usd"] == 0.75
     assert payload["estimated_cost_usd"] is None
     assert store.usage_since(_NOW).cost_usd == 0.75
@@ -523,7 +522,7 @@ def test_record_usage_is_idempotent_per_lease_generation_kind(tmp_path: Path):
     )
     totals = store.usage_since(_NOW)
     assert totals.input_tokens == 10  # not doubled
-    assert len(store.pending_outbound()) == 1  # not buffered twice
+    assert [f.kind for f in store.pending_outbound()] == ["lease.minted", "usage.recorded"]  # not buffered twice
 
 
 def test_record_usage_appends_a_new_row_for_a_new_generation(tmp_path: Path):
@@ -552,7 +551,7 @@ def test_record_usage_appends_a_new_row_for_a_new_generation(tmp_path: Path):
     )
     totals = store.usage_since(_NOW)
     assert totals.input_tokens == 20  # both rows summed
-    assert len(store.pending_outbound()) == 2
+    assert [f.kind for f in store.pending_outbound()] == ["lease.minted", "usage.recorded", "usage.recorded"]
 
 
 def test_usage_since_flags_partial_on_absent_cost(tmp_path: Path):
@@ -599,13 +598,6 @@ def test_lease_ids_for_chunk_spans_active_and_closed(tmp_path: Path):
     _mint(store, lease="lease_2", epoch=2)
     store.record_closure(lease_id="lease_1", chunk_id="ch_1", node_id="nd_build", reason="reaped", closed_at=_NOW)
     assert sorted(store.lease_ids_for_chunk("ch_1")) == ["lease_1", "lease_2"]
-
-
-def test_lease_token_hash_absent_for_a_lease_never_minted_one(tmp_path: Path):
-    # Never minted here (e.g. a lease from before this revision).
-    store = _store(tmp_path)
-    _mint(store)
-    assert store.lease_token_hash("lease_1") is None
 
 
 def test_lease_token_hash_round_trips_what_was_recorded(tmp_path: Path):
@@ -1215,7 +1207,7 @@ def test_transcript_outbound_buffer_is_fifo_ackable_and_its_own_sequence(tmp_pat
     store.ack_transcript_outbound(t1, acked_at=_NOW)
     assert [d.seq for d in store.pending_transcript_outbound()] == [t2]
     # The fact lane's own buffer is untouched by the transcript lane's ack.
-    assert len(store.pending_outbound()) == 1
+    assert len(store.pending_outbound()) == 2
 
     engine = sa.create_engine(f"sqlite:///{tmp_path / 'runner.db'}")
     with engine.connect() as conn:
@@ -1343,7 +1335,7 @@ def test_record_closure_finalizes_every_open_segment_and_marks_it_atomically(tmp
     assert {d.segment_id for d in pending} == segment_ids
     assert all(d.final for d in pending)
     # The fact lane's own buffer carries no marker — structural separation.
-    assert store.pending_outbound() == []
+    assert [f.kind for f in store.pending_outbound()] == ["lease.minted"]
 
 
 def test_record_closure_is_a_no_op_for_a_lease_with_no_segments(tmp_path: Path):

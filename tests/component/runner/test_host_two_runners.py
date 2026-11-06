@@ -37,6 +37,7 @@ from blizzard.runner.tracing.received_export import build_received_telemetry_exp
 from tests.support import claude_code_telemetry
 from tests.support.host_files import host_config_of
 from tests.support.runner_fakes import REGISTERED_AT, FakeHub, migrated_store_at
+from tests.support.runner_mint import new_mint
 
 _ENDPOINT = {"OTEL_EXPORTER_OTLP_ENDPOINT": "http://127.0.0.1:4318"}
 _RUNNERS = ("rn_a", "rn_b")
@@ -110,16 +111,18 @@ def _register_with_a_lease(runner: RunnerProcess) -> None:
     identity = RunnerIdentity(runner.runner_id, f"name-{runner.runner_id}", REGISTERED_AT)
     runner.stores.identity.record_runner_identity(identity)
     runner.identity.hold(identity)
-    runner.stores.lease_record.record_lease(
-        NewLease(
-            lease_id=f"lease_{runner.runner_id}",
-            chunk_id=f"ch_{runner.runner_id}",
-            graph_id="gr_1",
-            node_id="nd_build",
-            node_name="build",
-            epoch=1,
-            retries_max=2,
-            created_at=REGISTERED_AT,
+    runner.stores.lease_record.record_mint(
+        new_mint(
+            NewLease(
+                lease_id=f"lease_{runner.runner_id}",
+                chunk_id=f"ch_{runner.runner_id}",
+                graph_id="gr_1",
+                node_id="nd_build",
+                node_name="build",
+                epoch=1,
+                retries_max=2,
+                created_at=REGISTERED_AT,
+            )
         )
     )
     runner.stores.tokens.record_lease_token(f"lease_{runner.runner_id}", TokenHash(runner.runner_id).hex, REGISTERED_AT)
@@ -235,16 +238,18 @@ def test_a_pre_upgrade_flat_entry_is_removed_only_when_the_sweeping_runner_holds
         flat.mkdir(exist_ok=True)
         (flat / "lease_never_held").mkdir()
         (flat / "lease_closed_here").mkdir()
-        first.stores.lease_record.record_lease(
-            NewLease(
-                lease_id="lease_closed_here",
-                chunk_id="ch_1",
-                graph_id="gr_1",
-                node_id="nd_build",
-                node_name="build",
-                epoch=1,
-                retries_max=2,
-                created_at=REGISTERED_AT,
+        first.stores.lease_record.record_mint(
+            new_mint(
+                NewLease(
+                    lease_id="lease_closed_here",
+                    chunk_id="ch_1",
+                    graph_id="gr_1",
+                    node_id="nd_build",
+                    node_name="build",
+                    epoch=1,
+                    retries_max=2,
+                    created_at=REGISTERED_AT,
+                )
             )
         )
         first.stores.lease_record.record_closure(

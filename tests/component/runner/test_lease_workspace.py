@@ -40,6 +40,7 @@ from tests.support.runner_fakes import (
     make_envelope,
     make_store,
 )
+from tests.support.runner_mint import new_mint
 
 _NOW = datetime(2026, 7, 13, 12, 0, 0, tzinfo=UTC)
 
@@ -102,16 +103,18 @@ def _bind_in_b(store: SqlAlchemyRunnerStore, chunk_id: str = "ch_1") -> None:
 
 def _seed_lease(store: SqlAlchemyRunnerStore) -> None:
     """A build lease spawned into ``ws_b``'s ``e1``."""
-    store.record_lease(
-        NewLease(
-            lease_id="lease_1",
-            chunk_id="ch_1",
-            graph_id="gr_1",
-            node_id="nd_build",
-            node_name="build",
-            epoch=1,
-            retries_max=2,
-            created_at=_NOW,
+    store.record_mint(
+        new_mint(
+            NewLease(
+                lease_id="lease_1",
+                chunk_id="ch_1",
+                graph_id="gr_1",
+                node_id="nd_build",
+                node_name="build",
+                epoch=1,
+                retries_max=2,
+                created_at=_NOW,
+            )
         )
     )
     store.record_spawn(

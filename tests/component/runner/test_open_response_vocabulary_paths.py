@@ -41,6 +41,7 @@ from tests.support.runner_fakes import (
     make_store,
     no_retry_clock,
 )
+from tests.support.runner_mint import new_mint
 
 _NOW = datetime(2026, 10, 21, 12, 0, 0, tzinfo=UTC)
 
@@ -105,17 +106,19 @@ def test_a_request_carrying_an_unknown_value_is_refused_with_422() -> None:
 
 
 def _seed_running_lease(store: SqlAlchemyRunnerStore) -> None:
-    store.record_lease(
-        NewLease(
-            lease_id="lease_1",
-            chunk_id="ch_1",
-            graph_id="gr_1",
-            node_id="nd_build",
-            node_name="build",
-            epoch=1,
-            retries_max=2,
-            session_name="main",
-            created_at=_NOW,
+    store.record_mint(
+        new_mint(
+            NewLease(
+                lease_id="lease_1",
+                chunk_id="ch_1",
+                graph_id="gr_1",
+                node_id="nd_build",
+                node_name="build",
+                epoch=1,
+                retries_max=2,
+                session_name="main",
+                created_at=_NOW,
+            )
         )
     )
     store.record_spawn(
