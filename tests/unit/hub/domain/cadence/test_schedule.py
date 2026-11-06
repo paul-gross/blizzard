@@ -1,6 +1,7 @@
 """The schedule module (unit tier) pinned against the cron library at each edge the due rule relies on: a moment
 exactly at the instant asked, both daylight-saving changes for a fixed-hour and an hourly expression, the
-day-of-month or day-of-week match, and the refusals of a malformed, six-field, or never-firing expression or an
+day-of-month or day-of-week match, the next several moments across both changes and a sparse expression, and the
+refusals of a malformed, six-field, or never-firing expression or an
 unknown zone."""
 
 from __future__ import annotations
@@ -118,3 +119,38 @@ def test_an_instant_between_two_moments_has_the_later_as_its_first_at_or_after()
     schedule = _schedule("0 20 * * *")
     assert schedule.first_at_or_after(_utc(6, 1, 1, micro=1)) == _utc(6, 2, 1)
     assert schedule.first_at_or_after(_utc(6, 1, 0, 59)) == _utc(6, 1, 1)
+
+
+def test_the_next_moments_are_the_count_asked_earliest_first_the_first_strictly_after_the_instant() -> None:
+    schedule = _schedule("0 20 * * *")
+    at = _utc(6, 1, 1)  # exactly 20:00 CDT on May 31
+    assert schedule.next_moments(at, 5) == tuple(_utc(6, day, 1) for day in range(2, 7))
+
+
+def test_the_next_moments_across_the_spring_forward_fire_the_skipped_moment_after_the_jump() -> None:
+    schedule = _schedule("30 2 * * *")
+    assert schedule.next_moments(_utc(3, 6, 12), 5) == (
+        _utc(3, 7, 8, 30),  # 02:30 CST
+        _utc(3, 8, 8),  # the skipped 02:30 fires at 03:00 CDT
+        _utc(3, 9, 7, 30),  # 02:30 CDT
+        _utc(3, 10, 7, 30),
+        _utc(3, 11, 7, 30),
+    )
+
+
+def test_the_next_moments_across_the_fall_back_fire_the_repeated_moment_once() -> None:
+    schedule = _schedule("30 1 * * *")
+    assert schedule.next_moments(_utc(10, 31, 12), 5) == (
+        _utc(11, 1, 6, 30),  # 01:30 CDT; the repeated 01:30 CST never fires
+        _utc(11, 2, 7, 30),
+        _utc(11, 3, 7, 30),
+        _utc(11, 4, 7, 30),
+        _utc(11, 5, 7, 30),
+    )
+
+
+def test_a_sparse_yearly_expression_still_yields_five_moments() -> None:
+    schedule = _schedule("0 12 29 2 *")  # noon on leap days only
+    moments = schedule.next_moments(_AT, 5)
+    assert [m.year for m in moments] == [2028, 2032, 2036, 2040, 2044]
+    assert all((m.month, m.day) == (2, 29) for m in moments)

@@ -3,8 +3,11 @@ import { TestBed } from '@angular/core/testing';
 import { provideRouter, Router, RouterOutlet, type Routes } from '@angular/router';
 import { QueryClient, provideTanStackQuery } from '@tanstack/angular-query-experimental';
 import { ViewportService } from 'fleet';
+import { provideFlags } from 'fleet/shell';
 import {
   OPERATOR_ME_RESPONSE,
+  gardenCadenceView,
+  gardenChoreView,
   gardenFindingView,
   gardenRoutineView,
   gardenScopeView,
@@ -14,6 +17,8 @@ import {
 } from 'fleet/testing';
 import { commands, page } from 'vitest/browser';
 
+import { hubFlagsRead } from '../core/flags.query';
+import { GardeningCadencesPage } from './cadences/gardening-cadences-page';
 import { GardeningFindingsPage } from './findings/gardening-findings-page';
 import { GardeningRoutinesPage } from './routines/gardening-routines-page';
 import { GardeningRunsPage } from './runs/gardening-runs-page';
@@ -39,16 +44,15 @@ function tokenColor(token: string): string {
 }
 
 /**
- * The three gardening sub-tabs that arrived with the five-way tab split and had no
- * sweep of their own: Scopes (`.gs-layout`), Runs (`.gr-layout`), and Findings
- * (`.gf-layout`). Each composes the same `fleet-kit-master-detail` split, its host
+ * The gardening sub-tabs that share one split and had no sweep of their own: Scopes
+ * (`.gs-layout`), Cadences (`.gc-layout`), Runs (`.gr-layout`), and Findings (`.gf-layout`). Each composes the same `fleet-kit-master-detail` split, its host
  * carrying that class, and the same mobile drill-down that Routines and
  * Proposals each carry a sweep for, so each owes the same proof
  * (`bzh:visual-change-needs-a-render`, `bzh:narrow-viewport-tier-rule`): jsdom
  * parses the media query without ever evaluating it, and gardening sits in the
  * hub's mobile bottom tab bar, so the narrow width is load-bearing.
  *
- * One file rather than three, unlike the per-page sweeps beside it, because the
+ * One file rather than one per page, unlike the per-page sweeps beside it, because the
  * claim really is one claim: the same split, the same breakpoint, the same collapse,
  * differing only in the class prefix each page scopes it under. It is driven from a
  * table so a fourth page joining the split adds a row, not a copy — and so a page
@@ -75,6 +79,18 @@ const ROUTINES = [
     default_model: ['claude-sonnet-5'],
     default_effort: 'medium',
     created_at: '2026-01-01T00:00:00Z',
+  }),
+];
+
+/** A long-named cadence beside a short one — the list row must wrap the name and rhythm rather than widen the pane. */
+const CADENCES = [
+  gardenCadenceView({ slug: 'evening', name: 'Evening sweep', chores: [gardenChoreView()] }),
+  gardenCadenceView({
+    slug: 'weekly-deep-review',
+    name: 'A weekly deep review of every scope the project keeps, named at length',
+    schedule: { cron: '30 4 * * 1', zone: 'America/Argentina/ComodRivadavia' },
+    errand_counts: { due: 2, running: 1, waiting: 4, stopped: 3 },
+    retired: true,
   }),
 ];
 
@@ -168,6 +184,14 @@ const routes: Routes = [
     ],
   },
   {
+    path: 'gardening/cadences',
+    component: GardeningCadencesPage,
+    children: [
+      { path: '', component: TestGardeningDetail },
+      { path: ':cadenceSlug', component: TestGardeningDetail },
+    ],
+  },
+  {
     path: 'gardening/runs',
     component: GardeningRunsPage,
     children: [
@@ -195,6 +219,8 @@ async function render(url: string, overrides: GardenRoutes = {}) {
     'GET /api/me': () => OPERATOR_ME_RESPONSE,
     'GET /api/scopes': () => SCOPES,
     'GET /api/routines': () => ROUTINES,
+    'GET /api/cadences': () => CADENCES,
+    'GET /api/flags': () => ({ flags: {}, overridden: [] }),
     'GET /api/graphs': () => [],
     'GET /api/runs': () => RUNS,
     'GET /api/findings': () => ({ findings: FINDINGS, next_cursor: null }),
@@ -208,6 +234,7 @@ async function render(url: string, overrides: GardenRoutes = {}) {
       provideZonelessChangeDetection(),
       provideTanStackQuery(new QueryClient({ defaultOptions: { queries: { retry: false } } })),
       provideRouter(routes),
+      provideFlags(hubFlagsRead),
     ],
   }).compileComponents();
   const viewport = TestBed.inject(ViewportService);
@@ -230,6 +257,15 @@ const PAGES = [
     left: '.gs-left',
     right: '.gs-right',
     back: '[data-testid="gardening-scopes-back"]',
+  },
+  {
+    name: 'cadences',
+    url: '/gardening/cadences',
+    selectedUrl: '/gardening/cadences/evening',
+    layout: '.gc-layout',
+    left: '.gc-left',
+    right: '.gc-right',
+    back: '[data-testid="gardening-cadences-back"]',
   },
   {
     name: 'runs',
@@ -422,7 +458,7 @@ describe('gardening sub-tab layout shell sweep (web:shell-sweep)', () => {
     }
   });
 
-  it.each([1280, 390])('routines: puts "manual" at the row\'s right and the graph beneath the name, at %ipx', async (width) => {
+  it.each([1280, 390])('routines: puts the kept routine\'s "cadence" at the row\'s right and the graph beneath the name, at %ipx', async (width) => {
     const { fixture, router, stub, viewport } = await render('/gardening/routines');
     const root = fixture.nativeElement as HTMLElement;
     document.body.appendChild(root);
@@ -437,7 +473,8 @@ describe('gardening sub-tab layout shell sweep (web:shell-sweep)', () => {
       const name = row.querySelector<HTMLElement>('.rt-name')!;
       const cadence = row.querySelector<HTMLElement>('[data-testid="gardening-routine-cadence"]')!;
       const graph = row.querySelector<HTMLElement>('.rt-graph')!;
-      expect(cadence.textContent?.trim()).toBe('manual');
+      // `nightly` is kept by the `evening` cadence's chore.
+      expect(cadence.textContent?.trim()).toBe('cadence');
       expect(graph.textContent?.trim()).toBe('graph garden-routine');
       expect(cadence.getBoundingClientRect().left).toBeGreaterThan(name.getBoundingClientRect().right);
       expect(cadence.getBoundingClientRect().right).toBeLessThanOrEqual(row.getBoundingClientRect().right + 1);
@@ -450,9 +487,36 @@ describe('gardening sub-tab layout shell sweep (web:shell-sweep)', () => {
     }
   });
 
+  it.each([1280, 390, 320])('cadences: wraps the flag-off line and a long cadence inside the list at %ipx', async (width) => {
+    const { fixture, router, stub, viewport } = await render('/gardening/cadences');
+    const root = fixture.nativeElement as HTMLElement;
+    document.body.appendChild(root);
+
+    try {
+      await page.viewport(width, 800);
+      if (width < 720) viewport.setOverride('mobile');
+      await router.navigateByUrl('/gardening/cadences');
+      await settle(fixture);
+
+      const line = root.querySelector<HTMLElement>('[data-testid="gardening-cadences-flag-off"]')!;
+      expect(line, `${width}px: no flag-off line`).not.toBeNull();
+      const row = root.querySelector<HTMLElement>('[data-testid="gardening-cadence-row-weekly-deep-review"]')!;
+      expect(row.getBoundingClientRect().width, `${width}px: the list is not on screen`).toBeGreaterThan(0);
+      const left = root.querySelector<HTMLElement>('.gc-left')!;
+      expect(left.scrollWidth, `${width}px: cadence list overflows horizontally`).toBeLessThanOrEqual(left.clientWidth);
+      expect(line.getBoundingClientRect().right).toBeLessThanOrEqual(left.getBoundingClientRect().right + 1);
+    } finally {
+      viewport.setOverride('auto');
+      root.remove();
+      stub.restore();
+      await page.viewport(1280, 800);
+    }
+  });
+
   const LIST_STATES: readonly { tab: string; loading: GardenRoutes; empty: GardenRoutes }[] = [
     { tab: 'scopes', loading: { 'GET /api/scopes': () => NEVER }, empty: { 'GET /api/scopes': () => [] } },
     { tab: 'routines', loading: { 'GET /api/routines': () => NEVER }, empty: { 'GET /api/routines': () => [] } },
+    { tab: 'cadences', loading: { 'GET /api/cadences': () => NEVER }, empty: { 'GET /api/cadences': () => [] } },
   ];
   for (const { tab, loading: loadingRoutes, empty } of LIST_STATES) {
     it.each([1280, 390])(`${tab}: renders loading until the read answers, then the empty state, at %ipx`, async (width) => {

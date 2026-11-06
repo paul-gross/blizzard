@@ -97,9 +97,33 @@
         <ng-template #runsValue>
           {{ panel.runsLabel ?? '…' }}
         </ng-template>
+        <ng-template #keptByValue>
+          <fleet-kit-async-state
+            [state]="panel.keptByState"
+            placement="inline"
+            emptyText="No cadence keeps it — it runs when started."
+            loadingTestid="gardening-routine-kept-by-loading"
+            emptyTestid="gardening-routine-kept-by-none"
+            errorTestid="gardening-routine-kept-by-error"
+          >
+            <ul class="rp-kept-by">
+              @for (k of panel.keptBy ?? []; track k.cadenceSlug + k.choreKey) {
+                <li [attr.data-testid]="'gardening-routine-kept-by-' + k.cadenceSlug + '-' + k.choreKey">
+                  <a class="rp-link" [routerLink]="['/gardening', 'cadences', k.cadenceSlug] | lensLink">{{
+                    k.cadenceName
+                  }}</a>
+                  · chore {{ k.choreKey }}
+                  @if (k.nextMoment; as next) {
+                    · next <fleet-when [iso]="next" />
+                  }
+                </li>
+              }
+            </ul>
+          </fleet-kit-async-state>
+        </ng-template>
         <fleet-kit-fact-list
           class="rp-record-facts"
-          [rows]="recordRows(panel, graphValue, runsValue)"
+          [rows]="recordRows(panel, graphValue, runsValue, keptByValue)"
           testid="gardening-routine-record-facts"
         />
 

@@ -18,9 +18,10 @@ describe('recordRoute', () => {
     expect(recordRoute(RecordKind.SECRET, 'gh')).toEqual(['/admin', 'secrets', 'gh']);
   });
 
-  it('opens a scope or routine on its gardening detail', () => {
+  it('opens a scope, routine, or cadence on its gardening detail', () => {
     expect(recordRoute(RecordKind.SCOPE, 'blizzard')).toEqual(['/gardening', 'scopes', 'blizzard']);
     expect(recordRoute(RecordKind.ROUTINE, 'nightly')).toEqual(['/gardening', 'routines', 'nightly']);
+    expect(recordRoute(RecordKind.CADENCE, 'evening')).toEqual(['/gardening', 'cadences', 'evening']);
   });
 
   it('answers null for a kind the board has no surface for', () => {

@@ -53,6 +53,9 @@ is carried into each run's charge. Its `promote` is `true` when left out; `false
 A chore keeps its `chr_` id while its key stays in the list, across every edit. Removing a key and adding it back mints
 a new chore.
 
+A cadence's view also carries `next_moments`: its schedule's next five moments after the read, earliest first. It is
+empty when the cadence has no schedule or is retired.
+
 ## Attention
 
 A cadence's view carries `attention`: each thing that would stop one of its errands, named by its `reason`, the chore's
@@ -88,6 +91,12 @@ instant it was owed. A `due` errand mints only while the `cadences` flag is on.
 A run's list and detail views carry `cadence`: the id, slug, and name of the cadence that minted it, and the id and key
 of its chore. A run started by hand has none, and a run whose chore has since been removed names the chore's id with no
 key.
+
+## The board
+
+The hub's board keeps cadences under the Gardening tab's Cadences list and detail, where a cadence is created, edited,
+retired and re-enabled and its chores added, edited and removed, and its errands and next moments read.
+[board.md](./board.md#the-gardening-tab) owns what the board shows.
 
 ## The CLI
 

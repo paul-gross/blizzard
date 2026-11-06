@@ -922,8 +922,10 @@ const HUB_LAYERS = {
   'garden/scopes': ['garden/core', 'garden/runs'],
   'garden/findings': ['garden/core', 'garden/proposals'],
   'garden/routines': ['garden/core', 'garden/runs', 'graphs'],
+  'garden/cadences': ['garden/core'],
   'garden/doorway': ['garden/core', 'garden/proposals', 'garden/runs'],
   garden: [
+    'garden/cadences',
     'garden/core',
     'garden/doorway',
     'garden/findings',
@@ -939,6 +941,7 @@ const HUB_LAYERS = {
     'demo',
     'events',
     'garden',
+    'garden/cadences',
     'garden/findings',
     'garden/proposals',
     'garden/routines',

@@ -2,9 +2,12 @@ import { Component, provideZonelessChangeDetection } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { provideRouter, Router, RouterOutlet } from '@angular/router';
 import { QueryClient, provideTanStackQuery } from '@tanstack/angular-query-experimental';
+import { provideFlags } from 'fleet/shell';
 import {
   OPERATOR_ME_RESPONSE,
   type RequestClientStub,
+  gardenCadenceErrandView,
+  gardenCadenceView,
   gardenFindingDetailView,
   gardenFindingFactView,
   gardenProposalCountsView,
@@ -18,6 +21,7 @@ import {
   stubHubClient,
 } from 'fleet/testing';
 
+import { hubFlagsRead } from '../core/flags.query';
 import { provideProjectLens } from '../core/project-lens';
 import { GARDENING_ROUTES } from './gardening.routes';
 
@@ -32,6 +36,8 @@ function stubGarden(routes: Parameters<typeof stubHubClient>[0] = {}) {
     'GET /api/graphs': () => [],
     'GET /api/projects/{project}/runs': () => [],
     'GET /api/projects/{project}/scopes': () => [],
+    'GET /api/projects/{project}/cadences': () => [],
+    'GET /api/flags': () => ({ flags: {}, overridden: [] }),
     'GET /api/projects/{project}/findings': () => ({ findings: [], next_cursor: null }),
     'GET /api/projects/{project}/findings/classes': () => [],
     'GET /api/me': () => OPERATOR_ME_RESPONSE,
@@ -42,9 +48,9 @@ function stubGarden(routes: Parameters<typeof stubHubClient>[0] = {}) {
 /**
  * The `/gardening` subtree (`gardening.routes.ts`, mounted at `gardening` under a project's lens, as the app's route
  * table mounts it; the doorway and the guards on All are `garden-lens.guard.spec.ts`'s) —
- * proves the five top-level children resolve, the bare parent path redirects to
- * `runs` (the leftmost tab), and each of the five bare/param pairs (`scopes`,
- * `routines`, `runs`, `findings`, `proposals`) actually mounts its page and selects
+ * proves the six top-level children resolve, the bare parent path redirects to
+ * `runs` (the leftmost tab), and each of the six bare/param pairs (`scopes`,
+ * `routines`, `cadences`, `runs`, `findings`, `proposals`) actually mounts its page and selects
  * the right detail — through the actual router rather than by mounting a page component
  * directly (that's each page's own spec). A bare `<router-outlet>` host stands in for
  * `App`'s heavier one (auth session gate, live-update spine) — irrelevant to whether this route subtree itself is
@@ -69,6 +75,7 @@ describe('the /gardening route subtree', () => {
         provideTanStackQuery(new QueryClient({ defaultOptions: { queries: { retry: false } } })),
         provideRouter([{ path: 'p/:projectSlug', children: [{ path: 'gardening', children: GARDENING_ROUTES }] }]),
         provideProjectLens(),
+        provideFlags(hubFlagsRead),
       ],
     }).compileComponents();
   });
@@ -88,7 +95,7 @@ describe('the /gardening route subtree', () => {
     // initializer, which kills the component's construction and leaves the
     // navigation with no visible effect — the tab stops responding, with nothing
     // in the URL to show for it. Walking the strip is the only shape that catches it.
-    for (const tab of ['scopes', 'routines', 'runs', 'findings', 'proposals', 'scopes', 'runs', 'findings']) {
+    for (const tab of ['scopes', 'routines', 'cadences', 'runs', 'findings', 'proposals', 'scopes', 'cadences', 'runs', 'findings']) {
       await router.navigateByUrl(`/p/${PROJECT}/gardening/${tab}`);
       await settle(fixture, 8);
 
@@ -129,6 +136,23 @@ describe('the /gardening route subtree', () => {
 
     const el = fixture.nativeElement as HTMLElement;
     expect(el.querySelector('[data-testid="gardening-scope-panel"]')?.textContent).toContain('blizzard');
+  });
+
+  it('resolves /gardening/cadences/:cadenceSlug to the cadence detail, reading its errands by id', async () => {
+    stub.restore();
+    stub = stubGarden({
+      'GET /api/projects/{project}/cadences': () => [gardenCadenceView({ slug: 'evening', name: 'Evening sweep' })],
+      'GET /api/cadences/{cadence_id}/errands': () => [gardenCadenceErrandView()],
+    });
+    const fixture = TestBed.createComponent(TestGardeningRouteHost);
+    const router = TestBed.inject(Router);
+
+    await router.navigateByUrl('/p/blizzard/gardening/cadences/evening');
+    await settle(fixture, 12);
+
+    const el = fixture.nativeElement as HTMLElement;
+    expect(el.querySelector('[data-testid="gardening-cadence-panel"]')?.textContent).toContain('Evening sweep');
+    expect(stub.forRoute('/api/cadences/cad_evening/errands', 'GET')).toHaveLength(1);
   });
 
   it('resolves /gardening/routines to its own sub-tab, selecting nothing', async () => {
@@ -297,17 +321,17 @@ describe('the /gardening route subtree', () => {
     const fixture = TestBed.createComponent(TestGardeningRouteHost);
     const router = TestBed.inject(Router);
 
-    for (const tab of ['scopes', 'routines', 'runs', 'findings', 'proposals']) {
+    for (const tab of ['scopes', 'routines', 'cadences', 'runs', 'findings', 'proposals']) {
       await router.navigateByUrl(`/p/${PROJECT}/gardening/${tab}`);
       await settle(fixture, 8);
     }
 
     const paths = stub.requests.map((request) => request.path);
-    for (const nested of ['scopes', 'routines', 'runs', 'findings', 'garden-proposals']) {
+    for (const nested of ['scopes', 'routines', 'cadences', 'runs', 'findings', 'garden-proposals']) {
       expect(paths, `the ${nested} read`).toContain(`/api/projects/${PROJECT}/${nested}`);
     }
     const unnestedGardenReads = paths.filter((path) =>
-      /^\/api\/(scopes|routines|runs|findings|garden-proposals)(\/|$)/.test(path),
+      /^\/api\/(scopes|routines|cadences|runs|findings|garden-proposals)(\/|$)/.test(path),
     );
     // Two tenant-wide lists set the project beside the others — the crumb menu's proposals waiting per project and the
     // scope detail's same-slug callout. No other garden list, and no record, is read outside the project.

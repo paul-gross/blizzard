@@ -1,4 +1,5 @@
 import { type RoutineView, type RunDeltaView } from 'fleet';
+import { runCadenceView } from 'fleet/testing';
 import { describe, expect, it } from 'vitest';
 
 import { runDeltaVm } from './gardening-run-detail.model';
@@ -9,6 +10,7 @@ const delta = (fields: Partial<RunDeltaView> = {}): RunDeltaView =>
   ({
     chunk_id: 'ch_1',
     escalation: null,
+    cadence: null,
     mode: 'sweep',
     outcome: 'done',
     routine_name: 'docs',
@@ -51,6 +53,26 @@ describe('runDeltaVm', () => {
       nodeName: 'build',
       takeoverCommand: 'tk',
       wrappedTakeoverCommand: 'wtk',
+    });
+  });
+
+  it('names no cadence for a run started by hand', () => {
+    expect(runDeltaVm(delta(), noMintedAt, [])?.cadence).toBeNull();
+  });
+
+  it('names the cadence and chore of a run a cadence minted', () => {
+    expect(runDeltaVm(delta({ cadence: runCadenceView({ cadence_name: 'Evening' }) }), noMintedAt, [])?.cadence).toEqual({
+      slug: 'evening',
+      name: 'Evening',
+      choreKey: 'nightly',
+    });
+  });
+
+  it('keeps the cadence but no chore key once the chore was removed', () => {
+    expect(runDeltaVm(delta({ cadence: runCadenceView({ chore_key: null }) }), noMintedAt, [])?.cadence).toEqual({
+      slug: 'evening',
+      name: 'evening',
+      choreKey: null,
     });
   });
 

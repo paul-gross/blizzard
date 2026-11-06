@@ -21,6 +21,21 @@
             · <span><fleet-when [iso]="mintedAt" /></span>
           }
         </p>
+        @if (delta.cadence; as cadence) {
+          <p class="rd-meta" data-testid="gardening-run-delta-cadence">
+            Kept by
+            <a
+              class="rd-ref"
+              [routerLink]="['/gardening', 'cadences', cadence.slug] | lensLink"
+              data-testid="gardening-run-delta-cadence-link"
+            >{{ cadence.name }}</a>
+            @if (cadence.choreKey; as choreKey) {
+              · chore {{ choreKey }}
+            } @else {
+              · its chore was removed
+            }
+          </p>
+        }
         @if (delta.escalation; as escalation) {
           <p class="rd-escalation" data-testid="gardening-run-delta-escalation">
             Escalated at {{ escalation.nodeName ?? 'unknown node' }} — takeover:

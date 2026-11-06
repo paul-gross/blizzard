@@ -140,6 +140,8 @@ class CadenceView(WireModel):
     attention: list[CadenceAttentionView] = []
     #: How many of the cadence's errands stand in each state at the read.
     errand_counts: ErrandCountsView = ErrandCountsView()
+    #: The schedule's next five moments after the read, earliest first; empty with no schedule or once retired.
+    next_moments: list[str] = []
     created_at: str
     retired: bool = False
     revision: int

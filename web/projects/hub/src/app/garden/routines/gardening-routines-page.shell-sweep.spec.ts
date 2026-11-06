@@ -178,6 +178,7 @@ async function render() {
     'GET /api/scopes': () => SCOPES,
     'GET /api/me': () => ME,
     'GET /api/runs': () => [],
+    'GET /api/cadences': () => [],
   });
   await TestBed.configureTestingModule({
     imports: [TestRoutinesShellHost],

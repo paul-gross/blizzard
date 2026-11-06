@@ -1,0 +1,39 @@
+:host {
+  display: block;
+  font-family: var(--mono);
+  font-size: var(--fs-base);
+  color: var(--text);
+}
+.chf {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 0;
+}
+.chf-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.chf-row > .chf-field {
+  flex: 1 1 140px;
+}
+.chf-field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+.chf-label {
+  font-size: var(--fs-label);
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--label);
+}
+.chf-actions {
+  display: flex;
+  gap: 6px;
+}
+.chf-fixed {
+  overflow-wrap: anywhere;
+}

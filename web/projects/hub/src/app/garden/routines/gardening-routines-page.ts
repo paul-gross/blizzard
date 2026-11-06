@@ -4,6 +4,7 @@ import { asyncState, KitMasterDetail, KitPanel, type GraphSummaryView, type KitA
 import { FleetRoutineList, type RoutineListRowVm } from './routine-list';
 import { injectHubGraphsQuery } from '../../graphs/graphs.query';
 import { injectHubRoutinesQuery } from '../core/routines.query';
+import { injectHubCadencesQuery } from '../core/cadences.query';
 
 import { injectChildRouteParam } from '../../core/route-state';
 import { presentRoutineSlug, routineListRows } from './gardening-routines-page.model';
@@ -48,6 +49,7 @@ export class GardeningRoutinesPage {
 
   private readonly routinesQuery = injectHubRoutinesQuery();
   private readonly graphsQuery = injectHubGraphsQuery();
+  private readonly cadencesQuery = injectHubCadencesQuery();
 
   private readonly routines = computed<readonly RoutineView[]>(() => this.routinesQuery.data() ?? []);
   private readonly graphs = computed<readonly GraphSummaryView[]>(() => this.graphsQuery.data() ?? []);
@@ -71,7 +73,7 @@ export class GardeningRoutinesPage {
   }
 
   protected readonly listRows = computed<readonly RoutineListRowVm[]>(() =>
-    routineListRows(this.routines(), this.graphs(), this.graphsQuery),
+    routineListRows(this.routines(), this.graphs(), this.graphsQuery, this.cadencesQuery.data()),
   );
 
   protected readonly listState = computed<KitAsyncStateValue>(() =>

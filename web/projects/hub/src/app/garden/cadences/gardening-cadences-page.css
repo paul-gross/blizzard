@@ -1,0 +1,48 @@
+/* A flex column so the kit's host below can resolve `.body`'s bounded height
+ * (`gardening-page.css`) into its own full height, the way that page's own
+ * `:host` resolves the app shell's height into `.body`. */
+:host {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+}
+/* The split itself is `fleet-kit-master-detail`'s (`.gc-layout` is its host
+ * tag): its row layout, its mobile drill-down, and the Back control. This page sets
+ * only the kit's gap and divider properties, keeping a 12px gutter and no rule
+ * between the two panes. */
+.gc-layout {
+  --kit-master-detail-gap: 12px;
+  --kit-master-detail-divider: none;
+}
+/* Each pane is a flex column (`kit-master-detail.css`); `flex: 0 1 auto` with
+ * `min-height: 0` lets a short slot hug its own content while a tall one hits the
+ * pane's bound and scrolls inside its own box rather than dragging the other pane
+ * down with it. */
+.gc-left,
+.gc-right {
+  flex: 0 1 auto;
+  min-width: 0;
+  min-height: 0;
+  overflow-y: auto;
+}
+/* A floor under the empty/loading text (`fleet-kit-async-state`'s own inline
+ * status line) so it reads as a panel awaiting a selection rather than a
+ * bare line of text collapsed to fit its content. */
+.gc-right {
+  min-height: 240px;
+}
+
+.gc-flag-off {
+  margin: 0;
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--line);
+  color: var(--amber);
+  font-family: var(--mono);
+  font-size: var(--fs-sm);
+}
+.gc-create {
+  display: block;
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--line);
+}

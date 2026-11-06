@@ -10,6 +10,7 @@ import { ProjectLens } from '../core/project-lens';
 import { injectProjectsQuery } from '../core/projects.query';
 import { gardenPathOf } from './garden-lens.guard';
 import { GARDENING_DOORWAY_URL } from './core/garden-project';
+import { injectHubCadencesQuery } from './core/cadences.query';
 import { injectHubRoutinesQuery } from './core/routines.query';
 import { defaultRoutineWindow } from './core/routine-window';
 import { injectHubScopesQuery } from './core/scopes.query';
@@ -27,15 +28,15 @@ import { injectHubRunsQuery } from './runs/garden-runs.query';
 /**
  * One project's garden — the `/p/{project}/gardening` route, a top-level tab beside the board, not a
  * panel inside it (`blizzard-product:/delivered/garden/user-interface.md` §Where it lives). This page owns its
- * own second strip, divided along the garden's surfaces in this fixed order — scopes, routines, runs, findings,
- * proposals — each a real child route (`gardening.routes.ts`) so a tab is a deep link, not this component's own
+ * own second strip, divided along the garden's surfaces in this fixed order — scopes, routines, cadences, runs,
+ * findings, proposals — each a real child route (`gardening.routes.ts`) so a tab is a deep link, not this component's own
  * selection state.
  *
  * Above the strip, the breadcrumb `Gardening › {project} › {surface}` is the lens shown in place: `Gardening` opens the
  * doorway, and the project crumb switches the lens and keeps the surface, each choice showing that project's proposals
  * waiting.
  *
- * Scopes, routines and runs count their lists; Proposals counts the ones waiting on a person and draws that count in
+ * Scopes, routines, cadences and runs count their lists; Proposals counts the ones waiting on a person and draws that count in
  * amber. Findings has no total badge: its list reads only the requested pages, so a loaded-row count is not a total.
  */
 @Component({
@@ -60,6 +61,7 @@ export class GardeningPage {
   private readonly window = defaultRoutineWindow(inject(FLEET_CLOCK)());
   private readonly scopesQuery = injectHubScopesQuery();
   private readonly routinesQuery = injectHubRoutinesQuery();
+  private readonly cadencesQuery = injectHubCadencesQuery();
   private readonly runsQuery = injectHubRunsQuery(() => this.window.since);
   private readonly proposalsQuery = injectHubGardenProposalsQuery();
   private readonly tenantProposalsQuery = injectHubGardenProposalsQuery({ tenantWide: true });
@@ -76,12 +78,13 @@ export class GardeningPage {
   /** The doorway's address, for the `Gardening` crumb's link target. */
   protected readonly doorwayUrl = GARDENING_DOORWAY_URL;
 
-  /** The strip's five tabs, with counts for the surfaces whose reads supply a total. */
+  /** The strip's six tabs, with counts for the surfaces whose reads supply a total. */
   protected readonly tabs = computed(() =>
     gardenSurfaceTabs(
       gardenSurfaceCounts({
         scopes: this.scopesQuery.data(),
         routines: this.routinesQuery.data(),
+        cadences: this.cadencesQuery.data(),
         runs: this.runsQuery.data(),
         proposals: this.proposalsQuery.data(),
       }),

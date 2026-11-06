@@ -11,6 +11,7 @@ const VM: RunDeltaVm = {
   scopeSlug: 'runner-daemon',
   mintedAt: '2026-01-10T00:00:00Z',
   escalation: null,
+  cadence: null,
   sets: [
     {
       findingSetId: 'fins_01M1KANH0RZEABSD44RCEH6G9B',
@@ -221,6 +222,33 @@ describe('FleetRunDelta', () => {
     expect(el.querySelector('[data-testid="gardening-run-delta-escalation"]')?.textContent).toContain(
       'blizzard hub chunk takeover ch_1',
     );
+  });
+
+  it('names the cadence that minted the run, linked to its detail, and the chore', async () => {
+    const fixture = await mount({ vm: { ...VM, cadence: { slug: 'evening', name: 'Evening', choreKey: 'nightly' } } });
+    const el = fixture.nativeElement as HTMLElement;
+
+    const line = el.querySelector('[data-testid="gardening-run-delta-cadence"]');
+    expect(line?.textContent).toContain('chore nightly');
+    const link = el.querySelector<HTMLAnchorElement>('[data-testid="gardening-run-delta-cadence-link"]');
+    expect(link?.textContent?.trim()).toBe('Evening');
+    expect(link?.getAttribute('href')).toBe('/gardening/cadences/evening');
+  });
+
+  it('says the chore was removed when the run names a cadence but no chore', async () => {
+    const fixture = await mount({ vm: { ...VM, cadence: { slug: 'evening', name: 'Evening', choreKey: null } } });
+    const el = fixture.nativeElement as HTMLElement;
+
+    const line = el.querySelector('[data-testid="gardening-run-delta-cadence"]');
+    expect(line?.textContent).toContain('Evening');
+    expect(line?.textContent).toContain('its chore was removed');
+  });
+
+  it('names no cadence for a run started by hand', async () => {
+    const fixture = await mount({});
+    const el = fixture.nativeElement as HTMLElement;
+
+    expect(el.querySelector('[data-testid="gardening-run-delta-cadence"]')).toBeNull();
   });
 
   it('shows the empty state when no run is selected', async () => {

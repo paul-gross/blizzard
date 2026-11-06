@@ -11,6 +11,7 @@ const ROWS: readonly RoutineListRowVm[] = [
     graphName: 'garden-routine',
     blocked: false,
     retired: false,
+    kept: false,
   },
   {
     routineId: 'rtn_01FEDCBAZYXWVUTSRQPNMKJHG9876',
@@ -19,6 +20,7 @@ const ROWS: readonly RoutineListRowVm[] = [
     graphName: 'architecture',
     blocked: true,
     retired: false,
+    kept: true,
   },
 ];
 
@@ -48,6 +50,8 @@ describe('FleetRoutineList', () => {
     expect(row?.querySelector('.rt-name')?.textContent).toBe('Nightly sweep');
     expect(row?.textContent).toContain('graph garden-routine');
     expect(row?.querySelector('[data-testid="gardening-routine-cadence"]')?.textContent).toBe('manual');
+    const kept = el.querySelector('[data-testid="gardening-routine-row-weekly-audit"]');
+    expect(kept?.querySelector('[data-testid="gardening-routine-cadence"]')?.textContent).toBe('cadence');
   });
 
   it('renders the routine id as a compact ref, right-aligned, with the full id as its title', async () => {
@@ -73,8 +77,8 @@ describe('FleetRoutineList', () => {
   it('marks a retired routine distinctly from an enabled one', async () => {
     const fixture = await mount({
       rows: [
-        { routineId: 'rtn_01ABCDEFGHJKMNPQRSTVWXYZ0123', slug: 'nightly', name: 'Nightly sweep', graphName: 'garden-routine', blocked: false, retired: false },
-        { routineId: 'rtn_01FEDCBAZYXWVUTSRQPNMKJHG9876', slug: 'weekly-audit', name: 'Weekly audit', graphName: 'architecture', blocked: false, retired: true },
+        { routineId: 'rtn_01ABCDEFGHJKMNPQRSTVWXYZ0123', slug: 'nightly', name: 'Nightly sweep', graphName: 'garden-routine', blocked: false, retired: false, kept: false },
+        { routineId: 'rtn_01FEDCBAZYXWVUTSRQPNMKJHG9876', slug: 'weekly-audit', name: 'Weekly audit', graphName: 'architecture', blocked: false, retired: true, kept: false },
       ],
     });
     const el = fixture.nativeElement as HTMLElement;

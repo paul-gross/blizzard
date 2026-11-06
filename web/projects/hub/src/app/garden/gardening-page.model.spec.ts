@@ -56,10 +56,11 @@ describe('surfaceOf and surfaceLabel', () => {
 });
 
 describe('gardenSurfaceTabs', () => {
-  it('orders the five tabs, omitting a total badge for paged findings', () => {
-    expect(gardenSurfaceTabs({ scopes: 4, routines: 2, runs: null, findings: null, proposals: 3 })).toEqual([
+  it('orders the six tabs, omitting a total badge for paged findings', () => {
+    expect(gardenSurfaceTabs({ scopes: 4, routines: 2, cadences: 1, runs: null, findings: null, proposals: 3 })).toEqual([
       { surface: 'scopes', label: 'Scopes', count: 4 },
       { surface: 'routines', label: 'Routines', count: 2 },
+      { surface: 'cadences', label: 'Cadences', count: 1 },
       { surface: 'runs', label: 'Runs', count: null },
       { surface: 'findings', label: 'Findings', count: null },
       { surface: 'proposals', label: 'Proposals', count: 3 },
@@ -105,16 +106,18 @@ describe('gardenSurfaceCounts', () => {
       gardenSurfaceCounts({
         scopes: [{}, {}],
         routines: [{}],
+        cadences: [{}, {}, {}],
         runs: [],
         proposals: [proposal('gp_1', false), proposal('gp_2', true)],
       }),
-    ).toEqual({ scopes: 2, routines: 1, runs: 0, findings: null, proposals: 1 });
+    ).toEqual({ scopes: 2, routines: 1, cadences: 3, runs: 0, findings: null, proposals: 1 });
   });
 
   it('leaves a count out until its read answers', () => {
-    expect(gardenSurfaceCounts({ scopes: undefined, routines: undefined, runs: undefined, proposals: undefined })).toEqual({
+    expect(gardenSurfaceCounts({ scopes: undefined, routines: undefined, cadences: undefined, runs: undefined, proposals: undefined })).toEqual({
       scopes: null,
       routines: null,
+      cadences: null,
       runs: null,
       findings: null,
       proposals: null,

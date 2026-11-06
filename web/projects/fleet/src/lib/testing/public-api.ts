@@ -77,6 +77,7 @@ export { runnerLeaseView, runnerAskView, runnerFactView } from './builders/runne
 export { gardenFindingDetailView, gardenFindingFactView, gardenProposalCountsRowView, gardenProposalCountsView, gardenTrendPeriodView, gardenTrendView, gardenScopeSweepView, gardenMeasurementReadingView, gardenSweepsView, gardenGraphSummaryView } from './builders/garden';
 export { gardenProposalView, gardenProposalClosureView, gardenProposalAcceptResponse, gardenProposalsPageView, gardenEvidenceFindingView } from './builders/garden-proposal';
 export { deliveredSetView, deliveredSetDeltaView, runEscalationView, runRowView, runDeltaView, routineRunResponse, routineBaselineView, gardenRoutineView, gardenScopeView, gardenProjectView } from './builders/garden-run';
+export { gardenCadenceView, gardenChoreView, gardenCadenceAttentionView, gardenCadenceErrandView, gardenErrandRunView, runCadenceView } from './builders/cadence';
 export { gardenWorkItemView } from './builders/garden';
 export { gardenFindingView } from './builders/garden';
 export { graphSummaryView } from './builders/graph-summary';

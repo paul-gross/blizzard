@@ -10,8 +10,10 @@ import type {
   TrendView,
 } from 'fleet';
 import { describe, expect, it } from 'vitest';
+import { fixtureInstant, gardenCadenceView, gardenChoreView } from 'fleet/testing';
 
 import {
+  keptByRows,
   modelEffortLabel,
   routineRecentRuns,
   routineRunsLabel,
@@ -166,6 +168,8 @@ const PARTS: RoutinePanelParts = {
   recentRuns: null,
   recentRunsState: 'loading',
   measurementsState: 'loading',
+  keptBy: null,
+  keptByState: 'loading',
 };
 
 describe('routineBySlug', () => {
@@ -313,6 +317,48 @@ describe('trendTotals', () => {
   });
 });
 
+describe('keptByRows', () => {
+  it('answers null while the cadences read is pending or no routine is selected', () => {
+    expect(keptByRows(undefined, ROUTINE)).toBeNull();
+    expect(keptByRows([], null)).toBeNull();
+  });
+
+  it('keeps nothing when no chore names the routine', () => {
+    const other = gardenCadenceView({ slug: 'evening', chores: [gardenChoreView({ routine: 'weekly' })] });
+    expect(keptByRows([other], ROUTINE)).toEqual([]);
+  });
+
+  it("names the one chore keeping the routine, with its cadence's next moment", () => {
+    const evening = gardenCadenceView({ slug: 'evening', name: 'Evening', chores: [gardenChoreView()] });
+    expect(keptByRows([evening], ROUTINE)).toEqual([
+      { cadenceSlug: 'evening', cadenceName: 'Evening', choreKey: 'nightly', nextMoment: fixtureInstant(14 * 3600) },
+    ]);
+  });
+
+  it('names every chore across several cadences, in list order', () => {
+    const evening = gardenCadenceView({
+      slug: 'evening',
+      chores: [gardenChoreView(), gardenChoreView({ chore_id: 'chr_2', key: 'docs', routine: 'weekly' })],
+    });
+    const weekly = gardenCadenceView({
+      slug: 'weekly',
+      next_moments: [],
+      chores: [gardenChoreView({ chore_id: 'chr_3', key: 'deep' }), gardenChoreView({ chore_id: 'chr_4', key: 'web' })],
+    });
+    expect(keptByRows([evening, weekly], ROUTINE)?.map((k) => [k.cadenceSlug, k.choreKey, k.nextMoment])).toEqual([
+      ['evening', 'nightly', fixtureInstant(14 * 3600)],
+      ['weekly', 'deep', null],
+      ['weekly', 'web', null],
+    ]);
+  });
+
+  it("skips a retired cadence and one of another project", () => {
+    const retired = gardenCadenceView({ slug: 'old', retired: true, chores: [gardenChoreView()] });
+    const elsewhere = gardenCadenceView({ slug: 'far', project_id: 'prj_2', chores: [gardenChoreView()] });
+    expect(keptByRows([retired, elsewhere], ROUTINE)).toEqual([]);
+  });
+});
+
 describe('routinePanelVm', () => {
   it('answers null with no routine selected', () => {
     expect(routinePanelVm(null, PARTS)).toBeNull();
@@ -340,6 +386,8 @@ describe('routinePanelVm', () => {
       recentRunsState: 'loading',
       measurementsState: 'loading',
       runsLabel: null,
+      keptBy: null,
+      keptByState: 'loading',
     });
   });
 

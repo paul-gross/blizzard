@@ -1,4 +1,5 @@
 import { ChangeDetectionStrategy, Component, type TemplateRef, input, output, signal } from '@angular/core';
+import { RouterLink } from '@angular/router';
 
 import {
   compactRef,
@@ -15,6 +16,7 @@ import {
   KitTextInput,
   KitErrorLine,
 } from 'fleet';
+import { LensLink } from 'fleet/shell';
 
 import { lifecycleTone } from '../../core/lifecycle-tone';
 
@@ -81,6 +83,15 @@ export interface RelatedScopeVm {
   readonly isDefault: boolean;
 }
 
+/** One chore keeping the routine — the cadence it sits on, linked to that cadence's detail by slug, its key, and the
+ * cadence's next moment (`null` when the cadence has none ahead). */
+export interface KeptByVm {
+  readonly cadenceSlug: string;
+  readonly cadenceName: string;
+  readonly choreKey: string;
+  readonly nextMoment: string | null;
+}
+
 /** The selected routine's whole panel view model — plain data, no
  * query or wire type, so the presentational component and its spec never see one.
  * `blockedReason` alone carries blocked-ness: a non-`null` reason means blocked, so
@@ -115,6 +126,11 @@ export interface RoutinePanelVm {
   readonly measurementsState: KitAsyncStateValue;
   /** The Runs fact: how many runs the window holds, labelled with the window — `null` while the runs read is pending. */
   readonly runsLabel: string | null;
+  /** The chores keeping this routine — `null` while the cadences read is pending. */
+  readonly keptBy: readonly KeptByVm[] | null;
+  /** The Kept by fact's own async state, gated on the cadences read (`bzh:frontend-empty-state-gated`); `'empty'`
+   * says no cadence keeps the routine. */
+  readonly keptByState: KitAsyncStateValue;
 }
 
 /**
@@ -149,7 +165,7 @@ export interface RoutinePanelVm {
 @Component({
   selector: 'app-routine-panel',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [KitAsyncState, FleetWhen, KitBadge, KitButton, KitConfirmDialog, KitFactList, KitPanel, KitProseBlock, KitTextInput, KitErrorLine],
+  imports: [KitAsyncState, FleetWhen, KitBadge, KitButton, KitConfirmDialog, KitFactList, KitPanel, KitProseBlock, KitTextInput, KitErrorLine, LensLink, RouterLink],
   templateUrl: './routine-panel.html',
   styleUrl: './routine-panel.css',
 })
@@ -224,14 +240,18 @@ export class FleetRoutinePanel {
   /** The record as an aligned fact grid (`fleet-kit-fact-list`, `KitFact`'s own
    * shape) — a method, not a stored computed, since it depends on the selected
    * routine's record and on the view's own templates for the rows whose value is
-   * markup. Cadence says the routine runs only on a manual kickoff: no schedule
-   * starts one. */
-  protected recordRows(panel: RoutinePanelVm, graph: TemplateRef<unknown>, runs: TemplateRef<unknown>): readonly KitFact[] {
+   * markup. Kept by names the cadence chores that keep the routine. */
+  protected recordRows(
+    panel: RoutinePanelVm,
+    graph: TemplateRef<unknown>,
+    runs: TemplateRef<unknown>,
+    keptBy: TemplateRef<unknown>,
+  ): readonly KitFact[] {
     return [
       { label: 'Graph', template: graph, testid: 'gardening-routine-fact-graph' },
       { label: 'Default scope', value: panel.record.defaultScopeSlug, testid: 'gardening-routine-fact-scope' },
       { label: 'Model · effort', value: panel.record.modelEffort, testid: 'gardening-routine-fact-model' },
-      { label: 'Cadence', value: 'manual — runs only when kicked off', testid: 'gardening-routine-fact-cadence' },
+      { label: 'Kept by', template: keptBy, testid: 'gardening-routine-fact-kept-by' },
       { label: 'Runs', template: runs, testid: 'gardening-routine-fact-runs' },
     ];
   }

@@ -53,6 +53,14 @@ export interface RunDeltaEscalationVm {
   readonly wrappedTakeoverCommand: string;
 }
 
+/** The cadence that minted the run, linked to its detail by slug, and the chore — `choreKey` is `null` when the chore
+ * has since been removed from the cadence. */
+export interface RunDeltaCadenceVm {
+  readonly slug: string;
+  readonly name: string;
+  readonly choreKey: string | null;
+}
+
 /** One run's own delta view model — plain data, no query or wire type, so this
  * presentational component and its spec never see one. `mintedAt` is `null` when
  * the container has no matching run-list row to source it from. */
@@ -62,6 +70,8 @@ export interface RunDeltaVm {
   readonly scopeSlug: string;
   readonly mintedAt: string | null;
   readonly escalation: RunDeltaEscalationVm | null;
+  /** `null` for a run started by hand. */
+  readonly cadence: RunDeltaCadenceVm | null;
   readonly sets: readonly RunDeltaSetVm[];
 }
 

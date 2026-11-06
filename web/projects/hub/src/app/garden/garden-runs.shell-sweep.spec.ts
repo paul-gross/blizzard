@@ -73,6 +73,7 @@ const DELTA_VM: RunDeltaVm = {
   scopeSlug: 'blizzard',
   mintedAt: '2026-01-10T00:00:00Z',
   escalation: null,
+  cadence: null,
   sets: [
     {
       findingSetId: 'fins_1',

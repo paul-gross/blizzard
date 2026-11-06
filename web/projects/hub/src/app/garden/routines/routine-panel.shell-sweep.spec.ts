@@ -1,5 +1,6 @@
 import { provideZonelessChangeDetection } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
+import { provideRouter } from '@angular/router';
 import { commands, page } from 'vitest/browser';
 
 import { FleetRoutinePanel, type RoutinePanelVm } from './routine-panel';
@@ -83,12 +84,22 @@ const VM: RoutinePanelVm = {
   recentRunsState: 'ready',
   measurementsState: 'ready',
   runsLabel: '2 in the last 28 days',
+  keptBy: [
+    {
+      cadenceSlug: 'evening',
+      cadenceName: 'a-cadence-with-a-long-name-that-must-wrap-inside-its-fact',
+      choreKey: 'nightly',
+      nextMoment: '2026-01-11T02:00:00Z',
+    },
+    { cadenceSlug: 'weekly', cadenceName: 'weekly', choreKey: 'deep', nextMoment: null },
+  ],
+  keptByState: 'ready',
 };
 
 async function render(vm: RoutinePanelVm | null = VM, canEdit = false, state: 'loading' | 'empty' | 'ready' = 'ready') {
   await TestBed.configureTestingModule({
     imports: [FleetRoutinePanel],
-    providers: [provideZonelessChangeDetection()],
+    providers: [provideZonelessChangeDetection(), provideRouter([])],
   }).compileComponents();
   const fixture = TestBed.createComponent(FleetRoutinePanel);
   fixture.componentRef.setInput('state', state);
@@ -179,7 +190,7 @@ describe('gardening routine record label column shell sweep (web:shell-sweep)', 
         'Graph',
         'Default scope',
         'Model · effort',
-        'Cadence',
+        'Kept by',
         'Runs',
       ]);
       const heights = labels.map((l) => l.getBoundingClientRect().height);
@@ -284,6 +295,10 @@ describe('gardening routine detail header shell sweep (web:shell-sweep)', () => 
       const facts = root.querySelector<HTMLElement>('[data-testid="gardening-routine-record-facts"]')!;
       expect(facts.scrollWidth, `the open editor overflows at ${width}px`).toBeLessThanOrEqual(facts.clientWidth);
 
+      const keptBy = root.querySelector<HTMLElement>('[data-testid="gardening-routine-fact-kept-by"]')!;
+      expect(keptBy.querySelectorAll('li')).toHaveLength(2);
+      expect(keptBy.getBoundingClientRect().right, `Kept by overflows at ${width}px`).toBeLessThanOrEqual(width);
+
       const recent = root.querySelector<HTMLElement>('[data-testid="gardening-routine-recent-runs"]')!;
       expect(recent.querySelectorAll('li')).toHaveLength(2);
       expect(recent.scrollWidth, `recent runs overflow at ${width}px`).toBeLessThanOrEqual(recent.clientWidth);
@@ -315,6 +330,12 @@ describe('gardening routine detail header shell sweep (web:shell-sweep)', () => 
       expect(root.querySelector('[data-testid="gardening-routine-recent-runs-loading"]')).not.toBeNull();
       expect(root.querySelector('[data-testid="gardening-routine-recent-runs-empty"]')).toBeNull();
       expect(root.querySelector('[data-testid="gardening-routine-fact-runs"]')?.textContent).toContain('…');
+
+      fixture.componentRef.setInput('vm', { ...VM, keptBy: [], keptByState: 'empty' });
+      await fixture.whenStable();
+      const unkept = root.querySelector<HTMLElement>('[data-testid="gardening-routine-kept-by-none"]')!;
+      expect(unkept.textContent).toContain('No cadence keeps it — it runs when started.');
+      expect(unkept.getBoundingClientRect().right).toBeLessThanOrEqual(width);
 
       fixture.componentRef.setInput('vm', { ...VM, recentRuns: [], recentRunsState: 'empty', runsLabel: '0 in the last 28 days' });
       await fixture.whenStable();

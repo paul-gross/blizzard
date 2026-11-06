@@ -35,6 +35,10 @@ export function runDeltaVm(
             takeoverCommand: delta.escalation.takeover_command,
             wrappedTakeoverCommand: delta.escalation.wrapped_takeover_command,
           },
+    cadence:
+      delta.cadence === null
+        ? null
+        : { slug: delta.cadence.cadence_slug, name: delta.cadence.cadence_name, choreKey: delta.cadence.chore_key },
     sets: delta.sets.map((set) => ({
       findingSetId: set.finding_set_id,
       revisionsLabel: revisionsLabel(set.revisions),

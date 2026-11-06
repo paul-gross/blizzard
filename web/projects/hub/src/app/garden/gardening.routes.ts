@@ -4,12 +4,12 @@ import { gardenProjectGuard, gardeningDoorwayGuard } from './garden-lens.guard';
 
 /**
  * The gardening tab — a top-level peer of board/graphs/events, not a
- * panel inside any of them. Five deep-linkable children, one per noun the garden
- * machinery itself has: scopes, routines, runs, findings, proposals — every one of
+ * panel inside any of them. Six deep-linkable children, one per noun the garden
+ * machinery itself has: scopes, routines, cadences, runs, findings, proposals — every one of
  * them unrelated to its neighbors, so every one of them gets its own tab and its
  * own list.
  *
- * All five have one shape: the tab's list *is* the route, and its detail pane is a
+ * All six have one shape: the tab's list *is* the route, and its detail pane is a
  * child route under it — a bare child that selects nothing, and a `:param` child
  * naming the selection, both mounting the same detail component
  * (`gardening.routes.spec.ts` pins the list staying mounted across the pair).
@@ -58,6 +58,21 @@ export const GARDENING_ROUTES: Routes = [
           {
             path: ':routineSlug',
             loadComponent: () => import('./routines/gardening-routine-detail').then((m) => m.GardeningRoutineDetail),
+          },
+        ],
+      },
+      // A cadence is keyed by its slug, unique only inside its project.
+      {
+        path: 'cadences',
+        loadComponent: () => import('./cadences/gardening-cadences-page').then((m) => m.GardeningCadencesPage),
+        children: [
+          {
+            path: '',
+            loadComponent: () => import('./cadences/gardening-cadence-detail').then((m) => m.GardeningCadenceDetail),
+          },
+          {
+            path: ':cadenceSlug',
+            loadComponent: () => import('./cadences/gardening-cadence-detail').then((m) => m.GardeningCadenceDetail),
           },
         ],
       },

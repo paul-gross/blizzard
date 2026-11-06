@@ -1,13 +1,14 @@
 """A cadence's schedule — a five-field cron expression read as wall-clock time in an IANA zone.
 
-The only module that reaches the cron library. It answers three questions, each a pure function of the expression,
-the zone, and an instant it is handed, never a clock read: whether a schedule is valid, the latest moment at or
-before an instant, and the first moment after one."""
+The only module that reaches the cron library. It answers each question as a pure function of the expression, the
+zone, and an instant it is handed, never a clock read: whether a schedule is valid, the latest moment at or before an
+instant, the first moment after one, and the next several moments after one."""
 
 from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
+from itertools import islice
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from cronsim import CronSim, CronSimError
@@ -72,6 +73,12 @@ class Schedule:
         """The first moment strictly after ``at``, in UTC; ``None`` when none falls in the fifty years after it."""
         moment = next(CronSim(self.cron, at.astimezone(ZoneInfo(self.zone))), None)
         return None if moment is None else moment.astimezone(UTC)
+
+    def next_moments(self, at: datetime, count: int) -> tuple[datetime, ...]:
+        """Up to ``count`` moments strictly after ``at``, earliest first, in UTC; fewer only when the fifty years
+        after ``at`` hold fewer."""
+        iterator = CronSim(self.cron, at.astimezone(ZoneInfo(self.zone)))
+        return tuple(moment.astimezone(UTC) for moment in islice(iterator, count))
 
     def first_at_or_after(self, at: datetime) -> datetime | None:
         """The first moment at or after ``at``, in UTC; ``None`` when none falls in the fifty years after it."""

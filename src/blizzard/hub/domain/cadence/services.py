@@ -34,16 +34,21 @@ from blizzard.hub.domain.garden.scopes import IReadScopeRepository
 from blizzard.hub.domain.graph.model import IReadGraphRepository
 from blizzard.hub.domain.projects.model import Project
 
+#: How many of a schedule's coming moments a cadence's view carries.
+NEXT_MOMENTS = 5
+
 
 @domain_model
 @dataclass(frozen=True)
 class CadenceView:
     """A cadence beside the attention its errands need and its errands counted by state, as it stands at the
-    read. ``errand_counts`` holds an entry for every state."""
+    read. ``errand_counts`` holds an entry for every state; ``next_moments`` holds the schedule's next
+    :data:`NEXT_MOMENTS` moments after the read, earliest first — none with no schedule or once retired."""
 
     cadence: Cadence
     attention: tuple[Attention, ...]
     errand_counts: Mapping[ErrandState, int] = field(default_factory=lambda: dict.fromkeys(ErrandState, 0))
+    next_moments: tuple[datetime, ...] = ()
 
 
 @domain_model
@@ -174,7 +179,7 @@ class CadenceReading:
             counts = dict.fromkeys(ErrandState, 0)
             for row in read.errands:
                 counts[row.state] += 1
-            views.append(CadenceView(read.cadence, read.attention, counts))
+            views.append(CadenceView(read.cadence, read.attention, counts, read.next_moments))
         return views
 
     def _read(self, cadences: Sequence[Cadence]) -> list[_CadenceErrands]:
@@ -197,9 +202,17 @@ class CadenceReading:
                 cadence,
                 stopping,
                 [_errand_view(cadence, errand, stopping, runs.get(errand.key), now) for errand in held],
+                _next_moments(cadence, now),
             )
             for cadence, stopping, held in listed
         ]
+
+
+def _next_moments(cadence: Cadence, now: datetime) -> tuple[datetime, ...]:
+    schedule = cadence.rhythm.schedule
+    if schedule is None or cadence.retired:
+        return ()
+    return schedule.next_moments(now, NEXT_MOMENTS)
 
 
 def _by_scope(errand: Errand) -> str:
@@ -212,6 +225,7 @@ class _CadenceErrands:
     cadence: Cadence
     attention: tuple[Attention, ...]
     errands: list[ErrandView]
+    next_moments: tuple[datetime, ...]
 
 
 def _errand_view(

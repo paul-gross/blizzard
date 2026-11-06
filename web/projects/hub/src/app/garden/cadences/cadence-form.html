@@ -1,0 +1,76 @@
+@let d = draft();
+<form class="cf" [attr.data-testid]="testid()" (submit)="$event.preventDefault(); save()">
+  @if (creating()) {
+    <div class="cf-field">
+      <span class="cf-label">Slug</span>
+      <fleet-kit-text-input
+        [value]="d.slug"
+        ariaLabel="Slug"
+        placeholder="evening"
+        [testid]="testid() + '-slug'"
+        (valueChange)="set('slug', $event)"
+      />
+    </div>
+  }
+  <div class="cf-field">
+    <span class="cf-label">Name</span>
+    <fleet-kit-text-input
+      [value]="d.name"
+      ariaLabel="Name"
+      [placeholder]="creating() ? 'the slug, when blank' : null"
+      [testid]="testid() + '-name'"
+      (valueChange)="set('name', $event)"
+    />
+  </div>
+  <div class="cf-row">
+    <div class="cf-field">
+      <span class="cf-label">Cron</span>
+      <fleet-kit-text-input
+        [value]="d.cron"
+        ariaLabel="Cron"
+        placeholder="0 20 * * *"
+        [testid]="testid() + '-cron'"
+        (valueChange)="set('cron', $event)"
+      />
+    </div>
+    <div class="cf-field">
+      <span class="cf-label">Zone</span>
+      <fleet-kit-text-input
+        [value]="d.zone"
+        ariaLabel="Zone"
+        placeholder="America/Chicago"
+        [testid]="testid() + '-zone'"
+        (valueChange)="set('zone', $event)"
+      />
+    </div>
+  </div>
+  <div class="cf-row">
+    <div class="cf-field">
+      <span class="cf-label">Spacing</span>
+      <fleet-kit-text-input
+        [value]="d.spacing"
+        ariaLabel="Spacing"
+        placeholder="10d"
+        [testid]="testid() + '-spacing'"
+        (valueChange)="set('spacing', $event)"
+      />
+    </div>
+    <div class="cf-field">
+      <span class="cf-label">Anchor</span>
+      <fleet-kit-select
+        [options]="anchorOptions"
+        [selectedValue]="d.anchor"
+        ariaLabel="Anchor"
+        [testid]="testid() + '-anchor'"
+        (choose)="set('anchor', $event)"
+      />
+    </div>
+  </div>
+  <fleet-kit-error-line [message]="error()" [testid]="testid() + '-error'" />
+  <div class="cf-actions">
+    <fleet-kit-button variant="primary" [disabled]="pending()" [testid]="testid() + '-save'" (click)="save()">
+      {{ creating() ? 'Create' : 'Save' }}
+    </fleet-kit-button>
+    <fleet-kit-button [testid]="testid() + '-cancel'" (click)="cancelled.emit()">Cancel</fleet-kit-button>
+  </div>
+</form>

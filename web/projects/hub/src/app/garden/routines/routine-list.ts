@@ -16,6 +16,8 @@ export interface RoutineListRowVm {
   readonly blocked: boolean;
   /** Whether the routine's own retire/enable brake reads retired. */
   readonly retired: boolean;
+  /** Whether a chore on an enabled cadence keeps the routine — else it runs only when started. */
+  readonly kept: boolean;
 }
 
 /**

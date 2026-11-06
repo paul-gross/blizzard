@@ -145,3 +145,18 @@ td {
   color: var(--label-dim);
   font-style: italic;
 }
+/* Kept by — one chore per line, wrapping inside the fact value rather than widening the record. */
+.rp-kept-by {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  overflow-wrap: anywhere;
+}
+.rp-link {
+  color: var(--cyan);
+  text-decoration: none;
+}
+.rp-link:hover,
+.rp-link:focus-visible {
+  text-decoration: underline;
+}

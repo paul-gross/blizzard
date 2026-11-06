@@ -1,0 +1,237 @@
+<fleet-kit-async-state
+  [state]="state()"
+  placement="inline"
+  emptyText="Select a cadence to see its rhythm, its chores, and their errands."
+  emptyTestid="gardening-cadence-panel-empty"
+>
+  @let panel = vm();
+  @if (panel) {
+    <section class="cp" data-testid="gardening-cadence-panel">
+      <header class="cp-head">
+        <h3>{{ panel.name }}</h3>
+        @if (panel.name !== panel.slug) {
+          <code class="cp-slug" data-testid="gardening-cadence-panel-slug">{{ panel.slug }}</code>
+        }
+        <fleet-kit-badge data-testid="gardening-cadence-panel-state" [tone]="lifecycleTone(panel.renderedRetired)">{{
+          panel.renderedRetired ? 'retired' : 'enabled'
+        }}</fleet-kit-badge>
+        <span class="cp-grow"></span>
+        @if (canEdit()) {
+          <span class="cp-actions">
+            <fleet-kit-button
+              testid="gardening-cadence-panel-edit"
+              [disabled]="isOpen(panel, 'cadence')"
+              (click)="openForm(panel, 'cadence')"
+            >
+              Edit
+            </fleet-kit-button>
+            @if (panel.retired) {
+              <fleet-kit-button
+                variant="primary"
+                testid="gardening-cadence-panel-enable"
+                [disabled]="lifecyclePending()"
+                (click)="onEnable(panel)"
+              >
+                Re-enable
+              </fleet-kit-button>
+            } @else {
+              <fleet-kit-button
+                variant="danger"
+                testid="gardening-cadence-panel-retire"
+                [disabled]="lifecyclePending()"
+                (click)="onRetire(panel)"
+              >
+                Retire
+              </fleet-kit-button>
+            }
+          </span>
+        }
+      </header>
+
+      @if (isOpen(panel, 'cadence')) {
+        <app-cadence-form
+          class="cp-form"
+          testid="gardening-cadence-edit"
+          [initial]="panel.draft"
+          [pending]="editPending()"
+          [error]="actionError()"
+          (saved)="edit.emit($event)"
+          (cancelled)="closeForm()"
+        />
+      } @else {
+        <fleet-kit-error-line class="cp-error" [message]="actionError()" testid="gardening-cadence-panel-error" />
+      }
+
+      <ng-template #momentsFact>
+        @if (panel.nextMoments.length) {
+          <ol class="cp-moments">
+            @for (moment of panel.nextMoments; track moment.iso) {
+              <li data-testid="gardening-cadence-panel-moment">
+                {{ moment.text }} <fleet-when class="cp-rel" [iso]="moment.iso" [relative]="true" />
+              </li>
+            }
+          </ol>
+        } @else {
+          <span class="cp-dim" data-testid="gardening-cadence-panel-no-moments">no scheduled moment</span>
+        }
+      </ng-template>
+      <fleet-kit-fact-list class="cp-facts" testid="gardening-cadence-panel-facts" [rows]="factRows(momentsFact, panel.rhythm)" />
+
+      @if (panel.attention.length) {
+        <section class="cp-section" data-testid="gardening-cadence-panel-attention">
+          <h4>Needs attention</h4>
+          <ul class="cp-attention">
+            @for (item of panel.attention; track $index) {
+              <li>
+                @if (item.chore) {
+                  <code>{{ item.chore }}</code>
+                } @else {
+                  the cadence
+                }
+                @if (item.scope) {
+                  over <code>{{ item.scope }}</code>
+                }
+                : {{ item.reason }}
+              </li>
+            }
+          </ul>
+        </section>
+      }
+
+      <section class="cp-section" data-testid="gardening-cadence-panel-chores">
+        <h4>Chores</h4>
+        @for (chore of panel.chores; track chore.key) {
+          <article class="cp-chore" [attr.data-testid]="'gardening-cadence-chore-' + chore.key">
+            <div class="cp-chore-head">
+              <code class="cp-chore-key">{{ chore.key }}</code>
+              <span class="cp-dim">runs</span>
+              <a class="cp-link" [routerLink]="['/gardening', 'routines', chore.routine] | lensLink">{{ chore.routine }}</a>
+              <span class="cp-dim">over {{ chore.scopes }}, {{ chore.mode }}{{ chore.promote ? ', promoting' : '' }}</span>
+              <span class="cp-grow"></span>
+              @if (canEdit()) {
+                <span class="cp-actions">
+                  <fleet-kit-button
+                    [testid]="'gardening-cadence-chore-edit-' + chore.key"
+                    [disabled]="isOpen(panel, chore.key)"
+                    (click)="openForm(panel, { chore: chore.key })"
+                  >
+                    Edit
+                  </fleet-kit-button>
+                  <fleet-kit-button
+                    variant="danger"
+                    [testid]="'gardening-cadence-chore-remove-' + chore.key"
+                    [disabled]="editPending()"
+                    (click)="onRemoveChore(panel, chore.key)"
+                  >
+                    Remove
+                  </fleet-kit-button>
+                </span>
+              }
+            </div>
+            @if (chore.note) {
+              <p class="cp-note">{{ chore.note }}</p>
+            }
+            @if (isOpen(panel, chore.key)) {
+              <app-chore-form
+                [testid]="'gardening-chore-edit-' + chore.key"
+                [initial]="chore.draft"
+                [keyEditable]="false"
+                [pending]="editPending()"
+                [error]="actionError()"
+                (saved)="editChore.emit({ key: chore.key, draft: $event })"
+                (cancelled)="closeForm()"
+              />
+            }
+            @if (chore.errands; as errands) {
+              @if (errands.length) {
+                <div class="cp-table-wrap">
+                  <table class="cp-errands" [attr.data-testid]="'gardening-cadence-errands-' + chore.key">
+                    <thead>
+                      <tr>
+                        <th>Scope</th>
+                        <th>State</th>
+                        <th>Last run</th>
+                        <th>Due</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      @for (errand of errands; track errand.scope) {
+                        <tr [attr.data-testid]="'gardening-cadence-errand-' + chore.key + '-' + errand.scope">
+                          <td><code>{{ errand.scope }}</code></td>
+                          <td>
+                            <fleet-kit-badge [tone]="errand.tone">{{ errand.label }}</fleet-kit-badge>
+                            @if (errand.attention) {
+                              <span class="cp-why">{{ errand.attention }}</span>
+                            }
+                          </td>
+                          <td>
+                            @if (errand.lastRunAt; as at) {
+                              @if (errand.lastRunChunkId; as chunkId) {
+                                <a
+                                  class="cp-link"
+                                  [routerLink]="['/gardening', 'runs', chunkId] | lensLink"
+                                  data-testid="gardening-cadence-errand-run"
+                                  ><fleet-when [iso]="at" [relative]="true"
+                                /></a>
+                              } @else {
+                                <fleet-when [iso]="at" [relative]="true" />
+                              }
+                            } @else {
+                              <span class="cp-dim">never</span>
+                            }
+                          </td>
+                          <td>
+                            @if (errand.dueAt; as due) {
+                              <fleet-when [iso]="due" [relative]="true" data-testid="gardening-cadence-errand-due" />
+                            } @else {
+                              <span class="cp-dim">—</span>
+                            }
+                          </td>
+                        </tr>
+                      }
+                    </tbody>
+                  </table>
+                </div>
+              } @else {
+                <p class="cp-dim">No errand: the chore has no scope to run over.</p>
+              }
+            } @else {
+              <p class="cp-dim">…</p>
+            }
+          </article>
+        } @empty {
+          <p class="cp-dim" data-testid="gardening-cadence-panel-no-chores">The cadence keeps no chore.</p>
+        }
+        @if (canEdit()) {
+          @if (isOpen(panel, 'add-chore')) {
+            <app-chore-form
+              testid="gardening-chore-add"
+              [initial]="newChore"
+              [pending]="editPending()"
+              [error]="actionError()"
+              (saved)="addChore.emit($event)"
+              (cancelled)="closeForm()"
+            />
+          } @else {
+            <fleet-kit-button testid="gardening-cadence-chore-add" (click)="openForm(panel, 'add-chore')">
+              Add chore
+            </fleet-kit-button>
+          }
+        }
+      </section>
+    </section>
+  }
+</fleet-kit-async-state>
+
+@if (pendingConfirm(); as confirm) {
+  <fleet-kit-confirm-dialog
+    [open]="true"
+    [heading]="confirm.heading"
+    [message]="confirm.message"
+    [confirmLabel]="confirm.confirmLabel"
+    [variant]="confirm.variant"
+    testid="confirm-dialog"
+    (confirmed)="onConfirmed()"
+    (cancelled)="onCancelled()"
+  />
+}

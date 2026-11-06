@@ -1,5 +1,6 @@
 import {
   type AsyncStateQuery,
+  type CadenceView,
   type GardenProposalCountsView,
   type GardenSweepsView,
   type GraphSummaryView,
@@ -14,6 +15,7 @@ import { effectiveGraphByName } from './gardening-effective-graph';
 import type { RoutineEditVars } from './routine-edit.mutations';
 import type { RoutineLifecycleVars } from './routine-lifecycle.mutations';
 import type {
+  KeptByVm,
   LastSweptRowVm,
   MeasurementReadingVm,
   RecentRunVm,
@@ -152,6 +154,28 @@ export function routineRunsLabel(recent: readonly RecentRunVm[] | null, windowLa
   return recent === null ? null : `${recent.length} in the ${windowLabel}`;
 }
 
+/** The chores keeping `routine`, one row each, cadence by cadence in the list's order — a chore keeps a routine when
+ * its `routine` is the routine's slug, on an enabled cadence of the routine's own project. A retired cadence keeps
+ * nothing. `null` while the cadences read is pending or no routine is selected. */
+export function keptByRows(
+  cadences: readonly CadenceView[] | undefined,
+  routine: Pick<RoutineView, 'slug' | 'project_id'> | null,
+): readonly KeptByVm[] | null {
+  if (cadences === undefined || routine === null) return null;
+  return cadences
+    .filter((cadence) => !cadence.retired && cadence.project_id === routine.project_id)
+    .flatMap((cadence) =>
+      cadence.chores
+        .filter((chore) => chore.routine === routine.slug)
+        .map((chore) => ({
+          cadenceSlug: cadence.slug,
+          cadenceName: cadence.name,
+          choreKey: chore.key,
+          nextMoment: cadence.next_moments[0] ?? null,
+        })),
+    );
+}
+
 /** Everything {@link routinePanelVm} composes beside the routine itself. */
 export interface RoutinePanelParts {
   readonly blocked: boolean;
@@ -165,6 +189,8 @@ export interface RoutinePanelParts {
   readonly recentRuns: readonly RecentRunVm[] | null;
   readonly recentRunsState: KitAsyncStateValue;
   readonly measurementsState: KitAsyncStateValue;
+  readonly keptBy: readonly KeptByVm[] | null;
+  readonly keptByState: KitAsyncStateValue;
 }
 
 /** The routine panel's view model — `null` with no routine selected. `renderedRetired`
@@ -192,6 +218,8 @@ export function routinePanelVm(routine: RoutineView | null, parts: RoutinePanelP
     recentRunsState: parts.recentRunsState,
     measurementsState: parts.measurementsState,
     runsLabel: routineRunsLabel(parts.recentRuns, parts.windowLabel),
+    keptBy: parts.keptBy,
+    keptByState: parts.keptByState,
   };
 }
 

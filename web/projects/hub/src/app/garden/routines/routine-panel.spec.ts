@@ -1,5 +1,6 @@
 import { provideZonelessChangeDetection } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
+import { provideRouter } from '@angular/router';
 
 import { FleetRoutinePanel, type RoutinePanelVm } from './routine-panel';
 
@@ -39,6 +40,8 @@ const VM: RoutinePanelVm = {
   recentRunsState: 'ready',
   measurementsState: 'ready',
   runsLabel: '1 in the last 28 days',
+  keptBy: [],
+  keptByState: 'empty',
 };
 
 describe('FleetRoutinePanel', () => {
@@ -52,7 +55,7 @@ describe('FleetRoutinePanel', () => {
   }) {
     await TestBed.configureTestingModule({
       imports: [FleetRoutinePanel],
-      providers: [provideZonelessChangeDetection()],
+      providers: [provideZonelessChangeDetection(), provideRouter([])],
     }).compileComponents();
     const fixture = TestBed.createComponent(FleetRoutinePanel);
     // `'vm' in inputs`, not `??`: an explicit `null` is the nothing-selected case
@@ -100,7 +103,7 @@ describe('FleetRoutinePanel', () => {
       'Graph',
       'Default scope',
       'Model · effort',
-      'Cadence',
+      'Kept by',
       'Runs',
     ]);
     expect(el.querySelector('[data-testid="gardening-routine-fact-graph"]')?.textContent).toContain(
@@ -109,8 +112,41 @@ describe('FleetRoutinePanel', () => {
     expect(el.querySelector('[data-testid="gardening-routine-fact-model"]')?.textContent).toContain(
       'claude-sonnet-5 · medium',
     );
-    expect(el.querySelector('[data-testid="gardening-routine-fact-cadence"]')?.textContent).toContain('manual');
+    expect(el.querySelector('[data-testid="gardening-routine-fact-kept-by"]')?.textContent).toContain(
+      'No cadence keeps it — it runs when started.',
+    );
     expect(el.querySelector('[data-testid="gardening-routine-fact-runs"]')?.textContent).toContain('1 in the last 28 days');
+  });
+
+  it('names each chore keeping the routine, its cadence linked, and the next moment', async () => {
+    const fixture = await mount({
+      vm: {
+        ...VM,
+        keptBy: [
+          { cadenceSlug: 'evening', cadenceName: 'Evening', choreKey: 'nightly', nextMoment: '2026-01-11T02:00:00Z' },
+          { cadenceSlug: 'weekly', cadenceName: 'Weekly', choreKey: 'deep', nextMoment: null },
+        ],
+        keptByState: 'ready',
+      },
+    });
+    const el = fixture.nativeElement as HTMLElement;
+
+    const evening = el.querySelector('[data-testid="gardening-routine-kept-by-evening-nightly"]');
+    expect(evening?.textContent).toContain('chore nightly');
+    expect(evening?.textContent).toContain('next');
+    expect(evening?.querySelector('a')?.getAttribute('href')).toBe('/gardening/cadences/evening');
+    const weekly = el.querySelector('[data-testid="gardening-routine-kept-by-weekly-deep"]');
+    expect(weekly?.textContent).toContain('chore deep');
+    expect(weekly?.textContent).not.toContain('next');
+    expect(el.querySelector('[data-testid="gardening-routine-kept-by-none"]')).toBeNull();
+  });
+
+  it('holds the Kept by fact loading while the cadences read is pending', async () => {
+    const fixture = await mount({ vm: { ...VM, keptBy: null, keptByState: 'loading' } });
+    const el = fixture.nativeElement as HTMLElement;
+
+    expect(el.querySelector('[data-testid="gardening-routine-kept-by-loading"]')).toBeTruthy();
+    expect(el.querySelector('[data-testid="gardening-routine-kept-by-none"]')).toBeNull();
   });
 
   it('lists the recent runs, and says the window holds none once the read answers empty', async () => {

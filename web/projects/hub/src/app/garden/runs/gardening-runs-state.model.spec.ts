@@ -1,5 +1,6 @@
 import type { RoutineView, RunRowView } from 'fleet';
 import { describe, expect, it } from 'vitest';
+import { runCadenceView } from 'fleet/testing';
 
 import { mintedAtFor, runListRows, summedCounts } from './gardening-runs-state.model';
 
@@ -11,7 +12,8 @@ const DELIVERED_RUN: RunRowView = {
   minted_at: '2026-01-10T00:00:00Z',
   outcome: 'done',
   escalation: null,
-  cadence: null,
+  // Minted by a cadence — the list row reads the same as a hand-started run's.
+  cadence: runCadenceView(),
   delivered: [
     { finding_set_id: 'fins_1', revisions: { blizzard: 'abc123' }, measurement: '3 findings', added_count: 1, observed_count: 11, gone_count: 0 },
     { finding_set_id: 'fins_2', revisions: { blizzard: 'def456' }, measurement: null, added_count: 0, observed_count: 0, gone_count: 2 },

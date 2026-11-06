@@ -162,6 +162,7 @@ def _cadence_view(read: CadenceRead, labels: ProjectLabelFields) -> CadenceView:
         ],
         attention=[_attention_view(a) for a in read.attention],
         errand_counts=ErrandCountsView(**{state.value: count for state, count in read.errand_counts.items()}),
+        next_moments=[iso_utc(moment) for moment in read.next_moments],
         created_at=iso_utc(cadence.created_at),
         retired=cadence.retired,
         revision=cadence.revision,
