@@ -173,7 +173,7 @@ exit status, and the sanitized evidence together.
 This section covers OpenCode 1. OpenCode 2 admits by `ADMITTED_OPENCODE_V2_RANGE`
 (`src/blizzard/runner/harness/opencode_v2/version.py`), normalized by `normalize_opencode_v2_version`; its corpus lives
 at the same `src/blizzard/runner/harness/contracts/opencode/<version>/` path with `"major_version": 2` in its manifest,
-and `tests/test_runner_harness_opencode_v2_compatibility.py` and
+and `tests/unit/runner/harness/opencode_v2/compatibility/test_proof.py` and
 `tests/service/harnesses/test_opencode2_compatibility_service.py` judge it.
 
 This page's live diagnostic (above) runs against a version already inside the runner's admitted range —

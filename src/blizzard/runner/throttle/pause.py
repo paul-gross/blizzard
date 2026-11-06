@@ -281,7 +281,7 @@ class IWritePauseRepository(IReadPauseRepository, Protocol):
         """Append a local pause/start fact **and** its hub-bound report, atomically,
         and return the buffered report's seq. Appends rather than upserts:
         a locally-minted fact, not a mirror; taking the buffer entry here makes the
-        brake and its report crash-atomic (``tests/component/test_ingest_and_pause_verbs.py``).
+        brake and its report crash-atomic (``tests/component/runner/test_ingest_and_pause_verbs.py``).
         ``reason`` is stored alongside the fact so :meth:`~IReadPauseRepository.local_pause_reason`
         can read it back locally, not only through the hub-bound report."""
         ...
@@ -355,7 +355,7 @@ class PauseService:
         nothing when :meth:`LocalBrake.set_by_operator` finds it already in the requested state.
 
         The brake and its hub-bound report are one write: mirroring runs hub→runner only, so a brake
-        never reported up would never be repaired (``tests/component/test_ingest_and_pause_verbs.py``). The write
+        never reported up would never be repaired (``tests/component/runner/test_ingest_and_pause_verbs.py``). The write
         takes this runner's lock before it reads the brake, so the ceiling's engagement cannot race it."""
         with self._store.locked_brakes() as locked:
             fact = self._store.local_brake_locked(locked).set_by_operator(paused=paused, by=by, at=self._clock.now())

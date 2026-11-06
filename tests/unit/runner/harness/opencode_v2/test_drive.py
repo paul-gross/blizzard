@@ -23,7 +23,7 @@ from blizzard.runner.harness.opencode_v2.errors import ErrorKind
 from blizzard.runner.harness.opencode_v2.registration import ServiceRegistration
 from blizzard.runner.harness.opencode_v2.request import FIXED_DENIES, DriveKind, DriveRequest
 from blizzard.runner.harness.opencode_v2.result import DriverResult, Outcome, parse_result
-from tests.unit.runner.harness.opencode_v2.service_fake import (
+from tests.support.opencode_v2_session_service import (
     MODEL,
     REGISTRATION,
     Record,

@@ -68,6 +68,23 @@ def unmirrored_folder(path: Path, tests_root: Path, package_root: Path) -> Path 
     return None
 
 
+#: The only modules a tier folder holds besides its test modules.
+TIER_FOLDER_MODULES = frozenset({"__init__.py", "conftest.py"})
+
+
+def tier_folder_helpers(tests_root: Path) -> list[Path]:
+    """Every non-test module under a tier folder of ``tests_root``, sorted; shared helpers belong in ``support/``.
+
+    Collection never sees an uncollected helper, so this reads the folders rather than judging a collected item.
+    """
+    return sorted(
+        path
+        for folder in FOLDER_TIERS
+        for path in (tests_root / folder).rglob("*.py")
+        if path.name not in TIER_FOLDER_MODULES and not path.name.startswith("test_")
+    )
+
+
 def _relative_parts(path: Path, root: Path) -> tuple[str, ...] | None:
     try:
         return path.resolve().relative_to(root.resolve()).parts

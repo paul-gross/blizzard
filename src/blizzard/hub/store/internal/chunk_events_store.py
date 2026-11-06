@@ -364,7 +364,7 @@ def _pause_cause(r: Row[Any]) -> ActivityChunkChangeCause:
 
 
 #: The activity feed's fact-table sources, in feed order. The keys equal the registry's events narrowing
-#: (``tests/test_fact_families.py``); ``chunks`` is the feed's root and is read apart.
+#: (``tests/unit/hub/store/internal/test_fact_families.py``); ``chunks`` is the feed's root and is read apart.
 EVENT_SOURCES: dict[Table, _EventSource] = {
     s.chunk_promoted: _EventSource(chunk_promoted_stmt, "promoted"),
     s.chunk_demoted: _EventSource(_chunk_demoted_stmt, "demoted"),

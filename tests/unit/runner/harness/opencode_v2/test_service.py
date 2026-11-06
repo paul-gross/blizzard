@@ -13,7 +13,7 @@ import pytest
 from blizzard.runner.harness.opencode_v2.service import ServiceKeeper, ServiceUnavailableError
 from blizzard.runner.process.child_env import AllowlistedEnv, ChildEnv
 from blizzard.runner.process.child_processes import ChildRun, ShellCommand
-from tests.unit.runner.harness.opencode_v2.service_fake import REGISTRATION, SessionService, SessionTransport
+from tests.support.opencode_v2_session_service import REGISTRATION, SessionService, SessionTransport
 
 
 @dataclass

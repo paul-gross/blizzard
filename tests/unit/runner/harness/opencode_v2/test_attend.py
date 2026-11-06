@@ -20,7 +20,7 @@ from blizzard.runner.harness.opencode_v2.client import ModelReference
 from blizzard.runner.harness.opencode_v2.driver import DriverCore
 from blizzard.runner.harness.opencode_v2.request import FIXED_DENIES
 from blizzard.runner.harness.opencode_v2.transport import ServiceRequest, ServiceResponse
-from tests.unit.runner.harness.opencode_v2.service_fake import MODEL, REGISTRATION, SessionService, SessionTransport
+from tests.support.opencode_v2_session_service import MODEL, REGISTRATION, SessionService, SessionTransport
 
 ROOT = "ses_01JROOT0000000000000000000"
 CHILD = "ses_01JCHILD000000000000000000"

@@ -7,7 +7,7 @@ from pathlib import Path
 
 from fastapi.testclient import TestClient
 
-from tests.conftest import Daemon
+from tests.support.daemons import Daemon
 
 
 def test_ready_probe_true_against_migrated_store(daemon: Daemon, tmp_path: Path) -> None:

@@ -3,7 +3,7 @@
 Drives every read method of every runner/hub ``IRead*`` Protocol against a real, migrated-to-head sqlite store and
 fails if any reads a table whole — a scan, an automatic index, an ordered walk of a named index, or a search on the
 tenant prefix alone — where ``tests/support/store_scan_allowlist.py``'s allow-lists name no reason for it, coverage enforced by reflection equality against ``tests/support/store_read_census.py``'s census/exemptions.
-``tests/component/runner/store/test_store_indexes.py``/``tests/component/hub/store/internal/test_chunk_fact_table_indexes.py`` keep their own narrower purpose."""
+``tests/component/runner/store/test_indexes.py``/``tests/component/hub/store/internal/test_chunk_fact_table_indexes.py`` keep their own narrower purpose."""
 
 from __future__ import annotations
 
