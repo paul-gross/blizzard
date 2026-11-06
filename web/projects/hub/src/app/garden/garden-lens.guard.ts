@@ -10,7 +10,7 @@ import { GARDENING_DOORWAY_URL, GARDENING_LANDING_TAB } from './core/garden-proj
 import { isRecordTab, readRecordProject } from './core/garden-record.query';
 
 /** The tabs whose record segment is a name, unique only inside its project. */
-const NAMED_RECORDS: Readonly<Record<string, string>> = { scopes: 'scope', routines: 'routine' };
+const NAMED_RECORDS: Readonly<Record<string, string>> = { scopes: 'scope', routines: 'routine', cadences: 'cadence' };
 
 /** The tab and the record a gardening URL on All names: `/gardening/{tab}/{record}`, either part `null` when absent. */
 export function gardenPathOf(url: string): { readonly tab: string | null; readonly record: string | null } {
@@ -52,7 +52,7 @@ export const gardeningDoorwayGuard: CanActivateFn = async (_route, state) => {
  * - With exactly one project, the link opens under its lens as it is.
  * - A run, a finding or a proposal is named by an id unique in the tenant: the link opens under the lens of the
  *   project its own read names. A record the tenant does not hold opens the doorway with a notice.
- * - A scope's slug and a routine's slug are unique only inside a project, and the board never matches one across
+ * - A scope's, a routine's and a cadence's slug are unique only inside a project, and the board never matches one across
  *   projects: the link opens the doorway with a notice to choose the project.
  * - A bare tab opens the doorway.
  */

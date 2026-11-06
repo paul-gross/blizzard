@@ -337,3 +337,27 @@ export {
   projectRunDeltaApiProjectsProjectRunsChunkIdGet,
   retireProjectScopeApiProjectsProjectScopesSlugRetirePost,
 } from './lib/api/hub';
+// A project's cadences: the list read in the project, and each cadence's own verbs, addressed by its id.
+export {
+  AttentionReason,
+  ErrandState,
+  RunMode,
+  createProjectCadenceApiProjectsProjectCadencesPost,
+  editCadenceApiCadencesCadenceIdPatch,
+  enableCadenceApiCadencesCadenceIdEnablePost,
+  listCadenceErrandsApiCadencesCadenceIdErrandsGet,
+  listCadencesApiCadencesGet,
+  listProjectCadencesApiProjectsProjectCadencesGet,
+  retireCadenceApiCadencesCadenceIdRetirePost,
+} from './lib/api/hub';
+export type {
+  CadenceAttentionView,
+  CadenceCreateRequest,
+  CadenceEditRequest,
+  CadenceErrandView,
+  CadenceView,
+  ChoreDocument,
+  ChoreView,
+  ErrandRunView,
+  RunCadenceView,
+} from './lib/api/hub';

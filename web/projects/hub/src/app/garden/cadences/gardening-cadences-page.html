@@ -1,0 +1,42 @@
+<fleet-kit-master-detail
+  class="gc-layout"
+  paneId="gardening-cadences"
+  testidPrefix="gardening-cadences"
+  backLabel="Cadences"
+  [drilldown]="mobile()"
+  [hasSelection]="cadenceSlugParam() !== null"
+  (back)="onBack()"
+>
+  <fleet-kit-panel kit-master-detail-list class="gc-left" [label]="'Cadences · ' + projectName()">
+    @if (flagOffLine(); as line) {
+      <p class="gc-flag-off" data-testid="gardening-cadences-flag-off">{{ line }}</p>
+    }
+    @if (canEdit()) {
+      @if (creating()) {
+        <app-cadence-form
+          class="gc-create"
+          testid="gardening-cadence-create"
+          [initial]="emptyDraft"
+          [creating]="true"
+          [pending]="createPending()"
+          [error]="createError()"
+          (saved)="onCreate($event)"
+          (cancelled)="closeCreate()"
+        />
+      } @else {
+        <div class="gc-create">
+          <fleet-kit-button testid="gardening-cadence-new" (click)="openCreate()">New cadence</fleet-kit-button>
+        </div>
+      }
+    }
+    <app-cadence-list
+      [rows]="cadenceRows()"
+      [selectedSlug]="selectedCadenceSlug()"
+      [state]="cadencesState()"
+      (cadencePick)="selectCadence($event)"
+    />
+  </fleet-kit-panel>
+  <fleet-kit-panel kit-master-detail-detail class="gc-right" label="Cadence">
+    <router-outlet />
+  </fleet-kit-panel>
+</fleet-kit-master-detail>

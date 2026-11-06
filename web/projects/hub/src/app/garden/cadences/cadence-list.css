@@ -1,0 +1,44 @@
+:host {
+  display: block;
+  font-family: var(--mono);
+  font-size: var(--fs-base);
+  color: var(--text);
+}
+.cd-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.cd-top {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  min-width: 0;
+}
+.cd-name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.cd-flag {
+  flex: none;
+}
+.cd-rhythm {
+  margin-top: 2px;
+  color: var(--label);
+  font-size: var(--fs-sm);
+  overflow-wrap: anywhere;
+}
+.cd-counts {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 4px 6px;
+  margin-top: 4px;
+  font-size: var(--fs-xs);
+}
+.cd-chores {
+  color: var(--label);
+}

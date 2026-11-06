@@ -1,0 +1,36 @@
+:host {
+  display: block;
+  font-family: var(--mono);
+  font-size: var(--fs-base);
+  color: var(--text);
+}
+.cf {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 0;
+}
+.cf-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.cf-row > .cf-field {
+  flex: 1 1 140px;
+}
+.cf-field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+.cf-label {
+  font-size: var(--fs-label);
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--label);
+}
+.cf-actions {
+  display: flex;
+  gap: 6px;
+}

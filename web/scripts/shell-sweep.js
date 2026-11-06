@@ -120,6 +120,10 @@
  *     related-routines list genuinely stack at 1280/390/320px with no
  *     horizontal overflow, and a routine name long enough to wrap stays
  *     inside the list rather than widening the panel.
+ *   - projects/hub/src/app/garden/cadences/cadence-panel.shell-sweep.spec.ts —
+ *     the gardening cadence panel: its rhythm, next moments, attention, and
+ *     chores with their errands tables stack at 1280/390px with no horizontal
+ *     overflow, a long routine slug wrapping inside its chore.
  *   - projects/hub/src/app/admin/admin-config.shell-sweep.spec.ts — the Admin
  *     config surfaces: a desktop detail carries its write controls and a
  *     phone's carries none and shows the CLI command, both without horizontal
@@ -217,11 +221,11 @@
  *     Cancel/submit buttons sit side by side without overflowing the panel, at
  *     1400/390/320px.
  *   - projects/hub/src/app/garden/gardening-page-grids.shell-sweep.spec.ts —
- *     the three gardening sub-tabs the five-way split added (Scopes, Runs,
+ *     the gardening sub-tabs sharing one split (Scopes, Cadences, Runs,
  *     Findings): each one's own master/detail grid sits list beside detail at
- *     1280px and genuinely swaps from list to detail at 700/390/320px with no
+ *     1280px and genuinely swaps from list to detail at 740/700/390/320px with no
  *     horizontal overflow — the same mobile drill-down claim Routines and Proposals
- *     each carry, driven from one table rather than three copied files.
+ *     each carry, driven from one table rather than one copied file per page.
  *   - projects/hub/src/app/garden/findings/gardening-findings-filters.shell-sweep.spec.ts —
  *     the findings tab widened to every routine and every scope (blizzard#486): the
  *     four filter chip rows (routine, scope, class, state), each now carrying a
@@ -353,6 +357,7 @@ const SWEEPS = [
   { project: 'hub', spec: 'projects/hub/src/app/graphs/graph-diagram.shell-sweep.spec.ts' },
   { project: 'hub', spec: 'projects/hub/src/app/garden/routines/routine-panel.shell-sweep.spec.ts' },
   { project: 'hub', spec: 'projects/hub/src/app/garden/scopes/scope-panel.shell-sweep.spec.ts' },
+  { project: 'hub', spec: 'projects/hub/src/app/garden/cadences/cadence-panel.shell-sweep.spec.ts' },
   { project: 'hub', spec: 'projects/hub/src/app/admin/admin-config.shell-sweep.spec.ts' },
   { project: 'hub', spec: 'projects/hub/src/app/admin/members/members-table.shell-sweep.spec.ts' },
   { project: 'hub', spec: 'projects/hub/src/app/admin/projects/projects-table.shell-sweep.spec.ts' },

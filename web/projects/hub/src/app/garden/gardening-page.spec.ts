@@ -5,6 +5,7 @@ import { QueryClient, provideTanStackQuery } from '@tanstack/angular-query-exper
 import type { GardenProposalView } from 'fleet';
 import {
   type RequestClientStub,
+  gardenCadenceView,
   gardenProjectView,
   gardenProposalClosureView,
   gardenProposalView,
@@ -27,6 +28,7 @@ describe('GardeningPage (blizzard#397)', () => {
       'GET /api/garden-proposals': () => ({ proposals, next_cursor: null }),
       'GET /api/scopes': () => [gardenScopeView({ slug: 'a' }), gardenScopeView({ slug: 'b' })],
       'GET /api/routines': () => [gardenRoutineView({ routine_id: 'rtn_1', name: 'nightly' })],
+      'GET /api/cadences': () => [gardenCadenceView({ slug: 'evening' }), gardenCadenceView({ slug: 'weekly' }), gardenCadenceView({ slug: 'off', retired: true })],
       'GET /api/runs': () => [],
     });
     await TestBed.configureTestingModule({
@@ -42,12 +44,12 @@ describe('GardeningPage (blizzard#397)', () => {
     return fixture;
   }
 
-  it('renders the five surfaces in their order', async () => {
+  it('renders the six surfaces in their order', async () => {
     const fixture = await render([]);
     const el = fixture.nativeElement as HTMLElement;
 
     const tabs = Array.from(el.querySelectorAll('[fleetKitTab]')).map((t) => t.getAttribute('data-testid'));
-    expect(tabs).toEqual(['gardening-tab-scopes', 'gardening-tab-routines', 'gardening-tab-runs', 'gardening-tab-findings', 'gardening-tab-proposals']);
+    expect(tabs).toEqual(['gardening-tab-scopes', 'gardening-tab-routines', 'gardening-tab-cadences', 'gardening-tab-runs', 'gardening-tab-findings', 'gardening-tab-proposals']);
     expect(el.querySelector('[data-testid="gardening-tab-runs"]')?.textContent).toContain('Runs');
     expect(el.querySelector('[data-testid="gardening-tab-findings"]')?.textContent).toContain('Findings');
   });
@@ -74,6 +76,7 @@ describe('GardeningPage (blizzard#397)', () => {
     expect(count('proposals')?.classList.contains('hot')).toBe(true);
     expect(count('scopes')?.textContent).toBe('2');
     expect(count('routines')?.textContent).toBe('1');
+    expect(count('cadences')?.textContent).toBe('3');
     expect(count('runs')?.textContent).toBe('0');
     expect(count('findings')).toBeNull();
     expect(count('scopes')?.classList.contains('hot')).toBe(false);

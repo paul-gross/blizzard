@@ -1,0 +1,65 @@
+@let d = draft();
+<form class="chf" [attr.data-testid]="testid()" (submit)="$event.preventDefault(); save()">
+  <div class="chf-row">
+    <div class="chf-field">
+      <span class="chf-label">Key</span>
+      @if (keyEditable()) {
+        <fleet-kit-text-input
+          [value]="d.key"
+          ariaLabel="Chore key"
+          placeholder="nightly"
+          [testid]="testid() + '-key'"
+          (valueChange)="set('key', $event)"
+        />
+      } @else {
+        <span class="chf-fixed" [attr.data-testid]="testid() + '-key'">{{ d.key }}</span>
+      }
+    </div>
+    <div class="chf-field">
+      <span class="chf-label">Routine</span>
+      <fleet-kit-text-input
+        [value]="d.routine"
+        ariaLabel="Routine slug"
+        placeholder="nightly"
+        [testid]="testid() + '-routine'"
+        (valueChange)="set('routine', $event)"
+      />
+    </div>
+  </div>
+  <div class="chf-field">
+    <span class="chf-label">Scopes</span>
+    <fleet-kit-text-input
+      [value]="d.scopes"
+      ariaLabel="Scopes"
+      placeholder="all, a list of slugs, or blank for the routine's default"
+      [testid]="testid() + '-scopes'"
+      (valueChange)="set('scopes', $event)"
+    />
+  </div>
+  <div class="chf-row">
+    <div class="chf-field">
+      <span class="chf-label">Mode</span>
+      <fleet-kit-chips [options]="modeOptions()" [selectedValue]="d.mode" (choose)="set('mode', $event)" />
+    </div>
+    <div class="chf-field">
+      <span class="chf-label">Promote</span>
+      <fleet-kit-checkbox
+        [checked]="d.promote"
+        label="promote its runs"
+        [testid]="testid() + '-promote'"
+        (checkedChange)="setPromote($event)"
+      />
+    </div>
+  </div>
+  <div class="chf-field">
+    <span class="chf-label">Note</span>
+    <fleet-kit-text-input [value]="d.note" ariaLabel="Note" [testid]="testid() + '-note'" (valueChange)="set('note', $event)" />
+  </div>
+  <fleet-kit-error-line [message]="error()" [testid]="testid() + '-error'" />
+  <div class="chf-actions">
+    <fleet-kit-button variant="primary" [disabled]="pending()" [testid]="testid() + '-save'" (click)="save()">
+      Save chore
+    </fleet-kit-button>
+    <fleet-kit-button [testid]="testid() + '-cancel'" (click)="cancelled.emit()">Cancel</fleet-kit-button>
+  </div>
+</form>

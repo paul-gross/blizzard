@@ -1,0 +1,14 @@
+<app-cadence-panel
+  [vm]="panelVm()"
+  [state]="panelState()"
+  [canEdit]="canEdit()"
+  [actionError]="actionError()"
+  [editPending]="editPending()"
+  [lifecyclePending]="lifecyclePending()"
+  (edit)="onEdit($event)"
+  (addChore)="onAddChore($event)"
+  (editChore)="onEditChore($event)"
+  (removeChore)="onRemoveChore($event)"
+  (retire)="onRetire()"
+  (enable)="onEnable()"
+/>

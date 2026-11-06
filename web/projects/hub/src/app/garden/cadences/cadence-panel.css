@@ -1,0 +1,132 @@
+:host {
+  display: block;
+  font-family: var(--mono);
+  font-size: var(--fs-base);
+  color: var(--text);
+}
+.cp {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+/* The detail header: the name, its slug and lifecycle, then the cadence's own actions at the right. */
+.cp-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 10px;
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--line);
+}
+.cp-head h3 {
+  margin: 0;
+  min-width: 0;
+  color: var(--snow);
+  font-size: var(--fs-lg);
+  font-weight: normal;
+  letter-spacing: 0.02em;
+  overflow-wrap: anywhere;
+}
+.cp-slug {
+  color: var(--label);
+  overflow-wrap: anywhere;
+}
+.cp-grow {
+  flex: 1;
+}
+.cp-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.cp-error,
+.cp-form {
+  margin: 8px 12px 0;
+}
+.cp-facts {
+  --kv-label-col: max-content;
+  padding: 8px 12px;
+}
+.cp-moments {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.cp-rel,
+.cp-dim,
+.cp-why {
+  color: var(--label);
+}
+.cp-why {
+  margin-left: 6px;
+  font-size: var(--fs-sm);
+}
+.cp-section {
+  padding: 0 12px 10px;
+  min-width: 0;
+}
+.cp-section h4 {
+  margin: 8px 0 6px;
+  font-size: var(--fs-label);
+  font-weight: normal;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--label);
+}
+.cp-attention {
+  margin: 0;
+  padding-left: 16px;
+  overflow-wrap: anywhere;
+}
+.cp-chore {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 8px 0;
+  border-top: 1px solid var(--line);
+  min-width: 0;
+}
+.cp-chore-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 4px 8px;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.cp-chore-key {
+  color: var(--snow);
+}
+.cp-note {
+  margin: 0;
+  color: var(--label);
+  overflow-wrap: anywhere;
+}
+.cp-link {
+  color: var(--cyan);
+  text-decoration: none;
+}
+.cp-link:hover,
+.cp-link:focus-visible {
+  text-decoration: underline;
+}
+/* The errands table scrolls inside its own box at a narrow width rather than widening the panel. */
+.cp-table-wrap {
+  max-width: 100%;
+  overflow-x: auto;
+}
+.cp-errands {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: var(--fs-sm);
+}
+.cp-errands th {
+  text-align: left;
+  font-weight: normal;
+  color: var(--label);
+  padding: 2px 8px 2px 0;
+}
+.cp-errands td {
+  padding: 3px 8px 3px 0;
+  vertical-align: baseline;
+}

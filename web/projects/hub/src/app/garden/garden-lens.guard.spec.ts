@@ -173,6 +173,7 @@ describe('the gardening guards on All', () => {
   for (const [tab, noun] of [
     ['scopes', 'scope'],
     ['routines', 'routine'],
+    ['cadences', 'cadence'],
   ] as const) {
     it(`never matches a ${noun}'s name across projects: the doorway opens with a notice`, async () => {
       const { fixture, router, lens } = await boot(SEVERAL);
