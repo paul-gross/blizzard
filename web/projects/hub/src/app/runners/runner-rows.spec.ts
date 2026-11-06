@@ -3,8 +3,15 @@ import { TestBed } from '@angular/core/testing';
 import { QueryClient, provideTanStackQuery } from '@tanstack/angular-query-experimental';
 import { vi } from 'vitest';
 
-import { FRESHNESS_AGING_AFTER_MS, hubClient } from 'fleet';
-import { settle, type RequestClientStub, stubError, stubRequestClient } from 'fleet/testing';
+import { FRESHNESS_AGING_AFTER_MS } from 'fleet';
+import {
+  type RequestClientStub,
+  runnerRegistryView,
+  settle,
+  stubError,
+  stubHubClient,
+  subscriptionUsageView,
+} from 'fleet/testing';
 import { injectRunnerRows } from './runner-rows';
 
 
@@ -21,20 +28,9 @@ describe('injectRunnerRows subscription freshness fold', () => {
 
   let stub: RequestClientStub;
 
-  function runnersResponse(subscriptions: readonly Record<string, unknown>[]) {
+  function runnersResponse(subscriptions: ReturnType<typeof subscriptionUsageView>[]) {
     return {
-      runners: [
-        {
-          runner_id: 'rn_tick',
-          workspace_id: 'ws_a',
-          registered_at: SAMPLED_AT,
-          last_seen_at: SAMPLED_AT,
-          online: true,
-          hub_paused: false,
-          locally_paused: false,
-          subscriptions,
-        },
-      ],
+      runners: [runnerRegistryView({ runner_id: 'rn_tick', registered_at: SAMPLED_AT, last_seen_at: SAMPLED_AT, subscriptions })],
     };
   }
 
@@ -44,14 +40,11 @@ describe('injectRunnerRows subscription freshness fold', () => {
   });
 
   it("reclassifies a member's tier when the now signal advances, with no new query data", async () => {
-    stub = stubRequestClient(hubClient, (method, path) => {
-      if (method === 'GET' && path === '/api/runners') {
-        return runnersResponse([
-          { slug: 'anthropic', name: 'Anthropic', sampled_at: SAMPLED_AT, windows: [], condition: null },
-        ]);
-      }
-      if (method === 'GET' && path === '/api/chunks') return { chunks: [], next_cursor: null };
-      return {};
+    stub = stubHubClient({
+      'GET /api/runners': () =>
+        runnersResponse([subscriptionUsageView({ slug: 'anthropic', name: 'Anthropic', sampled_at: SAMPLED_AT })]),
+      'GET /api/hosts': () => ({ hosts: [] }),
+      'GET /api/chunks': () => ({ chunks: [], next_cursor: null }),
     });
     await TestBed.configureTestingModule({
       imports: [TestHost],
@@ -78,14 +71,11 @@ describe('injectRunnerRows subscription freshness fold', () => {
   });
 
   it('gives no tier and no refreshed label for an unparseable sampled_at', async () => {
-    stub = stubRequestClient(hubClient, (method, path) => {
-      if (method === 'GET' && path === '/api/runners') {
-        return runnersResponse([
-          { slug: 'anthropic', name: 'Anthropic', sampled_at: 'not-a-date', windows: [], condition: null },
-        ]);
-      }
-      if (method === 'GET' && path === '/api/chunks') return { chunks: [], next_cursor: null };
-      return {};
+    stub = stubHubClient({
+      'GET /api/runners': () =>
+        runnersResponse([subscriptionUsageView({ slug: 'anthropic', name: 'Anthropic', sampled_at: 'not-a-date' })]),
+      'GET /api/hosts': () => ({ hosts: [] }),
+      'GET /api/chunks': () => ({ chunks: [], next_cursor: null }),
     });
     await TestBed.configureTestingModule({
       imports: [TestHost],
@@ -106,31 +96,26 @@ describe('injectRunnerRows subscription freshness fold', () => {
 
 describe('injectRunnerRows retired runners', () => {
   const AT = '2026-07-16T11:44:00.000Z';
-  const RETIRED = {
+  const RETIRED = runnerRegistryView({
     runner_id: 'rn_gone',
-    workspace_id: 'ws_a',
     registered_at: AT,
     last_seen_at: AT,
     online: false,
-    hub_paused: false,
-    locally_paused: false,
+    connection: 'offline',
     retired: true,
     retired_at: AT,
     retired_by: 'op',
-  };
-  const LIVE = { ...RETIRED, runner_id: 'rn_live', online: true, retired: false, retired_at: null, retired_by: null };
+  });
+  const LIVE = { ...RETIRED, runner_name: 'rn_live', connection: 'online' as const, runner_id: 'rn_live', online: true, retired: false, retired_at: null, retired_by: null };
 
   let stub: RequestClientStub;
 
   beforeEach(async () => {
     // The hub hides a retired runner unless asked with `include_retired`.
-    stub = stubRequestClient(hubClient, (method, path) => {
-      if (method === 'GET' && path === '/api/runners') {
-        const asked = stub.forRoute('/api/runners').at(-1)?.search.includes('include_retired=true');
-        return { runners: asked ? [LIVE, RETIRED] : [LIVE] };
-      }
-      if (method === 'GET' && path === '/api/chunks') return { chunks: [], next_cursor: null };
-      return {};
+    stub = stubHubClient({
+      'GET /api/runners': (request) => ({ runners: request.search.includes('include_retired=true') ? [LIVE, RETIRED] : [LIVE] }),
+      'GET /api/hosts': () => ({ hosts: [] }),
+      'GET /api/chunks': () => ({ chunks: [], next_cursor: null }),
     });
     await TestBed.configureTestingModule({
       imports: [TestHost],
@@ -164,16 +149,18 @@ describe('injectRunnerRows retired runners', () => {
   });
 });
 
+/** The `GET /api/hosts` handler a state case answers with. */
+type HostsRoute = NonNullable<Parameters<typeof stubHubClient>[0]['GET /api/hosts']>;
+
 describe('injectRunnerRows state', () => {
   let stub: RequestClientStub;
   let releaseHosts: () => void;
 
-  async function configure(hosts: () => unknown | Promise<unknown>) {
-    stub = stubRequestClient(hubClient, async (method, path) => {
-      if (method === 'GET' && path === '/api/runners') return { runners: [] };
-      if (method === 'GET' && path === '/api/hosts') return hosts();
-      if (method === 'GET' && path === '/api/chunks') return { chunks: [], next_cursor: null };
-      return {};
+  async function configure(hosts: HostsRoute) {
+    stub = stubHubClient({
+      'GET /api/runners': () => ({ runners: [] }),
+      'GET /api/hosts': hosts,
+      'GET /api/chunks': () => ({ chunks: [], next_cursor: null }),
     });
     await TestBed.configureTestingModule({
       imports: [TestHost],

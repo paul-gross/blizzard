@@ -2,20 +2,26 @@ import { provideZonelessChangeDetection } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { QueryClient, provideTanStackQuery } from '@tanstack/angular-query-experimental';
 
-import { settle, type RequestClientStub, stubError, stubRequestClient } from 'fleet/testing';
-import { hubClient } from 'fleet';
+import { graphSummaryView, settle, type RequestClientStub, stubError, stubHubClient } from 'fleet/testing';
 import { GraphExplorer } from './graph-explorer';
 
 const GRAPHS = [
-  { graph_id: 'gr_build_v2', name: 'build', created_at: '2026-07-18T00:00:00Z', effective: true, entry_node_id: 'n1' },
-  { graph_id: 'gr_build_v1', name: 'build', created_at: '2026-07-01T00:00:00Z', effective: false, entry_node_id: 'n1' },
+  graphSummaryView({ graph_id: 'gr_build_v2', name: 'build', created_at: '2026-07-18T00:00:00Z', effective: true, entry_node_id: 'n1' }),
+  graphSummaryView({
+    graph_id: 'gr_build_v1',
+    name: 'build',
+    created_at: '2026-07-01T00:00:00Z',
+    effective: false,
+    entry_node_id: 'n1',
+    lifecycle: 'superseded',
+  }),
 ];
 
 describe('GraphExplorer', () => {
   let stub: RequestClientStub;
 
-  async function mount(route: (method: string, path: string) => unknown) {
-    stub = stubRequestClient(hubClient, route);
+  async function mount(listGraphs: NonNullable<Parameters<typeof stubHubClient>[0]['GET /api/graphs']>) {
+    stub = stubHubClient({ 'GET /api/graphs': listGraphs });
     await TestBed.configureTestingModule({
       imports: [GraphExplorer],
       providers: [

@@ -2,8 +2,16 @@ import { Component, provideZonelessChangeDetection } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { provideRouter, Router, RouterOutlet, type Routes } from '@angular/router';
 import { QueryClient, provideTanStackQuery } from '@tanstack/angular-query-experimental';
-import { hubClient, ViewportService } from 'fleet';
-import { OPERATOR_ME_RESPONSE, settle, stubRequestClient } from 'fleet/testing';
+import { ViewportService } from 'fleet';
+import {
+  OPERATOR_ME_RESPONSE,
+  gardenFindingView,
+  gardenRoutineView,
+  gardenScopeView,
+  runRowView,
+  settle,
+  stubHubClient,
+} from 'fleet/testing';
 import { commands, page } from 'vitest/browser';
 
 import { GardeningFindingsPage } from './findings/gardening-findings-page';
@@ -50,18 +58,15 @@ function tokenColor(token: string): string {
  * run it via `npm run shell-sweep` (`web/scripts/shell-sweep.js`).
  */
 const SCOPES = [
-  { slug: 'blizzard', description: 'the hub, runner, CLI and board', retired: false, created_at: '2026-01-01T00:00:00Z' },
-  { slug: 'web', description: 'the Angular workspace', retired: true, created_at: '2026-01-01T00:00:00Z' },
-  ...Array.from({ length: 38 }, (_, i) => ({
-    slug: `scope-${i + 1}`,
-    description: `Additional scope ${i + 1}`,
-    retired: false,
-    created_at: '2026-01-01T00:00:00Z',
-  })),
+  gardenScopeView({ slug: 'blizzard', description: 'the hub, runner, CLI and board', created_at: '2026-01-01T00:00:00Z' }),
+  gardenScopeView({ slug: 'web', description: 'the Angular workspace', retired: true, created_at: '2026-01-01T00:00:00Z' }),
+  ...Array.from({ length: 38 }, (_, i) =>
+    gardenScopeView({ slug: `scope-${i + 1}`, description: `Additional scope ${i + 1}`, created_at: '2026-01-01T00:00:00Z' }),
+  ),
 ];
 
 const ROUTINES = [
-  {
+  gardenRoutineView({
     routine_id: 'rtn_1',
     name: 'nightly',
     slug: 'nightly',
@@ -70,11 +75,11 @@ const ROUTINES = [
     default_model: ['claude-sonnet-5'],
     default_effort: 'medium',
     created_at: '2026-01-01T00:00:00Z',
-  },
+  }),
 ];
 
 const RUNS = [
-  {
+  runRowView({
     chunk_id: 'ch_01KXKVVF1J3D6H6VYZ3XYN3YJ9',
     routine_name: 'nightly',
     scope_slug: 'blizzard',
@@ -92,13 +97,13 @@ const RUNS = [
         gone_count: 0,
       },
     ],
-  },
+  }),
 ];
 
 /** A deliberately long, unbroken locus — the value that would widen a column past
  * its track if the list did not wrap it. */
 const FINDINGS = [
-  {
+  gardenFindingView({
     finding_id: 'fnd_1',
     routine_name: 'nightly',
     scope_slug: 'blizzard',
@@ -109,8 +114,7 @@ const FINDINGS = [
     live: true,
     observed_count: 1,
     last_seen_at: '2026-01-10T00:00:00Z',
-    facts: [{ kind: 'add', recorded_at: '2026-01-01T00:00:00Z' }],
-  },
+  }),
 ];
 
 /**
@@ -184,19 +188,19 @@ const routes: Routes = [
 /** A read that never answers — the list stays on its loading state. */
 const NEVER = new Promise<never>(() => undefined);
 
-async function render(url: string, override: (method: string, path: string) => unknown = () => undefined) {
-  const stub = stubRequestClient(hubClient, (method, path) => {
-    const overridden = override(method, path);
-    if (overridden !== undefined) return overridden;
-    if (method === 'GET' && path === '/api/me') return OPERATOR_ME_RESPONSE;
-    if (method === 'GET' && path === '/api/scopes') return SCOPES;
-    if (method === 'GET' && path === '/api/routines') return ROUTINES;
-    if (method === 'GET' && path === '/api/graphs') return [];
-    if (method === 'GET' && path === '/api/runs') return RUNS;
-    if (method === 'GET' && path === '/api/findings') return { findings: FINDINGS, next_cursor: null };
-    if (method === 'GET' && path === '/api/findings/classes') return ['stale-docstring'];
-    if (method === 'GET' && path === '/api/garden-proposals') return { proposals: [], next_cursor: null };
-    return {};
+type GardenRoutes = Parameters<typeof stubHubClient>[0];
+
+async function render(url: string, overrides: GardenRoutes = {}) {
+  const stub = stubHubClient({
+    'GET /api/me': () => OPERATOR_ME_RESPONSE,
+    'GET /api/scopes': () => SCOPES,
+    'GET /api/routines': () => ROUTINES,
+    'GET /api/graphs': () => [],
+    'GET /api/runs': () => RUNS,
+    'GET /api/findings': () => ({ findings: FINDINGS, next_cursor: null }),
+    'GET /api/findings/classes': () => ['stale-docstring'],
+    'GET /api/garden-proposals': () => ({ proposals: [], next_cursor: null }),
+    ...overrides,
   });
   await TestBed.configureTestingModule({
     imports: [TestGardeningGridHost],
@@ -446,14 +450,14 @@ describe('gardening sub-tab layout shell sweep (web:shell-sweep)', () => {
     }
   });
 
-  const LIST_STATES = [
-    { tab: 'scopes', path: '/api/scopes', empty: [] as unknown[] },
-    { tab: 'routines', path: '/api/routines', empty: [] as unknown[] },
-  ] as const;
-  for (const { tab, path, empty } of LIST_STATES) {
+  const LIST_STATES: readonly { tab: string; loading: GardenRoutes; empty: GardenRoutes }[] = [
+    { tab: 'scopes', loading: { 'GET /api/scopes': () => NEVER }, empty: { 'GET /api/scopes': () => [] } },
+    { tab: 'routines', loading: { 'GET /api/routines': () => NEVER }, empty: { 'GET /api/routines': () => [] } },
+  ];
+  for (const { tab, loading: loadingRoutes, empty } of LIST_STATES) {
     it.each([1280, 390])(`${tab}: renders loading until the read answers, then the empty state, at %ipx`, async (width) => {
       await page.viewport(width, 800);
-      const loading = await render(`/gardening/${tab}`, (method, p) => (method === 'GET' && p === path ? NEVER : undefined));
+      const loading = await render(`/gardening/${tab}`, loadingRoutes);
       let root = loading.fixture.nativeElement as HTMLElement;
       document.body.appendChild(root);
       try {
@@ -468,7 +472,7 @@ describe('gardening sub-tab layout shell sweep (web:shell-sweep)', () => {
       }
 
       TestBed.resetTestingModule();
-      const settled = await render(`/gardening/${tab}`, (method, p) => (method === 'GET' && p === path ? empty : undefined));
+      const settled = await render(`/gardening/${tab}`, empty);
       root = settled.fixture.nativeElement as HTMLElement;
       document.body.appendChild(root);
       try {

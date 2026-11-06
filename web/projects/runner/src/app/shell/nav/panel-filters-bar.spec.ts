@@ -2,58 +2,57 @@ import { provideZonelessChangeDetection } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { provideRouter, Router } from '@angular/router';
 import { QueryClient, provideTanStackQuery } from '@tanstack/angular-query-experimental';
-import { runnerClient } from 'fleet';
-import { type RequestClientStub, settle, stubRequestClient } from 'fleet/testing';
+import {
+  hostRunnerView,
+  pauseStateView,
+  type RequestClientStub,
+  runnerDashboardView,
+  runnerStatusView,
+  servedProjectStatusView,
+  settle,
+  stubError,
+  stubRunnerClient,
+} from 'fleet/testing';
 
 import { PanelFiltersBar } from './panel-filters-bar';
 
 /** Two serving runners — one braked here — and one halted. */
 const RUNNERS = {
   items: [
-    {
-      runner_id: 'rn_1',
-      name: 'r-claude',
-      state: 'serving',
-      served: true,
-      halted_reasons: [],
-      pause: { local: false, hub: false, effective: false, local_reason: null },
-      bindings: [{ project: 'blizzard', workspace_id: 'ws', agents: 4 }],
-      agents_in_use: 0,
-      max_agents: 4,
-    },
-    {
+    hostRunnerView({ runner_id: 'rn_1', name: 'r-claude', bindings: [{ project: 'blizzard', workspace_id: 'ws', agents: 4 }], max_agents: 4 }),
+    hostRunnerView({
       runner_id: 'rn_2',
       name: 'r-opencode',
-      state: 'serving',
-      served: true,
-      halted_reasons: [],
-      pause: { local: true, hub: false, effective: true, local_reason: 'usage limit' },
+      pause: pauseStateView({ local: true, effective: true, local_reason: 'usage limit' }),
       bindings: [{ project: 'winter', workspace_id: 'ws', agents: 2 }],
-      agents_in_use: 0,
       max_agents: 2,
-    },
-    { runner_id: null, name: 'r-broken', state: 'halted', served: false, halted_reasons: ['no hub token'], bindings: [] },
+    }),
+    hostRunnerView({ runner_id: null, name: 'r-broken', state: 'halted', served: false, pause: null, halted_reasons: ['no hub token'] }),
   ],
 };
 
 /** A runner's dashboard naming the one project it serves. */
 function dashboard(slug: string, name: string) {
-  return {
-    runner: { served_projects: [{ entry: slug, project_id: `proj_${slug}`, slug, name, color: 'slate', resolved: true }] },
-    asks: { items: [] },
-  };
+  return runnerDashboardView({
+    runner: runnerStatusView({
+      served_projects: [servedProjectStatusView({ entry: slug, project_id: `proj_${slug}`, slug, name, color: 'slate' })],
+    }),
+  });
 }
+
+const DASHBOARDS: Record<string, ReturnType<typeof dashboard>> = {
+  rn_1: dashboard('blizzard', 'Blizzard'),
+  rn_2: dashboard('winter', 'Winter'),
+};
 
 describe('PanelFiltersBar', () => {
   let stub: RequestClientStub;
 
   beforeEach(() => {
-    stub = stubRequestClient(runnerClient, (method, path) => {
-      if (method !== 'GET') return {};
-      if (path === '/api/host/runners') return RUNNERS;
-      if (path === '/runners/rn_1/api/dashboard') return dashboard('blizzard', 'Blizzard');
-      if (path === '/runners/rn_2/api/dashboard') return dashboard('winter', 'Winter');
-      return { items: [] };
+    stub = stubRunnerClient({
+      'GET /api/host/runners': () => RUNNERS,
+      'GET /runners/{runner_id}/api/dashboard': (_request, { runner_id }) =>
+        DASHBOARDS[runner_id] ?? stubError(404, { detail: 'unknown runner' }),
     });
   });
 

@@ -1,8 +1,7 @@
 import { ChangeDetectionStrategy, Component, provideZonelessChangeDetection } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { QueryClient, provideTanStackQuery } from '@tanstack/angular-query-experimental';
-import { runnerClient } from 'fleet';
-import { type RequestClientStub, stubRequestClient } from 'fleet/testing';
+import { type RequestClientStub, stubRunnerClient } from 'fleet/testing';
 import { vi } from 'vitest';
 
 import { injectFloorClearMutation, injectLocalPauseMutation } from './status.query';
@@ -25,7 +24,10 @@ class PauseMutationHost {
 describe('injectFloorClearMutation', () => {
   let stub: RequestClientStub;
   beforeEach(() => {
-    stub = stubRequestClient(runnerClient, () => ({ cleared_at: '2026-10-22T09:14:00Z', by: 'operator' }));
+    stub = stubRunnerClient({
+      'POST /api/host/subscriptions/{slug}/floor/clear': (_request, { slug }) => ({ cleared_at: '2026-10-22T09:14:00Z', by: 'operator', slug }),
+      'POST /runners/{runner_id}/api/runner/floor/clear': () => ({ cleared_at: '2026-10-22T09:14:00Z', by: 'operator', slug: null }),
+    });
   });
   afterEach(() => stub.restore());
 
@@ -50,11 +52,15 @@ describe('injectLocalPauseMutation', () => {
   let stub: RequestClientStub;
 
   beforeEach(() => {
-    stub = stubRequestClient(runnerClient, (method, path) =>
-      method === 'PATCH' && path === '/runners/rn_1/api/runner'
-        ? { runner_id: 'runner-1', local_paused: true, hub_paused: false, paused: true }
-        : {},
-    );
+    stub = stubRunnerClient({
+      'PATCH /runners/{runner_id}/api/runner': () => ({
+        runner_id: 'runner-1',
+        runner_name: 'r1',
+        local_paused: true,
+        hub_paused: false,
+        paused: true,
+      }),
+    });
   });
 
   afterEach(() => stub.restore());

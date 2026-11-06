@@ -2,8 +2,7 @@ import { provideZonelessChangeDetection } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { QueryClient, provideTanStackQuery } from '@tanstack/angular-query-experimental';
 
-import { hubClient } from 'fleet';
-import { type RequestClientStub, stubRequestClient } from 'fleet/testing';
+import { type RequestClientStub, chunkSummary, stubHubClient } from 'fleet/testing';
 import { injectDemoteChunkMutation } from './demote.mutations';
 import { injectPromoteChunkMutation } from './promote.mutations';
 
@@ -11,7 +10,10 @@ describe('the placement mutations', () => {
   let stub: RequestClientStub;
 
   beforeEach(() => {
-    stub = stubRequestClient(hubClient, () => ({}));
+    stub = stubHubClient({
+      'POST /api/chunks/{chunk_id}/demote': (_request, { chunk_id }) => chunkSummary({ chunk_id, graph_id: 'gr_1', status: 'ready' }),
+      'POST /api/chunks/{chunk_id}/promote': (_request, { chunk_id }) => chunkSummary({ chunk_id, graph_id: 'gr_1', status: 'ready' }),
+    });
     TestBed.configureTestingModule({
       providers: [
         provideZonelessChangeDetection(),

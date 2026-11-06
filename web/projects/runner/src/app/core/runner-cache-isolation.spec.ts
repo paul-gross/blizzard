@@ -3,7 +3,16 @@ import { TestBed } from '@angular/core/testing';
 import { provideRouter } from '@angular/router';
 import { QueryClient, provideTanStackQuery } from '@tanstack/angular-query-experimental';
 import { injectChunkDetailQuery, runnerClient, type runnerApi } from 'fleet';
-import { type RequestClientStub, settle, stubRequestClient } from 'fleet/testing';
+import {
+  type RequestClientStub,
+  chunkDetail,
+  hostRunnerView,
+  runnerDashboardView,
+  runnerLeaseView,
+  runnerStatusView,
+  settle,
+  stubRunnerClient,
+} from 'fleet/testing';
 
 import { injectPanelDashboards, injectPanelLeases } from './panel-reads';
 import { runnerChunkDetailKey, runnerDashboardKey, runnerLeasesKey } from './query-keys';
@@ -29,35 +38,30 @@ class RunnerReadsHost {
 }
 
 function hostRunner(runnerId: string, name: string): runnerApi.HostRunnerView {
-  return {
+  return hostRunnerView({
     runner_id: runnerId,
     name,
-    state: 'serving',
-    served: true,
-    halted_reasons: [],
-    pause: { local: false, hub: false, effective: false, local_reason: null },
-    throttle: null,
     bindings: [{ project: 'p', workspace_id: 'ws', agents: 4 }],
-    agents_in_use: 0,
     max_agents: 4,
-  };
+  });
 }
 
 /** Each runner answers with bodies naming itself, so a read served from the wrong
  * runner's cache entry shows. */
-function routeFor(method: string, path: string): unknown {
-  if (method !== 'GET') return {};
-  if (path === '/api/host/runners') return { items: [hostRunner('rn_1', 'r1'), hostRunner('rn_2', 'r2')] };
-  if (path === '/api/host/environments') return { workspaces: [] };
-  const match = /^\/runners\/([^/]+)\/api\/(.+)$/.exec(path);
-  if (match === null) return {};
-  const [, runnerId, rest] = match;
-  if (rest === 'dashboard') return { runner: { runner_id: runnerId } };
-  if (rest === 'leases') {
-    return { items: [{ lease_id: `lease-of-${runnerId}`, chunk_id: 'ch_1', state: 'running', created_at: '2026-07-16T11:00:00+00:00' }] };
-  }
-  if (rest === 'chunks/ch_1') return { chunk_id: 'ch_1', status: 'running', graph_name: runnerId };
-  return {};
+function stubHost(): RequestClientStub {
+  return stubRunnerClient({
+    'GET /api/host/runners': () => ({ items: [hostRunner('rn_1', 'r1'), hostRunner('rn_2', 'r2')] }),
+    'GET /api/host/environments': () => ({ workspaces: [] }),
+    'GET /runners/{runner_id}/api/dashboard': (_request, { runner_id }) =>
+      runnerDashboardView({ runner: runnerStatusView({ runner_id }) }),
+    'GET /runners/{runner_id}/api/leases': (_request, { runner_id }) => ({
+      items: [
+        runnerLeaseView({ lease_id: `lease-of-${runner_id}`, chunk_id: 'ch_1', state: 'running', created_at: '2026-07-16T11:00:00+00:00' }),
+      ],
+    }),
+    'GET /runners/{runner_id}/api/chunks/{chunk_id}': (_request, { runner_id, chunk_id }) =>
+      chunkDetail({ chunk_id, status: 'running', graph_name: runner_id }),
+  });
 }
 
 describe('two runners on one host', () => {
@@ -66,7 +70,7 @@ describe('two runners on one host', () => {
   afterEach(() => stub.restore());
 
   async function mount(queryClient: QueryClient) {
-    stub = stubRequestClient(runnerClient, routeFor);
+    stub = stubHost();
     await TestBed.configureTestingModule({
       imports: [RunnerReadsHost],
       providers: [provideZonelessChangeDetection(), provideRouter([]), provideTanStackQuery(queryClient)],

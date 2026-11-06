@@ -3,9 +3,8 @@ import { TestBed } from '@angular/core/testing';
 import { QueryClient, provideTanStackQuery } from '@tanstack/angular-query-experimental';
 import { vi } from 'vitest';
 
-import { hubClient } from 'fleet';
 import { HUB_PROJECT_FILTER } from 'fleet/shell';
-import { type RequestClientStub, stubRequestClient } from 'fleet/testing';
+import { gardenScopeView, type RequestClientStub, stubHubClient } from 'fleet/testing';
 import { injectEditScopeMutation } from './scope-edit.mutations';
 
 describe('injectEditScopeMutation', () => {
@@ -13,7 +12,9 @@ describe('injectEditScopeMutation', () => {
   let queryClient: QueryClient;
 
   beforeEach(() => {
-    stub = stubRequestClient(hubClient, () => ({ slug: 'blizzard', description: 'updated', retired: false }));
+    stub = stubHubClient({
+      'PATCH /api/projects/{project}/scopes/{slug}': () => gardenScopeView({ slug: 'blizzard', description: 'updated' }),
+    });
     queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
     TestBed.configureTestingModule({
       providers: [provideZonelessChangeDetection(), provideTanStackQuery(queryClient), { provide: HUB_PROJECT_FILTER, useValue: signal('acme').asReadonly() }],

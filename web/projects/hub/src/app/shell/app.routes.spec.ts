@@ -5,19 +5,48 @@ import { QueryClient, provideTanStackQuery } from '@tanstack/angular-query-exper
 import {
   EVENT_SOURCE_FACTORY,
   ViewportService,
-  hubClient,
   provideViewportRenavigation,
   type EventSourceFactory,
   type FleetEventSource,
 } from 'fleet';
 import { type MeResponse } from 'fleet/shell';
-import { OPERATOR_ME_RESPONSE, type RequestClientStub, settle, stubError, stubRequestClient } from 'fleet/testing';
+import { OPERATOR_ME_RESPONSE, chunkCountsView, configChangesPage, fleetSpendView, projectView, type RequestClientStub, settle, stubError, stubHubClient } from 'fleet/testing';
 
 import { LAST_TENANT_KEY, PAGE_RELOAD, TAB_TENANT_KEY } from '../core/auth/tenant-context';
 import { App } from './app';
 import { routes } from './app.routes';
 import { provideFlags } from 'fleet/shell';
 import { hubFlagsRead } from '../core/flags.query';
+
+/** The reads every shell view makes at rest, each answering its empty shape — the board, rail and explorer iterate
+ * theirs, and `BoardHeader` calls `.toFixed` on the spend's `cost_usd`. A block adds identity and whatever its view
+ * reads with content. */
+const IDLE_SHELL: Parameters<typeof stubHubClient>[0] = {
+  'GET /api/health': () => ({ status: 'ok', service: 'blizzard-hub', version: '0.0.0', overridden: [] }),
+  'GET /api/flags': () => ({ flags: {}, overridden: [] }),
+  'GET /api/chunk-counts': () =>
+    chunkCountsView({ not_ready: 0, ready: 0, running: 0, delivering: 0, needs_human: 0, done: 0, terminal: 0, total: 0 }),
+  'GET /api/projects': () => ({ projects: [] }),
+  'GET /api/chunks': () => ({ chunks: [], next_cursor: null }),
+  'GET /api/queue': () => ({ entries: [], next_cursor: null }),
+  'GET /api/backlog': () => ({ entries: [], next_cursor: null }),
+  'GET /api/questions': () => [],
+  'GET /api/decisions': () => ({ decisions: [] }),
+  'GET /api/activity': () => ({ activity: [] }),
+  'GET /api/graphs': () => [],
+  'GET /api/spend': () =>
+    fleetSpendView({ cost_usd: 0, input_tokens: 0, output_tokens: 0, cache_read_tokens: 0, cache_create_tokens: 0 }),
+  'GET /api/runners': () => ({ runners: [] }),
+  'GET /api/hosts': () => ({ hosts: [] }),
+  'GET /api/members': () => [],
+  'GET /api/work-sources': () => ({ sources: [] }),
+  'GET /api/secrets': () => [],
+  'GET /api/repositories': () => ({ repositories: [] }),
+  'GET /api/forges': () => ({ forges: [] }),
+  'GET /api/config/changes': () => configChangesPage(),
+  'GET /api/projects/{project}/source-links': () => ({ source_links: [] }),
+  'GET /api/projects/{project}/repository-links': () => ({ repository_links: [] }),
+};
 
 /** A do-nothing EventSource so the live-update spine can open without a real stream
  * (`App`'s constructor calls `FleetLiveUpdates.start()` unconditionally). */
@@ -51,14 +80,10 @@ describe('the board route (route-table mobile/desktop fork)', () => {
     // The app root's session gate needs `/api/me` to resolve before it
     // renders `<router-outlet>` at all — stub the full-permission operator identity
     // (`auth.mode = "none"`'s shape).
-    authStub = stubRequestClient(hubClient, (method, path) => {
-      if (path === '/api/me') return OPERATOR_ME_RESPONSE;
-      if (path === '/api/auth/providers') return [];
-      // See `app.spec.ts`'s `stubAuth` for why these need their real empty shape.
-      if (path === '/api/chunks') return { chunks: [], next_cursor: null };
-      if (path === '/api/questions' || path === '/api/graphs') return [];
-      if (path === '/api/spend') return { cost_usd: 0, cost_partial: false, input_tokens: 0, output_tokens: 0, cache_read_tokens: 0, cache_create_tokens: 0 };
-      return {};
+    authStub = stubHubClient({
+      ...IDLE_SHELL,
+      'GET /api/me': () => OPERATOR_ME_RESPONSE,
+      'GET /api/auth/providers': () => [],
     });
     await TestBed.configureTestingModule({
       imports: [App],
@@ -150,15 +175,10 @@ describe('the fleet route (mobile RunnersPage, desktop FleetPage)', () => {
 
   beforeEach(async () => {
     localStorage.clear();
-    authStub = stubRequestClient(hubClient, (method, path) => {
-      if (path === '/api/me') return OPERATOR_ME_RESPONSE;
-      if (path === '/api/auth/providers') return [];
-      if (path === '/api/chunks') return { chunks: [], next_cursor: null };
-      if (path === '/api/questions' || path === '/api/graphs') return [];
-      if (path === '/api/runners') return { runners: [] };
-      if (path === '/api/hosts') return { hosts: [] };
-      if (path === '/api/spend') return { cost_usd: 0, cost_partial: false, input_tokens: 0, output_tokens: 0, cache_read_tokens: 0, cache_create_tokens: 0 };
-      return {};
+    authStub = stubHubClient({
+      ...IDLE_SHELL,
+      'GET /api/me': () => OPERATOR_ME_RESPONSE,
+      'GET /api/auth/providers': () => [],
     });
     await TestBed.configureTestingModule({
       imports: [App],
@@ -241,13 +261,10 @@ describe('the public pages (sign-in refusals and invitations)', () => {
     localStorage.clear();
     sessionStorage.clear();
     me = null;
-    authStub = stubRequestClient(hubClient, (method, path) => {
-      if (path === '/api/me') return me ?? stubError(401, { detail: 'authentication required' });
-      if (path === '/api/auth/providers') return GITHUB;
-      if (path === '/api/chunks') return { chunks: [], next_cursor: null };
-      if (path === '/api/questions' || path === '/api/graphs') return [];
-      if (path === '/api/spend') return { cost_usd: 0, cost_partial: false, input_tokens: 0, output_tokens: 0, cache_read_tokens: 0, cache_create_tokens: 0 };
-      return {};
+    authStub = stubHubClient({
+      ...IDLE_SHELL,
+      'GET /api/me': () => me ?? stubError(401, { detail: 'authentication required' }),
+      'GET /api/auth/providers': () => GITHUB,
     });
     await TestBed.configureTestingModule({
       imports: [App],
@@ -333,15 +350,10 @@ describe('the admin members route', () => {
 
   beforeEach(async () => {
     localStorage.clear();
-    authStub = stubRequestClient(hubClient, (method, path) => {
-      if (path === '/api/me') return OPERATOR_ME_RESPONSE;
-      if (path === '/api/auth/providers') return [];
-      if (path === '/api/members') return [];
-      if (path === '/api/chunks') return { chunks: [], next_cursor: null };
-      if (path === '/api/questions' || path === '/api/graphs') return [];
-      if (path === '/api/runners') return { runners: [] };
-      if (path === '/api/spend') return { cost_usd: 0, cost_partial: false, input_tokens: 0, output_tokens: 0, cache_read_tokens: 0, cache_create_tokens: 0 };
-      return {};
+    authStub = stubHubClient({
+      ...IDLE_SHELL,
+      'GET /api/me': () => OPERATOR_ME_RESPONSE,
+      'GET /api/auth/providers': () => [],
     });
     await TestBed.configureTestingModule({
       imports: [App],
@@ -390,14 +402,7 @@ describe('the admin members route', () => {
  * has entered its tenant and the guard has settled the project.
  */
 describe('the views under the project lens', () => {
-  const BLIZZARD = {
-    project_id: 'proj_b',
-    slug: 'blizzard',
-    name: 'Blizzard',
-    description: '',
-    revision: 1,
-    created_at: '2026-10-01T00:00:00Z',
-  };
+  const BLIZZARD = projectView({ created_at: '2026-10-01T00:00:00Z' });
   let authStub: RequestClientStub;
   let reloads: number;
 
@@ -405,18 +410,15 @@ describe('the views under the project lens', () => {
     localStorage.clear();
     sessionStorage.clear();
     reloads = 0;
-    authStub = stubRequestClient(hubClient, (method, path) => {
-      if (path === '/api/me') return OPERATOR_ME_RESPONSE;
-      if (path === '/api/auth/providers') return [];
-      if (path === '/api/projects') return { projects: [BLIZZARD] };
-      if (path.startsWith('/api/projects/')) return stubError(404, { detail: 'no such project' });
-      if (path === '/api/members') return [];
-      if (path === '/api/chunks') return { chunks: [], next_cursor: null };
-      if (path === '/api/questions' || path === '/api/graphs' || path === '/api/routines') return [];
-      if (path === '/api/runs' || path === '/api/scopes') return [];
-      if (path === '/api/runners') return { runners: [] };
-      if (path === '/api/spend') return { cost_usd: 0, cost_partial: false, input_tokens: 0, output_tokens: 0, cache_read_tokens: 0, cache_create_tokens: 0 };
-      return {};
+    authStub = stubHubClient({
+      ...IDLE_SHELL,
+      'GET /api/me': () => OPERATOR_ME_RESPONSE,
+      'GET /api/auth/providers': () => [],
+      'GET /api/projects': () => ({ projects: [BLIZZARD] }),
+      'GET /api/projects/{project}': () => stubError(404, { detail: 'no such project' }),
+      'GET /api/routines': () => [],
+      'GET /api/runs': () => [],
+      'GET /api/scopes': () => [],
     });
     await TestBed.configureTestingModule({
       imports: [App],

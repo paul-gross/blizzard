@@ -3,8 +3,20 @@ import { TestBed } from '@angular/core/testing';
 import { By } from '@angular/platform-browser';
 import { ActivatedRoute, convertToParamMap, provideRouter } from '@angular/router';
 import { QueryClient, provideTanStackQuery } from '@tanstack/angular-query-experimental';
-import { hubClient, type MeResponse } from 'fleet';
-import { OPERATOR_ME_RESPONSE, type RequestClientStub, settle, stubError, stubRequestClient } from 'fleet/testing';
+import { type GardenProposalView, type MeResponse } from 'fleet';
+import {
+  gardenEvidenceFindingView,
+  gardenProposalAcceptResponse,
+  gardenProposalClosureView,
+  gardenProposalsPageView,
+  gardenProposalView,
+  gardenWorkItemView,
+  OPERATOR_ME_RESPONSE,
+  type RequestClientStub,
+  settle,
+  stubError,
+  stubHubClient,
+} from 'fleet/testing';
 import { BehaviorSubject } from 'rxjs';
 
 import { GardeningProposalDetail } from './gardening-proposal-detail';
@@ -16,89 +28,74 @@ const VIEWER_ME_RESPONSE: MeResponse = {
   permissions: OPERATOR_ME_RESPONSE.permissions.filter((p) => p !== 'chunk:control'),
 };
 
-const WAITING_A = {
+const WAITING_A = gardenProposalView({
   proposal_id: 'gp_1',
-  routine_name: 'comments',
   class: 'fix-the-source',
   title: 'Author a docstring standard',
   body: 'Seventeen modules narrate their own change history.',
   created_at: '2026-01-01T00:00:00Z',
   findings: ['fin_1', 'fin_2'],
-  closure: null,
-};
+});
 
-const WAITING_B = {
+const WAITING_B = gardenProposalView({
   proposal_id: 'gp_2',
-  routine_name: 'comments',
   class: 'remediate',
   title: 'Delete the dead helper',
   body: 'Nothing calls it.',
   created_at: '2026-01-02T00:00:00Z',
   findings: ['fin_3'],
-  closure: null,
-};
+});
 
-const NO_FINDINGS = {
+const NO_FINDINGS = gardenProposalView({
   proposal_id: 'gp_none',
-  routine_name: 'comments',
   class: 'fix-the-source',
   title: 'A proposal citing nothing',
   body: 'This routine found no findings worth citing.',
   created_at: '2026-01-01T12:00:00Z',
-  findings: [],
-  closure: null,
-};
+});
 
-const PASSED = {
+const PASSED = gardenProposalView({
   proposal_id: 'gp_3',
-  routine_name: 'comments',
   class: 'fix-the-source',
   title: 'Rewrite the whole module',
   body: 'Too large for this pass.',
   created_at: '2026-01-03T00:00:00Z',
   findings: ['fin_4'],
-  closure: {
-    closure: 'passed',
-    reason: 'not worth it yet',
-    closed_by: 'u_1',
-    closed_at: '2026-01-04T00:00:00Z',
-    item_outcome: null,
-    source: null,
-    ref: null,
-  },
-};
+  closure: gardenProposalClosureView({ closed_at: '2026-01-04T00:00:00Z' }),
+});
 
-const ACCEPTED_MINTED = {
+const ACCEPTED_MINTED = gardenProposalView({
   proposal_id: 'gp_4',
-  routine_name: 'comments',
   class: 'fix-the-source',
   title: 'Extract the shared helper',
   body: 'Three call sites duplicate this logic.',
   created_at: '2026-01-05T00:00:00Z',
   findings: ['fin_5'],
-  closure: {
+  closure: gardenProposalClosureView({
     closure: 'accepted',
     reason: null,
-    closed_by: 'u_1',
     closed_at: '2026-01-06T00:00:00Z',
     item_outcome: 'minted',
     source: 'hub',
     ref: '42',
-  },
-};
+  }),
+});
 
-function findingFixture(findingId: string) {
+type DetailRoutes = Parameters<typeof stubHubClient>[0];
+
+/** The reads and verbs the detail pane reaches, over the docket `proposals` and identity `me`. */
+function detailRoutes(proposals: GardenProposalView[], me: MeResponse): DetailRoutes {
   return {
-    finding_id: findingId,
-    routine_name: 'comments',
-    scope_slug: 'blizzard',
-    class: 'stale-docstring',
-    locus: `src/${findingId}.py:1`,
-    summary: `summary for ${findingId}`,
-    state: 'live',
-    live: true,
-    observed_count: 1,
-    last_seen_at: '2026-01-01T00:00:00Z',
+    'GET /api/garden-proposals': () => gardenProposalsPageView({ proposals }),
+    'GET /api/me': () => me,
+    'GET /api/routines': () => [],
+    'GET /api/findings/{finding_id}': (_request, { finding_id }) => gardenEvidenceFindingView({ finding_id }),
+    'GET /api/work-sources/{source}/items/{ref}': () => gardenWorkItemView({ web_url: '/board/chunk/ch_1' }),
+    'POST /api/findings/wont-fix': () => [],
+    'POST /api/garden-proposals/{proposal_id}/pass': (_request, { proposal_id }) =>
+      gardenProposalView({ proposal_id, closure: gardenProposalClosureView() }),
+    'POST /api/garden-proposals/{proposal_id}/accept': (_request, { proposal_id }) =>
+      gardenProposalAcceptResponse({ proposal_id }),
   };
 }
 
@@ -114,21 +111,12 @@ describe('GardeningProposalDetail', () => {
   afterEach(() => stub?.restore());
 
   async function render(
-    proposals: readonly unknown[] = [WAITING_A, WAITING_B, PASSED],
+    proposals: GardenProposalView[] = [WAITING_A, WAITING_B, PASSED],
     me: MeResponse = VIEWER_ME_RESPONSE,
     proposalId: string | null = null,
   ) {
     const paramMap$ = new BehaviorSubject(convertToParamMap(proposalId === null ? {} : { proposalId }));
-    stub = stubRequestClient(hubClient, (method, path) => {
-      if (method === 'GET' && path === '/api/garden-proposals') return { proposals, next_cursor: null };
-      if (method === 'GET' && path === '/api/me') return me;
-      if (method === 'GET' && path === '/api/routines') return [];
-      if (method === 'GET' && path.startsWith('/api/findings/')) return findingFixture(path.split('/').pop()!);
-      if (method === 'GET' && path === '/api/work-sources/hub/items/42') {
-        return { source: 'hub', ref: '42', label: 'hub#42', web_url: '/board/chunk/ch_1', title: 't', body: 'b', author: { kind: 'user' }, closure: null, closed_at: null, created_at: '2026-01-01T00:00:00Z', edited_at: '2026-01-01T00:00:00Z', stated_priority: null };
-      }
-      return {};
-    });
+    stub = stubHubClient(detailRoutes(proposals, me));
     await TestBed.configureTestingModule({
       imports: [GardeningProposalDetail],
       providers: [
@@ -313,13 +301,9 @@ describe('GardeningProposalDetail', () => {
     it('reports a failed inline triage instead of leaving the row silently unchanged', async () => {
       const { fixture, el } = await render([WAITING_A], OPERATOR_ME_RESPONSE, WAITING_A.proposal_id);
       stub.restore();
-      stub = stubRequestClient(hubClient, (method, path) => {
-        if (method === 'GET' && path === '/api/garden-proposals') return { proposals: [WAITING_A], next_cursor: null };
-        if (method === 'GET' && path === '/api/me') return OPERATOR_ME_RESPONSE;
-        if (method === 'GET' && path === '/api/routines') return [];
-        if (method === 'GET' && path.startsWith('/api/findings/')) return findingFixture(path.split('/').pop()!);
-        if (method === 'POST' && path === '/api/findings/resolve') return stubError(422, { detail: 'note required' });
-        return {};
+      stub = stubHubClient({
+        ...detailRoutes([WAITING_A], OPERATOR_ME_RESPONSE),
+        'POST /api/findings/resolve': () => stubError(422, { detail: 'note required' }),
       });
 
       el.querySelector<HTMLButtonElement>(

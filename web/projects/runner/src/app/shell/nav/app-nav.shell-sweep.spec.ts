@@ -2,8 +2,7 @@ import { provideZonelessChangeDetection } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { provideRouter } from '@angular/router';
 import { QueryClient, provideTanStackQuery } from '@tanstack/angular-query-experimental';
-import { runnerClient } from 'fleet';
-import { stubRequestClient } from 'fleet/testing';
+import { hostRunnerView, pauseStateView, runnerDashboardView, runnerStatusView, stubRunnerClient } from 'fleet/testing';
 import { page } from 'vitest/browser';
 
 import { AppNav } from './app-nav';
@@ -26,34 +25,29 @@ const WIDTHS = [1400, 1024, 768, 640, 480, 390, 320];
 /** Five runners — long names, one braked by both sides, one braked here, one halted. */
 const RUNNERS = {
   items: [
-    {
+    hostRunnerView({
       runner_id: 'rn_1',
       name: 'r-claude',
-      state: 'serving',
-      pause: { local: false, hub: false, effective: false, local_reason: null },
       bindings: [{ project: 'blizzard', workspace_id: 'ws', agents: 4 }],
-    },
-    {
+    }),
+    hostRunnerView({
       runner_id: 'rn_2',
       name: 'r-chatgpt-with-a-rather-long-runner-name',
-      state: 'serving',
-      pause: { local: true, hub: true, effective: true, local_reason: null },
+      pause: pauseStateView({ local: true, hub: true, effective: true }),
       bindings: [{ project: 'winter', workspace_id: 'ws', agents: 2 }],
-    },
-    {
+    }),
+    hostRunnerView({
       runner_id: 'rn_3',
       name: 'r-gemini',
-      state: 'serving',
-      pause: { local: true, hub: false, effective: true, local_reason: 'usage limit' },
+      pause: pauseStateView({ local: true, effective: true, local_reason: 'usage limit' }),
       bindings: [{ project: 'console-with-a-long-project-slug', workspace_id: 'ws', agents: 2 }],
-    },
-    {
+    }),
+    hostRunnerView({
       runner_id: 'rn_4',
       name: 'r-local-experiments',
-      state: 'serving',
       bindings: [{ project: 'ops', workspace_id: 'ws', agents: 1 }],
-    },
-    { runner_id: null, name: 'r-broken', state: 'halted', halted_reasons: ['no hub token'], bindings: [] },
+    }),
+    hostRunnerView({ runner_id: null, name: 'r-broken', state: 'halted', served: false, pause: null, halted_reasons: ['no hub token'] }),
   ],
 };
 
@@ -67,7 +61,11 @@ describe('runner app-nav shell sweep (web:shell-sweep)', () => {
     const onRejection = (e: PromiseRejectionEvent) => pageErrors.push(String(e.reason));
     window.addEventListener('error', onError);
     window.addEventListener('unhandledrejection', onRejection);
-    const stub = stubRequestClient(runnerClient, (method, path) => (method === 'GET' && path === '/api/host/runners' ? RUNNERS : {}));
+    const stub = stubRunnerClient({
+      'GET /api/host/runners': () => RUNNERS,
+      'GET /runners/{runner_id}/api/dashboard': (_request, { runner_id }) =>
+        runnerDashboardView({ runner: runnerStatusView({ runner_id }) }),
+    });
 
     await TestBed.configureTestingModule({
       imports: [AppNav],

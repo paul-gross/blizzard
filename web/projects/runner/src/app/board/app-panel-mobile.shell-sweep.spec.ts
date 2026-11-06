@@ -2,16 +2,22 @@ import { provideZonelessChangeDetection } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { QueryClient, provideTanStackQuery } from '@tanstack/angular-query-experimental';
 import { provideRouter } from '@angular/router';
-import { runnerClient } from 'fleet';
-import { stubRequestClient } from 'fleet/testing';
+import { type runnerApi } from 'fleet';
+import {
+  capacitiesView,
+  hostRunnerView,
+  hubConnectivityView,
+  runnerAskView,
+  runnerDashboardView,
+  runnerStatusView,
+  stubRunnerClient,
+  workItemEntry,
+} from 'fleet/testing';
 import { commands, page } from 'vitest/browser';
 
 import { type MachineChunkRow, machineChunkRows } from '../core/chunk-rows.model';
 import type { PanelLease } from '../core/panel-reads.model';
 import { LocalPanelMobile } from './app-panel-mobile';
-
-/** Matches `GET /runners/rn_1/api/chunks/{chunk_id}/work-items` for any chunk id. */
-const WORK_ITEMS_ROUTE = /^\/runners\/rn_1\/api\/chunks\/[^/]+\/work-items$/;
 
 const LEASE = (overrides: Partial<PanelLease> = {}): PanelLease => ({
   lease_id: 'lease_01KXKVVF1J3D6H6VYZ3XYNZPRR',
@@ -52,14 +58,16 @@ const MACHINE_CHUNKS: MachineChunkRow[] = machineChunkRows(
 
 /** Five work items — enough to prove the lines genuinely stack rather than reflow. */
 const FIVE_WORK_ITEMS = {
-  items: Array.from({ length: 5 }, (_, i) => ({
+  items: Array.from({ length: 5 }, (_, i) =>
+    workItemEntry({
     source: 'blizzard',
     ref: String(160 + i),
     label: `blizzard#${160 + i}`,
     web_url: `https://github.com/paul-gross/blizzard/issues/${160 + i}`,
     fetched_at: '2026-07-16T11:00:00.000Z',
     title: `work item title number ${i + 1} — long enough to wrap across two clamped lines on a narrow phone`,
-  })),
+    }),
+  ),
 };
 
 /**
@@ -70,9 +78,9 @@ const FIVE_WORK_ITEMS = {
  * spaces alone, so the long token has to be proven to break rather than push the panel
  * sideways.
  */
-const LONG_ASK = {
+const LONG_ASK: runnerApi.AskListResponse = {
   items: [
-    {
+    runnerAskView({
       question_id: 'qn_long',
       chunk_id: 'ch_01KXKVVF1J3D6H6VYZ3XYN3YJ9',
       lease_id: 'lease_01KXKVVF1J3D6H6VYZ3XYNZPRR',
@@ -85,56 +93,45 @@ const LONG_ASK = {
         '2. Live browser test: the board updated within 500ms.\n\n' +
         'The failing path is web/projects/fleet/src/lib/chunk/chunk-detail/chunk-awaiting-human.spec.ts\n\n' +
         'How should I proceed?',
-    },
+    }),
   ],
 };
 
 /** A full `DashboardView` body, `asks` set to `asks` and every other section a
  * plausible/empty default, so the shell's default fallback cannot
  * leave the dashboard readers pending/malformed. */
-function dashboardBody(asks: unknown) {
-  return {
-    runner: {
+function dashboardBody(asks: runnerApi.AskListResponse): runnerApi.DashboardView {
+  return runnerDashboardView({
+    runner: runnerStatusView({
       runner_id: 'runner-local',
-      workspace_id: 'workspace-local',
-      pause: { local: false, hub: false, effective: false, local_reason: null },
-      capacities: { used: 0, bindings: [{ project: 'p', project_id: 'p', workspace_id: 'ws', agents: 4, used: 0, free: 4 }] },
-      hub: { endpoint: 'http://127.0.0.1:8421', reachable: true, last_contact_at: null, buffer_depth: 0, hub_version: null, window: null },
-      last_tick_at: null,
-    },
+      capacities: capacitiesView({ bindings: [{ project: 'p', project_id: 'p', workspace_id: 'ws', agents: 4, used: 0, free: 4 }] }),
+      hub: hubConnectivityView({ endpoint: 'http://127.0.0.1:8421' }),
+    }),
     asks,
-    escalations: { items: [] },
-    takeovers: { items: [] },
-    facts: { items: [] },
-    harness_health: { items: [] },
-    fleet_summary: null,
-  };
+  });
 }
 
 /** The host's one runner, whose dashboard the rail's panels read. */
 const HOST_RUNNERS = {
   items: [
-    {
+    hostRunnerView({
       runner_id: 'rn_1',
       name: 'r-claude-with-a-long-host-name',
-      state: 'serving',
-      served: true,
-      halted_reasons: [],
-      pause: { local: false, hub: false, effective: false, local_reason: null },
       bindings: [{ project: 'p', workspace_id: 'ws', agents: 4 }],
-      agents_in_use: 0,
       max_agents: 4,
-    },
+    }),
   ],
 };
 
-async function render(asks: unknown = { items: [] }) {
-  const stub = stubRequestClient(runnerClient, (method, path) => {
-    if (method === 'GET' && WORK_ITEMS_ROUTE.test(path)) return FIVE_WORK_ITEMS;
-    if (method === 'GET' && path === '/api/host/runners') return HOST_RUNNERS;
-    if (method === 'GET' && path === '/api/host/environments') return { workspaces: [] };
-    if (method === 'GET' && path === '/runners/rn_1/api/dashboard') return dashboardBody(asks);
-    return { items: [] };
+async function render(asks: runnerApi.AskListResponse = { items: [] }) {
+  const stub = stubRunnerClient({
+    'GET /runners/{runner_id}/api/chunks/{chunk_id}/work-items': (_request, { runner_id }) =>
+      runner_id === 'rn_1' ? FIVE_WORK_ITEMS : { items: [] },
+    'GET /api/host/runners': () => HOST_RUNNERS,
+    'GET /api/host/environments': () => ({ workspaces: [] }),
+    'GET /api/host/workspaces': () => ({ items: [] }),
+    'GET /api/host/subscriptions': () => ({ items: [] }),
+    'GET /runners/{runner_id}/api/dashboard': () => dashboardBody(asks),
   });
   await TestBed.configureTestingModule({
     imports: [LocalPanelMobile],

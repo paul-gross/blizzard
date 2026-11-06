@@ -99,6 +99,13 @@
     <span class="mut">{{ ago }}</span>
   }
 </ng-template>
+<ng-template #url>
+  @if (detail().card.url; as href) {
+    <a [href]="href" target="_blank" rel="noopener noreferrer">{{ href }}</a>
+  } @else {
+    —
+  }
+</ng-template>
 <ng-template #token>
   @if (detail().card.enrolled) {
     <fleet-kit-badge tone="done" variant="soft">ENROLLED</fleet-kit-badge>

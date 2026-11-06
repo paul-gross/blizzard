@@ -2,8 +2,8 @@ import { Component, provideZonelessChangeDetection } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { Router, provideRouter } from '@angular/router';
 import { QueryClient, provideTanStackQuery } from '@tanstack/angular-query-experimental';
-import { type MeResponse, hubClient } from 'fleet';
-import { OPERATOR_ME_RESPONSE, stubRequestClient } from 'fleet/testing';
+import type { MeResponse } from 'fleet';
+import { OPERATOR_ME_RESPONSE, projectView, stubHubClient } from 'fleet/testing';
 import { page } from 'vitest/browser';
 
 import { TAB_TENANT_KEY } from '../../core/auth/tenant-context';
@@ -23,15 +23,15 @@ const PROJECTS = [
   'Snowball Reference Implementation',
   'Avalanche',
   'Permafrost Archive and Recovery',
-].map((name, i) => ({
-  project_id: `proj_${i}`,
-  slug: name.toLowerCase().split(' ')[0],
-  name,
-  description: '',
-  color: 'teal' as const,
-  revision: 1,
-  created_at: '2026-10-01T00:00:00Z',
-}));
+].map((name, i) =>
+  projectView({
+    project_id: `proj_${i}`,
+    slug: name.toLowerCase().split(' ')[0],
+    name,
+    color: 'teal',
+    created_at: '2026-10-01T00:00:00Z',
+  }),
+);
 
 // The desktop tab row's widths: a wide monitor down to the narrowest desktop the board renders.
 const WIDTHS = [1400, 1280, 1150, 1000, 900, 800, 768, 700];
@@ -149,10 +149,9 @@ describe('mobile titlebar lens sweep (web:shell-sweep)', () => {
     window.addEventListener('error', onError);
 
     sessionStorage.setItem(TAB_TENANT_KEY, 'ten_acme');
-    const stub = stubRequestClient(hubClient, (_method, path) => {
-      if (path === '/api/me') return LONG_TENANT_ME;
-      if (path === '/api/projects') return { projects: PROJECTS };
-      return {};
+    const stub = stubHubClient({
+      'GET /api/me': () => LONG_TENANT_ME,
+      'GET /api/projects': () => ({ projects: PROJECTS }),
     });
     await TestBed.configureTestingModule({
       imports: [MobileTitlebar],

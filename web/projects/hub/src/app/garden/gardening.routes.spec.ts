@@ -2,8 +2,21 @@ import { Component, provideZonelessChangeDetection } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { provideRouter, Router, RouterOutlet } from '@angular/router';
 import { QueryClient, provideTanStackQuery } from '@tanstack/angular-query-experimental';
-import { hubClient } from 'fleet';
-import { OPERATOR_ME_RESPONSE, type RequestClientStub, settle, stubRequestClient } from 'fleet/testing';
+import {
+  OPERATOR_ME_RESPONSE,
+  type RequestClientStub,
+  gardenFindingDetailView,
+  gardenFindingFactView,
+  gardenProposalCountsView,
+  gardenProposalView,
+  gardenRoutineView,
+  gardenScopeView,
+  gardenSweepsView,
+  gardenTrendView,
+  runDeltaView,
+  settle,
+  stubHubClient,
+} from 'fleet/testing';
 
 import { provideProjectLens } from '../core/project-lens';
 import { GARDENING_ROUTES } from './gardening.routes';
@@ -11,9 +24,19 @@ import { GARDENING_ROUTES } from './gardening.routes';
 /** The lens every case opens the garden under. */
 const PROJECT = 'blizzard';
 
-/** A nested project read's path as the un-nested read it narrows, so one stub table answers both. */
-function unnested(path: string): string {
-  return path.replace(`/api/projects/${PROJECT}/`, '/api/');
+/** The project's empty garden, every read the lensed tabs make answered, with `routes` declared over it. */
+function stubGarden(routes: Parameters<typeof stubHubClient>[0] = {}) {
+  return stubHubClient({
+    'GET /api/projects/{project}/garden-proposals': () => ({ proposals: [], next_cursor: null }),
+    'GET /api/projects/{project}/routines': () => [],
+    'GET /api/graphs': () => [],
+    'GET /api/projects/{project}/runs': () => [],
+    'GET /api/projects/{project}/scopes': () => [],
+    'GET /api/projects/{project}/findings': () => ({ findings: [], next_cursor: null }),
+    'GET /api/projects/{project}/findings/classes': () => [],
+    'GET /api/me': () => OPERATOR_ME_RESPONSE,
+    ...routes,
+  });
 }
 
 /**
@@ -38,18 +61,7 @@ describe('the /gardening route subtree', () => {
   let stub: RequestClientStub;
 
   beforeEach(async () => {
-    stub = stubRequestClient(hubClient, (method, nested) => {
-      const path = unnested(nested);
-      if (method === 'GET' && path === '/api/garden-proposals') return { proposals: [], next_cursor: null };
-      if (method === 'GET' && path === '/api/routines') return [];
-      if (method === 'GET' && path === '/api/graphs') return [];
-      if (method === 'GET' && path === '/api/runs') return [];
-      if (method === 'GET' && path === '/api/scopes') return [];
-      if (method === 'GET' && path === '/api/findings') return { findings: [], next_cursor: null };
-      if (method === 'GET' && path === '/api/findings/classes') return [];
-      if (method === 'GET' && path === '/api/me') return OPERATOR_ME_RESPONSE;
-      return {};
-    });
+    stub = stubGarden();
     await TestBed.configureTestingModule({
       imports: [TestGardeningRouteHost],
       providers: [
@@ -103,18 +115,11 @@ describe('the /gardening route subtree', () => {
 
   it('resolves /gardening/scopes/:scopeSlug to the scope detail', async () => {
     stub.restore();
-    stub = stubRequestClient(hubClient, (method, nested) => {
-      const path = unnested(nested);
-      if (method === 'GET' && path === '/api/garden-proposals') return { proposals: [], next_cursor: null };
-      if (method === 'GET' && path === '/api/routines') return [];
-      if (method === 'GET' && path === '/api/graphs') return [];
-      if (method === 'GET' && path === '/api/runs') return [];
-      if (method === 'GET' && path === '/api/scopes') {
-        return [{ slug: 'blizzard', description: 'the blizzard monorepo', retired: false, created_at: '2026-01-01T00:00:00Z' }];
-      }
-      if (method === 'GET' && path === '/api/scopes/blizzard/routines') return [];
-      if (method === 'GET' && path === '/api/me') return OPERATOR_ME_RESPONSE;
-      return {};
+    stub = stubGarden({
+      'GET /api/projects/{project}/scopes': () => [
+        gardenScopeView({ slug: 'blizzard', description: 'the blizzard monorepo', created_at: '2026-01-01T00:00:00Z' }),
+      ],
+      'GET /api/projects/{project}/scopes/{slug}/routines': () => [],
     });
     const fixture = TestBed.createComponent(TestGardeningRouteHost);
     const router = TestBed.inject(Router);
@@ -140,38 +145,21 @@ describe('the /gardening route subtree', () => {
 
   it('resolves /gardening/routines/:routineSlug to the routine detail by slug, showing its display name', async () => {
     stub.restore();
-    stub = stubRequestClient(hubClient, (method, nested) => {
-      const path = unnested(nested);
-      if (method === 'GET' && path === '/api/garden-proposals') return { proposals: [], next_cursor: null };
-      if (method === 'GET' && path === '/api/routines') {
-        return [
-          {
-            routine_id: 'rtn_1',
-            name: 'Nightly sweep',
-            slug: 'nightly',
-            graph_name: 'garden-routine',
-            default_scope_slug: 'blizzard',
-            default_model: [],
-            default_effort: null,
-            created_at: '2026-01-01T00:00:00Z',
-          },
-        ];
-      }
-      if (method === 'GET' && path === '/api/graphs') return [];
-      if (method === 'GET' && path === '/api/routines/trend') {
-        return { routine_name: 'nightly', since: '2026-01-01T00:00:00Z', until: '2026-01-29T00:00:00Z', period_days: 7, periods: [], age: { boundary: '2026-01-01T00:00:00Z', recent: 0, older: 0, unattributed: 0 } };
-      }
-      if (method === 'GET' && path === '/api/routines/rtn_1/sweeps') {
-        return { routine_name: 'nightly', since: '2026-01-01T00:00:00Z', until: '2026-01-29T00:00:00Z', last_swept: [], measurements: [] };
-      }
-      if (method === 'GET' && path === '/api/routines/rtn_1/scopes') return [];
-      if (method === 'GET' && path === '/api/routines/proposal-counts') {
-        return { since: '2026-01-01T00:00:00Z', until: '2026-01-29T00:00:00Z', routine: 'nightly', rows: [] };
-      }
-      if (method === 'GET' && path === '/api/runs') return [];
-      if (method === 'GET' && path === '/api/scopes') return [];
-      if (method === 'GET' && path === '/api/me') return OPERATOR_ME_RESPONSE;
-      return {};
+    stub = stubGarden({
+      'GET /api/projects/{project}/routines': () => [
+        gardenRoutineView({
+          routine_id: 'rtn_1',
+          name: 'Nightly sweep',
+          slug: 'nightly',
+          graph_name: 'garden-routine',
+          default_scope_slug: 'blizzard',
+          created_at: '2026-01-01T00:00:00Z',
+        }),
+      ],
+      'GET /api/routines/trend': () => gardenTrendView(),
+      'GET /api/routines/{routine_id}/sweeps': () => gardenSweepsView(),
+      'GET /api/routines/{routine_id}/scopes': () => [],
+      'GET /api/routines/proposal-counts': () => gardenProposalCountsView({ routine: 'nightly' }),
     });
     const fixture = TestBed.createComponent(TestGardeningRouteHost);
     const router = TestBed.inject(Router);
@@ -197,26 +185,8 @@ describe('the /gardening route subtree', () => {
 
   it('resolves /gardening/runs/:chunkId to the run detail', async () => {
     stub.restore();
-    stub = stubRequestClient(hubClient, (method, nested) => {
-      const path = unnested(nested);
-      if (method === 'GET' && path === '/api/garden-proposals') return { proposals: [], next_cursor: null };
-      if (method === 'GET' && path === '/api/routines') return [];
-      if (method === 'GET' && path === '/api/graphs') return [];
-      if (method === 'GET' && path === '/api/runs') return [];
-      if (method === 'GET' && path === '/api/runs/ch_1') {
-        return {
-          chunk_id: 'ch_1',
-          routine_name: 'nightly',
-          scope_slug: 'blizzard',
-          mode: 'full',
-          outcome: 'done',
-          escalation: null,
-          sets: [],
-        };
-      }
-      if (method === 'GET' && path === '/api/scopes') return [];
-      if (method === 'GET' && path === '/api/me') return OPERATOR_ME_RESPONSE;
-      return {};
+    stub = stubGarden({
+      'GET /api/projects/{project}/runs/{chunk_id}': () => runDeltaView({ chunk_id: 'ch_1' }),
     });
     const fixture = TestBed.createComponent(TestGardeningRouteHost);
     const router = TestBed.inject(Router);
@@ -243,40 +213,21 @@ describe('the /gardening route subtree', () => {
 
   it('resolves /gardening/findings/:findingId to the finding detail', async () => {
     stub.restore();
-    stub = stubRequestClient(hubClient, (method, nested) => {
-      const path = unnested(nested);
-      if (method === 'GET' && path === '/api/garden-proposals') return { proposals: [], next_cursor: null };
-      if (method === 'GET' && path === '/api/routines') return [];
-      if (method === 'GET' && path === '/api/graphs') return [];
-      if (method === 'GET' && path === '/api/runs') return [];
-      if (method === 'GET' && path === '/api/findings/classes') return ['stale-docstring'];
+    stub = stubGarden({
+      'GET /api/projects/{project}/findings/classes': () => ['stale-docstring'],
       // The detail by id remains available even if no list page contains it.
-      if (method === 'GET' && path === '/api/findings') {
-        return {
-          findings: [],
-          next_cursor: null,
-        };
-      }
-      if (method === 'GET' && path === '/api/findings/fnd_1') {
-        return {
+      'GET /api/findings/{finding_id}': () =>
+        gardenFindingDetailView({
           finding_id: 'fnd_1',
           routine_name: 'nightly',
           scope_slug: 'blizzard',
           class: 'stale-docstring',
           locus: 'a.py:1',
           summary: 'summary a',
-          state: 'live',
-          live: true,
-          introduced: null,
           last_seen_at: '2026-01-05T00:00:00Z',
           observed_count: 1,
-          note: null,
-          facts: [{ kind: 'add', recorded_at: '2026-01-01T00:00:00Z' }],
-        };
-      }
-      if (method === 'GET' && path === '/api/scopes') return [];
-      if (method === 'GET' && path === '/api/me') return OPERATOR_ME_RESPONSE;
-      return {};
+          facts: [gardenFindingFactView()],
+        }),
     });
     const fixture = TestBed.createComponent(TestGardeningRouteHost);
     const router = TestBed.inject(Router);
@@ -302,41 +253,28 @@ describe('the /gardening route subtree', () => {
 
   it('resolves /gardening/proposals/:proposalId to that proposal, not the first row of the docket', async () => {
     stub.restore();
-    stub = stubRequestClient(hubClient, (method, nested) => {
-      const path = unnested(nested);
-      if (method === 'GET' && path === '/api/garden-proposals') {
-        return {
-          proposals: [
-            {
-              proposal_id: 'gprop_1',
-              routine_name: 'comments',
-              class: 'fix-the-source',
-              title: 'Author a docstring standard',
-              body: 'Seventeen modules narrate their own change history.',
-              created_at: '2026-01-01T00:00:00Z',
-              findings: [],
-              closure: null,
-            },
-            {
-              proposal_id: 'gprop_2',
-              routine_name: 'comments',
-              class: 'remediate',
-              title: 'Delete the dead helper',
-              body: 'Nothing calls it.',
-              created_at: '2026-01-02T00:00:00Z',
-              findings: [],
-              closure: null,
-            },
-          ],
-          next_cursor: null,
-        };
-      }
-      if (method === 'GET' && path === '/api/routines') return [];
-      if (method === 'GET' && path === '/api/graphs') return [];
-      if (method === 'GET' && path === '/api/runs') return [];
-      if (method === 'GET' && path === '/api/scopes') return [];
-      if (method === 'GET' && path === '/api/me') return OPERATOR_ME_RESPONSE;
-      return {};
+    stub = stubGarden({
+      'GET /api/projects/{project}/garden-proposals': () => ({
+        proposals: [
+          gardenProposalView({
+            proposal_id: 'gprop_1',
+            routine_name: 'comments',
+            class: 'fix-the-source',
+            title: 'Author a docstring standard',
+            body: 'Seventeen modules narrate their own change history.',
+            created_at: '2026-01-01T00:00:00Z',
+          }),
+          gardenProposalView({
+            proposal_id: 'gprop_2',
+            routine_name: 'comments',
+            class: 'remediate',
+            title: 'Delete the dead helper',
+            body: 'Nothing calls it.',
+            created_at: '2026-01-02T00:00:00Z',
+          }),
+        ],
+        next_cursor: null,
+      }),
     });
     const fixture = TestBed.createComponent(TestGardeningRouteHost);
     const router = TestBed.inject(Router);

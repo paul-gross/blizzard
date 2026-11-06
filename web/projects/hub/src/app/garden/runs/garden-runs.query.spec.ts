@@ -2,8 +2,7 @@ import { ChangeDetectionStrategy, Component, provideZonelessChangeDetection } fr
 import { TestBed } from '@angular/core/testing';
 import { QueryClient, provideTanStackQuery } from '@tanstack/angular-query-experimental';
 
-import { hubClient } from 'fleet';
-import { type RequestClientStub, stubRequestClient, settle } from 'fleet/testing';
+import { type RequestClientStub, runDeltaView, runRowView, settle, stubHubClient } from 'fleet/testing';
 import { injectHubRunDeltaQuery, injectHubRunsQuery } from './garden-runs.query';
 
 @Component({
@@ -38,22 +37,8 @@ describe('injectHubRunsQuery', () => {
   afterEach(() => stub?.restore());
 
   it('reads the run list off GET /api/runs', async () => {
-    stub = stubRequestClient(hubClient, (method, path) => {
-      if (method === 'GET' && path === '/api/runs') {
-        return [
-          {
-            chunk_id: 'ch_1',
-            routine_name: 'nightly',
-            scope_slug: 'blizzard',
-            mode: 'full',
-            minted_at: '2026-01-10T00:00:00Z',
-            outcome: 'done',
-            escalation: null,
-            delivered: [],
-          },
-        ];
-      }
-      return {};
+    stub = stubHubClient({
+      'GET /api/runs': () => [runRowView({ chunk_id: 'ch_1', minted_at: '2026-01-10T00:00:00Z' })],
     });
     TestBed.configureTestingModule({
       imports: [TestRunsQueryHost],
@@ -73,19 +58,8 @@ describe('injectHubRunDeltaQuery', () => {
   afterEach(() => stub?.restore());
 
   it('reads one run’s delta off GET /api/runs/{chunk_id}', async () => {
-    stub = stubRequestClient(hubClient, (method, path) => {
-      if (method === 'GET' && path === '/api/runs/ch_1') {
-        return {
-          chunk_id: 'ch_1',
-          routine_name: 'nightly',
-          scope_slug: 'blizzard',
-          mode: 'full',
-          outcome: 'done',
-          escalation: null,
-          sets: [],
-        };
-      }
-      return {};
+    stub = stubHubClient({
+      'GET /api/runs/{chunk_id}': () => runDeltaView({ chunk_id: 'ch_1' }),
     });
     TestBed.configureTestingModule({
       imports: [TestRunDeltaQueryHost],
@@ -99,7 +73,7 @@ describe('injectHubRunDeltaQuery', () => {
   });
 
   it('stays disabled while no chunk id is selected', async () => {
-    stub = stubRequestClient(hubClient);
+    stub = stubHubClient({});
     TestBed.configureTestingModule({
       imports: [TestRunDeltaDisabledQueryHost],
       providers: [provideZonelessChangeDetection(), provideTanStackQuery(new QueryClient())],

@@ -8,8 +8,14 @@
 export { settle } from './settle';
 export { hiddenAtContainerWidth, resolveContainerStyle } from './container-query';
 export {
-  stubRequestClient,
+  stubHubClient,
+  stubRunnerClient,
   stubError,
+  stubAnswerRaceLost,
+  type StubUndeclaredError,
+  type StubRoutes,
+  type StubRouteHandler,
+  type StubDetailBody,
   type RequestClientStub,
   type CapturedRequest,
   type StubHttpError,
@@ -62,3 +68,17 @@ export {
 } from './builders/transcript';
 export { chunkCountsView, chunkSummary, fleetSpendView } from './builders/board';
 export { graphView, graphNodeView, graphEdgeView } from './builders/graph';
+export { pauseStateView, capacitiesView, hubConnectivityView, runnerStatusView, runnerDashboardView, hostRunnerView } from './builders/runner-dashboard';
+export { hostEnvironmentView, hostRegistrationView, servedProjectStatusView, selfTestView, hostSubscriptionView, harnessHealthView } from './builders/host-shell-views';
+export { runnerRegistryView, hostRegistryView, runnerBindingView, subscriptionUsageView } from './builders/fleet-runner-host';
+export { projectView, sourceLinkView, repositoryLinkView, workSourceSummary, repositorySummary, secretView, memberView, forgeDetail, configChangeView, configChangesPage } from './builders/admin-config';
+export { queuePeekEntry, backlogPeekEntry } from './builders/board-root-queue';
+export { runnerLeaseView, runnerAskView, runnerFactView } from './builders/runner-core';
+export { gardenFindingDetailView, gardenFindingFactView, gardenProposalCountsRowView, gardenProposalCountsView, gardenTrendPeriodView, gardenTrendView, gardenScopeSweepView, gardenMeasurementReadingView, gardenSweepsView, gardenGraphSummaryView } from './builders/garden';
+export { gardenProposalView, gardenProposalClosureView, gardenProposalAcceptResponse, gardenProposalsPageView, gardenEvidenceFindingView } from './builders/garden-proposal';
+export { deliveredSetView, deliveredSetDeltaView, runEscalationView, runRowView, runDeltaView, routineRunResponse, routineBaselineView, gardenRoutineView, gardenScopeView, gardenProjectView } from './builders/garden-run';
+export { gardenWorkItemView } from './builders/garden';
+export { gardenFindingView } from './builders/garden';
+export { graphSummaryView } from './builders/graph-summary';
+export { eventView } from './builders/event-log';
+export { flowView, flowFactView } from './builders/delivery-flow';

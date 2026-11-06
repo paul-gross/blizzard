@@ -3,7 +3,7 @@ import { TestBed } from '@angular/core/testing';
 import { QueryClient, provideTanStackQuery } from '@tanstack/angular-query-experimental';
 
 import { hubClient } from 'fleet';
-import { settle, type RequestClientStub, stubError, stubRequestClient } from 'fleet/testing';
+import { gardenFindingDetailView, settle, type RequestClientStub, stubError, stubHubClient } from 'fleet/testing';
 import { injectHubFindingQuery, injectHubFindingsBucketQuery, injectHubFindingsQuery } from './finding.query';
 
 @Component({
@@ -17,8 +17,8 @@ class TestFindingsQueryHost {
 }
 
 /** A fetch stub capturing each request's full URL (query string included) —
- * `fleet-spend.query.spec.ts`'s own local helper, since the shared `stubRequestClient`
- * drops the query string and this spec needs it to prove `include_gone` rides the
+ * `fleet-spend.query.spec.ts`'s own local helper, since the shared stub's handlers
+ * see only the query string, not the full URL, and this spec needs it to prove `include_gone` rides the
  * request. */
 function stubFetchCapturingUrl(body: unknown): { urls: string[]; restore: () => void } {
   const urls: string[] = [];
@@ -52,41 +52,28 @@ class TestFindingsBucketQueryHost {
   );
 }
 
+/** One live `comments` finding at `locus`, as the by-id read answers it. */
+function finding(finding_id: string, locus: string, summary: string) {
+  return gardenFindingDetailView({
+    finding_id,
+    routine_name: 'comments',
+    scope_slug: 'blizzard',
+    class: 'stale-docstring',
+    locus,
+    summary,
+    observed_count: 1,
+    last_seen_at: '2026-01-01T00:00:00Z',
+  });
+}
+
 describe('injectHubFindingsQuery', () => {
   let stub: RequestClientStub;
   afterEach(() => stub?.restore());
 
   it('reads every id independently, live, and joins the results', async () => {
-    stub = stubRequestClient(hubClient, (method, path) => {
-      if (method === 'GET' && path === '/api/findings/fin_1') {
-        return {
-          finding_id: 'fin_1',
-          routine_name: 'comments',
-          scope_slug: 'blizzard',
-          class: 'stale-docstring',
-          locus: 'src/a.py:1',
-          summary: 'a',
-          state: 'live',
-          live: true,
-          observed_count: 1,
-          last_seen_at: '2026-01-01T00:00:00Z',
-        };
-      }
-      if (method === 'GET' && path === '/api/findings/fin_2') {
-        return {
-          finding_id: 'fin_2',
-          routine_name: 'comments',
-          scope_slug: 'blizzard',
-          class: 'stale-docstring',
-          locus: 'src/b.py:9',
-          summary: 'b',
-          state: 'live',
-          live: true,
-          observed_count: 1,
-          last_seen_at: '2026-01-01T00:00:00Z',
-        };
-      }
-      return {};
+    stub = stubHubClient({
+      'GET /api/findings/{finding_id}': (_request, { finding_id }) =>
+        finding_id === 'fin_1' ? finding('fin_1', 'src/a.py:1', 'a') : finding('fin_2', 'src/b.py:9', 'b'),
     });
     TestBed.configureTestingModule({
       imports: [TestFindingsQueryHost],
@@ -103,23 +90,9 @@ describe('injectHubFindingsQuery', () => {
   });
 
   it("drops a failed id's row rather than failing the whole join", async () => {
-    stub = stubRequestClient(hubClient, (method, path) => {
-      if (method === 'GET' && path === '/api/findings/fin_1') {
-        return {
-          finding_id: 'fin_1',
-          routine_name: 'comments',
-          scope_slug: 'blizzard',
-          class: 'stale-docstring',
-          locus: 'src/a.py:1',
-          summary: 'a',
-          state: 'live',
-          live: true,
-          observed_count: 1,
-          last_seen_at: '2026-01-01T00:00:00Z',
-        };
-      }
-      if (method === 'GET' && path === '/api/findings/fin_2') return stubError(404, { detail: 'not found' });
-      return {};
+    stub = stubHubClient({
+      'GET /api/findings/{finding_id}': (_request, { finding_id }) =>
+        finding_id === 'fin_1' ? finding('fin_1', 'src/a.py:1', 'a') : stubError(404, { detail: 'not found' }),
     });
     TestBed.configureTestingModule({
       imports: [TestFindingsQueryHost],
@@ -135,7 +108,7 @@ describe('injectHubFindingsQuery', () => {
   });
 
   it('stays disabled for an empty id list', async () => {
-    stub = stubRequestClient(hubClient, () => ({}));
+    stub = stubHubClient({});
     TestBed.configureTestingModule({
       imports: [TestFindingsQueryHost],
       providers: [provideZonelessChangeDetection(), provideTanStackQuery(new QueryClient())],
@@ -165,9 +138,8 @@ describe('injectHubFindingQuery', () => {
   /** The same failed read the fan-out drops as a missing row reaches the one-finding
    * reader as an error, even with the fan-out already cached over that id. */
   it('surfaces a failed single-finding read as an error, even beside a fan-out over the same id', async () => {
-    stub = stubRequestClient(hubClient, (method, path) => {
-      if (method === 'GET' && path === '/api/findings/fin_2') return stubError(404, { detail: 'not found' });
-      return {};
+    stub = stubHubClient({
+      'GET /api/findings/{finding_id}': () => stubError(404, { detail: 'not found' }),
     });
     TestBed.configureTestingModule({
       imports: [TestFindingsQueryHost, TestFindingQueryHost],

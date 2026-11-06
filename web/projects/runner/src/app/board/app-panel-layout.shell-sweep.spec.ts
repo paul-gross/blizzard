@@ -2,8 +2,20 @@ import { provideZonelessChangeDetection } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { provideRouter } from '@angular/router';
 import { QueryClient, provideTanStackQuery } from '@tanstack/angular-query-experimental';
-import { runnerClient } from 'fleet';
-import { settle, stubRequestClient } from 'fleet/testing';
+import { type runnerApi } from 'fleet';
+import {
+  capacitiesView,
+  hostEnvironmentView,
+  hostRunnerView,
+  hubConnectivityView,
+  pauseStateView,
+  runnerAskView,
+  runnerDashboardView,
+  runnerStatusView,
+  servedProjectStatusView,
+  settle,
+  stubRunnerClient,
+} from 'fleet/testing';
 import { commands, page } from 'vitest/browser';
 
 import { machineChunkRows } from '../core/chunk-rows.model';
@@ -74,95 +86,81 @@ const ROWS = machineChunkRows(LEASES, [{ slug: 'blizzard', name: 'Blizzard', ent
 /** The host as the live instance reports it: one runner binding two workspaces, one held by its own brake. */
 const HOST_RUNNERS = {
   items: [
-    {
+    hostRunnerView({
       runner_id: 'rn_1',
       name: RUNNER_NAME,
-      state: 'serving',
-      served: true,
-      halted_reasons: [],
-      pause: { local: false, hub: true, effective: true, local_reason: null },
+      pause: pauseStateView({ hub: true, effective: true }),
       bindings: [
         { project: 'console', workspace_id: 'workspace-web', agents: 4 },
         { project: 'blizzard', workspace_id: 'workspace-local', agents: 8 },
       ],
       agents_in_use: 3,
       max_agents: 12,
-    },
-    {
+    }),
+    hostRunnerView({
       runner_id: 'rn_2',
       name: 'r-opencode',
-      state: 'serving',
-      served: true,
-      halted_reasons: [],
-      pause: { local: true, hub: false, effective: true, local_reason: 'OpenCode is not installed on this host yet' },
+      pause: pauseStateView({ local: true, effective: true, local_reason: 'OpenCode is not installed on this host yet' }),
       bindings: [{ project: 'winter', workspace_id: 'workspace-local', agents: 2 }],
       agents_in_use: 0,
       max_agents: 2,
-    },
+    }),
   ],
 };
 
-function dashboard(runnerId: string): unknown {
-  return {
+function dashboard(runnerId: string): runnerApi.DashboardView {
+  return runnerDashboardView({
     fleet_summary: { ready: 12, running: 9, waiting: 3, needs: 2 },
-    runner: {
+    runner: runnerStatusView({
       runner_id: runnerId,
-      workspace_id: 'workspace-local',
-      pause: { local: false, hub: false, effective: false, local_reason: null },
-      capacities: {
+      capacities: capacitiesView({
         used: 2,
         bindings: [{ project: 'blizzard', project_id: 'proj_b', workspace_id: 'workspace-local', agents: 8, used: 2, free: 6 }],
-      },
-      hub: { endpoint: 'http://127.0.0.1:4522', reachable: true, last_contact_at: '2026-07-16T11:59:30.000Z', buffer_depth: 0, hub_version: null, window: null },
-      last_tick_at: null,
-      served_projects: [{ entry: 'blizzard', project_id: 'proj_b', slug: 'blizzard', name: 'Blizzard', color: 'cyan' }],
-    },
+      }),
+      hub: hubConnectivityView({ last_contact_at: '2026-07-16T11:59:30.000Z' }),
+      served_projects: [servedProjectStatusView({ entry: 'blizzard', project_id: 'proj_b', slug: 'blizzard', name: 'Blizzard', color: 'cyan' })],
+    }),
     asks: {
       items: [
-        {
+        runnerAskView({
           question_id: 'qn_01KXKVVF1J3D6H6VYZ3XYNQ777',
           chunk_id: 'ch_01KXKVVF1J3D6H6VYZ3XYNASK1',
           lease_id: 'l_ask',
           question: 'Should the probe cap be configurable per service, or stay one value for every service on the host?',
-          options: [],
           session_id: 'sess-77',
           asked_at: '2026-07-16T11:40:00.000Z',
-        },
+        }),
       ],
     },
-    escalations: { items: [] },
-    takeovers: { items: [] },
-    facts: { items: [] },
-    harness_health: { items: [] },
-  };
+  });
 }
 
 const ENVIRONMENTS = {
   workspaces: [
     {
       workspace_id: 'workspace-local',
-      items: Array.from({ length: 12 }, (_, i) => ({
-        environment_id: `e${i + 1}`,
-        chunk_id: i < 3 ? `ch_${i}` : null,
-        held_since: i < 3 ? '2026-07-16T11:00:00.000Z' : null,
-        held: i < 3,
-        runner_id: i < 3 ? 'rn_1' : null,
-        project: i < 3 ? 'proj_b' : null,
-      })),
+      items: Array.from({ length: 12 }, (_, i) =>
+        hostEnvironmentView({
+          environment_id: `e${i + 1}`,
+          chunk_id: i < 3 ? `ch_${i}` : null,
+          held_since: i < 3 ? '2026-07-16T11:00:00.000Z' : null,
+          held: i < 3,
+          runner_id: i < 3 ? 'rn_1' : null,
+          project: i < 3 ? 'proj_b' : null,
+        }),
+      ),
     },
   ],
 };
 
-function routes(method: string, path: string): unknown {
-  if (method !== 'GET') return {};
-  if (path === '/api/host/runners') return HOST_RUNNERS;
-  if (path === '/api/host/environments') return ENVIRONMENTS;
-  if (path === '/api/host/workspaces') return { items: [{ workspace_id: 'workspace-local', max_environments: 12 }] };
-  if (path === '/api/host/subscriptions') return { items: [] };
-  const match = /^\/runners\/([^/]+)\/api\/dashboard$/.exec(path);
-  if (match) return dashboard(match[1]);
-  return { items: [] };
-}
+const ROUTES: Parameters<typeof stubRunnerClient>[0] = {
+  'GET /api/host/runners': () => HOST_RUNNERS,
+  'GET /api/host/environments': () => ENVIRONMENTS,
+  'GET /api/host/workspaces': () => ({ items: [{ workspace_id: 'workspace-local', max_environments: 12 }] }),
+  'GET /api/host/subscriptions': () => ({ items: [] }),
+  'GET /runners/{runner_id}/api/dashboard': (_request, { runner_id }) => dashboard(runner_id),
+  'GET /runners/{runner_id}/api/chunks/{chunk_id}/work-items': () => ({ items: [] }),
+};
 
 /** The design tokens are a global stylesheet the app build loads, never a standalone mount. */
 async function loadDesignTokens(): Promise<void> {
@@ -174,7 +172,7 @@ async function loadDesignTokens(): Promise<void> {
 
 async function render(width: number, selected: boolean) {
   TestBed.resetTestingModule();
-  const stub = stubRequestClient(runnerClient, routes);
+  const stub = stubRunnerClient(ROUTES);
   await TestBed.configureTestingModule({
     imports: [LocalPanelLayout],
     providers: [

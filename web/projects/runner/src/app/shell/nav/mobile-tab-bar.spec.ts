@@ -2,24 +2,16 @@ import { provideZonelessChangeDetection } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { provideRouter } from '@angular/router';
 import { QueryClient, provideTanStackQuery } from '@tanstack/angular-query-experimental';
-import { runnerClient } from 'fleet';
-import { type RequestClientStub, settle, stubRequestClient } from 'fleet/testing';
+import { type runnerApi } from 'fleet';
+import { hostRunnerView, type RequestClientStub, runnerAskView, runnerDashboardView, runnerStatusView, settle, stubRunnerClient } from 'fleet/testing';
 
 import { MobileTabBar } from './mobile-tab-bar';
 
 /** Two serving runners on the host. */
 const RUNNERS = {
-  items: ['rn_1', 'rn_2'].map((runnerId, i) => ({
-    runner_id: runnerId,
-    name: `r${i + 1}`,
-    state: 'serving',
-    served: true,
-    halted_reasons: [],
-    pause: { local: false, hub: false, effective: false, local_reason: null },
-    bindings: [{ project: 'p', workspace_id: 'ws', agents: 4 }],
-    agents_in_use: 0,
-    max_agents: 4,
-  })),
+  items: ['rn_1', 'rn_2'].map((runnerId, i) =>
+    hostRunnerView({ runner_id: runnerId, name: `r${i + 1}`, bindings: [{ project: 'p', workspace_id: 'ws', agents: 4 }], max_agents: 4 }),
+  ),
 };
 
 describe('MobileTabBar', () => {
@@ -27,14 +19,15 @@ describe('MobileTabBar', () => {
 
   afterEach(() => stub.restore());
 
-  async function render(asks: readonly unknown[]) {
-    stub = stubRequestClient(runnerClient, (method, path) => {
-      if (method !== 'GET') return {};
-      if (path === '/api/host/runners') return RUNNERS;
+  async function render(asks: readonly runnerApi.AskView[]) {
+    stub = stubRunnerClient({
+      'GET /api/host/runners': () => RUNNERS,
       // Every covered runner's asks count toward the badge.
-      if (path === '/runners/rn_1/api/dashboard') return { asks: { items: asks.slice(0, 1) } };
-      if (path === '/runners/rn_2/api/dashboard') return { asks: { items: asks.slice(1) } };
-      return {};
+      'GET /runners/{runner_id}/api/dashboard': (_request, { runner_id }) =>
+        runnerDashboardView({
+          runner: runnerStatusView({ runner_id }),
+          asks: { items: runner_id === 'rn_1' ? asks.slice(0, 1) : asks.slice(1) },
+        }),
     });
     await TestBed.configureTestingModule({
       imports: [MobileTabBar],
@@ -72,8 +65,8 @@ describe('MobileTabBar', () => {
 
   it('shows the open-asks count across every covered runner on the Asks tab', async () => {
     const fixture = await render([
-      { question_id: 'qn_1', chunk_id: 'ch_1', lease_id: 'lease_1', question: 'a?', options: [], session_id: null, asked_at: null },
-      { question_id: 'qn_2', chunk_id: 'ch_2', lease_id: 'lease_2', question: 'b?', options: [], session_id: null, asked_at: null },
+      runnerAskView({ question_id: 'qn_1', chunk_id: 'ch_1', lease_id: 'lease_1', question: 'a?', options: [], session_id: null }),
+      runnerAskView({ question_id: 'qn_2', chunk_id: 'ch_2', lease_id: 'lease_2', question: 'b?', options: [], session_id: null }),
     ]);
     const el = fixture.nativeElement as HTMLElement;
 

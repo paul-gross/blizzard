@@ -2,8 +2,7 @@ import { provideZonelessChangeDetection } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { provideRouter } from '@angular/router';
 import { QueryClient, provideTanStackQuery } from '@tanstack/angular-query-experimental';
-import { runnerClient } from 'fleet';
-import { type RequestClientStub, settle, stubRequestClient } from 'fleet/testing';
+import { type RequestClientStub, settle, stubRunnerClient } from 'fleet/testing';
 
 import { type MachineChunkRow, machineChunkRows } from '../core/chunk-rows.model';
 import type { PanelLease } from '../core/panel-reads.model';
@@ -69,7 +68,13 @@ describe('LocalPanelMobile', () => {
 
   beforeEach(() => {
     // Only the self-fetching children's own reads need an answer, so every route resolves to the empty shape.
-    stub = stubRequestClient(runnerClient, () => ({ items: [] }));
+    stub = stubRunnerClient({
+      'GET /api/host/runners': () => ({ items: [] }),
+      'GET /api/host/environments': () => ({ workspaces: [] }),
+      'GET /api/host/workspaces': () => ({ items: [] }),
+      'GET /api/host/subscriptions': () => ({ items: [] }),
+      'GET /runners/{runner_id}/api/chunks/{chunk_id}/work-items': () => ({ items: [] }),
+    });
   });
 
   afterEach(() => stub.restore());

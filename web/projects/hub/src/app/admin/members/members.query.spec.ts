@@ -2,8 +2,7 @@ import { ChangeDetectionStrategy, Component, provideZonelessChangeDetection } fr
 import { TestBed } from '@angular/core/testing';
 import { QueryClient, provideTanStackQuery } from '@tanstack/angular-query-experimental';
 
-import { hubClient } from 'fleet';
-import { settle, type RequestClientStub, stubError, stubRequestClient } from 'fleet/testing';
+import { memberView, settle, type RequestClientStub, stubError, stubHubClient } from 'fleet/testing';
 import { injectMembersQuery } from './members.query';
 
 @Component({
@@ -16,7 +15,7 @@ class TestMembersQueryHost {
 }
 
 const MEMBERS = [
-  {
+  memberView({
     user_id: 'usr_1',
     username: 'ada',
     display_name: 'Ada',
@@ -27,7 +26,7 @@ const MEMBERS = [
     identities: [{ provider_name: 'github', handle: 'ada' }],
     assignable_roles: [],
     revocable: false,
-  },
+  }),
 ];
 
 describe('injectMembersQuery', () => {
@@ -46,7 +45,7 @@ describe('injectMembersQuery', () => {
   }
 
   it('reads GET /api/members and resolves its rows', async () => {
-    stub = stubRequestClient(hubClient, (method, path) => (path === '/api/members' ? MEMBERS : {}));
+    stub = stubHubClient({ 'GET /api/members': () => MEMBERS });
     const fixture = mount();
     await settle(fixture);
 
@@ -55,9 +54,9 @@ describe('injectMembersQuery', () => {
   });
 
   it('surfaces a 403 (below user:manage) as the query error state', async () => {
-    stub = stubRequestClient(hubClient, (method, path) =>
-      path === '/api/members' ? stubError(403, { detail: "missing permission 'user:manage'" }) : {},
-    );
+    stub = stubHubClient({
+      'GET /api/members': () => stubError(403, { detail: "missing permission 'user:manage'" }),
+    });
     const fixture = mount();
     await settle(fixture);
 

@@ -2,8 +2,21 @@ import { provideZonelessChangeDetection } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { provideRouter, Router } from '@angular/router';
 import { QueryClient, provideTanStackQuery } from '@tanstack/angular-query-experimental';
-import { EVENT_SOURCE_FACTORY, ViewportService, runnerClient, type EventSourceFactory, type FleetEventSource } from 'fleet';
-import { type RequestClientStub, settle, stubError, stubRequestClient } from 'fleet/testing';
+import { EVENT_SOURCE_FACTORY, ViewportService, type EventSourceFactory, type FleetEventSource } from 'fleet';
+import {
+  capacitiesView,
+  hostEnvironmentView,
+  hostRegistrationView,
+  hostRunnerView,
+  hubConnectivityView,
+  type RequestClientStub,
+  runnerDashboardView,
+  runnerStatusView,
+  servedProjectStatusView,
+  settle,
+  stubError,
+  stubRunnerClient,
+} from 'fleet/testing';
 
 import { App } from './app';
 import { routes } from './app.routes';
@@ -27,56 +40,28 @@ class FakeEventSource {
 
 /** One serving runner, `r1` (`rn_1`), on the host. */
 const RUNNERS = {
-  items: [
-    {
-      runner_id: 'rn_1',
-      name: 'r1',
-      state: 'serving',
-      served: true,
-      halted_reasons: [],
-      pause: { local: false, hub: false, effective: false, local_reason: null },
-      bindings: [{ project: 'p', workspace_id: 'ws', agents: 4 }],
-      agents_in_use: 0,
-      max_agents: 4,
-    },
-  ],
+  items: [hostRunnerView({ runner_id: 'rn_1', name: 'r1', bindings: [{ project: 'p', workspace_id: 'ws', agents: 4 }], max_agents: 4 })],
 };
 
 /** `r1`'s dashboard — reaching its hub, nothing open. */
-const DASHBOARD = {
-  runner: {
+const DASHBOARD = runnerDashboardView({
+  runner: runnerStatusView({
     runner_id: 'rn_1',
     runner_name: 'r1',
     workspace_id: 'ws',
-    pause: { local: false, hub: false, effective: false, local_reason: null },
-    capacities: { used: 0, bindings: [{ project: 'p', project_id: 'proj_p', workspace_id: 'ws', agents: 4, used: 0, free: 4 }] },
-    hub: { endpoint: 'http://127.0.0.1:8421', reachable: true, last_contact_at: null, buffer_depth: 0 },
-    last_tick_at: null,
-    served_projects: [{ entry: 'p', project_id: 'proj_p', slug: 'p', name: 'P', color: 'slate', resolved: true }],
-  },
-  asks: { items: [] },
-  escalations: { items: [] },
-  takeovers: { items: [] },
-  facts: { items: [] },
-  harness_health: { items: [] },
-  fleet_summary: null,
-};
+    capacities: capacitiesView({ bindings: [{ project: 'p', project_id: 'proj_p', workspace_id: 'ws', agents: 4, used: 0, free: 4 }] }),
+    hub: hubConnectivityView({ endpoint: 'http://127.0.0.1:8421' }),
+    served_projects: [servedProjectStatusView({ entry: 'p', project_id: 'proj_p', slug: 'p', name: 'P', color: 'slate' })],
+  }),
+});
 
 /** The host's own reads, beyond its runners. */
-const HOST: Record<string, unknown> = {
-  '/api/host/environments': { workspaces: [{ workspace_id: 'ws', items: [{ environment_id: 'e1', held: false }] }] },
-  '/api/host/workspaces': { items: [{ workspace_id: 'ws', max_environments: 1 }] },
-  '/api/host/subscriptions': { items: [] },
-  '/api/host/registration': {
-    state: 'registered',
-    host_id: 'hs_1',
-    tenant_id: 'ten_1',
-    host_name: 'xps',
-    answered_at: null,
-    held_runner_ids: ['rn_1'],
-    detail: null,
-    buffered_facts: 0,
-  },
+const HOST: Parameters<typeof stubRunnerClient>[0] = {
+  'GET /api/host/environments': () => ({ workspaces: [{ workspace_id: 'ws', items: [hostEnvironmentView({ environment_id: 'e1' })] }] }),
+  'GET /api/host/workspaces': () => ({ items: [{ workspace_id: 'ws', max_environments: 1 }] }),
+  'GET /api/host/subscriptions': () => ({ items: [] }),
+  'GET /api/host/registration': () =>
+    hostRegistrationView({ host_id: 'hs_1', tenant_id: 'ten_1', host_name: 'xps', held_runner_ids: ['rn_1'] }),
 };
 
 describe('runner App', () => {
@@ -86,12 +71,19 @@ describe('runner App', () => {
     // The shell's pages read the host's runners, then fan out per runner — one runner and
     // otherwise empty answers keep this shell-level test independent of each page's own
     // read behavior (covered by the pages' own specs).
-    stub = stubRequestClient(runnerClient, (method, path) => {
-      if (method === 'GET' && path === '/api/host/runners') return RUNNERS;
-      if (method === 'GET' && path in HOST) return HOST[path];
-      if (method === 'GET' && path === '/runners/rn_1/api/dashboard') return DASHBOARD;
-      if (method === 'GET' && path.startsWith('/runners/rn_1/api/chunks/')) return stubError(404, { detail: 'unknown chunk' });
-      return { items: [] };
+    stub = stubRunnerClient({
+      ...HOST,
+      'GET /api/host/runners': () => RUNNERS,
+      'GET /api/auth/session': () => ({ auth_enabled: false, username: null }),
+      'GET /api/flags': () => ({ flags: {}, overridden: [] }),
+      'GET /runners/{runner_id}/api/dashboard': (_request, { runner_id }) =>
+        runner_id === 'rn_1' ? DASHBOARD : stubError(404, { detail: 'unknown runner' }),
+      'GET /runners/{runner_id}/api/chunks/{chunk_id}': () => stubError(404, { detail: 'unknown chunk' }),
+      'GET /runners/{runner_id}/api/leases': () => ({ items: [] }),
+      'GET /runners/{runner_id}/api/facts': () => ({ items: [] }),
+      'GET /runners/{runner_id}/api/asks': () => ({ items: [] }),
+      'GET /runners/{runner_id}/api/escalations': () => ({ items: [] }),
+      'GET /runners/{runner_id}/api/takeovers': () => ({ items: [] }),
     });
     const factory: EventSourceFactory = () => new FakeEventSource() as unknown as FleetEventSource;
     await TestBed.configureTestingModule({

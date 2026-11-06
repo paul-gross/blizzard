@@ -4,8 +4,7 @@ import { Router, provideRouter } from '@angular/router';
 import { RouterTestingHarness } from '@angular/router/testing';
 import { QueryClient, provideTanStackQuery } from '@tanstack/angular-query-experimental';
 
-import { hubClient } from 'fleet';
-import { OPERATOR_ME_RESPONSE, type RequestClientStub, settle, stubRequestClient } from 'fleet/testing';
+import { OPERATOR_ME_RESPONSE, projectView, type RequestClientStub, settle, stubHubClient } from 'fleet/testing';
 import { TAB_TENANT_KEY } from '../../core/auth/tenant-context';
 import { provideProjectLens } from '../../core/project-lens';
 import { LensPicker } from './lens-picker';
@@ -13,25 +12,17 @@ import { LensPicker } from './lens-picker';
 @Component({ selector: 'app-test-lens-view', template: '' })
 class TestView {}
 
-const project = (slug: string, name: string, color: string) => ({
-  project_id: `proj_${slug}`,
-  slug,
-  name,
-  color,
-  description: '',
-  revision: 1,
-  created_at: '2026-10-01T00:00:00Z',
-});
+const project = (slug: string, name: string, color: string) =>
+  projectView({ project_id: `proj_${slug}`, slug, name, color, created_at: '2026-10-01T00:00:00Z' });
 
 describe('LensPicker', () => {
   let stub: RequestClientStub;
 
   beforeEach(async () => {
     sessionStorage.setItem(TAB_TENANT_KEY, 'ten_acme');
-    stub = stubRequestClient(hubClient, (_method, path) => {
-      if (path === '/api/me') return OPERATOR_ME_RESPONSE;
-      if (path === '/api/projects') return { projects: [project('zeta', 'Zeta', 'pink'), project('glacier', 'Glacier', 'teal')] };
-      return {};
+    stub = stubHubClient({
+      'GET /api/me': () => OPERATOR_ME_RESPONSE,
+      'GET /api/projects': () => ({ projects: [project('zeta', 'Zeta', 'pink'), project('glacier', 'Glacier', 'teal')] }),
     });
     await TestBed.configureTestingModule({
       providers: [

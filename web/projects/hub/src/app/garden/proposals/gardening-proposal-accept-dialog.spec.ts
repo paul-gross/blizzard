@@ -1,33 +1,25 @@
 import { provideZonelessChangeDetection } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { QueryClient, provideTanStackQuery } from '@tanstack/angular-query-experimental';
-import { hubClient } from 'fleet';
-import { type RequestClientStub, settle, stubError, stubRequestClient } from 'fleet/testing';
+import {
+  gardenProposalAcceptResponse,
+  type RequestClientStub,
+  settle,
+  stubError,
+  stubHubClient,
+} from 'fleet/testing';
 
 import { GardeningProposalAcceptDialog } from './gardening-proposal-accept-dialog';
 
-const ACCEPT_RESPONSE = {
+const ACCEPT_RESPONSE = gardenProposalAcceptResponse({
   proposal_id: 'gp_1',
-  routine_name: 'comments',
   class: 'x',
   title: 't',
   body: 'the proposal body',
-  created_at: '2026-01-01T00:00:00Z',
-  findings: [],
-  chunk_id: 'ch_1',
-  closure: {
-    closure: 'accepted',
-    reason: null,
-    closed_by: 'u_1',
-    closed_at: '2026-01-02T00:00:00Z',
-    item_outcome: 'minted',
-    source: 'hub',
-    ref: '42',
-  },
-};
+});
 
-async function mount(route: (method: string, path: string) => unknown) {
-  const stub = stubRequestClient(hubClient, route);
+async function mount(routes: Parameters<typeof stubHubClient>[0]) {
+  const stub = stubHubClient(routes);
   await TestBed.configureTestingModule({
     imports: [GardeningProposalAcceptDialog],
     providers: [
@@ -48,7 +40,7 @@ describe('GardeningProposalAcceptDialog', () => {
   afterEach(() => stub?.restore());
 
   it('submits mint_work_item: true with the (unedited) proposal body and no extra input by default', async () => {
-    const mounted = await mount(() => ACCEPT_RESPONSE);
+    const mounted = await mount({ 'POST /api/garden-proposals/{proposal_id}/accept': () => ACCEPT_RESPONSE });
     stub = mounted.stub;
     const { el, fixture } = mounted;
 
@@ -64,7 +56,7 @@ describe('GardeningProposalAcceptDialog', () => {
   });
 
   it('carries an edited body override', async () => {
-    const mounted = await mount(() => ACCEPT_RESPONSE);
+    const mounted = await mount({ 'POST /api/garden-proposals/{proposal_id}/accept': () => ACCEPT_RESPONSE });
     stub = mounted.stub;
     const { el, fixture } = mounted;
 
@@ -80,7 +72,7 @@ describe('GardeningProposalAcceptDialog', () => {
   });
 
   it('gates decline-to-mint on its own required reason, then sends mint_work_item: false', async () => {
-    const mounted = await mount(() => ACCEPT_RESPONSE);
+    const mounted = await mount({ 'POST /api/garden-proposals/{proposal_id}/accept': () => ACCEPT_RESPONSE });
     stub = mounted.stub;
     const { el, fixture } = mounted;
 
@@ -108,11 +100,9 @@ describe('GardeningProposalAcceptDialog', () => {
   });
 
   it('renders a 409 (already closed) as an action error rather than closing', async () => {
-    const mounted = await mount((method, path) =>
-      method === 'POST' && path === '/api/garden-proposals/gp_1/accept'
-        ? stubError(409, { detail: 'garden proposal gp_1 already carries a closure' })
-        : {},
-    );
+    const mounted = await mount({
+      'POST /api/garden-proposals/{proposal_id}/accept': () => stubError(409, { detail: 'garden proposal gp_1 already carries a closure' }),
+    });
     stub = mounted.stub;
     const { el, fixture } = mounted;
     let closed = false;

@@ -2,8 +2,8 @@ import { Component, provideZonelessChangeDetection } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { Router, RouterOutlet, provideRouter } from '@angular/router';
 import { QueryClient, provideTanStackQuery } from '@tanstack/angular-query-experimental';
-import { hubClient } from 'fleet';
-import { settle, stubRequestClient } from 'fleet/testing';
+import type { GardenProposalView } from 'fleet';
+import { gardenProjectView, gardenProposalView, settle, stubHubClient } from 'fleet/testing';
 import { commands, page } from 'vitest/browser';
 
 import { ProjectLens, provideProjectLens } from '../core/project-lens';
@@ -44,25 +44,21 @@ class TestGardenTab {}
 @Component({ selector: 'app-test-garden-sweep-host', imports: [RouterOutlet], template: '<router-outlet />' })
 class TestGardenSweepHost {}
 
-const PROJECTS = [{ project_id: 'proj_b', slug: 'blizzard', name: 'Blizzard' }];
-const waiting = (id: string) => ({
-  proposal_id: id,
-  project_id: 'proj_b',
-  routine_name: 'comments',
-  class: 'x',
-  body: 'b',
-  created_at: '2026-01-01T00:00:00Z',
-  findings: [],
-});
+const PROJECTS = [gardenProjectView({ project_id: 'proj_b', slug: 'blizzard', name: 'Blizzard' })];
+const waiting = (id: string) => gardenProposalView({ proposal_id: id, project_id: 'proj_b' });
 
-async function render(proposals: readonly unknown[]) {
-  const stub = stubRequestClient(hubClient, (method, path) => {
-    if (method !== 'GET') return {};
-    if (path === '/api/projects') return { projects: PROJECTS };
-    if (path === '/api/runners') return { runners: [] };
-    if (path.endsWith('/garden-proposals')) return { proposals, next_cursor: null };
-    if (path.endsWith('/scopes') || path.endsWith('/routines') || path.endsWith('/runs')) return [];
-    return {};
+async function render(proposals: GardenProposalView[]) {
+  const stub = stubHubClient({
+    'GET /api/projects': () => ({ projects: PROJECTS }),
+    'GET /api/runners': () => ({ runners: [] }),
+    'GET /api/garden-proposals': () => ({ proposals, next_cursor: null }),
+    'GET /api/projects/{project}/garden-proposals': () => ({ proposals, next_cursor: null }),
+    'GET /api/scopes': () => [],
+    'GET /api/projects/{project}/scopes': () => [],
+    'GET /api/routines': () => [],
+    'GET /api/projects/{project}/routines': () => [],
+    'GET /api/runs': () => [],
+    'GET /api/projects/{project}/runs': () => [],
   });
   await TestBed.configureTestingModule({
     imports: [TestGardenSweepHost],

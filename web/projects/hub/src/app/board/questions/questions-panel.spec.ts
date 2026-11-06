@@ -2,12 +2,12 @@ import { provideZonelessChangeDetection } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { QueryClient, provideTanStackQuery } from '@tanstack/angular-query-experimental';
 
-import { settle, type RequestClientStub, stubRequestClient } from 'fleet/testing';
-import { hubClient } from 'fleet';
+import { type QuestionView } from 'fleet';
+import { questionView, settle, type RequestClientStub, stubHubClient } from 'fleet/testing';
 import { QuestionsPanel } from './questions-panel';
 
-const QUESTIONS = [
-  {
+const QUESTIONS: QuestionView[] = [
+  questionView({
     question_id: 'qn_01',
     chunk_id: 'ch_01KXKVVF1J3D6H6VYZ3XYN3YJ9',
     question: 'Which API style should the endpoint use?',
@@ -16,23 +16,24 @@ const QUESTIONS = [
     runner_id: 'rn_01',
     asked_at: '2026-07-16T00:00:01Z',
     answered: false,
-  },
-  {
+  }),
+  questionView({
     question_id: 'qn_02',
     chunk_id: 'ch_01KXKVVF1J3D6H6VYZ3XYN3YAB',
     question: 'Should the migration backfill in one pass?',
+    options: [],
     epoch: 2,
     runner_id: 'rn_02',
     asked_at: '2026-07-16T00:00:02Z',
     answered: false,
-  },
+  }),
 ];
 
 describe('QuestionsPanel', () => {
   let stub: RequestClientStub;
 
-  const render = async (questions: unknown = QUESTIONS) => {
-    stub = stubRequestClient(hubClient, (method, path) => (method === 'GET' && path === '/api/questions' ? questions : {}));
+  const render = async (questions: QuestionView[] = QUESTIONS) => {
+    stub = stubHubClient({ 'GET /api/questions': () => questions });
     await TestBed.configureTestingModule({
       imports: [QuestionsPanel],
       providers: [

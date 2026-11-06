@@ -3,8 +3,15 @@ import { TestBed } from '@angular/core/testing';
 import { provideRouter, Router } from '@angular/router';
 import { RouterTestingHarness } from '@angular/router/testing';
 import { QueryClient, provideTanStackQuery } from '@tanstack/angular-query-experimental';
-import { hubClient, type RepositorySummary } from 'fleet';
-import { OPERATOR_ME_RESPONSE, type RequestClientStub, settle, stubRequestClient } from 'fleet/testing';
+import { type MeResponse, type RepositorySummary } from 'fleet';
+import {
+  configChangesPage,
+  configChangeView,
+  OPERATOR_ME_RESPONSE,
+  type RequestClientStub,
+  settle,
+  stubHubClient,
+} from 'fleet/testing';
 
 import { RepositoryDetail } from './repository-detail';
 
@@ -28,9 +35,9 @@ const CORE: RepositorySummary = {
   created_by_name: null,
   retired: false,
 };
-const HISTORY = {
+const HISTORY = configChangesPage({
   changes: [
-    {
+    configChangeView({
       id: 7,
       actor: 'ada',
       door: 'board',
@@ -40,11 +47,11 @@ const HISTORY = {
       record_kind: 'repository',
       recorded_at: '2026-10-02T00:00:00Z',
       revision: 2,
-      diff: [{ field: 'slug', old: 'blizzard', new: 'core' }],
-    },
+      diff: [{ field: 'slug', old: 'blizzard', new: 'core', old_label: null, new_label: null }],
+    }),
   ],
-};
-const EDITOR = { ...OPERATOR_ME_RESPONSE, permissions: [...OPERATOR_ME_RESPONSE.permissions, 'config:edit'] };
+});
+const EDITOR: MeResponse = { ...OPERATOR_ME_RESPONSE, permissions: [...OPERATOR_ME_RESPONSE.permissions, 'config:edit'] };
 
 describe('RepositoryDetail', () => {
   let stub: RequestClientStub;
@@ -56,13 +63,11 @@ describe('RepositoryDetail', () => {
   });
 
   async function open(url: string) {
-    stub = stubRequestClient(hubClient, (method, path) => {
-      if (path === '/api/me') return EDITOR;
-      if (path === '/api/repositories/repo_c' || path === '/api/repositories/blizzard') {
-        return method === 'PATCH' ? { ...record, slug: 'core-2', revision: 4 } : record;
-      }
-      if (path === '/api/config/changes') return HISTORY;
-      return {};
+    stub = stubHubClient({
+      'GET /api/me': () => EDITOR,
+      'GET /api/repositories/{repository}': () => record,
+      'PATCH /api/repositories/{repository}': () => ({ ...record, slug: 'core-2', revision: 4 }),
+      'GET /api/config/changes': () => HISTORY,
     });
     TestBed.configureTestingModule({
       providers: [

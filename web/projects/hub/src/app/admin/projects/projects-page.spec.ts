@@ -3,9 +3,19 @@ import { TestBed } from '@angular/core/testing';
 import { provideRouter, Router } from '@angular/router';
 import { RouterTestingHarness } from '@angular/router/testing';
 import { QueryClient, provideTanStackQuery } from '@tanstack/angular-query-experimental';
-import { hubClient, type ProjectView } from 'fleet';
+import type { MeResponse, ProjectView } from 'fleet';
 import type { InAppLink } from 'fleet/shell';
-import { OPERATOR_ME_RESPONSE, type RequestClientStub, settle, stubRequestClient } from 'fleet/testing';
+import {
+  chunkCountsView,
+  OPERATOR_ME_RESPONSE,
+  type RequestClientStub,
+  repositoryLinkView,
+  runnerRegistryView,
+  settle,
+  sourceLinkView,
+  stubError,
+  stubHubClient,
+} from 'fleet/testing';
 
 import { ProjectLens, lensLink } from '../../core/project-lens';
 import { ProjectDetail } from './project-detail';
@@ -22,18 +32,18 @@ const BLIZZARD: ProjectView = {
 };
 const WINTER: ProjectView = { ...BLIZZARD, project_id: 'proj_w', slug: 'winter', name: 'Winter', description: '' };
 const NOVA: ProjectView = { ...WINTER, project_id: 'proj_n', slug: 'nova', name: 'Nova' };
-const SERVING = {
+const SERVING = runnerRegistryView({
   runner_id: 'rnr_1',
   runner_name: 'desk',
   added_at: '2026-10-01T00:00:00Z',
   connection: 'online',
   hub_paused: false,
   online: true,
-  projects: [{ entry: 'blizzard', project_id: 'proj_b', slug: 'blizzard', name: 'Blizzard', claimable: true }],
-};
+  projects: [{ entry: 'blizzard', project_id: 'proj_b', slug: 'blizzard', name: 'Blizzard', claimable: true, color: null }],
+});
 
 /** An operator who may change configuration. */
-const EDITOR = { ...OPERATOR_ME_RESPONSE, permissions: [...OPERATOR_ME_RESPONSE.permissions, 'config:edit'] };
+const EDITOR: MeResponse = { ...OPERATOR_ME_RESPONSE, permissions: [...OPERATOR_ME_RESPONSE.permissions, 'config:edit'] };
 
 /** A lens fixed on `project` (or All), linking the way the shell's lens does. */
 function lensOn(project: ProjectView | null) {
@@ -61,23 +71,32 @@ describe('ProjectsPage', () => {
   });
 
   async function open(url: string, lens: ProjectView | null = null) {
-    stub = stubRequestClient(hubClient, (method, path) => {
-      if (path === '/api/me') return EDITOR;
-      if (path === '/api/projects' && method === 'POST') return NOVA;
-      if (path === '/api/projects/proj_n') return NOVA;
-      if (path === '/api/projects') return { projects: [WINTER, BLIZZARD] };
-      if (path === '/api/runners') return { runners: [SERVING] };
-      if (path === '/api/projects/proj_b') return BLIZZARD;
-      if (path === '/api/projects/proj_w') return WINTER;
-      if (path === '/api/projects/proj_b/source-links') {
-        return { source_links: [{ project_id: 'proj_b', name: 'jira', linked: true, revision: 1 }] };
-      }
-      if (path === '/api/projects/proj_b/repository-links') {
-        return { repository_links: [{ project_id: 'proj_b', name: 'core', linked: true, revision: 1 }] };
-      }
-      if (path.endsWith('-links')) return {};
-      if (path === '/api/chunk-counts') return { ready: 2, running: 1, done: 4 };
-      return {};
+    const projects = new Map(
+      [WINTER, BLIZZARD, NOVA].flatMap((project) => [
+        [project.project_id, project],
+        [project.slug, project],
+      ]),
+    );
+    stub = stubHubClient({
+      'GET /api/me': () => EDITOR,
+      'POST /api/projects': () => NOVA,
+      'GET /api/projects': () => ({ projects: [WINTER, BLIZZARD] }),
+      'GET /api/projects/{project}': (_request, { project }) =>
+        projects.get(project) ?? stubError(404, { detail: `unknown project ${project}` }),
+      'GET /api/runners': () => ({ runners: [SERVING] }),
+      'GET /api/projects/{project}/source-links': (_request, { project }) => ({
+        source_links:
+          project === 'proj_b'
+            ? [sourceLinkView({ project_id: 'proj_b', name: 'jira', slug: 'jira', linked: true, revision: 1 })]
+            : [],
+      }),
+      'GET /api/projects/{project}/repository-links': (_request, { project }) => ({
+        repository_links:
+          project === 'proj_b'
+            ? [repositoryLinkView({ project_id: 'proj_b', name: 'core', slug: 'core', linked: true, revision: 1 })]
+            : [],
+      }),
+      'GET /api/chunk-counts': () => chunkCountsView({ ready: 2, running: 1, done: 4 }),
     });
     TestBed.configureTestingModule({
       providers: [

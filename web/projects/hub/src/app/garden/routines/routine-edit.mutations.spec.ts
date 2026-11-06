@@ -3,8 +3,7 @@ import { TestBed } from '@angular/core/testing';
 import { QueryClient, provideTanStackQuery } from '@tanstack/angular-query-experimental';
 import { vi } from 'vitest';
 
-import { hubClient } from 'fleet';
-import { type RequestClientStub, stubRequestClient } from 'fleet/testing';
+import { gardenRoutineView, type RequestClientStub, stubHubClient } from 'fleet/testing';
 import { injectEditRoutineMutation } from './routine-edit.mutations';
 
 describe('injectEditRoutineMutation', () => {
@@ -12,7 +11,10 @@ describe('injectEditRoutineMutation', () => {
   let queryClient: QueryClient;
 
   beforeEach(() => {
-    stub = stubRequestClient(hubClient, () => ({ routine_id: 'rt_1', slug: 'nightly', name: 'nightly', graph_name: 'garden-delta' }));
+    stub = stubHubClient({
+      'PATCH /api/routines/{routine_id}': () =>
+        gardenRoutineView({ routine_id: 'rt_1', name: 'nightly', graph_name: 'garden-delta' }),
+    });
     queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
     TestBed.configureTestingModule({
       providers: [provideZonelessChangeDetection(), provideTanStackQuery(queryClient)],

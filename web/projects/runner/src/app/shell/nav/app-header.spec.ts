@@ -2,8 +2,8 @@ import { type Provider, provideZonelessChangeDetection, signal } from '@angular/
 import { TestBed } from '@angular/core/testing';
 import { provideRouter, Router } from '@angular/router';
 import { QueryClient, provideTanStackQuery } from '@tanstack/angular-query-experimental';
-import { runnerClient, type SseStatus } from 'fleet';
-import { type RequestClientStub, hiddenAtContainerWidth, settle, stubError, stubRequestClient } from 'fleet/testing';
+import { type runnerApi, type SseStatus } from 'fleet';
+import { type RequestClientStub, hiddenAtContainerWidth, hostEnvironmentView, hostRunnerView, settle, stubError, stubRunnerClient } from 'fleet/testing';
 import { RunnerLogout } from '../../core/identity/runner-logout';
 import { RunnerLiveUpdates } from '../../core/live/runner-live-updates';
 import { vi } from 'vitest';
@@ -17,6 +17,19 @@ import { runnerFlagsRead } from '../../core/flags.query';
  * only ever reads `status`/`authFailed`, never starts or restarts it. */
 function fakeLiveUpdates(status: SseStatus, authFailed = false): Provider {
   return { provide: RunnerLiveUpdates, useValue: { status: signal(status), authFailed: signal(authFailed) } };
+}
+
+type RunnerRoutes = Parameters<typeof stubRunnerClient>[0];
+
+/** The header's reads answered empty — no runners, no environments, no session, no flags — with `overrides` on top. */
+function headerRoutes(overrides: RunnerRoutes = {}): RunnerRoutes {
+  return {
+    'GET /api/host/runners': () => ({ items: [] }),
+    'GET /api/host/environments': () => ({ workspaces: [] }),
+    'GET /api/auth/session': () => ({ auth_enabled: false, username: null }),
+    'GET /api/flags': () => ({ flags: {}, overridden: [] }),
+    ...overrides,
+  };
 }
 
 async function render(extraProviders: Provider[] = []) {
@@ -39,13 +52,13 @@ describe('AppHeader', () => {
   let stub: RequestClientStub;
 
   beforeEach(() => {
-    stub = stubRequestClient(runnerClient, () => ({ items: [] }));
+    stub = stubRunnerClient(headerRoutes());
   });
 
   afterEach(() => stub.restore());
 
   it('shows ok in the header once the runner local API responds', async () => {
-    stub = stubRequestClient(runnerClient, () => ({ items: [] }));
+    stub = stubRunnerClient(headerRoutes());
     const fixture = await render();
     const el = fixture.nativeElement as HTMLElement;
 
@@ -53,9 +66,7 @@ describe('AppHeader', () => {
   });
 
   it('shows offline in the header when the runner local API is unreachable', async () => {
-    stub = stubRequestClient(runnerClient, (method, path) =>
-      method === 'GET' && path === '/api/host/runners' ? stubError(503, { detail: 'down' }) : { items: [] },
-    );
+    stub = stubRunnerClient(headerRoutes({ 'GET /api/host/runners': () => stubError(503, { detail: 'down' }) }));
     const fixture = await render();
     const el = fixture.nativeElement as HTMLElement;
 
@@ -77,32 +88,28 @@ describe('AppHeader', () => {
   });
 
   it('folds the host’s runner and environment reads into the header stat cells', async () => {
-    stub = stubRequestClient(runnerClient, (method, path) => {
-      if (method !== 'GET') return {};
-      if (path === '/api/host/runners') {
-        return {
+    stub = stubRunnerClient(
+      headerRoutes({
+        'GET /api/host/runners': () => ({
           items: [
-            { runner_id: 'rn_1', name: 'r-claude', state: 'serving', agents_in_use: 1, max_agents: 2 },
-            { runner_id: 'rn_2', name: 'r-chatgpt', state: 'serving', agents_in_use: 0, max_agents: 1 },
+            hostRunnerView({ runner_id: 'rn_1', name: 'r-claude', agents_in_use: 1, max_agents: 2 }),
+            hostRunnerView({ runner_id: 'rn_2', name: 'r-chatgpt', agents_in_use: 0, max_agents: 1 }),
           ],
-        };
-      }
-      if (path === '/api/host/environments') {
-        return {
+        }),
+        'GET /api/host/environments': () => ({
           workspaces: [
             {
               workspace_id: 'ws-a',
               items: [
-                { environment_id: 'alpha', held: true, chunk_id: 'ch_1', runner_id: 'rn_1' },
-                { environment_id: 'beta', held: false },
+                hostEnvironmentView({ environment_id: 'alpha', held: true, chunk_id: 'ch_1', runner_id: 'rn_1' }),
+                hostEnvironmentView({ environment_id: 'beta', held: false }),
               ],
             },
-            { workspace_id: 'ws-b', items: [{ environment_id: 'gamma' }, { environment_id: 'delta' }] },
+            { workspace_id: 'ws-b', items: [hostEnvironmentView({ environment_id: 'gamma' }), hostEnvironmentView({ environment_id: 'delta' })] },
           ],
-        };
-      }
-      return { items: [] };
-    });
+        }),
+      }),
+    );
     const fixture = await render();
     const el = fixture.nativeElement as HTMLElement;
 
@@ -111,9 +118,7 @@ describe('AppHeader', () => {
   });
 
   it('shows the overridden-flags marker in the Runner cell, naming the flags, when the host’s answer overrides any', async () => {
-    stub = stubRequestClient(runnerClient, (_method, path) =>
-      path === '/api/flags' ? { flags: { alpha: true }, overridden: ['alpha'] } : { items: [] },
-    );
+    stub = stubRunnerClient(headerRoutes({ 'GET /api/flags': () => ({ flags: { alpha: true }, overridden: ['alpha'] }) }));
     const fixture = await render();
     const marker = (fixture.nativeElement as HTMLElement).querySelector('[data-testid="conn"] [data-testid="flags-overridden"]');
 
@@ -122,41 +127,35 @@ describe('AppHeader', () => {
   });
 
   it('shows no overridden-flags marker when the host’s answer overrides none', async () => {
-    stub = stubRequestClient(runnerClient, (_method, path) =>
-      path === '/api/flags' ? { flags: {}, overridden: [] } : { items: [] },
-    );
+    stub = stubRunnerClient(headerRoutes());
     const fixture = await render();
 
     expect((fixture.nativeElement as HTMLElement).querySelector('[data-testid="flags-overridden"]')).toBeNull();
   });
 
   it('narrows the header stat cells to the runner the Runner filter names', async () => {
-    stub = stubRequestClient(runnerClient, (method, path) => {
-      if (method !== 'GET') return {};
-      if (path === '/api/host/runners') {
-        return {
+    stub = stubRunnerClient(
+      headerRoutes({
+        'GET /api/host/runners': () => ({
           items: [
-            { runner_id: 'rn_1', name: 'r-claude', state: 'serving', agents_in_use: 1, max_agents: 2 },
-            { runner_id: 'rn_2', name: 'r-chatgpt', state: 'serving', agents_in_use: 1, max_agents: 1 },
+            hostRunnerView({ runner_id: 'rn_1', name: 'r-claude', agents_in_use: 1, max_agents: 2 }),
+            hostRunnerView({ runner_id: 'rn_2', name: 'r-chatgpt', agents_in_use: 1, max_agents: 1 }),
           ],
-        };
-      }
-      if (path === '/api/host/environments') {
-        return {
+        }),
+        'GET /api/host/environments': () => ({
           workspaces: [
             {
               workspace_id: 'ws-a',
               items: [
-                { environment_id: 'alpha', held: true, chunk_id: 'ch_1', runner_id: 'rn_1' },
-                { environment_id: 'beta', held: true, chunk_id: 'ch_2', runner_id: 'rn_2' },
-                { environment_id: 'gamma', held: false },
+                hostEnvironmentView({ environment_id: 'alpha', held: true, chunk_id: 'ch_1', runner_id: 'rn_1' }),
+                hostEnvironmentView({ environment_id: 'beta', held: true, chunk_id: 'ch_2', runner_id: 'rn_2' }),
+                hostEnvironmentView({ environment_id: 'gamma', held: false }),
               ],
             },
           ],
-        };
-      }
-      return { items: [] };
-    });
+        }),
+      }),
+    );
     const fixture = await render();
     const el = fixture.nativeElement as HTMLElement;
     expect(el.querySelector('[data-testid="stat-envs"]')?.textContent?.trim()).toBe('2/3');
@@ -176,7 +175,7 @@ describe('AppHeader', () => {
   });
 
   it('withholds the header stat cells before the first read resolves, rather than a misleading 0/0', async () => {
-    stub = stubRequestClient(runnerClient, () => ({ items: [] }));
+    stub = stubRunnerClient(headerRoutes());
     await TestBed.configureTestingModule({
       imports: [AppHeader],
       providers: [
@@ -205,13 +204,14 @@ describe('AppHeader', () => {
   it('keeps the stat cells withheld while the environments read is still pending, though the runners have landed', async () => {
     let releaseEnvironments!: () => void;
     const environmentsHeld = new Promise<void>((resolve) => (releaseEnvironments = resolve));
-    stub = stubRequestClient(runnerClient, async (_method, path) => {
-      if (path === '/api/host/environments') {
-        await environmentsHeld;
-        return { workspaces: [] };
-      }
-      return { items: [] };
-    });
+    stub = stubRunnerClient(
+      headerRoutes({
+        'GET /api/host/environments': async () => {
+          await environmentsHeld;
+          return { workspaces: [] };
+        },
+      }),
+    );
     await TestBed.configureTestingModule({
       imports: [AppHeader],
       providers: [
@@ -234,7 +234,7 @@ describe('AppHeader', () => {
   });
 
   it('renders the shared 48px board header, not a bespoke local one', async () => {
-    stub = stubRequestClient(runnerClient, () => ({ items: [] }));
+    stub = stubRunnerClient(headerRoutes());
     const fixture = await render();
     const el = fixture.nativeElement as HTMLElement;
 
@@ -242,7 +242,7 @@ describe('AppHeader', () => {
   });
 
   it('buries the appearance switcher behind the header menu, closed by default', async () => {
-    stub = stubRequestClient(runnerClient, () => ({ items: [] }));
+    stub = stubRunnerClient(headerRoutes());
     const fixture = await render();
     const el = fixture.nativeElement as HTMLElement;
 
@@ -266,7 +266,7 @@ describe('AppHeader', () => {
   });
 
   it('renders the shared avatar-circle trigger on the header menu', async () => {
-    stub = stubRequestClient(runnerClient, () => ({ items: [] }));
+    stub = stubRunnerClient(headerRoutes());
     const fixture = await render();
     const el = fixture.nativeElement as HTMLElement;
 
@@ -279,13 +279,11 @@ describe('AppHeader', () => {
    * take the only way out with it.
    */
   describe('Log out in the profile menu', () => {
-    const withSession = (session: unknown) => {
+    const withSession = (session: runnerApi.RunnerAuthSessionView) => {
       stub.restore();
-      stub = stubRequestClient(runnerClient, (method, path) => {
-        if (method === 'GET' && path === '/api/auth/session') return session;
-        if (method === 'POST' && path === '/api/auth/logout') return {};
-        return { items: [] };
-      });
+      stub = stubRunnerClient(
+        headerRoutes({ 'GET /api/auth/session': () => session, 'POST /api/auth/logout': () => undefined }),
+      );
     };
 
     const openMenu = async (fixture: Awaited<ReturnType<typeof render>>) => {
@@ -326,11 +324,12 @@ describe('AppHeader', () => {
 
     it('shows a failed logout once, in the header beside the menu and not in the identity block', async () => {
       stub.restore();
-      stub = stubRequestClient(runnerClient, (method, path) => {
-        if (method === 'GET' && path === '/api/auth/session') return { auth_enabled: true, username: 'alice' };
-        if (method === 'POST' && path === '/api/auth/logout') return stubError(500, { detail: 'nope' });
-        return { items: [] };
-      });
+      stub = stubRunnerClient(
+        headerRoutes({
+          'GET /api/auth/session': () => ({ auth_enabled: true, username: 'alice' }),
+          'POST /api/auth/logout': () => stubError(500, { detail: 'nope' }),
+        }),
+      );
       const fixture = await render();
       const el = fixture.nativeElement as HTMLElement;
       expect(el.querySelector('[data-testid="local-panel-logout-error"]')).toBeNull();
@@ -366,7 +365,7 @@ describe('AppHeader', () => {
       hiddenAtContainerWidth(el.querySelector(selector)!, { containerName: 'board-header', width });
 
     beforeEach(() => {
-      stub = stubRequestClient(runnerClient, () => ({ items: [] }));
+      stub = stubRunnerClient(headerRoutes());
     });
 
     it('keeps every trailing control at a full-width header', async () => {

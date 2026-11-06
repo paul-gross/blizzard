@@ -2,8 +2,8 @@ import { Component, provideZonelessChangeDetection } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { Router, provideRouter } from '@angular/router';
 
-import { hubClient, meApiMeGet } from 'fleet';
-import { type RequestClientStub, stubError, stubRequestClient } from 'fleet/testing';
+import { meApiMeGet } from 'fleet';
+import { type RequestClientStub, stubError, stubHubClient } from 'fleet/testing';
 import { provideAuthInterceptor } from './auth.interceptor';
 
 @Component({ selector: 'app-test-empty', template: '' })
@@ -17,7 +17,7 @@ describe('provideAuthInterceptor (issue #93)', () => {
   });
 
   it('routes to /login on a 401 response from any hub call', async () => {
-    stub = stubRequestClient(hubClient, () => stubError(401, { detail: 'not authenticated' }));
+    stub = stubHubClient({ 'GET /api/me': () => stubError(401, { detail: 'not authenticated' }) });
 
     TestBed.configureTestingModule({
       providers: [
@@ -42,13 +42,18 @@ describe('provideAuthInterceptor (issue #93)', () => {
   });
 
   it('leaves a successful response untouched', async () => {
-    stub = stubRequestClient(hubClient, () => ({
-      user_id: 'u',
-      username: 'u',
-      display_name: 'u',
-      role: 'contributor',
-      permissions: [],
-    }));
+    stub = stubHubClient({
+      'GET /api/me': () => ({
+        user_id: 'u',
+        username: 'u',
+        display_name: 'u',
+        role: 'contributor',
+        permissions: [],
+        tenants: [],
+        hub_admin: false,
+        assignable_roles: [],
+      }),
+    });
 
     TestBed.configureTestingModule({
       providers: [

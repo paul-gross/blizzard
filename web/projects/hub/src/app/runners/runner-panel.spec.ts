@@ -4,12 +4,21 @@ import { QueryClient, provideTanStackQuery } from '@tanstack/angular-query-exper
 import { provideRouter } from '@angular/router';
 import { vi } from 'vitest';
 
-import { settle, OPERATOR_ME_RESPONSE, type RequestClientStub, stubRequestClient } from 'fleet/testing';
-import { hubClient } from 'fleet';
+import {
+  OPERATOR_ME_RESPONSE,
+  type RequestClientStub,
+  chunkSummary,
+  hostRegistryView,
+  runnerBindingView,
+  runnerRegistryView,
+  settle,
+  stubHubClient,
+} from 'fleet/testing';
+import { type MeResponse, type RunnerRegistryView } from 'fleet';
 import { RunnerPanel } from './runner-panel';
 
 /** Every permission a runner action could be gated on — the rail must still offer none. */
-const ALL_PERMISSIONS_ME = {
+const ALL_PERMISSIONS_ME: MeResponse = {
   ...OPERATOR_ME_RESPONSE,
   permissions: [...OPERATOR_ME_RESPONSE.permissions, 'runner:pause' as const, 'runner:retire' as const],
 };
@@ -17,16 +26,8 @@ const ALL_PERMISSIONS_ME = {
 const NOW = new Date().toISOString();
 // One runner per pause state: none, the fleet's brake, the runner's own, and both
 // (they are separate concepts and the strip must say which).
-const runner = (id: string, over: Partial<Record<string, unknown>> = {}) => ({
-  runner_id: id,
-  workspace_id: 'ws_a',
-  registered_at: NOW,
-  last_seen_at: NOW,
-  online: true,
-  hub_paused: false,
-  locally_paused: false,
-  ...over,
-});
+const runner = (id: string, over: Partial<RunnerRegistryView> = {}) =>
+  runnerRegistryView({ runner_id: id, registered_at: NOW, last_seen_at: NOW, ...over });
 const CEILING_REASON = 'spend ceiling $5.00 reached over the trailing 24h (spend $7.00)';
 const RUNNERS = {
   runners: [
@@ -56,53 +57,48 @@ const RUNNERS = {
 // branch `ch_01idle…` covers; the hub's terminal-chunk shape is pinned by
 // `tests/component/hub/api/test_fleet_route_claim.py::test_summary_reports_a_finished_chunk_as_unrouted`.
 const CHUNKS = [
-  {
+  chunkSummary({
     chunk_id: 'ch_01claim000000000000000000000',
     graph_id: 'gr_1',
     status: 'running',
     current_node_id: 'nd_build',
     current_node_name: 'build',
-    model: 'claude-opus-4-8',
     runner_id: 'rn_online',
     environment_count: 2, // a grouped route holding two envs — the slot bar's numerator
-  },
-  {
+  }),
+  chunkSummary({
     chunk_id: 'ch_01other000000000000000000000',
     graph_id: 'gr_1',
     status: 'running',
     current_node_id: 'nd_review',
     current_node_name: 'review',
-    model: 'claude-opus-4-8',
     runner_id: 'rn_paused',
-  },
-  {
+  }),
+  chunkSummary({
     chunk_id: 'ch_01needs000000000000000000000',
     graph_id: 'gr_1',
     status: 'needs_human',
     current_node_id: 'nd_build',
     current_node_name: 'build',
-    model: 'claude-opus-4-8',
     runner_id: 'rn_both',
     environment_count: 1,
-  },
-  {
+  }),
+  chunkSummary({
     chunk_id: 'ch_01idle0000000000000000000000',
     graph_id: 'gr_1',
     status: 'not_ready',
     current_node_id: null,
-    model: 'claude-opus-4-8',
     runner_id: null,
-  },
-  {
+  }),
+  chunkSummary({
     chunk_id: 'ch_01done0000000000000000000000',
     graph_id: 'gr_1',
     status: 'done',
     current_node_id: null,
     current_node_name: null,
-    model: 'claude-opus-4-8',
     runner_id: null, // finished at rn_online; the hub reports it unrouted (#140)
     environment_count: 0,
-  },
+  }),
 ];
 
 
@@ -116,11 +112,11 @@ describe('RunnerPanel', () => {
   let stub: RequestClientStub;
 
   beforeEach(async () => {
-    stub = stubRequestClient(hubClient, (method, path) => {
-      if (method === 'GET' && path === '/api/me') return ALL_PERMISSIONS_ME;
-      if (method === 'GET' && path === '/api/runners') return RUNNERS;
-      if (method === 'GET' && path === '/api/chunks') return { chunks: CHUNKS, next_cursor: null };
-      return {};
+    stub = stubHubClient({
+      'GET /api/me': () => ALL_PERMISSIONS_ME,
+      'GET /api/runners': () => RUNNERS,
+      'GET /api/hosts': () => ({ hosts: [] }),
+      'GET /api/chunks': () => ({ chunks: CHUNKS, next_cursor: null }),
     });
     await TestBed.configureTestingModule({ imports: [RunnerPanel], providers: PROVIDERS() }).compileComponents();
   });
@@ -185,14 +181,20 @@ describe('RunnerPanel seenLabel (bzh:utc-instants)', () => {
   function render(lastSeenAt: string, online: boolean): Promise<HTMLElement> {
     const runners = {
       runners: [
-        { runner_id: 'r1', workspace_id: 'ws_a', registered_at: lastSeenAt, last_seen_at: lastSeenAt, online, paused: false },
+        runnerRegistryView({
+          runner_id: 'r1',
+          registered_at: lastSeenAt,
+          last_seen_at: lastSeenAt,
+          online,
+          connection: online ? 'online' : 'offline',
+        }),
       ],
     };
-    stub = stubRequestClient(hubClient, (method, path) => {
-      if (method === 'GET' && path === '/api/me') return OPERATOR_ME_RESPONSE;
-      if (method === 'GET' && path === '/api/runners') return runners;
-      if (method === 'GET' && path === '/api/chunks') return { chunks: [], next_cursor: null };
-      return {};
+    stub = stubHubClient({
+      'GET /api/me': () => OPERATOR_ME_RESPONSE,
+      'GET /api/runners': () => runners,
+      'GET /api/hosts': () => ({ hosts: [] }),
+      'GET /api/chunks': () => ({ chunks: [], next_cursor: null }),
     });
     return TestBed.configureTestingModule({
       imports: [RunnerPanel],
@@ -262,10 +264,10 @@ describe('RunnerPanel host cards', () => {
         runner_name: 'alpha',
         host_id: 'h1',
         agents: 3,
-        projects: [{ entry: 'default', project_id: 'pj_default', slug: 'default', name: 'Default' }],
+        projects: [{ entry: 'default', project_id: 'pj_default', slug: 'default', name: 'Default', claimable: true, color: null }],
         bindings: [
-          { project: 'default', workspace_id: 'ws-1', agents: 2 },
-          { project: 'default', workspace_id: 'ws-9', agents: 1, workspace_unreported: true },
+          runnerBindingView({ project: 'default', workspace_id: 'ws-1', agents: 2 }),
+          runnerBindingView({ project: 'default', workspace_id: 'ws-9', agents: 1, workspace_unreported: true }),
         ],
       }),
       runner('rB', { runner_name: 'bravo', host_id: 'h1' }),
@@ -274,27 +276,32 @@ describe('RunnerPanel host cards', () => {
   };
   const HOSTS = {
     hosts: [
-      {
+      hostRegistryView({
         host_id: 'h1',
         host_name: 'build-box',
-        connection: 'online',
-        online: true,
         last_seen_at: NOW,
         workspaces: [{ workspace_id: 'ws-1', env_capacity: 3 }, { workspace_id: 'ws-2' }],
-        subscriptions: [],
-        subscription_usage: [],
-      },
+      }),
     ],
   };
-  const LIVE = [{ chunk_id: 'ch_live', graph_id: 'gr_1', status: 'running', runner_id: 'rA', workspace_id: 'ws-1', project_id: 'pj_default', environment_count: 2 }];
+  const LIVE = [
+    chunkSummary({
+      chunk_id: 'ch_live',
+      graph_id: 'gr_1',
+      status: 'running',
+      runner_id: 'rA',
+      workspace_id: 'ws-1',
+      project_id: 'pj_default',
+      environment_count: 2,
+    }),
+  ];
 
   beforeEach(async () => {
-    stub = stubRequestClient(hubClient, (method, path) => {
-      if (method === 'GET' && path === '/api/me') return OPERATOR_ME_RESPONSE;
-      if (method === 'GET' && path === '/api/runners') return HOSTED;
-      if (method === 'GET' && path === '/api/hosts') return HOSTS;
-      if (method === 'GET' && path === '/api/chunks') return { chunks: LIVE, next_cursor: null };
-      return {};
+    stub = stubHubClient({
+      'GET /api/me': () => OPERATOR_ME_RESPONSE,
+      'GET /api/runners': () => HOSTED,
+      'GET /api/hosts': () => HOSTS,
+      'GET /api/chunks': () => ({ chunks: LIVE, next_cursor: null }),
     });
     await TestBed.configureTestingModule({ imports: [RunnerPanel], providers: PROVIDERS() }).compileComponents();
   });

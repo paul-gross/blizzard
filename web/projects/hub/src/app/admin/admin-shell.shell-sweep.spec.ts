@@ -3,9 +3,16 @@ import { TestBed } from '@angular/core/testing';
 import { provideRouter, Router } from '@angular/router';
 import { RouterTestingHarness } from '@angular/router/testing';
 import { QueryClient, provideTanStackQuery } from '@tanstack/angular-query-experimental';
-import { hubClient } from 'fleet';
 import type { InAppLink } from 'fleet/shell';
-import { OPERATOR_ME_RESPONSE, type RequestClientStub, settle, stubRequestClient } from 'fleet/testing';
+import {
+  chunkCountsView,
+  configChangesPage,
+  OPERATOR_ME_RESPONSE,
+  projectView,
+  type RequestClientStub,
+  settle,
+  stubHubClient,
+} from 'fleet/testing';
 import { commands, page } from 'vitest/browser';
 
 import { ProjectLens, lensLink } from '../core/project-lens';
@@ -22,8 +29,8 @@ import { ProjectsPage } from './projects/projects-page';
  */
 const PROJECTS = {
   projects: [
-    { project_id: 'proj_b', slug: 'blizzard', name: 'Blizzard', description: 'The platform', revision: 4, created_at: '2026-09-20T00:00:00Z' },
-    { project_id: 'proj_c', slug: 'celestial', name: 'Celestial', description: '', revision: 1, created_at: '2026-10-12T00:00:00Z' },
+    projectView({ project_id: 'proj_b', slug: 'blizzard', name: 'Blizzard', description: 'The platform', revision: 4, created_at: '2026-09-20T00:00:00Z' }),
+    projectView({ project_id: 'proj_c', slug: 'celestial', name: 'Celestial', description: '', revision: 1, created_at: '2026-10-12T00:00:00Z' }),
   ],
 };
 
@@ -57,19 +64,19 @@ describe('Admin → Projects shell sweep', () => {
   async function open(width: number) {
     await page.viewport(width, 800);
     await loadDesignTokens();
-    stub = stubRequestClient(hubClient, (_method, path) => {
-      if (path === '/api/me') return { ...OPERATOR_ME_RESPONSE, permissions: [...OPERATOR_ME_RESPONSE.permissions, 'config:edit'] };
-      if (path === '/api/projects') return PROJECTS;
-      if (path === '/api/projects/proj_b') return PROJECTS.projects[0];
-      if (path.endsWith('/source-links')) return { source_links: [] };
-      if (path.endsWith('/repository-links')) return { repository_links: [] };
-      if (path === '/api/work-sources') return { sources: [] };
-      if (path === '/api/repositories') return { repositories: [] };
-      if (path === '/api/secrets') return [];
-      if (path === '/api/runners') return { runners: [] };
-      if (path === '/api/config/changes') return { changes: [], total: 42 };
-      if (path === '/api/chunk-counts') return { ready: 3, running: 2, done: 90, done_since: 9 };
-      return {};
+    stub = stubHubClient({
+      'GET /api/me': () => ({ ...OPERATOR_ME_RESPONSE, permissions: [...OPERATOR_ME_RESPONSE.permissions, 'config:edit'] }),
+      'GET /api/members': () => [],
+      'GET /api/projects': () => PROJECTS,
+      'GET /api/projects/{project}': () => PROJECTS.projects[0],
+      'GET /api/projects/{project}/source-links': () => ({ source_links: [] }),
+      'GET /api/projects/{project}/repository-links': () => ({ repository_links: [] }),
+      'GET /api/work-sources': () => ({ sources: [] }),
+      'GET /api/repositories': () => ({ repositories: [] }),
+      'GET /api/secrets': () => [],
+      'GET /api/runners': () => ({ runners: [] }),
+      'GET /api/config/changes': () => configChangesPage({ total: 42 }),
+      'GET /api/chunk-counts': () => chunkCountsView({ ready: 3, running: 2, done: 90, done_since: 9 }),
     });
     TestBed.configureTestingModule({
       providers: [

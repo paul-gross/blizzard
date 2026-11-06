@@ -6,7 +6,7 @@ set -euo pipefail
 
 web="$(cd "$(dirname "$0")/.." && pwd)"
 
-(cd "$web" && npx ngc -p tsconfig.exemplars.json)
+"$web/scripts/exemplar-tree.sh" types
 (cd "$web/../exemplars/web" && "$web/node_modules/.bin/eslint" --max-warnings=0 -c "$web/eslint.exemplars.config.js" .)
 "$web/scripts/exemplar-client.sh" check
 "$web/scripts/exemplar-tree.sh" specs

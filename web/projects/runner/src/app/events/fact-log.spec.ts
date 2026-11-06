@@ -2,8 +2,8 @@ import { provideZonelessChangeDetection } from '@angular/core';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { provideRouter } from '@angular/router';
 import { QueryClient, provideTanStackQuery } from '@tanstack/angular-query-experimental';
-import { runnerClient, type runnerApi } from 'fleet';
-import { type RequestClientStub, settle, stubRequestClient } from 'fleet/testing';
+import { type runnerApi } from 'fleet';
+import { type RequestClientStub, hostRunnerView, runnerDashboardView, settle, stubRunnerClient } from 'fleet/testing';
 import { vi } from 'vitest';
 
 import { FactLog } from './fact-log';
@@ -14,50 +14,14 @@ afterEach(() => stub?.restore());
 
 /** A serving runner on the host, as `GET /api/host/runners` lists it. */
 function hostRunner(runnerId: string, name: string): runnerApi.HostRunnerView {
-  return {
-    runner_id: runnerId,
-    name,
-    state: 'serving',
-    served: true,
-    halted_reasons: [],
-    pause: { local: false, hub: false, effective: false, local_reason: null },
-    throttle: null,
-    bindings: [{ project: 'p', workspace_id: 'ws', agents: 4 }],
-    agents_in_use: 0,
-    max_agents: 4,
-  };
+  return hostRunnerView({ runner_id: runnerId, name, bindings: [{ project: 'p', workspace_id: 'ws', agents: 4 }], max_agents: 4 });
 }
 
 /** A full `DashboardView` body, `facts.items` set to `facts` and every other
  * section its empty default — `FactLog` reads off each runner's shared
  * `/runners/<id>/api/dashboard` poll, not a `/api/facts` route of its own. */
 function dashboardBody(facts: readonly runnerApi.FactView[]): runnerApi.DashboardView {
-  return {
-    runner: {
-      runner_id: 'runner-local',
-      workspace_id: 'workspace-local',
-      pause: { local: false, hub: false, effective: false, local_reason: null },
-      throttle: null,
-      capacities: { used: 0, agents: 4, free: 4, bindings: [{ project: 'p', project_id: 'p', workspace_id: 'ws', agents: 4, used: 0, free: 4 }] },
-      hub: { endpoint: 'http://127.0.0.1:8421', reachable: true, last_contact_at: null, buffer_depth: 0, hub_version: null, window: null },
-      last_tick_at: null,
-      gates: [],
-      unenforceable_gates: null,
-      identity: null,
-      routing_conflicts: [],
-      runner_name: null,
-      served_projects: null,
-      tenant_id: null,
-      tenant_name: null,
-      unmatched_bindings: [],
-    },
-    asks: { items: [] },
-    escalations: { items: [] },
-    takeovers: { items: [] },
-    fleet_summary: null,
-    facts: { items: [...facts] },
-    harness_health: { items: [] },
-  };
+  return runnerDashboardView({ facts: { items: [...facts] } });
 }
 
 /** Render `FactLog` over a host serving `rn_1` (`r1`) with `facts` in its ledger, and — given
@@ -67,14 +31,12 @@ async function render(
   otherFacts?: readonly runnerApi.FactView[],
 ): Promise<{ el: HTMLElement; fixture: ComponentFixture<FactLog> }> {
   const runners = [hostRunner('rn_1', 'r1'), ...(otherFacts ? [hostRunner('rn_2', 'r2')] : [])];
-  stub = stubRequestClient(runnerClient, (method, path) => {
-    if (method !== 'GET') return {};
-    if (path === '/api/host/runners') return { items: runners };
-    if (path === '/api/host/environments') return { workspaces: [] };
-    if (path === '/runners/rn_1/api/dashboard') return dashboardBody(facts);
-    if (path === '/runners/rn_2/api/dashboard') return dashboardBody(otherFacts ?? []);
-    if (/^\/runners\/[^/]+\/api\/leases$/.test(path)) return { items: [] };
-    return {};
+  stub = stubRunnerClient({
+    'GET /api/host/runners': () => ({ items: runners }),
+    'GET /api/host/environments': () => ({ workspaces: [] }),
+    'GET /runners/{runner_id}/api/dashboard': (_request, { runner_id }) =>
+      dashboardBody(runner_id === 'rn_1' ? facts : (otherFacts ?? [])),
+    'GET /runners/{runner_id}/api/leases': () => ({ items: [] }),
   });
   await TestBed.configureTestingModule({
     imports: [FactLog],

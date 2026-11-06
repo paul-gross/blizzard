@@ -3,8 +3,7 @@ import { TestBed } from '@angular/core/testing';
 import { Router, provideRouter } from '@angular/router';
 import { QueryClient, provideTanStackQuery } from '@tanstack/angular-query-experimental';
 
-import { hubClient } from 'fleet';
-import { type RequestClientStub, settle, stubRequestClient } from 'fleet/testing';
+import { type RequestClientStub, settle, stubHubClient } from 'fleet/testing';
 import { provideProjectLens } from '../core/project-lens';
 import { injectHubEventsQuery } from './events.query';
 
@@ -24,7 +23,7 @@ describe('injectHubEventsQuery under the project lens', () => {
   let stub: RequestClientStub;
 
   beforeEach(async () => {
-    stub = stubRequestClient(hubClient, (_method, path) => (path === '/api/events' ? { events: [] } : {}));
+    stub = stubHubClient({ 'GET /api/events': () => ({ events: [] }) });
     await TestBed.configureTestingModule({
       imports: [TestEventsQueryHost],
       providers: [

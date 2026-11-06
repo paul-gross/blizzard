@@ -2,8 +2,15 @@ import { Component, provideZonelessChangeDetection } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { provideRouter, Router, RouterOutlet, type Routes } from '@angular/router';
 import { QueryClient, provideTanStackQuery } from '@tanstack/angular-query-experimental';
-import { hubClient } from 'fleet';
-import { OPERATOR_ME_RESPONSE, settle, stubRequestClient } from 'fleet/testing';
+import { type FindingView, type RoutineView, type ScopeView } from 'fleet';
+import {
+  gardenFindingView,
+  gardenRoutineView,
+  gardenScopeView,
+  OPERATOR_ME_RESPONSE,
+  settle,
+  stubHubClient,
+} from 'fleet/testing';
 import { page } from 'vitest/browser';
 
 import { GardeningFindingDetail } from './gardening-finding-detail';
@@ -34,32 +41,28 @@ import { GardeningFindingsPage } from './gardening-findings-page';
  * Excluded from the default `ng test hub` run (`angular.json`'s `test.exclude`) —
  * run it via `npm run shell-sweep` (`web/scripts/shell-sweep.js`).
  */
-const ROUTINES = [
-  {
+const ROUTINES: RoutineView[] = [
+  gardenRoutineView({
     routine_id: 'rtn_1',
     name: 'nightly',
     slug: 'nightly',
-    graph_name: 'garden-routine',
     default_scope_slug: 'blizzard',
     default_model: ['claude-sonnet-5'],
     default_effort: 'medium',
-    created_at: '2026-01-01T00:00:00Z',
-  },
-  {
+  }),
+  gardenRoutineView({
     routine_id: 'rtn_2',
     name: 'weekly',
     slug: 'weekly',
-    graph_name: 'garden-routine',
     default_scope_slug: 'web',
     default_model: ['claude-sonnet-5'],
     default_effort: 'medium',
-    created_at: '2026-01-01T00:00:00Z',
-  },
+  }),
 ];
 
-const SCOPES = [
-  { slug: 'blizzard', description: 'the hub, runner, CLI and board', retired: false, created_at: '2026-01-01T00:00:00Z' },
-  { slug: 'web', description: 'the Angular workspace', retired: false, created_at: '2026-01-01T00:00:00Z' },
+const SCOPES: ScopeView[] = [
+  gardenScopeView({ slug: 'blizzard', description: 'the hub, runner, CLI and board' }),
+  gardenScopeView({ slug: 'web', description: 'the Angular workspace' }),
 ];
 
 /** Two findings from two distinct routines and two distinct scopes, so the
@@ -67,8 +70,8 @@ const SCOPES = [
  * `class` is deliberately a long, unbroken 40+ character run — proves `.fl-class`
  * shrinks-and-ellipsizes on its own line rather than pushing `.fl-ref` onto a
  * second line once `.fl-routine`/`.fl-scope` also render. */
-const FINDINGS = [
-  {
+const FINDINGS: FindingView[] = [
+  gardenFindingView({
     finding_id: 'fnd_1',
     routine_name: 'nightly',
     scope_slug: 'blizzard',
@@ -79,8 +82,8 @@ const FINDINGS = [
     live: true,
     observed_count: 1,
     last_seen_at: '2026-01-10T00:00:00Z',
-  },
-  {
+  }),
+  gardenFindingView({
     finding_id: 'fnd_2',
     routine_name: 'weekly',
     scope_slug: 'web',
@@ -91,13 +94,13 @@ const FINDINGS = [
     live: true,
     observed_count: 1,
     last_seen_at: '2026-01-10T00:00:00Z',
-  },
+  }),
   /** A review-sourced finding — `routine_name` is `null` (a review
    * finding carries no routine at all, never merely an unnamed one), and it carries
    * its own `severity` and `raised_by_chunk_id` in place of the routine/scope
    * disambiguation the two rows above render. Proves the row shows that gracefully
    * rather than blank or broken at the narrow widths gardening is reached at. */
-  {
+  gardenFindingView({
     finding_id: 'fnd_3',
     routine_name: null,
     scope_slug: 'blizzard',
@@ -111,7 +114,7 @@ const FINDINGS = [
     source: 'review',
     severity: 'blocking',
     raised_by_chunk_id: 'ch_01KXKVVF1J3D6H6VYZ3XYN3YJ9',
-  },
+  }),
 ];
 
 /** `gardening-page-grids.shell-sweep.spec.ts`'s own shell stand-in, reproduced here
@@ -156,15 +159,14 @@ const MANY_CLASSES = Array.from({ length: 55 }, (_, i) => ({
   class: `a-fairly-long-finding-class-name-number-${i}`,
 }));
 
-async function render(findings: readonly unknown[] = FINDINGS) {
-  const stub = stubRequestClient(hubClient, (method, path) => {
-    if (method === 'GET' && path === '/api/me') return OPERATOR_ME_RESPONSE;
-    if (method === 'GET' && path === '/api/scopes') return SCOPES;
-    if (method === 'GET' && path === '/api/routines') return ROUTINES;
-    if (method === 'GET' && path === '/api/findings') return { findings, next_cursor: 'older' };
-    if (method === 'GET' && path === '/api/findings/classes') return [...new Set(findings.map((f) => (f as { class: string }).class))].sort();
-    if (method === 'GET' && path === '/api/garden-proposals') return { proposals: [], next_cursor: null };
-    return {};
+async function render(findings: readonly FindingView[] = FINDINGS) {
+  const stub = stubHubClient({
+    'GET /api/me': () => OPERATOR_ME_RESPONSE,
+    'GET /api/scopes': () => SCOPES,
+    'GET /api/routines': () => ROUTINES,
+    'GET /api/findings': () => ({ findings: [...findings], next_cursor: 'older' }),
+    'GET /api/findings/classes': () => [...new Set(findings.map((f) => f.class))].sort(),
+    'GET /api/garden-proposals': () => ({ proposals: [], next_cursor: null }),
   });
   await TestBed.configureTestingModule({
     imports: [TestGardeningFindingsFiltersHost],

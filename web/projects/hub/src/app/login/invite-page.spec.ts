@@ -2,8 +2,8 @@ import { provideZonelessChangeDetection } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { ActivatedRoute, convertToParamMap } from '@angular/router';
 import { QueryClient, provideTanStackQuery } from '@tanstack/angular-query-experimental';
-import { hubClient } from 'fleet';
-import { type RequestClientStub, settle, stubRequestClient } from 'fleet/testing';
+import type { ProviderSummary } from 'fleet';
+import { type RequestClientStub, settle, stubHubClient } from 'fleet/testing';
 
 import { InvitePage } from './invite-page';
 
@@ -11,8 +11,8 @@ describe('InvitePage', () => {
   let stub: RequestClientStub;
   afterEach(() => stub.restore());
 
-  async function mount(providers: unknown, token = 'tok_invited') {
-    stub = stubRequestClient(hubClient, (_method, path) => (path === '/api/auth/providers' ? providers : {}));
+  async function mount(providers: ProviderSummary[], token = 'tok_invited') {
+    stub = stubHubClient({ 'GET /api/auth/providers': () => providers });
     await TestBed.configureTestingModule({
       imports: [InvitePage],
       providers: [

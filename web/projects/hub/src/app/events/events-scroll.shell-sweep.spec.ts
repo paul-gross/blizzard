@@ -2,8 +2,7 @@ import { Component, provideZonelessChangeDetection } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { provideRouter } from '@angular/router';
 import { QueryClient, provideTanStackQuery } from '@tanstack/angular-query-experimental';
-import { hubClient } from 'fleet';
-import { settle, stubRequestClient } from 'fleet/testing';
+import { eventView, settle, stubHubClient } from 'fleet/testing';
 import { page } from 'vitest/browser';
 
 import { EventsPage } from './events-page';
@@ -17,14 +16,16 @@ import { EventsPage } from './events-page';
  *
  * Excluded from the default `ng test hub` run — run it via `npm run shell-sweep`.
  */
-const EVENTS = Array.from({ length: 80 }, (_, i) => ({
-  id: 80 - i,
-  recorded_at: '2026-07-16T00:00:00Z',
-  severity: 'info',
-  kind: 'lease-minted',
-  runner_id: 'rn_01',
-  message: `Event ${80 - i}`,
-}));
+const EVENTS = Array.from({ length: 80 }, (_, i) =>
+  eventView({
+    id: 80 - i,
+    recorded_at: '2026-07-16T00:00:00Z',
+    severity: 'info',
+    kind: 'lease-minted',
+    runner_id: 'rn_01',
+    message: `Event ${80 - i}`,
+  }),
+);
 
 /** Stands in for the app shell's bounded, clipping `.shell` around the routed page. */
 @Component({
@@ -53,7 +54,7 @@ const scrolls = (el: Element) => getComputedStyle(el).overflowY === 'auto' && el
 describe('events feed scroll shell sweep (web:shell-sweep)', () => {
   for (const width of [1280, 390]) {
     it(`scrolls the rows list, and only it, to the last event at ${width}px`, async () => {
-      const stub = stubRequestClient(hubClient, (method, path) => (method === 'GET' && path === '/api/events' ? { events: EVENTS } : {}));
+      const stub = stubHubClient({ 'GET /api/events': () => ({ events: EVENTS }) });
       await TestBed.configureTestingModule({
         imports: [TestEventsShell],
         providers: [

@@ -18,6 +18,8 @@ ln -s "$web/node_modules" "$scratch/node_modules"
   if [[ -e "$scratch/projects/$file" ]]; then cat "$exemplars/$file" >> "$scratch/projects/$file"; else cp "$exemplars/$file" "$scratch/projects/$file"; fi
 done
 "$web/scripts/exemplar-client.sh" overlay "$scratch/projects/fleet/src/lib/api/hub"
+# The typed stubs key on the operation tables, so they follow the overlaid client.
+node "$web/scripts/generate-stub-operations.mjs" "$scratch/projects"
 
 case "${1:-}" in
   specs)
@@ -31,13 +33,38 @@ JSON
     while read -r spec; do specs+=("--include=projects/${spec#./}"); done < <(cd "$exemplars" && find . -name '*.spec.ts')
     cd "$scratch" && npx ng test hub --watch=false --ts-config=projects/hub/tsconfig.exemplars.spec.json "${specs[@]}"
     ;;
+  types)
+    # The strict-template type-check over the overlay, so an exemplar's routes are typed against its own operation table.
+    files=()
+    while read -r file; do files+=("\"./projects/${file#./}\""); done < <(cd "$exemplars" && find . -name '*.ts' ! -path './fleet/src/lib/api/*')
+    cat > "$scratch/tsconfig.exemplars.json" <<JSON
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "noEmit": true,
+    "types": ["vitest/globals"],
+    "paths": {
+      "fleet": ["./projects/fleet/src/exemplar-api.ts"],
+      "fleet/shell": ["./projects/fleet/src/shell-api.ts"],
+      "fleet/runner-shell": ["./projects/fleet/src/runner-shell-api.ts"],
+      "fleet/testing": ["./projects/fleet/src/lib/testing/public-api.ts"],
+      "@angular/*/testing": ["./node_modules/@angular/*/types/testing.d.ts"],
+      "*": ["./node_modules/*"]
+    }
+  },
+  "files": [],
+  "include": [$(IFS=,; echo "${files[*]}")]
+}
+JSON
+    cd "$scratch" && npx ngc -p tsconfig.exemplars.json
+    ;;
   structural-gate)
     sed -i "s|^const HUB_LAYERS = {$|&\n  permits: [],|" "$scratch/scripts/structural-gate.js"
     grep -q "^  permits: \[\],$" "$scratch/scripts/structural-gate.js"
     cd "$scratch" && node scripts/structural-gate.js
     ;;
   *)
-    echo "usage: $0 specs|structural-gate" >&2
+    echo "usage: $0 types|specs|structural-gate" >&2
     exit 2
     ;;
 esac

@@ -3,22 +3,46 @@ import { TestBed } from '@angular/core/testing';
 import { provideRouter } from '@angular/router';
 import { RouterTestingHarness } from '@angular/router/testing';
 import { QueryClient, provideTanStackQuery } from '@tanstack/angular-query-experimental';
-import { hubClient } from 'fleet';
+import type { MeResponse } from 'fleet';
 import type { InAppLink } from 'fleet/shell';
-import { OPERATOR_ME_RESPONSE, type RequestClientStub, settle, stubRequestClient } from 'fleet/testing';
+import {
+  configChangesPage,
+  memberView,
+  OPERATOR_ME_RESPONSE,
+  projectView,
+  type RequestClientStub,
+  repositoryLinkView,
+  repositorySummary,
+  secretView,
+  settle,
+  sourceLinkView,
+  stubHubClient,
+  workSourceSummary,
+} from 'fleet/testing';
 
 import { ProjectLens, lensLink } from '../core/project-lens';
 import { AdminShell } from './admin-shell';
 
 const PROJECTS = {
   projects: [
-    { project_id: 'proj_b', slug: 'blizzard', name: 'Blizzard', description: '', revision: 1, created_at: '' },
-    { project_id: 'proj_w', slug: 'winter', name: 'Winter', description: '', revision: 1, created_at: '' },
+    projectView({ project_id: 'proj_b', slug: 'blizzard', name: 'Blizzard', description: '', revision: 1, created_at: '' }),
+    projectView({ project_id: 'proj_w', slug: 'winter', name: 'Winter', description: '', revision: 1, created_at: '' }),
   ],
 };
-const SOURCES = { sources: [{ name: 'hub', built_in: true }, { name: 'jira' }, { name: 'gh' }] };
-const REPOSITORIES = { repositories: [{ name: 'core' }, { name: 'web' }] };
-const SECRETS = [{ name: 'gh-token' }];
+const SOURCES = {
+  sources: [
+    workSourceSummary({ name: 'hub', slug: 'hub', work_source_id: null, built_in: true }),
+    workSourceSummary({ name: 'jira', slug: 'jira', work_source_id: 'wsrc_j' }),
+    workSourceSummary({ name: 'gh', slug: 'gh', work_source_id: 'wsrc_g' }),
+  ],
+};
+const REPOSITORIES = {
+  repositories: [
+    repositorySummary({ name: 'core', slug: 'core', repository_id: 'repo_c' }),
+    repositorySummary({ name: 'web', slug: 'web', repository_id: 'web' }),
+  ],
+};
+const SECRETS = [secretView({ name: 'gh-token' })];
 
 function lensOn(slug: string | null) {
   return {
@@ -32,25 +56,24 @@ describe('AdminShell', () => {
   let stub: RequestClientStub;
   afterEach(() => stub?.restore());
 
-  async function open(slug: string | null, permissions: readonly string[]) {
-    stub = stubRequestClient(hubClient, (_method, path) => {
-      if (path === '/api/me') {
-        const tenants = (OPERATOR_ME_RESPONSE.tenants ?? []).map((tenant) => ({ ...tenant, permissions }));
+  async function open(slug: string | null, permissions: MeResponse['permissions']) {
+    stub = stubHubClient({
+      'GET /api/me': () => {
+        const tenants = OPERATOR_ME_RESPONSE.tenants.map((tenant) => ({ ...tenant, permissions }));
         return { ...OPERATOR_ME_RESPONSE, permissions, tenants };
-      }
-      if (path === '/api/members') return [{ user_id: 'u1' }, { user_id: 'u2' }, { user_id: 'u3' }];
-      if (path === '/api/projects') return PROJECTS;
-      if (path === '/api/work-sources') return SOURCES;
-      if (path === '/api/repositories') return REPOSITORIES;
-      if (path === '/api/secrets') return SECRETS;
-      if (path === '/api/config/changes') return { changes: [], total: slug === null ? 42 : 7 };
-      if (path === '/api/projects/winter/source-links') {
-        return { source_links: [{ project_id: 'proj_w', name: 'hub', linked: true, built_in: true }] };
-      }
-      if (path === '/api/projects/winter/repository-links') {
-        return { repository_links: [{ project_id: 'proj_w', name: 'web', linked: true, revision: 1 }] };
-      }
-      return {};
+      },
+      'GET /api/members': () => [memberView({ user_id: 'u1' }), memberView({ user_id: 'u2' }), memberView({ user_id: 'u3' })],
+      'GET /api/projects': () => PROJECTS,
+      'GET /api/work-sources': () => SOURCES,
+      'GET /api/repositories': () => REPOSITORIES,
+      'GET /api/secrets': () => SECRETS,
+      'GET /api/config/changes': () => configChangesPage({ total: slug === null ? 42 : 7 }),
+      'GET /api/projects/{project}/source-links': () => ({
+        source_links: [sourceLinkView({ project_id: 'proj_w', name: 'hub', slug: 'hub', linked: true, built_in: true, revision: null })],
+      }),
+      'GET /api/projects/{project}/repository-links': () => ({
+        repository_links: [repositoryLinkView({ project_id: 'proj_w', name: 'web', slug: 'web', repository_id: 'web', linked: true, revision: 1 })],
+      }),
     });
     TestBed.configureTestingModule({
       providers: [

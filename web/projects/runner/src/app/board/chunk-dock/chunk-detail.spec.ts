@@ -2,8 +2,22 @@ import { provideZonelessChangeDetection } from '@angular/core';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { provideRouter } from '@angular/router';
 import { QueryClient, provideTanStackQuery } from '@tanstack/angular-query-experimental';
-import { runnerClient, type runnerApi } from 'fleet';
-import { chunkDetail, type RequestClientStub, settle, stubError, stubRequestClient } from 'fleet/testing';
+import { type runnerApi } from 'fleet';
+import {
+  chunkDetail,
+  chunkSummary,
+  hostRunnerView,
+  type RequestClientStub,
+  runnerDashboardView,
+  runnerStatusView,
+  servedProjectStatusView,
+  settle,
+  type StubDetailBody,
+  stubError,
+  type StubHttpError,
+  stubRunnerClient,
+  workRefView,
+} from 'fleet/testing';
 import { vi } from 'vitest';
 
 import type { PanelLease } from '../../core/panel-reads.model';
@@ -19,7 +33,7 @@ const HEADER = (overrides: Partial<runnerApi.ChunkDetail> = {}): runnerApi.Chunk
     latest_epoch: 2,
     status: 'running',
     pausable: true,
-    work_refs: [{ source: 'blizzard', ref: '185', label: 'blizzard#185', web_url: 'https://forge.example/issues/185' }],
+    work_refs: [workRefView({ source: 'blizzard', ref: '185', label: 'blizzard#185', web_url: 'https://forge.example/issues/185' })],
     pause: null,
     ...overrides,
   });
@@ -71,57 +85,45 @@ const OLDER = (overrides: Partial<PanelLease> = {}): PanelLease =>
   });
 
 /** The host's one runner, binding project `p`. */
-const HOST_RUNNER = {
-  runner_id: 'rn_1',
-  name: 'r1',
-  state: 'serving',
-  served: true,
-  halted_reasons: [],
-  pause: { local: false, hub: false, effective: false, local_reason: null },
+const HOST_RUNNER = hostRunnerView({
   bindings: [{ project: 'p', workspace_id: 'ws', agents: 4 }],
   agents_in_use: 1,
   max_agents: 4,
-};
+});
 
 /** `rn_1`'s dashboard, naming the project it serves under `p`. */
-const PROJECT_DASHBOARD = {
-  runner: { served_projects: [{ entry: 'p', project_id: 'proj_p', slug: 'p', name: 'Project P', color: null }] },
-};
+const PROJECT_DASHBOARD = runnerDashboardView({
+  runner: runnerStatusView({ served_projects: [servedProjectStatusView({ entry: 'p', project_id: 'proj_p', slug: 'p', name: 'Project P', color: null })] }),
+});
 
-/** A transcript route that answers every lease's read with an empty transcript. */
-const TRANSCRIPT_ROUTE = /^\/api\/leases\/([^/]+)\/transcript$/;
-const CHUNK_ROUTE = /^\/runners\/rn_1\/api\/chunks\/([^/]+)$/;
-const PAUSE_ROUTE = /^\/runners\/rn_1\/api\/chunks\/([^/]+)\/pause$/;
-const RESUME_ROUTE = /^\/runners\/rn_1\/api\/chunks\/([^/]+)\/resume$/;
+/** What a pause or resume answers: the chunk's summary, or a {@link stubError} refusal. */
+type PauseResult = runnerApi.ChunkSummary | StubHttpError<number, StubDetailBody>;
 
-/** The header's own severable read + mutation routes, layered onto the transcript
- * route every test needs — `header` answers `GET /api/chunks/{id}`, `pauseResult`
- * answers both `POST .../pause` and `POST .../resume` (a `ChunkSummary`, or a
- * {@link stubError} to exercise the 409 refusal). */
-function routes(header: runnerApi.ChunkDetail = HEADER(), pauseResult: unknown = {}) {
-  return (method: string, path: string): unknown => {
-    if (method === 'GET') {
-      const transcript = TRANSCRIPT_ROUTE.exec(path);
-      if (transcript) {
-        return { lease_id: transcript[1], session_id: 'sess', available: true, reason: null, truncated: false, turns: [] };
-      }
-      if (CHUNK_ROUTE.test(path)) return header;
-    }
-    if (method === 'POST' && (PAUSE_ROUTE.test(path) || RESUME_ROUTE.test(path))) return pauseResult;
-    return {};
-  };
+const PAUSED_SUMMARY = (): runnerApi.ChunkSummary =>
+  chunkSummary({ chunk_id: 'ch_01KXKVVF1J3D6H6VYZ3XYN3YJ9', graph_id: 'gr_1', status: 'paused' });
+
+/** The header's own severable read + mutation routes — `header` answers
+ * `GET .../chunks/{id}`, `pauseResult` answers both `POST .../pause` and
+ * `POST .../resume` (a `ChunkSummary`, or a {@link stubError} to exercise the
+ * 409 refusal). */
+function routes(header: runnerApi.ChunkDetail = HEADER(), pauseResult: PauseResult = PAUSED_SUMMARY()) {
+  return {
+    'GET /runners/{runner_id}/api/chunks/{chunk_id}': () => header,
+    'POST /runners/{runner_id}/api/chunks/{chunk_id}/pause': () => pauseResult,
+    'POST /runners/{runner_id}/api/chunks/{chunk_id}/resume': () => pauseResult,
+  } as const;
 }
 
 async function render(
   leases: readonly PanelLease[],
   header: runnerApi.ChunkDetail = HEADER(),
-  pauseResult: unknown = {},
+  pauseResult: PauseResult = PAUSED_SUMMARY(),
 ): Promise<{
   el: HTMLElement;
   fixture: ComponentFixture<MachineDetail>;
   stub: RequestClientStub;
 }> {
-  const stub = stubRequestClient(runnerClient, routes(header, pauseResult));
+  const stub = stubRunnerClient(routes(header, pauseResult));
   return { ...(await mount(leases)), stub };
 }
 
@@ -233,10 +235,10 @@ describe('MachineDetail header', () => {
   });
 
   it("names the chunk's runner and its project by name", async () => {
-    stub = stubRequestClient(runnerClient, (method, path) => {
-      if (method === 'GET' && path === '/api/host/runners') return { items: [HOST_RUNNER] };
-      if (method === 'GET' && path === '/runners/rn_1/api/dashboard') return PROJECT_DASHBOARD;
-      return routes()(method, path);
+    stub = stubRunnerClient({
+      ...routes(),
+      'GET /api/host/runners': () => ({ items: [HOST_RUNNER] }),
+      'GET /runners/{runner_id}/api/dashboard': () => PROJECT_DASHBOARD,
     });
     const { el } = await mount([NEWEST()]);
 
@@ -245,11 +247,7 @@ describe('MachineDetail header', () => {
   });
 
   it("reads and acts on the newest attempt's own runner", async () => {
-    stub = stubRequestClient(runnerClient, (method, path) => {
-      if (method === 'GET' && path === `/runners/rn_2/api/chunks/${NEWEST().chunk_id}`) return HEADER();
-      if (method === 'POST' && path === `/runners/rn_2/api/chunks/${NEWEST().chunk_id}/pause`) return {};
-      return {};
-    });
+    stub = stubRunnerClient(routes());
     const { el, fixture } = await mount([NEWEST({ owner: { runnerId: 'rn_2', name: 'r2', label: 'r2' } })]);
 
     expect(el.querySelector('[data-testid="detail-pointer"]')?.textContent).toContain('blizzard#185');
@@ -526,7 +524,7 @@ describe('MachineDetail heartbeat label ticking', () => {
     vi.setSystemTime(Date.parse(NEWEST().last_heartbeat_at!));
     let stub: RequestClientStub | undefined;
     try {
-      stub = stubRequestClient(runnerClient, routes());
+      stub = stubRunnerClient(routes());
       await TestBed.configureTestingModule({
         imports: [MachineDetail],
         providers: [
@@ -579,8 +577,8 @@ describe('MachineDetail Requeue', () => {
   const REQUEUE_ROUTE = '/runners/rn_2/api/chunks/ch_01KXKVVF1J3D6H6VYZ3XYN3YJ9/requeues';
 
   /** The dock over an escalated chunk owned by `rn_2`, the requeue POST answered by `result`. */
-  async function mountEscalated(result: unknown) {
-    stub = stubRequestClient(runnerClient, (method, path) => (method === 'POST' && path === REQUEUE_ROUTE ? result : {}));
+  async function mountEscalated(result: runnerApi.RequeueResponse | StubHttpError<number, StubDetailBody>) {
+    stub = stubRunnerClient({ 'POST /runners/{runner_id}/api/chunks/{chunk_id}/requeues': () => result });
     await TestBed.configureTestingModule({
       imports: [MachineDetail],
       providers: [
@@ -611,7 +609,7 @@ describe('MachineDetail Requeue', () => {
   });
 
   it('sends nothing when the operator cancels', async () => {
-    const { fixture, el } = await mountEscalated({});
+    const { fixture, el } = await mountEscalated({ chunk_id: ESCALATION.chunk_id, requeued: true });
 
     el.querySelector<HTMLElement>('[data-testid="confirm-requeue-cancel"]')!.click();
     await settle(fixture);

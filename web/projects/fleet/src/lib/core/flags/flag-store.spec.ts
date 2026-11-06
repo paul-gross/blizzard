@@ -3,8 +3,14 @@ import { TestBed } from '@angular/core/testing';
 import { QueryClient, provideTanStackQuery } from '@tanstack/angular-query-experimental';
 
 import { flagsApiFlagsGet } from '../../api/hub';
-import { client as hubClient } from '../../api/hub/client.gen';
-import { type RequestClientStub, stubError, stubRequestClient } from '../../testing/stub-request-client';
+import type { FlagsResponse } from '../../api/hub';
+import {
+  type RequestClientStub,
+  type StubDetailBody,
+  type StubHttpError,
+  stubError,
+  stubHubClient,
+} from '../../testing/stub-request-client';
 import { FlagStore, type FlagsRead, provideFlags } from './flag-store';
 
 const READ: FlagsRead = {
@@ -27,8 +33,8 @@ class FlagHost {
 describe('FlagStore', () => {
   let stub: RequestClientStub;
 
-  const store = async (answer: unknown) => {
-    stub = stubRequestClient(hubClient, (_method, path) => (path === '/api/flags' ? answer : {}));
+  const store = async (answer: FlagsResponse | StubHttpError<number, StubDetailBody>) => {
+    stub = stubHubClient({ 'GET /api/flags': () => answer });
     TestBed.configureTestingModule({
       providers: [
         provideZonelessChangeDetection(),

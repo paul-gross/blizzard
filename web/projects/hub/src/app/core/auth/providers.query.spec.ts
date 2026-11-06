@@ -2,8 +2,7 @@ import { ChangeDetectionStrategy, Component, provideZonelessChangeDetection } fr
 import { TestBed } from '@angular/core/testing';
 import { QueryClient, provideTanStackQuery } from '@tanstack/angular-query-experimental';
 
-import { hubClient } from 'fleet';
-import { settle, type RequestClientStub, stubRequestClient } from 'fleet/testing';
+import { settle, type RequestClientStub, stubHubClient } from 'fleet/testing';
 import { injectAuthProvidersQuery } from './providers.query';
 
 @Component({
@@ -20,7 +19,7 @@ describe('injectAuthProvidersQuery', () => {
   afterEach(() => stub?.restore());
 
   it('lists the configured providers, empty under auth.mode=none', async () => {
-    stub = stubRequestClient(hubClient, (method, path) => (path === '/api/auth/providers' ? [] : {}));
+    stub = stubHubClient({ 'GET /api/auth/providers': () => [] });
     TestBed.configureTestingModule({
       imports: [TestProvidersQueryHost],
       providers: [provideZonelessChangeDetection(), provideTanStackQuery(new QueryClient())],
@@ -32,9 +31,9 @@ describe('injectAuthProvidersQuery', () => {
   });
 
   it('resolves the provider list on success', async () => {
-    stub = stubRequestClient(hubClient, (method, path) =>
-      path === '/api/auth/providers' ? [{ name: 'github', display_name: 'GitHub', type: 'github' }] : {},
-    );
+    stub = stubHubClient({
+      'GET /api/auth/providers': () => [{ name: 'github', display_name: 'GitHub', type: 'github' }],
+    });
     TestBed.configureTestingModule({
       imports: [TestProvidersQueryHost],
       providers: [provideZonelessChangeDetection(), provideTanStackQuery(new QueryClient())],

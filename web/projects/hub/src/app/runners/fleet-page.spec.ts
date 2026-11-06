@@ -5,71 +5,55 @@ import { RouterTestingHarness } from '@angular/router/testing';
 import { QueryClient, provideTanStackQuery } from '@tanstack/angular-query-experimental';
 import { vi } from 'vitest';
 
-import { hubClient } from 'fleet';
-import { OPERATOR_ME_RESPONSE, type RequestClientStub, settle, stubError, stubRequestClient } from 'fleet/testing';
+import { type MeResponse, type RunnerRegistryView } from 'fleet';
+import {
+  OPERATOR_ME_RESPONSE,
+  type RequestClientStub,
+  hostRegistryView,
+  runnerRegistryView,
+  settle,
+  stubError,
+  stubHubClient,
+} from 'fleet/testing';
 import { FleetPage } from './fleet-page';
 
-const ME = {
+const ME: MeResponse = {
   ...OPERATOR_ME_RESPONSE,
   permissions: [...OPERATOR_ME_RESPONSE.permissions, 'runner:retire' as const],
 };
 /** A `contributor`'s `/api/me` — every day-to-day operating permission, but not the
  * admin-tier `runner:pause`. */
-const CONTRIBUTOR_ME = {
+const CONTRIBUTOR_ME: MeResponse = {
   ...OPERATOR_ME_RESPONSE,
   role: 'contributor',
   permissions: OPERATOR_ME_RESPONSE.permissions.filter((p) => p !== 'runner:pause' && p !== 'graph:edit' && p !== 'user:manage'),
 };
 const NOW = new Date().toISOString();
-const runner = (id: string, over: Record<string, unknown> = {}) => ({
-  runner_id: id,
-  runner_name: id,
-  workspace_id: 'ws_a',
-  registered_at: NOW,
-  last_seen_at: NOW,
-  online: true,
-  connection: 'online',
-  hub_paused: false,
-  locally_paused: false,
-  capabilities: [],
-  gates: [],
-  subscription_unrostered: false,
-  ...over,
-});
-const HOST = {
-  host_id: 'hs_h1',
-  host_name: 'build-box',
-  connection: 'online',
-  online: true,
-  enrolled: true,
-  added_at: NOW,
-  last_seen_at: NOW,
-  workspaces: [],
-  subscriptions: [],
-  subscription_usage: [],
-};
+const runner = (id: string, over: Partial<RunnerRegistryView> = {}) =>
+  runnerRegistryView({ runner_id: id, registered_at: NOW, last_seen_at: NOW, ...over });
+const HOST = hostRegistryView({ host_id: 'hs_h1', host_name: 'build-box', added_at: NOW, last_seen_at: NOW });
+
+type Routes = Parameters<typeof stubHubClient>[0];
 
 describe('FleetPage', () => {
   let stub: RequestClientStub;
 
-  async function open(url: string, me: unknown = ME, over: (method: string, path: string) => unknown = () => undefined) {
-    stub = stubRequestClient(hubClient, (method, path) => {
-      const hit = over(method, path);
-      if (hit !== undefined) return hit;
-      if (path === '/api/me') return me;
-      if (path === '/api/runners') {
-        return {
-          runners: [
-            runner('rn_A', { host_id: 'hs_h1' }),
-            runner('rn_solo', { env_capacity: 4, hub_paused: false }),
-            runner('rn_stopped', { hub_paused: true }),
-          ],
-        };
-      }
-      if (path === '/api/hosts') return { hosts: [HOST] };
-      if (path === '/api/chunks') return { chunks: [], next_cursor: null };
-      if (path === '/api/hosts/hs_h1/enrollments') return { host_id: 'hs_h1', token: 'tok_secret' };
-      return {};
+  async function open(url: string, me: MeResponse = ME, over: Routes = {}) {
+    stub = stubHubClient({
+      'GET /api/me': () => me,
+      'GET /api/runners': () => ({
+        runners: [
+          runner('rn_A', { host_id: 'hs_h1' }),
+          runner('rn_solo', { env_capacity: 4, hub_paused: false }),
+          runner('rn_stopped', { hub_paused: true }),
+        ],
+      }),
+      'GET /api/hosts': () => ({ hosts: [HOST] }),
+      'GET /api/chunks': () => ({ chunks: [], next_cursor: null }),
+      'POST /api/hosts/{host_id}/enrollments': () => ({ host_id: 'hs_h1', token: 'tok_secret' }),
+      'POST /api/runners/{runner_id}/pause': (_request, { runner_id }) => runner(runner_id, { hub_paused: true }),
+      'POST /api/runners/{runner_id}/resume': (_request, { runner_id }) => runner(runner_id),
+      ...over,
     });
     TestBed.configureTestingModule({
       providers: [
@@ -168,11 +152,11 @@ describe('FleetPage', () => {
   });
 
   it('marks a never-connected hostless runner with a hollow light and no beacon', async () => {
-    const { el } = await open('/fleet/rn_solo', ME, (_method, path) =>
-      path === '/api/runners'
-        ? { runners: [runner('rn_solo', { online: false, connection: 'never_connected', registered_at: null, last_seen_at: null })] }
-        : undefined,
-    );
+    const { el } = await open('/fleet/rn_solo', ME, {
+      'GET /api/runners': () => ({
+        runners: [runner('rn_solo', { online: false, connection: 'never_connected', registered_at: null, last_seen_at: null })],
+      }),
+    });
 
     expect(el.querySelector('[data-testid="fleet-runner"] .dot .hollow')).not.toBeNull();
     expect(el.querySelector('[data-testid="fleet-runner"] fleet-kit-beacon')).toBeNull();
@@ -191,8 +175,9 @@ describe('FleetPage', () => {
       return () => resolveInvalidate();
     }
 
-    const rejectPause = (method: string, path: string) =>
-      path === '/api/runners/rn_solo/pause' ? stubError(409, { detail: 'runner already paused' }) : undefined;
+    const rejectPause: Routes = {
+      'POST /api/runners/{runner_id}/pause': () => stubError(409, { detail: 'runner already paused' }),
+    };
 
     it('resumes a hub-paused runner at the hub', async () => {
       const { harness, el } = await open('/fleet/rn_stopped');

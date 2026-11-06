@@ -3,8 +3,8 @@ import { TestBed } from '@angular/core/testing';
 import { QueryClient, provideTanStackQuery } from '@tanstack/angular-query-experimental';
 import { vi } from 'vitest';
 
-import { hubClient, hubConfigKey } from 'fleet';
-import { type RequestClientStub, stubRequestClient } from 'fleet/testing';
+import { hubConfigKey } from 'fleet';
+import { type RequestClientStub, stubHubClient, workSourceSummary } from 'fleet/testing';
 import {
   injectCreateWorkSourceMutation,
   injectEditWorkSourceMutation,
@@ -16,7 +16,12 @@ describe('work source mutations', () => {
   let queryClient: QueryClient;
 
   beforeEach(() => {
-    stub = stubRequestClient(hubClient, () => ({}));
+    stub = stubHubClient({
+      'POST /api/work-sources': () => workSourceSummary({ work_source_id: 'a', slug: 'a' }),
+      'PATCH /api/work-sources/{source}': () => workSourceSummary({ work_source_id: 'a', revision: 4 }),
+      'POST /api/work-sources/{source}/retire': () => workSourceSummary({ work_source_id: 'a', retired: true }),
+      'POST /api/work-sources/{source}/enable': () => workSourceSummary({ work_source_id: 'a' }),
+    });
     queryClient = new QueryClient({
       defaultOptions: { queries: { retry: false } },
     });

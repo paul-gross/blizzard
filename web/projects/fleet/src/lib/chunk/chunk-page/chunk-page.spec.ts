@@ -3,7 +3,23 @@ import { TestBed } from '@angular/core/testing';
 import { Router, provideRouter } from '@angular/router';
 import { RouterTestingHarness } from '@angular/router/testing';
 import { QueryClient, provideTanStackQuery } from '@tanstack/angular-query-experimental';
-import { type RequestClientStub, settle, stubError, stubRequestClient } from 'fleet/testing';
+import {
+  type RequestClientStub,
+  assetArtifactView,
+  chunkDetail,
+  chunkEscalationView,
+  chunkUsageTotalView,
+  chunkUsageView,
+  decisionView,
+  questionView,
+  settle,
+  stubError,
+  stubRunnerClient,
+  transcriptSegmentIndexEntry,
+  transitionView,
+  workItemEntry,
+  workRefView,
+} from 'fleet/testing';
 
 import { client as runnerClient } from '../../api/runner/client.gen';
 import { ViewportService } from '../../core/viewport/viewport-service';
@@ -25,20 +41,17 @@ import { type ChunkPageActions, provideChunkPageDaemon } from './chunk-page-daem
  */
 const CHUNK_ID = 'ch_01KXKVVF1J3D6H6VYZ3XYN3YJ9';
 
-const DETAIL = {
+const DETAIL = chunkDetail({
   chunk_id: CHUNK_ID,
   graph_id: 'gr_1',
   graph_name: 'default',
   current_node_id: 'nd_review',
   current_node_name: 'review',
   latest_epoch: 2,
-  open_prs: [],
-  closed_prs: [],
-  landed_repos: [],
   status: 'running',
-  work_refs: [{ source: 'blizzard', ref: '318', label: 'blizzard#318', web_url: 'https://forge.example/issues/318' }],
+  work_refs: [workRefView({ source: 'blizzard', ref: '318', label: 'blizzard#318', web_url: 'https://forge.example/issues/318' })],
   history: [
-    {
+    transitionView({
       choice_name: 'pass',
       epoch: 1,
       from_node_id: 'nd_build',
@@ -48,21 +61,21 @@ const DETAIL = {
       recorded_at: '2026-07-16T11:00:00.000Z',
       to_node_id: 'nd_review',
       to_node_name: 'review',
-    },
+    }),
   ],
   artifacts: [
-    {
+    assetArtifactView({
       key: 'build.retrospective.1',
-      kind: 'asset',
       name: 'retrospective',
       node_id: 'nd_build',
       node_name: 'build',
       epoch: 1,
       content: 'went fine',
       recorded_at: '2026-07-16T11:10:00.000Z',
-    },
+    }),
   ],
-};
+  cost: chunkUsageTotalView({ cost_usd: 0 }),
+});
 
 /** Stands in for the board route — only its resolving matters here. */
 @Component({ selector: 'fleet-board-stub', template: '' })
@@ -110,7 +123,7 @@ const ACTIONS: ChunkPageActions = {
   resolve: () => undefined,
 };
 
-const SEGMENT = {
+const SEGMENT = transcriptSegmentIndexEntry({
   segment_id: 'sg_1',
   node_id: 'nd_build',
   epoch: 1,
@@ -123,29 +136,33 @@ const SEGMENT = {
   normalizer_version: 'v1',
   harness_version: null,
   received_at: '2026-07-16T11:05:00.000Z',
-};
+});
 
-function routes(segments: readonly unknown[] = []): (method: string, path: string) => unknown {
-  return (method, path) => {
-    if (method !== 'GET') return {};
-    if (path === `/runners/rn_1/api/chunks/${CHUNK_ID}`) return DETAIL;
-    if (path === `/runners/rn_1/api/chunks/${CHUNK_ID}/work-items`) {
-      return { items: [{ source: 'blizzard', ref: '318', label: 'blizzard#318', title: 'Chunk detail route', body: 'x', comments: [] }] };
-    }
-    if (path === `/runners/rn_1/api/chunks/${CHUNK_ID}/transcripts`) return { chunk_id: CHUNK_ID, segments };
-    const segmentMatch = /^\/runners\/rn_1\/api\/chunks\/[^/]+\/transcripts\/([^/]+)$/.exec(path);
-    if (segmentMatch) {
-      return { segment_id: segmentMatch[1], final: true, truncated: false, turns: [] };
-    }
-    return {};
-  };
+type RunnerRoutes = Parameters<typeof stubRunnerClient>[0];
+
+/** Stub the runner reads the page makes, `overrides` replacing any of them. */
+function stubRunner(segments: typeof SEGMENT[] = [], overrides: RunnerRoutes = {}): RequestClientStub {
+  return stubRunnerClient({
+    'GET /runners/{runner_id}/api/chunks/{chunk_id}': () => DETAIL,
+    'GET /runners/{runner_id}/api/chunks/{chunk_id}/work-items': () => ({
+      items: [workItemEntry({ source: 'blizzard', ref: '318', label: 'blizzard#318', title: 'Chunk detail route', body: 'x'})],
+    }),
+    'GET /runners/{runner_id}/api/chunks/{chunk_id}/transcripts': () => ({ chunk_id: CHUNK_ID, segments }),
+    'GET /runners/{runner_id}/api/chunks/{chunk_id}/transcripts/{segment_id}': (_request, { segment_id }) => ({
+      segment_id,
+      final: true,
+      truncated: false,
+      turns: [],
+    }),
+    ...overrides,
+  });
 }
 
 describe('ChunkPage on a runner daemon', () => {
   let stub: RequestClientStub;
 
   beforeEach(() => {
-    stub = stubRequestClient(runnerClient, routes());
+    stub = stubRunner();
     TestBed.configureTestingModule({
       providers: [
         provideZonelessChangeDetection(),
@@ -183,13 +200,9 @@ describe('ChunkPage on a runner daemon', () => {
     // The `.inline` class only shows up on the pane's own status line, so a real error
     // state is needed to observe it — success renders no status line at all.
     stub.restore();
-    stub = stubRequestClient(
-      runnerClient,
-      (method, path) =>
-        method === 'GET' && path === `/runners/rn_1/api/chunks/${CHUNK_ID}/work-items`
-          ? stubError(503, { detail: 'no work source is configured' })
-          : routes()(method, path),
-    );
+    stub = stubRunner([], {
+      'GET /runners/{runner_id}/api/chunks/{chunk_id}/work-items': () => stubError(503, { detail: 'no work source is configured' }),
+    });
 
     const el = await open(`/board/chunk/${CHUNK_ID}`);
 
@@ -259,7 +272,7 @@ describe('ChunkPage on a runner daemon', () => {
 
   it('shows a picked step’s own transcript, read through the runner’s own transcript endpoints', async () => {
     stub.restore();
-    stub = stubRequestClient(runnerClient, routes([SEGMENT]));
+    stub = stubRunner([SEGMENT]);
     const el = await open(`/board/chunk/${CHUNK_ID}?tab=node-history&step=nd_build:1`);
 
     expect(stub.forRoute(`/runners/rn_1/api/chunks/${CHUNK_ID}/transcripts`, 'GET').length).toBeGreaterThan(0);
@@ -318,7 +331,7 @@ describe('ChunkPage on a runner daemon', () => {
 
   it('renders the open segment\u2019s content on the Transcripts tab, resolved through plane="runner"', async () => {
     stub.restore();
-    stub = stubRequestClient(runnerClient, routes([SEGMENT]));
+    stub = stubRunner([SEGMENT]);
     const el = await open(`/board/chunk/${CHUNK_ID}?tab=transcripts&segment=sg_1`);
 
     expect(stub.forRoute(`/runners/rn_1/api/chunks/${CHUNK_ID}/transcripts/sg_1`, 'GET').length).toBeGreaterThan(0);
@@ -327,9 +340,8 @@ describe('ChunkPage on a runner daemon', () => {
 
   it('renders an explicit empty state for a chunk with no history transitions and no transcript segments', async () => {
     stub.restore();
-    stub = stubRequestClient(runnerClient, (method, path) => {
-      if (method === 'GET' && path === `/runners/rn_1/api/chunks/${CHUNK_ID}`) return { ...DETAIL, history: [], current_node_id: 'done', current_node_terminal: true };
-      return routes()(method, path);
+    stub = stubRunner([], {
+      'GET /runners/{runner_id}/api/chunks/{chunk_id}': () => ({ ...DETAIL, history: [], current_node_id: 'done', current_node_terminal: true }),
     });
     const el = await open(`/board/chunk/${CHUNK_ID}?tab=transcripts`);
 
@@ -338,11 +350,10 @@ describe('ChunkPage on a runner daemon', () => {
 
   it("renders the hub-sourced cost estimate folded into the one cost figure on the General tab's work item box and the Node history tab's timeline", async () => {
     stub.restore();
-    stub = stubRequestClient(runnerClient, (method, path) => {
-      if (method === 'GET' && path === `/runners/rn_1/api/chunks/${CHUNK_ID}`) {
-        return {
+    stub = stubRunner([], {
+      'GET /runners/{runner_id}/api/chunks/{chunk_id}': () => ({
           ...DETAIL,
-          cost: {
+          cost: chunkUsageTotalView({
             input_tokens: 900,
             output_tokens: 400,
             cache_read_tokens: 0,
@@ -350,9 +361,9 @@ describe('ChunkPage on a runner daemon', () => {
             cost_usd: 0,
             cost_partial: false,
             estimated_cost_usd: 0.07,
-          },
+          }),
           usage: [
-            {
+            chunkUsageView({
               node_id: 'nd_build',
               epoch: 1,
               kind: 'spawn',
@@ -363,11 +374,9 @@ describe('ChunkPage on a runner daemon', () => {
               cache_create_tokens: 0,
               cost_usd: null,
               estimated_cost_usd: 0.07,
-            },
+            }),
           ],
-        };
-      }
-      return routes()(method, path);
+        }),
     });
 
     const harness = await RouterTestingHarness.create();
@@ -394,15 +403,16 @@ describe('ChunkPage on a runner daemon', () => {
     // itself, not just that the section mounts: an aggregate that dropped the field
     // would mount an always-empty sub-panel and satisfy a mount-only assertion.
     stub.restore();
-    stub = stubRequestClient(runnerClient, (method, path) => {
-      if (method === 'GET' && path === `/runners/rn_1/api/chunks/${CHUNK_ID}`) {
-        return {
+    stub = stubRunner([], {
+      'GET /runners/{runner_id}/api/chunks/{chunk_id}': () => ({
           ...DETAIL,
           status: 'needs_human',
-          escalation: { epoch: 2, takeover_command: `cd /ws/beta && claude --resume sess-new`, wrapped_takeover_command: '' },
-        };
-      }
-      return routes()(method, path);
+          escalation: chunkEscalationView({
+            epoch: 2,
+            takeover_command: `cd /ws/beta && claude --resume sess-new`,
+            wrapped_takeover_command: '',
+          }),
+        }),
     });
     const el = await open(`/board/chunk/${CHUNK_ID}`);
 
@@ -422,9 +432,8 @@ describe('ChunkPage on a runner daemon', () => {
 
   it('shows an error state when the chunk detail read fails', async () => {
     stub.restore();
-    stub = stubRequestClient(runnerClient, (method, path) => {
-      if (method === 'GET' && path === `/runners/rn_1/api/chunks/${CHUNK_ID}`) return stubError(502, { detail: 'unreachable' });
-      return routes()(method, path);
+    stub = stubRunner([], {
+      'GET /runners/{runner_id}/api/chunks/{chunk_id}': () => stubError(502, { detail: 'unreachable' }),
     });
     const el = await open(`/board/chunk/${CHUNK_ID}`);
 
@@ -436,13 +445,12 @@ describe('ChunkPage on a runner daemon', () => {
 
   it('renders no answer or resolve controls for an open question and gate decision', async () => {
     stub.restore();
-    stub = stubRequestClient(runnerClient, (method, path) => {
-      if (method === 'GET' && path === `/runners/rn_1/api/chunks/${CHUNK_ID}`) {
-        return {
+    stub = stubRunner([], {
+      'GET /runners/{runner_id}/api/chunks/{chunk_id}': () => ({
           ...DETAIL,
           status: 'waiting_on_human',
           questions: [
-            {
+            questionView({
               question_id: 'qn_77',
               chunk_id: CHUNK_ID,
               question: 'Which API style?',
@@ -451,9 +459,9 @@ describe('ChunkPage on a runner daemon', () => {
               runner_id: 'rn_01',
               asked_at: '2026-07-16T11:20:00.000Z',
               answered: false,
-            },
+            }),
           ],
-          decision: {
+          decision: decisionView({
             decision_id: 'de_01',
             chunk_id: CHUNK_ID,
             node_id: 'nd_review',
@@ -461,15 +469,13 @@ describe('ChunkPage on a runner daemon', () => {
             epoch: 2,
             submitted_at: '2026-07-16T11:20:00.000Z',
             choices: [
-              { name: 'approve', description: 'Ship it.' },
-              { name: 'reject', description: 'Send it back.' },
+              { name: 'approve', description: 'Ship it.', requires_checks: false, would_override_red_checks: false },
+              { name: 'reject', description: 'Send it back.', requires_checks: false, would_override_red_checks: false },
             ],
             transitioned: false,
             check_results: [],
-          },
-        };
-      }
-      return routes()(method, path);
+          }),
+        }),
     });
     const el = await open(`/board/chunk/${CHUNK_ID}`);
 
@@ -483,9 +489,8 @@ describe('ChunkPage on a runner daemon', () => {
 
   it('renders no graph edit for a not-ready chunk', async () => {
     stub.restore();
-    stub = stubRequestClient(runnerClient, (method, path) => {
-      if (method === 'GET' && path === `/runners/rn_1/api/chunks/${CHUNK_ID}`) return { ...DETAIL, status: 'not_ready', graph_editable: true };
-      return routes()(method, path);
+    stub = stubRunner([], {
+      'GET /runners/{runner_id}/api/chunks/{chunk_id}': () => ({ ...DETAIL, status: 'not_ready', graph_editable: true }),
     });
     const el = await open(`/board/chunk/${CHUNK_ID}`);
 

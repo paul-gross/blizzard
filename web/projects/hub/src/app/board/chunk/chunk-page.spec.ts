@@ -3,8 +3,26 @@ import { TestBed } from '@angular/core/testing';
 import { Router, provideRouter } from '@angular/router';
 import { RouterTestingHarness } from '@angular/router/testing';
 import { QueryClient, provideTanStackQuery } from '@tanstack/angular-query-experimental';
-import { ChunkPage, formatWhen, hubClient, ViewportService } from 'fleet';
-import { stubError, OPERATOR_ME_RESPONSE, type RequestClientStub, settle, stubRequestClient } from 'fleet/testing';
+import { ChunkPage, formatWhen, ViewportService, type hubApi } from 'fleet';
+import {
+  assetArtifactView,
+  chunkDetail,
+  chunkSummary,
+  commitArtifactView,
+  decisionView,
+  OPERATOR_ME_RESPONSE,
+  questionView,
+  type RequestClientStub,
+  settle,
+  stubError,
+  stubHubClient,
+  transcriptSegmentContentView,
+  transcriptSegmentIndexEntry,
+  transitionView,
+  turnSegmentView,
+  workItemEntry,
+  workRefView,
+} from 'fleet/testing';
 
 import { ArtifactPage } from './artifact-page';
 import { HUB_CHUNK_PAGE_PROVIDERS } from './hub-chunk-actions';
@@ -24,21 +42,17 @@ import { HUB_CHUNK_PAGE_PROVIDERS } from './hub-chunk-actions';
  */
 const CHUNK_ID = 'ch_01KXKVVF1J3D6H6VYZ3XYN3YJ9';
 
-const DETAIL = {
+const DETAIL = chunkDetail({
   chunk_id: CHUNK_ID,
   graph_id: 'gr_1',
   graph_name: 'default',
   current_node_id: 'nd_review',
   current_node_name: 'review',
   latest_epoch: 2,
-  open_prs: [],
-  closed_prs: [],
-  landed_repos: [],
-  model: 'claude-opus-5',
   status: 'running',
-  work_refs: [{ source: 'blizzard', ref: '26', url: null }],
+  work_refs: [workRefView({ source: 'blizzard', ref: '26', label: 'blizzard#26', web_url: null })],
   history: [
-    {
+    transitionView({
       choice_name: 'pass',
       epoch: 1,
       from_node_id: 'nd_build',
@@ -48,22 +62,20 @@ const DETAIL = {
       recorded_at: '2026-07-16T11:00:00.000Z',
       to_node_id: 'nd_review',
       to_node_name: 'review',
-    },
+    }),
   ],
   artifacts: [
-    {
+    assetArtifactView({
       key: 'review.findings.2',
-      kind: 'asset',
       name: 'findings',
       node_id: 'nd_review',
       node_name: 'review',
       epoch: 2,
       content: 'THE FINDINGS BODY',
       recorded_at: '2026-07-16T11:30:00.000Z',
-    },
-    {
+    }),
+    commitArtifactView({
       key: 'build.branch.1',
-      kind: 'git_commit',
       name: 'branch',
       node_id: 'nd_build',
       node_name: 'build',
@@ -73,9 +85,25 @@ const DETAIL = {
       branch_url: 'https://example.test/branch',
       commit_hash: 'abc1234',
       recorded_at: '2026-07-16T11:10:00.000Z',
-    },
+    }),
   ],
-};
+});
+
+type HubRoutes = Parameters<typeof stubHubClient>[0];
+
+/** The routes every chunk-page mount reads — the operator, the chunk, its work items — plus any the test adds. */
+function chunkRoutes(
+  detail: hubApi.ChunkDetail = DETAIL,
+  extra: HubRoutes = {},
+  items: hubApi.WorkItemEntry[] = [],
+): HubRoutes {
+  return {
+    'GET /api/me': () => OPERATOR_ME_RESPONSE,
+    'GET /api/chunks/{chunk_id}': () => detail,
+    'GET /api/chunks/{chunk_id}/work-items': () => ({ items }),
+    ...extra,
+  };
+}
 
 /** Stands in for the real board page — only its route resolving matters here,
  * so the back link's `/board?chunk=…` navigation actually lands. */
@@ -92,13 +120,9 @@ describe('Mobile chunk drill-down', () => {
   let stub: RequestClientStub;
 
   beforeEach(() => {
-    stub = stubRequestClient(hubClient, (method, path) => {
-      if (method === 'GET' && path === '/api/me') return OPERATOR_ME_RESPONSE;
-      if (method === 'GET' && path.endsWith('/work-items')) {
-        return { items: [{ ref: 'blizzard#26', title: 'Make the board mobile', state: 'open', web_url: null, comments: [] }] };
-      }
-      return DETAIL;
-    });
+    stub = stubHubClient(
+      chunkRoutes(DETAIL, {}, [workItemEntry({ ref: 'blizzard#26', title: 'Make the board mobile', web_url: null, comments: [] })]),
+    );
     TestBed.configureTestingModule({
       providers: [
         provideZonelessChangeDetection(),
@@ -219,11 +243,15 @@ describe('Mobile chunk drill-down', () => {
 
   it('pauses the chunk from the header menu once the operator confirms, through the hub', async () => {
     stub.restore();
-    stub = stubRequestClient(hubClient, (method, path) => {
-      if (method === 'GET' && path === '/api/me') return OPERATOR_ME_RESPONSE;
-      if (method === 'GET' && path.endsWith('/work-items')) return { items: [] };
-      return { ...DETAIL, pausable: true };
-    });
+    stub = stubHubClient(
+      chunkRoutes(
+        { ...DETAIL, pausable: true },
+        {
+          'POST /api/chunks/{chunk_id}/pause': () =>
+            chunkSummary({ chunk_id: CHUNK_ID, graph_id: 'gr_1', status: 'paused' }),
+        },
+      ),
+    );
     const harness = await RouterTestingHarness.create();
     await harness.navigateByUrl(`/board/chunk/${CHUNK_ID}`);
     await settle(harness.fixture);
@@ -286,12 +314,9 @@ describe('Mobile chunk drill-down', () => {
 
   it("shows exactly the selected step's own artifacts on the Node history tab (D8: exact (node_id, epoch))", async () => {
     stub.restore();
-    stub = stubRequestClient(hubClient, (method, path) => {
-      if (method === 'GET' && path === '/api/me') return OPERATOR_ME_RESPONSE;
-      if (method === 'GET' && path.endsWith('/work-items')) return { items: [] };
-      if (path === `/api/chunks/${CHUNK_ID}/transcripts`) return { chunk_id: CHUNK_ID, segments: [] };
-      return DETAIL;
-    });
+    stub = stubHubClient(
+      chunkRoutes(DETAIL, { 'GET /api/chunks/{chunk_id}/transcripts': () => ({ chunk_id: CHUNK_ID, segments: [] }) }),
+    );
     // DETAIL's own build.branch.1 artifact is (nd_build, epoch 1); review.findings.2 is
     // (nd_review, epoch 2) — selecting the build step must show only the former.
     const el = await open(`/board/chunk/${CHUNK_ID}?tab=node-history&step=nd_build:1`);
@@ -303,12 +328,9 @@ describe('Mobile chunk drill-down', () => {
 
   it('states an explicit empty transcript for a step with no shipped segments', async () => {
     stub.restore();
-    stub = stubRequestClient(hubClient, (method, path) => {
-      if (method === 'GET' && path === '/api/me') return OPERATOR_ME_RESPONSE;
-      if (method === 'GET' && path.endsWith('/work-items')) return { items: [] };
-      if (path === `/api/chunks/${CHUNK_ID}/transcripts`) return { chunk_id: CHUNK_ID, segments: [] };
-      return DETAIL;
-    });
+    stub = stubHubClient(
+      chunkRoutes(DETAIL, { 'GET /api/chunks/{chunk_id}/transcripts': () => ({ chunk_id: CHUNK_ID, segments: [] }) }),
+    );
     const el = await open(`/board/chunk/${CHUNK_ID}?tab=node-history&step=nd_build:1`);
 
     expect(el.querySelector('[data-testid="node-history-transcript-empty"]')?.textContent).toContain(
@@ -318,14 +340,12 @@ describe('Mobile chunk drill-down', () => {
 
   it("renders the selected step's own transcript once its segment resolves", async () => {
     stub.restore();
-    stub = stubRequestClient(hubClient, (method, path) => {
-      if (method === 'GET' && path === '/api/me') return OPERATOR_ME_RESPONSE;
-      if (method === 'GET' && path.endsWith('/work-items')) return { items: [] };
-      if (path === `/api/chunks/${CHUNK_ID}/transcripts`) {
-        return {
+    stub = stubHubClient(
+      chunkRoutes(DETAIL, {
+        'GET /api/chunks/{chunk_id}/transcripts': () => ({
           chunk_id: CHUNK_ID,
           segments: [
-            {
+            transcriptSegmentIndexEntry({
               segment_id: 'sg_1',
               node_id: 'nd_build',
               epoch: 1,
@@ -338,22 +358,18 @@ describe('Mobile chunk drill-down', () => {
               normalizer_version: 'v1',
               harness_version: null,
               received_at: '2026-07-16T11:05:00.000Z',
-            },
+            }),
           ],
-        };
-      }
-      if (path === `/api/chunks/${CHUNK_ID}/transcripts/sg_1`) {
-        return {
-          segment_id: 'sg_1',
-          final: true,
-          truncated: false,
-          turns: [
-            { index: 0, kind: 'asst', text: 'built it', timestamp: null, tool: null, thinking_redacted: false, sidechain: null, truncated: false },
-          ],
-        };
-      }
-      return DETAIL;
-    });
+        }),
+        'GET /api/chunks/{chunk_id}/transcripts/{segment_id}': () =>
+          transcriptSegmentContentView({
+            segment_id: 'sg_1',
+            final: true,
+            truncated: false,
+            turns: [turnSegmentView({ index: 0, kind: 'asst', text: 'built it', timestamp: null, tool: null, thinking_redacted: false, sidechain: null, truncated: false })],
+          }),
+      }),
+    );
     const el = await open(`/board/chunk/${CHUNK_ID}?tab=node-history&step=nd_build:1`);
 
     expect(el.querySelector('[data-testid="node-history-transcript-body"]')?.textContent).toContain('built it');
@@ -499,11 +515,7 @@ describe('Mobile chunk drill-down', () => {
     // sentinel, which `current_node_name` cannot resolve — the header must not
     // render the literal id "done" beside a status that also reads "done".
     stub.restore();
-    stub = stubRequestClient(hubClient, (method, path) => {
-      if (method === 'GET' && path === '/api/me') return OPERATOR_ME_RESPONSE;
-      if (method === 'GET' && path.endsWith('/work-items')) return { items: [] };
-      return { ...DETAIL, status: 'done', current_node_id: 'done', current_node_name: null };
-    });
+    stub = stubHubClient(chunkRoutes({ ...DETAIL, status: 'done', current_node_id: 'done', current_node_name: null }));
     const el = await open(`/board/chunk/${CHUNK_ID}`);
 
     const header = el.querySelector('[data-testid="board-chunk-detail"] header');
@@ -514,11 +526,7 @@ describe('Mobile chunk drill-down', () => {
 
   it('says so when the chunk has no artifacts at all', async () => {
     stub.restore();
-    stub = stubRequestClient(hubClient, (method, path) => {
-      if (method === 'GET' && path === '/api/me') return OPERATOR_ME_RESPONSE;
-      if (method === 'GET' && path.endsWith('/work-items')) return { items: [] };
-      return { ...DETAIL, artifacts: [] };
-    });
+    stub = stubHubClient(chunkRoutes({ ...DETAIL, artifacts: [] }));
     const el = await open(`/board/chunk/${CHUNK_ID}?tab=artifacts`);
 
     expect(el.querySelector('[data-testid="artifacts-tab-nav-empty"]')?.textContent).toContain('No artifacts yet');
@@ -528,7 +536,11 @@ describe('Mobile chunk drill-down', () => {
 
   it('reports a failed chunk read rather than spinning on LOADING', async () => {
     stub.restore();
-    stub = stubRequestClient(hubClient, () => stubError(404, { detail: 'unknown chunk' }));
+    stub = stubHubClient({
+      'GET /api/me': () => OPERATOR_ME_RESPONSE,
+      'GET /api/chunks/{chunk_id}': () => stubError(404, { detail: 'unknown chunk' }),
+      'GET /api/chunks/{chunk_id}/work-items': () => stubError(404, { detail: 'unknown chunk' }),
+    });
     const el = await open(`/board/chunk/${CHUNK_ID}`);
 
     expect(el.querySelector('[data-testid="mobile-chunk-error"]')?.textContent).toContain('CHUNK UNAVAILABLE');
@@ -541,7 +553,7 @@ describe('Mobile chunk drill-down', () => {
   // the surface most likely to *lose* a first-write-wins race — and the one where a
   // misreported race costs the most, since the notice is the only feedback there is.
 
-  const OPEN_QUESTION = {
+  const OPEN_QUESTION = questionView({
     question_id: 'qn_77',
     chunk_id: CHUNK_ID,
     question: 'Which API style?',
@@ -550,18 +562,20 @@ describe('Mobile chunk drill-down', () => {
     runner_id: 'rn_01',
     asked_at: '2026-07-16T11:20:00.000Z',
     answered: false,
-  };
+  });
+
+  type AnswerRoute = ReturnType<NonNullable<HubRoutes['POST /api/questions/{question_id}/answers']>>;
 
   /** Open the chunk page on a chunk parked on `OPEN_QUESTION`, with the answer POST
    * answering `answerResponse`, and submit an answer through the rendered controls. */
-  async function answerOnMobile(answerResponse: unknown): Promise<HTMLElement> {
+  async function answerOnMobile(answerResponse: AnswerRoute): Promise<HTMLElement> {
     stub.restore();
-    stub = stubRequestClient(hubClient, (method, path) => {
-      if (method === 'GET' && path === '/api/me') return OPERATOR_ME_RESPONSE;
-      if (method === 'POST' && path === '/api/questions/qn_77/answers') return answerResponse;
-      if (method === 'GET' && path.endsWith('/work-items')) return { items: [] };
-      return { ...DETAIL, status: 'waiting_on_human', questions: [OPEN_QUESTION] };
-    });
+    stub = stubHubClient(
+      chunkRoutes(
+        { ...DETAIL, status: 'waiting_on_human', questions: [OPEN_QUESTION] },
+        { 'POST /api/questions/{question_id}/answers': () => answerResponse },
+      ),
+    );
     const harness = await RouterTestingHarness.create();
     await harness.navigateByUrl(`/board/chunk/${CHUNK_ID}`, ChunkPage);
     await settle(harness.fixture);
@@ -581,6 +595,7 @@ describe('Mobile chunk drill-down', () => {
   it('renders a lost answer race as an outcome naming the winner, not "Answer failed."', async () => {
     const el = await answerOnMobile(
       stubError(409, {
+        detail: 'question already answered',
         won: false,
         question_id: 'qn_77',
         answer: 'rest',
@@ -602,26 +617,31 @@ describe('Mobile chunk drill-down', () => {
     expect(el.querySelector('[data-testid="mobile-chunk-action-outcome"]')).toBeNull();
   });
 
-  const OPEN_DECISION = {
+  const OPEN_DECISION = decisionView({
     decision_id: 'dc_77',
     chunk_id: CHUNK_ID,
     node_id: 'nd_gate',
     node_name: 'approve-gate',
     epoch: 1,
     submitted_at: '2026-07-16T11:20:00.000Z',
-    choices: [{ name: 'approve', description: '' }, { name: 'reject', description: '' }],
+    choices: [
+      { name: 'approve', description: '', requires_checks: false, would_override_red_checks: false },
+      { name: 'reject', description: '', requires_checks: false, would_override_red_checks: false },
+    ],
     check_results: [],
-  };
+  });
+
+  type ResolveRoute = ReturnType<NonNullable<HubRoutes['POST /api/decisions/{decision_id}/resolutions']>>;
 
   /** Open the chunk page parked on `OPEN_DECISION`, its resolve POST answering `resolveResponse`, and click a choice. */
-  async function resolveOnMobile(resolveResponse: unknown): Promise<HTMLElement> {
+  async function resolveOnMobile(resolveResponse: ResolveRoute): Promise<HTMLElement> {
     stub.restore();
-    stub = stubRequestClient(hubClient, (method, path) => {
-      if (method === 'GET' && path === '/api/me') return OPERATOR_ME_RESPONSE;
-      if (method === 'POST' && path === '/api/decisions/dc_77/resolutions') return resolveResponse;
-      if (method === 'GET' && path.endsWith('/work-items')) return { items: [] };
-      return { ...DETAIL, status: 'waiting_on_human', decision: OPEN_DECISION };
-    });
+    stub = stubHubClient(
+      chunkRoutes(
+        { ...DETAIL, status: 'waiting_on_human', decision: OPEN_DECISION },
+        { 'POST /api/decisions/{decision_id}/resolutions': () => resolveResponse },
+      ),
+    );
     const harness = await RouterTestingHarness.create();
     await harness.navigateByUrl(`/board/chunk/${CHUNK_ID}`, ChunkPage);
     await settle(harness.fixture);
@@ -658,16 +678,12 @@ describe('Mobile chunk drill-down', () => {
   it('shows an answered question’s delivery trail on the phone too', async () => {
     // Pinned on mobile so a mobile-only fork of the asks region cannot drop it silently.
     stub.restore();
-    stub = stubRequestClient(hubClient, (method, path) => {
-      if (method === 'GET' && path === '/api/me') return OPERATOR_ME_RESPONSE;
-      if (method === 'GET' && path.endsWith('/work-items')) return { items: [] };
-      return {
+    stub = stubHubClient(
+      chunkRoutes({
         ...DETAIL,
-        questions: [
-          { ...OPEN_QUESTION, answered: true, answer: 'rest', answered_by: 'alice', delivered: true },
-        ],
-      };
-    });
+        questions: [{ ...OPEN_QUESTION, answered: true, answer: 'rest', answered_by: 'alice', delivered: true }],
+      }),
+    );
     const el = await open(`/board/chunk/${CHUNK_ID}`);
 
     expect(el.querySelector('[data-testid="answered-by"]')?.textContent).toContain('alice');

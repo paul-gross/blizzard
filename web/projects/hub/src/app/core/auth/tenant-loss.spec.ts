@@ -3,9 +3,9 @@ import { TestBed } from '@angular/core/testing';
 import { QueryClient, provideTanStackQuery } from '@tanstack/angular-query-experimental';
 import { vi } from 'vitest';
 
-import { EVENT_SOURCE_FACTORY, FLEET_CLOCK, chunkCountsApiChunkCountsGet, hubClient, type MeResponse } from 'fleet';
+import { EVENT_SOURCE_FACTORY, FLEET_CLOCK, chunkCountsApiChunkCountsGet, type MeResponse } from 'fleet';
 import type { MeTenant } from 'fleet/shell';
-import { type RequestClientStub, stubError, stubRequestClient } from 'fleet/testing';
+import { type RequestClientStub, stubError, stubHubClient } from 'fleet/testing';
 import { LAST_TENANT_KEY, PAGE_RELOAD, TAB_TENANT_KEY, TenantContext } from './tenant-context';
 import { TENANT_CONFIRMED_MS } from './tenant-loss';
 import { provideTenantInterceptor } from './tenant.interceptor';
@@ -52,9 +52,10 @@ describe('TenantLoss — a board that loses its tenant', () => {
   beforeEach(() => {
     memberships = [ACME, GLOBEX];
     // Every tenant-scoped read answers 404 — the tenant is gone, or the record is.
-    stub = stubRequestClient(hubClient, (_method, path) =>
-      path === '/api/me' ? me(memberships) : stubError(404, { detail: 'not found' }),
-    );
+    stub = stubHubClient({
+      'GET /api/me': () => me(memberships),
+      'GET /api/chunk-counts': () => stubError(404, { detail: 'not found' }),
+    });
     reload = vi.fn();
     nowMs = Date.parse('2026-10-09T12:00:00Z');
     TestBed.configureTestingModule({

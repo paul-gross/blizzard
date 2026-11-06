@@ -3,8 +3,7 @@ import { TestBed } from '@angular/core/testing';
 import { QueryClient, provideTanStackQuery } from '@tanstack/angular-query-experimental';
 import { vi } from 'vitest';
 
-import { hubClient } from 'fleet';
-import { type RequestClientStub, stubRequestClient } from 'fleet/testing';
+import { graphView, type RequestClientStub, stubHubClient } from 'fleet/testing';
 import { injectGraphLifecycleMutation } from './graph-lifecycle.mutations';
 
 describe('injectGraphLifecycleMutation (issue #101)', () => {
@@ -12,7 +11,10 @@ describe('injectGraphLifecycleMutation (issue #101)', () => {
   let queryClient: QueryClient;
 
   beforeEach(() => {
-    stub = stubRequestClient(hubClient, () => ({}));
+    stub = stubHubClient({
+      'POST /api/graphs/{graph_id}/retire': (_request, { graph_id }) => graphView({ graph_id, enabled: false, retired: true }),
+      'POST /api/graphs/{graph_id}/enable': (_request, { graph_id }) => graphView({ graph_id }),
+    });
     queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
     TestBed.configureTestingModule({
       providers: [provideZonelessChangeDetection(), provideTanStackQuery(queryClient)],

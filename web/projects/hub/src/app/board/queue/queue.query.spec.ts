@@ -2,8 +2,7 @@ import { Component, input, provideZonelessChangeDetection } from '@angular/core'
 import { TestBed } from '@angular/core/testing';
 import { QueryClient, provideTanStackQuery } from '@tanstack/angular-query-experimental';
 
-import { hubClient } from 'fleet';
-import { type RequestClientStub, stubRequestClient, settle } from 'fleet/testing';
+import { backlogPeekEntry, type RequestClientStub, stubHubClient, settle } from 'fleet/testing';
 import { injectHubBacklogQuery } from './queue.query';
 
 /** A minimal host so {@link injectHubBacklogQuery}'s reactive `canReorder`
@@ -16,16 +15,13 @@ class BacklogQueryHost {
   readonly query = injectHubBacklogQuery(this.canReorder);
 }
 
+const BACKLOG_ENTRY = backlogPeekEntry({ chunk_id: 'ch_backlog_1', position: 0 });
+
 describe('injectHubBacklogQuery (bzh:ranking-is-per-list)', () => {
   let stub: RequestClientStub;
 
   beforeEach(() => {
-    stub = stubRequestClient(hubClient, (method, path) => {
-      if (path === '/api/backlog') {
-        return { entries: [{ chunk_id: 'ch_backlog_1', graph_id: 'gr_1', position: 0, work_refs: [] }] };
-      }
-      return {};
-    });
+    stub = stubHubClient({ 'GET /api/backlog': () => ({ entries: [BACKLOG_ENTRY], next_cursor: null }) });
     TestBed.configureTestingModule({
       providers: [
         provideZonelessChangeDetection(),
@@ -56,9 +52,7 @@ describe('injectHubBacklogQuery (bzh:ranking-is-per-list)', () => {
     await settle(fixture);
 
     expect(stub.forRoute('/api/backlog', 'GET')).toHaveLength(1);
-    expect(fixture.componentInstance.query.data()).toEqual([
-      { chunk_id: 'ch_backlog_1', graph_id: 'gr_1', position: 0, work_refs: [] },
-    ]);
+    expect(fixture.componentInstance.query.data()).toEqual([BACKLOG_ENTRY]);
   });
 
   it('starts firing once the identity resolves queue:reorder mid-life — the gate re-evaluates, not a one-shot check', async () => {
@@ -75,14 +69,13 @@ describe('injectHubBacklogQuery (bzh:ranking-is-per-list)', () => {
 
   it('drains a multi-page backlog and concatenates the pages in order (blizzard#526)', async () => {
     let calls = 0;
-    stub = stubRequestClient(hubClient, (method, path) => {
-      if (method === 'GET' && path === '/api/backlog') {
+    stub = stubHubClient({
+      'GET /api/backlog': () => {
         calls += 1;
         return calls === 1
-          ? { entries: [{ chunk_id: 'ch_backlog_1', graph_id: 'gr_1', position: 0, work_refs: [] }], next_cursor: 'cursor-1' }
-          : { entries: [{ chunk_id: 'ch_backlog_2', graph_id: 'gr_1', position: 1, work_refs: [] }], next_cursor: null };
-      }
-      return {};
+          ? { entries: [BACKLOG_ENTRY], next_cursor: 'cursor-1' }
+          : { entries: [backlogPeekEntry({ chunk_id: 'ch_backlog_2', position: 1 })], next_cursor: null };
+      },
     });
     const fixture = TestBed.createComponent(BacklogQueryHost);
     fixture.componentRef.setInput('canReorder', true);

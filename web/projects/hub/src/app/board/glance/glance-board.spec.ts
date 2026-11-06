@@ -2,9 +2,26 @@ import { provideZonelessChangeDetection, signal } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { provideRouter } from '@angular/router';
 import { QueryClient, provideTanStackQuery } from '@tanstack/angular-query-experimental';
-import { FLEET_CLOCK, hubClient } from 'fleet';
+import { type ChunkSummary, FLEET_CLOCK } from 'fleet';
 import { RUNNER_HOST_NAMES } from 'fleet/shell';
-import { OPERATOR_ME_RESPONSE, type RequestClientStub, settle, stubError, stubRequestClient } from 'fleet/testing';
+import {
+  OPERATOR_ME_RESPONSE,
+  type RequestClientStub,
+  backlogPeekEntry,
+  chunkSummary,
+  chunkUsageTotalView,
+  decisionView,
+  fleetSpendView,
+  projectView,
+  queuePeekEntry,
+  questionView,
+  runnerRegistryView,
+  settle,
+  stubError,
+  stubHubClient,
+  workItemEntry,
+  workRefView,
+} from 'fleet/testing';
 
 import { vi } from 'vitest';
 
@@ -13,173 +30,163 @@ import { GlanceBoard } from './glance-board';
 const NOW = Date.now();
 const completedAt = (ageMs: number) => new Date(NOW - ageMs).toISOString();
 
-/** A fixture chunk carrying the summary fields the hub always sends, at their resting values. */
-const asWire = <T extends object>(chunk: T) => ({ graph_name: null, graph_progress: [], latest_bounce: null, bounce_count: 0, ...chunk });
+/** The hub routes a spec declares — any subset of the hub's operations. */
+type HubRoutes = Parameters<typeof stubHubClient>[0];
 
 /**
  * `chunk-lanes.ts`'s lanes decide where in the list a chunk lands — this fixture
  * picks a chunk for every lane, plus terminal chunks outside the rolling window
  * that the list leaves out.
  */
-const CHUNKS = [
-  {
+const CHUNKS: ChunkSummary[] = [
+  chunkSummary({
     chunk_id: 'ch_01needshuman0000000000000000',
     graph_id: 'gr_1',
     status: 'needs_human',
     current_node_id: 'nd_review',
     current_node_name: 'review',
-    model: 'claude-opus-4-8',
     runner_id: 'r1',
-  },
-  {
+  }),
+  chunkSummary({
     chunk_id: 'ch_01waitinghuman00000000000000',
     graph_id: 'gr_1',
     status: 'waiting_on_human',
     current_node_id: 'nd_build',
     current_node_name: 'build',
-    model: 'claude-opus-4-8',
     runner_id: 'r2',
-  },
-  {
+  }),
+  chunkSummary({
     chunk_id: 'ch_01running000000000000000000',
     graph_id: 'gr_1',
     graph_name: 'default',
     status: 'running',
     current_node_id: 'nd_build',
     current_node_name: 'build',
-    model: 'claude-opus-4-8',
     runner_id: 'r3',
     runner_name: 'r-claude',
     project_id: 'pj_alpha',
-    cost: { cost_usd: 2.03, cost_partial: false, input_tokens: 0, output_tokens: 0, cache_read_tokens: 0, cache_create_tokens: 0 },
-  },
-  {
+    cost: chunkUsageTotalView({ cost_usd: 2.03, input_tokens: 0, output_tokens: 0, cache_read_tokens: 0, cache_create_tokens: 0 }),
+  }),
+  chunkSummary({
     chunk_id: 'ch_01readyfirst0000000000000000',
     graph_id: 'gr_1',
     status: 'ready',
     current_node_id: 'nd_test',
     current_node_name: 'test',
-    model: 'claude-opus-4-8',
     runner_id: null,
-  },
-  {
+  }),
+  chunkSummary({
     chunk_id: 'ch_01readysecond000000000000000',
     graph_id: 'gr_1',
     status: 'ready',
     current_node_id: 'nd_build',
     current_node_name: 'build',
-    model: 'claude-opus-4-8',
     runner_id: null,
-  },
-  {
+  }),
+  chunkSummary({
     chunk_id: 'ch_01donerecent0000000000000000',
     graph_id: 'gr_1',
     status: 'done',
     terminal: true,
     completed_at: completedAt(60 * 60 * 1000),
     current_node_id: null,
-    model: 'claude-opus-4-8',
     runner_id: null,
-    work_refs: [{ label: 'blizzard#79' }],
-  },
-  {
+    work_refs: [workRefView({ label: 'blizzard#79' })],
+  }),
+  chunkSummary({
     chunk_id: 'ch_01stoppedrecent00000000000000',
     graph_id: 'gr_1',
     status: 'stopped',
     terminal: true,
     completed_at: completedAt(2 * 60 * 60 * 1000),
     current_node_id: null,
-    model: 'claude-opus-4-8',
     runner_id: null,
-  },
-  {
+  }),
+  chunkSummary({
     chunk_id: 'ch_01doneold00000000000000000000',
     graph_id: 'gr_1',
     status: 'done',
     terminal: true,
     completed_at: completedAt(49 * 60 * 60 * 1000),
     current_node_id: null,
-    model: 'claude-opus-4-8',
     runner_id: null,
-  },
-  {
+  }),
+  chunkSummary({
     chunk_id: 'ch_01donemissing000000000000000',
     graph_id: 'gr_1',
     status: 'done',
     terminal: true,
     completed_at: null,
     current_node_id: null,
-    model: 'claude-opus-4-8',
     runner_id: null,
-  },
-  {
+  }),
+  chunkSummary({
     chunk_id: 'ch_01notready00000000000000000',
     graph_id: 'gr_1',
     status: 'not_ready',
     current_node_id: null,
-    model: 'claude-opus-4-8',
     runner_id: null,
-  },
-  {
+  }),
+  chunkSummary({
     chunk_id: 'ch_01notreadylater000000000000',
     graph_id: 'gr_1',
     status: 'not_ready',
     current_node_id: null,
-    model: 'claude-opus-4-8',
     runner_id: null,
-  },
-].map(asWire);
+  }),
+];
 
 // The backlog's hub order deliberately differs from the chunks list's order.
 const BACKLOG = [
-  { chunk_id: 'ch_01notreadylater000000000000', graph_id: 'gr_1', position: 0, work_refs: [] },
-  { chunk_id: 'ch_01notready00000000000000000', graph_id: 'gr_1', position: 1, work_refs: [] },
+  backlogPeekEntry({ chunk_id: 'ch_01notreadylater000000000000', graph_id: 'gr_1', position: 0 }),
+  backlogPeekEntry({ chunk_id: 'ch_01notready00000000000000000', graph_id: 'gr_1', position: 1 }),
 ];
 
 const DECISIONS = [
-  {
+  decisionView({
     decision_id: 'dc_1',
     chunk_id: 'ch_01needshuman0000000000000000',
     node_id: 'nd_gate',
     node_name: 'approve-gate',
     epoch: 1,
     submitted_at: '2026-07-16T00:00:01Z',
-    choices: [{ name: 'approve', description: '' }],
-  },
+    choices: [{ name: 'approve', description: '', requires_checks: false, would_override_red_checks: false }],
+    check_results: [],
+  }),
 ];
 
 // Two projects, so the cards carry their project's colour on All.
 const PROJECTS = {
   projects: [
-    { project_id: 'pj_alpha', slug: 'alpha', name: 'Alpha', color: 'teal' },
-    { project_id: 'pj_beta', slug: 'beta', name: 'Beta', color: 'pink' },
+    projectView({ project_id: 'pj_alpha', slug: 'alpha', name: 'Alpha', color: 'teal' }),
+    projectView({ project_id: 'pj_beta', slug: 'beta', name: 'Beta', color: 'pink' }),
   ],
 };
 
 // The API's dispatch order deliberately differs from the chunks list's order.
 const QUEUE = [
-  { chunk_id: 'ch_01readysecond000000000000000', graph_id: 'gr_1', position: 0 },
-  { chunk_id: 'ch_01readyfirst0000000000000000', graph_id: 'gr_1', position: 1 },
+  queuePeekEntry({ chunk_id: 'ch_01readysecond000000000000000', graph_id: 'gr_1', position: 0 }),
+  queuePeekEntry({ chunk_id: 'ch_01readyfirst0000000000000000', graph_id: 'gr_1', position: 1 }),
 ];
 
 // The open ask names the waiting_on_human fixture above, whose card carries its question.
 const QUESTIONS = [
-  {
+  questionView({
     question_id: 'qn_01ask00000000000000000000000',
     chunk_id: 'ch_01waitinghuman00000000000000',
     runner_id: 'r2',
     question: '401 vs 403 for expired tokens?',
     options: [],
-  },
+  }),
 ];
 
 const RUNNERS = [
-  { runner_id: 'r1', workspace_id: 'ws', registered_at: '2026-07-20T00:00:00Z', last_seen_at: '2026-07-20T00:00:00Z', online: true, hub_paused: false },
-  { runner_id: 'r2', workspace_id: 'ws', registered_at: '2026-07-20T00:00:00Z', last_seen_at: '2026-07-20T00:00:00Z', online: true, hub_paused: false },
-  { runner_id: 'r3', workspace_id: 'ws', registered_at: '2026-07-20T00:00:00Z', last_seen_at: '2026-07-20T00:00:00Z', online: false, hub_paused: false },
+  runnerRegistryView({ runner_id: 'r1', workspace_id: 'ws', registered_at: '2026-07-20T00:00:00Z', last_seen_at: '2026-07-20T00:00:00Z', online: true, connection: 'online' }),
+  runnerRegistryView({ runner_id: 'r2', workspace_id: 'ws', registered_at: '2026-07-20T00:00:00Z', last_seen_at: '2026-07-20T00:00:00Z', online: true, connection: 'online' }),
+  runnerRegistryView({ runner_id: 'r3', workspace_id: 'ws', registered_at: '2026-07-20T00:00:00Z', last_seen_at: '2026-07-20T00:00:00Z', online: false, connection: 'offline' }),
 ];
 
-const SPEND = {
+const SPEND = fleetSpendView({
   cost_usd: 18.4,
   cost_partial: false,
   input_tokens: 4_000_000,
@@ -187,7 +194,9 @@ const SPEND = {
   cache_read_tokens: 100_000,
   cache_create_tokens: 0,
   since: '2026-07-20T00:00:00Z',
-};
+});
+
+const HEALTH = { status: 'ok', service: 'blizzard-hub', version: '0.0.0', overridden: [] };
 
 const ids = (el: HTMLElement): (string | null)[] =>
   [...el.querySelectorAll('[data-testid="glance-list"] > li')].map((li) => li.getAttribute('data-chunk') ?? li.getAttribute('data-testid'));
@@ -198,21 +207,19 @@ describe('GlanceBoard — one list and the vitals', () => {
   let stub: RequestClientStub;
 
   /** Answer the board's reads, `overrides` first. */
-  function stubHub(overrides: (method: string, path: string) => unknown = () => undefined): void {
-    stub = stubRequestClient(hubClient, (method, path) => {
-      const override = overrides(method, path);
-      if (override !== undefined) return override;
-      if (method === 'GET' && path === '/api/chunks') return { chunks: CHUNKS, next_cursor: null };
-      if (method === 'GET' && path === '/api/queue') return { entries: QUEUE };
-      if (method === 'GET' && path === '/api/backlog') return { entries: BACKLOG };
-      if (method === 'GET' && path === '/api/me') return OPERATOR_ME_RESPONSE;
-      if (method === 'GET' && path === '/api/questions') return QUESTIONS;
-      if (method === 'GET' && path === '/api/decisions') return { decisions: DECISIONS };
-      if (method === 'GET' && path === '/api/projects') return PROJECTS;
-      if (method === 'GET' && path === '/api/runners') return { runners: RUNNERS };
-      if (method === 'GET' && path === '/api/health') return { status: 'ok' };
-      if (method === 'GET' && path === '/api/spend') return SPEND;
-      return {};
+  function stubHub(overrides: HubRoutes = {}): void {
+    stub = stubHubClient({
+      'GET /api/chunks': () => ({ chunks: CHUNKS, next_cursor: null }),
+      'GET /api/queue': () => ({ entries: QUEUE, next_cursor: null }),
+      'GET /api/backlog': () => ({ entries: BACKLOG, next_cursor: null }),
+      'GET /api/me': () => OPERATOR_ME_RESPONSE,
+      'GET /api/questions': () => QUESTIONS,
+      'GET /api/decisions': () => ({ decisions: DECISIONS }),
+      'GET /api/projects': () => PROJECTS,
+      'GET /api/runners': () => ({ runners: RUNNERS }),
+      'GET /api/health': () => HEALTH,
+      'GET /api/spend': () => SPEND,
+      ...overrides,
     });
   }
 
@@ -253,7 +260,7 @@ describe('GlanceBoard — one list and the vitals', () => {
 
   it('keeps the backlog in the chunk read\'s order, unread, without queue:reorder', async () => {
     stub.restore();
-    stubHub((method, path) => (method === 'GET' && path === '/api/me' ? { ...OPERATOR_ME_RESPONSE, permissions: [] } : undefined));
+    stubHub({ 'GET /api/me': () => ({ ...OPERATOR_ME_RESPONSE, permissions: [] }) });
     const fixture = TestBed.createComponent(GlanceBoard);
     await settle(fixture);
 
@@ -295,7 +302,7 @@ describe('GlanceBoard — one list and the vitals', () => {
 
   it('shows the list\'s error state when the chunks read fails', async () => {
     stub.restore();
-    stubHub((method, path) => (method === 'GET' && path === '/api/chunks' ? stubError(503, { detail: 'unavailable' }) : undefined));
+    stubHub({ 'GET /api/chunks': () => stubError(503, { detail: 'unavailable' }) });
     const fixture = TestBed.createComponent(GlanceBoard);
     await settle(fixture);
     const el = fixture.nativeElement as HTMLElement;
@@ -320,9 +327,7 @@ describe('GlanceBoard — one list and the vitals', () => {
 
   it('leaves a retired runner out of the runners-up denominator', async () => {
     stub.restore();
-    stubHub((method, path) =>
-      method === 'GET' && path === '/api/runners' ? { runners: [...RUNNERS, { ...RUNNERS[2], runner_id: 'r4', retired: true }] } : undefined,
-    );
+    stubHub({ 'GET /api/runners': () => ({ runners: [...RUNNERS, { ...RUNNERS[2], runner_id: 'r4', retired: true }] }) });
     const fixture = TestBed.createComponent(GlanceBoard);
     await settle(fixture);
     const el = fixture.nativeElement as HTMLElement;
@@ -364,28 +369,26 @@ describe('GlanceBoard — one list and the vitals', () => {
 // A subscription-only fleet: no billed cost anywhere, only a runner-reported estimate —
 // the glance board's combined figure reads `~$0.07` on its own rather than a plain
 // billed $0.00.
-const ESTIMATE_CHUNKS = [
-  {
+const ESTIMATE_CHUNKS: ChunkSummary[] = [
+  chunkSummary({
     chunk_id: 'ch_01estimaterun0000000000000',
     graph_id: 'gr_1',
     status: 'running',
     current_node_id: 'nd_build',
     current_node_name: 'build',
-    model: 'claude-opus-4-8',
     runner_id: 'r1',
-    cost: {
+    cost: chunkUsageTotalView({
       cost_usd: 0,
-      cost_partial: false,
       estimated_cost_usd: 0.07,
       input_tokens: 0,
       output_tokens: 0,
       cache_read_tokens: 0,
       cache_create_tokens: 0,
-    },
-  },
-].map(asWire);
+    }),
+  }),
+];
 
-const ESTIMATE_SPEND = {
+const ESTIMATE_SPEND = fleetSpendView({
   cost_usd: 0,
   cost_partial: false,
   estimated_cost_usd: 0.07,
@@ -394,21 +397,23 @@ const ESTIMATE_SPEND = {
   cache_read_tokens: 0,
   cache_create_tokens: 0,
   since: '2026-07-20T00:00:00Z',
-};
+});
 
 describe('GlanceBoard — cost estimate, no billed cost', () => {
   let stub: RequestClientStub;
 
   beforeEach(async () => {
-    stub = stubRequestClient(hubClient, (method, path) => {
-      if (method === 'GET' && path === '/api/chunks') return { chunks: ESTIMATE_CHUNKS, next_cursor: null };
-      if (method === 'GET' && path === '/api/queue') return { entries: [] };
-      if (method === 'GET' && path === '/api/me') return OPERATOR_ME_RESPONSE;
-      if (method === 'GET' && path === '/api/questions') return [];
-      if (method === 'GET' && path === '/api/runners') return { runners: [] };
-      if (method === 'GET' && path === '/api/health') return { status: 'ok' };
-      if (method === 'GET' && path === '/api/spend') return ESTIMATE_SPEND;
-      return {};
+    stub = stubHubClient({
+      'GET /api/chunks': () => ({ chunks: ESTIMATE_CHUNKS, next_cursor: null }),
+      'GET /api/queue': () => ({ entries: [], next_cursor: null }),
+      'GET /api/backlog': () => ({ entries: [], next_cursor: null }),
+      'GET /api/me': () => OPERATOR_ME_RESPONSE,
+      'GET /api/questions': () => [],
+      'GET /api/decisions': () => ({ decisions: [] }),
+      'GET /api/projects': () => ({ projects: [] }),
+      'GET /api/runners': () => ({ runners: [] }),
+      'GET /api/health': () => HEALTH,
+      'GET /api/spend': () => ESTIMATE_SPEND,
     });
     await TestBed.configureTestingModule({
       imports: [GlanceBoard],
@@ -444,33 +449,37 @@ describe('GlanceBoard — work items', () => {
   const CHUNK_ID = 'ch_01workitems00000000000000000';
 
   beforeEach(async () => {
-    stub = stubRequestClient(hubClient, (method, path) => {
-      if (method === 'GET' && path === '/api/chunks') {
-        return {
-          chunks: [
-            {
-              chunk_id: CHUNK_ID,
-              graph_id: 'gr_1',
-              status: 'running',
-              current_node_id: 'nd_build',
-              current_node_name: 'build',
-              runner_id: 'r1',
-              work_refs: [{ source: 'wsrc_api', ref: '4', label: 'toy-api#4' }],
-            },
-          ].map(asWire),
-          next_cursor: null,
-        };
-      }
-      if (method === 'GET' && path === '/api/work-items') {
-        return {
-          chunks: { [CHUNK_ID]: [{ source: 'wsrc_api', ref: '4', label: 'toy-api#4', title: 'Add idempotency keys to POST /payments' }] },
-        };
-      }
-      if (method === 'GET' && path === '/api/me') return OPERATOR_ME_RESPONSE;
-      if (method === 'GET' && path === '/api/runners') return { runners: [] };
-      if (method === 'GET' && path === '/api/questions') return [];
-      if (method === 'GET' && path === '/api/spend') return SPEND;
-      return {};
+    stub = stubHubClient({
+      'GET /api/chunks': () => ({
+        chunks: [
+          chunkSummary({
+            chunk_id: CHUNK_ID,
+            graph_id: 'gr_1',
+            status: 'running',
+            current_node_id: 'nd_build',
+            current_node_name: 'build',
+            runner_id: 'r1',
+            work_refs: [workRefView({ source: 'wsrc_api', ref: '4', label: 'toy-api#4', web_url: null })],
+          }),
+        ],
+        next_cursor: null,
+      }),
+      'GET /api/work-items': () => ({
+        chunks: {
+          [CHUNK_ID]: [
+            workItemEntry({ source: 'wsrc_api', ref: '4', label: 'toy-api#4', title: 'Add idempotency keys to POST /payments', web_url: null }),
+          ],
+        },
+      }),
+      'GET /api/queue': () => ({ entries: [], next_cursor: null }),
+      'GET /api/backlog': () => ({ entries: [], next_cursor: null }),
+      'GET /api/me': () => OPERATOR_ME_RESPONSE,
+      'GET /api/runners': () => ({ runners: [] }),
+      'GET /api/questions': () => [],
+      'GET /api/decisions': () => ({ decisions: [] }),
+      'GET /api/projects': () => ({ projects: [] }),
+      'GET /api/health': () => HEALTH,
+      'GET /api/spend': () => SPEND,
     });
     await TestBed.configureTestingModule({
       imports: [GlanceBoard],

@@ -5,8 +5,7 @@ import { toSignal } from '@angular/core/rxjs-interop';
 import { ActivatedRoute, Router, provideRouter, withRouterConfig } from '@angular/router';
 import { RouterTestingHarness } from '@angular/router/testing';
 import { QueryClient, provideTanStackQuery } from '@tanstack/angular-query-experimental';
-import { hubClient } from 'fleet';
-import { OPERATOR_ME_RESPONSE, type RequestClientStub, stubRequestClient } from 'fleet/testing';
+import { assetArtifactView, chunkDetail, chunkSummary, OPERATOR_ME_RESPONSE, type RequestClientStub, stubHubClient } from 'fleet/testing';
 
 import { readDemoConfig } from './demo-config';
 import { DemoDirector } from './demo-director';
@@ -26,39 +25,31 @@ import { DemoDirector } from './demo-director';
 const CHUNK = 'ch_01KXKVVF1J3D6H6VYZ3XYN3YJ9';
 const ARTIFACTS = ['branch/main', 'review/findings'];
 
-const CHUNK_ROW = {
+const CHUNK_FIELDS = {
   chunk_id: CHUNK,
   graph_id: 'gr_1',
-  status: 'running',
+  status: 'running' as const,
   current_node_id: 'nd_build',
   current_node_name: 'build',
-  model: 'claude-opus-5',
   work_refs: [],
   runner_id: 'runner-local',
   environment_count: 1,
 };
 
-function hubRoutes(method: string, path: string): unknown {
-  if (method !== 'GET') return {};
-  if (path === '/api/me') return OPERATOR_ME_RESPONSE;
-  if (path === '/api/chunks') return { chunks: [CHUNK_ROW], next_cursor: null };
-  if (/^\/api\/chunks\/[^/]+$/.test(path)) {
-    return {
-      ...CHUNK_ROW,
+const HUB_ROUTES: Parameters<typeof stubHubClient>[0] = {
+  'GET /api/me': () => OPERATOR_ME_RESPONSE,
+  'GET /api/chunks': () => ({ chunks: [chunkSummary(CHUNK_FIELDS)], next_cursor: null }),
+  'GET /api/chunks/{chunk_id}': () =>
+    chunkDetail({
+      ...CHUNK_FIELDS,
       graph_name: 'default',
       latest_epoch: 1,
       history: [],
-      artifacts: ARTIFACTS.map((key, index) => ({
-        key,
-        kind: 'asset',
-        epoch: 1,
-        content: 'body',
-        recorded_at: `2026-07-16T11:0${index}:00.000Z`,
-      })),
-    };
-  }
-  return {};
-}
+      artifacts: ARTIFACTS.map((key, index) =>
+        assetArtifactView({ key, kind: 'asset', epoch: 1, content: 'body', recorded_at: `2026-07-16T11:0${index}:00.000Z` }),
+      ),
+    }),
+};
 
 /** The board stand-in: the dock, labelled with whatever `?chunk` names. */
 @Component({
@@ -102,7 +93,7 @@ describe('DemoDirector', () => {
   let director: DemoDirector;
 
   beforeEach(() => {
-    stub = stubRequestClient(hubClient, hubRoutes);
+    stub = stubHubClient(HUB_ROUTES);
     TestBed.configureTestingModule({
       providers: [
         provideZonelessChangeDetection(),
