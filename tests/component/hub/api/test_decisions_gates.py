@@ -7,12 +7,15 @@ first-write-wins, and ``requeue`` closes an escalation by supersession.
 
 from __future__ import annotations
 
+import contextlib
 from datetime import timedelta
 from pathlib import Path
 from typing import Any
 
+import pytest
 import sqlalchemy as sa
 
+from blizzard.hub.domain.execution import apply
 from blizzard.hub.store import schema as s
 from tests.support.scaffolding import (
     HubHarness,
@@ -177,6 +180,25 @@ def test_graph_gate_opens_a_decision_and_parks(tmp_path: Path) -> None:
     open_list = resp.json()["decisions"]
     assert [d["decision_id"] for d in open_list] == [decision["decision_id"]]
     assert_all_timestamps_utc(resp.json())  # bzh:utc-instants — submitted_at
+
+
+def test_the_arrival_rolls_back_when_the_gate_open_fails(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    hub = build_hub(tmp_path)
+    chunk_id, nodes = _ingest(hub, _GATE_YAML)
+    _claim_and_lease(hub, chunk_id)
+
+    def _refuse(*_args: object, **_kwargs: object) -> None:
+        raise RuntimeError("gate arrival refused")
+
+    monkeypatch.setattr(apply, "open_graph_gate_on_arrival", _refuse)
+    with contextlib.suppress(RuntimeError):
+        hub.client.post(
+            f"/api/fleet/chunks/{chunk_id}/completions",
+            json=_completion(nodes["build"], choice="pass", artifacts=[_BUILD_ARTIFACT]),
+        )
+
+    detail = hub.client.get(f"/api/chunks/{chunk_id}").json()
+    assert detail["current_node_name"] == "build", "the transition rolled back with the failed gate open"
 
 
 def test_worker_transition_out_of_a_gate_is_rejected(tmp_path: Path) -> None:

@@ -7,11 +7,13 @@ an unresolvable target escalates to ``needs_human``; and a replay is idempotent.
 
 from __future__ import annotations
 
+import contextlib
 from pathlib import Path
 
 import httpx2
 import pytest
 
+from blizzard.hub.domain.execution import apply
 from blizzard.hub.domain.execution.auth.route import ROUTE_TOKEN_ENFORCE
 from tests.support.scaffolding import HubHarness, build_hub, emitted_events, pointer_token, report_lease
 
@@ -239,6 +241,22 @@ def test_a_cross_graph_gate_landing_opens_one_decision_even_on_replay(tmp_path: 
     assert decision["node_name"] == "build" and decision["epoch"] == 1
     assert _migrate(hub, chunk_id, node_id).json()["outcome"] == "migrated"
     assert [d["decision_id"] for d in hub.client.get("/api/decisions").json()["decisions"]] == [decision["decision_id"]]
+
+
+def test_the_landing_rolls_back_when_the_gate_open_fails(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    hub = build_hub(tmp_path)
+    chunk_id, node_id = _setup(hub, target_name="triage", mint_target=True, target_yaml=_GATE_TARGET_YAML)
+    source_id = hub.client.get(f"/api/chunks/{chunk_id}").json()["graph_id"]
+
+    def _refuse(*_args: object, **_kwargs: object) -> None:
+        raise RuntimeError("gate arrival refused")
+
+    monkeypatch.setattr(apply, "open_graph_gate_on_arrival", _refuse)
+    with contextlib.suppress(RuntimeError):
+        _migrate(hub, chunk_id, node_id)
+
+    detail = hub.client.get(f"/api/chunks/{chunk_id}").json()
+    assert detail["graph_id"] == source_id, "the migration rolled back with the failed gate open"
 
 
 def test_resolved_migration_gate_can_exit_after_a_new_claim(tmp_path: Path) -> None:
