@@ -10,7 +10,7 @@ from datetime import UTC, datetime, timedelta
 
 import pytest
 
-from blizzard.foundation.cadence_attention import AttentionReason
+from blizzard.foundation.cadence_attention import AttentionReason, ErrandState
 from blizzard.foundation.chunk_status import ChunkStatus
 from blizzard.foundation.run_mode import RunMode
 from blizzard.foundation.work_items import WorkItemClosure
@@ -21,8 +21,11 @@ from blizzard.hub.domain.cadence.errands import (
     LastRun,
     RunOutcome,
     chore_errands,
+    due_at,
     eligible_at,
+    errand_state,
     errands,
+    holder_of,
     is_due,
 )
 from blizzard.hub.domain.cadence.model import (
@@ -35,6 +38,7 @@ from blizzard.hub.domain.cadence.model import (
     Rhythm,
     ScopeSelection,
 )
+from blizzard.hub.domain.chunk.model import ChunkFacts
 from blizzard.hub.domain.garden.routines import Routine
 from blizzard.hub.domain.garden.scopes import Scope
 
@@ -407,3 +411,98 @@ def test_a_never_run_errand_under_a_spacing_beside_its_schedule_waits_only_for_t
     errand = _errand(joined_at=_AT)
     assert not is_due(rhythm, errand, None, _AT + timedelta(hours=1))
     assert is_due(rhythm, errand, None, _AT.replace(hour=19))
+
+
+# --- when an errand is due, and where it stands ---
+
+_NOW = _AT + timedelta(days=3)
+
+
+def _holds_at_due_at(rhythm: Rhythm, errand: Errand, last_run: LastRun | None) -> datetime:
+    """``due_at`` of the case, held to be the first instant the rule holds."""
+    at = due_at(rhythm, errand, last_run)
+    assert at is not None
+    assert is_due(rhythm, errand, last_run, at)
+    assert not is_due(rhythm, errand, last_run, at - timedelta(seconds=1))
+    return at
+
+
+def test_a_never_run_spacing_alone_is_due_at_the_instant_it_joined() -> None:
+    joined = _AT + timedelta(hours=2)
+    assert _holds_at_due_at(_rhythm(spacing="1d"), _errand(joined), None) == joined
+
+
+def test_a_spacing_alone_is_due_at_eligibility() -> None:
+    run = _done(_AT)
+    rhythm = _rhythm(spacing="1d", anchor="finished")
+    assert _holds_at_due_at(rhythm, _errand(), run) == eligible_at(rhythm, run)
+
+
+def test_a_schedule_alone_is_due_at_the_first_moment_after_the_reference() -> None:
+    assert _holds_at_due_at(_rhythm(cron=_CRON), _errand(), None) == _AT.replace(hour=19)
+    run = _done(_AT.replace(hour=19))
+    assert _holds_at_due_at(_rhythm(cron=_CRON), _errand(), run) == _AT.replace(hour=19) + timedelta(days=1)
+
+
+def test_a_schedule_and_a_spacing_are_due_at_the_first_moment_at_or_after_eligibility() -> None:
+    run = _done(_AT.replace(hour=19))
+    rhythm = _rhythm(cron=_CRON, spacing="30h", anchor="scheduled")
+    eligible = eligible_at(rhythm, run)
+    assert eligible == _AT.replace(hour=19) + timedelta(hours=30)  # 01:00, between two evening moments
+    assert _holds_at_due_at(rhythm, _errand(), run) == _AT.replace(hour=19) + timedelta(days=2)
+
+
+def test_a_moment_that_is_exactly_eligibility_is_the_due_instant() -> None:
+    run = _done(_AT.replace(hour=19))
+    assert _holds_at_due_at(_rhythm(cron=_CRON, spacing="1d", anchor="scheduled"), _errand(), run) == (
+        _AT.replace(hour=19) + timedelta(days=1)
+    )
+
+
+def test_a_missed_moment_is_due_in_the_past() -> None:
+    assert due_at(_rhythm(cron=_CRON), _errand(), _done(_AT.replace(hour=19))) < _NOW  # type: ignore[operator]
+
+
+def test_a_live_last_run_has_no_due_instant() -> None:
+    assert due_at(_rhythm(spacing="1d"), _errand(), LastRun(_AT)) is None
+
+
+def _state(
+    last_run: LastRun | None,
+    *,
+    stopping: Sequence[Attention] = (),
+    retired: bool = False,
+    rhythm: Rhythm | None = None,
+    now: datetime = _NOW,
+) -> ErrandState:
+    return errand_state(
+        rhythm or _rhythm(spacing="1d"), _errand(), last_run, stopping=stopping, retired=retired, now=now
+    )
+
+
+def test_an_errand_reads_due_running_or_waiting() -> None:
+    assert _state(None) is ErrandState.DUE
+    assert _state(LastRun(_AT)) is ErrandState.RUNNING
+    assert _state(_done(_NOW - timedelta(hours=2))) is ErrandState.WAITING
+
+
+def test_attention_stops_an_errand_even_while_its_last_run_is_live() -> None:
+    stop = Attention(AttentionReason.SCOPE_RETIRED, "nightly", "main")
+    assert _state(LastRun(_AT), stopping=[stop]) is ErrandState.STOPPED
+    assert _state(None, stopping=[stop]) is ErrandState.STOPPED
+
+
+def test_attention_on_another_scope_does_not_stop_the_errand() -> None:
+    assert _state(None, stopping=[Attention(AttentionReason.SCOPE_RETIRED, "nightly", "other")]) is ErrandState.DUE
+
+
+def test_a_retired_cadence_stops_every_errand() -> None:
+    assert _state(None, retired=True) is ErrandState.STOPPED
+    assert _state(LastRun(_AT), retired=True) is ErrandState.STOPPED
+
+
+def test_the_holder_of_a_run_names_its_chunk() -> None:
+    held = {"chk_a": ChunkFacts(minted=True), "chk_b": ChunkFacts(minted=True)}
+    holder = holder_of(held)
+    assert holder is not None
+    assert holder.chunk_id == "chk_b"

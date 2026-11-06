@@ -29,6 +29,8 @@ from blizzard.hub.auth.permissions import Permission, may_admit
 from blizzard.hub.composition import TenantServices
 from blizzard.hub.domain.cadence.model import (
     ALL_SCOPES,
+    Anchor,
+    Attention,
     Cadence,
     CadenceAdmissionRefused,
     CadenceEdit,
@@ -40,6 +42,7 @@ from blizzard.hub.domain.cadence.model import (
     ScopeSelection,
 )
 from blizzard.hub.domain.cadence.services import CadenceView as CadenceRead
+from blizzard.hub.domain.cadence.services import ErrandView
 from blizzard.hub.domain.config.errors import ConfigFieldError, ConfigRevisionConflict
 from blizzard.hub.domain.kernel.unset import UNSET
 from blizzard.hub.domain.projects.model import Project
@@ -48,12 +51,15 @@ from blizzard.wire.cadence import (
     CadenceCreateRequest,
     CadenceDocument,
     CadenceEditRequest,
+    CadenceErrandView,
     CadenceLifecycleRequest,
     CadenceScheduleDocument,
     CadenceScheduleView,
     CadenceView,
     ChoreDocument,
     ChoreView,
+    ErrandCountsView,
+    ErrandRunView,
 )
 
 _GUARDS = [Depends(reject_runner_principal), Depends(tenant_bound)]
@@ -103,6 +109,31 @@ def chore_scopes(chore: Chore) -> Literal["all"] | list[str] | None:
     return list(chore.spec.scopes) if selection is ScopeSelection.LISTED else None
 
 
+def _attention_view(item: Attention) -> CadenceAttentionView:
+    return CadenceAttentionView(reason=item.reason, chore=item.chore, scope=item.scope)
+
+
+def _errand_view(row: ErrandView) -> CadenceErrandView:
+    run = None if row.last_run is None else row.last_run.run
+    holder = None if run is None else run.holder
+    return CadenceErrandView(
+        chore=row.errand.chore.key,
+        scope=row.errand.scope_slug,
+        state=row.state,
+        attention=[_attention_view(a) for a in row.stopping],
+        last_run=None
+        if run is None
+        else ErrandRunView(
+            chunk_id=None if holder is None else holder.chunk_id,
+            status=None if holder is None else holder.status,
+            scheduled_at=iso_utc(run.minted_at),
+            started_at=None if holder is None or holder.started_at is None else iso_utc(holder.started_at),
+            finished_at=None if (finished := run.anchored_at(Anchor.FINISHED)) is None else iso_utc(finished),
+        ),
+        due_at=None if row.due_at is None else iso_utc(row.due_at),
+    )
+
+
 def _cadence_view(read: CadenceRead, labels: ProjectLabelFields) -> CadenceView:
     cadence = read.cadence
     rhythm = cadence.rhythm
@@ -129,7 +160,8 @@ def _cadence_view(read: CadenceRead, labels: ProjectLabelFields) -> CadenceView:
             )
             for chore in cadence.chores
         ],
-        attention=[CadenceAttentionView(reason=a.reason, chore=a.chore, scope=a.scope) for a in read.attention],
+        attention=[_attention_view(a) for a in read.attention],
+        errand_counts=ErrandCountsView(**{state.value: count for state, count in read.errand_counts.items()}),
         created_at=iso_utc(cadence.created_at),
         retired=cadence.retired,
         revision=cadence.revision,
@@ -245,6 +277,20 @@ def get_cadence(cadence_id: str, services: Services) -> CadenceView:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"unknown cadence {cadence_id}")
     labels = ProjectLabels.read(services, [read.cadence.project_id])
     return _cadence_view(read, labels.fields(read.cadence.project_id))
+
+
+@router.get(
+    "/cadences/{cadence_id}/errands",
+    response_model=list[CadenceErrandView],
+    dependencies=[Depends(require(Permission.FLEET_VIEW))],
+)
+def list_cadence_errands(cadence_id: str, services: Services) -> list[CadenceErrandView]:
+    """Every errand of the cadence — each chore over each scope — with its state (`due`, `running`, `waiting`, or
+    `stopped`), the attention that stops it, its last run, and when it is next due (`due_at`, null while running
+    or stopped), chore by chore in cadence order and by scope slug within a chore; 404 on an unknown id. A retired
+    cadence's errands are all `stopped`."""
+    cadence = _cadence_or_404(cadence_id, services)
+    return [_errand_view(row) for row in services.cadence_reading.errands(cadence)]
 
 
 def _cadence_edit(request: CadenceEditRequest) -> CadenceEdit:

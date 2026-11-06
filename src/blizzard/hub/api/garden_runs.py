@@ -22,6 +22,7 @@ from blizzard.hub.composition import TenantServices
 from blizzard.hub.domain.garden.runs.history import (
     DeliveredSet,
     DeliveredSetDelta,
+    RunCadence,
     RunDelta,
     RunEscalation,
     RunSummary,
@@ -33,6 +34,7 @@ from blizzard.wire.garden_run import (
     DeliveredSetView,
     GoneFindingView,
     ObservedFindingView,
+    RunCadenceView,
     RunDeltaView,
     RunEscalationView,
     RunRowView,
@@ -74,6 +76,18 @@ def _escalation_view(escalation: RunEscalation | None, names: GraphNames) -> Run
     )
 
 
+def _cadence_view(cadence: RunCadence | None) -> RunCadenceView | None:
+    if cadence is None:
+        return None
+    return RunCadenceView(
+        cadence_id=cadence.cadence_id,
+        cadence_slug=cadence.cadence_slug,
+        cadence_name=cadence.cadence_name,
+        chore_id=cadence.chore_id,
+        chore_key=cadence.chore_key,
+    )
+
+
 def _run_row_view(row: RunSummary, names: GraphNames, labels: ProjectLabelFields) -> RunRowView:
     return RunRowView(
         chunk_id=row.chunk_id,
@@ -84,6 +98,7 @@ def _run_row_view(row: RunSummary, names: GraphNames, labels: ProjectLabelFields
         outcome=row.outcome,
         escalation=_escalation_view(row.escalation, names),
         delivered=[_delivered_view(d) for d in row.delivered],
+        cadence=_cadence_view(row.cadence),
         **labels,
     )
 
@@ -124,6 +139,7 @@ def _run_delta_view(delta: RunDelta, names: GraphNames, labels: ProjectLabelFiel
         outcome=delta.outcome,
         escalation=_escalation_view(delta.escalation, names),
         sets=[_set_delta_view(s) for s in delta.sets],
+        cadence=_cadence_view(delta.cadence),
         **labels,
     )
 

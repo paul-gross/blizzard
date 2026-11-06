@@ -1782,6 +1782,62 @@
         "title": "CadenceEntry",
         "type": "object"
       },
+      "CadenceErrandView": {
+        "description": "One errand of a cadence \u2014 one chore over one scope \u2014 at the read.",
+        "properties": {
+          "attention": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/CadenceAttentionView"
+            },
+            "title": "Attention",
+            "type": "array"
+          },
+          "chore": {
+            "title": "Chore",
+            "type": "string"
+          },
+          "due_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Due At"
+          },
+          "last_run": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ErrandRunView"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "scope": {
+            "title": "Scope",
+            "type": "string"
+          },
+          "state": {
+            "$ref": "#/components/schemas/ErrandState",
+            "x-blizzard-open": true
+          }
+        },
+        "required": [
+          "chore",
+          "scope",
+          "state",
+          "attention",
+          "last_run",
+          "due_at"
+        ],
+        "title": "CadenceErrandView",
+        "type": "object"
+      },
       "CadenceLifecycleRequest": {
         "description": "Retire or re-enable a cadence; ``by`` is recorded on the lifecycle fact.",
         "properties": {
@@ -1881,6 +1937,15 @@
             "title": "Created At",
             "type": "string"
           },
+          "errand_counts": {
+            "$ref": "#/components/schemas/ErrandCountsView",
+            "default": {
+              "due": 0,
+              "running": 0,
+              "stopped": 0,
+              "waiting": 0
+            }
+          },
           "name": {
             "title": "Name",
             "type": "string"
@@ -1962,6 +2027,7 @@
           "anchor",
           "chores",
           "attention",
+          "errand_counts",
           "created_at",
           "retired",
           "revision",
@@ -5998,6 +6064,112 @@
         ],
         "title": "EnvelopeChoice",
         "type": "object"
+      },
+      "ErrandCountsView": {
+        "description": "A cadence's errands counted by state. A later state is a later field.",
+        "properties": {
+          "due": {
+            "default": 0,
+            "title": "Due",
+            "type": "integer"
+          },
+          "running": {
+            "default": 0,
+            "title": "Running",
+            "type": "integer"
+          },
+          "stopped": {
+            "default": 0,
+            "title": "Stopped",
+            "type": "integer"
+          },
+          "waiting": {
+            "default": 0,
+            "title": "Waiting",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "due",
+          "running",
+          "waiting",
+          "stopped"
+        ],
+        "title": "ErrandCountsView",
+        "type": "object"
+      },
+      "ErrandRunView": {
+        "description": "An errand's last run: the chunk holding its work item (``None`` when none could be resolved), the chunk's\nstatus, and when the run was scheduled, started, and finished.",
+        "properties": {
+          "chunk_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Chunk Id"
+          },
+          "finished_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Finished At"
+          },
+          "scheduled_at": {
+            "title": "Scheduled At",
+            "type": "string"
+          },
+          "started_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Started At"
+          },
+          "status": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ChunkStatus",
+                "x-blizzard-open": true
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "chunk_id",
+          "status",
+          "scheduled_at",
+          "started_at",
+          "finished_at"
+        ],
+        "title": "ErrandRunView",
+        "type": "object"
+      },
+      "ErrandState": {
+        "description": "Where an errand stands at a read: ``due`` \u2014 the next pass would mint it; ``running`` \u2014 its last run is live;\n``waiting`` \u2014 neither, until its next moment; ``stopped`` \u2014 its cadence is retired or attention stops it.",
+        "enum": [
+          "due",
+          "running",
+          "waiting",
+          "stopped"
+        ],
+        "title": "ErrandState",
+        "type": "string"
       },
       "EscalationCause": {
         "enum": [
@@ -14428,8 +14600,59 @@
         "title": "RoutineView",
         "type": "object"
       },
+      "RunCadenceView": {
+        "description": "The cadence errand that minted a run.",
+        "properties": {
+          "cadence_id": {
+            "title": "Cadence Id",
+            "type": "string"
+          },
+          "cadence_name": {
+            "title": "Cadence Name",
+            "type": "string"
+          },
+          "cadence_slug": {
+            "title": "Cadence Slug",
+            "type": "string"
+          },
+          "chore_id": {
+            "title": "Chore Id",
+            "type": "string"
+          },
+          "chore_key": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Chore Key"
+          }
+        },
+        "required": [
+          "cadence_id",
+          "cadence_slug",
+          "cadence_name",
+          "chore_id",
+          "chore_key"
+        ],
+        "title": "RunCadenceView",
+        "type": "object"
+      },
       "RunDeltaView": {
         "properties": {
+          "cadence": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/RunCadenceView"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "chunk_id": {
             "title": "Chunk Id",
             "type": "string"
@@ -14509,6 +14732,7 @@
           "outcome",
           "escalation",
           "sets",
+          "cadence",
           "project_id",
           "project_slug",
           "project_name"
@@ -14557,6 +14781,16 @@
       },
       "RunRowView": {
         "properties": {
+          "cadence": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/RunCadenceView"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "chunk_id": {
             "title": "Chunk Id",
             "type": "string"
@@ -14641,6 +14875,7 @@
           "outcome",
           "escalation",
           "delivered",
+          "cadence",
           "project_id",
           "project_slug",
           "project_name"
@@ -23786,6 +24021,53 @@
           }
         },
         "summary": "Enable Cadence",
+        "tags": [
+          "cadences"
+        ]
+      }
+    },
+    "/api/cadences/{cadence_id}/errands": {
+      "get": {
+        "description": "Every errand of the cadence \u2014 each chore over each scope \u2014 with its state (`due`, `running`, `waiting`, or\n`stopped`), the attention that stops it, its last run, and when it is next due (`due_at`, null while running\nor stopped), chore by chore in cadence order and by scope slug within a chore; 404 on an unknown id. A retired\ncadence's errands are all `stopped`.",
+        "operationId": "list_cadence_errands_api_cadences__cadence_id__errands_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "cadence_id",
+            "required": true,
+            "schema": {
+              "title": "Cadence Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/CadenceErrandView"
+                  },
+                  "title": "Response List Cadence Errands Api Cadences  Cadence Id  Errands Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List Cadence Errands",
         "tags": [
           "cadences"
         ]

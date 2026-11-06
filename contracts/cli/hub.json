@@ -1472,6 +1472,72 @@
           "path": "hub cadence enable",
           "short_help": "Re-enable a retired cadence SLUG."
         },
+        "errands": {
+          "help": "Cadence SLUG's errands \u2014 each chore over each scope \u2014 with its state, its last run, and when it is next due.\n\nA due errand mints on the next pass; due_at is empty while an errand is running or stopped.",
+          "params": [
+            {
+              "hidden": false,
+              "kind": "argument",
+              "name": "slug",
+              "opts": [
+                "slug"
+              ],
+              "required": true,
+              "secondary_opts": [],
+              "type": "text"
+            },
+            {
+              "help": "The project the record belongs to, by id or slug. Needed only when the tenant holds several projects; with one, the record goes to it.",
+              "hidden": false,
+              "kind": "option",
+              "name": "project",
+              "opts": [
+                "--project"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "text"
+            },
+            {
+              "help": "Print the raw response body as JSON.",
+              "hidden": false,
+              "kind": "option",
+              "name": "as_json",
+              "opts": [
+                "--json"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "boolean"
+            },
+            {
+              "help": "The tenant to act in, by id (default $BZ_HUB_TENANT); needed only when you belong to several.",
+              "hidden": false,
+              "kind": "option",
+              "name": "tenant",
+              "opts": [
+                "--tenant"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "text"
+            },
+            {
+              "help": "Hub API base URL (default $BZ_HUB_URL or http://127.0.0.1:8421).",
+              "hidden": false,
+              "kind": "option",
+              "name": "hub_url",
+              "opts": [
+                "--hub-url"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "text"
+            }
+          ],
+          "path": "hub cadence errands",
+          "short_help": "Cadence SLUG's errands \u2014 each chore over each scope \u2014 with its state, its last run, and when it is next due."
+        },
         "get": {
           "help": "One cadence's whole record \u2014 its rhythm, its chores with their ids, and its attention.",
           "params": [

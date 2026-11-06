@@ -23,6 +23,7 @@ from blizzard.hub.cli.views import Listing
 
 _FLAG_OFF_NOTICE = "note: cadences mint nothing until the flag cadences is on"
 _ANCHORS = click.Choice(["scheduled", "started", "finished"])
+_STATES = ("due", "running", "waiting", "stopped")
 _MODES = click.Choice([mode.value for mode in RunMode])
 
 
@@ -75,12 +76,33 @@ class CadenceDetail:
                 f"  chore {chore['key']}  {chore['chore_id']}  routine={chore['routine']}  "
                 f"{_scopes_text(chore.get('scopes'))}  mode={chore['mode']}{held}{note}"
             )
+        counts: dict[str, int] = body.get("errand_counts") or {}
+        yield "  errands: " + "  ".join(f"{state}={counts.get(state, 0)}" for state in _STATES)
         attention: Sequence[dict[str, Any]] = body.get("attention") or []
         if not attention:
             yield "  attention: none"
         for entry in attention:
             where = "".join(f"  {label}={entry[label]}" for label in ("chore", "scope") if entry.get(label) is not None)
             yield f"  attention: {entry['reason']}{where}"
+
+
+class ErrandListing(Listing):
+    empty = "no errands"
+
+    def line(self, row: Any) -> str:
+        run = row.get("last_run")
+        last = "last run: none"
+        if run is not None:
+            last = (
+                f"last run: {run.get('chunk_id') or 'unresolved'} {run.get('status') or 'unknown'} "
+                f"scheduled={run['scheduled_at']}"
+            )
+            if run.get("finished_at"):
+                last += f" finished={run['finished_at']}"
+        due = row.get("due_at") or "-"
+        attention: list[dict[str, Any]] = row.get("attention") or []
+        stopped = "".join(f"  {a['reason']}" for a in attention)
+        return f"{row['chore']}  scope={row['scope']}  {row['state']}  due_at={due}  {last}{stopped}"
 
 
 def _flag_notice() -> None:
@@ -185,6 +207,23 @@ def cadence_show(cli: CliContext, slug: str, project: str | None) -> None:
     body = _resolve_cadence(cli, slug, project)
     _flag_notice()
     cli.show(body, CadenceDetail(body))
+
+
+@cadence_group.command("errands", cls=FleetCommand)
+@click.argument("slug")
+@project_option(required_by_hub=True)
+def cadence_errands(cli: CliContext, slug: str, project: str | None) -> None:
+    """Cadence SLUG's errands — each chore over each scope — with its state, its last run, and when it is next due.
+
+    A due errand mints on the next pass; due_at is empty while an errand is running or stopped."""
+    cadence = _resolve_cadence(cli, slug, project)
+    rows = cli.get(
+        f"/api/cadences/{cadence['cadence_id']}/errands",
+        "GET /cadences/{id}/errands",
+        on_status={404: f"unknown cadence {slug!r}"},
+    ).json()
+    _flag_notice()
+    cli.show(rows, ErrandListing(rows))
 
 
 def _patch(cli: CliContext, cadence: dict[str, Any], body: dict[str, Any], *, done: str) -> None:

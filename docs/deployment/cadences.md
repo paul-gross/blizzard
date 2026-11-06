@@ -1,8 +1,8 @@
 # Cadences
 
-**Cadences mint nothing yet.** A cadence is stored, edited, and read with the `cadences` flag off, but no chunk is
-minted from one until the flag is on ([flags.md](../flags.md)). While it is off, `blizzard hub cadence list` and `get`
-print a line on stderr saying so.
+**While the `cadences` flag is off, cadences mint nothing.** A cadence is stored, edited, and read with the flag off,
+but no chunk is minted from one until it is on ([flags.md](../flags.md)). While it is off, `blizzard hub cadence list`,
+`get`, and `errands` print a line on stderr saying so.
 
 A **cadence** is a project's rhythm: when, and how often, the routines it keeps should run. A **chore** is one routine a
 cadence keeps, with the scopes it runs over, its run mode, and whether the chunks it mints are promoted. An **errand**
@@ -61,12 +61,41 @@ it is refused for naming a routine or a scope that does not resolve. The reasons
 `routine_retired`, `graph_unresolved`, `scope_unknown`, `scope_retired`, `scope_unlinked`, `no_scopes`, and `no_chores`.
 A retired cadence carries none.
 
+## Errands
+
+An errand is one chore over one scope, and `GET /api/cadences/{cadence_id}/errands` lists them, chore by chore in
+cadence order and by scope slug within a chore. Each shows its **state**, its **last run**, and its `due_at`:
+
+| State     | Meaning                                                                      |
+| --------- | ---------------------------------------------------------------------------- |
+| `due`     | The next sweep pass will mint it.                                            |
+| `running` | Its last run has not finished; a run waiting on a person counts as running.  |
+| `waiting` | It is neither, and comes due at `due_at`.                                    |
+| `stopped` | Its cadence is retired or attention stops it, even while a last run is live. |
+
+A cadence's view counts its errands by state in `errand_counts`.
+
+An errand comes due by its cadence's rhythm, counted from its last run's **reference**: the instant that run was
+scheduled, or, for an errand that has never run, the instant it joined its chore. A schedule alone makes it due at the
+first moment after the reference. A spacing alone makes it due once the spacing has run out from the anchor — the run's
+start, finish, or scheduling — and a never-run errand is due at once. With both, it is due at the first moment after the
+reference that is also at or after the end of the spacing. An errand whose last run is still live is not due.
+
+A moment missed while the hub was down, or while a run was live, is not lost: the errand fires late, once, however many
+moments passed. `due_at` is empty while an errand is running or stopped. For a `due` errand it may lie in the past, the
+instant it was owed. A `due` errand mints only while the `cadences` flag is on.
+
+A run's list and detail views carry `cadence`: the id, slug, and name of the cadence that minted it, and the id and key
+of its chore. A run started by hand has none, and a run whose chore has since been removed names the chore's id with no
+key.
+
 ## The CLI
 
 ```bash
 blizzard hub cadence create evening --cron "0 20 * * *" --zone America/Chicago --spacing 10d [--anchor started] [--name TEXT]
 blizzard hub cadence list [--include-retired]
 blizzard hub cadence get evening
+blizzard hub cadence errands evening
 blizzard hub cadence edit evening [--name TEXT] [--cron EXPR] [--zone ZONE] [--spacing 3d] [--anchor finished]
                                   [--no-schedule] [--no-spacing]
 blizzard hub cadence retire evening [--by WHO]
@@ -77,9 +106,10 @@ blizzard hub cadence chore edit evening arch [--routine R] [--all-scopes | --sco
 blizzard hub cadence chore remove evening arch
 ```
 
-A cadence is named by its slug. `edit` changes only the options given; `--cron` or `--zone` alone keeps the stored other
-half, `--no-schedule` clears the schedule, and `--no-spacing` clears the spacing and its anchor together. `retire` is a
-reversible brake: a retired cadence mints nothing, `list` leaves it out unless `--include-retired`, and `enable`
+A cadence is named by its slug. `get` prints the count of its errands in each state, and `errands` lists them with each
+one's state, last run, and `due_at`. `edit` changes only the options given; `--cron` or `--zone` alone keeps the stored
+other half, `--no-schedule` clears the schedule, and `--no-spacing` clears the spacing and its anchor together. `retire`
+is a reversible brake: a retired cadence mints nothing, `list` leaves it out unless `--include-retired`, and `enable`
 restores it.
 
 A `chore` verb is an edit of its cadence: it reads the cadence, rewrites its chore list, and writes it back on the

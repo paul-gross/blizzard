@@ -31,6 +31,17 @@ class RunEscalationView(BaseModel):
     wrapped_takeover_command: str
 
 
+class RunCadenceView(WireModel):
+    """The cadence errand that minted a run."""
+
+    cadence_id: str
+    cadence_slug: str
+    cadence_name: str
+    chore_id: str
+    #: The chore's key; ``None`` once the chore has been removed from the cadence.
+    chore_key: str | None = None
+
+
 class RunRowView(WireModel):
     chunk_id: str
     routine_name: str
@@ -40,6 +51,8 @@ class RunRowView(WireModel):
     outcome: Annotated[ChunkStatus | Unrecognized, OPEN]
     escalation: RunEscalationView | None
     delivered: list[DeliveredSetView]
+    #: The cadence errand that minted the run; ``None`` for a hand-started run.
+    cadence: RunCadenceView | None = None
     #: The id of the project this belongs to; ``None`` where the hub reports none.
     project_id: str | None = None
     #: The project's current slug; ``None`` where the hub reports none.
@@ -94,6 +107,8 @@ class RunDeltaView(WireModel):
     outcome: Annotated[ChunkStatus | Unrecognized, OPEN]
     escalation: RunEscalationView | None
     sets: list[DeliveredSetDeltaView]
+    #: The cadence errand that minted the run; ``None`` for a hand-started run.
+    cadence: RunCadenceView | None = None
     #: The id of the project this belongs to; ``None`` where the hub reports none.
     project_id: str | None = None
     #: The project's current slug; ``None`` where the hub reports none.

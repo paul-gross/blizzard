@@ -186,3 +186,25 @@ def test_an_unknown_cadence_is_refused(client: TestClient) -> None:
     result = _cli("get", "nope")
     assert result.exit_code != 0
     assert "unknown cadence 'nope'" in result.output
+
+
+def test_errands_lists_each_errand_with_its_state_and_get_prints_the_counts(client: TestClient) -> None:
+    _ok("create", "evening", "--spacing", "10d")
+    _ok("chore", "add", "evening", "arch", "--routine", "arch")
+    _ok("chore", "add", "evening", "ghost", "--routine", "nope")
+
+    listed = _ok("errands", "evening")
+    rows = json.loads(_ok("errands", "evening", "--json").stdout)
+
+    assert [(r["chore"], r["scope"], r["state"], r["last_run"]) for r in rows] == [("arch", "blizzard", "due", None)]
+    assert rows[0]["due_at"]
+    assert "arch  scope=blizzard  due  due_at=" in listed.stdout
+    assert "last run: none" in listed.stdout
+    assert "errands: due=1  running=0  waiting=0  stopped=0" in _ok("get", "evening").stdout
+    assert _shown()["errand_counts"] == {"due": 1, "running": 0, "waiting": 0, "stopped": 0}
+
+
+def test_errands_of_an_unknown_cadence_is_refused(client: TestClient) -> None:
+    result = _cli("errands", "nope")
+    assert result.exit_code != 0
+    assert "unknown cadence 'nope'" in result.output

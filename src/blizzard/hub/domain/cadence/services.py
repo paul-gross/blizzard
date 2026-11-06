@@ -9,11 +9,14 @@ links, graphs, and scopes as they stand, never cached across reads (``bzh:config
 from __future__ import annotations
 
 from collections import defaultdict
-from collections.abc import Sequence
-from dataclasses import dataclass
+from collections.abc import Mapping, Sequence
+from dataclasses import dataclass, field
+from datetime import datetime
 
+from blizzard.foundation.cadence_attention import ErrandState
 from blizzard.foundation.clock import IClock
 from blizzard.foundation.roles import domain_model
+from blizzard.hub.domain.cadence.errands import Errand, ErrandRun, chore_errands, due_at, errand_state
 from blizzard.hub.domain.cadence.model import (
     Attention,
     AttentionFacts,
@@ -23,7 +26,7 @@ from blizzard.hub.domain.cadence.model import (
     CadenceSlugTakenError,
     ScopeSelection,
 )
-from blizzard.hub.domain.cadence.ports import IReadCadenceRepository, IWriteCadenceRepository
+from blizzard.hub.domain.cadence.ports import IReadCadenceRepository, IReadErrandRunsRepository, IWriteCadenceRepository
 from blizzard.hub.domain.config.changes import ChangeContext
 from blizzard.hub.domain.garden.brake import BrakeVerb
 from blizzard.hub.domain.garden.routines import IReadRoutineRepository, IReadRoutineScopeRepository
@@ -35,10 +38,25 @@ from blizzard.hub.domain.projects.model import Project
 @domain_model
 @dataclass(frozen=True)
 class CadenceView:
-    """A cadence beside the attention its errands need, as it stands at the read."""
+    """A cadence beside the attention its errands need and its errands counted by state, as it stands at the
+    read. ``errand_counts`` holds an entry for every state."""
 
     cadence: Cadence
     attention: tuple[Attention, ...]
+    errand_counts: Mapping[ErrandState, int] = field(default_factory=lambda: dict.fromkeys(ErrandState, 0))
+
+
+@domain_model
+@dataclass(frozen=True)
+class ErrandView:
+    """One errand of a cadence at a read: its state, the attention entries that stop it, its last run, and when it
+    comes due next — ``None`` while running or stopped."""
+
+    errand: Errand
+    state: ErrandState
+    stopping: tuple[Attention, ...]
+    last_run: ErrandRun | None
+    due_at: datetime | None
 
 
 class CadenceAttention:
@@ -66,13 +84,14 @@ class CadenceAttention:
             for cadence in cadences
         ]
 
-    def facts(self, cadences: Sequence[Cadence]) -> dict[str, AttentionFacts]:
-        """What the live cadences among ``cadences`` are judged against, by project id: the routines their chores
+    def facts(self, cadences: Sequence[Cadence], *, include_retired: bool = False) -> dict[str, AttentionFacts]:
+        """What the live cadences among ``cadences`` — retired ones too when ``include_retired`` — are judged
+        against, by project id: the routines their chores
         name, those routines' links and when each was made, which of their graphs resolve, and the scopes the chores
         and links name."""
         by_project: dict[str, list[Cadence]] = defaultdict(list)
         for cadence in cadences:
-            if not cadence.retired:
+            if include_retired or not cadence.retired:
                 by_project[cadence.project_id].append(cadence)
         routines = {
             project_id: self._routines.get_many_by_slug(
@@ -113,25 +132,101 @@ class CadenceAttention:
 
 
 class CadenceReading:
-    """List and show cadences with their attention."""
+    """List and show cadences with their attention and errand counts, and read one cadence's errands. Every read
+    takes the clock once and reads every errand's last run in one call (``bzh:bulk-reconstitution``,
+    ``bzh:injected-clock``)."""
 
-    def __init__(self, *, cadences: IReadCadenceRepository, attention: CadenceAttention) -> None:
+    def __init__(
+        self,
+        *,
+        cadences: IReadCadenceRepository,
+        attention: CadenceAttention,
+        runs: IReadErrandRunsRepository,
+        clock: IClock,
+    ) -> None:
         self._cadences = cadences
         self._attention = attention
+        self._runs = runs
+        self._clock = clock
 
     def list_cadences(self, project_id: str | None = None, *, include_retired: bool = False) -> list[CadenceView]:
         """The tenant's cadences, or ``project_id``'s, newest first; retired ones only when asked for."""
         held = [c for c in self._cadences.list_all(project_id) if include_retired or not c.retired]
-        return self._attention.views(held)
+        return self._views(held)
 
     def show(self, cadence_id: str) -> CadenceView | None:
         """One cadence with its attention; ``None`` when no cadence holds ``cadence_id``."""
         cadence = self._cadences.get(cadence_id)
-        return None if cadence is None else self._attention.views([cadence])[0]
+        return None if cadence is None else self._views([cadence])[0]
 
     def view(self, cadence: Cadence) -> CadenceView:
         """``cadence`` as a write left it, with its attention."""
-        return self._attention.views([cadence])[0]
+        return self._views([cadence])[0]
+
+    def errands(self, cadence: Cadence) -> list[ErrandView]:
+        """``cadence``'s errands exactly as the mint judges them, chore by chore in cadence order and by scope
+        slug within a chore. A retired cadence's errands are all stopped."""
+        return self._read([cadence])[0].errands
+
+    def _views(self, cadences: Sequence[Cadence]) -> list[CadenceView]:
+        views: list[CadenceView] = []
+        for read in self._read(cadences):
+            counts = dict.fromkeys(ErrandState, 0)
+            for row in read.errands:
+                counts[row.state] += 1
+            views.append(CadenceView(read.cadence, read.attention, counts))
+        return views
+
+    def _read(self, cadences: Sequence[Cadence]) -> list[_CadenceErrands]:
+        """Each of ``cadences`` with its attention and errand views: configuration first, then every errand's last
+        run in one call, judged against one clock read."""
+        facts = self._attention.facts(cadences, include_retired=True)
+        listed: list[tuple[Cadence, tuple[Attention, ...], list[Errand]]] = []
+        for cadence in cadences:
+            project_facts = facts[cadence.project_id]
+            held = [
+                errand
+                for chore in cadence.chores
+                for errand in sorted(chore_errands(cadence.cadence_id, chore, project_facts), key=_by_scope)
+            ]
+            listed.append((cadence, cadence.attention(project_facts), held))
+        runs = self._runs.last_runs([errand.key for _, _, held in listed for errand in held])
+        now = self._clock.now()
+        return [
+            _CadenceErrands(
+                cadence,
+                stopping,
+                [_errand_view(cadence, errand, stopping, runs.get(errand.key), now) for errand in held],
+            )
+            for cadence, stopping, held in listed
+        ]
+
+
+def _by_scope(errand: Errand) -> str:
+    return errand.scope_slug
+
+
+@domain_model
+@dataclass(frozen=True)
+class _CadenceErrands:
+    cadence: Cadence
+    attention: tuple[Attention, ...]
+    errands: list[ErrandView]
+
+
+def _errand_view(
+    cadence: Cadence, errand: Errand, stopping: tuple[Attention, ...], run: ErrandRun | None, now: datetime
+) -> ErrandView:
+    last_run = None if run is None else run.run
+    state = errand_state(cadence.rhythm, errand, last_run, stopping=stopping, retired=cadence.retired, now=now)
+    live = state in (ErrandState.STOPPED, ErrandState.RUNNING)
+    return ErrandView(
+        errand=errand,
+        state=state,
+        stopping=tuple(item for item in stopping if errand.stopped_by([item])),
+        last_run=run,
+        due_at=None if live else due_at(cadence.rhythm, errand, last_run),
+    )
 
 
 class CadenceAuthoring:
