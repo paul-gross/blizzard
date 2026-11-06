@@ -15,7 +15,7 @@ from blizzard.foundation.store.engine import create_engine_from_url
 from blizzard.foundation.store.migrations import RevisionMismatchError
 from blizzard.hub.store import schema as hub_schema
 from blizzard.runner.store import schema as runner_schema
-from tests.conftest import Daemon
+from tests.support.daemons import Daemon
 from tests.support.migrations.store_migrations import (
     schema_snapshot,
 )

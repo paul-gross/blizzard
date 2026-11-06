@@ -12,7 +12,7 @@ import structlog
 from blizzard.runner.harness.opencode_v2.transcript.normalizer import NORMALIZER_VERSION
 from blizzard.runner.harness.opencode_v2.transcript.source import OpenCodeTwoTranscriptSource
 from blizzard.runner.harness.transcript import TranscriptBatch, TranscriptErrorFactory, TranscriptPosition
-from tests.unit.runner.harness.opencode_v2.service_fake import (
+from tests.support.opencode_v2_session_service import (
     REGISTRATION,
     TOKENS,
     SessionService,

@@ -6,7 +6,7 @@ from __future__ import annotations
 from typing import Any
 
 from blizzard.runner.harness.opencode_v2.client import MESSAGE_PAGE_LIMIT, OpenCodeServiceClient
-from tests.unit.runner.harness.opencode_v2.service_fake import REGISTRATION, SessionService, SessionTransport
+from tests.support.opencode_v2_session_service import REGISTRATION, SessionService, SessionTransport
 
 
 def _user(n: int) -> dict[str, Any]:

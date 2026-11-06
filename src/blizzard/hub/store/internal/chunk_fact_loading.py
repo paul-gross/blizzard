@@ -53,7 +53,7 @@ ALL_FAMILIES: frozenset[str] = families(Projection.FACTS)
 STATUS_FAMILIES: frozenset[str] = families(Projection.STATUS)
 
 #: The families `_load_batch` has a mapper for — equal to :data:`ALL_FAMILIES`, which
-#: `tests/test_fact_families.py` checks.
+#: `tests/unit/hub/store/internal/test_fact_families.py` checks.
 LOADED_FAMILIES: frozenset[str] = frozenset(
     {
         "promoted",

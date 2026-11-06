@@ -130,7 +130,7 @@ dev = [
     "ast-grep-cli==0.45.3",
     # Resolves the egress extra for pyright and the Parquet tests.
     "pyarrow>=25.0.1",
-    # Runs the published newest-copy views in tests/unit/hub/egress/test_egress_contract.py; a hard dependency,
+    # Runs the published newest-copy views in tests/unit/hub/egress/test_contract.py; a hard dependency,
     # because a skipped run would pass the check without running it.
     "duckdb>=1.1.0",
 ]

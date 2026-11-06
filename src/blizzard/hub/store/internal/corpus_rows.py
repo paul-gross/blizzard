@@ -184,7 +184,7 @@ def _bespoke(field: str, read: Callable[[Connection, Sequence[str]], dict[str, l
 
 #: Each trace-carried table's :class:`StepFacts` field and the read that fills it. ``chunk_work_refs`` fills the refs
 #: beside the facts rather than a field. The keys equal the registry's trace narrowing
-#: (``tests/test_fact_families.py``).
+#: (``tests/unit/hub/store/internal/test_fact_families.py``).
 TRACE_READERS: dict[Table, tuple[str, TraceReader]] = {
     s.chunk_work_refs: _mapped("work_refs", lambda r: WorkRef(source=r.source, ref=r.ref)),
     s.lease_facts: _mapped("lease_facts", lambda r: TracedLease(r.epoch, r.minted_at)),

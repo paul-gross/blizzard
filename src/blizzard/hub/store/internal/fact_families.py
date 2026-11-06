@@ -4,8 +4,8 @@ Each chunk-keyed fact table is declared once here, with the family it belongs to
 and pages by, and the projections that carry it. Every projection over a chunk's facts derives its table list from
 this declaration — ``ChunkFacts`` load, the status probe, ``StepFacts`` for the trace and egress sweeps, closing
 candidates, and the activity event feed — and keeps its own per-entry mapper. A table carried by no projection is
-named in :data:`EXCLUDED` with its reason; ``tests/test_fact_families.py`` fails any chunk-keyed table that is
-neither registered nor excluded.
+named in :data:`EXCLUDED` with its reason; ``tests/unit/hub/store/internal/test_fact_families.py`` fails any
+chunk-keyed table that is neither registered nor excluded.
 
 Membership records what each projection carries today: a family one projection omits is omitted by its entry, not
 by a list in that projection."""

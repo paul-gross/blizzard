@@ -16,6 +16,7 @@ from tests.support.tier_layout import (
     declared_layout_marker,
     misplaced_root_module,
     non_package_folder,
+    tier_folder_helpers,
     tier_of,
     unmirrored_folder,
 )
@@ -79,6 +80,18 @@ def test_a_flat_module_outside_the_root_list_is_misplaced(tmp_path: Path) -> Non
     assert not misplaced_root_module(tests / "test_old.py", tests, {"test_old.py"})
     assert not misplaced_root_module(tests / "unit" / "test_new.py", tests, set())
     assert not misplaced_root_module(tests / "conftest.py", tests, set())
+
+
+def test_a_non_test_module_under_a_tier_folder_is_a_helper(tmp_path: Path) -> None:
+    tests, _ = _tree(tmp_path)
+    for relative in ("unit/hub/fake.py", "guards/anything/world.py", "unit/hub/test_a.py", "component/conftest.py"):
+        (tests / relative).write_text("")
+    (tests / "support").mkdir()
+    (tests / "support" / "fake.py").write_text("")
+    assert tier_folder_helpers(tests) == [
+        tests / "guards" / "anything" / "world.py",
+        tests / "unit" / "hub" / "fake.py",
+    ]
 
 
 def test_a_folder_without_an_init_is_not_a_package(tmp_path: Path) -> None:
@@ -175,3 +188,12 @@ def test_the_tests_root_holds_no_helper_module() -> None:
         if path.name not in {"conftest.py", "__init__.py"} and not path.name.startswith("test_")
     )
     assert not stray, f"helper modules at the tests root, move them under tests/support/: {stray}"
+
+
+@pytest.mark.parametrize("tests_root", ["tests", "exemplars/python/tests"])
+def test_no_tier_folder_holds_a_helper_module(tests_root: str) -> None:
+    """A tier folder holds ``__init__.py``, ``conftest.py`` and test modules; its helpers live in ``support/``
+    (``bzh:mirrored-test-layout``)."""
+    root = repo_root() / tests_root
+    stray = [str(path.relative_to(root)) for path in tier_folder_helpers(root)]
+    assert not stray, f"helper modules in a tier folder of {tests_root}/, move them under its support/: {stray}"

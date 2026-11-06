@@ -16,7 +16,7 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
 from blizzard.foundation.web import Frontend
-from tests.conftest import Daemon
+from tests.support.daemons import Daemon
 
 # The app boots with real internal collaborators, doubles only at the (absent) seams.
 
