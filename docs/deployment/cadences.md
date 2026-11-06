@@ -1,8 +1,8 @@
 # Cadences
 
-**The `cadences` flag is on by default.** With it on, the hub mints each due errand's run on its rhythm. A hub that sets
-`cadences = false` under `[flags]` ([flags.md](../flags.md)) mints nothing: a cadence is still stored, edited, and read,
-and `blizzard hub cadence list`, `get`, and `errands` print a line on stderr saying the flag is off.
+**While the `cadences` flag is off, cadences mint nothing.** A cadence is stored, edited, and read with the flag off,
+but no chunk is minted from one until it is on ([flags.md](../flags.md)). A hub turns it on with `cadences = true` under
+`[flags]`. While it is off, `blizzard hub cadence list`, `get`, and `errands` print a line on stderr saying so.
 
 A **cadence** is a project's rhythm: when, and how often, the routines it keeps should run. A **chore** is one routine a
 cadence keeps, with the scopes it runs over, its run mode, and whether the chunks it mints are promoted. An **errand**

@@ -55,7 +55,7 @@ def test_the_packaged_registry_loads_with_its_declarations() -> None:
     registry = packaged_flag_registry()
     assert sorted(registry.live) == ["cadences"]
     cadences = registry.live["cadences"]
-    assert (cadences.owner, cadences.scope, cadences.default) == ("epic:cadence", "hub", True)
+    assert (cadences.owner, cadences.scope, cadences.default) == ("epic:cadence", "hub", False)
     assert dict(registry.retired) == {}
 
 
