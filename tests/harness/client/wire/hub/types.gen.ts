@@ -1136,6 +1136,10 @@ export type CadenceView = {
      */
     name: string;
     /**
+     * Next Moments
+     */
+    next_moments: Array<string>;
+    /**
      * Project Id
      */
     project_id: string | null;
