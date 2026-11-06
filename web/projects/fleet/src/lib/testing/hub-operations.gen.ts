@@ -35,6 +35,7 @@ export interface HubOperations {
   'GET /api/backlog': { path: T.GetBacklogApiBacklogGetData['path']; responses: T.GetBacklogApiBacklogGetResponses; errors: T.GetBacklogApiBacklogGetErrors };
   'GET /api/cadences': { path: T.ListCadencesApiCadencesGetData['path']; responses: T.ListCadencesApiCadencesGetResponses; errors: T.ListCadencesApiCadencesGetErrors };
   'GET /api/cadences/{cadence_id}': { path: T.GetCadenceApiCadencesCadenceIdGetData['path']; responses: T.GetCadenceApiCadencesCadenceIdGetResponses; errors: T.GetCadenceApiCadencesCadenceIdGetErrors };
+  'GET /api/cadences/{cadence_id}/errands': { path: T.ListCadenceErrandsApiCadencesCadenceIdErrandsGetData['path']; responses: T.ListCadenceErrandsApiCadencesCadenceIdErrandsGetResponses; errors: T.ListCadenceErrandsApiCadencesCadenceIdErrandsGetErrors };
   'GET /api/chunk-counts': { path: T.ChunkCountsApiChunkCountsGetData['path']; responses: T.ChunkCountsApiChunkCountsGetResponses; errors: T.ChunkCountsApiChunkCountsGetErrors };
   'GET /api/chunks': { path: T.ListChunksApiChunksGetData['path']; responses: T.ListChunksApiChunksGetResponses; errors: T.ListChunksApiChunksGetErrors };
   'GET /api/chunks/{chunk_id}': { path: T.GetChunkApiChunksChunkIdGetData['path']; responses: T.GetChunkApiChunksChunkIdGetResponses; errors: T.GetChunkApiChunksChunkIdGetErrors };

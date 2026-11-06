@@ -330,6 +330,7 @@ _PROBES: dict[tuple[str, str], _Probe] = {
     ("GET", "/api/routines"): _LIST,
     ("GET", "/api/cadences"): _LIST,
     ("GET", "/api/cadences/{cadence_id}"): _f(),
+    ("GET", "/api/cadences/{cadence_id}/errands"): _f(),
     ("PATCH", "/api/cadences/{cadence_id}"): _f({}),
     ("POST", "/api/cadences/{cadence_id}/retire"): _f({}),
     ("POST", "/api/cadences/{cadence_id}/enable"): _f({}),

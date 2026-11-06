@@ -42,6 +42,7 @@ describe('presentScopeSlug', () => {
 function run(scope_slug: string, minted_at: string): RunRowView {
   return {
     chunk_id: `c-${scope_slug}-${minted_at}`,
+    cadence: null,
     delivered: [],
     escalation: null,
     minted_at,

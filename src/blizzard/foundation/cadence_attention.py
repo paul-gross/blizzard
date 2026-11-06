@@ -16,3 +16,13 @@ class AttentionReason(StrEnum):
     SCOPE_UNLINKED = "scope_unlinked"
     NO_SCOPES = "no_scopes"
     NO_CHORES = "no_chores"
+
+
+class ErrandState(StrEnum):
+    """Where an errand stands at a read: ``due`` — the next pass would mint it; ``running`` — its last run is live;
+    ``waiting`` — neither, until its next moment; ``stopped`` — its cadence is retired or attention stops it."""
+
+    DUE = "due"
+    RUNNING = "running"
+    WAITING = "waiting"
+    STOPPED = "stopped"

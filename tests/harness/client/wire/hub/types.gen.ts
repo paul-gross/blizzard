@@ -1033,6 +1033,32 @@ export type CadenceEntry = {
 };
 
 /**
+ * CadenceErrandView
+ *
+ * One errand of a cadence — one chore over one scope — at the read.
+ */
+export type CadenceErrandView = {
+    /**
+     * Attention
+     */
+    attention: Array<CadenceAttentionView>;
+    /**
+     * Chore
+     */
+    chore: string;
+    /**
+     * Due At
+     */
+    due_at: string | null;
+    last_run: ErrandRunView | null;
+    /**
+     * Scope
+     */
+    scope: string;
+    state: ErrandState;
+};
+
+/**
  * CadenceLifecycleRequest
  *
  * Retire or re-enable a cadence; ``by`` is recorded on the lifecycle fact.
@@ -1104,6 +1130,7 @@ export type CadenceView = {
      * Created At
      */
     created_at: string;
+    errand_counts: ErrandCountsView;
     /**
      * Name
      */
@@ -3326,6 +3353,64 @@ export type EnvelopeChoice = {
      */
     requires_checks: boolean;
 };
+
+/**
+ * ErrandCountsView
+ *
+ * A cadence's errands counted by state. A later state is a later field.
+ */
+export type ErrandCountsView = {
+    /**
+     * Due
+     */
+    due: number;
+    /**
+     * Running
+     */
+    running: number;
+    /**
+     * Stopped
+     */
+    stopped: number;
+    /**
+     * Waiting
+     */
+    waiting: number;
+};
+
+/**
+ * ErrandRunView
+ *
+ * An errand's last run: the chunk holding its work item (``None`` when none could be resolved), the chunk's
+ * status, and when the run was scheduled, started, and finished.
+ */
+export type ErrandRunView = {
+    /**
+     * Chunk Id
+     */
+    chunk_id: string | null;
+    /**
+     * Finished At
+     */
+    finished_at: string | null;
+    /**
+     * Scheduled At
+     */
+    scheduled_at: string;
+    /**
+     * Started At
+     */
+    started_at: string | null;
+    status: ChunkStatus | null;
+};
+
+/**
+ * ErrandState
+ *
+ * Where an errand stands at a read: ``due`` — the next pass would mint it; ``running`` — its last run is live;
+ * ``waiting`` — neither, until its next moment; ``stopped`` — its cadence is retired or attention stops it.
+ */
+export type ErrandState = 'due' | 'running' | 'waiting' | 'stopped';
 
 /**
  * EscalationCause
@@ -8225,9 +8310,38 @@ export type RoutineView = {
 };
 
 /**
+ * RunCadenceView
+ *
+ * The cadence errand that minted a run.
+ */
+export type RunCadenceView = {
+    /**
+     * Cadence Id
+     */
+    cadence_id: string;
+    /**
+     * Cadence Name
+     */
+    cadence_name: string;
+    /**
+     * Cadence Slug
+     */
+    cadence_slug: string;
+    /**
+     * Chore Id
+     */
+    chore_id: string;
+    /**
+     * Chore Key
+     */
+    chore_key: string | null;
+};
+
+/**
  * RunDeltaView
  */
 export type RunDeltaView = {
+    cadence: RunCadenceView | null;
     /**
      * Chunk Id
      */
@@ -8291,6 +8405,7 @@ export type RunMode = 'full' | 'delta';
  * RunRowView
  */
 export type RunRowView = {
+    cadence: RunCadenceView | null;
     /**
      * Chunk Id
      */
@@ -12911,6 +13026,38 @@ export type EnableCadenceApiCadencesCadenceIdEnablePostResponses = {
 };
 
 export type EnableCadenceApiCadencesCadenceIdEnablePostResponse = EnableCadenceApiCadencesCadenceIdEnablePostResponses[keyof EnableCadenceApiCadencesCadenceIdEnablePostResponses];
+
+export type ListCadenceErrandsApiCadencesCadenceIdErrandsGetData = {
+    body?: never;
+    path: {
+        /**
+         * Cadence Id
+         */
+        cadence_id: string;
+    };
+    query?: never;
+    url: '/api/cadences/{cadence_id}/errands';
+};
+
+export type ListCadenceErrandsApiCadencesCadenceIdErrandsGetErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type ListCadenceErrandsApiCadencesCadenceIdErrandsGetError = ListCadenceErrandsApiCadencesCadenceIdErrandsGetErrors[keyof ListCadenceErrandsApiCadencesCadenceIdErrandsGetErrors];
+
+export type ListCadenceErrandsApiCadencesCadenceIdErrandsGetResponses = {
+    /**
+     * Response List Cadence Errands Api Cadences  Cadence Id  Errands Get
+     *
+     * Successful Response
+     */
+    200: Array<CadenceErrandView>;
+};
+
+export type ListCadenceErrandsApiCadencesCadenceIdErrandsGetResponse = ListCadenceErrandsApiCadencesCadenceIdErrandsGetResponses[keyof ListCadenceErrandsApiCadencesCadenceIdErrandsGetResponses];
 
 export type RetireCadenceApiCadencesCadenceIdRetirePostData = {
     body: CadenceLifecycleRequest;

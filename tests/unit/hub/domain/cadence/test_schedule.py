@@ -106,3 +106,15 @@ def test_a_schedule_is_refused_naming_its_field(cron: str | None, zone: str | No
     with pytest.raises(ConfigFieldError) as caught:
         Schedule.parse(cron, zone, at=_AT)
     assert caught.value.field == field
+
+
+def test_a_moment_exactly_at_the_instant_asked_is_the_first_at_or_after_it() -> None:
+    schedule = _schedule("0 20 * * *")
+    at = _utc(6, 1, 1)
+    assert schedule.first_at_or_after(at) == at
+
+
+def test_an_instant_between_two_moments_has_the_later_as_its_first_at_or_after() -> None:
+    schedule = _schedule("0 20 * * *")
+    assert schedule.first_at_or_after(_utc(6, 1, 1, micro=1)) == _utc(6, 2, 1)
+    assert schedule.first_at_or_after(_utc(6, 1, 0, 59)) == _utc(6, 1, 1)

@@ -81,6 +81,8 @@ class RunSummary:
     delivered: list[DeliveredSet]
     #: The run chunk's project.
     project_id: str | None
+    #: The cadence errand that minted the run; ``None`` for a hand-started run.
+    cadence: RunCadence | None = None
 
 
 @domain_model
@@ -150,6 +152,22 @@ class RunDelta:
     sets: list[DeliveredSetDelta]
     #: The run chunk's project.
     project_id: str | None
+    #: The cadence errand that minted the run; ``None`` for a hand-started run.
+    cadence: RunCadence | None = None
+
+
+@domain_model
+@dataclass(frozen=True)
+class RunCadence:
+    """The cadence errand that minted a run, as the store joins it: the cadence's id, slug, and name, the chore's
+    id, and the chore's key — ``None`` once the chore has been removed. Garden owns the value; it never imports the
+    cadence package."""
+
+    cadence_id: str
+    cadence_slug: str
+    cadence_name: str
+    chore_id: str
+    chore_key: str | None
 
 
 @domain_model
@@ -163,6 +181,8 @@ class RunIdentity:
     scope_slug: str
     mode: RunMode
     minted_at: datetime
+    #: The cadence errand that minted the run; ``None`` for a hand-started run.
+    cadence: RunCadence | None = None
 
 
 @domain_model
@@ -334,6 +354,7 @@ def run_rows(
                 escalation=escalation,
                 delivered=record.delivered,
                 project_id=chunk.project_id,
+                cadence=record.identity.cadence,
             )
         )
     return rows
@@ -395,4 +416,5 @@ class GardenRunService:
             escalation=escalation,
             sets=sets,
             project_id=chunk.project_id,
+            cadence=identity.cadence,
         )

@@ -100,6 +100,7 @@ HUMAN: dict[tuple[str, str], Permission] = {
     ("GET", "/api/projects/{project}/cadences"): Permission.FLEET_VIEW,
     ("GET", "/api/cadences"): Permission.FLEET_VIEW,
     ("GET", "/api/cadences/{cadence_id}"): Permission.FLEET_VIEW,
+    ("GET", "/api/cadences/{cadence_id}/errands"): Permission.FLEET_VIEW,
     ("PATCH", "/api/cadences/{cadence_id}"): Permission.GRAPH_EDIT,
     ("POST", "/api/cadences/{cadence_id}/retire"): Permission.GRAPH_EDIT,
     ("POST", "/api/cadences/{cadence_id}/enable"): Permission.GRAPH_EDIT,

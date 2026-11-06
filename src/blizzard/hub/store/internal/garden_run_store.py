@@ -21,11 +21,14 @@ from blizzard.hub.domain.garden.runs.history import (
     DeliveredSet,
     DeliveredSetRaw,
     IReadGardenRunRepository,
+    RunCadence,
     RunDeliveries,
     RunIdentity,
 )
 from blizzard.hub.store.schema import (
     artifacts,
+    cadence_chores,
+    cadences,
     chunk_work_refs,
     chunks,
     finding_facts,
@@ -51,7 +54,14 @@ def _run_identity_join(stmts: ScopedStatements) -> Join:
         & (work_items.c.ref == chunk_work_refs.c.ref),
     )
     with_runs = stmts.scope_join(with_items, work_item_runs, work_item_runs.c.work_item_id == work_items.c.work_item_id)
-    return stmts.scope_join(with_runs, scopes, scopes.c.scope_id == work_item_runs.c.scope_id)
+    with_scopes = stmts.scope_join(with_runs, scopes, scopes.c.scope_id == work_item_runs.c.scope_id)
+    # A hand run carries no cadence and a removed chore's row is gone, so both sides join outer.
+    with_cadences = stmts.scope_join(
+        with_scopes, cadences, cadences.c.cadence_id == work_item_runs.c.cadence_id, isouter=True
+    )
+    return stmts.scope_join(
+        with_cadences, cadence_chores, cadence_chores.c.chore_id == work_item_runs.c.chore_id, isouter=True
+    )
 
 
 _IDENTITY_COLUMNS = (
@@ -60,6 +70,11 @@ _IDENTITY_COLUMNS = (
     work_item_runs.c.routine_name,
     scopes.c.slug.label("scope_slug"),
     work_item_runs.c.mode,
+    work_item_runs.c.cadence_id,
+    work_item_runs.c.chore_id,
+    cadences.c.slug.label("cadence_slug"),
+    cadences.c.name.label("cadence_name"),
+    cadence_chores.c.key.label("chore_key"),
 )
 
 # The three fact kinds `DeliveredSet.added_count`/`observed_count`/`gone_count` fold
@@ -85,6 +100,15 @@ def _identity_of(row: Row[Any]) -> RunIdentity:
         scope_slug=row.scope_slug,
         mode=RunMode(row.mode),
         minted_at=row.minted_at,
+        cadence=None
+        if row.cadence_id is None
+        else RunCadence(
+            cadence_id=row.cadence_id,
+            cadence_slug=row.cadence_slug,
+            cadence_name=row.cadence_name,
+            chore_id=row.chore_id,
+            chore_key=row.chore_key,
+        ),
     )
 
 

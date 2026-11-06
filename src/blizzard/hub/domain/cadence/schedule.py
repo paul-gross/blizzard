@@ -72,3 +72,9 @@ class Schedule:
         """The first moment strictly after ``at``, in UTC; ``None`` when none falls in the fifty years after it."""
         moment = next(CronSim(self.cron, at.astimezone(ZoneInfo(self.zone))), None)
         return None if moment is None else moment.astimezone(UTC)
+
+    def first_at_or_after(self, at: datetime) -> datetime | None:
+        """The first moment at or after ``at``, in UTC; ``None`` when none falls in the fifty years after it."""
+        if self.latest_at_or_before(at) == at:
+            return at
+        return self.first_after(at)

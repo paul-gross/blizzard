@@ -1398,7 +1398,9 @@ def build_tenant_services(stores: TenantStores, parts: TenantServiceParts, *, ev
         cadences=cadence_store,
         cadence_authoring=CadenceAuthoring(cadences=cadence_store, clock=clock),
         cadence_lifecycle=CadenceLifecycle(cadences=cadence_store, clock=clock),
-        cadence_reading=CadenceReading(cadences=cadence_store, attention=cadence_attention),
+        cadence_reading=CadenceReading(
+            cadences=cadence_store, attention=cadence_attention, runs=errand_runs_store, clock=clock
+        ),
         errand_runs=errand_runs_store,
         errand_planning=ErrandPlanning(graphs=graph_store, finding_sets=finding_set_store),
         cadence_mint=CadenceMint(

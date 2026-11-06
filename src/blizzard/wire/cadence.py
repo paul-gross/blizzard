@@ -7,7 +7,8 @@ from typing import Annotated, Literal
 
 from pydantic import BaseModel, ConfigDict
 
-from blizzard.foundation.cadence_attention import AttentionReason
+from blizzard.foundation.cadence_attention import AttentionReason, ErrandState
+from blizzard.foundation.chunk_status import ChunkStatus
 from blizzard.foundation.run_mode import RunMode
 from blizzard.foundation.unrecognized import Unrecognized
 from blizzard.wire.base import WireModel
@@ -113,6 +114,15 @@ class CadenceAttentionView(WireModel):
     scope: str | None = None
 
 
+class ErrandCountsView(WireModel):
+    """A cadence's errands counted by state. A later state is a later field."""
+
+    due: int = 0
+    running: int = 0
+    waiting: int = 0
+    stopped: int = 0
+
+
 class CadenceView(WireModel):
     """A cadence as served by the create, list, read, edit, and lifecycle routes, with its attention as it stands at
     the read — empty when nothing stops its errands, or when it is retired."""
@@ -128,6 +138,8 @@ class CadenceView(WireModel):
     anchor: str | None = None
     chores: list[ChoreView] = []
     attention: list[CadenceAttentionView] = []
+    #: How many of the cadence's errands stand in each state at the read.
+    errand_counts: ErrandCountsView = ErrandCountsView()
     created_at: str
     retired: bool = False
     revision: int
@@ -137,3 +149,31 @@ class CadenceView(WireModel):
     project_slug: str | None = None
     #: The project's current display name; ``None`` where the hub reports none.
     project_name: str | None = None
+
+
+class ErrandRunView(WireModel):
+    """An errand's last run: the chunk holding its work item (``None`` when none could be resolved), the chunk's
+    status, and when the run was scheduled, started, and finished."""
+
+    chunk_id: str | None = None
+    status: Annotated[ChunkStatus | Unrecognized, OPEN] | None = None
+    #: When the run's work item was minted.
+    scheduled_at: str
+    #: When the run's first lease was minted; ``None`` before a runner took it up.
+    started_at: str | None = None
+    #: When the run became terminal; ``None`` while it is live.
+    finished_at: str | None = None
+
+
+class CadenceErrandView(WireModel):
+    """One errand of a cadence — one chore over one scope — at the read."""
+
+    chore: str
+    scope: str
+    state: Annotated[ErrandState | Unrecognized, OPEN]
+    #: The attention entries that stop this errand; empty when none does.
+    attention: list[CadenceAttentionView] = []
+    last_run: ErrandRunView | None = None
+    #: When the errand is or was next due — in the past for a ``due`` errand, whose missed moment is still owed;
+    #: ``None`` while it is running or stopped.
+    due_at: str | None = None
