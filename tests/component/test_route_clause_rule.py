@@ -15,8 +15,10 @@ _ROOT = repo_root()
 _VALE = shutil.which("vale")
 _REQUIRED = os.environ.get("BLIZZARD_REQUIRE_VALE") == "1"
 
-if _VALE is None and not _REQUIRED:
-    pytest.skip("vale is not installed; `mise run process-ref-lint` runs this module with it", allow_module_level=True)
+pytestmark = pytest.mark.skipif(
+    _VALE is None and not _REQUIRED,
+    reason="vale is not installed; `mise run process-ref-lint` runs this module with it",
+)
 
 _HUB = "src/blizzard/hub/cli/sample.py"
 _RUNNER = "src/blizzard/runner/cli/sample.py"
