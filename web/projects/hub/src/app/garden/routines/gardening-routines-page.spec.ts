@@ -74,6 +74,7 @@ describe('GardeningRoutinesPage', () => {
     stub = stubHubClient({
       'GET /api/routines': () => routines,
       'GET /api/graphs': () => graphs,
+      'GET /api/cadences': () => [],
     });
     await TestBed.configureTestingModule({
       imports: [TestRoutinesHost],

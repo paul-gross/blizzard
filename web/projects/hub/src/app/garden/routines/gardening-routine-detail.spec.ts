@@ -1,10 +1,12 @@
 import { provideZonelessChangeDetection } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
-import { ActivatedRoute, convertToParamMap, type ParamMap } from '@angular/router';
+import { ActivatedRoute, convertToParamMap, provideRouter, type ParamMap } from '@angular/router';
 import { QueryClient, provideTanStackQuery } from '@tanstack/angular-query-experimental';
 import { FLEET_CLOCK, type GraphSummaryView, type MeResponse, type RoutineView } from 'fleet';
 import {
   OPERATOR_ME_RESPONSE,
+  gardenCadenceView,
+  gardenChoreView,
   gardenGraphSummaryView,
   gardenMeasurementReadingView,
   gardenProposalCountsRowView,
@@ -119,6 +121,7 @@ describe('GardeningRoutineDetail', () => {
       // `injectHubScopesQuery` independently of this pane.
       'GET /api/scopes': () => [],
       'GET /api/runs': () => [],
+      'GET /api/cadences': () => [],
       'GET /api/me': () => me,
       'POST /api/routines/{routine_id}/retire': (_request, { routine_id }) =>
         gardenRoutineView({ ...ROUTINE, routine_id, retired: true }),
@@ -132,6 +135,7 @@ describe('GardeningRoutineDetail', () => {
       providers: [
         provideZonelessChangeDetection(),
         provideTanStackQuery(new QueryClient({ defaultOptions: { queries: { retry: false } } })),
+        provideRouter([]),
         { provide: ActivatedRoute, useValue: { paramMap: paramMap$ } },
       ],
     }).compileComponents();
@@ -230,6 +234,31 @@ describe('GardeningRoutineDetail', () => {
     expect(record?.textContent).toContain('blizzard');
     expect(record?.textContent).toContain('claude-sonnet-5');
     expect(record?.textContent).toContain('medium');
+  });
+
+  it('names the cadence chore keeping the routine off the cadences read', async () => {
+    const fixture = await render({
+      params: { routineSlug: 'nightly' },
+      routes: {
+        'GET /api/cadences': () => [
+          gardenCadenceView({ slug: 'evening', name: 'Evening', chores: [gardenChoreView({ routine: ROUTINE.slug })] }),
+        ],
+      },
+    });
+    const el = fixture.nativeElement as HTMLElement;
+
+    const fact = el.querySelector('[data-testid="gardening-routine-fact-kept-by"]');
+    expect(fact?.textContent).toContain('Evening');
+    expect(fact?.textContent).toContain('chore nightly');
+  });
+
+  it('says no cadence keeps a routine no chore names', async () => {
+    const fixture = await render({ params: { routineSlug: 'nightly' } });
+    const el = fixture.nativeElement as HTMLElement;
+
+    expect(el.querySelector('[data-testid="gardening-routine-kept-by-none"]')?.textContent).toContain(
+      'No cadence keeps it — it runs when started.',
+    );
   });
 
   it('lists the related scopes, marking the routine default', async () => {

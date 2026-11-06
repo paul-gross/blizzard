@@ -1,6 +1,7 @@
 import type { AsyncStateQuery, GraphSummaryView, RoutineView } from 'fleet';
 import { describe, expect, it } from 'vitest';
 
+import { gardenCadenceView, gardenChoreView } from 'fleet/testing';
 import { presentRoutineSlug, routineListRows } from './gardening-routines-page.model';
 
 const NIGHTLY: RoutineView = {
@@ -57,21 +58,30 @@ const query = (state: 'pending' | 'error' | 'success'): AsyncStateQuery => ({
 
 describe('routineListRows', () => {
   it('flags a routine blocked when its graph has no effective mint', () => {
-    expect(routineListRows([NIGHTLY, ORPHAN], [EFFECTIVE_GRAPH], query('success'))).toEqual([
-      { routineId: 'rtn_1', slug: 'nightly', name: 'Nightly sweep', graphName: 'garden-routine', blocked: false, retired: false },
-      { routineId: 'rtn_2', slug: 'orphan', name: 'Orphan', graphName: 'unminted', blocked: true, retired: true },
+    expect(routineListRows([NIGHTLY, ORPHAN], [EFFECTIVE_GRAPH], query('success'), [])).toEqual([
+      { routineId: 'rtn_1', slug: 'nightly', name: 'Nightly sweep', graphName: 'garden-routine', blocked: false, retired: false, kept: false },
+      { routineId: 'rtn_2', slug: 'orphan', name: 'Orphan', graphName: 'unminted', blocked: true, retired: true, kept: false },
     ]);
   });
 
   it('flags no routine blocked while the graph read is pending', () => {
-    expect(routineListRows([ORPHAN], [], query('pending')).map((row) => row.blocked)).toEqual([false]);
+    expect(routineListRows([ORPHAN], [], query('pending'), []).map((row) => row.blocked)).toEqual([false]);
   });
 
   it('flags no routine blocked when the graph read failed', () => {
-    expect(routineListRows([ORPHAN], [], query('error')).map((row) => row.blocked)).toEqual([false]);
+    expect(routineListRows([ORPHAN], [], query('error'), []).map((row) => row.blocked)).toEqual([false]);
+  });
+
+  it('marks a routine kept when a chore on an enabled cadence names it, and none while cadences are unread', () => {
+    const evening = gardenCadenceView({ slug: 'evening', chores: [gardenChoreView()] });
+    expect(routineListRows([NIGHTLY, ORPHAN], [EFFECTIVE_GRAPH], query('success'), [evening]).map((r) => r.kept)).toEqual([
+      true,
+      false,
+    ]);
+    expect(routineListRows([NIGHTLY], [EFFECTIVE_GRAPH], query('success'), undefined).map((r) => r.kept)).toEqual([false]);
   });
 
   it('answers no rows for no routines', () => {
-    expect(routineListRows([], [EFFECTIVE_GRAPH], query('success'))).toEqual([]);
+    expect(routineListRows([], [EFFECTIVE_GRAPH], query('success'), [])).toEqual([]);
   });
 });

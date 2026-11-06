@@ -5,6 +5,7 @@ import { FLEET_CLOCK, asyncState, errorMessage, injectPendingMutationVariables, 
 import { defaultRoutineWindow } from '../core/routine-window';
 import { FleetRoutinePanel, type LastSweptRowVm, type MeasurementReadingVm, type RelatedScopeVm, type RoutinePanelVm, type StrategyStepVm } from './routine-panel';
 import {
+  keptByRows,
   lastSweptRows,
   measurementReadings,
   proposalCountsRows,
@@ -30,6 +31,7 @@ import { map } from 'rxjs';
 import { isRoutineBlocked } from './gardening-effective-graph';
 import { injectLensedProject } from '../../core/lensed-project';
 import { injectHubRunsQuery } from '../runs/garden-runs.query';
+import { injectHubCadencesQuery } from '../core/cadences.query';
 import { GardeningRunDialog } from '../runs/gardening-run-dialog';
 
 /**
@@ -40,7 +42,7 @@ import { GardeningRunDialog } from '../runs/gardening-run-dialog';
  * so the bare one renders the panel's own "nothing selected" empty state. Edit sets
  * the graph the routine runs, gated on `graph:edit` like the scope detail's own Edit.
  *
- * A container: it injects the routine, graph, trend, sweeps, scopes, and
+ * A container: it injects the routine, graph, trend, sweeps, scopes, cadences, and
  * proposal-counts queries and forwards a plain view model to the presentational
  * {@link FleetRoutinePanel}, which injects no query of its own. The routine and
  * graph reads are the same cache-keyed queries the list beside it already holds, so
@@ -175,6 +177,15 @@ export class GardeningRoutineDetail {
     asyncState(this.proposalCountsQuery, (this.proposalCountsQuery.data()?.rows.length ?? 0) === 0),
   );
 
+  /** The project's cadences — the Kept by fact selects the chores naming this routine off them. */
+  private readonly cadencesQuery = injectHubCadencesQuery();
+
+  private readonly keptBy = computed(() => keptByRows(this.cadencesQuery.data(), this.selectedRoutine()));
+
+  private readonly keptByState = computed<KitAsyncStateValue>(() =>
+    asyncState(this.cadencesQuery, (this.keptBy()?.length ?? 0) === 0),
+  );
+
   private readonly recentRuns = computed(() =>
     routineRecentRuns(this.runsQuery.data(), this.selectedRoutine()?.slug ?? null),
   );
@@ -202,6 +213,8 @@ export class GardeningRoutineDetail {
       overrideRetired: this.overrideRetired(),
       recentRuns: this.recentRuns(),
       recentRunsState: this.recentRunsState(),
+      keptBy: this.keptBy(),
+      keptByState: this.keptByState(),
     }),
   );
 

@@ -458,7 +458,7 @@ describe('gardening sub-tab layout shell sweep (web:shell-sweep)', () => {
     }
   });
 
-  it.each([1280, 390])('routines: puts "manual" at the row\'s right and the graph beneath the name, at %ipx', async (width) => {
+  it.each([1280, 390])('routines: puts the kept routine\'s "cadence" at the row\'s right and the graph beneath the name, at %ipx', async (width) => {
     const { fixture, router, stub, viewport } = await render('/gardening/routines');
     const root = fixture.nativeElement as HTMLElement;
     document.body.appendChild(root);
@@ -473,7 +473,8 @@ describe('gardening sub-tab layout shell sweep (web:shell-sweep)', () => {
       const name = row.querySelector<HTMLElement>('.rt-name')!;
       const cadence = row.querySelector<HTMLElement>('[data-testid="gardening-routine-cadence"]')!;
       const graph = row.querySelector<HTMLElement>('.rt-graph')!;
-      expect(cadence.textContent?.trim()).toBe('manual');
+      // `nightly` is kept by the `evening` cadence's chore.
+      expect(cadence.textContent?.trim()).toBe('cadence');
       expect(graph.textContent?.trim()).toBe('graph garden-routine');
       expect(cadence.getBoundingClientRect().left).toBeGreaterThan(name.getBoundingClientRect().right);
       expect(cadence.getBoundingClientRect().right).toBeLessThanOrEqual(row.getBoundingClientRect().right + 1);

@@ -15,8 +15,8 @@
         >
           <span class="rt-top">
             <span class="rt-name">{{ row.name }}</span>
-            <!-- A routine runs only when kicked off by hand: no cadence schedules it. -->
-            <span class="rt-cadence" data-testid="gardening-routine-cadence">manual</span>
+            <!-- A routine a cadence keeps reads `cadence`; any other runs only when started. -->
+            <span class="rt-cadence" data-testid="gardening-routine-cadence">{{ row.kept ? 'cadence' : 'manual' }}</span>
           </span>
           <span class="rt-line2">
             <span class="rt-graph">graph {{ row.graphName }}</span>
