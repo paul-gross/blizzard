@@ -18,7 +18,7 @@ from sqlalchemy import Column, MetaData, String, Table
 from blizzard.foundation.chunk_status import ChunkStatus
 from blizzard.foundation.crash import CrashPoint
 from blizzard.foundation.escalation_causes import EscalationCause
-from blizzard.foundation.fact_kinds import ANSWER_DELIVERED, ESCALATION_RECORDED, EVENT_RECORDED
+from blizzard.foundation.fact_kinds import ANSWER_DELIVERED, ESCALATION_RECORDED, EVENT_RECORDED, LEASE_MINTED
 from blizzard.foundation.leases import LeaseClosureReason
 from blizzard.runner.harness.adapter import WorkerHandle
 from blizzard.runner.harness.identity import CLAUDE_CODE_HARNESS_ID, SessionReference
@@ -44,6 +44,7 @@ from tests.support.runner_fakes import (
     make_store,
     serving,
 )
+from tests.support.runner_mint import new_mint
 
 pytestmark = pytest.mark.unit
 
@@ -57,16 +58,18 @@ def _store(tmp_path: Path) -> SqlAlchemyRunnerStore:
 
 
 def _seed_lease(store: SqlAlchemyRunnerStore, *, session: SessionReference | None = _SESSION) -> None:
-    store.record_lease(
-        NewLease(
-            lease_id="lease_1",
-            chunk_id="ch_1",
-            graph_id="gr_1",
-            node_id="nd_build",
-            node_name="build",
-            epoch=1,
-            retries_max=0,
-            created_at=_NOW,
+    store.record_mint(
+        new_mint(
+            NewLease(
+                lease_id="lease_1",
+                chunk_id="ch_1",
+                graph_id="gr_1",
+                node_id="nd_build",
+                node_name="build",
+                epoch=1,
+                retries_max=0,
+                created_at=_NOW,
+            )
         )
     )
     if session is not None:
@@ -139,7 +142,8 @@ def test_record_closure_lands_the_closure_and_both_facts_in_order(tmp_path: Path
 
     assert store.active_lease("lease_1") is None
     rows = store.pending_outbound()
-    assert [(f.seq, f.kind) for f in rows] == list(zip(seqs, [EVENT_RECORDED, ESCALATION_RECORDED], strict=True))
+    assert [f.kind for f in rows] == [LEASE_MINTED, EVENT_RECORDED, ESCALATION_RECORDED]
+    assert [(f.seq, f.kind) for f in rows[1:]] == list(zip(seqs, [EVENT_RECORDED, ESCALATION_RECORDED], strict=True))
     assert seqs == sorted(seqs)
 
 
@@ -171,7 +175,7 @@ def test_a_raise_inside_record_closure_leaves_neither_the_closure_nor_any_fact(
         )
 
     assert store.active_lease("lease_1") is not None
-    assert store.pending_outbound() == []
+    assert [f.kind for f in store.pending_outbound()] == [LEASE_MINTED]
 
 
 # --- the escalation sites, each one escalating close ---

@@ -21,6 +21,7 @@ from tests.support.config_inputs import create_runner_app
 from tests.support.factory_fields import NewLeaseFields
 from tests.support.runner_client import runner_client
 from tests.support.runner_fakes import SqlAlchemyRunnerStore, make_host_stores, make_store, make_stores, no_retry_clock
+from tests.support.runner_mint import new_mint
 
 _NOW = datetime(2026, 9, 2, 12, 0, 0, tzinfo=UTC)
 _TOKEN = "the-lease-token"
@@ -95,7 +96,7 @@ def _seed_lease(store: SqlAlchemyRunnerStore, **overrides: Unpack[NewLeaseFields
         "created_at": _NOW,
     }
     lease = NewLease(**(defaults | overrides))
-    store.record_lease(lease)
+    store.record_mint(new_mint(lease))
     store.record_lease_token(lease.lease_id, TokenHash(_TOKEN).hex, _NOW)
 
 

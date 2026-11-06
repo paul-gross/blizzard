@@ -61,6 +61,7 @@ from tests.support.runner_fakes import (
     make_store,
     single_workspace,
 )
+from tests.support.runner_mint import new_mint
 
 _NOW = datetime(2026, 7, 17, 12, 0, 0, tzinfo=UTC)
 _HANDLE = WorkerHandle(session_id="sess-a", pid=100, process_start_time="start-100", pgid=100)
@@ -124,19 +125,21 @@ def _seed_lease(
 
     The session stamps default to unset, i.e. the pre-#144 shape: every
     scenario that says nothing about them asserts today's bare resume command."""
-    store.record_lease(
-        NewLease(
-            lease_id=lease,
-            chunk_id=chunk,
-            graph_id="gr_1",
-            node_id=node_id,
-            node_name=node_name,
-            epoch=epoch,
-            retries_max=2,
-            session_name=session_name,
-            resolved_model=resolved_model,
-            resolved_effort=resolved_effort,
-            created_at=_NOW,
+    store.record_mint(
+        new_mint(
+            NewLease(
+                lease_id=lease,
+                chunk_id=chunk,
+                graph_id="gr_1",
+                node_id=node_id,
+                node_name=node_name,
+                epoch=epoch,
+                retries_max=2,
+                session_name=session_name,
+                resolved_model=resolved_model,
+                resolved_effort=resolved_effort,
+                created_at=_NOW,
+            )
         )
     )
     store.record_spawn(
@@ -201,7 +204,9 @@ def test_takeover_opens_over_an_ask_parked_chunk(tmp_path: Path, workspace_root:
     assert record.session_id == "sess-a"
     assert record.fence_epoch is None  # nothing live to fence
     assert "ch_1" in store.open_takeover_chunk_ids()
-    assert store.pending_outbound() == []  # no fence bump enqueued — a dormant lease needs none
+    assert [f.kind for f in store.pending_outbound()] == [
+        LEASE_MINTED
+    ]  # no fence bump enqueued — a dormant lease needs none
 
 
 def test_a_takeover_session_may_ask_on_the_still_active_parked_lease(tmp_path: Path) -> None:
@@ -242,16 +247,18 @@ def test_takeover_after_a_node_entry_escalation_resolves_the_prior_session(tmp_p
     session-less lease newer than the prior session it could not resume. Once the owner is
     restored, a takeover must still resolve against that prior session, not the empty mint."""
     store = _store(tmp_path)
-    store.record_lease(
-        NewLease(
-            lease_id="lease_1",
-            chunk_id="ch_1",
-            graph_id="gr_1",
-            node_id="nd_build",
-            node_name="build",
-            epoch=1,
-            retries_max=2,
-            created_at=_NOW,
+    store.record_mint(
+        new_mint(
+            NewLease(
+                lease_id="lease_1",
+                chunk_id="ch_1",
+                graph_id="gr_1",
+                node_id="nd_build",
+                node_name="build",
+                epoch=1,
+                retries_max=2,
+                created_at=_NOW,
+            )
         )
     )
     store.record_spawn(
@@ -407,7 +414,7 @@ def test_takeover_refuses_a_live_worker_without_force(tmp_path: Path) -> None:
 
     # Refusing must not touch anything: no takeover fact, no kill, no fence.
     assert store.open_takeover_for_chunk("ch_1") is None
-    assert store.pending_outbound() == []
+    assert [f.kind for f in store.pending_outbound()] == [LEASE_MINTED]
 
 
 def test_forced_takeover_orders_fact_before_kill_fences_the_epoch_and_consumes_no_retry(tmp_path: Path) -> None:
@@ -443,9 +450,9 @@ def test_forced_takeover_orders_fact_before_kill_fences_the_epoch_and_consumes_n
     # The fence rides the outbound buffer as an ordinary lease.minted fact, so a late
     # completion from the killed worker's session lands on a stale epoch.
     pending = store.pending_outbound()
-    assert len(pending) == 1
-    assert pending[0].kind == LEASE_MINTED
-    assert '"epoch": 2' in pending[0].payload
+    assert [f.kind for f in pending] == [LEASE_MINTED, LEASE_MINTED]
+    assert '"epoch": 1' in pending[0].payload
+    assert '"epoch": 2' in pending[1].payload
 
     # latest_epoch is now fenced past the killed attempt, even though no local lease
     # was minted for it — a later real spawn would not reuse epoch 2.
@@ -478,8 +485,7 @@ def test_forced_takeover_refuses_a_lease_with_a_pending_submission(tmp_path: Pat
     # enqueued — the buffer holds only the pre-existing completion.
     assert store.open_takeover_for_chunk("ch_1") is None
     pending = store.pending_outbound()
-    assert len(pending) == 1
-    assert pending[0].kind == "completion.submitted"
+    assert [f.kind for f in pending] == [LEASE_MINTED, "completion.submitted"]
 
 
 def test_takeover_close_marks_it_ended(tmp_path: Path) -> None:
@@ -615,7 +621,7 @@ def test_advance_skips_judgement_and_the_held_chunk_poll_under_an_open_takeover(
     Advance(ctx).run()
 
     assert harness.judged == []  # never resumed to elicit a verdict
-    assert store.pending_outbound() == []  # no completion buffered
+    assert [f.kind for f in store.pending_outbound()] == [LEASE_MINTED]  # no completion buffered
     assert store.active_lease("lease_1") is not None  # left exactly as it was
 
 
@@ -908,7 +914,7 @@ def test_the_decision_transaction_is_all_or_none(tmp_path: Path) -> None:
         )
 
     assert store.open_takeover_for_chunk("ch_1") is None
-    assert store.pending_outbound() == []
+    assert [f.kind for f in store.pending_outbound()] == [LEASE_MINTED]
     assert store.lease_token_hash("lease_1") == "prior-token-hash"
 
 

@@ -76,6 +76,7 @@ from tests.support.runner_fakes import (
     serving,
     single_workspace,
 )
+from tests.support.runner_mint import new_mint
 
 
 class _BlipOnceHub(FakeHub):
@@ -246,16 +247,18 @@ def test_in_flight_chunk_runs_on_while_locally_paused(tmp_path: Path):
 
 def _seed_exited_lease(store: SqlAlchemyRunnerStore):
     """A build lease spawned into env e1; the worker has already exited (no probe entry)."""
-    store.record_lease(
-        NewLease(
-            lease_id="lease_1",
-            chunk_id="ch_1",
-            graph_id="gr_1",
-            node_id="nd_build",
-            node_name="build",
-            epoch=1,
-            retries_max=2,
-            created_at=_NOW,
+    store.record_mint(
+        new_mint(
+            NewLease(
+                lease_id="lease_1",
+                chunk_id="ch_1",
+                graph_id="gr_1",
+                node_id="nd_build",
+                node_name="build",
+                epoch=1,
+                retries_max=2,
+                created_at=_NOW,
+            )
         )
     )
     store.record_spawn(
@@ -554,16 +557,18 @@ def _seed_orphan_lease(
     store: SqlAlchemyRunnerStore, *, chunk: str = "ch_1", lease: str = "lease_1", retries_max: int = 2, epoch: int = 1
 ):
     """A lease minted at FILL but never spawned (no pid/session) — REAP's orphan case."""
-    store.record_lease(
-        NewLease(
-            lease_id=lease,
-            chunk_id=chunk,
-            graph_id="gr_1",
-            node_id="nd_build",
-            node_name="build",
-            epoch=epoch,
-            retries_max=retries_max,
-            created_at=_NOW,
+    store.record_mint(
+        new_mint(
+            NewLease(
+                lease_id=lease,
+                chunk_id=chunk,
+                graph_id="gr_1",
+                node_id="nd_build",
+                node_name="build",
+                epoch=epoch,
+                retries_max=retries_max,
+                created_at=_NOW,
+            )
         )
     )
     store.record_binding(chunk_id=chunk, environment_id="e1", workdir="/ws/e1", bound_at=_NOW, workspace_id="ws1")
@@ -589,7 +594,9 @@ def test_reap_orphan_requeue_respawn_suppressed_then_adopted_at_unpause(tmp_path
     assert store.active_lease("lease_1") is None
     assert store.active_lease_for_chunk("ch_1") is None
     assert store.attempt_count("ch_1", "nd_build") == 1
-    assert [f for f in store.pending_outbound() if f.kind == LEASE_MINTED] == []
+    assert [(f.kind, f.lease_id) for f in store.pending_outbound() if f.kind == LEASE_MINTED] == [
+        (LEASE_MINTED, "lease_1")
+    ]
     assert store.held_environment_ids() == ["e1"]
 
     # Unpause; FILL's reconcile pass sees the same shape a crashed FILL would
@@ -812,16 +819,18 @@ def test_pull_rejection_at_exhausted_retries_defers_escalation_while_locally_pau
     buffered just before pause flushes during it, the hub rejects it as stale, and the
     exhausted budget must not open the escalate door while paused."""
     store = _store(tmp_path)
-    store.record_lease(
-        NewLease(
-            lease_id="lease_1",
-            chunk_id="ch_1",
-            graph_id="gr_1",
-            node_id="nd_build",
-            node_name="build",
-            epoch=1,
-            retries_max=0,  # exhausted on the first attempt — a rejection escalates
-            created_at=_NOW,
+    store.record_mint(
+        new_mint(
+            NewLease(
+                lease_id="lease_1",
+                chunk_id="ch_1",
+                graph_id="gr_1",
+                node_id="nd_build",
+                node_name="build",
+                epoch=1,
+                retries_max=0,  # exhausted on the first attempt — a rejection escalates
+                created_at=_NOW,
+            )
         )
     )
     store.record_spawn(
@@ -1257,16 +1266,18 @@ def test_a_mark_written_earlier_in_the_pass_keeps_a_later_pause_parked_lease_asl
     store = _store(tmp_path)
     hub = FakeHub()
     for i in (1, 2, 3):
-        store.record_lease(
-            NewLease(
-                lease_id=f"lease_{i}",
-                chunk_id=f"ch_{i}",
-                graph_id="gr_1",
-                node_id="nd_build",
-                node_name="build",
-                epoch=1,
-                retries_max=2,
-                created_at=_NOW,
+        store.record_mint(
+            new_mint(
+                NewLease(
+                    lease_id=f"lease_{i}",
+                    chunk_id=f"ch_{i}",
+                    graph_id="gr_1",
+                    node_id="nd_build",
+                    node_name="build",
+                    epoch=1,
+                    retries_max=2,
+                    created_at=_NOW,
+                )
             )
         )
         store.record_spawn(

@@ -37,6 +37,7 @@ from tests.support.runner_fakes import (
     make_store,
     make_stores,
 )
+from tests.support.runner_mint import new_mint
 
 _NOW = datetime(2026, 9, 18, 12, 0, 0, tzinfo=UTC)
 _CHOICES = [("pass", "meets criteria"), ("fail", "does not")]
@@ -55,16 +56,18 @@ def _seed_exited_lease(
     epoch: int = 1,
     session: str = "sess-a",
 ) -> None:
-    store.record_lease(
-        NewLease(
-            lease_id=lease,
-            chunk_id=chunk,
-            graph_id="gr_1",
-            node_id=node,
-            node_name="review",
-            epoch=epoch,
-            retries_max=2,
-            created_at=_NOW,
+    store.record_mint(
+        new_mint(
+            NewLease(
+                lease_id=lease,
+                chunk_id=chunk,
+                graph_id="gr_1",
+                node_id=node,
+                node_name="review",
+                epoch=epoch,
+                retries_max=2,
+                created_at=_NOW,
+            )
         )
     )
     store.record_spawn(

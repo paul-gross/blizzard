@@ -10,6 +10,7 @@ from blizzard.runner.leases.model import NewLease
 from tests.support.config_inputs import create_runner_app
 from tests.support.runner_client import runner_client
 from tests.support.runner_fakes import make_host_stores, make_store, make_stores, record_usage
+from tests.support.runner_mint import new_mint
 from tests.support.scaffolding import assert_all_timestamps_utc
 
 _NOW = datetime(2026, 7, 16, 12, 0, 0, tzinfo=UTC)
@@ -23,16 +24,18 @@ def _app(tmp_path: Path) -> tuple[Any, Any]:
 
 
 def _seed_lease(store: Any, lease_id: str, epoch: int) -> None:
-    store.record_lease(
-        NewLease(
-            lease_id=lease_id,
-            chunk_id="ch_1",
-            graph_id="gr_1",
-            node_id="nd_build",
-            node_name="build",
-            epoch=epoch,
-            retries_max=2,
-            created_at=_NOW,
+    store.record_mint(
+        new_mint(
+            NewLease(
+                lease_id=lease_id,
+                chunk_id="ch_1",
+                graph_id="gr_1",
+                node_id="nd_build",
+                node_name="build",
+                epoch=epoch,
+                retries_max=2,
+                created_at=_NOW,
+            )
         )
     )
 

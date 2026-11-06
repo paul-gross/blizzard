@@ -18,6 +18,7 @@ from blizzard.runner.leases.model import NewLease
 from tests.support.config_inputs import create_runner_app
 from tests.support.runner_client import runner_client
 from tests.support.runner_fakes import make_host_stores, make_store, make_stores, no_retry_clock
+from tests.support.runner_mint import new_mint
 from tests.support.scaffolding import build_hub, pointer_token, report_escalation, report_lease, report_question
 
 _NOW = datetime(2026, 7, 21, 12, 0, 0, tzinfo=UTC)
@@ -126,16 +127,18 @@ def _runner_serving(tmp_path: Path, chunk_id: str, detail: dict[str, object]):
         hub_proxy_client=httpx2.Client(transport=httpx2.MockTransport(handler)),
         hub_retry_clock=no_retry_clock(),
     )
-    store.record_lease(
-        NewLease(
-            lease_id="lease_1",
-            chunk_id=chunk_id,
-            graph_id="gr_1",
-            node_id="nd_build",
-            node_name="build",
-            epoch=3,
-            retries_max=2,
-            created_at=_NOW,
+    store.record_mint(
+        new_mint(
+            NewLease(
+                lease_id="lease_1",
+                chunk_id=chunk_id,
+                graph_id="gr_1",
+                node_id="nd_build",
+                node_name="build",
+                epoch=3,
+                retries_max=2,
+                created_at=_NOW,
+            )
         )
     )
     store.record_lease_token("lease_1", TokenHash(_TOKEN).hex, _NOW)

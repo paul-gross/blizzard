@@ -43,6 +43,7 @@ from tests.support.runner_fakes import (
     make_envelope,
     make_store,
 )
+from tests.support.runner_mint import new_mint
 
 _NOW = datetime(2026, 7, 13, 12, 0, 0, tzinfo=UTC)
 _CHOICES = [("pass", "meets criteria"), ("fail", "does not")]
@@ -67,16 +68,18 @@ def _seed_running_lease(
     session: str = "sess-a",
     epoch: int = 1,
 ) -> None:
-    store.record_lease(
-        NewLease(
-            lease_id=lease,
-            chunk_id=chunk,
-            graph_id="gr_1",
-            node_id="nd_build",
-            node_name="build",
-            epoch=epoch,
-            retries_max=2,
-            created_at=_NOW,
+    store.record_mint(
+        new_mint(
+            NewLease(
+                lease_id=lease,
+                chunk_id=chunk,
+                graph_id="gr_1",
+                node_id="nd_build",
+                node_name="build",
+                epoch=epoch,
+                retries_max=2,
+                created_at=_NOW,
+            )
         )
     )
     store.record_spawn(
@@ -117,7 +120,7 @@ def test_advance_launches_then_collects_across_two_passes(tmp_path: Path):
     elicitation = store.in_flight_elicitation("lease_1", 1)
     assert elicitation is not None
     assert elicitation.pid == 8888  # FakeHarness's default judge pid
-    assert store.pending_outbound() == []  # nothing buffered yet — not collected
+    assert [b.kind for b in store.pending_outbound()] == ["lease.minted"]  # nothing else buffered yet — not collected
 
     Advance(ctx).run()  # collect — the fake elicitation pid reads dead by default
 
@@ -172,7 +175,7 @@ def test_collect_passes_over_a_still_running_elicitation(tmp_path: Path):
     Advance(ctx).run()  # would-be collect pass — must be a no-op
 
     assert store.in_flight_elicitation("lease_1", 1) is not None
-    assert store.pending_outbound() == []
+    assert [b.kind for b in store.pending_outbound()] == ["lease.minted"]
     # Hoist: a live, still-pending elicitation collects nothing on this pass, so it
     # must never pay for `Judgement.of`'s envelope fetch — `collect` would early-return anyway.
     assert len(hub.get_envelope_calls) == envelope_calls_before

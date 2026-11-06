@@ -22,6 +22,7 @@ from blizzard.runner.store.scoped import RUNNER_UNSCOPED_OPTION
 from tests.support.config_inputs import init_host
 from tests.support.pin_store import NOW
 from tests.support.runner_fakes import FIXTURE_RUNNER_ID, SqlAlchemyRunnerStore, runner_store_errors
+from tests.support.runner_mint import new_mint
 
 
 def _counter(engine: sa.Engine, lane: str) -> int:
@@ -57,16 +58,18 @@ def test_a_migrated_transcript_outbound_seq_is_never_reissued_after_a_prune(tmp_
     engine = create_engine_from_url(config.db_url)
     try:
         store = SqlAlchemyRunnerStore(engine, runner_store_errors())
-        store.record_lease(
-            NewLease(
-                lease_id="lease_1",
-                chunk_id="ch_1",
-                graph_id="gr_1",
-                node_id="nd_build",
-                node_name="build",
-                epoch=1,
-                retries_max=2,
-                created_at=NOW,
+        store.record_mint(
+            new_mint(
+                NewLease(
+                    lease_id="lease_1",
+                    chunk_id="ch_1",
+                    graph_id="gr_1",
+                    node_id="nd_build",
+                    node_name="build",
+                    epoch=1,
+                    retries_max=2,
+                    created_at=NOW,
+                )
             )
         )
         store.record_spawn(

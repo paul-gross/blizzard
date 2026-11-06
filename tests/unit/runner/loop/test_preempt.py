@@ -31,6 +31,7 @@ from tests.support.runner_fakes import (
     make_store,
     make_stores,
 )
+from tests.support.runner_mint import new_mint
 
 _NOW = datetime(2026, 7, 13, 12, 0, 0, tzinfo=UTC)
 _HANDLE = WorkerHandle(session_id="sess-a", pid=100, process_start_time="start-100", pgid=100)
@@ -44,17 +45,19 @@ def _seed_running_lease(
     store: SqlAlchemyRunnerStore, *, chunk: str = "ch_1", lease: str = "lease_1", epoch: int = 1
 ) -> None:
     """A build lease with a live worker and its env binding — the shape a restart preempts."""
-    store.record_lease(
-        NewLease(
-            lease_id=lease,
-            chunk_id=chunk,
-            graph_id="gr_1",
-            node_id="nd_build",
-            node_name="build",
-            epoch=epoch,
-            retries_max=2,
-            session_name="main",
-            created_at=_NOW,
+    store.record_mint(
+        new_mint(
+            NewLease(
+                lease_id=lease,
+                chunk_id=chunk,
+                graph_id="gr_1",
+                node_id="nd_build",
+                node_name="build",
+                epoch=epoch,
+                retries_max=2,
+                session_name="main",
+                created_at=_NOW,
+            )
         )
     )
     store.record_spawn(
@@ -399,17 +402,19 @@ def test_lifting_an_operator_pause_preempts_and_re_enters_on_the_next_tick(tmp_p
 def test_a_second_lease_at_the_forced_node_is_fresh_too(tmp_path: Path):
     """The forced visit stays fresh even after its first re-entry is orphaned."""
     store = _store(tmp_path)
-    store.record_lease(
-        NewLease(
-            lease_id="lease_2",
-            chunk_id="ch_1",
-            graph_id="gr_1",
-            node_id="nd_build",
-            node_name="build",
-            epoch=3,  # the first re-entry, minted above the restart at 2; never spawned
-            retries_max=2,
-            session_name="main",
-            created_at=_NOW,
+    store.record_mint(
+        new_mint(
+            NewLease(
+                lease_id="lease_2",
+                chunk_id="ch_1",
+                graph_id="gr_1",
+                node_id="nd_build",
+                node_name="build",
+                epoch=3,  # the first re-entry, minted above the restart at 2; never spawned
+                retries_max=2,
+                session_name="main",
+                created_at=_NOW,
+            )
         )
     )
     store.record_binding(chunk_id="ch_1", environment_id="e1", workdir="/ws/e1", bound_at=_NOW)

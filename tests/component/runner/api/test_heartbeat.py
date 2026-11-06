@@ -12,6 +12,7 @@ from blizzard.runner.leases.model import NewLease
 from tests.support.config_inputs import create_runner_app
 from tests.support.runner_client import runner_client
 from tests.support.runner_fakes import SqlAlchemyRunnerStore, make_host_stores, make_store, make_stores
+from tests.support.runner_mint import new_mint
 
 _NOW = datetime(2026, 7, 17, 12, 0, 0, tzinfo=UTC)
 
@@ -24,16 +25,18 @@ def _runner_app_with_store(tmp_path: Path):
 
 
 def _seed_lease(store: SqlAlchemyRunnerStore, lease_id: str = "lease_1") -> None:
-    store.record_lease(
-        NewLease(
-            lease_id=lease_id,
-            chunk_id="ch_1",
-            graph_id="gr_1",
-            node_id="nd_build",
-            node_name="build",
-            epoch=1,
-            retries_max=2,
-            created_at=_NOW,
+    store.record_mint(
+        new_mint(
+            NewLease(
+                lease_id=lease_id,
+                chunk_id="ch_1",
+                graph_id="gr_1",
+                node_id="nd_build",
+                node_name="build",
+                epoch=1,
+                retries_max=2,
+                created_at=_NOW,
+            )
         )
     )
 

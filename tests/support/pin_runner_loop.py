@@ -17,6 +17,7 @@ from tests.support.runner_fakes import (
     SqlAlchemyRunnerStore,
     make_store,
 )
+from tests.support.runner_mint import new_mint
 
 _NOW = datetime(2026, 8, 4, 12, 0, 0, tzinfo=UTC)
 
@@ -39,16 +40,18 @@ def _seed_running_lease(  # pyright: ignore[reportUnusedFunction]
     node_id: str = "nd_build",
     epoch: int = 1,
 ) -> None:
-    store.record_lease(
-        NewLease(
-            lease_id=lease,
-            chunk_id=chunk,
-            graph_id="gr_1",
-            node_id=node_id,
-            node_name="build",
-            epoch=epoch,
-            retries_max=2,
-            created_at=_NOW,
+    store.record_mint(
+        new_mint(
+            NewLease(
+                lease_id=lease,
+                chunk_id=chunk,
+                graph_id="gr_1",
+                node_id=node_id,
+                node_name="build",
+                epoch=epoch,
+                retries_max=2,
+                created_at=_NOW,
+            )
         )
     )
     store.record_spawn(

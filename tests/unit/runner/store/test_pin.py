@@ -24,6 +24,7 @@ from blizzard.runner.store.schema import (
 )
 from tests.support.pin_store import NOW
 from tests.support.runner_fakes import FIXTURE_RUNNER_ID, SqlAlchemyRunnerStore, make_store
+from tests.support.runner_mint import new_mint
 
 
 def _store(tmp_path: Path):
@@ -54,16 +55,18 @@ def _seqs(store: SqlAlchemyRunnerStore, table: sa.Table) -> list[int]:
 
 
 def _mint(store: SqlAlchemyRunnerStore, lease_id: str, *, epoch: int = 1, at: datetime = NOW) -> None:
-    store.record_lease(
-        NewLease(
-            lease_id=lease_id,
-            chunk_id="ch_1",
-            graph_id="gr_1",
-            node_id="nd_build",
-            node_name="build",
-            epoch=epoch,
-            retries_max=2,
-            created_at=at,
+    store.record_mint(
+        new_mint(
+            NewLease(
+                lease_id=lease_id,
+                chunk_id="ch_1",
+                graph_id="gr_1",
+                node_id="nd_build",
+                node_name="build",
+                epoch=epoch,
+                retries_max=2,
+                created_at=at,
+            )
         )
     )
 
@@ -180,16 +183,18 @@ def test_the_newest_binding_of_a_chunk_is_the_latest_recorded_even_at_an_equal_i
 def test_release_epoch_floor_and_tenure_read_are_chunk_scoped_at_equal_instants(tmp_path: Path) -> None:
     store = _store(tmp_path)
     for chunk, epoch in (("ch_1", 1), ("ch_2", 9), ("ch_3", 1)):
-        store.record_lease(
-            NewLease(
-                lease_id=f"lease_{chunk}_old",
-                chunk_id=chunk,
-                graph_id="gr_1",
-                node_id="nd_build",
-                node_name="build",
-                epoch=epoch,
-                retries_max=2,
-                created_at=NOW,
+        store.record_mint(
+            new_mint(
+                NewLease(
+                    lease_id=f"lease_{chunk}_old",
+                    chunk_id=chunk,
+                    graph_id="gr_1",
+                    node_id="nd_build",
+                    node_name="build",
+                    epoch=epoch,
+                    retries_max=2,
+                    created_at=NOW,
+                )
             )
         )
     store.record_release(chunk_id="ch_1", environment_id="e1", released_at=NOW)
@@ -204,16 +209,18 @@ def test_release_epoch_floor_and_tenure_read_are_chunk_scoped_at_equal_instants(
     assert not store.has_lease_in_binding_tenure("ch_2", NOW + timedelta(seconds=1))
     assert not store.has_lease_in_binding_tenure("ch_missing", NOW)
 
-    store.record_lease(
-        NewLease(
-            lease_id="lease_ch_1_new",
-            chunk_id="ch_1",
-            graph_id="gr_1",
-            node_id="nd_retro",
-            node_name="retro",
-            epoch=2,
-            retries_max=2,
-            created_at=NOW,
+    store.record_mint(
+        new_mint(
+            NewLease(
+                lease_id="lease_ch_1_new",
+                chunk_id="ch_1",
+                graph_id="gr_1",
+                node_id="nd_retro",
+                node_name="retro",
+                epoch=2,
+                retries_max=2,
+                created_at=NOW,
+            )
         )
     )
     assert store.has_lease_in_binding_tenure("ch_1", NOW)
@@ -224,16 +231,18 @@ def test_a_same_instant_escalation_closure_does_not_mask_its_escalation(tmp_path
     """``>``, not ``>=``: a mark stamped at the escalation's own instant must not close it
     — the sweep always stamps a later tick, and a tie would mask a fresh escalation."""
     store = _store(tmp_path)
-    store.record_lease(
-        NewLease(
-            lease_id="lease_1",
-            chunk_id="ch_1",
-            graph_id="gr_1",
-            node_id="nd_build",
-            node_name="build",
-            epoch=1,
-            retries_max=2,
-            created_at=NOW,
+    store.record_mint(
+        new_mint(
+            NewLease(
+                lease_id="lease_1",
+                chunk_id="ch_1",
+                graph_id="gr_1",
+                node_id="nd_build",
+                node_name="build",
+                epoch=1,
+                retries_max=2,
+                created_at=NOW,
+            )
         )
     )
     store.record_closure(lease_id="lease_1", chunk_id="ch_1", node_id="nd_build", reason="escalated", closed_at=NOW)

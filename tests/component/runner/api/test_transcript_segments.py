@@ -28,6 +28,7 @@ from tests.support.runner_fakes import (
     make_stores,
     single_workspace,
 )
+from tests.support.runner_mint import new_mint
 from tests.support.scaffolding import assert_all_timestamps_utc
 
 _NOW = datetime(2026, 7, 16, 12, 0, 0, tzinfo=UTC)
@@ -81,16 +82,18 @@ def _mint(
     lease: str = "lease_1",
     runner_id: str = "r1",
 ):
-    store.record_lease(
-        NewLease(
-            lease_id=lease,
-            chunk_id=chunk,
-            graph_id="gr_1",
-            node_id=node,
-            node_name="build",
-            epoch=epoch,
-            retries_max=2,
-            created_at=_NOW,
+    store.record_mint(
+        new_mint(
+            NewLease(
+                lease_id=lease,
+                chunk_id=chunk,
+                graph_id="gr_1",
+                node_id=node,
+                node_name="build",
+                epoch=epoch,
+                retries_max=2,
+                created_at=_NOW,
+            )
         )
     )
 

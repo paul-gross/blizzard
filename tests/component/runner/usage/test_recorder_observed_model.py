@@ -39,6 +39,7 @@ from tests.support.runner_fakes import (
     make_store,
     single_workspace,
 )
+from tests.support.runner_mint import new_mint
 
 _NOW = datetime(2026, 9, 23, 12, 0, 0, tzinfo=UTC)
 _SESSION_ID = "ses_a"
@@ -57,17 +58,19 @@ def _seed_lease(
     judge_boundary: bool = False,
     started_at: datetime = _NOW,
 ) -> None:
-    store.record_lease(
-        NewLease(
-            lease_id="lease_1",
-            chunk_id="ch_1",
-            graph_id="gr_1",
-            node_id="nd_build",
-            node_name="build",
-            epoch=1,
-            retries_max=2,
-            created_at=_NOW,
-            resolved_model=resolved_model,
+    store.record_mint(
+        new_mint(
+            NewLease(
+                lease_id="lease_1",
+                chunk_id="ch_1",
+                graph_id="gr_1",
+                node_id="nd_build",
+                node_name="build",
+                epoch=1,
+                retries_max=2,
+                created_at=_NOW,
+                resolved_model=resolved_model,
+            )
         )
     )
     store.record_spawn(
@@ -383,17 +386,19 @@ def test_interrupted_task_is_charged_once_across_recording_replay_and_resume(
         return datetime.fromtimestamp(ms / 1000, UTC)
 
     store = make_store(f"sqlite:///{tmp_path / 'runner.db'}")
-    store.record_lease(
-        NewLease(
-            lease_id="lease_1",
-            chunk_id="ch_1",
-            graph_id="gr_1",
-            node_id="nd_build",
-            node_name="build",
-            epoch=1,
-            retries_max=2,
-            created_at=at(900),
-            resolved_model="openai/root",
+    store.record_mint(
+        new_mint(
+            NewLease(
+                lease_id="lease_1",
+                chunk_id="ch_1",
+                graph_id="gr_1",
+                node_id="nd_build",
+                node_name="build",
+                epoch=1,
+                retries_max=2,
+                created_at=at(900),
+                resolved_model="openai/root",
+            )
         )
     )
     root = opencode_session(

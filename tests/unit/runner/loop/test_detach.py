@@ -32,6 +32,7 @@ from tests.support.runner_fakes import (
     make_context,
     make_store,
 )
+from tests.support.runner_mint import new_mint
 
 _NOW = datetime(2026, 7, 13, 12, 0, 0, tzinfo=UTC)
 _HANDLE = WorkerHandle(session_id="sess-a", pid=100, process_start_time="start-100", pgid=100)
@@ -53,16 +54,18 @@ def _seed_running_lease(
 ) -> None:
     """A build lease spawned into env e1 with a live worker, plus its binding — no resume
     intent (a live tick's lease, not a restart-marked one)."""
-    store.record_lease(
-        NewLease(
-            lease_id=lease,
-            chunk_id=chunk,
-            graph_id="gr_1",
-            node_id="nd_build",
-            node_name="build",
-            epoch=epoch,
-            retries_max=2,
-            created_at=_NOW,
+    store.record_mint(
+        new_mint(
+            NewLease(
+                lease_id=lease,
+                chunk_id=chunk,
+                graph_id="gr_1",
+                node_id="nd_build",
+                node_name="build",
+                epoch=epoch,
+                retries_max=2,
+                created_at=_NOW,
+            )
         )
     )
     store.record_spawn(
@@ -80,16 +83,18 @@ def _seed_orphan_lease(
 ) -> None:
     """A lease minted but never spawned (a crash in FILL's mint->spawn window) — REAP's own
     orphan case, with no retry budget left so the very first reap attempt exhausts it."""
-    store.record_lease(
-        NewLease(
-            lease_id=lease,
-            chunk_id=chunk,
-            graph_id="gr_1",
-            node_id="nd_build",
-            node_name="build",
-            epoch=1,
-            retries_max=retries_max,
-            created_at=_NOW,
+    store.record_mint(
+        new_mint(
+            NewLease(
+                lease_id=lease,
+                chunk_id=chunk,
+                graph_id="gr_1",
+                node_id="nd_build",
+                node_name="build",
+                epoch=1,
+                retries_max=retries_max,
+                created_at=_NOW,
+            )
         )
     )
     store.record_binding(chunk_id=chunk, environment_id="e1", workdir="/ws/e1", bound_at=_NOW, workspace_id="ws1")
@@ -262,7 +267,6 @@ def test_pull_leaves_a_still_ours_non_running_lease_untouched(tmp_path: Path, st
 def test_pull_defers_when_hub_unreachable(tmp_path: Path):
     store = _store(tmp_path)
     _seed_running_lease(store)
-    store.enqueue_outbound(kind=LEASE_MINTED, chunk_id="ch_1", lease_id="lease_1", payload="{}", created_at=_NOW)
     hub = FakeHub()
     hub.down = True  # chunk_statuses (and everything else) unreachable
     provider = FakeProvider({"e1": "/ws/e1"})
@@ -342,9 +346,9 @@ def test_reap_abandons_instead_of_escalating_a_detached_chunk(tmp_path: Path):
     # No escalation.recorded — the whole point. The abandon surfaces an *info*
     # ``attempt-abandoned`` operational event, which is not an escalation.
     pending = store.pending_outbound()
-    assert [f.kind for f in pending] == [EVENT_RECORDED]
+    assert [f.kind for f in pending] == [LEASE_MINTED, EVENT_RECORDED]
     assert ESCALATION_RECORDED not in [f.kind for f in pending]
-    assert json.loads(pending[0].payload)["kind"] == "attempt-abandoned"
+    assert json.loads(pending[1].payload)["kind"] == "attempt-abandoned"
     assert provider.released == ["e1"]  # abandoned — envs released, same as PULL's own detach path
     assert store.active_lease("lease_1") is None  # lease closed
     assert store.latest_epoch("ch_1") == 1  # no requeue, no new lease minted
@@ -551,9 +555,9 @@ def test_reap_abandons_instead_of_escalating_a_chunk_unknown_at_the_hub(tmp_path
 
     # No escalation — abandoned as an *info* ``attempt-abandoned`` event.
     pending = store.pending_outbound()
-    assert [f.kind for f in pending] == [EVENT_RECORDED]
+    assert [f.kind for f in pending] == [LEASE_MINTED, EVENT_RECORDED]
     assert ESCALATION_RECORDED not in [f.kind for f in pending]
-    assert json.loads(pending[0].payload)["kind"] == "attempt-abandoned"
+    assert json.loads(pending[1].payload)["kind"] == "attempt-abandoned"
     assert provider.released == ["e1"]  # abandoned — envs released
     assert store.active_lease("lease_1") is None
     assert store.latest_epoch("ch_1") == 1  # no requeue, no new lease minted

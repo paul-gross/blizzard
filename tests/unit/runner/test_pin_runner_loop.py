@@ -39,6 +39,7 @@ from tests.support.runner_fakes import (
     make_envelope,
     migrated_store_at,
 )
+from tests.support.runner_mint import new_mint
 
 
 def test_default_retries_max_is_two() -> None:
@@ -85,16 +86,18 @@ def test_checks_rerun_under_a_fresh_lease_epoch_at_the_same_chunk_and_node(tmp_p
     marker must be unset and the checks must run again against the rebuilt tree."""
     store = _store(tmp_path)
     _seed_running_lease(store, lease="lease_a", epoch=1)
-    store.record_lease(
-        NewLease(
-            lease_id="lease_b",  # the retry: same chunk, same node, fresh lease + epoch
-            chunk_id="ch_1",
-            graph_id="gr_1",
-            node_id="nd_build",
-            node_name="build",
-            epoch=2,
-            retries_max=2,
-            created_at=_NOW,
+    store.record_mint(
+        new_mint(
+            NewLease(
+                lease_id="lease_b",  # the retry: same chunk, same node, fresh lease + epoch
+                chunk_id="ch_1",
+                graph_id="gr_1",
+                node_id="nd_build",
+                node_name="build",
+                epoch=2,
+                retries_max=2,
+                created_at=_NOW,
+            )
         )
     )
     bindings = store.bindings_for_chunk("ch_1")

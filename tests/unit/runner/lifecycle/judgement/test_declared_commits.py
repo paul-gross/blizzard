@@ -28,6 +28,7 @@ from tests.support.runner_fakes import (
     make_context,
     make_store,
 )
+from tests.support.runner_mint import new_mint
 
 _NOW = datetime(2026, 7, 13, 12, 0, 0, tzinfo=UTC)
 _ORIGIN = "git@github.com:acme/widget.git"
@@ -66,16 +67,18 @@ class _Lease:
 
 def _lease(tmp_path: Path) -> _Lease:
     store = make_store(f"sqlite:///{tmp_path / 'runner.db'}")
-    store.record_lease(
-        NewLease(
-            lease_id="lease_1",
-            chunk_id="ch_1",
-            graph_id="gr_1",
-            node_id="nd_build",
-            node_name="build",
-            epoch=1,
-            retries_max=2,
-            created_at=_NOW,
+    store.record_mint(
+        new_mint(
+            NewLease(
+                lease_id="lease_1",
+                chunk_id="ch_1",
+                graph_id="gr_1",
+                node_id="nd_build",
+                node_name="build",
+                epoch=1,
+                retries_max=2,
+                created_at=_NOW,
+            )
         )
     )
     for env in _ENVS:
@@ -190,16 +193,18 @@ def test_each_declaration_is_confirmed_against_the_origin_of_the_workspace_its_e
     tmp_path: Path,
 ) -> None:
     store = make_store(f"sqlite:///{tmp_path / 'runner.db'}")
-    store.record_lease(
-        NewLease(
-            lease_id="lease_1",
-            chunk_id="ch_1",
-            graph_id="gr_1",
-            node_id="nd_build",
-            node_name="build",
-            epoch=1,
-            retries_max=2,
-            created_at=_NOW,
+    store.record_mint(
+        new_mint(
+            NewLease(
+                lease_id="lease_1",
+                chunk_id="ch_1",
+                graph_id="gr_1",
+                node_id="nd_build",
+                node_name="build",
+                epoch=1,
+                retries_max=2,
+                created_at=_NOW,
+            )
         )
     )
     for env, workspace in (("e1", "ws_a"), ("e2", "ws_b")):

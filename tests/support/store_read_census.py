@@ -252,6 +252,7 @@ from blizzard.runner.usage.repository import (
 )
 from tests.support.hub_node_artifacts import record_landing
 from tests.support.runner_fakes import record_usage
+from tests.support.runner_mint import new_mint
 from tests.support.scaffolding import (
     HubHarness,
     added_runner,
@@ -346,19 +347,21 @@ def build_runner_world(engine: Engine, runner_id: str = RUNNER_ID) -> RunnerWorl
 
     # --- chunk 1: a closed-then-active lease pair sharing one resumed session ---------
     lease_1, lease_2 = "lease_1a", "lease_1b"
-    stores.lease_record.record_lease(
-        NewLease(
-            lease_id=lease_1,
-            chunk_id=chunk_1,
-            graph_id=GRAPH_ID,
-            node_id=node_a,
-            node_name="build",
-            epoch=1,
-            retries_max=3,
-            created_at=_t(0),
-            session_name="pool-a",
-            resolved_model="model-a",
-            resolved_effort="medium",
+    stores.lease_record.record_mint(
+        new_mint(
+            NewLease(
+                lease_id=lease_1,
+                chunk_id=chunk_1,
+                graph_id=GRAPH_ID,
+                node_id=node_a,
+                node_name="build",
+                epoch=1,
+                retries_max=3,
+                created_at=_t(0),
+                session_name="pool-a",
+                resolved_model="model-a",
+                resolved_effort="medium",
+            )
         )
     )
     stores.liveness.record_spawn(
@@ -402,19 +405,21 @@ def build_runner_world(engine: Engine, runner_id: str = RUNNER_ID) -> RunnerWorl
     stores.environments.record_binding(chunk_id=chunk_1, environment_id="env-1", workdir="/ws/env-1", bound_at=_t(6))
     stores.tokens.set_route_token(chunk_1, token="route-token-1", at=_t(6))
 
-    stores.lease_record.record_lease(
-        NewLease(
-            lease_id=lease_2,
-            chunk_id=chunk_1,
-            graph_id=GRAPH_ID,
-            node_id=node_a,
-            node_name="build",
-            epoch=2,
-            retries_max=3,
-            created_at=_t(7),
-            session_name="pool-a",
-            resolved_model="model-b",
-            resolved_effort="high",
+    stores.lease_record.record_mint(
+        new_mint(
+            NewLease(
+                lease_id=lease_2,
+                chunk_id=chunk_1,
+                graph_id=GRAPH_ID,
+                node_id=node_a,
+                node_name="build",
+                epoch=2,
+                retries_max=3,
+                created_at=_t(7),
+                session_name="pool-a",
+                resolved_model="model-b",
+                resolved_effort="high",
+            )
         )
     )
     # Same session id as lease_1: a resume, which finalizes lease_1's still-open segment
@@ -549,16 +554,18 @@ def build_runner_world(engine: Engine, runner_id: str = RUNNER_ID) -> RunnerWorl
 
     # --- chunk 2: an ask parked (no resume) -------------------------------------------
     lease_3 = "lease_2a"
-    stores.lease_record.record_lease(
-        NewLease(
-            lease_id=lease_3,
-            chunk_id=chunk_2,
-            graph_id=GRAPH_ID,
-            node_id=node_b,
-            node_name="review",
-            epoch=1,
-            retries_max=2,
-            created_at=_t(20),
+    stores.lease_record.record_mint(
+        new_mint(
+            NewLease(
+                lease_id=lease_3,
+                chunk_id=chunk_2,
+                graph_id=GRAPH_ID,
+                node_id=node_b,
+                node_name="review",
+                epoch=1,
+                retries_max=2,
+                created_at=_t(20),
+            )
         )
     )
     stores.liveness.record_spawn(
@@ -582,16 +589,18 @@ def build_runner_world(engine: Engine, runner_id: str = RUNNER_ID) -> RunnerWorl
 
     # --- chunk 3: an open escalation ---------------------------------------------------
     lease_4 = "lease_3a"
-    stores.lease_record.record_lease(
-        NewLease(
-            lease_id=lease_4,
-            chunk_id=chunk_3,
-            graph_id=GRAPH_ID,
-            node_id=node_c,
-            node_name="judge",
-            epoch=1,
-            retries_max=2,
-            created_at=_t(30),
+    stores.lease_record.record_mint(
+        new_mint(
+            NewLease(
+                lease_id=lease_4,
+                chunk_id=chunk_3,
+                graph_id=GRAPH_ID,
+                node_id=node_c,
+                node_name="judge",
+                epoch=1,
+                retries_max=2,
+                created_at=_t(30),
+            )
         )
     )
     stores.lease_record.record_closure(
@@ -600,17 +609,19 @@ def build_runner_world(engine: Engine, runner_id: str = RUNNER_ID) -> RunnerWorl
 
     # --- chunk 4: an open takeover ------------------------------------------------------
     lease_5 = "lease_4a"
-    stores.lease_record.record_lease(
-        NewLease(
-            lease_id=lease_5,
-            chunk_id=chunk_4,
-            graph_id=GRAPH_ID,
-            node_id=node_d,
-            node_name="build",
-            epoch=1,
-            retries_max=2,
-            created_at=_t(40),
-            session_name="pool-d",
+    stores.lease_record.record_mint(
+        new_mint(
+            NewLease(
+                lease_id=lease_5,
+                chunk_id=chunk_4,
+                graph_id=GRAPH_ID,
+                node_id=node_d,
+                node_name="build",
+                epoch=1,
+                retries_max=2,
+                created_at=_t(40),
+                session_name="pool-d",
+            )
         )
     )
     stores.liveness.record_spawn(
@@ -632,16 +643,18 @@ def build_runner_world(engine: Engine, runner_id: str = RUNNER_ID) -> RunnerWorl
 
     # --- chunk 5: a local requeue, no later lease minted --------------------------------
     lease_6 = "lease_5a"
-    stores.lease_record.record_lease(
-        NewLease(
-            lease_id=lease_6,
-            chunk_id=chunk_5,
-            graph_id=GRAPH_ID,
-            node_id=node_e,
-            node_name="judge",
-            epoch=1,
-            retries_max=2,
-            created_at=_t(50),
+    stores.lease_record.record_mint(
+        new_mint(
+            NewLease(
+                lease_id=lease_6,
+                chunk_id=chunk_5,
+                graph_id=GRAPH_ID,
+                node_id=node_e,
+                node_name="judge",
+                epoch=1,
+                retries_max=2,
+                created_at=_t(50),
+            )
         )
     )
     stores.lease_record.record_closure(
@@ -651,16 +664,18 @@ def build_runner_world(engine: Engine, runner_id: str = RUNNER_ID) -> RunnerWorl
 
     # --- chunk 6: an in-flight elicitation ----------------------------------------------
     lease_7 = "lease_6a"
-    stores.lease_record.record_lease(
-        NewLease(
-            lease_id=lease_7,
-            chunk_id=chunk_6,
-            graph_id=GRAPH_ID,
-            node_id=node_f,
-            node_name="build",
-            epoch=1,
-            retries_max=2,
-            created_at=_t(60),
+    stores.lease_record.record_mint(
+        new_mint(
+            NewLease(
+                lease_id=lease_7,
+                chunk_id=chunk_6,
+                graph_id=GRAPH_ID,
+                node_id=node_f,
+                node_name="build",
+                epoch=1,
+                retries_max=2,
+                created_at=_t(60),
+            )
         )
     )
     stores.elicitations.record_elicitation_launch(lease_7, 1, output_path="/tmp/elicit-1", at=_t(61))
@@ -668,16 +683,18 @@ def build_runner_world(engine: Engine, runner_id: str = RUNNER_ID) -> RunnerWorl
 
     # --- chunk 7: an operator pause-park --------------------------------------------------
     lease_8 = "lease_7a"
-    stores.lease_record.record_lease(
-        NewLease(
-            lease_id=lease_8,
-            chunk_id=chunk_7,
-            graph_id=GRAPH_ID,
-            node_id=node_g,
-            node_name="build",
-            epoch=1,
-            retries_max=2,
-            created_at=_t(70),
+    stores.lease_record.record_mint(
+        new_mint(
+            NewLease(
+                lease_id=lease_8,
+                chunk_id=chunk_7,
+                graph_id=GRAPH_ID,
+                node_id=node_g,
+                node_name="build",
+                epoch=1,
+                retries_max=2,
+                created_at=_t(70),
+            )
         )
     )
     stores.pause.record_pause_park(lease_id=lease_8, chunk_id=chunk_7, parked_at=_t(71))

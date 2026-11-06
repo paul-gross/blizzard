@@ -22,6 +22,7 @@ from blizzard.runner.loop_wiring import LoopWiring
 from tests.support.host_files import one_workspace
 from tests.support.runner_client import runner_client, runner_seams
 from tests.support.runner_fakes import FIXTURE_RUNNER_ID, FakeHub, make_store, migrated_store_at
+from tests.support.runner_mint import new_mint
 
 _NOW = datetime(2026, 7, 17, 12, 0, 0, tzinfo=UTC)
 
@@ -44,16 +45,18 @@ def test_basic_takeover_escalation_and_transcript_resolve_to_the_environment_wor
     try:
         ctx = LoopWiring(config, "", graph.host.events).context(FakeHub(), graph)
         for lease_id, chunk_id in (("lease_1", "ch_1"), ("lease_2", "ch_2")):
-            store.record_lease(
-                NewLease(
-                    lease_id=lease_id,
-                    chunk_id=chunk_id,
-                    graph_id="gr_1",
-                    node_id="nd_build",
-                    node_name="build",
-                    epoch=1,
-                    retries_max=2,
-                    created_at=_NOW,
+            store.record_mint(
+                new_mint(
+                    NewLease(
+                        lease_id=lease_id,
+                        chunk_id=chunk_id,
+                        graph_id="gr_1",
+                        node_id="nd_build",
+                        node_name="build",
+                        epoch=1,
+                        retries_max=2,
+                        created_at=_NOW,
+                    )
                 )
             )
             store.record_spawn(

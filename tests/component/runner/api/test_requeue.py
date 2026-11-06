@@ -17,6 +17,7 @@ from blizzard.runner.operator.requeue import RequeueService
 from tests.support.config_inputs import create_runner_app
 from tests.support.runner_client import runner_client
 from tests.support.runner_fakes import SqlAlchemyRunnerStore, make_host_stores, make_store, make_stores
+from tests.support.runner_mint import new_mint
 
 _NOW = datetime(2026, 7, 17, 12, 0, 0, tzinfo=UTC)
 _LATER = datetime(2026, 7, 17, 13, 0, 0, tzinfo=UTC)  # strictly after the seeded lease's _NOW
@@ -32,16 +33,18 @@ def _app_with_requeue(tmp_path: Path, *, clock: FixedClock | None = None):
 
 
 def _seed_escalated_chunk(store: SqlAlchemyRunnerStore) -> None:
-    store.record_lease(
-        NewLease(
-            lease_id="lease_1",
-            chunk_id="ch_1",
-            graph_id="gr_1",
-            node_id="nd_build",
-            node_name="build",
-            epoch=1,
-            retries_max=2,
-            created_at=_NOW,
+    store.record_mint(
+        new_mint(
+            NewLease(
+                lease_id="lease_1",
+                chunk_id="ch_1",
+                graph_id="gr_1",
+                node_id="nd_build",
+                node_name="build",
+                epoch=1,
+                retries_max=2,
+                created_at=_NOW,
+            )
         )
     )
     store.record_spawn(
@@ -95,16 +98,18 @@ def test_requeue_while_a_takeover_is_open_is_409(tmp_path: Path) -> None:
 
 def test_requeue_a_chunk_that_is_not_needs_human_is_409(tmp_path: Path) -> None:
     app, store = _app_with_requeue(tmp_path)
-    store.record_lease(
-        NewLease(
-            lease_id="lease_1",
-            chunk_id="ch_1",
-            graph_id="gr_1",
-            node_id="nd_build",
-            node_name="build",
-            epoch=1,
-            retries_max=2,
-            created_at=_NOW,
+    store.record_mint(
+        new_mint(
+            NewLease(
+                lease_id="lease_1",
+                chunk_id="ch_1",
+                graph_id="gr_1",
+                node_id="nd_build",
+                node_name="build",
+                epoch=1,
+                retries_max=2,
+                created_at=_NOW,
+            )
         )
     )  # active, never closed — not needs_human
 

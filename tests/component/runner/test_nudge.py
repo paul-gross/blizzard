@@ -41,6 +41,7 @@ from tests.support.runner_fakes import (
     make_envelope,
     make_store,
 )
+from tests.support.runner_mint import new_mint
 
 _NOW = datetime(2026, 7, 19, 12, 0, 0, tzinfo=UTC)
 
@@ -216,19 +217,21 @@ def _seed_exited_lease(
     resolved_effort: str | None = None,
     resolved_compaction_window: str | None = None,
 ) -> None:
-    store.record_lease(
-        NewLease(
-            lease_id=lease_id,
-            chunk_id=chunk_id,
-            graph_id="gr_1",
-            node_id=node_id,
-            node_name="review",
-            epoch=epoch,
-            retries_max=2,
-            resolved_model=resolved_model,
-            resolved_effort=resolved_effort,
-            resolved_compaction_window=resolved_compaction_window,
-            created_at=_NOW,
+    store.record_mint(
+        new_mint(
+            NewLease(
+                lease_id=lease_id,
+                chunk_id=chunk_id,
+                graph_id="gr_1",
+                node_id=node_id,
+                node_name="review",
+                epoch=epoch,
+                retries_max=2,
+                resolved_model=resolved_model,
+                resolved_effort=resolved_effort,
+                resolved_compaction_window=resolved_compaction_window,
+                created_at=_NOW,
+            )
         )
     )
     store.record_spawn(

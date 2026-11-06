@@ -55,6 +55,7 @@ from tests.support.runner_fakes import (
     make_store,
     record_usage,
 )
+from tests.support.runner_mint import new_mint
 
 _NOW = datetime(2026, 7, 28, 12, 0, tzinfo=UTC)
 _CHOICES = [("pass", "ok"), ("fail", "no")]
@@ -770,19 +771,21 @@ def _seed_head(
     harness_id: str = CLAUDE_CODE_HARNESS_ID,
 ) -> str:
     """A pool head for `code` — a session-bearing lease stamping the pool name."""
-    store.record_lease(
-        NewLease(
-            lease_id="lease_head",
-            chunk_id="ch_1",
-            graph_id="gr_1",
-            node_id="nd_build",
-            node_name="build",
-            epoch=1,
-            retries_max=2,
-            session_name="code",
-            resolved_model=model,
-            resolved_effort="medium",
-            created_at=_NOW,
+    store.record_mint(
+        new_mint(
+            NewLease(
+                lease_id="lease_head",
+                chunk_id="ch_1",
+                graph_id="gr_1",
+                node_id="nd_build",
+                node_name="build",
+                epoch=1,
+                retries_max=2,
+                session_name="code",
+                resolved_model=model,
+                resolved_effort="medium",
+                created_at=_NOW,
+            )
         )
     )
     store.record_spawn(
@@ -1292,16 +1295,18 @@ def test_the_escalation_mints_never_spawned_lease_costs_a_later_real_attempt_no_
     # The owner is restored and a real attempt resumes at that same node, so `attempt_count`
     # reads exactly one — were the never-spawned mint still counted, `fail` would escalate.
     now2 = _NOW + timedelta(minutes=5)
-    store.record_lease(
-        NewLease(
-            lease_id="lease_real",
-            chunk_id="ch_1",
-            graph_id="gr_1",
-            node_id="nd_verify",
-            node_name="verify",
-            epoch=mint.epoch + 1,
-            retries_max=1,
-            created_at=now2,
+    store.record_mint(
+        new_mint(
+            NewLease(
+                lease_id="lease_real",
+                chunk_id="ch_1",
+                graph_id="gr_1",
+                node_id="nd_verify",
+                node_name="verify",
+                epoch=mint.epoch + 1,
+                retries_max=1,
+                created_at=now2,
+            )
         )
     )
     store.record_spawn(

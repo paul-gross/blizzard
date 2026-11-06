@@ -12,6 +12,7 @@ from pathlib import Path
 from blizzard.runner.harness.identity import CLAUDE_CODE_HARNESS_ID, SessionReference
 from blizzard.runner.leases.model import NewLease
 from tests.support.runner_fakes import SqlAlchemyRunnerStore, make_store
+from tests.support.runner_mint import new_mint
 
 _NOW = datetime(2026, 7, 13, 12, 0, 0, tzinfo=UTC)
 
@@ -29,16 +30,18 @@ def _mint(  # pyright: ignore[reportUnusedFunction]
     lease: str = "lease_1",
     retries_max: int = 2,
 ) -> None:
-    store.record_lease(
-        NewLease(
-            lease_id=lease,
-            chunk_id=chunk,
-            graph_id="gr_1",
-            node_id=node,
-            node_name=node_name,
-            epoch=epoch,
-            retries_max=retries_max,
-            created_at=_NOW,
+    store.record_mint(
+        new_mint(
+            NewLease(
+                lease_id=lease,
+                chunk_id=chunk,
+                graph_id="gr_1",
+                node_id=node,
+                node_name=node_name,
+                epoch=epoch,
+                retries_max=retries_max,
+                created_at=_NOW,
+            )
         )
     )
 
@@ -59,17 +62,19 @@ def _mint_with_session(  # pyright: ignore[reportUnusedFunction]
     node_name: str = "build",
     session_name: str | None = None,
 ) -> None:
-    store.record_lease(
-        NewLease(
-            lease_id=lease,
-            chunk_id="ch_1",
-            graph_id="gr_1",
-            node_id=node,
-            node_name=node_name,
-            epoch=epoch,
-            retries_max=2,
-            session_name=session_name,
-            created_at=at,
+    store.record_mint(
+        new_mint(
+            NewLease(
+                lease_id=lease,
+                chunk_id="ch_1",
+                graph_id="gr_1",
+                node_id=node,
+                node_name=node_name,
+                epoch=epoch,
+                retries_max=2,
+                session_name=session_name,
+                created_at=at,
+            )
         )
     )
     store.record_spawn(

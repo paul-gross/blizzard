@@ -47,6 +47,7 @@ from tests.support.runner_cli_home import (
     serve_local_api,
 )
 from tests.support.runner_fakes import SqlAlchemyRunnerStore
+from tests.support.runner_mint import new_mint
 from tests.support.worker_http import Bound, bind_local_only
 
 
@@ -70,16 +71,18 @@ def test_status_renders_the_full_view_with_the_hub_unreachable(tmp_path: Path) -
     root = init_runner_home(tmp_path)
     bound = _no_hub()
     store = registered_store(root)
-    store.record_lease(
-        NewLease(
-            lease_id="lease_1",
-            chunk_id="ch_1",
-            graph_id="gr_1",
-            node_id="nd_build",
-            node_name="build",
-            epoch=1,
-            retries_max=2,
-            created_at=_NOW,
+    store.record_mint(
+        new_mint(
+            NewLease(
+                lease_id="lease_1",
+                chunk_id="ch_1",
+                graph_id="gr_1",
+                node_id="nd_build",
+                node_name="build",
+                epoch=1,
+                retries_max=2,
+                created_at=_NOW,
+            )
         )
     )
     store.record_spawn(
@@ -102,21 +105,23 @@ def test_status_renders_the_full_view_with_the_hub_unreachable(tmp_path: Path) -
     )
 
     # A second, already-escalated chunk with its takeover command.
-    store.record_lease(
-        NewLease(
-            lease_id="lease_2",
-            chunk_id="ch_2",
-            graph_id="gr_1",
-            node_id="nd_build",
-            node_name="build",
-            epoch=1,
-            retries_max=2,
-            # The session stamps — so `status` renders which lineage parked
-            # and the resume command an operator can paste lands in its configuration.
-            session_name="code",
-            resolved_model="opus",
-            resolved_effort="high",
-            created_at=_NOW,
+    store.record_mint(
+        new_mint(
+            NewLease(
+                lease_id="lease_2",
+                chunk_id="ch_2",
+                graph_id="gr_1",
+                node_id="nd_build",
+                node_name="build",
+                epoch=1,
+                retries_max=2,
+                # The session stamps — so `status` renders which lineage parked
+                # and the resume command an operator can paste lands in its configuration.
+                session_name="code",
+                resolved_model="opus",
+                resolved_effort="high",
+                created_at=_NOW,
+            )
         )
     )
     store.record_spawn(
@@ -444,16 +449,18 @@ def test_status_prints_the_local_pause_reason_on_the_brake_line(tmp_path: Path) 
 
 
 def _seed_escalation(store: SqlAlchemyRunnerStore, *, reason: str) -> None:
-    store.record_lease(
-        NewLease(
-            lease_id="lease_9",
-            chunk_id="ch_9",
-            graph_id="gr_1",
-            node_id="nd_build",
-            node_name="build",
-            epoch=1,
-            retries_max=0,
-            created_at=_NOW,
+    store.record_mint(
+        new_mint(
+            NewLease(
+                lease_id="lease_9",
+                chunk_id="ch_9",
+                graph_id="gr_1",
+                node_id="nd_build",
+                node_name="build",
+                epoch=1,
+                retries_max=0,
+                created_at=_NOW,
+            )
         )
     )
     store.record_closure(lease_id="lease_9", chunk_id="ch_9", node_id="nd_build", reason=reason, closed_at=_NOW)

@@ -106,6 +106,7 @@ from tests.support.runner_fakes import (
     no_retry_clock,
     registered_identity,
 )
+from tests.support.runner_mint import new_mint
 
 #: The one refusal a missing, unknown or closed lease token meets — it never says whether a lease exists.
 _REFUSED_DETAIL = "presented token does not authorize a lease"
@@ -157,16 +158,18 @@ def _finished(handle: IPlatformTracing, exporter: InMemorySpanExporter) -> list[
 
 
 def _seed_lease(store: SqlAlchemyRunnerStore) -> None:
-    store.record_lease(
-        NewLease(
-            lease_id="lease_1",
-            chunk_id="ch_1",
-            graph_id="gr_1",
-            node_id="nd_build",
-            node_name="build",
-            epoch=1,
-            retries_max=2,
-            created_at=_NOW,
+    store.record_mint(
+        new_mint(
+            NewLease(
+                lease_id="lease_1",
+                chunk_id="ch_1",
+                graph_id="gr_1",
+                node_id="nd_build",
+                node_name="build",
+                epoch=1,
+                retries_max=2,
+                created_at=_NOW,
+            )
         )
     )
     store.record_lease_token("lease_1", TokenHash(_LEASE_TOKEN).hex, _NOW)
@@ -862,7 +865,7 @@ def _lease(epoch: int) -> NewLease:
 
 
 def _buffer_closed(ctx: LoopContext, epoch: int, enqueue: Callable[[OutboundFacts, Lease], None]) -> None:
-    ctx.stores.lease_record.record_lease(_lease(epoch))
+    ctx.stores.lease_record.record_mint(new_mint(_lease(epoch)))
     lease = ctx.stores.lease_record.active_lease(f"lease_{epoch}")
     assert lease is not None
     enqueue(OutboundFacts(ctx), lease)
@@ -923,7 +926,7 @@ def _advanced_to(epoch: int) -> FakeHub:
 
 
 def _held_after_lease_1(ctx: LoopContext) -> None:
-    ctx.stores.lease_record.record_lease(_lease(1))
+    ctx.stores.lease_record.record_mint(new_mint(_lease(1)))
     ctx.stores.lease_record.record_closure(
         lease_id="lease_1", chunk_id="ch_1", node_id="nd_build", reason="transitioned", closed_at=_NOW
     )

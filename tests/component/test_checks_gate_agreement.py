@@ -29,6 +29,7 @@ from tests.support.runner_fakes import (
     make_envelope,
     make_store,
 )
+from tests.support.runner_mint import new_mint
 from tests.support.scaffolding import build_hub, make_ready, pointer_token, report_lease
 
 _POINTER = {"source": "default", "ref": "9"}
@@ -149,16 +150,18 @@ def _runner_fails(tmp_path: Path, requires_checks: bool, results: list[tuple[str
     tmp_path.mkdir(parents=True, exist_ok=True)
     store = make_store(f"sqlite:///{tmp_path / 'runner.db'}")
     clock = FixedClock(datetime(2026, 7, 25, tzinfo=UTC))
-    store.record_lease(
-        NewLease(
-            lease_id="lease_b",
-            chunk_id="ch_1",
-            graph_id="gr_1",
-            node_id="nd_build",
-            node_name="build",
-            epoch=1,
-            retries_max=2,
-            created_at=clock.now(),
+    store.record_mint(
+        new_mint(
+            NewLease(
+                lease_id="lease_b",
+                chunk_id="ch_1",
+                graph_id="gr_1",
+                node_id="nd_build",
+                node_name="build",
+                epoch=1,
+                retries_max=2,
+                created_at=clock.now(),
+            )
         )
     )
     store.record_spawn(
