@@ -100,8 +100,9 @@ def re_escalates(
     taken: EscalateChoice | None = None,
 ) -> bool:
     """Whether taking ``edge`` at ``epoch`` would only re-escalate — answered ``escalated`` with
-    nothing written: it crosses graphs to a target that still names no enabled graph, or it is
-    the very ``escalate`` choice (``taken``) the attempt at ``epoch`` already escalated by."""
+    nothing written: it crosses graphs to the very target that still names no enabled graph the
+    attempt at ``epoch`` already escalated over, or it is the very ``escalate`` choice (``taken``)
+    the attempt at ``epoch`` already escalated by."""
     if edge is None:
         return False
     if edge.escalates:
@@ -112,7 +113,14 @@ def re_escalates(
             and escalation.cause == EscalationCause.ESCALATE_CHOICE
             and escalation.detail == taken.detail
         )
-    return edge.target_graph is not None and targets.cross_graph is None and facts.escalated_at(epoch)
+    if edge.target_graph is None or targets.cross_graph is not None:
+        return False
+    escalation = facts.open_escalation_at(epoch)
+    return (
+        escalation is not None
+        and escalation.cause == EscalationCause.MIGRATION_TARGET_UNRESOLVABLE
+        and escalation.detail == UnresolvableTarget.of(edge).detail
+    )
 
 
 def refuse_hub_executed(from_node: Node) -> None:

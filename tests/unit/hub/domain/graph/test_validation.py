@@ -10,7 +10,7 @@ from typing import Any
 
 import pytest
 
-from blizzard.hub.domain.graph.model import GraphDoc, NodeDoc, SessionDecl
+from blizzard.hub.domain.graph.model import GraphDoc, GraphParseError, NodeDoc, SessionDecl
 from blizzard.hub.domain.graph.validation import Validator
 from tests.support.scaffolding import TEST_CATALOGUE
 
@@ -31,8 +31,8 @@ def test_action_arguments_record_malformed_lists() -> None:
     assert node.malformed_action_args == ("bad",)
 
 
-def test_session_refuses_non_string_unknown_keys() -> None:
-    with pytest.raises(TypeError):
+def test_session_refuses_non_string_unknown_keys_as_a_parse_error() -> None:
+    with pytest.raises(GraphParseError):
         SessionDecl.of("code", {1: "value"})
 
 
