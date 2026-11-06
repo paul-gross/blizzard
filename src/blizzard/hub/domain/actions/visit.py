@@ -16,7 +16,7 @@ from blizzard.foundation.landing_policy import LandingPolicy
 from blizzard.foundation.repo_ref import pointer_key, repo_identity
 from blizzard.foundation.roles import domain_model
 from blizzard.hub.domain.artifact.model import StoredArtifact
-from blizzard.hub.domain.chunk.model import WorkRef
+from blizzard.hub.domain.chunk.model import LandedRepos, WorkRef
 from blizzard.hub.domain.chunk.no_code import no_code_marker, no_code_repos
 from blizzard.hub.domain.config.forges import ConfiguredForge
 from blizzard.hub.domain.config.landing_policies import landing_sort_key
@@ -269,6 +269,10 @@ class Visit:
         """The names of the markers recorded at this node, in any epoch."""
         return frozenset(row.name for row in self.markers)
 
+    def landed_repos(self) -> frozenset[str]:
+        """The repos landed anywhere in the chunk's delivery — a non-blank ``merged/<repo>`` at any node."""
+        return LandedRepos.of(self.artifacts).names
+
     def no_code_repos(self) -> frozenset[str]:
         """Current declarations resolved without a merge at this node."""
         return no_code_repos(self.markers, self.git_commits.payload(self.resolution.qualified, self.resolution))
@@ -282,13 +286,13 @@ class Visit:
 
     def parked_watch(self) -> RepositoryId | None:
         """The first unlanded parked repository with an existing change, unless it needs a fresh review."""
-        names = self.marker_names()
+        landed = self.landed_repos()
         pairs = sorted(
             zip(self.resolution.targets, self.resolution.qualified, strict=True),
             key=lambda pair: landing_sort_key(pair[0].landing_position, pair[0].slug),
         )
         for target, repo in pairs:
-            if f"merged/{repo}" in names:
+            if repo in landed:
                 continue
             if target.landing_policy is not LandingPolicy.PARK:
                 return None

@@ -121,7 +121,7 @@ class BounceEnvelope:
     ) -> BounceEnvelope:
         landed = LandedRepos.of(sources.markers).names | no_code_repos(sources.markers, commits)
         read = DeliveryRead.of(ChunkFacts(minted=True), sources)
-        prs = {p.repo: p for p in sorted([*read.closed_prs, *read.open_prs], key=lambda p: p.number)}
+        prs = {p.repo: p for p in read.open_prs}
         unlanded: list[dict[str, object]] = []
         for commit in commits:
             repo = commit["repo"]
@@ -320,7 +320,9 @@ class HubNodeRouter:
                     sources=self._delivery_sources(chunk),
                     action=action,
                 ).serialize()
-        self._commit(chunk, node, destination, epoch=epoch, choice=choice, bounce=(choice, envelope), ending=ending)
+        self._commit(
+            graph, chunk, node, destination, epoch=epoch, choice=choice, bounce=(choice, envelope), ending=ending
+        )
 
     def _destination(self, graph: Graph, node: Node, choice: str) -> _Destination:
         """Where ``choice`` routes from ``node``, resolved before any lock is taken: a cross-graph edge's target is
@@ -379,6 +381,7 @@ class HubNodeRouter:
 
     def _commit(
         self,
+        graph: Graph,
         chunk: Chunk,
         node: Node,
         destination: _Transition,
@@ -394,6 +397,7 @@ class HubNodeRouter:
         with self._exclusive.locked([chunk.chunk_id]) as handle:
             self._commit_on(
                 handle,
+                graph,
                 chunk,
                 node,
                 destination,
@@ -407,6 +411,7 @@ class HubNodeRouter:
     def _commit_on(
         self,
         handle: ILockedChunkRead,
+        graph: Graph,
         chunk: Chunk,
         node: Node,
         destination: _Transition,
@@ -440,6 +445,17 @@ class HubNodeRouter:
             release_route=destination.to_node_id == RESERVED_TERMINAL,
             close_decision=close,
         )
+        if wrote:
+            open_graph_gate_on_arrival(
+                self._decisions,
+                handle,
+                self._clock,
+                chunk_id=chunk.chunk_id,
+                graph=graph,
+                node_id=destination.to_node_id,
+                epoch=hub_epoch,
+                close_decision=close,
+            )
         ending.end(handle, outcome=choice, closure=choice if wrote else None)
 
     def _migrate_on(
@@ -551,6 +567,7 @@ class HubNodeRouter:
                 self._route_on(
                     handle,
                     visit,
+                    graph,
                     chunk,
                     node,
                     destination,
@@ -566,6 +583,7 @@ class HubNodeRouter:
         self,
         handle: ILockedChunkRead,
         visit: _StandingVisit,
+        graph: Graph,
         chunk: Chunk,
         node: Node,
         destination: _Destination,
@@ -598,6 +616,7 @@ class HubNodeRouter:
         else:
             self._commit_on(
                 handle,
+                graph,
                 chunk,
                 node,
                 destination,
@@ -671,7 +690,14 @@ class HubNodeRouter:
             action=None,
         ).serialize()
         self._commit(
-            chunk, node, destination, epoch=epoch, choice=choice, bounce=("poll-timeout", envelope), ending=ending
+            graph,
+            chunk,
+            node,
+            destination,
+            epoch=epoch,
+            choice=choice,
+            bounce=("poll-timeout", envelope),
+            ending=ending,
         )
 
     def escalate(self, chunk: Chunk, escalation: ActionEscalation, *, epoch: int, ending: ITurnEnd = NO_TURN) -> None:

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import contextlib
 import json
 from datetime import timedelta
 from pathlib import Path
@@ -16,6 +17,7 @@ from blizzard.hub.domain.chunk.model import Movement, MovementKind, WorkRef, dec
 from blizzard.hub.domain.chunk.ports.escalations import IWriteChunkEscalationsRepository
 from blizzard.hub.domain.chunk.ports.fence import EpochAdmission
 from blizzard.hub.domain.chunk.ports.record import IWriteChunkRecordRepository
+from blizzard.hub.domain.operations import restart
 from blizzard.hub.domain.operations.restart import SUPERSEDED_ANSWER, RestartGraphPinChanged
 from blizzard.runner.hub.internal.http_hub import chunk_state
 from blizzard.runner.lifecycle.model import HeldChunkMove, held_chunk_move, owns_node_entry
@@ -370,6 +372,24 @@ def test_unclaimed_restart_onto_a_gate_opens_its_decision(tmp_path: Path) -> Non
     assert detail["status"] == "waiting_on_human"
     assert detail["decision"]["epoch"] == detail["latest_epoch"] == 1
     assert len(hub.client.get("/api/decisions").json()["decisions"]) == 1
+
+
+def test_the_restart_rolls_back_when_the_gate_open_fails(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    hub = build_hub(tmp_path)
+    assert hub.client.post("/api/graphs", json={"definition_yaml": _GATE_YAML}).status_code == 201
+    chunk_id = ingest(hub, [_POINTER])
+    before = _detail(hub, chunk_id)
+
+    def _refuse(*_args: object, **_kwargs: object) -> None:
+        raise RuntimeError("gate arrival refused")
+
+    monkeypatch.setattr(restart, "open_graph_gate_on_arrival", _refuse)
+    with contextlib.suppress(RuntimeError):
+        _restart(hub, chunk_id, node="signoff")
+
+    after = _detail(hub, chunk_id)
+    assert after["current_node_name"] == before["current_node_name"] != "signoff"
+    assert after["latest_epoch"] == before["latest_epoch"]
 
 
 def test_restart_closes_a_resolved_decision_the_runner_has_not_acted_on(tmp_path: Path) -> None:

@@ -88,6 +88,8 @@ def _visit(
     repos: tuple[str, ...] = (_WIDGET,),
     *,
     markers: tuple[str, ...] = (),
+    blank_markers: tuple[str, ...] = (),
+    earlier_node_markers: tuple[str, ...] = (),
     expects: bool = True,
     feature_title: str | None = None,
     work_items: tuple[dict[str, str | None], ...] = (),
@@ -97,7 +99,13 @@ def _visit(
         _row(ArtifactKind.GIT_COMMIT, f"w{i}", f"feat/x:{_SUBMITTED}", repo=repo, node_id="nd_build")
         for i, repo in enumerate(repos)
     ]
-    marker_rows = tuple(_row(ArtifactKind.ASSET, name, "x") for name in markers)
+    marker_rows = (
+        *(_row(ArtifactKind.ASSET, name, "x") for name in markers),
+        *(_row(ArtifactKind.ASSET, name, "") for name in blank_markers),
+    )
+    earlier_rows = tuple(
+        _row(ArtifactKind.ASSET, name, "a" * 40, node_id="nd_earlier") for name in earlier_node_markers
+    )
     targets = tuple(
         ResolvedRepository(
             forge_id=_EXAMPLE_FORGE.forge_id,
@@ -118,7 +126,7 @@ def _visit(
             expects_git_commits=expects,
         ),
         epoch=1,
-        artifacts=(*commits, *marker_rows),
+        artifacts=(*commits, *earlier_rows, *marker_rows),
         markers=marker_rows,
         git_commits=GitCommits.of(commits),
         resolution=RepositoryResolution(
