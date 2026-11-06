@@ -608,6 +608,31 @@ def test_a_node_reentered_through_an_edge_starts_its_retry_budget_afresh(tmp_pat
     assert store.open_escalation_for_chunk("ch_1") is None
 
 
+def test_a_released_lease_spends_no_retry_from_the_visit_it_was_let_go_from(tmp_path: Path):
+    """A lease let go (`released`) is not a failed attempt: after it, the node's two failures both retry
+    under the default two retries, and only a third would exhaust the budget."""
+    store = _store(tmp_path)
+    hub = FakeHub()
+    hub.envelopes["ch_1"] = _build_envelope()  # retries_max = 2
+    _seed_running_lease(store, lease="lease_1", epoch=1)
+    store.record_closure(lease_id="lease_1", chunk_id="ch_1", node_id="nd_build", reason="released", closed_at=_NOW)
+    _seed_running_lease(store, lease="lease_2", epoch=2)
+    store.record_closure(lease_id="lease_2", chunk_id="ch_1", node_id="nd_build", reason="failed", closed_at=_NOW)
+    _seed_running_lease(store, lease="lease_3", epoch=3, pid=300, start="start-0", session="sess-3")
+    assert store.attempt_count("ch_1", "nd_build") == 2
+
+    provider = FakeProvider({"e1": "/ws/e1"})
+    harness = FakeHarness(
+        handle=WorkerHandle(session_id="sess-3", pid=304, process_start_time="start-4", pgid=304), verdict=None
+    )
+    ctx = make_context(store, hub=hub, provider=provider, harness=harness, probe=FakeProbe())
+    Advance(ctx).run()
+    Advance(ctx).run()  # the second failure — verdict-less — retries
+
+    assert [b for b in store.pending_outbound() if b.kind == ESCALATION_RECORDED] == []
+    assert store.open_escalation_for_chunk("ch_1") is None
+
+
 @pytest.mark.parametrize(("workspace_root", "expected_cwd"), [("/ws", "/ws"), ("", "/ws/e1")])
 def test_judgement_runs_in_the_sessions_own_spawn_cwd(tmp_path: Path, workspace_root: str, expected_cwd: str):
     """A judgement resumes the held session from its spawn cwd — the workspace root when one

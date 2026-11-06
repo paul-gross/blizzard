@@ -149,7 +149,7 @@ def test_pull_abandons_a_live_detached_chunk(tmp_path: Path):
     assert store.active_lease("lease_1") is None  # lease closed
     assert store.latest_epoch("ch_1") == 1  # no epoch bump
     assert store.pending_outbound() == []  # no requeue fact buffered
-    assert store.attempt_count("ch_1", "nd_build") == 1  # no retry consumed
+    assert store.attempt_count("ch_1", "nd_build") == 0  # no retry consumed
 
 
 def test_pull_abandons_a_chunk_reassigned_to_another_runner(tmp_path: Path):
@@ -168,7 +168,7 @@ def test_pull_abandons_a_chunk_reassigned_to_another_runner(tmp_path: Path):
     assert store.active_lease("lease_1") is None
     assert store.latest_epoch("ch_1") == 1
     assert store.pending_outbound() == []
-    assert store.attempt_count("ch_1", "nd_build") == 1
+    assert store.attempt_count("ch_1", "nd_build") == 0
 
 
 def test_pull_abandons_a_lease_whose_chunk_is_stopped_though_still_routed_to_this_runner(tmp_path: Path):
@@ -403,7 +403,7 @@ def test_pull_abandons_a_live_lease_whose_chunk_the_hub_reports_unknown(tmp_path
     assert store.active_lease("lease_1") is None  # lease closed
     assert store.latest_epoch("ch_1") == 1  # no epoch bump
     assert store.pending_outbound() == []  # no requeue, no escalation
-    assert store.attempt_count("ch_1", "nd_build") == 1  # no retry consumed
+    assert store.attempt_count("ch_1", "nd_build") == 0  # no retry consumed
 
 
 def test_pull_group_kills_a_still_live_detached_worker(tmp_path: Path):

@@ -321,7 +321,7 @@ def test_a_usage_limited_park_is_released_booking_its_usage_and_closing_its_leas
     assert store.pause_parked_lease_ids() == set()
     assert store.held_environment_ids() == []
     assert [(c.lease.lease_id, c.reason) for c in store.list_closed_leases(5)] == [("lease_1", "released")]
-    assert store.attempt_count("ch_1", "nd_build") == 1  # no retry spent
+    assert store.attempt_count("ch_1", "nd_build") == 0  # no retry spent
     assert len(_usage(store)) == 1
 
 

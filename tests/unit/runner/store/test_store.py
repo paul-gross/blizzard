@@ -204,6 +204,15 @@ def test_attempt_count_restarts_after_a_completed_step_and_only_then(tmp_path: P
     assert store.attempt_count("ch_1", "nd_build") == 2  # the new visit still spends its budget
 
 
+def test_attempt_count_excludes_a_released_closure(tmp_path: Path):
+    store = _store(tmp_path)
+    _mint(store, lease="lease_1", epoch=1)
+    store.record_closure(lease_id="lease_1", chunk_id="ch_1", node_id="nd_build", reason="released", closed_at=_NOW)
+    assert store.attempt_count("ch_1", "nd_build") == 0
+    _mint(store, lease="lease_2", epoch=2)
+    assert store.attempt_count("ch_1", "nd_build") == 1
+
+
 def test_attempt_count_excludes_a_never_spawned_escalation_but_counts_a_spawned_one(tmp_path: Path):
     """An owner-unresolvable escalation's own never-spawned mint must not cost the node's
     real attempts a retry — discriminated by its own closure reason from an ordinary,
