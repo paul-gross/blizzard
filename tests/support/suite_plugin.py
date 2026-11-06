@@ -24,10 +24,9 @@ from tests.support.revision_age import (
     colocated_versions,
     decide_colocated,
 )
-from tests.support.root_test_modules import ROOT_TEST_MODULES
 from tests.support.tier_layout import (
     declared_layout_marker,
-    misplaced_root_module,
+    flat_test_module,
     non_package_folder,
     tier_of,
     unmirrored_folder,
@@ -53,11 +52,10 @@ SHARD_BY_TEST = "test"
 SHARD_BY_FILE = "file"
 
 
-#: The two trees the folder layout governs: tests root, the package root its folders mirror, and the flat modules
-#: still allowed directly under the root. The exemplar tree admits none.
-LAYOUT_TREES: tuple[tuple[Path, Path, frozenset[str]], ...] = (
-    (repo_root() / "tests", repo_root() / "src" / "blizzard", ROOT_TEST_MODULES),
-    (repo_root() / "exemplars" / "python" / "tests", repo_root() / "exemplars" / "python" / "exemplar", frozenset()),
+#: The two trees the folder layout governs: each tests root and the package root its folders mirror.
+LAYOUT_TREES: tuple[tuple[Path, Path], ...] = (
+    (repo_root() / "tests", repo_root() / "src" / "blizzard"),
+    (repo_root() / "exemplars" / "python" / "tests", repo_root() / "exemplars" / "python" / "exemplar"),
 )
 
 
@@ -123,10 +121,11 @@ def _tiers_of_file(path: Path, nodeid: str) -> tuple[str, ...]:
     ``nodeid`` is the first collected test in the file, named by a refusal.
     """
     tiers: list[str] = []
-    for tests_root, package_root, root_modules in LAYOUT_TREES:
-        if misplaced_root_module(path, tests_root, root_modules):
+    for tests_root, package_root in LAYOUT_TREES:
+        if flat_test_module(path, tests_root):
             raise pytest.UsageError(
-                f"{nodeid}: a flat test module under {tests_root.name}/; place it in unit/, component/ or guards/"
+                f"{nodeid}: a test module directly under {tests_root.name}/, where bzh:mirrored-test-layout places none;"
+                " move it to the folder its tier's rule names"
             )
         tier = tier_of(path, tests_root)
         if tier is None:
