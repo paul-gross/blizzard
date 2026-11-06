@@ -24,7 +24,7 @@ export const SOCKET_PATH_LIMIT = 107;
 /** The variable that arms the mock harness; the host's workers must carry it, and no `runnerEnv` may take it away. */
 export const FENCE_VAR = 'BLIZZARD_MOCK_HARNESS_FENCE';
 const FENCE_FILE = '.blizzard-mock-harness-fence';
-const PLACEHOLDERS = ['workspace', 'origins', 'forgeOrigins', 'mockBin', 'mockOpencode2', 'usageBase', 'bundle', 'stubs'];
+const PLACEHOLDERS = ['workspace', 'origins', 'forgeOrigins', 'mockBin', 'mockOpencode2', 'opencode', 'usageBase', 'bundle', 'stubs'];
 const RUNNER_BINARY = 'blizzard-runner';
 const FIRST_RUNNER = 'runner-local';
 
@@ -40,12 +40,16 @@ function namesPlaceholder(value: unknown, name: string): boolean {
  * The engine-backed `mock-opencode-2`, emitted once into `dir` as an `opencode` binary a profile names as
  * `${mockOpencode2}`: a managed service answering like OpenCode 2, each turn's prompt run as a fenced script.
  */
-async function emitMockOpencode2(dir: string, levers: string[], run: (command: string, args: string[], home: string) => Promise<unknown>, home: string): Promise<string> {
+async function emitMockOpencode2(dir: string, levers: string[], run: (command: string, args: string[], home: string) => Promise<unknown>, home: string, version?: string): Promise<string> {
   const binary = path.join(dir, 'opencode');
   fs.mkdirSync(dir, { recursive: true });
-  await run(requireBinary(mockBinDir(), 'mock-opencode-2'), ['emit-engine', '--out', binary, ...levers.flatMap((lever) => ['--lever', lever])], home);
+  const versioned = version === undefined ? [] : ['--version', version];
+  await run(requireBinary(mockBinDir(), 'mock-opencode-2'), ['emit-engine', '--out', binary, ...versioned, ...levers.flatMap((lever) => ['--lever', lever])], home);
   return binary;
 }
+
+/** What `${opencode}` holds: `1` is OpenCode 1, as `mock-opencode`; a version is the engine-backed `mock-opencode-2` reporting it. */
+export type OpencodeRelease = 1 | `${number}.${number}.${number}`;
 
 /** What a test hands a host: the options of the runner-world and hub-world fixtures, one set per host. */
 export interface RunnerHostOptions {
@@ -73,8 +77,13 @@ export interface RunnerHostOptions {
    * directory before the host boots. A profile names the directory as `${bundle}`, as in `harness.config_dir`.
    */
   runnerBundle: Record<string, string>;
-  /** The failure levers the `${mockOpencode2}` service is emitted with, by name (`NEVER_REGISTERED`). */
+  /** The failure levers the `${mockOpencode2}` service, and every OpenCode 2 `${opencode}` installs, is emitted with, by name (`NEVER_REGISTERED`). */
   runnerOpencode2Levers: string[];
+  /**
+   * The release installed at `${opencode}` when the host is built: a host-owned `opencode` path a profile names as
+   * `runner[].opencode.binary`, which `installOpencode()` later replaces in place.
+   */
+  runnerOpencode: OpencodeRelease;
   /**
    * Executable scripts by file name, written into a test-owned directory before the host boots; a profile names the
    * directory as `${stubs}`, as in `runner[].worker.path_prepend`. A script, and a `runnerBundle` file, names the
@@ -121,6 +130,7 @@ export const DEFAULT_RUNNER_OPTIONS: RunnerHostOptions = {
   runnerTraceEndpoint: undefined,
   runnerBundle: {},
   runnerOpencode2Levers: [],
+  runnerOpencode: 1,
   runnerStubs: {},
   runnerModelPrices: {},
   runnerWinterTrap: false,
@@ -227,6 +237,12 @@ export interface RunnerHost extends OriginReads {
   kill(): Promise<void>;
   /** Stops a live host, then boots the same directory on the same port. On an unstarted host, the first boot. */
   restart(): Promise<void>;
+  /**
+   * Replaces the `opencode` at `${opencode}` with `release` in one rename, as an operator's upgrade replaces it in place,
+   * whether the host is running or stopped. A service an OpenCode 2 release registered is stopped first, as an upgrade
+   * restarts it; the runner starts the new release's when it next needs one.
+   */
+  installOpencode(release: OpencodeRelease): Promise<void>;
 }
 
 /** One session the mock harness recorded: its invocations in order. The mock owns the rest of the shape. */
@@ -596,7 +612,27 @@ export function runnerHostBuilder(given: BuilderContext): RunnerHostBuilder {
       };
       const mockOpencode2 = namesPlaceholder(profile, 'mockOpencode2') ? await emitMockOpencode2(path.join(root, 'opencode2'), options.runnerOpencode2Levers, run, home) : '';
       if (mockOpencode2 !== '') opencode2 = { binary: mockOpencode2, env: { ...env, [FENCE_VAR]: '1' } };
-      const expanded = expandProfile(profile, { workspace, origins, forgeOrigins: ctx.hub.forgeOrigins ?? '', mockBin: mockBinDir(), mockOpencode2, usageBase: ctx.vendor.url, bundle, stubs });
+      const opencode = path.join(root, 'opencode', 'opencode');
+      let releases = 0;
+      const installs = namesPlaceholder(profile, 'opencode');
+      const installOpencode = async (release: OpencodeRelease): Promise<void> => {
+        if (!installs) throw new Error('installOpencode() needs a profile naming ${opencode} as runner[].opencode.binary');
+        if (release !== 1 && release.startsWith('1.')) throw new Error(`OpenCode 1 is installed as 1, not as version ${release}`);
+        fs.mkdirSync(path.dirname(opencode), { recursive: true });
+        if (opencode2 !== undefined) await runCommand(opencode2.binary, ['service', 'stop'], { env: opencode2.env, cwd: root });
+        let target = requireBinary(mockBinDir(), 'mock-opencode');
+        if (release !== 1) {
+          target = await emitMockOpencode2(path.join(root, 'opencode-releases', String(releases++)), options.runnerOpencode2Levers, run, home, release);
+          // The latest engine stops whichever service is registered under the host's home when the host is disposed.
+          opencode2 = { binary: target, env: { ...env, [FENCE_VAR]: '1' } };
+        }
+        const staged = `${opencode}.staged`;
+        fs.rmSync(staged, { force: true });
+        fs.symlinkSync(target, staged);
+        fs.renameSync(staged, opencode);
+      };
+      if (installs) await installOpencode(options.runnerOpencode);
+      const expanded = expandProfile(profile, { workspace, origins, forgeOrigins: ctx.hub.forgeOrigins ?? '', mockBin: mockBinDir(), mockOpencode2, opencode, usageBase: ctx.vendor.url, bundle, stubs });
       const merged = mergeHostProfile(mergeHostProfile(written, baseline), expanded);
       fs.writeFileSync(path.join(dir, 'blizzard-host.toml'), stringify(merged));
 
@@ -793,6 +829,7 @@ export function runnerHostBuilder(given: BuilderContext): RunnerHostBuilder {
           if (daemon !== undefined && isAlive(daemon.pid)) await stopLive(daemon);
           await boot();
         },
+        installOpencode,
       };
       if (adopted !== undefined) host.prepareStopped({ runnerIds: { [adopted.name]: adopted.runnerId }, runnerTokens: { [adopted.name]: adopted.token } });
       return host;

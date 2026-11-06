@@ -429,7 +429,7 @@ export type { AuthStub } from './auth-stub';
 export type { MockHub } from './mock-world';
 export type { Bounce, Delivered, Federation } from './federation';
 export type { RunnerHosts } from './runner-world';
-export type { RunnerHost, RunnerHostOptions } from './runner-host';
+export type { OpencodeRelease, RunnerHost, RunnerHostOptions } from './runner-host';
 export { chunkProgress, holdingChunk, leaseProgress, runningLeaseWithWorker, SPAWN_HOLD, seededLeaseWithWorker, stepChunkUntil, stepUntil, stepUntilHeld } from './runner-steps';
 export { BILLED_ZERO_VAR, PRICES, pricedChunk, pricedProfile } from './priced-worker';
 export type { VendorUsage } from './vendor-usage';
