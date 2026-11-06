@@ -784,8 +784,8 @@ export const getWorkItemsApiChunksChunkIdWorkItemsGet = <ThrowOnError extends bo
  * edit only the fields an entry states, enable what is retired, leave unnamed records alone. Forges are declared,
  * and every work source and repository names its forge by id or slug. `dry_run` rolls the same transaction back,
  * with the same `outcomes` and no `apply_id`. 422 invalid — `config_version_retired` for any `version` but 2, a
- * missing one included — 409 conflict, 415 unknown `Content-Type`; a refusal leaves the store unchanged; 403 when a cadence write would leave it promoting its runs and the
- * caller may not promote chunks.
+ * missing one included — 409 conflict, 415 unknown `Content-Type`; a refusal leaves the store unchanged. 403 when a
+ * cadence write would leave it promoting its runs and the caller may not promote chunks.
  */
 export const applyConfigApiConfigApplyPost = <ThrowOnError extends boolean = false>(options: Options<ApplyConfigApiConfigApplyPostData, ThrowOnError>): RequestResult<ApplyConfigApiConfigApplyPostResponses, ApplyConfigApiConfigApplyPostErrors, ThrowOnError> => (options.client ?? client).post<ApplyConfigApiConfigApplyPostResponses, ApplyConfigApiConfigApplyPostErrors, ThrowOnError>({
     url: '/api/config/apply',
@@ -810,9 +810,9 @@ export const listChangesApiConfigChangesGet = <ThrowOnError extends boolean = fa
  * Export Config
  *
  * Every project with its standing links, every active forge, every active, non-built-in work source and
- * repository, and every active scope, routine (its linked scope set included), and cadence named in its project by slug, with
- * every field, and every active secret name, as a version-2 document that applies back as a no-op. Retired records
- * are left out, since applying one would enable it. 422 `config_version_retired` for `version=1`.
+ * repository, and every active scope, routine (its linked scope set included), and cadence named in its project by
+ * slug, with every field, and every active secret name, as a version-2 document that applies back as a no-op.
+ * Retired records are left out, since applying one would enable it. 422 `config_version_retired` for `version=1`.
  */
 export const exportConfigApiConfigExportGet = <ThrowOnError extends boolean = false>(options?: Options<ExportConfigApiConfigExportGetData, ThrowOnError>): RequestResult<ExportConfigApiConfigExportGetResponses, ExportConfigApiConfigExportGetErrors, ThrowOnError> => (options?.client ?? client).get<ExportConfigApiConfigExportGetResponses, ExportConfigApiConfigExportGetErrors, ThrowOnError>({ url: '/api/config/export', ...options });
 
