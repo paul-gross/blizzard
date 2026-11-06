@@ -18,7 +18,15 @@ from blizzard.hub.domain.chunk.ports.delivery import IWriteChunkDeliveryReposito
 from blizzard.hub.domain.chunk.ports.fence import EpochAdmission
 from blizzard.hub.store import schema as s
 from blizzard.hub.store.internal import chunk_lifecycle_store
-from tests.support.scaffolding import HubHarness, build_hub, chunk_stores, emitted_events, hub_scoped, ingest
+from tests.support.scaffolding import (
+    HubHarness,
+    build_hub,
+    capture_statements,
+    chunk_stores,
+    emitted_events,
+    hub_scoped,
+    ingest,
+)
 
 
 def _land(hub: HubHarness, chunk_id: str, *, repo: str = "widget") -> None:
@@ -372,3 +380,17 @@ def test_terminal_transition_rolls_back_with_intent(tmp_path: Path, hub_step: bo
             conn.execute(hub_scoped(select(s.transitions).where(s.transitions.c.transition_id == "tr_abort"))).first()
             is None
         )
+
+
+@pytest.mark.parametrize("refs", [1, 3])
+def test_the_chunks_project_is_read_once_however_many_refs_are_skipped(tmp_path: Path, refs: int) -> None:
+    hub = build_hub(tmp_path)
+    chunk_id = ingest(hub, [{"source": "default", "ref": str(i)} for i in range(refs)], promote=True)
+    chunk = hub.services.chunks.record.get(chunk_id)
+    assert chunk is not None
+
+    with capture_statements(hub.engine) as statements:
+        hub.services.complete.complete(chunk, by="test")
+
+    project_reads = [sql for sql, _ in statements if sql.lstrip().upper().startswith("SELECT CHUNKS.PROJECT_ID")]
+    assert len(project_reads) <= 1
