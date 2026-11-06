@@ -7,12 +7,12 @@ rhythm, the errand, its last run, and one handed instant ``now``. None reads a c
 
 from __future__ import annotations
 
-from collections.abc import Collection, Sequence
+from collections.abc import Collection, Mapping, Sequence
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 from enum import StrEnum
 
-from blizzard.foundation.chunk_status import ChunkStatus
+from blizzard.foundation.chunk_status import TERMINAL_STATUSES, ChunkStatus
 from blizzard.foundation.roles import domain_model
 from blizzard.foundation.work_items import WorkItemClosure
 from blizzard.hub.domain.cadence.model import (
@@ -25,6 +25,7 @@ from blizzard.hub.domain.cadence.model import (
     ScopeSelection,
     live_swept_scopes,
 )
+from blizzard.hub.domain.chunk.model import ChunkFacts
 from blizzard.hub.domain.garden.routines import Routine
 from blizzard.hub.domain.garden.scopes import Scope
 
@@ -165,6 +166,27 @@ class LastRun:
             self.holder.completed_at if terminal_holder and self.holder is not None else None,
         )
         return min((at for at in candidates if at is not None), default=None)
+
+
+@domain_model
+@dataclass(frozen=True)
+class ErrandRun:
+    """An errand's last run as the store reads it: the marked work item's id beside its reading, so a re-read can
+    tell whether the newest run is still the one a pass judged."""
+
+    work_item_id: str
+    run: LastRun
+
+
+def holder_of(held: Mapping[str, ChunkFacts]) -> Holder | None:
+    """The holder of a run's work item among ``held``, the non-ephemeral chunks holding its ref by chunk id: the
+    newest live one, else the newest terminal one, by chunk id. ``None`` when none holds it, which the run reads
+    as live."""
+    if not held:
+        return None
+    live = [chunk_id for chunk_id, facts in held.items() if facts.status() not in TERMINAL_STATUSES]
+    facts = held[max(live or held)]
+    return Holder(status=facts.status(), started_at=facts.started_at(), completed_at=facts.completed_at())
 
 
 # --- the due rule ---

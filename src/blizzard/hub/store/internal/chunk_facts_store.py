@@ -121,6 +121,14 @@ def _rows(
     return conn.execute(stmt).all()
 
 
+def status_facts_on(conn: Connection, chunk_ids: Sequence[str]) -> dict[str, ChunkFacts]:
+    """The status families' facts of ``chunk_ids`` on ``conn``, the caller's connection, keyed by chunk id — what
+    :meth:`ChunkFactsStore.status_facts_for` reads, an id that does not exist or is ephemeral dropped."""
+    if not chunk_ids:
+        return {}
+    return ChunkFactsStore._load(conn, chunk_ids, families=TICK_STATUS_FAMILIES)  # pyright: ignore[reportPrivateUsage]
+
+
 class ChunkFactsStore:
     """Read-only chunk-facts adapter — the fleet's fact-derivation projection."""
 
@@ -250,8 +258,8 @@ class ChunkFactsStore:
         facts_by_id = self._load(conn, candidate_ids, families=STATUS_FAMILIES)
         return {chunk_id: facts.status() for chunk_id, facts in facts_by_id.items()}
 
+    @staticmethod
     def _load(
-        self,
         conn: Connection,
         chunk_ids: Sequence[str] | None,
         *,
@@ -259,15 +267,14 @@ class ChunkFactsStore:
     ) -> dict[str, ChunkFacts]:
         selected = families if families is not None else ALL_FAMILIES
         if chunk_ids is None:
-            return self._load_batch(conn, None, selected)
+            return ChunkFactsStore._load_batch(conn, None, selected)
         result: dict[str, ChunkFacts] = {}
         for batch in id_batches(chunk_ids):
-            result.update(self._load_batch(conn, batch, selected))
+            result.update(ChunkFactsStore._load_batch(conn, batch, selected))
         return result
 
-    def _load_batch(
-        self, conn: Connection, batch: Sequence[str] | None, families: frozenset[str]
-    ) -> dict[str, ChunkFacts]:
+    @staticmethod
+    def _load_batch(conn: Connection, batch: Sequence[str] | None, families: frozenset[str]) -> dict[str, ChunkFacts]:
         graph_id_of = graph_id_of_batch(conn, batch)
         if not graph_id_of:
             return {}
@@ -400,7 +407,7 @@ class ChunkFactsStore:
                 } | {r.decision_id for r in restart_rows if r.decision_id is not None}
             else:
                 decision_ids = [d.decision_id for d in decision_rows]
-                resolved_ids = self._resolved_ids(conn, decision_ids) | {
+                resolved_ids = ChunkFactsStore._resolved_ids(conn, decision_ids) | {
                     r.decision_id for r in restart_rows if r.decision_id is not None
                 }
             closed_ids = decision_closure_ids(conn, None if batch is None else [d.decision_id for d in decision_rows])

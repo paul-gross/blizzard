@@ -14,6 +14,9 @@ import sqlalchemy as sa
 from sqlalchemy import Connection, Engine
 from structlog import get_logger
 
+from blizzard.hub.domain.cadence.errands import ErrandKey
+from blizzard.hub.domain.cadence.mint import mint_lock_keys
+from blizzard.hub.domain.chunk.ports.queue import BACKLOG_RANKING_LOCK, READY_RANKING_LOCK
 from blizzard.hub.store import schema as s
 from blizzard.hub.store import transactions as tx
 from blizzard.hub.store.errors import HubStoreConnections, HubStoreErrorFactory
@@ -40,6 +43,24 @@ class _CompatibleGuard(ScopedConnections):
             sa.select(s.tenant_deletions.c.tenant_id).where(s.tenant_deletions.c.tenant_id == self.scope.tenant)
         ).first():
             raise TenantClosed(self.scope.tenant)
+
+
+_LockSet = tuple[list[str], list[tuple[str, str]]]
+
+#: The cadence mint's lock set against the queue's own promote — a fresh chunk naming no row yet, the errand, and
+#: both ranking locks, beside the promoted chunk and both ranking locks — run each way round. Each first writer holds
+#: every lock it declares, so the second blocks on the ranking locks and lands only once the first commits.
+_MINT: _LockSet = (["n"], mint_lock_keys(ErrandKey("chr_proof", "scp_proof"), promote=True))
+_PROMOTE: _LockSet = (["a"], [READY_RANKING_LOCK, BACKLOG_RANKING_LOCK])
+_LOCK_SETS: dict[str, tuple[_LockSet, _LockSet]] = {
+    "cadence mint, then promote": (_MINT, _PROMOTE),
+    "promote, then cadence mint": (_PROMOTE, _MINT),
+}
+
+
+def _canonical(chunks: Sequence[str], keys: Sequence[tuple[str, str]]) -> list[str]:
+    """The order the store takes a lock set in: chunk ids, then keys by namespace and key."""
+    return [*sorted(chunks), *(f"{namespace}/{key}" for namespace, key in sorted(keys))]
 
 
 def _pid(conn: Connection) -> int:
@@ -73,6 +94,10 @@ def _run_pair(engine: Engine, *, kind: str, production_guard: bool) -> None:
     failures: list[BaseException] = []
     original_chunk, original_keys = tx.lock_chunk_row, tx.lock_keys
 
+    sets = _LOCK_SETS.get(kind)
+    # The first writer holds once it has taken every lock it declares, or its first when the two sets mirror.
+    hold_after = len(sets[0][0]) + len(sets[0][1]) if sets is not None else 1
+
     def observe(conn: Connection, name: str, operation: Callable[[], None]) -> None:
         worker = threading.current_thread().name
         pids[worker] = _pid(conn)
@@ -80,7 +105,7 @@ def _run_pair(engine: Engine, *, kind: str, production_guard: bool) -> None:
             second_started.set()
         operation()
         acquired[worker].append(name)
-        if worker == "first" and len(acquired[worker]) == 1:
+        if worker == "first" and len(acquired[worker]) == hold_after:
             held.set()
             if not release.wait(_TIMEOUT):
                 raise TimeoutError("first writer was not released")
@@ -94,7 +119,10 @@ def _run_pair(engine: Engine, *, kind: str, production_guard: bool) -> None:
     def writer(reverse: bool) -> None:
         try:
             with tx.HubTransactions(store).begin() as unit:
-                if kind == "chunks":
+                if sets is not None:
+                    chunks, keys = sets[1] if reverse else sets[0]
+                    unit.lock_set(chunks=chunks, keys=keys)
+                elif kind == "chunks":
                     unit.lock_chunks(["b", "a"] if reverse else ["a", "b"])
                 else:
                     keys = [("z", "b"), ("a", "a")]
@@ -139,8 +167,12 @@ def _run_pair(engine: Engine, *, kind: str, production_guard: bool) -> None:
         second.join(_TIMEOUT)
         if first.is_alive() or second.is_alive() or failures:
             raise RuntimeError(f"writers did not both complete: {failures}")
-        expected = ["a", "b"] if kind == "chunks" else ["a/a", "z/b"]
-        if acquired != {"first": expected, "second": expected}:
+        if sets is not None:
+            expected_by = {worker: _canonical(*sets[index]) for index, worker in enumerate(("first", "second"))}
+        else:
+            expected = ["a", "b"] if kind == "chunks" else ["a/a", "z/b"]
+            expected_by = {"first": expected, "second": expected}
+        if acquired != expected_by:
             raise RuntimeError(f"noncanonical lock order: {acquired}")
         print(f"PASS {kind}: {'production guard' if production_guard else 'decision-row contention'}")
     finally:
@@ -187,6 +219,8 @@ def main() -> None:
             _run_pair(engine, kind="chunks", production_guard=False)
             _run_pair(engine, kind="keys", production_guard=False)
             _run_pair(engine, kind="chunks", production_guard=True)
+            for kind in _LOCK_SETS:
+                _run_pair(engine, kind=kind, production_guard=False)
         finally:
             engine.dispose()
 

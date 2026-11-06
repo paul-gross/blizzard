@@ -73,7 +73,8 @@ from blizzard.hub.delivery.flow_turn import TurnRunner
 from blizzard.hub.delivery.hub_node import HubNodeRouter
 from blizzard.hub.documents import YAML_CODEC
 from blizzard.hub.documents.codec import IConfigCodec
-from blizzard.hub.domain.cadence.ports import IReadCadenceRepository
+from blizzard.hub.domain.cadence.mint import CadenceMint, ErrandPlanning
+from blizzard.hub.domain.cadence.ports import IReadCadenceRepository, IReadErrandRunsRepository
 from blizzard.hub.domain.cadence.services import (
     CadenceAttention,
     CadenceAuthoring,
@@ -231,6 +232,7 @@ from blizzard.hub.store.internal.config_change_store import ConfigChangeStore
 from blizzard.hub.store.internal.config_import_store import ConfigImportStore
 from blizzard.hub.store.internal.config_revisions_store import ConfigRevisionsStore
 from blizzard.hub.store.internal.egress_store import EgressStore
+from blizzard.hub.store.internal.errand_runs_store import ErrandRunsStore
 from blizzard.hub.store.internal.finding_store import FindingSetStore, FindingStore
 from blizzard.hub.store.internal.flow_store import FlowStore
 from blizzard.hub.store.internal.forge_annotation_store import ForgeAnnotationStore
@@ -423,6 +425,12 @@ class TenantServices:
     cadence_lifecycle: CadenceLifecycle
     #: List and show cadences with their attention, resolved in bulk.
     cadence_reading: CadenceReading
+    #: Each errand's last run, read in one snapshot or in a caller's unit.
+    errand_runs: IReadErrandRunsRepository
+    #: A due set's planning inputs, read in bulk.
+    errand_planning: ErrandPlanning
+    #: Mint one due errand's run in its own unit of work.
+    cadence_mint: CadenceMint
     #: Mint and ingest a hub work item from a routine, in one act.
     routine_run: RunService
     #: The per-scope delta baseline a routine has swept, and how much has landed since.
@@ -1069,6 +1077,7 @@ def build_tenant_services(stores: TenantStores, parts: TenantServiceParts, *, ev
     routine_store = RoutineStore(tenant_connections)
     routine_scope_store = RoutineScopeStore(tenant_connections)
     cadence_store = CadenceStore(tenant_connections)
+    errand_runs_store = ErrandRunsStore(tenant_connections)
     config_authoring = build_config_authoring(stores, cipher=parts.secret_cipher, offers=forges)
     finding_set_store = FindingSetStore(tenant_connections)
     run_context_store = RunContextStore(tenant_connections)
@@ -1384,6 +1393,18 @@ def build_tenant_services(stores: TenantStores, parts: TenantServiceParts, *, ev
             attention=CadenceAttention(
                 routines=routine_store, routine_scopes=routine_scope_store, scopes=scope_store, graphs=graph_store
             ),
+        ),
+        errand_runs=errand_runs_store,
+        errand_planning=ErrandPlanning(graphs=graph_store, finding_sets=finding_set_store),
+        cadence_mint=CadenceMint(
+            items=work_item_store,
+            work_refs=chunk_work_refs,
+            runs=errand_runs_store,
+            record=chunk_record,
+            queue=chunk_queue,
+            facts=chunk_facts,
+            transactions=stores.transactions,
+            clock=clock,
         ),
         routine_run=RunService(
             routines=routine_store,

@@ -2,11 +2,25 @@
 
 from __future__ import annotations
 
+import json
+from collections.abc import Sequence
 from datetime import datetime
 from typing import Protocol
 
+from blizzard.hub.domain.cadence.errands import ErrandKey, ErrandRun
 from blizzard.hub.domain.cadence.model import Cadence
 from blizzard.hub.domain.config.changes import ConfigChange
+from blizzard.hub.domain.kernel.transactions import Transaction
+from blizzard.hub.tenancy import TenantId
+
+#: The keyed-lock namespace of an errand (``bzh:transaction-graduation``): the cadence mint locks its errand under
+#: it, so two mints of one errand decide one after the other.
+ERRAND_LOCK_NAMESPACE = "cadence_errand"
+
+
+def errand_lock(key: ErrandKey) -> tuple[str, str]:
+    """The keyed lock on ``key``'s errand — keyed on its chore and scope ids without separator collisions."""
+    return ERRAND_LOCK_NAMESPACE, json.dumps([key.chore_id, key.scope_id])
 
 
 class IReadCadenceRepository(Protocol):
@@ -42,4 +56,25 @@ class IWriteCadenceRepository(IReadCadenceRepository, Protocol):
     ) -> Cadence:
         """Append the retire or enable fact and move the revision to ``cadence.revision``, as one compare-and-set
         on ``from_revision``."""
+        ...
+
+
+class IReadErrandRunsRepository(Protocol):
+    """Each errand's last run, read in one snapshot (``bzh:pass-reads-one-snapshot``)."""
+
+    def last_runs(
+        self, keys: Sequence[ErrandKey], *, transaction: Transaction | None = None
+    ) -> dict[ErrandKey, ErrandRun]:
+        """The newest work item marked with each of ``keys``, by minted instant then id, with its closure and its
+        holder's facts — the live non-ephemeral chunk holding its ref, else the newest terminal one, else none.
+        All of it is read as of one moment: in ``transaction`` when one is given, else in one read transaction of
+        its own. A key with no marked run has no entry."""
+        ...
+
+
+class IReadCadenceCorpus(Protocol):
+    """The cadences read across every open tenant."""
+
+    def tenants_with_live_cadences(self) -> list[TenantId]:
+        """Every open tenant holding a cadence that is not retired, in tenant id order."""
         ...
