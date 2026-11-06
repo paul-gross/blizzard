@@ -16,7 +16,7 @@ _TO_REVIEW = HUB_CMD_GRAPH_YAML.replace(
     "description: Landed.\n          to: done", "description: Landed.\n          to: review"
 )
 _GATED = (
-    _GATED.rstrip("\n")
+    _TO_REVIEW.rstrip("\n")
     + """
   review:
     executor: runner
