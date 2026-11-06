@@ -1,17 +1,18 @@
 """A cadence's errands, their counts, and the cadence a run names (component tier): the errands route reads each
 errand's state, last run, and next due instant against the hub's own clock; the cadence views count errands by
-state; a run's views name the cadence and chore that minted it — nothing for a hand run, no key for a removed chore —
+state and carry the schedule's next five moments — none unscheduled or retired; a run's views name the cadence and chore that minted it — nothing for a hand run, no key for a removed chore —
 and the cadence and run lists stay flat in statements as they grow."""
 
 from __future__ import annotations
 
-from datetime import timedelta
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any
 
 import pytest
 
 from blizzard.foundation.run_mode import RunMode
+from blizzard.foundation.store.utc import iso_utc
 from blizzard.hub.domain.cadence.errands import errands
 from blizzard.hub.domain.cadence.services import CadenceAttention
 from blizzard.hub.domain.chunk.model import WorkItemAuthor
@@ -266,3 +267,22 @@ def test_the_errands_of_a_cadence_read_in_a_flat_number_of_queries(tmp_path: Pat
     assert count_queries(few.engine, lambda: _errands(few, ids[0])) == count_queries(
         many.engine, lambda: _errands(many, ids[1])
     )
+
+
+def test_a_scheduled_cadence_serves_its_next_five_moments_after_the_hub_clock(hub: HubHarness) -> None:
+    hub.clock.instant = datetime(2026, 7, 13, 1, tzinfo=UTC)  # exactly 20:00 CDT on July 12
+    cadence = _create(hub, schedule={"cron": "0 20 * * *", "zone": "America/Chicago"})
+
+    moments = hub.client.get(f"/api/cadences/{cadence['cadence_id']}").json()["next_moments"]
+
+    assert moments == [iso_utc(datetime(2026, 7, day, 1, tzinfo=UTC)) for day in range(14, 19)]
+    assert cadence["next_moments"] == moments
+
+
+def test_a_cadence_with_no_schedule_or_retired_serves_no_next_moments(hub: HubHarness) -> None:
+    spaced = _create(hub, "spaced")
+    scheduled = _create(hub, "scheduled", schedule={"cron": "0 20 * * *", "zone": "America/Chicago"})
+    retired = hub.client.post(f"/api/cadences/{scheduled['cadence_id']}/retire", json={})
+
+    assert spaced["next_moments"] == []
+    assert retired.json()["next_moments"] == []

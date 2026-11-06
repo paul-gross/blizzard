@@ -53,6 +53,9 @@ is carried into each run's charge. Its `promote` is `true` when left out; `false
 A chore keeps its `chr_` id while its key stays in the list, across every edit. Removing a key and adding it back mints
 a new chore.
 
+A cadence's view also carries `next_moments`: its schedule's next five moments after the read, earliest first. It is
+empty when the cadence has no schedule or is retired.
+
 ## Attention
 
 A cadence's view carries `attention`: each thing that would stop one of its errands, named by its `reason`, the chore's

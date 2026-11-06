@@ -1950,6 +1950,14 @@
             "title": "Name",
             "type": "string"
           },
+          "next_moments": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "title": "Next Moments",
+            "type": "array"
+          },
           "project_id": {
             "anyOf": [
               {
@@ -2028,6 +2036,7 @@
           "chores",
           "attention",
           "errand_counts",
+          "next_moments",
           "created_at",
           "retired",
           "revision",
