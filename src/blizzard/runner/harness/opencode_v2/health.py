@@ -1,7 +1,12 @@
-"""The OpenCode 2 health-probe binding: the binary, its admitted range, and whether the binary and the service it
-manages are one major version."""
+"""The OpenCode 2 health-probe binding. Beyond the binary and its admitted range, every capability check runs against
+the operator's managed service, in order, and only the first that fails is reported, by name: a service version seen
+outside the range since the runner started, a disabled service, a service that does not answer once started, a binary
+and service of different major versions, a configured tier no authenticated provider lists, and a configured variant
+its model does not offer. Each is reported as a configuration conflict, so the runner's log names it."""
 
 from __future__ import annotations
+
+from collections.abc import Sequence
 
 from packaging.specifiers import SpecifierSet
 from packaging.version import InvalidVersion, Version
@@ -16,7 +21,15 @@ from blizzard.runner.harness.offline_compatibility import (
     ICompatibilityCorpus,
     assert_admitted_range_has_corpus,
 )
-from blizzard.runner.harness.opencode_v2.service import IServiceKeeper
+from blizzard.runner.harness.opencode_v2.client import ModelReference
+from blizzard.runner.harness.opencode_v2.service import (
+    DISABLED_DETAIL,
+    UNREADABLE_DETAIL,
+    IServiceKeeper,
+    ServiceDisabledError,
+    ServiceUnavailableError,
+)
+from blizzard.runner.harness.opencode_v2.shapes import ListedModel
 from blizzard.runner.harness.opencode_v2.version import (
     ADMITTED_OPENCODE_V2_RANGE,
     ADMITTED_OPENCODE_V2_RANGE_TEXT,
@@ -39,8 +52,12 @@ class OpenCodeTwoHealthProbe:
         hold: VersionHold,
         corpus: ICompatibilityCorpus,
         versions: VersionProbe,
+        model_aliases: Sequence[tuple[str, str]] = (),
+        effort_aliases: Sequence[tuple[str, str]] = (),
     ) -> None:
         self._binary = binary
+        self._model_aliases = tuple(model_aliases)
+        self._variants = tuple(dict.fromkeys(variant for _, variant in effort_aliases if variant))
         self._keeper = keeper
         self._hold = hold
         self._corpus = corpus
@@ -59,22 +76,64 @@ class OpenCodeTwoHealthProbe:
         return self._versions.observe_version(self._binary) is not None
 
     def config_conflicts(self) -> tuple[str, ...]:
-        """A service seen outside OpenCode 2's range since the runner started, and a binary and an answering service
-        of different major versions: the runner can drive neither."""
-        identity = self._keeper.answering()
-        service = None if identity is None else normalize_opencode_v2_version(identity.version) or identity.version
+        """The first capability check that fails, by name; starts the service when none answers and the operator has
+        not disabled it, and refuses a disabled one even while it runs."""
+        failure = self._first_failure()
+        return () if failure is None else (failure,)
+
+    def _first_failure(self) -> str | None:
+        held = self._held()
+        if held is not None:
+            return held
+        # Checked even while a service runs: a disabled one is the operator's word that fleet sessions stay off it.
+        disabled = self._keeper.disabled()
+        if disabled is not False:
+            return DISABLED_DETAIL if disabled else UNREADABLE_DETAIL
+        try:
+            identity = self._keeper.ensure()
+        except ServiceDisabledError as exc:
+            return str(exc)
+        except ServiceUnavailableError as exc:
+            return f"no OpenCode service answers: {exc}"
+        service = normalize_opencode_v2_version(identity.version) or identity.version
         self._hold.observe(service)
         held = self._held()
-        binary = normalize_opencode_v2_version(self._versions.observe_version(self._binary))
-        if service is None or binary is None or _major(binary) == _major(service):
+        if held is not None:
             return held
-        return (*held, f"{self._binary} is version {binary}, but the OpenCode service it manages is version {service}")
+        binary = normalize_opencode_v2_version(self._versions.observe_version(self._binary))
+        if binary is not None and _major(binary) != _major(service):
+            return f"{self._binary} is version {binary}, but the OpenCode service it manages is version {service}"
+        return self._model_failure()
 
-    def _held(self) -> tuple[str, ...]:
+    def _model_failure(self) -> str | None:
+        """A configured tier whose model no provider the service is authenticated to lists, or a variant
+        ``[opencode.effort.aliases]`` names that a tier's model does not offer — read from the model listing alone,
+        never the service's credentials. The identity mapping of an effort with no alias is left to the launch, which
+        refuses the one lease that asks for a variant its model lacks."""
+        tiers = [(tier, ref) for tier, model in self._model_aliases if (ref := ModelReference.parse(model)) is not None]
+        if not tiers:
+            return None
+        try:
+            listed = {(model.provider_id, model.id): model for model in self._keeper.listed_models()}
+        except ServiceUnavailableError as exc:
+            return str(exc)
+        for tier, ref in tiers:
+            model: ListedModel | None = listed.get((ref.provider_id, ref.id))
+            reference = ref.reference()
+            if model is None:
+                return (
+                    f"tier {tier} names {reference}, which no provider the OpenCode service is authenticated to lists"
+                )
+            missing = next((variant for variant in self._variants if variant not in model.variants), None)
+            if missing is not None:
+                return f"tier {tier}'s model {reference} offers no variant {missing}"
+        return None
+
+    def _held(self) -> str | None:
         foreign = self._hold.foreign
         if foreign is None:
-            return ()
-        return (f"the OpenCode service reported version {foreign} since the runner started; restart the runner",)
+            return None
+        return f"the OpenCode service reported version {foreign} since the runner started; restart the runner"
 
     def supported_version(self) -> SpecifierSet:
         return ADMITTED_OPENCODE_V2_RANGE

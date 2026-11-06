@@ -297,26 +297,27 @@ folded into it — the two harnesses' bindings are independent, and no deployed 
 working when this table is absent (its scaffolded default binds `opencode` on `PATH`). `binary` names the OpenCode
 executable, exactly as `harness_binary` does for Claude Code — and, exactly as for Claude Code, naming one that does not
 exist or is not executable is caught by the runner's own health evaluation rather than surfacing only at spawn: health
-recalculates at daemon start, after an operator-triggered selftest, and when the observed binary version changes, and a
-binding that fails any required check — missing binary, an incompatible or unknown observed version, failed
-authentication, a config conflict, an unmapped configured tier, or a recorded selftest failure — is marked unavailable.
-`HarnessSelector` skips an unavailable member with its own `"unhealthy"` reason ([observability.md](./observability.md))
-rather than selecting it, so a node whose acceptable set includes `opencode` falls back to another member instead of
-failing at spawn, and escalates only once every member is exhausted. The binding stays visible, with its cause, in this
-runner's own `GET /runners/{runner_id}/api/harness-health` diagnostics; the hub sees only the boolean flag, never the
-cause. Claude Code's own health check is the same evaluation, membership-only: an incompatible or unobserved version
-withholds availability exactly as OpenCode's does, but since Claude Code declares no compatibility corpus, an admitted
-version is never itself a cause — there is no `unknown_version` an admitted-but-unclassified Claude Code version could
-read. `[runner.opencode.models] supported` is the same list for OpenCode, defaulting to `*/*`; each entry must contain a
-`/`, since OpenCode takes only a `provider/model` reference, and one without it fails host-config load.
-`[runner.opencode.models.aliases]` and `[runner.opencode.effort.aliases]` mirror `[runner.models.aliases]`/
-`[runner.effort.aliases]` in shape but not in defaults — see "Model and effort tiers" above for why OpenCode's own table
-carries the whole mapping rather than overrides to a built-in one. `worker_config_path` names the runner-owned
-permission/plugin document that `blizzard runner init` scaffolds beside `worker-settings.json` (never inside a project
-repository); it denies OpenCode's native, non-interactive `question` tool outright — a headless worker has no one to
-answer it, and `blizzard runner ask` is its lease-authenticated replacement — and names the heartbeat plugin ("Harness
-identity" above) for OpenCode to load. Effort reasserts on every OpenCode invocation exactly as it does for Claude Code,
-for the same reason: a mint-only value would silently drop across a resume.
+recalculates at daemon start, after an operator-triggered selftest, when the observed binary version changes, and when a
+launch is refused because the version changed, and a binding that fails any required check — missing binary, an
+incompatible or unknown observed version, failed authentication, a config conflict, an unmapped configured tier, or a
+recorded selftest failure — is marked unavailable. `HarnessSelector` skips an unavailable member with its own
+`"unhealthy"` reason ([observability.md](./observability.md)) rather than selecting it, so a node whose acceptable set
+includes `opencode` falls back to another member instead of failing at spawn, and escalates only once every member is
+exhausted. The binding stays visible, with its cause, in this runner's own `GET /runners/{runner_id}/api/harness-health`
+diagnostics; the hub sees only the boolean flag, never the cause. Claude Code's own health check is the same evaluation,
+membership-only: an incompatible or unobserved version withholds availability exactly as OpenCode's does, but since
+Claude Code declares no compatibility corpus, an admitted version is never itself a cause — there is no
+`unknown_version` an admitted-but-unclassified Claude Code version could read. `[runner.opencode.models] supported` is
+the same list for OpenCode, defaulting to `*/*`; each entry must contain a `/`, since OpenCode takes only a
+`provider/model` reference, and one without it fails host-config load. `[runner.opencode.models.aliases]` and
+`[runner.opencode.effort.aliases]` mirror `[runner.models.aliases]`/ `[runner.effort.aliases]` in shape but not in
+defaults — see "Model and effort tiers" above for why OpenCode's own table carries the whole mapping rather than
+overrides to a built-in one. `worker_config_path` names the runner-owned permission/plugin document that
+`blizzard runner init` scaffolds beside `worker-settings.json` (never inside a project repository); it denies OpenCode's
+native, non-interactive `question` tool outright — a headless worker has no one to answer it, and `blizzard runner ask`
+is its lease-authenticated replacement — and names the heartbeat plugin ("Harness identity" above) for OpenCode to load.
+Effort reasserts on every OpenCode invocation exactly as it does for Claude Code, for the same reason: a mint-only value
+would silently drop across a resume.
 
 The same section drives OpenCode 2: the configured binary's `--version`, read once as the runner starts, chooses the
 binding — a binary inside OpenCode 1's range composes OpenCode 1 exactly as above, one inside OpenCode 2's range
@@ -326,12 +327,32 @@ restarts; to move one, stop it, upgrade OpenCode, and start it. On OpenCode 2 ev
 `blizzard runner opencode drive` on the operator's own managed service, under the operator's own login and
 configuration: `auth_path` and `worker_config_path` are ignored, the runner writes no worker config and loads no plugin,
 and a bundle's `opencode/` directory must be empty. Before each launch the runner checks the service through
-`GET /api/info`, starts it with `opencode service start` when none answers, and fails the turn as a spawn failure when
-none answers within 30 seconds. The version it advertises and records on every spawn is the service's own; a launch on a
-service whose version changed since it was advertised is refused, and the runner observes it afresh — a version still
-inside OpenCode 2's range is then available again, while a service once seen outside it leaves the capability
-unavailable as a config conflict until the runner restarts, even after the service returns — and a binary and service of
-different major versions leave the capability unavailable as a config conflict while they differ.
+`GET /api/info` and, when none answers, starts it with `opencode service start` — unless the operator has disabled it,
+or `opencode service get disabled` answers neither `true` nor `false` — and fails the turn as a spawn failure when none
+answers within 30 seconds. The version it advertises and records on every spawn is the service's own; a launch on a
+service whose version changed since it was advertised is refused, and the runner observes the version afresh and
+recalculates the capability's health at once, rather than at the end of its refresh window.
+
+OpenCode 2's health runs its checks against the service in order and reports the first that fails as a config conflict,
+naming it in the runner's log:
+
+- a service seen outside OpenCode 2's range since the runner started, which holds until the runner restarts, even after
+  the service returns;
+- a managed service the operator has disabled (`opencode service set disabled true`), even one still running, or a
+  setting that cannot be read — the runner starts neither;
+- no service answering once `opencode service start` has run;
+- a binary and service of different major versions, while they differ;
+- a tier in `[runner.opencode.models.aliases]` naming a model the service's model listing does not hold, since it lists
+  only the models of providers it is signed in to;
+- a variant in `[runner.opencode.effort.aliases]` that a tier's model does not offer — an effort with no alias passes
+  through as its own variant, which only the launch that asks for it checks.
+
+The runner reads the listing alone, never the service's credentials, and a health check starts a service that is not
+running, as a launch does; a version still inside OpenCode 2's range is available again once observed. On OpenCode 1, a
+store OpenCode 2 has migrated in place — its `opencode.db` holding the `kv` key `migration.v1-v2` — leaves the
+capability unavailable as a config conflict naming the store, since nothing OpenCode 1 writes to it afterward reaches
+OpenCode 2; restart the runner on OpenCode 2 to carry on. `blizzard runner selftest opencode` tests whichever major
+version the runner holds.
 
 A turn runs on the service, not in the worker, so killing a driver never stops it. Wherever the runner kills a driver,
 or a driver exits without a result, it interrupts that session's running tree through the service, best effort and

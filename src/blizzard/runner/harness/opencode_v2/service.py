@@ -1,5 +1,6 @@
-"""Keeping the operator's managed service up: checked before every launch and started with ``opencode service start``
-under the runner's tool profile when none answers. The runner never stops or restarts it."""
+"""Keeping the operator's managed service up: checked before every launch and every capability probe, and started with
+``opencode service start`` under the runner's tool profile when none answers — unless the operator has disabled it. The
+runner never stops, restarts, or reconfigures it."""
 
 from __future__ import annotations
 
@@ -14,6 +15,7 @@ from blizzard.runner.harness.opencode_v2.driver import (
     bind_service,
 )
 from blizzard.runner.harness.opencode_v2.registration import read_registration, registration_path
+from blizzard.runner.harness.opencode_v2.shapes import ListedModel, OpenCodeTwoShapeError, parse_listed_model
 from blizzard.runner.harness.opencode_v2.transport import (
     IServiceTransport,
 )
@@ -22,10 +24,22 @@ from blizzard.runner.process.child_processes import ChildLaunchError, IChildProc
 
 DEFAULT_START_TIMEOUT_SECONDS = 30.0
 DEFAULT_REACH_SECONDS = 30.0
+SETTING_TIMEOUT_SECONDS = 10.0
 
 
 class ServiceUnavailableError(RuntimeError):
     """No managed service answers, and starting one did not make one answer within the bound."""
+
+
+DISABLED_DETAIL = "the operator has disabled the managed OpenCode service; `opencode service unset disabled` enables it"
+UNREADABLE_DETAIL = (
+    "`opencode service get disabled` answered neither true nor false; the runner treats the service as disabled"
+)
+
+
+class ServiceDisabledError(ServiceUnavailableError):
+    """The operator has disabled the managed service, so OpenCode's own clients run private servers instead — or
+    whether they have cannot be read, so the runner starts none."""
 
 
 class IServiceKeeper(Protocol):
@@ -35,7 +49,18 @@ class IServiceKeeper(Protocol):
 
     def ensure(self) -> ServiceIdentity:
         """The answering service's identity, starting one first when none answers; raises
-        :class:`ServiceUnavailableError` when none answers within the bound."""
+        :class:`ServiceDisabledError` rather than start a disabled one, and :class:`ServiceUnavailableError` when none
+        answers within the bound."""
+        ...
+
+    def disabled(self) -> bool | None:
+        """Whether the operator has disabled the managed service; ``None`` when the setting cannot be read, which no
+        caller takes for enabled."""
+        ...
+
+    def listed_models(self) -> tuple[ListedModel, ...]:
+        """The answering service's model listing; raises :class:`ServiceUnavailableError` when none answers or the
+        listing cannot be read."""
         ...
 
 
@@ -75,11 +100,37 @@ class ServiceKeeper:
             return None
         return identity
 
+    def disabled(self) -> bool | None:
+        try:
+            run = self._children.run(
+                [self._binary, "service", "get", "disabled"],
+                cwd=None,
+                env=self._tool_env,
+                timeout=SETTING_TIMEOUT_SECONDS,
+            )
+        except ChildLaunchError:
+            return None
+        if run.exit_code != 0 or run.timed_out:
+            return None
+        return {"true": True, "false": False}.get(run.stdout.strip())
+
+    def listed_models(self) -> tuple[ListedModel, ...]:
+        path = self._registration_file()
+        try:
+            client, _ = bind_service(lambda: read_registration(path), self._transport)
+            return tuple(parse_listed_model(entry) for entry in client.models())
+        except (*BIND_FAULTS, OpenCodeTwoShapeError) as exc:
+            raise ServiceUnavailableError(f"cannot read the OpenCode service's model listing: {exc}") from exc
+
     def ensure(self) -> ServiceIdentity:
-        """The answering service's identity, starting one first when none answers."""
+        """The answering service's identity, starting one first when none answers and the operator has not disabled
+        it."""
         identity = self.answering()
         if identity is not None:
             return identity
+        disabled = self.disabled()
+        if disabled is not False:
+            raise ServiceDisabledError(DISABLED_DETAIL if disabled else UNREADABLE_DETAIL)
         try:
             # `service start` detaches the service itself; the run's own group keeps any lease's kill off it.
             self._children.run(
@@ -102,4 +153,12 @@ class ServiceKeeper:
             self._sleep(self._poll_seconds)
 
 
-__all__ = ["DEFAULT_REACH_SECONDS", "IServiceKeeper", "ServiceKeeper", "ServiceUnavailableError"]
+__all__ = [
+    "DEFAULT_REACH_SECONDS",
+    "DISABLED_DETAIL",
+    "UNREADABLE_DETAIL",
+    "IServiceKeeper",
+    "ServiceDisabledError",
+    "ServiceKeeper",
+    "ServiceUnavailableError",
+]

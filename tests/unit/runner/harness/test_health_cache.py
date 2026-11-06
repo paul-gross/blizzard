@@ -10,6 +10,7 @@ from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
+import pytest
 from packaging.specifiers import SpecifierSet
 
 from blizzard.foundation.clock import FixedClock
@@ -33,14 +34,17 @@ class _FakeProbe:
     supported: SpecifierSet | None = None
     corpus_backed: bool = True
     degradations: tuple[DeclaredDegradation, ...] = ()
+    conflicts: tuple[str, ...] = ()
     calls: int = field(default=0, compare=False)
+    conflict_reads: int = field(default=0, compare=False)
 
     def binary_present(self) -> bool:
         self.calls += 1
         return self.binary
 
     def config_conflicts(self) -> tuple[str, ...]:
-        return ()
+        self.conflict_reads += 1
+        return self.conflicts
 
     def probe_authentication(self) -> bool:
         return self.authenticated
@@ -152,6 +156,40 @@ def test_an_observed_version_change_forces_an_immediate_recompute() -> None:
     cache.refresh(_HARNESS_ID, adapter=_FakeAdapter(), observed_version="1.0")
     cache.refresh(_HARNESS_ID, adapter=_FakeAdapter(), observed_version="1.1")
     assert probe.calls == 2
+
+
+def test_an_invalidated_harness_recomputes_on_its_next_refresh_with_nothing_changed() -> None:
+    clock = FixedClock(_NOW)
+    probe = _FakeProbe()
+    cache = _cache(probe, _FakeSelftestResults(), clock=clock)
+    cache.refresh(_HARNESS_ID, adapter=_FakeAdapter(), observed_version="1.0")
+    cache.invalidate(_HARNESS_ID)
+    cache.refresh(_HARNESS_ID, adapter=_FakeAdapter(), observed_version="1.0")
+    assert probe.calls == 2
+
+
+@pytest.mark.parametrize(
+    ("probe", "cause"),
+    [
+        (_FakeProbe(binary=False, conflicts=("a",)), HarnessHealthCause.MISSING_BINARY),
+        (_FakeProbe(authenticated=False, conflicts=("a",)), HarnessHealthCause.AUTHENTICATION_FAILURE),
+    ],
+)
+def test_conflicts_are_never_gathered_once_a_check_ranked_before_them_fails(
+    probe: _FakeProbe, cause: HarnessHealthCause
+) -> None:
+    result = _cache(probe, _FakeSelftestResults(), clock=FixedClock(_NOW)).refresh(
+        _HARNESS_ID, adapter=_FakeAdapter(), observed_version="1.0"
+    )
+    assert result is not None and result.cause is cause and probe.conflict_reads == 0
+
+
+def test_conflicts_are_gathered_once_every_check_ranked_before_them_passes() -> None:
+    probe = _FakeProbe(conflicts=("ambient",))
+    result = _cache(probe, _FakeSelftestResults(), clock=FixedClock(_NOW)).refresh(
+        _HARNESS_ID, adapter=_FakeAdapter(), observed_version="1.0"
+    )
+    assert result is not None and result.cause is HarnessHealthCause.CONFIG_CONFLICT and probe.conflict_reads == 1
 
 
 def test_a_new_selftest_result_forces_an_immediate_recompute() -> None:

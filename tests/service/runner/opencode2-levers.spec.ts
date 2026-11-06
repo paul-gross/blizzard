@@ -57,16 +57,17 @@ async function seeded(mockHub: MockHub, host: RunnerHost, spec: MockChunkSpec) {
 }
 
 test.describe('the service-level levers', () => {
-  test('test_opencode2_a_service_that_never_answers_fails_the_launch_and_escalates', async ({ mockHub, runnerHosts }) => {
+  test('test_opencode2_a_service_that_never_answers_leaves_the_capability_unavailable_by_name', async ({ mockHub, runnerHosts }) => {
     const host = await runnerHosts.create({ runnerOpencode2Levers: ['NEVER_ANSWERS'] });
     const { runner, leases, stepping } = await seeded(mockHub, host, single('gr_oc2_never_answers', script("text('unreached')"), 0));
 
-    const outcomes = await stepping(async () => (await leases()).some((lease) => lease.state === 'closed'));
+    await stepping(async () => false, 3);
 
-    expect(outcomes[0], 'the pass that tried the launch').toBe('failed');
-    expect((await leases()).every((lease) => lease.session_id === null), 'no session was minted').toBe(true);
-    expect(host.logTail()).toContain('no OpenCode service to drive the turn on');
-    await stepUntil(host, async () => (await runner.facts({ limit: 200 })).body.items.map((fact) => fact.kind), (kinds) => kinds.includes('escalation.recorded'), { stallPasses: STALL_PASSES });
+    // Health started the service and found nothing answering, so the runner never took the chunk to launch it.
+    const health = (await runner.harnessHealth()).body.items.find((item) => item.harness_id === 'opencode');
+    expect([health?.available, health?.cause], JSON.stringify(health)).toEqual([false, 'config_conflict']);
+    expect(await leases(), 'no lease was taken').toEqual([]);
+    expect(host.logTail()).toContain('no OpenCode service answers');
   });
 
   test('test_opencode2_a_dropped_event_stream_still_completes_the_turn_by_polling', async ({ mockHub, runnerHosts }) => {

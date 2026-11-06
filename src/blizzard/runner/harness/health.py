@@ -31,6 +31,18 @@ class HarnessHealthCause(StrEnum):
     DECLARED_DEGRADATION = "declared_degradation"
 
 
+#: The causes :func:`evaluate_harness_health` ranks before a config conflict, so conflicts need gathering only when
+#: none of these holds.
+RANKED_BEFORE_CONFLICTS = frozenset(
+    {
+        HarnessHealthCause.MISSING_BINARY,
+        HarnessHealthCause.INCOMPATIBLE_VERSION,
+        HarnessHealthCause.UNKNOWN_VERSION,
+        HarnessHealthCause.AUTHENTICATION_FAILURE,
+    }
+)
+
+
 @domain_model
 @dataclass(frozen=True)
 class DeclaredDegradation:
@@ -136,6 +148,7 @@ def _unavailable(evidence: HarnessHealthEvidence, cause: HarnessHealthCause) -> 
 
 
 __all__ = [
+    "RANKED_BEFORE_CONFLICTS",
     "DeclaredDegradation",
     "HarnessHealthCause",
     "HarnessHealthEvidence",

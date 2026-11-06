@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import base64
 import json
+import re
 from collections.abc import Generator, Iterator, Mapping, Sequence
 from contextlib import contextmanager
 from dataclasses import dataclass
@@ -54,12 +55,25 @@ class Delivery(StrEnum):
     STEER = "steer"
 
 
+_MODEL = re.compile(r"(?P<provider>[^/\s]+)/(?P<model>\S+)")
+
+
 @domain_model
 @dataclass(frozen=True)
 class ModelReference:
     provider_id: str
     id: str
     variant: str | None = None
+
+    @classmethod
+    def parse(cls, model: str, variant: str | None = None) -> ModelReference | None:
+        """``provider/model`` as a reference, or ``None`` for anything else — an empty model among them, which leaves
+        OpenCode's own configured default in force."""
+        match = _MODEL.fullmatch(model)
+        return None if match is None else cls(match["provider"], match["model"], variant)
+
+    def reference(self) -> str:
+        return f"{self.provider_id}/{self.id}"
 
     def payload(self) -> JsonObject:
         body: JsonObject = {"providerID": self.provider_id, "id": self.id}

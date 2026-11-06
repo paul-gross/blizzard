@@ -56,7 +56,6 @@ SESSION_ID_PREFIX = "ses"
 DEFAULT_SUPPORTED_MODELS: tuple[str, ...] = ("*/*",)
 _EFFORT_ORDINAL = frozenset({"low", "medium", "high", "max"})
 _WINDOW = re.compile(r"(?P<count>[0-9]+)(?P<thousands>[kK]?)")
-_MODEL = re.compile(r"(?P<provider>[^/\s]+)/(?P<model>\S+)")
 
 
 def window_tokens(window: str | None) -> int | None:
@@ -151,7 +150,7 @@ class OpenCodeTwoAdapter:
             return self._model_aliases.get(entry)
         if entry in self._model_aliases:
             return self._model_aliases[entry]
-        if not model_supported(entry, self._supported_models) or _MODEL.fullmatch(entry) is None:
+        if not model_supported(entry, self._supported_models) or ModelReference.parse(entry) is None:
             return None
         return entry
 
@@ -175,10 +174,7 @@ class OpenCodeTwoAdapter:
         return self._supported_models
 
     def _reference(self, model: str | None, effort: str | None) -> ModelReference | None:
-        match = _MODEL.fullmatch(model or self._model or "")
-        if match is None:
-            return None
-        return ModelReference(match["provider"], match["model"], effort)
+        return ModelReference.parse(model or self._model or "", effort)
 
     # -- launching --------------------------------------------------------------------------------------------------
 

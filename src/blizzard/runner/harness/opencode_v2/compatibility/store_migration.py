@@ -14,7 +14,7 @@ from blizzard.runner.harness.json_value import JsonObject, JsonValue, decode_jso
 from blizzard.runner.harness.opencode_v2.compatibility.host import IProofHost
 from blizzard.runner.harness.opencode_v2.compatibility.rows import ProofRow, RowObservation
 
-#: The `kv` key OpenCode 2 writes when it has migrated a 1.x store; OpenCode 1's health reads it.
+#: The `kv` key OpenCode 2 writes when it has migrated a 1.x store; OpenCode 1's health refuses a store holding it.
 MIGRATION_KV_KEY = "migration.v1-v2"
 SEED_PROMPT = "Reply with the word SEEDED and nothing else."
 _STORE = Path(".local") / "share" / "opencode" / "opencode.db"

@@ -1,4 +1,5 @@
-"""Where OpenCode keeps its credential document and user config — one resolver each, fed an env mapping."""
+"""Where OpenCode keeps its credential document, its session store, and its user config — one resolver each, fed an env
+mapping."""
 
 from __future__ import annotations
 
@@ -17,6 +18,12 @@ def resolve_opencode_auth_path(env: Mapping[str, str]) -> Path | None:
     if not home:
         return None
     return Path(home) / ".local" / "share" / "opencode" / "auth.json"
+
+
+def resolve_opencode_store_path(env: Mapping[str, str]) -> Path | None:
+    """OpenCode's session store, ``opencode.db``, beside ``auth.json`` (:func:`resolve_opencode_auth_path`)."""
+    auth = resolve_opencode_auth_path(env)
+    return None if auth is None else auth.with_name("opencode.db")
 
 
 def resolve_opencode_config_dir(env: Mapping[str, str]) -> Path | None:

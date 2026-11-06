@@ -126,6 +126,10 @@ class OpenCodeTwoDeclaration:
         )
         return HarnessBinding(adapter=adapter, transcript_source=adapter.transcript_source())
 
+    @property
+    def health_varies_by_spawn_root(self) -> bool:
+        return False
+
     def health_probe(
         self,
         section: OpenCodeConfiguration,
@@ -141,6 +145,8 @@ class OpenCodeTwoDeclaration:
             hold=version_hold(section.binary),
             corpus=corpus,
             versions=VersionProbe(children, shared.worker_env.tool()),
+            model_aliases=section.model_aliases,
+            effort_aliases=section.effort_aliases,
         )
 
     def publish_layout(

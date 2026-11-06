@@ -6,7 +6,7 @@ Composition-root-owned and as long-lived as the runner process; readers go throu
 from __future__ import annotations
 
 from collections.abc import Mapping, Sequence
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from datetime import datetime
 from typing import Protocol
 
@@ -14,7 +14,12 @@ from blizzard.foundation.clock import IClock
 from blizzard.foundation.logging import get_logger
 from blizzard.runner.harness.adapter import IHarnessHealthProbe
 from blizzard.runner.harness.admission import admission_verdict
-from blizzard.runner.harness.health import HarnessHealthEvidence, HarnessHealthResult, evaluate_harness_health
+from blizzard.runner.harness.health import (
+    RANKED_BEFORE_CONFLICTS,
+    HarnessHealthEvidence,
+    HarnessHealthResult,
+    evaluate_harness_health,
+)
 from blizzard.runner.harness.offline_compatibility import ICompatibilityCorpus, classify_offline
 from blizzard.runner.harness.selftest_result import IReadSelfTestResultRepository, selftest_failed
 
@@ -82,7 +87,7 @@ class HarnessHealthCache:
     ) -> HarnessHealthResult | None:
         """Recompute (or reuse) ``harness_id``'s health; ``None`` for a harness this
         composition wired no health probe for. Recomputes when the refresh window elapses,
-        the observed version changes, or a new selftest result lands — never merely because
+        the observed version changes, a new selftest result lands, or :meth:`invalidate` asked — never merely because
         a peek asked; the first call for a harness always computes, since an empty cache is
         always stale (covering "at daemon start" with no separate startup hook)."""
         probe = self.probes.get(harness_id)
@@ -102,26 +107,27 @@ class HarnessHealthCache:
         supported_version = probe.supported_version()
         normalized_version = probe.normalize_version(observed_version)
         classifies_offline = probe.classifies_offline()
-        conflicts = probe.config_conflicts()
-        result = evaluate_harness_health(
-            HarnessHealthEvidence(
-                harness_id=harness_id,
-                binary_present=probe.binary_present(),
-                version_declared=supported_version is not None,
-                version_admitted=admission_verdict(normalized_version, supported_version),
-                version_classification=(
-                    classify_offline(self.corpus, harness_id, normalized_version, supported_version)
-                    if supported_version is not None and classifies_offline
-                    else None
-                ),
-                authenticated=probe.probe_authentication(),
-                unmapped_tiers=_unmapped_tiers(adapter, self.configured_tiers.get(harness_id, ())),
-                selftest_failed=selftest_failed(latest),
-                corpus_backed=classifies_offline,
-                degradations=probe.declared_degradations(),
-                config_conflicts=conflicts,
-            )
+        evidence = HarnessHealthEvidence(
+            harness_id=harness_id,
+            binary_present=probe.binary_present(),
+            version_declared=supported_version is not None,
+            version_admitted=admission_verdict(normalized_version, supported_version),
+            version_classification=(
+                classify_offline(self.corpus, harness_id, normalized_version, supported_version)
+                if supported_version is not None and classifies_offline
+                else None
+            ),
+            authenticated=probe.probe_authentication(),
+            unmapped_tiers=_unmapped_tiers(adapter, self.configured_tiers.get(harness_id, ())),
+            selftest_failed=selftest_failed(latest),
+            corpus_backed=classifies_offline,
+            degradations=probe.declared_degradations(),
         )
+        result = evaluate_harness_health(evidence)
+        # Conflicts are gathered only once every check ranked before them passes: gathering one may reach a service.
+        conflicts = () if result.cause in RANKED_BEFORE_CONFLICTS else probe.config_conflicts()
+        if conflicts:
+            result = evaluate_harness_health(replace(evidence, config_conflicts=conflicts))
         if conflicts:
             _log.warning("harness config conflict", harness_id=harness_id, conflicts=list(conflicts))
         self._results[harness_id] = result
@@ -129,6 +135,11 @@ class HarnessHealthCache:
         self._last_version[harness_id] = observed_version
         self._last_selftest[harness_id] = selftest_marker
         return result
+
+    def invalidate(self, harness_id: str) -> None:
+        """Have the next :meth:`refresh` for ``harness_id`` recompute whatever it observes — a launch refused because
+        the harness's version changed may find the version back where it was."""
+        self._computed_at.pop(harness_id, None)
 
     def get(self, harness_id: str) -> HarnessHealthResult | None:
         """The last-computed result, or ``None`` when :meth:`refresh` has never run for

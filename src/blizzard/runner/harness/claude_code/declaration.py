@@ -104,6 +104,10 @@ class ClaudeCodeDeclaration:
         )
         return HarnessBinding(adapter=adapter, transcript_source=transcript_source)
 
+    @property
+    def health_varies_by_spawn_root(self) -> bool:
+        return True
+
     def health_probe(
         self,
         section: ClaudeCodeSection,

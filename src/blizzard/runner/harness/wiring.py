@@ -294,7 +294,7 @@ def build_production_harness_health_probes(
     probes = {
         declaration.harness_id: tuple(
             declaration.health_probe(section, shared, spawn_root=root, corpus=corpus, children=children)
-            for root in roots
+            for root in (roots if declaration.health_varies_by_spawn_root else roots[:1])
         )
         for declaration, section in enabled(settings.sections, selection)
     }
