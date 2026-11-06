@@ -27,6 +27,7 @@ from tests.support.runner_fakes import (
     make_store,
     single_workspace,
 )
+from tests.support.runner_mint import new_mint
 
 _NOW = datetime(2026, 9, 18, 12, 0, 0, tzinfo=UTC)
 _SESSION_ID = "range-recovery-session"
@@ -39,16 +40,18 @@ def _usage_payloads_by_lease(store: SqlAlchemyRunnerStore):
 
 
 def _seed_lease(store: SqlAlchemyRunnerStore) -> None:
-    store.record_lease(
-        NewLease(
-            lease_id="lease_a",
-            chunk_id=_CHUNK_ID,
-            graph_id="gr_1",
-            node_id=_NODE_ID,
-            node_name="build",
-            epoch=1,
-            retries_max=2,
-            created_at=_NOW,
+    store.record_mint(
+        new_mint(
+            NewLease(
+                lease_id="lease_a",
+                chunk_id=_CHUNK_ID,
+                graph_id="gr_1",
+                node_id=_NODE_ID,
+                node_name="build",
+                epoch=1,
+                retries_max=2,
+                created_at=_NOW,
+            )
         )
     )
 
@@ -140,7 +143,7 @@ def test_a_later_generations_recovery_range_excludes_an_earlier_generations_toke
     ]
     # Each generation's own boundary-scoped read produced its own recorded fact — two
     # facts, one per generation, never one call re-summing what the other already recorded.
-    assert len(store.pending_outbound()) == 2
+    assert [b.kind for b in store.pending_outbound()] == ["lease.minted", USAGE_RECORDED, USAGE_RECORDED]
 
 
 def test_no_boundary_for_this_generation_records_no_sample_and_reads_no_transcript(tmp_path: Path) -> None:

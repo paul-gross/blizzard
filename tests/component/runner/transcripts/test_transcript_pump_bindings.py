@@ -25,6 +25,7 @@ from tests.support.runner_fakes import (
     make_context,
     make_store,
 )
+from tests.support.runner_mint import new_mint
 from tests.support.scaffolding import capture_statements, count_rows_read
 from tests.support.transcript_batches import incomplete_batch, normalized_turn, transcript_batch
 
@@ -61,16 +62,18 @@ def _open_segment(ctx: LoopContext, chunk_id: str, session: str, *, held: bool, 
         ctx.stores.environments.record_binding(
             chunk_id=chunk_id, environment_id=f"env-{n}", workdir=f"/ws/{n}", bound_at=_NOW, workspace_id=None
         )
-    ctx.stores.lease_record.record_lease(
-        NewLease(
-            lease_id=f"lease_{n}",
-            chunk_id=chunk_id,
-            graph_id="gr_1",
-            node_id="nd_build",
-            node_name="build",
-            epoch=1,
-            retries_max=2,
-            created_at=_NOW,
+    ctx.stores.lease_record.record_mint(
+        new_mint(
+            NewLease(
+                lease_id=f"lease_{n}",
+                chunk_id=chunk_id,
+                graph_id="gr_1",
+                node_id="nd_build",
+                node_name="build",
+                epoch=1,
+                retries_max=2,
+                created_at=_NOW,
+            )
         )
     )
     ctx.stores.liveness.record_spawn(

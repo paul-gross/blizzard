@@ -38,6 +38,7 @@ from tests.support.runner_fakes import (
     serving,
     single_workspace,
 )
+from tests.support.runner_mint import new_mint
 
 _IDLE_HANDLE = WorkerHandle(session_id="sess-idle", pid=100, process_start_time="start-100", pgid=100)
 
@@ -271,16 +272,18 @@ _LATER = _NOW + HEARTBEAT_STALENESS_THRESHOLD + timedelta(minutes=5)
 
 
 def _running_lease(store: SqlAlchemyRunnerStore, lease_id: str, chunk_id: str, *, pid: int, env: str) -> None:
-    store.record_lease(
-        NewLease(
-            lease_id=lease_id,
-            chunk_id=chunk_id,
-            graph_id="gr_1",
-            node_id="nd_build",
-            node_name="build",
-            epoch=1,
-            retries_max=2,
-            created_at=_NOW,
+    store.record_mint(
+        new_mint(
+            NewLease(
+                lease_id=lease_id,
+                chunk_id=chunk_id,
+                graph_id="gr_1",
+                node_id="nd_build",
+                node_name="build",
+                epoch=1,
+                retries_max=2,
+                created_at=_NOW,
+            )
         )
     )
     store.record_spawn(

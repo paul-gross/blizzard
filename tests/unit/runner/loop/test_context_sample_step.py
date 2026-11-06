@@ -32,6 +32,7 @@ from tests.support.runner_fakes import (
     make_store,
     serving,
 )
+from tests.support.runner_mint import new_mint
 
 _NOW = datetime(2026, 8, 11, 9, 0, 0, tzinfo=UTC)
 _SESSION = "sess-live"
@@ -46,19 +47,21 @@ def _seed_running_lease(
     store: SqlAlchemyRunnerStore, *, lease_id: str = "lease_1", session_id: str | None = _SESSION
 ) -> str:
     """One active lease, spawned (so it bears a session) — what the step sweeps."""
-    store.record_lease(
-        NewLease(
-            lease_id=lease_id,
-            chunk_id="ch_1",
-            graph_id="gr_1",
-            node_id="nd_build",
-            node_name="build",
-            epoch=1,
-            retries_max=2,
-            session_name="code",
-            resolved_model="sonnet",
-            resolved_effort="medium",
-            created_at=_NOW,
+    store.record_mint(
+        new_mint(
+            NewLease(
+                lease_id=lease_id,
+                chunk_id="ch_1",
+                graph_id="gr_1",
+                node_id="nd_build",
+                node_name="build",
+                epoch=1,
+                retries_max=2,
+                session_name="code",
+                resolved_model="sonnet",
+                resolved_effort="medium",
+                created_at=_NOW,
+            )
         )
     )
     if session_id is not None:

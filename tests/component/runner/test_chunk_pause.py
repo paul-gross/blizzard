@@ -59,6 +59,7 @@ from tests.support.runner_fakes import (
     serving,
     usage_limit_mark,
 )
+from tests.support.runner_mint import new_mint
 
 _NOW = datetime(2026, 7, 16, 12, 0, 0, tzinfo=UTC)
 _HANDLE = WorkerHandle(session_id="sess-a", pid=100, process_start_time="start-100", pgid=100)
@@ -78,16 +79,18 @@ def _seed_running_lease(
     start: str = "start-100",
 ) -> None:
     """A build lease spawned into env e1, plus its binding. The probe decides liveness."""
-    store.record_lease(
-        NewLease(
-            lease_id=lease,
-            chunk_id=chunk,
-            graph_id="gr_1",
-            node_id="nd_build",
-            node_name="build",
-            epoch=1,
-            retries_max=2,
-            created_at=_NOW,
+    store.record_mint(
+        new_mint(
+            NewLease(
+                lease_id=lease,
+                chunk_id=chunk,
+                graph_id="gr_1",
+                node_id="nd_build",
+                node_name="build",
+                epoch=1,
+                retries_max=2,
+                created_at=_NOW,
+            )
         )
     )
     store.record_spawn(
@@ -880,16 +883,18 @@ def test_a_next_node_under_a_chunk_pause_holds_the_binding_and_enters_once_unpau
 
 def _seed_orphan_lease(store: SqlAlchemyRunnerStore, *, retries_max: int = 2) -> None:
     """A lease minted but never spawned (no pid/session) — REAP's orphan case."""
-    store.record_lease(
-        NewLease(
-            lease_id="lease_1",
-            chunk_id="ch_1",
-            graph_id="gr_1",
-            node_id="nd_build",
-            node_name="build",
-            epoch=1,
-            retries_max=retries_max,
-            created_at=_NOW,
+    store.record_mint(
+        new_mint(
+            NewLease(
+                lease_id="lease_1",
+                chunk_id="ch_1",
+                graph_id="gr_1",
+                node_id="nd_build",
+                node_name="build",
+                epoch=1,
+                retries_max=retries_max,
+                created_at=_NOW,
+            )
         )
     )
     store.record_binding(chunk_id="ch_1", environment_id="e1", workdir="/ws/e1", bound_at=_NOW, workspace_id="ws1")
@@ -918,7 +923,9 @@ def test_a_reaped_orphan_on_a_paused_chunk_is_not_respawned_until_the_chunk_resu
         Reap(ctx).run()
 
     assert store.active_lease_for_chunk("ch_1") is None
-    assert [f for f in store.pending_outbound() if f.kind == LEASE_MINTED] == []
+    assert [(f.kind, f.lease_id) for f in store.pending_outbound() if f.kind == LEASE_MINTED] == [
+        (LEASE_MINTED, "lease_1")
+    ]
     assert store.held_environment_ids() == ["e1"]
     assert _suppressed_chunk_paused(logs, via="requeue")
 

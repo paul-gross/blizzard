@@ -41,6 +41,7 @@ from tests.support.runner_fakes import (
     serving,
     usage_limit_mark,
 )
+from tests.support.runner_mint import new_mint
 
 _NOW = datetime(2026, 10, 1, 12, 0, tzinfo=UTC)
 _SLUG = "team-plan"
@@ -105,16 +106,18 @@ def _advanced_chunk(store: SqlAlchemyRunnerStore, hub: FakeHub, *, first_node_ra
     first node's lease closed in this binding's tenure, or (``first_node_ran=False``) a claim no lease ever followed."""
     store.record_binding(chunk_id="ch_1", environment_id="e1", workdir="/ws/e1", bound_at=_NOW, workspace_id="ws1")
     if first_node_ran:
-        store.record_lease(
-            NewLease(
-                lease_id="lease_build",
-                chunk_id="ch_1",
-                graph_id="gr_1",
-                node_id="nd_build",
-                node_name="build",
-                epoch=1,
-                retries_max=2,
-                created_at=_NOW,
+        store.record_mint(
+            new_mint(
+                NewLease(
+                    lease_id="lease_build",
+                    chunk_id="ch_1",
+                    graph_id="gr_1",
+                    node_id="nd_build",
+                    node_name="build",
+                    epoch=1,
+                    retries_max=2,
+                    created_at=_NOW,
+                )
             )
         )
         store.record_closure(
@@ -242,16 +245,18 @@ def _parked_lease(
 ) -> tuple[SqlAlchemyRunnerStore, FakeHub, LoopContext]:
     """``lease_1``'s worker exited usage-limited and parked, holding the floor of the subscription it spends."""
     store, hub = make_store(f"sqlite:///{tmp_path / 'runner.db'}"), FakeHub()
-    store.record_lease(
-        NewLease(
-            lease_id="lease_1",
-            chunk_id="ch_1",
-            graph_id="gr_1",
-            node_id="nd_build",
-            node_name="build",
-            epoch=1,
-            retries_max=2,
-            created_at=_NOW,
+    store.record_mint(
+        new_mint(
+            NewLease(
+                lease_id="lease_1",
+                chunk_id="ch_1",
+                graph_id="gr_1",
+                node_id="nd_build",
+                node_name="build",
+                epoch=1,
+                retries_max=2,
+                created_at=_NOW,
+            )
         )
     )
     store.record_spawn(

@@ -30,6 +30,7 @@ from blizzard.runner.process.child_processes import ShellCommand
 from blizzard.runner.process.internal.subprocess_child_processes import SubprocessChildProcesses
 from tests.support.runner_cli_home import TWO_RUNNERS, host_of, init_runner_home, registered_store, serve_local_api
 from tests.support.runner_fakes import SqlAlchemyRunnerStore
+from tests.support.runner_mint import new_mint
 from tests.support.worker_http import bind_local_only
 
 _NOW = datetime(2026, 7, 17, 12, 0, 0, tzinfo=UTC)
@@ -73,16 +74,18 @@ class _CarrierRunner(CliRunner):
 
 
 def _seed_parked_lease(store: SqlAlchemyRunnerStore) -> None:
-    store.record_lease(
-        NewLease(
-            lease_id="lease_1",
-            chunk_id="ch_1",
-            graph_id="gr_1",
-            node_id="nd_build",
-            node_name="build",
-            epoch=1,
-            retries_max=2,
-            created_at=_NOW,
+    store.record_mint(
+        new_mint(
+            NewLease(
+                lease_id="lease_1",
+                chunk_id="ch_1",
+                graph_id="gr_1",
+                node_id="nd_build",
+                node_name="build",
+                epoch=1,
+                retries_max=2,
+                created_at=_NOW,
+            )
         )
     )
     store.record_spawn(
@@ -99,16 +102,18 @@ def _seed_parked_lease(store: SqlAlchemyRunnerStore) -> None:
 def _seed_escalated_lease(store: SqlAlchemyRunnerStore) -> None:
     """A closed reference lease — the needs-human shape a real bug reproduced
     against: every ``blizzard runner`` worker verb 404s once its lease is closed."""
-    store.record_lease(
-        NewLease(
-            lease_id="lease_1",
-            chunk_id="ch_1",
-            graph_id="gr_1",
-            node_id="nd_build",
-            node_name="build",
-            epoch=1,
-            retries_max=2,
-            created_at=_NOW,
+    store.record_mint(
+        new_mint(
+            NewLease(
+                lease_id="lease_1",
+                chunk_id="ch_1",
+                graph_id="gr_1",
+                node_id="nd_build",
+                node_name="build",
+                epoch=1,
+                retries_max=2,
+                created_at=_NOW,
+            )
         )
     )
     store.record_spawn(
@@ -251,16 +256,18 @@ def test_takeover_ends_the_takeover_even_when_the_child_raises_keyboard_interrup
 def test_takeover_refuses_a_live_worker_without_force(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     root = init_runner_home(tmp_path)
     store = registered_store(root)
-    store.record_lease(
-        NewLease(
-            lease_id="lease_1",
-            chunk_id="ch_1",
-            graph_id="gr_1",
-            node_id="nd_build",
-            node_name="build",
-            epoch=1,
-            retries_max=2,
-            created_at=_NOW,
+    store.record_mint(
+        new_mint(
+            NewLease(
+                lease_id="lease_1",
+                chunk_id="ch_1",
+                graph_id="gr_1",
+                node_id="nd_build",
+                node_name="build",
+                epoch=1,
+                retries_max=2,
+                created_at=_NOW,
+            )
         )
     )
     store.record_spawn(

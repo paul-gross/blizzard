@@ -66,9 +66,6 @@ WRITE_PROTOCOL_CENSUS: dict[str, Disposition] = {
         "Spawner._mint (runner/lifecycle/spawn.py) — the pinned mint's graph-scoped declarations, "
         "read only by the worker's own scoped artifact verb; no panel-facing kind represents it."
     ),
-    "record_lease": Published(
-        RunnerEventType.LEASE_CHANGED, "Spawner._mint (runner/lifecycle/spawn.py) — cause='created'"
-    ),
     "record_mint": Published(
         RunnerEventType.LEASE_CHANGED, "Spawner._mint (runner/lifecycle/spawn.py) — cause='created', after the commit"
     ),

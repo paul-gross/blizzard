@@ -210,7 +210,7 @@ def test_an_attempt_with_no_transition_contributes_no_duration(tmp_path: Path) -
 
 
 def test_a_duplicate_lease_row_does_not_fan_out_the_join(tmp_path: Path) -> None:
-    """A7: ``record_lease`` is a bare insert with no unique constraint, so a retried
+    """A7: ``record_lease_minted`` is a bare insert with no unique constraint, so a retried
     ``lease.minted`` report must not double the step this join sees, nor drift its
     duration off the earliest mint."""
     hub, token, _graph_id, nodes = seeded_hub(tmp_path)

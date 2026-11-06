@@ -34,6 +34,7 @@ from blizzard.runner.tracing.platform import (
 from tests.support.config_inputs import build_hosted_hub_app, create_runner_app, init_hub
 from tests.support.runner_client import UntimedTestClient, runner_client
 from tests.support.runner_fakes import make_host_stores, make_store, make_stores, no_retry_clock
+from tests.support.runner_mint import new_mint
 
 _ENDPOINT = {"OTEL_EXPORTER_OTLP_ENDPOINT": "http://127.0.0.1:4318"}
 _NOW = datetime(2026, 7, 21, 12, 0, 0, tzinfo=UTC)
@@ -93,16 +94,18 @@ def test_a_worker_read_chains_runner_and_hub_spans_under_the_step_root(tmp_path:
 
         db_url = f"sqlite:///{tmp_path / 'runner.db'}"
         store = make_store(db_url)
-        store.record_lease(
-            NewLease(
-                lease_id="lease_1",
-                chunk_id=chunk_id,
-                graph_id="gr_1",
-                node_id="nd_build",
-                node_name="build",
-                epoch=1,
-                retries_max=2,
-                created_at=_NOW,
+        store.record_mint(
+            new_mint(
+                NewLease(
+                    lease_id="lease_1",
+                    chunk_id=chunk_id,
+                    graph_id="gr_1",
+                    node_id="nd_build",
+                    node_name="build",
+                    epoch=1,
+                    retries_max=2,
+                    created_at=_NOW,
+                )
             )
         )
         store.record_lease_token("lease_1", TokenHash(_LEASE_TOKEN).hex, _NOW)

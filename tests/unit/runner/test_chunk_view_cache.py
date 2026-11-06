@@ -36,6 +36,7 @@ from tests.support.runner_fakes import (
     make_store,
     serving,
 )
+from tests.support.runner_mint import new_mint
 
 _NOW = datetime(2026, 9, 14, 12, 0, 0, tzinfo=UTC)
 _HANDLE = WorkerHandle(session_id="sess-a", pid=100, process_start_time="start-100", pgid=100)
@@ -48,16 +49,18 @@ def _store(tmp_path: Path):
 def _seed_active_lease(store: SqlAlchemyRunnerStore, *, chunk: str, lease: str, pid: int, start: str):
     """A running lease with a live worker — no bearing on the cache other than being one
     of the ids every ``Reap``/``Pull``/``Advance`` sweep reads this tick."""
-    store.record_lease(
-        NewLease(
-            lease_id=lease,
-            chunk_id=chunk,
-            graph_id="gr_1",
-            node_id="nd_build",
-            node_name="build",
-            epoch=1,
-            retries_max=2,
-            created_at=_NOW,
+    store.record_mint(
+        new_mint(
+            NewLease(
+                lease_id=lease,
+                chunk_id=chunk,
+                graph_id="gr_1",
+                node_id="nd_build",
+                node_name="build",
+                epoch=1,
+                retries_max=2,
+                created_at=_NOW,
+            )
         )
     )
     store.record_spawn(
@@ -71,16 +74,18 @@ def _seed_active_lease(store: SqlAlchemyRunnerStore, *, chunk: str, lease: str, 
 
 def _seed_escalated(store: SqlAlchemyRunnerStore, *, chunk: str, lease: str):
     """A lease minted, spawned, then closed ``escalated`` — the open-escalation shape."""
-    store.record_lease(
-        NewLease(
-            lease_id=lease,
-            chunk_id=chunk,
-            graph_id="gr_1",
-            node_id="nd_build",
-            node_name="build",
-            epoch=1,
-            retries_max=2,
-            created_at=_NOW,
+    store.record_mint(
+        new_mint(
+            NewLease(
+                lease_id=lease,
+                chunk_id=chunk,
+                graph_id="gr_1",
+                node_id="nd_build",
+                node_name="build",
+                epoch=1,
+                retries_max=2,
+                created_at=_NOW,
+            )
         )
     )
     store.record_spawn(

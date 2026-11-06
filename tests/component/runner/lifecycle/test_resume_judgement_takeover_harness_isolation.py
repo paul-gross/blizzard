@@ -38,6 +38,7 @@ from tests.support.runner_fakes import (
     make_stores,
     single_workspace,
 )
+from tests.support.runner_mint import new_mint
 
 _NOW = datetime(2026, 9, 20, 12, 0, 0, tzinfo=UTC)
 _SHARED_SESSION_ID = "shared-dispatch-session"
@@ -54,16 +55,18 @@ def _seed_lease(
     node_id: str = "nd_build",
     node_name: str = "build",
 ) -> None:
-    store.record_lease(
-        NewLease(
-            lease_id=lease_id,
-            chunk_id=chunk_id,
-            graph_id="gr_1",
-            node_id=node_id,
-            node_name=node_name,
-            epoch=1,
-            retries_max=2,
-            created_at=_NOW,
+    store.record_mint(
+        new_mint(
+            NewLease(
+                lease_id=lease_id,
+                chunk_id=chunk_id,
+                graph_id="gr_1",
+                node_id=node_id,
+                node_name=node_name,
+                epoch=1,
+                retries_max=2,
+                created_at=_NOW,
+            )
         )
     )
     store.record_spawn(

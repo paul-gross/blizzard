@@ -33,6 +33,7 @@ from tests.support.runner_fakes import (
     runner_invariant_violations,
     strip_transcript_segments,
 )
+from tests.support.runner_mint import new_mint
 
 _NOW = datetime(2026, 8, 10, 12, 0, 0, tzinfo=UTC)
 
@@ -105,16 +106,18 @@ def _historical_lease(
     ctx: LoopContext, *, lease_id: str, session_id: str, epoch: int, node_id: str = "nd_build", at: datetime = _NOW
 ) -> None:
     """A closed lease that ran ``session_id`` and left no segment — the pre-lane shape."""
-    ctx.stores.lease_record.record_lease(
-        NewLease(
-            lease_id=lease_id,
-            chunk_id="ch_1",
-            graph_id="gr_1",
-            node_id=node_id,
-            node_name=node_id.removeprefix("nd_"),
-            epoch=epoch,
-            retries_max=2,
-            created_at=at,
+    ctx.stores.lease_record.record_mint(
+        new_mint(
+            NewLease(
+                lease_id=lease_id,
+                chunk_id="ch_1",
+                graph_id="gr_1",
+                node_id=node_id,
+                node_name=node_id.removeprefix("nd_"),
+                epoch=epoch,
+                retries_max=2,
+                created_at=at,
+            )
         )
     )
     ctx.stores.liveness.record_spawn(
@@ -131,16 +134,18 @@ def _historical_lease(
 
 def _foreign_owner_lease(ctx: LoopContext, *, lease_id: str, session_id: str, epoch: int, at: datetime = _NOW) -> None:
     """A closed lease whose session's recorded owner this run's registry does not bind."""
-    ctx.stores.lease_record.record_lease(
-        NewLease(
-            lease_id=lease_id,
-            chunk_id="ch_1",
-            graph_id="gr_1",
-            node_id="nd_build",
-            node_name="build",
-            epoch=epoch,
-            retries_max=2,
-            created_at=at,
+    ctx.stores.lease_record.record_mint(
+        new_mint(
+            NewLease(
+                lease_id=lease_id,
+                chunk_id="ch_1",
+                graph_id="gr_1",
+                node_id="nd_build",
+                node_name="build",
+                epoch=epoch,
+                retries_max=2,
+                created_at=at,
+            )
         )
     )
     ctx.stores.liveness.record_spawn(
@@ -326,16 +331,18 @@ def test_a_live_leases_open_segment_is_left_to_the_tick() -> None:
     """The pump owns a running worker's segment; a backfill that finalized one would close
     a conversation still being written."""
     ctx, _ = _ctx(sessions={"sess-a": [_turn(0, "in flight")]})
-    ctx.stores.lease_record.record_lease(
-        NewLease(
-            lease_id="lease_live",
-            chunk_id="ch_1",
-            graph_id="gr_1",
-            node_id="nd_build",
-            node_name="build",
-            epoch=1,
-            retries_max=2,
-            created_at=_NOW,
+    ctx.stores.lease_record.record_mint(
+        new_mint(
+            NewLease(
+                lease_id="lease_live",
+                chunk_id="ch_1",
+                graph_id="gr_1",
+                node_id="nd_build",
+                node_name="build",
+                epoch=1,
+                retries_max=2,
+                created_at=_NOW,
+            )
         )
     )
     ctx.stores.liveness.record_spawn(
@@ -629,16 +636,18 @@ def test_reship_refuses_a_segment_whose_lease_is_still_active() -> None:
     races it, leaving two segments reading the same session from different offsets."""
     ctx, _ = _ctx(sessions={"sess-a": [_turn(0, "hello")]})
     first = _import_one(ctx)
-    ctx.stores.lease_record.record_lease(
-        NewLease(
-            lease_id="lease_live",
-            chunk_id="ch_1",
-            graph_id="gr_1",
-            node_id="nd_build",
-            node_name="build",
-            epoch=9,
-            retries_max=2,
-            created_at=_NOW,
+    ctx.stores.lease_record.record_mint(
+        new_mint(
+            NewLease(
+                lease_id="lease_live",
+                chunk_id="ch_1",
+                graph_id="gr_1",
+                node_id="nd_build",
+                node_name="build",
+                epoch=9,
+                retries_max=2,
+                created_at=_NOW,
+            )
         )
     )
     ctx.stores.liveness.record_spawn(

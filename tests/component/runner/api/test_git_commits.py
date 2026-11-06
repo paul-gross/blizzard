@@ -43,6 +43,7 @@ from tests.support.runner_fakes import (
     migrated_store_at,
     single_workspace,
 )
+from tests.support.runner_mint import new_mint
 from tests.support.winter_provider_fakes import FakeGit, FakeWinter
 
 _NOW = datetime(2026, 7, 22, 12, 0, 0, tzinfo=UTC)
@@ -75,7 +76,7 @@ def _seed_lease(
         "created_at": _NOW,
     }
     fields.update(overrides)
-    store.record_lease(NewLease(**fields))
+    store.record_mint(new_mint(NewLease(**fields)))
     store.record_lease_token(fields["lease_id"], TokenHash(_TOKEN).hex, _NOW)
     # A declaration resolves its environment from the chunk's bindings, so a lease
     # without one has nothing to declare against.

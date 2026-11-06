@@ -102,6 +102,7 @@ from tests.support.runner_fakes import (
 )
 from tests.support.runner_ingest import RUNNER_TABLES, contents, invariant_violations, seed_runner
 from tests.support.runner_join import RUNNER_BIN, runner_spawn_env
+from tests.support.runner_mint import new_mint
 from tests.support.scaffolding import (
     create_repositories,
     ensure_fixture_forge,
@@ -877,16 +878,18 @@ def test_kill9_at_attach_crash_point(crash_env: CrashEnv, tmp_path: Path, refuse
     # yet hold; dispose so the hosted daemon opens the sqlite file with no concurrent writer.
     engine = create_engine_from_url(db_url)
     store = registered_fixture_store(engine)
-    store.record_lease(
-        NewLease(
-            lease_id="lease_attach",
-            chunk_id="ch_attach",
-            graph_id="gr_attach",
-            node_id="nd_review",
-            node_name="review",
-            epoch=4,
-            retries_max=2,
-            created_at=_ATTACH_NOW,
+    store.record_mint(
+        new_mint(
+            NewLease(
+                lease_id="lease_attach",
+                chunk_id="ch_attach",
+                graph_id="gr_attach",
+                node_id="nd_review",
+                node_name="review",
+                epoch=4,
+                retries_max=2,
+                created_at=_ATTACH_NOW,
+            )
         )
     )
     store.record_lease_token("lease_attach", TokenHash(_ATTACH_TOKEN).hex, _ATTACH_NOW)
@@ -998,16 +1001,18 @@ def test_kill9_at_declare_commit_crash_point(crash_env: CrashEnv, tmp_path: Path
     # yet hold; dispose so the hosted daemon opens the sqlite file with no concurrent writer.
     engine = create_engine_from_url(db_url)
     store = registered_fixture_store(engine)
-    store.record_lease(
-        NewLease(
-            lease_id="lease_declare_commit",
-            chunk_id="ch_declare_commit",
-            graph_id="gr_declare_commit",
-            node_id="nd_build",
-            node_name="build",
-            epoch=4,
-            retries_max=2,
-            created_at=_DECLARE_COMMIT_NOW,
+    store.record_mint(
+        new_mint(
+            NewLease(
+                lease_id="lease_declare_commit",
+                chunk_id="ch_declare_commit",
+                graph_id="gr_declare_commit",
+                node_id="nd_build",
+                node_name="build",
+                epoch=4,
+                retries_max=2,
+                created_at=_DECLARE_COMMIT_NOW,
+            )
         )
     )
     store.record_lease_token("lease_declare_commit", TokenHash(_DECLARE_COMMIT_TOKEN).hex, _DECLARE_COMMIT_NOW)
@@ -3364,16 +3369,18 @@ def test_kill9_at_takeover_crash_point(crash_env: CrashEnv, tmp_path: Path, refu
         assert start_time is not None
         engine = create_engine_from_url(db_url)
         store = registered_fixture_store(engine)
-        store.record_lease(
-            NewLease(
-                lease_id=_TAKEOVER_LEASE,
-                chunk_id=_TAKEOVER_CHUNK,
-                graph_id="gr_takeover",
-                node_id="nd_build",
-                node_name="build",
-                epoch=1,
-                retries_max=2,
-                created_at=_TAKEOVER_NOW,
+        store.record_mint(
+            new_mint(
+                NewLease(
+                    lease_id=_TAKEOVER_LEASE,
+                    chunk_id=_TAKEOVER_CHUNK,
+                    graph_id="gr_takeover",
+                    node_id="nd_build",
+                    node_name="build",
+                    epoch=1,
+                    retries_max=2,
+                    created_at=_TAKEOVER_NOW,
+                )
             )
         )
         store.record_spawn(

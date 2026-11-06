@@ -18,6 +18,7 @@ from blizzard.runner.harness.usage import UsageKind, UsageSample
 from blizzard.runner.leases.model import NewLease
 from blizzard.runner.store.schema import usage_facts
 from tests.support.runner_fakes import FIXTURE_RUNNER_ID, SqlAlchemyRunnerStore, make_store, record_usage
+from tests.support.runner_mint import new_mint
 
 _NOW = datetime(2026, 7, 13, 12, 0, 0, tzinfo=UTC)
 _SESSION = "sess-shared"
@@ -29,16 +30,18 @@ def _store(tmp_path: Path):
 
 def _spawned_lease(store: SqlAlchemyRunnerStore, lease: str, *, chunk: str = "ch_1") -> None:
     """A lease already spawned onto the one shared session."""
-    store.record_lease(
-        NewLease(
-            lease_id=lease,
-            chunk_id=chunk,
-            graph_id="gr_1",
-            node_id="nd_build",
-            node_name="build",
-            epoch=1,
-            retries_max=2,
-            created_at=_NOW,
+    store.record_mint(
+        new_mint(
+            NewLease(
+                lease_id=lease,
+                chunk_id=chunk,
+                graph_id="gr_1",
+                node_id="nd_build",
+                node_name="build",
+                epoch=1,
+                retries_max=2,
+                created_at=_NOW,
+            )
         )
     )
     store.record_spawn(
@@ -124,16 +127,18 @@ def test_a_lease_with_no_identified_session_banks_its_figure_verbatim(tmp_path: 
     """No session, no basis to read a figure against — and no earlier fact it could
     double-count, since a fact is only reachable through the lease that produced it."""
     store = _store(tmp_path)
-    store.record_lease(
-        NewLease(
-            lease_id="lease_x",
-            chunk_id="ch_1",
-            graph_id="gr_1",
-            node_id="nd_build",
-            node_name="build",
-            epoch=1,
-            retries_max=2,
-            created_at=_NOW,
+    store.record_mint(
+        new_mint(
+            NewLease(
+                lease_id="lease_x",
+                chunk_id="ch_1",
+                graph_id="gr_1",
+                node_id="nd_build",
+                node_name="build",
+                epoch=1,
+                retries_max=2,
+                created_at=_NOW,
+            )
         )
     )
     _record(store, "lease_x", generation=1, sample=_sample("spawn", tokens=100_000, cost=2.00, scope=100_000))

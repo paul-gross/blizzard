@@ -7,6 +7,7 @@ from datetime import datetime
 from blizzard.runner.harness.identity import SessionReference
 from blizzard.runner.leases.model import NewLease
 from tests.support.runner_fakes import SqlAlchemyRunnerStore
+from tests.support.runner_mint import new_mint
 
 NODE_ID = "g1-build"
 
@@ -16,16 +17,18 @@ def closed_lease(
 ) -> None:
     """A lease minted at ``opened`` and closed at ``closed``; one never ``identified`` assembles no spans."""
     chunk_id = f"ch-{lease_id}"
-    store.record_lease(
-        NewLease(
-            lease_id=lease_id,
-            chunk_id=chunk_id,
-            graph_id="g1",
-            node_id=NODE_ID,
-            node_name="build",
-            epoch=1,
-            retries_max=2,
-            created_at=opened,
+    store.record_mint(
+        new_mint(
+            NewLease(
+                lease_id=lease_id,
+                chunk_id=chunk_id,
+                graph_id="g1",
+                node_id=NODE_ID,
+                node_name="build",
+                epoch=1,
+                retries_max=2,
+                created_at=opened,
+            )
         )
     )
     if identified:

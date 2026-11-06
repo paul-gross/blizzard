@@ -32,6 +32,7 @@ from tests.support.runner_fakes import (
     make_context,
     make_store,
 )
+from tests.support.runner_mint import new_mint
 from tests.support.scaffolding import DEFAULT_FIXTURE_REPOSITORIES, build_hub, report_lease
 
 _NOW = datetime(2026, 7, 13, 12, 0, 0, tzinfo=UTC)
@@ -40,16 +41,18 @@ _NOW = datetime(2026, 7, 13, 12, 0, 0, tzinfo=UTC)
 def _submit(tmp_path: Path, *, origins: dict[str, str], commits: dict[str, str]) -> list[CompletionArtifact]:
     """What the runner submits for two envs each declaring ``widget`` at ``commits[env]``."""
     store = make_store(f"sqlite:///{tmp_path / 'runner.db'}")
-    store.record_lease(
-        NewLease(
-            lease_id="lease_1",
-            chunk_id="ch_1",
-            graph_id="gr_1",
-            node_id="nd_build",
-            node_name="build",
-            epoch=1,
-            retries_max=2,
-            created_at=_NOW,
+    store.record_mint(
+        new_mint(
+            NewLease(
+                lease_id="lease_1",
+                chunk_id="ch_1",
+                graph_id="gr_1",
+                node_id="nd_build",
+                node_name="build",
+                epoch=1,
+                retries_max=2,
+                created_at=_NOW,
+            )
         )
     )
     for env in ("e1", "e2"):

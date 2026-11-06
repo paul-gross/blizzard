@@ -35,6 +35,7 @@ from tests.support.runner_fakes import (
     make_store,
     serving,
 )
+from tests.support.runner_mint import new_mint
 
 _NOW = datetime(2026, 7, 13, 12, 0, 0, tzinfo=UTC)
 _HANDLE = WorkerHandle(session_id="sess-a", pid=100, process_start_time="start-100", pgid=100)
@@ -69,16 +70,18 @@ def _seed_pre_revision_binding(store: SqlAlchemyRunnerStore, chunk_id: str, envi
 
 def _seed_running_lease(store: SqlAlchemyRunnerStore, chunk_id: str) -> None:
     lease_id = f"lease_{chunk_id}"
-    store.record_lease(
-        NewLease(
-            lease_id=lease_id,
-            chunk_id=chunk_id,
-            graph_id="gr_1",
-            node_id="nd_build",
-            node_name="build",
-            epoch=1,
-            retries_max=2,
-            created_at=_NOW,
+    store.record_mint(
+        new_mint(
+            NewLease(
+                lease_id=lease_id,
+                chunk_id=chunk_id,
+                graph_id="gr_1",
+                node_id="nd_build",
+                node_name="build",
+                epoch=1,
+                retries_max=2,
+                created_at=_NOW,
+            )
         )
     )
     store.record_spawn(

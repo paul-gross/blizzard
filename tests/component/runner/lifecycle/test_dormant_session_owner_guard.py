@@ -36,6 +36,7 @@ from tests.support.runner_fakes import (
     make_envelope,
     make_store,
 )
+from tests.support.runner_mint import new_mint
 
 _NOW = datetime(2026, 7, 13, 12, 0, 0, tzinfo=UTC)
 _FOREIGN_HARNESS_ID = "foreign"
@@ -88,16 +89,18 @@ def _assert_escalated_once_with_no_takeover(store: SqlAlchemyRunnerStore, chunk_
 @pytest.mark.parametrize("unavailable", [False, True], ids=["unknown-owner", "unavailable-owner"])
 def test_on_answer_blocked_by_unresolvable_owner_escalates_in_place(tmp_path: Path, unavailable: bool):
     store = _store(tmp_path)
-    store.record_lease(
-        NewLease(
-            lease_id="lease_blocked",
-            chunk_id="ch_blocked",
-            graph_id="gr_1",
-            node_id="nd_build",
-            node_name="build",
-            epoch=1,
-            retries_max=2,
-            created_at=_NOW,
+    store.record_mint(
+        new_mint(
+            NewLease(
+                lease_id="lease_blocked",
+                chunk_id="ch_blocked",
+                graph_id="gr_1",
+                node_id="nd_build",
+                node_name="build",
+                epoch=1,
+                retries_max=2,
+                created_at=_NOW,
+            )
         )
     )
     store.record_spawn(
@@ -155,16 +158,18 @@ def test_on_answer_blocked_by_unresolvable_owner_escalates_in_place(tmp_path: Pa
 @pytest.mark.parametrize("unavailable", [False, True], ids=["unknown-owner", "unavailable-owner"])
 def test_on_unpause_blocked_by_unresolvable_owner_escalates_in_place(tmp_path: Path, unavailable: bool):
     store = _store(tmp_path)
-    store.record_lease(
-        NewLease(
-            lease_id="lease_blocked",
-            chunk_id="ch_blocked",
-            graph_id="gr_1",
-            node_id="nd_build",
-            node_name="build",
-            epoch=1,
-            retries_max=2,
-            created_at=_NOW,
+    store.record_mint(
+        new_mint(
+            NewLease(
+                lease_id="lease_blocked",
+                chunk_id="ch_blocked",
+                graph_id="gr_1",
+                node_id="nd_build",
+                node_name="build",
+                epoch=1,
+                retries_max=2,
+                created_at=_NOW,
+            )
         )
     )
     store.record_spawn(
@@ -215,16 +220,18 @@ def test_on_unpause_blocked_by_unresolvable_owner_escalates_in_place(tmp_path: P
 @pytest.mark.parametrize("unavailable", [False, True], ids=["unknown-owner", "unavailable-owner"])
 def test_resume_on_unmet_produces_blocked_by_unresolvable_owner_escalates_in_place(tmp_path: Path, unavailable: bool):
     store = _store(tmp_path)
-    store.record_lease(
-        NewLease(
-            lease_id="lease_blocked",
-            chunk_id="ch_blocked",
-            graph_id="gr_1",
-            node_id="nd_build",
-            node_name="build",
-            epoch=1,
-            retries_max=2,
-            created_at=_NOW,
+    store.record_mint(
+        new_mint(
+            NewLease(
+                lease_id="lease_blocked",
+                chunk_id="ch_blocked",
+                graph_id="gr_1",
+                node_id="nd_build",
+                node_name="build",
+                epoch=1,
+                retries_max=2,
+                created_at=_NOW,
+            )
         )
     )
     store.record_spawn(
@@ -296,16 +303,18 @@ def test_park_on_ask_skips_only_the_usage_record_when_owner_unresolvable(tmp_pat
     unresolvable owner skips *that* record alone — the ask still reaches the hub and the
     chunk still parks, exactly as it would otherwise."""
     store = _store(tmp_path)
-    store.record_lease(
-        NewLease(
-            lease_id="lease_blocked",
-            chunk_id="ch_blocked",
-            graph_id="gr_1",
-            node_id="nd_build",
-            node_name="build",
-            epoch=1,
-            retries_max=2,
-            created_at=_NOW,
+    store.record_mint(
+        new_mint(
+            NewLease(
+                lease_id="lease_blocked",
+                chunk_id="ch_blocked",
+                graph_id="gr_1",
+                node_id="nd_build",
+                node_name="build",
+                epoch=1,
+                retries_max=2,
+                created_at=_NOW,
+            )
         )
     )
     store.record_spawn(

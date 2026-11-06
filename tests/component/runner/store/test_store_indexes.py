@@ -37,6 +37,7 @@ from tests.support.runner_fakes import (
     make_envelope,
     runner_store_errors,
 )
+from tests.support.runner_mint import new_mint
 
 _NOW = datetime(2026, 9, 13, 12, 0, 0, tzinfo=UTC)
 _ALIVE = (100, "start-100")  # (pid, start_time) for a running worker
@@ -76,16 +77,18 @@ def test_heartbeat_staleness_probe_plans_as_an_index_search(tmp_path: Path) -> N
 def test_binding_tenure_lease_probe_uses_the_chunk_epoch_index(tmp_path: Path) -> None:
     engine = _migrated_engine(tmp_path)
     store = SqlAlchemyRunnerStore(engine, runner_store_errors())
-    store.record_lease(
-        NewLease(
-            lease_id="lease_1",
-            chunk_id="ch_1",
-            graph_id="gr_1",
-            node_id="nd_1",
-            node_name="build",
-            epoch=1,
-            retries_max=1,
-            created_at=_NOW,
+    store.record_mint(
+        new_mint(
+            NewLease(
+                lease_id="lease_1",
+                chunk_id="ch_1",
+                graph_id="gr_1",
+                node_id="nd_1",
+                node_name="build",
+                epoch=1,
+                retries_max=1,
+                created_at=_NOW,
+            )
         )
     )
     with support.capture_statements(engine) as statements:

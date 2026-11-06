@@ -27,6 +27,7 @@ from tests.support.runner_fakes import (
     registered_identity,
     single_workspace,
 )
+from tests.support.runner_mint import new_mint
 
 _NOW = datetime(2026, 7, 16, 12, 0, 0, tzinfo=UTC)
 
@@ -43,7 +44,7 @@ def _seed_lease(store: SqlAlchemyRunnerStore, **overrides: Unpack[NewLeaseFields
         "created_at": _NOW,
     }
     fields.update(overrides)
-    store.record_lease(NewLease(**fields))
+    store.record_mint(new_mint(NewLease(**fields)))
 
 
 @pytest.mark.parametrize("harness_id", [CLAUDE_CODE_HARNESS_ID, "unregistered"])

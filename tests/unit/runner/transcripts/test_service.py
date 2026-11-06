@@ -26,6 +26,7 @@ from tests.support.runner_fakes import (
     make_store,
     single_workspace,
 )
+from tests.support.runner_mint import new_mint
 
 _NOW = datetime(2026, 7, 16, 12, 0, 0, tzinfo=UTC)
 _KEY = ("ch_1", "nd_build", 1)
@@ -77,7 +78,7 @@ def _seed_lease(store: SqlAlchemyRunnerStore, **overrides: Unpack[NewLeaseFields
         "created_at": _NOW,
     }
     fields.update(overrides)
-    store.record_lease(NewLease(**fields))
+    store.record_mint(new_mint(NewLease(**fields)))
 
 
 def _local_turn(text: str) -> Turn:

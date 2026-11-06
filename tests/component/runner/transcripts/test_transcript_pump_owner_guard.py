@@ -27,6 +27,7 @@ from tests.support.runner_fakes import (
     make_context,
     make_store,
 )
+from tests.support.runner_mint import new_mint
 
 _NOW = datetime(2026, 7, 13, 12, 0, 0, tzinfo=UTC)
 _FOREIGN_HARNESS_ID = "foreign"
@@ -79,16 +80,18 @@ def _open_segment(ctx: LoopContext, *, chunk_id: str, lease_id: str, session: Se
     ctx.stores.environments.record_binding(
         chunk_id=chunk_id, environment_id=f"e_{chunk_id}", workdir=f"/ws/{chunk_id}", bound_at=_NOW
     )
-    ctx.stores.lease_record.record_lease(
-        NewLease(
-            lease_id=lease_id,
-            chunk_id=chunk_id,
-            graph_id="gr_1",
-            node_id="nd_build",
-            node_name="build",
-            epoch=1,
-            retries_max=2,
-            created_at=_NOW,
+    ctx.stores.lease_record.record_mint(
+        new_mint(
+            NewLease(
+                lease_id=lease_id,
+                chunk_id=chunk_id,
+                graph_id="gr_1",
+                node_id="nd_build",
+                node_name="build",
+                epoch=1,
+                retries_max=2,
+                created_at=_NOW,
+            )
         )
     )
     ctx.stores.liveness.record_spawn(lease_id, pid=1, process_start_time="1", session=session, spawned_at=_NOW)

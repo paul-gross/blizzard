@@ -1,6 +1,6 @@
 """The hub store round-trips its own written instants (``bzh:utc-instants``).
 
-``record_lease(created_at=_NOW)`` (well, its fleet-registry sibling here) must read
+``record_registration(at=_NOW)`` (well, its fleet-registry sibling here) must read
 back ``== _NOW`` and UTC-aware — impossible before the schema's ``DateTime`` columns
 were retyped ``UtcDateTime``, since sqlite drops ``tzinfo`` on write.
 """
