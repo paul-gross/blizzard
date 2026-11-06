@@ -220,6 +220,28 @@ test('test_a_usage_limited_lease_on_a_runner_set_to_release_is_claimed_elsewhere
   expect(await leases(host, FIRST, chunkId)).toHaveLength(1);
 });
 
+test('test_a_released_lease_spends_no_retry_when_its_runner_reclaims_the_step', async ({ mockHub, runnerHosts, vendorUsage, clock }, testInfo) => {
+  const first = vendorUsage.mintAnthropic(testInfo.outputPath('vendor-first'));
+  const second = vendorUsage.mintAnthropic(testInfo.outputPath('vendor-second'));
+  const reset = minuteAhead(clock, 2);
+  vendorUsage.set(first.token, { short: { utilization: 90, resetsAt: reset }, long: sample(clock, 90).long });
+  vendorUsage.set(second.token, sample(clock, 96));
+  const host = await setup(runnerHosts, first.path, second.path, true);
+  await sampled(clock, host, 'anthropic', 90);
+  await sampled(clock, host, 'second-plan', 96);
+  const marker = testInfo.outputPath('spawned');
+  const script = `import os\nif not os.path.exists(${JSON.stringify(marker)}):\n    open(${JSON.stringify(marker)}, "w").close()\n    usage_limited(resets_at="${named(reset)}")\ncrash()\n`;
+  const build = { ...node(script, 'review'), judgement_prompt: 'crash()\n', retries_max: 2 };
+  const spec: MockChunkSpec = { entry: 'build', nodes: { build, review: node('pass\n', 'done') }, work_refs: [{ source: 'mock', ref: 'toy-api/issues/1' }] };
+  const chunkId = (await mockHub.seed.chunk(spec)).body.chunk_id;
+  await until(host, async () => leases(host, FIRST, chunkId), (found) => found.length === 1 && found[0]!.closure_reason === 'released');
+  await clock.advance(240);
+  vendorUsage.set(first.token, sample(clock, 40));
+  await sampled(clock, host, 'anthropic', 40);
+  const closed = await until(host, async () => leases(host, FIRST, chunkId), (found) => found.some((lease) => lease.closure_reason === 'escalated'));
+  expect(closed.map((lease) => lease.closure_reason).sort()).toEqual(['escalated', 'failed', 'failed', 'released']);
+});
+
 async function refuseBothUsage(mockHub: MockHub, host: RunnerHost, chunkId: string): Promise<void> {
   await until(host, async () => Promise.all(NAMES.map((name) => declining(mockHub, host, name))),
     ([first, second]) => first!.includes('floor') && second!.includes('utilization'));
