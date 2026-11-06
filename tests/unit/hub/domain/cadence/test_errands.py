@@ -460,7 +460,9 @@ def test_a_moment_that_is_exactly_eligibility_is_the_due_instant() -> None:
 
 
 def test_a_missed_moment_is_due_in_the_past() -> None:
-    assert due_at(_rhythm(cron=_CRON), _errand(), _done(_AT.replace(hour=19))) < _NOW  # type: ignore[operator]
+    owed = due_at(_rhythm(cron=_CRON), _errand(), _done(_AT.replace(hour=19)))
+    assert owed is not None
+    assert owed < _NOW
 
 
 def test_a_live_last_run_has_no_due_instant() -> None:
