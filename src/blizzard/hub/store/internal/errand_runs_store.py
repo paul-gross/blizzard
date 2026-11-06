@@ -22,10 +22,7 @@ from blizzard.hub.domain.cadence.errands import ErrandKey, ErrandRun, Holder, La
 from blizzard.hub.domain.cadence.ports import IReadErrandRunsRepository
 from blizzard.hub.domain.kernel.hub_source import RESERVED_HUB_SOURCE_NAME
 from blizzard.hub.domain.kernel.transactions import Transaction
-
-# Loads the holders' status facts on this read's own connection.
-# ast-grep-ignore: bzh:hub-store-adapter-imports
-from blizzard.hub.store.internal.chunk_facts_store import status_facts_on
+from blizzard.hub.store.internal.chunk_fact_loading import status_facts_on
 from blizzard.hub.store.internal.newest_fact import newer_row_exists
 from blizzard.hub.store.schema import chunk_work_refs, work_item_runs, work_items
 from blizzard.hub.store.scoped import ScopedConnections, statements_of
