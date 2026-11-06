@@ -166,6 +166,12 @@ def test_an_unknown_session_key_is_rejected_naming_the_key() -> None:
     assert "compaction_window" not in message.split("recognizes only")[0]
 
 
+def test_a_non_string_session_key_is_rejected_as_a_parse_error_naming_it() -> None:
+    with pytest.raises(GraphParseError) as exc_info:
+        GraphDoc.of(_doc(sessions={"code": {1: "x"}}))
+    assert "1" in str(exc_info.value).split("recognizes only")[0]
+
+
 def test_an_unknown_session_key_error_lists_every_recognised_key() -> None:
     with pytest.raises(GraphParseError) as exc_info:
         GraphDoc.of(_doc(sessions={"code": {"not_a_real_key": "x"}}))

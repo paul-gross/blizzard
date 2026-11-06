@@ -1079,6 +1079,7 @@ def build_tenant_services(stores: TenantStores, parts: TenantServiceParts, *, ev
     host_report = HostReportService(hosts=host_store, clock=clock)
     host_retirement = HostRetirementService(hosts=host_store, runners=registry_store, fleet=fleet, clock=clock)
     graph_mint = GraphMintService(graphs=graph_store, clock=clock, catalogue=parts.actions.catalogue)
+    default_graph_yaml = PACKAGED.default.inlined_yaml(parts.graph_yaml)
     scope_store = ScopeStore(tenant_connections)
     scope_registry = ScopeRegistry(scopes=scope_store, clock=clock)
     routine_store = RoutineStore(tenant_connections)
@@ -1317,7 +1318,7 @@ def build_tenant_services(stores: TenantStores, parts: TenantServiceParts, *, ev
         event_log=event_log,
         clock=clock,
         default_graph_doc=PACKAGED.default.doc,
-        default_graph_yaml=PACKAGED.default.inlined_yaml(parts.graph_yaml),
+        default_graph_yaml=default_graph_yaml,
         system_artifacts=parts.system_artifacts,
         work_sources=work_sources,
         users=parts.users,
@@ -1435,9 +1436,7 @@ def build_tenant_services(stores: TenantStores, parts: TenantServiceParts, *, ev
         garden_proposal_closure=GardenProposalClosureService(
             closures=garden_proposal_closure_store,
             items=stores.work_item_edits,
-            default_graph=lambda: graph_mint.ensure_default(
-                PACKAGED.default.doc, definition_yaml=PACKAGED.default.text
-            ),
+            default_graph=lambda: graph_mint.ensure_default(PACKAGED.default.doc, definition_yaml=default_graph_yaml),
             clock=clock,
         ),
         routine_garden_proposals=RoutineGardenProposalReader(

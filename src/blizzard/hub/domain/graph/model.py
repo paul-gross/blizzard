@@ -489,10 +489,7 @@ class SessionDecl:
     def of(cls, key: object, raw: object) -> SessionDecl:
         body = Parser.of(raw, f"session {key!r}")
         name = str(key)
-        unknown_keys = [key for key in body.body if key not in SESSION_KNOWN_KEYS]
-        if any(not isinstance(key, str) for key in unknown_keys):
-            raise TypeError("session keys must be strings")
-        unknown = sorted(key for key in unknown_keys if isinstance(key, str))
+        unknown = sorted(str(key) for key in body.body if key not in SESSION_KNOWN_KEYS)
         if unknown:
             # Pinned by
             # tests/unit/hub/domain/graph/test_sessions.py::test_an_unknown_session_key_is_rejected_naming_the_key

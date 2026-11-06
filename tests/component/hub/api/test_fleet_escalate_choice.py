@@ -36,6 +36,12 @@ nodes:
         blocked:
           description: Blocked on something outside the repository.
           to: escalate
+        ghost:
+          description: Hand off to a graph never minted.
+          to: graph:ghost
+        phantom:
+          description: Hand off to another graph never minted.
+          to: graph:phantom
 """
 
 _ESCALATED = "escalated — requeue the chunk"
@@ -88,6 +94,16 @@ def test_the_escalate_choice_parks_the_chunk_needs_human_and_records_no_transiti
     assert "`build`" in detail["escalation"]["detail"] and "`unfulfillable`" in detail["escalation"]["detail"]
     assert detail["current_node_id"] == chunk.node_id
     assert chunk.rows(s.transitions) == 0 and chunk.rows(s.escalations) == 1
+
+
+def test_the_escalate_choice_carries_operator_guidance_and_no_wrapped_takeover_verb(tmp_path: Path) -> None:
+    chunk = _Chunk(build_hub(tmp_path))
+    assert chunk.complete("unfulfillable")["outcome"] == _PARKED
+
+    escalation = chunk.detail()["escalation"]
+
+    assert escalation["wrapped_takeover_command"] == ""
+    assert "requeue this chunk with a note" in escalation["takeover_command"]
 
 
 def test_resubmitting_the_escalate_choice_answers_as_escalated_and_writes_nothing(tmp_path: Path) -> None:
@@ -149,4 +165,33 @@ def test_a_second_escalate_choice_after_the_first_is_refused_not_answered_as_its
     refused = chunk.complete("blocked")
 
     assert refused["outcome"] == "failure" and _ESCALATED in refused["detail"]
+    assert chunk.rows(s.escalations) == 1
+
+
+def test_an_unresolvable_cross_graph_choice_after_the_escalate_choice_is_refused(tmp_path: Path) -> None:
+    chunk = _Chunk(build_hub(tmp_path))
+    assert chunk.complete("unfulfillable")["outcome"] == _PARKED
+
+    refused = chunk.complete("ghost")
+
+    assert refused["outcome"] == "failure" and _ESCALATED in refused["detail"]
+    assert chunk.rows(s.escalations) == 1 and chunk.rows(s.transitions) == 0
+
+
+def test_a_different_unresolvable_cross_graph_choice_after_one_that_escalated_is_refused(tmp_path: Path) -> None:
+    chunk = _Chunk(build_hub(tmp_path))
+    assert chunk.complete("ghost")["outcome"] == _PARKED
+
+    refused = chunk.complete("phantom")
+
+    assert refused["outcome"] == "failure" and _ESCALATED in refused["detail"]
+    assert chunk.rows(s.escalations) == 1 and chunk.rows(s.transitions) == 0
+
+
+def test_resubmitting_the_unresolvable_cross_graph_choice_is_still_answered_quietly(tmp_path: Path) -> None:
+    chunk = _Chunk(build_hub(tmp_path))
+    assert chunk.complete("ghost")["outcome"] == _PARKED
+
+    assert chunk.complete("ghost")["outcome"] == _PARKED
+
     assert chunk.rows(s.escalations) == 1
