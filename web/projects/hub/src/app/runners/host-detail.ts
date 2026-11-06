@@ -34,6 +34,7 @@ export class HostDetail {
   readonly togglePause = output<RunnerRow>();
 
   private readonly lastReport = viewChild.required<TemplateRef<unknown>>('lastReport');
+  private readonly url = viewChild.required<TemplateRef<unknown>>('url');
   private readonly token = viewChild.required<TemplateRef<unknown>>('token');
   private readonly agents = viewChild.required<TemplateRef<unknown>>('agents');
 
@@ -45,7 +46,7 @@ export class HostDetail {
 
   /** Connection's second column: how the host is reached, its token, and its agents. */
   protected readonly connectionLive = computed<readonly KitFact[]>(() => [
-    { label: 'URL', value: this.detail().card.url ?? '—', testid: 'fleet-fact-url' },
+    { label: 'URL', template: this.url(), testid: 'fleet-fact-url' },
     { label: 'Token', template: this.token(), testid: 'fleet-fact-token' },
     { label: 'Agents', template: this.agents(), testid: 'fleet-fact-agents' },
   ]);
