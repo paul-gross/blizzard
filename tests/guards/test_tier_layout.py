@@ -14,7 +14,7 @@ from tests.support import suite_plugin
 from tests.support.repo_files import repo_root
 from tests.support.tier_layout import (
     declared_layout_marker,
-    misplaced_root_module,
+    flat_test_module,
     non_package_folder,
     tier_folder_helpers,
     tier_of,
@@ -51,8 +51,8 @@ class _Item:
         self.added.append(mark.name)
 
 
-def _layout(tests: Path, package: Path) -> tuple[tuple[Path, Path, frozenset[str]], ...]:
-    return ((tests, package, frozenset[str]()),)
+def _layout(tests: Path, package: Path) -> tuple[tuple[Path, Path], ...]:
+    return ((tests, package),)
 
 
 def _apply(*items: _Item) -> None:
@@ -74,12 +74,12 @@ def test_a_declared_tier_marker_is_found() -> None:
     assert declared_layout_marker(["parametrize", "service"]) is None
 
 
-def test_a_flat_module_outside_the_root_list_is_misplaced(tmp_path: Path) -> None:
+def test_any_test_module_directly_under_the_tests_root_is_flat(tmp_path: Path) -> None:
     tests, _ = _tree(tmp_path)
-    assert misplaced_root_module(tests / "test_new.py", tests, {"test_old.py"})
-    assert not misplaced_root_module(tests / "test_old.py", tests, {"test_old.py"})
-    assert not misplaced_root_module(tests / "unit" / "test_new.py", tests, set())
-    assert not misplaced_root_module(tests / "conftest.py", tests, set())
+    assert flat_test_module(tests / "test_new.py", tests)
+    assert not flat_test_module(tests / "unit" / "test_new.py", tests)
+    assert not flat_test_module(tests / "conftest.py", tests)
+    assert not flat_test_module(tmp_path / "test_new.py", tests)
 
 
 def test_a_non_test_module_under_a_tier_folder_is_a_helper(tmp_path: Path) -> None:
@@ -123,7 +123,7 @@ def test_the_layout_step_marks_a_test_with_its_folders_tier(tmp_path: Path, monk
         ("unit/hub/test_a.py", ("unit",), "declares the 'unit' marker"),
         ("component/test_a.py", ("component",), "declares the 'component' marker"),
         ("unit/nowhere/test_a.py", (), "mirrors no package"),
-        ("test_flat.py", (), "a flat test module"),
+        ("test_example.py", (), r"^test_example\.py: .*bzh:mirrored-test-layout"),
     ],
 )
 def test_the_layout_step_refuses_a_misplaced_file(
@@ -179,15 +179,15 @@ def test_a_markerless_module_under_a_tier_folder_is_selected_by_that_tier_alone(
     assert "test_tier_layout.py::test_a_tier_folder_gives_its_tier" not in _collected("component")
 
 
-def test_the_tests_root_holds_no_helper_module() -> None:
-    """Shared helpers live in ``tests/support/``; the root holds only ``conftest.py``, ``__init__.py`` and
-    test modules (``bzh:mirrored-test-layout``). Collection cannot see an uncollected helper, so this reads the folder."""
+def test_the_tests_root_holds_no_module_but_its_conftest_and_init() -> None:
+    """Tests live in a tier folder and shared helpers in ``tests/support/`` (``bzh:mirrored-test-layout``). Collection
+    cannot see an uncollected helper, nor a test module a narrowed run skips, so this reads the folder."""
     stray = sorted(
-        path.name
-        for path in (repo_root() / "tests").glob("*.py")
-        if path.name not in {"conftest.py", "__init__.py"} and not path.name.startswith("test_")
+        path.name for path in (repo_root() / "tests").glob("*.py") if path.name not in {"conftest.py", "__init__.py"}
     )
-    assert not stray, f"helper modules at the tests root, move them under tests/support/: {stray}"
+    assert not stray, (
+        f"modules at the tests root, move tests to a tier folder and helpers under tests/support/: {stray}"
+    )
 
 
 @pytest.mark.parametrize("tests_root", ["tests", "exemplars/python/tests"])

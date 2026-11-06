@@ -7,7 +7,7 @@ root and the mirrored package root, so it serves ``tests/`` against ``src/blizza
 
 from __future__ import annotations
 
-from collections.abc import Collection, Iterable
+from collections.abc import Iterable
 from pathlib import Path
 
 #: The folder directly under a tests root -> the tier it gives every test beneath it.
@@ -36,10 +36,10 @@ def declared_layout_marker(marker_names: Iterable[str]) -> str | None:
     return None
 
 
-def misplaced_root_module(path: Path, tests_root: Path, root_modules: Collection[str]) -> bool:
-    """True when ``path`` is a ``test_*.py`` directly under ``tests_root`` that is not in ``root_modules``."""
+def flat_test_module(path: Path, tests_root: Path) -> bool:
+    """True when ``path`` is a ``test_*.py`` directly under ``tests_root``, where no test module may sit."""
     parts = _relative_parts(path, tests_root)
-    return parts is not None and len(parts) == 1 and parts[0].startswith("test_") and parts[0] not in root_modules
+    return parts is not None and len(parts) == 1 and parts[0].startswith("test_")
 
 
 def non_package_folder(path: Path, tests_root: Path) -> Path | None:
