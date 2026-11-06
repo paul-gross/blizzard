@@ -41,11 +41,12 @@ class SessionReconcile:
     process: IOwnedProcessControl
 
     def run(self) -> int:
-        """Hand each harness owner its reconcilable sessions, and return how many were handed; never raises."""
-        by_owner = self.sessions()
-        for harness_id, session_ids in by_owner.items():
+        """Hand each harness owner its reconcilable sessions, and return how many turns the owners stopped; never
+        raises. An owner that cannot be resolved, or fails, stops none."""
+        stopped = 0
+        for harness_id, session_ids in self.sessions().items():
             try:
-                self.harnesses.lifecycle(harness_id).reconcile(session_ids)
+                stopped += self.harnesses.lifecycle(harness_id).reconcile(session_ids)
             except (UnknownHarnessError, UnavailableHarnessError) as exc:
                 _log.warning(
                     "reconciled sessions' owner unavailable — left running",
@@ -55,7 +56,7 @@ class SessionReconcile:
                 )
             except Exception:
                 _log.exception("reconciling sessions failed", harness_id=harness_id, sessions=len(session_ids))
-        return sum(len(session_ids) for session_ids in by_owner.values())
+        return stopped
 
     def sessions(self) -> dict[str, tuple[str, ...]]:
         """The reconcilable sessions' ids, by harness owner, in active-lease order."""

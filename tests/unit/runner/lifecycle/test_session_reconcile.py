@@ -81,10 +81,11 @@ def test_only_unfinished_workerless_untaken_sessions_are_handed_to_their_owner(t
     # 6: never spawned, so it holds no session. 7: closed — its generation is finished.
     store.record_closure(lease_id="lease_7", chunk_id="ch_7", node_id="nd_build", reason="done", closed_at=_NOW)
     harness = FakeHarness(handle=_HANDLE, verdict="pass")
+    harness.reconcile_stops = 1
 
-    handed = _reconcile(store, harness, FakeProbe(alive=alive)).run()
+    stopped = _reconcile(store, harness, FakeProbe(alive=alive)).run()
 
-    assert harness.reconciled == [("sess-1",)] and handed == 1
+    assert harness.reconciled == [("sess-1",)] and stopped == 1
 
 
 def test_a_judge_that_died_with_the_daemon_leaves_its_session_reconciled(tmp_path: Path) -> None:
@@ -96,6 +97,14 @@ def test_a_judge_that_died_with_the_daemon_leaves_its_session_reconciled(tmp_pat
 
     _reconcile(store, harness, FakeProbe()).run()
 
+    assert harness.reconciled == [("sess-1",)]
+
+
+def test_an_owner_that_stops_nothing_reports_nothing_stopped(tmp_path: Path) -> None:
+    store = make_store(f"sqlite:///{tmp_path / 'runner.db'}")
+    _lease(store, 1)
+    harness = FakeHarness(handle=_HANDLE, verdict="pass")
+    assert _reconcile(store, harness, FakeProbe()).run() == 0
     assert harness.reconciled == [("sess-1",)]
 
 
@@ -111,11 +120,11 @@ def test_an_owner_that_fails_is_logged_and_never_fails_the_start(tmp_path: Path)
     _lease(store, 1)
 
     class _Failing(FakeHarness):
-        def reconcile(self, session_ids: object) -> None:
+        def reconcile(self, session_ids: object) -> int:
             raise RuntimeError("service gone")
 
     with capture_logs() as logs:
-        handed = _reconcile(store, _Failing(handle=_HANDLE, verdict="pass"), FakeProbe()).run()
+        stopped = _reconcile(store, _Failing(handle=_HANDLE, verdict="pass"), FakeProbe()).run()
 
-    assert handed == 1
+    assert stopped == 0, "a failed owner stopped nothing"
     assert any(entry["event"] == "reconciling sessions failed" for entry in logs)

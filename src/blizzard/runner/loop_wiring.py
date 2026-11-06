@@ -345,8 +345,8 @@ class ResumeMarking:
         )
 
     def reconcile_sessions(self) -> int:
-        """Stop every turn a crash left running without its worker — run after :meth:`recover_takeovers` (so a
-        takeover a crash interrupted is no longer held) and before any thread can dispatch a restart resume."""
+        """Stop every turn a crash left running without its worker, returning how many — run after
+        :meth:`recover_takeovers` (so an interrupted takeover no longer holds) and before any restart resume."""
         return SessionReconcile(self.stores, self.harnesses, self.process).run()
 
     def recover_takeovers(self) -> int:

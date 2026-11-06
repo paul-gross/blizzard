@@ -4356,9 +4356,8 @@ def test_kill9_at_ingest_crash_point(crash_env: CrashEnv, tmp_path: Path, point:
     }, f"{point}: the re-run's end state differs from an uninterrupted ingest's"
 
 
-# --- The OpenCode 2 lane — a driver killed mid-turn leaves its turn running on the operator's service, so every ---
-# --- stop path is proven against the service itself: orphan after a killed driver, a takeover left alone, reconcile ---
-# --- before restart resume, and a service that restarts mid-turn. `opencode2.*` points arm inside the driver. ---
+# --- The OpenCode 2 lane: a killed driver leaves its turn running on the service, so each stop path is proven ---
+# --- against the service itself (`tests/crash/opencode2.py`); `opencode2.*` points arm inside the driver. ---
 
 _OPENCODE2_POINTS = [p for p in _ALL_POINTS if p.startswith("opencode2.")]
 _OPENCODE2_CI_SUBSET: tuple[str, ...] = ("opencode2.drive.after-create.before-prompt",)
@@ -4475,10 +4474,9 @@ def test_kill9_at_opencode2_driver_point(crash_env: CrashEnv, tmp_path: Path, po
         lease_id, _, session_id, _ = _first_lease(runner_dir, chunk_id)
         assert wait_for_closure(runner_dir, lease_id, timeout=60) is not None, "the killed driver's lease never closed"
         assert service.idle(session_id), "the killed driver's session still runs on the service"
-        status = wait_status(hub, chunk_id, {"done", "escalated"})
+        assert wait_status(hub, chunk_id, {"done", "escalated"}) == "done", f"the chunk did not land after {point}"
         _assert_invariants(runner_dir, tmp_path / "hub", when=f"after the driver died at {point}", after_recovery=True)
-        if status == "done":
-            _landed_once(crash_env, landed_file)
+        _landed_once(crash_env, landed_file)
 
 
 def test_kill9_between_the_boundary_write_and_the_launch_under_opencode2(crash_env: CrashEnv, tmp_path: Path) -> None:
@@ -4556,7 +4554,7 @@ def test_a_forced_takeover_mid_turn_leaves_the_attended_session_running(crash_en
         await_true(lambda: _gone(pid), "the forced takeover killed the driver")
 
         await_path(marker.with_name(marker.name + ".slept"), timeout=30)
-        assert not service.running(session_id), "the attended session's turn never settled"
+        await_true(lambda: not service.running(session_id), "the attended session's turn settled on its own")
         _assert_invariants(runner_dir, tmp_path / "hub", when="after a forced takeover mid-turn", after_recovery=False)
 
 
@@ -4585,7 +4583,7 @@ def test_a_daemon_restarted_mid_turn_reconciles_the_session_before_restart_resum
         assert wait_status(hub, chunk_id, {"done"}) == "done", "the chunk did not land after the restart"
         assert not marker.with_name(marker.name + ".slept").exists(), "the reconciled turn ran its tool to completion"
         tail = log.read_text()[offset:]
-        reconciled = tail.find("reconciled 1 session(s)")
+        reconciled = tail.find("stopped 1 turn(s) a crash left running")
         resumed = tail.find("launched opencode driver")
         assert reconciled != -1, f"the restart reconciled nothing:\n{tail[-4000:]}"
         assert resumed == -1 or reconciled < resumed, "a driver launched before the session was reconciled"

@@ -239,11 +239,11 @@ class IHarnessWorkerLifecycle(Protocol):
         never hands over a session under takeover; a binding whose worker owns its turn's processes does nothing."""
         ...
 
-    def reconcile(self, session_ids: Sequence[str]) -> None:
-        """Stop any turn still running in ``session_ids`` as the daemon starts, before any restart resume: each is a
-        session whose generation the runner's own records hold unfinished, with no live worker and no takeover. Best
-        effort and bounded, like :meth:`orphan`; the runner chooses every id, and a binding whose worker owns its
-        turn's processes does nothing."""
+    def reconcile(self, session_ids: Sequence[str]) -> int:
+        """Stop any turn still running in ``session_ids`` as the daemon starts, before any restart resume, and return
+        how many it stopped: each is a session whose generation the runner's own records hold unfinished, with no live
+        worker and no takeover. Best effort and bounded, like :meth:`orphan`; the runner chooses every id, and a binding
+        whose worker owns its turn's processes does nothing and stops none."""
         ...
 
 

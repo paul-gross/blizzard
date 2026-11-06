@@ -1613,5 +1613,5 @@ def test_orphan_and_reconcile_touch_nothing_a_worker_that_owned_its_turn_took_wi
         versions=version_probe(),
     )
     adapter.orphan("ses_1")
-    adapter.reconcile(("ses_1", "ses_2"))
+    assert adapter.reconcile(("ses_1", "ses_2")) == 0
     assert probe.killed == [] and probe.killed_groups == [] and probe.interrupted_groups == []

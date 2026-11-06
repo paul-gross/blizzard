@@ -34,7 +34,7 @@ def _warnings(logs: Sequence[MutableMapping[str, Any]]) -> list[MutableMapping[s
 def test_the_running_tree_is_interrupted_deepest_first_then_the_root() -> None:
     service = _service()
     transport = SessionTransport(service)
-    SessionOrphaner(lambda: REGISTRATION, transport).orphan(ROOT)
+    assert SessionOrphaner(lambda: REGISTRATION, transport).orphan(ROOT) is True
     assert service.interrupted == [GRANDCHILD, CHILD, ROOT]
     assert service.running == set()
 
@@ -42,7 +42,7 @@ def test_the_running_tree_is_interrupted_deepest_first_then_the_root() -> None:
 def test_a_tree_running_nothing_is_left_alone() -> None:
     service = _service()
     service.running.clear()
-    SessionOrphaner(lambda: REGISTRATION, SessionTransport(service)).orphan(ROOT)
+    assert SessionOrphaner(lambda: REGISTRATION, SessionTransport(service)).orphan(ROOT) is False
     assert service.interrupted == []
 
 
@@ -70,7 +70,7 @@ def test_no_registered_service_is_logged_and_ignored() -> None:
 
 def test_an_unreachable_service_is_logged_and_ignored() -> None:
     with capture_logs() as logs:
-        SessionOrphaner(lambda: REGISTRATION, SessionTransport(None)).orphan(ROOT)
+        assert SessionOrphaner(lambda: REGISTRATION, SessionTransport(None)).orphan(ROOT) is False
     assert len(_warnings(logs)) == 1
 
 

@@ -1186,7 +1186,7 @@ def _serve_host(
             # After the takeovers settle, and before any thread can dispatch a restart resume.
             stopped = resume.reconcile_sessions()
             if stopped:
-                click.echo(f"reconciled {stopped} session(s) a crash left without a worker")
+                click.echo(f"stopped {stopped} turn(s) a crash left running without a worker")
 
         # Report once before any runner ticks, so a runner the hub released under this host never claims across a
         # restart; a report that fails or times out starts the runners anyway.

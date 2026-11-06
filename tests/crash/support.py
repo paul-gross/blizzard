@@ -791,12 +791,10 @@ def write_runner_config(
     opencode_binary: Path | None = None,
     passthrough: tuple[str, ...] = (),
 ) -> RunnerConfig:
-    """Scaffold + persist a runner config pointed at the fixture workspace and mock harness, its host
-    file at ``port = 0`` — :func:`start_runner` chooses the port. ``join`` first adds the runner at the
-    hub at ``hub_url`` through ``runner init``, which writes its token to ``runner_dir/.env``; a scenario
-    with no hub listening passes ``join=False``. ``opencode_binary`` replaces ``mock-opencode`` (an emitted
-    OpenCode 2 engine, whose version composes OpenCode 2), and ``passthrough`` names more daemon variables a
-    worker inherits."""
+    """Scaffold + persist a runner config on the fixture workspace and mock harness, its host file at ``port = 0``
+    (:func:`start_runner` chooses the port). ``join`` first adds the runner at ``hub_url`` through ``runner init``;
+    a scenario with no hub listening passes ``join=False``. ``opencode_binary`` replaces ``mock-opencode`` — an
+    emitted OpenCode 2 engine composes OpenCode 2 — and ``passthrough`` names more daemon variables a worker inherits."""
     if join:
         join_runner(runner_dir, hub_url)
     base = init_runner_environment(runner_dir)

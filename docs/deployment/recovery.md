@@ -39,7 +39,10 @@ A crashed, OOM-killed, or kill-9ed daemon is brought straight back by the units'
 a reboot starts the enabled units at boot (`WantedBy=multi-user.target`); either way the startup pass recovers from the
 durable on-disk store. An ungraceful `kill -9` skips the shutdown marking but not the resume: the next start marks the
 crash-orphaned sessions before the loop begins (logging "marked N crash-interrupted lease(s) for restart-resume") and
-the same RESUME re-attaches them — the cost is precision, not context.
+the same RESUME re-attaches them — the cost is precision, not context. On OpenCode 2, whose turns run on the operator's
+service rather than in the worker, the start first stops any turn a crash left running there (logging "stopped N turn(s)
+a crash left running without a worker"), as [OpenCode configuration](./worker-spawn.md#opencode-configuration)
+describes.
 
 The startup pass is the loop's normal first move, not special recovery code — provided the runner's own local brake is
 off: with it on, REAP and RESUME still run but a stalled worker is not killed and a marked session is not re-attached;

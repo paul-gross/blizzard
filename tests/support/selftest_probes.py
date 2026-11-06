@@ -70,8 +70,9 @@ class FixedPidAdapter:
     def orphan(self, session_id: str) -> None:
         del session_id
 
-    def reconcile(self, session_ids: Sequence[str]) -> None:
+    def reconcile(self, session_ids: Sequence[str]) -> int:
         del session_ids
+        return 0
 
     def identity_env(self, preamble: WorkerPreamble, chunk_id: str, session_id: str) -> dict[str, str]:
         return {"BLIZZARD_SESSION_ID": session_id, "BLIZZARD_CHUNK_ID": chunk_id}
