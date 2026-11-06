@@ -178,8 +178,12 @@ def test_node_completion_carries_prev_node_node_and_status_change(tmp_path: Path
     # The terminal transition releases the route (`bzh:facts-not-status`), so
     # `runner_id` is omitted too.
     assert "runner_id" not in frame
-    # A turn's frame names no fact: the turn routes inside the router's own write.
-    assert "key" not in frame
+    # The frame takes the key the activity backfill gives the transition the turn wrote.
+    assert frame["key"].startswith("transitions:")
+    rows = hub.client.get("/api/activity", params={"chunk_id": chunk_id}).json()
+    backfilled = [r for r in _activity_rows(rows) if r["key"] == frame["key"]]
+    assert len(backfilled) == 1
+    assert backfilled[0]["cause"] == "hub-advanced"
 
 
 def test_stop_carries_cause_stopped(tmp_path: Path) -> None:
@@ -559,3 +563,9 @@ nodes:
     frames = _chunk_changed_frames(hub, since=before)
     assert frames[-1]["cause"] == "migrated"
     assert frames[-1]["key"].startswith("chunk_migrations:")
+
+
+def _activity_rows(body: object) -> list[dict[str, object]]:
+    rows = body["activity"] if isinstance(body, dict) else body
+    assert isinstance(rows, list)
+    return rows

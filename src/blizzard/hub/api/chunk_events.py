@@ -6,6 +6,7 @@ from __future__ import annotations
 import asyncio
 from collections.abc import Sequence
 from dataclasses import dataclass, replace
+from datetime import datetime
 
 from blizzard.foundation.hub_event_types import ChunkChangeCause
 from blizzard.foundation.roles import dto
@@ -210,8 +211,9 @@ class ChunkChanged:
 
 @dataclass(frozen=True)
 class AnnouncedTurns:
-    """A tenant's turns, each announcing the ``chunk-changed`` frame of the move it routed: a ``hub-advanced`` frame
-    once a turn ends with its chunk's transitions or status changed, none for a turn that only waited."""
+    """A tenant's turns, each announcing the ``chunk-changed`` frames of the move it routed: one frame per transition,
+    escalation or migration the turn wrote, keyed and caused as the activity backfill keys and causes it; a keyless
+    ``hub-advanced`` frame when the status moved with no new keyed fact; none for a turn that only waited."""
 
     services: TenantServices
     turns: ITurnRunner
@@ -223,9 +225,36 @@ class AnnouncedTurns:
 
     def _announce(self, change: ChunkChanged) -> None:
         state = ChunkFrameState.load(self.services, change.chunk_id)
-        moved = change.facts is None or len(state.facts.transitions) != len(change.facts.transitions)
+        before = change.facts
+        if before is not None:
+            frames = _new_keyed_frames(before, state.facts)
+            if frames:
+                for key, cause in frames:
+                    change.publish_from(state, cause=cause, key=key)
+                return
+        moved = before is None or len(state.facts.transitions) != len(before.transitions)
         if moved or state.facts.status().value != change.prev_status:
             change.publish_from(state, cause="hub-advanced")
+
+
+def _new_keyed_frames(before: ChunkFacts, after: ChunkFacts) -> list[tuple[str, ChunkChangeCause]]:
+    """The key and cause the activity backfill gives each transition, escalation or migration a turn newly wrote,
+    in ``recorded_at`` order — so a live frame and its refetched row are one row."""
+    seen_transitions = {t.transition_id for t in before.transitions}
+    seen_escalations = {e.id for e in before.escalations}
+    seen_migrations = {m.migration_id for m in before.migrations}
+    found: list[tuple[datetime, str, ChunkChangeCause]] = []
+    for t in after.transitions:
+        if t.transition_id is not None and t.transition_id not in seen_transitions:
+            found.append((t.recorded_at, f"transitions:{t.transition_id}", "hub-advanced"))
+    for e in after.escalations:
+        if e.id is not None and e.id not in seen_escalations:
+            found.append((e.recorded_at, f"escalations:{e.id}", "escalated"))
+    for m in after.migrations:
+        if m.migration_id is not None and m.migration_id not in seen_migrations:
+            found.append((m.recorded_at, f"chunk_migrations:{m.migration_id}", "migrated"))
+    found.sort(key=lambda f: f[0])
+    return [(key, cause) for _, key, cause in found]
 
 
 def announce_minted(services: TenantServices, minted: MintedErrand) -> None:

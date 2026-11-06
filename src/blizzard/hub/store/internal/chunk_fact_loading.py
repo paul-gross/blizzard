@@ -164,6 +164,7 @@ def _load_batch(conn: Connection, batch: Sequence[str] | None, families: frozens
                 from_node_id=t.from_node_id,
                 choice_name=t.choice_name,
                 graph_id=t.graph_id,
+                transition_id=t.transition_id,
             )
         )
 
@@ -188,6 +189,7 @@ def _load_batch(conn: Connection, batch: Sequence[str] | None, families: frozens
                     wrapped_takeover_command=e.wrapped_takeover_command or "",
                     cause=e.cause,
                     detail=e.detail,
+                    id=e.id,
                 )
             )
 
@@ -281,6 +283,7 @@ def _load_batch(conn: Connection, batch: Sequence[str] | None, families: frozens
                 # Null for a row predating the discriminator — read as unrecorded, never
                 # guessed at.
                 source=MigrationSource(m.source) if m.source else None,
+                migration_id=m.migration_id,
             )
         )
 

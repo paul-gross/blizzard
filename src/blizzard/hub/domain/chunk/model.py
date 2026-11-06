@@ -382,6 +382,8 @@ class TransitionFact:
     from_node_id: str | None = None
     choice_name: str | None = None
     graph_id: str | None = None
+    #: The recorded row's identity — what keys the activity feed's row for this fact; ``None`` when unhydrated.
+    transition_id: str | None = None
 
 
 @domain_model
@@ -398,6 +400,8 @@ class EscalationFact:
     wrapped_takeover_command: str = ""
     cause: str | None = None
     detail: str | None = None
+    #: The recorded row's identity — what keys the activity feed's row for this fact; ``None`` when unhydrated.
+    id: int | None = None
 
 
 @domain_model
@@ -486,6 +490,8 @@ class MigrationFact:
     recorded_at: datetime
     landed_node_executor: Executor = Executor.RUNNER
     source: MigrationSource | None = None
+    #: The recorded row's identity — what keys the activity feed's row for this fact; ``None`` when unhydrated.
+    migration_id: str | None = None
 
     @staticmethod
     def landing_node(target_graph: Graph, from_node_name: str | None) -> str:

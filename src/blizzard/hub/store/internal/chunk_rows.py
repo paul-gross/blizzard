@@ -591,6 +591,17 @@ def enqueue_close_intents(
             )
         ).all()
     }
+    project_id_cache: list[str | None] = []
+
+    def project_id_of_chunk() -> str | None:
+        if not project_id_cache:
+            project_id_cache.append(
+                conn.execute(
+                    stmts.select(s.chunks, s.chunks.c.project_id).where(s.chunks.c.chunk_id == chunk_id)
+                ).scalar_one()
+            )
+        return project_id_cache[0]
+
     for row in refs:
         pointer = WorkRef(row.source, row.ref)
         if (row.source, row.ref) in terminal:
@@ -634,9 +645,7 @@ def enqueue_close_intents(
             )
             publisher = event_publisher(conn)
             if publisher is not None:
-                project_id = conn.execute(
-                    stmts.select(s.chunks, s.chunks.c.project_id).where(s.chunks.c.chunk_id == chunk_id)
-                ).scalar_one()
+                project_id = project_id_of_chunk()
                 primary_key = result.inserted_primary_key
                 assert primary_key is not None
                 key = f"event_log:{primary_key[0]}"

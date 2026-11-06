@@ -14,6 +14,7 @@ from blizzard.foundation.roles import domain_model
 from blizzard.foundation.work_items import WorkItemPriority
 from blizzard.hub.domain.chunk.model import WorkRef
 from blizzard.hub.domain.kernel.hub_source import RESERVED_HUB_SOURCE_NAME
+from blizzard.hub.work_sources.registry import label_from_binding
 from blizzard.hub.work_sources.source import AuthorView, IWorkSourceRegistry, WorkItem, WorkSourceError
 
 
@@ -67,14 +68,14 @@ def _read_source(
         binding = sources.get(source)
         if binding is None:
             message = f"no work source is configured under {source!r}"
-            return {ref: ReadWorkItem(ref, slug, sources.label(ref), hub_source, error=message) for ref in refs}
+            return {ref: ReadWorkItem(ref, slug, f"{slug}#{ref.ref}", hub_source, error=message) for ref in refs}
         batch = sources.batch_reader(source)
         outcomes: Mapping[WorkRef, WorkItem | WorkSourceError] = (
             batch.fetch_many(refs, include_comments=include_comments) if batch is not None else {}
         )
         result: dict[WorkRef, ReadWorkItem] = {}
         for ref in refs:
-            label = sources.label(ref)
+            label = label_from_binding(ref, binding, lambda: slug)
             web_url = binding.web_url(ref, live_holder=live_holders.get(ref))
             outcome: WorkItem | WorkSourceError | ValueError
             if batch is not None:
