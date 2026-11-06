@@ -14,7 +14,7 @@ import {
   questionView,
   type RequestClientStub,
   stubError,
-  stubUndeclaredError,
+  stubAnswerRaceLost,
   type StubDetailBody,
   type StubUndeclaredError,
   stubHubClient,
@@ -497,7 +497,7 @@ describe('ChunkDetail container', () => {
 
   it('renders the winner’s name and answer as an outcome when the answer race is lost', async () => {
     // A lost first-write-wins race's 409 body is the winning row, not a `{detail}` error.
-    answerResponse = stubUndeclaredError(409, {
+    answerResponse = stubAnswerRaceLost({
       won: false,
       question_id: 'qn_77',
       answer: 'rest',
@@ -535,7 +535,7 @@ describe('ChunkDetail container', () => {
   });
 
   it('clears a stale answer outcome when a different chunk is opened', async () => {
-    answerResponse = stubUndeclaredError(409, {
+    answerResponse = stubAnswerRaceLost({
       won: false,
       question_id: 'qn_77',
       answer: 'rest',
@@ -557,7 +557,7 @@ describe('ChunkDetail container', () => {
   it('clears a stale answer outcome when any other dock action fires', async () => {
     // Otherwise a later action's failure renders the red notice *beside* the leftover
     // cyan "alice answered first", which reads as though the two are about each other.
-    answerResponse = stubUndeclaredError(409, {
+    answerResponse = stubAnswerRaceLost({
       won: false,
       question_id: 'qn_77',
       answer: 'rest',

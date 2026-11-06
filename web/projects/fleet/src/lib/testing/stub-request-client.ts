@@ -1,5 +1,6 @@
 import { client as hubClient } from '../api/hub/client.gen';
 import { client as runnerClient } from '../api/runner/client.gen';
+import type { AnswerResult } from '../api/hub';
 import type { HubOperations } from './hub-operations.gen';
 import type { RunnerOperations } from './runner-operations.gen';
 
@@ -54,16 +55,15 @@ interface StubbableClient {
   setConfig(config: { baseUrl: string; fetch: typeof fetch }): unknown;
 }
 
-/** A refusal whose body the hub's OpenAPI document does not model (e.g. the lost answer race's 409, which carries the
- * winning answer). The one deliberate opening in the typed contract: use it only where the wire sends a body the
- * generated types cannot express, and prefer {@link stubError} everywhere else. */
+/** A refusal whose body the hub's OpenAPI document does not declare. It cannot be built freehand: each undeclared
+ * wire shape gets its own typed constructor (below), so the body is still checked against a generated type. */
 export interface StubUndeclaredError extends StubHttpError<number, unknown> {
   readonly undeclared: true;
 }
 
-/** Build a {@link StubUndeclaredError} — see there. */
-export function stubUndeclaredError(status: number, body: unknown): StubUndeclaredError {
-  return { status, body, undeclared: true };
+/** The lost answer race: a 409 whose body is the winning answer, which the hub sends but does not declare. */
+export function stubAnswerRaceLost(winner: AnswerResult): StubUndeclaredError {
+  return { status: 409, body: winner, undeclared: true };
 }
 
 /** The body FastAPI's `HTTPException` sends — the envelope every domain refusal rides, declared or not. */

@@ -11,7 +11,7 @@ export {
   stubHubClient,
   stubRunnerClient,
   stubError,
-  stubUndeclaredError,
+  stubAnswerRaceLost,
   type StubUndeclaredError,
   type StubRoutes,
   type StubRouteHandler,
