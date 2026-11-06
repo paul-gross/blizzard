@@ -77,7 +77,7 @@ class RoutineScopeStore:
     def link(self, routine: Routine, scope_slug: str, *, from_revision: int, change: ConfigChange) -> Routine:
         with self._store.write("link", expect=(ConfigRevisionConflict,)) as conn:
             move_revision(conn, routine, from_revision)
-            link_scope(conn, routine, scope_slug)
+            link_scope(conn, routine, scope_slug, at=change.recorded_at)
             append_change(conn, change)
         return routine
 

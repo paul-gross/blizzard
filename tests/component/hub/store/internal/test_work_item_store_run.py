@@ -6,6 +6,7 @@ from __future__ import annotations
 
 from datetime import UTC, datetime
 from pathlib import Path
+from typing import Any
 
 import pytest
 from sqlalchemy import Engine
@@ -13,12 +14,13 @@ from sqlalchemy import Engine
 from blizzard.foundation.chunk_status import ChunkStatus
 from blizzard.foundation.clock import FixedClock
 from blizzard.foundation.store.engine import create_engine_from_url
-from blizzard.hub.domain.chunk.model import Chunk, WorkItemAuthor, WorkRef, mint_chunk
+from blizzard.hub.domain.chunk.model import Chunk, ErrandMark, WorkItemAuthor, WorkItemAuthorKind, WorkRef, mint_chunk
 from blizzard.hub.domain.chunk.ports.stores import ChunkStores
 from blizzard.hub.domain.projects.model import ProjectId
 from blizzard.hub.store.errors import HubStoreError
 from blizzard.hub.store.internal.run_context_store import RunContextStore
 from blizzard.hub.store.internal.work_item_store import WorkItemStore
+from blizzard.hub.store.transactions import HubTransactions
 from tests.support.scaffolding import (
     chunk_stores,
     default_project,
@@ -30,6 +32,26 @@ from tests.support.scaffolding import (
 )
 
 _NOW = datetime(2026, 7, 16, 12, 0, 0, tzinfo=UTC)
+
+
+def _chunk(engine: Engine, pointer: WorkRef) -> Chunk:
+    return mint_chunk([pointer], graph_id="gr_1", at=_NOW, project_id=ProjectId(default_project(engine)))
+
+
+def _mint(items: WorkItemStore, engine: Engine, chunk: Chunk, *, author: WorkItemAuthor, **kwargs: Any) -> None:
+    items.create_run_with_chunk(
+        project_id=default_project(engine),
+        pointer=chunk.work_refs[0],
+        title="gardening run (full)",
+        body="b",
+        author=author,
+        routine_name="gardening",
+        scope_slug="blizzard",
+        run_mode="full",
+        at=_NOW,
+        chunk=chunk,
+        **kwargs,
+    )
 
 
 def _stores(tmp_path: Path) -> tuple[WorkItemStore, ChunkStores, RunContextStore, Engine]:
@@ -153,3 +175,49 @@ def test_a_failing_write_rolls_back_the_whole_composite(tmp_path: Path) -> None:
     assert collided is not None
     assert not collided.promoted
     assert run_context.for_chunk(colliding_chunk) is None
+
+
+def test_a_hand_started_run_carries_no_errand_mark(tmp_path: Path) -> None:
+    items, _chunks, run_context, engine = _stores(tmp_path)
+    chunk = _chunk(engine, WorkRef(source="hub", ref=items.allocate_ref("hub")))
+
+    _mint(items, engine, chunk, author=WorkItemAuthor.user("usr_1"))
+
+    run = run_context.for_chunk(chunk)
+    assert run is not None
+    assert run.errand is None
+
+
+def test_a_cadence_minted_run_round_trips_its_mark_and_its_author(tmp_path: Path) -> None:
+    items, _chunks, run_context, engine = _stores(tmp_path)
+    pointer = WorkRef(source="hub", ref=items.allocate_ref("hub"))
+    chunk = _chunk(engine, pointer)
+    author = WorkItemAuthor.cadence("cad_1", "chr_1")
+
+    _mint(items, engine, chunk, author=author, errand=ErrandMark(cadence_id="cad_1", chore_id="chr_1"))
+
+    run = run_context.for_chunk(chunk)
+    assert run is not None
+    assert run.errand == ErrandMark(cadence_id="cad_1", chore_id="chr_1")
+    fetched = items.get("hub", pointer.ref)
+    assert fetched is not None
+    assert fetched.author == author
+    assert fetched.author.kind is WorkItemAuthorKind.CADENCE
+
+
+def test_a_supplied_unit_carries_the_write_and_its_rollback_takes_it_back(tmp_path: Path) -> None:
+    items, chunks, run_context, engine = _stores(tmp_path)
+    transactions = HubTransactions(items.store)
+    kept = _chunk(engine, WorkRef(source="hub", ref=items.allocate_ref("hub")))
+    dropped = _chunk(engine, WorkRef(source="hub", ref=items.allocate_ref("hub")))
+
+    with transactions.begin() as unit:
+        _mint(items, engine, kept, author=WorkItemAuthor.cadence("cad_1", "chr_1"), transaction=unit)
+    with pytest.raises(RuntimeError), transactions.begin() as unit:
+        _mint(items, engine, dropped, author=WorkItemAuthor.cadence("cad_1", "chr_1"), transaction=unit)
+        raise RuntimeError("abort")
+
+    assert run_context.for_chunk(kept) is not None
+    assert chunks.record.get(kept.chunk_id) is not None
+    assert items.get("hub", dropped.work_refs[0].ref) is None
+    assert chunks.record.get(dropped.chunk_id) is None

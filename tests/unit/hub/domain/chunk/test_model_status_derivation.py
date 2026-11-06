@@ -837,6 +837,19 @@ def test_open_pause_reads_the_fact_on_a_done_chunk() -> None:
 # --------------------------------------------------------------------------- #
 
 
+def test_started_at_is_none_for_a_chunk_never_leased() -> None:
+    assert ChunkFacts(minted=True, promoted=True).started_at() is None
+    assert ChunkFacts(minted=True, stopped=True, stopped_at=_at(3)).started_at() is None
+
+
+def test_started_at_is_the_earliest_lease_mint_whatever_the_order() -> None:
+    facts = ChunkFacts(
+        minted=True,
+        leases=[LeaseFact(epoch=2, minted_at=_at(7)), LeaseFact(epoch=1, minted_at=_at(4))],
+    )
+    assert facts.started_at() == _at(4)
+
+
 def test_completed_at_is_none_for_every_non_terminal_status() -> None:
     assert ChunkFacts(minted=True).completed_at() is None
     facts = ChunkFacts(minted=True, routes_created=[RouteCreatedFact(created_at=_at(1))])
