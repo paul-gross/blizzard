@@ -8,10 +8,14 @@ actually recorded, driving the real routes rather than calling the broker direct
 from __future__ import annotations
 
 import json
+from dataclasses import replace
+from datetime import UTC, datetime
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 from blizzard.foundation.hub_event_types import HubEventType
+from blizzard.hub.api.chunk_events import new_keyed_frames
+from blizzard.hub.domain.chunk.model import ChunkFacts, EscalationFact, MigrationFact
 from tests.support.scaffolding import (
     HubHarness,
     build_hub,
@@ -178,8 +182,12 @@ def test_node_completion_carries_prev_node_node_and_status_change(tmp_path: Path
     # The terminal transition releases the route (`bzh:facts-not-status`), so
     # `runner_id` is omitted too.
     assert "runner_id" not in frame
-    # A turn's frame names no fact: the turn routes inside the router's own write.
-    assert "key" not in frame
+    # The frame takes the key the activity backfill gives the transition the turn wrote.
+    assert frame["key"].startswith("transitions:")
+    rows = hub.client.get("/api/activity", params={"chunk_id": chunk_id}).json()
+    backfilled = [r for r in _activity_rows(rows) if r["key"] == frame["key"]]
+    assert len(backfilled) == 1
+    assert backfilled[0]["cause"] == "hub-advanced"
 
 
 def test_stop_carries_cause_stopped(tmp_path: Path) -> None:
@@ -559,3 +567,44 @@ nodes:
     frames = _chunk_changed_frames(hub, since=before)
     assert frames[-1]["cause"] == "migrated"
     assert frames[-1]["key"].startswith("chunk_migrations:")
+
+
+def _activity_rows(body: object) -> list[dict[str, object]]:
+    payload = cast("dict[str, object] | list[dict[str, object]]", body)
+    rows = payload["activity"] if isinstance(payload, dict) else payload
+    assert isinstance(rows, list)
+    return cast("list[dict[str, object]]", rows)
+
+
+def test_loaded_escalation_id_keys_the_same_row_the_backfill_reads(tmp_path: Path) -> None:
+    hub = build_hub(tmp_path)
+    chunk_id, _node_id = _claimed(hub)
+    report_escalation(hub, chunk_id, epoch=1, seq=2, takeover_command="cd wd && claude --resume")
+    facts = hub.services.chunks.facts.load_facts(chunk_id)
+    assert facts is not None
+    (escalation,) = facts.escalations
+    assert escalation.id is not None
+    rows = _activity_rows(hub.client.get("/api/activity", params={"chunk_id": chunk_id}).json())
+    matching = [r for r in rows if r["key"] == f"escalations:{escalation.id}"]
+    assert [r["cause"] for r in matching] == ["escalated"]
+
+
+def testnew_keyed_frames_name_a_new_escalation_and_migration_like_the_backfill() -> None:
+    t0 = datetime(2026, 1, 1, tzinfo=UTC)
+    base = ChunkFacts.or_default(None)
+    escalated = replace(base, escalations=[EscalationFact(epoch=1, recorded_at=t0, id=7)])
+    assert new_keyed_frames(base, escalated) == [("escalations:7", "escalated")]
+    assert new_keyed_frames(escalated, escalated) == []
+    migration = MigrationFact(
+        from_node_id=None,
+        from_graph_id="g1",
+        to_graph_id="g2",
+        landed_node_id=None,
+        choice_name=None,
+        model=None,
+        epoch=1,
+        recorded_at=t0,
+        migration_id="mg_1",
+    )
+    migrated = replace(base, migrations=[migration])
+    assert new_keyed_frames(base, migrated) == [("chunk_migrations:mg_1", "migrated")]

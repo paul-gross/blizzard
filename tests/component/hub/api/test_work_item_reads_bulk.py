@@ -2,12 +2,17 @@
 
 from __future__ import annotations
 
+from dataclasses import replace
 from pathlib import Path
 from typing import Any
 
 from blizzard.hub.domain.chunk.model import WorkItemAuthor, WorkRef
+from blizzard.hub.live_config import ConfigObjectCache
 from blizzard.hub.store.internal.chunk_facts_store import ChunkFactsStore
 from blizzard.hub.store.internal.chunk_work_refs_store import ChunkWorkRefsStore
+from blizzard.hub.store.internal.config_revisions_store import ConfigRevisionsStore
+from blizzard.hub.work_sources.internal.hub_work_source import HubWorkSource
+from blizzard.hub.work_sources.registry import BuiltWorkSource, StoreWorkSourceRegistry
 from blizzard.hub.work_sources.source import WorkItem
 from tests.support.scaffolding import (
     FakeBatchWorkSource,
@@ -16,9 +21,11 @@ from tests.support.scaffolding import (
     chunk_stores,
     count_queries,
     hub_store_connections,
+    ingest,
     pointer_token,
     seed_runner,
     seed_work_item,
+    serve_default_tenant,
 )
 
 
@@ -145,4 +152,36 @@ def test_hub_authored_refs_cost_a_bounded_number_of_statements(tmp_path: Path) -
 
     assert count_queries(small.engine, lambda: call(small, small_ids)) == count_queries(
         large.engine, lambda: call(large, large_ids)
+    )
+
+
+def test_store_backed_labels_cost_the_same_at_two_and_eight_pointers(tmp_path: Path) -> None:
+    (tmp_path / "small").mkdir()
+    (tmp_path / "large").mkdir()
+
+    def seeded(root: Path, count: int) -> tuple[Any, str]:
+        hub = build_hub(root, work_sources={"widget": FakeWorkSource(name="widget", title="t")})
+        refs = [{"source": "widget", "ref": str(i)} for i in range(count)]
+        chunk_id = ingest(hub, refs)
+        built_in = hub.work_sources.get("hub")
+        assert isinstance(built_in, HubWorkSource)
+        registry = StoreWorkSourceRegistry(
+            records=hub.services.work_source_records,
+            objects=ConfigObjectCache(ConfigRevisionsStore(hub_store_connections(hub.engine))),
+            build=lambda record: BuiltWorkSource(record, FakeWorkSource(name=record.name, title="t"), lambda: None),
+            built_in=built_in,
+        )
+        serve_default_tenant(hub, replace(hub.services, work_sources=registry))
+        return hub, chunk_id
+
+    small, small_id = seeded(tmp_path / "small", 2)
+    large, large_id = seeded(tmp_path / "large", 8)
+
+    def read(hub: Any, chunk_id: str) -> None:
+        assert _bulk(hub, [chunk_id]).status_code == 200
+
+    read(small, small_id)
+    read(large, large_id)
+    assert count_queries(small.engine, lambda: read(small, small_id)) == count_queries(
+        large.engine, lambda: read(large, large_id)
     )

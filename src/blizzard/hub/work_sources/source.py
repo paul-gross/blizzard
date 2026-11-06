@@ -138,7 +138,9 @@ class IWorkSourceRegistry(Protocol):
 
     def label(self, pointer: WorkRef) -> str:
         """``pointer`` as displayed: its binding's :meth:`IWorkSource.label`, else ``{source label}#{ref}`` — always
-        the source's current slug, never the stored key."""
+        the source's current slug, never the stored key.
+        Each call costs one config read; a caller labelling several pointers uses ``SelectedWorkSources``, or
+        ``label_from_binding`` with a binding it already holds."""
         ...
 
     def annotator(self, source: str) -> IWorkAnnotator | None:
