@@ -9,7 +9,7 @@ import { requireFreshHub } from '../factories';
 import type { Level } from '../tenancy';
 
 /** The sweeps a pass over one tenant serves; the other three run over every tenant only. */
-export const TENANT_SWEEPS = ['forge_status', 'event_derivation', 'close_drain'] as const;
+export const TENANT_SWEEPS = ['forge_status', 'event_derivation', 'close_drain', 'cadence'] as const;
 export type TenantSweep = (typeof TENANT_SWEEPS)[number];
 
 /** Every sweep the hub builds, by its name in `[sweeps.<name>]`. */
@@ -41,7 +41,7 @@ export interface HubApi extends Verbs {
    */
   sweep(name: TenantSweep): Promise<SweepPassResponse>;
   /**
-   * The same pass over every tenant of the hub, any of the six sweeps. Refused before any request is sent below
+   * The same pass over every tenant of the hub, any of the seven sweeps. Refused before any request is sent below
    * `fresh-hub`, where another test's tenant would be swept too.
    */
   sweep(name: SweepName, options: { allTenants: true }): Promise<SweepPassResponse>;

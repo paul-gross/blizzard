@@ -20,11 +20,13 @@ def test_each_sweep_name_knows_its_logger_segment_and_whether_one_tenant_serves_
         SweepName.TENANT_TEARDOWN: "tenant_teardown",
         SweepName.TRACE_EXPORT: "trace_export",
         SweepName.EGRESS: "egress",
+        SweepName.CADENCE: "cadence",
     }
     assert {name for name in SweepName if name.serves_one_tenant()} == {
         SweepName.FORGE_STATUS,
         SweepName.EVENT_DERIVATION,
         SweepName.CLOSE_DRAIN,
+        SweepName.CADENCE,
     }
 
 

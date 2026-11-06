@@ -887,7 +887,7 @@ def test_every_sweep_acts_in_each_open_tenant_and_opens_no_closed_one(tmp_path: 
     hub.hub_services.tenants.open_tenants.refresh()
     assert hub.app is not None
     sweeps = {sweep.name: sweep.reconciler for sweep in Sweep.all(hub.app)}
-    passes = ("forge_status", "transcript_events", "work_closure", "trace_export", "egress")
+    passes = ("forge_status", "transcript_events", "work_closure", "trace_export", "egress", "cadence")
     assert set(sweeps) == {*passes, "tenant_teardown"}
 
     hub.clock.advance(timedelta(hours=1))

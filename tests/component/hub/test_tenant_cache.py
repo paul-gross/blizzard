@@ -18,6 +18,7 @@ from sqlalchemy import Engine, event
 
 from blizzard.foundation.clock import FixedClock
 from blizzard.foundation.store.engine import create_engine_from_url
+from blizzard.hub.api.chunk_events import announce_minted
 from blizzard.hub.composition import (
     HubCore,
     HubServices,
@@ -225,6 +226,8 @@ def _served(core: HubCore, tmp_path: Path, brokers: TenantBrokers) -> HubService
         brokers=brokers,
         annotation_interval_seconds=120,
         version_window=VERSION_WINDOW,
+        cadences_on=lambda: False,
+        announce_minted=announce_minted,
     )
 
 

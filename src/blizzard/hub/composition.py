@@ -73,7 +73,7 @@ from blizzard.hub.delivery.flow_turn import TurnRunner
 from blizzard.hub.delivery.hub_node import HubNodeRouter
 from blizzard.hub.documents import YAML_CODEC
 from blizzard.hub.documents.codec import IConfigCodec
-from blizzard.hub.domain.cadence.mint import CadenceMint, ErrandPlanning
+from blizzard.hub.domain.cadence.mint import CadenceMint, ErrandPlanning, MintedErrand
 from blizzard.hub.domain.cadence.ports import IReadCadenceRepository, IReadErrandRunsRepository
 from blizzard.hub.domain.cadence.services import (
     CadenceAttention,
@@ -81,6 +81,7 @@ from blizzard.hub.domain.cadence.services import (
     CadenceLifecycle,
     CadenceReading,
 )
+from blizzard.hub.domain.cadence.sweep import CadenceSweep, TenantCadence
 from blizzard.hub.domain.chunk.dependencies import DependencyService
 from blizzard.hub.domain.chunk.event_log import EventLogService
 from blizzard.hub.domain.chunk.ingest import IngestService
@@ -512,6 +513,8 @@ class HubServices:
     system_artifacts: PackagedSystemArtifacts
     #: The close-intent drain sweep — one pass per hub, acting in each intent's tenant.
     close_drain: CloseDrainSweep
+    #: The cadence sweep — one pass per hub, judging and minting in each tenant holding a live cadence.
+    cadence: CadenceSweep
     #: The fleet-trace export sweep — ``None`` when no trace exporter is wired.
     trace_export: TraceExportSweep | None
     #: The operator's read of fleet tracing — always composed, so status answers with tracing off.
@@ -779,6 +782,7 @@ class TenantSweeps:
 
     close_drain: CloseIntentDrainer
     event_derivation: TenantEventDerivation
+    cadence: TenantCadence
     annotation: TenantAnnotation
 
 
@@ -998,6 +1002,9 @@ class TenantServiceParts:
     actions: HubActions
     action_passes: ActionPassDriver
     step_wake: StepWake
+    #: Publishes a committed cadence mint's frames through the tenant's services — handed in by the hub's app,
+    #: which owns the frames.
+    announce_minted: Callable[[TenantServices, MintedErrand], None]
 
 
 def build_tenant_services(stores: TenantStores, parts: TenantServiceParts, *, events: EventBroker) -> ServedTenant:
@@ -1157,6 +1164,9 @@ def build_tenant_services(stores: TenantStores, parts: TenantServiceParts, *, ev
     )
     work_ref_label: WorkRefLabel = work_sources.label
     flow_line_factory = FlowLineFactory(facts=chunk_facts, record=chunk_record, graphs=graph_store)
+    cadence_attention = CadenceAttention(
+        routines=routine_store, routine_scopes=routine_scope_store, scopes=scope_store, graphs=graph_store
+    )
     services = TenantServices(
         forges=forges,
         forge_budgets=forge_budgets,
@@ -1388,12 +1398,7 @@ def build_tenant_services(stores: TenantStores, parts: TenantServiceParts, *, ev
         cadences=cadence_store,
         cadence_authoring=CadenceAuthoring(cadences=cadence_store, clock=clock),
         cadence_lifecycle=CadenceLifecycle(cadences=cadence_store, clock=clock),
-        cadence_reading=CadenceReading(
-            cadences=cadence_store,
-            attention=CadenceAttention(
-                routines=routine_store, routine_scopes=routine_scope_store, scopes=scope_store, graphs=graph_store
-            ),
-        ),
+        cadence_reading=CadenceReading(cadences=cadence_store, attention=cadence_attention),
         errand_runs=errand_runs_store,
         errand_planning=ErrandPlanning(graphs=graph_store, finding_sets=finding_set_store),
         cadence_mint=CadenceMint(
@@ -1469,6 +1474,15 @@ def build_tenant_services(stores: TenantStores, parts: TenantServiceParts, *, ev
             public_url=parts.public_url,
         ),
         event_derivation=TenantEventDerivation(service=event_derivation_service, events=event_store, clock=clock),
+        cadence=TenantCadence(
+            cadences=cadence_store,
+            attention=cadence_attention,
+            runs=services.errand_runs,
+            planning=services.errand_planning,
+            mint=services.cadence_mint,
+            announce=lambda minted: parts.announce_minted(services, minted),
+            clock=clock,
+        ),
         annotation=TenantAnnotation(
             facts=chunk_facts,
             work_sources=work_sources,
@@ -1508,6 +1522,8 @@ def build_services(
     actions: HubActions = HUB_ACTIONS,
     action_pass_seconds: float = DEFAULT_ACTION_PASS_SECONDS,
     action_pass_grace: timedelta = ACTION_PASS_GRACE,
+    cadences_on: Callable[[], bool],
+    announce_minted: Callable[[TenantServices, MintedErrand], None],
 ) -> HubServices:
     """Construct and wire the hub-level services over the shared :class:`HubCore`, and have its
     tenant cache serve each tenant's services (:func:`build_tenant_services`). The sweeps and exports
@@ -1516,7 +1532,8 @@ def build_services(
     work-source registry, ``forges`` its forge registry; an explicit ``oauth_registry`` wins over
     ``oauth_providers``; ``hub_version`` defaults to the installed one; ``actions`` are the hub actions a node
     may name, and a pass is bounded by ``action_pass_seconds``, its caller letting go ``action_pass_grace``
-    later."""
+    later. ``cadences_on`` answers, each cadence pass, whether the ``cadences`` flag lets it mint, and
+    ``announce_minted`` publishes each mint it commits."""
     clock = core.clock
     # One per hub process, shared by every tenant's turns.
     action_loop = ActionLoop()
@@ -1545,6 +1562,7 @@ def build_services(
         actions=actions,
         action_passes=ActionPassDriver(action_loop, PassBound(action_pass_seconds, action_pass_grace)),
         step_wake=step_wake,
+        announce_minted=announce_minted,
     )
     core.tenants.serve(
         TenantServing(build=lambda stores, events: build_tenant_services(stores, parts, events=events), brokers=brokers)
@@ -1729,6 +1747,11 @@ def build_services(
         tenant=lambda tenant: sweeps_of(tenant).close_drain,
         clock=clock,
     )
+    cadence = CadenceSweep(
+        corpus=core.hub_scoped_reads.corpus,
+        tenant=lambda tenant: sweeps_of(tenant).cadence,
+        minting=cadences_on,
+    )
     event_derivation = EventDerivationReconciler(
         corpus=core.hub_scoped_reads.corpus,
         tenant=lambda tenant: sweeps_of(tenant).event_derivation,
@@ -1762,6 +1785,7 @@ def build_services(
         clock=clock,
         system_artifacts=system_artifacts,
         close_drain=close_drain,
+        cadence=cadence,
         trace_export=trace_export,
         trace_status=trace_status,
         trace_replay=trace_replay,
@@ -1794,11 +1818,13 @@ def build_services(
                 SweepName.TENANT_TEARDOWN: tenant_teardown_sweep,
                 **({SweepName.TRACE_EXPORT: trace_export} if trace_export is not None else {}),
                 **({SweepName.EGRESS: egress_export} if egress_export is not None else {}),
+                SweepName.CADENCE: cadence,
             },
             one_tenant={
                 SweepName.FORGE_STATUS: annotation,
                 SweepName.EVENT_DERIVATION: event_derivation,
                 SweepName.CLOSE_DRAIN: close_drain,
+                SweepName.CADENCE: cadence,
             },
             locks=SweepLocks(),
             clock=clock,

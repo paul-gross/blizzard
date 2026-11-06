@@ -61,8 +61,8 @@ def _in_progress() -> JSONResponse:
 def run_tenant_pass(
     name: str, tenant: Annotated[TenantRequest, Depends(resolve_tenant)], hub: Hub
 ) -> SweepPassResponse | JSONResponse:
-    """One pass of ``forge_status``, ``event_derivation`` or ``close_drain`` over the request's tenant alone:
-    ``failed`` with the fault its tenant met."""
+    """One pass of ``forge_status``, ``event_derivation``, ``close_drain`` or ``cadence`` over the request's tenant
+    alone: ``failed`` with the fault its tenant met."""
     try:
         return _response(hub.sweeps.pass_one_tenant(name, tenant.scope.tenant))
     except UnknownSweep as exc:

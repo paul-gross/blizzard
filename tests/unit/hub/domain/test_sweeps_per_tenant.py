@@ -15,6 +15,7 @@ from structlog.testing import capture_logs
 
 from blizzard.foundation.clock import FixedClock
 from blizzard.foundation.logging import get_logger
+from blizzard.hub.domain.cadence.sweep import CADENCE_PASS_LIMIT, CadenceSweep, CadenceTally, DueErrand, TenantCadence
 from blizzard.hub.domain.chunk.model import PendingCloseIntent, WorkRef
 from blizzard.hub.domain.chunk.ports.work_refs import TenantWorkRef, WorkRefsSignature
 from blizzard.hub.domain.observability.analytics.derivation import (
@@ -25,6 +26,7 @@ from blizzard.hub.domain.observability.analytics.derivation import (
 )
 from blizzard.hub.domain.observability.analytics.events import CandidacyRead, DerivationSignature
 from blizzard.hub.domain.observability.forge_status import AnnotationReconciler, AnnotationTally, TenantAnnotation
+from blizzard.hub.domain.sweeps.fair_share import fair_share
 from blizzard.hub.domain.tenancy.teardown import IReadTenantTeardowns, TenantTeardown, TenantTeardownSweep
 from blizzard.hub.domain.work_items.closure import (
     CLOSE_DRAIN_PASS_LIMIT,
@@ -32,7 +34,6 @@ from blizzard.hub.domain.work_items.closure import (
     CloseDrainTally,
     CloseIntentDrainer,
     TenantCloseIntent,
-    fair_share,
 )
 from blizzard.hub.tenancy import TenantClosed, TenantId
 from tests.support.pass_isolation import (
@@ -406,6 +407,59 @@ def _teardown_pass(scene: Scene, recorder: Recorder, clock: FixedClock) -> Calla
     ).sweep
 
 
+# --- the cadence sweep ---------------------------------------------------------------------
+
+
+class _LiveCadences:
+    def __init__(self, tenants: Sequence[TenantId]) -> None:
+        self.tenants = list(tenants)
+
+    def tenants_with_live_cadences(self) -> list[TenantId]:
+        return sorted(self.tenants)
+
+
+def _due_errands(tenant: TenantId, count: int) -> list[DueErrand]:
+    """Stand-ins for ``tenant``'s due errands — the sweep only shares them out and hands them back."""
+    return [cast(DueErrand, f"{tenant}_errand_{n}") for n in range(count)]
+
+
+class _TenantCadence:
+    """Stands in for one tenant's :class:`TenantCadence`, recording what it judges and is handed to mint."""
+
+    def __init__(self, due: Sequence[DueErrand]) -> None:
+        self.found = list(due)
+        self.judged = 0
+        self.minted: list[DueErrand] = []
+
+    def due(self) -> list[DueErrand]:
+        self.judged += 1
+        return self.found
+
+    def mint(self, due: Sequence[DueErrand], tally: CadenceTally) -> None:
+        self.minted.extend(due)
+        tally.minted += len(due)
+
+
+def _cadence_pass(scene: Scene, recorder: Recorder, clock: FixedClock) -> CadenceSweep:
+    class Unit(_TenantCadence):
+        def __init__(self, tenant: TenantId) -> None:
+            burst = tenant == scene.poisoned and scene.poison is Poison.BURST
+            super().__init__(_due_errands(tenant, CADENCE_PASS_LIMIT + 20 if burst else 3))
+            self.tenant = tenant
+
+        def mint(self, due: Sequence[DueErrand], tally: CadenceTally) -> None:
+            _log.info("tenant cadence work")
+            recorder.log(self.tenant, "mint", list(due))
+            if _poison_for(self.tenant, scene) is Poison.RAISES:
+                raise RuntimeError("the cadence store refused the mint")
+
+    return CadenceSweep(
+        corpus=_LiveCadences(scene.tenants),
+        tenant=lambda tenant: cast(TenantCadence, Unit(tenant)),
+        minting=lambda: True,
+    )
+
+
 @pytest.mark.parametrize(
     ("make_pass", "events", "summary"),
     [
@@ -416,6 +470,7 @@ def _teardown_pass(scene: Scene, recorder: Recorder, clock: FixedClock) -> Calla
         ),
         (build_sweep(_derivation_pass), ("tenant derivation work",), "transcript event derivation sweep completed"),
         (build_sweep(_drain_pass), ("tenant drain work",), "close intent drain sweep completed"),
+        (build_sweep(_cadence_pass), ("tenant cadence work",), "cadence sweep completed"),
         (_teardown_pass, ("tenant teardown work",), None),
     ],
 )
@@ -777,3 +832,99 @@ def test_a_derivation_pass_retries_a_vanished_tenants_drop_that_raised() -> None
     reconciler.sweep()
 
     assert attempts == [frozenset({"sg_9"}), frozenset({"sg_9"})]
+
+
+@pytest.mark.parametrize("poison", (Poison.RAISES, Poison.BURST))
+def test_a_failing_or_bursting_tenant_changes_nothing_the_cadence_sweep_does_for_another(poison: Poison) -> None:
+    assert_pass_isolates(build_sweep(_cadence_pass), poison)
+
+
+@pytest.mark.parametrize("poison", (Poison.RAISES, Poison.BURST))
+def test_a_failing_or_bursting_tenants_one_tenant_passes_change_nothing_the_cadence_sweep_does_for_another(
+    poison: Poison,
+) -> None:
+    assert_tenant_pass_isolates(_cadence_pass, poison)
+
+
+def test_a_cadence_pass_mints_each_tenants_due_errands_in_its_own_tenant_up_to_the_pass_limit() -> None:
+    units = {_A: _TenantCadence(_due_errands(_A, CADENCE_PASS_LIMIT)), _B: _TenantCadence(_due_errands(_B, 2))}
+    sweep = CadenceSweep(
+        corpus=_LiveCadences([_A, _B]), tenant=lambda tenant: cast(TenantCadence, units[tenant]), minting=lambda: True
+    )
+
+    with capture_logs(processors=[merge_contextvars]) as logs:
+        sweep.sweep()
+
+    assert units[_B].minted == _due_errands(_B, 2)
+    assert units[_A].minted == _due_errands(_A, CADENCE_PASS_LIMIT - 2)
+    [summary] = [entry for entry in logs if entry["event"] == "cadence sweep completed"]
+    assert (summary["due"], summary["minted"], summary["minting"]) == (CADENCE_PASS_LIMIT + 2, CADENCE_PASS_LIMIT, True)
+    assert "tenant_id" not in summary
+
+
+def test_a_cadence_pass_with_its_flag_off_judges_every_tenant_and_mints_nothing() -> None:
+    units = {_A: _TenantCadence(_due_errands(_A, 1)), _B: _TenantCadence(_due_errands(_B, 1))}
+    minting = False
+    sweep = CadenceSweep(
+        corpus=_LiveCadences([_A, _B]),
+        tenant=lambda tenant: cast(TenantCadence, units[tenant]),
+        minting=lambda: minting,
+    )
+
+    sweep.sweep()
+    assert sweep.sweep_tenant(_A) is None
+
+    assert [unit.judged for unit in units.values()] == [2, 1]
+    assert [unit.minted for unit in units.values()] == [[], []]
+
+    minting = True
+    sweep.sweep()
+
+    assert units[_A].minted == _due_errands(_A, 1)
+
+
+def test_a_cadence_pass_skips_a_tenant_closed_since_its_corpus_read_and_a_one_tenant_pass_propagates_it() -> None:
+    unit = _TenantCadence(_due_errands(_A, 1))
+    sweep = CadenceSweep(
+        corpus=_LiveCadences([_A, _B]),
+        tenant=lambda tenant: cast(TenantCadence, unit if tenant == _A else _refused(tenant)),
+        minting=lambda: True,
+    )
+
+    sweep.sweep()
+
+    assert unit.minted == _due_errands(_A, 1)
+    with pytest.raises(TenantClosed):
+        sweep.sweep_tenant(_B)
+
+
+def test_a_one_tenant_cadence_pass_returns_the_fault_its_raising_tenant_met() -> None:
+    sweep = _cadence_pass(Scene(POISONED, Poison.RAISES), Recorder(), FixedClock(_NOW))
+
+    with capture_logs() as logs:
+        fault = sweep.sweep_tenant(POISONED)
+
+    assert fault is not None
+    assert fault.message == "the cadence store refused the mint"
+    assert any(entry["event"] == "cadence minting failed for a tenant" for entry in logs)
+
+
+def test_a_tenant_whose_judging_fails_is_its_own_fault_and_the_rest_still_mint() -> None:
+    class Unjudgeable(_TenantCadence):
+        def due(self) -> list[DueErrand]:
+            raise RuntimeError("the cadences cannot be read")
+
+    units = {_A: Unjudgeable([]), _B: _TenantCadence(_due_errands(_B, 1))}
+    sweep = CadenceSweep(
+        corpus=_LiveCadences([_A, _B]), tenant=lambda tenant: cast(TenantCadence, units[tenant]), minting=lambda: True
+    )
+
+    with capture_logs() as logs:
+        sweep.sweep()
+        fault = sweep.sweep_tenant(_A)
+
+    assert units[_B].minted == _due_errands(_B, 1)
+    assert fault is not None
+    assert fault.message == "the cadences cannot be read"
+    [summary, _] = [entry for entry in logs if entry["event"] == "cadence sweep completed"]
+    assert summary["tenants_failed"] == [_A]

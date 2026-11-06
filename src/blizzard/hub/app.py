@@ -53,7 +53,7 @@ from blizzard.hub.api.auth_session import refuse_closed_tenant
 from blizzard.hub.api.cadences import project_router as project_cadences_router
 from blizzard.hub.api.cadences import router as cadences_router
 from blizzard.hub.api.chunk_dependencies import router as chunk_dependencies_router
-from blizzard.hub.api.chunk_events import AnnouncedTurns
+from blizzard.hub.api.chunk_events import AnnouncedTurns, announce_minted
 from blizzard.hub.api.chunks import router as chunks_router
 from blizzard.hub.api.clock import clock_router
 from blizzard.hub.api.config import router as config_router
@@ -168,6 +168,9 @@ CLOSE_DRAIN_INTERVAL_SECONDS = 60
 #: The tenant-teardown sweep's own interval — each pass drains every deletion underway by one bounded pass.
 TENANT_TEARDOWN_INTERVAL_SECONDS = 30
 
+#: The cadence sweep's own interval, on real time — each pass judges every errand against the hub's clock.
+CADENCE_INTERVAL_SECONDS = 60
+
 #: How long the hub's shutdown waits for buffered platform spans to leave.
 PLATFORM_TRACING_SHUTDOWN_SECONDS = 3.0
 
@@ -268,6 +271,8 @@ def _sweep_interval(name: SweepName, config: HubConfig) -> int:
             return config.tracing.sweep_seconds
         case SweepName.EGRESS:
             return config.egress.sweep_seconds
+        case SweepName.CADENCE:
+            return CADENCE_INTERVAL_SECONDS
 
 
 def _refuse_retired_runner(_request: Request, exc: Exception) -> JSONResponse:
@@ -656,6 +661,7 @@ def build_hosted_app(
     oauth_client = oauth_http_client or httpx2.Client(timeout=15.0)
     platform_tracing.instrument_client(oauth_client)
 
+    flags = build_hub_flags(config)
     services = build_services(
         core,
         work_sources=work_source_registry,
@@ -686,6 +692,8 @@ def build_hosted_app(
         annotation_interval_seconds=config.annotation_interval_seconds,
         action_pass_seconds=config.action_pass_seconds,
         version_window=version_window,
+        cadences_on=lambda: flags.on("cadences"),
+        announce_minted=announce_minted,
     )
     # Only once the store is at the expected schema head: a store mid-migration must
     # fail *readiness*, not *boot* (pinned:
@@ -725,7 +733,7 @@ def build_hosted_app(
         readiness=readiness,
         services=services,
         platform_tracing=platform_tracing,
-        flags=build_hub_flags(config),
+        flags=flags,
         test_flow_router=(
             flow_control_router(flow_driver, resolved_clock, control_lock)
             if isinstance(resolved_clock, ControlledClock) and control_lock is not None and flow_driver

@@ -35929,7 +35929,7 @@
     },
     "/api/sweeps/{name}/passes": {
       "post": {
-        "description": "One pass of ``forge_status``, ``event_derivation`` or ``close_drain`` over the request's tenant alone:\n``failed`` with the fault its tenant met.",
+        "description": "One pass of ``forge_status``, ``event_derivation``, ``close_drain`` or ``cadence`` over the request's tenant\nalone: ``failed`` with the fault its tenant met.",
         "operationId": "run_tenant_pass_api_sweeps__name__passes_post",
         "parameters": [
           {

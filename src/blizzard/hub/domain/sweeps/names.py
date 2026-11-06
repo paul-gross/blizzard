@@ -1,4 +1,4 @@
-"""The hub's six sweeps by config name, and the mode each runs in."""
+"""The hub's seven sweeps by config name, and the mode each runs in."""
 
 from __future__ import annotations
 
@@ -18,6 +18,7 @@ class SweepName(StrEnum):
     TENANT_TEARDOWN = "tenant_teardown"
     TRACE_EXPORT = "trace_export"
     EGRESS = "egress"
+    CADENCE = "cadence"
 
     @property
     def logger_segment(self) -> str:
@@ -35,7 +36,7 @@ class SweepName(StrEnum):
 
 
 _LOGGER_SEGMENTS = {SweepName.EVENT_DERIVATION: "transcript_events", SweepName.CLOSE_DRAIN: "work_closure"}
-_ONE_TENANT = frozenset({SweepName.FORGE_STATUS, SweepName.EVENT_DERIVATION, SweepName.CLOSE_DRAIN})
+_ONE_TENANT = frozenset({SweepName.FORGE_STATUS, SweepName.EVENT_DERIVATION, SweepName.CLOSE_DRAIN, SweepName.CADENCE})
 
 
 class SweepMode(StrEnum):

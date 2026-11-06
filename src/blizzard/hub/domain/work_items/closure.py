@@ -28,6 +28,7 @@ from blizzard.hub.domain.chunk.ports.commit_links import IReadLandedCommitLinks,
 from blizzard.hub.domain.chunk.ports.delivery import IWriteChunkDeliveryRepository
 from blizzard.hub.domain.chunk.ports.record import IReadChunkRecordRepository
 from blizzard.hub.domain.kernel.tenant_fault import TenantFault
+from blizzard.hub.domain.sweeps.fair_share import fair_share
 from blizzard.hub.tenancy import TenantClosed, TenantId, UnknownTenant
 from blizzard.hub.work_sources.closer import WorkCloseError, WorkItemGoneError
 from blizzard.hub.work_sources.source import IWorkSourceRegistry
@@ -281,26 +282,6 @@ class CloseDrainTally:
             self.skipped += 1
         else:
             self.failed += 1
-
-
-def fair_share(
-    due: Mapping[TenantId, Sequence[PendingCloseIntent]], limit: int, start: int
-) -> dict[TenantId, list[PendingCloseIntent]]:
-    """Up to ``limit`` of ``due``, one intent per tenant in turn from the ``start``-th tenant by name."""
-    tenants = sorted(due)
-    if tenants:
-        start %= len(tenants)
-        tenants = tenants[start:] + tenants[:start]
-    taken: dict[TenantId, list[PendingCloseIntent]] = {}
-    depth = 0
-    while sum(map(len, taken.values())) < limit:
-        round_ = [tenant for tenant in tenants if len(due[tenant]) > depth]
-        if not round_:
-            break
-        for tenant in round_[: limit - sum(map(len, taken.values()))]:
-            taken.setdefault(tenant, []).append(due[tenant][depth])
-        depth += 1
-    return taken
 
 
 class CloseDrainSweep:
