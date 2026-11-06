@@ -13,3 +13,5 @@ tokens:
   - '\bchange\s+[A-Z]\b'
   - '\b[A-Z]\([ivxlcdm]+\)'
   - '\bhub:\d+'
+  - '\bP\d+ exit criterion\b'
+  - '\bwave \d+\b'
