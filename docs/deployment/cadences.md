@@ -1,8 +1,8 @@
 # Cadences
 
 **While the `cadences` flag is off, cadences mint nothing.** A cadence is stored, edited, and read with the flag off,
-but no chunk is minted from one until it is on ([flags.md](../flags.md)). While it is off, `blizzard hub cadence list`,
-`get`, and `errands` print a line on stderr saying so.
+but no chunk is minted from one until it is on ([flags.md](../flags.md)). A hub turns it on with `cadences = true` under
+`[flags]`. While it is off, `blizzard hub cadence list`, `get`, and `errands` print a line on stderr saying so.
 
 A **cadence** is a project's rhythm: when, and how often, the routines it keeps should run. A **chore** is one routine a
 cadence keeps, with the scopes it runs over, its run mode, and whether the chunks it mints are promoted. An **errand**
@@ -55,6 +55,84 @@ a new chore.
 
 A cadence's view also carries `next_moments`: its schedule's next five moments after the read, earliest first. It is
 empty when the cadence has no schedule or is retired.
+
+## Worked cadences
+
+Each example is a cadence record, as `blizzard hub cadence create` and the chore verbs write it, or as the `cadences`
+section of a [configuration document](./config-documents.md) holds it. The routines and scopes they name must exist in
+the project first ([routines-and-scopes.md](./routines-and-scopes.md)); a cadence naming one that does not still saves,
+and its view shows the gap under `attention`.
+
+### The mutation-testing corpus pass
+
+A routine on the `mutation-testing` axis, linked to its four scopes: `hub-daemon`, `runner-daemon`, `shared-spine`, and
+`cli-surface`. The pass converges, since a delta run mutates only the functions changed since the last baseline, so the
+chore runs in `delta` mode over `all`. A delta against a scope never swept downgrades to a full run on its own.
+
+```yaml
+slug: mutation
+name: Mutation corpus pass
+schedule:
+  cron: "0 2 * * 6"
+  zone: America/Chicago
+spacing: 6d
+chores:
+  - key: corpus
+    routine: mutation-testing
+    scopes: all
+    mode: delta
+```
+
+Saturday at 02:00 is when a run comes due, and the six-day spacing stops a late run from being followed at once by the
+next. An errand for each of the four scopes comes due; each scope is its own chunk.
+
+### The ideation routine
+
+A routine on the `ideation` axis, linked to its scopes. The `ideation` graph has no delta mode and always sweeps its
+whole scope, so the chore states `full`. A spacing alone would also do; a schedule is stated here so the sweeps land on
+a weekday.
+
+```yaml
+slug: ideation
+name: Ideation
+schedule:
+  cron: "0 9 * * 1"
+  zone: America/Chicago
+spacing: 13d
+anchor: finished
+chores:
+  - key: ideate
+    routine: ideation
+    scopes: [features, architecture, usage, cost]
+    mode: full
+    promote: false
+```
+
+The `finished` anchor counts the spacing from when the last run ended, so a run that waits on a person is not followed
+by another. `promote: false` leaves each minted chunk not ready until someone promotes it, as a run started by hand with
+`blizzard hub routine run` is.
+
+### A gardening routine's trend
+
+A gardening routine's [trend](./routines-and-scopes.md#reading-a-routines-health) reads finding inflow against outflow
+per period, so it wants sweeps at a steady interval rather than a burst after a pause. A schedule fixes the moments;
+`delta` mode keeps each sweep to what changed.
+
+```yaml
+slug: gardening
+name: Gardening trend
+schedule:
+  cron: "0 3 * * *"
+  zone: America/Chicago
+chores:
+  - key: architecture
+    routine: architecture
+    scopes: all
+    mode: delta
+```
+
+With a schedule alone, an errand comes due at the first moment after its last run was scheduled. A moment missed while
+the hub was down fires once, late, so a gap shows in the series as one late sweep and never as several at once.
 
 ## Attention
 

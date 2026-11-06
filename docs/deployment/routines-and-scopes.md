@@ -8,7 +8,8 @@ Both belong to a project: a scope's slug and a routine's slug are unique within 
 names one by slug or name, takes `--project <id|slug>` when the tenant holds several projects, and a listing verb takes
 it to show one project's records ([projects.md](./projects.md#a-call-that-names-no-project)).
 
-A [cadence](./cadences.md) keeps routines on a rhythm, running each over the scopes its chores name.
+A routine runs when someone starts it, or when a [cadence](./cadences.md) keeps it: a cadence runs each routine its
+chores name, over the scopes they name, on a schedule or a spacing.
 
 ## Scopes
 
