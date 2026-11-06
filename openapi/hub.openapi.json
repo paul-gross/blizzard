@@ -25341,7 +25341,7 @@
     },
     "/api/config/apply": {
       "post": {
-        "description": "Reconcile a version-2 document (YAML or JSON, by `Content-Type`) in one transaction: create what is absent,\nedit only the fields an entry states, enable what is retired, leave unnamed records alone. Forges are declared,\nand every work source and repository names its forge by id or slug. `dry_run` rolls the same transaction back,\nwith the same `outcomes` and no `apply_id`. 422 invalid \u2014 `config_version_retired` for any `version` but 2, a\nmissing one included \u2014 409 conflict, 415 unknown `Content-Type`; a refusal leaves the store unchanged; 403 when a cadence write would leave it promoting its runs and the\ncaller may not promote chunks.",
+        "description": "Reconcile a version-2 document (YAML or JSON, by `Content-Type`) in one transaction: create what is absent,\nedit only the fields an entry states, enable what is retired, leave unnamed records alone. Forges are declared,\nand every work source and repository names its forge by id or slug. `dry_run` rolls the same transaction back,\nwith the same `outcomes` and no `apply_id`. 422 invalid \u2014 `config_version_retired` for any `version` but 2, a\nmissing one included \u2014 409 conflict, 415 unknown `Content-Type`; a refusal leaves the store unchanged. 403 when a\ncadence write would leave it promoting its runs and the caller may not promote chunks.",
         "operationId": "apply_config_api_config_apply_post",
         "parameters": [
           {
@@ -25531,7 +25531,7 @@
     },
     "/api/config/export": {
       "get": {
-        "description": "Every project with its standing links, every active forge, every active, non-built-in work source and\nrepository, and every active scope, routine (its linked scope set included), and cadence named in its project by slug, with\nevery field, and every active secret name, as a version-2 document that applies back as a no-op. Retired records\nare left out, since applying one would enable it. 422 `config_version_retired` for `version=1`.",
+        "description": "Every project with its standing links, every active forge, every active, non-built-in work source and\nrepository, and every active scope, routine (its linked scope set included), and cadence named in its project by\nslug, with every field, and every active secret name, as a version-2 document that applies back as a no-op.\nRetired records are left out, since applying one would enable it. 422 `config_version_retired` for `version=1`.",
         "operationId": "export_config_api_config_export_get",
         "parameters": [
           {
