@@ -387,6 +387,24 @@ def test_list_scopes_for_an_unlinked_routine_is_empty(tmp_path: Path) -> None:
     assert store.list_scopes("rtn_ghost") == []
 
 
+def test_links_for_reads_every_link_beside_its_stamp_and_keeps_an_unlinked_id(tmp_path: Path) -> None:
+    store, routine, engine = _routine_scope_store(tmp_path)
+    _relink(store, routine, "other", link=True)
+    with engine.begin() as conn:
+        conn.execute(
+            hub_scoped(
+                s.routine_scopes.update()
+                .where(s.routine_scopes.c.scope_id == _scope_id(engine, "other"))
+                .values(linked_at=None)
+            )
+        )
+
+    assert store.links_for(["rtn_1", "rtn_ghost"]) == {
+        "rtn_1": {"blizzard": _NOW, "other": None},
+        "rtn_ghost": {},
+    }
+
+
 def test_list_routines_returns_the_linked_routine_ids(tmp_path: Path) -> None:
     store, _, engine = _routine_scope_store(tmp_path)
 

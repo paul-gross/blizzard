@@ -66,20 +66,22 @@ class RoutineScopeStore:
                     linked[row.routine_id].append(row.slug)
         return linked
 
-    def linked_at_for(self, routine_ids: Sequence[str]) -> dict[str, dict[str, datetime]]:
-        stamped: dict[str, dict[str, datetime]] = {}
+    def links_for(self, routine_ids: Sequence[str]) -> dict[str, dict[str, datetime | None]]:
+        links: dict[str, dict[str, datetime | None]] = {routine_id: {} for routine_id in routine_ids}
         if not routine_ids:
-            return stamped
-        with self._store.read("linked_at_for") as conn:
+            return links
+        with self._store.read("links_for") as conn:
             for batch in id_batches(routine_ids):
                 rows = conn.execute(
                     self._store.select(
                         _links(self._store), routine_scopes.c.routine_id, scopes.c.slug, routine_scopes.c.linked_at
-                    ).where(routine_scopes.c.routine_id.in_(batch), routine_scopes.c.linked_at.is_not(None))
+                    )
+                    .where(routine_scopes.c.routine_id.in_(batch))
+                    .order_by(routine_scopes.c.routine_id, scopes.c.slug)
                 ).all()
                 for row in rows:
-                    stamped.setdefault(row.routine_id, {})[row.slug] = row.linked_at
-        return stamped
+                    links[row.routine_id][row.slug] = row.linked_at
+        return links
 
     def list_routines(self, scope_id: str) -> list[str]:
         with self._store.read("list_routines") as conn:

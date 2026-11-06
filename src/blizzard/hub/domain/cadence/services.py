@@ -82,8 +82,13 @@ class CadenceAttention:
         }
         found = [routine for held in routines.values() for routine in held.values()]
         routine_ids = [routine.routine_id for routine in found]
-        linked = self._routine_scopes.list_scopes_for(routine_ids)
-        linked_at = self._routine_scopes.linked_at_for(routine_ids)
+        links = self._routine_scopes.links_for(routine_ids)
+        linked = {routine_id: list(held) for routine_id, held in links.items()}
+        linked_at = {
+            routine_id: stamped
+            for routine_id, held in links.items()
+            if (stamped := {slug: at for slug, at in held.items() if at is not None})
+        }
         enabled = self._graphs.enabled_names(sorted({routine.graph_name for routine in found}))
         facts: dict[str, AttentionFacts] = {}
         for project_id, held in by_project.items():

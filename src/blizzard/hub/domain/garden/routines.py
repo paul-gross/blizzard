@@ -410,9 +410,10 @@ class IReadRoutineScopeRepository(Protocol):
         its list empty when nothing links to it."""
         ...
 
-    def linked_at_for(self, routine_ids: Sequence[str]) -> dict[str, dict[str, datetime]]:
-        """When each stamped link of ``routine_ids`` was made, by routine id then scope slug; a link made before
-        links were stamped, and a routine with no stamped link, have no entry."""
+    def links_for(self, routine_ids: Sequence[str]) -> dict[str, dict[str, datetime | None]]:
+        """Every link of ``routine_ids`` in one read, by routine id then scope slug in slug order, each beside when
+        it was made — ``None`` for a link made before links were stamped; each id present, its map empty when
+        nothing links to it."""
         ...
 
     def list_routines(self, scope_id: str) -> list[str]:

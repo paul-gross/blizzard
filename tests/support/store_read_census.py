@@ -2822,9 +2822,7 @@ HUB_CENSUS: dict[tuple[type, str], HubRecipe] = {
     (IReadRoutineScopeRepository, "list_scopes_for"): lambda w: w.hub.services.routine_scopes.list_scopes_for(
         [w.routine_id]
     ),
-    (IReadRoutineScopeRepository, "linked_at_for"): lambda w: w.hub.services.routine_scopes.linked_at_for(
-        [w.routine_id]
-    ),
+    (IReadRoutineScopeRepository, "links_for"): lambda w: w.hub.services.routine_scopes.links_for([w.routine_id]),
     (IReadRoutineScopeRepository, "list_routines"): lambda w: w.hub.services.routine_scopes.list_routines(w.scope_a_id),
     (IReadRunContextRepository, "for_chunk"): lambda w: w.hub.services.run_context.for_chunk(w.run_chunk_1_chunk),
     (ISecretCatalog, "get"): lambda w: w.secrets.get("gh-token"),
