@@ -70,3 +70,12 @@ def test_a_stored_step_envelope_still_validates_with_its_step_ignored() -> None:
         **{k: v for k, v in _LEGACY_STEP_BODY.items() if k != "step"},
         "action": None,
     }
+
+
+def test_the_envelope_names_the_latest_written_pr_not_the_highest_numbered() -> None:
+    adopted = PrMarker("delivery-pr/acme/one/3", 1, "acme/one", 3, "https://forge.one/acme/one/pull/3")
+    newer_number = PrMarker("delivery-pr/acme/one/7", 1, "acme/one", 7, "https://forge.one/acme/one/pull/7")
+
+    body = json.loads(_written(action=None, pr_markers=[newer_number, adopted]))
+
+    assert body["unlanded"][0]["pr"] == {"number": 3, "url": adopted.url}

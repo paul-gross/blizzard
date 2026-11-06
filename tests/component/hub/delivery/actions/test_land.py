@@ -448,6 +448,27 @@ def test_a_fully_marked_commit_set_lands_without_a_forge_call() -> None:
     assert double.calls == []
 
 
+def test_a_repo_landed_at_an_earlier_node_lands_without_a_forge_call() -> None:
+    double = _forge()
+    answer, _ = _land(double, _visit(earlier_node_markers=(f"merged/{_WIDGET}",)))
+    assert answer.choice == "landed"
+    assert double.calls == []
+
+
+def test_a_blank_landing_marker_is_not_a_landing() -> None:
+    double = _forge()
+    visit = _visit(blank_markers=(f"merged/{_WIDGET}",))
+    _land(double, visit)
+    assert double.calls != [], "land goes to the forge for a repo whose only record is blank"
+    assert visit.landed_repos() == frozenset()
+
+
+def test_a_repo_landed_at_an_earlier_node_is_never_the_parked_watch() -> None:
+    visit = _visit(earlier_node_markers=(f"merged/{_WIDGET}",))
+    assert visit.landed_repos() == frozenset({_WIDGET})
+    assert visit.parked_watch() is None
+
+
 def test_a_base_held_submission_records_no_code_only_for_that_repo() -> None:
     double = _forge(_WIDGET, _GADGET)
     double.repos[_WIDGET].compares = {

@@ -74,10 +74,10 @@ class Land:
         if not run.visit.git_commits.rows:
             run.say("no code to land: this chunk submitted no git commits")
             return run.answer(LANDED)
-        already = run.visit.marker_names()
+        already = run.visit.landed_repos()
         no_code = run.visit.no_code_repos()
         unlanded = in_landing_order(
-            repo for repo in self._repos(run, forges) if repo.marker() not in already and repo.repo not in no_code
+            repo for repo in self._repos(run, forges) if repo.repo not in already and repo.repo not in no_code
         )
         if not unlanded:
             if no_code:
