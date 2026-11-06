@@ -92,6 +92,12 @@ A run's list and detail views carry `cadence`: the id, slug, and name of the cad
 of its chore. A run started by hand has none, and a run whose chore has since been removed names the chore's id with no
 key.
 
+## The board
+
+The hub's board keeps cadences under the Gardening tab's Cadences list and detail, where a cadence is created, edited,
+retired and re-enabled and its chores added, edited and removed, and its errands and next moments read.
+[board.md](./board.md#the-gardening-tab) owns what the board shows.
+
 ## The CLI
 
 ```bash

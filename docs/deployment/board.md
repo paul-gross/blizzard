@@ -100,6 +100,31 @@ and reason, and the graph transitions around them. A landing attempt whose submi
 On a phone, `/delivery` lists the same chunks as cards, and `/delivery/chunk/:chunkId` opens one chunk's delivery on a
 screen of its own; that route resolves on a desktop too, so a shared link still opens.
 
+## The Gardening tab
+
+`/gardening` shows a project's gardening records under one strip of tabs: Scopes, Routines, Cadences, Runs, Findings and
+Proposals. Each opens a list beside the selected record's detail.
+
+**Cadences** lists the project's cadences at `/p/{project}/gardening/cadences`. A row names the cadence, its rhythm —
+its cron and zone, then its spacing, as in `0 20 * * * America/Chicago, at least 10 days apart` — and when its next
+moment comes, how many chores it keeps, its errands counted by state (`due`, `running`, `waiting`, `stopped`), and an
+`attention` badge counting what stops them. A retired cadence reads `retired`. While the `cadences` flag is off the list
+opens with a line saying cadences are kept and editable but mint no run until it is turned on. A person who may edit
+graphs creates a cadence from **New cadence**: a slug, a name, a cron and zone, a spacing and its anchor.
+
+Selecting a cadence opens its detail at `/p/{project}/gardening/cadences/{slug}`: whether it is enabled or retired, its
+rhythm, its next five moments, what needs attention, and each chore — the routine it runs, linked, the scopes it runs
+over, its mode, whether it promotes — with a table of its errands: the scope, the errand's state and why it is stopped,
+its last run, linked to that run, and when it is next due. The detail's actions are **Edit**, **Retire** or
+**Re-enable**, and each chore's **Edit** and **Remove** and the cadence's **Add chore**; retiring, re-enabling and
+removing a chore ask first. Each edit carries the revision the detail read, so one made against a cadence someone else
+has since changed is refused and says so rather than overwriting it.
+
+A routine's detail names what keeps it under **Kept by**: each chore that runs it on an enabled cadence of its project,
+with the cadence linked, the chore's key and its next moment. A routine no cadence keeps reads "No cadence keeps it — it
+runs when started." and its row in the routines list reads `manual` rather than `cadence`. A run a cadence minted names
+it on the run's detail — `Kept by` the cadence, linked, and the chore — or that its chore was removed since.
+
 ## On a phone
 
 On a phone the hub's tabs sit at the foot of the screen as Board, Delivery, Fleet, Gardening and Events; on a desktop
