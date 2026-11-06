@@ -782,12 +782,21 @@ def daemon_url(daemon_dir: Path) -> str:
 
 
 def write_runner_config(
-    runner_dir: Path, *, workspace: Path, bin_dir: Path, hub_url: str, join: bool = True
+    runner_dir: Path,
+    *,
+    workspace: Path,
+    bin_dir: Path,
+    hub_url: str,
+    join: bool = True,
+    opencode_binary: Path | None = None,
+    passthrough: tuple[str, ...] = (),
 ) -> RunnerConfig:
     """Scaffold + persist a runner config pointed at the fixture workspace and mock harness, its host
     file at ``port = 0`` — :func:`start_runner` chooses the port. ``join`` first adds the runner at the
     hub at ``hub_url`` through ``runner init``, which writes its token to ``runner_dir/.env``; a scenario
-    with no hub listening passes ``join=False``."""
+    with no hub listening passes ``join=False``. ``opencode_binary`` replaces ``mock-opencode`` (an emitted
+    OpenCode 2 engine, whose version composes OpenCode 2), and ``passthrough`` names more daemon variables a
+    worker inherits."""
     if join:
         join_runner(runner_dir, hub_url)
     base = init_runner_environment(runner_dir)
@@ -813,7 +822,9 @@ def write_runner_config(
                 credentials_path=claude_credentials,
             ),
             # Without this, no crash-tier scenario can spawn an OpenCode worker (bzh:crash-sweep).
-            dataclasses.replace(opencode(base), binary=str(bin_dir / "mock-opencode"), auth_path=opencode_auth),
+            dataclasses.replace(
+                opencode(base), binary=str(opencode_binary or bin_dir / "mock-opencode"), auth_path=opencode_auth
+            ),
             base=base.harness_sections,
         ),
         # Unset on purpose: the external-usage sampler's first soft-failure check (a
@@ -821,7 +832,7 @@ def write_runner_config(
         subscriptions=sampler_without_credentials(runner_dir),
         # `start_runner` sets `ENV_HARNESS_FENCE` in the daemon subprocess's own env; it
         # reaches a worker only because it is declared here.
-        worker_env_passthrough=(ENV_HARNESS_FENCE,),
+        worker_env_passthrough=(ENV_HARNESS_FENCE, *passthrough),
     )
     write_host_file(config)
     return config

@@ -11,6 +11,7 @@ from contextlib import suppress
 from dataclasses import dataclass, field
 from typing import TextIO
 
+from blizzard.foundation.crash import crashpoint
 from blizzard.foundation.roles import domain_model
 from blizzard.runner.harness.autonomy import Autonomy
 from blizzard.runner.harness.opencode_v2.client import (
@@ -41,6 +42,11 @@ from blizzard.runner.harness.opencode_v2.transport import ServiceUnreachableErro
 DEFAULT_GRACE_SECONDS = 30.0
 #: What a call the driver makes can fail with that the service, not the turn, is to blame for.
 _SERVICE_FAULTS = (ServiceUnreachableError, ServiceRequestError, ServiceShapeError, OpenCodeTwoShapeError)
+# A minting drive's two windows before its turn runs: each leaves the runner a worker gone without a result.
+_CP_BEFORE_CREATE = crashpoint("opencode2.drive.before-create", "minting drive started; its session not yet created")
+_CP_BEFORE_PROMPT = crashpoint(
+    "opencode2.drive.after-create.before-prompt", "minting drive's session created; its turn not yet prompted"
+)
 _SETTLED_TOOL_STATES = frozenset({"completed", "error"})
 _OUTCOMES = {outcome.value: outcome for outcome in Outcome}
 
@@ -124,6 +130,8 @@ class TurnDriver:
         try:
             self._open()
             self._seed(self._poll())
+            if self._request.kind.mints():
+                _CP_BEFORE_PROMPT.reached()
             if self._listen:
                 listener.start()
             delivery = None if self._request.kind.mints() else Delivery.QUEUE
@@ -158,6 +166,7 @@ class TurnDriver:
                 model=request.model,
                 agent=request.agent,
             )
+            _CP_BEFORE_CREATE.reached()
             self._core.open_session(spec, self._environment)
             return
         try:

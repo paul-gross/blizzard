@@ -15,7 +15,7 @@ import signal
 import subprocess
 import sys
 import time
-from collections.abc import Callable
+from collections.abc import Callable, Generator
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any
@@ -45,6 +45,8 @@ from blizzard.runner.store import schema as runner_schema
 from blizzard.runner.throttle.settings import HoldOrRelease, ThrottleSettings, UtilizationSettings
 from blizzard.tools.invariants import Invariants
 from tests.crash.flow_graph import landing_graph_yaml
+from tests.crash.opencode2 import Service, await_path, await_true, commit_and_declare, ingest, judge, once, script
+from tests.crash.opencode2 import graph_yaml as opencode2_graph_yaml
 from tests.crash.support import (
     ENV_CRASH_FENCE,
     ENV_CRASH_POINT,
@@ -143,6 +145,7 @@ _DEDICATED_PREFIXES = (
     "escalate.",
     "answer.",
     "takeover.",
+    "opencode2.",
 )
 _RESUME_POINTS = [p for p in _ALL_POINTS if p.startswith("resume.")]
 _ABANDON_POINTS = [p for p in _ALL_POINTS if p.startswith("abandon.")]
@@ -388,6 +391,7 @@ def test_ci_subset_covers_every_family(monkeypatch: pytest.MonkeyPatch) -> None:
         | set(_select(_ESCALATE_POINTS, _ESCALATE_CI_SUBSET))
         | set(_select(_ANSWER_POINTS, _ANSWER_CI_SUBSET))
         | set(_select(_TAKEOVER_POINTS, _TAKEOVER_CI_SUBSET))
+        | set(_select(_OPENCODE2_POINTS, _OPENCODE2_CI_SUBSET))
     )
     uncovered = {family for family in families if not any(p.startswith(f"{family}.") for p in ci_selected)}
     assert not uncovered, f"registry families with zero CI-subset coverage: {sorted(uncovered)}"
@@ -4350,3 +4354,274 @@ def test_kill9_at_ingest_crash_point(crash_env: CrashEnv, tmp_path: Path, point:
         "here token": True,
         "there token": False,
     }, f"{point}: the re-run's end state differs from an uninterrupted ingest's"
+
+
+# --- The OpenCode 2 lane — a driver killed mid-turn leaves its turn running on the operator's service, so every ---
+# --- stop path is proven against the service itself: orphan after a killed driver, a takeover left alone, reconcile ---
+# --- before restart resume, and a service that restarts mid-turn. `opencode2.*` points arm inside the driver. ---
+
+_OPENCODE2_POINTS = [p for p in _ALL_POINTS if p.startswith("opencode2.")]
+_OPENCODE2_CI_SUBSET: tuple[str, ...] = ("opencode2.drive.after-create.before-prompt",)
+_OPENCODE2_SWEEP = _select(_OPENCODE2_POINTS, _OPENCODE2_CI_SUBSET)
+
+
+@contextlib.contextmanager
+def _opencode2_lane(
+    crash_env: CrashEnv,
+    tmp_path: Path,
+    definition: str,
+    title: str,
+    *,
+    levers: tuple[str, ...] = (),
+    driver_point: str | None = None,
+    daemon_point: str | None = None,
+) -> Generator[tuple[httpx2.Client, Path, Service, str, Callable[..., subprocess.Popen[str]]]]:
+    """A hub, the engine's service under an isolated home, a runner on OpenCode 2, and one ingested chunk; yields the
+    hub client, the runner dir, the service, the chunk, and a starter that (re)starts the runner — armed unless told
+    otherwise. ``driver_point`` arms an ``opencode2.*`` point in every driver the runner launches, never in the daemon
+    itself; ``daemon_point`` arms a point in the daemon alone."""
+    if not (crash_env.bin_dir / "mock-opencode-2").is_file():
+        pytest.skip("the provisioned blizzard-mock sibling predates mock-opencode-2 (run `winter provision <env>`)")
+    hub_dir, runner_dir = tmp_path / "hub", tmp_path / "runner"
+    service = Service.emit(crash_env.bin_dir, tmp_path / "opencode2", levers)
+    hub_proc = start_hub(hub_dir, forge_url=crash_env.forge_url, crash_point=None)
+    procs: list[subprocess.Popen[str]] = []
+    hub = httpx2.Client(base_url=daemon_url(hub_dir), timeout=30.0)
+    try:
+        await_http(hub, "/api/health", proc=hub_proc)
+        chunk_id = ingest(hub, crash_env.forge, definition, title)
+        write_runner_config(
+            runner_dir,
+            workspace=crash_env.workspace,
+            bin_dir=crash_env.bin_dir,
+            hub_url=daemon_url(hub_dir),
+            opencode_binary=service.binary,
+            passthrough=(ENV_CRASH_POINT, ENV_CRASH_FENCE) if driver_point is not None else (),
+        )
+
+        def start(*, armed: bool = True) -> subprocess.Popen[str]:
+            extra = service.daemon_env()
+            if armed and driver_point is not None:
+                extra |= {ENV_CRASH_POINT: driver_point, ENV_CRASH_FENCE: "1"}
+            proc = start_runner(runner_dir, crash_point=daemon_point if armed else None, extra_env=extra)
+            procs.append(proc)
+            return proc
+
+        yield hub, runner_dir, service, chunk_id, start
+    finally:
+        hub.close()
+        for proc in procs:
+            terminate(proc)
+        terminate(hub_proc)
+        service.stop()
+
+
+def _first_lease(runner_dir: Path, chunk_id: str, *, timeout: float = 90.0) -> tuple[str, int, str, int]:
+    """The chunk's first lease once its worker is recorded: (lease_id, epoch, session_id, pid)."""
+    found: list[tuple[str, int, str, int]] = []
+
+    def recorded() -> bool:
+        for lease_id, epoch, session_id, pid in sorted(leases_for_chunk(runner_dir, chunk_id), key=lambda row: row[1]):
+            if session_id is not None and pid is not None:
+                found.append((lease_id, epoch, session_id, pid))
+                return True
+        return False
+
+    assert _poll(recorded, timeout), f"no recorded worker for {chunk_id}: {leases_for_chunk(runner_dir, chunk_id)}"
+    return found[0]
+
+
+def _judge_pid(runner_dir: Path, lease_id: str, *, timeout: float = 90.0) -> int:
+    """The pid of ``lease_id``'s in-flight judgement, once it is recorded."""
+    pids: list[int] = []
+
+    def started() -> bool:
+        store, engine = _runner_store(runner_dir)
+        try:
+            pending = store.in_flight_elicitations_by_lease().get(lease_id)
+        finally:
+            engine.dispose()
+        if pending is not None and pending.pid is not None:
+            pids.append(pending.pid)
+            return True
+        return False
+
+    assert _poll(started, timeout), f"no judgement recorded for {lease_id}"
+    return pids[0]
+
+
+def _kill_group(pid: int) -> None:
+    """SIGKILL the driver's whole process group — a faithful kill, which never reaches the service."""
+    with contextlib.suppress(ProcessLookupError):
+        os.killpg(pid, signal.SIGKILL)
+
+
+def _landed_once(crash_env: CrashEnv, landed_file: str) -> None:
+    tree = git_bare(crash_env.origins / "toy-api.git", "log", "--oneline", "--", landed_file)
+    commits = [line for line in tree.splitlines() if line.strip()]
+    assert len(commits) == 1, f"{landed_file} landed {len(commits)} times on bare main:\n{tree}"
+
+
+@pytest.mark.parametrize("point", _OPENCODE2_SWEEP)
+def test_kill9_at_opencode2_driver_point(crash_env: CrashEnv, tmp_path: Path, point: str) -> None:
+    """A minting driver SIGKILLed before its turn runs — before the session exists, or after it exists unprompted —
+    leaves a worker gone without a result: the runner orphans its session, nothing runs on the service, and the
+    chunk recovers."""
+    landed_file = f"LANDED-{point.replace('.', '-')}.md"
+    definition = opencode2_graph_yaml(script(commit_and_declare(landed_file)))
+    with _opencode2_lane(crash_env, tmp_path, definition, landed_file, driver_point=point) as lane:
+        hub, runner_dir, service, chunk_id, start = lane
+        start()
+        lease_id, _, session_id, _ = _first_lease(runner_dir, chunk_id)
+        assert wait_for_closure(runner_dir, lease_id, timeout=60) is not None, "the killed driver's lease never closed"
+        assert service.idle(session_id), "the killed driver's session still runs on the service"
+        status = wait_status(hub, chunk_id, {"done", "escalated"})
+        _assert_invariants(runner_dir, tmp_path / "hub", when=f"after the driver died at {point}", after_recovery=True)
+        if status == "done":
+            _landed_once(crash_env, landed_file)
+
+
+def test_kill9_between_the_boundary_write_and_the_launch_under_opencode2(crash_env: CrashEnv, tmp_path: Path) -> None:
+    """The daemon killed after a spawn's invocation boundary is durable but before its driver launched leaves no turn
+    on the service: the restart reconciles nothing that runs, and the chunk lands once."""
+    point = "spawn.after-boundary-record.before-spawn"
+    landed_file = "LANDED-opencode2-boundary.md"
+    definition = opencode2_graph_yaml(script(commit_and_declare(landed_file)))
+    with _opencode2_lane(crash_env, tmp_path, definition, landed_file, daemon_point=point) as lane:
+        hub, runner_dir, _, chunk_id, start = lane
+        code = wait_death(start())
+        assert code == -9, f"armed runner at {point} exited {code}, not SIGKILL (-9); point never reached?"
+        _assert_invariants(runner_dir, tmp_path / "hub", when=f"after {point}", after_recovery=True)
+        start(armed=False)
+        assert wait_status(hub, chunk_id, {"done"}) == "done", f"the chunk did not land after {point}"
+        _assert_invariants(runner_dir, tmp_path / "hub", when=f"after recovering {point}", after_recovery=True)
+        _landed_once(crash_env, landed_file)
+
+
+@pytest.mark.parametrize("stage", ["tool", "child", "resume", "judgement"])
+def test_a_driver_killed_mid_turn_is_orphaned_and_its_turn_stopped(
+    crash_env: CrashEnv, tmp_path: Path, stage: str
+) -> None:
+    """A driver SIGKILLed while its turn runs — during a tool, a child's tool, a resumed turn's tool, or the
+    judgement's — never reaches the service, so the runner orphans the session: the held tool is interrupted before it
+    finishes, and the chunk lands once on the retry."""
+    landed_file = f"LANDED-opencode2-mid-{stage}.md"
+    marker = tmp_path / f"{stage}.held"
+    hold = once(marker, 12)
+    build, review, judgement = script(commit_and_declare(landed_file)), None, None
+    # The commit lands first, so the hold is the turn's last tool and a stopped turn owes nothing a nudge could not run.
+    if stage == "tool":
+        build = script(commit_and_declare(landed_file), hold)
+    elif stage == "child":
+        build = script(commit_and_declare(landed_file), f"subagent({script(hold)!r})")
+    elif stage == "resume":
+        review = script(hold, "text('REVIEWED')")
+    else:
+        judgement = judge(hold)
+    definition = opencode2_graph_yaml(build, judgement=judgement, review=review)
+    with _opencode2_lane(crash_env, tmp_path, definition, landed_file) as lane:
+        hub, runner_dir, service, chunk_id, start = lane
+        proc = start()
+        await_path(marker, proc=proc)
+        lease_id, _, session_id, pid = sorted(
+            (row for row in leases_for_chunk(runner_dir, chunk_id) if row[3] is not None), key=lambda row: row[1]
+        )[-1]
+        assert session_id is not None and pid is not None
+        assert service.running(session_id), "the held tool is not running on the service"
+        _kill_group(_judge_pid(runner_dir, lease_id) if stage == "judgement" else pid)
+
+        await_true(lambda: not service.running(session_id), "the orphaned session stopped running", timeout=30)
+        assert wait_status(hub, chunk_id, {"done"}) == "done", f"the chunk did not land after the {stage} kill"
+        time.sleep(2)
+        assert not marker.with_name(marker.name + ".slept").exists(), "the orphaned turn ran its tool to completion"
+        _assert_invariants(runner_dir, tmp_path / "hub", when=f"after a driver killed mid-{stage}", after_recovery=True)
+        _landed_once(crash_env, landed_file)
+
+
+def test_a_forced_takeover_mid_turn_leaves_the_attended_session_running(crash_env: CrashEnv, tmp_path: Path) -> None:
+    """A forced takeover kills the driver but hands the session to the operator to attend: orphan never interrupts
+    it, so the held tool runs on to completion on the service."""
+    landed_file = "LANDED-opencode2-takeover.md"
+    marker = tmp_path / "takeover.held"
+    definition = opencode2_graph_yaml(script(commit_and_declare(landed_file), once(marker, 6)))
+    with _opencode2_lane(crash_env, tmp_path, definition, landed_file) as lane:
+        _, runner_dir, service, chunk_id, start = lane
+        proc = start()
+        runner = runner_api(runner_dir, await_host(runner_dir, proc))
+        await_path(marker, proc=proc)
+        _, _, session_id, pid = _first_lease(runner_dir, chunk_id)
+
+        opened = runner.post(f"/api/chunks/{chunk_id}/takeovers", json={"force": True})
+        assert opened.status_code == 201, opened.text
+        await_true(lambda: _gone(pid), "the forced takeover killed the driver")
+
+        await_path(marker.with_name(marker.name + ".slept"), timeout=30)
+        assert not service.running(session_id), "the attended session's turn never settled"
+        _assert_invariants(runner_dir, tmp_path / "hub", when="after a forced takeover mid-turn", after_recovery=False)
+
+
+def test_a_daemon_restarted_mid_turn_reconciles_the_session_before_restart_resume(
+    crash_env: CrashEnv, tmp_path: Path
+) -> None:
+    """A daemon and its driver both killed mid-turn, as a reboot kills them, leave the turn running on the service:
+    the next start reconciles the session — the held tool is interrupted — before any restart resume is dispatched,
+    and the resumed lease lands the chunk once."""
+    landed_file = "LANDED-opencode2-daemon-restart.md"
+    marker = tmp_path / "restart.held"
+    definition = opencode2_graph_yaml(script(commit_and_declare(landed_file), once(marker, 12)))
+    with _opencode2_lane(crash_env, tmp_path, definition, landed_file) as lane:
+        hub, runner_dir, service, chunk_id, start = lane
+        proc = start()
+        await_path(marker, proc=proc)
+        lease_id, epoch, session_id, pid = _first_lease(runner_dir, chunk_id)
+        proc.kill()
+        proc.wait(timeout=10)
+        _kill_group(pid)
+        assert service.running(session_id), "the turn did not outlive its driver and daemon"
+
+        log = runner_dir / "daemon.log"
+        offset = log.stat().st_size
+        start()
+        assert wait_status(hub, chunk_id, {"done"}) == "done", "the chunk did not land after the restart"
+        assert not marker.with_name(marker.name + ".slept").exists(), "the reconciled turn ran its tool to completion"
+        tail = log.read_text()[offset:]
+        reconciled = tail.find("reconciled 1 session(s)")
+        resumed = tail.find("launched opencode driver")
+        assert reconciled != -1, f"the restart reconciled nothing:\n{tail[-4000:]}"
+        assert resumed == -1 or reconciled < resumed, "a driver launched before the session was reconciled"
+        leases = leases_for_chunk(runner_dir, chunk_id)
+        assert [row[:3] for row in leases if row[0] == lease_id] == [(lease_id, epoch, session_id)]
+        _assert_invariants(runner_dir, tmp_path / "hub", when="after a daemon restart mid-turn", after_recovery=True)
+        _landed_once(crash_env, landed_file)
+
+
+def test_a_service_restarted_mid_turn_fails_the_turn_and_leaves_nothing_running(
+    crash_env: CrashEnv, tmp_path: Path
+) -> None:
+    """A service that restarts while its first tool runs resumes that turn by itself, without its environment: the
+    driver sees the changed identity, interrupts the tree on the new service, and fails the turn as the service's
+    fault, so nothing of the session runs on the new service and the runner's records stay whole."""
+    definition = opencode2_graph_yaml(script("shell('true')"))
+    with _opencode2_lane(
+        crash_env, tmp_path, definition, "opencode2-service-restart", levers=("RESTARTS_MID_TURN",)
+    ) as lane:
+        hub, runner_dir, service, chunk_id, start = lane
+        start()
+        lease_id, _, session_id, _ = _first_lease(runner_dir, chunk_id)
+        first = runner_dir / "worker-stdout" / f"{lease_id}.1.stdout"
+        await_true(lambda: '"record": "result"' in (first.read_text() if first.exists() else ""), "the turn ended")
+        records = [json.loads(line) for line in first.read_text().splitlines() if line.strip()]
+        assert {"record": "result", "outcome": "failed"}.items() <= records[-1].items(), records[-1]
+        assert any(r.get("kind") == "service" and "restarted" in str(r.get("message")) for r in records), records
+        await_true(lambda: service.idle(session_id), "the interrupted session settled on the new service")
+        wait_status(hub, chunk_id, {"done", "escalated"})
+        _assert_invariants(runner_dir, tmp_path / "hub", when="after a service restart mid-turn", after_recovery=True)
+
+
+def _gone(pid: int) -> bool:
+    """Whether ``pid`` has exited — dead, or a zombie its parent has yet to reap."""
+    try:
+        stat = Path(f"/proc/{pid}/stat").read_text()
+    except FileNotFoundError:
+        return True
+    return stat.rsplit(")", 1)[1].split()[0] in {"Z", "X"}
