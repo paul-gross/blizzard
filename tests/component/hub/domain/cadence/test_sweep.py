@@ -34,10 +34,11 @@ from tests.support.scaffolding import HubHarness, build_hub, default_project, de
 
 _CTX = ChangeContext(actor="operator", door=Door.API)
 _CADENCES_ON = resolve_flags(FLAG_REGISTRY, "hub", {"cadences": True}).flags
+_CADENCES_OFF = resolve_flags(FLAG_REGISTRY, "hub", {"cadences": False}).flags
 
 
 def _hub(tmp_path: Path, *, on: bool = True) -> HubHarness:
-    return build_hub(tmp_path, flags=_CADENCES_ON if on else None)
+    return build_hub(tmp_path, flags=_CADENCES_ON if on else _CADENCES_OFF)
 
 
 def _project(hub: HubHarness, services: TenantServices, tenant: TenantId) -> Project:

@@ -108,9 +108,10 @@ Proposals. Each opens a list beside the selected record's detail.
 **Cadences** lists the project's cadences at `/p/{project}/gardening/cadences`. A row names the cadence, its rhythm —
 its cron and zone, then its spacing, as in `0 20 * * * America/Chicago, at least 10 days apart` — and when its next
 moment comes, how many chores it keeps, its errands counted by state (`due`, `running`, `waiting`, `stopped`), and an
-`attention` badge counting what stops them. A retired cadence reads `retired`. While the `cadences` flag is off the list
-opens with a line saying cadences are kept and editable but mint no run until it is turned on. A person who may edit
-graphs creates a cadence from **New cadence**: a slug, a name, a cron and zone, a spacing and its anchor.
+`attention` badge counting what stops them. A retired cadence reads `retired`. While the `cadences` flag is off
+(`cadences = false` under `[flags]`) the list opens with a line saying cadences are kept and editable but mint no run
+until it is turned on. A person who may edit graphs creates a cadence from **New cadence**: a slug, a name, a cron and
+zone, a spacing and its anchor.
 
 Selecting a cadence opens its detail at `/p/{project}/gardening/cadences/{slug}`: whether it is enabled or retired, its
 rhythm, its next five moments, what needs attention, and each chore — the routine it runs, linked, the scopes it runs

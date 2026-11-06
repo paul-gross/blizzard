@@ -5,6 +5,6 @@
 owner = "epic:cadence"
 summary = "Cadences mint errands on their rhythm"
 scope = "hub"
-default = "off"
+default = "on"
 
 [retired]

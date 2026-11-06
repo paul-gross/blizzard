@@ -37,7 +37,7 @@ def _ignored(captured: list[EventDict]) -> dict[str, str]:
 
 def test_a_hub_over_the_packaged_registry_answers_its_defaults(tmp_path: Path) -> None:
     hub = build_hub(tmp_path)
-    assert hub.client.get("/api/flags").json() == {"flags": {"cadences": False}, "overridden": []}
+    assert hub.client.get("/api/flags").json() == {"flags": {"cadences": True}, "overridden": []}
     health = hub.client.get("/api/health").json()
     assert health["overridden"] == []
     assert health["status"] == "ok"

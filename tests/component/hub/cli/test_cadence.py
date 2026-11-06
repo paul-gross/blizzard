@@ -61,7 +61,7 @@ def _serve(tmp_path: Path, flags: dict[str, bool]) -> Iterator[TestClient]:
 
 @pytest.fixture
 def client(tmp_path: Path) -> Iterator[TestClient]:
-    yield from _serve(tmp_path, {})
+    yield from _serve(tmp_path, {"cadences": False})
 
 
 @pytest.fixture
