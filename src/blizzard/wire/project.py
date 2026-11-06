@@ -13,6 +13,7 @@ from pydantic import BaseModel, ConfigDict
 from blizzard.foundation.project_colors import HexColor, ProjectColor
 from blizzard.foundation.unrecognized import Unrecognized
 from blizzard.wire.base import WireModel
+from blizzard.wire.problem import CommonProblemMembers
 from blizzard.wire.vocabulary import OPEN
 
 
@@ -136,6 +137,30 @@ class ProjectRequiredBody(WireModel):
     code: Literal["project_required"] = "project_required"
     message: str
     projects: list[ProjectRef]
+
+
+class ProjectRequiredProblem(
+    CommonProblemMembers[Literal["urn:blizzard:problem:project-required"], ProjectRequiredBody]
+):
+    """A project must be selected; its released detail includes the choices."""
+
+    status: int | None = None
+
+
+class UnknownProjectDetail(BaseModel):
+    """The released validation-shaped entry for an unknown project."""
+
+    loc: list[str]
+    msg: str
+    type: Literal["unknown_project"]
+
+
+class UnknownProjectProblem(
+    CommonProblemMembers[Literal["urn:blizzard:problem:unknown-project"], list[UnknownProjectDetail]]
+):
+    """A query names a project the tenant does not hold."""
+
+    status: int | None = None
 
 
 class SourceNotLinkedBody(BaseModel):

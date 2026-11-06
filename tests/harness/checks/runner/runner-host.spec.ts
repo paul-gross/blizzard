@@ -83,7 +83,7 @@ test.describe('a profile that cannot be a host is refused before any process sta
 test('a socket path over the limit is refused before init, naming the path and the limit', async ({ mockHub, worldContext, ledger, vendorUsage }, testInfo) => {
   const scratchRoot = path.join(os.tmpdir(), 'x'.repeat(120));
   const builder = runnerHostBuilder({ hub: { url: mockHub.url }, context: worldContext, ledger, testInfo, vendor: vendorUsage, scratchRoot });
-  await expect(builder.create()).rejects.toThrow(/host\.sock is \d+ bytes, over the 107-byte limit/);
+  await expect(builder.create({ runnerDir: path.join(scratchRoot, 'h') })).rejects.toThrow(/host\.sock is \d+ bytes, over the 107-byte limit/);
   expect(fs.existsSync(scratchRoot)).toBe(false);
   expect((await mockHub.captured.read()).body.requests).toEqual([]);
 });

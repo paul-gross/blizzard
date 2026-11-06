@@ -8,15 +8,26 @@ permission gate refuses it."""
 from __future__ import annotations
 
 from datetime import datetime
+from functools import partial
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
+from fastapi.responses import JSONResponse
 
 from blizzard.foundation.store.utc import iso_utc
-from blizzard.hub.api import chunk_events
+from blizzard.hub.api import chunk_events, problems
 from blizzard.hub.api.auth import reject_runner_principal
 from blizzard.hub.api.auth_session import require, tenant_bound
 from blizzard.hub.api.deps import Services
+from blizzard.hub.api.problem_exceptions import ProblemHTTPException
+from blizzard.hub.api.problem_rendering import problem_response
+from blizzard.hub.api.problems import (
+    host_name_taken_problem,
+    runner_already_hosted_problem,
+    runner_lifecycle_conflict_problem,
+    runner_not_found_problem,
+    runner_retired_problem,
+)
 from blizzard.hub.api.runners import publish_retirement, usage_views
 from blizzard.hub.auth.models import ResolvedIdentity
 from blizzard.hub.auth.permissions import Permission
@@ -152,15 +163,16 @@ def _publish_host_retirement(
 
 
 def _unknown_runner(exc: UnknownRunner | RunnerNotUnderHost) -> HTTPException:
-    return HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"unknown runner {exc.runner_id}")
+    return ProblemHTTPException(partial(problems.runner_not_found_problem, exc.runner_id))
 
 
 @router.post("/hosts", response_model=HostAddResponse, status_code=status.HTTP_201_CREATED)
 def add_host(
     request: HostAddRequest,
+    http_request: Request,
     services: Services,
     identity: Annotated[ResolvedIdentity, Depends(require(Permission.RUNNER_RETIRE))],
-) -> HostAddResponse:
+) -> HostAddResponse | JSONResponse:
     """Add a host under ``name`` — the hub mints its id and bearer token together, and the plaintext token is returned
     once. ``adopt`` places existing runners under it in the same write: a runner of another tenant is refused as
     unknown (404), one already under a host or a retired one 409, and so is one retired or reinstated while the add
@@ -168,11 +180,15 @@ def add_host(
     try:
         added = services.host_enrollment.add(request.name, by=identity.username, adopt=request.adopt)
     except HostNameTaken as exc:
-        raise _conflict(exc) from exc
+        return problem_response(host_name_taken_problem(exc, instance=http_request.url.path))
     except UnknownRunner as exc:
-        raise _unknown_runner(exc) from exc
-    except (RunnerAlreadyHosted, RunnerRetired, RunnerLifecycleConflict) as exc:
-        raise _conflict(exc) from exc
+        return problem_response(runner_not_found_problem(exc.runner_id, instance=http_request.url.path))
+    except RunnerAlreadyHosted as exc:
+        return problem_response(runner_already_hosted_problem(exc, instance=http_request.url.path))
+    except RunnerRetired as exc:
+        return problem_response(runner_retired_problem(exc, instance=http_request.url.path, status_code=409))
+    except RunnerLifecycleConflict as exc:
+        return problem_response(runner_lifecycle_conflict_problem(exc, instance=http_request.url.path))
     services.events.publish_host_changed(added.host_id, kind="added", host_name=added.name, by=identity.username)
     return HostAddResponse(host_id=added.host_id, host_name=added.name, token=added.token, adopted=list(added.adopted))
 

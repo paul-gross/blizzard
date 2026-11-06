@@ -68,6 +68,13 @@ def test_a_repeated_request_answers_409(tmp_path: Path) -> None:
     resp = hub.client.post("/api/permits", json={"holder": "ada", "capability": "deploy"})
 
     assert resp.status_code == 409
+    assert resp.headers["content-type"] == "application/problem+json"
+    body = resp.json()
+    assert (body["type"], body["status"], body["instance"]) == (
+        "urn:blizzard:problem:permit-already-requested",
+        409,
+        "/api/permits",
+    )
 
 
 def test_an_unknown_permit_answers_404_on_read_and_on_a_verb(tmp_path: Path) -> None:

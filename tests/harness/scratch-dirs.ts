@@ -19,8 +19,10 @@ export interface ScratchDirs {
 
 /** Scratch directories under the root a runner host builder uses; `scratchRoot` is overridden by the harness check alone. */
 export function scratchDirs(options: { scratchRoot?: string } = {}): ScratchDirs {
-  const root = path.join(options.scratchRoot ?? os.tmpdir(), `bzs-${crypto.randomBytes(4).toString('hex')}`);
-  const home = path.join(root, 'home');
+  const dataRoot = path.join(options.scratchRoot ?? os.tmpdir(), `bzs-${crypto.randomBytes(4).toString('hex')}`);
+  const runtimeRoot = options.scratchRoot === undefined ? process.env.BLIZZARD_TEST_HOST_RUNTIME : undefined;
+  const root = runtimeRoot ? path.join(runtimeRoot, path.basename(dataRoot)) : dataRoot;
+  const home = path.join(dataRoot, 'home');
   return {
     make(name) {
       const dir = path.join(root, name);
@@ -39,6 +41,7 @@ export function scratchDirs(options: { scratchRoot?: string } = {}): ScratchDirs
     },
     dispose() {
       fs.rmSync(root, { recursive: true, force: true });
+      if (root !== dataRoot) fs.rmSync(dataRoot, { recursive: true, force: true });
     },
   };
 }

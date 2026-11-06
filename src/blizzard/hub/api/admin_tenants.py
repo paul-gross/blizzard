@@ -10,10 +10,12 @@ from fastapi import APIRouter, Depends, HTTPException, Response, status
 
 from blizzard.foundation.store.utc import iso_utc
 from blizzard.foundation.tenants import TenantDeletionState
+from blizzard.hub.api import problems
 from blizzard.hub.api.auth import reject_runner_principal
 from blizzard.hub.api.auth_session import require_hub
 from blizzard.hub.api.door import RequestDoor
 from blizzard.hub.api.hub_level import Hub
+from blizzard.hub.api.problem_exceptions import ProblemHTTPException
 from blizzard.hub.auth.models import ResolvedIdentity
 from blizzard.hub.auth.permissions import Permission
 from blizzard.hub.domain.tenancy.administration import Tenant, TenantAdminUnknown, TenantNameRefused
@@ -79,7 +81,7 @@ def rename_tenant(tenant_id: str, body: TenantRenameRequest, services: Hub) -> T
     except TenantNameRefused as exc:
         raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, detail=str(exc)) from exc
     except UnknownTenant as exc:
-        raise HTTPException(status.HTTP_404_NOT_FOUND, detail="no such tenant") from exc
+        raise ProblemHTTPException(problems.tenant_not_found_problem) from exc
 
 
 @router.delete(
@@ -100,7 +102,7 @@ def delete_tenant(tenant_id: str, actor: TenantAdmin, services: Hub, response: R
     try:
         progress = services.tenant_teardown.delete(tenant, by=actor.user_id)
     except UnknownTenant as exc:
-        raise HTTPException(status.HTTP_404_NOT_FOUND, detail="no such tenant") from exc
+        raise ProblemHTTPException(problems.tenant_not_found_problem) from exc
     except LastTenant as exc:
         raise HTTPException(
             status.HTTP_409_CONFLICT,

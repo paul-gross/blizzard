@@ -115,8 +115,21 @@ def test_a_blank_name_is_refused_and_a_live_name_is_taken(tmp_path: Path) -> Non
     assert hub.client.post("/api/hosts", json={"name": "  "}).status_code == 422
     taken = hub.client.post("/api/hosts", json={"name": "box"})
     assert taken.status_code == 409
+    assert taken.headers["content-type"] == "application/problem+json"
+    assert taken.json()["type"] == "urn:blizzard:problem:host-name-taken"
+    assert taken.json()["instance"] == "/api/hosts"
     assert "box" in taken.text
     assert len(hub.client.get("/api/hosts").json()["hosts"]) == 1
+
+
+def test_add_host_unknown_runner_is_a_problem_and_adds_nothing(tmp_path: Path) -> None:
+    hub = build_hub(tmp_path)
+    response = hub.client.post("/api/hosts", json={"name": "box", "adopt": ["rn_missing"]})
+    assert response.status_code == 404
+    assert response.headers["content-type"] == "application/problem+json"
+    assert response.json()["type"] == "urn:blizzard:problem:runner-not-found"
+    assert response.json()["detail"] == "unknown runner rn_missing"
+    assert hub.client.get("/api/hosts").json()["hosts"] == []
 
 
 def test_a_retired_hosts_name_can_be_held_again(tmp_path: Path) -> None:

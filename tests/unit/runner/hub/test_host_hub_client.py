@@ -184,6 +184,32 @@ def test_every_host_call_types_a_refused_credential_a_retired_host_and_a_not_fou
 
 
 @pytest.mark.parametrize("call", _CALLS)
+@pytest.mark.parametrize(
+    ("status", "kind", "reason"),
+    [
+        (401, "authentication-required", HostRefusalReason.CREDENTIAL_REFUSED),
+        (403, "host-retired", HostRefusalReason.RETIRED),
+        (404, "runner-not-found", HostRefusalReason.NOT_FOUND),
+    ],
+)
+def test_host_known_problem_type(
+    call: Callable[[HttpHostHubClient], object], status: int, kind: str, reason: HostRefusalReason
+) -> None:
+    answer = call(
+        _host_client(lambda _r: httpx2.Response(status, json={"type": f"urn:blizzard:problem:{kind}", "detail": "no"}))
+    )
+    assert answer == HostRefused(reason=reason, status=status, detail="no")
+
+
+@pytest.mark.parametrize("call", _CALLS)
+@pytest.mark.parametrize("status", [401, 403, 404])
+def test_host_unknown_problem_is_an_error(call: Callable[[HttpHostHubClient], object], status: int) -> None:
+    with pytest.raises(HubClientError) as raised:
+        call(_host_client(lambda _r: httpx2.Response(status, json={"type": "future", "detail": "no"})))
+    assert type(raised.value) is HubClientError
+
+
+@pytest.mark.parametrize("call", _CALLS)
 @pytest.mark.parametrize("status", [409, 503])
 def test_any_other_failure_raises_a_hub_client_error(call: Callable[[HttpHostHubClient], object], status: int) -> None:
     with pytest.raises(HubClientError):

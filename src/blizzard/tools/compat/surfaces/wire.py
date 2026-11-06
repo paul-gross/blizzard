@@ -6,6 +6,7 @@ gained response enum value is additive where the baseline marks every response p
 
 from __future__ import annotations
 
+import json
 from collections.abc import Callable, Mapping
 from dataclasses import replace
 from typing import Any, Final, Literal, TypedDict, cast
@@ -16,7 +17,7 @@ from blizzard.tools.compat.violation import Violation
 _SURFACE_PREFIX = "/api/fleet"
 _SURFACE_EXTRA_PATHS = ("/api/auth/jwks.json", "/api/auth/authorize")
 #: Single operations a runner reaches on an operator path — `runner init` adding its runner, or its host.
-_SURFACE_EXTRA_OPERATIONS = (("post", "/api/runners"), ("post", "/api/hosts"))
+_SURFACE_EXTRA_OPERATIONS = (("post", "/api/runners"), ("post", "/api/hosts"), ("get", "/api/me"))
 _HTTP_METHODS = ("get", "post", "put", "patch", "delete")
 #: The document mark an open response position carries; compat reads documents, never the code that writes them.
 _OPEN_MARK: Final = "x-blizzard-open"
@@ -120,18 +121,6 @@ def _request_schema(op: Operation) -> Schema | None:
     return media.get("schema") if media else None
 
 
-def _response_schema(op: Operation) -> Schema | None:
-    responses = op.get("responses", {})
-    for code in ("200", "201", "202"):
-        resp = responses.get(code)
-        if not resp:
-            continue
-        media = resp.get("content", {}).get("application/json")
-        if media and "schema" in media:
-            return media["schema"]
-    return None
-
-
 def _collect_reachable(
     doc: Document,
     node: Schema | None,
@@ -176,7 +165,9 @@ def _open_components(doc: Mapping[str, object], select: Selection) -> set[str]:
     return {name for name, marked in _walk(cast(Document, doc), select)[1].items() if all(marked)}
 
 
-def _walk(doc: Document, select: Selection) -> tuple[dict[str, set[str]], dict[str, list[bool]]]:
+def _walk(
+    doc: Document, select: Selection, skip: set[tuple[str, str, str]] | None = None
+) -> tuple[dict[str, set[str]], dict[str, list[bool]]]:
     """Each reached component's roles, and the open mark of each response position that references it.
 
     ``seen`` is keyed by (schema, role): a schema reached by both roles must have its
@@ -185,11 +176,15 @@ def _walk(doc: Document, select: Selection) -> tuple[dict[str, set[str]], dict[s
     roles: dict[str, set[str]] = {}
     seen: set[tuple[str, str]] = set()
     marks: dict[str, list[bool]] = {}
-    for _path, _method, op in _surface_operations(doc, select):
+    for path, method, op in _surface_operations(doc, select):
         _collect_reachable(doc, _request_schema(op), "request", roles, seen, marks)
         for param in op.get("parameters", []):
             _collect_reachable(doc, param.get("schema"), "request", roles, seen, marks)
-        _collect_reachable(doc, _response_schema(op), "response", roles, seen, marks)
+        for code, response in op.get("responses", {}).items():
+            for media, body in response.get("content", {}).items():
+                if skip and (path, method, code) in skip and media == "application/json":
+                    continue
+                _collect_reachable(doc, body.get("schema"), "response", roles, seen, marks)
     return roles, marks
 
 
@@ -299,6 +294,48 @@ def _nested_schema(schema: Schema, key: Literal["items", "additionalProperties"]
     return None
 
 
+def _shape(node: Schema) -> str:
+    """Canonicalize schema annotations and unordered union members for conservative comparison."""
+    ignored = {"title", "description", "default", "examples", "example", "deprecated", _OPEN_MARK}
+    value: dict[str, Any] = {k: v for k, v in node.items() if k not in ignored}
+    if "properties" in node:
+        value["properties"] = {k: json.loads(_shape(v)) for k, v in node["properties"].items()}
+    for key in ("items", "additionalProperties"):
+        nested = _nested_of(node, key)
+        if nested is not None:
+            value[key] = json.loads(_shape(nested))
+    for key in ("anyOf", "oneOf", "allOf"):
+        members = node.get(key)
+        if members is not None:
+            value[key] = [json.loads(s) for s in sorted(_shape(member) for member in members)]
+    if "required" in node:
+        value["required"] = sorted(node["required"])
+    return json.dumps(value, sort_keys=True)
+
+
+def _diff_inline_union(label: str, base: Schema, head: Schema, violations: list[Violation]) -> None:
+    for key in ("anyOf", "oneOf"):
+        old_members: list[Schema] | None = base.get(key)
+        new_members: list[Schema] | None = head.get(key)
+        if (
+            (old_members is not None or new_members is not None)
+            and any(
+                "$ref" not in member and member.get("type") != "null"
+                for member in (*(old_members or []), *(new_members or []))
+            )
+            and any(
+                sum(member.get("type") != "null" for member in members) > 1
+                for members in (old_members or [], new_members or [])
+            )
+            and (
+                old_members is None
+                or new_members is None
+                or sorted(map(_shape, old_members)) != sorted(map(_shape, new_members))
+            )
+        ):
+            violations.append(_violation(label, "inline response union changed", base))
+
+
 def _diff_property(
     label: str,
     bp: Schema,
@@ -346,6 +383,9 @@ def _diff_property(
 
     _diff_enum_and_union(label, bp, hp, is_request, is_response, violations, is_open=bp.get(_OPEN_MARK) is True)
 
+    if is_response:
+        _diff_inline_union(label, bp, hp, violations)
+
     # A closed inline enum widened to a bare string gains values an older closed-`Literal` parse refuses.
     base_enum = _inline_enum(bp)
     if (
@@ -366,6 +406,9 @@ def _diff_property(
         if b_nested is not None and h_nested is not None:
             _diff_property(label + suffix, b_nested, h_nested, is_request, is_response, violations, head_schemas)
 
+    if "properties" in bp or "properties" in hp:
+        _diff_schema(label, bp, hp, is_request, is_response, violations, head_schemas)
+
 
 def _diff_schema(
     name: str,
@@ -378,6 +421,8 @@ def _diff_schema(
     is_open: bool = False,
 ) -> None:
     _diff_enum_and_union(name, base, head, is_request, is_response, violations, is_open=is_open)
+    if is_response:
+        _diff_inline_union(name, base, head, violations)
 
     base_props: dict[str, Schema] = base.get("properties", {})
     head_props: dict[str, Schema] = head.get("properties", {})
@@ -467,6 +512,132 @@ def _diff_parameters(
         )
 
 
+def _is_refusal(code: str) -> bool:
+    return len(code) == 3 and code[0] in "45" and (code[1:].isdigit() or code[1:] == "XX")
+
+
+_MIGRATIONS = {
+    ("post", "/api/fleet/chunks/{chunk_id}/release", "409"): (
+        "ReleaseRefusal",
+        "ReleaseProblem",
+        "urn:blizzard:problem:release-refusal",
+    ),
+    ("get", "/api/fleet/identity", "401"): (
+        "RunnerIdentityRefusal",
+        "RunnerIdentityProblem",
+        "urn:blizzard:problem:runner-identity",
+    ),
+    ("post", "/api/fleet/runners", "409"): (
+        "RunnerVersionRefusal",
+        "RunnerVersionProblem",
+        "urn:blizzard:problem:runner-version",
+    ),
+}
+
+
+def _migrations(base: Document, head: Document, select: Selection) -> dict[tuple[str, str, str], str]:
+    accepted: dict[tuple[str, str, str], str] = {}
+    for (method, path, code), (old_name, new_name, kind) in _MIGRATIONS.items():
+        if not select(path, method):
+            continue
+        old = base.get("paths", {}).get(path, {}).get(method, {}).get("responses", {}).get(code, {})
+        new = head.get("paths", {}).get(path, {}).get(method, {}).get("responses", {}).get(code, {})
+        if "application/json" in new.get("content", {}):
+            continue
+        old_ref = old.get("content", {}).get("application/json", {}).get("schema", {}).get("$ref")
+        new_ref = new.get("content", {}).get("application/problem+json", {}).get("schema", {}).get("$ref")
+        if old_ref != f"#/components/schemas/{old_name}" or new_ref != f"#/components/schemas/{new_name}":
+            continue
+        before = _schema_components(base).get(old_name, {})
+        after = _schema_components(head).get(new_name, {})
+        old_props, new_props = before.get("properties", {}), after.get("properties", {})
+        kind_schema = cast(dict[str, Any], new_props.get("type", {}))
+        if (
+            before.get("type") != "object"
+            or after.get("type") != "object"
+            or before.get("additionalProperties", True) is not True
+            or set(before) - {"type", "properties", "required", "additionalProperties", "title", "description"}
+            or set(after) - {"type", "properties", "required", "additionalProperties", "title", "description"}
+            or kind_schema.get("const") != kind
+            or kind_schema.get("type") != "string"
+            or not {"type", "title", "detail", "instance"} <= set(after.get("required", []))
+            or any(new_props.get(field, {}).get("type") != "string" for field in ("title", "detail", "instance"))
+            or not old_props
+            or not set(before.get("required", [])) <= set(after.get("required", []))
+            or not old_props.keys() <= new_props.keys()
+            or any(_shape(prop) != _shape(new_props[name]) for name, prop in old_props.items())
+        ):
+            continue
+        accepted[(path, method, code)] = old_name
+    return accepted
+
+
+def _diff_refusals(
+    base: Document,
+    head: Document,
+    violations: list[Violation],
+    select: Selection,
+    migrations: dict[tuple[str, str, str], str],
+) -> None:
+    head_ops = {(path, method): op for path, method, op in _surface_operations(head, select)}
+    for path, method, op in _surface_operations(base, select):
+        other = head_ops.get((path, method))
+        if other is None:
+            continue
+        for code, response in op.get("responses", {}).items():
+            if not _is_refusal(code):
+                continue
+            label = f"{method.upper()} {path} {code}"
+            newer = other.get("responses", {}).get(code)
+            if newer is None:
+                violations.append(_violation(label, "refusal status removed", op))
+                continue
+            content, new_content = response.get("content", {}), newer.get("content", {})
+            for media, body in content.items():
+                where = f"{label} {media}"
+                new_body = new_content.get(media)
+                if new_body is None:
+                    if media == "application/json" and (path, method, code) in migrations:
+                        continue
+                    violations.append(_violation(where, "refusal media type removed", op))
+                    continue
+                old_schema, new_schema = body.get("schema"), new_body.get("schema")
+                if old_schema is None:
+                    continue
+                if new_schema is None:
+                    violations.append(_violation(where, "refusal schema removed", op))
+                    continue
+                old_variants, new_variants = _union_ref_names(old_schema), _union_ref_names(new_schema)
+                if old_variants is not None and new_variants is not None:
+                    lost = old_variants - new_variants
+                    if lost:
+                        violations.append(_violation(where, f"refusal union lost member(s) {sorted(lost)}", op))
+                _diff_property(where, old_schema, new_schema, False, True, violations, _schema_components(head))
+                # Components can be shared by many operations.  In addition to the global component finding,
+                # report each refusal position reaching a changed component so the affected contract is actionable.
+                old_roles: dict[str, set[str]] = {}
+                new_roles: dict[str, set[str]] = {}
+                _collect_reachable(base, old_schema, "response", old_roles, set(), {})
+                _collect_reachable(head, new_schema, "response", new_roles, set(), {})
+                old_components, new_components = _schema_components(base), _schema_components(head)
+                for name in sorted(old_roles.keys() & new_roles.keys() & old_components.keys() & new_components.keys()):
+                    positional: list[Violation] = []
+                    _diff_schema(
+                        f"{where} {name}",
+                        old_components[name],
+                        new_components[name],
+                        False,
+                        True,
+                        positional,
+                        new_components,
+                    )
+                    violations.extend(
+                        replace(finding, component_where=finding.where[len(where) + 1 :])
+                        for finding in positional
+                        if finding.reason in {"response property removed", "response property type changed"}
+                    )
+
+
 def classify_spec_diff(
     base: Mapping[str, object],
     head: Mapping[str, object],
@@ -487,8 +658,13 @@ def classify_spec_diff(
     base_schemas = _schema_components(base_doc)
     head_schemas = _schema_components(head_doc)
     _diff_parameters(base_doc, head_doc, violations, head_schemas, select)
+    migrations = _migrations(base_doc, head_doc, select)
+    other_roles, _ = _walk(base_doc, select, set(migrations))
+    _diff_refusals(base_doc, head_doc, violations, select, migrations)
 
     for name in sorted(base_roles):
+        if name in migrations.values() and name not in other_roles:
+            continue
         if name not in head_schemas:
             violations.append(_violation(name, "component schema deleted", base_schemas.get(name, {})))
             continue

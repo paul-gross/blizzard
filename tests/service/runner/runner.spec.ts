@@ -191,6 +191,26 @@ test('test_fill_absorbs_a_dependency_denial_then_claims_once_it_clears', async (
   await stepUntil(runnerHost, () => chunkStatus(mockHub, runnerHost, chunkId), (status) => status === 'done');
 });
 
+for (const legacy of [false, true]) {
+  test(`test_claim_refusal_does_not_create_a_lease_and_recovers[${legacy ? 'legacy' : 'problem'}]`, async ({ mockHub, runnerHost }) => {
+    const chunkId = await seed(mockHub);
+    await mockHub.levers.arm('claim_runner_retired', { chunk_id: chunkId });
+    if (legacy) await mockHub.levers.arm('legacy_claim_refusals', { chunk_id: chunkId });
+
+    await stepUntil(
+      runnerHost,
+      async () => (await captured(mockHub, 'POST', '/api/fleet/routes')).filter((request) => (request.body as { chunk_id?: string } | null)?.chunk_id === chunkId).length,
+      (count) => count > 0,
+    );
+    expect(await chunkStatus(mockHub, runnerHost, chunkId)).toBe('ready');
+    expect((await runnerHost.runners[RUNNER]!.leases()).body.items.filter((lease) => lease.chunk_id === chunkId)).toEqual([]);
+
+    await mockHub.levers.clear('claim_runner_retired', chunkId);
+    await stepUntil(runnerHost, () => chunkStatus(mockHub, runnerHost, chunkId), (status) => status === 'done');
+    expect((await soleLease(runnerHost, chunkId)).state).toBe('closed');
+  });
+}
+
 test('test_fill_reaches_past_a_marked_head_by_default_against_a_real_mock_hub', async ({ mockHub, runnerHost }) => {
   const blockedId = await seed(mockHub); // seeded first: the peek's marked head
   const openId = await seed(mockHub);

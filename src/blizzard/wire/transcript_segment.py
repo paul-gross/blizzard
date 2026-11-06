@@ -6,10 +6,17 @@ high-water sequence, ``(segment_id, turn_range_start)`` the re-offer dedupe key.
 
 from __future__ import annotations
 
+from typing import Literal
+
 from pydantic import BaseModel
 
 from blizzard.foundation.transcripts import TurnKind
 from blizzard.wire.base import WireModel
+from blizzard.wire.problem import ProblemDetails
+
+
+class LeaseOwnershipProblem(ProblemDetails[Literal["urn:blizzard:problem:lease-ownership"]]):
+    """The caller cannot read another runner's lease segments."""
 
 
 class ToolCallSegmentView(BaseModel):

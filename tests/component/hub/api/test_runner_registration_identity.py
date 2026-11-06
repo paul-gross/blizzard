@@ -185,7 +185,14 @@ def test_the_fleet_read_of_a_runner_that_never_registered_is_409(tmp_path: Path)
     resp = hub.client.get(f"/api/fleet/runners/{added.runner_id}", headers=_bearer(added.token))
 
     assert resp.status_code == 409
-    assert resp.json() == {"detail": f"runner {added.runner_id} has not registered"}
+    assert resp.headers["content-type"] == "application/problem+json"
+    assert resp.json() == {
+        "type": "urn:blizzard:problem:runner-not-registered",
+        "title": "Runner not registered",
+        "detail": f"runner {added.runner_id} has not registered",
+        "instance": f"/api/fleet/runners/{added.runner_id}",
+        "status": 409,
+    }
 
 
 def test_a_runner_added_in_another_tenant_registers_naming_that_tenant(tmp_path: Path) -> None:

@@ -94,6 +94,8 @@ export interface MockChunkSpec {
   work_refs?: { source: string; ref: string }[];
   /** Graph-scoped artifacts baked into the chunk's mint; `asset` is the one kind the hub synthesizes. */
   graph_artifacts?: { name: string; kind?: 'asset'; content: string }[];
+  /** Delivery formats owed by each artifact name in the seeded graph. */
+  artifact_formats?: Record<string, ('finding-delta' | 'garden-proposal-candidate')[]>;
   /** The chunk's derived cost total, as `ChunkUsageTotalView` names its fields; each defaults to zero. */
   cost?: { cost_usd?: number; estimated_cost_usd?: number | null; cost_partial?: boolean; billed_partial?: boolean };
   status?: 'ready' | 'not_ready' | 'paused' | 'needs_human' | 'delivering' | 'done' | 'stopped';

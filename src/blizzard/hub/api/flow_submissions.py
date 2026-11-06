@@ -3,14 +3,17 @@
 
 from __future__ import annotations
 
+from functools import partial
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 
 from blizzard.foundation.store.utc import iso_utc
+from blizzard.hub.api import problems
 from blizzard.hub.api.auth import reject_runner_principal
 from blizzard.hub.api.auth_session import require, tenant_bound
 from blizzard.hub.api.deps import Services
+from blizzard.hub.api.problem_exceptions import ProblemHTTPException
 from blizzard.hub.auth.permissions import Permission
 from blizzard.hub.domain.delivery.flows import SubmissionRecord
 from blizzard.wire.flow_submissions import (
@@ -61,7 +64,7 @@ def list_flow_submissions(chunk_id: str, services: Services) -> ChunkFlowSubmiss
     """Every submission of the chunk's visits, open or closed, in arrival order. Unpaged: the read is bounded by one
     chunk's visits — a submission per hub-node visit generation."""
     if services.chunks.record.get(chunk_id) is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"unknown chunk {chunk_id}")
+        raise ProblemHTTPException(partial(problems.chunk_not_found_problem, chunk_id))
     return ChunkFlowSubmissionsView(
         chunk_id=chunk_id, items=[_view(record) for record in services.flows.submissions_of(chunk_id)]
     )

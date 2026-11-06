@@ -12,6 +12,9 @@ import pytest
 
 from blizzard.foundation.hub_event_types import HubEventType
 from blizzard.hub.domain.execution.auth.route import ROUTE_TOKEN_ENFORCE
+from blizzard.wire.problem import CHUNK_NOT_FOUND, RELEASE_REFUSAL, ROUTE_NOT_HELD
+from blizzard.wire.release import ReleaseProblem
+from blizzard.wire.route import RouteNotHeldProblem
 from tests.support.scaffolding import HubHarness, build_hub, emitted_events, pointer_token
 
 _GRAPH_YAML = """
@@ -97,6 +100,11 @@ def test_a_stale_epoch_is_refused_409_naming_stale(tmp_path: Path) -> None:
     resp = _release(hub, chunk_id, epoch=0, route_token=token)
 
     assert resp.status_code == 409, resp.text
+    assert resp.headers["content-type"] == "application/problem+json"
+    body = ReleaseProblem.model_validate(resp.json())
+    assert body.type == RELEASE_REFUSAL
+    assert resp.json()["chunk_id"] == chunk_id
+    assert body.instance == f"/api/fleet/chunks/{chunk_id}/release"
     assert resp.json()["reason"] == "stale"
     assert _status(hub, chunk_id) == "running"
 
@@ -108,6 +116,8 @@ def test_a_caller_not_holding_the_route_is_refused_403(tmp_path: Path) -> None:
     resp = _release(hub, chunk_id, route_token=token, runner_id="r2")
 
     assert resp.status_code == 403, resp.text
+    assert resp.headers["content-type"] == "application/problem+json"
+    assert RouteNotHeldProblem.model_validate(resp.json()).type == ROUTE_NOT_HELD
     assert _status(hub, chunk_id) == "running"
 
 
@@ -119,13 +129,18 @@ def test_a_reason_outside_its_bounds_is_refused_422(tmp_path: Path, reason: str)
     resp = _release(hub, chunk_id, route_token=token, reason=reason)
 
     assert resp.status_code == 422, resp.text
+    assert resp.headers["content-type"] == "application/json"
     assert _status(hub, chunk_id) == "running"
 
 
 def test_an_unknown_chunk_is_404(tmp_path: Path) -> None:
     hub = build_hub(tmp_path)
 
-    assert _release(hub, "ch_nope", route_token=None).status_code == 404
+    resp = _release(hub, "ch_nope", route_token=None)
+    assert resp.status_code == 404
+    assert resp.headers["content-type"] == "application/problem+json"
+    assert resp.json()["type"] == CHUNK_NOT_FOUND
+    assert resp.json()["detail"] == "unknown chunk ch_nope"
 
 
 def test_a_mismatched_route_token_is_refused_403_under_enforce(tmp_path: Path) -> None:

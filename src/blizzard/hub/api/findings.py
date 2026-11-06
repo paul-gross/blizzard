@@ -10,15 +10,18 @@ from __future__ import annotations
 
 from collections.abc import Callable, Generator
 from contextlib import contextmanager
+from functools import partial
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 
 from blizzard.foundation.findings import FindingFactKind, FindingState
 from blizzard.foundation.store.utc import iso_utc
+from blizzard.hub.api import problems
 from blizzard.hub.api.auth import reject_runner_principal
 from blizzard.hub.api.auth_session import require, tenant_bound
 from blizzard.hub.api.deps import Services
+from blizzard.hub.api.problem_exceptions import ProblemHTTPException
 from blizzard.hub.api.project_label_fields import ProjectLabelFields
 from blizzard.hub.api.project_labels import ProjectLabels
 from blizzard.hub.api.project_params import PathProject, QueryProject, project_of_call
@@ -151,7 +154,7 @@ def _page(
             limit=limit,
         )
     except MalformedCursor as exc:
-        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail="malformed cursor") from exc
+        raise ProblemHTTPException(partial(problems.malformed_cursor_problem, exc)) from exc
     labels = ProjectLabels.read(services, (f.project_id for f in page.findings))
     return FindingsPageView(
         findings=[finding_view(f, labels.fields(f.project_id)) for f in page.findings], next_cursor=page.next_cursor

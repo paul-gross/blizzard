@@ -32,7 +32,15 @@ def test_missing_token_is_rejected_on_a_fleet_verb_under_every_configuration(tmp
     hub = build_hub(tmp_path, auth_mode=auth_mode)
     assert hub.app is not None
     resp = TestClient(hub.app).get("/api/fleet/queue/peek")
-    assert (resp.status_code, resp.json()) == (401, {"detail": "missing or malformed Authorization header"})
+    assert resp.status_code == 401
+    assert resp.headers["content-type"] == "application/problem+json"
+    assert resp.json() == {
+        "type": "urn:blizzard:problem:authentication-required",
+        "title": "Authentication required",
+        "detail": "missing or malformed Authorization header",
+        "instance": "/api/fleet/queue/peek",
+        "status": 401,
+    }
 
 
 # The same token is rejected on an operator verb — not anonymous-plus-credential
@@ -117,7 +125,9 @@ def test_a_runner_verb_on_a_path_naming_another_runner_is_refused_403(tmp_path: 
     resp = getattr(hub.client, method)(path, headers=bearer(token))
 
     assert resp.status_code == 403, resp.text
-    assert resp.json() == {"detail": "token belongs to runner 'runner-a', not 'runner-b'"}
+    assert resp.json()["detail"] == "token belongs to runner 'runner-a', not 'runner-b'"
+    if method == "get":
+        assert resp.json()["type"] == "urn:blizzard:problem:runner-ownership"
 
 
 # No fleet route reachable at its old anonymous path

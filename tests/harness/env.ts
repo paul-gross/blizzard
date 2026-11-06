@@ -52,9 +52,9 @@ export function runId(): string {
   return id;
 }
 
-/** `.run/<run-id>/`, where this run's daemons, logs, and hub coordinates live. */
+/** `.run/<run-id>/` under lease scratch when supplied, otherwise the tests directory. */
 export function runDir(): string {
-  return path.join(TESTS_ROOT, '.run', runId());
+  return path.join(process.env.BLIZZARD_TMPDIR ?? TESTS_ROOT, '.run', runId());
 }
 
 /**

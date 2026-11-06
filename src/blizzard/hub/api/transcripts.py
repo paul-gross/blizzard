@@ -7,14 +7,17 @@ route answers anything. Gated on :attr:`~blizzard.hub.auth.permissions.Permissio
 from __future__ import annotations
 
 import json
+from functools import partial
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import TypeAdapter
 
 from blizzard.foundation.store.utc import iso_utc
+from blizzard.hub.api import problems
 from blizzard.hub.api.auth import reject_runner_principal
 from blizzard.hub.api.auth_session import require, tenant_bound
 from blizzard.hub.api.deps import Services
+from blizzard.hub.api.problem_exceptions import ProblemHTTPException
 from blizzard.hub.auth.permissions import Permission
 from blizzard.hub.domain.observability.transcripts import (
     SegmentRecordContent,
@@ -138,7 +141,7 @@ def lease_content_view(
 def list_transcript_segments(chunk_id: str, services: Services) -> TranscriptSegmentIndexView:
     """The chunk's segment index — metadata and byte counts only, never turns."""
     if services.chunks.record.get(chunk_id) is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"unknown chunk {chunk_id}")
+        raise ProblemHTTPException(partial(problems.chunk_not_found_problem, chunk_id))
     rows = services.transcripts.segments_for_chunk(chunk_id)
     return TranscriptSegmentIndexView(chunk_id=chunk_id, segments=[_index_entry(row) for row in rows])
 
@@ -152,7 +155,7 @@ def get_transcript_segment(chunk_id: str, segment_id: str, services: Services) -
     """One segment's decompressed turns, concatenated across its stored records in
     turn-range order — the lazy per-segment content read."""
     if services.chunks.record.get(chunk_id) is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"unknown chunk {chunk_id}")
+        raise ProblemHTTPException(partial(problems.chunk_not_found_problem, chunk_id))
     records = services.transcripts.records_for_segment(chunk_id, segment_id)
     if not records:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"unknown segment {segment_id}")

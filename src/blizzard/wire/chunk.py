@@ -4,7 +4,7 @@ results; and the pass-through work items."""
 
 from __future__ import annotations
 
-from typing import Annotated
+from typing import Annotated, Literal
 
 from pydantic import BaseModel, Field
 
@@ -18,9 +18,34 @@ from blizzard.foundation.work_items import WorkItemPriority
 from blizzard.wire.base import WireModel
 from blizzard.wire.decision import DecisionView
 from blizzard.wire.flow import ChunkFlowPlaceView, FlowFactView
+from blizzard.wire.problem import ProblemDetails
 from blizzard.wire.question import QuestionView
 from blizzard.wire.vocabulary import OPEN
 from blizzard.wire.work_source import WorkItemAuthorView
+
+
+class ChunkNotFoundProblem(ProblemDetails[Literal["urn:blizzard:problem:chunk-not-found"]]):
+    """The named chunk does not exist in the tenant."""
+
+
+class ChunkNotPausableProblem(ProblemDetails[Literal["urn:blizzard:problem:chunk-not-pausable"]]):
+    """The chunk cannot be paused in its current state."""
+
+
+class NoCurrentNodeProblem(ProblemDetails[Literal["urn:blizzard:problem:no-current-node"]]):
+    """The chunk has no current node from which to build an envelope."""
+
+
+class NoRunContextProblem(ProblemDetails[Literal["urn:blizzard:problem:no-run-context"]]):
+    """The chunk has no routine-run context."""
+
+
+class NoAnsweredProposalProblem(ProblemDetails[Literal["urn:blizzard:problem:no-answered-proposal"]]):
+    """The chunk answers no accepted, minted garden proposal."""
+
+
+class FindingNotInChunkProblem(ProblemDetails[Literal["urn:blizzard:problem:finding-not-in-chunk"]]):
+    """The finding is outside the set answered by the chunk."""
 
 
 class WorkRefModel(BaseModel):

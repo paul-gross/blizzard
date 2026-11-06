@@ -8,6 +8,8 @@ import httpx2
 import pytest
 
 from blizzard.hub.domain.runners.version_window import VersionWindow
+from blizzard.wire.problem import RUNNER_VERSION
+from blizzard.wire.runner import RunnerVersionProblem
 from tests.support.scaffolding import HubHarness, build_hub, seed_runner
 
 _WINDOW = VersionWindow(floor="0.2")
@@ -39,6 +41,10 @@ def test_a_runner_below_the_floor_is_refused_too_old_naming_both_versions_and_th
 
     assert resp.status_code == 409, resp.text
     body = resp.json()
+    assert resp.headers["content-type"] == "application/problem+json"
+    assert RunnerVersionProblem.model_validate(body).type == RUNNER_VERSION
+    assert body["instance"] == "/api/fleet/runners"
+    assert body["status"] == 409
     assert body["reason"] == "too-old"
     assert body["runner_version"] == "0.1.4"
     assert body["hub_version"] == "0.3"

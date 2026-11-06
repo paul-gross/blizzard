@@ -20,16 +20,19 @@ from __future__ import annotations
 
 from collections.abc import Callable
 from dataclasses import dataclass
+from functools import partial
 from typing import Annotated
 
 import structlog
 from fastapi import Depends, HTTPException, Request, status
 from fastapi.responses import JSONResponse
 from fastapi.routing import APIRoute
+from pydantic import BaseModel
 
 from blizzard.auth_core import Role
 from blizzard.foundation.platform_tracing.attributes import Caller, annotate_caller, annotate_tenant
 from blizzard.foundation.roles import collaborator
+from blizzard.hub.api import problems
 from blizzard.hub.api.auth import (
     UNRESOLVED_RUNNER_TOKEN,
     HostAuth,
@@ -40,12 +43,21 @@ from blizzard.hub.api.auth import (
 )
 from blizzard.hub.api.bearer import presented_bearer
 from blizzard.hub.api.hub_level import Hub, hub_services
+from blizzard.hub.api.problem_declarations import BOOTSTRAP_DEPENDENCY_DECLARATIONS, FLEET_DEPENDENCY_DECLARATIONS
+from blizzard.hub.api.problem_exceptions import ProblemHTTPException
+from blizzard.hub.api.problem_rendering import problem_response
+from blizzard.hub.api.problems import (
+    authentication_unresolved_problem,
+    tenant_not_found_problem,
+)
 from blizzard.hub.auth.hashing import SessionId
 from blizzard.hub.auth.models import ResolvedIdentity
 from blizzard.hub.auth.permissions import HUB_PERMISSIONS, Permission, permissions_for
 from blizzard.hub.composition import HubServices, TenantServices
 from blizzard.hub.config import AUTH_MODE_NONE
 from blizzard.hub.tenancy import StoreScope, TenantClosed, TenantId, UnknownTenant
+from blizzard.wire.auth import AuthenticationUnresolvedProblem
+from blizzard.wire.tenant import TenantNotFoundProblem
 
 SESSION_COOKIE_NAME = "bz_session"
 
@@ -174,10 +186,7 @@ def resolve_tenant(request: Request, hub: Hub) -> TenantRequest:
     credential = _machine_credential(request, hub)
     if credential is not None:
         if named is not None and named != credential.tenant_id:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail=f"{TENANT_HEADER} names a tenant other than the presented credential's",
-            )
+            raise ProblemHTTPException(problems.tenant_credential_mismatch_problem)
         return _served(hub, credential.tenant_id, credential)
     if request.app.state.config.auth.mode == AUTH_MODE_NONE:
         tenant = named if named is not None else hub.tenants.open_tenants.only()
@@ -186,7 +195,7 @@ def resolve_tenant(request: Request, hub: Hub) -> TenantRequest:
         return _served(hub, tenant, implicit_operator(tenant))
     identity = resolve_identity(request, hub)
     if identity is None:
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="authentication required")
+        raise ProblemHTTPException(partial(problems.authentication_required_problem, detail="authentication required"))
     if named is not None:
         role = hub.memberships.role_in(named, identity.user_id)
         if role is None:
@@ -290,7 +299,7 @@ def _served(hub: HubServices, tenant: TenantId, identity: Principal) -> TenantRe
 
 
 def _no_such_tenant() -> HTTPException:
-    return HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=_NO_SUCH_TENANT)
+    return ProblemHTTPException(problems.tenant_not_found_problem)
 
 
 def refuse_closed_tenant(request: Request, exc: Exception) -> JSONResponse:
@@ -299,15 +308,26 @@ def refuse_closed_tenant(request: Request, exc: Exception) -> JSONResponse:
     ``401`` to the runner whose token resolved it, the ``404`` of a tenant that does not exist to anyone else."""
     assert isinstance(exc, TenantClosed | UnknownTenant)
     if resolved_runner(request) is not None:
+        if _declares_closed_tenant_problem(request, AuthenticationUnresolvedProblem):
+            return problem_response(
+                authentication_unresolved_problem(instance=request.url.path, detail=UNRESOLVED_RUNNER_TOKEN),
+            )
         return JSONResponse(status_code=status.HTTP_401_UNAUTHORIZED, content={"detail": UNRESOLVED_RUNNER_TOKEN})
+    if _declares_closed_tenant_problem(request, TenantNotFoundProblem):
+        return problem_response(tenant_not_found_problem(instance=request.url.path))
     return JSONResponse(status_code=status.HTTP_404_NOT_FOUND, content={"detail": _NO_SUCH_TENANT})
 
 
-def _tenant_required() -> HTTPException:
-    return HTTPException(
-        status_code=status.HTTP_409_CONFLICT,
-        detail={"code": "tenant_required", "message": f"name the tenant to act in with {TENANT_HEADER}"},
+def _declares_closed_tenant_problem(request: Request, model: type[BaseModel]) -> bool:
+    route = request.scope.get("route")
+    return isinstance(route, APIRoute) and any(
+        declaration.method == request.method and declaration.path == route.path and declaration.model is model
+        for declaration in (*FLEET_DEPENDENCY_DECLARATIONS, *BOOTSTRAP_DEPENDENCY_DECLARATIONS)
     )
+
+
+def _tenant_required() -> HTTPException:
+    return ProblemHTTPException(problems.tenant_required_problem)
 
 
 def _caller_of(request: Request) -> Caller:
@@ -321,10 +341,10 @@ def granted(request: Request, tenant: TenantRequest, permission: Permission) -> 
     person without it and for a machine credential, which no permission gate admits."""
     identity = tenant.identity
     if not isinstance(identity, ResolvedIdentity):
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="a machine credential is not valid here")
+        raise ProblemHTTPException(problems.machine_credential_forbidden_problem)
     annotate_caller(_caller_of(request))
     if permission not in identity.permissions:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=f"missing permission {permission!r}")
+        raise ProblemHTTPException(partial(problems.permission_required_problem, permission))
     return identity
 
 
@@ -363,10 +383,12 @@ def require_hub(permission: Permission) -> Callable[..., ResolvedIdentity]:
             return implicit_operator(None)
         identity = resolve_identity(request, hub_services(request))
         if identity is None:
-            raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="authentication required")
+            raise ProblemHTTPException(
+                partial(problems.authentication_required_problem, detail="authentication required")
+            )
         annotate_caller(PresentedSession(request).caller())
         if permission not in identity.permissions:
-            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=f"missing permission {permission!r}")
+            raise ProblemHTTPException(partial(problems.permission_required_problem, permission))
         return identity
 
     return _hub_dependency

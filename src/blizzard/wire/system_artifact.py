@@ -3,7 +3,15 @@ documents, scoped under ``ArtifactScope.SYSTEM``."""
 
 from __future__ import annotations
 
+from typing import Literal
+
 from pydantic import BaseModel
+
+from blizzard.wire.problem import ProblemDetails
+
+
+class SystemArtifactNotFoundProblem(ProblemDetails[Literal["urn:blizzard:problem:system-artifact-not-found"]]):
+    """The named system artifact is not published."""
 
 
 class SystemArtifactView(BaseModel):

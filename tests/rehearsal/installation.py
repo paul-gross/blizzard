@@ -176,8 +176,12 @@ class Host:
         log, listening = self.dir / "daemon.log", self.dir / LISTENING_FILE
         env = runner_spawn_env(hub_url, {"BZ_RUNNER_TICK_SECONDS": "0.3", FENCE_VAR: "1"}, base=installation.env())
         port_args, publishes = _port_args(installation, "blizzard-runner", listening, self.port)
+        command = [str(installation.bin_dir / "blizzard-runner"), "host", "--dir", str(self.dir), *port_args]
+        if len(str(self.dir.resolve() / "host.sock")) > 107:
+            command = [str(installation.bin_dir / "python"), "-I", str(Path(__file__).with_name("host_entry.py")),
+                       str(self.dir), "host", "--dir", str(self.dir), *port_args]  # fmt: skip
         self.proc = subprocess.Popen(
-            [str(installation.bin_dir / "blizzard-runner"), "host", "--dir", str(self.dir), *port_args],
+            command,
             env=env, stdout=daemon_log_sink(log), stderr=subprocess.STDOUT, text=True,
         )  # fmt: skip
         if publishes:

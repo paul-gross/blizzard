@@ -13,7 +13,7 @@ import importlib
 import json
 from collections.abc import Iterable, Iterator
 from pathlib import Path
-from typing import Annotated, Any, Literal, get_args, get_origin
+from typing import Annotated, Any, Literal, cast, get_args, get_origin
 
 import pytest
 from pydantic import BaseModel
@@ -57,6 +57,29 @@ def _document_roles(documents: Iterable[dict[str, object]]) -> tuple[set[str], s
                 responses.add(name)
             if "request" in roles:
                 requests.add(name)
+        paths = cast(dict[str, dict[str, Any]], document.get("paths", {}))
+        for path in paths.values():
+            for operation in path.values():
+                if not isinstance(operation, dict):
+                    continue
+                typed_op = cast(dict[str, Any], operation)
+                bodies: list[tuple[str, dict[str, Any]]] = [("request", typed_op.get("requestBody", {}))]
+                bodies.extend(("response", body) for body in typed_op.get("responses", {}).values())
+                for role, body in bodies:
+                    for media in body.get("content", {}).values():
+                        schema = media.get("schema")
+                        if schema is None:
+                            continue
+                        content = {"application/json": {"schema": schema}}
+                        op = (
+                            {"requestBody": {"content": content}}
+                            if role == "request"
+                            else {"responses": {"200": {"content": content}}}
+                        )
+                        single = {"paths": {"/": {"get": op}}, "components": document.get("components", {})}
+                        names = reachable_schemas(single, is_any_operation)
+                        target = requests if role == "request" else responses
+                        target.update(_component_class_name(name) for name in names)
     return responses, requests
 
 
@@ -310,6 +333,15 @@ def test_a_bare_vocabulary_on_a_documented_response_is_caught() -> None:
     assert _violations_of([_document(responses=["_PlantedView"])]) == [
         "_PlantedView.shade: response vocabulary neither open nor declared closed"
     ]
+
+
+def test_problem_response_vocabulary_is_caught() -> None:
+    document: dict[str, Any] = _document(responses=["_PlantedView"])
+    operation = document["paths"]["/_PlantedView"]["get"]
+    operation["responses"]["409"] = operation["responses"].pop("200")
+    content = operation["responses"]["409"]["content"]
+    content["application/problem+json"] = content.pop("application/json")
+    assert _violations_of([document]) == ["_PlantedView.shade: response vocabulary neither open nor declared closed"]
 
 
 def test_a_model_nested_in_a_documented_response_is_held_too() -> None:

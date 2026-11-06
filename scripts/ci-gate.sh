@@ -52,6 +52,9 @@ mise run playwright-check
 step "pytest (unit + component tiers, parallel)"
 uv run pytest -n auto
 
+step "runner refusal aggregate coverage census"
+uv run python -m tests.support.aggregate_census
+
 # --- OpenAPI spec drift (bzh:generated-client, the Python half) --------------
 # Regenerate the committed specs and fail on any difference. The frontend's
 # openapi-ts client is generated from these; keeping them exact is what makes

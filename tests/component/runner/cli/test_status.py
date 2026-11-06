@@ -50,6 +50,8 @@ from tests.support.runner_fakes import SqlAlchemyRunnerStore
 from tests.support.runner_mint import new_mint
 from tests.support.worker_http import Bound, bind_local_only
 
+pytestmark = pytest.mark.usefixtures("short_host_sockets")
+
 
 def _configure_runner_id(root: Path, runner_id: str) -> None:
     """Point the host file's runner at ``runner_id``, as an operator renames the hub id a runner is configured with."""
@@ -561,9 +563,9 @@ def test_status_of_a_host_that_built_no_runner_prints_why_each_one_was_left_unbu
     root = init_runner_home(tmp_path)
     _edit_host_file(root, 'subscription = "anthropic"', 'subscription = "missing"')
     bound = _no_hub()
-    with _serve_host_of_halted_runners(root):
+    with _serve_host_of_halted_runners(root) as socket_path:
         result = bound.runner.invoke(runner_group, ["status", "--dir", str(root)])
-        health = httpx2.Client(transport=httpx2.HTTPTransport(uds=str(root / "host.sock")), base_url="http://host")
+        health = httpx2.Client(transport=httpx2.HTTPTransport(uds=str(socket_path)), base_url="http://host")
         served = health.get("/api/health").status_code
 
     assert served == 200  # the host serves while its only runner is halted

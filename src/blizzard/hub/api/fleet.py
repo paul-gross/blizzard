@@ -10,6 +10,7 @@ from __future__ import annotations
 from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import datetime
+from functools import partial
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response, status
@@ -17,10 +18,9 @@ from fastapi.responses import JSONResponse
 
 from blizzard.foundation.claim_denials import ClaimDenialReason
 from blizzard.foundation.logging import get_logger
-from blizzard.foundation.release_refusals import ReleaseRefusalReason
 from blizzard.foundation.roles import dto
 from blizzard.foundation.store.utc import as_utc
-from blizzard.hub.api import chunk_events, node_steps
+from blizzard.hub.api import chunk_events, node_steps, problems
 from blizzard.hub.api import chunk_statuses as chunk_statuses_api
 from blizzard.hub.api import chunks as chunks_api
 from blizzard.hub.api import questions as questions_api
@@ -44,6 +44,8 @@ from blizzard.hub.api.deps import Services
 from blizzard.hub.api.findings import finding_view
 from blizzard.hub.api.garden_proposals import garden_proposal_view
 from blizzard.hub.api.ingest_broadcast import IngestBroadcast, pushed_facts
+from blizzard.hub.api.problem_exceptions import ProblemHTTPException
+from blizzard.hub.api.problem_rendering import problem_response
 from blizzard.hub.api.project_labels import ProjectLabels
 from blizzard.hub.api.project_params import QueryProject
 from blizzard.hub.api.scopes import scope_view
@@ -69,7 +71,7 @@ from blizzard.hub.domain.execution.claim import (
 )
 from blizzard.hub.domain.execution.completion import MigrationTargets
 from blizzard.hub.domain.execution.envelope import Envelope, NoCurrentNode
-from blizzard.hub.domain.execution.release import ReleaseRefusalKind, ReleaseRefused
+from blizzard.hub.domain.execution.release import ReleaseRefused
 from blizzard.hub.domain.execution.submissions import Completion
 from blizzard.hub.domain.garden.proposals.model import RoutineProposalState
 from blizzard.hub.domain.garden.run_context import RunContext
@@ -110,21 +112,15 @@ from blizzard.wire.fleet import FleetSummaryView
 from blizzard.wire.garden_proposal import GardenProposalsPageView, GardenProposalView
 from blizzard.wire.question import QuestionView
 from blizzard.wire.queue import QueuePeekRequest, QueuePeekResponse
-from blizzard.wire.release import ReleaseRefusal, ReleaseRequest, ReleaseResponse
+from blizzard.wire.release import ReleaseRequest, ReleaseResponse
 from blizzard.wire.route import (
     RouteClaim,
-    RouteClaimConflict,
-    RouteClaimDependencyDenial,
-    RouteClaimIncompatibleDenial,
-    RouteClaimPausedDenial,
     RouteClaimResponse,
-    RouteClaimTerminalDenial,
     RouteTokenRekeyResponse,
 )
 from blizzard.wire.runner import (
     RunnerRegistrationRequest,
     RunnerRegistrationResponse,
-    RunnerVersionRefusal,
     RunnerView,
     VersionWindowView,
 )
@@ -199,9 +195,8 @@ class FleetRequest:
         if self.principal.runner_id == runner_id:
             return
         _log.warning("runner_id mismatch", declared_runner_id=runner_id, token_runner_id=self.principal.runner_id)
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail=f"token belongs to runner {self.principal.runner_id!r}, not {runner_id!r}",
+        raise ProblemHTTPException(
+            partial(problems.runner_ownership_problem, caller_id=self.principal.runner_id, runner_id=runner_id)
         )
 
 
@@ -218,7 +213,7 @@ def _demand_lease_owner(principal: RunnerPrincipal, owning_runner_id: str | None
             owning_runner_id=exc.owning_runner_id,
             requesting_runner_id=exc.requesting_runner_id,
         )
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(exc)) from exc
+        raise ProblemHTTPException(partial(problems.lease_ownership_problem, exc)) from exc
 
 
 def _migration_targets(
@@ -284,9 +279,18 @@ def list_system_artifacts_route(services: Services) -> list[SystemArtifactView]:
 
 
 @router.get("/system-artifacts/{name:path}", response_model=SystemArtifactView)
-def get_system_artifact_route(name: str, services: Services) -> SystemArtifactView:
+def get_system_artifact_route(
+    name: str, services: Services, http_request: Request
+) -> SystemArtifactView | JSONResponse:
     """One published system artifact by its slash-bearing name; ``404`` unknown."""
-    return system_artifacts_api.get_system_artifact(name, services.system_artifacts)
+    try:
+        return system_artifacts_api.get_system_artifact(name, services.system_artifacts)
+    except HTTPException as exc:
+        if exc.status_code != status.HTTP_404_NOT_FOUND:
+            raise
+        return problem_response(
+            problems.system_artifact_not_found_problem(name, instance=http_request.url.path),
+        )
 
 
 @router.get("/chunks/{chunk_id}", response_model=ChunkDetail)
@@ -351,7 +355,7 @@ def get_question(question_id: str, services: Services) -> QuestionView:
     """The runner's answer poll before it resumes the dormant session."""
     row = services.chunks.questions.get_question(question_id)
     if row is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"unknown question {question_id}")
+        raise ProblemHTTPException(partial(problems.question_not_found_problem, question_id))
     labels = ProjectLabels.read(services, [row.project_id])
     facts = ChunkFacts.or_default(services.chunks.facts.load_facts(row.chunk_id))
     return questions_api.question_view(
@@ -367,17 +371,17 @@ def get_envelope(chunk_id: str, services: Services) -> NodeEnvelope:
     """The chunk's current node envelope, idempotent — the lost-apply re-read."""
     chunk = services.chunks.record.get(chunk_id)
     if chunk is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"unknown chunk {chunk_id}")
+        raise ProblemHTTPException(partial(problems.chunk_not_found_problem, chunk_id))
     graph = services.graphs.get(chunk.graph_id)
     if graph is None:
-        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="chunk's pinned graph is missing")
+        raise ProblemHTTPException(problems.pinned_graph_missing_problem)
     facts = ChunkFacts.or_default(services.chunks.facts.load_facts(chunk_id))
     try:
         envelope = Envelope.current(
             chunk, graph, facts, services.chunks.artifacts.load_artifacts(chunk_id), label=services.work_ref_label
         )
     except NoCurrentNode as exc:
-        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
+        raise ProblemHTTPException(partial(problems.no_current_node_problem, exc)) from exc
     return node_steps.node_envelope(envelope)
 
 
@@ -388,10 +392,10 @@ def check_artifact(chunk_id: str, body: ArtifactCheckRequest, services: Services
     ``4xx`` here is a failed request, never a refusal. 404 for an unknown chunk."""
     chunk = services.chunks.record.get(chunk_id)
     if chunk is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"unknown chunk {chunk_id}")
+        raise ProblemHTTPException(partial(problems.chunk_not_found_problem, chunk_id))
     graph = services.graphs.get(chunk.graph_id)
     if graph is None:
-        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="chunk's pinned graph is missing")
+        raise ProblemHTTPException(problems.pinned_graph_missing_problem)
     return ArtifactCheckResponse(refusal=services.garden_stage_check.refusal(graph, body.name, body.content))
 
 
@@ -401,13 +405,10 @@ def _routine_run_or_404(chunk_id: str, services: TenantServices) -> RunContext:
     chunk's :class:`RunContext`."""
     chunk = services.chunks.record.get(chunk_id)
     if chunk is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"unknown chunk {chunk_id}")
+        raise ProblemHTTPException(partial(problems.chunk_not_found_problem, chunk_id))
     run = services.run_context.for_chunk(chunk)
     if run is None:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"chunk {chunk_id} carries no run context — not a routine run",
-        )
+        raise ProblemHTTPException(partial(problems.no_run_context_problem, chunk_id))
     return run
 
 
@@ -463,7 +464,7 @@ def get_garden_proposals_page(
             run.project_id, run.routine_name, state=state, cursor=cursor, limit=limit
         )
     except MalformedCursor as exc:
-        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail="malformed cursor") from exc
+        raise ProblemHTTPException(partial(problems.malformed_cursor_problem, exc)) from exc
     return GardenProposalsPageView(
         proposals=[garden_proposal_view(p, closure, labels) for p, closure in pairs], next_cursor=next_cursor
     )
@@ -575,7 +576,9 @@ def get_chunk_analytics_spend_graphs(
 
 
 @router.get("/scopes", response_model=list[ScopeView])
-def get_scopes(services: Services, chunk_id: Annotated[str | None, Query()] = None) -> list[ScopeView]:
+def get_scopes(
+    services: Services, http_request: Request, chunk_id: Annotated[str | None, Query()] = None
+) -> list[ScopeView] | JSONResponse:
     """Every scope, newest first, each marked retired or not — the
     deployment's scope vocabulary; with `chunk_id`, only the scopes of that chunk's project, the vocabulary a
     worker on that chunk may name. 404 on an unknown chunk."""
@@ -583,7 +586,7 @@ def get_scopes(services: Services, chunk_id: Annotated[str | None, Query()] = No
     if chunk_id is not None:
         chunk = services.chunks.record.get(chunk_id)
         if chunk is None:
-            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"unknown chunk {chunk_id}")
+            return problem_response(problems.chunk_not_found_problem(chunk_id, instance=http_request.url.path))
         project_id = chunk.require_project()
     scopes = services.scopes.list_all(project_id)
     labels = ProjectLabels.read(services, (s.project_id for s in scopes))
@@ -593,13 +596,10 @@ def get_scopes(services: Services, chunk_id: Annotated[str | None, Query()] = No
 def _answered_findings_or_404(chunk_id: str, services: TenantServices) -> list[FindingView]:
     chunk = services.chunks.record.get(chunk_id)
     if chunk is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"unknown chunk {chunk_id}")
+        raise ProblemHTTPException(partial(problems.chunk_not_found_problem, chunk_id))
     findings = services.answered_findings.resolve_for_chunk(chunk)
     if findings is None:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"chunk {chunk_id} answers no accepted, minted garden proposal",
-        )
+        raise ProblemHTTPException(partial(problems.no_answered_proposal_problem, chunk_id))
     labels = ProjectLabels.read(services, (f.project_id for f in findings))
     return [finding_view(f, labels.fields(f.project_id)) for f in findings]
 
@@ -621,10 +621,7 @@ def get_chunk_finding(chunk_id: str, finding_id: str, services: Services) -> Fin
     for finding in _answered_findings_or_404(chunk_id, services):
         if finding.finding_id == finding_id:
             return finding
-    raise HTTPException(
-        status_code=status.HTTP_404_NOT_FOUND,
-        detail=f"finding {finding_id} is not among the findings chunk {chunk_id} answers",
-    )
+    raise ProblemHTTPException(partial(problems.finding_not_in_chunk_problem, chunk_id, finding_id))
 
 
 @router.post("/chunks/{chunk_id}/hub-advance", response_model=HubAdvanceResponse)
@@ -636,10 +633,10 @@ def hub_advance(
     flows it holds — ``detail`` names it. The call never takes a pass itself: ``ran`` is always false."""
     chunk = services.chunks.record.get(chunk_id)
     if chunk is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"unknown chunk {chunk_id}")
+        raise ProblemHTTPException(partial(problems.chunk_not_found_problem, chunk_id))
     graph = services.graphs.get(chunk.graph_id)
     if graph is None:
-        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="chunk's pinned graph is missing")
+        raise ProblemHTTPException(problems.pinned_graph_missing_problem)
     facts = services.chunks.facts.load_facts(chunk_id) or ChunkFacts(minted=True)
     node = facts.hub_advance_node(graph)
     if node is None:
@@ -673,26 +670,10 @@ def _flow_namer(services: TenantServices) -> Callable[[Flow], str]:
     return name
 
 
-def _incompatible_denial(
-    services: TenantServices, chunk_id: str, exc: ClaimDeniedIncompatible
-) -> RouteClaimIncompatibleDenial:
-    """The incompatible-claim body: a capability refusal keeps its standing ``detail``; a project refusal's
-    ``detail`` names the chunk's project by its slug as it stands."""
-    if exc.reason is not ClaimDenialReason.PROJECT or exc.project_id is None:
-        return RouteClaimIncompatibleDenial(chunk_id=chunk_id, incompatible_runner_id=exc.runner_id)
-    project = services.projects.get(ProjectId(exc.project_id))
-    named = exc.project_id if project is None else project.slug
-    return RouteClaimIncompatibleDenial(
-        chunk_id=chunk_id,
-        incompatible_runner_id=exc.runner_id,
-        reason=ClaimDenialReason.PROJECT,
-        detail=f"runner does not serve the chunk's project {named}",
-    )
-
-
 @claim_router.post("/routes", response_model=RouteClaimResponse, status_code=status.HTTP_201_CREATED)
 def claim_route(
     claim: RouteClaim,
+    request: Request,
     services: Services,
     fleet: Annotated[FleetRequest, Depends(FleetRequest.of_even_if_retired)],
 ) -> object:
@@ -701,12 +682,13 @@ def claim_route(
     the runner does not serve, or incompatible with the runner's stored capabilities, else the first node
     envelope."""
     runner_id = fleet.caller_id()
+    instance = request.url.path
     chunk = services.chunks.record.get(claim.chunk_id)
     if chunk is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"unknown chunk {claim.chunk_id}")
+        return problem_response(problems.chunk_not_found_problem(claim.chunk_id, instance=instance))
     graph = services.graphs.get(chunk.graph_id)
     if graph is None:
-        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="chunk's pinned graph is missing")
+        return problem_response(problems.pinned_graph_missing_problem(instance=instance))
     change = chunk_events.ChunkChanged.before(services, chunk.chunk_id)
     try:
         result = services.claim.claim(
@@ -717,35 +699,35 @@ def claim_route(
             environment_ids=claim.environment_ids,
         )
     except RunnerRetired as exc:
-        retired_denial = RouteClaimPausedDenial(chunk_id=claim.chunk_id, runner_id=exc.runner_id, detail=str(exc))
-        return JSONResponse(status_code=status.HTTP_403_FORBIDDEN, content=retired_denial.model_dump())
+        return problem_response(problems.claim_runner_retired_problem(exc, chunk_id=claim.chunk_id, instance=instance))
     except ClaimDeniedPaused as exc:
-        denial = RouteClaimPausedDenial(chunk_id=claim.chunk_id, runner_id=exc.runner_id)
-        return JSONResponse(status_code=status.HTTP_403_FORBIDDEN, content=denial.model_dump())
+        return problem_response(problems.claim_paused_problem(exc, chunk_id=claim.chunk_id, instance=instance))
     except ClaimDeniedUnregistered as exc:
-        unregistered = RouteClaimPausedDenial(chunk_id=claim.chunk_id, runner_id=exc.runner_id, detail=str(exc))
-        return JSONResponse(status_code=status.HTTP_403_FORBIDDEN, content=unregistered.model_dump())
-    except ClaimDeniedVersionRefused as exc:
-        version_refused = RouteClaimPausedDenial(chunk_id=claim.chunk_id, runner_id=exc.runner_id, detail=str(exc))
-        return JSONResponse(status_code=status.HTTP_403_FORBIDDEN, content=version_refused.model_dump())
-    except ClaimDeniedTerminal as exc:
-        terminal_denial = RouteClaimTerminalDenial(chunk_id=claim.chunk_id, status=exc.status.value)
-        return JSONResponse(status_code=status.HTTP_409_CONFLICT, content=terminal_denial.model_dump())
-    except ClaimDeniedNotReady as exc:
-        # The status-carrying 409 shape: a runner skips the chunk as it does an ended one.
-        not_ready_denial = RouteClaimTerminalDenial(chunk_id=claim.chunk_id, status=exc.status.value, detail=str(exc))
-        return JSONResponse(status_code=status.HTTP_409_CONFLICT, content=not_ready_denial.model_dump())
-    except ClaimDeniedDependency as exc:
-        dependency_denial = RouteClaimDependencyDenial(
-            chunk_id=claim.chunk_id, prerequisite_chunk_id=exc.prerequisite_chunk_id
+        return problem_response(
+            problems.claim_runner_unregistered_problem(exc, chunk_id=claim.chunk_id, instance=instance)
         )
-        return JSONResponse(status_code=status.HTTP_409_CONFLICT, content=dependency_denial.model_dump())
+    except ClaimDeniedVersionRefused as exc:
+        return problem_response(problems.claim_runner_version_problem(exc, chunk_id=claim.chunk_id, instance=instance))
+    except ClaimDeniedTerminal as exc:
+        return problem_response(problems.claim_terminal_problem(exc, instance=instance), status_code=409)
+    except ClaimDeniedNotReady as exc:
+        return problem_response(problems.claim_not_ready_problem(exc, instance=instance), status_code=409)
+    except ClaimDeniedDependency as exc:
+        return problem_response(problems.claim_dependency_problem(exc, instance=instance), status_code=409)
     except ClaimDeniedIncompatible as exc:
-        incompatible_denial = _incompatible_denial(services, claim.chunk_id, exc)
-        return JSONResponse(status_code=status.HTTP_409_CONFLICT, content=incompatible_denial.model_dump())
+        project = (
+            services.projects.get(ProjectId(exc.project_id))
+            if exc.reason is ClaimDenialReason.PROJECT and exc.project_id is not None
+            else None
+        )
+        denial = problems.claim_incompatible_problem(
+            exc, instance=instance, project_name=project.slug if project else None
+        )
+        return problem_response(denial, status_code=409)
     except ClaimConflict as exc:
-        conflict = RouteClaimConflict(chunk_id=claim.chunk_id, held_by_runner_id=exc.held_by_runner_id)
-        return JSONResponse(status_code=status.HTTP_409_CONFLICT, content=conflict.model_dump())
+        return problem_response(
+            problems.claim_conflict_problem(exc, chunk_id=claim.chunk_id, instance=instance), status_code=409
+        )
     change.publish(cause="claimed", status="running", key=f"route_created:{result.route_id}")
     services.events.publish_queue_changed()  # the claim removed the chunk from the ready queue
     return RouteClaimResponse(
@@ -761,44 +743,46 @@ def claim_route(
 @router.post("/chunks/{chunk_id}/route-token", response_model=RouteTokenRekeyResponse)
 def rekey_route_token(
     chunk_id: str,
+    http_request: Request,
     services: Services,
     fleet: Annotated[FleetRequest, Depends(FleetRequest.of)],
-) -> RouteTokenRekeyResponse:
+) -> RouteTokenRekeyResponse | JSONResponse:
     """Rotate the chunk's live route capability token — the lost-plaintext recovery for a
     claim whose response was never read back. Confined to the live route's own runner; this route
     presents no chunk-scoped ``route_token`` of its own, which is exactly what it is minting. 403
     when the route's runner is retired; 409 when the chunk has ended."""
     route = services.chunks.route.route_of(chunk_id)
     if route is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"chunk {chunk_id} has no live route")
-    fleet.assert_owns(route.runner_id)
+        exc = RekeyDeniedNotHolder(chunk_id=chunk_id, holder=None)
+        return problem_response(
+            problems.rekey_not_holder_problem(exc, caller_id=fleet.caller_id(), instance=http_request.url.path),
+        )
+    try:
+        fleet.assert_owns(route.runner_id)
+    except HTTPException:
+        exc = RekeyDeniedNotHolder(chunk_id=chunk_id, holder=route.runner_id)
+        return problem_response(
+            problems.rekey_not_holder_problem(exc, caller_id=fleet.caller_id(), instance=http_request.url.path),
+        )
     try:
         route_token = services.claim.rekey(route)
     except RekeyDeniedNotHolder as exc:
-        # The route moved after the pre-check: answer as the pre-check would have.
-        if exc.holder is None:
-            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
-        fleet.assert_owns(exc.holder)
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(exc)) from exc
+        return problem_response(
+            problems.rekey_not_holder_problem(exc, caller_id=fleet.caller_id(), instance=http_request.url.path),
+        )
     except RekeyDeniedTerminal as exc:
-        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
+        return problem_response(problems.rekey_terminal_problem(exc, instance=http_request.url.path))
     return RouteTokenRekeyResponse(chunk_id=chunk_id, route_token=route_token)
-
-
-_RELEASE_CONFLICT_REASONS = {
-    ReleaseRefusalKind.STALE: ReleaseRefusalReason.STALE,
-    ReleaseRefusalKind.NOT_RUNNING: ReleaseRefusalReason.NOT_RUNNING,
-}
 
 
 @router.post(
     "/chunks/{chunk_id}/release",
     response_model=ReleaseResponse,
-    responses={status.HTTP_409_CONFLICT: {"model": ReleaseRefusal}},
 )
 def release_chunk(
     chunk_id: str,
     request: ReleaseRequest,
+    http_request: Request,
     services: Services,
     fleet: Annotated[FleetRequest, Depends(FleetRequest.of)],
 ) -> object:
@@ -809,7 +793,7 @@ def release_chunk(
     runner_id = fleet.caller_id()
     chunk = services.chunks.record.get(chunk_id)
     if chunk is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"unknown chunk {chunk_id}")
+        return problem_response(problems.chunk_not_found_problem(chunk_id, instance=http_request.url.path))
     change = chunk_events.ChunkChanged.before(services, chunk_id)
     try:
         released_id = services.release.release(
@@ -821,11 +805,10 @@ def release_chunk(
             route_token_mode=fleet.route_token_mode,
         )
     except ReleaseRefused as exc:
-        reason = _RELEASE_CONFLICT_REASONS.get(exc.kind)
-        if reason is None:
-            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(exc)) from exc
-        refusal = ReleaseRefusal(chunk_id=chunk_id, reason=reason, detail=str(exc))
-        return JSONResponse(status_code=status.HTTP_409_CONFLICT, content=refusal.model_dump(mode="json"))
+        refusal = problems.release_problem(exc, instance=http_request.url.path)
+        if refusal is None:
+            return problem_response(problems.release_not_holder_problem(exc, instance=http_request.url.path))
+        return problem_response(refusal)
     change.publish(cause="released", key=f"route_released:{released_id}", released_by=runner_id, reason=request.reason)
     services.events.publish_queue_changed()  # a released chunk re-enters the ready queue
     return ReleaseResponse(chunk_id=chunk_id, released_id=released_id)
@@ -843,10 +826,10 @@ def submit_completion(
     runner_id = fleet.caller_id()
     chunk = services.chunks.record.get(chunk_id)
     if chunk is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"unknown chunk {chunk_id}")
+        raise ProblemHTTPException(partial(problems.chunk_not_found_problem, chunk_id))
     graph = services.graphs.get(chunk.graph_id)
     if graph is None:
-        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="chunk's pinned graph is missing")
+        raise ProblemHTTPException(problems.pinned_graph_missing_problem)
     completion = node_steps.completion_of(submission, runner_id=runner_id)
     targets = _migration_targets(services, chunk, graph, completion, follow_latest_default=fleet.follow_latest)
     change = chunk_events.ChunkChanged.before(services, chunk_id)
@@ -888,10 +871,10 @@ def submit_decision(
     runner_id = fleet.caller_id()
     chunk = services.chunks.record.get(chunk_id)
     if chunk is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"unknown chunk {chunk_id}")
+        raise ProblemHTTPException(partial(problems.chunk_not_found_problem, chunk_id))
     graph = services.graphs.get(chunk.graph_id)
     if graph is None:
-        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="chunk's pinned graph is missing")
+        raise ProblemHTTPException(problems.pinned_graph_missing_problem)
     change = chunk_events.ChunkChanged.before(services, chunk_id)
     result = services.decisions.submit(
         chunk,
@@ -982,10 +965,10 @@ def get_lease_transcript_segments(
     "/runners",
     response_model=RunnerRegistrationResponse,
     status_code=status.HTTP_201_CREATED,
-    responses={status.HTTP_409_CONFLICT: {"model": RunnerVersionRefusal}},
 )
 def register_runner(
     request: RunnerRegistrationRequest,
+    http_request: Request,
     services: Services,
     fleet: Annotated[FleetRequest, Depends(FleetRequest.of)],
 ) -> object:
@@ -998,7 +981,7 @@ def register_runner(
     runner_id = fleet.caller_id()
     registration = services.registry.get_runner(runner_id)
     if registration is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"unknown runner {runner_id}")
+        return problem_response(problems.runner_not_found_problem(runner_id, instance=http_request.url.path))
     capabilities = tuple(
         RunnerCapability(
             harness_id=c.harness_id,
@@ -1047,14 +1030,7 @@ def register_runner(
     except RunnerVersionRefused as exc:
         if exc.changed:
             services.events.publish_runner_changed(runner_id, kind="registered", runner_name=registration.name)
-        refusal = RunnerVersionRefusal(
-            reason=exc.refusal.reason,
-            runner_version=exc.judgement.reported_version,
-            hub_version=exc.judgement.hub_version,
-            floor=exc.judgement.floor,
-            detail=exc.refusal.detail,
-        )
-        return JSONResponse(status_code=status.HTTP_409_CONFLICT, content=refusal.model_dump(mode="json"))
+        return problem_response(problems.runner_version_problem(exc, instance=http_request.url.path))
     if registered.changed:
         services.events.publish_runner_changed(runner_id, kind="registered", runner_name=registered.name)
     hosts = runners_api.hosts_of(services, [registration])
@@ -1091,7 +1067,7 @@ def heartbeat_runner(
     fleet.assert_owns(runner_id)
     alive = services.fleet.heartbeat(runner_id)
     if not alive:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"unknown runner {runner_id}")
+        raise ProblemHTTPException(partial(problems.runner_not_found_problem, runner_id))
     services.events.publish_runner_changed(runner_id, kind="heartbeat", runner_name=fleet.principal.runner_name)
     return Response(status_code=status.HTTP_204_NO_CONTENT)
 
@@ -1124,11 +1100,11 @@ def get_runner(
     fleet.assert_owns(runner_id)
     registration = services.registry.get_runner(runner_id)
     if registration is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"unknown runner {runner_id}")
+        raise ProblemHTTPException(partial(problems.runner_not_found_problem, runner_id))
     try:
         registration.refuse_if_never_connected()
     except RunnerNeverConnected as exc:
-        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
+        raise ProblemHTTPException(partial(problems.runner_not_registered_problem, exc)) from exc
     return runners_api.runner_view(
         services.fleet.own_liveness(registration),
         now=services.clock.now(),

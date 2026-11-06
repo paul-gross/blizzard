@@ -4,11 +4,12 @@
 
 from __future__ import annotations
 
-from typing import Annotated
+from typing import Annotated, Literal
 
 from pydantic import BaseModel, StringConstraints
 
 from blizzard.foundation.unrecognized import Unrecognized
+from blizzard.wire.problem import ProblemDetails
 from blizzard.wire.vocabulary import OPEN
 from exemplar.foundation.permits import PermitState, PermitVerb
 from exemplar.wire.base import ResponseModel
@@ -62,3 +63,7 @@ class PermitListResponse(ResponseModel):
 
     permits: list[PermitView]
     next_cursor: str | None
+
+
+class PermitAlreadyRequestedProblem(ProblemDetails[Literal["urn:blizzard:problem:permit-already-requested"]]):
+    """The project already holds a permit for the holder and capability (``409``)."""

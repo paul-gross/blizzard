@@ -71,8 +71,10 @@ test('test_dashboard_matches_the_individual_reads_over_a_real_running_daemon', a
   expect(body.takeovers.items.length).toBeGreaterThan(0);
   expect(body.facts.items.length).toBeGreaterThan(0);
 
-  // The mock hub serves no fleet summary, so that slot degrades to null rather than failing the read.
-  expect(body.fleet_summary).toBeNull();
+  // The mock hub now serves a fleet summary; the dashboard must compose that same live read.
+  const summary = await runner.raw.get('/api/fleet-summary');
+  expect(summary.status).toBe(200);
+  expect(body.fleet_summary).toEqual(summary.body);
 
   // A hub outage is a second, distinct failure of the same slot; the local sections stay populated.
   await mockHub.levers.arm('unreachable', { remaining: 10_000 });

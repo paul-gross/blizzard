@@ -3,15 +3,24 @@ registry and subscription-usage views."""
 
 from __future__ import annotations
 
-from typing import Annotated
+from typing import Annotated, Literal
 
 from pydantic import BaseModel, Field, StringConstraints
 
 from blizzard.foundation.runner_connection import RunnerConnection
 from blizzard.foundation.unrecognized import Unrecognized
 from blizzard.wire.base import WireModel
+from blizzard.wire.problem import ProblemDetails
 from blizzard.wire.runner import RunnerSubscriptionDeclaration, SubscriptionUsageView
 from blizzard.wire.vocabulary import OPEN
+
+
+class HostRetiredProblem(ProblemDetails[Literal["urn:blizzard:problem:host-retired"]]):
+    """A retired host cannot perform this operation."""
+
+
+class HostNameTakenProblem(ProblemDetails[Literal["urn:blizzard:problem:host-name-taken"]]):
+    """A live host already holds the requested name."""
 
 
 class HostWorkspace(BaseModel):

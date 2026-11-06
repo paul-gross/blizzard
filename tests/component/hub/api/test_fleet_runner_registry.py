@@ -111,7 +111,8 @@ def test_get_of_a_runner_that_never_registered_is_409(tmp_path: Path) -> None:
     hub = build_hub(tmp_path)
     resp = hub.client.get("/api/fleet/runners/ghost")
     assert resp.status_code == 409
-    assert resp.json() == {"detail": "runner ghost has not registered"}
+    assert resp.json()["detail"] == "runner ghost has not registered"
+    assert resp.json()["type"] == "urn:blizzard:problem:runner-not-registered"
 
 
 def test_pause_and_resume_flip_the_derived_brake(tmp_path: Path) -> None:

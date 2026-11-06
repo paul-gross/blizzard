@@ -3,9 +3,16 @@ view."""
 
 from __future__ import annotations
 
+from typing import Literal
+
 from pydantic import BaseModel
 
 from blizzard.wire.base import WireModel
+from blizzard.wire.problem import ProblemDetails
+
+
+class QuestionNotFoundProblem(ProblemDetails[Literal["urn:blizzard:problem:question-not-found"]]):
+    """The named question does not exist in the tenant."""
 
 
 class QuestionAsked(BaseModel):

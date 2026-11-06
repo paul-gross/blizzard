@@ -124,6 +124,7 @@ def test_set_aside_refuses_a_stamped_name_already_taken_moving_nothing(tmp_path:
     assert (tmp_path / f"runner.db.{_STAMP}").read_bytes() == b"earlier"
 
 
+@pytest.mark.usefixtures("short_host_sockets")
 def test_reset_refuses_while_a_daemon_answers_on_the_socket_leaving_the_store(tmp_path: Path) -> None:
     root = _initialized(tmp_path)
     database = sqlite_store_file(load_runner_config(root).db_url)

@@ -9,6 +9,7 @@ from __future__ import annotations
 import json
 import sqlite3
 import subprocess
+import sys
 import tomllib
 from pathlib import Path
 
@@ -187,6 +188,7 @@ def _hub_mark(hub: httpx2.Client) -> int:
 
 def test_a_graduated_pre_host_directory_resumes_its_leases_and_delivers_its_backlog_above_the_hub_mark(
     tmp_path: Path,
+    short_host_runtime: Path,
 ) -> None:
     bin_dir = require_mock_fleet()
     root = tmp_path / "runner"
@@ -216,7 +218,16 @@ def test_a_graduated_pre_host_directory_resumes_its_leases_and_delivers_its_back
 
         log, listening = root / "daemon.log", root / LISTENING_FILE
         proc = subprocess.Popen(
-            [str(RUNNER_BIN), "host", "--dir", str(root), *listening_args(listening, 0)],
+            [
+                sys.executable,
+                "-m",
+                "tests.support.short_socket_host",
+                str(short_host_runtime),
+                "host",
+                "--dir",
+                str(root),
+                *listening_args(listening, 0),
+            ],
             env=runner_spawn_env(hub_url, {"BZ_RUNNER_TICK_SECONDS": "0.5"}),
             stdout=daemon_log_sink(log),
             stderr=subprocess.STDOUT,

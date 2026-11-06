@@ -117,12 +117,13 @@ test('test_a_refused_and_a_not_held_runner_halt_alone_while_the_held_runner_work
   expect((await standalone.leases()).body.items).toEqual([]);
 });
 
-test('test_a_version_refused_runner_halts_alone_while_its_sibling_keeps_leasing', async ({ mockHub, runnerHosts }) => {
+for (const legacy of [false, true]) test(`test_a_version_refused_runner_halts_alone_while_its_sibling_keeps_leasing[${legacy ? 'legacy' : 'problem'}]`, async ({ mockHub, runnerHosts }) => {
   await seedProject(mockHub, 'p-b');
   const host = await runnerHosts.create({ runnerStarted: false, runnerConfig: { runner: [second] } });
   const refused = host.runners['runner-b']!;
   const detail = "runner 0.1.4 is below hub 0.3.0's floor 0.2; upgrade it";
   await mockHub.levers.arm('version_refused', { payload: { runner_id: refused.id, reason: 'too-old', detail } });
+  if (legacy) await mockHub.levers.arm('legacy_version_refusals');
   await host.restart();
   await host.stepHost();
   await host.step('runner-b');

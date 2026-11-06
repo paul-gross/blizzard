@@ -7,12 +7,16 @@ import json
 from datetime import UTC, datetime
 from pathlib import Path
 
+import pytest
 from sqlalchemy import Engine
 
 from blizzard.foundation.node_steps import Executor, JudgedBy, SessionMode
 from blizzard.hub.domain.chunk.model import WorkItemAuthor
 from blizzard.hub.domain.graph.model import Graph, Node
 from blizzard.hub.store.internal.graph_store import GraphStore
+from blizzard.wire.chunk import ChunkNotFoundProblem
+from blizzard.wire.route import PinnedGraphMissingProblem
+from tests.support.refusal_observation import RefusalObservation, refusal_mismatches
 from tests.support.scaffolding import build_hub, hub_store_connections, seed_work_item
 
 _NOW = datetime(2026, 9, 4, 12, 0, 0, tzinfo=UTC)
@@ -70,3 +74,53 @@ def test_an_unknown_chunk_is_404(tmp_path: Path) -> None:
     hub = build_hub(tmp_path)
     resp = hub.client.post("/api/fleet/chunks/ch_ghost/artifact-check", json={"name": "delta", "content": "x"})
     assert resp.status_code == 404
+    assert resp.json()["detail"] == "unknown chunk ch_ghost"
+    assert hub.app is not None
+    assert (
+        refusal_mismatches(
+            hub.app.openapi(),
+            RefusalObservation(
+                "post",
+                "/api/fleet/chunks/{chunk_id}/artifact-check",
+                404,
+                resp.headers["content-type"],
+                ChunkNotFoundProblem,
+                resp.json(),
+            ),
+        )
+        == []
+    )
+
+
+def test_missing_graph_is_declared_and_does_not_mutate(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    hub = build_hub(tmp_path)
+    chunk_id = _seed_deliver_chunk(hub.engine)
+    before = hub.services.chunks.record.get(chunk_id)
+    facts = hub.services.chunks.facts.load_facts(chunk_id)
+
+    def missing_graph(graph_id: str) -> None:
+        return None
+
+    monkeypatch.setattr(hub.services.graphs, "get", missing_graph)
+    url = f"/api/fleet/chunks/{chunk_id}/artifact-check"
+    response = hub.client.post(url, json={"name": "delta", "content": "x"})
+    assert response.status_code == 500
+    assert response.json()["detail"] == "chunk's pinned graph is missing"
+    assert response.json()["instance"] == url
+    assert hub.app is not None
+    assert (
+        refusal_mismatches(
+            hub.app.openapi(),
+            RefusalObservation(
+                "post",
+                "/api/fleet/chunks/{chunk_id}/artifact-check",
+                500,
+                response.headers["content-type"],
+                PinnedGraphMissingProblem,
+                response.json(),
+            ),
+        )
+        == []
+    )
+    assert hub.services.chunks.record.get(chunk_id) == before
+    assert hub.services.chunks.facts.load_facts(chunk_id) == facts

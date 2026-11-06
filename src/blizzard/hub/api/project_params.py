@@ -12,12 +12,15 @@ An unresolved project answers ``404`` on a path and ``422`` in a query or a body
 
 from __future__ import annotations
 
+from functools import partial
 from typing import Annotated
 
 from fastapi import Depends, HTTPException, Request, status
 from fastapi.responses import JSONResponse
 
+from blizzard.hub.api import problems
 from blizzard.hub.api.deps import Services
+from blizzard.hub.api.problem_exceptions import ProblemHTTPException
 from blizzard.hub.composition import TenantServices
 from blizzard.hub.domain.projects.model import Project, ProjectId, ProjectRequired, sole_project
 from blizzard.wire.project import ProjectRef, ProjectRequiredBody
@@ -46,6 +49,8 @@ def _unknown(value: str) -> str:
 
 
 def _unprocessable(where: str, field: str, value: str) -> HTTPException:
+    if (where, field) == ("query", "project"):
+        return ProblemHTTPException(partial(problems.unknown_query_project_problem, value))
     return HTTPException(
         status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
         detail=[{"loc": [where, field], "msg": _unknown(value), "type": UNKNOWN_PROJECT}],

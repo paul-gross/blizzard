@@ -11,13 +11,16 @@ from __future__ import annotations
 
 from typing import Annotated
 
-from fastapi import APIRouter, HTTPException, Request, status
+from fastapi import APIRouter, Request
+from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 
 from blizzard.auth_core import Role
 from blizzard.foundation.unrecognized import Unrecognized
 from blizzard.hub.api.auth_session import TENANT_HEADER, implicit_operator, resolve_identity
 from blizzard.hub.api.hub_level import hub_services
+from blizzard.hub.api.problem_rendering import problem_response
+from blizzard.hub.api.problems import authentication_required_problem
 from blizzard.hub.auth.memberships import Membership
 from blizzard.hub.auth.permissions import Permission, permissions_for
 from blizzard.hub.auth.service import ASSIGNABLE_ROLES
@@ -61,7 +64,7 @@ class MeResponse(WireModel):
 
 
 @router.get("/me", response_model=MeResponse)
-def me(request: Request) -> MeResponse:
+def me(request: Request) -> MeResponse | JSONResponse:
     """Under ``auth.mode = "none"`` the implicit operator, a member of every open tenant; under
     ``oauth`` with a resolving session, the session's person; under ``oauth`` with none, 401.
     A header naming a tenant the caller cannot enter resolves no tenant — never a 404 here."""
@@ -69,7 +72,9 @@ def me(request: Request) -> MeResponse:
     services = None if mode == AUTH_MODE_NONE else hub_services(request)
     identity = resolve_identity(request, services)
     if identity is None:
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="not authenticated")
+        return problem_response(
+            authentication_required_problem(instance=request.url.path, detail="not authenticated"),
+        )
     if mode == AUTH_MODE_NONE:
         tenants = _operator_tenants(request)
         only = tenants[0] if len(tenants) == 1 else None

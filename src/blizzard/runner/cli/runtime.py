@@ -430,6 +430,11 @@ def _host_add_refused(exc: HostAddRefused, name: str, hub: str, rerun: _Rerun) -
             return f"your session at {hub} may not add hosts: {exc.detail}"
         case HostAddRefusalReason.UNSUPPORTED:
             return f"the hub at {hub} predates hosts, so nothing was added; upgrade it, then re-run `{rerun.again()}`"
+        case HostAddRefusalReason.RUNNER_NOT_FOUND:
+            return (
+                f"the hub at {hub} could not adopt a runner, so nothing was added: {exc.detail}. "
+                f"Check that the runner exists in the selected tenant, then re-run `{rerun.again()}`"
+            )
         case HostAddRefusalReason.NAME_TAKEN:
             return (
                 f"the hub at {hub} refused to add host {name}, so nothing was added: a live host already holds the "

@@ -436,6 +436,7 @@ def test_a_stale_socket_file_is_not_a_serving_daemon(tmp_path: Path) -> None:
     assert daemon_holding(HostLayout(root).legacy_socket_path, _DOOR) is None
 
 
+@pytest.mark.usefixtures("short_host_sockets")
 def test_a_daemon_answering_its_socket_is_holding_the_store(tmp_path: Path) -> None:
     root = tmp_path / "runner"
     assert init_runner().invoke(blizzard, ["runner", "init", str(root)]).exit_code == 0
@@ -448,6 +449,7 @@ def test_a_daemon_answering_its_socket_is_holding_the_store(tmp_path: Path) -> N
 
 
 @pytest.mark.parametrize(("reply", "expected"), [(None, "did not answer"), (_UNAVAILABLE, "503")])
+@pytest.mark.usefixtures("short_host_sockets")
 def test_an_ambiguous_liveness_answer_fails_closed(reply: bytes | None, expected: str, tmp_path: Path) -> None:
     """A wedged or unhealthy daemon still HOLDS the single-writer store. Resolving either
     ambiguity toward "nothing there" would let the verb write concurrently with it."""
@@ -541,6 +543,7 @@ def test_a_transcript_verb_refuses_a_runner_that_has_not_joined_its_hub(tmp_path
     assert isinstance(result.exception, SystemExit)
 
 
+@pytest.mark.usefixtures("short_host_sockets")
 def test_runner_transcript_reship_refuses_while_a_daemon_holds_the_store(tmp_path: Path) -> None:
     """The shared `_transcript_config` guard reaches the second verb too — the whole reason
     it was extracted, and a regression here is silent store corruption, not a failed command."""
@@ -558,6 +561,7 @@ def test_runner_transcript_reship_refuses_while_a_daemon_holds_the_store(tmp_pat
     assert "so this cannot" in result.output
 
 
+@pytest.mark.usefixtures("short_host_sockets")
 def test_runner_transcript_backfill_refuses_while_a_daemon_holds_the_store(tmp_path: Path) -> None:
     """The single-writer guard, exercised through the verb rather than the helper alone."""
     root = tmp_path / "runner"
@@ -583,6 +587,7 @@ _STORE_WRITERS = {
 
 @pytest.mark.parametrize("verb", _STORE_WRITERS)
 @pytest.mark.parametrize("held_by", ["lock", "socket"])
+@pytest.mark.usefixtures("short_host_sockets")
 def test_every_store_writing_verb_refuses_a_held_directory_in_one_wording(
     verb: str, held_by: str, tmp_path: Path
 ) -> None:
@@ -811,6 +816,7 @@ _FAILED = _json_reply("200 OK", '{"started_at":"a","finished_at":"b","outcome":"
 _BUSY = _json_reply("409 Conflict", '{"code":"tick_in_progress"}')
 
 
+@pytest.mark.usefixtures("short_host_sockets")
 def test_tick_steps_a_running_host_through_its_socket(tmp_path: Path) -> None:
     code, output = _tick_on_running_host(tmp_path, [], _HEALTH, _RUNNERS, _COMPLETED)
 
@@ -818,6 +824,7 @@ def test_tick_steps_a_running_host_through_its_socket(tmp_path: Path) -> None:
     assert "tick complete" in output
 
 
+@pytest.mark.usefixtures("short_host_sockets")
 def test_tick_host_steps_the_host_wide_pass(tmp_path: Path) -> None:
     code, output = _tick_on_running_host(tmp_path, ["--host"], _HEALTH, _COMPLETED)
 
@@ -826,6 +833,7 @@ def test_tick_host_steps_the_host_wide_pass(tmp_path: Path) -> None:
 
 
 @pytest.mark.parametrize(("reply", "said"), [(_FAILED, "hub unreachable"), (_BUSY, "already in progress")])
+@pytest.mark.usefixtures("short_host_sockets")
 def test_tick_on_a_running_host_exits_1_unless_the_pass_completed(tmp_path: Path, reply: bytes, said: str) -> None:
     code, output = _tick_on_running_host(tmp_path, [], _HEALTH, _RUNNERS, reply)
 
@@ -834,6 +842,7 @@ def test_tick_on_a_running_host_exits_1_unless_the_pass_completed(tmp_path: Path
     assert "tick complete" not in output
 
 
+@pytest.mark.usefixtures("short_host_sockets")
 def test_tick_refuses_host_and_runner_together_without_running_work(tmp_path: Path) -> None:
     code, output = _tick_on_running_host(tmp_path, ["--host", "--runner", "r"])
 
@@ -865,6 +874,7 @@ def test_tick_with_the_lock_held_and_no_answering_socket_still_refuses(tmp_path:
     assert "so this cannot run a tick — stop it first" in result.output
 
 
+@pytest.mark.usefixtures("short_host_sockets")
 def test_tick_with_the_lock_held_and_a_dead_socket_file_still_refuses(tmp_path: Path) -> None:
     """A socket file an ungraceful exit left behind answers nothing, so it is not a host to step."""
     root = tmp_path / "runner"

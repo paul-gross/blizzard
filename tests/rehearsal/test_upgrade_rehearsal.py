@@ -20,8 +20,11 @@ import httpx2
 import pytest
 import yaml
 
-from blizzard.tools.compat.releases import parse_release
+from blizzard.foundation.runner_token_names import hub_token_variable
+from blizzard.runner.hub.internal.token_file import HubTokenFile
+from blizzard.tools.compat.releases import parse_release, parse_releases
 from blizzard.tools.release_install import Installation, download_release, install
+from tests.rehearsal.claim_proxy import pause_on_claim
 from tests.rehearsal.comparison import (
     Rows,
     project,
@@ -150,7 +153,7 @@ def _baselines() -> list[str | None]:
         capture_output=True, text=True, check=True, cwd=repo_root(),
     ).stdout.split()  # fmt: skip
     tags = [release["tag"] for release in json.loads(listed.stdout)["releases"]]
-    return [tag for tag in tags if tag in published] or [None]
+    return [release.tag for release in parse_releases(tag for tag in tags if tag in published)] or [None]
 
 
 @pytest.fixture(scope="module")
@@ -180,7 +183,8 @@ def test_a_supported_release_upgrades_to_the_candidate_and_walks_back(
     server_url = os.environ.get(_PG_URL)
     if backend == "postgres" and not server_url:
         pytest.skip(f"{_PG_URL} is unset, so the Postgres backend is not rehearsed")
-    mock_bin = mock_bin_dir()
+    named_mock = os.environ.get("BLIZZARD_REHEARSAL_MOCK_BIN")
+    mock_bin = Path(named_mock) if named_mock else mock_bin_dir()
     if mock_bin is None:
         pytest.skip("no provisioned sibling blizzard-mock worktree (run `winter provision <env>`)")
     root = work_root / f"{baseline_tag}-{backend}"
@@ -306,6 +310,105 @@ class _Rehearsal:
         assert self.forge.delete("/_levers/checks_pending", params={"repo": REPO}).status_code == 200
         self._await_landed(client, self._ingest(client, "the baseline runner against the candidate hub"), step)
         self._await_landed(client, self.held, step)
+        self._rehearse_refusals(client, step)
+
+    def _rehearse_refusals(self, client: httpx2.Client, step: str) -> None:
+        routes = ("/api/fleet/routes", "/api/hosts", "/api/fleet/chunks/{chunk_id}/release")
+        paths = self.openapi.get("paths", {})
+        (self.root / "release-refusal-routes.json").write_text(
+            json.dumps({route: "available" if route in paths else "unavailable" for route in routes}, indent=2) + "\n"
+        )
+        token = HubTokenFile.of(self.work.dir, hub_token_variable("rehearsal-work")).held()
+        if not token:
+            raise self._fail(step, "baseline runner has no token")
+        identity = client.get("/api/fleet/identity", headers={"Authorization": f"Bearer {token}"})
+        assert identity.status_code == 200, identity.text
+        runner_id = identity.json()["runner_id"]
+        self._release_refusal_probe(token, self.held, "terminal", "done", step)
+        self._other_claim_refusals(client, token, runner_id, step)
+
+        self.work.stop()
+        host_file = self.work.dir / "blizzard-host.toml"
+        original = host_file.read_text()
+        with pause_on_claim(self.hub.url, runner_id) as (proxy, observed, answers):
+            host_file.write_text(original.replace(f'hub_url = "{self.hub.url}"', f'hub_url = "{proxy}"'))
+            try:
+                self.work.start(self.baseline, proxy)
+                waiting = self._ingest(client, "claim refused in flight")
+                if not observed.wait(_TIMEOUT):
+                    raise self._fail(step, "runner never sent a claim through the pause proxy")
+                assert answers[0][0] == 403, answers
+                assert answers[0][1]["chunk_id"] == waiting, answers
+                assert answers[0][1]["runner_id"] == runner_id, answers
+                with httpx2.Client(base_url=f"http://127.0.0.1:{self.work.port}", timeout=30.0) as runner:
+                    self._await_runner_pause(runner, runner_id, True, step)
+                    detail = client.get(f"/api/chunks/{waiting}").json()
+                    assert detail["status"] == "ready" and detail["route"] is None, detail
+                    self._release_refusal_probe(token, waiting, "paused", runner_id, step)
+                    log = self.work.dir / "daemon.log"
+                    events = [json.loads(line) for line in log.read_text().splitlines() if line.startswith("{")]
+                    assert any(
+                        event.get("event") == "route claim denied — the hub refused this runner"
+                        and event.get("chunk_id") == waiting
+                        for event in events
+                    ), "runner did not classify the in-flight refusal"
+                    resumed = client.post(f"/api/runners/{runner_id}/resume", json={"by": "rehearsal"})
+                    assert resumed.status_code == 200, resumed.text
+                    self._await_runner_pause(runner, runner_id, False, step)
+                self._await_landed(client, waiting, step)
+            finally:
+                self.work.stop()
+                host_file.write_text(original)
+        self.work.start(self.baseline, self.hub.url)
+
+    def _other_claim_refusals(self, client: httpx2.Client, token: str, runner_id: str, step: str) -> None:
+        self.work.stop()
+        not_ready = self._ingest(client, "not ready", promote=False)
+        self._release_refusal_probe(token, not_ready, "not_ready", "not_ready", step)
+
+        prerequisite = self._ingest(client, "prerequisite", promote=False)
+        dependent = self._ingest(client, "dependent", promote=False)
+        edge = {"prerequisite_chunk_id": prerequisite, "by": "rehearsal"}
+        declared = client.post(f"/api/chunks/{dependent}/dependencies", json=edge)
+        assert declared.status_code == 202, declared.text
+        assert client.post(f"/api/chunks/{dependent}/promote").status_code == 202
+        self._release_refusal_probe(token, dependent, "dependency", prerequisite, step)
+
+        incompatible = self._ingest(client, "incompatible", promote=False)
+        patched = client.patch(f"/api/chunks/{incompatible}", json={"default_harnesses": ["unavailable-harness"]})
+        assert patched.status_code == 202, patched.text
+        assert client.post(f"/api/chunks/{incompatible}/promote").status_code == 202
+        self._release_refusal_probe(token, incompatible, "incompatible", runner_id, step)
+
+        conflict = self._ingest(client, "conflict")
+        claim = client.post(
+            "/api/fleet/routes", headers={"Authorization": f"Bearer {token}"},
+            json={"chunk_id": conflict, "workspace_id": "rehearsal", "environment_ids": []},
+        )  # fmt: skip
+        assert claim.status_code == 201, claim.text
+        self._release_refusal_probe(token, conflict, "conflict", runner_id, step)
+        for chunk in (not_ready, prerequisite, dependent, incompatible, conflict):
+            stopped = client.post(f"/api/chunks/{chunk}/stop", json={"by": "rehearsal"})
+            assert stopped.status_code == 202, stopped.text
+        self.work.start(self.baseline, self.hub.url)
+
+    def _release_refusal_probe(self, token: str, chunk: str, expected: str, value: str, step: str) -> None:
+        probe = subprocess.run(
+            [str(self.baseline.bin_dir / "python"), "-I", str(Path(__file__).with_name("release_refusals.py")),
+             self.hub.url, chunk, expected, value],
+            input=token, env=self.baseline.env(), capture_output=True, text=True, check=False, timeout=60,
+        )  # fmt: skip
+        if probe.returncode:
+            raise self._fail(step, f"release client {expected} probe failed:\n{probe.stdout}\n{probe.stderr}")
+
+    def _await_runner_pause(self, runner: httpx2.Client, runner_id: str, paused: bool, step: str) -> None:
+        deadline = time.monotonic() + _TIMEOUT
+        while time.monotonic() < deadline:
+            response = runner.get(f"/runners/{runner_id}/api/runner")
+            if response.status_code == 200 and response.json().get("pause", {}).get("hub") is paused:
+                return
+            time.sleep(0.5)
+        raise self._fail(step, f"runner did not mirror hub_paused={paused}")
 
     def upgrade_the_runner(self) -> None:
         step = "4 upgrade the runner"
@@ -375,7 +478,7 @@ class _Rehearsal:
         assert minted.status_code == 201, minted.text
         self.graph_id = minted.json()["graph_id"]
 
-    def _ingest(self, client: httpx2.Client, title: str) -> str:
+    def _ingest(self, client: httpx2.Client, title: str, *, promote: bool = True) -> str:
         issue = self.forge.post(f"/repos/{REPO}/issues", json={"title": title, "body": title})
         assert issue.status_code == 201, issue.text
         ingested = client.post(
@@ -383,7 +486,8 @@ class _Rehearsal:
         )
         assert ingested.status_code == 201, ingested.text
         chunk_id = ingested.json()["chunk_id"]
-        assert client.post(f"/api/chunks/{chunk_id}/promote").status_code == 202
+        if promote:
+            assert client.post(f"/api/chunks/{chunk_id}/promote").status_code == 202
         return chunk_id
 
     def _await(

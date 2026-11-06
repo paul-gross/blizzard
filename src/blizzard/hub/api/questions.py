@@ -8,16 +8,18 @@
 from __future__ import annotations
 
 from collections.abc import Mapping
+from functools import partial
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.responses import JSONResponse
 
 from blizzard.foundation.store.utc import iso_utc
-from blizzard.hub.api import chunk_events
+from blizzard.hub.api import chunk_events, problems
 from blizzard.hub.api.auth import reject_runner_principal
 from blizzard.hub.api.auth_session import require, tenant_bound
 from blizzard.hub.api.deps import Services
+from blizzard.hub.api.problem_exceptions import ProblemHTTPException
 from blizzard.hub.api.project_label_fields import ProjectLabelFields
 from blizzard.hub.api.project_labels import ProjectLabels
 from blizzard.hub.api.project_params import QueryProject
@@ -87,7 +89,7 @@ def ask_question(fact: QuestionAsked, services: Services) -> dict[str, str]:
     """Land a ``question.asked`` row — the chunk parks ``waiting_on_human``; 409 when fenced out."""
     chunk = services.chunks.record.get(fact.chunk_id)
     if chunk is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"unknown chunk {fact.chunk_id}")
+        raise ProblemHTTPException(partial(problems.chunk_not_found_problem, fact.chunk_id))
     change = chunk_events.ChunkChanged.before(services, fact.chunk_id)
     refusal = services.questions.record_asked(asked_question(fact))
     if refusal is not None:
@@ -111,7 +113,7 @@ def answer_question(
     body's ``answered_by`` field — a spoofed value there is silently ignored."""
     pre_answer = services.chunks.questions.get_question(question_id)
     if pre_answer is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"unknown question {question_id}")
+        raise ProblemHTTPException(partial(problems.question_not_found_problem, question_id))
     change = chunk_events.ChunkChanged.before(services, pre_answer.chunk_id)
     try:
         outcome = services.questions.answer(pre_answer, answer=request.answer, answered_by=identity.username)

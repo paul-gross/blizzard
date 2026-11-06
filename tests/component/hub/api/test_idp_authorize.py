@@ -20,6 +20,7 @@ from blizzard.hub.config import AUTH_MODE_NONE, AUTH_MODE_OAUTH
 from blizzard.hub.domain.runners.host import HostAddition, HostLifecycleFact, HostReport, IWriteHostRegistry
 from blizzard.hub.domain.runners.lifecycle_version import HostLifecycleVersion
 from blizzard.hub.domain.runners.registration import IWriteRunnerRegistry
+from blizzard.wire import problem
 from tests.support.scaffolding import (
     HubHarness,
     TenantHarness,
@@ -48,6 +49,10 @@ def test_jwks_404s_under_none_mode(tmp_path: Path) -> None:
     hub = build_hub(tmp_path, auth_mode=AUTH_MODE_NONE)
     resp = hub.client.get("/api/auth/jwks.json")
     assert resp.status_code == 404
+    assert resp.headers["content-type"] == "application/problem+json"
+    assert resp.json()["type"] == problem.IDP_DISABLED
+    assert resp.json()["detail"] == "the IdP surface is not enabled"
+    assert resp.json()["instance"] == "/api/auth/jwks.json"
 
 
 def test_authorize_404s_under_none_mode(tmp_path: Path) -> None:
@@ -78,6 +83,9 @@ def test_authorize_rejects_unknown_client(tmp_path: Path) -> None:
         follow_redirects=False,
     )
     assert resp.status_code == 400
+    assert resp.headers["content-type"] == "application/problem+json"
+    assert resp.json()["type"] == problem.FEDERATION_CLIENT_REFUSED
+    assert resp.json()["detail"] == "unknown client or unregistered redirect_uri"
 
 
 def test_authorize_rejects_unregistered_redirect_uri(tmp_path: Path) -> None:
@@ -193,6 +201,7 @@ def test_authorize_with_no_session_and_no_providers_refuses(tmp_path: Path) -> N
     # Zero configured providers: nothing to authenticate against, so the refusal stays
     # an actionable error rather than a chooser bounce.
     assert resp.status_code == 501
+    assert resp.json()["type"] == problem.FEDERATION_NO_PROVIDER
 
 
 def test_rotate_signing_key_requires_user_manage(tmp_path: Path) -> None:
