@@ -593,7 +593,7 @@ def test_an_attach_between_worker_exit_and_buffering_rides_the_completion_and_a_
         worktree_git=FakeWorktreeGit(),
         clock=FixedClock(_NOW),
     )
-    service = AttachmentService(store, FixedClock(_NOW), store)
+    service = AttachmentService(store, FixedClock(_NOW), store, store)
     lease = store.lease("lease_r")
     assert lease is not None
     worker = WorkerLease(lease=lease, active=True)

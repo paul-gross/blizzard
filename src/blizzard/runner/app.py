@@ -846,7 +846,7 @@ def _wire_runner(
         events=graph.events,
     )
     requeue = RequeueService(runner_stores.requeue, clock)
-    attachments = AttachmentService(runner_stores.attachments, clock, runner_stores.outbound)
+    attachments = AttachmentService(runner_stores.attachments, clock, runner_stores.outbound, runner_stores.lease_lock)
     # Takes the workspaces too: a declaration is checked against the environment's repo manifest, which the
     # provider of the environment's workspace declares.
     git_commit_declarations = GitCommitDeclarationService(
@@ -855,6 +855,7 @@ def _wire_runner(
         workspaces,
         environments=runner_stores.environments,
         outbound=runner_stores.outbound,
+        lease_lock=runner_stores.lease_lock,
     )
     stepper = RunnerStepper(graph.config, process_graph=graph)
     served = runner_seams(

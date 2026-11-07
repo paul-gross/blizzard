@@ -30,24 +30,24 @@ _LEASE = Lease(
 
 def test_content_on_the_active_lease_is_staged() -> None:
     """Even after the worker exited with its judgement still in flight — latest wins."""
-    check_attachable(WorkerLease(lease=_LEASE, active=True), name="review", content="looks good", outcome_pending=False)
+    check_attachable(WorkerLease(lease=_LEASE, active=True), name="review", content="looks good", settled=False)
 
 
 def test_empty_content_is_refused() -> None:
     with pytest.raises(AttachmentEmpty, match="'review' is empty"):
-        check_attachable(WorkerLease(lease=_LEASE, active=True), name="review", content="", outcome_pending=False)
+        check_attachable(WorkerLease(lease=_LEASE, active=True), name="review", content="", settled=False)
 
 
 def test_an_attach_on_a_takeovers_closed_reference_lease_is_refused() -> None:
     with pytest.raises(AttachmentOnClosedLease, match="lease_1 is closed"):
-        check_attachable(WorkerLease(lease=_LEASE, active=False), name="review", content="c", outcome_pending=False)
+        check_attachable(WorkerLease(lease=_LEASE, active=False), name="review", content="c", settled=False)
 
 
 def test_empty_content_is_refused_first() -> None:
     with pytest.raises(AttachmentEmpty):
-        check_attachable(WorkerLease(lease=_LEASE, active=False), name="review", content="", outcome_pending=False)
+        check_attachable(WorkerLease(lease=_LEASE, active=False), name="review", content="", settled=False)
 
 
 def test_content_once_the_outcome_is_buffered_is_refused() -> None:
     with pytest.raises(AttachmentTooLate, match="lease_1's outcome is already submitted"):
-        check_attachable(WorkerLease(lease=_LEASE, active=True), name="review", content="c", outcome_pending=True)
+        check_attachable(WorkerLease(lease=_LEASE, active=True), name="review", content="c", settled=True)

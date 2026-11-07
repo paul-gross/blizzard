@@ -42,6 +42,7 @@ from blizzard.runner.hub.served_projects import IWriteServedProjectsRepository, 
 from blizzard.runner.leases.asks import IWriteAskRepository
 from blizzard.runner.leases.elicitation import IWriteElicitationRepository
 from blizzard.runner.leases.escalations import IWriteEscalationRepository
+from blizzard.runner.leases.lease_lock import IWriteLeaseLock
 from blizzard.runner.leases.liveness import IWriteLeaseLivenessRepository
 from blizzard.runner.leases.model import NewLease, NewMint
 from blizzard.runner.leases.operator_requests import IWriteAttachmentRepository, IWriteRequeueRepository
@@ -235,6 +236,12 @@ def _sample() -> UsageSample:
 #: against the seeded world — on A's own chunks and leases, so an unconfined write would reach B's same-shaped rows.
 
 
+def _lock_lease(w: RunnerWorld) -> None:
+    """One lease-locked unit over the world's runner alone, on one of its own leases."""
+    with w.stores.lease_lock.locked(w.lease_2):
+        pass
+
+
 def _engage_under_lock(w: RunnerWorld) -> None:
     """One locked brake transaction over the world's runner alone: its brake read and its fact written on the handle."""
     with w.stores.pause.locked_brakes() as locked:
@@ -420,6 +427,7 @@ WRITE_CENSUS: dict[tuple[type, str], WriteRecipe] = {
     (IWritePauseRepository, "record_local_pause"): lambda w: w.stores.pause.record_local_pause(
         paused=True, at=_at(37), by="operator", report_kind="runner.locally_paused", report_payload="{}"
     ),
+    (IWriteLeaseLock, "locked"): lambda w: _lock_lease(w),
     (IWritePauseRepository, "locked_brakes"): lambda w: _engage_under_lock(w),
     (IWritePauseRepository, "local_brake_locked"): lambda w: _engage_under_lock(w),
     (IWritePauseRepository, "record_local_pause_locked"): lambda w: _engage_under_lock(w),

@@ -40,7 +40,7 @@ _TOKEN = "the-lease-token"
 def _app_with_attachments(tmp_path: Path):
     store = make_store(f"sqlite:///{tmp_path / 'runner.db'}")
     config = RunnerConfig(root=tmp_path, db_url=f"sqlite:///{tmp_path / 'runner.db'}")
-    service = AttachmentService(store, FixedClock(_NOW), store)
+    service = AttachmentService(store, FixedClock(_NOW), store, store)
     return create_runner_app(
         config, runner_stores=make_stores(store), host_stores=make_host_stores(store), attachments=service
     ), store
@@ -72,7 +72,7 @@ def test_503_when_attachment_service_unwired(tmp_path: Path) -> None:
 def test_503_when_store_unwired(tmp_path: Path) -> None:
     store = make_store(f"sqlite:///{tmp_path / 'runner.db'}")
     config = RunnerConfig(root=tmp_path, db_url=f"sqlite:///{tmp_path / 'runner.db'}")
-    service = AttachmentService(store, FixedClock(_NOW), store)
+    service = AttachmentService(store, FixedClock(_NOW), store, store)
     # The service is wired, but ``runner_stores`` — the controller's own read-only
     # resolution seam — is not: the edge must still answer 503, not raise.
     app = create_runner_app(config, attachments=service)
@@ -348,7 +348,7 @@ _REFUSAL = "artifact 'delta' does not match the finding-delta shape: measurement
 def _app_with_hub(tmp_path: Path, handler: Callable[[httpx2.Request], httpx2.Response]):
     store = make_store(f"sqlite:///{tmp_path / 'runner.db'}")
     config = RunnerConfig(root=tmp_path, db_url=f"sqlite:///{tmp_path / 'runner.db'}", hub_url=_HUB_URL)
-    service = AttachmentService(store, FixedClock(_NOW), store)
+    service = AttachmentService(store, FixedClock(_NOW), store, store)
     app = create_runner_app(
         config,
         runner_stores=make_stores(store),

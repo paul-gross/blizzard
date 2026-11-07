@@ -39,6 +39,7 @@ from blizzard.runner.hub.outbound_buffer import (
     transcript_truncated_event,
 )
 from blizzard.runner.leases.asks import OpenAsk
+from blizzard.runner.leases.lease_lock import ILeaseUnit
 from blizzard.runner.leases.model import Lease
 from blizzard.runner.node_steps.submissions import Completion, GateSubmission
 from blizzard.wire.completion import CompletionSubmission
@@ -98,15 +99,17 @@ class OutboundFacts:
         payload = answer_delivered_payload(lease, question_id)
         self._enqueue(ANSWER_DELIVERED, lease.chunk_id, lease.lease_id, payload, at)
 
-    def completion(self, lease: Lease, completion: Completion, *, at: datetime) -> None:
+    def completion(self, lease: Lease, completion: Completion, *, at: datetime, unit: ILeaseUnit | None = None) -> int:
         """Buffered as the wire body the drain later submits, so a row written before a redeploy
-        drains unchanged after it."""
+        drains unchanged after it. Given a ``unit`` the row joins its transaction and is not yet announced: the
+        caller announces it via :meth:`published` once the unit commits. Answers the row's seq."""
         payload = submission_payload(completion_submission(completion).model_dump(mode="json"))
-        self._enqueue(COMPLETION_KIND, lease.chunk_id, lease.lease_id, payload, at)
+        return self._enqueue(COMPLETION_KIND, lease.chunk_id, lease.lease_id, payload, at, unit)
 
-    def decision(self, lease: Lease, gate: GateSubmission, *, at: datetime) -> None:
+    def decision(self, lease: Lease, gate: GateSubmission, *, at: datetime, unit: ILeaseUnit | None = None) -> int:
+        """:meth:`completion` for a runner-config gate's decision."""
         payload = submission_payload(decision_submission(gate).model_dump(mode="json"))
-        self._enqueue(DECISION_KIND, lease.chunk_id, lease.lease_id, payload, at)
+        return self._enqueue(DECISION_KIND, lease.chunk_id, lease.lease_id, payload, at, unit)
 
     def command_failed(
         self,
@@ -170,12 +173,20 @@ class OutboundFacts:
         self._enqueue(EVENT_RECORDED, chunk_id, lease_id, payload, at)
 
     def _enqueue(
-        self, kind: str, chunk_id: str | None, lease_id: str | None, payload: Mapping[str, object], at: datetime
-    ) -> None:
+        self,
+        kind: str,
+        chunk_id: str | None,
+        lease_id: str | None,
+        payload: Mapping[str, object],
+        at: datetime,
+        unit: ILeaseUnit | None = None,
+    ) -> int:
         seq = self.ctx.stores.outbound.enqueue_outbound(
-            kind=kind, chunk_id=chunk_id, lease_id=lease_id, payload=json.dumps(payload), created_at=at
+            kind=kind, chunk_id=chunk_id, lease_id=lease_id, payload=json.dumps(payload), created_at=at, unit=unit
         )
-        self.published(seq, kind, chunk_id, lease_id)
+        if unit is None:
+            self.published(seq, kind, chunk_id, lease_id)
+        return seq
 
 
 def buffered_completion(fact: BufferedFact) -> Completion:

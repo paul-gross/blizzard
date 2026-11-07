@@ -3,14 +3,15 @@
 A worker durably submits an explicit artifact for a ``produces:`` name, authorized by its spawn-minted
 lease token; :meth:`AttachmentService.attach` is the one place the write happens. :func:`check_attachable`
 accepts non-empty content against the active lease, even mid-judgement (newest wins until the outcome is
-buffered), and refuses empty content, an open takeover's closed reference lease, and a lease whose outcome is
-already buffered — nothing would publish any of those."""
+buffered, acked or not), and refuses empty content, an open takeover's closed reference lease, and a lease whose
+outcome is already buffered — nothing would publish any of those."""
 
 from __future__ import annotations
 
 from blizzard.foundation.clock import IClock
 from blizzard.foundation.crash import crashpoint
 from blizzard.runner.hub.outbound_buffer import IReadOutboundRepository
+from blizzard.runner.leases.lease_lock import IWriteLeaseLock
 from blizzard.runner.leases.operator_requests import IWriteAttachmentRepository
 from blizzard.runner.leases.worker_lease import WorkerLease, WorkerVerb
 
@@ -48,10 +49,10 @@ class AttachmentTooLate(AttachmentRefused):
     """The lease's outcome is already buffered for the hub; the declaration would never be submitted."""
 
 
-def check_attachable(worker: WorkerLease, *, name: str, content: str, outcome_pending: bool) -> None:
+def check_attachable(worker: WorkerLease, *, name: str, content: str, settled: bool) -> None:
     """Pass when ``content`` may be staged under ``name`` for ``worker``'s lease, else raise
     the :class:`AttachmentRefused` that applies — empty content first.
-    ``outcome_pending`` is whether the lease's outcome is already buffered for the hub."""
+    ``settled`` is whether the lease's outcome is already buffered for the hub, acked or not."""
     if not content:
         raise AttachmentEmpty(f"attachment {name!r} is empty — an attachment must carry content")
     if not worker.accepts(WorkerVerb.ATTACH):
@@ -59,7 +60,7 @@ def check_attachable(worker: WorkerLease, *, name: str, content: str, outcome_pe
             f"lease {worker.lease.lease_id} is closed — "
             "an attachment on a takeover's reference lease is never published"
         )
-    if outcome_pending:
+    if settled:
         raise AttachmentTooLate(
             f"lease {worker.lease.lease_id}'s outcome is already submitted — "
             "declare assets before the node-step's verdict"
@@ -67,10 +68,17 @@ def check_attachable(worker: WorkerLease, *, name: str, content: str, outcome_pe
 
 
 class AttachmentService:
-    """Composition-root-wired: the attachment store, the outbound buffer read, and the clock."""
+    """Composition-root-wired: the attachment store, the outbound buffer read, the lease lock, and the clock."""
 
-    def __init__(self, store: IWriteAttachmentRepository, clock: IClock, outbound: IReadOutboundRepository) -> None:
+    def __init__(
+        self,
+        store: IWriteAttachmentRepository,
+        clock: IClock,
+        outbound: IReadOutboundRepository,
+        lease_lock: IWriteLeaseLock,
+    ) -> None:
         self._store = store
+        self._lease_lock = lease_lock
         self._outbound = outbound
         self._clock = clock
 
@@ -81,7 +89,7 @@ class AttachmentService:
             worker,
             name=name,
             content=content,
-            outcome_pending=worker.lease.lease_id in self._outbound.pending_submission_lease_ids(),
+            settled=self._outbound.submission_buffered(worker.lease.lease_id),
         )
 
     def attach(self, worker: WorkerLease, *, name: str, content: str) -> None:
@@ -91,19 +99,23 @@ class AttachmentService:
         Append-and-read-newest: a repeat call for the same ``(lease, name)`` is a
         correction, not an error."""
         lease = worker.lease
-        check_attachable(
-            worker,
-            name=name,
-            content=content,
-            outcome_pending=lease.lease_id in self._outbound.pending_submission_lease_ids(),
-        )
-        self._store.record_attachment(
-            lease_id=lease.lease_id,
-            chunk_id=lease.chunk_id,
-            node_id=lease.node_id,
-            epoch=lease.epoch,
-            name=name,
-            content=content,
-            attached_at=self._clock.now(),
-        )
+        # The settled fact is read under the lease's lock, in the unit that inserts: a capture of the outcome either
+        # commits first and refuses this attachment, or commits after it and carries it.
+        with self._lease_lock.locked(lease.lease_id) as unit:
+            check_attachable(
+                worker,
+                name=name,
+                content=content,
+                settled=self._outbound.submission_buffered(lease.lease_id, unit=unit),
+            )
+            self._store.record_attachment(
+                lease_id=lease.lease_id,
+                chunk_id=lease.chunk_id,
+                node_id=lease.node_id,
+                epoch=lease.epoch,
+                name=name,
+                content=content,
+                attached_at=self._clock.now(),
+                unit=unit,
+            )
         _CP_ATTACH_AFTER_RECORD.reached()

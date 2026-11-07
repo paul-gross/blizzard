@@ -21,6 +21,7 @@ from blizzard.runner.leases.git_commit_declaration import (
     GitCommitDeclaration,
     IReadGitCommitDeclarationRepository,
 )
+from blizzard.runner.leases.lease_lock import ILeaseUnit, IWriteLeaseLock
 from blizzard.runner.leases.model import Lease
 from blizzard.runner.node_steps.submissions import CompletionArtifact
 
@@ -119,6 +120,8 @@ def converge_pointers(confirmed: Mapping[Key, CompletionArtifact]) -> list[Point
 class GitCommitsStores(OutboundStores, Protocol):
     @property
     def git_commit_declarations(self) -> IReadGitCommitDeclarationRepository: ...
+    @property
+    def lease_lock(self) -> IWriteLeaseLock: ...
 
 
 class GitCommitsContext(OutboundContext, Protocol):
@@ -163,6 +166,18 @@ class DeclaredCommits:
                 self._confirmed[key] = artifact
                 changed = True
         return self._converge() if changed else []
+
+    def pointers(self) -> list[CompletionArtifact]:
+        """The lease's whole converged pointer set as last verified — unlike :meth:`verify`, never only what changed."""
+        return [pointer for group in converge_pointers(self._confirmed) for pointer in group.pointers]
+
+    def current_under(self, unit: ILeaseUnit) -> bool:
+        """Whether the declarations the lease holds on ``unit`` are exactly those the last :meth:`verify` resolved —
+        false once a declaration was admitted since, which the caller verifies and retries."""
+        return (
+            self.ctx.stores.git_commit_declarations.git_commit_declarations_for_lease(self.lease.lease_id, unit=unit)
+            == self._resolved
+        )
 
     def _converge(self) -> list[CompletionArtifact]:
         artifacts: list[CompletionArtifact] = []

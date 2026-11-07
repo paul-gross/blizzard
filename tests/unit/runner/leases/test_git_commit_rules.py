@@ -57,12 +57,12 @@ _DECLARATION = GitCommitDeclaration(environment_id="e1", repo="toy-api", branch=
 
 class _DeclaredFields(TypedDict, total=False):
     known_repos: Sequence[str]
-    outcome_pending: bool
+    settled: bool
     at: datetime
 
 
 def _declared(*, active: bool = True, **overrides: Unpack[_DeclaredFields]) -> GitCommitDeclarationRecord:
-    fields: _DeclaredFields = {"known_repos": ["toy-api"], "outcome_pending": False, "at": _AT}
+    fields: _DeclaredFields = {"known_repos": ["toy-api"], "settled": False, "at": _AT}
     fields.update(overrides)
     return _DECLARATION.declared_by(WorkerLease(lease=_LEASE, active=active), **fields)
 
@@ -131,10 +131,14 @@ def test_declared_carries_lease_chunk_node_epoch() -> None:
     )
 
 
-def test_declared_after_outcome_pending_too_late() -> None:
+def test_declared_after_settled_too_late() -> None:
     with pytest.raises(GitCommitDeclarationTooLate, match="lease lease_1's outcome is already buffered") as refused:
-        _declared(outcome_pending=True)
+        _declared(settled=True)
     assert refused.value.lease_id == "lease_1"
+
+
+def test_closed_reference_lease_is_never_refused_by_a_settled_outcome() -> None:
+    assert _declared(active=False, settled=True).rides_completion is False
 
 
 def test_closed_reference_lease_accepts_the_declaration_but_rides_no_completion() -> None:

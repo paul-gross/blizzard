@@ -11,12 +11,13 @@ from __future__ import annotations
 import json
 from dataclasses import dataclass
 from datetime import datetime
-from typing import Any
+from typing import Any, cast
 
 from sqlalchemy import ColumnElement, Connection, Row, Select, Table, and_, join
 from sqlalchemy.exc import IntegrityError
 
 from blizzard.foundation.roles import domain_model
+from blizzard.runner.leases.lease_lock import ILeaseUnit
 from blizzard.runner.leases.model import Lease, WorkRefStamp
 from blizzard.runner.store.schema import (
     OUTBOX_LANE_OUTBOUND,
@@ -41,6 +42,19 @@ from blizzard.runner.store.scoped import RUNNER_COLUMN, RunnerStoreConnections
 #: A fresh segment's placeholder, before its first pump read — restated rather than
 #: imported (the store never depends on the harness seam). Shared by the leases and transcripts adapters.
 NO_NORMALIZER_VERSION = ""
+
+
+@dataclass(frozen=True)
+class LeaseUnit:
+    """The concrete lease-locked unit — the statements it joins run on :attr:`conn`, the transaction the lease's row was
+    locked on. :class:`~blizzard.runner.leases.lease_lock.ILeaseUnit` is what the domain holds it as."""
+
+    conn: Connection
+
+
+def unit_conn(unit: ILeaseUnit) -> Connection:
+    """Recover the transaction from a domain-held unit; only the lease-lock adapter builds one."""
+    return cast(LeaseUnit, unit).conn
 
 
 @domain_model

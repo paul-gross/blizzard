@@ -12,6 +12,7 @@ from blizzard.foundation.event_log import EVENT_LOG_SEVERITY, EventLogKind
 from blizzard.foundation.roles import domain_model
 from blizzard.foundation.store.utc import iso_utc
 from blizzard.runner.leases.asks import OpenAsk
+from blizzard.runner.leases.lease_lock import ILeaseUnit
 from blizzard.runner.leases.model import Lease
 
 __all__ = [
@@ -211,6 +212,12 @@ class IReadOutboundRepository(Protocol):
         while the flush is pending."""
         ...
 
+    def submission_buffered(self, lease_id: str, *, unit: ILeaseUnit | None = None) -> bool:
+        """Whether a ``completion.submitted`` or ``decision.submitted`` fact was ever buffered for ``lease_id``,
+        acked or not — the lease's outcome is settled, and nothing declared after it would be submitted. Given a
+        ``unit``, read on its transaction."""
+        ...
+
     def pending_outbound(self, *, limit: int | None = None) -> list[BufferedFact]:
         """The unacked outbound buffer, FIFO by seq; unbounded when ``limit`` is ``None``.
 
@@ -234,9 +241,17 @@ class IWriteOutboundRepository(IReadOutboundRepository, Protocol):
     """Read-write outbound-buffer store — held only by the domain."""
 
     def enqueue_outbound(
-        self, *, kind: str, chunk_id: str | None, lease_id: str | None, payload: str, created_at: datetime
+        self,
+        *,
+        kind: str,
+        chunk_id: str | None,
+        lease_id: str | None,
+        payload: str,
+        created_at: datetime,
+        unit: ILeaseUnit | None = None,
     ) -> int:
-        """Append a hub-bound fact to the store-and-forward buffer; return its seq."""
+        """Append a hub-bound fact to the store-and-forward buffer; return its seq. Given a ``unit``, it joins that
+        transaction and is durable when the unit commits."""
         ...
 
     def ack_outbound(self, seq: int, *, acked_at: datetime) -> None:
@@ -254,5 +269,6 @@ class IWriteOutboundRepository(IReadOutboundRepository, Protocol):
         """Delete acked rows older than the store's own retention window, but
         only below the lowest still-pending seq — an acked row interleaved above a pending
         one always survives, so the retained buffer stays gapless from the pending floor
-        upward. Returns the number of rows pruned."""
+        upward. An acked submission row also survives while its lease has no closure. Returns the number of rows
+        pruned."""
         ...

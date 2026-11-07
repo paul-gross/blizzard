@@ -864,7 +864,7 @@ def _lease(epoch: int) -> NewLease:
     )
 
 
-def _buffer_closed(ctx: LoopContext, epoch: int, enqueue: Callable[[OutboundFacts, Lease], None]) -> None:
+def _buffer_closed(ctx: LoopContext, epoch: int, enqueue: Callable[[OutboundFacts, Lease], object]) -> None:
     ctx.stores.lease_record.record_mint(new_mint(_lease(epoch)))
     lease = ctx.stores.lease_record.active_lease(f"lease_{epoch}")
     assert lease is not None
