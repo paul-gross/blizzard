@@ -1,0 +1,16 @@
+id: bzh:cli-refusal-body-confined
+snapshots:
+  ? |
+    detail = resp.json().get("detail")
+  : labels:
+    - source: resp.json().get("detail")
+      style: primary
+      start: 9
+      end: 34
+  ? |
+    slug = resp.json()["detail"]["slug"]
+  : labels:
+    - source: resp.json()["detail"]
+      style: primary
+      start: 7
+      end: 28

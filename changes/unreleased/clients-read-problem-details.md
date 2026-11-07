@@ -12,3 +12,7 @@ The hub's `404` for a route held behind a flag that is off is now an `applicatio
 `urn:blizzard:problem:flag-off`; its `detail` is the same `{code, flag, message}` object as before. The hub
 administrator invariant check's `409` is the new type `urn:blizzard:problem:invariants-in-progress`; it adds a `detail`
 sentence beside the released `code` member.
+
+The runner now relays a hub refusal that carries a JSON object body to its caller as the hub sent it: the body, the
+status, the `Content-Type` and the `WWW-Authenticate` and `Retry-After` headers. Both OpenAPI documents publish a base
+`Problem` component, which the board reads for a refusal's `detail` and `title`.

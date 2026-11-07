@@ -7713,6 +7713,38 @@ export type PrView = {
 };
 
 /**
+ * Problem
+ *
+ * The members every hub refusal shares, as a client that dispatches on ``type`` reads them. ``detail`` is a
+ * string, or — while the legacy fields stay — an object (``message`` and a ``code``) or a validation list. Every
+ * member is optional because a refusal from a hub before problem details carries only ``detail``.
+ */
+export type Problem = {
+    /**
+     * Detail
+     */
+    detail?: string | {
+        [key: string]: unknown;
+    } | Array<ValidationEntry> | null;
+    /**
+     * Instance
+     */
+    instance?: string | null;
+    /**
+     * Status
+     */
+    status?: number | string | null;
+    /**
+     * Title
+     */
+    title?: string | null;
+    /**
+     * Type
+     */
+    type?: string | null;
+};
+
+/**
  * ProducesEntry
  *
  * One node's ``produces:`` expectation, kind-carrying.
@@ -12516,6 +12548,26 @@ export type UserView = {
      * Username
      */
     username: string;
+};
+
+/**
+ * ValidationEntry
+ *
+ * One entry of a FastAPI request-validation ``detail`` list.
+ */
+export type ValidationEntry = {
+    /**
+     * Loc
+     */
+    loc?: Array<string | number>;
+    /**
+     * Msg
+     */
+    msg?: string;
+    /**
+     * Type
+     */
+    type?: string;
 };
 
 /**

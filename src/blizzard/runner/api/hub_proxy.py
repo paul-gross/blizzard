@@ -10,7 +10,7 @@ from dataclasses import dataclass
 
 import httpx2
 import structlog
-from fastapi import Request, status
+from fastapi import Request, Response, status
 from fastapi.exceptions import HTTPException
 
 from blizzard.foundation.clock import IMonotonicClock
@@ -22,6 +22,7 @@ from blizzard.runner.config import RunnerConfig
 from blizzard.runner.hub.client import HubClientError, ITokenIdentityReader
 from blizzard.runner.hub.held_token import ICurrentHubToken
 from blizzard.runner.hub.identity import IdentityVerdict, IIdentityOnContact
+from blizzard.wire.problem import type_of
 
 # The per-attempt bound: the timeout on any single outbound request this proxy makes.
 HUB_TIMEOUT = 15.0
@@ -52,6 +53,45 @@ def _unverified(verdict: IdentityVerdict) -> str:
     }[verdict.state]
     remedy = verdict.remedy()
     return f"{code}: {verdict.refusal()}" + (f"; {remedy}" if remedy is not None else "")
+
+
+#: The upstream headers a relayed refusal keeps: how to authenticate again, and when to retry.
+_RELAYED_HEADERS = ("www-authenticate", "retry-after")
+
+
+class UpstreamRefusal(HTTPException):
+    """A refusal the hub answered with a JSON object body, relayed to the runner's caller as the hub sent it: the body,
+    the status, the ``Content-Type`` and the authentication and throttling headers. ``detail`` carries the flattened
+    text for a caller that only reads the status."""
+
+    def __init__(self, upstream: httpx2.Response, detail: str) -> None:
+        headers = {name: upstream.headers[name] for name in _RELAYED_HEADERS if name in upstream.headers}
+        super().__init__(status_code=upstream.status_code, detail=detail, headers=headers or None)
+        self.body = upstream.content
+        self.media_type = upstream.headers["content-type"] if "content-type" in upstream.headers else "application/json"
+        self.payload: dict[str, object] = as_table(upstream.json()) or {}
+        present, kind = type_of(self.payload)
+        #: The relayed problem's ``type``; ``None`` for a body that predates problem details.
+        self.problem_type: str | None = kind if present and isinstance(kind, str) else None
+
+
+async def relay_upstream_refusal(request: Request, exc: Exception) -> Response:
+    """Answer a relayed hub refusal byte for byte."""
+    assert isinstance(exc, UpstreamRefusal)
+    return Response(content=exc.body, status_code=exc.status_code, headers=exc.headers, media_type=exc.media_type)
+
+
+def _refusal(upstream: httpx2.Response) -> HTTPException:
+    """The runner's answer to a hub refusal: the hub's own JSON object body when it sent one, else its text as a
+    ``detail``."""
+    detail = HubProxy._detail(upstream)  # pyright: ignore[reportPrivateUsage]
+    try:
+        body: object = upstream.json()
+    except ValueError:
+        return HTTPException(status_code=upstream.status_code, detail=detail)
+    if isinstance(body, dict):
+        return UpstreamRefusal(upstream, detail)
+    return HTTPException(status_code=upstream.status_code, detail=detail)
 
 
 @dataclass(frozen=True)
@@ -213,13 +253,13 @@ class HubProxy:
                 return upstream
 
             if not (retryable and upstream.status_code in _RETRYABLE_STATUSES):
-                raise HTTPException(status_code=upstream.status_code, detail=self._detail(upstream))
+                raise _refusal(upstream)
 
             if self._may_retry(retries, budget, started):
                 self.clock.sleep(_backoff(retries))
                 retries += 1
                 continue
-            raise HTTPException(status_code=upstream.status_code, detail=self._detail(upstream))
+            raise _refusal(upstream)
 
     def _verify_identity(self, timeout: float | None) -> None:
         """Return once the token is verified to name the configured runner; raise ``503`` with the reason

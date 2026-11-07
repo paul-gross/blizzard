@@ -169,6 +169,26 @@ def admits(payload: object, kinds: Collection[str]) -> bool:
     return not present or (isinstance(kind, str) and kind in kinds)
 
 
+class ValidationEntry(BaseModel):
+    """One entry of a FastAPI request-validation ``detail`` list."""
+
+    loc: list[str | int] = []
+    msg: str = ""
+    type: str = ""
+
+
+class Problem(BaseModel):
+    """The members every hub refusal shares, as a client that dispatches on ``type`` reads them. ``detail`` is a
+    string, or — while the legacy fields stay — an object (``message`` and a ``code``) or a validation list. Every
+    member is optional because a refusal from a hub before problem details carries only ``detail``."""
+
+    type: str | None = None
+    title: str | None = None
+    detail: str | dict[str, Any] | list[ValidationEntry] | None = None
+    instance: str | None = None
+    status: int | str | None = None
+
+
 class CommonProblemMembers[ProblemType: str, Detail](BaseModel):
     """Always-sent common members, without imposing a status representation."""
 

@@ -72,6 +72,7 @@ from blizzard.runner.api.health import router as health_router
 from blizzard.runner.api.heartbeat import router as heartbeat_router
 from blizzard.runner.api.history import router as history_router
 from blizzard.runner.api.host import router as host_router
+from blizzard.runner.api.hub_proxy import UpstreamRefusal, relay_upstream_refusal
 from blizzard.runner.api.invariants import router as host_invariants_router
 from blizzard.runner.api.invocation_usage import router as invocation_usage_router
 from blizzard.runner.api.leases import router as leases_router
@@ -522,6 +523,7 @@ def create_app(
         app.state.session_secret = secrets.token_bytes(32)
 
     app.add_exception_handler(FlagOffError, refuse_flag_off)
+    app.add_exception_handler(UpstreamRefusal, relay_upstream_refusal)
 
     @app.exception_handler(RequestValidationError)
     async def validation_error(request: Request, exc: RequestValidationError) -> Response:

@@ -11,6 +11,7 @@ from typing import NotRequired, TypedDict
 import click
 
 from blizzard.cli.collaborators import CliCollaborators
+from blizzard.cli.refusal import refusal_of
 from blizzard.foundation.credential_renewal import RenewalFailureReason, RenewalResult
 from blizzard.foundation.escalation_causes import EscalationCause
 from blizzard.foundation.roles import dto
@@ -610,7 +611,7 @@ def clear_floor(
         else:
             resp = daemon.send("post", "/api/runner/floor/clear", json_body={"by": by})
             if resp.status_code == 409:
-                slug = resp.json()["detail"]["slug"]
+                slug = refusal_of(resp).detail["slug"]
                 raise click.ClickException(
                     f"clear-floor: runner {runner} spends subscription {slug!r} — its floor is that subscription's;"
                     f" clear it with `blizzard runner clear-floor --subscription {slug}`"

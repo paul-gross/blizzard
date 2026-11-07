@@ -13268,6 +13268,86 @@
         "title": "PrView",
         "type": "object"
       },
+      "Problem": {
+        "description": "The members every hub refusal shares, as a client that dispatches on ``type`` reads them. ``detail`` is a\nstring, or \u2014 while the legacy fields stay \u2014 an object (``message`` and a ``code``) or a validation list. Every\nmember is optional because a refusal from a hub before problem details carries only ``detail``.",
+        "properties": {
+          "detail": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "items": {
+                  "$ref": "#/components/schemas/ValidationEntry"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Detail"
+          },
+          "instance": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Instance"
+          },
+          "status": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Status"
+          },
+          "title": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Title"
+          },
+          "type": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Type"
+          }
+        },
+        "title": "Problem",
+        "type": "object"
+      },
       "ProducesEntry": {
         "description": "One node's ``produces:`` expectation, kind-carrying.",
         "properties": {
@@ -21168,6 +21248,38 @@
           "assignable_roles"
         ],
         "title": "UserView",
+        "type": "object"
+      },
+      "ValidationEntry": {
+        "description": "One entry of a FastAPI request-validation ``detail`` list.",
+        "properties": {
+          "loc": {
+            "default": [],
+            "items": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "integer"
+                }
+              ]
+            },
+            "title": "Loc",
+            "type": "array"
+          },
+          "msg": {
+            "default": "",
+            "title": "Msg",
+            "type": "string"
+          },
+          "type": {
+            "default": "",
+            "title": "Type",
+            "type": "string"
+          }
+        },
+        "title": "ValidationEntry",
         "type": "object"
       },
       "ValidationError": {

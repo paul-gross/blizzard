@@ -15,7 +15,7 @@ from fastapi.exceptions import HTTPException
 
 from blizzard.foundation.artifacts import ArtifactKind, ArtifactScope
 from blizzard.foundation.roles import collaborator
-from blizzard.runner.api.hub_proxy import HubProxy
+from blizzard.runner.api.hub_proxy import HubProxy, UpstreamRefusal
 from blizzard.runner.api.lease_scope import authorized_lease
 from blizzard.runner.api.wiring import RunnerWiring
 from blizzard.runner.lifecycle.artifacts import (
@@ -26,6 +26,7 @@ from blizzard.runner.lifecycle.artifacts import (
     IReadGraphArtifactRepository,
 )
 from blizzard.wire.envelope import EnvelopeArtifact, NodeEnvelope, WorkerArtifact
+from blizzard.wire.problem import SYSTEM_ARTIFACT_NOT_FOUND
 
 router = APIRouter(prefix="/api", tags=["runner"])
 
@@ -73,8 +74,13 @@ def _system_hit(name: str, request: Request) -> WorkerArtifact | None:
     proxy = HubProxy.of(request, "artifacts")
     try:
         upstream = proxy.get(f"/api/fleet/system-artifacts/{quote(name, safe='/')}")
+    except UpstreamRefusal as exc:
+        # A hub before problem details answers the miss with no ``type``; any other typed 404 is not a miss.
+        if exc.problem_type in (SYSTEM_ARTIFACT_NOT_FOUND, None) and exc.status_code == status.HTTP_404_NOT_FOUND:
+            return None
+        raise
     except HTTPException as exc:
-        if exc.status_code == status.HTTP_404_NOT_FOUND:
+        if exc.status_code == status.HTTP_404_NOT_FOUND and not isinstance(exc, UpstreamRefusal):
             return None
         raise
     body = upstream.json()

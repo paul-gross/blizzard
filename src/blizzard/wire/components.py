@@ -42,6 +42,7 @@ from blizzard.wire.finding import (
     GoneFindingOp,
     ObservedFindingOp,
 )
+from blizzard.wire.problem import Problem
 from blizzard.wire.project import ProjectRef, ProjectRequiredBody
 from blizzard.wire.sse import (
     ChunkChangedPayload,
@@ -86,6 +87,7 @@ HUB_SCHEMA_COMPONENTS = SchemaComponents(
         BounceAction,
         BounceUnlandedRepo,
         BouncePullRequest,
+        Problem,
         ProjectRequiredBody,
         ProjectRef,
         ChunkChangedPayload,
@@ -119,6 +121,7 @@ HUB_SCHEMA_COMPONENTS = SchemaComponents(
 
 RUNNER_SCHEMA_COMPONENTS = SchemaComponents(
     models=(
+        Problem,
         LeaseChangedPayload,
         AskChangedPayload,
         EscalationChangedPayload,
