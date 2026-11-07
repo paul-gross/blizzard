@@ -30,6 +30,7 @@ from blizzard.hub.store import schema as s
 from blizzard.hub.store.internal.chunk_facts_store import ChunkFactsStore, status_family_tables
 from blizzard.hub.store.internal.chunk_rows import ephemeral_ids, ephemeral_ids_in
 from blizzard.hub.store.internal.chunk_terminal_predicates import maybe_live
+from blizzard.hub.store.internal.fact_families import ephemeral_tables
 from blizzard.hub.store.scoped import ScopedConnections, statements_of
 from blizzard.hub.store.transactions import chunk_handle_connection
 
@@ -66,11 +67,9 @@ class ChunkWorkRefsStore:
     def live_work_refs_signature(self) -> WorkRefsSignature:
         """One statement of append-only aggregates over the tenant's rows of every table
         :meth:`live_work_refs` reads: the status families' tables, ``chunk_work_refs``, and the
-        ephemeral ``chunk_grouped`` / ``chunk_deleted`` — a count each, plus the highest ``id``
+        registry's ephemeral tables (``fact_families.ephemeral_tables``) — a count each, plus the highest ``id``
         where the table has one."""
-        tables = sorted(
-            (*status_family_tables(), s.chunk_work_refs, s.chunk_grouped, s.chunk_deleted), key=lambda t: t.name
-        )
+        tables = sorted((*status_family_tables(), s.chunk_work_refs, *ephemeral_tables()), key=lambda t: t.name)
         columns: list[Label[Any]] = []
         for table in tables:
             columns.append(self._store.select(table, func.count()).scalar_subquery().label(f"{table.name}__count"))
