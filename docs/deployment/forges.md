@@ -119,9 +119,9 @@ left: it holds every caller of that key until the answer's `X-RateLimit-Reset`.
 the bucket, the remaining over the limit, and the reset — and `GET /api/forges/<forge>` answers the same as `budgets`.
 Nothing is listed before the forge has answered.
 
-The hub records `forge-budget-low` (warning) when a budget first turns a caller away, and `forge-rate-limited` (warning)
-when the forge first refuses one for its rate — each at most once per budget per reset window, naming the forge, the
-secret, the bucket, the last remaining and limit, and the reset
+The hub records `forge-budget-low` (warning) when a budget's remaining first falls low enough to turn a caller away, and
+`forge-rate-limited` (warning) when the forge first refuses one for its rate — each at most once per budget per reset
+window, naming the forge, the secret, the bucket, the last remaining and limit, and the reset
 ([observability.md](./observability.md#the-operational-event-log)). A notice lost to a restart is not recorded.
 
 ## A missing capability

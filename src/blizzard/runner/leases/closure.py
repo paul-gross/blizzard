@@ -21,6 +21,12 @@ PUBLISHED_REASONS: frozenset[str] = frozenset(LeaseClosureReason)
 MINT_REASONS: frozenset[str] = frozenset({ESCALATION_MINT, NO_ACCEPTABLE_HARNESS_MINT})
 #: The reasons that close a completed node-step; the newest one at a node ends its visit and its retry budget.
 COMPLETED_STEP_REASONS: frozenset[str] = frozenset({LeaseClosureReason.TRANSITIONED, LeaseClosureReason.PARKED})
+#: The reasons whose attempt spends no retry: superseded, let go, or a mint that never spawned.
+UNSPENT_REASONS: frozenset[str] = frozenset({LeaseClosureReason.PREEMPTED, LeaseClosureReason.RELEASED, *MINT_REASONS})
+#: The reasons whose attempt spends a retry.
+SPENT_REASONS: frozenset[str] = frozenset(
+    {LeaseClosureReason.FAILED, LeaseClosureReason.REAPED, LeaseClosureReason.ESCALATED}
+)
 #: Every reason an open escalation derives from: the ordinary one plus both mints.
 ESCALATION_REASONS: frozenset[str] = frozenset({LeaseClosureReason.ESCALATED, *MINT_REASONS})
 

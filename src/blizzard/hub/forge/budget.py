@@ -75,8 +75,9 @@ class IForgeRateDialect(Protocol):
 @domain_model
 @dataclass(frozen=True)
 class BudgetNotice:
-    """A budget's once-per-window notice: turned a caller away (``BUDGET_LOW``) or refused by the forge
-    (``RATE_LIMITED``), with the last reading's remaining and limit when there is one."""
+    """A budget's once-per-window notice: its remaining first fell low enough to turn a caller away (``BUDGET_LOW``) or
+    the forge refused one for its rate (``RATE_LIMITED``), with the last reading's remaining and limit when there is
+    one."""
 
     kind: BudgetNoticeKind
     key: BudgetKey
@@ -130,7 +131,6 @@ class ForgeBudgets:
         with budget.lock:
             spent_until = budget.spent_until
             if spent_until is not None and now < spent_until:
-                self._notice(budget, BudgetNoticeKind.BUDGET_LOW, key, bucket, budget.readings.get(bucket), spent_until)
                 raise ForgeBudgetLow(spent_until, f"{key.forge_id}: spent until {spent_until}")
             reading = budget.readings.get(bucket)
             if reading is None or reading.reset <= now or _admits(priority, reading):
