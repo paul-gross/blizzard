@@ -17,7 +17,7 @@ import {
   type RouteView,
   runnerDisplayName,
   runnerTitle,
-  KitButton,
+  KitCloseButton,
   KitSwatch,
   ChunkActionsMenu,
 } from 'fleet';
@@ -36,7 +36,7 @@ import { LensLink } from 'fleet/shell';
   changeDetection: ChangeDetectionStrategy.OnPush,
   imports: [
     WorkRefLink,
-    KitButton,
+    KitCloseButton,
     KitSwatch,
     ChunkActionsMenu,
     RouterLink,

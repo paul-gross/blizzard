@@ -166,8 +166,9 @@ describe('ChunkDetailHeader', () => {
     await fixture.whenStable();
     const el = fixture.nativeElement as HTMLElement;
 
-    const close = el.querySelector('[data-testid="detail-close"]');
-    expect(close?.querySelector('svg.glyph--x')).not.toBeNull();
+    const close = el.querySelector('fleet-kit-close-button [data-testid="detail-close"]');
+    expect(close?.querySelector('svg[aria-hidden="true"]')).not.toBeNull();
+    expect(close?.textContent?.trim()).toBe('');
     expect(
       close?.getAttribute('aria-label') ??
         close?.querySelector('[aria-label]')?.getAttribute('aria-label'),

@@ -20,6 +20,7 @@ export { KitSwatch } from './kit-swatch';
 export { projectTint } from './kit-swatch-color';
 export { KitColorInput } from './kit-color-input';
 export { KitButton } from './kit-button';
+export { KitCloseButton } from './kit-close-button';
 export { KitSectionHead } from './kit-section-head';
 export { KitChip, KitChips, type KitChipOption } from './kit-chips';
 export { KitCheckbox } from './kit-checkbox';

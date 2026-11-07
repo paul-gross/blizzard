@@ -2,7 +2,7 @@ import { ChangeDetectionStrategy, Component, computed, input, output, signal } f
 import { RouterLink } from '@angular/router';
 import {
   KitBadge,
-  KitButton,
+  KitCloseButton,
   KitConfirmDialog,
   type KitConfirmDialogPrompt,
   KitMenu,
@@ -34,7 +34,7 @@ import { WorkerLine } from '../../runners/worker-line';
 @Component({
   selector: 'app-machine-detail-header',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [WorkRefLink, KitBadge, KitButton, KitConfirmDialog, KitMenu, KitMenuItem, KitMenuItemSubtitle, KitMenuPanel, RouterLink, WorkerLine],
+  imports: [WorkRefLink, KitBadge, KitCloseButton, KitConfirmDialog, KitMenu, KitMenuItem, KitMenuItemSubtitle, KitMenuPanel, RouterLink, WorkerLine],
   templateUrl: './machine-detail-header.html',
   styleUrl: './machine-detail-header.css',
 })

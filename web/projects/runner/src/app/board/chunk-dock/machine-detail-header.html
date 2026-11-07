@@ -40,9 +40,7 @@
     @if (pause() || pausable()) {
       <fleet-kit-menu class="actions" testid="chunk-actions-menu" ariaLabel="Chunk actions" align="end" bordered [menu]="actionsMenu" />
     }
-    <fleet-kit-button class="close" testid="detail-close" ariaLabel="Close" (click)="dismiss.emit()">
-      ✕
-    </fleet-kit-button>
+    <fleet-kit-close-button testid="detail-close" (click)="dismiss.emit()" />
   </div>
 </header>
 

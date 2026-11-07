@@ -36,6 +36,20 @@
   background: var(--tint-selected);
   border-color: var(--cyan);
 }
+/* `icon` — a fixed square holding one glyph, centred on both axes so the glyph's own
+   metrics never set the height. */
+.act.icon {
+  box-sizing: border-box;
+  width: 30px;
+  height: 30px;
+  padding: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  line-height: 1;
+  font-size: var(--fs-lg);
+  border-radius: 3px;
+}
 .act:hover:not(:disabled) {
   border-color: var(--cyan);
 }

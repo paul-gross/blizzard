@@ -113,7 +113,3 @@
   --kit-menu-trigger-pad: 8px 15px;
   --kit-menu-trigger-fs: var(--fs-lg);
 }
-.close {
-  --kit-button-pad: 2px 10px;
-  --kit-button-fs: var(--fs-lg);
-}

@@ -21,7 +21,7 @@ import { KitButton } from './kit-button';
 })
 class TestHost {
   readonly variant = signal<'default' | 'primary' | 'danger'>('default');
-  readonly size = signal<'default' | 'cta'>('default');
+  readonly size = signal<'default' | 'cta' | 'icon'>('default');
   readonly disabled = signal(false);
   clicks = 0;
 }
@@ -93,5 +93,16 @@ describe('KitButton', () => {
     const el = fixture.nativeElement as HTMLElement;
 
     expect(el.querySelector('[data-testid="act"]')?.classList.contains('cta')).toBe(true);
+  });
+
+  it('applies the icon class when size is icon', async () => {
+    const fixture = TestBed.createComponent(TestHost);
+    fixture.componentInstance.size.set('icon');
+    await fixture.whenStable();
+    const el = fixture.nativeElement as HTMLElement;
+
+    const button = el.querySelector('[data-testid="act"]');
+    expect(button?.classList.contains('icon')).toBe(true);
+    expect(button?.classList.contains('cta')).toBe(false);
   });
 });

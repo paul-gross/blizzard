@@ -16,8 +16,8 @@ import { ChangeDetectionStrategy, Component, input } from '@angular/core';
 export class KitButton {
   readonly variant = input<'default' | 'primary' | 'danger'>('default');
   /** `default` is the compact action chrome; `cta` is the larger, more emphatic
-   * call-to-action treatment. */
-  readonly size = input<'default' | 'cta'>('default');
+   * call-to-action treatment; `icon` is a fixed 30px square for a lone glyph. */
+  readonly size = input<'default' | 'cta' | 'icon'>('default');
   readonly disabled = input(false);
   readonly ariaLabel = input<string | null>(null);
   readonly title = input<string | null>(null);
