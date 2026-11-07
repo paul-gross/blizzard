@@ -1,4 +1,3 @@
-import type { TemplateRef } from '@angular/core';
 import type {
   ChunkCountsView,
   ConfigChangeView,
@@ -29,7 +28,7 @@ import {
   sourceLinkRows,
   wiringCallout,
 } from './projects.model';
-import { linkCount, projectFacts, projectTabs, queueText } from './project-overview.model';
+import { linkCount, projectTabs, queueText } from './project-overview.model';
 
 function project(id: string, slug: string, name: string): ProjectView {
   return { project_id: id, slug, name, description: '', color: 'teal', revision: 1, created_at: '2026-10-01T00:00:00Z' };
@@ -158,28 +157,7 @@ describe('projects model', () => {
     });
   });
 
-  it("states the overview's facts, leaving out the ones not yet read", () => {
-    const labels = (facts: readonly { label: string }[]) => facts.map((fact) => fact.label);
-    expect(labels(projectFacts(BLIZZARD, { former: [], counts: undefined, color: undefined, created: undefined, revision: undefined }))).toEqual([
-      'Slug',
-      'Id',
-    ]);
-    const full = projectFacts(BLIZZARD, {
-      former: ['default'],
-      counts: counts(1, 1, 3),
-      color: undefined,
-      created: undefined,
-      revision: undefined,
-    });
-    expect(labels(full)).toEqual(['Slug', 'Former slugs', 'Queue', 'Id']);
-    expect(full.find((fact) => fact.label === 'Queue')?.value).toBe('1 ready · 1 running');
-  });
-
-  it('states the color fact once its template is handed in, and a row carries its project color', () => {
-    const color = {} as TemplateRef<unknown>;
-    const facts = projectFacts(BLIZZARD, { former: [], counts: undefined, color, created: undefined, revision: undefined });
-    expect(facts.map((fact) => fact.label)).toEqual(['Slug', 'Color', 'Id']);
-    expect(facts.find((fact) => fact.label === 'Color')?.template).toBe(color);
+  it('carries its project color on a row', () => {
     expect(projectRows([BLIZZARD], new Map(), null, null)[0].color).toBe('teal');
   });
 

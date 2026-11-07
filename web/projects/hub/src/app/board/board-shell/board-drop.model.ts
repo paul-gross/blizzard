@@ -1,4 +1,4 @@
-import { moveItemInArray } from '@angular/cdk/drag-drop';
+import { movedItem } from '../../core/array-move';
 
 import type { BoardLaneMove, BoardReorderList, BoardReposition } from './board-column';
 
@@ -19,9 +19,8 @@ export type BoardDropMove =
 /**
  * A drop into `list`, whose chunks render in `ids` order, resolved to the anchor the chunk now
  * sits after — `null` at the very top, which the hub reads as "first". A drop from the other
- * list is a lane move; one within the list replays the order on a copy (cdk moves nothing
- * itself) so the anchor is the chunk that ends up immediately above. A drop that changed
- * nothing resolves to `null`.
+ * list is a lane move; one within the list replays the order on a copy so the anchor is the
+ * chunk that ends up immediately above. A drop that changed nothing resolves to `null`.
  */
 export function resolveDrop(list: BoardReorderList, ids: readonly string[], drop: BoardDrop): BoardDropMove | null {
   if (drop.crossed) {
@@ -36,8 +35,7 @@ export function resolveDrop(list: BoardReorderList, ids: readonly string[], drop
     };
   }
   if (drop.previousIndex === drop.currentIndex) return null;
-  const order = [...ids];
-  moveItemInArray(order, drop.previousIndex, drop.currentIndex);
+  const order = movedItem(ids, drop.previousIndex, drop.currentIndex);
   return {
     kind: 'reposition',
     move: { chunkId: order[drop.currentIndex], afterChunkId: drop.currentIndex === 0 ? null : order[drop.currentIndex - 1], list },

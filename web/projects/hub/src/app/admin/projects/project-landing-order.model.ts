@@ -1,5 +1,6 @@
-import { moveItemInArray } from '@angular/cdk/drag-drop';
 import type { LandingPositionRequest, RepositoryLinkView } from 'fleet';
+
+import { movedItem } from '../../core/array-move';
 
 import type { ProjectLinkRowVm } from './projects.model';
 
@@ -41,16 +42,16 @@ export function landingSections(rows: readonly ProjectLinkRowVm[], links: readon
 
 /**
  * A drop resolved to the one position it asks the hub for. Landing in the ranked section places the repository after
- * its new predecessor (`null` at the front), replaying a move within the section on a copy (cdk moves nothing itself);
+ * its new predecessor (`null` at the front), replaying a move within the section on a copy;
  * landing in the unranked section from the ranked one unranks it. A move within the unranked section, or a drop that
  * changed nothing, resolves to `null`.
  */
 export function resolveLandingDrop(sections: LandingSections, drop: LandingDrop): LandingPositionRequest | null {
   if (drop.to === 'unranked') return drop.from === 'ranked' ? { repository: drop.key, unranked: true } : null;
-  const order = sections.ranked.map((row) => row.key);
+  let order = sections.ranked.map((row) => row.key);
   if (drop.from === 'ranked') {
     if (drop.previousIndex === drop.currentIndex) return null;
-    moveItemInArray(order, drop.previousIndex, drop.currentIndex);
+    order = movedItem(order, drop.previousIndex, drop.currentIndex);
   } else {
     order.splice(drop.currentIndex, 0, drop.key);
   }

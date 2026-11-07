@@ -18,7 +18,8 @@ import { ConfigRevisions } from '../config-revisions';
 import type { LandingSections } from './project-landing-order.model';
 import { ProjectLinkPanel } from './project-link-panel';
 import { ProjectOverviewCard } from './project-overview-card';
-import { projectFacts, type OverviewLineVm } from './project-overview.model';
+import { projectFacts } from './project-facts';
+import type { OverviewLineVm } from './project-overview.model';
 import type { ProjectLinkKind } from './projects.mutations';
 import type { ProjectLinkRowVm } from './projects.model';
 
