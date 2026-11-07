@@ -55,8 +55,8 @@ const fact = (flowId: string, kind: FlowFactView['kind'], minutesAgo: number, fi
   ...fields,
 });
 
-const place = (flowId: string, position: number, state: ChunkFlowPlaceView['state']): ChunkFlowPlaceView =>
-  ({ flow_id: flowId, position, state, branch: 'master', next_poll_at: null, repository_name: null, repository_slug: null, resource: flowId }) as ChunkFlowPlaceView;
+const place = (flowId: string, position: number, state: ChunkFlowPlaceView['state'], fields: Partial<ChunkFlowPlaceView> = {}): ChunkFlowPlaceView =>
+  ({ flow_id: flowId, position, state, in_line: ['next', 'waiting', 'polling'].includes(state), ...fields, branch: 'master', next_poll_at: null, repository_name: null, repository_slug: null, resource: flowId }) as ChunkFlowPlaceView;
 
 const detail = (fields: Partial<ChunkDetail>): ChunkDetail => chunkDetail({ chunk_id: 'ch_1', history: [], ...fields });
 const texts = (d: ChunkDetail) => deliveryHistory(d, FORGES, FIXTURE_NOW).map((entry) => entry.text);
@@ -202,6 +202,16 @@ describe('deliveryDrawerView', () => {
     ]);
     expect(view.repos[0].commit?.text).toBe('9f2c4e1');
     expect(view.repos[2].prs).toEqual([{ text: '#4', url: prView().url }]);
+  });
+
+  it('reads each place by the hub\'s classification: raw and idle for an unknown or unaffirmed state', () => {
+    const stateOf = (p: ChunkFlowPlaceView) =>
+      deliveryDrawerView(detail({ flow_places: [p] }), FLOWS, REPOSITORIES, FIXTURE_NOW)!.repos[0];
+    expect(stateOf(place('fl_a', 1, 'landing'))).toMatchObject({ state: 'landing' });
+    expect(stateOf(place('fl_a', 1, 'passed-over'))).toMatchObject({ state: 'passed over' });
+    expect(stateOf(place('fl_a', 3, 'mystery' as ChunkFlowPlaceView['state'], { in_line: false }))).toMatchObject({ state: 'mystery', tone: 'idle' });
+    expect(stateOf(place('fl_a', 3, 'waiting', { in_line: undefined }))).toMatchObject({ state: 'waiting' });
+    expect(stateOf(place('fl_a', 3, 'mystery' as ChunkFlowPlaceView['state'], { in_line: true }))).toMatchObject({ state: 'in line · 3rd' });
   });
 
   it('reads a repository whose last attempt bounced as bounced, and one with nothing as not submitted', () => {

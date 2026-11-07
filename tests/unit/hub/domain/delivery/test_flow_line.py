@@ -11,6 +11,7 @@ from typing import TypedDict, Unpack
 
 from blizzard.foundation.chunk_status import ChunkStatus
 from blizzard.foundation.clock import FixedClock
+from blizzard.foundation.flow_place_state import FlowPlaceState
 from blizzard.foundation.landing_policy import LandingPolicy
 from blizzard.foundation.node_steps import Executor
 from blizzard.hub.domain.chunk.model import (
@@ -36,6 +37,7 @@ from blizzard.hub.domain.delivery.flows import (
     Flow,
     FlowFact,
     FlowLine,
+    FlowPlace,
     FlowResource,
     LandingTerms,
     PollPolicy,
@@ -250,6 +252,44 @@ def test_a_parked_visit_has_its_own_place_state_and_due_instant() -> None:
 
     [place] = line.places_of(parked, now=_AT)
     assert (place.state, place.due_at) == ("awaiting-merge", _AT + timedelta(minutes=2))
+
+
+def test_a_place_is_in_line_exactly_when_its_state_holds_a_queue_position() -> None:
+    first, second = _submission("ch_1", 1, _MAIN), _submission("ch_2", 2, _MAIN)
+    polled, parked = _submission("ch_3", 3, _MAIN), _submission("ch_4", 4, _OTHER)
+    paused = _submission("ch_5", 5, _OTHER)
+    poll = HubNodePollFact(_DELIVER, 1, _AT)
+    park = HubNodePollFact(_DELIVER, 1, _AT, kind="awaiting-merge")
+    pause = _at_node(pauses=[PauseFact(paused=True, set_at=_AT, set_by="op")])
+    line = _line(
+        (first, _at_node()),
+        (second, _at_node()),
+        (polled, _at_node(hub_node_polls=[poll])),
+        (parked, _at_node(hub_node_polls=[park])),
+        (paused, pause),
+        turning=frozenset({"fsub_ch_1"}),
+    )
+
+    seen = {
+        place.state: place.in_line
+        for sub in (first, second, polled, parked, paused)
+        for place in line.places_of(sub, now=_AT)
+    }
+
+    assert seen == {
+        FlowPlaceState.LANDING: False,
+        FlowPlaceState.NEXT: True,
+        FlowPlaceState.POLLING: True,
+        FlowPlaceState.AWAITING_MERGE: False,
+        FlowPlaceState.PASSED_OVER: False,
+    }
+
+
+def test_every_place_state_is_classified_in_line_or_not() -> None:
+    for state in FlowPlaceState:
+        place = FlowPlace(submission=_submission("ch_1", 1, _MAIN), flow=_MAIN, state=state, position=1)
+        assert isinstance(place.in_line, bool)
+        assert place.in_line is (state in {FlowPlaceState.NEXT, FlowPlaceState.WAITING, FlowPlaceState.POLLING})
 
 
 def test_the_lines_places_run_in_arrival_order() -> None:

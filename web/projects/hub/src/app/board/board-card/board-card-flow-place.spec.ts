@@ -30,11 +30,11 @@ const DELIVERING: BoardCard = {
 const PLACES = placeLines([
   {
     flow_id: 'flw_1', resource: 'repo_1:master', repository_name: 'blizzard', repository_slug: null,
-    branch: 'master', state: 'landing', position: 1, next_poll_at: null,
+    branch: 'master', state: 'landing', in_line: false, position: 1, next_poll_at: null,
   },
   {
     flow_id: 'flw_2', resource: 'repo_2:master', repository_name: 'blizzard-context', repository_slug: null,
-    branch: 'master', state: 'waiting', position: 3, next_poll_at: null,
+    branch: 'master', state: 'waiting', in_line: true, position: 3, next_poll_at: null,
   },
 ]);
 

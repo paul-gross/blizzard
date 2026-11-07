@@ -51,6 +51,10 @@ class FlowPlaceView(WireModel):
     submission_id: str
     arrival: int
     state: Annotated[FlowPlaceState | Unrecognized, OPEN]
+    #: Whether the place holds a position in the flow's queue: true for ``next``, ``waiting``, and ``polling``;
+    #: false for ``landing``, ``awaiting-merge``, and ``passed-over``. The hub judges it so a reader need not
+    #: partition ``state``.
+    in_line: bool
     #: One for the submission landing or next, else one plus the eligible submissions ahead of it on the flow.
     position: int
     #: When its next poll is due while it is ``polling``; ``None`` otherwise.
@@ -67,6 +71,10 @@ class ChunkFlowPlaceView(WireModel):
     repository_name: str | None = None
     branch: str
     state: Annotated[FlowPlaceState | Unrecognized, OPEN]
+    #: Whether the place holds a position in the flow's queue: true for ``next``, ``waiting``, and ``polling``;
+    #: false for ``landing``, ``awaiting-merge``, and ``passed-over``. The hub judges it so a reader need not
+    #: partition ``state``.
+    in_line: bool
     #: One for the chunk landing or next, else one plus the eligible submissions ahead of it on the flow.
     position: int
     #: When its next poll is due while it is ``polling``; ``None`` otherwise.

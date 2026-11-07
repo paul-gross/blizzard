@@ -11,7 +11,7 @@ from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass, replace
 from datetime import datetime, timedelta
 from types import MappingProxyType
-from typing import Literal, get_args
+from typing import Literal, assert_never, get_args
 
 from blizzard.foundation.chunk_status import ChunkStatus
 from blizzard.foundation.event_log import EventLogKind
@@ -645,3 +645,20 @@ class FlowPlace:
     state: FlowPlaceState
     position: int
     due_at: datetime | None = None
+
+    @property
+    def in_line(self) -> bool:
+        """Whether this place holds a position in its flow's queue: ``next``, ``waiting``, and ``polling`` do;
+        ``landing``, ``awaiting-merge``, and ``passed-over`` do not."""
+        return _holds_queue_position(self.state)
+
+
+def _holds_queue_position(state: FlowPlaceState) -> bool:
+    """Exhaustive over :class:`FlowPlaceState`, so a new state fails the type check until it is classified."""
+    match state:
+        case FlowPlaceState.NEXT | FlowPlaceState.WAITING | FlowPlaceState.POLLING:
+            return True
+        case FlowPlaceState.LANDING | FlowPlaceState.AWAITING_MERGE | FlowPlaceState.PASSED_OVER:
+            return False
+        case _ as unreachable:
+            assert_never(unreachable)

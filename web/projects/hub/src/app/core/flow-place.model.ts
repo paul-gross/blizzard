@@ -54,6 +54,12 @@ export function flowPath(flow: {
   return repo === null ? flow.resource : `${repo}/${flow.branch}`;
 }
 
+/** Whether the hub says a place holds a position in its flow's queue. Only an affirmative `in_line` counts: a place
+ * from a hub that predates the field, or one the hub does not affirm, is not in line. */
+export function placeInLine(place: { readonly in_line?: boolean }): boolean {
+  return place.in_line === true;
+}
+
 /** One of a chunk's places as a card or a list row says it. */
 export interface FlowPlaceLine {
   readonly flowId: string;
@@ -63,13 +69,12 @@ export interface FlowPlaceLine {
   readonly tone: Tone;
 }
 
-/** How a chunk's place on one flow reads: landing on it, passed over on it, awaiting its change's merge on it, or its position in line. */
+/** How a chunk's place on one flow reads: its position in line when the hub says it holds one, else its state's label
+ * (raw when this build does not know the state). */
 export function placeText(place: ChunkFlowPlaceView): string {
   const path = flowPath(place);
-  if (place.state === 'landing') return `landing on ${path}`;
-  if (place.state === 'passed-over') return `passed over on ${path}`;
-  if (place.state === 'awaiting-merge') return `awaiting merge on ${path}`;
-  return `${ordinal(place.position)} on ${path}`;
+  if (placeInLine(place)) return `${ordinal(place.position)} on ${path}`;
+  return `${placeStateLabel(place.state)} on ${path}`;
 }
 
 /** Every place a chunk holds, one line per flow, in the order the hub lists them. */

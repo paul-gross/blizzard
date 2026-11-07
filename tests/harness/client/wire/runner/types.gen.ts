@@ -749,6 +749,10 @@ export type ChunkFlowPlaceView = {
      */
     flow_id: string;
     /**
+     * In Line
+     */
+    in_line: boolean;
+    /**
      * Next Poll At
      */
     next_poll_at: string | null;

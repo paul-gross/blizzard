@@ -14,7 +14,7 @@ import {
   type Tone,
 } from 'fleet';
 
-import { ordinal, placeStateLabel, placeStateTone } from '../core/flow-place.model';
+import { ordinal, placeInLine, placeStateLabel, placeStateTone } from '../core/flow-place.model';
 
 /** A link the drawer draws. */
 export interface DrawerLink {
@@ -115,7 +115,7 @@ export type HistoryTone = 'done' | 'waiting' | 'needs' | 'idle' | null;
  * that takes it up; any other turn that settled without landing — sent back, or ended judging nothing — any other
  * bounce, and a withdrawal are problems; a run of waits and a transition are context; anything else is neutral
  * progress. */
-function historyTone(kind: 'submitted' | 'started' | 'turn-ended' | 'landed' | 'bounced' | 'withdrawn' | 'polls' | 'transition', rework = false): HistoryTone {
+function historyTone(kind: hubApi.FlowFactKind | 'bounced' | 'polls' | 'transition', rework = false): HistoryTone {
   switch (kind) {
     case 'landed':
       return 'done';
@@ -141,7 +141,7 @@ function verdictTone(turn: FlowFactView): Tone {
 
 /** `HH:MM` of an instant. */
 function clock(at: string): string {
-  return formatWhen(at, new Date(at));
+  return formatWhenParts(at, new Date(at)).time;
 }
 
 interface Draft extends Omit<HistoryEntry, 'repos'> {
@@ -183,7 +183,7 @@ function flowEntries(facts: readonly FlowFactView[], repo: string | null, now: n
         return;
       }
       flushPolls();
-      out.push(draft(`f-${fact.id}`, fact.at, now, repo, 'landing attempt started', historyTone('started')));
+      out.push(draft(`f-${fact.id}`, fact.at, now, repo, 'landing attempt started', historyTone('turn-started')));
       return;
     }
     if (fact.kind === 'turn-ended' && fact.wait) {
@@ -314,7 +314,7 @@ function repoBlock(detail: ChunkDetail, forge: string, forges: ReadonlyMap<strin
   if (landed) [state, tone] = ['landed', 'done'];
   // A turn that landed with nothing to merge leaves no landed repository behind.
   else if (settled?.verdict === 'landed') [state, tone] = ['landed · no changes', 'done'];
-  else if (place) [state, tone] = [place.state === 'landing' || place.state === 'awaiting-merge' || place.state === 'passed-over' ? placeStateLabel(place.state) : `in line · ${ordinal(place.position)}`, placeStateTone(place.state)];
+  else if (place) [state, tone] = [placeInLine(place) ? `in line · ${ordinal(place.position)}` : placeStateLabel(place.state), placeStateTone(place.state)];
   else if (settled) [state, tone] = [`bounced · ${settled.outcome}`, verdictTone(settled)];
   else if (openPrs.length) [state, tone] = [detail.awaiting_external_merge ? 'awaiting merge' : 'PR open', 'idle'];
   else [state, tone] = ['not submitted', 'idle'];

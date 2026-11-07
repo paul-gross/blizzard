@@ -4,6 +4,7 @@ import { describe, expect, it } from 'vitest';
 
 import {
   cardStageColor,
+  stageTone,
   cardStageLabel,
   chunkLine,
   deliveredRecently,
@@ -65,6 +66,7 @@ const place = (flowId: string, position: number, state: ChunkFlowPlaceView['stat
   flow_id: flowId,
   position,
   state,
+  in_line: ['next', 'waiting', 'polling'].includes(state),
   branch: 'master',
   next_poll_at: null,
   repository_name: null,
@@ -239,7 +241,12 @@ describe('the phone\'s cards', () => {
     const inLine = only(inputs([chunk('ch_1', { flow_places: [place('fl_a', 2)] })]));
     const landed = only(inputs([chunk('ch_1', { landed: true, status: 'done' })]));
     expect([bounce, inLine, landed].map(cardStageLabel)).toEqual(['conflict', 'in line #2', 'landed']);
-    expect([bounce, inLine, landed].map(cardStageColor)).toEqual(['var(--red)', 'var(--cyan)', toneColor('done')]);
+    expect([bounce, inLine, landed].map(cardStageColor)).toEqual([toneColor('stale'), toneColor('spawning'), toneColor('done')]);
+    expect([bounce, inLine, landed].map(stageTone)).toEqual(['stale', 'spawning', 'done']);
+  });
+
+  it('draws a row with no stage in the idle tone', () => {
+    expect(stageTone({ ...only(inputs([chunk('ch_1', { flow_places: [place('fl_a', 2)] })])), stage: -1 })).toBe('idle');
   });
 });
 
@@ -319,6 +326,23 @@ describe('a row\'s line, links, step and icon', () => {
     const pr = chunk('ch_1', { open_prs: [prView()] });
     expect(only(inputs([pr])).chunk.titlesPending).toBe(true);
     expect(only(inputs([pr], { workItems: new Map([['ch_1', { items: [] } as unknown as WorkItemsView]]) })).chunk.titlesPending).toBe(false);
+  });
+});
+
+describe('chunkLine on the hub\'s classification', () => {
+  it('lists only the places the hub affirms are in line, an unknown state included', () => {
+    const unknown = place('fl_a', 2, 'mystery' as ChunkFlowPlaceView['state'], { in_line: false });
+    const affirmed = place('fl_b', 4, 'mystery' as ChunkFlowPlaceView['state'], { in_line: true });
+    const chunkA = chunk('ch_1', { flow_places: [unknown] });
+    const chunkB = chunk('ch_2', { flow_places: [unknown, affirmed] });
+    expect(chunkLine(chunkA, inputs([chunkA]))).toBeNull();
+    expect(chunkLine(chunkB, inputs([chunkB]))?.best).toBe('#4');
+  });
+
+  it('lists no place lacking in_line', () => {
+    const bare = { ...place('fl_a', 2, 'waiting'), in_line: undefined } as unknown as ChunkFlowPlaceView;
+    const c = chunk('ch_1', { flow_places: [bare] });
+    expect(chunkLine(c, inputs([c]))).toBeNull();
   });
 });
 

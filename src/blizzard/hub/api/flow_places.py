@@ -89,6 +89,7 @@ class FlowLineRead:
             repository_name=record.name if record is not None else None,
             branch=place.flow.branch,
             state=place.state,
+            in_line=place.in_line,
             position=place.position,
             next_poll_at=iso_utc(place.due_at) if place.due_at is not None else None,
         )
@@ -115,6 +116,7 @@ class FlowLineRead:
                 submission_id=place.submission.submission_id,
                 arrival=place.submission.arrival,
                 state=place.state,
+                in_line=place.in_line,
                 position=place.position,
                 next_poll_at=iso_utc(place.due_at) if place.due_at is not None else None,
             )
