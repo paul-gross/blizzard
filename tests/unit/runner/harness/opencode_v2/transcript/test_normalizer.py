@@ -10,7 +10,7 @@ import pytest
 
 from blizzard.runner.harness.admission import version_admitted
 from blizzard.runner.harness.internal.committed_corpus import CommittedCorpus
-from blizzard.runner.harness.json_value import JsonValue
+from blizzard.runner.harness.json_value import JsonObject, JsonValue
 from blizzard.runner.harness.opencode_v2.shapes import Message, parse_message, parse_part
 from blizzard.runner.harness.opencode_v2.transcript.normalizer import (
     is_open,
@@ -101,3 +101,26 @@ def test_text_after_an_open_steps_last_call_is_held() -> None:
     assert shippable(message) == 2
     assert [turn.kind for turn in message_turns(message).turns] == ["thinking", "tool"]
     assert [turn.text for turn in message_turns(message, 2).turns] == []
+
+
+def _step(*states: tuple[str, JsonValue]) -> JsonObject:
+    calls: list[JsonValue] = [
+        {"type": "tool", "id": f"call_{n}", "name": "shell", "state": {"status": status, "input": tool_input}}
+        for n, (status, tool_input) in enumerate(states)
+    ]
+    return {
+        "type": "assistant",
+        "id": "msg_1",
+        "time": {"created": 1},
+        "content": [{"type": "text", "text": "go"}, *calls],
+    }
+
+
+def test_a_call_whose_arguments_are_still_streaming_is_held_until_they_finish() -> None:
+    assert shippable(parse_message(_step(("streaming", '{"command": "sl')))) == 1
+    assert shippable(parse_message(_step(("running", {"command": "sleep"})))) == 2
+
+
+def test_a_step_ships_only_up_to_its_first_streaming_call() -> None:
+    message = parse_message(_step(("running", {"a": 1}), ("streaming", "{"), ("running", {"b": 2})))
+    assert shippable(message) == 2
