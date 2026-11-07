@@ -5536,7 +5536,7 @@ export type GetChunkRunnersRunnerIdApiChunksChunkIdGetErrors = {
     /**
      * A refusal the hub answered, relayed as the hub sent it.
      */
-    422: HttpValidationError;
+    422: HttpValidationError | Problem;
     /**
      * A refusal the hub answered, relayed as the hub sent it.
      */
@@ -5596,7 +5596,7 @@ export type PauseChunkRunnersRunnerIdApiChunksChunkIdPausePostErrors = {
     /**
      * A refusal the hub answered, relayed as the hub sent it.
      */
-    422: HttpValidationError;
+    422: HttpValidationError | Problem;
     /**
      * A refusal the hub answered, relayed as the hub sent it.
      */
@@ -5728,7 +5728,7 @@ export type ResumeChunkRunnersRunnerIdApiChunksChunkIdResumePostErrors = {
     /**
      * A refusal the hub answered, relayed as the hub sent it.
      */
-    422: HttpValidationError;
+    422: HttpValidationError | Problem;
     /**
      * A refusal the hub answered, relayed as the hub sent it.
      */
@@ -5989,7 +5989,7 @@ export type GetWorkItemsRunnersRunnerIdApiChunksChunkIdWorkItemsGetErrors = {
     /**
      * A refusal the hub answered, relayed as the hub sent it.
      */
-    422: HttpValidationError;
+    422: HttpValidationError | Problem;
     /**
      * A refusal the hub answered, relayed as the hub sent it.
      */
@@ -6155,7 +6155,7 @@ export type GetFleetSummaryRunnersRunnerIdApiFleetSummaryGetErrors = {
     /**
      * A refusal the hub answered, relayed as the hub sent it.
      */
-    422: HttpValidationError;
+    422: HttpValidationError | Problem;
     /**
      * A refusal the hub answered, relayed as the hub sent it.
      */
@@ -6211,7 +6211,7 @@ export type ListGateDecisionsRunnersRunnerIdApiGateDecisionsGetErrors = {
     /**
      * A refusal the hub answered, relayed as the hub sent it.
      */
-    422: HttpValidationError;
+    422: HttpValidationError | Problem;
     /**
      * A refusal the hub answered, relayed as the hub sent it.
      */
@@ -6381,7 +6381,7 @@ export type GetAnalyticsCountsAgentTypesRunnersRunnerIdApiLeasesLeaseIdAnalytics
     /**
      * A refusal the hub answered, relayed as the hub sent it.
      */
-    422: HttpValidationError;
+    422: HttpValidationError | Problem;
     /**
      * A refusal the hub answered, relayed as the hub sent it.
      */
@@ -6450,7 +6450,7 @@ export type GetAnalyticsCountsFilesRunnersRunnerIdApiLeasesLeaseIdAnalyticsCount
     /**
      * A refusal the hub answered, relayed as the hub sent it.
      */
-    422: HttpValidationError;
+    422: HttpValidationError | Problem;
     /**
      * A refusal the hub answered, relayed as the hub sent it.
      */
@@ -6523,7 +6523,7 @@ export type GetAnalyticsCountsNodesRunnersRunnerIdApiLeasesLeaseIdAnalyticsCount
     /**
      * A refusal the hub answered, relayed as the hub sent it.
      */
-    422: HttpValidationError;
+    422: HttpValidationError | Problem;
     /**
      * A refusal the hub answered, relayed as the hub sent it.
      */
@@ -6592,7 +6592,7 @@ export type GetAnalyticsCountsSkillsRunnersRunnerIdApiLeasesLeaseIdAnalyticsCoun
     /**
      * A refusal the hub answered, relayed as the hub sent it.
      */
-    422: HttpValidationError;
+    422: HttpValidationError | Problem;
     /**
      * A refusal the hub answered, relayed as the hub sent it.
      */
@@ -6665,7 +6665,7 @@ export type GetAnalyticsSpendGraphsRunnersRunnerIdApiLeasesLeaseIdAnalyticsSpend
     /**
      * A refusal the hub answered, relayed as the hub sent it.
      */
-    422: HttpValidationError;
+    422: HttpValidationError | Problem;
     /**
      * A refusal the hub answered, relayed as the hub sent it.
      */
@@ -6738,7 +6738,7 @@ export type GetAnalyticsSpendNodesRunnersRunnerIdApiLeasesLeaseIdAnalyticsSpendN
     /**
      * A refusal the hub answered, relayed as the hub sent it.
      */
-    422: HttpValidationError;
+    422: HttpValidationError | Problem;
     /**
      * A refusal the hub answered, relayed as the hub sent it.
      */
@@ -6803,7 +6803,7 @@ export type ListArtifactsRunnersRunnerIdApiLeasesLeaseIdArtifactsGetErrors = {
     /**
      * A refusal the hub answered, relayed as the hub sent it.
      */
-    422: HttpValidationError;
+    422: HttpValidationError | Problem;
     /**
      * A refusal the hub answered, relayed as the hub sent it.
      */
@@ -6878,7 +6878,7 @@ export type GetArtifactRunnersRunnerIdApiLeasesLeaseIdArtifactsNameGetErrors = {
     /**
      * A refusal the hub answered, relayed as the hub sent it.
      */
-    422: HttpValidationError;
+    422: HttpValidationError | Problem;
     /**
      * A refusal the hub answered, relayed as the hub sent it.
      */
@@ -6938,7 +6938,7 @@ export type GetChunkAsksRunnersRunnerIdApiLeasesLeaseIdAsksGetErrors = {
     /**
      * A refusal the hub answered, relayed as the hub sent it.
      */
-    422: HttpValidationError;
+    422: HttpValidationError | Problem;
     /**
      * A refusal the hub answered, relayed as the hub sent it.
      */
@@ -7074,7 +7074,7 @@ export type RecordAttachmentRunnersRunnerIdApiLeasesLeaseIdAttachmentsPostErrors
     /**
      * A refusal the hub answered, relayed as the hub sent it.
      */
-    422: HttpValidationError;
+    422: HttpValidationError | Problem;
     /**
      * A refusal the hub answered, relayed as the hub sent it.
      */
@@ -7134,7 +7134,7 @@ export type ListFindingsRunnersRunnerIdApiLeasesLeaseIdFindingsGetErrors = {
     /**
      * A refusal the hub answered, relayed as the hub sent it.
      */
-    422: HttpValidationError;
+    422: HttpValidationError | Problem;
     /**
      * A refusal the hub answered, relayed as the hub sent it.
      */
@@ -7200,7 +7200,7 @@ export type GetFindingRunnersRunnerIdApiLeasesLeaseIdFindingsFindingIdGetErrors 
     /**
      * A refusal the hub answered, relayed as the hub sent it.
      */
-    422: HttpValidationError;
+    422: HttpValidationError | Problem;
     /**
      * A refusal the hub answered, relayed as the hub sent it.
      */
@@ -7260,7 +7260,7 @@ export type ListGardenFindingsRunnersRunnerIdApiLeasesLeaseIdGardenFindingsGetEr
     /**
      * A refusal the hub answered, relayed as the hub sent it.
      */
-    422: HttpValidationError;
+    422: HttpValidationError | Problem;
     /**
      * A refusal the hub answered, relayed as the hub sent it.
      */
@@ -7327,7 +7327,7 @@ export type ListGardenProposalsRunnersRunnerIdApiLeasesLeaseIdGardenProposalsGet
     /**
      * A refusal the hub answered, relayed as the hub sent it.
      */
-    422: HttpValidationError;
+    422: HttpValidationError | Problem;
     /**
      * A refusal the hub answered, relayed as the hub sent it.
      */
@@ -7425,7 +7425,7 @@ export type GetHistoryRunnersRunnerIdApiLeasesLeaseIdHistoryGetErrors = {
     /**
      * A refusal the hub answered, relayed as the hub sent it.
      */
-    422: HttpValidationError;
+    422: HttpValidationError | Problem;
     /**
      * A refusal the hub answered, relayed as the hub sent it.
      */
@@ -7487,7 +7487,7 @@ export type GetChunkNotesRunnersRunnerIdApiLeasesLeaseIdNotesGetErrors = {
     /**
      * A refusal the hub answered, relayed as the hub sent it.
      */
-    422: HttpValidationError;
+    422: HttpValidationError | Problem;
     /**
      * A refusal the hub answered, relayed as the hub sent it.
      */
@@ -7549,7 +7549,7 @@ export type ListScopesRunnersRunnerIdApiLeasesLeaseIdScopesGetErrors = {
     /**
      * A refusal the hub answered, relayed as the hub sent it.
      */
-    422: HttpValidationError;
+    422: HttpValidationError | Problem;
     /**
      * A refusal the hub answered, relayed as the hub sent it.
      */

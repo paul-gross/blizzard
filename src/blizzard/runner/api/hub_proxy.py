@@ -77,9 +77,16 @@ RELAYED_REFUSALS: dict[int | str, dict[str, Any]] = {
     )
 }
 
-# A proxied 422 can also be FastAPI's own request validation response.
+# A proxied 422 can be FastAPI validation or a hub refusal, including a legacy
+# application/json refusal. The JSON union also gives generated clients both
+# variants when their generator selects one media type per response status.
 RELAYED_REFUSALS[status.HTTP_422_UNPROCESSABLE_CONTENT]["content"]["application/json"] = {
-    "schema": {"$ref": "#/components/schemas/HTTPValidationError"}
+    "schema": {
+        "anyOf": [
+            {"$ref": "#/components/schemas/HTTPValidationError"},
+            {"$ref": "#/components/schemas/Problem"},
+        ]
+    }
 }
 
 

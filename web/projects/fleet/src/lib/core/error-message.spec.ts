@@ -1,7 +1,18 @@
 import type { ProjectRequiredBody } from '../api/hub';
+import type { PauseChunkRunnersRunnerIdApiChunksChunkIdPausePostErrors } from '../api/runner';
 import { errorMessage } from './error-message';
 
 describe('errorMessage', () => {
+  it('accepts both generated proxy 422 variants', () => {
+    const problem: PauseChunkRunnersRunnerIdApiChunksChunkIdPausePostErrors[422] = {
+      type: 'urn:example:refusal', detail: 'refused',
+    };
+    const validation: PauseChunkRunnersRunnerIdApiChunksChunkIdPausePostErrors[422] = {
+      detail: [{ loc: ['body'], msg: 'invalid', type: 'value_error' }],
+    };
+    expect(errorMessage(problem, 'failed')).toBe('refused');
+    expect(errorMessage(validation, 'failed')).toContain('invalid');
+  });
   it("reads a problem's string detail whatever its type", () => {
     const error = {
       type: 'urn:blizzard:problem:chunk-not-found',
