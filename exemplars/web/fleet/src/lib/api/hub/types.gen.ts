@@ -15,6 +15,35 @@ export type HttpValidationError = {
 };
 
 /**
+ * PermitAlreadyRequestedProblem
+ *
+ * The project already holds a permit for the holder and capability (``409``).
+ */
+export type PermitAlreadyRequestedProblem = {
+    /**
+     * Detail
+     */
+    detail: string;
+    /**
+     * Instance
+     */
+    instance: string;
+    /**
+     * Status
+     */
+    status?: number;
+    /**
+     * Title
+     */
+    title: string;
+    /**
+     * Type
+     */
+    type: 'urn:blizzard:problem:permit-already-requested';
+    [key: string]: unknown;
+};
+
+/**
  * PermitCreateRequest
  *
  * Request a permit granting ``capability`` to ``holder``.
@@ -235,6 +264,10 @@ export type RequestPermitApiPermitsPostData = {
 };
 
 export type RequestPermitApiPermitsPostErrors = {
+    /**
+     * Conflict
+     */
+    409: PermitAlreadyRequestedProblem;
     /**
      * Validation Error
      */
