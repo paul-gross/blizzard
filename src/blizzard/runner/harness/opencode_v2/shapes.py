@@ -170,10 +170,13 @@ def parse_session(value: JsonValue) -> SessionRecord:
 @domain_model
 @dataclass(frozen=True)
 class ToolState:
-    """``output`` is a completed call's text and ``error`` a failed call's message; both ``None`` until it ends."""
+    """``output`` is a completed call's text and ``error`` a failed call's message; both ``None`` until it ends.
+    ``streamed_input`` is a streaming call's raw partial arguments; its ``input`` is ``{}`` then. The string form is
+    OpenCode 2.2.6's ``Session.Message.ToolState.Streaming`` schema, which no committed corpus captures."""
 
     status: str
     input: JsonObject = field(default_factory=dict[str, JsonValue])
+    streamed_input: str | None = None
     metadata: JsonObject = field(default_factory=dict[str, JsonValue])
     output: str | None = None
     error: str | None = None
@@ -231,13 +234,20 @@ def parse_part(value: JsonValue) -> Part:
     if kind != "tool":
         return Part(type=kind)
     state = _object(record.get("state"), "part.tool.state")
+    status = _text(state, "status", "part.tool.state")
+    raw_input = state.get("input")
+    if status == "streaming" and isinstance(raw_input, str):
+        tool_input, streamed_input = {}, raw_input
+    else:
+        tool_input, streamed_input = _optional_object(state, "input", "part.tool.state"), None
     return Part(
         type=kind,
         id=_text(record, "id", "part.tool"),
         name=_text(record, "name", "part.tool"),
         state=ToolState(
-            status=_text(state, "status", "part.tool.state"),
-            input=_optional_object(state, "input", "part.tool.state"),
+            status=status,
+            input=tool_input,
+            streamed_input=streamed_input,
             metadata=_optional_object(state, "metadata", "part.tool.state"),
             output=_tool_output(state),
             error=_tool_error(state),

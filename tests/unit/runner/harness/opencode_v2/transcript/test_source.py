@@ -254,3 +254,19 @@ def test_no_read_starts_or_continues_a_turn() -> None:
     source.size_bytes(ROOT, spawn_cwd=None)
     source.context_tokens(ROOT, spawn_cwd=None)
     assert transport.requests and {request.method for request in transport.requests} == {"GET"}
+
+
+def test_a_call_still_streaming_its_arguments_ships_once_they_are_complete_and_only_once() -> None:
+    streaming = assistant("msg_2", tools=(tool("call_1", "streaming", input='{"command": "sl'),))
+    streaming["time"] = {"created": 2}
+    streaming.pop("tokens")
+    streaming.pop("cost")
+    service = _service(_user("msg_1", "go"), streaming)
+    source, _ = _source(service)
+    first = _read(source)
+    assert [turn.kind for turn in first.turns if turn.tool is not None] == []
+    service.messages[ROOT][1] = assistant("msg_2", "done", tools=(tool("call_1", input={"command": "sleep"}),))
+    second = _read(source, first.next_position)
+    calls = [turn.tool for turn in second.turns if turn.tool is not None]
+    assert len(calls) == 1 and calls[0].input == {"command": "sleep"}
+    assert _read(source, second.next_position).turns == []

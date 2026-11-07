@@ -56,11 +56,17 @@ def is_open(message: Message) -> bool:
 
 
 def shippable(message: Message) -> int:
-    """How many of ``message``'s parts can ship now: all of a settled message's, an open one's through its last call."""
+    """How many of ``message``'s parts can ship now: all of a settled message's, an open one's through its last call,
+    stopping before the first call whose arguments are still streaming."""
     if not is_open(message):
         return len(message.parts)
     calls = [index for index, part in enumerate(message.parts) if part.type == "tool"]
-    return calls[-1] + 1 if calls else 0
+    end = calls[-1] + 1 if calls else 0
+    streaming = next(
+        (i for i, p in enumerate(message.parts) if p.type == "tool" and p.state and p.state.status == "streaming"),
+        None,
+    )
+    return end if streaming is None else min(end, streaming)
 
 
 def tool_output(part: Part) -> str | None:

@@ -20,6 +20,7 @@ from blizzard.runner.harness.opencode_v2.shapes import (
     parse_form_request,
     parse_listed_model,
     parse_message,
+    parse_part,
     parse_permission_request,
     parse_session,
 )
@@ -246,3 +247,23 @@ def test_an_unread_message_or_part_type_is_kept_by_its_type() -> None:
 def test_the_corpus_directory_exists() -> None:
     assert _VERSIONS and all((_CORPUS.root / "opencode" / v).is_dir() for v in _VERSIONS)
     assert Path(_CORPUS.root).is_dir()
+
+
+def _tool_part(status: str, tool_input: JsonValue) -> JsonValue:
+    # A ``streaming`` status pins the string form ``ToolState`` documents.
+    return {"type": "tool", "id": "call_1", "name": "shell", "state": {"status": status, "input": tool_input}}
+
+
+def test_a_streaming_call_keeps_its_raw_partial_arguments_and_an_empty_input() -> None:
+    state = parse_part(_tool_part("streaming", '{"command": "sl')).state
+    assert state is not None and state.input == {} and state.streamed_input == '{"command": "sl'
+
+
+def test_a_string_input_on_a_call_that_is_not_streaming_is_refused() -> None:
+    with pytest.raises(OpenCodeTwoShapeError):
+        parse_part(_tool_part("running", '{"command": "sl'))
+
+
+def test_a_streaming_call_whose_input_is_neither_object_nor_string_is_refused() -> None:
+    with pytest.raises(OpenCodeTwoShapeError):
+        parse_part(_tool_part("streaming", 5))
