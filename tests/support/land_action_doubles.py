@@ -9,8 +9,9 @@ from typing import Any
 
 from blizzard.foundation.artifacts import ArtifactKind
 from blizzard.hub.delivery.actions.land import Land
+from blizzard.hub.domain.actions.declarations import GitCommits
 from blizzard.hub.domain.actions.effects import Effect, EffectResult, EffectStatus, LandingRecord, Marker, Pass
-from blizzard.hub.domain.actions.visit import GitCommits, LandingProject, Visit, VisitChunk, VisitNode
+from blizzard.hub.domain.actions.visit import LandingProject, Visit, VisitChunk, VisitNode
 from blizzard.hub.domain.artifact.model import StoredArtifact
 from blizzard.hub.domain.config.capabilities import Capability
 from blizzard.hub.domain.config.forges import ConfiguredForge, ForgeFields, ForgeId

@@ -21,8 +21,9 @@ from typing_extensions import TypeIs
 from blizzard.foundation.artifacts import ArtifactKind
 from blizzard.foundation.crash import ENV_CRASH_FENCE
 from blizzard.hub.delivery.action_registry import ENV_TEST_ACTIONS, SHIPPED_ACTIONS, TEST_ACTIONS
+from blizzard.hub.domain.actions.declarations import GitCommits
 from blizzard.hub.domain.actions.requirements import ACTION_REQUIREMENTS
-from blizzard.hub.domain.actions.visit import GitCommits, LandingProject, Visit, VisitChunk, VisitNode
+from blizzard.hub.domain.actions.visit import LandingProject, Visit, VisitChunk, VisitNode
 from blizzard.hub.domain.artifact.model import StoredArtifact
 from blizzard.hub.domain.chunk.model import WorkRef
 from blizzard.hub.domain.config.forges import ConfiguredForge, ForgeFields, ForgeId

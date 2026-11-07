@@ -14,13 +14,17 @@ from datetime import UTC, datetime
 from pathlib import Path
 
 from blizzard.foundation.clock import FixedClock
+from blizzard.runner.composition import build_host_process
+from blizzard.runner.config import RunnerConfig
 from blizzard.runner.environments.provider import AcquiredEnvironment
 from blizzard.runner.environments.workspaces import WorkspaceEntry, WorkspaceRegistry
 from blizzard.runner.harness.adapter import WorkerHandle
+from blizzard.runner.host_config import BuiltRunner, HaltedRunner, ResolvedToken
 from blizzard.runner.hub.client import ClaimRequest, HubClientError, QueueEntry, RouteClaimOutcome
 from blizzard.runner.lifecycle.claim import ReadyQueue
 from blizzard.runner.loop.context import LoopConfig
 from blizzard.runner.loop.tick import tick
+from tests.support.host_files import host_config_of
 from tests.support.runner_fakes import (
     FIXTURE_PROJECT_ID,
     FakeHarness,
@@ -115,6 +119,40 @@ def test_two_runners_on_one_workspace_never_hold_one_environment(tmp_path: Path)
     }
     assert held == {"ch_a": "e1", "ch_b": "e2"}
     assert [v for v in runner_invariant_violations(store_a) if v.invariant == "runner:unique-env-binding"] == []
+
+
+def test_a_halted_runners_unreleased_binding_is_excluded_from_its_siblings_pool(tmp_path: Path) -> None:
+    provider = FakeProvider({"e1": "/ws/e1", "e2": "/ws/e2"})
+    workspaces = WorkspaceRegistry([WorkspaceEntry("ws1", provider, spawn_root="")])
+    store_a = make_store(f"sqlite:///{tmp_path / 'runner.db'}", runner_id="r_a")
+    store_b = SqlAlchemyRunnerStore(store_a.engine, runner_store_errors(), "r_b")
+    ctx_a = _runner(store_a, "r_a", workspaces, "ch_a")
+    ReadyQueue.peeked(ctx_a, (fixture_route(),)).claim_one()
+
+    # Restart the host with A halted and unbuilt, but with its persisted binding intact.
+    config = RunnerConfig(root=tmp_path, db_url=f"sqlite:///{tmp_path / 'runner.db'}", hub_url="http://127.0.0.1:9")
+    halted = HaltedRunner("r_a", "r_a", ("has no hub token",))
+    host = build_host_process(
+        host_config_of(config),
+        [BuiltRunner("r_b", dataclasses.replace(config, runner_id="r_b"), ResolvedToken())],
+        halted=(halted,),
+    )
+    try:
+        assert host.halted == (halted,)
+        assert [runner.runner_id for runner in host.runners] == ["r_b"]
+        ctx_b = dataclasses.replace(
+            _runner(store_b, "r_b", workspaces, "ch_b"), stores=host.runners[0].stores, host_stores=host.host_stores
+        )
+        assert [
+            (b.chunk_id, b.environment_id) for b in host.host_stores.runner_audit.held_workspace_bindings("ws1")
+        ] == [("ch_a", "e1")]
+        ReadyQueue.peeked(ctx_b, (fixture_route(),)).claim_one()
+
+        held = {b.chunk_id: b.environment_id for b in host.host_stores.runner_audit.held_workspace_bindings("ws1")}
+        assert held == {"ch_a": "e1", "ch_b": "e2"}
+        assert [v for v in runner_invariant_violations(store_a) if v.invariant == "runner:unique-env-binding"] == []
+    finally:
+        host.close()
 
 
 def test_a_runner_that_cannot_take_the_workspace_lock_still_finishes_its_tick(tmp_path: Path) -> None:

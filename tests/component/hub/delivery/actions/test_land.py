@@ -20,8 +20,8 @@ from blizzard.foundation.escalation_causes import EscalationCause
 from blizzard.foundation.hub_event_types import HubEventType
 from blizzard.hub.config import HubConfig
 from blizzard.hub.delivery.actions.land import Land
+from blizzard.hub.domain.actions.declarations import GitCommits
 from blizzard.hub.domain.actions.effects import LandingRecord
-from blizzard.hub.domain.actions.visit import GitCommits
 from blizzard.hub.domain.chunk.model import WorkItemAuthor, decide_close_enqueue
 from blizzard.hub.domain.chunk.no_code import no_code_marker
 from blizzard.hub.domain.chunk.ports.fence import EpochAdmission
@@ -1092,6 +1092,8 @@ def test_a_landing_record_is_written_past_the_fence_once_and_answers_whether_it_
     assert isinstance(artifacts, ChunkArtifactsStore)
     chunk = hub.services.chunks.record.get(chunk_id)
     assert chunk is not None
+    assert len(chunk.work_refs) == 1
+    work_ref = chunk.work_refs[0]
     close_decision = decide_close_enqueue(chunk.work_refs, lambda _: True)
 
     def record() -> bool:
@@ -1114,3 +1116,5 @@ def test_a_landing_record_is_written_past_the_fence_once_and_answers_whether_it_
     assert record() is True
     assert _landed_rows(hub, chunk_id) == [(_WIDGET, "m1", "re_widget")]
     assert [a.data for a in artifacts.load_artifacts(chunk_id) if a.name == f"merged/{_WIDGET}"] == ["m1"]
+    intents = [i for i in hub.services.chunks.delivery.pending_close_intents() if i.chunk_id == chunk_id]
+    assert [i.ref for i in intents] == [work_ref]
