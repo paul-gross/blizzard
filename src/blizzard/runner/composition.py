@@ -69,14 +69,7 @@ from blizzard.runner.harness.wiring import (
 from blizzard.runner.host_config import BuiltRunner, HaltedRunner, HostConfig, ResolvedToken
 from blizzard.runner.host_file import HostFileEditor
 from blizzard.runner.host_layout import HostLayout
-from blizzard.runner.hub.client import (
-    HostReport,
-    HostReportedWorkspace,
-    IHostHubClient,
-    ITokenIdentityReader,
-    TokenIdentity,
-    TokenRefusal,
-)
+from blizzard.runner.hub.client import HostReport, HostReportedWorkspace, IHostHubClient
 from blizzard.runner.hub.client import SubscriptionDeclaration as HubSubscriptionDeclaration
 from blizzard.runner.hub.flags import FlagsHolder
 from blizzard.runner.hub.held_token import HubTokenHolder
@@ -296,6 +289,8 @@ class RunnerProcess:
     retirement: RetiredRunnerWatch
     #: The token every runner->hub client presents — re-read from ``.env`` while the identity mismatches.
     hub_token: HubTokenHolder
+    #: The one client this runner's identity reads go through, under ``hub_token``; closed with the runner.
+    identity_client: httpx2.Client
     #: The host's broker, stamping this runner's id on every runner-scoped event; ``None`` on a host with none.
     events: IRunnerEventPublisher | None
     #: What the enabled bindings together do with each of a worker's telemetry signals, derived once at startup.
@@ -376,8 +371,11 @@ class RunnerProcess:
         return self.host.harness_telemetry_names
 
     def close_runner(self) -> None:
-        """Shut the spawner executor down, waiting for its running work."""
-        self.executor.shutdown(wait=True)
+        """Shut the spawner executor down, waiting for its running work, then close the identity client. Idempotent."""
+        try:
+            self.executor.shutdown(wait=True)
+        finally:
+            self.identity_client.close()
 
     def close(self) -> None:
         try:
@@ -883,6 +881,7 @@ def _build_runner(
     identity = identity or RunnerIdentityHolder()
     platform_tracing = host.platform_tracing
     executor = ThreadPoolExecutor(max_workers=1, thread_name_prefix="blizzard-spawner")
+    identity_client: httpx2.Client | None = None
     try:
         # Seeded only from a store at the code's schema head: a store mid-migration fails readiness, not boot.
         ready = host.readiness.evaluate().ready
@@ -953,6 +952,12 @@ def _build_runner(
             leases=stores.lease_traces, exporter=exporter, identity=identity, clock=clock, config=config.tracing
         )
         hub_token = held_hub_token(config, token)
+        # This runner's own identity client: the host tick's watch reads on its thread, so no loop or app client is
+        # shared. The held token is read per request; the runner closes the client with itself.
+        identity_client = httpx2.Client(
+            base_url=config.hub_url, timeout=_HOST_HUB_TIMEOUT_SECONDS, auth=HeldTokenAuth(hub_token)
+        )
+        platform_tracing.instrument_client(identity_client)
         return RunnerProcess(
             host=host,
             config=config,
@@ -970,17 +975,22 @@ def _build_runner(
             retirement=RetiredRunnerWatch(
                 runner_id=runner_id,
                 rows=stores.identity,
-                forgetter=RunnerIdentityStore(connections),
-                token_identity=_OwnTokenIdentity(config.hub_url, hub_token),
+                forgetter=stores.identity,
+                token_identity=HttpHubClient(identity_client),
             ),
             hub_token=hub_token,
+            identity_client=identity_client,
             events=RunnerEventPublisher.over(host.events, runner_id),
             harness_telemetry=plan,
             flags=FlagsHolder(resolve_flags(host.flag_registry, "runner", config.flags).flags),
             closes_host=closes_host,
         )
     except BaseException:
-        executor.shutdown(wait=True)
+        try:
+            if identity_client is not None:
+                identity_client.close()
+        finally:
+            executor.shutdown(wait=True)
         raise
 
 
@@ -1043,23 +1053,6 @@ def build_identity_service(
         yield RunnerIdentityService(recorder=identities, forgetter=identities, clock=clock)
     finally:
         engine.dispose()
-
-
-class _OwnTokenIdentity:
-    """The identity read under a runner's own held token, each call over a client that lives only for it."""
-
-    def __init__(self, hub_url: str, token: HubTokenHolder) -> None:
-        self._hub_url = hub_url
-        self._token = token
-
-    def identity(self) -> TokenIdentity | TokenRefusal:
-        with httpx2.Client(
-            base_url=self._hub_url, timeout=_HOST_HUB_TIMEOUT_SECONDS, auth=HeldTokenAuth(self._token)
-        ) as client:
-            return HttpHubClient(client).identity()
-
-
-_own_token_identity_conforms: type[ITokenIdentityReader] = _OwnTokenIdentity
 
 
 def build_read_stores(engine: Engine, *, errors: RunnerStoreErrorFactory, runner_id: str | None) -> RunnerReadStores:

@@ -633,6 +633,7 @@ def test_hosted_graph_shares_process_scoped_dependencies_with_loop_and_recovery(
         assert runner_seams(hosted.app).harness_health is ctx.harness_health is graph.health
         assert hosted.app.state.event_broker is graph.host.events
         assert ctx.events is graph.events
+        assert runner_seams(hosted.app).events is graph.events
         assert hosted.app.state.clock is ctx.clock is hosted.resume.clock is graph.clock
         assert hosted.resume.process is ctx.process is graph.process
         assert ctx.stores is graph.stores

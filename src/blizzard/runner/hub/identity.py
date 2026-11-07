@@ -85,6 +85,10 @@ class IWriteRetiredRunnerIdentity(Protocol):
         ...
 
 
+class IRunnerIdentityStore(IWriteRunnerIdentityRepository, IWriteRetiredRunnerIdentity, Protocol):
+    """The runner bundle's one identity store: the row's read-write access and its retirement forgetting."""
+
+
 class ICurrentRunnerIdentity(Protocol):
     """The process's current runner identity."""
 
