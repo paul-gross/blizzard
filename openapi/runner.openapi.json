@@ -9127,9 +9127,14 @@
                 "schema": {
                   "$ref": "#/components/schemas/HTTPValidationError"
                 }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
               }
             },
-            "description": "Validation Error"
+            "description": "A refusal the hub answered, relayed as the hub sent it."
           },
           "503": {
             "content": {
@@ -9241,9 +9246,14 @@
                 "schema": {
                   "$ref": "#/components/schemas/HTTPValidationError"
                 }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
               }
             },
-            "description": "Validation Error"
+            "description": "A refusal the hub answered, relayed as the hub sent it."
           },
           "503": {
             "content": {
@@ -9464,9 +9474,14 @@
                 "schema": {
                   "$ref": "#/components/schemas/HTTPValidationError"
                 }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
               }
             },
-            "description": "Validation Error"
+            "description": "A refusal the hub answered, relayed as the hub sent it."
           },
           "503": {
             "content": {
@@ -9902,9 +9917,14 @@
                 "schema": {
                   "$ref": "#/components/schemas/HTTPValidationError"
                 }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
               }
             },
-            "description": "Validation Error"
+            "description": "A refusal the hub answered, relayed as the hub sent it."
           },
           "503": {
             "content": {
@@ -10180,9 +10200,14 @@
                 "schema": {
                   "$ref": "#/components/schemas/HTTPValidationError"
                 }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
               }
             },
-            "description": "Validation Error"
+            "description": "A refusal the hub answered, relayed as the hub sent it."
           },
           "503": {
             "content": {
@@ -10285,9 +10310,14 @@
                 "schema": {
                   "$ref": "#/components/schemas/HTTPValidationError"
                 }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
               }
             },
-            "description": "Validation Error"
+            "description": "A refusal the hub answered, relayed as the hub sent it."
           },
           "503": {
             "content": {
@@ -10592,9 +10622,14 @@
                 "schema": {
                   "$ref": "#/components/schemas/HTTPValidationError"
                 }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
               }
             },
-            "description": "Validation Error"
+            "description": "A refusal the hub answered, relayed as the hub sent it."
           },
           "503": {
             "content": {
@@ -10738,9 +10773,14 @@
                 "schema": {
                   "$ref": "#/components/schemas/HTTPValidationError"
                 }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
               }
             },
-            "description": "Validation Error"
+            "description": "A refusal the hub answered, relayed as the hub sent it."
           },
           "503": {
             "content": {
@@ -10894,9 +10934,14 @@
                 "schema": {
                   "$ref": "#/components/schemas/HTTPValidationError"
                 }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
               }
             },
-            "description": "Validation Error"
+            "description": "A refusal the hub answered, relayed as the hub sent it."
           },
           "503": {
             "content": {
@@ -11040,9 +11085,14 @@
                 "schema": {
                   "$ref": "#/components/schemas/HTTPValidationError"
                 }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
               }
             },
-            "description": "Validation Error"
+            "description": "A refusal the hub answered, relayed as the hub sent it."
           },
           "503": {
             "content": {
@@ -11196,9 +11246,14 @@
                 "schema": {
                   "$ref": "#/components/schemas/HTTPValidationError"
                 }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
               }
             },
-            "description": "Validation Error"
+            "description": "A refusal the hub answered, relayed as the hub sent it."
           },
           "503": {
             "content": {
@@ -11352,9 +11407,14 @@
                 "schema": {
                   "$ref": "#/components/schemas/HTTPValidationError"
                 }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
               }
             },
-            "description": "Validation Error"
+            "description": "A refusal the hub answered, relayed as the hub sent it."
           },
           "503": {
             "content": {
@@ -11486,9 +11546,14 @@
                 "schema": {
                   "$ref": "#/components/schemas/HTTPValidationError"
                 }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
               }
             },
-            "description": "Validation Error"
+            "description": "A refusal the hub answered, relayed as the hub sent it."
           },
           "503": {
             "content": {
@@ -11641,9 +11706,14 @@
                 "schema": {
                   "$ref": "#/components/schemas/HTTPValidationError"
                 }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
               }
             },
-            "description": "Validation Error"
+            "description": "A refusal the hub answered, relayed as the hub sent it."
           },
           "503": {
             "content": {
@@ -11759,9 +11829,14 @@
                 "schema": {
                   "$ref": "#/components/schemas/HTTPValidationError"
                 }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
               }
             },
-            "description": "Validation Error"
+            "description": "A refusal the hub answered, relayed as the hub sent it."
           },
           "503": {
             "content": {
@@ -12001,9 +12076,14 @@
                 "schema": {
                   "$ref": "#/components/schemas/HTTPValidationError"
                 }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
               }
             },
-            "description": "Validation Error"
+            "description": "A refusal the hub answered, relayed as the hub sent it."
           },
           "503": {
             "content": {
@@ -12119,9 +12199,14 @@
                 "schema": {
                   "$ref": "#/components/schemas/HTTPValidationError"
                 }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
               }
             },
-            "description": "Validation Error"
+            "description": "A refusal the hub answered, relayed as the hub sent it."
           },
           "503": {
             "content": {
@@ -12242,9 +12327,14 @@
                 "schema": {
                   "$ref": "#/components/schemas/HTTPValidationError"
                 }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
               }
             },
-            "description": "Validation Error"
+            "description": "A refusal the hub answered, relayed as the hub sent it."
           },
           "503": {
             "content": {
@@ -12360,9 +12450,14 @@
                 "schema": {
                   "$ref": "#/components/schemas/HTTPValidationError"
                 }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
               }
             },
-            "description": "Validation Error"
+            "description": "A refusal the hub answered, relayed as the hub sent it."
           },
           "503": {
             "content": {
@@ -12488,9 +12583,14 @@
                 "schema": {
                   "$ref": "#/components/schemas/HTTPValidationError"
                 }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
               }
             },
-            "description": "Validation Error"
+            "description": "A refusal the hub answered, relayed as the hub sent it."
           },
           "503": {
             "content": {
@@ -12670,9 +12770,14 @@
                 "schema": {
                   "$ref": "#/components/schemas/HTTPValidationError"
                 }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
               }
             },
-            "description": "Validation Error"
+            "description": "A refusal the hub answered, relayed as the hub sent it."
           },
           "503": {
             "content": {
@@ -12788,9 +12893,14 @@
                 "schema": {
                   "$ref": "#/components/schemas/HTTPValidationError"
                 }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
               }
             },
-            "description": "Validation Error"
+            "description": "A refusal the hub answered, relayed as the hub sent it."
           },
           "503": {
             "content": {
@@ -12906,9 +13016,14 @@
                 "schema": {
                   "$ref": "#/components/schemas/HTTPValidationError"
                 }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
               }
             },
-            "description": "Validation Error"
+            "description": "A refusal the hub answered, relayed as the hub sent it."
           },
           "503": {
             "content": {

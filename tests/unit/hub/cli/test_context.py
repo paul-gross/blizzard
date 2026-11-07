@@ -237,6 +237,22 @@ def test_a_verbs_own_409_is_left_to_the_verb() -> None:
     assert len(sent) == 1
 
 
+def test_untyped_tenant_text_is_not_dispatched_as_a_tenant_refusal() -> None:
+    from blizzard.wire.tenant import NO_SUCH_TENANT
+
+    sent: list[dict[str, object]] = []
+    refusal = _FakeResponse(404, {"detail": NO_SUCH_TENANT})
+    bound = bind_stubs(get=_get_answering({"/api/x": refusal}, sent))
+    cli = replace(_ctx(bound), tenant=_BRAVO)
+
+    response = cli.send("get", "/api/x")
+    assert response is refusal
+    with pytest.raises(click.ClickException) as exc_info:
+        cli.check(response, "GET /x")
+    assert exc_info.value.message == NO_SUCH_TENANT
+    assert len(sent) == 1
+
+
 def test_stream_surfaces_tenant_required_with_the_callers_tenants() -> None:
     sent: list[dict[str, object]] = []
     bound = bind_stubs(

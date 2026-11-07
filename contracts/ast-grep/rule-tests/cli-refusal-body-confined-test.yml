@@ -14,3 +14,11 @@ invalid:
     slug = resp.json()["detail"]["slug"]
   - |
     detail = resp.json().get("detail")
+  - |
+    def check(resp):
+        body = resp.json()
+        return body["detail"]
+  - |
+    def check(resp):
+        body = resp.json()
+        return body.get("detail")

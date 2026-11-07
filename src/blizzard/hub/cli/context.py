@@ -252,7 +252,7 @@ class CliContext:
         if _succeeded(resp):
             return
         reading = refusal_of(resp)
-        self._refuse_tenant(resp, reading)
+        self._refuse_tenant(reading)
         self._refuse_project(reading)
         self._refuse_flag_off(reading)
 
@@ -332,7 +332,7 @@ class CliContext:
         self.check(resp, operation)
         return resp
 
-    def _refuse_tenant(self, resp: Response, reading: ProblemReading) -> None:
+    def _refuse_tenant(self, reading: ProblemReading) -> None:
         """Raise when the hub refuses the tenant the call acts in, before a verb can read the status code as its own:
         a ``tenant-required`` refusal (the caller belongs to several tenants and the call named none), or a
         ``tenant-not-found`` one for the tenant ``--tenant`` named. Either lists the caller's tenants from ``/api/me``,
@@ -342,9 +342,7 @@ class CliContext:
             raise self._tenant_refusal(
                 "you belong to several tenants — name the one to act in with --tenant <tenant_id>"
             )
-        if reading.type == TENANT_NOT_FOUND or (
-            reading.type is None and resp.status_code == HTTPStatus.NOT_FOUND and reading.message == NO_SUCH_TENANT
-        ):
+        if reading.type == TENANT_NOT_FOUND:
             if self.tenant is None:
                 raise click.ClickException(reading.message or NO_SUCH_TENANT)
             raise self._tenant_refusal(

@@ -16,3 +16,13 @@ rule:
   any:
     - pattern: $RESPONSE.json()["detail"]
     - pattern: $RESPONSE.json().get("detail")
+    - all:
+        - any:
+            - pattern: $BODY["detail"]
+            - pattern: $BODY.get("detail")
+        - inside:
+            kind: function_definition
+            has:
+              pattern: $BODY = $RESPONSE.json()
+              stopBy: end
+            stopBy: end

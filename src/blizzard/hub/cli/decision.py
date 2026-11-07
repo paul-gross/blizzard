@@ -53,8 +53,9 @@ def decision_resolve(cli: CliContext, decision_id: str, choice: str, resolved_by
     if note is not None:
         request["note"] = note
     resp = cli.send("post", f"/api/decisions/{decision_id}/resolutions", json_body=request)
-    if refusal_of(resp).type == DECISION_ALREADY_RESOLVED:
-        raise click.ClickException(f"already resolved by {resp.json()['already_resolved_by']}")
+    reading = refusal_of(resp)
+    if reading.type == DECISION_ALREADY_RESOLVED:
+        raise click.ClickException(f"already resolved by {reading.members['already_resolved_by']}")
     cli.check(
         resp,
         "POST /decisions/{id}/resolutions",

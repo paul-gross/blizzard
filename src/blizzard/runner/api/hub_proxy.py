@@ -72,8 +72,14 @@ RELAYED_REFUSALS: dict[int | str, dict[str, Any]] = {
         status.HTTP_403_FORBIDDEN,
         status.HTTP_404_NOT_FOUND,
         status.HTTP_409_CONFLICT,
+        status.HTTP_422_UNPROCESSABLE_CONTENT,
         status.HTTP_503_SERVICE_UNAVAILABLE,
     )
+}
+
+# A proxied 422 can also be FastAPI's own request validation response.
+RELAYED_REFUSALS[status.HTTP_422_UNPROCESSABLE_CONTENT]["content"]["application/json"] = {
+    "schema": {"$ref": "#/components/schemas/HTTPValidationError"}
 }
 
 
