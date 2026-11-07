@@ -11,9 +11,6 @@
 .answered {
   margin-bottom: 8px;
 }
-.s-head {
-  margin-bottom: 6px;
-}
 /* The same amber accent bar the board cards carry, with breathing room so the
    heading never touches it. */
 .awaiting {

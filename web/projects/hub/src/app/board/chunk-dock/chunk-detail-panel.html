@@ -18,12 +18,12 @@
     <section class="d-sec" aria-label="Work item">
       @if (showDelivery()) {
         <div class="d-box">
-          <div class="s-head"><span class="tag">Delivery</span></div>
+          <fleet-kit-section-head label="Delivery" />
           <fleet-chunk-delivery [detail]="detail()" />
         </div>
       }
       <div class="d-box">
-        <div class="s-head"><span class="tag">Work item · {{ pointerCount() }}</span></div>
+        <fleet-kit-section-head label="Work item" [count]="pointerCount()" />
         <fleet-chunk-detail-facts [detail]="detail()" />
       </div>
       <fleet-chunk-detail-awaiting-human

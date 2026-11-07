@@ -2,7 +2,7 @@
    pads itself vertically — `fleet-kit-panel`'s zero-padded `.p-body`
    (kit-panel.ts) means a panel-wrapped consumer isn't double-padded; the
    dock's own `.d-sec` (chunk-detail-panel.ts) drops its padding here to
-   match. Horizontal padding lives on `.step`/`.s-head` instead of
+   match. Horizontal padding lives on `.step`/the section heading instead of
    here (below) — a row's own hover/selected background has to reach this
    host's full width to read as a band rather than a floating inset
    rectangle, which a horizontally-padded host would clip short of. */
@@ -10,19 +10,8 @@
   display: block;
   padding: 6px 0;
 }
-.tag {
-  font-size: var(--fs-label);
-  letter-spacing: 0.18em;
-  text-transform: uppercase;
-  color: var(--label);
-}
-.s-head {
-  display: flex;
-  align-items: baseline;
-  gap: 6px;
-  min-width: 0;
-  padding: 0 8px;
-  margin-bottom: 6px;
+.head {
+  --kit-section-head-pad: 0 8px;
 }
 .graph-sep {
   color: var(--label-dim);

@@ -1,6 +1,6 @@
 @if (escalation(); as esc) {
   <div class="escalation" data-testid="escalation">
-    <div class="s-head"><span class="tag">Needs human · takeover</span></div>
+    <fleet-kit-section-head label="Needs human · takeover" />
     @if (hasWrapped()) {
       <p class="esc-hint">
         <span data-testid="escalation-cause">{{ causeSentence() }}</span>&ngsp;

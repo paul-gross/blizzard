@@ -6,12 +6,6 @@
   font-size: var(--fs-base);
   font-variant-numeric: tabular-nums;
 }
-.tag {
-  font-size: var(--fs-label);
-  letter-spacing: 0.18em;
-  text-transform: uppercase;
-  color: var(--label);
-}
 /* The dock itself never scrolls — each of its three columns owns its own
    scroll, so a long issue body cannot push the history and artifacts out of
    view, and the header stays pinned. */
@@ -69,9 +63,6 @@
 }
 fleet-chunk-detail-facts {
   --chunk-facts-pad: 0;
-}
-.s-head {
-  margin-bottom: 6px;
 }
 /* Delivery and the work item's facts each sit in a box, bordered like the dock and kit panels, so each reads apart from what follows. */
 .d-box {

@@ -4,6 +4,7 @@ import { EscalationCause, type ChunkDetail, type ChunkEscalationView } from '../
 import { createCopyFlash } from '../../core/clipboard';
 import { openLookup } from '../../core/open-lookup';
 import { KitButton } from '../../kit/kit-button';
+import { KitSectionHead } from '../../kit/kit-section-head';
 
 /**
  * The chunk's open escalation, needing a human takeover. Presentational only: it
@@ -24,7 +25,7 @@ import { KitButton } from '../../kit/kit-button';
 @Component({
   selector: 'fleet-chunk-detail-escalation',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [KitButton],
+  imports: [KitButton, KitSectionHead],
   templateUrl: './chunk-escalation.html',
   styleUrl: './chunk-escalation.css',
 })

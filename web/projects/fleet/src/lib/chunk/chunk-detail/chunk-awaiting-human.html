@@ -1,6 +1,6 @@
 @if (openQuestions().length > 0 || openDecision() || resolvedDecision()) {
   <div class="awaiting" data-testid="awaiting-human">
-    <div class="s-head"><span class="tag">Awaiting human</span></div>
+    <fleet-kit-section-head label="Awaiting human" />
     @for (q of openQuestions(); track q.question_id) {
       <div class="ask" data-testid="open-question">
         <p class="ask-q" data-testid="question-text">{{ q.question }}</p>
@@ -91,7 +91,7 @@
 
 @if (answeredQuestions().length > 0) {
   <div class="answered" data-testid="answered-questions">
-    <div class="s-head"><span class="tag">Answered</span></div>
+    <fleet-kit-section-head label="Answered" />
     @for (q of answeredQuestions(); track q.question_id) {
       <div class="trail" data-testid="answered-question">
         <p class="ask-q" data-testid="answered-question-text">{{ q.question }}</p>

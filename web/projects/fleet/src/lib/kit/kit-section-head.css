@@ -1,0 +1,17 @@
+:host {
+  display: block;
+}
+.s-head {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  min-width: 0;
+  padding: var(--kit-section-head-pad, 0);
+  margin-bottom: 6px;
+}
+.tag {
+  font-size: var(--fs-label);
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--label);
+}

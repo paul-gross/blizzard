@@ -1,13 +1,13 @@
 @if (heading()) {
-  <div class="s-head">
-    <span class="tag" id="chunk-timeline-heading">Node history</span>
+  <!-- The label is bound rather than a static attribute, so its text appears in the DOM once. -->
+  <fleet-kit-section-head class="head" [label]="'Node history'" labelId="chunk-timeline-heading">
     <span class="graph-sep" aria-hidden="true">·</span>
     @if (graphLinkBase(); as base) {
       <a class="graph-link" data-testid="node-history-graph" [routerLink]="[...base, detail().graph_id] | lensLink" [title]="detail().graph_id">{{ graphLabel() }}</a>
     } @else {
       <span class="graph-link" data-testid="node-history-graph" [title]="detail().graph_id">{{ graphLabel() }}</span>
     }
-  </div>
+  </fleet-kit-section-head>
 }
 @if (historyRows().length === 0 && !activeRow()) {
   <fleet-kit-async-state

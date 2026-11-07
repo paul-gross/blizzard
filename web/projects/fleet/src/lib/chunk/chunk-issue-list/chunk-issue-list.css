@@ -54,15 +54,6 @@
 .i-detail {
   padding: 8px;
 }
-.tag {
-  font-size: var(--fs-label);
-  letter-spacing: 0.18em;
-  text-transform: uppercase;
-  color: var(--label);
-}
-.s-head {
-  margin-bottom: 6px;
-}
 .notice {
   margin: 0;
   padding: 6px 8px;

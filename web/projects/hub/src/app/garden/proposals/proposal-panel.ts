@@ -1,7 +1,7 @@
 import { ChangeDetectionStrategy, Component, input, output } from '@angular/core';
 import { RouterLink } from '@angular/router';
 
-import { compactRef, type hubApi, KitAsyncState, type KitAsyncStateValue, KitBadge, KitButton, KitFactList, type KitFact, KitPanel, KitProseBlock, type Tone, FleetWhen } from 'fleet';
+import { compactRef, type hubApi, KitAsyncState, type KitAsyncStateValue, KitBadge, KitButton, KitFactList, type KitFact, KitPanel, KitProseBlock, KitSectionHead, type Tone, FleetWhen } from 'fleet';
 import type { FindingTriageVerb } from '../core/finding-list';
 import { findingStateTone, isFindingExited } from '../core/finding-state';
 import { LensLink } from 'fleet/shell';
@@ -115,7 +115,7 @@ export interface ProposalPanelVm {
 @Component({
   selector: 'app-proposal-panel',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [KitAsyncState, FleetWhen, KitBadge, KitButton, KitFactList, KitPanel, KitProseBlock, RouterLink, LensLink],
+  imports: [KitAsyncState, FleetWhen, KitBadge, KitButton, KitFactList, KitPanel, KitProseBlock, KitSectionHead, RouterLink, LensLink],
   templateUrl: './proposal-panel.html',
   styleUrl: './proposal-panel.css',
 })
