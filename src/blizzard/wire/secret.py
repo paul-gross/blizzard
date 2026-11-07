@@ -5,9 +5,20 @@ view carries it, a ciphertext, or a key id."""
 
 from __future__ import annotations
 
+from typing import Literal
+
 from pydantic import BaseModel, SecretStr
 
 from blizzard.wire.base import WireModel
+from blizzard.wire.problem import ProblemDetails
+
+
+class SecretAlreadyExistsProblem(ProblemDetails[Literal["urn:blizzard:problem:secret-already-exists"]]):
+    """A create named a secret the tenant already holds."""
+
+
+class SecretNotFoundProblem(ProblemDetails[Literal["urn:blizzard:problem:secret-not-found"]]):
+    """The named secret does not exist in the tenant."""
 
 
 class SecretCreateRequest(BaseModel):

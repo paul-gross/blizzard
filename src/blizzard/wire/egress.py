@@ -4,13 +4,14 @@
 from __future__ import annotations
 
 from datetime import datetime
-from typing import Annotated
+from typing import Annotated, Literal
 
 from pydantic import BaseModel
 
 from blizzard.foundation.egress_reset import EgressResetDirection
 from blizzard.foundation.egress_state import EgressState
 from blizzard.foundation.unrecognized import Unrecognized
+from blizzard.wire.problem import ProblemDetails
 from blizzard.wire.vocabulary import OPEN
 
 
@@ -91,10 +92,9 @@ class EgressBackfillResponse(BaseModel):
     datasets: list[EgressBackfillCount]
 
 
-class EgressBackfillFailure(BaseModel):
+class EgressBackfillFailure(ProblemDetails[Literal["urn:blizzard:problem:egress-backfill-failed"]]):
     """The writer refused or raised: ``datasets`` count what was committed before the backfill stopped, and
     ``cause`` names why, as the live export's own failure events do."""
 
-    detail: str
     cause: str
     datasets: list[EgressBackfillCount]

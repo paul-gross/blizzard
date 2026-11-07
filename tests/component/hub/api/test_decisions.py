@@ -9,9 +9,12 @@ from __future__ import annotations
 
 from pathlib import Path
 
+from blizzard.wire.decision import DecisionResolutionConflict
+from blizzard.wire.problem import DECISION_ALREADY_RESOLVED
 from tests.support.gate_decisions import (
     _open_decision,  # pyright: ignore[reportPrivateUsage]  # shared test helper, imported from tests.support.gate_decisions
 )
+from tests.support.refusal_observation import declared_refusal_mismatches
 from tests.support.scaffolding import build_hub
 
 # --- POST /api/decisions/{id}/resolutions — primary -------------------------
@@ -33,7 +36,10 @@ def test_resolutions_resolves_first_write_wins(tmp_path: Path) -> None:
     second = hub.client.post(
         f"/api/decisions/{decision_id}/resolutions", json={"choice": "reject", "resolved_by": "bob"}
     )
-    assert second.status_code == 409, second.text
+    assert hub.app is not None
+    path = "/api/decisions/{decision_id}/resolutions"
+    assert declared_refusal_mismatches(hub.app.openapi(), second, "post", path, 409, DecisionResolutionConflict) == []
+    assert (second.json()["type"], second.json()["detail"]) == (DECISION_ALREADY_RESOLVED, "decision already resolved")
     assert second.json()["already_resolved_by"] == "operator"
     assert second.json()["resolved_choice"] == "approve"
     assert second.json()["resolved_at"] == first.json()["resolved_at"]

@@ -38,6 +38,8 @@ from blizzard.wire.chunk import (
     NoCurrentNodeProblem,
     NoRunContextProblem,
 )
+from blizzard.wire.decision import DecisionResolutionConflict
+from blizzard.wire.egress import EgressBackfillFailure
 from blizzard.wire.host import HostNameTakenProblem, HostRetiredProblem
 from blizzard.wire.invariants import InvariantsInProgressProblem
 from blizzard.wire.problem import (
@@ -46,7 +48,7 @@ from blizzard.wire.problem import (
 from blizzard.wire.project import (
     UnknownProjectProblem,
 )
-from blizzard.wire.question import QuestionNotFoundProblem
+from blizzard.wire.question import QuestionAlreadyAnsweredProblem, QuestionNotFoundProblem
 from blizzard.wire.release import ReleaseProblem
 from blizzard.wire.route import (
     ClaimRunnerRetiredProblem,
@@ -77,12 +79,14 @@ from blizzard.wire.runner import (
     RunnerVersionProblem,
     UnknownServedProjectProblem,
 )
+from blizzard.wire.secret import SecretAlreadyExistsProblem, SecretNotFoundProblem
 from blizzard.wire.system_artifact import SystemArtifactNotFoundProblem
 from blizzard.wire.tenant import (
     TenantCredentialMismatchProblem,
     TenantNotFoundProblem,
     TenantRequiredProblem,
 )
+from blizzard.wire.traces import TraceReplayFailure
 from blizzard.wire.transcript_segment import LeaseOwnershipProblem
 
 
@@ -350,6 +354,24 @@ FEDERATION_DECLARATIONS = (
 # The hub administrator's invariant check, which the operator CLI calls.
 ADMIN_DECLARATIONS = (ProblemDeclaration("GET", "/api/admin/invariants", 409, InvariantsInProgressProblem),)
 
+# Operator refusals the hub CLI tells apart by type.
+OPERATOR_DECLARATIONS = (
+    ProblemDeclaration("POST", "/api/secrets", 409, SecretAlreadyExistsProblem),
+    *(
+        ProblemDeclaration(method, path, 404, SecretNotFoundProblem)
+        for method, path in (
+            ("PUT", "/api/secrets/{name}/value"),
+            ("GET", "/api/secrets/{name}"),
+            ("POST", "/api/secrets/{name}/retire"),
+            ("POST", "/api/secrets/{name}/enable"),
+        )
+    ),
+    ProblemDeclaration("POST", "/api/decisions/{decision_id}/resolutions", 409, DecisionResolutionConflict),
+    ProblemDeclaration("POST", "/api/questions/{question_id}/answers", 409, QuestionAlreadyAnsweredProblem),
+    ProblemDeclaration("POST", "/api/egress/backfill", 502, EgressBackfillFailure),
+    ProblemDeclaration("POST", "/api/traces/replay", 502, TraceReplayFailure),
+)
+
 HUB_PROBLEM_DECLARATIONS = (
     *PROXY_RESOURCE_DECLARATIONS,
     *ROUTINE_RESOURCE_DECLARATIONS,
@@ -358,6 +380,7 @@ HUB_PROBLEM_DECLARATIONS = (
     *HUB_DEPENDENCY_DECLARATIONS,
     *FEDERATION_DECLARATIONS,
     *ADMIN_DECLARATIONS,
+    *OPERATOR_DECLARATIONS,
 )
 
 

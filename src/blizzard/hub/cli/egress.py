@@ -4,16 +4,17 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import UTC, datetime
-from http import HTTPStatus
 from typing import Any
 
 import click
 
+from blizzard.cli.refusal import refusal_of
 from blizzard.cli.window import since_option, until_option, utc_query_value
 from blizzard.foundation.roles import dto
 from blizzard.foundation.store.utc import iso_utc
 from blizzard.hub.cli.command import AdminCommand
 from blizzard.hub.cli.context import CliContext
+from blizzard.wire.problem import EGRESS_BACKFILL_FAILED
 
 #: A backfill runs inside the request, and a week-long window outlasts the default client timeout.
 _BACKFILL_TIMEOUT = 600.0
@@ -101,7 +102,7 @@ def egress_backfill(cli: CliContext, since: datetime, until: datetime, dataset: 
     latest exported_at. A window over backfill_max_window is refused, not split."""
     body = {"since": utc_query_value(since), "until": utc_query_value(until), "dataset": dataset, "dry_run": dry_run}
     resp = cli.send("post", "/api/egress/backfill", json_body=body, timeout=_BACKFILL_TIMEOUT)
-    if resp.status_code == HTTPStatus.BAD_GATEWAY:
+    if refusal_of(resp).type == EGRESS_BACKFILL_FAILED:
         failure = resp.json()
         placed = ", ".join(f"{c['rows']} {c['dataset']} rows in {c['files']} files" for c in failure["datasets"])
         raise click.ClickException(

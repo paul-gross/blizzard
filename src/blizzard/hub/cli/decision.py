@@ -2,15 +2,16 @@
 
 from __future__ import annotations
 
-from http import HTTPStatus
 from typing import Any
 
 import click
 
+from blizzard.cli.refusal import refusal_of
 from blizzard.hub.cli.command import FleetCommand
 from blizzard.hub.cli.context import CliContext
 from blizzard.hub.cli.project_option import project_option, project_query
 from blizzard.hub.cli.views import Listing
+from blizzard.wire.problem import DECISION_ALREADY_RESOLVED
 
 
 class DecisionListing(Listing):
@@ -52,11 +53,8 @@ def decision_resolve(cli: CliContext, decision_id: str, choice: str, resolved_by
     if note is not None:
         request["note"] = note
     resp = cli.send("post", f"/api/decisions/{decision_id}/resolutions", json_body=request)
-    if resp.status_code == HTTPStatus.CONFLICT:
-        body = resp.json()
-        if "already_resolved_by" in body:
-            raise click.ClickException(f"already resolved by {body['already_resolved_by']}")
-        raise click.ClickException(str(body.get("detail", "decision is closed")))
+    if refusal_of(resp).type == DECISION_ALREADY_RESOLVED:
+        raise click.ClickException(f"already resolved by {resp.json()['already_resolved_by']}")
     cli.check(
         resp,
         "POST /decisions/{id}/resolutions",

@@ -68,7 +68,7 @@ class UpstreamRefusal(HTTPException):
         headers = {name: upstream.headers[name] for name in _RELAYED_HEADERS if name in upstream.headers}
         super().__init__(status_code=upstream.status_code, detail=detail, headers=headers or None)
         self.body = upstream.content
-        self.media_type = upstream.headers["content-type"] if "content-type" in upstream.headers else "application/json"
+        self.media_type = upstream.headers["content-type"] if "content-type" in upstream.headers else "application/json"  # noqa: SIM401
         self.payload: dict[str, object] = as_table(upstream.json()) or {}
         present, kind = type_of(self.payload)
         #: The relayed problem's ``type``; ``None`` for a body that predates problem details.

@@ -67,6 +67,8 @@ from blizzard.wire.chunk import (
     NoCurrentNodeProblem,
     NoRunContextProblem,
 )
+from blizzard.wire.decision import DecisionResolutionConflict
+from blizzard.wire.egress import EgressBackfillCount, EgressBackfillFailure
 from blizzard.wire.host import HostNameTakenProblem, HostRetiredProblem
 from blizzard.wire.invariants import InvariantsInProgressProblem
 from blizzard.wire.problem import (
@@ -96,7 +98,7 @@ from blizzard.wire.project import (
     UnknownProjectDetail,
     UnknownProjectProblem,
 )
-from blizzard.wire.question import QuestionNotFoundProblem
+from blizzard.wire.question import QuestionAlreadyAnsweredProblem, QuestionNotFoundProblem
 from blizzard.wire.release import ReleaseProblem
 from blizzard.wire.route import (
     ClaimRunnerRetiredProblem,
@@ -127,6 +129,7 @@ from blizzard.wire.runner import (
     RunnerVersionProblem,
     UnknownServedProjectProblem,
 )
+from blizzard.wire.secret import SecretAlreadyExistsProblem, SecretNotFoundProblem
 from blizzard.wire.system_artifact import SystemArtifactNotFoundProblem
 from blizzard.wire.tenant import (
     NO_SUCH_TENANT,
@@ -135,6 +138,7 @@ from blizzard.wire.tenant import (
     TenantRequiredDetail,
     TenantRequiredProblem,
 )
+from blizzard.wire.traces import TraceReplayFailure
 from blizzard.wire.transcript_segment import LeaseOwnershipProblem
 
 
@@ -798,4 +802,89 @@ def invariants_in_progress_problem(*, instance: str) -> InvariantsInProgressProb
         detail="another invariant check is running — try again when it finishes",
         instance=instance,
         status=409,
+    )
+
+
+def secret_already_exists_problem(detail: str, *, instance: str) -> SecretAlreadyExistsProblem:
+    return SecretAlreadyExistsProblem(
+        type=problem_types.SECRET_ALREADY_EXISTS,
+        title="Secret already exists",
+        detail=detail,
+        instance=instance,
+        status=409,
+    )
+
+
+def secret_not_found_problem(name: str, *, instance: str) -> SecretNotFoundProblem:
+    return SecretNotFoundProblem(
+        type=problem_types.SECRET_NOT_FOUND,
+        title="Secret not found",
+        detail=f"unknown secret {name}",
+        instance=instance,
+        status=404,
+    )
+
+
+def decision_already_resolved_problem(
+    decision_id: str, already_resolved_by: str, resolved_choice: str, resolved_at: str, *, instance: str
+) -> DecisionResolutionConflict:
+    return DecisionResolutionConflict(
+        type=problem_types.DECISION_ALREADY_RESOLVED,
+        title="Decision already resolved",
+        instance=instance,
+        status=409,
+        decision_id=decision_id,
+        already_resolved_by=already_resolved_by,
+        resolved_choice=resolved_choice,
+        resolved_at=resolved_at,
+    )
+
+
+def question_already_answered_problem(
+    question_id: str, answer: str, answered_by: str, answered_at: str, *, instance: str
+) -> QuestionAlreadyAnsweredProblem:
+    """The winning answer, for the loser of a first-write-wins race."""
+    return QuestionAlreadyAnsweredProblem(
+        type=problem_types.QUESTION_ALREADY_ANSWERED,
+        title="Question already answered",
+        detail="question already answered",
+        instance=instance,
+        status=409,
+        won=False,
+        question_id=question_id,
+        answer=answer,
+        answered_by=answered_by,
+        answered_at=answered_at,
+    )
+
+
+def egress_backfill_failed_problem(
+    cause: str, datasets: list[EgressBackfillCount], *, instance: str
+) -> EgressBackfillFailure:
+    """Fixed text, never the writer's own error; ``datasets`` counts what was committed before it stopped."""
+    return EgressBackfillFailure(
+        type=problem_types.EGRESS_BACKFILL_FAILED,
+        title="Egress backfill failed",
+        detail="the egress writer did not accept a batch; the backfill stopped",
+        instance=instance,
+        status=502,
+        cause=cause,
+        datasets=datasets,
+    )
+
+
+def trace_replay_failed_problem(
+    steps: int, spans: int, batches: int, chunks: int, *, instance: str
+) -> TraceReplayFailure:
+    """Fixed text, never the exporter's own error; the counts are what it accepted before it stopped."""
+    return TraceReplayFailure(
+        type=problem_types.TRACE_REPLAY_FAILED,
+        title="Trace replay failed",
+        detail="the trace exporter did not accept a batch; the replay stopped",
+        instance=instance,
+        status=502,
+        steps=steps,
+        spans=spans,
+        batches=batches,
+        chunks=chunks,
     )

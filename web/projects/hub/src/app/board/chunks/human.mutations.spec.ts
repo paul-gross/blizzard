@@ -64,6 +64,10 @@ describe('injectResolveDecisionMutation', () => {
 
   it('re-reads the same keys after a lost race — someone else’s resolution landed', async () => {
     resolveResponse = stubError(409, {
+      type: 'urn:blizzard:problem:decision-already-resolved',
+      title: 'Decision already resolved',
+      instance: '/api/decisions/dc_1/resolutions',
+      status: 409,
       decision_id: 'dc_1',
       already_resolved_by: 'alice',
       resolved_choice: 'reject',

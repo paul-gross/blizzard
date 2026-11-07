@@ -37,6 +37,13 @@ def observe_refusal(
     return observation
 
 
+def declared_refusal_mismatches(
+    spec: dict[str, Any], response: Response, method: str, path: str, status: int, model: type[BaseModel]
+) -> list[str]:
+    """Observe ``response`` as a problem refusal of ``method path`` and check it against its declaration."""
+    return refusal_mismatches(spec, observe_refusal([], response, method, path, status, model))
+
+
 def _model_refs(schema: dict[str, Any]) -> set[str]:
     refs: set[str] = set()
     ref = schema.get("$ref")

@@ -8,6 +8,7 @@ identity, never a request field."""
 from __future__ import annotations
 
 from collections.abc import Mapping
+from functools import partial
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, Header, HTTPException, Request, status
@@ -15,10 +16,12 @@ from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 
 from blizzard.foundation.store.utc import iso_utc
+from blizzard.hub.api import problems
 from blizzard.hub.api.auth import reject_runner_principal
 from blizzard.hub.api.auth_session import require, tenant_bound
 from blizzard.hub.api.deps import Services
 from blizzard.hub.api.door import RequestDoor, change_context
+from blizzard.hub.api.problem_exceptions import ProblemHTTPException
 from blizzard.hub.api.user_names import user_names
 from blizzard.hub.auth.models import ResolvedIdentity
 from blizzard.hub.auth.permissions import Permission
@@ -90,7 +93,7 @@ def _parse_name(raw: str) -> SecretName:
 def _existing(services: TenantServices, raw: str) -> SecretMetadata:
     record = services.secret_catalog.get(_parse_name(raw).value)
     if record is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"unknown secret {raw}")
+        raise ProblemHTTPException(partial(problems.secret_not_found_problem, raw))
     return record
 
 
@@ -111,7 +114,7 @@ def create_secret(
     except SecretValueBlank as exc:
         raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail=str(exc)) from exc
     except SecretAlreadyExists as exc:
-        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
+        raise ProblemHTTPException(partial(problems.secret_already_exists_problem, str(exc))) from exc
     return secret_view(record, user_names(services, [record.replaced_by]), retired=False)
 
 

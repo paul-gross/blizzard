@@ -24,6 +24,10 @@ _REF_PREFIX = "#/components/schemas/"
 #: FastAPI's own 422 body shapes, which no blizzard model owns.
 _FRAMEWORK_SCHEMAS = frozenset({"HTTPValidationError", "ValidationError"})
 
+#: The base problem a client reads a refusal as. A refusal from a hub before problem details omits members, so every
+#: one is optional by design; no route serves this model.
+_CLIENT_READ_SCHEMAS = frozenset({"Problem", "ValidationEntry"})
+
 
 def _subclasses[T](cls: type[T]) -> Iterator[type[T]]:
     for sub in cls.__subclasses__():
@@ -145,7 +149,13 @@ def _request_reached_anywhere() -> set[str]:
 def test_a_response_only_schema_lists_every_property_as_required(name: str, app: FastAPI) -> None:
     spec = app.openapi()
     schemas = spec["components"]["schemas"]
-    exempt = _exclude_flagged(app, spec) | _sse_payloads() | _FRAMEWORK_SCHEMAS | _request_reached_anywhere()
+    exempt = (
+        _exclude_flagged(app, spec)
+        | _sse_payloads()
+        | _FRAMEWORK_SCHEMAS
+        | _CLIENT_READ_SCHEMAS
+        | _request_reached_anywhere()
+    )
     partial_status = {
         cls.__name__
         for cls in _subclasses(CommonProblemMembers)

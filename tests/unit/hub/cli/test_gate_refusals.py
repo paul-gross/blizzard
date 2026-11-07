@@ -1,12 +1,13 @@
 """``blizzard hub decision resolve`` and ``blizzard hub question answer`` against a refusing
-server (unit tier, client stubbed): a 409 carrying the winner reads as a lost first-write-wins
-race, and any other 409 — a gate or question already closed — surfaces the server's detail."""
+server (unit tier, client stubbed): a 409 typed as already resolved or answered reads as a lost
+first-write-wins race, and any other 409 — a gate or question already closed — surfaces the server's detail."""
 
 from __future__ import annotations
 
 from typing import Any
 
 from blizzard.hub.cli import hub as hub_group
+from blizzard.wire.problem import DECISION_ALREADY_RESOLVED, QUESTION_ALREADY_ANSWERED
 from tests.support.worker_http import bind_stubs
 
 
@@ -28,7 +29,13 @@ def _invoke(payload: object, args: list[str]) -> Any:
 
 
 def test_a_lost_resolution_race_names_the_winner() -> None:
-    payload = {"decision_id": "dec_1", "already_resolved_by": "alice", "choice": "yes"}
+    payload = {
+        "type": DECISION_ALREADY_RESOLVED,
+        "detail": "decision already resolved",
+        "decision_id": "dec_1",
+        "already_resolved_by": "alice",
+        "choice": "yes",
+    }
     result = _invoke(payload, ["decision", "resolve", "dec_1", "no"])
     assert result.exit_code != 0
     assert "already resolved by alice" in result.output
@@ -44,6 +51,8 @@ def test_a_closed_decision_surfaces_the_servers_detail() -> None:
 
 def test_a_lost_answer_race_names_the_winner() -> None:
     payload = {
+        "type": QUESTION_ALREADY_ANSWERED,
+        "detail": "question already answered",
         "won": False,
         "question_id": "qn_1",
         "answer": "use main",

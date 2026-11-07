@@ -12,7 +12,6 @@ from functools import partial
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, status
-from fastapi.responses import JSONResponse
 
 from blizzard.foundation.store.utc import iso_utc
 from blizzard.hub.api import chunk_events, problems
@@ -119,6 +118,18 @@ def answer_question(
         outcome = services.questions.answer(pre_answer, answer=request.answer, answered_by=identity.username)
     except QuestionClosed as exc:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
+    if not outcome.won:
+        # A racing second answer — the loser is told who already answered (the same
+        # first-write-wins pattern as a gate decision).
+        raise ProblemHTTPException(
+            partial(
+                problems.question_already_answered_problem,
+                outcome.question_id,
+                outcome.answer,
+                outcome.answered_by,
+                iso_utc(outcome.answered_at),
+            )
+        )
     result = AnswerResult(
         won=outcome.won,
         question_id=outcome.question_id,
@@ -126,10 +137,6 @@ def answer_question(
         answered_by=outcome.answered_by,
         answered_at=iso_utc(outcome.answered_at),
     )
-    if not outcome.won:
-        # A racing second answer — the loser is told who already answered (the same
-        # first-write-wins pattern as a gate decision).
-        return JSONResponse(status_code=status.HTTP_409_CONFLICT, content=result.model_dump())
     # The winning answer row alone flips the chunk out of waiting_on_human; the question's
     # own chunk_id never changes, so the pre-answer read already named it — no re-read.
     key = f"question_answers:{question_id}"

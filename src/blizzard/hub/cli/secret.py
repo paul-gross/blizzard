@@ -6,7 +6,6 @@ the process list; no verb prints a value."""
 from __future__ import annotations
 
 import os
-from http import HTTPStatus
 from pathlib import Path
 from typing import Any
 
@@ -18,6 +17,7 @@ from blizzard.cli.refusal import refusal_of
 from blizzard.hub.cli.command import FleetCommand
 from blizzard.hub.cli.context import CliContext
 from blizzard.hub.cli.views import Listing
+from blizzard.wire.problem import SECRET_ALREADY_EXISTS, SECRET_NOT_FOUND
 
 
 class SecretListing(Listing):
@@ -49,9 +49,10 @@ def secret_create(cli: CliContext, name: str) -> None:
     stripped; an empty value is refused."""
     value = _stdin_value()
     resp = cli.send("post", "/api/secrets", json_body={"name": name, "value": value}, door=True)
-    if resp.status_code == HTTPStatus.CONFLICT:
+    refusal = refusal_of(resp)
+    if refusal.type == SECRET_ALREADY_EXISTS:
         raise click.ClickException(
-            f"{(refusal_of(resp).message or f'secret {name} already exists')} — replace it with `secret set`"
+            f"{refusal.message or f'secret {name} already exists'} — replace it with `secret set`"
         )
     cli.check(resp, "POST /secrets")
     body = resp.json()
@@ -67,7 +68,7 @@ def secret_set(cli: CliContext, name: str) -> None:
     stripped; an empty value is refused."""
     value = _stdin_value()
     resp = cli.send("put", f"/api/secrets/{name}/value", json_body={"value": value}, door=True)
-    if resp.status_code == HTTPStatus.NOT_FOUND:
+    if refusal_of(resp).type == SECRET_NOT_FOUND:
         raise click.ClickException(f"unknown secret {name} — create it with `secret create`")
     cli.check(resp, "PUT /secrets/{name}/value")
     body = resp.json()

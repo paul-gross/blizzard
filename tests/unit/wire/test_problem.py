@@ -119,6 +119,12 @@ def test_problem_registry_has_unique_stable_uris() -> None:
         "HUB_STORE_UNAVAILABLE": "urn:blizzard:problem:hub-store-unavailable",
         "FLAG_OFF": "urn:blizzard:problem:flag-off",
         "INVARIANTS_IN_PROGRESS": "urn:blizzard:problem:invariants-in-progress",
+        "SECRET_ALREADY_EXISTS": "urn:blizzard:problem:secret-already-exists",
+        "SECRET_NOT_FOUND": "urn:blizzard:problem:secret-not-found",
+        "DECISION_ALREADY_RESOLVED": "urn:blizzard:problem:decision-already-resolved",
+        "QUESTION_ALREADY_ANSWERED": "urn:blizzard:problem:question-already-answered",
+        "EGRESS_BACKFILL_FAILED": "urn:blizzard:problem:egress-backfill-failed",
+        "TRACE_REPLAY_FAILED": "urn:blizzard:problem:trace-replay-failed",
     }
     constants = {name: value for name, value in vars(registry).items() if name.isupper() and isinstance(value, str)}
     assert constants == expected

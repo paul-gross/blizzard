@@ -15,6 +15,16 @@ class QuestionNotFoundProblem(ProblemDetails[Literal["urn:blizzard:problem:quest
     """The named question does not exist in the tenant."""
 
 
+class QuestionAlreadyAnsweredProblem(ProblemDetails[Literal["urn:blizzard:problem:question-already-answered"]]):
+    """A racing second answer: the loser is told the **winning** answer, who gave it, and when."""
+
+    won: bool
+    question_id: str
+    answer: str
+    answered_by: str
+    answered_at: str
+
+
 class QuestionAsked(BaseModel):
     """A ``question.asked`` fact.
 

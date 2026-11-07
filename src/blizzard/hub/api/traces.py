@@ -4,17 +4,19 @@ tenant, so status and replay alike gate on the hub-level
 
 from __future__ import annotations
 
+from functools import partial
+
 from fastapi import APIRouter, Depends, HTTPException, status
-from fastapi.responses import JSONResponse
 
 from blizzard.foundation.store.utc import as_utc, iso_utc
+from blizzard.hub.api import problems
 from blizzard.hub.api.auth import reject_runner_principal
 from blizzard.hub.api.auth_session import require_hub
 from blizzard.hub.api.hub_level import Hub
+from blizzard.hub.api.problem_exceptions import ProblemHTTPException
 from blizzard.hub.auth.permissions import Permission
 from blizzard.hub.domain.observability.tracing.replay import ReplayUnavailable, ReplayWindowRefused
 from blizzard.wire.traces import (
-    TraceReplayFailure,
     TraceReplayRequest,
     TraceReplayResponse,
     TraceStatusResponse,
@@ -46,10 +48,9 @@ def trace_status(services: Hub) -> TraceStatusResponse:
 @router.post(
     "/replay",
     response_model=TraceReplayResponse,
-    responses={status.HTTP_502_BAD_GATEWAY: {"model": TraceReplayFailure}},
     dependencies=[Depends(require_hub(Permission.EXPORT_ADMIN))],
 )
-def trace_replay(request: TraceReplayRequest, services: Hub) -> TraceReplayResponse | JSONResponse:
+def trace_replay(request: TraceReplayRequest, services: Hub) -> TraceReplayResponse:
     """Tell every step closed and chunk finished in ``[since, until)`` again, without moving the live cursor.
     A bad window — inverted, too wide, or reaching past now — is 422, a replay that must export while tracing
     is off is 409, and an exporter that refuses is 502 with the counts it accepted before."""
@@ -60,14 +61,9 @@ def trace_replay(request: TraceReplayRequest, services: Hub) -> TraceReplayRespo
     except ReplayUnavailable as exc:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
     if result.failed:
-        failure = TraceReplayFailure(
-            detail="the trace exporter did not accept a batch; the replay stopped",
-            steps=result.steps,
-            spans=result.spans,
-            batches=result.batches,
-            chunks=result.chunks,
+        raise ProblemHTTPException(
+            partial(problems.trace_replay_failed_problem, result.steps, result.spans, result.batches, result.chunks)
         )
-        return JSONResponse(status_code=status.HTTP_502_BAD_GATEWAY, content=failure.model_dump())
     return TraceReplayResponse(
         steps=result.steps, spans=result.spans, batches=result.batches, dry_run=result.dry_run, chunks=result.chunks
     )

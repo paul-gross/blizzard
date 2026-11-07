@@ -81,6 +81,12 @@ PROJECT_REQUIRED: Final = "urn:blizzard:problem:project-required"
 HUB_STORE_UNAVAILABLE: Final = "urn:blizzard:problem:hub-store-unavailable"
 FLAG_OFF: Final = "urn:blizzard:problem:flag-off"
 INVARIANTS_IN_PROGRESS: Final = "urn:blizzard:problem:invariants-in-progress"
+SECRET_ALREADY_EXISTS: Final = "urn:blizzard:problem:secret-already-exists"
+SECRET_NOT_FOUND: Final = "urn:blizzard:problem:secret-not-found"
+DECISION_ALREADY_RESOLVED: Final = "urn:blizzard:problem:decision-already-resolved"
+QUESTION_ALREADY_ANSWERED: Final = "urn:blizzard:problem:question-already-answered"
+EGRESS_BACKFILL_FAILED: Final = "urn:blizzard:problem:egress-backfill-failed"
+TRACE_REPLAY_FAILED: Final = "urn:blizzard:problem:trace-replay-failed"
 
 PROBLEM_TYPES: frozenset[str] = frozenset(
     {
@@ -147,6 +153,12 @@ PROBLEM_TYPES: frozenset[str] = frozenset(
         HUB_STORE_UNAVAILABLE,
         FLAG_OFF,
         INVARIANTS_IN_PROGRESS,
+        SECRET_ALREADY_EXISTS,
+        SECRET_NOT_FOUND,
+        DECISION_ALREADY_RESOLVED,
+        QUESTION_ALREADY_ANSWERED,
+        EGRESS_BACKFILL_FAILED,
+        TRACE_REPLAY_FAILED,
     }
 )
 

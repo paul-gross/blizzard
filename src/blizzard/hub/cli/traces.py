@@ -4,17 +4,18 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import datetime
-from http import HTTPStatus
 from typing import Any
 
 import click
 
 from blizzard.cli.collaborators import CliCollaborators
+from blizzard.cli.refusal import refusal_of
 from blizzard.cli.window import refuse_bad_window, replay_windows, resume_since, since_option, until_option
 from blizzard.foundation.roles import dto
 from blizzard.foundation.store.utc import iso_utc
 from blizzard.hub.cli.command import AdminCommand
 from blizzard.hub.cli.context import CliContext
+from blizzard.wire.problem import TRACE_REPLAY_FAILED
 
 #: A replay runs inside the request, and a week-long window outlasts the default client timeout.
 _REPLAY_TIMEOUT = 600.0
@@ -85,7 +86,7 @@ def traces_replay(cli: CliContext, since: datetime, until: datetime, dry_run: bo
             resp = cli.send("post", "/api/traces/replay", json_body=body, timeout=_REPLAY_TIMEOUT)
         except click.ClickException as exc:
             raise click.ClickException(f"{exc.message} (window {number} of {len(windows)}){resume}") from exc
-        if resp.status_code == HTTPStatus.BAD_GATEWAY:
+        if refusal_of(resp).type == TRACE_REPLAY_FAILED:
             failure = resp.json()
             raise click.ClickException(
                 f"{failure['detail']} (told {failure['steps']} steps, {failure.get('chunks', 0)} chunks, "

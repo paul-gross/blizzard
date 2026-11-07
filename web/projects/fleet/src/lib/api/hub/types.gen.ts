@@ -3307,7 +3307,7 @@ export type DecisionOpenedPayload = {
 /**
  * DecisionResolutionConflict
  *
- * The 409 body: the decision was already resolved (the loser is told who won, with what, and when).
+ * The 409 problem: the decision was already resolved (the loser is told who won, with what, and when).
  */
 export type DecisionResolutionConflict = {
     /**
@@ -3323,6 +3323,10 @@ export type DecisionResolutionConflict = {
      */
     detail: string;
     /**
+     * Instance
+     */
+    instance: string;
+    /**
      * Resolved At
      */
     resolved_at: string;
@@ -3330,6 +3334,19 @@ export type DecisionResolutionConflict = {
      * Resolved Choice
      */
     resolved_choice: string;
+    /**
+     * Status
+     */
+    status?: number;
+    /**
+     * Title
+     */
+    title: string;
+    /**
+     * Type
+     */
+    type: 'urn:blizzard:problem:decision-already-resolved';
+    [key: string]: unknown;
 };
 
 /**
@@ -3630,6 +3647,23 @@ export type EgressBackfillFailure = {
      * Detail
      */
     detail: string;
+    /**
+     * Instance
+     */
+    instance: string;
+    /**
+     * Status
+     */
+    status?: number;
+    /**
+     * Title
+     */
+    title: string;
+    /**
+     * Type
+     */
+    type: 'urn:blizzard:problem:egress-backfill-failed';
+    [key: string]: unknown;
 };
 
 /**
@@ -8471,6 +8505,55 @@ export type ProviderSummary = {
 };
 
 /**
+ * QuestionAlreadyAnsweredProblem
+ *
+ * A racing second answer: the loser is told the **winning** answer, who gave it, and when.
+ */
+export type QuestionAlreadyAnsweredProblem = {
+    /**
+     * Answer
+     */
+    answer: string;
+    /**
+     * Answered At
+     */
+    answered_at: string;
+    /**
+     * Answered By
+     */
+    answered_by: string;
+    /**
+     * Detail
+     */
+    detail: string;
+    /**
+     * Instance
+     */
+    instance: string;
+    /**
+     * Question Id
+     */
+    question_id: string;
+    /**
+     * Status
+     */
+    status?: number;
+    /**
+     * Title
+     */
+    title: string;
+    /**
+     * Type
+     */
+    type: 'urn:blizzard:problem:question-already-answered';
+    /**
+     * Won
+     */
+    won: boolean;
+    [key: string]: unknown;
+};
+
+/**
  * QuestionAnsweredPayload
  */
 export type QuestionAnsweredPayload = {
@@ -11738,6 +11821,35 @@ export type ScopeView = {
 };
 
 /**
+ * SecretAlreadyExistsProblem
+ *
+ * A create named a secret the tenant already holds.
+ */
+export type SecretAlreadyExistsProblem = {
+    /**
+     * Detail
+     */
+    detail: string;
+    /**
+     * Instance
+     */
+    instance: string;
+    /**
+     * Status
+     */
+    status?: number;
+    /**
+     * Title
+     */
+    title: string;
+    /**
+     * Type
+     */
+    type: 'urn:blizzard:problem:secret-already-exists';
+    [key: string]: unknown;
+};
+
+/**
  * SecretCreateRequest
  *
  * Store a new secret under ``name`` — 409 when the name is taken.
@@ -11747,6 +11859,35 @@ export type SecretCreateRequest = {
      * Name
      */
     name: string;
+};
+
+/**
+ * SecretNotFoundProblem
+ *
+ * The named secret does not exist in the tenant.
+ */
+export type SecretNotFoundProblem = {
+    /**
+     * Detail
+     */
+    detail: string;
+    /**
+     * Instance
+     */
+    instance: string;
+    /**
+     * Status
+     */
+    status?: number;
+    /**
+     * Title
+     */
+    title: string;
+    /**
+     * Type
+     */
+    type: 'urn:blizzard:problem:secret-not-found';
+    [key: string]: unknown;
 };
 
 /**
@@ -12503,13 +12644,30 @@ export type TraceReplayFailure = {
      */
     detail: string;
     /**
+     * Instance
+     */
+    instance: string;
+    /**
      * Spans
      */
     spans: number;
     /**
+     * Status
+     */
+    status?: number;
+    /**
      * Steps
      */
     steps: number;
+    /**
+     * Title
+     */
+    title: string;
+    /**
+     * Type
+     */
+    type: 'urn:blizzard:problem:trace-replay-failed';
+    [key: string]: unknown;
 };
 
 /**
@@ -16894,7 +17052,7 @@ export type EgressBackfillApiEgressBackfillPostErrors = {
      */
     422: HttpValidationError;
     /**
-     * Bad Gateway
+     * Problem
      */
     502: EgressBackfillFailure;
 };
@@ -22027,6 +22185,10 @@ export type AnswerQuestionApiQuestionsQuestionIdAnswersPostData = {
 
 export type AnswerQuestionApiQuestionsQuestionIdAnswersPostErrors = {
     /**
+     * Problem
+     */
+    409: QuestionAlreadyAnsweredProblem;
+    /**
      * Validation Error
      */
     422: HttpValidationError;
@@ -23519,6 +23681,10 @@ export type CreateSecretApiSecretsPostData = {
 
 export type CreateSecretApiSecretsPostErrors = {
     /**
+     * Problem
+     */
+    409: SecretAlreadyExistsProblem;
+    /**
      * Validation Error
      */
     422: HttpValidationError;
@@ -23548,6 +23714,10 @@ export type GetSecretApiSecretsNameGetData = {
 };
 
 export type GetSecretApiSecretsNameGetErrors = {
+    /**
+     * Problem
+     */
+    404: SecretNotFoundProblem;
     /**
      * Validation Error
      */
@@ -23585,6 +23755,10 @@ export type EnableSecretApiSecretsNameEnablePostData = {
 
 export type EnableSecretApiSecretsNameEnablePostErrors = {
     /**
+     * Problem
+     */
+    404: SecretNotFoundProblem;
+    /**
      * Validation Error
      */
     422: HttpValidationError;
@@ -23620,6 +23794,10 @@ export type RetireSecretApiSecretsNameRetirePostData = {
 };
 
 export type RetireSecretApiSecretsNameRetirePostErrors = {
+    /**
+     * Problem
+     */
+    404: SecretNotFoundProblem;
     /**
      * Validation Error
      */
@@ -23660,6 +23838,10 @@ export type ReplaceSecretApiSecretsNameValuePutData = {
 };
 
 export type ReplaceSecretApiSecretsNameValuePutErrors = {
+    /**
+     * Problem
+     */
+    404: SecretNotFoundProblem;
     /**
      * Validation Error
      */
@@ -23764,7 +23946,7 @@ export type TraceReplayApiTracesReplayPostErrors = {
      */
     422: HttpValidationError;
     /**
-     * Bad Gateway
+     * Problem
      */
     502: TraceReplayFailure;
 };

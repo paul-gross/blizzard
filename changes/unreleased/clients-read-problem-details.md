@@ -16,3 +16,7 @@ sentence beside the released `code` member.
 The runner now relays a hub refusal that carries a JSON object body to its caller as the hub sent it: the body, the
 status, the `Content-Type` and the `WWW-Authenticate` and `Retry-After` headers. Both OpenAPI documents publish a base
 `Problem` component, which the board reads for a refusal's `detail` and `title`.
+
+Six more refusals the operator CLI reads are registered problem types with their status and `detail` unchanged:
+`secret-already-exists`, `secret-not-found`, `decision-already-resolved`, `question-already-answered`,
+`egress-backfill-failed` and `trace-replay-failed`. The question-already-answered `409` gains a `detail` sentence.

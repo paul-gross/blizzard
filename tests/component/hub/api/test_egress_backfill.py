@@ -18,6 +18,8 @@ from blizzard.hub.domain.observability.egress.config import EgressConfig
 from blizzard.hub.domain.observability.egress.event_rows import FilePathPolicy
 from blizzard.hub.egress.writer import EgressFailure, EgressFailureCause
 from blizzard.hub.store.internal.hub_scoped_reads import build_hub_scoped_reads
+from blizzard.wire.egress import EgressBackfillFailure
+from blizzard.wire.problem import EGRESS_BACKFILL_FAILED
 from tests.support.egress_world import (
     OLD_VERSION,
     SETTLED,
@@ -32,6 +34,7 @@ from tests.support.egress_world import (
     kinds,
     project_of,
 )
+from tests.support.refusal_observation import declared_refusal_mismatches
 from tests.support.scaffolding import HubHarness, InMemoryEgressWriter, default_tenant, hub_level_connections
 from tests.support.trace_hub import seed_open_tenant_chunk, trace_store
 from tests.support.worker_http import bind_stubs
@@ -272,8 +275,12 @@ def test_a_writer_failure_stops_the_backfill_with_502_and_the_counts_so_far(tmp_
 
     resp = _backfill(hub, since, until)
 
-    assert resp.status_code == 502
+    assert hub.app is not None
+    path = "/api/egress/backfill"
+    assert declared_refusal_mismatches(hub.app.openapi(), resp, "post", path, 502, EgressBackfillFailure) == []
     body = resp.json()
+    assert body["type"] == EGRESS_BACKFILL_FAILED
+    assert body["detail"] == "the egress writer did not accept a batch; the backfill stopped"
     assert body["cause"] == "low-disk"
     assert body["datasets"] == [{"dataset": "steps", "rows": 0, "files": 0}]
     assert kinds(hub) == []

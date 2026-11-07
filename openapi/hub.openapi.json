@@ -5561,7 +5561,8 @@
         "type": "object"
       },
       "DecisionResolutionConflict": {
-        "description": "The 409 body: the decision was already resolved (the loser is told who won, with what, and when).",
+        "additionalProperties": true,
+        "description": "The 409 problem: the decision was already resolved (the loser is told who won, with what, and when).",
         "properties": {
           "already_resolved_by": {
             "title": "Already Resolved By",
@@ -5576,6 +5577,10 @@
             "title": "Detail",
             "type": "string"
           },
+          "instance": {
+            "title": "Instance",
+            "type": "string"
+          },
           "resolved_at": {
             "default": "",
             "title": "Resolved At",
@@ -5585,14 +5590,34 @@
             "default": "",
             "title": "Resolved Choice",
             "type": "string"
+          },
+          "status": {
+            "anyOf": [
+              {
+                "type": "integer"
+              }
+            ],
+            "title": "Status"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          },
+          "type": {
+            "const": "urn:blizzard:problem:decision-already-resolved",
+            "title": "Type",
+            "type": "string"
           }
         },
         "required": [
+          "type",
+          "title",
+          "detail",
+          "instance",
           "decision_id",
           "already_resolved_by",
           "resolved_choice",
-          "resolved_at",
-          "detail"
+          "resolved_at"
         ],
         "title": "DecisionResolutionConflict",
         "type": "object"
@@ -6081,6 +6106,7 @@
         "type": "object"
       },
       "EgressBackfillFailure": {
+        "additionalProperties": true,
         "description": "The writer refused or raised: ``datasets`` count what was committed before the backfill stopped, and\n``cause`` names why, as the live export's own failure events do.",
         "properties": {
           "cause": {
@@ -6097,10 +6123,34 @@
           "detail": {
             "title": "Detail",
             "type": "string"
+          },
+          "instance": {
+            "title": "Instance",
+            "type": "string"
+          },
+          "status": {
+            "anyOf": [
+              {
+                "type": "integer"
+              }
+            ],
+            "title": "Status"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          },
+          "type": {
+            "const": "urn:blizzard:problem:egress-backfill-failed",
+            "title": "Type",
+            "type": "string"
           }
         },
         "required": [
+          "type",
+          "title",
           "detail",
+          "instance",
           "cause",
           "datasets"
         ],
@@ -13700,6 +13750,70 @@
         "title": "ProviderSummary",
         "type": "object"
       },
+      "QuestionAlreadyAnsweredProblem": {
+        "additionalProperties": true,
+        "description": "A racing second answer: the loser is told the **winning** answer, who gave it, and when.",
+        "properties": {
+          "answer": {
+            "title": "Answer",
+            "type": "string"
+          },
+          "answered_at": {
+            "title": "Answered At",
+            "type": "string"
+          },
+          "answered_by": {
+            "title": "Answered By",
+            "type": "string"
+          },
+          "detail": {
+            "title": "Detail",
+            "type": "string"
+          },
+          "instance": {
+            "title": "Instance",
+            "type": "string"
+          },
+          "question_id": {
+            "title": "Question Id",
+            "type": "string"
+          },
+          "status": {
+            "anyOf": [
+              {
+                "type": "integer"
+              }
+            ],
+            "title": "Status"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          },
+          "type": {
+            "const": "urn:blizzard:problem:question-already-answered",
+            "title": "Type",
+            "type": "string"
+          },
+          "won": {
+            "title": "Won",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "type",
+          "title",
+          "detail",
+          "instance",
+          "won",
+          "question_id",
+          "answer",
+          "answered_by",
+          "answered_at"
+        ],
+        "title": "QuestionAlreadyAnsweredProblem",
+        "type": "object"
+      },
       "QuestionAnsweredPayload": {
         "additionalProperties": false,
         "properties": {
@@ -18926,6 +19040,45 @@
         "title": "ScopeView",
         "type": "object"
       },
+      "SecretAlreadyExistsProblem": {
+        "additionalProperties": true,
+        "description": "A create named a secret the tenant already holds.",
+        "properties": {
+          "detail": {
+            "title": "Detail",
+            "type": "string"
+          },
+          "instance": {
+            "title": "Instance",
+            "type": "string"
+          },
+          "status": {
+            "anyOf": [
+              {
+                "type": "integer"
+              }
+            ],
+            "title": "Status"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          },
+          "type": {
+            "const": "urn:blizzard:problem:secret-already-exists",
+            "title": "Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "type",
+          "title",
+          "detail",
+          "instance"
+        ],
+        "title": "SecretAlreadyExistsProblem",
+        "type": "object"
+      },
       "SecretCreateRequest": {
         "description": "Store a new secret under ``name`` \u2014 409 when the name is taken.",
         "properties": {
@@ -18945,6 +19098,45 @@
           "value"
         ],
         "title": "SecretCreateRequest",
+        "type": "object"
+      },
+      "SecretNotFoundProblem": {
+        "additionalProperties": true,
+        "description": "The named secret does not exist in the tenant.",
+        "properties": {
+          "detail": {
+            "title": "Detail",
+            "type": "string"
+          },
+          "instance": {
+            "title": "Instance",
+            "type": "string"
+          },
+          "status": {
+            "anyOf": [
+              {
+                "type": "integer"
+              }
+            ],
+            "title": "Status"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          },
+          "type": {
+            "const": "urn:blizzard:problem:secret-not-found",
+            "title": "Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "type",
+          "title",
+          "detail",
+          "instance"
+        ],
+        "title": "SecretNotFoundProblem",
         "type": "object"
       },
       "SecretReplaceRequest": {
@@ -20064,6 +20256,7 @@
         "type": "object"
       },
       "TraceReplayFailure": {
+        "additionalProperties": true,
         "description": "The exporter refused or raised: ``steps``, ``spans`` and ``batches`` count what it accepted before the\nreplay stopped. ``detail`` is fixed text, never the exporter's own error.",
         "properties": {
           "batches": {
@@ -20079,17 +20272,41 @@
             "title": "Detail",
             "type": "string"
           },
+          "instance": {
+            "title": "Instance",
+            "type": "string"
+          },
           "spans": {
             "title": "Spans",
             "type": "integer"
           },
+          "status": {
+            "anyOf": [
+              {
+                "type": "integer"
+              }
+            ],
+            "title": "Status"
+          },
           "steps": {
             "title": "Steps",
             "type": "integer"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          },
+          "type": {
+            "const": "urn:blizzard:problem:trace-replay-failed",
+            "title": "Type",
+            "type": "string"
           }
         },
         "required": [
+          "type",
+          "title",
           "detail",
+          "instance",
           "steps",
           "spans",
           "batches",
@@ -28854,7 +29071,7 @@
           },
           "409": {
             "content": {
-              "application/json": {
+              "application/problem+json": {
                 "schema": {
                   "$ref": "#/components/schemas/DecisionResolutionConflict"
                 }
@@ -28916,13 +29133,13 @@
           },
           "502": {
             "content": {
-              "application/json": {
+              "application/problem+json": {
                 "schema": {
                   "$ref": "#/components/schemas/EgressBackfillFailure"
                 }
               }
             },
-            "description": "Bad Gateway"
+            "description": "Problem"
           }
         },
         "summary": "Egress Backfill",
@@ -39290,6 +39507,16 @@
             },
             "description": "Successful Response"
           },
+          "409": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/QuestionAlreadyAnsweredProblem"
+                }
+              }
+            },
+            "description": "Problem"
+          },
           "422": {
             "content": {
               "application/json": {
@@ -41955,6 +42182,16 @@
             },
             "description": "Successful Response"
           },
+          "409": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SecretAlreadyExistsProblem"
+                }
+              }
+            },
+            "description": "Problem"
+          },
           "422": {
             "content": {
               "application/json": {
@@ -41997,6 +42234,16 @@
               }
             },
             "description": "Successful Response"
+          },
+          "404": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SecretNotFoundProblem"
+                }
+              }
+            },
+            "description": "Problem"
           },
           "422": {
             "content": {
@@ -42057,6 +42304,16 @@
             },
             "description": "Successful Response"
           },
+          "404": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SecretNotFoundProblem"
+                }
+              }
+            },
+            "description": "Problem"
+          },
           "422": {
             "content": {
               "application/json": {
@@ -42115,6 +42372,16 @@
               }
             },
             "description": "Successful Response"
+          },
+          "404": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SecretNotFoundProblem"
+                }
+              }
+            },
+            "description": "Problem"
           },
           "422": {
             "content": {
@@ -42200,6 +42467,16 @@
               }
             },
             "description": "Successful Response"
+          },
+          "404": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SecretNotFoundProblem"
+                }
+              }
+            },
+            "description": "Problem"
           },
           "422": {
             "content": {
@@ -42372,13 +42649,13 @@
           },
           "502": {
             "content": {
-              "application/json": {
+              "application/problem+json": {
                 "schema": {
                   "$ref": "#/components/schemas/TraceReplayFailure"
                 }
               }
             },
-            "description": "Bad Gateway"
+            "description": "Problem"
           }
         },
         "summary": "Trace Replay",

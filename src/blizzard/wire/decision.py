@@ -6,10 +6,13 @@ transition; a graph gate needs none. Resolution — a person picking one — is 
 
 from __future__ import annotations
 
+from typing import Literal
+
 from pydantic import BaseModel
 
 from blizzard.wire.base import WireModel
 from blizzard.wire.completion import CheckResult, SubmittedArtifact
+from blizzard.wire.problem import ProblemDetails
 
 
 class DecisionChoiceModel(WireModel):
@@ -100,8 +103,8 @@ class DecisionResolutionResponse(WireModel):
     note: str | None = None
 
 
-class DecisionResolutionConflict(WireModel):
-    """The 409 body: the decision was already resolved (the loser is told who won, with what, and when)."""
+class DecisionResolutionConflict(ProblemDetails[Literal["urn:blizzard:problem:decision-already-resolved"]]):
+    """The 409 problem: the decision was already resolved (the loser is told who won, with what, and when)."""
 
     decision_id: str
     already_resolved_by: str
