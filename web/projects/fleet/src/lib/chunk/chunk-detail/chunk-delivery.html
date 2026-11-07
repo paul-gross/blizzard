@@ -1,5 +1,5 @@
 <div class="delivery" data-testid="chunk-delivery">
-  @if (detail().pending?.kind === 'awaiting-merge') {
+  @if (parkWait()) {
     <p class="wait" data-testid="delivery-park-wait">
       @if (detail().pending?.since; as since) {
         Awaiting merge since <fleet-when [iso]="since" />

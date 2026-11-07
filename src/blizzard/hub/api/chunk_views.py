@@ -11,6 +11,7 @@ from typing import Final, TypedDict
 from blizzard.foundation.chunk_status import TERMINAL_STATUSES, ChunkDeleteRefusal
 from blizzard.foundation.ids import Id
 from blizzard.foundation.store.utc import iso_utc
+from blizzard.foundation.wait_kinds import WaitKind
 from blizzard.hub.api import problems
 from blizzard.hub.api.decisions import to_decision_view
 from blizzard.hub.api.delivery_declarations import delivery_declarations_for
@@ -70,6 +71,7 @@ from blizzard.wire.chunk import (
     WorkRefView,
 )
 from blizzard.wire.flow import ChunkFlowPlaceView
+from blizzard.wire.vocabulary import open_value
 
 
 class _RouteNotInjected(Enum):
@@ -543,7 +545,7 @@ class ChunkView:
         return PendingView(
             node_name=node.name,
             next_poll_at=iso_utc(PollPolicy.of(node).due_at(pending)),
-            kind=pending.kind,
+            kind=open_value(WaitKind, pending.kind),
             since=iso_utc(
                 self.facts.hub_node_pending_since(node_id=pending.node_id, epoch=pending.epoch) or pending.polled_at
             ),

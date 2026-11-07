@@ -1,4 +1,4 @@
-import type { CadenceCreateRequest, CadenceView } from 'fleet';
+import { CadenceAnchor, type CadenceCreateRequest, type CadenceView } from 'fleet';
 
 import type { CadenceDraft } from './cadence-form';
 import type { CadenceCountVm, CadenceRowVm } from './cadence-list';
@@ -28,13 +28,14 @@ export function spacingText(minutes: number): string {
 
 /**
  * A cadence's rhythm as one line: its schedule's cron and zone, then its spacing — `0 20 * * * America/Chicago, at
- * least 10 days apart`. A spacing counted from other than its start names its anchor.
+ * least 10 days apart`. A spacing counted from other than its start names its anchor,
+ * an anchor this build does not know included, raw.
  */
 export function rhythmText(cadence: Pick<CadenceView, 'schedule' | 'spacing_minutes' | 'anchor'>): string {
   const parts: string[] = [];
   if (cadence.schedule !== null) parts.push(`${cadence.schedule.cron} ${cadence.schedule.zone}`);
   if (cadence.spacing_minutes !== null) {
-    const anchored = cadence.anchor === null || cadence.anchor === 'started' ? '' : ` from ${cadence.anchor}`;
+    const anchored = cadence.anchor === null || cadence.anchor === CadenceAnchor.STARTED ? '' : ` from ${cadence.anchor}`;
     parts.push(`at least ${spacingText(cadence.spacing_minutes)} apart${anchored}`);
   }
   return parts.length === 0 ? 'no rhythm' : parts.join(', ');

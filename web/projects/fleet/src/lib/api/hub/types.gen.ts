@@ -1174,6 +1174,24 @@ export type CadenceAdmissionRefusedProblem = {
 };
 
 /**
+ * CadenceAnchor
+ *
+ * Which moment of an errand's last run its spacing counts from.
+ */
+export const CadenceAnchor = {
+    SCHEDULED: 'scheduled',
+    STARTED: 'started',
+    FINISHED: 'finished'
+} as const;
+
+/**
+ * CadenceAnchor
+ *
+ * Which moment of an errand's last run its spacing counts from.
+ */
+export type CadenceAnchor = typeof CadenceAnchor[keyof typeof CadenceAnchor];
+
+/**
  * CadenceAttentionView
  *
  * One thing that stops a cadence's errands: the chore by key (``None`` for the whole cadence), the scope when
@@ -1417,10 +1435,7 @@ export type CadenceSlugTakenProblem = {
  * the read — empty when nothing stops its errands, or when it is retired.
  */
 export type CadenceView = {
-    /**
-     * Anchor
-     */
-    anchor: string | null;
+    anchor: CadenceAnchor | null;
     /**
      * Attention
      */
@@ -1483,10 +1498,7 @@ export type CadenceView = {
  * Repository terms captured by the submission's first turn.
  */
 export type CapturedLandingTermsView = {
-    /**
-     * Landing Policy
-     */
-    landing_policy: string;
+    landing_policy: LandingPolicyName;
     /**
      * Landing Position
      */
@@ -10522,10 +10534,7 @@ export type PauseView = {
  * first attempt or is already mid-poll, and when the next is due. Never itself a status.
  */
 export type PendingView = {
-    /**
-     * Kind
-     */
-    kind: string;
+    kind: WaitKind;
     /**
      * Next Poll At
      */
@@ -17156,6 +17165,10 @@ export type VersionWindowView = {
      */
     floor: string;
 };
+
+export const WaitKind = { PENDING: 'pending', AWAITING_MERGE: 'awaiting-merge' } as const;
+
+export type WaitKind = typeof WaitKind[keyof typeof WaitKind];
 
 /**
  * WorkItemAuthorView

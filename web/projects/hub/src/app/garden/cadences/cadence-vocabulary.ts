@@ -1,4 +1,4 @@
-import { AttentionReason, ErrandState, openLookup, RunMode, type Tone } from 'fleet';
+import { AttentionReason, CadenceAnchor, ErrandState, openLookup, RunMode, type Tone } from 'fleet';
 
 /** An errand state's label and badge tone. */
 export interface ErrandStateLook {
@@ -50,4 +50,4 @@ export const choreModeLabel = openLookup<RunMode, string>(
 );
 
 /** The anchors a spacing may count from; an empty value leaves it unstated, read as `started`. */
-export const CADENCE_ANCHORS: readonly string[] = ['scheduled', 'started', 'finished'];
+export const CADENCE_ANCHORS: readonly CadenceAnchor[] = Object.values(CadenceAnchor);

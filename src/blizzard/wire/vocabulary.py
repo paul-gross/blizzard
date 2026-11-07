@@ -8,9 +8,10 @@ declared closed. An open field, ``Annotated[E | Unrecognized, OPEN]``, parses a 
 from __future__ import annotations
 
 import types
+from collections.abc import Callable
 from dataclasses import dataclass
 from enum import Enum
-from typing import Any, TypeAliasType, Union, get_args, get_origin
+from typing import Any, TypeAliasType, Union, cast, get_args, get_origin
 
 from pydantic import GetCoreSchemaHandler, GetJsonSchemaHandler, ValidationError
 from pydantic.json_schema import JsonSchemaValue
@@ -64,6 +65,18 @@ def _raw(value: Any) -> Any:
 
 #: Annotate a response vocabulary field open: ``Annotated[E | Unrecognized, OPEN]``.
 OPEN = OpenVocabulary()
+
+
+def open_value[E](known: type[E] | TypeAliasType, name: str) -> E | Unrecognized:
+    """Read a stored vocabulary name as ``E | Unrecognized`` — the member when ``name`` is in the vocabulary, else the
+    unknown value carried raw. ``known`` is the vocabulary: a ``StrEnum`` or a ``type`` alias of a ``Literal``."""
+    if isinstance(known, TypeAliasType):
+        members: tuple[Any, ...] = get_args(known.__value__)
+        return cast("E", name) if name in members else Unrecognized(name)
+    try:
+        return cast("Callable[[str], E]", known)(name)
+    except ValueError:
+        return Unrecognized(name)
 
 
 @dto

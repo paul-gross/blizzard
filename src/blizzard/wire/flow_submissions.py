@@ -3,7 +3,12 @@ closure."""
 
 from __future__ import annotations
 
+from typing import Annotated
+
+from blizzard.foundation.landing_policy import LandingPolicy
+from blizzard.foundation.unrecognized import Unrecognized
 from blizzard.wire.base import WireModel
+from blizzard.wire.vocabulary import OPEN
 
 
 class FlowSubmissionClosureView(WireModel):
@@ -17,7 +22,7 @@ class CapturedLandingTermsView(WireModel):
     """Repository terms captured by the submission's first turn."""
 
     repository_id: str
-    landing_policy: str
+    landing_policy: Annotated[LandingPolicy | Unrecognized, OPEN]
     park_timeout_hours: int | None
     landing_position: float | None
 

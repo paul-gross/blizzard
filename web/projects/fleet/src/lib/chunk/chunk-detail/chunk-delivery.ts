@@ -1,6 +1,6 @@
 import { ChangeDetectionStrategy, Component, computed, input } from '@angular/core';
 
-import type { ChunkDetail, LandedRepoView, PrView } from '../../api/hub';
+import { WaitKind, type ChunkDetail, type LandedRepoView, type PrView } from '../../api/hub';
 import { shortCommitHash } from '../../core/commit-hash';
 import { FleetWhen } from '../../core/when-display/fleet-when';
 
@@ -22,6 +22,9 @@ interface DeliveryRow {
 })
 export class ChunkDelivery {
   readonly detail = input.required<ChunkDetail>();
+
+  /** Whether the chunk is parked on its change's merge; a pending kind this build does not know is not. */
+  protected readonly parkWait = computed(() => this.detail().pending?.kind === WaitKind.AWAITING_MERGE);
 
   /** One row per repo, in order of first appearance across open PRs, closed PRs, then landed repos. */
   protected readonly rows = computed<readonly DeliveryRow[]>(() => {

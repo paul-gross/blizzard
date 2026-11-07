@@ -1,6 +1,7 @@
 import { TestBed } from '@angular/core/testing';
 import { describe, expect, it } from 'vitest';
 
+import { type WaitKind } from '../../api/hub';
 import { chunkDetail, prView } from '../../testing/builders/chunk';
 import { ChunkDelivery } from './chunk-delivery';
 
@@ -24,7 +25,7 @@ describe('ChunkDelivery', () => {
     const fixture = TestBed.createComponent(ChunkDelivery);
     fixture.componentRef.setInput('detail', chunkDetail({
       awaiting_external_merge: true,
-      pending: { node_name: 'land', next_poll_at: '2026-10-30T12:05:00Z', kind: 'future-kind', since: null },
+      pending: { node_name: 'land', next_poll_at: '2026-10-30T12:05:00Z', kind: 'future-kind' as WaitKind, since: null },
     }));
     await fixture.whenStable();
     const el = fixture.nativeElement as HTMLElement;
