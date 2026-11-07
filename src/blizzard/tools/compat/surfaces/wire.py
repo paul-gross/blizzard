@@ -560,8 +560,10 @@ def _migrations(base: Document, head: Document, select: Selection) -> dict[tuple
         if "application/json" in new.get("content", {}):
             continue
         old_ref = old.get("content", {}).get("application/json", {}).get("schema", {}).get("$ref")
-        new_ref = new.get("content", {}).get("application/problem+json", {}).get("schema", {}).get("$ref")
-        if old_ref != f"#/components/schemas/{old_name}" or new_ref != f"#/components/schemas/{new_name}":
+        new_schema = new.get("content", {}).get("application/problem+json", {}).get("schema", {})
+        # The problem may sit beside the shared-dependency problems the operation also declares at this status.
+        new_refs = [new_schema.get("$ref"), *(member.get("$ref") for member in new_schema.get("anyOf", []))]
+        if old_ref != f"#/components/schemas/{old_name}" or f"#/components/schemas/{new_name}" not in new_refs:
             continue
         before = _schema_components(base).get(old_name, {})
         after = _schema_components(head).get(new_name, {})
