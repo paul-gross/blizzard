@@ -14,6 +14,7 @@ from blizzard.foundation.chunk_status import ChunkDeleteRefusal, ChunkStatus
 from blizzard.foundation.graph_progress_state import GraphProgressState
 from blizzard.foundation.migration_source import MigrationSource
 from blizzard.foundation.unrecognized import Unrecognized
+from blizzard.foundation.wait_kinds import WaitKind
 from blizzard.foundation.work_items import WorkItemPriority
 from blizzard.wire.base import WireModel
 from blizzard.wire.decision import DecisionView
@@ -467,7 +468,7 @@ class PendingView(WireModel):
 
     node_name: str
     next_poll_at: str
-    kind: str = "pending"
+    kind: Annotated[WaitKind | Unrecognized, OPEN] = "pending"
     since: str | None = None
 
 

@@ -1,11 +1,17 @@
 import { describe, expect, it } from 'vitest';
 
+import { WaitKind } from '../../api/hub';
 import { chunkDetail, prView } from '../../testing/builders/chunk';
 import { hasDelivery } from './has-delivery';
 
 describe('hasDelivery', () => {
   const empty = chunkDetail({ open_prs: [], closed_prs: [], landed_repos: [], awaiting_external_merge: false, pending: null });
-  const pending = (kind: string) => ({ node_name: 'park', next_poll_at: '2026-10-30T12:05:00Z', kind, since: null });
+  const pending = (kind: string) => ({
+    node_name: 'park',
+    next_poll_at: '2026-10-30T12:05:00Z',
+    kind: kind as WaitKind,
+    since: null,
+  });
 
   it('holds for a PR open or closed, a landed repo, or an operator merge wait', () => {
     expect(hasDelivery(empty)).toBe(false);
@@ -16,7 +22,8 @@ describe('hasDelivery', () => {
   });
 
   it('holds for a parked wait with nothing opened yet, and not for another pending kind', () => {
-    expect(hasDelivery({ ...empty, pending: pending('awaiting-merge') })).toBe(true);
+    expect(hasDelivery({ ...empty, pending: pending(WaitKind.AWAITING_MERGE) })).toBe(true);
+    expect(hasDelivery({ ...empty, pending: pending(WaitKind.PENDING) })).toBe(false);
     expect(hasDelivery({ ...empty, pending: pending('future-kind') })).toBe(false);
   });
 });

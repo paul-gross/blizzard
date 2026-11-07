@@ -11,8 +11,9 @@ from __future__ import annotations
 from dataclasses import dataclass, replace
 from datetime import datetime
 
+from blizzard.foundation.cadence_anchor import CadenceAnchor
 from blizzard.foundation.roles import domain_model
-from blizzard.hub.domain.cadence.model import Anchor, Cadence, CadenceEdit, CadenceShape, ScheduleShape, Spacing
+from blizzard.hub.domain.cadence.model import Cadence, CadenceEdit, CadenceShape, ScheduleShape, Spacing
 from blizzard.hub.domain.config.apply import DeclaredReferences
 from blizzard.hub.domain.config.changes import ChangeContext, ConfigChange
 from blizzard.hub.domain.config.errors import ConfigFieldError
@@ -80,7 +81,7 @@ def effective_edit(edit: CadenceEdit, stored: Cadence) -> CadenceEdit:
     if (
         edit.anchor is not UNSET
         and rhythm.spacing is not None
-        and (_anchor(edit.anchor) or Anchor.STARTED) == rhythm.effective_anchor()
+        and (_anchor(edit.anchor) or CadenceAnchor.STARTED) == rhythm.effective_anchor()
     ):
         edit = replace(edit, anchor=UNSET)
     return edit
@@ -96,11 +97,11 @@ def _minutes(spacing: str | None) -> int | None | str:
         return spacing
 
 
-def _anchor(anchor: str | None) -> Anchor | None | str:
+def _anchor(anchor: str | None) -> CadenceAnchor | None | str:
     """The anchor ``anchor`` states, ``None`` for none, or the raw text when it names none of the three."""
     if anchor is None:
         return None
     try:
-        return Anchor(anchor)
+        return CadenceAnchor(anchor)
     except ValueError:
         return anchor

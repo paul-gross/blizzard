@@ -5465,9 +5465,9 @@
         "description": "A hub node's in-progress poll \u2014 whether a chunk parked at a hub node is about to run its\nfirst attempt or is already mid-poll, and when the next is due. Never itself a status.",
         "properties": {
           "kind": {
+            "$ref": "#/components/schemas/WaitKind",
             "default": "pending",
-            "title": "Kind",
-            "type": "string"
+            "x-blizzard-open": true
           },
           "next_poll_at": {
             "title": "Next Poll At",
@@ -8021,6 +8021,13 @@
         ],
         "title": "VersionWindowView",
         "type": "object"
+      },
+      "WaitKind": {
+        "enum": [
+          "pending",
+          "awaiting-merge"
+        ],
+        "type": "string"
       },
       "WorkItemAuthorView": {
         "description": "Who filed a hub-owned work item, legible for display \u2014 ``user_id``\nand ``login`` set only for ``kind == \"user\"``; ``runner_id``/``chunk_id``/``node_name``\n\u2014 the proposing runner, chunk, and node \u2014 set only for ``kind == \"fleet\"``, with\n``runner_name`` the proposing runner's latest registered name when the registry holds it.",

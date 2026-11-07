@@ -7,6 +7,7 @@ from typing import Annotated, Literal
 
 from pydantic import BaseModel, ConfigDict
 
+from blizzard.foundation.cadence_anchor import CadenceAnchor
 from blizzard.foundation.cadence_attention import AttentionReason, ErrandState
 from blizzard.foundation.chunk_status import ChunkStatus
 from blizzard.foundation.run_mode import RunMode
@@ -136,7 +137,7 @@ class CadenceView(WireModel):
     #: The least time between an errand's runs, in minutes; ``None`` with no spacing.
     spacing_minutes: int | None = None
     #: The anchor the spacing counts from — ``started`` when unstated — or ``None`` with no spacing.
-    anchor: str | None = None
+    anchor: Annotated[CadenceAnchor | Unrecognized, OPEN] | None = None
     chores: list[ChoreView] = []
     attention: list[CadenceAttentionView] = []
     #: How many of the cadence's errands stand in each state at the read.

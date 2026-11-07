@@ -10,11 +10,11 @@ from typing import Literal
 
 import pytest
 
+from blizzard.foundation.cadence_anchor import CadenceAnchor
 from blizzard.foundation.cadence_attention import AttentionReason
 from blizzard.foundation.ids import Id, IdPrefix
 from blizzard.foundation.run_mode import RunMode
 from blizzard.hub.domain.cadence.model import (
-    Anchor,
     Attention,
     AttentionFacts,
     Cadence,
@@ -56,11 +56,11 @@ def test_a_schedule_alone_a_spacing_alone_and_both_are_each_a_rhythm() -> None:
     alone = _rhythm(has_schedule=False, spacing="10d")
     assert alone.schedule is None and alone.spacing == Spacing(14400)
     both = _rhythm(spacing="36h", anchor="finished")
-    assert both.schedule is not None and both.spacing == Spacing(2160) and both.anchor is Anchor.FINISHED
+    assert both.schedule is not None and both.spacing == Spacing(2160) and both.anchor is CadenceAnchor.FINISHED
 
 
 def test_an_unstated_anchor_reads_as_started_with_a_spacing_and_as_none_without_one() -> None:
-    assert _rhythm(spacing="90m").effective_anchor() is Anchor.STARTED
+    assert _rhythm(spacing="90m").effective_anchor() is CadenceAnchor.STARTED
     assert _rhythm().effective_anchor() is None
 
 

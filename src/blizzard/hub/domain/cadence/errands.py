@@ -12,12 +12,12 @@ from dataclasses import dataclass
 from datetime import datetime, timedelta
 from enum import StrEnum
 
+from blizzard.foundation.cadence_anchor import CadenceAnchor
 from blizzard.foundation.cadence_attention import ErrandState
 from blizzard.foundation.chunk_status import TERMINAL_STATUSES, ChunkStatus
 from blizzard.foundation.roles import domain_model
 from blizzard.foundation.work_items import WorkItemClosure
 from blizzard.hub.domain.cadence.model import (
-    Anchor,
     Attention,
     AttentionFacts,
     Cadence,
@@ -151,13 +151,13 @@ class LastRun:
     def unfinished(self) -> bool:
         return self.outcome() is RunOutcome.LIVE
 
-    def anchored_at(self, anchor: Anchor) -> datetime | None:
+    def anchored_at(self, anchor: CadenceAnchor) -> datetime | None:
         """The instant ``anchor`` reads on this run. ``started`` reads ``scheduled`` for a run settled before any
         runner took it up; ``finished`` is the earlier of the holder's completion and the item's closure, and is
         ``None`` only while the run is live."""
-        if anchor is Anchor.SCHEDULED:
+        if anchor is CadenceAnchor.SCHEDULED:
             return self.minted_at
-        if anchor is Anchor.STARTED:
+        if anchor is CadenceAnchor.STARTED:
             started = self.holder.started_at if self.holder is not None else None
             return started or self.minted_at
         if self.unfinished():

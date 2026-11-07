@@ -18,10 +18,10 @@ from sqlalchemy import ColumnElement, Row
 from sqlalchemy.engine import Connection
 from sqlalchemy.exc import IntegrityError
 
+from blizzard.foundation.cadence_anchor import CadenceAnchor
 from blizzard.foundation.run_mode import RunMode
 from blizzard.foundation.store.batching import id_batches
 from blizzard.hub.domain.cadence.model import (
-    Anchor,
     Cadence,
     CadenceSlugTakenError,
     Chore,
@@ -277,7 +277,7 @@ def _chore_of(row: Row[Any], scopes: list[str]) -> Chore:
 def _cadence_of(row: Row[Any], chores: list[Chore], retired: bool) -> Cadence:
     schedule = None if row.schedule_cron is None else Schedule(row.schedule_cron, row.schedule_zone)
     spacing = None if row.spacing_minutes is None else Spacing(row.spacing_minutes)
-    anchor = None if row.anchor is None else Anchor(row.anchor)
+    anchor = None if row.anchor is None else CadenceAnchor(row.anchor)
     return Cadence(
         cadence_id=row.cadence_id,
         slug=row.slug,

@@ -8,6 +8,7 @@ from typing import Annotated
 
 from fastapi import APIRouter, Depends, Query
 
+from blizzard.foundation.landing_policy import LandingPolicy
 from blizzard.foundation.store.utc import iso_utc
 from blizzard.hub.api import problems, problems_chunks
 from blizzard.hub.api.auth import reject_runner_principal
@@ -24,6 +25,7 @@ from blizzard.wire.flow_submissions import (
     SubmissionTurnsPage,
     SubmissionTurnView,
 )
+from blizzard.wire.vocabulary import open_value
 
 router = APIRouter(
     prefix="/api", tags=["flows"], dependencies=[Depends(reject_runner_principal), Depends(tenant_bound)]
@@ -43,7 +45,7 @@ def _view(record: SubmissionRecord) -> FlowSubmissionView:
         terms=[
             CapturedLandingTermsView(
                 repository_id=t.repository_id,
-                landing_policy=t.landing_policy,
+                landing_policy=open_value(LandingPolicy, t.landing_policy),
                 park_timeout_hours=t.park_timeout_hours,
                 landing_position=t.landing_position,
             )

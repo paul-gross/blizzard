@@ -340,8 +340,10 @@ export {
 // A project's cadences: the list read in the project, and each cadence's own verbs, addressed by its id.
 export {
   AttentionReason,
+  CadenceAnchor,
   ErrandState,
   RunMode,
+  WaitKind,
   createProjectCadenceApiProjectsProjectCadencesPost,
   editCadenceApiCadencesCadenceIdPatch,
   enableCadenceApiCadencesCadenceIdEnablePost,

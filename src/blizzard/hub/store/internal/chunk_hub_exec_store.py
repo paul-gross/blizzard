@@ -15,8 +15,9 @@ from datetime import datetime
 from sqlalchemy import Connection
 
 from blizzard.foundation.clock import IClock
+from blizzard.foundation.wait_kinds import WaitKind
 from blizzard.hub.domain.artifact.model import StoredArtifact
-from blizzard.hub.domain.chunk.model import CloseEnqueueDecision, WaitKind
+from blizzard.hub.domain.chunk.model import CloseEnqueueDecision
 from blizzard.hub.domain.chunk.ports.exclusive import ILockedChunkRead
 from blizzard.hub.domain.chunk.ports.fence import EpochAdmission
 from blizzard.hub.domain.chunk.ports.hub_exec import IWriteChunkHubExecRepository
