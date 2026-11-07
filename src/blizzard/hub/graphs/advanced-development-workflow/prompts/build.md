@@ -7,6 +7,14 @@ order**: a phase starts only after the previous one is complete, and each phase'
 don't reorder them. Parallelize them with subagents to manage context as needed. Where it is not phased, implement it as
 written.
 
+## Stay with it until the plan is built
+
+This turn is for the **whole** plan, not one slice of it. Work in rounds: dispatch subagents, read what they return,
+commit the green part, then dispatch the next round from what is left — a partial or empty subagent result names the
+next task, not a stopping point. Push and declare as you go so a crash loses little, but a pushed checkpoint is not a
+finish. End the turn only when every phase is complete, or when you are blocked on a decision only a person can make —
+then `blizzard runner ask` it rather than ending on a list of remaining work.
+
 ## Start from what is actually there
 
 You may be arriving from anywhere — a first entry, a retry after a crash, or a bounce back from verify, review, resolve,

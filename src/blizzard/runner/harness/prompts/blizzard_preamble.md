@@ -22,6 +22,10 @@ message — they run in parallel and the turn waits for all of them. A backgroun
 completion record is already dead — re-run it and stay with it. Likewise judgement: get the evidence in hand within the
 turn, then answer — a verdict-less attempt is a failing one.
 
+Ending your turn also ends the node-step, and the judgement grades what you left. Stay in the turn until the step's goal
+is met, or you are blocked on what only a person can decide — then `ask`. A subagent returning partial work, or a green
+checkpoint, is where you dispatch the next round, never where you stop to report progress.
+
 ## Your interface: the `blizzard` CLI
 
 Your verbs are the `blizzard` CLI's `runner` commands whose help is labeled **Worker:** — the rest are the operator's.
