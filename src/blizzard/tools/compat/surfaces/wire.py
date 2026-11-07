@@ -532,6 +532,21 @@ _MIGRATIONS = {
         "RunnerVersionProblem",
         "urn:blizzard:problem:runner-version",
     ),
+    ("post", "/api/decisions/{decision_id}/resolutions", "409"): (
+        "DecisionResolutionConflict",
+        "DecisionResolutionConflict",
+        "urn:blizzard:problem:decision-already-resolved",
+    ),
+    ("post", "/api/egress/backfill", "502"): (
+        "EgressBackfillFailure",
+        "EgressBackfillFailure",
+        "urn:blizzard:problem:egress-backfill-failed",
+    ),
+    ("post", "/api/traces/replay", "502"): (
+        "TraceReplayFailure",
+        "TraceReplayFailure",
+        "urn:blizzard:problem:trace-replay-failed",
+    ),
 }
 
 
