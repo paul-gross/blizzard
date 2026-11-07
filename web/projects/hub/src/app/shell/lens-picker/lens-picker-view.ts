@@ -33,6 +33,5 @@ export class LensPickerView {
   /** The slug of the choice made, `null` for All. */
   readonly choose = output<string | null>();
 
-  protected readonly all = computed(() => this.choices().find((choice) => choice.slug === null) ?? null);
   protected readonly projects = computed(() => this.choices().filter((choice) => choice.slug !== null));
 }

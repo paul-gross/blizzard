@@ -180,7 +180,7 @@ export class ProjectLens {
 
   /** The URL of the view `from` names (default: the board's current location), under the lens of `slug` (`null` for
    * All) — see {@link lensSource} and {@link viewOf}. */
-  viewUnder(slug: string | null, from?: string | null): string {
+  private viewUnder(slug: string | null, from?: string | null): string {
     return lensedUrl(viewOf(lensSource(from ?? this.url())), slug);
   }
 
