@@ -23,7 +23,7 @@ from blizzard.wire.problem import (
     TENANT_NOT_FOUND,
     TENANT_REQUIRED,
 )
-from blizzard.wire.problem_reading import ProblemReading
+from blizzard.wire.problem_reading import ProblemReading, is_kind
 from blizzard.wire.tenant import NO_SUCH_TENANT
 
 
@@ -203,9 +203,7 @@ class CliContext:
             ):
                 if resp.status_code >= 400:
                     resp.read()
-                self._refuse_tenant(resp)
-                self._refuse_project(resp)
-                self._refuse_flag_off(resp)
+                self._refuse_common(resp)
                 self.check(resp, operation)
                 yield from resp.iter_lines()
         except HTTPError as exc:
@@ -246,15 +244,22 @@ class CliContext:
                 resp = client.request(method.upper(), full_url, **kwargs)
         except HTTPError as exc:
             raise self.failed(f"{method.upper()} {path}", exc) from exc
-        self._refuse_tenant(resp)
-        self._refuse_project(resp)
-        self._refuse_flag_off(resp)
+        self._refuse_common(resp)
         return resp
+
+    def _refuse_common(self, resp: Response) -> None:
+        """Raise the refusals no verb answers itself, reading the body once."""
+        if _succeeded(resp):
+            return
+        reading = refusal_of(resp)
+        self._refuse_tenant(resp, reading)
+        self._refuse_project(reading)
+        self._refuse_flag_off(reading)
 
     def check(self, resp: Response, operation: str) -> None:
         """Raise a ``ClickException`` for an error response, in the hub's own words — its ``detail``, else its
         ``title``. An authentication refusal hints at login; a response with no words of its own reports the failure."""
-        if resp.status_code < HTTPStatus.BAD_REQUEST:
+        if _succeeded(resp):
             return
         reading = refusal_of(resp)
         if reading.type in AUTHENTICATION_TYPES or (
@@ -327,42 +332,33 @@ class CliContext:
         self.check(resp, operation)
         return resp
 
-    def _refuse_tenant(self, resp: Response) -> None:
+    def _refuse_tenant(self, resp: Response, reading: ProblemReading) -> None:
         """Raise when the hub refuses the tenant the call acts in, before a verb can read the status code as its own:
         a ``tenant-required`` refusal (the caller belongs to several tenants and the call named none), or a
         ``tenant-not-found`` one for the tenant ``--tenant`` named. Either lists the caller's tenants from ``/api/me``,
         ids beside names. A ``tenant-not-found`` on a call naming no tenant stays the hub's own words: it is the caller
         holding no membership, or a hub-level verb's own tenant argument."""
-        if resp.status_code < HTTPStatus.BAD_REQUEST:
-            return
-        reading = refusal_of(resp)
-        if reading.type == TENANT_REQUIRED or (reading.type is None and reading.legacy_code == _LEGACY_TENANT_REQUIRED):
+        if is_kind(reading, TENANT_REQUIRED, _LEGACY_TENANT_REQUIRED):
             raise self._tenant_refusal(
                 "you belong to several tenants — name the one to act in with --tenant <tenant_id>"
             )
-        if reading.type == TENANT_NOT_FOUND:
+        if reading.type == TENANT_NOT_FOUND or (
+            reading.type is None and resp.status_code == HTTPStatus.NOT_FOUND and reading.message == NO_SUCH_TENANT
+        ):
             if self.tenant is None:
                 raise click.ClickException(reading.message or NO_SUCH_TENANT)
             raise self._tenant_refusal(
                 f"no tenant {self.tenant} you can enter — it does not exist, it is closed, or you are not its member"
             )
 
-    def _refuse_project(self, resp: Response) -> None:
+    def _refuse_project(self, reading: ProblemReading) -> None:
         """Raise :func:`project_required` on a ``project-required`` refusal, with the projects it carries."""
-        if resp.status_code < HTTPStatus.BAD_REQUEST:
-            return
-        reading = refusal_of(resp)
-        if reading.type == PROJECT_REQUIRED or (
-            reading.type is None and reading.legacy_code == _LEGACY_PROJECT_REQUIRED
-        ):
+        if is_kind(reading, PROJECT_REQUIRED, _LEGACY_PROJECT_REQUIRED):
             raise project_required(_projects_of(reading))
 
-    def _refuse_flag_off(self, resp: Response) -> None:
+    def _refuse_flag_off(self, reading: ProblemReading) -> None:
         """Raise on a ``flag-off`` refusal — the route is held behind a flag that is off — in its own words."""
-        if resp.status_code < HTTPStatus.BAD_REQUEST:
-            return
-        reading = refusal_of(resp)
-        if reading.type == FLAG_OFF or (reading.type is None and reading.legacy_code == _LEGACY_FLAG_OFF):
+        if is_kind(reading, FLAG_OFF, _LEGACY_FLAG_OFF):
             raise click.ClickException(reading.message or "not available yet: its flag is off")
 
     def _tenant_refusal(self, headline: str) -> click.ClickException:
@@ -386,6 +382,11 @@ class CliContext:
         door_header = {"X-Blizzard-Door": "cli"} if door else {}
         tenant_header = {TENANT_HEADER: self.tenant} if self.tenant else {}
         return {**door_header, **headers, **tenant_header, **self.trace.headers()}
+
+
+def _succeeded(resp: Response) -> bool:
+    """Whether ``resp`` is a ``2xx`` — an unfollowed redirect is not a success a verb may report."""
+    return HTTPStatus.OK <= resp.status_code < HTTPStatus.MULTIPLE_CHOICES
 
 
 def project_required(projects: list[dict[str, str]]) -> click.ClickException:

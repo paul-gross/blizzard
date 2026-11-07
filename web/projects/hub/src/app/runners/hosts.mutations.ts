@@ -1,10 +1,14 @@
 import { inject } from '@angular/core';
-import { QueryClient, injectMutation } from '@tanstack/angular-query-experimental';
+import {
+  QueryClient,
+  injectMutation,
+} from '@tanstack/angular-query-experimental';
 
 import {
   enrollHostApiHostsHostIdEnrollmentsPost,
   hubHostsKey,
   hubRunnersKey,
+  problemType,
   retireHostApiHostsHostIdRetirePost,
   revokeHostTokenApiHostsHostIdTokenRevocationsPost,
 } from 'fleet';
@@ -13,6 +17,9 @@ import {
   hostRetireMutationKey,
   hostRevokeTokenMutationKey,
 } from '../core/mutation-keys';
+
+/** The `type` of the hub's refusal of an unforced retire whose runners hold chunks. */
+const HOST_HOLDS_ROUTES = 'urn:blizzard:problem:host-holds-routes';
 
 /** Retire a host; `force` releases the chunks its runners hold instead of being refused. */
 export interface HostRetireVars {
@@ -36,7 +43,7 @@ function settleHostReads(queryClient: QueryClient): Promise<unknown> {
   ]);
 }
 
-/** `POST /api/hosts/{id}/retire`. An unforced retire the hub refuses with a 409 — its
+/** `POST /api/hosts/{id}/retire`. An unforced retire the hub refuses as `host-holds-routes` — its
  * runners hold chunks — throws {@link HostRetireRefused}, so the caller can ask again
  * with `force`. */
 export function injectHostRetireMutation() {
@@ -44,12 +51,15 @@ export function injectHostRetireMutation() {
   return injectMutation(() => ({
     mutationKey: hostRetireMutationKey,
     mutationFn: async (vars: HostRetireVars): Promise<void> => {
-      const { error, response } = await retireHostApiHostsHostIdRetirePost({
+      const { error } = await retireHostApiHostsHostIdRetirePost({
         path: { host_id: vars.hostId },
         body: { by: 'operator', force: vars.force },
         throwOnError: false,
       });
-      if (error) throw !vars.force && response?.status === 409 ? new HostRetireRefused(error) : error;
+      if (error)
+        throw !vars.force && problemType(error) === HOST_HOLDS_ROUTES
+          ? new HostRetireRefused(error)
+          : error;
     },
     onSettled: () => settleHostReads(queryClient),
   }));
@@ -62,11 +72,13 @@ export function injectHostRevokeTokenMutation() {
   return injectMutation(() => ({
     mutationKey: hostRevokeTokenMutationKey,
     mutationFn: async (hostId: string): Promise<void> => {
-      const { error } = await revokeHostTokenApiHostsHostIdTokenRevocationsPost({
-        path: { host_id: hostId },
-        body: { by: 'operator' },
-        throwOnError: false,
-      });
+      const { error } = await revokeHostTokenApiHostsHostIdTokenRevocationsPost(
+        {
+          path: { host_id: hostId },
+          body: { by: 'operator' },
+          throwOnError: false,
+        },
+      );
       if (error) throw error;
     },
     onSettled: () => settleHostReads(queryClient),

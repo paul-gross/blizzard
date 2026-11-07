@@ -1,7 +1,10 @@
 import { provideZonelessChangeDetection } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { Router, provideRouter, withRouterConfig } from '@angular/router';
-import { QueryClient, provideTanStackQuery } from '@tanstack/angular-query-experimental';
+import {
+  QueryClient,
+  provideTanStackQuery,
+} from '@tanstack/angular-query-experimental';
 import {
   EVENT_SOURCE_FACTORY,
   ViewportService,
@@ -10,9 +13,23 @@ import {
   type FleetEventSource,
 } from 'fleet';
 import { type MeResponse } from 'fleet/shell';
-import { OPERATOR_ME_RESPONSE, chunkCountsView, configChangesPage, fleetSpendView, projectView, type RequestClientStub, settle, stubError, stubHubClient } from 'fleet/testing';
+import {
+  OPERATOR_ME_RESPONSE,
+  chunkCountsView,
+  configChangesPage,
+  fleetSpendView,
+  projectView,
+  type RequestClientStub,
+  settle,
+  stubError,
+  stubHubClient,
+} from 'fleet/testing';
 
-import { LAST_TENANT_KEY, PAGE_RELOAD, TAB_TENANT_KEY } from '../core/auth/tenant-context';
+import {
+  LAST_TENANT_KEY,
+  PAGE_RELOAD,
+  TAB_TENANT_KEY,
+} from '../core/auth/tenant-context';
 import { App } from './app';
 import { routes } from './app.routes';
 import { provideFlags } from 'fleet/shell';
@@ -22,10 +39,24 @@ import { hubFlagsRead } from '../core/flags.query';
  * theirs, and `BoardHeader` calls `.toFixed` on the spend's `cost_usd`. A block adds identity and whatever its view
  * reads with content. */
 const IDLE_SHELL: Parameters<typeof stubHubClient>[0] = {
-  'GET /api/health': () => ({ status: 'ok', service: 'blizzard-hub', version: '0.0.0', overridden: [] }),
+  'GET /api/health': () => ({
+    status: 'ok',
+    service: 'blizzard-hub',
+    version: '0.0.0',
+    overridden: [],
+  }),
   'GET /api/flags': () => ({ flags: {}, overridden: [] }),
   'GET /api/chunk-counts': () =>
-    chunkCountsView({ not_ready: 0, ready: 0, running: 0, delivering: 0, needs_human: 0, done: 0, terminal: 0, total: 0 }),
+    chunkCountsView({
+      not_ready: 0,
+      ready: 0,
+      running: 0,
+      delivering: 0,
+      needs_human: 0,
+      done: 0,
+      terminal: 0,
+      total: 0,
+    }),
   'GET /api/projects': () => ({ projects: [] }),
   'GET /api/chunks': () => ({ chunks: [], next_cursor: null }),
   'GET /api/queue': () => ({ entries: [], next_cursor: null }),
@@ -35,7 +66,13 @@ const IDLE_SHELL: Parameters<typeof stubHubClient>[0] = {
   'GET /api/activity': () => ({ activity: [] }),
   'GET /api/graphs': () => [],
   'GET /api/spend': () =>
-    fleetSpendView({ cost_usd: 0, input_tokens: 0, output_tokens: 0, cache_read_tokens: 0, cache_create_tokens: 0 }),
+    fleetSpendView({
+      cost_usd: 0,
+      input_tokens: 0,
+      output_tokens: 0,
+      cache_read_tokens: 0,
+      cache_create_tokens: 0,
+    }),
   'GET /api/runners': () => ({ runners: [] }),
   'GET /api/hosts': () => ({ hosts: [] }),
   'GET /api/members': () => [],
@@ -45,7 +82,9 @@ const IDLE_SHELL: Parameters<typeof stubHubClient>[0] = {
   'GET /api/forges': () => ({ forges: [] }),
   'GET /api/config/changes': () => configChangesPage(),
   'GET /api/projects/{project}/source-links': () => ({ source_links: [] }),
-  'GET /api/projects/{project}/repository-links': () => ({ repository_links: [] }),
+  'GET /api/projects/{project}/repository-links': () => ({
+    repository_links: [],
+  }),
 };
 
 /** A do-nothing EventSource so the live-update spine can open without a real stream
@@ -100,11 +139,22 @@ describe('the board route (route-table mobile/desktop fork)', () => {
         // outgoing shell still watches, so the flip test below timed out
         // whenever CI's scheduling put that timer after the swap. With nothing
         // ever stale, a remount reads the cache instead of refetching.
-        provideTanStackQuery(new QueryClient({ defaultOptions: { queries: { retry: false, staleTime: Infinity } } })),
+        provideTanStackQuery(
+          new QueryClient({
+            defaultOptions: { queries: { retry: false, staleTime: Infinity } },
+          }),
+        ),
         provideFlags(hubFlagsRead),
-        provideRouter(routes, withRouterConfig({ onSameUrlNavigation: 'reload' })),
+        provideRouter(
+          routes,
+          withRouterConfig({ onSameUrlNavigation: 'reload' }),
+        ),
         provideViewportRenavigation(),
-        { provide: EVENT_SOURCE_FACTORY, useValue: (() => new FakeEventSource() as unknown as FleetEventSource) as EventSourceFactory },
+        {
+          provide: EVENT_SOURCE_FACTORY,
+          useValue: (() =>
+            new FakeEventSource() as unknown as FleetEventSource) as EventSourceFactory,
+        },
       ],
     }).compileComponents();
   });
@@ -184,11 +234,20 @@ describe('the fleet route (mobile RunnersPage, desktop FleetPage)', () => {
       imports: [App],
       providers: [
         provideZonelessChangeDetection(),
-        provideTanStackQuery(new QueryClient({ defaultOptions: { queries: { retry: false } } })),
+        provideTanStackQuery(
+          new QueryClient({ defaultOptions: { queries: { retry: false } } }),
+        ),
         provideFlags(hubFlagsRead),
-        provideRouter(routes, withRouterConfig({ onSameUrlNavigation: 'reload' })),
+        provideRouter(
+          routes,
+          withRouterConfig({ onSameUrlNavigation: 'reload' }),
+        ),
         provideViewportRenavigation(),
-        { provide: EVENT_SOURCE_FACTORY, useValue: (() => new FakeEventSource() as unknown as FleetEventSource) as EventSourceFactory },
+        {
+          provide: EVENT_SOURCE_FACTORY,
+          useValue: (() =>
+            new FakeEventSource() as unknown as FleetEventSource) as EventSourceFactory,
+        },
       ],
     }).compileComponents();
   });
@@ -217,7 +276,9 @@ describe('the fleet route (mobile RunnersPage, desktop FleetPage)', () => {
     await settle(fixture);
     const el = fixture.nativeElement as HTMLElement;
 
-    expect(el.querySelector('[data-testid="mobile-fleet-detail"]')).toBeTruthy();
+    expect(
+      el.querySelector('[data-testid="mobile-fleet-detail"]'),
+    ).toBeTruthy();
     expect(el.querySelector('[data-testid="fleet-split"]')).toBeNull();
   });
 
@@ -234,7 +295,9 @@ describe('the fleet route (mobile RunnersPage, desktop FleetPage)', () => {
       expect(router.url).toBe(url);
       expect(el.querySelector('[data-testid="fleet-split"]')).toBeTruthy();
       expect(el.querySelector('[data-testid="runner-panel"]')).toBeNull();
-      expect(el.querySelector('[data-testid="mobile-fleet-detail"]')).toBeNull();
+      expect(
+        el.querySelector('[data-testid="mobile-fleet-detail"]'),
+      ).toBeNull();
     });
   }
 });
@@ -250,8 +313,18 @@ describe('the public pages (sign-in refusals and invitations)', () => {
     ...OPERATOR_ME_RESPONSE,
     role: null,
     tenants: [
-      { tenant_id: 'ten_acme', name: 'Acme', role: 'admin', permissions: ['fleet:view'] },
-      { tenant_id: 'ten_globex', name: 'Globex', role: 'guest', permissions: ['fleet:view'] },
+      {
+        tenant_id: 'ten_acme',
+        name: 'Acme',
+        role: 'admin',
+        permissions: ['fleet:view'],
+      },
+      {
+        tenant_id: 'ten_globex',
+        name: 'Globex',
+        role: 'guest',
+        permissions: ['fleet:view'],
+      },
     ],
   };
   let authStub: RequestClientStub;
@@ -263,18 +336,28 @@ describe('the public pages (sign-in refusals and invitations)', () => {
     me = null;
     authStub = stubHubClient({
       ...IDLE_SHELL,
-      'GET /api/me': () => me ?? stubError(401, { detail: 'authentication required' }),
+      'GET /api/me': () =>
+        me ?? stubError(401, { detail: 'authentication required' }),
       'GET /api/auth/providers': () => GITHUB,
     });
     await TestBed.configureTestingModule({
       imports: [App],
       providers: [
         provideZonelessChangeDetection(),
-        provideTanStackQuery(new QueryClient({ defaultOptions: { queries: { retry: false } } })),
+        provideTanStackQuery(
+          new QueryClient({ defaultOptions: { queries: { retry: false } } }),
+        ),
         provideFlags(hubFlagsRead),
-        provideRouter(routes, withRouterConfig({ onSameUrlNavigation: 'reload' })),
+        provideRouter(
+          routes,
+          withRouterConfig({ onSameUrlNavigation: 'reload' }),
+        ),
         provideViewportRenavigation(),
-        { provide: EVENT_SOURCE_FACTORY, useValue: (() => new FakeEventSource() as unknown as FleetEventSource) as EventSourceFactory },
+        {
+          provide: EVENT_SOURCE_FACTORY,
+          useValue: (() =>
+            new FakeEventSource() as unknown as FleetEventSource) as EventSourceFactory,
+        },
       ],
     }).compileComponents();
     TestBed.inject(ViewportService).setOverride('desktop');
@@ -295,9 +378,11 @@ describe('the public pages (sign-in refusals and invitations)', () => {
 
     expect(router.url).toBe('/invite/tok_1');
     expect(el.querySelector('[data-testid="invite-page"]')).toBeTruthy();
-    expect(el.querySelector('[data-testid="login-provider-github"]')?.getAttribute('href')).toBe(
-      '/api/auth/github/authorize?return_to=%2F&invite=tok_1',
-    );
+    expect(
+      el
+        .querySelector('[data-testid="login-provider-github"]')
+        ?.getAttribute('href'),
+    ).toBe('/api/auth/github/authorize?return_to=%2F&invite=tok_1');
   });
 
   it('shows a signed-in person the invitation outside the shell, so their account goes through the same check', async () => {
@@ -311,12 +396,14 @@ describe('the public pages (sign-in refusals and invitations)', () => {
   });
 
   it('shows a refused sign-in its reason and keeps the refusal in the URL', async () => {
-    const { el, router } = await open('/login?refusal=invitation_email_mismatch');
+    const { el, router } = await open(
+      '/login?refusal=invitation_email_mismatch',
+    );
 
     expect(router.url).toBe('/login?refusal=invitation_email_mismatch');
-    expect(el.querySelector('[data-testid="login-refusal"]')?.textContent).toContain(
-      'This invitation is for a different email address.',
-    );
+    expect(
+      el.querySelector('[data-testid="login-refusal"]')?.textContent,
+    ).toContain('This invitation is for a different email address.');
   });
 
   it('lands an accepted invitation in the invited tenant, among several, and leaves the landing URL', async () => {
@@ -328,7 +415,11 @@ describe('the public pages (sign-in refusals and invitations)', () => {
     expect(router.url.startsWith('/invite')).toBe(false);
     expect(sessionStorage.getItem(TAB_TENANT_KEY)).toBe('ten_globex');
     expect(localStorage.getItem(LAST_TENANT_KEY)).toBe('ten_globex');
-    expect(el.querySelector('[data-testid="board-header-tagline"]')?.textContent?.trim()).toBe('Globex');
+    expect(
+      el
+        .querySelector('[data-testid="board-header-tagline"]')
+        ?.textContent?.trim(),
+    ).toBe('Globex');
   });
 
   it('settles a landing naming a tenant the person is not in like any stale choice', async () => {
@@ -359,11 +450,20 @@ describe('the admin members route', () => {
       imports: [App],
       providers: [
         provideZonelessChangeDetection(),
-        provideTanStackQuery(new QueryClient({ defaultOptions: { queries: { retry: false } } })),
+        provideTanStackQuery(
+          new QueryClient({ defaultOptions: { queries: { retry: false } } }),
+        ),
         provideFlags(hubFlagsRead),
-        provideRouter(routes, withRouterConfig({ onSameUrlNavigation: 'reload' })),
+        provideRouter(
+          routes,
+          withRouterConfig({ onSameUrlNavigation: 'reload' }),
+        ),
         provideViewportRenavigation(),
-        { provide: EVENT_SOURCE_FACTORY, useValue: (() => new FakeEventSource() as unknown as FleetEventSource) as EventSourceFactory },
+        {
+          provide: EVENT_SOURCE_FACTORY,
+          useValue: (() =>
+            new FakeEventSource() as unknown as FleetEventSource) as EventSourceFactory,
+        },
       ],
     }).compileComponents();
     TestBed.inject(ViewportService).setOverride('desktop');
@@ -384,7 +484,9 @@ describe('the admin members route', () => {
 
     expect(router.url).toBe('/admin/members');
     expect(el.querySelector('[data-testid="members-table"]')).toBeTruthy();
-    expect(el.querySelector('[data-testid="admin-tab-members"]')?.textContent).toContain('Members');
+    expect(
+      el.querySelector('[data-testid="admin-tab-members"]')?.textContent,
+    ).toContain('Members');
     expect(authStub.forRoute('/api/members', 'GET').length).toBeGreaterThan(0);
   });
 
@@ -415,7 +517,11 @@ describe('the views under the project lens', () => {
       'GET /api/me': () => OPERATOR_ME_RESPONSE,
       'GET /api/auth/providers': () => [],
       'GET /api/projects': () => ({ projects: [BLIZZARD] }),
-      'GET /api/projects/{project}': () => stubError(404, { detail: 'no such project' }),
+      'GET /api/projects/{project}': () =>
+        stubError(404, {
+          type: 'urn:blizzard:problem:project-not-found',
+          detail: 'no such project',
+        }),
       'GET /api/routines': () => [],
       'GET /api/runs': () => [],
       'GET /api/scopes': () => [],
@@ -424,11 +530,20 @@ describe('the views under the project lens', () => {
       imports: [App],
       providers: [
         provideZonelessChangeDetection(),
-        provideTanStackQuery(new QueryClient({ defaultOptions: { queries: { retry: false } } })),
+        provideTanStackQuery(
+          new QueryClient({ defaultOptions: { queries: { retry: false } } }),
+        ),
         provideFlags(hubFlagsRead),
-        provideRouter(routes, withRouterConfig({ onSameUrlNavigation: 'reload' })),
+        provideRouter(
+          routes,
+          withRouterConfig({ onSameUrlNavigation: 'reload' }),
+        ),
         provideViewportRenavigation(),
-        { provide: EVENT_SOURCE_FACTORY, useValue: (() => new FakeEventSource() as unknown as FleetEventSource) as EventSourceFactory },
+        {
+          provide: EVENT_SOURCE_FACTORY,
+          useValue: (() =>
+            new FakeEventSource() as unknown as FleetEventSource) as EventSourceFactory,
+        },
         { provide: PAGE_RELOAD, useValue: () => reloads++ },
       ],
     }).compileComponents();
@@ -463,8 +578,14 @@ describe('the views under the project lens', () => {
 
   it('renders the desktop board under the lens, and the mobile glance there on a phone', async () => {
     const desktop = await open('/p/blizzard/board');
-    expect(desktop.el.querySelector('[data-testid="board-shell"]')).toBeTruthy();
-    expect(desktop.el.querySelector('[data-testid="project-lens-blizzard"]')?.getAttribute('aria-pressed')).toBe('true');
+    expect(
+      desktop.el.querySelector('[data-testid="board-shell"]'),
+    ).toBeTruthy();
+    expect(
+      desktop.el
+        .querySelector('[data-testid="project-lens-blizzard"]')
+        ?.getAttribute('aria-pressed'),
+    ).toBe('true');
   });
 
   it('renders the mobile glance under the lens on a phone', async () => {
@@ -478,7 +599,9 @@ describe('the views under the project lens', () => {
     const { el, router } = await open('/p/gone/graphs');
 
     expect(router.url).toBe('/graphs');
-    expect(el.querySelector('[data-testid="lens-notice"]')?.textContent).toContain('No project “gone” in this tenant.');
+    expect(
+      el.querySelector('[data-testid="lens-notice"]')?.textContent,
+    ).toContain('No project “gone” in this tenant.');
     expect(reloads).toBe(0);
     expect(sessionStorage.getItem(TAB_TENANT_KEY)).toBe('ten_operator');
     expect(el.querySelector('[data-testid="board-header"]')).toBeTruthy();

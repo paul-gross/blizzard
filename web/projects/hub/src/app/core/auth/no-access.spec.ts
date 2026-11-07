@@ -30,13 +30,15 @@ describe('NoAccess', () => {
     await fixture.whenStable();
     const el = fixture.nativeElement as HTMLElement;
 
-    expect(el.querySelector('[data-testid="no-access"]')?.textContent).toContain(
-      "You don't have access to anything here yet.",
-    );
-    expect(el.querySelector('[data-testid="no-access"]')?.textContent).toContain(
-      'Reach out to your administrator for access.',
-    );
-    expect(el.querySelector('[data-testid="no-access-username"]')?.textContent).toContain('newcomer');
+    expect(
+      el.querySelector('[data-testid="no-access"]')?.textContent,
+    ).toContain("You don't have access to anything here yet.");
+    expect(
+      el.querySelector('[data-testid="no-access"]')?.textContent,
+    ).toContain('Reach out to your administrator for access.');
+    expect(
+      el.querySelector('[data-testid="no-access-username"]')?.textContent,
+    ).toContain('newcomer');
   });
 
   it('emits logout when the control is clicked', async () => {
@@ -60,7 +62,12 @@ describe('NoAccess', () => {
     await fixture.whenStable();
     const el = fixture.nativeElement as HTMLElement;
 
-    expect(el.querySelector<HTMLButtonElement>('[data-testid="no-access-logout"]')?.disabled).toBe(true);
-    expect(el.querySelector('[data-testid="no-access-logout-error"]')?.textContent).toContain('session store down');
+    expect(
+      el.querySelector<HTMLButtonElement>('[data-testid="no-access-logout"]')
+        ?.disabled,
+    ).toBe(true);
+    expect(
+      el.querySelector('[data-testid="no-access-logout-error"]')?.textContent,
+    ).toContain('session store down');
   });
 });

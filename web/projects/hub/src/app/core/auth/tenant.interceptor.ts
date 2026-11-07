@@ -6,7 +6,12 @@ import {
   makeEnvironmentProviders,
 } from '@angular/core';
 
-import { EVENT_SOURCE_FACTORY, type EventSourceFactory, FetchEventSource, hubClient } from 'fleet/shell';
+import {
+  EVENT_SOURCE_FACTORY,
+  type EventSourceFactory,
+  FetchEventSource,
+  hubClient,
+} from 'fleet/shell';
 
 import { TENANT_HEADER, TenantContext } from './tenant-context';
 import { TenantLoss } from './tenant-loss';
@@ -34,15 +39,19 @@ export function provideTenantInterceptor(): EnvironmentProviders {
       useValue: () => {
         const context = inject(TenantContext);
         const registration = hubClient.interceptors.request.use((request) => {
-          for (const [name, value] of Object.entries(tenantHeaders(context))) request.headers.set(name, value);
+          for (const [name, value] of Object.entries(tenantHeaders(context)))
+            request.headers.set(name, value);
           return request;
         });
         const loss = inject(TenantLoss);
-        const responses = hubClient.interceptors.response.use((response, request) => {
-          const tenant = request.headers.get(TENANT_HEADER);
-          if (response.status === 404 && tenant !== null) loss.notFound(tenant);
-          return response;
-        });
+        const responses = hubClient.interceptors.response.use(
+          (response, request) => {
+            const tenant = request.headers.get(TENANT_HEADER);
+            if (response.status === 404 && tenant !== null)
+              loss.notFound(tenant);
+            return response;
+          },
+        );
         // The generated client outlives this injector; its interceptor must not keep naming this context's tenant.
         inject(DestroyRef).onDestroy(() => {
           hubClient.interceptors.request.eject(registration);

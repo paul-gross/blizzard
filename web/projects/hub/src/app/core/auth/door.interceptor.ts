@@ -1,4 +1,8 @@
-import { ENVIRONMENT_INITIALIZER, type EnvironmentProviders, makeEnvironmentProviders } from '@angular/core';
+import {
+  ENVIRONMENT_INITIALIZER,
+  type EnvironmentProviders,
+  makeEnvironmentProviders,
+} from '@angular/core';
 
 import { hubClient } from 'fleet/shell';
 

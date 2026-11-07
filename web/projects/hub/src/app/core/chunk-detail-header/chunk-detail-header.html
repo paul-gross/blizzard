@@ -13,35 +13,42 @@
     <span class="d-sub">
       <!-- The project the chunk belongs to leads the line, its swatch beside its name. -->
       @if (detail().project_name; as projectName) {
-        <span class="project" data-testid="detail-project" [title]="projectName">
-          @if (projectColor(); as color) {
-            <fleet-kit-swatch class="project-swatch" [color]="color" />
-          }
-          {{ projectName }}
-        </span>
-        <span class="sep" aria-hidden="true">·</span>
+      <span class="project" data-testid="detail-project" [title]="projectName">
+        @if (projectColor(); as color) {
+        <fleet-kit-swatch class="project-swatch" [color]="color" />
+        } {{ projectName }}
+      </span>
+      <span class="sep" aria-hidden="true">·</span>
       }
       <!-- Each pointer links out to its work source.
            No web_url (unconfigured source) degrades to plain text, no broken link. -->
-      @for (p of pointers(); track p.source + ':' + p.ref) {
-        @if (!$first) {
-          <span class="sep" aria-hidden="true">·</span>
-        }
-        <fleet-work-ref-link [workRef]="p" testid="detail-pointer" />
+      @for (p of pointers(); track p.source + ':' + p.ref) { @if (!$first) {
+      <span class="sep" aria-hidden="true">·</span>
       }
-      @if (pointers().length) {
-        <span class="sep" aria-hidden="true">·</span>
+      <fleet-work-ref-link [workRef]="p" testid="detail-pointer" />
+      } @if (pointers().length) {
+      <span class="sep" aria-hidden="true">·</span>
       }
       <!-- The runner holding the chunk as `host/runner` — a plain fact; Detach, in the ⋯ menu,
            names it again in its own copy. Then where the chunk is: its status and the node it
            sits at. -->
       @if (claimant(); as runner) {
-        <span class="runner" data-testid="route-info" [attr.title]="claimantTitle()">{{ runner }}</span>
-        <span class="sep" aria-hidden="true">·</span>
+      <span
+        class="runner"
+        data-testid="route-info"
+        [attr.title]="claimantTitle()"
+        >{{ runner }}</span
+      >
+      <span class="sep" aria-hidden="true">·</span>
       }
       <span class="st" data-testid="detail-status">{{ renderedStatus() }}</span>
       <span class="sep" aria-hidden="true">·</span>
-      <span class="st" data-testid="detail-node" [attr.title]="detail().current_node_id">{{ currentNodeName() }}</span>
+      <span
+        class="st"
+        data-testid="detail-node"
+        [attr.title]="detail().current_node_id"
+        >{{ currentNodeName() }}</span
+      >
     </span>
   </div>
   <div class="d-meta">
@@ -49,17 +56,33 @@
          a paused chunk that is also parked on a question derives waiting_on_human, so
          the status cell above would never say so. -->
     @if (pause(); as p) {
-      <span class="pb" data-testid="chunk-pause-by">Paused by {{ p.by }}</span>
+    <span class="pb" data-testid="chunk-pause-by">Paused by {{ p.by }}</span>
     }
     <!-- Every chunk action lives in the ⋮ overflow menu, with its confirmations. -->
     @if (control(); as c) {
-      <fleet-chunk-actions-menu [detail]="detail()" [control]="c" [claimant]="claimant()" [afterDelete]="afterDelete()" />
-    }
-    @if (closable()) {
-      <fleet-kit-button class="close" testid="detail-close" ariaLabel="Close" (click)="dismiss.emit()">
-        <svg class="glyph glyph--x" viewBox="0 0 16 16" width="12" height="12" aria-hidden="true"><path d="M3.5 3.5l9 9M12.5 3.5l-9 9" /></svg>
-      </fleet-kit-button>
+    <fleet-chunk-actions-menu
+      [detail]="detail()"
+      [control]="c"
+      [claimant]="claimant()"
+      [afterDelete]="afterDelete()"
+    />
+    } @if (closable()) {
+    <fleet-kit-button
+      class="close"
+      testid="detail-close"
+      ariaLabel="Close"
+      (click)="dismiss.emit()"
+    >
+      <svg
+        class="glyph glyph--x"
+        viewBox="0 0 16 16"
+        width="12"
+        height="12"
+        aria-hidden="true"
+      >
+        <path d="M3.5 3.5l9 9M12.5 3.5l-9 9" />
+      </svg>
+    </fleet-kit-button>
     }
   </div>
 </header>
-

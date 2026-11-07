@@ -7,11 +7,9 @@ from typing import Any
 
 import click
 
-from blizzard.cli.refusal import refusal_of
 from blizzard.hub.cli.command import AdminCommand
 from blizzard.hub.cli.context import CliContext
 from blizzard.hub.cli.views import Listing
-from blizzard.wire.problem_types_admin import TENANT_DELETED
 
 
 class TenantListing(Listing):
@@ -77,7 +75,7 @@ def tenant_delete(cli: CliContext, tenant_id: str, yes: bool) -> None:
     if not yes and not click.confirm(f"delete tenant {tenant_id} and every row it holds? this cannot be undone"):
         raise click.Abort()
     resp = cli.send("delete", f"/api/admin/tenants/{tenant_id}")
-    if refusal_of(resp).type == TENANT_DELETED:
+    if resp.status_code == HTTPStatus.GONE:
         cli.show_lines(
             {"tenant_id": tenant_id, "state": "deleted", "rows_removed": None},
             f"tenant {tenant_id} was already deleted",

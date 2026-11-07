@@ -5,7 +5,9 @@ interface Page {
   next_cursor?: string | null;
 }
 
-function fetcherOf(pages: Page[]): (cursor: string | undefined) => Promise<{ data?: Page; error: unknown }> {
+function fetcherOf(
+  pages: Page[],
+): (cursor: string | undefined) => Promise<{ data?: Page; error: unknown }> {
   let calls = 0;
   return async () => {
     const page = pages[calls];
@@ -53,7 +55,8 @@ describe('drainPages', () => {
     const boom = new Error('boom');
     const fetchPage = async (): Promise<{ data?: Page; error: unknown }> => {
       calls += 1;
-      if (calls === 1) return { data: { rows: [1], next_cursor: 'c1' }, error: undefined };
+      if (calls === 1)
+        return { data: { rows: [1], next_cursor: 'c1' }, error: undefined };
       return { data: undefined, error: boom };
     };
 

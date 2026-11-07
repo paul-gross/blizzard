@@ -9,10 +9,18 @@ describe('provideDoorInterceptor', () => {
     const seen: string[] = [];
     const fakeFetch = async (input: Request): Promise<Response> => {
       seen.push(input.headers.get(DOOR_HEADER) ?? '');
-      return new Response('{}', { status: 200, headers: { 'Content-Type': 'application/json' } });
+      return new Response('{}', {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' },
+      });
     };
-    hubClient.setConfig({ baseUrl: 'http://localhost', fetch: fakeFetch as typeof fetch });
-    TestBed.configureTestingModule({ providers: [provideZonelessChangeDetection(), provideDoorInterceptor()] });
+    hubClient.setConfig({
+      baseUrl: 'http://localhost',
+      fetch: fakeFetch as typeof fetch,
+    });
+    TestBed.configureTestingModule({
+      providers: [provideZonelessChangeDetection(), provideDoorInterceptor()],
+    });
     TestBed.inject(Injector); // forces the environment injector (and its ENVIRONMENT_INITIALIZERs) to run
 
     await meApiMeGet({ throwOnError: false });

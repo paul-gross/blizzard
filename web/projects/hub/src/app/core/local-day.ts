@@ -5,7 +5,11 @@
  * one `injectHubFleetSpendQuery` cache entry rather than opening two. */
 export function startOfLocalDayIso(nowMs: number): string {
   const now = new Date(nowMs);
-  return new Date(now.getFullYear(), now.getMonth(), now.getDate()).toISOString();
+  return new Date(
+    now.getFullYear(),
+    now.getMonth(),
+    now.getDate(),
+  ).toISOString();
 }
 
 /** The local midnight *before* {@link startOfLocalDayIso}'s — "yesterday"'s own
@@ -16,5 +20,9 @@ export function startOfLocalDayIso(nowMs: number): string {
  * where today starts. */
 export function startOfPreviousLocalDayIso(nowMs: number): string {
   const now = new Date(nowMs);
-  return new Date(now.getFullYear(), now.getMonth(), now.getDate() - 1).toISOString();
+  return new Date(
+    now.getFullYear(),
+    now.getMonth(),
+    now.getDate() - 1,
+  ).toISOString();
 }

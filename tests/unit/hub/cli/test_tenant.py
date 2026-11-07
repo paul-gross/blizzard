@@ -57,7 +57,7 @@ def test_list_shows_a_deletion_underway_with_when_it_began() -> None:
     ]
 
 
-def test_a_typed_already_deleted_refusal_reads_as_deleted_and_an_untyped_410_does_not() -> None:
+def test_a_410_on_delete_reads_as_deleted_typed_or_not() -> None:
     typed = {"type": TENANT_DELETED, "title": "Tenant deleted", "detail": "tenant deleted", "status": 410}
 
     def delete_typed(url: str, *, timeout: float, headers: dict[str, str] | None = None) -> httpx2.Response:
@@ -71,5 +71,6 @@ def test_a_typed_already_deleted_refusal_reads_as_deleted_and_an_untyped_410_doe
     refused = bind_stubs(delete=delete_untyped).runner.invoke(hub_group, args)
 
     assert said.exit_code == 0, said.output
-    assert "tenant ten_a was already deleted" in said.output or '"state": "deleted"' in said.output
-    assert refused.exit_code != 0
+    assert said.output.strip() == "tenant ten_a was already deleted"
+    assert refused.exit_code == 0, refused.output
+    assert refused.output.strip() == "tenant ten_a was already deleted"

@@ -2,7 +2,10 @@ import { provideZonelessChangeDetection } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { By } from '@angular/platform-browser';
 import { provideRouter, Router } from '@angular/router';
-import { QueryClient, provideTanStackQuery } from '@tanstack/angular-query-experimental';
+import {
+  QueryClient,
+  provideTanStackQuery,
+} from '@tanstack/angular-query-experimental';
 import {
   EVENT_SOURCE_FACTORY,
   FleetLiveUpdates,
@@ -14,18 +17,39 @@ import {
   type ProviderSummary,
 } from 'fleet';
 import { provideAuthInterceptor } from '../core/auth/auth.interceptor';
-import { LAST_TENANT_KEY, TAB_TENANT_KEY, TenantContext } from '../core/auth/tenant-context';
+import {
+  LAST_TENANT_KEY,
+  TAB_TENANT_KEY,
+  TenantContext,
+} from '../core/auth/tenant-context';
 import { provideTenantInterceptor } from '../core/auth/tenant.interceptor';
 import type { MeTenant } from 'fleet/shell';
-import { OPERATOR_ME_RESPONSE, chunkCountsView, fleetSpendView, projectView, type RequestClientStub, settle, stubError, stubHubClient } from 'fleet/testing';
+import {
+  OPERATOR_ME_RESPONSE,
+  chunkCountsView,
+  fleetSpendView,
+  projectView,
+  type RequestClientStub,
+  settle,
+  stubError,
+  stubHubClient,
+} from 'fleet/testing';
 import { vi } from 'vitest';
 import { FLEET_CLOCK } from 'fleet';
 
 import { App } from './app';
 import { routes } from './app.routes';
 import { BoardPage } from '../board/board-page';
-import { startOfLocalDayIso, startOfPreviousLocalDayIso } from '../core/local-day';
-import { type FlagsResponse, IN_APP_LINK, type InAppLink, provideFlags } from 'fleet/shell';
+import {
+  startOfLocalDayIso,
+  startOfPreviousLocalDayIso,
+} from '../core/local-day';
+import {
+  type FlagsResponse,
+  IN_APP_LINK,
+  type InAppLink,
+  provideFlags,
+} from 'fleet/shell';
 import { ProjectLens } from '../core/project-lens';
 import { hubFlagsRead } from '../core/flags.query';
 
@@ -45,11 +69,25 @@ class FakeEventSource {
 /** The reads the shell and its board make at rest, each answering its empty shape — the board, rail and explorer iterate
  * theirs, and `BoardHeader` calls `.toFixed` on the spend's `cost_usd`. */
 const IDLE_BOARD: Parameters<typeof stubHubClient>[0] = {
-  'GET /api/health': () => ({ status: 'ok', service: 'blizzard-hub', version: '0.0.0', overridden: [] }),
+  'GET /api/health': () => ({
+    status: 'ok',
+    service: 'blizzard-hub',
+    version: '0.0.0',
+    overridden: [],
+  }),
   'GET /api/flags': () => ({ flags: {}, overridden: [] }),
   'GET /api/projects': () => ({ projects: LENS_PROJECTS }),
   'GET /api/chunk-counts': () =>
-    chunkCountsView({ not_ready: 0, ready: 0, running: 0, delivering: 0, needs_human: 0, done: 0, terminal: 0, total: 0 }),
+    chunkCountsView({
+      not_ready: 0,
+      ready: 0,
+      running: 0,
+      delivering: 0,
+      needs_human: 0,
+      done: 0,
+      terminal: 0,
+      total: 0,
+    }),
   'GET /api/chunks': () => ({ chunks: [], next_cursor: null }),
   'GET /api/queue': () => ({ entries: [], next_cursor: null }),
   'GET /api/backlog': () => ({ entries: [], next_cursor: null }),
@@ -60,7 +98,13 @@ const IDLE_BOARD: Parameters<typeof stubHubClient>[0] = {
   'GET /api/runners': () => ({ runners: [] }),
   'GET /api/hosts': () => ({ hosts: [] }),
   'GET /api/spend': () =>
-    fleetSpendView({ cost_usd: 0, input_tokens: 0, output_tokens: 0, cache_read_tokens: 0, cache_create_tokens: 0 }),
+    fleetSpendView({
+      cost_usd: 0,
+      input_tokens: 0,
+      output_tokens: 0,
+      cache_read_tokens: 0,
+      cache_create_tokens: 0,
+    }),
 };
 
 /** Stubs `/api/me` and `/api/auth/providers` — the two reads the app root's session
@@ -75,7 +119,8 @@ function stubAuth(
 ): RequestClientStub {
   return stubHubClient({
     ...IDLE_BOARD,
-    'GET /api/me': () => (me === null ? stubError(401, { detail: 'not authenticated' }) : me),
+    'GET /api/me': () =>
+      me === null ? stubError(401, { detail: 'not authenticated' }) : me,
     'GET /api/auth/providers': () => [...providers],
     'GET /api/flags': () => flags,
   });
@@ -95,22 +140,42 @@ const LENS_PROJECTS = ['zeta', 'blizzard'].map((slug) =>
  * yesterday window reaches the request. Conforms to
  * {@link RequestClientStub} (`requests`/`forRoute` unused, kept trivial) so it can
  * stand in for `authStub` in this file's shared `afterEach`. */
-function stubAuthCapturingSpendUrls(): RequestClientStub & { spendUrls: string[] } {
+function stubAuthCapturingSpendUrls(): RequestClientStub & {
+  spendUrls: string[];
+} {
   const spendUrls: string[] = [];
   const previousFetch = globalThis.fetch;
   const fakeFetch = async (input: Request): Promise<Response> => {
     const url = new URL(input.url);
     let body: unknown = {};
     if (url.pathname === '/api/me') body = OPERATOR_ME_RESPONSE;
-    else if (url.pathname === '/api/chunks') body = { chunks: [], next_cursor: null };
-    else if (url.pathname === '/api/questions' || url.pathname === '/api/graphs') body = [];
+    else if (url.pathname === '/api/chunks')
+      body = { chunks: [], next_cursor: null };
+    else if (
+      url.pathname === '/api/questions' ||
+      url.pathname === '/api/graphs'
+    )
+      body = [];
     else if (url.pathname === '/api/spend') {
       spendUrls.push(input.url);
-      body = { cost_usd: 0, cost_partial: false, input_tokens: 0, output_tokens: 0, cache_read_tokens: 0, cache_create_tokens: 0 };
+      body = {
+        cost_usd: 0,
+        cost_partial: false,
+        input_tokens: 0,
+        output_tokens: 0,
+        cache_read_tokens: 0,
+        cache_create_tokens: 0,
+      };
     }
-    return new Response(JSON.stringify(body), { status: 200, headers: { 'Content-Type': 'application/json' } });
+    return new Response(JSON.stringify(body), {
+      status: 200,
+      headers: { 'Content-Type': 'application/json' },
+    });
   };
-  hubClient.setConfig({ baseUrl: 'http://localhost', fetch: fakeFetch as typeof fetch });
+  hubClient.setConfig({
+    baseUrl: 'http://localhost',
+    fetch: fakeFetch as typeof fetch,
+  });
   return {
     spendUrls,
     requests: [],
@@ -119,7 +184,9 @@ function stubAuthCapturingSpendUrls(): RequestClientStub & { spendUrls: string[]
   };
 }
 
-const OIDC: readonly ProviderSummary[] = [{ name: 'oidc-co', display_name: 'Stub SSO', type: 'oidc' }];
+const OIDC: readonly ProviderSummary[] = [
+  { name: 'oidc-co', display_name: 'Stub SSO', type: 'oidc' },
+];
 
 /** A signed-in person holding no membership; specs add theirs through `tenants`. */
 const MEMBERLESS: MeResponse = {
@@ -138,15 +205,23 @@ const ACME_ADMIN: MeTenant = {
   role: 'admin',
   permissions: ['fleet:view', 'user:manage'],
 };
-const BETA_GUEST: MeTenant = { tenant_id: 'ten_b', name: 'Beta', role: 'guest', permissions: ['fleet:view'] };
+const BETA_GUEST: MeTenant = {
+  tenant_id: 'ten_b',
+  name: 'Beta',
+  role: 'guest',
+  permissions: ['fleet:view'],
+};
 
 describe('hub App', () => {
   let queryClient: QueryClient;
   let authStub: RequestClientStub;
 
   beforeEach(async () => {
-    const factory: EventSourceFactory = () => new FakeEventSource() as unknown as FleetEventSource;
-    queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    const factory: EventSourceFactory = () =>
+      new FakeEventSource() as unknown as FleetEventSource;
+    queryClient = new QueryClient({
+      defaultOptions: { queries: { retry: false } },
+    });
     authStub = stubAuth();
     await TestBed.configureTestingModule({
       imports: [App],
@@ -176,7 +251,12 @@ describe('hub App', () => {
     expect(header).toBeTruthy();
     expect(nav).toBeTruthy();
     // Header precedes nav.
-    expect(Boolean(header!.compareDocumentPosition(nav!) & Node.DOCUMENT_POSITION_FOLLOWING)).toBe(true);
+    expect(
+      Boolean(
+        header!.compareDocumentPosition(nav!) &
+        Node.DOCUMENT_POSITION_FOLLOWING,
+      ),
+    ).toBe(true);
 
     expect(router.url).toBe('/board');
     expect(el.querySelector('[data-testid="board-shell"]')).toBeTruthy();
@@ -272,10 +352,16 @@ describe('hub App', () => {
       const todayMidnight = startOfLocalDayIso(Date.now());
       const yesterdayMidnight = startOfPreviousLocalDayIso(Date.now());
       const withUntil = capture.spendUrls.filter((u) => u.includes('until='));
-      const withoutUntil = capture.spendUrls.filter((u) => !u.includes('until='));
+      const withoutUntil = capture.spendUrls.filter(
+        (u) => !u.includes('until='),
+      );
 
       // spendToday: since alone, the original open-ended tail.
-      expect(withoutUntil.some((u) => u.includes(`since=${encodeURIComponent(todayMidnight)}`))).toBe(true);
+      expect(
+        withoutUntil.some((u) =>
+          u.includes(`since=${encodeURIComponent(todayMidnight)}`),
+        ),
+      ).toBe(true);
       // spendYesterday: both bounds, excluding today's own spend by construction.
       expect(
         withUntil.some(
@@ -302,21 +388,32 @@ describe('hub App', () => {
       await TestBed.inject(Router).navigateByUrl('/');
       await settle(fixture);
 
-      const sinceOf = (day: Date): string => `since=${encodeURIComponent(day.toISOString())}`;
-      expect(capture.spendUrls.some((u) => u.includes(sinceOf(new Date(2026, 6, 16))))).toBe(true);
+      const sinceOf = (day: Date): string =>
+        `since=${encodeURIComponent(day.toISOString())}`;
+      expect(
+        capture.spendUrls.some((u) =>
+          u.includes(sinceOf(new Date(2026, 6, 16))),
+        ),
+      ).toBe(true);
 
       nowMs = new Date(2026, 6, 17, 0, 0, 30).getTime();
       vi.advanceTimersByTime(60_000);
       await settle(fixture);
 
       const withUntil = capture.spendUrls.filter((u) => u.includes('until='));
-      const withoutUntil = capture.spendUrls.filter((u) => !u.includes('until='));
-      expect(withoutUntil.some((u) => u.includes(sinceOf(new Date(2026, 6, 17))))).toBe(true);
+      const withoutUntil = capture.spendUrls.filter(
+        (u) => !u.includes('until='),
+      );
+      expect(
+        withoutUntil.some((u) => u.includes(sinceOf(new Date(2026, 6, 17)))),
+      ).toBe(true);
       expect(
         withUntil.some(
           (u) =>
             u.includes(sinceOf(new Date(2026, 6, 16))) &&
-            u.includes(`until=${encodeURIComponent(new Date(2026, 6, 17).toISOString())}`),
+            u.includes(
+              `until=${encodeURIComponent(new Date(2026, 6, 17).toISOString())}`,
+            ),
         ),
       ).toBe(true);
     });
@@ -324,7 +421,9 @@ describe('hub App', () => {
     it('does not re-request the spend windows when the one-second tick stays within the day', async () => {
       const nowMs = new Date(2026, 6, 16, 12, 0, 0).getTime();
       let elapsedMs = 0;
-      TestBed.overrideProvider(FLEET_CLOCK, { useValue: () => nowMs + elapsedMs });
+      TestBed.overrideProvider(FLEET_CLOCK, {
+        useValue: () => nowMs + elapsedMs,
+      });
       vi.useFakeTimers({ toFake: ['setInterval', 'clearInterval'] });
       authStub.restore();
       const capture = stubAuthCapturingSpendUrls();
@@ -344,11 +443,15 @@ describe('hub App', () => {
   });
 
   describe('the overridden-flags marker', () => {
-    const marker = (el: HTMLElement) => el.querySelector('[data-testid="conn"] [data-testid="flags-overridden"]');
+    const marker = (el: HTMLElement) =>
+      el.querySelector('[data-testid="conn"] [data-testid="flags-overridden"]');
 
     it('shows in the Hub cell, naming the flags, when the hub’s answer overrides any', async () => {
       authStub.restore();
-      authStub = stubAuth(OPERATOR_ME_RESPONSE, [], { flags: { alpha: true }, overridden: ['alpha'] });
+      authStub = stubAuth(OPERATOR_ME_RESPONSE, [], {
+        flags: { alpha: true },
+        overridden: ['alpha'],
+      });
       TestBed.inject(ViewportService).setOverride('desktop');
       const fixture = TestBed.createComponent(App);
       await TestBed.inject(Router).navigateByUrl('/');
@@ -395,7 +498,9 @@ describe('hub App', () => {
       await settle(fixture);
       const el = fixture.nativeElement as HTMLElement;
 
-      expect(el.querySelector('[data-testid="mobile-titlebar"]')).not.toBeNull();
+      expect(
+        el.querySelector('[data-testid="mobile-titlebar"]'),
+      ).not.toBeNull();
       expect(el.querySelector('[data-testid="mobile-tab-bar"]')).not.toBeNull();
       expect(el.querySelector('[data-testid="board-header"]')).toBeNull();
       expect(el.querySelector('[data-testid="app-nav"]')).toBeNull();
@@ -404,7 +509,9 @@ describe('hub App', () => {
       // slot attribute through projection — it must still land in the shell's header
       // slot (first in the column), not fall through to the default content slot.
       const shell = el.querySelector('fleet-app-shell .shell');
-      expect(shell?.firstElementChild?.tagName.toLowerCase()).toBe('app-mobile-titlebar');
+      expect(shell?.firstElementChild?.tagName.toLowerCase()).toBe(
+        'app-mobile-titlebar',
+      );
     });
   });
 
@@ -418,7 +525,8 @@ describe('hub App', () => {
       await router.navigateByUrl('/p/blizzard/board');
       await settle(fixture);
       const el = fixture.nativeElement as HTMLElement;
-      const chip = (slug: string) => el.querySelector<HTMLElement>(`[data-testid="project-lens-${slug}"]`);
+      const chip = (slug: string) =>
+        el.querySelector<HTMLElement>(`[data-testid="project-lens-${slug}"]`);
 
       expect(chip('all')?.getAttribute('aria-pressed')).toBe('false');
       expect(chip('blizzard')?.getAttribute('aria-pressed')).toBe('true');
@@ -431,7 +539,10 @@ describe('hub App', () => {
 
     it('names the lensed project in the mobile titlebar from the same read, and opens the lens picker from it', async () => {
       // The app's own lens-keeping link rewrite, as `app.config.ts` provides it.
-      TestBed.overrideProvider(IN_APP_LINK, { useFactory: () => (link: InAppLink) => TestBed.inject(ProjectLens).link(link) });
+      TestBed.overrideProvider(IN_APP_LINK, {
+        useFactory: () => (link: InAppLink) =>
+          TestBed.inject(ProjectLens).link(link),
+      });
       TestBed.inject(ViewportService).setOverride('mobile');
       const fixture = TestBed.createComponent(App);
       const router = TestBed.inject(Router);
@@ -439,8 +550,12 @@ describe('hub App', () => {
       await settle(fixture);
       const el = fixture.nativeElement as HTMLElement;
 
-      const lens = el.querySelector<HTMLAnchorElement>('[data-testid="mobile-titlebar-lens"]');
-      expect(lens?.querySelector('.name')?.textContent?.trim()).toBe('Blizzard');
+      const lens = el.querySelector<HTMLAnchorElement>(
+        '[data-testid="mobile-titlebar-lens"]',
+      );
+      expect(lens?.querySelector('.name')?.textContent?.trim()).toBe(
+        'Blizzard',
+      );
       expect(authStub.forRoute('/api/projects', 'GET')).toHaveLength(1);
 
       lens!.click();
@@ -452,7 +567,9 @@ describe('hub App', () => {
   describe('session-aware UI (issue #93)', () => {
     it('routes an unauthenticated session to /login, with no board chrome', async () => {
       authStub.restore();
-      authStub = stubAuth(null, [{ name: 'oidc-co', display_name: 'Stub SSO', type: 'oidc' }]);
+      authStub = stubAuth(null, [
+        { name: 'oidc-co', display_name: 'Stub SSO', type: 'oidc' },
+      ]);
 
       const fixture = TestBed.createComponent(App);
       const router = TestBed.inject(Router);
@@ -476,10 +593,12 @@ describe('hub App', () => {
       await settle(fixture);
       const el = fixture.nativeElement as HTMLElement;
 
-      expect(el.querySelector('[data-testid="no-access"]')?.textContent).toContain(
-        'Reach out to your administrator for access.',
-      );
-      expect(el.querySelector('[data-testid="no-access-username"]')?.textContent).toContain('newcomer');
+      expect(
+        el.querySelector('[data-testid="no-access"]')?.textContent,
+      ).toContain('Reach out to your administrator for access.');
+      expect(
+        el.querySelector('[data-testid="no-access-username"]')?.textContent,
+      ).toContain('newcomer');
       expect(el.querySelector('[data-testid="board-header"]')).toBeNull();
       expect(el.querySelector('[data-testid="app-nav"]')).toBeNull();
       expect(el.querySelector('[data-testid="tenant-picker"]')).toBeNull();
@@ -487,7 +606,10 @@ describe('hub App', () => {
 
     it('renders the no-access screen for a hub administrator holding no membership', async () => {
       authStub.restore();
-      authStub = stubAuth({ ...MEMBERLESS, hub_admin: true, permissions: ['tenant:admin'] }, OIDC);
+      authStub = stubAuth(
+        { ...MEMBERLESS, hub_admin: true, permissions: ['tenant:admin'] },
+        OIDC,
+      );
 
       const fixture = TestBed.createComponent(App);
       await TestBed.inject(Router).navigateByUrl('/');
@@ -506,7 +628,10 @@ describe('hub App', () => {
       // keep that transient render from crashing.
       authStub = stubHubClient({
         ...IDLE_BOARD,
-        'GET /api/me': () => (loggedOut ? stubError(401, { detail: 'not authenticated' }) : MEMBERLESS),
+        'GET /api/me': () =>
+          loggedOut
+            ? stubError(401, { detail: 'not authenticated' })
+            : MEMBERLESS,
         'GET /api/auth/providers': () => [],
         'POST /api/auth/logout': () => {
           loggedOut = true;
@@ -519,7 +644,9 @@ describe('hub App', () => {
       await settle(fixture);
       const el = fixture.nativeElement as HTMLElement;
 
-      el.querySelector<HTMLElement>('[data-testid="no-access-logout"]')?.click();
+      el.querySelector<HTMLElement>(
+        '[data-testid="no-access-logout"]',
+      )?.click();
       await settle(fixture);
 
       expect(router.url).toBe('/login');
@@ -545,32 +672,46 @@ describe('hub App', () => {
       const el = fixture.nativeElement as HTMLElement;
 
       expect(el.querySelector('[data-testid="tenant-picker"]')).toBeNull();
-      expect(el.querySelector('[data-testid="board-header"]')?.textContent).toContain('Acme');
+      expect(
+        el.querySelector('[data-testid="board-header"]')?.textContent,
+      ).toContain('Acme');
       expect(sessionStorage.getItem(TAB_TENANT_KEY)).toBe('ten_a');
       expect(localStorage.getItem(LAST_TENANT_KEY)).toBe('ten_a');
-      const afterSettle = authStub.requests.filter((r) => r.path === '/api/graphs');
+      const afterSettle = authStub.requests.filter(
+        (r) => r.path === '/api/graphs',
+      );
       expect(afterSettle.length).toBeGreaterThan(0);
-      expect(afterSettle.every((r) => r.headers['x-blizzard-tenant'] === 'ten_a')).toBe(true);
+      expect(
+        afterSettle.every((r) => r.headers['x-blizzard-tenant'] === 'ten_a'),
+      ).toBe(true);
       expect(router.url).not.toContain('ten_a');
     });
 
     it('offers the picker, outside the shell, for several memberships with no remembered choice', async () => {
       authStub.restore();
-      authStub = stubAuth({ ...MEMBERLESS, tenants: [ACME_ADMIN, BETA_GUEST] }, OIDC);
+      authStub = stubAuth(
+        { ...MEMBERLESS, tenants: [ACME_ADMIN, BETA_GUEST] },
+        OIDC,
+      );
 
       const fixture = TestBed.createComponent(App);
       await TestBed.inject(Router).navigateByUrl('/');
       await settle(fixture);
       const el = fixture.nativeElement as HTMLElement;
 
-      expect(el.querySelectorAll('[data-testid="tenant-picker-option"]')).toHaveLength(2);
+      expect(
+        el.querySelectorAll('[data-testid="tenant-picker-option"]'),
+      ).toHaveLength(2);
       expect(el.querySelector('[data-testid="board-header"]')).toBeNull();
       expect(el.querySelector('[data-testid="app-nav"]')).toBeNull();
     });
 
     it("renders the shell in the chosen tenant, with that membership's permissions, and remembers it", async () => {
       authStub.restore();
-      authStub = stubAuth({ ...MEMBERLESS, tenants: [ACME_ADMIN, BETA_GUEST] }, OIDC);
+      authStub = stubAuth(
+        { ...MEMBERLESS, tenants: [ACME_ADMIN, BETA_GUEST] },
+        OIDC,
+      );
 
       const fixture = TestBed.createComponent(App);
       const router = TestBed.inject(Router);
@@ -578,23 +719,32 @@ describe('hub App', () => {
       await settle(fixture);
       const el = fixture.nativeElement as HTMLElement;
 
-      el.querySelectorAll<HTMLElement>('[data-testid="tenant-picker-option"]')[1]?.click();
+      el.querySelectorAll<HTMLElement>(
+        '[data-testid="tenant-picker-option"]',
+      )[1]?.click();
       await settle(fixture);
 
       expect(el.querySelector('[data-testid="tenant-picker"]')).toBeNull();
-      expect(el.querySelector('[data-testid="board-header"]')?.textContent).toContain('Beta');
+      expect(
+        el.querySelector('[data-testid="board-header"]')?.textContent,
+      ).toContain('Beta');
       // A guest in Beta, though an admin in Acme: no Admin tab.
       expect(el.querySelector('[data-testid="nav-admin"]')).toBeNull();
       expect(sessionStorage.getItem(TAB_TENANT_KEY)).toBe('ten_b');
       expect(localStorage.getItem(LAST_TENANT_KEY)).toBe('ten_b');
-      const counts = authStub.requests.filter((r) => r.path === '/api/chunk-counts');
+      const counts = authStub.requests.filter(
+        (r) => r.path === '/api/chunk-counts',
+      );
       expect(counts.at(-1)?.headers['x-blizzard-tenant']).toBe('ten_b');
     });
 
     it("opens straight into the browser's last choice while it is still a membership", async () => {
       localStorage.setItem(LAST_TENANT_KEY, 'ten_a');
       authStub.restore();
-      authStub = stubAuth({ ...MEMBERLESS, tenants: [ACME_ADMIN, BETA_GUEST] }, OIDC);
+      authStub = stubAuth(
+        { ...MEMBERLESS, tenants: [ACME_ADMIN, BETA_GUEST] },
+        OIDC,
+      );
 
       const fixture = TestBed.createComponent(App);
       await TestBed.inject(Router).navigateByUrl('/');
@@ -602,26 +752,45 @@ describe('hub App', () => {
       const el = fixture.nativeElement as HTMLElement;
 
       expect(el.querySelector('[data-testid="tenant-picker"]')).toBeNull();
-      expect(el.querySelector('[data-testid="board-header"]')?.textContent).toContain('Acme');
+      expect(
+        el.querySelector('[data-testid="board-header"]')?.textContent,
+      ).toContain('Acme');
       expect(el.querySelector('[data-testid="nav-admin"]')).toBeTruthy();
-      expect(authStub.requests.every((r) => r.headers['x-blizzard-tenant'] === 'ten_a')).toBe(true);
+      expect(
+        authStub.requests.every(
+          (r) => r.headers['x-blizzard-tenant'] === 'ten_a',
+        ),
+      ).toBe(true);
     });
 
     /** The hub-level routes — the only ones the board may call before it has entered a tenant. */
-    const HUB_LEVEL = new Set(['/api/me', '/api/auth/providers', '/api/health', '/api/flags']);
-    const tenantScoped = () => authStub.requests.filter((r) => !HUB_LEVEL.has(r.path));
+    const HUB_LEVEL = new Set([
+      '/api/me',
+      '/api/auth/providers',
+      '/api/health',
+      '/api/flags',
+    ]);
+    const tenantScoped = () =>
+      authStub.requests.filter((r) => !HUB_LEVEL.has(r.path));
 
     it('sends nothing tenant-scoped while the picker shows, and forgets a remembered tenant that is gone', async () => {
       sessionStorage.setItem(TAB_TENANT_KEY, 'ten_gone');
       localStorage.setItem(LAST_TENANT_KEY, 'ten_gone');
       authStub.restore();
-      authStub = stubAuth({ ...MEMBERLESS, tenants: [ACME_ADMIN, BETA_GUEST] }, OIDC);
+      authStub = stubAuth(
+        { ...MEMBERLESS, tenants: [ACME_ADMIN, BETA_GUEST] },
+        OIDC,
+      );
 
       const fixture = TestBed.createComponent(App);
       await TestBed.inject(Router).navigateByUrl('/');
       await settle(fixture);
 
-      expect((fixture.nativeElement as HTMLElement).querySelector('[data-testid="tenant-picker"]')).toBeTruthy();
+      expect(
+        (fixture.nativeElement as HTMLElement).querySelector(
+          '[data-testid="tenant-picker"]',
+        ),
+      ).toBeTruthy();
       expect(tenantScoped()).toEqual([]);
       expect(TestBed.inject(TenantContext).current()).toBeNull();
       expect(sessionStorage.getItem(TAB_TENANT_KEY)).toBeNull();
@@ -637,7 +806,11 @@ describe('hub App', () => {
       await TestBed.inject(Router).navigateByUrl('/events');
       await settle(fixture);
 
-      expect((fixture.nativeElement as HTMLElement).querySelector('[data-testid="no-access"]')).toBeTruthy();
+      expect(
+        (fixture.nativeElement as HTMLElement).querySelector(
+          '[data-testid="no-access"]',
+        ),
+      ).toBeTruthy();
       expect(tenantScoped()).toEqual([]);
       expect(localStorage.getItem(LAST_TENANT_KEY)).toBeNull();
     });
@@ -662,15 +835,22 @@ describe('hub App', () => {
       await TestBed.inject(Router).navigateByUrl('/');
       await settle(fixture);
 
-      const headerReads = authStub.requests.filter((r) => r.path === '/api/chunk-counts' || r.path === '/api/spend');
+      const headerReads = authStub.requests.filter(
+        (r) => r.path === '/api/chunk-counts' || r.path === '/api/spend',
+      );
       expect(headerReads.length).toBeGreaterThanOrEqual(3);
-      expect(headerReads.every((r) => r.headers['x-blizzard-tenant'] === 'ten_a')).toBe(true);
+      expect(
+        headerReads.every((r) => r.headers['x-blizzard-tenant'] === 'ten_a'),
+      ).toBe(true);
     });
 
     it('offers the picker when the last choice is no longer a membership', async () => {
       localStorage.setItem(LAST_TENANT_KEY, 'ten_gone');
       authStub.restore();
-      authStub = stubAuth({ ...MEMBERLESS, tenants: [ACME_ADMIN, BETA_GUEST] }, OIDC);
+      authStub = stubAuth(
+        { ...MEMBERLESS, tenants: [ACME_ADMIN, BETA_GUEST] },
+        OIDC,
+      );
 
       const fixture = TestBed.createComponent(App);
       await TestBed.inject(Router).navigateByUrl('/');
@@ -685,7 +865,9 @@ describe('hub App', () => {
   describe('the Admin nav tab', () => {
     it('shows the Admin nav tab only with user:manage under oauth, and hides it under none', async () => {
       authStub.restore();
-      authStub = stubAuth(OPERATOR_ME_RESPONSE, [{ name: 'oidc-co', display_name: 'Stub SSO', type: 'oidc' }]);
+      authStub = stubAuth(OPERATOR_ME_RESPONSE, [
+        { name: 'oidc-co', display_name: 'Stub SSO', type: 'oidc' },
+      ]);
 
       const fixture = TestBed.createComponent(App);
       const router = TestBed.inject(Router);
@@ -714,7 +896,9 @@ describe('hub App', () => {
       // rather than inside the fixture.
       el.querySelector<HTMLElement>('[data-testid="app-nav-menu"]')?.click();
       await settle(fixture);
-      expect(document.body.querySelector('[data-testid="nav-logout"]')).toBeTruthy();
+      expect(
+        document.body.querySelector('[data-testid="nav-logout"]'),
+      ).toBeTruthy();
     });
   });
 });

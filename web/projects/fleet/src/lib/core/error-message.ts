@@ -76,6 +76,16 @@ function refusalMessage(detail: unknown): string | null {
     : message;
 }
 
+/** A refusal body's `type` when it carries one — what a verb that acts on one refusal compares with the registered
+ * URN. Display never reads it. */
+export function problemType(error: unknown): string | undefined {
+  const type =
+    typeof error === 'object' && error !== null
+      ? (error as { type?: unknown }).type
+      : undefined;
+  return typeof type === 'string' ? type : undefined;
+}
+
 /** What the operator is shown for a hub or runner refusal: the problem's `detail` — a string, a
  * coded object's `message`, or a validation list's field-named messages — else its `title`. It
  * reads the generated `Problem` and never the `type`: a type the board does not know is shown by

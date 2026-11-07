@@ -1,5 +1,8 @@
 import { inject } from '@angular/core';
-import { QueryClient, injectMutation } from '@tanstack/angular-query-experimental';
+import {
+  QueryClient,
+  injectMutation,
+} from '@tanstack/angular-query-experimental';
 
 import { logoutApiAuthLogoutPost, hubMeKey } from 'fleet/shell';
 import { logoutMutationKey } from '../mutation-keys';

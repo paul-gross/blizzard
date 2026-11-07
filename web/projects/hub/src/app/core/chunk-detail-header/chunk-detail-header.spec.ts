@@ -17,7 +17,12 @@ const ISSUE_DETAIL: ChunkDetail = chunkDetail({
   current_node_id: 'nd_build',
   latest_epoch: 1,
   work_refs: [
-    { source: 'widget', ref: '42', label: 'widget#42', web_url: 'https://github.com/acme/widget/issues/42' },
+    {
+      source: 'widget',
+      ref: '42',
+      label: 'widget#42',
+      web_url: 'https://github.com/acme/widget/issues/42',
+    },
   ],
   history: [],
   artifacts: [],
@@ -36,11 +41,19 @@ const ROUTED_DETAIL: ChunkDetail = chunkDetail({
   work_refs: [],
   history: [],
   artifacts: [],
-  route: { runner_id: 'rn_01', runner_name: 'r-claude', workspace_id: 'ws_01', environment_ids: ['env_01'] },
+  route: {
+    runner_id: 'rn_01',
+    runner_name: 'r-claude',
+    workspace_id: 'ws_01',
+    environment_ids: ['env_01'],
+  },
 });
 
 /** A chunk carrying an open pause fact, whatever its derived status reads. */
-function pausedDetail(status: ChunkDetail['status'], extra: Partial<ChunkDetail> = {}): ChunkDetail {
+function pausedDetail(
+  status: ChunkDetail['status'],
+  extra: Partial<ChunkDetail> = {},
+): ChunkDetail {
   return {
     ...ROUTED_DETAIL,
     status,
@@ -52,11 +65,16 @@ function pausedDetail(status: ChunkDetail['status'], extra: Partial<ChunkDetail>
 /** The CDK renders the actions menu into an overlay attached to `document.body`, not inside the fixture's own
  * element — so its items are queried there (`kit-menu.spec.ts`'s own convention). The menu's own
  * gating and confirmations are `chunk-actions-menu.spec.ts`'s; this header pins only that it hosts it. */
-const inOverlay = (selector: string) => document.body.querySelector<HTMLElement>(selector);
+const inOverlay = (selector: string) =>
+  document.body.querySelector<HTMLElement>(selector);
 
 /** Open the header's ⋮ actions menu. */
-async function openMenu(fixture: ReturnType<typeof TestBed.createComponent<ChunkDetailHeader>>): Promise<void> {
-  (fixture.nativeElement as HTMLElement).querySelector<HTMLElement>('[data-testid="chunk-actions-menu"]')?.click();
+async function openMenu(
+  fixture: ReturnType<typeof TestBed.createComponent<ChunkDetailHeader>>,
+): Promise<void> {
+  (fixture.nativeElement as HTMLElement)
+    .querySelector<HTMLElement>('[data-testid="chunk-actions-menu"]')
+    ?.click();
   await fixture.whenStable();
 }
 
@@ -76,17 +94,27 @@ describe('ChunkDetailHeader', () => {
     await fixture.whenStable();
     const el = fixture.nativeElement as HTMLElement;
 
-    const idLink = el.querySelector<HTMLAnchorElement>('[data-testid="detail-id"]');
+    const idLink = el.querySelector<HTMLAnchorElement>(
+      '[data-testid="detail-id"]',
+    );
     expect(idLink?.textContent?.trim()).toBe(ISSUE_DETAIL.chunk_id);
     // At narrow widths the id truncates with an ellipsis (styles), so the full id
     // stays recoverable through the title attribute rather than the rendered text.
     expect(idLink?.getAttribute('title')).toBe(ISSUE_DETAIL.chunk_id);
     // The chunk longname links out to its dedicated page.
-    expect(idLink?.getAttribute('href')).toBe(`/board/chunk/${ISSUE_DETAIL.chunk_id}`);
-    const pointer = el.querySelector<HTMLAnchorElement>('a[data-testid="detail-pointer"]');
+    expect(idLink?.getAttribute('href')).toBe(
+      `/board/chunk/${ISSUE_DETAIL.chunk_id}`,
+    );
+    const pointer = el.querySelector<HTMLAnchorElement>(
+      'a[data-testid="detail-pointer"]',
+    );
     expect(pointer?.textContent?.trim()).toBe('widget#42');
-    expect(pointer?.getAttribute('href')).toBe('https://github.com/acme/widget/issues/42');
-    expect(el.querySelector('[data-testid="detail-status"]')?.textContent).toContain('running');
+    expect(pointer?.getAttribute('href')).toBe(
+      'https://github.com/acme/widget/issues/42',
+    );
+    expect(
+      el.querySelector('[data-testid="detail-status"]')?.textContent,
+    ).toContain('running');
   });
 
   it('surfaces who paused a chunk in the header', async () => {
@@ -98,7 +126,9 @@ describe('ChunkDetailHeader', () => {
     await fixture.whenStable();
     const el = fixture.nativeElement as HTMLElement;
 
-    expect(el.querySelector('[data-testid="chunk-pause-by"]')?.textContent).toContain('operator');
+    expect(
+      el.querySelector('[data-testid="chunk-pause-by"]')?.textContent,
+    ).toContain('operator');
   });
 
   it('shows no chunk-pause-by when the chunk carries no open pause fact', async () => {
@@ -122,7 +152,9 @@ describe('ChunkDetailHeader', () => {
     await fixture.whenStable();
     const el = fixture.nativeElement as HTMLElement;
 
-    el.querySelector<HTMLButtonElement>('[data-testid="detail-close"]')?.click();
+    el.querySelector<HTMLButtonElement>(
+      '[data-testid="detail-close"]',
+    )?.click();
     expect(closed).toBe(true);
   });
 
@@ -136,8 +168,15 @@ describe('ChunkDetailHeader', () => {
 
     const close = el.querySelector('[data-testid="detail-close"]');
     expect(close?.querySelector('svg.glyph--x')).not.toBeNull();
-    expect(close?.getAttribute('aria-label') ?? close?.querySelector('[aria-label]')?.getAttribute('aria-label')).toBe('Close');
-    expect(el.querySelector('[data-testid="chunk-actions-menu"] svg.glyph--dots, .actions svg.glyph--dots')).not.toBeNull();
+    expect(
+      close?.getAttribute('aria-label') ??
+        close?.querySelector('[aria-label]')?.getAttribute('aria-label'),
+    ).toBe('Close');
+    expect(
+      el.querySelector(
+        '[data-testid="chunk-actions-menu"] svg.glyph--dots, .actions svg.glyph--dots',
+      ),
+    ).not.toBeNull();
   });
 
   it('draws no ⋮ actions menu without a control port', async () => {
@@ -146,7 +185,11 @@ describe('ChunkDetailHeader', () => {
     fixture.componentRef.setInput('renderedStatus', ROUTED_DETAIL.status);
     await fixture.whenStable();
 
-    expect((fixture.nativeElement as HTMLElement).querySelector('[data-testid="chunk-actions-menu"]')).toBeNull();
+    expect(
+      (fixture.nativeElement as HTMLElement).querySelector(
+        '[data-testid="chunk-actions-menu"]',
+      ),
+    ).toBeNull();
   });
 
   it('draws no close button when not closable', async () => {
@@ -156,7 +199,11 @@ describe('ChunkDetailHeader', () => {
     fixture.componentRef.setInput('closable', false);
     await fixture.whenStable();
 
-    expect((fixture.nativeElement as HTMLElement).querySelector('[data-testid="detail-close"]')).toBeNull();
+    expect(
+      (fixture.nativeElement as HTMLElement).querySelector(
+        '[data-testid="detail-close"]',
+      ),
+    ).toBeNull();
   });
 
   // --- The claiming runner -----------------------------------
@@ -193,7 +240,9 @@ describe('ChunkDetailHeader', () => {
     const el = fixture.nativeElement as HTMLElement;
 
     // The line may clip a long name, so its tooltip carries what the clip hides.
-    expect(el.querySelector('[data-testid="route-info"]')?.getAttribute('title')).toBe('R-01.r-claude · rn_01');
+    expect(
+      el.querySelector('[data-testid="route-info"]')?.getAttribute('title'),
+    ).toBe('R-01.r-claude · rn_01');
   });
 
   // --- Pending status override (`bzh:frontend-pending-override`) -----------
@@ -213,7 +262,9 @@ describe('ChunkDetailHeader', () => {
     await fixture.whenStable();
     const el = fixture.nativeElement as HTMLElement;
 
-    expect(el.querySelector('[data-testid="detail-status"]')?.textContent?.trim()).toBe('paused');
+    expect(
+      el.querySelector('[data-testid="detail-status"]')?.textContent?.trim(),
+    ).toBe('paused');
   });
 
   it('re-renders the chip when renderedStatus changes', async () => {
@@ -227,7 +278,9 @@ describe('ChunkDetailHeader', () => {
     await fixture.whenStable();
     const el = fixture.nativeElement as HTMLElement;
 
-    expect(el.querySelector('[data-testid="detail-status"]')?.textContent?.trim()).toBe(ROUTED_DETAIL.status);
+    expect(
+      el.querySelector('[data-testid="detail-status"]')?.textContent?.trim(),
+    ).toBe(ROUTED_DETAIL.status);
   });
 
   it('names no dependency edge on the identity line — the Work item box owns them', async () => {
@@ -235,8 +288,20 @@ describe('ChunkDetailHeader', () => {
     fixture.componentRef.setInput('detail', {
       ...ISSUE_DETAIL,
       neighborhood: {
-        prerequisites: [{ chunk_id: 'ch_01prereq00000000000000aaa', status: 'ready', satisfied: false }],
-        dependents: [{ chunk_id: 'ch_01dependent0000000000ccc', status: 'not_ready', satisfied: false }],
+        prerequisites: [
+          {
+            chunk_id: 'ch_01prereq00000000000000aaa',
+            status: 'ready',
+            satisfied: false,
+          },
+        ],
+        dependents: [
+          {
+            chunk_id: 'ch_01dependent0000000000ccc',
+            status: 'not_ready',
+            satisfied: false,
+          },
+        ],
       },
     });
     fixture.componentRef.setInput('renderedStatus', ISSUE_DETAIL.status);
@@ -246,7 +311,9 @@ describe('ChunkDetailHeader', () => {
     expect(el.querySelector('[data-testid="detail-blocked-by"]')).toBeNull();
     expect(el.querySelector('[data-testid="detail-blocking"]')).toBeNull();
     // One pointer, the status, the node — two gaps between the three, so two dots.
-    expect(el.querySelectorAll('[data-testid="detail-pointer"]')).toHaveLength(1);
+    expect(el.querySelectorAll('[data-testid="detail-pointer"]')).toHaveLength(
+      1,
+    );
     expect(el.querySelectorAll('.d-sub .sep')).toHaveLength(2);
   });
 
@@ -254,7 +321,10 @@ describe('ChunkDetailHeader', () => {
 
   it('leads the identity line with the project, its swatch beside its name when a color is known', async () => {
     const fixture = TestBed.createComponent(ChunkDetailHeader);
-    fixture.componentRef.setInput('detail', { ...ISSUE_DETAIL, project_name: 'blizzard' });
+    fixture.componentRef.setInput('detail', {
+      ...ISSUE_DETAIL,
+      project_name: 'blizzard',
+    });
     fixture.componentRef.setInput('renderedStatus', ISSUE_DETAIL.status);
     fixture.componentRef.setInput('projectColor', 'teal');
     await fixture.whenStable();
@@ -267,7 +337,9 @@ describe('ChunkDetailHeader', () => {
 
     fixture.componentRef.setInput('projectColor', null);
     await fixture.whenStable();
-    expect(el.querySelector('[data-testid="detail-project"] fleet-kit-swatch')).toBeNull();
+    expect(
+      el.querySelector('[data-testid="detail-project"] fleet-kit-swatch'),
+    ).toBeNull();
   });
 
   it('names no project for a chunk carrying none', async () => {
@@ -276,7 +348,11 @@ describe('ChunkDetailHeader', () => {
     fixture.componentRef.setInput('renderedStatus', ISSUE_DETAIL.status);
     await fixture.whenStable();
 
-    expect((fixture.nativeElement as HTMLElement).querySelector('[data-testid="detail-project"]')).toBeNull();
+    expect(
+      (fixture.nativeElement as HTMLElement).querySelector(
+        '[data-testid="detail-project"]',
+      ),
+    ).toBeNull();
   });
 
   it('names the runner host/runner where the app knows its host, in the fact and the action copy', async () => {
@@ -288,9 +364,15 @@ describe('ChunkDetailHeader', () => {
     await fixture.whenStable();
     const el = fixture.nativeElement as HTMLElement;
 
-    expect(el.querySelector('[data-testid="route-info"]')?.textContent?.trim()).toBe('atlas/r-claude');
-    expect(el.querySelector('[data-testid="route-info"]')?.getAttribute('title')).toBe('atlas/r-claude · rn_01');
+    expect(
+      el.querySelector('[data-testid="route-info"]')?.textContent?.trim(),
+    ).toBe('atlas/r-claude');
+    expect(
+      el.querySelector('[data-testid="route-info"]')?.getAttribute('title'),
+    ).toBe('atlas/r-claude · rn_01');
     await openMenu(fixture);
-    expect(inOverlay('[data-testid="detach-chunk"]')?.textContent).toContain('Detach from atlas/r-claude');
+    expect(inOverlay('[data-testid="detach-chunk"]')?.textContent).toContain(
+      'Detach from atlas/r-claude',
+    );
   });
 });

@@ -1,10 +1,20 @@
-import { ChangeDetectionStrategy, Component, provideZonelessChangeDetection, type Signal } from '@angular/core';
+import {
+  ChangeDetectionStrategy,
+  Component,
+  provideZonelessChangeDetection,
+  type Signal,
+} from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { By } from '@angular/platform-browser';
 import { provideRouter, Router, RouterOutlet } from '@angular/router';
 import { settle } from 'fleet/testing';
 
-import { injectChildRouteParam, injectQueryFilters, injectRouteParam, type QueryFilters } from './route-state';
+import {
+  injectChildRouteParam,
+  injectQueryFilters,
+  injectRouteParam,
+  type QueryFilters,
+} from './route-state';
 
 /**
  * Pins the two router reads every gardening tab's list route is built on
@@ -27,7 +37,8 @@ let parentConstructions = 0;
   selector: 'app-test-parent',
   changeDetection: ChangeDetectionStrategy.OnPush,
   imports: [RouterOutlet],
-  template: '<span data-testid="picked">{{ picked() ?? "none" }}</span><router-outlet />',
+  template:
+    '<span data-testid="picked">{{ picked() ?? "none" }}</span><router-outlet />',
 })
 class TestParent {
   readonly picked: Signal<string | null> = injectChildRouteParam('itemId');
@@ -77,8 +88,11 @@ describe('route-state', () => {
   });
 
   function picked(fixture: { nativeElement: unknown }): string | undefined {
-    return ((fixture.nativeElement as HTMLElement).querySelector('[data-testid="picked"]') ?? undefined)?.textContent
-      ?.trim();
+    return (
+      (fixture.nativeElement as HTMLElement).querySelector(
+        '[data-testid="picked"]',
+      ) ?? undefined
+    )?.textContent?.trim();
   }
 
   it('reads the active child param, and keeps the parent mounted across the pair', async () => {
@@ -114,7 +128,8 @@ describe('route-state', () => {
     await settle(fixture);
     // The parent is mounted by the router, so it is reached through the fixture's
     // own debug tree rather than off a fixture of its own.
-    const parent = fixture.debugElement.query(By.directive(TestParent)).componentInstance as TestParent;
+    const parent = fixture.debugElement.query(By.directive(TestParent))
+      .componentInstance as TestParent;
     expect(parent.filters.read('state')).toBe('live');
     expect(parent.filters.read('class')).toBeNull();
 
@@ -137,7 +152,9 @@ describe('route-state', () => {
     const fixture = TestBed.createComponent(TestHost);
     const router = TestBed.inject(Router);
     const own = (): string | undefined =>
-      (fixture.nativeElement as HTMLElement).querySelector('[data-testid="own"]')?.textContent?.trim();
+      (fixture.nativeElement as HTMLElement)
+        .querySelector('[data-testid="own"]')
+        ?.textContent?.trim();
 
     await router.navigateByUrl('/own/abc');
     await settle(fixture);

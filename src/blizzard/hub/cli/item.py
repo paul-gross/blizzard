@@ -70,8 +70,9 @@ def item_create(cli: CliContext, title: str, body_file: str, priority: str, sour
         json_body={"title": title, "body": body, "stated_priority": priority},
         params=project_query(project) or None,
     )
-    if refusal_of(resp).type == POINTER_ALREADY_HELD:
-        conflict = resp.json()
+    refusal = refusal_of(resp)
+    if refusal.type == POINTER_ALREADY_HELD:
+        conflict = refusal.members
         raise click.ClickException(
             f"pointer {pointer_label(conflict)} already held by chunk {conflict.get('existing_chunk_id')}"
         )

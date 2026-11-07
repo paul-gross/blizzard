@@ -1,10 +1,6 @@
 import { injectQuery } from '@tanstack/angular-query-experimental';
 
-import {
-  type FlowView,
-  hubFlowsKey,
-  listFlowsApiFlowsGet,
-} from 'fleet';
+import { type FlowView, hubFlowsKey, listFlowsApiFlowsGet } from 'fleet';
 import { LIVE_COVERED_POLL_BACKSTOP_MS } from 'fleet/shell';
 
 /**
@@ -16,7 +12,10 @@ export function injectActiveFlowsQuery() {
   return injectQuery(() => ({
     queryKey: [...hubFlowsKey, 'active'] as const,
     queryFn: async (): Promise<FlowView[]> => {
-      const { data, error } = await listFlowsApiFlowsGet({ query: { active: true }, throwOnError: false });
+      const { data, error } = await listFlowsApiFlowsGet({
+        query: { active: true },
+        throwOnError: false,
+      });
       if (error) throw error;
       return data?.flows ?? [];
     },

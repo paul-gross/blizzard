@@ -26,7 +26,7 @@ export { MobileTabBar, type MobileTabItem } from './lib/shell/mobile-chrome/mobi
 
 export { KitButton } from './lib/kit/kit-button';
 export { KitErrorLine } from './lib/kit/kit-error-line';
-export { errorMessage } from './lib/core/error-message';
+export { errorMessage, problemType } from './lib/core/error-message';
 export { LIVE_COVERED_POLL_BACKSTOP_MS } from './lib/core/polling/polling';
 export {
   hubAuthProvidersKey,

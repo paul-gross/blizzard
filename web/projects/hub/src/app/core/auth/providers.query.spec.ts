@@ -1,6 +1,13 @@
-import { ChangeDetectionStrategy, Component, provideZonelessChangeDetection } from '@angular/core';
+import {
+  ChangeDetectionStrategy,
+  Component,
+  provideZonelessChangeDetection,
+} from '@angular/core';
 import { TestBed } from '@angular/core/testing';
-import { QueryClient, provideTanStackQuery } from '@tanstack/angular-query-experimental';
+import {
+  QueryClient,
+  provideTanStackQuery,
+} from '@tanstack/angular-query-experimental';
 
 import { settle, type RequestClientStub, stubHubClient } from 'fleet/testing';
 import { injectAuthProvidersQuery } from './providers.query';
@@ -22,7 +29,10 @@ describe('injectAuthProvidersQuery', () => {
     stub = stubHubClient({ 'GET /api/auth/providers': () => [] });
     TestBed.configureTestingModule({
       imports: [TestProvidersQueryHost],
-      providers: [provideZonelessChangeDetection(), provideTanStackQuery(new QueryClient())],
+      providers: [
+        provideZonelessChangeDetection(),
+        provideTanStackQuery(new QueryClient()),
+      ],
     });
     const fixture = TestBed.createComponent(TestProvidersQueryHost);
     await settle(fixture);
@@ -32,15 +42,22 @@ describe('injectAuthProvidersQuery', () => {
 
   it('resolves the provider list on success', async () => {
     stub = stubHubClient({
-      'GET /api/auth/providers': () => [{ name: 'github', display_name: 'GitHub', type: 'github' }],
+      'GET /api/auth/providers': () => [
+        { name: 'github', display_name: 'GitHub', type: 'github' },
+      ],
     });
     TestBed.configureTestingModule({
       imports: [TestProvidersQueryHost],
-      providers: [provideZonelessChangeDetection(), provideTanStackQuery(new QueryClient())],
+      providers: [
+        provideZonelessChangeDetection(),
+        provideTanStackQuery(new QueryClient()),
+      ],
     });
     const fixture = TestBed.createComponent(TestProvidersQueryHost);
     await settle(fixture);
 
-    expect(fixture.componentInstance.query.data()).toEqual([{ name: 'github', display_name: 'GitHub', type: 'github' }]);
+    expect(fixture.componentInstance.query.data()).toEqual([
+      { name: 'github', display_name: 'GitHub', type: 'github' },
+    ]);
   });
 });

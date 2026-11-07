@@ -205,9 +205,11 @@ present, is a numeric HTTP status. HTTP status is authoritative. For compatibili
 refusals instead carry a required string `status` describing the chunk; claim race, dependency and incompatible refusals
 omit `status` entirely, not even `null`. Tenant-required, project-required and flag-off refusals retain an object-valued
 `detail`, and unknown-project refusals (an unheld `?project=`, as on `GET /api/fleet/queue/peek`) a list-valued,
-validation-shaped one. These exceptions mean the bodies are not strictly RFC 9457 compliant. Other released fields and
+validation-shaped one. Other refusals keep the structured `detail` they released: lists for `config-document-invalid`,
+`unknown-work-source` and `config-field-invalid`; objects for `landing-order-conflict`, `last-tenant`, the `forge-*`
+refusals and `secret-in-use`. These exceptions mean the bodies are not strictly RFC 9457 compliant. Other released fields and
 their meanings remain in the response, including nullable fields. Unknown-tenant bootstrap retains the string `detail`
-the `tenant-not-found` problem in the registry names. Authentication and throttling responses preserve applicable
+the `tenant-not-found` problem names in [`src/blizzard/wire/tenant.py`](../src/blizzard/wire/tenant.py). Authentication and throttling responses preserve applicable
 headers, including `WWW-Authenticate` and `Retry-After`.
 
 Domain `422` refusals use problem media with a string detail, except the project-required and unknown-project refusals

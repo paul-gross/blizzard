@@ -8,6 +8,7 @@ from fastapi.testclient import TestClient
 from pydantic import TypeAdapter, ValidationError
 
 from blizzard.wire import problem as registry
+from blizzard.wire import problem_types_admin, problem_types_chunks, problem_types_garden, problem_types_runners
 from blizzard.wire.auth import (
     CliPkceRequiredProblem,
     CliRedirectRefusedProblem,
@@ -484,6 +485,18 @@ def test_legacy_defaults_and_required_fields_survive() -> None:
     assert "reason" in schema["required"]
     assert RunnerIdentityProblem.model_json_schema()["properties"]["runner_id"]["deprecated"] is True
     assert ReleaseProblem.model_json_schema()["properties"]["reason"]["deprecated"] is True
+
+
+def test_every_declared_type_constant_is_in_the_registry() -> None:
+    modules = (registry, problem_types_admin, problem_types_chunks, problem_types_garden, problem_types_runners)
+    declared = {
+        value
+        for module in modules
+        for value in vars(module).values()
+        if isinstance(value, str) and value.startswith("urn:blizzard:problem:")
+    }
+
+    assert declared == set(ALL_PROBLEM_TYPES)
 
 
 def test_every_family_type_is_registered_once_and_named_by_its_concept() -> None:

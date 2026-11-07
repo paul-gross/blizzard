@@ -86,10 +86,11 @@ def traces_replay(cli: CliContext, since: datetime, until: datetime, dry_run: bo
             resp = cli.send("post", "/api/traces/replay", json_body=body, timeout=_REPLAY_TIMEOUT)
         except click.ClickException as exc:
             raise click.ClickException(f"{exc.message} (window {number} of {len(windows)}){resume}") from exc
-        if refusal_of(resp).type == TRACE_REPLAY_FAILED:
-            failure = resp.json()
+        refusal = refusal_of(resp)
+        if refusal.type == TRACE_REPLAY_FAILED:
+            failure = refusal.members
             raise click.ClickException(
-                f"{failure['detail']} (told {failure['steps']} steps, {failure.get('chunks', 0)} chunks, "
+                f"{refusal.message} (told {failure['steps']} steps, {failure.get('chunks', 0)} chunks, "
                 f"{failure['spans']} spans in {failure['batches']} batches of window {number} of {len(windows)} "
                 f"before it stopped){resume}"
             )

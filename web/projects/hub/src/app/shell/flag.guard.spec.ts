@@ -1,7 +1,10 @@
 import { Component, provideZonelessChangeDetection } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { Router, provideRouter } from '@angular/router';
-import { QueryClient, provideTanStackQuery } from '@tanstack/angular-query-experimental';
+import {
+  QueryClient,
+  provideTanStackQuery,
+} from '@tanstack/angular-query-experimental';
 import { type FlagsResponse, flagGuard, provideFlags } from 'fleet/shell';
 import { type RequestClientStub, stubHubClient } from 'fleet/testing';
 
@@ -20,15 +23,25 @@ describe('the flag guard on the hub', () => {
     TestBed.configureTestingModule({
       providers: [
         provideZonelessChangeDetection(),
-        provideTanStackQuery(new QueryClient({ defaultOptions: { queries: { retry: false } } })),
+        provideTanStackQuery(
+          new QueryClient({ defaultOptions: { queries: { retry: false } } }),
+        ),
         provideFlags(hubFlagsRead),
         provideProjectLens(),
         provideRouter([
-          { path: 'shiny', canActivate: [flagGuard('shiny')], component: TestView },
+          {
+            path: 'shiny',
+            canActivate: [flagGuard('shiny')],
+            component: TestView,
+          },
           {
             path: 'p/:projectSlug',
             children: [
-              { path: 'shiny', canActivate: [flagGuard('shiny')], component: TestView },
+              {
+                path: 'shiny',
+                canActivate: [flagGuard('shiny')],
+                component: TestView,
+              },
               { path: '', component: TestView },
             ],
           },
@@ -54,10 +67,20 @@ describe('the flag guard on the hub', () => {
   });
 
   it('sends a route whose flag is off to the board’s root', async () => {
-    expect((await open('/shiny', { flags: { shiny: false }, overridden: [] })).url).toBe('/');
+    expect(
+      (await open('/shiny', { flags: { shiny: false }, overridden: [] })).url,
+    ).toBe('/');
   });
 
   it('keeps the project lens the board is on when it sends a lensed route away', async () => {
-    expect((await open('/p/blizzard/shiny', { flags: {}, overridden: [] }, '/p/blizzard')).url).toBe('/p/blizzard');
+    expect(
+      (
+        await open(
+          '/p/blizzard/shiny',
+          { flags: {}, overridden: [] },
+          '/p/blizzard',
+        )
+      ).url,
+    ).toBe('/p/blizzard');
   });
 });

@@ -1,6 +1,9 @@
 import { provideZonelessChangeDetection, signal } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
-import { QueryClient, provideTanStackQuery } from '@tanstack/angular-query-experimental';
+import {
+  QueryClient,
+  provideTanStackQuery,
+} from '@tanstack/angular-query-experimental';
 import { type ProjectView, hubProjectsKey } from 'fleet';
 
 import { LensNote } from './lens-note';
@@ -27,7 +30,13 @@ describe('LensNote', () => {
       providers: [
         provideZonelessChangeDetection(),
         provideTanStackQuery(queryClient),
-        { provide: ProjectLens, useValue: { slug: signal(slug).asReadonly(), lensed: signal(slug !== null).asReadonly() } },
+        {
+          provide: ProjectLens,
+          useValue: {
+            slug: signal(slug).asReadonly(),
+            lensed: signal(slug !== null).asReadonly(),
+          },
+        },
       ],
     }).compileComponents();
     const fixture = TestBed.createComponent(LensNote);

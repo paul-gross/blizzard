@@ -6,7 +6,10 @@ import { ProjectLens } from './project-lens';
 import { injectProjectsQuery } from './projects.query';
 
 /** The project of `projects` the lens names by `slug`, `null` on All or while the list does not hold it. */
-export function lensedProject(projects: readonly ProjectView[] | undefined, slug: string | null): ProjectView | null {
+export function lensedProject(
+  projects: readonly ProjectView[] | undefined,
+  slug: string | null,
+): ProjectView | null {
   if (slug === null) return null;
   return projects?.find((project) => project.slug === slug) ?? null;
 }

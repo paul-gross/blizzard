@@ -1,13 +1,20 @@
 import type { RunnerRegistryView, ServedProjectView } from 'fleet';
 
 /** The projects a runner declares it serves, as the hub resolved each entry; empty when it declares none. */
-export function servedProjects(runner: RunnerRegistryView): readonly ServedProjectView[] {
+export function servedProjects(
+  runner: RunnerRegistryView,
+): readonly ServedProjectView[] {
   return runner.projects ?? [];
 }
 
 /** Whether `runner` declares the project `projectId` among the projects it serves. */
-export function runnerServes(runner: RunnerRegistryView, projectId: string): boolean {
-  return servedProjects(runner).some((served) => served.project_id === projectId);
+export function runnerServes(
+  runner: RunnerRegistryView,
+  projectId: string,
+): boolean {
+  return servedProjects(runner).some(
+    (served) => served.project_id === projectId,
+  );
 }
 
 /** Whether `runner` is unassigned — it declares no project, so it is offered no work. */
@@ -16,7 +23,9 @@ export function isUnassigned(runner: RunnerRegistryView): boolean {
 }
 
 /** The entries of `runner`'s declaration that name no project of the tenant, as the runner wrote them. */
-export function unresolvedEntries(runner: RunnerRegistryView): readonly string[] {
+export function unresolvedEntries(
+  runner: RunnerRegistryView,
+): readonly string[] {
   return servedProjects(runner)
     .filter((served) => served.project_id == null)
     .map((served) => served.entry);
@@ -34,6 +43,9 @@ export function servingRunners(
 ): readonly RunnerRegistryView[] {
   return runners.filter(
     (runner) =>
-      runner.online && servedProjects(runner).some((served) => served.project_id === projectId && served.claimable),
+      runner.online &&
+      servedProjects(runner).some(
+        (served) => served.project_id === projectId && served.claimable,
+      ),
   );
 }

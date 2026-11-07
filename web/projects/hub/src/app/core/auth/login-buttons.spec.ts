@@ -23,8 +23,12 @@ describe('LoginButtons', () => {
     await fixture.whenStable();
     const el = fixture.nativeElement as HTMLElement;
 
-    expect(el.querySelectorAll('[data-testid^="login-provider-"]').length).toBeGreaterThanOrEqual(1);
-    expect(el.querySelector('[data-testid="login-provider-github"]')).toBeTruthy();
+    expect(
+      el.querySelectorAll('[data-testid^="login-provider-"]').length,
+    ).toBeGreaterThanOrEqual(1);
+    expect(
+      el.querySelector('[data-testid="login-provider-github"]'),
+    ).toBeTruthy();
   });
 
   it('marks a github provider with the github glyph and an oidc one with the generic sso glyph', async () => {
@@ -33,8 +37,16 @@ describe('LoginButtons', () => {
     await fixture.whenStable();
     const el = fixture.nativeElement as HTMLElement;
 
-    expect(el.querySelector('[data-testid="login-provider-github"] [data-testid="login-provider-mark-github"]')).toBeTruthy();
-    expect(el.querySelector('[data-testid="login-provider-oidc-co"] [data-testid="login-provider-mark-sso"]')).toBeTruthy();
+    expect(
+      el.querySelector(
+        '[data-testid="login-provider-github"] [data-testid="login-provider-mark-github"]',
+      ),
+    ).toBeTruthy();
+    expect(
+      el.querySelector(
+        '[data-testid="login-provider-oidc-co"] [data-testid="login-provider-mark-sso"]',
+      ),
+    ).toBeTruthy();
   });
 
   it('links each button to its authorize route carrying return_to', async () => {
@@ -44,7 +56,9 @@ describe('LoginButtons', () => {
     await fixture.whenStable();
     const el = fixture.nativeElement as HTMLElement;
 
-    const href = el.querySelector('[data-testid="login-provider-github"]')?.getAttribute('href');
+    const href = el
+      .querySelector('[data-testid="login-provider-github"]')
+      ?.getAttribute('href');
     expect(href).toBe('/api/auth/github/authorize?return_to=%2Fgraphs');
   });
 
@@ -55,20 +69,30 @@ describe('LoginButtons', () => {
     await fixture.whenStable();
     const el = fixture.nativeElement as HTMLElement;
 
-    const items = Array.from(el.querySelectorAll('[data-testid^="login-provider-"][data-provider-type]'));
+    const items = Array.from(
+      el.querySelectorAll(
+        '[data-testid^="login-provider-"][data-provider-type]',
+      ),
+    );
     expect(items[0].getAttribute('data-testid')).toBe('login-provider-oidc-co');
-    expect(el.querySelector('[data-testid="login-provider-last-used"]')).toBeTruthy();
+    expect(
+      el.querySelector('[data-testid="login-provider-last-used"]'),
+    ).toBeTruthy();
   });
 
   it('emits providerClick with the provider name when a button is clicked', async () => {
     const fixture = TestBed.createComponent(LoginButtons);
     fixture.componentRef.setInput('providers', PROVIDERS);
     const clicked: string[] = [];
-    fixture.componentInstance.providerClick.subscribe((name: string) => clicked.push(name));
+    fixture.componentInstance.providerClick.subscribe((name: string) =>
+      clicked.push(name),
+    );
     await fixture.whenStable();
     const el = fixture.nativeElement as HTMLElement;
 
-    el.querySelector<HTMLElement>('[data-testid="login-provider-github"]')?.dispatchEvent(new MouseEvent('click'));
+    el.querySelector<HTMLElement>(
+      '[data-testid="login-provider-github"]',
+    )?.dispatchEvent(new MouseEvent('click'));
 
     expect(clicked).toEqual(['github']);
   });
@@ -80,11 +104,15 @@ describe('LoginButtons', () => {
     await fixture.whenStable();
     const el = fixture.nativeElement as HTMLElement;
 
-    expect(el.querySelector('[data-testid="login-provider-github"]')?.getAttribute('href')).toBe(
-      '/api/auth/github/authorize?return_to=%2F&invite=tok_a%2Fb%2Bc',
-    );
-    expect(el.querySelector('[data-testid="login-provider-oidc-co"]')?.getAttribute('href')).toBe(
-      '/api/auth/oidc-co/authorize?return_to=%2F&invite=tok_a%2Fb%2Bc',
-    );
+    expect(
+      el
+        .querySelector('[data-testid="login-provider-github"]')
+        ?.getAttribute('href'),
+    ).toBe('/api/auth/github/authorize?return_to=%2F&invite=tok_a%2Fb%2Bc');
+    expect(
+      el
+        .querySelector('[data-testid="login-provider-oidc-co"]')
+        ?.getAttribute('href'),
+    ).toBe('/api/auth/oidc-co/authorize?return_to=%2F&invite=tok_a%2Fb%2Bc');
   });
 });

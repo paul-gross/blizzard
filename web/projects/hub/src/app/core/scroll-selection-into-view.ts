@@ -1,4 +1,10 @@
-import { afterEveryRender, DestroyRef, effect, ElementRef, inject } from '@angular/core';
+import {
+  afterEveryRender,
+  DestroyRef,
+  effect,
+  ElementRef,
+  inject,
+} from '@angular/core';
 
 /** How long after the picked element renders a resize of its scroll container still re-reveals it — long enough for a
  * panel opening beside or below the list to settle. */
@@ -10,7 +16,10 @@ const SETTLE_MS = 350;
  * of its scroll container. The container is watched briefly afterwards, so a panel that takes room once the pick has
  * rendered re-reveals it. An item already in view does not move; reduced motion jumps rather than glides.
  */
-export function injectScrollSelectionIntoView(selectedId: () => string | null, selector: (id: string) => string): void {
+export function injectScrollSelectionIntoView(
+  selectedId: () => string | null,
+  selector: (id: string) => string,
+): void {
   const host = inject<ElementRef<HTMLElement>>(ElementRef).nativeElement;
   let last: string | null = null;
   let pending: string | null = null;
@@ -36,11 +45,17 @@ export function injectScrollSelectionIntoView(selectedId: () => string | null, s
 }
 
 function reveal(el: HTMLElement): () => void {
-  const behavior: ScrollBehavior = matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth';
+  const behavior: ScrollBehavior = matchMedia(
+    '(prefers-reduced-motion: reduce)',
+  ).matches
+    ? 'auto'
+    : 'smooth';
   let frame = 0;
   const scroll = () => {
     cancelAnimationFrame(frame);
-    frame = requestAnimationFrame(() => el.scrollIntoView({ block: 'nearest', inline: 'nearest', behavior }));
+    frame = requestAnimationFrame(() =>
+      el.scrollIntoView({ block: 'nearest', inline: 'nearest', behavior }),
+    );
   };
   const container = scrollParent(el);
   // A ResizeObserver reports once on observe, so the reveal runs right away and again as the panel takes its room.

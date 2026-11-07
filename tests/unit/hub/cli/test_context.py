@@ -149,6 +149,12 @@ def test_check_leaves_a_200_alone() -> None:
     _CTX.check(_response(200), "GET /x")  # must not raise
 
 
+@pytest.mark.parametrize("status_code", [301, 307, 308])
+def test_check_refuses_an_unfollowed_redirect_rather_than_reporting_success(status_code: int) -> None:
+    with pytest.raises(click.ClickException):
+        _CTX.check(_response(status_code), "POST /x")
+
+
 # --- the tenant a call names ------------------------------------------------------
 
 _BRAVO = "ten_01BRAVO"

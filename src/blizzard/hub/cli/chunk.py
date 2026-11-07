@@ -196,8 +196,9 @@ def chunk_ingest(cli: CliContext, pointers: tuple[str, ...], project: str | None
     if project is not None:
         request["project"] = project
     resp = cli.send("post", "/api/chunks", json_body=request)
-    if refusal_of(resp).type == POINTER_ALREADY_HELD:
-        conflict = resp.json()
+    refusal = refusal_of(resp)
+    if refusal.type == POINTER_ALREADY_HELD:
+        conflict = refusal.members
         raise click.ClickException(
             f"pointer {pointer_label(conflict)} already held by chunk {conflict.get('existing_chunk_id')}"
         )
@@ -388,20 +389,20 @@ def chunk_depend(cli: CliContext, chunk_id: str, prerequisite_chunk_id: str, by:
         f"/api/chunks/{chunk_id}/dependencies",
         json_body={"prerequisite_chunk_id": prerequisite_chunk_id, "by": by},
     )
-    kind = refusal_of(resp).type
+    refusal = refusal_of(resp)
+    kind = refusal.type
+    body = refusal.members
     if kind == DEPENDENT_NOT_EDITABLE:
-        body = resp.json()
         raise click.ClickException(
             f"{body['chunk_id']} is not editable at status {body['status']} — cannot declare a dependency"
         )
     if kind == DEPENDENCY_WOULD_CLOSE_CYCLE:
-        body = resp.json()
         raise click.ClickException(
             f"declaring {body['dependent_chunk_id']} → {body['prerequisite_chunk_id']} "
             "would close a cycle in the standing dependency graph"
         )
     if kind == PREREQUISITE_EPHEMERAL:
-        raise click.ClickException(f"{resp.json()['chunk_id']} is ephemeral and cannot be named as a prerequisite")
+        raise click.ClickException(f"{body['chunk_id']} is ephemeral and cannot be named as a prerequisite")
     cli.check(
         resp,
         "POST /chunks/{id}/dependencies",
@@ -422,8 +423,9 @@ def chunk_release_dependency(cli: CliContext, chunk_id: str, prerequisite_chunk_
         f"/api/chunks/{chunk_id}/dependencies/release",
         json_body={"prerequisite_chunk_id": prerequisite_chunk_id, "by": by},
     )
-    if refusal_of(resp).type == NO_STANDING_DEPENDENCY:
-        body = resp.json()
+    refusal = refusal_of(resp)
+    if refusal.type == NO_STANDING_DEPENDENCY:
+        body = refusal.members
         raise click.ClickException(
             f"no standing dependency from {body['dependent_chunk_id']} to {body['prerequisite_chunk_id']}"
         )

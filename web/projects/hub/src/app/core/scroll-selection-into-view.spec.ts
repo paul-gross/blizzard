@@ -1,4 +1,9 @@
-import { ChangeDetectionStrategy, Component, provideZonelessChangeDetection, signal } from '@angular/core';
+import {
+  ChangeDetectionStrategy,
+  Component,
+  provideZonelessChangeDetection,
+  signal,
+} from '@angular/core';
 import { type ComponentFixture, TestBed } from '@angular/core/testing';
 import { vi } from 'vitest';
 
@@ -8,7 +13,11 @@ import { injectScrollSelectionIntoView } from './scroll-selection-into-view';
   selector: 'app-test-scroll-host',
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
-    <div class="scroller" style="overflow-y: auto" [attr.data-selected]="selected()">
+    <div
+      class="scroller"
+      style="overflow-y: auto"
+      [attr.data-selected]="selected()"
+    >
       @for (id of ids(); track id) {
         <div class="item" [attr.data-id]="id">{{ id }}</div>
       }
@@ -20,12 +29,18 @@ class ScrollHost {
   readonly selected = signal<string | null>(null);
 
   constructor() {
-    injectScrollSelectionIntoView(this.selected, (id) => `.item[data-id="${id}"]`);
+    injectScrollSelectionIntoView(
+      this.selected,
+      (id) => `.item[data-id="${id}"]`,
+    );
   }
 }
 
 describe('injectScrollSelectionIntoView', () => {
-  let scrolled: { id: string | null; options: ScrollIntoViewOptions | undefined }[];
+  let scrolled: {
+    id: string | null;
+    options: ScrollIntoViewOptions | undefined;
+  }[];
   let observed: Element[];
   let disconnects: number;
   let reducedMotion: boolean;
@@ -35,10 +50,19 @@ describe('injectScrollSelectionIntoView', () => {
     observed = [];
     disconnects = 0;
     reducedMotion = false;
-    vi.spyOn(Element.prototype, 'scrollIntoView').mockImplementation(function (this: Element, options?: boolean | ScrollIntoViewOptions) {
-      scrolled.push({ id: this.getAttribute('data-id'), options: options as ScrollIntoViewOptions | undefined });
+    vi.spyOn(Element.prototype, 'scrollIntoView').mockImplementation(function (
+      this: Element,
+      options?: boolean | ScrollIntoViewOptions,
+    ) {
+      scrolled.push({
+        id: this.getAttribute('data-id'),
+        options: options as ScrollIntoViewOptions | undefined,
+      });
     });
-    vi.spyOn(window, 'matchMedia').mockImplementation((query: string) => ({ matches: reducedMotion, media: query }) as MediaQueryList);
+    vi.spyOn(window, 'matchMedia').mockImplementation(
+      (query: string) =>
+        ({ matches: reducedMotion, media: query }) as MediaQueryList,
+    );
     // A ResizeObserver reports once on observe, as the browser's does.
     vi.stubGlobal(
       'ResizeObserver',
@@ -56,7 +80,10 @@ describe('injectScrollSelectionIntoView', () => {
         }
       },
     );
-    await TestBed.configureTestingModule({ imports: [ScrollHost], providers: [provideZonelessChangeDetection()] }).compileComponents();
+    await TestBed.configureTestingModule({
+      imports: [ScrollHost],
+      providers: [provideZonelessChangeDetection()],
+    }).compileComponents();
   });
 
   afterEach(() => {
@@ -67,7 +94,9 @@ describe('injectScrollSelectionIntoView', () => {
   /** Settle a change, then the animation frame the reveal scrolls on. */
   async function render(fixture: ComponentFixture<ScrollHost>): Promise<void> {
     await fixture.whenStable();
-    await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
+    await new Promise<void>((resolve) =>
+      requestAnimationFrame(() => resolve()),
+    );
   }
 
   async function mount(selected: string | null = null) {
@@ -86,8 +115,15 @@ describe('injectScrollSelectionIntoView', () => {
   it('reveals a selection already set on load, to the nearest edge of its scroll container, gliding', async () => {
     const fixture = await mount('b');
 
-    expect(scrolled).toEqual([{ id: 'b', options: { block: 'nearest', inline: 'nearest', behavior: 'smooth' } }]);
-    expect(observed).toEqual([(fixture.nativeElement as HTMLElement).querySelector('.scroller')]);
+    expect(scrolled).toEqual([
+      {
+        id: 'b',
+        options: { block: 'nearest', inline: 'nearest', behavior: 'smooth' },
+      },
+    ]);
+    expect(observed).toEqual([
+      (fixture.nativeElement as HTMLElement).querySelector('.scroller'),
+    ]);
   });
 
   it('reveals each new pick once, and not again for the same pick', async () => {

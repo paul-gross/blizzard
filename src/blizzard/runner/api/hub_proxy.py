@@ -23,7 +23,7 @@ from blizzard.runner.config import RunnerConfig
 from blizzard.runner.hub.client import HubClientError, ITokenIdentityReader
 from blizzard.runner.hub.held_token import ICurrentHubToken
 from blizzard.runner.hub.identity import IdentityVerdict, IIdentityOnContact
-from blizzard.wire.problem import type_of
+from blizzard.wire.problem_reading import read_problem
 
 # The per-attempt bound: the timeout on any single outbound request this proxy makes.
 HUB_TIMEOUT = 15.0
@@ -86,11 +86,10 @@ class UpstreamRefusal(HTTPException):
         headers = {name: upstream.headers[name] for name in _RELAYED_HEADERS if name in upstream.headers}
         super().__init__(status_code=upstream.status_code, detail=detail, headers=headers or None)
         self.body = upstream.content
+        # SIM401 would rewrite this to ``.get``, whose receiver the producer-delegation guards cannot resolve.
         self.media_type = upstream.headers["content-type"] if "content-type" in upstream.headers else "application/json"  # noqa: SIM401
-        self.payload: dict[str, object] = as_table(upstream.json()) or {}
-        present, kind = type_of(self.payload)
         #: The relayed problem's ``type``; ``None`` for a body that predates problem details.
-        self.problem_type: str | None = kind if present and isinstance(kind, str) else None
+        self.problem_type: str | None = read_problem(upstream.json()).type
 
 
 async def relay_upstream_refusal(request: Request, exc: Exception) -> Response:
@@ -102,7 +101,7 @@ async def relay_upstream_refusal(request: Request, exc: Exception) -> Response:
 def _refusal(upstream: httpx2.Response) -> HTTPException:
     """The runner's answer to a hub refusal: the hub's own JSON object body when it sent one, else its text as a
     ``detail``."""
-    detail = HubProxy._detail(upstream)  # pyright: ignore[reportPrivateUsage]
+    detail = HubProxy.detail_of(upstream)
     try:
         body: object = upstream.json()
     except ValueError:
@@ -319,7 +318,7 @@ class HubProxy:
         return get_logger(f"blizzard.runner.api.{self.what.replace('-', '_')}")
 
     @staticmethod
-    def _detail(response: httpx2.Response) -> str:
+    def detail_of(response: httpx2.Response) -> str:
         """The hub's error detail, unwrapped from its JSON body when present."""
         try:
             payload = as_table(response.json())

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import UTC, datetime
-from typing import Any
+from typing import Any, cast
 
 import click
 
@@ -102,11 +102,13 @@ def egress_backfill(cli: CliContext, since: datetime, until: datetime, dataset: 
     latest exported_at. A window over backfill_max_window is refused, not split."""
     body = {"since": utc_query_value(since), "until": utc_query_value(until), "dataset": dataset, "dry_run": dry_run}
     resp = cli.send("post", "/api/egress/backfill", json_body=body, timeout=_BACKFILL_TIMEOUT)
-    if refusal_of(resp).type == EGRESS_BACKFILL_FAILED:
-        failure = resp.json()
-        placed = ", ".join(f"{c['rows']} {c['dataset']} rows in {c['files']} files" for c in failure["datasets"])
+    refusal = refusal_of(resp)
+    if refusal.type == EGRESS_BACKFILL_FAILED:
+        failure = refusal.members
+        datasets = cast(list[dict[str, object]], failure["datasets"])
+        placed = ", ".join(f"{c['rows']} {c['dataset']} rows in {c['files']} files" for c in datasets)
         raise click.ClickException(
-            f"{failure['detail']} ({failure['cause']}; committed {placed or 'nothing'} before it stopped)"
+            f"{refusal.message} ({failure['cause']}; committed {placed or 'nothing'} before it stopped)"
         )
     cli.check(resp, "POST /egress/backfill")
     result = resp.json()

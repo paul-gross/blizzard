@@ -18,6 +18,7 @@ from blizzard.foundation.roles import collaborator
 from blizzard.runner.host_layout import HostLayout
 from blizzard.runner.route_paths import runner_prefix
 from blizzard.wire.problem import FLAG_OFF
+from blizzard.wire.problem_reading import is_kind
 
 # A machine-local round trip, so a hook-scale budget rather than the hub-client one.
 LOCAL_CLIENT_TIMEOUT = 5.0
@@ -205,7 +206,7 @@ def _flag_off(resp: Response) -> str | None:
     """The host's own words when a ``404`` is its ``flag-off`` refusal — the route is held behind a flag that is off.
     The host's refusal carries no ``type``, so its ``detail.code`` is read."""
     reading = refusal_of(resp)
-    if reading.type == FLAG_OFF or (reading.type is None and reading.legacy_code == "flag_off"):
+    if is_kind(reading, FLAG_OFF, "flag_off"):
         return reading.message
     return None
 

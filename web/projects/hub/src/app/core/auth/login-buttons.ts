@@ -1,4 +1,10 @@
-import { ChangeDetectionStrategy, Component, computed, input, output } from '@angular/core';
+import {
+  ChangeDetectionStrategy,
+  Component,
+  computed,
+  input,
+  output,
+} from '@angular/core';
 
 import type { ProviderSummary } from 'fleet';
 
@@ -61,7 +67,8 @@ export class LoginButtons {
 
   protected hrefFor(name: string): string {
     const invite = this.invite();
-    const carried = invite === null ? '' : `&invite=${encodeURIComponent(invite)}`;
+    const carried =
+      invite === null ? '' : `&invite=${encodeURIComponent(invite)}`;
     return `/api/auth/${encodeURIComponent(name)}/authorize?return_to=${encodeURIComponent(this.returnTo())}${carried}`;
   }
 }

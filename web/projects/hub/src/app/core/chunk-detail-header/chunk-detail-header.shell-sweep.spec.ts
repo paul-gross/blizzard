@@ -43,7 +43,10 @@ const DETAIL: ChunkDetail = chunkDetail({
 });
 
 /** The same chunk claimed by a runner with a typical name — 12 characters, inside the 13 the claim line holds whole. */
-const TYPICAL_NAME_DETAIL: ChunkDetail = { ...DETAIL, route: { ...DETAIL.route!, runner_name: 'runner-local' } };
+const TYPICAL_NAME_DETAIL: ChunkDetail = {
+  ...DETAIL,
+  route: { ...DETAIL.route!, runner_name: 'runner-local' },
+};
 
 const WIDTHS = [800, 390, 320];
 
@@ -53,13 +56,21 @@ const SWEPT = ['chunk-actions-menu', 'detail-close'] as const;
 
 /** The menu panel's own items, once opened — a routed, pausable, deletable chunk
  * (`blocking` gate open) makes all four live at once. */
-const MENU_ITEMS = ['pause-chunk', 'detach-chunk', 'complete-chunk', 'delete-chunk'] as const;
+const MENU_ITEMS = [
+  'pause-chunk',
+  'detach-chunk',
+  'complete-chunk',
+  'delete-chunk',
+] as const;
 
 async function renderHeader(
   width: number,
   detail: ChunkDetail = DETAIL,
   runnerHosts: ReadonlyMap<string, string> = new Map(),
-): Promise<{ root: HTMLElement; fixture: ReturnType<typeof TestBed.createComponent<ChunkDetailHeader>> }> {
+): Promise<{
+  root: HTMLElement;
+  fixture: ReturnType<typeof TestBed.createComponent<ChunkDetailHeader>>;
+}> {
   TestBed.resetTestingModule();
   await TestBed.configureTestingModule({
     imports: [ChunkDetailHeader],
@@ -84,8 +95,12 @@ describe('chunk detail header action row shell sweep (web:shell-sweep)', () => {
       try {
         // The host is `display: contents` (no box of its own) — `.d-head` is the
         // actual header element every control's edge is measured against.
-        const headerRect = root.querySelector('.d-head')!.getBoundingClientRect();
-        const controls = root.querySelectorAll<HTMLElement>(SWEPT.map((t) => `[data-testid="${t}"]`).join(', '));
+        const headerRect = root
+          .querySelector('.d-head')!
+          .getBoundingClientRect();
+        const controls = root.querySelectorAll<HTMLElement>(
+          SWEPT.map((t) => `[data-testid="${t}"]`).join(', '),
+        );
         expect(
           controls.length,
           `width ${width}: fixture defect — expected every control in SWEPT to render, got ` +
@@ -108,12 +123,16 @@ describe('chunk detail header action row shell sweep (web:shell-sweep)', () => {
     it(`keeps the opened ⋯ menu's own items on-viewport at width ${width}`, async () => {
       const { root, fixture } = await renderHeader(width);
       try {
-        root.querySelector<HTMLElement>('[data-testid="chunk-actions-menu"]')?.click();
+        root
+          .querySelector<HTMLElement>('[data-testid="chunk-actions-menu"]')
+          ?.click();
         await fixture.whenStable();
 
         // The CDK renders the panel into an overlay attached to `document.body`,
         // not inside the fixture's own element (`kit-menu.spec.ts`'s own convention).
-        const items = document.body.querySelectorAll<HTMLElement>(MENU_ITEMS.map((t) => `[data-testid="${t}"]`).join(', '));
+        const items = document.body.querySelectorAll<HTMLElement>(
+          MENU_ITEMS.map((t) => `[data-testid="${t}"]`).join(', '),
+        );
         expect(
           items.length,
           `width ${width}: fixture defect — expected every item in MENU_ITEMS to render, got ` +
@@ -127,7 +146,10 @@ describe('chunk detail header action row shell sweep (web:shell-sweep)', () => {
             rect.right,
             `width ${width}: menu item ${item.dataset['testid']}'s right edge (${rect.right}) overflows the viewport (${width})`,
           ).toBeLessThanOrEqual(width + 0.5);
-          expect(rect.left, `width ${width}: menu item ${item.dataset['testid']} renders off-screen to the left`).toBeGreaterThanOrEqual(-0.5);
+          expect(
+            rect.left,
+            `width ${width}: menu item ${item.dataset['testid']} renders off-screen to the left`,
+          ).toBeGreaterThanOrEqual(-0.5);
         }
       } finally {
         root.remove();
@@ -137,16 +159,22 @@ describe('chunk detail header action row shell sweep (web:shell-sweep)', () => {
     it(`keeps the claim line's compact runner id readable at width ${width}`, async () => {
       const { root } = await renderHeader(width);
       try {
-        const chip = root.querySelector<HTMLElement>('[data-testid="route-info"]')!;
+        const chip = root.querySelector<HTMLElement>(
+          '[data-testid="route-info"]',
+        )!;
         const text = chip.firstChild as Text;
         // Through the separator: an ellipsis that clips the name lands on it at the earliest.
         const named = runnerDisplayName(DETAIL.route!.runner_id, 'n');
         const lead = named.slice(0, -1);
-        expect(text.data.startsWith(lead), `width ${width}: the chip reads ${JSON.stringify(text.data)}`).toBe(true);
+        expect(
+          text.data.startsWith(lead),
+          `width ${width}: the chip reads ${JSON.stringify(text.data)}`,
+        ).toBe(true);
         const range = document.createRange();
         range.setStart(text, 0);
         range.setEnd(text, lead.length);
-        const visibleRight = chip.getBoundingClientRect().left + chip.clientWidth;
+        const visibleRight =
+          chip.getBoundingClientRect().left + chip.clientWidth;
         expect(
           range.getBoundingClientRect().right,
           `width ${width}: the chip clips its lead ${JSON.stringify(lead)} (visible to ${visibleRight})`,
@@ -160,20 +188,34 @@ describe('chunk detail header action row shell sweep (web:shell-sweep)', () => {
   it('shows a typical display name whole on the claim line at width 800', async () => {
     const { root } = await renderHeader(800, TYPICAL_NAME_DETAIL);
     try {
-      const chip = root.querySelector<HTMLElement>('[data-testid="route-info"]')!;
+      const chip = root.querySelector<HTMLElement>(
+        '[data-testid="route-info"]',
+      )!;
       expect(chip.textContent).toBe('R-E4AX.runner-local');
-      expect(chip.scrollWidth, `the chip clips ${JSON.stringify(chip.textContent)}`).toBeLessThanOrEqual(chip.clientWidth);
+      expect(
+        chip.scrollWidth,
+        `the chip clips ${JSON.stringify(chip.textContent)}`,
+      ).toBeLessThanOrEqual(chip.clientWidth);
     } finally {
       root.remove();
     }
   });
 
   it('names a typical runner by its host whole on the claim line at width 800', async () => {
-    const { root } = await renderHeader(800, TYPICAL_NAME_DETAIL, new Map([[DETAIL.route!.runner_id, 'atlas']]));
+    const { root } = await renderHeader(
+      800,
+      TYPICAL_NAME_DETAIL,
+      new Map([[DETAIL.route!.runner_id, 'atlas']]),
+    );
     try {
-      const chip = root.querySelector<HTMLElement>('[data-testid="route-info"]')!;
+      const chip = root.querySelector<HTMLElement>(
+        '[data-testid="route-info"]',
+      )!;
       expect(chip.textContent).toBe('atlas/runner-local');
-      expect(chip.scrollWidth, `the chip clips ${JSON.stringify(chip.textContent)}`).toBeLessThanOrEqual(chip.clientWidth);
+      expect(
+        chip.scrollWidth,
+        `the chip clips ${JSON.stringify(chip.textContent)}`,
+      ).toBeLessThanOrEqual(chip.clientWidth);
     } finally {
       root.remove();
     }

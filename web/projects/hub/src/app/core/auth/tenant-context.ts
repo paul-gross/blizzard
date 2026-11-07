@@ -1,4 +1,10 @@
-import { Injectable, InjectionToken, type Signal, inject, signal } from '@angular/core';
+import {
+  Injectable,
+  InjectionToken,
+  type Signal,
+  inject,
+  signal,
+} from '@angular/core';
 import { QueryClient } from '@tanstack/angular-query-experimental';
 
 import { type MeResponse, type MeTenant, hubMeKey } from 'fleet/shell';
@@ -18,7 +24,11 @@ export const LAST_TENANT_KEY = 'blizzard.tenant.last';
 export type TenantResolution =
   | { readonly kind: 'none' }
   | { readonly kind: 'choose'; readonly tenants: readonly MeTenant[] }
-  | { readonly kind: 'selected'; readonly tenant: MeTenant; readonly tenants: readonly MeTenant[] };
+  | {
+      readonly kind: 'selected';
+      readonly tenant: MeTenant;
+      readonly tenants: readonly MeTenant[];
+    };
 
 /** Settles the tenant from the caller's memberships: the only one when there is one; with several, `held` (the tab's
  * tenant) while it is still a membership, else `last` (the browser's last choice) while it is, else a choice. */
@@ -28,18 +38,30 @@ export function resolveTenant(
   last: string | null,
 ): TenantResolution {
   if (tenants.length === 0) return { kind: 'none' };
-  if (tenants.length === 1) return { kind: 'selected', tenant: tenants[0], tenants };
-  const kept = tenants.find((t) => t.tenant_id === held) ?? tenants.find((t) => t.tenant_id === last);
-  return kept === undefined ? { kind: 'choose', tenants } : { kind: 'selected', tenant: kept, tenants };
+  if (tenants.length === 1)
+    return { kind: 'selected', tenant: tenants[0], tenants };
+  const kept =
+    tenants.find((t) => t.tenant_id === held) ??
+    tenants.find((t) => t.tenant_id === last);
+  return kept === undefined
+    ? { kind: 'choose', tenants }
+    : { kind: 'selected', tenant: kept, tenants };
 }
 
 /** The identity as the board reads it, in the selected tenant. The hub answers `role` and `permissions` for the tenant
  * the request named, and every call names the selected one, so a resolved answer is already that membership's and
  * stands. A read made before the tenant was settled — no header among several memberships, or one naming a tenant the
  * caller has left — resolves none (`role` null); the selected membership's role and permissions stand in for it. */
-export function inSelectedTenant(me: MeResponse, resolution: TenantResolution): MeResponse {
+export function inSelectedTenant(
+  me: MeResponse,
+  resolution: TenantResolution,
+): MeResponse {
   if (resolution.kind !== 'selected' || me.role !== null) return me;
-  return { ...me, role: resolution.tenant.role, permissions: resolution.tenant.permissions };
+  return {
+    ...me,
+    role: resolution.tenant.role,
+    permissions: resolution.tenant.permissions,
+  };
 }
 
 /** Reloads the page — the seam a tenant switch re-enters the board through, replaced in tests. */
@@ -61,8 +83,12 @@ export class TenantContext {
   private readonly queryClient = inject(QueryClient);
   private readonly reload = inject(PAGE_RELOAD);
 
-  private readonly lastChoice = signal(read(globalThis.localStorage, LAST_TENANT_KEY));
-  private readonly held = signal(read(globalThis.sessionStorage, TAB_TENANT_KEY) ?? this.lastChoice());
+  private readonly lastChoice = signal(
+    read(globalThis.localStorage, LAST_TENANT_KEY),
+  );
+  private readonly held = signal(
+    read(globalThis.sessionStorage, TAB_TENANT_KEY) ?? this.lastChoice(),
+  );
 
   /** The tenant this tab's calls name, `null` before one is known (the hub then settles a single membership itself). */
   readonly current: Signal<string | null> = this.held.asReadonly();
@@ -87,7 +113,8 @@ export class TenantContext {
     if (this.held() === tenant) return;
     this.held.set(tenant);
     void this.queryClient.invalidateQueries({
-      predicate: (query) => !hubMeKey.every((part, index) => query.queryKey[index] === part),
+      predicate: (query) =>
+        !hubMeKey.every((part, index) => query.queryKey[index] === part),
     });
   }
 
@@ -138,7 +165,11 @@ function read(storage: Storage | undefined, key: string): string | null {
 }
 
 /** Removes `key` while it still names `tenant` — another tab may have stored a different choice since. */
-function forget(storage: Storage | undefined, key: string, tenant: string): void {
+function forget(
+  storage: Storage | undefined,
+  key: string,
+  tenant: string,
+): void {
   try {
     if (storage?.getItem(key) === tenant) storage.removeItem(key);
   } catch {
