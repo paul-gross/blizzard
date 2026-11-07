@@ -79,7 +79,6 @@ def item_create(cli: CliContext, title: str, body_file: str, priority: str, sour
     cli.check(
         resp,
         "POST /work-sources/{source}/items",
-        on_status={404: f"unknown work source {source!r}", 409: f"work source {source!r} has no editor"},
     )
     body_json = resp.json()
     cli.show_lines(body_json, f"created {body_json['label']} → chunk {body_json['chunk_id']}")
@@ -108,7 +107,6 @@ def item_edit(
         f"/api/work-sources/{source}/items/{ref}",
         "PATCH /work-sources/{source}/items/{ref}",
         json_body=json_body,
-        on_status={404: f"unknown {source}:{ref}", 409: f"work source {source!r} has no editor"},
     )
     body_json = resp.json()
     cli.show_lines(body_json, f"edited {body_json['label']}")
@@ -125,7 +123,6 @@ def item_delete(cli: CliContext, token: tuple[str, str], yes: bool) -> None:
     resp = cli.delete(
         f"/api/work-sources/{source}/items/{ref}",
         "DELETE /work-sources/{source}/items/{ref}",
-        on_status={404: f"unknown {source}:{ref}", 409: f"work source {source!r} has no editor"},
     )
     body_json = resp.json()
     cli.show_lines(body_json, f"withdrew {body_json['label']}")

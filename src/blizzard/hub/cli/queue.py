@@ -46,10 +46,6 @@ def queue_set(cli: CliContext, chunk_ids: tuple[str, ...]) -> None:
         "/api/queue",
         "PUT /queue",
         json_body={"chunk_ids": list(chunk_ids)},
-        on_status={
-            409: "one of the named chunks is not in the ready list (it may be in the not_ready backlog instead)",
-            422: "chunk_ids must not repeat",
-        },
     )
     body = resp.json()
     cli.show_lines(body, f"queue order set ({len(body.get('entries', []))} ready chunk(s))")
@@ -70,7 +66,6 @@ def queue_move(cli: CliContext, chunk_id: str, position: int) -> None:
         "/api/queue/position",
         "POST /queue/position",
         json_body={"chunk_id": chunk_id, "after_chunk_id": after_chunk_id},
-        on_status={409: f"chunk {chunk_id} is not in the ready list (it may be in the not_ready backlog instead)"},
     )
     landed = next(entry["position"] for entry in resp.json()["entries"] if entry["chunk_id"] == chunk_id)
     cli.finish(resp, f"moved {chunk_id} to position {landed}")

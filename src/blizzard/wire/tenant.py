@@ -3,7 +3,7 @@ administrator calls."""
 
 from __future__ import annotations
 
-from typing import Annotated, Any, Literal
+from typing import Annotated, Any, Final, Literal
 
 from pydantic import BaseModel, StringConstraints
 
@@ -23,6 +23,11 @@ from blizzard.wire.vocabulary import OPEN
 TenantName = Annotated[
     str, StringConstraints(min_length=1, max_length=TENANT_NAME_MAX_LENGTH, pattern=TENANT_NAME_PATTERN)
 ]
+
+
+#: The one spelling of the ``detail`` a refusal of an unknown, closed, or unenterable tenant carries. The model's
+#: ``Literal`` below repeats it only because a type annotation cannot take a name.
+NO_SUCH_TENANT: Final = "no such tenant"
 
 
 class TenantRequiredDetail(BaseModel):

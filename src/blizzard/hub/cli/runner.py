@@ -97,11 +97,6 @@ def runner_add(cli: CliContext, name: str, projects: tuple[str, ...], host_id: s
     cli.check(
         resp,
         "POST /runners",
-        on_status={
-            404: f"unknown host {host_id}",
-            409: f"host {host_id} is retired",
-            422: "a runner's name must not be blank",
-        },
     )
     body = resp.json()
     cli.show_lines(
@@ -127,7 +122,7 @@ def runner_list(cli: CliContext, include_retired: bool) -> None:
 @click.argument("runner_id")
 def runner_show(cli: CliContext, runner_id: str) -> None:
     """One runner's connection and paused state, by RUNNER_ID — symmetric with ``runner list``."""
-    resp = cli.get(f"/api/runners/{runner_id}", "GET /runners/{id}", on_status={404: f"unknown runner {runner_id}"})
+    resp = cli.get(f"/api/runners/{runner_id}", "GET /runners/{id}")
     body = resp.json()
     cli.show(body, RunnerDetail(body))
 
@@ -153,7 +148,6 @@ def _set_runner_pause(cli: CliContext, runner_id: str, *, verb: str, by: str) ->
         f"/api/runners/{runner_id}/{verb}",
         f"POST /runners/{{id}}/{verb}",
         json_body={"by": by},
-        on_status={404: f"unknown runner {runner_id}"},
     )
     body = resp.json()
     state = "paused" if body.get("hub_paused") else "running"
@@ -173,11 +167,10 @@ def runner_enroll(cli: CliContext, runner_id: str) -> None:
     RUNNER_ID is unknown or retired — `reinstate` it first."""
     # Read first, so a failed read leaves the token unrotated:
     # test_enroll_rotates_nothing_when_the_registry_entry_cannot_be_read.
-    entry = cli.get(f"/api/runners/{runner_id}", "GET /runners/{id}", on_status={404: f"unknown runner {runner_id}"})
+    entry = cli.get(f"/api/runners/{runner_id}", "GET /runners/{id}")
     resp = cli.post(
         f"/api/runners/{runner_id}/enrollments",
         "POST /runners/{id}/enrollments",
-        on_status={404: f"unknown runner {runner_id}", 409: f"runner {runner_id} is retired"},
     )
     body = resp.json()
     cli.show_lines(
@@ -200,7 +193,6 @@ def runner_retire(cli: CliContext, runner_id: str, force: bool, by: str) -> None
         f"/api/runners/{runner_id}/retire",
         "POST /runners/{id}/retire",
         json_body={"by": by, "force": force},
-        on_status={404: f"unknown runner {runner_id}", 409: f"runner {runner_id} holds chunks"},
     )
     body = resp.json()
     lines = [f"runner {runner_id} is retired"]
@@ -219,7 +211,6 @@ def runner_reinstate(cli: CliContext, runner_id: str, by: str) -> None:
         f"/api/runners/{runner_id}/reinstate",
         "POST /runners/{id}/reinstate",
         json_body={"by": by},
-        on_status={404: f"unknown runner {runner_id}", 409: f"runner {runner_id} is not retired"},
     )
     body = resp.json()
     cli.show_lines(body, f"runner {runner_id} is reinstated — enroll it to mint a fresh token")
@@ -234,7 +225,6 @@ def runner_revoke_token(cli: CliContext, runner_id: str, by: str) -> None:
         f"/api/runners/{runner_id}/token-revocations",
         "POST /runners/{id}/token-revocations",
         json_body={"by": by},
-        on_status={404: f"unknown runner {runner_id}", 409: f"runner {runner_id} has no enrolled token"},
     )
     body = resp.json()
     cli.show_lines(body, f"revoked {runner_id}'s token — enroll it to mint a fresh one")

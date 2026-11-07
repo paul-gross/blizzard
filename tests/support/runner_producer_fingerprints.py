@@ -1,7 +1,7 @@
 """Source-bound change detector; not a reviewed operation/refusal inventory."""
 
 FINGERPRINTS = """\
-src/blizzard/hub/api/admin_invariants.py 2 1c7aaa2f85c30b66088e2aebc6eb3a5c6ebaed3f75a09b3f909a08992b3bddcd
+src/blizzard/hub/api/admin_invariants.py 2 3b7a7969c36d6e20b5a5b84738c13f894c38329ecaa4c01d5a4b99a595e897b8
 src/blizzard/hub/api/admin_tenants.py 9 e8618655649f715899f436b63c03d2bd5d4ba7e476e782c4f8dee06409bc6e8b
 src/blizzard/hub/api/analytics.py 12 9f474da6b8d9b67ffe25884265b6df8d97318c914db64d7854c25eed0ef066de
 src/blizzard/hub/api/auth.py 5 12ac8948923033da98c0be3f084798ab23f1f1be9f9306a73736ad0eac3db863
@@ -18,7 +18,7 @@ src/blizzard/hub/api/decisions.py 6 fd54447e8983f39cb89b08b350d6aa88953ba67ee361
 src/blizzard/hub/api/egress.py 8 753e4c40f17a33497fc1746c2c7918db97f5444d133a0d213659157deadb435c
 src/blizzard/hub/api/events.py 4 959bf13106002a0bc819a66ba6cb6a5bdc191d959fc04279d46451faa586a057
 src/blizzard/hub/api/findings.py 5 23bb02fcec53ab6f5abcd73fba77dde56c32045c2b89ff7bcaf6c1e254225ab7
-src/blizzard/hub/api/flag_guard.py 1 50e9d8710d1e7f88c7d8ba332b19bb4dbc35633b866b99d837c14a8235ac98c8
+src/blizzard/hub/api/flag_guard.py 1 35a0b0c331ab08eb98d9aa0f37ae3c0ac29c2d1173b813c4a58e5f0c653fc9cc
 src/blizzard/hub/api/flags.py 1 b8966a5042c3abe58f354abebe5f9a9266af79b1f663eb9c50e523900437a25f
 src/blizzard/hub/api/fleet.py 54 1a124f247f27f69d091b7f6f45cd3e0eb972828568d22b502b5e53a8fa0dc63d
 src/blizzard/hub/api/fleet_host.py 12 045b40fb7893932edc5241c9ef70e9f4a69ff13893ddf08756fdbdc6087ba722

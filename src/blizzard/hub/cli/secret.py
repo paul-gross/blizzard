@@ -14,6 +14,7 @@ import click
 
 from blizzard.cli.config_inputs import packaged_flag_registry, strict_config
 from blizzard.cli.get_group import GetGroup
+from blizzard.cli.refusal import refusal_of
 from blizzard.hub.cli.command import FleetCommand
 from blizzard.hub.cli.context import CliContext
 from blizzard.hub.cli.views import Listing
@@ -50,7 +51,7 @@ def secret_create(cli: CliContext, name: str) -> None:
     resp = cli.send("post", "/api/secrets", json_body={"name": name, "value": value}, door=True)
     if resp.status_code == HTTPStatus.CONFLICT:
         raise click.ClickException(
-            f"{cli.detail(resp, f'secret {name} already exists')} — replace it with `secret set`"
+            f"{(refusal_of(resp).message or f'secret {name} already exists')} — replace it with `secret set`"
         )
     cli.check(resp, "POST /secrets")
     body = resp.json()
@@ -68,7 +69,7 @@ def secret_set(cli: CliContext, name: str) -> None:
     resp = cli.send("put", f"/api/secrets/{name}/value", json_body={"value": value}, door=True)
     if resp.status_code == HTTPStatus.NOT_FOUND:
         raise click.ClickException(f"unknown secret {name} — create it with `secret create`")
-    cli.check(resp, "PUT /secrets/{name}/value", on_status={409: f"secret {name} cannot be replaced"})
+    cli.check(resp, "PUT /secrets/{name}/value")
     body = resp.json()
     cli.show_lines(body, f"secret {name} set at revision {body['revision']}")
 
@@ -113,7 +114,7 @@ def secret_list(cli: CliContext, include_retired: bool) -> None:
 @click.argument("name")
 def secret_show(cli: CliContext, name: str) -> None:
     """Show NAME's metadata — revision, who replaced it and when. Never its value."""
-    body = cli.get(f"/api/secrets/{name}", "GET /secrets/{name}", on_status={404: f"unknown secret {name}"}).json()
+    body = cli.get(f"/api/secrets/{name}", "GET /secrets/{name}").json()
     state = "retired" if body["retired"] else "enabled"
     used_by = ", ".join(f"{r['kind']} {r.get('label') or r['key']}" for r in body["references"]) or "-"
     cli.show_lines(
@@ -145,7 +146,6 @@ def _set_lifecycle(cli: CliContext, name: str, *, verb: str) -> None:
     resp = cli.post(
         f"/api/secrets/{name}/{verb}",
         f"POST /secrets/{{name}}/{verb}",
-        on_status={404: f"unknown secret {name}", 409: f"secret {name} cannot be {verb}d"},
         door=True,
     )
     body = resp.json()

@@ -54,7 +54,6 @@ def invite_create(cli: CliContext, email: str, role: str, expires_in: int) -> No
         "/api/invitations",
         "POST /invitations",
         json_body={"email": email, "role": role, "expires_in": expires_in},
-        on_status={422: "invitation refused"},
     )
     body = resp.json()
     invitation = body["invitation"]
@@ -83,7 +82,6 @@ def invite_revoke(cli: CliContext, invitation_id: str) -> None:
         f"/api/invitations/{invitation_id}/revocations",
         "POST /invitations/{id}/revocations",
         json_body={},
-        on_status={404: f"no such invitation {invitation_id}", 409: "already accepted or revoked"},
     )
     body = resp.json()
     cli.show_lines(body, f"revoked invitation {body['invitation_id']} for {body['email']}")

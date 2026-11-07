@@ -50,5 +50,5 @@ def question_answer(cli: CliContext, question_id: str, answer_text: str, answere
         if "answered_by" in body:
             raise click.ClickException(f"already answered by {body['answered_by']}: {body.get('answer')!r}")
         raise click.ClickException(str(body.get("detail", "question is closed")))
-    cli.check(resp, "POST /questions/{id}/answers", on_status={404: f"unknown question {question_id}"})
+    cli.check(resp, "POST /questions/{id}/answers")
     cli.finish(resp, f"answered {question_id}: {answer_text!r} (the runner will resume the session)")

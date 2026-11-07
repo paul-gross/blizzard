@@ -202,11 +202,12 @@ an unknown present type is an unexpected refusal, not a reason to guess a known 
 Each problem carries `type`, `title`, `detail` and `instance`. Ordinarily `detail` is a string and `status`, when
 present, is a numeric HTTP status. HTTP status is authoritative. For compatibility, terminal and not-ready claim
 refusals instead carry a required string `status` describing the chunk; claim race, dependency and incompatible refusals
-omit `status` entirely, not even `null`. Tenant-required and project-required refusals retain an object-valued `detail`,
-and unknown-project refusals (an unheld `?project=`, as on `GET /api/fleet/queue/peek`) a list-valued, validation-shaped
-one. These exceptions mean the bodies are not strictly RFC 9457 compliant. Other released fields and their meanings
-remain in the response, including nullable fields. Unknown-tenant bootstrap retains the detail `no such tenant`.
-Authentication and throttling responses preserve applicable headers, including `WWW-Authenticate` and `Retry-After`.
+omit `status` entirely, not even `null`. Tenant-required, project-required and flag-off refusals retain an object-valued
+`detail`, and unknown-project refusals (an unheld `?project=`, as on `GET /api/fleet/queue/peek`) a list-valued,
+validation-shaped one. These exceptions mean the bodies are not strictly RFC 9457 compliant. Other released fields and
+their meanings remain in the response, including nullable fields. Unknown-tenant bootstrap retains the string `detail`
+the `tenant-not-found` problem in the registry names. Authentication and throttling responses preserve applicable
+headers, including `WWW-Authenticate` and `Retry-After`.
 
 Domain `422` refusals use problem media with a string detail, except the project-required and unknown-project refusals
 above; FastAPI request-validation `422` responses remain distinct, sanitized validation bodies, not problems. The legacy

@@ -6,16 +6,18 @@ from dataclasses import dataclass, field
 from http import HTTPStatus
 from pathlib import Path
 from types import TracebackType
-from typing import Any, Literal, cast
+from typing import Any, Literal
 
 import click
 
 from blizzard.cli.collaborators import CliCollaborators, Client, ClientFactory, ConnectError, HTTPError, Response
 from blizzard.cli.operator_trace import ITraceHeaders, OperatorTrace
 from blizzard.cli.param_rank import ParamSource
+from blizzard.cli.refusal import refusal_of
 from blizzard.foundation.roles import collaborator
 from blizzard.runner.host_layout import HostLayout
 from blizzard.runner.route_paths import runner_prefix
+from blizzard.wire.problem import FLAG_OFF
 
 # A machine-local round trip, so a hook-scale budget rather than the hub-client one.
 LOCAL_CLIENT_TIMEOUT = 5.0
@@ -193,26 +195,19 @@ class RunnerDaemon:
         if params is not None:
             kwargs["params"] = params
         resp = getattr(self.client, method)(path, **kwargs)
-        if resp.status_code == HTTPStatus.NOT_FOUND and _flag_off(resp):
-            raise click.ClickException(resp.json()["detail"]["message"])
+        if resp.status_code == HTTPStatus.NOT_FOUND and (words := _flag_off(resp)) is not None:
+            raise click.ClickException(words)
         resp.raise_for_status()
         return resp
 
 
-def _flag_off(resp: Response) -> bool:
-    """Whether a ``404`` is the host's ``flag_off`` refusal: the route is held behind a flag that is off."""
-    try:
-        body: object = resp.json()
-    except ValueError:
-        return False
-    if not isinstance(body, dict):
-        return False
-    body_dict = cast(dict[object, object], body)
-    detail = body_dict.get("detail")
-    if not isinstance(detail, dict):
-        return False
-    detail_dict = cast(dict[object, object], detail)
-    return detail_dict.get("code") == "flag_off" and isinstance(detail_dict.get("message"), str)
+def _flag_off(resp: Response) -> str | None:
+    """The host's own words when a ``404`` is its ``flag-off`` refusal — the route is held behind a flag that is off.
+    The host's refusal carries no ``type``, so its ``detail.code`` is read."""
+    reading = refusal_of(resp)
+    if reading.type == FLAG_OFF or (reading.type is None and reading.legacy_code == "flag_off"):
+        return reading.message
+    return None
 
 
 def _named(items: list[dict[str, Any]]) -> str:

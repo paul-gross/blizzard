@@ -5,13 +5,13 @@ from __future__ import annotations
 import os
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, cast
+from typing import TYPE_CHECKING
 
 import click
 
 from blizzard.cli.collaborators import CliCollaborators, Client, HTTPError, HTTPStatusError, Response
 from blizzard.cli.operator_trace import exit_code_of
-from blizzard.foundation.roles import dto
+from blizzard.cli.refusal import refusal_of
 from blizzard.foundation.trace_ids import DerivedContext, parse_traceparent
 
 if TYPE_CHECKING:
@@ -35,24 +35,6 @@ _SESSION_META_KEY = "blizzard.runner.worker_session"
 # A hub-proxied read travels further than a runner-local write, so the two are bounded apart.
 READ_TIMEOUT = 30.0
 WRITE_TIMEOUT = 5.0
-
-
-@dto
-@dataclass(frozen=True)
-class Problem:
-    """A rejected call's response — the ``detail`` string its JSON body carries, or ``""``."""
-
-    response: Response
-
-    @property
-    def detail(self) -> str:  # ast-grep-ignore: bzh:property-delegates
-        try:
-            body: object = self.response.json()
-        except ValueError:
-            return ""
-        body_dict = cast(dict[object, object], body) if isinstance(body, dict) else {}
-        detail = body_dict.get("detail")
-        return str(detail) if detail else ""
 
 
 class WorkerSession:
@@ -255,7 +237,7 @@ class WorkerCall:
             return resp
         except HTTPStatusError as exc:
             named = rejected or failure
-            raise click.ClickException(f"{self.verb}: {named} ({Problem(exc.response).detail or exc})") from exc
+            raise click.ClickException(f"{self.verb}: {named} ({refusal_of(exc.response).message or exc})") from exc
         except HTTPError as exc:
             raise click.ClickException(f"{self.verb}: {failure} ({exc})") from exc
 

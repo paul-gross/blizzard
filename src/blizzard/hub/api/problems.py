@@ -68,6 +68,7 @@ from blizzard.wire.chunk import (
     NoRunContextProblem,
 )
 from blizzard.wire.host import HostNameTakenProblem, HostRetiredProblem
+from blizzard.wire.invariants import InvariantsInProgressProblem
 from blizzard.wire.problem import (
     CLAIM_CONFLICT,
     CLAIM_DEPENDENCY,
@@ -78,6 +79,7 @@ from blizzard.wire.problem import (
     CLAIM_RUNNER_UNREGISTERED,
     CLAIM_RUNNER_VERSION_REFUSED,
     CLAIM_TERMINAL,
+    INVARIANTS_IN_PROGRESS,
     MALFORMED_CURSOR,
     RELEASE_REFUSAL,
     ROUTE_NOT_FOUND,
@@ -127,6 +129,7 @@ from blizzard.wire.runner import (
 )
 from blizzard.wire.system_artifact import SystemArtifactNotFoundProblem
 from blizzard.wire.tenant import (
+    NO_SUCH_TENANT,
     TenantCredentialMismatchProblem,
     TenantNotFoundProblem,
     TenantRequiredDetail,
@@ -303,7 +306,7 @@ def tenant_not_found_problem(*, instance: str) -> TenantNotFoundProblem:
     return TenantNotFoundProblem(
         type=problem_types.TENANT_NOT_FOUND,
         title="Tenant not found",
-        detail="no such tenant",
+        detail=NO_SUCH_TENANT,
         instance=instance,
         status=404,
     )
@@ -785,4 +788,14 @@ def malformed_cursor_problem(exc: MalformedCursor, *, instance: str) -> Malforme
     """Never echo the untrusted cursor in the response."""
     return MalformedCursorProblem(
         type=MALFORMED_CURSOR, title="Malformed cursor", detail="malformed cursor", instance=instance, status=422
+    )
+
+
+def invariants_in_progress_problem(*, instance: str) -> InvariantsInProgressProblem:
+    return InvariantsInProgressProblem(
+        type=INVARIANTS_IN_PROGRESS,
+        title="Invariant check in progress",
+        detail="another invariant check is running — try again when it finishes",
+        instance=instance,
+        status=409,
     )

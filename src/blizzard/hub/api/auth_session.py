@@ -57,7 +57,7 @@ from blizzard.hub.composition import HubServices, TenantServices
 from blizzard.hub.config import AUTH_MODE_NONE
 from blizzard.hub.tenancy import StoreScope, TenantClosed, TenantId, UnknownTenant
 from blizzard.wire.auth import AuthenticationUnresolvedProblem
-from blizzard.wire.tenant import TenantNotFoundProblem
+from blizzard.wire.tenant import NO_SUCH_TENANT, TenantNotFoundProblem
 
 SESSION_COOKIE_NAME = "bz_session"
 
@@ -86,7 +86,7 @@ OPERATOR = "operator"
 
 #: One body for a tenant that does not exist and one the caller cannot enter, so the two are
 #: indistinguishable.
-_NO_SUCH_TENANT = "no such tenant"
+_NO_SUCH_TENANT = NO_SUCH_TENANT
 
 #: Whoever a request's tenant was resolved for: a person, a runner, or a runner host.
 Principal = ResolvedIdentity | RunnerPrincipal | HostPrincipal

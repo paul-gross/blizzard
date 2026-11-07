@@ -145,15 +145,6 @@ def test_check_falls_back_to_a_generic_message_when_the_403_body_has_no_detail()
     assert exc_info.value.message == "forbidden"
 
 
-def test_check_a_named_on_status_entry_still_wins_over_the_bare_403_branch() -> None:
-    resp = _response(403, None)
-
-    with pytest.raises(click.ClickException) as exc_info:
-        _CTX.check(resp, "GET /x", on_status={403: "named fallback"})
-
-    assert exc_info.value.message == "named fallback"
-
-
 def test_check_leaves_a_200_alone() -> None:
     _CTX.check(_response(200), "GET /x")  # must not raise
 

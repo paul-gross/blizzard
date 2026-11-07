@@ -93,7 +93,7 @@ def traces_replay(cli: CliContext, since: datetime, until: datetime, dry_run: bo
                 f"before it stopped){resume}"
             )
         try:
-            cli.check(resp, "POST /traces/replay", on_status={409: "tracing is off", 422: "window refused"})
+            cli.check(resp, "POST /traces/replay")
         except click.ClickException as exc:
             raise click.ClickException(f"{exc.message} (window {number} of {len(windows)}){resume}") from exc
         result = resp.json()

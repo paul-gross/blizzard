@@ -23,6 +23,7 @@ from blizzard.runner.host_layout import HostLayout
 from blizzard.runner.status.invariants import HostInvariantCheck
 from blizzard.runner.store import schema as runner_schema
 from blizzard.tools.invariants import runner_invariants
+from blizzard.wire.problem import INVARIANTS_IN_PROGRESS
 from tests.support.config_inputs import create_runner_app
 from tests.support.host_files import one_workspace
 from tests.support.runner_fakes import FIXTURE_RUNNER_ID, FakeProbe, migrated_store_at
@@ -135,7 +136,16 @@ def test_a_hub_check_while_another_runs_answers_409(hub: HubHarness, monkeypatch
         held.release.set()
         running.join(timeout=10)
 
-    assert (refused.status_code, refused.json()) == (409, {"code": "invariants_in_progress"})
+    assert refused.status_code == 409
+    assert refused.headers["content-type"] == "application/problem+json"
+    assert refused.json() == {
+        "type": INVARIANTS_IN_PROGRESS,
+        "title": "Invariant check in progress",
+        "detail": "another invariant check is running — try again when it finishes",
+        "instance": _HUB_ROUTE,
+        "status": 409,
+        "code": "invariants_in_progress",
+    }
     assert hub.client.get(_HUB_ROUTE, headers=headers).status_code == 200
 
 

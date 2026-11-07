@@ -117,6 +117,8 @@ def test_problem_registry_has_unique_stable_uris() -> None:
         "SSO_REFUSED": "urn:blizzard:problem:sso-refused",
         "PROJECT_REQUIRED": "urn:blizzard:problem:project-required",
         "HUB_STORE_UNAVAILABLE": "urn:blizzard:problem:hub-store-unavailable",
+        "FLAG_OFF": "urn:blizzard:problem:flag-off",
+        "INVARIANTS_IN_PROGRESS": "urn:blizzard:problem:invariants-in-progress",
     }
     constants = {name: value for name, value in vars(registry).items() if name.isupper() and isinstance(value, str)}
     assert constants == expected

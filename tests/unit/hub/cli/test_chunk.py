@@ -646,9 +646,9 @@ def test_depend_refuses_an_ephemeral_prerequisite() -> None:
     assert "ephemeral" in result.output
 
 
-def test_depend_maps_404_naming_both_chunks() -> None:
+def test_depend_shows_the_hubs_404_naming_both_chunks() -> None:
     def fake_post(url: str, *, json: object, timeout: float) -> _FakeResponse:
-        return _FakeResponse(404, {})
+        return _FakeResponse(404, {"detail": "unknown chunk ch_1 or ch_2"})
 
     bound = bind_stubs(post=fake_post)
     result = bound.runner.invoke(hub_group, ["chunk", "depend", "ch_1", "ch_2"])
@@ -713,15 +713,15 @@ def test_release_dependency_refuses_when_no_edge_stands() -> None:
     assert "ch_2" in result.output
 
 
-def test_release_dependency_maps_404() -> None:
+def test_release_dependency_shows_the_hubs_404() -> None:
     def fake_post(url: str, *, json: object, timeout: float) -> _FakeResponse:
-        return _FakeResponse(404, {})
+        return _FakeResponse(404, {"detail": "no dependency of ch_1 on ch_2"})
 
     bound = bind_stubs(post=fake_post)
     result = bound.runner.invoke(hub_group, ["chunk", "release-dependency", "ch_1", "ch_2"])
 
     assert result.exit_code != 0
-    assert "ch_1" in result.output
+    assert "no dependency of ch_1 on ch_2" in result.output
 
 
 def test_chunk_list_marks_a_blocked_chunk() -> None:

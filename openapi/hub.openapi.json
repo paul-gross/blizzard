@@ -11550,6 +11550,52 @@
         "title": "InvariantViolation",
         "type": "object"
       },
+      "InvariantsInProgressProblem": {
+        "additionalProperties": true,
+        "description": "Another invariant check is running on this hub. ``code`` is the released body's only member, kept beside the\nproblem members for a client before problem details.",
+        "properties": {
+          "code": {
+            "const": "invariants_in_progress",
+            "default": "invariants_in_progress",
+            "title": "Code",
+            "type": "string"
+          },
+          "detail": {
+            "title": "Detail",
+            "type": "string"
+          },
+          "instance": {
+            "title": "Instance",
+            "type": "string"
+          },
+          "status": {
+            "anyOf": [
+              {
+                "type": "integer"
+              }
+            ],
+            "title": "Status"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          },
+          "type": {
+            "const": "urn:blizzard:problem:invariants-in-progress",
+            "title": "Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "type",
+          "title",
+          "detail",
+          "instance",
+          "code"
+        ],
+        "title": "InvariantsInProgressProblem",
+        "type": "object"
+      },
       "InvariantsResponse": {
         "properties": {
           "violations": {
@@ -12169,7 +12215,7 @@
         "type": "object"
       },
       "MeResponse": {
-        "description": "The resolved identity's wire view. ``role`` and ``permissions`` are those of the tenant\nthe request resolves \u2014 the one ``X-Blizzard-Tenant`` names among ``tenants``, else the\ncaller's only membership. With no such tenant ``role`` is null and ``permissions`` holds\nonly the hub-level permissions of a hub administrator.",
+        "description": "The resolved identity's wire view. ``role`` and ``permissions`` are those of the tenant\nthe request resolves \u2014 the one ``X-Blizzard-Tenant`` names among ``tenants``, else the\ncaller's only membership. When the request resolves no tenant ``role`` is null and ``permissions`` holds\nonly the hub-level permissions of a hub administrator.",
         "properties": {
           "assignable_roles": {
             "default": [],
@@ -22519,7 +22565,14 @@
             "description": "Successful Response"
           },
           "409": {
-            "description": "Another invariant check is running on this hub: `{\"code\": \"invariants_in_progress\"}`."
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InvariantsInProgressProblem"
+                }
+              }
+            },
+            "description": "Another invariant check is running on this hub."
           }
         },
         "summary": "Hub Invariants",

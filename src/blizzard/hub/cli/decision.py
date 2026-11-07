@@ -60,7 +60,6 @@ def decision_resolve(cli: CliContext, decision_id: str, choice: str, resolved_by
     cli.check(
         resp,
         "POST /decisions/{id}/resolutions",
-        on_status={404: f"no such decision {decision_id}", 400: "invalid choice", 422: "invalid choice"},
     )
     body = resp.json()
     override = " — overrode red checks" if body.get("overrode_red_checks") else ""

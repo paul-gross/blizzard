@@ -182,7 +182,7 @@ def _ask_hub(ctx: click.Context, client_factory: ClientFactory, hub_url: str) ->
     cli = CliContext.of(hub_url, session, OperatorTrace.source(ctx), client_factory)
     try:
         resp = cli.send("get", _HUB_PATH, timeout=CHECK_TIMEOUT)
-        cli.check(resp, "check-invariants", on_status={HTTPStatus.CONFLICT: _RUNNING})
+        cli.check(resp, "check-invariants")
         return _violations(resp.json())
     except click.ClickException as exc:
         raise click.ClickException(f"{where}: {exc.message}") from exc

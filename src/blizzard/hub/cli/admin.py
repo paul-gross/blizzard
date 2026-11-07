@@ -37,7 +37,6 @@ def admin_grant(cli: CliContext, user_id: str) -> None:
     resp = cli.put(
         f"/api/admin/hub-admins/{user_id}",
         "PUT /admin/hub-admins/{user_id}",
-        on_status={404: f"no such user {user_id}"},
     )
     body = resp.json()
     cli.show_lines(body, f"{body['user_id']} ({body['username']}) is a hub administrator")
@@ -50,6 +49,5 @@ def admin_revoke(cli: CliContext, user_id: str) -> None:
     cli.delete(
         f"/api/admin/hub-admins/{user_id}",
         "DELETE /admin/hub-admins/{user_id}",
-        on_status={404: f"no such user {user_id}", 409: "refused"},
     )
     cli.show_lines({"user_id": user_id, "revoked": True}, f"{user_id} is not a hub administrator")

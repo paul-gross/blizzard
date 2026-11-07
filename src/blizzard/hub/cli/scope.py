@@ -59,9 +59,7 @@ def scope_list(cli: CliContext, project: str | None) -> None:
 @project_option(required_by_hub=True)
 def scope_show(cli: CliContext, slug: str, project: str | None) -> None:
     """Show SLUG's record — state, description, revision, and when it was created."""
-    body = cli.get(
-        project_path(project, f"/scopes/{slug}"), "GET /scopes/{slug}", on_status={404: f"unknown scope {slug}"}
-    ).json()
+    body = cli.get(project_path(project, f"/scopes/{slug}"), "GET /scopes/{slug}").json()
     state = "retired" if body["retired"] else "enabled"
     cli.show_lines(
         body,
@@ -82,7 +80,6 @@ def scope_edit(cli: CliContext, slug: str, description: str, project: str | None
         project_path(project, f"/scopes/{slug}"),
         "PATCH /scopes/{slug}",
         json_body={"description": description},
-        on_status={404: f"unknown scope {slug}"},
         door=True,
     )
     body = resp.json()
@@ -112,7 +109,6 @@ def _set_scope_lifecycle(cli: CliContext, slug: str, *, verb: str, by: str, proj
         project_path(project, f"/scopes/{slug}/{verb}"),
         f"POST /scopes/{{slug}}/{verb}",
         json_body={"by": by},
-        on_status={404: f"unknown scope {slug}"},
         door=True,
     )
     body = resp.json()

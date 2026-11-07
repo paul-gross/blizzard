@@ -102,7 +102,7 @@ def graph_list(cli: CliContext) -> None:
 @click.argument("graph_id")
 def graph_show(cli: CliContext, graph_id: str) -> None:
     """One graph's full reified definition — session pools, nodes, and edges."""
-    resp = cli.get(f"/api/graphs/{graph_id}", "GET /graphs/{id}", on_status={404: f"unknown graph {graph_id}"})
+    resp = cli.get(f"/api/graphs/{graph_id}", "GET /graphs/{id}")
     body = resp.json()
     cli.show(body, GraphDetail(body))
 
@@ -176,7 +176,6 @@ def graph_follow_latest(cli: CliContext, graph_id: str, value: str) -> None:
         f"/api/graphs/{graph_id}",
         "PATCH /graphs/{id}",
         json_body={"follow_latest": follow_latest},
-        on_status={404: f"unknown graph {graph_id}"},
     )
     body = resp.json()
     stored = body.get("follow_latest")
@@ -189,7 +188,6 @@ def _set_graph_lifecycle(cli: CliContext, graph_id: str, *, verb: str) -> None:
         f"/api/graphs/{graph_id}/{verb}",
         f"POST /graphs/{{id}}/{verb}",
         json_body={},
-        on_status={404: f"unknown graph {graph_id}"},
     )
     body = resp.json()
     state = "retired" if body.get("retired") else "enabled"

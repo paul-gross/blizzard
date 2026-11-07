@@ -12,7 +12,9 @@ from fastapi import Depends, Request, status
 from fastapi.responses import JSONResponse
 
 from blizzard.foundation.flags import FlagOffError, Flags
-from blizzard.wire.flags import FlagOff, FlagOffResponse
+from blizzard.hub.api.problem_rendering import problem_response
+from blizzard.wire.flags import FlagOff, FlagOffProblem, FlagOffResponse
+from blizzard.wire.problem import FLAG_OFF
 
 
 def flag_guard(
@@ -31,6 +33,15 @@ def flag_guard(
 
 
 def refuse_flag_off(request: Request, exc: Exception) -> JSONResponse:
-    """Answer a held route while its flag is off: ``404`` with the code ``flag_off`` naming the flag."""
+    """Answer a held route while its flag is off: a ``404`` problem whose ``detail`` is the
+    ``flag_off`` object naming the flag."""
     assert isinstance(exc, FlagOffError)
-    return JSONResponse(status_code=status.HTTP_404_NOT_FOUND, content={"detail": FlagOff.of(exc.flag).model_dump()})
+    return problem_response(
+        FlagOffProblem(
+            type=FLAG_OFF,
+            title="Not available yet",
+            detail=FlagOff.of(exc.flag),
+            instance=request.url.path,
+            status=status.HTTP_404_NOT_FOUND,
+        )
+    )

@@ -142,9 +142,7 @@ def test_queue_move_reports_409_when_chunk_is_not_ready() -> None:
     assert "not in the ready list" in result.output
 
 
-def test_queue_move_falls_back_to_the_updated_both_lists_refusal_when_the_body_names_no_detail() -> None:
-    # When a 409 body carries no ``detail``, the CLI's own ``on_status`` fallback is
-    # what the operator sees — proven here to name both lists, independent of the body.
+def test_queue_move_reports_the_failed_operation_when_the_body_names_no_detail() -> None:
     def fake_get(url: str, *, timeout: float, params: object | None = None) -> _FakeResponse:
         return _queue_response(["ch_a", "ch_b"])
 
@@ -156,8 +154,7 @@ def test_queue_move_falls_back_to_the_updated_both_lists_refusal_when_the_body_n
     result = bound.runner.invoke(hub_group, ["queue", "move", "ch_a", "0"])
 
     assert result.exit_code != 0
-    assert "not in the ready list" in result.output
-    assert "not_ready backlog" in result.output
+    assert "POST /queue/position failed:" in result.output
 
 
 def test_queue_set_reports_409_when_a_named_chunk_is_not_ready() -> None:
@@ -172,7 +169,7 @@ def test_queue_set_reports_409_when_a_named_chunk_is_not_ready() -> None:
     assert "not in the ready list" in result.output
 
 
-def test_queue_set_falls_back_to_the_updated_both_lists_refusal_when_the_body_names_no_detail() -> None:
+def test_queue_set_reports_the_failed_operation_when_the_body_names_no_detail() -> None:
     def fake_put(url: str, *, json: object, timeout: float) -> _FakeResponse:
         return _FakeResponse(409, {})
 
@@ -181,8 +178,7 @@ def test_queue_set_falls_back_to_the_updated_both_lists_refusal_when_the_body_na
     result = bound.runner.invoke(hub_group, ["queue", "set", "ch_a"])
 
     assert result.exit_code != 0
-    assert "not in the ready list" in result.output
-    assert "not_ready backlog" in result.output
+    assert "PUT /queue failed:" in result.output
 
 
 def test_queue_show_marks_a_blocked_entry() -> None:

@@ -79,7 +79,7 @@ def egress_reset(cli: CliContext, dataset: str, to: datetime) -> None:
     writing its rows again to new files. The move is recorded as an egress-cursor-reset event."""
     body = {"dataset": dataset, "to": iso_utc(to.astimezone(UTC))}
     resp = cli.send("post", "/api/egress/reset", json_body=body)
-    cli.check(resp, "POST /egress/reset", on_status={409: "the egress export is not configured", 422: "reset refused"})
+    cli.check(resp, "POST /egress/reset")
     result = resp.json()
     was = result["from_at"] or "no cursor yet"
     cli.show_lines(
@@ -107,9 +107,7 @@ def egress_backfill(cli: CliContext, since: datetime, until: datetime, dataset: 
         raise click.ClickException(
             f"{failure['detail']} ({failure['cause']}; committed {placed or 'nothing'} before it stopped)"
         )
-    cli.check(
-        resp, "POST /egress/backfill", on_status={409: "the egress export is not configured", 422: "window refused"}
-    )
+    cli.check(resp, "POST /egress/backfill")
     result = resp.json()
     verb = "would write" if dry_run else "wrote"
     lines = [f"{verb} {c['rows']} {c['dataset']} rows in {c['files']} files" for c in result["datasets"]]

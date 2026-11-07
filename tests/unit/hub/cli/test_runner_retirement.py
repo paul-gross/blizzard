@@ -75,14 +75,14 @@ def test_reinstate_posts_by_and_reports_it() -> None:
     assert "reinstated" in result.output
 
 
-def test_revoke_token_posts_a_revocation_and_maps_an_unenrolled_runner() -> None:
+def test_revoke_token_posts_a_revocation_and_shows_the_hubs_unenrolled_refusal() -> None:
     bound, calls = _stub("post", _FakeResponse(201, {"runner": {"runner_id": "runner-a", "retired": False}}))
     ok = bound.runner.invoke(hub_group, ["runner", "revoke-token", "runner-a"], env=_ENV)
     assert ok.exit_code == 0, ok.output
     assert calls[0]["url"].endswith("/api/runners/runner-a/token-revocations")
     assert "revoked" in ok.output
 
-    bound, _ = _stub("post", _FakeResponse(409))
+    bound, _ = _stub("post", _FakeResponse(409, {"detail": "runner runner-a has no enrolled token"}))
     refused = bound.runner.invoke(hub_group, ["runner", "revoke-token", "runner-a"], env=_ENV)
     assert refused.exit_code != 0
     assert "no enrolled token" in refused.output

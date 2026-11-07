@@ -11,6 +11,7 @@ import click
 
 from blizzard.cli.collaborators import Response
 from blizzard.cli.config_inputs import packaged_flag_registry, strict_config
+from blizzard.cli.refusal import refusal_of
 from blizzard.hub.cli.command import FleetCommand
 from blizzard.hub.cli.context import CliContext, RawBody
 from blizzard.hub.cli.project_option import project_option, project_query
@@ -56,10 +57,8 @@ class ValidationEntry(TypedDict):
 def _refusal(cli: CliContext, resp: Response) -> str:
     """The hub's refusal, each validation entry located by its path inside the document
     (``work_sources.1.provider: …``)."""
-    try:
-        detail = resp.json().get("detail")
-    except ValueError:
-        detail = None
+    reading = refusal_of(resp)
+    detail = reading.detail
     if isinstance(detail, list):
         lines: list[str] = []
         for entry in cast(list[ValidationEntry], detail):
@@ -67,7 +66,7 @@ def _refusal(cli: CliContext, resp: Response) -> str:
             at = f" (line {entry.get('line')}, column {entry['column']})" if entry.get("line") is not None else ""
             lines.append(f"{where}: {entry['msg']}{at}" if where else f"{entry['msg']}{at}")
         return "; ".join(lines)
-    return cli.detail(resp, f"refused with {resp.status_code}")
+    return reading.message or f"refused with {resp.status_code}"
 
 
 @click.group("config")

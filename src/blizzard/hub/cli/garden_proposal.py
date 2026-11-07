@@ -78,14 +78,9 @@ def garden_proposal_show(cli: CliContext, proposal_id: str) -> None:
     resp = cli.get(
         f"/api/garden-proposals/{proposal_id}",
         "GET /garden-proposals/{id}",
-        on_status={404: f"unknown garden proposal {proposal_id}"},
     )
     body = resp.json()
     cli.show(body, GardenProposalDetail(body))
-
-
-def _already_closed_fallback(proposal_id: str) -> str:
-    return f"garden proposal {proposal_id} already carries a closure"
 
 
 @garden_proposal_group.command("pass", cls=FleetCommand)
@@ -100,11 +95,6 @@ def garden_proposal_pass(cli: CliContext, proposal_id: str, reason: str) -> None
         f"/api/garden-proposals/{proposal_id}/pass",
         "POST /garden-proposals/{id}/pass",
         json_body={"reason": reason},
-        on_status={
-            404: f"unknown garden proposal {proposal_id}",
-            409: _already_closed_fallback(proposal_id),
-            422: "passing a garden proposal requires a reason",
-        },
     )
     body = resp.json()
     cli.show(body, GardenProposalDetail(body))
@@ -142,7 +132,6 @@ def garden_proposal_accept(
         f"/api/garden-proposals/{proposal_id}/accept",
         "POST /garden-proposals/{id}/accept",
         json_body=json_body,
-        on_status={404: f"unknown garden proposal {proposal_id}", 409: _already_closed_fallback(proposal_id)},
     )
     body = resp.json()
     cli.show(body, GardenProposalDetail(body))
@@ -198,7 +187,6 @@ def garden_proposal_edit(
         f"/api/garden-proposals/{proposal_id}",
         "PATCH /garden-proposals/{id}",
         json_body=json_body,
-        on_status={404: f"unknown garden proposal {proposal_id}", 409: _already_closed_fallback(proposal_id)},
     )
     body_json = resp.json()
     cli.show(body_json, GardenProposalDetail(body_json))
@@ -214,7 +202,6 @@ def garden_proposal_attach(cli: CliContext, proposal_id: str, finding_ids: tuple
         f"/api/garden-proposals/{proposal_id}/attach",
         "POST /garden-proposals/{id}/attach",
         json_body={"findings": list(finding_ids)},
-        on_status={404: f"unknown garden proposal {proposal_id}", 409: _already_closed_fallback(proposal_id)},
     )
     body_json = resp.json()
     cli.show(body_json, GardenProposalDetail(body_json))
@@ -230,7 +217,6 @@ def garden_proposal_detach(cli: CliContext, proposal_id: str, finding_ids: tuple
         f"/api/garden-proposals/{proposal_id}/detach",
         "POST /garden-proposals/{id}/detach",
         json_body={"findings": list(finding_ids)},
-        on_status={404: f"unknown garden proposal {proposal_id}", 409: _already_closed_fallback(proposal_id)},
     )
     body_json = resp.json()
     cli.show(body_json, GardenProposalDetail(body_json))

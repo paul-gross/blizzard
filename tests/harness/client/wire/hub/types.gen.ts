@@ -6621,6 +6621,40 @@ export type InvariantViolation = {
 };
 
 /**
+ * InvariantsInProgressProblem
+ *
+ * Another invariant check is running on this hub. ``code`` is the released body's only member, kept beside the
+ * problem members for a client before problem details.
+ */
+export type InvariantsInProgressProblem = {
+    /**
+     * Code
+     */
+    code: 'invariants_in_progress';
+    /**
+     * Detail
+     */
+    detail: string;
+    /**
+     * Instance
+     */
+    instance: string;
+    /**
+     * Status
+     */
+    status?: number;
+    /**
+     * Title
+     */
+    title: string;
+    /**
+     * Type
+     */
+    type: 'urn:blizzard:problem:invariants-in-progress';
+    [key: string]: unknown;
+};
+
+/**
  * InvariantsResponse
  */
 export type InvariantsResponse = {
@@ -7062,7 +7096,7 @@ export type MalformedCursorProblem = {
  *
  * The resolved identity's wire view. ``role`` and ``permissions`` are those of the tenant
  * the request resolves — the one ``X-Blizzard-Tenant`` names among ``tenants``, else the
- * caller's only membership. With no such tenant ``role`` is null and ``permissions`` holds
+ * caller's only membership. When the request resolves no tenant ``role`` is null and ``permissions`` holds
  * only the hub-level permissions of a hub administrator.
  */
 export type MeResponse = {
@@ -13272,10 +13306,12 @@ export type HubInvariantsApiAdminInvariantsGetData = {
 
 export type HubInvariantsApiAdminInvariantsGetErrors = {
     /**
-     * Another invariant check is running on this hub: `{"code": "invariants_in_progress"}`.
+     * Another invariant check is running on this hub.
      */
-    409: unknown;
+    409: InvariantsInProgressProblem;
 };
+
+export type HubInvariantsApiAdminInvariantsGetError = HubInvariantsApiAdminInvariantsGetErrors[keyof HubInvariantsApiAdminInvariantsGetErrors];
 
 export type HubInvariantsApiAdminInvariantsGetResponses = {
     /**

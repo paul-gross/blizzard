@@ -36,7 +36,6 @@ def tenant_create(cli: CliContext, name: str, admin_user_id: str | None) -> None
         "/api/admin/tenants",
         "POST /admin/tenants",
         json_body={"name": name, "admin_user_id": admin_user_id},
-        on_status={404: f"no such user {admin_user_id}", 422: "name refused"},
         door=True,
     )
     body = resp.json()
@@ -60,7 +59,6 @@ def tenant_rename(cli: CliContext, tenant_id: str, name: str) -> None:
         f"/api/admin/tenants/{tenant_id}",
         "PATCH /admin/tenants/{id}",
         json_body={"name": name},
-        on_status={404: f"no such tenant {tenant_id}", 422: "name refused"},
     )
     body = resp.json()
     cli.show_lines(body, f"tenant {body['tenant_id']} is now named {body['name']}")
@@ -86,10 +84,6 @@ def tenant_delete(cli: CliContext, tenant_id: str, yes: bool) -> None:
     cli.check(
         resp,
         "DELETE /admin/tenants/{id}",
-        on_status={
-            404: f"no such tenant {tenant_id}",
-            409: "the hub's only open tenant cannot be deleted",
-        },
     )
     body = resp.json()
     if resp.status_code == HTTPStatus.ACCEPTED:

@@ -39,6 +39,7 @@ from blizzard.wire.chunk import (
     NoRunContextProblem,
 )
 from blizzard.wire.host import HostNameTakenProblem, HostRetiredProblem
+from blizzard.wire.invariants import InvariantsInProgressProblem
 from blizzard.wire.problem import (
     HubStoreUnavailableProblem,
 )
@@ -346,6 +347,9 @@ FEDERATION_DECLARATIONS = (
     ProblemDeclaration("GET", "/api/auth/{name}/callback", 400, SsoRefusedProblem),
 )
 
+# The hub administrator's invariant check, which the operator CLI calls.
+ADMIN_DECLARATIONS = (ProblemDeclaration("GET", "/api/admin/invariants", 409, InvariantsInProgressProblem),)
+
 HUB_PROBLEM_DECLARATIONS = (
     *PROXY_RESOURCE_DECLARATIONS,
     *ROUTINE_RESOURCE_DECLARATIONS,
@@ -353,6 +357,7 @@ HUB_PROBLEM_DECLARATIONS = (
     *BOOTSTRAP_DEPENDENCY_DECLARATIONS,
     *HUB_DEPENDENCY_DECLARATIONS,
     *FEDERATION_DECLARATIONS,
+    *ADMIN_DECLARATIONS,
 )
 
 

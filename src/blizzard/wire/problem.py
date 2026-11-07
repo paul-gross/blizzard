@@ -79,6 +79,8 @@ LOGIN_FAILED: Final = "urn:blizzard:problem:login-failed"
 SSO_REFUSED: Final = "urn:blizzard:problem:sso-refused"
 PROJECT_REQUIRED: Final = "urn:blizzard:problem:project-required"
 HUB_STORE_UNAVAILABLE: Final = "urn:blizzard:problem:hub-store-unavailable"
+FLAG_OFF: Final = "urn:blizzard:problem:flag-off"
+INVARIANTS_IN_PROGRESS: Final = "urn:blizzard:problem:invariants-in-progress"
 
 PROBLEM_TYPES: frozenset[str] = frozenset(
     {
@@ -143,6 +145,8 @@ PROBLEM_TYPES: frozenset[str] = frozenset(
         SSO_REFUSED,
         PROJECT_REQUIRED,
         HUB_STORE_UNAVAILABLE,
+        FLAG_OFF,
+        INVARIANTS_IN_PROGRESS,
     }
 )
 

@@ -37,7 +37,7 @@ def test_a_409_surfaces_the_servers_detail() -> None:
     assert "reopen it before" in result.output
 
 
-def test_a_409_without_a_detail_falls_back_to_the_verb() -> None:
+def test_a_409_without_a_detail_reports_the_failed_operation() -> None:
     def fake_post(url: str, *, json: object, timeout: float) -> _FakeResponse:
         return _FakeResponse(409)
 
@@ -45,4 +45,4 @@ def test_a_409_without_a_detail_falls_back_to_the_verb() -> None:
     result = bound.runner.invoke(hub_group, ["finding", "reopen", "fin_1", "--note", "n"])
 
     assert result.exit_code != 0
-    assert "'reopen' is not legal" in result.output
+    assert "POST /findings/reopen failed:" in result.output

@@ -128,9 +128,9 @@ def test_scope_enable_posts_to_the_enable_endpoint() -> None:
     assert "enabled" in result.output
 
 
-def test_scope_retire_maps_an_unknown_scope() -> None:
+def test_scope_retire_shows_the_hubs_unknown_scope_refusal() -> None:
     def fake_post(url: str, *, json: object, timeout: float, headers: dict[str, str] | None = None) -> _FakeResponse:
-        return _FakeResponse(404)
+        return _FakeResponse(404, {"detail": "unknown scope ghost"})
 
     bound = bind_stubs(post=fake_post)
     result = bound.runner.invoke(hub_group, ["scope", "retire", "ghost"])
@@ -160,9 +160,9 @@ def test_scope_show_prints_the_whole_record() -> None:
     assert "created t0" in result.output
 
 
-def test_scope_show_maps_an_unknown_scope() -> None:
+def test_scope_show_shows_the_hubs_unknown_scope_refusal() -> None:
     def fake_get(url: str, *, timeout: float) -> _FakeResponse:
-        return _FakeResponse(404)
+        return _FakeResponse(404, {"detail": "unknown scope no-such"})
 
     bound = bind_stubs(get=fake_get)
     result = bound.runner.invoke(hub_group, ["scope", "get", "no-such"])

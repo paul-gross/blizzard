@@ -2,7 +2,8 @@
 
 HANDLERS = set(
     """\
-blizzard.foundation.flags.flags.FlagOffError -> blizzard.hub.api.flag_guard.refuse_flag_off d4cfae6eaee3df716e2854a0e85b501a2da053f2173d4fa52dc23852aba192b8
+blizzard.foundation.flags.flags.FlagOffError -> blizzard.hub.api.flag_guard.refuse_flag_off d80393fbe43f072cef6030d6d2233a80d7566adce9b2b9b63ac6a2df88f125ce
+blizzard.foundation.flags.flags.FlagOffError -> blizzard.hub.api.flag_guard.refuse_flag_off transitive bd6b5e35ebc286239a9e826392f1d2e56e00a582713ec985f63a2f6563e1a919
 blizzard.hub.auth.memberships.MembershipRoleRefused -> blizzard.hub.api.members.refuse_membership_role c5ec0de2e41c981c628394954d27178b02f1ec0e121a94f4a2edc14bef0da5b6
 blizzard.hub.domain.config.work_sources.BuiltInWorkSource -> blizzard.hub.api.work_source_params.refuse_built_in_work_source 06d3d22277234cf8e5d83a2f040b667a254c6684a40060d2db097517a46dc8ba
 blizzard.hub.domain.projects.model.ProjectRequired -> blizzard.hub.api.project_params.refuse_project_required d5b91458019551c3d9d1218887a6d415ca44e15d52578f4273e6c6135b9acaa5
@@ -12,9 +13,9 @@ blizzard.hub.domain.runners.host.HostRetired -> blizzard.hub.app._refuse_retired
 blizzard.hub.domain.runners.registration.RunnerRetired -> blizzard.hub.app._refuse_retired_runner e477618eac8c66823e63731fb522db3d7b126a1069868157cdb57571a3639ee5
 blizzard.hub.domain.runners.registration.RunnerRetired -> blizzard.hub.app._refuse_retired_runner transitive 58afe328242a9834ad667986dd3a4e0e36b577100723621a41ebec5ef3c7c8ae
 blizzard.hub.tenancy.TenantClosed -> blizzard.hub.api.auth_session.refuse_closed_tenant 262fc047ba44d05d1b0169ff83843c4fea4de761c1d59ac14e336c92ddbf82e8
-blizzard.hub.tenancy.TenantClosed -> blizzard.hub.api.auth_session.refuse_closed_tenant transitive 7ff4289e2e4cb9d968ddbab45d676e2115237268bdab777b892204c1037b97ad
+blizzard.hub.tenancy.TenantClosed -> blizzard.hub.api.auth_session.refuse_closed_tenant transitive 7bef38e51b2b4b54364f3179d3f3697443e58de442e630bce641dccba53c300b
 blizzard.hub.tenancy.UnknownTenant -> blizzard.hub.api.auth_session.refuse_closed_tenant 262fc047ba44d05d1b0169ff83843c4fea4de761c1d59ac14e336c92ddbf82e8
-blizzard.hub.tenancy.UnknownTenant -> blizzard.hub.api.auth_session.refuse_closed_tenant transitive 7ff4289e2e4cb9d968ddbab45d676e2115237268bdab777b892204c1037b97ad
+blizzard.hub.tenancy.UnknownTenant -> blizzard.hub.api.auth_session.refuse_closed_tenant transitive 7bef38e51b2b4b54364f3179d3f3697443e58de442e630bce641dccba53c300b
 builtins.Exception -> blizzard.hub.app._log_unhandled_request_error 3c9fb426644d5b065e019bc44b5a62ef1f0d4187613215789f0cada4610d8345
 builtins.Exception -> blizzard.hub.app._log_unhandled_request_error transitive 048a87f614b3110f4c354790a858a463b2b5bc21988211b6abcfc7ddf6503b1a
 fastapi.exceptions.RequestValidationError -> blizzard.hub.app._validation_error a2332f8ec524dd24029ed2dd42468c94c6d9cf041b690538b951810755fe0313

@@ -125,9 +125,9 @@ def test_graph_enable_posts_to_the_enable_endpoint() -> None:
     assert "enabled" in result.output
 
 
-def test_graph_retire_maps_an_unknown_graph() -> None:
+def test_graph_retire_shows_the_hubs_unknown_graph_refusal() -> None:
     def fake_post(url: str, *, json: object, timeout: float) -> _FakeResponse:
-        return _FakeResponse(404)
+        return _FakeResponse(404, {"detail": "unknown graph gr_ghost"})
 
     bound = bind_stubs(post=fake_post)
     result = bound.runner.invoke(hub_group, ["graph", "retire", "gr_ghost"])
@@ -241,9 +241,9 @@ def test_graph_show_surfaces_the_baked_artifact_names_only_under_json() -> None:
     assert as_json.output.index("zebra") < as_json.output.index("apple")
 
 
-def test_graph_show_maps_an_unknown_graph() -> None:
+def test_graph_show_shows_the_hubs_unknown_graph_refusal() -> None:
     def fake_get(url: str, *, timeout: float) -> _FakeResponse:
-        return _FakeResponse(404)
+        return _FakeResponse(404, {"detail": "unknown graph gr_ghost"})
 
     bound = bind_stubs(get=fake_get)
     result = bound.runner.invoke(hub_group, ["graph", "get", "gr_ghost"])
