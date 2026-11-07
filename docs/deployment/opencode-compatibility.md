@@ -174,7 +174,12 @@ This section covers OpenCode 1. OpenCode 2 admits by `ADMITTED_OPENCODE_V2_RANGE
 (`src/blizzard/runner/harness/opencode_v2/version.py`), normalized by `normalize_opencode_v2_version`; its corpus lives
 at the same `src/blizzard/runner/harness/contracts/opencode/<version>/` path with `"major_version": 2` in its manifest,
 and `tests/unit/runner/harness/opencode_v2/compatibility/test_proof.py` and
-`tests/service/harnesses/test_opencode2_compatibility_service.py` judge it.
+`tests/service/harnesses/test_opencode2_compatibility_service.py` judge it. A version an operator relies on has also
+passed OpenCode 2's release gate on a workstation running it: this proof ending `supported` or `degraded`,
+`blizzard runner selftest opencode` on the operator's service, a concurrency soak of fleet turns beside an operator
+session, and one real chunk run end to end on a local hub. Its corpus's `release-gate.json`, beside the manifest the
+proof writes, records the version, the date it passed, the model, and each check's result — the proof's classification,
+the others `passed`.
 
 This page's live diagnostic (above) runs against a version already inside the runner's admitted range —
 `ADMITTED_OPENCODE_RANGE` (`src/blizzard/runner/harness/opencode/compatibility/probe.py`), a
@@ -297,8 +302,8 @@ The output has the same line shapes as the OpenCode 1 report: one line per row, 
 - `usage_and_cost`, `pricing`, `errors_and_limits`, `model_and_variant`, `compaction` — usage is reported per session
   and per message, the model listing carries prices, unknown models and variants fail as `provider.no-route`, the model
   and variant hold, and compaction is recorded.
-- `permission_rules`, `permission_requests` — deny rules hold, `ask` requests hold their turn until answered, and forms
-  wait until they are cancelled.
+- `permission_rules`, `permission_requests` — deny rules hold, `ask` requests hold their turn until answered, a refusal
+  sent with a message fails the call with it and the turn settles, and forms wait until they are cancelled.
 - `events`, `child_agents`, `takeover` — every event carries its session id, child sessions link to their root, and
   `opencode --session <id>` continues a session.
 - `store_migration` — OpenCode 2 marks a migrated 1.x store with the `kv` key `migration.v1-v2`, and OpenCode 1 can

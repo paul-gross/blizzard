@@ -134,18 +134,21 @@ def test_operations_address_their_documented_paths_and_bodies() -> None:
     record("PUT", "/api/session/ses_a/environment", None)
     record("POST", "/api/session/ses_a/prompt", {"data": {"id": "msg_1"}})
     record("POST", "/api/session/ses_a/permission/per_1/reply", None)
+    record("POST", "/api/session/ses_a/permission/per_2/reply", None)
     record("POST", "/api/session/ses_a/model", None)
     record("PATCH", "/api/session/ses_a", None)
     client, _ = _client(service)
     client.set_environment("ses_a", {"BLIZZARD_LEASE": "l1"})
     client.prompt("ses_a", 'line one\n"quoted"', Delivery.QUEUE)
     client.reply_permission("ses_a", "per_1", PermissionDecision.ONCE)
+    client.reply_permission("ses_a", "per_2", PermissionDecision.REJECT, "carry on without it")
     client.switch_model("ses_a", ModelReference("openai", "m"))
     client.update_session("ses_a", rules=())
     assert seen == [
         ("PUT", "/api/session/ses_a/environment", {"variables": {"BLIZZARD_LEASE": "l1"}}),
         ("POST", "/api/session/ses_a/prompt", {"text": 'line one\n"quoted"', "delivery": "queue"}),
         ("POST", "/api/session/ses_a/permission/per_1/reply", {"decision": "once"}),
+        ("POST", "/api/session/ses_a/permission/per_2/reply", {"decision": "reject", "message": "carry on without it"}),
         ("POST", "/api/session/ses_a/model", {"model": {"providerID": "openai", "id": "m"}}),
         ("PATCH", "/api/session/ses_a", {"permissions": []}),
     ]

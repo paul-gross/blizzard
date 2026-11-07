@@ -30,6 +30,7 @@ from blizzard.runner.harness.opencode_v2.compatibility import script
 from blizzard.runner.harness.opencode_v2.compatibility.host import IProofHost
 from blizzard.runner.harness.opencode_v2.compatibility.rows import ProofReport, ProofRow, RowObservation
 from blizzard.runner.harness.opencode_v2.compatibility.store_migration import IStoreMigrationProbe
+from blizzard.runner.harness.opencode_v2.drive import REFUSAL_MESSAGE
 from blizzard.runner.harness.opencode_v2.driver import (
     DriverCore,
     ServiceRestartedError,
@@ -454,6 +455,13 @@ class OpenCodeTwoProof:
             facts,
         )
 
+    def _await_stopped(self, session_id: str, timeout: float = 120) -> list[JsonObject]:
+        """The session's messages once it stops running, settled or not; a turn ended with no idle never settles."""
+        deadline = time.monotonic() + timeout
+        while session_id in self.core.client.running_sessions() and time.monotonic() < deadline:
+            time.sleep(0.5)
+        return self.core.client.messages(session_id)
+
     def _await_permission(self, session_id: str, timeout: float = 120) -> list[JsonObject]:
         deadline = time.monotonic() + timeout
         while time.monotonic() < deadline:
@@ -742,9 +750,26 @@ class OpenCodeTwoProof:
         rejected = self.open("ask-reject", rules=ask)
         self.core.client.prompt(rejected, script.ASK_PROMPT)
         reject_request = self._await_permission(rejected)[0]
-        self.core.client.reply_permission(rejected, str(reject_request["id"]), PermissionDecision.REJECT)
+        self.core.client.reply_permission(
+            rejected, str(reject_request["id"]), PermissionDecision.REJECT, REFUSAL_MESSAGE
+        )
         self.await_running_then_settled(rejected, TURN_TIMEOUT_SECONDS)
         reject_held = not (self.scratch / "proof-asked").exists()
+        rejected_messages = self.core.client.messages(rejected)
+        refused = [
+            part
+            for part in tool_parts(rejected_messages, "shell")
+            if as_object(part_state(part).get("error")).get("message") == REFUSAL_MESSAGE
+        ]
+        settled = [m for m in rejected_messages if m.get("type") == "idle" and m.get("outcome") == "succeeded"]
+
+        # A refusal carrying no message: recorded so the mock's model of it is held to the corpus, not a condition of
+        # the row, since the driver never sends one.
+        declined = self.open("ask-declined", rules=ask)
+        self.core.client.prompt(declined, script.ASK_PROMPT)
+        declined_request = self._await_permission(declined)[0]
+        self.core.client.reply_permission(declined, str(declined_request["id"]), PermissionDecision.REJECT)
+        declined_messages = self._await_stopped(declined)
 
         form_session = self.open("form")
         form = self.core.client.create_form(form_session, "blizzard proof", [{"key": "answer", "type": "string"}])
@@ -752,22 +777,27 @@ class OpenCodeTwoProof:
         self.core.client.cancel_form(form_session, str(form["id"]))
         after_cancel = [f.get("id") for f in self.core.client.forms(form_session)]
         self.capture("permission_request", request)
+        self.capture("permission_rejected_messages", list[JsonValue](rejected_messages))
+        self.capture("permission_declined_messages", list[JsonValue](declined_messages))
         self.capture("form_request", form)
         facts: JsonObject = {
             "ask_waited": waited,
             "once_took_effect": took_effect,
             "reject_held": reject_held,
+            "reject_failed_the_call_and_the_turn_went_on": bool(refused) and bool(settled),
             "form_pending_until_cancelled": form.get("id") in pending and form.get("id") not in after_cancel,
         }
         ok = all(bool(value) for value in facts.values())
+        facts["bare_reject_ended_the_turn_with_no_idle"] = not any(m.get("type") == "idle" for m in declined_messages)
         return RowObservation(
             ProofRow.PERMISSION_REQUESTS,
             EvidenceState.OBSERVED if ok else EvidenceState.FAILED,
             "an `ask` raised a request that held the turn until `session.permission.reply` answered it, each reply "
-            "took effect, and a form waited until it was cancelled"
+            "took effect, a reject with a message failed the call with it and the turn settled, and a form waited "
+            "until it was cancelled"
             if ok
             else f"a request did not wait or apply: {facts}",
-            ("permission_request", "form_request"),
+            ("permission_request", "permission_rejected_messages", "permission_declined_messages", "form_request"),
             facts,
         )
 

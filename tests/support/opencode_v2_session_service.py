@@ -66,6 +66,7 @@ class SessionService:
     permissions: dict[str, list[Record]] = field(default_factory=dict[str, list[Record]])
     forms: dict[str, list[Record]] = field(default_factory=dict[str, list[Record]])
     replies: list[tuple[str, str, str]] = field(default_factory=list[tuple[str, str, str]])
+    reply_messages: dict[str, str | None] = field(default_factory=dict[str, str | None])
     interrupted: list[str] = field(default_factory=list[str])
     compactions: list[str] = field(default_factory=list[str])
     switched: list[tuple[str, object]] = field(default_factory=list[tuple[str, object]])
@@ -198,6 +199,7 @@ class SessionService:
             request_id, decision = rest[1], body["decision"]
             self.permissions[session_id] = [p for p in self.permissions.get(session_id, []) if p["id"] != request_id]
             self.replies.append((session_id, request_id, decision))
+            self.reply_messages[request_id] = body.get("message")
             if self.on_reply is not None:
                 self.on_reply(self, session_id, {"request": request_id, "decision": decision})
             return 204, None

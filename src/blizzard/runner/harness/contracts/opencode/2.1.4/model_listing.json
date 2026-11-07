@@ -2,6 +2,111 @@
   {
     "capabilities": {
       "input": [
+        "text"
+      ],
+      "output": [
+        "text"
+      ],
+      "tools": true
+    },
+    "cost": [
+      {
+        "cache": {
+          "read": 0,
+          "write": 0
+        },
+        "input": 0,
+        "output": 0
+      }
+    ],
+    "enabled": true,
+    "id": "iceman-free",
+    "limit": {
+      "context": 262144,
+      "output": 131072
+    },
+    "modelID": "iceman-free",
+    "name": "Iceman Free",
+    "package": "@opencode/ai/providers/openai-compatible",
+    "providerID": "opencode",
+    "settings": "<redacted>",
+    "status": "active",
+    "time": {
+      "released": 1793923200000
+    },
+    "variants": []
+  },
+  {
+    "capabilities": {
+      "input": [
+        "text",
+        "image"
+      ],
+      "output": [
+        "text"
+      ],
+      "temperature": true,
+      "tools": true
+    },
+    "compatibility": {
+      "reasoningField": "reasoning_content"
+    },
+    "cost": [
+      {
+        "cache": {
+          "read": 0,
+          "write": 0
+        },
+        "input": 0,
+        "output": 0
+      }
+    ],
+    "enabled": true,
+    "family": "ling",
+    "id": "inkling-2-small-free",
+    "limit": {
+      "context": 1048576,
+      "output": 131072
+    },
+    "modelID": "inkling-2-small-free",
+    "name": "Inkling 2 Small Free",
+    "package": "@opencode/ai/providers/openai-compatible",
+    "providerID": "opencode",
+    "settings": "<redacted>",
+    "status": "active",
+    "time": {
+      "released": 1793836800000
+    },
+    "variants": [
+      {
+        "id": "none",
+        "settings": "<redacted>"
+      },
+      {
+        "id": "minimal",
+        "settings": "<redacted>"
+      },
+      {
+        "id": "low",
+        "settings": "<redacted>"
+      },
+      {
+        "id": "medium",
+        "settings": "<redacted>"
+      },
+      {
+        "id": "high",
+        "settings": "<redacted>"
+      },
+      {
+        "id": "max",
+        "settings": "<redacted>"
+      }
+    ]
+  },
+  {
+    "capabilities": {
+      "input": [
         "text",
         "image",
         "video",
@@ -31,7 +136,7 @@
     },
     "modelID": "crouton-alpha-free",
     "name": "Crouton Alpha Free",
-    "package": "@opencode/ai/providers/openai-compatible",
+    "package": "@opencode/ai/providers/openai",
     "providerID": "opencode",
     "settings": "<redacted>",
     "status": "active",
@@ -57,58 +162,6 @@
       },
       {
         "id": "xhigh",
-        "settings": "<redacted>"
-      },
-      {
-        "id": "max",
-        "settings": "<redacted>"
-      }
-    ]
-  },
-  {
-    "capabilities": {
-      "input": [
-        "text",
-        "image"
-      ],
-      "output": [
-        "text"
-      ],
-      "temperature": true,
-      "tools": true
-    },
-    "cost": [
-      {
-        "cache": {
-          "read": 0,
-          "write": 0
-        },
-        "input": 0,
-        "output": 0
-      }
-    ],
-    "enabled": true,
-    "id": "pulse-alpha-free",
-    "limit": {
-      "context": 1048576,
-      "output": 131072
-    },
-    "modelID": "pulse-alpha-free",
-    "name": "Pulse Alpha Free",
-    "package": "@opencode/ai/providers/openai-compatible",
-    "providerID": "opencode",
-    "settings": "<redacted>",
-    "status": "active",
-    "time": {
-      "released": 1793577600000
-    },
-    "variants": [
-      {
-        "id": "low",
-        "settings": "<redacted>"
-      },
-      {
-        "id": "high",
         "settings": "<redacted>"
       },
       {

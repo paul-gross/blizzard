@@ -1,9 +1,9 @@
 [
   {
-    "id": "msg_1a3e7a299001JMEO4fRzGZis6l",
+    "id": "msg_1b4093fa2001TEzWS2nexFPfyt",
     "text": "Use the shell tool exactly once to run `echo $$ > proof-sleep.pid; sleep 40; echo SLEPT` and wait for it. Then reply DONE.",
     "time": {
-      "created": 1793751229130
+      "created": 1794021867504
     },
     "type": "user"
   },
@@ -11,23 +11,11 @@
     "agent": "build",
     "content": [
       {
-        "native": {
-          "itemId": "rs_030f2267eeb18bda016aea78be384887d2a586c4ca4231e31e",
-          "reasoningEncryptedContent": "gAAAAABq6njEzQHQsRkbq1HmtkumzCDPYBpPb-gK7CxV0ojLYzmOuyTw1Yur27FcM_OFi-LSSJhN5ihHnonnpfH4-i54KOe24wiav1ymdD0H5_6xStWtCtMDPABID9yrLxxk6fOwRatcl-QjnoPo2-QJF4d6KdSTTvmdqV7rIizktkZNTf0kCY2C6zUk83vmpp4-j7sce4ru5gRU1EaOp4E6rSTAkIo6DQFbrVj-k7hW-ctq5T5ncSVplTawPBj4rfzyZCfj5182BREg49bJhb4BreET-Wu-zbsGxJVoKYqmMoasihR2zogYDSreaUZTARw5F6tlc062tpq3-_ZxrJ1YRKAIjyVeSfZerby2rvGgVn06iN3a5OkvWheMa3t184k6StUc-PGnsFqtlRwUsnR1bgbrDqC6sje8TqIZFlXiynCxFK-8D1YZ5m3qnjATYEXHpDSbGWHDZ7zut2kdLuTkxRLmV8NgN-j680a37nD51i3aMd-eeENSotj05aW-R--CGCJ753pOfnsExtRhyFrSJ9kSBVX6DBpWHgITDBMlFtbp03Be-GYlVRIK8nL_juLQ9m4M7aXFQ1JQnCTSCdGrapDd-6gFP1TGV1c_8NYiPXeEYt9CsCjeTkKy3xZJMppt5UD_LC4OGtrhWNKJMP2br8lWQC8DSKYmCt-7KfId6PGmOupCIKLoBHXyQVlSU9DpTRNHB5gaDhNXxUShvAFTycHTNHvZg97TyhmpI09pvmNAxvRAYMMO2oQzlTZKYwaGxVczxwlaWfKNuuUoUEUPsNE-No7J-US3MoFQE0lbRfJPhqTXHPjcDolK_537u7vialdmp-p3gcQDLD7x9AaJ26K5hvlHGpd9CyqX3Jjb2SH0rZJAludrzsgfPkLpWPugESJAONZYZHWz6U67MpfOa2Y_yf1FD9Da5Ho_q7TJFsUsVY8tz6fMLHhfY44bDWoSdydxvd5tSqr6dSsOQbv-FQ6T-NvnAnXsJE5aZNnATCe8pzo4aUqL37bJIq82IKep-3llzwEER8cf7E6qQX30QPHGigsAq-4vGBLHAQZRfH-XlP7KPcoLJ6ZgfkclLzV6y4FUXlVT3wbqei_bIS6_yBHPfhtgOg07l99ioiCnc9Xud8x6S_mlyNwfkqIUh2KStu_mIYhWwR7yBmbjwx-Wa-DHaW9TcBjKkQdazXqx9OsXpdToHsg5G6G0-9u2gpdhpq7hOoBVeU1Zu4dxrvmMVd1I6Fdti7IpjgUInN1xW4C9JNnRuHEkFJaD8O2MOpJSkN7mXZR57hi4q35k6c9-Yu-_fCkCeqfk6crHoVlSsaRDLaAUV82sQoKfwDGKrK46pNwxuDvVV7X-OzXyUgmSbgRuKNdoJZlFEd6qfCQUYovU7OFqGEZc_Zyl4sVxDuGrr8JfDMeA97brGsnq6nBKWVxUZ2q8XzdAyqbTXzanMX0yRnxmyA-88WM9ZoI6OnCx_RBSIUm1OZFuK6szKfdtHCWl7_WLxHblCVhO4pyy7VN6dQXkV7PGHwLcx3A8eVOeaLdedKto4XIVrsPX6LiYiB7lDgY1rkMo55-LceIHb2lXwu2ZJ4bumvHOI7cTJOzYs9eaHjLgh9ZnYcbBpAb6K7AZnfRmN0a7TV7WcX7ZbQT7KkNuSc8lf1y7FkJSGxj0rHOAmbHx7DBq7A2lM_14HK9btdCi5WeqHRARHLNDFC7XHoFM787-El6JYkw0mI1OauycncTdqLHQohoHgRkXrUNspWHSqFXxglU5b-NOoxo0sZ6QUU2t128XXBZZi4z7BFrplcSZGCpLlbXYRO2arl34wKOPLQCCXIFG0TUc-A78OMnkOGzppuTViO2MMafKCGo8OA2c5cagwhVfNbuMQ309jhUe3d-tAeMDOUnyxrmxsS7f5dFF_6fIhlKyMJur96vglbfwtuUN4e1f4YyefCvUzzZFtQ=="
-        },
-        "text": "**Waiting for completion**",
-        "time": {
-          "completed": 1793751236618,
-          "created": 1793751230273
-        },
-        "type": "reasoning"
-      },
-      {
         "executed": false,
-        "id": "call_a04f11802183485c859fc91aa0fdd195",
+        "id": "call_a2138c9a5a66406aa228449ad63667a1",
         "name": "shell",
         "native": {
-          "itemId": "fc_030f2267eeb18bda016aea78c48bb087d29bc38f929b59536f"
+          "itemId": "fc_0c8ef473b5106f01016aee99ed1d0487d29c6a4275ed6101f8"
         },
         "state": {
           "error": {
@@ -39,14 +27,14 @@
             "timeout": 60000
           },
           "metadata": {
-            "shellID": "sh_1a3e7c019001vnc2S8bV06U2nK"
+            "shellID": "sh_1b409482e001KGv9YlFU52IBnJ"
           },
           "status": "error"
         },
         "time": {
-          "completed": 1793751237107,
-          "created": 1793751236620,
-          "ran": 1793751236626
+          "completed": 1794021869967,
+          "created": 1794021869150,
+          "ran": 1794021869606
         },
         "type": "tool"
       }
@@ -57,42 +45,42 @@
       "type": "aborted"
     },
     "finish": "error",
-    "id": "msg_1a3e7a2d3001pTOiUvoH7KTjZ7",
+    "id": "msg_1b4094000001NZMd7AYp5vAThm",
     "model": {
       "id": "gpt-6-luna",
       "providerID": "openai",
       "variant": "high"
     },
     "native": {
-      "responseId": "resp_030f2267eeb18bda016aea78bdbcf887d2b903758beab9adc9",
+      "responseId": "resp_0c8ef473b5106f01016aee99ec68b487d285c442c0d4ff91ff",
       "serviceTier": "default"
     },
     "snapshot": {
-      "end": "4bd21d1ac89893fbe97e1e4000df5e9912446c11",
+      "end": "6d6a043301596060bf2bbcffd63da5ba7ee635c0",
       "files": [],
-      "start": "4bd21d1ac89893fbe97e1e4000df5e9912446c11"
+      "start": "6d6a043301596060bf2bbcffd63da5ba7ee635c0"
     },
     "time": {
-      "completed": 1793751237130,
-      "created": 1793751229151,
-      "streamed": 1793751236629
+      "completed": 1794021869988,
+      "created": 1794021867546,
+      "streamed": 1794021869625
     },
     "tokens": {
       "cache": {
         "read": 0,
         "write": 0
       },
-      "input": 6567,
-      "output": 39,
-      "reasoning": 34
+      "input": 6568,
+      "output": 37,
+      "reasoning": 0
     },
     "type": "assistant"
   },
   {
-    "id": "msg_1a3e7c210001WqeCwOltsqM3t5",
+    "id": "msg_1b40949ad001YUd84kQ1kqXudg",
     "outcome": "interrupted",
     "time": {
-      "created": 1793751237136
+      "created": 1794021869997
     },
     "type": "idle"
   }

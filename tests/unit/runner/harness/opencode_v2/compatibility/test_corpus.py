@@ -4,6 +4,7 @@ corpus contract, every fixture it lists is present, and the captured shapes stil
 from __future__ import annotations
 
 import json
+from datetime import date
 from pathlib import Path
 from typing import cast
 
@@ -70,6 +71,22 @@ def test_the_manifest_meets_the_corpus_contract_and_lists_only_present_fixtures(
     assert degraded <= {row.value for row in DEGRADABLE_ROWS}
     for fixture in _objects(manifest["fixtures"]):
         assert (_directory(version) / str(fixture["path"])).is_file(), fixture
+
+
+@pytest.mark.parametrize("version", _VERSIONS)
+def test_the_release_gate_record_names_its_version_and_every_check_it_passed(version: str) -> None:
+    """The gate is run by hand on a workstation, beside the proof that writes the manifest, so its record is a file of
+    its own that no re-capture rewrites."""
+    gate = json.loads((_directory(version) / "release-gate.json").read_text())
+    manifest = _CORPUS.manifest("opencode", version)
+    assert manifest is not None
+    assert gate["version"] == version and date.fromisoformat(gate["passed_on"])
+    assert isinstance(gate["model"], str) and gate["model"]
+    checks = gate["checks"]
+    assert set(checks) == {"compatibility_proof", "selftest", "concurrency_soak", "real_chunk"}
+    classification = classification_of_manifest(manifest)
+    assert classification is not None and checks["compatibility_proof"] == classification.value
+    assert {checks[name] for name in ("selftest", "concurrency_soak", "real_chunk")} == {"passed"}
 
 
 @pytest.mark.parametrize("version", _VERSIONS)

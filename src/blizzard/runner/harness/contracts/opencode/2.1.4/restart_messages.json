@@ -1,9 +1,9 @@
 [
   {
-    "id": "msg_1a3eba290001L3I3iIM9GI9lFR",
+    "id": "msg_1b40d23c8001EMheSIourUhnYY",
     "text": "Use the shell tool exactly once to run `sleep 20; echo RESTART-SURVIVED` and wait for it. Then reply DONE.",
     "time": {
-      "created": 1793751491245
+      "created": 1794022122490
     },
     "type": "user"
   },
@@ -12,83 +12,86 @@
     "content": [
       {
         "executed": false,
-        "id": "call_1c94b46c431a4e1d920d437c2af9f51e",
+        "id": "call_0f24a40318ba4e95acd417721e98b4c7",
         "name": "shell",
         "native": {
-          "itemId": "fc_05c076ac7ab90cdd016aea79c4897087d2af1fa578dcb08e2a"
+          "itemId": "fc_0c7e23a305e43393016aee9aeb967487d2b532e65942d0a8ad"
         },
         "state": {
           "error": {
-            "message": "Command cancelled",
-            "type": "unknown"
+            "message": "Tool execution interrupted",
+            "type": "aborted"
           },
           "input": {
-            "command": "sleep 20; echo RESTART-SURVIVED",
-            "timeout": 30000
+            "command": "sleep 20; echo RESTART-SURVIVED"
           },
           "metadata": {
-            "shellID": "sh_1a3eba942001IqS5ABvdzPieJp"
+            "shellID": "sh_1b40d2976001LivheiS5O0kBly"
           },
           "status": "error"
         },
         "time": {
-          "completed": 1793751493466,
-          "created": 1793751492622,
-          "ran": 1793751492927
+          "completed": 1794022124334,
+          "created": 1794022123666,
+          "ran": 1794022123886
         },
         "type": "tool"
       }
     ],
     "cost": 0,
-    "finish": "tool-calls",
-    "id": "msg_1a3eba2b9001gB7LSvfrrU9hVQ",
+    "error": {
+      "message": "Step interrupted",
+      "type": "aborted"
+    },
+    "finish": "error",
+    "id": "msg_1b40d240c0014TgqbJhU6OWjQA",
     "model": {
       "id": "gpt-6-luna",
       "providerID": "openai",
       "variant": "high"
     },
     "native": {
-      "responseId": "resp_05c076ac7ab90cdd016aea79c3ed0c87d29fb87515c2630b8a",
+      "responseId": "resp_0c7e23a305e43393016aee9aeb0a8c87d289db649bca210f3f",
       "serviceTier": "default"
     },
     "snapshot": {
-      "end": "4bd21d1ac89893fbe97e1e4000df5e9912446c11",
+      "end": "b1471825c6e46fa7ca1355ab61aef7e1c5aad194",
       "files": [],
-      "start": "4bd21d1ac89893fbe97e1e4000df5e9912446c11"
+      "start": "b1471825c6e46fa7ca1355ab61aef7e1c5aad194"
     },
     "time": {
-      "completed": 1793751493507,
-      "created": 1793751491279,
-      "streamed": 1793751492940
+      "completed": 1794022124348,
+      "created": 1794022122533,
+      "streamed": 1794022123896
     },
     "tokens": {
       "cache": {
         "read": 6400,
         "write": 0
       },
-      "input": 162,
-      "output": 32,
+      "input": 212,
+      "output": 27,
       "reasoning": 0
     },
     "type": "assistant"
   },
   {
     "description": "Continuing after restart",
-    "id": "msg_1a3ebad39001Hj99l3518t0MeY",
+    "id": "msg_1b40d2d41001dmdsSkRZwtsB8D",
     "metadata": {
       "notice": "restart"
     },
     "text": "The server restarted while you were working. Continue from where you left off without repeating completed work.",
     "time": {
-      "created": 1793751493946
+      "created": 1794022124865
     },
     "type": "synthetic"
   },
   {
-    "id": "msg_1a3ebae3d001PvtitbGGdksmSp",
+    "id": "msg_1b40d30cf001Xq2VP8UD5hiO52",
     "outcome": "interrupted",
     "time": {
-      "created": 1793751494205
+      "created": 1794022125775
     },
     "type": "idle"
   }

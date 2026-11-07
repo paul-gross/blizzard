@@ -52,7 +52,7 @@ def test_a_step_still_running_ships_its_call_with_no_output_and_patches_it_once_
     live = next(m for m in _messages(version, "transcript_live") if m.type == "assistant")
     assert is_open(live) and shippable(live) == len(live.parts)
     made = message_turns(live)
-    assert [turn.kind for turn in made.turns] == ["tool"] and made.pending
+    assert [turn.kind for turn in made.turns if turn.kind != "thinking"] == ["tool"] and made.pending
     after = next(m for m in _messages(version, "transcript_after") if m.id == live.id)
     assert not is_open(after)
     patches, waiting = late_outputs(after, made.pending)

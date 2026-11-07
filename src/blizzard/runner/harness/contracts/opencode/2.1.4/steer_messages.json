@@ -1,9 +1,9 @@
 [
   {
-    "id": "msg_1a3e81ecd001VZh7sFeUTjdxyC",
+    "id": "msg_1b409954700106sCWKpSju67z3",
     "text": "Use the shell tool exactly once to run `echo $$ > proof-sleep.pid; sleep 40; echo SLEPT` and wait for it. Then reply DONE.",
     "time": {
-      "created": 1793751260894
+      "created": 1794021889382
     },
     "type": "user"
   },
@@ -12,10 +12,10 @@
     "content": [
       {
         "executed": false,
-        "id": "call_1792ea83bbae43b29c8626532272561f",
+        "id": "call_00d2e40c86114be9a0d0e9a3c30c72c5",
         "name": "shell",
         "native": {
-          "itemId": "fc_05dd2a2f31d06bf4016aea78df183487d2a58050b21d7bf261"
+          "itemId": "fc_04249ccf03041d7f016aee9a02864087d2b52365ab7f4072be"
         },
         "state": {
           "content": [
@@ -26,7 +26,7 @@
           ],
           "input": {
             "command": "echo $$ > proof-sleep.pid; sleep 40; echo SLEPT",
-            "timeout": 50000
+            "timeout": 60000
           },
           "metadata": {
             "exit": 0,
@@ -36,51 +36,51 @@
           "status": "completed"
         },
         "time": {
-          "completed": 1793751303797,
-          "created": 1793751263262,
-          "ran": 1793751263717
+          "completed": 1794021931022,
+          "created": 1794021890567,
+          "ran": 1794021891002
         },
         "type": "tool"
       }
     ],
     "cost": 0,
     "finish": "tool-calls",
-    "id": "msg_1a3e81ee7001NuwXildfcqAnrw",
+    "id": "msg_1b40995750010UM9mOmBhR5Ep4",
     "model": {
       "id": "gpt-6-luna",
       "providerID": "openai",
       "variant": "high"
     },
     "native": {
-      "responseId": "resp_05dd2a2f31d06bf4016aea78de883087d2a8fc5d224e890f73",
+      "responseId": "resp_04249ccf03041d7f016aee9a01f09c87d297b642135d932042",
       "serviceTier": "default"
     },
     "snapshot": {
-      "end": "4bd21d1ac89893fbe97e1e4000df5e9912446c11",
+      "end": "6d6a043301596060bf2bbcffd63da5ba7ee635c0",
       "files": [],
-      "start": "4bd21d1ac89893fbe97e1e4000df5e9912446c11"
+      "start": "6d6a043301596060bf2bbcffd63da5ba7ee635c0"
     },
     "time": {
-      "completed": 1793751303811,
-      "created": 1793751260923,
-      "streamed": 1793751263728
+      "completed": 1794021931063,
+      "created": 1794021889418,
+      "streamed": 1794021891027
     },
     "tokens": {
       "cache": {
         "read": 0,
         "write": 0
       },
-      "input": 6567,
+      "input": 6568,
       "output": 37,
       "reasoning": 0
     },
     "type": "assistant"
   },
   {
-    "id": "msg_1a3e82a92001lyFUuTwGq3RKQA",
+    "id": "msg_1b4099d25001QsFmJXDQiccEus",
     "text": "Stop what you are doing and reply with the word STEERED and nothing else.",
     "time": {
-      "created": 1793751303827
+      "created": 1794021931090
     },
     "type": "user"
   },
@@ -89,7 +89,19 @@
     "content": [
       {
         "native": {
-          "itemId": "msg_05dd2a2f31d06bf4016aea790879e487d2a624b80a44d0f15d",
+          "itemId": "rs_04249ccf03041d7f016aee9a2bcf0c87d2b69632b688d41d32",
+          "reasoningEncryptedContent": "gAAAAABq7pou6YoqH869MrnVjAzx9DtHFrRf4GvYCqfMp13a1Wqc4T-8ePY9UtiKjb0KFoQODgA_tLv12h09oLxhZjThexC-JLlsyE8ptNuX2UE08XI4F7DnUzfOiXdf9paSM-QDUxzBTJrxbX-J8Xc0J-5rYGuRSxlSKHDgMi04_oUTf4FnciZZkBG6E8R3eWVV0mqqln-CBh2P1dCxT5K7oP2z26dZRPBxZ1Co_f3HxuqEh9qFJeIjMb7_WeDpVcUZd8VMzzc6R123-I_FgPShzoncoxbUtjzc7Gu6Bea6joE5Amz2O3ufIagjqFqCNpdhfu8ZNpVTs9g8oCDf3CP_iwGjzCkirL_l7W8ZP2CiVvwdQDTuwAC5k1cLL3kw-g8URHn8RGawfkCZ00qV-sw5vfSme6Sv9VCYDk67DUZ7FWFvg3VUgc7Jd_5TKejd62g6MJJFHt_2RZWvx-AbfcF4wNUWVQYRbvPLPhEcXtvEgr0f51T_LaksD9HynpiJHxB53Nk07O7fq3N8QQcRQNN5MBzWxxUBvNnozYg-1x92LMKs0W5izsqj-uEROrWvJ3Fg-MxdVKrSp9d1XCr5qpKqYVQzgvPgqAs3dn0qvfT3EQtSNnTBsoyE3RuDoLn0s6WHLo56uwqjleRMEU1csuSGIpJNzLyHlqIbRriwr9unps3FpdXB-rodUiMMXwXaTOvIH6icXbloSJdB1NU7czWo4K4A9-vYRjdpJ3oKlgoSOQIRngEfEfckzLeKQcSa4xJRsqaoCarken31XErZUX9yflzZLNrYnPGCbsngDRpFb4xcXyaCQXRiVRkp29OxK57sAUjek2iOdOmE9O-r9mri5cyMw_1kSA4xg5qrF-1Gho-TKyzEivDaQZUCtqOovcTy_8IMt8chtyXgmtSiV8Yvt-IHJejViURX2qNVELw8sPgsepsHUqaYM8LBnjUeft7NIGyHmUld-_zyp4BKBXJCOTq7UYfVGnawDbWlXZlb_14C1e8P3QNhKwDtAPqUdtgj_2AupKcKV0ah6IgCvEA2wNroPTVsqidhru7hWOzxn2eW-D9U9TkrfRwNWF0LGzrNIw_EjBZepu5kxoBrxqWSCdLDCVbwnRpID-hXpukzLqYRaR6Ga7IKWBZokYX7pmISZqF49wNWGisiX5lrO28pG5IB2o8XyUAgJzhX8G1fU7HC3t3NrbVY-PW3FZDYMM4-86B9QrLBtXP6sCTOeRfbGPzK4_IAkzffvQsP6POVadOFRHxlaJpbGVgjlWfObeIFJKSsRe4pwRlJV2vPR3hG49vxd3Q2s7Fvm2se9v47bPzfvgbNhlZhoLjBfzSAA2YgQHEXYbpD47vJoW2ptUDFZ7zMqCKZy25r6QsyerbI9I_e0ievtFt5d_a9jXSzC6AYqJgnLMLN7vFlWDtwgeN5scd3mmq2j0AeTw9T1XIoVNyUobuSKgsMTtPRynba-Qcp8AmQVloCV6Sydo_-4hRPSOQqieY1348lxHHD48gdAkgA8TnMwsvw4WNtiyKWsNMTtedvP6oR55jXU9Y8A7NtjOURdHgjuEH-mdPmSxkK_GlfPaNCpoMwwDrA4t3HNbnIy5UUGD206BCWpS-abBqkdmCXQ3-H6uKmrMz26HOQr7nroSM0nDQfi3M6RGjI9SD1iFGec_QQsUpdHlSF6ZIwOuMJxn3p6H7RQm1uw0FAXfzTtQC7XzpfVjc0RbH9SZH_C2OYriSucQH831ZrrHyuCrfawER99zD4zYzNZABoM6syK2ab0ymhRbhujSlZn-IqdT94si_vOsOKng7KTT0rKMlLmnHx5Q=="
+        },
+        "text": "",
+        "time": {
+          "completed": 1794021934313,
+          "created": 1794021931873
+        },
+        "type": "reasoning"
+      },
+      {
+        "native": {
+          "itemId": "msg_04249ccf03041d7f016aee9a2e3d1c87d2af93354f742135f6",
           "phase": "final_answer"
         },
         "text": "STEERED",
@@ -98,42 +110,42 @@
     ],
     "cost": 0,
     "finish": "stop",
-    "id": "msg_1a3e8c6a0001DttQlXmECT4mSd",
+    "id": "msg_1b40a3861001kMpI0O5FDGFOne",
     "model": {
       "id": "gpt-6-luna",
       "providerID": "openai",
       "variant": "high"
     },
     "native": {
-      "responseId": "resp_05dd2a2f31d06bf4016aea7908103487d2b78a3e64e83ca54f",
+      "responseId": "resp_04249ccf03041d7f016aee9a2b451c87d2b74bc587f5a5bb44",
       "serviceTier": "default"
     },
     "snapshot": {
-      "end": "4bd21d1ac89893fbe97e1e4000df5e9912446c11",
+      "end": "6d6a043301596060bf2bbcffd63da5ba7ee635c0",
       "files": [],
-      "start": "4bd21d1ac89893fbe97e1e4000df5e9912446c11"
+      "start": "6d6a043301596060bf2bbcffd63da5ba7ee635c0"
     },
     "time": {
-      "completed": 1793751304642,
-      "created": 1793751303859,
-      "streamed": 1793751304629
+      "completed": 1794021934340,
+      "created": 1794021931125,
+      "streamed": 1794021934329
     },
     "tokens": {
       "cache": {
         "read": 6400,
         "write": 0
       },
-      "input": 239,
-      "output": 7,
-      "reasoning": 0
+      "input": 240,
+      "output": 9,
+      "reasoning": 12
     },
     "type": "assistant"
   },
   {
-    "id": "msg_1a3e8c9c7001qyMoDduuzgToQ2",
+    "id": "msg_1b40a450c001zxGhTX4G36EtcL",
     "outcome": "succeeded",
     "time": {
-      "created": 1793751304647
+      "created": 1794021934348
     },
     "type": "idle"
   }

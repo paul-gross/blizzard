@@ -1,6 +1,6 @@
 {
   "cost": 0,
-  "id": "ses_e390868b6b5cabf9636d61acf9",
+  "id": "ses_744cb856dcc76a136e7ab16cbf",
   "location": {
     "directory": "<scratch>/repo"
   },
@@ -8,7 +8,7 @@
     "blizzard": {
       "proof": "compatibility",
       "row": "interrupt",
-      "run": "df12f60f"
+      "run": "ad60d9e0"
     }
   },
   "model": {
@@ -26,9 +26,9 @@
   ],
   "projectID": "global",
   "time": {
-    "created": 1793751229069,
-    "idle": 1793751237136,
-    "updated": 1793751237130
+    "created": 1794021867396,
+    "idle": 1794021869997,
+    "updated": 1794021869988
   },
   "title": "blizzard compatibility proof interrupt",
   "tokens": {
@@ -36,8 +36,8 @@
       "read": 0,
       "write": 0
     },
-    "input": 6567,
-    "output": 39,
-    "reasoning": 34
+    "input": 6568,
+    "output": 37,
+    "reasoning": 0
   }
 }

@@ -1,8 +1,8 @@
 {
   "body": {
     "_tag": "SessionNotFoundError",
-    "message": "Session not found: ses_9b9247ac962fd295f714201fcf",
-    "sessionID": "ses_9b9247ac962fd295f714201fcf"
+    "message": "Session not found: ses_bf6ef74a110082c5d373c42c07",
+    "sessionID": "ses_bf6ef74a110082c5d373c42c07"
   },
   "status": 404
 }

@@ -1,0 +1,75 @@
+[
+  {
+    "id": "msg_1b40ac2ed001T467lmLIUqtMDg",
+    "text": "Use the shell tool exactly once to run `touch proof-asked`. Then reply ASKED.",
+    "time": {
+      "created": 1794021966607
+    },
+    "type": "user"
+  },
+  {
+    "agent": "build",
+    "content": [
+      {
+        "executed": false,
+        "id": "call_c729c70858314ac7b5c49b39339a2d9b",
+        "name": "shell",
+        "native": {
+          "itemId": "fc_08ddce5a9f1a7edf016aee9a4fce1487d28ff834d0247aec8b"
+        },
+        "state": {
+          "error": {
+            "message": "The user declined this tool call",
+            "type": "aborted"
+          },
+          "input": {
+            "command": "touch proof-asked"
+          },
+          "status": "error"
+        },
+        "time": {
+          "completed": 1794021968189,
+          "created": 1794021967916,
+          "ran": 1794021967994
+        },
+        "type": "tool"
+      }
+    ],
+    "cost": 0,
+    "error": {
+      "message": "Step interrupted",
+      "type": "aborted"
+    },
+    "finish": "error",
+    "id": "msg_1b40ac31c0012Rld4f1UkOQ68K",
+    "model": {
+      "id": "gpt-6-luna",
+      "providerID": "openai",
+      "variant": "high"
+    },
+    "native": {
+      "responseId": "resp_08ddce5a9f1a7edf016aee9a4f2f3487d2b31470410cfadc6a",
+      "serviceTier": "default"
+    },
+    "snapshot": {
+      "end": "6d6a043301596060bf2bbcffd63da5ba7ee635c0",
+      "files": [],
+      "start": "6d6a043301596060bf2bbcffd63da5ba7ee635c0"
+    },
+    "time": {
+      "completed": 1794021968207,
+      "created": 1794021966641,
+      "streamed": 1794021968012
+    },
+    "tokens": {
+      "cache": {
+        "read": 1792,
+        "write": 0
+      },
+      "input": 4760,
+      "output": 20,
+      "reasoning": 0
+    },
+    "type": "assistant"
+  }
+]

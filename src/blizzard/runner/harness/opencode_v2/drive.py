@@ -68,6 +68,13 @@ class _Poll:
     messages: dict[str, list[Message]] = field(default_factory=dict[str, list[Message]])
 
 
+#: What a refused call's error tells the model: a refusal sent without it ends the turn unsettled instead.
+REFUSAL_MESSAGE = (
+    "Refused: this unattended worker's autonomy does not allow this call, and no one is here to approve it. "
+    "Do not retry it; carry on without it."
+)
+
+
 def permission_reply(autonomy: Autonomy) -> PermissionDecision:
     """The answer to an ``ask`` the session's rules leave: what the operator's configuration allows or denies is
     never the driver's to widen, so ``auto`` and ``dangerous`` answer alike."""
@@ -285,7 +292,8 @@ class TurnDriver:
                 ask = parse_permission_request(raw)
                 if ask.id in self._answered:
                     continue
-                client.reply_permission(session_id, ask.id, reply)
+                message = REFUSAL_MESSAGE if reply is PermissionDecision.REJECT else None
+                client.reply_permission(session_id, ask.id, reply, message)
                 self._record(Decision("permission", session_id, ask.id, reply.value, ask.action, ask.resources))
             for raw in client.forms(session_id):
                 form = parse_form_request(raw)
@@ -398,4 +406,4 @@ class TurnDriver:
             self._done.wait(self._poll_seconds)
 
 
-__all__ = ["DEFAULT_GRACE_SECONDS", "TurnDriver", "permission_reply"]
+__all__ = ["DEFAULT_GRACE_SECONDS", "REFUSAL_MESSAGE", "TurnDriver", "permission_reply"]

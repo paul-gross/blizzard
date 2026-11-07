@@ -100,11 +100,19 @@
       "source": "live"
     },
     {
+      "path": "permission_declined_messages.json",
+      "source": "live"
+    },
+    {
       "path": "permission_denied_parts.json",
       "source": "live"
     },
     {
       "path": "permission_deny_tool_messages.json",
+      "source": "live"
+    },
+    {
+      "path": "permission_rejected_messages.json",
       "source": "live"
     },
     {
@@ -273,6 +281,8 @@
       "classification": "supported",
       "evidence": [
         "permission_request",
+        "permission_rejected_messages",
+        "permission_declined_messages",
         "form_request"
       ],
       "name": "permission_requests"

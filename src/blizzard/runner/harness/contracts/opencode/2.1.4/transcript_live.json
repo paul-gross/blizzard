@@ -1,9 +1,9 @@
 [
   {
-    "id": "msg_1a3e9db690015Qjb6wxKjvjmc8",
+    "id": "msg_1b40b4307001NLFBwBDkSn3h61",
     "text": "Use the shell tool exactly once to run `echo $$ > proof-sleep.pid; sleep 40; echo SLEPT` and wait for it. Then reply DONE.",
     "time": {
-      "created": 1793751374721
+      "created": 1794021999402
     },
     "type": "user"
   },
@@ -12,10 +12,10 @@
     "content": [
       {
         "executed": false,
-        "id": "call_13b85373594d4a8ca2585903a3101cf5",
+        "id": "call_769b684b0a6340cdbc9a64517a54a3de",
         "name": "shell",
         "native": {
-          "itemId": "fc_0fbe0c605b8a1bfc016aea7950234c87d295b55be5f1efbb00"
+          "itemId": "fc_0e13e9bf24e99ed4016aee9a709bd087d2bb595c178542e1bb"
         },
         "state": {
           "input": {
@@ -26,24 +26,24 @@
           "status": "running"
         },
         "time": {
-          "created": 1793751376163,
-          "ran": 1793751376600
+          "created": 1794022000682,
+          "ran": 1794022001094
         },
         "type": "tool"
       }
     ],
-    "id": "msg_1a3e9db8b0013LAQ5ieHMN2vRx",
+    "id": "msg_1b40b4338001tU8MehIh4zKS0s",
     "model": {
       "id": "gpt-6-luna",
       "providerID": "openai",
       "variant": "high"
     },
     "snapshot": {
-      "start": "4bd21d1ac89893fbe97e1e4000df5e9912446c11"
+      "start": "6d6a043301596060bf2bbcffd63da5ba7ee635c0"
     },
     "time": {
-      "created": 1793751374747,
-      "streamed": 1793751376623
+      "created": 1794021999439,
+      "streamed": 1794022001111
     },
     "type": "assistant"
   }
