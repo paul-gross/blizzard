@@ -71,19 +71,100 @@ describe('LensPicker', () => {
     expect(el.querySelector('[data-testid="lens-picker-back"]')?.getAttribute('href')).toBe('/board');
   });
 
-  it('returns to that view under the chosen lens', async () => {
-    const { harness, choice } = await open('/lens?from=%2Ffleet');
+  it('backs out to the exact originating location under the lens still on', async () => {
+    const from = encodeURIComponent('/board/chunk/chk_1?layout=list#x');
+    const { el } = await open(`/p/glacier/lens?from=${from}`);
 
-    choice('zeta')!.click();
-    await settle(harness.fixture);
-    expect(TestBed.inject(Router).url).toBe('/p/zeta/fleet');
+    expect(el.querySelector('[data-testid="lens-picker-back"]')?.getAttribute('href')).toBe('/p/glacier/board/chunk/chk_1?layout=list#x');
   });
 
-  it('returns to that view on All when All is chosen', async () => {
+  for (const [mount, prefix] of [['unlensed', ''], ['lensed', '/p/glacier']] as const) {
+    describe(`on the ${mount} mount`, () => {
+      const at = (from: string | null) => `${prefix}/lens${from === null ? '' : `?from=${encodeURIComponent(from)}`}`;
+
+      it('opens the chosen project on the originating view, dropping its record, query and fragment', async () => {
+        const { harness, choice } = await open(at('/board/chunk/chk_1?layout=list#x'));
+        choice('zeta')!.click();
+        await settle(harness.fixture);
+        expect(TestBed.inject(Router).url).toBe('/p/zeta/board');
+      });
+
+      it('keeps a gardening tab across a choice', async () => {
+        const { harness, choice } = await open(at('/gardening/findings/f1'));
+        choice('zeta')!.click();
+        await settle(harness.fixture);
+        expect(TestBed.inject(Router).url).toBe('/p/zeta/gardening/findings');
+      });
+
+      it('keeps an admin tab across a choice of All', async () => {
+        const { harness, choice } = await open(at('/admin/members/m1'));
+        choice('all')!.click();
+        await settle(harness.fixture);
+        expect(TestBed.inject(Router).url).toBe('/admin/members');
+      });
+
+      it('leaves the picker for the view-only URL when the project already on is chosen', async () => {
+        const { harness, choice } = await open(at('/board/chunk/chk_1'));
+        choice('glacier')!.click();
+        await settle(harness.fixture);
+        expect(TestBed.inject(Router).url).toBe('/p/glacier/board');
+      });
+
+      for (const from of [null, '', 'fleet', '//evil.example/x', '/lens', '/p/zeta/lens?from=lens']) {
+        it(`falls back to the board for a source of ${JSON.stringify(from)}`, async () => {
+          const { harness, el, choice } = await open(at(from));
+          const lensed = prefix !== '';
+          expect(el.querySelector('[data-testid="lens-picker-back"]')?.getAttribute('href')).toBe(lensed ? '/p/glacier/board' : '/board');
+          choice('zeta')!.click();
+          await settle(harness.fixture);
+          expect(TestBed.inject(Router).url).toBe('/p/zeta/board');
+        });
+      }
+    });
+  }
+
+  it('returns to the view on All when All is chosen', async () => {
     const { harness, choice } = await open('/p/glacier/lens?from=%2Fboard%3Flayout%3Dlist');
 
     choice('all')!.click();
     await settle(harness.fixture);
-    expect(TestBed.inject(Router).url).toBe('/board?layout=list');
+    expect(TestBed.inject(Router).url).toBe('/board');
+  });
+
+  it('shows All and Back with a loading line while the projects are pending', async () => {
+    stub.restore();
+    stub = stubHubClient({
+      'GET /api/me': () => OPERATOR_ME_RESPONSE,
+      'GET /api/projects': () => new Promise(() => undefined),
+    });
+    const { el } = await open('/lens');
+
+    expect(el.querySelector('[data-testid="lens-picker-loading"]')).not.toBeNull();
+    expect(el.querySelector('[data-testid="lens-picker-all"]')).not.toBeNull();
+    expect(el.querySelector('[data-testid="lens-picker-back"]')).not.toBeNull();
+  });
+
+  it('shows an error line on a failed read, and a no-projects line on an empty tenant', async () => {
+    stub.restore();
+    stub = stubHubClient({
+      'GET /api/me': () => OPERATOR_ME_RESPONSE,
+      'GET /api/projects': () => {
+        throw new Error('down');
+      },
+    });
+    const failed = await open('/lens');
+    expect(failed.el.querySelector('[data-testid="lens-picker-error"]')).not.toBeNull();
+    expect(failed.el.querySelector('[data-testid="lens-picker-all"]')).not.toBeNull();
+  });
+
+  it('shows a no-projects line on an empty tenant', async () => {
+    stub.restore();
+    stub = stubHubClient({
+      'GET /api/me': () => OPERATOR_ME_RESPONSE,
+      'GET /api/projects': () => ({ projects: [] }),
+    });
+    const { el } = await open('/lens');
+    expect(el.querySelector('[data-testid="lens-picker-empty"]')).not.toBeNull();
+    expect(el.querySelector('[data-testid="lens-picker-all"]')).not.toBeNull();
   });
 });

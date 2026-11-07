@@ -223,8 +223,9 @@ link keeps it:
 
 The lens control sits beside the view tabs and shows the project's display name, each project's chip led by its color;
 changing it opens the same view under the other lens. On a phone the title bar names the lens, and tapping it opens a
-picker of All projects and each project. A lensed URL naming a project by id or by a former slug is rewritten to the
-current slug. One naming no project of the tenant opens the same view on All, with a notice.
+picker of All projects and each project; choosing one opens the same view under it, as the desktop control does. A
+lensed URL naming a project by id or by a former slug is rewritten to the current slug. One naming no project of the
+tenant opens the same view on All, with a notice.
 
 | View                                     | On one project                                                               | On All                     |
 | ---------------------------------------- | ---------------------------------------------------------------------------- | -------------------------- |
