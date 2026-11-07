@@ -378,6 +378,12 @@ class IReadGardenProposalRepository(Protocol):
 
     def get(self, proposal_id: str) -> GardenProposal | None: ...
 
+    def get_many(self, proposal_ids: Sequence[str]) -> dict[str, GardenProposal]:
+        """`get`'s batched sibling (`bzh:bulk-reconstitution`) — every proposal among
+        `proposal_ids`, findings included, keyed by `proposal_id`; an id that doesn't
+        resolve is simply absent."""
+        ...
+
     def list_all(self) -> list[GardenProposal]: ...
 
     def list_page(

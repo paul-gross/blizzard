@@ -2717,7 +2717,18 @@ HUB_CENSUS: dict[tuple[type, str], HubRecipe] = {
     (IReadGardenProposalClosureRepository, "find_by_item"): lambda w: (
         w.hub.services.garden_proposal_closures.find_by_item(w.materialized_source, w.materialized_ref)
     ),
+    (IReadGardenProposalClosureRepository, "find_by_items"): lambda w: (
+        w.hub.services.garden_proposal_closures.find_by_items(
+            [
+                WorkRef(source=w.materialized_source, ref=w.materialized_ref),
+                WorkRef(source=w.materialized_source, ref="unminted"),
+            ]
+        )
+    ),
     (IReadGardenProposalRepository, "get"): lambda w: w.hub.services.garden_proposals.get(w.garden_proposal_1),
+    (IReadGardenProposalRepository, "get_many"): lambda w: w.hub.services.garden_proposals.get_many(
+        [w.garden_proposal_1, w.garden_proposal_2]
+    ),
     (IReadGardenProposalRepository, "list_all"): lambda w: w.hub.services.garden_proposals.list_all(),
     (IReadGardenProposalRepository, "list_page"): lambda w: (
         w.hub.services.garden_proposals.list_page(limit=50),

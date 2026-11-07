@@ -117,6 +117,9 @@ class _FakeClosures:
     def find_by_item(self, source: str, ref: str) -> GardenProposalClosure | None:
         return self.by_item.get((source, ref))
 
+    def find_by_items(self, pointers: Sequence[WorkRef]) -> dict[WorkRef, GardenProposalClosure]:
+        return {p: c for p in pointers if (c := self.by_item.get((p.source, p.ref))) is not None}
+
 
 @dataclass
 class _FakeProposals:
@@ -124,6 +127,9 @@ class _FakeProposals:
 
     def get(self, proposal_id: str) -> GardenProposal | None:
         return self.by_id.get(proposal_id)
+
+    def get_many(self, proposal_ids: Sequence[str]) -> dict[str, GardenProposal]:
+        return {i: self.by_id[i] for i in proposal_ids if i in self.by_id}
 
     def list_all(self) -> list[GardenProposal]:
         raise NotImplementedError

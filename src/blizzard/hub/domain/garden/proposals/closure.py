@@ -14,7 +14,7 @@ from typing import NoReturn, Protocol
 from blizzard.foundation.clock import IClock
 from blizzard.foundation.garden_proposals import GardenProposalClosureKind, GardenProposalItemOutcome
 from blizzard.foundation.roles import domain_model
-from blizzard.hub.domain.chunk.model import HubWorkItem, WorkItemAuthor
+from blizzard.hub.domain.chunk.model import HubWorkItem, WorkItemAuthor, WorkRef
 from blizzard.hub.domain.garden.findings.model import Finding
 from blizzard.hub.domain.garden.proposals.model import (
     GardenProposal,
@@ -210,6 +210,11 @@ class IReadGardenProposalClosureRepository(Protocol):
         """The accepted closure that minted `(source, ref)`'s item, or `None` when no
         closure names that pointer — a pass or a declined accept, or simply no closure at
         all (reaching the proposal a delivered item answers)."""
+        ...
+
+    def find_by_items(self, pointers: Sequence[WorkRef]) -> dict[WorkRef, GardenProposalClosure]:
+        """`find_by_item`'s batched sibling (`bzh:bulk-reconstitution`) — the minted closure
+        per pointer, keyed by pointer; a pointer no closure names is simply absent."""
         ...
 
 
