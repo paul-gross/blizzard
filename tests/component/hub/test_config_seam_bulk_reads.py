@@ -31,7 +31,7 @@ from blizzard.hub.live_config import ConfigObjectCache
 from blizzard.hub.store.internal.config_revisions_store import ConfigRevisionsStore
 from blizzard.hub.work_sources.internal.hub_work_source import HubWorkSource
 from blizzard.hub.work_sources.registry import BuiltWorkSource, StoreWorkSourceRegistry
-from tests.component.hub.test_bounded_hub_readers import record_fact
+from tests.support.position_facts import record_fact
 from tests.support.scaffolding import (
     FakeWorkSource,
     HubHarness,

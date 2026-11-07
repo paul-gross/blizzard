@@ -21,7 +21,9 @@ _SRC_DIR = _REPO_ROOT / "src" / "blizzard"
 _SEAM_SIZE_LIMIT = 12
 
 #: ``SpawnContext`` (14): ``Spawner`` and ``Attempt`` build each other and share one ``ctx``; no split until that breaks.
-_ACCEPTED_VIOLATIONS: set[str] = {"SpawnContext"}
+#: ``IReadFlows`` and ``IReadGraphRepository`` (13): each reads one aggregate's store and gained the plural a bounded
+#: read needs (``open_turns_of``, ``get_enabled_by_names``); no split while the reads stay one aggregate's.
+_ACCEPTED_VIOLATIONS: set[str] = {"SpawnContext", "IReadFlows", "IReadGraphRepository"}
 
 
 def _is_protocol(node: ast.ClassDef) -> bool:

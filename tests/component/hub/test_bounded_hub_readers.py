@@ -13,32 +13,16 @@ from sqlalchemy import insert
 from blizzard.foundation.store import batching as batching_module
 from blizzard.hub.store.internal.project_position_store import newest_positions
 from blizzard.hub.store.schema import project_repository_positions as positions
+from tests.support.position_facts import record_fact
 from tests.support.scaffolding import (
     HubHarness,
     build_hub,
     count_queries,
     count_rows_read,
     hub_store_connections,
-    stamp,
 )
 
 _AT = datetime(2026, 1, 1, tzinfo=UTC)
-
-
-def record_fact(hub: HubHarness, project_id: str, repository_id: str, position: float | None) -> None:
-    with hub.engine.begin() as conn:
-        conn.execute(
-            insert(positions).values(
-                stamp(
-                    positions,
-                    project_id=project_id,
-                    repository_id=repository_id,
-                    position=position,
-                    set_at=_AT,
-                    set_by="test",
-                )
-            )
-        )
 
 
 def _newest(hub: HubHarness, pairs: set[tuple[str, str]]) -> dict[tuple[str, str], float | None]:
