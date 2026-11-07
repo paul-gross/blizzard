@@ -14,61 +14,6 @@
   gap: 6px;
   padding: 6px;
 }
-/* The filter strip, as the board glance's vitals strip: a count over its caption, the picked tile pressed in. */
-.vitals {
-  display: grid;
-  grid-template-columns: repeat(2, 1fr);
-  border: 1px solid var(--bezel);
-  background: var(--panel-deep);
-}
-.vital {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: 2px;
-  padding: 10px 6px;
-  border: 0;
-  border-right: 1px solid var(--line);
-  background: transparent;
-  font: inherit;
-  text-align: center;
-  cursor: pointer;
-  -webkit-tap-highlight-color: transparent;
-  transition:
-    background-color 120ms ease,
-    box-shadow 120ms ease;
-}
-button.vital:focus-visible {
-  outline: 1px solid var(--cyan);
-  outline-offset: -2px;
-}
-.vital.on {
-  background: color-mix(in srgb, var(--cyan) 14%, var(--panel-deep));
-  box-shadow:
-    inset 0 3px 6px rgb(0 0 0 / 0.55),
-    inset 0 0 0 1px color-mix(in srgb, var(--cyan) 45%, transparent);
-}
-.vital.on .v-n,
-.vital.on .v-cap {
-  transform: translateY(1px);
-}
-.vital.on .v-cap {
-  color: var(--cyan);
-}
-.vital:last-child {
-  border-right: 0;
-}
-.v-n {
-  font-size: var(--fs-lg);
-  color: var(--snow);
-}
-.v-cap {
-  font-size: var(--fs-label);
-  letter-spacing: 0.14em;
-  text-transform: uppercase;
-  color: var(--label);
-}
 .cards {
   list-style: none;
   margin: 0;

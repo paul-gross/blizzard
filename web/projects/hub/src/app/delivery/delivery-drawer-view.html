@@ -17,9 +17,7 @@
         <fleet-kit-skeleton class="sk-sub" [rows]="1" />
       </span>
       @if (closable()) {
-        <fleet-kit-button class="close" testid="detail-close" ariaLabel="Close" (click)="dismiss.emit()">
-          <svg class="glyph glyph--x" viewBox="0 0 16 16" width="12" height="12" aria-hidden="true"><path d="M3.5 3.5l9 9M12.5 3.5l-9 9" /></svg>
-        </fleet-kit-button>
+        <fleet-kit-close-button testid="detail-close" (click)="dismiss.emit()" />
       }
     </header>
   }

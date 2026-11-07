@@ -315,7 +315,7 @@ describe('GlanceBoard — one list and the vitals', () => {
     const fixture = TestBed.createComponent(GlanceBoard);
     await settle(fixture);
     const el = fixture.nativeElement as HTMLElement;
-    const vital = (id: string) => el.querySelector(`[data-testid="${id}"] .v-n`)?.textContent?.trim();
+    const vital = (id: string) => el.querySelector(`[data-testid="${id}"] .cell-count`)?.textContent?.trim();
 
     expect(vital('vital-needs-you')).toBe('2');
     expect(vital('vital-running')).toBe('1');

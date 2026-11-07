@@ -213,9 +213,9 @@ function assertRealTimerDetectorWorks() {
 // The kit's own retired chrome classes — `KitPanel`'s panel shell
 // (`.panel`/`.p-hdr`/`.p-body`/`.lbl`), `KitAsyncState`'s loading/error/empty triad
 // (`.status`, and its own hand-rolled precursors `.none`/`.hint`/`.rest`), `KitButton`'s
-// `.act`. A component outside `fleet/lib/kit/` declaring one of these as a standalone
+// `.act`, `KitSectionHead`'s `.s-head`. A component outside `fleet/lib/kit/` declaring one of these as a standalone
 // rule has re-typed chrome the kit already owns (`bzh:frontend-kit-floor`).
-const RETIRED_KIT_CLASSES = ['panel', 'p-hdr', 'p-body', 'lbl', 'status', 'none', 'hint', 'rest', 'act'];
+const RETIRED_KIT_CLASSES = ['panel', 'p-hdr', 'p-body', 'lbl', 'status', 'none', 'hint', 'rest', 'act', 's-head'];
 const RETIRED_CLASS_RULE = new RegExp(`^\\s*\\.(${RETIRED_KIT_CLASSES.join('|')})\\s*\\{`, 'gm');
 
 // `KitFactList`'s own two-column `<dl>` (`kit-fact-list.html`) — a hand-rolled
@@ -256,6 +256,7 @@ function assertKitFloorDetectorWorks() {
     ['.hint {', 'hint'],
     ['.rest {', 'rest'],
     ['.act {', 'act'],
+    ['.s-head {', 's-head'],
     ['  .none {', 'none'], // indented, as every real rule is
   ];
   const mustPassClasses = [

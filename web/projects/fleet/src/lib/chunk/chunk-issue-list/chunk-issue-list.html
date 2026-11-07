@@ -75,7 +75,7 @@
             <pre class="i-body" data-testid="issue-body">{{ item.body }}</pre>
           }
           <div class="i-messages">
-            <div class="s-head"><span class="tag">Messages · {{ item.comments.length }}</span></div>
+            <fleet-kit-section-head label="Messages" [count]="item.comments.length" />
             @if (item.comments.length === 0) {
               <fleet-kit-async-state
                 state="empty"

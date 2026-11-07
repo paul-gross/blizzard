@@ -77,29 +77,6 @@
   width: 6ch;
   margin-top: 2px;
 }
-/* The close button, as the board dock's header draws it: a 30px square with its X drawn, not typeset. */
-.close ::ng-deep .act {
-  box-sizing: border-box;
-  width: 30px;
-  height: 30px;
-  padding: 0;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  line-height: 1;
-  font-size: var(--fs-lg);
-  border: 1px solid var(--line);
-  border-radius: 3px;
-}
-.glyph {
-  display: block;
-}
-.glyph--x {
-  fill: none;
-  stroke: currentColor;
-  stroke-width: 1.5;
-  stroke-linecap: round;
-}
 .dim {
   color: var(--label);
 }

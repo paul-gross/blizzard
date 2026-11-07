@@ -3,6 +3,7 @@ import { ChangeDetectionStrategy, Component, computed, input, output, signal } f
 import type { ChunkDetail, DecisionView, QuestionView } from '../../api/hub';
 import { KitButton } from '../../kit/kit-button';
 import { KitChips, type KitChipOption } from '../../kit/kit-chips';
+import { KitSectionHead } from '../../kit/kit-section-head';
 import { KitTextInput } from '../../kit/kit-text-input';
 import { FleetWhen } from '../../core/when-display/fleet-when';
 import { injectRunnerHostNames, runnerDisplayName } from '../../core/runner-display-name';
@@ -47,7 +48,7 @@ const ANSWERED_TRAIL_LIMIT = 3;
 @Component({
   selector: 'fleet-chunk-detail-awaiting-human',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [ChunkEscalation, FleetWhen, KitButton, KitChips, KitTextInput],
+  imports: [ChunkEscalation, FleetWhen, KitButton, KitChips, KitSectionHead, KitTextInput],
   templateUrl: './chunk-awaiting-human.html',
   styleUrl: './chunk-awaiting-human.css',
 })

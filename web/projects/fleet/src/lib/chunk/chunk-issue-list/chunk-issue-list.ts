@@ -2,7 +2,7 @@ import { ChangeDetectionStrategy, Component, input, signal } from '@angular/core
 import { RouterLink } from '@angular/router';
 
 import type { WorkItemAuthorView, WorkItemEntry, WorkItemPriority } from '../../api/hub';
-import { KitAccordionSection, KitAsyncState, KitBadge, KitMarkdown } from '../../kit';
+import { KitAccordionSection, KitAsyncState, KitBadge, KitMarkdown, KitSectionHead } from '../../kit';
 import type { Tone } from '../../kit';
 import { injectRunnerHostNames, runnerDisplayName } from '../../core/runner-display-name';
 import { LensLink } from '../../core/lens-link';
@@ -44,7 +44,7 @@ const PRIORITY_TONE = openLookup<WorkItemPriority, Tone>({ high: 'needs', normal
 @Component({
   selector: 'fleet-chunk-issue-list',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [KitAccordionSection, KitAsyncState, KitBadge, KitMarkdown, RouterLink, LensLink],
+  imports: [KitAccordionSection, KitAsyncState, KitBadge, KitMarkdown, KitSectionHead, RouterLink, LensLink],
   templateUrl: './chunk-issue-list.html',
   styleUrl: './chunk-issue-list.css',
 })

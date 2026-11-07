@@ -2,7 +2,7 @@ import { NgTemplateOutlet } from '@angular/common';
 import { ChangeDetectionStrategy, Component, computed, input, signal } from '@angular/core';
 import { RouterLink } from '@angular/router';
 
-import { formatSeenTag, KitAsyncState, type KitAsyncStateValue, KitSkeleton, LaneIcon } from 'fleet';
+import { formatSeenTag, KitAsyncState, type KitAsyncStateValue, type KitCountCell, KitCountStrip, KitSkeleton, LaneIcon } from 'fleet';
 import { LensLink } from 'fleet/shell';
 import { cardStageColor, cardStageLabel, deliveredRecently, type DeliveryList, type DeliveryRow } from './delivery.model';
 
@@ -17,7 +17,7 @@ type DeliveryFilter = 'delivering' | 'recent';
 @Component({
   selector: 'app-delivery-glance-view',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [KitAsyncState, KitSkeleton, LaneIcon, LensLink, NgTemplateOutlet, RouterLink],
+  imports: [KitAsyncState, KitCountStrip, KitSkeleton, LaneIcon, LensLink, NgTemplateOutlet, RouterLink],
   templateUrl: './delivery-glance-view.html',
   styleUrl: './delivery-glance-view.css',
 })
@@ -32,7 +32,15 @@ export class DeliveryGlanceView {
   /** The group the list is narrowed to, or `null` for both. A tile toggles, as the board glance's vitals do. */
   protected readonly filter = signal<DeliveryFilter | null>(null);
 
-  protected toggle(filter: DeliveryFilter): void {
+  /** The filter strip's two tiles: each group's count over its caption. */
+  protected readonly filterCells = computed<readonly KitCountCell[]>(() => [
+    { key: 'delivering', count: this.list().delivering.length, caption: 'delivering', testid: 'delivery-filter-delivering', selectable: true },
+    { key: 'recent', count: this.recent().length, caption: 'delivered 48h', testid: 'delivery-filter-recent', selectable: true },
+  ]);
+
+  /** Takes a {@link filterCells} key, so always a {@link DeliveryFilter}. */
+  protected toggle(key: string): void {
+    const filter = key as DeliveryFilter;
     this.filter.update((current) => (current === filter ? null : filter));
   }
 

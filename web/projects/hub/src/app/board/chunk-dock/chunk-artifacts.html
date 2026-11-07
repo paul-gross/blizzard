@@ -1,6 +1,6 @@
 <div class="arts">
   @if (heading()) {
-    <div class="s-head"><span class="tag" id="chunk-artifacts-heading">Artifacts</span></div>
+    <fleet-kit-section-head class="head" label="Artifacts" labelId="chunk-artifacts-heading" />
   }
   @if (artifacts().length === 0) {
     <fleet-kit-async-state state="empty" placement="inline" emptyText="No artifacts yet." emptyTestid="artifacts-empty" />

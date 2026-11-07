@@ -1,15 +1,6 @@
 :host {
   display: contents;
 }
-.tag {
-  font-size: var(--fs-label);
-  letter-spacing: 0.18em;
-  text-transform: uppercase;
-  color: var(--label);
-}
-.s-head {
-  margin-bottom: 6px;
-}
 .escalation {
   border: 1px solid var(--red-dim);
   background: color-mix(in srgb, var(--red) 6%, transparent);

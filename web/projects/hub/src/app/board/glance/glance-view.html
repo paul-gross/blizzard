@@ -69,32 +69,7 @@
 </ng-template>
 
 <div class="glance" data-testid="glance-board">
-  <div class="vitals" data-testid="glance-vitals">
-    <!-- eslint-disable-next-line no-restricted-syntax -- A vital tile is its own toggle: the kit button's chrome would break the strip's grid of counts. -->
-    <button type="button" class="vital" data-testid="vital-needs-you" [class.on]="filter() === 'needs'" [attr.aria-pressed]="filter() === 'needs'" (click)="toggleFilter('needs')">
-      <span class="v-n" [style.color]="vitals().needsYou > 0 ? laneColor('needs') : null">{{ vitals().needsYou }}</span>
-      <span class="v-cap">needs you</span>
-    </button>
-    <!-- eslint-disable-next-line no-restricted-syntax -- A vital tile is its own toggle: the kit button's chrome would break the strip's grid of counts. -->
-    <button type="button" class="vital" data-testid="vital-running" [class.on]="filter() === 'running'" [attr.aria-pressed]="filter() === 'running'" (click)="toggleFilter('running')">
-      <span class="v-n" [style.color]="laneColor('running')">{{ vitals().running }}</span>
-      <span class="v-cap">running</span>
-    </button>
-    <!-- eslint-disable-next-line no-restricted-syntax -- A vital tile is its own toggle: the kit button's chrome would break the strip's grid of counts. -->
-    <button type="button" class="vital" data-testid="vital-ready" [class.on]="filter() === 'ready'" [attr.aria-pressed]="filter() === 'ready'" (click)="toggleFilter('ready')">
-      <span class="v-n">{{ vitals().ready }}</span>
-      <span class="v-cap">ready</span>
-    </button>
-    <!-- eslint-disable-next-line no-restricted-syntax -- A vital tile is its own toggle: the kit button's chrome would break the strip's grid of counts. -->
-    <button type="button" class="vital" data-testid="vital-done-today" [class.on]="filter() === 'done'" [attr.aria-pressed]="filter() === 'done'" (click)="toggleFilter('done')">
-      <span class="v-n" [style.color]="laneColor(DONE_LANE)">{{ vitals().doneRecent }}</span>
-      <span class="v-cap">done (48h)</span>
-    </button>
-    <div class="vital" data-testid="vital-runners-up">
-      <span class="v-n">{{ vitals().runnersUpLabel }}</span>
-      <span class="v-cap">runners up</span>
-    </div>
-  </div>
+  <fleet-kit-count-strip testid="glance-vitals" [cells]="vitalCells()" [selected]="filter()" (cellClick)="toggleFilter($event)" />
 
   <fleet-kit-panel aria-label="Fleet spend" data-testid="glance-spend-panel" label="Fleet spend">
     <fleet-kit-async-state

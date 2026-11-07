@@ -25,8 +25,15 @@ import { BoardPage } from './board-page';
  * dock's `closed` class, never the geometry it produces (`board-page.css`'s `.board` and
  * `.dock` flex split and `.dock.closed`'s `display: none`).
  *
+ * Open, the dock's kit panel fills the dock's share, and each of its three columns
+ * scrolls on its own: a column given more content than it can show scrolls without
+ * moving its siblings or growing the dock.
+ *
  * Proven able to fail by dropping `.dock.closed`'s `display: none`: the closed dock then
- * takes room, and the at-rest board no longer runs the column's full height.
+ * takes room, and the at-rest board no longer runs the column's full height. The
+ * open-dock claims are proven able to fail by dropping the panel body frame's
+ * definite height (`chunk-detail-panel.css`'s `.d-frame`): the columns then grow to
+ * their content and stop scrolling on their own.
  *
  * Excluded from the default `ng test` run the same way every other
  * `*.shell-sweep.spec.ts` is — run it via `npm run shell-sweep`
@@ -124,6 +131,30 @@ describe('board dock shell sweep (web:shell-sweep)', () => {
         });
         expect(docked.height, 'opening the dock did not shorten the board').toBeLessThan(atRest.height);
         expect(box(dock).y, 'the dock does not open beneath the board').toBeGreaterThanOrEqual(docked.y + docked.height);
+
+        await pumpUntil(harness.fixture, () => dock.querySelectorAll('.d-sec').length === 3);
+        const panel = dock.querySelector('fleet-kit-panel[data-testid="chunk-detail"]')!;
+        const dockBox = box(dock);
+        expect(box(panel), 'the open dock panel does not fill its share').toEqual(dockBox);
+        const columns = [...dock.querySelectorAll<HTMLElement>('.d-sec')];
+        for (const column of columns) {
+          const filler = document.createElement('div');
+          filler.style.height = `${dockBox.height * 3}px`;
+          column.appendChild(filler);
+        }
+        for (const [i, column] of columns.entries()) {
+          const colBox = box(column);
+          expect(colBox.y + colBox.height, `column ${i} overruns the dock`).toBeLessThanOrEqual(dockBox.y + dockBox.height + 1);
+          expect(column.scrollHeight, `column ${i} does not overflow into its own scroll`).toBeGreaterThan(column.clientHeight);
+          column.scrollTop = 100;
+          expect(column.scrollTop, `column ${i} does not scroll`).toBe(100);
+          for (const [j, sibling] of columns.entries()) {
+            if (j !== i) expect(sibling.scrollTop, `scrolling column ${i} moved column ${j}`).toBe(0);
+          }
+          column.scrollTop = 0;
+        }
+        expect(box(dock), 'filling the columns grew the dock').toEqual(dockBox);
+        for (const column of columns) column.lastElementChild!.remove();
 
         await harness.navigateByUrl('/board');
         await pumpUntil(harness.fixture, () => dock.classList.contains('closed'));

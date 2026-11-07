@@ -20,6 +20,8 @@ import {
   hasCostFigure,
   type FleetSpendView,
   type KitAsyncStateValue,
+  type KitCountCell,
+  KitCountStrip,
   type WorkLine,
   LaneIcon,
 } from 'fleet';
@@ -64,7 +66,7 @@ export interface Vitals {
 @Component({
   selector: 'app-glance-view',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [FleetSpend, FleetWhen, NodeStrip, KitAsyncState, KitBadge, KitPanel, KitSkeleton, LaneIcon, NgTemplateOutlet, RouterLink, LensLink],
+  imports: [FleetSpend, FleetWhen, NodeStrip, KitAsyncState, KitBadge, KitCountStrip, KitPanel, KitSkeleton, LaneIcon, NgTemplateOutlet, RouterLink, LensLink],
   templateUrl: './glance-view.html',
   styleUrl: './glance-view.css',
 })
@@ -107,11 +109,25 @@ export class GlanceView {
   /** The vital the list is narrowed to — tapping a count shows only its cards; tapping it again clears it. */
   protected readonly filter = signal<GlanceFilter | null>(null);
 
+  /** The vitals strip: four lane counts that each narrow the list, then the runners-up readout. */
+  protected readonly vitalCells = computed<readonly KitCountCell[]>(() => {
+    const v = this.vitals();
+    return [
+      { key: 'needs', count: v.needsYou, caption: 'needs you', testid: 'vital-needs-you', selectable: true, countColor: v.needsYou > 0 ? this.laneColor('needs') : null },
+      { key: 'running', count: v.running, caption: 'running', testid: 'vital-running', selectable: true, countColor: this.laneColor('running') },
+      { key: 'ready', count: v.ready, caption: 'ready', testid: 'vital-ready', selectable: true },
+      { key: 'done', count: v.doneRecent, caption: 'done (48h)', testid: 'vital-done-today', selectable: true, countColor: this.laneColor(DONE_LANE) },
+      { key: 'runners', count: v.runnersUpLabel, caption: 'runners up', testid: 'vital-runners-up', selectable: false },
+    ];
+  });
+
   /** The list's cards under {@link filter}, in the order the unfiltered list shows them. */
   protected readonly filtered = computed(() => filterGlanceRows(this.list(), this.filter()));
 
-  protected toggleFilter(key: GlanceFilter): void {
-    this.filter.update((current) => (current === key ? null : key));
+  /** Takes a selectable {@link vitalCells} key, so always a {@link GlanceFilter}. */
+  protected toggleFilter(key: string): void {
+    const filter = key as GlanceFilter;
+    this.filter.update((current) => (current === filter ? null : filter));
   }
 
   /** A chunk's status tone as a color — the card's left edge, as a desktop list row's. */

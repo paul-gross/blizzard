@@ -7,18 +7,11 @@
   display: block;
   padding: 6px 0;
 }
-.tag {
-  font-size: var(--fs-label);
-  letter-spacing: 0.18em;
-  text-transform: uppercase;
-  color: var(--label);
-}
 .arts {
   margin-bottom: 8px;
 }
-.s-head {
-  padding: 0 8px;
-  margin-bottom: 6px;
+.head {
+  --kit-section-head-pad: 0 8px;
 }
 .artifacts {
   list-style: none;

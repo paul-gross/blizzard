@@ -40,7 +40,7 @@
       }
     </div>
     <div class="col col--list">
-      <fleet-kit-skeleton class="tag s-head" [rows]="1" />
+      <fleet-kit-skeleton class="tag sk-head" [rows]="1" />
       <div class="timeline">
         @for (r of historyRows; track $index) {
           <div class="step">
@@ -62,7 +62,7 @@
       </div>
     </div>
     <div class="col col--list">
-      <fleet-kit-skeleton class="tag s-head" [rows]="1" />
+      <fleet-kit-skeleton class="tag sk-head" [rows]="1" />
       @for (r of artifactRows; track $index) {
         <div class="art">
           <fleet-kit-skeleton class="bar" [style.width.%]="r[0]" [rows]="1" />

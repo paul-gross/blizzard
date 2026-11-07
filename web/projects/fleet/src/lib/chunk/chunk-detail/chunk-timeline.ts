@@ -8,6 +8,7 @@ import { injectRunnerHostNames, injectRunnerNames, runnerBoardLabel, runnerBoard
 import { SessionEfficiency } from '../../core/session-efficiency-view';
 import { injectNowSignal } from '../../core/now-signal';
 import { KitAsyncState } from '../../kit/kit-async-state';
+import { KitSectionHead } from '../../kit/kit-section-head';
 import {
   deriveActiveRow,
   deriveHistoryRows,
@@ -47,7 +48,7 @@ import { verdictTone } from './verdict-tone';
 @Component({
   selector: 'fleet-chunk-detail-timeline',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [KitAsyncState, NgTemplateOutlet, SessionEfficiency, RouterLink, LensLink],
+  imports: [KitAsyncState, KitSectionHead, NgTemplateOutlet, SessionEfficiency, RouterLink, LensLink],
   templateUrl: './chunk-timeline.html',
   styleUrl: './chunk-timeline.css',
 })

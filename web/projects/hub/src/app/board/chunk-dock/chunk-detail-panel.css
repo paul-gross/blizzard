@@ -6,24 +6,24 @@
   font-size: var(--fs-base);
   font-variant-numeric: tabular-nums;
 }
-.tag {
-  font-size: var(--fs-label);
-  letter-spacing: 0.18em;
-  text-transform: uppercase;
-  color: var(--label);
-}
-/* The dock itself never scrolls — each of its three columns owns its own
-   scroll, so a long issue body cannot push the history and artifacts out of
-   view, and the header stays pinned. */
+/* The dock is a kit panel (its bezel and gradient) that never scrolls: its body only
+   clips, and each of its three columns owns its own scroll, so a long issue body
+   cannot push the history and artifacts out of view, and the header stays pinned.
+   The header mounts as the body's first child rather than in the panel's header
+   slot, whose own padding, rule and wash would double the header's. Border-box
+   keeps the panel's bezel inside the dock's share rather than past it. */
 .dock {
+  box-sizing: border-box;
+  height: 100%;
+  color: var(--text);
+}
+/* KitPanel's body is a plain block, so this frame is the full-height flex column
+   that hands the columns a definite height; without `height: 100%` it grows to
+   its content and the columns stop scrolling on their own. */
+.d-frame {
   display: flex;
   flex-direction: column;
   height: 100%;
-  min-height: 0;
-  background: linear-gradient(180deg, var(--panel) 0%, var(--panel-deep) 100%);
-  border: 1px solid var(--bezel);
-  color: var(--text);
-  overflow: hidden;
 }
 /* An outcome sits in the same slot as the failure line and carries the same
    weight, but reads cyan rather than red: a lost answer race is news the operator
@@ -61,21 +61,20 @@
 /* The node-history and artifacts sections now pad their own host
    (chunk-timeline.ts, chunk-artifacts.ts) — a plain `.d-sec` here would
    double that padding. The work-item section keeps `.d-sec`'s padding for its
-   siblings (ChunkAwaitingHuman, ChunkIssuePane), which supply none of their own; ChunkFacts now pads itself too (`chunk-facts.css`'s `--chunk-facts-pad`)
-   for its other consumer (the general tab's unpadded panel body), so it is
-   zeroed out here to keep this column's existing rhythm rather than double it. */
+   siblings (ChunkAwaitingHuman, ChunkIssuePane), which supply none of their own. */
 .d-sec--flush {
   padding: 0;
 }
-fleet-chunk-detail-facts {
-  --chunk-facts-pad: 0;
-}
-.s-head {
-  margin-bottom: 6px;
-}
-/* Delivery and the work item's facts each sit in a box, bordered like the dock and kit panels, so each reads apart from what follows. */
+/* Delivery and the work item's facts each sit in a kit panel, so each reads apart from what follows. They sit
+   in a scrolling column, so they size to their content; the body padding is this consumer's layout. */
 .d-box {
-  border: 1px solid var(--bezel);
-  padding: 6px 8px;
   margin-bottom: 8px;
+}
+.d-box-body {
+  display: block;
+  padding: 6px 8px;
+}
+/* ChunkFacts pads its own host from this property; zero it so the box body's padding is the only one. */
+fleet-chunk-detail-facts.d-box-body {
+  --chunk-facts-pad: 0;
 }

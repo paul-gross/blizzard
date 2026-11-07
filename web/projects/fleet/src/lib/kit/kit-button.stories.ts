@@ -8,7 +8,7 @@ const meta: Meta<KitButton> = {
   args: { variant: 'default', size: 'default', disabled: false, ariaLabel: null, title: null, testid: null },
   argTypes: {
     variant: { control: 'inline-radio', options: ['default', 'primary', 'danger'] },
-    size: { control: 'inline-radio', options: ['default', 'cta'] },
+    size: { control: 'inline-radio', options: ['default', 'cta', 'icon'] },
   },
   render: (args) => ({
     props: args,
@@ -24,3 +24,10 @@ export const Primary: Story = { args: { variant: 'primary' } };
 export const Danger: Story = { args: { variant: 'danger' } };
 export const CallToAction: Story = { args: { variant: 'primary', size: 'cta' } };
 export const Disabled: Story = { args: { disabled: true } };
+export const Icon: Story = {
+  args: { size: 'icon', ariaLabel: 'Refresh' },
+  render: (args) => ({
+    props: args,
+    template: `<fleet-kit-button [size]="size" [ariaLabel]="ariaLabel" [testid]="testid">↻</fleet-kit-button>`,
+  }),
+};

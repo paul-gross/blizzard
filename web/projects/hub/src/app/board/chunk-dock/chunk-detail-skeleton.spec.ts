@@ -33,7 +33,7 @@ describe('ChunkDetailSkeleton', () => {
     expect(columns[0].querySelectorAll('.edge')).toHaveLength(5);
     expect(columns[0].querySelectorAll(':scope > .acc')).toHaveLength(3);
     // The node-history and artifacts columns: a heading each over their rows.
-    expect(columns.slice(1).map((col) => col.querySelector(':scope > .s-head') !== null)).toEqual([true, true]);
+    expect(columns.slice(1).map((col) => col.querySelector(':scope > .sk-head') !== null)).toEqual([true, true]);
     expect(columns[1].querySelectorAll('.timeline > .step')).toHaveLength(6);
     expect(columns[1].querySelectorAll('.step')[0].querySelectorAll('.cell')).toHaveLength(3);
     expect(columns[2].querySelectorAll(':scope > .art')).toHaveLength(5);

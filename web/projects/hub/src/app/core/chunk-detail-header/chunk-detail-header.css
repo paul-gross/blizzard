@@ -102,28 +102,3 @@
   font-size: var(--fs-xs);
   white-space: nowrap;
 }
-/* The close button, the same size square target as the ⋮ trigger beside it (`chunk-actions-menu.css`) —
-   a fixed box with the glyph centred in it, so the glyph's own metrics never set the height. */
-.close ::ng-deep .act {
-  box-sizing: border-box;
-  width: 30px;
-  height: 30px;
-  padding: 0;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  line-height: 1;
-  font-size: var(--fs-lg);
-  border: 1px solid var(--line);
-  border-radius: 3px;
-}
-/* The glyph is drawn, not typeset, so it centres on its own ink rather than a fallback font's line box. */
-.glyph {
-  display: block;
-}
-.glyph--x {
-  fill: none;
-  stroke: currentColor;
-  stroke-width: 1.5;
-  stroke-linecap: round;
-}
