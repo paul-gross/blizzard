@@ -35,10 +35,7 @@ def test_proxy_422_declares_problem_and_framework_validation(tmp_path: Path) -> 
     spec = app.openapi()
     response = spec["paths"]["/runners/{runner_id}/api/chunks/{chunk_id}/pause"]["post"]["responses"]["422"]
     assert response["content"]["application/problem+json"]["schema"]["$ref"] == "#/components/schemas/Problem"
-    assert response["content"]["application/json"]["schema"]["anyOf"] == [
-        {"$ref": "#/components/schemas/HTTPValidationError"},
-        {"$ref": "#/components/schemas/Problem"},
-    ]
+    assert response["content"]["application/json"]["schema"]["$ref"] == "#/components/schemas/HTTPValidationError"
     assert "HTTPValidationError" in spec["components"]["schemas"]
 
 

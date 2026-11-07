@@ -9125,14 +9125,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "anyOf": [
-                    {
-                      "$ref": "#/components/schemas/HTTPValidationError"
-                    },
-                    {
-                      "$ref": "#/components/schemas/Problem"
-                    }
-                  ]
+                  "$ref": "#/components/schemas/HTTPValidationError"
                 }
               },
               "application/problem+json": {
@@ -9251,14 +9244,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "anyOf": [
-                    {
-                      "$ref": "#/components/schemas/HTTPValidationError"
-                    },
-                    {
-                      "$ref": "#/components/schemas/Problem"
-                    }
-                  ]
+                  "$ref": "#/components/schemas/HTTPValidationError"
                 }
               },
               "application/problem+json": {
@@ -9486,14 +9472,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "anyOf": [
-                    {
-                      "$ref": "#/components/schemas/HTTPValidationError"
-                    },
-                    {
-                      "$ref": "#/components/schemas/Problem"
-                    }
-                  ]
+                  "$ref": "#/components/schemas/HTTPValidationError"
                 }
               },
               "application/problem+json": {
@@ -9936,14 +9915,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "anyOf": [
-                    {
-                      "$ref": "#/components/schemas/HTTPValidationError"
-                    },
-                    {
-                      "$ref": "#/components/schemas/Problem"
-                    }
-                  ]
+                  "$ref": "#/components/schemas/HTTPValidationError"
                 }
               },
               "application/problem+json": {
@@ -10226,14 +10198,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "anyOf": [
-                    {
-                      "$ref": "#/components/schemas/HTTPValidationError"
-                    },
-                    {
-                      "$ref": "#/components/schemas/Problem"
-                    }
-                  ]
+                  "$ref": "#/components/schemas/HTTPValidationError"
                 }
               },
               "application/problem+json": {
@@ -10343,14 +10308,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "anyOf": [
-                    {
-                      "$ref": "#/components/schemas/HTTPValidationError"
-                    },
-                    {
-                      "$ref": "#/components/schemas/Problem"
-                    }
-                  ]
+                  "$ref": "#/components/schemas/HTTPValidationError"
                 }
               },
               "application/problem+json": {
@@ -10662,14 +10620,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "anyOf": [
-                    {
-                      "$ref": "#/components/schemas/HTTPValidationError"
-                    },
-                    {
-                      "$ref": "#/components/schemas/Problem"
-                    }
-                  ]
+                  "$ref": "#/components/schemas/HTTPValidationError"
                 }
               },
               "application/problem+json": {
@@ -10820,14 +10771,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "anyOf": [
-                    {
-                      "$ref": "#/components/schemas/HTTPValidationError"
-                    },
-                    {
-                      "$ref": "#/components/schemas/Problem"
-                    }
-                  ]
+                  "$ref": "#/components/schemas/HTTPValidationError"
                 }
               },
               "application/problem+json": {
@@ -10988,14 +10932,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "anyOf": [
-                    {
-                      "$ref": "#/components/schemas/HTTPValidationError"
-                    },
-                    {
-                      "$ref": "#/components/schemas/Problem"
-                    }
-                  ]
+                  "$ref": "#/components/schemas/HTTPValidationError"
                 }
               },
               "application/problem+json": {
@@ -11146,14 +11083,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "anyOf": [
-                    {
-                      "$ref": "#/components/schemas/HTTPValidationError"
-                    },
-                    {
-                      "$ref": "#/components/schemas/Problem"
-                    }
-                  ]
+                  "$ref": "#/components/schemas/HTTPValidationError"
                 }
               },
               "application/problem+json": {
@@ -11314,14 +11244,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "anyOf": [
-                    {
-                      "$ref": "#/components/schemas/HTTPValidationError"
-                    },
-                    {
-                      "$ref": "#/components/schemas/Problem"
-                    }
-                  ]
+                  "$ref": "#/components/schemas/HTTPValidationError"
                 }
               },
               "application/problem+json": {
@@ -11482,14 +11405,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "anyOf": [
-                    {
-                      "$ref": "#/components/schemas/HTTPValidationError"
-                    },
-                    {
-                      "$ref": "#/components/schemas/Problem"
-                    }
-                  ]
+                  "$ref": "#/components/schemas/HTTPValidationError"
                 }
               },
               "application/problem+json": {
@@ -11628,14 +11544,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "anyOf": [
-                    {
-                      "$ref": "#/components/schemas/HTTPValidationError"
-                    },
-                    {
-                      "$ref": "#/components/schemas/Problem"
-                    }
-                  ]
+                  "$ref": "#/components/schemas/HTTPValidationError"
                 }
               },
               "application/problem+json": {
@@ -11795,14 +11704,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "anyOf": [
-                    {
-                      "$ref": "#/components/schemas/HTTPValidationError"
-                    },
-                    {
-                      "$ref": "#/components/schemas/Problem"
-                    }
-                  ]
+                  "$ref": "#/components/schemas/HTTPValidationError"
                 }
               },
               "application/problem+json": {
@@ -11925,14 +11827,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "anyOf": [
-                    {
-                      "$ref": "#/components/schemas/HTTPValidationError"
-                    },
-                    {
-                      "$ref": "#/components/schemas/Problem"
-                    }
-                  ]
+                  "$ref": "#/components/schemas/HTTPValidationError"
                 }
               },
               "application/problem+json": {
@@ -12179,14 +12074,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "anyOf": [
-                    {
-                      "$ref": "#/components/schemas/HTTPValidationError"
-                    },
-                    {
-                      "$ref": "#/components/schemas/Problem"
-                    }
-                  ]
+                  "$ref": "#/components/schemas/HTTPValidationError"
                 }
               },
               "application/problem+json": {
@@ -12309,14 +12197,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "anyOf": [
-                    {
-                      "$ref": "#/components/schemas/HTTPValidationError"
-                    },
-                    {
-                      "$ref": "#/components/schemas/Problem"
-                    }
-                  ]
+                  "$ref": "#/components/schemas/HTTPValidationError"
                 }
               },
               "application/problem+json": {
@@ -12444,14 +12325,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "anyOf": [
-                    {
-                      "$ref": "#/components/schemas/HTTPValidationError"
-                    },
-                    {
-                      "$ref": "#/components/schemas/Problem"
-                    }
-                  ]
+                  "$ref": "#/components/schemas/HTTPValidationError"
                 }
               },
               "application/problem+json": {
@@ -12574,14 +12448,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "anyOf": [
-                    {
-                      "$ref": "#/components/schemas/HTTPValidationError"
-                    },
-                    {
-                      "$ref": "#/components/schemas/Problem"
-                    }
-                  ]
+                  "$ref": "#/components/schemas/HTTPValidationError"
                 }
               },
               "application/problem+json": {
@@ -12714,14 +12581,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "anyOf": [
-                    {
-                      "$ref": "#/components/schemas/HTTPValidationError"
-                    },
-                    {
-                      "$ref": "#/components/schemas/Problem"
-                    }
-                  ]
+                  "$ref": "#/components/schemas/HTTPValidationError"
                 }
               },
               "application/problem+json": {
@@ -12908,14 +12768,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "anyOf": [
-                    {
-                      "$ref": "#/components/schemas/HTTPValidationError"
-                    },
-                    {
-                      "$ref": "#/components/schemas/Problem"
-                    }
-                  ]
+                  "$ref": "#/components/schemas/HTTPValidationError"
                 }
               },
               "application/problem+json": {
@@ -13038,14 +12891,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "anyOf": [
-                    {
-                      "$ref": "#/components/schemas/HTTPValidationError"
-                    },
-                    {
-                      "$ref": "#/components/schemas/Problem"
-                    }
-                  ]
+                  "$ref": "#/components/schemas/HTTPValidationError"
                 }
               },
               "application/problem+json": {
@@ -13168,14 +13014,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "anyOf": [
-                    {
-                      "$ref": "#/components/schemas/HTTPValidationError"
-                    },
-                    {
-                      "$ref": "#/components/schemas/Problem"
-                    }
-                  ]
+                  "$ref": "#/components/schemas/HTTPValidationError"
                 }
               },
               "application/problem+json": {
