@@ -1,3 +1,4 @@
+import type { CadenceAnchor } from 'fleet';
 import { gardenCadenceAttentionView, gardenCadenceView, gardenChoreView } from 'fleet/testing';
 import { describe, expect, it } from 'vitest';
 
@@ -31,6 +32,11 @@ describe('rhythmText', () => {
   it('names an anchor other than the start', () => {
     expect(rhythmText({ schedule: null, spacing_minutes: 60, anchor: 'finished' })).toBe('at least 1 hour apart from finished');
     expect(rhythmText({ schedule: null, spacing_minutes: 60, anchor: 'started' })).toBe('at least 1 hour apart');
+    expect(rhythmText({ schedule: null, spacing_minutes: 60, anchor: null })).toBe('at least 1 hour apart');
+    expect(rhythmText({ schedule: null, spacing_minutes: 60, anchor: 'scheduled' })).toBe('at least 1 hour apart from scheduled');
+    expect(rhythmText({ schedule: null, spacing_minutes: 60, anchor: 'sideways' as CadenceAnchor })).toBe(
+      'at least 1 hour apart from sideways',
+    );
   });
 
   it('states a schedule alone, and says when there is no rhythm', () => {

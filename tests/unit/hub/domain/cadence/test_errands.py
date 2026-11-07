@@ -10,6 +10,7 @@ from datetime import UTC, datetime, timedelta
 
 import pytest
 
+from blizzard.foundation.cadence_anchor import CadenceAnchor
 from blizzard.foundation.cadence_attention import AttentionReason, ErrandState
 from blizzard.foundation.chunk_status import ChunkStatus
 from blizzard.foundation.run_mode import RunMode
@@ -29,7 +30,6 @@ from blizzard.hub.domain.cadence.errands import (
     is_due,
 )
 from blizzard.hub.domain.cadence.model import (
-    Anchor,
     Attention,
     AttentionFacts,
     Cadence,
@@ -218,34 +218,34 @@ def test_a_run_reads_withdrawn_then_delivered_then_its_holder(run: LastRun, outc
 
 def test_each_anchor_reads_its_moment_of_the_run() -> None:
     run = LastRun(_AT, holder=Holder(ChunkStatus.DONE, _AT + timedelta(minutes=5), _AT + timedelta(hours=1)))
-    assert run.anchored_at(Anchor.SCHEDULED) == _AT
-    assert run.anchored_at(Anchor.STARTED) == _AT + timedelta(minutes=5)
-    assert run.anchored_at(Anchor.FINISHED) == _AT + timedelta(hours=1)
+    assert run.anchored_at(CadenceAnchor.SCHEDULED) == _AT
+    assert run.anchored_at(CadenceAnchor.STARTED) == _AT + timedelta(minutes=5)
+    assert run.anchored_at(CadenceAnchor.FINISHED) == _AT + timedelta(hours=1)
 
 
 def test_a_run_stopped_before_it_started_reads_started_as_scheduled() -> None:
     run = LastRun(_AT, holder=Holder(ChunkStatus.STOPPED, None, _AT + timedelta(minutes=30)))
-    assert run.anchored_at(Anchor.STARTED) == _AT
-    assert run.anchored_at(Anchor.FINISHED) == _AT + timedelta(minutes=30)
+    assert run.anchored_at(CadenceAnchor.STARTED) == _AT
+    assert run.anchored_at(CadenceAnchor.FINISHED) == _AT + timedelta(minutes=30)
 
 
 def test_a_withdrawn_run_with_no_holder_reads_started_as_scheduled_and_finished_as_withdrawn() -> None:
     run = LastRun(_AT, WorkItemClosure.WITHDRAWN, _AT + timedelta(minutes=10))
-    assert run.anchored_at(Anchor.STARTED) == _AT
-    assert run.anchored_at(Anchor.FINISHED) == _AT + timedelta(minutes=10)
+    assert run.anchored_at(CadenceAnchor.STARTED) == _AT
+    assert run.anchored_at(CadenceAnchor.FINISHED) == _AT + timedelta(minutes=10)
 
 
 def test_finished_reads_the_earlier_of_the_holder_settling_and_the_item_closing() -> None:
     done = Holder(ChunkStatus.DONE, _AT, _AT + timedelta(hours=2))
     run = LastRun(_AT, WorkItemClosure.DELIVERED, _AT + timedelta(hours=3), done)
-    assert run.anchored_at(Anchor.FINISHED) == _AT + timedelta(hours=2)
+    assert run.anchored_at(CadenceAnchor.FINISHED) == _AT + timedelta(hours=2)
     delivered_first = LastRun(_AT, WorkItemClosure.DELIVERED, _AT + timedelta(hours=1), done)
-    assert delivered_first.anchored_at(Anchor.FINISHED) == _AT + timedelta(hours=1)
+    assert delivered_first.anchored_at(CadenceAnchor.FINISHED) == _AT + timedelta(hours=1)
 
 
 def test_a_live_run_has_no_finished_instant_and_no_eligibility() -> None:
     live = LastRun(_AT, holder=Holder(ChunkStatus.RUNNING, _AT))
-    assert live.anchored_at(Anchor.FINISHED) is None
+    assert live.anchored_at(CadenceAnchor.FINISHED) is None
     assert eligible_at(_rhythm(spacing="1h", anchor="finished"), live) is None
 
 
@@ -342,7 +342,7 @@ def test_a_grouped_run_is_held_until_its_survivor_settles() -> None:
     later = _AT + timedelta(hours=3)
     assert not is_due(rhythm, _errand(), grouped, later)
     settled = replace(grouped, holder=replace(survivor, status=ChunkStatus.DONE, completed_at=later))
-    assert settled.anchored_at(Anchor.STARTED) == _AT + timedelta(minutes=3)  # the survivor's start
+    assert settled.anchored_at(CadenceAnchor.STARTED) == _AT + timedelta(minutes=3)  # the survivor's start
     assert is_due(rhythm, _errand(), settled, later)
 
 

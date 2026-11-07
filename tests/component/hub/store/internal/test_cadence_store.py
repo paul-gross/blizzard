@@ -16,9 +16,9 @@ from typing import Any
 import pytest
 import sqlalchemy as sa
 
+from blizzard.foundation.cadence_anchor import CadenceAnchor
 from blizzard.foundation.run_mode import RunMode
 from blizzard.hub.domain.cadence.model import (
-    Anchor,
     Cadence,
     CadenceEdit,
     CadenceShape,
@@ -103,7 +103,7 @@ def test_a_cadence_reads_back_as_written_by_id_slug_and_list(hub: HubHarness) ->
     assert by_id.rhythm.schedule is not None
     assert by_id.rhythm.spacing is not None
     assert (by_id.rhythm.schedule.cron, by_id.rhythm.schedule.zone) == ("0 20 * * *", "America/Chicago")
-    assert (by_id.rhythm.spacing.minutes, by_id.rhythm.anchor) == (10 * 24 * 60, Anchor.FINISHED)
+    assert (by_id.rhythm.spacing.minutes, by_id.rhythm.anchor) == (10 * 24 * 60, CadenceAnchor.FINISHED)
     assert [chore.key for chore in by_id.chores] == ["arch", "tests", "plain"]
     arch, tests, plain = (chore.spec for chore in by_id.chores)
     assert (arch.selection, arch.mode, arch.note, arch.promote) == (

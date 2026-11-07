@@ -12,7 +12,6 @@ from dataclasses import dataclass, field, replace
 from datetime import datetime
 from enum import StrEnum
 from types import MappingProxyType
-from typing import Literal
 
 from blizzard.foundation.chunk_migration import MigrationMode
 from blizzard.foundation.chunk_status import TERMINAL_STATUSES, ChunkStatus
@@ -447,10 +446,6 @@ class BounceFact:
     cause: str
     envelope: str
     recorded_at: datetime
-
-
-#: What a recorded wait waits on.
-type WaitKind = Literal["pending", "awaiting-merge"]
 
 
 @domain_model

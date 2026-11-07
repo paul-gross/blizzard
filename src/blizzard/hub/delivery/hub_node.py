@@ -20,6 +20,7 @@ from blizzard.foundation.escalation_causes import EscalationCause
 from blizzard.foundation.event_log import EventLogKind
 from blizzard.foundation.ids import Id, IdPrefix
 from blizzard.foundation.roles import domain_model
+from blizzard.foundation.wait_kinds import WaitKind
 from blizzard.hub.domain.actions.effects import ActionEscalation
 from blizzard.hub.domain.actions.visit import GitCommits, LandingProject
 from blizzard.hub.domain.artifact.model import StoredArtifact
@@ -30,7 +31,6 @@ from blizzard.hub.domain.chunk.model import (
     ChunkFacts,
     CloseEnqueueDecision,
     LandedRepos,
-    WaitKind,
     decide_close_enqueue,
 )
 from blizzard.hub.domain.chunk.no_code import no_code_repos

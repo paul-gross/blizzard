@@ -3279,10 +3279,7 @@ export type PauseView = {
  * first attempt or is already mid-poll, and when the next is due. Never itself a status.
  */
 export type PendingView = {
-    /**
-     * Kind
-     */
-    kind: string;
+    kind: WaitKind;
     /**
      * Next Poll At
      */
@@ -4843,6 +4840,10 @@ export type VersionWindowView = {
      */
     floor: string;
 };
+
+export const WaitKind = { PENDING: 'pending', AWAITING_MERGE: 'awaiting-merge' } as const;
+
+export type WaitKind = typeof WaitKind[keyof typeof WaitKind];
 
 /**
  * WorkItemAuthorView

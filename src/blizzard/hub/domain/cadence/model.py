@@ -13,6 +13,7 @@ from datetime import datetime
 from enum import StrEnum
 from typing import Literal
 
+from blizzard.foundation.cadence_anchor import CadenceAnchor
 from blizzard.foundation.cadence_attention import AttentionReason
 from blizzard.foundation.ids import Id, IdPrefix
 from blizzard.foundation.roles import domain_model
@@ -36,14 +37,6 @@ _SPACING_PATTERN = re.compile(r"^([0-9]+)([mhd])$")
 _UNIT_MINUTES = {"m": 1, "h": 60, "d": 24 * 60}
 #: The selection a chore states to run over every scope its routine sweeps.
 ALL_SCOPES = "all"
-
-
-class Anchor(StrEnum):
-    """Which moment of an errand's last run its spacing counts from."""
-
-    SCHEDULED = "scheduled"
-    STARTED = "started"
-    FINISHED = "finished"
 
 
 class ScopeSelection(StrEnum):
@@ -77,17 +70,17 @@ class Spacing:
 @dataclass(frozen=True)
 class Rhythm:
     """When a cadence's errands may come due: a schedule, a spacing, or both, and the anchor a spacing counts
-    from. ``anchor`` is ``None`` when unstated, read as :attr:`Anchor.STARTED`."""
+    from. ``anchor`` is ``None`` when unstated, read as :attr:`CadenceAnchor.STARTED`."""
 
     schedule: Schedule | None
     spacing: Spacing | None
-    anchor: Anchor | None = None
+    anchor: CadenceAnchor | None = None
 
-    def effective_anchor(self) -> Anchor | None:
+    def effective_anchor(self) -> CadenceAnchor | None:
         """The anchor the spacing counts from — ``started`` when unstated — or ``None`` with no spacing."""
         if self.spacing is None:
             return None
-        return self.anchor or Anchor.STARTED
+        return self.anchor or CadenceAnchor.STARTED
 
     @classmethod
     def parse(
@@ -107,12 +100,12 @@ class Rhythm:
         parsed_spacing = Spacing.parse(spacing) if spacing is not None else None
         if schedule is None and parsed_spacing is None:
             raise ConfigFieldError("schedule", "a cadence states a schedule, a spacing, or both")
-        parsed_anchor: Anchor | None = None
+        parsed_anchor: CadenceAnchor | None = None
         if anchor is not None:
             if parsed_spacing is None:
                 raise ConfigFieldError("anchor", "an anchor counts a spacing, and this cadence states none")
             try:
-                parsed_anchor = Anchor(anchor)
+                parsed_anchor = CadenceAnchor(anchor)
             except ValueError as exc:
                 raise ConfigFieldError(
                     "anchor", f"an anchor is scheduled, started, or finished, got {anchor!r}"

@@ -17,6 +17,7 @@ from typing import Annotated, Literal
 
 from fastapi import APIRouter, Depends, Header, HTTPException, Query, status
 
+from blizzard.foundation.cadence_anchor import CadenceAnchor
 from blizzard.foundation.store.utc import iso_utc
 from blizzard.hub.api import problems, problems_garden
 from blizzard.hub.api.auth import reject_runner_principal
@@ -32,7 +33,6 @@ from blizzard.hub.auth.permissions import Permission, may_admit
 from blizzard.hub.composition import TenantServices
 from blizzard.hub.domain.cadence.model import (
     ALL_SCOPES,
-    Anchor,
     Attention,
     Cadence,
     CadenceAdmissionRefused,
@@ -131,7 +131,7 @@ def _errand_view(row: ErrandView) -> CadenceErrandView:
             status=None if holder is None else holder.status,
             scheduled_at=iso_utc(run.minted_at),
             started_at=None if holder is None or holder.started_at is None else iso_utc(holder.started_at),
-            finished_at=None if (finished := run.anchored_at(Anchor.FINISHED)) is None else iso_utc(finished),
+            finished_at=None if (finished := run.anchored_at(CadenceAnchor.FINISHED)) is None else iso_utc(finished),
         ),
         due_at=None if row.due_at is None else iso_utc(row.due_at),
     )
@@ -149,7 +149,7 @@ def _cadence_view(read: CadenceRead, labels: ProjectLabelFields) -> CadenceView:
         if rhythm.schedule is None
         else CadenceScheduleView(cron=rhythm.schedule.cron, zone=rhythm.schedule.zone),
         spacing_minutes=None if rhythm.spacing is None else rhythm.spacing.minutes,
-        anchor=None if anchor is None else anchor.value,
+        anchor=anchor,
         chores=[
             ChoreView(
                 chore_id=chore.chore_id,
