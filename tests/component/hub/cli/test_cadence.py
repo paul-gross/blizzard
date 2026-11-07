@@ -148,7 +148,10 @@ def test_chore_verbs_refuse_a_duplicate_or_missing_key(client: TestClient) -> No
     _ok("create", "evening", "--spacing", "10d")
     _ok("chore", "add", "evening", "arch", "--routine", "arch")
 
-    assert "already has chore 'arch'" in _cli("chore", "add", "evening", "arch", "--routine", "arch").output
+    duplicate = _cli("chore", "add", "evening", "arch", "--routine", "arch")
+    assert duplicate.exit_code != 0
+    assert "share the key 'arch'" in duplicate.output
+    assert [c["key"] for c in _shown()["chores"]] == ["arch"]
     assert "has no chore 'nope'" in _cli("chore", "edit", "evening", "nope", "--hold").output
     assert "has no chore 'nope'" in _cli("chore", "remove", "evening", "nope").output
     both = _cli("chore", "edit", "evening", "arch", "--all-scopes", "--default-scope")

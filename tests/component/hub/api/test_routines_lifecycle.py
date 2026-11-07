@@ -146,6 +146,54 @@ def test_create_naming_an_existing_name_is_refused_rather_than_duplicating(tmp_p
     assert len(hub.client.get("/api/routines").json()) == 1
 
 
+def test_two_routines_may_share_a_display_name_under_different_slugs(tmp_path: Path) -> None:
+    hub = build_hub(tmp_path)
+    _mint_graph(hub)
+    base = {"name": "Nightly", "graph_name": "alpha", "default_scope_slug": "blizzard"}
+
+    assert hub.client.post("/api/routines", json={**base, "slug": "one"}).status_code == 201
+    assert hub.client.post("/api/routines", json={**base, "slug": "two"}).status_code == 201
+    assert sorted(r["slug"] for r in hub.client.get("/api/routines").json()) == ["one", "two"]
+
+
+def test_a_retired_routines_slug_still_refuses_a_create(tmp_path: Path) -> None:
+    hub = build_hub(tmp_path)
+    _mint_graph(hub)
+    created = _create(hub)
+    assert hub.client.post(f"/api/routines/{created['routine_id']}/retire", json={}).status_code == 202
+
+    resp = hub.client.post(
+        "/api/routines",
+        json={"name": "nightly", "graph_name": "alpha", "default_scope_slug": "blizzard"},
+    )
+
+    assert resp.status_code == 422, resp.text
+    assert "nightly" in resp.json()["detail"]
+    assert len(hub.client.get("/api/routines", params={"include_retired": "true"}).json()) == 1
+
+
+def test_create_stating_neither_slug_nor_name_is_refused_at_the_slug(tmp_path: Path) -> None:
+    hub = build_hub(tmp_path)
+    _mint_graph(hub)
+
+    resp = hub.client.post("/api/routines", json={"graph_name": "alpha", "default_scope_slug": "fresh"})
+
+    assert resp.status_code == 422, resp.text
+    assert resp.headers["content-type"].startswith("application/problem+json")
+    assert resp.json()["detail"][0]["loc"] == ["body", "slug"]
+    assert hub.client.get("/api/routines", params={"include_retired": "true"}).json() == []
+    assert "fresh" not in [s["slug"] for s in hub.client.get("/api/scopes").json()]
+
+
+def test_create_by_slug_only_or_name_only_still_succeeds(tmp_path: Path) -> None:
+    hub = build_hub(tmp_path)
+    _mint_graph(hub)
+    base = {"graph_name": "alpha", "default_scope_slug": "blizzard"}
+
+    assert hub.client.post("/api/routines", json={**base, "slug": "by-slug"}).status_code == 201
+    assert hub.client.post("/api/routines", json={**base, "name": "by-name"}).status_code == 201
+
+
 def test_create_naming_an_unresolved_graph_is_refused_naming_it(tmp_path: Path) -> None:
     hub = build_hub(tmp_path)
 
