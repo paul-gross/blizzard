@@ -4,9 +4,10 @@ from __future__ import annotations
 
 import hashlib
 import json
-from collections.abc import Iterable, Mapping
+from collections.abc import Iterable, Mapping, Sequence
 
 from blizzard.hub.domain.artifact.model import StoredArtifact
+from blizzard.hub.domain.chunk.model import LandedRepos
 
 
 def no_code_marker(declaration: Mapping[str, str | None]) -> tuple[str, str]:
@@ -29,3 +30,12 @@ def no_code_repos(
         and all(declaration.get(key) for key in ("record", "base_branch", "branch", "commit"))
         and no_code_marker(declaration) in markers
     )
+
+
+def finished_repos(
+    artifacts: Sequence[StoredArtifact],
+    markers: Iterable[StoredArtifact],
+    declarations: Iterable[Mapping[str, str | None]],
+) -> frozenset[str]:
+    """Repos landed in artifacts or resolved without code in markers."""
+    return LandedRepos.of(artifacts).names | no_code_repos(markers, declarations)

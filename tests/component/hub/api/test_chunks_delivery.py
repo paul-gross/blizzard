@@ -13,6 +13,8 @@ from sqlalchemy import Connection, event
 
 from blizzard.hub.domain.chunk.no_code import no_code_marker
 from blizzard.hub.domain.config.forges import ConfiguredForge, ForgeId
+from blizzard.hub.domain.projects.links import RepositoryLink
+from blizzard.hub.domain.projects.model import ProjectId
 from blizzard.hub.store import schema as s
 from tests.support.scaffolding import (
     HubHarness,
@@ -28,7 +30,7 @@ from tests.support.scaffolding import (
 _NOW = datetime(2026, 1, 1, tzinfo=UTC)
 
 
-def _marker(conn: Connection, chunk_id: str, name: str, data: str, index: int) -> None:
+def _marker(conn: Connection, chunk_id: str, name: str, data: str, index: int, node: str = "deliver") -> None:
     conn.execute(
         s.artifacts.insert().values(
             stamp(
@@ -36,7 +38,7 @@ def _marker(conn: Connection, chunk_id: str, name: str, data: str, index: int) -
                 artifact_id=f"art_delivery_{index}",
                 chunk_id=chunk_id,
                 node_id="nd_delivery",
-                node_name="deliver",
+                node_name=node,
                 epoch=1,
                 name=name,
                 kind="asset",
@@ -196,7 +198,8 @@ def test_delivery_marker_read_only_touches_page_ids_at_two_fleet_sizes(tmp_path:
     assert counts[0] == counts[1]
 
 
-def test_no_code_matches_current_resolved_commit_on_list_and_detail(tmp_path: Path) -> None:
+@pytest.mark.parametrize("node", ["deliver", "arbitrary-worker-node"])
+def test_no_code_matches_current_resolved_commit_on_list_and_detail(tmp_path: Path, node: str) -> None:
     hub = build_hub(tmp_path)
     create_repositories(
         hub.client, [fixture_repository("one", ensure_fixture_forge(hub.client, "http://forge.example"), owner="acme")]
@@ -215,7 +218,7 @@ def test_no_code_matches_current_resolved_commit_on_list_and_detail(tmp_path: Pa
             '{"repo":"acme/one","number":1,"url":"http://forge/acme/one/pull/1"}',
             1,
         )
-        _marker(conn, chunk_id, name, data, 2)
+        _marker(conn, chunk_id, name, data, 2, node)
         conn.execute(
             s.artifacts.insert().values(
                 stamp(
@@ -268,3 +271,62 @@ def test_no_code_matches_current_resolved_commit_on_list_and_detail(tmp_path: Pa
         assert len(view["open_prs"]) == 1
         assert not view["closed_prs"]
         assert not view["landed_repos"]
+
+
+def test_no_code_declarations_resolve_a_page_in_one_batch(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    hub = build_hub(tmp_path)
+    create_repositories(
+        hub.client, [fixture_repository("one", ensure_fixture_forge(hub.client, "http://forge.example"), owner="acme")]
+    )
+    record = next(
+        r["repository_id"] for r in hub.client.get("/api/repositories").json()["repositories"] if r["slug"] == "one"
+    )
+    name, data = no_code_marker(
+        {"repo": "acme/one", "record": record, "base_branch": "main", "branch": "feat/x", "commit": "abc"}
+    )
+    for i in range(3):
+        chunk_id = ingest(hub, [{"source": "default", "ref": str(i)}])
+        with hub.engine.begin() as conn:
+            _marker(conn, chunk_id, name, data, i, "arbitrary-worker-node")
+            _marker(
+                conn,
+                chunk_id,
+                "delivery-pr/acme/one/1",
+                '{"repo":"acme/one","number":1,"url":"http://forge/acme/one/pull/1"}',
+                100 + i,
+            )
+            conn.execute(
+                s.artifacts.insert().values(
+                    stamp(
+                        s.artifacts,
+                        artifact_id=f"art_batch_commit_{i}",
+                        chunk_id=chunk_id,
+                        node_id="nd_build",
+                        node_name="build",
+                        epoch=1,
+                        name="one",
+                        kind="git_commit",
+                        data="feat/x:abc",
+                        repo="acme/one",
+                        forge=None,
+                        produced_at=_NOW,
+                        seq=10 + i,
+                    )
+                )
+            )
+    links = hub.services.project_links
+    calls: list[Sequence[ProjectId]] = []
+    original = links.repositories_of_projects
+
+    def read(project_ids: Sequence[ProjectId]) -> dict[ProjectId, list[RepositoryLink]]:
+        calls.append(project_ids)
+        return original(project_ids)
+
+    monkeypatch.setattr(links, "repositories_of_projects", read)
+    response = hub.client.get("/api/chunks")
+    assert response.status_code == 200
+    chunks = response.json()["chunks"]
+    assert len(chunks) == 3
+    assert all(not chunk["open_prs"] and len(chunk["closed_prs"]) == 1 for chunk in chunks)
+    # The page's landed-link rendering and declaration resolution each read projects once.
+    assert len(calls) == 2

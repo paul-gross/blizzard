@@ -10,8 +10,9 @@ from datetime import UTC, datetime
 from types import MappingProxyType
 
 from blizzard.foundation.artifacts import ArtifactKind
+from blizzard.hub.domain.actions.declarations import GitCommits
 from blizzard.hub.domain.actions.effects import Effect, EffectResult, EffectStatus, LandingRecord, Pass
-from blizzard.hub.domain.actions.visit import GitCommits, LandingProject, Visit, VisitChunk, VisitNode
+from blizzard.hub.domain.actions.visit import LandingProject, Visit, VisitChunk, VisitNode
 from blizzard.hub.domain.artifact.model import StoredArtifact
 from blizzard.hub.domain.config.forges import ConfiguredForge, ForgeFields, ForgeId
 from blizzard.hub.domain.config.repositories import (

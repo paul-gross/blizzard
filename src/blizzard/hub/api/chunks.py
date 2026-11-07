@@ -24,7 +24,6 @@ from blizzard.hub.api.auth_session import require, tenant_bound
 from blizzard.hub.api.board_window import BOARD_DONE_WINDOW
 from blizzard.hub.api.chunk_edit import ChunkPatchBody
 from blizzard.hub.api.chunk_views import ChunkView, blocked_view, ingest_conflict_refusal
-from blizzard.hub.api.delivery_declarations import delivery_declarations_for
 from blizzard.hub.api.deps import Services
 from blizzard.hub.api.flow_places import chunk_flow_places
 from blizzard.hub.api.graph_names import GraphNames, graph_by_ref
@@ -54,6 +53,7 @@ from blizzard.hub.domain.chunk.ingest import (
     ingest_work_refs,
 )
 from blizzard.hub.domain.chunk.model import Chunk, ChunkFacts, FleetSummary, WorkRef
+from blizzard.hub.domain.delivery.declarations import delivery_declarations_for
 from blizzard.hub.domain.execution.decisions import NotEscalated
 from blizzard.hub.domain.execution.detach import NotRouted
 from blizzard.hub.domain.graph.authoring import DefaultGraphRetired
@@ -304,7 +304,13 @@ def list_chunks(
     # Unlike the fleet-wide status/holder reads above, delivery belongs only to
     # rendered rows: one narrowed, batched read over this page's ids.
     delivery_sources = services.chunks.artifacts.delivery_sources_for([chunk.chunk_id for chunk in page_chunks])
-    declarations = delivery_declarations_for(services, page_chunks, delivery_sources)
+    declarations = delivery_declarations_for(
+        page_chunks,
+        delivery_sources,
+        project_links=services.project_links,
+        repository_records=services.repository_records,
+        forge_records=services.forge_records,
+    )
     commit_links = services.commit_links.for_chunks(page_chunks)
     # A pointer the page renders can be held live by a chunk outside it; the store narrows to live candidates.
     live_holders = services.chunks.work_refs.live_holders(p for chunk in page_chunks for p in chunk.work_refs)

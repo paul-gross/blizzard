@@ -14,7 +14,6 @@ from blizzard.foundation.store.utc import iso_utc
 from blizzard.foundation.wait_kinds import WaitKind
 from blizzard.hub.api import problems
 from blizzard.hub.api.decisions import to_decision_view
-from blizzard.hub.api.delivery_declarations import delivery_declarations_for
 from blizzard.hub.api.flow_places import chunk_flow_places, fact_view
 from blizzard.hub.api.graph_names import GraphNames
 from blizzard.hub.api.problem_exceptions import ProblemHTTPException
@@ -36,6 +35,7 @@ from blizzard.hub.domain.chunk.model import (
     verb_legal_from,
 )
 from blizzard.hub.domain.config.repositories import CommitOrigin, resolve_origin_record
+from blizzard.hub.domain.delivery.declarations import delivery_declarations_for
 from blizzard.hub.domain.delivery.flows import PollPolicy, SubmissionRecord, bounce_is_rework, bounce_withdrew
 from blizzard.hub.domain.graph.model import RESERVED_TERMINAL
 from blizzard.hub.domain.graph.progress import NodeVisit, node_progress
@@ -273,7 +273,13 @@ class ChunkView:
         if self.delivery is not None:
             return self.delivery
         sources = self.services.chunks.artifacts.delivery_sources_for([self.chunk.chunk_id])
-        declarations = delivery_declarations_for(self.services, [self.chunk], sources)
+        declarations = delivery_declarations_for(
+            [self.chunk],
+            sources,
+            project_links=self.services.project_links,
+            repository_records=self.services.repository_records,
+            forge_records=self.services.forge_records,
+        )
         commit_links = self.services.commit_links.for_chunks([self.chunk])
         return DeliveryRead.of(
             self.facts,

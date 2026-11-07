@@ -21,8 +21,9 @@ from blizzard.foundation.event_log import EventLogKind
 from blizzard.foundation.ids import Id, IdPrefix
 from blizzard.foundation.roles import domain_model
 from blizzard.foundation.wait_kinds import WaitKind
+from blizzard.hub.domain.actions.declarations import GitCommits
 from blizzard.hub.domain.actions.effects import ActionEscalation
-from blizzard.hub.domain.actions.visit import GitCommits, LandingProject
+from blizzard.hub.domain.actions.visit import LandingProject
 from blizzard.hub.domain.artifact.model import StoredArtifact
 from blizzard.hub.domain.chunk.delivery_read import DeliveryRead, DeliverySources
 from blizzard.hub.domain.chunk.event_log import EventLogService, LoggedEvent
@@ -30,10 +31,9 @@ from blizzard.hub.domain.chunk.model import (
     Chunk,
     ChunkFacts,
     CloseEnqueueDecision,
-    LandedRepos,
     decide_close_enqueue,
 )
-from blizzard.hub.domain.chunk.no_code import no_code_repos
+from blizzard.hub.domain.chunk.no_code import finished_repos
 from blizzard.hub.domain.chunk.ports.artifacts import IWriteChunkArtifactsRepository
 from blizzard.hub.domain.chunk.ports.decisions import IWriteChunkDecisionsRepository
 from blizzard.hub.domain.chunk.ports.escalations import BounceEscalationOutcome, IWriteChunkEscalationsRepository
@@ -119,7 +119,7 @@ class BounceEnvelope:
         sources: DeliverySources,
         action: BouncedAction | None,
     ) -> BounceEnvelope:
-        landed = LandedRepos.of(sources.markers).names | no_code_repos(sources.markers, commits)
+        landed = finished_repos(sources.markers, sources.markers, commits)
         read = DeliveryRead.of(ChunkFacts(minted=True), sources)
         prs = {p.repo: p for p in read.open_prs}
         unlanded: list[dict[str, object]] = []
@@ -308,7 +308,7 @@ class HubNodeRouter:
         if commits and destination.to_node_id != RESERVED_TERMINAL:
             pending_repos = {c["repo"] for c in commits}
             artifacts = self._artifacts.load_artifacts(chunk.chunk_id)
-            finished = LandedRepos.of(artifacts).names | no_code_repos(artifacts, commits)
+            finished = finished_repos(artifacts, artifacts, commits)
             if not pending_repos.issubset(finished):
                 envelope = BounceEnvelope.of(
                     cause=choice,

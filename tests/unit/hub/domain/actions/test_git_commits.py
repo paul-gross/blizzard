@@ -5,7 +5,7 @@ from __future__ import annotations
 import pytest
 
 from blizzard.foundation.artifacts import ArtifactKind
-from blizzard.hub.domain.actions.visit import GitCommits, UnconvergedDeliveryError
+from blizzard.hub.domain.actions.declarations import GitCommits, UnconvergedDeliveryError
 from blizzard.hub.domain.artifact.model import StoredArtifact
 
 
