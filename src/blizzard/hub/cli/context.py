@@ -340,12 +340,7 @@ class CliContext:
             raise self._tenant_refusal(
                 "you belong to several tenants — name the one to act in with --tenant <tenant_id>"
             )
-        # An operation that does not yet declare the problem answers the released body: a ``404`` whose ``detail``
-        # is the one string. This text match leaves with the legacy ``detail`` fields.
-        legacy_not_found = (
-            reading.type is None and resp.status_code == HTTPStatus.NOT_FOUND and reading.message == NO_SUCH_TENANT
-        )
-        if reading.type == TENANT_NOT_FOUND or legacy_not_found:
+        if reading.type == TENANT_NOT_FOUND:
             if self.tenant is None:
                 raise click.ClickException(reading.message or NO_SUCH_TENANT)
             raise self._tenant_refusal(

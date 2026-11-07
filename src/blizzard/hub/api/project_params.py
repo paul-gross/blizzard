@@ -21,6 +21,7 @@ from fastapi.responses import JSONResponse
 from blizzard.hub.api import problems
 from blizzard.hub.api.deps import Services
 from blizzard.hub.api.problem_exceptions import ProblemHTTPException
+from blizzard.hub.api.problem_rendering import declared_problem_response
 from blizzard.hub.composition import TenantServices
 from blizzard.hub.domain.projects.model import Project, ProjectId, ProjectRequired, sole_project
 from blizzard.wire.project import ProjectRef, ProjectRequiredBody
@@ -100,5 +101,8 @@ def refuse_project_required(request: Request, exc: Exception) -> JSONResponse:
     """Answer a call that needs a project and named none while its tenant does not hold exactly one: ``422`` with
     the code ``project_required`` and the tenant's projects."""
     assert isinstance(exc, ProjectRequired)
+    declared = declared_problem_response(request, problems.project_required_problem(exc, instance=request.url.path))
+    if declared is not None:
+        return declared
     body = ProjectRequiredBody(message=str(exc), projects=[project_ref(project) for project in exc.projects])
     return JSONResponse(status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, content={"detail": body.model_dump()})

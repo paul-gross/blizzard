@@ -27,7 +27,6 @@ import structlog
 from fastapi import Depends, HTTPException, Request, status
 from fastapi.responses import JSONResponse
 from fastapi.routing import APIRoute
-from pydantic import BaseModel
 
 from blizzard.auth_core import Role
 from blizzard.foundation.platform_tracing.attributes import Caller, annotate_caller, annotate_tenant
@@ -43,9 +42,8 @@ from blizzard.hub.api.auth import (
 )
 from blizzard.hub.api.bearer import presented_bearer
 from blizzard.hub.api.hub_level import Hub, hub_services
-from blizzard.hub.api.problem_declarations import BOOTSTRAP_DEPENDENCY_DECLARATIONS, FLEET_DEPENDENCY_DECLARATIONS
 from blizzard.hub.api.problem_exceptions import ProblemHTTPException
-from blizzard.hub.api.problem_rendering import problem_response
+from blizzard.hub.api.problem_rendering import declared_problem_response
 from blizzard.hub.api.problems import (
     authentication_unresolved_problem,
     tenant_not_found_problem,
@@ -56,8 +54,7 @@ from blizzard.hub.auth.permissions import HUB_PERMISSIONS, Permission, permissio
 from blizzard.hub.composition import HubServices, TenantServices
 from blizzard.hub.config import AUTH_MODE_NONE
 from blizzard.hub.tenancy import StoreScope, TenantClosed, TenantId, UnknownTenant
-from blizzard.wire.auth import AuthenticationUnresolvedProblem
-from blizzard.wire.tenant import NO_SUCH_TENANT, TenantNotFoundProblem
+from blizzard.wire.tenant import NO_SUCH_TENANT
 
 SESSION_COOKIE_NAME = "bz_session"
 
@@ -308,22 +305,14 @@ def refuse_closed_tenant(request: Request, exc: Exception) -> JSONResponse:
     ``401`` to the runner whose token resolved it, the ``404`` of a tenant that does not exist to anyone else."""
     assert isinstance(exc, TenantClosed | UnknownTenant)
     if resolved_runner(request) is not None:
-        if _declares_closed_tenant_problem(request, AuthenticationUnresolvedProblem):
-            return problem_response(
-                authentication_unresolved_problem(instance=request.url.path, detail=UNRESOLVED_RUNNER_TOKEN),
-            )
-        return JSONResponse(status_code=status.HTTP_401_UNAUTHORIZED, content={"detail": UNRESOLVED_RUNNER_TOKEN})
-    if _declares_closed_tenant_problem(request, TenantNotFoundProblem):
-        return problem_response(tenant_not_found_problem(instance=request.url.path))
-    return JSONResponse(status_code=status.HTTP_404_NOT_FOUND, content={"detail": _NO_SUCH_TENANT})
-
-
-def _declares_closed_tenant_problem(request: Request, model: type[BaseModel]) -> bool:
-    route = request.scope.get("route")
-    return isinstance(route, APIRoute) and any(
-        declaration.method == request.method and declaration.path == route.path and declaration.model is model
-        for declaration in (*FLEET_DEPENDENCY_DECLARATIONS, *BOOTSTRAP_DEPENDENCY_DECLARATIONS)
-    )
+        declared = declared_problem_response(
+            request, authentication_unresolved_problem(instance=request.url.path, detail=UNRESOLVED_RUNNER_TOKEN)
+        )
+        return declared or JSONResponse(
+            status_code=status.HTTP_401_UNAUTHORIZED, content={"detail": UNRESOLVED_RUNNER_TOKEN}
+        )
+    declared = declared_problem_response(request, tenant_not_found_problem(instance=request.url.path))
+    return declared or JSONResponse(status_code=status.HTTP_404_NOT_FOUND, content={"detail": _NO_SUCH_TENANT})
 
 
 def _tenant_required() -> HTTPException:

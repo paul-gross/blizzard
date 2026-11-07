@@ -8,6 +8,7 @@ lists members only through one."""
 
 from __future__ import annotations
 
+import json
 from pathlib import Path
 
 import pytest
@@ -18,6 +19,7 @@ from blizzard.hub.api.auth_session import TENANT_HEADER
 from blizzard.hub.auth.models import User
 from blizzard.hub.store import schema
 from blizzard.hub.tenancy import TenantId
+from blizzard.wire.problem import TENANT_NOT_FOUND
 from tests.support.scaffolding import (
     HubHarness,
     build_hub,
@@ -175,7 +177,14 @@ def test_a_hub_administrator_naming_no_open_tenant_is_answered_as_anyone(tmp_pat
         hub.client.put(f"/api/members/{grace.user_id}", json={"role": "guest"}, headers=_as(hub, root, tenant)).text
         for tenant in (TenantId("ten_01KXZZZZZZZZZZZZZZZZZZZZZZ"), TenantId("not-a-tenant"))
     }
-    assert answers == {'{"detail":"no such tenant"}'}
+    (answer,) = answers
+    assert json.loads(answer) == {
+        "type": TENANT_NOT_FOUND,
+        "title": "Tenant not found",
+        "detail": "no such tenant",
+        "instance": f"/api/members/{grace.user_id}",
+        "status": 404,
+    }
 
 
 def test_a_revoked_member_can_no_longer_enter_the_tenant(tmp_path: Path) -> None:

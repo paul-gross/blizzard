@@ -510,15 +510,19 @@ def lease_ownership_problem(exc: LeaseSegmentsNotOwned, *, instance: str) -> Lea
 
 
 def project_required_problem(exc: ProjectRequired, *, instance: str) -> ProjectRequiredProblem:
-    return ProjectRequiredProblem(
-        type=problem_types.PROJECT_REQUIRED,
-        title="Project required",
-        instance=instance,
-        status=422,
-        detail=ProjectRequiredBody(
+    return project_choice_problem(
+        ProjectRequiredBody(
             message=str(exc),
             projects=[ProjectRef(project_id=p.project_id, slug=p.slug, name=p.name) for p in exc.projects],
         ),
+        instance=instance,
+    )
+
+
+def project_choice_problem(detail: ProjectRequiredBody, *, instance: str) -> ProjectRequiredProblem:
+    """The ``project_required`` refusal carrying ``detail``, the projects a caller chooses among."""
+    return ProjectRequiredProblem(
+        type=problem_types.PROJECT_REQUIRED, title="Project required", instance=instance, status=422, detail=detail
     )
 
 

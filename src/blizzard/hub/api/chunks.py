@@ -12,7 +12,7 @@ from datetime import datetime
 from functools import partial
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 
@@ -29,6 +29,7 @@ from blizzard.hub.api.deps import Services
 from blizzard.hub.api.flow_places import chunk_flow_places
 from blizzard.hub.api.graph_names import GraphNames, graph_by_ref
 from blizzard.hub.api.problem_exceptions import ProblemHTTPException
+from blizzard.hub.api.problem_rendering import declared_problem_response
 from blizzard.hub.api.project_label_fields import project_label_fields
 from blizzard.hub.api.project_params import QueryProject, body_project, project_of_call, project_ref
 from blizzard.hub.api.work_item_reads import read_chunk_work_items
@@ -148,7 +149,7 @@ def _ingest_project(services: TenantServices, pointers: list[WorkRef], named: Pr
 
 
 def ingest_project_refusal(
-    services: TenantServices, exc: IngestProjectAmbiguous | IngestSourceNotLinked
+    request: Request, services: TenantServices, exc: IngestProjectAmbiguous | IngestSourceNotLinked
 ) -> JSONResponse:
     """An ingest's project refusal as its ``422`` body: ``source_not_linked`` naming the source and
     the project it is not linked to (``null`` when it is linked to none); otherwise
@@ -164,7 +165,13 @@ def ingest_project_refusal(
     else:
         found = services.projects.get_many(list(exc.candidates))
         projects = [found[project_id] for project_id in exc.candidates if project_id in found]
-        body = ProjectRequiredBody(message=str(exc), projects=[project_ref(project) for project in projects])
+        required = ProjectRequiredBody(message=str(exc), projects=[project_ref(project) for project in projects])
+        declared = declared_problem_response(
+            request, problems.project_choice_problem(required, instance=request.url.path)
+        )
+        if declared is not None:
+            return declared
+        body = required
     return JSONResponse(status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, content={"detail": body.model_dump()})
 
 
@@ -174,7 +181,7 @@ def ingest_project_refusal(
     status_code=status.HTTP_201_CREATED,
     dependencies=[Depends(require(Permission.CHUNK_INGEST))],
 )
-def ingest_chunk(request: ChunkIngestRequest, services: Services) -> object:
+def ingest_chunk(request: ChunkIngestRequest, services: Services, http_request: Request) -> object:
     """Ingest by source-native token into the project named, or the one the tokens' sources
     agree on; 422 on a project the tenant does not hold, a token no configured source
     claims, a project the tokens leave open (``project_required``), a source the
@@ -202,7 +209,7 @@ def ingest_chunk(request: ChunkIngestRequest, services: Services) -> object:
     except EmptyIngest as exc:
         raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail=str(exc)) from exc
     except (IngestProjectAmbiguous, IngestSourceNotLinked) as exc:
-        return ingest_project_refusal(services, exc)
+        return ingest_project_refusal(http_request, services, exc)
     except IngestItemProjectMismatch as exc:
         raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail=str(exc)) from exc
     try:
@@ -214,7 +221,7 @@ def ingest_chunk(request: ChunkIngestRequest, services: Services) -> object:
     try:
         chunk_id = services.ingest.ingest(pointers, graph=graph, project=project)
     except IngestSourceNotLinked as exc:  # unlinked after the project was chosen
-        return ingest_project_refusal(services, exc)
+        return ingest_project_refusal(http_request, services, exc)
     except IngestConflict as exc:
         return ingest_conflict_response(services, exc)
     chunk_events.ChunkChanged.of(services, chunk_id, prev_status=None).publish(cause="minted", key=f"chunks:{chunk_id}")

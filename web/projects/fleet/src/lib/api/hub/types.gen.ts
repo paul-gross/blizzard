@@ -8437,6 +8437,32 @@ export type ProjectRequiredBody = {
 };
 
 /**
+ * ProjectRequiredProblem
+ *
+ * A project must be selected; its released detail includes the choices.
+ */
+export type ProjectRequiredProblem = {
+    detail: ProjectRequiredBody;
+    /**
+     * Instance
+     */
+    instance: string;
+    /**
+     * Status
+     */
+    status?: number;
+    /**
+     * Title
+     */
+    title: string;
+    /**
+     * Type
+     */
+    type: 'urn:blizzard:problem:project-required';
+    [key: string]: unknown;
+};
+
+/**
  * ProjectView
  *
  * One project — the ``GET /api/projects`` listing row and every project verb's view.
@@ -14064,9 +14090,29 @@ export type ListActivityApiActivityGetData = {
 
 export type ListActivityApiActivityGetErrors = {
     /**
+     * Problem
+     */
+    400: TenantCredentialMismatchProblem;
+    /**
+     * Problem
+     */
+    401: AuthenticationRequiredProblem;
+    /**
+     * Problem
+     */
+    404: TenantNotFoundProblem;
+    /**
+     * Problem
+     */
+    409: TenantRequiredProblem;
+    /**
      * Validation Error
      */
     422: HttpValidationError;
+    /**
+     * Problem
+     */
+    503: HubStoreUnavailableProblem;
 };
 
 export type ListActivityApiActivityGetError = ListActivityApiActivityGetErrors[keyof ListActivityApiActivityGetErrors];
@@ -14094,9 +14140,21 @@ export type HubEventsApiAdminEventsGetData = {
 
 export type HubEventsApiAdminEventsGetErrors = {
     /**
+     * Problem
+     */
+    401: AuthenticationRequiredProblem;
+    /**
+     * Problem
+     */
+    403: PermissionRequiredProblem;
+    /**
      * Validation Error
      */
     422: HttpValidationError;
+    /**
+     * Problem
+     */
+    503: HubStoreUnavailableProblem;
 };
 
 export type HubEventsApiAdminEventsGetError = HubEventsApiAdminEventsGetErrors[keyof HubEventsApiAdminEventsGetErrors];
@@ -14119,6 +14177,23 @@ export type SyncEveryTenantApiAdminGraphsSyncPostData = {
     url: '/api/admin/graphs/sync';
 };
 
+export type SyncEveryTenantApiAdminGraphsSyncPostErrors = {
+    /**
+     * Problem
+     */
+    401: AuthenticationRequiredProblem;
+    /**
+     * Problem
+     */
+    403: PermissionRequiredProblem;
+    /**
+     * Problem
+     */
+    503: HubStoreUnavailableProblem;
+};
+
+export type SyncEveryTenantApiAdminGraphsSyncPostError = SyncEveryTenantApiAdminGraphsSyncPostErrors[keyof SyncEveryTenantApiAdminGraphsSyncPostErrors];
+
 export type SyncEveryTenantApiAdminGraphsSyncPostResponses = {
     /**
      * Successful Response
@@ -14134,6 +14209,23 @@ export type ListHubAdminsApiAdminHubAdminsGetData = {
     query?: never;
     url: '/api/admin/hub-admins';
 };
+
+export type ListHubAdminsApiAdminHubAdminsGetErrors = {
+    /**
+     * Problem
+     */
+    401: AuthenticationRequiredProblem;
+    /**
+     * Problem
+     */
+    403: PermissionRequiredProblem;
+    /**
+     * Problem
+     */
+    503: HubStoreUnavailableProblem;
+};
+
+export type ListHubAdminsApiAdminHubAdminsGetError = ListHubAdminsApiAdminHubAdminsGetErrors[keyof ListHubAdminsApiAdminHubAdminsGetErrors];
 
 export type ListHubAdminsApiAdminHubAdminsGetResponses = {
     /**
@@ -14160,9 +14252,21 @@ export type RevokeHubAdminApiAdminHubAdminsUserIdDeleteData = {
 
 export type RevokeHubAdminApiAdminHubAdminsUserIdDeleteErrors = {
     /**
+     * Problem
+     */
+    401: AuthenticationRequiredProblem;
+    /**
+     * Problem
+     */
+    403: PermissionRequiredProblem;
+    /**
      * Validation Error
      */
     422: HttpValidationError;
+    /**
+     * Problem
+     */
+    503: HubStoreUnavailableProblem;
 };
 
 export type RevokeHubAdminApiAdminHubAdminsUserIdDeleteError = RevokeHubAdminApiAdminHubAdminsUserIdDeleteErrors[keyof RevokeHubAdminApiAdminHubAdminsUserIdDeleteErrors];
@@ -14190,9 +14294,21 @@ export type GrantHubAdminApiAdminHubAdminsUserIdPutData = {
 
 export type GrantHubAdminApiAdminHubAdminsUserIdPutErrors = {
     /**
+     * Problem
+     */
+    401: AuthenticationRequiredProblem;
+    /**
+     * Problem
+     */
+    403: PermissionRequiredProblem;
+    /**
      * Validation Error
      */
     422: HttpValidationError;
+    /**
+     * Problem
+     */
+    503: HubStoreUnavailableProblem;
 };
 
 export type GrantHubAdminApiAdminHubAdminsUserIdPutError = GrantHubAdminApiAdminHubAdminsUserIdPutErrors[keyof GrantHubAdminApiAdminHubAdminsUserIdPutErrors];
@@ -14215,9 +14331,21 @@ export type HubInvariantsApiAdminInvariantsGetData = {
 
 export type HubInvariantsApiAdminInvariantsGetErrors = {
     /**
+     * Problem
+     */
+    401: AuthenticationRequiredProblem;
+    /**
+     * Problem
+     */
+    403: PermissionRequiredProblem;
+    /**
      * Another invariant check is running on this hub.
      */
     409: InvariantsInProgressProblem;
+    /**
+     * Problem
+     */
+    503: HubStoreUnavailableProblem;
 };
 
 export type HubInvariantsApiAdminInvariantsGetError = HubInvariantsApiAdminInvariantsGetErrors[keyof HubInvariantsApiAdminInvariantsGetErrors];
@@ -14245,6 +14373,14 @@ export type RunEveryTenantPassApiAdminSweepsNamePassesPostData = {
 
 export type RunEveryTenantPassApiAdminSweepsNamePassesPostErrors = {
     /**
+     * Problem
+     */
+    401: AuthenticationRequiredProblem;
+    /**
+     * Problem
+     */
+    403: PermissionRequiredProblem;
+    /**
      * No sweep this hub builds goes by the name.
      */
     404: unknown;
@@ -14256,6 +14392,10 @@ export type RunEveryTenantPassApiAdminSweepsNamePassesPostErrors = {
      * Validation Error
      */
     422: HttpValidationError;
+    /**
+     * Problem
+     */
+    503: HubStoreUnavailableProblem;
 };
 
 export type RunEveryTenantPassApiAdminSweepsNamePassesPostError = RunEveryTenantPassApiAdminSweepsNamePassesPostErrors[keyof RunEveryTenantPassApiAdminSweepsNamePassesPostErrors];
@@ -14275,6 +14415,23 @@ export type ListTenantsApiAdminTenantsGetData = {
     query?: never;
     url: '/api/admin/tenants';
 };
+
+export type ListTenantsApiAdminTenantsGetErrors = {
+    /**
+     * Problem
+     */
+    401: AuthenticationRequiredProblem;
+    /**
+     * Problem
+     */
+    403: PermissionRequiredProblem;
+    /**
+     * Problem
+     */
+    503: HubStoreUnavailableProblem;
+};
+
+export type ListTenantsApiAdminTenantsGetError = ListTenantsApiAdminTenantsGetErrors[keyof ListTenantsApiAdminTenantsGetErrors];
 
 export type ListTenantsApiAdminTenantsGetResponses = {
     /**
@@ -14302,9 +14459,21 @@ export type CreateTenantApiAdminTenantsPostData = {
 
 export type CreateTenantApiAdminTenantsPostErrors = {
     /**
+     * Problem
+     */
+    401: AuthenticationRequiredProblem;
+    /**
+     * Problem
+     */
+    403: PermissionRequiredProblem;
+    /**
      * Validation Error
      */
     422: HttpValidationError;
+    /**
+     * Problem
+     */
+    503: HubStoreUnavailableProblem;
 };
 
 export type CreateTenantApiAdminTenantsPostError = CreateTenantApiAdminTenantsPostErrors[keyof CreateTenantApiAdminTenantsPostErrors];
@@ -14332,6 +14501,14 @@ export type DeleteTenantApiAdminTenantsTenantIdDeleteData = {
 
 export type DeleteTenantApiAdminTenantsTenantIdDeleteErrors = {
     /**
+     * Problem
+     */
+    401: AuthenticationRequiredProblem;
+    /**
+     * Problem
+     */
+    403: PermissionRequiredProblem;
+    /**
      * No tenant has the id.
      */
     404: unknown;
@@ -14347,6 +14524,10 @@ export type DeleteTenantApiAdminTenantsTenantIdDeleteErrors = {
      * Validation Error
      */
     422: HttpValidationError;
+    /**
+     * Problem
+     */
+    503: HubStoreUnavailableProblem;
 };
 
 export type DeleteTenantApiAdminTenantsTenantIdDeleteError = DeleteTenantApiAdminTenantsTenantIdDeleteErrors[keyof DeleteTenantApiAdminTenantsTenantIdDeleteErrors];
@@ -14378,9 +14559,21 @@ export type RenameTenantApiAdminTenantsTenantIdPatchData = {
 
 export type RenameTenantApiAdminTenantsTenantIdPatchErrors = {
     /**
+     * Problem
+     */
+    401: AuthenticationRequiredProblem;
+    /**
+     * Problem
+     */
+    403: PermissionRequiredProblem;
+    /**
      * Validation Error
      */
     422: HttpValidationError;
+    /**
+     * Problem
+     */
+    503: HubStoreUnavailableProblem;
 };
 
 export type RenameTenantApiAdminTenantsTenantIdPatchError = RenameTenantApiAdminTenantsTenantIdPatchErrors[keyof RenameTenantApiAdminTenantsTenantIdPatchErrors];
@@ -14460,9 +14653,33 @@ export type CountsByAgentTypeApiAnalyticsCountsAgentTypesGetData = {
 
 export type CountsByAgentTypeApiAnalyticsCountsAgentTypesGetErrors = {
     /**
+     * Problem
+     */
+    400: TenantCredentialMismatchProblem;
+    /**
+     * Problem
+     */
+    401: AuthenticationRequiredProblem;
+    /**
+     * Problem
+     */
+    403: PermissionRequiredProblem;
+    /**
+     * Problem
+     */
+    404: TenantNotFoundProblem;
+    /**
+     * Problem
+     */
+    409: TenantRequiredProblem;
+    /**
      * Validation Error
      */
     422: HttpValidationError;
+    /**
+     * Problem
+     */
+    503: HubStoreUnavailableProblem;
 };
 
 export type CountsByAgentTypeApiAnalyticsCountsAgentTypesGetError = CountsByAgentTypeApiAnalyticsCountsAgentTypesGetErrors[keyof CountsByAgentTypeApiAnalyticsCountsAgentTypesGetErrors];
@@ -14542,9 +14759,33 @@ export type CountsByFileApiAnalyticsCountsFilesGetData = {
 
 export type CountsByFileApiAnalyticsCountsFilesGetErrors = {
     /**
+     * Problem
+     */
+    400: TenantCredentialMismatchProblem;
+    /**
+     * Problem
+     */
+    401: AuthenticationRequiredProblem;
+    /**
+     * Problem
+     */
+    403: PermissionRequiredProblem;
+    /**
+     * Problem
+     */
+    404: TenantNotFoundProblem;
+    /**
+     * Problem
+     */
+    409: TenantRequiredProblem;
+    /**
      * Validation Error
      */
     422: HttpValidationError;
+    /**
+     * Problem
+     */
+    503: HubStoreUnavailableProblem;
 };
 
 export type CountsByFileApiAnalyticsCountsFilesGetError = CountsByFileApiAnalyticsCountsFilesGetErrors[keyof CountsByFileApiAnalyticsCountsFilesGetErrors];
@@ -14624,9 +14865,33 @@ export type CountsByNodeApiAnalyticsCountsNodesGetData = {
 
 export type CountsByNodeApiAnalyticsCountsNodesGetErrors = {
     /**
+     * Problem
+     */
+    400: TenantCredentialMismatchProblem;
+    /**
+     * Problem
+     */
+    401: AuthenticationRequiredProblem;
+    /**
+     * Problem
+     */
+    403: PermissionRequiredProblem;
+    /**
+     * Problem
+     */
+    404: TenantNotFoundProblem;
+    /**
+     * Problem
+     */
+    409: TenantRequiredProblem;
+    /**
      * Validation Error
      */
     422: HttpValidationError;
+    /**
+     * Problem
+     */
+    503: HubStoreUnavailableProblem;
 };
 
 export type CountsByNodeApiAnalyticsCountsNodesGetError = CountsByNodeApiAnalyticsCountsNodesGetErrors[keyof CountsByNodeApiAnalyticsCountsNodesGetErrors];
@@ -14694,9 +14959,33 @@ export type CountsBySkillApiAnalyticsCountsSkillsGetData = {
 
 export type CountsBySkillApiAnalyticsCountsSkillsGetErrors = {
     /**
+     * Problem
+     */
+    400: TenantCredentialMismatchProblem;
+    /**
+     * Problem
+     */
+    401: AuthenticationRequiredProblem;
+    /**
+     * Problem
+     */
+    403: PermissionRequiredProblem;
+    /**
+     * Problem
+     */
+    404: TenantNotFoundProblem;
+    /**
+     * Problem
+     */
+    409: TenantRequiredProblem;
+    /**
      * Validation Error
      */
     422: HttpValidationError;
+    /**
+     * Problem
+     */
+    503: HubStoreUnavailableProblem;
 };
 
 export type CountsBySkillApiAnalyticsCountsSkillsGetError = CountsBySkillApiAnalyticsCountsSkillsGetErrors[keyof CountsBySkillApiAnalyticsCountsSkillsGetErrors];
@@ -14752,9 +15041,33 @@ export type DurationsByGraphApiAnalyticsDurationsGraphsGetData = {
 
 export type DurationsByGraphApiAnalyticsDurationsGraphsGetErrors = {
     /**
+     * Problem
+     */
+    400: TenantCredentialMismatchProblem;
+    /**
+     * Problem
+     */
+    401: AuthenticationRequiredProblem;
+    /**
+     * Problem
+     */
+    403: PermissionRequiredProblem;
+    /**
+     * Problem
+     */
+    404: TenantNotFoundProblem;
+    /**
+     * Problem
+     */
+    409: TenantRequiredProblem;
+    /**
      * Validation Error
      */
     422: HttpValidationError;
+    /**
+     * Problem
+     */
+    503: HubStoreUnavailableProblem;
 };
 
 export type DurationsByGraphApiAnalyticsDurationsGraphsGetError = DurationsByGraphApiAnalyticsDurationsGraphsGetErrors[keyof DurationsByGraphApiAnalyticsDurationsGraphsGetErrors];
@@ -14810,9 +15123,33 @@ export type DurationsByNodeApiAnalyticsDurationsNodesGetData = {
 
 export type DurationsByNodeApiAnalyticsDurationsNodesGetErrors = {
     /**
+     * Problem
+     */
+    400: TenantCredentialMismatchProblem;
+    /**
+     * Problem
+     */
+    401: AuthenticationRequiredProblem;
+    /**
+     * Problem
+     */
+    403: PermissionRequiredProblem;
+    /**
+     * Problem
+     */
+    404: TenantNotFoundProblem;
+    /**
+     * Problem
+     */
+    409: TenantRequiredProblem;
+    /**
      * Validation Error
      */
     422: HttpValidationError;
+    /**
+     * Problem
+     */
+    503: HubStoreUnavailableProblem;
 };
 
 export type DurationsByNodeApiAnalyticsDurationsNodesGetError = DurationsByNodeApiAnalyticsDurationsNodesGetErrors[keyof DurationsByNodeApiAnalyticsDurationsNodesGetErrors];
@@ -14900,9 +15237,33 @@ export type ListEventsApiAnalyticsEventsGetData = {
 
 export type ListEventsApiAnalyticsEventsGetErrors = {
     /**
+     * Problem
+     */
+    400: TenantCredentialMismatchProblem;
+    /**
+     * Problem
+     */
+    401: AuthenticationRequiredProblem;
+    /**
+     * Problem
+     */
+    403: PermissionRequiredProblem;
+    /**
+     * Problem
+     */
+    404: TenantNotFoundProblem;
+    /**
+     * Problem
+     */
+    409: TenantRequiredProblem;
+    /**
      * Validation Error
      */
     422: HttpValidationError;
+    /**
+     * Problem
+     */
+    503: HubStoreUnavailableProblem;
 };
 
 export type ListEventsApiAnalyticsEventsGetError = ListEventsApiAnalyticsEventsGetErrors[keyof ListEventsApiAnalyticsEventsGetErrors];
@@ -14982,9 +15343,33 @@ export type StreamEventsApiAnalyticsEventsNdjsonGetData = {
 
 export type StreamEventsApiAnalyticsEventsNdjsonGetErrors = {
     /**
+     * Problem
+     */
+    400: TenantCredentialMismatchProblem;
+    /**
+     * Problem
+     */
+    401: AuthenticationRequiredProblem;
+    /**
+     * Problem
+     */
+    403: PermissionRequiredProblem;
+    /**
+     * Problem
+     */
+    404: TenantNotFoundProblem;
+    /**
+     * Problem
+     */
+    409: TenantRequiredProblem;
+    /**
      * Validation Error
      */
     422: HttpValidationError;
+    /**
+     * Problem
+     */
+    503: HubStoreUnavailableProblem;
 };
 
 export type StreamEventsApiAnalyticsEventsNdjsonGetError = StreamEventsApiAnalyticsEventsNdjsonGetErrors[keyof StreamEventsApiAnalyticsEventsNdjsonGetErrors];
@@ -15040,9 +15425,33 @@ export type OutcomesByNodeApiAnalyticsOutcomesNodesGetData = {
 
 export type OutcomesByNodeApiAnalyticsOutcomesNodesGetErrors = {
     /**
+     * Problem
+     */
+    400: TenantCredentialMismatchProblem;
+    /**
+     * Problem
+     */
+    401: AuthenticationRequiredProblem;
+    /**
+     * Problem
+     */
+    403: PermissionRequiredProblem;
+    /**
+     * Problem
+     */
+    404: TenantNotFoundProblem;
+    /**
+     * Problem
+     */
+    409: TenantRequiredProblem;
+    /**
      * Validation Error
      */
     422: HttpValidationError;
+    /**
+     * Problem
+     */
+    503: HubStoreUnavailableProblem;
 };
 
 export type OutcomesByNodeApiAnalyticsOutcomesNodesGetError = OutcomesByNodeApiAnalyticsOutcomesNodesGetErrors[keyof OutcomesByNodeApiAnalyticsOutcomesNodesGetErrors];
@@ -15065,9 +15474,33 @@ export type ReDeriveApiAnalyticsReDerivePostData = {
 
 export type ReDeriveApiAnalyticsReDerivePostErrors = {
     /**
+     * Problem
+     */
+    400: TenantCredentialMismatchProblem;
+    /**
+     * Problem
+     */
+    401: AuthenticationRequiredProblem;
+    /**
+     * Problem
+     */
+    403: PermissionRequiredProblem;
+    /**
+     * Problem
+     */
+    404: TenantNotFoundProblem;
+    /**
+     * Problem
+     */
+    409: TenantRequiredProblem;
+    /**
      * Validation Error
      */
     422: HttpValidationError;
+    /**
+     * Problem
+     */
+    503: HubStoreUnavailableProblem;
 };
 
 export type ReDeriveApiAnalyticsReDerivePostError = ReDeriveApiAnalyticsReDerivePostErrors[keyof ReDeriveApiAnalyticsReDerivePostErrors];
@@ -15131,9 +15564,33 @@ export type SpendByChunkApiAnalyticsSpendChunksGetData = {
 
 export type SpendByChunkApiAnalyticsSpendChunksGetErrors = {
     /**
+     * Problem
+     */
+    400: TenantCredentialMismatchProblem;
+    /**
+     * Problem
+     */
+    401: AuthenticationRequiredProblem;
+    /**
+     * Problem
+     */
+    403: PermissionRequiredProblem;
+    /**
+     * Problem
+     */
+    404: TenantNotFoundProblem;
+    /**
+     * Problem
+     */
+    409: TenantRequiredProblem;
+    /**
      * Validation Error
      */
     422: HttpValidationError;
+    /**
+     * Problem
+     */
+    503: HubStoreUnavailableProblem;
 };
 
 export type SpendByChunkApiAnalyticsSpendChunksGetError = SpendByChunkApiAnalyticsSpendChunksGetErrors[keyof SpendByChunkApiAnalyticsSpendChunksGetErrors];
@@ -15189,9 +15646,33 @@ export type StreamChunkSpendApiAnalyticsSpendChunksNdjsonGetData = {
 
 export type StreamChunkSpendApiAnalyticsSpendChunksNdjsonGetErrors = {
     /**
+     * Problem
+     */
+    400: TenantCredentialMismatchProblem;
+    /**
+     * Problem
+     */
+    401: AuthenticationRequiredProblem;
+    /**
+     * Problem
+     */
+    403: PermissionRequiredProblem;
+    /**
+     * Problem
+     */
+    404: TenantNotFoundProblem;
+    /**
+     * Problem
+     */
+    409: TenantRequiredProblem;
+    /**
      * Validation Error
      */
     422: HttpValidationError;
+    /**
+     * Problem
+     */
+    503: HubStoreUnavailableProblem;
 };
 
 export type StreamChunkSpendApiAnalyticsSpendChunksNdjsonGetError = StreamChunkSpendApiAnalyticsSpendChunksNdjsonGetErrors[keyof StreamChunkSpendApiAnalyticsSpendChunksNdjsonGetErrors];
@@ -15251,9 +15732,33 @@ export type SpendByGraphApiAnalyticsSpendGraphsGetData = {
 
 export type SpendByGraphApiAnalyticsSpendGraphsGetErrors = {
     /**
+     * Problem
+     */
+    400: TenantCredentialMismatchProblem;
+    /**
+     * Problem
+     */
+    401: AuthenticationRequiredProblem;
+    /**
+     * Problem
+     */
+    403: PermissionRequiredProblem;
+    /**
+     * Problem
+     */
+    404: TenantNotFoundProblem;
+    /**
+     * Problem
+     */
+    409: TenantRequiredProblem;
+    /**
      * Validation Error
      */
     422: HttpValidationError;
+    /**
+     * Problem
+     */
+    503: HubStoreUnavailableProblem;
 };
 
 export type SpendByGraphApiAnalyticsSpendGraphsGetError = SpendByGraphApiAnalyticsSpendGraphsGetErrors[keyof SpendByGraphApiAnalyticsSpendGraphsGetErrors];
@@ -15309,9 +15814,33 @@ export type SpendByModelApiAnalyticsSpendModelsGetData = {
 
 export type SpendByModelApiAnalyticsSpendModelsGetErrors = {
     /**
+     * Problem
+     */
+    400: TenantCredentialMismatchProblem;
+    /**
+     * Problem
+     */
+    401: AuthenticationRequiredProblem;
+    /**
+     * Problem
+     */
+    403: PermissionRequiredProblem;
+    /**
+     * Problem
+     */
+    404: TenantNotFoundProblem;
+    /**
+     * Problem
+     */
+    409: TenantRequiredProblem;
+    /**
      * Validation Error
      */
     422: HttpValidationError;
+    /**
+     * Problem
+     */
+    503: HubStoreUnavailableProblem;
 };
 
 export type SpendByModelApiAnalyticsSpendModelsGetError = SpendByModelApiAnalyticsSpendModelsGetErrors[keyof SpendByModelApiAnalyticsSpendModelsGetErrors];
@@ -15371,9 +15900,33 @@ export type SpendByNodeApiAnalyticsSpendNodesGetData = {
 
 export type SpendByNodeApiAnalyticsSpendNodesGetErrors = {
     /**
+     * Problem
+     */
+    400: TenantCredentialMismatchProblem;
+    /**
+     * Problem
+     */
+    401: AuthenticationRequiredProblem;
+    /**
+     * Problem
+     */
+    403: PermissionRequiredProblem;
+    /**
+     * Problem
+     */
+    404: TenantNotFoundProblem;
+    /**
+     * Problem
+     */
+    409: TenantRequiredProblem;
+    /**
      * Validation Error
      */
     422: HttpValidationError;
+    /**
+     * Problem
+     */
+    503: HubStoreUnavailableProblem;
 };
 
 export type SpendByNodeApiAnalyticsSpendNodesGetError = SpendByNodeApiAnalyticsSpendNodesGetErrors[keyof SpendByNodeApiAnalyticsSpendNodesGetErrors];
@@ -15699,9 +16252,33 @@ export type GetBacklogApiBacklogGetData = {
 
 export type GetBacklogApiBacklogGetErrors = {
     /**
+     * Problem
+     */
+    400: TenantCredentialMismatchProblem;
+    /**
+     * Problem
+     */
+    401: AuthenticationRequiredProblem;
+    /**
+     * Problem
+     */
+    403: PermissionRequiredProblem;
+    /**
+     * Problem
+     */
+    404: TenantNotFoundProblem;
+    /**
+     * Problem
+     */
+    409: TenantRequiredProblem;
+    /**
      * Validation Error
      */
     422: HttpValidationError;
+    /**
+     * Problem
+     */
+    503: HubStoreUnavailableProblem;
 };
 
 export type GetBacklogApiBacklogGetError = GetBacklogApiBacklogGetErrors[keyof GetBacklogApiBacklogGetErrors];
@@ -15724,9 +16301,33 @@ export type ReplaceBacklogApiBacklogPutData = {
 
 export type ReplaceBacklogApiBacklogPutErrors = {
     /**
+     * Problem
+     */
+    400: TenantCredentialMismatchProblem;
+    /**
+     * Problem
+     */
+    401: AuthenticationRequiredProblem;
+    /**
+     * Problem
+     */
+    403: PermissionRequiredProblem;
+    /**
+     * Problem
+     */
+    404: TenantNotFoundProblem;
+    /**
+     * Problem
+     */
+    409: TenantRequiredProblem;
+    /**
      * Validation Error
      */
     422: HttpValidationError;
+    /**
+     * Problem
+     */
+    503: HubStoreUnavailableProblem;
 };
 
 export type ReplaceBacklogApiBacklogPutError = ReplaceBacklogApiBacklogPutErrors[keyof ReplaceBacklogApiBacklogPutErrors];
@@ -15749,9 +16350,33 @@ export type RepositionBacklogApiBacklogPositionPostData = {
 
 export type RepositionBacklogApiBacklogPositionPostErrors = {
     /**
+     * Problem
+     */
+    400: TenantCredentialMismatchProblem;
+    /**
+     * Problem
+     */
+    401: AuthenticationRequiredProblem;
+    /**
+     * Problem
+     */
+    403: PermissionRequiredProblem;
+    /**
+     * Problem
+     */
+    404: TenantNotFoundProblem;
+    /**
+     * Problem
+     */
+    409: TenantRequiredProblem;
+    /**
      * Validation Error
      */
     422: HttpValidationError;
+    /**
+     * Problem
+     */
+    503: HubStoreUnavailableProblem;
 };
 
 export type RepositionBacklogApiBacklogPositionPostError = RepositionBacklogApiBacklogPositionPostErrors[keyof RepositionBacklogApiBacklogPositionPostErrors];
@@ -15783,9 +16408,29 @@ export type ListCadencesApiCadencesGetData = {
 
 export type ListCadencesApiCadencesGetErrors = {
     /**
+     * Problem
+     */
+    400: TenantCredentialMismatchProblem;
+    /**
+     * Problem
+     */
+    401: AuthenticationRequiredProblem;
+    /**
+     * Problem
+     */
+    404: TenantNotFoundProblem;
+    /**
+     * Problem
+     */
+    409: TenantRequiredProblem;
+    /**
      * Validation Error
      */
     422: HttpValidationError;
+    /**
+     * Problem
+     */
+    503: HubStoreUnavailableProblem;
 };
 
 export type ListCadencesApiCadencesGetError = ListCadencesApiCadencesGetErrors[keyof ListCadencesApiCadencesGetErrors];
@@ -15815,9 +16460,29 @@ export type GetCadenceApiCadencesCadenceIdGetData = {
 
 export type GetCadenceApiCadencesCadenceIdGetErrors = {
     /**
+     * Problem
+     */
+    400: TenantCredentialMismatchProblem;
+    /**
+     * Problem
+     */
+    401: AuthenticationRequiredProblem;
+    /**
+     * Problem
+     */
+    404: TenantNotFoundProblem;
+    /**
+     * Problem
+     */
+    409: TenantRequiredProblem;
+    /**
      * Validation Error
      */
     422: HttpValidationError;
+    /**
+     * Problem
+     */
+    503: HubStoreUnavailableProblem;
 };
 
 export type GetCadenceApiCadencesCadenceIdGetError = GetCadenceApiCadencesCadenceIdGetErrors[keyof GetCadenceApiCadencesCadenceIdGetErrors];
@@ -15855,9 +16520,33 @@ export type EditCadenceApiCadencesCadenceIdPatchData = {
 
 export type EditCadenceApiCadencesCadenceIdPatchErrors = {
     /**
+     * Problem
+     */
+    400: TenantCredentialMismatchProblem;
+    /**
+     * Problem
+     */
+    401: AuthenticationRequiredProblem;
+    /**
+     * Problem
+     */
+    403: PermissionRequiredProblem;
+    /**
+     * Problem
+     */
+    404: TenantNotFoundProblem;
+    /**
+     * Problem
+     */
+    409: TenantRequiredProblem;
+    /**
      * Validation Error
      */
     422: HttpValidationError;
+    /**
+     * Problem
+     */
+    503: HubStoreUnavailableProblem;
 };
 
 export type EditCadenceApiCadencesCadenceIdPatchError = EditCadenceApiCadencesCadenceIdPatchErrors[keyof EditCadenceApiCadencesCadenceIdPatchErrors];
@@ -15895,9 +16584,33 @@ export type EnableCadenceApiCadencesCadenceIdEnablePostData = {
 
 export type EnableCadenceApiCadencesCadenceIdEnablePostErrors = {
     /**
+     * Problem
+     */
+    400: TenantCredentialMismatchProblem;
+    /**
+     * Problem
+     */
+    401: AuthenticationRequiredProblem;
+    /**
+     * Problem
+     */
+    403: PermissionRequiredProblem;
+    /**
+     * Problem
+     */
+    404: TenantNotFoundProblem;
+    /**
+     * Problem
+     */
+    409: TenantRequiredProblem;
+    /**
      * Validation Error
      */
     422: HttpValidationError;
+    /**
+     * Problem
+     */
+    503: HubStoreUnavailableProblem;
 };
 
 export type EnableCadenceApiCadencesCadenceIdEnablePostError = EnableCadenceApiCadencesCadenceIdEnablePostErrors[keyof EnableCadenceApiCadencesCadenceIdEnablePostErrors];
@@ -15925,9 +16638,29 @@ export type ListCadenceErrandsApiCadencesCadenceIdErrandsGetData = {
 
 export type ListCadenceErrandsApiCadencesCadenceIdErrandsGetErrors = {
     /**
+     * Problem
+     */
+    400: TenantCredentialMismatchProblem;
+    /**
+     * Problem
+     */
+    401: AuthenticationRequiredProblem;
+    /**
+     * Problem
+     */
+    404: TenantNotFoundProblem;
+    /**
+     * Problem
+     */
+    409: TenantRequiredProblem;
+    /**
      * Validation Error
      */
     422: HttpValidationError;
+    /**
+     * Problem
+     */
+    503: HubStoreUnavailableProblem;
 };
 
 export type ListCadenceErrandsApiCadencesCadenceIdErrandsGetError = ListCadenceErrandsApiCadencesCadenceIdErrandsGetErrors[keyof ListCadenceErrandsApiCadencesCadenceIdErrandsGetErrors];
@@ -15967,9 +16700,33 @@ export type RetireCadenceApiCadencesCadenceIdRetirePostData = {
 
 export type RetireCadenceApiCadencesCadenceIdRetirePostErrors = {
     /**
+     * Problem
+     */
+    400: TenantCredentialMismatchProblem;
+    /**
+     * Problem
+     */
+    401: AuthenticationRequiredProblem;
+    /**
+     * Problem
+     */
+    403: PermissionRequiredProblem;
+    /**
+     * Problem
+     */
+    404: TenantNotFoundProblem;
+    /**
+     * Problem
+     */
+    409: TenantRequiredProblem;
+    /**
      * Validation Error
      */
     422: HttpValidationError;
+    /**
+     * Problem
+     */
+    503: HubStoreUnavailableProblem;
 };
 
 export type RetireCadenceApiCadencesCadenceIdRetirePostError = RetireCadenceApiCadencesCadenceIdRetirePostErrors[keyof RetireCadenceApiCadencesCadenceIdRetirePostErrors];
@@ -16001,9 +16758,29 @@ export type ChunkCountsApiChunkCountsGetData = {
 
 export type ChunkCountsApiChunkCountsGetErrors = {
     /**
+     * Problem
+     */
+    400: TenantCredentialMismatchProblem;
+    /**
+     * Problem
+     */
+    401: AuthenticationRequiredProblem;
+    /**
+     * Problem
+     */
+    404: TenantNotFoundProblem;
+    /**
+     * Problem
+     */
+    409: TenantRequiredProblem;
+    /**
      * Validation Error
      */
     422: HttpValidationError;
+    /**
+     * Problem
+     */
+    503: HubStoreUnavailableProblem;
 };
 
 export type ChunkCountsApiChunkCountsGetError = ChunkCountsApiChunkCountsGetErrors[keyof ChunkCountsApiChunkCountsGetErrors];
@@ -16043,9 +16820,29 @@ export type ListChunksApiChunksGetData = {
 
 export type ListChunksApiChunksGetErrors = {
     /**
+     * Problem
+     */
+    400: TenantCredentialMismatchProblem;
+    /**
+     * Problem
+     */
+    401: AuthenticationRequiredProblem;
+    /**
+     * Problem
+     */
+    404: TenantNotFoundProblem;
+    /**
+     * Problem
+     */
+    409: TenantRequiredProblem;
+    /**
      * Validation Error
      */
     422: HttpValidationError;
+    /**
+     * Problem
+     */
+    503: HubStoreUnavailableProblem;
 };
 
 export type ListChunksApiChunksGetError = ListChunksApiChunksGetErrors[keyof ListChunksApiChunksGetErrors];
@@ -16068,9 +16865,33 @@ export type IngestChunkApiChunksPostData = {
 
 export type IngestChunkApiChunksPostErrors = {
     /**
+     * Problem
+     */
+    400: TenantCredentialMismatchProblem;
+    /**
+     * Problem
+     */
+    401: AuthenticationRequiredProblem;
+    /**
+     * Problem
+     */
+    403: PermissionRequiredProblem;
+    /**
+     * Problem
+     */
+    404: TenantNotFoundProblem;
+    /**
+     * Problem
+     */
+    409: TenantRequiredProblem;
+    /**
      * Validation Error
      */
     422: HttpValidationError;
+    /**
+     * Problem
+     */
+    503: HubStoreUnavailableProblem;
 };
 
 export type IngestChunkApiChunksPostError = IngestChunkApiChunksPostErrors[keyof IngestChunkApiChunksPostErrors];
@@ -16098,9 +16919,33 @@ export type DeleteChunkApiChunksChunkIdDeleteData = {
 
 export type DeleteChunkApiChunksChunkIdDeleteErrors = {
     /**
+     * Problem
+     */
+    400: TenantCredentialMismatchProblem;
+    /**
+     * Problem
+     */
+    401: AuthenticationRequiredProblem;
+    /**
+     * Problem
+     */
+    403: PermissionRequiredProblem;
+    /**
+     * Problem
+     */
+    404: TenantNotFoundProblem;
+    /**
+     * Problem
+     */
+    409: TenantRequiredProblem;
+    /**
      * Validation Error
      */
     422: HttpValidationError;
+    /**
+     * Problem
+     */
+    503: HubStoreUnavailableProblem;
 };
 
 export type DeleteChunkApiChunksChunkIdDeleteError = DeleteChunkApiChunksChunkIdDeleteErrors[keyof DeleteChunkApiChunksChunkIdDeleteErrors];
@@ -16128,9 +16973,29 @@ export type GetChunkApiChunksChunkIdGetData = {
 
 export type GetChunkApiChunksChunkIdGetErrors = {
     /**
+     * Problem
+     */
+    400: TenantCredentialMismatchProblem;
+    /**
+     * Problem
+     */
+    401: AuthenticationRequiredProblem;
+    /**
+     * Problem
+     */
+    404: TenantNotFoundProblem;
+    /**
+     * Problem
+     */
+    409: TenantRequiredProblem;
+    /**
      * Validation Error
      */
     422: HttpValidationError;
+    /**
+     * Problem
+     */
+    503: HubStoreUnavailableProblem;
 };
 
 export type GetChunkApiChunksChunkIdGetError = GetChunkApiChunksChunkIdGetErrors[keyof GetChunkApiChunksChunkIdGetErrors];
@@ -16158,9 +17023,33 @@ export type PatchChunkApiChunksChunkIdPatchData = {
 
 export type PatchChunkApiChunksChunkIdPatchErrors = {
     /**
+     * Problem
+     */
+    400: TenantCredentialMismatchProblem;
+    /**
+     * Problem
+     */
+    401: AuthenticationRequiredProblem;
+    /**
+     * Problem
+     */
+    403: PermissionRequiredProblem;
+    /**
+     * Problem
+     */
+    404: TenantNotFoundProblem;
+    /**
+     * Problem
+     */
+    409: TenantRequiredProblem;
+    /**
      * Validation Error
      */
     422: HttpValidationError;
+    /**
+     * Problem
+     */
+    503: HubStoreUnavailableProblem;
 };
 
 export type PatchChunkApiChunksChunkIdPatchError = PatchChunkApiChunksChunkIdPatchErrors[keyof PatchChunkApiChunksChunkIdPatchErrors];
@@ -16209,9 +17098,29 @@ export type CloseDiagnosticApiChunksChunkIdCloseDiagnosticGetData = {
 
 export type CloseDiagnosticApiChunksChunkIdCloseDiagnosticGetErrors = {
     /**
+     * Problem
+     */
+    400: TenantCredentialMismatchProblem;
+    /**
+     * Problem
+     */
+    401: AuthenticationRequiredProblem;
+    /**
+     * Problem
+     */
+    404: TenantNotFoundProblem;
+    /**
+     * Problem
+     */
+    409: TenantRequiredProblem;
+    /**
      * Validation Error
      */
     422: HttpValidationError;
+    /**
+     * Problem
+     */
+    503: HubStoreUnavailableProblem;
 };
 
 export type CloseDiagnosticApiChunksChunkIdCloseDiagnosticGetError = CloseDiagnosticApiChunksChunkIdCloseDiagnosticGetErrors[keyof CloseDiagnosticApiChunksChunkIdCloseDiagnosticGetErrors];
@@ -16239,9 +17148,33 @@ export type CompleteChunkApiChunksChunkIdCompletePostData = {
 
 export type CompleteChunkApiChunksChunkIdCompletePostErrors = {
     /**
+     * Problem
+     */
+    400: TenantCredentialMismatchProblem;
+    /**
+     * Problem
+     */
+    401: AuthenticationRequiredProblem;
+    /**
+     * Problem
+     */
+    403: PermissionRequiredProblem;
+    /**
+     * Problem
+     */
+    404: TenantNotFoundProblem;
+    /**
+     * Problem
+     */
+    409: TenantRequiredProblem;
+    /**
      * Validation Error
      */
     422: HttpValidationError;
+    /**
+     * Problem
+     */
+    503: HubStoreUnavailableProblem;
 };
 
 export type CompleteChunkApiChunksChunkIdCompletePostError = CompleteChunkApiChunksChunkIdCompletePostErrors[keyof CompleteChunkApiChunksChunkIdCompletePostErrors];
@@ -16272,9 +17205,33 @@ export type DemoteChunkApiChunksChunkIdDemotePostData = {
 
 export type DemoteChunkApiChunksChunkIdDemotePostErrors = {
     /**
+     * Problem
+     */
+    400: TenantCredentialMismatchProblem;
+    /**
+     * Problem
+     */
+    401: AuthenticationRequiredProblem;
+    /**
+     * Problem
+     */
+    403: PermissionRequiredProblem;
+    /**
+     * Problem
+     */
+    404: TenantNotFoundProblem;
+    /**
+     * Problem
+     */
+    409: TenantRequiredProblem;
+    /**
      * Validation Error
      */
     422: HttpValidationError;
+    /**
+     * Problem
+     */
+    503: HubStoreUnavailableProblem;
 };
 
 export type DemoteChunkApiChunksChunkIdDemotePostError = DemoteChunkApiChunksChunkIdDemotePostErrors[keyof DemoteChunkApiChunksChunkIdDemotePostErrors];
@@ -16302,9 +17259,33 @@ export type DeclareDependencyApiChunksChunkIdDependenciesPostData = {
 
 export type DeclareDependencyApiChunksChunkIdDependenciesPostErrors = {
     /**
+     * Problem
+     */
+    400: TenantCredentialMismatchProblem;
+    /**
+     * Problem
+     */
+    401: AuthenticationRequiredProblem;
+    /**
+     * Problem
+     */
+    403: PermissionRequiredProblem;
+    /**
+     * Problem
+     */
+    404: TenantNotFoundProblem;
+    /**
+     * Problem
+     */
+    409: TenantRequiredProblem;
+    /**
      * Validation Error
      */
     422: HttpValidationError;
+    /**
+     * Problem
+     */
+    503: HubStoreUnavailableProblem;
 };
 
 export type DeclareDependencyApiChunksChunkIdDependenciesPostError = DeclareDependencyApiChunksChunkIdDependenciesPostErrors[keyof DeclareDependencyApiChunksChunkIdDependenciesPostErrors];
@@ -16332,9 +17313,33 @@ export type ReleaseDependencyApiChunksChunkIdDependenciesReleasePostData = {
 
 export type ReleaseDependencyApiChunksChunkIdDependenciesReleasePostErrors = {
     /**
+     * Problem
+     */
+    400: TenantCredentialMismatchProblem;
+    /**
+     * Problem
+     */
+    401: AuthenticationRequiredProblem;
+    /**
+     * Problem
+     */
+    403: PermissionRequiredProblem;
+    /**
+     * Problem
+     */
+    404: TenantNotFoundProblem;
+    /**
+     * Problem
+     */
+    409: TenantRequiredProblem;
+    /**
      * Validation Error
      */
     422: HttpValidationError;
+    /**
+     * Problem
+     */
+    503: HubStoreUnavailableProblem;
 };
 
 export type ReleaseDependencyApiChunksChunkIdDependenciesReleasePostError = ReleaseDependencyApiChunksChunkIdDependenciesReleasePostErrors[keyof ReleaseDependencyApiChunksChunkIdDependenciesReleasePostErrors];
@@ -16362,9 +17367,33 @@ export type DetachChunkApiChunksChunkIdDetachPostData = {
 
 export type DetachChunkApiChunksChunkIdDetachPostErrors = {
     /**
+     * Problem
+     */
+    400: TenantCredentialMismatchProblem;
+    /**
+     * Problem
+     */
+    401: AuthenticationRequiredProblem;
+    /**
+     * Problem
+     */
+    403: PermissionRequiredProblem;
+    /**
+     * Problem
+     */
+    404: TenantNotFoundProblem;
+    /**
+     * Problem
+     */
+    409: TenantRequiredProblem;
+    /**
      * Validation Error
      */
     422: HttpValidationError;
+    /**
+     * Problem
+     */
+    503: HubStoreUnavailableProblem;
 };
 
 export type DetachChunkApiChunksChunkIdDetachPostError = DetachChunkApiChunksChunkIdDetachPostErrors[keyof DetachChunkApiChunksChunkIdDetachPostErrors];
@@ -16392,9 +17421,29 @@ export type ListFlowSubmissionsApiChunksChunkIdFlowSubmissionsGetData = {
 
 export type ListFlowSubmissionsApiChunksChunkIdFlowSubmissionsGetErrors = {
     /**
+     * Problem
+     */
+    400: TenantCredentialMismatchProblem;
+    /**
+     * Problem
+     */
+    401: AuthenticationRequiredProblem;
+    /**
+     * Problem
+     */
+    404: TenantNotFoundProblem;
+    /**
+     * Problem
+     */
+    409: TenantRequiredProblem;
+    /**
      * Validation Error
      */
     422: HttpValidationError;
+    /**
+     * Problem
+     */
+    503: HubStoreUnavailableProblem;
 };
 
 export type ListFlowSubmissionsApiChunksChunkIdFlowSubmissionsGetError = ListFlowSubmissionsApiChunksChunkIdFlowSubmissionsGetErrors[keyof ListFlowSubmissionsApiChunksChunkIdFlowSubmissionsGetErrors];
@@ -16435,9 +17484,29 @@ export type ListSubmissionTurnsApiChunksChunkIdFlowSubmissionsSubmissionIdTurnsG
 
 export type ListSubmissionTurnsApiChunksChunkIdFlowSubmissionsSubmissionIdTurnsGetErrors = {
     /**
+     * Problem
+     */
+    400: TenantCredentialMismatchProblem;
+    /**
+     * Problem
+     */
+    401: AuthenticationRequiredProblem;
+    /**
+     * Problem
+     */
+    404: TenantNotFoundProblem;
+    /**
+     * Problem
+     */
+    409: TenantRequiredProblem;
+    /**
      * Validation Error
      */
     422: HttpValidationError;
+    /**
+     * Problem
+     */
+    503: HubStoreUnavailableProblem;
 };
 
 export type ListSubmissionTurnsApiChunksChunkIdFlowSubmissionsSubmissionIdTurnsGetError = ListSubmissionTurnsApiChunksChunkIdFlowSubmissionsSubmissionIdTurnsGetErrors[keyof ListSubmissionTurnsApiChunksChunkIdFlowSubmissionsSubmissionIdTurnsGetErrors];
@@ -16465,9 +17534,33 @@ export type GroupChunksApiChunksChunkIdGroupPostData = {
 
 export type GroupChunksApiChunksChunkIdGroupPostErrors = {
     /**
+     * Problem
+     */
+    400: TenantCredentialMismatchProblem;
+    /**
+     * Problem
+     */
+    401: AuthenticationRequiredProblem;
+    /**
+     * Problem
+     */
+    403: PermissionRequiredProblem;
+    /**
+     * Problem
+     */
+    404: TenantNotFoundProblem;
+    /**
+     * Problem
+     */
+    409: TenantRequiredProblem;
+    /**
      * Validation Error
      */
     422: HttpValidationError;
+    /**
+     * Problem
+     */
+    503: HubStoreUnavailableProblem;
 };
 
 export type GroupChunksApiChunksChunkIdGroupPostError = GroupChunksApiChunksChunkIdGroupPostErrors[keyof GroupChunksApiChunksChunkIdGroupPostErrors];
@@ -16504,9 +17597,29 @@ export type LandingFactsApiChunksChunkIdLandingFactsGetData = {
 
 export type LandingFactsApiChunksChunkIdLandingFactsGetErrors = {
     /**
+     * Problem
+     */
+    400: TenantCredentialMismatchProblem;
+    /**
+     * Problem
+     */
+    401: AuthenticationRequiredProblem;
+    /**
+     * Problem
+     */
+    404: TenantNotFoundProblem;
+    /**
+     * Problem
+     */
+    409: TenantRequiredProblem;
+    /**
      * Validation Error
      */
     422: HttpValidationError;
+    /**
+     * Problem
+     */
+    503: HubStoreUnavailableProblem;
 };
 
 export type LandingFactsApiChunksChunkIdLandingFactsGetError = LandingFactsApiChunksChunkIdLandingFactsGetErrors[keyof LandingFactsApiChunksChunkIdLandingFactsGetErrors];
@@ -16534,9 +17647,33 @@ export type PauseChunkApiChunksChunkIdPausePostData = {
 
 export type PauseChunkApiChunksChunkIdPausePostErrors = {
     /**
+     * Problem
+     */
+    400: TenantCredentialMismatchProblem;
+    /**
+     * Problem
+     */
+    401: AuthenticationRequiredProblem;
+    /**
+     * Problem
+     */
+    403: PermissionRequiredProblem;
+    /**
+     * Problem
+     */
+    404: TenantNotFoundProblem;
+    /**
+     * Problem
+     */
+    409: TenantRequiredProblem;
+    /**
      * Validation Error
      */
     422: HttpValidationError;
+    /**
+     * Problem
+     */
+    503: HubStoreUnavailableProblem;
 };
 
 export type PauseChunkApiChunksChunkIdPausePostError = PauseChunkApiChunksChunkIdPausePostErrors[keyof PauseChunkApiChunksChunkIdPausePostErrors];
@@ -16564,9 +17701,29 @@ export type GetPmItemsDeprecatedAliasApiChunksChunkIdPmItemsGetData = {
 
 export type GetPmItemsDeprecatedAliasApiChunksChunkIdPmItemsGetErrors = {
     /**
+     * Problem
+     */
+    400: TenantCredentialMismatchProblem;
+    /**
+     * Problem
+     */
+    401: AuthenticationRequiredProblem;
+    /**
+     * Problem
+     */
+    404: TenantNotFoundProblem;
+    /**
+     * Problem
+     */
+    409: TenantRequiredProblem;
+    /**
      * Validation Error
      */
     422: HttpValidationError;
+    /**
+     * Problem
+     */
+    503: HubStoreUnavailableProblem;
 };
 
 export type GetPmItemsDeprecatedAliasApiChunksChunkIdPmItemsGetError = GetPmItemsDeprecatedAliasApiChunksChunkIdPmItemsGetErrors[keyof GetPmItemsDeprecatedAliasApiChunksChunkIdPmItemsGetErrors];
@@ -16597,9 +17754,33 @@ export type PromoteChunkApiChunksChunkIdPromotePostData = {
 
 export type PromoteChunkApiChunksChunkIdPromotePostErrors = {
     /**
+     * Problem
+     */
+    400: TenantCredentialMismatchProblem;
+    /**
+     * Problem
+     */
+    401: AuthenticationRequiredProblem;
+    /**
+     * Problem
+     */
+    403: PermissionRequiredProblem;
+    /**
+     * Problem
+     */
+    404: TenantNotFoundProblem;
+    /**
+     * Problem
+     */
+    409: TenantRequiredProblem;
+    /**
      * Validation Error
      */
     422: HttpValidationError;
+    /**
+     * Problem
+     */
+    503: HubStoreUnavailableProblem;
 };
 
 export type PromoteChunkApiChunksChunkIdPromotePostError = PromoteChunkApiChunksChunkIdPromotePostErrors[keyof PromoteChunkApiChunksChunkIdPromotePostErrors];
@@ -16630,9 +17811,33 @@ export type RequeueChunkApiChunksChunkIdRequeuesPostData = {
 
 export type RequeueChunkApiChunksChunkIdRequeuesPostErrors = {
     /**
+     * Problem
+     */
+    400: TenantCredentialMismatchProblem;
+    /**
+     * Problem
+     */
+    401: AuthenticationRequiredProblem;
+    /**
+     * Problem
+     */
+    403: PermissionRequiredProblem;
+    /**
+     * Problem
+     */
+    404: TenantNotFoundProblem;
+    /**
+     * Problem
+     */
+    409: TenantRequiredProblem;
+    /**
      * Validation Error
      */
     422: HttpValidationError;
+    /**
+     * Problem
+     */
+    503: HubStoreUnavailableProblem;
 };
 
 export type RequeueChunkApiChunksChunkIdRequeuesPostError = RequeueChunkApiChunksChunkIdRequeuesPostErrors[keyof RequeueChunkApiChunksChunkIdRequeuesPostErrors];
@@ -16660,9 +17865,33 @@ export type RestartChunkApiChunksChunkIdRestartPostData = {
 
 export type RestartChunkApiChunksChunkIdRestartPostErrors = {
     /**
+     * Problem
+     */
+    400: TenantCredentialMismatchProblem;
+    /**
+     * Problem
+     */
+    401: AuthenticationRequiredProblem;
+    /**
+     * Problem
+     */
+    403: PermissionRequiredProblem;
+    /**
+     * Problem
+     */
+    404: TenantNotFoundProblem;
+    /**
+     * Problem
+     */
+    409: TenantRequiredProblem;
+    /**
      * Validation Error
      */
     422: HttpValidationError;
+    /**
+     * Problem
+     */
+    503: HubStoreUnavailableProblem;
 };
 
 export type RestartChunkApiChunksChunkIdRestartPostError = RestartChunkApiChunksChunkIdRestartPostErrors[keyof RestartChunkApiChunksChunkIdRestartPostErrors];
@@ -16690,9 +17919,33 @@ export type ResumeChunkApiChunksChunkIdResumePostData = {
 
 export type ResumeChunkApiChunksChunkIdResumePostErrors = {
     /**
+     * Problem
+     */
+    400: TenantCredentialMismatchProblem;
+    /**
+     * Problem
+     */
+    401: AuthenticationRequiredProblem;
+    /**
+     * Problem
+     */
+    403: PermissionRequiredProblem;
+    /**
+     * Problem
+     */
+    404: TenantNotFoundProblem;
+    /**
+     * Problem
+     */
+    409: TenantRequiredProblem;
+    /**
      * Validation Error
      */
     422: HttpValidationError;
+    /**
+     * Problem
+     */
+    503: HubStoreUnavailableProblem;
 };
 
 export type ResumeChunkApiChunksChunkIdResumePostError = ResumeChunkApiChunksChunkIdResumePostErrors[keyof ResumeChunkApiChunksChunkIdResumePostErrors];
@@ -16720,9 +17973,33 @@ export type StopChunkApiChunksChunkIdStopPostData = {
 
 export type StopChunkApiChunksChunkIdStopPostErrors = {
     /**
+     * Problem
+     */
+    400: TenantCredentialMismatchProblem;
+    /**
+     * Problem
+     */
+    401: AuthenticationRequiredProblem;
+    /**
+     * Problem
+     */
+    403: PermissionRequiredProblem;
+    /**
+     * Problem
+     */
+    404: TenantNotFoundProblem;
+    /**
+     * Problem
+     */
+    409: TenantRequiredProblem;
+    /**
      * Validation Error
      */
     422: HttpValidationError;
+    /**
+     * Problem
+     */
+    503: HubStoreUnavailableProblem;
 };
 
 export type StopChunkApiChunksChunkIdStopPostError = StopChunkApiChunksChunkIdStopPostErrors[keyof StopChunkApiChunksChunkIdStopPostErrors];
@@ -16750,9 +18027,33 @@ export type ListTranscriptSegmentsApiChunksChunkIdTranscriptsGetData = {
 
 export type ListTranscriptSegmentsApiChunksChunkIdTranscriptsGetErrors = {
     /**
+     * Problem
+     */
+    400: TenantCredentialMismatchProblem;
+    /**
+     * Problem
+     */
+    401: AuthenticationRequiredProblem;
+    /**
+     * Problem
+     */
+    403: PermissionRequiredProblem;
+    /**
+     * Problem
+     */
+    404: TenantNotFoundProblem;
+    /**
+     * Problem
+     */
+    409: TenantRequiredProblem;
+    /**
      * Validation Error
      */
     422: HttpValidationError;
+    /**
+     * Problem
+     */
+    503: HubStoreUnavailableProblem;
 };
 
 export type ListTranscriptSegmentsApiChunksChunkIdTranscriptsGetError = ListTranscriptSegmentsApiChunksChunkIdTranscriptsGetErrors[keyof ListTranscriptSegmentsApiChunksChunkIdTranscriptsGetErrors];
@@ -16784,9 +18085,33 @@ export type GetTranscriptSegmentApiChunksChunkIdTranscriptsSegmentIdGetData = {
 
 export type GetTranscriptSegmentApiChunksChunkIdTranscriptsSegmentIdGetErrors = {
     /**
+     * Problem
+     */
+    400: TenantCredentialMismatchProblem;
+    /**
+     * Problem
+     */
+    401: AuthenticationRequiredProblem;
+    /**
+     * Problem
+     */
+    403: PermissionRequiredProblem;
+    /**
+     * Problem
+     */
+    404: TenantNotFoundProblem;
+    /**
+     * Problem
+     */
+    409: TenantRequiredProblem;
+    /**
      * Validation Error
      */
     422: HttpValidationError;
+    /**
+     * Problem
+     */
+    503: HubStoreUnavailableProblem;
 };
 
 export type GetTranscriptSegmentApiChunksChunkIdTranscriptsSegmentIdGetError = GetTranscriptSegmentApiChunksChunkIdTranscriptsSegmentIdGetErrors[keyof GetTranscriptSegmentApiChunksChunkIdTranscriptsSegmentIdGetErrors];
@@ -16814,9 +18139,29 @@ export type GetWorkItemsApiChunksChunkIdWorkItemsGetData = {
 
 export type GetWorkItemsApiChunksChunkIdWorkItemsGetErrors = {
     /**
+     * Problem
+     */
+    400: TenantCredentialMismatchProblem;
+    /**
+     * Problem
+     */
+    401: AuthenticationRequiredProblem;
+    /**
+     * Problem
+     */
+    404: TenantNotFoundProblem;
+    /**
+     * Problem
+     */
+    409: TenantRequiredProblem;
+    /**
      * Validation Error
      */
     422: HttpValidationError;
+    /**
+     * Problem
+     */
+    503: HubStoreUnavailableProblem;
 };
 
 export type GetWorkItemsApiChunksChunkIdWorkItemsGetError = GetWorkItemsApiChunksChunkIdWorkItemsGetErrors[keyof GetWorkItemsApiChunksChunkIdWorkItemsGetErrors];
@@ -16844,9 +18189,33 @@ export type ApplyConfigApiConfigApplyPostData = {
 
 export type ApplyConfigApiConfigApplyPostErrors = {
     /**
+     * Problem
+     */
+    400: TenantCredentialMismatchProblem;
+    /**
+     * Problem
+     */
+    401: AuthenticationRequiredProblem;
+    /**
+     * Problem
+     */
+    403: PermissionRequiredProblem;
+    /**
+     * Problem
+     */
+    404: TenantNotFoundProblem;
+    /**
+     * Problem
+     */
+    409: TenantRequiredProblem;
+    /**
      * Validation Error
      */
     422: HttpValidationError;
+    /**
+     * Problem
+     */
+    503: HubStoreUnavailableProblem;
 };
 
 export type ApplyConfigApiConfigApplyPostError = ApplyConfigApiConfigApplyPostErrors[keyof ApplyConfigApiConfigApplyPostErrors];
@@ -16890,9 +18259,29 @@ export type ListChangesApiConfigChangesGetData = {
 
 export type ListChangesApiConfigChangesGetErrors = {
     /**
+     * Problem
+     */
+    400: TenantCredentialMismatchProblem;
+    /**
+     * Problem
+     */
+    401: AuthenticationRequiredProblem;
+    /**
+     * Problem
+     */
+    404: TenantNotFoundProblem;
+    /**
+     * Problem
+     */
+    409: TenantRequiredProblem;
+    /**
      * Validation Error
      */
     422: HttpValidationError;
+    /**
+     * Problem
+     */
+    503: HubStoreUnavailableProblem;
 };
 
 export type ListChangesApiConfigChangesGetError = ListChangesApiConfigChangesGetErrors[keyof ListChangesApiConfigChangesGetErrors];
@@ -16920,9 +18309,29 @@ export type ExportConfigApiConfigExportGetData = {
 
 export type ExportConfigApiConfigExportGetErrors = {
     /**
+     * Problem
+     */
+    400: TenantCredentialMismatchProblem;
+    /**
+     * Problem
+     */
+    401: AuthenticationRequiredProblem;
+    /**
+     * Problem
+     */
+    404: TenantNotFoundProblem;
+    /**
+     * Problem
+     */
+    409: TenantRequiredProblem;
+    /**
      * Validation Error
      */
     422: HttpValidationError;
+    /**
+     * Problem
+     */
+    503: HubStoreUnavailableProblem;
 };
 
 export type ExportConfigApiConfigExportGetError = ExportConfigApiConfigExportGetErrors[keyof ExportConfigApiConfigExportGetErrors];
@@ -16955,9 +18364,29 @@ export type GetSchemaApiConfigSchemaKindGetData = {
 
 export type GetSchemaApiConfigSchemaKindGetErrors = {
     /**
+     * Problem
+     */
+    400: TenantCredentialMismatchProblem;
+    /**
+     * Problem
+     */
+    401: AuthenticationRequiredProblem;
+    /**
+     * Problem
+     */
+    404: TenantNotFoundProblem;
+    /**
+     * Problem
+     */
+    409: TenantRequiredProblem;
+    /**
      * Validation Error
      */
     422: HttpValidationError;
+    /**
+     * Problem
+     */
+    503: HubStoreUnavailableProblem;
 };
 
 export type GetSchemaApiConfigSchemaKindGetError = GetSchemaApiConfigSchemaKindGetErrors[keyof GetSchemaApiConfigSchemaKindGetErrors];
@@ -16989,9 +18418,29 @@ export type ListDecisionsApiDecisionsGetData = {
 
 export type ListDecisionsApiDecisionsGetErrors = {
     /**
+     * Problem
+     */
+    400: TenantCredentialMismatchProblem;
+    /**
+     * Problem
+     */
+    401: AuthenticationRequiredProblem;
+    /**
+     * Problem
+     */
+    404: TenantNotFoundProblem;
+    /**
+     * Problem
+     */
+    409: TenantRequiredProblem;
+    /**
      * Validation Error
      */
     422: HttpValidationError;
+    /**
+     * Problem
+     */
+    503: HubStoreUnavailableProblem;
 };
 
 export type ListDecisionsApiDecisionsGetError = ListDecisionsApiDecisionsGetErrors[keyof ListDecisionsApiDecisionsGetErrors];
@@ -17019,13 +18468,33 @@ export type ResolveDecisionApiDecisionsDecisionIdResolutionsPostData = {
 
 export type ResolveDecisionApiDecisionsDecisionIdResolutionsPostErrors = {
     /**
+     * Problem
+     */
+    400: TenantCredentialMismatchProblem;
+    /**
+     * Problem
+     */
+    401: AuthenticationRequiredProblem;
+    /**
+     * Problem
+     */
+    403: PermissionRequiredProblem;
+    /**
+     * Problem
+     */
+    404: TenantNotFoundProblem;
+    /**
      * A lost first-write-wins race, carrying the winning resolution. A decision closed without a resolution shares the status and answers a bare `{detail}` instead.
      */
-    409: DecisionResolutionConflict;
+    409: TenantRequiredProblem | DecisionResolutionConflict;
     /**
      * Validation Error
      */
     422: HttpValidationError;
+    /**
+     * Problem
+     */
+    503: HubStoreUnavailableProblem;
 };
 
 export type ResolveDecisionApiDecisionsDecisionIdResolutionsPostError = ResolveDecisionApiDecisionsDecisionIdResolutionsPostErrors[keyof ResolveDecisionApiDecisionsDecisionIdResolutionsPostErrors];
@@ -17048,6 +18517,14 @@ export type EgressBackfillApiEgressBackfillPostData = {
 
 export type EgressBackfillApiEgressBackfillPostErrors = {
     /**
+     * Problem
+     */
+    401: AuthenticationRequiredProblem;
+    /**
+     * Problem
+     */
+    403: PermissionRequiredProblem;
+    /**
      * Validation Error
      */
     422: HttpValidationError;
@@ -17055,6 +18532,10 @@ export type EgressBackfillApiEgressBackfillPostErrors = {
      * Problem
      */
     502: EgressBackfillFailure;
+    /**
+     * Problem
+     */
+    503: HubStoreUnavailableProblem;
 };
 
 export type EgressBackfillApiEgressBackfillPostError = EgressBackfillApiEgressBackfillPostErrors[keyof EgressBackfillApiEgressBackfillPostErrors];
@@ -17077,9 +18558,21 @@ export type EgressResetApiEgressResetPostData = {
 
 export type EgressResetApiEgressResetPostErrors = {
     /**
+     * Problem
+     */
+    401: AuthenticationRequiredProblem;
+    /**
+     * Problem
+     */
+    403: PermissionRequiredProblem;
+    /**
      * Validation Error
      */
     422: HttpValidationError;
+    /**
+     * Problem
+     */
+    503: HubStoreUnavailableProblem;
 };
 
 export type EgressResetApiEgressResetPostError = EgressResetApiEgressResetPostErrors[keyof EgressResetApiEgressResetPostErrors];
@@ -17099,6 +18592,23 @@ export type EgressStatusApiEgressStatusGetData = {
     query?: never;
     url: '/api/egress/status';
 };
+
+export type EgressStatusApiEgressStatusGetErrors = {
+    /**
+     * Problem
+     */
+    401: AuthenticationRequiredProblem;
+    /**
+     * Problem
+     */
+    403: PermissionRequiredProblem;
+    /**
+     * Problem
+     */
+    503: HubStoreUnavailableProblem;
+};
+
+export type EgressStatusApiEgressStatusGetError = EgressStatusApiEgressStatusGetErrors[keyof EgressStatusApiEgressStatusGetErrors];
 
 export type EgressStatusApiEgressStatusGetResponses = {
     /**
@@ -17143,9 +18653,29 @@ export type ListEventsApiEventsGetData = {
 
 export type ListEventsApiEventsGetErrors = {
     /**
+     * Problem
+     */
+    400: TenantCredentialMismatchProblem;
+    /**
+     * Problem
+     */
+    401: AuthenticationRequiredProblem;
+    /**
+     * Problem
+     */
+    404: TenantNotFoundProblem;
+    /**
+     * Problem
+     */
+    409: TenantRequiredProblem;
+    /**
      * Validation Error
      */
     422: HttpValidationError;
+    /**
+     * Problem
+     */
+    503: HubStoreUnavailableProblem;
 };
 
 export type ListEventsApiEventsGetError = ListEventsApiEventsGetErrors[keyof ListEventsApiEventsGetErrors];
@@ -17209,9 +18739,29 @@ export type ListFindingsApiFindingsGetData = {
 
 export type ListFindingsApiFindingsGetErrors = {
     /**
+     * Problem
+     */
+    400: TenantCredentialMismatchProblem;
+    /**
+     * Problem
+     */
+    401: AuthenticationRequiredProblem;
+    /**
+     * Problem
+     */
+    404: TenantNotFoundProblem;
+    /**
+     * Problem
+     */
+    409: TenantRequiredProblem;
+    /**
      * Validation Error
      */
     422: HttpValidationError;
+    /**
+     * Problem
+     */
+    503: HubStoreUnavailableProblem;
 };
 
 export type ListFindingsApiFindingsGetError = ListFindingsApiFindingsGetErrors[keyof ListFindingsApiFindingsGetErrors];
@@ -17247,9 +18797,29 @@ export type ListFindingClassesApiFindingsClassesGetData = {
 
 export type ListFindingClassesApiFindingsClassesGetErrors = {
     /**
+     * Problem
+     */
+    400: TenantCredentialMismatchProblem;
+    /**
+     * Problem
+     */
+    401: AuthenticationRequiredProblem;
+    /**
+     * Problem
+     */
+    404: TenantNotFoundProblem;
+    /**
+     * Problem
+     */
+    409: TenantRequiredProblem;
+    /**
      * Validation Error
      */
     422: HttpValidationError;
+    /**
+     * Problem
+     */
+    503: HubStoreUnavailableProblem;
 };
 
 export type ListFindingClassesApiFindingsClassesGetError = ListFindingClassesApiFindingsClassesGetErrors[keyof ListFindingClassesApiFindingsClassesGetErrors];
@@ -17274,9 +18844,33 @@ export type ConfirmGoneFindingsApiFindingsConfirmGonePostData = {
 
 export type ConfirmGoneFindingsApiFindingsConfirmGonePostErrors = {
     /**
+     * Problem
+     */
+    400: TenantCredentialMismatchProblem;
+    /**
+     * Problem
+     */
+    401: AuthenticationRequiredProblem;
+    /**
+     * Problem
+     */
+    403: PermissionRequiredProblem;
+    /**
+     * Problem
+     */
+    404: TenantNotFoundProblem;
+    /**
+     * Problem
+     */
+    409: TenantRequiredProblem;
+    /**
      * Validation Error
      */
     422: HttpValidationError;
+    /**
+     * Problem
+     */
+    503: HubStoreUnavailableProblem;
 };
 
 export type ConfirmGoneFindingsApiFindingsConfirmGonePostError = ConfirmGoneFindingsApiFindingsConfirmGonePostErrors[keyof ConfirmGoneFindingsApiFindingsConfirmGonePostErrors];
@@ -17301,9 +18895,33 @@ export type NotAFindingFindingsApiFindingsNotAFindingPostData = {
 
 export type NotAFindingFindingsApiFindingsNotAFindingPostErrors = {
     /**
+     * Problem
+     */
+    400: TenantCredentialMismatchProblem;
+    /**
+     * Problem
+     */
+    401: AuthenticationRequiredProblem;
+    /**
+     * Problem
+     */
+    403: PermissionRequiredProblem;
+    /**
+     * Problem
+     */
+    404: TenantNotFoundProblem;
+    /**
+     * Problem
+     */
+    409: TenantRequiredProblem;
+    /**
      * Validation Error
      */
     422: HttpValidationError;
+    /**
+     * Problem
+     */
+    503: HubStoreUnavailableProblem;
 };
 
 export type NotAFindingFindingsApiFindingsNotAFindingPostError = NotAFindingFindingsApiFindingsNotAFindingPostErrors[keyof NotAFindingFindingsApiFindingsNotAFindingPostErrors];
@@ -17328,9 +18946,33 @@ export type ReopenFindingsApiFindingsReopenPostData = {
 
 export type ReopenFindingsApiFindingsReopenPostErrors = {
     /**
+     * Problem
+     */
+    400: TenantCredentialMismatchProblem;
+    /**
+     * Problem
+     */
+    401: AuthenticationRequiredProblem;
+    /**
+     * Problem
+     */
+    403: PermissionRequiredProblem;
+    /**
+     * Problem
+     */
+    404: TenantNotFoundProblem;
+    /**
+     * Problem
+     */
+    409: TenantRequiredProblem;
+    /**
      * Validation Error
      */
     422: HttpValidationError;
+    /**
+     * Problem
+     */
+    503: HubStoreUnavailableProblem;
 };
 
 export type ReopenFindingsApiFindingsReopenPostError = ReopenFindingsApiFindingsReopenPostErrors[keyof ReopenFindingsApiFindingsReopenPostErrors];
@@ -17355,9 +18997,33 @@ export type ResolveFindingsApiFindingsResolvePostData = {
 
 export type ResolveFindingsApiFindingsResolvePostErrors = {
     /**
+     * Problem
+     */
+    400: TenantCredentialMismatchProblem;
+    /**
+     * Problem
+     */
+    401: AuthenticationRequiredProblem;
+    /**
+     * Problem
+     */
+    403: PermissionRequiredProblem;
+    /**
+     * Problem
+     */
+    404: TenantNotFoundProblem;
+    /**
+     * Problem
+     */
+    409: TenantRequiredProblem;
+    /**
      * Validation Error
      */
     422: HttpValidationError;
+    /**
+     * Problem
+     */
+    503: HubStoreUnavailableProblem;
 };
 
 export type ResolveFindingsApiFindingsResolvePostError = ResolveFindingsApiFindingsResolvePostErrors[keyof ResolveFindingsApiFindingsResolvePostErrors];
@@ -17382,9 +19048,33 @@ export type SupersedeFindingsApiFindingsSupersedePostData = {
 
 export type SupersedeFindingsApiFindingsSupersedePostErrors = {
     /**
+     * Problem
+     */
+    400: TenantCredentialMismatchProblem;
+    /**
+     * Problem
+     */
+    401: AuthenticationRequiredProblem;
+    /**
+     * Problem
+     */
+    403: PermissionRequiredProblem;
+    /**
+     * Problem
+     */
+    404: TenantNotFoundProblem;
+    /**
+     * Problem
+     */
+    409: TenantRequiredProblem;
+    /**
      * Validation Error
      */
     422: HttpValidationError;
+    /**
+     * Problem
+     */
+    503: HubStoreUnavailableProblem;
 };
 
 export type SupersedeFindingsApiFindingsSupersedePostError = SupersedeFindingsApiFindingsSupersedePostErrors[keyof SupersedeFindingsApiFindingsSupersedePostErrors];
@@ -17409,9 +19099,33 @@ export type WontFixFindingsApiFindingsWontFixPostData = {
 
 export type WontFixFindingsApiFindingsWontFixPostErrors = {
     /**
+     * Problem
+     */
+    400: TenantCredentialMismatchProblem;
+    /**
+     * Problem
+     */
+    401: AuthenticationRequiredProblem;
+    /**
+     * Problem
+     */
+    403: PermissionRequiredProblem;
+    /**
+     * Problem
+     */
+    404: TenantNotFoundProblem;
+    /**
+     * Problem
+     */
+    409: TenantRequiredProblem;
+    /**
      * Validation Error
      */
     422: HttpValidationError;
+    /**
+     * Problem
+     */
+    503: HubStoreUnavailableProblem;
 };
 
 export type WontFixFindingsApiFindingsWontFixPostError = WontFixFindingsApiFindingsWontFixPostErrors[keyof WontFixFindingsApiFindingsWontFixPostErrors];
@@ -17441,9 +19155,29 @@ export type GetFindingApiFindingsFindingIdGetData = {
 
 export type GetFindingApiFindingsFindingIdGetErrors = {
     /**
+     * Problem
+     */
+    400: TenantCredentialMismatchProblem;
+    /**
+     * Problem
+     */
+    401: AuthenticationRequiredProblem;
+    /**
+     * Problem
+     */
+    404: TenantNotFoundProblem;
+    /**
+     * Problem
+     */
+    409: TenantRequiredProblem;
+    /**
      * Validation Error
      */
     422: HttpValidationError;
+    /**
+     * Problem
+     */
+    503: HubStoreUnavailableProblem;
 };
 
 export type GetFindingApiFindingsFindingIdGetError = GetFindingApiFindingsFindingIdGetErrors[keyof GetFindingApiFindingsFindingIdGetErrors];
@@ -19808,9 +21542,29 @@ export type ListFlowsApiFlowsGetData = {
 
 export type ListFlowsApiFlowsGetErrors = {
     /**
+     * Problem
+     */
+    400: TenantCredentialMismatchProblem;
+    /**
+     * Problem
+     */
+    401: AuthenticationRequiredProblem;
+    /**
+     * Problem
+     */
+    404: TenantNotFoundProblem;
+    /**
+     * Problem
+     */
+    409: TenantRequiredProblem;
+    /**
      * Validation Error
      */
     422: HttpValidationError;
+    /**
+     * Problem
+     */
+    503: HubStoreUnavailableProblem;
 };
 
 export type ListFlowsApiFlowsGetError = ListFlowsApiFlowsGetErrors[keyof ListFlowsApiFlowsGetErrors];
@@ -19838,9 +21592,29 @@ export type GetFlowApiFlowsFlowIdGetData = {
 
 export type GetFlowApiFlowsFlowIdGetErrors = {
     /**
+     * Problem
+     */
+    400: TenantCredentialMismatchProblem;
+    /**
+     * Problem
+     */
+    401: AuthenticationRequiredProblem;
+    /**
+     * Problem
+     */
+    404: TenantNotFoundProblem;
+    /**
+     * Problem
+     */
+    409: TenantRequiredProblem;
+    /**
      * Validation Error
      */
     422: HttpValidationError;
+    /**
+     * Problem
+     */
+    503: HubStoreUnavailableProblem;
 };
 
 export type GetFlowApiFlowsFlowIdGetError = GetFlowApiFlowsFlowIdGetErrors[keyof GetFlowApiFlowsFlowIdGetErrors];
@@ -19877,9 +21651,29 @@ export type GetFlowRecordApiFlowsFlowIdRecordGetData = {
 
 export type GetFlowRecordApiFlowsFlowIdRecordGetErrors = {
     /**
+     * Problem
+     */
+    400: TenantCredentialMismatchProblem;
+    /**
+     * Problem
+     */
+    401: AuthenticationRequiredProblem;
+    /**
+     * Problem
+     */
+    404: TenantNotFoundProblem;
+    /**
+     * Problem
+     */
+    409: TenantRequiredProblem;
+    /**
      * Validation Error
      */
     422: HttpValidationError;
+    /**
+     * Problem
+     */
+    503: HubStoreUnavailableProblem;
 };
 
 export type GetFlowRecordApiFlowsFlowIdRecordGetError = GetFlowRecordApiFlowsFlowIdRecordGetErrors[keyof GetFlowRecordApiFlowsFlowIdRecordGetErrors];
@@ -19907,9 +21701,29 @@ export type ListForgesApiForgesGetData = {
 
 export type ListForgesApiForgesGetErrors = {
     /**
+     * Problem
+     */
+    400: TenantCredentialMismatchProblem;
+    /**
+     * Problem
+     */
+    401: AuthenticationRequiredProblem;
+    /**
+     * Problem
+     */
+    404: TenantNotFoundProblem;
+    /**
+     * Problem
+     */
+    409: TenantRequiredProblem;
+    /**
      * Validation Error
      */
     422: HttpValidationError;
+    /**
+     * Problem
+     */
+    503: HubStoreUnavailableProblem;
 };
 
 export type ListForgesApiForgesGetError = ListForgesApiForgesGetErrors[keyof ListForgesApiForgesGetErrors];
@@ -19938,9 +21752,33 @@ export type CreateForgeApiForgesPostData = {
 
 export type CreateForgeApiForgesPostErrors = {
     /**
+     * Problem
+     */
+    400: TenantCredentialMismatchProblem;
+    /**
+     * Problem
+     */
+    401: AuthenticationRequiredProblem;
+    /**
+     * Problem
+     */
+    403: PermissionRequiredProblem;
+    /**
+     * Problem
+     */
+    404: TenantNotFoundProblem;
+    /**
+     * Problem
+     */
+    409: TenantRequiredProblem;
+    /**
      * Validation Error
      */
     422: HttpValidationError;
+    /**
+     * Problem
+     */
+    503: HubStoreUnavailableProblem;
 };
 
 export type CreateForgeApiForgesPostError = CreateForgeApiForgesPostErrors[keyof CreateForgeApiForgesPostErrors];
@@ -19968,9 +21806,29 @@ export type GetForgeApiForgesForgeGetData = {
 
 export type GetForgeApiForgesForgeGetErrors = {
     /**
+     * Problem
+     */
+    400: TenantCredentialMismatchProblem;
+    /**
+     * Problem
+     */
+    401: AuthenticationRequiredProblem;
+    /**
+     * Problem
+     */
+    404: TenantNotFoundProblem;
+    /**
+     * Problem
+     */
+    409: TenantRequiredProblem;
+    /**
      * Validation Error
      */
     422: HttpValidationError;
+    /**
+     * Problem
+     */
+    503: HubStoreUnavailableProblem;
 };
 
 export type GetForgeApiForgesForgeGetError = GetForgeApiForgesForgeGetErrors[keyof GetForgeApiForgesForgeGetErrors];
@@ -20008,9 +21866,33 @@ export type PatchForgeApiForgesForgePatchData = {
 
 export type PatchForgeApiForgesForgePatchErrors = {
     /**
+     * Problem
+     */
+    400: TenantCredentialMismatchProblem;
+    /**
+     * Problem
+     */
+    401: AuthenticationRequiredProblem;
+    /**
+     * Problem
+     */
+    403: PermissionRequiredProblem;
+    /**
+     * Problem
+     */
+    404: TenantNotFoundProblem;
+    /**
+     * Problem
+     */
+    409: TenantRequiredProblem;
+    /**
      * Validation Error
      */
     422: HttpValidationError;
+    /**
+     * Problem
+     */
+    503: HubStoreUnavailableProblem;
 };
 
 export type PatchForgeApiForgesForgePatchError = PatchForgeApiForgesForgePatchErrors[keyof PatchForgeApiForgesForgePatchErrors];
@@ -20048,9 +21930,33 @@ export type EnableForgeApiForgesForgeEnablePostData = {
 
 export type EnableForgeApiForgesForgeEnablePostErrors = {
     /**
+     * Problem
+     */
+    400: TenantCredentialMismatchProblem;
+    /**
+     * Problem
+     */
+    401: AuthenticationRequiredProblem;
+    /**
+     * Problem
+     */
+    403: PermissionRequiredProblem;
+    /**
+     * Problem
+     */
+    404: TenantNotFoundProblem;
+    /**
+     * Problem
+     */
+    409: TenantRequiredProblem;
+    /**
      * Validation Error
      */
     422: HttpValidationError;
+    /**
+     * Problem
+     */
+    503: HubStoreUnavailableProblem;
 };
 
 export type EnableForgeApiForgesForgeEnablePostError = EnableForgeApiForgesForgeEnablePostErrors[keyof EnableForgeApiForgesForgeEnablePostErrors];
@@ -20088,9 +21994,33 @@ export type RetireForgeApiForgesForgeRetirePostData = {
 
 export type RetireForgeApiForgesForgeRetirePostErrors = {
     /**
+     * Problem
+     */
+    400: TenantCredentialMismatchProblem;
+    /**
+     * Problem
+     */
+    401: AuthenticationRequiredProblem;
+    /**
+     * Problem
+     */
+    403: PermissionRequiredProblem;
+    /**
+     * Problem
+     */
+    404: TenantNotFoundProblem;
+    /**
+     * Problem
+     */
+    409: TenantRequiredProblem;
+    /**
      * Validation Error
      */
     422: HttpValidationError;
+    /**
+     * Problem
+     */
+    503: HubStoreUnavailableProblem;
 };
 
 export type RetireForgeApiForgesForgeRetirePostError = RetireForgeApiForgesForgeRetirePostErrors[keyof RetireForgeApiForgesForgeRetirePostErrors];
@@ -20130,9 +22060,29 @@ export type ListGardenProposalsApiGardenProposalsGetData = {
 
 export type ListGardenProposalsApiGardenProposalsGetErrors = {
     /**
+     * Problem
+     */
+    400: TenantCredentialMismatchProblem;
+    /**
+     * Problem
+     */
+    401: AuthenticationRequiredProblem;
+    /**
+     * Problem
+     */
+    404: TenantNotFoundProblem;
+    /**
+     * Problem
+     */
+    409: TenantRequiredProblem;
+    /**
      * Validation Error
      */
     422: HttpValidationError;
+    /**
+     * Problem
+     */
+    503: HubStoreUnavailableProblem;
 };
 
 export type ListGardenProposalsApiGardenProposalsGetError = ListGardenProposalsApiGardenProposalsGetErrors[keyof ListGardenProposalsApiGardenProposalsGetErrors];
@@ -20155,9 +22105,33 @@ export type CreateGardenProposalApiGardenProposalsPostData = {
 
 export type CreateGardenProposalApiGardenProposalsPostErrors = {
     /**
+     * Problem
+     */
+    400: TenantCredentialMismatchProblem;
+    /**
+     * Problem
+     */
+    401: AuthenticationRequiredProblem;
+    /**
+     * Problem
+     */
+    403: PermissionRequiredProblem;
+    /**
+     * Problem
+     */
+    404: TenantNotFoundProblem;
+    /**
+     * Problem
+     */
+    409: TenantRequiredProblem;
+    /**
      * Validation Error
      */
     422: HttpValidationError;
+    /**
+     * Problem
+     */
+    503: HubStoreUnavailableProblem;
 };
 
 export type CreateGardenProposalApiGardenProposalsPostError = CreateGardenProposalApiGardenProposalsPostErrors[keyof CreateGardenProposalApiGardenProposalsPostErrors];
@@ -20185,9 +22159,29 @@ export type GetGardenProposalApiGardenProposalsProposalIdGetData = {
 
 export type GetGardenProposalApiGardenProposalsProposalIdGetErrors = {
     /**
+     * Problem
+     */
+    400: TenantCredentialMismatchProblem;
+    /**
+     * Problem
+     */
+    401: AuthenticationRequiredProblem;
+    /**
+     * Problem
+     */
+    404: TenantNotFoundProblem;
+    /**
+     * Problem
+     */
+    409: TenantRequiredProblem;
+    /**
      * Validation Error
      */
     422: HttpValidationError;
+    /**
+     * Problem
+     */
+    503: HubStoreUnavailableProblem;
 };
 
 export type GetGardenProposalApiGardenProposalsProposalIdGetError = GetGardenProposalApiGardenProposalsProposalIdGetErrors[keyof GetGardenProposalApiGardenProposalsProposalIdGetErrors];
@@ -20215,9 +22209,33 @@ export type EditGardenProposalApiGardenProposalsProposalIdPatchData = {
 
 export type EditGardenProposalApiGardenProposalsProposalIdPatchErrors = {
     /**
+     * Problem
+     */
+    400: TenantCredentialMismatchProblem;
+    /**
+     * Problem
+     */
+    401: AuthenticationRequiredProblem;
+    /**
+     * Problem
+     */
+    403: PermissionRequiredProblem;
+    /**
+     * Problem
+     */
+    404: TenantNotFoundProblem;
+    /**
+     * Problem
+     */
+    409: TenantRequiredProblem;
+    /**
      * Validation Error
      */
     422: HttpValidationError;
+    /**
+     * Problem
+     */
+    503: HubStoreUnavailableProblem;
 };
 
 export type EditGardenProposalApiGardenProposalsProposalIdPatchError = EditGardenProposalApiGardenProposalsProposalIdPatchErrors[keyof EditGardenProposalApiGardenProposalsProposalIdPatchErrors];
@@ -20245,9 +22263,33 @@ export type AcceptGardenProposalApiGardenProposalsProposalIdAcceptPostData = {
 
 export type AcceptGardenProposalApiGardenProposalsProposalIdAcceptPostErrors = {
     /**
+     * Problem
+     */
+    400: TenantCredentialMismatchProblem;
+    /**
+     * Problem
+     */
+    401: AuthenticationRequiredProblem;
+    /**
+     * Problem
+     */
+    403: PermissionRequiredProblem;
+    /**
+     * Problem
+     */
+    404: TenantNotFoundProblem;
+    /**
+     * Problem
+     */
+    409: TenantRequiredProblem;
+    /**
      * Validation Error
      */
     422: HttpValidationError;
+    /**
+     * Problem
+     */
+    503: HubStoreUnavailableProblem;
 };
 
 export type AcceptGardenProposalApiGardenProposalsProposalIdAcceptPostError = AcceptGardenProposalApiGardenProposalsProposalIdAcceptPostErrors[keyof AcceptGardenProposalApiGardenProposalsProposalIdAcceptPostErrors];
@@ -20275,9 +22317,33 @@ export type AttachGardenProposalFindingsApiGardenProposalsProposalIdAttachPostDa
 
 export type AttachGardenProposalFindingsApiGardenProposalsProposalIdAttachPostErrors = {
     /**
+     * Problem
+     */
+    400: TenantCredentialMismatchProblem;
+    /**
+     * Problem
+     */
+    401: AuthenticationRequiredProblem;
+    /**
+     * Problem
+     */
+    403: PermissionRequiredProblem;
+    /**
+     * Problem
+     */
+    404: TenantNotFoundProblem;
+    /**
+     * Problem
+     */
+    409: TenantRequiredProblem;
+    /**
      * Validation Error
      */
     422: HttpValidationError;
+    /**
+     * Problem
+     */
+    503: HubStoreUnavailableProblem;
 };
 
 export type AttachGardenProposalFindingsApiGardenProposalsProposalIdAttachPostError = AttachGardenProposalFindingsApiGardenProposalsProposalIdAttachPostErrors[keyof AttachGardenProposalFindingsApiGardenProposalsProposalIdAttachPostErrors];
@@ -20305,9 +22371,33 @@ export type DetachGardenProposalFindingsApiGardenProposalsProposalIdDetachPostDa
 
 export type DetachGardenProposalFindingsApiGardenProposalsProposalIdDetachPostErrors = {
     /**
+     * Problem
+     */
+    400: TenantCredentialMismatchProblem;
+    /**
+     * Problem
+     */
+    401: AuthenticationRequiredProblem;
+    /**
+     * Problem
+     */
+    403: PermissionRequiredProblem;
+    /**
+     * Problem
+     */
+    404: TenantNotFoundProblem;
+    /**
+     * Problem
+     */
+    409: TenantRequiredProblem;
+    /**
      * Validation Error
      */
     422: HttpValidationError;
+    /**
+     * Problem
+     */
+    503: HubStoreUnavailableProblem;
 };
 
 export type DetachGardenProposalFindingsApiGardenProposalsProposalIdDetachPostError = DetachGardenProposalFindingsApiGardenProposalsProposalIdDetachPostErrors[keyof DetachGardenProposalFindingsApiGardenProposalsProposalIdDetachPostErrors];
@@ -20335,9 +22425,33 @@ export type PassGardenProposalApiGardenProposalsProposalIdPassPostData = {
 
 export type PassGardenProposalApiGardenProposalsProposalIdPassPostErrors = {
     /**
+     * Problem
+     */
+    400: TenantCredentialMismatchProblem;
+    /**
+     * Problem
+     */
+    401: AuthenticationRequiredProblem;
+    /**
+     * Problem
+     */
+    403: PermissionRequiredProblem;
+    /**
+     * Problem
+     */
+    404: TenantNotFoundProblem;
+    /**
+     * Problem
+     */
+    409: TenantRequiredProblem;
+    /**
      * Validation Error
      */
     422: HttpValidationError;
+    /**
+     * Problem
+     */
+    503: HubStoreUnavailableProblem;
 };
 
 export type PassGardenProposalApiGardenProposalsProposalIdPassPostError = PassGardenProposalApiGardenProposalsProposalIdPassPostErrors[keyof PassGardenProposalApiGardenProposalsProposalIdPassPostErrors];
@@ -20357,6 +22471,31 @@ export type ListGraphsApiGraphsGetData = {
     query?: never;
     url: '/api/graphs';
 };
+
+export type ListGraphsApiGraphsGetErrors = {
+    /**
+     * Problem
+     */
+    400: TenantCredentialMismatchProblem;
+    /**
+     * Problem
+     */
+    401: AuthenticationRequiredProblem;
+    /**
+     * Problem
+     */
+    404: TenantNotFoundProblem;
+    /**
+     * Problem
+     */
+    409: TenantRequiredProblem;
+    /**
+     * Problem
+     */
+    503: HubStoreUnavailableProblem;
+};
+
+export type ListGraphsApiGraphsGetError = ListGraphsApiGraphsGetErrors[keyof ListGraphsApiGraphsGetErrors];
 
 export type ListGraphsApiGraphsGetResponses = {
     /**
@@ -20378,9 +22517,33 @@ export type MintGraphApiGraphsPostData = {
 
 export type MintGraphApiGraphsPostErrors = {
     /**
+     * Problem
+     */
+    400: TenantCredentialMismatchProblem;
+    /**
+     * Problem
+     */
+    401: AuthenticationRequiredProblem;
+    /**
+     * Problem
+     */
+    403: PermissionRequiredProblem;
+    /**
+     * Problem
+     */
+    404: TenantNotFoundProblem;
+    /**
+     * Problem
+     */
+    409: TenantRequiredProblem;
+    /**
      * Validation Error
      */
     422: HttpValidationError;
+    /**
+     * Problem
+     */
+    503: HubStoreUnavailableProblem;
 };
 
 export type MintGraphApiGraphsPostError = MintGraphApiGraphsPostErrors[keyof MintGraphApiGraphsPostErrors];
@@ -20400,6 +22563,35 @@ export type SyncGraphsApiGraphsSyncPostData = {
     query?: never;
     url: '/api/graphs/sync';
 };
+
+export type SyncGraphsApiGraphsSyncPostErrors = {
+    /**
+     * Problem
+     */
+    400: TenantCredentialMismatchProblem;
+    /**
+     * Problem
+     */
+    401: AuthenticationRequiredProblem;
+    /**
+     * Problem
+     */
+    403: PermissionRequiredProblem;
+    /**
+     * Problem
+     */
+    404: TenantNotFoundProblem;
+    /**
+     * Problem
+     */
+    409: TenantRequiredProblem;
+    /**
+     * Problem
+     */
+    503: HubStoreUnavailableProblem;
+};
+
+export type SyncGraphsApiGraphsSyncPostError = SyncGraphsApiGraphsSyncPostErrors[keyof SyncGraphsApiGraphsSyncPostErrors];
 
 export type SyncGraphsApiGraphsSyncPostResponses = {
     /**
@@ -20424,9 +22616,29 @@ export type GetGraphApiGraphsGraphIdGetData = {
 
 export type GetGraphApiGraphsGraphIdGetErrors = {
     /**
+     * Problem
+     */
+    400: TenantCredentialMismatchProblem;
+    /**
+     * Problem
+     */
+    401: AuthenticationRequiredProblem;
+    /**
+     * Problem
+     */
+    404: TenantNotFoundProblem;
+    /**
+     * Problem
+     */
+    409: TenantRequiredProblem;
+    /**
      * Validation Error
      */
     422: HttpValidationError;
+    /**
+     * Problem
+     */
+    503: HubStoreUnavailableProblem;
 };
 
 export type GetGraphApiGraphsGraphIdGetError = GetGraphApiGraphsGraphIdGetErrors[keyof GetGraphApiGraphsGraphIdGetErrors];
@@ -20454,9 +22666,33 @@ export type PatchGraphApiGraphsGraphIdPatchData = {
 
 export type PatchGraphApiGraphsGraphIdPatchErrors = {
     /**
+     * Problem
+     */
+    400: TenantCredentialMismatchProblem;
+    /**
+     * Problem
+     */
+    401: AuthenticationRequiredProblem;
+    /**
+     * Problem
+     */
+    403: PermissionRequiredProblem;
+    /**
+     * Problem
+     */
+    404: TenantNotFoundProblem;
+    /**
+     * Problem
+     */
+    409: TenantRequiredProblem;
+    /**
      * Validation Error
      */
     422: HttpValidationError;
+    /**
+     * Problem
+     */
+    503: HubStoreUnavailableProblem;
 };
 
 export type PatchGraphApiGraphsGraphIdPatchError = PatchGraphApiGraphsGraphIdPatchErrors[keyof PatchGraphApiGraphsGraphIdPatchErrors];
@@ -20484,9 +22720,33 @@ export type EnableGraphApiGraphsGraphIdEnablePostData = {
 
 export type EnableGraphApiGraphsGraphIdEnablePostErrors = {
     /**
+     * Problem
+     */
+    400: TenantCredentialMismatchProblem;
+    /**
+     * Problem
+     */
+    401: AuthenticationRequiredProblem;
+    /**
+     * Problem
+     */
+    403: PermissionRequiredProblem;
+    /**
+     * Problem
+     */
+    404: TenantNotFoundProblem;
+    /**
+     * Problem
+     */
+    409: TenantRequiredProblem;
+    /**
      * Validation Error
      */
     422: HttpValidationError;
+    /**
+     * Problem
+     */
+    503: HubStoreUnavailableProblem;
 };
 
 export type EnableGraphApiGraphsGraphIdEnablePostError = EnableGraphApiGraphsGraphIdEnablePostErrors[keyof EnableGraphApiGraphsGraphIdEnablePostErrors];
@@ -20514,9 +22774,33 @@ export type SetGraphFollowLatestApiGraphsGraphIdFollowLatestPostData = {
 
 export type SetGraphFollowLatestApiGraphsGraphIdFollowLatestPostErrors = {
     /**
+     * Problem
+     */
+    400: TenantCredentialMismatchProblem;
+    /**
+     * Problem
+     */
+    401: AuthenticationRequiredProblem;
+    /**
+     * Problem
+     */
+    403: PermissionRequiredProblem;
+    /**
+     * Problem
+     */
+    404: TenantNotFoundProblem;
+    /**
+     * Problem
+     */
+    409: TenantRequiredProblem;
+    /**
      * Validation Error
      */
     422: HttpValidationError;
+    /**
+     * Problem
+     */
+    503: HubStoreUnavailableProblem;
 };
 
 export type SetGraphFollowLatestApiGraphsGraphIdFollowLatestPostError = SetGraphFollowLatestApiGraphsGraphIdFollowLatestPostErrors[keyof SetGraphFollowLatestApiGraphsGraphIdFollowLatestPostErrors];
@@ -20544,9 +22828,33 @@ export type RetireGraphApiGraphsGraphIdRetirePostData = {
 
 export type RetireGraphApiGraphsGraphIdRetirePostErrors = {
     /**
+     * Problem
+     */
+    400: TenantCredentialMismatchProblem;
+    /**
+     * Problem
+     */
+    401: AuthenticationRequiredProblem;
+    /**
+     * Problem
+     */
+    403: PermissionRequiredProblem;
+    /**
+     * Problem
+     */
+    404: TenantNotFoundProblem;
+    /**
+     * Problem
+     */
+    409: TenantRequiredProblem;
+    /**
      * Validation Error
      */
     422: HttpValidationError;
+    /**
+     * Problem
+     */
+    503: HubStoreUnavailableProblem;
 };
 
 export type RetireGraphApiGraphsGraphIdRetirePostError = RetireGraphApiGraphsGraphIdRetirePostErrors[keyof RetireGraphApiGraphsGraphIdRetirePostErrors];
@@ -20590,9 +22898,29 @@ export type ListHostsApiHostsGetData = {
 
 export type ListHostsApiHostsGetErrors = {
     /**
+     * Problem
+     */
+    400: TenantCredentialMismatchProblem;
+    /**
+     * Problem
+     */
+    401: AuthenticationRequiredProblem;
+    /**
+     * Problem
+     */
+    404: TenantNotFoundProblem;
+    /**
+     * Problem
+     */
+    409: TenantRequiredProblem;
+    /**
      * Validation Error
      */
     422: HttpValidationError;
+    /**
+     * Problem
+     */
+    503: HubStoreUnavailableProblem;
 };
 
 export type ListHostsApiHostsGetError = ListHostsApiHostsGetErrors[keyof ListHostsApiHostsGetErrors];
@@ -20669,9 +22997,29 @@ export type GetHostApiHostsHostIdGetData = {
 
 export type GetHostApiHostsHostIdGetErrors = {
     /**
+     * Problem
+     */
+    400: TenantCredentialMismatchProblem;
+    /**
+     * Problem
+     */
+    401: AuthenticationRequiredProblem;
+    /**
+     * Problem
+     */
+    404: TenantNotFoundProblem;
+    /**
+     * Problem
+     */
+    409: TenantRequiredProblem;
+    /**
      * Validation Error
      */
     422: HttpValidationError;
+    /**
+     * Problem
+     */
+    503: HubStoreUnavailableProblem;
 };
 
 export type GetHostApiHostsHostIdGetError = GetHostApiHostsHostIdGetErrors[keyof GetHostApiHostsHostIdGetErrors];
@@ -20699,9 +23047,33 @@ export type AdoptRunnersApiHostsHostIdAdoptionsPostData = {
 
 export type AdoptRunnersApiHostsHostIdAdoptionsPostErrors = {
     /**
+     * Problem
+     */
+    400: TenantCredentialMismatchProblem;
+    /**
+     * Problem
+     */
+    401: AuthenticationRequiredProblem;
+    /**
+     * Problem
+     */
+    403: PermissionRequiredProblem;
+    /**
+     * Problem
+     */
+    404: TenantNotFoundProblem;
+    /**
+     * Problem
+     */
+    409: TenantRequiredProblem;
+    /**
      * Validation Error
      */
     422: HttpValidationError;
+    /**
+     * Problem
+     */
+    503: HubStoreUnavailableProblem;
 };
 
 export type AdoptRunnersApiHostsHostIdAdoptionsPostError = AdoptRunnersApiHostsHostIdAdoptionsPostErrors[keyof AdoptRunnersApiHostsHostIdAdoptionsPostErrors];
@@ -20729,9 +23101,33 @@ export type EnrollHostApiHostsHostIdEnrollmentsPostData = {
 
 export type EnrollHostApiHostsHostIdEnrollmentsPostErrors = {
     /**
+     * Problem
+     */
+    400: TenantCredentialMismatchProblem;
+    /**
+     * Problem
+     */
+    401: AuthenticationRequiredProblem;
+    /**
+     * Problem
+     */
+    403: PermissionRequiredProblem;
+    /**
+     * Problem
+     */
+    404: TenantNotFoundProblem;
+    /**
+     * Problem
+     */
+    409: TenantRequiredProblem;
+    /**
      * Validation Error
      */
     422: HttpValidationError;
+    /**
+     * Problem
+     */
+    503: HubStoreUnavailableProblem;
 };
 
 export type EnrollHostApiHostsHostIdEnrollmentsPostError = EnrollHostApiHostsHostIdEnrollmentsPostErrors[keyof EnrollHostApiHostsHostIdEnrollmentsPostErrors];
@@ -20759,9 +23155,33 @@ export type ReleaseRunnersApiHostsHostIdReleasesPostData = {
 
 export type ReleaseRunnersApiHostsHostIdReleasesPostErrors = {
     /**
+     * Problem
+     */
+    400: TenantCredentialMismatchProblem;
+    /**
+     * Problem
+     */
+    401: AuthenticationRequiredProblem;
+    /**
+     * Problem
+     */
+    403: PermissionRequiredProblem;
+    /**
+     * Problem
+     */
+    404: TenantNotFoundProblem;
+    /**
+     * Problem
+     */
+    409: TenantRequiredProblem;
+    /**
      * Validation Error
      */
     422: HttpValidationError;
+    /**
+     * Problem
+     */
+    503: HubStoreUnavailableProblem;
 };
 
 export type ReleaseRunnersApiHostsHostIdReleasesPostError = ReleaseRunnersApiHostsHostIdReleasesPostErrors[keyof ReleaseRunnersApiHostsHostIdReleasesPostErrors];
@@ -20789,9 +23209,33 @@ export type RetireHostApiHostsHostIdRetirePostData = {
 
 export type RetireHostApiHostsHostIdRetirePostErrors = {
     /**
+     * Problem
+     */
+    400: TenantCredentialMismatchProblem;
+    /**
+     * Problem
+     */
+    401: AuthenticationRequiredProblem;
+    /**
+     * Problem
+     */
+    403: PermissionRequiredProblem;
+    /**
+     * Problem
+     */
+    404: TenantNotFoundProblem;
+    /**
+     * Problem
+     */
+    409: TenantRequiredProblem;
+    /**
      * Validation Error
      */
     422: HttpValidationError;
+    /**
+     * Problem
+     */
+    503: HubStoreUnavailableProblem;
 };
 
 export type RetireHostApiHostsHostIdRetirePostError = RetireHostApiHostsHostIdRetirePostErrors[keyof RetireHostApiHostsHostIdRetirePostErrors];
@@ -20819,9 +23263,33 @@ export type RevokeHostTokenApiHostsHostIdTokenRevocationsPostData = {
 
 export type RevokeHostTokenApiHostsHostIdTokenRevocationsPostErrors = {
     /**
+     * Problem
+     */
+    400: TenantCredentialMismatchProblem;
+    /**
+     * Problem
+     */
+    401: AuthenticationRequiredProblem;
+    /**
+     * Problem
+     */
+    403: PermissionRequiredProblem;
+    /**
+     * Problem
+     */
+    404: TenantNotFoundProblem;
+    /**
+     * Problem
+     */
+    409: TenantRequiredProblem;
+    /**
      * Validation Error
      */
     422: HttpValidationError;
+    /**
+     * Problem
+     */
+    503: HubStoreUnavailableProblem;
 };
 
 export type RevokeHostTokenApiHostsHostIdTokenRevocationsPostError = RevokeHostTokenApiHostsHostIdTokenRevocationsPostErrors[keyof RevokeHostTokenApiHostsHostIdTokenRevocationsPostErrors];
@@ -20842,6 +23310,35 @@ export type ListInvitationsApiInvitationsGetData = {
     url: '/api/invitations';
 };
 
+export type ListInvitationsApiInvitationsGetErrors = {
+    /**
+     * Problem
+     */
+    400: TenantCredentialMismatchProblem;
+    /**
+     * Problem
+     */
+    401: AuthenticationRequiredProblem;
+    /**
+     * Problem
+     */
+    403: PermissionRequiredProblem;
+    /**
+     * Problem
+     */
+    404: TenantNotFoundProblem;
+    /**
+     * Problem
+     */
+    409: TenantRequiredProblem;
+    /**
+     * Problem
+     */
+    503: HubStoreUnavailableProblem;
+};
+
+export type ListInvitationsApiInvitationsGetError = ListInvitationsApiInvitationsGetErrors[keyof ListInvitationsApiInvitationsGetErrors];
+
 export type ListInvitationsApiInvitationsGetResponses = {
     /**
      * Successful Response
@@ -20860,9 +23357,33 @@ export type CreateInvitationApiInvitationsPostData = {
 
 export type CreateInvitationApiInvitationsPostErrors = {
     /**
+     * Problem
+     */
+    400: TenantCredentialMismatchProblem;
+    /**
+     * Problem
+     */
+    401: AuthenticationRequiredProblem;
+    /**
+     * Problem
+     */
+    403: PermissionRequiredProblem;
+    /**
+     * Problem
+     */
+    404: TenantNotFoundProblem;
+    /**
+     * Problem
+     */
+    409: TenantRequiredProblem;
+    /**
      * Validation Error
      */
     422: HttpValidationError;
+    /**
+     * Problem
+     */
+    503: HubStoreUnavailableProblem;
 };
 
 export type CreateInvitationApiInvitationsPostError = CreateInvitationApiInvitationsPostErrors[keyof CreateInvitationApiInvitationsPostErrors];
@@ -20890,9 +23411,33 @@ export type RevokeInvitationApiInvitationsInvitationIdRevocationsPostData = {
 
 export type RevokeInvitationApiInvitationsInvitationIdRevocationsPostErrors = {
     /**
+     * Problem
+     */
+    400: TenantCredentialMismatchProblem;
+    /**
+     * Problem
+     */
+    401: AuthenticationRequiredProblem;
+    /**
+     * Problem
+     */
+    403: PermissionRequiredProblem;
+    /**
+     * Problem
+     */
+    404: TenantNotFoundProblem;
+    /**
+     * Problem
+     */
+    409: TenantRequiredProblem;
+    /**
      * Validation Error
      */
     422: HttpValidationError;
+    /**
+     * Problem
+     */
+    503: HubStoreUnavailableProblem;
 };
 
 export type RevokeInvitationApiInvitationsInvitationIdRevocationsPostError = RevokeInvitationApiInvitationsInvitationIdRevocationsPostErrors[keyof RevokeInvitationApiInvitationsInvitationIdRevocationsPostErrors];
@@ -20942,6 +23487,35 @@ export type ListMembersApiMembersGetData = {
     url: '/api/members';
 };
 
+export type ListMembersApiMembersGetErrors = {
+    /**
+     * Problem
+     */
+    400: TenantCredentialMismatchProblem;
+    /**
+     * Problem
+     */
+    401: AuthenticationRequiredProblem;
+    /**
+     * Problem
+     */
+    403: PermissionRequiredProblem;
+    /**
+     * Problem
+     */
+    404: TenantNotFoundProblem;
+    /**
+     * Problem
+     */
+    409: TenantRequiredProblem;
+    /**
+     * Problem
+     */
+    503: HubStoreUnavailableProblem;
+};
+
+export type ListMembersApiMembersGetError = ListMembersApiMembersGetErrors[keyof ListMembersApiMembersGetErrors];
+
 export type ListMembersApiMembersGetResponses = {
     /**
      * Response List Members Api Members Get
@@ -20967,9 +23541,33 @@ export type RevokeMembershipApiMembersUserIdDeleteData = {
 
 export type RevokeMembershipApiMembersUserIdDeleteErrors = {
     /**
+     * Problem
+     */
+    400: TenantCredentialMismatchProblem;
+    /**
+     * Problem
+     */
+    401: AuthenticationRequiredProblem;
+    /**
+     * Problem
+     */
+    403: PermissionRequiredProblem;
+    /**
+     * Problem
+     */
+    404: TenantNotFoundProblem;
+    /**
+     * Problem
+     */
+    409: TenantRequiredProblem;
+    /**
      * Validation Error
      */
     422: HttpValidationError;
+    /**
+     * Problem
+     */
+    503: HubStoreUnavailableProblem;
 };
 
 export type RevokeMembershipApiMembersUserIdDeleteError = RevokeMembershipApiMembersUserIdDeleteErrors[keyof RevokeMembershipApiMembersUserIdDeleteErrors];
@@ -20997,9 +23595,33 @@ export type GrantMembershipApiMembersUserIdPutData = {
 
 export type GrantMembershipApiMembersUserIdPutErrors = {
     /**
+     * Problem
+     */
+    400: TenantCredentialMismatchProblem;
+    /**
+     * Problem
+     */
+    401: AuthenticationRequiredProblem;
+    /**
+     * Problem
+     */
+    403: PermissionRequiredProblem;
+    /**
+     * Problem
+     */
+    404: TenantNotFoundProblem;
+    /**
+     * Problem
+     */
+    409: TenantRequiredProblem;
+    /**
      * Validation Error
      */
     422: HttpValidationError;
+    /**
+     * Problem
+     */
+    503: HubStoreUnavailableProblem;
 };
 
 export type GrantMembershipApiMembersUserIdPutError = GrantMembershipApiMembersUserIdPutErrors[keyof GrantMembershipApiMembersUserIdPutErrors];
@@ -21019,6 +23641,31 @@ export type ListProjectsApiProjectsGetData = {
     query?: never;
     url: '/api/projects';
 };
+
+export type ListProjectsApiProjectsGetErrors = {
+    /**
+     * Problem
+     */
+    400: TenantCredentialMismatchProblem;
+    /**
+     * Problem
+     */
+    401: AuthenticationRequiredProblem;
+    /**
+     * Problem
+     */
+    404: TenantNotFoundProblem;
+    /**
+     * Problem
+     */
+    409: TenantRequiredProblem;
+    /**
+     * Problem
+     */
+    503: HubStoreUnavailableProblem;
+};
+
+export type ListProjectsApiProjectsGetError = ListProjectsApiProjectsGetErrors[keyof ListProjectsApiProjectsGetErrors];
 
 export type ListProjectsApiProjectsGetResponses = {
     /**
@@ -21044,9 +23691,33 @@ export type CreateProjectApiProjectsPostData = {
 
 export type CreateProjectApiProjectsPostErrors = {
     /**
+     * Problem
+     */
+    400: TenantCredentialMismatchProblem;
+    /**
+     * Problem
+     */
+    401: AuthenticationRequiredProblem;
+    /**
+     * Problem
+     */
+    403: PermissionRequiredProblem;
+    /**
+     * Problem
+     */
+    404: TenantNotFoundProblem;
+    /**
+     * Problem
+     */
+    409: TenantRequiredProblem;
+    /**
      * Validation Error
      */
     422: HttpValidationError;
+    /**
+     * Problem
+     */
+    503: HubStoreUnavailableProblem;
 };
 
 export type CreateProjectApiProjectsPostError = CreateProjectApiProjectsPostErrors[keyof CreateProjectApiProjectsPostErrors];
@@ -21074,9 +23745,29 @@ export type GetProjectApiProjectsProjectGetData = {
 
 export type GetProjectApiProjectsProjectGetErrors = {
     /**
+     * Problem
+     */
+    400: TenantCredentialMismatchProblem;
+    /**
+     * Problem
+     */
+    401: AuthenticationRequiredProblem;
+    /**
+     * Problem
+     */
+    404: TenantNotFoundProblem;
+    /**
+     * Problem
+     */
+    409: TenantRequiredProblem;
+    /**
      * Validation Error
      */
     422: HttpValidationError;
+    /**
+     * Problem
+     */
+    503: HubStoreUnavailableProblem;
 };
 
 export type GetProjectApiProjectsProjectGetError = GetProjectApiProjectsProjectGetErrors[keyof GetProjectApiProjectsProjectGetErrors];
@@ -21114,9 +23805,33 @@ export type PatchProjectApiProjectsProjectPatchData = {
 
 export type PatchProjectApiProjectsProjectPatchErrors = {
     /**
+     * Problem
+     */
+    400: TenantCredentialMismatchProblem;
+    /**
+     * Problem
+     */
+    401: AuthenticationRequiredProblem;
+    /**
+     * Problem
+     */
+    403: PermissionRequiredProblem;
+    /**
+     * Problem
+     */
+    404: TenantNotFoundProblem;
+    /**
+     * Problem
+     */
+    409: TenantRequiredProblem;
+    /**
      * Validation Error
      */
     422: HttpValidationError;
+    /**
+     * Problem
+     */
+    503: HubStoreUnavailableProblem;
 };
 
 export type PatchProjectApiProjectsProjectPatchError = PatchProjectApiProjectsProjectPatchErrors[keyof PatchProjectApiProjectsProjectPatchErrors];
@@ -21149,9 +23864,29 @@ export type ListProjectCadencesApiProjectsProjectCadencesGetData = {
 
 export type ListProjectCadencesApiProjectsProjectCadencesGetErrors = {
     /**
+     * Problem
+     */
+    400: TenantCredentialMismatchProblem;
+    /**
+     * Problem
+     */
+    401: AuthenticationRequiredProblem;
+    /**
+     * Problem
+     */
+    404: TenantNotFoundProblem;
+    /**
+     * Problem
+     */
+    409: TenantRequiredProblem;
+    /**
      * Validation Error
      */
     422: HttpValidationError;
+    /**
+     * Problem
+     */
+    503: HubStoreUnavailableProblem;
 };
 
 export type ListProjectCadencesApiProjectsProjectCadencesGetError = ListProjectCadencesApiProjectsProjectCadencesGetErrors[keyof ListProjectCadencesApiProjectsProjectCadencesGetErrors];
@@ -21187,9 +23922,33 @@ export type CreateProjectCadenceApiProjectsProjectCadencesPostData = {
 
 export type CreateProjectCadenceApiProjectsProjectCadencesPostErrors = {
     /**
+     * Problem
+     */
+    400: TenantCredentialMismatchProblem;
+    /**
+     * Problem
+     */
+    401: AuthenticationRequiredProblem;
+    /**
+     * Problem
+     */
+    403: PermissionRequiredProblem;
+    /**
+     * Problem
+     */
+    404: TenantNotFoundProblem;
+    /**
+     * Problem
+     */
+    409: TenantRequiredProblem;
+    /**
      * Validation Error
      */
     422: HttpValidationError;
+    /**
+     * Problem
+     */
+    503: HubStoreUnavailableProblem;
 };
 
 export type CreateProjectCadenceApiProjectsProjectCadencesPostError = CreateProjectCadenceApiProjectsProjectCadencesPostErrors[keyof CreateProjectCadenceApiProjectsProjectCadencesPostErrors];
@@ -21254,9 +24013,29 @@ export type ListProjectFindingsApiProjectsProjectFindingsGetData = {
 
 export type ListProjectFindingsApiProjectsProjectFindingsGetErrors = {
     /**
+     * Problem
+     */
+    400: TenantCredentialMismatchProblem;
+    /**
+     * Problem
+     */
+    401: AuthenticationRequiredProblem;
+    /**
+     * Problem
+     */
+    404: TenantNotFoundProblem;
+    /**
+     * Problem
+     */
+    409: TenantRequiredProblem;
+    /**
      * Validation Error
      */
     422: HttpValidationError;
+    /**
+     * Problem
+     */
+    503: HubStoreUnavailableProblem;
 };
 
 export type ListProjectFindingsApiProjectsProjectFindingsGetError = ListProjectFindingsApiProjectsProjectFindingsGetErrors[keyof ListProjectFindingsApiProjectsProjectFindingsGetErrors];
@@ -21293,9 +24072,29 @@ export type ListProjectFindingClassesApiProjectsProjectFindingsClassesGetData = 
 
 export type ListProjectFindingClassesApiProjectsProjectFindingsClassesGetErrors = {
     /**
+     * Problem
+     */
+    400: TenantCredentialMismatchProblem;
+    /**
+     * Problem
+     */
+    401: AuthenticationRequiredProblem;
+    /**
+     * Problem
+     */
+    404: TenantNotFoundProblem;
+    /**
+     * Problem
+     */
+    409: TenantRequiredProblem;
+    /**
      * Validation Error
      */
     422: HttpValidationError;
+    /**
+     * Problem
+     */
+    503: HubStoreUnavailableProblem;
 };
 
 export type ListProjectFindingClassesApiProjectsProjectFindingsClassesGetError = ListProjectFindingClassesApiProjectsProjectFindingsClassesGetErrors[keyof ListProjectFindingClassesApiProjectsProjectFindingsClassesGetErrors];
@@ -21338,9 +24137,29 @@ export type ListProjectGardenProposalsApiProjectsProjectGardenProposalsGetData =
 
 export type ListProjectGardenProposalsApiProjectsProjectGardenProposalsGetErrors = {
     /**
+     * Problem
+     */
+    400: TenantCredentialMismatchProblem;
+    /**
+     * Problem
+     */
+    401: AuthenticationRequiredProblem;
+    /**
+     * Problem
+     */
+    404: TenantNotFoundProblem;
+    /**
+     * Problem
+     */
+    409: TenantRequiredProblem;
+    /**
      * Validation Error
      */
     422: HttpValidationError;
+    /**
+     * Problem
+     */
+    503: HubStoreUnavailableProblem;
 };
 
 export type ListProjectGardenProposalsApiProjectsProjectGardenProposalsGetError = ListProjectGardenProposalsApiProjectsProjectGardenProposalsGetErrors[keyof ListProjectGardenProposalsApiProjectsProjectGardenProposalsGetErrors];
@@ -21368,9 +24187,33 @@ export type CreateProjectGardenProposalApiProjectsProjectGardenProposalsPostData
 
 export type CreateProjectGardenProposalApiProjectsProjectGardenProposalsPostErrors = {
     /**
+     * Problem
+     */
+    400: TenantCredentialMismatchProblem;
+    /**
+     * Problem
+     */
+    401: AuthenticationRequiredProblem;
+    /**
+     * Problem
+     */
+    403: PermissionRequiredProblem;
+    /**
+     * Problem
+     */
+    404: TenantNotFoundProblem;
+    /**
+     * Problem
+     */
+    409: TenantRequiredProblem;
+    /**
      * Validation Error
      */
     422: HttpValidationError;
+    /**
+     * Problem
+     */
+    503: HubStoreUnavailableProblem;
 };
 
 export type CreateProjectGardenProposalApiProjectsProjectGardenProposalsPostError = CreateProjectGardenProposalApiProjectsProjectGardenProposalsPostErrors[keyof CreateProjectGardenProposalApiProjectsProjectGardenProposalsPostErrors];
@@ -21404,9 +24247,33 @@ export type PutLandingOrderApiProjectsProjectLandingOrderPutData = {
 
 export type PutLandingOrderApiProjectsProjectLandingOrderPutErrors = {
     /**
+     * Problem
+     */
+    400: TenantCredentialMismatchProblem;
+    /**
+     * Problem
+     */
+    401: AuthenticationRequiredProblem;
+    /**
+     * Problem
+     */
+    403: PermissionRequiredProblem;
+    /**
+     * Problem
+     */
+    404: TenantNotFoundProblem;
+    /**
+     * Problem
+     */
+    409: TenantRequiredProblem;
+    /**
      * Validation Error
      */
     422: HttpValidationError;
+    /**
+     * Problem
+     */
+    503: HubStoreUnavailableProblem;
 };
 
 export type PutLandingOrderApiProjectsProjectLandingOrderPutError = PutLandingOrderApiProjectsProjectLandingOrderPutErrors[keyof PutLandingOrderApiProjectsProjectLandingOrderPutErrors];
@@ -21440,9 +24307,33 @@ export type PositionRepositoryApiProjectsProjectLandingOrderPositionPostData = {
 
 export type PositionRepositoryApiProjectsProjectLandingOrderPositionPostErrors = {
     /**
+     * Problem
+     */
+    400: TenantCredentialMismatchProblem;
+    /**
+     * Problem
+     */
+    401: AuthenticationRequiredProblem;
+    /**
+     * Problem
+     */
+    403: PermissionRequiredProblem;
+    /**
+     * Problem
+     */
+    404: TenantNotFoundProblem;
+    /**
+     * Problem
+     */
+    409: TenantRequiredProblem;
+    /**
      * Validation Error
      */
     422: HttpValidationError;
+    /**
+     * Problem
+     */
+    503: HubStoreUnavailableProblem;
 };
 
 export type PositionRepositoryApiProjectsProjectLandingOrderPositionPostError = PositionRepositoryApiProjectsProjectLandingOrderPositionPostErrors[keyof PositionRepositoryApiProjectsProjectLandingOrderPositionPostErrors];
@@ -21470,9 +24361,29 @@ export type ListRepositoryLinksApiProjectsProjectRepositoryLinksGetData = {
 
 export type ListRepositoryLinksApiProjectsProjectRepositoryLinksGetErrors = {
     /**
+     * Problem
+     */
+    400: TenantCredentialMismatchProblem;
+    /**
+     * Problem
+     */
+    401: AuthenticationRequiredProblem;
+    /**
+     * Problem
+     */
+    404: TenantNotFoundProblem;
+    /**
+     * Problem
+     */
+    409: TenantRequiredProblem;
+    /**
      * Validation Error
      */
     422: HttpValidationError;
+    /**
+     * Problem
+     */
+    503: HubStoreUnavailableProblem;
 };
 
 export type ListRepositoryLinksApiProjectsProjectRepositoryLinksGetError = ListRepositoryLinksApiProjectsProjectRepositoryLinksGetErrors[keyof ListRepositoryLinksApiProjectsProjectRepositoryLinksGetErrors];
@@ -21514,9 +24425,33 @@ export type LinkRepositoryApiProjectsProjectRepositoryLinksRepositoryPutData = {
 
 export type LinkRepositoryApiProjectsProjectRepositoryLinksRepositoryPutErrors = {
     /**
+     * Problem
+     */
+    400: TenantCredentialMismatchProblem;
+    /**
+     * Problem
+     */
+    401: AuthenticationRequiredProblem;
+    /**
+     * Problem
+     */
+    403: PermissionRequiredProblem;
+    /**
+     * Problem
+     */
+    404: TenantNotFoundProblem;
+    /**
+     * Problem
+     */
+    409: TenantRequiredProblem;
+    /**
      * Validation Error
      */
     422: HttpValidationError;
+    /**
+     * Problem
+     */
+    503: HubStoreUnavailableProblem;
 };
 
 export type LinkRepositoryApiProjectsProjectRepositoryLinksRepositoryPutError = LinkRepositoryApiProjectsProjectRepositoryLinksRepositoryPutErrors[keyof LinkRepositoryApiProjectsProjectRepositoryLinksRepositoryPutErrors];
@@ -21558,9 +24493,33 @@ export type UnlinkRepositoryApiProjectsProjectRepositoryLinksRepositoryRetirePos
 
 export type UnlinkRepositoryApiProjectsProjectRepositoryLinksRepositoryRetirePostErrors = {
     /**
+     * Problem
+     */
+    400: TenantCredentialMismatchProblem;
+    /**
+     * Problem
+     */
+    401: AuthenticationRequiredProblem;
+    /**
+     * Problem
+     */
+    403: PermissionRequiredProblem;
+    /**
+     * Problem
+     */
+    404: TenantNotFoundProblem;
+    /**
+     * Problem
+     */
+    409: TenantRequiredProblem;
+    /**
      * Validation Error
      */
     422: HttpValidationError;
+    /**
+     * Problem
+     */
+    503: HubStoreUnavailableProblem;
 };
 
 export type UnlinkRepositoryApiProjectsProjectRepositoryLinksRepositoryRetirePostError = UnlinkRepositoryApiProjectsProjectRepositoryLinksRepositoryRetirePostErrors[keyof UnlinkRepositoryApiProjectsProjectRepositoryLinksRepositoryRetirePostErrors];
@@ -21593,9 +24552,29 @@ export type ListProjectRoutinesApiProjectsProjectRoutinesGetData = {
 
 export type ListProjectRoutinesApiProjectsProjectRoutinesGetErrors = {
     /**
+     * Problem
+     */
+    400: TenantCredentialMismatchProblem;
+    /**
+     * Problem
+     */
+    401: AuthenticationRequiredProblem;
+    /**
+     * Problem
+     */
+    404: TenantNotFoundProblem;
+    /**
+     * Problem
+     */
+    409: TenantRequiredProblem;
+    /**
      * Validation Error
      */
     422: HttpValidationError;
+    /**
+     * Problem
+     */
+    503: HubStoreUnavailableProblem;
 };
 
 export type ListProjectRoutinesApiProjectsProjectRoutinesGetError = ListProjectRoutinesApiProjectsProjectRoutinesGetErrors[keyof ListProjectRoutinesApiProjectsProjectRoutinesGetErrors];
@@ -21631,9 +24610,33 @@ export type CreateProjectRoutineApiProjectsProjectRoutinesPostData = {
 
 export type CreateProjectRoutineApiProjectsProjectRoutinesPostErrors = {
     /**
+     * Problem
+     */
+    400: TenantCredentialMismatchProblem;
+    /**
+     * Problem
+     */
+    401: AuthenticationRequiredProblem;
+    /**
+     * Problem
+     */
+    403: PermissionRequiredProblem;
+    /**
+     * Problem
+     */
+    404: TenantNotFoundProblem;
+    /**
+     * Problem
+     */
+    409: TenantRequiredProblem;
+    /**
      * Validation Error
      */
     422: HttpValidationError;
+    /**
+     * Problem
+     */
+    503: HubStoreUnavailableProblem;
 };
 
 export type CreateProjectRoutineApiProjectsProjectRoutinesPostError = CreateProjectRoutineApiProjectsProjectRoutinesPostErrors[keyof CreateProjectRoutineApiProjectsProjectRoutinesPostErrors];
@@ -21670,9 +24673,29 @@ export type ListProjectRunsApiProjectsProjectRunsGetData = {
 
 export type ListProjectRunsApiProjectsProjectRunsGetErrors = {
     /**
+     * Problem
+     */
+    400: TenantCredentialMismatchProblem;
+    /**
+     * Problem
+     */
+    401: AuthenticationRequiredProblem;
+    /**
+     * Problem
+     */
+    404: TenantNotFoundProblem;
+    /**
+     * Problem
+     */
+    409: TenantRequiredProblem;
+    /**
      * Validation Error
      */
     422: HttpValidationError;
+    /**
+     * Problem
+     */
+    503: HubStoreUnavailableProblem;
 };
 
 export type ListProjectRunsApiProjectsProjectRunsGetError = ListProjectRunsApiProjectsProjectRunsGetErrors[keyof ListProjectRunsApiProjectsProjectRunsGetErrors];
@@ -21706,9 +24729,29 @@ export type ProjectRunDeltaApiProjectsProjectRunsChunkIdGetData = {
 
 export type ProjectRunDeltaApiProjectsProjectRunsChunkIdGetErrors = {
     /**
+     * Problem
+     */
+    400: TenantCredentialMismatchProblem;
+    /**
+     * Problem
+     */
+    401: AuthenticationRequiredProblem;
+    /**
+     * Problem
+     */
+    404: TenantNotFoundProblem;
+    /**
+     * Problem
+     */
+    409: TenantRequiredProblem;
+    /**
      * Validation Error
      */
     422: HttpValidationError;
+    /**
+     * Problem
+     */
+    503: HubStoreUnavailableProblem;
 };
 
 export type ProjectRunDeltaApiProjectsProjectRunsChunkIdGetError = ProjectRunDeltaApiProjectsProjectRunsChunkIdGetErrors[keyof ProjectRunDeltaApiProjectsProjectRunsChunkIdGetErrors];
@@ -21736,9 +24779,29 @@ export type ListProjectScopesApiProjectsProjectScopesGetData = {
 
 export type ListProjectScopesApiProjectsProjectScopesGetErrors = {
     /**
+     * Problem
+     */
+    400: TenantCredentialMismatchProblem;
+    /**
+     * Problem
+     */
+    401: AuthenticationRequiredProblem;
+    /**
+     * Problem
+     */
+    404: TenantNotFoundProblem;
+    /**
+     * Problem
+     */
+    409: TenantRequiredProblem;
+    /**
      * Validation Error
      */
     422: HttpValidationError;
+    /**
+     * Problem
+     */
+    503: HubStoreUnavailableProblem;
 };
 
 export type ListProjectScopesApiProjectsProjectScopesGetError = ListProjectScopesApiProjectsProjectScopesGetErrors[keyof ListProjectScopesApiProjectsProjectScopesGetErrors];
@@ -21774,9 +24837,33 @@ export type CreateProjectScopeApiProjectsProjectScopesPostData = {
 
 export type CreateProjectScopeApiProjectsProjectScopesPostErrors = {
     /**
+     * Problem
+     */
+    400: TenantCredentialMismatchProblem;
+    /**
+     * Problem
+     */
+    401: AuthenticationRequiredProblem;
+    /**
+     * Problem
+     */
+    403: PermissionRequiredProblem;
+    /**
+     * Problem
+     */
+    404: TenantNotFoundProblem;
+    /**
+     * Problem
+     */
+    409: TenantRequiredProblem;
+    /**
      * Validation Error
      */
     422: HttpValidationError;
+    /**
+     * Problem
+     */
+    503: HubStoreUnavailableProblem;
 };
 
 export type CreateProjectScopeApiProjectsProjectScopesPostError = CreateProjectScopeApiProjectsProjectScopesPostErrors[keyof CreateProjectScopeApiProjectsProjectScopesPostErrors];
@@ -21808,9 +24895,29 @@ export type GetProjectScopeApiProjectsProjectScopesSlugGetData = {
 
 export type GetProjectScopeApiProjectsProjectScopesSlugGetErrors = {
     /**
+     * Problem
+     */
+    400: TenantCredentialMismatchProblem;
+    /**
+     * Problem
+     */
+    401: AuthenticationRequiredProblem;
+    /**
+     * Problem
+     */
+    404: TenantNotFoundProblem;
+    /**
+     * Problem
+     */
+    409: TenantRequiredProblem;
+    /**
      * Validation Error
      */
     422: HttpValidationError;
+    /**
+     * Problem
+     */
+    503: HubStoreUnavailableProblem;
 };
 
 export type GetProjectScopeApiProjectsProjectScopesSlugGetError = GetProjectScopeApiProjectsProjectScopesSlugGetErrors[keyof GetProjectScopeApiProjectsProjectScopesSlugGetErrors];
@@ -21852,9 +24959,33 @@ export type EditProjectScopeApiProjectsProjectScopesSlugPatchData = {
 
 export type EditProjectScopeApiProjectsProjectScopesSlugPatchErrors = {
     /**
+     * Problem
+     */
+    400: TenantCredentialMismatchProblem;
+    /**
+     * Problem
+     */
+    401: AuthenticationRequiredProblem;
+    /**
+     * Problem
+     */
+    403: PermissionRequiredProblem;
+    /**
+     * Problem
+     */
+    404: TenantNotFoundProblem;
+    /**
+     * Problem
+     */
+    409: TenantRequiredProblem;
+    /**
      * Validation Error
      */
     422: HttpValidationError;
+    /**
+     * Problem
+     */
+    503: HubStoreUnavailableProblem;
 };
 
 export type EditProjectScopeApiProjectsProjectScopesSlugPatchError = EditProjectScopeApiProjectsProjectScopesSlugPatchErrors[keyof EditProjectScopeApiProjectsProjectScopesSlugPatchErrors];
@@ -21896,9 +25027,33 @@ export type EnableProjectScopeApiProjectsProjectScopesSlugEnablePostData = {
 
 export type EnableProjectScopeApiProjectsProjectScopesSlugEnablePostErrors = {
     /**
+     * Problem
+     */
+    400: TenantCredentialMismatchProblem;
+    /**
+     * Problem
+     */
+    401: AuthenticationRequiredProblem;
+    /**
+     * Problem
+     */
+    403: PermissionRequiredProblem;
+    /**
+     * Problem
+     */
+    404: TenantNotFoundProblem;
+    /**
+     * Problem
+     */
+    409: TenantRequiredProblem;
+    /**
      * Validation Error
      */
     422: HttpValidationError;
+    /**
+     * Problem
+     */
+    503: HubStoreUnavailableProblem;
 };
 
 export type EnableProjectScopeApiProjectsProjectScopesSlugEnablePostError = EnableProjectScopeApiProjectsProjectScopesSlugEnablePostErrors[keyof EnableProjectScopeApiProjectsProjectScopesSlugEnablePostErrors];
@@ -21940,9 +25095,33 @@ export type RetireProjectScopeApiProjectsProjectScopesSlugRetirePostData = {
 
 export type RetireProjectScopeApiProjectsProjectScopesSlugRetirePostErrors = {
     /**
+     * Problem
+     */
+    400: TenantCredentialMismatchProblem;
+    /**
+     * Problem
+     */
+    401: AuthenticationRequiredProblem;
+    /**
+     * Problem
+     */
+    403: PermissionRequiredProblem;
+    /**
+     * Problem
+     */
+    404: TenantNotFoundProblem;
+    /**
+     * Problem
+     */
+    409: TenantRequiredProblem;
+    /**
      * Validation Error
      */
     422: HttpValidationError;
+    /**
+     * Problem
+     */
+    503: HubStoreUnavailableProblem;
 };
 
 export type RetireProjectScopeApiProjectsProjectScopesSlugRetirePostError = RetireProjectScopeApiProjectsProjectScopesSlugRetirePostErrors[keyof RetireProjectScopeApiProjectsProjectScopesSlugRetirePostErrors];
@@ -21974,9 +25153,29 @@ export type ListProjectScopeRoutinesApiProjectsProjectScopesSlugRoutinesGetData 
 
 export type ListProjectScopeRoutinesApiProjectsProjectScopesSlugRoutinesGetErrors = {
     /**
+     * Problem
+     */
+    400: TenantCredentialMismatchProblem;
+    /**
+     * Problem
+     */
+    401: AuthenticationRequiredProblem;
+    /**
+     * Problem
+     */
+    404: TenantNotFoundProblem;
+    /**
+     * Problem
+     */
+    409: TenantRequiredProblem;
+    /**
      * Validation Error
      */
     422: HttpValidationError;
+    /**
+     * Problem
+     */
+    503: HubStoreUnavailableProblem;
 };
 
 export type ListProjectScopeRoutinesApiProjectsProjectScopesSlugRoutinesGetError = ListProjectScopeRoutinesApiProjectsProjectScopesSlugRoutinesGetErrors[keyof ListProjectScopeRoutinesApiProjectsProjectScopesSlugRoutinesGetErrors];
@@ -22006,9 +25205,29 @@ export type ListSourceLinksApiProjectsProjectSourceLinksGetData = {
 
 export type ListSourceLinksApiProjectsProjectSourceLinksGetErrors = {
     /**
+     * Problem
+     */
+    400: TenantCredentialMismatchProblem;
+    /**
+     * Problem
+     */
+    401: AuthenticationRequiredProblem;
+    /**
+     * Problem
+     */
+    404: TenantNotFoundProblem;
+    /**
+     * Problem
+     */
+    409: TenantRequiredProblem;
+    /**
      * Validation Error
      */
     422: HttpValidationError;
+    /**
+     * Problem
+     */
+    503: HubStoreUnavailableProblem;
 };
 
 export type ListSourceLinksApiProjectsProjectSourceLinksGetError = ListSourceLinksApiProjectsProjectSourceLinksGetErrors[keyof ListSourceLinksApiProjectsProjectSourceLinksGetErrors];
@@ -22050,9 +25269,33 @@ export type LinkSourceApiProjectsProjectSourceLinksSourcePutData = {
 
 export type LinkSourceApiProjectsProjectSourceLinksSourcePutErrors = {
     /**
+     * Problem
+     */
+    400: TenantCredentialMismatchProblem;
+    /**
+     * Problem
+     */
+    401: AuthenticationRequiredProblem;
+    /**
+     * Problem
+     */
+    403: PermissionRequiredProblem;
+    /**
+     * Problem
+     */
+    404: TenantNotFoundProblem;
+    /**
+     * Problem
+     */
+    409: TenantRequiredProblem;
+    /**
      * Validation Error
      */
     422: HttpValidationError;
+    /**
+     * Problem
+     */
+    503: HubStoreUnavailableProblem;
 };
 
 export type LinkSourceApiProjectsProjectSourceLinksSourcePutError = LinkSourceApiProjectsProjectSourceLinksSourcePutErrors[keyof LinkSourceApiProjectsProjectSourceLinksSourcePutErrors];
@@ -22094,9 +25337,33 @@ export type UnlinkSourceApiProjectsProjectSourceLinksSourceRetirePostData = {
 
 export type UnlinkSourceApiProjectsProjectSourceLinksSourceRetirePostErrors = {
     /**
+     * Problem
+     */
+    400: TenantCredentialMismatchProblem;
+    /**
+     * Problem
+     */
+    401: AuthenticationRequiredProblem;
+    /**
+     * Problem
+     */
+    403: PermissionRequiredProblem;
+    /**
+     * Problem
+     */
+    404: TenantNotFoundProblem;
+    /**
+     * Problem
+     */
+    409: TenantRequiredProblem;
+    /**
      * Validation Error
      */
     422: HttpValidationError;
+    /**
+     * Problem
+     */
+    503: HubStoreUnavailableProblem;
 };
 
 export type UnlinkSourceApiProjectsProjectSourceLinksSourceRetirePostError = UnlinkSourceApiProjectsProjectSourceLinksSourceRetirePostErrors[keyof UnlinkSourceApiProjectsProjectSourceLinksSourceRetirePostErrors];
@@ -22124,9 +25391,29 @@ export type ListOpenQuestionsApiQuestionsGetData = {
 
 export type ListOpenQuestionsApiQuestionsGetErrors = {
     /**
+     * Problem
+     */
+    400: TenantCredentialMismatchProblem;
+    /**
+     * Problem
+     */
+    401: AuthenticationRequiredProblem;
+    /**
+     * Problem
+     */
+    404: TenantNotFoundProblem;
+    /**
+     * Problem
+     */
+    409: TenantRequiredProblem;
+    /**
      * Validation Error
      */
     422: HttpValidationError;
+    /**
+     * Problem
+     */
+    503: HubStoreUnavailableProblem;
 };
 
 export type ListOpenQuestionsApiQuestionsGetError = ListOpenQuestionsApiQuestionsGetErrors[keyof ListOpenQuestionsApiQuestionsGetErrors];
@@ -22151,9 +25438,33 @@ export type AskQuestionApiQuestionsPostData = {
 
 export type AskQuestionApiQuestionsPostErrors = {
     /**
+     * Problem
+     */
+    400: TenantCredentialMismatchProblem;
+    /**
+     * Problem
+     */
+    401: AuthenticationRequiredProblem;
+    /**
+     * Problem
+     */
+    403: PermissionRequiredProblem;
+    /**
+     * Problem
+     */
+    404: TenantNotFoundProblem;
+    /**
+     * Problem
+     */
+    409: TenantRequiredProblem;
+    /**
      * Validation Error
      */
     422: HttpValidationError;
+    /**
+     * Problem
+     */
+    503: HubStoreUnavailableProblem;
 };
 
 export type AskQuestionApiQuestionsPostError = AskQuestionApiQuestionsPostErrors[keyof AskQuestionApiQuestionsPostErrors];
@@ -22187,11 +25498,31 @@ export type AnswerQuestionApiQuestionsQuestionIdAnswersPostErrors = {
     /**
      * Problem
      */
-    409: QuestionAlreadyAnsweredProblem;
+    400: TenantCredentialMismatchProblem;
+    /**
+     * Problem
+     */
+    401: AuthenticationRequiredProblem;
+    /**
+     * Problem
+     */
+    403: PermissionRequiredProblem;
+    /**
+     * Problem
+     */
+    404: TenantNotFoundProblem;
+    /**
+     * Problem
+     */
+    409: TenantRequiredProblem | QuestionAlreadyAnsweredProblem;
     /**
      * Validation Error
      */
     422: HttpValidationError;
+    /**
+     * Problem
+     */
+    503: HubStoreUnavailableProblem;
 };
 
 export type AnswerQuestionApiQuestionsQuestionIdAnswersPostError = AnswerQuestionApiQuestionsQuestionIdAnswersPostErrors[keyof AnswerQuestionApiQuestionsQuestionIdAnswersPostErrors];
@@ -22227,9 +25558,29 @@ export type GetQueueApiQueueGetData = {
 
 export type GetQueueApiQueueGetErrors = {
     /**
+     * Problem
+     */
+    400: TenantCredentialMismatchProblem;
+    /**
+     * Problem
+     */
+    401: AuthenticationRequiredProblem;
+    /**
+     * Problem
+     */
+    404: TenantNotFoundProblem;
+    /**
+     * Problem
+     */
+    409: TenantRequiredProblem;
+    /**
      * Validation Error
      */
     422: HttpValidationError;
+    /**
+     * Problem
+     */
+    503: HubStoreUnavailableProblem;
 };
 
 export type GetQueueApiQueueGetError = GetQueueApiQueueGetErrors[keyof GetQueueApiQueueGetErrors];
@@ -22252,9 +25603,33 @@ export type ReplaceQueueApiQueuePutData = {
 
 export type ReplaceQueueApiQueuePutErrors = {
     /**
+     * Problem
+     */
+    400: TenantCredentialMismatchProblem;
+    /**
+     * Problem
+     */
+    401: AuthenticationRequiredProblem;
+    /**
+     * Problem
+     */
+    403: PermissionRequiredProblem;
+    /**
+     * Problem
+     */
+    404: TenantNotFoundProblem;
+    /**
+     * Problem
+     */
+    409: TenantRequiredProblem;
+    /**
      * Validation Error
      */
     422: HttpValidationError;
+    /**
+     * Problem
+     */
+    503: HubStoreUnavailableProblem;
 };
 
 export type ReplaceQueueApiQueuePutError = ReplaceQueueApiQueuePutErrors[keyof ReplaceQueueApiQueuePutErrors];
@@ -22277,9 +25652,33 @@ export type RepositionQueueApiQueuePositionPostData = {
 
 export type RepositionQueueApiQueuePositionPostErrors = {
     /**
+     * Problem
+     */
+    400: TenantCredentialMismatchProblem;
+    /**
+     * Problem
+     */
+    401: AuthenticationRequiredProblem;
+    /**
+     * Problem
+     */
+    403: PermissionRequiredProblem;
+    /**
+     * Problem
+     */
+    404: TenantNotFoundProblem;
+    /**
+     * Problem
+     */
+    409: TenantRequiredProblem;
+    /**
      * Validation Error
      */
     422: HttpValidationError;
+    /**
+     * Problem
+     */
+    503: HubStoreUnavailableProblem;
 };
 
 export type RepositionQueueApiQueuePositionPostError = RepositionQueueApiQueuePositionPostErrors[keyof RepositionQueueApiQueuePositionPostErrors];
@@ -22323,9 +25722,29 @@ export type ListRepositoriesApiRepositoriesGetData = {
 
 export type ListRepositoriesApiRepositoriesGetErrors = {
     /**
+     * Problem
+     */
+    400: TenantCredentialMismatchProblem;
+    /**
+     * Problem
+     */
+    401: AuthenticationRequiredProblem;
+    /**
+     * Problem
+     */
+    404: TenantNotFoundProblem;
+    /**
+     * Problem
+     */
+    409: TenantRequiredProblem;
+    /**
      * Validation Error
      */
     422: HttpValidationError;
+    /**
+     * Problem
+     */
+    503: HubStoreUnavailableProblem;
 };
 
 export type ListRepositoriesApiRepositoriesGetError = ListRepositoriesApiRepositoriesGetErrors[keyof ListRepositoriesApiRepositoriesGetErrors];
@@ -22354,9 +25773,33 @@ export type CreateRepositoryApiRepositoriesPostData = {
 
 export type CreateRepositoryApiRepositoriesPostErrors = {
     /**
+     * Problem
+     */
+    400: TenantCredentialMismatchProblem;
+    /**
+     * Problem
+     */
+    401: AuthenticationRequiredProblem;
+    /**
+     * Problem
+     */
+    403: PermissionRequiredProblem;
+    /**
+     * Problem
+     */
+    404: TenantNotFoundProblem;
+    /**
+     * Problem
+     */
+    409: TenantRequiredProblem;
+    /**
      * Validation Error
      */
     422: HttpValidationError;
+    /**
+     * Problem
+     */
+    503: HubStoreUnavailableProblem;
 };
 
 export type CreateRepositoryApiRepositoriesPostError = CreateRepositoryApiRepositoriesPostErrors[keyof CreateRepositoryApiRepositoriesPostErrors];
@@ -22384,9 +25827,29 @@ export type GetRepositoryApiRepositoriesRepositoryGetData = {
 
 export type GetRepositoryApiRepositoriesRepositoryGetErrors = {
     /**
+     * Problem
+     */
+    400: TenantCredentialMismatchProblem;
+    /**
+     * Problem
+     */
+    401: AuthenticationRequiredProblem;
+    /**
+     * Problem
+     */
+    404: TenantNotFoundProblem;
+    /**
+     * Problem
+     */
+    409: TenantRequiredProblem;
+    /**
      * Validation Error
      */
     422: HttpValidationError;
+    /**
+     * Problem
+     */
+    503: HubStoreUnavailableProblem;
 };
 
 export type GetRepositoryApiRepositoriesRepositoryGetError = GetRepositoryApiRepositoriesRepositoryGetErrors[keyof GetRepositoryApiRepositoriesRepositoryGetErrors];
@@ -22424,9 +25887,33 @@ export type PatchRepositoryApiRepositoriesRepositoryPatchData = {
 
 export type PatchRepositoryApiRepositoriesRepositoryPatchErrors = {
     /**
+     * Problem
+     */
+    400: TenantCredentialMismatchProblem;
+    /**
+     * Problem
+     */
+    401: AuthenticationRequiredProblem;
+    /**
+     * Problem
+     */
+    403: PermissionRequiredProblem;
+    /**
+     * Problem
+     */
+    404: TenantNotFoundProblem;
+    /**
+     * Problem
+     */
+    409: TenantRequiredProblem;
+    /**
      * Validation Error
      */
     422: HttpValidationError;
+    /**
+     * Problem
+     */
+    503: HubStoreUnavailableProblem;
 };
 
 export type PatchRepositoryApiRepositoriesRepositoryPatchError = PatchRepositoryApiRepositoriesRepositoryPatchErrors[keyof PatchRepositoryApiRepositoriesRepositoryPatchErrors];
@@ -22464,9 +25951,33 @@ export type EnableRepositoryApiRepositoriesRepositoryEnablePostData = {
 
 export type EnableRepositoryApiRepositoriesRepositoryEnablePostErrors = {
     /**
+     * Problem
+     */
+    400: TenantCredentialMismatchProblem;
+    /**
+     * Problem
+     */
+    401: AuthenticationRequiredProblem;
+    /**
+     * Problem
+     */
+    403: PermissionRequiredProblem;
+    /**
+     * Problem
+     */
+    404: TenantNotFoundProblem;
+    /**
+     * Problem
+     */
+    409: TenantRequiredProblem;
+    /**
      * Validation Error
      */
     422: HttpValidationError;
+    /**
+     * Problem
+     */
+    503: HubStoreUnavailableProblem;
 };
 
 export type EnableRepositoryApiRepositoriesRepositoryEnablePostError = EnableRepositoryApiRepositoriesRepositoryEnablePostErrors[keyof EnableRepositoryApiRepositoriesRepositoryEnablePostErrors];
@@ -22504,9 +26015,33 @@ export type RetireRepositoryApiRepositoriesRepositoryRetirePostData = {
 
 export type RetireRepositoryApiRepositoriesRepositoryRetirePostErrors = {
     /**
+     * Problem
+     */
+    400: TenantCredentialMismatchProblem;
+    /**
+     * Problem
+     */
+    401: AuthenticationRequiredProblem;
+    /**
+     * Problem
+     */
+    403: PermissionRequiredProblem;
+    /**
+     * Problem
+     */
+    404: TenantNotFoundProblem;
+    /**
+     * Problem
+     */
+    409: TenantRequiredProblem;
+    /**
      * Validation Error
      */
     422: HttpValidationError;
+    /**
+     * Problem
+     */
+    503: HubStoreUnavailableProblem;
 };
 
 export type RetireRepositoryApiRepositoriesRepositoryRetirePostError = RetireRepositoryApiRepositoriesRepositoryRetirePostErrors[keyof RetireRepositoryApiRepositoriesRepositoryRetirePostErrors];
@@ -22538,9 +26073,29 @@ export type ListRoutinesApiRoutinesGetData = {
 
 export type ListRoutinesApiRoutinesGetErrors = {
     /**
+     * Problem
+     */
+    400: TenantCredentialMismatchProblem;
+    /**
+     * Problem
+     */
+    401: AuthenticationRequiredProblem;
+    /**
+     * Problem
+     */
+    404: TenantNotFoundProblem;
+    /**
+     * Problem
+     */
+    409: TenantRequiredProblem;
+    /**
      * Validation Error
      */
     422: HttpValidationError;
+    /**
+     * Problem
+     */
+    503: HubStoreUnavailableProblem;
 };
 
 export type ListRoutinesApiRoutinesGetError = ListRoutinesApiRoutinesGetErrors[keyof ListRoutinesApiRoutinesGetErrors];
@@ -22571,9 +26126,33 @@ export type CreateRoutineApiRoutinesPostData = {
 
 export type CreateRoutineApiRoutinesPostErrors = {
     /**
+     * Problem
+     */
+    400: TenantCredentialMismatchProblem;
+    /**
+     * Problem
+     */
+    401: AuthenticationRequiredProblem;
+    /**
+     * Problem
+     */
+    403: PermissionRequiredProblem;
+    /**
+     * Problem
+     */
+    404: TenantNotFoundProblem;
+    /**
+     * Problem
+     */
+    409: TenantRequiredProblem;
+    /**
      * Validation Error
      */
     422: HttpValidationError;
+    /**
+     * Problem
+     */
+    503: HubStoreUnavailableProblem;
 };
 
 export type CreateRoutineApiRoutinesPostError = CreateRoutineApiRoutinesPostErrors[keyof CreateRoutineApiRoutinesPostErrors];
@@ -22617,9 +26196,29 @@ export type RoutineProposalCountsApiRoutinesProposalCountsGetData = {
 
 export type RoutineProposalCountsApiRoutinesProposalCountsGetErrors = {
     /**
+     * Problem
+     */
+    400: TenantCredentialMismatchProblem;
+    /**
+     * Problem
+     */
+    401: AuthenticationRequiredProblem;
+    /**
+     * Problem
+     */
+    404: TenantNotFoundProblem;
+    /**
+     * Problem
+     */
+    409: TenantRequiredProblem;
+    /**
      * Validation Error
      */
     422: HttpValidationError;
+    /**
+     * Problem
+     */
+    503: HubStoreUnavailableProblem;
 };
 
 export type RoutineProposalCountsApiRoutinesProposalCountsGetError = RoutineProposalCountsApiRoutinesProposalCountsGetErrors[keyof RoutineProposalCountsApiRoutinesProposalCountsGetErrors];
@@ -22667,9 +26266,29 @@ export type RoutineTrendApiRoutinesTrendGetData = {
 
 export type RoutineTrendApiRoutinesTrendGetErrors = {
     /**
+     * Problem
+     */
+    400: TenantCredentialMismatchProblem;
+    /**
+     * Problem
+     */
+    401: AuthenticationRequiredProblem;
+    /**
+     * Problem
+     */
+    404: TenantNotFoundProblem;
+    /**
+     * Problem
+     */
+    409: TenantRequiredProblem;
+    /**
      * Validation Error
      */
     422: HttpValidationError;
+    /**
+     * Problem
+     */
+    503: HubStoreUnavailableProblem;
 };
 
 export type RoutineTrendApiRoutinesTrendGetError = RoutineTrendApiRoutinesTrendGetErrors[keyof RoutineTrendApiRoutinesTrendGetErrors];
@@ -22697,9 +26316,29 @@ export type GetRoutineApiRoutinesRoutineIdGetData = {
 
 export type GetRoutineApiRoutinesRoutineIdGetErrors = {
     /**
+     * Problem
+     */
+    400: TenantCredentialMismatchProblem;
+    /**
+     * Problem
+     */
+    401: AuthenticationRequiredProblem;
+    /**
+     * Problem
+     */
+    404: TenantNotFoundProblem;
+    /**
+     * Problem
+     */
+    409: TenantRequiredProblem;
+    /**
      * Validation Error
      */
     422: HttpValidationError;
+    /**
+     * Problem
+     */
+    503: HubStoreUnavailableProblem;
 };
 
 export type GetRoutineApiRoutinesRoutineIdGetError = GetRoutineApiRoutinesRoutineIdGetErrors[keyof GetRoutineApiRoutinesRoutineIdGetErrors];
@@ -22737,9 +26376,33 @@ export type EditRoutineApiRoutinesRoutineIdPatchData = {
 
 export type EditRoutineApiRoutinesRoutineIdPatchErrors = {
     /**
+     * Problem
+     */
+    400: TenantCredentialMismatchProblem;
+    /**
+     * Problem
+     */
+    401: AuthenticationRequiredProblem;
+    /**
+     * Problem
+     */
+    403: PermissionRequiredProblem;
+    /**
+     * Problem
+     */
+    404: TenantNotFoundProblem;
+    /**
+     * Problem
+     */
+    409: TenantRequiredProblem;
+    /**
      * Validation Error
      */
     422: HttpValidationError;
+    /**
+     * Problem
+     */
+    503: HubStoreUnavailableProblem;
 };
 
 export type EditRoutineApiRoutinesRoutineIdPatchError = EditRoutineApiRoutinesRoutineIdPatchErrors[keyof EditRoutineApiRoutinesRoutineIdPatchErrors];
@@ -22767,9 +26430,29 @@ export type RoutineBaselinesApiRoutinesRoutineIdBaselinesGetData = {
 
 export type RoutineBaselinesApiRoutinesRoutineIdBaselinesGetErrors = {
     /**
+     * Problem
+     */
+    400: TenantCredentialMismatchProblem;
+    /**
+     * Problem
+     */
+    401: AuthenticationRequiredProblem;
+    /**
+     * Problem
+     */
+    404: TenantNotFoundProblem;
+    /**
+     * Problem
+     */
+    409: TenantRequiredProblem;
+    /**
      * Validation Error
      */
     422: HttpValidationError;
+    /**
+     * Problem
+     */
+    503: HubStoreUnavailableProblem;
 };
 
 export type RoutineBaselinesApiRoutinesRoutineIdBaselinesGetError = RoutineBaselinesApiRoutinesRoutineIdBaselinesGetErrors[keyof RoutineBaselinesApiRoutinesRoutineIdBaselinesGetErrors];
@@ -22809,9 +26492,33 @@ export type EnableRoutineApiRoutinesRoutineIdEnablePostData = {
 
 export type EnableRoutineApiRoutinesRoutineIdEnablePostErrors = {
     /**
+     * Problem
+     */
+    400: TenantCredentialMismatchProblem;
+    /**
+     * Problem
+     */
+    401: AuthenticationRequiredProblem;
+    /**
+     * Problem
+     */
+    403: PermissionRequiredProblem;
+    /**
+     * Problem
+     */
+    404: TenantNotFoundProblem;
+    /**
+     * Problem
+     */
+    409: TenantRequiredProblem;
+    /**
      * Validation Error
      */
     422: HttpValidationError;
+    /**
+     * Problem
+     */
+    503: HubStoreUnavailableProblem;
 };
 
 export type EnableRoutineApiRoutinesRoutineIdEnablePostError = EnableRoutineApiRoutinesRoutineIdEnablePostErrors[keyof EnableRoutineApiRoutinesRoutineIdEnablePostErrors];
@@ -22849,9 +26556,33 @@ export type RetireRoutineApiRoutinesRoutineIdRetirePostData = {
 
 export type RetireRoutineApiRoutinesRoutineIdRetirePostErrors = {
     /**
+     * Problem
+     */
+    400: TenantCredentialMismatchProblem;
+    /**
+     * Problem
+     */
+    401: AuthenticationRequiredProblem;
+    /**
+     * Problem
+     */
+    403: PermissionRequiredProblem;
+    /**
+     * Problem
+     */
+    404: TenantNotFoundProblem;
+    /**
+     * Problem
+     */
+    409: TenantRequiredProblem;
+    /**
      * Validation Error
      */
     422: HttpValidationError;
+    /**
+     * Problem
+     */
+    503: HubStoreUnavailableProblem;
 };
 
 export type RetireRoutineApiRoutinesRoutineIdRetirePostError = RetireRoutineApiRoutinesRoutineIdRetirePostErrors[keyof RetireRoutineApiRoutinesRoutineIdRetirePostErrors];
@@ -22879,9 +26610,33 @@ export type RunRoutineApiRoutinesRoutineIdRunPostData = {
 
 export type RunRoutineApiRoutinesRoutineIdRunPostErrors = {
     /**
+     * Problem
+     */
+    400: TenantCredentialMismatchProblem;
+    /**
+     * Problem
+     */
+    401: AuthenticationRequiredProblem;
+    /**
+     * Problem
+     */
+    403: PermissionRequiredProblem;
+    /**
+     * Problem
+     */
+    404: TenantNotFoundProblem;
+    /**
+     * Problem
+     */
+    409: TenantRequiredProblem;
+    /**
      * Validation Error
      */
     422: HttpValidationError;
+    /**
+     * Problem
+     */
+    503: HubStoreUnavailableProblem;
 };
 
 export type RunRoutineApiRoutinesRoutineIdRunPostError = RunRoutineApiRoutinesRoutineIdRunPostErrors[keyof RunRoutineApiRoutinesRoutineIdRunPostErrors];
@@ -22909,9 +26664,29 @@ export type ListRoutineScopesApiRoutinesRoutineIdScopesGetData = {
 
 export type ListRoutineScopesApiRoutinesRoutineIdScopesGetErrors = {
     /**
+     * Problem
+     */
+    400: TenantCredentialMismatchProblem;
+    /**
+     * Problem
+     */
+    401: AuthenticationRequiredProblem;
+    /**
+     * Problem
+     */
+    404: TenantNotFoundProblem;
+    /**
+     * Problem
+     */
+    409: TenantRequiredProblem;
+    /**
      * Validation Error
      */
     422: HttpValidationError;
+    /**
+     * Problem
+     */
+    503: HubStoreUnavailableProblem;
 };
 
 export type ListRoutineScopesApiRoutinesRoutineIdScopesGetError = ListRoutineScopesApiRoutinesRoutineIdScopesGetErrors[keyof ListRoutineScopesApiRoutinesRoutineIdScopesGetErrors];
@@ -22955,9 +26730,33 @@ export type UnlinkRoutineScopeApiRoutinesRoutineIdScopesScopeSlugDeleteData = {
 
 export type UnlinkRoutineScopeApiRoutinesRoutineIdScopesScopeSlugDeleteErrors = {
     /**
+     * Problem
+     */
+    400: TenantCredentialMismatchProblem;
+    /**
+     * Problem
+     */
+    401: AuthenticationRequiredProblem;
+    /**
+     * Problem
+     */
+    403: PermissionRequiredProblem;
+    /**
+     * Problem
+     */
+    404: TenantNotFoundProblem;
+    /**
+     * Problem
+     */
+    409: TenantRequiredProblem;
+    /**
      * Validation Error
      */
     422: HttpValidationError;
+    /**
+     * Problem
+     */
+    503: HubStoreUnavailableProblem;
 };
 
 export type UnlinkRoutineScopeApiRoutinesRoutineIdScopesScopeSlugDeleteError = UnlinkRoutineScopeApiRoutinesRoutineIdScopesScopeSlugDeleteErrors[keyof UnlinkRoutineScopeApiRoutinesRoutineIdScopesScopeSlugDeleteErrors];
@@ -22999,9 +26798,33 @@ export type LinkRoutineScopeApiRoutinesRoutineIdScopesScopeSlugPutData = {
 
 export type LinkRoutineScopeApiRoutinesRoutineIdScopesScopeSlugPutErrors = {
     /**
+     * Problem
+     */
+    400: TenantCredentialMismatchProblem;
+    /**
+     * Problem
+     */
+    401: AuthenticationRequiredProblem;
+    /**
+     * Problem
+     */
+    403: PermissionRequiredProblem;
+    /**
+     * Problem
+     */
+    404: TenantNotFoundProblem;
+    /**
+     * Problem
+     */
+    409: TenantRequiredProblem;
+    /**
      * Validation Error
      */
     422: HttpValidationError;
+    /**
+     * Problem
+     */
+    503: HubStoreUnavailableProblem;
 };
 
 export type LinkRoutineScopeApiRoutinesRoutineIdScopesScopeSlugPutError = LinkRoutineScopeApiRoutinesRoutineIdScopesScopeSlugPutErrors[keyof LinkRoutineScopeApiRoutinesRoutineIdScopesScopeSlugPutErrors];
@@ -23038,9 +26861,29 @@ export type RoutineSweepsApiRoutinesRoutineIdSweepsGetData = {
 
 export type RoutineSweepsApiRoutinesRoutineIdSweepsGetErrors = {
     /**
+     * Problem
+     */
+    400: TenantCredentialMismatchProblem;
+    /**
+     * Problem
+     */
+    401: AuthenticationRequiredProblem;
+    /**
+     * Problem
+     */
+    404: TenantNotFoundProblem;
+    /**
+     * Problem
+     */
+    409: TenantRequiredProblem;
+    /**
      * Validation Error
      */
     422: HttpValidationError;
+    /**
+     * Problem
+     */
+    503: HubStoreUnavailableProblem;
 };
 
 export type RoutineSweepsApiRoutinesRoutineIdSweepsGetError = RoutineSweepsApiRoutinesRoutineIdSweepsGetErrors[keyof RoutineSweepsApiRoutinesRoutineIdSweepsGetErrors];
@@ -23068,9 +26911,29 @@ export type ListRunnersApiRunnersGetData = {
 
 export type ListRunnersApiRunnersGetErrors = {
     /**
+     * Problem
+     */
+    400: TenantCredentialMismatchProblem;
+    /**
+     * Problem
+     */
+    401: AuthenticationRequiredProblem;
+    /**
+     * Problem
+     */
+    404: TenantNotFoundProblem;
+    /**
+     * Problem
+     */
+    409: TenantRequiredProblem;
+    /**
      * Validation Error
      */
     422: HttpValidationError;
+    /**
+     * Problem
+     */
+    503: HubStoreUnavailableProblem;
 };
 
 export type ListRunnersApiRunnersGetError = ListRunnersApiRunnersGetErrors[keyof ListRunnersApiRunnersGetErrors];
@@ -23093,9 +26956,33 @@ export type AddRunnerApiRunnersPostData = {
 
 export type AddRunnerApiRunnersPostErrors = {
     /**
+     * Problem
+     */
+    400: TenantCredentialMismatchProblem;
+    /**
+     * Problem
+     */
+    401: AuthenticationRequiredProblem;
+    /**
+     * Problem
+     */
+    403: PermissionRequiredProblem;
+    /**
+     * Problem
+     */
+    404: TenantNotFoundProblem;
+    /**
+     * Problem
+     */
+    409: TenantRequiredProblem;
+    /**
      * Validation Error
      */
     422: HttpValidationError;
+    /**
+     * Problem
+     */
+    503: HubStoreUnavailableProblem;
 };
 
 export type AddRunnerApiRunnersPostError = AddRunnerApiRunnersPostErrors[keyof AddRunnerApiRunnersPostErrors];
@@ -23123,9 +27010,29 @@ export type GetRunnerApiRunnersRunnerIdGetData = {
 
 export type GetRunnerApiRunnersRunnerIdGetErrors = {
     /**
+     * Problem
+     */
+    400: TenantCredentialMismatchProblem;
+    /**
+     * Problem
+     */
+    401: AuthenticationRequiredProblem;
+    /**
+     * Problem
+     */
+    404: TenantNotFoundProblem;
+    /**
+     * Problem
+     */
+    409: TenantRequiredProblem;
+    /**
      * Validation Error
      */
     422: HttpValidationError;
+    /**
+     * Problem
+     */
+    503: HubStoreUnavailableProblem;
 };
 
 export type GetRunnerApiRunnersRunnerIdGetError = GetRunnerApiRunnersRunnerIdGetErrors[keyof GetRunnerApiRunnersRunnerIdGetErrors];
@@ -23153,9 +27060,33 @@ export type EnrollRunnerApiRunnersRunnerIdEnrollmentsPostData = {
 
 export type EnrollRunnerApiRunnersRunnerIdEnrollmentsPostErrors = {
     /**
+     * Problem
+     */
+    400: TenantCredentialMismatchProblem;
+    /**
+     * Problem
+     */
+    401: AuthenticationRequiredProblem;
+    /**
+     * Problem
+     */
+    403: PermissionRequiredProblem;
+    /**
+     * Problem
+     */
+    404: TenantNotFoundProblem;
+    /**
+     * Problem
+     */
+    409: TenantRequiredProblem;
+    /**
      * Validation Error
      */
     422: HttpValidationError;
+    /**
+     * Problem
+     */
+    503: HubStoreUnavailableProblem;
 };
 
 export type EnrollRunnerApiRunnersRunnerIdEnrollmentsPostError = EnrollRunnerApiRunnersRunnerIdEnrollmentsPostErrors[keyof EnrollRunnerApiRunnersRunnerIdEnrollmentsPostErrors];
@@ -23183,9 +27114,33 @@ export type PauseRunnerApiRunnersRunnerIdPausePostData = {
 
 export type PauseRunnerApiRunnersRunnerIdPausePostErrors = {
     /**
+     * Problem
+     */
+    400: TenantCredentialMismatchProblem;
+    /**
+     * Problem
+     */
+    401: AuthenticationRequiredProblem;
+    /**
+     * Problem
+     */
+    403: PermissionRequiredProblem;
+    /**
+     * Problem
+     */
+    404: TenantNotFoundProblem;
+    /**
+     * Problem
+     */
+    409: TenantRequiredProblem;
+    /**
      * Validation Error
      */
     422: HttpValidationError;
+    /**
+     * Problem
+     */
+    503: HubStoreUnavailableProblem;
 };
 
 export type PauseRunnerApiRunnersRunnerIdPausePostError = PauseRunnerApiRunnersRunnerIdPausePostErrors[keyof PauseRunnerApiRunnersRunnerIdPausePostErrors];
@@ -23213,9 +27168,33 @@ export type ReinstateRunnerApiRunnersRunnerIdReinstatePostData = {
 
 export type ReinstateRunnerApiRunnersRunnerIdReinstatePostErrors = {
     /**
+     * Problem
+     */
+    400: TenantCredentialMismatchProblem;
+    /**
+     * Problem
+     */
+    401: AuthenticationRequiredProblem;
+    /**
+     * Problem
+     */
+    403: PermissionRequiredProblem;
+    /**
+     * Problem
+     */
+    404: TenantNotFoundProblem;
+    /**
+     * Problem
+     */
+    409: TenantRequiredProblem;
+    /**
      * Validation Error
      */
     422: HttpValidationError;
+    /**
+     * Problem
+     */
+    503: HubStoreUnavailableProblem;
 };
 
 export type ReinstateRunnerApiRunnersRunnerIdReinstatePostError = ReinstateRunnerApiRunnersRunnerIdReinstatePostErrors[keyof ReinstateRunnerApiRunnersRunnerIdReinstatePostErrors];
@@ -23243,9 +27222,33 @@ export type ResumeRunnerApiRunnersRunnerIdResumePostData = {
 
 export type ResumeRunnerApiRunnersRunnerIdResumePostErrors = {
     /**
+     * Problem
+     */
+    400: TenantCredentialMismatchProblem;
+    /**
+     * Problem
+     */
+    401: AuthenticationRequiredProblem;
+    /**
+     * Problem
+     */
+    403: PermissionRequiredProblem;
+    /**
+     * Problem
+     */
+    404: TenantNotFoundProblem;
+    /**
+     * Problem
+     */
+    409: TenantRequiredProblem;
+    /**
      * Validation Error
      */
     422: HttpValidationError;
+    /**
+     * Problem
+     */
+    503: HubStoreUnavailableProblem;
 };
 
 export type ResumeRunnerApiRunnersRunnerIdResumePostError = ResumeRunnerApiRunnersRunnerIdResumePostErrors[keyof ResumeRunnerApiRunnersRunnerIdResumePostErrors];
@@ -23273,9 +27276,33 @@ export type RetireRunnerApiRunnersRunnerIdRetirePostData = {
 
 export type RetireRunnerApiRunnersRunnerIdRetirePostErrors = {
     /**
+     * Problem
+     */
+    400: TenantCredentialMismatchProblem;
+    /**
+     * Problem
+     */
+    401: AuthenticationRequiredProblem;
+    /**
+     * Problem
+     */
+    403: PermissionRequiredProblem;
+    /**
+     * Problem
+     */
+    404: TenantNotFoundProblem;
+    /**
+     * Problem
+     */
+    409: TenantRequiredProblem;
+    /**
      * Validation Error
      */
     422: HttpValidationError;
+    /**
+     * Problem
+     */
+    503: HubStoreUnavailableProblem;
 };
 
 export type RetireRunnerApiRunnersRunnerIdRetirePostError = RetireRunnerApiRunnersRunnerIdRetirePostErrors[keyof RetireRunnerApiRunnersRunnerIdRetirePostErrors];
@@ -23303,9 +27330,33 @@ export type RevokeRunnerTokenApiRunnersRunnerIdTokenRevocationsPostData = {
 
 export type RevokeRunnerTokenApiRunnersRunnerIdTokenRevocationsPostErrors = {
     /**
+     * Problem
+     */
+    400: TenantCredentialMismatchProblem;
+    /**
+     * Problem
+     */
+    401: AuthenticationRequiredProblem;
+    /**
+     * Problem
+     */
+    403: PermissionRequiredProblem;
+    /**
+     * Problem
+     */
+    404: TenantNotFoundProblem;
+    /**
+     * Problem
+     */
+    409: TenantRequiredProblem;
+    /**
      * Validation Error
      */
     422: HttpValidationError;
+    /**
+     * Problem
+     */
+    503: HubStoreUnavailableProblem;
 };
 
 export type RevokeRunnerTokenApiRunnersRunnerIdTokenRevocationsPostError = RevokeRunnerTokenApiRunnersRunnerIdTokenRevocationsPostErrors[keyof RevokeRunnerTokenApiRunnersRunnerIdTokenRevocationsPostErrors];
@@ -23341,9 +27392,29 @@ export type ListRunsApiRunsGetData = {
 
 export type ListRunsApiRunsGetErrors = {
     /**
+     * Problem
+     */
+    400: TenantCredentialMismatchProblem;
+    /**
+     * Problem
+     */
+    401: AuthenticationRequiredProblem;
+    /**
+     * Problem
+     */
+    404: TenantNotFoundProblem;
+    /**
+     * Problem
+     */
+    409: TenantRequiredProblem;
+    /**
      * Validation Error
      */
     422: HttpValidationError;
+    /**
+     * Problem
+     */
+    503: HubStoreUnavailableProblem;
 };
 
 export type ListRunsApiRunsGetError = ListRunsApiRunsGetErrors[keyof ListRunsApiRunsGetErrors];
@@ -23373,9 +27444,29 @@ export type RunDeltaApiRunsChunkIdGetData = {
 
 export type RunDeltaApiRunsChunkIdGetErrors = {
     /**
+     * Problem
+     */
+    400: TenantCredentialMismatchProblem;
+    /**
+     * Problem
+     */
+    401: AuthenticationRequiredProblem;
+    /**
+     * Problem
+     */
+    404: TenantNotFoundProblem;
+    /**
+     * Problem
+     */
+    409: TenantRequiredProblem;
+    /**
      * Validation Error
      */
     422: HttpValidationError;
+    /**
+     * Problem
+     */
+    503: HubStoreUnavailableProblem;
 };
 
 export type RunDeltaApiRunsChunkIdGetError = RunDeltaApiRunsChunkIdGetErrors[keyof RunDeltaApiRunsChunkIdGetErrors];
@@ -23403,9 +27494,29 @@ export type ListScopesApiScopesGetData = {
 
 export type ListScopesApiScopesGetErrors = {
     /**
+     * Problem
+     */
+    400: TenantCredentialMismatchProblem;
+    /**
+     * Problem
+     */
+    401: AuthenticationRequiredProblem;
+    /**
+     * Problem
+     */
+    404: TenantNotFoundProblem;
+    /**
+     * Problem
+     */
+    409: TenantRequiredProblem;
+    /**
      * Validation Error
      */
     422: HttpValidationError;
+    /**
+     * Problem
+     */
+    503: HubStoreUnavailableProblem;
 };
 
 export type ListScopesApiScopesGetError = ListScopesApiScopesGetErrors[keyof ListScopesApiScopesGetErrors];
@@ -23436,9 +27547,33 @@ export type CreateScopeApiScopesPostData = {
 
 export type CreateScopeApiScopesPostErrors = {
     /**
+     * Problem
+     */
+    400: TenantCredentialMismatchProblem;
+    /**
+     * Problem
+     */
+    401: AuthenticationRequiredProblem;
+    /**
+     * Problem
+     */
+    403: PermissionRequiredProblem;
+    /**
+     * Problem
+     */
+    404: TenantNotFoundProblem;
+    /**
+     * Problem
+     */
+    409: TenantRequiredProblem;
+    /**
      * Validation Error
      */
     422: HttpValidationError;
+    /**
+     * Problem
+     */
+    503: HubStoreUnavailableProblem;
 };
 
 export type CreateScopeApiScopesPostError = CreateScopeApiScopesPostErrors[keyof CreateScopeApiScopesPostErrors];
@@ -23466,9 +27601,29 @@ export type GetScopeApiScopesSlugGetData = {
 
 export type GetScopeApiScopesSlugGetErrors = {
     /**
+     * Problem
+     */
+    400: TenantCredentialMismatchProblem;
+    /**
+     * Problem
+     */
+    401: AuthenticationRequiredProblem;
+    /**
+     * Problem
+     */
+    404: TenantNotFoundProblem;
+    /**
+     * Problem
+     */
+    409: TenantRequiredProblem;
+    /**
      * Validation Error
      */
     422: HttpValidationError;
+    /**
+     * Problem
+     */
+    503: HubStoreUnavailableProblem;
 };
 
 export type GetScopeApiScopesSlugGetError = GetScopeApiScopesSlugGetErrors[keyof GetScopeApiScopesSlugGetErrors];
@@ -23506,9 +27661,33 @@ export type EditScopeApiScopesSlugPatchData = {
 
 export type EditScopeApiScopesSlugPatchErrors = {
     /**
+     * Problem
+     */
+    400: TenantCredentialMismatchProblem;
+    /**
+     * Problem
+     */
+    401: AuthenticationRequiredProblem;
+    /**
+     * Problem
+     */
+    403: PermissionRequiredProblem;
+    /**
+     * Problem
+     */
+    404: TenantNotFoundProblem;
+    /**
+     * Problem
+     */
+    409: TenantRequiredProblem;
+    /**
      * Validation Error
      */
     422: HttpValidationError;
+    /**
+     * Problem
+     */
+    503: HubStoreUnavailableProblem;
 };
 
 export type EditScopeApiScopesSlugPatchError = EditScopeApiScopesSlugPatchErrors[keyof EditScopeApiScopesSlugPatchErrors];
@@ -23546,9 +27725,33 @@ export type EnableScopeApiScopesSlugEnablePostData = {
 
 export type EnableScopeApiScopesSlugEnablePostErrors = {
     /**
+     * Problem
+     */
+    400: TenantCredentialMismatchProblem;
+    /**
+     * Problem
+     */
+    401: AuthenticationRequiredProblem;
+    /**
+     * Problem
+     */
+    403: PermissionRequiredProblem;
+    /**
+     * Problem
+     */
+    404: TenantNotFoundProblem;
+    /**
+     * Problem
+     */
+    409: TenantRequiredProblem;
+    /**
      * Validation Error
      */
     422: HttpValidationError;
+    /**
+     * Problem
+     */
+    503: HubStoreUnavailableProblem;
 };
 
 export type EnableScopeApiScopesSlugEnablePostError = EnableScopeApiScopesSlugEnablePostErrors[keyof EnableScopeApiScopesSlugEnablePostErrors];
@@ -23586,9 +27789,33 @@ export type RetireScopeApiScopesSlugRetirePostData = {
 
 export type RetireScopeApiScopesSlugRetirePostErrors = {
     /**
+     * Problem
+     */
+    400: TenantCredentialMismatchProblem;
+    /**
+     * Problem
+     */
+    401: AuthenticationRequiredProblem;
+    /**
+     * Problem
+     */
+    403: PermissionRequiredProblem;
+    /**
+     * Problem
+     */
+    404: TenantNotFoundProblem;
+    /**
+     * Problem
+     */
+    409: TenantRequiredProblem;
+    /**
      * Validation Error
      */
     422: HttpValidationError;
+    /**
+     * Problem
+     */
+    503: HubStoreUnavailableProblem;
 };
 
 export type RetireScopeApiScopesSlugRetirePostError = RetireScopeApiScopesSlugRetirePostErrors[keyof RetireScopeApiScopesSlugRetirePostErrors];
@@ -23616,9 +27843,29 @@ export type ListScopeRoutinesApiScopesSlugRoutinesGetData = {
 
 export type ListScopeRoutinesApiScopesSlugRoutinesGetErrors = {
     /**
+     * Problem
+     */
+    400: TenantCredentialMismatchProblem;
+    /**
+     * Problem
+     */
+    401: AuthenticationRequiredProblem;
+    /**
+     * Problem
+     */
+    404: TenantNotFoundProblem;
+    /**
+     * Problem
+     */
+    409: TenantRequiredProblem;
+    /**
      * Validation Error
      */
     422: HttpValidationError;
+    /**
+     * Problem
+     */
+    503: HubStoreUnavailableProblem;
 };
 
 export type ListScopeRoutinesApiScopesSlugRoutinesGetError = ListScopeRoutinesApiScopesSlugRoutinesGetErrors[keyof ListScopeRoutinesApiScopesSlugRoutinesGetErrors];
@@ -23648,9 +27895,29 @@ export type ListSecretsApiSecretsGetData = {
 
 export type ListSecretsApiSecretsGetErrors = {
     /**
+     * Problem
+     */
+    400: TenantCredentialMismatchProblem;
+    /**
+     * Problem
+     */
+    401: AuthenticationRequiredProblem;
+    /**
+     * Problem
+     */
+    404: TenantNotFoundProblem;
+    /**
+     * Problem
+     */
+    409: TenantRequiredProblem;
+    /**
      * Validation Error
      */
     422: HttpValidationError;
+    /**
+     * Problem
+     */
+    503: HubStoreUnavailableProblem;
 };
 
 export type ListSecretsApiSecretsGetError = ListSecretsApiSecretsGetErrors[keyof ListSecretsApiSecretsGetErrors];
@@ -23683,11 +27950,31 @@ export type CreateSecretApiSecretsPostErrors = {
     /**
      * Problem
      */
-    409: SecretAlreadyExistsProblem;
+    400: TenantCredentialMismatchProblem;
+    /**
+     * Problem
+     */
+    401: AuthenticationRequiredProblem;
+    /**
+     * Problem
+     */
+    403: PermissionRequiredProblem;
+    /**
+     * Problem
+     */
+    404: TenantNotFoundProblem;
+    /**
+     * Problem
+     */
+    409: TenantRequiredProblem | SecretAlreadyExistsProblem;
     /**
      * Validation Error
      */
     422: HttpValidationError;
+    /**
+     * Problem
+     */
+    503: HubStoreUnavailableProblem;
 };
 
 export type CreateSecretApiSecretsPostError = CreateSecretApiSecretsPostErrors[keyof CreateSecretApiSecretsPostErrors];
@@ -23717,11 +28004,27 @@ export type GetSecretApiSecretsNameGetErrors = {
     /**
      * Problem
      */
-    404: SecretNotFoundProblem;
+    400: TenantCredentialMismatchProblem;
+    /**
+     * Problem
+     */
+    401: AuthenticationRequiredProblem;
+    /**
+     * Problem
+     */
+    404: TenantNotFoundProblem | SecretNotFoundProblem;
+    /**
+     * Problem
+     */
+    409: TenantRequiredProblem;
     /**
      * Validation Error
      */
     422: HttpValidationError;
+    /**
+     * Problem
+     */
+    503: HubStoreUnavailableProblem;
 };
 
 export type GetSecretApiSecretsNameGetError = GetSecretApiSecretsNameGetErrors[keyof GetSecretApiSecretsNameGetErrors];
@@ -23757,11 +28060,31 @@ export type EnableSecretApiSecretsNameEnablePostErrors = {
     /**
      * Problem
      */
-    404: SecretNotFoundProblem;
+    400: TenantCredentialMismatchProblem;
+    /**
+     * Problem
+     */
+    401: AuthenticationRequiredProblem;
+    /**
+     * Problem
+     */
+    403: PermissionRequiredProblem;
+    /**
+     * Problem
+     */
+    404: TenantNotFoundProblem | SecretNotFoundProblem;
+    /**
+     * Problem
+     */
+    409: TenantRequiredProblem;
     /**
      * Validation Error
      */
     422: HttpValidationError;
+    /**
+     * Problem
+     */
+    503: HubStoreUnavailableProblem;
 };
 
 export type EnableSecretApiSecretsNameEnablePostError = EnableSecretApiSecretsNameEnablePostErrors[keyof EnableSecretApiSecretsNameEnablePostErrors];
@@ -23797,11 +28120,31 @@ export type RetireSecretApiSecretsNameRetirePostErrors = {
     /**
      * Problem
      */
-    404: SecretNotFoundProblem;
+    400: TenantCredentialMismatchProblem;
+    /**
+     * Problem
+     */
+    401: AuthenticationRequiredProblem;
+    /**
+     * Problem
+     */
+    403: PermissionRequiredProblem;
+    /**
+     * Problem
+     */
+    404: TenantNotFoundProblem | SecretNotFoundProblem;
+    /**
+     * Problem
+     */
+    409: TenantRequiredProblem;
     /**
      * Validation Error
      */
     422: HttpValidationError;
+    /**
+     * Problem
+     */
+    503: HubStoreUnavailableProblem;
 };
 
 export type RetireSecretApiSecretsNameRetirePostError = RetireSecretApiSecretsNameRetirePostErrors[keyof RetireSecretApiSecretsNameRetirePostErrors];
@@ -23841,11 +28184,31 @@ export type ReplaceSecretApiSecretsNameValuePutErrors = {
     /**
      * Problem
      */
-    404: SecretNotFoundProblem;
+    400: TenantCredentialMismatchProblem;
+    /**
+     * Problem
+     */
+    401: AuthenticationRequiredProblem;
+    /**
+     * Problem
+     */
+    403: PermissionRequiredProblem;
+    /**
+     * Problem
+     */
+    404: TenantNotFoundProblem | SecretNotFoundProblem;
+    /**
+     * Problem
+     */
+    409: TenantRequiredProblem;
     /**
      * Validation Error
      */
     422: HttpValidationError;
+    /**
+     * Problem
+     */
+    503: HubStoreUnavailableProblem;
 };
 
 export type ReplaceSecretApiSecretsNameValuePutError = ReplaceSecretApiSecretsNameValuePutErrors[keyof ReplaceSecretApiSecretsNameValuePutErrors];
@@ -23881,9 +28244,29 @@ export type FleetSpendApiSpendGetData = {
 
 export type FleetSpendApiSpendGetErrors = {
     /**
+     * Problem
+     */
+    400: TenantCredentialMismatchProblem;
+    /**
+     * Problem
+     */
+    401: AuthenticationRequiredProblem;
+    /**
+     * Problem
+     */
+    404: TenantNotFoundProblem;
+    /**
+     * Problem
+     */
+    409: TenantRequiredProblem;
+    /**
      * Validation Error
      */
     422: HttpValidationError;
+    /**
+     * Problem
+     */
+    503: HubStoreUnavailableProblem;
 };
 
 export type FleetSpendApiSpendGetError = FleetSpendApiSpendGetErrors[keyof FleetSpendApiSpendGetErrors];
@@ -23911,18 +28294,36 @@ export type RunTenantPassApiSweepsNamePassesPostData = {
 
 export type RunTenantPassApiSweepsNamePassesPostErrors = {
     /**
+     * Problem
+     */
+    400: TenantCredentialMismatchProblem;
+    /**
+     * Problem
+     */
+    401: AuthenticationRequiredProblem;
+    /**
+     * Problem
+     */
+    403: PermissionRequiredProblem;
+    /**
      * No sweep this hub builds goes by the name.
      */
-    404: unknown;
+    404: TenantNotFoundProblem;
     /**
      * A pass of the sweep holds the lock this one needs: `{"code": "sweep_in_progress"}`.
      */
-    409: unknown;
+    409: TenantRequiredProblem;
     /**
      * The sweep runs over every tenant only.
      */
     422: unknown;
+    /**
+     * Problem
+     */
+    503: HubStoreUnavailableProblem;
 };
+
+export type RunTenantPassApiSweepsNamePassesPostError = RunTenantPassApiSweepsNamePassesPostErrors[keyof RunTenantPassApiSweepsNamePassesPostErrors];
 
 export type RunTenantPassApiSweepsNamePassesPostResponses = {
     /**
@@ -23942,6 +28343,14 @@ export type TraceReplayApiTracesReplayPostData = {
 
 export type TraceReplayApiTracesReplayPostErrors = {
     /**
+     * Problem
+     */
+    401: AuthenticationRequiredProblem;
+    /**
+     * Problem
+     */
+    403: PermissionRequiredProblem;
+    /**
      * Validation Error
      */
     422: HttpValidationError;
@@ -23949,6 +28358,10 @@ export type TraceReplayApiTracesReplayPostErrors = {
      * Problem
      */
     502: TraceReplayFailure;
+    /**
+     * Problem
+     */
+    503: HubStoreUnavailableProblem;
 };
 
 export type TraceReplayApiTracesReplayPostError = TraceReplayApiTracesReplayPostErrors[keyof TraceReplayApiTracesReplayPostErrors];
@@ -23969,6 +28382,23 @@ export type TraceStatusApiTracesStatusGetData = {
     url: '/api/traces/status';
 };
 
+export type TraceStatusApiTracesStatusGetErrors = {
+    /**
+     * Problem
+     */
+    401: AuthenticationRequiredProblem;
+    /**
+     * Problem
+     */
+    403: PermissionRequiredProblem;
+    /**
+     * Problem
+     */
+    503: HubStoreUnavailableProblem;
+};
+
+export type TraceStatusApiTracesStatusGetError = TraceStatusApiTracesStatusGetErrors[keyof TraceStatusApiTracesStatusGetErrors];
+
 export type TraceStatusApiTracesStatusGetResponses = {
     /**
      * Successful Response
@@ -23984,6 +28414,35 @@ export type ListUsersApiUsersGetData = {
     query?: never;
     url: '/api/users';
 };
+
+export type ListUsersApiUsersGetErrors = {
+    /**
+     * Problem
+     */
+    400: TenantCredentialMismatchProblem;
+    /**
+     * Problem
+     */
+    401: AuthenticationRequiredProblem;
+    /**
+     * Problem
+     */
+    403: PermissionRequiredProblem;
+    /**
+     * Problem
+     */
+    404: TenantNotFoundProblem;
+    /**
+     * Problem
+     */
+    409: TenantRequiredProblem;
+    /**
+     * Problem
+     */
+    503: HubStoreUnavailableProblem;
+};
+
+export type ListUsersApiUsersGetError = ListUsersApiUsersGetErrors[keyof ListUsersApiUsersGetErrors];
 
 export type ListUsersApiUsersGetResponses = {
     /**
@@ -24010,9 +28469,33 @@ export type AssignRoleApiUsersUserIdRolePostData = {
 
 export type AssignRoleApiUsersUserIdRolePostErrors = {
     /**
+     * Problem
+     */
+    400: TenantCredentialMismatchProblem;
+    /**
+     * Problem
+     */
+    401: AuthenticationRequiredProblem;
+    /**
+     * Problem
+     */
+    403: PermissionRequiredProblem;
+    /**
+     * Problem
+     */
+    404: TenantNotFoundProblem;
+    /**
+     * Problem
+     */
+    409: TenantRequiredProblem;
+    /**
      * Validation Error
      */
     422: HttpValidationError;
+    /**
+     * Problem
+     */
+    503: HubStoreUnavailableProblem;
 };
 
 export type AssignRoleApiUsersUserIdRolePostError = AssignRoleApiUsersUserIdRolePostErrors[keyof AssignRoleApiUsersUserIdRolePostErrors];
@@ -24044,9 +28527,29 @@ export type GetBulkWorkItemsApiWorkItemsGetData = {
 
 export type GetBulkWorkItemsApiWorkItemsGetErrors = {
     /**
+     * Problem
+     */
+    400: TenantCredentialMismatchProblem;
+    /**
+     * Problem
+     */
+    401: AuthenticationRequiredProblem;
+    /**
+     * Problem
+     */
+    404: TenantNotFoundProblem;
+    /**
+     * Problem
+     */
+    409: TenantRequiredProblem;
+    /**
      * Validation Error
      */
     422: HttpValidationError;
+    /**
+     * Problem
+     */
+    503: HubStoreUnavailableProblem;
 };
 
 export type GetBulkWorkItemsApiWorkItemsGetError = GetBulkWorkItemsApiWorkItemsGetErrors[keyof GetBulkWorkItemsApiWorkItemsGetErrors];
@@ -24074,9 +28577,29 @@ export type ListWorkSourcesApiWorkSourcesGetData = {
 
 export type ListWorkSourcesApiWorkSourcesGetErrors = {
     /**
+     * Problem
+     */
+    400: TenantCredentialMismatchProblem;
+    /**
+     * Problem
+     */
+    401: AuthenticationRequiredProblem;
+    /**
+     * Problem
+     */
+    404: TenantNotFoundProblem;
+    /**
+     * Problem
+     */
+    409: TenantRequiredProblem;
+    /**
      * Validation Error
      */
     422: HttpValidationError;
+    /**
+     * Problem
+     */
+    503: HubStoreUnavailableProblem;
 };
 
 export type ListWorkSourcesApiWorkSourcesGetError = ListWorkSourcesApiWorkSourcesGetErrors[keyof ListWorkSourcesApiWorkSourcesGetErrors];
@@ -24105,9 +28628,33 @@ export type CreateWorkSourceApiWorkSourcesPostData = {
 
 export type CreateWorkSourceApiWorkSourcesPostErrors = {
     /**
+     * Problem
+     */
+    400: TenantCredentialMismatchProblem;
+    /**
+     * Problem
+     */
+    401: AuthenticationRequiredProblem;
+    /**
+     * Problem
+     */
+    403: PermissionRequiredProblem;
+    /**
+     * Problem
+     */
+    404: TenantNotFoundProblem;
+    /**
+     * Problem
+     */
+    409: TenantRequiredProblem;
+    /**
      * Validation Error
      */
     422: HttpValidationError;
+    /**
+     * Problem
+     */
+    503: HubStoreUnavailableProblem;
 };
 
 export type CreateWorkSourceApiWorkSourcesPostError = CreateWorkSourceApiWorkSourcesPostErrors[keyof CreateWorkSourceApiWorkSourcesPostErrors];
@@ -24135,9 +28682,29 @@ export type GetWorkSourceApiWorkSourcesSourceGetData = {
 
 export type GetWorkSourceApiWorkSourcesSourceGetErrors = {
     /**
+     * Problem
+     */
+    400: TenantCredentialMismatchProblem;
+    /**
+     * Problem
+     */
+    401: AuthenticationRequiredProblem;
+    /**
+     * Problem
+     */
+    404: TenantNotFoundProblem;
+    /**
+     * Problem
+     */
+    409: TenantRequiredProblem;
+    /**
      * Validation Error
      */
     422: HttpValidationError;
+    /**
+     * Problem
+     */
+    503: HubStoreUnavailableProblem;
 };
 
 export type GetWorkSourceApiWorkSourcesSourceGetError = GetWorkSourceApiWorkSourcesSourceGetErrors[keyof GetWorkSourceApiWorkSourcesSourceGetErrors];
@@ -24175,9 +28742,33 @@ export type PatchWorkSourceApiWorkSourcesSourcePatchData = {
 
 export type PatchWorkSourceApiWorkSourcesSourcePatchErrors = {
     /**
+     * Problem
+     */
+    400: TenantCredentialMismatchProblem;
+    /**
+     * Problem
+     */
+    401: AuthenticationRequiredProblem;
+    /**
+     * Problem
+     */
+    403: PermissionRequiredProblem;
+    /**
+     * Problem
+     */
+    404: TenantNotFoundProblem;
+    /**
+     * Problem
+     */
+    409: TenantRequiredProblem;
+    /**
      * Validation Error
      */
     422: HttpValidationError;
+    /**
+     * Problem
+     */
+    503: HubStoreUnavailableProblem;
 };
 
 export type PatchWorkSourceApiWorkSourcesSourcePatchError = PatchWorkSourceApiWorkSourcesSourcePatchErrors[keyof PatchWorkSourceApiWorkSourcesSourcePatchErrors];
@@ -24215,9 +28806,33 @@ export type EnableWorkSourceApiWorkSourcesSourceEnablePostData = {
 
 export type EnableWorkSourceApiWorkSourcesSourceEnablePostErrors = {
     /**
+     * Problem
+     */
+    400: TenantCredentialMismatchProblem;
+    /**
+     * Problem
+     */
+    401: AuthenticationRequiredProblem;
+    /**
+     * Problem
+     */
+    403: PermissionRequiredProblem;
+    /**
+     * Problem
+     */
+    404: TenantNotFoundProblem;
+    /**
+     * Problem
+     */
+    409: TenantRequiredProblem;
+    /**
      * Validation Error
      */
     422: HttpValidationError;
+    /**
+     * Problem
+     */
+    503: HubStoreUnavailableProblem;
 };
 
 export type EnableWorkSourceApiWorkSourcesSourceEnablePostError = EnableWorkSourceApiWorkSourcesSourceEnablePostErrors[keyof EnableWorkSourceApiWorkSourcesSourceEnablePostErrors];
@@ -24250,9 +28865,29 @@ export type ListWorkItemsApiWorkSourcesSourceItemsGetData = {
 
 export type ListWorkItemsApiWorkSourcesSourceItemsGetErrors = {
     /**
+     * Problem
+     */
+    400: TenantCredentialMismatchProblem;
+    /**
+     * Problem
+     */
+    401: AuthenticationRequiredProblem;
+    /**
+     * Problem
+     */
+    404: TenantNotFoundProblem;
+    /**
+     * Problem
+     */
+    409: TenantRequiredProblem;
+    /**
      * Validation Error
      */
     422: HttpValidationError;
+    /**
+     * Problem
+     */
+    503: HubStoreUnavailableProblem;
 };
 
 export type ListWorkItemsApiWorkSourcesSourceItemsGetError = ListWorkItemsApiWorkSourcesSourceItemsGetErrors[keyof ListWorkItemsApiWorkSourcesSourceItemsGetErrors];
@@ -24285,9 +28920,33 @@ export type CreateWorkItemApiWorkSourcesSourceItemsPostData = {
 
 export type CreateWorkItemApiWorkSourcesSourceItemsPostErrors = {
     /**
+     * Problem
+     */
+    400: TenantCredentialMismatchProblem;
+    /**
+     * Problem
+     */
+    401: AuthenticationRequiredProblem;
+    /**
+     * Problem
+     */
+    403: PermissionRequiredProblem;
+    /**
+     * Problem
+     */
+    404: TenantNotFoundProblem;
+    /**
+     * Problem
+     */
+    409: TenantRequiredProblem;
+    /**
      * Validation Error
      */
     422: HttpValidationError;
+    /**
+     * Problem
+     */
+    503: HubStoreUnavailableProblem;
 };
 
 export type CreateWorkItemApiWorkSourcesSourceItemsPostError = CreateWorkItemApiWorkSourcesSourceItemsPostErrors[keyof CreateWorkItemApiWorkSourcesSourceItemsPostErrors];
@@ -24319,9 +28978,33 @@ export type WithdrawWorkItemApiWorkSourcesSourceItemsRefDeleteData = {
 
 export type WithdrawWorkItemApiWorkSourcesSourceItemsRefDeleteErrors = {
     /**
+     * Problem
+     */
+    400: TenantCredentialMismatchProblem;
+    /**
+     * Problem
+     */
+    401: AuthenticationRequiredProblem;
+    /**
+     * Problem
+     */
+    403: PermissionRequiredProblem;
+    /**
+     * Problem
+     */
+    404: TenantNotFoundProblem;
+    /**
+     * Problem
+     */
+    409: TenantRequiredProblem;
+    /**
      * Validation Error
      */
     422: HttpValidationError;
+    /**
+     * Problem
+     */
+    503: HubStoreUnavailableProblem;
 };
 
 export type WithdrawWorkItemApiWorkSourcesSourceItemsRefDeleteError = WithdrawWorkItemApiWorkSourcesSourceItemsRefDeleteErrors[keyof WithdrawWorkItemApiWorkSourcesSourceItemsRefDeleteErrors];
@@ -24353,9 +29036,29 @@ export type GetWorkItemApiWorkSourcesSourceItemsRefGetData = {
 
 export type GetWorkItemApiWorkSourcesSourceItemsRefGetErrors = {
     /**
+     * Problem
+     */
+    400: TenantCredentialMismatchProblem;
+    /**
+     * Problem
+     */
+    401: AuthenticationRequiredProblem;
+    /**
+     * Problem
+     */
+    404: TenantNotFoundProblem;
+    /**
+     * Problem
+     */
+    409: TenantRequiredProblem;
+    /**
      * Validation Error
      */
     422: HttpValidationError;
+    /**
+     * Problem
+     */
+    503: HubStoreUnavailableProblem;
 };
 
 export type GetWorkItemApiWorkSourcesSourceItemsRefGetError = GetWorkItemApiWorkSourcesSourceItemsRefGetErrors[keyof GetWorkItemApiWorkSourcesSourceItemsRefGetErrors];
@@ -24387,9 +29090,33 @@ export type PatchWorkItemApiWorkSourcesSourceItemsRefPatchData = {
 
 export type PatchWorkItemApiWorkSourcesSourceItemsRefPatchErrors = {
     /**
+     * Problem
+     */
+    400: TenantCredentialMismatchProblem;
+    /**
+     * Problem
+     */
+    401: AuthenticationRequiredProblem;
+    /**
+     * Problem
+     */
+    403: PermissionRequiredProblem;
+    /**
+     * Problem
+     */
+    404: TenantNotFoundProblem;
+    /**
+     * Problem
+     */
+    409: TenantRequiredProblem;
+    /**
      * Validation Error
      */
     422: HttpValidationError;
+    /**
+     * Problem
+     */
+    503: HubStoreUnavailableProblem;
 };
 
 export type PatchWorkItemApiWorkSourcesSourceItemsRefPatchError = PatchWorkItemApiWorkSourcesSourceItemsRefPatchErrors[keyof PatchWorkItemApiWorkSourcesSourceItemsRefPatchErrors];
@@ -24427,9 +29154,33 @@ export type RetireWorkSourceApiWorkSourcesSourceRetirePostData = {
 
 export type RetireWorkSourceApiWorkSourcesSourceRetirePostErrors = {
     /**
+     * Problem
+     */
+    400: TenantCredentialMismatchProblem;
+    /**
+     * Problem
+     */
+    401: AuthenticationRequiredProblem;
+    /**
+     * Problem
+     */
+    403: PermissionRequiredProblem;
+    /**
+     * Problem
+     */
+    404: TenantNotFoundProblem;
+    /**
+     * Problem
+     */
+    409: TenantRequiredProblem;
+    /**
      * Validation Error
      */
     422: HttpValidationError;
+    /**
+     * Problem
+     */
+    503: HubStoreUnavailableProblem;
 };
 
 export type RetireWorkSourceApiWorkSourcesSourceRetirePostError = RetireWorkSourceApiWorkSourcesSourceRetirePostErrors[keyof RetireWorkSourceApiWorkSourcesSourceRetirePostErrors];

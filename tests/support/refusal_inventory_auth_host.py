@@ -37,8 +37,8 @@ _TENANT = {
     "auth_session.refuse_closed_tenant": {
         'JSONResponse(status_code=status.HTTP_401_UNAUTHORIZED, content={"detail": UNRESOLVED_RUNNER_TOKEN})',
         'JSONResponse(status_code=status.HTTP_404_NOT_FOUND, content={"detail": _NO_SUCH_TENANT})',
-        "problem_response(authentication_unresolved_problem(instance=request.url.path, detail=UNRESOLVED_RUNNER_TOKEN))",
-        "problem_response(tenant_not_found_problem(instance=request.url.path))",
+        "declared_problem_response(request, authentication_unresolved_problem(instance=request.url.path, detail=UNRESOLVED_RUNNER_TOKEN))",
+        "declared_problem_response(request, tenant_not_found_problem(instance=request.url.path))",
     },
 }
 
