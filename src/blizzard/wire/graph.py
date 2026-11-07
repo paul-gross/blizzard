@@ -3,7 +3,7 @@ choice, session, and rotation views; the sync report; and the summary row."""
 
 from __future__ import annotations
 
-from typing import Annotated
+from typing import Annotated, Literal
 
 from pydantic import BaseModel, ConfigDict
 
@@ -13,6 +13,7 @@ from blizzard.foundation.graph_targets import ChoiceTargetKind
 from blizzard.foundation.node_steps import Executor, JudgedBy, SessionMode
 from blizzard.foundation.unrecognized import Unrecognized
 from blizzard.wire.base import WireModel
+from blizzard.wire.problem import ProblemDetails
 from blizzard.wire.vocabulary import OPEN, DeclaredClosed
 
 
@@ -41,8 +42,8 @@ class GraphFlagsPatchRequest(BaseModel):
     follow_latest: bool | None = None
 
 
-class GraphValidationReport(BaseModel):
-    """The validator's verdict — the 422 body when errors reject a mint."""
+class GraphValidationReport(ProblemDetails[Literal["urn:blizzard:problem:graph-definition-invalid"]]):
+    """The validator's verdict — the 422 problem when errors reject a mint."""
 
     ok: bool
     errors: list[str] = []

@@ -125,6 +125,16 @@ def test_problem_registry_has_unique_stable_uris() -> None:
         "QUESTION_ALREADY_ANSWERED": "urn:blizzard:problem:question-already-answered",
         "EGRESS_BACKFILL_FAILED": "urn:blizzard:problem:egress-backfill-failed",
         "TRACE_REPLAY_FAILED": "urn:blizzard:problem:trace-replay-failed",
+        "REVISION_CONFLICT": "urn:blizzard:problem:revision-conflict",
+        "POINTER_ALREADY_HELD": "urn:blizzard:problem:pointer-already-held",
+        "DEPENDENT_NOT_EDITABLE": "urn:blizzard:problem:dependent-not-editable",
+        "DEPENDENCY_WOULD_CLOSE_CYCLE": "urn:blizzard:problem:dependency-would-close-cycle",
+        "PREREQUISITE_EPHEMERAL": "urn:blizzard:problem:prerequisite-ephemeral",
+        "NO_STANDING_DEPENDENCY": "urn:blizzard:problem:no-standing-dependency",
+        "CONFIG_APPLY_CONFLICT": "urn:blizzard:problem:config-apply-conflict",
+        "CONFIG_MEDIA_TYPE_UNSUPPORTED": "urn:blizzard:problem:config-media-type-unsupported",
+        "CONFIG_DOCUMENT_INVALID": "urn:blizzard:problem:config-document-invalid",
+        "GRAPH_DEFINITION_INVALID": "urn:blizzard:problem:graph-definition-invalid",
     }
     constants = {name: value for name, value in vars(registry).items() if name.isupper() and isinstance(value, str)}
     assert constants == expected

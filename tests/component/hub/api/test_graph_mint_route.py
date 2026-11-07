@@ -9,6 +9,9 @@ from blizzard.foundation.artifacts import ArtifactKind
 from blizzard.hub.documents import YAML_CODEC
 from blizzard.hub.domain.graph.model import GraphArtifact, ProducesSpec
 from blizzard.hub.graphs import PACKAGED, GraphFile
+from blizzard.wire.graph import GraphValidationReport
+from blizzard.wire.problem import GRAPH_DEFINITION_INVALID
+from tests.support.refusal_observation import app_spec, declared_refusal_mismatches
 from tests.support.scaffolding import build_hub
 
 _VALID_GRAPH = """
@@ -63,8 +66,10 @@ def test_mint_valid_graph_returns_reified_view(tmp_path: Path) -> None:
 def test_mint_invalid_graph_is_422_with_report(tmp_path: Path) -> None:
     hub = build_hub(tmp_path)
     resp = hub.client.post("/api/graphs", json={"definition_yaml": _INVALID_GRAPH})
-    assert resp.status_code == 422
+    spec = app_spec(hub.client)
+    assert declared_refusal_mismatches(spec, resp, "post", "/api/graphs", 422, GraphValidationReport) == []
     report = resp.json()
+    assert (report["type"], report["detail"]) == (GRAPH_DEFINITION_INVALID, "graph definition invalid")
     assert report["ok"] is False
     assert any("entry" in e for e in report["errors"])
     assert any("nowhere" in e for e in report["errors"])
@@ -73,7 +78,8 @@ def test_mint_invalid_graph_is_422_with_report(tmp_path: Path) -> None:
 def test_mint_malformed_yaml_is_422(tmp_path: Path) -> None:
     hub = build_hub(tmp_path)
     resp = hub.client.post("/api/graphs", json={"definition_yaml": "not: a: graph: ["})
-    assert resp.status_code == 422
+    spec = app_spec(hub.client)
+    assert declared_refusal_mismatches(spec, resp, "post", "/api/graphs", 422, GraphValidationReport) == []
     assert resp.json()["ok"] is False
 
 

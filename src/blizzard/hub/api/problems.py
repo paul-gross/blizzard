@@ -5,6 +5,7 @@ Callers supply the already-sanitized instance and detail.
 
 from __future__ import annotations
 
+from blizzard.foundation.chunk_status import ChunkStatus
 from blizzard.foundation.claim_denials import ClaimDenialReason
 from blizzard.foundation.release_refusals import ReleaseRefusalReason
 from blizzard.hub.auth.permissions import Permission
@@ -59,16 +60,29 @@ from blizzard.wire.auth import (
     RunnerCredentialForbiddenProblem,
     SsoRefusedProblem,
 )
+from blizzard.wire.cadence import RevisionConflictProblem
 from blizzard.wire.chunk import (
+    ChunkIngestConflict,
     ChunkNotFoundProblem,
     ChunkNotPausableProblem,
+    DependencyWouldCloseCycleView,
+    DependentNotEditableView,
     FindingNotInChunkProblem,
     NoAnsweredProposalProblem,
     NoCurrentNodeProblem,
     NoRunContextProblem,
+    NoStandingDependencyView,
+    PrerequisiteIsEphemeralView,
+)
+from blizzard.wire.config import (
+    ConfigApplyConflictProblem,
+    ConfigDocumentError,
+    ConfigDocumentInvalidProblem,
+    ConfigMediaTypeUnsupportedProblem,
 )
 from blizzard.wire.decision import DecisionResolutionConflict
 from blizzard.wire.egress import EgressBackfillCount, EgressBackfillFailure
+from blizzard.wire.graph import GraphValidationReport
 from blizzard.wire.host import HostNameTakenProblem, HostRetiredProblem
 from blizzard.wire.invariants import InvariantsInProgressProblem
 from blizzard.wire.problem import (
@@ -891,4 +905,124 @@ def trace_replay_failed_problem(
         spans=spans,
         batches=batches,
         chunks=chunks,
+    )
+
+
+def revision_conflict_problem(detail: str, *, instance: str) -> RevisionConflictProblem:
+    return RevisionConflictProblem(
+        type=problem_types.REVISION_CONFLICT, title="Revision conflict", detail=detail, instance=instance, status=409
+    )
+
+
+def pointer_already_held_problem(
+    existing_chunk_id: str, source: str, ref: str, slug: str | None, label: str | None, *, instance: str
+) -> ChunkIngestConflict:
+    return ChunkIngestConflict(
+        type=problem_types.POINTER_ALREADY_HELD,
+        title="Pointer already held",
+        detail="pointer already held by a live chunk",
+        instance=instance,
+        status=409,
+        existing_chunk_id=existing_chunk_id,
+        source=source,
+        ref=ref,
+        slug=slug,
+        label=label,
+    )
+
+
+def dependent_not_editable_problem(
+    chunk_id: str, chunk_status: ChunkStatus, *, instance: str
+) -> DependentNotEditableView:
+    """Carries the released chunk-status string as ``status``, so the HTTP status is the caller's."""
+    return DependentNotEditableView(
+        type=problem_types.DEPENDENT_NOT_EDITABLE,
+        title="Dependent not editable",
+        detail="dependent chunk is not editable at this status",
+        instance=instance,
+        chunk_id=chunk_id,
+        status=chunk_status,
+    )
+
+
+def dependency_would_close_cycle_problem(
+    dependent_chunk_id: str, prerequisite_chunk_id: str, *, instance: str
+) -> DependencyWouldCloseCycleView:
+    return DependencyWouldCloseCycleView(
+        type=problem_types.DEPENDENCY_WOULD_CLOSE_CYCLE,
+        title="Dependency would close a cycle",
+        detail="declaring this edge would close a cycle in the standing dependency graph",
+        instance=instance,
+        status=409,
+        dependent_chunk_id=dependent_chunk_id,
+        prerequisite_chunk_id=prerequisite_chunk_id,
+    )
+
+
+def prerequisite_ephemeral_problem(chunk_id: str, *, instance: str) -> PrerequisiteIsEphemeralView:
+    return PrerequisiteIsEphemeralView(
+        type=problem_types.PREREQUISITE_EPHEMERAL,
+        title="Prerequisite is ephemeral",
+        detail="prerequisite chunk is ephemeral and cannot be named as a prerequisite",
+        instance=instance,
+        status=409,
+        chunk_id=chunk_id,
+    )
+
+
+def no_standing_dependency_problem(
+    dependent_chunk_id: str, prerequisite_chunk_id: str, *, instance: str
+) -> NoStandingDependencyView:
+    return NoStandingDependencyView(
+        type=problem_types.NO_STANDING_DEPENDENCY,
+        title="No standing dependency",
+        detail="no standing dependency to release",
+        instance=instance,
+        status=409,
+        dependent_chunk_id=dependent_chunk_id,
+        prerequisite_chunk_id=prerequisite_chunk_id,
+    )
+
+
+def config_apply_conflict_problem(detail: str, *, instance: str) -> ConfigApplyConflictProblem:
+    return ConfigApplyConflictProblem(
+        type=problem_types.CONFIG_APPLY_CONFLICT,
+        title="Configuration conflict",
+        detail=detail,
+        instance=instance,
+        status=409,
+    )
+
+
+def config_media_type_unsupported_problem(detail: str, *, instance: str) -> ConfigMediaTypeUnsupportedProblem:
+    return ConfigMediaTypeUnsupportedProblem(
+        type=problem_types.CONFIG_MEDIA_TYPE_UNSUPPORTED,
+        title="Unsupported configuration media type",
+        detail=detail,
+        instance=instance,
+        status=415,
+    )
+
+
+def config_document_invalid_problem(errors: list[dict[str, object]], *, instance: str) -> ConfigDocumentInvalidProblem:
+    """Each error as located, every member it carries kept."""
+    return ConfigDocumentInvalidProblem(
+        type=problem_types.CONFIG_DOCUMENT_INVALID,
+        title="Configuration document invalid",
+        detail=[ConfigDocumentError.model_validate(error) for error in errors],
+        instance=instance,
+        status=422,
+    )
+
+
+def graph_definition_invalid_problem(errors: list[str], warnings: list[str], *, instance: str) -> GraphValidationReport:
+    return GraphValidationReport(
+        type=problem_types.GRAPH_DEFINITION_INVALID,
+        title="Graph definition invalid",
+        detail="graph definition invalid",
+        instance=instance,
+        status=422,
+        ok=False,
+        errors=errors,
+        warnings=warnings,
     )

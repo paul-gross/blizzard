@@ -20,3 +20,13 @@ status, the `Content-Type` and the `WWW-Authenticate` and `Retry-After` headers.
 Six more refusals the operator CLI reads are registered problem types with their status and `detail` unchanged:
 `secret-already-exists`, `secret-not-found`, `decision-already-resolved`, `question-already-answered`,
 `egress-backfill-failed` and `trace-replay-failed`. The question-already-answered `409` gains a `detail` sentence.
+
+Ten more are registered with their status and `detail` unchanged: a cadence write's stale `If-Match` `409` is
+`revision-conflict`; the ingest `409` of `POST /api/chunks`, `POST /api/work-sources/{source}/items`,
+`POST /api/routines/{routine_id}/run` and `POST /api/garden-proposals/{proposal_id}/accept` is `pointer-already-held`;
+the dependency `409`s are `dependent-not-editable` (whose `status` member stays the chunk's status),
+`dependency-would-close-cycle`, `prerequisite-ephemeral` and `no-standing-dependency`; `POST /api/config/apply`
+answers `config-apply-conflict` (`409`), `config-media-type-unsupported` (`415`) and `config-document-invalid`
+(`422`, its located `detail` list unchanged), which `GET /api/config/export` and `GET /api/config/schema/{kind}` also
+answer for a retired version; and `POST /api/graphs`'s `422` is `graph-definition-invalid`, which gains a `detail`
+sentence beside its released `ok`, `errors` and `warnings`.

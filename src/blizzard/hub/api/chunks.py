@@ -23,7 +23,7 @@ from blizzard.hub.api.auth import reject_runner_principal
 from blizzard.hub.api.auth_session import require, tenant_bound
 from blizzard.hub.api.board_window import BOARD_DONE_WINDOW
 from blizzard.hub.api.chunk_edit import ChunkPatchBody
-from blizzard.hub.api.chunk_views import ChunkView, blocked_view, ingest_conflict_response
+from blizzard.hub.api.chunk_views import ChunkView, blocked_view, ingest_conflict_refusal
 from blizzard.hub.api.delivery_declarations import delivery_declarations_for
 from blizzard.hub.api.deps import Services
 from blizzard.hub.api.flow_places import chunk_flow_places
@@ -223,7 +223,7 @@ def ingest_chunk(request: ChunkIngestRequest, services: Services, http_request: 
     except IngestSourceNotLinked as exc:  # unlinked after the project was chosen
         return ingest_project_refusal(http_request, services, exc)
     except IngestConflict as exc:
-        return ingest_conflict_response(services, exc)
+        raise ingest_conflict_refusal(services, exc) from exc
     chunk_events.ChunkChanged.of(services, chunk_id, prev_status=None).publish(cause="minted", key=f"chunks:{chunk_id}")
     services.events.publish_queue_changed()  # mint adds the chunk to the backlog list
     return ChunkIngestResponse(chunk_id=chunk_id, **project_label_fields(project, services.projects.get(project)))

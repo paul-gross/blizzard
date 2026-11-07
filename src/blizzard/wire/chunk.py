@@ -18,7 +18,7 @@ from blizzard.foundation.work_items import WorkItemPriority
 from blizzard.wire.base import WireModel
 from blizzard.wire.decision import DecisionView
 from blizzard.wire.flow import ChunkFlowPlaceView, FlowFactView
-from blizzard.wire.problem import ProblemDetails
+from blizzard.wire.problem import ProblemDetails, ProblemMembers
 from blizzard.wire.question import QuestionView
 from blizzard.wire.vocabulary import OPEN
 from blizzard.wire.work_source import WorkItemAuthorView
@@ -102,16 +102,15 @@ class ChunkDeleteResponse(BaseModel):
     chunk_id: str
 
 
-class ChunkIngestConflict(BaseModel):
-    """The 409 body: the pointer is already held by a live chunk. ``source`` is the pointer's source key — ``hub`` or
-    the source's id — with the source's current ``slug`` and the pointer's ``label`` beside it."""
+class ChunkIngestConflict(ProblemDetails[Literal["urn:blizzard:problem:pointer-already-held"]]):
+    """The 409 problem: the pointer is already held by a live chunk. ``source`` is the pointer's source key — ``hub``
+    or the source's id — with the source's current ``slug`` and the pointer's ``label`` beside it."""
 
     existing_chunk_id: str
     source: str
     ref: str
     slug: str | None = None
     label: str | None = None
-    detail: str = "pointer already held by a live chunk"
 
 
 class ChunkUsageTotalView(WireModel):
@@ -796,35 +795,31 @@ class ChunkDependencyEdgeView(WireModel):
     released_by: str | None = None
 
 
-class DependentNotEditableView(BaseModel):
-    """The 409 body: the dependent chunk has left its declarable window — no longer
-    ``not_ready`` or ``ready``."""
+class DependentNotEditableView(ProblemMembers[Literal["urn:blizzard:problem:dependent-not-editable"]]):
+    """The 409 problem: the dependent chunk has left its declarable window — no longer
+    ``not_ready`` or ``ready``. Its released ``status`` is the chunk's status, not the HTTP status."""
 
     chunk_id: str
-    status: ChunkStatus
-    detail: str = "dependent chunk is not editable at this status"
+    status: Annotated[ChunkStatus | Unrecognized, OPEN]
 
 
-class DependencyWouldCloseCycleView(BaseModel):
-    """The 409 body: declaring this edge would close a cycle in the standing
+class DependencyWouldCloseCycleView(ProblemDetails[Literal["urn:blizzard:problem:dependency-would-close-cycle"]]):
+    """The 409 problem: declaring this edge would close a cycle in the standing
     dependency graph — a self-edge is among the cycle cases."""
 
     dependent_chunk_id: str
     prerequisite_chunk_id: str
-    detail: str = "declaring this edge would close a cycle in the standing dependency graph"
 
 
-class NoStandingDependencyView(BaseModel):
-    """The 409 body: the release named an ordered pair with no standing edge."""
+class NoStandingDependencyView(ProblemDetails[Literal["urn:blizzard:problem:no-standing-dependency"]]):
+    """The 409 problem: the release named an ordered pair with no standing edge."""
 
     dependent_chunk_id: str
     prerequisite_chunk_id: str
-    detail: str = "no standing dependency to release"
 
 
-class PrerequisiteIsEphemeralView(BaseModel):
-    """The 409 body: the named prerequisite is ephemeral — grouped-away or deleted —
+class PrerequisiteIsEphemeralView(ProblemDetails[Literal["urn:blizzard:problem:prerequisite-ephemeral"]]):
+    """The 409 problem: the named prerequisite is ephemeral — grouped-away or deleted —
     and so not a legal prerequisite."""
 
     chunk_id: str
-    detail: str = "prerequisite chunk is ephemeral and cannot be named as a prerequisite"

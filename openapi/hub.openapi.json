@@ -3485,6 +3485,86 @@
         "title": "ChunkGroupResponse",
         "type": "object"
       },
+      "ChunkIngestConflict": {
+        "additionalProperties": true,
+        "description": "The 409 problem: the pointer is already held by a live chunk. ``source`` is the pointer's source key \u2014 ``hub``\nor the source's id \u2014 with the source's current ``slug`` and the pointer's ``label`` beside it.",
+        "properties": {
+          "detail": {
+            "title": "Detail",
+            "type": "string"
+          },
+          "existing_chunk_id": {
+            "title": "Existing Chunk Id",
+            "type": "string"
+          },
+          "instance": {
+            "title": "Instance",
+            "type": "string"
+          },
+          "label": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Label"
+          },
+          "ref": {
+            "title": "Ref",
+            "type": "string"
+          },
+          "slug": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Slug"
+          },
+          "source": {
+            "title": "Source",
+            "type": "string"
+          },
+          "status": {
+            "anyOf": [
+              {
+                "type": "integer"
+              }
+            ],
+            "title": "Status"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          },
+          "type": {
+            "const": "urn:blizzard:problem:pointer-already-held",
+            "title": "Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "type",
+          "title",
+          "detail",
+          "instance",
+          "existing_chunk_id",
+          "source",
+          "ref",
+          "slug",
+          "label"
+        ],
+        "title": "ChunkIngestConflict",
+        "type": "object"
+      },
       "ChunkIngestRequest": {
         "description": "Ingest by source-native token \u2014 specific items always, batch fine. Each token is resolved against\nthe configured work sources' own grammar: ``{name}:{ref}``, ``{name}#{ref}``, or the item's own URL.\nTokens only; no pre-resolved ``{source, ref}`` shape travels alongside them.",
         "properties": {
@@ -5189,6 +5269,45 @@
         "title": "CompletionSubmission",
         "type": "object"
       },
+      "ConfigApplyConflictProblem": {
+        "additionalProperties": true,
+        "description": "An apply's entry conflicts with a record the tenant holds; ``detail`` names the entry.",
+        "properties": {
+          "detail": {
+            "title": "Detail",
+            "type": "string"
+          },
+          "instance": {
+            "title": "Instance",
+            "type": "string"
+          },
+          "status": {
+            "anyOf": [
+              {
+                "type": "integer"
+              }
+            ],
+            "title": "Status"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          },
+          "type": {
+            "const": "urn:blizzard:problem:config-apply-conflict",
+            "title": "Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "type",
+          "title",
+          "detail",
+          "instance"
+        ],
+        "title": "ConfigApplyConflictProblem",
+        "type": "object"
+      },
       "ConfigApplyOutcome": {
         "description": "One outcome of an apply. ``op`` is ``create``, ``edit`` or ``enable`` for a change written and\n``unchanged`` for a named record that needed none; ``diff`` is empty for ``unchanged``.",
         "properties": {
@@ -5406,6 +5525,83 @@
         "title": "ConfigChangesPage",
         "type": "object"
       },
+      "ConfigDocumentError": {
+        "additionalProperties": true,
+        "description": "One located entry of an invalid configuration document: ``loc`` is the path inside the request. A decode error\nalso carries ``line`` and ``column``; a ``project_required`` entry carries ``projects`` to choose from.",
+        "properties": {
+          "loc": {
+            "items": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "integer"
+                }
+              ]
+            },
+            "title": "Loc",
+            "type": "array"
+          },
+          "msg": {
+            "title": "Msg",
+            "type": "string"
+          },
+          "type": {
+            "title": "Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "loc",
+          "msg",
+          "type"
+        ],
+        "title": "ConfigDocumentError",
+        "type": "object"
+      },
+      "ConfigDocumentInvalidProblem": {
+        "additionalProperties": true,
+        "description": "A configuration document, or the version a read names, the hub refuses; ``detail`` locates every error.",
+        "properties": {
+          "detail": {
+            "items": {
+              "$ref": "#/components/schemas/ConfigDocumentError"
+            },
+            "title": "Detail",
+            "type": "array"
+          },
+          "instance": {
+            "title": "Instance",
+            "type": "string"
+          },
+          "status": {
+            "anyOf": [
+              {
+                "type": "integer"
+              }
+            ],
+            "title": "Status"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          },
+          "type": {
+            "const": "urn:blizzard:problem:config-document-invalid",
+            "title": "Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "type",
+          "title",
+          "detail",
+          "instance"
+        ],
+        "title": "ConfigDocumentInvalidProblem",
+        "type": "object"
+      },
       "ConfigDocumentV2": {
         "additionalProperties": false,
         "description": "A declarative configuration document, version 2 \u2014 the one version a hub applies and exports. Each entry is the\nkind's own document model, so a field an entry omits is left as stored; forges reconcile before the records that\nname them, projects before scopes and routines, and scopes before routines, so an entry may name a forge, a\nproject or a scope the same document declares; ``secrets`` lists secret names that must already be active.\n``GET /api/config/export`` writes every field of every entry, ``projects`` first, and names every project by its\nslug.",
@@ -5484,6 +5680,45 @@
           "version"
         ],
         "title": "ConfigDocumentV2",
+        "type": "object"
+      },
+      "ConfigMediaTypeUnsupportedProblem": {
+        "additionalProperties": true,
+        "description": "An apply's ``Content-Type`` names no document format the hub reads.",
+        "properties": {
+          "detail": {
+            "title": "Detail",
+            "type": "string"
+          },
+          "instance": {
+            "title": "Instance",
+            "type": "string"
+          },
+          "status": {
+            "anyOf": [
+              {
+                "type": "integer"
+              }
+            ],
+            "title": "Status"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          },
+          "type": {
+            "const": "urn:blizzard:problem:config-media-type-unsupported",
+            "title": "Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "type",
+          "title",
+          "detail",
+          "instance"
+        ],
+        "title": "ConfigMediaTypeUnsupportedProblem",
         "type": "object"
       },
       "DecisionChoiceModel": {
@@ -6079,6 +6314,96 @@
           "gone_count"
         ],
         "title": "DeliveredSetView",
+        "type": "object"
+      },
+      "DependencyWouldCloseCycleView": {
+        "additionalProperties": true,
+        "description": "The 409 problem: declaring this edge would close a cycle in the standing\ndependency graph \u2014 a self-edge is among the cycle cases.",
+        "properties": {
+          "dependent_chunk_id": {
+            "title": "Dependent Chunk Id",
+            "type": "string"
+          },
+          "detail": {
+            "title": "Detail",
+            "type": "string"
+          },
+          "instance": {
+            "title": "Instance",
+            "type": "string"
+          },
+          "prerequisite_chunk_id": {
+            "title": "Prerequisite Chunk Id",
+            "type": "string"
+          },
+          "status": {
+            "anyOf": [
+              {
+                "type": "integer"
+              }
+            ],
+            "title": "Status"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          },
+          "type": {
+            "const": "urn:blizzard:problem:dependency-would-close-cycle",
+            "title": "Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "type",
+          "title",
+          "detail",
+          "instance",
+          "dependent_chunk_id",
+          "prerequisite_chunk_id"
+        ],
+        "title": "DependencyWouldCloseCycleView",
+        "type": "object"
+      },
+      "DependentNotEditableView": {
+        "additionalProperties": true,
+        "description": "The 409 problem: the dependent chunk has left its declarable window \u2014 no longer\n``not_ready`` or ``ready``. Its released ``status`` is the chunk's status, not the HTTP status.",
+        "properties": {
+          "chunk_id": {
+            "title": "Chunk Id",
+            "type": "string"
+          },
+          "detail": {
+            "title": "Detail",
+            "type": "string"
+          },
+          "instance": {
+            "title": "Instance",
+            "type": "string"
+          },
+          "status": {
+            "$ref": "#/components/schemas/ChunkStatus",
+            "x-blizzard-open": true
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          },
+          "type": {
+            "const": "urn:blizzard:problem:dependent-not-editable",
+            "title": "Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "type",
+          "title",
+          "detail",
+          "instance",
+          "chunk_id",
+          "status"
+        ],
+        "title": "DependentNotEditableView",
         "type": "object"
       },
       "EgressBackfillCount": {
@@ -10274,6 +10599,68 @@
         "title": "GraphSyncResponse",
         "type": "object"
       },
+      "GraphValidationReport": {
+        "additionalProperties": true,
+        "description": "The validator's verdict \u2014 the 422 problem when errors reject a mint.",
+        "properties": {
+          "detail": {
+            "title": "Detail",
+            "type": "string"
+          },
+          "errors": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "title": "Errors",
+            "type": "array"
+          },
+          "instance": {
+            "title": "Instance",
+            "type": "string"
+          },
+          "ok": {
+            "title": "Ok",
+            "type": "boolean"
+          },
+          "status": {
+            "anyOf": [
+              {
+                "type": "integer"
+              }
+            ],
+            "title": "Status"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          },
+          "type": {
+            "const": "urn:blizzard:problem:graph-definition-invalid",
+            "title": "Type",
+            "type": "string"
+          },
+          "warnings": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "title": "Warnings",
+            "type": "array"
+          }
+        },
+        "required": [
+          "type",
+          "title",
+          "detail",
+          "instance",
+          "ok",
+          "errors",
+          "warnings"
+        ],
+        "title": "GraphValidationReport",
+        "type": "object"
+      },
       "GraphView": {
         "description": "A minted graph as served by ``GET /graphs/{graph_id}`` and the mint response.\n\n``enabled`` and ``retired`` are one lifecycle fact, saying nothing about\nwhether this mint is newest. ``follow_latest`` is the **stored** tri-state (#164).",
         "properties": {
@@ -12753,6 +13140,55 @@
         "title": "NoRunContextProblem",
         "type": "object"
       },
+      "NoStandingDependencyView": {
+        "additionalProperties": true,
+        "description": "The 409 problem: the release named an ordered pair with no standing edge.",
+        "properties": {
+          "dependent_chunk_id": {
+            "title": "Dependent Chunk Id",
+            "type": "string"
+          },
+          "detail": {
+            "title": "Detail",
+            "type": "string"
+          },
+          "instance": {
+            "title": "Instance",
+            "type": "string"
+          },
+          "prerequisite_chunk_id": {
+            "title": "Prerequisite Chunk Id",
+            "type": "string"
+          },
+          "status": {
+            "anyOf": [
+              {
+                "type": "integer"
+              }
+            ],
+            "title": "Status"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          },
+          "type": {
+            "const": "urn:blizzard:problem:no-standing-dependency",
+            "title": "Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "type",
+          "title",
+          "detail",
+          "instance",
+          "dependent_chunk_id",
+          "prerequisite_chunk_id"
+        ],
+        "title": "NoStandingDependencyView",
+        "type": "object"
+      },
       "NodeConfig": {
         "description": "The node's invariant identity for this step.",
         "properties": {
@@ -13316,6 +13752,50 @@
           "url"
         ],
         "title": "PrView",
+        "type": "object"
+      },
+      "PrerequisiteIsEphemeralView": {
+        "additionalProperties": true,
+        "description": "The 409 problem: the named prerequisite is ephemeral \u2014 grouped-away or deleted \u2014\nand so not a legal prerequisite.",
+        "properties": {
+          "chunk_id": {
+            "title": "Chunk Id",
+            "type": "string"
+          },
+          "detail": {
+            "title": "Detail",
+            "type": "string"
+          },
+          "instance": {
+            "title": "Instance",
+            "type": "string"
+          },
+          "status": {
+            "anyOf": [
+              {
+                "type": "integer"
+              }
+            ],
+            "title": "Status"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          },
+          "type": {
+            "const": "urn:blizzard:problem:prerequisite-ephemeral",
+            "title": "Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "type",
+          "title",
+          "detail",
+          "instance",
+          "chunk_id"
+        ],
+        "title": "PrerequisiteIsEphemeralView",
         "type": "object"
       },
       "Problem": {
@@ -15447,6 +15927,45 @@
           "note"
         ],
         "title": "RestartView",
+        "type": "object"
+      },
+      "RevisionConflictProblem": {
+        "additionalProperties": true,
+        "description": "A write's ``If-Match`` named a revision the record has since moved past.",
+        "properties": {
+          "detail": {
+            "title": "Detail",
+            "type": "string"
+          },
+          "instance": {
+            "title": "Instance",
+            "type": "string"
+          },
+          "status": {
+            "anyOf": [
+              {
+                "type": "integer"
+              }
+            ],
+            "title": "Status"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          },
+          "type": {
+            "const": "urn:blizzard:problem:revision-conflict",
+            "title": "Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "type",
+          "title",
+          "detail",
+          "instance"
+        ],
+        "title": "RevisionConflictProblem",
         "type": "object"
       },
       "Role": {
@@ -28635,7 +29154,14 @@
             "content": {
               "application/problem+json": {
                 "schema": {
-                  "$ref": "#/components/schemas/TenantRequiredProblem"
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/TenantRequiredProblem"
+                    },
+                    {
+                      "$ref": "#/components/schemas/RevisionConflictProblem"
+                    }
+                  ]
                 }
               }
             },
@@ -28780,7 +29306,14 @@
             "content": {
               "application/problem+json": {
                 "schema": {
-                  "$ref": "#/components/schemas/TenantRequiredProblem"
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/TenantRequiredProblem"
+                    },
+                    {
+                      "$ref": "#/components/schemas/RevisionConflictProblem"
+                    }
+                  ]
                 }
               }
             },
@@ -29022,7 +29555,14 @@
             "content": {
               "application/problem+json": {
                 "schema": {
-                  "$ref": "#/components/schemas/TenantRequiredProblem"
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/TenantRequiredProblem"
+                    },
+                    {
+                      "$ref": "#/components/schemas/RevisionConflictProblem"
+                    }
+                  ]
                 }
               }
             },
@@ -29377,7 +29917,14 @@
             "content": {
               "application/problem+json": {
                 "schema": {
-                  "$ref": "#/components/schemas/TenantRequiredProblem"
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/TenantRequiredProblem"
+                    },
+                    {
+                      "$ref": "#/components/schemas/ChunkIngestConflict"
+                    }
+                  ]
                 }
               }
             },
@@ -30198,7 +30745,20 @@
             "content": {
               "application/problem+json": {
                 "schema": {
-                  "$ref": "#/components/schemas/TenantRequiredProblem"
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/TenantRequiredProblem"
+                    },
+                    {
+                      "$ref": "#/components/schemas/DependentNotEditableView"
+                    },
+                    {
+                      "$ref": "#/components/schemas/DependencyWouldCloseCycleView"
+                    },
+                    {
+                      "$ref": "#/components/schemas/PrerequisiteIsEphemeralView"
+                    }
+                  ]
                 }
               }
             },
@@ -30311,7 +30871,14 @@
             "content": {
               "application/problem+json": {
                 "schema": {
-                  "$ref": "#/components/schemas/TenantRequiredProblem"
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/TenantRequiredProblem"
+                    },
+                    {
+                      "$ref": "#/components/schemas/NoStandingDependencyView"
+                    }
+                  ]
                 }
               }
             },
@@ -32099,7 +32666,24 @@
             "content": {
               "application/problem+json": {
                 "schema": {
-                  "$ref": "#/components/schemas/TenantRequiredProblem"
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/TenantRequiredProblem"
+                    },
+                    {
+                      "$ref": "#/components/schemas/ConfigApplyConflictProblem"
+                    }
+                  ]
+                }
+              }
+            },
+            "description": "Problem"
+          },
+          "415": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ConfigMediaTypeUnsupportedProblem"
                 }
               }
             },
@@ -32110,6 +32694,11 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ConfigDocumentInvalidProblem"
                 }
               }
             },
@@ -32368,6 +32957,11 @@
                 "schema": {
                   "$ref": "#/components/schemas/HTTPValidationError"
                 }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ConfigDocumentInvalidProblem"
+                }
               }
             },
             "description": "Validation Error"
@@ -32474,6 +33068,11 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ConfigDocumentInvalidProblem"
                 }
               }
             },
@@ -41122,7 +41721,14 @@
             "content": {
               "application/problem+json": {
                 "schema": {
-                  "$ref": "#/components/schemas/TenantRequiredProblem"
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/TenantRequiredProblem"
+                    },
+                    {
+                      "$ref": "#/components/schemas/ChunkIngestConflict"
+                    }
+                  ]
                 }
               }
             },
@@ -41648,6 +42254,11 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GraphValidationReport"
                 }
               }
             },
@@ -50072,7 +50683,14 @@
             "content": {
               "application/problem+json": {
                 "schema": {
-                  "$ref": "#/components/schemas/TenantRequiredProblem"
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/TenantRequiredProblem"
+                    },
+                    {
+                      "$ref": "#/components/schemas/ChunkIngestConflict"
+                    }
+                  ]
                 }
               }
             },
@@ -54822,7 +55440,14 @@
             "content": {
               "application/problem+json": {
                 "schema": {
-                  "$ref": "#/components/schemas/TenantRequiredProblem"
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/TenantRequiredProblem"
+                    },
+                    {
+                      "$ref": "#/components/schemas/ChunkIngestConflict"
+                    }
+                  ]
                 }
               }
             },

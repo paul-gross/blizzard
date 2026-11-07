@@ -2,15 +2,15 @@
 
 from __future__ import annotations
 
-from http import HTTPStatus
-
 import click
 
+from blizzard.cli.refusal import refusal_of
 from blizzard.hub.cli.command import FleetCommand
 from blizzard.hub.cli.context import CliContext
 from blizzard.hub.cli.inputs import read_body_file
 from blizzard.hub.cli.project_option import project_option, project_query
 from blizzard.hub.cli.views import pointer_label
+from blizzard.wire.problem import POINTER_ALREADY_HELD
 
 
 class WorkToken(click.ParamType[tuple[str, str]]):
@@ -70,12 +70,11 @@ def item_create(cli: CliContext, title: str, body_file: str, priority: str, sour
         json_body={"title": title, "body": body, "stated_priority": priority},
         params=project_query(project) or None,
     )
-    if resp.status_code == HTTPStatus.CONFLICT:
+    if refusal_of(resp).type == POINTER_ALREADY_HELD:
         conflict = resp.json()
-        if "existing_chunk_id" in conflict:
-            raise click.ClickException(
-                f"pointer {pointer_label(conflict)} already held by chunk {conflict.get('existing_chunk_id')}"
-            )
+        raise click.ClickException(
+            f"pointer {pointer_label(conflict)} already held by chunk {conflict.get('existing_chunk_id')}"
+        )
     cli.check(
         resp,
         "POST /work-sources/{source}/items",

@@ -19,7 +19,7 @@ from blizzard.foundation.work_items import WorkItemPriority
 from blizzard.hub.api import chunk_events
 from blizzard.hub.api.auth import reject_runner_principal
 from blizzard.hub.api.auth_session import require, tenant_bound
-from blizzard.hub.api.chunk_views import ingest_conflict_response
+from blizzard.hub.api.chunk_views import ingest_conflict_refusal
 from blizzard.hub.api.deps import Services
 from blizzard.hub.api.door import RequestDoor, change_context
 from blizzard.hub.api.forge_choice import forge_choice
@@ -393,7 +393,7 @@ def create_work_item(
             project_id=project_id,
         )
     except IngestConflict as exc:
-        return ingest_conflict_response(services, exc)
+        raise ingest_conflict_refusal(services, exc) from exc
     # A freshly minted chunk rests `not_ready`, exactly as a `POST /chunks` ingest does.
     chunk_events.ChunkChanged.of(services, created.chunk_id, prev_status=None).publish(
         cause="minted", key=f"chunks:{created.chunk_id}"

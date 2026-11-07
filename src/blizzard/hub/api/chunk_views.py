@@ -5,18 +5,18 @@ from __future__ import annotations
 from collections.abc import Callable, Iterable, Mapping, Sequence
 from dataclasses import dataclass
 from enum import Enum
+from functools import partial
 from typing import Final, TypedDict
-
-from fastapi import status
-from fastapi.responses import JSONResponse
 
 from blizzard.foundation.chunk_status import TERMINAL_STATUSES, ChunkDeleteRefusal
 from blizzard.foundation.ids import Id
 from blizzard.foundation.store.utc import iso_utc
+from blizzard.hub.api import problems
 from blizzard.hub.api.decisions import to_decision_view
 from blizzard.hub.api.delivery_declarations import delivery_declarations_for
 from blizzard.hub.api.flow_places import chunk_flow_places, fact_view
 from blizzard.hub.api.graph_names import GraphNames
+from blizzard.hub.api.problem_exceptions import ProblemHTTPException
 from blizzard.hub.api.project_label_fields import ProjectLabelFields, project_label_fields
 from blizzard.hub.api.questions import question_view
 from blizzard.hub.composition import TenantServices
@@ -51,7 +51,6 @@ from blizzard.wire.chunk import (
     BounceView,
     ChunkDetail,
     ChunkEscalationView,
-    ChunkIngestConflict,
     ChunkNeighborhoodView,
     ChunkSummary,
     ChunkUsageTotalView,
@@ -127,18 +126,20 @@ def blocked_view(unmet_prerequisite_chunk_ids: Sequence[str] | None) -> BlockedV
     return BlockedView(prerequisite_chunk_id=marking.prerequisite_chunk_id, unmet_count=marking.unmet_count)
 
 
-def ingest_conflict_response(services: TenantServices, exc: IngestConflict) -> JSONResponse:
+def ingest_conflict_refusal(services: TenantServices, exc: IngestConflict) -> ProblemHTTPException:
     """The ``409`` an ingest answers when a live chunk already holds one of its pointers: the pointer by its source's
     key, with the source's current slug and the pointer's label beside it."""
     pointer = exc.pointer
-    conflict = ChunkIngestConflict(
-        existing_chunk_id=exc.existing_chunk_id,
-        source=pointer.source,
-        slug=services.work_sources.source_label(pointer.source),
-        label=services.work_sources.label(pointer),
-        ref=pointer.ref,
+    return ProblemHTTPException(
+        partial(
+            problems.pointer_already_held_problem,
+            exc.existing_chunk_id,
+            pointer.source,
+            pointer.ref,
+            services.work_sources.source_label(pointer.source),
+            services.work_sources.label(pointer),
+        )
     )
-    return JSONResponse(status_code=status.HTTP_409_CONFLICT, content=conflict.model_dump())
 
 
 class DeliveryWireFields(TypedDict):

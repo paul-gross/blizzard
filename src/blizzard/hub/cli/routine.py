@@ -5,7 +5,6 @@ from __future__ import annotations
 from collections.abc import Iterator, Sequence
 from dataclasses import dataclass
 from datetime import datetime
-from http import HTTPStatus
 from typing import Any
 
 import click
@@ -19,6 +18,7 @@ from blizzard.hub.cli.command import FleetCommand
 from blizzard.hub.cli.context import CliContext, project_required
 from blizzard.hub.cli.project_option import project_option, project_path, project_query
 from blizzard.hub.cli.views import Listing, ProposalOrigin
+from blizzard.wire.problem import POINTER_ALREADY_HELD
 
 _ROUTINE_MODEL_HELP = (
     "The routine's default model preference. Repeatable and ORDERED — the first entry "
@@ -28,6 +28,7 @@ _ROUTINE_HARNESSES_HELP = (
     "The routine's default harness preference. Repeatable and ORDERED — the first entry "
     "that resolves at session mint wins."
 )
+
 _CLEARABLE = click.Choice(["model", "effort", "harnesses"])
 
 
@@ -306,8 +307,9 @@ def routine_run(
         f"/api/routines/{routine_id}/run",
         json_body={"scope_slug": scope_slug, "mode": mode, "note": note},
     )
-    if resp.status_code == HTTPStatus.CONFLICT:
-        raise click.ClickException(f"run refused: {(refusal_of(resp).message or 'conflict')}")
+    refusal = refusal_of(resp)
+    if refusal.type == POINTER_ALREADY_HELD:
+        raise click.ClickException(f"run refused: {refusal.message or 'conflict'}")
     cli.check(
         resp,
         "POST /routines/{id}/run",

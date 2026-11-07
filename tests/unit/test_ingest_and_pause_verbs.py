@@ -15,6 +15,7 @@ from blizzard.cli.operator_trace import ITraceHeaders
 from blizzard.hub.cli import hub as hub_group
 from blizzard.runner.cli import runner as runner_group
 from blizzard.runner.cli.daemon import RunnerDaemon
+from blizzard.wire.problem import POINTER_ALREADY_HELD
 from tests.support.ingest_and_pause_verbs import (
     _init_runner,  # pyright: ignore[reportPrivateUsage]
 )
@@ -118,7 +119,9 @@ def test_ingest_maps_a_pointer_conflict() -> None:
     """A 409 (pointer already held by a live chunk) is a named error, not a stack trace."""
 
     def fake_post(url: str, *, json: object, timeout: float) -> _FakeResponse:
-        return _FakeResponse(409, {"existing_chunk_id": "ch_old", "source": "blizzard", "ref": "8"})
+        return _FakeResponse(
+            409, {"type": POINTER_ALREADY_HELD, "existing_chunk_id": "ch_old", "source": "blizzard", "ref": "8"}
+        )
 
     bound = bind_stubs(post=fake_post)
     result = bound.runner.invoke(hub_group, ["chunk", "ingest", "blizzard:8"])

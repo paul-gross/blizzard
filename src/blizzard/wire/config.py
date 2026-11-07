@@ -11,6 +11,7 @@ from blizzard.foundation.landing_policy import LandingPolicy
 from blizzard.wire.base import WireModel
 from blizzard.wire.cadence import CadenceDocument
 from blizzard.wire.forge import DEPRECATED_FIELD, OldFieldWarning
+from blizzard.wire.problem import CommonProblemMembers, ProblemDetails
 from blizzard.wire.routine import RoutineDocument
 from blizzard.wire.scope import ScopeDocument
 
@@ -182,3 +183,30 @@ class ConfigApplyResponse(WireModel):
     outcomes: list[ConfigApplyOutcome]
     #: Always empty.
     warnings: list[OldFieldWarning] = Field(default=[], json_schema_extra=DEPRECATED_FIELD)
+
+
+class ConfigApplyConflictProblem(ProblemDetails[Literal["urn:blizzard:problem:config-apply-conflict"]]):
+    """An apply's entry conflicts with a record the tenant holds; ``detail`` names the entry."""
+
+
+class ConfigMediaTypeUnsupportedProblem(ProblemDetails[Literal["urn:blizzard:problem:config-media-type-unsupported"]]):
+    """An apply's ``Content-Type`` names no document format the hub reads."""
+
+
+class ConfigDocumentError(BaseModel):
+    """One located entry of an invalid configuration document: ``loc`` is the path inside the request. A decode error
+    also carries ``line`` and ``column``; a ``project_required`` entry carries ``projects`` to choose from."""
+
+    model_config = ConfigDict(extra="allow")
+
+    loc: list[str | int]
+    msg: str
+    type: str
+
+
+class ConfigDocumentInvalidProblem(
+    CommonProblemMembers[Literal["urn:blizzard:problem:config-document-invalid"], list[ConfigDocumentError]]
+):
+    """A configuration document, or the version a read names, the hub refuses; ``detail`` locates every error."""
+
+    status: int | None = None

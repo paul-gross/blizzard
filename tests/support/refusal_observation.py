@@ -3,6 +3,8 @@
 from dataclasses import dataclass
 from typing import Any
 
+from fastapi import FastAPI
+from fastapi.testclient import TestClient
 from httpx2 import Response
 from pydantic import BaseModel, ValidationError
 
@@ -35,6 +37,13 @@ def observe_refusal(
     observation = RefusalObservation(method, path, status, response.headers["content-type"], model, response.json())
     observations.append(observation)
     return observation
+
+
+def app_spec(client: TestClient) -> dict[str, Any]:
+    """The OpenAPI document of the app ``client`` drives."""
+    app = client.app
+    assert isinstance(app, FastAPI)
+    return app.openapi()
 
 
 def declared_refusal_mismatches(

@@ -7,15 +7,17 @@ authenticated identity, never a request field."""
 
 from __future__ import annotations
 
+from functools import partial
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, status
-from fastapi.responses import JSONResponse
 
 from blizzard.foundation.store.utc import iso_utc
+from blizzard.hub.api import problems
 from blizzard.hub.api.auth import reject_runner_principal
 from blizzard.hub.api.auth_session import require, tenant_bound
 from blizzard.hub.api.deps import Services
+from blizzard.hub.api.problem_exceptions import ProblemHTTPException
 from blizzard.hub.auth.models import ResolvedIdentity
 from blizzard.hub.auth.permissions import Permission
 from blizzard.hub.documents.codec import ConfigDecodeError
@@ -33,7 +35,6 @@ from blizzard.wire.graph import (
     GraphSummaryView,
     GraphSyncEntry,
     GraphSyncResponse,
-    GraphValidationReport,
     GraphView,
     ProducesEntry,
     RotatePolicyView,
@@ -139,14 +140,14 @@ def mint_graph(request: GraphMintRequest, services: Services) -> object:
     try:
         doc = GraphDoc.of(services.graph_yaml.decode(request.definition_yaml.encode("utf-8")))
     except (GraphParseError, ConfigDecodeError) as exc:
-        report = GraphValidationReport(ok=False, errors=[str(exc)], warnings=[])
-        return JSONResponse(status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, content=report.model_dump())
+        raise ProblemHTTPException(partial(problems.graph_definition_invalid_problem, [str(exc)], [])) from exc
 
     try:
         graph, warnings = services.graph_mint.mint(doc, definition_yaml=request.definition_yaml)
     except GraphValidationError as exc:
-        report = GraphValidationReport(ok=False, errors=exc.result.errors, warnings=exc.result.warnings)
-        return JSONResponse(status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, content=report.model_dump())
+        raise ProblemHTTPException(
+            partial(problems.graph_definition_invalid_problem, exc.result.errors, exc.result.warnings)
+        ) from exc
 
     # A freshly minted graph carries no lifecycle fact yet — it starts enabled.
     return _graph_view(graph, definition_yaml=_body(services, graph.graph_id), retired=False, warnings=warnings)

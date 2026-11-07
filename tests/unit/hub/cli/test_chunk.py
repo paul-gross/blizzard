@@ -12,6 +12,12 @@ import pytest
 from click.testing import CliRunner
 
 from blizzard.hub.cli import hub as hub_group
+from blizzard.wire.problem import (
+    DEPENDENCY_WOULD_CLOSE_CYCLE,
+    DEPENDENT_NOT_EDITABLE,
+    NO_STANDING_DEPENDENCY,
+    PREREQUISITE_EPHEMERAL,
+)
 from tests.support.worker_http import bind_stubs
 
 
@@ -604,7 +610,9 @@ def test_depend_sends_a_named_by() -> None:
 
 def test_depend_refuses_a_dependent_not_editable() -> None:
     def fake_post(url: str, *, json: object, timeout: float) -> _FakeResponse:
-        return _FakeResponse(409, {"chunk_id": "ch_1", "status": "running", "detail": "not editable"})
+        return _FakeResponse(
+            409, {"type": DEPENDENT_NOT_EDITABLE, "chunk_id": "ch_1", "status": "running", "detail": "not editable"}
+        )
 
     bound = bind_stubs(post=fake_post)
     result = bound.runner.invoke(hub_group, ["chunk", "depend", "ch_1", "ch_2"])
@@ -619,6 +627,7 @@ def test_depend_refuses_a_cycle_naming_the_pair() -> None:
         return _FakeResponse(
             409,
             {
+                "type": DEPENDENCY_WOULD_CLOSE_CYCLE,
                 "dependent_chunk_id": "ch_1",
                 "prerequisite_chunk_id": "ch_2",
                 "detail": "would close a cycle",
@@ -636,7 +645,7 @@ def test_depend_refuses_a_cycle_naming_the_pair() -> None:
 
 def test_depend_refuses_an_ephemeral_prerequisite() -> None:
     def fake_post(url: str, *, json: object, timeout: float) -> _FakeResponse:
-        return _FakeResponse(409, {"chunk_id": "ch_2", "detail": "ephemeral"})
+        return _FakeResponse(409, {"type": PREREQUISITE_EPHEMERAL, "chunk_id": "ch_2", "detail": "ephemeral"})
 
     bound = bind_stubs(post=fake_post)
     result = bound.runner.invoke(hub_group, ["chunk", "depend", "ch_1", "ch_2"])
@@ -699,6 +708,7 @@ def test_release_dependency_refuses_when_no_edge_stands() -> None:
         return _FakeResponse(
             409,
             {
+                "type": NO_STANDING_DEPENDENCY,
                 "dependent_chunk_id": "ch_1",
                 "prerequisite_chunk_id": "ch_2",
                 "detail": "no standing dependency to release",

@@ -7,8 +7,7 @@ from __future__ import annotations
 
 from functools import partial
 
-from fastapi import APIRouter, Depends, HTTPException, status
-from fastapi.responses import JSONResponse
+from fastapi import APIRouter, Depends, HTTPException, Request, status
 
 from blizzard.foundation.store.utc import iso_utc
 from blizzard.hub.api import problems
@@ -16,6 +15,7 @@ from blizzard.hub.api.auth import reject_runner_principal
 from blizzard.hub.api.auth_session import require, tenant_bound
 from blizzard.hub.api.deps import Services
 from blizzard.hub.api.problem_exceptions import ProblemHTTPException
+from blizzard.hub.api.problem_rendering import problem_response
 from blizzard.hub.auth.permissions import Permission
 from blizzard.hub.composition import TenantServices
 from blizzard.hub.domain.chunk.dependencies import (
@@ -31,10 +31,6 @@ from blizzard.wire.chunk import (
     ChunkDependencyDeclareRequest,
     ChunkDependencyEdgeView,
     ChunkDependencyReleaseRequest,
-    DependencyWouldCloseCycleView,
-    DependentNotEditableView,
-    NoStandingDependencyView,
-    PrerequisiteIsEphemeralView,
 )
 
 router = APIRouter(
@@ -94,6 +90,7 @@ def _edge_view(edge: DependencyEdge) -> ChunkDependencyEdgeView:
 def declare_dependency(
     chunk_id: str,
     request: ChunkDependencyDeclareRequest,
+    http_request: Request,
     services: Services,
 ) -> object:
     """Declare that CHUNK depends on ``prerequisite_chunk_id``.
@@ -108,16 +105,17 @@ def declare_dependency(
     except ChunkNotFound as exc:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
     except DependentNotEditable as exc:
-        view = DependentNotEditableView(chunk_id=exc.chunk_id, status=exc.status)
-        return JSONResponse(status_code=status.HTTP_409_CONFLICT, content=view.model_dump())
-    except DependencyWouldCloseCycle as exc:
-        view = DependencyWouldCloseCycleView(
-            dependent_chunk_id=exc.dependent_chunk_id, prerequisite_chunk_id=exc.prerequisite_chunk_id
+        # Its ``status`` member is the released chunk status, so the HTTP status is named here.
+        return problem_response(
+            problems.dependent_not_editable_problem(exc.chunk_id, exc.status, instance=http_request.url.path),
+            status_code=status.HTTP_409_CONFLICT,
         )
-        return JSONResponse(status_code=status.HTTP_409_CONFLICT, content=view.model_dump())
+    except DependencyWouldCloseCycle as exc:
+        raise ProblemHTTPException(
+            partial(problems.dependency_would_close_cycle_problem, exc.dependent_chunk_id, exc.prerequisite_chunk_id)
+        ) from exc
     except PrerequisiteIsEphemeral as exc:
-        view = PrerequisiteIsEphemeralView(chunk_id=exc.chunk_id)
-        return JSONResponse(status_code=status.HTTP_409_CONFLICT, content=view.model_dump())
+        raise ProblemHTTPException(partial(problems.prerequisite_ephemeral_problem, exc.chunk_id)) from exc
     return _edge_view(edge)
 
 
@@ -140,8 +138,7 @@ def release_dependency(
         edge = _resolve_standing_edge(services, dependent, request.prerequisite_chunk_id)
         released = services.dependencies.release(edge, by=request.by)
     except NoStandingDependencyToRelease as exc:
-        view = NoStandingDependencyView(
-            dependent_chunk_id=exc.dependent_chunk_id, prerequisite_chunk_id=exc.prerequisite_chunk_id
-        )
-        return JSONResponse(status_code=status.HTTP_409_CONFLICT, content=view.model_dump())
+        raise ProblemHTTPException(
+            partial(problems.no_standing_dependency_problem, exc.dependent_chunk_id, exc.prerequisite_chunk_id)
+        ) from exc
     return _edge_view(released)

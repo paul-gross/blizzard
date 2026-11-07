@@ -12,15 +12,18 @@ cadence promoting its runs needs. Every view carries the cadence's attention, re
 from __future__ import annotations
 
 from collections.abc import Sequence
+from functools import partial
 from typing import Annotated, Literal
 
 from fastapi import APIRouter, Depends, Header, HTTPException, Query, status
 
 from blizzard.foundation.store.utc import iso_utc
+from blizzard.hub.api import problems
 from blizzard.hub.api.auth import reject_runner_principal
 from blizzard.hub.api.auth_session import require, tenant_bound
 from blizzard.hub.api.deps import Services
 from blizzard.hub.api.door import RequestDoor, change_context
+from blizzard.hub.api.problem_exceptions import ProblemHTTPException
 from blizzard.hub.api.project_label_fields import ProjectLabelFields
 from blizzard.hub.api.project_labels import ProjectLabels
 from blizzard.hub.api.project_params import PathProject, QueryProject
@@ -190,7 +193,7 @@ def _unprocessable(exc: ConfigFieldError) -> HTTPException:
 
 
 def _revision_conflict(exc: ConfigRevisionConflict) -> HTTPException:
-    return HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc))
+    return ProblemHTTPException(partial(problems.revision_conflict_problem, str(exc)))
 
 
 def admission_refused(exc: CadenceAdmissionRefused) -> HTTPException:

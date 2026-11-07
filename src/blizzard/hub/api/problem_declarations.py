@@ -30,17 +30,29 @@ from blizzard.wire.auth import (
     RunnerCredentialForbiddenProblem,
     SsoRefusedProblem,
 )
+from blizzard.wire.cadence import RevisionConflictProblem
 from blizzard.wire.chunk import (
+    ChunkIngestConflict,
     ChunkNotFoundProblem,
     ChunkNotPausableProblem,
+    DependencyWouldCloseCycleView,
+    DependentNotEditableView,
     FindingNotInChunkProblem,
     NoAnsweredProposalProblem,
     NoCurrentNodeProblem,
     NoRunContextProblem,
+    NoStandingDependencyView,
+    PrerequisiteIsEphemeralView,
+)
+from blizzard.wire.config import (
+    ConfigApplyConflictProblem,
+    ConfigDocumentInvalidProblem,
+    ConfigMediaTypeUnsupportedProblem,
 )
 from blizzard.wire.decision import DecisionResolutionConflict
 from blizzard.wire.egress import EgressBackfillFailure
 from blizzard.wire.flags import FlagOffProblem
+from blizzard.wire.graph import GraphValidationReport
 from blizzard.wire.host import HostNameTakenProblem, HostRetiredProblem
 from blizzard.wire.invariants import InvariantsInProgressProblem
 from blizzard.wire.problem import (
@@ -714,6 +726,35 @@ OPERATOR_DECLARATIONS = (
     ProblemDeclaration("POST", "/api/questions/{question_id}/answers", 409, QuestionAlreadyAnsweredProblem),
     ProblemDeclaration("POST", "/api/egress/backfill", 502, EgressBackfillFailure),
     ProblemDeclaration("POST", "/api/traces/replay", 502, TraceReplayFailure),
+    *(
+        ProblemDeclaration(method, f"/api/cadences/{{cadence_id}}{suffix}", 409, RevisionConflictProblem)
+        for method, suffix in (("PATCH", ""), ("POST", "/retire"), ("POST", "/enable"))
+    ),
+    *(
+        ProblemDeclaration("POST", path, 409, ChunkIngestConflict)
+        for path in (
+            "/api/chunks",
+            "/api/work-sources/{source}/items",
+            "/api/routines/{routine_id}/run",
+            "/api/garden-proposals/{proposal_id}/accept",
+        )
+    ),
+    *(
+        ProblemDeclaration("POST", "/api/chunks/{chunk_id}/dependencies", 409, model)
+        for model in (DependentNotEditableView, DependencyWouldCloseCycleView, PrerequisiteIsEphemeralView)
+    ),
+    ProblemDeclaration("POST", "/api/chunks/{chunk_id}/dependencies/release", 409, NoStandingDependencyView),
+    ProblemDeclaration("POST", "/api/config/apply", 409, ConfigApplyConflictProblem),
+    ProblemDeclaration("POST", "/api/config/apply", 415, ConfigMediaTypeUnsupportedProblem),
+    *(
+        ProblemDeclaration(method, path, 422, ConfigDocumentInvalidProblem)
+        for method, path in (
+            ("POST", "/api/config/apply"),
+            ("GET", "/api/config/export"),
+            ("GET", "/api/config/schema/{kind}"),
+        )
+    ),
+    ProblemDeclaration("POST", "/api/graphs", 422, GraphValidationReport),
 )
 
 HUB_PROBLEM_DECLARATIONS = (

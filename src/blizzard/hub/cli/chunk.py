@@ -4,12 +4,12 @@ from __future__ import annotations
 
 from collections.abc import Iterator
 from dataclasses import dataclass
-from http import HTTPStatus
 from typing import Any, TypedDict, cast
 
 import click
 
 from blizzard.cli.get_group import GetGroup
+from blizzard.cli.refusal import refusal_of
 from blizzard.cli.transcript_render import SegmentContentLines, SegmentIndexLines
 from blizzard.foundation.chunk_status import TERMINAL_STATUSES
 from blizzard.foundation.roles import dto
@@ -18,6 +18,13 @@ from blizzard.hub.cli.context import CliContext
 from blizzard.hub.cli.flow import flow_label, place_label
 from blizzard.hub.cli.project_option import project_option, project_query
 from blizzard.hub.cli.views import ChunkLine, ChunkRow, Cost, Listing, pointer_label
+from blizzard.wire.problem import (
+    DEPENDENCY_WOULD_CLOSE_CYCLE,
+    DEPENDENT_NOT_EDITABLE,
+    NO_STANDING_DEPENDENCY,
+    POINTER_ALREADY_HELD,
+    PREREQUISITE_EPHEMERAL,
+)
 
 
 class Neighbor(TypedDict):
@@ -189,7 +196,7 @@ def chunk_ingest(cli: CliContext, pointers: tuple[str, ...], project: str | None
     if project is not None:
         request["project"] = project
     resp = cli.send("post", "/api/chunks", json_body=request)
-    if resp.status_code == HTTPStatus.CONFLICT:
+    if refusal_of(resp).type == POINTER_ALREADY_HELD:
         conflict = resp.json()
         raise click.ClickException(
             f"pointer {pointer_label(conflict)} already held by chunk {conflict.get('existing_chunk_id')}"
@@ -381,18 +388,20 @@ def chunk_depend(cli: CliContext, chunk_id: str, prerequisite_chunk_id: str, by:
         f"/api/chunks/{chunk_id}/dependencies",
         json_body={"prerequisite_chunk_id": prerequisite_chunk_id, "by": by},
     )
-    if resp.status_code == HTTPStatus.CONFLICT:
+    kind = refusal_of(resp).type
+    if kind == DEPENDENT_NOT_EDITABLE:
         body = resp.json()
-        if "status" in body:
-            raise click.ClickException(
-                f"{body['chunk_id']} is not editable at status {body['status']} — cannot declare a dependency"
-            )
-        if "dependent_chunk_id" in body:
-            raise click.ClickException(
-                f"declaring {body['dependent_chunk_id']} → {body['prerequisite_chunk_id']} "
-                "would close a cycle in the standing dependency graph"
-            )
-        raise click.ClickException(f"{body['chunk_id']} is ephemeral and cannot be named as a prerequisite")
+        raise click.ClickException(
+            f"{body['chunk_id']} is not editable at status {body['status']} — cannot declare a dependency"
+        )
+    if kind == DEPENDENCY_WOULD_CLOSE_CYCLE:
+        body = resp.json()
+        raise click.ClickException(
+            f"declaring {body['dependent_chunk_id']} → {body['prerequisite_chunk_id']} "
+            "would close a cycle in the standing dependency graph"
+        )
+    if kind == PREREQUISITE_EPHEMERAL:
+        raise click.ClickException(f"{resp.json()['chunk_id']} is ephemeral and cannot be named as a prerequisite")
     cli.check(
         resp,
         "POST /chunks/{id}/dependencies",
@@ -413,7 +422,7 @@ def chunk_release_dependency(cli: CliContext, chunk_id: str, prerequisite_chunk_
         f"/api/chunks/{chunk_id}/dependencies/release",
         json_body={"prerequisite_chunk_id": prerequisite_chunk_id, "by": by},
     )
-    if resp.status_code == HTTPStatus.CONFLICT:
+    if refusal_of(resp).type == NO_STANDING_DEPENDENCY:
         body = resp.json()
         raise click.ClickException(
             f"no standing dependency from {body['dependent_chunk_id']} to {body['prerequisite_chunk_id']}"

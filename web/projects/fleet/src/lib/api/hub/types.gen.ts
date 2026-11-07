@@ -2045,6 +2045,56 @@ export type ChunkGroupResponse = {
 };
 
 /**
+ * ChunkIngestConflict
+ *
+ * The 409 problem: the pointer is already held by a live chunk. ``source`` is the pointer's source key — ``hub``
+ * or the source's id — with the source's current ``slug`` and the pointer's ``label`` beside it.
+ */
+export type ChunkIngestConflict = {
+    /**
+     * Detail
+     */
+    detail: string;
+    /**
+     * Existing Chunk Id
+     */
+    existing_chunk_id: string;
+    /**
+     * Instance
+     */
+    instance: string;
+    /**
+     * Label
+     */
+    label: string | null;
+    /**
+     * Ref
+     */
+    ref: string;
+    /**
+     * Slug
+     */
+    slug: string | null;
+    /**
+     * Source
+     */
+    source: string;
+    /**
+     * Status
+     */
+    status?: number;
+    /**
+     * Title
+     */
+    title: string;
+    /**
+     * Type
+     */
+    type: 'urn:blizzard:problem:pointer-already-held';
+    [key: string]: unknown;
+};
+
+/**
  * ChunkIngestRequest
  *
  * Ingest by source-native token — specific items always, batch fine. Each token is resolved against
@@ -3076,6 +3126,35 @@ export type CompletionSubmission = {
 };
 
 /**
+ * ConfigApplyConflictProblem
+ *
+ * An apply's entry conflicts with a record the tenant holds; ``detail`` names the entry.
+ */
+export type ConfigApplyConflictProblem = {
+    /**
+     * Detail
+     */
+    detail: string;
+    /**
+     * Instance
+     */
+    instance: string;
+    /**
+     * Status
+     */
+    status?: number;
+    /**
+     * Title
+     */
+    title: string;
+    /**
+     * Type
+     */
+    type: 'urn:blizzard:problem:config-apply-conflict';
+    [key: string]: unknown;
+};
+
+/**
  * ConfigApplyOutcome
  *
  * One outcome of an apply. ``op`` is ``create``, ``edit`` or ``enable`` for a change written and
@@ -3208,6 +3287,57 @@ export type ConfigChangesPage = {
 };
 
 /**
+ * ConfigDocumentError
+ *
+ * One located entry of an invalid configuration document: ``loc`` is the path inside the request. A decode error
+ * also carries ``line`` and ``column``; a ``project_required`` entry carries ``projects`` to choose from.
+ */
+export type ConfigDocumentError = {
+    /**
+     * Loc
+     */
+    loc: Array<string | number>;
+    /**
+     * Msg
+     */
+    msg: string;
+    /**
+     * Type
+     */
+    type: string;
+    [key: string]: unknown;
+};
+
+/**
+ * ConfigDocumentInvalidProblem
+ *
+ * A configuration document, or the version a read names, the hub refuses; ``detail`` locates every error.
+ */
+export type ConfigDocumentInvalidProblem = {
+    /**
+     * Detail
+     */
+    detail: Array<ConfigDocumentError>;
+    /**
+     * Instance
+     */
+    instance: string;
+    /**
+     * Status
+     */
+    status?: number;
+    /**
+     * Title
+     */
+    title: string;
+    /**
+     * Type
+     */
+    type: 'urn:blizzard:problem:config-document-invalid';
+    [key: string]: unknown;
+};
+
+/**
  * ConfigDocumentV2
  *
  * A declarative configuration document, version 2 — the one version a hub applies and exports. Each entry is the
@@ -3254,6 +3384,35 @@ export type ConfigDocumentV2 = {
      * Work Sources
      */
     work_sources?: Array<WorkSourceEntry>;
+};
+
+/**
+ * ConfigMediaTypeUnsupportedProblem
+ *
+ * An apply's ``Content-Type`` names no document format the hub reads.
+ */
+export type ConfigMediaTypeUnsupportedProblem = {
+    /**
+     * Detail
+     */
+    detail: string;
+    /**
+     * Instance
+     */
+    instance: string;
+    /**
+     * Status
+     */
+    status?: number;
+    /**
+     * Title
+     */
+    title: string;
+    /**
+     * Type
+     */
+    type: 'urn:blizzard:problem:config-media-type-unsupported';
+    [key: string]: unknown;
 };
 
 /**
@@ -3606,6 +3765,75 @@ export type DeliveredSetView = {
     revisions: {
         [key: string]: string;
     };
+};
+
+/**
+ * DependencyWouldCloseCycleView
+ *
+ * The 409 problem: declaring this edge would close a cycle in the standing
+ * dependency graph — a self-edge is among the cycle cases.
+ */
+export type DependencyWouldCloseCycleView = {
+    /**
+     * Dependent Chunk Id
+     */
+    dependent_chunk_id: string;
+    /**
+     * Detail
+     */
+    detail: string;
+    /**
+     * Instance
+     */
+    instance: string;
+    /**
+     * Prerequisite Chunk Id
+     */
+    prerequisite_chunk_id: string;
+    /**
+     * Status
+     */
+    status?: number;
+    /**
+     * Title
+     */
+    title: string;
+    /**
+     * Type
+     */
+    type: 'urn:blizzard:problem:dependency-would-close-cycle';
+    [key: string]: unknown;
+};
+
+/**
+ * DependentNotEditableView
+ *
+ * The 409 problem: the dependent chunk has left its declarable window — no longer
+ * ``not_ready`` or ``ready``. Its released ``status`` is the chunk's status, not the HTTP status.
+ */
+export type DependentNotEditableView = {
+    /**
+     * Chunk Id
+     */
+    chunk_id: string;
+    /**
+     * Detail
+     */
+    detail: string;
+    /**
+     * Instance
+     */
+    instance: string;
+    status: ChunkStatus;
+    /**
+     * Title
+     */
+    title: string;
+    /**
+     * Type
+     */
+    type: 'urn:blizzard:problem:dependent-not-editable';
+    [key: string]: unknown;
 };
 
 /**
@@ -6191,6 +6419,47 @@ export type GraphSyncResponse = {
 };
 
 /**
+ * GraphValidationReport
+ *
+ * The validator's verdict — the 422 problem when errors reject a mint.
+ */
+export type GraphValidationReport = {
+    /**
+     * Detail
+     */
+    detail: string;
+    /**
+     * Errors
+     */
+    errors: Array<string>;
+    /**
+     * Instance
+     */
+    instance: string;
+    /**
+     * Ok
+     */
+    ok: boolean;
+    /**
+     * Status
+     */
+    status?: number;
+    /**
+     * Title
+     */
+    title: string;
+    /**
+     * Type
+     */
+    type: 'urn:blizzard:problem:graph-definition-invalid';
+    /**
+     * Warnings
+     */
+    warnings: Array<string>;
+    [key: string]: unknown;
+};
+
+/**
  * GraphView
  *
  * A minted graph as served by ``GET /graphs/{graph_id}`` and the mint response.
@@ -7884,6 +8153,43 @@ export type NoRunContextProblem = {
 };
 
 /**
+ * NoStandingDependencyView
+ *
+ * The 409 problem: the release named an ordered pair with no standing edge.
+ */
+export type NoStandingDependencyView = {
+    /**
+     * Dependent Chunk Id
+     */
+    dependent_chunk_id: string;
+    /**
+     * Detail
+     */
+    detail: string;
+    /**
+     * Instance
+     */
+    instance: string;
+    /**
+     * Prerequisite Chunk Id
+     */
+    prerequisite_chunk_id: string;
+    /**
+     * Status
+     */
+    status?: number;
+    /**
+     * Title
+     */
+    title: string;
+    /**
+     * Type
+     */
+    type: 'urn:blizzard:problem:no-standing-dependency';
+    [key: string]: unknown;
+};
+
+/**
  * NodeConfig
  *
  * The node's invariant identity for this step.
@@ -8226,6 +8532,40 @@ export type PrView = {
      * Url
      */
     url: string;
+};
+
+/**
+ * PrerequisiteIsEphemeralView
+ *
+ * The 409 problem: the named prerequisite is ephemeral — grouped-away or deleted —
+ * and so not a legal prerequisite.
+ */
+export type PrerequisiteIsEphemeralView = {
+    /**
+     * Chunk Id
+     */
+    chunk_id: string;
+    /**
+     * Detail
+     */
+    detail: string;
+    /**
+     * Instance
+     */
+    instance: string;
+    /**
+     * Status
+     */
+    status?: number;
+    /**
+     * Title
+     */
+    title: string;
+    /**
+     * Type
+     */
+    type: 'urn:blizzard:problem:prerequisite-ephemeral';
+    [key: string]: unknown;
 };
 
 /**
@@ -9555,6 +9895,35 @@ export type RestartView = {
      * To Node Name
      */
     to_node_name: string | null;
+};
+
+/**
+ * RevisionConflictProblem
+ *
+ * A write's ``If-Match`` named a revision the record has since moved past.
+ */
+export type RevisionConflictProblem = {
+    /**
+     * Detail
+     */
+    detail: string;
+    /**
+     * Instance
+     */
+    instance: string;
+    /**
+     * Status
+     */
+    status?: number;
+    /**
+     * Title
+     */
+    title: string;
+    /**
+     * Type
+     */
+    type: 'urn:blizzard:problem:revision-conflict';
+    [key: string]: unknown;
 };
 
 /**
@@ -16538,7 +16907,7 @@ export type EditCadenceApiCadencesCadenceIdPatchErrors = {
     /**
      * Problem
      */
-    409: TenantRequiredProblem;
+    409: TenantRequiredProblem | RevisionConflictProblem;
     /**
      * Validation Error
      */
@@ -16602,7 +16971,7 @@ export type EnableCadenceApiCadencesCadenceIdEnablePostErrors = {
     /**
      * Problem
      */
-    409: TenantRequiredProblem;
+    409: TenantRequiredProblem | RevisionConflictProblem;
     /**
      * Validation Error
      */
@@ -16718,7 +17087,7 @@ export type RetireCadenceApiCadencesCadenceIdRetirePostErrors = {
     /**
      * Problem
      */
-    409: TenantRequiredProblem;
+    409: TenantRequiredProblem | RevisionConflictProblem;
     /**
      * Validation Error
      */
@@ -16883,7 +17252,7 @@ export type IngestChunkApiChunksPostErrors = {
     /**
      * Problem
      */
-    409: TenantRequiredProblem;
+    409: TenantRequiredProblem | ChunkIngestConflict;
     /**
      * Validation Error
      */
@@ -17277,7 +17646,7 @@ export type DeclareDependencyApiChunksChunkIdDependenciesPostErrors = {
     /**
      * Problem
      */
-    409: TenantRequiredProblem;
+    409: TenantRequiredProblem | DependentNotEditableView | DependencyWouldCloseCycleView | PrerequisiteIsEphemeralView;
     /**
      * Validation Error
      */
@@ -17331,7 +17700,7 @@ export type ReleaseDependencyApiChunksChunkIdDependenciesReleasePostErrors = {
     /**
      * Problem
      */
-    409: TenantRequiredProblem;
+    409: TenantRequiredProblem | NoStandingDependencyView;
     /**
      * Validation Error
      */
@@ -18207,7 +18576,11 @@ export type ApplyConfigApiConfigApplyPostErrors = {
     /**
      * Problem
      */
-    409: TenantRequiredProblem;
+    409: TenantRequiredProblem | ConfigApplyConflictProblem;
+    /**
+     * Problem
+     */
+    415: ConfigMediaTypeUnsupportedProblem;
     /**
      * Validation Error
      */
@@ -22281,7 +22654,7 @@ export type AcceptGardenProposalApiGardenProposalsProposalIdAcceptPostErrors = {
     /**
      * Problem
      */
-    409: TenantRequiredProblem;
+    409: TenantRequiredProblem | ChunkIngestConflict;
     /**
      * Validation Error
      */
@@ -26628,7 +27001,7 @@ export type RunRoutineApiRoutinesRoutineIdRunPostErrors = {
     /**
      * Problem
      */
-    409: TenantRequiredProblem;
+    409: TenantRequiredProblem | ChunkIngestConflict;
     /**
      * Validation Error
      */
@@ -28938,7 +29311,7 @@ export type CreateWorkItemApiWorkSourcesSourceItemsPostErrors = {
     /**
      * Problem
      */
-    409: TenantRequiredProblem;
+    409: TenantRequiredProblem | ChunkIngestConflict;
     /**
      * Validation Error
      */

@@ -14,6 +14,7 @@ import pytest
 from click.testing import CliRunner, Result
 
 from blizzard.hub.cli import hub as hub_group
+from blizzard.wire.problem import POINTER_ALREADY_HELD
 from tests.support.worker_http import bind_stubs
 
 
@@ -748,13 +749,22 @@ def test_routine_run_maps_a_409_to_a_click_exception() -> None:
         return _FakeResponse(200, [{"routine_id": "rtn_1", "slug": "gardening", "name": "gardening"}])
 
     def fake_post(url: str, *, json: object, timeout: float, headers: dict[str, str] | None = None) -> _FakeResponse:
-        return _FakeResponse(409, {"existing_chunk_id": "ch_1", "source": "hub", "ref": "1"})
+        return _FakeResponse(
+            409,
+            {
+                "type": POINTER_ALREADY_HELD,
+                "detail": "pointer already held by a live chunk",
+                "existing_chunk_id": "ch_1",
+                "source": "hub",
+                "ref": "1",
+            },
+        )
 
     bound = bind_stubs(get=_in_one_project(fake_get), post=fake_post)
     result = bound.runner.invoke(hub_group, ["routine", "run", "gardening"])
 
     assert result.exit_code != 0
-    assert "conflict" in result.output
+    assert "run refused: pointer already held by a live chunk" in result.output
 
 
 def test_routine_run_maps_a_503_to_a_click_exception() -> None:

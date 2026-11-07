@@ -15,7 +15,7 @@ from blizzard.foundation.store.utc import iso_utc
 from blizzard.hub.api import chunk_events, problems
 from blizzard.hub.api.auth import reject_runner_principal
 from blizzard.hub.api.auth_session import require, tenant_bound
-from blizzard.hub.api.chunk_views import ingest_conflict_response
+from blizzard.hub.api.chunk_views import ingest_conflict_refusal
 from blizzard.hub.api.deps import Services
 from blizzard.hub.api.problem_exceptions import ProblemHTTPException
 from blizzard.hub.api.project_label_fields import ProjectLabelFields
@@ -258,7 +258,7 @@ def accept_garden_proposal(
     except DefaultGraphRetired as exc:
         raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=str(exc)) from exc
     except IngestConflict as exc:
-        return ingest_conflict_response(services, exc)
+        raise ingest_conflict_refusal(services, exc) from exc
     if accepted.chunk_id is not None:
         # A freshly minted chunk rests `not_ready`, exactly as a `POST
         # /work-sources/hub/items` mint does.

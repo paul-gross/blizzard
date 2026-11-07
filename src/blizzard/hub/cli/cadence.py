@@ -7,7 +7,6 @@ from __future__ import annotations
 
 from collections.abc import Iterator, Sequence
 from dataclasses import dataclass
-from http import HTTPStatus
 from typing import Any
 
 import click
@@ -21,6 +20,7 @@ from blizzard.hub.cli.context import CliContext, project_required
 from blizzard.hub.cli.flag_gate import hub_flag_on
 from blizzard.hub.cli.project_option import project_option, project_path, project_query
 from blizzard.hub.cli.views import Listing
+from blizzard.wire.problem import REVISION_CONFLICT
 
 _FLAG_OFF_NOTICE = "note: cadences mint nothing until the flag cadences is on"
 _ANCHORS = click.Choice(["scheduled", "started", "finished"])
@@ -233,8 +233,9 @@ def _patch(cli: CliContext, cadence: dict[str, Any], body: dict[str, Any], *, do
         if_match=int(cadence["revision"]),
         door=True,
     )
-    if resp.status_code == HTTPStatus.CONFLICT:
-        raise click.ClickException(f"cadence edit refused: {(refusal_of(resp).message or 'conflict')}")
+    refusal = refusal_of(resp)
+    if refusal.type == REVISION_CONFLICT:
+        raise click.ClickException(f"cadence edit refused: {refusal.message or 'conflict'}")
     cli.check(resp, "PATCH /cadences/{id}")
     cli.show_lines(resp.json(), done)
 

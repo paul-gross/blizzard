@@ -17,10 +17,30 @@ from blizzard.hub.api import chunk_dependencies as chunk_dependencies_module
 from blizzard.hub.composition import TenantServices
 from blizzard.hub.domain.chunk.dependencies import PrerequisiteScope
 from blizzard.hub.store import schema as s
+from blizzard.wire.chunk import (
+    DependencyWouldCloseCycleView,
+    DependentNotEditableView,
+    NoStandingDependencyView,
+    PrerequisiteIsEphemeralView,
+)
+from blizzard.wire.problem import (
+    DEPENDENCY_WOULD_CLOSE_CYCLE,
+    DEPENDENT_NOT_EDITABLE,
+    NO_STANDING_DEPENDENCY,
+    PREREQUISITE_EPHEMERAL,
+)
+from tests.support.refusal_observation import app_spec, declared_refusal_mismatches
 from tests.support.scaffolding import HubHarness, build_hub, hub_scoped, ingest, report_lease, stamp
 
 _DEPENDENT = {"source": "default", "ref": "dependent"}
 _PREREQUISITE = {"source": "default", "ref": "prereq"}
+_DECLARE = "/api/chunks/{chunk_id}/dependencies"
+_RELEASE = "/api/chunks/{chunk_id}/dependencies/release"
+
+
+def _declared(hub: HubHarness, resp: Any, path: str, model: type[Any]) -> list[str]:
+    """``resp``'s mismatches against ``path``'s declared 409 ``model``."""
+    return declared_refusal_mismatches(app_spec(hub.client), resp, "post", path, 409, model)
 
 
 def _claim(hub: HubHarness, chunk_id: str) -> None:
@@ -110,8 +130,9 @@ def test_declare_refuses_a_claimed_dependent_and_writes_nothing(tmp_path: Path) 
 
     resp = _declare(hub, dependent_id, prerequisite_id)
 
-    assert resp.status_code == 409, resp.text
+    assert _declared(hub, resp, _DECLARE, DependentNotEditableView) == []
     body = resp.json()
+    assert (body["type"], body["detail"]) == (DEPENDENT_NOT_EDITABLE, "dependent chunk is not editable at this status")
     assert body["chunk_id"] == dependent_id
     assert body["status"] == "running"
     assert _rows(hub) == before == []
@@ -126,8 +147,10 @@ def test_declare_refuses_a_cycle_and_writes_nothing(tmp_path: Path) -> None:
 
     resp = _declare(hub, chunk_b, chunk_a)
 
-    assert resp.status_code == 409, resp.text
+    assert _declared(hub, resp, _DECLARE, DependencyWouldCloseCycleView) == []
     body = resp.json()
+    assert body["type"] == DEPENDENCY_WOULD_CLOSE_CYCLE
+    assert body["detail"] == "declaring this edge would close a cycle in the standing dependency graph"
     assert body["dependent_chunk_id"] == chunk_b
     assert body["prerequisite_chunk_id"] == chunk_a
     assert _rows(hub) == before
@@ -153,8 +176,9 @@ def test_release_refuses_when_no_edge_stands_and_writes_nothing(tmp_path: Path) 
 
     resp = _release(hub, dependent_id, prerequisite_id)
 
-    assert resp.status_code == 409, resp.text
+    assert _declared(hub, resp, _RELEASE, NoStandingDependencyView) == []
     body = resp.json()
+    assert (body["type"], body["detail"]) == (NO_STANDING_DEPENDENCY, "no standing dependency to release")
     assert body["dependent_chunk_id"] == dependent_id
     assert body["prerequisite_chunk_id"] == prerequisite_id
     assert _rows(hub) == before == []
@@ -205,8 +229,10 @@ def test_declare_refuses_an_ephemeral_prerequisite_and_writes_nothing(tmp_path: 
 
     resp = _declare(hub, dependent_id, prerequisite_id)
 
-    assert resp.status_code == 409, resp.text
+    assert _declared(hub, resp, _DECLARE, PrerequisiteIsEphemeralView) == []
     body = resp.json()
+    assert body["type"] == PREREQUISITE_EPHEMERAL
+    assert body["detail"] == "prerequisite chunk is ephemeral and cannot be named as a prerequisite"
     assert body["chunk_id"] == prerequisite_id
     assert _rows(hub) == before == []
 

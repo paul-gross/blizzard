@@ -87,6 +87,16 @@ DECISION_ALREADY_RESOLVED: Final = "urn:blizzard:problem:decision-already-resolv
 QUESTION_ALREADY_ANSWERED: Final = "urn:blizzard:problem:question-already-answered"
 EGRESS_BACKFILL_FAILED: Final = "urn:blizzard:problem:egress-backfill-failed"
 TRACE_REPLAY_FAILED: Final = "urn:blizzard:problem:trace-replay-failed"
+REVISION_CONFLICT: Final = "urn:blizzard:problem:revision-conflict"
+POINTER_ALREADY_HELD: Final = "urn:blizzard:problem:pointer-already-held"
+DEPENDENT_NOT_EDITABLE: Final = "urn:blizzard:problem:dependent-not-editable"
+DEPENDENCY_WOULD_CLOSE_CYCLE: Final = "urn:blizzard:problem:dependency-would-close-cycle"
+PREREQUISITE_EPHEMERAL: Final = "urn:blizzard:problem:prerequisite-ephemeral"
+NO_STANDING_DEPENDENCY: Final = "urn:blizzard:problem:no-standing-dependency"
+CONFIG_APPLY_CONFLICT: Final = "urn:blizzard:problem:config-apply-conflict"
+CONFIG_MEDIA_TYPE_UNSUPPORTED: Final = "urn:blizzard:problem:config-media-type-unsupported"
+CONFIG_DOCUMENT_INVALID: Final = "urn:blizzard:problem:config-document-invalid"
+GRAPH_DEFINITION_INVALID: Final = "urn:blizzard:problem:graph-definition-invalid"
 
 PROBLEM_TYPES: frozenset[str] = frozenset(
     {
@@ -159,6 +169,16 @@ PROBLEM_TYPES: frozenset[str] = frozenset(
         QUESTION_ALREADY_ANSWERED,
         EGRESS_BACKFILL_FAILED,
         TRACE_REPLAY_FAILED,
+        REVISION_CONFLICT,
+        POINTER_ALREADY_HELD,
+        DEPENDENT_NOT_EDITABLE,
+        DEPENDENCY_WOULD_CLOSE_CYCLE,
+        PREREQUISITE_EPHEMERAL,
+        NO_STANDING_DEPENDENCY,
+        CONFIG_APPLY_CONFLICT,
+        CONFIG_MEDIA_TYPE_UNSUPPORTED,
+        CONFIG_DOCUMENT_INVALID,
+        GRAPH_DEFINITION_INVALID,
     }
 )
 
