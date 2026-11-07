@@ -233,6 +233,23 @@ class GardenProposalStore:
                 return None
             return self._of(row, self._findings(conn, proposal_id))
 
+    def get_many(self, proposal_ids: Sequence[str]) -> dict[str, GardenProposal]:
+        """`get`'s batched sibling (`bzh:bulk-reconstitution`) — one row read per
+        `id_batches` batch, findings through `_findings_for` (the same `finding_id`
+        order `get` gives)."""
+        if not proposal_ids:
+            return {}
+        with self._store.read("get_many") as conn:
+            rows: list[Row[Any]] = []
+            for batch in id_batches(proposal_ids):
+                rows.extend(
+                    conn.execute(
+                        self._store.select(garden_proposals).where(garden_proposals.c.proposal_id.in_(batch))
+                    ).all()
+                )
+            findings = self._findings_for(conn, [row.proposal_id for row in rows])
+            return {row.proposal_id: self._of(row, findings[row.proposal_id]) for row in rows}
+
     def list_all(self) -> list[GardenProposal]:
         """Newest first — `proposal_id` (a chronologically sortable ULID) breaks the tie a
         one-instant batch delivery leaves in `created_at` alone."""

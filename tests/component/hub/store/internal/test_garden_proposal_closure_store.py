@@ -25,7 +25,10 @@ from blizzard.hub.domain.work_items.ports import IWriteWorkItemRepository
 from blizzard.hub.graphs import PACKAGED
 from blizzard.hub.store import schema as s
 from blizzard.hub.store.internal.finding_store import FindingStore
-from blizzard.hub.store.internal.garden_proposal_closure_store import GardenProposalClosureStore
+from blizzard.hub.store.internal.garden_proposal_closure_store import (
+    GardenProposalClosureStore,
+    insert_garden_proposal_closure_row,
+)
 from blizzard.hub.store.internal.garden_proposal_store import GardenProposalStore
 from blizzard.hub.store.internal.work_item_store import WorkItemStore
 from tests.support.scaffolding import (
@@ -155,6 +158,73 @@ def test_get_many_query_cost_scales_linearly_with_batch_count(tmp_path: Path, mo
     assert per_batch_cost > 0
     assert two_batch_count == one_batch_count + per_batch_cost
     assert three_batch_count == one_batch_count + 2 * per_batch_cost  # the trailing size-1 batch costs the same
+
+
+def _mint(hub: HubHarness, proposal_id: str, pointer: WorkRef) -> None:
+    with hub_store_connections(hub.engine).write("seed_mint") as conn:
+        insert_garden_proposal_closure_row(
+            conn,
+            proposal_id=proposal_id,
+            closure=GardenProposalClosureKind.ACCEPTED,
+            reason=None,
+            closed_by="u1",
+            at=_NOW,
+            item_outcome=GardenProposalItemOutcome.MINTED,
+            pointer=pointer,
+        )
+
+
+def test_find_by_items_round_trips_minted_pointers_and_drops_unminted_ones(tmp_path: Path) -> None:
+    hub = build_hub(tmp_path)
+    _seed_proposals(hub, ["gprop_1", "gprop_2", "gprop_3", "gprop_4"])
+    closures = GardenProposalClosureStore(hub_store_connections(hub.engine))
+    _mint(hub, "gprop_1", WorkRef(source="hub", ref="1"))
+    _mint(hub, "gprop_2", WorkRef(source="other", ref="1"))
+    closures.record_pass("gprop_3", reason="r", closed_by="u1", at=_NOW)
+    closures.record_accept_decline("gprop_4", reason=None, closed_by="u1", at=_NOW)
+
+    result = closures.find_by_items(
+        [WorkRef(source="hub", ref="1"), WorkRef(source="other", ref="1"), WorkRef(source="hub", ref="nope")]
+    )
+
+    assert set(result) == {WorkRef(source="hub", ref="1"), WorkRef(source="other", ref="1")}
+    assert result[WorkRef(source="hub", ref="1")].proposal_id == "gprop_1"
+    assert result[WorkRef(source="other", ref="1")].proposal_id == "gprop_2"
+    assert result[WorkRef(source="hub", ref="1")] == closures.find_by_item("hub", "1")
+
+
+def test_find_by_items_keeps_the_same_ref_under_another_source_distinct(tmp_path: Path) -> None:
+    hub = build_hub(tmp_path)
+    _seed_proposals(hub, ["gprop_1"])
+    _mint(hub, "gprop_1", WorkRef(source="hub", ref="7"))
+    closures = GardenProposalClosureStore(hub_store_connections(hub.engine))
+
+    assert closures.find_by_items([WorkRef(source="elsewhere", ref="7")]) == {}
+
+
+def test_find_by_items_of_no_pointers_is_empty(tmp_path: Path) -> None:
+    hub = build_hub(tmp_path)
+    assert GardenProposalClosureStore(hub_store_connections(hub.engine)).find_by_items([]) == {}
+
+
+def test_find_by_items_query_cost_scales_with_batch_count(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(batching_module, "BATCH_SIZE", 3)
+    hub = build_hub(tmp_path)
+    proposal_ids = [f"gprop_{i}" for i in range(7)]
+    _seed_proposals(hub, proposal_ids)
+    pointers = [WorkRef(source="hub", ref=str(i)) for i in range(7)]
+    for proposal_id, pointer in zip(proposal_ids, pointers, strict=True):
+        _mint(hub, proposal_id, pointer)
+    closures = GardenProposalClosureStore(hub_store_connections(hub.engine))
+
+    one = count_queries(hub.engine, lambda: closures.find_by_items(pointers[:3]))
+    two = count_queries(hub.engine, lambda: closures.find_by_items(pointers[:6]))
+    three = count_queries(hub.engine, lambda: closures.find_by_items(pointers))
+
+    per_batch = two - one
+    assert per_batch > 0
+    assert three == one + 2 * per_batch
+    assert len(closures.find_by_items(pointers)) == 7
 
 
 def test_record_pass_then_get_round_trips(tmp_path: Path) -> None:

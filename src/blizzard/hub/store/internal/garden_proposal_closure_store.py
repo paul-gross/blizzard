@@ -3,6 +3,7 @@ All ``sqlalchemy`` usage confined here (``bzh:dependency-inversion``)."""
 
 from __future__ import annotations
 
+from collections import defaultdict
 from collections.abc import Sequence
 from datetime import datetime
 from typing import Any
@@ -105,6 +106,27 @@ class GardenProposalClosureStore:
                 )
             ).one_or_none()
         return self._of(row) if row is not None else None
+
+    def find_by_items(self, pointers: Sequence[WorkRef]) -> dict[WorkRef, GardenProposalClosure]:
+        """`find_by_item`'s batched sibling — pointers are grouped by ``source`` and each
+        source's refs batched through a single-column ``ref IN``, filtered on
+        `ix_garden_proposal_closures_tenant_source_ref` (``bzh:sql-portable``)."""
+        if not pointers:
+            return {}
+        refs_by_source: dict[str, list[str]] = defaultdict(list)
+        for pointer in pointers:
+            refs_by_source[pointer.source].append(pointer.ref)
+        result: dict[WorkRef, GardenProposalClosure] = {}
+        with self._store.read("find_by_items") as conn:
+            for source, refs in refs_by_source.items():
+                for batch in id_batches(refs):
+                    rows = conn.execute(
+                        self._store.select(garden_proposal_closures).where(
+                            garden_proposal_closures.c.source == source, garden_proposal_closures.c.ref.in_(batch)
+                        )
+                    ).all()
+                    result.update({WorkRef(source=row.source, ref=row.ref): self._of(row) for row in rows})
+        return result
 
     def record_pass(self, proposal_id: str, *, reason: str, closed_by: str, at: datetime) -> bool:
         try:

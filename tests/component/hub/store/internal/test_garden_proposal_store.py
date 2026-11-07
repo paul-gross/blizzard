@@ -15,6 +15,7 @@ from blizzard.foundation.garden_proposals import (
     GardenProposalItemOutcome,
     GardenProposalOrigin,
 )
+from blizzard.foundation.store import batching as batching_module
 from blizzard.foundation.store.engine import create_engine_from_url
 from blizzard.hub.domain.chunk.model import WorkRef
 from blizzard.hub.domain.garden.proposals.model import (
@@ -750,3 +751,47 @@ def test_routine_page_cost_is_flat_in_closed_proposal_count(tmp_path: Path) -> N
 
         measured.append((count_queries(engine, read), count_rows_read(engine, read)))
     assert measured[0] == measured[1]
+
+
+def test_get_many_equals_get_per_id_and_drops_unknown_ids(tmp_path: Path) -> None:
+    store, engine = _store_and_engine(tmp_path)
+    project = default_project(engine)
+    for proposal_id, findings in (("gprop_1", ["fin_2", "fin_1"]), ("gprop_2", []), ("gprop_3", ["fin_1"])):
+        store.create(
+            proposal_id,
+            project_id=project,
+            origin=GardenProposalOrigin.ROUTINE_RUN,
+            routine_name="nightly",
+            class_="c",
+            title=proposal_id,
+            body="b",
+            findings=findings,
+            at=_NOW,
+        )
+
+    result = store.get_many(["gprop_1", "gprop_2", "gprop_ghost", "gprop_3"])
+
+    assert set(result) == {"gprop_1", "gprop_2", "gprop_3"}
+    for proposal_id, proposal in result.items():
+        assert proposal == store.get(proposal_id)
+    assert result["gprop_1"].findings == ["fin_1", "fin_2"]
+    assert result["gprop_2"].findings == []
+
+
+def test_get_many_of_no_ids_is_empty(tmp_path: Path) -> None:
+    assert _store(tmp_path).get_many([]) == {}
+
+
+def test_get_many_query_cost_scales_with_batch_count(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(batching_module, "BATCH_SIZE", 3)
+    store, engine = _sized_store(tmp_path, 7)
+    ids = [f"gprop_extra_{i}" for i in range(7)]
+
+    one = count_queries(engine, lambda: store.get_many(ids[:3]))
+    two = count_queries(engine, lambda: store.get_many(ids[:6]))
+    three = count_queries(engine, lambda: store.get_many(ids))
+
+    per_batch = two - one
+    assert per_batch > 0
+    assert three == one + 2 * per_batch
+    assert set(store.get_many(ids)) == set(ids)

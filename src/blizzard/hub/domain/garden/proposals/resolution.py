@@ -119,7 +119,7 @@ class GardenProposalDeliveryResolution:
 
 
 class AnsweredFindingsReader:
-    """Reads the findings the accepted, minted garden proposals behind `chunk`'s work items answer — the
+    """Reads the findings the garden proposals behind `chunk`'s work items answer — the
     worker-facing read a leased chunk can reach its own findings through, sibling to
     :class:`GardenProposalDeliveryResolution`'s write-side walk but read-only and keyed
     off the chunk itself rather than a delivered pointer. Named apart from the module's
@@ -137,18 +137,19 @@ class AnsweredFindingsReader:
         self._findings = findings
 
     def resolve_for_chunk(self, chunk: Chunk) -> list[Finding] | None:
-        """The findings the proposals behind `chunk`'s work items answer — the union over
-        every item, each proposal's findings in its own order, an item first in the chunk
-        ahead of one folded in later, a finding cited twice listed once. `None` when no
-        item resolves: the chunk carries no work ref, or none of its items names a
-        minted accepted closure whose proposal still resolves."""
+        """The findings the proposals behind `chunk`'s work items answer — what a chunk
+        answers is owned by `blizzard-context:/domain/findings-and-proposals.md` §Closing a
+        proposal: pass or accept. Listed in chunk order (an item first in the chunk ahead of
+        one folded in later), each proposal's findings in its own order. `None` when no item
+        resolves (see the domain); one closure read and one proposal read serve the whole chunk."""
+        closures = self._closures.find_by_items(chunk.work_refs)
+        minted = {pointer: c for pointer in chunk.work_refs if (c := closures.get(pointer)) and c.mints_delivery}
+        proposals = self._proposals.get_many([c.proposal_id for c in minted.values()])
         ids: list[str] = []
         answered = False
         for pointer in chunk.work_refs:
-            closure = self._closures.find_by_item(pointer.source, pointer.ref)
-            if closure is None or not closure.mints_delivery:
-                continue
-            proposal = self._proposals.get(closure.proposal_id)
+            closure = minted.get(pointer)
+            proposal = proposals.get(closure.proposal_id) if closure is not None else None
             if proposal is None:
                 continue
             answered = True
