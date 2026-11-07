@@ -32,6 +32,7 @@ from blizzard.runner.hub.outbound_buffer import (
     transcript_truncated_event,
 )
 from blizzard.runner.leases.asks import OpenAsk
+from blizzard.runner.leases.lease_lock import ILeaseUnit
 from blizzard.runner.leases.model import Lease
 from tests.support.factory_fields import LeaseFields
 from tests.support.runner_fakes import make_envelope
@@ -219,12 +220,22 @@ class _RecordingOutbound:
     rows: list[dict[str, object]] = field(default_factory=list[dict[str, object]])
 
     def enqueue_outbound(
-        self, *, kind: str, chunk_id: str | None, lease_id: str | None, payload: str, created_at: datetime
+        self,
+        *,
+        kind: str,
+        chunk_id: str | None,
+        lease_id: str | None,
+        payload: str,
+        created_at: datetime,
+        unit: object = None,
     ) -> int:
         self.rows.append(
             {"kind": kind, "chunk_id": chunk_id, "lease_id": lease_id, "payload": payload, "created_at": created_at}
         )
         return len(self.rows)
+
+    def submission_buffered(self, lease_id: str, *, unit: ILeaseUnit | None = None) -> bool:
+        return False
 
     def pending_submission_lease_ids(self) -> set[str]:
         raise NotImplementedError

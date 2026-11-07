@@ -12,6 +12,7 @@ from datetime import datetime
 from typing import Protocol
 
 from blizzard.foundation.roles import domain_model
+from blizzard.runner.leases.lease_lock import ILeaseUnit
 from blizzard.runner.leases.worker_lease import WorkerLease, WorkerVerb
 
 __all__ = [
@@ -94,17 +95,19 @@ class GitCommitDeclaration:
     commit: str
 
     def declared_by(
-        self, worker: WorkerLease, *, known_repos: Sequence[str], outcome_pending: bool, at: datetime
+        self, worker: WorkerLease, *, known_repos: Sequence[str], settled: bool, at: datetime
     ) -> GitCommitDeclarationRecord:
         """The row ``worker``'s lease appends for this declaration at ``at``.
 
         Refuses a repo the environment does not list, a lease whose standing does not accept a git-commit,
-        and a declaration once the lease's outcome is buffered (it would never be submitted)."""
+        and a declaration once the lease's outcome is buffered, acked or not (it would never be submitted).
+        ``settled`` is that fact. The takeover's closed reference lease is never refused by it: its pointer rides no
+        completion, and is recorded as such."""
         require_listed_repo(self.environment_id, self.repo, known_repos)
         lease = worker.lease
         if not worker.accepts(WorkerVerb.GIT_COMMIT):
             raise GitCommitDeclarationOnClosedLease(lease.lease_id)
-        if outcome_pending:
+        if settled and worker.active:
             raise GitCommitDeclarationTooLate(lease.lease_id)
         return GitCommitDeclarationRecord(
             lease_id=lease.lease_id,
@@ -136,12 +139,15 @@ class DeclaredLeaseCommit:
 class IReadGitCommitDeclarationRepository(Protocol):
     """Read-only git-commit declaration queries."""
 
-    def git_commit_declarations_for_lease(self, lease_id: str) -> dict[tuple[str, str], GitCommitDeclaration]:
+    def git_commit_declarations_for_lease(
+        self, lease_id: str, *, unit: ILeaseUnit | None = None
+    ) -> dict[tuple[str, str], GitCommitDeclaration]:
         """The lease's explicit git-commit declarations, newest per ``(environment_id,
         repo)``, keyed the same way.
 
         Append-only, latest-wins. Keying on the environment as well as the repo keeps
-        several environments from collapsing one env's branch onto another's."""
+        several environments from collapsing one env's branch onto another's. Given a ``unit``, read on its
+        transaction."""
         ...
 
     def git_commit_declarations_for_leases(self, lease_ids: Sequence[str]) -> dict[str, list[DeclaredLeaseCommit]]:

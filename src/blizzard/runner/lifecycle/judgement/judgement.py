@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Protocol
 
@@ -18,7 +19,9 @@ from blizzard.runner.harness.registry import UnavailableHarnessError, UnknownHar
 from blizzard.runner.harness.spawn_cwd import SpawnCwd
 from blizzard.runner.hub.client import HubClientError
 from blizzard.runner.hub.outbound import OutboundFacts
+from blizzard.runner.hub.outbound_buffer import COMPLETION_KIND, DECISION_KIND
 from blizzard.runner.leases.elicitation import PendingElicitation
+from blizzard.runner.leases.lease_lock import ILeaseUnit
 from blizzard.runner.leases.model import Lease
 from blizzard.runner.lifecycle.attempt import Attempt
 from blizzard.runner.lifecycle.dormant import DormantContext, DormantSession
@@ -180,15 +183,16 @@ class Judgement:
         gated = lease.node_name in self.ctx.config.gates
         route = route_exit(entry, gated=gated)
         artifacts: list[CompletionArtifact] = []
+        commits = DeclaredCommits(self.ctx, lease, self.bindings)
         if route is not ExitRoute.ELICIT:
             # Confirmed ahead of the gate and the brake alike: a buffered decision and the
             # produces reconcile both read them.
-            artifacts = DeclaredCommits(self.ctx, lease, self.bindings).verify()
+            artifacts = commits.verify()
         if route is ExitRoute.BUFFER_DECISION:
             # This operator gates this node by name, so the outcome is a human's: buffer a
             # Decision instead of eliciting a verdict. Not a spawn, so it is ungated. The node's
             # checks run first, against the tree the worker left, so the human decides with them.
-            self._buffer_decision(artifacts, self.checks())
+            self._buffer_decision(commits, self.checks())
             return
         if Spawner(self.ctx).suppressed(
             start=StartKind.CONTINUATION, via="advance", chunk_id=lease.chunk_id, lease_id=lease.lease_id
@@ -547,32 +551,70 @@ class Judgement:
         # Harvest asset artifacts for any `produces` name no git commit covers, read from the
         # durable store so a restart between attach and completion still sees it.
         produces = ProducesReconciler(self.envelope)
-        artifacts = DeclaredCommits(self.ctx, lease, self.bindings).verify()
         assessment = harness.parse_assessment(output)
-        attachments = self.ctx.stores.attachments.attachments_for_lease(lease.lease_id)
-        artifacts += produces.collect_assets(artifacts, assessment, attachments)
-        self.buffer_completion(selected.name, checks, artifacts)
 
-    def _buffer_decision(self, artifacts: list[CompletionArtifact], checks: list[ExecutedCheck]) -> None:
+        def completion(unit: ILeaseUnit, pointers: list[CompletionArtifact]) -> tuple[str, int]:
+            attachments = self.ctx.stores.attachments.attachments_for_lease(lease.lease_id, unit=unit)
+            artifacts = pointers + produces.collect_assets(pointers, assessment, attachments)
+            return COMPLETION_KIND, self._completion_facts(selected.name, checks, artifacts, unit)
+
+        self._capture(DeclaredCommits(self.ctx, lease, self.bindings), completion)
+        self._buffered(selected.name)
+
+    def _capture(
+        self, commits: DeclaredCommits, enqueue: Callable[[ILeaseUnit, list[CompletionArtifact]], tuple[str, int]]
+    ) -> None:
+        """Harvest the lease's declarations and buffer the outcome as one lease-locked unit, so nothing admitted
+        in between is left out and nothing is admitted after. The network confirmation of a commit pointer runs
+        outside the lock; under it, a declaration admitted since is confirmed and the unit retried. Each retry is
+        forced by a newly admitted declaration, so the loop ends when declaring does."""
+        lease = self.lease
+        commits.verify()
+        while True:
+            with self.ctx.stores.lease_lock.locked(lease.lease_id) as unit:
+                if commits.current_under(unit):
+                    submitted = enqueue(unit, commits.pointers())
+                    break
+            commits.verify()
+        # Announced once the unit has committed, as every other fact is.
+        OutboundFacts(self.ctx).published(submitted[1], submitted[0], lease.chunk_id, lease.lease_id)
+
+    def _buffer_decision(self, commits: DeclaredCommits, checks: list[ExecutedCheck]) -> None:
         """Buffer a runner-config gate decision — the gated node-step's outcome.
 
         The choice set is not the runner's, so the submission carries only the step's artifacts,
         the checks it ran, and its fence; ADVANCE skips this lease until the flush closes it."""
         lease = self.lease
-        submission = GateSubmission(
-            from_node_id=lease.node_id,
-            epoch=lease.epoch,
-            check_results=[CheckVerdict(command=c.command, passed=c.passed) for c in checks],
-            artifacts=artifacts,
-            route_token=self.ctx.stores.tokens.route_token(lease.chunk_id),
-            lease_id=lease.lease_id,
-        )
-        OutboundFacts(self.ctx).decision(lease, submission, at=self.ctx.clock.now())
+
+        def decision(unit: ILeaseUnit, pointers: list[CompletionArtifact]) -> tuple[str, int]:
+            submission = GateSubmission(
+                from_node_id=lease.node_id,
+                epoch=lease.epoch,
+                check_results=[CheckVerdict(command=c.command, passed=c.passed) for c in checks],
+                artifacts=pointers,
+                route_token=self.ctx.stores.tokens.route_token(lease.chunk_id),
+                lease_id=lease.lease_id,
+            )
+            return DECISION_KIND, OutboundFacts(self.ctx).decision(
+                lease, submission, at=self.ctx.clock.now(), unit=unit
+            )
+
+        self._capture(commits, decision)
         _log.info("runner-config gate: decision buffered", chunk_id=lease.chunk_id, node=lease.node_name)
 
     def buffer_completion(self, choice: str, checks: list[ExecutedCheck], artifacts: list[CompletionArtifact]) -> None:
         """One atomic, epoch-fenced write. The entry names the lease, so ADVANCE skips it
         until the flush closes it."""
+        self._completion_facts(choice, checks, artifacts, None)
+        self._buffered(choice)
+
+    def _completion_facts(
+        self,
+        choice: str,
+        checks: list[ExecutedCheck],
+        artifacts: list[CompletionArtifact],
+        unit: ILeaseUnit | None,
+    ) -> int:
         lease = self.lease
         submission = Completion(
             choice=choice,
@@ -584,7 +626,10 @@ class Judgement:
             route_token=self.ctx.stores.tokens.route_token(lease.chunk_id),
             lease_id=lease.lease_id,
         )
-        OutboundFacts(self.ctx).completion(lease, submission, at=self.ctx.clock.now())
+        return OutboundFacts(self.ctx).completion(lease, submission, at=self.ctx.clock.now(), unit=unit)
+
+    def _buffered(self, choice: str) -> None:
+        lease = self.lease
         _CP_AFTER_BUFFER.reached()
         _log.info("completion buffered", chunk_id=lease.chunk_id, lease_id=lease.lease_id, choice=choice)
 

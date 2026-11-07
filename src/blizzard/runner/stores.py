@@ -38,6 +38,7 @@ from blizzard.runner.leases.asks import IReadAskRepository, IWriteAskRepository
 from blizzard.runner.leases.elicitation import IReadElicitationRepository, IWriteElicitationRepository
 from blizzard.runner.leases.escalations import IReadEscalationRepository, IWriteEscalationRepository
 from blizzard.runner.leases.git_commit_declaration import IReadGitCommitDeclarationRepository
+from blizzard.runner.leases.lease_lock import IWriteLeaseLock
 from blizzard.runner.leases.liveness import IReadLeaseLivenessRepository, IWriteLeaseLivenessRepository
 from blizzard.runner.leases.operator_requests import (
     IReadAttachmentRepository,
@@ -147,6 +148,7 @@ class IWriteRunnerStore(
     IWriteUsageRepository,
     IWriteAttachmentRepository,
     IWriteGitCommitDeclarationRepository,
+    IWriteLeaseLock,
     IWriteCheckRepository,
     IWriteElicitationRepository,
     IWriteInvocationBoundaryRepository,
@@ -182,6 +184,8 @@ class RunnerStores:
     usage: IWriteUsageRepository
     attachments: IWriteAttachmentRepository
     git_commit_declarations: IWriteGitCommitDeclarationRepository
+    #: The lease-row lock a declaration's admission and an outcome's capture each run as one unit under.
+    lease_lock: IWriteLeaseLock
     checks: IWriteCheckRepository
     elicitations: IWriteElicitationRepository
     invocation_boundaries: IWriteInvocationBoundaryRepository

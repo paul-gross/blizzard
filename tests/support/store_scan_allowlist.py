@@ -38,6 +38,7 @@ from blizzard.hub.domain.observability.forge_status import IReadAnnotatedSources
 from blizzard.hub.domain.observability.hub_events import IReadHubEventLog
 from blizzard.hub.domain.observability.tracing.repository import IReadTraceStatus, IReadTraceSteps
 from blizzard.hub.domain.tenancy.administration import IReadTenantDirectory
+from blizzard.runner.hub.outbound_buffer import IReadOutboundRepository
 from blizzard.runner.tracing.repository import IReadLeaseTraceCursor
 from blizzard.runner.transcripts.ledger import IReadTranscriptLedgerRepository
 
@@ -255,6 +256,15 @@ RUNNER_ALLOWED_SCANS: list[Allowance] = [
         "stamped_at/segment_id ix_transcript_segments_chunk_id_stamped_at_segment_id "
         "every OTHER transcript_segments read hits — a one-time sweep (blizzard#250), "
         "bounded by one environment's own session history.",
+    ),
+    MethodScopedAllowance(
+        IReadOutboundRepository,
+        "submission_buffered",
+        "outbound_buffer",
+        200,
+        "the declaration admission's one probe for a lease's submission row — `ix_outbound_buffer_acked_at_seq` keys on "
+        "acked_at, which an acked-or-not probe by lease cannot use; it runs once per worker declaration against the "
+        "runner's own seven-day buffer, which the drain keeps small.",
     ),  # --- named-index walks by design ----------------------------------------------------
     IndexWalkAllowance(IReadLeaseTraceCursor, "newest_export_cursor", ("trace_cursor",), _NEWEST_ROW_REASON),
     IndexWalkAllowance(IReadLeaseTraceCursor, "newest_trace_cursor", ("trace_cursor",), _NEWEST_ROW_REASON),

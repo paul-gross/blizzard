@@ -8,7 +8,9 @@ import sqlalchemy as sa
 from sqlalchemy import func
 
 from blizzard.foundation.logging import get_logger
+from blizzard.runner.leases.lease_lock import ILeaseUnit
 from blizzard.runner.leases.operator_requests import IWriteAttachmentRepository
+from blizzard.runner.store.internal.base import unit_conn
 from blizzard.runner.store.schema import attachments
 from blizzard.runner.store.scoped import RunnerStoreConnections
 
@@ -21,7 +23,7 @@ class AttachmentStore:
     def __init__(self, store: RunnerStoreConnections) -> None:
         self._store = store
 
-    def attachments_for_lease(self, lease_id: str) -> dict[str, str]:
+    def attachments_for_lease(self, lease_id: str, *, unit: ILeaseUnit | None = None) -> dict[str, str]:
         st = self._store
         newest = (
             st.select(attachments, attachments.c.name, func.max(attachments.c.id).label("id"))
@@ -32,7 +34,8 @@ class AttachmentStore:
         stmt = st.select(
             sa.join(attachments, newest, attachments.c.id == newest.c.id), attachments.c.name, attachments.c.content
         )
-        return {str(r.name): str(r.content) for r in self._store.all(stmt)}
+        rows = self._store.all(stmt) if unit is None else unit_conn(unit).execute(stmt).all()
+        return {str(r.name): str(r.content) for r in rows}
 
     def attachment_names_for_lease(self, lease_id: str) -> set[str]:
         # The names-only equivalent of `attachments_for_lease` above — no `max(id)`/join
@@ -50,21 +53,24 @@ class AttachmentStore:
         name: str,
         content: str,
         attached_at: datetime,
+        unit: ILeaseUnit | None = None,
     ) -> None:
-        # A single committed transaction — durable the instant this returns, so it
-        # survives a `kill -9` right after.
-        with self._store.begin() as conn:
-            conn.execute(
-                self._store.insert(attachments).values(
-                    lease_id=lease_id,
-                    chunk_id=chunk_id,
-                    node_id=node_id,
-                    epoch=epoch,
-                    name=name,
-                    content=content,
-                    attached_at=attached_at,
-                )
-            )
+        # Alone, a single committed transaction — durable the instant this returns, so it survives a `kill -9`
+        # right after. In a unit, it commits with the unit.
+        stmt = self._store.insert(attachments).values(
+            lease_id=lease_id,
+            chunk_id=chunk_id,
+            node_id=node_id,
+            epoch=epoch,
+            name=name,
+            content=content,
+            attached_at=attached_at,
+        )
+        if unit is None:
+            with self._store.begin() as conn:
+                conn.execute(stmt)
+        else:
+            unit_conn(unit).execute(stmt)
         _log.info("attachment recorded", lease_id=lease_id, name=name)
 
 

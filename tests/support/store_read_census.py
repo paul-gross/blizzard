@@ -897,6 +897,7 @@ RUNNER_CENSUS: dict[tuple[type, str], RunnerRecipe] = {
     (IReadWorkspacePromptRepository, "workspace_prompt_override"): lambda w: (
         w.host_read.workspace_prompt.workspace_prompt_override(w.workspace_id)
     ),
+    (IReadOutboundRepository, "submission_buffered"): lambda w: w.read.outbound.submission_buffered(w.lease_2),
     (IReadOutboundRepository, "pending_submission_lease_ids"): lambda w: w.read.outbound.pending_submission_lease_ids(),
     (IReadOutboundRepository, "pending_outbound"): lambda w: w.read.outbound.pending_outbound(),
     (IReadOutboundRepository, "pending_outbound_count"): lambda w: w.read.outbound.pending_outbound_count(),
