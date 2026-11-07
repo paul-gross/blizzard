@@ -20,6 +20,7 @@ from blizzard.runner.environments.workspaces import WorkspaceRegistry
 from blizzard.runner.harness.adapter import WorkerHandle
 from blizzard.runner.hub.outbound_buffer import COMPLETION_KIND
 from blizzard.runner.leases.git_commit_declaration import GitCommitDeclarationTooLate
+from blizzard.runner.leases.lease_lock import ILeaseUnit
 from blizzard.runner.leases.model import Lease, NewLease
 from blizzard.runner.leases.worker_lease import WorkerLease
 from blizzard.runner.lifecycle.judgement.git_commit_declaration import GitCommitDeclarationService
@@ -65,8 +66,8 @@ class _World:
     def buffer(self) -> None:
         """Capture the outcome the way a judgement does — a completion carrying the pointers and the attachments."""
 
-        def enqueue(unit: object, pointers: list[CompletionArtifact]) -> tuple[str, int]:
-            attachments = self.store.attachments_for_lease(_LEASE, unit=unit)  # type: ignore[arg-type]
+        def enqueue(unit: ILeaseUnit, pointers: list[CompletionArtifact]) -> tuple[str, int]:
+            attachments = self.store.attachments_for_lease(_LEASE, unit=unit)
             body = {"pointers": [p.commit_hash for p in pointers], "attachments": attachments}
             seq = self.store.enqueue_outbound(
                 kind=COMPLETION_KIND,
@@ -74,7 +75,7 @@ class _World:
                 lease_id=_LEASE,
                 payload=json.dumps(body),
                 created_at=_NOW,
-                unit=unit,  # type: ignore[arg-type]
+                unit=unit,
             )
             return COMPLETION_KIND, seq
 
@@ -115,7 +116,7 @@ def _world(tmp_path: Path, commits_cls: type[DeclaredCommits] = DeclaredCommits)
     assert lease is not None
     bindings = store.bindings_for_chunk("ch_1")
     envelope = make_envelope("ch_1", "build", node_id="nd_build", choices=[("pass", "ok")])
-    workspaces: WorkspaceRegistry = single_workspace(provider, workspace_id="ws1")  # type: ignore[assignment]
+    workspaces: WorkspaceRegistry = single_workspace(provider, workspace_id="ws1")
     clock = FixedClock(_NOW)
     return _World(
         store=store,
