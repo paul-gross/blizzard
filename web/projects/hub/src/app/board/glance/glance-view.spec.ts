@@ -72,7 +72,7 @@ describe('GlanceView', () => {
     await fixture.whenStable();
     const el = fixture.nativeElement as HTMLElement;
 
-    const vital = (id: string) => text(el.querySelector(`[data-testid="${id}"] .v-n`));
+    const vital = (id: string) => text(el.querySelector(`[data-testid="${id}"] .cell-count`));
     expect([vital('vital-needs-you'), vital('vital-running'), vital('vital-ready'), vital('vital-done-today'), vital('vital-runners-up')]).toEqual([
       '2',
       '3',
@@ -80,7 +80,7 @@ describe('GlanceView', () => {
       '5',
       '1/2',
     ]);
-    expect(text(el.querySelector('[data-testid="vital-done-today"] .v-cap'))).toBe('done (48h)');
+    expect(text(el.querySelector('[data-testid="vital-done-today"] .cell-caption'))).toBe('done (48h)');
   });
 
   it('shows the list\'s loading, error, and empty states in place of the list', async () => {

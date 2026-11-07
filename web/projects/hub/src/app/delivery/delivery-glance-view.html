@@ -41,18 +41,7 @@
     emptyTestid="delivery-empty"
   >
     <fleet-kit-skeleton loading variant="card" [rows]="6" />
-    <div class="vitals" data-testid="delivery-filter">
-      <!-- eslint-disable-next-line no-restricted-syntax -- A filter tile is its own toggle, as the board glance's vitals are: the kit button's chrome would break the strip of counts. -->
-      <button type="button" class="vital" data-testid="delivery-filter-delivering" [class.on]="filter() === 'delivering'" [attr.aria-pressed]="filter() === 'delivering'" (click)="toggle('delivering')">
-        <span class="v-n">{{ l.delivering.length }}</span>
-        <span class="v-cap">delivering</span>
-      </button>
-      <!-- eslint-disable-next-line no-restricted-syntax -- A filter tile is its own toggle, as the board glance's vitals are: the kit button's chrome would break the strip of counts. -->
-      <button type="button" class="vital" data-testid="delivery-filter-recent" [class.on]="filter() === 'recent'" [attr.aria-pressed]="filter() === 'recent'" (click)="toggle('recent')">
-        <span class="v-n">{{ recent().length }}</span>
-        <span class="v-cap">delivered 48h</span>
-      </button>
-    </div>
+    <fleet-kit-count-strip testid="delivery-filter" [cells]="filterCells()" [selected]="filter()" (cellClick)="toggle($event)" />
     <ul class="cards">
       @if (filter() !== 'recent') {
         @for (row of l.delivering; track row.chunk.chunkId) {

@@ -43,8 +43,8 @@ describe('DeliveryGlanceView', () => {
     const { el } = await render('ready');
 
     expect(cards(el)).toEqual(['ch_pr', 'ch_bounced', 'ch_new']);
-    expect(el.querySelector('[data-testid="delivery-filter-delivering"] .v-n')?.textContent).toBe('2');
-    expect(el.querySelector('[data-testid="delivery-filter-recent"] .v-n')?.textContent).toBe('1');
+    expect(el.querySelector('[data-testid="delivery-filter-delivering"] .cell-count')?.textContent).toBe('2');
+    expect(el.querySelector('[data-testid="delivery-filter-recent"] .cell-count')?.textContent).toBe('1');
     expect(el.querySelector('[data-chunk="ch_bounced"] .stage')?.textContent?.trim()).toBe('conflict');
   });
 

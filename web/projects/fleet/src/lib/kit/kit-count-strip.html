@@ -1,0 +1,22 @@
+<div class="strip" [style.grid-template-columns]="columns()" [attr.data-testid]="testid()">
+  @for (cell of cells(); track cell.key) {
+    @if (cell.selectable) {
+      <button
+        type="button"
+        class="cell"
+        [class.on]="selected() === cell.key"
+        [attr.aria-pressed]="selected() === cell.key"
+        [attr.data-testid]="cell.testid"
+        (click)="cellClick.emit(cell.key)"
+      >
+        <span class="cell-count" [style.color]="cell.countColor ?? null">{{ cell.count }}</span>
+        <span class="cell-caption">{{ cell.caption }}</span>
+      </button>
+    } @else {
+      <div class="cell" [attr.data-testid]="cell.testid">
+        <span class="cell-count" [style.color]="cell.countColor ?? null">{{ cell.count }}</span>
+        <span class="cell-caption">{{ cell.caption }}</span>
+      </div>
+    }
+  }
+</div>
