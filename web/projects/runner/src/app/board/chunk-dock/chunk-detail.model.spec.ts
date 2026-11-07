@@ -1,7 +1,17 @@
 import { compactRef, runnerClient, type runnerApi } from 'fleet';
 
 import type { PanelLease } from '../../core/panel-reads.model';
-import { heartbeatLabel, leaseRefLabel, liveWorker, runnerTarget } from './chunk-detail.model';
+import {
+  heartbeatLabel,
+  leaseRefLabel,
+  liveWorker,
+  type RequeueFeedback,
+  requeueErrorOf,
+  requeueFeedbackFor,
+  requeueKey,
+  runnerTarget,
+  withRequeueFeedback,
+} from './chunk-detail.model';
 
 const NOW = Date.parse('2026-07-16T12:00:00.000Z');
 
@@ -90,5 +100,54 @@ describe('heartbeatLabel', () => {
   it('renders an em dash before the first beat or past the skew bound', () => {
     expect(heartbeatLabel(lease({ last_heartbeat_at: null }), NOW)).toBe('—');
     expect(heartbeatLabel(lease({ last_heartbeat_at: '2026-07-16T13:00:00.000Z' }), NOW)).toBe('—');
+  });
+});
+
+describe('requeueFeedbackFor', () => {
+  const REQUEUED: RequeueFeedback = { kind: 'requeued' };
+  const FAILED: RequeueFeedback = { kind: 'error', message: 'refused' };
+  const feedback = new Map<string, RequeueFeedback>([
+    [requeueKey('rn_1', 'ch_a'), REQUEUED],
+    [requeueKey('rn_2', 'ch_a'), FAILED],
+  ]);
+
+  it('reads the entry held under the runner and chunk together', () => {
+    expect(requeueFeedbackFor(feedback, 'rn_1', 'ch_a')).toBe(REQUEUED);
+    expect(requeueFeedbackFor(feedback, 'rn_2', 'ch_a')).toBe(FAILED);
+  });
+
+  it('is null for a chunk with no entry, or another runner\'s chunk of the same id', () => {
+    expect(requeueFeedbackFor(feedback, 'rn_1', 'ch_b')).toBeNull();
+    expect(requeueFeedbackFor(feedback, 'rn_3', 'ch_a')).toBeNull();
+  });
+
+  it('is null while no runner or chunk is selected', () => {
+    expect(requeueFeedbackFor(feedback, null, 'ch_a')).toBeNull();
+    expect(requeueFeedbackFor(feedback, 'rn_1', null)).toBeNull();
+  });
+
+  it('keeps runner and chunk ids from running together into one key', () => {
+    expect(requeueKey('rn_1', 'ch_a')).not.toBe(requeueKey('rn_1c', 'h_a'));
+  });
+});
+
+describe('withRequeueFeedback', () => {
+  it('sets one key without touching another, and clears it on null', () => {
+    const other = new Map([[requeueKey('rn_2', 'ch_a'), { kind: 'requeued' } as RequeueFeedback]]);
+    const set = withRequeueFeedback(other, 'rn_1', 'ch_a', { kind: 'error', message: 'x' });
+    expect(requeueFeedbackFor(set, 'rn_1', 'ch_a')).toEqual({ kind: 'error', message: 'x' });
+    expect(requeueFeedbackFor(set, 'rn_2', 'ch_a')).toEqual({ kind: 'requeued' });
+    expect(other.size).toBe(1);
+    const cleared = withRequeueFeedback(set, 'rn_1', 'ch_a', null);
+    expect(requeueFeedbackFor(cleared, 'rn_1', 'ch_a')).toBeNull();
+    expect(requeueFeedbackFor(cleared, 'rn_2', 'ch_a')).toEqual({ kind: 'requeued' });
+  });
+});
+
+describe('requeueErrorOf', () => {
+  it('reads a failure\'s message only', () => {
+    expect(requeueErrorOf({ kind: 'error', message: 'refused' })).toBe('refused');
+    expect(requeueErrorOf({ kind: 'requeued' })).toBeNull();
+    expect(requeueErrorOf(null)).toBeNull();
   });
 });

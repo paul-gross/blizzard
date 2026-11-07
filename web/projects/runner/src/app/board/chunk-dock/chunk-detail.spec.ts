@@ -553,27 +553,30 @@ describe('MachineDetail heartbeat label ticking', () => {
   });
 });
 
+/** An open escalation on `chunkId`'s newest lease. */
+const escalation = (chunkId: string): runnerApi.EscalationView => ({
+  chunk_id: chunkId,
+  lease_id: NEW_LEASE,
+  node_id: 'nd_build',
+  epoch: 2,
+  closed_at: '2026-07-16T11:00:00.000Z',
+  resume_command: 'blizzard runner resume sess-new',
+  wrapped_takeover_command: null,
+  closure: null,
+  cause: null,
+  effort: null,
+  harness_id: null,
+  harness_version: null,
+  model: null,
+  project_id: null,
+  session_name: null,
+});
+
 describe('MachineDetail Requeue', () => {
   let stub: RequestClientStub;
   afterEach(() => stub.restore());
 
-  const ESCALATION: runnerApi.EscalationView = {
-    chunk_id: 'ch_01KXKVVF1J3D6H6VYZ3XYN3YJ9',
-    lease_id: NEW_LEASE,
-    node_id: 'nd_build',
-    epoch: 2,
-    closed_at: '2026-07-16T11:00:00.000Z',
-    resume_command: 'blizzard runner resume sess-new',
-    wrapped_takeover_command: null,
-    closure: null,
-    cause: null,
-    effort: null,
-    harness_id: null,
-    harness_version: null,
-    model: null,
-    project_id: null,
-    session_name: null,
-  };
+  const ESCALATION = escalation('ch_01KXKVVF1J3D6H6VYZ3XYN3YJ9');
   const REQUEUE_ROUTE = '/runners/rn_2/api/chunks/ch_01KXKVVF1J3D6H6VYZ3XYN3YJ9/requeues';
 
   /** The dock over an escalated chunk owned by `rn_2`, the requeue POST answered by `result`. */
@@ -627,5 +630,167 @@ describe('MachineDetail Requeue', () => {
     expect(el.querySelector('[data-testid="requeue-error"]')?.textContent).toContain('end the interactive session first');
     expect(el.querySelector('[data-testid="requeued-notice"]')).toBeNull();
     expect(el.querySelector<HTMLButtonElement>('button[data-testid="requeue-chunk"]')!.disabled).toBe(false);
+  });
+});
+
+describe('MachineDetail Requeue, keyed by runner and chunk', () => {
+  let stub: RequestClientStub;
+  afterEach(() => stub.restore());
+
+  /** Change detection over a few macrotask turns, without waiting for stability — a requeue
+   * held open by the test keeps the app unstable. */
+  async function turn(fixture: { detectChanges(): void }): Promise<void> {
+    for (let i = 0; i < 8; i += 1) {
+      fixture.detectChanges();
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    }
+  }
+
+  type Outcome = 'ok' | 'err';
+  const CHUNK_A = 'ch_01KXKVVF1J3D6H6VYZ3XYNAAAA';
+  const CHUNK_B = 'ch_01KXKVVF1J3D6H6VYZ3XYNBBBB';
+
+
+  /** Every requeue POST is held until the test releases it by `runner/chunk`, then answers `outcome`. */
+  async function mountHeld(outcome: Record<string, Outcome>) {
+    const release: Record<string, () => void> = {};
+    stub = stubRunnerClient({
+      'GET /runners/{runner_id}/api/chunks/{chunk_id}': () => HEADER(),
+      'POST /runners/{runner_id}/api/chunks/{chunk_id}/requeues': async (_req, { runner_id, chunk_id }) => {
+        const key = `${runner_id}/${chunk_id}`;
+        await new Promise<void>((resolve) => (release[key] = resolve));
+        return outcome[key] === 'err'
+          ? stubError(409, { detail: `refused ${key}` })
+          : { chunk_id, requeued: true };
+      },
+    });
+    await TestBed.configureTestingModule({
+      imports: [MachineDetail],
+      providers: [
+        provideZonelessChangeDetection(),
+        provideTanStackQuery(new QueryClient({ defaultOptions: { queries: { retry: false } } })),
+        provideRouter([]),
+      ],
+    }).compileComponents();
+    const fixture = TestBed.createComponent(MachineDetail);
+    const el = fixture.nativeElement as HTMLElement;
+    const select = async (runnerId: string, chunkId: string) => {
+      fixture.componentRef.setInput('leases', [
+        NEWEST({ chunk_id: chunkId, owner: { runnerId, name: runnerId, label: runnerId } }),
+      ]);
+      fixture.componentRef.setInput('escalation', escalation(chunkId));
+      await turn(fixture);
+    };
+    const button = () => el.querySelector<HTMLButtonElement>('button[data-testid="requeue-chunk"]')!;
+    const requeue = async () => {
+      button().click();
+      await turn(fixture);
+      el.querySelector<HTMLElement>('[data-testid="confirm-requeue-confirm"]')!.click();
+      await turn(fixture);
+    };
+    const shown = () => ({
+      notice: el.querySelector('[data-testid="requeued-notice"]') !== null,
+      error: el.querySelector('[data-testid="requeue-error"]')?.textContent?.trim() ?? '',
+      pending: button().disabled,
+    });
+    const posts = (runnerId: string, chunkId: string) =>
+      stub.forRoute(`/runners/${runnerId}/api/chunks/${chunkId}/requeues`, 'POST');
+    return { fixture, release, select, requeue, shown, posts };
+  }
+
+  const expected = (outcome: Outcome | undefined, key: string) =>
+    outcome === 'ok'
+      ? { notice: true, error: '', pending: false }
+      : { notice: false, error: `refused ${key}`, pending: false };
+
+  const pairs: [string, [string, string], [string, string]][] = [
+    ['two chunks on one runner', ['rn_1', CHUNK_A], ['rn_1', CHUNK_B]],
+    ['the same chunk id on two runners', ['rn_1', CHUNK_A], ['rn_2', CHUNK_A]],
+  ];
+  const orders: [string, Outcome, Outcome, 0 | 1][] = [
+    ['both land, first answers first', 'ok', 'ok', 0],
+    ['both land, second answers first', 'ok', 'ok', 1],
+    ['first fails, second lands, first answers first', 'err', 'ok', 0],
+    ['first lands, second fails, second answers first', 'ok', 'err', 1],
+  ];
+
+  describe.each(pairs)('overlapping requeues across %s', (_pair, first, second) => {
+    it.each(orders)('%s — each key keeps its own pending state and outcome', async (_name, firstOutcome, secondOutcome, answersFirst) => {
+      const keys = [first.join('/'), second.join('/')];
+      const subjects = [first, second];
+      const { release, select, requeue, shown, posts } = await mountHeld({ [keys[0]]: firstOutcome, [keys[1]]: secondOutcome });
+
+      await select(...first);
+      await requeue();
+      expect(shown()).toEqual({ notice: false, error: '', pending: true });
+
+      // A selection change while the first is in flight: the second key reads idle and clean.
+      await select(...second);
+      expect(shown()).toEqual({ notice: false, error: '', pending: false });
+      await requeue();
+      expect(shown().pending).toBe(true);
+
+      const later = answersFirst === 0 ? 1 : 0;
+      release[keys[answersFirst]]();
+      await select(...subjects[later]);
+      // The answered requeue lands on its own key only — the still-pending one shows nothing of it.
+      expect(shown()).toEqual({ notice: false, error: '', pending: true });
+
+      release[keys[later]]();
+      await select(...subjects[later]);
+      const outcomes = [firstOutcome, secondOutcome];
+      expect(shown()).toEqual(expected(outcomes[later], keys[later]));
+
+      // Returning to the other key shows its own late outcome again.
+      await select(...subjects[answersFirst]);
+      expect(shown()).toEqual(expected(outcomes[answersFirst], keys[answersFirst]));
+
+      expect(posts(...first)).toHaveLength(1);
+      expect(posts(...second)).toHaveLength(1);
+    });
+  });
+
+  it('a late outcome lands on its own chunk while another is selected, and shows on return', async () => {
+    const keyA = `rn_1/${CHUNK_A}`;
+    const { release, select, requeue, shown } = await mountHeld({ [keyA]: 'err' });
+
+    await select('rn_1', CHUNK_A);
+    await requeue();
+    await select('rn_1', CHUNK_B);
+    release[keyA]();
+    await select('rn_1', CHUNK_B);
+    expect(shown()).toEqual({ notice: false, error: '', pending: false });
+
+    await select('rn_1', CHUNK_A);
+    expect(shown()).toEqual(expected('err', keyA));
+  });
+
+  it('a new requeue of a key clears that key\'s outcome', async () => {
+    const keyA = `rn_1/${CHUNK_A}`;
+    const { release, select, requeue, shown } = await mountHeld({ [keyA]: 'err' });
+
+    await select('rn_1', CHUNK_A);
+    await requeue();
+    release[keyA]();
+    await select('rn_1', CHUNK_A);
+    expect(shown().error).toContain('refused');
+
+    await requeue();
+    expect(shown()).toEqual({ notice: false, error: '', pending: true });
+    release[keyA]();
+  });
+
+  it('guards a duplicate submit of the same key while it is in flight', async () => {
+    const keyA = `rn_1/${CHUNK_A}`;
+    const { fixture, release, select, requeue, posts } = await mountHeld({});
+
+    await select('rn_1', CHUNK_A);
+    await requeue();
+    (fixture.componentInstance as unknown as { onRequeue(chunkId: string): void }).onRequeue(CHUNK_A);
+    await turn(fixture);
+
+    expect(posts('rn_1', CHUNK_A)).toHaveLength(1);
+    release[keyA]();
+    await turn(fixture);
   });
 });
