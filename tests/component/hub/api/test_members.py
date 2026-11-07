@@ -121,7 +121,15 @@ def test_a_non_member_answers_exactly_as_a_user_that_does_not_exist(tmp_path: Pa
         for user_id in (elsewhere.user_id, "usr_01KXZZZZZZZZZZZZZZZZZZZZZZ", "alan")
     ] + [hub.client.delete(f"/api/members/{user_id}", headers=headers) for user_id in (elsewhere.user_id, "usr_none")]
 
-    assert {(a.status_code, a.text) for a in answers} == {(404, '{"detail":"no such user"}')}
+    refusal = {
+        "type": "urn:blizzard:problem:member-not-found",
+        "title": "Member not found",
+        "detail": "no such user",
+        "status": 404,
+    }
+    assert {a.status_code for a in answers} == {404}
+    assert {a.headers["content-type"] for a in answers} == {"application/problem+json"}
+    assert [{**a.json(), "instance": None} for a in answers] == [{**refusal, "instance": None}] * len(answers)
     assert _facts(hub) == before
 
 

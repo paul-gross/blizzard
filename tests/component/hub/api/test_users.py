@@ -262,7 +262,7 @@ def test_a_non_member_answers_404_exactly_as_an_unknown_user(tmp_path: Path, to_
     unknown = hub.client.post("/api/users/usr_missing/role", json={"role": to_role}, headers=_cookie(token))
 
     assert (non_member.status_code, unknown.status_code) == (404, 404)
-    assert non_member.json() == unknown.json()
+    assert {**non_member.json(), "instance": None} == {**unknown.json(), "instance": None}
 
 
 def test_admin_demotes_a_guest_to_pending(tmp_path: Path) -> None:

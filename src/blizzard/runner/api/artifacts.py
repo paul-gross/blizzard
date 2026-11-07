@@ -15,7 +15,7 @@ from fastapi.exceptions import HTTPException
 
 from blizzard.foundation.artifacts import ArtifactKind, ArtifactScope
 from blizzard.foundation.roles import collaborator
-from blizzard.runner.api.hub_proxy import HubProxy, UpstreamRefusal
+from blizzard.runner.api.hub_proxy import RELAYED_REFUSALS, HubProxy, UpstreamRefusal
 from blizzard.runner.api.lease_scope import authorized_lease
 from blizzard.runner.api.wiring import RunnerWiring
 from blizzard.runner.lifecycle.artifacts import (
@@ -106,7 +106,7 @@ class NodeArtifacts:
         return matches if node is None else [a for a in matches if a.node_name == node]
 
 
-@router.get("/leases/{lease_id}/artifacts", response_model=list[WorkerArtifact])
+@router.get("/leases/{lease_id}/artifacts", response_model=list[WorkerArtifact], responses=RELAYED_REFUSALS)
 def list_artifacts(lease_id: str, request: Request, scope: ArtifactScope | None = None) -> list[WorkerArtifact]:
     """The worker's own artifacts — every node-step input resolved latest-by-epoch, the graph
     mint's own baked-in declarations, and blizzard's published system-artifact set, all
@@ -123,7 +123,7 @@ def list_artifacts(lease_id: str, request: Request, scope: ArtifactScope | None 
     return node_rows + _graph_rows(lease.graph_id, request) + _system_rows(request)
 
 
-@router.get("/leases/{lease_id}/artifacts/{name:path}", response_model=WorkerArtifact)
+@router.get("/leases/{lease_id}/artifacts/{name:path}", response_model=WorkerArtifact, responses=RELAYED_REFUSALS)
 def get_artifact(
     lease_id: str, name: str, request: Request, node: str | None = None, scope: ArtifactScope | None = None
 ) -> WorkerArtifact:

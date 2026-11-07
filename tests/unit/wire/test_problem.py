@@ -32,6 +32,11 @@ from blizzard.wire.problem import (
     TENANT_REQUIRED,
     ProblemDetails,
 )
+from blizzard.wire.problem_registry import ALL_PROBLEM_TYPES
+from blizzard.wire.problem_types_admin import ADMIN_PROBLEM_TYPES
+from blizzard.wire.problem_types_chunks import CHUNKS_PROBLEM_TYPES
+from blizzard.wire.problem_types_garden import GARDEN_PROBLEM_TYPES
+from blizzard.wire.problem_types_runners import RUNNERS_PROBLEM_TYPES
 from blizzard.wire.project import ProjectRef, ProjectRequiredBody, ProjectRequiredProblem
 from blizzard.wire.release import ReleaseProblem, ReleaseRefusal
 from blizzard.wire.route import (
@@ -479,3 +484,16 @@ def test_legacy_defaults_and_required_fields_survive() -> None:
     assert "reason" in schema["required"]
     assert RunnerIdentityProblem.model_json_schema()["properties"]["runner_id"]["deprecated"] is True
     assert ReleaseProblem.model_json_schema()["properties"]["reason"]["deprecated"] is True
+
+
+def test_every_family_type_is_registered_once_and_named_by_its_concept() -> None:
+    families = (
+        ADMIN_PROBLEM_TYPES,
+        CHUNKS_PROBLEM_TYPES,
+        GARDEN_PROBLEM_TYPES,
+        RUNNERS_PROBLEM_TYPES,
+    )
+    everything = [uri for group in (PROBLEM_TYPES, *families) for uri in group]
+
+    assert len(everything) == len(set(everything)) == len(ALL_PROBLEM_TYPES)
+    assert all(uri.startswith("urn:blizzard:problem:") for uri in ALL_PROBLEM_TYPES)

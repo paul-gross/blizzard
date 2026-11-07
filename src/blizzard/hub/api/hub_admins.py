@@ -6,13 +6,16 @@ rules live in :class:`~blizzard.hub.auth.hub_admins.HubAdministrators` (``bzh:co
 
 from __future__ import annotations
 
+from functools import partial
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, HTTPException, Response, status
+from fastapi import APIRouter, Depends, Response, status
 
+from blizzard.hub.api import problems_admin
 from blizzard.hub.api.auth import reject_runner_principal
 from blizzard.hub.api.auth_session import require_hub
 from blizzard.hub.api.hub_level import Hub
+from blizzard.hub.api.problem_exceptions import ProblemHTTPException
 from blizzard.hub.auth.hub_admins import LastHubAdminKept
 from blizzard.hub.auth.models import ResolvedIdentity, User
 from blizzard.hub.auth.permissions import Permission
@@ -31,7 +34,7 @@ def _view(user: User) -> HubAdminView:
 def _subject(services: HubServices, user_id: str) -> User:
     user = services.users.get(user_id)
     if user is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="no such user")
+        raise ProblemHTTPException(partial(problems_admin.user_not_found_problem, "no such user"))
     return user
 
 
@@ -57,5 +60,5 @@ def revoke_hub_admin(user_id: str, services: Hub, actor: _Granter) -> Response:
     try:
         services.hub_admins.revoke(_subject(services, user_id), by=actor.user_id)
     except LastHubAdminKept as exc:
-        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
+        raise ProblemHTTPException(partial(problems_admin.last_hub_admin_problem, str(exc))) from exc
     return Response(status_code=status.HTTP_204_NO_CONTENT)

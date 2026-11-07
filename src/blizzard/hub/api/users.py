@@ -9,16 +9,19 @@ the members routes' own.
 
 from __future__ import annotations
 
+from functools import partial
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends
 
 from blizzard.auth_core import Role
 from blizzard.foundation.store.utc import iso_utc
+from blizzard.hub.api import problems_admin
 from blizzard.hub.api.auth import reject_runner_principal
 from blizzard.hub.api.auth_session import require, tenant_bound
 from blizzard.hub.api.hub_level import Hub
 from blizzard.hub.api.members import change_membership, identity_views, tenant_of
+from blizzard.hub.api.problem_exceptions import ProblemHTTPException
 from blizzard.hub.auth.memberships import Member, assignable_roles, revocable
 from blizzard.hub.auth.models import Identity, ResolvedIdentity, wire_role
 from blizzard.hub.auth.permissions import Permission
@@ -66,9 +69,11 @@ def assign_role(user_id: str, body: RoleAssignmentRequest, services: Hub, actor:
     try:
         to_role = Role(body.role)
     except ValueError as exc:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=f"unknown role {body.role!r}") from exc
+        raise ProblemHTTPException(partial(problems_admin.unknown_role_problem, f"unknown role {body.role!r}")) from exc
     if to_role is Role.SUPERUSER:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="superuser is not assignable through the API")
+        raise ProblemHTTPException(
+            partial(problems_admin.role_not_assignable_problem, "superuser is not assignable through the API")
+        )
     member = change_membership(services, actor, user_id, None if to_role is Role.PENDING else to_role)
     return _user_view(
         member,

@@ -9,7 +9,7 @@ from __future__ import annotations
 from fastapi import APIRouter, Depends, Request
 
 from blizzard.runner.api.federation import require_human_api
-from blizzard.runner.api.hub_proxy import HubProxy
+from blizzard.runner.api.hub_proxy import RELAYED_REFUSALS, HubProxy
 from blizzard.runner.api.wiring import RunnerWiring
 from blizzard.wire.decision import OpenDecisionsResponse
 
@@ -19,7 +19,12 @@ router = APIRouter(prefix="/api", tags=["runner"])
 _FORWARD_TIMEOUT_SECONDS = 3.0
 
 
-@router.get("/gate-decisions", response_model=OpenDecisionsResponse, dependencies=[Depends(require_human_api)])
+@router.get(
+    "/gate-decisions",
+    response_model=OpenDecisionsResponse,
+    dependencies=[Depends(require_human_api)],
+    responses=RELAYED_REFUSALS,
+)
 def list_gate_decisions(request: Request) -> OpenDecisionsResponse:
     """The unresolved decisions this runner's configuration imposed, as the hub holds them. A runner that has not
     registered has imposed none."""

@@ -6,16 +6,19 @@ The records are inert."""
 from __future__ import annotations
 
 from collections.abc import Mapping
+from functools import partial
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, Header, HTTPException, status
+from fastapi import APIRouter, Depends, Header, status
 
 from blizzard.foundation.store.utc import iso_utc
+from blizzard.hub.api import problems, problems_admin
 from blizzard.hub.api.auth import reject_runner_principal
 from blizzard.hub.api.auth_session import require, tenant_bound
 from blizzard.hub.api.deps import Services
 from blizzard.hub.api.door import RequestDoor, change_context
 from blizzard.hub.api.forge_choice import forge_choice
+from blizzard.hub.api.problem_exceptions import ProblemHTTPException
 from blizzard.hub.api.repository_params import PathRepository
 from blizzard.hub.api.user_names import user_names
 from blizzard.hub.auth.models import ResolvedIdentity
@@ -73,15 +76,18 @@ def _shown(record: ConfiguredRepository, services: TenantServices) -> Repository
     return _summary(record, forge, user_names(services, [record.created_by]))
 
 
-def _unprocessable(exc: ConfigFieldError) -> HTTPException:
-    return HTTPException(
-        status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
-        detail=[{"loc": ["body", exc.field], "msg": exc.message, "type": exc.code}],
+def _unprocessable(exc: ConfigFieldError) -> ProblemHTTPException:
+    return ProblemHTTPException(
+        partial(problems_admin.config_field_invalid_problem, "body", exc.field, exc.message, exc.code)
     )
 
 
-def _conflict(exc: Exception) -> HTTPException:
-    return HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc))
+def _conflict(exc: Exception) -> ProblemHTTPException:
+    if isinstance(exc, RepositorySlugTaken):
+        return ProblemHTTPException(partial(problems_admin.repository_slug_taken_problem, str(exc)))
+    if isinstance(exc, RepositoryCoordinateTaken):
+        return ProblemHTTPException(partial(problems_admin.repository_coordinate_taken_problem, str(exc)))
+    return ProblemHTTPException(partial(problems.revision_conflict_problem, str(exc)))
 
 
 @router.get(

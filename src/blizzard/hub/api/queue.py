@@ -12,13 +12,12 @@ from dataclasses import dataclass
 from functools import partial
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
-from fastapi.responses import JSONResponse
+from fastapi import APIRouter, Depends, Query
 
 from blizzard.foundation.chunk_status import ChunkStatus
 from blizzard.foundation.queue_policy import QueueMatchPolicy
 from blizzard.foundation.roles import dto
-from blizzard.hub.api import chunk_events, problems
+from blizzard.hub.api import chunk_events, problems, problems_chunks
 from blizzard.hub.api.auth import reject_runner_principal
 from blizzard.hub.api.auth_session import require, tenant_bound
 from blizzard.hub.api.chunk_views import blocked_view
@@ -115,9 +114,9 @@ def _replace(list_: QueueList, chunk_ids: list[str], services: TenantServices) -
     try:
         ranked = services.queue.reorder(list_, _resolved(list_, chunk_ids, services))
     except DuplicateReorderIds as exc:
-        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail=str(exc)) from exc
+        raise ProblemHTTPException(partial(problems_chunks.duplicate_reorder_ids_problem, str(exc))) from exc
     except NotInList as exc:
-        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
+        raise ProblemHTTPException(partial(problems_chunks.not_in_list_problem, str(exc))) from exc
     services.events.publish_queue_changed()
     return ranked
 
@@ -131,9 +130,9 @@ def _reposition(list_: QueueList, chunk_id: str, after_chunk_id: str | None, ser
         chunk, after = _resolved_move(list_, chunk_id, after_chunk_id, services)
         ranked = services.queue.reposition(list_, chunk, after)
     except SelfAnchoredMove as exc:
-        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail=str(exc)) from exc
+        raise ProblemHTTPException(partial(problems_chunks.self_anchored_move_problem, str(exc))) from exc
     except NotInList as exc:
-        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
+        raise ProblemHTTPException(partial(problems_chunks.not_in_list_problem, str(exc))) from exc
     services.events.publish_queue_changed()
     return ranked
 
@@ -455,11 +454,13 @@ def group_chunks(
     try:
         result = services.group.group(chunk_id, request.merge_chunk_ids)
     except ChunkNotFound as exc:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
-    except (ChunkNotGroupable, ChunksInDifferentProjects) as exc:
-        return JSONResponse(status_code=status.HTTP_409_CONFLICT, content={"detail": str(exc)})
+        raise ProblemHTTPException(partial(problems.chunk_disappeared_problem, exc)) from exc
+    except ChunkNotGroupable as exc:
+        raise ProblemHTTPException(partial(problems_chunks.chunk_not_groupable_problem, str(exc))) from exc
+    except ChunksInDifferentProjects as exc:
+        raise ProblemHTTPException(partial(problems_chunks.chunks_in_different_projects_problem, str(exc))) from exc
     except FoldWouldCloseCycle as exc:
-        return JSONResponse(status_code=status.HTTP_409_CONFLICT, content={"detail": str(exc)})
+        raise ProblemHTTPException(partial(problems_chunks.fold_would_close_cycle_problem, str(exc))) from exc
     # The survivor's status comes from the group result, never a ``"ready"`` constant:
     # grouping backlog chunks leaves a backlog survivor.
     survivor = result.survivor

@@ -11,12 +11,12 @@ from collections.abc import Mapping
 from functools import partial
 from typing import Annotated, Any
 
-from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from pydantic import ValidationError
 from starlette.concurrency import run_in_threadpool
 
 from blizzard.foundation.store.utc import iso_utc
-from blizzard.hub.api import problems
+from blizzard.hub.api import problems, problems_admin
 from blizzard.hub.api.auth import reject_runner_principal
 from blizzard.hub.api.auth_session import require, tenant_bound
 from blizzard.hub.api.cadences import admission_refused, cadence_shape, chore_scopes, chore_shapes, schedule_shape
@@ -210,7 +210,9 @@ def get_schema(kind: str, version: Annotated[int, Query(ge=1, le=2)] = DOCUMENT_
         raise _version_retired(["query", "version"], version)
     model = _SCHEMAS.get(kind)
     if model is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"no document schema for {kind!r}")
+        raise ProblemHTTPException(
+            partial(problems_admin.config_schema_not_found_problem, f"no document schema for {kind!r}")
+        )
     schema = model.model_json_schema()
     if kind == "repositories":
         schema[LANDING_POLICIES_KEY] = [

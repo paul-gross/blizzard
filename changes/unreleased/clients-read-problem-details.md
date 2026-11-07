@@ -30,3 +30,11 @@ the dependency `409`s are `dependent-not-editable` (whose `status` member stays 
 located `detail` list unchanged), which `GET /api/config/export` and `GET /api/config/schema/{kind}` also answer for a
 retired version; and `POST /api/graphs`'s `422` is `graph-definition-invalid`, which gains a `detail` sentence beside
 its released `ok`, `errors` and `warnings`.
+
+Every deliberate domain refusal on the routes the operator CLI and the board call is now a registered
+`urn:blizzard:problem:<concept>-<condition>` type, declared in the OpenAPI document with its status and `detail`
+unchanged: the chunk, queue, decision, question, finding and flow families; routines, cadences, garden proposals, runs,
+scopes and sweeps; projects, forges, repositories, work sources, secrets, members, invitations, tenants, hub
+administrators, users, config and graphs; and the non-fleet runner, host, egress, traces, spend, transcript and work
+item reads. Each shared dependency — authentication, permission, tenant, project, store availability — is declared once
+per operation. The runner declares the relayed problem on the routes it proxies.

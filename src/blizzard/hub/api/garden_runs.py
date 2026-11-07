@@ -5,15 +5,18 @@ a new run rather than reading an existing one."""
 from __future__ import annotations
 
 from datetime import datetime
+from functools import partial
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, Query
 
 from blizzard.foundation.store.utc import as_utc, iso_utc
+from blizzard.hub.api import problems_garden
 from blizzard.hub.api.auth import reject_runner_principal
 from blizzard.hub.api.auth_session import require, tenant_bound
 from blizzard.hub.api.deps import Services
 from blizzard.hub.api.graph_names import GraphNames
+from blizzard.hub.api.problem_exceptions import ProblemHTTPException
 from blizzard.hub.api.project_label_fields import ProjectLabelFields
 from blizzard.hub.api.project_labels import ProjectLabels
 from blizzard.hub.api.project_params import PathProject, QueryProject
@@ -49,9 +52,8 @@ def _parse_instant(value: str, *, field: str) -> datetime:
     try:
         return as_utc(datetime.fromisoformat(value))
     except ValueError as exc:
-        raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
-            detail=f"{field} {value!r} is not a valid ISO-8601 instant",
+        raise ProblemHTTPException(
+            partial(problems_garden.garden_window_invalid_problem, f"{field} {value!r} is not a valid ISO-8601 instant")
         ) from exc
 
 
@@ -150,7 +152,7 @@ def _runs(services: TenantServices, project_id: str | None, since: str | None, u
     try:
         rows = services.garden_run.list_runs(since=parsed_since, until=parsed_until, project_id=project_id)
     except InvalidWindowError as exc:
-        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail=str(exc)) from exc
+        raise ProblemHTTPException(partial(problems_garden.garden_window_invalid_problem, str(exc))) from exc
     names = GraphNames(services.graphs)
     names.prime(row.escalation.graph_id for row in rows if row.escalation is not None)
     labels = ProjectLabels.read(services, (row.project_id for row in rows))
@@ -162,7 +164,7 @@ def _delta(services: TenantServices, chunk_id: str, project_id: str | None) -> R
     in_project = chunk is not None and (project_id is None or chunk.project_id == project_id)
     delta = services.garden_run.run_delta(chunk) if chunk is not None and in_project else None
     if delta is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"unknown run {chunk_id}")
+        raise ProblemHTTPException(partial(problems_garden.run_not_found_problem, f"unknown run {chunk_id}"))
     names = GraphNames(services.graphs)
     if delta.escalation is not None:
         names.prime([delta.escalation.graph_id])

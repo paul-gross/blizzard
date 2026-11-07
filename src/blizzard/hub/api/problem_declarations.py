@@ -4,12 +4,15 @@ exception handlers and the OpenAPI document both read."""
 from __future__ import annotations
 
 from collections.abc import Sequence
-from dataclasses import dataclass
 
 from fastapi import Request
 from pydantic import BaseModel
 
-from blizzard.foundation.roles import dto
+from blizzard.hub.api.problem_declaration import ProblemDeclaration
+from blizzard.hub.api.problem_declarations_admin import ADMIN_FAMILY_DECLARATIONS
+from blizzard.hub.api.problem_declarations_chunks import CHUNKS_DECLARATIONS
+from blizzard.hub.api.problem_declarations_garden import GARDEN_DECLARATIONS
+from blizzard.hub.api.problem_declarations_runners import RUNNERS_DECLARATIONS
 from blizzard.wire.auth import (
     AuthenticationRequiredProblem,
     AuthenticationRevokedProblem,
@@ -102,18 +105,6 @@ from blizzard.wire.tenant import (
 )
 from blizzard.wire.traces import TraceReplayFailure
 from blizzard.wire.transcript_segment import LeaseOwnershipProblem
-
-
-@dto
-@dataclass(frozen=True)
-class ProblemDeclaration:
-    """One operation/status/model variant, independent of route registration."""
-
-    method: str
-    path: str
-    status_code: int
-    model: type[BaseModel]
-
 
 # Resource refusals at the fleet proxy boundary.
 PROXY_RESOURCE_DECLARATIONS: tuple[ProblemDeclaration, ...] = (
@@ -767,6 +758,10 @@ HUB_PROBLEM_DECLARATIONS = (
     *FEDERATION_DECLARATIONS,
     *ADMIN_DECLARATIONS,
     *OPERATOR_DECLARATIONS,
+    *RUNNERS_DECLARATIONS,
+    *CHUNKS_DECLARATIONS,
+    *ADMIN_FAMILY_DECLARATIONS,
+    *GARDEN_DECLARATIONS,
 )
 
 

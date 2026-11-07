@@ -18,7 +18,7 @@ from typing import Annotated, Literal
 from fastapi import APIRouter, Depends, Header, HTTPException, Query, status
 
 from blizzard.foundation.store.utc import iso_utc
-from blizzard.hub.api import problems
+from blizzard.hub.api import problems, problems_garden
 from blizzard.hub.api.auth import reject_runner_principal
 from blizzard.hub.api.auth_session import require, tenant_bound
 from blizzard.hub.api.deps import Services
@@ -186,10 +186,7 @@ def _listing(services: TenantServices, project_id: str | None, *, include_retire
 
 
 def _unprocessable(exc: ConfigFieldError) -> HTTPException:
-    return HTTPException(
-        status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
-        detail=[{"loc": ["body", exc.field], "msg": exc.message, "type": "value_error"}],
-    )
+    return ProblemHTTPException(partial(problems_garden.config_field_invalid_problem, exc.field, exc.message))
 
 
 def _revision_conflict(exc: ConfigRevisionConflict) -> HTTPException:
@@ -198,13 +195,13 @@ def _revision_conflict(exc: ConfigRevisionConflict) -> HTTPException:
 
 def admission_refused(exc: CadenceAdmissionRefused) -> HTTPException:
     """403 for a write leaving a cadence promoting its runs, by a caller who may not admit work."""
-    return HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(exc))
+    return ProblemHTTPException(partial(problems_garden.cadence_admission_refused_problem, str(exc)))
 
 
 def _cadence_or_404(cadence_id: str, services: TenantServices) -> Cadence:
     cadence = services.cadences.get(cadence_id)
     if cadence is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"unknown cadence {cadence_id}")
+        raise ProblemHTTPException(partial(problems_garden.cadence_not_found_problem, f"unknown cadence {cadence_id}"))
     return cadence
 
 
@@ -225,7 +222,7 @@ def _create(
     except ConfigFieldError as exc:
         raise _unprocessable(exc) from exc
     except CadenceSlugTakenError as exc:
-        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail=str(exc)) from exc
+        raise ProblemHTTPException(partial(problems_garden.cadence_slug_taken_problem, str(exc))) from exc
     except CadenceAdmissionRefused as exc:
         raise admission_refused(exc) from exc
     read = services.cadence_reading.view(cadence)
@@ -278,7 +275,7 @@ def get_cadence(cadence_id: str, services: Services) -> CadenceView:
     """One cadence's whole record with its attention; 404 on an unknown id."""
     read = services.cadence_reading.show(cadence_id)
     if read is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"unknown cadence {cadence_id}")
+        raise ProblemHTTPException(partial(problems_garden.cadence_not_found_problem, f"unknown cadence {cadence_id}"))
     labels = ProjectLabels.read(services, [read.cadence.project_id])
     return _cadence_view(read, labels.fields(read.cadence.project_id))
 

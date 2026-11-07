@@ -8,6 +8,7 @@ import httpx2
 from click.testing import Result
 
 from blizzard.hub.cli import hub as hub_group
+from blizzard.wire.problem_types_admin import TENANT_DELETED
 from tests.support.worker_http import bind_stubs
 
 _HUB_URL = "http://testserver"
@@ -54,3 +55,21 @@ def test_list_shows_a_deletion_underway_with_when_it_began() -> None:
         "ten_a  acme  open  created_at=t0  by hal",
         "ten_b  bravo  deleting since t2",
     ]
+
+
+def test_a_typed_already_deleted_refusal_reads_as_deleted_and_an_untyped_410_does_not() -> None:
+    typed = {"type": TENANT_DELETED, "title": "Tenant deleted", "detail": "tenant deleted", "status": 410}
+
+    def delete_typed(url: str, *, timeout: float, headers: dict[str, str] | None = None) -> httpx2.Response:
+        return httpx2.Response(410, json=typed, request=httpx2.Request("DELETE", url))
+
+    def delete_untyped(url: str, *, timeout: float, headers: dict[str, str] | None = None) -> httpx2.Response:
+        return httpx2.Response(410, json={"detail": "tenant deleted"}, request=httpx2.Request("DELETE", url))
+
+    args = ["tenant", "delete", "ten_a", "--yes", "--hub-url", _HUB_URL]
+    said = bind_stubs(delete=delete_typed).runner.invoke(hub_group, args)
+    refused = bind_stubs(delete=delete_untyped).runner.invoke(hub_group, args)
+
+    assert said.exit_code == 0, said.output
+    assert "tenant ten_a was already deleted" in said.output or '"state": "deleted"' in said.output
+    assert refused.exit_code != 0

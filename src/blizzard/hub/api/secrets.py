@@ -11,12 +11,12 @@ from collections.abc import Mapping
 from functools import partial
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, Header, HTTPException, Request, status
+from fastapi import APIRouter, Depends, Header, Request, status
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 
 from blizzard.foundation.store.utc import iso_utc
-from blizzard.hub.api import problems
+from blizzard.hub.api import problems, problems_admin
 from blizzard.hub.api.auth import reject_runner_principal
 from blizzard.hub.api.auth_session import require, tenant_bound
 from blizzard.hub.api.deps import Services
@@ -39,6 +39,7 @@ from blizzard.hub.domain.config.secrets import (
     listed,
     retirable,
 )
+from blizzard.wire.problem_types_admin import RecordReferrer
 from blizzard.wire.secret import RecordRefView, SecretCreateRequest, SecretReplaceRequest, SecretView
 
 SECRETS_PREFIX = "/api/secrets"
@@ -87,7 +88,7 @@ def _parse_name(raw: str) -> SecretName:
     try:
         return SecretName.parse(raw)
     except SecretNameError as exc:
-        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail=str(exc)) from exc
+        raise ProblemHTTPException(partial(problems_admin.secret_name_invalid_problem, str(exc))) from exc
 
 
 def _existing(services: TenantServices, raw: str) -> SecretMetadata:
@@ -112,7 +113,7 @@ def create_secret(
             name, request.value.get_secret_value(), change_context(identity, door)
         )
     except SecretValueBlank as exc:
-        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail=str(exc)) from exc
+        raise ProblemHTTPException(partial(problems_admin.secret_value_blank_problem, str(exc))) from exc
     except SecretAlreadyExists as exc:
         raise ProblemHTTPException(partial(problems.secret_already_exists_problem, str(exc))) from exc
     return secret_view(record, user_names(services, [record.replaced_by]), retired=False)
@@ -136,11 +137,11 @@ def replace_secret(
             record, request.value.get_secret_value(), change_context(identity, door), if_match=if_match
         )
     except SecretRevisionConflict as exc:
-        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
+        raise ProblemHTTPException(partial(problems.revision_conflict_problem, str(exc))) from exc
     except SecretRetired as exc:
-        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=f"{exc}; enable it first") from exc
+        raise ProblemHTTPException(partial(problems_admin.secret_retired_problem, f"{exc}; enable it first")) from exc
     except SecretValueBlank as exc:
-        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail=str(exc)) from exc
+        raise ProblemHTTPException(partial(problems_admin.secret_value_blank_problem, str(exc))) from exc
     return secret_view(
         replaced,
         user_names(services, [replaced.replaced_by]),
@@ -184,12 +185,8 @@ def retire_secret(
     try:
         services.config_authoring.retire_secret(record, change_context(identity, door))
     except SecretReferenced as exc:
-        detail = {
-            "code": "secret_in_use",
-            "message": str(exc),
-            "referrers": [_ref_view(r).model_dump() for r in exc.referrers],
-        }
-        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=detail) from exc
+        referrers = [RecordReferrer(kind=r.kind.value, key=r.key, label=r.label) for r in exc.referrers]
+        raise ProblemHTTPException(partial(problems_admin.secret_in_use_problem, str(exc), referrers)) from exc
     return secret_view(
         record,
         user_names(services, [record.replaced_by]),

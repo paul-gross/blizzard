@@ -195,9 +195,10 @@ their authentication dependencies, host and admin bootstrap, `/api/me`, federati
 reads, and delegated artifact and scope handlers, including operations outside `/api/fleet`. Deliberate missing-graph
 `500` refusals are included; arbitrary server failures, successful semantic outcomes and downstream proxy rewriting are
 not. The authoritative registry of stable `urn:blizzard:problem:<refusal-name>` type URIs is
-[`src/blizzard/wire/problem.py`](../src/blizzard/wire/problem.py); operation response declarations and the OpenAPI
-document identify which types each operation can return. Clients dispatch on `type`, not prose or legacy field presence;
-an unknown present type is an unexpected refusal, not a reason to guess a known outcome.
+[`src/blizzard/wire/problem.py`](../src/blizzard/wire/problem.py) and the `problem_types_<family>.py` modules beside it,
+unioned in `src/blizzard/wire/problem_registry.py`; operation response declarations and the OpenAPI document identify
+which types each operation can return. Clients dispatch on `type`, not prose or legacy field presence; an unknown
+present type is an unexpected refusal, not a reason to guess a known outcome.
 
 Each problem carries `type`, `title`, `detail` and `instance`. Ordinarily `detail` is a string and `status`, when
 present, is a numeric HTTP status. HTTP status is authoritative. For compatibility, terminal and not-ready claim

@@ -6,15 +6,18 @@ Each handler is sync, so the pass runs off the event loop and every write it mak
 
 from __future__ import annotations
 
+from functools import partial
 from typing import Annotated, Any
 
-from fastapi import APIRouter, Depends, HTTPException, Request, status
+from fastapi import APIRouter, Depends, Request, status
 from fastapi.responses import JSONResponse
 
 from blizzard.foundation.store.utc import iso_utc
+from blizzard.hub.api import problems_garden
 from blizzard.hub.api.auth import reject_runner_principal
 from blizzard.hub.api.auth_session import TenantRequest, require, require_hub, resolve_tenant, tenant_bound
 from blizzard.hub.api.hub_level import Hub
+from blizzard.hub.api.problem_exceptions import ProblemHTTPException
 from blizzard.hub.auth.permissions import Permission
 from blizzard.hub.domain.sweeps.locks import SweepInProgress
 from blizzard.hub.domain.sweeps.roster import SweepPassResult, SweepServesNoTenant, UnknownSweep
@@ -66,9 +69,9 @@ def run_tenant_pass(
     try:
         return _response(hub.sweeps.pass_one_tenant(name, tenant.scope.tenant))
     except UnknownSweep as exc:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
+        raise ProblemHTTPException(partial(problems_garden.sweep_not_found_problem, str(exc))) from exc
     except SweepServesNoTenant as exc:
-        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail=str(exc)) from exc
+        raise ProblemHTTPException(partial(problems_garden.sweep_serves_no_tenant_problem, str(exc))) from exc
     except SweepInProgress:
         return _in_progress()
 
@@ -85,6 +88,6 @@ def run_every_tenant_pass(name: str, request: Request, hub: Hub) -> SweepPassRes
     try:
         return _response(hub.sweeps.pass_every_tenant(name, request.app.state.platform_tracing.tracer))
     except UnknownSweep as exc:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
+        raise ProblemHTTPException(partial(problems_garden.sweep_not_found_problem, str(exc))) from exc
     except SweepInProgress:
         return _in_progress()

@@ -10,14 +10,14 @@ from __future__ import annotations
 
 from fastapi import APIRouter, Request
 
-from blizzard.runner.api.hub_proxy import HubProxy
+from blizzard.runner.api.hub_proxy import RELAYED_REFUSALS, HubProxy
 from blizzard.runner.api.lease_scope import authorized_lease
 from blizzard.wire.chunk_asks import ChunkAsksSource, ChunkAskView
 
 router = APIRouter(prefix="/api", tags=["runner"])
 
 
-@router.get("/leases/{lease_id}/asks", response_model=list[ChunkAskView])
+@router.get("/leases/{lease_id}/asks", response_model=list[ChunkAskView], responses=RELAYED_REFUSALS)
 def get_chunk_asks(lease_id: str, request: Request) -> list[ChunkAskView]:
     """Every question asked on the worker's own chunk, oldest-first — open, answered, and
     restart-superseded alike."""

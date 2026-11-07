@@ -18,7 +18,7 @@ from typing import Annotated
 from fastapi import Depends, HTTPException, Request, status
 from fastapi.responses import JSONResponse
 
-from blizzard.hub.api import problems
+from blizzard.hub.api import problems, problems_admin
 from blizzard.hub.api.deps import Services
 from blizzard.hub.api.problem_exceptions import ProblemHTTPException
 from blizzard.hub.api.problem_rendering import declared_problem_response
@@ -52,17 +52,14 @@ def _unknown(value: str) -> str:
 def _unprocessable(where: str, field: str, value: str) -> HTTPException:
     if (where, field) == ("query", "project"):
         return ProblemHTTPException(partial(problems.unknown_query_project_problem, value))
-    return HTTPException(
-        status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
-        detail=[{"loc": [where, field], "msg": _unknown(value), "type": UNKNOWN_PROJECT}],
-    )
+    return ProblemHTTPException(partial(problems_admin.unknown_body_project_problem, field, value))
 
 
 def path_project(project: str, services: Services) -> Project:
     """The project the ``{project}`` path segment names, by id, slug or former slug; ``404`` when it names none."""
     found = services.projects.resolve(project)
     if found is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=_unknown(project))
+        raise ProblemHTTPException(partial(problems_admin.project_not_found_problem, _unknown(project)))
     return found
 
 

@@ -3,10 +3,11 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from functools import partial
 
-from fastapi import HTTPException, status
-
+from blizzard.hub.api import problems_chunks
 from blizzard.hub.api.graph_names import graph_by_ref
+from blizzard.hub.api.problem_exceptions import ProblemHTTPException
 from blizzard.hub.composition import TenantServices
 from blizzard.hub.domain.chunk.model import Chunk, IntendedMigration
 from blizzard.hub.domain.graph.harnesses import InvalidHarnesses
@@ -39,11 +40,11 @@ class ChunkPatchBody:
                 intended_migration=intended_migration,
             )
         except BlankEditValue as exc:
-            raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail=str(exc)) from exc
+            raise ProblemHTTPException(partial(problems_chunks.blank_edit_value_problem, str(exc))) from exc
         try:
             self.services.edit.edit(chunk, edit, graph_target=graph_target, migration_target=migration_target)
         except InvalidHarnesses as exc:
-            raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail=str(exc)) from exc
+            raise ProblemHTTPException(partial(problems_chunks.invalid_harnesses_problem, str(exc))) from exc
 
     def _graph_target(self) -> Graph | None:
         ref = self.request.graph_id
@@ -51,7 +52,7 @@ class ChunkPatchBody:
             return None
         graph = self.services.graphs.get(ref)
         if graph is None:
-            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"unknown graph {ref}")
+            raise ProblemHTTPException(partial(problems_chunks.graph_not_found_problem, f"unknown graph {ref}"))
         return graph
 
     def _default_model(self) -> list[str] | UnsetType:

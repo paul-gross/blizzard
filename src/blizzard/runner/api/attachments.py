@@ -12,7 +12,7 @@ from fastapi import APIRouter, Request, status
 from fastapi.exceptions import HTTPException
 
 from blizzard.foundation.logging import get_logger
-from blizzard.runner.api.hub_proxy import HubProxy
+from blizzard.runner.api.hub_proxy import RELAYED_REFUSALS, HubProxy
 from blizzard.runner.api.lease_scope import authorized_lease, authorized_worker_lease
 from blizzard.runner.api.wiring import RunnerWiring
 from blizzard.runner.operator.attachments import AttachmentEmpty, AttachmentOnClosedLease, AttachmentTooLate
@@ -53,7 +53,12 @@ def _hub_refusal(request: Request, chunk_id: str, body: AttachmentRequest) -> st
         return None
 
 
-@router.post("/leases/{lease_id}/attachments", response_model=AttachmentResponse, status_code=status.HTTP_200_OK)
+@router.post(
+    "/leases/{lease_id}/attachments",
+    response_model=AttachmentResponse,
+    status_code=status.HTTP_200_OK,
+    responses=RELAYED_REFUSALS,
+)
 def record_attachment(lease_id: str, request_body: AttachmentRequest, request: Request) -> AttachmentResponse:
     """Record a worker's explicit artifact for ``request_body.name`` against its lease."""
     service = RunnerWiring.of(request).attachments()

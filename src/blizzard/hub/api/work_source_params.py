@@ -7,12 +7,15 @@ unresolved source answers ``404`` on a path and ``422`` in a query."""
 
 from __future__ import annotations
 
+from functools import partial
 from typing import Annotated
 
-from fastapi import Depends, HTTPException, Request, status
+from fastapi import Depends, Request, status
 from fastapi.responses import JSONResponse
 
+from blizzard.hub.api import problems_admin
 from blizzard.hub.api.deps import Services
+from blizzard.hub.api.problem_exceptions import ProblemHTTPException
 from blizzard.hub.composition import TenantServices
 from blizzard.hub.domain.config.work_sources import (
     BuiltInWorkSource,
@@ -43,7 +46,7 @@ def path_source_key(source: str, services: Services) -> str:
     """The key the ``{source}`` path segment names (:func:`source_key`); ``404`` when it names none."""
     key = source_key(source, services)
     if key is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=_unknown(source))
+        raise ProblemHTTPException(partial(problems_admin.work_source_not_found_problem, _unknown(source)))
     return key
 
 
@@ -54,7 +57,7 @@ def resolved_work_source(value: str, services: TenantServices) -> ConfiguredWork
     """The configured source ``value`` names, by id, slug or former slug; ``404`` when it names none."""
     found = services.work_source_records.resolve(value)
     if found is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=_unknown(value))
+        raise ProblemHTTPException(partial(problems_admin.work_source_not_found_problem, _unknown(value)))
     return found
 
 
@@ -82,10 +85,7 @@ def query_source(services: Services, source: str | None = None) -> str | None:
         return None
     key = source_key(source, services)
     if key is None:
-        raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
-            detail=[{"loc": ["query", "source"], "msg": _unknown(source), "type": UNKNOWN_WORK_SOURCE}],
-        )
+        raise ProblemHTTPException(partial(problems_admin.unknown_query_work_source_problem, source))
     return key
 
 

@@ -6,11 +6,14 @@ redirect; a display name never resolves. An unresolved repository answers ``404`
 
 from __future__ import annotations
 
+from functools import partial
 from typing import Annotated
 
-from fastapi import Depends, HTTPException, status
+from fastapi import Depends
 
+from blizzard.hub.api import problems_admin
 from blizzard.hub.api.deps import Services
+from blizzard.hub.api.problem_exceptions import ProblemHTTPException
 from blizzard.hub.domain.config.repositories import ConfiguredRepository
 
 
@@ -18,7 +21,9 @@ def path_repository(repository: str, services: Services) -> ConfiguredRepository
     """The repository the ``{repository}`` path segment names, by id, slug or former slug; ``404`` when none."""
     found = services.repository_records.resolve(repository)
     if found is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"unknown repository {repository!r}")
+        raise ProblemHTTPException(
+            partial(problems_admin.repository_not_found_problem, f"unknown repository {repository!r}")
+        )
     return found
 
 

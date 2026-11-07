@@ -13,18 +13,20 @@ and an optional ``If-Match`` (``bzh:configured-record``). ``GET /routines/trend`
 from __future__ import annotations
 
 from datetime import datetime
+from functools import partial
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, Header, HTTPException, Query, Response, status
 
 from blizzard.foundation.garden_proposals import GardenProposalOrigin
 from blizzard.foundation.store.utc import as_utc, iso_utc
-from blizzard.hub.api import chunk_events
+from blizzard.hub.api import chunk_events, problems, problems_garden
 from blizzard.hub.api.auth import reject_runner_principal
 from blizzard.hub.api.auth_session import require, tenant_bound
 from blizzard.hub.api.chunk_views import ingest_conflict_refusal
 from blizzard.hub.api.deps import Services
 from blizzard.hub.api.door import RequestDoor, change_context
+from blizzard.hub.api.problem_exceptions import ProblemHTTPException
 from blizzard.hub.api.project_label_fields import ProjectLabelFields
 from blizzard.hub.api.project_labels import ProjectLabels
 from blizzard.hub.api.project_params import CallProject, PathProject, QueryProject, project_of_call
@@ -101,20 +103,26 @@ def _listing(services: TenantServices, project_id: str | None, *, include_retire
 
 
 def _unprocessable(exc: ConfigFieldError) -> HTTPException:
-    return HTTPException(
-        status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
-        detail=[{"loc": ["body", exc.field], "msg": exc.message, "type": "value_error"}],
-    )
+    return ProblemHTTPException(partial(problems_garden.config_field_invalid_problem, exc.field, exc.message))
 
 
 def _revision_conflict(exc: ConfigRevisionConflict) -> HTTPException:
-    return HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc))
+    return ProblemHTTPException(partial(problems.revision_conflict_problem, str(exc)))
+
+
+def _definition_refusal(exc: Exception) -> HTTPException:
+    """A malformed scope slug is the scope's refusal; every other refused definition is the routine's own."""
+    if isinstance(exc, ScopeSlugError):
+        return ProblemHTTPException(partial(problems_garden.scope_slug_invalid_problem, str(exc)))
+    return ProblemHTTPException(partial(problems_garden.routine_definition_invalid_problem, str(exc)))
 
 
 def _routine_or_404(routine_id: str, services: TenantServices) -> Routine:
     routine = services.routines.get(routine_id)
     if routine is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"unknown routine {routine_id}")
+        raise ProblemHTTPException(
+            partial(problems_garden.routine_not_found_problem, f"unknown routine {routine_id}", 404)
+        )
     return routine
 
 
@@ -146,7 +154,7 @@ def _create(
         RoutineScopeOtherProject,
         InvalidHarnesses,
     ) as exc:
-        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail=str(exc)) from exc
+        raise _definition_refusal(exc) from exc
     return _routine_view(routine, ProjectLabels.of_project(project).fields(routine.project_id))
 
 
@@ -205,9 +213,8 @@ def _parse_instant(value: str, *, field: str) -> datetime:
     try:
         return as_utc(datetime.fromisoformat(value))
     except ValueError as exc:
-        raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
-            detail=f"{field} {value!r} is not a valid ISO-8601 instant",
+        raise ProblemHTTPException(
+            partial(problems_garden.garden_window_invalid_problem, f"{field} {value!r} is not a valid ISO-8601 instant")
         ) from exc
 
 
@@ -257,7 +264,9 @@ def routine_trend(
     project_id = project if project is not None else project_of_call(services).project_id
     found = services.routines.get_by_slug(project_id, routine)
     if found is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"unknown routine {routine!r}")
+        raise ProblemHTTPException(
+            partial(problems_garden.routine_not_found_problem, f"unknown routine {routine!r}", 404)
+        )
     parsed_since = _parse_instant(since, field="since")
     parsed_until = _parse_instant(until, field="until")
     parsed_boundary = _parse_instant(introduced_boundary, field="introduced_boundary")
@@ -266,7 +275,7 @@ def routine_trend(
             since=parsed_since, until=parsed_until, introduced_boundary=parsed_boundary, period_days=period_days
         )
     except InvalidWindowError as exc:
-        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail=str(exc)) from exc
+        raise ProblemHTTPException(partial(problems_garden.garden_window_invalid_problem, str(exc))) from exc
     return _trend_view(services.garden_trend.trend(found, window))
 
 
@@ -311,13 +320,15 @@ def routine_proposal_counts(
     try:
         require_until_after_since(parsed_since, parsed_until)
     except InvalidWindowError as exc:
-        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail=str(exc)) from exc
+        raise ProblemHTTPException(partial(problems_garden.garden_window_invalid_problem, str(exc))) from exc
     project_id: str | None = project
     if routine is not None:
         if project_id is None:
             project_id = project_of_call(services).project_id
         if services.routines.get_by_slug(project_id, routine) is None:
-            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"unknown routine {routine!r}")
+            raise ProblemHTTPException(
+                partial(problems_garden.routine_not_found_problem, f"unknown routine {routine!r}", 404)
+            )
     rows = services.garden_proposals.counts_by_class(
         since=parsed_since, until=parsed_until, routine_name=routine, project_id=project_id, origin=origin
     )
@@ -361,7 +372,9 @@ def routine_baselines(routine_id: str, services: Services) -> list[RoutineBaseli
     404 on an unknown routine id."""
     routine = services.routines.get(routine_id)
     if routine is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"unknown routine {routine_id}")
+        raise ProblemHTTPException(
+            partial(problems_garden.routine_not_found_problem, f"unknown routine {routine_id}", 404)
+        )
     return [_baseline_view(b) for b in services.routine_baselines.baselines_for(routine)]
 
 
@@ -375,7 +388,9 @@ def list_routine_scopes(routine_id: str, services: Services) -> list[str]:
     scope is always among them. 404 on an unknown routine id."""
     routine = services.routines.get(routine_id)
     if routine is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"unknown routine {routine_id}")
+        raise ProblemHTTPException(
+            partial(problems_garden.routine_not_found_problem, f"unknown routine {routine_id}", 404)
+        )
     return services.routine_scopes.list_scopes(routine.routine_id)
 
 
@@ -386,10 +401,10 @@ def _resolve_scope_for_membership(routine: Routine, scope_slug: str, services: T
     try:
         slug = ScopeSlug.parse(scope_slug)
     except ScopeSlugError as exc:
-        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail=str(exc)) from exc
+        raise ProblemHTTPException(partial(problems_garden.scope_slug_invalid_problem, str(exc))) from exc
     scope = services.scopes.get(routine.project_id, slug.value)
     if scope is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"unknown scope {scope_slug}")
+        raise ProblemHTTPException(partial(problems_garden.scope_not_found_problem, f"unknown scope {scope_slug}", 404))
     return scope
 
 
@@ -410,7 +425,7 @@ def link_routine_scope(
     try:
         services.routine_scope_membership.link(routine, scope, change_context(identity, door), if_match=if_match)
     except RoutineScopeOtherProject as exc:
-        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail=str(exc)) from exc
+        raise _definition_refusal(exc) from exc
     except ConfigRevisionConflict as exc:
         raise _revision_conflict(exc) from exc
     return Response(status_code=status.HTTP_204_NO_CONTENT)
@@ -434,7 +449,7 @@ def unlink_routine_scope(
     try:
         services.routine_scope_membership.unlink(routine, scope, change_context(identity, door), if_match=if_match)
     except (RoutineDefaultScopeUnlinkError, RoutineScopeOtherProject) as exc:
-        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail=str(exc)) from exc
+        raise _definition_refusal(exc) from exc
     except ConfigRevisionConflict as exc:
         raise _revision_conflict(exc) from exc
     return Response(status_code=status.HTTP_204_NO_CONTENT)
@@ -479,7 +494,7 @@ def edit_routine(
         RoutineScopeOtherProject,
         InvalidHarnesses,
     ) as exc:
-        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail=str(exc)) from exc
+        raise _definition_refusal(exc) from exc
     return _labelled(edited, services)
 
 
@@ -565,13 +580,15 @@ def routine_sweeps(
     malformed instant or a non-positive span. Positive spans are uncapped for historical comparison."""
     routine = services.routines.get(routine_id)
     if routine is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"unknown routine {routine_id}")
+        raise ProblemHTTPException(
+            partial(problems_garden.routine_not_found_problem, f"unknown routine {routine_id}", 404)
+        )
     parsed_since = _parse_instant(since, field="since")
     parsed_until = _parse_instant(until, field="until")
     try:
         window = SweepWindow.of(parsed_since, parsed_until)
     except InvalidWindowError as exc:
-        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail=str(exc)) from exc
+        raise ProblemHTTPException(partial(problems_garden.garden_window_invalid_problem, str(exc))) from exc
     sweeps = services.garden_sweeps.sweeps(routine, since=window.since, until=window.until)
     return _sweeps_view(sweeps)
 
@@ -617,20 +634,24 @@ def run_routine(
     allocated ref's pointer."""
     routine = services.routines.get(routine_id)
     if routine is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"unknown routine {routine_id}")
+        raise ProblemHTTPException(
+            partial(problems_garden.routine_not_found_problem, f"unknown routine {routine_id}", 404)
+        )
     try:
         services.routine_run.refuse_if_retired(routine)
     except RoutineRetiredError as exc:
-        raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=str(exc)) from exc
+        raise ProblemHTTPException(partial(problems_garden.routine_not_runnable_problem, str(exc))) from exc
     try:
         slug = routine.effective_scope_slug(
             ScopeSlug.parse(request.scope_slug) if request.scope_slug is not None else None
         )
     except ScopeSlugError as exc:
-        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail=str(exc)) from exc
+        raise ProblemHTTPException(partial(problems_garden.scope_slug_invalid_problem, str(exc))) from exc
     scope = services.scopes.get(routine.project_id, slug.value)
     if scope is None:
-        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail=f"unknown scope {slug.value!r}")
+        raise ProblemHTTPException(
+            partial(problems_garden.scope_not_found_problem, f"unknown scope {slug.value!r}", 422)
+        )
     try:
         result = services.routine_run.run(
             routine,
@@ -640,15 +661,15 @@ def run_routine(
             author=WorkItemAuthor.user(identity.user_id),
         )
     except ScopeNotRelatedError as exc:
-        raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
-            detail=(
+        raise ProblemHTTPException(
+            partial(
+                problems_garden.routine_scope_not_related_problem,
                 f"scope {exc.slug!r} is not related to routine {exc.routine_id!r} — link it first with "
-                f"`blizzard hub routine scope add {exc.routine_id} {exc.slug}`"
-            ),
+                f"`blizzard hub routine scope add {exc.routine_id} {exc.slug}`",
+            )
         ) from exc
     except (RoutineGraphUnresolvedError, ScopeRetiredError, RoutineRetiredError) as exc:
-        raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=str(exc)) from exc
+        raise ProblemHTTPException(partial(problems_garden.routine_not_runnable_problem, str(exc))) from exc
     except IngestConflict as exc:
         raise ingest_conflict_refusal(services, exc) from exc
     # The chunk is minted `not_ready`, so its post-write status reads `not_ready`.

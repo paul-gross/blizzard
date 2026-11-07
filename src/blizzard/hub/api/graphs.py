@@ -10,10 +10,10 @@ from __future__ import annotations
 from functools import partial
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, status
 
 from blizzard.foundation.store.utc import iso_utc
-from blizzard.hub.api import problems
+from blizzard.hub.api import problems, problems_admin
 from blizzard.hub.api.auth import reject_runner_principal
 from blizzard.hub.api.auth_session import require, tenant_bound
 from blizzard.hub.api.deps import Services
@@ -207,7 +207,7 @@ def get_graph(graph_id: str, services: Services) -> GraphView:
     """One graph's full reified definition; 404 on unknown id."""
     graph = services.graphs.get(graph_id)
     if graph is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"unknown graph {graph_id}")
+        raise ProblemHTTPException(partial(problems_admin.graph_not_found_problem, f"unknown graph {graph_id}"))
     return _graph_view(
         graph,
         definition_yaml=_body(services, graph_id),
@@ -230,7 +230,7 @@ def retire_graph(
     already pinned to it runs on untouched. 404 on an unknown id."""
     graph = services.graphs.get(graph_id)
     if graph is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"unknown graph {graph_id}")
+        raise ProblemHTTPException(partial(problems_admin.graph_not_found_problem, f"unknown graph {graph_id}"))
     services.graph_lifecycle.retire(graph, by=identity.user_id)
     return _graph_view(
         graph,
@@ -254,7 +254,7 @@ def enable_graph(
     Idempotent on an already-enabled graph; 404 on an unknown id."""
     graph = services.graphs.get(graph_id)
     if graph is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"unknown graph {graph_id}")
+        raise ProblemHTTPException(partial(problems_admin.graph_not_found_problem, f"unknown graph {graph_id}"))
     services.graph_lifecycle.enable(graph, by=identity.user_id)
     return _graph_view(
         graph,
@@ -278,7 +278,7 @@ def patch_graph(
     no change row."""
     graph = services.graphs.get(graph_id)
     if graph is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"unknown graph {graph_id}")
+        raise ProblemHTTPException(partial(problems_admin.graph_not_found_problem, f"unknown graph {graph_id}"))
     if "follow_latest" in request.model_fields_set:
         services.graph_lifecycle.set_follow_latest(graph, follow_latest=request.follow_latest, by=identity.user_id)
     return _graph_view(
@@ -308,7 +308,7 @@ def set_graph_follow_latest(
     Idempotent, and 404 on an unknown id."""
     graph = services.graphs.get(graph_id)
     if graph is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"unknown graph {graph_id}")
+        raise ProblemHTTPException(partial(problems_admin.graph_not_found_problem, f"unknown graph {graph_id}"))
     services.graph_lifecycle.set_follow_latest(graph, follow_latest=request.follow_latest, by=identity.user_id)
     return _graph_view(
         graph,

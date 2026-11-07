@@ -5,10 +5,10 @@ from __future__ import annotations
 
 from functools import partial
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends
 
 from blizzard.foundation.store.utc import as_utc, iso_utc
-from blizzard.hub.api import problems
+from blizzard.hub.api import problems, problems_runners
 from blizzard.hub.api.auth import reject_runner_principal
 from blizzard.hub.api.auth_session import require_hub
 from blizzard.hub.api.hub_level import Hub
@@ -68,9 +68,9 @@ def egress_reset(request: EgressResetRequest, services: Hub) -> EgressResetRespo
     try:
         result = services.egress_reset.reset(request.dataset, as_utc(request.to))
     except ResetRefused as exc:
-        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail=str(exc)) from exc
+        raise ProblemHTTPException(partial(problems_runners.egress_reset_refused_problem, exc)) from exc
     except ResetUnavailable as exc:
-        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
+        raise ProblemHTTPException(partial(problems_runners.egress_reset_unavailable_problem, exc)) from exc
     return EgressResetResponse(
         dataset=result.dataset,
         from_at=iso_utc(result.previous) if result.previous else None,
@@ -94,9 +94,9 @@ def egress_backfill(request: EgressBackfillRequest, services: Hub) -> EgressBack
             as_utc(request.since), as_utc(request.until), dataset=request.dataset, dry_run=request.dry_run
         )
     except BackfillWindowRefused as exc:
-        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail=str(exc)) from exc
+        raise ProblemHTTPException(partial(problems_runners.egress_backfill_window_refused_problem, exc)) from exc
     except BackfillUnavailable as exc:
-        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
+        raise ProblemHTTPException(partial(problems_runners.egress_backfill_unavailable_problem, exc)) from exc
     counts = [EgressBackfillCount(dataset=c.dataset, rows=c.rows, files=c.files) for c in result.datasets]
     if result.failure is not None:
         raise ProblemHTTPException(partial(problems.egress_backfill_failed_problem, result.failure.cause.value, counts))

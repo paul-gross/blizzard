@@ -10,6 +10,7 @@ from typing import Any, cast
 import click
 
 from blizzard.cli.get_group import GetGroup
+from blizzard.cli.refusal import refusal_of
 from blizzard.foundation.roles import dto
 from blizzard.foundation.runner_token_names import hub_token_variable
 from blizzard.hub.cli.command import FleetCommand
@@ -92,7 +93,7 @@ def runner_add(cli: CliContext, name: str, projects: tuple[str, ...], host_id: s
     if host_id is not None:
         request["host_id"] = host_id
     resp = cli.send("post", "/api/runners", json_body=request)
-    if resp.status_code in _PREDATES_ADD and host_id is None:
+    if resp.status_code in _PREDATES_ADD and refusal_of(resp).type is None and host_id is None:
         raise click.ClickException(f"this hub ({cli.hub_url}) predates `hub runner add`")
     cli.check(
         resp,

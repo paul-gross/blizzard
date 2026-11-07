@@ -29,6 +29,7 @@ from blizzard.hub.domain.runners.registration import RetiredRunnerGuard
 from blizzard.hub.store import schema as s
 from blizzard.hub.store.scoped import ScopedConnections
 from blizzard.hub.store.transactions import HubTransactions
+from blizzard.wire.problem_types_chunks import DECISION_CLOSED
 from tests.support.gate_decisions import (
     _open_decision,  # pyright: ignore[reportPrivateUsage]  # shared test helper, imported from tests.support.gate_decisions
 )
@@ -116,7 +117,9 @@ def test_a_resolution_refuses_when_the_gate_closes_after_the_resolve_read_it(
 
     assert [type(exc) for exc in raised] == [DecisionClosed]
     assert resp.status_code == 409, resp.text
-    assert resp.json() == {"detail": str(raised[0])}
+    assert resp.headers["content-type"] == "application/problem+json"
+    assert resp.json()["type"] == DECISION_CLOSED
+    assert resp.json()["detail"] == str(raised[0])
     assert _resolution_rows(hub, decision_id) == 0
     emitted = emitted_events(hub, since=before)
     assert HubEventType.DECISION_RESOLVED not in [e["event"] for e in emitted]

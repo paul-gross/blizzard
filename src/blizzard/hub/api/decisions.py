@@ -10,10 +10,10 @@ from collections.abc import Mapping
 from functools import partial
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, status
 
 from blizzard.foundation.store.utc import iso_utc
-from blizzard.hub.api import chunk_events, problems
+from blizzard.hub.api import chunk_events, problems, problems_chunks
 from blizzard.hub.api.auth import reject_runner_principal
 from blizzard.hub.api.auth_session import require, tenant_bound
 from blizzard.hub.api.deps import Services
@@ -107,16 +107,18 @@ def resolve_decision(
     body's ``resolved_by`` field — a spoofed value there is silently ignored."""
     pre_decision = services.chunks.decisions.get_decision(decision_id)
     if pre_decision is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"unknown decision {decision_id}")
+        raise ProblemHTTPException(
+            partial(problems_chunks.decision_not_found_problem, f"unknown decision {decision_id}")
+        )
     change = chunk_events.ChunkChanged.before(services, pre_decision.chunk_id)
     try:
         result = services.decisions.resolve(
             pre_decision, choice=request.choice, resolved_by=identity.username, note=request.note
         )
     except NotADecisionChoice as exc:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+        raise ProblemHTTPException(partial(problems_chunks.not_a_decision_choice_problem, str(exc))) from exc
     except DecisionClosed as exc:
-        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
+        raise ProblemHTTPException(partial(problems_chunks.decision_closed_problem, str(exc))) from exc
     decision = services.chunks.decisions.get_decision(decision_id)
     if not result.resolved:
         raise ProblemHTTPException(

@@ -7,7 +7,7 @@ from __future__ import annotations
 
 from functools import partial
 
-from fastapi import APIRouter, Depends, HTTPException, Request, status
+from fastapi import APIRouter, Depends, Request, status
 
 from blizzard.foundation.store.utc import iso_utc
 from blizzard.hub.api import problems
@@ -103,7 +103,7 @@ def declare_dependency(
     try:
         edge = services.dependencies.declare(dependent, prerequisite, by=request.by)
     except ChunkNotFound as exc:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
+        raise ProblemHTTPException(partial(problems.chunk_disappeared_problem, exc)) from exc
     except DependentNotEditable as exc:
         # Its ``status`` member is the released chunk status, so the HTTP status is named here.
         return problem_response(

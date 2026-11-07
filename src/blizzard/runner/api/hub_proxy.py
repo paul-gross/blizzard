@@ -7,6 +7,7 @@ directly."""
 from __future__ import annotations
 
 from dataclasses import dataclass
+from typing import Any
 
 import httpx2
 import structlog
@@ -57,6 +58,24 @@ def _unverified(verdict: IdentityVerdict) -> str:
 
 #: The upstream headers a relayed refusal keeps: how to authenticate again, and when to retry.
 _RELAYED_HEADERS = ("www-authenticate", "retry-after")
+
+
+#: The refusal statuses a hub-proxied route relays, each declared as the base problem a client reads.
+RELAYED_REFUSALS: dict[int | str, dict[str, Any]] = {
+    code: {
+        "description": "A refusal the hub answered, relayed as the hub sent it.",
+        "content": {"application/problem+json": {"schema": {"$ref": "#/components/schemas/Problem"}}},
+    }
+    for code in (
+        status.HTTP_400_BAD_REQUEST,
+        status.HTTP_401_UNAUTHORIZED,
+        status.HTTP_403_FORBIDDEN,
+        status.HTTP_404_NOT_FOUND,
+        status.HTTP_409_CONFLICT,
+        422,
+        status.HTTP_503_SERVICE_UNAVAILABLE,
+    )
+}
 
 
 class UpstreamRefusal(HTTPException):

@@ -11,15 +11,18 @@ request's :class:`ChangeContext` and an optional ``If-Match`` (``bzh:configured-
 
 from __future__ import annotations
 
+from functools import partial
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, Header, HTTPException, status
 
 from blizzard.foundation.store.utc import iso_utc
+from blizzard.hub.api import problems, problems_garden
 from blizzard.hub.api.auth import reject_runner_principal
 from blizzard.hub.api.auth_session import require, tenant_bound
 from blizzard.hub.api.deps import Services
 from blizzard.hub.api.door import RequestDoor, change_context
+from blizzard.hub.api.problem_exceptions import ProblemHTTPException
 from blizzard.hub.api.project_label_fields import ProjectLabelFields
 from blizzard.hub.api.project_labels import ProjectLabels
 from blizzard.hub.api.project_params import CallProject, PathProject, QueryProject
@@ -55,20 +58,17 @@ def _labelled(scope: Scope, project: Project) -> ScopeView:
 
 def _unprocessable(exc: ConfigFieldError) -> HTTPException:
     """A refused field, located in the body — the shape FastAPI's own validation answers."""
-    return HTTPException(
-        status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
-        detail=[{"loc": ["body", exc.field], "msg": exc.message, "type": "value_error"}],
-    )
+    return ProblemHTTPException(partial(problems_garden.config_field_invalid_problem, exc.field, exc.message))
 
 
 def _revision_conflict(exc: ConfigRevisionConflict) -> HTTPException:
-    return HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc))
+    return ProblemHTTPException(partial(problems.revision_conflict_problem, str(exc)))
 
 
 def _scope_or_404(project: Project, slug: str, services: TenantServices) -> Scope:
     scope = services.scopes.get(project.project_id, slug)
     if scope is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"unknown scope {slug}")
+        raise ProblemHTTPException(partial(problems_garden.scope_not_found_problem, f"unknown scope {slug}", 404))
     return scope
 
 
@@ -82,7 +82,7 @@ def _create(
     try:
         slug = ScopeSlug.parse(request.slug)
     except ScopeSlugError as exc:
-        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail=str(exc)) from exc
+        raise ProblemHTTPException(partial(problems_garden.scope_slug_invalid_problem, str(exc))) from exc
     scope = services.scope_registry.ensure(
         project, slug, change_context(identity, door), description=request.description
     )
@@ -101,7 +101,7 @@ def _edit(
     try:
         parsed = ScopeSlug.parse(slug)
     except ScopeSlugError as exc:
-        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail=str(exc)) from exc
+        raise ProblemHTTPException(partial(problems_garden.scope_slug_invalid_problem, str(exc))) from exc
     scope = _scope_or_404(project, parsed.value, services)
     edit = ScopeEdit(**{name: getattr(request, name) for name in request.model_fields_set})
     try:

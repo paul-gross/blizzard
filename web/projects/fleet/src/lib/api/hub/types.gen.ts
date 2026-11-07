@@ -4,6 +4,35 @@ export type ClientOptions = {
     baseUrl: `${string}://${string}` | (string & {});
 };
 
+/**
+ * AbsorberNotLiveProblem
+ *
+ * A supersede named an absorber that is not itself live.
+ */
+export type AbsorberNotLiveProblem = {
+    /**
+     * Detail
+     */
+    detail: string;
+    /**
+     * Instance
+     */
+    instance: string;
+    /**
+     * Status
+     */
+    status?: number;
+    /**
+     * Title
+     */
+    title: string;
+    /**
+     * Type
+     */
+    type: 'urn:blizzard:problem:absorber-not-live';
+    [key: string]: unknown;
+};
+
 export const ActivityChunkChangeCause = {
     MINTED: 'minted',
     PROMOTED: 'promoted',
@@ -955,6 +984,35 @@ export type BacklogReplaceRequest = {
 };
 
 /**
+ * BlankEditValueProblem
+ *
+ * An edit supplied a value that is blank once trimmed.
+ */
+export type BlankEditValueProblem = {
+    /**
+     * Detail
+     */
+    detail: string;
+    /**
+     * Instance
+     */
+    instance: string;
+    /**
+     * Status
+     */
+    status?: number;
+    /**
+     * Title
+     */
+    title: string;
+    /**
+     * Type
+     */
+    type: 'urn:blizzard:problem:blank-edit-value';
+    [key: string]: unknown;
+};
+
+/**
  * BlockedView
  *
  * A chunk's blocked marking — present iff a pre-claim dependent (``not_ready`` or
@@ -1084,6 +1142,35 @@ export type BounceView = {
      * Withdrawn
      */
     withdrawn: boolean;
+};
+
+/**
+ * CadenceAdmissionRefusedProblem
+ *
+ * A write would leave a cadence promoting its runs, by a caller who may not admit work.
+ */
+export type CadenceAdmissionRefusedProblem = {
+    /**
+     * Detail
+     */
+    detail: string;
+    /**
+     * Instance
+     */
+    instance: string;
+    /**
+     * Status
+     */
+    status?: number;
+    /**
+     * Title
+     */
+    title: string;
+    /**
+     * Type
+     */
+    type: 'urn:blizzard:problem:cadence-admission-refused';
+    [key: string]: unknown;
 };
 
 /**
@@ -1233,6 +1320,35 @@ export type CadenceLifecycleRequest = {
 };
 
 /**
+ * CadenceNotFoundProblem
+ *
+ * The named cadence does not exist in the tenant.
+ */
+export type CadenceNotFoundProblem = {
+    /**
+     * Detail
+     */
+    detail: string;
+    /**
+     * Instance
+     */
+    instance: string;
+    /**
+     * Status
+     */
+    status?: number;
+    /**
+     * Title
+     */
+    title: string;
+    /**
+     * Type
+     */
+    type: 'urn:blizzard:problem:cadence-not-found';
+    [key: string]: unknown;
+};
+
+/**
  * CadenceScheduleDocument
  *
  * The moments a cadence may fire: a five-field cron expression read as wall-clock time in an IANA ``zone``.
@@ -1263,6 +1379,35 @@ export type CadenceScheduleView = {
      * Zone
      */
     zone: string;
+};
+
+/**
+ * CadenceSlugTakenProblem
+ *
+ * The project already holds a cadence of that slug.
+ */
+export type CadenceSlugTakenProblem = {
+    /**
+     * Detail
+     */
+    detail: string;
+    /**
+     * Instance
+     */
+    instance: string;
+    /**
+     * Status
+     */
+    status?: number;
+    /**
+     * Title
+     */
+    title: string;
+    /**
+     * Type
+     */
+    type: 'urn:blizzard:problem:cadence-slug-taken';
+    [key: string]: unknown;
 };
 
 /**
@@ -1458,6 +1603,35 @@ export type ChoreView = {
      * Scopes Set At
      */
     scopes_set_at: string;
+};
+
+/**
+ * ChunkAlreadyMovedProblem
+ *
+ * A graph re-pin named a chunk that has already moved.
+ */
+export type ChunkAlreadyMovedProblem = {
+    /**
+     * Detail
+     */
+    detail: string;
+    /**
+     * Instance
+     */
+    instance: string;
+    /**
+     * Status
+     */
+    status?: number;
+    /**
+     * Title
+     */
+    title: string;
+    /**
+     * Type
+     */
+    type: 'urn:blizzard:problem:chunk-already-moved';
+    [key: string]: unknown;
 };
 
 export const ChunkChangeCause = {
@@ -2045,6 +2219,35 @@ export type ChunkGroupResponse = {
 };
 
 /**
+ * ChunkHasDependentsProblem
+ *
+ * A delete targeted a chunk that is a standing prerequisite for other chunks.
+ */
+export type ChunkHasDependentsProblem = {
+    /**
+     * Detail
+     */
+    detail: string;
+    /**
+     * Instance
+     */
+    instance: string;
+    /**
+     * Status
+     */
+    status?: number;
+    /**
+     * Title
+     */
+    title: string;
+    /**
+     * Type
+     */
+    type: 'urn:blizzard:problem:chunk-has-dependents';
+    [key: string]: unknown;
+};
+
+/**
  * ChunkIngestConflict
  *
  * The 409 problem: the pointer is already held by a live chunk. ``source`` is the pointer's source key — ``hub``
@@ -2175,6 +2378,122 @@ export type ChunkNeighborhoodView = {
 };
 
 /**
+ * ChunkNotDeletableProblem
+ *
+ * A delete targeted a chunk outside the pre-claim window.
+ */
+export type ChunkNotDeletableProblem = {
+    /**
+     * Detail
+     */
+    detail: string;
+    /**
+     * Instance
+     */
+    instance: string;
+    /**
+     * Status
+     */
+    status?: number;
+    /**
+     * Title
+     */
+    title: string;
+    /**
+     * Type
+     */
+    type: 'urn:blizzard:problem:chunk-not-deletable';
+    [key: string]: unknown;
+};
+
+/**
+ * ChunkNotDemotableProblem
+ *
+ * A demote targeted a chunk that is not resting in the ready lane.
+ */
+export type ChunkNotDemotableProblem = {
+    /**
+     * Detail
+     */
+    detail: string;
+    /**
+     * Instance
+     */
+    instance: string;
+    /**
+     * Status
+     */
+    status?: number;
+    /**
+     * Title
+     */
+    title: string;
+    /**
+     * Type
+     */
+    type: 'urn:blizzard:problem:chunk-not-demotable';
+    [key: string]: unknown;
+};
+
+/**
+ * ChunkNotEditableProblem
+ *
+ * An edit supplied a field outside that field's editable window.
+ */
+export type ChunkNotEditableProblem = {
+    /**
+     * Detail
+     */
+    detail: string;
+    /**
+     * Instance
+     */
+    instance: string;
+    /**
+     * Status
+     */
+    status?: number;
+    /**
+     * Title
+     */
+    title: string;
+    /**
+     * Type
+     */
+    type: 'urn:blizzard:problem:chunk-not-editable';
+    [key: string]: unknown;
+};
+
+/**
+ * ChunkNotEscalatedProblem
+ *
+ * A requeue targeted a chunk that is not waiting on a human.
+ */
+export type ChunkNotEscalatedProblem = {
+    /**
+     * Detail
+     */
+    detail: string;
+    /**
+     * Instance
+     */
+    instance: string;
+    /**
+     * Status
+     */
+    status?: number;
+    /**
+     * Title
+     */
+    title: string;
+    /**
+     * Type
+     */
+    type: 'urn:blizzard:problem:chunk-not-escalated';
+    [key: string]: unknown;
+};
+
+/**
  * ChunkNotFoundProblem
  *
  * The named chunk does not exist in the tenant.
@@ -2204,6 +2523,35 @@ export type ChunkNotFoundProblem = {
 };
 
 /**
+ * ChunkNotGroupableProblem
+ *
+ * A group named a chunk outside the pre-claim window.
+ */
+export type ChunkNotGroupableProblem = {
+    /**
+     * Detail
+     */
+    detail: string;
+    /**
+     * Instance
+     */
+    instance: string;
+    /**
+     * Status
+     */
+    status?: number;
+    /**
+     * Title
+     */
+    title: string;
+    /**
+     * Type
+     */
+    type: 'urn:blizzard:problem:chunk-not-groupable';
+    [key: string]: unknown;
+};
+
+/**
  * ChunkNotPausableProblem
  *
  * The chunk cannot be paused in its current state.
@@ -2229,6 +2577,122 @@ export type ChunkNotPausableProblem = {
      * Type
      */
     type: 'urn:blizzard:problem:chunk-not-pausable';
+    [key: string]: unknown;
+};
+
+/**
+ * ChunkNotPromotableProblem
+ *
+ * A promote targeted a never-promoted chunk outside the promotable window.
+ */
+export type ChunkNotPromotableProblem = {
+    /**
+     * Detail
+     */
+    detail: string;
+    /**
+     * Instance
+     */
+    instance: string;
+    /**
+     * Status
+     */
+    status?: number;
+    /**
+     * Title
+     */
+    title: string;
+    /**
+     * Type
+     */
+    type: 'urn:blizzard:problem:chunk-not-promotable';
+    [key: string]: unknown;
+};
+
+/**
+ * ChunkNotRestartableProblem
+ *
+ * A restart targeted a terminal chunk.
+ */
+export type ChunkNotRestartableProblem = {
+    /**
+     * Detail
+     */
+    detail: string;
+    /**
+     * Instance
+     */
+    instance: string;
+    /**
+     * Status
+     */
+    status?: number;
+    /**
+     * Title
+     */
+    title: string;
+    /**
+     * Type
+     */
+    type: 'urn:blizzard:problem:chunk-not-restartable';
+    [key: string]: unknown;
+};
+
+/**
+ * ChunkNotRoutedProblem
+ *
+ * A detach targeted a chunk with no live, claimed route.
+ */
+export type ChunkNotRoutedProblem = {
+    /**
+     * Detail
+     */
+    detail: string;
+    /**
+     * Instance
+     */
+    instance: string;
+    /**
+     * Status
+     */
+    status?: number;
+    /**
+     * Title
+     */
+    title: string;
+    /**
+     * Type
+     */
+    type: 'urn:blizzard:problem:chunk-not-routed';
+    [key: string]: unknown;
+};
+
+/**
+ * ChunkNotStoppableProblem
+ *
+ * A stop targeted a chunk that is already done or stopped.
+ */
+export type ChunkNotStoppableProblem = {
+    /**
+     * Detail
+     */
+    detail: string;
+    /**
+     * Instance
+     */
+    instance: string;
+    /**
+     * Status
+     */
+    status?: number;
+    /**
+     * Title
+     */
+    title: string;
+    /**
+     * Type
+     */
+    type: 'urn:blizzard:problem:chunk-not-stoppable';
     [key: string]: unknown;
 };
 
@@ -2698,6 +3162,35 @@ export type ChunkWorkItemsView = {
     chunks: {
         [key: string]: Array<WorkItemEntry>;
     };
+};
+
+/**
+ * ChunksInDifferentProjectsProblem
+ *
+ * A group named a chunk of another project than the survivor's.
+ */
+export type ChunksInDifferentProjectsProblem = {
+    /**
+     * Detail
+     */
+    detail: string;
+    /**
+     * Instance
+     */
+    instance: string;
+    /**
+     * Status
+     */
+    status?: number;
+    /**
+     * Title
+     */
+    title: string;
+    /**
+     * Type
+     */
+    type: 'urn:blizzard:problem:chunks-in-different-projects';
+    [key: string]: unknown;
 };
 
 /**
@@ -3387,6 +3880,35 @@ export type ConfigDocumentV2 = {
 };
 
 /**
+ * ConfigFieldInvalidProblem
+ *
+ * A configured record's field cannot mean anything; ``detail`` locates it in the body.
+ */
+export type ConfigFieldInvalidProblem = {
+    /**
+     * Detail
+     */
+    detail: Array<ValidationEntry>;
+    /**
+     * Instance
+     */
+    instance: string;
+    /**
+     * Status
+     */
+    status?: number;
+    /**
+     * Title
+     */
+    title: string;
+    /**
+     * Type
+     */
+    type: 'urn:blizzard:problem:config-field-invalid';
+    [key: string]: unknown;
+};
+
+/**
  * ConfigMediaTypeUnsupportedProblem
  *
  * An apply's ``Content-Type`` names no document format the hub reads.
@@ -3416,6 +3938,93 @@ export type ConfigMediaTypeUnsupportedProblem = {
 };
 
 /**
+ * ConfigSchemaNotFoundProblem
+ *
+ * No document schema exists for the named record kind.
+ */
+export type ConfigSchemaNotFoundProblem = {
+    /**
+     * Detail
+     */
+    detail: string;
+    /**
+     * Instance
+     */
+    instance: string;
+    /**
+     * Status
+     */
+    status?: number;
+    /**
+     * Title
+     */
+    title: string;
+    /**
+     * Type
+     */
+    type: 'urn:blizzard:problem:config-schema-not-found';
+    [key: string]: unknown;
+};
+
+/**
+ * ContradictoryPlacementProblem
+ *
+ * A placement named both an anchor and the top.
+ */
+export type ContradictoryPlacementProblem = {
+    /**
+     * Detail
+     */
+    detail: string;
+    /**
+     * Instance
+     */
+    instance: string;
+    /**
+     * Status
+     */
+    status?: number;
+    /**
+     * Title
+     */
+    title: string;
+    /**
+     * Type
+     */
+    type: 'urn:blizzard:problem:contradictory-placement';
+    [key: string]: unknown;
+};
+
+/**
+ * CurrentNodeNotOnGraphProblem
+ *
+ * The chunk stands on a node its own pinned graph does not carry.
+ */
+export type CurrentNodeNotOnGraphProblem = {
+    /**
+     * Detail
+     */
+    detail: string;
+    /**
+     * Instance
+     */
+    instance: string;
+    /**
+     * Status
+     */
+    status?: number;
+    /**
+     * Title
+     */
+    title: string;
+    /**
+     * Type
+     */
+    type: 'urn:blizzard:problem:current-node-not-on-graph';
+    [key: string]: unknown;
+};
+
+/**
  * DecisionChoiceModel
  *
  * One selectable gate outcome; ``requires_checks`` marks a choice that overrides red checks
@@ -3439,6 +4048,64 @@ export type DecisionChoiceModel = {
      * Would Override Red Checks
      */
     would_override_red_checks: boolean;
+};
+
+/**
+ * DecisionClosedProblem
+ *
+ * A resolution reached a gate something already closed undecided.
+ */
+export type DecisionClosedProblem = {
+    /**
+     * Detail
+     */
+    detail: string;
+    /**
+     * Instance
+     */
+    instance: string;
+    /**
+     * Status
+     */
+    status?: number;
+    /**
+     * Title
+     */
+    title: string;
+    /**
+     * Type
+     */
+    type: 'urn:blizzard:problem:decision-closed';
+    [key: string]: unknown;
+};
+
+/**
+ * DecisionNotFoundProblem
+ *
+ * The named decision does not exist in the tenant.
+ */
+export type DecisionNotFoundProblem = {
+    /**
+     * Detail
+     */
+    detail: string;
+    /**
+     * Instance
+     */
+    instance: string;
+    /**
+     * Status
+     */
+    status?: number;
+    /**
+     * Title
+     */
+    title: string;
+    /**
+     * Type
+     */
+    type: 'urn:blizzard:problem:decision-not-found';
+    [key: string]: unknown;
 };
 
 /**
@@ -3704,6 +4371,35 @@ export type DecisionView = {
 };
 
 /**
+ * DefaultGraphRetiredProblem
+ *
+ * Every graph named after the packaged default is retired.
+ */
+export type DefaultGraphRetiredProblem = {
+    /**
+     * Detail
+     */
+    detail: string;
+    /**
+     * Instance
+     */
+    instance: string;
+    /**
+     * Status
+     */
+    status?: number;
+    /**
+     * Title
+     */
+    title: string;
+    /**
+     * Type
+     */
+    type: 'urn:blizzard:problem:default-graph-retired';
+    [key: string]: unknown;
+};
+
+/**
  * DeliveredSetDeltaView
  */
 export type DeliveredSetDeltaView = {
@@ -3837,6 +4533,64 @@ export type DependentNotEditableView = {
 };
 
 /**
+ * DuplicateFindingProblem
+ *
+ * A bulk finding verb named the same finding twice.
+ */
+export type DuplicateFindingProblem = {
+    /**
+     * Detail
+     */
+    detail: string;
+    /**
+     * Instance
+     */
+    instance: string;
+    /**
+     * Status
+     */
+    status?: number;
+    /**
+     * Title
+     */
+    title: string;
+    /**
+     * Type
+     */
+    type: 'urn:blizzard:problem:duplicate-finding';
+    [key: string]: unknown;
+};
+
+/**
+ * DuplicateReorderIdsProblem
+ *
+ * A whole-order replacement named one chunk twice.
+ */
+export type DuplicateReorderIdsProblem = {
+    /**
+     * Detail
+     */
+    detail: string;
+    /**
+     * Instance
+     */
+    instance: string;
+    /**
+     * Status
+     */
+    status?: number;
+    /**
+     * Title
+     */
+    title: string;
+    /**
+     * Type
+     */
+    type: 'urn:blizzard:problem:duplicate-reorder-ids';
+    [key: string]: unknown;
+};
+
+/**
  * EgressBackfillCount
  *
  * One dataset's rows and data files — written, or with ``dry_run`` that would be.
@@ -3936,6 +4690,64 @@ export type EgressBackfillResponse = {
 };
 
 /**
+ * EgressBackfillUnavailableProblem
+ *
+ * The export is off or rejected, so a wet backfill cannot run.
+ */
+export type EgressBackfillUnavailableProblem = {
+    /**
+     * Detail
+     */
+    detail: string;
+    /**
+     * Instance
+     */
+    instance: string;
+    /**
+     * Status
+     */
+    status?: number;
+    /**
+     * Title
+     */
+    title: string;
+    /**
+     * Type
+     */
+    type: 'urn:blizzard:problem:egress-backfill-unavailable';
+    [key: string]: unknown;
+};
+
+/**
+ * EgressBackfillWindowRefusedProblem
+ *
+ * The backfill window is inverted, too wide, or reaches past now, or the dataset is unknown.
+ */
+export type EgressBackfillWindowRefusedProblem = {
+    /**
+     * Detail
+     */
+    detail: string;
+    /**
+     * Instance
+     */
+    instance: string;
+    /**
+     * Status
+     */
+    status?: number;
+    /**
+     * Title
+     */
+    title: string;
+    /**
+     * Type
+     */
+    type: 'urn:blizzard:problem:egress-backfill-window-refused';
+    [key: string]: unknown;
+};
+
+/**
  * EgressDatasetStatus
  *
  * One configured dataset: ``cursor_at`` is its position in time, ``None`` before its first pass;
@@ -3954,6 +4766,35 @@ export type EgressDatasetStatus = {
      * Name
      */
     name: string;
+};
+
+/**
+ * EgressResetRefusedProblem
+ *
+ * The dataset is unconfigured or the instant is in the future.
+ */
+export type EgressResetRefusedProblem = {
+    /**
+     * Detail
+     */
+    detail: string;
+    /**
+     * Instance
+     */
+    instance: string;
+    /**
+     * Status
+     */
+    status?: number;
+    /**
+     * Title
+     */
+    title: string;
+    /**
+     * Type
+     */
+    type: 'urn:blizzard:problem:egress-reset-refused';
+    [key: string]: unknown;
 };
 
 /**
@@ -3996,6 +4837,35 @@ export type EgressResetResponse = {
      * To At
      */
     to_at: string;
+};
+
+/**
+ * EgressResetUnavailableProblem
+ *
+ * The export is off or rejected, so a cursor cannot be reset.
+ */
+export type EgressResetUnavailableProblem = {
+    /**
+     * Detail
+     */
+    detail: string;
+    /**
+     * Instance
+     */
+    instance: string;
+    /**
+     * Status
+     */
+    status?: number;
+    /**
+     * Title
+     */
+    title: string;
+    /**
+     * Type
+     */
+    type: 'urn:blizzard:problem:egress-reset-unavailable';
+    [key: string]: unknown;
 };
 
 /**
@@ -4734,6 +5604,35 @@ export type FindingFactView = {
 };
 
 /**
+ * FindingNotFoundProblem
+ *
+ * The named finding does not exist in the tenant.
+ */
+export type FindingNotFoundProblem = {
+    /**
+     * Detail
+     */
+    detail: string;
+    /**
+     * Instance
+     */
+    instance: string;
+    /**
+     * Status
+     */
+    status?: number;
+    /**
+     * Title
+     */
+    title: string;
+    /**
+     * Type
+     */
+    type: 'urn:blizzard:problem:finding-not-found';
+    [key: string]: unknown;
+};
+
+/**
  * FindingNotInChunkProblem
  *
  * The finding is outside the set answered by the chunk.
@@ -4759,6 +5658,35 @@ export type FindingNotInChunkProblem = {
      * Type
      */
     type: 'urn:blizzard:problem:finding-not-in-chunk';
+    [key: string]: unknown;
+};
+
+/**
+ * FindingNoteRequiredProblem
+ *
+ * A finding verb carried a blank or missing note.
+ */
+export type FindingNoteRequiredProblem = {
+    /**
+     * Detail
+     */
+    detail: string;
+    /**
+     * Instance
+     */
+    instance: string;
+    /**
+     * Status
+     */
+    status?: number;
+    /**
+     * Title
+     */
+    title: string;
+    /**
+     * Type
+     */
+    type: 'urn:blizzard:problem:finding-note-required';
     [key: string]: unknown;
 };
 
@@ -4836,6 +5764,35 @@ export type FindingSupersedeRequest = {
 };
 
 /**
+ * FindingSupersedesItselfProblem
+ *
+ * A supersede named its own finding as the absorber.
+ */
+export type FindingSupersedesItselfProblem = {
+    /**
+     * Detail
+     */
+    detail: string;
+    /**
+     * Instance
+     */
+    instance: string;
+    /**
+     * Status
+     */
+    status?: number;
+    /**
+     * Title
+     */
+    title: string;
+    /**
+     * Type
+     */
+    type: 'urn:blizzard:problem:finding-supersedes-itself';
+    [key: string]: unknown;
+};
+
+/**
  * FindingSurvey
  *
  * A run's survey artifact — the scope, the revision read per repository, the
@@ -4860,6 +5817,35 @@ export type FindingSurvey = {
      * Scope
      */
     scope: string;
+};
+
+/**
+ * FindingTransitionRefusedProblem
+ *
+ * A finding verb was applied to a finding whose state does not allow it.
+ */
+export type FindingTransitionRefusedProblem = {
+    /**
+     * Detail
+     */
+    detail: string;
+    /**
+     * Instance
+     */
+    instance: string;
+    /**
+     * Status
+     */
+    status?: number;
+    /**
+     * Title
+     */
+    title: string;
+    /**
+     * Type
+     */
+    type: 'urn:blizzard:problem:finding-transition-refused';
+    [key: string]: unknown;
 };
 
 /**
@@ -4943,6 +5929,35 @@ export type FindingView = {
      * Summary
      */
     summary: string;
+};
+
+/**
+ * FindingWriteContendedProblem
+ *
+ * A finding verb's write kept losing to concurrent writes.
+ */
+export type FindingWriteContendedProblem = {
+    /**
+     * Detail
+     */
+    detail: string;
+    /**
+     * Instance
+     */
+    instance: string;
+    /**
+     * Status
+     */
+    status?: number;
+    /**
+     * Title
+     */
+    title: string;
+    /**
+     * Type
+     */
+    type: 'urn:blizzard:problem:finding-write-contended';
+    [key: string]: unknown;
 };
 
 /**
@@ -5160,6 +6175,35 @@ export type FlowListView = {
 };
 
 /**
+ * FlowNotFoundProblem
+ *
+ * The named flow does not exist in the tenant.
+ */
+export type FlowNotFoundProblem = {
+    /**
+     * Detail
+     */
+    detail: string;
+    /**
+     * Instance
+     */
+    instance: string;
+    /**
+     * Status
+     */
+    status?: number;
+    /**
+     * Title
+     */
+    title: string;
+    /**
+     * Type
+     */
+    type: 'urn:blizzard:problem:flow-not-found';
+    [key: string]: unknown;
+};
+
+/**
  * FlowPlaceState
  *
  * Where an open submission stands on a flow it holds.
@@ -5354,6 +6398,35 @@ export type FlowView = {
 };
 
 /**
+ * FoldWouldCloseCycleProblem
+ *
+ * A group would close a cycle in the standing dependency graph.
+ */
+export type FoldWouldCloseCycleProblem = {
+    /**
+     * Detail
+     */
+    detail: string;
+    /**
+     * Instance
+     */
+    instance: string;
+    /**
+     * Status
+     */
+    status?: number;
+    /**
+     * Title
+     */
+    title: string;
+    /**
+     * Type
+     */
+    type: 'urn:blizzard:problem:fold-would-close-cycle';
+    [key: string]: unknown;
+};
+
+/**
  * ForgeBudgetView
  *
  * One rate budget's last reading of one bucket: the secret its calls go out under (``None`` for the anonymous
@@ -5507,6 +6580,127 @@ export type ForgeEntry = {
 };
 
 /**
+ * ForgeInUseDetail
+ */
+export type ForgeInUseDetail = {
+    /**
+     * Code
+     */
+    code: 'forge_in_use';
+    /**
+     * Message
+     */
+    message: string;
+    /**
+     * Referrers
+     */
+    referrers: Array<RecordReferrer>;
+};
+
+/**
+ * ForgeInUseProblem
+ *
+ * Enabled records still name the forge.
+ */
+export type ForgeInUseProblem = {
+    detail: ForgeInUseDetail;
+    /**
+     * Instance
+     */
+    instance: string;
+    /**
+     * Status
+     */
+    status?: number;
+    /**
+     * Title
+     */
+    title: string;
+    /**
+     * Type
+     */
+    type: 'urn:blizzard:problem:forge-in-use';
+    [key: string]: unknown;
+};
+
+/**
+ * ForgeNotFoundProblem
+ *
+ * A path names a forge the tenant does not hold.
+ */
+export type ForgeNotFoundProblem = {
+    /**
+     * Detail
+     */
+    detail: string;
+    /**
+     * Instance
+     */
+    instance: string;
+    /**
+     * Status
+     */
+    status?: number;
+    /**
+     * Title
+     */
+    title: string;
+    /**
+     * Type
+     */
+    type: 'urn:blizzard:problem:forge-not-found';
+    [key: string]: unknown;
+};
+
+/**
+ * ForgeOriginTakenDetail
+ */
+export type ForgeOriginTakenDetail = {
+    /**
+     * Api Base
+     */
+    api_base: string;
+    /**
+     * Code
+     */
+    code: 'forge_origin_taken';
+    /**
+     * Holder
+     */
+    holder: string;
+    /**
+     * Message
+     */
+    message: string;
+};
+
+/**
+ * ForgeOriginTakenProblem
+ *
+ * Another forge holds the API origin.
+ */
+export type ForgeOriginTakenProblem = {
+    detail: ForgeOriginTakenDetail;
+    /**
+     * Instance
+     */
+    instance: string;
+    /**
+     * Status
+     */
+    status?: number;
+    /**
+     * Title
+     */
+    title: string;
+    /**
+     * Type
+     */
+    type: 'urn:blizzard:problem:forge-origin-taken';
+    [key: string]: unknown;
+};
+
+/**
  * ForgePatchRequest
  */
 export type ForgePatchRequest = {
@@ -5544,6 +6738,94 @@ export type ForgeReferenceView = {
      * Label
      */
     label: string | null;
+};
+
+/**
+ * ForgeRevisionConflictDetail
+ */
+export type ForgeRevisionConflictDetail = {
+    /**
+     * Code
+     */
+    code: 'revision_conflict';
+    /**
+     * Current
+     */
+    current: number;
+    /**
+     * Message
+     */
+    message: string;
+};
+
+/**
+ * ForgeRevisionConflictProblem
+ *
+ * A forge write read a revision the store no longer holds.
+ */
+export type ForgeRevisionConflictProblem = {
+    detail: ForgeRevisionConflictDetail;
+    /**
+     * Instance
+     */
+    instance: string;
+    /**
+     * Status
+     */
+    status?: number;
+    /**
+     * Title
+     */
+    title: string;
+    /**
+     * Type
+     */
+    type: 'urn:blizzard:problem:forge-revision-conflict';
+    [key: string]: unknown;
+};
+
+/**
+ * ForgeSlugTakenDetail
+ */
+export type ForgeSlugTakenDetail = {
+    /**
+     * Code
+     */
+    code: 'forge_slug_taken';
+    /**
+     * Message
+     */
+    message: string;
+    /**
+     * Slug
+     */
+    slug: string;
+};
+
+/**
+ * ForgeSlugTakenProblem
+ *
+ * Another forge holds the slug.
+ */
+export type ForgeSlugTakenProblem = {
+    detail: ForgeSlugTakenDetail;
+    /**
+     * Instance
+     */
+    instance: string;
+    /**
+     * Status
+     */
+    status?: number;
+    /**
+     * Title
+     */
+    title: string;
+    /**
+     * Type
+     */
+    type: 'urn:blizzard:problem:forge-slug-taken';
+    [key: string]: unknown;
 };
 
 /**
@@ -5608,6 +6890,35 @@ export type ForgesListView = {
      * Forges
      */
     forges: Array<ForgeSummary>;
+};
+
+/**
+ * GardenDefaultGraphRetiredProblem
+ *
+ * The packaged default graph is retired, so accepting a proposal cannot mint its work item.
+ */
+export type GardenDefaultGraphRetiredProblem = {
+    /**
+     * Detail
+     */
+    detail: string;
+    /**
+     * Instance
+     */
+    instance: string;
+    /**
+     * Status
+     */
+    status?: number;
+    /**
+     * Title
+     */
+    title: string;
+    /**
+     * Type
+     */
+    type: 'urn:blizzard:problem:garden-default-graph-retired';
+    [key: string]: unknown;
 };
 
 /**
@@ -5693,6 +7004,35 @@ export type GardenProposalAcceptResponse = {
      * Title
      */
     title: string;
+};
+
+/**
+ * GardenProposalAlreadyClosedProblem
+ *
+ * The proposal already carries a closure, which is terminal.
+ */
+export type GardenProposalAlreadyClosedProblem = {
+    /**
+     * Detail
+     */
+    detail: string;
+    /**
+     * Instance
+     */
+    instance: string;
+    /**
+     * Status
+     */
+    status?: number;
+    /**
+     * Title
+     */
+    title: string;
+    /**
+     * Type
+     */
+    type: 'urn:blizzard:problem:garden-proposal-already-closed';
+    [key: string]: unknown;
 };
 
 /**
@@ -5886,6 +7226,36 @@ export type GardenProposalFindingsRequest = {
 };
 
 /**
+ * GardenProposalInvalidProblem
+ *
+ * A garden-proposal write states something that cannot hold: a blank or empty field, a body without a mint,
+ * or an unknown, duplicate, exited, foreign or mislinked finding.
+ */
+export type GardenProposalInvalidProblem = {
+    /**
+     * Detail
+     */
+    detail: string;
+    /**
+     * Instance
+     */
+    instance: string;
+    /**
+     * Status
+     */
+    status?: number;
+    /**
+     * Title
+     */
+    title: string;
+    /**
+     * Type
+     */
+    type: 'urn:blizzard:problem:garden-proposal-invalid';
+    [key: string]: unknown;
+};
+
+/**
  * GardenProposalItemOutcome
  *
  * Whether an accepted proposal minted a work item — recorded positively rather than
@@ -5900,6 +7270,35 @@ export const GardenProposalItemOutcome = { MINTED: 'minted', DECLINED: 'declined
  * inferred from an absent link, so a declined mint reads as a decision, not a gap.
  */
 export type GardenProposalItemOutcome = typeof GardenProposalItemOutcome[keyof typeof GardenProposalItemOutcome];
+
+/**
+ * GardenProposalNotFoundProblem
+ *
+ * The named garden proposal does not exist in the tenant.
+ */
+export type GardenProposalNotFoundProblem = {
+    /**
+     * Detail
+     */
+    detail: string;
+    /**
+     * Instance
+     */
+    instance: string;
+    /**
+     * Status
+     */
+    status?: number;
+    /**
+     * Title
+     */
+    title: string;
+    /**
+     * Type
+     */
+    type: 'urn:blizzard:problem:garden-proposal-not-found';
+    [key: string]: unknown;
+};
 
 /**
  * GardenProposalOrigin
@@ -6027,6 +7426,35 @@ export type GardenSweepsView = {
      * Until
      */
     until: string;
+};
+
+/**
+ * GardenWindowInvalidProblem
+ *
+ * A time window is malformed: an instant that is not ISO-8601, or a span the window refuses.
+ */
+export type GardenWindowInvalidProblem = {
+    /**
+     * Detail
+     */
+    detail: string;
+    /**
+     * Instance
+     */
+    instance: string;
+    /**
+     * Status
+     */
+    status?: number;
+    /**
+     * Title
+     */
+    title: string;
+    /**
+     * Type
+     */
+    type: 'urn:blizzard:problem:garden-window-invalid';
+    [key: string]: unknown;
 };
 
 /**
@@ -6250,6 +7678,35 @@ export type GraphNodeView = {
      * Session Source
      */
     session_source: string | null;
+};
+
+/**
+ * GraphNotFoundProblem
+ *
+ * The named graph does not exist in the tenant.
+ */
+export type GraphNotFoundProblem = {
+    /**
+     * Detail
+     */
+    detail: string;
+    /**
+     * Instance
+     */
+    instance: string;
+    /**
+     * Status
+     */
+    status?: number;
+    /**
+     * Title
+     */
+    title: string;
+    /**
+     * Type
+     */
+    type: 'urn:blizzard:problem:graph-not-found';
+    [key: string]: unknown;
 };
 
 /**
@@ -6686,6 +8143,64 @@ export type HostFactBatch = {
 };
 
 /**
+ * HostHoldsRoutesProblem
+ *
+ * A non-forced retirement cannot proceed while a runner under the host holds routes.
+ */
+export type HostHoldsRoutesProblem = {
+    /**
+     * Detail
+     */
+    detail: string;
+    /**
+     * Instance
+     */
+    instance: string;
+    /**
+     * Status
+     */
+    status?: number;
+    /**
+     * Title
+     */
+    title: string;
+    /**
+     * Type
+     */
+    type: 'urn:blizzard:problem:host-holds-routes';
+    [key: string]: unknown;
+};
+
+/**
+ * HostLifecycleConflictProblem
+ *
+ * The host's lifecycle changed during the operation.
+ */
+export type HostLifecycleConflictProblem = {
+    /**
+     * Detail
+     */
+    detail: string;
+    /**
+     * Instance
+     */
+    instance: string;
+    /**
+     * Status
+     */
+    status?: number;
+    /**
+     * Title
+     */
+    title: string;
+    /**
+     * Type
+     */
+    type: 'urn:blizzard:problem:host-lifecycle-conflict';
+    [key: string]: unknown;
+};
+
+/**
  * HostLifecycleRequest
  *
  * Revoke a host's token — records who did it.
@@ -6723,6 +8238,64 @@ export type HostNameTakenProblem = {
      * Type
      */
     type: 'urn:blizzard:problem:host-name-taken';
+    [key: string]: unknown;
+};
+
+/**
+ * HostNotEnrolledProblem
+ *
+ * The host holds no token to revoke.
+ */
+export type HostNotEnrolledProblem = {
+    /**
+     * Detail
+     */
+    detail: string;
+    /**
+     * Instance
+     */
+    instance: string;
+    /**
+     * Status
+     */
+    status?: number;
+    /**
+     * Title
+     */
+    title: string;
+    /**
+     * Type
+     */
+    type: 'urn:blizzard:problem:host-not-enrolled';
+    [key: string]: unknown;
+};
+
+/**
+ * HostNotFoundProblem
+ *
+ * The named host is not available to the caller.
+ */
+export type HostNotFoundProblem = {
+    /**
+     * Detail
+     */
+    detail: string;
+    /**
+     * Instance
+     */
+    instance: string;
+    /**
+     * Status
+     */
+    status?: number;
+    /**
+     * Title
+     */
+    title: string;
+    /**
+     * Type
+     */
+    type: 'urn:blizzard:problem:host-not-found';
     [key: string]: unknown;
 };
 
@@ -6936,6 +8509,64 @@ export type HostRetiredProblem = {
      * Type
      */
     type: 'urn:blizzard:problem:host-retired';
+    [key: string]: unknown;
+};
+
+/**
+ * HostRetirementInterruptedProblem
+ *
+ * A host retirement was interrupted after committing part of its work.
+ */
+export type HostRetirementInterruptedProblem = {
+    /**
+     * Detail
+     */
+    detail: string;
+    /**
+     * Instance
+     */
+    instance: string;
+    /**
+     * Status
+     */
+    status?: number;
+    /**
+     * Title
+     */
+    title: string;
+    /**
+     * Type
+     */
+    type: 'urn:blizzard:problem:host-retirement-interrupted';
+    [key: string]: unknown;
+};
+
+/**
+ * HostRetirementUnfinishedProblem
+ *
+ * The host's retirement has not finished, so its runners cannot be released.
+ */
+export type HostRetirementUnfinishedProblem = {
+    /**
+     * Detail
+     */
+    detail: string;
+    /**
+     * Instance
+     */
+    instance: string;
+    /**
+     * Status
+     */
+    status?: number;
+    /**
+     * Title
+     */
+    title: string;
+    /**
+     * Type
+     */
+    type: 'urn:blizzard:problem:host-retirement-unfinished';
     [key: string]: unknown;
 };
 
@@ -7268,6 +8899,93 @@ export type IdpDisabledProblem = {
 };
 
 /**
+ * IngestEmptyProblem
+ *
+ * An ingest named no work ref.
+ */
+export type IngestEmptyProblem = {
+    /**
+     * Detail
+     */
+    detail: string;
+    /**
+     * Instance
+     */
+    instance: string;
+    /**
+     * Status
+     */
+    status?: number;
+    /**
+     * Title
+     */
+    title: string;
+    /**
+     * Type
+     */
+    type: 'urn:blizzard:problem:ingest-empty';
+    [key: string]: unknown;
+};
+
+/**
+ * IngestItemProjectMismatchProblem
+ *
+ * A hub item the ingest wraps records a project other than the one the ingest mints into.
+ */
+export type IngestItemProjectMismatchProblem = {
+    /**
+     * Detail
+     */
+    detail: string;
+    /**
+     * Instance
+     */
+    instance: string;
+    /**
+     * Status
+     */
+    status?: number;
+    /**
+     * Title
+     */
+    title: string;
+    /**
+     * Type
+     */
+    type: 'urn:blizzard:problem:ingest-item-project-mismatch';
+    [key: string]: unknown;
+};
+
+/**
+ * IngestTokenUnclaimedProblem
+ *
+ * An ingest token no configured work source claims.
+ */
+export type IngestTokenUnclaimedProblem = {
+    /**
+     * Detail
+     */
+    detail: string;
+    /**
+     * Instance
+     */
+    instance: string;
+    /**
+     * Status
+     */
+    status?: number;
+    /**
+     * Title
+     */
+    title: string;
+    /**
+     * Type
+     */
+    type: 'urn:blizzard:problem:ingest-token-unclaimed';
+    [key: string]: unknown;
+};
+
+/**
  * IntendedMigrationPatch
  *
  * The intended-migration value a ``ChunkPatchRequest`` carries. ``to_graph`` is a
@@ -7308,6 +9026,35 @@ export type IntendedMigrationView = {
      * Node Name
      */
     node_name: string | null;
+};
+
+/**
+ * InvalidHarnessesProblem
+ *
+ * A harness preference contains a blank or a duplicate.
+ */
+export type InvalidHarnessesProblem = {
+    /**
+     * Detail
+     */
+    detail: string;
+    /**
+     * Instance
+     */
+    instance: string;
+    /**
+     * Status
+     */
+    status?: number;
+    /**
+     * Title
+     */
+    title: string;
+    /**
+     * Type
+     */
+    type: 'urn:blizzard:problem:invalid-harnesses';
+    [key: string]: unknown;
 };
 
 /**
@@ -7369,6 +9116,35 @@ export type InvariantsResponse = {
 };
 
 /**
+ * InvitationAlreadyResolvedProblem
+ *
+ * The invitation was already accepted or revoked.
+ */
+export type InvitationAlreadyResolvedProblem = {
+    /**
+     * Detail
+     */
+    detail: string;
+    /**
+     * Instance
+     */
+    instance: string;
+    /**
+     * Status
+     */
+    status?: number;
+    /**
+     * Title
+     */
+    title: string;
+    /**
+     * Type
+     */
+    type: 'urn:blizzard:problem:invitation-already-resolved';
+    [key: string]: unknown;
+};
+
+/**
  * InvitationCreateRequest
  *
  * Invite ``email`` into the request's tenant as ``role``, for ``expires_in`` whole days.
@@ -7409,6 +9185,35 @@ export type InvitationListResponse = {
      * Invitations
      */
     invitations: Array<InvitationView>;
+};
+
+/**
+ * InvitationNotFoundProblem
+ *
+ * The tenant holds no such invitation.
+ */
+export type InvitationNotFoundProblem = {
+    /**
+     * Detail
+     */
+    detail: string;
+    /**
+     * Instance
+     */
+    instance: string;
+    /**
+     * Status
+     */
+    status?: number;
+    /**
+     * Title
+     */
+    title: string;
+    /**
+     * Type
+     */
+    type: 'urn:blizzard:problem:invitation-not-found';
+    [key: string]: unknown;
 };
 
 /**
@@ -7535,6 +9340,46 @@ export type LandingFactsPage = {
 };
 
 /**
+ * LandingOrderConflictDetail
+ */
+export type LandingOrderConflictDetail = {
+    /**
+     * Code
+     */
+    code: 'landing_order_conflict';
+    /**
+     * Message
+     */
+    message: string;
+};
+
+/**
+ * LandingOrderConflictProblem
+ *
+ * Concurrent landing-order writes kept changing the order.
+ */
+export type LandingOrderConflictProblem = {
+    detail: LandingOrderConflictDetail;
+    /**
+     * Instance
+     */
+    instance: string;
+    /**
+     * Status
+     */
+    status?: number;
+    /**
+     * Title
+     */
+    title: string;
+    /**
+     * Type
+     */
+    type: 'urn:blizzard:problem:landing-order-conflict';
+    [key: string]: unknown;
+};
+
+/**
  * LandingOrderRequest
  *
  * A project's whole landing order: ``repositories``, each an id or a slug, ranked ``1.0``, ``2.0``, … in the
@@ -7584,6 +9429,104 @@ export type LandingPositionRequest = {
      * Unranked
      */
     unranked?: boolean;
+};
+
+/**
+ * LastAdminKeptProblem
+ *
+ * The tenant's last admin cannot be demoted or revoked.
+ */
+export type LastAdminKeptProblem = {
+    /**
+     * Detail
+     */
+    detail: string;
+    /**
+     * Instance
+     */
+    instance: string;
+    /**
+     * Status
+     */
+    status?: number;
+    /**
+     * Title
+     */
+    title: string;
+    /**
+     * Type
+     */
+    type: 'urn:blizzard:problem:last-admin-kept';
+    [key: string]: unknown;
+};
+
+/**
+ * LastHubAdminProblem
+ *
+ * The last hub administrator cannot be revoked.
+ */
+export type LastHubAdminProblem = {
+    /**
+     * Detail
+     */
+    detail: string;
+    /**
+     * Instance
+     */
+    instance: string;
+    /**
+     * Status
+     */
+    status?: number;
+    /**
+     * Title
+     */
+    title: string;
+    /**
+     * Type
+     */
+    type: 'urn:blizzard:problem:last-hub-admin';
+    [key: string]: unknown;
+};
+
+/**
+ * LastTenantDetail
+ */
+export type LastTenantDetail = {
+    /**
+     * Code
+     */
+    code: 'last_tenant';
+    /**
+     * Message
+     */
+    message: string;
+};
+
+/**
+ * LastTenantProblem
+ *
+ * The hub's only open tenant cannot be deleted.
+ */
+export type LastTenantProblem = {
+    detail: LastTenantDetail;
+    /**
+     * Instance
+     */
+    instance: string;
+    /**
+     * Status
+     */
+    status?: number;
+    /**
+     * Title
+     */
+    title: string;
+    /**
+     * Type
+     */
+    type: 'urn:blizzard:problem:last-tenant';
+    [key: string]: unknown;
 };
 
 /**
@@ -7907,6 +9850,35 @@ export type MeasurementReadingView = {
 };
 
 /**
+ * MemberNotFoundProblem
+ *
+ * The named user is not a member of the tenant.
+ */
+export type MemberNotFoundProblem = {
+    /**
+     * Detail
+     */
+    detail: string;
+    /**
+     * Instance
+     */
+    instance: string;
+    /**
+     * Status
+     */
+    status?: number;
+    /**
+     * Title
+     */
+    title: string;
+    /**
+     * Type
+     */
+    type: 'urn:blizzard:problem:member-not-found';
+    [key: string]: unknown;
+};
+
+/**
  * MemberRoleRequest
  *
  * ``PUT /api/members/{user_id}`` body — the membership role to grant: ``guest``, ``contributor`` or ``admin``.
@@ -7961,6 +9933,35 @@ export type MemberView = {
 };
 
 /**
+ * MembershipChangeRefusedProblem
+ *
+ * A caller may not change their own membership role.
+ */
+export type MembershipChangeRefusedProblem = {
+    /**
+     * Detail
+     */
+    detail: string;
+    /**
+     * Instance
+     */
+    instance: string;
+    /**
+     * Status
+     */
+    status?: number;
+    /**
+     * Title
+     */
+    title: string;
+    /**
+     * Type
+     */
+    type: 'urn:blizzard:problem:membership-change-refused';
+    [key: string]: unknown;
+};
+
+/**
  * MigrationMode
  *
  * How a chunk's intended migration fires at its next transition.
@@ -8004,6 +10005,35 @@ export const MigrationSource = {
  * in history.
  */
 export type MigrationSource = typeof MigrationSource[keyof typeof MigrationSource];
+
+/**
+ * MigrationTargetIsCurrentPinProblem
+ *
+ * An intended migration's target graph is the chunk's own current pin.
+ */
+export type MigrationTargetIsCurrentPinProblem = {
+    /**
+     * Detail
+     */
+    detail: string;
+    /**
+     * Instance
+     */
+    instance: string;
+    /**
+     * Status
+     */
+    status?: number;
+    /**
+     * Title
+     */
+    title: string;
+    /**
+     * Type
+     */
+    type: 'urn:blizzard:problem:migration-target-is-current-pin';
+    [key: string]: unknown;
+};
 
 /**
  * MigrationView
@@ -8302,6 +10332,93 @@ export type NodeEnvelope = {
     work_refs: Array<{
         [key: string]: string;
     }>;
+};
+
+/**
+ * NodeNotOnGraphProblem
+ *
+ * A restart or forced migration named a node its landing graph does not carry.
+ */
+export type NodeNotOnGraphProblem = {
+    /**
+     * Detail
+     */
+    detail: string;
+    /**
+     * Instance
+     */
+    instance: string;
+    /**
+     * Status
+     */
+    status?: number;
+    /**
+     * Title
+     */
+    title: string;
+    /**
+     * Type
+     */
+    type: 'urn:blizzard:problem:node-not-on-graph';
+    [key: string]: unknown;
+};
+
+/**
+ * NotADecisionChoiceProblem
+ *
+ * A resolution named a choice the gate does not offer.
+ */
+export type NotADecisionChoiceProblem = {
+    /**
+     * Detail
+     */
+    detail: string;
+    /**
+     * Instance
+     */
+    instance: string;
+    /**
+     * Status
+     */
+    status?: number;
+    /**
+     * Title
+     */
+    title: string;
+    /**
+     * Type
+     */
+    type: 'urn:blizzard:problem:not-a-decision-choice';
+    [key: string]: unknown;
+};
+
+/**
+ * NotInListProblem
+ *
+ * A reorder named a chunk outside the list it ranks.
+ */
+export type NotInListProblem = {
+    /**
+     * Detail
+     */
+    detail: string;
+    /**
+     * Instance
+     */
+    instance: string;
+    /**
+     * Status
+     */
+    status?: number;
+    /**
+     * Title
+     */
+    title: string;
+    /**
+     * Type
+     */
+    type: 'urn:blizzard:problem:not-in-list';
+    [key: string]: unknown;
 };
 
 /**
@@ -8711,6 +10828,64 @@ export type ProjectDocument = {
 };
 
 /**
+ * ProjectLinkNotFoundProblem
+ *
+ * The project holds no link to the named work source or repository.
+ */
+export type ProjectLinkNotFoundProblem = {
+    /**
+     * Detail
+     */
+    detail: string;
+    /**
+     * Instance
+     */
+    instance: string;
+    /**
+     * Status
+     */
+    status?: number;
+    /**
+     * Title
+     */
+    title: string;
+    /**
+     * Type
+     */
+    type: 'urn:blizzard:problem:project-link-not-found';
+    [key: string]: unknown;
+};
+
+/**
+ * ProjectNotFoundProblem
+ *
+ * A path names a project the tenant does not hold.
+ */
+export type ProjectNotFoundProblem = {
+    /**
+     * Detail
+     */
+    detail: string;
+    /**
+     * Instance
+     */
+    instance: string;
+    /**
+     * Status
+     */
+    status?: number;
+    /**
+     * Title
+     */
+    title: string;
+    /**
+     * Type
+     */
+    type: 'urn:blizzard:problem:project-not-found';
+    [key: string]: unknown;
+};
+
+/**
  * ProjectPatchRequest
  *
  * A sparse edit: an absent field is unchanged, a present one is set, and an explicit ``null`` is refused on every
@@ -8799,6 +10974,35 @@ export type ProjectRequiredProblem = {
      * Type
      */
     type: 'urn:blizzard:problem:project-required';
+    [key: string]: unknown;
+};
+
+/**
+ * ProjectSlugTakenProblem
+ *
+ * Another project of the tenant holds the slug.
+ */
+export type ProjectSlugTakenProblem = {
+    /**
+     * Detail
+     */
+    detail: string;
+    /**
+     * Instance
+     */
+    instance: string;
+    /**
+     * Status
+     */
+    status?: number;
+    /**
+     * Title
+     */
+    title: string;
+    /**
+     * Type
+     */
+    type: 'urn:blizzard:problem:project-slug-taken';
     [key: string]: unknown;
 };
 
@@ -9019,6 +11223,35 @@ export type QuestionAskedPayload = {
 };
 
 /**
+ * QuestionClosedProblem
+ *
+ * An answer reached a question whose chunk has ended.
+ */
+export type QuestionClosedProblem = {
+    /**
+     * Detail
+     */
+    detail: string;
+    /**
+     * Instance
+     */
+    instance: string;
+    /**
+     * Status
+     */
+    status?: number;
+    /**
+     * Title
+     */
+    title: string;
+    /**
+     * Type
+     */
+    type: 'urn:blizzard:problem:question-closed';
+    [key: string]: unknown;
+};
+
+/**
  * QuestionNotFoundProblem
  *
  * The named question does not exist in the tenant.
@@ -9140,6 +11373,35 @@ export type QuestionView = {
      * Superseded
      */
     superseded: boolean;
+};
+
+/**
+ * QuestionWriteFencedProblem
+ *
+ * The write fence refused a question.asked row.
+ */
+export type QuestionWriteFencedProblem = {
+    /**
+     * Detail
+     */
+    detail: string;
+    /**
+     * Instance
+     */
+    instance: string;
+    /**
+     * Status
+     */
+    status?: number;
+    /**
+     * Title
+     */
+    title: string;
+    /**
+     * Type
+     */
+    type: 'urn:blizzard:problem:question-write-fenced';
+    [key: string]: unknown;
 };
 
 /**
@@ -9318,6 +11580,35 @@ export type ReDeriveResponse = {
 };
 
 /**
+ * ReDeriveScopeRefusedProblem
+ *
+ * A re-derive names both a segment and a chunk.
+ */
+export type ReDeriveScopeRefusedProblem = {
+    /**
+     * Detail
+     */
+    detail: string;
+    /**
+     * Instance
+     */
+    instance: string;
+    /**
+     * Status
+     */
+    status?: number;
+    /**
+     * Title
+     */
+    title: string;
+    /**
+     * Type
+     */
+    type: 'urn:blizzard:problem:re-derive-scope-refused';
+    [key: string]: unknown;
+};
+
+/**
  * ReadinessResponse
  *
  * The wire shape of a readiness reading.
@@ -9398,6 +11689,27 @@ export type RecordKind = typeof RecordKind[keyof typeof RecordKind];
  * key is its id; ``None`` for a kind keyed by its name.
  */
 export type RecordRefView = {
+    /**
+     * Key
+     */
+    key: string;
+    /**
+     * Kind
+     */
+    kind: string;
+    /**
+     * Label
+     */
+    label: string | null;
+};
+
+/**
+ * RecordReferrer
+ *
+ * An enabled record that still names the forge or secret, by kind and key. ``label`` is the record's current slug
+ * for a slugged kind, whose key is its id; ``None`` for a kind keyed by its name.
+ */
+export type RecordReferrer = {
     /**
      * Key
      */
@@ -9507,6 +11819,35 @@ export type RepositoriesListView = {
      * Repositories
      */
     repositories: Array<RepositorySummary>;
+};
+
+/**
+ * RepositoryCoordinateTakenProblem
+ *
+ * Another repository holds the forge, owner and repo.
+ */
+export type RepositoryCoordinateTakenProblem = {
+    /**
+     * Detail
+     */
+    detail: string;
+    /**
+     * Instance
+     */
+    instance: string;
+    /**
+     * Status
+     */
+    status?: number;
+    /**
+     * Title
+     */
+    title: string;
+    /**
+     * Type
+     */
+    type: 'urn:blizzard:problem:repository-coordinate-taken';
+    [key: string]: unknown;
 };
 
 /**
@@ -9644,6 +11985,35 @@ export type RepositoryLinksView = {
 };
 
 /**
+ * RepositoryNotFoundProblem
+ *
+ * A path names a repository the tenant does not hold.
+ */
+export type RepositoryNotFoundProblem = {
+    /**
+     * Detail
+     */
+    detail: string;
+    /**
+     * Instance
+     */
+    instance: string;
+    /**
+     * Status
+     */
+    status?: number;
+    /**
+     * Title
+     */
+    title: string;
+    /**
+     * Type
+     */
+    type: 'urn:blizzard:problem:repository-not-found';
+    [key: string]: unknown;
+};
+
+/**
  * RepositoryPatchRequest
  *
  * A sparse edit: an absent field is unchanged, a present one is set, and an explicit ``null`` is refused on every
@@ -9685,6 +12055,35 @@ export type RepositoryPatchRequest = {
      * Slug
      */
     slug?: string | null;
+};
+
+/**
+ * RepositorySlugTakenProblem
+ *
+ * Another repository of the tenant holds the slug.
+ */
+export type RepositorySlugTakenProblem = {
+    /**
+     * Detail
+     */
+    detail: string;
+    /**
+     * Instance
+     */
+    instance: string;
+    /**
+     * Status
+     */
+    status?: number;
+    /**
+     * Title
+     */
+    title: string;
+    /**
+     * Type
+     */
+    type: 'urn:blizzard:problem:repository-slug-taken';
+    [key: string]: unknown;
 };
 
 /**
@@ -9835,6 +12234,35 @@ export type ResolutionView = {
 };
 
 /**
+ * RestartGraphPinChangedProblem
+ *
+ * A concurrent edit re-pinned the chunk between the caller's load and the restart.
+ */
+export type RestartGraphPinChangedProblem = {
+    /**
+     * Detail
+     */
+    detail: string;
+    /**
+     * Instance
+     */
+    instance: string;
+    /**
+     * Status
+     */
+    status?: number;
+    /**
+     * Title
+     */
+    title: string;
+    /**
+     * Type
+     */
+    type: 'urn:blizzard:problem:restart-graph-pin-changed';
+    [key: string]: unknown;
+};
+
+/**
  * RestartView
  *
  * One operator restart (#370, #371): the chunk was forced from ``from_node`` onto ``to_node`` at
@@ -9956,6 +12384,35 @@ export type RoleAssignmentRequest = {
      * Role
      */
     role: string;
+};
+
+/**
+ * RoleNotAssignableProblem
+ *
+ * The role is not assignable through the API.
+ */
+export type RoleNotAssignableProblem = {
+    /**
+     * Detail
+     */
+    detail: string;
+    /**
+     * Instance
+     */
+    instance: string;
+    /**
+     * Status
+     */
+    status?: number;
+    /**
+     * Title
+     */
+    title: string;
+    /**
+     * Type
+     */
+    type: 'urn:blizzard:problem:role-not-assignable';
+    [key: string]: unknown;
 };
 
 /**
@@ -10473,6 +12930,36 @@ export type RoutineCreateRequest = {
 };
 
 /**
+ * RoutineDefinitionInvalidProblem
+ *
+ * A routine write states a definition that cannot hold: a bad or taken slug, an unresolved graph, a scope of
+ * another project, invalid harnesses, an immutable slug changed, or the default scope unlinked.
+ */
+export type RoutineDefinitionInvalidProblem = {
+    /**
+     * Detail
+     */
+    detail: string;
+    /**
+     * Instance
+     */
+    instance: string;
+    /**
+     * Status
+     */
+    status?: number;
+    /**
+     * Title
+     */
+    title: string;
+    /**
+     * Type
+     */
+    type: 'urn:blizzard:problem:routine-definition-invalid';
+    [key: string]: unknown;
+};
+
+/**
  * RoutineEditRequest
  *
  * A sparse edit: an absent field is unchanged, a present one is set. A present
@@ -10568,6 +13055,64 @@ export type RoutineLifecycleRequest = {
 };
 
 /**
+ * RoutineNotFoundProblem
+ *
+ * The named routine does not exist in the project (404 on a read or write, 422 when a body names it).
+ */
+export type RoutineNotFoundProblem = {
+    /**
+     * Detail
+     */
+    detail: string;
+    /**
+     * Instance
+     */
+    instance: string;
+    /**
+     * Status
+     */
+    status?: number;
+    /**
+     * Title
+     */
+    title: string;
+    /**
+     * Type
+     */
+    type: 'urn:blizzard:problem:routine-not-found';
+    [key: string]: unknown;
+};
+
+/**
+ * RoutineNotRunnableProblem
+ *
+ * A routine run is refused: the routine or the effective scope is retired, or the graph has no enabled mint.
+ */
+export type RoutineNotRunnableProblem = {
+    /**
+     * Detail
+     */
+    detail: string;
+    /**
+     * Instance
+     */
+    instance: string;
+    /**
+     * Status
+     */
+    status?: number;
+    /**
+     * Title
+     */
+    title: string;
+    /**
+     * Type
+     */
+    type: 'urn:blizzard:problem:routine-not-runnable';
+    [key: string]: unknown;
+};
+
+/**
  * RoutineProposalState
  *
  * Select open, closed, or all of a routine's garden proposals.
@@ -10660,6 +13205,35 @@ export type RoutineRunResponse = {
      * Title
      */
     title: string;
+};
+
+/**
+ * RoutineScopeNotRelatedProblem
+ *
+ * A run names a scope outside the routine's related set.
+ */
+export type RoutineScopeNotRelatedProblem = {
+    /**
+     * Detail
+     */
+    detail: string;
+    /**
+     * Instance
+     */
+    instance: string;
+    /**
+     * Status
+     */
+    status?: number;
+    /**
+     * Title
+     */
+    title: string;
+    /**
+     * Type
+     */
+    type: 'urn:blizzard:problem:routine-scope-not-related';
+    [key: string]: unknown;
 };
 
 /**
@@ -10825,6 +13399,35 @@ export const RunMode = { FULL: 'full', DELTA: 'delta' } as const;
  * only what changed since the recorded baseline.
  */
 export type RunMode = typeof RunMode[keyof typeof RunMode];
+
+/**
+ * RunNotFoundProblem
+ *
+ * The named garden run does not exist (in the project, when the request is project-scoped).
+ */
+export type RunNotFoundProblem = {
+    /**
+     * Detail
+     */
+    detail: string;
+    /**
+     * Instance
+     */
+    instance: string;
+    /**
+     * Status
+     */
+    status?: number;
+    /**
+     * Title
+     */
+    title: string;
+    /**
+     * Type
+     */
+    type: 'urn:blizzard:problem:run-not-found';
+    [key: string]: unknown;
+};
 
 /**
  * RunRowView
@@ -11407,6 +14010,35 @@ export type RunnerLifecycleRequest = {
 };
 
 /**
+ * RunnerNotEnrolledProblem
+ *
+ * The runner holds no token to revoke.
+ */
+export type RunnerNotEnrolledProblem = {
+    /**
+     * Detail
+     */
+    detail: string;
+    /**
+     * Instance
+     */
+    instance: string;
+    /**
+     * Status
+     */
+    status?: number;
+    /**
+     * Title
+     */
+    title: string;
+    /**
+     * Type
+     */
+    type: 'urn:blizzard:problem:runner-not-enrolled';
+    [key: string]: unknown;
+};
+
+/**
  * RunnerNotFoundProblem
  *
  * The named runner is not available to the caller.
@@ -11461,6 +14093,35 @@ export type RunnerNotRegisteredProblem = {
      * Type
      */
     type: 'urn:blizzard:problem:runner-not-registered';
+    [key: string]: unknown;
+};
+
+/**
+ * RunnerNotRetiredProblem
+ *
+ * Only a retired runner can be reinstated.
+ */
+export type RunnerNotRetiredProblem = {
+    /**
+     * Detail
+     */
+    detail: string;
+    /**
+     * Instance
+     */
+    instance: string;
+    /**
+     * Status
+     */
+    status?: number;
+    /**
+     * Title
+     */
+    title: string;
+    /**
+     * Type
+     */
+    type: 'urn:blizzard:problem:runner-not-retired';
     [key: string]: unknown;
 };
 
@@ -11762,6 +14423,35 @@ export type RunnerRegistryView = {
      * Workspace Id
      */
     workspace_id: string | null;
+};
+
+/**
+ * RunnerReinstateInterruptedProblem
+ *
+ * A runner reinstatement was interrupted after committing part of its work.
+ */
+export type RunnerReinstateInterruptedProblem = {
+    /**
+     * Detail
+     */
+    detail: string;
+    /**
+     * Instance
+     */
+    instance: string;
+    /**
+     * Status
+     */
+    status?: number;
+    /**
+     * Title
+     */
+    title: string;
+    /**
+     * Type
+     */
+    type: 'urn:blizzard:problem:runner-reinstate-interrupted';
+    [key: string]: unknown;
 };
 
 /**
@@ -12152,6 +14842,64 @@ export type ScopeLifecycleRequest = {
 };
 
 /**
+ * ScopeNotFoundProblem
+ *
+ * The named scope does not exist in the project (404 on a read or write, 422 when a run names it).
+ */
+export type ScopeNotFoundProblem = {
+    /**
+     * Detail
+     */
+    detail: string;
+    /**
+     * Instance
+     */
+    instance: string;
+    /**
+     * Status
+     */
+    status?: number;
+    /**
+     * Title
+     */
+    title: string;
+    /**
+     * Type
+     */
+    type: 'urn:blizzard:problem:scope-not-found';
+    [key: string]: unknown;
+};
+
+/**
+ * ScopeSlugInvalidProblem
+ *
+ * A scope slug is malformed.
+ */
+export type ScopeSlugInvalidProblem = {
+    /**
+     * Detail
+     */
+    detail: string;
+    /**
+     * Instance
+     */
+    instance: string;
+    /**
+     * Status
+     */
+    status?: number;
+    /**
+     * Title
+     */
+    title: string;
+    /**
+     * Type
+     */
+    type: 'urn:blizzard:problem:scope-slug-invalid';
+    [key: string]: unknown;
+};
+
+/**
  * ScopeSweepView
  */
 export type ScopeSweepView = {
@@ -12257,6 +15005,79 @@ export type SecretCreateRequest = {
 };
 
 /**
+ * SecretInUseDetail
+ */
+export type SecretInUseDetail = {
+    /**
+     * Code
+     */
+    code: 'secret_in_use';
+    /**
+     * Message
+     */
+    message: string;
+    /**
+     * Referrers
+     */
+    referrers: Array<RecordReferrer>;
+};
+
+/**
+ * SecretInUseProblem
+ *
+ * Active records still reference the secret.
+ */
+export type SecretInUseProblem = {
+    detail: SecretInUseDetail;
+    /**
+     * Instance
+     */
+    instance: string;
+    /**
+     * Status
+     */
+    status?: number;
+    /**
+     * Title
+     */
+    title: string;
+    /**
+     * Type
+     */
+    type: 'urn:blizzard:problem:secret-in-use';
+    [key: string]: unknown;
+};
+
+/**
+ * SecretNameInvalidProblem
+ *
+ * The secret name is not a valid name.
+ */
+export type SecretNameInvalidProblem = {
+    /**
+     * Detail
+     */
+    detail: string;
+    /**
+     * Instance
+     */
+    instance: string;
+    /**
+     * Status
+     */
+    status?: number;
+    /**
+     * Title
+     */
+    title: string;
+    /**
+     * Type
+     */
+    type: 'urn:blizzard:problem:secret-name-invalid';
+    [key: string]: unknown;
+};
+
+/**
  * SecretNotFoundProblem
  *
  * The named secret does not exist in the tenant.
@@ -12295,6 +15116,64 @@ export type SecretReplaceRequest = {
      * Value
      */
     value: string;
+};
+
+/**
+ * SecretRetiredProblem
+ *
+ * The secret is retired and must be enabled first.
+ */
+export type SecretRetiredProblem = {
+    /**
+     * Detail
+     */
+    detail: string;
+    /**
+     * Instance
+     */
+    instance: string;
+    /**
+     * Status
+     */
+    status?: number;
+    /**
+     * Title
+     */
+    title: string;
+    /**
+     * Type
+     */
+    type: 'urn:blizzard:problem:secret-retired';
+    [key: string]: unknown;
+};
+
+/**
+ * SecretValueBlankProblem
+ *
+ * The secret value is blank.
+ */
+export type SecretValueBlankProblem = {
+    /**
+     * Detail
+     */
+    detail: string;
+    /**
+     * Instance
+     */
+    instance: string;
+    /**
+     * Status
+     */
+    status?: number;
+    /**
+     * Title
+     */
+    title: string;
+    /**
+     * Type
+     */
+    type: 'urn:blizzard:problem:secret-value-blank';
+    [key: string]: unknown;
 };
 
 /**
@@ -12339,6 +15218,35 @@ export type SecretView = {
      * Revision
      */
     revision: number;
+};
+
+/**
+ * SelfAnchoredMoveProblem
+ *
+ * A single-chunk reorder named the chunk as its own anchor.
+ */
+export type SelfAnchoredMoveProblem = {
+    /**
+     * Detail
+     */
+    detail: string;
+    /**
+     * Instance
+     */
+    instance: string;
+    /**
+     * Status
+     */
+    status?: number;
+    /**
+     * Title
+     */
+    title: string;
+    /**
+     * Type
+     */
+    type: 'urn:blizzard:problem:self-anchored-move';
+    [key: string]: unknown;
 };
 
 /**
@@ -12519,6 +15427,35 @@ export type SourceLinksView = {
 };
 
 /**
+ * SpendInstantInvalidProblem
+ *
+ * A spend window edge is not an ISO-8601 instant.
+ */
+export type SpendInstantInvalidProblem = {
+    /**
+     * Detail
+     */
+    detail: string;
+    /**
+     * Instance
+     */
+    instance: string;
+    /**
+     * Status
+     */
+    status?: number;
+    /**
+     * Title
+     */
+    title: string;
+    /**
+     * Type
+     */
+    type: 'urn:blizzard:problem:spend-instant-invalid';
+    [key: string]: unknown;
+};
+
+/**
  * SsoRefusedProblem
  *
  * A provider callback's state belongs to a different provider.
@@ -12550,6 +15487,35 @@ export type SsoRefusedProblem = {
      * Type
      */
     type: 'urn:blizzard:problem:sso-refused';
+    [key: string]: unknown;
+};
+
+/**
+ * SubmissionNotFoundProblem
+ *
+ * The named flow submission does not belong to the chunk.
+ */
+export type SubmissionNotFoundProblem = {
+    /**
+     * Detail
+     */
+    detail: string;
+    /**
+     * Instance
+     */
+    instance: string;
+    /**
+     * Status
+     */
+    status?: number;
+    /**
+     * Title
+     */
+    title: string;
+    /**
+     * Type
+     */
+    type: 'urn:blizzard:problem:submission-not-found';
     [key: string]: unknown;
 };
 
@@ -12664,6 +15630,35 @@ export type SubscriptionUsageView = {
 };
 
 /**
+ * SweepNotFoundProblem
+ *
+ * No sweep this hub builds goes by the name.
+ */
+export type SweepNotFoundProblem = {
+    /**
+     * Detail
+     */
+    detail: string;
+    /**
+     * Instance
+     */
+    instance: string;
+    /**
+     * Status
+     */
+    status?: number;
+    /**
+     * Title
+     */
+    title: string;
+    /**
+     * Type
+     */
+    type: 'urn:blizzard:problem:sweep-not-found';
+    [key: string]: unknown;
+};
+
+/**
  * SweepPassOutcome
  *
  * How one sweep pass ended.
@@ -12697,6 +15692,35 @@ export type SweepPassResponse = {
      * Started At
      */
     started_at: string;
+};
+
+/**
+ * SweepServesNoTenantProblem
+ *
+ * The sweep runs over every tenant only, so a single tenant's pass is refused.
+ */
+export type SweepServesNoTenantProblem = {
+    /**
+     * Detail
+     */
+    detail: string;
+    /**
+     * Instance
+     */
+    instance: string;
+    /**
+     * Status
+     */
+    status?: number;
+    /**
+     * Title
+     */
+    title: string;
+    /**
+     * Type
+     */
+    type: 'urn:blizzard:problem:sweep-serves-no-tenant';
+    [key: string]: unknown;
 };
 
 /**
@@ -12745,6 +15769,35 @@ export type SystemArtifactView = {
 };
 
 /**
+ * TargetGraphRetiredProblem
+ *
+ * A graph named explicitly as a new target has been retired.
+ */
+export type TargetGraphRetiredProblem = {
+    /**
+     * Detail
+     */
+    detail: string;
+    /**
+     * Instance
+     */
+    instance: string;
+    /**
+     * Status
+     */
+    status?: number;
+    /**
+     * Title
+     */
+    title: string;
+    /**
+     * Type
+     */
+    type: 'urn:blizzard:problem:target-graph-retired';
+    [key: string]: unknown;
+};
+
+/**
  * TenantCreateRequest
  *
  * ``POST /api/admin/tenants``: the new tenant's name — a label, never refused for being taken — and, optionally,
@@ -12787,6 +15840,35 @@ export type TenantCredentialMismatchProblem = {
      * Type
      */
     type: 'urn:blizzard:problem:tenant-credential-mismatch';
+    [key: string]: unknown;
+};
+
+/**
+ * TenantDeletedProblem
+ *
+ * The tenant was already deleted.
+ */
+export type TenantDeletedProblem = {
+    /**
+     * Detail
+     */
+    detail: string;
+    /**
+     * Instance
+     */
+    instance: string;
+    /**
+     * Status
+     */
+    status?: number;
+    /**
+     * Title
+     */
+    title: string;
+    /**
+     * Type
+     */
+    type: 'urn:blizzard:problem:tenant-deleted';
     [key: string]: unknown;
 };
 
@@ -12844,6 +15926,35 @@ export type TenantGraphSync = {
      * Tenant Id
      */
     tenant_id: string;
+};
+
+/**
+ * TenantNameRefusedProblem
+ *
+ * The name is not a tenant name's shape.
+ */
+export type TenantNameRefusedProblem = {
+    /**
+     * Detail
+     */
+    detail: string;
+    /**
+     * Instance
+     */
+    instance: string;
+    /**
+     * Status
+     */
+    status?: number;
+    /**
+     * Title
+     */
+    title: string;
+    /**
+     * Type
+     */
+    type: 'urn:blizzard:problem:tenant-name-refused';
+    [key: string]: unknown;
 };
 
 /**
@@ -13115,6 +16226,64 @@ export type TraceReplayResponse = {
 };
 
 /**
+ * TraceReplayUnavailableProblem
+ *
+ * Tracing is off, so a replay that must export cannot run.
+ */
+export type TraceReplayUnavailableProblem = {
+    /**
+     * Detail
+     */
+    detail: string;
+    /**
+     * Instance
+     */
+    instance: string;
+    /**
+     * Status
+     */
+    status?: number;
+    /**
+     * Title
+     */
+    title: string;
+    /**
+     * Type
+     */
+    type: 'urn:blizzard:problem:trace-replay-unavailable';
+    [key: string]: unknown;
+};
+
+/**
+ * TraceReplayWindowRefusedProblem
+ *
+ * The replay window is inverted, too wide, or reaches past now.
+ */
+export type TraceReplayWindowRefusedProblem = {
+    /**
+     * Detail
+     */
+    detail: string;
+    /**
+     * Instance
+     */
+    instance: string;
+    /**
+     * Status
+     */
+    status?: number;
+    /**
+     * Title
+     */
+    title: string;
+    /**
+     * Type
+     */
+    type: 'urn:blizzard:problem:trace-replay-window-refused';
+    [key: string]: unknown;
+};
+
+/**
  * TraceStatusResponse
  *
  * Whether fleet tracing runs and how it is doing. ``endpoint`` is the configured origin only; no exporter
@@ -13327,6 +16496,35 @@ export type TranscriptSegmentIndexView = {
      * Segments
      */
     segments: Array<TranscriptSegmentIndexEntry>;
+};
+
+/**
+ * TranscriptSegmentNotFoundProblem
+ *
+ * The chunk holds no transcript segment of that id.
+ */
+export type TranscriptSegmentNotFoundProblem = {
+    /**
+     * Detail
+     */
+    detail: string;
+    /**
+     * Instance
+     */
+    instance: string;
+    /**
+     * Status
+     */
+    status?: number;
+    /**
+     * Title
+     */
+    title: string;
+    /**
+     * Type
+     */
+    type: 'urn:blizzard:problem:transcript-segment-not-found';
+    [key: string]: unknown;
 };
 
 /**
@@ -13692,6 +16890,35 @@ export type UnknownProjectProblem = {
 };
 
 /**
+ * UnknownRoleProblem
+ *
+ * The named role is not a role.
+ */
+export type UnknownRoleProblem = {
+    /**
+     * Detail
+     */
+    detail: string;
+    /**
+     * Instance
+     */
+    instance: string;
+    /**
+     * Status
+     */
+    status?: number;
+    /**
+     * Title
+     */
+    title: string;
+    /**
+     * Type
+     */
+    type: 'urn:blizzard:problem:unknown-role';
+    [key: string]: unknown;
+};
+
+/**
  * UnknownServedProjectProblem
  *
  * A runner's declared project does not exist in the tenant.
@@ -13721,6 +16948,55 @@ export type UnknownServedProjectProblem = {
 };
 
 /**
+ * UnknownWorkSourceDetail
+ *
+ * The validation-shaped entry for an unknown work source.
+ */
+export type UnknownWorkSourceDetail = {
+    /**
+     * Loc
+     */
+    loc: Array<string>;
+    /**
+     * Msg
+     */
+    msg: string;
+    /**
+     * Type
+     */
+    type: 'unknown_work_source';
+};
+
+/**
+ * UnknownWorkSourceProblem
+ *
+ * A query names a work source the tenant does not hold.
+ */
+export type UnknownWorkSourceProblem = {
+    /**
+     * Detail
+     */
+    detail: Array<UnknownWorkSourceDetail>;
+    /**
+     * Instance
+     */
+    instance: string;
+    /**
+     * Status
+     */
+    status?: number;
+    /**
+     * Title
+     */
+    title: string;
+    /**
+     * Type
+     */
+    type: 'urn:blizzard:problem:unknown-work-source';
+    [key: string]: unknown;
+};
+
+/**
  * UserIdentityView
  *
  * One linked provider identity.
@@ -13734,6 +17010,35 @@ export type UserIdentityView = {
      * Provider Name
      */
     provider_name: string;
+};
+
+/**
+ * UserNotFoundProblem
+ *
+ * The named user does not exist.
+ */
+export type UserNotFoundProblem = {
+    /**
+     * Detail
+     */
+    detail: string;
+    /**
+     * Instance
+     */
+    instance: string;
+    /**
+     * Status
+     */
+    status?: number;
+    /**
+     * Title
+     */
+    title: string;
+    /**
+     * Type
+     */
+    type: 'urn:blizzard:problem:user-not-found';
+    [key: string]: unknown;
 };
 
 /**
@@ -14041,6 +17346,151 @@ export type WorkItemEntry = {
 };
 
 /**
+ * WorkItemFieldBlankProblem
+ *
+ * A work item's title or body is blank.
+ */
+export type WorkItemFieldBlankProblem = {
+    /**
+     * Detail
+     */
+    detail: string;
+    /**
+     * Instance
+     */
+    instance: string;
+    /**
+     * Status
+     */
+    status?: number;
+    /**
+     * Title
+     */
+    title: string;
+    /**
+     * Type
+     */
+    type: 'urn:blizzard:problem:work-item-field-blank';
+    [key: string]: unknown;
+};
+
+/**
+ * WorkItemHeldByDependentsProblem
+ *
+ * The work item's holder is a standing prerequisite of other chunks.
+ */
+export type WorkItemHeldByDependentsProblem = {
+    /**
+     * Detail
+     */
+    detail: string;
+    /**
+     * Instance
+     */
+    instance: string;
+    /**
+     * Status
+     */
+    status?: number;
+    /**
+     * Title
+     */
+    title: string;
+    /**
+     * Type
+     */
+    type: 'urn:blizzard:problem:work-item-held-by-dependents';
+    [key: string]: unknown;
+};
+
+/**
+ * WorkItemHeldByLiveChunkProblem
+ *
+ * A live chunk still holds the work item.
+ */
+export type WorkItemHeldByLiveChunkProblem = {
+    /**
+     * Detail
+     */
+    detail: string;
+    /**
+     * Instance
+     */
+    instance: string;
+    /**
+     * Status
+     */
+    status?: number;
+    /**
+     * Title
+     */
+    title: string;
+    /**
+     * Type
+     */
+    type: 'urn:blizzard:problem:work-item-held-by-live-chunk';
+    [key: string]: unknown;
+};
+
+/**
+ * WorkItemNotEditableProblem
+ *
+ * The work item already carries a closure.
+ */
+export type WorkItemNotEditableProblem = {
+    /**
+     * Detail
+     */
+    detail: string;
+    /**
+     * Instance
+     */
+    instance: string;
+    /**
+     * Status
+     */
+    status?: number;
+    /**
+     * Title
+     */
+    title: string;
+    /**
+     * Type
+     */
+    type: 'urn:blizzard:problem:work-item-not-editable';
+    [key: string]: unknown;
+};
+
+/**
+ * WorkItemNotFoundProblem
+ *
+ * The work source holds no item at the named ref.
+ */
+export type WorkItemNotFoundProblem = {
+    /**
+     * Detail
+     */
+    detail: string;
+    /**
+     * Instance
+     */
+    instance: string;
+    /**
+     * Status
+     */
+    status?: number;
+    /**
+     * Title
+     */
+    title: string;
+    /**
+     * Type
+     */
+    type: 'urn:blizzard:problem:work-item-not-found';
+    [key: string]: unknown;
+};
+
+/**
  * WorkItemPatchRequest
  *
  * ``PATCH /api/work-sources/{source}/items/{ref}`` — every field optional, applied
@@ -14275,6 +17725,93 @@ export type WorkSourceEntry = {
 };
 
 /**
+ * WorkSourceLocatorTakenProblem
+ *
+ * Another work source holds the provider and locator.
+ */
+export type WorkSourceLocatorTakenProblem = {
+    /**
+     * Detail
+     */
+    detail: string;
+    /**
+     * Instance
+     */
+    instance: string;
+    /**
+     * Status
+     */
+    status?: number;
+    /**
+     * Title
+     */
+    title: string;
+    /**
+     * Type
+     */
+    type: 'urn:blizzard:problem:work-source-locator-taken';
+    [key: string]: unknown;
+};
+
+/**
+ * WorkSourceNoEditorProblem
+ *
+ * The work source offers no editing of its items.
+ */
+export type WorkSourceNoEditorProblem = {
+    /**
+     * Detail
+     */
+    detail: string;
+    /**
+     * Instance
+     */
+    instance: string;
+    /**
+     * Status
+     */
+    status?: number;
+    /**
+     * Title
+     */
+    title: string;
+    /**
+     * Type
+     */
+    type: 'urn:blizzard:problem:work-source-no-editor';
+    [key: string]: unknown;
+};
+
+/**
+ * WorkSourceNotFoundProblem
+ *
+ * A path or request names a work source the tenant does not hold.
+ */
+export type WorkSourceNotFoundProblem = {
+    /**
+     * Detail
+     */
+    detail: string;
+    /**
+     * Instance
+     */
+    instance: string;
+    /**
+     * Status
+     */
+    status?: number;
+    /**
+     * Title
+     */
+    title: string;
+    /**
+     * Type
+     */
+    type: 'urn:blizzard:problem:work-source-not-found';
+    [key: string]: unknown;
+};
+
+/**
  * WorkSourcePatchRequest
  *
  * A sparse edit: an absent field is unchanged, a present one is set, and an explicit ``null`` is refused on every
@@ -14310,6 +17847,35 @@ export type WorkSourcePatchRequest = {
      * Slug
      */
     slug?: string | null;
+};
+
+/**
+ * WorkSourceSlugTakenProblem
+ *
+ * Another work source of the tenant holds the slug.
+ */
+export type WorkSourceSlugTakenProblem = {
+    /**
+     * Detail
+     */
+    detail: string;
+    /**
+     * Instance
+     */
+    instance: string;
+    /**
+     * Status
+     */
+    status?: number;
+    /**
+     * Title
+     */
+    title: string;
+    /**
+     * Type
+     */
+    type: 'urn:blizzard:problem:work-source-slug-taken';
+    [key: string]: unknown;
 };
 
 /**
@@ -14629,6 +18195,14 @@ export type RevokeHubAdminApiAdminHubAdminsUserIdDeleteErrors = {
      */
     403: PermissionRequiredProblem;
     /**
+     * Problem
+     */
+    404: UserNotFoundProblem;
+    /**
+     * Problem
+     */
+    409: LastHubAdminProblem;
+    /**
      * Validation Error
      */
     422: HttpValidationError;
@@ -14670,6 +18244,10 @@ export type GrantHubAdminApiAdminHubAdminsUserIdPutErrors = {
      * Problem
      */
     403: PermissionRequiredProblem;
+    /**
+     * Problem
+     */
+    404: UserNotFoundProblem;
     /**
      * Validation Error
      */
@@ -14752,7 +18330,7 @@ export type RunEveryTenantPassApiAdminSweepsNamePassesPostErrors = {
     /**
      * No sweep this hub builds goes by the name.
      */
-    404: unknown;
+    404: SweepNotFoundProblem;
     /**
      * A pass of the sweep holds the lock this one needs: `{"code": "sweep_in_progress"}`.
      */
@@ -14836,6 +18414,10 @@ export type CreateTenantApiAdminTenantsPostErrors = {
      */
     403: PermissionRequiredProblem;
     /**
+     * Problem
+     */
+    404: UserNotFoundProblem;
+    /**
      * Validation Error
      */
     422: HttpValidationError;
@@ -14884,11 +18466,11 @@ export type DeleteTenantApiAdminTenantsTenantIdDeleteErrors = {
     /**
      * The tenant is the hub's only open tenant.
      */
-    409: unknown;
+    409: LastTenantProblem;
     /**
      * The tenant was deleted.
      */
-    410: unknown;
+    410: TenantDeletedProblem;
     /**
      * Validation Error
      */
@@ -16688,7 +20270,7 @@ export type ReplaceBacklogApiBacklogPutErrors = {
     /**
      * Problem
      */
-    409: TenantRequiredProblem;
+    409: TenantRequiredProblem | NotInListProblem;
     /**
      * Validation Error
      */
@@ -16737,7 +20319,7 @@ export type RepositionBacklogApiBacklogPositionPostErrors = {
     /**
      * Problem
      */
-    409: TenantRequiredProblem;
+    409: TenantRequiredProblem | NotInListProblem;
     /**
      * Validation Error
      */
@@ -16839,7 +20421,7 @@ export type GetCadenceApiCadencesCadenceIdGetErrors = {
     /**
      * Problem
      */
-    404: TenantNotFoundProblem;
+    404: TenantNotFoundProblem | CadenceNotFoundProblem;
     /**
      * Problem
      */
@@ -16899,11 +20481,11 @@ export type EditCadenceApiCadencesCadenceIdPatchErrors = {
     /**
      * Problem
      */
-    403: PermissionRequiredProblem;
+    403: PermissionRequiredProblem | CadenceAdmissionRefusedProblem;
     /**
      * Problem
      */
-    404: TenantNotFoundProblem;
+    404: TenantNotFoundProblem | CadenceNotFoundProblem;
     /**
      * Problem
      */
@@ -16963,11 +20545,11 @@ export type EnableCadenceApiCadencesCadenceIdEnablePostErrors = {
     /**
      * Problem
      */
-    403: PermissionRequiredProblem;
+    403: PermissionRequiredProblem | CadenceAdmissionRefusedProblem;
     /**
      * Problem
      */
-    404: TenantNotFoundProblem;
+    404: TenantNotFoundProblem | CadenceNotFoundProblem;
     /**
      * Problem
      */
@@ -17017,7 +20599,7 @@ export type ListCadenceErrandsApiCadencesCadenceIdErrandsGetErrors = {
     /**
      * Problem
      */
-    404: TenantNotFoundProblem;
+    404: TenantNotFoundProblem | CadenceNotFoundProblem;
     /**
      * Problem
      */
@@ -17083,7 +20665,7 @@ export type RetireCadenceApiCadencesCadenceIdRetirePostErrors = {
     /**
      * Problem
      */
-    404: TenantNotFoundProblem;
+    404: TenantNotFoundProblem | CadenceNotFoundProblem;
     /**
      * Problem
      */
@@ -17260,7 +20842,7 @@ export type IngestChunkApiChunksPostErrors = {
     /**
      * Problem
      */
-    503: HubStoreUnavailableProblem;
+    503: HubStoreUnavailableProblem | DefaultGraphRetiredProblem;
 };
 
 export type IngestChunkApiChunksPostError = IngestChunkApiChunksPostErrors[keyof IngestChunkApiChunksPostErrors];
@@ -17302,11 +20884,11 @@ export type DeleteChunkApiChunksChunkIdDeleteErrors = {
     /**
      * Problem
      */
-    404: TenantNotFoundProblem;
+    404: TenantNotFoundProblem | ChunkNotFoundProblem;
     /**
      * Problem
      */
-    409: TenantRequiredProblem;
+    409: TenantRequiredProblem | ChunkNotDeletableProblem | ChunkHasDependentsProblem;
     /**
      * Validation Error
      */
@@ -17352,7 +20934,7 @@ export type GetChunkApiChunksChunkIdGetErrors = {
     /**
      * Problem
      */
-    404: TenantNotFoundProblem;
+    404: TenantNotFoundProblem | ChunkNotFoundProblem;
     /**
      * Problem
      */
@@ -17406,11 +20988,11 @@ export type PatchChunkApiChunksChunkIdPatchErrors = {
     /**
      * Problem
      */
-    404: TenantNotFoundProblem;
+    404: TenantNotFoundProblem | ChunkNotFoundProblem | GraphNotFoundProblem;
     /**
      * Problem
      */
-    409: TenantRequiredProblem;
+    409: TenantRequiredProblem | ChunkNotEditableProblem | ChunkAlreadyMovedProblem | TargetGraphRetiredProblem | MigrationTargetIsCurrentPinProblem | NodeNotOnGraphProblem;
     /**
      * Validation Error
      */
@@ -17477,7 +21059,7 @@ export type CloseDiagnosticApiChunksChunkIdCloseDiagnosticGetErrors = {
     /**
      * Problem
      */
-    404: TenantNotFoundProblem;
+    404: TenantNotFoundProblem | ChunkNotFoundProblem;
     /**
      * Problem
      */
@@ -17531,7 +21113,7 @@ export type CompleteChunkApiChunksChunkIdCompletePostErrors = {
     /**
      * Problem
      */
-    404: TenantNotFoundProblem;
+    404: TenantNotFoundProblem | ChunkNotFoundProblem;
     /**
      * Problem
      */
@@ -17588,11 +21170,11 @@ export type DemoteChunkApiChunksChunkIdDemotePostErrors = {
     /**
      * Problem
      */
-    404: TenantNotFoundProblem;
+    404: TenantNotFoundProblem | ChunkNotFoundProblem;
     /**
      * Problem
      */
-    409: TenantRequiredProblem;
+    409: TenantRequiredProblem | ChunkNotDemotableProblem | NotInListProblem;
     /**
      * Validation Error
      */
@@ -17642,7 +21224,7 @@ export type DeclareDependencyApiChunksChunkIdDependenciesPostErrors = {
     /**
      * Problem
      */
-    404: TenantNotFoundProblem;
+    404: TenantNotFoundProblem | ChunkNotFoundProblem;
     /**
      * Problem
      */
@@ -17696,7 +21278,7 @@ export type ReleaseDependencyApiChunksChunkIdDependenciesReleasePostErrors = {
     /**
      * Problem
      */
-    404: TenantNotFoundProblem;
+    404: TenantNotFoundProblem | ChunkNotFoundProblem;
     /**
      * Problem
      */
@@ -17750,11 +21332,11 @@ export type DetachChunkApiChunksChunkIdDetachPostErrors = {
     /**
      * Problem
      */
-    404: TenantNotFoundProblem;
+    404: TenantNotFoundProblem | ChunkNotFoundProblem;
     /**
      * Problem
      */
-    409: TenantRequiredProblem;
+    409: TenantRequiredProblem | ChunkNotRoutedProblem;
     /**
      * Validation Error
      */
@@ -17863,7 +21445,7 @@ export type ListSubmissionTurnsApiChunksChunkIdFlowSubmissionsSubmissionIdTurnsG
     /**
      * Problem
      */
-    404: TenantNotFoundProblem;
+    404: TenantNotFoundProblem | SubmissionNotFoundProblem;
     /**
      * Problem
      */
@@ -17917,11 +21499,11 @@ export type GroupChunksApiChunksChunkIdGroupPostErrors = {
     /**
      * Problem
      */
-    404: TenantNotFoundProblem;
+    404: TenantNotFoundProblem | ChunkNotFoundProblem;
     /**
      * Problem
      */
-    409: TenantRequiredProblem;
+    409: TenantRequiredProblem | ChunkNotGroupableProblem | ChunksInDifferentProjectsProblem | FoldWouldCloseCycleProblem;
     /**
      * Validation Error
      */
@@ -17976,7 +21558,7 @@ export type LandingFactsApiChunksChunkIdLandingFactsGetErrors = {
     /**
      * Problem
      */
-    404: TenantNotFoundProblem;
+    404: TenantNotFoundProblem | ChunkNotFoundProblem;
     /**
      * Problem
      */
@@ -18030,11 +21612,11 @@ export type PauseChunkApiChunksChunkIdPausePostErrors = {
     /**
      * Problem
      */
-    404: TenantNotFoundProblem;
+    404: TenantNotFoundProblem | ChunkNotFoundProblem;
     /**
      * Problem
      */
-    409: TenantRequiredProblem;
+    409: TenantRequiredProblem | ChunkNotPausableProblem;
     /**
      * Validation Error
      */
@@ -18137,11 +21719,11 @@ export type PromoteChunkApiChunksChunkIdPromotePostErrors = {
     /**
      * Problem
      */
-    404: TenantNotFoundProblem;
+    404: TenantNotFoundProblem | ChunkNotFoundProblem;
     /**
      * Problem
      */
-    409: TenantRequiredProblem;
+    409: TenantRequiredProblem | ChunkNotPromotableProblem | NotInListProblem;
     /**
      * Validation Error
      */
@@ -18194,11 +21776,11 @@ export type RequeueChunkApiChunksChunkIdRequeuesPostErrors = {
     /**
      * Problem
      */
-    404: TenantNotFoundProblem;
+    404: TenantNotFoundProblem | ChunkNotFoundProblem;
     /**
      * Problem
      */
-    409: TenantRequiredProblem;
+    409: TenantRequiredProblem | ChunkNotEscalatedProblem;
     /**
      * Validation Error
      */
@@ -18248,15 +21830,19 @@ export type RestartChunkApiChunksChunkIdRestartPostErrors = {
     /**
      * Problem
      */
-    404: TenantNotFoundProblem;
+    404: TenantNotFoundProblem | ChunkNotFoundProblem | GraphNotFoundProblem;
     /**
      * Problem
      */
-    409: TenantRequiredProblem;
+    409: TenantRequiredProblem | ChunkNotRestartableProblem | NodeNotOnGraphProblem | CurrentNodeNotOnGraphProblem | RestartGraphPinChangedProblem | TargetGraphRetiredProblem | MigrationTargetIsCurrentPinProblem;
     /**
      * Validation Error
      */
     422: HttpValidationError;
+    /**
+     * Problem
+     */
+    500: PinnedGraphMissingProblem;
     /**
      * Problem
      */
@@ -18302,7 +21888,7 @@ export type ResumeChunkApiChunksChunkIdResumePostErrors = {
     /**
      * Problem
      */
-    404: TenantNotFoundProblem;
+    404: TenantNotFoundProblem | ChunkNotFoundProblem;
     /**
      * Problem
      */
@@ -18356,11 +21942,11 @@ export type StopChunkApiChunksChunkIdStopPostErrors = {
     /**
      * Problem
      */
-    404: TenantNotFoundProblem;
+    404: TenantNotFoundProblem | ChunkNotFoundProblem;
     /**
      * Problem
      */
-    409: TenantRequiredProblem;
+    409: TenantRequiredProblem | ChunkNotStoppableProblem;
     /**
      * Validation Error
      */
@@ -18410,7 +21996,7 @@ export type ListTranscriptSegmentsApiChunksChunkIdTranscriptsGetErrors = {
     /**
      * Problem
      */
-    404: TenantNotFoundProblem;
+    404: TenantNotFoundProblem | ChunkNotFoundProblem;
     /**
      * Problem
      */
@@ -18468,7 +22054,7 @@ export type GetTranscriptSegmentApiChunksChunkIdTranscriptsSegmentIdGetErrors = 
     /**
      * Problem
      */
-    404: TenantNotFoundProblem;
+    404: TenantNotFoundProblem | ChunkNotFoundProblem | TranscriptSegmentNotFoundProblem;
     /**
      * Problem
      */
@@ -18518,7 +22104,7 @@ export type GetWorkItemsApiChunksChunkIdWorkItemsGetErrors = {
     /**
      * Problem
      */
-    404: TenantNotFoundProblem;
+    404: TenantNotFoundProblem | ChunkNotFoundProblem;
     /**
      * Problem
      */
@@ -18747,7 +22333,7 @@ export type GetSchemaApiConfigSchemaKindGetErrors = {
     /**
      * Problem
      */
-    404: TenantNotFoundProblem;
+    404: TenantNotFoundProblem | ConfigSchemaNotFoundProblem;
     /**
      * Problem
      */
@@ -18843,7 +22429,7 @@ export type ResolveDecisionApiDecisionsDecisionIdResolutionsPostErrors = {
     /**
      * Problem
      */
-    400: TenantCredentialMismatchProblem;
+    400: TenantCredentialMismatchProblem | NotADecisionChoiceProblem;
     /**
      * Problem
      */
@@ -18855,11 +22441,11 @@ export type ResolveDecisionApiDecisionsDecisionIdResolutionsPostErrors = {
     /**
      * Problem
      */
-    404: TenantNotFoundProblem;
+    404: TenantNotFoundProblem | DecisionNotFoundProblem;
     /**
      * A lost first-write-wins race, carrying the winning resolution. A decision closed without a resolution shares the status and answers a bare `{detail}` instead.
      */
-    409: TenantRequiredProblem | DecisionResolutionConflict;
+    409: TenantRequiredProblem | DecisionResolutionConflict | DecisionClosedProblem;
     /**
      * Validation Error
      */
@@ -18897,6 +22483,10 @@ export type EgressBackfillApiEgressBackfillPostErrors = {
      * Problem
      */
     403: PermissionRequiredProblem;
+    /**
+     * Problem
+     */
+    409: EgressBackfillUnavailableProblem;
     /**
      * Validation Error
      */
@@ -18938,6 +22528,10 @@ export type EgressResetApiEgressResetPostErrors = {
      * Problem
      */
     403: PermissionRequiredProblem;
+    /**
+     * Problem
+     */
+    409: EgressResetUnavailableProblem;
     /**
      * Validation Error
      */
@@ -19231,11 +22825,11 @@ export type ConfirmGoneFindingsApiFindingsConfirmGonePostErrors = {
     /**
      * Problem
      */
-    404: TenantNotFoundProblem;
+    404: TenantNotFoundProblem | FindingNotFoundProblem;
     /**
      * Problem
      */
-    409: TenantRequiredProblem;
+    409: TenantRequiredProblem | FindingTransitionRefusedProblem | FindingWriteContendedProblem;
     /**
      * Validation Error
      */
@@ -19282,11 +22876,11 @@ export type NotAFindingFindingsApiFindingsNotAFindingPostErrors = {
     /**
      * Problem
      */
-    404: TenantNotFoundProblem;
+    404: TenantNotFoundProblem | FindingNotFoundProblem;
     /**
      * Problem
      */
-    409: TenantRequiredProblem;
+    409: TenantRequiredProblem | FindingTransitionRefusedProblem | FindingWriteContendedProblem;
     /**
      * Validation Error
      */
@@ -19333,11 +22927,11 @@ export type ReopenFindingsApiFindingsReopenPostErrors = {
     /**
      * Problem
      */
-    404: TenantNotFoundProblem;
+    404: TenantNotFoundProblem | FindingNotFoundProblem;
     /**
      * Problem
      */
-    409: TenantRequiredProblem;
+    409: TenantRequiredProblem | FindingTransitionRefusedProblem | FindingWriteContendedProblem;
     /**
      * Validation Error
      */
@@ -19384,11 +22978,11 @@ export type ResolveFindingsApiFindingsResolvePostErrors = {
     /**
      * Problem
      */
-    404: TenantNotFoundProblem;
+    404: TenantNotFoundProblem | FindingNotFoundProblem;
     /**
      * Problem
      */
-    409: TenantRequiredProblem;
+    409: TenantRequiredProblem | FindingTransitionRefusedProblem | FindingWriteContendedProblem;
     /**
      * Validation Error
      */
@@ -19435,11 +23029,11 @@ export type SupersedeFindingsApiFindingsSupersedePostErrors = {
     /**
      * Problem
      */
-    404: TenantNotFoundProblem;
+    404: TenantNotFoundProblem | FindingNotFoundProblem;
     /**
      * Problem
      */
-    409: TenantRequiredProblem;
+    409: TenantRequiredProblem | FindingTransitionRefusedProblem | FindingWriteContendedProblem;
     /**
      * Validation Error
      */
@@ -19486,11 +23080,11 @@ export type WontFixFindingsApiFindingsWontFixPostErrors = {
     /**
      * Problem
      */
-    404: TenantNotFoundProblem;
+    404: TenantNotFoundProblem | FindingNotFoundProblem;
     /**
      * Problem
      */
-    409: TenantRequiredProblem;
+    409: TenantRequiredProblem | FindingTransitionRefusedProblem | FindingWriteContendedProblem;
     /**
      * Validation Error
      */
@@ -19538,7 +23132,7 @@ export type GetFindingApiFindingsFindingIdGetErrors = {
     /**
      * Problem
      */
-    404: TenantNotFoundProblem;
+    404: TenantNotFoundProblem | FindingNotFoundProblem;
     /**
      * Problem
      */
@@ -21975,7 +25569,7 @@ export type GetFlowApiFlowsFlowIdGetErrors = {
     /**
      * Problem
      */
-    404: TenantNotFoundProblem;
+    404: TenantNotFoundProblem | FlowNotFoundProblem;
     /**
      * Problem
      */
@@ -22034,7 +25628,7 @@ export type GetFlowRecordApiFlowsFlowIdRecordGetErrors = {
     /**
      * Problem
      */
-    404: TenantNotFoundProblem;
+    404: TenantNotFoundProblem | FlowNotFoundProblem;
     /**
      * Problem
      */
@@ -22143,7 +25737,7 @@ export type CreateForgeApiForgesPostErrors = {
     /**
      * Problem
      */
-    409: TenantRequiredProblem;
+    409: TenantRequiredProblem | ForgeSlugTakenProblem | ForgeOriginTakenProblem;
     /**
      * Validation Error
      */
@@ -22189,7 +25783,7 @@ export type GetForgeApiForgesForgeGetErrors = {
     /**
      * Problem
      */
-    404: TenantNotFoundProblem;
+    404: TenantNotFoundProblem | ForgeNotFoundProblem;
     /**
      * Problem
      */
@@ -22253,11 +25847,11 @@ export type PatchForgeApiForgesForgePatchErrors = {
     /**
      * Problem
      */
-    404: TenantNotFoundProblem;
+    404: TenantNotFoundProblem | ForgeNotFoundProblem;
     /**
      * Problem
      */
-    409: TenantRequiredProblem;
+    409: TenantRequiredProblem | ForgeRevisionConflictProblem | ForgeSlugTakenProblem | ForgeOriginTakenProblem;
     /**
      * Validation Error
      */
@@ -22317,11 +25911,11 @@ export type EnableForgeApiForgesForgeEnablePostErrors = {
     /**
      * Problem
      */
-    404: TenantNotFoundProblem;
+    404: TenantNotFoundProblem | ForgeNotFoundProblem;
     /**
      * Problem
      */
-    409: TenantRequiredProblem;
+    409: TenantRequiredProblem | ForgeRevisionConflictProblem;
     /**
      * Validation Error
      */
@@ -22381,11 +25975,11 @@ export type RetireForgeApiForgesForgeRetirePostErrors = {
     /**
      * Problem
      */
-    404: TenantNotFoundProblem;
+    404: TenantNotFoundProblem | ForgeNotFoundProblem;
     /**
      * Problem
      */
-    409: TenantRequiredProblem;
+    409: TenantRequiredProblem | ForgeRevisionConflictProblem | ForgeInUseProblem;
     /**
      * Validation Error
      */
@@ -22542,7 +26136,7 @@ export type GetGardenProposalApiGardenProposalsProposalIdGetErrors = {
     /**
      * Problem
      */
-    404: TenantNotFoundProblem;
+    404: TenantNotFoundProblem | GardenProposalNotFoundProblem;
     /**
      * Problem
      */
@@ -22596,11 +26190,11 @@ export type EditGardenProposalApiGardenProposalsProposalIdPatchErrors = {
     /**
      * Problem
      */
-    404: TenantNotFoundProblem;
+    404: TenantNotFoundProblem | GardenProposalNotFoundProblem;
     /**
      * Problem
      */
-    409: TenantRequiredProblem;
+    409: TenantRequiredProblem | GardenProposalAlreadyClosedProblem;
     /**
      * Validation Error
      */
@@ -22650,11 +26244,11 @@ export type AcceptGardenProposalApiGardenProposalsProposalIdAcceptPostErrors = {
     /**
      * Problem
      */
-    404: TenantNotFoundProblem;
+    404: TenantNotFoundProblem | GardenProposalNotFoundProblem;
     /**
      * Problem
      */
-    409: TenantRequiredProblem | ChunkIngestConflict;
+    409: TenantRequiredProblem | ChunkIngestConflict | GardenProposalAlreadyClosedProblem;
     /**
      * Validation Error
      */
@@ -22662,7 +26256,7 @@ export type AcceptGardenProposalApiGardenProposalsProposalIdAcceptPostErrors = {
     /**
      * Problem
      */
-    503: HubStoreUnavailableProblem;
+    503: HubStoreUnavailableProblem | GardenDefaultGraphRetiredProblem;
 };
 
 export type AcceptGardenProposalApiGardenProposalsProposalIdAcceptPostError = AcceptGardenProposalApiGardenProposalsProposalIdAcceptPostErrors[keyof AcceptGardenProposalApiGardenProposalsProposalIdAcceptPostErrors];
@@ -22704,11 +26298,11 @@ export type AttachGardenProposalFindingsApiGardenProposalsProposalIdAttachPostEr
     /**
      * Problem
      */
-    404: TenantNotFoundProblem;
+    404: TenantNotFoundProblem | GardenProposalNotFoundProblem;
     /**
      * Problem
      */
-    409: TenantRequiredProblem;
+    409: TenantRequiredProblem | GardenProposalAlreadyClosedProblem;
     /**
      * Validation Error
      */
@@ -22758,11 +26352,11 @@ export type DetachGardenProposalFindingsApiGardenProposalsProposalIdDetachPostEr
     /**
      * Problem
      */
-    404: TenantNotFoundProblem;
+    404: TenantNotFoundProblem | GardenProposalNotFoundProblem;
     /**
      * Problem
      */
-    409: TenantRequiredProblem;
+    409: TenantRequiredProblem | GardenProposalAlreadyClosedProblem;
     /**
      * Validation Error
      */
@@ -22812,11 +26406,11 @@ export type PassGardenProposalApiGardenProposalsProposalIdPassPostErrors = {
     /**
      * Problem
      */
-    404: TenantNotFoundProblem;
+    404: TenantNotFoundProblem | GardenProposalNotFoundProblem;
     /**
      * Problem
      */
-    409: TenantRequiredProblem;
+    409: TenantRequiredProblem | GardenProposalAlreadyClosedProblem;
     /**
      * Validation Error
      */
@@ -22999,7 +26593,7 @@ export type GetGraphApiGraphsGraphIdGetErrors = {
     /**
      * Problem
      */
-    404: TenantNotFoundProblem;
+    404: TenantNotFoundProblem | GraphNotFoundProblem;
     /**
      * Problem
      */
@@ -23053,7 +26647,7 @@ export type PatchGraphApiGraphsGraphIdPatchErrors = {
     /**
      * Problem
      */
-    404: TenantNotFoundProblem;
+    404: TenantNotFoundProblem | GraphNotFoundProblem;
     /**
      * Problem
      */
@@ -23107,7 +26701,7 @@ export type EnableGraphApiGraphsGraphIdEnablePostErrors = {
     /**
      * Problem
      */
-    404: TenantNotFoundProblem;
+    404: TenantNotFoundProblem | GraphNotFoundProblem;
     /**
      * Problem
      */
@@ -23161,7 +26755,7 @@ export type SetGraphFollowLatestApiGraphsGraphIdFollowLatestPostErrors = {
     /**
      * Problem
      */
-    404: TenantNotFoundProblem;
+    404: TenantNotFoundProblem | GraphNotFoundProblem;
     /**
      * Problem
      */
@@ -23215,7 +26809,7 @@ export type RetireGraphApiGraphsGraphIdRetirePostErrors = {
     /**
      * Problem
      */
-    404: TenantNotFoundProblem;
+    404: TenantNotFoundProblem | GraphNotFoundProblem;
     /**
      * Problem
      */
@@ -23380,7 +26974,7 @@ export type GetHostApiHostsHostIdGetErrors = {
     /**
      * Problem
      */
-    404: TenantNotFoundProblem;
+    404: TenantNotFoundProblem | HostNotFoundProblem;
     /**
      * Problem
      */
@@ -23434,11 +27028,11 @@ export type AdoptRunnersApiHostsHostIdAdoptionsPostErrors = {
     /**
      * Problem
      */
-    404: TenantNotFoundProblem;
+    404: TenantNotFoundProblem | HostNotFoundProblem | RunnerNotFoundProblem;
     /**
      * Problem
      */
-    409: TenantRequiredProblem;
+    409: TenantRequiredProblem | RunnerAlreadyHostedProblem | RunnerRetiredProblem | HostRetiredProblem | RunnerLifecycleConflictProblem;
     /**
      * Validation Error
      */
@@ -23488,11 +27082,11 @@ export type EnrollHostApiHostsHostIdEnrollmentsPostErrors = {
     /**
      * Problem
      */
-    404: TenantNotFoundProblem;
+    404: TenantNotFoundProblem | HostNotFoundProblem;
     /**
      * Problem
      */
-    409: TenantRequiredProblem;
+    409: TenantRequiredProblem | HostRetiredProblem;
     /**
      * Validation Error
      */
@@ -23542,11 +27136,11 @@ export type ReleaseRunnersApiHostsHostIdReleasesPostErrors = {
     /**
      * Problem
      */
-    404: TenantNotFoundProblem;
+    404: TenantNotFoundProblem | HostNotFoundProblem | RunnerNotFoundProblem;
     /**
      * Problem
      */
-    409: TenantRequiredProblem;
+    409: TenantRequiredProblem | HostRetirementUnfinishedProblem | HostLifecycleConflictProblem | RunnerLifecycleConflictProblem;
     /**
      * Validation Error
      */
@@ -23596,11 +27190,11 @@ export type RetireHostApiHostsHostIdRetirePostErrors = {
     /**
      * Problem
      */
-    404: TenantNotFoundProblem;
+    404: TenantNotFoundProblem | HostNotFoundProblem;
     /**
      * Problem
      */
-    409: TenantRequiredProblem;
+    409: TenantRequiredProblem | HostHoldsRoutesProblem | HostLifecycleConflictProblem | HostRetirementInterruptedProblem;
     /**
      * Validation Error
      */
@@ -23650,11 +27244,11 @@ export type RevokeHostTokenApiHostsHostIdTokenRevocationsPostErrors = {
     /**
      * Problem
      */
-    404: TenantNotFoundProblem;
+    404: TenantNotFoundProblem | HostNotFoundProblem;
     /**
      * Problem
      */
-    409: TenantRequiredProblem;
+    409: TenantRequiredProblem | HostNotEnrolledProblem;
     /**
      * Validation Error
      */
@@ -23798,11 +27392,11 @@ export type RevokeInvitationApiInvitationsInvitationIdRevocationsPostErrors = {
     /**
      * Problem
      */
-    404: TenantNotFoundProblem;
+    404: TenantNotFoundProblem | InvitationNotFoundProblem;
     /**
      * Problem
      */
-    409: TenantRequiredProblem;
+    409: TenantRequiredProblem | InvitationAlreadyResolvedProblem;
     /**
      * Validation Error
      */
@@ -23924,15 +27518,15 @@ export type RevokeMembershipApiMembersUserIdDeleteErrors = {
     /**
      * Problem
      */
-    403: PermissionRequiredProblem;
+    403: PermissionRequiredProblem | MembershipChangeRefusedProblem;
     /**
      * Problem
      */
-    404: TenantNotFoundProblem;
+    404: TenantNotFoundProblem | MemberNotFoundProblem;
     /**
      * Problem
      */
-    409: TenantRequiredProblem;
+    409: TenantRequiredProblem | LastAdminKeptProblem;
     /**
      * Validation Error
      */
@@ -23978,15 +27572,15 @@ export type GrantMembershipApiMembersUserIdPutErrors = {
     /**
      * Problem
      */
-    403: PermissionRequiredProblem;
+    403: PermissionRequiredProblem | MembershipChangeRefusedProblem;
     /**
      * Problem
      */
-    404: TenantNotFoundProblem;
+    404: TenantNotFoundProblem | MemberNotFoundProblem;
     /**
      * Problem
      */
-    409: TenantRequiredProblem;
+    409: TenantRequiredProblem | LastAdminKeptProblem;
     /**
      * Validation Error
      */
@@ -24082,7 +27676,7 @@ export type CreateProjectApiProjectsPostErrors = {
     /**
      * Problem
      */
-    409: TenantRequiredProblem;
+    409: TenantRequiredProblem | ProjectSlugTakenProblem;
     /**
      * Validation Error
      */
@@ -24128,7 +27722,7 @@ export type GetProjectApiProjectsProjectGetErrors = {
     /**
      * Problem
      */
-    404: TenantNotFoundProblem;
+    404: TenantNotFoundProblem | ProjectNotFoundProblem;
     /**
      * Problem
      */
@@ -24192,11 +27786,11 @@ export type PatchProjectApiProjectsProjectPatchErrors = {
     /**
      * Problem
      */
-    404: TenantNotFoundProblem;
+    404: TenantNotFoundProblem | ProjectNotFoundProblem;
     /**
      * Problem
      */
-    409: TenantRequiredProblem;
+    409: TenantRequiredProblem | RevisionConflictProblem | ProjectSlugTakenProblem;
     /**
      * Validation Error
      */
@@ -24247,7 +27841,7 @@ export type ListProjectCadencesApiProjectsProjectCadencesGetErrors = {
     /**
      * Problem
      */
-    404: TenantNotFoundProblem;
+    404: TenantNotFoundProblem | ProjectNotFoundProblem;
     /**
      * Problem
      */
@@ -24305,11 +27899,11 @@ export type CreateProjectCadenceApiProjectsProjectCadencesPostErrors = {
     /**
      * Problem
      */
-    403: PermissionRequiredProblem;
+    403: PermissionRequiredProblem | CadenceAdmissionRefusedProblem;
     /**
      * Problem
      */
-    404: TenantNotFoundProblem;
+    404: TenantNotFoundProblem | ProjectNotFoundProblem;
     /**
      * Problem
      */
@@ -24396,7 +27990,7 @@ export type ListProjectFindingsApiProjectsProjectFindingsGetErrors = {
     /**
      * Problem
      */
-    404: TenantNotFoundProblem;
+    404: TenantNotFoundProblem | ProjectNotFoundProblem;
     /**
      * Problem
      */
@@ -24455,7 +28049,7 @@ export type ListProjectFindingClassesApiProjectsProjectFindingsClassesGetErrors 
     /**
      * Problem
      */
-    404: TenantNotFoundProblem;
+    404: TenantNotFoundProblem | ProjectNotFoundProblem;
     /**
      * Problem
      */
@@ -24520,7 +28114,7 @@ export type ListProjectGardenProposalsApiProjectsProjectGardenProposalsGetErrors
     /**
      * Problem
      */
-    404: TenantNotFoundProblem;
+    404: TenantNotFoundProblem | ProjectNotFoundProblem;
     /**
      * Problem
      */
@@ -24574,7 +28168,7 @@ export type CreateProjectGardenProposalApiProjectsProjectGardenProposalsPostErro
     /**
      * Problem
      */
-    404: TenantNotFoundProblem;
+    404: TenantNotFoundProblem | ProjectNotFoundProblem;
     /**
      * Problem
      */
@@ -24634,11 +28228,11 @@ export type PutLandingOrderApiProjectsProjectLandingOrderPutErrors = {
     /**
      * Problem
      */
-    404: TenantNotFoundProblem;
+    404: TenantNotFoundProblem | ProjectNotFoundProblem;
     /**
      * Problem
      */
-    409: TenantRequiredProblem;
+    409: TenantRequiredProblem | LandingOrderConflictProblem;
     /**
      * Validation Error
      */
@@ -24694,11 +28288,11 @@ export type PositionRepositoryApiProjectsProjectLandingOrderPositionPostErrors =
     /**
      * Problem
      */
-    404: TenantNotFoundProblem;
+    404: TenantNotFoundProblem | ProjectNotFoundProblem;
     /**
      * Problem
      */
-    409: TenantRequiredProblem;
+    409: TenantRequiredProblem | LandingOrderConflictProblem;
     /**
      * Validation Error
      */
@@ -24744,7 +28338,7 @@ export type ListRepositoryLinksApiProjectsProjectRepositoryLinksGetErrors = {
     /**
      * Problem
      */
-    404: TenantNotFoundProblem;
+    404: TenantNotFoundProblem | ProjectNotFoundProblem;
     /**
      * Problem
      */
@@ -24812,11 +28406,11 @@ export type LinkRepositoryApiProjectsProjectRepositoryLinksRepositoryPutErrors =
     /**
      * Problem
      */
-    404: TenantNotFoundProblem;
+    404: TenantNotFoundProblem | ProjectNotFoundProblem | RepositoryNotFoundProblem;
     /**
      * Problem
      */
-    409: TenantRequiredProblem;
+    409: TenantRequiredProblem | RevisionConflictProblem;
     /**
      * Validation Error
      */
@@ -24880,11 +28474,11 @@ export type UnlinkRepositoryApiProjectsProjectRepositoryLinksRepositoryRetirePos
     /**
      * Problem
      */
-    404: TenantNotFoundProblem;
+    404: TenantNotFoundProblem | ProjectNotFoundProblem | ProjectLinkNotFoundProblem | RepositoryNotFoundProblem;
     /**
      * Problem
      */
-    409: TenantRequiredProblem;
+    409: TenantRequiredProblem | RevisionConflictProblem;
     /**
      * Validation Error
      */
@@ -24935,7 +28529,7 @@ export type ListProjectRoutinesApiProjectsProjectRoutinesGetErrors = {
     /**
      * Problem
      */
-    404: TenantNotFoundProblem;
+    404: TenantNotFoundProblem | ProjectNotFoundProblem;
     /**
      * Problem
      */
@@ -24997,7 +28591,7 @@ export type CreateProjectRoutineApiProjectsProjectRoutinesPostErrors = {
     /**
      * Problem
      */
-    404: TenantNotFoundProblem;
+    404: TenantNotFoundProblem | ProjectNotFoundProblem;
     /**
      * Problem
      */
@@ -25056,7 +28650,7 @@ export type ListProjectRunsApiProjectsProjectRunsGetErrors = {
     /**
      * Problem
      */
-    404: TenantNotFoundProblem;
+    404: TenantNotFoundProblem | ProjectNotFoundProblem;
     /**
      * Problem
      */
@@ -25112,7 +28706,7 @@ export type ProjectRunDeltaApiProjectsProjectRunsChunkIdGetErrors = {
     /**
      * Problem
      */
-    404: TenantNotFoundProblem;
+    404: TenantNotFoundProblem | ProjectNotFoundProblem | RunNotFoundProblem;
     /**
      * Problem
      */
@@ -25162,7 +28756,7 @@ export type ListProjectScopesApiProjectsProjectScopesGetErrors = {
     /**
      * Problem
      */
-    404: TenantNotFoundProblem;
+    404: TenantNotFoundProblem | ProjectNotFoundProblem;
     /**
      * Problem
      */
@@ -25224,7 +28818,7 @@ export type CreateProjectScopeApiProjectsProjectScopesPostErrors = {
     /**
      * Problem
      */
-    404: TenantNotFoundProblem;
+    404: TenantNotFoundProblem | ProjectNotFoundProblem;
     /**
      * Problem
      */
@@ -25278,7 +28872,7 @@ export type GetProjectScopeApiProjectsProjectScopesSlugGetErrors = {
     /**
      * Problem
      */
-    404: TenantNotFoundProblem;
+    404: TenantNotFoundProblem | ProjectNotFoundProblem | ScopeNotFoundProblem;
     /**
      * Problem
      */
@@ -25346,11 +28940,11 @@ export type EditProjectScopeApiProjectsProjectScopesSlugPatchErrors = {
     /**
      * Problem
      */
-    404: TenantNotFoundProblem;
+    404: TenantNotFoundProblem | ProjectNotFoundProblem | ScopeNotFoundProblem;
     /**
      * Problem
      */
-    409: TenantRequiredProblem;
+    409: TenantRequiredProblem | RevisionConflictProblem;
     /**
      * Validation Error
      */
@@ -25414,11 +29008,11 @@ export type EnableProjectScopeApiProjectsProjectScopesSlugEnablePostErrors = {
     /**
      * Problem
      */
-    404: TenantNotFoundProblem;
+    404: TenantNotFoundProblem | ProjectNotFoundProblem | ScopeNotFoundProblem;
     /**
      * Problem
      */
-    409: TenantRequiredProblem;
+    409: TenantRequiredProblem | RevisionConflictProblem;
     /**
      * Validation Error
      */
@@ -25482,11 +29076,11 @@ export type RetireProjectScopeApiProjectsProjectScopesSlugRetirePostErrors = {
     /**
      * Problem
      */
-    404: TenantNotFoundProblem;
+    404: TenantNotFoundProblem | ProjectNotFoundProblem | ScopeNotFoundProblem;
     /**
      * Problem
      */
-    409: TenantRequiredProblem;
+    409: TenantRequiredProblem | RevisionConflictProblem;
     /**
      * Validation Error
      */
@@ -25536,7 +29130,7 @@ export type ListProjectScopeRoutinesApiProjectsProjectScopesSlugRoutinesGetError
     /**
      * Problem
      */
-    404: TenantNotFoundProblem;
+    404: TenantNotFoundProblem | ProjectNotFoundProblem | ScopeNotFoundProblem;
     /**
      * Problem
      */
@@ -25588,7 +29182,7 @@ export type ListSourceLinksApiProjectsProjectSourceLinksGetErrors = {
     /**
      * Problem
      */
-    404: TenantNotFoundProblem;
+    404: TenantNotFoundProblem | ProjectNotFoundProblem;
     /**
      * Problem
      */
@@ -25656,11 +29250,11 @@ export type LinkSourceApiProjectsProjectSourceLinksSourcePutErrors = {
     /**
      * Problem
      */
-    404: TenantNotFoundProblem;
+    404: TenantNotFoundProblem | ProjectNotFoundProblem | WorkSourceNotFoundProblem;
     /**
      * Problem
      */
-    409: TenantRequiredProblem;
+    409: TenantRequiredProblem | RevisionConflictProblem;
     /**
      * Validation Error
      */
@@ -25724,11 +29318,11 @@ export type UnlinkSourceApiProjectsProjectSourceLinksSourceRetirePostErrors = {
     /**
      * Problem
      */
-    404: TenantNotFoundProblem;
+    404: TenantNotFoundProblem | ProjectNotFoundProblem | ProjectLinkNotFoundProblem | WorkSourceNotFoundProblem;
     /**
      * Problem
      */
-    409: TenantRequiredProblem;
+    409: TenantRequiredProblem | RevisionConflictProblem;
     /**
      * Validation Error
      */
@@ -25825,11 +29419,11 @@ export type AskQuestionApiQuestionsPostErrors = {
     /**
      * Problem
      */
-    404: TenantNotFoundProblem;
+    404: TenantNotFoundProblem | ChunkNotFoundProblem;
     /**
      * Problem
      */
-    409: TenantRequiredProblem;
+    409: TenantRequiredProblem | QuestionWriteFencedProblem;
     /**
      * Validation Error
      */
@@ -25883,11 +29477,11 @@ export type AnswerQuestionApiQuestionsQuestionIdAnswersPostErrors = {
     /**
      * Problem
      */
-    404: TenantNotFoundProblem;
+    404: TenantNotFoundProblem | QuestionNotFoundProblem;
     /**
      * Problem
      */
-    409: TenantRequiredProblem | QuestionAlreadyAnsweredProblem;
+    409: TenantRequiredProblem | QuestionAlreadyAnsweredProblem | QuestionClosedProblem;
     /**
      * Validation Error
      */
@@ -25994,7 +29588,7 @@ export type ReplaceQueueApiQueuePutErrors = {
     /**
      * Problem
      */
-    409: TenantRequiredProblem;
+    409: TenantRequiredProblem | NotInListProblem;
     /**
      * Validation Error
      */
@@ -26043,7 +29637,7 @@ export type RepositionQueueApiQueuePositionPostErrors = {
     /**
      * Problem
      */
-    409: TenantRequiredProblem;
+    409: TenantRequiredProblem | NotInListProblem;
     /**
      * Validation Error
      */
@@ -26164,7 +29758,7 @@ export type CreateRepositoryApiRepositoriesPostErrors = {
     /**
      * Problem
      */
-    409: TenantRequiredProblem;
+    409: TenantRequiredProblem | RepositorySlugTakenProblem | RepositoryCoordinateTakenProblem;
     /**
      * Validation Error
      */
@@ -26210,7 +29804,7 @@ export type GetRepositoryApiRepositoriesRepositoryGetErrors = {
     /**
      * Problem
      */
-    404: TenantNotFoundProblem;
+    404: TenantNotFoundProblem | RepositoryNotFoundProblem;
     /**
      * Problem
      */
@@ -26274,11 +29868,11 @@ export type PatchRepositoryApiRepositoriesRepositoryPatchErrors = {
     /**
      * Problem
      */
-    404: TenantNotFoundProblem;
+    404: TenantNotFoundProblem | RepositoryNotFoundProblem;
     /**
      * Problem
      */
-    409: TenantRequiredProblem;
+    409: TenantRequiredProblem | RevisionConflictProblem | RepositorySlugTakenProblem | RepositoryCoordinateTakenProblem;
     /**
      * Validation Error
      */
@@ -26338,11 +29932,11 @@ export type EnableRepositoryApiRepositoriesRepositoryEnablePostErrors = {
     /**
      * Problem
      */
-    404: TenantNotFoundProblem;
+    404: TenantNotFoundProblem | RepositoryNotFoundProblem;
     /**
      * Problem
      */
-    409: TenantRequiredProblem;
+    409: TenantRequiredProblem | RevisionConflictProblem;
     /**
      * Validation Error
      */
@@ -26402,11 +29996,11 @@ export type RetireRepositoryApiRepositoriesRepositoryRetirePostErrors = {
     /**
      * Problem
      */
-    404: TenantNotFoundProblem;
+    404: TenantNotFoundProblem | RepositoryNotFoundProblem;
     /**
      * Problem
      */
-    409: TenantRequiredProblem;
+    409: TenantRequiredProblem | RevisionConflictProblem;
     /**
      * Validation Error
      */
@@ -26579,7 +30173,7 @@ export type RoutineProposalCountsApiRoutinesProposalCountsGetErrors = {
     /**
      * Problem
      */
-    404: TenantNotFoundProblem;
+    404: TenantNotFoundProblem | RoutineNotFoundProblem;
     /**
      * Problem
      */
@@ -26649,7 +30243,7 @@ export type RoutineTrendApiRoutinesTrendGetErrors = {
     /**
      * Problem
      */
-    404: TenantNotFoundProblem;
+    404: TenantNotFoundProblem | RoutineNotFoundProblem;
     /**
      * Problem
      */
@@ -26699,7 +30293,7 @@ export type GetRoutineApiRoutinesRoutineIdGetErrors = {
     /**
      * Problem
      */
-    404: TenantNotFoundProblem;
+    404: TenantNotFoundProblem | RoutineNotFoundProblem;
     /**
      * Problem
      */
@@ -26763,11 +30357,11 @@ export type EditRoutineApiRoutinesRoutineIdPatchErrors = {
     /**
      * Problem
      */
-    404: TenantNotFoundProblem;
+    404: TenantNotFoundProblem | RoutineNotFoundProblem;
     /**
      * Problem
      */
-    409: TenantRequiredProblem;
+    409: TenantRequiredProblem | RevisionConflictProblem;
     /**
      * Validation Error
      */
@@ -26813,7 +30407,7 @@ export type RoutineBaselinesApiRoutinesRoutineIdBaselinesGetErrors = {
     /**
      * Problem
      */
-    404: TenantNotFoundProblem;
+    404: TenantNotFoundProblem | RoutineNotFoundProblem;
     /**
      * Problem
      */
@@ -26879,11 +30473,11 @@ export type EnableRoutineApiRoutinesRoutineIdEnablePostErrors = {
     /**
      * Problem
      */
-    404: TenantNotFoundProblem;
+    404: TenantNotFoundProblem | RoutineNotFoundProblem;
     /**
      * Problem
      */
-    409: TenantRequiredProblem;
+    409: TenantRequiredProblem | RevisionConflictProblem;
     /**
      * Validation Error
      */
@@ -26943,11 +30537,11 @@ export type RetireRoutineApiRoutinesRoutineIdRetirePostErrors = {
     /**
      * Problem
      */
-    404: TenantNotFoundProblem;
+    404: TenantNotFoundProblem | RoutineNotFoundProblem;
     /**
      * Problem
      */
-    409: TenantRequiredProblem;
+    409: TenantRequiredProblem | RevisionConflictProblem;
     /**
      * Validation Error
      */
@@ -26997,7 +30591,7 @@ export type RunRoutineApiRoutinesRoutineIdRunPostErrors = {
     /**
      * Problem
      */
-    404: TenantNotFoundProblem;
+    404: TenantNotFoundProblem | RoutineNotFoundProblem;
     /**
      * Problem
      */
@@ -27009,7 +30603,7 @@ export type RunRoutineApiRoutinesRoutineIdRunPostErrors = {
     /**
      * Problem
      */
-    503: HubStoreUnavailableProblem;
+    503: HubStoreUnavailableProblem | RoutineNotRunnableProblem;
 };
 
 export type RunRoutineApiRoutinesRoutineIdRunPostError = RunRoutineApiRoutinesRoutineIdRunPostErrors[keyof RunRoutineApiRoutinesRoutineIdRunPostErrors];
@@ -27047,7 +30641,7 @@ export type ListRoutineScopesApiRoutinesRoutineIdScopesGetErrors = {
     /**
      * Problem
      */
-    404: TenantNotFoundProblem;
+    404: TenantNotFoundProblem | RoutineNotFoundProblem;
     /**
      * Problem
      */
@@ -27117,11 +30711,11 @@ export type UnlinkRoutineScopeApiRoutinesRoutineIdScopesScopeSlugDeleteErrors = 
     /**
      * Problem
      */
-    404: TenantNotFoundProblem;
+    404: TenantNotFoundProblem | RoutineNotFoundProblem | ScopeNotFoundProblem;
     /**
      * Problem
      */
-    409: TenantRequiredProblem;
+    409: TenantRequiredProblem | RevisionConflictProblem;
     /**
      * Validation Error
      */
@@ -27185,11 +30779,11 @@ export type LinkRoutineScopeApiRoutinesRoutineIdScopesScopeSlugPutErrors = {
     /**
      * Problem
      */
-    404: TenantNotFoundProblem;
+    404: TenantNotFoundProblem | RoutineNotFoundProblem | ScopeNotFoundProblem;
     /**
      * Problem
      */
-    409: TenantRequiredProblem;
+    409: TenantRequiredProblem | RevisionConflictProblem;
     /**
      * Validation Error
      */
@@ -27244,7 +30838,7 @@ export type RoutineSweepsApiRoutinesRoutineIdSweepsGetErrors = {
     /**
      * Problem
      */
-    404: TenantNotFoundProblem;
+    404: TenantNotFoundProblem | RoutineNotFoundProblem;
     /**
      * Problem
      */
@@ -27343,11 +30937,11 @@ export type AddRunnerApiRunnersPostErrors = {
     /**
      * Problem
      */
-    404: TenantNotFoundProblem;
+    404: TenantNotFoundProblem | HostNotFoundProblem;
     /**
      * Problem
      */
-    409: TenantRequiredProblem;
+    409: TenantRequiredProblem | HostRetiredProblem;
     /**
      * Validation Error
      */
@@ -27393,7 +30987,7 @@ export type GetRunnerApiRunnersRunnerIdGetErrors = {
     /**
      * Problem
      */
-    404: TenantNotFoundProblem;
+    404: TenantNotFoundProblem | RunnerNotFoundProblem;
     /**
      * Problem
      */
@@ -27447,11 +31041,11 @@ export type EnrollRunnerApiRunnersRunnerIdEnrollmentsPostErrors = {
     /**
      * Problem
      */
-    404: TenantNotFoundProblem;
+    404: TenantNotFoundProblem | RunnerNotFoundProblem;
     /**
      * Problem
      */
-    409: TenantRequiredProblem;
+    409: TenantRequiredProblem | RunnerRetiredProblem;
     /**
      * Validation Error
      */
@@ -27501,7 +31095,7 @@ export type PauseRunnerApiRunnersRunnerIdPausePostErrors = {
     /**
      * Problem
      */
-    404: TenantNotFoundProblem;
+    404: TenantNotFoundProblem | RunnerNotFoundProblem;
     /**
      * Problem
      */
@@ -27555,11 +31149,11 @@ export type ReinstateRunnerApiRunnersRunnerIdReinstatePostErrors = {
     /**
      * Problem
      */
-    404: TenantNotFoundProblem;
+    404: TenantNotFoundProblem | RunnerNotFoundProblem;
     /**
      * Problem
      */
-    409: TenantRequiredProblem;
+    409: TenantRequiredProblem | RunnerReinstateInterruptedProblem | RunnerNotRetiredProblem | HostRetiredProblem | RunnerLifecycleConflictProblem;
     /**
      * Validation Error
      */
@@ -27609,7 +31203,7 @@ export type ResumeRunnerApiRunnersRunnerIdResumePostErrors = {
     /**
      * Problem
      */
-    404: TenantNotFoundProblem;
+    404: TenantNotFoundProblem | RunnerNotFoundProblem;
     /**
      * Problem
      */
@@ -27663,11 +31257,11 @@ export type RetireRunnerApiRunnersRunnerIdRetirePostErrors = {
     /**
      * Problem
      */
-    404: TenantNotFoundProblem;
+    404: TenantNotFoundProblem | RunnerNotFoundProblem;
     /**
      * Problem
      */
-    409: TenantRequiredProblem;
+    409: TenantRequiredProblem | RunnerRetireInterruptedProblem | RunnerHoldsRoutesProblem | RunnerLifecycleConflictProblem;
     /**
      * Validation Error
      */
@@ -27717,11 +31311,11 @@ export type RevokeRunnerTokenApiRunnersRunnerIdTokenRevocationsPostErrors = {
     /**
      * Problem
      */
-    404: TenantNotFoundProblem;
+    404: TenantNotFoundProblem | RunnerNotFoundProblem;
     /**
      * Problem
      */
-    409: TenantRequiredProblem;
+    409: TenantRequiredProblem | RunnerNotEnrolledProblem | RunnerLifecycleConflictProblem;
     /**
      * Validation Error
      */
@@ -27827,7 +31421,7 @@ export type RunDeltaApiRunsChunkIdGetErrors = {
     /**
      * Problem
      */
-    404: TenantNotFoundProblem;
+    404: TenantNotFoundProblem | RunNotFoundProblem;
     /**
      * Problem
      */
@@ -27984,7 +31578,7 @@ export type GetScopeApiScopesSlugGetErrors = {
     /**
      * Problem
      */
-    404: TenantNotFoundProblem;
+    404: TenantNotFoundProblem | ScopeNotFoundProblem;
     /**
      * Problem
      */
@@ -28048,11 +31642,11 @@ export type EditScopeApiScopesSlugPatchErrors = {
     /**
      * Problem
      */
-    404: TenantNotFoundProblem;
+    404: TenantNotFoundProblem | ScopeNotFoundProblem;
     /**
      * Problem
      */
-    409: TenantRequiredProblem;
+    409: TenantRequiredProblem | RevisionConflictProblem;
     /**
      * Validation Error
      */
@@ -28112,11 +31706,11 @@ export type EnableScopeApiScopesSlugEnablePostErrors = {
     /**
      * Problem
      */
-    404: TenantNotFoundProblem;
+    404: TenantNotFoundProblem | ScopeNotFoundProblem;
     /**
      * Problem
      */
-    409: TenantRequiredProblem;
+    409: TenantRequiredProblem | RevisionConflictProblem;
     /**
      * Validation Error
      */
@@ -28176,11 +31770,11 @@ export type RetireScopeApiScopesSlugRetirePostErrors = {
     /**
      * Problem
      */
-    404: TenantNotFoundProblem;
+    404: TenantNotFoundProblem | ScopeNotFoundProblem;
     /**
      * Problem
      */
-    409: TenantRequiredProblem;
+    409: TenantRequiredProblem | RevisionConflictProblem;
     /**
      * Validation Error
      */
@@ -28226,7 +31820,7 @@ export type ListScopeRoutinesApiScopesSlugRoutinesGetErrors = {
     /**
      * Problem
      */
-    404: TenantNotFoundProblem;
+    404: TenantNotFoundProblem | ScopeNotFoundProblem;
     /**
      * Problem
      */
@@ -28509,7 +32103,7 @@ export type RetireSecretApiSecretsNameRetirePostErrors = {
     /**
      * Problem
      */
-    409: TenantRequiredProblem;
+    409: TenantRequiredProblem | SecretInUseProblem;
     /**
      * Validation Error
      */
@@ -28573,7 +32167,7 @@ export type ReplaceSecretApiSecretsNameValuePutErrors = {
     /**
      * Problem
      */
-    409: TenantRequiredProblem;
+    409: TenantRequiredProblem | RevisionConflictProblem | SecretRetiredProblem;
     /**
      * Validation Error
      */
@@ -28681,7 +32275,7 @@ export type RunTenantPassApiSweepsNamePassesPostErrors = {
     /**
      * No sweep this hub builds goes by the name.
      */
-    404: TenantNotFoundProblem;
+    404: TenantNotFoundProblem | SweepNotFoundProblem;
     /**
      * A pass of the sweep holds the lock this one needs: `{"code": "sweep_in_progress"}`.
      */
@@ -28689,7 +32283,7 @@ export type RunTenantPassApiSweepsNamePassesPostErrors = {
     /**
      * The sweep runs over every tenant only.
      */
-    422: unknown;
+    422: SweepServesNoTenantProblem;
     /**
      * Problem
      */
@@ -28723,6 +32317,10 @@ export type TraceReplayApiTracesReplayPostErrors = {
      * Problem
      */
     403: PermissionRequiredProblem;
+    /**
+     * Problem
+     */
+    409: TraceReplayUnavailableProblem;
     /**
      * Validation Error
      */
@@ -28844,7 +32442,7 @@ export type AssignRoleApiUsersUserIdRolePostErrors = {
     /**
      * Problem
      */
-    400: TenantCredentialMismatchProblem;
+    400: TenantCredentialMismatchProblem | UnknownRoleProblem;
     /**
      * Problem
      */
@@ -28852,15 +32450,15 @@ export type AssignRoleApiUsersUserIdRolePostErrors = {
     /**
      * Problem
      */
-    403: PermissionRequiredProblem;
+    403: PermissionRequiredProblem | MembershipChangeRefusedProblem | RoleNotAssignableProblem;
     /**
      * Problem
      */
-    404: TenantNotFoundProblem;
+    404: TenantNotFoundProblem | MemberNotFoundProblem;
     /**
      * Problem
      */
-    409: TenantRequiredProblem;
+    409: TenantRequiredProblem | LastAdminKeptProblem;
     /**
      * Validation Error
      */
@@ -29019,7 +32617,7 @@ export type CreateWorkSourceApiWorkSourcesPostErrors = {
     /**
      * Problem
      */
-    409: TenantRequiredProblem;
+    409: TenantRequiredProblem | WorkSourceSlugTakenProblem | WorkSourceLocatorTakenProblem;
     /**
      * Validation Error
      */
@@ -29065,7 +32663,7 @@ export type GetWorkSourceApiWorkSourcesSourceGetErrors = {
     /**
      * Problem
      */
-    404: TenantNotFoundProblem;
+    404: TenantNotFoundProblem | WorkSourceNotFoundProblem;
     /**
      * Problem
      */
@@ -29129,11 +32727,11 @@ export type PatchWorkSourceApiWorkSourcesSourcePatchErrors = {
     /**
      * Problem
      */
-    404: TenantNotFoundProblem;
+    404: TenantNotFoundProblem | WorkSourceNotFoundProblem;
     /**
      * Problem
      */
-    409: TenantRequiredProblem;
+    409: TenantRequiredProblem | RevisionConflictProblem | WorkSourceSlugTakenProblem | WorkSourceLocatorTakenProblem;
     /**
      * Validation Error
      */
@@ -29193,11 +32791,11 @@ export type EnableWorkSourceApiWorkSourcesSourceEnablePostErrors = {
     /**
      * Problem
      */
-    404: TenantNotFoundProblem;
+    404: TenantNotFoundProblem | WorkSourceNotFoundProblem;
     /**
      * Problem
      */
-    409: TenantRequiredProblem;
+    409: TenantRequiredProblem | RevisionConflictProblem;
     /**
      * Validation Error
      */
@@ -29248,11 +32846,11 @@ export type ListWorkItemsApiWorkSourcesSourceItemsGetErrors = {
     /**
      * Problem
      */
-    404: TenantNotFoundProblem;
+    404: TenantNotFoundProblem | WorkSourceNotFoundProblem;
     /**
      * Problem
      */
-    409: TenantRequiredProblem;
+    409: TenantRequiredProblem | WorkSourceNoEditorProblem;
     /**
      * Validation Error
      */
@@ -29307,11 +32905,11 @@ export type CreateWorkItemApiWorkSourcesSourceItemsPostErrors = {
     /**
      * Problem
      */
-    404: TenantNotFoundProblem;
+    404: TenantNotFoundProblem | WorkSourceNotFoundProblem;
     /**
      * Problem
      */
-    409: TenantRequiredProblem | ChunkIngestConflict;
+    409: TenantRequiredProblem | ChunkIngestConflict | WorkSourceNoEditorProblem;
     /**
      * Validation Error
      */
@@ -29319,7 +32917,7 @@ export type CreateWorkItemApiWorkSourcesSourceItemsPostErrors = {
     /**
      * Problem
      */
-    503: HubStoreUnavailableProblem;
+    503: HubStoreUnavailableProblem | DefaultGraphRetiredProblem;
 };
 
 export type CreateWorkItemApiWorkSourcesSourceItemsPostError = CreateWorkItemApiWorkSourcesSourceItemsPostErrors[keyof CreateWorkItemApiWorkSourcesSourceItemsPostErrors];
@@ -29365,11 +32963,11 @@ export type WithdrawWorkItemApiWorkSourcesSourceItemsRefDeleteErrors = {
     /**
      * Problem
      */
-    404: TenantNotFoundProblem;
+    404: TenantNotFoundProblem | WorkSourceNotFoundProblem | WorkItemNotFoundProblem | ChunkNotFoundProblem;
     /**
      * Problem
      */
-    409: TenantRequiredProblem;
+    409: TenantRequiredProblem | WorkSourceNoEditorProblem | WorkItemNotEditableProblem | WorkItemHeldByLiveChunkProblem | WorkItemHeldByDependentsProblem;
     /**
      * Validation Error
      */
@@ -29419,11 +33017,11 @@ export type GetWorkItemApiWorkSourcesSourceItemsRefGetErrors = {
     /**
      * Problem
      */
-    404: TenantNotFoundProblem;
+    404: TenantNotFoundProblem | WorkSourceNotFoundProblem | WorkItemNotFoundProblem;
     /**
      * Problem
      */
-    409: TenantRequiredProblem;
+    409: TenantRequiredProblem | WorkSourceNoEditorProblem;
     /**
      * Validation Error
      */
@@ -29477,11 +33075,11 @@ export type PatchWorkItemApiWorkSourcesSourceItemsRefPatchErrors = {
     /**
      * Problem
      */
-    404: TenantNotFoundProblem;
+    404: TenantNotFoundProblem | WorkSourceNotFoundProblem | WorkItemNotFoundProblem;
     /**
      * Problem
      */
-    409: TenantRequiredProblem;
+    409: TenantRequiredProblem | WorkSourceNoEditorProblem | WorkItemNotEditableProblem;
     /**
      * Validation Error
      */
@@ -29541,11 +33139,11 @@ export type RetireWorkSourceApiWorkSourcesSourceRetirePostErrors = {
     /**
      * Problem
      */
-    404: TenantNotFoundProblem;
+    404: TenantNotFoundProblem | WorkSourceNotFoundProblem;
     /**
      * Problem
      */
-    409: TenantRequiredProblem;
+    409: TenantRequiredProblem | RevisionConflictProblem;
     /**
      * Validation Error
      */
