@@ -1302,6 +1302,10 @@
             "title": "Flow Id",
             "type": "string"
           },
+          "in_line": {
+            "title": "In Line",
+            "type": "boolean"
+          },
           "next_poll_at": {
             "anyOf": [
               {
@@ -1355,6 +1359,7 @@
           "repository_name",
           "branch",
           "state",
+          "in_line",
           "position",
           "next_poll_at"
         ],

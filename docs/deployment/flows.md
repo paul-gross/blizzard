@@ -10,16 +10,21 @@ same line the hub drives.
 
 Each open submission holds a place on every flow it submitted to. Its state is the same on all of them:
 
-| State         | Meaning                                                                                                           |
-| ------------- | ----------------------------------------------------------------------------------------------------------------- |
-| `landing`     | Its turn is open now.                                                                                             |
-| `next`        | It may take a turn, and nothing that arrived before it on any of its flows may.                                   |
-| `waiting`     | It may take a turn, behind one that arrived before it.                                                            |
-| `polling`     | Its last turn found its checks still running; it takes no turn until its next poll is due, and says when that is. |
-| `passed-over` | Its chunk is not `delivering` — paused or needing a person — so the line moves on without it until it is again.   |
+| State            | Meaning                                                                                                                |
+| ---------------- | ---------------------------------------------------------------------------------------------------------------------- |
+| `landing`        | Its turn is open now.                                                                                                  |
+| `next`           | It may take a turn, and nothing that arrived before it on any of its flows may.                                        |
+| `waiting`        | It may take a turn, behind one that arrived before it.                                                                 |
+| `polling`        | Its last turn found its checks still running; it takes no turn until its next poll is due, and says when that is.      |
+| `awaiting-merge` | Its last turn found the change waiting on a merge; it takes no turn until its next poll is due, and says when that is. |
+| `passed-over`    | Its chunk is not `delivering` — paused or needing a person — so the line moves on without it until it is again.        |
 
 Its **position** on a flow is 1 while it is `landing` or `next`. Otherwise it is 1 plus the submissions ahead of it on
 that flow that may take a turn now, so a paused chunk or one waiting on a poll does not hold the others' numbers back.
+
+Every place also carries `in_line`, the hub's judgement of whether it holds a position in the line: true for `next`,
+`waiting`, and `polling`; false for `landing`, `awaiting-merge`, and `passed-over`. A reader takes it from there rather
+than sorting the states itself, and treats a state it does not know as not in line.
 
 ## The record
 

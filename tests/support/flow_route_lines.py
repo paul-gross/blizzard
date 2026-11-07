@@ -31,6 +31,7 @@ class Line:
 
     def line(self) -> list[tuple[str, str, int]]:
         body = self.client.get(f"/api/flows/{self.flow_id}").json()
+        assert all(place["in_line"] is (place["state"] in ("next", "waiting", "polling")) for place in body["line"])
         return [(place["chunk_id"], place["state"], place["position"]) for place in body["line"]]
 
     def chunk_places(self, chunk_id: str) -> list[tuple[str, str, int]]:
@@ -39,6 +40,9 @@ class Line:
         listed = [(p["flow_id"], p["state"], p["position"]) for p in rows[chunk_id]["flow_places"]]
         detail = [(p["flow_id"], p["state"], p["position"]) for p in self.world.detail(chunk_id)["flow_places"]]
         assert listed == detail
+        in_line = [p["in_line"] for p in rows[chunk_id]["flow_places"]]
+        assert in_line == [p["in_line"] for p in self.world.detail(chunk_id)["flow_places"]]
+        assert in_line == [state in ("next", "waiting", "polling") for _, state, _ in listed]
         return listed
 
     def take_turn(self, chunk_id: str) -> None:
