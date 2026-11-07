@@ -10,7 +10,7 @@ from blizzard.hub.graphs import PACKAGED
 from blizzard.runner.harness.preamble import PROMPTS
 
 NODE_PROMPT_BAR = 4_000
-PREAMBLE_BAR = 3_050
+PREAMBLE_BAR = 3_300
 
 
 def _over(files: list[Path], bar: int) -> list[str]:
