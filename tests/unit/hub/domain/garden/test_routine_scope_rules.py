@@ -101,7 +101,7 @@ def test_every_routine_verb_has_a_declared_row() -> None:
 
 
 @pytest.mark.parametrize("retired", [True, False])
-def test_a_held_name_refuses_a_create_in_either_state(retired: bool) -> None:
+def test_the_verb_table_admits_no_create_on_an_existing_routine_in_either_state(retired: bool) -> None:
     assert not Routine.allows(RoutineVerb.CREATE, retired=retired)
 
 

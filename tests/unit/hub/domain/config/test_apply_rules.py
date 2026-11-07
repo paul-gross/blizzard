@@ -364,6 +364,14 @@ def test_a_stored_scope_edits_only_a_stated_description() -> None:
     assert [(w.change.op, w.from_revision) for w in edited.writes] == [(ChangeOp.EDIT, 2)]
 
 
+def test_a_routine_with_neither_handle_is_refused_at_its_entry_not_asserted() -> None:
+    entry = replace(_routine_entry(), slug=None, name=None)
+    with pytest.raises(ApplyEntryRefused) as refused:
+        _plan(ConfigDeclaration(routines=(entry,)), _garden())
+    assert (refused.value.section, refused.value.index) == ("routines", 0)
+    assert isinstance(refused.value.cause, ConfigFieldError) and refused.value.cause.field == "slug"
+
+
 @pytest.mark.parametrize(
     ("entry", "known", "field"),
     [

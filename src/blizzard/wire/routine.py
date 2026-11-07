@@ -5,18 +5,12 @@ from __future__ import annotations
 
 from typing import Annotated
 
-from pydantic import BaseModel, ConfigDict, model_validator
+from pydantic import BaseModel, ConfigDict
 
 from blizzard.foundation.run_mode import RunMode
 from blizzard.foundation.unrecognized import Unrecognized
 from blizzard.wire.base import WireModel
 from blizzard.wire.vocabulary import OPEN
-
-
-def _require_handle(slug: str | None, name: str | None) -> None:
-    """A routine states its ``slug``, its ``name``, or both; with only one, the other takes the same value."""
-    if slug is None and name is None:
-        raise ValueError("a routine states a slug, a name, or both")
 
 
 class RoutineCreateRequest(BaseModel):
@@ -31,11 +25,6 @@ class RoutineCreateRequest(BaseModel):
     default_effort: str | None = None
     # The routine's default harness preference — the `default_model` shape.
     default_harnesses: list[str] = []
-
-    @model_validator(mode="after")
-    def _handle_stated(self) -> RoutineCreateRequest:
-        _require_handle(self.slug, self.name)
-        return self
 
 
 class RoutineDocument(BaseModel):
@@ -54,11 +43,6 @@ class RoutineDocument(BaseModel):
     default_effort: str | None = None
     default_harnesses: list[str] = []
     scopes: list[str] = []
-
-    @model_validator(mode="after")
-    def _handle_stated(self) -> RoutineDocument:
-        _require_handle(self.slug, self.name)
-        return self
 
 
 class RoutineEditRequest(BaseModel):

@@ -57,9 +57,14 @@ from blizzard.hub.domain.config.work_sources import (
     WorkSourceSlug,
     require_known_provider,
 )
-from blizzard.hub.domain.config_apply.entries import DocumentEntries
+from blizzard.hub.domain.config_apply.entries import DeclaredRoutine, DocumentEntries
 from blizzard.hub.domain.garden.declarations import RoutineDeclaration, ScopeDeclaration
-from blizzard.hub.domain.garden.routines import IReadRoutineRepository, IReadRoutineScopeRepository, Routine
+from blizzard.hub.domain.garden.routines import (
+    IReadRoutineRepository,
+    IReadRoutineScopeRepository,
+    Routine,
+    stated_handle,
+)
 from blizzard.hub.domain.garden.scopes import IReadScopeRepository
 from blizzard.hub.domain.graph.model import IReadGraphRepository
 from blizzard.hub.domain.kernel.unset import UNSET, UnsetType
@@ -435,20 +440,29 @@ class ConfigApplication:
                 for index, scope in enumerate(entries.scopes)
             ),
             routines=tuple(
-                RoutineDeclaration(
-                    slug=routine.slug,
-                    name=routine.name,
-                    graph_name=routine.graph_name,
-                    default_scope_slug=routine.default_scope_slug,
-                    default_model=routine.default_model,
-                    default_effort=routine.default_effort,
-                    default_harnesses=routine.default_harnesses,
-                    edit=routine.edit,
-                    project_id=projects.project_of(ROUTINES_SECTION, index, routine.project).project_id,
-                    scopes=routine.scopes,
-                )
+                ConfigApplication._routine_declaration(index, routine, projects)
                 for index, routine in enumerate(entries.routines)
             ),
+        )
+
+    @staticmethod
+    def _routine_declaration(index: int, routine: DeclaredRoutine, projects: ProjectsPlan) -> RoutineDeclaration:
+        """The declaration of one routine entry; an entry stating neither slug nor name is refused at the entry."""
+        try:
+            stated_handle(routine.slug, routine.name)
+        except ConfigFieldError as exc:
+            raise ApplyEntryRefused(ROUTINES_SECTION, index, exc) from exc
+        return RoutineDeclaration(
+            slug=routine.slug,
+            name=routine.name,
+            graph_name=routine.graph_name,
+            default_scope_slug=routine.default_scope_slug,
+            default_model=routine.default_model,
+            default_effort=routine.default_effort,
+            default_harnesses=routine.default_harnesses,
+            edit=routine.edit,
+            project_id=projects.project_of(ROUTINES_SECTION, index, routine.project).project_id,
+            scopes=routine.scopes,
         )
 
     def _cadence_declarations(

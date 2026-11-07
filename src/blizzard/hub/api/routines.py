@@ -155,6 +155,8 @@ def _create(
         InvalidHarnesses,
     ) as exc:
         raise _definition_refusal(exc) from exc
+    except ConfigFieldError as exc:
+        raise _unprocessable(exc) from exc
     return _routine_view(routine, ProjectLabels.of_project(project).fields(routine.project_id))
 
 

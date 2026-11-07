@@ -24,6 +24,7 @@ from blizzard.hub.domain.garden.routines import (
     RoutineSlugError,
     require_graph_change_resolves,
     resolved_handle,
+    stated_handle,
 )
 from blizzard.hub.domain.garden.scopes import Scope, ScopeEdit, ScopeSlug, ScopeSlugError
 from blizzard.hub.domain.graph.harnesses import InvalidHarnesses, validated_harnesses
@@ -94,9 +95,7 @@ class RoutineDeclaration:
 
     def _stated_handle(self) -> str:
         """The slug the entry states, else its name."""
-        handle = self.slug if self.slug is not None else self.name
-        assert handle is not None
-        return handle
+        return stated_handle(self.slug, self.name)
 
     @property
     def key(self) -> tuple[str, str]:
