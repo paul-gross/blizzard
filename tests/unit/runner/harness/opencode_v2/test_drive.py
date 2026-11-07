@@ -17,7 +17,7 @@ import pytest
 
 from blizzard.runner.harness.autonomy import Autonomy
 from blizzard.runner.harness.opencode_v2.client import ModelReference
-from blizzard.runner.harness.opencode_v2.drive import TurnDriver
+from blizzard.runner.harness.opencode_v2.drive import REFUSAL_MESSAGE, TurnDriver
 from blizzard.runner.harness.opencode_v2.driver import DriverCore
 from blizzard.runner.harness.opencode_v2.errors import ErrorKind
 from blizzard.runner.harness.opencode_v2.registration import ServiceRegistration
@@ -191,6 +191,8 @@ def test_a_permission_request_is_answered_per_autonomy_and_recorded(autonomy: Au
     harness = Harness(service, _request(autonomy=autonomy))
     result = harness.run()
     assert service.replies == [(ROOT, "per_1", reply)]
+    # A refusal carries its message, so the call fails as a tool error and the turn goes on to settle.
+    assert service.reply_messages["per_1"] == (REFUSAL_MESSAGE if reply == "reject" else None)
     assert [(d.surface, d.reply, d.action, d.resources) for d in result.decisions] == [
         ("permission", reply, "shell", ("touch x",))
     ]

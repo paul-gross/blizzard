@@ -1,10 +1,10 @@
 [
   {
     "executed": false,
-    "id": "call_4122c2fb8b6f4a39a1c4da296a96e0be",
+    "id": "call_e53b7e7fc9294270a2cdb4f9882171a7",
     "name": "shell",
     "native": {
-      "itemId": "fc_04a6bdc988a88ba0016aea7915925487d2a4e6af1f67e6b51f"
+      "itemId": "fc_05065e70e6b3ab9e016aee9a38547087d28a7eaf9ec76f0317"
     },
     "state": {
       "error": {
@@ -12,15 +12,14 @@
         "type": "permission.rejected"
       },
       "input": {
-        "command": "touch proof-denied-shell",
-        "workdir": "<scratch>/repo"
+        "command": "touch proof-denied-shell"
       },
       "status": "error"
     },
     "time": {
-      "completed": 1793751318106,
-      "created": 1793751317619,
-      "ran": 1793751318102
+      "completed": 1794021944553,
+      "created": 1794021944466,
+      "ran": 1794021944525
     },
     "type": "tool"
   }

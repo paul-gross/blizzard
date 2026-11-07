@@ -38,6 +38,8 @@ _MESSAGE_LISTS = (
     "interrupt_root_messages",
     "judgement_messages",
     "permission_deny_tool_messages",
+    "permission_rejected_messages",
+    "permission_declined_messages",
     "restart_messages",
     "steer_messages",
     "takeover_messages",
@@ -102,6 +104,22 @@ def test_an_interrupted_step_carries_its_error_and_the_idle_its_outcome(version:
     errors = [message.error for message in messages if message.error is not None]
     assert errors and classify_error(errors[0]).kind is ErrorKind.INTERRUPTED
     assert messages[-1].outcome == "interrupted"
+
+
+@pytest.mark.parametrize("version", _VERSIONS)
+def test_a_refusal_sent_with_its_message_fails_the_call_and_the_turn_settles(version: str) -> None:
+    messages = [parse_message(item) for item in _items(_fixture(version, "permission_rejected_messages"))]
+    failed = [p.state for m in messages for p in m.parts if p.state is not None and p.state.status == "error"]
+    assert failed and all(state.error for state in failed)
+    assert messages[-1].type == "idle" and messages[-1].outcome == "succeeded"
+
+
+@pytest.mark.parametrize("version", _VERSIONS)
+def test_a_refusal_sent_with_no_message_aborts_the_step_and_ends_the_turn_with_no_idle(version: str) -> None:
+    messages = [parse_message(item) for item in _items(_fixture(version, "permission_declined_messages"))]
+    errors = [message.error for message in messages if message.error is not None]
+    assert errors and classify_error(errors[0]).kind is ErrorKind.INTERRUPTED
+    assert not any(message.type == "idle" for message in messages)
 
 
 @pytest.mark.parametrize("version", _VERSIONS)
@@ -196,7 +214,7 @@ def test_a_step_still_streaming_parses_with_no_usage_yet(version: str) -> None:
     live = [parse_message(item) for item in _items(_fixture(version, "transcript_live"))]
     step = next(message for message in live if message.type == "assistant")
     assert step.tokens is None and step.cost is None and step.completed is None
-    call = step.parts[0]
+    call = next(part for part in step.parts if part.type == "tool")
     assert call.state is not None and call.state.status == "running" and call.state.output is None
 
 

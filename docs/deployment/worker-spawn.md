@@ -333,6 +333,10 @@ answers within 30 seconds. The version it advertises and records on every spawn 
 service whose version changed since it was advertised is refused, and the runner observes the version afresh and
 recalculates the capability's health at once, rather than at the end of its refresh window.
 
+The driver answers each permission request the session's rules leave: `auto` and `dangerous` allow it once, and `normal`
+refuses it with a message, so the call fails as a tool error and the turn carries on — OpenCode 2 ends a turn unsettled
+on a refusal that carries none.
+
 OpenCode 2's health runs its checks against the service in order and reports the first that fails as a config conflict,
 naming it in the runner's log:
 

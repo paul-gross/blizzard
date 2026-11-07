@@ -327,9 +327,16 @@ class OpenCodeServiceClient:
         answer = self._call("session.permission.list", "GET", self._session(session_id, "/permission"))
         return _objects(_data(answer, "session.permission.list"), "session.permission.list")
 
-    def reply_permission(self, session_id: str, request_id: str, decision: PermissionDecision) -> None:
+    def reply_permission(
+        self, session_id: str, request_id: str, decision: PermissionDecision, message: str | None = None
+    ) -> None:
+        """A ``reject`` with no ``message`` aborts the turn without settling it; with one, the call fails with the
+        message as its error and the turn goes on."""
         path = self._session(session_id, f"/permission/{quote(request_id, safe='')}/reply")
-        self._call("session.permission.reply", "POST", path, {"decision": decision.value})
+        body: JsonObject = {"decision": decision.value}
+        if message is not None:
+            body["message"] = message
+        self._call("session.permission.reply", "POST", path, body)
 
     def forms(self, session_id: str) -> list[JsonObject]:
         answer = self._call("session.form.list", "GET", self._session(session_id, "/form"))

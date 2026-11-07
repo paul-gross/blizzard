@@ -1,6 +1,6 @@
 {
   "cost": 0,
-  "id": "ses_73da6fef4b24c0fff6c87b68c4",
+  "id": "ses_a703c6d002d49b0b01a4b405a8",
   "location": {
     "directory": "<scratch>/repo"
   },
@@ -8,7 +8,7 @@
     "blizzard": {
       "proof": "compatibility",
       "row": "model",
-      "run": "df12f60f"
+      "run": "ad60d9e0"
     }
   },
   "model": {
@@ -26,18 +26,18 @@
   ],
   "projectID": "global",
   "time": {
-    "created": 1793751425523,
-    "idle": 1793751436432,
-    "updated": 1793751436425
+    "created": 1794022058532,
+    "idle": 1794022067290,
+    "updated": 1794022067276
   },
   "title": "blizzard compatibility proof model",
   "tokens": {
     "cache": {
-      "read": 12800,
+      "read": 14720,
       "write": 0
     },
-    "input": 6965,
-    "output": 60,
-    "reasoning": 39
+    "input": 5195,
+    "output": 50,
+    "reasoning": 58
   }
 }

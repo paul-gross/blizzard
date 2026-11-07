@@ -214,17 +214,21 @@
       "classification": "supported",
       "evidence": [
         "permission_request",
+        "permission_rejected_messages",
+        "permission_declined_messages",
         "form_request"
       ],
       "facts": {
         "ask_waited": true,
+        "bare_reject_ended_the_turn_with_no_idle": true,
         "form_pending_until_cancelled": true,
         "once_took_effect": true,
+        "reject_failed_the_call_and_the_turn_went_on": true,
         "reject_held": true
       },
       "name": "permission_requests",
       "state": "observed",
-      "summary": "an `ask` raised a request that held the turn until `session.permission.reply` answered it, each reply took effect, and a form waited until it was cancelled"
+      "summary": "an `ask` raised a request that held the turn until `session.permission.reply` answered it, each reply took effect, a reject with a message failed the call with it and the turn settled, and a form waited until it was cancelled"
     },
     {
       "classification": "supported",

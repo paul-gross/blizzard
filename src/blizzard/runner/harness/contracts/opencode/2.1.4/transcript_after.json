@@ -1,9 +1,9 @@
 [
   {
-    "id": "msg_1a3e9db690015Qjb6wxKjvjmc8",
+    "id": "msg_1b40b4307001NLFBwBDkSn3h61",
     "text": "Use the shell tool exactly once to run `echo $$ > proof-sleep.pid; sleep 40; echo SLEPT` and wait for it. Then reply DONE.",
     "time": {
-      "created": 1793751374721
+      "created": 1794021999402
     },
     "type": "user"
   },
@@ -12,10 +12,10 @@
     "content": [
       {
         "executed": false,
-        "id": "call_13b85373594d4a8ca2585903a3101cf5",
+        "id": "call_769b684b0a6340cdbc9a64517a54a3de",
         "name": "shell",
         "native": {
-          "itemId": "fc_0fbe0c605b8a1bfc016aea7950234c87d295b55be5f1efbb00"
+          "itemId": "fc_0e13e9bf24e99ed4016aee9a709bd087d2bb595c178542e1bb"
         },
         "state": {
           "content": [
@@ -36,41 +36,41 @@
           "status": "completed"
         },
         "time": {
-          "completed": 1793751416677,
-          "created": 1793751376163,
-          "ran": 1793751376600
+          "completed": 1794022041138,
+          "created": 1794022000682,
+          "ran": 1794022001094
         },
         "type": "tool"
       }
     ],
     "cost": 0,
     "finish": "tool-calls",
-    "id": "msg_1a3e9db8b0013LAQ5ieHMN2vRx",
+    "id": "msg_1b40b4338001tU8MehIh4zKS0s",
     "model": {
       "id": "gpt-6-luna",
       "providerID": "openai",
       "variant": "high"
     },
     "native": {
-      "responseId": "resp_0fbe0c605b8a1bfc016aea794f48b087d2b0b812787d1deab4",
+      "responseId": "resp_0e13e9bf24e99ed4016aee9a70095c87d28f92314761ea475e",
       "serviceTier": "default"
     },
     "snapshot": {
-      "end": "4bd21d1ac89893fbe97e1e4000df5e9912446c11",
+      "end": "6d6a043301596060bf2bbcffd63da5ba7ee635c0",
       "files": [],
-      "start": "4bd21d1ac89893fbe97e1e4000df5e9912446c11"
+      "start": "6d6a043301596060bf2bbcffd63da5ba7ee635c0"
     },
     "time": {
-      "completed": 1793751416701,
-      "created": 1793751374747,
-      "streamed": 1793751376623
+      "completed": 1794022041166,
+      "created": 1794021999439,
+      "streamed": 1794022001111
     },
     "tokens": {
       "cache": {
-        "read": 6400,
+        "read": 1792,
         "write": 0
       },
-      "input": 167,
+      "input": 4776,
       "output": 37,
       "reasoning": 0
     },
@@ -81,7 +81,7 @@
     "content": [
       {
         "native": {
-          "itemId": "msg_0fbe0c605b8a1bfc016aea7979804c87d2950547aa61ecfc2e",
+          "itemId": "msg_0e13e9bf24e99ed4016aee9a99cefc87d2add0b80cd6107d7a",
           "phase": "final_answer"
         },
         "text": "DONE",
@@ -90,42 +90,42 @@
     ],
     "cost": 0,
     "finish": "stop",
-    "id": "msg_1a3ea7f99001Pj0tAw6mSGtI1X",
+    "id": "msg_1b40be67f001ITRs9DGIYKkFFD",
     "model": {
       "id": "gpt-6-luna",
       "providerID": "openai",
       "variant": "high"
     },
     "native": {
-      "responseId": "resp_0fbe0c605b8a1bfc016aea7979108087d2b6f965483aa3872d",
+      "responseId": "resp_0e13e9bf24e99ed4016aee9a9961c887d296e013aeb485f01e",
       "serviceTier": "default"
     },
     "snapshot": {
-      "end": "4bd21d1ac89893fbe97e1e4000df5e9912446c11",
+      "end": "6d6a043301596060bf2bbcffd63da5ba7ee635c0",
       "files": [],
-      "start": "4bd21d1ac89893fbe97e1e4000df5e9912446c11"
+      "start": "6d6a043301596060bf2bbcffd63da5ba7ee635c0"
     },
     "time": {
-      "completed": 1793751417710,
-      "created": 1793751416752,
-      "streamed": 1793751417693
+      "completed": 1794022041919,
+      "created": 1794022041241,
+      "streamed": 1794022041886
     },
     "tokens": {
       "cache": {
         "read": 6400,
         "write": 0
       },
-      "input": 218,
+      "input": 219,
       "output": 5,
       "reasoning": 0
     },
     "type": "assistant"
   },
   {
-    "id": "msg_1a3ea83750010F1JqznfpScTGr",
+    "id": "msg_1b40be94e0013j41aL7c5vuYv1",
     "outcome": "succeeded",
     "time": {
-      "created": 1793751417717
+      "created": 1794022041934
     },
     "type": "idle"
   }

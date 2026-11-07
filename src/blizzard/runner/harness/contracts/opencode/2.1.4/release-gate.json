@@ -1,0 +1,11 @@
+{
+  "checks": {
+    "compatibility_proof": "degraded",
+    "concurrency_soak": "passed",
+    "real_chunk": "passed",
+    "selftest": "passed"
+  },
+  "model": "openai/gpt-6-luna#high",
+  "passed_on": "2026-11-06",
+  "version": "2.1.4"
+}
