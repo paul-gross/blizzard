@@ -1,4 +1,4 @@
-"""Every registered problem type: the base registry in ``wire/problem.py`` and each route family's own module."""
+"""Every registered problem type: the base registry in ``src/blizzard/wire/problem.py`` and each route family's own module."""
 
 from blizzard.wire.problem import PROBLEM_TYPES
 from blizzard.wire.problem_types_admin import ADMIN_PROBLEM_TYPES
