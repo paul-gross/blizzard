@@ -4062,10 +4062,18 @@ export type SelfTestStartRequest = {
     harness: string;
 };
 
+export const SelfTestStatus = {
+    RUNNING: 'running',
+    PASSED: 'passed',
+    FAILED: 'failed'
+} as const;
+
+export type SelfTestStatus = typeof SelfTestStatus[keyof typeof SelfTestStatus];
+
 /**
  * SelfTestView
  *
- * A selftest run's current state — ``running`` until every check has resolved.
+ * A selftest run's current state — ``running`` until every check has resolved, then ``settled``.
  */
 export type SelfTestView = {
     /**
@@ -4085,9 +4093,10 @@ export type SelfTestView = {
      */
     id: string;
     /**
-     * Status
+     * Settled
      */
-    status: string;
+    settled: boolean;
+    status: SelfTestStatus;
 };
 
 /**

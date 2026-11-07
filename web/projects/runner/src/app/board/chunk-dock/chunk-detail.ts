@@ -4,6 +4,8 @@ import {
   errorMessage,
   injectChunkDetailQuery,
   injectNowSignal,
+  injectPendingMutationVariables,
+  isPendingFor,
   KitPanel,
   KitPanelHeader,
   type runnerApi,
@@ -11,8 +13,18 @@ import {
 } from 'fleet';
 
 import { injectChunkPauseMutation } from './chunk-pause.mutations';
-import { injectChunkRequeueMutation } from './chunk-requeue.mutations';
-import { heartbeatLabel, liveWorker, runnerTarget } from './chunk-detail.model';
+import { type ChunkRequeueVars, injectChunkRequeueMutation } from './chunk-requeue.mutations';
+import {
+  heartbeatLabel,
+  liveWorker,
+  requeueErrorOf,
+  requeueFeedbackFor,
+  type RequeueFeedback,
+  type RequeueFeedbackMap,
+  runnerTarget,
+  withRequeueFeedback,
+} from './chunk-detail.model';
+import { chunkRequeueMutationKey } from '../../core/mutation-keys';
 import { injectPanelProjects } from '../../core/panel-reads';
 import { MachineDetailView } from './chunk-detail-view';
 import { type PanelLease, projectNameFor } from '../../core/panel-reads.model';
@@ -121,45 +133,55 @@ export class MachineDetail {
    * so a stale failure never lingers into the next chunk's dock. */
   protected readonly actionError = signal<string | null>(null);
 
+  /** Each requeue's outcome, keyed by runner and chunk — kept across selection changes, so a
+   * late outcome lands on its own chunk and shows again on return. */
+  private readonly requeueFeedback = signal<RequeueFeedbackMap>(new Map());
+
   /** The escalation's Requeue mutation — this dock's runner, the escalation's owner, since the
    * shell matches the escalation on the newest lease's runner. */
-  protected readonly requeueMutation = injectChunkRequeueMutation(() => this.runnerId());
+  protected readonly requeueMutation = injectChunkRequeueMutation(() => this.runnerId(), {
+    onSuccess: (vars) => this.setRequeueFeedback(vars, { kind: 'requeued' }),
+    onError: (error, vars) =>
+      this.setRequeueFeedback(vars, { kind: 'error', message: errorMessage(error, 'Requeue failed.') }),
+  });
 
-  /** Whether the shown chunk's requeue is in flight — scoped to it by the mutation's variables. */
+  /** Every requeue pending on this dock's runner (`bzh:frontend-pending-override`). */
+  private readonly pendingRequeues = injectPendingMutationVariables<ChunkRequeueVars>(
+    () => chunkRequeueMutationKey(this.runnerId()),
+  );
+
+  /** Whether the shown chunk's requeue is in flight on its runner. */
   protected readonly requeuePending = computed<boolean>(() =>
-    this.requeueMutation.isPending() && this.requeueMutation.variables()?.chunkId === this.chunkId());
+    isPendingFor(this.pendingRequeues(), (vars) =>
+      vars.runnerId === this.runnerId() && vars.chunkId === this.chunkId()));
+
+  private readonly shownRequeueFeedback = computed(() =>
+    requeueFeedbackFor(this.requeueFeedback(), this.runnerId(), this.chunkId()));
 
   /** The shown chunk's last requeue failure, or `null`. */
-  protected readonly requeueError = signal<string | null>(null);
+  protected readonly requeueError = computed<string | null>(() => requeueErrorOf(this.shownRequeueFeedback()));
 
-  /** The chunk whose requeue last landed, so the notice renders for that chunk only. */
-  private readonly requeuedChunkId = signal<string | null>(null);
-  protected readonly requeued = computed<boolean>(() =>
-    this.requeuedChunkId() !== null && this.requeuedChunkId() === this.chunkId());
+  /** Whether the shown chunk's last requeue landed. */
+  protected readonly requeued = computed<boolean>(() => this.shownRequeueFeedback()?.kind === 'requeued');
 
   constructor() {
     effect(() => {
       this.chunkId();
       this.actionError.set(null);
-      this.requeueError.set(null);
     });
   }
 
   /** Requeue the escalated chunk on its owning runner, once the operator has confirmed. */
   protected onRequeue(chunkId: string): void {
     const runnerId = this.runnerId();
-    if (runnerId === null || this.requeuePending()) return;
-    this.requeueError.set(null);
-    this.requeuedChunkId.set(null);
-    this.requeueMutation.mutate(
-      { runnerId, chunkId },
-      {
-        onSuccess: () => this.requeuedChunkId.set(chunkId),
-        onError: (error) => {
-          if (this.chunkId() === chunkId) this.requeueError.set(errorMessage(error, 'Requeue failed.'));
-        },
-      },
-    );
+    if (runnerId === null || isPendingFor(this.pendingRequeues(), (vars) =>
+      vars.runnerId === runnerId && vars.chunkId === chunkId)) return;
+    this.setRequeueFeedback({ runnerId, chunkId }, null);
+    this.requeueMutation.mutate({ runnerId, chunkId });
+  }
+
+  private setRequeueFeedback(vars: ChunkRequeueVars, entry: RequeueFeedback | null): void {
+    this.requeueFeedback.update((current) => withRequeueFeedback(current, vars.runnerId, vars.chunkId, entry));
   }
 
   /** The chunk's runner's bare name, for the header's

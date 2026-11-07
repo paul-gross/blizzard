@@ -10,11 +10,11 @@
           <fleet-kit-button [testid]="'run-selftest-' + row.harness" [disabled]="row.busy" (click)="runSelftest.emit(row.harness)">Run selftest</fleet-kit-button>
         </span>
         @if (row.run; as run) {
-          @if (run.status !== 'running') {
+          @if (phase(run) === 'settled') {
             <ul class="checks" data-testid="selftest-checks">
               @for (check of run.checks; track check.name) {
-                <li class="check" [class.failed]="!check.passed" data-testid="selftest-check">
-                  <span class="mark">{{ check.passed ? 'PASS' : 'FAIL' }}</span>
+                <li class="check" data-testid="selftest-check">
+                  <fleet-kit-badge class="mark" [tone]="checkTone(check.passed)">{{ check.passed ? 'PASS' : 'FAIL' }}</fleet-kit-badge>
                   <span class="name">{{ check.name }}</span>
                   <span class="detail">{{ check.detail }}</span>
                 </li>

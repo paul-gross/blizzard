@@ -22,12 +22,6 @@
   gap: 6px;
   flex-wrap: wrap;
 }
-.check .mark {
-  color: var(--green);
-}
-.check.failed .mark {
-  color: var(--red);
-}
 .check .detail {
   color: var(--label-dim);
 }

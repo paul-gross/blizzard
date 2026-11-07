@@ -5,7 +5,7 @@ import { injectFleetSpendDays } from '../fleet-spend/fleet-spend-days';
 import { injectHubBacklogQuery, injectHubQueueQuery } from '../queue/queue.query';
 import { hasPermission, injectMeQuery } from '../../core/auth/me.query';
 import { injectProjectsQuery } from '../../core/projects.query';
-import { projectColorsById } from '../board-page.model';
+import { orderedChunkIds, projectColorsById } from '../board-page.model';
 import { injectHubQuestionsQuery } from '../questions/questions.query';
 import { injectHubDecisionsQuery } from '../gates/gates.query';
 import { injectHubRunnersQuery } from '../../core/runners.query';
@@ -55,7 +55,7 @@ export class GlanceBoard {
   private readonly runners = computed(() => liveRunners(this.runnersQuery.data() ?? []));
 
   /** Every chunk's work items — the board's own batched read, so the glance and the board share one cache. */
-  private readonly workItems = injectBoardWorkItemsQuery(() => this.chunks().map((chunk) => chunk.chunk_id));
+  private readonly workItems = injectBoardWorkItemsQuery(() => orderedChunkIds(this.chunks()));
 
   /** Every chunk as one ordered list of cards, as the desktop list orders its rows. */
   protected readonly list = computed<GlanceListGroups>(() =>

@@ -28,3 +28,42 @@ export function heartbeatLabel(lease: runnerApi.LeaseView | null, now: number): 
   const age = ageMs(lease.last_heartbeat_at, now);
   return age === null ? '—' : formatAge(age);
 }
+
+/** One requeue's outcome on its chunk: it landed, or it failed with `message`. */
+export type RequeueFeedback = { readonly kind: 'requeued' } | { readonly kind: 'error'; readonly message: string };
+
+/** Requeue outcomes by {@link requeueKey}. */
+export type RequeueFeedbackMap = ReadonlyMap<string, RequeueFeedback>;
+
+/** The key a requeue's outcome is held under — its runner and its chunk. */
+export function requeueKey(runnerId: string, chunkId: string): string {
+  return `${runnerId}\u0000${chunkId}`;
+}
+
+/** The outcome held for `chunkId` on `runnerId`, or `null` while there is none or nothing is selected. */
+export function requeueFeedbackFor(
+  feedback: RequeueFeedbackMap,
+  runnerId: string | null,
+  chunkId: string | null,
+): RequeueFeedback | null {
+  if (runnerId === null || chunkId === null) return null;
+  return feedback.get(requeueKey(runnerId, chunkId)) ?? null;
+}
+
+/** `feedback` with the entry for `chunkId` on `runnerId` set to `entry`, or removed when `entry` is `null`. */
+export function withRequeueFeedback(
+  feedback: RequeueFeedbackMap,
+  runnerId: string,
+  chunkId: string,
+  entry: RequeueFeedback | null,
+): RequeueFeedbackMap {
+  const next = new Map(feedback);
+  if (entry === null) next.delete(requeueKey(runnerId, chunkId));
+  else next.set(requeueKey(runnerId, chunkId), entry);
+  return next;
+}
+
+/** A requeue outcome's failure message, or `null` when it landed or there is none. */
+export function requeueErrorOf(feedback: RequeueFeedback | null): string | null {
+  return feedback?.kind === 'error' ? feedback.message : null;
+}

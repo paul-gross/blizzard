@@ -64,6 +64,13 @@ def test_terminal_run_refuses_conclude() -> None:
     assert SelfTestRun.TRANSITIONS["passed"] == frozenset()
 
 
+def test_only_a_concluded_run_is_settled() -> None:
+    running = _run()
+    assert not running.settled()
+    assert running.conclude([_PASS]).settled()
+    assert running.crashed("boom").settled()
+
+
 def test_result_record_carries_terminal_status() -> None:
     assert _run().crashed("boom").result_record(_AT) == LatestSelfTestResult(
         harness_id="claude_code", status="failed", error="boom", recorded_at=_AT

@@ -9,7 +9,7 @@ import { injectChunkRequeueMutation } from './chunk-requeue.mutations';
 
 @Component({ selector: 'app-test-requeue-host', template: '', changeDetection: ChangeDetectionStrategy.OnPush })
 class RequeueHost {
-  readonly mutation = injectChunkRequeueMutation(() => 'rn_1');
+  readonly mutation = injectChunkRequeueMutation(() => 'rn_1', { onSuccess: () => undefined, onError: () => undefined });
 }
 
 describe('injectChunkRequeueMutation', () => {

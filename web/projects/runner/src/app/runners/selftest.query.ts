@@ -4,8 +4,9 @@ import { injectQueries } from '@tanstack/angular-query-experimental/inject-queri
 import { errorMessage, runnerApi } from 'fleet';
 
 import { runnerDashboardKey, runnerSelftestKey } from '../core/query-keys';
+import { selftestPhase } from './selftest.model';
 
-/** How often a still-`running` selftest run is re-read. */
+/** How often a still-running selftest run is re-read. */
 export const SELFTEST_POLL_MS = 1000;
 
 /** One harness's latest selftest run, by id. */
@@ -23,7 +24,8 @@ export interface SelftestRunRead {
 /**
  * `GET /runners/{runner_id}/api/selftests/{selftest_id}` — one run's current state, through the
  * generated `getSelftestRunnersRunnerIdApiSelftestsSelftestIdGet` (`bzh:generated-client`). It is
- * re-read every {@link SELFTEST_POLL_MS} while `running`, and not again once terminal.
+ * re-read every {@link SELFTEST_POLL_MS} while {@link selftestPhase} reads it running, and not again
+ * once settled or unclassified.
  */
 export function selftestQueryOptions(runnerId: string, selftestId: string) {
   return {
@@ -37,13 +39,13 @@ export function selftestQueryOptions(runnerId: string, selftestId: string) {
       return data!;
     },
     refetchInterval: (query: { state: { data?: runnerApi.SelfTestView } }) =>
-      query.state.data?.status === 'running' ? SELFTEST_POLL_MS : false,
+      query.state.data !== undefined && selftestPhase(query.state.data) === 'running' ? SELFTEST_POLL_MS : false,
   };
 }
 
 /**
  * Each harness's latest run on `runnerId` ({@link selftestQueryOptions}), keyed by harness. A run
- * that reads back terminal re-reads the runner's dashboard once, since its `harness_health` changes.
+ * that reads back settled re-reads the runner's dashboard once, since its `harness_health` changes.
  */
 export function injectSelftestRunsQuery(runnerId: () => string, runs: () => readonly SelftestRunRef[]) {
   const queryClient = inject(QueryClient);
@@ -67,7 +69,7 @@ export function injectSelftestRunsQuery(runnerId: () => string, runs: () => read
   effect(() => {
     for (const read of reads().values()) {
       const run = read.run;
-      if (run === null || run.status === 'running' || settled.has(run.id)) continue;
+      if (run === null || selftestPhase(run) !== 'settled' || settled.has(run.id)) continue;
       settled.add(run.id);
       void queryClient.invalidateQueries({ queryKey: runnerDashboardKey(runnerId()) });
     }

@@ -85,6 +85,28 @@ module.exports = defineConfig([
       "no-restricted-syntax": ["error", ...CLOCK_SELECTORS],
     },
   },
+  // A `*.model.ts` is pure (`bzh:frontend-containers-compose`): no Angular and no query
+  // library, not even a type, so a model never holds a framework object and its spec needs
+  // no TestBed. The glob carries no `projects/` prefix because each project's config is
+  // read from its own directory; no project config restates this rule, since flat config
+  // replaces a rule's options per matching block. `web/scripts/model-imports-lint-probe.js`
+  // proves it under each project's config.
+  {
+    files: ["**/*.model.ts"],
+    rules: {
+      "@typescript-eslint/no-restricted-imports": [
+        "error",
+        {
+          patterns: [
+            {
+              group: ["@angular/*", "@tanstack/*"],
+              message: "A model is pure: move the Angular or query-library code to its container or component.",
+            },
+          ],
+        },
+      ],
+    },
+  },
   {
     files: ["**/*.html"],
     extends: [

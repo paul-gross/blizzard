@@ -1,9 +1,10 @@
 import { ChangeDetectionStrategy, Component, computed, input, signal } from '@angular/core';
-import { asyncState, errorMessage, type runnerApi } from 'fleet';
+import { asyncState, errorMessage, injectPendingMutationVariables, type runnerApi } from 'fleet';
 
+import { selftestStartMutationKey } from '../core/mutation-keys';
 import { injectRunnerDashboardQuery } from '../core/status.query';
-import { selftestRows, startingHarness } from './selftest.model';
-import { injectSelftestStartMutation } from './selftest.mutations';
+import { pendingHarnesses, selftestRows, selftestRunRefs } from './selftest.model';
+import { injectSelftestStartMutation, type SelftestStartVars } from './selftest.mutations';
 import { injectSelftestRunsQuery } from './selftest.query';
 import { SelftestView } from './selftest-view';
 
@@ -21,30 +22,25 @@ import { SelftestView } from './selftest-view';
 export class LocalSelftest {
   readonly runnerId = input.required<string>();
   private readonly dashboard = injectRunnerDashboardQuery(() => this.runnerId());
-  private readonly mutation = injectSelftestStartMutation(() => this.runnerId());
   private readonly started = signal<ReadonlyMap<string, runnerApi.SelfTestView>>(new Map());
   private readonly startErrors = signal<ReadonlyMap<string, string>>(new Map());
-  private readonly reads = injectSelftestRunsQuery(
-    () => this.runnerId(),
-    () => [...this.started().values()].map((run) => ({ harness: run.harness, id: run.id })),
-  );
+  private readonly mutation = injectSelftestStartMutation(() => this.runnerId(), {
+    onSuccess: (run, vars) => this.started.update((runs) => new Map(runs).set(vars.harness, run)),
+    onError: (error, vars) => this.startErrors.update((errors) =>
+      new Map(errors).set(vars.harness, errorMessage(error, 'Selftest failed to start.'))),
+  });
+  /** Every start pending for this runner (`bzh:frontend-pending-override`). */
+  private readonly pendingStarts = injectPendingMutationVariables<SelftestStartVars>(() => selftestStartMutationKey(this.runnerId()));
+  private readonly reads = injectSelftestRunsQuery(() => this.runnerId(), () => selftestRunRefs(this.started()));
   private readonly health = computed(() => this.dashboard.data()?.harness_health.items ?? []);
   protected readonly state = computed(() => asyncState(this.dashboard, this.health().length === 0));
-  private readonly starting = computed(() => startingHarness(this.mutation.isPending(), this.mutation.variables()?.harness));
   protected readonly rows = computed(() =>
-    selftestRows(this.health(), this.started(), this.reads(), this.starting(), this.startErrors()));
+    selftestRows(this.health(), this.started(), this.reads(), pendingHarnesses(this.pendingStarts()), this.startErrors()));
 
   protected run(harness: string): void {
     if (this.rows().find((row) => row.harness === harness)?.busy) return;
     this.startErrors.update((errors) => withoutKey(errors, harness));
-    this.mutation.mutate(
-      { runnerId: this.runnerId(), harness },
-      {
-        onSuccess: (run) => this.started.update((runs) => new Map(runs).set(harness, run)),
-        onError: (error) => this.startErrors.update((errors) =>
-          new Map(errors).set(harness, errorMessage(error, 'Selftest failed to start.'))),
-      },
-    );
+    this.mutation.mutate({ runnerId: this.runnerId(), harness });
   }
 }
 
