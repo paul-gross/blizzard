@@ -66,9 +66,9 @@ def test_terminal_run_refuses_conclude() -> None:
 
 def test_only_a_concluded_run_is_settled() -> None:
     running = _run()
-    assert not running.settled
-    assert running.conclude([_PASS]).settled
-    assert running.crashed("boom").settled
+    assert not running.settled()
+    assert running.conclude([_PASS]).settled()
+    assert running.crashed("boom").settled()
 
 
 def test_result_record_carries_terminal_status() -> None:

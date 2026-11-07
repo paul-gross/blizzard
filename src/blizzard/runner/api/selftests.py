@@ -54,7 +54,7 @@ def _view(run: SelfTestRun) -> SelfTestView:
         id=run.id,
         harness=run.harness,
         status=run.status,
-        settled=run.settled,
+        settled=run.settled(),
         checks=[SelfTestCheckView(name=c.name, passed=c.passed, detail=c.detail) for c in run.checks],
         error=run.error,
     )

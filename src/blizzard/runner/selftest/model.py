@@ -63,7 +63,6 @@ class SelfTestRun:
         "failed": frozenset(),
     }
 
-    @property
     def settled(self) -> bool:
         """Whether the run has concluded — its status leaves no move (:attr:`TRANSITIONS`)."""
         return not self.TRANSITIONS[self.status]
