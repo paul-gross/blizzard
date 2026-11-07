@@ -6,6 +6,7 @@ import {
   ProjectLens,
   lensLink,
   lensSegmentOf,
+  lensSource,
   lensedUrl,
   unlensedUrl,
   viewOf,
@@ -13,6 +14,18 @@ import {
 
 @Component({ selector: 'app-test-lens-view', template: '' })
 class TestLensView {}
+
+describe('lensSource', () => {
+  it('keeps the whole unlensed location, record, query and fragment', () => {
+    expect(lensSource('/board/chunk/chk_1?layout=list#x')).toBe('/board/chunk/chk_1?layout=list#x');
+    expect(lensSource('/p/a/gardening/findings/f1?r=1')).toBe('/gardening/findings/f1?r=1');
+  });
+
+  it('falls back to the board for an absent, relative, protocol-relative, root, public or picker source', () => {
+    for (const from of [null, undefined, '', 'fleet', '//evil.example/x', '/', '/?a=1', '/login', '/invite/x', '/lens', '/lens?from=%2Ffleet', '/p/a/lens?from=lens', '/p/a', '/p'])
+      expect(lensSource(from)).toBe('/board');
+  });
+});
 
 describe('the lens in a board URL', () => {
   it('reads the project segment of a lensed URL, and none of a URL on All', () => {
@@ -122,6 +135,27 @@ describe('ProjectLens', () => {
 
     await lens.switchTo(null);
     expect(router.url).toBe('/gardening/findings');
+  });
+
+  it('switches from an explicit source, dropping its record, query and fragment but keeping its tab', async () => {
+    const lens = TestBed.inject(ProjectLens);
+    const router = TestBed.inject(Router);
+
+    await router.navigateByUrl('/p/a/lens?from=x');
+    await lens.switchTo('b', '/board/chunk/chk_1?layout=list#x');
+    expect(router.url).toBe('/p/b/board');
+    await lens.switchTo(null, '/gardening/findings/f1');
+    expect(router.url).toBe('/gardening/findings');
+    await lens.switchTo('a', '/admin/members/m1?q=1');
+    expect(router.url).toBe('/p/a/admin/members');
+    await lens.switchTo('b', null);
+    expect(router.url).toBe('/p/b/admin/members');
+  });
+
+  it('tracks the unlensed location the board is on as its source', async () => {
+    const lens = TestBed.inject(ProjectLens);
+    await TestBed.inject(Router).navigateByUrl('/p/a/board/chunk/c1?layout=list#x');
+    expect(lens.source()).toBe('/board/chunk/c1?layout=list#x');
   });
 
   it('holds a notice until it is dismissed or the lens is switched', async () => {

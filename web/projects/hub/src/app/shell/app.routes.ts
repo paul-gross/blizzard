@@ -1,7 +1,7 @@
 import type { Routes } from '@angular/router';
 import { matchesMobileViewport } from 'fleet/shell';
 import { enterInvitedTenant } from '../core/auth/invite-accepted';
-import { LENSED_ROUTE_PATH } from '../core/project-lens';
+import { LENSED_ROUTE_PATH, LENS_PICKER_PATH } from '../core/project-lens';
 import { projectLensGuard } from './project-lens.guard';
 
 /**
@@ -62,7 +62,7 @@ export const VIEW_ROUTES: Routes = [
     loadComponent: () => import('../delivery/delivery-chunk-page').then((m) => m.DeliveryChunkPage),
   },
   // The phone's project lens picker, opened from the titlebar's lens name; `?from=` names the view it returns to.
-  { path: 'lens', loadComponent: () => import('./lens-picker/lens-picker').then((m) => m.LensPicker) },
+  { path: LENS_PICKER_PATH, loadComponent: () => import('./lens-picker/lens-picker').then((m) => m.LensPicker) },
   { path: 'graphs', loadComponent: () => import('../graphs/graphs-page').then((m) => m.GraphsPage) },
   { path: 'graphs/:graphId', loadComponent: () => import('../graphs/graphs-page').then((m) => m.GraphsPage) },
   { path: 'events', loadComponent: () => import('../events/events-page').then((m) => m.EventsPage) },

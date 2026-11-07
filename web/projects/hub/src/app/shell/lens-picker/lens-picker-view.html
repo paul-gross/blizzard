@@ -1,0 +1,54 @@
+<div class="lp" data-testid="lens-picker">
+  <!-- eslint-disable-next-line lens/no-absolute-link -- The container hands over a link already kept under the lens by ProjectLens. -->
+  <a class="back-row" [routerLink]="backLink()" data-testid="lens-picker-back">
+    <fleet-kit-back-bar label="Project lens" />
+  </a>
+  <div class="choices">
+    <ul class="list">
+      <li>
+        <!-- eslint-disable-next-line no-restricted-syntax -- A lens choice is a full-width list row with its swatch, not a kit button's chrome. -->
+        <button
+          type="button"
+          class="choice"
+          [class.selected]="current() === null"
+          [attr.aria-pressed]="current() === null"
+          data-testid="lens-picker-all"
+          (click)="choose.emit(null)"
+        >
+          <span class="name">All projects</span>
+        </button>
+      </li>
+    </ul>
+    <fleet-kit-async-state
+      [state]="state()"
+      placement="inline"
+      loadingText="Loading projects…"
+      loadingTestid="lens-picker-loading"
+      errorText="Projects unavailable"
+      errorTestid="lens-picker-error"
+      emptyText="No projects"
+      emptyTestid="lens-picker-empty"
+    >
+      <ul class="list">
+        @for (choice of projects(); track choice.slug) {
+          <li>
+            <!-- eslint-disable-next-line no-restricted-syntax -- A lens choice is a full-width list row with its swatch, not a kit button's chrome. -->
+            <button
+              type="button"
+              class="choice"
+              [class.selected]="choice.slug === current()"
+              [attr.aria-pressed]="choice.slug === current()"
+              [attr.data-testid]="'lens-picker-' + choice.slug"
+              (click)="choose.emit(choice.slug)"
+            >
+              @if (choice.color; as color) {
+                <fleet-kit-swatch [color]="color" />
+              }
+              <span class="name">{{ choice.label }}</span>
+            </button>
+          </li>
+        }
+      </ul>
+    </fleet-kit-async-state>
+  </div>
+</div>

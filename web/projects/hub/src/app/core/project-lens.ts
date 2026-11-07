@@ -6,7 +6,7 @@ import {
   inject,
   signal,
 } from '@angular/core';
-import { NavigationEnd, Router } from '@angular/router';
+import { NavigationEnd, Router, type UrlTree } from '@angular/router';
 
 import { HUB_PROJECT_FILTER, IN_APP_LINK, type InAppLink } from 'fleet/shell';
 
@@ -31,6 +31,12 @@ const TABBED_VIEWS: ReadonlySet<string> = new Set(['gardening', 'admin']);
 
 /** The view the board opens on when a URL names none. */
 const DEFAULT_VIEW = 'board';
+
+/** The lens picker's route path, mounted with the views so it opens under either lens. */
+export const LENS_PICKER_PATH = 'lens';
+
+/** The query param naming the location the picker returns to and switches the lens from. */
+export const LENS_PICKER_FROM = 'from';
 
 /** The path of `url`, without its query and fragment, split into its segments. */
 function pathSegments(url: string): string[] {
@@ -100,6 +106,23 @@ export function viewOf(url: string): string {
 }
 
 /**
+ * The unlensed in-app location a lens switch starts from and Back returns to, for a candidate `url` (lensed or not,
+ * possibly absent): the whole location — record, query and fragment — kept. An absent, empty, relative or
+ * protocol-relative input, a root-only location, a public page, and the picker itself fall back to the board.
+ */
+export function lensSource(url: string | null | undefined): string {
+  const fallback = `/${DEFAULT_VIEW}`;
+  if (!url || !url.startsWith('/') || url.startsWith('//')) return fallback;
+  const unlensed = unlensedUrl(url);
+  const [root] = pathSegments(unlensed);
+  return root === undefined ||
+    root === LENS_PICKER_PATH ||
+    UNLENSED_ROOTS.has(root)
+    ? fallback
+    : unlensed;
+}
+
+/**
  * The project lens — the project the board's views are narrowed to, read from the URL and held nowhere else, so a
  * refresh or a shared link reproduces it: `/{view}/…` is the lens on All, `/p/{project}/{view}/…` the lens on one
  * project, named by its current slug once the lens guard has settled it.
@@ -121,6 +144,9 @@ export class ProjectLens {
 
   /** The slug of the project the lens is on, `null` for All. */
   readonly slug = computed(() => lensSegmentOf(this.url()));
+
+  /** The unlensed location the board is on — what a lens switch starts from and the picker's Back returns to. */
+  readonly source = computed(() => lensSource(this.url()));
 
   /** Whether the lens is on one project. */
   readonly lensed = computed(() => this.slug() !== null);
@@ -146,15 +172,26 @@ export class ProjectLens {
     return lensLink(link, this.slug());
   }
 
-  /** The URL of the view the board is on, under the lens of `slug` (`null` for All) — see {@link viewOf}. */
-  viewUnder(slug: string | null): string {
-    return lensedUrl(viewOf(this.url()), slug);
+  /** `link`, an absolute in-app URL, under the lens the board is on, as a router URL tree — so a query and a fragment
+   * in it survive a `routerLink`. */
+  linkTree(link: string): UrlTree {
+    return this.router.parseUrl(this.link(link));
   }
 
-  /** Puts the lens on `slug` (`null` for All), keeping the view the board is on. */
-  switchTo(slug: string | null): Promise<boolean> {
+  /** The URL of the view `from` names (default: the board's current location), under the lens of `slug` (`null` for
+   * All) — see {@link lensSource} and {@link viewOf}. */
+  viewUnder(slug: string | null, from?: string | null): string {
+    return lensedUrl(viewOf(lensSource(from ?? this.url())), slug);
+  }
+
+  /**
+   * Puts the lens on `slug` (`null` for All), keeping the view — and a tabbed view's tab — of `from`, or of the
+   * location the board is on. The record, query and fragment are dropped. A caller off the board's own views, such as
+   * the picker, passes its source explicitly.
+   */
+  switchTo(slug: string | null, from?: string | null): Promise<boolean> {
     this.noticeText.set(null);
-    return this.router.navigateByUrl(this.viewUnder(slug));
+    return this.router.navigateByUrl(this.viewUnder(slug, from));
   }
 
   /** Shows `text` as the lens's notice until it is dismissed or the lens is switched. */

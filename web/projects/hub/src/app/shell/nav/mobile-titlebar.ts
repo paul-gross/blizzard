@@ -1,14 +1,11 @@
 import { ChangeDetectionStrategy, Component, computed, inject, input } from '@angular/core';
 import { CdkMenuTrigger } from '@angular/cdk/menu';
-import { NavigationEnd, Router, RouterLink } from '@angular/router';
-import { toSignal } from '@angular/core/rxjs-interop';
-import { filter, map } from 'rxjs';
+import { RouterLink } from '@angular/router';
 import { KitMenuItem, KitMenuPanel, MobileTitlebar as FleetMobileTitlebar, ViewportMenu, formatCost, type FleetSpendView } from 'fleet';
 import { KitSwatch, LensLink } from 'fleet/shell';
 
 import { injectLensedProject } from '../../core/lensed-project';
-import { unlensedUrl } from '../../core/project-lens';
-import { LENS_PICKER_PATH, lensPickerFrom } from '../lens-picker/lens-picker.model';
+import { LENS_PICKER_PATH, ProjectLens } from '../../core/project-lens';
 import { TenantMenu } from './tenant-menu';
 import { injectTenantSwitch } from './tenant-switch';
 
@@ -56,21 +53,11 @@ export class MobileTitlebar {
   /** The project the lens is on, which the bar names — `null` on All. */
   protected readonly lensed = injectLensedProject();
 
-  private readonly router = inject(Router);
-
   protected readonly lensName = computed(() => this.lensed()?.name ?? 'All projects');
 
   /** The picker, kept under the lens the board is on through `lensLink`. */
   protected readonly pickerLink = ['/', LENS_PICKER_PATH];
 
-  private readonly url = toSignal(
-    this.router.events.pipe(
-      filter((event) => event instanceof NavigationEnd),
-      map(() => this.router.url),
-    ),
-    { initialValue: this.router.url },
-  );
-
-  /** The unlensed view the board is on, for the picker to return to. */
-  protected readonly fromView = computed(() => lensPickerFrom(unlensedUrl(this.url())));
+  /** The unlensed location the board is on, for the picker to return to and switch the lens from. */
+  protected readonly fromView = inject(ProjectLens).source;
 }

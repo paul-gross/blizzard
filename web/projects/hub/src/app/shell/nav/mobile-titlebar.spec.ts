@@ -127,6 +127,14 @@ describe('MobileTitlebar', () => {
     expect(el.querySelector('[data-testid="mobile-titlebar-caption"]')).toBeNull();
   });
 
+  it('carries the whole unlensed location it is on to the picker', async () => {
+    await TestBed.inject(Router).navigateByUrl('/p/glacier/board/chunk/chk_1?layout=list#x');
+    const fixture = await mountIn(TWO_TENANTS);
+    const lens = (fixture.nativeElement as HTMLElement).querySelector<HTMLAnchorElement>('[data-testid="mobile-titlebar-lens"]');
+
+    expect(lens?.getAttribute('href')).toBe('/p/glacier/lens?from=%2Fboard%2Fchunk%2Fchk_1%3Flayout%3Dlist%23x');
+  });
+
   it('names All projects on All, linking to the unlensed picker, and reads no projects there', async () => {
     await TestBed.inject(Router).navigateByUrl('/board');
     const fixture = await mountIn(TWO_TENANTS);
