@@ -9,8 +9,10 @@ from __future__ import annotations
 
 from typing import Annotated
 
-from fastapi import Depends, HTTPException, Request, status
+from fastapi import Depends, Request
 
+from blizzard.hub.api import problems
+from blizzard.hub.api.problem_exceptions import ProblemHTTPException
 from blizzard.hub.composition import HubServices
 
 
@@ -18,10 +20,7 @@ def hub_services(request: Request) -> HubServices:
     """A dependency: the hub-level services, shared by every tenant."""
     services: HubServices | None = getattr(request.app.state, "services", None)
     if services is None:
-        raise HTTPException(
-            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail="hub store not wired — start via `blizzard hub host`",
-        )
+        raise ProblemHTTPException(problems.hub_store_unavailable_problem)
     return services
 
 

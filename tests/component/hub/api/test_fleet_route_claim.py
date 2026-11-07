@@ -8,6 +8,13 @@ from pathlib import Path
 from sqlalchemy import select
 
 from blizzard.hub.store import schema as s
+from blizzard.wire.problem import (
+    CHUNK_NOT_FOUND,
+    CLAIM_CONFLICT,
+    CLAIM_PAUSED,
+    CLAIM_RUNNER_UNREGISTERED,
+    CLAIM_TERMINAL,
+)
 from tests.support.scaffolding import HubHarness, build_hub, hub_scoped, make_ready, pointer_token, report_lease
 
 _POINTER = {"source": "default", "ref": "7"}
@@ -190,6 +197,9 @@ def test_a_claim_on_a_finished_chunk_is_denied_as_terminal_not_as_held(tmp_path:
 
     assert resp.status_code == 409
     body = resp.json()
+    assert resp.headers["content-type"] == "application/problem+json"
+    assert body["type"] == CLAIM_TERMINAL
+    assert body["instance"] == "/api/fleet/routes"
     assert body["status"] == "done"
     assert "held_by_runner_id" not in body
 
@@ -265,12 +275,19 @@ def test_second_claim_loses_with_409(tmp_path: Path) -> None:
     assert hub.client.post("/api/fleet/routes", json=_claim_body(chunk_id, "r1")).status_code == 201
     loser = hub.client.post("/api/fleet/routes", json=_claim_body(chunk_id, "r2"))
     assert loser.status_code == 409
+    assert loser.headers["content-type"] == "application/problem+json"
+    assert loser.json()["type"] == CLAIM_CONFLICT
+    assert "status" not in loser.json()
     assert loser.json()["held_by_runner_id"] == "r1"
 
 
 def test_claim_on_unknown_chunk_is_404(tmp_path: Path) -> None:
     hub = build_hub(tmp_path)
-    assert hub.client.post("/api/fleet/routes", json=_claim_body("ch_missing")).status_code == 404
+    resp = hub.client.post("/api/fleet/routes", json=_claim_body("ch_missing"))
+    assert resp.status_code == 404
+    assert resp.headers["content-type"] == "application/problem+json"
+    assert resp.json()["type"] == CHUNK_NOT_FOUND
+    assert resp.json()["detail"] == "unknown chunk ch_missing"
 
 
 def test_envelope_reread_is_idempotent(tmp_path: Path) -> None:
@@ -299,6 +316,8 @@ def test_claim_denied_while_hub_paused(tmp_path: Path) -> None:
 
     assert resp.status_code == 403
     body = resp.json()
+    assert resp.headers["content-type"] == "application/problem+json"
+    assert body["type"] == CLAIM_PAUSED
     assert body["chunk_id"] == chunk_id
     assert body["runner_id"] == "r1"
     # Distinguishable from a 409 conflict: no other runner holds this chunk, it was
@@ -369,11 +388,11 @@ def test_claim_from_an_unregistered_runner_is_denied_before_the_race(tmp_path: P
     resp = hub.client.post("/api/fleet/routes", json=_claim_body(chunk_id, "r-unregistered"))
 
     assert resp.status_code == 403
-    assert resp.json() == {
-        "chunk_id": chunk_id,
-        "runner_id": "r-unregistered",
-        "detail": "runner r-unregistered is not registered at the hub",
-    }
+    body = resp.json()
+    assert body["type"] == CLAIM_RUNNER_UNREGISTERED
+    assert body["chunk_id"] == chunk_id
+    assert body["runner_id"] == "r-unregistered"
+    assert body["detail"] == "runner r-unregistered is not registered at the hub"
     assert hub.client.get(f"/api/chunks/{chunk_id}").json()["status"] == "ready"
 
 

@@ -424,7 +424,8 @@ export function runnerHostBuilder(given: BuilderContext): RunnerHostBuilder {
     if (ownDir !== undefined && adopted !== undefined) throw new Error('runnerDir and runnerAdopted cannot both be set');
     let defaultRunner = adopted?.name ?? (index === 0 ? FIRST_RUNNER : `${FIRST_RUNNER}-${index}`);
     const root = path.join(ctx.scratchRoot ?? os.tmpdir(), `bzh-${crypto.randomBytes(4).toString('hex')}`);
-    const dir = ownDir ?? path.join(root, 'h');
+    const runtimeRoot = process.env.BLIZZARD_TEST_HOST_RUNTIME;
+    const dir = ownDir ?? (runtimeRoot ? path.join(runtimeRoot, path.basename(root)) : path.join(root, 'h'));
     const socket = path.join(dir, 'host.sock');
     const tooLong = socketPathProblem(socket);
     if (tooLong !== undefined) throw new Error(tooLong);
@@ -434,6 +435,7 @@ export function runnerHostBuilder(given: BuilderContext): RunnerHostBuilder {
     const timings: Timings = { mintMs: 0, initMs: 0, addMs: 0, bootMs: 0 };
     let daemon: LiveDaemon | undefined;
     let disposed = false;
+    let ownsRuntime = false;
     let otlp: OtlpSink | undefined;
     // The emitted OpenCode 2 service, stopped with the host: it detaches from whatever started it.
     let opencode2: { binary: string; env: NodeJS.ProcessEnv } | undefined;
@@ -454,11 +456,16 @@ export function runnerHostBuilder(given: BuilderContext): RunnerHostBuilder {
       if (failed && fs.existsSync(logPath)) await testInfo.attach(`runner host ${index} log`, { body: logTail(logPath), contentType: 'text/plain' });
       await testInfo.attach(`runner host ${index} timings`, { body: JSON.stringify(timings), contentType: 'application/json' });
       fs.rmSync(root, { recursive: true, force: true });
+      if (ownsRuntime) fs.rmSync(dir, { recursive: true, force: true });
       return refusals;
     };
     made.push({ dispose });
 
     try {
+      if (ownDir === undefined && runtimeRoot) {
+        fs.mkdirSync(dir, { mode: 0o700 });
+        ownsRuntime = true;
+      }
       fs.mkdirSync(home, { recursive: true });
       const bundle = path.join(root, 'bundle');
       const stubs = path.join(root, 'stubs');

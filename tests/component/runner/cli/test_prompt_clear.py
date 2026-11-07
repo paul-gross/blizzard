@@ -5,6 +5,7 @@ from __future__ import annotations
 from datetime import UTC, datetime
 from pathlib import Path
 
+import pytest
 from click.testing import Result
 
 from blizzard.cli.main import blizzard
@@ -13,6 +14,8 @@ from tests.support.host_files import load_runner_config
 from tests.support.runner_cli_home import init_runner_home, serve_local_api
 from tests.support.runner_fakes import SqlAlchemyRunnerStore, runner_store_errors
 from tests.support.worker_http import bind_local_only
+
+pytestmark = pytest.mark.usefixtures("short_host_sockets")
 
 
 def _run(*args: str) -> Result:

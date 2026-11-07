@@ -6,8 +6,9 @@ from __future__ import annotations
 import fnmatch
 import json
 import os
+import tempfile
 import zlib
-from collections.abc import Mapping
+from collections.abc import Iterator, Mapping
 from datetime import UTC, datetime
 from pathlib import Path
 
@@ -15,6 +16,7 @@ import pytest
 
 from blizzard.foundation.operator_sessions.internal import session_file
 from blizzard.hub.store.tenant_guard import install_tenant_guard
+from blizzard.runner.host_layout import HostLayout
 from blizzard.runner.store.runner_guard import install_runner_guard
 from tests.support.head_replay_guard import install_head_replay_guard
 from tests.support.repo_files import install_repo_read_guard, repo_root
@@ -50,6 +52,30 @@ SHARD_ENV = "BLIZZARD_TEST_SHARD"
 SHARD_BY_ENV = "BLIZZARD_TEST_SHARD_BY"
 SHARD_BY_TEST = "test"
 SHARD_BY_FILE = "file"
+
+
+@pytest.fixture
+def short_host_runtime() -> Iterator[Path]:
+    """A private, short-lived directory for test host sockets."""
+    with tempfile.TemporaryDirectory(prefix="bz-sock-", dir="/tmp") as runtime:
+        yield Path(runtime)
+
+
+@pytest.fixture
+def short_host_sockets(monkeypatch: pytest.MonkeyPatch, short_host_runtime: Path) -> None:
+    """Keep each host's sockets short while its store and other files stay in the test directory."""
+    roots: dict[Path, Path] = {}
+
+    def socket_for(layout: HostLayout, name: str) -> Path:
+        root = layout.root.resolve()
+        if root not in roots:
+            directory = short_host_runtime / str(len(roots))
+            directory.mkdir()
+            roots[root] = directory
+        return roots[root] / name
+
+    monkeypatch.setattr(HostLayout, "socket_path", property(lambda layout: socket_for(layout, "host.sock")))
+    monkeypatch.setattr(HostLayout, "legacy_socket_path", property(lambda layout: socket_for(layout, "runner.sock")))
 
 
 #: The two trees the folder layout governs: each tests root and the package root its folders mirror.

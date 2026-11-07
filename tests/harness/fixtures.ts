@@ -35,6 +35,7 @@ import type { OtlpSink } from './otlp-sink';
 import { mergeHostProfile, mergeProfile } from './profiles';
 import { startCollector, type Collector } from './collector';
 import { withSecondForge } from './second-forge';
+import { startClaimBarrier } from './claim-barrier';
 
 /** A fleet-plane client for one runner, under the token minted for it. */
 export interface FleetClient extends Verbs {
@@ -43,6 +44,8 @@ export interface FleetClient extends Verbs {
 }
 
 interface Fixtures {
+  claimBarrierEnabled: boolean;
+  claimBarrier: Awaited<ReturnType<typeof startClaimBarrier>> | undefined;
   api: HubApi;
   /** Internal: the runner fixtures' hub, the test's own tenant on the test's hub; a host needs isolation `fresh-tenant` or above. */
   runnerBinding: RunnerBinding;
@@ -92,6 +95,12 @@ export { FIXTURE_FORGE } from './hubs';
 
 /** The package's `test` and `expect`, and the wire types: the only module a spec imports. */
 export const test = mergeTests(tenancy, runnerWorld, uiWorld).extend<Fixtures>({
+  claimBarrierEnabled: [false, { option: true }],
+  claimBarrier: async ({ claimBarrierEnabled, testHub }, use) => {
+    const barrier = claimBarrierEnabled ? await startClaimBarrier(testHub.coordinates.url) : undefined;
+    await use(barrier);
+    await barrier?.close();
+  },
   api: async ({ testHub, tenant, level, ledger, clockMode }, use, testInfo) => {
     await use(
       hubApi({
@@ -150,7 +159,7 @@ export const test = mergeTests(tenancy, runnerWorld, uiWorld).extend<Fixtures>({
     await use(await people.create({ role: userRole }));
   },
 
-  runnerBinding: async ({ testHub, tenant, tenantOf, level, ledger, playwright, repository, runnerOnForge, clockStack }, use, testInfo) => {
+  runnerBinding: async ({ testHub, tenant, tenantOf, level, ledger, playwright, repository, runnerOnForge, clockStack, claimBarrier }, use, testInfo) => {
     const hub = testHub.coordinates;
     // On a hub offering an IdP, `init` runs under a logged-in operator's config home; the host's own stays empty.
     // Built only then, since the `people` fixture itself refuses a hub with authentication off.
@@ -189,7 +198,7 @@ export const test = mergeTests(tenancy, runnerWorld, uiWorld).extend<Fixtures>({
     let operatorRefresh: (() => Promise<void>) | undefined;
     await use({
       hub: {
-        url: hub.url,
+        url: claimBarrier?.url ?? hub.url,
         tenantId: tenant.id,
         operatorHome:
           hub.auth === undefined

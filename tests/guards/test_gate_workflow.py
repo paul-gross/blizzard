@@ -32,3 +32,14 @@ def test_the_event_commits_reach_the_command_through_env_not_interpolation() -> 
 
 def test_the_per_commit_wire_check_is_retired() -> None:
     assert [name for name in _jobs() if "compat" in name] == ["compat"]
+
+
+def test_refusal_census_runs_unsharded_in_the_required_pytest_result_and_local_gate() -> None:
+    job = _jobs()["python-tests-result"]
+    assert job["needs"] == ["python-tests"]
+    command = "uv run python -m tests.support.aggregate_census"
+    steps = [step for step in job["steps"] if step.get("run") == command]
+    assert len(steps) == 1
+    assert "if" not in steps[0] and "continue-on-error" not in steps[0]
+    assert "BLIZZARD_TEST_SHARD" not in steps[0].get("env", {})
+    assert command in (repo_root() / "scripts/ci-gate.sh").read_text()

@@ -6,13 +6,14 @@ ids — and its bearer token names the runner. Exactly one claim per chunk is ac
 
 from __future__ import annotations
 
-from typing import Annotated
+from typing import Annotated, Literal
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from blizzard.foundation.claim_denials import ClaimDenialReason
 from blizzard.foundation.unrecognized import Unrecognized
 from blizzard.wire.envelope import NodeEnvelope
+from blizzard.wire.problem import ProblemDetails, ProblemMembers, StatuslessProblemMembers
 from blizzard.wire.vocabulary import OPEN
 
 
@@ -89,6 +90,108 @@ class RouteClaimPausedDenial(BaseModel):
     chunk_id: str
     runner_id: str
     detail: str = "runner is paused at the hub"
+
+
+class RouteClaimConflictProblem(
+    StatuslessProblemMembers[Literal["urn:blizzard:problem:claim-conflict"]], RouteClaimConflict
+):
+    """A lost claim race; status is deliberately absent."""
+
+    chunk_id: str = Field(deprecated=True)
+    held_by_runner_id: str = Field(deprecated=True)
+
+
+class RouteClaimTerminalProblem(
+    ProblemMembers[Literal["urn:blizzard:problem:claim-terminal"]], RouteClaimTerminalDenial
+):
+    """A claim denial whose legacy status is a chunk status, not HTTP status."""
+
+    chunk_id: str = Field(deprecated=True)
+    status: str = Field(deprecated=True)
+
+
+class RouteClaimNotReadyProblem(
+    ProblemMembers[Literal["urn:blizzard:problem:claim-not-ready"]], RouteClaimTerminalDenial
+):
+    """A claim denied for now, retaining the released chunk-status string."""
+
+    chunk_id: str = Field(deprecated=True)
+    status: str = Field(deprecated=True)
+
+
+class RouteClaimDependencyProblem(
+    StatuslessProblemMembers[Literal["urn:blizzard:problem:claim-dependency"]], RouteClaimDependencyDenial
+):
+    """An unmet prerequisite; status is deliberately absent."""
+
+    chunk_id: str = Field(deprecated=True)
+    prerequisite_chunk_id: str = Field(deprecated=True)
+
+
+class RouteClaimIncompatibleProblem(
+    StatuslessProblemMembers[Literal["urn:blizzard:problem:claim-incompatible"]], RouteClaimIncompatibleDenial
+):
+    """A runner unable to execute a claim; status is deliberately absent."""
+
+    chunk_id: str = Field(deprecated=True)
+    incompatible_runner_id: str = Field(deprecated=True)
+    reason: Annotated[ClaimDenialReason | Unrecognized, OPEN] = Field(
+        default=ClaimDenialReason.CAPABILITY, deprecated=True
+    )
+
+
+class RouteClaimPausedProblem(ProblemDetails[Literal["urn:blizzard:problem:claim-paused"]], RouteClaimPausedDenial):
+    """A runner barred from claiming."""
+
+    chunk_id: str = Field(deprecated=True)
+    runner_id: str = Field(deprecated=True)
+
+
+class ClaimRunnerRetiredProblem(
+    ProblemDetails[Literal["urn:blizzard:problem:claim-runner-retired"]], RouteClaimPausedDenial
+):
+    """A claim from a retired runner."""
+
+    chunk_id: str = Field(deprecated=True)
+    runner_id: str = Field(deprecated=True)
+
+
+class ClaimRunnerUnregisteredProblem(
+    ProblemDetails[Literal["urn:blizzard:problem:claim-runner-unregistered"]], RouteClaimPausedDenial
+):
+    """A claim from a runner not registered at the hub."""
+
+    chunk_id: str = Field(deprecated=True)
+    runner_id: str = Field(deprecated=True)
+
+
+class ClaimRunnerVersionRefusedProblem(
+    ProblemDetails[Literal["urn:blizzard:problem:claim-runner-version-refused"]], RouteClaimPausedDenial
+):
+    """A claim from a runner refused by the hub's version window."""
+
+    chunk_id: str = Field(deprecated=True)
+    runner_id: str = Field(deprecated=True)
+
+
+class PinnedGraphMissingProblem(ProblemDetails[Literal["urn:blizzard:problem:pinned-graph-missing"]]):
+    """The chunk's pinned graph is missing."""
+
+
+class MalformedCursorProblem(ProblemDetails[Literal["urn:blizzard:problem:malformed-cursor"]]):
+    """The supplied pagination cursor is malformed."""
+
+
+class RouteNotFoundProblem(ProblemDetails[Literal["urn:blizzard:problem:route-not-found"]]):
+    """The chunk has no live route."""
+
+
+class RouteNotHeldProblem(ProblemDetails[Literal["urn:blizzard:problem:route-not-held"]]):
+    """The caller does not hold the route or its capability is invalid."""
+
+
+class RouteTerminalProblem(ProblemDetails[Literal["urn:blizzard:problem:route-terminal"]]):
+    """The route's chunk has ended and cannot be rekeyed."""
 
 
 class RouteTokenRekeyResponse(BaseModel):

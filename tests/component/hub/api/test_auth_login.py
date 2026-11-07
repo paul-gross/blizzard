@@ -17,6 +17,7 @@ from httpx2 import Response
 from blizzard.hub.auth.models import ProviderIdentity
 from blizzard.hub.config import LoginThrottleConfig
 from blizzard.hub.store import schema
+from blizzard.wire import problem as problem_types
 from tests.support.oauth_login_double import ADA, FakeOAuthProvider, known_ada, state_from_redirect
 from tests.support.scaffolding import HubHarness, build_hub, hub_scoped
 
@@ -62,6 +63,9 @@ def test_authorize_404s_for_an_unknown_provider(tmp_path: Path) -> None:
     hub = build_hub(tmp_path, auth_mode="oauth", oauth_providers={})
     resp = hub.client.get("/api/auth/nope/authorize", follow_redirects=False)
     assert resp.status_code == 404
+    assert resp.headers["content-type"] == "application/problem+json"
+    assert resp.json()["type"] == problem_types.LOGIN_PROVIDER_UNKNOWN
+    assert resp.json()["detail"] == "unknown provider 'nope'"
 
 
 def test_authorize_404s_under_none_mode(tmp_path: Path) -> None:
@@ -69,6 +73,9 @@ def test_authorize_404s_under_none_mode(tmp_path: Path) -> None:
     hub = build_hub(tmp_path, oauth_providers={"github": github})
     resp = hub.client.get("/api/auth/github/authorize", follow_redirects=False)
     assert resp.status_code == 404
+    assert resp.headers["content-type"] == "application/problem+json"
+    assert resp.json()["type"] == problem_types.LOGIN_DISABLED
+    assert resp.json()["detail"] == "login is not enabled"
 
 
 # --- callback: the full dance ends in a resolving cookie ---------------------------
@@ -258,6 +265,10 @@ def test_callback_rejects_a_bad_state_and_emits_a_login_failed_fact(tmp_path: Pa
     resp = hub.client.get("/api/auth/github/callback?code=abc&state=never-minted", follow_redirects=False)
     assert resp.status_code == 400
     assert resp.json()["error"] == "login_failed"
+    assert resp.headers["content-type"] == "application/problem+json"
+    assert resp.json()["type"] == problem_types.LOGIN_FAILED
+    assert resp.json()["instance"] == "/api/auth/github/callback"
+    assert "never-minted" not in resp.text
 
     facts = hub.hub_services.auth_facts.list_recent()
     assert any(f.kind == "login_failed" for f in facts)
@@ -285,6 +296,9 @@ def test_callback_refuses_a_state_minted_for_a_different_provider(tmp_path: Path
     resp = hub.client.get(f"/api/auth/oidc-co/callback?code=abc&state={state}", follow_redirects=False)
     assert resp.status_code == 400
     assert resp.json()["error"] == "sso_refused"
+    assert resp.headers["content-type"] == "application/problem+json"
+    assert resp.json()["type"] == problem_types.SSO_REFUSED
+    assert state not in resp.text
 
     facts = hub.hub_services.auth_facts.list_recent()
     assert any(f.kind == "sso_refused" for f in facts)
@@ -338,8 +352,11 @@ def test_authorize_throttles_after_repeated_requests_from_one_ip(tmp_path: Path)
     github = FakeOAuthProvider(name="github")
     hub = build_hub(tmp_path, auth_mode="oauth", oauth_providers={"github": github})
 
-    statuses = [hub.client.get("/api/auth/github/authorize", follow_redirects=False).status_code for _ in range(15)]
-    assert 429 in statuses
+    responses = [hub.client.get("/api/auth/github/authorize", follow_redirects=False) for _ in range(15)]
+    throttled = next(response for response in responses if response.status_code == 429)
+    assert throttled.headers["content-type"] == "application/problem+json"
+    assert throttled.json()["type"] == problem_types.LOGIN_THROTTLED
+    assert throttled.json()["detail"] == "too many login attempts — try again shortly"
 
 
 def _throttled_statuses(hub: HubHarness, calls: int) -> list[int]:

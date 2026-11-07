@@ -180,7 +180,7 @@ def _logged(log: Path, event: str, lease_id: str) -> bool:
 
 
 def test_a_host_that_ingested_a_colliding_runner_resumes_both_and_delivers_each_backlog_above_its_mark(
-    tmp_path: Path, refused_url: str
+    tmp_path: Path, refused_url: str, short_host_runtime: Path
 ) -> None:
     bin_dir = require_mock_fleet()
     here, there = tmp_path / "here", tmp_path / "there"
@@ -238,7 +238,16 @@ def test_a_host_that_ingested_a_colliding_runner_resumes_both_and_delivers_each_
 
         log, listening = here / "daemon.log", here / LISTENING_FILE
         proc = subprocess.Popen(
-            [str(RUNNER_BIN), "host", "--dir", str(here), *listening_args(listening, 0)],
+            [
+                sys.executable,
+                "-m",
+                "tests.support.short_socket_host",
+                str(short_host_runtime),
+                "host",
+                "--dir",
+                str(here),
+                *listening_args(listening, 0),
+            ],
             env=runner_spawn_env(hub_url, {"BZ_RUNNER_TICK_SECONDS": "0.5"}),
             stdout=daemon_log_sink(log),
             stderr=subprocess.STDOUT,

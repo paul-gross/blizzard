@@ -188,6 +188,33 @@ A registration's `subscriptions` field is additive the same way: it defaults to 
 of a declared roster simply omits it, and the hub falls back to its pre-existing age-gated membership rule for that
 runner rather than rejecting the registration or defaulting the roster to empty.
 
+## Runner-reached HTTP refusals
+
+Deliberate hub-authored refusals reachable by runners use `application/problem+json`. This includes fleet operations and
+their authentication dependencies, host and admin bootstrap, `/api/me`, federation and JWKS, proxy upstream and archive
+reads, and delegated artifact and scope handlers, including operations outside `/api/fleet`. Deliberate missing-graph
+`500` refusals are included; arbitrary server failures, successful semantic outcomes and downstream proxy rewriting are
+not. The authoritative registry of stable `urn:blizzard:problem:<refusal-name>` type URIs is
+[`src/blizzard/wire/problem.py`](../src/blizzard/wire/problem.py); operation response declarations and the OpenAPI
+document identify which types each operation can return. Clients dispatch on `type`, not prose or legacy field presence;
+an unknown present type is an unexpected refusal, not a reason to guess a known outcome.
+
+Each problem carries `type`, `title`, `detail` and `instance`. Ordinarily `detail` is a string and `status`, when
+present, is a numeric HTTP status. HTTP status is authoritative. For compatibility, terminal and not-ready claim
+refusals instead carry a required string `status` describing the chunk; claim race, dependency and incompatible refusals
+omit `status` entirely, not even `null`. Tenant-required and project-required refusals retain an object-valued `detail`,
+and unknown-project refusals (an unheld `?project=`, as on `GET /api/fleet/queue/peek`) a list-valued, validation-shaped
+one. These exceptions mean the bodies are not strictly RFC 9457 compliant. Other released fields and their meanings
+remain in the response, including nullable fields. Unknown-tenant bootstrap retains the detail `no such tenant`.
+Authentication and throttling responses preserve applicable headers, including `WWW-Authenticate` and `Retry-After`.
+
+Domain `422` refusals use problem media with a string detail, except the project-required and unknown-project refusals
+above; FastAPI request-validation `422` responses remain distinct, sanitized validation bodies, not problems. The legacy
+fields and the runner's absent-`type` old-hub fallback are deprecated in the `runner-refusal-problem-details` change
+note, with removal targeted for `0.6`. Only an absent `type` invokes that fallback; retiring it or removing legacy
+fields is a separate compatibility-judged change, not a skew-window floor raise here. Current problem details and
+diagnostic information are not scheduled for deletion.
+
 ## What a tag publishes
 
 Every image below is `ghcr.io/paul-gross/blizzard-hub`.

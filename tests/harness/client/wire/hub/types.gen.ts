@@ -693,6 +693,93 @@ export type ArtifactView = {
 export type AttentionReason = 'routine_unknown' | 'routine_retired' | 'graph_unresolved' | 'scope_unknown' | 'scope_retired' | 'scope_unlinked' | 'no_scopes' | 'no_chores';
 
 /**
+ * AuthenticationRequiredProblem
+ *
+ * A required credential or session is absent.
+ */
+export type AuthenticationRequiredProblem = {
+    /**
+     * Detail
+     */
+    detail: string;
+    /**
+     * Instance
+     */
+    instance: string;
+    /**
+     * Status
+     */
+    status?: number;
+    /**
+     * Title
+     */
+    title: string;
+    /**
+     * Type
+     */
+    type: 'urn:blizzard:problem:authentication-required';
+    [key: string]: unknown;
+};
+
+/**
+ * AuthenticationRevokedProblem
+ *
+ * The presented bearer credential has been revoked.
+ */
+export type AuthenticationRevokedProblem = {
+    /**
+     * Detail
+     */
+    detail: string;
+    /**
+     * Instance
+     */
+    instance: string;
+    /**
+     * Status
+     */
+    status?: number;
+    /**
+     * Title
+     */
+    title: string;
+    /**
+     * Type
+     */
+    type: 'urn:blizzard:problem:authentication-revoked';
+    [key: string]: unknown;
+};
+
+/**
+ * AuthenticationUnresolvedProblem
+ *
+ * The presented bearer credential does not resolve to the required principal.
+ */
+export type AuthenticationUnresolvedProblem = {
+    /**
+     * Detail
+     */
+    detail: string;
+    /**
+     * Instance
+     */
+    instance: string;
+    /**
+     * Status
+     */
+    status?: number;
+    /**
+     * Title
+     */
+    title: string;
+    /**
+     * Type
+     */
+    type: 'urn:blizzard:problem:authentication-unresolved';
+    [key: string]: unknown;
+};
+
+/**
  * BacklogPageView
  *
  * ``GET /api/backlog``'s own bounded page: ``next_cursor``
@@ -1917,6 +2004,64 @@ export type ChunkNeighborhoodView = {
 };
 
 /**
+ * ChunkNotFoundProblem
+ *
+ * The named chunk does not exist in the tenant.
+ */
+export type ChunkNotFoundProblem = {
+    /**
+     * Detail
+     */
+    detail: string;
+    /**
+     * Instance
+     */
+    instance: string;
+    /**
+     * Status
+     */
+    status?: number;
+    /**
+     * Title
+     */
+    title: string;
+    /**
+     * Type
+     */
+    type: 'urn:blizzard:problem:chunk-not-found';
+    [key: string]: unknown;
+};
+
+/**
+ * ChunkNotPausableProblem
+ *
+ * The chunk cannot be paused in its current state.
+ */
+export type ChunkNotPausableProblem = {
+    /**
+     * Detail
+     */
+    detail: string;
+    /**
+     * Instance
+     */
+    instance: string;
+    /**
+     * Status
+     */
+    status?: number;
+    /**
+     * Title
+     */
+    title: string;
+    /**
+     * Type
+     */
+    type: 'urn:blizzard:problem:chunk-not-pausable';
+    [key: string]: unknown;
+};
+
+/**
  * ChunkPatchRequest
  *
  * The multi-field ``PATCH /chunks/{id}`` body — every field independently optional,
@@ -2382,6 +2527,225 @@ export type ChunksPageView = {
      * Next Cursor
      */
     next_cursor: string | null;
+};
+
+/**
+ * ClaimDenialReason
+ *
+ * The closed set of reasons an incompatible-claim ``409`` names: ``capability``, the runner's stored
+ * capabilities no longer run every statically reachable runner-owned lineage of the chunk; ``project``, the runner
+ * does not serve the chunk's project.
+ */
+export type ClaimDenialReason = 'capability' | 'project';
+
+/**
+ * ClaimRunnerRetiredProblem
+ *
+ * A claim from a retired runner.
+ */
+export type ClaimRunnerRetiredProblem = {
+    /**
+     * Chunk Id
+     *
+     * @deprecated
+     */
+    chunk_id: string;
+    /**
+     * Detail
+     */
+    detail: string;
+    /**
+     * Instance
+     */
+    instance: string;
+    /**
+     * Runner Id
+     *
+     * @deprecated
+     */
+    runner_id: string;
+    /**
+     * Status
+     */
+    status?: number;
+    /**
+     * Title
+     */
+    title: string;
+    /**
+     * Type
+     */
+    type: 'urn:blizzard:problem:claim-runner-retired';
+    [key: string]: unknown;
+};
+
+/**
+ * ClaimRunnerUnregisteredProblem
+ *
+ * A claim from a runner not registered at the hub.
+ */
+export type ClaimRunnerUnregisteredProblem = {
+    /**
+     * Chunk Id
+     *
+     * @deprecated
+     */
+    chunk_id: string;
+    /**
+     * Detail
+     */
+    detail: string;
+    /**
+     * Instance
+     */
+    instance: string;
+    /**
+     * Runner Id
+     *
+     * @deprecated
+     */
+    runner_id: string;
+    /**
+     * Status
+     */
+    status?: number;
+    /**
+     * Title
+     */
+    title: string;
+    /**
+     * Type
+     */
+    type: 'urn:blizzard:problem:claim-runner-unregistered';
+    [key: string]: unknown;
+};
+
+/**
+ * ClaimRunnerVersionRefusedProblem
+ *
+ * A claim from a runner refused by the hub's version window.
+ */
+export type ClaimRunnerVersionRefusedProblem = {
+    /**
+     * Chunk Id
+     *
+     * @deprecated
+     */
+    chunk_id: string;
+    /**
+     * Detail
+     */
+    detail: string;
+    /**
+     * Instance
+     */
+    instance: string;
+    /**
+     * Runner Id
+     *
+     * @deprecated
+     */
+    runner_id: string;
+    /**
+     * Status
+     */
+    status?: number;
+    /**
+     * Title
+     */
+    title: string;
+    /**
+     * Type
+     */
+    type: 'urn:blizzard:problem:claim-runner-version-refused';
+    [key: string]: unknown;
+};
+
+/**
+ * CliPkceRequiredProblem
+ *
+ * CLI authorization lacks a valid PKCE challenge.
+ */
+export type CliPkceRequiredProblem = {
+    /**
+     * Detail
+     */
+    detail: string;
+    /**
+     * Instance
+     */
+    instance: string;
+    /**
+     * Status
+     */
+    status?: number;
+    /**
+     * Title
+     */
+    title: string;
+    /**
+     * Type
+     */
+    type: 'urn:blizzard:problem:cli-pkce-required';
+    [key: string]: unknown;
+};
+
+/**
+ * CliRedirectRefusedProblem
+ *
+ * The CLI redirect is not a registered loopback or out-of-band URI.
+ */
+export type CliRedirectRefusedProblem = {
+    /**
+     * Detail
+     */
+    detail: string;
+    /**
+     * Instance
+     */
+    instance: string;
+    /**
+     * Status
+     */
+    status?: number;
+    /**
+     * Title
+     */
+    title: string;
+    /**
+     * Type
+     */
+    type: 'urn:blizzard:problem:cli-redirect-refused';
+    [key: string]: unknown;
+};
+
+/**
+ * CliTokenRefusedProblem
+ *
+ * Code, verifier, or redirect is invalid, deliberately without identifying which.
+ */
+export type CliTokenRefusedProblem = {
+    /**
+     * Detail
+     */
+    detail: string;
+    /**
+     * Instance
+     */
+    instance: string;
+    /**
+     * Status
+     */
+    status?: number;
+    /**
+     * Title
+     */
+    title: string;
+    /**
+     * Type
+     */
+    type: 'urn:blizzard:problem:cli-token-refused';
+    [key: string]: unknown;
 };
 
 /**
@@ -3559,6 +3923,93 @@ export type ExternalSubscriptionUsageWindowView = {
 };
 
 /**
+ * FederationClientRefusedProblem
+ *
+ * Unknown client, unregistered redirect, or missing membership, deliberately indistinguishable.
+ */
+export type FederationClientRefusedProblem = {
+    /**
+     * Detail
+     */
+    detail: string;
+    /**
+     * Instance
+     */
+    instance: string;
+    /**
+     * Status
+     */
+    status?: number;
+    /**
+     * Title
+     */
+    title: string;
+    /**
+     * Type
+     */
+    type: 'urn:blizzard:problem:federation-client-refused';
+    [key: string]: unknown;
+};
+
+/**
+ * FederationNoProviderProblem
+ *
+ * No existing hub session and no configured authentication provider.
+ */
+export type FederationNoProviderProblem = {
+    /**
+     * Detail
+     */
+    detail: string;
+    /**
+     * Instance
+     */
+    instance: string;
+    /**
+     * Status
+     */
+    status?: number;
+    /**
+     * Title
+     */
+    title: string;
+    /**
+     * Type
+     */
+    type: 'urn:blizzard:problem:federation-no-provider';
+    [key: string]: unknown;
+};
+
+/**
+ * FederationResponseModeProblem
+ *
+ * The requested authorization response mode is not supported.
+ */
+export type FederationResponseModeProblem = {
+    /**
+     * Detail
+     */
+    detail: string;
+    /**
+     * Instance
+     */
+    instance: string;
+    /**
+     * Status
+     */
+    status?: number;
+    /**
+     * Title
+     */
+    title: string;
+    /**
+     * Type
+     */
+    type: 'urn:blizzard:problem:federation-response-mode';
+    [key: string]: unknown;
+};
+
+/**
  * FieldChangeView
  *
  * One changed field. A secret's value never appears in a diff.
@@ -3791,6 +4242,35 @@ export type FindingFactView = {
      * Superseded By
      */
     superseded_by: string | null;
+};
+
+/**
+ * FindingNotInChunkProblem
+ *
+ * The finding is outside the set answered by the chunk.
+ */
+export type FindingNotInChunkProblem = {
+    /**
+     * Detail
+     */
+    detail: string;
+    /**
+     * Instance
+     */
+    instance: string;
+    /**
+     * Status
+     */
+    status?: number;
+    /**
+     * Title
+     */
+    title: string;
+    /**
+     * Type
+     */
+    type: 'urn:blizzard:problem:finding-not-in-chunk';
+    [key: string]: unknown;
 };
 
 /**
@@ -5575,6 +6055,35 @@ export type HostLifecycleRequest = {
 };
 
 /**
+ * HostNameTakenProblem
+ *
+ * A live host already holds the requested name.
+ */
+export type HostNameTakenProblem = {
+    /**
+     * Detail
+     */
+    detail: string;
+    /**
+     * Instance
+     */
+    instance: string;
+    /**
+     * Status
+     */
+    status?: number;
+    /**
+     * Title
+     */
+    title: string;
+    /**
+     * Type
+     */
+    type: 'urn:blizzard:problem:host-name-taken';
+    [key: string]: unknown;
+};
+
+/**
  * HostRecordResponse
  *
  * A host's own record: its id, tenant, held name, and the runners the hub holds under it that are not retired.
@@ -5756,6 +6265,35 @@ export type HostRetireResponse = {
      * Released Chunk Ids
      */
     released_chunk_ids: Array<string>;
+};
+
+/**
+ * HostRetiredProblem
+ *
+ * A retired host cannot perform this operation.
+ */
+export type HostRetiredProblem = {
+    /**
+     * Detail
+     */
+    detail: string;
+    /**
+     * Instance
+     */
+    instance: string;
+    /**
+     * Status
+     */
+    status?: number;
+    /**
+     * Title
+     */
+    title: string;
+    /**
+     * Type
+     */
+    type: 'urn:blizzard:problem:host-retired';
+    [key: string]: unknown;
 };
 
 /**
@@ -5961,11 +6499,69 @@ export type HubEventView = {
 };
 
 /**
+ * HubStoreUnavailableProblem
+ *
+ * The hub has no wired store available to service the request.
+ */
+export type HubStoreUnavailableProblem = {
+    /**
+     * Detail
+     */
+    detail: string;
+    /**
+     * Instance
+     */
+    instance: string;
+    /**
+     * Status
+     */
+    status?: number;
+    /**
+     * Title
+     */
+    title: string;
+    /**
+     * Type
+     */
+    type: 'urn:blizzard:problem:hub-store-unavailable';
+    [key: string]: unknown;
+};
+
+/**
  * IdPrefix
  *
  * One tag per hub entity kind; a member formats as its own value.
  */
 export type IdPrefix = 'ch' | 'gr' | 'nd' | 'cho' | 'art' | 'tr' | 'dec' | 'qn' | 'lease' | 'tko' | 'self' | 'mg' | 'usr' | 'seg' | 'wi' | 'rtn' | 'scp' | 'fin' | 'fins' | 'gprop' | 'dep' | 'apl' | 'rn' | 'hs' | 'ten' | 'inv' | 'proj' | 'repo' | 'wsrc' | 'frg' | 'flw' | 'fsub' | 'htn' | 'cad' | 'chr';
+
+/**
+ * IdpDisabledProblem
+ *
+ * The hub's IdP surface or its signing key is unavailable.
+ */
+export type IdpDisabledProblem = {
+    /**
+     * Detail
+     */
+    detail: string;
+    /**
+     * Instance
+     */
+    instance: string;
+    /**
+     * Status
+     */
+    status?: number;
+    /**
+     * Title
+     */
+    title: string;
+    /**
+     * Type
+     */
+    type: 'urn:blizzard:problem:idp-disabled';
+    [key: string]: unknown;
+};
 
 /**
  * IntendedMigrationPatch
@@ -6223,6 +6819,35 @@ export type LandingPositionRequest = {
 };
 
 /**
+ * LeaseOwnershipProblem
+ *
+ * The caller cannot read another runner's lease segments.
+ */
+export type LeaseOwnershipProblem = {
+    /**
+     * Detail
+     */
+    detail: string;
+    /**
+     * Instance
+     */
+    instance: string;
+    /**
+     * Status
+     */
+    status?: number;
+    /**
+     * Title
+     */
+    title: string;
+    /**
+     * Type
+     */
+    type: 'urn:blizzard:problem:lease-ownership';
+    [key: string]: unknown;
+};
+
+/**
  * LeaseTranscriptView
  *
  * A lease's transcript, concatenated across every segment stored under its
@@ -6250,6 +6875,186 @@ export type LeaseTranscriptView = {
      * Turns
      */
     turns: Array<TurnSegmentViewOutput>;
+};
+
+/**
+ * LoginDisabledProblem
+ *
+ * Provider login is disabled.
+ */
+export type LoginDisabledProblem = {
+    /**
+     * Detail
+     */
+    detail: string;
+    /**
+     * Instance
+     */
+    instance: string;
+    /**
+     * Status
+     */
+    status?: number;
+    /**
+     * Title
+     */
+    title: string;
+    /**
+     * Type
+     */
+    type: 'urn:blizzard:problem:login-disabled';
+    [key: string]: unknown;
+};
+
+/**
+ * LoginFailedProblem
+ *
+ * A provider callback failed without exposing which check failed.
+ */
+export type LoginFailedProblem = {
+    /**
+     * Detail
+     */
+    detail: string;
+    /**
+     * Error
+     *
+     * @deprecated
+     */
+    error: 'login_failed';
+    /**
+     * Instance
+     */
+    instance: string;
+    /**
+     * Status
+     */
+    status?: number;
+    /**
+     * Title
+     */
+    title: string;
+    /**
+     * Type
+     */
+    type: 'urn:blizzard:problem:login-failed';
+    [key: string]: unknown;
+};
+
+/**
+ * LoginProviderUnknownProblem
+ *
+ * The requested provider is not configured.
+ */
+export type LoginProviderUnknownProblem = {
+    /**
+     * Detail
+     */
+    detail: string;
+    /**
+     * Instance
+     */
+    instance: string;
+    /**
+     * Status
+     */
+    status?: number;
+    /**
+     * Title
+     */
+    title: string;
+    /**
+     * Type
+     */
+    type: 'urn:blizzard:problem:login-provider-unknown';
+    [key: string]: unknown;
+};
+
+/**
+ * LoginThrottledProblem
+ *
+ * The login attempt was rate limited.
+ */
+export type LoginThrottledProblem = {
+    /**
+     * Detail
+     */
+    detail: string;
+    /**
+     * Instance
+     */
+    instance: string;
+    /**
+     * Status
+     */
+    status?: number;
+    /**
+     * Title
+     */
+    title: string;
+    /**
+     * Type
+     */
+    type: 'urn:blizzard:problem:login-throttled';
+    [key: string]: unknown;
+};
+
+/**
+ * MachineCredentialForbiddenProblem
+ *
+ * A machine credential is not valid for this operation.
+ */
+export type MachineCredentialForbiddenProblem = {
+    /**
+     * Detail
+     */
+    detail: string;
+    /**
+     * Instance
+     */
+    instance: string;
+    /**
+     * Status
+     */
+    status?: number;
+    /**
+     * Title
+     */
+    title: string;
+    /**
+     * Type
+     */
+    type: 'urn:blizzard:problem:machine-credential-forbidden';
+    [key: string]: unknown;
+};
+
+/**
+ * MalformedCursorProblem
+ *
+ * The supplied pagination cursor is malformed.
+ */
+export type MalformedCursorProblem = {
+    /**
+     * Detail
+     */
+    detail: string;
+    /**
+     * Instance
+     */
+    instance: string;
+    /**
+     * Status
+     */
+    status?: number;
+    /**
+     * Title
+     */
+    title: string;
+    /**
+     * Type
+     */
+    type: 'urn:blizzard:problem:malformed-cursor';
+    [key: string]: unknown;
 };
 
 /**
@@ -6465,6 +7270,93 @@ export type MigrationView = {
      * To Graph Name
      */
     to_graph_name: string | null;
+};
+
+/**
+ * NoAnsweredProposalProblem
+ *
+ * The chunk answers no accepted, minted garden proposal.
+ */
+export type NoAnsweredProposalProblem = {
+    /**
+     * Detail
+     */
+    detail: string;
+    /**
+     * Instance
+     */
+    instance: string;
+    /**
+     * Status
+     */
+    status?: number;
+    /**
+     * Title
+     */
+    title: string;
+    /**
+     * Type
+     */
+    type: 'urn:blizzard:problem:no-answered-proposal';
+    [key: string]: unknown;
+};
+
+/**
+ * NoCurrentNodeProblem
+ *
+ * The chunk has no current node from which to build an envelope.
+ */
+export type NoCurrentNodeProblem = {
+    /**
+     * Detail
+     */
+    detail: string;
+    /**
+     * Instance
+     */
+    instance: string;
+    /**
+     * Status
+     */
+    status?: number;
+    /**
+     * Title
+     */
+    title: string;
+    /**
+     * Type
+     */
+    type: 'urn:blizzard:problem:no-current-node';
+    [key: string]: unknown;
+};
+
+/**
+ * NoRunContextProblem
+ *
+ * The chunk has no routine-run context.
+ */
+export type NoRunContextProblem = {
+    /**
+     * Detail
+     */
+    detail: string;
+    /**
+     * Instance
+     */
+    instance: string;
+    /**
+     * Status
+     */
+    status?: number;
+    /**
+     * Title
+     */
+    title: string;
+    /**
+     * Type
+     */
+    type: 'urn:blizzard:problem:no-run-context';
+    [key: string]: unknown;
 };
 
 /**
@@ -6707,6 +7599,64 @@ export type PendingView = {
  * One grantable capability; a role expands to a fixed set of them.
  */
 export type Permission = 'fleet:view' | 'chunk:ingest' | 'chunk:control' | 'question:answer' | 'gate:resolve' | 'queue:reorder' | 'runner:pause' | 'runner:retire' | 'runner:add' | 'graph:edit' | 'user:manage' | 'transcript:read' | 'analytics:admin' | 'config:edit' | 'tenant:admin' | 'membership:grant-any' | 'hub-admin:grant' | 'export:admin';
+
+/**
+ * PermissionRequiredProblem
+ *
+ * The authenticated caller lacks a required permission.
+ */
+export type PermissionRequiredProblem = {
+    /**
+     * Detail
+     */
+    detail: string;
+    /**
+     * Instance
+     */
+    instance: string;
+    /**
+     * Status
+     */
+    status?: number;
+    /**
+     * Title
+     */
+    title: string;
+    /**
+     * Type
+     */
+    type: 'urn:blizzard:problem:permission-required';
+    [key: string]: unknown;
+};
+
+/**
+ * PinnedGraphMissingProblem
+ *
+ * The chunk's pinned graph is missing.
+ */
+export type PinnedGraphMissingProblem = {
+    /**
+     * Detail
+     */
+    detail: string;
+    /**
+     * Instance
+     */
+    instance: string;
+    /**
+     * Status
+     */
+    status?: number;
+    /**
+     * Title
+     */
+    title: string;
+    /**
+     * Type
+     */
+    type: 'urn:blizzard:problem:pinned-graph-missing';
+    [key: string]: unknown;
+};
 
 /**
  * PrView
@@ -7049,6 +7999,35 @@ export type QuestionAskedPayload = {
      * Question Id
      */
     question_id: string;
+};
+
+/**
+ * QuestionNotFoundProblem
+ *
+ * The named question does not exist in the tenant.
+ */
+export type QuestionNotFoundProblem = {
+    /**
+     * Detail
+     */
+    detail: string;
+    /**
+     * Instance
+     */
+    instance: string;
+    /**
+     * Status
+     */
+    status?: number;
+    /**
+     * Title
+     */
+    title: string;
+    /**
+     * Type
+     */
+    type: 'urn:blizzard:problem:question-not-found';
+    [key: string]: unknown;
 };
 
 /**
@@ -7397,20 +8376,42 @@ export type RecordRefView = {
 };
 
 /**
- * ReleaseRefusal
+ * ReleaseProblem
  *
- * The ``409`` body: the chunk's state refuses the release.
+ * A release refusal with its released discriminator fields.
  */
-export type ReleaseRefusal = {
+export type ReleaseProblem = {
     /**
      * Chunk Id
+     *
+     * @deprecated
      */
     chunk_id: string;
     /**
      * Detail
      */
     detail: string;
+    /**
+     * Instance
+     */
+    instance: string;
+    /**
+     * @deprecated
+     */
     reason: ReleaseRefusalReason;
+    /**
+     * Status
+     */
+    status?: number;
+    /**
+     * Title
+     */
+    title: string;
+    /**
+     * Type
+     */
+    type: 'urn:blizzard:problem:release-refusal';
+    [key: string]: unknown;
 };
 
 /**
@@ -7918,6 +8919,199 @@ export type RouteClaim = {
 };
 
 /**
+ * RouteClaimConflictProblem
+ *
+ * A lost claim race; status is deliberately absent.
+ */
+export type RouteClaimConflictProblem = {
+    /**
+     * Chunk Id
+     *
+     * @deprecated
+     */
+    chunk_id: string;
+    /**
+     * Detail
+     */
+    detail: string;
+    /**
+     * Held By Runner Id
+     *
+     * @deprecated
+     */
+    held_by_runner_id: string;
+    /**
+     * Instance
+     */
+    instance: string;
+    /**
+     * Title
+     */
+    title: string;
+    /**
+     * Type
+     */
+    type: 'urn:blizzard:problem:claim-conflict';
+    [key: string]: unknown;
+};
+
+/**
+ * RouteClaimDependencyProblem
+ *
+ * An unmet prerequisite; status is deliberately absent.
+ */
+export type RouteClaimDependencyProblem = {
+    /**
+     * Chunk Id
+     *
+     * @deprecated
+     */
+    chunk_id: string;
+    /**
+     * Detail
+     */
+    detail: string;
+    /**
+     * Instance
+     */
+    instance: string;
+    /**
+     * Prerequisite Chunk Id
+     *
+     * @deprecated
+     */
+    prerequisite_chunk_id: string;
+    /**
+     * Title
+     */
+    title: string;
+    /**
+     * Type
+     */
+    type: 'urn:blizzard:problem:claim-dependency';
+    [key: string]: unknown;
+};
+
+/**
+ * RouteClaimIncompatibleProblem
+ *
+ * A runner unable to execute a claim; status is deliberately absent.
+ */
+export type RouteClaimIncompatibleProblem = {
+    /**
+     * Chunk Id
+     *
+     * @deprecated
+     */
+    chunk_id: string;
+    /**
+     * Detail
+     */
+    detail: string;
+    /**
+     * Incompatible Runner Id
+     *
+     * @deprecated
+     */
+    incompatible_runner_id: string;
+    /**
+     * Instance
+     */
+    instance: string;
+    /**
+     * @deprecated
+     */
+    reason: ClaimDenialReason;
+    /**
+     * Title
+     */
+    title: string;
+    /**
+     * Type
+     */
+    type: 'urn:blizzard:problem:claim-incompatible';
+    [key: string]: unknown;
+};
+
+/**
+ * RouteClaimNotReadyProblem
+ *
+ * A claim denied for now, retaining the released chunk-status string.
+ */
+export type RouteClaimNotReadyProblem = {
+    /**
+     * Chunk Id
+     *
+     * @deprecated
+     */
+    chunk_id: string;
+    /**
+     * Detail
+     */
+    detail: string;
+    /**
+     * Instance
+     */
+    instance: string;
+    /**
+     * Status
+     *
+     * @deprecated
+     */
+    status: string;
+    /**
+     * Title
+     */
+    title: string;
+    /**
+     * Type
+     */
+    type: 'urn:blizzard:problem:claim-not-ready';
+    [key: string]: unknown;
+};
+
+/**
+ * RouteClaimPausedProblem
+ *
+ * A runner barred from claiming.
+ */
+export type RouteClaimPausedProblem = {
+    /**
+     * Chunk Id
+     *
+     * @deprecated
+     */
+    chunk_id: string;
+    /**
+     * Detail
+     */
+    detail: string;
+    /**
+     * Instance
+     */
+    instance: string;
+    /**
+     * Runner Id
+     *
+     * @deprecated
+     */
+    runner_id: string;
+    /**
+     * Status
+     */
+    status?: number;
+    /**
+     * Title
+     */
+    title: string;
+    /**
+     * Type
+     */
+    type: 'urn:blizzard:problem:claim-paused';
+    [key: string]: unknown;
+};
+
+/**
  * RouteClaimResponse
  *
  * The winning claim's reply — the route, its first node envelope, and the
@@ -7945,6 +9139,130 @@ export type RouteClaimResponse = {
      * Workspace Id
      */
     workspace_id: string;
+};
+
+/**
+ * RouteClaimTerminalProblem
+ *
+ * A claim denial whose legacy status is a chunk status, not HTTP status.
+ */
+export type RouteClaimTerminalProblem = {
+    /**
+     * Chunk Id
+     *
+     * @deprecated
+     */
+    chunk_id: string;
+    /**
+     * Detail
+     */
+    detail: string;
+    /**
+     * Instance
+     */
+    instance: string;
+    /**
+     * Status
+     *
+     * @deprecated
+     */
+    status: string;
+    /**
+     * Title
+     */
+    title: string;
+    /**
+     * Type
+     */
+    type: 'urn:blizzard:problem:claim-terminal';
+    [key: string]: unknown;
+};
+
+/**
+ * RouteNotFoundProblem
+ *
+ * The chunk has no live route.
+ */
+export type RouteNotFoundProblem = {
+    /**
+     * Detail
+     */
+    detail: string;
+    /**
+     * Instance
+     */
+    instance: string;
+    /**
+     * Status
+     */
+    status?: number;
+    /**
+     * Title
+     */
+    title: string;
+    /**
+     * Type
+     */
+    type: 'urn:blizzard:problem:route-not-found';
+    [key: string]: unknown;
+};
+
+/**
+ * RouteNotHeldProblem
+ *
+ * The caller does not hold the route or its capability is invalid.
+ */
+export type RouteNotHeldProblem = {
+    /**
+     * Detail
+     */
+    detail: string;
+    /**
+     * Instance
+     */
+    instance: string;
+    /**
+     * Status
+     */
+    status?: number;
+    /**
+     * Title
+     */
+    title: string;
+    /**
+     * Type
+     */
+    type: 'urn:blizzard:problem:route-not-held';
+    [key: string]: unknown;
+};
+
+/**
+ * RouteTerminalProblem
+ *
+ * The route's chunk has ended and cannot be rekeyed.
+ */
+export type RouteTerminalProblem = {
+    /**
+     * Detail
+     */
+    detail: string;
+    /**
+     * Instance
+     */
+    instance: string;
+    /**
+     * Status
+     */
+    status?: number;
+    /**
+     * Title
+     */
+    title: string;
+    /**
+     * Type
+     */
+    type: 'urn:blizzard:problem:route-terminal';
+    [key: string]: unknown;
 };
 
 /**
@@ -8492,6 +9810,35 @@ export type RunnerAddResponse = {
 };
 
 /**
+ * RunnerAlreadyHostedProblem
+ *
+ * A runner to adopt already stands under a host.
+ */
+export type RunnerAlreadyHostedProblem = {
+    /**
+     * Detail
+     */
+    detail: string;
+    /**
+     * Instance
+     */
+    instance: string;
+    /**
+     * Status
+     */
+    status?: number;
+    /**
+     * Title
+     */
+    title: string;
+    /**
+     * Type
+     */
+    type: 'urn:blizzard:problem:runner-already-hosted';
+    [key: string]: unknown;
+};
+
+/**
  * RunnerBinding
  *
  * One project a runner serves through one of its host's workspaces: the ``project`` by id or slug, the host
@@ -8612,6 +9959,35 @@ export type RunnerChangedPayload = {
  * but not heard from within it.
  */
 export type RunnerConnection = 'never_connected' | 'online' | 'offline';
+
+/**
+ * RunnerCredentialForbiddenProblem
+ *
+ * A resolved runner credential was presented on an operator verb.
+ */
+export type RunnerCredentialForbiddenProblem = {
+    /**
+     * Detail
+     */
+    detail: string;
+    /**
+     * Instance
+     */
+    instance: string;
+    /**
+     * Status
+     */
+    status?: number;
+    /**
+     * Title
+     */
+    title: string;
+    /**
+     * Type
+     */
+    type: 'urn:blizzard:problem:runner-credential-forbidden';
+    [key: string]: unknown;
+};
 
 /**
  * RunnerDeclining
@@ -8759,18 +10135,71 @@ export type RunnerFactBatch = {
 };
 
 /**
- * RunnerIdentityRefusal
+ * RunnerHoldsRoutesProblem
  *
- * Why the presented runner bearer token names no runner the hub admits. ``runner_id`` names
- * the runner a ``revoked`` or ``retired`` token was issued to, and is ``None`` for a ``missing``
- * or ``unknown`` one.
+ * A non-forced retirement cannot proceed while the runner holds routes.
  */
-export type RunnerIdentityRefusal = {
+export type RunnerHoldsRoutesProblem = {
+    /**
+     * Detail
+     */
+    detail: string;
+    /**
+     * Instance
+     */
+    instance: string;
+    /**
+     * Status
+     */
+    status?: number;
+    /**
+     * Title
+     */
+    title: string;
+    /**
+     * Type
+     */
+    type: 'urn:blizzard:problem:runner-holds-routes';
+    [key: string]: unknown;
+};
+
+/**
+ * RunnerIdentityProblem
+ *
+ * An identity refusal retaining its released discriminator and runner id.
+ */
+export type RunnerIdentityProblem = {
+    /**
+     * Detail
+     */
+    detail: string;
+    /**
+     * Instance
+     */
+    instance: string;
+    /**
+     * @deprecated
+     */
     reason: RunnerTokenRefusalReason;
     /**
      * Runner Id
+     *
+     * @deprecated
      */
     runner_id: string | null;
+    /**
+     * Status
+     */
+    status?: number;
+    /**
+     * Title
+     */
+    title: string;
+    /**
+     * Type
+     */
+    type: 'urn:blizzard:problem:runner-identity';
+    [key: string]: unknown;
 };
 
 /**
@@ -8806,6 +10235,35 @@ export type RunnerIdentityView = {
 };
 
 /**
+ * RunnerLifecycleConflictProblem
+ *
+ * The runner's lifecycle changed during the operation.
+ */
+export type RunnerLifecycleConflictProblem = {
+    /**
+     * Detail
+     */
+    detail: string;
+    /**
+     * Instance
+     */
+    instance: string;
+    /**
+     * Status
+     */
+    status?: number;
+    /**
+     * Title
+     */
+    title: string;
+    /**
+     * Type
+     */
+    type: 'urn:blizzard:problem:runner-lifecycle-conflict';
+    [key: string]: unknown;
+};
+
+/**
  * RunnerLifecycleRequest
  *
  * Reinstate a runner, or revoke its token — records who did it.
@@ -8815,6 +10273,93 @@ export type RunnerLifecycleRequest = {
      * By
      */
     by?: string;
+};
+
+/**
+ * RunnerNotFoundProblem
+ *
+ * The named runner is not available to the caller.
+ */
+export type RunnerNotFoundProblem = {
+    /**
+     * Detail
+     */
+    detail: string;
+    /**
+     * Instance
+     */
+    instance: string;
+    /**
+     * Status
+     */
+    status?: number;
+    /**
+     * Title
+     */
+    title: string;
+    /**
+     * Type
+     */
+    type: 'urn:blizzard:problem:runner-not-found';
+    [key: string]: unknown;
+};
+
+/**
+ * RunnerNotRegisteredProblem
+ *
+ * The runner has never registered.
+ */
+export type RunnerNotRegisteredProblem = {
+    /**
+     * Detail
+     */
+    detail: string;
+    /**
+     * Instance
+     */
+    instance: string;
+    /**
+     * Status
+     */
+    status?: number;
+    /**
+     * Title
+     */
+    title: string;
+    /**
+     * Type
+     */
+    type: 'urn:blizzard:problem:runner-not-registered';
+    [key: string]: unknown;
+};
+
+/**
+ * RunnerOwnershipProblem
+ *
+ * The named runner differs from the calling runner.
+ */
+export type RunnerOwnershipProblem = {
+    /**
+     * Detail
+     */
+    detail: string;
+    /**
+     * Instance
+     */
+    instance: string;
+    /**
+     * Status
+     */
+    status?: number;
+    /**
+     * Title
+     */
+    title: string;
+    /**
+     * Type
+     */
+    type: 'urn:blizzard:problem:runner-ownership';
+    [key: string]: unknown;
 };
 
 /**
@@ -9089,6 +10634,35 @@ export type RunnerRegistryView = {
 };
 
 /**
+ * RunnerRetireInterruptedProblem
+ *
+ * A runner retirement was interrupted after committing part of its work.
+ */
+export type RunnerRetireInterruptedProblem = {
+    /**
+     * Detail
+     */
+    detail: string;
+    /**
+     * Instance
+     */
+    instance: string;
+    /**
+     * Status
+     */
+    status?: number;
+    /**
+     * Title
+     */
+    title: string;
+    /**
+     * Type
+     */
+    type: 'urn:blizzard:problem:runner-retire-interrupted';
+    [key: string]: unknown;
+};
+
+/**
  * RunnerRetireRequest
  *
  * Retire a runner — ``force`` releases every chunk it still holds.
@@ -9115,6 +10689,35 @@ export type RunnerRetireResponse = {
      */
     released_chunk_ids: Array<string>;
     runner: RunnerRegistryView;
+};
+
+/**
+ * RunnerRetiredProblem
+ *
+ * A retired runner cannot perform this operation.
+ */
+export type RunnerRetiredProblem = {
+    /**
+     * Detail
+     */
+    detail: string;
+    /**
+     * Instance
+     */
+    instance: string;
+    /**
+     * Status
+     */
+    status?: number;
+    /**
+     * Title
+     */
+    title: string;
+    /**
+     * Type
+     */
+    type: 'urn:blizzard:problem:runner-retired';
+    [key: string]: unknown;
 };
 
 /**
@@ -9158,11 +10761,11 @@ export type RunnerTokenRevocationResponse = {
 };
 
 /**
- * RunnerVersionRefusal
+ * RunnerVersionProblem
  *
- * The hub's window refusing a runner's version.
+ * The version window refusing a runner, in the problem representation.
  */
-export type RunnerVersionRefusal = {
+export type RunnerVersionProblem = {
     /**
      * Detail
      */
@@ -9175,11 +10778,28 @@ export type RunnerVersionRefusal = {
      * Hub Version
      */
     hub_version: string;
+    /**
+     * Instance
+     */
+    instance: string;
     reason: VersionRefusalReason;
     /**
      * Runner Version
      */
     runner_version: string | null;
+    /**
+     * Status
+     */
+    status?: number;
+    /**
+     * Title
+     */
+    title: string;
+    /**
+     * Type
+     */
+    type: 'urn:blizzard:problem:runner-version';
+    [key: string]: unknown;
 };
 
 /**
@@ -9652,6 +11272,41 @@ export type SourceLinksView = {
 };
 
 /**
+ * SsoRefusedProblem
+ *
+ * A provider callback's state belongs to a different provider.
+ */
+export type SsoRefusedProblem = {
+    /**
+     * Detail
+     */
+    detail: string;
+    /**
+     * Error
+     *
+     * @deprecated
+     */
+    error: 'sso_refused';
+    /**
+     * Instance
+     */
+    instance: string;
+    /**
+     * Status
+     */
+    status?: number;
+    /**
+     * Title
+     */
+    title: string;
+    /**
+     * Type
+     */
+    type: 'urn:blizzard:problem:sso-refused';
+    [key: string]: unknown;
+};
+
+/**
  * SubmissionTurnView
  *
  * A turn, open while its end and outcome are null.
@@ -9791,6 +11446,35 @@ export type SweepPassResponse = {
 };
 
 /**
+ * SystemArtifactNotFoundProblem
+ *
+ * The named system artifact is not published.
+ */
+export type SystemArtifactNotFoundProblem = {
+    /**
+     * Detail
+     */
+    detail: string;
+    /**
+     * Instance
+     */
+    instance: string;
+    /**
+     * Status
+     */
+    status?: number;
+    /**
+     * Title
+     */
+    title: string;
+    /**
+     * Type
+     */
+    type: 'urn:blizzard:problem:system-artifact-not-found';
+    [key: string]: unknown;
+};
+
+/**
  * SystemArtifactView
  *
  * A system artifact's global name and raw text.
@@ -9821,6 +11505,35 @@ export type TenantCreateRequest = {
      * Name
      */
     name: string;
+};
+
+/**
+ * TenantCredentialMismatchProblem
+ *
+ * The tenant header disagrees with the machine credential.
+ */
+export type TenantCredentialMismatchProblem = {
+    /**
+     * Detail
+     */
+    detail: string;
+    /**
+     * Instance
+     */
+    instance: string;
+    /**
+     * Status
+     */
+    status?: number;
+    /**
+     * Title
+     */
+    title: string;
+    /**
+     * Type
+     */
+    type: 'urn:blizzard:problem:tenant-credential-mismatch';
+    [key: string]: unknown;
 };
 
 /**
@@ -9873,6 +11586,35 @@ export type TenantGraphSync = {
 };
 
 /**
+ * TenantNotFoundProblem
+ *
+ * A nonexistent or inaccessible tenant, indistinguishable on the wire.
+ */
+export type TenantNotFoundProblem = {
+    /**
+     * Detail
+     */
+    detail: 'no such tenant';
+    /**
+     * Instance
+     */
+    instance: string;
+    /**
+     * Status
+     */
+    status?: number;
+    /**
+     * Title
+     */
+    title: string;
+    /**
+     * Type
+     */
+    type: 'urn:blizzard:problem:tenant-not-found';
+    [key: string]: unknown;
+};
+
+/**
  * TenantRenameRequest
  *
  * ``PATCH /api/admin/tenants/{tenant_id}``: the tenant's new name.
@@ -9882,6 +11624,48 @@ export type TenantRenameRequest = {
      * Name
      */
     name: string;
+};
+
+/**
+ * TenantRequiredDetail
+ *
+ * The released object carried in the tenant-selection refusal's detail.
+ */
+export type TenantRequiredDetail = {
+    /**
+     * Code
+     */
+    code: 'tenant_required';
+    /**
+     * Message
+     */
+    message: string;
+};
+
+/**
+ * TenantRequiredProblem
+ *
+ * The request must select one of several tenants.
+ */
+export type TenantRequiredProblem = {
+    detail: TenantRequiredDetail;
+    /**
+     * Instance
+     */
+    instance: string;
+    /**
+     * Status
+     */
+    status?: number;
+    /**
+     * Title
+     */
+    title: string;
+    /**
+     * Type
+     */
+    type: 'urn:blizzard:problem:tenant-required';
+    [key: string]: unknown;
 };
 
 /**
@@ -10566,6 +12350,84 @@ export type UnenforceableGateView = {
      */
     node: string;
     reason: UnenforceableGateReason;
+};
+
+/**
+ * UnknownProjectDetail
+ *
+ * The released validation-shaped entry for an unknown project.
+ */
+export type UnknownProjectDetail = {
+    /**
+     * Loc
+     */
+    loc: Array<string>;
+    /**
+     * Msg
+     */
+    msg: string;
+    /**
+     * Type
+     */
+    type: 'unknown_project';
+};
+
+/**
+ * UnknownProjectProblem
+ *
+ * A query names a project the tenant does not hold.
+ */
+export type UnknownProjectProblem = {
+    /**
+     * Detail
+     */
+    detail: Array<UnknownProjectDetail>;
+    /**
+     * Instance
+     */
+    instance: string;
+    /**
+     * Status
+     */
+    status?: number;
+    /**
+     * Title
+     */
+    title: string;
+    /**
+     * Type
+     */
+    type: 'urn:blizzard:problem:unknown-project';
+    [key: string]: unknown;
+};
+
+/**
+ * UnknownServedProjectProblem
+ *
+ * A runner's declared project does not exist in the tenant.
+ */
+export type UnknownServedProjectProblem = {
+    /**
+     * Detail
+     */
+    detail: string;
+    /**
+     * Instance
+     */
+    instance: string;
+    /**
+     * Status
+     */
+    status?: number;
+    /**
+     * Title
+     */
+    title: string;
+    /**
+     * Type
+     */
+    type: 'urn:blizzard:problem:unknown-served-project';
+    [key: string]: unknown;
 };
 
 /**
@@ -12614,9 +14476,29 @@ export type AuthorizeApiAuthAuthorizeGetData = {
 
 export type AuthorizeApiAuthAuthorizeGetErrors = {
     /**
+     * Problem
+     */
+    400: FederationResponseModeProblem | FederationClientRefusedProblem | CliRedirectRefusedProblem | CliPkceRequiredProblem;
+    /**
+     * Problem
+     */
+    403: RunnerRetiredProblem | HostRetiredProblem;
+    /**
+     * Problem
+     */
+    404: IdpDisabledProblem;
+    /**
      * Validation Error
      */
     422: HttpValidationError;
+    /**
+     * Problem
+     */
+    501: FederationNoProviderProblem;
+    /**
+     * Problem
+     */
+    503: HubStoreUnavailableProblem;
 };
 
 export type AuthorizeApiAuthAuthorizeGetError = AuthorizeApiAuthAuthorizeGetErrors[keyof AuthorizeApiAuthAuthorizeGetErrors];
@@ -12637,9 +14519,21 @@ export type CliTokenApiAuthCliTokenPostData = {
 
 export type CliTokenApiAuthCliTokenPostErrors = {
     /**
+     * Problem
+     */
+    400: CliTokenRefusedProblem;
+    /**
+     * Problem
+     */
+    404: IdpDisabledProblem;
+    /**
      * Validation Error
      */
     422: HttpValidationError;
+    /**
+     * Problem
+     */
+    503: HubStoreUnavailableProblem;
 };
 
 export type CliTokenApiAuthCliTokenPostError = CliTokenApiAuthCliTokenPostErrors[keyof CliTokenApiAuthCliTokenPostErrors];
@@ -12659,6 +14553,19 @@ export type JwksApiAuthJwksJsonGetData = {
     query?: never;
     url: '/api/auth/jwks.json';
 };
+
+export type JwksApiAuthJwksJsonGetErrors = {
+    /**
+     * Problem
+     */
+    404: IdpDisabledProblem;
+    /**
+     * Problem
+     */
+    503: HubStoreUnavailableProblem;
+};
+
+export type JwksApiAuthJwksJsonGetError = JwksApiAuthJwksJsonGetErrors[keyof JwksApiAuthJwksJsonGetErrors];
 
 export type JwksApiAuthJwksJsonGetResponses = {
     /**
@@ -12746,9 +14653,21 @@ export type AuthorizeApiAuthNameAuthorizeGetData = {
 
 export type AuthorizeApiAuthNameAuthorizeGetErrors = {
     /**
+     * Problem
+     */
+    404: LoginDisabledProblem | LoginProviderUnknownProblem;
+    /**
      * Validation Error
      */
     422: HttpValidationError;
+    /**
+     * Problem
+     */
+    429: LoginThrottledProblem;
+    /**
+     * Problem
+     */
+    503: HubStoreUnavailableProblem;
 };
 
 export type AuthorizeApiAuthNameAuthorizeGetError = AuthorizeApiAuthNameAuthorizeGetErrors[keyof AuthorizeApiAuthNameAuthorizeGetErrors];
@@ -12783,9 +14702,25 @@ export type CallbackApiAuthNameCallbackGetData = {
 
 export type CallbackApiAuthNameCallbackGetErrors = {
     /**
+     * Problem
+     */
+    400: LoginFailedProblem | SsoRefusedProblem;
+    /**
+     * Problem
+     */
+    404: LoginDisabledProblem;
+    /**
      * Validation Error
      */
     422: HttpValidationError;
+    /**
+     * Problem
+     */
+    429: LoginThrottledProblem;
+    /**
+     * Problem
+     */
+    503: HubStoreUnavailableProblem;
 };
 
 export type CallbackApiAuthNameCallbackGetError = CallbackApiAuthNameCallbackGetErrors[keyof CallbackApiAuthNameCallbackGetErrors];
@@ -14607,9 +16542,29 @@ export type GetChunkStatusesApiFleetChunkStatusesGetData = {
 
 export type GetChunkStatusesApiFleetChunkStatusesGetErrors = {
     /**
+     * Problem
+     */
+    400: TenantCredentialMismatchProblem;
+    /**
+     * Problem
+     */
+    401: AuthenticationRequiredProblem | AuthenticationRevokedProblem | AuthenticationUnresolvedProblem;
+    /**
+     * Problem
+     */
+    403: RunnerRetiredProblem;
+    /**
+     * Problem
+     */
+    404: TenantNotFoundProblem;
+    /**
      * Validation Error
      */
     422: HttpValidationError;
+    /**
+     * Problem
+     */
+    503: HubStoreUnavailableProblem;
 };
 
 export type GetChunkStatusesApiFleetChunkStatusesGetError = GetChunkStatusesApiFleetChunkStatusesGetErrors[keyof GetChunkStatusesApiFleetChunkStatusesGetErrors];
@@ -14639,9 +16594,29 @@ export type GetChunkApiFleetChunksChunkIdGetData = {
 
 export type GetChunkApiFleetChunksChunkIdGetErrors = {
     /**
+     * Problem
+     */
+    400: TenantCredentialMismatchProblem;
+    /**
+     * Problem
+     */
+    401: AuthenticationRequiredProblem | AuthenticationRevokedProblem | AuthenticationUnresolvedProblem;
+    /**
+     * Problem
+     */
+    403: RunnerRetiredProblem;
+    /**
+     * Problem
+     */
+    404: ChunkNotFoundProblem | TenantNotFoundProblem;
+    /**
      * Validation Error
      */
     422: HttpValidationError;
+    /**
+     * Problem
+     */
+    503: HubStoreUnavailableProblem;
 };
 
 export type GetChunkApiFleetChunksChunkIdGetError = GetChunkApiFleetChunksChunkIdGetErrors[keyof GetChunkApiFleetChunksChunkIdGetErrors];
@@ -14678,9 +16653,29 @@ export type GetChunkAnalyticsCountsAgentTypesApiFleetChunksChunkIdAnalyticsCount
 
 export type GetChunkAnalyticsCountsAgentTypesApiFleetChunksChunkIdAnalyticsCountsAgentTypesGetErrors = {
     /**
+     * Problem
+     */
+    400: TenantCredentialMismatchProblem;
+    /**
+     * Problem
+     */
+    401: AuthenticationRequiredProblem | AuthenticationRevokedProblem | AuthenticationUnresolvedProblem;
+    /**
+     * Problem
+     */
+    403: RunnerRetiredProblem;
+    /**
+     * Problem
+     */
+    404: ChunkNotFoundProblem | NoRunContextProblem | TenantNotFoundProblem;
+    /**
      * Validation Error
      */
     422: HttpValidationError;
+    /**
+     * Problem
+     */
+    503: HubStoreUnavailableProblem;
 };
 
 export type GetChunkAnalyticsCountsAgentTypesApiFleetChunksChunkIdAnalyticsCountsAgentTypesGetError = GetChunkAnalyticsCountsAgentTypesApiFleetChunksChunkIdAnalyticsCountsAgentTypesGetErrors[keyof GetChunkAnalyticsCountsAgentTypesApiFleetChunksChunkIdAnalyticsCountsAgentTypesGetErrors];
@@ -14717,9 +16712,29 @@ export type GetChunkAnalyticsCountsFilesApiFleetChunksChunkIdAnalyticsCountsFile
 
 export type GetChunkAnalyticsCountsFilesApiFleetChunksChunkIdAnalyticsCountsFilesGetErrors = {
     /**
+     * Problem
+     */
+    400: TenantCredentialMismatchProblem;
+    /**
+     * Problem
+     */
+    401: AuthenticationRequiredProblem | AuthenticationRevokedProblem | AuthenticationUnresolvedProblem;
+    /**
+     * Problem
+     */
+    403: RunnerRetiredProblem;
+    /**
+     * Problem
+     */
+    404: ChunkNotFoundProblem | NoRunContextProblem | TenantNotFoundProblem;
+    /**
      * Validation Error
      */
     422: HttpValidationError;
+    /**
+     * Problem
+     */
+    503: HubStoreUnavailableProblem;
 };
 
 export type GetChunkAnalyticsCountsFilesApiFleetChunksChunkIdAnalyticsCountsFilesGetError = GetChunkAnalyticsCountsFilesApiFleetChunksChunkIdAnalyticsCountsFilesGetErrors[keyof GetChunkAnalyticsCountsFilesApiFleetChunksChunkIdAnalyticsCountsFilesGetErrors];
@@ -14760,9 +16775,29 @@ export type GetChunkAnalyticsCountsNodesApiFleetChunksChunkIdAnalyticsCountsNode
 
 export type GetChunkAnalyticsCountsNodesApiFleetChunksChunkIdAnalyticsCountsNodesGetErrors = {
     /**
+     * Problem
+     */
+    400: TenantCredentialMismatchProblem;
+    /**
+     * Problem
+     */
+    401: AuthenticationRequiredProblem | AuthenticationRevokedProblem | AuthenticationUnresolvedProblem;
+    /**
+     * Problem
+     */
+    403: RunnerRetiredProblem;
+    /**
+     * Problem
+     */
+    404: ChunkNotFoundProblem | NoRunContextProblem | TenantNotFoundProblem;
+    /**
      * Validation Error
      */
     422: HttpValidationError;
+    /**
+     * Problem
+     */
+    503: HubStoreUnavailableProblem;
 };
 
 export type GetChunkAnalyticsCountsNodesApiFleetChunksChunkIdAnalyticsCountsNodesGetError = GetChunkAnalyticsCountsNodesApiFleetChunksChunkIdAnalyticsCountsNodesGetErrors[keyof GetChunkAnalyticsCountsNodesApiFleetChunksChunkIdAnalyticsCountsNodesGetErrors];
@@ -14799,9 +16834,29 @@ export type GetChunkAnalyticsCountsSkillsApiFleetChunksChunkIdAnalyticsCountsSki
 
 export type GetChunkAnalyticsCountsSkillsApiFleetChunksChunkIdAnalyticsCountsSkillsGetErrors = {
     /**
+     * Problem
+     */
+    400: TenantCredentialMismatchProblem;
+    /**
+     * Problem
+     */
+    401: AuthenticationRequiredProblem | AuthenticationRevokedProblem | AuthenticationUnresolvedProblem;
+    /**
+     * Problem
+     */
+    403: RunnerRetiredProblem;
+    /**
+     * Problem
+     */
+    404: ChunkNotFoundProblem | NoRunContextProblem | TenantNotFoundProblem;
+    /**
      * Validation Error
      */
     422: HttpValidationError;
+    /**
+     * Problem
+     */
+    503: HubStoreUnavailableProblem;
 };
 
 export type GetChunkAnalyticsCountsSkillsApiFleetChunksChunkIdAnalyticsCountsSkillsGetError = GetChunkAnalyticsCountsSkillsApiFleetChunksChunkIdAnalyticsCountsSkillsGetErrors[keyof GetChunkAnalyticsCountsSkillsApiFleetChunksChunkIdAnalyticsCountsSkillsGetErrors];
@@ -14842,9 +16897,29 @@ export type GetChunkAnalyticsSpendGraphsApiFleetChunksChunkIdAnalyticsSpendGraph
 
 export type GetChunkAnalyticsSpendGraphsApiFleetChunksChunkIdAnalyticsSpendGraphsGetErrors = {
     /**
+     * Problem
+     */
+    400: TenantCredentialMismatchProblem;
+    /**
+     * Problem
+     */
+    401: AuthenticationRequiredProblem | AuthenticationRevokedProblem | AuthenticationUnresolvedProblem;
+    /**
+     * Problem
+     */
+    403: RunnerRetiredProblem;
+    /**
+     * Problem
+     */
+    404: ChunkNotFoundProblem | NoRunContextProblem | TenantNotFoundProblem;
+    /**
      * Validation Error
      */
     422: HttpValidationError;
+    /**
+     * Problem
+     */
+    503: HubStoreUnavailableProblem;
 };
 
 export type GetChunkAnalyticsSpendGraphsApiFleetChunksChunkIdAnalyticsSpendGraphsGetError = GetChunkAnalyticsSpendGraphsApiFleetChunksChunkIdAnalyticsSpendGraphsGetErrors[keyof GetChunkAnalyticsSpendGraphsApiFleetChunksChunkIdAnalyticsSpendGraphsGetErrors];
@@ -14885,9 +16960,29 @@ export type GetChunkAnalyticsSpendNodesApiFleetChunksChunkIdAnalyticsSpendNodesG
 
 export type GetChunkAnalyticsSpendNodesApiFleetChunksChunkIdAnalyticsSpendNodesGetErrors = {
     /**
+     * Problem
+     */
+    400: TenantCredentialMismatchProblem;
+    /**
+     * Problem
+     */
+    401: AuthenticationRequiredProblem | AuthenticationRevokedProblem | AuthenticationUnresolvedProblem;
+    /**
+     * Problem
+     */
+    403: RunnerRetiredProblem;
+    /**
+     * Problem
+     */
+    404: ChunkNotFoundProblem | NoRunContextProblem | TenantNotFoundProblem;
+    /**
      * Validation Error
      */
     422: HttpValidationError;
+    /**
+     * Problem
+     */
+    503: HubStoreUnavailableProblem;
 };
 
 export type GetChunkAnalyticsSpendNodesApiFleetChunksChunkIdAnalyticsSpendNodesGetError = GetChunkAnalyticsSpendNodesApiFleetChunksChunkIdAnalyticsSpendNodesGetErrors[keyof GetChunkAnalyticsSpendNodesApiFleetChunksChunkIdAnalyticsSpendNodesGetErrors];
@@ -14915,9 +17010,33 @@ export type CheckArtifactApiFleetChunksChunkIdArtifactCheckPostData = {
 
 export type CheckArtifactApiFleetChunksChunkIdArtifactCheckPostErrors = {
     /**
+     * Problem
+     */
+    400: TenantCredentialMismatchProblem;
+    /**
+     * Problem
+     */
+    401: AuthenticationRequiredProblem | AuthenticationRevokedProblem | AuthenticationUnresolvedProblem;
+    /**
+     * Problem
+     */
+    403: RunnerRetiredProblem;
+    /**
+     * Problem
+     */
+    404: ChunkNotFoundProblem | TenantNotFoundProblem;
+    /**
      * Validation Error
      */
     422: HttpValidationError;
+    /**
+     * Problem
+     */
+    500: PinnedGraphMissingProblem;
+    /**
+     * Problem
+     */
+    503: HubStoreUnavailableProblem;
 };
 
 export type CheckArtifactApiFleetChunksChunkIdArtifactCheckPostError = CheckArtifactApiFleetChunksChunkIdArtifactCheckPostErrors[keyof CheckArtifactApiFleetChunksChunkIdArtifactCheckPostErrors];
@@ -14945,9 +17064,33 @@ export type SubmitCompletionApiFleetChunksChunkIdCompletionsPostData = {
 
 export type SubmitCompletionApiFleetChunksChunkIdCompletionsPostErrors = {
     /**
+     * Problem
+     */
+    400: TenantCredentialMismatchProblem;
+    /**
+     * Problem
+     */
+    401: AuthenticationRequiredProblem | AuthenticationRevokedProblem | AuthenticationUnresolvedProblem;
+    /**
+     * Problem
+     */
+    403: RunnerRetiredProblem;
+    /**
+     * Problem
+     */
+    404: ChunkNotFoundProblem | TenantNotFoundProblem;
+    /**
      * Validation Error
      */
     422: HttpValidationError;
+    /**
+     * Problem
+     */
+    500: PinnedGraphMissingProblem;
+    /**
+     * Problem
+     */
+    503: HubStoreUnavailableProblem;
 };
 
 export type SubmitCompletionApiFleetChunksChunkIdCompletionsPostError = SubmitCompletionApiFleetChunksChunkIdCompletionsPostErrors[keyof SubmitCompletionApiFleetChunksChunkIdCompletionsPostErrors];
@@ -14975,9 +17118,33 @@ export type SubmitDecisionApiFleetChunksChunkIdDecisionsPostData = {
 
 export type SubmitDecisionApiFleetChunksChunkIdDecisionsPostErrors = {
     /**
+     * Problem
+     */
+    400: TenantCredentialMismatchProblem;
+    /**
+     * Problem
+     */
+    401: AuthenticationRequiredProblem | AuthenticationRevokedProblem | AuthenticationUnresolvedProblem;
+    /**
+     * Problem
+     */
+    403: RunnerRetiredProblem;
+    /**
+     * Problem
+     */
+    404: ChunkNotFoundProblem | TenantNotFoundProblem;
+    /**
      * Validation Error
      */
     422: HttpValidationError;
+    /**
+     * Problem
+     */
+    500: PinnedGraphMissingProblem;
+    /**
+     * Problem
+     */
+    503: HubStoreUnavailableProblem;
 };
 
 export type SubmitDecisionApiFleetChunksChunkIdDecisionsPostError = SubmitDecisionApiFleetChunksChunkIdDecisionsPostErrors[keyof SubmitDecisionApiFleetChunksChunkIdDecisionsPostErrors];
@@ -15005,9 +17172,37 @@ export type GetEnvelopeApiFleetChunksChunkIdEnvelopeGetData = {
 
 export type GetEnvelopeApiFleetChunksChunkIdEnvelopeGetErrors = {
     /**
+     * Problem
+     */
+    400: TenantCredentialMismatchProblem;
+    /**
+     * Problem
+     */
+    401: AuthenticationRequiredProblem | AuthenticationRevokedProblem | AuthenticationUnresolvedProblem;
+    /**
+     * Problem
+     */
+    403: RunnerRetiredProblem;
+    /**
+     * Problem
+     */
+    404: ChunkNotFoundProblem | TenantNotFoundProblem;
+    /**
+     * Problem
+     */
+    409: NoCurrentNodeProblem;
+    /**
      * Validation Error
      */
     422: HttpValidationError;
+    /**
+     * Problem
+     */
+    500: PinnedGraphMissingProblem;
+    /**
+     * Problem
+     */
+    503: HubStoreUnavailableProblem;
 };
 
 export type GetEnvelopeApiFleetChunksChunkIdEnvelopeGetError = GetEnvelopeApiFleetChunksChunkIdEnvelopeGetErrors[keyof GetEnvelopeApiFleetChunksChunkIdEnvelopeGetErrors];
@@ -15035,9 +17230,29 @@ export type GetChunkFindingsApiFleetChunksChunkIdFindingsGetData = {
 
 export type GetChunkFindingsApiFleetChunksChunkIdFindingsGetErrors = {
     /**
+     * Problem
+     */
+    400: TenantCredentialMismatchProblem;
+    /**
+     * Problem
+     */
+    401: AuthenticationRequiredProblem | AuthenticationRevokedProblem | AuthenticationUnresolvedProblem;
+    /**
+     * Problem
+     */
+    403: RunnerRetiredProblem;
+    /**
+     * Problem
+     */
+    404: ChunkNotFoundProblem | NoAnsweredProposalProblem | TenantNotFoundProblem;
+    /**
      * Validation Error
      */
     422: HttpValidationError;
+    /**
+     * Problem
+     */
+    503: HubStoreUnavailableProblem;
 };
 
 export type GetChunkFindingsApiFleetChunksChunkIdFindingsGetError = GetChunkFindingsApiFleetChunksChunkIdFindingsGetErrors[keyof GetChunkFindingsApiFleetChunksChunkIdFindingsGetErrors];
@@ -15071,9 +17286,29 @@ export type GetChunkFindingApiFleetChunksChunkIdFindingsFindingIdGetData = {
 
 export type GetChunkFindingApiFleetChunksChunkIdFindingsFindingIdGetErrors = {
     /**
+     * Problem
+     */
+    400: TenantCredentialMismatchProblem;
+    /**
+     * Problem
+     */
+    401: AuthenticationRequiredProblem | AuthenticationRevokedProblem | AuthenticationUnresolvedProblem;
+    /**
+     * Problem
+     */
+    403: RunnerRetiredProblem;
+    /**
+     * Problem
+     */
+    404: ChunkNotFoundProblem | NoAnsweredProposalProblem | FindingNotInChunkProblem | TenantNotFoundProblem;
+    /**
      * Validation Error
      */
     422: HttpValidationError;
+    /**
+     * Problem
+     */
+    503: HubStoreUnavailableProblem;
 };
 
 export type GetChunkFindingApiFleetChunksChunkIdFindingsFindingIdGetError = GetChunkFindingApiFleetChunksChunkIdFindingsFindingIdGetErrors[keyof GetChunkFindingApiFleetChunksChunkIdFindingsFindingIdGetErrors];
@@ -15101,9 +17336,29 @@ export type GetGardenFindingsApiFleetChunksChunkIdGardenFindingsGetData = {
 
 export type GetGardenFindingsApiFleetChunksChunkIdGardenFindingsGetErrors = {
     /**
+     * Problem
+     */
+    400: TenantCredentialMismatchProblem;
+    /**
+     * Problem
+     */
+    401: AuthenticationRequiredProblem | AuthenticationRevokedProblem | AuthenticationUnresolvedProblem;
+    /**
+     * Problem
+     */
+    403: RunnerRetiredProblem;
+    /**
+     * Problem
+     */
+    404: ChunkNotFoundProblem | NoRunContextProblem | TenantNotFoundProblem;
+    /**
      * Validation Error
      */
     422: HttpValidationError;
+    /**
+     * Problem
+     */
+    503: HubStoreUnavailableProblem;
 };
 
 export type GetGardenFindingsApiFleetChunksChunkIdGardenFindingsGetError = GetGardenFindingsApiFleetChunksChunkIdGardenFindingsGetErrors[keyof GetGardenFindingsApiFleetChunksChunkIdGardenFindingsGetErrors];
@@ -15135,9 +17390,29 @@ export type GetGardenProposalsApiFleetChunksChunkIdGardenProposalsGetData = {
 
 export type GetGardenProposalsApiFleetChunksChunkIdGardenProposalsGetErrors = {
     /**
+     * Problem
+     */
+    400: TenantCredentialMismatchProblem;
+    /**
+     * Problem
+     */
+    401: AuthenticationRequiredProblem | AuthenticationRevokedProblem | AuthenticationUnresolvedProblem;
+    /**
+     * Problem
+     */
+    403: RunnerRetiredProblem;
+    /**
+     * Problem
+     */
+    404: ChunkNotFoundProblem | NoRunContextProblem | TenantNotFoundProblem;
+    /**
      * Validation Error
      */
     422: HttpValidationError;
+    /**
+     * Problem
+     */
+    503: HubStoreUnavailableProblem;
 };
 
 export type GetGardenProposalsApiFleetChunksChunkIdGardenProposalsGetError = GetGardenProposalsApiFleetChunksChunkIdGardenProposalsGetErrors[keyof GetGardenProposalsApiFleetChunksChunkIdGardenProposalsGetErrors];
@@ -15177,9 +17452,29 @@ export type GetGardenProposalsPageApiFleetChunksChunkIdGardenProposalsPageGetDat
 
 export type GetGardenProposalsPageApiFleetChunksChunkIdGardenProposalsPageGetErrors = {
     /**
+     * Problem
+     */
+    400: TenantCredentialMismatchProblem;
+    /**
+     * Problem
+     */
+    401: AuthenticationRequiredProblem | AuthenticationRevokedProblem | AuthenticationUnresolvedProblem;
+    /**
+     * Problem
+     */
+    403: RunnerRetiredProblem;
+    /**
+     * Problem
+     */
+    404: ChunkNotFoundProblem | NoRunContextProblem | TenantNotFoundProblem;
+    /**
      * Validation Error
      */
     422: HttpValidationError;
+    /**
+     * Problem
+     */
+    503: HubStoreUnavailableProblem;
 };
 
 export type GetGardenProposalsPageApiFleetChunksChunkIdGardenProposalsPageGetError = GetGardenProposalsPageApiFleetChunksChunkIdGardenProposalsPageGetErrors[keyof GetGardenProposalsPageApiFleetChunksChunkIdGardenProposalsPageGetErrors];
@@ -15207,9 +17502,33 @@ export type HubAdvanceApiFleetChunksChunkIdHubAdvancePostData = {
 
 export type HubAdvanceApiFleetChunksChunkIdHubAdvancePostErrors = {
     /**
+     * Problem
+     */
+    400: TenantCredentialMismatchProblem;
+    /**
+     * Problem
+     */
+    401: AuthenticationRequiredProblem | AuthenticationRevokedProblem | AuthenticationUnresolvedProblem;
+    /**
+     * Problem
+     */
+    403: RunnerRetiredProblem;
+    /**
+     * Problem
+     */
+    404: ChunkNotFoundProblem | TenantNotFoundProblem;
+    /**
      * Validation Error
      */
     422: HttpValidationError;
+    /**
+     * Problem
+     */
+    500: PinnedGraphMissingProblem;
+    /**
+     * Problem
+     */
+    503: HubStoreUnavailableProblem;
 };
 
 export type HubAdvanceApiFleetChunksChunkIdHubAdvancePostError = HubAdvanceApiFleetChunksChunkIdHubAdvancePostErrors[keyof HubAdvanceApiFleetChunksChunkIdHubAdvancePostErrors];
@@ -15237,9 +17556,33 @@ export type PauseChunkApiFleetChunksChunkIdPausePostData = {
 
 export type PauseChunkApiFleetChunksChunkIdPausePostErrors = {
     /**
+     * Problem
+     */
+    400: TenantCredentialMismatchProblem;
+    /**
+     * Problem
+     */
+    401: AuthenticationRequiredProblem | AuthenticationRevokedProblem | AuthenticationUnresolvedProblem;
+    /**
+     * Problem
+     */
+    403: RunnerRetiredProblem;
+    /**
+     * Problem
+     */
+    404: ChunkNotFoundProblem | TenantNotFoundProblem;
+    /**
+     * Problem
+     */
+    409: ChunkNotPausableProblem;
+    /**
      * Validation Error
      */
     422: HttpValidationError;
+    /**
+     * Problem
+     */
+    503: HubStoreUnavailableProblem;
 };
 
 export type PauseChunkApiFleetChunksChunkIdPausePostError = PauseChunkApiFleetChunksChunkIdPausePostErrors[keyof PauseChunkApiFleetChunksChunkIdPausePostErrors];
@@ -15267,9 +17610,29 @@ export type FleetGetPmItemsDeprecatedAliasApiFleetChunksChunkIdPmItemsGetData = 
 
 export type FleetGetPmItemsDeprecatedAliasApiFleetChunksChunkIdPmItemsGetErrors = {
     /**
+     * Problem
+     */
+    400: TenantCredentialMismatchProblem;
+    /**
+     * Problem
+     */
+    401: AuthenticationRequiredProblem | AuthenticationRevokedProblem | AuthenticationUnresolvedProblem;
+    /**
+     * Problem
+     */
+    403: RunnerRetiredProblem;
+    /**
+     * Problem
+     */
+    404: ChunkNotFoundProblem | TenantNotFoundProblem;
+    /**
      * Validation Error
      */
     422: HttpValidationError;
+    /**
+     * Problem
+     */
+    503: HubStoreUnavailableProblem;
 };
 
 export type FleetGetPmItemsDeprecatedAliasApiFleetChunksChunkIdPmItemsGetError = FleetGetPmItemsDeprecatedAliasApiFleetChunksChunkIdPmItemsGetErrors[keyof FleetGetPmItemsDeprecatedAliasApiFleetChunksChunkIdPmItemsGetErrors];
@@ -15297,13 +17660,33 @@ export type ReleaseChunkApiFleetChunksChunkIdReleasePostData = {
 
 export type ReleaseChunkApiFleetChunksChunkIdReleasePostErrors = {
     /**
-     * Conflict
+     * Problem
      */
-    409: ReleaseRefusal;
+    400: TenantCredentialMismatchProblem;
+    /**
+     * Problem
+     */
+    401: AuthenticationRequiredProblem | AuthenticationRevokedProblem | AuthenticationUnresolvedProblem;
+    /**
+     * Problem
+     */
+    403: RouteNotHeldProblem | RunnerRetiredProblem;
+    /**
+     * Problem
+     */
+    404: ChunkNotFoundProblem | TenantNotFoundProblem;
+    /**
+     * Problem
+     */
+    409: ReleaseProblem;
     /**
      * Validation Error
      */
     422: HttpValidationError;
+    /**
+     * Problem
+     */
+    503: HubStoreUnavailableProblem;
 };
 
 export type ReleaseChunkApiFleetChunksChunkIdReleasePostError = ReleaseChunkApiFleetChunksChunkIdReleasePostErrors[keyof ReleaseChunkApiFleetChunksChunkIdReleasePostErrors];
@@ -15331,9 +17714,29 @@ export type ResumeChunkApiFleetChunksChunkIdResumePostData = {
 
 export type ResumeChunkApiFleetChunksChunkIdResumePostErrors = {
     /**
+     * Problem
+     */
+    400: TenantCredentialMismatchProblem;
+    /**
+     * Problem
+     */
+    401: AuthenticationRequiredProblem | AuthenticationRevokedProblem | AuthenticationUnresolvedProblem;
+    /**
+     * Problem
+     */
+    403: RunnerRetiredProblem;
+    /**
+     * Problem
+     */
+    404: ChunkNotFoundProblem | TenantNotFoundProblem;
+    /**
      * Validation Error
      */
     422: HttpValidationError;
+    /**
+     * Problem
+     */
+    503: HubStoreUnavailableProblem;
 };
 
 export type ResumeChunkApiFleetChunksChunkIdResumePostError = ResumeChunkApiFleetChunksChunkIdResumePostErrors[keyof ResumeChunkApiFleetChunksChunkIdResumePostErrors];
@@ -15361,9 +17764,33 @@ export type RekeyRouteTokenApiFleetChunksChunkIdRouteTokenPostData = {
 
 export type RekeyRouteTokenApiFleetChunksChunkIdRouteTokenPostErrors = {
     /**
+     * Problem
+     */
+    400: TenantCredentialMismatchProblem;
+    /**
+     * Problem
+     */
+    401: AuthenticationRequiredProblem | AuthenticationRevokedProblem | AuthenticationUnresolvedProblem;
+    /**
+     * Problem
+     */
+    403: RouteNotHeldProblem | RunnerRetiredProblem;
+    /**
+     * Problem
+     */
+    404: RouteNotFoundProblem | TenantNotFoundProblem;
+    /**
+     * Problem
+     */
+    409: RouteTerminalProblem;
+    /**
      * Validation Error
      */
     422: HttpValidationError;
+    /**
+     * Problem
+     */
+    503: HubStoreUnavailableProblem;
 };
 
 export type RekeyRouteTokenApiFleetChunksChunkIdRouteTokenPostError = RekeyRouteTokenApiFleetChunksChunkIdRouteTokenPostErrors[keyof RekeyRouteTokenApiFleetChunksChunkIdRouteTokenPostErrors];
@@ -15400,9 +17827,29 @@ export type GetLeaseTranscriptSegmentsApiFleetChunksChunkIdTranscriptSegmentsGet
 
 export type GetLeaseTranscriptSegmentsApiFleetChunksChunkIdTranscriptSegmentsGetErrors = {
     /**
+     * Problem
+     */
+    400: TenantCredentialMismatchProblem;
+    /**
+     * Problem
+     */
+    401: AuthenticationRequiredProblem | AuthenticationRevokedProblem | AuthenticationUnresolvedProblem;
+    /**
+     * Problem
+     */
+    403: LeaseOwnershipProblem | RunnerRetiredProblem;
+    /**
+     * Problem
+     */
+    404: TenantNotFoundProblem;
+    /**
      * Validation Error
      */
     422: HttpValidationError;
+    /**
+     * Problem
+     */
+    503: HubStoreUnavailableProblem;
 };
 
 export type GetLeaseTranscriptSegmentsApiFleetChunksChunkIdTranscriptSegmentsGetError = GetLeaseTranscriptSegmentsApiFleetChunksChunkIdTranscriptSegmentsGetErrors[keyof GetLeaseTranscriptSegmentsApiFleetChunksChunkIdTranscriptSegmentsGetErrors];
@@ -15430,9 +17877,29 @@ export type GetWorkItemsApiFleetChunksChunkIdWorkItemsGetData = {
 
 export type GetWorkItemsApiFleetChunksChunkIdWorkItemsGetErrors = {
     /**
+     * Problem
+     */
+    400: TenantCredentialMismatchProblem;
+    /**
+     * Problem
+     */
+    401: AuthenticationRequiredProblem | AuthenticationRevokedProblem | AuthenticationUnresolvedProblem;
+    /**
+     * Problem
+     */
+    403: RunnerRetiredProblem;
+    /**
+     * Problem
+     */
+    404: ChunkNotFoundProblem | TenantNotFoundProblem;
+    /**
      * Validation Error
      */
     422: HttpValidationError;
+    /**
+     * Problem
+     */
+    503: HubStoreUnavailableProblem;
 };
 
 export type GetWorkItemsApiFleetChunksChunkIdWorkItemsGetError = GetWorkItemsApiFleetChunksChunkIdWorkItemsGetErrors[keyof GetWorkItemsApiFleetChunksChunkIdWorkItemsGetErrors];
@@ -15455,9 +17922,29 @@ export type IngestRunnerFactsApiFleetEventsPostData = {
 
 export type IngestRunnerFactsApiFleetEventsPostErrors = {
     /**
+     * Problem
+     */
+    400: TenantCredentialMismatchProblem;
+    /**
+     * Problem
+     */
+    401: AuthenticationRequiredProblem | AuthenticationRevokedProblem | AuthenticationUnresolvedProblem;
+    /**
+     * Problem
+     */
+    403: RunnerRetiredProblem;
+    /**
+     * Problem
+     */
+    404: TenantNotFoundProblem;
+    /**
      * Validation Error
      */
     422: HttpValidationError;
+    /**
+     * Problem
+     */
+    503: HubStoreUnavailableProblem;
 };
 
 export type IngestRunnerFactsApiFleetEventsPostError = IngestRunnerFactsApiFleetEventsPostErrors[keyof IngestRunnerFactsApiFleetEventsPostErrors];
@@ -15478,6 +17965,31 @@ export type GetHostRecordApiFleetHostGetData = {
     url: '/api/fleet/host';
 };
 
+export type GetHostRecordApiFleetHostGetErrors = {
+    /**
+     * Problem
+     */
+    400: TenantCredentialMismatchProblem;
+    /**
+     * Problem
+     */
+    401: AuthenticationRequiredProblem | AuthenticationRevokedProblem | AuthenticationUnresolvedProblem;
+    /**
+     * Problem
+     */
+    403: HostRetiredProblem;
+    /**
+     * Problem
+     */
+    404: TenantNotFoundProblem;
+    /**
+     * Problem
+     */
+    503: HubStoreUnavailableProblem;
+};
+
+export type GetHostRecordApiFleetHostGetError = GetHostRecordApiFleetHostGetErrors[keyof GetHostRecordApiFleetHostGetErrors];
+
 export type GetHostRecordApiFleetHostGetResponses = {
     /**
      * Successful Response
@@ -15496,9 +18008,29 @@ export type ReportHostApiFleetHostPostData = {
 
 export type ReportHostApiFleetHostPostErrors = {
     /**
+     * Problem
+     */
+    400: TenantCredentialMismatchProblem;
+    /**
+     * Problem
+     */
+    401: AuthenticationRequiredProblem | AuthenticationRevokedProblem | AuthenticationUnresolvedProblem;
+    /**
+     * Problem
+     */
+    403: HostRetiredProblem;
+    /**
+     * Problem
+     */
+    404: TenantNotFoundProblem;
+    /**
      * Validation Error
      */
     422: HttpValidationError;
+    /**
+     * Problem
+     */
+    503: HubStoreUnavailableProblem;
 };
 
 export type ReportHostApiFleetHostPostError = ReportHostApiFleetHostPostErrors[keyof ReportHostApiFleetHostPostErrors];
@@ -15521,9 +18053,29 @@ export type IngestHostFactsApiFleetHostEventsPostData = {
 
 export type IngestHostFactsApiFleetHostEventsPostErrors = {
     /**
+     * Problem
+     */
+    400: TenantCredentialMismatchProblem;
+    /**
+     * Problem
+     */
+    401: AuthenticationRequiredProblem | AuthenticationRevokedProblem | AuthenticationUnresolvedProblem;
+    /**
+     * Problem
+     */
+    403: HostRetiredProblem;
+    /**
+     * Problem
+     */
+    404: TenantNotFoundProblem;
+    /**
      * Validation Error
      */
     422: HttpValidationError;
+    /**
+     * Problem
+     */
+    503: HubStoreUnavailableProblem;
 };
 
 export type IngestHostFactsApiFleetHostEventsPostError = IngestHostFactsApiFleetHostEventsPostErrors[keyof IngestHostFactsApiFleetHostEventsPostErrors];
@@ -15546,9 +18098,29 @@ export type AddHostRunnerApiFleetHostRunnersPostData = {
 
 export type AddHostRunnerApiFleetHostRunnersPostErrors = {
     /**
+     * Problem
+     */
+    400: TenantCredentialMismatchProblem;
+    /**
+     * Problem
+     */
+    401: AuthenticationRequiredProblem | AuthenticationRevokedProblem | AuthenticationUnresolvedProblem;
+    /**
+     * Problem
+     */
+    403: HostRetiredProblem;
+    /**
+     * Problem
+     */
+    404: TenantNotFoundProblem;
+    /**
      * Validation Error
      */
     422: HttpValidationError;
+    /**
+     * Problem
+     */
+    503: HubStoreUnavailableProblem;
 };
 
 export type AddHostRunnerApiFleetHostRunnersPostError = AddHostRunnerApiFleetHostRunnersPostErrors[keyof AddHostRunnerApiFleetHostRunnersPostErrors];
@@ -15576,9 +18148,33 @@ export type RetireHostRunnerApiFleetHostRunnersRunnerIdRetirePostData = {
 
 export type RetireHostRunnerApiFleetHostRunnersRunnerIdRetirePostErrors = {
     /**
+     * Problem
+     */
+    400: TenantCredentialMismatchProblem;
+    /**
+     * Problem
+     */
+    401: AuthenticationRequiredProblem | AuthenticationRevokedProblem | AuthenticationUnresolvedProblem;
+    /**
+     * Problem
+     */
+    403: HostRetiredProblem;
+    /**
+     * Problem
+     */
+    404: RunnerNotFoundProblem | TenantNotFoundProblem;
+    /**
+     * Problem
+     */
+    409: RunnerHoldsRoutesProblem | RunnerLifecycleConflictProblem | RunnerRetireInterruptedProblem;
+    /**
      * Validation Error
      */
     422: HttpValidationError;
+    /**
+     * Problem
+     */
+    503: HubStoreUnavailableProblem;
 };
 
 export type RetireHostRunnerApiFleetHostRunnersRunnerIdRetirePostError = RetireHostRunnerApiFleetHostRunnersRunnerIdRetirePostErrors[keyof RetireHostRunnerApiFleetHostRunnersRunnerIdRetirePostErrors];
@@ -15601,9 +18197,13 @@ export type GetRunnerIdentityApiFleetIdentityGetData = {
 
 export type GetRunnerIdentityApiFleetIdentityGetErrors = {
     /**
-     * Unauthorized
+     * Problem
      */
-    401: RunnerIdentityRefusal;
+    401: RunnerIdentityProblem;
+    /**
+     * Problem
+     */
+    503: HubStoreUnavailableProblem;
 };
 
 export type GetRunnerIdentityApiFleetIdentityGetError = GetRunnerIdentityApiFleetIdentityGetErrors[keyof GetRunnerIdentityApiFleetIdentityGetErrors];
@@ -15631,9 +18231,29 @@ export type GetQuestionApiFleetQuestionsQuestionIdGetData = {
 
 export type GetQuestionApiFleetQuestionsQuestionIdGetErrors = {
     /**
+     * Problem
+     */
+    400: TenantCredentialMismatchProblem;
+    /**
+     * Problem
+     */
+    401: AuthenticationRequiredProblem | AuthenticationRevokedProblem | AuthenticationUnresolvedProblem;
+    /**
+     * Problem
+     */
+    403: RunnerRetiredProblem;
+    /**
+     * Problem
+     */
+    404: QuestionNotFoundProblem | TenantNotFoundProblem;
+    /**
      * Validation Error
      */
     422: HttpValidationError;
+    /**
+     * Problem
+     */
+    503: HubStoreUnavailableProblem;
 };
 
 export type GetQuestionApiFleetQuestionsQuestionIdGetError = GetQuestionApiFleetQuestionsQuestionIdGetErrors[keyof GetQuestionApiFleetQuestionsQuestionIdGetErrors];
@@ -15661,9 +18281,29 @@ export type PeekQueueApiFleetQueuePeekGetData = {
 
 export type PeekQueueApiFleetQueuePeekGetErrors = {
     /**
+     * Problem
+     */
+    400: TenantCredentialMismatchProblem;
+    /**
+     * Problem
+     */
+    401: AuthenticationRequiredProblem | AuthenticationRevokedProblem | AuthenticationUnresolvedProblem;
+    /**
+     * Problem
+     */
+    403: RunnerRetiredProblem;
+    /**
+     * Problem
+     */
+    404: TenantNotFoundProblem;
+    /**
      * Validation Error
      */
     422: HttpValidationError;
+    /**
+     * Problem
+     */
+    503: HubStoreUnavailableProblem;
 };
 
 export type PeekQueueApiFleetQueuePeekGetError = PeekQueueApiFleetQueuePeekGetErrors[keyof PeekQueueApiFleetQueuePeekGetErrors];
@@ -15686,9 +18326,29 @@ export type PeekMatchedQueueApiFleetQueuePeekPostData = {
 
 export type PeekMatchedQueueApiFleetQueuePeekPostErrors = {
     /**
+     * Problem
+     */
+    400: TenantCredentialMismatchProblem;
+    /**
+     * Problem
+     */
+    401: AuthenticationRequiredProblem | AuthenticationRevokedProblem | AuthenticationUnresolvedProblem;
+    /**
+     * Problem
+     */
+    403: RunnerRetiredProblem;
+    /**
+     * Problem
+     */
+    404: TenantNotFoundProblem;
+    /**
      * Validation Error
      */
     422: HttpValidationError;
+    /**
+     * Problem
+     */
+    503: HubStoreUnavailableProblem;
 };
 
 export type PeekMatchedQueueApiFleetQueuePeekPostError = PeekMatchedQueueApiFleetQueuePeekPostErrors[keyof PeekMatchedQueueApiFleetQueuePeekPostErrors];
@@ -15711,9 +18371,37 @@ export type ClaimRouteApiFleetRoutesPostData = {
 
 export type ClaimRouteApiFleetRoutesPostErrors = {
     /**
+     * Problem
+     */
+    400: TenantCredentialMismatchProblem;
+    /**
+     * Problem
+     */
+    401: AuthenticationRequiredProblem | AuthenticationRevokedProblem | AuthenticationUnresolvedProblem;
+    /**
+     * Problem
+     */
+    403: RouteClaimPausedProblem | ClaimRunnerRetiredProblem | ClaimRunnerUnregisteredProblem | ClaimRunnerVersionRefusedProblem;
+    /**
+     * Problem
+     */
+    404: ChunkNotFoundProblem | TenantNotFoundProblem;
+    /**
+     * Problem
+     */
+    409: RouteClaimTerminalProblem | RouteClaimNotReadyProblem | RouteClaimDependencyProblem | RouteClaimIncompatibleProblem | RouteClaimConflictProblem;
+    /**
      * Validation Error
      */
     422: HttpValidationError;
+    /**
+     * Problem
+     */
+    500: PinnedGraphMissingProblem;
+    /**
+     * Problem
+     */
+    503: HubStoreUnavailableProblem;
 };
 
 export type ClaimRouteApiFleetRoutesPostError = ClaimRouteApiFleetRoutesPostErrors[keyof ClaimRouteApiFleetRoutesPostErrors];
@@ -15736,13 +18424,33 @@ export type RegisterRunnerApiFleetRunnersPostData = {
 
 export type RegisterRunnerApiFleetRunnersPostErrors = {
     /**
-     * Conflict
+     * Problem
      */
-    409: RunnerVersionRefusal;
+    400: TenantCredentialMismatchProblem;
+    /**
+     * Problem
+     */
+    401: AuthenticationRequiredProblem | AuthenticationRevokedProblem | AuthenticationUnresolvedProblem;
+    /**
+     * Problem
+     */
+    403: RunnerRetiredProblem;
+    /**
+     * Problem
+     */
+    404: RunnerNotFoundProblem | TenantNotFoundProblem;
+    /**
+     * Problem
+     */
+    409: RunnerVersionProblem;
     /**
      * Validation Error
      */
     422: HttpValidationError;
+    /**
+     * Problem
+     */
+    503: HubStoreUnavailableProblem;
 };
 
 export type RegisterRunnerApiFleetRunnersPostError = RegisterRunnerApiFleetRunnersPostErrors[keyof RegisterRunnerApiFleetRunnersPostErrors];
@@ -15770,9 +18478,33 @@ export type GetRunnerApiFleetRunnersRunnerIdGetData = {
 
 export type GetRunnerApiFleetRunnersRunnerIdGetErrors = {
     /**
+     * Problem
+     */
+    400: TenantCredentialMismatchProblem;
+    /**
+     * Problem
+     */
+    401: AuthenticationRequiredProblem | AuthenticationRevokedProblem | AuthenticationUnresolvedProblem;
+    /**
+     * Problem
+     */
+    403: RunnerOwnershipProblem | RunnerRetiredProblem;
+    /**
+     * Problem
+     */
+    404: RunnerNotFoundProblem | TenantNotFoundProblem;
+    /**
+     * Problem
+     */
+    409: RunnerNotRegisteredProblem;
+    /**
      * Validation Error
      */
     422: HttpValidationError;
+    /**
+     * Problem
+     */
+    503: HubStoreUnavailableProblem;
 };
 
 export type GetRunnerApiFleetRunnersRunnerIdGetError = GetRunnerApiFleetRunnersRunnerIdGetErrors[keyof GetRunnerApiFleetRunnersRunnerIdGetErrors];
@@ -15800,9 +18532,29 @@ export type ListRunnerDecisionsApiFleetRunnersRunnerIdDecisionsGetData = {
 
 export type ListRunnerDecisionsApiFleetRunnersRunnerIdDecisionsGetErrors = {
     /**
+     * Problem
+     */
+    400: TenantCredentialMismatchProblem;
+    /**
+     * Problem
+     */
+    401: AuthenticationRequiredProblem | AuthenticationRevokedProblem | AuthenticationUnresolvedProblem;
+    /**
+     * Problem
+     */
+    403: RunnerOwnershipProblem | RunnerRetiredProblem;
+    /**
+     * Problem
+     */
+    404: TenantNotFoundProblem;
+    /**
      * Validation Error
      */
     422: HttpValidationError;
+    /**
+     * Problem
+     */
+    503: HubStoreUnavailableProblem;
 };
 
 export type ListRunnerDecisionsApiFleetRunnersRunnerIdDecisionsGetError = ListRunnerDecisionsApiFleetRunnersRunnerIdDecisionsGetErrors[keyof ListRunnerDecisionsApiFleetRunnersRunnerIdDecisionsGetErrors];
@@ -15830,9 +18582,29 @@ export type HeartbeatRunnerApiFleetRunnersRunnerIdHeartbeatsPostData = {
 
 export type HeartbeatRunnerApiFleetRunnersRunnerIdHeartbeatsPostErrors = {
     /**
+     * Problem
+     */
+    400: TenantCredentialMismatchProblem;
+    /**
+     * Problem
+     */
+    401: AuthenticationRequiredProblem | AuthenticationRevokedProblem | AuthenticationUnresolvedProblem;
+    /**
+     * Problem
+     */
+    403: RunnerOwnershipProblem | RunnerRetiredProblem;
+    /**
+     * Problem
+     */
+    404: RunnerNotFoundProblem | TenantNotFoundProblem;
+    /**
      * Validation Error
      */
     422: HttpValidationError;
+    /**
+     * Problem
+     */
+    503: HubStoreUnavailableProblem;
 };
 
 export type HeartbeatRunnerApiFleetRunnersRunnerIdHeartbeatsPostError = HeartbeatRunnerApiFleetRunnersRunnerIdHeartbeatsPostErrors[keyof HeartbeatRunnerApiFleetRunnersRunnerIdHeartbeatsPostErrors];
@@ -15860,9 +18632,29 @@ export type GetScopesApiFleetScopesGetData = {
 
 export type GetScopesApiFleetScopesGetErrors = {
     /**
+     * Problem
+     */
+    400: TenantCredentialMismatchProblem;
+    /**
+     * Problem
+     */
+    401: AuthenticationRequiredProblem | AuthenticationRevokedProblem | AuthenticationUnresolvedProblem;
+    /**
+     * Problem
+     */
+    403: RunnerRetiredProblem;
+    /**
+     * Problem
+     */
+    404: ChunkNotFoundProblem | TenantNotFoundProblem;
+    /**
      * Validation Error
      */
     422: HttpValidationError;
+    /**
+     * Problem
+     */
+    503: HubStoreUnavailableProblem;
 };
 
 export type GetScopesApiFleetScopesGetError = GetScopesApiFleetScopesGetErrors[keyof GetScopesApiFleetScopesGetErrors];
@@ -15885,6 +18677,31 @@ export type FleetSummaryApiFleetSummaryGetData = {
     url: '/api/fleet/summary';
 };
 
+export type FleetSummaryApiFleetSummaryGetErrors = {
+    /**
+     * Problem
+     */
+    400: TenantCredentialMismatchProblem;
+    /**
+     * Problem
+     */
+    401: AuthenticationRequiredProblem | AuthenticationRevokedProblem | AuthenticationUnresolvedProblem;
+    /**
+     * Problem
+     */
+    403: RunnerRetiredProblem;
+    /**
+     * Problem
+     */
+    404: TenantNotFoundProblem;
+    /**
+     * Problem
+     */
+    503: HubStoreUnavailableProblem;
+};
+
+export type FleetSummaryApiFleetSummaryGetError = FleetSummaryApiFleetSummaryGetErrors[keyof FleetSummaryApiFleetSummaryGetErrors];
+
 export type FleetSummaryApiFleetSummaryGetResponses = {
     /**
      * Successful Response
@@ -15900,6 +18717,31 @@ export type ListSystemArtifactsRouteApiFleetSystemArtifactsGetData = {
     query?: never;
     url: '/api/fleet/system-artifacts';
 };
+
+export type ListSystemArtifactsRouteApiFleetSystemArtifactsGetErrors = {
+    /**
+     * Problem
+     */
+    400: TenantCredentialMismatchProblem;
+    /**
+     * Problem
+     */
+    401: AuthenticationRequiredProblem | AuthenticationRevokedProblem | AuthenticationUnresolvedProblem;
+    /**
+     * Problem
+     */
+    403: RunnerRetiredProblem;
+    /**
+     * Problem
+     */
+    404: TenantNotFoundProblem;
+    /**
+     * Problem
+     */
+    503: HubStoreUnavailableProblem;
+};
+
+export type ListSystemArtifactsRouteApiFleetSystemArtifactsGetError = ListSystemArtifactsRouteApiFleetSystemArtifactsGetErrors[keyof ListSystemArtifactsRouteApiFleetSystemArtifactsGetErrors];
 
 export type ListSystemArtifactsRouteApiFleetSystemArtifactsGetResponses = {
     /**
@@ -15926,9 +18768,29 @@ export type GetSystemArtifactRouteApiFleetSystemArtifactsNameGetData = {
 
 export type GetSystemArtifactRouteApiFleetSystemArtifactsNameGetErrors = {
     /**
+     * Problem
+     */
+    400: TenantCredentialMismatchProblem;
+    /**
+     * Problem
+     */
+    401: AuthenticationRequiredProblem | AuthenticationRevokedProblem | AuthenticationUnresolvedProblem;
+    /**
+     * Problem
+     */
+    403: RunnerRetiredProblem;
+    /**
+     * Problem
+     */
+    404: SystemArtifactNotFoundProblem | TenantNotFoundProblem;
+    /**
      * Validation Error
      */
     422: HttpValidationError;
+    /**
+     * Problem
+     */
+    503: HubStoreUnavailableProblem;
 };
 
 export type GetSystemArtifactRouteApiFleetSystemArtifactsNameGetError = GetSystemArtifactRouteApiFleetSystemArtifactsNameGetErrors[keyof GetSystemArtifactRouteApiFleetSystemArtifactsNameGetErrors];
@@ -15951,9 +18813,29 @@ export type IngestTranscriptSegmentsApiFleetTranscriptsPostData = {
 
 export type IngestTranscriptSegmentsApiFleetTranscriptsPostErrors = {
     /**
+     * Problem
+     */
+    400: TenantCredentialMismatchProblem;
+    /**
+     * Problem
+     */
+    401: AuthenticationRequiredProblem | AuthenticationRevokedProblem | AuthenticationUnresolvedProblem;
+    /**
+     * Problem
+     */
+    403: RunnerRetiredProblem;
+    /**
+     * Problem
+     */
+    404: TenantNotFoundProblem;
+    /**
      * Validation Error
      */
     422: HttpValidationError;
+    /**
+     * Problem
+     */
+    503: HubStoreUnavailableProblem;
 };
 
 export type IngestTranscriptSegmentsApiFleetTranscriptsPostError = IngestTranscriptSegmentsApiFleetTranscriptsPostErrors[keyof IngestTranscriptSegmentsApiFleetTranscriptsPostErrors];
@@ -16788,9 +19670,33 @@ export type AddHostApiHostsPostData = {
 
 export type AddHostApiHostsPostErrors = {
     /**
+     * Problem
+     */
+    400: TenantCredentialMismatchProblem;
+    /**
+     * Problem
+     */
+    401: AuthenticationRequiredProblem;
+    /**
+     * Problem
+     */
+    403: MachineCredentialForbiddenProblem | RunnerCredentialForbiddenProblem | PermissionRequiredProblem;
+    /**
+     * Problem
+     */
+    404: RunnerNotFoundProblem | TenantNotFoundProblem;
+    /**
+     * Problem
+     */
+    409: HostNameTakenProblem | RunnerAlreadyHostedProblem | RunnerRetiredProblem | RunnerLifecycleConflictProblem | TenantRequiredProblem;
+    /**
      * Validation Error
      */
     422: HttpValidationError;
+    /**
+     * Problem
+     */
+    503: HubStoreUnavailableProblem;
 };
 
 export type AddHostApiHostsPostError = AddHostApiHostsPostErrors[keyof AddHostApiHostsPostErrors];
@@ -17061,6 +19967,19 @@ export type MeApiMeGetData = {
     query?: never;
     url: '/api/me';
 };
+
+export type MeApiMeGetErrors = {
+    /**
+     * Problem
+     */
+    401: AuthenticationRequiredProblem;
+    /**
+     * Problem
+     */
+    503: HubStoreUnavailableProblem;
+};
+
+export type MeApiMeGetError = MeApiMeGetErrors[keyof MeApiMeGetErrors];
 
 export type MeApiMeGetResponses = {
     /**

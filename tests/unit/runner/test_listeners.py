@@ -28,6 +28,7 @@ def _close(sockets: list[socket.socket], config: RunnerConfig) -> None:
     Uds(config.socket_path).unlink()
 
 
+@pytest.mark.usefixtures("short_host_sockets")
 def test_binds_both_a_socket_and_a_tcp_port(tmp_path: Path) -> None:
     """One app, two doors: the CLI's socket and the browser's TCP port."""
     config = _config(tmp_path)
@@ -40,6 +41,7 @@ def test_binds_both_a_socket_and_a_tcp_port(tmp_path: Path) -> None:
         _close(sockets, config)
 
 
+@pytest.mark.usefixtures("short_host_sockets")
 def test_socket_is_owner_only(tmp_path: Path) -> None:
     """The access control is the filesystem, so 0600 is the control, not decoration:
     uvicorn's own uds branch would chmod this 0666, and binding it ourselves is what
@@ -54,6 +56,7 @@ def test_socket_is_owner_only(tmp_path: Path) -> None:
         _close(sockets, config)
 
 
+@pytest.mark.usefixtures("short_host_sockets")
 def test_a_stale_socket_from_a_crash_does_not_block_startup(tmp_path: Path) -> None:
     """`kill -9` leaves the file behind; the next start must not be wedged by a corpse."""
     config = _config(tmp_path)
@@ -66,6 +69,7 @@ def test_a_stale_socket_from_a_crash_does_not_block_startup(tmp_path: Path) -> N
         _close(sockets, config)
 
 
+@pytest.mark.usefixtures("short_host_sockets")
 def test_refuses_to_start_beside_a_live_daemon(tmp_path: Path) -> None:
     """A socket someone is actually serving is not a corpse — the store is single-writer."""
     config = _config(tmp_path)
@@ -77,6 +81,7 @@ def test_refuses_to_start_beside_a_live_daemon(tmp_path: Path) -> None:
         _close(first, config)
 
 
+@pytest.mark.usefixtures("short_host_sockets")
 def test_a_tcp_clash_strands_no_socket_file(tmp_path: Path) -> None:
     """Startup fails as a unit: a half-bound daemon would leave a corpse that lies."""
     held = socket.socket(socket.AF_INET, socket.SOCK_STREAM)

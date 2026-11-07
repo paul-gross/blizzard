@@ -139,6 +139,7 @@ def test_a_reader_never_observes_a_partial_listening_file(tmp_path: Path) -> Non
     assert sorted(path.name for path in tmp_path.iterdir()) == ["daemon.url"]
 
 
+@pytest.mark.usefixtures("short_host_sockets")
 def test_a_host_composed_on_a_bound_port_zero_derives_every_runner_url_from_the_bound_port(tmp_path: Path) -> None:
     config = RunnerConfig(
         root=tmp_path,

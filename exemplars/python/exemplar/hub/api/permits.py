@@ -8,7 +8,8 @@ from __future__ import annotations
 
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, Query, status
+from fastapi import APIRouter, Depends, Query, Request, status
+from fastapi.responses import JSONResponse
 
 from blizzard.foundation.store.utc import iso_utc
 from blizzard.hub.api.auth import reject_runner_principal
@@ -21,7 +22,7 @@ from blizzard.hub.auth.permissions import Permission
 from blizzard.hub.domain.kernel.pagination import DEFAULT_LIMIT, MAX_LIMIT, MalformedCursor
 from exemplar.hub.api.deps import Services
 from exemplar.hub.api.permit_params import PathPermit
-from exemplar.hub.api.refusals import conflict, unprocessable
+from exemplar.hub.api.refusals import already_requested, conflict, unprocessable
 from exemplar.hub.composition import TenantServices
 from exemplar.hub.domain.permits.model import (
     Permit,
@@ -31,7 +32,13 @@ from exemplar.hub.domain.permits.model import (
     PermitVerbRefused,
     RevocationNoteRequired,
 )
-from exemplar.wire.permit import PermitCreateRequest, PermitListResponse, PermitRevokeRequest, PermitView
+from exemplar.wire.permit import (
+    PermitAlreadyRequestedProblem,
+    PermitCreateRequest,
+    PermitListResponse,
+    PermitRevokeRequest,
+    PermitView,
+)
 
 router = APIRouter(
     prefix="/api", tags=["permits"], dependencies=[Depends(reject_runner_principal), Depends(tenant_bound)]
@@ -61,8 +68,17 @@ def _labelled(services: TenantServices, permit: Permit) -> PermitView:
     return permit_view(permit, ProjectLabels.read(services, [permit.project_id]).fields(permit.project_id))
 
 
-@router.post("/permits", response_model=PermitView, status_code=status.HTTP_201_CREATED)
-def request_permit(request: PermitCreateRequest, services: Services, identity: Editor) -> PermitView:
+@router.post(
+    "/permits",
+    response_model=PermitView,
+    status_code=status.HTTP_201_CREATED,
+    responses={
+        status.HTTP_409_CONFLICT: {"model": PermitAlreadyRequestedProblem, "content": {"application/problem+json": {}}}
+    },
+)
+def request_permit(
+    request: PermitCreateRequest, services: Services, identity: Editor, http: Request
+) -> PermitView | JSONResponse:
     """Request a permit for ``holder`` in the project named, or the tenant's only one: 201, 409 when the project already
     holds one for the holder and capability, 422 on a project the tenant does not hold or one left open
     (``project_required``)."""
@@ -72,7 +88,7 @@ def request_permit(request: PermitCreateRequest, services: Services, identity: E
             project=project, holder=request.holder, capability=request.capability, by=identity.user_id
         )
     except PermitAlreadyRequested as exc:
-        raise conflict(str(exc)) from exc
+        return already_requested(exc, http)
     return permit_view(permit, ProjectLabels.of_project(project).fields(permit.project_id))
 
 

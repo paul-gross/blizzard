@@ -83,6 +83,17 @@ def test_init_naming_a_tenant_it_may_not_enter_stops_listing_the_ones_it_may(
     assert "  ten_alpha  alpha" in result.output
 
 
+def test_init_reports_an_unknown_adopted_runner(tmp_path: Path, fake_init_hub: FakeInitHub) -> None:
+    fake_init_hub.admin.host_refusal = HostAddRefused(
+        "POST /api/hosts -> 404", reason=HostAddRefusalReason.RUNNER_NOT_FOUND, detail="unknown runner rn_missing"
+    )
+    result = _init(fake_init_hub, tmp_path / "runner")
+    assert result.exit_code != 0
+    assert "unknown runner rn_missing" in result.output
+    assert "exists in the selected tenant" in result.output
+    assert "predates hosts" not in result.output
+
+
 def test_init_whose_held_token_serves_another_tenant_stops_naming_both_and_keeps_everything(
     tmp_path: Path, fake_init_hub: FakeInitHub
 ) -> None:

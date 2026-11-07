@@ -28,7 +28,7 @@ export interface HubOperations {
   'GET /api/analytics/spend/models': { path: T.SpendByModelApiAnalyticsSpendModelsGetData['path']; responses: T.SpendByModelApiAnalyticsSpendModelsGetResponses; errors: T.SpendByModelApiAnalyticsSpendModelsGetErrors };
   'GET /api/analytics/spend/nodes': { path: T.SpendByNodeApiAnalyticsSpendNodesGetData['path']; responses: T.SpendByNodeApiAnalyticsSpendNodesGetResponses; errors: T.SpendByNodeApiAnalyticsSpendNodesGetErrors };
   'GET /api/auth/authorize': { path: T.AuthorizeApiAuthAuthorizeGetData['path']; responses: T.AuthorizeApiAuthAuthorizeGetResponses; errors: T.AuthorizeApiAuthAuthorizeGetErrors };
-  'GET /api/auth/jwks.json': { path: T.JwksApiAuthJwksJsonGetData['path']; responses: T.JwksApiAuthJwksJsonGetResponses; errors: {} };
+  'GET /api/auth/jwks.json': { path: T.JwksApiAuthJwksJsonGetData['path']; responses: T.JwksApiAuthJwksJsonGetResponses; errors: T.JwksApiAuthJwksJsonGetErrors };
   'GET /api/auth/providers': { path: T.ListProvidersApiAuthProvidersGetData['path']; responses: T.ListProvidersApiAuthProvidersGetResponses; errors: {} };
   'GET /api/auth/{name}/authorize': { path: T.AuthorizeApiAuthNameAuthorizeGetData['path']; responses: T.AuthorizeApiAuthNameAuthorizeGetResponses; errors: T.AuthorizeApiAuthNameAuthorizeGetErrors };
   'GET /api/auth/{name}/callback': { path: T.CallbackApiAuthNameCallbackGetData['path']; responses: T.CallbackApiAuthNameCallbackGetResponses; errors: T.CallbackApiAuthNameCallbackGetErrors };
@@ -74,15 +74,15 @@ export interface HubOperations {
   'GET /api/fleet/chunks/{chunk_id}/pm-items': { path: T.FleetGetPmItemsDeprecatedAliasApiFleetChunksChunkIdPmItemsGetData['path']; responses: T.FleetGetPmItemsDeprecatedAliasApiFleetChunksChunkIdPmItemsGetResponses; errors: T.FleetGetPmItemsDeprecatedAliasApiFleetChunksChunkIdPmItemsGetErrors };
   'GET /api/fleet/chunks/{chunk_id}/transcript-segments': { path: T.GetLeaseTranscriptSegmentsApiFleetChunksChunkIdTranscriptSegmentsGetData['path']; responses: T.GetLeaseTranscriptSegmentsApiFleetChunksChunkIdTranscriptSegmentsGetResponses; errors: T.GetLeaseTranscriptSegmentsApiFleetChunksChunkIdTranscriptSegmentsGetErrors };
   'GET /api/fleet/chunks/{chunk_id}/work-items': { path: T.GetWorkItemsApiFleetChunksChunkIdWorkItemsGetData['path']; responses: T.GetWorkItemsApiFleetChunksChunkIdWorkItemsGetResponses; errors: T.GetWorkItemsApiFleetChunksChunkIdWorkItemsGetErrors };
-  'GET /api/fleet/host': { path: T.GetHostRecordApiFleetHostGetData['path']; responses: T.GetHostRecordApiFleetHostGetResponses; errors: {} };
+  'GET /api/fleet/host': { path: T.GetHostRecordApiFleetHostGetData['path']; responses: T.GetHostRecordApiFleetHostGetResponses; errors: T.GetHostRecordApiFleetHostGetErrors };
   'GET /api/fleet/identity': { path: T.GetRunnerIdentityApiFleetIdentityGetData['path']; responses: T.GetRunnerIdentityApiFleetIdentityGetResponses; errors: T.GetRunnerIdentityApiFleetIdentityGetErrors };
   'GET /api/fleet/questions/{question_id}': { path: T.GetQuestionApiFleetQuestionsQuestionIdGetData['path']; responses: T.GetQuestionApiFleetQuestionsQuestionIdGetResponses; errors: T.GetQuestionApiFleetQuestionsQuestionIdGetErrors };
   'GET /api/fleet/queue/peek': { path: T.PeekQueueApiFleetQueuePeekGetData['path']; responses: T.PeekQueueApiFleetQueuePeekGetResponses; errors: T.PeekQueueApiFleetQueuePeekGetErrors };
   'GET /api/fleet/runners/{runner_id}': { path: T.GetRunnerApiFleetRunnersRunnerIdGetData['path']; responses: T.GetRunnerApiFleetRunnersRunnerIdGetResponses; errors: T.GetRunnerApiFleetRunnersRunnerIdGetErrors };
   'GET /api/fleet/runners/{runner_id}/decisions': { path: T.ListRunnerDecisionsApiFleetRunnersRunnerIdDecisionsGetData['path']; responses: T.ListRunnerDecisionsApiFleetRunnersRunnerIdDecisionsGetResponses; errors: T.ListRunnerDecisionsApiFleetRunnersRunnerIdDecisionsGetErrors };
   'GET /api/fleet/scopes': { path: T.GetScopesApiFleetScopesGetData['path']; responses: T.GetScopesApiFleetScopesGetResponses; errors: T.GetScopesApiFleetScopesGetErrors };
-  'GET /api/fleet/summary': { path: T.FleetSummaryApiFleetSummaryGetData['path']; responses: T.FleetSummaryApiFleetSummaryGetResponses; errors: {} };
-  'GET /api/fleet/system-artifacts': { path: T.ListSystemArtifactsRouteApiFleetSystemArtifactsGetData['path']; responses: T.ListSystemArtifactsRouteApiFleetSystemArtifactsGetResponses; errors: {} };
+  'GET /api/fleet/summary': { path: T.FleetSummaryApiFleetSummaryGetData['path']; responses: T.FleetSummaryApiFleetSummaryGetResponses; errors: T.FleetSummaryApiFleetSummaryGetErrors };
+  'GET /api/fleet/system-artifacts': { path: T.ListSystemArtifactsRouteApiFleetSystemArtifactsGetData['path']; responses: T.ListSystemArtifactsRouteApiFleetSystemArtifactsGetResponses; errors: T.ListSystemArtifactsRouteApiFleetSystemArtifactsGetErrors };
   'GET /api/fleet/system-artifacts/{name}': { path: T.GetSystemArtifactRouteApiFleetSystemArtifactsNameGetData['path']; responses: T.GetSystemArtifactRouteApiFleetSystemArtifactsNameGetResponses; errors: T.GetSystemArtifactRouteApiFleetSystemArtifactsNameGetErrors };
   'GET /api/flows': { path: T.ListFlowsApiFlowsGetData['path']; responses: T.ListFlowsApiFlowsGetResponses; errors: T.ListFlowsApiFlowsGetErrors };
   'GET /api/flows/{flow_id}': { path: T.GetFlowApiFlowsFlowIdGetData['path']; responses: T.GetFlowApiFlowsFlowIdGetResponses; errors: T.GetFlowApiFlowsFlowIdGetErrors };
@@ -97,7 +97,7 @@ export interface HubOperations {
   'GET /api/hosts': { path: T.ListHostsApiHostsGetData['path']; responses: T.ListHostsApiHostsGetResponses; errors: T.ListHostsApiHostsGetErrors };
   'GET /api/hosts/{host_id}': { path: T.GetHostApiHostsHostIdGetData['path']; responses: T.GetHostApiHostsHostIdGetResponses; errors: T.GetHostApiHostsHostIdGetErrors };
   'GET /api/invitations': { path: T.ListInvitationsApiInvitationsGetData['path']; responses: T.ListInvitationsApiInvitationsGetResponses; errors: {} };
-  'GET /api/me': { path: T.MeApiMeGetData['path']; responses: T.MeApiMeGetResponses; errors: {} };
+  'GET /api/me': { path: T.MeApiMeGetData['path']; responses: T.MeApiMeGetResponses; errors: T.MeApiMeGetErrors };
   'GET /api/members': { path: T.ListMembersApiMembersGetData['path']; responses: T.ListMembersApiMembersGetResponses; errors: {} };
   'GET /api/projects': { path: T.ListProjectsApiProjectsGetData['path']; responses: T.ListProjectsApiProjectsGetResponses; errors: {} };
   'GET /api/projects/{project}': { path: T.GetProjectApiProjectsProjectGetData['path']; responses: T.GetProjectApiProjectsProjectGetResponses; errors: T.GetProjectApiProjectsProjectGetErrors };

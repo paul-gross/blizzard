@@ -14,6 +14,7 @@ from blizzard.runner.transcripts.internal import http_archived_transcript_reposi
 from blizzard.runner.transcripts.internal.http_archived_transcript_repository import (
     HttpArchivedTranscriptRepository,
 )
+from blizzard.wire import problem
 
 
 def _repo(handler: Callable[[httpx2.Request], httpx2.Response]) -> HttpArchivedTranscriptRepository:
@@ -218,6 +219,26 @@ def test_401_and_403_are_refused_not_unreachable(status: int) -> None:
 
     result = _repo(handler).read_turns(chunk_id="ch_1", node_id="nd_build", epoch=1)
     assert result.status == "refused"
+
+
+@pytest.mark.parametrize(
+    ("status", "kind", "expected"),
+    [
+        (401, problem.AUTHENTICATION_REQUIRED, "refused"),
+        (401, problem.AUTHENTICATION_REVOKED, "refused"),
+        (401, problem.AUTHENTICATION_UNRESOLVED, "refused"),
+        (403, problem.LEASE_OWNERSHIP, "refused"),
+        (403, problem.RUNNER_RETIRED, "refused"),
+        (401, problem.LEASE_OWNERSHIP, "unreachable"),
+        (403, problem.AUTHENTICATION_REQUIRED, "unreachable"),
+        (403, "unknown", "unreachable"),
+        (401, None, "unreachable"),
+        (403, [], "unreachable"),
+    ],
+)
+def test_typed_refusals_are_classified_by_type_and_status(status: int, kind: object, expected: str) -> None:
+    repo = _repo(lambda request: httpx2.Response(status, json={"type": kind, "detail": "no"}))
+    assert repo.read_turns(chunk_id="ch_1", node_id="nd_build", epoch=1).status == expected
 
 
 def test_a_transport_failure_is_unreachable_not_raised() -> None:

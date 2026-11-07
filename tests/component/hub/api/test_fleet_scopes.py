@@ -16,6 +16,20 @@ def test_empty_scope_registry_is_an_empty_list(tmp_path: Path) -> None:
     assert resp.json() == []
 
 
+def test_unknown_chunk_answers_a_problem_without_query_in_instance(tmp_path: Path) -> None:
+    hub = build_hub(tmp_path)
+    resp = hub.client.get("/api/fleet/scopes", params={"chunk_id": "chk_missing"})
+    assert resp.status_code == 404
+    assert resp.headers["content-type"] == "application/problem+json"
+    assert resp.json() == {
+        "type": "urn:blizzard:problem:chunk-not-found",
+        "title": "Chunk not found",
+        "detail": "unknown chunk chk_missing",
+        "instance": "/api/fleet/scopes",
+        "status": 404,
+    }
+
+
 def test_lists_every_scope_marked_retired_or_not(tmp_path: Path) -> None:
     hub = build_hub(tmp_path)
     hub.client.post("/api/scopes", json={"slug": "blizzard", "description": "the platform"})

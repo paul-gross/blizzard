@@ -145,6 +145,16 @@ jobs:
         env:
           RESULT: ${{ needs.python-tests.result }}
         run: test "$RESULT" = success || { echo "::error::a pytest shard finished '$RESULT'"; exit 1; }
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@v6
+        with:
+          enable-cache: true
+          python-version: "3.12"
+      - run: uv sync
+      - name: runner refusal aggregate coverage census
+        run: uv run python -m tests.support.aggregate_census
 
   # Playwright runs TypeScript without checking its types, so the gate does: tsc, eslint (with the bans a service
   # spec keeps), and a regenerate-and-diff of the committed wire types (bzh:generated-client). Starts no daemon and

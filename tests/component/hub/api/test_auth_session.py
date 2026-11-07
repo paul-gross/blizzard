@@ -55,6 +55,11 @@ def test_no_session_is_401_on_the_me_route(tmp_path: Path) -> None:
     hub = build_hub(tmp_path, auth_mode="oauth")
     resp = hub.client.get("/api/me")
     assert resp.status_code == 401
+    assert resp.headers["content-type"] == "application/problem+json"
+    assert resp.json()["type"] == "urn:blizzard:problem:authentication-required"
+    assert resp.json()["detail"] == "not authenticated"
+    assert resp.json()["instance"] == "/api/me"
+    assert "www-authenticate" not in resp.headers
 
 
 # --- pending: only /api/me (and the not-yet-landed login/logout surface) ------

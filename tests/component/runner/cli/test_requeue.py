@@ -10,6 +10,8 @@ from __future__ import annotations
 from datetime import UTC, datetime
 from pathlib import Path
 
+import pytest
+
 from blizzard.runner.cli import runner as runner_group
 from blizzard.runner.harness.identity import CLAUDE_CODE_HARNESS_ID, SessionReference
 from blizzard.runner.leases.model import NewLease
@@ -17,6 +19,8 @@ from tests.support.runner_cli_home import init_runner_home, registered_store, se
 from tests.support.runner_fakes import SqlAlchemyRunnerStore
 from tests.support.runner_mint import new_mint
 from tests.support.worker_http import bind_local_only
+
+pytestmark = pytest.mark.usefixtures("short_host_sockets")
 
 _NOW = datetime(2026, 7, 17, 12, 0, 0, tzinfo=UTC)
 

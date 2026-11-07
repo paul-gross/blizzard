@@ -19,7 +19,9 @@ from pathlib import Path
 import pytest
 from click.testing import CliRunner
 
+from blizzard.cli.collaborators import Client
 from blizzard.cli.main import blizzard
+from blizzard.runner.cli.daemon import Door
 from blizzard.runner.config_table import ConfigError
 from blizzard.runner.host_layout import HostLayout, HostLock
 from blizzard.runner.runtime import migration_runner
@@ -178,7 +180,10 @@ def test_migrate_upgrades_a_store_a_configured_db_url_names_in_place_leaving_the
         assert conn.execute("SELECT version_num FROM alembic_version").fetchone() is not None
 
 
-def test_migrate_and_check_refuse_a_configured_store_a_pre_host_daemon_still_serves(tmp_path: Path) -> None:
+@pytest.mark.usefixtures("short_host_sockets")
+def test_migrate_and_check_refuse_a_configured_store_a_pre_host_daemon_still_serves(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     """A copy whose host file keeps a ``db_url`` naming the live ``<dir>/data/runner.db`` would migrate the live store
     under its running daemon: the daemon answers on that directory's ``runner.sock``, which both verbs probe."""
     root = _pre_host(tmp_path)
@@ -191,6 +196,14 @@ def test_migrate_and_check_refuse_a_configured_store_a_pre_host_daemon_still_ser
     before = named.read_bytes()
 
     server = _answering(live)
+    socket_path = HostLayout(live).legacy_socket_path
+    (live / "runner.sock").symlink_to(socket_path)
+    uds_client = Door.uds_client
+
+    def reach_short_socket(door: Door, sock: Path) -> Client:
+        return uds_client(door, socket_path if sock == live / "runner.sock" else sock)
+
+    monkeypatch.setattr(Door, "uds_client", reach_short_socket)
     try:
         migrated = CliRunner().invoke(blizzard, ["runner", "migrate", "--dir", str(root)])
         checked = CliRunner().invoke(blizzard, ["runner", "host", "--check", "--dir", str(root)])
@@ -280,6 +293,7 @@ def test_every_verb_that_moves_the_store_refuses_while_a_pre_host_daemon_answers
     assert (_tree(adopted), _tree(root)) == before
 
 
+@pytest.mark.usefixtures("short_host_sockets")
 def test_a_plain_upgrade_of_an_existing_store_refuses_a_pre_host_daemon_and_nothing_else(tmp_path: Path) -> None:
     root = _host(tmp_path)
     layout = HostLayout(root)
@@ -298,6 +312,7 @@ def test_a_plain_upgrade_of_an_existing_store_refuses_a_pre_host_daemon_and_noth
     assert "runner daemon is serving" in result.output
 
 
+@pytest.mark.usefixtures("short_host_sockets")
 def test_host_refuses_to_start_while_the_directory_is_held_or_a_pre_host_daemon_answers(tmp_path: Path) -> None:
     root = _host(tmp_path)
 

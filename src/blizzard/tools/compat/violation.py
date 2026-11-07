@@ -19,6 +19,7 @@ class Violation:
     where: str
     reason: str
     deprecated: bool = False
+    component_where: str | None = None
 
     def __str__(self) -> str:
         return f"{self.where}: {self.reason}"

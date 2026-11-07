@@ -9,6 +9,7 @@ from __future__ import annotations
 
 from collections.abc import Collection, Iterable, Mapping, Sequence
 from dataclasses import dataclass
+from functools import partial
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
@@ -17,11 +18,12 @@ from fastapi.responses import JSONResponse
 from blizzard.foundation.chunk_status import ChunkStatus
 from blizzard.foundation.queue_policy import QueueMatchPolicy
 from blizzard.foundation.roles import dto
-from blizzard.hub.api import chunk_events
+from blizzard.hub.api import chunk_events, problems
 from blizzard.hub.api.auth import reject_runner_principal
 from blizzard.hub.api.auth_session import require, tenant_bound
 from blizzard.hub.api.chunk_views import blocked_view
 from blizzard.hub.api.deps import Services
+from blizzard.hub.api.problem_exceptions import ProblemHTTPException
 from blizzard.hub.api.project_label_fields import project_label_fields
 from blizzard.hub.api.project_params import QueryProject
 from blizzard.hub.auth.permissions import Permission
@@ -308,7 +310,7 @@ def get_queue(
     try:
         page = services.queue.page(QueueList.READY, statuses=statuses, cursor=cursor, limit=limit, project=project)
     except MalformedCursor as exc:
-        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail="malformed cursor") from exc
+        raise ProblemHTTPException(partial(problems.malformed_cursor_problem, exc)) from exc
     return _page_view(
         page,
         _blocked_markings(services, statuses, [entry.chunk.chunk_id for entry in page.entries]),
@@ -398,7 +400,7 @@ def get_backlog(
     try:
         page = services.queue.page(QueueList.NOT_READY, statuses=statuses, cursor=cursor, limit=limit, project=project)
     except MalformedCursor as exc:
-        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail="malformed cursor") from exc
+        raise ProblemHTTPException(partial(problems.malformed_cursor_problem, exc)) from exc
     return _backlog_page_view(
         page,
         _blocked_markings(services, statuses, [entry.chunk.chunk_id for entry in page.entries]),

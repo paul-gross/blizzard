@@ -16,10 +16,11 @@ from datetime import timedelta
 from urllib.parse import quote
 
 from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
-from fastapi.responses import HTMLResponse, RedirectResponse
+from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 from pydantic import BaseModel
 
 from blizzard.foundation.roles import dto
+from blizzard.hub.api import problems
 from blizzard.hub.api.auth import (
     HostSigningIn,
     RunnerSigningIn,
@@ -29,6 +30,7 @@ from blizzard.hub.api.auth import (
 )
 from blizzard.hub.api.auth_session import require_hub, resolve_identity
 from blizzard.hub.api.hub_level import hub_services
+from blizzard.hub.api.problem_rendering import problem_response
 from blizzard.hub.auth.permissions import Permission
 from blizzard.hub.auth.service import CLI_CLIENT_ID
 from blizzard.hub.auth.signing import SigningKeyService
@@ -195,47 +197,43 @@ def authorize(
     response_mode: str = "form_post",
     code_challenge: str | None = None,
     code_challenge_method: str | None = None,
-) -> HTMLResponse | RedirectResponse:
-    surface = IdpSurface.of(request)
+) -> HTMLResponse | RedirectResponse | JSONResponse:
+    try:
+        surface = IdpSurface.of(request)
+    except HTTPException:
+        return problem_response(problems.idp_disabled_problem(instance=request.url.path))
     if response_mode not in _RESPONSE_MODES:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=f"unknown response_mode {response_mode!r}")
+        return problem_response(problems.federation_response_mode_problem(response_mode, instance=request.url.path))
     services = surface.services
-    signing = surface.signing
+    signing = services.signing
+    if signing is None:
+        return problem_response(problems.idp_disabled_problem(instance=request.url.path))
 
     is_cli = client == CLI_CLIENT_ID
     federation_client: FederationClient | None = None
     if is_cli:
         if not CliRedirect(redirect_uri).valid:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="client=cli's redirect_uri must be the registered ephemeral loopback form",
-            )
+            return problem_response(problems.cli_redirect_refused_problem(instance=request.url.path))
         if not code_challenge or code_challenge_method not in (None, "S256"):
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="client=cli requires a PKCE code_challenge (S256) — PKCE is mandatory for this public client",
-            )
+            return problem_response(problems.cli_pkce_required_problem(instance=request.url.path))
     else:
         # One undifferentiated 400 for an unknown client and an unregistered redirect URI, so a caller cannot
         # fingerprint client ids by probing.
         # A runner id and a host id are both hub-minted, so the client alone settles which it names.
         resolved = runner_signing_in(services, client) or host_signing_in(services, client)
         if resolved is None:
-            raise _unknown_client()
+            return _unknown_client(request)
         federation_client = _federation_client(resolved)
         try:
             federation_client.admit(redirect_uri)
         except UnknownFederationClient:
-            raise _unknown_client() from None
+            return _unknown_client(request)
 
     identity = resolve_identity(request, services)
     if identity is None:
         providers = services.oauth_providers.list()
         if not providers:
-            raise HTTPException(
-                status_code=status.HTTP_501_NOT_IMPLEMENTED,
-                detail="no hub session, and no configured providers to authenticate against",
-            )
+            return problem_response(problems.federation_no_provider_problem(instance=request.url.path))
         return_to = request.url.path
         if request.url.query:
             return_to = f"{return_to}?{request.url.query}"
@@ -261,7 +259,7 @@ def authorize(
     try:
         role = federation_client.federate(redirect_uri, role=role)
     except UnknownFederationClient:
-        raise _unknown_client() from None
+        return _unknown_client(request)
     email = user.email if user is not None else None
     claims: dict[str, object] = {
         "sub": identity.user_id,
@@ -285,15 +283,22 @@ def _federation_client(signing_in: RunnerSigningIn | HostSigningIn) -> Federatio
     return FederationClient(signing_in.tenant, signing_in.host)
 
 
-def _unknown_client() -> HTTPException:
+def _unknown_client(request: Request) -> JSONResponse:
     """The one answer for every runner or host client a sign-in cannot reach: unknown, an unregistered
     redirect URI, or a runner in a tenant the person holds no membership in."""
-    return HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="unknown client or unregistered redirect_uri")
+    return problem_response(problems.federation_client_refused_problem(instance=request.url.path))
 
 
-@router.get("/jwks.json")
-def jwks(request: Request) -> dict[str, object]:
-    return IdpSurface.of(request).signing.public_jwks()
+@router.get("/jwks.json", response_model=dict[str, object])
+def jwks(request: Request) -> dict[str, object] | JSONResponse:
+    try:
+        surface = IdpSurface.of(request)
+    except HTTPException:
+        return problem_response(problems.idp_disabled_problem(instance=request.url.path))
+    signing = surface.services.signing
+    if signing is None:
+        return problem_response(problems.idp_disabled_problem(instance=request.url.path))
+    return signing.public_jwks()
 
 
 class CliTokenRequest(BaseModel):
@@ -311,18 +316,19 @@ class CliTokenResponse(BaseModel):
 
 
 @router.post("/cli/token", response_model=CliTokenResponse)
-def cli_token(request: Request, body: CliTokenRequest) -> CliTokenResponse:
+def cli_token(request: Request, body: CliTokenRequest) -> CliTokenResponse | JSONResponse:
     """Redeem a ``client=cli`` authorize code for a hub session token.
 
     Public plane — there is no session yet; this route is what mints one. One
     undifferentiated 400 covers every failure, telling a caller nothing about which."""
-    services = IdpSurface.of(request).services
+    try:
+        surface = IdpSurface.of(request)
+    except HTTPException:
+        return problem_response(problems.idp_disabled_problem(instance=request.url.path))
+    services = surface.services
     token = services.auth.exchange_cli_code(body.code, code_verifier=body.code_verifier, redirect_uri=body.redirect_uri)
     if token is None:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="invalid or expired code, PKCE verifier, or redirect_uri",
-        )
+        return problem_response(problems.cli_token_refused_problem(instance=request.url.path))
     return CliTokenResponse(token=token)
 
 

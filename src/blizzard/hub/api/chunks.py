@@ -9,6 +9,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import datetime
+from functools import partial
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
@@ -17,7 +18,7 @@ from pydantic import BaseModel
 
 from blizzard.foundation.chunk_status import TERMINAL_STATUSES, ChunkDeleteRefusal, ChunkStatus
 from blizzard.foundation.store.utc import as_utc
-from blizzard.hub.api import chunk_events
+from blizzard.hub.api import chunk_events, problems
 from blizzard.hub.api.auth import reject_runner_principal
 from blizzard.hub.api.auth_session import require, tenant_bound
 from blizzard.hub.api.board_window import BOARD_DONE_WINDOW
@@ -27,6 +28,7 @@ from blizzard.hub.api.delivery_declarations import delivery_declarations_for
 from blizzard.hub.api.deps import Services
 from blizzard.hub.api.flow_places import chunk_flow_places
 from blizzard.hub.api.graph_names import GraphNames, graph_by_ref
+from blizzard.hub.api.problem_exceptions import ProblemHTTPException
 from blizzard.hub.api.project_label_fields import project_label_fields
 from blizzard.hub.api.project_params import QueryProject, body_project, project_of_call, project_ref
 from blizzard.hub.api.work_item_reads import read_chunk_work_items
@@ -246,7 +248,7 @@ def list_chunks(
             cursor=cursor, limit=limit, done_since=done_since, done_kept=done_floor, project=project
         )
     except MalformedCursor as exc:
-        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail="malformed cursor") from exc
+        raise ProblemHTTPException(partial(problems.malformed_cursor_problem, exc)) from exc
     facts = services.chunks.facts.load_facts_for([c.chunk_id for c in page.chunks])
     if done_since is not None:
         # The store's exclusion leaves a same-instant movement tie in; the derivation settles it. A floor
@@ -480,7 +482,7 @@ def close_diagnostic(
 ) -> CloseDiagnostic:
     """Page close evidence independently in durable write order; never return failure details."""
     if services.chunks.record.get(chunk_id) is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"unknown chunk {chunk_id}")
+        raise ProblemHTTPException(partial(problems.chunk_not_found_problem, chunk_id))
     delivery = services.chunks.delivery
     intents = delivery.close_intents(chunk_id, after=intent_cursor, limit=limit + 1)
     closures = delivery.close_closures(chunk_id, after=closure_cursor, limit=limit + 1)
@@ -513,7 +515,7 @@ def landing_facts(
 ) -> LandingFactsPage:
     """Page durable repository landings in write order."""
     if services.chunks.record.get(chunk_id) is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"unknown chunk {chunk_id}")
+        raise ProblemHTTPException(partial(problems.chunk_not_found_problem, chunk_id))
     facts = services.chunks.delivery.landing_facts(chunk_id, after=cursor, limit=limit + 1)
     page = facts[:limit]
     return LandingFactsPage(
@@ -530,7 +532,7 @@ def get_chunk(chunk_id: str, services: Services) -> ChunkDetail:
     """One chunk aggregate in full — derived status, current node, route."""
     chunk = services.chunks.record.get(chunk_id)
     if chunk is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"unknown chunk {chunk_id}")
+        raise ProblemHTTPException(partial(problems.chunk_not_found_problem, chunk_id))
     facts = services.chunks.facts.load_facts(chunk_id) or ChunkFacts(minted=True)
     blocked, neighborhood, refusal = _dependency_views_for_chunk(services, chunk_id, facts=facts)
     # Primed with every graph id this chunk's history ever names.
@@ -574,14 +576,14 @@ def requeue_chunk(
     optional body's note."""
     chunk = services.chunks.record.get(chunk_id)
     if chunk is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"unknown chunk {chunk_id}")
+        raise ProblemHTTPException(partial(problems.chunk_not_found_problem, chunk_id))
     change = chunk_events.ChunkChanged.before(services, chunk_id)
     try:
         requeue_id = services.requeue.requeue(
             chunk, by=identity.username, note=request.note if request is not None else None
         )
     except ChunkNotFound as exc:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
+        raise ProblemHTTPException(partial(problems.chunk_disappeared_problem, exc)) from exc
     except NotEscalated as exc:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
     facts = change.publish(cause="requeued", key=f"requeues:{requeue_id}")
@@ -603,10 +605,10 @@ def restart_chunk(chunk_id: str, request: ChunkRestartRequest, services: Service
     moved. 409 refuses a terminal chunk, an unmatched name, or its own pin; 404 an unknown target."""
     chunk = services.chunks.record.get(chunk_id)
     if chunk is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"unknown chunk {chunk_id}")
+        raise ProblemHTTPException(partial(problems.chunk_not_found_problem, chunk_id))
     graph = services.graphs.get(chunk.graph_id)
     if graph is None:
-        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="chunk's pinned graph is missing")
+        raise ProblemHTTPException(problems.pinned_graph_missing_problem)
     to_graph = graph_by_ref(services.graphs, request.to_graph) if request.to_graph is not None else None
     change = chunk_events.ChunkChanged.before(services, chunk_id)
     try:
@@ -614,7 +616,7 @@ def restart_chunk(chunk_id: str, request: ChunkRestartRequest, services: Service
             chunk, graph, node_name=request.node, by=request.by, to_graph=to_graph, note=request.note
         )
     except ChunkNotFound as exc:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
+        raise ProblemHTTPException(partial(problems.chunk_disappeared_problem, exc)) from exc
     except (
         ChunkNotRestartable,
         RestartCurrentNodeUnknown,
@@ -641,7 +643,7 @@ def detach_chunk(chunk_id: str, services: Services) -> ChunkSummary:
     """Forcibly release a chunk from its runner without touching any escalation."""
     chunk = services.chunks.record.get(chunk_id)
     if chunk is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"unknown chunk {chunk_id}")
+        raise ProblemHTTPException(partial(problems.chunk_not_found_problem, chunk_id))
     change = chunk_events.ChunkChanged.before(services, chunk_id)
     try:
         released_id = services.detach.detach(chunk)
@@ -662,14 +664,14 @@ def pause_chunk(chunk_id: str, request: ChunkPauseRequest, services: Services) -
     """Set a chunk's operator pause brake — the claim is kept, unlike detach."""
     chunk = services.chunks.record.get(chunk_id)
     if chunk is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"unknown chunk {chunk_id}")
+        raise ProblemHTTPException(partial(problems.chunk_not_found_problem, chunk_id))
     change = chunk_events.ChunkChanged.before(services, chunk_id)
     try:
         pause_fact_id = services.pause.pause(chunk, by=request.by)
     except ChunkNotFound as exc:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
+        raise ProblemHTTPException(partial(problems.chunk_disappeared_problem, exc)) from exc
     except ChunkNotPausable as exc:
-        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
+        raise ProblemHTTPException(partial(problems.chunk_not_pausable_problem, exc)) from exc
     facts = change.publish(cause="paused", key=f"chunk_pause_facts:{pause_fact_id}")
     services.events.publish_queue_changed()  # a pause moves the chunk out of the ready queue
     return ChunkView.of(services, chunk, facts=facts).summary()
@@ -685,7 +687,7 @@ def resume_chunk(chunk_id: str, request: ChunkPauseRequest, services: Services) 
     """Clear a chunk's operator pause brake — idempotent, never refused."""
     chunk = services.chunks.record.get(chunk_id)
     if chunk is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"unknown chunk {chunk_id}")
+        raise ProblemHTTPException(partial(problems.chunk_not_found_problem, chunk_id))
     change = chunk_events.ChunkChanged.before(services, chunk_id)
     pause_fact_id = services.pause.resume(chunk, by=request.by)
     facts = change.publish(cause="resumed", key=f"chunk_pause_facts:{pause_fact_id}")
@@ -707,12 +709,12 @@ def stop_chunk(chunk_id: str, request: ChunkStopRequest, services: Services) -> 
     when the chunk is already ``done`` or ``stopped`` — stopping is not retroactive."""
     chunk = services.chunks.record.get(chunk_id)
     if chunk is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"unknown chunk {chunk_id}")
+        raise ProblemHTTPException(partial(problems.chunk_not_found_problem, chunk_id))
     change = chunk_events.ChunkChanged.before(services, chunk_id)
     try:
         stopped = services.stop.stop(chunk, by=request.by)
     except ChunkNotFound as exc:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
+        raise ProblemHTTPException(partial(problems.chunk_disappeared_problem, exc)) from exc
     except ChunkNotStoppable as exc:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
     facts = change.publish(cause="stopped", key=f"chunk_stopped:{stopped.fact_id}")
@@ -735,12 +737,12 @@ def complete_chunk(chunk_id: str, request: ChunkCompleteRequest, services: Servi
     unknown."""
     chunk = services.chunks.record.get(chunk_id)
     if chunk is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"unknown chunk {chunk_id}")
+        raise ProblemHTTPException(partial(problems.chunk_not_found_problem, chunk_id))
     change = chunk_events.ChunkChanged.before(services, chunk_id)
     try:
         completed = services.complete.complete(chunk, by=request.by)
     except ChunkNotFound as exc:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
+        raise ProblemHTTPException(partial(problems.chunk_disappeared_problem, exc)) from exc
     key = f"chunk_completed:{completed.fact_id}" if completed is not None else None
     facts = change.publish(cause="completed", key=key)
     if completed is not None:
@@ -775,12 +777,12 @@ def promote_chunk(chunk_id: str, services: Services, request: ChunkPlacementRequ
     placement = _placement_of(request)
     chunk = services.chunks.record.get(chunk_id)
     if chunk is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"unknown chunk {chunk_id}")
+        raise ProblemHTTPException(partial(problems.chunk_not_found_problem, chunk_id))
     change = chunk_events.ChunkChanged.before(services, chunk_id)
     try:
         promoted_id = services.promote.promote(chunk, placement=placement)
     except ChunkNotFound as exc:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
+        raise ProblemHTTPException(partial(problems.chunk_disappeared_problem, exc)) from exc
     except (ChunkNotPromotable, NotInList) as exc:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
     except SelfAnchoredMove as exc:
@@ -807,12 +809,12 @@ def demote_chunk(chunk_id: str, services: Services, request: ChunkPlacementReque
     placement = _placement_of(request)
     chunk = services.chunks.record.get(chunk_id)
     if chunk is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"unknown chunk {chunk_id}")
+        raise ProblemHTTPException(partial(problems.chunk_not_found_problem, chunk_id))
     change = chunk_events.ChunkChanged.before(services, chunk_id)
     try:
         demoted_id = services.demote.demote(chunk, placement=placement)
     except ChunkNotFound as exc:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
+        raise ProblemHTTPException(partial(problems.chunk_disappeared_problem, exc)) from exc
     except (ChunkNotDemotable, NotInList) as exc:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
     except SelfAnchoredMove as exc:
@@ -836,12 +838,12 @@ def patch_chunk(chunk_id: str, request: ChunkPatchRequest, services: Services) -
     refused edit."""
     chunk = services.chunks.record.get(chunk_id)
     if chunk is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"unknown chunk {chunk_id}")
+        raise ProblemHTTPException(partial(problems.chunk_not_found_problem, chunk_id))
     change = chunk_events.ChunkChanged.before(services, chunk_id)
     try:
         ChunkPatchBody(request, services).apply(chunk)
     except ChunkNotFound as exc:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
+        raise ProblemHTTPException(partial(problems.chunk_disappeared_problem, exc)) from exc
     except (
         ChunkNotEditable,
         ChunkAlreadyMoved,
@@ -881,12 +883,12 @@ def delete_chunk(chunk_id: str, request: ChunkDeleteRequest, services: Services)
     Irreversible: CHUNK is gone from every read the instant this returns."""
     chunk = services.chunks.record.get(chunk_id)
     if chunk is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"unknown chunk {chunk_id}")
+        raise ProblemHTTPException(partial(problems.chunk_not_found_problem, chunk_id))
     change = chunk_events.ChunkChanged.before(services, chunk_id)
     try:
         deleted_id = services.delete.delete(chunk, by=request.by)
     except ChunkNotFound as exc:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
+        raise ProblemHTTPException(partial(problems.chunk_disappeared_problem, exc)) from exc
     except ChunkNotDeletable as exc:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
     except ChunkHasDependents as exc:
@@ -907,7 +909,7 @@ def get_work_items(chunk_id: str, services: Services) -> WorkItemsView:
     failing the whole read; a chunk with no pointers reads as an empty list, not a 404."""
     entries = read_chunk_work_items([chunk_id], services, include_comments=True)
     if chunk_id not in entries:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"unknown chunk {chunk_id}")
+        raise ProblemHTTPException(partial(problems.chunk_not_found_problem, chunk_id))
     return WorkItemsView(items=entries[chunk_id])
 
 

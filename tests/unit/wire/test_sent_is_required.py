@@ -15,6 +15,7 @@ from blizzard.cli.config_inputs import packaged_flag_registry
 from blizzard.hub.app import create_app_for_export as build_hub_app
 from blizzard.runner.app import create_app_for_export as build_runner_app
 from blizzard.wire.base import WireModel
+from blizzard.wire.problem import CommonProblemMembers
 from blizzard.wire.sse import SseFramePayload
 from blizzard.wire.sse_runner import RunnerScopedPayload
 
@@ -24,7 +25,7 @@ _REF_PREFIX = "#/components/schemas/"
 _FRAMEWORK_SCHEMAS = frozenset({"HTTPValidationError", "ValidationError"})
 
 
-def _subclasses(cls: type[object]) -> Iterator[type[object]]:
+def _subclasses[T](cls: type[T]) -> Iterator[type[T]]:
     for sub in cls.__subclasses__():
         yield sub
         yield from _subclasses(sub)
@@ -121,6 +122,13 @@ def _sse_payloads() -> set[str]:
     return {cls.__name__ for cls in (*_subclasses(SseFramePayload), SseFramePayload, RunnerScopedPayload)}
 
 
+def _optional_properties(schema_name: str, schema: dict[str, Any], partial_status: set[str]) -> set[str]:
+    optional = set(schema.get("properties", {})) - set(schema.get("required", []))
+    if schema_name in partial_status:
+        optional.discard("status")
+    return optional
+
+
 def _apps() -> list[tuple[str, FastAPI]]:
     registry = packaged_flag_registry()
     return [("hub", build_hub_app(registry)), ("runner", build_runner_app(registry))]
@@ -138,15 +146,26 @@ def test_a_response_only_schema_lists_every_property_as_required(name: str, app:
     spec = app.openapi()
     schemas = spec["components"]["schemas"]
     exempt = _exclude_flagged(app, spec) | _sse_payloads() | _FRAMEWORK_SCHEMAS | _request_reached_anywhere()
+    partial_status = {
+        cls.__name__
+        for cls in _subclasses(CommonProblemMembers)
+        if (field := cls.model_fields.get("status")) is not None and field.annotation == int | None
+    }
 
     optional = {
-        schema_name: sorted(set(schema["properties"]) - set(schema.get("required", [])))
+        schema_name: sorted(missing)
         for schema_name, schema in schemas.items()
         if schema_name not in exempt and schema.get("type") == "object" and schema.get("properties")
-        if set(schema["properties"]) - set(schema.get("required", []))
+        if (missing := _optional_properties(schema_name, schema, partial_status))
     }
 
     assert not optional, f"{name}: response-only schemas with optional properties; subclass WireModel: {optional}"
+
+
+def test_optional_problem_status_exemption_does_not_hide_other_optional_fields() -> None:
+    schema: dict[str, Any] = {"properties": {"status": {}, "detail": {}}, "required": []}
+    assert _optional_properties("ExampleProblem", schema, {"ExampleProblem"}) == {"detail"}
+    assert _optional_properties("Other", schema, {"ExampleProblem"}) == {"status", "detail"}
 
 
 @pytest.mark.parametrize(("name", "app"), _apps(), ids=lambda value: value if isinstance(value, str) else "")

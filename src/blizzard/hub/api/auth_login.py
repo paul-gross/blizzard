@@ -17,17 +17,21 @@ reach these to log in at all. Under ``auth.mode = "none"`` every route here is i
 from __future__ import annotations
 
 from dataclasses import dataclass
+from functools import partial
 from urllib.parse import urlencode
 
-from fastapi import APIRouter, HTTPException, Request, Response, status
-from fastapi.responses import JSONResponse, RedirectResponse
+from fastapi import APIRouter, Request, Response, status
+from fastapi.responses import RedirectResponse
 from pydantic import BaseModel
 
 from blizzard.foundation.origin import Origin
 from blizzard.foundation.return_to import ReturnTo
 from blizzard.foundation.sign_in_refusal import SignInRefusal
+from blizzard.hub.api import problems
 from blizzard.hub.api.auth_session import SESSION_COOKIE_NAME, PresentedSession
 from blizzard.hub.api.hub_level import hub_services
+from blizzard.hub.api.problem_exceptions import ProblemHTTPException
+from blizzard.hub.api.problem_rendering import problem_response
 from blizzard.hub.auth.facts import AuthFactsService
 from blizzard.hub.auth.invitations import InvitationToken
 from blizzard.hub.auth.oauth.provider import IOAuthProvider, OAuthExchangeError
@@ -37,7 +41,6 @@ from blizzard.hub.config import AUTH_MODE_NONE
 
 router = APIRouter(prefix="/api/auth", tags=["auth"])
 
-_THROTTLE_DETAIL = "too many login attempts — try again shortly"
 
 #: The board route a sign-in that accepted an invitation lands on, its ``tenant`` naming the invited tenant.
 INVITATION_LANDING = "/invite/accepted"
@@ -62,17 +65,15 @@ class LoginRefusal:
     facts: AuthFactsService
     actor: str
     subject: str
+    instance: str
 
     def login_failed(self, detail: str) -> Response:
         self.facts.login_failed(actor=self.actor, subject=self.subject, detail=detail)
-        return self._response("login_failed")
+        return problem_response(problems.login_failed_problem(instance=self.instance))
 
     def sso_refused(self, detail: str) -> Response:
         self.facts.sso_refused(actor=self.actor, subject=self.subject, detail=detail)
-        return self._response("sso_refused")
-
-    def _response(self, error: str) -> Response:
-        return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST, content={"error": error})
+        return problem_response(problems.sso_refused_problem(instance=self.instance))
 
 
 @dataclass(frozen=True)
@@ -101,12 +102,14 @@ class ProviderLogin:
 
     @property
     def refusal(self) -> LoginRefusal:
-        return LoginRefusal(self.services.auth_facts, actor=self.origin.ip, subject=self.name)
+        return LoginRefusal(
+            self.services.auth_facts, actor=self.origin.ip, subject=self.name, instance=self.request.url.path
+        )
 
     def assert_not_throttled(self) -> None:
         throttle = self.services.auth_throttle
         if throttle is not None and not throttle.allow(self.origin.ip):
-            raise HTTPException(status_code=status.HTTP_429_TOO_MANY_REQUESTS, detail=_THROTTLE_DETAIL)
+            raise ProblemHTTPException(problems.login_throttled_problem)
 
 
 @router.get("/providers", response_model=list[ProviderSummary])
@@ -122,12 +125,12 @@ def list_providers(request: Request) -> list[ProviderSummary]:
 @router.get("/{name}/authorize")
 def authorize(name: str, request: Request, return_to: str | None = None, invite: str | None = None) -> RedirectResponse:
     if request.app.state.config.auth.mode == AUTH_MODE_NONE:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="login is not enabled")
+        raise ProblemHTTPException(problems.login_disabled_problem)
     login = ProviderLogin.of(request, name)
     login.assert_not_throttled()
     provider = login.provider
     if provider is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"unknown provider {name!r}")
+        raise ProblemHTTPException(partial(problems.login_provider_unknown_problem, name))
     state = login.services.auth.start_state(
         kind=PROVIDER_LOGIN_STATE_KIND,
         provider_name=name,
@@ -140,7 +143,7 @@ def authorize(name: str, request: Request, return_to: str | None = None, invite:
 @router.get("/{name}/callback")
 def callback(name: str, request: Request, code: str | None = None, state: str | None = None) -> Response:
     if request.app.state.config.auth.mode == AUTH_MODE_NONE:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="login is not enabled")
+        raise ProblemHTTPException(problems.login_disabled_problem)
     login = ProviderLogin.of(request, name)
     login.assert_not_throttled()
     refusal = login.refusal

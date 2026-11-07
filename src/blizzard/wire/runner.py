@@ -4,7 +4,7 @@ and the runner, registry, binding, capability, and subscription-usage views."""
 from __future__ import annotations
 
 from datetime import datetime
-from typing import Annotated
+from typing import Annotated, Literal
 
 from pydantic import BaseModel, Field, StringConstraints
 
@@ -15,6 +15,7 @@ from blizzard.foundation.runner_version import RunnerVersionStanding, VersionRef
 from blizzard.foundation.subscription_miss import SampleMissReason
 from blizzard.foundation.unrecognized import Unrecognized
 from blizzard.wire.base import WireModel
+from blizzard.wire.problem import ProblemDetails
 from blizzard.wire.vocabulary import OPEN
 
 
@@ -163,6 +164,46 @@ class RunnerVersionRefusal(WireModel):
     detail: str
 
 
+class RunnerVersionProblem(RunnerVersionRefusal, ProblemDetails[Literal["urn:blizzard:problem:runner-version"]]):
+    """The version window refusing a runner, in the problem representation."""
+
+
+class UnknownServedProjectProblem(ProblemDetails[Literal["urn:blizzard:problem:unknown-served-project"]]):
+    """A runner's declared project does not exist in the tenant."""
+
+
+class RunnerNotFoundProblem(ProblemDetails[Literal["urn:blizzard:problem:runner-not-found"]]):
+    """The named runner is not available to the caller."""
+
+
+class RunnerNotRegisteredProblem(ProblemDetails[Literal["urn:blizzard:problem:runner-not-registered"]]):
+    """The runner has never registered."""
+
+
+class RunnerRetiredProblem(ProblemDetails[Literal["urn:blizzard:problem:runner-retired"]]):
+    """A retired runner cannot perform this operation."""
+
+
+class RunnerOwnershipProblem(ProblemDetails[Literal["urn:blizzard:problem:runner-ownership"]]):
+    """The named runner differs from the calling runner."""
+
+
+class RunnerAlreadyHostedProblem(ProblemDetails[Literal["urn:blizzard:problem:runner-already-hosted"]]):
+    """A runner to adopt already stands under a host."""
+
+
+class RunnerLifecycleConflictProblem(ProblemDetails[Literal["urn:blizzard:problem:runner-lifecycle-conflict"]]):
+    """The runner's lifecycle changed during the operation."""
+
+
+class RunnerHoldsRoutesProblem(ProblemDetails[Literal["urn:blizzard:problem:runner-holds-routes"]]):
+    """A non-forced retirement cannot proceed while the runner holds routes."""
+
+
+class RunnerRetireInterruptedProblem(ProblemDetails[Literal["urn:blizzard:problem:runner-retire-interrupted"]]):
+    """A runner retirement was interrupted after committing part of its work."""
+
+
 class RunnerRegistrationResponse(WireModel):
     """The registered runner's hub-minted id and current name, whether this call was its first
     registration since it was added, and the tenant it serves, by its current name."""
@@ -251,6 +292,13 @@ class RunnerIdentityRefusal(WireModel):
 
     reason: Annotated[RunnerTokenRefusalReason | Unrecognized, OPEN]
     runner_id: str | None = None
+
+
+class RunnerIdentityProblem(RunnerIdentityRefusal, ProblemDetails[Literal["urn:blizzard:problem:runner-identity"]]):
+    """An identity refusal retaining its released discriminator and runner id."""
+
+    reason: Annotated[RunnerTokenRefusalReason | Unrecognized, OPEN] = Field(deprecated=True)
+    runner_id: str | None = Field(default=None, deprecated=True)
 
 
 class ExternalSubscriptionUsageWindowView(BaseModel):

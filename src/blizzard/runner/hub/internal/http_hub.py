@@ -18,7 +18,7 @@ from http import HTTPStatus
 from typing import Any
 
 import httpx2
-from pydantic import BaseModel, TypeAdapter
+from pydantic import BaseModel, TypeAdapter, ValidationError
 
 from blizzard import __version__
 from blizzard.foundation.logging import get_logger
@@ -92,6 +92,7 @@ from blizzard.runner.hub.served_projects import ServedProject
 from blizzard.runner.node_steps.chunk_state import ChunkGate, ChunkPause, ChunkSpend, ChunkState
 from blizzard.runner.node_steps.envelope import Envelope
 from blizzard.runner.node_steps.submissions import ApplyReply, Completion, GateSubmission
+from blizzard.wire import problem
 from blizzard.wire.chunk import ChunkStatusView, HubAdvanceResponse
 from blizzard.wire.envelope import ApplyResponse, NodeEnvelope
 from blizzard.wire.facts import HostFactAck, RunnerFactAck
@@ -174,9 +175,69 @@ type _Refusal = Callable[[str, httpx2.Response], HubClientError | None]
 _RELEASE_REFUSALS = frozenset({HTTPStatus.CONFLICT, HTTPStatus.FORBIDDEN, HTTPStatus.NOT_FOUND})
 
 
+type _ClaimOutcome = Callable[[Any], RouteClaimOutcome]
+
+
+def _claim_terminal(body: Any) -> RouteClaimOutcome:
+    return RouteClaimOutcome(denied_terminal=_terminal(RouteClaimTerminalDenial.model_validate(body)))
+
+
+def _claim_dependency(body: Any) -> RouteClaimOutcome:
+    return RouteClaimOutcome(denied_dependency=_dependency(RouteClaimDependencyDenial.model_validate(body)))
+
+
+def _claim_incompatible(body: Any) -> RouteClaimOutcome:
+    return RouteClaimOutcome(denied_incompatible=_incompatible(RouteClaimIncompatibleDenial.model_validate(body)))
+
+
+def _claim_conflict(body: Any) -> RouteClaimOutcome:
+    return RouteClaimOutcome(conflict=_conflict(RouteClaimConflict.model_validate(body)))
+
+
+def _claim_paused(body: Any) -> RouteClaimOutcome:
+    return RouteClaimOutcome(denied_paused=_paused(RouteClaimPausedDenial.model_validate(body)))
+
+
+_CLAIM_REFUSALS: dict[tuple[int, str], _ClaimOutcome] = {
+    (HTTPStatus.CONFLICT, problem.CLAIM_TERMINAL): _claim_terminal,
+    (HTTPStatus.CONFLICT, problem.CLAIM_NOT_READY): _claim_terminal,
+    (HTTPStatus.CONFLICT, problem.CLAIM_DEPENDENCY): _claim_dependency,
+    (HTTPStatus.CONFLICT, problem.CLAIM_INCOMPATIBLE): _claim_incompatible,
+    (HTTPStatus.CONFLICT, problem.CLAIM_CONFLICT): _claim_conflict,
+    (HTTPStatus.FORBIDDEN, problem.CLAIM_PAUSED): _claim_paused,
+    (HTTPStatus.FORBIDDEN, problem.CLAIM_RUNNER_RETIRED): _claim_paused,
+    (HTTPStatus.FORBIDDEN, problem.CLAIM_RUNNER_UNREGISTERED): _claim_paused,
+    (HTTPStatus.FORBIDDEN, problem.CLAIM_RUNNER_VERSION_REFUSED): _claim_paused,
+}
+
+#: A typeless 409 from an older hub, told apart by the field it carries; none of them is a race loss.
+_LEGACY_CLAIM_CONFLICTS: tuple[tuple[str, _ClaimOutcome], ...] = (
+    ("status", _claim_terminal),
+    ("prerequisite_chunk_id", _claim_dependency),
+    ("incompatible_runner_id", _claim_incompatible),
+)
+
+
+def _claim_refusal(status: int, body: dict[str, Any]) -> _ClaimOutcome | None:
+    """The outcome a refused claim decodes to, or ``None`` for an unrecognized problem type."""
+    present, kind = problem.type_of(body)
+    if present:
+        return _CLAIM_REFUSALS.get((status, kind)) if isinstance(kind, str) else None
+    if status == HTTPStatus.FORBIDDEN:
+        return _claim_paused
+    return next((outcome for field, outcome in _LEGACY_CLAIM_CONFLICTS if field in body), _claim_conflict)
+
+
 def _retire_held(operation: str, resp: httpx2.Response) -> HubClientError | None:
-    """A retire under the host refused while the runner still holds chunks (409)."""
+    """A retire under the host refused with a runner retirement conflict (409)."""
     if resp.status_code != HTTPStatus.CONFLICT:
+        return None
+    present, kind = _problem_type(resp)
+    if present and kind not in (
+        problem.RUNNER_HOLDS_ROUTES,
+        problem.RUNNER_LIFECYCLE_CONFLICT,
+        problem.RUNNER_RETIRE_INTERRUPTED,
+    ):
         return None
     return HostRunnerRetireRefused(f"{operation} -> {resp.status_code}", detail=_detail(resp))
 
@@ -184,6 +245,8 @@ def _retire_held(operation: str, resp: httpx2.Response) -> HubClientError | None
 def _no_such_project(operation: str, resp: httpx2.Response) -> HubClientError | None:
     """An add under the host refused for a named project the tenant does not hold (422 with the hub's text)."""
     if resp.status_code != HTTPStatus.UNPROCESSABLE_ENTITY or not _text_detail(resp):
+        return None
+    if not _type_matches(resp, problem.UNKNOWN_SERVED_PROJECT):
         return None
     return RunnerAddRefused(
         f"{operation} -> {resp.status_code}", reason=RunnerAddRefusalReason.NO_SUCH_PROJECT, detail=_detail(resp)
@@ -247,21 +310,17 @@ class HttpHubClient:
             resp = self._client.post(f"{_FLEET_API}/routes", json=body)
         except httpx2.HTTPError as exc:
             raise self._wrap(exc, "POST /fleet/routes") from exc
-        if resp.status_code == HTTPStatus.CONFLICT:
-            body = resp.json()
-            # Four distinct 409 shapes share the status code — race loss, terminal,
-            # dependency, and incompatibility denials — told apart by which field is in body.
-            if "status" in body:
-                return RouteClaimOutcome(denied_terminal=_terminal(RouteClaimTerminalDenial.model_validate(body)))
-            if "prerequisite_chunk_id" in body:
-                return RouteClaimOutcome(denied_dependency=_dependency(RouteClaimDependencyDenial.model_validate(body)))
-            if "incompatible_runner_id" in body:
-                return RouteClaimOutcome(
-                    denied_incompatible=_incompatible(RouteClaimIncompatibleDenial.model_validate(body))
-                )
-            return RouteClaimOutcome(conflict=_conflict(RouteClaimConflict.model_validate(body)))
-        if resp.status_code == HTTPStatus.FORBIDDEN:
-            return RouteClaimOutcome(denied_paused=_paused(RouteClaimPausedDenial.model_validate(resp.json())))
+        if resp.status_code in (HTTPStatus.CONFLICT, HTTPStatus.FORBIDDEN):
+            try:
+                refusal = as_table(resp.json())
+            except ValueError:
+                refusal = None
+            outcome = _claim_refusal(resp.status_code, refusal) if refusal is not None else None
+            if outcome is not None:
+                try:
+                    return outcome(refusal)
+                except ValidationError as exc:
+                    raise HubClientError(f"POST /fleet/routes -> {resp.status_code}: malformed refusal") from exc
         self._raise_for_status(resp, "POST /fleet/routes")
         return RouteClaimOutcome(claimed=_claimed(RouteClaimResponse.model_validate(resp.json())))
 
@@ -305,7 +364,9 @@ class HttpHubClient:
 
     def get_envelope(self, chunk_id: str) -> Envelope:
         resp = self._get(
-            f"{_FLEET_API}/chunks/{chunk_id}/envelope", not_found_as=ChunkNotFoundError, ended_on_conflict=True
+            f"{_FLEET_API}/chunks/{chunk_id}/envelope",
+            not_found_as=ChunkNotFoundError,
+            ended_conflict=problem.NO_CURRENT_NODE,
         )
         return envelope_of(NodeEnvelope.model_validate(resp.json()))
 
@@ -439,7 +500,10 @@ class HttpHubClient:
 
     def rekey_route_token(self, chunk_id: str) -> str:
         resp = self._post(
-            f"{_FLEET_API}/chunks/{chunk_id}/route-token", None, ended_on_conflict=True, ended_on_not_found=True
+            f"{_FLEET_API}/chunks/{chunk_id}/route-token",
+            None,
+            ended_conflict=problem.ROUTE_TERMINAL,
+            ended_not_found=problem.ROUTE_NOT_FOUND,
         )
         return RouteTokenRekeyResponse.model_validate(resp.json()).route_token
 
@@ -451,7 +515,13 @@ class HttpHubClient:
         except httpx2.HTTPError as exc:
             raise self._wrap(exc, f"POST {path}") from exc
         # Every refusal leaves the route held; which one it was is the hub's to log, not the runner's to act on.
-        if resp.status_code in _RELEASE_REFUSALS:
+        present, kind = _problem_type(resp)
+        release_types: dict[int, tuple[str, ...]] = {
+            HTTPStatus.CONFLICT: (problem.RELEASE_REFUSAL,),
+            HTTPStatus.FORBIDDEN: (problem.ROUTE_NOT_HELD, problem.RUNNER_RETIRED),
+            HTTPStatus.NOT_FOUND: (problem.CHUNK_NOT_FOUND, problem.ROUTE_NOT_FOUND),
+        }
+        if resp.status_code in _RELEASE_REFUSALS and (not present or kind in release_types[resp.status_code]):
             _log.info("hub refused release", chunk_id=chunk_id, status=resp.status_code, detail=_detail(resp))
             return False
         self._raise_for_status(resp, f"POST {path}")
@@ -465,13 +535,13 @@ class HttpHubClient:
         *,
         params: dict[str, list[str]] | None = None,
         not_found_as: type[HubClientError] | None = None,
-        ended_on_conflict: bool = False,
+        ended_conflict: str | None = None,
     ) -> httpx2.Response:
         try:
             resp = self._client.get(path, params=params)
         except httpx2.HTTPError as exc:
             raise self._wrap(exc, f"GET {path}") from exc
-        self._raise_for_status(resp, f"GET {path}", not_found_as=not_found_as, ended_on_conflict=ended_on_conflict)
+        self._raise_for_status(resp, f"GET {path}", not_found_as=not_found_as, ended_conflict=ended_conflict)
         return resp
 
     def _post(
@@ -480,8 +550,8 @@ class HttpHubClient:
         body: object,
         *,
         timeout: float | None = None,
-        ended_on_conflict: bool = False,
-        ended_on_not_found: bool = False,
+        ended_conflict: str | None = None,
+        ended_not_found: str | None = None,
         refused: Callable[[httpx2.Response], HubClientError | None] | None = None,
     ) -> httpx2.Response:
         try:
@@ -494,9 +564,7 @@ class HttpHubClient:
         if refused is not None and not resp.is_success and (error := refused(resp)) is not None:
             _log.info("hub call refused", operation=f"POST {path}", status=resp.status_code)
             raise error
-        self._raise_for_status(
-            resp, f"POST {path}", ended_on_conflict=ended_on_conflict, ended_on_not_found=ended_on_not_found
-        )
+        self._raise_for_status(resp, f"POST {path}", ended_conflict=ended_conflict, ended_not_found=ended_not_found)
         return resp
 
     def _raise_for_status(
@@ -505,21 +573,28 @@ class HttpHubClient:
         operation: str,
         *,
         not_found_as: type[HubClientError] | None = None,
-        ended_on_conflict: bool = False,
-        ended_on_not_found: bool = False,
+        ended_conflict: str | None = None,
+        ended_not_found: str | None = None,
     ) -> None:
         if resp.is_success:
             return
         message = f"{operation} -> {resp.status_code}: {resp.text[:200]}"
         # A status decoded to a typed terminal outcome is expected: the caller owns its handling and
         # its log level. Only a status left unclassified is a hub-call failure worth an error.
-        if not_found_as is not None and resp.status_code == HTTPStatus.NOT_FOUND:
+        present, kind = _problem_type(resp)
+        if (
+            not_found_as is not None
+            and resp.status_code == HTTPStatus.NOT_FOUND
+            and (not present or (not_found_as is ChunkNotFoundError and kind == problem.CHUNK_NOT_FOUND))
+        ):
             _log.info("hub call refused", operation=operation, status=resp.status_code)
             raise not_found_as(message)
-        if ended_on_not_found and resp.status_code == HTTPStatus.NOT_FOUND:
-            _log.info("hub call refused", operation=operation, status=resp.status_code)
-            raise ChunkEndedError(message, detail=_detail(resp))
-        if ended_on_conflict and resp.status_code == HTTPStatus.CONFLICT:
+        ended_by_status: dict[int, str | None] = {
+            HTTPStatus.CONFLICT: ended_conflict,
+            HTTPStatus.NOT_FOUND: ended_not_found,
+        }
+        ended = ended_by_status.get(resp.status_code)
+        if ended is not None and (not present or kind == ended):
             _log.info("hub call refused", operation=operation, status=resp.status_code)
             raise ChunkEndedError(message, detail=_detail(resp))
         _log.error("hub call failed", operation=operation, status=resp.status_code, body=resp.text[:500])
@@ -588,9 +663,25 @@ class HttpHubRunnerAdmin:
 
 def _host_add_refusal(resp: httpx2.Response) -> HostAddRefusalReason | None:
     """The reason a host add's answer refuses it, or ``None`` when it is no refusal the caller acts on.
-    A ``404`` carrying the hub's tenant text is the tenant refusal, and a ``409`` carrying the
+    A legacy ``404`` carrying the hub's tenant text is the tenant refusal, and a ``409`` carrying the
     tenant-required code is that one; any other ``404`` is a hub that predates hosts, and any other
     ``409`` a name a live host holds."""
+    present, kind = _problem_type(resp)
+    if present:
+        reasons: dict[tuple[int, str], HostAddRefusalReason] = {
+            (HTTPStatus.NOT_FOUND, problem.TENANT_NOT_FOUND): HostAddRefusalReason.NO_SUCH_TENANT,
+            (HTTPStatus.CONFLICT, problem.TENANT_REQUIRED): HostAddRefusalReason.TENANT_REQUIRED,
+            (HTTPStatus.CONFLICT, problem.HOST_NAME_TAKEN): HostAddRefusalReason.NAME_TAKEN,
+            (HTTPStatus.CONFLICT, problem.RUNNER_ALREADY_HOSTED): HostAddRefusalReason.NAME_TAKEN,
+            (HTTPStatus.CONFLICT, problem.RUNNER_RETIRED): HostAddRefusalReason.NAME_TAKEN,
+            (HTTPStatus.CONFLICT, problem.RUNNER_LIFECYCLE_CONFLICT): HostAddRefusalReason.NAME_TAKEN,
+            (HTTPStatus.UNAUTHORIZED, problem.AUTHENTICATION_REQUIRED): HostAddRefusalReason.SIGN_IN_REQUIRED,
+            (HTTPStatus.FORBIDDEN, problem.PERMISSION_REQUIRED): HostAddRefusalReason.FORBIDDEN,
+            (HTTPStatus.FORBIDDEN, problem.MACHINE_CREDENTIAL_FORBIDDEN): HostAddRefusalReason.FORBIDDEN,
+            (HTTPStatus.FORBIDDEN, problem.RUNNER_CREDENTIAL_FORBIDDEN): HostAddRefusalReason.FORBIDDEN,
+            (HTTPStatus.NOT_FOUND, problem.RUNNER_NOT_FOUND): HostAddRefusalReason.RUNNER_NOT_FOUND,
+        }
+        return reasons.get((resp.status_code, kind)) if isinstance(kind, str) else None
     if resp.status_code == HTTPStatus.NOT_FOUND and _detail(resp) == _NO_SUCH_TENANT:
         return HostAddRefusalReason.NO_SUCH_TENANT
     if resp.status_code == HTTPStatus.CONFLICT and _refusal_code(resp) == _TENANT_REQUIRED:
@@ -675,7 +766,15 @@ class HttpHostHubClient:
             raise HubClientError(f"{operation} failed: {exc}") from exc
         if resp.is_success:
             return resp
+        present, kind = _problem_type(resp)
+        host_types: dict[int, tuple[str, ...]] = {
+            HTTPStatus.UNAUTHORIZED: tuple(problem.AUTHENTICATION_TYPES),
+            HTTPStatus.FORBIDDEN: (problem.HOST_RETIRED,),
+            HTTPStatus.NOT_FOUND: (problem.RUNNER_NOT_FOUND, problem.TENANT_NOT_FOUND),
+        }
         reason = _HOST_REFUSALS.get(resp.status_code)
+        if present and (reason is None or kind not in host_types[resp.status_code]):
+            reason = None
         if reason is not None:
             _log.info("hub call refused", operation=operation, status=resp.status_code, reason=reason)
             return HostRefused(reason=reason, status=resp.status_code, detail=_detail(resp))
@@ -739,6 +838,21 @@ def _refusal_code(resp: httpx2.Response) -> str | None:
     return code if isinstance(code, str) else None
 
 
+def _payload(resp: httpx2.Response) -> object:
+    try:
+        return resp.json()
+    except ValueError:
+        return None
+
+
+def _problem_type(resp: httpx2.Response) -> tuple[bool, object]:
+    return problem.type_of(_payload(resp))
+
+
+def _type_matches(resp: httpx2.Response, kind: str) -> bool:
+    return problem.admits(_payload(resp), (kind,))
+
+
 _hub_client_conforms: type[IHubClient] = HttpHubClient
 
 
@@ -766,6 +880,8 @@ _host_runner_adder_conforms: type[IHostRunnerAdder] = HttpHostHubClient
 def _identity_refusal(resp: httpx2.Response) -> TokenRefusal | None:
     """The identity route's typed ``401``, or ``None`` for a ``401`` that is not one — a proxy's,
     say — which the caller treats as any other failed call."""
+    if not _type_matches(resp, problem.RUNNER_IDENTITY):
+        return None
     try:
         refusal = RunnerIdentityRefusal.model_validate(resp.json())
     except ValueError:
@@ -781,6 +897,8 @@ def _malformed(operation: str, exc: ValueError) -> HubClientError:
 def _version_refusal(resp: httpx2.Response) -> VersionRefusal | None:
     """The window's refusal a ``409`` carries, or ``None`` for any other answer."""
     if resp.status_code != HTTPStatus.CONFLICT:
+        return None
+    if not _type_matches(resp, problem.RUNNER_VERSION):
         return None
     try:
         body = RunnerVersionRefusal.model_validate(resp.json())

@@ -10,16 +10,19 @@ through that tenant's own registry.
 from __future__ import annotations
 
 from dataclasses import dataclass
+from functools import partial
 
-from fastapi import HTTPException, Request, status
+from fastapi import Request
 
 from blizzard.foundation.logging import get_logger
 from blizzard.foundation.platform_tracing.attributes import CALLER, annotate
 from blizzard.foundation.roles import dto
 from blizzard.foundation.runner_tokens import RunnerTokenRefusalReason
 from blizzard.foundation.tokens import TokenHash
+from blizzard.hub.api import problems
 from blizzard.hub.api.bearer import presented_bearer
 from blizzard.hub.api.hub_level import Hub
+from blizzard.hub.api.problem_exceptions import ProblemFactory, ProblemHTTPException
 from blizzard.hub.composition import HubServices
 from blizzard.hub.domain.observability.tracing.attributes import RUNNER_ID, RUNNER_NAME
 from blizzard.hub.domain.runners.host import Host
@@ -126,10 +129,16 @@ class RunnerAuth:
         credentials = self.services.hub_scoped_reads.credentials
         if token is not None and credentials.revoked_token_runner(TokenHash(token).hex) is not None:
             _log.warning("revoked runner token presented", path=self.request.url.path)
-            raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="bearer token has been revoked")
-        reason = "missing or malformed Authorization header" if token is None else UNRESOLVED_RUNNER_TOKEN
+            raise ProblemHTTPException(problems.authentication_revoked_problem)
+        problem: ProblemFactory
+        if token is None:
+            reason = "missing or malformed Authorization header"
+            problem = partial(problems.authentication_required_problem, detail=reason)
+        else:
+            reason = UNRESOLVED_RUNNER_TOKEN
+            problem = partial(problems.authentication_unresolved_problem, detail=reason)
         _log.warning("runner auth failed", reason=reason, path=self.request.url.path)
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail=reason)
+        raise ProblemHTTPException(problem)
 
     def identify(self) -> RunnerRegistration:
         """The runner the presented token names, or :class:`RunnerTokenRefused` saying why the hub
@@ -160,10 +169,7 @@ class RunnerAuth:
         _log.warning(
             "runner token presented on operator verb", runner_id=principal.runner_id, path=self.request.url.path
         )
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail=f"runner token for {principal.runner_id!r} is not valid on an operator verb",
-        )
+        raise ProblemHTTPException(partial(problems.runner_credential_forbidden_problem, principal.runner_id))
 
 
 @dto
@@ -224,10 +230,16 @@ class HostAuth:
         credentials = self.services.hub_scoped_reads.credentials
         if token is not None and credentials.revoked_token_host(TokenHash(token).hex) is not None:
             _log.warning("revoked host token presented", path=self.request.url.path)
-            raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="bearer token has been revoked")
-        reason = "missing or malformed Authorization header" if token is None else UNRESOLVED_HOST_TOKEN
+            raise ProblemHTTPException(problems.authentication_revoked_problem)
+        problem: ProblemFactory
+        if token is None:
+            reason = "missing or malformed Authorization header"
+            problem = partial(problems.authentication_required_problem, detail=reason)
+        else:
+            reason = UNRESOLVED_HOST_TOKEN
+            problem = partial(problems.authentication_unresolved_problem, detail=reason)
         _log.warning("host auth failed", reason=reason, path=self.request.url.path)
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail=reason)
+        raise ProblemHTTPException(problem)
 
     def host(self) -> Host:
         """The loaded host the demanded principal names — read once by the resolution."""

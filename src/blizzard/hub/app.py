@@ -23,6 +23,7 @@ from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse, PlainTextResponse
 from sqlalchemy import Connection, Engine
 from sqlalchemy.exc import SQLAlchemyError
+from starlette.exceptions import HTTPException
 from starlette.routing import Route
 
 from blizzard import __version__
@@ -44,6 +45,7 @@ from blizzard.foundation.trace_attributes import CHUNK_ID
 from blizzard.foundation.trace_export.internal.otlp import OtlpTraceExporter
 from blizzard.foundation.trace_export.settings import TracingSettings
 from blizzard.foundation.web import Frontend, install_schema_components
+from blizzard.hub.api import problems
 from blizzard.hub.api.admin_events import router as admin_events_router
 from blizzard.hub.api.admin_invariants import router as admin_invariants_router
 from blizzard.hub.api.admin_tenants import router as admin_tenants_router
@@ -85,6 +87,9 @@ from blizzard.hub.api.me import router as me_router
 from blizzard.hub.api.members import grants_router as member_grants_router
 from blizzard.hub.api.members import refuse_membership_role
 from blizzard.hub.api.members import router as members_router
+from blizzard.hub.api.openapi_problems import install_problem_responses
+from blizzard.hub.api.problem_exceptions import problem_http_exception
+from blizzard.hub.api.problem_rendering import declared_problem_response
 from blizzard.hub.api.project_params import refuse_project_required
 from blizzard.hub.api.projects import router as projects_router
 from blizzard.hub.api.questions import router as questions_router
@@ -275,14 +280,18 @@ def _sweep_interval(name: SweepName, config: HubConfig) -> int:
             return CADENCE_INTERVAL_SECONDS
 
 
-def _refuse_retired_runner(_request: Request, exc: Exception) -> JSONResponse:
+def _refuse_retired_runner(request: Request, exc: Exception) -> JSONResponse:
     """Map the domain's :class:`RunnerRetired` to a 403 carrying its message."""
-    return JSONResponse(status_code=status.HTTP_403_FORBIDDEN, content={"detail": str(exc)})
+    assert isinstance(exc, RunnerRetired)
+    declared = declared_problem_response(request, problems.runner_retired_problem(exc, instance=request.url.path))
+    return declared or JSONResponse(status_code=status.HTTP_403_FORBIDDEN, content={"detail": str(exc)})
 
 
-def _refuse_retired_host(_request: Request, exc: Exception) -> JSONResponse:
+def _refuse_retired_host(request: Request, exc: Exception) -> JSONResponse:
     """Map the domain's :class:`HostRetired` to a 403 carrying its message."""
-    return JSONResponse(status_code=status.HTTP_403_FORBIDDEN, content={"detail": str(exc)})
+    assert isinstance(exc, HostRetired)
+    declared = declared_problem_response(request, problems.host_retired_problem(exc, instance=request.url.path))
+    return declared or JSONResponse(status_code=status.HTTP_403_FORBIDDEN, content={"detail": str(exc)})
 
 
 def _log_unhandled_request_error(request: Request, exc: Exception) -> PlainTextResponse:
@@ -492,6 +501,7 @@ def create_app(
     app.add_exception_handler(RunnerRetired, _refuse_retired_runner)
     app.add_exception_handler(HostRetired, _refuse_retired_host)
     app.add_exception_handler(RequestValidationError, _validation_error)
+    app.add_exception_handler(HTTPException, problem_http_exception)
     app.add_exception_handler(TenantClosed, refuse_closed_tenant)
     app.add_exception_handler(UnknownTenant, refuse_closed_tenant)
     app.add_exception_handler(ProjectRequired, refuse_project_required)
@@ -575,6 +585,7 @@ def create_app(
     )
     Frontend.embedded("hub", app_name="blizzard-hub").mount(app)
     install_schema_components(app, HUB_SCHEMA_COMPONENTS.models, HUB_SCHEMA_COMPONENTS.enums)
+    install_problem_responses(app)
 
     log.info("hub app created", db_url=config.db_url, services_wired=services is not None)
     return app

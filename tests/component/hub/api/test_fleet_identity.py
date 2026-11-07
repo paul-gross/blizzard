@@ -29,7 +29,21 @@ def _plain(hub: HubHarness) -> TestClient:
 def _identity(hub: HubHarness, token: str | None) -> tuple[int, dict[str, object]]:
     headers = {"Authorization": f"Bearer {token}"} if token is not None else None
     resp = _plain(hub).get("/api/fleet/identity", headers=headers)
+    if resp.status_code == 401:
+        assert resp.headers["content-type"] == "application/problem+json"
     return resp.status_code, resp.json()
+
+
+def _refusal(reason: str, runner_id: str | None = None) -> tuple[int, dict[str, object]]:
+    return 401, {
+        "type": "urn:blizzard:problem:runner-identity",
+        "title": "Runner identity refused",
+        "detail": "runner identity refused",
+        "instance": "/api/fleet/identity",
+        "status": 401,
+        "reason": reason,
+        "runner_id": runner_id,
+    }
 
 
 def _tenant(hub: HubHarness, tenant: TenantId | None = None) -> dict[str, str]:
@@ -136,13 +150,21 @@ def test_a_token_names_the_tenant_its_runner_was_added_in(tmp_path: Path) -> Non
 
 def test_no_token_is_refused_as_missing(tmp_path: Path) -> None:
     hub = build_hub(tmp_path)
-    assert _identity(hub, None) == (401, {"reason": "missing", "runner_id": None})
+    assert _identity(hub, None) == _refusal("missing")
+
+
+def test_openapi_declares_identity_problem(tmp_path: Path) -> None:
+    hub = build_hub(tmp_path)
+    spec = _plain(hub).get("/openapi.json").json()
+    content = spec["paths"]["/api/fleet/identity"]["get"]["responses"]["401"]["content"]
+    assert content["application/problem+json"]["schema"] == {"$ref": "#/components/schemas/RunnerIdentityProblem"}
+    assert "application/json" not in content
 
 
 def test_a_token_the_hub_never_issued_is_refused_as_unknown(tmp_path: Path) -> None:
     hub = build_hub(tmp_path)
     seed_runner(hub, "runner-a")
-    assert _identity(hub, "never-issued") == (401, {"reason": "unknown", "runner_id": None})
+    assert _identity(hub, "never-issued") == _refusal("unknown")
 
 
 def test_a_token_rotated_away_is_refused_as_revoked_naming_its_runner(tmp_path: Path) -> None:
@@ -150,7 +172,7 @@ def test_a_token_rotated_away_is_refused_as_revoked_naming_its_runner(tmp_path: 
     old = seed_runner(hub, "runner-a")
     assert hub.client.post("/api/runners/runner-a/enrollments").status_code == 201
 
-    assert _identity(hub, old) == (401, {"reason": "revoked", "runner_id": "runner-a"})
+    assert _identity(hub, old) == _refusal("revoked", "runner-a")
 
 
 def test_a_retired_runners_token_is_refused_as_retired_naming_it(tmp_path: Path) -> None:
@@ -158,7 +180,7 @@ def test_a_retired_runners_token_is_refused_as_retired_naming_it(tmp_path: Path)
     token = seed_runner(hub, "runner-a")
     assert hub.client.post("/api/runners/runner-a/retire", json={"by": "op"}).status_code == 200
 
-    assert _identity(hub, token) == (401, {"reason": "retired", "runner_id": "runner-a"})
+    assert _identity(hub, token) == _refusal("retired", "runner-a")
 
 
 def test_a_reinstated_runners_old_token_is_refused_as_revoked(tmp_path: Path) -> None:
@@ -167,7 +189,7 @@ def test_a_reinstated_runners_old_token_is_refused_as_revoked(tmp_path: Path) ->
     assert hub.client.post("/api/runners/runner-a/retire", json={"by": "op"}).status_code == 200
     assert hub.client.post("/api/runners/runner-a/reinstate", json={"by": "op"}).status_code == 200
 
-    assert _identity(hub, token) == (401, {"reason": "revoked", "runner_id": "runner-a"})
+    assert _identity(hub, token) == _refusal("revoked", "runner-a")
 
 
 def test_answering_registers_nothing_and_records_no_liveness(tmp_path: Path) -> None:
@@ -201,6 +223,6 @@ def test_a_hub_whose_toml_still_sets_runner_auth_mode_boots_and_refuses_a_tokenl
     try:
         client = TestClient(app)
         assert client.post("/api/fleet/runners", json={"workspace_id": "w1"}).status_code == 401
-        assert client.get("/api/fleet/identity").json() == {"reason": "missing", "runner_id": None}
+        assert client.get("/api/fleet/identity").json() == _refusal("missing")[1]
     finally:
         app.state.engine.dispose()

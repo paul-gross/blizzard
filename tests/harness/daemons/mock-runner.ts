@@ -1,5 +1,5 @@
 import * as path from 'node:path';
-import { daemonEnv, mockBinDir, requireBinary } from '../env';
+import { daemonEnv, mockBinDir, requireBinary, RUNNER_VERSION } from '../env';
 import { type DaemonRecord, startDaemon } from './process';
 
 /**
@@ -18,7 +18,7 @@ export function startMockRunner(dir: string, options: { hubUrl: string; name: st
         '--host', '127.0.0.1', '--port', String(port), '--listening-file', listeningFile,
         '--hub-url', options.hubUrl, '--name', options.name, '--token', options.token,
       ],
-      env: daemonEnv({ BZ_HUB_URL: options.hubUrl, ...options.env }),
+      env: daemonEnv({ BZ_HUB_URL: options.hubUrl, BZ_MOCK_RUNNER_VERSION: RUNNER_VERSION, ...options.env }),
     }),
   });
 }

@@ -53,19 +53,26 @@ def judge(
     note declares, admitted only when ``declarable``; ``allowed`` the allowances that may admit, by the same key.
     Under ``line`` no new pair passes but an allowed one."""
     allowed = allowed or {}
+
+    def allowance_for(release: str, violation: Violation) -> Allowance | None:
+        exact = allowed.get((release, *_key(violation)))
+        if exact is not None or violation.component_where is None:
+            return exact
+        return allowed.get((release, violation.surface, violation.component_where, violation.reason))
+
     return [
         Verdict(
             release,
             violation,
             (release, *_key(violation)) in inherited
-            or (release, *_key(violation)) in allowed
+            or allowance_for(release, violation) is not None
             or (
                 not line
                 and acknowledged
                 and (violation.deprecated or (declarable and (violation.surface, violation.where) in declared))
             ),
             (release, *_key(violation)) in inherited,
-            allowed.get((release, *_key(violation))),
+            allowance_for(release, violation),
         )
         for release, violations in findings.items()
         for violation in violations

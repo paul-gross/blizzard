@@ -10,7 +10,7 @@ test.describe('with sampling on', () => {
 
   test('a stepHost records the counterpart’s windows, and the next one the new ones with no wait', async ({ runnerHost, vendorUsage }) => {
     // The one credential the fixture minted for the sampling profile, in the host's scratch root.
-    const vendorDir = path.join(path.dirname(runnerHost.dir), 'vendor');
+    const vendorDir = path.join(path.dirname(runnerHost.home), 'vendor');
     const [credential, ...others] = fs.readdirSync(vendorDir);
     expect(others).toEqual([]);
     const token = (JSON.parse(fs.readFileSync(path.join(vendorDir, credential as string), 'utf8')) as { claudeAiOauth: { accessToken: string } }).claudeAiOauth.accessToken;

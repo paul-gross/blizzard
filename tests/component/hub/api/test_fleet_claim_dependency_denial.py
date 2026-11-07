@@ -16,6 +16,7 @@ from blizzard.hub.domain.chunk.dependencies import PrerequisiteScope
 from blizzard.hub.domain.chunk.model import DependencyEdge
 from blizzard.hub.domain.chunk.ports.dependencies import IWriteChunkDependenciesRepository
 from blizzard.hub.domain.chunk.ports.exclusive import ILockedChunkRead
+from blizzard.wire.problem import CLAIM_DEPENDENCY
 from tests.support.scaffolding import HubHarness, build_hub, count_queries, ingest
 
 
@@ -41,6 +42,9 @@ def test_claim_denied_when_the_dependency_is_unmet(tmp_path: Path) -> None:
 
     assert resp.status_code == 409, resp.text
     body = resp.json()
+    assert resp.headers["content-type"] == "application/problem+json"
+    assert body["type"] == CLAIM_DEPENDENCY
+    assert body["instance"] == "/api/fleet/routes"
     assert body["chunk_id"] == dependent_id
     assert body["prerequisite_chunk_id"] == prerequisite_id
     # Distinguishable from the other two 409 shapes.

@@ -10,8 +10,11 @@ from __future__ import annotations
 from pathlib import Path
 
 import httpx2
+import pytest
 
+from blizzard.foundation.chunk_status import ChunkStatus
 from blizzard.hub.domain.execution.auth.route import ROUTE_TOKEN_ENFORCE
+from blizzard.hub.domain.execution.claim import RekeyDeniedNotHolder, RekeyDeniedTerminal
 from tests.support.scaffolding import HubHarness, build_hub, pointer_token, report_lease, runner_token
 
 _POINTER = {"source": "default", "ref": "84"}
@@ -342,6 +345,10 @@ def test_rekey_on_a_chunk_with_no_live_route_is_404(tmp_path: Path) -> None:
     resp = hub.client.post(f"/api/fleet/chunks/{chunk_id}/route-token")
 
     assert resp.status_code == 404
+    assert resp.headers["content-type"] == "application/problem+json"
+    assert resp.json()["type"] == "urn:blizzard:problem:route-not-found"
+    assert resp.json()["detail"] == f"chunk {chunk_id} has no live route"
+    assert resp.json()["instance"] == f"/api/fleet/chunks/{chunk_id}/route-token"
 
 
 def test_rekey_is_confined_to_the_live_routes_own_runner(tmp_path: Path) -> None:
@@ -371,11 +378,60 @@ def test_rekey_is_confined_to_the_live_routes_own_runner(tmp_path: Path) -> None
         f"/api/fleet/chunks/{chunk_id}/route-token", headers={"Authorization": f"Bearer {token_r2}"}
     )
     assert denied.status_code == 403
+    assert denied.headers["content-type"] == "application/problem+json"
+    assert denied.json()["type"] == "urn:blizzard:problem:route-not-held"
+    assert denied.json()["detail"] == "token belongs to runner 'r2', not 'r1'"
 
     allowed = hub.client.post(
         f"/api/fleet/chunks/{chunk_id}/route-token", headers={"Authorization": f"Bearer {token_r1}"}
     )
     assert allowed.status_code == 200, allowed.text
+
+
+@pytest.mark.parametrize("holder", [None, "r2", "r1"])
+def test_rekey_lost_route_race_returns_typed_refusal(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, holder: str | None
+) -> None:
+    hub = build_hub(tmp_path)
+    chunk_id, _ = _ingest(hub)
+    _claim(hub, chunk_id)
+
+    def refuse(*args: object) -> str:
+        raise RekeyDeniedNotHolder(chunk_id=chunk_id, holder=holder)
+
+    monkeypatch.setattr(hub.services.claim, "rekey", refuse)
+    path = f"/api/fleet/chunks/{chunk_id}/route-token"
+    response = hub.client.post(path)
+    expected_detail = (
+        f"chunk {chunk_id} has no live route"
+        if holder is None
+        else "token belongs to runner 'r1', not 'r2'"
+        if holder == "r2"
+        else f"chunk {chunk_id} is held by another runner"
+    )
+    assert response.status_code == (404 if holder is None else 403)
+    assert response.headers["content-type"] == "application/problem+json"
+    assert response.json()["type"] == f"urn:blizzard:problem:route-{'not-found' if holder is None else 'not-held'}"
+    assert response.json()["detail"] == expected_detail
+    assert response.json()["instance"] == path
+
+
+def test_rekey_terminal_refusal_is_typed(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    hub = build_hub(tmp_path)
+    chunk_id, _ = _ingest(hub)
+    _claim(hub, chunk_id)
+
+    def refuse(*args: object) -> str:
+        raise RekeyDeniedTerminal(chunk_id=chunk_id, status=ChunkStatus.DONE)
+
+    monkeypatch.setattr(hub.services.claim, "rekey", refuse)
+    path = f"/api/fleet/chunks/{chunk_id}/route-token"
+    response = hub.client.post(path)
+    assert response.status_code == 409
+    assert response.headers["content-type"] == "application/problem+json"
+    assert response.json()["type"] == "urn:blizzard:problem:route-terminal"
+    assert response.json()["detail"] == f"chunk {chunk_id} is done, its route confers no tenure"
+    assert response.json()["instance"] == path
 
 
 # A runner-config gate decision is gated the same way as a completion

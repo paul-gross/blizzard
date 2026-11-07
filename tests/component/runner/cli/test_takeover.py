@@ -33,6 +33,8 @@ from tests.support.runner_fakes import SqlAlchemyRunnerStore
 from tests.support.runner_mint import new_mint
 from tests.support.worker_http import bind_local_only
 
+pytestmark = pytest.mark.usefixtures("short_host_sockets")
+
 _NOW = datetime(2026, 7, 17, 12, 0, 0, tzinfo=UTC)
 
 

@@ -5,13 +5,17 @@ here, which stays #457's to add."""
 
 from __future__ import annotations
 
+from functools import partial
+
 from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.responses import JSONResponse
 
 from blizzard.foundation.store.utc import iso_utc
+from blizzard.hub.api import problems
 from blizzard.hub.api.auth import reject_runner_principal
 from blizzard.hub.api.auth_session import require, tenant_bound
 from blizzard.hub.api.deps import Services
+from blizzard.hub.api.problem_exceptions import ProblemHTTPException
 from blizzard.hub.auth.permissions import Permission
 from blizzard.hub.composition import TenantServices
 from blizzard.hub.domain.chunk.dependencies import (
@@ -41,7 +45,7 @@ router = APIRouter(
 def _resolve_dependent(services: TenantServices, chunk_id: str) -> Chunk:
     chunk = services.chunks.record.get(chunk_id)
     if chunk is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"unknown chunk {chunk_id}")
+        raise ProblemHTTPException(partial(problems.chunk_not_found_problem, chunk_id))
     return chunk
 
 
@@ -55,7 +59,7 @@ def resolve_prerequisite(services: TenantServices, chunk_id: str) -> Prerequisit
         return PrerequisiteScope(chunk_id=chunk.chunk_id)
     if services.chunks.lifecycle.is_ephemeral(chunk_id):
         return PrerequisiteScope(chunk_id=chunk_id)
-    raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"unknown chunk {chunk_id}")
+    raise ProblemHTTPException(partial(problems.chunk_not_found_problem, chunk_id))
 
 
 def _resolve_standing_edge(services: TenantServices, dependent: Chunk, prerequisite_chunk_id: str) -> DependencyEdge:

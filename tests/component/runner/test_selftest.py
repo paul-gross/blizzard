@@ -19,6 +19,7 @@ from pathlib import Path
 from typing import Any
 
 import httpx2
+import pytest
 import uvicorn
 from click.testing import CliRunner
 from fastapi.testclient import TestClient
@@ -583,6 +584,7 @@ def _await_socket(path: Path, timeout: float = 10.0) -> None:
     raise AssertionError(f"runner local API never came up on {path}")
 
 
+@pytest.mark.usefixtures("short_host_sockets")
 def test_cli_selftest_prints_every_check_and_exits_zero_on_success(tmp_path: Path) -> None:
     root = _init_runner_with_binary(tmp_path, _fake_binary(tmp_path / "bin"))
     with _serve_local_api(root):
@@ -599,6 +601,7 @@ def test_cli_selftest_prints_every_check_and_exits_zero_on_success(tmp_path: Pat
     assert "passed for claude_code" in result.output
 
 
+@pytest.mark.usefixtures("short_host_sockets")
 def test_cli_selftest_exits_non_zero_and_prints_the_failure_on_a_drifted_harness(tmp_path: Path) -> None:
     root = _init_runner_with_binary(tmp_path, _fake_binary(tmp_path / "bin", source=_BROKEN_HARNESS))
     with _serve_local_api(root):
@@ -610,6 +613,7 @@ def test_cli_selftest_exits_non_zero_and_prints_the_failure_on_a_drifted_harness
     assert "FAILED for claude_code" in result.output
 
 
+@pytest.mark.usefixtures("short_host_sockets")
 def test_cli_selftest_rejects_an_unknown_harness(tmp_path: Path) -> None:
     root = _init_runner_with_binary(tmp_path, _fake_binary(tmp_path / "bin"))
     with _serve_local_api(root):

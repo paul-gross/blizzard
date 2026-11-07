@@ -11,6 +11,7 @@ import json
 from collections.abc import Iterator
 from dataclasses import dataclass, replace
 from datetime import datetime
+from functools import partial
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
@@ -18,9 +19,11 @@ from fastapi.responses import Response, StreamingResponse
 
 from blizzard.foundation.roles import dto
 from blizzard.foundation.store.utc import as_utc, iso_utc
+from blizzard.hub.api import problems
 from blizzard.hub.api.auth import reject_runner_principal
 from blizzard.hub.api.auth_session import require, tenant_bound
 from blizzard.hub.api.deps import Services
+from blizzard.hub.api.problem_exceptions import ProblemHTTPException
 from blizzard.hub.api.project_params import QueryProject
 from blizzard.hub.api.work_source_params import QuerySource
 from blizzard.hub.auth.permissions import Permission
@@ -348,7 +351,7 @@ def list_events(
     try:
         page = services.analytics_events.events(filters.criteria, cursor=cursor, limit=limit)
     except MalformedCursor as exc:
-        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail="malformed cursor") from exc
+        raise ProblemHTTPException(partial(problems.malformed_cursor_problem, exc)) from exc
     return _events_response(page)
 
 
@@ -600,7 +603,7 @@ def spend_by_chunk(
     try:
         page = services.operational_analytics.spend_by_chunk(scope.criteria, cursor=cursor, limit=limit)
     except MalformedCursor as exc:
-        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail="malformed cursor") from exc
+        raise ProblemHTTPException(partial(problems.malformed_cursor_problem, exc)) from exc
     return AnalyticsChunkSpendResponse(spend=[_chunk_spend_view(r) for r in page.records], next_cursor=page.next_cursor)
 
 

@@ -7,14 +7,16 @@ This route reads the token itself and answers every outcome, 200 or a typed 401.
 
 from __future__ import annotations
 
-from fastapi import APIRouter, Request, status
+from fastapi import APIRouter, Request
 from fastapi.responses import JSONResponse
 
 from blizzard.foundation.runner_tokens import RunnerTokenRefusalReason
 from blizzard.hub.api.auth import RunnerAuth, RunnerPrincipal
 from blizzard.hub.api.hub_level import Hub
+from blizzard.hub.api.problem_rendering import problem_response
+from blizzard.hub.api.problems import runner_identity_problem
 from blizzard.hub.domain.runners.registration import RunnerTokenRefused
-from blizzard.wire.runner import RunnerIdentityRefusal, RunnerIdentityView
+from blizzard.wire.runner import RunnerIdentityView
 
 router = APIRouter(prefix="/api/fleet", tags=["fleet"])
 
@@ -22,7 +24,6 @@ router = APIRouter(prefix="/api/fleet", tags=["fleet"])
 @router.get(
     "/identity",
     response_model=RunnerIdentityView,
-    responses={status.HTTP_401_UNAUTHORIZED: {"model": RunnerIdentityRefusal}},
 )
 def get_runner_identity(request: Request, services: Hub) -> RunnerIdentityView | JSONResponse:
     """The id and name of the runner the presented bearer token names, and the tenant it was added
@@ -32,8 +33,7 @@ def get_runner_identity(request: Request, services: Hub) -> RunnerIdentityView |
     try:
         identified = _identified(RunnerAuth.of(request, services))
     except RunnerTokenRefused as exc:
-        refusal = RunnerIdentityRefusal(reason=exc.reason, runner_id=exc.runner_id)
-        return JSONResponse(status_code=status.HTTP_401_UNAUTHORIZED, content=refusal.model_dump(mode="json"))
+        return problem_response(runner_identity_problem(exc, instance=request.url.path))
     return RunnerIdentityView(
         runner_id=identified.runner_id,
         runner_name=identified.runner_name,

@@ -203,10 +203,15 @@ def test_a_runner_write_whose_tenant_closes_mid_request_answers_401_and_writes_n
         "/api/fleet/runners", json={"workspace_id": "w1", "name": "r-acme"}, headers=runner
     )
 
-    assert (response.status_code, response.json()) == (
-        401,
-        {"detail": "bearer token does not resolve to a known runner"},
-    )
+    assert response.status_code == 401
+    assert response.headers["content-type"] == "application/problem+json"
+    assert response.json() == {
+        "type": "urn:blizzard:problem:authentication-unresolved",
+        "title": "Authentication unresolved",
+        "detail": "bearer token does not resolve to a known runner",
+        "instance": "/api/fleet/runners",
+        "status": 401,
+    }
     assert _rows_of(hub, tenant) == rows["closed"]
 
 

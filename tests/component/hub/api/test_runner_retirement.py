@@ -224,7 +224,15 @@ def test_a_revoked_token_gets_401_while_the_runner_stays_listed(tmp_path: Path) 
     assert resp.status_code == 201, resp.text
     assert resp.json()["runner"]["retired"] is False
     refused = hub.client.get("/api/fleet/queue/peek", headers=_bearer(token))
-    assert (refused.status_code, refused.json()) == (401, {"detail": "bearer token has been revoked"})
+    assert refused.status_code == 401
+    assert refused.headers["content-type"] == "application/problem+json"
+    assert refused.json() == {
+        "type": "urn:blizzard:problem:authentication-revoked",
+        "title": "Authentication revoked",
+        "detail": "bearer token has been revoked",
+        "instance": "/api/fleet/queue/peek",
+        "status": 401,
+    }
     assert [r["runner_id"] for r in _listed(hub)] == ["runner-a"]
 
 

@@ -192,6 +192,9 @@ def test_a_project_denial_body_carries_exactly_its_denial_keys(tmp_path: Path) -
 
     assert resp.status_code == 409, resp.text
     assert resp.json() == {
+        "type": "urn:blizzard:problem:claim-incompatible",
+        "title": "Claim denied: incompatible runner",
+        "instance": "/api/fleet/routes",
         "chunk_id": chunk_id,
         "incompatible_runner_id": "r1",
         "reason": "project",

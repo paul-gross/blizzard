@@ -6,10 +6,15 @@ presents a route token that does not match it, and ``404`` for a chunk the tenan
 
 from __future__ import annotations
 
+from typing import Annotated, Literal
+
 from pydantic import BaseModel, Field
 
 from blizzard.foundation.release_refusals import ReleaseRefusalReason
+from blizzard.foundation.unrecognized import Unrecognized
 from blizzard.wire.base import WireModel
+from blizzard.wire.problem import ProblemDetails
+from blizzard.wire.vocabulary import OPEN
 
 #: The longest ``reason`` a release accepts.
 RELEASE_REASON_MAX_LENGTH = 64
@@ -36,5 +41,12 @@ class ReleaseRefusal(WireModel):
     """The ``409`` body: the chunk's state refuses the release."""
 
     chunk_id: str
-    reason: ReleaseRefusalReason
+    reason: Annotated[ReleaseRefusalReason | Unrecognized, OPEN]
     detail: str
+
+
+class ReleaseProblem(ReleaseRefusal, ProblemDetails[Literal["urn:blizzard:problem:release-refusal"]]):
+    """A release refusal with its released discriminator fields."""
+
+    chunk_id: str = Field(deprecated=True)
+    reason: Annotated[ReleaseRefusalReason | Unrecognized, OPEN] = Field(deprecated=True)

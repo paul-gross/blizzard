@@ -10,6 +10,7 @@ from collections.abc import Collection, Iterable, Mapping, Sequence
 from collections.abc import Set as AbstractSet
 from dataclasses import dataclass
 from datetime import datetime
+from functools import partial
 from typing import Annotated, ClassVar
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
@@ -18,10 +19,11 @@ from blizzard.foundation.hub_event_types import RunnerChangeKind
 from blizzard.foundation.node_steps import Executor
 from blizzard.foundation.store.utc import iso_utc
 from blizzard.foundation.subscription_miss import SampleMissReason
-from blizzard.hub.api import chunk_events
+from blizzard.hub.api import chunk_events, problems
 from blizzard.hub.api.auth import reject_runner_principal
 from blizzard.hub.api.auth_session import require, tenant_bound
 from blizzard.hub.api.deps import Services
+from blizzard.hub.api.problem_exceptions import ProblemHTTPException
 from blizzard.hub.auth.models import ResolvedIdentity
 from blizzard.hub.auth.permissions import Permission
 from blizzard.hub.composition import TenantServices
@@ -89,7 +91,7 @@ class RunnerBrake:
         """Write the fact, publish the frame, and read the runner back; 404 on an unknown one."""
         registration = self.services.registry.get_runner(self.runner_id)
         if registration is None:
-            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"unknown runner {self.runner_id}")
+            raise ProblemHTTPException(partial(problems.runner_not_found_problem, self.runner_id))
         fact_id = self.services.fleet.set_paused(registration, paused=self.paused, by=self.by)
         self.services.events.publish_runner_changed(
             self.runner_id,
@@ -349,7 +351,7 @@ def _registration(services: TenantServices, runner_id: str) -> RunnerRegistratio
     """The runner's loaded registration, 404 on an unknown one."""
     registration = services.registry.get_runner(runner_id)
     if registration is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"unknown runner {runner_id}")
+        raise ProblemHTTPException(partial(problems.runner_not_found_problem, runner_id))
     return registration
 
 

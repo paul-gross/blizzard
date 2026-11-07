@@ -25,7 +25,7 @@ const WINTER: WorkSourceSummary = {
   secret: 'gh-winter',
   revision: 2,
   created_by: 'pgross',
- 
+
   built_in: false,
   created_at: null,
   created_by_name: null,

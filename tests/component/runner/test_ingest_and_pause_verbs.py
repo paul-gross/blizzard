@@ -11,6 +11,7 @@ from contextlib import contextmanager
 from pathlib import Path
 
 import httpx2
+import pytest
 import uvicorn
 
 from blizzard.foundation.store.engine import create_engine_from_url
@@ -23,6 +24,8 @@ from tests.support.ingest_and_pause_verbs import (
 )
 from tests.support.runner_fakes import SqlAlchemyRunnerStore, runner_store_errors
 from tests.support.worker_http import Bound, bind_local_only
+
+pytestmark = pytest.mark.usefixtures("short_host_sockets")
 
 
 def _store(root: Path) -> SqlAlchemyRunnerStore:

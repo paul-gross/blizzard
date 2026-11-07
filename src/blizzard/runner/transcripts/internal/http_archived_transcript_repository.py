@@ -17,6 +17,7 @@ from blizzard.runner.transcripts.archived_repository import (
 )
 from blizzard.runner.transcripts.internal.segment_projection import to_turn
 from blizzard.runner.transcripts.repository import MAX_TURNS, recent_window
+from blizzard.wire import problem
 from blizzard.wire.transcript_segment import LeaseTranscriptView
 
 _log = get_logger("blizzard.runner.transcripts.archived")
@@ -47,7 +48,7 @@ class HttpArchivedTranscriptRepository:
         except httpx2.HTTPError as exc:
             _log.error("hub unreachable for archived transcript", chunk_id=chunk_id, node_id=node_id, error=str(exc))
             return _answer("unreachable")
-        if resp.status_code in (httpx2.codes.UNAUTHORIZED, httpx2.codes.FORBIDDEN):
+        if _is_refusal(resp):
             # A refusal is a definite answer, not a transport failure — the caller
             # falls back to local exactly like "holds nothing" would. Logged, never silent.
             _log.error(
@@ -85,3 +86,20 @@ class HttpArchivedTranscriptRepository:
 _read_archived_transcript_repository_conforms: type[IReadArchivedTranscriptRepository] = (
     HttpArchivedTranscriptRepository
 )
+
+
+def _is_refusal(resp: httpx2.Response) -> bool:
+    kinds = _REFUSAL_TYPES.get(resp.status_code)
+    if kinds is None:
+        return False
+    try:
+        payload = resp.json()
+    except ValueError:
+        payload = None
+    return problem.admits(payload, kinds)
+
+
+_REFUSAL_TYPES: dict[int, frozenset[str]] = {
+    httpx2.codes.UNAUTHORIZED: problem.AUTHENTICATION_TYPES,
+    httpx2.codes.FORBIDDEN: frozenset({problem.LEASE_OWNERSHIP, problem.RUNNER_RETIRED}),
+}

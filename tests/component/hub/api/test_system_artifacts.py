@@ -49,6 +49,13 @@ def test_get_resolves_a_slash_bearing_name(tmp_path: Path) -> None:
 def test_get_404s_for_an_unpublished_name(tmp_path: Path) -> None:
     hub = build_hub(tmp_path, system_artifacts=_packaged(tmp_path / "packaged"))
 
-    resp = hub.client.get("/api/fleet/system-artifacts/ghost")
+    resp = hub.client.get("/api/fleet/system-artifacts/missing/ghost?ignored=secret")
     assert resp.status_code == 404
-    assert "ghost" in resp.json()["detail"]
+    assert resp.headers["content-type"] == "application/problem+json"
+    assert resp.json() == {
+        "type": "urn:blizzard:problem:system-artifact-not-found",
+        "title": "System artifact not found",
+        "detail": "no system artifact 'missing/ghost'",
+        "instance": "/api/fleet/system-artifacts/missing/ghost",
+        "status": 404,
+    }

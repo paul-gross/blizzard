@@ -96,12 +96,9 @@ class RunnerAddRefused(HubClientError):
 
 
 class HostAddRefusalReason(StrEnum):
-    """Why the hub refused to add a host: ``SIGN_IN_REQUIRED``, the hub requires an operator session
-    and none was presented, or it was not accepted (401); ``FORBIDDEN``, the operator lacks the
-    permission (403); ``UNSUPPORTED``, the hub predates hosts (404 or 405); ``NAME_TAKEN``, a live
-    host of the tenant holds the name (409); ``TENANT_REQUIRED``, the operator may enter several
-    tenants and named none (409); ``NO_SUCH_TENANT``, the named tenant is none the operator may
-    enter (404)."""
+    """Why the hub refused to add a host — no accepted operator session (401), no permission (403), a
+    hub predating hosts (404/405), a live host holding the name (409), several enterable tenants and
+    none named (409), a named tenant the operator may not enter (404), or an unknown adopted runner (404)."""
 
     SIGN_IN_REQUIRED = "sign_in_required"
     FORBIDDEN = "forbidden"
@@ -109,6 +106,7 @@ class HostAddRefusalReason(StrEnum):
     NAME_TAKEN = "name_taken"
     TENANT_REQUIRED = "tenant_required"
     NO_SUCH_TENANT = "no_such_tenant"
+    RUNNER_NOT_FOUND = "runner_not_found"
 
 
 class HostAddRefused(HubClientError):
