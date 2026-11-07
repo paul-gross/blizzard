@@ -40,19 +40,13 @@ function runnerAgents(row: BoundRow): number | null {
 
 /** The agents `rows` declare — the sum of their runners' declared agents; `null` for none declared. */
 export function declaredAgents(rows: readonly BoundRow[]): number | null {
-  const declared = rows
-    .map(runnerAgents)
-    .filter((agents): agents is number => agents !== null);
-  return declared.length === 0
-    ? null
-    : declared.reduce((sum, agents) => sum + agents, 0);
+  const declared = rows.map(runnerAgents).filter((agents): agents is number => agents !== null);
+  return declared.length === 0 ? null : declared.reduce((sum, agents) => sum + agents, 0);
 }
 
 /** The agents busy across `rows` — the sum of their binding lines' agents in use. */
 export function busyAgents(rows: readonly BoundRow[]): number {
-  return rows
-    .flatMap((row) => row.bindingLines)
-    .reduce((sum, line) => sum + line.agentsInUse, 0);
+  return rows.flatMap((row) => row.bindingLines).reduce((sum, line) => sum + line.agentsInUse, 0);
 }
 
 /** A binding line plus the environments its live chunks hold — the host workspace table's
@@ -99,65 +93,42 @@ export interface HostCard {
 /** The runner rows the runners view renders, partitioned: each host card with the rows it
  * holds, then the rows under no card. */
 export interface HostGroups<Row extends RunnerRegistryView> {
-  readonly cards: readonly {
-    readonly card: HostCard;
-    readonly rows: readonly Row[];
-  }[];
+  readonly cards: readonly { readonly card: HostCard; readonly rows: readonly Row[] }[];
   readonly hostless: readonly Row[];
 }
 
 /** Whether `chunk` was claimed for a binding: in the binding's workspace, on the project the
  * binding names. The binding names its project as the runner's declaration entry, so it matches
  * the chunk's id or slug, or the project the hub resolved that entry to. */
-function chunkWorksBinding(
-  chunk: ChunkSummary,
-  workspaceId: string,
-  project: string,
-  resolvedId: string | null,
-): boolean {
+function chunkWorksBinding(chunk: ChunkSummary, workspaceId: string, project: string, resolvedId: string | null): boolean {
   if (chunk.workspace_id !== workspaceId) return false;
-  if (chunk.project_id === project || chunk.project_slug === project)
-    return true;
+  if (chunk.project_id === project || chunk.project_slug === project) return true;
   return resolvedId !== null && chunk.project_id === resolvedId;
 }
 
 /** Each of `runner`'s bindings joined to the board's live chunks it holds on that binding — the
  * chunks the runner holds, claimed in the binding's workspace, on its project. */
-function bindingUses(
-  runner: RunnerRegistryView,
-  chunks: readonly ChunkSummary[],
-): readonly BindingUse[] {
+function bindingUses(runner: RunnerRegistryView, chunks: readonly ChunkSummary[]): readonly BindingUse[] {
   const held = chunks.filter((chunk) => chunk.runner_id === runner.runner_id);
   const served = servedProjects(runner);
   return (runner.bindings ?? []).map((binding) => {
     const entry = served.find((s) => s.entry === binding.project);
     const matched = held.filter((chunk) =>
-      chunkWorksBinding(
-        chunk,
-        binding.workspace_id,
-        binding.project,
-        entry?.project_id ?? null,
-      ),
+      chunkWorksBinding(chunk, binding.workspace_id, binding.project, entry?.project_id ?? null),
     );
     return {
       project: entry?.name ?? entry?.slug ?? binding.project,
       workspaceId: binding.workspace_id,
       agentsInUse: matched.length,
       unreported: binding.workspace_unreported ?? false,
-      environmentsInUse: matched.reduce(
-        (sum, chunk) => sum + (chunk.environment_count ?? 0),
-        0,
-      ),
+      environmentsInUse: matched.reduce((sum, chunk) => sum + (chunk.environment_count ?? 0), 0),
       chunks: matched,
     };
   });
 }
 
 /** `runner`'s binding lines, each with its agents in use from the board's live chunks. */
-export function bindingLines(
-  runner: RunnerRegistryView,
-  chunks: readonly ChunkSummary[],
-): readonly BindingLine[] {
+export function bindingLines(runner: RunnerRegistryView, chunks: readonly ChunkSummary[]): readonly BindingLine[] {
   return bindingUses(runner, chunks).map((use) => ({
     project: use.project,
     workspaceId: use.workspaceId,
@@ -175,10 +146,7 @@ export function subscriptionName(
   const slug = runner.subscription ?? null;
   if (slug === null) return null;
   const host = runner.host_id ? hosts.get(runner.host_id) : undefined;
-  return (
-    host?.subscriptions?.find((declared) => declared.slug === slug)?.name ??
-    slug
-  );
+  return host?.subscriptions?.find((declared) => declared.slug === slug)?.name ?? slug;
 }
 
 /** The live chunks `runners` hold, by the workspace each was claimed in. A claim's workspace is
@@ -186,15 +154,9 @@ export function subscriptionName(
 function heldByWorkspace(
   runners: readonly RunnerRegistryView[],
   chunks: readonly ChunkSummary[],
-): Map<
-  string,
-  { readonly runner: RunnerRegistryView; readonly chunk: ChunkSummary }[]
-> {
+): Map<string, { runner: RunnerRegistryView; chunk: ChunkSummary }[]> {
   const byRunner = new Map(runners.map((runner) => [runner.runner_id, runner]));
-  const held = new Map<
-    string,
-    { runner: RunnerRegistryView; chunk: ChunkSummary }[]
-  >();
+  const held = new Map<string, { runner: RunnerRegistryView; chunk: ChunkSummary }[]>();
   for (const chunk of chunks) {
     const runner = chunk.runner_id ? byRunner.get(chunk.runner_id) : undefined;
     if (!runner || !chunk.workspace_id) continue;
@@ -206,16 +168,10 @@ function heldByWorkspace(
 }
 
 /** Environments in use per workspace across `runners`, from the live chunks they hold there. */
-function workspaceInUse(
-  runners: readonly RunnerRegistryView[],
-  chunks: readonly ChunkSummary[],
-): Map<string, number> {
+function workspaceInUse(runners: readonly RunnerRegistryView[], chunks: readonly ChunkSummary[]): Map<string, number> {
   const inUse = new Map<string, number>();
   for (const [workspaceId, held] of heldByWorkspace(runners, chunks)) {
-    inUse.set(
-      workspaceId,
-      held.reduce((sum, { chunk }) => sum + (chunk.environment_count ?? 0), 0),
-    );
+    inUse.set(workspaceId, held.reduce((sum, { chunk }) => sum + (chunk.environment_count ?? 0), 0));
   }
   return inUse;
 }
@@ -241,10 +197,7 @@ function workspaceHeld(
   return held;
 }
 
-function reportedAgo(
-  lastSeenAt: string | null | undefined,
-  nowMs: number,
-): string | null {
+function reportedAgo(lastSeenAt: string | null | undefined, nowMs: number): string | null {
   const delta = ageMs(lastSeenAt, nowMs);
   return delta === null ? null : formatSeenTag(lastSeenAt, nowMs);
 }
@@ -262,17 +215,12 @@ export function foldHostCards(
   chunks: readonly ChunkSummary[],
   nowMs: number,
 ): readonly HostCard[] {
-  const names = new Map(
-    runners.map((runner) => [runner.runner_id, runner.runner_name]),
-  );
-  const shownHosts =
-    lensed === null ? null : new Set(lensed.map((runner) => runner.host_id));
+  const names = new Map(runners.map((runner) => [runner.runner_id, runner.runner_name]));
+  const shownHosts = lensed === null ? null : new Set(lensed.map((runner) => runner.host_id));
   return hosts
     .filter((host) => shownHosts === null || shownHosts.has(host.host_id))
     .map((host) => {
-      const hostRunners = runners.filter(
-        (runner) => runner.host_id === host.host_id,
-      );
+      const hostRunners = runners.filter((runner) => runner.host_id === host.host_id);
       return {
         hostId: host.host_id,
         hostName: host.host_name,
@@ -282,23 +230,14 @@ export function foldHostCards(
           host.connection === RunnerConnection.NEVER_CONNECTED
             ? 'never reported'
             : formatSeenAgo(host.last_seen_at, host.online, nowMs),
-        workspaces: hostWorkspaceRows(
-          host,
-          workspaceInUse(hostRunners, chunks),
-        ),
-        subscriptionPaces: hostSubscriptionPaces(
-          host,
-          nowMs,
-          (id) => names.get(id) ?? id,
-        ),
+        workspaces: hostWorkspaceRows(host, workspaceInUse(hostRunners, chunks)),
+        subscriptionPaces: hostSubscriptionPaces(host, nowMs, (id) => names.get(id) ?? id),
         url: host.url ?? null,
         enrolled: host.enrolled,
         registeredAt: host.registered_at ?? null,
         addedAt: host.added_at,
         addedBy: host.added_by ?? null,
-        lastSeenLabel: host.last_seen_at
-          ? formatAbsolute(host.last_seen_at)
-          : 'never',
+        lastSeenLabel: host.last_seen_at ? formatAbsolute(host.last_seen_at) : 'never',
         reportedAgo: reportedAgo(host.last_seen_at, nowMs),
         heldChunks: workspaceHeld(hostRunners, chunks),
       };
@@ -313,10 +252,7 @@ export function groupHostRows<Row extends RunnerRegistryView>(
 ): HostGroups<Row> {
   const hostIds = new Set(cards.map((card) => card.hostId));
   return {
-    cards: cards.map((card) => ({
-      card,
-      rows: rows.filter((row) => row.host_id === card.hostId),
-    })),
+    cards: cards.map((card) => ({ card, rows: rows.filter((row) => row.host_id === card.hostId) })),
     hostless: rows.filter((row) => !row.host_id || !hostIds.has(row.host_id)),
   };
 }
