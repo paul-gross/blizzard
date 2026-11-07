@@ -185,7 +185,7 @@ def _poll_until_done(client: TestClient, selftest_id: str, timeout: float = 20.0
         resp = client.get(f"/api/selftests/{selftest_id}")
         assert resp.status_code == 200, resp.text
         body = resp.json()
-        if body["status"] != "running":
+        if body["settled"]:
             return body
         time.sleep(0.05)
     raise AssertionError(f"selftest {selftest_id} never finished within {timeout}s")
@@ -201,11 +201,13 @@ def test_selftest_runs_every_check_against_the_fake_harness_and_passes(
     assert start.status_code == 201, start.text
     run = start.json()
     assert run["status"] == "running"
+    assert run["settled"] is False
     assert run["harness"] == "claude_code"
 
     run = _poll_until_done(client, run["id"])
 
     assert run["status"] == "passed", run
+    assert run["settled"] is True
     names = [c["name"] for c in run["checks"]]
     assert names == [
         "spawn_session_id",
@@ -227,6 +229,7 @@ def test_selftest_reports_the_failing_checks_on_a_drifted_harness(tmp_path: Path
     run = _poll_until_done(client, start.json()["id"])
 
     assert run["status"] == "failed"
+    assert run["settled"] is True
     by_name = {c["name"]: c for c in run["checks"]}
     # Process mechanics still work — spawn, resume, and resume_command exercise only
     # what ClaudeCodeAdapter itself controls.
@@ -250,6 +253,7 @@ def test_selftest_skips_downstream_checks_when_the_binary_cannot_spawn(
     run = _poll_until_done(client, start.json()["id"])
 
     assert run["status"] == "failed"
+    assert run["settled"] is True
     by_name = {c["name"]: c for c in run["checks"]}
     assert by_name["spawn_session_id"]["passed"] is False
     assert "spawn raised" in by_name["spawn_session_id"]["detail"]

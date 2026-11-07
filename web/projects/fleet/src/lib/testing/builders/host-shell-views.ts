@@ -38,7 +38,7 @@ export function servedProjectStatusView(
 
 /** A selftest run, still running with no checks yet. */
 export function selfTestView(overrides: Partial<SelfTestView> = {}): SelfTestView {
-  return { checks: [], error: null, harness: 'mock', id: 'st_1', status: 'running', ...overrides };
+  return { checks: [], error: null, harness: 'mock', id: 'st_1', settled: false, status: 'running', ...overrides };
 }
 
 /** One host subscription, sampled healthy with no spenders and no usage windows. */

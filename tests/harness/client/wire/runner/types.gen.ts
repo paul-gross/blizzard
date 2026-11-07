@@ -3732,10 +3732,12 @@ export type SelfTestStartRequest = {
     harness: string;
 };
 
+export type SelfTestStatus = 'running' | 'passed' | 'failed';
+
 /**
  * SelfTestView
  *
- * A selftest run's current state — ``running`` until every check has resolved.
+ * A selftest run's current state — ``running`` until every check has resolved, then ``settled``.
  */
 export type SelfTestView = {
     /**
@@ -3755,9 +3757,10 @@ export type SelfTestView = {
      */
     id: string;
     /**
-     * Status
+     * Settled
      */
-    status: string;
+    settled: boolean;
+    status: SelfTestStatus;
 };
 
 /**

@@ -6824,8 +6824,16 @@
         "title": "SelfTestStartRequest",
         "type": "object"
       },
+      "SelfTestStatus": {
+        "enum": [
+          "running",
+          "passed",
+          "failed"
+        ],
+        "type": "string"
+      },
       "SelfTestView": {
-        "description": "A selftest run's current state \u2014 ``running`` until every check has resolved.",
+        "description": "A selftest run's current state \u2014 ``running`` until every check has resolved, then ``settled``.",
         "properties": {
           "checks": {
             "items": {
@@ -6853,15 +6861,20 @@
             "title": "Id",
             "type": "string"
           },
+          "settled": {
+            "title": "Settled",
+            "type": "boolean"
+          },
           "status": {
-            "title": "Status",
-            "type": "string"
+            "$ref": "#/components/schemas/SelfTestStatus",
+            "x-blizzard-open": true
           }
         },
         "required": [
           "id",
           "harness",
           "status",
+          "settled",
           "checks",
           "error"
         ],

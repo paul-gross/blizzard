@@ -15,7 +15,8 @@ from typing import ClassVar, Literal
 from blizzard.foundation.roles import domain_model
 from blizzard.runner.harness.selftest_result import LatestSelfTestResult, SelfTestTerminalStatus
 
-SelfTestStatus = Literal["running", SelfTestTerminalStatus]
+#: Where a selftest run stands: ``running`` until it concludes ``passed`` or ``failed``.
+type SelfTestStatus = Literal["running", SelfTestTerminalStatus]
 
 # The seven adapter-drift checks, in the order a run performs them (the last two were added later).
 SPAWN_SESSION_ID = "spawn_session_id"
@@ -61,6 +62,11 @@ class SelfTestRun:
         "passed": frozenset(),
         "failed": frozenset(),
     }
+
+    @property
+    def settled(self) -> bool:
+        """Whether the run has concluded — its status leaves no move (:attr:`TRANSITIONS`)."""
+        return not self.TRANSITIONS[self.status]
 
     def conclude(self, checks: Sequence[SelfTestCheck]) -> SelfTestRun:
         """The run with every check resolved: ``passed`` only when at least one check ran and every
