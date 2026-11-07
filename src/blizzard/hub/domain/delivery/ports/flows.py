@@ -45,6 +45,10 @@ class IReadFlows(Protocol):
         """Every turn of this tenant with no ``ended_at``."""
         ...
 
+    def open_turns_of(self, submission_ids: Sequence[str]) -> list[Turn]:
+        """The turns of ``submission_ids`` with no ``ended_at``, ordered like :meth:`open_turns`."""
+        ...
+
     def submission_for_visit(
         self, chunk_id: str, *, node_id: str, epoch: int, transaction: Transaction | None = None
     ) -> Submission | None:

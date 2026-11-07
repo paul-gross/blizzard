@@ -470,6 +470,9 @@ class _Flows:
     def open_turns(self) -> list[Turn]:
         return self.turns
 
+    def open_turns_of(self, submission_ids: Sequence[str]) -> list[Turn]:
+        return [turn for turn in self.turns if turn.submission_id in set(submission_ids)]
+
     def submission_for_visit(
         self, chunk_id: str, *, node_id: str, epoch: int, transaction: Transaction | None = None
     ) -> Submission | None:
