@@ -38,7 +38,7 @@ ROUTINE_DECLARATIONS = (
     *(
         ProblemDeclaration("POST", path, 422, model)
         for path in _ROUTINE_CREATES
-        for model in (ScopeSlugInvalidProblem, RoutineDefinitionInvalidProblem)
+        for model in (ScopeSlugInvalidProblem, RoutineDefinitionInvalidProblem, admin_t.ConfigFieldInvalidProblem)
     ),
     ProblemDeclaration("GET", "/api/routines/trend", 404, RoutineNotFoundProblem),
     ProblemDeclaration("GET", "/api/routines/trend", 422, GardenWindowInvalidProblem),

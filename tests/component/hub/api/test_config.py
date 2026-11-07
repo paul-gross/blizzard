@@ -997,6 +997,22 @@ def test_an_entry_without_scopes_leaves_the_linked_set(hub: HubHarness) -> None:
     assert hub.client.get(f"/api/routines/{_routine(hub)['routine_id']}/scopes").json() == ["core", "edge"]
 
 
+def test_a_routine_entry_with_neither_slug_nor_name_is_refused_at_its_slug_and_writes_nothing(hub: HubHarness) -> None:
+    _mint_graph(hub)
+    valid = {"slug": "good", "graph_name": "alpha", "default_scope_slug": "core"}
+    bare = {"graph_name": "alpha", "default_scope_slug": "core"}
+
+    refused = _apply_json(hub, {"version": 2, "scopes": [_SCOPE_ENTRY], "routines": [valid, bare]})
+
+    assert refused.status_code == 422, refused.text
+    assert refused.json()["detail"][0]["loc"] == ["body", "routines", 1, "slug"]
+    assert hub.client.get("/api/routines", params={"include_retired": "true"}).json() == []
+
+    assert _rows(_apply_json(hub, {"version": 2, "scopes": [_SCOPE_ENTRY], "routines": [valid]}))
+    name_only = {"name": "by-name", "graph_name": "alpha", "default_scope_slug": "core"}
+    assert _rows(_apply_json(hub, {"version": 2, "scopes": [_SCOPE_ENTRY], "routines": [valid, name_only]}))
+
+
 def test_garden_refusals_are_located_at_their_entry_and_leave_the_store_unchanged(hub: HubHarness) -> None:
     _mint_graph(hub)
     before = _changes(hub)

@@ -377,8 +377,6 @@ def chore_add(
     _, selection = _scope_selection(all_scopes, scopes, False)
     cadence = _resolve_cadence(cli, slug, project)
     chores = _documents(cadence)
-    if any(chore["key"] == key for chore in chores):
-        raise click.ClickException(f"cadence {slug!r} already has chore {key!r}")
     chore: dict[str, Any] = {"key": key, "routine": routine, "scopes": selection, "promote": not hold}
     chore |= {k: v for k, v in {"mode": mode, "note": note}.items() if v is not None}
     _patch(cli, cadence, {"chores": [*chores, chore]}, done=f"added chore {key!r} to cadence {slug!r}")

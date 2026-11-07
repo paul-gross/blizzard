@@ -52819,6 +52819,9 @@
                     },
                     {
                       "$ref": "#/components/schemas/RoutineDefinitionInvalidProblem"
+                    },
+                    {
+                      "$ref": "#/components/schemas/ConfigFieldInvalidProblem"
                     }
                   ]
                 }
@@ -56264,6 +56267,9 @@
                     },
                     {
                       "$ref": "#/components/schemas/RoutineDefinitionInvalidProblem"
+                    },
+                    {
+                      "$ref": "#/components/schemas/ConfigFieldInvalidProblem"
                     }
                   ]
                 }

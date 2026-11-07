@@ -31,6 +31,8 @@ from blizzard.hub.domain.garden.routines import (
     RoutineSlugImmutableError,
     RoutineSlugTakenError,
     require_graph_change_resolves,
+    resolved_handle,
+    stated_handle,
 )
 from blizzard.hub.domain.garden.scopes import IWriteScopeRepository, Scope, ScopeMint, ScopeRegistry, ScopeSlug
 from blizzard.hub.domain.graph.harnesses import InvalidHarnesses
@@ -224,6 +226,39 @@ def test_create_with_a_slug_and_a_name_keeps_each() -> None:
     assert (routine.slug, routine.name) == ("nightly", "Nightly Sweep")
     assert routines.changes[-1].record_key == "nightly"
     assert FieldChange("name", None, "Nightly Sweep") in routines.changes[-1].diff
+
+
+def test_two_creates_in_one_project_may_share_a_display_name() -> None:
+    authoring, _, _, _ = _authoring()
+
+    first = _create(authoring, slug="first", name="Nightly")
+    second = _create(authoring, slug="second", name="Nightly")
+
+    assert (first.slug, second.slug) == ("first", "second")
+    assert first.name == second.name == "Nightly"
+    assert first.routine_id != second.routine_id
+
+
+@pytest.mark.parametrize(
+    ("slug", "name", "handle"),
+    [("s", None, "s"), (None, "n", "n"), ("s", "n", "s")],
+)
+def test_the_stated_handle_is_the_slug_else_the_name(slug: str | None, name: str | None, handle: str) -> None:
+    assert stated_handle(slug, name) == handle
+
+
+def test_stating_neither_handle_is_refused_naming_the_slug() -> None:
+    with pytest.raises(ConfigFieldError) as refused:
+        stated_handle(None, None)
+    assert refused.value.field == "slug"
+    with pytest.raises(ConfigFieldError):
+        resolved_handle(None, None)
+
+
+def test_resolved_handle_fills_the_missing_one_from_the_other() -> None:
+    assert resolved_handle("s", None) == ("s", "s")
+    assert resolved_handle(None, "n") == ("n", "n")
+    assert resolved_handle("s", "n") == ("s", "n")
 
 
 def test_create_with_only_a_slug_takes_the_slug_as_its_name() -> None:

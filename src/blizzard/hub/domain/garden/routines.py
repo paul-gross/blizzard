@@ -129,12 +129,19 @@ def require_slug_free(holder: Routine | None, slug: str) -> None:
         raise RoutineSlugTakenError(slug)
 
 
+def stated_handle(slug: str | None, name: str | None) -> str:
+    """The handle a routine states: its slug, else its name; stating neither is refused."""
+    handle = slug if slug is not None else name
+    if handle is None:
+        raise ConfigFieldError("slug", "a routine states a slug, a name, or both")
+    return handle
+
+
 def resolved_handle(slug: str | None, name: str | None) -> tuple[str, str]:
     """The ``(slug, name)`` a create resolves to: each stated value as stated, the missing one the other's value.
     Only a **stated** slug is checked against the scope-slug shape; a slug taken from ``name`` is not, as no routine
     name has ever been shape-checked."""
-    if slug is None and name is None:
-        raise ConfigFieldError("slug", "a routine states a slug, a name, or both")
+    stated_handle(slug, name)
     if slug is not None:
         try:
             ScopeSlug.parse(slug)
