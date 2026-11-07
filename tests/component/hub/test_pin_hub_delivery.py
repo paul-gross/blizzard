@@ -13,7 +13,7 @@ import pytest
 
 from blizzard.foundation.artifacts import ArtifactKind
 from blizzard.foundation.ids import Id, IdPrefix
-from blizzard.hub.domain.actions.visit import UnconvergedDeliveryError
+from blizzard.hub.domain.actions.declarations import UnconvergedDeliveryError
 from blizzard.hub.domain.artifact.model import StoredArtifact
 from blizzard.hub.domain.chunk.model import WorkRef, decide_close_enqueue
 from blizzard.hub.domain.chunk.ports.fence import EpochAdmission

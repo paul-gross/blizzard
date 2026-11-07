@@ -16,7 +16,7 @@ import yaml
 from blizzard.foundation.artifacts import ArtifactKind
 from blizzard.foundation.clock import FixedClock
 from blizzard.foundation.node_steps import Executor
-from blizzard.hub.domain.actions.visit import GitCommits, UnconvergedDeliveryError
+from blizzard.hub.domain.actions.declarations import GitCommits, UnconvergedDeliveryError
 from blizzard.hub.domain.artifact.model import StoredArtifact
 from blizzard.hub.domain.chunk.model import (
     ChunkFacts,
