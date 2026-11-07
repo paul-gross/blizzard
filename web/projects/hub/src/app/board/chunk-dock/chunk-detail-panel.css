@@ -74,3 +74,7 @@
   display: block;
   padding: 6px 8px;
 }
+/* ChunkFacts pads its own host from this property; zero it so the box body's padding is the only one. */
+fleet-chunk-detail-facts.d-box-body {
+  --chunk-facts-pad: 0;
+}
