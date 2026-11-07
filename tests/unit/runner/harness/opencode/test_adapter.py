@@ -241,6 +241,57 @@ def test_numeric_window_reaches_all_launches_using_session_stamp(
     assert captured[4][1]["OPENCODE_CONFIG_CONTENT"] == config.read_text()
 
 
+def test_auto_window_leaves_the_worker_config_untouched_on_spawn_and_resume(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, spawn_executor: Executor
+) -> None:
+    config = tmp_path / "config.json"
+    config.write_text('{"permission":{"question":"deny"},"plugin":[],"custom":"retained"}')
+    captured: list[dict[str, str]] = []
+
+    class FakeProcess:
+        pid = 9999999
+
+    class Catalog:
+        def limits_for(self, provider: str, model: str) -> OpenCodeModelLimits | None:
+            return OpenCodeModelLimits(100000, 5000)
+
+    class Resolver:
+        def resolve(self, *, cwd: str, env: Any) -> OpenCodeEffectivePermissions:
+            return OpenCodeEffectivePermissions(merged_config={"compaction": {"reserved": 1200}}, agent_rulesets={})
+
+    def launch(cmd: list[str], **kwargs: Any) -> FakeProcess:
+        captured.append(kwargs["env"])
+        return FakeProcess()
+
+    monkeypatch.setattr(subprocess, "Popen", launch)
+    adapter = _adapter(
+        spawn_executor, worker_config_path=str(config), limits_catalog=Catalog(), permission_resolver=Resolver()
+    )
+    preamble = _preamble(str(tmp_path), stdout_path=str(tmp_path / "spawn.out"))
+    envelope = make_envelope("ch_1", "build", node_id="nd_build", choices=[("pass", "ok")])
+    with capture_logs() as logs:
+        adapter.spawn(envelope, preamble, None, model="old/model", compaction_window="auto")
+        adapter.spawn(envelope, preamble, None, resume_from="ses_prior", model="old/model", compaction_window="auto")
+        adapter.resume_with_message(str(tmp_path), "ses_prior", "continue", model="old/model", compaction_window="auto")
+
+    assert len(captured) == 3
+    assert not [log for log in logs if "compaction window" in log["event"]]
+    assert all(env["OPENCODE_CONFIG_CONTENT"] == config.read_text() for env in captured)
+
+
+@pytest.mark.parametrize("value", ["", "150k tokens", "True", "auto2"])
+def test_an_unrecognized_compaction_window_logs_once_per_value_and_is_ignored(
+    value: str, spawn_executor: Executor
+) -> None:
+    adapter = _adapter(spawn_executor)
+
+    with capture_logs() as logs:
+        assert adapter.resolve_compaction_window(value) is None
+        assert adapter.resolve_compaction_window(value) is None
+
+    assert len([entry for entry in logs if "unrecognized compaction window" in entry["event"]]) == 1
+
+
 @pytest.mark.parametrize("failure", ["missing-model", "missing-limits", "resolver-error", "invalid-effective"])
 def test_numeric_window_fallback_preserves_launch_and_warns_once_per_window(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, spawn_executor: Executor, failure: str

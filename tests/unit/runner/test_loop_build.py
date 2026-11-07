@@ -43,7 +43,7 @@ from blizzard.runner.harness.opencode.adapter import OpenCodeAdapter
 from blizzard.runner.harness.opencode.section import OpenCodeSection
 from blizzard.runner.harness.registry import HarnessBinding, HarnessRegistry
 from blizzard.runner.harness.spawn_cwd import SpawnCwd
-from blizzard.runner.harness.wiring import publish_harness_bundle
+from blizzard.runner.harness.wiring import first_bindings, publish_harness_bundle
 from blizzard.runner.host_layout import HostLayout
 from blizzard.runner.hub.identity import RunnerIdentity
 from blizzard.runner.leases.model import NewLease
@@ -361,7 +361,7 @@ def test_process_graph_delivers_the_published_snapshot_to_the_claude_code_adapte
         workspaces=one_workspace(root=str(tmp_path / "workspace")),
         harness_sections=sections(ClaudeCodeSection(worker_settings_path=str(tmp_path / "worker-settings.json"))),
     )
-    snapshot = publish_harness_bundle(bundle, tmp_path)
+    snapshot = publish_harness_bundle(bundle, tmp_path, selection=first_bindings())
 
     graph = build_runner_process(config, bundle=snapshot, runner_id=FIXTURE_RUNNER_ID)
     try:
@@ -854,7 +854,7 @@ def test_loop_wiring_of_delivers_its_bundle_to_the_graph_it_builds(tmp_path: Pat
         db_url=HostLayout(tmp_path).default_db_url,
         workspaces=one_workspace(root=str(tmp_path / "workspace")),
     )
-    snapshot = publish_harness_bundle(bundle, tmp_path)
+    snapshot = publish_harness_bundle(bundle, tmp_path, selection=first_bindings())
 
     def settings_argv(ctx: LoopContext) -> list[str]:
         adapter = ctx.harnesses.lifecycle(CLAUDE_CODE_HARNESS_ID)

@@ -28,6 +28,7 @@ from blizzard.runner.harness.registry import (
 from blizzard.runner.harness.wiring import (
     build_production_harness_health_probes,
     build_production_harness_registry,
+    first_bindings,
 )
 from blizzard.runner.process.internal.linux_process_probe import LinuxProcessProbe
 from tests.support.child_launch import CHILDREN
@@ -148,6 +149,7 @@ def test_production_registry_shares_one_process_launcher_across_both_bindings(
     """Both bindings inherit ONE runner-side launcher — an identity check, not equality."""
     registry = build_production_harness_registry(
         RunnerConfig(root=tmp_path, db_url="sqlite://").harness_settings(NO_TRACING),
+        selection=first_bindings(),
         process=LinuxProcessProbe(),
         executor=spawn_executor,
         children=CHILDREN,
@@ -163,6 +165,7 @@ def test_production_registry_wires_a_real_opencode_transcript_source(tmp_path: P
     """OpenCode's binding names a real transcript source, shared by the adapter and the binding."""
     registry = build_production_harness_registry(
         RunnerConfig(root=tmp_path, db_url="sqlite://").harness_settings(NO_TRACING),
+        selection=first_bindings(),
         process=LinuxProcessProbe(),
         executor=spawn_executor,
         children=CHILDREN,
@@ -186,6 +189,7 @@ def test_production_registry_injects_a_file_price_catalog_from_worker_env_passth
 
     registry = build_production_harness_registry(
         config.harness_settings(NO_TRACING),
+        selection=first_bindings(),
         process=LinuxProcessProbe(),
         executor=spawn_executor,
         children=CHILDREN,
@@ -208,6 +212,7 @@ def test_production_registry_binds_no_price_catalog_with_an_unresolvable_cache_r
 
     registry = build_production_harness_registry(
         config.harness_settings(NO_TRACING),
+        selection=first_bindings(),
         process=LinuxProcessProbe(),
         executor=spawn_executor,
         children=CHILDREN,
@@ -223,6 +228,7 @@ def test_production_registry_omits_a_disabled_claude_code_and_defaults_to_openco
     config = with_claude_code(RunnerConfig(root=tmp_path, db_url="sqlite://"), enabled=False)
     registry = build_production_harness_registry(
         config.harness_settings(NO_TRACING),
+        selection=first_bindings(),
         process=LinuxProcessProbe(),
         executor=spawn_executor,
         children=CHILDREN,
@@ -239,6 +245,7 @@ def test_production_registry_omits_a_disabled_claude_code_and_defaults_to_openco
 def test_production_registry_omits_a_disabled_opencode(tmp_path: Path, spawn_executor: Executor) -> None:
     registry = build_production_harness_registry(
         with_opencode(RunnerConfig(root=tmp_path, db_url="sqlite://"), enabled=False).harness_settings(NO_TRACING),
+        selection=first_bindings(),
         process=LinuxProcessProbe(),
         executor=spawn_executor,
         children=CHILDREN,
@@ -256,6 +263,7 @@ def test_production_registry_defaults_to_claude_code_with_both_enabled(
     assert default_harness_id(
         build_production_harness_registry(
             RunnerConfig(root=tmp_path, db_url="sqlite://").harness_settings(NO_TRACING),
+            selection=first_bindings(),
             process=LinuxProcessProbe(),
             executor=spawn_executor,
             children=CHILDREN,
@@ -268,7 +276,11 @@ def test_production_health_probes_omit_a_disabled_harness(tmp_path: Path) -> Non
     base = RunnerConfig(root=tmp_path, db_url="sqlite://")
     assert list(
         build_production_harness_health_probes(
-            base.harness_settings(NO_TRACING), spawn_roots=("",), corpus=CommittedCorpus(), children=CHILDREN
+            base.harness_settings(NO_TRACING),
+            spawn_roots=("",),
+            corpus=CommittedCorpus(),
+            children=CHILDREN,
+            selection=first_bindings(),
         )
     ) == [
         CLAUDE_CODE_HARNESS_ID,
@@ -277,13 +289,21 @@ def test_production_health_probes_omit_a_disabled_harness(tmp_path: Path) -> Non
     no_claude = with_claude_code(RunnerConfig(root=tmp_path, db_url="sqlite://"), enabled=False)
     assert list(
         build_production_harness_health_probes(
-            no_claude.harness_settings(NO_TRACING), spawn_roots=("",), corpus=CommittedCorpus(), children=CHILDREN
+            no_claude.harness_settings(NO_TRACING),
+            spawn_roots=("",),
+            corpus=CommittedCorpus(),
+            children=CHILDREN,
+            selection=first_bindings(),
         )
     ) == [OPENCODE_HARNESS_ID]
     no_opencode = with_opencode(RunnerConfig(root=tmp_path, db_url="sqlite://"), enabled=False)
     assert list(
         build_production_harness_health_probes(
-            no_opencode.harness_settings(NO_TRACING), spawn_roots=("",), corpus=CommittedCorpus(), children=CHILDREN
+            no_opencode.harness_settings(NO_TRACING),
+            spawn_roots=("",),
+            corpus=CommittedCorpus(),
+            children=CHILDREN,
+            selection=first_bindings(),
         )
     ) == [CLAUDE_CODE_HARNESS_ID]
 
@@ -291,6 +311,7 @@ def test_production_health_probes_omit_a_disabled_harness(tmp_path: Path) -> Non
 def test_a_binding_whose_health_reads_no_spawn_root_is_probed_once_for_every_root(tmp_path: Path) -> None:
     probes = build_production_harness_health_probes(
         RunnerConfig(root=tmp_path, db_url="sqlite://").harness_settings(NO_TRACING),
+        selection=first_bindings(),
         spawn_roots=(str(tmp_path / "a"), str(tmp_path / "b")),
         corpus=CommittedCorpus(),
         children=CHILDREN,
@@ -301,7 +322,11 @@ def test_a_binding_whose_health_reads_no_spawn_root_is_probed_once_for_every_roo
 
 def _probe_auth_path(config: RunnerConfig) -> Path | None:
     probe = build_production_harness_health_probes(
-        config.harness_settings(NO_TRACING), spawn_roots=("",), corpus=CommittedCorpus(), children=CHILDREN
+        config.harness_settings(NO_TRACING),
+        spawn_roots=("",),
+        corpus=CommittedCorpus(),
+        children=CHILDREN,
+        selection=first_bindings(),
     )[OPENCODE_HARNESS_ID]
     assert isinstance(probe, OpenCodeHealthProbe)
     return vars(probe)["_auth_path"]

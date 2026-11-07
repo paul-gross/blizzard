@@ -6,11 +6,19 @@ from __future__ import annotations
 
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
-from typing import Any, cast
+from typing import Any, Protocol, cast
 
 from blizzard.foundation.roles import collaborator
 from blizzard.runner.harness.declaration import HarnessSection, IHarnessDeclaration, IVersionSelectedDeclaration
-from blizzard.runner.harness.internal.version_probe import VersionProbe
+
+
+class IVersionProbe(Protocol):
+    """What choosing a declaration asks of a binary: whether it is there to run, and the version it reports."""
+
+    def binary_present(self, binary: str) -> bool: ...
+
+    def observe_version(self, binary: str) -> str | None: ...
+
 
 type HarnessFamilies = Mapping[str, Sequence[IHarnessDeclaration[Any]]]
 
@@ -32,7 +40,7 @@ class BindingSelection:
 
 
 def select_declaration(
-    family: Sequence[IHarnessDeclaration[Any]], section: HarnessSection, versions: VersionProbe
+    family: Sequence[IHarnessDeclaration[Any]], section: HarnessSection, versions: IVersionProbe
 ) -> IHarnessDeclaration[Any]:
     """The declaration of ``family`` binding ``section``'s binary, probed once when the family holds several and the
     binary is there to run; the first otherwise, whose health reports the binary missing."""
@@ -47,7 +55,7 @@ def select_declaration(
 
 
 def select_bindings(
-    families: HarnessFamilies, sections: Mapping[str, HarnessSection], versions: VersionProbe
+    families: HarnessFamilies, sections: Mapping[str, HarnessSection], versions: IVersionProbe
 ) -> BindingSelection:
     """Each harness id's chosen declaration, for the parsed ``sections`` by harness id."""
     return BindingSelection(
@@ -58,4 +66,4 @@ def select_bindings(
     )
 
 
-__all__ = ["BindingSelection", "HarnessFamilies", "select_bindings", "select_declaration"]
+__all__ = ["BindingSelection", "HarnessFamilies", "IVersionProbe", "select_bindings", "select_declaration"]

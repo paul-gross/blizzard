@@ -53,7 +53,7 @@ from blizzard.foundation.trace_ids import DerivedContext, StepKey, step_root, tr
 from blizzard.runner.config import RunnerConfig
 from blizzard.runner.harness.adapter import WorkerHandle
 from blizzard.runner.harness.claude_code.section import ClaudeCodeSection
-from blizzard.runner.harness.wiring import combined_telemetry_plan, declared_telemetry_names
+from blizzard.runner.harness.wiring import combined_telemetry_plan, declared_telemetry_names, first_bindings
 from blizzard.runner.hub.identity import ICurrentRunnerIdentity, RunnerIdentity, RunnerIdentityHolder
 from blizzard.runner.hub.outbound import OutboundFacts
 from blizzard.runner.leases.model import Lease, NewLease
@@ -1393,7 +1393,10 @@ def test_claude_code_spans_are_kept_and_counted_while_traces_are_operator_config
         harness_sections=sections(ClaudeCodeSection(worker_settings_path=str(settings))),
     )
     plan = combined_telemetry_plan(
-        config.harness_settings(NO_TRACING), harness_telemetry_enabled=True, runner_environ=_ENDPOINT
+        config.harness_settings(NO_TRACING),
+        harness_telemetry_enabled=True,
+        runner_environ=_ENDPOINT,
+        selection=first_bindings(),
     )
     assert plan.traces is HarnessTelemetryOutcome.OPERATOR_CONFIGURED
 

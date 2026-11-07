@@ -23,12 +23,13 @@ from blizzard.runner.harness.wiring import (
     HarnessSections,
     combined_telemetry_plan,
     declared_telemetry_names,
+    first_bindings,
     publish_harness_bundle,
 )
 from blizzard.runner.process.child_env import AllowlistedEnv, ChildEnv
 from blizzard.runner.process.child_processes import StreamTarget
 from tests.support.child_launch import version_probe
-from tests.support.config_inputs import host_runtime_of
+from tests.support.config_inputs import host_runtime_of, selector_over
 from tests.support.harness_sections import sections
 from tests.support.runner_fakes import NO_TRACING, FakeProbe, make_envelope
 
@@ -71,6 +72,7 @@ def _plan(
 ) -> HarnessTelemetryPlan:
     return combined_telemetry_plan(
         config.harness_settings(NO_TRACING),
+        selection=first_bindings(),
         bundle=bundle,
         harness_telemetry_enabled=enabled,
         runner_environ=runner_environ,
@@ -133,7 +135,7 @@ def test_one_signal_is_yielded_through_the_published_bundles_settings_env(tmp_pa
     source = tmp_path / "bundle"
     (source / "claude-code").mkdir(parents=True)
     (source / "claude-code" / "settings.json").write_text(json.dumps({"env": {"OTEL_METRICS_EXPORTER": "none"}}))
-    snapshot = publish_harness_bundle(source, tmp_path)
+    snapshot = publish_harness_bundle(source, tmp_path, selection=first_bindings())
     # The runner's own worker file names a destination too; the bundle's composed document supersedes it.
     config = _config(tmp_path, worker_settings_path=_settings(tmp_path, {"OTEL_LOGS_EXPORTER": "otlp"}))
     plan = _plan(config, bundle=snapshot)
@@ -142,12 +144,12 @@ def test_one_signal_is_yielded_through_the_published_bundles_settings_env(tmp_pa
 
 def test_runner_init_erases_an_opt_out_edited_into_the_default_worker_settings(tmp_path: Path) -> None:
     """The default worker settings file is rewritten by every ``init``, so it is no durable home for an opt-out."""
-    config = host_runtime_of(tmp_path).init().runner_config()
+    config = host_runtime_of(tmp_path).init(selector_over()).runner_config()
     path = tmp_path / WORKER_SETTINGS_FILENAME
     path.write_text(json.dumps({**json.loads(path.read_text()), "env": {"OTEL_METRICS_EXPORTER": "none"}}))
     assert _plan(config).metrics is YIELDED
 
-    assert _plan(host_runtime_of(tmp_path).init().runner_config()) == _all(CAPTURED)
+    assert _plan(host_runtime_of(tmp_path).init(selector_over()).runner_config()) == _all(CAPTURED)
 
 
 def test_a_generic_endpoint_yields_every_signal(tmp_path: Path) -> None:

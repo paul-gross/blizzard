@@ -75,6 +75,48 @@ def test_an_unresolvable_cross_graph_target_escalates_as_a_migration_target(tmp_
     assert not any(a["name"] == "hub-unroutable-outcome" for a in detail["artifacts"])
 
 
+def _retire(hub: HubHarness, graph_id: str) -> None:
+    retire = hub.client.post(f"/api/graphs/{graph_id}/retire", json={"by": "operator"})
+    assert retire.status_code == 202, retire.text
+
+
+def _mint_triage(hub: HubHarness, *, prompt: str) -> str:
+    created = hub.client.post("/api/graphs", json={"definition_yaml": _RUNNER_TARGET_YAML.replace("Triage.", prompt)})
+    assert created.status_code == 201, created.text
+    return created.json()["graph_id"]
+
+
+def _cross_chunk(hub: HubHarness) -> str:
+    chunk_id, build_node_id, _graph = to_merge_node(hub, graph_yaml=_CROSS.replace("@TARGET@", "triage"))
+    submit_build_pass(hub, chunk_id, build_node_id, 1)
+    return chunk_id
+
+
+def test_a_cross_graph_target_whose_only_mint_is_retired_escalates_as_a_migration_target(tmp_path: Path) -> None:
+    hub = build_hub(tmp_path)
+    _retire(hub, _mint_triage(hub, prompt="Triage."))
+
+    chunk_id = _cross_chunk(hub)
+
+    detail = hub.client.get(f"/api/chunks/{chunk_id}").json()
+    assert detail["status"] == "needs_human"
+    assert detail["escalation"]["cause"] == "migration-target-unresolvable"
+
+
+def test_a_cross_graph_choice_migrates_onto_the_older_mint_when_the_newest_is_retired(tmp_path: Path) -> None:
+    hub = build_hub(tmp_path)
+    older = _mint_triage(hub, prompt="Triage first.")
+    hub.clock.advance(timedelta(hours=1))
+    newest = _mint_triage(hub, prompt="Triage second.")
+    _retire(hub, newest)
+
+    chunk_id = _cross_chunk(hub)
+
+    detail = hub.client.get(f"/api/chunks/{chunk_id}").json()
+    assert detail["graph_id"] == older
+    assert detail["status"] == "ready"
+
+
 def test_a_standing_intent_stays_parked_across_an_ordinary_hub_exit(tmp_path: Path) -> None:
     hub = build_hub(tmp_path)
     assert hub.client.post("/api/graphs", json={"definition_yaml": _RUNNER_TARGET_YAML}).status_code == 201
