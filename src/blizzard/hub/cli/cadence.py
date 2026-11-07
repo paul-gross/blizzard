@@ -7,12 +7,12 @@ from __future__ import annotations
 
 from collections.abc import Iterator, Sequence
 from dataclasses import dataclass
-from http import HTTPStatus
 from typing import Any
 
 import click
 
 from blizzard.cli.get_group import GetGroup
+from blizzard.cli.refusal import refusal_of
 from blizzard.foundation.roles import dto
 from blizzard.foundation.run_mode import RunMode
 from blizzard.hub.cli.command import FleetCommand
@@ -20,6 +20,7 @@ from blizzard.hub.cli.context import CliContext, project_required
 from blizzard.hub.cli.flag_gate import hub_flag_on
 from blizzard.hub.cli.project_option import project_option, project_path, project_query
 from blizzard.hub.cli.views import Listing
+from blizzard.wire.problem import REVISION_CONFLICT
 
 _FLAG_OFF_NOTICE = "note: cadences mint nothing until the flag cadences is on"
 _ANCHORS = click.Choice(["scheduled", "started", "finished"])
@@ -168,8 +169,6 @@ def cadence_create(
         json_body={k: v for k, v in body.items() if v is not None},
         door=True,
     )
-    if resp.status_code == HTTPStatus.UNPROCESSABLE_ENTITY:
-        raise click.ClickException(f"cadence rejected: {cli.detail(resp, 'validation failed')}")
     cli.check(resp, "POST /cadences")
     created = resp.json()
     cli.show_lines(created, f"created cadence {created['slug']!r} {created['cadence_id']}")
@@ -220,7 +219,6 @@ def cadence_errands(cli: CliContext, slug: str, project: str | None) -> None:
     rows = cli.get(
         f"/api/cadences/{cadence['cadence_id']}/errands",
         "GET /cadences/{id}/errands",
-        on_status={404: f"unknown cadence {slug!r}"},
     ).json()
     _flag_notice()
     cli.show(rows, ErrandListing(rows))
@@ -235,11 +233,10 @@ def _patch(cli: CliContext, cadence: dict[str, Any], body: dict[str, Any], *, do
         if_match=int(cadence["revision"]),
         door=True,
     )
-    if resp.status_code == HTTPStatus.UNPROCESSABLE_ENTITY:
-        raise click.ClickException(f"cadence edit rejected: {cli.detail(resp, 'validation failed')}")
-    if resp.status_code == HTTPStatus.CONFLICT:
-        raise click.ClickException(f"cadence edit refused: {cli.detail(resp, 'conflict')}")
-    cli.check(resp, "PATCH /cadences/{id}", on_status={404: f"unknown cadence {cadence['slug']!r}"})
+    refusal = refusal_of(resp)
+    if refusal.type == REVISION_CONFLICT:
+        raise click.ClickException(f"cadence edit refused: {refusal.message or 'conflict'}")
+    cli.check(resp, "PATCH /cadences/{id}")
     cli.show_lines(resp.json(), done)
 
 
@@ -311,7 +308,6 @@ def _set_lifecycle(cli: CliContext, slug: str, *, verb: str, by: str, project: s
         f"/api/cadences/{cadence['cadence_id']}/{verb}",
         f"POST /cadences/{{id}}/{verb}",
         json_body={"by": by},
-        on_status={404: f"unknown cadence {slug!r}"},
         door=True,
     )
     body = resp.json()

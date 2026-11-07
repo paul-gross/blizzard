@@ -9,11 +9,11 @@ from __future__ import annotations
 import json
 from functools import partial
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends
 from pydantic import TypeAdapter
 
 from blizzard.foundation.store.utc import iso_utc
-from blizzard.hub.api import problems
+from blizzard.hub.api import problems, problems_runners
 from blizzard.hub.api.auth import reject_runner_principal
 from blizzard.hub.api.auth_session import require, tenant_bound
 from blizzard.hub.api.deps import Services
@@ -158,5 +158,5 @@ def get_transcript_segment(chunk_id: str, segment_id: str, services: Services) -
         raise ProblemHTTPException(partial(problems.chunk_not_found_problem, chunk_id))
     records = services.transcripts.records_for_segment(chunk_id, segment_id)
     if not records:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"unknown segment {segment_id}")
+        raise ProblemHTTPException(partial(problems_runners.transcript_segment_not_found_problem, segment_id))
     return content_view(segment_id, records)

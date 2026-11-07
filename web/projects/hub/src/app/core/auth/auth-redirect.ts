@@ -16,7 +16,9 @@ export function isPublicUrl(url: string): boolean {
  * navigation ends, that is the page the tab opened on. */
 function landingUrl(router: Router): string {
   const navigation = router.currentNavigation();
-  return navigation === null ? router.url : router.serializeUrl(navigation.extractedUrl);
+  return navigation === null
+    ? router.url
+    : router.serializeUrl(navigation.extractedUrl);
 }
 
 /** Routes the app to `/login`, first stashing the current route for {@link consumeReturnUrl} to read back once the

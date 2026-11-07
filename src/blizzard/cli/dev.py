@@ -17,6 +17,7 @@ from blizzard.cli.collaborators import CliCollaborators, ClientFactory, HTTPErro
 from blizzard.cli.config_inputs import packaged_flag_registry, strict_config
 from blizzard.cli.operator_trace import OperatorTrace
 from blizzard.cli.param_rank import ParamSource
+from blizzard.cli.refusal import refusal_of
 from blizzard.foundation.invariants import Violation
 from blizzard.foundation.operator_sessions import IReadSessionStore
 from blizzard.foundation.operator_sessions.internal.session_file import SessionFile
@@ -31,6 +32,7 @@ from blizzard.runner.host_config import HostConfig
 from blizzard.runner.host_layout import HostLayout
 from blizzard.tools.invariants import Invariants
 from blizzard.wire.invariants import InvariantsResponse
+from blizzard.wire.problem import INVARIANTS_IN_PROGRESS
 
 # The hub's fact checks read every chunk, so a client waits longer than the verbs' fifteen seconds.
 CHECK_TIMEOUT = 60.0
@@ -182,7 +184,9 @@ def _ask_hub(ctx: click.Context, client_factory: ClientFactory, hub_url: str) ->
     cli = CliContext.of(hub_url, session, OperatorTrace.source(ctx), client_factory)
     try:
         resp = cli.send("get", _HUB_PATH, timeout=CHECK_TIMEOUT)
-        cli.check(resp, "check-invariants", on_status={HTTPStatus.CONFLICT: _RUNNING})
+        if resp.status_code == HTTPStatus.CONFLICT and refusal_of(resp).type in (None, INVARIANTS_IN_PROGRESS):
+            raise click.ClickException(_RUNNING)
+        cli.check(resp, "check-invariants")
         return _violations(resp.json())
     except click.ClickException as exc:
         raise click.ClickException(f"{where}: {exc.message}") from exc

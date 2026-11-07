@@ -9,7 +9,7 @@ from typing import Annotated
 
 from fastapi import APIRouter, Query, Request
 
-from blizzard.runner.api.hub_proxy import HubProxy
+from blizzard.runner.api.hub_proxy import RELAYED_REFUSALS, HubProxy
 from blizzard.runner.api.lease_scope import authorized_lease
 from blizzard.wire.analytics import AnalyticsCountsResponse, AnalyticsSpendResponse
 
@@ -56,7 +56,9 @@ def _spend(
     return AnalyticsSpendResponse.model_validate(upstream.json())
 
 
-@router.get("/leases/{lease_id}/analytics/counts/files", response_model=AnalyticsCountsResponse)
+@router.get(
+    "/leases/{lease_id}/analytics/counts/files", response_model=AnalyticsCountsResponse, responses=RELAYED_REFUSALS
+)
 def get_analytics_counts_files(
     lease_id: str,
     request: Request,
@@ -67,7 +69,9 @@ def get_analytics_counts_files(
     return _counts(lease_id, request, "files", since, until)
 
 
-@router.get("/leases/{lease_id}/analytics/counts/skills", response_model=AnalyticsCountsResponse)
+@router.get(
+    "/leases/{lease_id}/analytics/counts/skills", response_model=AnalyticsCountsResponse, responses=RELAYED_REFUSALS
+)
 def get_analytics_counts_skills(
     lease_id: str,
     request: Request,
@@ -78,7 +82,11 @@ def get_analytics_counts_skills(
     return _counts(lease_id, request, "skills", since, until)
 
 
-@router.get("/leases/{lease_id}/analytics/counts/agent-types", response_model=AnalyticsCountsResponse)
+@router.get(
+    "/leases/{lease_id}/analytics/counts/agent-types",
+    response_model=AnalyticsCountsResponse,
+    responses=RELAYED_REFUSALS,
+)
 def get_analytics_counts_agent_types(
     lease_id: str,
     request: Request,
@@ -89,7 +97,9 @@ def get_analytics_counts_agent_types(
     return _counts(lease_id, request, "agent-types", since, until)
 
 
-@router.get("/leases/{lease_id}/analytics/counts/nodes", response_model=AnalyticsCountsResponse)
+@router.get(
+    "/leases/{lease_id}/analytics/counts/nodes", response_model=AnalyticsCountsResponse, responses=RELAYED_REFUSALS
+)
 def get_analytics_counts_nodes(
     lease_id: str,
     request: Request,
@@ -101,7 +111,9 @@ def get_analytics_counts_nodes(
     return _counts(lease_id, request, "nodes", since, until, by_name)
 
 
-@router.get("/leases/{lease_id}/analytics/spend/nodes", response_model=AnalyticsSpendResponse)
+@router.get(
+    "/leases/{lease_id}/analytics/spend/nodes", response_model=AnalyticsSpendResponse, responses=RELAYED_REFUSALS
+)
 def get_analytics_spend_nodes(
     lease_id: str,
     request: Request,
@@ -113,7 +125,9 @@ def get_analytics_spend_nodes(
     return _spend(lease_id, request, "nodes", since, until, by_name)
 
 
-@router.get("/leases/{lease_id}/analytics/spend/graphs", response_model=AnalyticsSpendResponse)
+@router.get(
+    "/leases/{lease_id}/analytics/spend/graphs", response_model=AnalyticsSpendResponse, responses=RELAYED_REFUSALS
+)
 def get_analytics_spend_graphs(
     lease_id: str,
     request: Request,

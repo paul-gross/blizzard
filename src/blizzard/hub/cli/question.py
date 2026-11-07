@@ -2,15 +2,16 @@
 
 from __future__ import annotations
 
-from http import HTTPStatus
 from typing import Any
 
 import click
 
+from blizzard.cli.refusal import refusal_of
 from blizzard.hub.cli.command import FleetCommand
 from blizzard.hub.cli.context import CliContext
 from blizzard.hub.cli.project_option import project_option, project_query
 from blizzard.hub.cli.views import Listing, QuestionLine
+from blizzard.wire.problem import QUESTION_ALREADY_ANSWERED
 
 
 class QuestionListing(Listing):
@@ -45,10 +46,9 @@ def question_answer(cli: CliContext, question_id: str, answer_text: str, answere
     resp = cli.send(
         "post", f"/api/questions/{question_id}/answers", json_body={"answer": answer_text, "answered_by": answered_by}
     )
-    if resp.status_code == HTTPStatus.CONFLICT:
-        body = resp.json()
-        if "answered_by" in body:
-            raise click.ClickException(f"already answered by {body['answered_by']}: {body.get('answer')!r}")
-        raise click.ClickException(str(body.get("detail", "question is closed")))
-    cli.check(resp, "POST /questions/{id}/answers", on_status={404: f"unknown question {question_id}"})
+    refusal = refusal_of(resp)
+    if refusal.type == QUESTION_ALREADY_ANSWERED:
+        body = refusal.members
+        raise click.ClickException(f"already answered by {body['answered_by']}: {body['answer']!r}")
+    cli.check(resp, "POST /questions/{id}/answers")
     cli.finish(resp, f"answered {question_id}: {answer_text!r} (the runner will resume the session)")

@@ -48,9 +48,9 @@ def test_enroll_posts_to_the_enrollments_endpoint_and_prints_the_token() -> None
     assert "sekrit-token" in result.output
 
 
-def test_enroll_maps_an_unknown_runner() -> None:
+def test_enroll_shows_the_hubs_unknown_runner_refusal() -> None:
     def fake_get(url: str, *, timeout: float, **_: object) -> _FakeResponse:
-        return _FakeResponse(404)
+        return _FakeResponse(404, {"detail": "unknown runner ghost"})
 
     bound = bind_stubs(get=fake_get)
     result = bound.runner.invoke(hub_group, ["runner", "enroll", "ghost"])

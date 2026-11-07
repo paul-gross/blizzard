@@ -5,14 +5,14 @@ from __future__ import annotations
 
 from fastapi import APIRouter, Request
 
-from blizzard.runner.api.hub_proxy import HubProxy
+from blizzard.runner.api.hub_proxy import RELAYED_REFUSALS, HubProxy
 from blizzard.runner.api.lease_scope import authorized_lease
 from blizzard.wire.scope import ScopeView
 
 router = APIRouter(prefix="/api", tags=["runner"])
 
 
-@router.get("/leases/{lease_id}/scopes", response_model=list[ScopeView])
+@router.get("/leases/{lease_id}/scopes", response_model=list[ScopeView], responses=RELAYED_REFUSALS)
 def list_scopes(lease_id: str, request: Request) -> list[ScopeView]:
     """Forward this lease's scope-list read to the hub — the layered pass-through. The
     lease authorizes the caller and names its chunk, so the hub answers that chunk's project's

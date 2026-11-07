@@ -5,9 +5,10 @@ from __future__ import annotations
 from collections.abc import Iterable
 from dataclasses import dataclass, field
 from datetime import datetime
+from functools import partial
 
-from fastapi import HTTPException, status
-
+from blizzard.hub.api import problems_admin
+from blizzard.hub.api.problem_exceptions import ProblemHTTPException
 from blizzard.hub.domain.graph.model import Graph, GraphSummary, IReadGraphRepository
 
 
@@ -18,7 +19,7 @@ def graph_by_ref(graphs: IReadGraphRepository, ref: str) -> Graph:
     while a retired graph named by id resolves and is refused by the domain instead."""
     graph = graphs.get(ref) or graphs.get_enabled_by_name(ref)
     if graph is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"unknown graph {ref}")
+        raise ProblemHTTPException(partial(problems_admin.graph_not_found_problem, f"unknown graph {ref}"))
     return graph
 
 

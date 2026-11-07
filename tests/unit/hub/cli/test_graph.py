@@ -15,6 +15,7 @@ import pytest
 from click.testing import CliRunner
 
 from blizzard.hub.cli import hub as hub_group
+from blizzard.wire.problem import GRAPH_DEFINITION_INVALID
 from tests.support.worker_http import bind_stubs
 
 
@@ -125,9 +126,9 @@ def test_graph_enable_posts_to_the_enable_endpoint() -> None:
     assert "enabled" in result.output
 
 
-def test_graph_retire_maps_an_unknown_graph() -> None:
+def test_graph_retire_shows_the_hubs_unknown_graph_refusal() -> None:
     def fake_post(url: str, *, json: object, timeout: float) -> _FakeResponse:
-        return _FakeResponse(404)
+        return _FakeResponse(404, {"detail": "unknown graph gr_ghost"})
 
     bound = bind_stubs(post=fake_post)
     result = bound.runner.invoke(hub_group, ["graph", "retire", "gr_ghost"])
@@ -241,9 +242,9 @@ def test_graph_show_surfaces_the_baked_artifact_names_only_under_json() -> None:
     assert as_json.output.index("zebra") < as_json.output.index("apple")
 
 
-def test_graph_show_maps_an_unknown_graph() -> None:
+def test_graph_show_shows_the_hubs_unknown_graph_refusal() -> None:
     def fake_get(url: str, *, timeout: float) -> _FakeResponse:
-        return _FakeResponse(404)
+        return _FakeResponse(404, {"detail": "unknown graph gr_ghost"})
 
     bound = bind_stubs(get=fake_get)
     result = bound.runner.invoke(hub_group, ["graph", "get", "gr_ghost"])
@@ -337,7 +338,10 @@ def test_graph_mint_maps_a_validation_failure(tmp_path: Path) -> None:
     graph_path = _write_graph_with_prompt_ref(tmp_path)
 
     def fake_post(url: str, *, json: object, timeout: float) -> _FakeResponse:
-        return _FakeResponse(422, {"ok": False, "errors": ["entry node 'build' not found"], "warnings": []})
+        return _FakeResponse(
+            422,
+            {"type": GRAPH_DEFINITION_INVALID, "ok": False, "errors": ["entry node 'build' not found"], "warnings": []},
+        )
 
     bound = bind_stubs(post=fake_post)
     result = bound.runner.invoke(hub_group, ["graph", "mint", str(graph_path)])
@@ -354,6 +358,7 @@ def test_graph_mint_validation_failure_also_renders_warnings(tmp_path: Path) -> 
         return _FakeResponse(
             422,
             {
+                "type": GRAPH_DEFINITION_INVALID,
                 "ok": False,
                 "errors": ["entry node 'build' not found"],
                 "warnings": ["node build has no incoming edges"],

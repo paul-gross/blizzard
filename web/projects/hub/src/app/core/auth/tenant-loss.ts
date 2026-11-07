@@ -27,13 +27,18 @@ export class TenantLoss {
   private readonly clock = inject(FLEET_CLOCK);
 
   private checking = false;
-  private confirmed: { readonly tenant: string; readonly at: number } | null = null;
+  private confirmed: { readonly tenant: string; readonly at: number } | null =
+    null;
 
   /** A call that named `tenant` answered 404. */
   notFound(tenant: string): void {
     // A call sent before the board entered another tenant, or after it left this one, says nothing about the current.
     if (this.checking || tenant !== this.context.current()) return;
-    if (this.confirmed?.tenant === tenant && this.clock() - this.confirmed.at < TENANT_CONFIRMED_MS) return;
+    if (
+      this.confirmed?.tenant === tenant &&
+      this.clock() - this.confirmed.at < TENANT_CONFIRMED_MS
+    )
+      return;
     this.checking = true;
     void this.check(tenant)
       .catch(() => undefined)
@@ -45,7 +50,9 @@ export class TenantLoss {
     // No session is the sign-in flow's to handle, and a failed read (thrown) leaves the board as it is.
     const me = await readMe();
     if (me === null) return;
-    if ((me.tenants ?? []).some((membership) => membership.tenant_id === tenant)) {
+    if (
+      (me.tenants ?? []).some((membership) => membership.tenant_id === tenant)
+    ) {
       this.confirmed = { tenant, at: this.clock() };
       return;
     }

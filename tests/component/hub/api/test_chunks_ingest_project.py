@@ -8,11 +8,14 @@ from pathlib import Path
 
 import pytest
 
+from blizzard.hub.api import problems
 from blizzard.hub.domain.chunk.ingest import IngestSourceNotLinked
 from blizzard.hub.domain.chunk.model import WorkItemAuthor, WorkRef
 from blizzard.hub.domain.projects.model import ProjectId
 from blizzard.wire.chunk import ChunkIngestConflict
+from blizzard.wire.problem import POINTER_ALREADY_HELD
 from tests.support.project_ingest import ingest_project, two_projects
+from tests.support.refusal_observation import app_spec, declared_refusal_mismatches
 from tests.support.scaffolding import (
     HubHarness,
     hub_store_connections,
@@ -98,14 +101,19 @@ def test_an_item_a_live_chunk_of_another_project_holds_answers_409_naming_its_ho
     held = body["chunk_id"]
     assert _project_of(hub, held) == first
 
-    status, body = ingest_project(hub, "shared:11", project="second")
+    resp = hub.client.post("/api/chunks", json={"tokens": ["shared:11"], "project": "second"})
 
-    assert status == 409
+    spec = app_spec(hub.client)
+    assert declared_refusal_mismatches(spec, resp, "post", "/api/chunks", 409, ChunkIngestConflict) == []
     assert (
-        body
-        == ChunkIngestConflict(
-            existing_chunk_id=held, source="shared", ref="11", slug="shared", label="shared#11"
-        ).model_dump()
+        resp.json()
+        == problems.pointer_already_held_problem(
+            held, "shared", "11", "shared", "shared#11", instance="/api/chunks"
+        ).problem_dump()
+    )
+    assert (resp.json()["type"], resp.json()["detail"]) == (
+        POINTER_ALREADY_HELD,
+        "pointer already held by a live chunk",
     )
     assert [c["chunk_id"] for c in hub.client.get("/api/chunks").json()["chunks"]] == [held]
 

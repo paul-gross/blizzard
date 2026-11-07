@@ -9,14 +9,14 @@ from urllib.parse import quote
 
 from fastapi import APIRouter, Request
 
-from blizzard.runner.api.hub_proxy import HubProxy
+from blizzard.runner.api.hub_proxy import RELAYED_REFUSALS, HubProxy
 from blizzard.runner.api.lease_scope import authorized_lease
 from blizzard.wire.finding import FindingView
 
 router = APIRouter(prefix="/api", tags=["runner"])
 
 
-@router.get("/leases/{lease_id}/findings", response_model=list[FindingView])
+@router.get("/leases/{lease_id}/findings", response_model=list[FindingView], responses=RELAYED_REFUSALS)
 def list_findings(lease_id: str, request: Request) -> list[FindingView]:
     """Forward this lease's chunk's answered-findings read to the hub; its refusals pass through verbatim."""
     lease = authorized_lease(lease_id, request)
@@ -26,7 +26,7 @@ def list_findings(lease_id: str, request: Request) -> list[FindingView]:
     return [FindingView.model_validate(item) for item in upstream.json()]
 
 
-@router.get("/leases/{lease_id}/findings/{finding_id}", response_model=FindingView)
+@router.get("/leases/{lease_id}/findings/{finding_id}", response_model=FindingView, responses=RELAYED_REFUSALS)
 def get_finding(lease_id: str, finding_id: str, request: Request) -> FindingView:
     """Forward one finding of this lease's chunk's answered set to the hub; its refusals pass through verbatim."""
     lease = authorized_lease(lease_id, request)

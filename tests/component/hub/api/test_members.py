@@ -8,6 +8,7 @@ lists members only through one."""
 
 from __future__ import annotations
 
+import json
 from pathlib import Path
 
 import pytest
@@ -18,6 +19,7 @@ from blizzard.hub.api.auth_session import TENANT_HEADER
 from blizzard.hub.auth.models import User
 from blizzard.hub.store import schema
 from blizzard.hub.tenancy import TenantId
+from blizzard.wire.problem import TENANT_NOT_FOUND
 from tests.support.scaffolding import (
     HubHarness,
     build_hub,
@@ -119,7 +121,15 @@ def test_a_non_member_answers_exactly_as_a_user_that_does_not_exist(tmp_path: Pa
         for user_id in (elsewhere.user_id, "usr_01KXZZZZZZZZZZZZZZZZZZZZZZ", "alan")
     ] + [hub.client.delete(f"/api/members/{user_id}", headers=headers) for user_id in (elsewhere.user_id, "usr_none")]
 
-    assert {(a.status_code, a.text) for a in answers} == {(404, '{"detail":"no such user"}')}
+    refusal = {
+        "type": "urn:blizzard:problem:member-not-found",
+        "title": "Member not found",
+        "detail": "no such user",
+        "status": 404,
+    }
+    assert {a.status_code for a in answers} == {404}
+    assert {a.headers["content-type"] for a in answers} == {"application/problem+json"}
+    assert [{**a.json(), "instance": None} for a in answers] == [{**refusal, "instance": None}] * len(answers)
     assert _facts(hub) == before
 
 
@@ -175,7 +185,14 @@ def test_a_hub_administrator_naming_no_open_tenant_is_answered_as_anyone(tmp_pat
         hub.client.put(f"/api/members/{grace.user_id}", json={"role": "guest"}, headers=_as(hub, root, tenant)).text
         for tenant in (TenantId("ten_01KXZZZZZZZZZZZZZZZZZZZZZZ"), TenantId("not-a-tenant"))
     }
-    assert answers == {'{"detail":"no such tenant"}'}
+    (answer,) = answers
+    assert json.loads(answer) == {
+        "type": TENANT_NOT_FOUND,
+        "title": "Tenant not found",
+        "detail": "no such tenant",
+        "instance": f"/api/members/{grace.user_id}",
+        "status": 404,
+    }
 
 
 def test_a_revoked_member_can_no_longer_enter_the_tenant(tmp_path: Path) -> None:

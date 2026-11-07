@@ -35,6 +35,7 @@ from blizzard.hub.store import schema
 from blizzard.hub.store.internal.tenant_teardown_store import DRAIN_ORDER, TenantTeardownStore
 from blizzard.hub.store.scoped import is_tenant_owned
 from blizzard.hub.tenancy import HUB_SCOPED_OPTION, TenantClosed, TenantId, UnknownTenant
+from blizzard.wire.problem import TENANT_NOT_FOUND
 from tests.support.scaffolding import (
     HubHarness,
     added_runner,
@@ -188,7 +189,11 @@ def test_a_member_write_whose_tenant_closes_mid_request_answers_404_and_writes_n
 
     response = TestClient(hub.app).post("/api/secrets", json={"name": "gh", "value": "v"}, headers=person)
 
-    assert (response.status_code, response.json()) == (404, {"detail": "no such tenant"})
+    assert (response.status_code, response.json()["type"], response.json()["detail"]) == (
+        404,
+        TENANT_NOT_FOUND,
+        "no such tenant",
+    )
     assert _rows_of(hub, tenant) == rows["closed"]
 
 
@@ -247,7 +252,11 @@ def test_a_hub_administrators_grant_whose_tenant_is_deleted_mid_request_answers_
 
     response = TestClient(hub.app).put(f"/api/members/{nobody.user_id}", json={"role": "admin"}, headers=headers)
 
-    assert (response.status_code, response.json()) == (404, {"detail": "no such tenant"})
+    assert (response.status_code, response.json()["type"], response.json()["detail"]) == (
+        404,
+        TENANT_NOT_FOUND,
+        "no such tenant",
+    )
     assert states == [TenantDeletionState.DELETED]
     assert _rows_of(hub, tenant) == {}
 
@@ -264,7 +273,11 @@ def test_a_hub_administrators_grant_whose_tenant_closes_mid_request_answers_404_
 
     response = TestClient(hub.app).put(f"/api/members/{nobody.user_id}", json={"role": "admin"}, headers=headers)
 
-    assert (response.status_code, response.json()) == (404, {"detail": "no such tenant"})
+    assert (response.status_code, response.json()["type"], response.json()["detail"]) == (
+        404,
+        TENANT_NOT_FOUND,
+        "no such tenant",
+    )
     assert _rows_of(hub, tenant) == rows["closed"]
 
 
@@ -288,7 +301,11 @@ def test_a_tenant_admins_revoke_whose_tenant_closes_mid_request_answers_404_and_
 
     response = TestClient(hub.app).request(method, path.format(user_id=bob.user_id), json=body, headers=headers)
 
-    assert (response.status_code, response.json()) == (404, {"detail": "no such tenant"})
+    assert (response.status_code, response.json()["type"], response.json()["detail"]) == (
+        404,
+        TENANT_NOT_FOUND,
+        "no such tenant",
+    )
     assert _rows_of(hub, tenant) == rows["closed"]
 
 

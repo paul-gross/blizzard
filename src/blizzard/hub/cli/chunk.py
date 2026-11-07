@@ -4,12 +4,12 @@ from __future__ import annotations
 
 from collections.abc import Iterator
 from dataclasses import dataclass
-from http import HTTPStatus
 from typing import Any, TypedDict, cast
 
 import click
 
 from blizzard.cli.get_group import GetGroup
+from blizzard.cli.refusal import refusal_of
 from blizzard.cli.transcript_render import SegmentContentLines, SegmentIndexLines
 from blizzard.foundation.chunk_status import TERMINAL_STATUSES
 from blizzard.foundation.roles import dto
@@ -18,6 +18,13 @@ from blizzard.hub.cli.context import CliContext
 from blizzard.hub.cli.flow import flow_label, place_label
 from blizzard.hub.cli.project_option import project_option, project_query
 from blizzard.hub.cli.views import ChunkLine, ChunkRow, Cost, Listing, pointer_label
+from blizzard.wire.problem import (
+    DEPENDENCY_WOULD_CLOSE_CYCLE,
+    DEPENDENT_NOT_EDITABLE,
+    NO_STANDING_DEPENDENCY,
+    POINTER_ALREADY_HELD,
+    PREREQUISITE_EPHEMERAL,
+)
 
 
 class Neighbor(TypedDict):
@@ -145,7 +152,7 @@ def chunk_list(cli: CliContext, project: str | None) -> None:
 @click.argument("chunk_id")
 def chunk_show(cli: CliContext, chunk_id: str) -> None:
     """Show one chunk: status, current node, holding runner, pointers, dependencies, and cost."""
-    resp = cli.get(f"/api/chunks/{chunk_id}", "GET /chunks/{id}", on_status={404: f"unknown chunk {chunk_id}"})
+    resp = cli.get(f"/api/chunks/{chunk_id}", "GET /chunks/{id}")
     detail = resp.json()
     cli.show(detail, ChunkDetail(detail))
 
@@ -189,12 +196,13 @@ def chunk_ingest(cli: CliContext, pointers: tuple[str, ...], project: str | None
     if project is not None:
         request["project"] = project
     resp = cli.send("post", "/api/chunks", json_body=request)
-    if resp.status_code == HTTPStatus.CONFLICT:
-        conflict = resp.json()
+    refusal = refusal_of(resp)
+    if refusal.type == POINTER_ALREADY_HELD:
+        conflict = refusal.members
         raise click.ClickException(
             f"pointer {pointer_label(conflict)} already held by chunk {conflict.get('existing_chunk_id')}"
         )
-    cli.check(resp, "POST /chunks", on_status={422: "at least one token required"})
+    cli.check(resp, "POST /chunks")
     body = resp.json()
     cli.show_lines(body, f"ingested {len(tokens)} pointer(s) → chunk {body['chunk_id']}")
 
@@ -257,7 +265,6 @@ def chunk_set(
         f"/api/chunks/{chunk_id}",
         "PATCH /chunks/{id}",
         json_body=body,
-        on_status={404: f"unknown chunk {chunk_id}", 409: "chunk is not editable", 422: "invalid request"},
     )
     view = resp.json()
     parts: list[str] = []
@@ -284,11 +291,6 @@ def chunk_promote(cli: CliContext, chunk_id: str, after: str | None) -> None:
         f"/api/chunks/{chunk_id}/promote",
         "POST /chunks/{id}/promote",
         json_body={"after_chunk_id": after} if after is not None else None,
-        on_status={
-            409: "chunk is not promotable, or --after is not in the ready queue",
-            404: f"no such chunk {chunk_id}",
-            422: "a chunk cannot be placed after itself",
-        },
     )
     cli.finish(resp, f"promoted {chunk_id} — now ready for a runner to claim")
 
@@ -308,11 +310,6 @@ def chunk_demote(cli: CliContext, chunk_id: str, after: str | None) -> None:
         f"/api/chunks/{chunk_id}/demote",
         "POST /chunks/{id}/demote",
         json_body={"after_chunk_id": after} if after is not None else None,
-        on_status={
-            409: "chunk is not demotable, or --after is not in the backlog",
-            404: f"no such chunk {chunk_id}",
-            422: "a chunk cannot be placed after itself",
-        },
     )
     cli.finish(resp, f"demoted {chunk_id} — back to not ready")
 
@@ -330,7 +327,6 @@ def chunk_pause(cli: CliContext, chunk_id: str, by: str) -> None:
         f"/api/chunks/{chunk_id}/pause",
         "POST /chunks/{id}/pause",
         json_body={"by": by},
-        on_status={409: "chunk is not pausable", 404: f"no such chunk {chunk_id}"},
     )
     cli.finish(
         resp,
@@ -351,7 +347,6 @@ def chunk_resume(cli: CliContext, chunk_id: str, by: str) -> None:
         f"/api/chunks/{chunk_id}/resume",
         "POST /chunks/{id}/resume",
         json_body={"by": by},
-        on_status={404: f"no such chunk {chunk_id}"},
     )
     cli.finish(
         resp,
@@ -371,7 +366,6 @@ def chunk_detach(cli: CliContext, chunk_id: str) -> None:
     resp = cli.post(
         f"/api/chunks/{chunk_id}/detach",
         "POST /chunks/{id}/detach",
-        on_status={409: "chunk has no live route holding a claim", 404: f"no such chunk {chunk_id}"},
     )
     cli.finish(
         resp,
@@ -395,22 +389,23 @@ def chunk_depend(cli: CliContext, chunk_id: str, prerequisite_chunk_id: str, by:
         f"/api/chunks/{chunk_id}/dependencies",
         json_body={"prerequisite_chunk_id": prerequisite_chunk_id, "by": by},
     )
-    if resp.status_code == HTTPStatus.CONFLICT:
-        body = resp.json()
-        if "status" in body:
-            raise click.ClickException(
-                f"{body['chunk_id']} is not editable at status {body['status']} — cannot declare a dependency"
-            )
-        if "dependent_chunk_id" in body:
-            raise click.ClickException(
-                f"declaring {body['dependent_chunk_id']} → {body['prerequisite_chunk_id']} "
-                "would close a cycle in the standing dependency graph"
-            )
+    refusal = refusal_of(resp)
+    kind = refusal.type
+    body = refusal.members
+    if kind == DEPENDENT_NOT_EDITABLE:
+        raise click.ClickException(
+            f"{body['chunk_id']} is not editable at status {body['status']} — cannot declare a dependency"
+        )
+    if kind == DEPENDENCY_WOULD_CLOSE_CYCLE:
+        raise click.ClickException(
+            f"declaring {body['dependent_chunk_id']} → {body['prerequisite_chunk_id']} "
+            "would close a cycle in the standing dependency graph"
+        )
+    if kind == PREREQUISITE_EPHEMERAL:
         raise click.ClickException(f"{body['chunk_id']} is ephemeral and cannot be named as a prerequisite")
     cli.check(
         resp,
         "POST /chunks/{id}/dependencies",
-        on_status={404: f"unknown chunk {chunk_id} or {prerequisite_chunk_id}"},
     )
     cli.finish(resp, f"{chunk_id} now depends on {prerequisite_chunk_id}")
 
@@ -428,12 +423,13 @@ def chunk_release_dependency(cli: CliContext, chunk_id: str, prerequisite_chunk_
         f"/api/chunks/{chunk_id}/dependencies/release",
         json_body={"prerequisite_chunk_id": prerequisite_chunk_id, "by": by},
     )
-    if resp.status_code == HTTPStatus.CONFLICT:
-        body = resp.json()
+    refusal = refusal_of(resp)
+    if refusal.type == NO_STANDING_DEPENDENCY:
+        body = refusal.members
         raise click.ClickException(
             f"no standing dependency from {body['dependent_chunk_id']} to {body['prerequisite_chunk_id']}"
         )
-    cli.check(resp, "POST /chunks/{id}/dependencies/release", on_status={404: f"unknown chunk {chunk_id}"})
+    cli.check(resp, "POST /chunks/{id}/dependencies/release")
     cli.finish(resp, f"released {chunk_id}'s dependency on {prerequisite_chunk_id}")
 
 
@@ -448,7 +444,6 @@ def chunk_requeue(cli: CliContext, chunk_id: str, note: str | None) -> None:
         f"/api/chunks/{chunk_id}/requeues",
         "POST /chunks/{id}/requeues",
         json_body={"note": note} if note is not None else None,
-        on_status={409: "chunk is not escalated", 404: f"no such chunk {chunk_id}"},
     )
     cli.finish(resp, f"requeued {chunk_id} — re-leasable at its current node")
 
@@ -466,7 +461,6 @@ def chunk_stop(cli: CliContext, chunk_id: str, by: str) -> None:
         f"/api/chunks/{chunk_id}/stop",
         "POST /chunks/{id}/stop",
         json_body={"by": by},
-        on_status={409: "chunk is not stoppable", 404: f"no such chunk {chunk_id}"},
     )
     cli.finish(resp, f"stopped {chunk_id} — terminally abandoned, its route (if any) released")
 
@@ -483,7 +477,6 @@ def chunk_done(cli: CliContext, chunk_id: str, by: str) -> None:
         f"/api/chunks/{chunk_id}/complete",
         "POST /chunks/{id}/complete",
         json_body={"by": by},
-        on_status={404: f"no such chunk {chunk_id}"},
     )
     cli.finish(resp, f"completed {chunk_id} — done, its route (if any) released")
 
@@ -517,7 +510,6 @@ def chunk_restart(
         f"/api/chunks/{chunk_id}/restart",
         "POST /chunks/{id}/restart",
         json_body={"node": node, "to_graph": to_graph, "by": by, **({"note": note} if note is not None else {})},
-        on_status={409: "chunk is not restartable there", 404: f"no such chunk {chunk_id}"},
     )
     body = resp.json()
     landed = body.get("current_node_name") or node or "its current node"
@@ -558,11 +550,6 @@ def chunk_migrate(cli: CliContext, chunk_id: str, to_graph: str | None, node: st
         f"/api/chunks/{chunk_id}",
         "PATCH /chunks/{id}",
         json_body=body,
-        on_status={
-            404: f"unknown chunk {chunk_id}",
-            409: "chunk is not editable",
-            422: "invalid migration request",
-        },
     )
 
     body = resp.json()
@@ -582,7 +569,6 @@ def chunk_group_cmd(cli: CliContext, chunk_id: str, merge_ids: tuple[str, ...]) 
         f"/api/chunks/{chunk_id}/group",
         "POST /chunks/{id}/group",
         json_body={"merge_chunk_ids": list(merge_ids)},
-        on_status={404: f"unknown chunk {chunk_id}", 409: "one of the named chunks is not unacquired"},
     )
     body = resp.json()
     merged = ", ".join(body.get("merged_chunk_ids", [])) or "none"
@@ -604,7 +590,6 @@ def chunk_delete(cli: CliContext, chunk_id: str, by: str, yes: bool) -> None:
         f"/api/chunks/{chunk_id}",
         "DELETE /chunks/{id}",
         json_body={"by": by},
-        on_status={409: "chunk is not deletable", 404: f"no such chunk {chunk_id}"},
     )
     cli.finish(resp, f"deleted {chunk_id} — its hub item(s), if any, withdrawn")
 
@@ -621,7 +606,6 @@ class WorkItems:
         resp = self.cli.get(
             f"/api/chunks/{self.chunk_id}/work-items",
             "GET /chunks/{id}/work-items",
-            on_status={404: f"unknown chunk {self.chunk_id}"},
         )
         body = resp.json()
         self.cli.show(body, WorkItemListing(body.get("items", [])))
@@ -650,7 +634,6 @@ def chunk_transcript_list(cli: CliContext, chunk_id: str) -> None:
     body = cli.get(
         f"/api/chunks/{chunk_id}/transcripts",
         "GET /chunks/{id}/transcripts",
-        on_status={404: f"unknown chunk {chunk_id}"},
     ).json()
     cli.show(body, SegmentIndexLines(body))
 
@@ -666,7 +649,6 @@ def chunk_transcript_get(cli: CliContext, chunk_id: str, segment_id: str) -> Non
     body = cli.get(
         f"/api/chunks/{chunk_id}/transcripts/{segment_id}",
         "GET /chunks/{id}/transcripts/{segment_id}",
-        on_status={404: f"unknown chunk {chunk_id}, or no segment {segment_id} in it"},
     ).json()
     cli.show(body, SegmentContentLines(body))
 

@@ -7,10 +7,11 @@ directly."""
 from __future__ import annotations
 
 from dataclasses import dataclass
+from typing import Any
 
 import httpx2
 import structlog
-from fastapi import Request, status
+from fastapi import Request, Response, status
 from fastapi.exceptions import HTTPException
 
 from blizzard.foundation.clock import IMonotonicClock
@@ -22,6 +23,7 @@ from blizzard.runner.config import RunnerConfig
 from blizzard.runner.hub.client import HubClientError, ITokenIdentityReader
 from blizzard.runner.hub.held_token import ICurrentHubToken
 from blizzard.runner.hub.identity import IdentityVerdict, IIdentityOnContact
+from blizzard.wire.problem_reading import read_problem
 
 # The per-attempt bound: the timeout on any single outbound request this proxy makes.
 HUB_TIMEOUT = 15.0
@@ -52,6 +54,67 @@ def _unverified(verdict: IdentityVerdict) -> str:
     }[verdict.state]
     remedy = verdict.remedy()
     return f"{code}: {verdict.refusal()}" + (f"; {remedy}" if remedy is not None else "")
+
+
+#: The upstream headers a relayed refusal keeps: how to authenticate again, and when to retry.
+_RELAYED_HEADERS = ("www-authenticate", "retry-after")
+
+
+#: The refusal statuses a hub-proxied route relays, each declared as the base problem a client reads.
+RELAYED_REFUSALS: dict[int | str, dict[str, Any]] = {
+    code: {
+        "description": "A refusal the hub answered, relayed as the hub sent it.",
+        "content": {"application/problem+json": {"schema": {"$ref": "#/components/schemas/Problem"}}},
+    }
+    for code in (
+        status.HTTP_400_BAD_REQUEST,
+        status.HTTP_401_UNAUTHORIZED,
+        status.HTTP_403_FORBIDDEN,
+        status.HTTP_404_NOT_FOUND,
+        status.HTTP_409_CONFLICT,
+        status.HTTP_422_UNPROCESSABLE_CONTENT,
+        status.HTTP_503_SERVICE_UNAVAILABLE,
+    )
+}
+
+# A proxied 422 can also be FastAPI's own request validation response.
+RELAYED_REFUSALS[status.HTTP_422_UNPROCESSABLE_CONTENT]["content"]["application/json"] = {
+    "schema": {"$ref": "#/components/schemas/HTTPValidationError"}
+}
+
+
+class UpstreamRefusal(HTTPException):
+    """A refusal the hub answered with a JSON object body, relayed to the runner's caller as the hub sent it: the body,
+    the status, the ``Content-Type`` and the authentication and throttling headers. ``detail`` carries the flattened
+    text for a caller that only reads the status."""
+
+    def __init__(self, upstream: httpx2.Response, detail: str) -> None:
+        headers = {name: upstream.headers[name] for name in _RELAYED_HEADERS if name in upstream.headers}
+        super().__init__(status_code=upstream.status_code, detail=detail, headers=headers or None)
+        self.body = upstream.content
+        # SIM401 would rewrite this to ``.get``, whose receiver the producer-delegation guards cannot resolve.
+        self.media_type = upstream.headers["content-type"] if "content-type" in upstream.headers else "application/json"  # noqa: SIM401
+        #: The relayed problem's ``type``; ``None`` for a body that predates problem details.
+        self.problem_type: str | None = read_problem(upstream.json()).type
+
+
+async def relay_upstream_refusal(request: Request, exc: Exception) -> Response:
+    """Answer a relayed hub refusal byte for byte."""
+    assert isinstance(exc, UpstreamRefusal)
+    return Response(content=exc.body, status_code=exc.status_code, headers=exc.headers, media_type=exc.media_type)
+
+
+def _refusal(upstream: httpx2.Response) -> HTTPException:
+    """The runner's answer to a hub refusal: the hub's own JSON object body when it sent one, else its text as a
+    ``detail``."""
+    detail = HubProxy.detail_of(upstream)
+    try:
+        body: object = upstream.json()
+    except ValueError:
+        return HTTPException(status_code=upstream.status_code, detail=detail)
+    if isinstance(body, dict):
+        return UpstreamRefusal(upstream, detail)
+    return HTTPException(status_code=upstream.status_code, detail=detail)
 
 
 @dataclass(frozen=True)
@@ -213,13 +276,13 @@ class HubProxy:
                 return upstream
 
             if not (retryable and upstream.status_code in _RETRYABLE_STATUSES):
-                raise HTTPException(status_code=upstream.status_code, detail=self._detail(upstream))
+                raise _refusal(upstream)
 
             if self._may_retry(retries, budget, started):
                 self.clock.sleep(_backoff(retries))
                 retries += 1
                 continue
-            raise HTTPException(status_code=upstream.status_code, detail=self._detail(upstream))
+            raise _refusal(upstream)
 
     def _verify_identity(self, timeout: float | None) -> None:
         """Return once the token is verified to name the configured runner; raise ``503`` with the reason
@@ -261,7 +324,7 @@ class HubProxy:
         return get_logger(f"blizzard.runner.api.{self.what.replace('-', '_')}")
 
     @staticmethod
-    def _detail(response: httpx2.Response) -> str:
+    def detail_of(response: httpx2.Response) -> str:
         """The hub's error detail, unwrapped from its JSON body when present."""
         try:
             payload = as_table(response.json())

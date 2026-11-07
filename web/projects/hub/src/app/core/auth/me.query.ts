@@ -23,7 +23,8 @@ export function injectMeQuery() {
     return {
       queryKey: hubMeKey,
       queryFn: readMe,
-      select: (me: MeResponse | null) => (me === null ? null : inSelectedTenant(me, resolve(me.tenants ?? []))),
+      select: (me: MeResponse | null) =>
+        me === null ? null : inSelectedTenant(me, resolve(me.tenants ?? [])),
       retry: false,
     };
   });

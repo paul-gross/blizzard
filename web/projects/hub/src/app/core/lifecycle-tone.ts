@@ -26,6 +26,10 @@ export const builtInTone: Tone = 'idle';
  * {@link lifecycleTone}; `superseded`, and a lifecycle this build does not know, reuse `idle`'s dim.
  */
 export const graphLifecycleTone = openLookup<GraphLifecycle, Tone>(
-  { effective: lifecycleTone(false), superseded: 'idle', retired: lifecycleTone(true) },
+  {
+    effective: lifecycleTone(false),
+    superseded: 'idle',
+    retired: lifecycleTone(true),
+  },
   () => 'idle',
 );

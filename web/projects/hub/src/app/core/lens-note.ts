@@ -1,4 +1,9 @@
-import { ChangeDetectionStrategy, Component, computed, input } from '@angular/core';
+import {
+  ChangeDetectionStrategy,
+  Component,
+  computed,
+  input,
+} from '@angular/core';
 
 import { lensNoteText } from './lens-note.model';
 import { injectLensedProject } from './lensed-project';
@@ -20,5 +25,7 @@ export class LensNote {
   /** What the view shows, as the sentence's subject — "Graphs", "Members", "Secrets". */
   readonly surface = input.required<string>();
 
-  protected readonly text = computed(() => lensNoteText(this.surface(), this.project()));
+  protected readonly text = computed(() =>
+    lensNoteText(this.surface(), this.project()),
+  );
 }

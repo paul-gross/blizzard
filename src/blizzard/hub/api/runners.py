@@ -13,13 +13,13 @@ from datetime import datetime
 from functools import partial
 from typing import Annotated, ClassVar
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, Query, status
 
 from blizzard.foundation.hub_event_types import RunnerChangeKind
 from blizzard.foundation.node_steps import Executor
 from blizzard.foundation.store.utc import iso_utc
 from blizzard.foundation.subscription_miss import SampleMissReason
-from blizzard.hub.api import chunk_events, problems
+from blizzard.hub.api import chunk_events, problems, problems_runners
 from blizzard.hub.api.auth import reject_runner_principal
 from blizzard.hub.api.auth_session import require, tenant_bound
 from blizzard.hub.api.deps import Services
@@ -392,14 +392,14 @@ def add_runner(
         else:
             host = services.hosts.get_host(request.host_id)
             if host is None:
-                raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"unknown host {request.host_id}")
+                raise ProblemHTTPException(partial(problems_runners.host_not_found_problem, request.host_id))
             added = services.host_enrollment.add_runner(
                 host, request.name, by=identity.username, projects=request.projects
             )
     except UnknownServedProject as exc:
-        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail=str(exc)) from exc
+        raise ProblemHTTPException(partial(problems.unknown_served_project_problem, exc)) from exc
     except HostRetired as exc:
-        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
+        raise ProblemHTTPException(partial(problems.host_retired_problem, exc, status_code=409)) from exc
     services.events.publish_runner_changed(added.runner_id, kind="added", runner_name=added.name, by=identity.username)
     return RunnerAddResponse(runner_id=added.runner_id, runner_name=added.name, token=added.token)
 
@@ -420,7 +420,7 @@ def enroll_runner(runner_id: str, services: Services) -> RunnerEnrollmentRespons
     try:
         token = services.enrollment.enroll(registration)
     except RunnerRetired as exc:
-        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
+        raise ProblemHTTPException(partial(problems.runner_retired_problem, exc, status_code=409)) from exc
     return RunnerEnrollmentResponse(runner_id=runner_id, token=token)
 
 
@@ -492,9 +492,11 @@ def retire_runner(runner_id: str, request: RunnerRetireRequest, services: Servic
         outcome = services.fleet.retire(registration, by=request.by, force=request.force)
     except RetireInterrupted as exc:
         publish_retirement(services, registration, exc.committed, by=request.by, changes=changes)
-        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
-    except (RunnerHoldsRoutes, RunnerLifecycleConflict) as exc:
-        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
+        raise ProblemHTTPException(partial(problems.runner_retire_interrupted_problem, exc)) from exc
+    except RunnerHoldsRoutes as exc:
+        raise ProblemHTTPException(partial(problems.runner_holds_routes_problem, exc)) from exc
+    except RunnerLifecycleConflict as exc:
+        raise ProblemHTTPException(partial(problems.runner_lifecycle_conflict_problem, exc)) from exc
     publish_retirement(services, registration, outcome, by=request.by, changes=changes)
     return RunnerRetireResponse(
         runner=_reread(services, runner_id), released_chunk_ids=[r.chunk_id for r in outcome.released]
@@ -551,9 +553,13 @@ def reinstate_runner(runner_id: str, request: RunnerLifecycleRequest, services: 
         outcome = services.fleet.reinstate(registration, by=request.by)
     except ReinstateInterrupted as exc:
         _publish_releases(services, exc.released, changes)
-        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
-    except (RunnerNotRetired, HostRetired, RunnerLifecycleConflict) as exc:
-        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
+        raise ProblemHTTPException(partial(problems_runners.runner_reinstate_interrupted_problem, exc)) from exc
+    except RunnerNotRetired as exc:
+        raise ProblemHTTPException(partial(problems_runners.runner_not_retired_problem, exc)) from exc
+    except HostRetired as exc:
+        raise ProblemHTTPException(partial(problems.host_retired_problem, exc, status_code=409)) from exc
+    except RunnerLifecycleConflict as exc:
+        raise ProblemHTTPException(partial(problems.runner_lifecycle_conflict_problem, exc)) from exc
     _publish_releases(services, outcome.released, changes)
     services.events.publish_runner_changed(
         runner_id,
@@ -579,8 +585,10 @@ def revoke_runner_token(
     registration = _registration(services, runner_id)
     try:
         revocation_id = services.fleet.revoke_token(registration, by=request.by)
-    except (RunnerNotEnrolled, RunnerLifecycleConflict) as exc:
-        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
+    except RunnerNotEnrolled as exc:
+        raise ProblemHTTPException(partial(problems_runners.runner_not_enrolled_problem, exc)) from exc
+    except RunnerLifecycleConflict as exc:
+        raise ProblemHTTPException(partial(problems.runner_lifecycle_conflict_problem, exc)) from exc
     services.events.publish_runner_changed(
         runner_id,
         kind="token-revoked",

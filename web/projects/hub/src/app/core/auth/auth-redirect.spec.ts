@@ -1,15 +1,24 @@
 import type { Router } from '@angular/router';
 
-import { consumeReturnUrl, isPublicUrl, redirectToLogin, safeAuthorizeReturnTo } from './auth-redirect';
+import {
+  consumeReturnUrl,
+  isPublicUrl,
+  redirectToLogin,
+  safeAuthorizeReturnTo,
+} from './auth-redirect';
 
 /** A router on `url`, or navigating to `inFlight` when one is given. */
-function fakeRouter(url: string, inFlight?: string): { router: Router; navigated: string[] } {
+function fakeRouter(
+  url: string,
+  inFlight?: string,
+): { router: Router; navigated: string[] } {
   const navigated: string[] = [];
   const router = {
     get url() {
       return url;
     },
-    currentNavigation: () => (inFlight === undefined ? null : { extractedUrl: inFlight }),
+    currentNavigation: () =>
+      inFlight === undefined ? null : { extractedUrl: inFlight },
     serializeUrl: (tree: unknown) => String(tree),
     navigateByUrl: (target: string) => {
       navigated.push(target);
@@ -76,20 +85,27 @@ describe('redirectToLogin / consumeReturnUrl', () => {
 
 describe('safeAuthorizeReturnTo', () => {
   it('honors a same-origin /api/auth/authorize request, query string intact', () => {
-    const raw = '/api/auth/authorize?client=runner-a&redirect_uri=https://runner-a.example/cb&state=s';
+    const raw =
+      '/api/auth/authorize?client=runner-a&redirect_uri=https://runner-a.example/cb&state=s';
     expect(safeAuthorizeReturnTo(raw)).toBe(raw);
   });
 
   it('honors the bare /api/auth/authorize path', () => {
-    expect(safeAuthorizeReturnTo('/api/auth/authorize')).toBe('/api/auth/authorize');
+    expect(safeAuthorizeReturnTo('/api/auth/authorize')).toBe(
+      '/api/auth/authorize',
+    );
   });
 
   it('rejects an absolute cross-origin URL (open-redirect guard)', () => {
-    expect(safeAuthorizeReturnTo('https://evil.example/api/auth/authorize')).toBeNull();
+    expect(
+      safeAuthorizeReturnTo('https://evil.example/api/auth/authorize'),
+    ).toBeNull();
   });
 
   it('rejects a protocol-relative //host target', () => {
-    expect(safeAuthorizeReturnTo('//evil.example/api/auth/authorize')).toBeNull();
+    expect(
+      safeAuthorizeReturnTo('//evil.example/api/auth/authorize'),
+    ).toBeNull();
   });
 
   it('rejects any other same-origin path', () => {

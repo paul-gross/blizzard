@@ -7,16 +7,17 @@ store (``bzh:controller-read-only``)."""
 from __future__ import annotations
 
 from collections.abc import Mapping
+from functools import partial
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, HTTPException, status
-from fastapi.responses import JSONResponse
+from fastapi import APIRouter, Depends, status
 
 from blizzard.foundation.store.utc import iso_utc
-from blizzard.hub.api import chunk_events
+from blizzard.hub.api import chunk_events, problems, problems_chunks
 from blizzard.hub.api.auth import reject_runner_principal
 from blizzard.hub.api.auth_session import require, tenant_bound
 from blizzard.hub.api.deps import Services
+from blizzard.hub.api.problem_exceptions import ProblemHTTPException
 from blizzard.hub.api.project_label_fields import ProjectLabelFields
 from blizzard.hub.api.project_labels import ProjectLabels
 from blizzard.hub.api.project_params import QueryProject
@@ -26,7 +27,6 @@ from blizzard.hub.domain.chunk.model import DecisionClosed, GateDecision, NotADe
 from blizzard.wire.completion import CheckResult
 from blizzard.wire.decision import (
     DecisionChoiceModel,
-    DecisionResolutionConflict,
     DecisionResolutionRequest,
     DecisionResolutionResponse,
     DecisionView,
@@ -90,7 +90,6 @@ def list_decisions(services: Services, project: QueryProject) -> OpenDecisionsRe
     response_model=DecisionResolutionResponse,
     responses={
         status.HTTP_409_CONFLICT: {
-            "model": DecisionResolutionConflict,
             "description": "A lost first-write-wins race, carrying the winning resolution. A decision closed "
             "without a resolution shares the status and answers a bare `{detail}` instead.",
         }
@@ -108,25 +107,29 @@ def resolve_decision(
     body's ``resolved_by`` field — a spoofed value there is silently ignored."""
     pre_decision = services.chunks.decisions.get_decision(decision_id)
     if pre_decision is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"unknown decision {decision_id}")
+        raise ProblemHTTPException(
+            partial(problems_chunks.decision_not_found_problem, f"unknown decision {decision_id}")
+        )
     change = chunk_events.ChunkChanged.before(services, pre_decision.chunk_id)
     try:
         result = services.decisions.resolve(
             pre_decision, choice=request.choice, resolved_by=identity.username, note=request.note
         )
     except NotADecisionChoice as exc:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+        raise ProblemHTTPException(partial(problems_chunks.not_a_decision_choice_problem, str(exc))) from exc
     except DecisionClosed as exc:
-        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
+        raise ProblemHTTPException(partial(problems_chunks.decision_closed_problem, str(exc))) from exc
     decision = services.chunks.decisions.get_decision(decision_id)
     if not result.resolved:
-        conflict = DecisionResolutionConflict(
-            decision_id=decision_id,
-            already_resolved_by=result.resolved_by,
-            resolved_choice=(decision.resolved_choice or "") if decision is not None else "",
-            resolved_at=(iso_utc(decision.resolved_at) if decision is not None and decision.resolved_at else ""),
+        raise ProblemHTTPException(
+            partial(
+                problems.decision_already_resolved_problem,
+                decision_id,
+                result.resolved_by,
+                (decision.resolved_choice or "") if decision is not None else "",
+                (iso_utc(decision.resolved_at) if decision is not None and decision.resolved_at else ""),
+            )
         )
-        return JSONResponse(status_code=status.HTTP_409_CONFLICT, content=conflict.model_dump())
     if decision is not None:
         key = f"decision_resolutions:{decision_id}"
         state = chunk_events.ChunkFrameState.load(services, decision.chunk_id)

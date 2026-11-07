@@ -48,7 +48,8 @@ export function injectRouteParam(name: string): Signal<string | null> {
 export function injectChildRouteParam(name: string): Signal<string | null> {
   const route = inject(ActivatedRoute);
   const router = inject(Router);
-  const read = (): string | null => route.firstChild?.snapshot?.paramMap.get(name) ?? null;
+  const read = (): string | null =>
+    route.firstChild?.snapshot?.paramMap.get(name) ?? null;
   return toSignal(
     router.events.pipe(
       filter((event) => event instanceof NavigationEnd),
@@ -84,11 +85,17 @@ export interface QueryFilters {
 export function injectQueryFilters(): QueryFilters {
   const route = inject(ActivatedRoute);
   const router = inject(Router);
-  const params = toSignal(route.queryParamMap, { initialValue: route.snapshot.queryParamMap });
+  const params = toSignal(route.queryParamMap, {
+    initialValue: route.snapshot.queryParamMap,
+  });
   return {
     read: (name) => params().get(name),
     patch: (values) => {
-      void router.navigate([], { queryParams: values, queryParamsHandling: 'merge', replaceUrl: true });
+      void router.navigate([], {
+        queryParams: values,
+        queryParamsHandling: 'merge',
+        replaceUrl: true,
+      });
     },
   };
 }

@@ -14,8 +14,13 @@ export const DRAIN_LIMIT = 1000;
  * surfaces as this call's own rejection, so a `queryFn` that awaits it carries a
  * mid-drain failure straight to the query's error state.
  */
-export async function drainPages<Row, Page extends { next_cursor?: string | null }>(
-  fetchPage: (cursor: string | undefined) => Promise<{ data?: Page; error: unknown }>,
+export async function drainPages<
+  Row,
+  Page extends { next_cursor?: string | null },
+>(
+  fetchPage: (
+    cursor: string | undefined,
+  ) => Promise<{ data?: Page; error: unknown }>,
   rowsOf: (page: Page) => Row[] | undefined,
 ): Promise<Row[]> {
   const rows: Row[] = [];

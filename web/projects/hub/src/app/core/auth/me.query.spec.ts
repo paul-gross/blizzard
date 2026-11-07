@@ -1,8 +1,20 @@
-import { ChangeDetectionStrategy, Component, provideZonelessChangeDetection } from '@angular/core';
+import {
+  ChangeDetectionStrategy,
+  Component,
+  provideZonelessChangeDetection,
+} from '@angular/core';
 import { TestBed } from '@angular/core/testing';
-import { QueryClient, provideTanStackQuery } from '@tanstack/angular-query-experimental';
+import {
+  QueryClient,
+  provideTanStackQuery,
+} from '@tanstack/angular-query-experimental';
 
-import { settle, type RequestClientStub, stubError, stubHubClient } from 'fleet/testing';
+import {
+  settle,
+  type RequestClientStub,
+  stubError,
+  stubHubClient,
+} from 'fleet/testing';
 import { hasPermission, injectMeQuery } from './me.query';
 
 @Component({
@@ -35,7 +47,9 @@ describe('injectMeQuery', () => {
       imports: [TestMeQueryHost],
       providers: [
         provideZonelessChangeDetection(),
-        provideTanStackQuery(new QueryClient({ defaultOptions: { queries: { retry: false } } })),
+        provideTanStackQuery(
+          new QueryClient({ defaultOptions: { queries: { retry: false } } }),
+        ),
       ],
     });
     const fixture = TestBed.createComponent(TestMeQueryHost);
@@ -54,12 +68,16 @@ describe('injectMeQuery', () => {
   });
 
   it('resolves to null (not an error) on 401 — no/expired session is a legitimate value', async () => {
-    stub = stubHubClient({ 'GET /api/me': () => stubError(401, { detail: 'not authenticated' }) });
+    stub = stubHubClient({
+      'GET /api/me': () => stubError(401, { detail: 'not authenticated' }),
+    });
     TestBed.configureTestingModule({
       imports: [TestMeQueryHost],
       providers: [
         provideZonelessChangeDetection(),
-        provideTanStackQuery(new QueryClient({ defaultOptions: { queries: { retry: false } } })),
+        provideTanStackQuery(
+          new QueryClient({ defaultOptions: { queries: { retry: false } } }),
+        ),
       ],
     });
     const fixture = TestBed.createComponent(TestMeQueryHost);
@@ -76,13 +94,31 @@ describe('hasPermission', () => {
     expect(hasPermission(undefined, 'user:manage')).toBe(false);
     expect(
       hasPermission(
-        { user_id: 'u', username: 'u', display_name: 'u', role: 'admin', permissions: ['user:manage'], tenants: [], hub_admin: false, assignable_roles: [] },
+        {
+          user_id: 'u',
+          username: 'u',
+          display_name: 'u',
+          role: 'admin',
+          permissions: ['user:manage'],
+          tenants: [],
+          hub_admin: false,
+          assignable_roles: [],
+        },
         'user:manage',
       ),
     ).toBe(true);
     expect(
       hasPermission(
-        { user_id: 'u', username: 'u', display_name: 'u', role: 'contributor', permissions: ['fleet:view'], tenants: [], hub_admin: false, assignable_roles: [] },
+        {
+          user_id: 'u',
+          username: 'u',
+          display_name: 'u',
+          role: 'contributor',
+          permissions: ['fleet:view'],
+          tenants: [],
+          hub_admin: false,
+          assignable_roles: [],
+        },
         'user:manage',
       ),
     ).toBe(false);

@@ -12,23 +12,24 @@ from datetime import datetime
 from functools import partial
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, Query, Request, status
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 
 from blizzard.foundation.chunk_status import TERMINAL_STATUSES, ChunkDeleteRefusal, ChunkStatus
 from blizzard.foundation.store.utc import as_utc
-from blizzard.hub.api import chunk_events, problems
+from blizzard.hub.api import chunk_events, problems, problems_chunks
 from blizzard.hub.api.auth import reject_runner_principal
 from blizzard.hub.api.auth_session import require, tenant_bound
 from blizzard.hub.api.board_window import BOARD_DONE_WINDOW
 from blizzard.hub.api.chunk_edit import ChunkPatchBody
-from blizzard.hub.api.chunk_views import ChunkView, blocked_view, ingest_conflict_response
+from blizzard.hub.api.chunk_views import ChunkView, blocked_view, ingest_conflict_refusal
 from blizzard.hub.api.delivery_declarations import delivery_declarations_for
 from blizzard.hub.api.deps import Services
 from blizzard.hub.api.flow_places import chunk_flow_places
 from blizzard.hub.api.graph_names import GraphNames, graph_by_ref
 from blizzard.hub.api.problem_exceptions import ProblemHTTPException
+from blizzard.hub.api.problem_rendering import declared_problem_response
 from blizzard.hub.api.project_label_fields import project_label_fields
 from blizzard.hub.api.project_params import QueryProject, body_project, project_of_call, project_ref
 from blizzard.hub.api.work_item_reads import read_chunk_work_items
@@ -148,7 +149,7 @@ def _ingest_project(services: TenantServices, pointers: list[WorkRef], named: Pr
 
 
 def ingest_project_refusal(
-    services: TenantServices, exc: IngestProjectAmbiguous | IngestSourceNotLinked
+    request: Request, services: TenantServices, exc: IngestProjectAmbiguous | IngestSourceNotLinked
 ) -> JSONResponse:
     """An ingest's project refusal as its ``422`` body: ``source_not_linked`` naming the source and
     the project it is not linked to (``null`` when it is linked to none); otherwise
@@ -164,7 +165,13 @@ def ingest_project_refusal(
     else:
         found = services.projects.get_many(list(exc.candidates))
         projects = [found[project_id] for project_id in exc.candidates if project_id in found]
-        body = ProjectRequiredBody(message=str(exc), projects=[project_ref(project) for project in projects])
+        required = ProjectRequiredBody(message=str(exc), projects=[project_ref(project) for project in projects])
+        declared = declared_problem_response(
+            request, problems.project_choice_problem(required, instance=request.url.path)
+        )
+        if declared is not None:
+            return declared
+        body = required
     return JSONResponse(status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, content={"detail": body.model_dump()})
 
 
@@ -174,7 +181,7 @@ def ingest_project_refusal(
     status_code=status.HTTP_201_CREATED,
     dependencies=[Depends(require(Permission.CHUNK_INGEST))],
 )
-def ingest_chunk(request: ChunkIngestRequest, services: Services) -> object:
+def ingest_chunk(request: ChunkIngestRequest, services: Services, http_request: Request) -> object:
     """Ingest by source-native token into the project named, or the one the tokens' sources
     agree on; 422 on a project the tenant does not hold, a token no configured source
     claims, a project the tokens leave open (``project_required``), a source the
@@ -190,9 +197,11 @@ def ingest_chunk(request: ChunkIngestRequest, services: Services) -> object:
         pointer = services.work_sources.resolve(token)
         if pointer is None:
             configured = ", ".join(sorted(services.work_sources.names())) or "none"
-            raise HTTPException(
-                status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
-                detail=(f"token {token!r} is not claimed by any configured work source (configured: {configured})"),
+            raise ProblemHTTPException(
+                partial(
+                    problems_chunks.ingest_token_unclaimed_problem,
+                    f"token {token!r} is not claimed by any configured work source (configured: {configured})",
+                )
             )
         pointers.append(pointer)
     try:
@@ -200,23 +209,23 @@ def ingest_chunk(request: ChunkIngestRequest, services: Services) -> object:
         pointers = ingest_work_refs(pointers)
         project = _ingest_project(services, pointers, named)
     except EmptyIngest as exc:
-        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail=str(exc)) from exc
+        raise ProblemHTTPException(partial(problems_chunks.ingest_empty_problem, str(exc))) from exc
     except (IngestProjectAmbiguous, IngestSourceNotLinked) as exc:
-        return ingest_project_refusal(services, exc)
+        return ingest_project_refusal(http_request, services, exc)
     except IngestItemProjectMismatch as exc:
-        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail=str(exc)) from exc
+        raise ProblemHTTPException(partial(problems_chunks.ingest_item_project_mismatch_problem, str(exc))) from exc
     try:
         graph = services.graph_mint.ensure_default(
             services.default_graph_doc, definition_yaml=services.default_graph_yaml
         )
     except DefaultGraphRetired as exc:
-        raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=str(exc)) from exc
+        raise ProblemHTTPException(partial(problems_chunks.default_graph_retired_problem, str(exc))) from exc
     try:
         chunk_id = services.ingest.ingest(pointers, graph=graph, project=project)
     except IngestSourceNotLinked as exc:  # unlinked after the project was chosen
-        return ingest_project_refusal(services, exc)
+        return ingest_project_refusal(http_request, services, exc)
     except IngestConflict as exc:
-        return ingest_conflict_response(services, exc)
+        raise ingest_conflict_refusal(services, exc) from exc
     chunk_events.ChunkChanged.of(services, chunk_id, prev_status=None).publish(cause="minted", key=f"chunks:{chunk_id}")
     services.events.publish_queue_changed()  # mint adds the chunk to the backlog list
     return ChunkIngestResponse(chunk_id=chunk_id, **project_label_fields(project, services.projects.get(project)))
@@ -585,7 +594,7 @@ def requeue_chunk(
     except ChunkNotFound as exc:
         raise ProblemHTTPException(partial(problems.chunk_disappeared_problem, exc)) from exc
     except NotEscalated as exc:
-        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
+        raise ProblemHTTPException(partial(problems_chunks.chunk_not_escalated_problem, str(exc))) from exc
     facts = change.publish(cause="requeued", key=f"requeues:{requeue_id}")
     services.events.publish_queue_changed()  # requeue can re-admit the chunk to the queue
     return ChunkView.of(services, chunk, facts=facts).summary()
@@ -617,15 +626,18 @@ def restart_chunk(chunk_id: str, request: ChunkRestartRequest, services: Service
         )
     except ChunkNotFound as exc:
         raise ProblemHTTPException(partial(problems.chunk_disappeared_problem, exc)) from exc
-    except (
-        ChunkNotRestartable,
-        RestartCurrentNodeUnknown,
-        RestartNodeUnknown,
-        RestartGraphPinChanged,
-        TargetGraphRetired,
-        MigrationTargetIsCurrentPin,
-    ) as exc:
-        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
+    except ChunkNotRestartable as exc:
+        raise ProblemHTTPException(partial(problems_chunks.chunk_not_restartable_problem, str(exc))) from exc
+    except RestartCurrentNodeUnknown as exc:
+        raise ProblemHTTPException(partial(problems_chunks.current_node_not_on_graph_problem, str(exc))) from exc
+    except RestartNodeUnknown as exc:
+        raise ProblemHTTPException(partial(problems_chunks.node_not_on_graph_problem, str(exc))) from exc
+    except RestartGraphPinChanged as exc:
+        raise ProblemHTTPException(partial(problems_chunks.restart_graph_pin_changed_problem, str(exc))) from exc
+    except TargetGraphRetired as exc:
+        raise ProblemHTTPException(partial(problems_chunks.target_graph_retired_problem, str(exc))) from exc
+    except MigrationTargetIsCurrentPin as exc:
+        raise ProblemHTTPException(partial(problems_chunks.migration_target_is_current_pin_problem, str(exc))) from exc
     facts = change.publish(cause="restarted", key=f"chunk_restarts:{restarted.fact_id}")
     publish_flow_facts(services.events, restarted.withdrawn)
     services.events.publish_queue_changed()  # an unrouted chunk re-enters the queue at the target node
@@ -648,7 +660,7 @@ def detach_chunk(chunk_id: str, services: Services) -> ChunkSummary:
     try:
         released_id = services.detach.detach(chunk)
     except NotRouted as exc:
-        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
+        raise ProblemHTTPException(partial(problems_chunks.chunk_not_routed_problem, str(exc))) from exc
     facts = change.publish(cause="detached", key=f"route_released:{released_id}")
     services.events.publish_queue_changed()  # a detached chunk re-enters the ready queue
     return ChunkView.of(services, chunk, facts=facts).summary()
@@ -716,7 +728,7 @@ def stop_chunk(chunk_id: str, request: ChunkStopRequest, services: Services) -> 
     except ChunkNotFound as exc:
         raise ProblemHTTPException(partial(problems.chunk_disappeared_problem, exc)) from exc
     except ChunkNotStoppable as exc:
-        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
+        raise ProblemHTTPException(partial(problems_chunks.chunk_not_stoppable_problem, str(exc))) from exc
     facts = change.publish(cause="stopped", key=f"chunk_stopped:{stopped.fact_id}")
     publish_flow_facts(services.events, stopped.withdrawn)
     services.events.publish_queue_changed()  # a stopped chunk is never offered for claim again
@@ -758,7 +770,7 @@ def _placement_of(request: ChunkPlacementRequest | None) -> Placement:
     try:
         return Placement(after_chunk_id=request.after_chunk_id, to_top=request.to_top)
     except ContradictoryPlacement as exc:
-        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail=str(exc)) from exc
+        raise ProblemHTTPException(partial(problems_chunks.contradictory_placement_problem, str(exc))) from exc
 
 
 @router.post(
@@ -783,10 +795,12 @@ def promote_chunk(chunk_id: str, services: Services, request: ChunkPlacementRequ
         promoted_id = services.promote.promote(chunk, placement=placement)
     except ChunkNotFound as exc:
         raise ProblemHTTPException(partial(problems.chunk_disappeared_problem, exc)) from exc
-    except (ChunkNotPromotable, NotInList) as exc:
-        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
+    except ChunkNotPromotable as exc:
+        raise ProblemHTTPException(partial(problems_chunks.chunk_not_promotable_problem, str(exc))) from exc
+    except NotInList as exc:
+        raise ProblemHTTPException(partial(problems_chunks.not_in_list_problem, str(exc))) from exc
     except SelfAnchoredMove as exc:
-        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail=str(exc)) from exc
+        raise ProblemHTTPException(partial(problems_chunks.self_anchored_move_problem, str(exc))) from exc
     key = f"chunk_promoted:{promoted_id}" if promoted_id is not None else None
     facts = change.publish(cause="promoted", key=key)
     services.events.publish_queue_changed()  # a promoted chunk enters the ready queue
@@ -815,10 +829,12 @@ def demote_chunk(chunk_id: str, services: Services, request: ChunkPlacementReque
         demoted_id = services.demote.demote(chunk, placement=placement)
     except ChunkNotFound as exc:
         raise ProblemHTTPException(partial(problems.chunk_disappeared_problem, exc)) from exc
-    except (ChunkNotDemotable, NotInList) as exc:
-        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
+    except ChunkNotDemotable as exc:
+        raise ProblemHTTPException(partial(problems_chunks.chunk_not_demotable_problem, str(exc))) from exc
+    except NotInList as exc:
+        raise ProblemHTTPException(partial(problems_chunks.not_in_list_problem, str(exc))) from exc
     except SelfAnchoredMove as exc:
-        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail=str(exc)) from exc
+        raise ProblemHTTPException(partial(problems_chunks.self_anchored_move_problem, str(exc))) from exc
     key = f"chunk_demoted:{demoted_id}" if demoted_id is not None else None
     facts = change.publish(cause="demoted", key=key)
     services.events.publish_queue_changed()  # a demoted chunk leaves the ready queue
@@ -844,14 +860,16 @@ def patch_chunk(chunk_id: str, request: ChunkPatchRequest, services: Services) -
         ChunkPatchBody(request, services).apply(chunk)
     except ChunkNotFound as exc:
         raise ProblemHTTPException(partial(problems.chunk_disappeared_problem, exc)) from exc
-    except (
-        ChunkNotEditable,
-        ChunkAlreadyMoved,
-        TargetGraphRetired,
-        MigrationTargetIsCurrentPin,
-        ForcedNodeUnknown,
-    ) as exc:
-        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
+    except ChunkNotEditable as exc:
+        raise ProblemHTTPException(partial(problems_chunks.chunk_not_editable_problem, str(exc))) from exc
+    except ChunkAlreadyMoved as exc:
+        raise ProblemHTTPException(partial(problems_chunks.chunk_already_moved_problem, str(exc))) from exc
+    except TargetGraphRetired as exc:
+        raise ProblemHTTPException(partial(problems_chunks.target_graph_retired_problem, str(exc))) from exc
+    except MigrationTargetIsCurrentPin as exc:
+        raise ProblemHTTPException(partial(problems_chunks.migration_target_is_current_pin_problem, str(exc))) from exc
+    except ForcedNodeUnknown as exc:
+        raise ProblemHTTPException(partial(problems_chunks.node_not_on_graph_problem, str(exc))) from exc
 
     updated = services.chunks.record.get(chunk_id)
     assert updated is not None, "the chunk existed a moment ago and this edit does not delete chunks"
@@ -890,9 +908,9 @@ def delete_chunk(chunk_id: str, request: ChunkDeleteRequest, services: Services)
     except ChunkNotFound as exc:
         raise ProblemHTTPException(partial(problems.chunk_disappeared_problem, exc)) from exc
     except ChunkNotDeletable as exc:
-        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
+        raise ProblemHTTPException(partial(problems_chunks.chunk_not_deletable_problem, str(exc))) from exc
     except ChunkHasDependents as exc:
-        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
+        raise ProblemHTTPException(partial(problems_chunks.chunk_has_dependents_problem, str(exc))) from exc
     change.publish(cause="deleted", key=f"chunk_deleted:{deleted_id}", by=request.by, status=change.prev_status)
     services.events.publish_queue_changed()  # a deleted chunk is never offered for claim again
     return ChunkDeleteResponse(chunk_id=chunk_id)

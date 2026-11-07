@@ -13,11 +13,11 @@ from contextlib import contextmanager
 from functools import partial
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, Query
 
 from blizzard.foundation.findings import FindingFactKind, FindingState
 from blizzard.foundation.store.utc import iso_utc
-from blizzard.hub.api import problems
+from blizzard.hub.api import problems, problems_chunks
 from blizzard.hub.api.auth import reject_runner_principal
 from blizzard.hub.api.auth_session import require, tenant_bound
 from blizzard.hub.api.deps import Services
@@ -107,7 +107,9 @@ def _load_or_404(finding_ids: list[str], services: TenantServices) -> list[Findi
     for finding_id in finding_ids:
         finding = by_id.get(finding_id)
         if finding is None:
-            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"unknown finding {finding_id}")
+            raise ProblemHTTPException(
+                partial(problems_chunks.finding_not_found_problem, f"unknown finding {finding_id}")
+            )
         findings.append(finding)
     return findings
 
@@ -270,7 +272,7 @@ def get_finding(finding_id: str, services: Services) -> FindingDetailView:
     404 on an unknown id."""
     result = services.findings.get_with_facts(finding_id)
     if result is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"unknown finding {finding_id}")
+        raise ProblemHTTPException(partial(problems_chunks.finding_not_found_problem, f"unknown finding {finding_id}"))
     finding, facts = result
     labels = ProjectLabels.read(services, [finding.project_id]).fields(finding.project_id)
     return FindingDetailView.model_validate(
@@ -299,10 +301,18 @@ def _refusals_mapped() -> Generator[None, None, None]:
     non-live absorber is 422."""
     try:
         yield
-    except (FindingTransitionRefused, FindingWriteContended) as exc:
-        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
-    except (FindingNoteRequiredError, DuplicateFindingError, FindingSupersedesItself, AbsorberNotLive) as exc:
-        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail=str(exc)) from exc
+    except FindingTransitionRefused as exc:
+        raise ProblemHTTPException(partial(problems_chunks.finding_transition_refused_problem, str(exc))) from exc
+    except FindingWriteContended as exc:
+        raise ProblemHTTPException(partial(problems_chunks.finding_write_contended_problem, str(exc))) from exc
+    except FindingNoteRequiredError as exc:
+        raise ProblemHTTPException(partial(problems_chunks.finding_note_required_problem, str(exc))) from exc
+    except DuplicateFindingError as exc:
+        raise ProblemHTTPException(partial(problems_chunks.duplicate_finding_problem, str(exc))) from exc
+    except FindingSupersedesItself as exc:
+        raise ProblemHTTPException(partial(problems_chunks.finding_supersedes_itself_problem, str(exc))) from exc
+    except AbsorberNotLive as exc:
+        raise ProblemHTTPException(partial(problems_chunks.absorber_not_live_problem, str(exc))) from exc
 
 
 @router.post("/findings/resolve", response_model=list[FindingView])

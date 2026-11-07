@@ -49,10 +49,6 @@ class FindingDetail:
             yield f"  note: {body['note']}"
 
 
-def _blank_note_fallback(verb: str) -> str:
-    return f"{verb!r} requires a non-empty note"
-
-
 @click.group("finding", cls=GetGroup)
 def finding_group() -> None:
     """Read findings, and close or reopen them."""
@@ -93,9 +89,7 @@ def finding_list(
 @click.argument("finding_id")
 def finding_show(cli: CliContext, finding_id: str) -> None:
     """One finding's whole record."""
-    resp = cli.get(
-        f"/api/findings/{finding_id}", "GET /findings/{id}", on_status={404: f"unknown finding {finding_id}"}
-    )
+    resp = cli.get(f"/api/findings/{finding_id}", "GET /findings/{id}")
     body = resp.json()
     cli.show(body, FindingDetail(body))
 
@@ -107,11 +101,6 @@ def _post_exit(
         f"/api/findings/{path}",
         wire_name,
         json_body={"finding_ids": list(finding_ids), "note": note, **extra},
-        on_status={
-            404: f"unknown finding among {', '.join(finding_ids)}",
-            409: f"{verb!r} is not legal from the state of a finding among {', '.join(finding_ids)}",
-            422: _blank_note_fallback(verb),
-        },
     ).json()
     cli.show(rows, FindingListing(rows))
 

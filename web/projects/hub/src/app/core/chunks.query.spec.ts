@@ -1,9 +1,22 @@
-import { ChangeDetectionStrategy, Component, provideZonelessChangeDetection } from '@angular/core';
+import {
+  ChangeDetectionStrategy,
+  Component,
+  provideZonelessChangeDetection,
+} from '@angular/core';
 import { TestBed } from '@angular/core/testing';
-import { QueryClient, provideTanStackQuery } from '@tanstack/angular-query-experimental';
+import {
+  QueryClient,
+  provideTanStackQuery,
+} from '@tanstack/angular-query-experimental';
 
 import type { ChunkSummary } from 'fleet';
-import { chunkSummary, settle, type RequestClientStub, stubError, stubHubClient } from 'fleet/testing';
+import {
+  chunkSummary,
+  settle,
+  type RequestClientStub,
+  stubError,
+  stubHubClient,
+} from 'fleet/testing';
 import { injectHubBoardChunksQuery } from './chunks.query';
 
 @Component({
@@ -24,7 +37,9 @@ function mount() {
     imports: [TestChunksQueryHost],
     providers: [
       provideZonelessChangeDetection(),
-      provideTanStackQuery(new QueryClient({ defaultOptions: { queries: { retry: false } } })),
+      provideTanStackQuery(
+        new QueryClient({ defaultOptions: { queries: { retry: false } } }),
+      ),
     ],
   });
   return TestBed.createComponent(TestChunksQueryHost);
@@ -35,11 +50,15 @@ describe('injectHubBoardChunksQuery', () => {
   afterEach(() => stub?.restore());
 
   it('reads a single-page GET /api/chunks whole (blizzard#526) — one request when next_cursor is already null', async () => {
-    stub = stubHubClient({ 'GET /api/chunks': () => ({ chunks: [chunk('ch_1')], next_cursor: null }) });
+    stub = stubHubClient({
+      'GET /api/chunks': () => ({ chunks: [chunk('ch_1')], next_cursor: null }),
+    });
     const fixture = mount();
     await settle(fixture);
 
-    expect(fixture.componentInstance.query.data()?.map((c) => c.chunk_id)).toEqual(['ch_1']);
+    expect(
+      fixture.componentInstance.query.data()?.map((c) => c.chunk_id),
+    ).toEqual(['ch_1']);
     expect(stub.forRoute('/api/chunks', 'GET')).toHaveLength(1);
   });
 
@@ -56,7 +75,9 @@ describe('injectHubBoardChunksQuery', () => {
     const fixture = mount();
     await settle(fixture);
 
-    expect(fixture.componentInstance.query.data()?.map((c) => c.chunk_id)).toEqual(['ch_1', 'ch_2', 'ch_3']);
+    expect(
+      fixture.componentInstance.query.data()?.map((c) => c.chunk_id),
+    ).toEqual(['ch_1', 'ch_2', 'ch_3']);
     expect(stub.forRoute('/api/chunks', 'GET')).toHaveLength(2);
   });
 
@@ -65,7 +86,9 @@ describe('injectHubBoardChunksQuery', () => {
     stub = stubHubClient({
       'GET /api/chunks': () => {
         calls += 1;
-        return calls === 1 ? { chunks: [chunk('ch_1')], next_cursor: 'cursor-1' } : stubError(503, { detail: 'unavailable' });
+        return calls === 1
+          ? { chunks: [chunk('ch_1')], next_cursor: 'cursor-1' }
+          : stubError(503, { detail: 'unavailable' });
       },
     });
     const fixture = mount();

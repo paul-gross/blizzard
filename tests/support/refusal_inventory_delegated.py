@@ -26,7 +26,7 @@ SHARED_PRODUCERS = {
     # Tenant closure after resolution is mapped differently for a resolved runner.
     "auth_session.refuse_closed_tenant": {
         "JSONResponse(status_code=status.HTTP_401_UNAUTHORIZED, content={'detail': UNRESOLVED_RUNNER_TOKEN})",
-        "problem_response(authentication_unresolved_problem(instance=request.url.path, detail=UNRESOLVED_RUNNER_TOKEN))",
+        "declared_problem_response(request, authentication_unresolved_problem(instance=request.url.path, detail=UNRESOLVED_RUNNER_TOKEN))",
     },
     # Unhandled exceptions, including failures in dependencies or rendering.
     "app._log_unhandled_request_error": {

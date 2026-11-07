@@ -1,12 +1,27 @@
-import { ChangeDetectionStrategy, Component, provideZonelessChangeDetection } from '@angular/core';
+import {
+  ChangeDetectionStrategy,
+  Component,
+  provideZonelessChangeDetection,
+} from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { Router, provideRouter } from '@angular/router';
-import { QueryClient, provideTanStackQuery } from '@tanstack/angular-query-experimental';
+import {
+  QueryClient,
+  provideTanStackQuery,
+} from '@tanstack/angular-query-experimental';
 
 import type { ProjectView } from 'fleet';
-import { projectView, type RequestClientStub, settle, stubHubClient } from 'fleet/testing';
+import {
+  projectView,
+  type RequestClientStub,
+  settle,
+  stubHubClient,
+} from 'fleet/testing';
 import { provideProjectLens } from './project-lens';
-import { injectShowProjectColors, showsProjectColors } from './project-lens-colors';
+import {
+  injectShowProjectColors,
+  showsProjectColors,
+} from './project-lens-colors';
 
 describe('showsProjectColors', () => {
   it('paints project colours on All with more than one project', () => {
@@ -28,7 +43,11 @@ describe('showsProjectColors', () => {
 @Component({ selector: 'app-test-colors-view', template: '' })
 class TestView {}
 
-@Component({ selector: 'app-test-colors-host', changeDetection: ChangeDetectionStrategy.OnPush, template: '' })
+@Component({
+  selector: 'app-test-colors-host',
+  changeDetection: ChangeDetectionStrategy.OnPush,
+  template: '',
+})
 class ColorsHost {
   readonly show = injectShowProjectColors();
 }
@@ -43,9 +62,14 @@ describe('injectShowProjectColors', () => {
       imports: [ColorsHost],
       providers: [
         provideZonelessChangeDetection(),
-        provideTanStackQuery(new QueryClient({ defaultOptions: { queries: { retry: false } } })),
+        provideTanStackQuery(
+          new QueryClient({ defaultOptions: { queries: { retry: false } } }),
+        ),
         provideRouter([
-          { path: 'p/:projectSlug', children: [{ path: '**', component: TestView }] },
+          {
+            path: 'p/:projectSlug',
+            children: [{ path: '**', component: TestView }],
+          },
           { path: '**', component: TestView },
         ]),
         provideProjectLens(),
@@ -55,7 +79,9 @@ describe('injectShowProjectColors', () => {
   afterEach(() => stub.restore());
 
   async function showAt(url: string, count: number): Promise<boolean> {
-    projects = Array.from({ length: count }, (_, i) => projectView({ slug: `p${i}`, project_id: `proj_${i}`, name: `P${i}` }));
+    projects = Array.from({ length: count }, (_, i) =>
+      projectView({ slug: `p${i}`, project_id: `proj_${i}`, name: `P${i}` }),
+    );
     await TestBed.inject(Router).navigateByUrl(url);
     const fixture = TestBed.createComponent(ColorsHost);
     await settle(fixture);

@@ -9,12 +9,14 @@ from __future__ import annotations
 from collections.abc import Mapping, Sequence
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, Query
 
 from blizzard.foundation.store.utc import iso_utc
+from blizzard.hub.api import problems_runners
 from blizzard.hub.api.auth import reject_runner_principal
 from blizzard.hub.api.auth_session import require, tenant_bound
 from blizzard.hub.api.deps import Services
+from blizzard.hub.api.problem_exceptions import ProblemHTTPException
 from blizzard.hub.auth.permissions import Permission
 from blizzard.hub.composition import TenantServices
 from blizzard.hub.work_sources.reads import ReadWorkItem, read_work_items
@@ -100,5 +102,5 @@ def get_bulk_work_items(
     Each GitHub source is asked once however many items it holds. An unknown or ephemeral chunk id is omitted, never
     a 404; a per-pointer failure is that entry's own ``error``. Comments are empty unless ``include_comments``."""
     if not chunk_id:
-        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="name at least one chunk_id")
+        raise ProblemHTTPException(problems_runners.work_items_chunk_ids_required_problem)
     return ChunkWorkItemsView(chunks=read_chunk_work_items(chunk_id, services, include_comments=include_comments))

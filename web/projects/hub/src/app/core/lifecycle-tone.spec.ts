@@ -1,4 +1,8 @@
-import { builtInTone, graphLifecycleTone, lifecycleTone } from './lifecycle-tone';
+import {
+  builtInTone,
+  graphLifecycleTone,
+  lifecycleTone,
+} from './lifecycle-tone';
 
 describe('lifecycleTone', () => {
   it('reads an enabled record cyan (spawning) and a retired one red (stale)', () => {

@@ -1,6 +1,9 @@
 import { Injector, provideZonelessChangeDetection } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
-import { QueryClient, provideTanStackQuery } from '@tanstack/angular-query-experimental';
+import {
+  QueryClient,
+  provideTanStackQuery,
+} from '@tanstack/angular-query-experimental';
 import { vi } from 'vitest';
 
 import { EVENT_SOURCE_FACTORY, hubClient, meApiMeGet } from 'fleet';
@@ -14,9 +17,15 @@ describe('provideTenantInterceptor', () => {
     seen = [];
     const fakeFetch = async (input: Request): Promise<Response> => {
       seen.push(input.headers.get(TENANT_HEADER));
-      return new Response('{}', { status: 200, headers: { 'Content-Type': 'application/json' } });
+      return new Response('{}', {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' },
+      });
     };
-    hubClient.setConfig({ baseUrl: 'http://localhost', fetch: fakeFetch as typeof fetch });
+    hubClient.setConfig({
+      baseUrl: 'http://localhost',
+      fetch: fakeFetch as typeof fetch,
+    });
     TestBed.configureTestingModule({
       providers: [
         provideZonelessChangeDetection(),

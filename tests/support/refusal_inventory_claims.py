@@ -114,7 +114,7 @@ EXCEPTION_HANDLERS = {
     },
     "refuse_closed_tenant": {
         "JSONResponse(status_code=status.HTTP_401_UNAUTHORIZED, content={'detail': UNRESOLVED_RUNNER_TOKEN})",
-        "problem_response(authentication_unresolved_problem(instance=request.url.path, detail=UNRESOLVED_RUNNER_TOKEN))",
+        "declared_problem_response(request, authentication_unresolved_problem(instance=request.url.path, detail=UNRESOLVED_RUNNER_TOKEN))",
     },
     "_log_unhandled_request_error": {
         "PlainTextResponse('Internal Server Error', status_code=status.HTTP_500_INTERNAL_SERVER_ERROR)",

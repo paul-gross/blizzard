@@ -15,6 +15,9 @@ from blizzard.hub.api import auth_session
 from blizzard.hub.auth.permissions import Permission, permissions_for
 from blizzard.hub.domain.config.changes import ChangeContext, Door
 from blizzard.hub.domain.garden.scopes import ScopeSlug
+from blizzard.wire.cadence import RevisionConflictProblem
+from blizzard.wire.problem import REVISION_CONFLICT
+from tests.support.refusal_observation import app_spec, declared_refusal_mismatches
 from tests.support.scaffolding import HubHarness, build_hub, count_queries, default_project, project_record
 
 _CTX = ChangeContext(actor="operator", door=Door.API)
@@ -131,7 +134,12 @@ def test_a_patch_edits_only_its_fields_keeps_a_kept_chores_id_and_409s_on_a_stal
     assert [(c["chore_id"], c["promote"]) for c in body["chores"]] == [(chore["chore_id"], False)]
     assert [d["field"] for d in _changes(hub)[-1]["diff"]] == ["chores.arch"]
     stale = hub.client.patch(url, json={"name": "late"}, headers={"If-Match": "1"})
-    assert stale.status_code == 409, stale.text
+    spec = app_spec(hub.client)
+    assert (
+        declared_refusal_mismatches(spec, stale, "patch", "/api/cadences/{cadence_id}", 409, RevisionConflictProblem)
+        == []
+    )
+    assert stale.json()["type"] == REVISION_CONFLICT
 
 
 def test_a_patch_clears_a_field_with_null_and_refuses_a_null_name(hub: HubHarness) -> None:

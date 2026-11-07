@@ -119,12 +119,6 @@ def host_add(cli: CliContext, name: str, adopt: tuple[str, ...]) -> None:
     cli.check(
         resp,
         "POST /hosts",
-        on_status={
-            404: "an adopted runner is unknown to this tenant",
-            409: f"cannot add host {name}: the name is held by a live host, or an adopted runner is retired or "
-            "already under a host",
-            422: "a host's name must not be blank",
-        },
     )
     body = resp.json()
     lines = [f"added host {body['host_id']} ({body['host_name']}) — never connected"]
@@ -148,7 +142,7 @@ def host_list(cli: CliContext, include_retired: bool) -> None:
 @click.argument("host_id")
 def host_show(cli: CliContext, host_id: str) -> None:
     """One host's connection, reported facts and runners, by HOST_ID — symmetric with ``runner-host list``."""
-    resp = cli.get(f"/api/hosts/{host_id}", "GET /hosts/{id}", on_status={404: f"unknown host {host_id}"})
+    resp = cli.get(f"/api/hosts/{host_id}", "GET /hosts/{id}")
     body = resp.json()
     cli.show(body, HostDetail(body))
 
@@ -158,11 +152,6 @@ def _runners_verb(cli: CliContext, host_id: str, runner_ids: tuple[str, ...], *,
         f"/api/hosts/{host_id}/{verb}",
         f"POST /hosts/{{id}}/{verb}",
         json_body={"by": by, "runner_ids": list(runner_ids)},
-        on_status={
-            404: f"unknown host {host_id}, or a runner unknown to it",
-            409: f"host {host_id} cannot take those runners: one is retired or already under a host, or the host is "
-            "retired",
-        },
     )
     body: dict[str, Any] = resp.json()
     return body
@@ -201,7 +190,6 @@ def host_revoke_token(cli: CliContext, host_id: str, by: str) -> None:
         f"/api/hosts/{host_id}/token-revocations",
         "POST /hosts/{id}/token-revocations",
         json_body={"by": by},
-        on_status={404: f"unknown host {host_id}", 409: f"host {host_id} has no enrolled token"},
     )
     cli.show_lines(resp.json(), f"revoked {host_id}'s token — enroll it to mint a fresh one")
 
@@ -215,7 +203,6 @@ def host_enroll(cli: CliContext, host_id: str) -> None:
     resp = cli.post(
         f"/api/hosts/{host_id}/enrollments",
         "POST /hosts/{id}/enrollments",
-        on_status={404: f"unknown host {host_id}", 409: f"host {host_id} is retired"},
     )
     body = resp.json()
     cli.show_lines(body, f"enrolled {host_id} — its previous token no longer resolves", *token_lines(body["token"]))
@@ -234,7 +221,6 @@ def host_retire(cli: CliContext, host_id: str, force: bool, by: str) -> None:
         f"/api/hosts/{host_id}/retire",
         "POST /hosts/{id}/retire",
         json_body={"by": by, "force": force},
-        on_status={404: f"unknown host {host_id}", 409: f"host {host_id} has runners holding chunks"},
     )
     body = resp.json()
     lines = [f"host {host_id} is retired"]

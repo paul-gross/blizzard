@@ -7,15 +7,17 @@ authenticated identity, never a request field."""
 
 from __future__ import annotations
 
+from functools import partial
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, HTTPException, status
-from fastapi.responses import JSONResponse
+from fastapi import APIRouter, Depends, status
 
 from blizzard.foundation.store.utc import iso_utc
+from blizzard.hub.api import problems, problems_admin
 from blizzard.hub.api.auth import reject_runner_principal
 from blizzard.hub.api.auth_session import require, tenant_bound
 from blizzard.hub.api.deps import Services
+from blizzard.hub.api.problem_exceptions import ProblemHTTPException
 from blizzard.hub.auth.models import ResolvedIdentity
 from blizzard.hub.auth.permissions import Permission
 from blizzard.hub.documents.codec import ConfigDecodeError
@@ -33,7 +35,6 @@ from blizzard.wire.graph import (
     GraphSummaryView,
     GraphSyncEntry,
     GraphSyncResponse,
-    GraphValidationReport,
     GraphView,
     ProducesEntry,
     RotatePolicyView,
@@ -139,14 +140,14 @@ def mint_graph(request: GraphMintRequest, services: Services) -> object:
     try:
         doc = GraphDoc.of(services.graph_yaml.decode(request.definition_yaml.encode("utf-8")))
     except (GraphParseError, ConfigDecodeError) as exc:
-        report = GraphValidationReport(ok=False, errors=[str(exc)], warnings=[])
-        return JSONResponse(status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, content=report.model_dump())
+        raise ProblemHTTPException(partial(problems.graph_definition_invalid_problem, [str(exc)], [])) from exc
 
     try:
         graph, warnings = services.graph_mint.mint(doc, definition_yaml=request.definition_yaml)
     except GraphValidationError as exc:
-        report = GraphValidationReport(ok=False, errors=exc.result.errors, warnings=exc.result.warnings)
-        return JSONResponse(status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, content=report.model_dump())
+        raise ProblemHTTPException(
+            partial(problems.graph_definition_invalid_problem, exc.result.errors, exc.result.warnings)
+        ) from exc
 
     # A freshly minted graph carries no lifecycle fact yet — it starts enabled.
     return _graph_view(graph, definition_yaml=_body(services, graph.graph_id), retired=False, warnings=warnings)
@@ -206,7 +207,7 @@ def get_graph(graph_id: str, services: Services) -> GraphView:
     """One graph's full reified definition; 404 on unknown id."""
     graph = services.graphs.get(graph_id)
     if graph is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"unknown graph {graph_id}")
+        raise ProblemHTTPException(partial(problems_admin.graph_not_found_problem, f"unknown graph {graph_id}"))
     return _graph_view(
         graph,
         definition_yaml=_body(services, graph_id),
@@ -229,7 +230,7 @@ def retire_graph(
     already pinned to it runs on untouched. 404 on an unknown id."""
     graph = services.graphs.get(graph_id)
     if graph is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"unknown graph {graph_id}")
+        raise ProblemHTTPException(partial(problems_admin.graph_not_found_problem, f"unknown graph {graph_id}"))
     services.graph_lifecycle.retire(graph, by=identity.user_id)
     return _graph_view(
         graph,
@@ -253,7 +254,7 @@ def enable_graph(
     Idempotent on an already-enabled graph; 404 on an unknown id."""
     graph = services.graphs.get(graph_id)
     if graph is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"unknown graph {graph_id}")
+        raise ProblemHTTPException(partial(problems_admin.graph_not_found_problem, f"unknown graph {graph_id}"))
     services.graph_lifecycle.enable(graph, by=identity.user_id)
     return _graph_view(
         graph,
@@ -277,7 +278,7 @@ def patch_graph(
     no change row."""
     graph = services.graphs.get(graph_id)
     if graph is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"unknown graph {graph_id}")
+        raise ProblemHTTPException(partial(problems_admin.graph_not_found_problem, f"unknown graph {graph_id}"))
     if "follow_latest" in request.model_fields_set:
         services.graph_lifecycle.set_follow_latest(graph, follow_latest=request.follow_latest, by=identity.user_id)
     return _graph_view(
@@ -307,7 +308,7 @@ def set_graph_follow_latest(
     Idempotent, and 404 on an unknown id."""
     graph = services.graphs.get(graph_id)
     if graph is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"unknown graph {graph_id}")
+        raise ProblemHTTPException(partial(problems_admin.graph_not_found_problem, f"unknown graph {graph_id}"))
     services.graph_lifecycle.set_follow_latest(graph, follow_latest=request.follow_latest, by=identity.user_id)
     return _graph_view(
         graph,

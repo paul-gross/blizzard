@@ -11,11 +11,11 @@ from datetime import datetime
 from functools import partial
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
+from fastapi import APIRouter, Depends, Query, Request, status
 from fastapi.responses import JSONResponse
 
 from blizzard.foundation.store.utc import iso_utc
-from blizzard.hub.api import chunk_events, problems
+from blizzard.hub.api import chunk_events, problems, problems_runners
 from blizzard.hub.api.auth import reject_runner_principal
 from blizzard.hub.api.auth_session import require, tenant_bound
 from blizzard.hub.api.deps import Services
@@ -128,7 +128,7 @@ def _host(services: TenantServices, host_id: str) -> Host:
     """The host's loaded record, 404 on an unknown one."""
     host = services.hosts.get_host(host_id)
     if host is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"unknown host {host_id}")
+        raise ProblemHTTPException(partial(problems_runners.host_not_found_problem, host_id))
     return host
 
 
@@ -137,8 +137,29 @@ def _reread(services: TenantServices, host_id: str) -> HostRegistryView:
     return registry_view(services, _host(services, host_id))
 
 
-def _conflict(exc: Exception) -> HTTPException:
-    return HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc))
+def _conflict(exc: Exception) -> ProblemHTTPException:
+    """The 409 problem the domain's lifecycle refusal names."""
+    match exc:
+        case RunnerAlreadyHosted():
+            return ProblemHTTPException(partial(problems.runner_already_hosted_problem, exc))
+        case RunnerRetired():
+            return ProblemHTTPException(partial(problems.runner_retired_problem, exc, status_code=409))
+        case HostRetired():
+            return ProblemHTTPException(partial(problems.host_retired_problem, exc, status_code=409))
+        case RunnerLifecycleConflict():
+            return ProblemHTTPException(partial(problems.runner_lifecycle_conflict_problem, exc))
+        case HostRetirementUnfinished():
+            return ProblemHTTPException(partial(problems_runners.host_retirement_unfinished_problem, exc))
+        case HostLifecycleConflict():
+            return ProblemHTTPException(partial(problems_runners.host_lifecycle_conflict_problem, exc))
+        case HostNotEnrolled():
+            return ProblemHTTPException(partial(problems_runners.host_not_enrolled_problem, exc))
+        case HostHoldsRoutes():
+            return ProblemHTTPException(partial(problems_runners.host_holds_routes_problem, exc))
+        case HostRetirementInterrupted():
+            return ProblemHTTPException(partial(problems_runners.host_retirement_interrupted_problem, exc))
+        case _:
+            raise exc
 
 
 def _publish_host_retirement(
@@ -162,7 +183,7 @@ def _publish_host_retirement(
         )
 
 
-def _unknown_runner(exc: UnknownRunner | RunnerNotUnderHost) -> HTTPException:
+def _unknown_runner(exc: UnknownRunner | RunnerNotUnderHost) -> ProblemHTTPException:
     return ProblemHTTPException(partial(problems.runner_not_found_problem, exc.runner_id))
 
 

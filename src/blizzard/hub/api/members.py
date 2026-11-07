@@ -11,16 +11,19 @@ module resolves the subject, maps each refusal to its answer, and renders.
 
 from __future__ import annotations
 
+from functools import partial
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
+from fastapi import APIRouter, Depends, Request, Response, status
 from fastapi.responses import JSONResponse
 
 from blizzard.auth_core import Role
 from blizzard.foundation.store.utc import iso_utc
+from blizzard.hub.api import problems_admin
 from blizzard.hub.api.auth import reject_runner_principal
 from blizzard.hub.api.auth_session import TenantBoundAdmitting, require, require_either, tenant_bound
 from blizzard.hub.api.hub_level import Hub
+from blizzard.hub.api.problem_exceptions import ProblemHTTPException
 from blizzard.hub.auth.memberships import (
     LastAdminKept,
     Member,
@@ -76,9 +79,9 @@ def change_membership(services: HubServices, actor: ResolvedIdentity, user_id: s
     except NotAMember as exc:
         raise _unknown(exc) from exc
     except MembershipChangeRefused as exc:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(exc)) from exc
+        raise ProblemHTTPException(partial(problems_admin.membership_change_refused_problem, str(exc))) from exc
     except LastAdminKept as exc:
-        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
+        raise ProblemHTTPException(partial(problems_admin.last_admin_kept_problem, str(exc))) from exc
     if member.role is None:
         # The revocation has committed: the user's open event streams in the tenant end. Every membership role
         # holds the stream's permission, so a role change ends none.
@@ -92,8 +95,8 @@ def refuse_membership_role(request: Request, exc: Exception) -> JSONResponse:
     return JSONResponse(status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, content={"detail": str(exc)})
 
 
-def _unknown(exc: NotAMember) -> HTTPException:
-    return HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc))
+def _unknown(exc: NotAMember) -> ProblemHTTPException:
+    return ProblemHTTPException(partial(problems_admin.member_not_found_problem, str(exc)))
 
 
 def _member_view(member: Member, *, identities: list[Identity], actor: ResolvedIdentity, admins: int) -> MemberView:

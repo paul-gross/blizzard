@@ -3,7 +3,11 @@ import { TestBed } from '@angular/core/testing';
 import { Router, provideRouter } from '@angular/router';
 
 import { meApiMeGet } from 'fleet';
-import { type RequestClientStub, stubError, stubHubClient } from 'fleet/testing';
+import {
+  type RequestClientStub,
+  stubError,
+  stubHubClient,
+} from 'fleet/testing';
 import { provideAuthInterceptor } from './auth.interceptor';
 
 @Component({ selector: 'app-test-empty', template: '' })
@@ -17,7 +21,9 @@ describe('provideAuthInterceptor (issue #93)', () => {
   });
 
   it('routes to /login on a 401 response from any hub call', async () => {
-    stub = stubHubClient({ 'GET /api/me': () => stubError(401, { detail: 'not authenticated' }) });
+    stub = stubHubClient({
+      'GET /api/me': () => stubError(401, { detail: 'not authenticated' }),
+    });
 
     TestBed.configureTestingModule({
       providers: [

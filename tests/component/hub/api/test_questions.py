@@ -9,11 +9,14 @@ from __future__ import annotations
 
 from pathlib import Path
 
+from blizzard.wire.problem import QUESTION_ALREADY_ANSWERED
+from blizzard.wire.question import QuestionAlreadyAnsweredProblem
 from tests.support.chunk_questions import (
     _GRAPH_YAML,  # pyright: ignore[reportPrivateUsage]  # shared test helper, imported from tests.support.chunk_questions
     _POINTER,  # pyright: ignore[reportPrivateUsage]  # shared test helper, imported from tests.support.chunk_questions
     ask_question,
 )
+from tests.support.refusal_observation import declared_refusal_mismatches
 from tests.support.scaffolding import build_hub, make_ready, pointer_token
 
 # --- POST /api/questions/{id}/answers — primary -----------------------------
@@ -29,7 +32,12 @@ def test_answers_first_write_wins(tmp_path: Path) -> None:
     assert first.json()["answer"] == "rest"
 
     second = hub.client.post("/api/questions/qn_1/answers", json={"answer": "graphql", "answered_by": "bob"})
-    assert second.status_code == 409, second.text
+    assert hub.app is not None
+    path = "/api/questions/{question_id}/answers"
+    assert (
+        declared_refusal_mismatches(hub.app.openapi(), second, "post", path, 409, QuestionAlreadyAnsweredProblem) == []
+    )
+    assert (second.json()["type"], second.json()["detail"]) == (QUESTION_ALREADY_ANSWERED, "question already answered")
     assert second.json()["won"] is False
     # `answered_by` in the body is a spoof attempt — overwrites it with the
     # resolved session identity, `"operator"` under the default `auth.mode = "none"`.

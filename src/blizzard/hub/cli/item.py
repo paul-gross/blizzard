@@ -2,15 +2,15 @@
 
 from __future__ import annotations
 
-from http import HTTPStatus
-
 import click
 
+from blizzard.cli.refusal import refusal_of
 from blizzard.hub.cli.command import FleetCommand
 from blizzard.hub.cli.context import CliContext
 from blizzard.hub.cli.inputs import read_body_file
 from blizzard.hub.cli.project_option import project_option, project_query
 from blizzard.hub.cli.views import pointer_label
+from blizzard.wire.problem import POINTER_ALREADY_HELD
 
 
 class WorkToken(click.ParamType[tuple[str, str]]):
@@ -70,16 +70,15 @@ def item_create(cli: CliContext, title: str, body_file: str, priority: str, sour
         json_body={"title": title, "body": body, "stated_priority": priority},
         params=project_query(project) or None,
     )
-    if resp.status_code == HTTPStatus.CONFLICT:
-        conflict = resp.json()
-        if "existing_chunk_id" in conflict:
-            raise click.ClickException(
-                f"pointer {pointer_label(conflict)} already held by chunk {conflict.get('existing_chunk_id')}"
-            )
+    refusal = refusal_of(resp)
+    if refusal.type == POINTER_ALREADY_HELD:
+        conflict = refusal.members
+        raise click.ClickException(
+            f"pointer {pointer_label(conflict)} already held by chunk {conflict.get('existing_chunk_id')}"
+        )
     cli.check(
         resp,
         "POST /work-sources/{source}/items",
-        on_status={404: f"unknown work source {source!r}", 409: f"work source {source!r} has no editor"},
     )
     body_json = resp.json()
     cli.show_lines(body_json, f"created {body_json['label']} → chunk {body_json['chunk_id']}")
@@ -108,7 +107,6 @@ def item_edit(
         f"/api/work-sources/{source}/items/{ref}",
         "PATCH /work-sources/{source}/items/{ref}",
         json_body=json_body,
-        on_status={404: f"unknown {source}:{ref}", 409: f"work source {source!r} has no editor"},
     )
     body_json = resp.json()
     cli.show_lines(body_json, f"edited {body_json['label']}")
@@ -125,7 +123,6 @@ def item_delete(cli: CliContext, token: tuple[str, str], yes: bool) -> None:
     resp = cli.delete(
         f"/api/work-sources/{source}/items/{ref}",
         "DELETE /work-sources/{source}/items/{ref}",
-        on_status={404: f"unknown {source}:{ref}", 409: f"work source {source!r} has no editor"},
     )
     body_json = resp.json()
     cli.show_lines(body_json, f"withdrew {body_json['label']}")

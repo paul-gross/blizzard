@@ -18,6 +18,7 @@ from blizzard.hub.cli.context import CliContext
 from blizzard.hub.cli.flag_gate import hub_flag_command, hub_flag_option
 from blizzard.hub.cli.session_service import SessionService
 from blizzard.wire.flags import FlagOff
+from blizzard.wire.problem import FLAG_OFF
 from tests.support.session_store_fakes import InMemorySessionStore
 from tests.support.worker_http import Bound, bind_stubs
 
@@ -133,6 +134,28 @@ def test_a_flag_off_404_reaching_the_response_check_renders_the_same_message() -
         session_reader=InMemorySessionStore(),
         trace=_NoTrace(),
         client_factory=bound.collaborators.client_factory,
+    )
+    with pytest.raises(click.ClickException) as raised:
+        cli.get("/api/held", "GET /held")
+    assert raised.value.message == _REFUSAL
+
+
+def test_a_typed_flag_off_404_renders_the_same_message() -> None:
+    body = {
+        "type": FLAG_OFF,
+        "title": "Flag off",
+        "status": 404,
+        "detail": FlagOff.of("hub-thing").model_dump(),
+    }
+
+    def _get(url: str, **_: object) -> _Response:
+        return _Response(404, body)
+
+    cli = CliContext(
+        hub_url="http://hub.local",
+        session_reader=InMemorySessionStore(),
+        trace=_NoTrace(),
+        client_factory=bind_stubs(get=_get).collaborators.client_factory,
     )
     with pytest.raises(click.ClickException) as raised:
         cli.get("/api/held", "GET /held")

@@ -5,15 +5,18 @@ project's: a branch's line is shared by every project landing on it."""
 
 from __future__ import annotations
 
+from functools import partial
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, Query
 
+from blizzard.hub.api import problems_chunks
 from blizzard.hub.api.auth import reject_runner_principal
 from blizzard.hub.api.auth_session import require, tenant_bound
 from blizzard.hub.api.board_window import BOARD_DONE_WINDOW
 from blizzard.hub.api.deps import Services
 from blizzard.hub.api.flow_places import FlowLineRead, fact_view
+from blizzard.hub.api.problem_exceptions import ProblemHTTPException
 from blizzard.hub.auth.permissions import Permission
 from blizzard.hub.domain.delivery.flows import FlowOverview
 from blizzard.wire.flow import FlowListView, FlowRecordPage, FlowView
@@ -32,7 +35,7 @@ def _overview(flow_id: str, services: Services) -> FlowOverview:
     """The flow ``{flow_id}`` names; ``404`` when the tenant holds none by that id."""
     found = services.flow_views.flow_overview(flow_id)
     if found is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"unknown flow {flow_id}")
+        raise ProblemHTTPException(partial(problems_chunks.flow_not_found_problem, f"unknown flow {flow_id}"))
     return found
 
 

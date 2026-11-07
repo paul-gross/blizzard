@@ -23,7 +23,9 @@ def _hub(index: dict[str, object] | None = None, content: dict[str, object] | No
             return httpx2.Response(200, json=index)
         if request.url.path == "/api/chunks/ch_1/transcripts/sg_1" and content is not None:
             return httpx2.Response(200, json=content)
-        return httpx2.Response(404)
+        if request.url.path == "/api/chunks/ch_1/transcripts":
+            return httpx2.Response(404, json={"detail": "unknown chunk ch_1"})
+        return httpx2.Response(404, json={"detail": "no segment sg_9 on chunk ch_1"})
 
     return bind_transport(handler), seen
 

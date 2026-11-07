@@ -229,9 +229,9 @@ def test_run_show_renders_added_observed_and_gone_per_set() -> None:
     assert "- fin_3: not found" in result.output
 
 
-def test_run_show_maps_a_404_to_a_click_exception() -> None:
+def test_run_show_shows_the_hubs_404() -> None:
     def fake_get(url: str, *, timeout: float) -> _FakeResponse:
-        return _FakeResponse(404)
+        return _FakeResponse(404, {"detail": "unknown run ch_ghost"})
 
     bound = bind_stubs(get=fake_get)
     result = bound.runner.invoke(hub_group, ["run", "get", "ch_ghost"])

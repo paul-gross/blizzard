@@ -19,7 +19,6 @@ def rotate_signing_key(cli: CliContext) -> None:
     cli.post(
         "/api/auth/rotate-signing-key",
         "POST /auth/rotate-signing-key",
-        on_status={404: "the IdP surface is not enabled (auth.mode=none)"},
     )
     click.echo("signing key rotated")
 

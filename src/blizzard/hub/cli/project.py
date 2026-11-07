@@ -44,10 +44,6 @@ class ProjectListing(Listing):
         return f"{row['slug']}  {row['name']}  {row['color']}  {row['project_id']}  r{row['revision']}"
 
 
-def _refusals(project: str) -> dict[int, str]:
-    return {404: f"no project {project}", 409: f"project {project} cannot be changed", 422: "project refused"}
-
-
 def _linked(source_links: list[Any], repository_links: list[Any]) -> list[str]:
     sources = [
         f"{row['name']} (built in)" if row.get("built_in") else row.get("slug") or row["name"] for row in source_links
@@ -97,7 +93,7 @@ def project_create(cli: CliContext, slug: str, name: str | None, description: st
         body["name"] = name
     if color is not None:
         body["color"] = color
-    resp = cli.post("/api/projects", "POST /projects", json_body=body, on_status=_refusals(slug), door=True)
+    resp = cli.post("/api/projects", "POST /projects", json_body=body, door=True)
     out = resp.json()
     cli.show_lines(out, f"project {out['slug']} created at revision 1 — id {out['project_id']}")
 
@@ -114,13 +110,12 @@ def project_list(cli: CliContext) -> None:
 def project_show(cli: CliContext, project: str) -> None:
     """Show PROJECT — named by its id, its slug, or a slug it has left — with the work sources linked to it and the
     repositories linked to it, in landing order, each with its position or "unranked"."""
-    missing = {404: f"no project {project}"}
-    body = cli.get(f"/api/projects/{project}", "GET /projects/{project}", on_status=missing).json()
-    sources = cli.get(
-        f"/api/projects/{project}/source-links", "GET /projects/{project}/source-links", on_status=missing
-    ).json()["source_links"]
+    body = cli.get(f"/api/projects/{project}", "GET /projects/{project}").json()
+    sources = cli.get(f"/api/projects/{project}/source-links", "GET /projects/{project}/source-links").json()[
+        "source_links"
+    ]
     repositories = cli.get(
-        f"/api/projects/{project}/repository-links", "GET /projects/{project}/repository-links", on_status=missing
+        f"/api/projects/{project}/repository-links", "GET /projects/{project}/repository-links"
     ).json()["repository_links"]
     cli.show_lines(
         {**body, "source_links": sources, "repository_links": repositories},
@@ -159,7 +154,6 @@ def project_edit(
         f"/api/projects/{project}",
         "PATCH /projects/{project}",
         json_body=body,
-        on_status=_refusals(project),
         if_match=if_match,
         door=True,
     )
@@ -182,10 +176,6 @@ def project_link(
     resp = cli.put(
         f"/api/projects/{project}/{collection}/{record}",
         f"PUT /projects/{{project}}/{collection}/{{name}}",
-        on_status={
-            404: f"no project {project} or no {kind} {record}",
-            409: f"the link to {kind} {record} is at another revision",
-        },
         if_match=if_match,
         door=True,
     )
@@ -208,23 +198,10 @@ def project_unlink(
     resp = cli.post(
         f"/api/projects/{project}/{collection}/{record}/retire",
         f"POST /projects/{{project}}/{collection}/{{name}}/retire",
-        on_status={
-            404: f"project {project} was never linked to {kind} {record}",
-            409: f"the link to {kind} {record} is at another revision",
-            422: f"{kind} {record} cannot be unlinked",
-        },
         if_match=if_match,
         door=True,
     )
     cli.show_lines(resp.json(), f"project {project} is unlinked from {kind} {record}")
-
-
-def _order_refusals(project: str) -> dict[int, str]:
-    return {
-        404: f"no project {project}",
-        409: "landing order changed while it was written",
-        422: "landing order refused",
-    }
 
 
 def _show_order(cli: CliContext, project: str, body: Any) -> None:
@@ -242,7 +219,6 @@ def project_order(cli: CliContext, project: str, repositories: tuple[str, ...]) 
         f"/api/projects/{project}/landing-order",
         "PUT /projects/{project}/landing-order",
         json_body={"repositories": list(repositories)},
-        on_status=_order_refusals(project),
         door=True,
     )
     _show_order(cli, project, resp.json())
@@ -266,7 +242,6 @@ def project_position(
         f"/api/projects/{project}/landing-order/position",
         "POST /projects/{project}/landing-order/position",
         json_body=body,
-        on_status=_order_refusals(project),
         door=True,
     )
     _show_order(cli, project, resp.json())

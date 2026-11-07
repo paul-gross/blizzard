@@ -19,6 +19,13 @@ from blizzard.hub.domain.config.changes import ChangeContext, Door
 from blizzard.hub.store.internal import repository_record_store, work_source_record_store
 from blizzard.hub.store.internal.former_slugs import SlugTables
 from blizzard.hub.store.internal.secret_store import SecretStore, record_lifecycle_fact
+from blizzard.wire.config import (
+    ConfigApplyConflictProblem,
+    ConfigDocumentInvalidProblem,
+    ConfigMediaTypeUnsupportedProblem,
+)
+from blizzard.wire.problem import CONFIG_APPLY_CONFLICT, CONFIG_DOCUMENT_INVALID, CONFIG_MEDIA_TYPE_UNSUPPORTED
+from tests.support.refusal_observation import app_spec, declared_refusal_mismatches
 from tests.support.scaffolding import HubHarness, build_hub, hub_store_connections, seed_session, seed_user
 
 _SENTINEL = "tok-planted-840"
@@ -52,6 +59,9 @@ _DEMO: _WorkSourceBody = {
     "annotate": True,
     "forge": "github",
 }
+
+
+_APPLY = "/api/config/apply"
 
 
 @pytest.fixture
@@ -797,7 +807,9 @@ def test_refusals_carry_their_status_and_entry_and_leave_the_store_unchanged(hub
     assert twice.status_code == 422 and twice.json()["detail"][0]["loc"][:3] == ["body", "work_sources", 1]
 
     clash = _apply_json(hub, {"version": 2, "work_sources": [_DEMO, {**_DEMO, "slug": "other"}]})
-    assert clash.status_code == 409 and "work_sources[1]" in clash.json()["detail"]
+    spec = app_spec(hub.client)
+    assert declared_refusal_mismatches(spec, clash, "post", _APPLY, 409, ConfigApplyConflictProblem) == []
+    assert clash.json()["type"] == CONFIG_APPLY_CONFLICT and "work_sources[1]" in clash.json()["detail"]
 
     built_in = _apply_json(hub, {"version": 2, "work_sources": [{**_DEMO, "slug": "hub"}]})
     assert built_in.status_code == 422
@@ -811,11 +823,17 @@ def test_refusals_carry_their_status_and_entry_and_leave_the_store_unchanged(hub
 
 
 def test_a_malformed_body_is_422_and_an_unknown_media_type_is_415(hub: HubHarness) -> None:
+    spec = app_spec(hub.client)
     broken = hub.client.post("/api/config/apply", content=b"a: [", headers={"Content-Type": _YAML})
-    assert broken.status_code == 422
+    assert declared_refusal_mismatches(spec, broken, "post", _APPLY, 422, ConfigDocumentInvalidProblem) == []
+    assert broken.json()["type"] == CONFIG_DOCUMENT_INVALID
     assert broken.json()["detail"][0]["line"] is not None
     plain = hub.client.post("/api/config/apply", content=b"version: 1", headers={"Content-Type": "text/plain"})
-    assert plain.status_code == 415
+    assert declared_refusal_mismatches(spec, plain, "post", _APPLY, 415, ConfigMediaTypeUnsupportedProblem) == []
+    assert (plain.json()["type"], plain.json()["detail"]) == (
+        CONFIG_MEDIA_TYPE_UNSUPPORTED,
+        "unsupported content type 'text/plain'; send a YAML or JSON document",
+    )
 
 
 def test_applying_an_export_writes_nothing(hub: HubHarness) -> None:

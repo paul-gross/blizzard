@@ -13,6 +13,7 @@ from urllib.parse import urlsplit
 import httpx2
 import pytest
 import structlog.testing
+from fastapi import FastAPI
 from fastapi.testclient import TestClient
 from opentelemetry.sdk.trace.export.in_memory_span_exporter import InMemorySpanExporter
 
@@ -25,7 +26,10 @@ from blizzard.hub.domain.observability.tracing.attributes import (
     PLATFORM_INSTRUMENTATION_SCOPE_VERSION,
     resource_attributes,
 )
+from blizzard.wire.problem import SECRET_ALREADY_EXISTS, SECRET_NOT_FOUND
+from blizzard.wire.secret import SecretAlreadyExistsProblem, SecretNotFoundProblem
 from tests.support.config_inputs import build_hosted_hub_app, init_hub
+from tests.support.refusal_observation import declared_refusal_mismatches
 from tests.support.worker_http import Bound, bind_stubs
 
 _SENTINEL = "tok-planted-839"
@@ -62,10 +66,14 @@ def _cli(args: list[str], *, stdin: str | None = None):
 
 
 def test_create_replace_list_show_retire_enable_over_the_api(client: TestClient) -> None:
+    assert isinstance(client.app, FastAPI)
+    spec = client.app.openapi()
     created = client.post("/api/secrets", json={"name": "gh-test", "value": _SENTINEL})
     assert created.status_code == 201
     assert created.json()["revision"] == 1
-    assert client.post("/api/secrets", json={"name": "gh-test", "value": "x"}).status_code == 409
+    taken = client.post("/api/secrets", json={"name": "gh-test", "value": "x"})
+    assert declared_refusal_mismatches(spec, taken, "post", "/api/secrets", 409, SecretAlreadyExistsProblem) == []
+    assert (taken.json()["type"], taken.json()["detail"]) == (SECRET_ALREADY_EXISTS, "secret gh-test already exists")
     replaced = client.put("/api/secrets/gh-test/value", json={"value": "v2"}, headers={"If-Match": "1"})
     assert replaced.status_code == 200
     assert replaced.json()["revision"] == 2
@@ -73,7 +81,11 @@ def test_create_replace_list_show_retire_enable_over_the_api(client: TestClient)
     stale = client.put("/api/secrets/gh-test/value", json={"value": "v3"}, headers={"If-Match": "1"})
     assert stale.status_code == 409
     assert "revision 2" in stale.json()["detail"]
-    assert client.put("/api/secrets/nope/value", json={"value": "v"}).status_code == 404
+    unknown = client.put("/api/secrets/nope/value", json={"value": "v"})
+    assert (
+        declared_refusal_mismatches(spec, unknown, "put", "/api/secrets/{name}/value", 404, SecretNotFoundProblem) == []
+    )
+    assert (unknown.json()["type"], unknown.json()["detail"]) == (SECRET_NOT_FOUND, "unknown secret nope")
     assert client.post("/api/secrets", json={"name": "Bad Name", "value": "v"}).status_code == 422
 
     assert client.post("/api/secrets/gh-test/retire").json()["retired"] is True
@@ -94,7 +106,14 @@ def test_create_replace_list_show_retire_enable_over_the_api(client: TestClient)
         "retirable",
         "references",
     }
-    assert client.get("/api/secrets/missing").status_code == 404
+    for method, path in (
+        ("get", "/api/secrets/{name}"),
+        ("post", "/api/secrets/{name}/retire"),
+        ("post", "/api/secrets/{name}/enable"),
+    ):
+        missing = client.request(method.upper(), path.replace("{name}", "missing"))
+        assert declared_refusal_mismatches(spec, missing, method, path, 404, SecretNotFoundProblem) == []
+        assert (missing.json()["type"], missing.json()["detail"]) == (SECRET_NOT_FOUND, "unknown secret missing")
 
 
 def test_a_validation_error_on_a_secret_route_echoes_no_input_but_other_routes_keep_theirs(client: TestClient) -> None:

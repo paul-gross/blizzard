@@ -3,19 +3,21 @@ gate on the hub-level :attr:`~blizzard.hub.auth.permissions.Permission.EXPORT_AD
 
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends, HTTPException, status
-from fastapi.responses import JSONResponse
+from functools import partial
+
+from fastapi import APIRouter, Depends
 
 from blizzard.foundation.store.utc import as_utc, iso_utc
+from blizzard.hub.api import problems, problems_runners
 from blizzard.hub.api.auth import reject_runner_principal
 from blizzard.hub.api.auth_session import require_hub
 from blizzard.hub.api.hub_level import Hub
+from blizzard.hub.api.problem_exceptions import ProblemHTTPException
 from blizzard.hub.auth.permissions import Permission
 from blizzard.hub.domain.observability.egress.backfill import BackfillUnavailable, BackfillWindowRefused
 from blizzard.hub.domain.observability.egress.reset import ResetRefused, ResetUnavailable
 from blizzard.wire.egress import (
     EgressBackfillCount,
-    EgressBackfillFailure,
     EgressBackfillRequest,
     EgressBackfillResponse,
     EgressDatasetStatus,
@@ -66,9 +68,9 @@ def egress_reset(request: EgressResetRequest, services: Hub) -> EgressResetRespo
     try:
         result = services.egress_reset.reset(request.dataset, as_utc(request.to))
     except ResetRefused as exc:
-        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail=str(exc)) from exc
+        raise ProblemHTTPException(partial(problems_runners.egress_reset_refused_problem, exc)) from exc
     except ResetUnavailable as exc:
-        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
+        raise ProblemHTTPException(partial(problems_runners.egress_reset_unavailable_problem, exc)) from exc
     return EgressResetResponse(
         dataset=result.dataset,
         from_at=iso_utc(result.previous) if result.previous else None,
@@ -80,10 +82,9 @@ def egress_reset(request: EgressResetRequest, services: Hub) -> EgressResetRespo
 @router.post(
     "/backfill",
     response_model=EgressBackfillResponse,
-    responses={status.HTTP_502_BAD_GATEWAY: {"model": EgressBackfillFailure}},
     dependencies=[Depends(require_hub(Permission.EXPORT_ADMIN))],
 )
-def egress_backfill(request: EgressBackfillRequest, services: Hub) -> EgressBackfillResponse | JSONResponse:
+def egress_backfill(request: EgressBackfillRequest, services: Hub) -> EgressBackfillResponse:
     """Write the rows of ``[since, until)`` again as the live export would, without moving a cursor. A bad window
     — inverted, too wide, or reaching past now — or dataset is 422, a wet backfill while the export is off or
     rejected is 409 (a dry run only counts, so it runs), and a writer that refuses is 502 with the counts
@@ -93,15 +94,10 @@ def egress_backfill(request: EgressBackfillRequest, services: Hub) -> EgressBack
             as_utc(request.since), as_utc(request.until), dataset=request.dataset, dry_run=request.dry_run
         )
     except BackfillWindowRefused as exc:
-        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail=str(exc)) from exc
+        raise ProblemHTTPException(partial(problems_runners.egress_backfill_window_refused_problem, exc)) from exc
     except BackfillUnavailable as exc:
-        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
+        raise ProblemHTTPException(partial(problems_runners.egress_backfill_unavailable_problem, exc)) from exc
     counts = [EgressBackfillCount(dataset=c.dataset, rows=c.rows, files=c.files) for c in result.datasets]
     if result.failure is not None:
-        failure = EgressBackfillFailure(
-            detail="the egress writer did not accept a batch; the backfill stopped",
-            cause=result.failure.cause.value,
-            datasets=counts,
-        )
-        return JSONResponse(status_code=status.HTTP_502_BAD_GATEWAY, content=failure.model_dump())
+        raise ProblemHTTPException(partial(problems.egress_backfill_failed_problem, result.failure.cause.value, counts))
     return EgressBackfillResponse(dry_run=result.dry_run, datasets=counts)

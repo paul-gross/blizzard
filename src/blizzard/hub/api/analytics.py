@@ -14,12 +14,12 @@ from datetime import datetime
 from functools import partial
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, Query
 from fastapi.responses import Response, StreamingResponse
 
 from blizzard.foundation.roles import dto
 from blizzard.foundation.store.utc import as_utc, iso_utc
-from blizzard.hub.api import problems
+from blizzard.hub.api import problems, problems_runners
 from blizzard.hub.api.auth import reject_runner_principal
 from blizzard.hub.api.auth_session import require, tenant_bound
 from blizzard.hub.api.deps import Services
@@ -80,7 +80,7 @@ def re_derive(request: ReDeriveRequest, services: Services) -> ReDeriveResponse:
     try:
         scope = ReDeriveScope.of(segment_id=request.segment_id, chunk_id=request.chunk_id)
     except ReDeriveScopeRefused as exc:
-        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail=str(exc)) from exc
+        raise ProblemHTTPException(partial(problems_runners.re_derive_scope_refused_problem, exc)) from exc
     outcome = services.event_derivation_service.re_derive(scope, limit=request.limit)
     return ReDeriveResponse(derived=outcome.derived, remaining=outcome.remaining, not_visible=outcome.not_visible)
 

@@ -111,8 +111,7 @@ def test_the_flag_notice_is_absent_while_the_flag_is_on(flag_on_client: TestClie
 def test_a_bad_create_is_refused_naming_the_field(client: TestClient) -> None:
     result = _cli("create", "evening", "--cron", "0 0 * * * *", "--zone", "UTC")
     assert result.exit_code != 0
-    assert "cadence rejected" in result.output
-    assert "schedule" in result.output
+    assert "schedule.cron" in result.output
 
 
 def test_chore_add_edit_and_remove_keep_the_id_and_move_the_revision(client: TestClient) -> None:

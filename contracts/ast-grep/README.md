@@ -12,6 +12,10 @@ disregards ignore files, as pyright does, and prunes pyright's generated and dep
 
 ## Rules
 
+- **`bzh:cli-refusal-body-confined`** (`rules/cli-refusal-body-confined.yml`) — a CLI command reads a refusal's `detail`
+  only through `blizzard.cli.refusal`, never directly from `resp.json()` or from a variable assigned that result in the
+  same function. Scoped to the three CLI trees, with the adapter module ignored. Its prose home is
+  `blizzard-context:/architecture/system-shape/fleet-wire.md`.
 - **`bzh:domain-takes-objects`** (`rules/domain-takes-objects.yml`) — a domain operation takes an already-loaded object,
   never a raw identifier it resolves itself. The rule's own prose home, including its `Detect`/`Scope` boundary, is
   `blizzard-context:/architecture/repository-access.md#domain-operations-take-objects-bzhdomain-takes-objects`; this

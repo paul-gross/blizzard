@@ -39,14 +39,6 @@ class SourceListing(Listing):
         )
 
 
-def _refusals(source: str) -> dict[int, str]:
-    return {
-        404: f"unknown work source {source}",
-        409: f"work source {source} cannot be changed",
-        422: "invalid work source",
-    }
-
-
 @click.group("source", cls=GetGroup)
 def source_group() -> None:
     """Manage the tenant's work sources, where work items come from."""
@@ -86,7 +78,7 @@ def source_create(
         "annotate": annotate,
     }
     body.update({k: v for k, v in (("name", name), ("forge", forge)) if v is not None})
-    resp = cli.post("/api/work-sources", "POST /work-sources", json_body=body, on_status=_refusals(slug), door=True)
+    resp = cli.post("/api/work-sources", "POST /work-sources", json_body=body, door=True)
     out = resp.json()
     cli.show_lines(out, f"work source {out['slug']} created at revision 1 — id {out['work_source_id']}")
 
@@ -108,7 +100,6 @@ def source_show(cli: CliContext, source: str) -> None:
     body = cli.get(
         f"/api/work-sources/{source}",
         "GET /work-sources/{source}",
-        on_status={404: f"unknown work source {source}"},
     ).json()
     if body["built_in"]:
         cli.show_lines(body, f"{body['name']}  built-in  annotate={str(body['annotate']).lower()}")
@@ -181,7 +172,6 @@ def source_edit(
         f"/api/work-sources/{source}",
         "PATCH /work-sources/{source}",
         json_body=body,
-        on_status=_refusals(source),
         if_match=if_match,
         door=True,
     )
@@ -209,7 +199,6 @@ def _set_lifecycle(cli: CliContext, source: str, verb: str, if_match: int | None
     resp = cli.post(
         f"/api/work-sources/{source}/{verb}",
         f"POST /work-sources/{{source}}/{verb}",
-        on_status=_refusals(source),
         if_match=if_match,
         door=True,
     )

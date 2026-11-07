@@ -4,13 +4,14 @@ since each names the tenants it acts on itself."""
 
 from __future__ import annotations
 
+from functools import partial
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, HTTPException, Response, status
+from fastapi import APIRouter, Depends, Response, status
 
 from blizzard.foundation.store.utc import iso_utc
 from blizzard.foundation.tenants import TenantDeletionState
-from blizzard.hub.api import problems
+from blizzard.hub.api import problems, problems_admin
 from blizzard.hub.api.auth import reject_runner_principal
 from blizzard.hub.api.auth_session import require_hub
 from blizzard.hub.api.door import RequestDoor
@@ -56,9 +57,9 @@ def create_tenant(body: TenantCreateRequest, actor: TenantAdmin, door: RequestDo
     try:
         tenant = services.tenant_admin.create(body.name, admin_user_id=body.admin_user_id, by=actor.user_id, door=door)
     except TenantNameRefused as exc:
-        raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, detail=str(exc)) from exc
+        raise ProblemHTTPException(partial(problems_admin.tenant_name_refused_problem, str(exc))) from exc
     except TenantAdminUnknown as exc:
-        raise HTTPException(status.HTTP_404_NOT_FOUND, detail="no such user") from exc
+        raise ProblemHTTPException(partial(problems_admin.user_not_found_problem, "no such user")) from exc
     return _view(tenant)
 
 
@@ -79,7 +80,7 @@ def rename_tenant(tenant_id: str, body: TenantRenameRequest, services: Hub) -> T
     try:
         return _view(services.tenant_admin.rename(TenantId(tenant_id), body.name))
     except TenantNameRefused as exc:
-        raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, detail=str(exc)) from exc
+        raise ProblemHTTPException(partial(problems_admin.tenant_name_refused_problem, str(exc))) from exc
     except UnknownTenant as exc:
         raise ProblemHTTPException(problems.tenant_not_found_problem) from exc
 
@@ -104,12 +105,9 @@ def delete_tenant(tenant_id: str, actor: TenantAdmin, services: Hub, response: R
     except UnknownTenant as exc:
         raise ProblemHTTPException(problems.tenant_not_found_problem) from exc
     except LastTenant as exc:
-        raise HTTPException(
-            status.HTTP_409_CONFLICT,
-            detail={"code": "last_tenant", "message": "the hub's only open tenant cannot be deleted"},
-        ) from exc
+        raise ProblemHTTPException(problems_admin.last_tenant_problem) from exc
     except TenantAlreadyDeleted as exc:
-        raise HTTPException(status.HTTP_410_GONE, detail="tenant deleted") from exc
+        raise ProblemHTTPException(partial(problems_admin.tenant_deleted_problem, "tenant deleted")) from exc
     if progress.state is TenantDeletionState.DELETING:
         response.status_code = status.HTTP_202_ACCEPTED
     return TenantDeletionResponse(tenant_id=tenant, state=progress.state, rows_removed=progress.rows_removed)

@@ -11,7 +11,7 @@ export { RUNNER_HOST_NAMES, RUNNER_NAMES, injectRunnerHostNames, injectRunnerNam
 export { formatCost, formatTokens, hasCostFigure } from '../cost-format';
 export { type SessionEfficiencyInput } from '../session-efficiency';
 export { SessionEfficiency } from '../session-efficiency-view';
-export { errorMessage } from '../error-message';
+export { errorMessage, problemType } from '../error-message';
 export { harnessName } from '../harness-name';
 export { nodeStepKey, parseNodeStepKey } from '../node-step';
 export { openLookup, unlisted } from '../open-lookup';

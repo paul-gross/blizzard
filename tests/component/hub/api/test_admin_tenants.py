@@ -128,7 +128,8 @@ def test_creating_with_an_unknown_admin_answers_404_and_creates_nothing(hub: Hub
         "/api/admin/tenants", json={"name": "acme", "admin_user_id": "usr_nobody"}, headers=_bearer(session)
     )
 
-    assert resp.status_code == 404 and resp.json() == {"detail": "no such user"}
+    assert resp.status_code == 404 and resp.json()["detail"] == "no such user"
+    assert resp.json()["type"] == "urn:blizzard:problem:user-not-found"
     assert [t["name"] for t in hub.client.get("/api/admin/tenants", headers=_bearer(session)).json()] == ["default"]
 
 

@@ -1,6 +1,9 @@
 import { type Type, provideZonelessChangeDetection } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
-import { QueryClient, provideTanStackQuery } from '@tanstack/angular-query-experimental';
+import {
+  QueryClient,
+  provideTanStackQuery,
+} from '@tanstack/angular-query-experimental';
 import { provideRouter } from '@angular/router';
 import { RouterTestingHarness } from '@angular/router/testing';
 import { vi } from 'vitest';
@@ -25,9 +28,18 @@ const RETIRE_ME: MeResponse = {
 
 const NOW = new Date().toISOString();
 const runner = (id: string, host_id: string | null = null) =>
-  runnerRegistryView({ runner_id: id, registered_at: NOW, last_seen_at: NOW, host_id });
+  runnerRegistryView({
+    runner_id: id,
+    registered_at: NOW,
+    last_seen_at: NOW,
+    host_id,
+  });
 const RUNNERS = { runners: [runner('rA', 'h1'), runner('rC')] };
-const HOST = hostRegistryView({ host_id: 'h1', host_name: 'build-box', last_seen_at: NOW });
+const HOST = hostRegistryView({
+  host_id: 'h1',
+  host_name: 'build-box',
+  last_seen_at: NOW,
+});
 const HOSTS = { hosts: [HOST] };
 const REFUSAL = 'runner rA holds chunk ch_live';
 const TOKEN = 'bzh_host_secret_token';
@@ -40,14 +52,21 @@ function routes(over: Routes = {}, me: MeResponse = RETIRE_ME): Routes {
     'GET /api/runners': () => RUNNERS,
     'GET /api/hosts': () => HOSTS,
     'GET /api/chunks': () => ({ chunks: [], next_cursor: null }),
-    'POST /api/hosts/{host_id}/retire': () => ({ host: HOST, released_chunk_ids: [] }),
+    'POST /api/hosts/{host_id}/retire': () => ({
+      host: HOST,
+      released_chunk_ids: [],
+    }),
     'POST /api/hosts/{host_id}/token-revocations': () => ({ host: HOST }),
-    'POST /api/hosts/{host_id}/enrollments': () => ({ host_id: 'h1', token: TOKEN }),
+    'POST /api/hosts/{host_id}/enrollments': () => ({
+      host_id: 'h1',
+      token: TOKEN,
+    }),
     ...over,
   };
 }
 
-const click = (el: HTMLElement, selector: string) => el.querySelector<HTMLButtonElement>(selector)?.click();
+const click = (el: HTMLElement, selector: string) =>
+  el.querySelector<HTMLButtonElement>(selector)?.click();
 
 for (const [name, container, release, hostCard] of [
   ['FleetPage', FleetPage, 'fleet-runner-release', 'fleet-card-h1'],
@@ -61,8 +80,16 @@ for (const [name, container, release, hostCard] of [
         imports: [container as Type<unknown>],
         providers: [
           provideZonelessChangeDetection(),
-          provideTanStackQuery(new QueryClient({ defaultOptions: { queries: { retry: false } } })),
-          provideRouter([{ path: 'fleet', component: FleetPage, children: [{ path: ':id', children: [] }] }]),
+          provideTanStackQuery(
+            new QueryClient({ defaultOptions: { queries: { retry: false } } }),
+          ),
+          provideRouter([
+            {
+              path: 'fleet',
+              component: FleetPage,
+              children: [{ path: ':id', children: [] }],
+            },
+          ]),
         ],
       }).compileComponents();
       // The Fleet tab opens its selection from the URL.
@@ -70,7 +97,10 @@ for (const [name, container, release, hostCard] of [
       await harness.navigateByUrl('/fleet/h1');
       const fixture = harness.fixture;
       await settle(fixture);
-      const invalidate = vi.spyOn(TestBed.inject(QueryClient), 'invalidateQueries');
+      const invalidate = vi.spyOn(
+        TestBed.inject(QueryClient),
+        'invalidateQueries',
+      );
       return { fixture, el: fixture.nativeElement as HTMLElement, invalidate };
     }
 
@@ -107,7 +137,10 @@ for (const [name, container, release, hostCard] of [
         routes({
           'POST /api/hosts/{host_id}/retire': (request) =>
             stub.forRoute(request.path, 'POST').length === 1
-              ? stubError(409, { detail: REFUSAL })
+              ? stubError(409, {
+                  type: 'urn:blizzard:problem:host-holds-routes',
+                  detail: REFUSAL,
+                })
               : { host: HOST, released_chunk_ids: [] },
         }),
       );
@@ -117,7 +150,9 @@ for (const [name, container, release, hostCard] of [
       click(el, '[data-testid="host-confirm-confirm"]');
       await settle(fixture);
 
-      expect(el.querySelector('[data-testid="host-force-retire"]')?.textContent).toContain(REFUSAL);
+      expect(
+        el.querySelector('[data-testid="host-force-retire"]')?.textContent,
+      ).toContain(REFUSAL);
       click(el, '[data-testid="host-force-retire-confirm"]');
       await settle(fixture);
 
@@ -137,7 +172,9 @@ for (const [name, container, release, hostCard] of [
       click(el, '[data-testid="host-confirm-confirm"]');
       await settle(fixture);
 
-      expect(stub.forRoute('/api/hosts/h1/token-revocations', 'POST')).toHaveLength(1);
+      expect(
+        stub.forRoute('/api/hosts/h1/token-revocations', 'POST'),
+      ).toHaveLength(1);
       expectRefetch(invalidate);
     });
 
@@ -147,12 +184,30 @@ for (const [name, container, release, hostCard] of [
       click(el, '[data-testid="host-enroll"]');
       await settle(fixture);
 
-      expect(stub.forRoute('/api/hosts/h1/enrollments', 'POST')).toHaveLength(1);
+      expect(stub.forRoute('/api/hosts/h1/enrollments', 'POST')).toHaveLength(
+        1,
+      );
       expectRefetch(invalidate);
-      expect(el.querySelector('[data-testid="host-token"]')?.textContent).toBe(TOKEN);
+      expect(el.querySelector('[data-testid="host-token"]')?.textContent).toBe(
+        TOKEN,
+      );
       const queryClient = TestBed.inject(QueryClient);
-      expect(JSON.stringify(queryClient.getMutationCache().getAll().map((m) => m.state))).not.toContain(TOKEN);
-      expect(JSON.stringify(queryClient.getQueryCache().getAll().map((q) => q.state.data))).not.toContain(TOKEN);
+      expect(
+        JSON.stringify(
+          queryClient
+            .getMutationCache()
+            .getAll()
+            .map((m) => m.state),
+        ),
+      ).not.toContain(TOKEN);
+      expect(
+        JSON.stringify(
+          queryClient
+            .getQueryCache()
+            .getAll()
+            .map((q) => q.state.data),
+        ),
+      ).not.toContain(TOKEN);
 
       click(el, '[data-testid="host-token-done"]');
       await settle(fixture);
@@ -160,7 +215,9 @@ for (const [name, container, release, hostCard] of [
     });
 
     it('withholds every host verb without runner:retire', async () => {
-      expect(OPERATOR_ME_RESPONSE.permissions).not.toContain('runner:retire' as const);
+      expect(OPERATOR_ME_RESPONSE.permissions).not.toContain(
+        'runner:retire' as const,
+      );
       const { el } = await render(routes({}, OPERATOR_ME_RESPONSE));
 
       expect(el.querySelector(`[data-testid="${hostCard}"]`)).not.toBeNull();

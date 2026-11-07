@@ -12,6 +12,7 @@ from blizzard.foundation.chunk_status import ChunkStatus
 from blizzard.foundation.run_mode import RunMode
 from blizzard.foundation.unrecognized import Unrecognized
 from blizzard.wire.base import WireModel
+from blizzard.wire.problem import ProblemDetails
 from blizzard.wire.vocabulary import OPEN
 
 
@@ -179,3 +180,7 @@ class CadenceErrandView(WireModel):
     #: When the errand is or was next due — in the past for a ``due`` errand, whose missed moment is still owed;
     #: ``None`` while it is running or stopped.
     due_at: str | None = None
+
+
+class RevisionConflictProblem(ProblemDetails[Literal["urn:blizzard:problem:revision-conflict"]]):
+    """A write's ``If-Match`` named a revision the record has since moved past."""

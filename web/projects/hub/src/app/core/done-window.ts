@@ -5,7 +5,10 @@ import { ageMs } from 'fleet';
 export const BOARD_DONE_WINDOW_HOURS = 48;
 
 /** Whether `at` falls in the board's done window as of `now` — the one test the phone's recent-done groups share. */
-export function withinDoneWindow(at: string | null | undefined, now: number): boolean {
+export function withinDoneWindow(
+  at: string | null | undefined,
+  now: number,
+): boolean {
   const age = ageMs(at, now);
   return age !== null && age <= BOARD_DONE_WINDOW_HOURS * 60 * 60 * 1000;
 }

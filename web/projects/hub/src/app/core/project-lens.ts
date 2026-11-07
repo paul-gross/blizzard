@@ -1,4 +1,11 @@
-import { DestroyRef, Injectable, type Provider, computed, inject, signal } from '@angular/core';
+import {
+  DestroyRef,
+  Injectable,
+  type Provider,
+  computed,
+  inject,
+  signal,
+} from '@angular/core';
 import { NavigationEnd, Router } from '@angular/router';
 
 import { HUB_PROJECT_FILTER, IN_APP_LINK, type InAppLink } from 'fleet/shell';
@@ -13,7 +20,11 @@ export const PROJECT_SEGMENT_PARAM = 'projectSlug';
 export const LENSED_ROUTE_PATH = `${LENS_SEGMENT}/:${PROJECT_SEGMENT_PARAM}`;
 
 /** Root segments that are never lensed: the lens's own segment and the public pages. */
-const UNLENSED_ROOTS: ReadonlySet<string> = new Set([LENS_SEGMENT, 'login', 'invite']);
+const UNLENSED_ROOTS: ReadonlySet<string> = new Set([
+  LENS_SEGMENT,
+  'login',
+  'invite',
+]);
 
 /** Views whose second segment is a tab of the view, kept when the lens changes. */
 const TABBED_VIEWS: ReadonlySet<string> = new Set(['gardening', 'admin']);
@@ -30,22 +41,29 @@ function pathSegments(url: string): string[] {
 /** The project segment `url` is lensed on — the segment after `/p/` — or `null` for a URL on All. */
 export function lensSegmentOf(url: string): string | null {
   const [root, segment] = pathSegments(url);
-  return root === LENS_SEGMENT && segment !== undefined ? decodeURIComponent(segment) : null;
+  return root === LENS_SEGMENT && segment !== undefined
+    ? decodeURIComponent(segment)
+    : null;
 }
 
 /** `url` on All: its lens prefix removed, its view, query and fragment kept. */
 export function unlensedUrl(url: string): string {
   if (lensSegmentOf(url) === null) return url;
   const rest = url.replace(/^\/?[^/?#]+\/[^/?#]+/, '');
-  return rest === '' || rest.startsWith('?') || rest.startsWith('#') ? `/${rest}` : rest;
+  return rest === '' || rest.startsWith('?') || rest.startsWith('#')
+    ? `/${rest}`
+    : rest;
 }
 
 /** `url`, a URL on All, under the lens of `slug` — or unchanged for `null`, or for a page the lens never reaches. */
 export function lensedUrl(url: string, slug: string | null): string {
   const [root] = pathSegments(url);
-  if (slug === null || (root !== undefined && UNLENSED_ROOTS.has(root))) return url;
+  if (slug === null || (root !== undefined && UNLENSED_ROOTS.has(root)))
+    return url;
   const prefix = `/${LENS_SEGMENT}/${encodeURIComponent(slug)}`;
-  return url === '/' || url.startsWith('/?') || url.startsWith('/#') ? `${prefix}${url.slice(1)}` : `${prefix}${url}`;
+  return url === '/' || url.startsWith('/?') || url.startsWith('/#')
+    ? `${prefix}${url.slice(1)}`
+    : `${prefix}${url}`;
 }
 
 /**
@@ -53,11 +71,15 @@ export function lensedUrl(url: string, slug: string | null): string {
  * under a lens, a link to a public page, and any link while the lens is on All (`null`) come back unchanged.
  */
 export function lensLink(link: string, slug: string | null): string;
-export function lensLink(link: readonly unknown[], slug: string | null): readonly unknown[];
+export function lensLink(
+  link: readonly unknown[],
+  slug: string | null,
+): readonly unknown[];
 export function lensLink(link: InAppLink, slug: string | null): InAppLink;
 export function lensLink(link: InAppLink, slug: string | null): InAppLink {
   if (slug === null) return link;
-  if (typeof link === 'string') return link.startsWith('/') ? lensedUrl(link, slug) : link;
+  if (typeof link === 'string')
+    return link.startsWith('/') ? lensedUrl(link, slug) : link;
   const [first, ...rest] = link;
   if (typeof first !== 'string' || !first.startsWith('/')) return link;
   const segments = first.split('/').filter((segment) => segment !== '');
@@ -70,7 +92,10 @@ export function lensLink(link: InAppLink, slug: string | null): InAppLink {
 export function viewOf(url: string): string {
   const segments = pathSegments(unlensedUrl(url));
   const view = segments[0] ?? DEFAULT_VIEW;
-  const kept = TABBED_VIEWS.has(view) && segments[1] !== undefined ? [view, segments[1]] : [view];
+  const kept =
+    TABBED_VIEWS.has(view) && segments[1] !== undefined
+      ? [view, segments[1]]
+      : [view];
   return `/${kept.join('/')}`;
 }
 

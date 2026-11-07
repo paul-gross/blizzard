@@ -10,6 +10,7 @@ from typing import TypedDict, Unpack
 import httpx2
 
 from blizzard.hub.cli import hub as hub_group
+from blizzard.wire.problem import POINTER_ALREADY_HELD
 from tests.support.worker_http import bind_stubs
 
 
@@ -101,7 +102,9 @@ def test_create_defaults_source_to_hub_and_reads_a_body_file(tmp_path: Path) -> 
 
 def test_create_maps_a_pointer_conflict() -> None:
     def fake_post(url: str, *, json: object, timeout: float) -> _FakeResponse:
-        return _FakeResponse(409, {"existing_chunk_id": "ch_old", "source": "hub", "ref": "42"})
+        return _FakeResponse(
+            409, {"type": POINTER_ALREADY_HELD, "existing_chunk_id": "ch_old", "source": "hub", "ref": "42"}
+        )
 
     bound = bind_stubs(post=fake_post)
     result = bound.runner.invoke(hub_group, ["item", "create", "--title", "t", "--body-file", "-"], input="b")

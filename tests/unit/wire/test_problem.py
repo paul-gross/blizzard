@@ -1,13 +1,19 @@
 """Problem serialization preserves the legacy claim status distinction."""
 
+import importlib
+import inspect
 import json
+import pkgutil
+from typing import get_args
 
 import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
-from pydantic import TypeAdapter, ValidationError
+from pydantic import BaseModel, TypeAdapter, ValidationError
 
+import blizzard.wire as wire
 from blizzard.wire import problem as registry
+from blizzard.wire import problem_types_admin, problem_types_chunks, problem_types_garden, problem_types_runners
 from blizzard.wire.auth import (
     CliPkceRequiredProblem,
     CliRedirectRefusedProblem,
@@ -32,6 +38,11 @@ from blizzard.wire.problem import (
     TENANT_REQUIRED,
     ProblemDetails,
 )
+from blizzard.wire.problem_registry import ALL_PROBLEM_TYPES
+from blizzard.wire.problem_types_admin import ADMIN_PROBLEM_TYPES
+from blizzard.wire.problem_types_chunks import CHUNKS_PROBLEM_TYPES
+from blizzard.wire.problem_types_garden import GARDEN_PROBLEM_TYPES
+from blizzard.wire.problem_types_runners import RUNNERS_PROBLEM_TYPES
 from blizzard.wire.project import ProjectRef, ProjectRequiredBody, ProjectRequiredProblem
 from blizzard.wire.release import ReleaseProblem, ReleaseRefusal
 from blizzard.wire.route import (
@@ -117,6 +128,24 @@ def test_problem_registry_has_unique_stable_uris() -> None:
         "SSO_REFUSED": "urn:blizzard:problem:sso-refused",
         "PROJECT_REQUIRED": "urn:blizzard:problem:project-required",
         "HUB_STORE_UNAVAILABLE": "urn:blizzard:problem:hub-store-unavailable",
+        "FLAG_OFF": "urn:blizzard:problem:flag-off",
+        "INVARIANTS_IN_PROGRESS": "urn:blizzard:problem:invariants-in-progress",
+        "SECRET_ALREADY_EXISTS": "urn:blizzard:problem:secret-already-exists",
+        "SECRET_NOT_FOUND": "urn:blizzard:problem:secret-not-found",
+        "DECISION_ALREADY_RESOLVED": "urn:blizzard:problem:decision-already-resolved",
+        "QUESTION_ALREADY_ANSWERED": "urn:blizzard:problem:question-already-answered",
+        "EGRESS_BACKFILL_FAILED": "urn:blizzard:problem:egress-backfill-failed",
+        "TRACE_REPLAY_FAILED": "urn:blizzard:problem:trace-replay-failed",
+        "REVISION_CONFLICT": "urn:blizzard:problem:revision-conflict",
+        "POINTER_ALREADY_HELD": "urn:blizzard:problem:pointer-already-held",
+        "DEPENDENT_NOT_EDITABLE": "urn:blizzard:problem:dependent-not-editable",
+        "DEPENDENCY_WOULD_CLOSE_CYCLE": "urn:blizzard:problem:dependency-would-close-cycle",
+        "PREREQUISITE_EPHEMERAL": "urn:blizzard:problem:prerequisite-ephemeral",
+        "NO_STANDING_DEPENDENCY": "urn:blizzard:problem:no-standing-dependency",
+        "CONFIG_APPLY_CONFLICT": "urn:blizzard:problem:config-apply-conflict",
+        "CONFIG_MEDIA_TYPE_UNSUPPORTED": "urn:blizzard:problem:config-media-type-unsupported",
+        "CONFIG_DOCUMENT_INVALID": "urn:blizzard:problem:config-document-invalid",
+        "GRAPH_DEFINITION_INVALID": "urn:blizzard:problem:graph-definition-invalid",
     }
     constants = {name: value for name, value in vars(registry).items() if name.isupper() and isinstance(value, str)}
     assert constants == expected
@@ -461,3 +490,45 @@ def test_legacy_defaults_and_required_fields_survive() -> None:
     assert "reason" in schema["required"]
     assert RunnerIdentityProblem.model_json_schema()["properties"]["runner_id"]["deprecated"] is True
     assert ReleaseProblem.model_json_schema()["properties"]["reason"]["deprecated"] is True
+
+
+def test_every_declared_type_constant_is_in_the_registry() -> None:
+    modules = (registry, problem_types_admin, problem_types_chunks, problem_types_garden, problem_types_runners)
+    declared = {
+        value
+        for module in modules
+        for value in vars(module).values()
+        if isinstance(value, str) and value.startswith("urn:blizzard:problem:")
+    }
+
+    assert declared == set(ALL_PROBLEM_TYPES)
+
+
+def test_every_problem_model_literal_is_registered() -> None:
+    declared: set[str] = set()
+    for module_info in pkgutil.walk_packages(wire.__path__, wire.__name__ + "."):
+        module = importlib.import_module(module_info.name)
+        for _, model in inspect.getmembers(module, inspect.isclass):
+            if model.__module__ != module.__name__ or not issubclass(model, BaseModel):
+                continue
+            field = model.model_fields.get("type")
+            if field is not None:
+                declared.update(
+                    value
+                    for value in get_args(field.annotation)
+                    if isinstance(value, str) and value.startswith("urn:blizzard:problem:")
+                )
+    assert declared <= ALL_PROBLEM_TYPES
+
+
+def test_every_family_type_is_registered_once_and_named_by_its_concept() -> None:
+    families = (
+        ADMIN_PROBLEM_TYPES,
+        CHUNKS_PROBLEM_TYPES,
+        GARDEN_PROBLEM_TYPES,
+        RUNNERS_PROBLEM_TYPES,
+    )
+    everything = [uri for group in (PROBLEM_TYPES, *families) for uri in group]
+
+    assert len(everything) == len(set(everything)) == len(ALL_PROBLEM_TYPES)
+    assert all(uri.startswith("urn:blizzard:problem:") for uri in ALL_PROBLEM_TYPES)

@@ -8,17 +8,20 @@ always as ``Door.APPLY`` — the door is never read from the request (``bzh:conf
 from __future__ import annotations
 
 from collections.abc import Mapping
+from functools import partial
 from typing import Annotated, Any
 
-from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from pydantic import ValidationError
 from starlette.concurrency import run_in_threadpool
 
 from blizzard.foundation.store.utc import iso_utc
+from blizzard.hub.api import problems, problems_admin
 from blizzard.hub.api.auth import reject_runner_principal
 from blizzard.hub.api.auth_session import require, tenant_bound
 from blizzard.hub.api.cadences import admission_refused, cadence_shape, chore_scopes, chore_shapes, schedule_shape
 from blizzard.hub.api.deps import Services
+from blizzard.hub.api.problem_exceptions import ProblemHTTPException
 from blizzard.hub.api.project_params import PROJECT_REQUIRED, QueryProject
 from blizzard.hub.api.user_names import user_names
 from blizzard.hub.auth.models import ResolvedIdentity
@@ -113,16 +116,12 @@ def _version_retired(loc: list[str], version: object) -> HTTPException:
     else:
         stated = version if isinstance(version, int) else repr(version)
         msg = f"version {stated} is retired; send a version {DOCUMENT_VERSION} document"
-    return HTTPException(
-        status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
-        detail=[
-            {
-                "loc": loc,
-                "msg": msg,
-                "type": VERSION_RETIRED,
-            }
-        ],
-    )
+    return _invalid([{"loc": loc, "msg": msg, "type": VERSION_RETIRED}])
+
+
+def _invalid(errors: list[dict[str, object]]) -> HTTPException:
+    """422 locating each of ``errors`` inside the request."""
+    return ProblemHTTPException(partial(problems.config_document_invalid_problem, errors))
 
 
 def _labels(
@@ -211,7 +210,9 @@ def get_schema(kind: str, version: Annotated[int, Query(ge=1, le=2)] = DOCUMENT_
         raise _version_retired(["query", "version"], version)
     model = _SCHEMAS.get(kind)
     if model is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"no document schema for {kind!r}")
+        raise ProblemHTTPException(
+            partial(problems_admin.config_schema_not_found_problem, f"no document schema for {kind!r}")
+        )
     schema = model.model_json_schema()
     if kind == "repositories":
         schema[LANDING_POLICIES_KEY] = [
@@ -416,9 +417,8 @@ def _refusal(exc: ApplyEntryRefused) -> HTTPException:
     """422 naming the entry (and field) for an invalid entry or unavailable secret; 409 for a conflict."""
     cause = exc.cause
     if isinstance(cause, EntryProjectRequired):
-        return HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
-            detail=[
+        return _invalid(
+            [
                 {
                     "loc": ["body", exc.section, exc.index, cause.field],
                     "msg": cause.message,
@@ -428,34 +428,30 @@ def _refusal(exc: ApplyEntryRefused) -> HTTPException:
                         for project in cause.projects
                     ],
                 }
-            ],
+            ]
         )
     if isinstance(cause, ConfigFieldError):
         loc: list[str | int] = ["body", exc.section, exc.index]
         if cause.field:
             loc.append(cause.field)
-        return HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
-            detail=[{"loc": loc, "msg": cause.message, "type": cause.code}],
-        )
-    return HTTPException(status_code=status.HTTP_409_CONFLICT, detail=f"{exc.section}[{exc.index}]: {cause}")
+        return _invalid([{"loc": loc, "msg": cause.message, "type": cause.code}])
+    return ProblemHTTPException(partial(problems.config_apply_conflict_problem, f"{exc.section}[{exc.index}]: {cause}"))
 
 
 def _document(body: bytes, content_type: str | None) -> ConfigDocumentV2:
     codec = codec_for_media_type(content_type or "")
     if codec is None:
-        raise HTTPException(
-            status_code=status.HTTP_415_UNSUPPORTED_MEDIA_TYPE,
-            detail=f"unsupported content type {content_type!r}; send a YAML or JSON document",
+        raise ProblemHTTPException(
+            partial(
+                problems.config_media_type_unsupported_problem,
+                f"unsupported content type {content_type!r}; send a YAML or JSON document",
+            )
         )
     try:
         mapping = codec.decode(body)
     except ConfigDecodeError as exc:
-        raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
-            detail=[
-                {"loc": ["body"], "msg": exc.problem, "type": "value_error", "line": exc.line, "column": exc.column}
-            ],
+        raise _invalid(
+            [{"loc": ["body"], "msg": exc.problem, "type": "value_error", "line": exc.line, "column": exc.column}]
         ) from exc
     version = mapping.get("version")
     if version != DOCUMENT_VERSION:
@@ -463,9 +459,8 @@ def _document(body: bytes, content_type: str | None) -> ConfigDocumentV2:
     try:
         return ConfigDocumentV2.model_validate(mapping)
     except ValidationError as exc:
-        raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
-            detail=[{"loc": ["body", *e["loc"]], "msg": e["msg"], "type": e["type"]} for e in exc.errors()],
+        raise _invalid(
+            [{"loc": ["body", *e["loc"]], "msg": e["msg"], "type": e["type"]} for e in exc.errors()]
         ) from exc
 
 

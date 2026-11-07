@@ -145,17 +145,14 @@ def test_check_falls_back_to_a_generic_message_when_the_403_body_has_no_detail()
     assert exc_info.value.message == "forbidden"
 
 
-def test_check_a_named_on_status_entry_still_wins_over_the_bare_403_branch() -> None:
-    resp = _response(403, None)
-
-    with pytest.raises(click.ClickException) as exc_info:
-        _CTX.check(resp, "GET /x", on_status={403: "named fallback"})
-
-    assert exc_info.value.message == "named fallback"
-
-
 def test_check_leaves_a_200_alone() -> None:
     _CTX.check(_response(200), "GET /x")  # must not raise
+
+
+@pytest.mark.parametrize("status_code", [301, 307, 308])
+def test_check_refuses_an_unfollowed_redirect_rather_than_reporting_success(status_code: int) -> None:
+    with pytest.raises(click.ClickException):
+        _CTX.check(_response(status_code), "POST /x")
 
 
 # --- the tenant a call names ------------------------------------------------------
@@ -237,6 +234,22 @@ def test_a_verbs_own_409_is_left_to_the_verb() -> None:
     bound = bind_stubs(get=_get_answering({"/api/x": conflict}, sent))
 
     assert _ctx(bound).send("get", "/api/x") is conflict
+    assert len(sent) == 1
+
+
+def test_untyped_tenant_text_is_not_dispatched_as_a_tenant_refusal() -> None:
+    from blizzard.wire.tenant import NO_SUCH_TENANT
+
+    sent: list[dict[str, object]] = []
+    refusal = _FakeResponse(404, {"detail": NO_SUCH_TENANT})
+    bound = bind_stubs(get=_get_answering({"/api/x": refusal}, sent))
+    cli = replace(_ctx(bound), tenant=_BRAVO)
+
+    response = cli.send("get", "/api/x")
+    assert response is refusal
+    with pytest.raises(click.ClickException) as exc_info:
+        cli.check(response, "GET /x")
+    assert exc_info.value.message == NO_SUCH_TENANT
     assert len(sent) == 1
 
 

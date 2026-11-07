@@ -5,6 +5,7 @@ Callers supply the already-sanitized instance and detail.
 
 from __future__ import annotations
 
+from blizzard.foundation.chunk_status import ChunkStatus
 from blizzard.foundation.claim_denials import ClaimDenialReason
 from blizzard.foundation.release_refusals import ReleaseRefusalReason
 from blizzard.hub.auth.permissions import Permission
@@ -59,15 +60,31 @@ from blizzard.wire.auth import (
     RunnerCredentialForbiddenProblem,
     SsoRefusedProblem,
 )
+from blizzard.wire.cadence import RevisionConflictProblem
 from blizzard.wire.chunk import (
+    ChunkIngestConflict,
     ChunkNotFoundProblem,
     ChunkNotPausableProblem,
+    DependencyWouldCloseCycleView,
+    DependentNotEditableView,
     FindingNotInChunkProblem,
     NoAnsweredProposalProblem,
     NoCurrentNodeProblem,
     NoRunContextProblem,
+    NoStandingDependencyView,
+    PrerequisiteIsEphemeralView,
 )
+from blizzard.wire.config import (
+    ConfigApplyConflictProblem,
+    ConfigDocumentError,
+    ConfigDocumentInvalidProblem,
+    ConfigMediaTypeUnsupportedProblem,
+)
+from blizzard.wire.decision import DecisionResolutionConflict
+from blizzard.wire.egress import EgressBackfillCount, EgressBackfillFailure
+from blizzard.wire.graph import GraphValidationReport
 from blizzard.wire.host import HostNameTakenProblem, HostRetiredProblem
+from blizzard.wire.invariants import InvariantsInProgressProblem
 from blizzard.wire.problem import (
     CLAIM_CONFLICT,
     CLAIM_DEPENDENCY,
@@ -78,6 +95,7 @@ from blizzard.wire.problem import (
     CLAIM_RUNNER_UNREGISTERED,
     CLAIM_RUNNER_VERSION_REFUSED,
     CLAIM_TERMINAL,
+    INVARIANTS_IN_PROGRESS,
     MALFORMED_CURSOR,
     RELEASE_REFUSAL,
     ROUTE_NOT_FOUND,
@@ -94,7 +112,7 @@ from blizzard.wire.project import (
     UnknownProjectDetail,
     UnknownProjectProblem,
 )
-from blizzard.wire.question import QuestionNotFoundProblem
+from blizzard.wire.question import QuestionAlreadyAnsweredProblem, QuestionNotFoundProblem
 from blizzard.wire.release import ReleaseProblem
 from blizzard.wire.route import (
     ClaimRunnerRetiredProblem,
@@ -125,13 +143,16 @@ from blizzard.wire.runner import (
     RunnerVersionProblem,
     UnknownServedProjectProblem,
 )
+from blizzard.wire.secret import SecretAlreadyExistsProblem, SecretNotFoundProblem
 from blizzard.wire.system_artifact import SystemArtifactNotFoundProblem
 from blizzard.wire.tenant import (
+    NO_SUCH_TENANT,
     TenantCredentialMismatchProblem,
     TenantNotFoundProblem,
     TenantRequiredDetail,
     TenantRequiredProblem,
 )
+from blizzard.wire.traces import TraceReplayFailure
 from blizzard.wire.transcript_segment import LeaseOwnershipProblem
 
 
@@ -303,7 +324,7 @@ def tenant_not_found_problem(*, instance: str) -> TenantNotFoundProblem:
     return TenantNotFoundProblem(
         type=problem_types.TENANT_NOT_FOUND,
         title="Tenant not found",
-        detail="no such tenant",
+        detail=NO_SUCH_TENANT,
         instance=instance,
         status=404,
     )
@@ -503,15 +524,19 @@ def lease_ownership_problem(exc: LeaseSegmentsNotOwned, *, instance: str) -> Lea
 
 
 def project_required_problem(exc: ProjectRequired, *, instance: str) -> ProjectRequiredProblem:
-    return ProjectRequiredProblem(
-        type=problem_types.PROJECT_REQUIRED,
-        title="Project required",
-        instance=instance,
-        status=422,
-        detail=ProjectRequiredBody(
+    return project_choice_problem(
+        ProjectRequiredBody(
             message=str(exc),
             projects=[ProjectRef(project_id=p.project_id, slug=p.slug, name=p.name) for p in exc.projects],
         ),
+        instance=instance,
+    )
+
+
+def project_choice_problem(detail: ProjectRequiredBody, *, instance: str) -> ProjectRequiredProblem:
+    """The ``project_required`` refusal carrying ``detail``, the projects a caller chooses among."""
+    return ProjectRequiredProblem(
+        type=problem_types.PROJECT_REQUIRED, title="Project required", instance=instance, status=422, detail=detail
     )
 
 
@@ -785,4 +810,219 @@ def malformed_cursor_problem(exc: MalformedCursor, *, instance: str) -> Malforme
     """Never echo the untrusted cursor in the response."""
     return MalformedCursorProblem(
         type=MALFORMED_CURSOR, title="Malformed cursor", detail="malformed cursor", instance=instance, status=422
+    )
+
+
+def invariants_in_progress_problem(*, instance: str) -> InvariantsInProgressProblem:
+    return InvariantsInProgressProblem(
+        type=INVARIANTS_IN_PROGRESS,
+        title="Invariant check in progress",
+        detail="another invariant check is running — try again when it finishes",
+        instance=instance,
+        status=409,
+    )
+
+
+def secret_already_exists_problem(detail: str, *, instance: str) -> SecretAlreadyExistsProblem:
+    return SecretAlreadyExistsProblem(
+        type=problem_types.SECRET_ALREADY_EXISTS,
+        title="Secret already exists",
+        detail=detail,
+        instance=instance,
+        status=409,
+    )
+
+
+def secret_not_found_problem(name: str, *, instance: str) -> SecretNotFoundProblem:
+    return SecretNotFoundProblem(
+        type=problem_types.SECRET_NOT_FOUND,
+        title="Secret not found",
+        detail=f"unknown secret {name}",
+        instance=instance,
+        status=404,
+    )
+
+
+def decision_already_resolved_problem(
+    decision_id: str, already_resolved_by: str, resolved_choice: str, resolved_at: str, *, instance: str
+) -> DecisionResolutionConflict:
+    return DecisionResolutionConflict(
+        type=problem_types.DECISION_ALREADY_RESOLVED,
+        title="Decision already resolved",
+        instance=instance,
+        status=409,
+        decision_id=decision_id,
+        already_resolved_by=already_resolved_by,
+        resolved_choice=resolved_choice,
+        resolved_at=resolved_at,
+    )
+
+
+def question_already_answered_problem(
+    question_id: str, answer: str, answered_by: str, answered_at: str, *, instance: str
+) -> QuestionAlreadyAnsweredProblem:
+    """The winning answer, for the loser of a first-write-wins race."""
+    return QuestionAlreadyAnsweredProblem(
+        type=problem_types.QUESTION_ALREADY_ANSWERED,
+        title="Question already answered",
+        detail="question already answered",
+        instance=instance,
+        status=409,
+        won=False,
+        question_id=question_id,
+        answer=answer,
+        answered_by=answered_by,
+        answered_at=answered_at,
+    )
+
+
+def egress_backfill_failed_problem(
+    cause: str, datasets: list[EgressBackfillCount], *, instance: str
+) -> EgressBackfillFailure:
+    """Fixed text, never the writer's own error; ``datasets`` counts what was committed before it stopped."""
+    return EgressBackfillFailure(
+        type=problem_types.EGRESS_BACKFILL_FAILED,
+        title="Egress backfill failed",
+        detail="the egress writer did not accept a batch; the backfill stopped",
+        instance=instance,
+        status=502,
+        cause=cause,
+        datasets=datasets,
+    )
+
+
+def trace_replay_failed_problem(
+    steps: int, spans: int, batches: int, chunks: int, *, instance: str
+) -> TraceReplayFailure:
+    """Fixed text, never the exporter's own error; the counts are what it accepted before it stopped."""
+    return TraceReplayFailure(
+        type=problem_types.TRACE_REPLAY_FAILED,
+        title="Trace replay failed",
+        detail="the trace exporter did not accept a batch; the replay stopped",
+        instance=instance,
+        status=502,
+        steps=steps,
+        spans=spans,
+        batches=batches,
+        chunks=chunks,
+    )
+
+
+def revision_conflict_problem(detail: str, *, instance: str) -> RevisionConflictProblem:
+    return RevisionConflictProblem(
+        type=problem_types.REVISION_CONFLICT, title="Revision conflict", detail=detail, instance=instance, status=409
+    )
+
+
+def pointer_already_held_problem(
+    existing_chunk_id: str, source: str, ref: str, slug: str | None, label: str | None, *, instance: str
+) -> ChunkIngestConflict:
+    return ChunkIngestConflict(
+        type=problem_types.POINTER_ALREADY_HELD,
+        title="Pointer already held",
+        detail="pointer already held by a live chunk",
+        instance=instance,
+        status=409,
+        existing_chunk_id=existing_chunk_id,
+        source=source,
+        ref=ref,
+        slug=slug,
+        label=label,
+    )
+
+
+def dependent_not_editable_problem(
+    chunk_id: str, chunk_status: ChunkStatus, *, instance: str
+) -> DependentNotEditableView:
+    """Carries the released chunk-status string as ``status``, so the HTTP status is the caller's."""
+    return DependentNotEditableView(
+        type=problem_types.DEPENDENT_NOT_EDITABLE,
+        title="Dependent not editable",
+        detail="dependent chunk is not editable at this status",
+        instance=instance,
+        chunk_id=chunk_id,
+        status=chunk_status,
+    )
+
+
+def dependency_would_close_cycle_problem(
+    dependent_chunk_id: str, prerequisite_chunk_id: str, *, instance: str
+) -> DependencyWouldCloseCycleView:
+    return DependencyWouldCloseCycleView(
+        type=problem_types.DEPENDENCY_WOULD_CLOSE_CYCLE,
+        title="Dependency would close a cycle",
+        detail="declaring this edge would close a cycle in the standing dependency graph",
+        instance=instance,
+        status=409,
+        dependent_chunk_id=dependent_chunk_id,
+        prerequisite_chunk_id=prerequisite_chunk_id,
+    )
+
+
+def prerequisite_ephemeral_problem(chunk_id: str, *, instance: str) -> PrerequisiteIsEphemeralView:
+    return PrerequisiteIsEphemeralView(
+        type=problem_types.PREREQUISITE_EPHEMERAL,
+        title="Prerequisite is ephemeral",
+        detail="prerequisite chunk is ephemeral and cannot be named as a prerequisite",
+        instance=instance,
+        status=409,
+        chunk_id=chunk_id,
+    )
+
+
+def no_standing_dependency_problem(
+    dependent_chunk_id: str, prerequisite_chunk_id: str, *, instance: str
+) -> NoStandingDependencyView:
+    return NoStandingDependencyView(
+        type=problem_types.NO_STANDING_DEPENDENCY,
+        title="No standing dependency",
+        detail="no standing dependency to release",
+        instance=instance,
+        status=409,
+        dependent_chunk_id=dependent_chunk_id,
+        prerequisite_chunk_id=prerequisite_chunk_id,
+    )
+
+
+def config_apply_conflict_problem(detail: str, *, instance: str) -> ConfigApplyConflictProblem:
+    return ConfigApplyConflictProblem(
+        type=problem_types.CONFIG_APPLY_CONFLICT,
+        title="Configuration conflict",
+        detail=detail,
+        instance=instance,
+        status=409,
+    )
+
+
+def config_media_type_unsupported_problem(detail: str, *, instance: str) -> ConfigMediaTypeUnsupportedProblem:
+    return ConfigMediaTypeUnsupportedProblem(
+        type=problem_types.CONFIG_MEDIA_TYPE_UNSUPPORTED,
+        title="Unsupported configuration media type",
+        detail=detail,
+        instance=instance,
+        status=415,
+    )
+
+
+def config_document_invalid_problem(errors: list[dict[str, object]], *, instance: str) -> ConfigDocumentInvalidProblem:
+    """Each error as located, every member it carries kept."""
+    return ConfigDocumentInvalidProblem(
+        type=problem_types.CONFIG_DOCUMENT_INVALID,
+        title="Configuration document invalid",
+        detail=[ConfigDocumentError.model_validate(error) for error in errors],
+        instance=instance,
+        status=422,
+    )
+
+
+def graph_definition_invalid_problem(errors: list[str], warnings: list[str], *, instance: str) -> GraphValidationReport:
+    return GraphValidationReport(
+        type=problem_types.GRAPH_DEFINITION_INVALID,
+        title="Graph definition invalid",
+        detail="graph definition invalid",
+        instance=instance,
+        status=422,
+        ok=False,
+        errors=errors,
+        warnings=warnings,
     )

@@ -29,6 +29,16 @@ from tests.support.config_inputs import create_runner_app
 from tests.support.runner_client import live_api_routes
 from tests.support.runner_fakes import registered_identity
 
+
+def test_proxy_422_declares_problem_and_framework_validation(tmp_path: Path) -> None:
+    app = create_runner_app(RunnerConfig(root=tmp_path, db_url="sqlite://", name="test", hub_url="http://hub.example"))
+    spec = app.openapi()
+    response = spec["paths"]["/runners/{runner_id}/api/chunks/{chunk_id}/pause"]["post"]["responses"]["422"]
+    assert response["content"]["application/problem+json"]["schema"]["$ref"] == "#/components/schemas/Problem"
+    assert response["content"]["application/json"]["schema"]["$ref"] == "#/components/schemas/HTTPValidationError"
+    assert "HTTPValidationError" in spec["components"]["schemas"]
+
+
 # --- The two-lane table -----------------------------------------------------
 
 #: Human web lane — the panel's own reads/writes; ``require_human_api`` gates each so an

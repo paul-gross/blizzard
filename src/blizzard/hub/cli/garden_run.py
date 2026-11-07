@@ -6,7 +6,6 @@ from __future__ import annotations
 from collections.abc import Iterator
 from dataclasses import dataclass
 from datetime import datetime
-from http import HTTPStatus
 from typing import Any
 
 import click
@@ -47,8 +46,6 @@ def run_list(cli: CliContext, since: datetime | None, until: datetime | None, pr
         k: v for k, v in {"since": utc_query_value(since), "until": utc_query_value(until)}.items() if v is not None
     }
     resp = cli.send("get", "/api/runs", params=params | project_query(project))
-    if resp.status_code == HTTPStatus.UNPROCESSABLE_ENTITY:
-        raise click.ClickException(f"run list rejected: {cli.detail(resp, 'validation failed')}")
     cli.check(resp, "GET /runs")
     rows = resp.json()
     cli.show(rows, RunListing(rows))
@@ -96,6 +93,6 @@ class RunDetail:
 def run_show(cli: CliContext, chunk_id: str) -> None:
     """One run's full detail — identity, derived outcome, and, per finding set it
     delivered, the added/observed/gone entries its own artifact published."""
-    resp = cli.get(f"/api/runs/{chunk_id}", "GET /runs/{id}", on_status={404: f"unknown run {chunk_id}"})
+    resp = cli.get(f"/api/runs/{chunk_id}", "GET /runs/{id}")
     body = resp.json()
     cli.show(body, RunDetail(body))

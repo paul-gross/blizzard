@@ -8,13 +8,13 @@ from __future__ import annotations
 
 from fastapi import APIRouter, Request
 
-from blizzard.runner.api.hub_proxy import HubProxy
+from blizzard.runner.api.hub_proxy import RELAYED_REFUSALS, HubProxy
 from blizzard.wire.fleet import FleetSummaryView
 
 router = APIRouter(prefix="/api", tags=["runner"])
 
 
-@router.get("/fleet-summary", response_model=FleetSummaryView)
+@router.get("/fleet-summary", response_model=FleetSummaryView, responses=RELAYED_REFUSALS)
 def get_fleet_summary(request: Request) -> FleetSummaryView:
     """Forward the fleet-summary read to the hub — the layered pass-through."""
     return fleet_summary(HubProxy.of(request, "fleet-summary"))

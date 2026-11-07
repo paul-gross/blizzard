@@ -10,19 +10,21 @@ carries no gate; it renders each source's capability booleans instead."""
 from __future__ import annotations
 
 from collections.abc import Iterable, Mapping
+from functools import partial
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, Header, HTTPException, Query, status
+from fastapi import APIRouter, Depends, Header, Query, status
 
 from blizzard.foundation.store.utc import iso_utc
 from blizzard.foundation.work_items import WorkItemPriority
-from blizzard.hub.api import chunk_events
+from blizzard.hub.api import chunk_events, problems, problems_admin
 from blizzard.hub.api.auth import reject_runner_principal
 from blizzard.hub.api.auth_session import require, tenant_bound
-from blizzard.hub.api.chunk_views import ingest_conflict_response
+from blizzard.hub.api.chunk_views import ingest_conflict_refusal
 from blizzard.hub.api.deps import Services
 from blizzard.hub.api.door import RequestDoor, change_context
 from blizzard.hub.api.forge_choice import forge_choice
+from blizzard.hub.api.problem_exceptions import ProblemHTTPException
 from blizzard.hub.api.project_params import QueryProject, project_of_call
 from blizzard.hub.api.user_names import user_names
 from blizzard.hub.api.work_source_params import PathSourceKey, PathWorkSource, resolved_work_source
@@ -82,18 +84,22 @@ def _require_editor(source: str, services: TenantServices) -> tuple[IWorkSource,
     in" the way ``annotate`` is."""
     source_obj = services.work_sources.get(source)
     if source_obj is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"unknown work source {source!r}")
+        raise ProblemHTTPException(
+            partial(problems_admin.work_source_not_found_problem, f"unknown work source {source!r}")
+        )
     editor = services.work_sources.editor(source)
     if editor is None:
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail=f"work source {services.work_sources.source_label(source)!r} has no editor",
+        raise ProblemHTTPException(
+            partial(
+                problems_admin.work_source_no_editor_problem,
+                f"work source {services.work_sources.source_label(source)!r} has no editor",
+            )
         )
     return source_obj, editor
 
 
-def _blank(exc: WorkItemFieldBlank) -> HTTPException:
-    return HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail=str(exc))
+def _blank(exc: WorkItemFieldBlank) -> ProblemHTTPException:
+    return ProblemHTTPException(partial(problems_admin.work_item_field_blank_problem, str(exc)))
 
 
 def _runner_names(services: TenantServices, authors: Iterable[WorkItemAuthor]) -> dict[str, str]:
@@ -179,15 +185,18 @@ def _built_in_summary(services: TenantServices) -> WorkSourceSummary:
     )
 
 
-def _unprocessable(exc: ConfigFieldError) -> HTTPException:
-    return HTTPException(
-        status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
-        detail=[{"loc": ["body", exc.field], "msg": exc.message, "type": exc.code}],
+def _unprocessable(exc: ConfigFieldError) -> ProblemHTTPException:
+    return ProblemHTTPException(
+        partial(problems_admin.config_field_invalid_problem, "body", exc.field, exc.message, exc.code)
     )
 
 
-def _conflict(exc: Exception) -> HTTPException:
-    return HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc))
+def _conflict(exc: Exception) -> ProblemHTTPException:
+    if isinstance(exc, WorkSourceSlugTaken):
+        return ProblemHTTPException(partial(problems_admin.work_source_slug_taken_problem, str(exc)))
+    if isinstance(exc, WorkSourceLocatorTaken):
+        return ProblemHTTPException(partial(problems_admin.work_source_locator_taken_problem, str(exc)))
+    return ProblemHTTPException(partial(problems.revision_conflict_problem, str(exc)))
 
 
 @router.get("/work-sources", response_model=WorkSourcesListView, dependencies=[Depends(require(Permission.FLEET_VIEW))])
@@ -382,7 +391,7 @@ def create_work_item(
             services.default_graph_doc, definition_yaml=services.default_graph_yaml
         )
     except DefaultGraphRetired as exc:
-        raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=str(exc)) from exc
+        raise ProblemHTTPException(partial(problems_admin.default_graph_retired_problem, str(exc))) from exc
     try:
         created = editor.create(
             title=text.title,
@@ -393,7 +402,7 @@ def create_work_item(
             project_id=project_id,
         )
     except IngestConflict as exc:
-        return ingest_conflict_response(services, exc)
+        raise ingest_conflict_refusal(services, exc) from exc
     # A freshly minted chunk rests `not_ready`, exactly as a `POST /chunks` ingest does.
     chunk_events.ChunkChanged.of(services, created.chunk_id, prev_status=None).publish(
         cause="minted", key=f"chunks:{created.chunk_id}"
@@ -427,7 +436,7 @@ def get_work_item(source: PathSourceKey, ref: str, services: Services) -> WorkIt
     try:
         item = editor.get(pointer)
     except WorkItemRefUnknownError as exc:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
+        raise ProblemHTTPException(partial(problems_admin.work_item_not_found_problem, str(exc))) from exc
     return _view(
         item,
         source_obj,
@@ -468,9 +477,9 @@ def patch_work_item(
     try:
         updated = editor.edit(pointer, edit)
     except WorkItemRefUnknownError as exc:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
+        raise ProblemHTTPException(partial(problems_admin.work_item_not_found_problem, str(exc))) from exc
     except WorkItemNotEditable as exc:
-        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
+        raise ProblemHTTPException(partial(problems_admin.work_item_not_editable_problem, str(exc))) from exc
     return _view(
         updated,
         source_obj,
@@ -502,14 +511,18 @@ def withdraw_work_item(
     try:
         withdrawn = editor.withdraw(pointer, by=identity.user_id)
     except WorkItemRefUnknownError as exc:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
+        raise ProblemHTTPException(partial(problems_admin.work_item_not_found_problem, str(exc))) from exc
     except ChunkNotFound as exc:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
+        raise ProblemHTTPException(partial(problems.chunk_disappeared_problem, exc)) from exc
     except WithdrawalLostToClosure as exc:
         _publish_holder_deletion(services, exc.deletion, by=identity.user_id)
-        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
-    except (WorkItemNotEditable, WorkItemHeldByLiveChunk, WorkItemHeldByDependents) as exc:
-        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
+        raise ProblemHTTPException(partial(problems_admin.work_item_not_editable_problem, str(exc))) from exc
+    except WorkItemNotEditable as exc:
+        raise ProblemHTTPException(partial(problems_admin.work_item_not_editable_problem, str(exc))) from exc
+    except WorkItemHeldByLiveChunk as exc:
+        raise ProblemHTTPException(partial(problems_admin.work_item_held_by_live_chunk_problem, str(exc))) from exc
+    except WorkItemHeldByDependents as exc:
+        raise ProblemHTTPException(partial(problems_admin.work_item_held_by_dependents_problem, str(exc))) from exc
     _publish_holder_deletion(services, withdrawn, by=identity.user_id)
     holder = services.chunks.work_refs.find_live_holder(pointer)
     return _view(

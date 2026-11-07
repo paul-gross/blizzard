@@ -8,14 +8,17 @@ never learns whether that address already has an account: no answer here depends
 from __future__ import annotations
 
 from datetime import datetime
+from functools import partial
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, status
 
 from blizzard.foundation.store.utc import iso_utc
+from blizzard.hub.api import problems_admin
 from blizzard.hub.api.auth import reject_runner_principal
 from blizzard.hub.api.auth_session import TenantBoundAdmitting, require_either
 from blizzard.hub.api.deps import Services
+from blizzard.hub.api.problem_exceptions import ProblemHTTPException
 from blizzard.hub.auth.invitations import (
     InvitationAlreadyResolved,
     InvitationNotFound,
@@ -94,7 +97,7 @@ def revoke_invitation(invitation_id: str, services: Services, identity: Manager)
     try:
         record = services.invitations.revoke(invitation_id, by=identity.user_id)
     except InvitationNotFound as exc:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
+        raise ProblemHTTPException(partial(problems_admin.invitation_not_found_problem, str(exc))) from exc
     except InvitationAlreadyResolved as exc:
-        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
+        raise ProblemHTTPException(partial(problems_admin.invitation_already_resolved_problem, str(exc))) from exc
     return invitation_view(record, now=services.clock.now())

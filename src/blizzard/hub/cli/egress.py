@@ -4,16 +4,17 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import UTC, datetime
-from http import HTTPStatus
-from typing import Any
+from typing import Any, cast
 
 import click
 
+from blizzard.cli.refusal import refusal_of
 from blizzard.cli.window import since_option, until_option, utc_query_value
 from blizzard.foundation.roles import dto
 from blizzard.foundation.store.utc import iso_utc
 from blizzard.hub.cli.command import AdminCommand
 from blizzard.hub.cli.context import CliContext
+from blizzard.wire.problem import EGRESS_BACKFILL_FAILED
 
 #: A backfill runs inside the request, and a week-long window outlasts the default client timeout.
 _BACKFILL_TIMEOUT = 600.0
@@ -79,7 +80,7 @@ def egress_reset(cli: CliContext, dataset: str, to: datetime) -> None:
     writing its rows again to new files. The move is recorded as an egress-cursor-reset event."""
     body = {"dataset": dataset, "to": iso_utc(to.astimezone(UTC))}
     resp = cli.send("post", "/api/egress/reset", json_body=body)
-    cli.check(resp, "POST /egress/reset", on_status={409: "the egress export is not configured", 422: "reset refused"})
+    cli.check(resp, "POST /egress/reset")
     result = resp.json()
     was = result["from_at"] or "no cursor yet"
     cli.show_lines(
@@ -101,15 +102,15 @@ def egress_backfill(cli: CliContext, since: datetime, until: datetime, dataset: 
     latest exported_at. A window over backfill_max_window is refused, not split."""
     body = {"since": utc_query_value(since), "until": utc_query_value(until), "dataset": dataset, "dry_run": dry_run}
     resp = cli.send("post", "/api/egress/backfill", json_body=body, timeout=_BACKFILL_TIMEOUT)
-    if resp.status_code == HTTPStatus.BAD_GATEWAY:
-        failure = resp.json()
-        placed = ", ".join(f"{c['rows']} {c['dataset']} rows in {c['files']} files" for c in failure["datasets"])
+    refusal = refusal_of(resp)
+    if refusal.type == EGRESS_BACKFILL_FAILED:
+        failure = refusal.members
+        datasets = cast(list[dict[str, object]], failure["datasets"])
+        placed = ", ".join(f"{c['rows']} {c['dataset']} rows in {c['files']} files" for c in datasets)
         raise click.ClickException(
-            f"{failure['detail']} ({failure['cause']}; committed {placed or 'nothing'} before it stopped)"
+            f"{refusal.message} ({failure['cause']}; committed {placed or 'nothing'} before it stopped)"
         )
-    cli.check(
-        resp, "POST /egress/backfill", on_status={409: "the egress export is not configured", 422: "window refused"}
-    )
+    cli.check(resp, "POST /egress/backfill")
     result = resp.json()
     verb = "would write" if dry_run else "wrote"
     lines = [f"{verb} {c['rows']} {c['dataset']} rows in {c['files']} files" for c in result["datasets"]]

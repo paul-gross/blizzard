@@ -18,7 +18,10 @@ from blizzard.foundation.trace_export.settings import TracingSettings
 from blizzard.foundation.trace_spans import FinishedSpan
 from blizzard.hub.cli import hub as hub_group
 from blizzard.hub.store import schema
+from blizzard.wire.problem import TRACE_REPLAY_FAILED
+from blizzard.wire.traces import TraceReplayFailure
 from tests.support.hub_event_rows import hub_event_rows
+from tests.support.refusal_observation import declared_refusal_mismatches
 from tests.support.scaffolding import HubHarness, InMemoryTraceExporter, hub_scoped
 from tests.support.trace_export_world import closed_pair, trace_export_sweep
 from tests.support.trace_hub import trace_hub
@@ -164,8 +167,12 @@ def test_an_exporter_failure_is_a_bad_gateway_with_the_partial_counts(tmp_path: 
     exporter.export = second_fails
     resp = hub.client.post("/api/traces/replay", json=_window(hub))
 
-    assert resp.status_code == 502
+    assert hub.app is not None
+    path = "/api/traces/replay"
+    assert declared_refusal_mismatches(hub.app.openapi(), resp, "post", path, 502, TraceReplayFailure) == []
     body = resp.json()
+    assert body["type"] == TRACE_REPLAY_FAILED
+    assert body["detail"] == "the trace exporter did not accept a batch; the replay stopped"
     assert (body["steps"] + body["chunks"], body["batches"]) == (1, 1)
     assert body["spans"] > 0
     assert _cursor_rows(hub) == rows

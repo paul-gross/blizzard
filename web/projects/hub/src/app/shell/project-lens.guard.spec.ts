@@ -3,10 +3,23 @@ import { TestBed } from '@angular/core/testing';
 import { Location } from '@angular/common';
 import { SpyLocation } from '@angular/common/testing';
 import { Router, provideRouter } from '@angular/router';
-import { QueryClient, provideTanStackQuery } from '@tanstack/angular-query-experimental';
-import { OPERATOR_ME_RESPONSE, projectView, type RequestClientStub, stubError, stubHubClient } from 'fleet/testing';
+import {
+  QueryClient,
+  provideTanStackQuery,
+} from '@tanstack/angular-query-experimental';
+import {
+  OPERATOR_ME_RESPONSE,
+  projectView,
+  type RequestClientStub,
+  stubError,
+  stubHubClient,
+} from 'fleet/testing';
 
-import { PAGE_RELOAD, TAB_TENANT_KEY, TenantContext } from '../core/auth/tenant-context';
+import {
+  PAGE_RELOAD,
+  TAB_TENANT_KEY,
+  TenantContext,
+} from '../core/auth/tenant-context';
 import { provideTenantInterceptor } from '../core/auth/tenant.interceptor';
 import { LENSED_ROUTE_PATH, ProjectLens } from '../core/project-lens';
 import { projectLensGuard } from './project-lens.guard';
@@ -14,7 +27,10 @@ import { projectLensGuard } from './project-lens.guard';
 @Component({ selector: 'app-test-lensed-view', template: '' })
 class TestLensedView {}
 
-const BLIZZARD = projectView({ revision: 2, created_at: '2026-10-01T00:00:00Z' });
+const BLIZZARD = projectView({
+  revision: 2,
+  created_at: '2026-10-01T00:00:00Z',
+});
 
 describe('the project lens guard', () => {
   let stub: RequestClientStub;
@@ -30,15 +46,27 @@ describe('the project lens guard', () => {
       'GET /api/projects': () => ({ projects: [BLIZZARD] }),
       'GET /api/projects/{project}': (_request, { project }) => {
         if (project === 'old-blizzard') return BLIZZARD;
-        if (project === 'fresh') return { ...BLIZZARD, project_id: 'proj_f', slug: 'fresh', name: 'Fresh' };
-        if (project === 'broken') return stubError(500, { detail: 'the store is down' });
-        return stubError(404, { detail: 'no such project' });
+        if (project === 'fresh')
+          return {
+            ...BLIZZARD,
+            project_id: 'proj_f',
+            slug: 'fresh',
+            name: 'Fresh',
+          };
+        if (project === 'broken')
+          return stubError(500, { detail: 'the store is down' });
+        return stubError(404, {
+          type: 'urn:blizzard:problem:project-not-found',
+          detail: 'no such project',
+        });
       },
     });
     TestBed.configureTestingModule({
       providers: [
         provideZonelessChangeDetection(),
-        provideTanStackQuery(new QueryClient({ defaultOptions: { queries: { retry: false } } })),
+        provideTanStackQuery(
+          new QueryClient({ defaultOptions: { queries: { retry: false } } }),
+        ),
         provideRouter([
           {
             path: LENSED_ROUTE_PATH,
@@ -68,14 +96,22 @@ describe('the project lens guard', () => {
 
     expect(router.url).toBe('/p/blizzard/events');
     expect(stub.forRoute('/api/projects', 'GET').length).toBe(1);
-    expect(stub.requests.filter((request) => request.path.startsWith('/api/projects/')).length).toBe(0);
+    expect(
+      stub.requests.filter((request) =>
+        request.path.startsWith('/api/projects/'),
+      ).length,
+    ).toBe(0);
   });
 
   it('replaces a project’s id in the URL with its current slug', async () => {
-    const { router, location } = await open('/p/proj_b/gardening/runs?since=7d');
+    const { router, location } = await open(
+      '/p/proj_b/gardening/runs?since=7d',
+    );
 
     expect(router.url).toBe('/p/blizzard/gardening/runs?since=7d');
-    expect(location.urlChanges.at(-1)).toBe('replace: /p/blizzard/gardening/runs?since=7d');
+    expect(location.urlChanges.at(-1)).toBe(
+      'replace: /p/blizzard/gardening/runs?since=7d',
+    );
   });
 
   it('replaces a slug the project has left with its current one', async () => {
@@ -97,7 +133,9 @@ describe('the project lens guard', () => {
 
     expect(router.url).toBe('/events');
     expect(location.urlChanges.at(-1)).toBe('replace: /events');
-    expect(TestBed.inject(ProjectLens).notice()).toBe('No project “gone” in this tenant. Showing all projects.');
+    expect(TestBed.inject(ProjectLens).notice()).toBe(
+      'No project “gone” in this tenant. Showing all projects.',
+    );
     expect(reloads).toBe(0);
     expect(TestBed.inject(TenantContext).current()).toBe('ten_operator');
     expect(sessionStorage.getItem(TAB_TENANT_KEY)).toBe('ten_operator');

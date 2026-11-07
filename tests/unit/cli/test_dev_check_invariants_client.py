@@ -11,6 +11,7 @@ import httpx2
 import pytest
 
 from blizzard.cli.main import blizzard
+from blizzard.wire.problem import INVARIANTS_IN_PROGRESS
 from tests.support.worker_http import bind_transport
 
 HUB = "http://hub.example"
@@ -113,7 +114,19 @@ def test_no_options_at_all_is_a_usage_error() -> None:
     [
         (httpx2.Response(403, json={"detail": "admin only"}), "admin only"),
         (httpx2.Response(401, json={"detail": "no"}), "blizzard hub login"),
-        (httpx2.Response(409, json={"code": "invariants_in_progress"}), "another invariant check is running"),
+        (
+            httpx2.Response(
+                409,
+                json={
+                    "type": INVARIANTS_IN_PROGRESS,
+                    "title": "Invariant check in progress",
+                    "detail": "another invariant check is running — try again when it finishes",
+                    "instance": "/api/admin/invariants",
+                    "status": 409,
+                },
+            ),
+            "another invariant check is running",
+        ),
     ],
 )
 def test_a_hub_refusal_exits_one_naming_the_hub(answer: httpx2.Response, says: str) -> None:

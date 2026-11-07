@@ -7,6 +7,8 @@ from typing import Literal, Self
 
 from pydantic import BaseModel
 
+from blizzard.wire.problem import CommonProblemMembers
+
 
 class FlagsResponse(BaseModel):
     """An open map, so adding or retiring a flag never changes the OpenAPI document."""
@@ -33,3 +35,10 @@ class FlagOffResponse(BaseModel):
     """The body of a ``404`` from a route a flag holds: the refusal, under ``detail``."""
 
     detail: FlagOff
+
+
+class FlagOffProblem(CommonProblemMembers[Literal["urn:blizzard:problem:flag-off"], FlagOff]):
+    """The ``404`` of a route a flag holds, as a problem. Its ``detail`` stays the object the refusal has always
+    carried, which a client before problem details reads."""
+
+    status: int | None = None

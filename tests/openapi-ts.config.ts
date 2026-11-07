@@ -1,4 +1,5 @@
 import { defineConfig } from '@hey-api/openapi-ts';
+import { responseUnionInput } from '../web/scripts/openapi-response-union.mjs';
 
 // Types only, not a client: the harness's clients make the calls. The output is committed and the static job
 // regenerates it and fails on drift, so a renamed field in an OpenAPI document breaks `tsc` first. One entry per
@@ -11,6 +12,7 @@ export default defineConfig([
   },
   {
     input: '../openapi/runner.openapi.json',
+    parser: { patch: responseUnionInput },
     output: { path: 'harness/client/wire/runner' },
     plugins: ['@hey-api/typescript'],
   },

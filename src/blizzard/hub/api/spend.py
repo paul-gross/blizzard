@@ -8,14 +8,17 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import datetime
+from functools import partial
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends
 
 from blizzard.foundation.roles import dto
 from blizzard.foundation.store.utc import as_utc
+from blizzard.hub.api import problems_runners
 from blizzard.hub.api.auth import reject_runner_principal
 from blizzard.hub.api.auth_session import require, tenant_bound
 from blizzard.hub.api.deps import Services
+from blizzard.hub.api.problem_exceptions import ProblemHTTPException
 from blizzard.hub.api.project_params import QueryProject
 from blizzard.hub.auth.permissions import Permission
 from blizzard.wire.fleet import FleetSpendView
@@ -45,10 +48,7 @@ def _instant(value: str, *, field: str) -> datetime:
     try:
         return as_utc(datetime.fromisoformat(value))
     except ValueError as exc:
-        raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
-            detail=f"{field} {value!r} is not a valid ISO-8601 instant",
-        ) from exc
+        raise ProblemHTTPException(partial(problems_runners.spend_instant_invalid_problem, field, value)) from exc
 
 
 @router.get("/spend", response_model=FleetSpendView, dependencies=[Depends(require(Permission.FLEET_VIEW))])

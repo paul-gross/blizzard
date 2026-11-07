@@ -3,13 +3,14 @@
 from __future__ import annotations
 
 from datetime import datetime
-from typing import Annotated
+from typing import Annotated, Literal
 
 from pydantic import BaseModel
 
 from blizzard.foundation.trace_export.settings import TracingState
 from blizzard.foundation.unrecognized import Unrecognized
 from blizzard.wire.base import WireModel
+from blizzard.wire.problem import ProblemDetails
 from blizzard.wire.vocabulary import OPEN
 
 
@@ -61,11 +62,10 @@ class TraceReplayResponse(WireModel):
     chunks: int = 0
 
 
-class TraceReplayFailure(WireModel):
+class TraceReplayFailure(ProblemDetails[Literal["urn:blizzard:problem:trace-replay-failed"]]):
     """The exporter refused or raised: ``steps``, ``spans`` and ``batches`` count what it accepted before the
     replay stopped. ``detail`` is fixed text, never the exporter's own error."""
 
-    detail: str
     steps: int
     spans: int
     batches: int

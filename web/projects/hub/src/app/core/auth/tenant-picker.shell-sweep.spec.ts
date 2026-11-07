@@ -19,9 +19,24 @@ import { TenantPicker } from './tenant-picker';
 })
 class TestTenantPicker {
   readonly tenants: readonly MeTenant[] = [
-    { tenant_id: 'ten_a', name: 'Acme', role: 'admin', permissions: ['fleet:view'] },
-    { tenant_id: 'ten_globex', name: 'Globex Interplanetary Freight', role: 'guest', permissions: ['fleet:view'] },
-    { tenant_id: 'ten_b', name: 'B', role: 'guest', permissions: ['fleet:view'] },
+    {
+      tenant_id: 'ten_a',
+      name: 'Acme',
+      role: 'admin',
+      permissions: ['fleet:view'],
+    },
+    {
+      tenant_id: 'ten_globex',
+      name: 'Globex Interplanetary Freight',
+      role: 'guest',
+      permissions: ['fleet:view'],
+    },
+    {
+      tenant_id: 'ten_b',
+      name: 'B',
+      role: 'guest',
+      permissions: ['fleet:view'],
+    },
   ];
 }
 
@@ -39,15 +54,31 @@ describe('tenant picker sweep (web:shell-sweep)', () => {
     try {
       for (const width of [1280, 390, 320]) {
         await page.viewport(width, 800);
-        const options = [...root.querySelectorAll<HTMLElement>('[data-testid="tenant-picker-option"]')];
+        const options = [
+          ...root.querySelectorAll<HTMLElement>(
+            '[data-testid="tenant-picker-option"]',
+          ),
+        ];
         expect(options, `three options at ${width}px`).toHaveLength(3);
         const boxes = options.map((option) => option.getBoundingClientRect());
         for (const box of boxes) {
-          expect(box.width, `one option width at ${width}px`).toBeCloseTo(boxes[0].width, 0);
-          expect(box.left, `one option edge at ${width}px`).toBeCloseTo(boxes[0].left, 0);
-          expect(box.right, `inside the viewport at ${width}px`).toBeLessThanOrEqual(width);
+          expect(box.width, `one option width at ${width}px`).toBeCloseTo(
+            boxes[0].width,
+            0,
+          );
+          expect(box.left, `one option edge at ${width}px`).toBeCloseTo(
+            boxes[0].left,
+            0,
+          );
+          expect(
+            box.right,
+            `inside the viewport at ${width}px`,
+          ).toBeLessThanOrEqual(width);
         }
-        expect(document.documentElement.scrollWidth, `no horizontal overflow at ${width}px`).toBeLessThanOrEqual(width);
+        expect(
+          document.documentElement.scrollWidth,
+          `no horizontal overflow at ${width}px`,
+        ).toBeLessThanOrEqual(width);
       }
     } finally {
       root.remove();

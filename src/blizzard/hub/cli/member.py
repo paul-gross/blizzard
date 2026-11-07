@@ -43,7 +43,6 @@ def member_grant(cli: CliContext, user_id: str, role: str) -> None:
         f"/api/members/{user_id}",
         "PUT /members/{user_id}",
         json_body={"role": role},
-        on_status={404: f"no such member {user_id}", 403: "refused", 409: "refused", 422: "role refused"},
     )
     body = resp.json()
     cli.show_lines(body, f"{body['user_id']} ({body['username']}) is now {body['role']}")
@@ -56,6 +55,5 @@ def member_revoke(cli: CliContext, user_id: str) -> None:
     cli.delete(
         f"/api/members/{user_id}",
         "DELETE /members/{user_id}",
-        on_status={404: f"no such member {user_id}", 403: "refused", 409: "refused"},
     )
     cli.show_lines({"user_id": user_id, "revoked": True}, f"revoked {user_id}'s membership")

@@ -5,12 +5,12 @@ from __future__ import annotations
 from collections.abc import Iterator, Sequence
 from dataclasses import dataclass
 from datetime import datetime
-from http import HTTPStatus
 from typing import Any
 
 import click
 
 from blizzard.cli.get_group import GetGroup
+from blizzard.cli.refusal import refusal_of
 from blizzard.cli.window import since_option, until_option, utc_query_value
 from blizzard.foundation.roles import dto
 from blizzard.foundation.run_mode import RunMode
@@ -18,6 +18,7 @@ from blizzard.hub.cli.command import FleetCommand
 from blizzard.hub.cli.context import CliContext, project_required
 from blizzard.hub.cli.project_option import project_option, project_path, project_query
 from blizzard.hub.cli.views import Listing, ProposalOrigin
+from blizzard.wire.problem import POINTER_ALREADY_HELD
 
 _ROUTINE_MODEL_HELP = (
     "The routine's default model preference. Repeatable and ORDERED — the first entry "
@@ -27,6 +28,7 @@ _ROUTINE_HARNESSES_HELP = (
     "The routine's default harness preference. Repeatable and ORDERED — the first entry "
     "that resolves at session mint wins."
 )
+
 _CLEARABLE = click.Choice(["model", "effort", "harnesses"])
 
 
@@ -102,8 +104,6 @@ def routine_create(
         },
         door=True,
     )
-    if resp.status_code == HTTPStatus.UNPROCESSABLE_ENTITY:
-        raise click.ClickException(f"routine rejected: {cli.detail(resp, 'validation failed')}")
     cli.check(resp, "POST /routines")
     body = resp.json()
     cli.show_lines(body, f"minted routine {body['routine_id']}")
@@ -126,14 +126,11 @@ def routine_list(cli: CliContext, include_retired: bool, project: str | None) ->
 def routine_show(cli: CliContext, routine_id: str) -> None:
     """One routine's whole record — slug, name, graph, default scope, model/effort defaults,
     and its linked scopes."""
-    resp = cli.get(
-        f"/api/routines/{routine_id}", "GET /routines/{id}", on_status={404: f"unknown routine {routine_id}"}
-    )
+    resp = cli.get(f"/api/routines/{routine_id}", "GET /routines/{id}")
     body = resp.json()
     scopes = cli.get(
         f"/api/routines/{routine_id}/scopes",
         "GET /routines/{id}/scopes",
-        on_status={404: f"unknown routine {routine_id}"},
     ).json()
     cli.show({**body, "scopes": scopes}, RoutineDetail(body, scopes))
 
@@ -188,9 +185,7 @@ def routine_edit(
     if not body:
         raise click.UsageError("nothing to change — give a field to set or --clear")
     resp = cli.send("patch", f"/api/routines/{routine_id}", json_body=body, door=True)
-    if resp.status_code == HTTPStatus.UNPROCESSABLE_ENTITY:
-        raise click.ClickException(f"routine edit rejected: {cli.detail(resp, 'validation failed')}")
-    cli.check(resp, "PATCH /routines/{id}", on_status={404: f"unknown routine {routine_id}"})
+    cli.check(resp, "PATCH /routines/{id}")
     cli.show_lines(resp.json(), f"routine {routine_id} updated")
 
 
@@ -207,12 +202,9 @@ def routine_scope_add(cli: CliContext, routine_id: str, scope_slug: str) -> None
 
     Refused when ROUTINE_ID or SCOPE_SLUG is unknown, or SCOPE_SLUG is malformed."""
     resp = cli.send("put", f"/api/routines/{routine_id}/scopes/{scope_slug}", door=True)
-    if resp.status_code == HTTPStatus.UNPROCESSABLE_ENTITY:
-        raise click.ClickException(f"scope add rejected: {cli.detail(resp, 'validation failed')}")
     cli.check(
         resp,
         "PUT /routines/{id}/scopes/{slug}",
-        on_status={404: f"unknown routine {routine_id} or scope {scope_slug}"},
     )
     cli.show_lines(
         {"routine_id": routine_id, "scope_slug": scope_slug}, f"linked scope {scope_slug!r} to routine {routine_id}"
@@ -228,12 +220,9 @@ def routine_scope_remove(cli: CliContext, routine_id: str, scope_slug: str) -> N
     Refused when ROUTINE_ID or SCOPE_SLUG is unknown, SCOPE_SLUG is malformed, or it is
     ROUTINE_ID's default scope, which always stays linked."""
     resp = cli.send("delete", f"/api/routines/{routine_id}/scopes/{scope_slug}", door=True)
-    if resp.status_code == HTTPStatus.UNPROCESSABLE_ENTITY:
-        raise click.ClickException(f"scope remove rejected: {cli.detail(resp, 'validation failed')}")
     cli.check(
         resp,
         "DELETE /routines/{id}/scopes/{slug}",
-        on_status={404: f"unknown routine {routine_id} or scope {scope_slug}"},
     )
     cli.show_lines(
         {"routine_id": routine_id, "scope_slug": scope_slug},
@@ -282,7 +271,6 @@ def _set_routine_lifecycle(cli: CliContext, name: str, *, verb: str, by: str, pr
         f"/api/routines/{routine_id}/{verb}",
         f"POST /routines/{{id}}/{verb}",
         json_body={"by": by},
-        on_status={404: f"unknown routine {name!r}"},
         door=True,
     )
     body = resp.json()
@@ -319,14 +307,12 @@ def routine_run(
         f"/api/routines/{routine_id}/run",
         json_body={"scope_slug": scope_slug, "mode": mode, "note": note},
     )
-    if resp.status_code == HTTPStatus.UNPROCESSABLE_ENTITY:
-        raise click.ClickException(f"run rejected: {cli.detail(resp, 'validation failed')}")
-    if resp.status_code == HTTPStatus.CONFLICT:
-        raise click.ClickException(f"run refused: {cli.detail(resp, 'conflict')}")
+    refusal = refusal_of(resp)
+    if refusal.type == POINTER_ALREADY_HELD:
+        raise click.ClickException(f"run refused: {refusal.message or 'conflict'}")
     cli.check(
         resp,
         "POST /routines/{id}/run",
-        on_status={404: f"unknown routine {name!r}", 503: f"routine {name!r} refused to run"},
     )
     body = resp.json()
     lines = [f"minted {body['chunk_id']} from routine {name!r} — mode={body['effective_mode']}"]
@@ -397,8 +383,6 @@ def routine_trend(
         }
         | project_query(project),
     )
-    if resp.status_code == HTTPStatus.UNPROCESSABLE_ENTITY:
-        raise click.ClickException(f"trend rejected: {cli.detail(resp, 'validation failed')}")
     cli.check(resp, "GET /routines/trend")
     body = resp.json()
     cli.show(body, TrendDetail(body))
@@ -445,9 +429,7 @@ def routine_sweeps(cli: CliContext, name: str, since: datetime, until: datetime,
         f"/api/routines/{routine_id}/sweeps",
         params={"since": utc_query_value(since), "until": utc_query_value(until)},
     )
-    if resp.status_code == HTTPStatus.UNPROCESSABLE_ENTITY:
-        raise click.ClickException(f"sweeps rejected: {cli.detail(resp, 'validation failed')}")
-    cli.check(resp, "GET /routines/{id}/sweeps", on_status={404: f"unknown routine {name!r}"})
+    cli.check(resp, "GET /routines/{id}/sweeps")
     body = resp.json()
     cli.show(body, SweepsDetail(body))
 
@@ -495,9 +477,6 @@ def routine_proposal_counts(
     if origin is not None:
         params["origin"] = origin
     resp = cli.send("get", "/api/routines/proposal-counts", params=params)
-    if resp.status_code == HTTPStatus.UNPROCESSABLE_ENTITY:
-        raise click.ClickException(f"proposal counts rejected: {cli.detail(resp, 'validation failed')}")
-    on_status = {404: f"unknown routine {name!r}"} if name is not None else None
-    cli.check(resp, "GET /routines/proposal-counts", on_status=on_status)
+    cli.check(resp, "GET /routines/proposal-counts")
     body = resp.json()
     cli.show(body, ProposalCountsDetail(body))

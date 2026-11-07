@@ -4,6 +4,9 @@ from pathlib import Path
 
 import pytest
 
+from blizzard.wire.config import ConfigDocumentInvalidProblem
+from blizzard.wire.problem import CONFIG_DOCUMENT_INVALID
+from tests.support.refusal_observation import app_spec, declared_refusal_mismatches
 from tests.support.scaffolding import build_hub
 
 FORGE = {"slug": "enterprise", "kind": "github", "api_base": "https://api.example.test"}
@@ -115,7 +118,10 @@ def test_a_document_of_any_version_but_2_is_refused_naming_version_2(tmp_path: P
 def test_version_1_of_the_export_and_a_schema_is_refused_naming_version_2(tmp_path: Path, path: str) -> None:
     hub = build_hub(tmp_path, repositories=(), link=False)
     refused = hub.client.get(path, params={"version": 1})
-    assert refused.status_code == 422, refused.text
+    declared = path.replace("repositories", "{kind}")
+    spec = app_spec(hub.client)
+    assert declared_refusal_mismatches(spec, refused, "get", declared, 422, ConfigDocumentInvalidProblem) == []
+    assert refused.json()["type"] == CONFIG_DOCUMENT_INVALID
     (detail,) = refused.json()["detail"]
     assert (detail["loc"], detail["type"]) == (["query", "version"], "config_version_retired")
     assert "version 2" in detail["msg"]

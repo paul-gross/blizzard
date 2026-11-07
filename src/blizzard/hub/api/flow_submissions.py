@@ -6,10 +6,10 @@ from __future__ import annotations
 from functools import partial
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, Query
 
 from blizzard.foundation.store.utc import iso_utc
-from blizzard.hub.api import problems
+from blizzard.hub.api import problems, problems_chunks
 from blizzard.hub.api.auth import reject_runner_principal
 from blizzard.hub.api.auth_session import require, tenant_bound
 from blizzard.hub.api.deps import Services
@@ -84,7 +84,7 @@ def list_submission_turns(
 ) -> SubmissionTurnsPage:
     """Turns of one submission, newest ID first; includes turns holding no flows."""
     if not services.flows.submission_belongs_to(submission_id, chunk_id):
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="unknown submission")
+        raise ProblemHTTPException(partial(problems_chunks.submission_not_found_problem, "unknown submission"))
     rows = services.flows.turns_page(submission_id, before=before, limit=limit + 1)
     page = rows[:limit]
     return SubmissionTurnsPage(

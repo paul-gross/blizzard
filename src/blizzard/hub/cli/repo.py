@@ -50,14 +50,6 @@ class RepoListing(Listing):
         )
 
 
-def _refusals(repository: str) -> dict[int, str]:
-    return {
-        404: f"unknown repository {repository}",
-        409: f"repository {repository} cannot be changed",
-        422: "invalid repository",
-    }
-
-
 @click.group("repo", cls=GetGroup)
 def repo_group() -> None:
     """Manage the tenant's repository records."""
@@ -100,7 +92,7 @@ def repo_create(
         "secret_name": secret,
         **_landing(policy, park_timeout),
     }
-    resp = cli.post("/api/repositories", "POST /repositories", json_body=body, on_status=_refusals(slug), door=True)
+    resp = cli.post("/api/repositories", "POST /repositories", json_body=body, door=True)
     out = resp.json()
     cli.show_lines(out, f"repository {out['slug']} created at revision 1 — id {out['repository_id']}")
 
@@ -124,7 +116,6 @@ def repo_show(cli: CliContext, repository: str) -> None:
     body = cli.get(
         f"/api/repositories/{repository}",
         "GET /repositories/{repository}",
-        on_status={404: f"unknown repository {repository}"},
     ).json()
     cli.show_lines(
         body,
@@ -198,7 +189,6 @@ def repo_edit(
         f"/api/repositories/{repository}",
         "PATCH /repositories/{repository}",
         json_body=body,
-        on_status=_refusals(repository),
         if_match=if_match,
         door=True,
     )
@@ -241,7 +231,6 @@ def _set_lifecycle(cli: CliContext, repository: str, verb: str, if_match: int | 
     resp = cli.post(
         f"/api/repositories/{repository}/{verb}",
         f"POST /repositories/{{repository}}/{verb}",
-        on_status=_refusals(repository),
         if_match=if_match,
         door=True,
     )

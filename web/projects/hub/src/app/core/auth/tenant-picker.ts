@@ -1,6 +1,16 @@
-import { ChangeDetectionStrategy, Component, input, output } from '@angular/core';
+import {
+  ChangeDetectionStrategy,
+  Component,
+  input,
+  output,
+} from '@angular/core';
 
-import { type MeResponse, type MeTenant, KitButton, KitErrorLine } from 'fleet/shell';
+import {
+  type MeResponse,
+  type MeTenant,
+  KitButton,
+  KitErrorLine,
+} from 'fleet/shell';
 
 /**
  * The tenant picker — a person with several memberships, none of them this tab's tenant or the browser's last

@@ -133,6 +133,7 @@ from blizzard.wire.runner import (
     RunnerView,
     ServedProjectView,
 )
+from blizzard.wire.tenant import NO_SUCH_TENANT
 from blizzard.wire.transcript_segment import TranscriptSegmentAck, TranscriptSegmentBatch, TranscriptSegmentRecord
 from blizzard.wire.user import CallerTenantsView
 
@@ -259,10 +260,6 @@ _HOST_REFUSALS: dict[int, HostRefusalReason] = {
     HTTPStatus.FORBIDDEN: HostRefusalReason.RETIRED,
     HTTPStatus.NOT_FOUND: HostRefusalReason.NOT_FOUND,
 }
-
-#: The hub's refusal text for a named tenant the caller cannot enter — one text for an unknown, a
-#: closed, and an unenterable tenant.
-_NO_SUCH_TENANT = "no such tenant"
 
 #: The ``detail.code`` of the hub's ``409`` when the caller may enter several tenants and named none.
 _TENANT_REQUIRED = "tenant_required"
@@ -682,7 +679,7 @@ def _host_add_refusal(resp: httpx2.Response) -> HostAddRefusalReason | None:
             (HTTPStatus.NOT_FOUND, problem.RUNNER_NOT_FOUND): HostAddRefusalReason.RUNNER_NOT_FOUND,
         }
         return reasons.get((resp.status_code, kind)) if isinstance(kind, str) else None
-    if resp.status_code == HTTPStatus.NOT_FOUND and _detail(resp) == _NO_SUCH_TENANT:
+    if resp.status_code == HTTPStatus.NOT_FOUND and _detail(resp) == NO_SUCH_TENANT:
         return HostAddRefusalReason.NO_SUCH_TENANT
     if resp.status_code == HTTPStatus.CONFLICT and _refusal_code(resp) == _TENANT_REQUIRED:
         return HostAddRefusalReason.TENANT_REQUIRED

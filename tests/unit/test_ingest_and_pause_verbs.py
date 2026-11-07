@@ -15,6 +15,7 @@ from blizzard.cli.operator_trace import ITraceHeaders
 from blizzard.hub.cli import hub as hub_group
 from blizzard.runner.cli import runner as runner_group
 from blizzard.runner.cli.daemon import RunnerDaemon
+from blizzard.wire.problem import POINTER_ALREADY_HELD
 from tests.support.ingest_and_pause_verbs import (
     _init_runner,  # pyright: ignore[reportPrivateUsage]
 )
@@ -118,7 +119,9 @@ def test_ingest_maps_a_pointer_conflict() -> None:
     """A 409 (pointer already held by a live chunk) is a named error, not a stack trace."""
 
     def fake_post(url: str, *, json: object, timeout: float) -> _FakeResponse:
-        return _FakeResponse(409, {"existing_chunk_id": "ch_old", "source": "blizzard", "ref": "8"})
+        return _FakeResponse(
+            409, {"type": POINTER_ALREADY_HELD, "existing_chunk_id": "ch_old", "source": "blizzard", "ref": "8"}
+        )
 
     bound = bind_stubs(post=fake_post)
     result = bound.runner.invoke(hub_group, ["chunk", "ingest", "blizzard:8"])
@@ -185,11 +188,11 @@ def test_promote_posts_to_the_chunk_and_reports_ready() -> None:
     assert "promoted ch_42" in result.output
 
 
-def test_promote_maps_an_unknown_chunk() -> None:
+def test_promote_shows_the_hubs_unknown_chunk_refusal() -> None:
     """A 404 (no such chunk) is a named error, not a stack trace."""
 
     def fake_post(url: str, *, timeout: float) -> _FakeResponse:
-        return _FakeResponse(404)
+        return _FakeResponse(404, {"detail": "unknown chunk ch_nope"})
 
     bound = bind_stubs(post=fake_post)
     result = bound.runner.invoke(hub_group, ["chunk", "promote", "ch_nope"])
@@ -227,11 +230,11 @@ def test_detach_maps_a_conflict_with_the_servers_detail() -> None:
     assert "chunk ch_42 has no live route" in result.output
 
 
-def test_detach_maps_an_unknown_chunk() -> None:
+def test_detach_shows_the_hubs_unknown_chunk_refusal() -> None:
     """A 404 (no such chunk) is a named error, not a stack trace."""
 
     def fake_post(url: str, *, timeout: float) -> _FakeResponse:
-        return _FakeResponse(404)
+        return _FakeResponse(404, {"detail": "unknown chunk ch_nope"})
 
     bound = bind_stubs(post=fake_post)
     result = bound.runner.invoke(hub_group, ["chunk", "detach", "ch_nope"])
@@ -273,11 +276,11 @@ def test_stop_maps_a_conflict_with_the_servers_detail() -> None:
     assert "chunk ch_42 is stopped, not stoppable" in result.output
 
 
-def test_stop_maps_an_unknown_chunk() -> None:
+def test_stop_shows_the_hubs_unknown_chunk_refusal() -> None:
     """A 404 (no such chunk) is a named error, not a stack trace."""
 
     def fake_post(url: str, *, json: object, timeout: float) -> _FakeResponse:
-        return _FakeResponse(404)
+        return _FakeResponse(404, {"detail": "unknown chunk ch_nope"})
 
     bound = bind_stubs(post=fake_post)
     result = bound.runner.invoke(hub_group, ["chunk", "stop", "ch_nope"])
@@ -321,11 +324,11 @@ def test_done_posts_to_the_chunk_and_reports_completed() -> None:
     assert "completed ch_42" in result.output
 
 
-def test_done_maps_an_unknown_chunk() -> None:
+def test_done_shows_the_hubs_unknown_chunk_refusal() -> None:
     """A 404 (no such chunk) is a named error, not a stack trace."""
 
     def fake_post(url: str, *, json: object, timeout: float) -> _FakeResponse:
-        return _FakeResponse(404)
+        return _FakeResponse(404, {"detail": "unknown chunk ch_nope"})
 
     bound = bind_stubs(post=fake_post)
     result = bound.runner.invoke(hub_group, ["chunk", "done", "ch_nope"])
@@ -382,11 +385,11 @@ def test_pause_chunk_maps_a_conflict_with_the_servers_detail() -> None:
     assert "chunk ch_42 is delivering, not pausable" in result.output
 
 
-def test_pause_chunk_maps_an_unknown_chunk() -> None:
+def test_pause_chunk_shows_the_hubs_unknown_chunk_refusal() -> None:
     """A 404 (no such chunk) is a named error, not a stack trace."""
 
     def fake_post(url: str, *, json: object, timeout: float) -> _FakeResponse:
-        return _FakeResponse(404)
+        return _FakeResponse(404, {"detail": "unknown chunk ch_nope"})
 
     bound = bind_stubs(post=fake_post)
     result = bound.runner.invoke(hub_group, ["chunk", "pause", "ch_nope"])
@@ -415,11 +418,11 @@ def test_resume_chunk_posts_to_the_chunk_and_reports_resumed() -> None:
     assert "resumed ch_42" in result.output
 
 
-def test_resume_chunk_maps_an_unknown_chunk() -> None:
+def test_resume_chunk_shows_the_hubs_unknown_chunk_refusal() -> None:
     """A 404 (no such chunk) is a named error, not a stack trace."""
 
     def fake_post(url: str, *, json: object, timeout: float) -> _FakeResponse:
-        return _FakeResponse(404)
+        return _FakeResponse(404, {"detail": "unknown chunk ch_nope"})
 
     bound = bind_stubs(post=fake_post)
     result = bound.runner.invoke(hub_group, ["chunk", "resume", "ch_nope"])
@@ -489,9 +492,9 @@ def test_chunk_delete_maps_a_conflict_with_the_servers_detail() -> None:
     assert "chunk ch_42 is running — deletion needs an unacquired chunk" in result.output
 
 
-def test_chunk_delete_maps_an_unknown_chunk() -> None:
+def test_chunk_delete_shows_the_hubs_unknown_chunk_refusal() -> None:
     def fake_request(method: str, url: str, *, json: object, timeout: float) -> _FakeResponse:
-        return _FakeResponse(404)
+        return _FakeResponse(404, {"detail": "unknown chunk ch_nope"})
 
     bound = bind_stubs(request=fake_request)
     result = bound.runner.invoke(hub_group, ["chunk", "delete", "ch_nope", "--yes"])

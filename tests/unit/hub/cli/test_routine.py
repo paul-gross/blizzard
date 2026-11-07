@@ -14,6 +14,7 @@ import pytest
 from click.testing import CliRunner, Result
 
 from blizzard.hub.cli import hub as hub_group
+from blizzard.wire.problem import POINTER_ALREADY_HELD
 from tests.support.worker_http import bind_stubs
 
 
@@ -401,9 +402,9 @@ def test_routine_show_lists_the_routines_scopes() -> None:
     assert "scopes: blizzard, cold" in result.output
 
 
-def test_routine_show_maps_an_unknown_routine() -> None:
+def test_routine_show_shows_the_hubs_unknown_routine_refusal() -> None:
     def fake_get(url: str, *, timeout: float) -> _FakeResponse:
-        return _FakeResponse(404)
+        return _FakeResponse(404, {"detail": "unknown routine rtn_ghost"})
 
     bound = bind_stubs(get=_in_one_project(fake_get))
     result = bound.runner.invoke(hub_group, ["routine", "get", "rtn_ghost"])
@@ -412,7 +413,9 @@ def test_routine_show_maps_an_unknown_routine() -> None:
     assert "rtn_ghost" in result.output
 
 
-def _invoke_routine_edit(*args: str, status: int = 200) -> tuple[Result, list[object]]:
+def _invoke_routine_edit(
+    *args: str, status: int = 200, body: dict[str, object] | None = None
+) -> tuple[Result, list[object]]:
     patch_calls: list[object] = []
 
     def fake_get(url: str, *, timeout: float, **_: object) -> _FakeResponse:
@@ -421,7 +424,7 @@ def _invoke_routine_edit(*args: str, status: int = 200) -> tuple[Result, list[ob
     def fake_patch(url: str, *, json: object, timeout: float, headers: dict[str, str] | None = None) -> _FakeResponse:
         patch_calls.append(json)
         return _FakeResponse(
-            status, {"routine_id": "rtn_1", "slug": "nightly", "name": "nightly", "graph_name": "beta"}
+            status, body or {"routine_id": "rtn_1", "slug": "nightly", "name": "nightly", "graph_name": "beta"}
         )
 
     bound = bind_stubs(get=_in_one_project(fake_get), patch=fake_patch)
@@ -471,8 +474,8 @@ def test_routine_edit_refuses_a_usage_error_before_any_request(args: list[str]) 
     assert patch_calls == []
 
 
-def test_routine_edit_maps_an_unknown_routine() -> None:
-    result, _ = _invoke_routine_edit("--graph", "beta", status=404)
+def test_routine_edit_shows_the_hubs_unknown_routine_refusal() -> None:
+    result, _ = _invoke_routine_edit("--graph", "beta", status=404, body={"detail": "unknown routine rtn_1"})
 
     assert result.exit_code != 0
     assert "unknown routine rtn_1" in result.output
@@ -746,13 +749,22 @@ def test_routine_run_maps_a_409_to_a_click_exception() -> None:
         return _FakeResponse(200, [{"routine_id": "rtn_1", "slug": "gardening", "name": "gardening"}])
 
     def fake_post(url: str, *, json: object, timeout: float, headers: dict[str, str] | None = None) -> _FakeResponse:
-        return _FakeResponse(409, {"existing_chunk_id": "ch_1", "source": "hub", "ref": "1"})
+        return _FakeResponse(
+            409,
+            {
+                "type": POINTER_ALREADY_HELD,
+                "detail": "pointer already held by a live chunk",
+                "existing_chunk_id": "ch_1",
+                "source": "hub",
+                "ref": "1",
+            },
+        )
 
     bound = bind_stubs(get=_in_one_project(fake_get), post=fake_post)
     result = bound.runner.invoke(hub_group, ["routine", "run", "gardening"])
 
     assert result.exit_code != 0
-    assert "conflict" in result.output
+    assert "run refused: pointer already held by a live chunk" in result.output
 
 
 def test_routine_run_maps_a_503_to_a_click_exception() -> None:

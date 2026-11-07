@@ -9,13 +9,15 @@ from typing import Any, NotRequired, TypedDict, cast
 
 import click
 
-from blizzard.cli.collaborators import Response
 from blizzard.cli.config_inputs import packaged_flag_registry, strict_config
+from blizzard.cli.refusal import refusal_of
 from blizzard.hub.cli.command import FleetCommand
 from blizzard.hub.cli.context import CliContext, RawBody
 from blizzard.hub.cli.project_option import project_option, project_query
 from blizzard.hub.cli.views import Listing
 from blizzard.hub.documents import accepted_extensions, codec_for_path
+from blizzard.wire.problem import CONFIG_APPLY_CONFLICT, CONFIG_DOCUMENT_INVALID, CONFIG_MEDIA_TYPE_UNSUPPORTED
+from blizzard.wire.problem_reading import ProblemReading
 
 _KINDS = click.Choice(["work_source", "repository", "forge", "secret", "scope", "routine", "project"])
 
@@ -42,8 +44,8 @@ class ApplyListing(Listing):
         return f"{row['op']:<9}  {row['kind']} {row['key']}{tail}"
 
 
-#: The statuses the hub refuses a document with — each names the entry it stopped at.
-_REFUSED = (409, 415, 422)
+#: The problem types the hub refuses a document with — each names the entry it stopped at.
+_REFUSED = frozenset({CONFIG_APPLY_CONFLICT, CONFIG_MEDIA_TYPE_UNSUPPORTED, CONFIG_DOCUMENT_INVALID})
 
 
 class ValidationEntry(TypedDict):
@@ -53,21 +55,17 @@ class ValidationEntry(TypedDict):
     msg: str
 
 
-def _refusal(cli: CliContext, resp: Response) -> str:
-    """The hub's refusal, each validation entry located by its path inside the document
+def _refusal(reading: ProblemReading) -> str:
+    """The hub's refusal, each entry of an invalid document located by its path inside the document
     (``work_sources.1.provider: …``)."""
-    try:
-        detail = resp.json().get("detail")
-    except ValueError:
-        detail = None
-    if isinstance(detail, list):
+    if reading.type == CONFIG_DOCUMENT_INVALID:
         lines: list[str] = []
-        for entry in cast(list[ValidationEntry], detail):
+        for entry in cast(list[ValidationEntry], reading.detail):
             where = ".".join(str(part) for part in entry.get("loc", [])[1:])
             at = f" (line {entry.get('line')}, column {entry['column']})" if entry.get("line") is not None else ""
             lines.append(f"{where}: {entry['msg']}{at}" if where else f"{entry['msg']}{at}")
         return "; ".join(lines)
-    return cli.detail(resp, f"refused with {resp.status_code}")
+    return reading.message or str(reading.type)
 
 
 @click.group("config")
@@ -121,8 +119,9 @@ def config_apply(cli: CliContext, file: Path, dry_run: bool) -> None:
         raw_body=body,
         params={"dry_run": "true"} if dry_run else None,
     )
-    if resp.status_code in _REFUSED:
-        raise click.ClickException(_refusal(cli, resp))
+    refusal = refusal_of(resp)
+    if refusal.type in _REFUSED:
+        raise click.ClickException(_refusal(refusal))
     cli.check(resp, "POST /config/apply")
     payload = resp.json()
     cli.show(payload, ApplyListing(payload["outcomes"]))
@@ -152,8 +151,9 @@ def config_export(cli: CliContext, fmt: str, version: str) -> None:
     codec = codec_for_path(f"export.{fmt}")
     assert codec is not None
     resp = cli.send("get", "/api/config/export", params={"version": version})
-    if resp.status_code in _REFUSED:
-        raise click.ClickException(_refusal(cli, resp))
+    refusal = refusal_of(resp)
+    if refusal.type in _REFUSED:
+        raise click.ClickException(_refusal(refusal))
     cli.check(resp, "GET /config/export")
     document = resp.json()
     click.echo(codec.encode(document).decode("utf-8"), nl=False)

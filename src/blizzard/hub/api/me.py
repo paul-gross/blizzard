@@ -47,7 +47,7 @@ class MeTenant(BaseModel):
 class MeResponse(WireModel):
     """The resolved identity's wire view. ``role`` and ``permissions`` are those of the tenant
     the request resolves — the one ``X-Blizzard-Tenant`` names among ``tenants``, else the
-    caller's only membership. With no such tenant ``role`` is null and ``permissions`` holds
+    caller's only membership. When the request resolves no tenant ``role`` is null and ``permissions`` holds
     only the hub-level permissions of a hub administrator."""
 
     user_id: str

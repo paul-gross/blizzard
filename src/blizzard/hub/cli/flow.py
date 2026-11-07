@@ -109,16 +109,15 @@ def flow_show(cli: CliContext, flow_id: str, record: bool, limit: int) -> None:
 
     With --record, the flow's record instead — every submission, turn, landing and withdrawal, newest first, up to
     --limit entries."""
-    on_status = {404: f"unknown flow {flow_id}"}
     if not record:
-        body = cli.get(f"/api/flows/{flow_id}", "GET /flows/{id}", on_status=on_status).json()
+        body = cli.get(f"/api/flows/{flow_id}", "GET /flows/{id}").json()
         cli.show(body, FlowDetail(body))
         return
     facts: list[Any] = []
     params: dict[str, str] = {}
     while True:
         params["limit"] = str(min(limit - len(facts), _RECORD_PAGE))
-        page = cli.get(f"/api/flows/{flow_id}/record", "GET /flows/{id}/record", params=params, on_status=on_status)
+        page = cli.get(f"/api/flows/{flow_id}/record", "GET /flows/{id}/record", params=params)
         body = page.json()
         facts.extend(body["facts"])
         if len(facts) >= limit or body["next_before"] is None:

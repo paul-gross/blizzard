@@ -1,9 +1,29 @@
-import { ChangeDetectionStrategy, Component, provideZonelessChangeDetection, signal } from '@angular/core';
+import {
+  ChangeDetectionStrategy,
+  Component,
+  provideZonelessChangeDetection,
+  signal,
+} from '@angular/core';
 import { TestBed } from '@angular/core/testing';
-import { QueryClient, provideTanStackQuery } from '@tanstack/angular-query-experimental';
+import {
+  QueryClient,
+  provideTanStackQuery,
+} from '@tanstack/angular-query-experimental';
 
-import { FLEET_CLOCK, hubBoardChunkWorkItemsKey, hubChunkWorkItemsKey, type ChunkWorkItemsView, type WorkItemsView } from 'fleet';
-import { type RequestClientStub, settle, stubError, stubHubClient, workItemEntry } from 'fleet/testing';
+import {
+  FLEET_CLOCK,
+  hubBoardChunkWorkItemsKey,
+  hubChunkWorkItemsKey,
+  type ChunkWorkItemsView,
+  type WorkItemsView,
+} from 'fleet';
+import {
+  type RequestClientStub,
+  settle,
+  stubError,
+  stubHubClient,
+  workItemEntry,
+} from 'fleet/testing';
 import { WORK_ITEMS_BATCH_SIZE } from './board-work-items.model';
 import { injectBoardWorkItemsQuery } from './board-work-items.query';
 
@@ -18,10 +38,12 @@ class TestHost {
 }
 
 const NOW = 10_000_000;
-const ids = (n: number) => Array.from({ length: n }, (_, i) => `ch_${String(i).padStart(4, '0')}`);
+const ids = (n: number) =>
+  Array.from({ length: n }, (_, i) => `ch_${String(i).padStart(4, '0')}`);
 
 /** The chunk ids a bulk `/api/work-items` request names. */
-const idsOf = (search: string) => new URLSearchParams(search).getAll('chunk_id');
+const idsOf = (search: string) =>
+  new URLSearchParams(search).getAll('chunk_id');
 
 const titled = (chunkId: string): WorkItemsView => ({
   items: [
@@ -38,7 +60,10 @@ const titled = (chunkId: string): WorkItemsView => ({
 });
 
 /** The bulk answer for the chunks a request names, omitting any in `omit`. */
-const bulkAnswer = (search: string, omit: readonly string[] = []): ChunkWorkItemsView => ({
+const bulkAnswer = (
+  search: string,
+  omit: readonly string[] = [],
+): ChunkWorkItemsView => ({
   chunks: Object.fromEntries(
     idsOf(search)
       .filter((id) => !omit.includes(id))
@@ -67,7 +92,10 @@ describe('injectBoardWorkItemsQuery', () => {
     return TestBed.createComponent(TestHost);
   };
 
-  const readAll = async (chunkIds: readonly string[], seed?: (client: QueryClient) => void) => {
+  const readAll = async (
+    chunkIds: readonly string[],
+    seed?: (client: QueryClient) => void,
+  ) => {
     const fixture = mount(seed);
     fixture.componentInstance.chunkIds.set(chunkIds);
     await vi.waitFor(async () => {
@@ -78,7 +106,9 @@ describe('injectBoardWorkItemsQuery', () => {
   };
 
   it('reads 20 chunks in one request', async () => {
-    stub = stubHubClient({ 'GET /api/work-items': ({ search }) => bulkAnswer(search) });
+    stub = stubHubClient({
+      'GET /api/work-items': ({ search }) => bulkAnswer(search),
+    });
     const all = ids(20);
     const found = await readAll(all);
 
@@ -90,26 +120,38 @@ describe('injectBoardWorkItemsQuery', () => {
   });
 
   it('answers every chunk past one batch with one request per batch', async () => {
-    stub = stubHubClient({ 'GET /api/work-items': ({ search }) => bulkAnswer(search) });
+    stub = stubHubClient({
+      'GET /api/work-items': ({ search }) => bulkAnswer(search),
+    });
     const all = ids(WORK_ITEMS_BATCH_SIZE + 5);
     const found = await readAll(all);
 
     expect(found.size).toBe(all.length);
     expect(found.get('ch_0104')?.items?.[0].title).toBe('ch_0104');
     expect(stub.requests).toHaveLength(2);
-    expect(stub.requests.map((r) => idsOf(r.search).length).sort((a, b) => a - b)).toEqual([5, WORK_ITEMS_BATCH_SIZE]);
+    expect(
+      stub.requests.map((r) => idsOf(r.search).length).sort((a, b) => a - b),
+    ).toEqual([5, WORK_ITEMS_BATCH_SIZE]);
   });
 
   it('never writes the dock entry, holding what it read under its own key', async () => {
-    stub = stubHubClient({ 'GET /api/work-items': ({ search }) => bulkAnswer(search) });
+    stub = stubHubClient({
+      'GET /api/work-items': ({ search }) => bulkAnswer(search),
+    });
     await readAll(['ch_a']);
 
-    expect(queryClient.getQueryData(hubChunkWorkItemsKey('ch_a'))).toBeUndefined();
-    expect(queryClient.getQueryData(hubBoardChunkWorkItemsKey('ch_a'))).toEqual(titled('ch_a'));
+    expect(
+      queryClient.getQueryData(hubChunkWorkItemsKey('ch_a')),
+    ).toBeUndefined();
+    expect(queryClient.getQueryData(hubBoardChunkWorkItemsKey('ch_a'))).toEqual(
+      titled('ch_a'),
+    );
   });
 
   it('reuses a chunk read within the hold even once a live update has invalidated it', async () => {
-    stub = stubHubClient({ 'GET /api/work-items': ({ search }) => bulkAnswer(search) });
+    stub = stubHubClient({
+      'GET /api/work-items': ({ search }) => bulkAnswer(search),
+    });
     const found = await readAll(['ch_held', 'ch_new'], (client) => {
       client.setQueryData(hubChunkWorkItemsKey('ch_held'), titled('ch_held'), {
         updatedAt: NOW - 60_000,
@@ -124,16 +166,24 @@ describe('injectBoardWorkItemsQuery', () => {
   });
 
   it("reuses a chunk the board's own earlier read holds", async () => {
-    stub = stubHubClient({ 'GET /api/work-items': ({ search }) => bulkAnswer(search) });
+    stub = stubHubClient({
+      'GET /api/work-items': ({ search }) => bulkAnswer(search),
+    });
     await readAll(['ch_held'], (client) => {
-      client.setQueryData(hubBoardChunkWorkItemsKey('ch_held'), titled('ch_held'), { updatedAt: NOW - 60_000 });
+      client.setQueryData(
+        hubBoardChunkWorkItemsKey('ch_held'),
+        titled('ch_held'),
+        { updatedAt: NOW - 60_000 },
+      );
     });
 
     expect(stub.requests).toHaveLength(0);
   });
 
   it('re-reads a chunk whose last read is past the hold', async () => {
-    stub = stubHubClient({ 'GET /api/work-items': ({ search }) => bulkAnswer(search) });
+    stub = stubHubClient({
+      'GET /api/work-items': ({ search }) => bulkAnswer(search),
+    });
     await readAll(['ch_old'], (client) => {
       client.setQueryData(hubChunkWorkItemsKey('ch_old'), titled('ch_old'), {
         updatedAt: NOW - 6 * 60_000,
@@ -144,21 +194,29 @@ describe('injectBoardWorkItemsQuery', () => {
   });
 
   it('answers a chunk the bulk answer omits as carrying no items, keeping the rest, and holds only the answered', async () => {
-    stub = stubHubClient({ 'GET /api/work-items': ({ search }) => bulkAnswer(search, ['ch_gone']) });
+    stub = stubHubClient({
+      'GET /api/work-items': ({ search }) => bulkAnswer(search, ['ch_gone']),
+    });
     const found = await readAll(['ch_gone', 'ch_ok']);
 
     expect(found.get('ch_gone')).toEqual({ items: [] });
     expect(found.get('ch_ok')?.items?.length).toBeGreaterThan(0);
-    expect(queryClient.getQueryData(hubBoardChunkWorkItemsKey('ch_gone'))).toBeUndefined();
+    expect(
+      queryClient.getQueryData(hubBoardChunkWorkItemsKey('ch_gone')),
+    ).toBeUndefined();
   });
 
   it('answers every unheld chunk as carrying no items when the bulk call fails, holding none', async () => {
-    stub = stubHubClient({ 'GET /api/work-items': () => stubError(502, { detail: 'hub down' }) });
+    stub = stubHubClient({
+      'GET /api/work-items': () => stubError(502, { detail: 'hub down' }),
+    });
     const found = await readAll(['ch_a', 'ch_b']);
 
     expect(found.get('ch_a')).toEqual({ items: [] });
     expect(found.get('ch_b')).toEqual({ items: [] });
-    expect(queryClient.getQueryData(hubBoardChunkWorkItemsKey('ch_a'))).toBeUndefined();
+    expect(
+      queryClient.getQueryData(hubBoardChunkWorkItemsKey('ch_a')),
+    ).toBeUndefined();
   });
 
   it("shows a batch's titles as soon as it answers, while a later batch still reads", async () => {
@@ -177,7 +235,9 @@ describe('injectBoardWorkItemsQuery', () => {
 
     await vi.waitFor(async () => {
       await settle(fixture, 1);
-      expect(fixture.componentInstance.workItems().size).toBe(WORK_ITEMS_BATCH_SIZE);
+      expect(fixture.componentInstance.workItems().size).toBe(
+        WORK_ITEMS_BATCH_SIZE,
+      );
     });
     expect(fixture.componentInstance.workItems().has(last)).toBe(false);
 

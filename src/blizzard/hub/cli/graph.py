@@ -4,19 +4,20 @@ from __future__ import annotations
 
 from collections.abc import Iterator
 from dataclasses import dataclass
-from http import HTTPStatus
 from pathlib import Path
 from typing import Any, cast
 
 import click
 
 from blizzard.cli.get_group import GetGroup
+from blizzard.cli.refusal import refusal_of
 from blizzard.foundation.roles import dto
 from blizzard.hub.cli.command import AdminCommand, FleetCommand
 from blizzard.hub.cli.context import CliContext
 from blizzard.hub.cli.views import Listing
 from blizzard.hub.documents import YAML_CODEC
 from blizzard.hub.graphs import GraphFile
+from blizzard.wire.problem import GRAPH_DEFINITION_INVALID
 
 
 class GraphListing(Listing):
@@ -102,7 +103,7 @@ def graph_list(cli: CliContext) -> None:
 @click.argument("graph_id")
 def graph_show(cli: CliContext, graph_id: str) -> None:
     """One graph's full reified definition — session pools, nodes, and edges."""
-    resp = cli.get(f"/api/graphs/{graph_id}", "GET /graphs/{id}", on_status={404: f"unknown graph {graph_id}"})
+    resp = cli.get(f"/api/graphs/{graph_id}", "GET /graphs/{id}")
     body = resp.json()
     cli.show(body, GraphDetail(body))
 
@@ -124,7 +125,7 @@ def graph_mint(cli: CliContext, path: str) -> None:
             raise click.ClickException(f"failed to load {path}: {exc}") from exc
 
     resp = cli.send("post", "/api/graphs", json_body={"definition_yaml": definition_yaml})
-    if resp.status_code == HTTPStatus.UNPROCESSABLE_ENTITY:
+    if refusal_of(resp).type == GRAPH_DEFINITION_INVALID:
         report = resp.json()
         lines = [f"error: {e}" for e in report.get("errors", [])]
         lines += [f"warning: {w}" for w in report.get("warnings", [])]
@@ -176,7 +177,6 @@ def graph_follow_latest(cli: CliContext, graph_id: str, value: str) -> None:
         f"/api/graphs/{graph_id}",
         "PATCH /graphs/{id}",
         json_body={"follow_latest": follow_latest},
-        on_status={404: f"unknown graph {graph_id}"},
     )
     body = resp.json()
     stored = body.get("follow_latest")
@@ -189,7 +189,6 @@ def _set_graph_lifecycle(cli: CliContext, graph_id: str, *, verb: str) -> None:
         f"/api/graphs/{graph_id}/{verb}",
         f"POST /graphs/{{id}}/{verb}",
         json_body={},
-        on_status={404: f"unknown graph {graph_id}"},
     )
     body = resp.json()
     state = "retired" if body.get("retired") else "enabled"

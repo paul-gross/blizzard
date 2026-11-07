@@ -1,4 +1,9 @@
-import { type ChunkFlowPlaceView, type hubApi, openLookup, type Tone } from 'fleet';
+import {
+  type ChunkFlowPlaceView,
+  type hubApi,
+  openLookup,
+  type Tone,
+} from 'fleet';
 
 /** How a place's state reads, and the tone it is drawn in. A state this build does not know reads raw, in the idle
  * tone. */
@@ -68,7 +73,9 @@ export function placeText(place: ChunkFlowPlaceView): string {
 }
 
 /** Every place a chunk holds, one line per flow, in the order the hub lists them. */
-export function placeLines(places: readonly ChunkFlowPlaceView[] | undefined): readonly FlowPlaceLine[] {
+export function placeLines(
+  places: readonly ChunkFlowPlaceView[] | undefined,
+): readonly FlowPlaceLine[] {
   return (places ?? []).map((place) => ({
     flowId: place.flow_id,
     text: placeText(place),

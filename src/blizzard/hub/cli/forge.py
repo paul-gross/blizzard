@@ -27,10 +27,6 @@ class ForgeListing(Listing):
         return f"{row['slug']}  {row['name']}  {row['forge_id']}  r{row['revision']}  {_state(row)}  {row['api_base']}"
 
 
-def _refusals(forge: str) -> dict[int, str]:
-    return {404: f"unknown forge {forge}", 409: f"forge {forge} cannot be changed", 422: "invalid forge"}
-
-
 @click.group("forge", cls=GetGroup)
 def forge_group() -> None:
     """Create, list, get, edit, retire and enable forges."""
@@ -45,7 +41,7 @@ def forge_group() -> None:
 def forge_create(cli: CliContext, slug: str, name: str | None, kind: str, api_base: str, web_base: str | None) -> None:
     """Add forge SLUG at revision 1."""
     body = {"slug": slug, "name": name, "kind": kind, "api_base": api_base, "web_base": web_base}
-    row = cli.post("/api/forges", "POST /forges", json_body=body, on_status=_refusals(slug), door=True).json()
+    row = cli.post("/api/forges", "POST /forges", json_body=body, door=True).json()
     cli.show_lines(row, f"forge {row['slug']} created at revision 1 — id {row['forge_id']}")
 
 
@@ -63,7 +59,7 @@ def forge_list(cli: CliContext, include_retired: bool) -> None:
 def forge_show(cli: CliContext, forge: str) -> None:
     """Show FORGE by id, current slug or former slug, with the capabilities it offers, its linked records and each rate
     budget's last reading."""
-    row = cli.get(f"/api/forges/{forge}", "GET /forges/{forge}", on_status=_refusals(forge)).json()
+    row = cli.get(f"/api/forges/{forge}", "GET /forges/{forge}").json()
     cli.show_lines(
         row,
         f"{row['slug']}  {row['name']}  revision {row['revision']}  {_state(row)}",
@@ -115,7 +111,6 @@ def forge_edit(
         f"/api/forges/{forge}",
         "PATCH /forges/{forge}",
         json_body=body,
-        on_status=_refusals(forge),
         if_match=if_match,
         door=True,
     ).json()
@@ -142,7 +137,6 @@ def _lifecycle(cli: CliContext, forge: str, verb: str, if_match: int | None) -> 
     row = cli.post(
         f"/api/forges/{forge}/{verb}",
         f"POST /forges/{{forge}}/{verb}",
-        on_status=_refusals(forge),
         if_match=if_match,
         door=True,
     ).json()

@@ -1,0 +1,24 @@
+id: bzh:cli-refusal-body-confined
+valid:
+  # Asking the adapter.
+  - |
+    reading = refusal_of(resp)
+    message = reading.message
+  # A row of a successful read.
+  - |
+    detail = row.get("detail")
+  - |
+    detail = row["detail"]
+invalid:
+  - |
+    slug = resp.json()["detail"]["slug"]
+  - |
+    detail = resp.json().get("detail")
+  - |
+    def check(resp):
+        body = resp.json()
+        return body["detail"]
+  - |
+    def check(resp):
+        body = resp.json()
+        return body.get("detail")

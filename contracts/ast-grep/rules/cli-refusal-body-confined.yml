@@ -1,0 +1,28 @@
+# yaml-language-server: $schema=https://raw.githubusercontent.com/ast-grep/ast-grep/main/schemas/rule.json
+
+id: bzh:cli-refusal-body-confined
+language: Python
+severity: error
+message: >-
+  A refusal body's `detail` is read only by blizzard.cli.refusal, the CLI trees' one problem-details adapter. A command
+  asks `refusal_of(resp)` for the refusal's `type` and `message`, and dispatches on the type (bzh:clients-read-problem-types).
+files:
+  - src/blizzard/cli/**
+  - src/blizzard/hub/cli/**
+  - src/blizzard/runner/cli/**
+ignores:
+  - src/blizzard/cli/refusal.py
+rule:
+  any:
+    - pattern: $RESPONSE.json()["detail"]
+    - pattern: $RESPONSE.json().get("detail")
+    - all:
+        - any:
+            - pattern: $BODY["detail"]
+            - pattern: $BODY.get("detail")
+        - inside:
+            kind: function_definition
+            has:
+              pattern: $BODY = $RESPONSE.json()
+              stopBy: end
+            stopBy: end

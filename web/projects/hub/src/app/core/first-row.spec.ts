@@ -2,7 +2,9 @@ import { firstRowToOpen } from './first-row';
 
 describe('firstRowToOpen', () => {
   it('opens the first row of a settled list on desktop when the URL names none', () => {
-    expect(firstRowToOpen(null, ['hub-api', 'cli'], true, false)).toBe('hub-api');
+    expect(firstRowToOpen(null, ['hub-api', 'cli'], true, false)).toBe(
+      'hub-api',
+    );
   });
 
   it('leaves a named row alone', () => {

@@ -8,15 +8,18 @@ unlinking it is refused ``409``, as is any write on it."""
 
 from __future__ import annotations
 
+from functools import partial
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, Header, HTTPException, status
+from fastapi import APIRouter, Depends, Header, status
 
 from blizzard.foundation.store.utc import iso_utc
+from blizzard.hub.api import problems, problems_admin
 from blizzard.hub.api.auth import reject_runner_principal
 from blizzard.hub.api.auth_session import require, tenant_bound
 from blizzard.hub.api.deps import Services
 from blizzard.hub.api.door import RequestDoor, change_context
+from blizzard.hub.api.problem_exceptions import ProblemHTTPException
 from blizzard.hub.api.project_params import PathProject
 from blizzard.hub.api.repository_params import PathRepository
 from blizzard.hub.api.work_source_params import path_work_source, resolved_work_source
@@ -98,25 +101,22 @@ def _repository_view(link: RepositoryLink, repository: ConfiguredRepository) -> 
     )
 
 
-def _unprocessable(field: str, message: str, kind: str = "value_error", where: str = "body") -> HTTPException:
-    return HTTPException(
-        status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
-        detail=[{"loc": [where, field], "msg": message, "type": kind}],
-    )
+def _unprocessable(field: str, message: str, kind: str = "value_error", where: str = "body") -> ProblemHTTPException:
+    return ProblemHTTPException(partial(problems_admin.config_field_invalid_problem, where, field, message, kind))
 
 
-def _conflict(exc: Exception) -> HTTPException:
-    return HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc))
+def _conflict(exc: Exception) -> ProblemHTTPException:
+    if isinstance(exc, ProjectSlugTaken):
+        return ProblemHTTPException(partial(problems_admin.project_slug_taken_problem, str(exc)))
+    return ProblemHTTPException(partial(problems.revision_conflict_problem, str(exc)))
 
 
-def _landing_order_conflict(exc: LandingOrderConflict) -> HTTPException:
-    return HTTPException(
-        status_code=status.HTTP_409_CONFLICT, detail={"code": exc.code, "message": f"{exc}; run it again"}
-    )
+def _landing_order_conflict(exc: LandingOrderConflict) -> ProblemHTTPException:
+    return ProblemHTTPException(partial(problems_admin.landing_order_conflict_problem, f"{exc}; run it again"))
 
 
-def _not_found(detail: str) -> HTTPException:
-    return HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=detail)
+def _not_found(detail: str) -> ProblemHTTPException:
+    return ProblemHTTPException(partial(problems_admin.project_link_not_found_problem, detail))
 
 
 def _edit(request: ProjectPatchRequest) -> ProjectEdit:

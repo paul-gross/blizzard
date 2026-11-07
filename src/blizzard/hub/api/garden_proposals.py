@@ -8,14 +8,14 @@ from __future__ import annotations
 from functools import partial
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, Query, status
 
 from blizzard.foundation.garden_proposals import GardenProposalOrigin
 from blizzard.foundation.store.utc import iso_utc
-from blizzard.hub.api import chunk_events, problems
+from blizzard.hub.api import chunk_events, problems, problems_garden
 from blizzard.hub.api.auth import reject_runner_principal
 from blizzard.hub.api.auth_session import require, tenant_bound
-from blizzard.hub.api.chunk_views import ingest_conflict_response
+from blizzard.hub.api.chunk_views import ingest_conflict_refusal
 from blizzard.hub.api.deps import Services
 from blizzard.hub.api.problem_exceptions import ProblemHTTPException
 from blizzard.hub.api.project_label_fields import ProjectLabelFields
@@ -114,7 +114,9 @@ def _labelled(
 def _get_or_404(proposal_id: str, services: TenantServices) -> GardenProposal:
     proposal = services.garden_proposals.get(proposal_id)
     if proposal is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"unknown garden proposal {proposal_id}")
+        raise ProblemHTTPException(
+            partial(problems_garden.garden_proposal_not_found_problem, f"unknown garden proposal {proposal_id}")
+        )
     return proposal
 
 
@@ -124,7 +126,7 @@ def _require_open_for(verb: GardenProposalVerb, proposal: GardenProposal, servic
     try:
         proposal.require_legal(verb, services.garden_proposal_closures.get(proposal.proposal_id))
     except GardenProposalAlreadyClosed as exc:
-        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
+        raise ProblemHTTPException(partial(problems_garden.garden_proposal_already_closed_problem, str(exc))) from exc
 
 
 def _resolve_findings_or_422(finding_ids: list[str], services: TenantServices) -> list[Finding]:
@@ -134,9 +136,8 @@ def _resolve_findings_or_422(finding_ids: list[str], services: TenantServices) -
     found = services.findings.get_many(finding_ids)
     missing = sorted({fid for fid in finding_ids if fid not in found})
     if missing:
-        raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
-            detail=f"unknown finding id(s): {', '.join(missing)}",
+        raise ProblemHTTPException(
+            partial(problems_garden.garden_proposal_invalid_problem, f"unknown finding id(s): {', '.join(missing)}")
         )
     return [found[fid] for fid in finding_ids]
 
@@ -220,9 +221,9 @@ def pass_garden_proposal(
     try:
         closure = services.garden_proposal_closure.pass_(proposal, reason=request.reason, by=identity.user_id)
     except GardenProposalPassReasonRequired as exc:
-        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail=str(exc)) from exc
+        raise ProblemHTTPException(partial(problems_garden.garden_proposal_invalid_problem, str(exc))) from exc
     except GardenProposalAlreadyClosed as exc:
-        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
+        raise ProblemHTTPException(partial(problems_garden.garden_proposal_already_closed_problem, str(exc))) from exc
     return _labelled(proposal, closure, services)
 
 
@@ -252,13 +253,13 @@ def accept_garden_proposal(
             findings=proposal_findings,
         )
     except (GardenProposalBodyWithoutMint, WorkItemFieldBlank) as exc:
-        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail=str(exc)) from exc
+        raise ProblemHTTPException(partial(problems_garden.garden_proposal_invalid_problem, str(exc))) from exc
     except GardenProposalAlreadyClosed as exc:
-        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
+        raise ProblemHTTPException(partial(problems_garden.garden_proposal_already_closed_problem, str(exc))) from exc
     except DefaultGraphRetired as exc:
-        raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=str(exc)) from exc
+        raise ProblemHTTPException(partial(problems_garden.garden_default_graph_retired_problem, str(exc))) from exc
     except IngestConflict as exc:
-        return ingest_conflict_response(services, exc)
+        raise ingest_conflict_refusal(services, exc) from exc
     if accepted.chunk_id is not None:
         # A freshly minted chunk rests `not_ready`, exactly as a `POST
         # /work-sources/hub/items` mint does.
@@ -278,8 +279,8 @@ def _create(
     if request.routine is not None:
         routine = services.routines.get_by_slug(project.project_id, request.routine)
         if routine is None:
-            raise HTTPException(
-                status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail=f"unknown routine {request.routine!r}"
+            raise ProblemHTTPException(
+                partial(problems_garden.routine_not_found_problem, f"unknown routine {request.routine!r}", 422)
             )
     findings = _resolve_findings_or_422(request.findings, services)
     try:
@@ -299,7 +300,7 @@ def _create(
         GardenProposalRoutineOtherProjectError,
         GardenProposalBlankFieldError,
     ) as exc:
-        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail=str(exc)) from exc
+        raise ProblemHTTPException(partial(problems_garden.garden_proposal_invalid_problem, str(exc))) from exc
     return garden_proposal_view(proposal, None, ProjectLabels.of_project(project).fields(proposal.project_id))
 
 
@@ -359,9 +360,9 @@ def edit_garden_proposal(
     try:
         updated = services.garden_proposal_authoring.edit(proposal, edit)
     except (GardenProposalBlankFieldError, GardenProposalEmptyEditError) as exc:
-        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail=str(exc)) from exc
+        raise ProblemHTTPException(partial(problems_garden.garden_proposal_invalid_problem, str(exc))) from exc
     except GardenProposalAlreadyClosed as exc:
-        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
+        raise ProblemHTTPException(partial(problems_garden.garden_proposal_already_closed_problem, str(exc))) from exc
     return _labelled(updated, services.garden_proposal_closures.get(proposal_id), services)
 
 
@@ -391,9 +392,9 @@ def attach_garden_proposal_findings(
         GardenProposalFindingOtherProjectError,
         GardenProposalFindingAlreadyLinkedError,
     ) as exc:
-        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail=str(exc)) from exc
+        raise ProblemHTTPException(partial(problems_garden.garden_proposal_invalid_problem, str(exc))) from exc
     except GardenProposalAlreadyClosed as exc:
-        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
+        raise ProblemHTTPException(partial(problems_garden.garden_proposal_already_closed_problem, str(exc))) from exc
     return _labelled(updated, services.garden_proposal_closures.get(proposal_id), services)
 
 
@@ -416,7 +417,7 @@ def detach_garden_proposal_findings(
     try:
         updated = services.garden_proposal_authoring.detach(proposal, findings)
     except (GardenProposalNoFindingsError, DuplicateProposalFindingError, GardenProposalFindingNotLinkedError) as exc:
-        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail=str(exc)) from exc
+        raise ProblemHTTPException(partial(problems_garden.garden_proposal_invalid_problem, str(exc))) from exc
     except GardenProposalAlreadyClosed as exc:
-        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
+        raise ProblemHTTPException(partial(problems_garden.garden_proposal_already_closed_problem, str(exc))) from exc
     return _labelled(updated, services.garden_proposal_closures.get(proposal_id), services)

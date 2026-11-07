@@ -9,13 +9,13 @@ from __future__ import annotations
 
 from fastapi import APIRouter, Request
 
-from blizzard.runner.api.hub_proxy import HubProxy
+from blizzard.runner.api.hub_proxy import RELAYED_REFUSALS, HubProxy
 from blizzard.wire.chunk import WorkItemsView
 
 router = APIRouter(prefix="/api", tags=["runner"])
 
 
-@router.get("/chunks/{chunk_id}/work-items", response_model=WorkItemsView)
+@router.get("/chunks/{chunk_id}/work-items", response_model=WorkItemsView, responses=RELAYED_REFUSALS)
 def get_work_items(chunk_id: str, request: Request) -> WorkItemsView:
     """Forward a chunk's work-items read to the hub — the layered pass-through."""
     upstream = HubProxy.of(request, "work-items").get(f"/api/fleet/chunks/{chunk_id}/work-items", chunk_id=chunk_id)

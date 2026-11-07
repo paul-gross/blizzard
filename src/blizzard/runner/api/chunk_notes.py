@@ -7,14 +7,14 @@ from __future__ import annotations
 
 from fastapi import APIRouter, Request
 
-from blizzard.runner.api.hub_proxy import HubProxy
+from blizzard.runner.api.hub_proxy import RELAYED_REFUSALS, HubProxy
 from blizzard.runner.api.lease_scope import authorized_lease
 from blizzard.wire.chunk_asks import ChunkNotesSource, ChunkNoteView
 
 router = APIRouter(prefix="/api", tags=["runner"])
 
 
-@router.get("/leases/{lease_id}/notes", response_model=list[ChunkNoteView])
+@router.get("/leases/{lease_id}/notes", response_model=list[ChunkNoteView], responses=RELAYED_REFUSALS)
 def get_chunk_notes(lease_id: str, request: Request) -> list[ChunkNoteView]:
     """Every note a person left on the worker's own chunk, oldest-first; a fact without one has no row."""
     lease = authorized_lease(lease_id, request)

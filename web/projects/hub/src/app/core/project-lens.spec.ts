@@ -2,7 +2,14 @@ import { Component, provideZonelessChangeDetection } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { Router, provideRouter } from '@angular/router';
 
-import { ProjectLens, lensLink, lensSegmentOf, lensedUrl, unlensedUrl, viewOf } from './project-lens';
+import {
+  ProjectLens,
+  lensLink,
+  lensSegmentOf,
+  lensedUrl,
+  unlensedUrl,
+  viewOf,
+} from './project-lens';
 
 @Component({ selector: 'app-test-lens-view', template: '' })
 class TestLensView {}
@@ -16,10 +23,14 @@ describe('the lens in a board URL', () => {
   });
 
   it('removes and adds the lens prefix, keeping the view, the query and the fragment', () => {
-    expect(unlensedUrl('/p/blizzard/gardening/runs?since=7d')).toBe('/gardening/runs?since=7d');
+    expect(unlensedUrl('/p/blizzard/gardening/runs?since=7d')).toBe(
+      '/gardening/runs?since=7d',
+    );
     expect(unlensedUrl('/p/blizzard')).toBe('/');
     expect(unlensedUrl('/events')).toBe('/events');
-    expect(lensedUrl('/gardening/runs?since=7d', 'blizzard')).toBe('/p/blizzard/gardening/runs?since=7d');
+    expect(lensedUrl('/gardening/runs?since=7d', 'blizzard')).toBe(
+      '/p/blizzard/gardening/runs?since=7d',
+    );
     expect(lensedUrl('/', 'blizzard')).toBe('/p/blizzard');
     expect(lensedUrl('/board', null)).toBe('/board');
   });
@@ -31,11 +42,27 @@ describe('the lens in a board URL', () => {
 
   it('keeps a link to a view under the lens, and leaves relative, public and already-lensed links alone', () => {
     expect(lensLink('/board', 'blizzard')).toBe('/p/blizzard/board');
-    expect(lensLink(['/board', 'chunk', 'chk_1'], 'blizzard')).toEqual(['/p', 'blizzard', 'board', 'chunk', 'chk_1']);
-    expect(lensLink(['/board/chunk', 'chk_1'], 'blizzard')).toEqual(['/p', 'blizzard', 'board', 'chunk', 'chk_1']);
+    expect(lensLink(['/board', 'chunk', 'chk_1'], 'blizzard')).toEqual([
+      '/p',
+      'blizzard',
+      'board',
+      'chunk',
+      'chk_1',
+    ]);
+    expect(lensLink(['/board/chunk', 'chk_1'], 'blizzard')).toEqual([
+      '/p',
+      'blizzard',
+      'board',
+      'chunk',
+      'chk_1',
+    ]);
     expect(lensLink(['chk_1'], 'blizzard')).toEqual(['chk_1']);
     expect(lensLink(['/login'], 'blizzard')).toEqual(['/login']);
-    expect(lensLink(['/p', 'other', 'board'], 'blizzard')).toEqual(['/p', 'other', 'board']);
+    expect(lensLink(['/p', 'other', 'board'], 'blizzard')).toEqual([
+      '/p',
+      'other',
+      'board',
+    ]);
     expect(lensLink(['/board'], null)).toEqual(['/board']);
   });
 
@@ -53,7 +80,10 @@ describe('ProjectLens', () => {
       providers: [
         provideZonelessChangeDetection(),
         provideRouter([
-          { path: 'p/:projectSlug', children: [{ path: '**', component: TestLensView }] },
+          {
+            path: 'p/:projectSlug',
+            children: [{ path: '**', component: TestLensView }],
+          },
           { path: '**', component: TestLensView },
         ]),
       ],
@@ -66,7 +96,13 @@ describe('ProjectLens', () => {
 
     await router.navigateByUrl('/p/blizzard/events');
     expect(lens.slug()).toBe('blizzard');
-    expect(lens.link(['/board', 'chunk', 'chk_1'])).toEqual(['/p', 'blizzard', 'board', 'chunk', 'chk_1']);
+    expect(lens.link(['/board', 'chunk', 'chk_1'])).toEqual([
+      '/p',
+      'blizzard',
+      'board',
+      'chunk',
+      'chk_1',
+    ]);
 
     await router.navigateByUrl('/events');
     expect(lens.slug()).toBeNull();

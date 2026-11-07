@@ -79,6 +79,24 @@ LOGIN_FAILED: Final = "urn:blizzard:problem:login-failed"
 SSO_REFUSED: Final = "urn:blizzard:problem:sso-refused"
 PROJECT_REQUIRED: Final = "urn:blizzard:problem:project-required"
 HUB_STORE_UNAVAILABLE: Final = "urn:blizzard:problem:hub-store-unavailable"
+FLAG_OFF: Final = "urn:blizzard:problem:flag-off"
+INVARIANTS_IN_PROGRESS: Final = "urn:blizzard:problem:invariants-in-progress"
+SECRET_ALREADY_EXISTS: Final = "urn:blizzard:problem:secret-already-exists"
+SECRET_NOT_FOUND: Final = "urn:blizzard:problem:secret-not-found"
+DECISION_ALREADY_RESOLVED: Final = "urn:blizzard:problem:decision-already-resolved"
+QUESTION_ALREADY_ANSWERED: Final = "urn:blizzard:problem:question-already-answered"
+EGRESS_BACKFILL_FAILED: Final = "urn:blizzard:problem:egress-backfill-failed"
+TRACE_REPLAY_FAILED: Final = "urn:blizzard:problem:trace-replay-failed"
+REVISION_CONFLICT: Final = "urn:blizzard:problem:revision-conflict"
+POINTER_ALREADY_HELD: Final = "urn:blizzard:problem:pointer-already-held"
+DEPENDENT_NOT_EDITABLE: Final = "urn:blizzard:problem:dependent-not-editable"
+DEPENDENCY_WOULD_CLOSE_CYCLE: Final = "urn:blizzard:problem:dependency-would-close-cycle"
+PREREQUISITE_EPHEMERAL: Final = "urn:blizzard:problem:prerequisite-ephemeral"
+NO_STANDING_DEPENDENCY: Final = "urn:blizzard:problem:no-standing-dependency"
+CONFIG_APPLY_CONFLICT: Final = "urn:blizzard:problem:config-apply-conflict"
+CONFIG_MEDIA_TYPE_UNSUPPORTED: Final = "urn:blizzard:problem:config-media-type-unsupported"
+CONFIG_DOCUMENT_INVALID: Final = "urn:blizzard:problem:config-document-invalid"
+GRAPH_DEFINITION_INVALID: Final = "urn:blizzard:problem:graph-definition-invalid"
 
 PROBLEM_TYPES: frozenset[str] = frozenset(
     {
@@ -143,6 +161,24 @@ PROBLEM_TYPES: frozenset[str] = frozenset(
         SSO_REFUSED,
         PROJECT_REQUIRED,
         HUB_STORE_UNAVAILABLE,
+        FLAG_OFF,
+        INVARIANTS_IN_PROGRESS,
+        SECRET_ALREADY_EXISTS,
+        SECRET_NOT_FOUND,
+        DECISION_ALREADY_RESOLVED,
+        QUESTION_ALREADY_ANSWERED,
+        EGRESS_BACKFILL_FAILED,
+        TRACE_REPLAY_FAILED,
+        REVISION_CONFLICT,
+        POINTER_ALREADY_HELD,
+        DEPENDENT_NOT_EDITABLE,
+        DEPENDENCY_WOULD_CLOSE_CYCLE,
+        PREREQUISITE_EPHEMERAL,
+        NO_STANDING_DEPENDENCY,
+        CONFIG_APPLY_CONFLICT,
+        CONFIG_MEDIA_TYPE_UNSUPPORTED,
+        CONFIG_DOCUMENT_INVALID,
+        GRAPH_DEFINITION_INVALID,
     }
 )
 
@@ -163,6 +199,26 @@ def admits(payload: object, kinds: Collection[str]) -> bool:
     is admitted, one with a type outside ``kinds`` is not."""
     present, kind = type_of(payload)
     return not present or (isinstance(kind, str) and kind in kinds)
+
+
+class ValidationEntry(BaseModel):
+    """One entry of a FastAPI request-validation ``detail`` list."""
+
+    loc: list[str | int] = []
+    msg: str = ""
+    type: str = ""
+
+
+class Problem(BaseModel):
+    """The members every hub refusal shares, as a client that dispatches on ``type`` reads them. ``detail`` is a
+    string, or — while the legacy fields stay — an object (``message`` and a ``code``) or a validation list. Every
+    member is optional because a refusal from a hub before problem details carries only ``detail``."""
+
+    type: str | None = None
+    title: str | None = None
+    detail: str | dict[str, Any] | list[ValidationEntry] | None = None
+    instance: str | None = None
+    status: int | str | None = None
 
 
 class CommonProblemMembers[ProblemType: str, Detail](BaseModel):

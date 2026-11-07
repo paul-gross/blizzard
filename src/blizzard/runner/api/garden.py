@@ -9,7 +9,7 @@ from typing import Annotated
 
 from fastapi import APIRouter, Query, Request
 
-from blizzard.runner.api.hub_proxy import HubProxy
+from blizzard.runner.api.hub_proxy import RELAYED_REFUSALS, HubProxy
 from blizzard.runner.api.lease_scope import authorized_lease
 from blizzard.wire.finding import FindingView
 from blizzard.wire.garden_proposal import GardenProposalsPageView, GardenProposalView
@@ -17,7 +17,7 @@ from blizzard.wire.garden_proposal import GardenProposalsPageView, GardenProposa
 router = APIRouter(prefix="/api", tags=["runner"])
 
 
-@router.get("/leases/{lease_id}/garden/findings", response_model=list[FindingView])
+@router.get("/leases/{lease_id}/garden/findings", response_model=list[FindingView], responses=RELAYED_REFUSALS)
 def list_garden_findings(lease_id: str, request: Request) -> list[FindingView]:
     """Forward this lease's chunk's finding-bucket read to the hub; its refusals pass through verbatim."""
     lease = authorized_lease(lease_id, request)
@@ -27,7 +27,7 @@ def list_garden_findings(lease_id: str, request: Request) -> list[FindingView]:
     return [FindingView.model_validate(item) for item in upstream.json()]
 
 
-@router.get("/leases/{lease_id}/garden/proposals", response_model=list[GardenProposalView])
+@router.get("/leases/{lease_id}/garden/proposals", response_model=list[GardenProposalView], responses=RELAYED_REFUSALS)
 def list_garden_proposals(
     lease_id: str, request: Request, state: Annotated[str, Query()] = "open"
 ) -> list[GardenProposalView]:

@@ -1,18 +1,50 @@
 import { Injector, provideZonelessChangeDetection } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
-import { QueryClient, provideTanStackQuery } from '@tanstack/angular-query-experimental';
+import {
+  QueryClient,
+  provideTanStackQuery,
+} from '@tanstack/angular-query-experimental';
 import { vi } from 'vitest';
 
-import { EVENT_SOURCE_FACTORY, FLEET_CLOCK, chunkCountsApiChunkCountsGet, type MeResponse } from 'fleet';
+import {
+  EVENT_SOURCE_FACTORY,
+  FLEET_CLOCK,
+  chunkCountsApiChunkCountsGet,
+  type MeResponse,
+} from 'fleet';
 import type { MeTenant } from 'fleet/shell';
-import { type RequestClientStub, stubError, stubHubClient } from 'fleet/testing';
-import { LAST_TENANT_KEY, PAGE_RELOAD, TAB_TENANT_KEY, TenantContext } from './tenant-context';
+import {
+  type RequestClientStub,
+  stubError,
+  stubHubClient,
+} from 'fleet/testing';
+import {
+  LAST_TENANT_KEY,
+  PAGE_RELOAD,
+  TAB_TENANT_KEY,
+  TenantContext,
+} from './tenant-context';
 import { TENANT_CONFIRMED_MS } from './tenant-loss';
 import { provideTenantInterceptor } from './tenant.interceptor';
 
-const ACME: MeTenant = { tenant_id: 'ten_a', name: 'Acme', role: 'admin', permissions: ['fleet:view'] };
-const BETA: MeTenant = { tenant_id: 'ten_b', name: 'Beta', role: 'guest', permissions: ['fleet:view'] };
-const GLOBEX: MeTenant = { tenant_id: 'ten_g', name: 'Globex', role: 'guest', permissions: ['fleet:view'] };
+const ACME: MeTenant = {
+  tenant_id: 'ten_a',
+  name: 'Acme',
+  role: 'admin',
+  permissions: ['fleet:view'],
+};
+const BETA: MeTenant = {
+  tenant_id: 'ten_b',
+  name: 'Beta',
+  role: 'guest',
+  permissions: ['fleet:view'],
+};
+const GLOBEX: MeTenant = {
+  tenant_id: 'ten_g',
+  name: 'Globex',
+  role: 'guest',
+  permissions: ['fleet:view'],
+};
 
 const me = (tenants: readonly MeTenant[]): MeResponse => ({
   user_id: 'usr_1',
@@ -27,7 +59,8 @@ const me = (tenants: readonly MeTenant[]): MeResponse => ({
 
 /** Lets every pending 404 report and `/api/me` read run to its end — a few macrotask turns. */
 async function drain(): Promise<void> {
-  for (let turn = 0; turn < 5; turn++) await new Promise((resolve) => setTimeout(resolve, 0));
+  for (let turn = 0; turn < 5; turn++)
+    await new Promise((resolve) => setTimeout(resolve, 0));
 }
 
 describe('TenantLoss — a board that loses its tenant', () => {
@@ -85,7 +118,11 @@ describe('TenantLoss — a board that loses its tenant', () => {
 
     expect(sessionStorage.getItem(TAB_TENANT_KEY)).toBeNull();
     expect(localStorage.getItem(LAST_TENANT_KEY)).toBeNull();
-    expect(atStartup(memberships)).toEqual({ kind: 'selected', tenant: ACME, tenants: memberships });
+    expect(atStartup(memberships)).toEqual({
+      kind: 'selected',
+      tenant: ACME,
+      tenants: memberships,
+    });
   });
 
   it('leaves a deleted tenant for the picker when several memberships are left', async () => {
@@ -96,7 +133,10 @@ describe('TenantLoss — a board that loses its tenant', () => {
     await chunkCountsApiChunkCountsGet({ throwOnError: false });
     await vi.waitFor(() => expect(reload).toHaveBeenCalledTimes(1));
 
-    expect(atStartup(memberships)).toEqual({ kind: 'choose', tenants: memberships });
+    expect(atStartup(memberships)).toEqual({
+      kind: 'choose',
+      tenants: memberships,
+    });
   });
 
   it('leaves a deleted tenant for the no-access screen when no membership is left', async () => {
@@ -122,7 +162,11 @@ describe('TenantLoss — a board that loses its tenant', () => {
     await vi.waitFor(() => expect(reload).toHaveBeenCalledTimes(1));
 
     expect(localStorage.getItem(LAST_TENANT_KEY)).toBe('ten_b');
-    expect(atStartup(memberships)).toEqual({ kind: 'selected', tenant: BETA, tenants: memberships });
+    expect(atStartup(memberships)).toEqual({
+      kind: 'selected',
+      tenant: BETA,
+      tenants: memberships,
+    });
   });
 
   it('changes nothing for a missing record in a live tenant, and does not re-read for every such 404', async () => {
@@ -151,7 +195,11 @@ describe('TenantLoss — a board that loses its tenant', () => {
     openIn('ten_g');
     memberships = [ACME];
 
-    await Promise.all([1, 2, 3, 4].map(() => chunkCountsApiChunkCountsGet({ throwOnError: false })));
+    await Promise.all(
+      [1, 2, 3, 4].map(() =>
+        chunkCountsApiChunkCountsGet({ throwOnError: false }),
+      ),
+    );
     await vi.waitFor(() => expect(reload).toHaveBeenCalledTimes(1));
     await drain();
 
@@ -169,7 +217,10 @@ describe('TenantLoss — a board that loses its tenant', () => {
   });
 
   it('leaves the tenant when the live event stream answers 404', async () => {
-    vi.stubGlobal('fetch', vi.fn(async () => new Response(null, { status: 404 })));
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => new Response(null, { status: 404 })),
+    );
     openIn('ten_g');
     memberships = [ACME];
 

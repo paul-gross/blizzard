@@ -195,17 +195,21 @@ their authentication dependencies, host and admin bootstrap, `/api/me`, federati
 reads, and delegated artifact and scope handlers, including operations outside `/api/fleet`. Deliberate missing-graph
 `500` refusals are included; arbitrary server failures, successful semantic outcomes and downstream proxy rewriting are
 not. The authoritative registry of stable `urn:blizzard:problem:<refusal-name>` type URIs is
-[`src/blizzard/wire/problem.py`](../src/blizzard/wire/problem.py); operation response declarations and the OpenAPI
-document identify which types each operation can return. Clients dispatch on `type`, not prose or legacy field presence;
-an unknown present type is an unexpected refusal, not a reason to guess a known outcome.
+[`src/blizzard/wire/problem.py`](../src/blizzard/wire/problem.py) and the `problem_types_<family>.py` modules beside it,
+unioned in `src/blizzard/wire/problem_registry.py`; operation response declarations and the OpenAPI document identify
+which types each operation can return. Clients dispatch on `type`, not prose or legacy field presence; an unknown
+present type is an unexpected refusal, not a reason to guess a known outcome.
 
 Each problem carries `type`, `title`, `detail` and `instance`. Ordinarily `detail` is a string and `status`, when
 present, is a numeric HTTP status. HTTP status is authoritative. For compatibility, terminal and not-ready claim
 refusals instead carry a required string `status` describing the chunk; claim race, dependency and incompatible refusals
-omit `status` entirely, not even `null`. Tenant-required and project-required refusals retain an object-valued `detail`,
-and unknown-project refusals (an unheld `?project=`, as on `GET /api/fleet/queue/peek`) a list-valued, validation-shaped
-one. These exceptions mean the bodies are not strictly RFC 9457 compliant. Other released fields and their meanings
-remain in the response, including nullable fields. Unknown-tenant bootstrap retains the detail `no such tenant`.
+omit `status` entirely, not even `null`. Tenant-required, project-required and flag-off refusals retain an object-valued
+`detail`, and unknown-project refusals (an unheld `?project=`, as on `GET /api/fleet/queue/peek`) a list-valued,
+validation-shaped one. Other refusals keep the structured `detail` they released: lists for `config-document-invalid`,
+`unknown-work-source` and `config-field-invalid`; objects for `landing-order-conflict`, `last-tenant`, the `forge-*`
+refusals and `secret-in-use`. These exceptions mean the bodies are not strictly RFC 9457 compliant. Other released
+fields and their meanings remain in the response, including nullable fields. Unknown-tenant bootstrap retains the string
+`detail` the `tenant-not-found` problem names in [`src/blizzard/wire/tenant.py`](../src/blizzard/wire/tenant.py).
 Authentication and throttling responses preserve applicable headers, including `WWW-Authenticate` and `Retry-After`.
 
 Domain `422` refusals use problem media with a string detail, except the project-required and unknown-project refusals

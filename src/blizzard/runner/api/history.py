@@ -13,7 +13,7 @@ from dataclasses import dataclass
 from fastapi import APIRouter, Request
 
 from blizzard.foundation.roles import dto
-from blizzard.runner.api.hub_proxy import HubProxy
+from blizzard.runner.api.hub_proxy import RELAYED_REFUSALS, HubProxy
 from blizzard.runner.api.lease_scope import authorized_lease
 from blizzard.wire.chunk import BounceView, MigrationView, RequeueView, ResolutionView, RestartView, TransitionView
 from blizzard.wire.history import ChunkHistoryView, HistoryRowView
@@ -21,7 +21,7 @@ from blizzard.wire.history import ChunkHistoryView, HistoryRowView
 router = APIRouter(prefix="/api", tags=["runner"])
 
 
-@router.get("/leases/{lease_id}/history", response_model=list[HistoryRowView])
+@router.get("/leases/{lease_id}/history", response_model=list[HistoryRowView], responses=RELAYED_REFUSALS)
 def get_history(lease_id: str, request: Request) -> list[HistoryRowView]:
     """The worker's own chunk's timeline — transitions, migrations, bounces, gate resolutions,
     requeues, and restarts merged

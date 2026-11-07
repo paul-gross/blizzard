@@ -1,5 +1,9 @@
 import { inject, type Signal } from '@angular/core';
-import { keepPreviousData, QueryClient, type QueryObserverResult } from '@tanstack/angular-query-experimental';
+import {
+  keepPreviousData,
+  QueryClient,
+  type QueryObserverResult,
+} from '@tanstack/angular-query-experimental';
 import { injectQueries } from '@tanstack/angular-query-experimental/inject-queries-experimental';
 
 import {
@@ -11,7 +15,11 @@ import {
   type ChunkWorkItemsView,
   type WorkItemsView,
 } from 'fleet';
-import { mergeWorkItemBatches, withinHold, workItemBatches } from './board-work-items.model';
+import {
+  mergeWorkItemBatches,
+  withinHold,
+  workItemBatches,
+} from './board-work-items.model';
 
 /** How long the board reuses a chunk's work items: titles rarely move, and each read can reach
  * an external forge. */
@@ -21,10 +29,21 @@ const WORK_ITEMS_HOLD_MS = 5 * 60_000;
 const NO_ITEMS_READ: WorkItemsView = { items: [] };
 
 /** A chunk's held work items: the dock's entry, a superset since it carries comments, else the board's own. */
-function heldWorkItems(queryClient: QueryClient, now: number, chunkId: string): WorkItemsView | undefined {
-  for (const key of [hubChunkWorkItemsKey(chunkId), hubBoardChunkWorkItemsKey(chunkId)]) {
+function heldWorkItems(
+  queryClient: QueryClient,
+  now: number,
+  chunkId: string,
+): WorkItemsView | undefined {
+  for (const key of [
+    hubChunkWorkItemsKey(chunkId),
+    hubBoardChunkWorkItemsKey(chunkId),
+  ]) {
     const state = queryClient.getQueryState<WorkItemsView>(key);
-    if (state?.data !== undefined && withinHold(state.dataUpdatedAt, now, WORK_ITEMS_HOLD_MS)) return state.data;
+    if (
+      state?.data !== undefined &&
+      withinHold(state.dataUpdatedAt, now, WORK_ITEMS_HOLD_MS)
+    )
+      return state.data;
   }
   return undefined;
 }
@@ -72,7 +91,11 @@ async function readWorkItemsBatch(
     }
     const items: WorkItemsView = { items: view };
     // The hold is written by a fetch that already has its answer, not by a direct cache write.
-    await queryClient.fetchQuery({ queryKey: hubBoardChunkWorkItemsKey(chunkId), queryFn: () => items, staleTime: 0 });
+    await queryClient.fetchQuery({
+      queryKey: hubBoardChunkWorkItemsKey(chunkId),
+      queryFn: () => items,
+      staleTime: 0,
+    });
     found.set(chunkId, items);
   }
   return found;
@@ -84,13 +107,16 @@ async function readWorkItemsBatch(
  * (`board-work-items.model.ts`), each its own query, so a batch's titles land as soon as it
  * answers. A batch the board's chunks reshuffle into holds its previous answer while it re-reads.
  */
-export function injectBoardWorkItemsQuery(chunkIds: () => readonly string[]): Signal<ReadonlyMap<string, WorkItemsView>> {
+export function injectBoardWorkItemsQuery(
+  chunkIds: () => readonly string[],
+): Signal<ReadonlyMap<string, WorkItemsView>> {
   const queryClient = inject(QueryClient);
   const clock = inject(FLEET_CLOCK);
   return injectQueries(() => ({
     queries: workItemBatches(chunkIds()).map((batch) => ({
       queryKey: hubWorkItemsBatchKey(batch),
-      queryFn: ({ signal }: { signal: AbortSignal }) => readWorkItemsBatch(queryClient, clock(), batch, signal),
+      queryFn: ({ signal }: { signal: AbortSignal }) =>
+        readWorkItemsBatch(queryClient, clock(), batch, signal),
       staleTime: WORK_ITEMS_HOLD_MS,
       refetchOnWindowFocus: false,
       placeholderData: keepPreviousData,
@@ -99,7 +125,11 @@ export function injectBoardWorkItemsQuery(chunkIds: () => readonly string[]): Si
     // signal proxies, so the results are read as what they are.
     combine: (results) =>
       mergeWorkItemBatches(
-        (results as unknown as readonly QueryObserverResult<ReadonlyMap<string, WorkItemsView>>[]).map((result) => result.data),
+        (
+          results as unknown as readonly QueryObserverResult<
+            ReadonlyMap<string, WorkItemsView>
+          >[]
+        ).map((result) => result.data),
       ),
   }));
 }
