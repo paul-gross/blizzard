@@ -16,6 +16,15 @@ const CHECKS: runnerApi.SelfTestCheckView[] = [
   { name: 'resume', passed: false, detail: 'no session' },
 ];
 
+/** Change detection over a few macrotask turns, without waiting for stability — a start held
+ * open by the test keeps the app unstable. */
+async function turn(fixture: { detectChanges(): void }): Promise<void> {
+  for (let i = 0; i < 8; i += 1) {
+    fixture.detectChanges();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+  }
+}
+
 let stub: RequestClientStub;
 afterEach(() => stub.restore());
 
@@ -40,7 +49,7 @@ describe('LocalSelftest', () => {
       'POST /runners/{runner_id}/api/selftests': () => selfTestView(),
       'GET /runners/{runner_id}/api/selftests/{selftest_id}': () => {
         reads += 1;
-        return reads < 2 ? selfTestView() : selfTestView({ status: 'failed', checks: CHECKS, error: 'resume failed' });
+        return reads < 2 ? selfTestView() : selfTestView({ status: 'failed', settled: true, checks: CHECKS, error: 'resume failed' });
       },
     });
     expect(el.querySelectorAll('[data-testid="selftest"]')).toHaveLength(2);
@@ -57,7 +66,7 @@ describe('LocalSelftest', () => {
       expect(el.querySelector('[data-testid="selftest-status"]')?.textContent?.trim()).toBe('failed');
     }, { timeout: SELFTEST_POLL_MS * 4 });
     expect(reads).toBe(2);
-    const checks = [...el.querySelectorAll('[data-testid="selftest-check"]')].map((check) => [...check.querySelectorAll('span')].map((part) => part.textContent?.trim()).join(' '));
+    const checks = [...el.querySelectorAll('[data-testid="selftest-check"]')].map((check) => [...check.children].map((part) => part.textContent?.trim()).join(' '));
     expect(checks).toEqual(['PASS spawn spawned', 'FAIL resume no session']);
     expect(el.querySelector('[data-testid="selftest-run-error"]')?.textContent).toContain('resume failed');
     expect(button('mock').disabled).toBe(false);
@@ -79,5 +88,62 @@ describe('LocalSelftest', () => {
     expect(rows[0].querySelector('[data-testid="selftest-error"]')?.textContent).toContain('harness mock is unavailable');
     expect(rows[1].querySelector('[data-testid="selftest-error"]')?.textContent ?? '').not.toContain('unavailable');
     expect(button('mock').disabled).toBe(false);
+  });
+
+  describe('two overlapping starts', () => {
+    type Outcome = 'ok' | 'err';
+    const cases: [string, Outcome, Outcome, 'mock' | 'claude_code'][] = [
+      ['both succeed, first answers first', 'ok', 'ok', 'mock'],
+      ['both succeed, second answers first', 'ok', 'ok', 'claude_code'],
+      ['first fails, second succeeds, first answers first', 'err', 'ok', 'mock'],
+      ['first fails, second succeeds, second answers first', 'err', 'ok', 'claude_code'],
+      ['first succeeds, second fails, first answers first', 'ok', 'err', 'mock'],
+      ['first succeeds, second fails, second answers first', 'ok', 'err', 'claude_code'],
+    ];
+
+    it.each(cases)('%s — each harness keeps its own pending state, run and error', async (_name, mockOutcome, claudeOutcome, firstAnswer) => {
+      const outcome: Record<string, Outcome> = { mock: mockOutcome, claude_code: claudeOutcome };
+      const release: Record<string, () => void> = {};
+      const { fixture, el, button } = await mount({
+        'POST /runners/{runner_id}/api/selftests': async (req) => {
+          const harness = (req.body as { harness: string }).harness;
+          await new Promise<void>((resolve) => (release[harness] = resolve));
+          return outcome[harness] === 'ok'
+            ? selfTestView({ id: `st_${harness}`, harness })
+            : stubError(503, { detail: `harness ${harness} is unavailable` });
+        },
+        'GET /runners/{runner_id}/api/selftests/{selftest_id}': (_req, { selftest_id }) =>
+          selfTestView({ id: selftest_id, harness: selftest_id.replace(/^st_/, '') }),
+      });
+      const row = (harness: string) => el.querySelector(`[data-testid="selftest"][data-harness-id="${harness}"]`)!;
+
+      button('mock').click();
+      await turn(fixture);
+      button('claude_code').click();
+      await turn(fixture);
+      expect(button('mock').disabled).toBe(true);
+      expect(button('claude_code').disabled).toBe(true);
+
+      const secondAnswer = firstAnswer === 'mock' ? 'claude_code' : 'mock';
+      release[firstAnswer]();
+      await turn(fixture);
+      expect(button(secondAnswer).disabled).toBe(true);
+      expect(button(firstAnswer).disabled).toBe(outcome[firstAnswer] === 'ok');
+      release[secondAnswer]();
+      await turn(fixture);
+
+      for (const harness of ['mock', 'claude_code']) {
+        const error = row(harness).querySelector('[data-testid="selftest-error"]')?.textContent ?? '';
+        if (outcome[harness] === 'ok') {
+          expect(row(harness).querySelector('[data-testid="selftest-status"]')?.textContent?.trim()).toBe('running');
+          expect(button(harness).disabled).toBe(true);
+          expect(error).not.toContain('unavailable');
+        } else {
+          expect(row(harness).querySelector('[data-testid="selftest-status"]')).toBeNull();
+          expect(button(harness).disabled).toBe(false);
+          expect(error).toContain(`harness ${harness} is unavailable`);
+        }
+      }
+    });
   });
 });

@@ -9,7 +9,7 @@ import { injectSelftestStartMutation } from './selftest.mutations';
 
 @Component({ selector: 'app-test-selftest-host', template: '', changeDetection: ChangeDetectionStrategy.OnPush })
 class SelftestHost {
-  readonly mutation = injectSelftestStartMutation(() => 'rn_1');
+  readonly mutation = injectSelftestStartMutation(() => 'rn_1', { onSuccess: () => undefined, onError: () => undefined });
 }
 
 describe('injectSelftestStartMutation', () => {

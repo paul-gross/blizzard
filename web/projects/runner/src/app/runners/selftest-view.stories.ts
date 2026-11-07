@@ -16,7 +16,8 @@ const row = (overrides: Partial<SelftestRow> = {}): SelftestRow => ({
   harness: 'claude_code', available: true, run: null, busy: false, error: null, ...overrides,
 });
 const run = (status: string, overrides: Partial<runnerApi.SelfTestView> = {}): runnerApi.SelfTestView => ({
-  id: 'st_1', harness: 'claude_code', status, checks: [], error: null, ...overrides,
+  id: 'st_1', harness: 'claude_code', status: status as runnerApi.SelfTestStatus, settled: status !== 'running', checks: [], error: null,
+  ...overrides,
 });
 
 const meta: Meta<SelftestView> = {
@@ -35,6 +36,7 @@ export const Failed: Story = { args: { rows: [row({ run: run('failed', {
   checks: [...CHECKS.slice(0, 3), { name: 'resume', passed: false, detail: 'no session to resume' }],
   error: 'the resume check failed',
 }) })] } };
+export const UnknownStatus: Story = { args: { rows: [row({ run: run('queued', { settled: false }), busy: true })] } };
 export const StartError: Story = { args: { rows: [row({ error: 'harness claude_code is unavailable' })] } };
 export const NoHarness: Story = { args: { rows: [], state: 'empty' } };
 export const Phone: Story = { args: Failed.args, globals: { viewport: { value: 'phone', isRotated: false } } };

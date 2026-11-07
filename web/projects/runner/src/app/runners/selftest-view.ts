@@ -1,10 +1,10 @@
 import { ChangeDetectionStrategy, Component, input, output } from '@angular/core';
 import { harnessName, KitAsyncState, KitBadge, KitButton, KitErrorLine, type KitAsyncStateValue } from 'fleet';
 
-import { type SelftestRow, selftestTone } from './selftest.model';
+import { checkTone, type SelftestRow, selftestPhase, selftestTone } from './selftest.model';
 
 /** {@link LocalSelftest}'s presentational view: a Run control per harness, and its latest run's
- * status, checks and error once it reads back. */
+ * status, its checks once settled, and its error. */
 @Component({
   selector: 'app-selftest-view',
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -15,6 +15,8 @@ import { type SelftestRow, selftestTone } from './selftest.model';
 export class SelftestView {
   protected readonly harnessName = harnessName;
   protected readonly tone = selftestTone;
+  protected readonly phase = selftestPhase;
+  protected readonly checkTone = checkTone;
   readonly rows = input<readonly SelftestRow[]>([]);
   readonly state = input.required<KitAsyncStateValue>();
   /** Emitted with the harness id to selftest. */
