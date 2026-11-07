@@ -184,7 +184,6 @@ export class MachineDetail {
     this.requeueFeedback.update((current) => withRequeueFeedback(current, vars.runnerId, vars.chunkId, entry));
   }
 
-
   /** The chunk's runner's bare name, for the header's
    * `pauseCopy`/`resumeCopy` `<runner>` slot (`bzh:claim-vocabulary`). */
   protected readonly runnerName = computed<string | null>(() => this.newestLease()?.owner.label ?? null);
