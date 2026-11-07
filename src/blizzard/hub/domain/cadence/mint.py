@@ -89,10 +89,7 @@ class ErrandPlanning:
             scope = facts.scopes.get(errand.scope_slug)
             if routine is not None and scope is not None:
                 resolved.append((errand, routine, scope, facts))
-        graphs = {
-            name: self._graphs.get_enabled_by_name(name)
-            for name in sorted({routine.graph_name for _, routine, _, _ in resolved})
-        }
+        graphs = self._graphs.get_enabled_by_names(sorted({routine.graph_name for _, routine, _, _ in resolved}))
         baselines: dict[tuple[str, str], Mapping[str, FindingSet]] = {
             (project_id, slug): {
                 found.scope_slug: found for found in self._finding_sets.newest_by_scope_for_routine(project_id, slug)
@@ -104,7 +101,7 @@ class ErrandPlanning:
                 routine=routine,
                 scope=scope,
                 linked=facts.linked.get(routine.routine_id, ()),
-                graph=graphs[routine.graph_name],
+                graph=graphs.get(routine.graph_name),
                 baseline=baselines[(routine.project_id, routine.slug)].get(scope.slug),
             )
             for errand, routine, scope, facts in resolved

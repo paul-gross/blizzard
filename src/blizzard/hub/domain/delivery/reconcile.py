@@ -271,13 +271,12 @@ class FlowLineReconciler:
             record.repository_id: record for record in self._repositories.list_all(include_retired=True)
         }
         chunks = self._record.get_many(sorted({sub.chunk_id for sub in subs}))
-        projects: dict[str | None, LandingProject] = {}
+        project_ids = [chunk.project_id for chunk in chunks.values()]
+        projects = LandingProject.read_many(project_ids, projects=self._projects, links=self._links)
         candidates: dict[str, tuple[LandingTerms, ...]] = {}
         for sub in subs:
             chunk = chunks.get(sub.chunk_id)
             project_id = chunk.project_id if chunk is not None else None
-            if project_id not in projects:
-                projects[project_id] = LandingProject.read(project_id, projects=self._projects, links=self._links)
             positions = projects[project_id].positions
             candidates[sub.submission_id] = tuple(
                 LandingTerms.candidate(repository_id, records.get(repository_id), position=positions.get(repository_id))

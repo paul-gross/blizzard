@@ -12,21 +12,26 @@ projects, sources or graph names."""
 from __future__ import annotations
 
 from collections.abc import Callable
+from datetime import UTC, datetime
 from pathlib import Path
 
 import pytest
 
 from blizzard.foundation.store import batching as batching_module
+from blizzard.hub.api.fleet import _flow_namer as flow_namer  # pyright: ignore[reportPrivateUsage]
+from blizzard.hub.domain.actions.visit import LandingProject
 from blizzard.hub.domain.chunk.model import WorkRef
 from blizzard.hub.domain.config.changes import RecordKind
 from blizzard.hub.domain.config.repositories import RepositoryId, RepositorySlug
 from blizzard.hub.domain.config.work_sources import WorkSourceId, WorkSourceSlug
+from blizzard.hub.domain.delivery.flows import Flow
 from blizzard.hub.domain.graph.model import GraphDoc
 from blizzard.hub.domain.projects.model import ProjectId, ProjectSlug
 from blizzard.hub.live_config import ConfigObjectCache
 from blizzard.hub.store.internal.config_revisions_store import ConfigRevisionsStore
 from blizzard.hub.work_sources.internal.hub_work_source import HubWorkSource
 from blizzard.hub.work_sources.registry import BuiltWorkSource, StoreWorkSourceRegistry
+from tests.component.hub.test_bounded_hub_readers import record_fact
 from tests.support.scaffolding import (
     FakeWorkSource,
     HubHarness,
@@ -38,6 +43,7 @@ from tests.support.scaffolding import (
 )
 
 _N = 4
+_AT = datetime(2026, 1, 1, tzinfo=UTC)
 
 
 def _graph_yaml(name: str) -> str:
@@ -366,6 +372,95 @@ def test_enabled_names_is_statement_free_when_empty_and_flat_otherwise(graphs_hu
     graphs = graphs_hub.services.graphs
     assert count_queries(graphs_hub.engine, lambda: graphs.enabled_names([])) == 0
     _flat(graphs_hub, lambda n: graphs.enabled_names([f"g{i}" for i in range(n)]))
+
+
+# --- IReadGraphRepository.get_enabled_by_names ---------------------------------------------
+
+
+def test_get_enabled_by_names_agrees_with_the_singular_and_drops_missing_and_retired_names(
+    graphs_hub: HubHarness,
+) -> None:
+    graphs = graphs_hub.services.graphs
+    names = [f"g{i}" for i in range(_N)]
+
+    found = graphs.get_enabled_by_names([*names, "never"])
+
+    assert set(found) == {"g0", "g2", "g3"}  # g1 is all-retired; g2's enabled mint is its older one
+    for name, graph in found.items():
+        assert graph == graphs.get_enabled_by_name(name)
+
+
+def test_get_enabled_by_names_matches_across_a_batch_boundary(
+    graphs_hub: HubHarness, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(batching_module, "BATCH_SIZE", 2)
+    found = graphs_hub.services.graphs.get_enabled_by_names([f"g{i}" for i in range(_N)])
+    assert set(found) == {"g0", "g2", "g3"}
+
+
+def test_get_enabled_by_names_is_statement_free_when_empty_and_flat_otherwise(graphs_hub: HubHarness) -> None:
+    graphs = graphs_hub.services.graphs
+    assert count_queries(graphs_hub.engine, lambda: graphs.get_enabled_by_names([])) == 0
+    _flat(graphs_hub, lambda n: graphs.get_enabled_by_names([f"g{i}" for i in range(n)]))
+
+
+# --- LandingProject.read_many --------------------------------------------------------------
+
+
+def _read(hub: HubHarness, ids: list[ProjectId | None]) -> dict[ProjectId | None, LandingProject]:
+    return LandingProject.read_many(ids, projects=hub.services.projects, links=hub.services.project_links)
+
+
+def test_read_many_matches_read_per_project(links_hub: HubHarness) -> None:
+    ids: list[ProjectId | None] = [_project(links_hub, f"p{i}") for i in range(_N)]
+    record_fact(links_hub, str(ids[2]), _repository_id(links_hub, "r1"), 3.0)
+    missing = ProjectId("pr_missing")
+    ids += [None, missing]
+
+    many = _read(links_hub, ids)
+
+    for project_id in ids:
+        assert many[project_id] == LandingProject.read(
+            project_id, projects=links_hub.services.projects, links=links_hub.services.project_links
+        )
+    assert many[None] == LandingProject()
+    assert many[missing] == LandingProject(project_id=missing, slug=missing)
+    assert many[ids[2]].linked  # a standing link set
+    assert many[ids[0]].linked == {_repository_id(links_hub, "r0")}
+
+
+def test_read_many_statements_are_flat_across_distinct_projects(links_hub: HubHarness) -> None:
+    ids = [_project(links_hub, f"p{i}") for i in range(_N)]
+    reads: Callable[[int], object] = lambda n: _read(links_hub, list(ids[:n]))  # noqa: E731
+    assert count_queries(links_hub.engine, lambda: reads(1)) == count_queries(links_hub.engine, lambda: reads(_N))
+    assert count_queries(links_hub.engine, lambda: _read(links_hub, [None])) == 0
+
+
+# --- _flow_namer ---------------------------------------------------------------------------
+
+
+def _flow(repository_id: str, branch: str = "feat") -> Flow:
+    return Flow(flow_id=f"fl_{repository_id}", repository_id=repository_id, branch=branch, created_at=_AT)
+
+
+def test_the_flow_namer_names_flows_from_one_preload_and_falls_back_to_the_raw_id(links_hub: HubHarness) -> None:
+    flows = [_flow(_repository_id(links_hub, f"r{i}")) for i in range(_N)]
+    flows.append(_flow("rp_gone"))
+
+    namer = flow_namer(links_hub.services, flows)
+
+    assert [namer(f) for f in flows] == [*(f"r{i}/feat" for i in range(_N)), "rp_gone/feat"]
+
+
+def test_the_flow_namer_statements_are_flat_across_flow_counts(links_hub: HubHarness) -> None:
+    flows = [_flow(_repository_id(links_hub, f"r{i}")) for i in range(_N)]
+
+    def build(n: int) -> object:
+        namer = flow_namer(links_hub.services, flows[:n])
+        return [namer(f) for f in flows[:n]]
+
+    assert count_queries(links_hub.engine, lambda: build(1)) == count_queries(links_hub.engine, lambda: build(_N))
+    assert count_queries(links_hub.engine, lambda: flow_namer(links_hub.services, [])) == 0
 
 
 # --- Call sites ----------------------------------------------------------------------------

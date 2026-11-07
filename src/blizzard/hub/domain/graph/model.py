@@ -1004,6 +1004,11 @@ class IReadGraphRepository(IReadManyGraphs, Protocol):
         retired resolves to ``None``."""
         ...
 
+    def get_enabled_by_names(self, names: Sequence[str]) -> dict[str, Graph]:
+        """:meth:`get_enabled_by_name` for each of ``names``, keyed by name, in a bounded number of reads
+        (``bzh:bulk-reconstitution``); a name with no enabled mint is dropped."""
+        ...
+
     def enabled_names(self, names: Sequence[str]) -> set[str]:
         """Those of ``names`` with an enabled mint — the names :meth:`get_enabled_by_name` resolves, answered
         without reifying a graph (``bzh:bulk-reconstitution``)."""
