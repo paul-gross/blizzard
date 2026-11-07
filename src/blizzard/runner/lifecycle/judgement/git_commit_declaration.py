@@ -21,6 +21,7 @@ from blizzard.runner.leases.git_commit_declaration import (
     GitCommitDeclarationUnknownRepo,
     IReadGitCommitDeclarationRepository,
 )
+from blizzard.runner.leases.lease_lock import ILeaseUnit, IWriteLeaseLock
 from blizzard.runner.leases.worker_lease import WorkerLease
 
 __all__ = [
@@ -83,11 +84,13 @@ class IWriteGitCommitDeclarationRepository(IReadGitCommitDeclarationRepository, 
         branch: str,
         commit: str,
         declared_at: datetime,
+        unit: ILeaseUnit | None = None,
     ) -> None:
         """Append a worker's explicit git-commit declaration for ``repo`` in
         ``environment_id``, a single committed transaction so it survives a
         ``kill -9`` before the collection reads it. Append-only: a later call for the
-        same key is a correction, read back as the replacement, never merged."""
+        same key is a correction, read back as the replacement, never merged. Given a ``unit``, it joins that
+        transaction and is durable when the unit commits."""
         ...
 
 
@@ -101,7 +104,7 @@ _CP_DECLARE_COMMIT_AFTER_RECORD = crashpoint(
 
 class GitCommitDeclarationService:
     """Composition-root-wired: the write store, the environment store, the host's workspaces, the
-    outbound buffer (whether the lease's outcome is still unbuffered), and the clock. The repo manifest of the
+    outbound buffer (whether the lease's outcome is buffered), the lease lock, and the clock. The repo manifest of the
     provider of the workspace the environment's binding names says which repos the lease authorizes and is the one
     source of each origin later verified."""
 
@@ -113,8 +116,10 @@ class GitCommitDeclarationService:
         *,
         environments: IReadEnvironmentRepository,
         outbound: IReadOutboundRepository,
+        lease_lock: IWriteLeaseLock,
     ) -> None:
         self._store = store
+        self._lease_lock = lease_lock
         self._clock = clock
         self._workspaces = workspaces
         self._environments = environments
@@ -134,7 +139,7 @@ class GitCommitDeclarationService:
         (``bzh:domain-takes-objects``). Raises :class:`GitCommitDeclarationUnknownRepo` when the
         env is unresolvable or does not list ``repo``, :class:`GitCommitDeclarationOnClosedLease`
         when the lease's standing refuses the verb, or :class:`GitCommitDeclarationTooLate` once
-        the lease's outcome is buffered.
+        the lease's outcome is buffered, acked or not.
         Append-and-read-newest (``bzh:facts-not-status``): a repeat call for the same ``(lease, env,
         repo)`` is a correction. The env is part of that key, so one env cannot overwrite another."""
         lease = worker.lease
@@ -144,23 +149,29 @@ class GitCommitDeclarationService:
         )
         workspace_id = next((b.workspace_id for b in bindings if b.environment_id == resolved_env), None)
         provider = self._workspaces.provider(workspace_id)
-        record = GitCommitDeclaration(resolved_env, repo, branch, commit).declared_by(
-            worker,
-            known_repos=[repo.name for repo in provider.repos(resolved_env)] if provider is not None else [],
-            outcome_pending=lease.lease_id in self._outbound.pending_submission_lease_ids(),
-            at=self._clock.now(),
-        )
-        self._store.record_git_commit_declaration(
-            lease_id=record.lease_id,
-            chunk_id=record.chunk_id,
-            node_id=record.node_id,
-            epoch=record.epoch,
-            environment_id=record.environment_id,
-            repo=record.repo,
-            branch=record.branch,
-            commit=record.commit,
-            declared_at=record.declared_at,
-        )
+        declaration = GitCommitDeclaration(resolved_env, repo, branch, commit)
+        known_repos = [r.name for r in provider.repos(resolved_env)] if provider is not None else []
+        # The settled fact is read under the lease's lock, in the unit that inserts: a capture of the outcome either
+        # commits first and refuses this declaration, or commits after it and carries it.
+        with self._lease_lock.locked(lease.lease_id) as unit:
+            record = declaration.declared_by(
+                worker,
+                known_repos=known_repos,
+                settled=self._outbound.submission_buffered(lease.lease_id, unit=unit),
+                at=self._clock.now(),
+            )
+            self._store.record_git_commit_declaration(
+                lease_id=record.lease_id,
+                chunk_id=record.chunk_id,
+                node_id=record.node_id,
+                epoch=record.epoch,
+                environment_id=record.environment_id,
+                repo=record.repo,
+                branch=record.branch,
+                commit=record.commit,
+                declared_at=record.declared_at,
+                unit=unit,
+            )
         _CP_DECLARE_COMMIT_AFTER_RECORD.reached()
         return DeclaredGitCommit(
             environment_id=resolved_env, note=None if record.rides_completion else RIDES_NO_COMPLETION_NOTE

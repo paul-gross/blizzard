@@ -8,6 +8,8 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Protocol
 
+from blizzard.runner.leases.lease_lock import ILeaseUnit
+
 __all__ = [
     "IReadAttachmentRepository",
     "IReadRequeueRepository",
@@ -42,10 +44,10 @@ class IWriteRequeueRepository(IReadRequeueRepository, Protocol):
 class IReadAttachmentRepository(Protocol):
     """Read-only attachment queries."""
 
-    def attachments_for_lease(self, lease_id: str) -> dict[str, str]:
+    def attachments_for_lease(self, lease_id: str, *, unit: ILeaseUnit | None = None) -> dict[str, str]:
         """The lease's explicit artifact submissions, newest content per ``name``.
         Append-only, latest-wins-per-``(lease_id, name)``: a re-attach of
-        the same name reads back as the replacement, never a duplicate."""
+        the same name reads back as the replacement, never a duplicate. Given a ``unit``, read on its transaction."""
         ...
 
     def attachment_names_for_lease(self, lease_id: str) -> set[str]:
@@ -68,6 +70,7 @@ class IWriteAttachmentRepository(IReadAttachmentRepository, Protocol):
         name: str,
         content: str,
         attached_at: datetime,
+        unit: ILeaseUnit | None = None,
     ) -> None:
         """Append a worker's explicit artifact submission for ``name``, a
         single committed transaction so it survives a ``kill -9`` before the completion

@@ -125,6 +125,7 @@ from blizzard.runner.store.internal.identity_store import RunnerIdentityStore
 from blizzard.runner.store.internal.invariants import RunnerInvariants
 from blizzard.runner.store.internal.invocation_boundary_store import InvocationBoundaryStore
 from blizzard.runner.store.internal.lease_liveness_store import LeaseLivenessStore
+from blizzard.runner.store.internal.lease_lock_store import LeaseLockStore
 from blizzard.runner.store.internal.lease_record_store import LeaseRecordStore
 from blizzard.runner.store.internal.lease_resume_intent_store import LeaseResumeIntentStore
 from blizzard.runner.store.internal.lease_session_store import LeaseSessionStore
@@ -1018,6 +1019,7 @@ def _build_stores(connections: RunnerStoreConnections) -> RunnerStores:
         usage=UsageStore(connections),
         attachments=AttachmentStore(connections),
         git_commit_declarations=GitCommitDeclarationStore(connections),
+        lease_lock=LeaseLockStore(connections),
         checks=CheckStore(connections),
         elicitations=ElicitationStore(connections),
         invocation_boundaries=InvocationBoundaryStore(connections),

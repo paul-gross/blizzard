@@ -197,6 +197,7 @@ WRITE_PROTOCOL_CENSUS: dict[str, Disposition] = {
         "(blizzard#317 review round 4, F1 — was wrongly Silent, since the write's own outbound_buffer "
         "insert bypassed enqueue_outbound and so went unannounced).",
     ),
+    "locked": Silent("opens the lease-locked unit; it writes no fact itself."),
     "locked_brakes": Silent("opens the locked brake transaction; it writes no fact itself."),
     "local_brake_locked": Silent("a read of the brake on a locked transaction."),
     "record_local_pause_locked": Published(

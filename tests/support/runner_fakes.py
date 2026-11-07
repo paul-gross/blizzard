@@ -88,6 +88,7 @@ from blizzard.runner.hub.identity import IdentityVerdictHolder, RunnerIdentity, 
 from blizzard.runner.hub.served_projects import ServedProject
 from blizzard.runner.hub.verified import VerifiedHubClient
 from blizzard.runner.leases.internal.worker_stdout_files import WorkerStdoutFiles
+from blizzard.runner.leases.lease_lock import ILeaseUnit
 from blizzard.runner.leases.operator_requests import IReadAttachmentRepository
 from blizzard.runner.lifecycle.env_release import EnvironmentRelease
 from blizzard.runner.lifecycle.judgement.check_runner import CheckOutcome, ICheckRunner
@@ -123,6 +124,7 @@ from blizzard.runner.store.internal.host_workspace_prompt_store import Workspace
 from blizzard.runner.store.internal.identity_store import RunnerIdentityStore
 from blizzard.runner.store.internal.invocation_boundary_store import InvocationBoundaryStore
 from blizzard.runner.store.internal.lease_liveness_store import LeaseLivenessStore
+from blizzard.runner.store.internal.lease_lock_store import LeaseLockStore
 from blizzard.runner.store.internal.lease_record_store import LeaseRecordStore
 from blizzard.runner.store.internal.lease_resume_intent_store import LeaseResumeIntentStore
 from blizzard.runner.store.internal.lease_session_store import LeaseSessionStore
@@ -196,6 +198,7 @@ class SqlAlchemyRunnerStore(
     DaemonLivenessStore,
     AttachmentStore,
     GitCommitDeclarationStore,
+    LeaseLockStore,
     CheckStore,
     GraphArtifactStore,
     ElicitationStore,
@@ -242,6 +245,7 @@ class SqlAlchemyRunnerStore(
         DaemonLivenessStore.__init__(self, store)
         AttachmentStore.__init__(self, store)
         GitCommitDeclarationStore.__init__(self, store)
+        LeaseLockStore.__init__(self, store)
         CheckStore.__init__(self, store)
         GraphArtifactStore.__init__(self, store)
         ElicitationStore.__init__(self, store)
@@ -401,6 +405,7 @@ def make_stores(store: IWriteRunnerStore) -> RunnerStores:
         usage=store,
         attachments=store,
         git_commit_declarations=store,
+        lease_lock=store,
         checks=store,
         elicitations=store,
         invocation_boundaries=store,
@@ -458,9 +463,9 @@ class CountingAttachmentStore:
         self.attachments_for_lease_calls: list[str] = []
         self.attachment_names_for_lease_calls: list[str] = []
 
-    def attachments_for_lease(self, lease_id: str) -> dict[str, str]:
+    def attachments_for_lease(self, lease_id: str, *, unit: ILeaseUnit | None = None) -> dict[str, str]:
         self.attachments_for_lease_calls.append(lease_id)
-        return self._inner.attachments_for_lease(lease_id)
+        return self._inner.attachments_for_lease(lease_id, unit=unit)
 
     def attachment_names_for_lease(self, lease_id: str) -> set[str]:
         self.attachment_names_for_lease_calls.append(lease_id)

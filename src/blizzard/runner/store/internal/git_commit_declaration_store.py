@@ -10,7 +10,9 @@ from sqlalchemy import func
 from blizzard.foundation.logging import get_logger
 from blizzard.foundation.store.batching import id_batches
 from blizzard.runner.leases.git_commit_declaration import DeclaredLeaseCommit, GitCommitDeclaration
+from blizzard.runner.leases.lease_lock import ILeaseUnit
 from blizzard.runner.lifecycle.judgement.git_commit_declaration import IWriteGitCommitDeclarationRepository
+from blizzard.runner.store.internal.base import unit_conn
 from blizzard.runner.store.schema import git_commit_declarations
 from blizzard.runner.store.scoped import RunnerStoreConnections
 
@@ -23,7 +25,9 @@ class GitCommitDeclarationStore:
     def __init__(self, store: RunnerStoreConnections) -> None:
         self._store = store
 
-    def git_commit_declarations_for_lease(self, lease_id: str) -> dict[tuple[str, str], GitCommitDeclaration]:
+    def git_commit_declarations_for_lease(
+        self, lease_id: str, *, unit: ILeaseUnit | None = None
+    ) -> dict[tuple[str, str], GitCommitDeclaration]:
         newest = (
             self._store.select(
                 git_commit_declarations,
@@ -49,7 +53,7 @@ class GitCommitDeclarationStore:
                 branch=str(r.branch),
                 commit=str(r.commit),
             )
-            for r in self._store.all(stmt)
+            for r in (self._store.all(stmt) if unit is None else unit_conn(unit).execute(stmt).all())
         }
 
     def git_commit_declarations_for_leases(self, lease_ids: Sequence[str]) -> dict[str, list[DeclaredLeaseCommit]]:
@@ -102,23 +106,26 @@ class GitCommitDeclarationStore:
         branch: str,
         commit: str,
         declared_at: datetime,
+        unit: ILeaseUnit | None = None,
     ) -> None:
-        # A single committed transaction — durable the instant this returns, so it survives
-        # a `kill -9` right after.
-        with self._store.begin() as conn:
-            conn.execute(
-                self._store.insert(git_commit_declarations).values(
-                    lease_id=lease_id,
-                    chunk_id=chunk_id,
-                    node_id=node_id,
-                    epoch=epoch,
-                    environment_id=environment_id,
-                    repo=repo,
-                    branch=branch,
-                    commit=commit,
-                    declared_at=declared_at,
-                )
-            )
+        # Alone, a single committed transaction — durable the instant this returns, so it survives a `kill -9`
+        # right after. In a unit, it commits with the unit.
+        stmt = self._store.insert(git_commit_declarations).values(
+            lease_id=lease_id,
+            chunk_id=chunk_id,
+            node_id=node_id,
+            epoch=epoch,
+            environment_id=environment_id,
+            repo=repo,
+            branch=branch,
+            commit=commit,
+            declared_at=declared_at,
+        )
+        if unit is None:
+            with self._store.begin() as conn:
+                conn.execute(stmt)
+        else:
+            unit_conn(unit).execute(stmt)
         _log.info("git-commit declaration recorded", lease_id=lease_id, repo=repo)
 
 
