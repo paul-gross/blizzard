@@ -6,6 +6,8 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import TypeGuard
 
+from tests.support.stable_ast import unparse
+
 HTTP_NAMES = frozenset({"get", "post", "put", "patch", "delete", "head", "options", "request", "send", "stream"})
 
 
@@ -121,7 +123,7 @@ class _Candidates(ast.NodeVisitor):
             Candidate(
                 self.file,
                 ".".join(self.owners),
-                ast.get_source_segment(self.source, node) or ast.unparse(node),
+                ast.get_source_segment(self.source, node) or unparse(node),
                 node.lineno,
                 node.col_offset,
             )

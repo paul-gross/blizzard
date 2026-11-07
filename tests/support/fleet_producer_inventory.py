@@ -5,6 +5,7 @@ import ast
 from tests.support.refusal_inventory_auth_host import DIRECT_PRODUCERS as HOST
 from tests.support.refusal_inventory_claims import DIRECT_PRODUCERS as CLAIM
 from tests.support.refusal_inventory_delegated import DIRECT_PRODUCERS as READS
+from tests.support.stable_ast import unparse
 
 CLAIM_OPERATION = ("POST", "/api/fleet/routes")
 HOST_OPERATIONS = {
@@ -20,7 +21,7 @@ def _entries(producers: dict[str, set[str]], default_module: str = "") -> set[tu
     return {
         (
             f"blizzard.hub.api.{default_module + owner if '.' not in owner or owner.startswith('FleetRequest.') else owner}",
-            ast.unparse(ast.parse(expr, mode="eval").body),
+            unparse(ast.parse(expr, mode="eval").body),
         )
         for owner, expressions in producers.items()
         for expr in expressions

@@ -29,7 +29,7 @@ from tests.support.runner_refusal_discovery import match_operations, route_inven
 
 # Concrete implementation wired for the unresolved /api/me memberships call.
 COLLABORATOR_SOURCES = {
-    MembershipRepository.memberships_for: "dc9e4e0de923745daa50c57ee0c0345d260ffb8063907bbb7ee8940a492f65cc",
+    MembershipRepository.memberships_for: "ac8ac16f9db4422d667ca722b332371623cfcb272e7b341691361e6f6603beba",
 }
 
 

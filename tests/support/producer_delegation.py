@@ -15,6 +15,7 @@ from starlette.responses import Response
 from blizzard.hub import composition
 from blizzard.hub.api.auth import HostAuth, RunnerAuth
 from tests.support.runner_refusal_discovery import producers
+from tests.support.stable_ast import stable_dump, unparse
 
 
 def _inert_expression(node: ast.AST) -> bool:
@@ -254,7 +255,7 @@ def delegation_candidates(function: FunctionType, instance: object = None) -> tu
             if isinstance(target, FunctionType):
                 pending.append((target, None))
             elif not (inspect.isclass(target) and issubclass(target, (Response, HTTPException))):
-                unresolved.add(f"{name}:{start + node.lineno - 1}: unresolved call {ast.unparse(expr)}")
+                unresolved.add(f"{name}:{start + node.lineno - 1}: unresolved call {unparse(expr)}")
     return found, unresolved
 
 
@@ -292,15 +293,14 @@ def evidence_digest(values: set[str]) -> str:
 def source_fingerprint(function: FunctionType) -> str:
     """Fingerprint implementation syntax, independent of formatting and line numbers."""
     source = textwrap.dedent(inspect.getsource(function))
-    return hashlib.sha256(ast.dump(ast.parse(source), include_attributes=False).encode()).hexdigest()
+    return hashlib.sha256(stable_dump(ast.parse(source)).encode()).hexdigest()
 
 
 def application_source_digest(root: Path) -> str:
     """Cover unresolved hub collaborator implementations and their wiring conservatively."""
     sources = root / "src" / "blizzard" / "hub"
     entries = {
-        str(path.relative_to(sources)): ast.dump(ast.parse(path.read_text()), include_attributes=False)
-        for path in sources.rglob("*.py")
+        str(path.relative_to(sources)): stable_dump(ast.parse(path.read_text())) for path in sources.rglob("*.py")
     }
     return hashlib.sha256(repr(sorted(entries.items())).encode()).hexdigest()
 

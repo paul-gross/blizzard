@@ -37,9 +37,9 @@ REVIEWED = {
         ),
         (
             "blizzard.hub.api.idp.authorize",
-            "RedirectResponse(f\"/api/auth/{providers[0].name}/authorize?return_to={quote(return_to, safe='')}\")",
+            "RedirectResponse(f'/api/auth/{providers[0].name}/authorize?return_to={quote(return_to, safe='')}')",
         ),
-        ("blizzard.hub.api.idp.authorize", "RedirectResponse(f\"/login?return_to={quote(return_to, safe='')}\")"),
+        ("blizzard.hub.api.idp.authorize", "RedirectResponse(f'/login?return_to={quote(return_to, safe='')}')"),
     },
     ("GET", "/api/auth/jwks.json"): {
         _PROBLEM,

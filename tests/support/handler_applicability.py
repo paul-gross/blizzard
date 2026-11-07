@@ -13,6 +13,8 @@ import textwrap
 import types
 from typing import Any, cast
 
+from tests.support.stable_ast import unparse
+
 
 def transitive_dispatch(route: Any, app: Any) -> tuple[dict[str, set[str]], set[str]]:
     """Find candidate dispatches and expose calls or raises that cannot be resolved.
@@ -118,7 +120,7 @@ def transitive_dispatch(route: Any, app: Any) -> tuple[dict[str, set[str]], set[
                 ):
                     visit(target)
                 else:
-                    unresolved.add(f"{name}:{node.lineno}: unresolved call {ast.unparse(node)}")
+                    unresolved.add(f"{name}:{node.lineno}: unresolved call {unparse(node)}")
 
     for function in functions:
         visit(function)

@@ -20,6 +20,8 @@ from fastapi.routing import APIRoute
 from starlette.exceptions import HTTPException
 from starlette.responses import Response
 
+from tests.support.stable_ast import stable_dump, unparse
+
 
 @dataclass(frozen=True, order=True)
 class Reach:
@@ -48,10 +50,10 @@ def _string(node: ast.AST, names: dict[str, str]) -> str | None:
                     and len(part.value.args) == 1
                     and isinstance(part.value.args[0], ast.Name | ast.Attribute)
                 ):
-                    resolved = "{" + ast.unparse(part.value.args[0]) + "}"
+                    resolved = "{" + unparse(part.value.args[0]) + "}"
                 if resolved is None and not isinstance(part.value, ast.Name | ast.Attribute):
                     return None
-                parts.append(resolved if resolved is not None else "{" + ast.unparse(part.value) + "}")
+                parts.append(resolved if resolved is not None else "{" + unparse(part.value) + "}")
             else:
                 return None
         return "".join(parts)
@@ -161,7 +163,7 @@ def classify_jwks_data(source: str) -> dict[tuple[int, int], str]:
     result: dict[tuple[int, int], str] = {}
 
     def calls(function: ast.FunctionDef, expression: str) -> list[ast.Call]:
-        return [n for n in ast.walk(function) if isinstance(n, ast.Call) and ast.unparse(n) == expression]
+        return [n for n in ast.walk(function) if isinstance(n, ast.Call) and unparse(n) == expression]
 
     def stores(function: ast.FunctionDef, name: str) -> int:
         return sum(
@@ -174,30 +176,28 @@ def classify_jwks_data(source: str) -> dict[tuple[int, int], str]:
         n
         for n in ast.walk(cls)
         if isinstance(n, ast.Assign | ast.AnnAssign | ast.AugAssign)
-        and any(ast.unparse(t) == "self._http" for t in (n.targets if isinstance(n, ast.Assign) else [n.target]))
+        and any(unparse(t) == "self._http" for t in (n.targets if isinstance(n, ast.Assign) else [n.target]))
     ]
     http_typed = (
         http_arg is not None
         and http_arg.annotation is not None
-        and ast.unparse(http_arg.annotation) == "httpx2.Client"
+        and unparse(http_arg.annotation) == "httpx2.Client"
         and len(http_writes) == 1
         and isinstance(http_writes[0], ast.Assign)
-        and ast.unparse(http_writes[0].value) == "http_client"
+        and unparse(http_writes[0].value) == "http_client"
     )
     response = [
         n
         for n in ast.walk(refresh)
         if isinstance(n, ast.Assign)
         and len(n.targets) == 1
-        and ast.unparse(n.targets[0]) == "resp"
-        and ast.unparse(n.value) == "self._http.get(self._url)"
+        and unparse(n.targets[0]) == "resp"
+        and unparse(n.value) == "self._http.get(self._url)"
     ]
     loops = [
         n
         for n in ast.walk(refresh)
-        if isinstance(n, ast.For)
-        and ast.unparse(n.target) == "jwk"
-        and ast.unparse(n.iter) == "resp.json().get('keys', [])"
+        if isinstance(n, ast.For) and unparse(n.target) == "jwk" and unparse(n.iter) == "resp.json().get('keys', [])"
     ]
     if (
         http_typed
@@ -214,25 +214,25 @@ def classify_jwks_data(source: str) -> dict[tuple[int, int], str]:
         n
         for n in ast.walk(cls)
         if isinstance(n, ast.Assign | ast.AnnAssign | ast.AugAssign)
-        and any(ast.unparse(t) == "self._keys" for t in (n.targets if isinstance(n, ast.Assign) else [n.target]))
+        and any(unparse(t) == "self._keys" for t in (n.targets if isinstance(n, ast.Assign) else [n.target]))
     ]
     typed = [
         n
         for n in cache_writes
         if isinstance(n, ast.AnnAssign)
-        and ast.unparse(n.annotation) == "dict[str, RSAPublicKey]"
+        and unparse(n.annotation) == "dict[str, RSAPublicKey]"
         and n.value is not None
-        and ast.unparse(n.value) == "{}"
+        and unparse(n.value) == "{}"
     ]
-    refreshed = [n for n in cache_writes if isinstance(n, ast.Assign) and ast.unparse(n.value) == "keys"]
+    refreshed = [n for n in cache_writes if isinstance(n, ast.Assign) and unparse(n.value) == "keys"]
     key_decls = [
         n
         for n in ast.walk(refresh)
         if isinstance(n, ast.AnnAssign)
-        and ast.unparse(n.target) == "keys"
-        and ast.unparse(n.annotation) == "dict[str, RSAPublicKey]"
+        and unparse(n.target) == "keys"
+        and unparse(n.annotation) == "dict[str, RSAPublicKey]"
         and n.value is not None
-        and ast.unparse(n.value) == "{}"
+        and unparse(n.value) == "{}"
     ]
     if len(cache_writes) == 2 and len(typed) == len(refreshed) == len(key_decls) == 1 and stores(refresh, "keys") == 1:
         for call in calls(key_for, "self._keys.get(kid)"):
@@ -300,11 +300,11 @@ def classify_runner_wiring(source: str, root: Path) -> dict[tuple[int, int], str
                 and isinstance(node.targets[0], ast.Name)
                 and writes.get(node.targets[0].id) == 1
             ):
-                local[node.targets[0].id] = ast.unparse(node.value)
+                local[node.targets[0].id] = unparse(node.value)
         for node in ast.walk(function):
             if not isinstance(node, ast.Call) or not isinstance(node.func, ast.Attribute):
                 continue
-            receiver = ast.unparse(node.func.value)
+            receiver = unparse(node.func.value)
             receiver = local.get(receiver, receiver)
             for accessor, method in proven.items():
                 if (
@@ -535,7 +535,7 @@ def classify_get_receivers(source: str) -> dict[tuple[int, int], str]:
         requests = {
             arg.arg
             for arg in function.args.args + function.args.kwonlyargs
-            if arg.annotation is not None and ast.unparse(arg.annotation) == "Request"
+            if arg.annotation is not None and unparse(arg.annotation) == "Request"
         }
         writes: dict[str, int] = {}
         for node in ast.walk(function):
@@ -609,14 +609,14 @@ def _function_reaches(
         if (
             isinstance(node, ast.Assign)
             and isinstance(node.value, ast.Call)
-            and ast.unparse(node.value.func) == "HubProxy.of"
+            and unparse(node.value.func) == "HubProxy.of"
         ):
             proxy_names.update(target.id for target in node.targets if isinstance(target, ast.Name))
     for argument in function.args.args + function.args.kwonlyargs:
-        if argument.annotation is not None and ast.unparse(argument.annotation) == "HubProxy":
+        if argument.annotation is not None and unparse(argument.annotation) == "HubProxy":
             proxy_names.add(argument.arg)
     for node in (child for statement in function.body for child in ast.walk(statement)):
-        if isinstance(node, ast.JoinedStr) and "hub_url" in ast.unparse(node):
+        if isinstance(node, ast.JoinedStr) and "hub_url" in unparse(node):
             segments = [
                 part.value for part in node.values if isinstance(part, ast.Constant) and isinstance(part.value, str)
             ]
@@ -624,7 +624,7 @@ def _function_reaches(
             if path is not None:
                 reaches.add(Reach("GET", path.group(1), node.lineno))
             else:
-                unresolved.append(f"{function.name}:{node.lineno}: dynamic hub URL {ast.unparse(node)}")
+                unresolved.append(f"{function.name}:{node.lineno}: dynamic hub URL {unparse(node)}")
         if isinstance(node, ast.Assign) and len(node.targets) == 1 and isinstance(node.targets[0], ast.Name):
             value = _string(node.value, names)
             if value is not None:
@@ -632,7 +632,7 @@ def _function_reaches(
         if not isinstance(node, ast.Call) or not isinstance(node.func, ast.Attribute):
             continue
         attr = node.func.attr
-        receiver = ast.unparse(node.func.value)
+        receiver = unparse(node.func.value)
         if attr in ("_get", "_post", "_send") and receiver == "self":
             method = {"_get": "GET", "_post": "POST"}.get(attr)
         elif attr in ("get", "post", "put", "patch", "delete", "request") and (
@@ -646,7 +646,7 @@ def _function_reaches(
                 attr in ("get", "post", "put", "patch", "delete", "request")
                 and (node.lineno, node.col_offset) not in classified
             ):
-                unresolved.append(f"{function.name}:{node.lineno}: unknown receiver {ast.unparse(node)}")
+                unresolved.append(f"{function.name}:{node.lineno}: unknown receiver {unparse(node)}")
             continue
         args = node.args
         if method is None:
@@ -654,7 +654,7 @@ def _function_reaches(
             args = args[1:]
         path = _string(args[0], names) if args else None
         if method is None or path is None or not path.startswith("/"):
-            unresolved.append(f"{function.name}:{node.lineno}: {ast.unparse(node)}")
+            unresolved.append(f"{function.name}:{node.lineno}: {unparse(node)}")
         else:
             reaches.add(Reach(method, path, node.lineno))
     return reaches, unresolved
@@ -684,7 +684,7 @@ def producers(source: str, resolved: dict[str, str] | None = None) -> set[tuple[
             if name in ("problem_response", "declared_problem_response") or name.endswith(
                 ("HTTPException", "Response")
             ):
-                found.add((function.name, node.lineno, ast.unparse(node)))
+                found.add((function.name, node.lineno, unparse(node)))
     return found
 
 
@@ -822,7 +822,7 @@ def outbound_seam_unknowns(runner: Path) -> list[str]:
             n
             for n in ast.walk(tree)
             if isinstance(n, ast.Call)
-            and ast.unparse(n.func) in {"httpx2.Client", "httpx2.AsyncClient", "httpx.Client", "httpx.AsyncClient"}
+            and unparse(n.func) in {"httpx2.Client", "httpx2.AsyncClient", "httpx.Client", "httpx.AsyncClient"}
         ]
         if len(constructors) != client_constructors.get(relative, 0):
             unknown.append(f"{relative}: HTTP client construction count changed: {len(constructors)}")
@@ -851,13 +851,13 @@ def outbound_seam_unknowns(runner: Path) -> list[str]:
                             continue
                         if target.value.id != "self":
                             continue
-                        receiver = ast.unparse(target)
+                        receiver = unparse(target)
                         # A client-shaped field used with an HTTP method is an
                         # unreviewed transport, irrespective of imports.
                         if receiver not in transports.get(relative, set()) and any(
                             isinstance(n, ast.Call)
                             and isinstance(n.func, ast.Attribute)
-                            and ast.unparse(n.func.value) == receiver
+                            and unparse(n.func.value) == receiver
                             and n.func.attr in {"get", "post", "put", "patch", "delete", "request", "send", "stream"}
                             and (
                                 "client" in assignment.value.id
@@ -940,7 +940,7 @@ def outbound_seam_unknowns(runner: Path) -> list[str]:
                         "stream",
                     }
                 ):
-                    unknown.append(f"{relative}:{call.lineno}: unreviewed injected transport: {ast.unparse(call)}")
+                    unknown.append(f"{relative}:{call.lineno}: unreviewed injected transport: {unparse(call)}")
         for node in ast.walk(tree):
             modules = (
                 [alias.name for alias in node.names]
@@ -955,7 +955,7 @@ def outbound_seam_unknowns(runner: Path) -> list[str]:
                 and any(name.split(".")[0] in {"httpx", "httpx2", "requests", "aiohttp", "urllib3"} for name in modules)
             ):
                 unknown.append(f"{relative}:{node.lineno}: unreviewed HTTP library import")
-            if not isinstance(node, ast.Attribute) or ast.unparse(node) not in transports.get(relative, set()):
+            if not isinstance(node, ast.Attribute) or unparse(node) not in transports.get(relative, set()):
                 continue
             parent = parents.get(id(node))
             if isinstance(node.ctx, ast.Store):
@@ -968,7 +968,7 @@ def outbound_seam_unknowns(runner: Path) -> list[str]:
                     and call.func is parent
                 ):
                     continue
-            unknown.append(f"{relative}:{node.lineno}: unsupported or escaped HTTP client: {ast.unparse(node)}")
+            unknown.append(f"{relative}:{node.lineno}: unsupported or escaped HTTP client: {unparse(node)}")
     return sorted(unknown)
 
 
@@ -1007,9 +1007,7 @@ def injected_call_fingerprints(runner: Path) -> dict[str, tuple[int, str]]:
                     continue
                 receiver = call.func.value
                 if isinstance(receiver, ast.Name) and receiver.id in arguments:
-                    entries.append(
-                        ast.dump(function, include_attributes=False) + ast.dump(call, include_attributes=False)
-                    )
+                    entries.append(stable_dump(function) + stable_dump(call))
             # A bound transport method can be saved and invoked later without an
             # attribute call at the invocation site. Track the binding itself.
             call_targets = {id(call.func) for call in ast.walk(function) if isinstance(call, ast.Call)}
@@ -1021,9 +1019,7 @@ def injected_call_fingerprints(runner: Path) -> dict[str, tuple[int, str]]:
                     and node.value.id in arguments
                     and id(node) not in call_targets
                 ):
-                    entries.append(
-                        ast.dump(function, include_attributes=False) + ast.dump(node, include_attributes=False)
-                    )
+                    entries.append(stable_dump(function) + stable_dump(node))
         for cls in (n for n in ast.walk(tree) if isinstance(n, ast.ClassDef)):
             fields: set[str] = set()
             for method in (n for n in cls.body if isinstance(n, ast.FunctionDef | ast.AsyncFunctionDef)):
@@ -1045,7 +1041,7 @@ def injected_call_fingerprints(runner: Path) -> dict[str, tuple[int, str]]:
                         break
                     args = expanded
                 fields.update(
-                    ast.unparse(t)
+                    unparse(t)
                     for a in assignments
                     if isinstance(a.value, ast.Name) and a.value.id in args
                     for t in a.targets
@@ -1055,15 +1051,18 @@ def injected_call_fingerprints(runner: Path) -> dict[str, tuple[int, str]]:
                 if (
                     isinstance(call.func, ast.Attribute)
                     and call.func.attr in methods
-                    and ast.unparse(call.func.value) in fields
+                    and unparse(call.func.value) in fields
                 ):
-                    entries.append(ast.dump(cls, include_attributes=False) + ast.dump(call, include_attributes=False))
+                    entries.append(stable_dump(cls) + stable_dump(call))
         if entries:
             result[path.relative_to(runner).as_posix()] = (
                 len(entries),
                 hashlib.sha256("\n".join(sorted(entries)).encode()).hexdigest(),
             )
     return result
+
+
+_FORWARD_URL = stable_dump(ast.parse("f\"{self.config.hub_url.rstrip('/')}{path}\"", mode="eval").body)
 
 
 def proxy_forwarding(runner: Path) -> tuple[set[tuple[str, str]], list[str]]:
@@ -1088,9 +1087,9 @@ def proxy_forwarding(runner: Path) -> tuple[set[tuple[str, str]], list[str]]:
         calls = (
             []
             if method is None
-            else [node for node in ast.walk(method) if isinstance(node, ast.Call) and ast.unparse(node.func) == target]
+            else [node for node in ast.walk(method) if isinstance(node, ast.Call) and unparse(node.func) == target]
         )
-        if len(calls) != 1 or tuple(ast.unparse(arg) for arg in calls[0].args[:2]) != arguments:
+        if len(calls) != 1 or tuple(unparse(arg) for arg in calls[0].args[:2]) != arguments:
             unknown.append(f"HubProxy.{name}: forwarding to {target} is not established")
         if method is not None:
             protected = {"path", "method", "url"} & {arg.arg for arg in method.args.args}
@@ -1104,7 +1103,7 @@ def proxy_forwarding(runner: Path) -> tuple[set[tuple[str, str]], list[str]]:
     for name, method in methods.items():
         parents = {id(child): parent for parent in ast.walk(method) for child in ast.iter_child_nodes(parent)}
         for node in ast.walk(method):
-            if isinstance(node, ast.Attribute) and ast.unparse(node) in (
+            if isinstance(node, ast.Attribute) and unparse(node) in (
                 "self.forward",
                 "self._forward",
                 "self.client.request",
@@ -1113,15 +1112,15 @@ def proxy_forwarding(runner: Path) -> tuple[set[tuple[str, str]], list[str]]:
                     "self.forward": {"get", "post"},
                     "self._forward": {"forward"},
                     "self.client.request": {"_forward"},
-                }[ast.unparse(node)]
+                }[unparse(node)]
                 parent = parents.get(id(node))
                 if name not in expected_owner or not isinstance(parent, ast.Call) or parent.func is not node:
-                    unknown.append(f"HubProxy.{name}: unexpected forwarding use {ast.unparse(node)}")
+                    unknown.append(f"HubProxy.{name}: unexpected forwarding use {unparse(node)}")
     forward = methods.get("_forward")
     if forward is None or not any(
         isinstance(node, ast.Assign)
         and any(isinstance(target, ast.Name) and target.id == "url" for target in node.targets)
-        and ast.unparse(node.value) == "f\"{self.config.hub_url.rstrip('/')}{path}\""
+        and stable_dump(node.value) == _FORWARD_URL
         for node in ast.walk(forward)
     ):
         unknown.append("HubProxy._forward: URL construction is not established")
@@ -1195,7 +1194,7 @@ def proxy_forwarding(runner: Path) -> tuple[set[tuple[str, str]], list[str]]:
                     continue
                 if isinstance(parent, ast.arg) and parent.annotation is node:
                     continue
-                unknown.append(f"{path.name}:{node.lineno}: unsupported HubProxy use {ast.unparse(node)}")
+                unknown.append(f"{path.name}:{node.lineno}: unsupported HubProxy use {unparse(node)}")
         for function in (n for n in ast.walk(tree) if isinstance(n, ast.FunctionDef | ast.AsyncFunctionDef)):
             names = {
                 arg.arg
@@ -1222,7 +1221,7 @@ def proxy_forwarding(runner: Path) -> tuple[set[tuple[str, str]], list[str]]:
                     if (
                         isinstance(parent, ast.Assign)
                         and isinstance(parent.value, ast.Call)
-                        and ast.unparse(parent.value.func) == "HubProxy.of"
+                        and unparse(parent.value.func) == "HubProxy.of"
                     ):
                         continue
                 if isinstance(node.ctx, ast.Load) and permitted_use(node):
@@ -1249,12 +1248,12 @@ def jwks_wiring(runner: Path) -> tuple[set[str], bool]:
     bindings = [
         n
         for n in ast.walk(cls)
-        if isinstance(n, ast.Assign) and len(n.targets) == 1 and ast.unparse(n.targets[0]) == "self._url"
+        if isinstance(n, ast.Assign) and len(n.targets) == 1 and unparse(n.targets[0]) == "self._url"
     ]
     if len(bindings) != 1 or not isinstance(bindings[0].value, ast.Name):
         return set(), False
     if any(
-        isinstance(node, ast.AnnAssign | ast.AugAssign) and ast.unparse(node.target) == "self._url"
+        isinstance(node, ast.AnnAssign | ast.AugAssign) and unparse(node.target) == "self._url"
         for node in ast.walk(cls)
     ):
         return set(), False
@@ -1472,15 +1471,13 @@ def callable_producers(func: Any) -> tuple[set[str], set[str]]:
                                 candidate = candidate.__func__
                             if inspect.isfunction(candidate):
                                 pending.append(candidate)
-                        unresolved.add(
-                            f"{name}:{start + node.lineno - 1}: constructor dispatch {ast.unparse(node.func)}"
-                        )
+                        unresolved.add(f"{name}:{start + node.lineno - 1}: constructor dispatch {unparse(node.func)}")
                 elif (
                     node.func.id in parameters | writes
                     or (target is None and not hasattr(builtins, node.func.id))
                     or (target is not None and not inspect.isclass(target))
                 ):
-                    unresolved.add(f"{name}:{start + node.lineno - 1}: dynamic call {ast.unparse(node.func)}")
+                    unresolved.add(f"{name}:{start + node.lineno - 1}: dynamic call {unparse(node.func)}")
             elif isinstance(node.func, ast.Attribute):
                 receiver = node.func.value
                 target = None
@@ -1501,7 +1498,7 @@ def callable_producers(func: Any) -> tuple[set[str], set[str]]:
                 if inspect.ismethod(target) or inspect.isfunction(target):
                     pending.append(target)
                 else:
-                    unresolved.add(f"{name}:{start + node.lineno - 1}: dynamic call {ast.unparse(node.func)}")
+                    unresolved.add(f"{name}:{start + node.lineno - 1}: dynamic call {unparse(node.func)}")
     return found, unresolved
 
 
