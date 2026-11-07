@@ -35,7 +35,7 @@ from blizzard.runner.harness.opencode.model_limits import OpenCodeModelLimits
 from blizzard.runner.harness.opencode.permissions.permission_resolver import SubprocessOpenCodePermissionResolver
 from blizzard.runner.harness.opencode.section import OpenCodeSection
 from blizzard.runner.harness.process_launch import LaunchedProcess
-from blizzard.runner.harness.wiring import publish_harness_bundle
+from blizzard.runner.harness.wiring import first_bindings, publish_harness_bundle
 from blizzard.runner.node_steps.envelope import Envelope, EnvelopeNode
 from blizzard.runner.process.child_env import AllowlistedEnv, ChildEnv
 from blizzard.runner.process.child_processes import IChildProcesses, StreamTarget
@@ -88,7 +88,7 @@ def _setup(root: Path, login: Path, model: str) -> tuple[Path, Path, Path, Path]
         runtime,
         worker_shell="/bin/bash",
     )
-    snapshot = publish_harness_bundle(source.parent, runtime)
+    snapshot = publish_harness_bundle(source.parent, runtime, selection=first_bindings())
     previous = published_snapshot(runtime)
     assert previous == snapshot.path.resolve()
     native = source / "opencode.json"
@@ -97,7 +97,7 @@ def _setup(root: Path, login: Path, model: str) -> tuple[Path, Path, Path, Path]
     try:
         native.write_text(json.dumps({"permission": {"question": "allow"}, "agent": companion}))
         try:
-            publish_harness_bundle(source.parent, runtime)
+            publish_harness_bundle(source.parent, runtime, selection=first_bindings())
         except HarnessBundleError as exc:
             assert exc.path == native
         else:
@@ -106,7 +106,7 @@ def _setup(root: Path, login: Path, model: str) -> tuple[Path, Path, Path, Path]
         runner_plugins = json.loads((runtime / "opencode-worker-config.json").read_text())["plugin"]
         native.write_text(json.dumps({"plugin": runner_plugins, "agent": companion}))
         try:
-            publish_harness_bundle(source.parent, runtime)
+            publish_harness_bundle(source.parent, runtime, selection=first_bindings())
         except HarnessBundleError as exc:
             assert exc.path == native
         else:
@@ -114,7 +114,7 @@ def _setup(root: Path, login: Path, model: str) -> tuple[Path, Path, Path, Path]
         assert published_snapshot(runtime) == previous
         native.write_text(json.dumps({"plugin": [(source / "plugins" / "marker.js").as_uri()], "agent": companion}))
         try:
-            publish_harness_bundle(source.parent, runtime)
+            publish_harness_bundle(source.parent, runtime, selection=first_bindings())
         except HarnessBundleError as exc:
             assert str(native) in str(exc) and str(source / "plugins" / "marker.js") in str(exc)
         else:

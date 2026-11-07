@@ -14,7 +14,7 @@ from blizzard.runner.harness.bundle import HarnessBundleError
 from blizzard.runner.harness.claude_code.section import ClaudeCodeSection
 from blizzard.runner.harness.internal.bundle_publisher import published_snapshot
 from blizzard.runner.harness.opencode.section import OpenCodeSection
-from blizzard.runner.harness.wiring import publish_harness_bundle
+from blizzard.runner.harness.wiring import first_bindings, publish_harness_bundle
 from blizzard.runner.host_layout import HOST_CONFIG_FILENAME
 from tests.support.harness_bundle import bundle as _bundle
 from tests.support.harness_bundle import runtime as _runtime
@@ -25,10 +25,15 @@ from tests.support.host_files import load_runner_config
 def test_missing_runner_config_blocks_publish_without_repointing_snapshot(tmp_path: Path) -> None:
     bundle = _bundle(tmp_path)
     runtime = _runtime(tmp_path)
-    first = publish_harness_bundle(bundle, runtime)
+    first = publish_harness_bundle(bundle, runtime, selection=first_bindings())
     missing = runtime / "missing-worker-config.json"
     with pytest.raises(HarnessBundleError) as raised:
-        publish_harness_bundle(bundle, runtime, sections=sections(OpenCodeSection(worker_config_path=str(missing))))
+        publish_harness_bundle(
+            bundle,
+            runtime,
+            sections=sections(OpenCodeSection(worker_config_path=str(missing))),
+            selection=first_bindings(),
+        )
     assert raised.value.path == missing
     assert published_snapshot(runtime) == first.path.resolve()
 
@@ -46,14 +51,18 @@ def test_publish_composes_the_runner_wiring_into_the_snapshot_and_names_the_sour
     settings = _claude_code_bundle(tmp_path, {"model": "opus"})
     bundle = settings.parent.parent
 
-    composed = json.loads((publish_harness_bundle(bundle, tmp_path).path / "claude-code" / "settings.json").read_text())
+    composed = json.loads(
+        (
+            publish_harness_bundle(bundle, tmp_path, selection=first_bindings()).path / "claude-code" / "settings.json"
+        ).read_text()
+    )
     assert composed["model"] == "opus"
     assert "SessionEnd" in composed["hooks"]
     assert composed["disableAllHooks"] is False
 
     settings.write_text(json.dumps({"disableAllHooks": True}))
     with pytest.raises(HarnessBundleError) as raised:
-        publish_harness_bundle(bundle, tmp_path)
+        publish_harness_bundle(bundle, tmp_path, selection=first_bindings())
     assert raised.value.path == settings
 
 
@@ -62,9 +71,9 @@ def test_publish_composes_under_the_given_autonomy_and_section_permission_mode(t
     bundle = settings.parent.parent
 
     with pytest.raises(HarnessBundleError) as dangerous:
-        publish_harness_bundle(bundle, tmp_path)
+        publish_harness_bundle(bundle, tmp_path, selection=first_bindings())
     assert dangerous.value.path == settings
-    normal = publish_harness_bundle(bundle, tmp_path, autonomy=Autonomy.Normal)
+    normal = publish_harness_bundle(bundle, tmp_path, autonomy=Autonomy.Normal, selection=first_bindings())
     composed = json.loads((normal.path / "claude-code" / "settings.json").read_text())
     assert composed["permissions"]["disableBypassPermissionsMode"] is True
     with pytest.raises(HarnessBundleError) as overridden:
@@ -73,6 +82,7 @@ def test_publish_composes_under_the_given_autonomy_and_section_permission_mode(t
             tmp_path,
             autonomy=Autonomy.Normal,
             sections=sections(ClaudeCodeSection(permission_mode="bypassPermissions")),
+            selection=first_bindings(),
         )
     assert overridden.value.path == settings
 
