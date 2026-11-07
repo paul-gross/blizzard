@@ -3,14 +3,12 @@
 
 from __future__ import annotations
 
-from pathlib import Path
 from typing import Any
 
 import pytest
 
-from blizzard.runner.harness.binding_selection import BindingSelection, select_declaration
+from blizzard.runner.harness.binding_selection import BindingSelection, select_bindings, select_declaration
 from blizzard.runner.harness.declaration import IHarnessDeclaration
-from blizzard.runner.harness.internal.version_probe import VersionProbe
 from blizzard.runner.harness.opencode.declaration import OPENCODE_DECLARATION
 from blizzard.runner.harness.opencode.section import OpenCodeSection
 from blizzard.runner.harness.opencode_v2.declaration import OPENCODE_V2_DECLARATION
@@ -20,31 +18,27 @@ from blizzard.runner.harness.wiring import (
     enabled,
     first_bindings,
     harness_families,
-    select_harness_bindings,
 )
-from blizzard.runner.process.child_env import AllowlistedEnv
-from tests.support.child_launch import CHILDREN, tool_env
 
 
-class _Counting(VersionProbe):
-    def __init__(self) -> None:
-        super().__init__(CHILDREN, tool_env())
+class _Counting:
+    """A version probe reporting ``output`` for ``present`` binaries, counting each version it observes."""
+
+    def __init__(self, output: str | None = None, *, present: bool = True) -> None:
+        self.output = output
+        self.present = present
         self.probes = 0
+
+    def binary_present(self, binary: str) -> bool:
+        return self.present
 
     def observe_version(self, binary: str) -> str | None:
         self.probes += 1
-        return super().observe_version(binary)
+        return self.output
 
 
-def _binary(tmp_path: Path, output: str) -> str:
-    path = tmp_path / "opencode"
-    path.write_text(f"#!/bin/sh\necho '{output}'\n")
-    path.chmod(0o755)
-    return str(path)
-
-
-def _sections(binary: str, *, enabled: bool = True) -> HarnessSections:
-    return HarnessSections.defaults().replaced(OpenCodeSection(enabled=enabled, binary=binary))
+def _sections(*, enabled: bool = True) -> HarnessSections:
+    return HarnessSections.defaults().replaced(OpenCodeSection(enabled=enabled))
 
 
 @pytest.mark.parametrize(
@@ -58,37 +52,38 @@ def _sections(binary: str, *, enabled: bool = True) -> HarnessSections:
         ("not a version", OPENCODE_DECLARATION),
     ],
 )
-def test_the_binarys_version_chooses_the_opencode_declaration(
-    tmp_path: Path, output: str, chosen: IHarnessDeclaration[Any]
-) -> None:
-    probe = _Counting()
+def test_the_binarys_version_chooses_the_opencode_declaration(output: str, chosen: IHarnessDeclaration[Any]) -> None:
+    probe = _Counting(output)
     family = harness_families()["opencode"]
-    section = _sections(_binary(tmp_path, output)).of("opencode")
+    section = _sections().of("opencode")
     assert select_declaration(family, section, probe) is chosen
     assert probe.probes == 1
 
 
-def test_a_missing_binary_or_a_disabled_section_takes_opencode_1_without_a_probe(tmp_path: Path) -> None:
+def test_a_missing_binary_or_a_disabled_section_takes_opencode_1_without_a_probe() -> None:
     family = harness_families()["opencode"]
-    absent = _Counting()
-    missing = _sections(str(tmp_path / "absent")).of("opencode")
-    assert select_declaration(family, missing, absent) is OPENCODE_DECLARATION and absent.probes == 0
-    probe = _Counting()
-    disabled = _sections(_binary(tmp_path, "2.1.4"), enabled=False).of("opencode")
+    absent = _Counting("2.1.4", present=False)
+    assert select_declaration(family, _sections().of("opencode"), absent) is OPENCODE_DECLARATION
+    assert absent.probes == 0
+    probe = _Counting("2.1.4")
+    disabled = _sections(enabled=False).of("opencode")
     assert select_declaration(family, disabled, probe) is OPENCODE_DECLARATION and probe.probes == 0
 
 
-def test_one_opencode_section_composes_either_major_and_claude_code_is_never_probed(tmp_path: Path) -> None:
-    sections = _sections(_binary(tmp_path, "2.1.4"))
-    selection = select_harness_bindings(sections, worker_env=AllowlistedEnv.of(()), children=CHILDREN)
+def test_one_opencode_section_composes_either_major_and_claude_code_is_never_probed() -> None:
+    sections = _sections()
+    probe = _Counting("2.1.4")
+    selection = select_bindings(harness_families(), {section.harness_id: section for section in sections}, probe)
     assert [declaration for declaration, _ in enabled(sections, selection)][-1] is OPENCODE_V2_DECLARATION
     assert selection.of("claude_code") is harness_families()["claude_code"][0]
-    assert dict(enabled(sections))[OPENCODE_DECLARATION] is sections.of("opencode")
+    assert dict(enabled(sections, selection))[OPENCODE_V2_DECLARATION] is sections.of("opencode")
+    assert probe.probes == 1
 
 
-def test_with_no_selection_each_harness_takes_its_first_declaration() -> None:
+def test_first_bindings_names_each_family_s_first_declaration() -> None:
     assert first_bindings() == BindingSelection.first(harness_families())
-    assert first_bindings().of("opencode") is OPENCODE_DECLARATION
+    for harness_id, family in harness_families().items():
+        assert first_bindings().of(harness_id) is family[0]
 
 
 def test_every_declaration_s_normalizer_is_declared_for_the_dialect_guard() -> None:

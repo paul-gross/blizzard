@@ -33,7 +33,7 @@ from blizzard.runner.harness.opencode.bundle import (
 )
 from blizzard.runner.harness.opencode.declaration import OPENCODE_DECLARATION
 from blizzard.runner.harness.opencode.section import OpenCodeSection
-from blizzard.runner.harness.wiring import HarnessSections, publish_harness_bundle, shared_inputs
+from blizzard.runner.harness.wiring import HarnessSections, first_bindings, publish_harness_bundle, shared_inputs
 from tests.support.child_launch import CHILDREN
 from tests.support.config_inputs import init_host
 from tests.support.harness_sections import opencode, sections, with_claude_code
@@ -97,7 +97,7 @@ def test_registry_binds_published_config_and_generated_config_without_bundle(
     native = bundle / "opencode" / "opencode.json"
     native.parent.mkdir(parents=True)
     native.write_text(json.dumps({"permission": {"bash": "deny"}, "plugin": ["extra@1"]}))
-    snapshot = publish_harness_bundle(bundle, config.root, sections=config.harness_sections)
+    snapshot = publish_harness_bundle(bundle, config.root, sections=config.harness_sections, selection=first_bindings())
     probe = FakeProbe()
     launcher = ProcessLauncher(probe, executor=spawn_executor, children=CHILDREN)
     bundled = replace(config, harness_config_dir=bundle)
@@ -151,6 +151,7 @@ def test_runner_publication_passes_the_configured_worker_path(tmp_path: Path) ->
     publish_runner_bundle(
         config,
         replace(InitCollaborators.http(CliCollaborators.production().client_factory), publish_harness_bundle=publish),
+        first_bindings(),
     )
     assert observed == [(bundle, tmp_path, str(worker))]
 
@@ -385,11 +386,11 @@ def test_mode_only_change_publishes_a_new_snapshot_that_keeps_the_mode(tmp_path:
     script.chmod(0o644)
     runtime = tmp_path / "runner"
     runtime.mkdir()
-    first = publish_harness_bundle(bundle, runtime)
+    first = publish_harness_bundle(bundle, runtime, selection=first_bindings())
     assert (first.path / "claude-code" / "plugins" / "p" / "run.sh").stat().st_mode & 0o777 == 0o644
-    assert publish_harness_bundle(bundle, runtime).path == first.path
+    assert publish_harness_bundle(bundle, runtime, selection=first_bindings()).path == first.path
     script.chmod(0o755)
-    second = publish_harness_bundle(bundle, runtime)
+    second = publish_harness_bundle(bundle, runtime, selection=first_bindings())
     assert second.path != first.path
     assert (second.path / "claude-code" / "plugins" / "p" / "run.sh").stat().st_mode & 0o777 == 0o755
 
@@ -404,7 +405,7 @@ def test_runner_publication_composes_under_the_configured_root_autonomy_and_perm
     root.mkdir()
     config = RunnerConfig(root=root, db_url="sqlite://", harness_config_dir=bundle, autonomy=Autonomy.Normal)
 
-    snapshot = publish_runner_bundle(config, _COLLABORATORS)
+    snapshot = publish_runner_bundle(config, _COLLABORATORS, first_bindings())
 
     assert snapshot is not None
     assert snapshot.path.parent == root / "harness-config" / "snapshots"
@@ -412,4 +413,6 @@ def test_runner_publication_composes_under_the_configured_root_autonomy_and_perm
     composed = json.loads((snapshot.path / "claude-code" / "settings.json").read_text())
     assert composed["permissions"]["disableBypassPermissionsMode"] is True
     with pytest.raises(click.ClickException, match="disableBypassPermissionsMode"):
-        publish_runner_bundle(with_claude_code(config, permission_mode="bypassPermissions"), _COLLABORATORS)
+        publish_runner_bundle(
+            with_claude_code(config, permission_mode="bypassPermissions"), _COLLABORATORS, first_bindings()
+        )

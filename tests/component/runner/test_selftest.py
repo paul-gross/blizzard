@@ -38,7 +38,7 @@ from blizzard.runner.harness.overload import ProviderOverload
 from blizzard.runner.harness.registry import HarnessBinding, HarnessRegistry
 from blizzard.runner.harness.transcript import IHarnessTranscriptSource, NullTranscriptSource
 from blizzard.runner.harness.usage import UsageKind, UsageLimit, UsageSample
-from blizzard.runner.harness.wiring import build_production_harness_registry
+from blizzard.runner.harness.wiring import build_production_harness_registry, first_bindings
 from blizzard.runner.lifecycle.judgement.internal.elicitation_files import ElicitationFiles
 from blizzard.runner.listeners import Listeners, Uds
 from blizzard.runner.process.child_env import AllowlistedEnv
@@ -638,6 +638,7 @@ def test_both_production_bindings_pass_every_selftest_check(tmp_path: Path, spaw
     )
     harnesses = build_production_harness_registry(
         config.harness_settings(NO_TRACING),
+        selection=first_bindings(),
         process=LinuxProcessProbe(),
         executor=spawn_executor,
         children=CHILDREN,

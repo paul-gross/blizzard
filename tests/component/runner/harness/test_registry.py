@@ -10,6 +10,7 @@ from blizzard.runner.harness.internal.committed_corpus import CommittedCorpus
 from blizzard.runner.harness.opencode.health import OpenCodeHealthProbe
 from blizzard.runner.harness.wiring import (
     build_production_harness_health_probes,
+    first_bindings,
 )
 from tests.support.child_launch import CHILDREN
 from tests.support.runner_fakes import NO_TRACING
@@ -20,6 +21,7 @@ def test_the_production_opencode_probe_admits_against_the_injected_corpus(tmp_pa
     corpus = CommittedCorpus()
     probe = build_production_harness_health_probes(
         RunnerConfig(root=tmp_path, db_url="sqlite://").harness_settings(NO_TRACING),
+        selection=first_bindings(),
         spawn_roots=("",),
         corpus=corpus,
         children=CHILDREN,

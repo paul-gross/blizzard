@@ -21,6 +21,9 @@ from blizzard.hub.domain.runners.version_window import VersionWindow
 from blizzard.hub.event_log_opener import system_event_log_opener
 from blizzard.runner import app as runner_app
 from blizzard.runner import runtime as runner_runtime
+from blizzard.runner.config import RunnerConfig
+from blizzard.runner.harness.binding_selection import BindingSelection, IVersionProbe, select_bindings
+from blizzard.runner.harness.wiring import harness_families
 from blizzard.runner.host_config import HostConfig
 from blizzard.runner.loop.mode import LoopMode
 
@@ -106,6 +109,28 @@ def migrate_hub(root: Path, *, down: str | None = None, allow_external_db: bool 
     )
 
 
+class FakeVersionProbe:
+    """An :class:`IVersionProbe` reporting ``version`` for every binary, or no binary at all when ``None``."""
+
+    def __init__(self, version: str | None = None) -> None:
+        self.version = version
+
+    def binary_present(self, binary: str) -> bool:
+        return self.version is not None
+
+    def observe_version(self, binary: str) -> str | None:
+        return self.version
+
+
+def selector_over(versions: IVersionProbe | None = None) -> Callable[[RunnerConfig], BindingSelection]:
+    """The per-runner bindings selector over ``versions`` (no binary present by default, so each family's first),
+    in place of the one a production root builds from the machine's PATH."""
+    probe = versions or FakeVersionProbe()
+    return lambda config: select_bindings(
+        harness_families(), {section.harness_id: section for section in config.harness_sections}, probe
+    )
+
+
 def host_runtime_of(
     root: Path,
     *,
@@ -129,9 +154,11 @@ def init_host(
     hub_url: str | None = None,
     projects: tuple[str, ...] | None = None,
     holder: Callable[[Path], str | None] | None = None,
+    versions: IVersionProbe | None = None,
 ) -> HostConfig:
-    """:func:`blizzard.runner.runtime.init_environment` with the suite's inputs."""
-    return host_runtime_of(root, hub_url=hub_url, projects=projects, holder=holder).init()
+    """:func:`blizzard.runner.runtime.init_environment` with the suite's inputs; ``versions`` is what the runners'
+    binaries report."""
+    return host_runtime_of(root, hub_url=hub_url, projects=projects, holder=holder).init(selector_over(versions))
 
 
 def migrate_host(root: Path, *, down: str | None = None) -> None:

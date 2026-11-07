@@ -10,4 +10,5 @@ none answers, and ignores `auth_path` and `worker_config_path`; it advertises an
 launch on a service whose version has changed since is refused until the runner observes it afresh. A service seen on
 another major version leaves the capability unavailable until the runner restarts; a binary and service of different
 major versions leave it unavailable while they differ. A bundle's `opencode/` directory holds nothing an OpenCode 2
-runner reads, so a runner on OpenCode 2 refuses to publish one with entries in it.
+runner reads, so a runner on OpenCode 2 refuses to publish one with entries in it. `blizzard runner init` scaffolds
+neither the heartbeat plugin nor the worker config for a runner on OpenCode 2, and removes none already written.

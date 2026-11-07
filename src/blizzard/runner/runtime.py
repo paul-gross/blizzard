@@ -26,7 +26,9 @@ from blizzard.foundation.flags import FlagRegistry
 from blizzard.foundation.logging import get_logger
 from blizzard.foundation.roles import collaborator, domain_model
 from blizzard.foundation.store.migrations import MigrationConnectionError, MigrationRefused, MigrationRunner
+from blizzard.runner.config import RunnerConfig
 from blizzard.runner.config_table import ConfigError
+from blizzard.runner.harness.binding_selection import BindingSelection
 from blizzard.runner.harness.wiring import declared
 from blizzard.runner.host_config import HostConfig
 from blizzard.runner.host_file import write_scaffold
@@ -211,8 +213,9 @@ class Runtime:
     #: Whether every load of the host file reads it strictly.
     strict: bool = field(kw_only=True)
 
-    def init(self) -> HostConfig:
-        """Scaffold the host file + data dir + a migrated store. Idempotent.
+    def init(self, select_bindings: Callable[[RunnerConfig], BindingSelection]) -> HostConfig:
+        """Scaffold the host file + data dir + a migrated store. Idempotent. ``select_bindings`` names the
+        declaration each runner's binaries choose, whose runtime files are scaffolded.
 
         Re-running reconciles: an existing host file is left untouched, the data dir is ensured, and the store is
         migrated to head — a no-op when already current. A directory holding no host file and a pre-host store is
@@ -241,7 +244,7 @@ class Runtime:
             # `init` refreshes them to head.
             for entry in config.runners:
                 if entry.own is not None:
-                    for declaration, section in declared(entry.own.harness_sections):
+                    for declaration, section in declared(entry.own.harness_sections, select_bindings(entry.own)):
                         declaration.scaffold_runtime(section, root, worker_shell=entry.own.worker_shell)
         except OSError as exc:
             raise ConfigError(f"cannot write the host directory at {root}: {exc}") from exc
@@ -445,10 +448,11 @@ def init_environment(
     holder: Callable[[Path], str | None] = _nothing_answers,
     flag_registry: FlagRegistry,
     strict: bool,
+    select_bindings: Callable[[RunnerConfig], BindingSelection],
 ) -> HostConfig:
     return Runtime(
         root, hub_url=hub_url, projects=projects, holder=holder, flag_registry=flag_registry, strict=strict
-    ).init()
+    ).init(select_bindings)
 
 
 def migrate(

@@ -19,7 +19,7 @@ from blizzard.foundation.runner_token_names import HOST_TOKEN_VARIABLE, hub_toke
 from blizzard.hub.config_keys import HUB_REGISTRY
 from blizzard.runner.cli import runner
 from blizzard.runner.config_keys import HOST_REGISTRY
-from blizzard.runner.harness.wiring import HarnessSections, declared
+from blizzard.runner.harness.wiring import HarnessSections, declared, first_bindings
 from blizzard.runner.hub.internal.token_file import HubTokenFile
 from blizzard.tools.config_contract import document_from_registry
 from blizzard.tools.contracts import CONFIGS
@@ -72,7 +72,7 @@ def test_every_writer_is_a_runner_command() -> None:
 
 
 def test_init_scaffolds_exactly_the_harness_files_the_contract_names_with_writer_init(tmp_path: Path) -> None:
-    for declaration, section in declared(HarnessSections.defaults()):
+    for declaration, section in declared(HarnessSections.defaults(), first_bindings()):
         declaration.scaffold_runtime(section, tmp_path, worker_shell="/bin/bash")
     written = {str(p.relative_to(tmp_path)) for p in tmp_path.rglob("*") if p.is_file()}
     named = {row["path"] for row in _host()["paths"] if row["written_by"] == ["init"]}

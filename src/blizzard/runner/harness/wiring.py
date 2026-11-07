@@ -153,22 +153,21 @@ def select_harness_bindings(
 
 
 def first_bindings() -> BindingSelection:
-    """Each harness id's first declaration, for a caller composing no runner."""
+    """Each harness id's first declaration — the explicit choice of a caller composing no runner, which probes no
+    binary. A caller composing a runner passes the selection made for it instead."""
     return BindingSelection.first(harness_families())
 
 
 def declared(
-    sections: HarnessSections, selection: BindingSelection | None = None
+    sections: HarnessSections, selection: BindingSelection
 ) -> Iterator[tuple[IHarnessDeclaration[Any], HarnessSection]]:
-    """Each chosen declaration paired with its parsed section, in catalog order; with no ``selection``, each harness
-    id's first."""
-    chosen = selection or first_bindings()
+    """Each chosen declaration paired with its parsed section, in catalog order."""
     for harness_id in harness_families():
-        yield chosen.of(harness_id), sections.of(harness_id)
+        yield selection.of(harness_id), sections.of(harness_id)
 
 
 def enabled(
-    sections: HarnessSections, selection: BindingSelection | None = None
+    sections: HarnessSections, selection: BindingSelection
 ) -> Iterator[tuple[IHarnessDeclaration[Any], HarnessSection]]:
     """:func:`declared`, narrowed to the bindings their sections enable."""
     return ((declaration, section) for declaration, section in declared(sections, selection) if section.enabled)
@@ -181,13 +180,12 @@ def declared_normalizer_versions() -> tuple[str, ...]:
 
 def configured_tiers(sections: HarnessSections) -> dict[str, tuple[tuple[str, str], ...]]:
     """Each binding's configured tier mapping, keyed by harness id."""
-    return {declaration.harness_id: section.configured_tiers for declaration, section in declared(sections)}
+    return {section.harness_id: section.configured_tiers for section in sections}
 
 
-def bundle_layouts(selection: BindingSelection | None = None) -> tuple[HarnessLayout, ...]:
-    """Each harness id's bundle layout, without runner composition — its first declaration's with no ``selection``."""
-    chosen = selection or first_bindings()
-    return tuple(chosen.of(harness_id).bundle_layout for harness_id in harness_families())
+def bundle_layouts(selection: BindingSelection) -> tuple[HarnessLayout, ...]:
+    """Each harness id's bundle layout under ``selection``, without runner composition."""
+    return tuple(selection.of(harness_id).bundle_layout for harness_id in harness_families())
 
 
 def declared_telemetry_names() -> tuple[HarnessTelemetryNames, ...]:
@@ -203,7 +201,7 @@ def declared_telemetry_names() -> tuple[HarnessTelemetryNames, ...]:
 def combined_telemetry_plan(
     settings: HarnessSettings,
     *,
-    selection: BindingSelection | None = None,
+    selection: BindingSelection,
     bundle: BundleSnapshot | None = None,
     harness_telemetry_enabled: bool = False,
     runner_environ: Mapping[str, str] | None = None,
@@ -248,7 +246,7 @@ def shared_inputs(
 def build_production_harness_registry(
     settings: HarnessSettings,
     *,
-    selection: BindingSelection | None = None,
+    selection: BindingSelection,
     executor: Executor,
     process: IProcessProbe,
     children: IChildProcesses,
@@ -281,7 +279,7 @@ def build_production_harness_registry(
 def build_production_harness_health_probes(
     settings: HarnessSettings,
     *,
-    selection: BindingSelection | None = None,
+    selection: BindingSelection,
     spawn_roots: Sequence[str],
     corpus: ICompatibilityCorpus,
     children: IChildProcesses,
@@ -305,9 +303,9 @@ def publish_harness_bundle(
     config_dir: Path,
     runtime_root: Path,
     *,
+    selection: BindingSelection,
     autonomy: Autonomy = Autonomy.Dangerous,
     sections: HarnessSections | None = None,
-    selection: BindingSelection | None = None,
 ) -> BundleSnapshot:
     """Load ``config_dir`` against every binding's layout and publish it under ``runtime_root``,
     composing each binding's runner wiring in from its own section (each defaulted when
@@ -320,7 +318,7 @@ def publish_harness_bundle(
     return publish_bundle(config_dir, runtime_root, layouts)
 
 
-def inspect_harness_bundle(config_dir: Path, selection: BindingSelection | None = None) -> tuple[HarnessSource, ...]:
+def inspect_harness_bundle(config_dir: Path, selection: BindingSelection) -> tuple[HarnessSource, ...]:
     """Validate ``config_dir`` against each chosen binding's layout without publishing."""
     return inspect_bundle(config_dir, bundle_layouts(selection))
 

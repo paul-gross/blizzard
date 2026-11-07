@@ -13,6 +13,7 @@ from dataclasses import dataclass, replace
 from functools import partial
 from http import HTTPStatus
 from pathlib import Path
+from typing import Protocol
 
 import click
 
@@ -63,9 +64,10 @@ from blizzard.runner.composition import (
 from blizzard.runner.config import DEFAULT_RUNNER_NAME, RunnerConfig, worker_shell_refusal
 from blizzard.runner.config_table import ConfigError
 from blizzard.runner.events.broker import EventBroker
+from blizzard.runner.harness.autonomy import Autonomy
 from blizzard.runner.harness.binding_selection import BindingSelection
 from blizzard.runner.harness.bundle import BundleSnapshot
-from blizzard.runner.harness.wiring import publish_harness_bundle, select_harness_bindings
+from blizzard.runner.harness.wiring import HarnessSections, publish_harness_bundle, select_harness_bindings
 from blizzard.runner.host_config import (
     BuiltRunner,
     HaltedRunner,
@@ -172,6 +174,20 @@ def _http_host_clients(client_factory: ClientFactory, hub_url: str) -> Generator
         yield lambda token: HttpHostHubClient(http, token=token)
 
 
+class IPublishHarnessBundle(Protocol):
+    """Publishing the operator's harness-config bundle, as :func:`publish_harness_bundle` does."""
+
+    def __call__(
+        self,
+        config_dir: Path,
+        runtime_root: Path,
+        *,
+        selection: BindingSelection,
+        autonomy: Autonomy = ...,
+        sections: HarnessSections | None = ...,
+    ) -> BundleSnapshot: ...
+
+
 @dataclass(frozen=True)
 class InitCollaborators:
     """The hub clients, store migrations, host-process builder, and harness-bundle publisher a runtime verb
@@ -185,7 +201,7 @@ class InitCollaborators:
     #: The runner store's migrations at a URL.
     store_migrations: Callable[[str], MigrationRunner] = runner_store_migrations
     build_host_process: Callable[..., HostProcess] = build_host_process
-    publish_harness_bundle: Callable[..., BundleSnapshot] = publish_harness_bundle
+    publish_harness_bundle: IPublishHarnessBundle = publish_harness_bundle
     #: The bindings a runner's configured binaries choose, probed once as it starts.
     select_bindings: Callable[[RunnerConfig], BindingSelection] = lambda config: select_runner_bindings(config)
 
@@ -264,7 +280,7 @@ def init(
         if allow_readd and (aside := runtime.set_aside_pre_host_store(now=clock.now())) is not None:
             for path in aside.moved:
                 click.echo(f"set the pre-host store aside as {path}")
-        initialized.append(runtime.init())
+        initialized.append(runtime.init(InitCollaborators.of(ctx).select_bindings))
         return initialized[0]
 
     run_init(
@@ -1085,12 +1101,11 @@ def select_runner_bindings(config: RunnerConfig) -> BindingSelection:
 
 
 def publish_runner_bundle(
-    config: RunnerConfig, collaborators: InitCollaborators, selection: BindingSelection | None = None
+    config: RunnerConfig, collaborators: InitCollaborators, selection: BindingSelection
 ) -> BundleSnapshot | None:
     """Load the operator's harness-config bundle and publish its snapshot before any work is
     accepted, returning it for the process graph to deliver; a runtime with no
-    `[harness] config_dir` is left untouched. ``selection`` is the bindings the runner composes, each harness's first
-    when absent."""
+    `[harness] config_dir` is left untouched. ``selection`` is the bindings the runner composes."""
     if config.harness_config_dir is None:
         return None
     with click_exception_on(ConfigError):
