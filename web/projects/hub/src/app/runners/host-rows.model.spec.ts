@@ -83,21 +83,21 @@ describe('bindingLines', () => {
     ]);
   });
 
-  it('counts a chunk whose workspace matches no binding toward none, and its environments toward no workspace', () => {
+  it('counts a chunk held in a workspace its runner no longer binds toward that workspace, not toward a binding', () => {
     const rA = runner('rA', {
       host_id: 'h1',
       projects: SERVING,
-      bindings: [
-        { project: 'default', workspace_id: 'ws-1', agents: 2, workspace_unreported: false },
-        { project: 'default', workspace_id: 'ws-2', agents: 2, workspace_unreported: false },
-      ],
+      bindings: [{ project: 'default', workspace_id: 'ws-1', agents: 2, workspace_unreported: false }],
     });
-    const stray = chunk('ch_x', 'rA', { id: 'pj_default' }, 2, 'ws-elsewhere');
+    const stray = chunk('ch_x', 'rA', { id: 'pj_default' }, 2, 'ws-old');
 
-    expect(bindingLines(rA, [stray]).map((line) => line.agentsInUse)).toEqual([0, 0]);
-    const [card] = foldHostCards([host('h1', { workspaces: [{ workspace_id: 'ws-1' }, { workspace_id: 'ws-2' }] })], [rA], null, [stray], NOW);
-    expect(card.workspaces.map((ws) => ws.inUse)).toEqual([0, 0]);
-    expect([...card.heldChunks.values()].flat()).toEqual([]);
+    expect(bindingLines(rA, [stray]).map((line) => line.agentsInUse)).toEqual([0]);
+    const [card] = foldHostCards([host('h1', { workspaces: [{ workspace_id: 'ws-1' }, { workspace_id: 'ws-old' }] })], [rA], null, [stray], NOW);
+    expect(card.workspaces.map((ws) => [ws.workspaceId, ws.inUse])).toEqual([
+      ['ws-1', 0],
+      ['ws-old', 2],
+    ]);
+    expect([...card.heldChunks].map(([id, held]) => [id, held.map((h) => h.chunkId)])).toEqual([['ws-old', ['ch_x']]]);
   });
 
   it("splits a two-workspace runner's environments and held chunks per workspace on the host card", () => {

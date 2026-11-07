@@ -18,8 +18,8 @@
     <!-- Most important first: what the fleet can still spend, who is spending it, then the room it has. -->
     @if (rail().subscriptions.length > 0) {
       <div class="subs" data-testid="runner-subscriptions">
-        @for (sub of rail().subscriptions; track sub.slug) {
-          <fleet-subscription-blocks data-testid="runner-subscription" [line]="sub" />
+        @for (sub of rail().subscriptions; track sub.key) {
+          <fleet-subscription-blocks data-testid="runner-subscription" [attr.data-host]="sub.hostName" [attr.title]="sub.hostName" [line]="sub" />
         }
       </div>
     }

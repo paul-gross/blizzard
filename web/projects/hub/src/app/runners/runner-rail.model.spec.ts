@@ -149,7 +149,7 @@ describe('subscriptionLines', () => {
     ]);
   });
 
-  it('lists each subscription once across hosts and host-less runners, reading the freshest sample', () => {
+  it('lists a subscription once per host and per host-less runner, each reading its own sample', () => {
     const lines = subscriptionLines(
       groups(
         [
@@ -160,25 +160,24 @@ describe('subscriptionLines', () => {
       ),
     );
 
-    expect(lines.map((l) => l.slug)).toEqual(['claude', 'gpt', 'gemini']);
-    expect(lines[0].stale).toBe(true);
+    expect(lines.map((l) => l.slug)).toEqual(['claude', 'gpt', 'claude', 'gemini', 'claude']);
+    expect(new Set(lines.map((l) => l.key)).size).toBe(5);
+    expect(lines.map((l) => l.stale)).toEqual([false, false, true, false, false]);
     expect(subscriptionLines(groups([{ card: withPaces('h1', [pace('c', { refreshedTag: '[50s]' }), pace('n')]), rows: [] }])).map((l) => l.age)).toEqual([
       '[50s]',
       null,
     ]);
   });
 
-  it('reads a subscription lapsed when any host reports it lapsed, however fresh another host reads it', () => {
+  it("keeps one host's lapsed login from outranking another host's healthy reading of the same slug", () => {
     const lapsed = pace('claude', { condition: hubApi.SampleMissReason.CREDENTIAL_LAPSED, sampledAt: '2026-07-16T10:00:00.000Z' });
     const good = pace('claude', { sampledAt: '2026-07-16T12:00:00.000Z' });
 
-    for (const order of [
-      [lapsed, good],
-      [good, lapsed],
-    ]) {
-      const lines = subscriptionLines(groups(order.map((p, i) => ({ card: withPaces(`h${i}`, [p]), rows: [] }))));
-      expect(lines.map((l) => l.state)).toEqual(['lapsed']);
-    }
+    const lines = subscriptionLines(groups([lapsed, good].map((p, i) => ({ card: withPaces(`h${i}`, [p]), rows: [] }))));
+    expect(lines.map((l) => [l.hostName, l.state])).toEqual([
+      ['h0-name', 'lapsed'],
+      ['h1-name', 'paced'],
+    ]);
   });
 
   it('reads a lapsed credential as lapsed, and no sample or no windows as unsampled', () => {

@@ -1,4 +1,4 @@
-import { isLapsedSubscription as isLapsed, type SubscriptionLine, subscriptionLine, type SubscriptionPace } from 'fleet';
+import { type SubscriptionLine, subscriptionLine, type SubscriptionPace } from 'fleet';
 
 import { type ConnectionLight, runnerLight } from './connection-status.model';
 import { busyAgents, declaredAgents, type HostGroups } from './host-rows.model';
@@ -29,7 +29,7 @@ export interface RailRow {
 export interface RailVm {
   /** Empty when no runner or workspace reports a capacity. */
   readonly envs: readonly Gauge[];
-  readonly subscriptions: readonly SubscriptionLine[];
+  readonly subscriptions: readonly RailSubscription[];
   readonly rows: readonly RailRow[];
 }
 
@@ -52,27 +52,33 @@ export function envGauges(groups: HostGroups<RunnerRow>): readonly Gauge[] {
   return gauges;
 }
 
-/** Whether `pace` should stand for its subscription over `held`: a lapsed login on any host outranks
- * another host's good reading — it is the one the operator must act on — then the later sample wins. */
-function outranks(pace: SubscriptionPace, held: SubscriptionPace): boolean {
-  if (isLapsed(pace) !== isLapsed(held)) return isLapsed(pace);
-  if (pace.sampledAt === null) return false;
-  return held.sampledAt === null || Date.parse(pace.sampledAt) > Date.parse(held.sampledAt);
+/** One subscription line on the rail, kept apart by the host whose spenders it reaches: a
+ * subscription reaches only its own host's spenders, so two hosts sharing a slug read as two lines. */
+export interface RailSubscription extends SubscriptionLine {
+  /** Unique per host and slug (or per host-less runner and slug) — the list's track key. */
+  readonly key: string;
+  /** The host the reading belongs to; `null` for a host-less runner's own. */
+  readonly hostName: string | null;
 }
 
 /**
- * One line per distinct subscription across every host card and host-less runner, in first-seen
- * order. A subscription two hosts both report reads lapsed if either reports it lapsed, else from
- * whichever sampled it last.
+ * One line per subscription per host, then per host-less runner, in first-seen order — a lapsed
+ * login on one host never outranks, or hides, another host's reading.
  */
-export function subscriptionLines(groups: HostGroups<RunnerRow>): readonly SubscriptionLine[] {
-  const chosen = new Map<string, SubscriptionPace>();
-  const paces = [...groups.cards.flatMap(({ card }) => card.subscriptionPaces), ...groups.hostless.flatMap((row) => row.subscriptionPaces)];
-  for (const pace of paces) {
-    const held = chosen.get(pace.slug);
-    if (!held || outranks(pace, held)) chosen.set(pace.slug, pace);
-  }
-  return [...chosen.values()].map(subscriptionLine);
+export function subscriptionLines(groups: HostGroups<RunnerRow>): readonly RailSubscription[] {
+  const lines: RailSubscription[] = [];
+  const seen = new Set<string>();
+  const add = (owner: string, hostName: string | null, paces: readonly SubscriptionPace[]): void => {
+    for (const pace of paces) {
+      const key = `${owner}\u0000${pace.slug}`;
+      if (seen.has(key)) continue;
+      seen.add(key);
+      lines.push({ ...subscriptionLine(pace), key, hostName });
+    }
+  };
+  for (const { card } of groups.cards) add(`host:${card.hostId}`, card.hostName, card.subscriptionPaces);
+  for (const row of groups.hostless) add(`runner:${row.runner_id}`, null, row.subscriptionPaces);
+  return lines;
 }
 
 /** A runner's agents: one gauge, its agents busy of the count it shares across its bindings; none where it declares none. */

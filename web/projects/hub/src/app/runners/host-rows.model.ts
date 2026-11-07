@@ -107,8 +107,7 @@ function chunkWorksBinding(chunk: ChunkSummary, workspaceId: string, project: st
 }
 
 /** Each of `runner`'s bindings joined to the board's live chunks it holds on that binding — the
- * chunks the runner holds, claimed in the binding's workspace, on its project. A chunk whose
- * workspace matches no binding counts toward none. */
+ * chunks the runner holds, claimed in the binding's workspace, on its project. */
 function bindingUses(runner: RunnerRegistryView, chunks: readonly ChunkSummary[]): readonly BindingUse[] {
   const held = chunks.filter((chunk) => chunk.runner_id === runner.runner_id);
   const served = servedProjects(runner);
@@ -150,37 +149,50 @@ export function subscriptionName(
   return host?.subscriptions?.find((declared) => declared.slug === slug)?.name ?? slug;
 }
 
-/** Environments in use per workspace across `runners`, from their bindings' live chunks. */
+/** The live chunks `runners` hold, by the workspace each was claimed in. A claim's workspace is
+ * fixed for its tenure, so a chunk keeps counting there after its runner's binding changes. */
+function heldByWorkspace(
+  runners: readonly RunnerRegistryView[],
+  chunks: readonly ChunkSummary[],
+): Map<string, { runner: RunnerRegistryView; chunk: ChunkSummary }[]> {
+  const byRunner = new Map(runners.map((runner) => [runner.runner_id, runner]));
+  const held = new Map<string, { runner: RunnerRegistryView; chunk: ChunkSummary }[]>();
+  for (const chunk of chunks) {
+    const runner = chunk.runner_id ? byRunner.get(chunk.runner_id) : undefined;
+    if (!runner || !chunk.workspace_id) continue;
+    const lines = held.get(chunk.workspace_id) ?? [];
+    lines.push({ runner, chunk });
+    held.set(chunk.workspace_id, lines);
+  }
+  return held;
+}
+
+/** Environments in use per workspace across `runners`, from the live chunks they hold there. */
 function workspaceInUse(runners: readonly RunnerRegistryView[], chunks: readonly ChunkSummary[]): Map<string, number> {
   const inUse = new Map<string, number>();
-  for (const runner of runners) {
-    for (const use of bindingUses(runner, chunks)) {
-      inUse.set(use.workspaceId, (inUse.get(use.workspaceId) ?? 0) + use.environmentsInUse);
-    }
+  for (const [workspaceId, held] of heldByWorkspace(runners, chunks)) {
+    inUse.set(workspaceId, held.reduce((sum, { chunk }) => sum + (chunk.environment_count ?? 0), 0));
   }
   return inUse;
 }
 
-/** The live chunks `runners` hold per workspace, from their bindings. */
+/** The live chunks `runners` hold per workspace. */
 function workspaceHeld(
   runners: readonly RunnerRegistryView[],
   chunks: readonly ChunkSummary[],
 ): Map<string, readonly HeldChunk[]> {
-  const held = new Map<string, HeldChunk[]>();
-  for (const runner of runners) {
-    for (const use of bindingUses(runner, chunks)) {
-      const lines = held.get(use.workspaceId) ?? [];
-      for (const chunk of use.chunks) {
-        lines.push({
-          chunkId: chunk.chunk_id,
-          shortRef: compactRef(chunk.chunk_id),
-          step: chunk.current_node_name ?? chunk.current_node_id ?? '—',
-          runnerName: runner.runner_name,
-          environments: chunk.environment_count ?? 0,
-        });
-      }
-      held.set(use.workspaceId, lines);
-    }
+  const held = new Map<string, readonly HeldChunk[]>();
+  for (const [workspaceId, entries] of heldByWorkspace(runners, chunks)) {
+    held.set(
+      workspaceId,
+      entries.map(({ runner, chunk }) => ({
+        chunkId: chunk.chunk_id,
+        shortRef: compactRef(chunk.chunk_id),
+        step: chunk.current_node_name ?? chunk.current_node_id ?? '—',
+        runnerName: runner.runner_name,
+        environments: chunk.environment_count ?? 0,
+      })),
+    );
   }
   return held;
 }
