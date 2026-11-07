@@ -1,6 +1,7 @@
 """A syntax-tree rendering that is identical across the supported Python versions, for hashed baselines."""
 
 import ast
+from typing import cast
 
 
 def stable_dump(node: ast.AST) -> str:
@@ -10,10 +11,12 @@ def stable_dump(node: ast.AST) -> str:
         return f"Expr(docstring={' '.join(node.value.value.split())!r})"
     parts: list[str] = []
     for name in node._fields:
-        value = getattr(node, name, None)
+        value: object = getattr(node, name, None)
         if isinstance(node, ast.JoinedStr) and name == "values":
             # Python 3.12 keeps an empty literal piece in a format spec that later versions drop.
-            value = [part for part in value if not (isinstance(part, ast.Constant) and part.value == "")]
+            value = [
+                part for part in cast(list[object], value) if not (isinstance(part, ast.Constant) and part.value == "")
+            ]
         if value is None or value == []:
             continue
         parts.append(f"{name}={_render(value)}")
@@ -24,7 +27,7 @@ def _render(value: object) -> str:
     if isinstance(value, ast.AST):
         return stable_dump(value)
     if isinstance(value, list):
-        return "[" + ", ".join(_render(item) for item in value) + "]"
+        return "[" + ", ".join(_render(item) for item in cast(list[object], value)) + "]"
     return repr(value)
 
 
