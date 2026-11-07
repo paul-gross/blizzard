@@ -4,4 +4,4 @@ export { FRESHNESS_AGING_AFTER_MS, type SubscriptionPace } from './subscription-
 export { hostSubscriptionPaces, hostWorkspaceRows, hubSubscriptionPaces } from './hub-host.model';
 export { runnerSubscriptionLines, runnerSubscriptionPaces } from './runner-host.model';
 export { SubscriptionBlocks } from './subscription-blocks';
-export { isLapsed as isLapsedSubscription, type SubscriptionLine, subscriptionLine } from './subscription-blocks.model';
+export { type SubscriptionLine, subscriptionLine } from './subscription-blocks.model';
