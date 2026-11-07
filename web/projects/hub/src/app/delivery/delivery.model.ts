@@ -8,8 +8,7 @@ import {
   type ChunkSummary,
   compactRef,
   formatAbsolute,
-  formatLocalClockWithDay,
-  formatWhen,
+  formatWhenParts,
   type FlowFactView,
   type KitAsyncStateValue,
   type FlowView,
@@ -21,6 +20,7 @@ import {
   shortCommitHash,
   STATUS_TONE,
   toneColor,
+  type Tone,
   type WorkItemsView,
   type WorkLine,
   workLines,
@@ -28,7 +28,7 @@ import {
 } from 'fleet';
 
 import { withinDoneWindow } from '../core/done-window';
-import { ordinal } from '../core/flow-place.model';
+import { ordinal, placeInLine } from '../core/flow-place.model';
 import { graphStepLabel, STEP_RUNNER_SEP } from '../core/step-label';
 
 /** How long a bounce keeps a chunk with no other delivery footprint in the list. */
@@ -77,10 +77,10 @@ export interface DeliveryWhen {
 /** An instant as the date column draws it — the board's own short stamps, split over two lines: the day (as
  * `formatWhen` names an older one) over the `HH:MM` it names a same-day one by. */
 export function deliveryWhen(iso: string | null, now: number): DeliveryWhen | null {
-  const clock = formatLocalClockWithDay(iso, new Date(now));
-  if (iso === null || clock === null) return null;
-  const day = clock.day === null ? null : clock.day === 'Yesterday' ? clock.day : formatWhen(iso, new Date(now));
-  return { day, time: formatWhen(iso, new Date(iso)), title: formatAbsolute(iso) };
+  if (iso === null) return null;
+  const parts = formatWhenParts(iso, new Date(now));
+  if (parts.time === '') return null;
+  return { day: parts.day === '' ? null : parts.day, time: parts.time, title: formatAbsolute(iso) };
 }
 
 /** A PR or commit link in a row's links column, its repository named dimly before it. */
@@ -244,7 +244,7 @@ function flowRepoName(flowId: string, fallback: string, inputs: DeliveryInputs):
 /** A chunk's places in line — every place that is neither landing nor parked off the line — or `null` for none. */
 export function chunkLine(chunk: ChunkSummary, inputs: DeliveryInputs): DeliveryLine | null {
   const places = chunk.flow_places
-    .filter((place) => place.state !== 'landing' && place.state !== 'awaiting-merge' && place.state !== 'passed-over')
+    .filter(placeInLine)
     .sort((a, b) => a.position - b.position);
   const best = places[0];
   if (!best) return null;
@@ -372,9 +372,15 @@ export function cardStageLabel(row: DeliveryRow): string {
   return row.stage >= 0 ? STAGES[row.stage] : 'no stage';
 }
 
-/** The colour a phone's card names its stage in: red for a bounce, done's for a landing, cyan for a stage reached. */
+/** The tone a row's stage is drawn in, on the phone card and the desktop list alike: a bounce stale, a landing done, any
+ * other stage reached in progress (`spawning`), no stage idle. */
+export function stageTone(row: DeliveryRow): Tone {
+  if (row.bounce) return 'stale';
+  if (row.stage === STAGES.length - 1) return 'done';
+  return row.stage >= 0 ? 'spawning' : 'idle';
+}
+
+/** The colour a row's stage is drawn in — {@link stageTone}'s. */
 export function cardStageColor(row: DeliveryRow): string {
-  if (row.bounce) return 'var(--red)';
-  if (row.stage === STAGES.length - 1) return toneColor('done');
-  return row.stage >= 0 ? 'var(--cyan)' : 'var(--label)';
+  return toneColor(stageTone(row));
 }

@@ -132,11 +132,7 @@
   color: var(--text);
 }
 .stage.at {
-  color: var(--cyan);
   font-weight: 700;
-}
-.stage.at.bad {
-  color: var(--red);
 }
 .places {
   color: var(--label);

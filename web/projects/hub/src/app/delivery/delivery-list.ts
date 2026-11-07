@@ -3,7 +3,7 @@ import { ChangeDetectionStrategy, Component, input, output } from '@angular/core
 
 import { formatSeenTag, KitAsyncState, type KitAsyncStateValue, KitSelectRow, KitSkeleton, LaneIcon } from 'fleet';
 import { DeliveryChunk } from './delivery-chunk';
-import { deliveryWhen, type DeliveryList as DeliveryListValue, type DeliveryRow, type DeliveryWhen, STAGES } from './delivery.model';
+import { cardStageColor, deliveryWhen, type DeliveryList as DeliveryListValue, type DeliveryRow, type DeliveryWhen, STAGES } from './delivery.model';
 import { skeletonRows } from './delivery-skeleton.model';
 
 /**
@@ -27,6 +27,7 @@ export class DeliveryList {
   readonly picked = output<string>();
 
   protected readonly stages = STAGES;
+  protected readonly stageColor = cardStageColor;
   /** The loading placeholders, drawn once. */
   protected readonly skeletons = skeletonRows();
 

@@ -6,8 +6,11 @@ import {
   placeLines,
   placeStateLabel,
   placeStateTone,
+  placeInLine,
   placeText,
 } from './flow-place.model';
+
+const IN_LINE_STATES: readonly string[] = ['next', 'waiting', 'polling'];
 
 const place = (over: Partial<ChunkFlowPlaceView> = {}): ChunkFlowPlaceView => ({
   flow_id: 'flw_1',
@@ -19,6 +22,7 @@ const place = (over: Partial<ChunkFlowPlaceView> = {}): ChunkFlowPlaceView => ({
   position: 3,
   next_poll_at: null,
   ...over,
+  in_line: over.in_line ?? IN_LINE_STATES.includes(over.state ?? 'waiting'),
 });
 
 describe('ordinal', () => {
@@ -78,7 +82,7 @@ describe('placeText', () => {
     );
   });
 
-  it('places a state this build does not know by its position', () => {
+  it('reads a state this build does not know raw, never by a position', () => {
     expect(
       placeText(
         place({
@@ -86,7 +90,7 @@ describe('placeText', () => {
           position: 2,
         }),
       ),
-    ).toBe('2nd on blizzard/master');
+    ).toBe('future-state on blizzard/master');
   });
 });
 
@@ -134,5 +138,39 @@ describe('placeLines', () => {
     ]);
     expect(lines.map((line) => line.flowId)).toEqual(['flw_1', 'flw_2']);
     expect(placeLines(undefined)).toEqual([]);
+  });
+});
+
+describe('placeInLine and placeText on the hub\'s classification', () => {
+  it('reads each known state by what the hub affirms', () => {
+    const states = [
+      ['landing', false, 'landing on blizzard/master'],
+      ['next', true, '3rd on blizzard/master'],
+      ['waiting', true, '3rd on blizzard/master'],
+      ['polling', true, '3rd on blizzard/master'],
+      ['awaiting-merge', false, 'awaiting merge on blizzard/master'],
+      ['passed-over', false, 'passed over on blizzard/master'],
+    ] as const;
+    for (const [state, inLine, text] of states) {
+      const p = place({ state, in_line: inLine });
+      expect(placeInLine(p)).toBe(inLine);
+      expect(placeText(p)).toBe(text);
+    }
+  });
+
+  it('reads an unknown state raw and never as a queue position', () => {
+    const p = place({ state: 'mystery' as ChunkFlowPlaceView['state'], in_line: false });
+    expect(placeText(p)).toBe('mystery on blizzard/master');
+  });
+
+  it('reads a place lacking in_line by its state label, even a known in-line state', () => {
+    const p = { ...place({ state: 'waiting' }), in_line: undefined } as unknown as ChunkFlowPlaceView;
+    expect(placeInLine(p)).toBe(false);
+    expect(placeText(p)).toBe('waiting on blizzard/master');
+  });
+
+  it('trusts an affirmed in_line on a state it does not know', () => {
+    const p = place({ state: 'mystery' as ChunkFlowPlaceView['state'], in_line: true });
+    expect(placeText(p)).toBe('3rd on blizzard/master');
   });
 });

@@ -29,7 +29,7 @@ const BOUNCED = 'ch_01bounced000000000000000000';
 const LANDED = 'ch_01landed0000000000000000000';
 const IDLE = 'ch_01idle000000000000000000000';
 
-const PLACE = { flow_id: 'fl_a', position: 2, state: 'waiting', branch: 'master', next_poll_at: null, repository_name: 'blizzard', repository_slug: null, resource: 'rp_a:master' } as const;
+const PLACE = { flow_id: 'fl_a', position: 2, state: 'waiting', in_line: true, branch: 'master', next_poll_at: null, repository_name: 'blizzard', repository_slug: null, resource: 'rp_a:master' } as const;
 
 const CHUNKS = [
   chunkSummary({ chunk_id: IN_LINE, graph_id: 'gr_1', graph_name: 'adv-dwf', status: 'running', current_node_id: 'nd_build', current_node_name: 'build', open_prs: [prView({ number: 41 })], flow_places: [PLACE] }),

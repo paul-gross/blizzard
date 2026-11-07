@@ -86,7 +86,7 @@
           @if (i > 0) {
             <span class="connector" [class.lit]="i <= row.stage"></span>
           }
-          <span class="stage" [class.lit]="i <= row.stage" [class.at]="i === row.stage" [class.bad]="row.bounce !== null && i === row.stage">{{ stage }}@if (i === 1 && row.line) { {{ row.line.best }}}</span>
+          <span class="stage" [class.lit]="i <= row.stage" [class.at]="i === row.stage" [style.color]="i === row.stage ? stageColor(row) : null">{{ stage }}@if (i === 1 && row.line) { {{ row.line.best }}}</span>
         }
       </span>
       @if (row.bounce; as bounce) {
