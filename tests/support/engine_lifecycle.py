@@ -79,9 +79,8 @@ class EngineOwner:
         paths = self.paths_for(engines) | self.deferred_paths.pop(node, set())
         for engine in engines:
             self.engine_paths.pop(engine, None)
-        # A descriptor cannot be attributed to one engine when a wider scope
-        # has another engine on the same file. Carry the obligation forward;
-        # the last owner must prove *all* handles to that path are closed.
+        # Shared paths remain the obligation of the last owner, which must
+        # prove that all handles to the path are closed.
         with _lock:
             for owner in _sessions:
                 for other, other_engines in owner.engines.items():
