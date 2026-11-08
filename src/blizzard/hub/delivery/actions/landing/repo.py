@@ -105,6 +105,16 @@ class LandingRun:
         if result.status is EffectStatus.FENCED:
             raise LandingFenced(f"{repo.repo} landed at {revision}, but {result.detail}")
 
+    async def settle(self, repo: RepoLanding, landed: Landed) -> None:
+        """Record ``landed``, then run its follow-up; only the landing itself can raise :class:`LandingFenced`."""
+        await self.landed(repo, landed.revision)
+        if landed.after is None:
+            return
+        try:
+            await landed.after()
+        except (NotRecorded, ForgeEscalation, ForgeRejected, ForgeNotFound, ForgeUnavailable) as exc:
+            self.say(f"{repo.repo}: a note after its landing was not written (non-fatal): {exc}")
+
     def item_lines(self) -> list[str]:
         """``Refs <reference>`` per work item, else its label — never a closing keyword or title."""
         return [
@@ -189,6 +199,8 @@ class Landed:
     """The base holds the repository's work; ``merged/<repo>`` records ``revision``."""
 
     revision: str
+    #: Best-effort annotations run only after the landing is durable; a refusal of one never undoes the landing.
+    after: Callable[[], Awaitable[None]] | None = None
 
 
 @domain_model

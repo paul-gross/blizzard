@@ -26,6 +26,7 @@ from blizzard.hub.delivery.actions.landing.repo import (
     Landed,
     LandingRun,
     NeedsPerson,
+    NoCode,
     NotRecorded,
     Ready,
     RepoLanding,
@@ -66,7 +67,7 @@ async def combine(run: LandingRun, stepped: Sequence[tuple[RepoLanding, RepoStat
     states = [state for _, state in ordered]
     for repo, state in ordered:
         if isinstance(state, Landed):
-            await run.landed(repo, state.revision)
+            await run.settle(repo, state)
             if repo.record.landing_policy is LandingPolicy.FAST_FORWARD:
                 await cleanup(repo, state.revision)
 
@@ -111,7 +112,9 @@ async def combine(run: LandingRun, stepped: Sequence[tuple[RepoLanding, RepoStat
             if isinstance(parked, NeedsPerson):
                 return run.escalate(parked.escalation)
             if isinstance(parked, Landed):
-                await run.landed(repo, parked.revision)
+                await run.settle(repo, parked)
+                continue
+            if isinstance(parked, NoCode):
                 continue
             return run.answer(PENDING)
         if not isinstance(state, Ready):
@@ -122,7 +125,7 @@ async def combine(run: LandingRun, stepped: Sequence[tuple[RepoLanding, RepoStat
             return run.answer(PENDING)
         if isinstance(outcome, NeedsPerson):
             return run.escalate(outcome.escalation)
-        await run.landed(repo, outcome.revision)
+        await run.settle(repo, outcome)
         if repo.record.landing_policy is LandingPolicy.FAST_FORWARD:
             await cleanup(repo, outcome.revision)
     return run.answer(LANDED)

@@ -1,6 +1,7 @@
 """Parked changes are watched without the hub deciding their merge."""
 
 import asyncio
+import json
 from dataclasses import replace
 from datetime import timedelta
 
@@ -11,9 +12,10 @@ from blizzard.hub.delivery.actions.land import Land
 from blizzard.hub.domain.actions.visit import Visit
 from blizzard.hub.domain.artifact.model import StoredArtifact
 from blizzard.hub.domain.chunk.no_code import no_code_marker
+from blizzard.hub.domain.config.capabilities import Capability
 from blizzard.hub.domain.config.repositories import RepositoryId
-from blizzard.hub.forge.landing import ChangeState
-from tests.support.github_double import change
+from blizzard.hub.forge.landing import ChangeState, CommitSummary, ComparisonStatus
+from tests.support.github_double import GitHubDouble, change, comparison
 from tests.support.land_action_doubles import (
     _GADGET,  # pyright: ignore[reportPrivateUsage]  # shared test helper, imported from tests.support.land_action_doubles
     _SUBMITTED,  # pyright: ignore[reportPrivateUsage]  # shared test helper, imported from tests.support.land_action_doubles
@@ -284,3 +286,102 @@ def test_the_watch_is_none_after_a_current_epoch_reopen_of_the_parked_repository
     visit = _with_no_code(_a_b_c(), _WIDGET)
     reopen = _row(ArtifactKind.ASSET, f"park-reopen/{_GADGET}/2", "")
     assert replace(visit, markers=(*visit.markers, reopen)).parked_watch() is None
+
+
+def _merged(visit: Visit, *, head: str = _SUBMITTED, base: str = "main", revision: str | None = "merged"):
+    return replace(
+        change(_WIDGET, 1, branch="feat/x", sha=head, base=base, state=ChangeState.MERGED, merged_revision=revision),
+        closed_at=visit.now,
+    )
+
+
+def test_changed_head_lands_at_the_merged_revision_with_changed_head_evidence():
+    visit = parked_visit()
+    for head in ("augmented", "replaced"):
+        forge = _forge()
+        forge.repo(_WIDGET).changes[1] = _merged(visit, head=head)
+        answer, sink = _land(forge, replace(visit, markers=(marker(visit),)))
+        assert answer.choice == "landed"
+        assert [row.revision for row in sink.landings()] == ["merged"]
+        evidence = json.loads(sink.markers()["delivery-findings"])
+        assert evidence["merged_head"] == head and evidence["submitted"] == _SUBMITTED
+        assert "person_added_commits" not in evidence
+
+
+def test_a_refused_annotation_never_costs_the_landing():
+    visit = parked_visit()
+    forge = _forge()
+    forge.repo(_WIDGET).changes[1] = _merged(visit, head="augmented")
+    sink = _Sink(refuse=("delivery-pr", "awaiting-external-merge", "delivery-findings"))
+    answer, sink = _land(forge, visit, sink)
+    assert answer.choice == "landed"
+    assert [row.revision for row in sink.landings()] == ["merged"]
+
+
+def test_a_landing_needs_neither_compare_nor_the_work_branch():
+    visit = parked_visit()
+    forge = _forge()
+    forge.repo(_WIDGET).changes[1] = _merged(visit, head="augmented")
+    forge.repo(_WIDGET).heads.clear()
+    answer, sink = _land(forge, visit, offered=frozenset({Capability.CHANGES_OPEN, Capability.CHANGES_READ}), sink=None)
+    assert answer.choice == "landed"
+    assert [row.revision for row in sink.landings()] == ["merged"]
+    assert not forge.named("compare") and not forge.named("branch_tip")
+
+
+def test_a_merged_change_into_another_base_or_without_a_revision_does_not_land():
+    visit = parked_visit()
+    current = replace(visit, markers=(marker(visit),))
+    for merged in (_merged(visit, base="release"), _merged(visit, revision=None)):
+        forge = _forge()
+        forge.repo(_WIDGET).changes[1] = merged
+        answer, sink = _land(forge, current)
+        assert not sink.landings()
+        assert answer.choice in {"awaiting-merge", "pending"}
+
+
+def test_a_merge_seen_past_the_fence_keeps_history_and_touches_no_later_repository():
+    visit = parked_visit((_WIDGET, _GADGET))
+    forge = _forge(_WIDGET, _GADGET)
+    forge.repo(_WIDGET).changes[1] = _merged(visit)
+    held = _Sink(fence_landings=True)
+    answer, sink = _land(forge, replace(visit, markers=(marker(visit),)), held)
+    assert answer.choice == "failure"
+    assert [row.repo for row in sink.landings()] == [_WIDGET]
+    assert all(repo == _WIDGET for _, repo, _ in forge.calls)
+    assert "delivery-findings" not in sink.markers()
+
+
+def _contained(forge: GitHubDouble) -> GitHubDouble:
+    state = forge.repo(_WIDGET)
+    state.base_tip = "base-tip"
+    for pair in (("main", _SUBMITTED), ("main", "feat/x")):
+        state.compares[pair] = comparison(ComparisonStatus.BEHIND)
+    return forge
+
+
+def test_park_resolves_contained_work_as_no_code_only_where_its_forge_can_prove_it():
+    forge = _contained(_forge())
+    answer, sink = _land(forge, parked_visit())
+    assert answer.choice == "landed"
+    assert sink.landings() == []
+    assert any(name.startswith("no-code/") for name in sink.markers())
+    assert not forge.named("open_change")
+
+    minimal = _contained(_forge())
+    answer, sink = _land(minimal, parked_visit(), offered=frozenset({Capability.CHANGES_OPEN, Capability.CHANGES_READ}))
+    assert answer.choice == "awaiting-merge"
+    assert not minimal.named("compare") and not minimal.named("branch_tip")
+    assert not any(name.startswith("no-code/") for name in sink.markers())
+
+
+def test_park_does_not_treat_contained_work_under_a_foreign_head_as_no_code():
+    forge = _contained(_forge())
+    state = forge.repo(_WIDGET)
+    state.heads["feat/x"] = "foreign"
+    state.compares[(_SUBMITTED, "foreign")] = comparison(
+        ComparisonStatus.AHEAD, commits=(CommitSummary("foreign", (_SUBMITTED,)),)
+    )
+    answer, sink = _land(forge, parked_visit())
+    assert answer.choice == "awaiting-merge"
+    assert not any(name.startswith("no-code/") for name in sink.markers())

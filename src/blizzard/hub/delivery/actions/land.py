@@ -92,7 +92,7 @@ class Land:
                 return run.answer(PENDING)
             if not isinstance(state, Landed):
                 return await combine(run, [(first, state)])
-            await run.landed(first, state.revision)
+            await run.settle(first, state)
             unlanded = unlanded[1:]
             if len(forges) < len(run.visit.resolution.targets):
                 return run.answer(PENDING)

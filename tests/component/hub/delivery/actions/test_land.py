@@ -1295,3 +1295,19 @@ def test_a_landing_record_is_written_past_the_fence_once_and_answers_whether_it_
     assert [a.data for a in artifacts.load_artifacts(chunk_id) if a.name == f"merged/{_WIDGET}"] == ["m1"]
     intents = [i for i in hub.services.chunks.delivery.pending_close_intents() if i.chunk_id == chunk_id]
     assert [i.ref for i in intents] == [work_ref]
+
+
+def test_base_held_work_under_a_foreign_head_is_not_no_code() -> None:
+    double = _forge()
+    state = double.repos[_WIDGET]
+    state.heads["feat/x"] = "foreign"
+    state.compares = {
+        ("main", "feat/x"): comparison(ComparisonStatus.BEHIND),
+        ("main", _SUBMITTED): comparison(ComparisonStatus.BEHIND),
+        (_SUBMITTED, "foreign"): comparison(ComparisonStatus.AHEAD, commits=(CommitSummary("foreign", (_SUBMITTED,)),)),
+    }
+    state.replies["open_change"] = [ForgeRejected("No commits between main and feat/x")]
+    answer, sink = _land(double)
+    assert answer.choice != "landed"
+    assert not any(name.startswith("no-code/") for name in sink.markers())
+    assert sink.landings() == []
