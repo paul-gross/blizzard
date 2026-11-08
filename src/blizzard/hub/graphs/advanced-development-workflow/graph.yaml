@@ -44,7 +44,7 @@ entry: plan
 #   gate          the two cold-eyes gates, on the basic tier. No `rotate:` block: a gate
 #                 is only ever reached through `fresh:gate`, so its head is minted every
 #                 entry and rotation never applies.
-#   retro         the closing retrospective, on the advanced tier and fresh every entry,
+#   retro         the closing retrospective, on the basic tier and fresh every entry,
 #                 so no `rotate:` block either. The pool pins the tier every entry. The node
 #                 synthesizes the per-node `retrospective` diaries and the asset trail, not
 #                 a resumed conversation.
@@ -118,7 +118,7 @@ sessions:
     compaction_window: "450000"
   retro:
     # Fresh every entry, like `gate`: the window is inert here too.
-    model: ["blizzard:advanced"]
+    model: ["blizzard:basic"]
     compaction_window: "450000"
 
 # `docket` is this graph's own findings-docket definition — the format every plan-review/review

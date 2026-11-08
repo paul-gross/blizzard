@@ -63,7 +63,7 @@ def test_adv_dwf_declares_the_six_pools_and_bounds_only_the_accumulating_ones() 
     assert doc.sessions["integration"].model == ["blizzard:basic"]
     assert doc.sessions["verification"].model == ["blizzard:basic"]
     assert doc.sessions["gate"].model == ["blizzard:basic"]
-    assert doc.sessions["retro"].model == ["blizzard:advanced"]
+    assert doc.sessions["retro"].model == ["blizzard:basic"]
     # `gate` and `retro` are only ever reached fresh, so a bound would never apply to them.
     assert doc.sessions["retro"].rotate is None
     assert doc.sessions["code"].rotate is not None
