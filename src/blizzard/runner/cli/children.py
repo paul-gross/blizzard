@@ -1,5 +1,5 @@
-"""The runner CLI's carrier — the shared collaborators extended with the launch seam and the opencode loopback
-transport (``bzh:dependency-injection``)."""
+"""The runner CLI's carrier — the shared collaborators extended with the launch seam, the opencode loopback
+transport, and the OpenCode 2 service transport (``bzh:dependency-injection``)."""
 
 from __future__ import annotations
 
@@ -9,6 +9,7 @@ import click
 
 from blizzard.cli.collaborators import CliCollaborators
 from blizzard.runner.harness.opencode.compatibility.loopback import ILoopbackTransport, UrllibLoopbackTransport
+from blizzard.runner.harness.opencode_v2.transport import IServiceTransport, UrllibServiceTransport
 from blizzard.runner.process.child_processes import IChildProcesses
 from blizzard.runner.process.internal.subprocess_child_processes import SubprocessChildProcesses
 
@@ -17,12 +18,13 @@ _PIN = "blizzard.runner.cli.children"
 
 @dataclass(frozen=True)
 class RunnerCliCollaborators(CliCollaborators):
-    """What a runner verb acts through: the shared clocks and HTTP factory, plus the child-process launcher and
-    the opencode loopback transport. An invoker hands its own to the root group as ``obj``; with none, the
-    production ones are built."""
+    """What a runner verb acts through: the shared clocks and HTTP factory, plus the child-process launcher,
+    the opencode loopback transport, and the OpenCode 2 service transport. An invoker hands its own to the root
+    group as ``obj``; with none, the production ones are built."""
 
     children: IChildProcesses
     loopback: ILoopbackTransport
+    service: IServiceTransport
 
     @classmethod
     def of(cls, ctx: click.Context) -> RunnerCliCollaborators:
@@ -43,6 +45,7 @@ class RunnerCliCollaborators(CliCollaborators):
             monotonic_clock=shared.monotonic_clock,
             children=SubprocessChildProcesses(),
             loopback=UrllibLoopbackTransport(),
+            service=UrllibServiceTransport(),
         )
 
 

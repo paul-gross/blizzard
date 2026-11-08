@@ -7,6 +7,7 @@ import json
 import sqlite3
 import stat
 from pathlib import Path
+from typing import cast
 
 import pytest
 from click.testing import CliRunner
@@ -15,8 +16,16 @@ from blizzard.runner.cli import runner as runner_group
 from blizzard.runner.harness.admission import classification_of_manifest
 from blizzard.runner.harness.compatibility import CompatibilityClassification, EvidenceState
 from blizzard.runner.harness.json_value import JsonObject
+from blizzard.runner.harness.opencode_v2.client import ModelReference
 from blizzard.runner.harness.opencode_v2.compatibility.corpus import ProofEvidence, Sanitizer
-from blizzard.runner.harness.opencode_v2.compatibility.proof import final_assistant_text, part_error_type, tool_output
+from blizzard.runner.harness.opencode_v2.compatibility.host import IProofHost
+from blizzard.runner.harness.opencode_v2.compatibility.proof import (
+    CoreFactory,
+    OpenCodeTwoProof,
+    final_assistant_text,
+    part_error_type,
+    tool_output,
+)
 from blizzard.runner.harness.opencode_v2.compatibility.rows import (
     ROW_ROSTER,
     IncompleteProofError,
@@ -27,6 +36,7 @@ from blizzard.runner.harness.opencode_v2.compatibility.rows import (
 )
 from blizzard.runner.harness.opencode_v2.compatibility.store_migration import (
     MIGRATION_KV_KEY,
+    IStoreMigrationProbe,
     first_session_id,
     snapshot,
 )
@@ -183,3 +193,43 @@ def test_a_version_neither_major_admits_is_reported_and_nothing_is_probed(tmp_pa
     assert "outside every admitted range" in result.output
     assert "nothing was probed" in result.output
     assert not evidence.exists()
+
+
+@pytest.mark.parametrize(
+    ("reply", "recorded", "state"),
+    [
+        ("<Choice>pass</Choice> done", "pass", EvidenceState.OBSERVED),
+        ("<Choice>step2</Choice>", "step2", EvidenceState.OBSERVED),
+        ("<Choice> </Choice><Choice>done</Choice>", None, EvidenceState.FAILED),
+        ("no verdict here", None, EvidenceState.FAILED),
+        ("<Choice>pass</Choice> tool-output-not-the-verdict", "pass", EvidenceState.FAILED),
+    ],
+)
+def test_the_judgement_row_reads_the_verdict_production_reads(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, reply: str, recorded: str | None, state: EvidenceState
+) -> None:
+    proof = OpenCodeTwoProof(
+        binary="opencode",
+        model=ModelReference("p", "m"),
+        scratch=tmp_path,
+        host=cast(IProofHost, object()),
+        core_factory=cast(CoreFactory, object()),
+        migration=cast(IStoreMigrationProbe, object()),
+    )
+    assistant: JsonObject = {"type": "assistant", "content": [{"type": "text", "text": reply}]}
+
+    def open_session(label: str, *args: object, **kwargs: object) -> str:
+        del label, args, kwargs
+        return "ses_1"
+
+    def turn(*args: object, **kwargs: object) -> list[JsonObject]:
+        del args, kwargs
+        return [assistant]
+
+    monkeypatch.setattr(proof, "open", open_session)
+    monkeypatch.setattr(proof, "turn", turn)
+
+    observation = proof.row_judgement()
+
+    assert observation.state is state
+    assert (observation.facts or {})["choice"] == recorded

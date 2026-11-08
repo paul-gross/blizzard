@@ -12,6 +12,7 @@ from dataclasses import dataclass
 from datetime import UTC, datetime
 
 from blizzard.foundation.roles import adapter_model, domain_model
+from blizzard.runner.harness.harness_shared import cap_block
 from blizzard.runner.harness.opencode.shapes import (
     OpenCodeMessage,
     OpenCodePart,
@@ -24,15 +25,12 @@ from blizzard.runner.harness.transcript import LateToolOutput, NormalizedTurn, N
 #: The normalizer version stamped onto every batch; bumped when this module's output changes.
 NORMALIZER_VERSION = "opencode-export/1"
 
-#: Cap each text / thinking / tool-output string block at this many characters.
-MAX_BLOCK_CHARS = 1024 * 1024
-
 
 @domain_model
 @dataclass(frozen=True)
 class Text:
-    """One string block, capped at :data:`MAX_BLOCK_CHARS`. OpenCode's own export carries
-    plain text — no ANSI escape sequences observed in any pinned fixture — so this block
+    """One string block, capped at :data:`~blizzard.runner.harness.harness_shared.MAX_BLOCK_CHARS`.
+    OpenCode's own export carries plain text — no ANSI escape sequences observed in any pinned fixture — so this block
     strips none; it only truncates."""
 
     text: str
@@ -40,9 +38,7 @@ class Text:
 
     @classmethod
     def of(cls, raw: str) -> Text:
-        if len(raw) > MAX_BLOCK_CHARS:
-            return cls(raw[:MAX_BLOCK_CHARS], True)
-        return cls(raw, False)
+        return cls(*cap_block(raw))
 
 
 _EMPTY = Text("", False)
@@ -222,7 +218,6 @@ def _tool_turn(index: int, part: OpenCodePart, timestamp: datetime | None) -> No
 
 
 __all__ = [
-    "MAX_BLOCK_CHARS",
     "NORMALIZER_VERSION",
     "ChildCandidate",
     "Text",

@@ -2,6 +2,7 @@
 
 from collections.abc import Mapping
 
+from blizzard.runner.harness.harness_shared import CompactionWindow, parse_compaction_window
 from blizzard.runner.harness.json_value import JsonObject, JsonValue
 from blizzard.runner.harness.opencode.model_limits import OpenCodeModelLimits
 from blizzard.runner.harness.opencode.permissions.permission_compose import merge_overrides
@@ -45,7 +46,10 @@ def compose_window(
         reserved = min(20000, min(output, 32000))
     if not isinstance(reserved, int) or isinstance(reserved, bool) or reserved < 0:
         return None
-    numeric = int(window[:-1]) * 1000 if window.endswith(("k", "K")) else int(window)
+    parsed = parse_compaction_window(window)
+    if not isinstance(parsed, CompactionWindow) or parsed.tokens is None:
+        raise ValueError(f"not a token-count compaction window: {window!r}")
+    numeric = parsed.tokens
     return merge_overrides(
         base,
         {

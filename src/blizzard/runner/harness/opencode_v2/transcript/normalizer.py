@@ -9,12 +9,11 @@ from dataclasses import dataclass, field
 from datetime import UTC, datetime
 
 from blizzard.foundation.roles import domain_model
+from blizzard.runner.harness.harness_shared import cap_block
 from blizzard.runner.harness.opencode_v2.shapes import Message, Part
 from blizzard.runner.harness.transcript import LateToolOutput, NormalizedTurn, NormalizedTurnKind, ToolCall
 
 NORMALIZER_VERSION = "opencode-v2/1"
-#: Each text, thinking and tool-output block is capped at this many characters.
-MAX_BLOCK_CHARS = 1024 * 1024
 #: The call that spawns a child session.
 SUBAGENT_TOOL = "subagent"
 
@@ -31,10 +30,6 @@ class MessageTurns:
     turns: list[NormalizedTurn] = field(default_factory=list[NormalizedTurn])
     calls: dict[str, int] = field(default_factory=dict[str, int])
     pending: tuple[str, ...] = ()
-
-
-def _capped(raw: str) -> tuple[str, bool]:
-    return (raw[:MAX_BLOCK_CHARS], True) if len(raw) > MAX_BLOCK_CHARS else (raw, False)
 
 
 def _utc(epoch_ms: int | None) -> datetime | None:
@@ -126,13 +121,13 @@ def late_outputs(message: Message, pending: Sequence[str]) -> tuple[list[LateToo
         if output is None:
             waiting.append(call_id)
             continue
-        text, truncated = _capped(output)
+        text, truncated = cap_block(output)
         patches.append(LateToolOutput(tool_use_id=call_id, output=text, output_truncated=truncated))
     return patches, tuple(waiting)
 
 
 def _text_turn(index: int, kind: NormalizedTurnKind, raw: str, timestamp: datetime | None) -> NormalizedTurn:
-    text, truncated = _capped(raw)
+    text, truncated = cap_block(raw)
     return NormalizedTurn(
         index=index,
         kind=kind,
@@ -146,7 +141,7 @@ def _text_turn(index: int, kind: NormalizedTurnKind, raw: str, timestamp: dateti
 
 
 def _thinking_turn(index: int, raw: str, timestamp: datetime | None) -> NormalizedTurn:
-    text, truncated = _capped(raw)
+    text, truncated = cap_block(raw)
     return NormalizedTurn(
         index=index,
         kind="thinking",
@@ -161,7 +156,7 @@ def _thinking_turn(index: int, raw: str, timestamp: datetime | None) -> Normaliz
 
 def _tool_turn(index: int, part: Part, timestamp: datetime | None) -> NormalizedTurn:
     raw = tool_output(part)
-    output, truncated = _capped(raw) if raw is not None else (None, False)
+    output, truncated = cap_block(raw) if raw is not None else (None, False)
     tool = ToolCall(
         name=part.name or "",
         input=part.state.input if part.state is not None else {},
@@ -184,7 +179,6 @@ def _tool_turn(index: int, part: Part, timestamp: datetime | None) -> Normalized
 
 
 __all__ = [
-    "MAX_BLOCK_CHARS",
     "NORMALIZER_VERSION",
     "SUBAGENT_TOOL",
     "MessageTurns",

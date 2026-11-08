@@ -13,7 +13,7 @@ from pathlib import Path
 import pytest
 import structlog
 
-from blizzard.runner.harness.claude_code import normalizer as normalizer_module
+from blizzard.runner.harness import harness_shared
 from blizzard.runner.harness.claude_code.transcript import ClaudeCodeTranscriptSource
 from blizzard.runner.harness.transcript import TranscriptErrorFactory
 from blizzard.runner.transcripts.internal import projected_transcript_repository as projection_module
@@ -215,7 +215,7 @@ def test_max_turns_cap_keeps_the_most_recent_and_flags_truncated(
 def test_max_block_chars_caps_assistant_text_without_flagging_file_level_truncation(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    monkeypatch.setattr(normalizer_module, "MAX_BLOCK_CHARS", 10)
+    monkeypatch.setattr(harness_shared, "MAX_BLOCK_CHARS", 10)
     _write(tmp_path, [fx.assistant_text("x" * 50)])
     transcript = _read(tmp_path)
 

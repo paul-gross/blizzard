@@ -4,7 +4,6 @@ and limit is read from that driver's own result, never OpenCode's output."""
 
 from __future__ import annotations
 
-import re
 import shlex
 from collections.abc import Sequence
 from datetime import datetime, timedelta
@@ -55,15 +54,12 @@ _log = get_logger("blizzard.runner.harness")
 SESSION_ID_PREFIX = "ses"
 DEFAULT_SUPPORTED_MODELS: tuple[str, ...] = ("*/*",)
 _EFFORT_ORDINAL = frozenset({"low", "medium", "high", "max"})
-_WINDOW = re.compile(r"(?P<count>[0-9]+)(?P<thousands>[kK]?)")
 
 
 def window_tokens(window: str | None) -> int | None:
     """A resolved compaction window in tokens; ``None`` for ``auto`` or none, which leave the operator's own."""
-    match = _WINDOW.fullmatch(window or "")
-    if match is None:
-        return None
-    return int(match["count"]) * (1000 if match["thousands"] else 1)
+    parsed = harness_shared.parse_compaction_window(window)
+    return parsed.tokens if isinstance(parsed, harness_shared.CompactionWindow) else None
 
 
 class OpenCodeTwoAdapter:
@@ -163,7 +159,7 @@ class OpenCodeTwoAdapter:
         return value if value in _EFFORT_ORDINAL else None
 
     def resolve_compaction_window(self, value: str | None) -> str | None:
-        if value is None or not (value == "auto" or _WINDOW.fullmatch(value)):
+        if not isinstance(harness_shared.parse_compaction_window(value), harness_shared.CompactionWindow):
             return None
         return value
 

@@ -11,7 +11,7 @@ import json
 
 import pytest
 
-from blizzard.runner.harness.claude_code import normalizer as normalizer_module
+from blizzard.runner.harness import harness_shared
 from blizzard.runner.harness.claude_code.normalizer import NormalizedFile, Run, TranscriptEntry
 from blizzard.runner.harness.json_value import JsonObject
 from tests.support import transcript_fixtures as fx
@@ -129,7 +129,7 @@ def test_malformed_and_truncated_records_degrade_to_fewer_turns_not_a_raise() ->
 
 
 def test_max_block_chars_caps_a_turn(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(normalizer_module, "MAX_BLOCK_CHARS", 10)
+    monkeypatch.setattr(harness_shared, "MAX_BLOCK_CHARS", 10)
     result = NormalizedFile.of_lines([fx.assistant_text("x" * 50)])
 
     assert len(result.turns[0].text) == 10
@@ -623,3 +623,11 @@ def test_sidecar_file_records_normalize_as_their_own_main_conversation() -> None
 
     assert [t.kind for t in result.turns] == ["env", "asst"]
     assert result.unlinked_sidechains == []
+
+
+def test_the_ansi_strip_precedes_the_cap(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(harness_shared, "MAX_BLOCK_CHARS", 10)
+    result = NormalizedFile.of_lines([fx.assistant_text("\x1b[31m" + "x" * 10 + "\x1b[0m")])
+
+    assert result.turns[0].text == "x" * 10
+    assert result.turns[0].truncated is False
