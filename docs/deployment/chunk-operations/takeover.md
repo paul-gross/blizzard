@@ -68,10 +68,11 @@ escalation carries one.
 Above the commands, the board's escalation panel states why the chunk escalated — a sentence chosen by the escalation's
 cause, followed by its one-line detail. A hub-authored cause (`bounce-cap`, `migration-target-unresolvable`,
 `hub-action-missing`, `hub-action-stuck`, `unroutable-outcome`) never names a worker, an `escalate-choice` escalation
-names the worker's own judgement that the work cannot be completed by a fleet worker, and an escalation with no recorded
-cause reads as a neutral "Escalated" naming no actor. `blizzard runner
-status` prints, beneath a `no-acceptable-harness`
-escalation, each harness's id, availability, and health cause.
+names the worker's own judgement that the work cannot be completed by a fleet worker, with the assets that step produced
+on the chunk beside it, and an escalation with no recorded cause reads as a neutral "Escalated" naming no actor.
+`blizzard runner
+status` prints, beneath a `no-acceptable-harness` escalation, each harness's id, availability, and
+health cause.
 
 Which commands an escalation carries, and whether its session is reachable through takeover at all, is owned by
 blizzard-context's

@@ -10,10 +10,20 @@ from datetime import timedelta
 from pathlib import Path
 from typing import Any
 
-from sqlalchemy import Table
+import pytest
+from sqlalchemy import Table, event, select
 
 from blizzard.hub.store import schema as s
-from tests.support.scaffolding import HubHarness, build_hub, chunk_rows, ingest, report_lease
+from blizzard.hub.store.internal import chunk_escalations_store
+from tests.support.scaffolding import (
+    HubHarness,
+    build_hub,
+    chunk_rows,
+    emitted_events,
+    hub_scoped,
+    ingest,
+    report_lease,
+)
 
 _YAML = """
 name: default-delivery
@@ -62,13 +72,20 @@ class _Chunk:
         assert claim.status_code == 201, claim.text
         report_lease(hub, self.chunk_id, epoch=1, seq=1)
 
-    def complete(self, choice: str, *, epoch: int = 1, decision_id: str | None = None) -> dict[str, Any]:
+    def complete(
+        self,
+        choice: str,
+        *,
+        epoch: int = 1,
+        decision_id: str | None = None,
+        artifacts: list[dict[str, Any]] | None = None,
+    ) -> dict[str, Any]:
         body: dict[str, Any] = {
             "choice": choice,
             "epoch": epoch,
             "runner_id": "r1",
             "from_node_id": self.node_id,
-            "artifacts": [],
+            "artifacts": artifacts or [],
         }
         if decision_id is not None:
             body["decision_id"] = decision_id
@@ -81,6 +98,30 @@ class _Chunk:
 
     def rows(self, table: Table) -> int:
         return chunk_rows(self.hub, table, self.chunk_id)
+
+    def artifact_rows(self) -> list[tuple[str, str, int, str | None]]:
+        with self.hub.engine.connect() as conn:
+            found = conn.execute(
+                hub_scoped(
+                    select(s.artifacts.c.name, s.artifacts.c.node_name, s.artifacts.c.epoch, s.artifacts.c.data)
+                    .where(s.artifacts.c.chunk_id == self.chunk_id)
+                    .order_by(s.artifacts.c.seq)
+                )
+            ).all()
+        return [(r.name, r.node_name, r.epoch, r.data) for r in found]
+
+
+_ARTIFACTS: list[dict[str, Any]] = [
+    {"name": "reasoning", "kind": "asset", "content": "cannot be built by a worker"},
+    {"name": "notes", "kind": "asset", "content": "see the spike"},
+    {
+        "name": "work",
+        "kind": "git_commit",
+        "repo": "acme/widget",
+        "branch_name": "blizzard/ch-1",
+        "commit_hash": "a" * 40,
+    },
+]
 
 
 def test_the_escalate_choice_parks_the_chunk_needs_human_and_records_no_transition(tmp_path: Path) -> None:
@@ -195,3 +236,162 @@ def test_resubmitting_the_unresolvable_cross_graph_choice_is_still_answered_quie
     assert chunk.complete("ghost")["outcome"] == _PARKED
 
     assert chunk.rows(s.escalations) == 1
+
+
+def test_the_escalate_choice_persists_its_artifacts_with_the_escalation(tmp_path: Path) -> None:
+    chunk = _Chunk(build_hub(tmp_path))
+
+    assert chunk.complete("unfulfillable", artifacts=_ARTIFACTS)["outcome"] == _PARKED
+
+    rows = chunk.artifact_rows()
+    assert [(n, node, epoch) for n, node, epoch, _ in rows] == [
+        ("reasoning", "build", 1),
+        ("notes", "build", 1),
+        ("work", "build", 1),
+    ]
+    assert rows[0][3] == "cannot be built by a worker"
+    assert chunk.rows(s.escalations) == 1 and chunk.rows(s.transitions) == 0
+    assert {a["name"] for a in chunk.detail()["artifacts"]} >= {"reasoning", "notes", "work"}
+
+
+def test_resubmitting_the_escalate_choice_with_other_artifacts_adds_none(tmp_path: Path) -> None:
+    chunk = _Chunk(build_hub(tmp_path))
+    assert chunk.complete("unfulfillable", artifacts=_ARTIFACTS)["outcome"] == _PARKED
+    before = chunk.artifact_rows()
+
+    other = [{"name": "extra", "kind": "asset", "content": "later"}]
+    assert chunk.complete("unfulfillable", artifacts=other)["outcome"] == _PARKED
+
+    assert chunk.artifact_rows() == before
+
+
+def test_a_losing_different_escalate_choice_adds_none_of_its_artifacts(tmp_path: Path) -> None:
+    chunk = _Chunk(build_hub(tmp_path))
+    assert chunk.complete("unfulfillable", artifacts=_ARTIFACTS)["outcome"] == _PARKED
+    before = chunk.artifact_rows()
+
+    refused = chunk.complete("blocked", artifacts=[{"name": "extra", "kind": "asset", "content": "x"}])
+
+    assert refused["outcome"] == "failure"
+    assert chunk.artifact_rows() == before
+
+
+def test_a_stale_epoch_escalate_choice_writes_no_escalation_and_no_artifacts(tmp_path: Path) -> None:
+    chunk = _Chunk(build_hub(tmp_path))
+
+    refused = chunk.complete("unfulfillable", epoch=2, artifacts=_ARTIFACTS)
+
+    assert refused["outcome"] == "failure"
+    assert chunk.rows(s.escalations) == 0 and chunk.artifact_rows() == []
+
+
+def test_a_later_attempt_appends_its_own_artifacts_and_keeps_the_earlier(tmp_path: Path) -> None:
+    chunk = _Chunk(build_hub(tmp_path))
+    assert chunk.complete("unfulfillable", artifacts=_ARTIFACTS)["outcome"] == _PARKED
+    chunk.hub.clock.advance(timedelta(seconds=1))
+    assert chunk.hub.client.post(f"/api/chunks/{chunk.chunk_id}/requeues").status_code == 202
+    claim = chunk.hub.client.post(
+        "/api/fleet/routes",
+        json={"chunk_id": chunk.chunk_id, "runner_id": "r1", "workspace_id": "w1", "environment_ids": ["e"]},
+    )
+    assert claim.status_code == 201, claim.text
+    report_lease(chunk.hub, chunk.chunk_id, epoch=2, seq=2)
+
+    again = [{"name": "retry-notes", "kind": "asset", "content": "second try"}]
+    assert chunk.complete("unfulfillable", epoch=2, artifacts=again)["outcome"] == _PARKED
+
+    assert [(n, e) for n, _, e, _ in chunk.artifact_rows()] == [
+        ("reasoning", 1),
+        ("notes", 1),
+        ("work", 1),
+        ("retry-notes", 2),
+    ]
+
+
+def test_a_failing_artifact_insert_leaves_no_escalation_and_no_artifacts(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    chunk = _Chunk(build_hub(tmp_path))
+    since = chunk.hub.events.latest_id()
+
+    def boom(*_args: Any, **_kwargs: Any) -> int:
+        raise RuntimeError("rollback")
+
+    monkeypatch.setattr(chunk_escalations_store, "next_artifact_seq", boom)
+    with pytest.raises(RuntimeError, match="rollback"):
+        chunk.hub.client.post(
+            f"/api/fleet/chunks/{chunk.chunk_id}/completions",
+            json={
+                "choice": "unfulfillable",
+                "epoch": 1,
+                "runner_id": "r1",
+                "from_node_id": chunk.node_id,
+                "artifacts": _ARTIFACTS,
+            },
+        )
+
+    assert chunk.rows(s.escalations) == 0 and chunk.artifact_rows() == []
+    assert chunk.detail()["status"] != "needs_human"
+    assert emitted_events(chunk.hub, since=since) == []
+
+
+def test_a_failing_escalation_insert_leaves_no_artifacts(tmp_path: Path) -> None:
+    chunk = _Chunk(build_hub(tmp_path))
+
+    def fail_on_escalation(_conn: Any, _cursor: Any, statement: str, *_rest: Any) -> None:
+        if statement.lstrip().upper().startswith("INSERT INTO ESCALATIONS"):
+            raise RuntimeError("rollback")
+
+    event.listen(chunk.hub.engine, "before_cursor_execute", fail_on_escalation)
+    try:
+        with pytest.raises(RuntimeError, match="rollback"):
+            chunk.hub.client.post(
+                f"/api/fleet/chunks/{chunk.chunk_id}/completions",
+                json={
+                    "choice": "unfulfillable",
+                    "epoch": 1,
+                    "runner_id": "r1",
+                    "from_node_id": chunk.node_id,
+                    "artifacts": _ARTIFACTS,
+                },
+            )
+    finally:
+        event.remove(chunk.hub.engine, "before_cursor_execute", fail_on_escalation)
+
+    assert chunk.rows(s.escalations) == 0 and chunk.artifact_rows() == []
+
+
+def test_a_displaced_claimant_escalate_choice_writes_neither_escalation_nor_artifacts(tmp_path: Path) -> None:
+    chunk = _Chunk(build_hub(tmp_path))
+    resp = chunk.hub.client.post(
+        f"/api/fleet/chunks/{chunk.chunk_id}/completions",
+        json={
+            "choice": "unfulfillable",
+            "epoch": 1,
+            "runner_id": "r2",
+            "from_node_id": chunk.node_id,
+            "artifacts": _ARTIFACTS,
+        },
+    )
+
+    assert resp.status_code == 200 and resp.json()["outcome"] == "failure"
+    assert chunk.rows(s.escalations) == 0 and chunk.artifact_rows() == []
+
+
+def test_a_gate_resolved_escalate_choice_keeps_the_decisions_artifacts_exactly_once(tmp_path: Path) -> None:
+    chunk = _Chunk(build_hub(tmp_path))
+    decided = chunk.hub.client.post(
+        f"/api/fleet/chunks/{chunk.chunk_id}/decisions",
+        json={"from_node_id": chunk.node_id, "epoch": 1, "runner_id": "r1", "artifacts": _ARTIFACTS},
+    )
+    assert decided.status_code == 200, decided.text
+    decision_id = chunk.detail()["decision"]["decision_id"]
+    resolved = chunk.hub.client.post(f"/api/decisions/{decision_id}/resolutions", json={"choice": "unfulfillable"})
+    assert resolved.status_code == 200, resolved.text
+    before = chunk.artifact_rows()
+    assert [n for n, *_ in before] == ["reasoning", "notes", "work"]
+
+    other = [{"name": "extra", "kind": "asset", "content": "x"}]
+    assert chunk.complete("unfulfillable", decision_id=decision_id, artifacts=other)["outcome"] == _PARKED
+
+    assert chunk.artifact_rows() == before

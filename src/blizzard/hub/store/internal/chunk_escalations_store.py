@@ -6,13 +6,15 @@ Timestamps arrive already stamped (``bzh:injected-clock``)."""
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from datetime import datetime
 from typing import Any
 
 from sqlalchemy import Connection, Row
 
 from blizzard.foundation.clock import IClock
-from blizzard.hub.domain.chunk.model import EscalationOpen
+from blizzard.hub.domain.artifact.model import StoredArtifact
+from blizzard.hub.domain.chunk.model import CloseEnqueueDecision, EscalationOpen
 from blizzard.hub.domain.chunk.ports.escalations import BounceEscalationOutcome, IWriteChunkEscalationsRepository
 from blizzard.hub.domain.chunk.ports.exclusive import ILockedChunkRead
 from blizzard.hub.domain.chunk.ports.facts import IReadChunkFactsRepository
@@ -20,7 +22,14 @@ from blizzard.hub.domain.chunk.ports.fence import Claimant, EpochAdmission, Fenc
 from blizzard.hub.domain.kernel.transactions import Transaction
 from blizzard.hub.domain.projects.model import ProjectId
 from blizzard.hub.store import schema as s
-from blizzard.hub.store.internal.chunk_rows import ephemeral_ids_select, fence, record_hub_lease
+from blizzard.hub.store.internal.chunk_rows import (
+    enqueue_close_intents,
+    ephemeral_ids_select,
+    fence,
+    is_landing_marker,
+    next_artifact_seq,
+    record_hub_lease,
+)
 from blizzard.hub.store.internal.chunk_terminal_predicates import maybe_live
 from blizzard.hub.store.internal.newest_fact import newer_row_exists
 from blizzard.hub.store.locking import lock_chunk_row
@@ -68,6 +77,8 @@ class ChunkEscalationsStore:
         wrapped_takeover_command: str = "",
         cause: str | None,
         detail: str | None,
+        artifacts: Sequence[StoredArtifact] = (),
+        close_decision: CloseEnqueueDecision | None = None,
         transaction: Transaction | None = None,
     ) -> int | FenceRefusal:
         with chunk_locked_connection(self._store, chunk_id, transaction, "record_escalation") as conn:
@@ -87,6 +98,25 @@ class ChunkEscalationsStore:
                 )
             )
             key = result.inserted_primary_key
+            for row in artifacts:
+                conn.execute(
+                    self._store.insert(s.artifacts).values(
+                        artifact_id=row.artifact_id,
+                        chunk_id=row.chunk_id,
+                        node_id=row.node_id,
+                        node_name=row.node_name,
+                        epoch=row.epoch,
+                        name=row.name,
+                        kind=row.kind.value,
+                        data=row.data,
+                        repo=row.repo,
+                        forge=row.forge,
+                        produced_at=at,
+                        seq=next_artifact_seq(conn, row.chunk_id),
+                    )
+                )
+            if close_decision is not None and any(is_landing_marker(row.name, row.data) for row in artifacts):
+                enqueue_close_intents(conn, chunk_id, at=at, close_decision=close_decision)
             return int(key[0]) if key is not None else 0
 
     def record_bounce_locked(
