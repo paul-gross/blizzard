@@ -331,7 +331,10 @@ and a bundle's `opencode/` directory must be empty. Before each launch the runne
 or `opencode service get disabled` answers neither `true` nor `false` — and fails the turn as a spawn failure when none
 answers within 30 seconds. The version it advertises and records on every spawn is the service's own; a launch on a
 service whose version changed since it was advertised is refused, and the runner observes the version afresh and
-recalculates the capability's health at once, rather than at the end of its refresh window.
+recalculates the capability's health at once, rather than at the end of its refresh window. The refused launch is then
+relaunched once on the version just observed, so a change within OpenCode 2's range costs nothing. A version the runner
+cannot hold refuses that relaunch too, and the chunk escalates `harness-version-changed` without spending a retry
+([observability.md](./observability.md)): restart the runner on a supported release, then requeue.
 
 The driver answers each permission request the session's rules leave: `auto` and `dangerous` allow it once, and `normal`
 refuses it with a message, so the call fails as a tool error and the turn carries on — OpenCode 2 ends a turn unsettled
