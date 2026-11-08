@@ -1,7 +1,8 @@
 """Work-source records: the stored shape, validation, sparse merge, and the seams.
 
-A work source has the slugged configured-record shape (``bzh:configured-record``). ``hub`` is never a
-work source's slug, current or former: the built-in source holds that key."""
+A work source has the configured-record shape (``bzh:configured-record``) and its three names
+(``bzh:configured-record-names``). ``hub`` is never a work source's slug, current or former: the built-in source holds
+that key."""
 
 from __future__ import annotations
 
