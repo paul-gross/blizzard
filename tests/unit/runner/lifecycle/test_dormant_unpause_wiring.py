@@ -393,7 +393,7 @@ def _moving(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, move: UnpauseMove) 
     _spy(monkeypatch, dormant, "unpause_move", move)
     _spy(monkeypatch, dormant, "releases_usage_limited", False)
     rig.resumes = _spy(monkeypatch, type(rig.ctx.stores.pause), "record_pause_park_resume", bound=True)
-    rig.wake = _spy(monkeypatch, DormantSession, "_wake", (4321, _NOW), bound=True)
+    rig.wake = _spy(monkeypatch, DormantSession, "_wake", (4321, _NOW, None), bound=True)
     rig.worker_usage = _spy(monkeypatch, UsageRecorder, "record_worker", bound=True)
     return rig
 

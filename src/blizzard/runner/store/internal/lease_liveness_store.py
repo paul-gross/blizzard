@@ -16,12 +16,14 @@ from blizzard.foundation.logging import get_logger
 from blizzard.foundation.store.batching import id_batches
 from blizzard.runner.harness.identity import SessionReference
 from blizzard.runner.leases.liveness import IWriteLeaseLivenessRepository, LeaseLivenessFacts
-from blizzard.runner.store.internal.base import NO_NORMALIZER_VERSION, enqueue_transcript_final
+from blizzard.runner.leases.model import ParkResume
+from blizzard.runner.store.internal.base import NO_NORMALIZER_VERSION, enqueue_transcript_final, insert_outbox_row
 from blizzard.runner.store.schema import (
     heartbeats,
     lease_context,
     lease_spawns,
     leases,
+    outbound_buffer,
     park_resumes,
     transcript_segments,
 )
@@ -284,8 +286,9 @@ class LeaseLivenessStore:
         harness_version: str | None = None,
         pgid: int | None = None,
         spawn_cwd: str | None = None,
-        park_resume_question_id: str | None = None,
-    ) -> None:
+        park_resume: ParkResume | None = None,
+    ) -> int | None:
+        seq: int | None = None
         with self._store.begin() as conn:
             conn.execute(
                 self._store.update(leases)
@@ -325,14 +328,28 @@ class LeaseLivenessStore:
                 at=spawned_at,
                 spawn_cwd=spawn_cwd,
             )
-            if park_resume_question_id is not None:
+            if park_resume is not None:
                 # The answered park closes with the pid that consumes the answer: a crash
                 # before this commit leaves the park open for a single re-wake, never resumed
                 # with no worker; after it, the park reads resumed and the pid owned.
                 conn.execute(
                     self._store.insert(park_resumes).values(
-                        lease_id=lease_id, question_id=park_resume_question_id, resumed_at=spawned_at
+                        lease_id=lease_id, question_id=park_resume.question_id, resumed_at=spawned_at
                     )
+                )
+                # The receipt joins the same transaction: the answer is delivered exactly when its resume is durable.
+                chunk_id = conn.execute(
+                    self._store.select(leases, leases.c.chunk_id).where(leases.c.lease_id == lease_id)
+                ).scalar_one()
+                seq = insert_outbox_row(
+                    self._store,
+                    conn,
+                    outbound_buffer,
+                    kind=park_resume.fact_kind,
+                    chunk_id=chunk_id,
+                    lease_id=lease_id,
+                    payload=park_resume.fact_payload,
+                    created_at=spawned_at,
                 )
         _log.info(
             "worker spawned",
@@ -341,6 +358,7 @@ class LeaseLivenessStore:
             session_id=session.session_id,
             harness_id=session.harness_id,
         )
+        return seq
 
     def record_provisional_spawn(
         self,

@@ -20,11 +20,12 @@ from blizzard.foundation.crash import CrashPoint
 from blizzard.foundation.escalation_causes import EscalationCause
 from blizzard.foundation.fact_kinds import ANSWER_DELIVERED, ESCALATION_RECORDED, EVENT_RECORDED, LEASE_MINTED
 from blizzard.foundation.leases import LeaseClosureReason
+from blizzard.runner.events.broker import EventBroker
 from blizzard.runner.harness.adapter import WorkerHandle
 from blizzard.runner.harness.identity import CLAUDE_CODE_HARNESS_ID, SessionReference
 from blizzard.runner.harness.registry import UnknownHarnessError
 from blizzard.runner.hub.client import HubQuestion
-from blizzard.runner.leases.model import NewLease
+from blizzard.runner.leases.model import NewLease, ParkResume
 from blizzard.runner.leases.record import ClosureFact
 from blizzard.runner.lifecycle.attempt import Attempt
 from blizzard.runner.lifecycle.dormant import DormantSession
@@ -49,6 +50,7 @@ from tests.support.runner_mint import new_mint
 _NOW = datetime(2026, 7, 13, 12, 0, 0, tzinfo=UTC)
 _HANDLE = WorkerHandle(session_id="sess-a", pid=100, process_start_time="start-100", pgid=100)
 _SESSION = SessionReference(CLAUDE_CODE_HARNESS_ID, "sess-a")
+_RESUME = ParkResume("qn_1", ANSWER_DELIVERED, '{"question_id": "qn_1"}')
 
 
 def _store(tmp_path: Path) -> SqlAlchemyRunnerStore:
@@ -75,7 +77,12 @@ def _seed_lease(store: SqlAlchemyRunnerStore, *, session: SessionReference | Non
     store.record_binding(chunk_id="ch_1", environment_id="e1", workdir="/ws/e1", bound_at=_NOW, workspace_id="ws1")
 
 
-def _ctx(store: SqlAlchemyRunnerStore, hub: FakeHub | None = None, harness: FakeHarness | None = None):
+def _ctx(
+    store: SqlAlchemyRunnerStore,
+    hub: FakeHub | None = None,
+    harness: FakeHarness | None = None,
+    events: EventBroker | None = None,
+):
     if hub is None:
         hub = FakeHub()
         hub.chunks["ch_1"] = ChunkState(
@@ -86,6 +93,7 @@ def _ctx(store: SqlAlchemyRunnerStore, hub: FakeHub | None = None, harness: Fake
         hub=hub,
         provider=FakeProvider({"e1": "/ws/e1"}),
         harness=harness or FakeHarness(handle=_HANDLE, verdict="pass"),
+        events=events,
         probe=FakeProbe(),
         config=LoopConfig(
             runner_name="r1",
@@ -234,6 +242,17 @@ def test_no_acceptable_harness_buffers_its_escalation_inside_the_closure(
 # --- record_spawn: the woken pid and the answered park, one transaction ---
 
 
+def _missing_park_resumes() -> Table:
+    """A table the store never created: the park-resume insert fails inside the transaction."""
+    return Table(
+        "no_such_park_resumes",
+        MetaData(),
+        Column("lease_id", String),
+        Column("question_id", String),
+        Column("resumed_at", String),
+    )
+
+
 def _seed_parked(store: SqlAlchemyRunnerStore) -> None:
     _seed_lease(store)
     store.record_ask(
@@ -252,18 +271,31 @@ def test_record_spawn_with_a_park_resume_lands_the_pid_and_the_resume_together(t
     store = _store(tmp_path)
     _seed_parked(store)
 
-    store.record_spawn(
+    seq = store.record_spawn(
         "lease_1",
         pid=4321,
         process_start_time="start-4321",
         session=_SESSION,
         spawned_at=_NOW,
-        park_resume_question_id="qn_1",
+        park_resume=_RESUME,
     )
 
     assert store.open_park("lease_1") is None
     lease = store.active_lease("lease_1")
     assert lease is not None and lease.pid == 4321
+    receipts = [f for f in store.pending_outbound() if f.kind == ANSWER_DELIVERED]
+    assert [f.seq for f in receipts] == [seq]
+    assert receipts[0].lease_id == "lease_1" and receipts[0].chunk_id == "ch_1"
+
+
+def test_record_spawn_without_a_park_resume_buffers_no_receipt(tmp_path: Path):
+    store = _store(tmp_path)
+    _seed_lease(store)
+
+    seq = store.record_spawn("lease_1", pid=4321, process_start_time="start-4321", session=_SESSION, spawned_at=_NOW)
+
+    assert seq is None
+    assert not [f for f in store.pending_outbound() if f.kind == ANSWER_DELIVERED]
 
 
 def test_a_raise_inside_record_spawn_leaves_neither_the_pid_nor_the_park_resume(
@@ -280,6 +312,7 @@ def test_a_raise_inside_record_spawn_leaves_neither_the_pid_nor_the_park_resume(
         Column("resumed_at", String),
     )
     monkeypatch.setattr(lease_liveness_store, "park_resumes", missing)
+    before = [f.seq for f in store.pending_outbound()]
 
     with pytest.raises(Exception, match="no_such_park_resumes"):
         store.record_spawn(
@@ -288,13 +321,19 @@ def test_a_raise_inside_record_spawn_leaves_neither_the_pid_nor_the_park_resume(
             process_start_time="start-4321",
             session=_SESSION,
             spawned_at=_NOW,
-            park_resume_question_id="qn_1",
+            park_resume=_RESUME,
         )
 
     park = store.open_park("lease_1")
     assert park is not None and park.question_id == "qn_1"
     lease = store.active_lease("lease_1")
     assert lease is not None and lease.pid == 100
+    assert [f.seq for f in store.pending_outbound()] == before
+    monkeypatch.undo()
+    seq = store.record_spawn(
+        "lease_1", pid=4321, process_start_time="start-4321", session=_SESSION, spawned_at=_NOW, park_resume=_RESUME
+    )
+    assert seq == before[-1] + 1  # the rolled-back attempt consumed no seq
 
 
 # --- on_answer ---
@@ -347,9 +386,9 @@ def test_the_answer_wake_reaches_its_own_points_and_closes_the_park(tmp_path: Pa
     assert [f for f in store.pending_outbound() if f.kind == ANSWER_DELIVERED]
 
 
-def test_on_answer_replayed_after_the_record_finds_the_park_closed_and_does_not_wake(tmp_path: Path):
-    """The crash-after-record state: the woken pid and the park resume are durable, the
-    ``answer.delivered`` fact is not. The next pass reads no open park and wakes nothing."""
+def test_on_answer_replayed_after_the_record_finds_the_receipt_durable_and_wakes_nothing(tmp_path: Path):
+    """The crash-after-record state: the woken pid, the park resume and the ``answer.delivered`` receipt are
+    durable together. The next pass reads no open park, wakes nothing and enqueues nothing."""
     store = _store(tmp_path)
     _seed_parked(store)
     store.record_spawn(
@@ -358,8 +397,10 @@ def test_on_answer_replayed_after_the_record_finds_the_park_closed_and_does_not_
         process_start_time="start-4321",
         session=_SESSION,
         spawned_at=_NOW,
-        park_resume_question_id="qn_1",
+        park_resume=_RESUME,
     )
+    before = [f.seq for f in store.pending_outbound() if f.kind == ANSWER_DELIVERED]
+    assert len(before) == 1
     harness = FakeHarness(handle=_HANDLE, verdict="pass")
     ctx = _ctx(store, hub=_answered_hub(), harness=harness)
     lease = store.active_lease("lease_1")
@@ -368,3 +409,54 @@ def test_on_answer_replayed_after_the_record_finds_the_park_closed_and_does_not_
     DormantSession(ctx, lease).on_answer()
 
     assert harness.resumed == []
+    assert [f.seq for f in store.pending_outbound() if f.kind == ANSWER_DELIVERED] == before
+
+
+def test_the_receipt_is_published_only_after_the_resume_commits(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
+    store = _store(tmp_path)
+    _seed_parked(store)
+    harness = FakeHarness(handle=_HANDLE, verdict="pass")
+    harness.resume_pid = 4321
+    broker = EventBroker()
+    ctx = _ctx(store, hub=_answered_hub(), harness=harness, events=broker)
+    published: list[tuple[int, bool]] = []
+
+    def spy(**kwargs: Any) -> int:
+        if kwargs["kind"] == ANSWER_DELIVERED:
+            durable = any(f.seq == kwargs["seq"] for f in store.pending_outbound())
+            published.append((kwargs["seq"], durable))
+        return 0
+
+    monkeypatch.setattr(broker, "publish_fact_changed", spy)
+    lease = store.active_lease("lease_1")
+    assert lease is not None
+
+    DormantSession(ctx, lease).on_answer()
+
+    receipts = [f.seq for f in store.pending_outbound() if f.kind == ANSWER_DELIVERED]
+    assert published == [(receipts[0], True)]
+
+
+def test_a_failed_record_publishes_no_receipt_and_buffers_none(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
+    store = _store(tmp_path)
+    _seed_parked(store)
+    harness = FakeHarness(handle=_HANDLE, verdict="pass")
+    harness.resume_pid = 4321
+    broker = EventBroker()
+    ctx = _ctx(store, hub=_answered_hub(), harness=harness, events=broker)
+    published: list[str] = []
+
+    def spy(**kwargs: Any) -> int:
+        published.append(kwargs["kind"])
+        return 0
+
+    monkeypatch.setattr(broker, "publish_fact_changed", spy)
+    monkeypatch.setattr(lease_liveness_store, "park_resumes", _missing_park_resumes())
+    lease = store.active_lease("lease_1")
+    assert lease is not None
+
+    with pytest.raises(Exception, match="no_such_park_resumes"):
+        DormantSession(ctx, lease).on_answer()
+
+    assert ANSWER_DELIVERED not in published
+    assert not [f for f in store.pending_outbound() if f.kind == ANSWER_DELIVERED]

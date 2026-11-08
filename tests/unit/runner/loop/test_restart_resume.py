@@ -18,7 +18,7 @@ from blizzard.foundation.crash import CrashPoint
 from blizzard.runner.harness.adapter import WorkerHandle
 from blizzard.runner.harness.identity import CLAUDE_CODE_HARNESS_ID, SessionReference
 from blizzard.runner.harness.registry import HarnessBinding, HarnessRegistry
-from blizzard.runner.leases.model import NewLease
+from blizzard.runner.leases.model import NewLease, ParkResume
 from blizzard.runner.lifecycle.resume_intents import ResumeIntents
 from blizzard.runner.loop.steps import Resume
 from blizzard.runner.loop.tick import tick
@@ -238,8 +238,8 @@ def test_a_record_spawn_write_that_raises_kills_the_still_unconfirmed_resume(
         harness_version: str | None = None,
         pgid: int | None = None,
         spawn_cwd: str | None = None,
-        park_resume_question_id: str | None = None,
-    ) -> None:
+        park_resume: ParkResume | None = None,
+    ) -> int | None:
         raise RuntimeError("durable write failed")
 
     monkeypatch.setattr(store, "record_spawn", _raise)

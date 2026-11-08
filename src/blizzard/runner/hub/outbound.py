@@ -95,9 +95,10 @@ class OutboundFacts:
         payload = question_asked_payload(lease, ask, route_token=self._route_token(lease.chunk_id))
         self._enqueue(QUESTION_ASKED, lease.chunk_id, lease.lease_id, payload, at)
 
-    def answer_delivered(self, lease: Lease, question_id: str, *, at: datetime) -> None:
-        payload = answer_delivered_payload(lease, question_id)
-        self._enqueue(ANSWER_DELIVERED, lease.chunk_id, lease.lease_id, payload, at)
+    def answer_delivered_fact(self, lease: Lease, question_id: str) -> tuple[str, str]:
+        """The ``answer.delivered`` kind and rendered payload, not yet buffered. The resume commits it in the
+        transaction that records the woken pid; the caller publishes after the commit via :meth:`published`."""
+        return ANSWER_DELIVERED, json.dumps(answer_delivered_payload(lease, question_id))
 
     def completion(self, lease: Lease, completion: Completion, *, at: datetime, unit: ILeaseUnit | None = None) -> int:
         """Buffered as the wire body the drain later submits, so a row written before a redeploy
