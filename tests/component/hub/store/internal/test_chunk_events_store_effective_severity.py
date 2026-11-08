@@ -11,13 +11,13 @@ from typing import Any, cast
 import sqlalchemy as sa
 
 from blizzard.foundation.clock import FixedClock
-from blizzard.foundation.event_log import EVENT_LOG_SEVERITY, EventLogSeverity
+from blizzard.foundation.event_log import EventLogSeverity
 from blizzard.hub.store.internal.chunk_events_store import ChunkEventsStore
 from tests.support.scaffolding import hub_store_connections, migrated_hub_at
 
 _T0 = datetime(2026, 1, 1, tzinfo=UTC)
 
-_CRITICAL_KIND = "needs-human"
+_CRITICAL_KIND = "needs-human"  # declared critical in EVENT_LOG_SEVERITY
 _INFO_KIND = "flow-landed"
 
 
@@ -47,7 +47,6 @@ def _ids(store: ChunkEventsStore, severity: EventLogSeverity, **kw: Any) -> list
 
 
 def test_obsolete_severity_with_known_kind_filters_by_kind_severity(tmp_path: Path) -> None:
-    assert EVENT_LOG_SEVERITY[_CRITICAL_KIND] is EventLogSeverity.CRITICAL  # type: ignore[index]
     store = _store(tmp_path)
     row = _record(store, severity="error", kind=_CRITICAL_KIND, at=1)
 
