@@ -64,10 +64,6 @@ class IReadLeaseRecordRepository(Protocol):
         """
         ...
 
-    def closed_lease_ids(self, lease_ids: Collection[str]) -> set[str]:
-        """The supplied ids owned and closed by this runner; unknown ids are omitted."""
-        ...
-
     def list_closed_leases(self, limit: int) -> list[ClosedLease]:
         """The most recently closed leases, newest first.
 
@@ -104,7 +100,13 @@ class IReadLeaseRecordRepository(Protocol):
         ...
 
 
-class IReadChunkLeaseRepository(IReadLeaseRecordRepository, Protocol):
+class IReadClosedLeaseRepository(Protocol):
+    def closed_lease_ids(self, lease_ids: Collection[str]) -> set[str]:
+        """The supplied ids owned and closed by this runner; unknown ids are omitted."""
+        ...
+
+
+class IReadChunkLeaseRepository(IReadLeaseRecordRepository, IReadClosedLeaseRepository, Protocol):
     """The lease record plus one chunk's whole lease history — the lease list's chunk filter."""
 
     def chunk_leases(self, chunk_id: str) -> list[Lease | ClosedLease]:

@@ -15,7 +15,11 @@ from typing import Protocol
 
 from blizzard.runner.host_layout import DATA_DIRNAME, LEGACY_WORKER_SCRATCH_DIRNAME
 from blizzard.runner.leases.record import IReadLeaseRecordRepository
-from blizzard.runner.process.scratch_cleanup import sweep_closed_legacy
+from blizzard.runner.process.scratch_cleanup import ClosedLeaseLookup, sweep_closed_legacy
+
+
+class ScratchLeaseRepository(IReadLeaseRecordRepository, ClosedLeaseLookup, Protocol):
+    pass
 
 
 class ScratchSweeper(Protocol):
@@ -56,7 +60,7 @@ def _sync_root_path(root: Path) -> None:
 def reconcile_scratch_roots(
     host_root: Path,
     root: Path,
-    runners: Mapping[str, IReadLeaseRecordRepository],
+    runners: Mapping[str, ScratchLeaseRepository],
     *,
     scratch_factory: ScratchSweeperFactory,
 ) -> None:

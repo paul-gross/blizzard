@@ -1,16 +1,18 @@
 """Reconcile legacy scratch against runner-scoped closure facts."""
 
-from collections.abc import Callable
+from collections.abc import Callable, Collection
 from typing import Protocol
-
-from blizzard.runner.leases.record import IReadLeaseRecordRepository
 
 
 class LegacySweeper(Protocol):
     def sweep_legacy(self, removable: Callable[[str], bool], *, strict: bool = False) -> int: ...
 
 
-def sweep_closed_legacy(scratch: LegacySweeper, repo: IReadLeaseRecordRepository, *, strict: bool = False) -> int:
+class ClosedLeaseLookup(Protocol):
+    def closed_lease_ids(self, lease_ids: Collection[str]) -> set[str]: ...
+
+
+def sweep_closed_legacy(scratch: LegacySweeper, repo: ClosedLeaseLookup, *, strict: bool = False) -> int:
     """Collect candidates before deleting, then remove only proven closed payloads."""
     candidates: set[str] = set()
 

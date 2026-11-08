@@ -225,7 +225,11 @@ from blizzard.runner.leases.liveness import IReadLeaseLivenessRepository
 from blizzard.runner.leases.model import NewLease
 from blizzard.runner.leases.operator_requests import IReadAttachmentRepository, IReadRequeueRepository
 from blizzard.runner.leases.overload import IReadOverloadRepository
-from blizzard.runner.leases.record import IReadChunkLeaseRepository, IReadLeaseRecordRepository
+from blizzard.runner.leases.record import (
+    IReadChunkLeaseRepository,
+    IReadClosedLeaseRepository,
+    IReadLeaseRecordRepository,
+)
 from blizzard.runner.leases.resume_intent import IReadLeaseResumeIntentRepository
 from blizzard.runner.leases.session import IReadLeaseSessionRepository
 from blizzard.runner.lifecycle.artifacts import IReadGraphArtifactRepository, PinnedGraphArtifact
@@ -804,6 +808,9 @@ RunnerRecipe = Callable[[RunnerWorld], object]
 
 #: Every reflected runner ``(Protocol, method)``, mapped to a recipe run against :func:`build_runner_world`'s world.
 RUNNER_CENSUS: dict[tuple[type, str], RunnerRecipe] = {
+    (IReadClosedLeaseRepository, "closed_lease_ids"): lambda w: w.read.lease_record.closed_lease_ids(
+        {w.lease_1, w.lease_2, "unknown"}
+    ),
     (IReadLeaseRecordRepository, "list_active_leases"): lambda w: w.read.lease_record.list_active_leases(),
     (IReadLeaseRecordRepository, "active_lease_for_chunk"): lambda w: w.read.lease_record.active_lease_for_chunk(
         w.chunk_1
