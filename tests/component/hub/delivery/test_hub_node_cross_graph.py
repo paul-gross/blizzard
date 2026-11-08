@@ -10,6 +10,7 @@ from __future__ import annotations
 import contextlib
 from datetime import timedelta
 from pathlib import Path
+from typing import Any
 
 import pytest
 
@@ -17,6 +18,7 @@ from blizzard.hub.delivery import hub_node
 from tests.support.hub_command_graphs import (
     ALWAYS_PENDING_GRAPH_YAML,
     HUB_CMD_GRAPH_YAML,
+    post_build_pass,
     submit_build_pass,
     to_merge_node,
 )
@@ -188,3 +190,217 @@ def test_a_poll_timeout_whose_failure_edge_is_cross_graph_migrates(tmp_path: Pat
     detail = hub.client.get(f"/api/chunks/{chunk_id}").json()
     assert detail["graph_id"] == triage_id
     assert detail["pending"] is None
+
+
+# --- follow-latest at an ordinary nonterminal hub exit -------------------------------------------------------
+
+_AFTER_NODE = """
+  after:
+    executor: runner
+    prompt: After.
+    judgement:
+      prompt: Assess.
+      choices:
+        pass:
+          description: Done.
+          to: done
+"""
+_FL_YAML = (
+    HUB_CMD_GRAPH_YAML.replace("description: Landed.\n          to: done", "description: Landed.\n          to: after")
+    + _AFTER_NODE
+)
+_FL_HUMAN_YAML = _FL_YAML.replace(
+    "    prompt: After.\n    judgement:\n      prompt: Assess.", "    judgement:\n      by: human"
+)
+_FL_NO_AFTER_YAML = HUB_CMD_GRAPH_YAML.replace(
+    "description: Landed.\n          to: done", "description: Landed.\n          to: build"
+)
+
+
+def _mint_graph(hub: HubHarness, yaml_text: str) -> str:
+    created = hub.client.post("/api/graphs", json={"definition_yaml": yaml_text})
+    assert created.status_code == 201, created.text
+    return str(created.json()["graph_id"])
+
+
+def _policy(hub: HubHarness, graph_id: str, value: bool | None) -> None:
+    resp = hub.client.post(f"/api/graphs/{graph_id}/follow-latest", json={"follow_latest": value})
+    assert resp.status_code == 202, resp.text
+
+
+def _park_then_mint(
+    hub: HubHarness, *, v1_yaml: str, v2_yaml: str | None, policy: bool | None = True
+) -> tuple[str, str | None]:
+    """A chunk standing at hub node ``merge`` of v1, the hub's pass not yet taken, with a newer mint of v2_yaml."""
+    chunk_id, build_node_id, graph = to_merge_node(hub, graph_yaml=v1_yaml)
+    _policy(hub, graph.graph_id, policy)
+    post_build_pass(hub, chunk_id, build_node_id, 1)
+    v2 = None
+    if v2_yaml is not None:
+        hub.clock.advance(timedelta(minutes=1))
+        v2 = _mint_graph(hub, v2_yaml)
+    return chunk_id, v2
+
+
+def _detail(hub: HubHarness, chunk_id: str) -> dict[str, Any]:
+    return dict(hub.client.get(f"/api/chunks/{chunk_id}").json())
+
+
+def _migrations(hub: HubHarness, chunk_id: str) -> list[object]:
+    facts = hub.services.chunks.facts.load_facts(chunk_id)
+    assert facts is not None
+    return list(facts.migrations)
+
+
+def test_a_hub_exit_on_a_follow_latest_pin_migrates_onto_the_newer_mint_instead_of_transitioning(
+    tmp_path: Path,
+) -> None:
+    hub = build_hub(tmp_path)
+    chunk_id, v2 = _park_then_mint(hub, v1_yaml=_FL_YAML, v2_yaml=_FL_YAML.replace("Build the change.", "Better."))
+
+    hub.settle_turns()
+
+    detail = _detail(hub, chunk_id)
+    assert detail["graph_id"] == v2
+    assert detail["current_node_name"] == "after"
+    assert detail["status"] == "ready"
+    facts = hub.services.chunks.facts.load_facts(chunk_id)
+    assert facts is not None
+    assert [m.source.value if m.source else None for m in facts.migrations] == ["follow-latest"]
+    assert not any(t.from_node_id == facts.migrations[0].from_node_id for t in facts.transitions)
+
+
+def test_a_hub_exit_lands_on_the_newer_mints_entry_when_it_lacks_the_destination(tmp_path: Path) -> None:
+    hub = build_hub(tmp_path)
+    chunk_id, v2 = _park_then_mint(hub, v1_yaml=_FL_YAML, v2_yaml=_FL_NO_AFTER_YAML)
+
+    hub.settle_turns()
+
+    detail = _detail(hub, chunk_id)
+    assert detail["graph_id"] == v2
+    assert detail["current_node_name"] == "build"
+    assert detail["status"] == "ready"
+
+
+def test_a_hub_exit_into_a_human_judged_destination_opens_that_landings_decision(tmp_path: Path) -> None:
+    hub = build_hub(tmp_path)
+    chunk_id, v2 = _park_then_mint(hub, v1_yaml=_FL_YAML, v2_yaml=_FL_HUMAN_YAML)
+
+    hub.settle_turns()
+
+    detail = _detail(hub, chunk_id)
+    assert detail["graph_id"] == v2
+    assert detail["current_node_name"] == "after"
+    assert detail["status"] == "waiting_on_human"
+
+
+@pytest.mark.parametrize("policy", [None, False])
+def test_a_hub_exit_without_the_policy_transitions_as_before(tmp_path: Path, policy: bool | None) -> None:
+    hub = build_hub(tmp_path)
+    chunk_id, _v2 = _park_then_mint(
+        hub, v1_yaml=_FL_YAML, v2_yaml=_FL_YAML.replace("Build the change.", "Better."), policy=policy
+    )
+
+    hub.settle_turns()
+
+    detail = _detail(hub, chunk_id)
+    assert detail["current_node_name"] == "after"
+    assert _migrations(hub, chunk_id) == []
+
+
+def test_the_fleet_default_turns_the_policy_on_for_an_inheriting_graph(tmp_path: Path) -> None:
+    hub = build_hub(tmp_path, follow_latest=True)
+    chunk_id, v2 = _park_then_mint(
+        hub, v1_yaml=_FL_YAML, v2_yaml=_FL_YAML.replace("Build the change.", "Better."), policy=None
+    )
+
+    hub.settle_turns()
+
+    assert _detail(hub, chunk_id)["graph_id"] == v2
+    assert len(_migrations(hub, chunk_id)) == 1
+
+
+def test_a_hub_exit_with_no_newer_mint_transitions(tmp_path: Path) -> None:
+    hub = build_hub(tmp_path)
+    chunk_id, _ = _park_then_mint(hub, v1_yaml=_FL_YAML, v2_yaml=None)
+
+    hub.settle_turns()
+
+    assert _detail(hub, chunk_id)["current_node_name"] == "after"
+    assert _migrations(hub, chunk_id) == []
+
+
+def test_a_hub_exit_finishing_at_done_does_not_migrate(tmp_path: Path) -> None:
+    hub = build_hub(tmp_path)
+    chunk_id, _ = _park_then_mint(
+        hub, v1_yaml=HUB_CMD_GRAPH_YAML, v2_yaml=HUB_CMD_GRAPH_YAML.replace("Build the change.", "Better.")
+    )
+
+    hub.settle_turns()
+
+    assert _detail(hub, chunk_id)["status"] == "done"
+    assert _migrations(hub, chunk_id) == []
+
+
+def test_a_standing_intent_suppresses_the_follow_latest_hop(tmp_path: Path) -> None:
+    hub = build_hub(tmp_path)
+    assert hub.client.post("/api/graphs", json={"definition_yaml": _RUNNER_TARGET_YAML}).status_code == 201
+    chunk_id, _v2 = _park_then_mint(hub, v1_yaml=_FL_YAML, v2_yaml=_FL_YAML.replace("Build the change.", "Better."))
+    patched = hub.client.patch(f"/api/chunks/{chunk_id}", json={"intended_migration": {"to_graph": "triage"}})
+    assert patched.status_code == 202, patched.text
+
+    hub.settle_turns()
+
+    assert _migrations(hub, chunk_id) == []
+    assert _detail(hub, chunk_id)["current_node_name"] == "after"
+
+
+def test_a_failure_exit_on_a_follow_latest_pin_migrates(tmp_path: Path) -> None:
+    hub = build_hub(tmp_path)
+    graph_yaml = _FL_YAML.replace("with: {choice: [success]}", "with: {choice: [failure]}").replace(
+        "description: Failed to land.\n          to: build", "description: Failed to land.\n          to: after"
+    )
+    chunk_id, v2 = _park_then_mint(hub, v1_yaml=graph_yaml, v2_yaml=graph_yaml.replace("Build the change.", "Better."))
+
+    hub.settle_turns()
+
+    assert _detail(hub, chunk_id)["graph_id"] == v2
+    assert len(_migrations(hub, chunk_id)) == 1
+
+
+def test_a_poll_timeout_exit_on_a_follow_latest_pin_migrates_and_keeps_its_bounce(tmp_path: Path) -> None:
+    hub = build_hub(tmp_path)
+    graph_yaml = ALWAYS_PENDING_GRAPH_YAML.replace(
+        "description: Red.\n          to: build", "description: Red.\n          to: after"
+    ).replace("  merge:", _AFTER_NODE.strip("\n") + "\n  merge:")
+    chunk_id, build_node_id, graph = to_merge_node(hub, graph_yaml=graph_yaml)
+    _policy(hub, graph.graph_id, True)
+    submit_build_pass(hub, chunk_id, build_node_id, 1)
+    hub.clock.advance(timedelta(minutes=1))
+    v2 = _mint_graph(hub, graph_yaml.replace("Build the change.", "Better."))
+    for _ in range(3):
+        hub.clock.advance(timedelta(seconds=31))
+        hub.turn_outcome(chunk_id)
+
+    detail = _detail(hub, chunk_id)
+    assert detail["graph_id"] == v2
+    assert len(_migrations(hub, chunk_id)) == 1
+    assert any(a["name"] == "bounce-envelope" for a in detail["artifacts"])
+
+
+def test_the_follow_latest_hop_rolls_back_with_its_turn_when_the_landed_gate_fails(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    hub = build_hub(tmp_path)
+    chunk_id, _v2 = _park_then_mint(hub, v1_yaml=_FL_YAML, v2_yaml=_FL_HUMAN_YAML)
+    graph_id = _detail(hub, chunk_id)["graph_id"]
+
+    def _refuse(*_args: object, **_kwargs: object) -> None:
+        raise RuntimeError("gate arrival refused")
+
+    monkeypatch.setattr(hub_node, "open_graph_gate_on_arrival", _refuse)
+    with contextlib.suppress(RuntimeError):
+        hub.settle_turns()
+
+    assert _detail(hub, chunk_id)["graph_id"] == graph_id
+    assert _migrations(hub, chunk_id) == []

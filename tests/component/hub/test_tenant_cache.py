@@ -224,6 +224,7 @@ def _served(core: HubCore, tmp_path: Path, brokers: TenantBrokers) -> HubService
         work_sources=work_sources,
         secret_keys=hub_key_provider({}, data_dir=tmp_path),
         brokers=brokers,
+        follow_latest_default=False,
         annotation_interval_seconds=120,
         version_window=VERSION_WINDOW,
         cadences_on=lambda: False,

@@ -51,12 +51,13 @@ from blizzard.hub.domain.config.repositories import (
 )
 from blizzard.hub.domain.delivery.flows import TURN_ESCALATED
 from blizzard.hub.domain.delivery.ports.flows import IHubStepRefusals
-from blizzard.hub.domain.execution.completion import Landing, UnresolvableTarget
+from blizzard.hub.domain.execution.completion import Landing, MigrationTargets, UnresolvableTarget
 from blizzard.hub.domain.execution.gate_arrival import open_graph_gate_on_arrival
 from blizzard.hub.domain.graph.model import (
     DEFAULT_BOUNCE_CAP,
     HUB_DEFAULT_FAILURE_CHOICE,
     RESERVED_TERMINAL,
+    FollowLatest,
     Graph,
     IReadGraphRepository,
     Node,
@@ -210,12 +211,23 @@ class _Unroutable:
 
 @domain_model
 @dataclass(frozen=True)
+class _Drift:
+    """The follow-latest inputs read before the lock for a pin whose policy is on and whose name has a strictly newer
+    enabled mint: the policy, and that mint. :meth:`MigrationTargets.of` decides from them under the lock."""
+
+    policy: FollowLatest
+    newest: Graph
+
+
+@domain_model
+@dataclass(frozen=True)
 class _Transition:
     """A node edge: the chunk transitions to ``to_node_id``, the id of the node the edge names ``to_node_name`` — or
-    the reserved terminal."""
+    the reserved terminal. ``drift`` is set when the pin could follow the latest mint at this transition."""
 
     to_node_id: str
     to_node_name: str
+    drift: _Drift | None = None
 
     def turn_outcome(self, choice: str) -> str:
         """The outcome a turn routing ``choice`` here ends on."""
@@ -267,7 +279,9 @@ class HubNodeRouter:
         movement: IWriteChunkMovementRepository,
         decisions: IWriteChunkDecisionsRepository,
         graphs: IReadGraphRepository,
+        follow_latest_default: bool,
     ) -> None:
+        self._follow_latest_default = follow_latest_default
         self._artifacts = artifacts
         self._hub_exec = hub_exec
         self._escalations = escalations
@@ -336,7 +350,20 @@ class HubNodeRouter:
         to_node_id = _target(graph, edge.to_node_name) if edge is not None else None
         if edge is None or to_node_id is None:
             return _Unroutable(edge.to_node_name if edge is not None else None)
-        return _Transition(to_node_id, edge.to_node_name)
+        return _Transition(to_node_id, edge.to_node_name, self._drift(graph, to_node_id))
+
+    def _drift(self, graph: Graph, to_node_id: str) -> _Drift | None:
+        """The follow-latest inputs for a transition into a node — read here, before the lock, as an authored target
+        is. ``None`` for the reserved terminal, a policy that is off, or no strictly newer enabled mint."""
+        if to_node_id == RESERVED_TERMINAL:
+            return None
+        policy = FollowLatest.of(self._graphs.follow_latest(graph.graph_id), hub_default=self._follow_latest_default)
+        if not policy.enabled:
+            return None
+        newest = self._graphs.get_enabled_by_name(graph.name)
+        if newest is None or policy.target(graph, newest) is None:
+            return None
+        return _Drift(policy, newest)
 
     def _route_away(
         self,
@@ -424,11 +451,48 @@ class HubNodeRouter:
         hub_epoch = epoch + 1
         cause, envelope = bounce
         artifacts: list[StoredArtifact] = []
+        landing: Landing | None = None
+        if destination.drift is not None:
+            # The decision re-establishes its read (`bzh:write-reestablishes-read`): a visit no longer standing, or a
+            # chunk no longer delivering, routes nothing.
+            locked = handle.record(chunk.chunk_id)
+            facts = handle.facts(chunk.chunk_id)
+            if locked is None or facts is None or not facts.delivering_at(node.node_id, epoch=epoch):
+                ending.end(handle, outcome=choice, closure=None)
+                return
+            edge = graph.edge_for_choice(node.node_id, choice)
+            assert edge is not None, f"a transition destination resolved from an edge of `{choice}` on `{node.name}`"
+            landing = Landing.consult(
+                locked,
+                edge,
+                MigrationTargets.of(
+                    locked,
+                    graph,
+                    cross_graph=None,
+                    intent_graph=None,
+                    intent_retired=False,
+                    follow_latest=destination.drift.policy,
+                    newest_same_name=destination.drift.newest,
+                ),
+            )
         if envelope is not None:
             if self._bounce(handle, chunk, node, hub_epoch=hub_epoch, cause=cause, envelope=envelope):
                 ending.end(handle, outcome=TURN_ESCALATED, closure=None)
                 return
             artifacts.append(self._envelope_artifact(chunk, node, hub_epoch=hub_epoch, envelope=envelope))
+        if landing is not None:
+            self._migrate_on(
+                handle,
+                chunk,
+                node,
+                landing,
+                epoch=epoch,
+                choice=choice,
+                close=close,
+                ending=ending,
+                artifacts=artifacts,
+            )
+            return
         wrote = self._hub_exec.record_hub_step_transition_locked(
             handle,
             chunk.chunk_id,
@@ -468,9 +532,10 @@ class HubNodeRouter:
         choice: str,
         close: CloseEnqueueDecision,
         ending: ITurnEnd,
+        artifacts: list[StoredArtifact] | None = None,
     ) -> None:
         """The migration onto ``landing`` at the visit's own ``epoch`` — it mints none — a standing intent staying
-        parked, and the landed node's gate opened."""
+        parked, and the landed node's gate opened. ``artifacts`` ride on the migration's own transaction."""
         outcome = self._movement.record_migration_locked(
             handle,
             chunk.chunk_id,
@@ -485,7 +550,7 @@ class HubNodeRouter:
             admission=EpochAdmission.CURRENT,
             claimant=None,
             at=self._clock.now(),
-            artifacts=[],
+            artifacts=artifacts or [],
             source=landing.source,
             release_route=landing.releases_route,
             clear_intent=landing.clear_intent,

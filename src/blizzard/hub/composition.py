@@ -995,6 +995,7 @@ class TenantServiceParts:
     system_artifacts: PackagedSystemArtifacts
     action_loop: ActionLoop
     public_url: str | None
+    follow_latest_default: bool
     transcript_caps: TranscriptCaps | None
     platform_tracer: IPlatformTracer | None
     color_pick: ColorPick
@@ -1137,6 +1138,7 @@ def build_tenant_services(stores: TenantStores, parts: TenantServiceParts, *, ev
         movement=chunk_movement,
         decisions=chunk_decisions,
         graphs=graph_store,
+        follow_latest_default=parts.follow_latest_default,
     )
     turns = TurnRunner(
         flows=stores.flows,
@@ -1504,6 +1506,7 @@ def build_services(
     secret_keys: IHubKeyProvider,
     brokers: TenantBrokers | None = None,
     public_url: str | None = None,
+    follow_latest_default: bool,
     oauth_providers: Sequence[OAuthProviderConfig] = (),
     oauth_http_client: httpx2.Client | None = None,
     oauth_registry: IOAuthProviderRegistry | None = None,
@@ -1557,6 +1560,7 @@ def build_services(
         system_artifacts=system_artifacts,
         action_loop=action_loop,
         public_url=public_url,
+        follow_latest_default=follow_latest_default,
         transcript_caps=transcript_caps,
         platform_tracer=platform_tracer,
         color_pick=color_pick,

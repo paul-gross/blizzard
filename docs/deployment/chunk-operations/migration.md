@@ -59,6 +59,10 @@ A follow-latest move rides the same deferred path with the same guarantees — r
 as a transition, and firing only at a transition the chunk was making anyway. Its landing is name-match-else-entry on
 the transition's own destination, falling back to the target's entry node when the newer definition lost the node.
 
+A hub-executed node's exit is one of the transitions that consult the policy — whether it succeeded, failed, was refused
+before its pass, timed out, or is bouncing an incomplete delivery back — while an exit that finishes at `done`, a
+cap-crossing escalation, and an answer no edge routes are not.
+
 ## When there is no transition to wait for
 
 `chunk restart --to-graph` ([control-verbs.md](../control-verbs.md)) is the eager counterpart, for when no next
