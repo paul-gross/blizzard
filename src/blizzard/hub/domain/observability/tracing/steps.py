@@ -183,6 +183,8 @@ def _attempt_steps(facts: StepFacts) -> list[NodeStep]:
         minted = min(lease.minted_at for lease in facts.lease_facts if lease.epoch == epoch)
         hub = owner.runner_id is None
         start = hub_start(facts, minted) if hub else minted
+        # A hub step starts at the arrival that placed it, which may carry its own epoch; only a runner step's
+        # own-epoch arrival is the move its completion caused.
         steps.append(
             NodeStep(
                 kind=StepKind.HUB if hub else StepKind.RUNNER,
@@ -190,7 +192,7 @@ def _attempt_steps(facts: StepFacts) -> list[NodeStep]:
                 epoch=epoch,
                 runner_id=owner.runner_id,
                 start=start,
-                position=position_at(facts, start),
+                position=position_at(facts, start, before_epoch=None if hub else epoch),
                 close=runner_close(facts, epoch, start),
             )
         )

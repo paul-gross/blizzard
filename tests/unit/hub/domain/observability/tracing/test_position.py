@@ -268,3 +268,13 @@ def test_gate_position_uses_its_decisions_node() -> None:
     )
     (step,) = identify_steps(facts)
     assert (step.position.node_name, step.position.visit) == ("gate", 1)
+
+
+def test_a_step_opening_and_closing_on_one_instant_is_named_after_its_own_node() -> None:
+    facts = fx.make_facts(
+        transitions=(fx.to("g1", "review", 10, 1),),
+        **fx.runner_epoch(1, 10),
+    )
+    step = identify_steps(facts)[0]
+    assert (step.position.node_name, step.position.visit) == ("build", 1)
+    assert position_at(facts, fx.at(10)).node_name == "review"  # an unscoped read still sees the later arrival

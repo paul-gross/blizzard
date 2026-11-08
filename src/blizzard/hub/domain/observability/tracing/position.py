@@ -149,9 +149,16 @@ def arrivals_with_entry(facts: StepFacts) -> tuple[Arrival, ...]:
     return (entry, *arrivals)
 
 
-def position_at(facts: StepFacts, instant: datetime) -> Position:
-    """The chunk's graph, node and visit at ``instant`` — arrivals recorded at or before it."""
-    seen = [a for a in arrivals_with_entry(facts) if a.recorded_at <= instant]
+def position_at(facts: StepFacts, instant: datetime, before_epoch: int | None = None) -> Position:
+    """The chunk's graph, node and visit at ``instant`` — arrivals recorded at or before it.
+
+    ``before_epoch`` names the epoch of the step being placed: an arrival on the very instant at that
+    epoch or later is that step's own doing, so it never names the step."""
+    seen = [
+        a
+        for a in arrivals_with_entry(facts)
+        if a.recorded_at < instant or (a.recorded_at == instant and (before_epoch is None or a.epoch < before_epoch))
+    ]
     current = seen[-1]
     visit = sum(1 for a in seen if a.node_name == current.node_name)
     return Position(current.graph_id, current.node_id, current.node_name, visit)

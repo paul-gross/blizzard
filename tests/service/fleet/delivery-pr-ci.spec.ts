@@ -481,18 +481,12 @@ test.describe('poll timeout, on the controlled clock', () => {
     await createGraph(api, repo, 'default-delivery', 4);
     const { chunk } = await issue('pr-ci', { repository: repo });
     expect((await api.post(`/api/chunks/${chunk.chunk_id}/promote`)).status).toBe(202);
-    // The hub misnames a step that opens and closes on one instant after the node it moved to, so time passes while build runs.
-    const read = async () => {
-      const state = await stepped(api, chunk.chunk_id);
-      if (state.current_node_name === 'build') await clock.advance(1);
-      return state;
-    };
-    await stepUntil(host, read, (s) => s.pending !== null, { stallPasses: 80, progress: chunkProgress });
+    await stepUntil(host, () => stepped(api, chunk.chunk_id), (s) => s.pending !== null, { stallPasses: 80, progress: chunkProgress });
     await clock.advance(1);
     await api.flowStep();
     await clock.advance(5);
-    await stepUntil(host, read, (s) => s.bounces.length > 0, { stallPasses: 80, progress: chunkProgress });
-    await stepUntil(host, read, (s) => s.history.filter((h) => h.choice_name === 'pass').length >= 2, { stallPasses: 80, progress: chunkProgress });
+    await stepUntil(host, () => stepped(api, chunk.chunk_id), (s) => s.bounces.length > 0, { stallPasses: 80, progress: chunkProgress });
+    await stepUntil(host, () => stepped(api, chunk.chunk_id), (s) => s.history.filter((h) => h.choice_name === 'pass').length >= 2, { stallPasses: 80, progress: chunkProgress });
     await flushTraces(host);
     const chunkSpans = () => traceSink.spans().filter(isFleet).filter((span) => span.attributes['blizzard.chunk.id'] === chunk.chunk_id);
     const flushed = chunkSpans();

@@ -45,5 +45,7 @@ test.describe('a traced test on a controlled stack', () => {
     await flushTraces(runnerHost);
     const spans = traceSink.spans().filter(isFleet).filter((span) => span.attributes['blizzard.chunk.id'] === chunk.chunk_id);
     expect([spans.some((span) => roleOf(span) === 'step'), spans.some((span) => roleOf(span) === 'runner/invocation')]).toEqual([true, true]);
+    const step = spans.find((span) => roleOf(span) === 'step')!;
+    expect([step.name, step.attributes['blizzard.node.name']]).toEqual(['step build', 'build']);
   });
 });
