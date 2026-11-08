@@ -10,7 +10,7 @@ const VITALS: Vitals = {
   needsYou: 0,
   running: 0,
   ready: 0,
-  doneRecent: 0,
+  done: 0,
   runnersUpLabel: '0/0',
 };
 
@@ -68,7 +68,7 @@ describe('GlanceView', () => {
 
   it('renders the five vitals', async () => {
     const fixture = render();
-    fixture.componentRef.setInput('vitals', { needsYou: 2, running: 3, ready: 4, doneRecent: 5, runnersUpLabel: '1/2' });
+    fixture.componentRef.setInput('vitals', { needsYou: 2, running: 3, ready: 4, done: 5, runnersUpLabel: '1/2' });
     await fixture.whenStable();
     const el = fixture.nativeElement as HTMLElement;
 
@@ -80,7 +80,20 @@ describe('GlanceView', () => {
       '5',
       '1/2',
     ]);
-    expect(text(el.querySelector('[data-testid="vital-done-today"] .cell-caption'))).toBe('done (48h)');
+    expect(text(el.querySelector('[data-testid="vital-done-today"] .cell-caption'))).toBe('Done');
+  });
+
+  it('keeps the supplied policy visible when a vital filters the list', async () => {
+    const fixture = render();
+    fixture.componentRef.setInput('donePolicy', { heading: 'Finished', explanation: 'Server-selected completed work', cutoffs: [] });
+    await fixture.whenStable();
+    const el = fixture.nativeElement as HTMLElement;
+    expect(text(el.querySelector('[data-testid="vital-done-today"] .cell-caption'))).toBe('Finished');
+    expect(text(el.querySelector('[data-testid="glance-done-divider"]'))).toContain('Finished');
+    el.querySelector<HTMLElement>('[data-testid="vital-done-today"]')?.click();
+    await fixture.whenStable();
+    expect(el.querySelector('[data-testid="glance-done-divider"]')).toBeNull();
+    expect(text(el.querySelector('[data-testid="glance-done-policy"]'))).toBe('Server-selected completed work');
   });
 
   it('shows the list\'s loading, error, and empty states in place of the list', async () => {

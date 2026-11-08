@@ -177,12 +177,19 @@ naming `"malformed cursor"`. `GET /api/events` and `GET /api/activity` instead c
 and predate the cursor/`next_cursor` half of the contract — each is its own bounded, recency-ordered window, not a walk
 over the full backing set.
 
-`GET /api/chunks?board_window=true` is the board's own read: it omits every `done` chunk that finished more than 48
-hours ago unless it is among the 10 most recently finished `done` chunks (per project under `?project=`), and keeps
+`GET /api/chunks?board_window=true` is the board's own read: it keeps `done` chunks finished within 48 hours **or**
+among the 10 most recently finished `done` chunks across the requested scope. The scope is the tenant, or the selected
+project under `?project=`; the floor is not applied separately to each project on the tenant-wide read. It also keeps
 `stopped` and non-terminal chunks of any age. A windowed page can come back short of `limit`; `next_cursor` is still
 `null` exactly on the last page. Without the param the list is unfiltered. An omitted chunk still answers by id at
 `GET /api/chunks/{chunk_id}`. `GET /api/chunk-counts` serves the all-time count per derived status, plus a `total`, over
 exactly the chunks the unfiltered list pages over — the counts ignore the window.
+
+Each chunk page carries `board_done_policy`: an object for a windowed read, or `null` for an unfiltered read. An absent
+field on a response from an older hub means the policy is unknown, not unfiltered. The object names `window_seconds`
+(duration in seconds), `floor` (number of newest done chunks), and `done_since` (the UTC cutoff instant). Pages are LIVE
+reads, not a snapshot: each page's object describes the policy and cutoff used for that page, so cutoffs can differ
+across a cursor walk. Clients must retain that per-page provenance rather than attribute one page's cutoff to all rows.
 
 The board's Tracks layout reads three more routes, each refused to a runner's credentials. `GET /api/env-timeline`
 answers every node step a chunk spent in a runner environment within `[since, until)`, grouped host → workspace →

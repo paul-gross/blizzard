@@ -255,12 +255,21 @@ class ChunkSummary(WireModel):
     bounce_count: int = 0
 
 
+class BoardDonePolicyView(WireModel):
+    """The done-window policy applied to this chunk read."""
+
+    window_seconds: int
+    floor: int
+    done_since: str
+
+
 class ChunksPageView(WireModel):
     """``GET /api/chunks``'s own bounded page — ``next_cursor`` is
     ``None`` exactly when this page is the last one."""
 
     chunks: list[ChunkSummary] = []
     next_cursor: str | None = None
+    board_done_policy: BoardDonePolicyView | None = None
 
 
 class ChunkCountsView(WireModel):

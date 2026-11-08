@@ -18,11 +18,11 @@ from blizzard.runner.hub.internal.http_hub import HttpHubClient, HttpHubRunnerAd
 
 
 def main() -> None:
-    url, chunk, expected, value = sys.argv[1:]
+    url, chunk, expected, value, workspace_id = sys.argv[1:]
     token = sys.stdin.read().strip()
     with httpx.Client(base_url=url, headers={"Authorization": f"Bearer {token}"}, timeout=30) as transport:
         client = HttpHubClient(transport)
-        outcome = client.claim_route(ClaimRequest(chunk_id=chunk, workspace_id="rehearsal", environment_ids=[]))
+        outcome = client.claim_route(ClaimRequest(chunk_id=chunk, workspace_id=workspace_id, environment_ids=[]))
         arm, field = {
             "terminal": ("denied_terminal", "status"),
             "not_ready": ("denied_terminal", "status"),

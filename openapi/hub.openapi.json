@@ -1571,6 +1571,30 @@
         "title": "BlockedView",
         "type": "object"
       },
+      "BoardDonePolicyView": {
+        "description": "The done-window policy applied to this chunk read.",
+        "properties": {
+          "done_since": {
+            "title": "Done Since",
+            "type": "string"
+          },
+          "floor": {
+            "title": "Floor",
+            "type": "integer"
+          },
+          "window_seconds": {
+            "title": "Window Seconds",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "window_seconds",
+          "floor",
+          "done_since"
+        ],
+        "title": "BoardDonePolicyView",
+        "type": "object"
+      },
       "BounceAction": {
         "description": "The hub action whose pass answered the ``choice`` the bounce routed; ``log_artifact`` names its\n``hub-log.<action>`` asset, ``null`` when the pass logged nothing.",
         "properties": {
@@ -5341,6 +5365,16 @@
       "ChunksPageView": {
         "description": "``GET /api/chunks``'s own bounded page \u2014 ``next_cursor`` is\n``None`` exactly when this page is the last one.",
         "properties": {
+          "board_done_policy": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/BoardDonePolicyView"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "chunks": {
             "default": [],
             "items": {
@@ -5363,7 +5397,8 @@
         },
         "required": [
           "chunks",
-          "next_cursor"
+          "next_cursor",
+          "board_done_policy"
         ],
         "title": "ChunksPageView",
         "type": "object"

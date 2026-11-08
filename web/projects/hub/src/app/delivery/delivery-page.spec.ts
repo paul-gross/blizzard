@@ -67,7 +67,7 @@ function hubRoutes(
   return {
     'GET /api/flows': flows,
     'GET /api/repositories': () => ({ repositories: [repositorySummary({ repository_id: 'rp_a', owner: 'paul-gross', repo: 'blizzard', name: 'blizzard' })] }),
-    'GET /api/chunks': () => ({ chunks: CHUNKS, next_cursor: null }),
+    'GET /api/chunks': () => ({ chunks: CHUNKS, next_cursor: null, board_done_policy: null }),
     'GET /api/flows/{flow_id}/record': () => ({
       facts: [fact(3, BOUNCED, 'turn-ended', 600, 'failure'), fact(2, IN_LINE, 'submitted', 1800), fact(1, LANDED, 'landed', 7200)],
       next_before: null,
@@ -148,7 +148,7 @@ describe('DeliveryPage', () => {
   });
 
   it('says so when nothing is delivering or delivered', async () => {
-    configure(hubRoutes(undefined, { 'GET /api/chunks': () => ({ chunks: [], next_cursor: null }) }));
+    configure(hubRoutes(undefined, { 'GET /api/chunks': () => ({ chunks: [], next_cursor: null, board_done_policy: null }) }));
     const { el } = await open();
 
     expect(el.querySelector('[data-testid="delivery-empty"]')?.textContent).toContain('Nothing delivering or delivered.');

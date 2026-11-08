@@ -11,6 +11,7 @@ import os
 import subprocess
 import sys
 import time
+import tomllib
 from collections.abc import Callable
 from contextlib import ExitStack
 from pathlib import Path
@@ -284,6 +285,7 @@ class _Rehearsal:
             self.work, name="rehearsal-work", hub_url=self.hub.url, project=_PROJECT,
             workspace=self.workspace, mock_bin=self.mock_bin,
         )  # fmt: skip
+        self.workspace_id = tomllib.loads((self.work.dir / "blizzard-host.toml").read_text())["workspace"][0]["id"]
         self.work.init(self.baseline, self.hub.url)
         self.work.start(self.baseline, self.hub.url)
         assert self.forge.post("/_levers/checks_pending", json={"repo": REPO}).status_code == 200
@@ -304,6 +306,13 @@ class _Rehearsal:
         self._migrate(step, self.hub.migrate(self.candidate), "hub migrate")
         client = self._client(self.hub.start(self.candidate))
         self._hold_views(client, step)
+        probe = subprocess.run(
+            [str(self.baseline.bin_dir / "python"), "-I", str(Path(__file__).with_name("release_chunks.py")),
+             self.hub.url],
+            env=self.baseline.env(), capture_output=True, text=True, check=False, timeout=120,
+        )  # fmt: skip
+        if probe.returncode:
+            raise self._fail(step, f"release chunk-page probe failed:\n{probe.stdout}\n{probe.stderr}")
 
     def keep_the_old_runner(self) -> None:
         step = "3 keep the old runner"
@@ -384,7 +393,7 @@ class _Rehearsal:
         conflict = self._ingest(client, "conflict")
         claim = client.post(
             "/api/fleet/routes", headers={"Authorization": f"Bearer {token}"},
-            json={"chunk_id": conflict, "workspace_id": DEFAULT_WORKSPACE_ID, "environment_ids": []},
+            json={"chunk_id": conflict, "workspace_id": self.workspace_id, "environment_ids": []},
         )  # fmt: skip
         assert claim.status_code == 201, claim.text
         self._release_refusal_probe(token, conflict, "conflict", runner_id, step)
@@ -396,7 +405,7 @@ class _Rehearsal:
     def _release_refusal_probe(self, token: str, chunk: str, expected: str, value: str, step: str) -> None:
         probe = subprocess.run(
             [str(self.baseline.bin_dir / "python"), "-I", str(Path(__file__).with_name("release_refusals.py")),
-             self.hub.url, chunk, expected, value],
+             self.hub.url, chunk, expected, value, self.workspace_id],
             input=token, env=self.baseline.env(), capture_output=True, text=True, check=False, timeout=60,
         )  # fmt: skip
         if probe.returncode:

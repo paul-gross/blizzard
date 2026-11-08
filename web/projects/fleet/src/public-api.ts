@@ -144,6 +144,7 @@ export type {
   ChunkCountsView,
   ChunkStatus,
   ChunkSummary,
+  ChunksPageView,
   DecisionResolutionConflict,
   DecisionResolutionResponse,
   DecisionView,

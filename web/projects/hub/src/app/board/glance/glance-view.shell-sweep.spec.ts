@@ -10,7 +10,7 @@ const VITALS: Vitals = {
   needsYou: 2,
   running: 1,
   ready: 1,
-  doneRecent: 1,
+  done: 1,
   runnersUpLabel: '7/257',
 };
 

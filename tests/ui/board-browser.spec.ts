@@ -272,3 +272,44 @@ test('test_board_browser_live_group_reorder_answer_and_pause', async ({ api, iss
   const log = (await runnerHost.originLog(REPO, BRANCH, 'LANDED.md'))!;
   expect(log[0]).toMatchObject({ sha: head, subject: 'feat: resolve the board answer and land the change' });
 });
+
+test.describe('server-selected done on the desktop', () => {
+  test.use({ isolation: 'fresh-hub', clockMode: 'controlled' });
+
+  test('retains an old done row and falls back honestly when policy metadata is absent', async ({ issue, clock, page, wideViewport }) => {
+    test.setTimeout(120000);
+    // Start with a real hub row, then emulate a server-selected old DONE row in the board read.
+    // This tests rendering and metadata compatibility, not the hub's window-selection algorithm.
+    const { chunk } = await issue('old desktop done');
+    const completedAt = new Date(clock.now().getTime() - 49 * 60 * 60 * 1000).toISOString();
+    let omitPolicy = false;
+    await page.route('**/api/chunks?**', async (route) => {
+      const response = await route.fetch();
+      const body = await response.json();
+      body.chunks = body.chunks.map((row: { chunk_id: string }) => row.chunk_id === chunk.chunk_id
+        ? { ...row, status: 'done', terminal: true, promotable: false, current_node_id: 'done', current_node_name: 'done', completed_at: completedAt }
+        : row);
+      if (omitPolicy) delete body.board_done_policy;
+      await route.fulfill({ response, json: body });
+    });
+    // The all-time total may exceed the selected lane's count.
+    await page.route('**/api/chunk-counts**', async (route) => {
+      const response = await route.fetch();
+      const body = await response.json();
+      await route.fulfill({ response, json: { ...body, done: 3, terminal: 3, total: 3, not_ready: 0 } });
+    });
+    await page.setViewportSize(wideViewport);
+    await page.goto('/board');
+    const lane = page.locator('[data-col="done"]');
+    const card = lane.locator(`[data-testid="chunk-card"][data-chunk="${chunk.chunk_id}"]`);
+    await expect(card).toBeVisible();
+    await expect(lane.getByTestId('lane-count')).toHaveText('1');
+    await expect(lane.locator('.b-col-head')).toHaveAttribute('title', /within 48 hours.*newest 10.*3 all time/);
+
+    // The same rows still render when an older server omits the policy field.
+    omitPolicy = true;
+    await page.reload();
+    await expect(card).toBeVisible();
+    await expect(lane.locator('.b-col-head')).toHaveAttribute('title', /Server-selected completed work/);
+  });
+});

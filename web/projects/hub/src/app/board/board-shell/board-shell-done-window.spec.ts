@@ -4,8 +4,9 @@ import { TestBed } from '@angular/core/testing';
 import type { ChunkSummary, KitAsyncStateValue } from 'fleet';
 import { chunkCountsView, chunkSummary } from 'fleet/testing';
 import { BoardShell } from './board-shell';
+import { glanceListGroups } from '../glance/glance-board.model';
 
-/** The DONE column holds only the hub's recent window, so it counts and names that window rather than all time. */
+/** The DONE column counts the hub-selected rows, rather than the all-time total. */
 describe('BoardShell DONE window', () => {
   const done = (suffix: string): ChunkSummary =>
     chunkSummary({
@@ -36,26 +37,55 @@ describe('BoardShell DONE window', () => {
 
   const head = (el: HTMLElement, column: string) => el.querySelector(`[data-col="${column}"] .b-col-head`);
 
-  it('labels its column by the window the hub keeps', async () => {
+  it('uses a generic heading until the policy is supplied', async () => {
     const el = await render([], 'ready', null);
 
-    expect(head(el, 'done')?.querySelector('.col-lbl')?.textContent?.trim()).toBe('DONE MAX(48H, 10)');
+    expect(head(el, 'done')?.querySelector('.col-lbl')?.textContent?.trim()).toBe('Done');
   });
 
-  it('counts the cards its window shows, not the all-time total, which its head\'s title carries', async () => {
+  it('counts the selected cards, not the all-time total, which its head\'s title carries', async () => {
     const el = await render([done('a'), done('b')], 'ready', 207);
 
     expect(head(el, 'done')?.querySelector('.n')?.textContent?.trim()).toBe('2');
     expect(head(el, 'done')?.getAttribute('title')).toBe(
-      'Whichever is more: everything finished in the last 48h, or the 10 most recent · 207 all time',
+      'Server-selected completed work · 207 all time',
     );
     expect(head(el, 'ready')?.hasAttribute('title')).toBe(false);
+  });
+
+  it('shows the same server-selected rows as glance despite clock skew and missing timestamps', async () => {
+    const chunks = [
+      { ...done('old'), completed_at: '2020-01-01T00:00:00Z' },
+      { ...done('future'), completed_at: '2099-01-01T00:00:00Z' },
+      { ...done('missing'), completed_at: null },
+      { ...done('bad'), completed_at: 'invalid' },
+    ];
+    const fixture = TestBed.createComponent(BoardShell);
+    fixture.componentRef.setInput('chunks', chunks);
+    fixture.componentRef.setInput('state', 'ready');
+    fixture.componentRef.setInput('layout', 'list');
+    await fixture.whenStable();
+    const el = fixture.nativeElement as HTMLElement;
+    const desktop = [...el.querySelectorAll<HTMLElement>('[data-testid="list-row"]')].map((row) => row.dataset['chunk']);
+    const mobile = glanceListGroups(chunks, [], [], [], [], new Map(), new Map(), new Map()).done.map((row) => row.chunkId);
+    expect(desktop).toEqual(mobile);
+    expect(mobile).toEqual(chunks.map((chunk) => chunk.chunk_id).sort((a, b) => a.includes('future') ? -1 : b.includes('future') ? 1 : 0));
+  });
+
+  it('uses the supplied server policy for the heading and explanation', async () => {
+    const fixture = TestBed.createComponent(BoardShell);
+    fixture.componentRef.setInput('state', 'ready');
+    fixture.componentRef.setInput('donePolicy', { heading: 'Finished', explanation: 'Completed within 2 hours or among the newest 3', cutoffs: [] });
+    await fixture.whenStable();
+    const heading = head(fixture.nativeElement as HTMLElement, 'done');
+    expect(heading?.querySelector('.col-lbl')?.textContent?.trim()).toBe('Finished');
+    expect(heading?.getAttribute('title')).toBe('Completed within 2 hours or among the newest 3');
   });
 
   it('withholds its count while the board loads, and its all-time total until the counts read resolves', async () => {
     const el = await render([], 'loading', null);
 
     expect(head(el, 'done')?.querySelector('.n')?.textContent?.trim()).toBe('');
-    expect(head(el, 'done')?.getAttribute('title')).toBe('Whichever is more: everything finished in the last 48h, or the 10 most recent');
+    expect(head(el, 'done')?.getAttribute('title')).toBe('Server-selected completed work');
   });
 });

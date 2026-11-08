@@ -71,6 +71,8 @@
 <div class="glance" data-testid="glance-board">
   <fleet-kit-count-strip testid="glance-vitals" [cells]="vitalCells()" [selected]="filter()" (cellClick)="toggleFilter($event)" />
 
+  <p class="done-policy" data-testid="glance-done-policy">{{ donePolicy().explanation }}</p>
+
   <fleet-kit-panel aria-label="Fleet spend" data-testid="glance-spend-panel" label="Fleet spend">
     <fleet-kit-async-state
       [state]="spendState()"
@@ -115,7 +117,7 @@
       <li class="divider" data-testid="glance-done-divider" role="separator" aria-label="Backlog above, done below">
         <span class="divider-label">▲ Backlog</span>
         <span class="divider-rule"></span>
-        <span class="divider-label">Done (48h) ▼</span>
+        <span class="divider-label">{{ donePolicy().heading }} ▼</span>
       </li>
       @for (row of list().done; track row.chunkId) {
         <ng-container *ngTemplateOutlet="card; context: { $implicit: row }" />

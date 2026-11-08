@@ -34,7 +34,7 @@ const CHUNK = chunkSummary({
 /** The board's reads, each answered empty but for one running chunk and its one titled work item. */
 const ROUTES: Parameters<typeof stubHubClient>[0] = {
   'GET /api/me': () => OPERATOR_ME_RESPONSE,
-  'GET /api/chunks': () => ({ chunks: [CHUNK], next_cursor: null }),
+  'GET /api/chunks': () => ({ chunks: [CHUNK], next_cursor: null, board_done_policy: null }),
   'GET /api/chunks/{chunk_id}': () =>
     chunkDetail({
       ...CHUNK,

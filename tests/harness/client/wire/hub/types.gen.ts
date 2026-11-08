@@ -961,6 +961,26 @@ export type BlockedView = {
 };
 
 /**
+ * BoardDonePolicyView
+ *
+ * The done-window policy applied to this chunk read.
+ */
+export type BoardDonePolicyView = {
+    /**
+     * Done Since
+     */
+    done_since: string;
+    /**
+     * Floor
+     */
+    floor: number;
+    /**
+     * Window Seconds
+     */
+    window_seconds: number;
+};
+
+/**
  * BounceAction
  *
  * The hub action whose pass answered the ``choice`` the bounce routed; ``log_artifact`` names its
@@ -3058,6 +3078,7 @@ export type ChunksInDifferentProjectsProblem = {
  * ``None`` exactly when this page is the last one.
  */
 export type ChunksPageView = {
+    board_done_policy: BoardDonePolicyView | null;
     /**
      * Chunks
      */

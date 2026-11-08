@@ -62,7 +62,6 @@ const groups = (
     (fields.backlogOrder ?? []).map((chunkId) => ({ chunk_id: chunkId })),
     fields.hosts ?? new Map(),
     fields.colors ?? new Map(),
-    NOW,
     fields.workItems ?? NO_ITEMS,
   );
 
@@ -96,17 +95,17 @@ describe('glanceListGroups', () => {
     expect(ids(list.backlog)).toEqual(['ch_b2', 'ch_b1', 'ch_b3']);
   });
 
-  it('keeps only the chunks finished in the last 48 hours, the board\'s own done window', () => {
+  it('keeps every server-selected done chunk, including old and undated rows', () => {
     const list = groups([
       chunk('ch_recent', 'done', { terminal: true, completed_at: ago(HOUR) }),
       chunk('ch_stopped', 'stopped', { terminal: true, completed_at: ago(30 * HOUR) }),
       chunk('ch_stale', 'done', { terminal: true, completed_at: ago(49 * HOUR) }),
       chunk('ch_undated', 'done', { terminal: true, completed_at: null }),
     ]);
-    expect(ids(list.done)).toEqual(['ch_recent', 'ch_stopped']);
+    expect(ids(list.done)).toEqual(['ch_recent', 'ch_stopped', 'ch_stale', 'ch_undated']);
   });
 
-  it('lists the recent done newest-first, whatever order the read returns them in', () => {
+  it('lists done newest-first, whatever order the read returns them in', () => {
     const list = groups([
       chunk('ch_old', 'done', { terminal: true, completed_at: ago(5 * HOUR) }),
       chunk('ch_new', 'done', { terminal: true, completed_at: ago(HOUR) }),
@@ -228,7 +227,7 @@ describe('glanceVitals', () => {
       // running, and delivering, which shows under RUNNING
       running: 2,
       ready: 1,
-      doneRecent: 1,
+      done: 1,
       runnersUpLabel: '1/2',
     });
   });
@@ -272,7 +271,7 @@ describe('filterGlanceRows', () => {
 
   it('lists exactly as many cards as the vital it is narrowed to counts', () => {
     const vitals = glanceVitals([], LIST);
-    const counts: Record<GlanceFilter, number> = { needs: vitals.needsYou, running: vitals.running, ready: vitals.ready, done: vitals.doneRecent };
+    const counts: Record<GlanceFilter, number> = { needs: vitals.needsYou, running: vitals.running, ready: vitals.ready, done: vitals.done };
     for (const [filter, count] of Object.entries(counts)) expect(filterGlanceRows(LIST, filter as GlanceFilter)).toHaveLength(count);
   });
 

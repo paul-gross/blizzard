@@ -146,7 +146,7 @@ function hubRoutes(me: MeResponse = OPERATOR_ME_RESPONSE): HubRoutes {
         CHUNK(BACKLOG, 'not_ready'),
         CHUNK(BACKLOG_NEXT, 'not_ready'),
       ],
-      next_cursor: null,
+      next_cursor: null, board_done_policy: null,
     }),
     'GET /api/chunk-counts': () => COUNTS,
     'GET /api/questions': () => [

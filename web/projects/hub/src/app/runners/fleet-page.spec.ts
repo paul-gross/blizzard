@@ -49,7 +49,7 @@ describe('FleetPage', () => {
         ],
       }),
       'GET /api/hosts': () => ({ hosts: [HOST] }),
-      'GET /api/chunks': () => ({ chunks: [], next_cursor: null }),
+      'GET /api/chunks': () => ({ chunks: [], next_cursor: null, board_done_policy: null }),
       'POST /api/hosts/{host_id}/enrollments': () => ({ host_id: 'hs_h1', token: 'tok_secret' }),
       'POST /api/runners/{runner_id}/pause': (_request, { runner_id }) => runner(runner_id, { hub_paused: true }),
       'POST /api/runners/{runner_id}/resume': (_request, { runner_id }) => runner(runner_id),

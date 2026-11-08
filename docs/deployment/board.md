@@ -155,7 +155,8 @@ it on the run's detail — `Kept by` the cadence, linked, and the chore — or t
 
 On a phone the hub's tabs sit at the foot of the screen as Board, Delivery, Fleet, Gardening and Events; on a desktop
 the header orders them Board, Delivery, Fleet, Graphs, Gardening, Events and Admin. The title bar names the project lens
-— tapping it opens a picker listing All projects and each project — and today's spend. The mobile board counts the
-chunks done in the last 48 hours and lists them under `Done (48h)`, each with when it finished and how long ago. The
-mobile Delivery tab lists the chunks delivering and those delivered in the last 48 hours as cards, and tapping one opens
-that chunk's delivery on a screen of its own.
+— tapping it opens a picker listing All projects and each project — and today's spend. The mobile board counts and lists
+the server-selected done chunks, including the newest floor as well as those inside the window
+([observability.md](./observability.md#list-pagination)), each with when it finished and how long ago. The mobile
+Delivery tab lists the chunks delivering and those delivered in the last 48 hours as cards, and tapping one opens that
+chunk's delivery on a screen of its own.

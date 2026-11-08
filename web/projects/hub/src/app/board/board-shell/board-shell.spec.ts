@@ -155,7 +155,7 @@ describe('BoardShell', () => {
     const el = fixture.nativeElement as HTMLElement;
 
     const heads = [...el.querySelectorAll('[data-col] .col-lbl')].map((n) => n.textContent?.trim());
-    expect(heads).toEqual(['BACKLOG', 'READY', 'WAIT/HUMAN', 'NEEDS HUMAN', 'RUNNING', 'DONE MAX(48H, 10)']);
+    expect(heads).toEqual(['BACKLOG', 'READY', 'WAIT/HUMAN', 'NEEDS HUMAN', 'RUNNING', 'Done']);
   });
 
   it('renders a not-ready chunk as a card in the backlog column, with no Promote control', async () => {

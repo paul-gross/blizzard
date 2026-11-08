@@ -66,6 +66,7 @@ export {
 export type {
   ChunkCountsView,
   ChunkSummary,
+  ChunksPageView,
   DecisionView,
   FlagsResponse,
   FleetSpendView,

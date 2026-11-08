@@ -65,7 +65,7 @@ describe('RunnersPage (mobile Fleet screen)', () => {
       'GET /api/me': () => me,
       'GET /api/runners': () => RUNNERS,
       'GET /api/hosts': () => ({ hosts: [HOST] }),
-      'GET /api/chunks': () => ({ chunks: CHUNKS, next_cursor: null }),
+      'GET /api/chunks': () => ({ chunks: CHUNKS, next_cursor: null, board_done_policy: null }),
       ...over,
     });
     TestBed.configureTestingModule({

@@ -209,7 +209,7 @@ describe('GlanceBoard — one list and the vitals', () => {
   /** Answer the board's reads, `overrides` first. */
   function stubHub(overrides: HubRoutes = {}): void {
     stub = stubHubClient({
-      'GET /api/chunks': () => ({ chunks: CHUNKS, next_cursor: null }),
+      'GET /api/chunks': () => ({ chunks: CHUNKS, next_cursor: null, board_done_policy: null }),
       'GET /api/queue': () => ({ entries: QUEUE, next_cursor: null }),
       'GET /api/backlog': () => ({ entries: BACKLOG, next_cursor: null }),
       'GET /api/me': () => OPERATOR_ME_RESPONSE,
@@ -239,7 +239,7 @@ describe('GlanceBoard — one list and the vitals', () => {
 
   afterEach(() => stub.restore());
 
-  it('lists needs, waiting, running, READY in queue order, the divider, BACKLOG in backlog order, the divider, then done in the last 48h', async () => {
+  it('lists needs, waiting, running, READY in queue order, the divider, BACKLOG in backlog order, the divider, then server-selected done', async () => {
     const fixture = TestBed.createComponent(GlanceBoard);
     await settle(fixture);
 
@@ -255,6 +255,8 @@ describe('GlanceBoard — one list and the vitals', () => {
       'glance-done-divider',
       'ch_01donerecent0000000000000000',
       'ch_01stoppedrecent00000000000000',
+      'ch_01doneold00000000000000000000',
+      'ch_01donemissing000000000000000',
     ]);
   });
 
@@ -320,7 +322,7 @@ describe('GlanceBoard — one list and the vitals', () => {
     expect(vital('vital-needs-you')).toBe('2');
     expect(vital('vital-running')).toBe('1');
     expect(vital('vital-ready')).toBe('2');
-    expect(vital('vital-done-today')).toBe('2');
+    expect(vital('vital-done-today')).toBe('4');
     // r1 and r2 online, r3 offline — "2/3 runners up".
     expect(vital('vital-runners-up')).toBe('2/3');
   });
@@ -404,7 +406,7 @@ describe('GlanceBoard — cost estimate, no billed cost', () => {
 
   beforeEach(async () => {
     stub = stubHubClient({
-      'GET /api/chunks': () => ({ chunks: ESTIMATE_CHUNKS, next_cursor: null }),
+      'GET /api/chunks': () => ({ chunks: ESTIMATE_CHUNKS, next_cursor: null, board_done_policy: null }),
       'GET /api/queue': () => ({ entries: [], next_cursor: null }),
       'GET /api/backlog': () => ({ entries: [], next_cursor: null }),
       'GET /api/me': () => OPERATOR_ME_RESPONSE,
@@ -462,7 +464,7 @@ describe('GlanceBoard — work items', () => {
             work_refs: [workRefView({ source: 'wsrc_api', ref: '4', label: 'toy-api#4', web_url: null })],
           }),
         ],
-        next_cursor: null,
+        next_cursor: null, board_done_policy: null,
       }),
       'GET /api/work-items': () => ({
         chunks: {

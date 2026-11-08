@@ -51,7 +51,7 @@ export function injectRunnerRows(includeRetired: () => boolean = () => false): {
    * bindings folded on; recomputes on {@link now} so elapsed bars keep advancing between
    * `runner-changed` pushes. */
   const allRows = computed<readonly RunnerRow[]>(() =>
-    foldRunnerRows(runnersQuery.data() ?? [], chunksQuery.data() ?? [], now(), hostsQuery.data() ?? []),
+    foldRunnerRows(runnersQuery.data() ?? [], chunksQuery.data()?.chunks ?? [], now(), hostsQuery.data() ?? []),
   );
 
   const rows = computed<readonly RunnerRow[]>(() => lensRunners(allRows(), projectFilter()));
@@ -61,7 +61,7 @@ export function injectRunnerRows(includeRetired: () => boolean = () => false): {
       hostsQuery.data() ?? [],
       allRows(),
       projectFilter() === null ? null : rows(),
-      chunksQuery.data() ?? [],
+      chunksQuery.data()?.chunks ?? [],
       now(),
     ),
   );

@@ -38,7 +38,7 @@ const CHUNK_FIELDS = {
 
 const HUB_ROUTES: Parameters<typeof stubHubClient>[0] = {
   'GET /api/me': () => OPERATOR_ME_RESPONSE,
-  'GET /api/chunks': () => ({ chunks: [chunkSummary(CHUNK_FIELDS)], next_cursor: null }),
+  'GET /api/chunks': () => ({ chunks: [chunkSummary(CHUNK_FIELDS)], next_cursor: null, board_done_policy: null }),
   'GET /api/chunks/{chunk_id}': () =>
     chunkDetail({
       ...CHUNK_FIELDS,

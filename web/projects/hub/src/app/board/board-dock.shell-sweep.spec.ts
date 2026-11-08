@@ -48,7 +48,7 @@ const NO_SPEND = chunkUsageTotalView({ ...NO_TOKENS, cost_usd: 0, estimated_cost
 
 const ROUTES: Parameters<typeof stubHubClient>[0] = {
   'GET /api/me': () => OPERATOR_ME_RESPONSE,
-  'GET /api/chunks': () => ({ chunks: [CHUNK], next_cursor: null }),
+  'GET /api/chunks': () => ({ chunks: [CHUNK], next_cursor: null, board_done_policy: null }),
   'GET /api/chunks/{chunk_id}': () =>
     chunkDetail({
       ...CHUNK,

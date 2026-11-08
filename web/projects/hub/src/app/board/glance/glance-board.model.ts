@@ -1,7 +1,6 @@
 import { DONE_LANE, RunnerConnection, UNKNOWN_LANE, chunkLane, compactRef, runnerBoardParts, type RunnerBoardParts, type ChunkStatus, type ChunkSummary, type DecisionView, type hubApi, type QuestionView, type RunnerRegistryView, type WorkItemsView, workLines } from 'fleet';
 
 import type { RowWork, Vitals } from './glance-view';
-import { withinDoneWindow } from '../../core/done-window';
 
 /** The runners that count toward runners-up: a retired runner has left the fleet, and a never-connected
  * one (added but never started) has not joined it yet — neither reads as down. */
@@ -18,14 +17,14 @@ function rowWork(chunk: ChunkSummary | undefined, workItems: ReadonlyMap<string,
 }
 
 /** The vitals strip, counted off the mobile list: what needs a person, what is moving, what is queued, what
- * finished in the done window, and the registry's online fraction. */
+ * completed, and the registry's online fraction. */
 export function glanceVitals(runners: readonly RunnerRegistryView[], list: GlanceListGroups): Vitals {
   const online = runners.filter((runner) => runner.online).length;
   return {
     needsYou: filterGlanceRows(list, 'needs').length,
     running: filterGlanceRows(list, 'running').length,
     ready: filterGlanceRows(list, 'ready').length,
-    doneRecent: filterGlanceRows(list, 'done').length,
+    done: filterGlanceRows(list, 'done').length,
     runnersUpLabel: `${online}/${runners.length}`,
   };
 }
@@ -61,7 +60,7 @@ export interface GlanceRow extends RowWork {
   readonly completedAt: string | null;
 }
 
-/** The mobile list in render order: attention and work in flight, then READY over BACKLOG, then done in the last 48h. */
+/** The mobile list in render order: attention and work in flight, then READY over BACKLOG, then done. */
 export interface GlanceListGroups {
   readonly live: readonly GlanceRow[];
   readonly ready: readonly GlanceRow[];
@@ -86,7 +85,6 @@ export function glanceListGroups(
   backlogOrder: readonly { readonly chunk_id: string }[],
   runnerHosts: ReadonlyMap<string, string>,
   projectColors: ReadonlyMap<string, string>,
-  now: number,
   workItems: ReadonlyMap<string, WorkItemsView>,
 ): GlanceListGroups {
   const asks = new Map(questions.map((question) => [question.chunk_id, question.question]));
@@ -116,10 +114,9 @@ export function glanceListGroups(
       projectColor: projectColors.get(chunk.project_id ?? '') ?? null,
       completedAt: lane === DONE_LANE ? (chunk.completed_at ?? null) : null,
     };
-    // The recent-done group reaches back the board's own done window, rolling with the clock.
     if (lane === DONE_LANE) {
-      if (!withinDoneWindow(chunk.completed_at, now)) continue;
-      doneAt.set(chunk.chunk_id, Date.parse(chunk.completed_at ?? ''));
+      const ms = Date.parse(chunk.completed_at ?? '');
+      doneAt.set(chunk.chunk_id, Number.isNaN(ms) ? Number.NEGATIVE_INFINITY : ms);
     }
     byLane.set(lane, [...(byLane.get(lane) ?? []), row]);
   }
@@ -128,7 +125,11 @@ export function glanceListGroups(
     live: [...lane('needs'), ...lane('waiting'), ...lane('running'), ...lane(UNKNOWN_LANE)],
     ready: byRank(lane('ready'), readyOrder),
     backlog: byRank(lane('notready'), backlogOrder),
-    done: lane(DONE_LANE).sort((a, b) => (doneAt.get(b.chunkId) ?? 0) - (doneAt.get(a.chunkId) ?? 0)),
+    done: lane(DONE_LANE).sort((a, b) => {
+      const left = doneAt.get(a.chunkId)!;
+      const right = doneAt.get(b.chunkId)!;
+      return left === right ? 0 : left > right ? -1 : 1;
+    }),
   };
 }
 

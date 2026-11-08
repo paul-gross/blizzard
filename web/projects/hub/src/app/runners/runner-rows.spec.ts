@@ -44,7 +44,7 @@ describe('injectRunnerRows subscription freshness fold', () => {
       'GET /api/runners': () =>
         runnersResponse([subscriptionUsageView({ slug: 'anthropic', name: 'Anthropic', sampled_at: SAMPLED_AT })]),
       'GET /api/hosts': () => ({ hosts: [] }),
-      'GET /api/chunks': () => ({ chunks: [], next_cursor: null }),
+      'GET /api/chunks': () => ({ chunks: [], next_cursor: null, board_done_policy: null }),
     });
     await TestBed.configureTestingModule({
       imports: [TestHost],
@@ -75,7 +75,7 @@ describe('injectRunnerRows subscription freshness fold', () => {
       'GET /api/runners': () =>
         runnersResponse([subscriptionUsageView({ slug: 'anthropic', name: 'Anthropic', sampled_at: 'not-a-date' })]),
       'GET /api/hosts': () => ({ hosts: [] }),
-      'GET /api/chunks': () => ({ chunks: [], next_cursor: null }),
+      'GET /api/chunks': () => ({ chunks: [], next_cursor: null, board_done_policy: null }),
     });
     await TestBed.configureTestingModule({
       imports: [TestHost],
@@ -115,7 +115,7 @@ describe('injectRunnerRows retired runners', () => {
     stub = stubHubClient({
       'GET /api/runners': (request) => ({ runners: request.search.includes('include_retired=true') ? [LIVE, RETIRED] : [LIVE] }),
       'GET /api/hosts': () => ({ hosts: [] }),
-      'GET /api/chunks': () => ({ chunks: [], next_cursor: null }),
+      'GET /api/chunks': () => ({ chunks: [], next_cursor: null, board_done_policy: null }),
     });
     await TestBed.configureTestingModule({
       imports: [TestHost],
@@ -160,7 +160,7 @@ describe('injectRunnerRows state', () => {
     stub = stubHubClient({
       'GET /api/runners': () => ({ runners: [] }),
       'GET /api/hosts': hosts,
-      'GET /api/chunks': () => ({ chunks: [], next_cursor: null }),
+      'GET /api/chunks': () => ({ chunks: [], next_cursor: null, board_done_policy: null }),
     });
     await TestBed.configureTestingModule({
       imports: [TestHost],
