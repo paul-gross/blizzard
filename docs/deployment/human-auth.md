@@ -175,6 +175,8 @@ panel offers no sign-in: `login` answers 503 and no session is read. Its runners
 returns at the next answered report, with any session still inside its TTL. A host with no host token keeps signing in
 as its first runner, as before.
 
+A registered host signs in as itself with every runner halted too, on the same conditions.
+
 An unknown host id, a callback the host has not reported, and a person with no membership in the host's tenant all get
 the one undifferentiated 400 a runner client gets. Only a member who presents a reported callback can tell a retired
 host apart, by a 403.

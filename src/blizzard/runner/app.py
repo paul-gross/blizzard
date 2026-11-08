@@ -915,6 +915,8 @@ def _wire_runnerless_app(
         readiness=host.readiness,
         workspace_registry=host.workspaces,
         host_stores=host.host_stores,
+        host_registration=host.host_registration,
+        host_identity=host.host_identity,
         hub_http_client=hub_http_client,
         events=host.events,
         clock=host.clock,
