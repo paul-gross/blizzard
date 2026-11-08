@@ -553,9 +553,9 @@ def _publish_releases(
 )
 def reinstate_runner(runner_id: str, request: RunnerLifecycleRequest, services: Services) -> RunnerRegistryView:
     """Reinstate a retired runner — any token it still carries is revoked with the reversal, and it stays unenrolled
-    until enrolled afresh; 409 when not retired, when it stands
-    under a retired host, and when its lifecycle moved while the reinstate was decided. A route its retirement left
-    held is released first, as the retire's own release pass would, and its ``detached`` frame published."""
+    until enrolled afresh; 409 when not retired, when it stands under a retired host, and when its lifecycle moved
+    while the reinstate was decided. A route its retirement left held is released first, as the retire's own release
+    pass would, and its ``detached`` frame published."""
     registration = _registration(services, runner_id)
     held = services.chunks.route.live_routes_of_runner(runner_id)
     changes = chunk_events.ChunkChanged.before_many(services, [r.chunk_id for r in held])

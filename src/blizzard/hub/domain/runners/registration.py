@@ -381,9 +381,8 @@ class RunnerRegistration:
     def reinstate(self, *, by: str, at: datetime) -> LifecycleFact:
         """The ``retired=False`` fact, and only the fact: the runner ends unenrolled — the service revokes any token it
         still carries in the same unit — and
-        :meth:`~blizzard.hub.domain.execution.fleet.FleetService.reinstate` finishes the
-        retirement's release pass before writing it. Raises :class:`RunnerNotRetired` unless it
-        is retired."""
+        :meth:`~blizzard.hub.domain.execution.fleet.FleetService.reinstate` finishes the retirement's release pass
+        before writing it. Raises :class:`RunnerNotRetired` unless it is retired."""
         if not self.permits(RunnerVerb.REINSTATE):
             raise RunnerNotRetired(self.runner_id)
         return LifecycleFact(runner_id=self.runner_id, retired=False, at=at, by=by)

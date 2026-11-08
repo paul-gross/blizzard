@@ -362,15 +362,13 @@ class FleetService:
         return ReleasedRoute(chunk_id=route.chunk_id, released_id=released_id)
 
     def reinstate(self, registration: RunnerRegistration, *, by: str) -> ReinstateOutcome:
-        """Finish the retirement ``registration`` was read at, then reverse it. The runner stays
-        unenrolled — any token an enrollment that raced the retire left is revoked in the unit that lands the fact —
-        so the operator enrolls it afresh. A
-        runner under a retired host stays retired
-        (:class:`~blizzard.hub.domain.runners.host.HostRetired`), and so does one whose host
-        retires before the fact lands. Every route the runner still holds is released first, as
-        the retire's own pass would, each conditioned on the version read; the ``retired=False``
-        fact then lands on that same version. A runner whose lifecycle moved raises
-        :class:`RunnerLifecycleConflict`; once a release has committed, any refusal raises
+        """Finish the retirement ``registration`` was read at, then reverse it. The runner stays unenrolled — any token
+        an enrollment that raced the retire left is revoked in the unit that lands the fact — so the operator enrolls
+        it afresh. A runner under a retired host stays retired
+        (:class:`~blizzard.hub.domain.runners.host.HostRetired`), and so does one whose host retires before the fact
+        lands. Every route the runner still holds is released first, as the retire's own pass would, each conditioned
+        on the version read; the ``retired=False`` fact then lands on that same version. A runner whose lifecycle
+        moved raises :class:`RunnerLifecycleConflict`; once a release has committed, any refusal raises
         :class:`ReinstateInterrupted` carrying those releases."""
         fact = registration.reinstate(by=by, at=self._clock.now())
         host = self._host_of(registration)

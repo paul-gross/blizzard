@@ -58611,7 +58611,7 @@
     },
     "/api/runners/{runner_id}/reinstate": {
       "post": {
-        "description": "Reinstate a retired runner \u2014 any token it still carries is revoked with the reversal, and it stays unenrolled\nuntil enrolled afresh; 409 when not retired, when it stands\nunder a retired host, and when its lifecycle moved while the reinstate was decided. A route its retirement left\nheld is released first, as the retire's own release pass would, and its ``detached`` frame published.",
+        "description": "Reinstate a retired runner \u2014 any token it still carries is revoked with the reversal, and it stays unenrolled\nuntil enrolled afresh; 409 when not retired, when it stands under a retired host, and when its lifecycle moved\nwhile the reinstate was decided. A route its retirement left held is released first, as the retire's own release\npass would, and its ``detached`` frame published.",
         "operationId": "reinstate_runner_api_runners__runner_id__reinstate_post",
         "parameters": [
           {
