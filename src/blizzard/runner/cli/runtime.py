@@ -49,6 +49,7 @@ from blizzard.runner.app import HostedApp, build_hosted_app
 from blizzard.runner.cli.daemon import Door, RunnerDaemon, daemon_holding, runner_option
 from blizzard.runner.cli.directory import load_host
 from blizzard.runner.cli.env import DEFAULT_DIR, ENV_RUNNER_DIR
+from blizzard.runner.cli.scratch_binding import reconcile_scratch_roots
 from blizzard.runner.cli.store import runtime_of
 from blizzard.runner.cli.store_guard import named_runners, store_write_guard
 from blizzard.runner.composition import (
@@ -129,6 +130,7 @@ from blizzard.runner.loop.periodic_pass_driver import PeriodicPassDriver
 from blizzard.runner.loop.step_passes import HostPassStepper
 from blizzard.runner.loop_wiring import LoopWiring, PeriodicDriver, RunnerStepper, host_pass_stepper
 from blizzard.runner.process.internal.subprocess_child_processes import SubprocessChildProcesses
+from blizzard.runner.process.internal.worker_scratch_dirs import WorkerScratchDirs
 from blizzard.runner.runtime import (
     StoreResetRefused,
     ensure_current_revision,
@@ -136,7 +138,6 @@ from blizzard.runner.runtime import (
     named_store_socket,
     reset_command,
 )
-from blizzard.runner.scratch_binding import reconcile_scratch_roots
 from blizzard.runner.store import MIGRATIONS_DIR
 from blizzard.runner.store.errors import RunnerStoreErrorFactory
 from blizzard.runner.stores import HostReadStores, RunnerReadStores
@@ -1286,7 +1287,7 @@ def _reconcile_host_scratch(config: RunnerConfig, host: HostProcess, runner_ids:
         for runner_id in runner_ids
     }
     root = config.worker_scratch_root or config.root / WORKER_SCRATCH_DIRNAME
-    reconcile_scratch_roots(config.root, root, repositories)
+    reconcile_scratch_roots(config.root, root, repositories, scratch_factory=WorkerScratchDirs)
 
 
 @click.command("tick")

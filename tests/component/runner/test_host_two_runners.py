@@ -21,6 +21,7 @@ from blizzard.foundation.tokens import TokenHash
 from blizzard.foundation.trace_ids import StepKey, trace_id
 from blizzard.runner.app import build_hosted_app
 from blizzard.runner.cli.runtime import _reconcile_host_scratch  # pyright: ignore[reportPrivateUsage]
+from blizzard.runner.cli.scratch_binding import reconcile_scratch_roots
 from blizzard.runner.composition import HostProcess, RunnerProcess, build_host_process
 from blizzard.runner.config import RunnerConfig
 from blizzard.runner.host_config import BuiltRunner, ResolvedToken
@@ -29,7 +30,6 @@ from blizzard.runner.hub.identity import RunnerIdentity
 from blizzard.runner.leases.model import NewLease
 from blizzard.runner.loop_wiring import LoopWiring
 from blizzard.runner.process.internal.worker_scratch_dirs import WorkerScratchDirs
-from blizzard.runner.scratch_binding import reconcile_scratch_roots
 from blizzard.runner.tracing.attributes import RUNNER_ID
 from blizzard.runner.tracing.config import RunnerTracingConfig
 from blizzard.runner.tracing.platform import (
@@ -293,7 +293,7 @@ def test_root_change_checks_every_runners_scoped_active_leases(tmp_path: Path) -
         first, second = host.runners
         repositories = {runner.runner_id: runner.stores.lease_record for runner in host.runners}
         old, new = tmp_path / "old", tmp_path / "new"
-        reconcile_scratch_roots(tmp_path, old, repositories)
+        reconcile_scratch_roots(tmp_path, old, repositories, scratch_factory=WorkerScratchDirs)
         second.stores.lease_record.record_mint(
             new_mint(
                 NewLease(
@@ -310,11 +310,11 @@ def test_root_change_checks_every_runners_scoped_active_leases(tmp_path: Path) -
         )
         assert not first.stores.lease_record.list_active_leases()
         with pytest.raises(RuntimeError, match="drain leases"):
-            reconcile_scratch_roots(tmp_path, new, repositories)
+            reconcile_scratch_roots(tmp_path, new, repositories, scratch_factory=WorkerScratchDirs)
         second.stores.lease_record.record_closure(
             lease_id="lease_active_second", chunk_id="ch_1", node_id="nd_build", reason="done", closed_at=REGISTERED_AT
         )
-        reconcile_scratch_roots(tmp_path, new, repositories)
+        reconcile_scratch_roots(tmp_path, new, repositories, scratch_factory=WorkerScratchDirs)
     finally:
         host.close()
 
@@ -347,18 +347,18 @@ def test_root_change_refuses_real_cleanup_failure(tmp_path: Path) -> None:
     try:
         repositories = {runner.runner_id: runner.stores.lease_record for runner in host.runners}
         old, new = tmp_path / "old", tmp_path / "new"
-        reconcile_scratch_roots(tmp_path, old, repositories)
+        reconcile_scratch_roots(tmp_path, old, repositories, scratch_factory=WorkerScratchDirs)
         payload = Path(WorkerScratchDirs(str(old), host.runners[0].runner_id).ensure("lease_1111WXYZ"))
         (payload / "file").write_text("data")
         payload.chmod(0o500)
         try:
             with pytest.raises(PermissionError):
-                reconcile_scratch_roots(tmp_path, new, repositories)
+                reconcile_scratch_roots(tmp_path, new, repositories, scratch_factory=WorkerScratchDirs)
             assert (tmp_path / "data" / "worker-scratch-root").read_text() == str(old)
             assert (payload / "file").exists()
         finally:
             payload.chmod(0o700)
-        reconcile_scratch_roots(tmp_path, new, repositories)
+        reconcile_scratch_roots(tmp_path, new, repositories, scratch_factory=WorkerScratchDirs)
         assert not payload.exists()
     finally:
         host.close()

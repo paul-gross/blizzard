@@ -11,10 +11,21 @@ import os
 import tempfile
 from collections.abc import Callable, Mapping
 from pathlib import Path
+from typing import Protocol
 
 from blizzard.runner.host_layout import DATA_DIRNAME, LEGACY_WORKER_SCRATCH_DIRNAME
 from blizzard.runner.leases.record import IReadLeaseRecordRepository
-from blizzard.runner.process.internal.worker_scratch_dirs import WorkerScratchDirs
+
+
+class ScratchSweeper(Protocol):
+    def sweep_orphans(self, active_lease_ids: set[str], *, strict: bool = False) -> int: ...
+
+    def sweep_legacy(self, removable: Callable[[str], bool], *, strict: bool = False) -> int: ...
+
+
+class ScratchSweeperFactory(Protocol):
+    def __call__(self, root: str, *, runner_id: str, legacy_root: str) -> ScratchSweeper: ...
+
 
 _BINDING = "worker-scratch-root"
 
@@ -41,7 +52,13 @@ def _sync_root_path(root: Path) -> None:
             os.close(fd)
 
 
-def reconcile_scratch_roots(host_root: Path, root: Path, runners: Mapping[str, IReadLeaseRecordRepository]) -> None:
+def reconcile_scratch_roots(
+    host_root: Path,
+    root: Path,
+    runners: Mapping[str, IReadLeaseRecordRepository],
+    *,
+    scratch_factory: ScratchSweeperFactory,
+) -> None:
     """Bind and reconcile once, before any runner on this host can spawn.
 
     Each repository is already bound to its runner, including runners that could
@@ -56,7 +73,7 @@ def reconcile_scratch_roots(host_root: Path, root: Path, runners: Mapping[str, I
     def reconcile(target: Path) -> None:
         _check_root(target)
         for runner, repo in runners.items():
-            scratch = WorkerScratchDirs(
+            scratch = scratch_factory(
                 str(target),
                 runner_id=runner,
                 legacy_root=str(host_root / LEGACY_WORKER_SCRATCH_DIRNAME),

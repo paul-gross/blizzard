@@ -23,8 +23,8 @@ _OWNERS: dict[str, type] = {
     "OpenCodeSection": OpenCodeSection,
 }
 
-#: Fields that hold a path but are no ``[[runner]]`` key: the host directory and the store, both the host's own.
-_NOT_RUNNER_KEYS = frozenset({"RunnerConfig.root", "RunnerConfig.db_url"})
+#: Host-owned paths, not ``[[runner]]`` keys: the host directory, store and worker scratch root.
+_NOT_RUNNER_KEYS = frozenset({"RunnerConfig.root", "RunnerConfig.db_url", "RunnerConfig.worker_scratch_root"})
 
 
 def _holds_a_path(owner: type, field: dataclasses.Field[object]) -> bool:

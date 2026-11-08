@@ -1,12 +1,15 @@
+from functools import partial
 from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 
 import pytest
 
-import blizzard.runner.scratch_binding as scratch_binding
+import blizzard.runner.cli.scratch_binding as scratch_binding
+from blizzard.runner.cli.scratch_binding import bind_scratch_root
 from blizzard.runner.process.internal.worker_scratch_dirs import WorkerScratchDirs
-from blizzard.runner.scratch_binding import bind_scratch_root, reconcile_scratch_roots
+
+reconcile_scratch_roots = partial(scratch_binding.reconcile_scratch_roots, scratch_factory=WorkerScratchDirs)
 
 
 def test_root_change_requires_drain_and_reconciles_before_switch(tmp_path: Path) -> None:
@@ -39,14 +42,14 @@ def test_root_sync_failure_never_publishes_binding_and_retry_syncs_existing_path
     root = tmp_path / "parent" / "scratch"
     binding = tmp_path / "data" / "worker-scratch-root"
     with (
-        patch("blizzard.runner.scratch_binding._sync_root_path", side_effect=OSError("interrupted")),
+        patch("blizzard.runner.cli.scratch_binding._sync_root_path", side_effect=OSError("interrupted")),
         pytest.raises(OSError, match="interrupted"),
     ):
         reconcile_scratch_roots(tmp_path, root, {})
     assert root.is_dir()
     assert not binding.exists()
     with patch(
-        "blizzard.runner.scratch_binding._sync_root_path",
+        "blizzard.runner.cli.scratch_binding._sync_root_path",
         wraps=scratch_binding._sync_root_path,  # pyright: ignore[reportPrivateUsage]
     ) as sync:
         reconcile_scratch_roots(tmp_path, root, {})
@@ -126,7 +129,7 @@ def test_host_reconciliation_aggregates_runners_before_changing_root(
         adapters.append((root, runner_id, instance))
         return instance
 
-    monkeypatch.setattr("blizzard.runner.scratch_binding.WorkerScratchDirs", adapter)
+    reconcile_scratch_roots = partial(scratch_binding.reconcile_scratch_roots, scratch_factory=adapter)
     first, second = MagicMock(), MagicMock()
     first.list_active_leases.return_value = []
     second.list_active_leases.return_value = [SimpleNamespace(lease_id="active")]
