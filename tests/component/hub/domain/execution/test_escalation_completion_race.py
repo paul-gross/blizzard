@@ -80,10 +80,16 @@ class _Chunk:
         assert claim.status_code == 201, claim.text
         report_lease(self.hub, self.chunk_id, epoch=1, seq=1)
 
-    def complete(self, choice: str) -> dict[str, Any]:
+    def complete(self, choice: str, artifacts: list[dict[str, Any]] | None = None) -> dict[str, Any]:
         resp = self.hub.client.post(
             f"/api/fleet/chunks/{self.chunk_id}/completions",
-            json={"choice": choice, "epoch": 1, "runner_id": "r1", "from_node_id": self.node_id, "artifacts": []},
+            json={
+                "choice": choice,
+                "epoch": 1,
+                "runner_id": "r1",
+                "from_node_id": self.node_id,
+                "artifacts": artifacts or [],
+            },
         )
         assert resp.status_code == 200, resp.text
         return resp.json()
@@ -94,9 +100,19 @@ class _Chunk:
     def rows(self, table: Table) -> int:
         return chunk_rows(self.hub, table, self.chunk_id)
 
+    def artifact_names(self) -> list[str]:
+        return [a["name"] for a in self.detail()["artifacts"]]
+
 
 def _race(
-    monkeypatch: pytest.MonkeyPatch, chunk: _Chunk, hook: str, *, winner: str, loser: str
+    monkeypatch: pytest.MonkeyPatch,
+    chunk: _Chunk,
+    hook: str,
+    *,
+    winner: str,
+    loser: str,
+    winner_artifacts: list[dict[str, Any]] | None = None,
+    loser_artifacts: list[dict[str, Any]] | None = None,
 ) -> tuple[dict[str, Any], dict[str, Any]]:
     """Submit ``loser``, committing ``winner`` once ``loser``'s apply has read its facts and
     reached the escalation path ``hook``, before that path writes. Returns both answers."""
@@ -106,11 +122,11 @@ def _race(
     def interleave(self: ApplyService, *args: Any, **kwargs: Any) -> Any:
         if not won:
             won.append({})
-            won[0] = chunk.complete(winner)
+            won[0] = chunk.complete(winner, winner_artifacts)
         return original(self, *args, **kwargs)
 
     monkeypatch.setattr(ApplyService, hook, interleave)
-    lost = chunk.complete(loser)
+    lost = chunk.complete(loser, loser_artifacts)
     assert won, f"the race never reached `{hook}`"
     return won[0], lost
 
@@ -173,3 +189,63 @@ def test_a_duplicate_unresolved_cross_graph_completion_writes_one_escalation(
 
     assert won["outcome"] == _PARKED and lost["outcome"] == _PARKED
     assert chunk.rows(s.escalations) == 1 and chunk.rows(s.chunk_migrations) == 0
+
+
+def _asset(name: str) -> list[dict[str, Any]]:
+    return [{"name": name, "kind": "asset", "content": name}]
+
+
+def test_a_duplicate_escalate_choice_race_leaves_one_artifact_set(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    chunk = _Chunk(build_hub(tmp_path))
+
+    _race(
+        monkeypatch,
+        chunk,
+        "_escalate_choice",
+        winner="unfulfillable",
+        loser="unfulfillable",
+        winner_artifacts=_asset("first"),
+        loser_artifacts=_asset("second"),
+    )
+
+    assert chunk.artifact_names() == ["first"]
+
+
+def test_a_losing_different_escalate_choice_adds_none_of_its_artifacts(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    chunk = _Chunk(build_hub(tmp_path))
+
+    _race(
+        monkeypatch,
+        chunk,
+        "_escalate_choice",
+        winner="blocked",
+        loser="unfulfillable",
+        winner_artifacts=_asset("winner"),
+        loser_artifacts=_asset("loser"),
+    )
+
+    assert chunk.artifact_names() == ["winner"]
+
+
+def test_an_escalate_choice_losing_to_a_transition_adds_no_escalation_or_artifacts(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    chunk = _Chunk(build_hub(tmp_path))
+
+    won, lost = _race(
+        monkeypatch,
+        chunk,
+        "_escalate_choice",
+        winner="review",
+        loser="unfulfillable",
+        winner_artifacts=_asset("winner"),
+        loser_artifacts=_asset("loser"),
+    )
+
+    assert won["outcome"] == "next" and lost["outcome"] == "next"
+    assert chunk.rows(s.escalations) == 0
+    assert chunk.artifact_names() == ["winner"]
