@@ -1,5 +1,7 @@
 """The runner tick's slim batch status read — one bulk-by-id-set call to
-each of the facts/route/decisions seams, and to the chunks' projects."""
+each of the facts/route/decisions seams, and to the chunks' projects. The ``decision`` reported
+is the current visit's (:meth:`~blizzard.hub.domain.chunk.model.ChunkFacts.current_visit_decision`),
+not the chunk-wide newest."""
 
 from __future__ import annotations
 
@@ -18,7 +20,12 @@ def chunk_statuses(chunk_ids: list[str], services: TenantServices) -> list[Chunk
         return []
     facts_by_id = services.chunks.facts.status_facts_for(ids)
     routes_by_id = services.chunks.route.routes_for(ids)
-    decisions_by_id = services.chunks.decisions.live_decisions_for(ids)
+    visit_decisions = {
+        chunk_id: decision
+        for chunk_id, facts in facts_by_id.items()
+        if (decision := facts.current_visit_decision()) is not None
+    }
+    resolved_choices = services.chunks.decisions.resolved_choices(d.decision_id for d in visit_decisions.values())
     project_by_id = {chunk_id: chunk.project_id for chunk_id, chunk in services.chunks.record.get_many(ids).items()}
     projects = services.projects.get_many(sorted({p for p in project_by_id.values() if p is not None}))
 
@@ -28,7 +35,7 @@ def chunk_statuses(chunk_ids: list[str], services: TenantServices) -> list[Chunk
         if facts is None:
             continue
         route = routes_by_id.get(chunk_id)
-        decision = decisions_by_id.get(chunk_id)
+        decision = visit_decisions.get(chunk_id)
         project_id = project_by_id.get(chunk_id)
         project = projects.get(project_id) if project_id is not None else None
         views.append(
@@ -45,8 +52,8 @@ def chunk_statuses(chunk_ids: list[str], services: TenantServices) -> list[Chunk
                     decision_id=decision.decision_id,
                     node_id=decision.node_id,
                     epoch=decision.epoch,
-                    resolved_choice=decision.resolved_choice,
-                    transitioned=decision.transitioned,
+                    resolved_choice=resolved_choices.get(decision.decision_id),
+                    transitioned=False,
                 )
                 if decision is not None
                 else None,

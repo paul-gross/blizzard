@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from collections.abc import Sequence
+from dataclasses import replace
 from datetime import UTC, datetime, timedelta
 from typing import TypedDict, Unpack
 
@@ -12,9 +13,11 @@ from blizzard.hub.domain.chunk.model import (
     Chunk,
     ChunkFacts,
     DecisionChoice,
+    DecisionFact,
     GateDecision,
     LeaseFact,
     MigrationFact,
+    TransitionFact,
 )
 from blizzard.hub.domain.execution.submissions import CheckOutcome, Completion, CompletionArtifact
 from blizzard.hub.domain.graph.model import RESERVED_TERMINAL, Choice, Edge, Node
@@ -110,6 +113,45 @@ CHUNK = Chunk(chunk_id="chk_1", graph_id="gr_a", work_refs=[], minted_at=_T0)
 
 
 AT_BUILD = ChunkFacts(minted=True, promoted=True, leases=[LeaseFact(epoch=1, minted_at=_T0)])
+
+
+def decision_fact(
+    decision_id: str = "dec_1",
+    *,
+    node_id: str = "nd_gate",
+    epoch: int = 1,
+    resolved: bool = False,
+    closed: bool = False,
+    submitted_at: datetime = T1,
+) -> DecisionFact:
+    """A loaded ``decisions`` row on ``node_id`` at ``epoch``, as the facts hydrate it."""
+    return DecisionFact(
+        decision_id=decision_id,
+        submitted_at=submitted_at,
+        resolved=resolved,
+        closed=closed,
+        node_id=node_id,
+        epoch=epoch,
+    )
+
+
+def arrived_at(
+    node_id: str, *, epoch: int, decisions: Sequence[DecisionFact] = (), recorded_at: datetime = T1
+) -> ChunkFacts:
+    """A chunk whose newest movement is a transition onto ``node_id`` at ``epoch``, holding ``decisions``."""
+    return replace(
+        AT_BUILD,
+        transitions=[
+            TransitionFact(
+                to_node_id=node_id,
+                to_node_executor=Executor.RUNNER,
+                epoch=epoch,
+                recorded_at=recorded_at,
+                from_node_id="nd_build",
+            )
+        ],
+        decisions=list(decisions),
+    )
 
 
 class _SubmissionFields(TypedDict, total=False):

@@ -426,12 +426,16 @@ class DecisionFact:
     — is what ``waiting_on_human`` derives from. ``resolved`` is computed by the
     hydrating repository so the derivation reads a plain boolean. ``closed`` is a second,
     later state: a fact consumed the decision — a transition, a migration, an escalation or a
-    restart — so a decision can be resolved yet not closed while the runner has not moved on."""
+    restart — so a decision can be resolved yet not closed while the runner has not moved on.
+    ``node_id`` and ``epoch`` are the gated node and the fence the decision was stamped at: what
+    :meth:`ChunkFacts.visit_decisions` places it in a node visit by."""
 
     decision_id: str
     submitted_at: datetime
     resolved: bool = False
     closed: bool = False
+    node_id: str = ""
+    epoch: int = 0
 
 
 @domain_model
@@ -953,13 +957,16 @@ class GateDecision:
         taken = next((c for c in self.choices if c.name == choice), None)
         return taken is not None and ChecksGate(taken.requires_checks, self.check_results).violated
 
-    def resolving_refusal(self, *, chunk_id: str, node_id: str, node_name: str, epoch: int, choice: str) -> str | None:
+    def resolving_refusal(
+        self, *, chunk_id: str, node_id: str, node_name: str, in_visit: bool, choice: str
+    ) -> str | None:
         """Why a resolving transition naming this gate cannot leave ``node_id``, or ``None``: the
-        gate belongs to another chunk, node or visit, is not yet resolved, or resolved to another choice."""
+        gate belongs to another chunk or node, is not the current visit's (``in_visit``, judged by
+        :meth:`ChunkFacts.visit_decisions`), is not yet resolved, or resolved to another choice."""
         if self.chunk_id != chunk_id or self.node_id != node_id:
             return f"decision {self.decision_id} does not match node `{node_name}`"
-        if self.epoch != epoch:
-            return f"decision {self.decision_id} belongs to epoch {self.epoch}, not current visit {epoch}"
+        if not in_visit:
+            return f"decision {self.decision_id} is not the current visit's decision at node `{node_name}`"
         if self.resolved_choice is None:
             return f"decision {self.decision_id} is not yet resolved"
         if choice != self.resolved_choice:
@@ -1487,6 +1494,36 @@ class ChunkFacts:
         if not unclosed:
             return None
         return max(unclosed, key=lambda d: d.submitted_at)
+
+    def visit_decisions(self, node_id: str) -> list[DecisionFact]:
+        """The unclosed decisions of ``node_id``'s current visit — empty unless ``node_id`` is the
+        chunk's current node (the caller passes the graph's entry node while the chunk has never moved).
+
+        A decision belongs to the **visit**, not to the claim or lease that opened it: a graph gate is
+        stamped at the arrival's epoch and a runner gate at its producing attempt's, which can be later,
+        and either is carried by whichever holder's later fence comes next. Membership is "on the node,
+        unclosed, and stamped at or above this visit's arrival epoch" — sound because every movement
+        writer records at or above every earlier fenced write, so an earlier visit's decision either
+        sits below the arrival or, at the same epoch, was closed by the self-loop exit that produced it.
+        More than one member is an ambiguity the caller refuses; this never picks a winner."""
+        movement = self.latest_movement()
+        if movement is not None and movement.node_id != node_id:
+            return []
+        arrival = self.arrival_epoch_at(node_id) if movement is not None else None
+        return [
+            d
+            for d in self.decisions
+            if d.node_id == node_id and not d.closed and (arrival is None or d.epoch >= arrival)
+        ]
+
+    def current_visit_decision(self) -> DecisionFact | None:
+        """The decision a reader of the chunk's current visit reports, or ``None`` — the one member of
+        :meth:`visit_decisions` at the current node. A chunk that has never moved has stood only at
+        its entry node, so every unclosed decision is that visit's. More than one member is reported
+        as the newest so the reader still sees a gate: every exit from it is refused as ambiguous."""
+        node_id = self.current_node_id()
+        members = [d for d in self.decisions if not d.closed] if node_id is None else self.visit_decisions(node_id)
+        return max(members, key=lambda d: (d.submitted_at, d.decision_id)) if members else None
 
     def has_open_decision(self) -> bool:
         """True iff a gate's decision is unresolved — no resolution flips it off."""

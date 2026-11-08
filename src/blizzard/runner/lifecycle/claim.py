@@ -35,6 +35,7 @@ from blizzard.runner.lifecycle.model import (
     ClaimVerdict,
     InterruptedClaimMove,
     adopt_enters_node,
+    claim_carries_decision,
     claim_denial_fields,
     claim_disposition,
     claim_verdict,
@@ -117,6 +118,25 @@ class ClaimContext(SpawnContext, ReleaseContext, Protocol):
     @property
     def workspaces(self) -> IWorkspaceAcquisition: ...
     def capability_snapshot(self) -> tuple[HarnessCapability, ...]: ...
+
+
+def _defers_to_open_decision(ctx: ClaimContext, chunk_id: str, envelope: Envelope) -> bool:
+    """Whether a won claim leaves its node unentered: the chunk's node visit already holds a gate decision, which
+    the held-chunk drive holds or resolves this tick, or the chunk's view is unreadable, which the next tick's
+    interrupted-claim reconcile decides. The binding and the stored route token stay either way."""
+    try:
+        view = ctx.chunk_views.get(chunk_id)
+    except HubClientError:
+        _log.info("won claim not entered — chunk view unreadable; reconciled next tick", chunk_id=chunk_id)
+        return True
+    if claim_carries_decision(view, envelope.node.node_id):
+        _log.info(
+            "won claim not entered — the node visit already holds a gate decision",
+            chunk_id=chunk_id,
+            decision_id=view.decision.decision_id if view.decision is not None else None,
+        )
+        return True
+    return False
 
 
 @dataclass
@@ -207,6 +227,8 @@ class ReadyQueue:
         # Stash the won claim's plaintext route token before spawning: every later
         # reader takes it out of the store, never off `outcome.claimed` directly.
         self.ctx.stores.tokens.set_route_token(chunk_id, token=outcome.claimed.route_token, at=self.ctx.clock.now())
+        if _defers_to_open_decision(self.ctx, chunk_id, outcome.claimed.envelope):
+            return True
         Spawner(self.ctx).enter_node(chunk_id, outcome.claimed.envelope, acquired, via="fill")
         return True
 
@@ -511,6 +533,8 @@ class InterruptedClaims:
         # A reclaim is a fresh claim, so its token overwrites whatever this chunk's row held
         # before — a fresh claim always wins.
         self.ctx.stores.tokens.set_route_token(chunk_id, token=outcome.claimed.route_token, at=self.ctx.clock.now())
+        if _defers_to_open_decision(self.ctx, chunk_id, outcome.claimed.envelope):
+            return
         Spawner(self.ctx).spawn(
             chunk_id, outcome.claimed.envelope, envs, via="reclaim", harness_id=self._latest_owner(chunk_id)
         )

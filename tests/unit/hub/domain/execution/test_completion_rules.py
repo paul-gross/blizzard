@@ -28,6 +28,7 @@ from blizzard.hub.domain.chunk.model import (
 )
 from blizzard.hub.domain.execution.apply import ApplyResult
 from blizzard.hub.domain.execution.completion import (
+    AmbiguousGateDecision,
     ChunkEscalated,
     CompletionNotAtCurrentNode,
     CompletionPlan,
@@ -47,6 +48,7 @@ from blizzard.hub.domain.execution.completion import (
     refuse_incoherent_attempt,
     replayed_migration,
     stored_artifacts,
+    visit_gate,
 )
 from blizzard.hub.domain.execution.submissions import CheckOutcome, Completion, CompletionArtifact
 from blizzard.hub.domain.graph.model import RESERVED_TERMINAL, Edge, FollowLatest, Node, ProducesSpec
@@ -62,7 +64,9 @@ from tests.support.completion_facts import (
     GRAPH,
     T1,
     _node,  # pyright: ignore[reportPrivateUsage]  # shared test helper, imported from tests.support.completion_facts
+    arrived_at,
     completion_submission,
+    decision_fact,
     gate_decision,
     migration_fact,
 )
@@ -241,7 +245,8 @@ def test_a_red_check_refuses_a_choice_that_requires_green_ones() -> None:
 
 def _resolving(choice: str, decision: GateDecision | None) -> CompletionPlan:
     submission = completion_submission(choice, from_node_id="nd_gate", decision_id="dec_1")
-    return CompletionPlan.resolving(GRAPH, _GATE, submission, decision, chunk=CHUNK)
+    facts = arrived_at("nd_gate", epoch=1, decisions=[decision_fact(resolved=True)])
+    return CompletionPlan.resolving(GRAPH, _GATE, submission, decision, chunk=CHUNK, facts=facts)
 
 
 def test_a_resolving_completion_takes_the_resolved_choice() -> None:
@@ -264,6 +269,39 @@ def test_a_resolving_completion_naming_a_gate_it_cannot_leave_is_refused(
 ) -> None:
     with pytest.raises(CompletionRefused, match=detail):
         _resolving("yes", decision)
+
+
+def test_a_resolving_completion_carries_the_visits_decision_from_a_later_fence() -> None:
+    # The gate was opened at epoch 1; a new claimant resolves it from epoch 4.
+    submission = replace(completion_submission("yes", from_node_id="nd_gate", decision_id="dec_1"), epoch=4)
+    facts = arrived_at("nd_gate", epoch=1, decisions=[decision_fact(resolved=True)])
+    plan = CompletionPlan.resolving(GRAPH, _GATE, submission, gate_decision(resolved="yes"), chunk=CHUNK, facts=facts)
+    assert plan.to_node_id == "nd_review"
+
+
+def test_a_resolving_completion_naming_an_earlier_visits_decision_is_refused() -> None:
+    submission = completion_submission("yes", from_node_id="nd_gate", decision_id="dec_1")
+    facts = arrived_at("nd_gate", epoch=3, decisions=[decision_fact(resolved=True, epoch=1)])
+    with pytest.raises(CompletionRefused, match="is not the current visit's decision"):
+        CompletionPlan.resolving(GRAPH, _GATE, submission, gate_decision(resolved="yes"), chunk=CHUNK, facts=facts)
+
+
+def test_two_unconsumed_decisions_in_one_visit_are_refused_without_a_winner() -> None:
+    facts = arrived_at(
+        "nd_gate", epoch=1, decisions=[decision_fact("dec_1", resolved=True), decision_fact("dec_2", epoch=2)]
+    )
+    submission = completion_submission("yes", from_node_id="nd_gate", decision_id="dec_1")
+    with pytest.raises(AmbiguousGateDecision, match="dec_1, dec_2"):
+        CompletionPlan.resolving(GRAPH, _GATE, submission, gate_decision(resolved="yes"), chunk=CHUNK, facts=facts)
+    with pytest.raises(AmbiguousGateDecision):
+        visit_gate(facts, _GATE)
+
+
+def test_the_visit_gate_is_the_one_unconsumed_decision_at_the_node() -> None:
+    held = decision_fact(epoch=2)
+    assert visit_gate(arrived_at("nd_gate", epoch=1, decisions=[held]), _GATE) == held
+    assert visit_gate(arrived_at("nd_gate", epoch=1, decisions=[replace(held, closed=True)]), _GATE) is None
+    assert visit_gate(arrived_at("nd_review", epoch=1, decisions=[held]), _GATE) is None
 
 
 # --- Migration replay --------------------------------------------------------

@@ -148,13 +148,19 @@ class ChunkDecisionsStore:
                 result.update(self._live_decisions_batch(conn, batch))
             return result
 
-    def _live_decisions_batch(self, conn: Connection, chunk_ids: Sequence[str]) -> dict[str, LiveDecisionStatus]:
-        rows = conn.execute(self._newest_live_decisions_select(chunk_ids)).all()
-        if not rows:
+    def resolved_choices(self, decision_ids: Iterable[str]) -> dict[str, str]:
+        """See ``src/blizzard/hub/domain/chunk/ports/decisions.py``'s
+        ``IReadChunkDecisionsRepository.resolved_choices``."""
+        ids = list(dict.fromkeys(decision_ids))
+        if not ids:
             return {}
-        resolved_choice_of: dict[str, str] = {}
-        for id_batch in id_batches([row.decision_id for row in rows]):
-            resolved_choice_of.update(
+        with self._store.read("resolved_choices") as conn:
+            return self._resolved_choices_conn(conn, ids)
+
+    def _resolved_choices_conn(self, conn: Connection, decision_ids: Sequence[str]) -> dict[str, str]:
+        choices: dict[str, str] = {}
+        for id_batch in id_batches(decision_ids):
+            choices.update(
                 {
                     r.decision_id: r.choice
                     for r in conn.execute(
@@ -166,6 +172,13 @@ class ChunkDecisionsStore:
                     ).all()
                 }
             )
+        return choices
+
+    def _live_decisions_batch(self, conn: Connection, chunk_ids: Sequence[str]) -> dict[str, LiveDecisionStatus]:
+        rows = conn.execute(self._newest_live_decisions_select(chunk_ids)).all()
+        if not rows:
+            return {}
+        resolved_choice_of = self._resolved_choices_conn(conn, [row.decision_id for row in rows])
         return {
             row.chunk_id: LiveDecisionStatus(
                 decision_id=row.decision_id,

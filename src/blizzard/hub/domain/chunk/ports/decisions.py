@@ -69,6 +69,11 @@ class IReadChunkDecisionsRepository(Protocol):
         throughout. A chunk with no live decision is absent from the dict."""
         ...
 
+    def resolved_choices(self, decision_ids: Iterable[str]) -> dict[str, str]:
+        """Each given decision's resolved choice, keyed by decision id, one read per id batch — a
+        decision without a resolution row is absent from the dict."""
+        ...
+
 
 class IWriteChunkDecisionsRepository(IReadChunkDecisionsRepository, Protocol):
     """Read-write chunk-decisions access."""

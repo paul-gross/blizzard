@@ -15,6 +15,7 @@ from blizzard.foundation.chunk_status import ChunkStatus
 from blizzard.foundation.node_steps import ApplyOutcome
 from blizzard.runner.harness.adapter import WorkerHandle
 from blizzard.runner.harness.identity import CLAUDE_CODE_HARNESS_ID, SessionReference
+from blizzard.runner.hub.client import QueueEntry
 from blizzard.runner.leases.model import NewLease
 from blizzard.runner.lifecycle.judgement.check_runner import CheckOutcome
 from blizzard.runner.loop.context import LoopConfig
@@ -30,6 +31,7 @@ from tests.support.runner_fakes import (
     FakeProvider,
     FakeWorktreeGit,
     SqlAlchemyRunnerStore,
+    claimed_outcome,
     make_context,
     make_envelope,
     make_store,
@@ -331,6 +333,46 @@ def test_fill_leaves_a_resolved_gate_to_advance(tmp_path: Path):
     assert len(hub.completions) == 1
     _, submission = hub.completions[0]
     assert submission.decision_id == "dec_1" and submission.choice == "approve" and submission.epoch == 1
+
+
+@pytest.mark.parametrize("gates", [("build",), ()], ids=["gated-locally", "ungated-locally"])
+def test_a_fresh_claim_carries_on_its_visits_resolved_decision_without_spawning(tmp_path: Path, gates: tuple[str, ...]):
+    """A chunk detached at a resolved gate and claimed afresh: FILL leaves the node unentered and ADVANCE
+    submits the resolving transition at the claim's epoch, whatever this runner's own ``gates`` are."""
+    store = _store(tmp_path)
+    hub = FakeHub()
+    hub.queue = [QueueEntry(chunk_id="ch_1", graph_id="gr_1", position=0)]
+    hub.claim_outcome = claimed_outcome("ch_1", make_envelope("ch_1", "build", node_id="nd_build", choices=_CHOICES))
+    hub.chunks["ch_1"] = ChunkState(
+        chunk_id="ch_1",
+        status=ChunkStatus.RUNNING,
+        latest_epoch=2,
+        route_runner_id="r1",
+        decision=ChunkGate(decision_id="dec_1", node_id="nd_build", epoch=1, resolved_choice="pass"),
+    )
+    hub.apply_responses = [ApplyReply(outcome=ApplyOutcome.HUB_NODE_TAKEN, detail="deliver took over")]
+    harness = FakeHarness(handle=_HANDLE, verdict="pass")
+    ctx = make_context(
+        store,
+        hub=hub,
+        provider=FakeProvider({"e1": "/ws/e1"}),
+        harness=harness,
+        probe=FakeProbe(),
+        config=LoopConfig(runner_name="r1", runner_id=FIXTURE_RUNNER_ID, gates=gates),
+    )
+
+    Fill(ctx).run()
+
+    assert harness.spawns == []
+    assert store.active_lease_for_chunk("ch_1") is None
+    assert store.held_environment_ids() == ["e1"]
+
+    Advance(ctx).run()
+
+    assert harness.spawns == []
+    assert hub.decisions_submitted == []  # no second gate
+    _, submission = hub.completions[0]
+    assert (submission.decision_id, submission.choice, submission.epoch) == ("dec_1", "pass", 2)
 
 
 def _gate_parked_chunk(*, status: ChunkStatus, route_runner_id: str | None, resolved_choice: str | None) -> ChunkState:
