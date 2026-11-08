@@ -14,7 +14,7 @@ from typing import Protocol
 from blizzard.foundation.clock import IClock
 from blizzard.foundation.crash import crashpoint
 from blizzard.foundation.ids import Id, IdPrefix
-from blizzard.foundation.node_steps import ApplyOutcome, JudgedBy
+from blizzard.foundation.node_steps import ApplyOutcome
 from blizzard.foundation.roles import domain_model
 from blizzard.hub.domain.artifact.model import StoredArtifact
 from blizzard.hub.domain.chunk.model import Chunk, ChunkFacts, WorkRefLabel, decide_close_enqueue
@@ -42,8 +42,10 @@ from blizzard.hub.domain.execution.completion import (
     re_escalates,
     refuse_hub_executed,
     refuse_incoherent_attempt,
+    refuse_unconsumed_gate,
     replayed_migration,
     stored_artifacts,
+    visit_gate,
 )
 from blizzard.hub.domain.execution.envelope import Arrival, Envelope
 from blizzard.hub.domain.execution.gate_arrival import open_graph_gate_on_arrival
@@ -263,46 +265,26 @@ class ApplyService:
         if replayed is not None:
             return self._respond(chunk, graph, from_node, submission, to_node_id=replayed, is_fresh_apply=False)
 
+        edge = graph.edge_for_choice(from_node.node_id, submission.choice)
+        re_escalating = re_escalates(
+            facts, edge, targets, epoch=submission.epoch, taken=EscalateChoice.of(from_node, submission.choice)
+        )
         try:
             refuse_hub_executed(from_node)
             refuse_incoherent_attempt(
-                facts,
-                graph,
-                from_node=from_node,
-                epoch=submission.epoch,
-                re_escalating=re_escalates(
-                    facts,
-                    graph.edge_for_choice(from_node.node_id, submission.choice),
-                    targets,
-                    epoch=submission.epoch,
-                    taken=EscalateChoice.of(from_node, submission.choice),
-                ),
+                facts, graph, from_node=from_node, epoch=submission.epoch, re_escalating=re_escalating
             )
             # Unconditional and ahead of every dispatch fork, so none carries a `git_commit`
             # missing a repo, branch, or hash.
             policy_rejection = CommitPointerPolicy(submission.artifacts).rejection()
             if policy_rejection is not None:
                 raise CompletionRefused(policy_rejection)
-            if submission.decision_id is not None:
-                # A gate-resolving transition — a graph gate (human node) or a runner-config gate.
-                decision = self._decisions.get_decision(submission.decision_id)
-                plan = CompletionPlan.resolving(
-                    graph,
-                    from_node,
-                    submission,
-                    decision,
-                    chunk=chunk,
-                    visit_epoch=facts.arrival_epoch_at(from_node.node_id)
-                    if from_node.judged_by is JudgedBy.HUMAN
-                    else None,
-                )
+            if re_escalating and submission.decision_id is not None:
+                # A resolving re-escalation writes nothing: its escalation already closed the decision.
+                assert edge is not None
+                plan = CompletionPlan(edge, None)
             else:
-                open_gate = self._decisions.find_decision(
-                    chunk.chunk_id, node_id=from_node.node_id, epoch=submission.epoch
-                )
-                plan = CompletionPlan.plain(
-                    graph, from_node, submission, open_gate=open_gate, produces_mode=produces_mode
-                )
+                plan = self._gate_plan(chunk, graph, from_node, submission, facts, produces_mode=produces_mode)
         except CompletionRefused as refused:
             return ApplyResult.failure(refused.detail)
 
@@ -321,6 +303,62 @@ class ApplyService:
         if landing is not None:
             return self._land_migration(chunk, graph, from_node, submission, landing, artifacts)
         return self._transition(chunk, graph, from_node, submission, plan, artifacts)
+
+    def _gate_plan(
+        self,
+        chunk: Chunk,
+        graph: Graph,
+        from_node: Node,
+        submission: Completion,
+        facts: ChunkFacts,
+        *,
+        produces_mode: str,
+    ) -> CompletionPlan:
+        """The plan the current visit's gate decision admits — the pre-lock fast path, re-established
+        under the chunk's lock by :meth:`_refuse_under_lock`. A resolving transition names its
+        decision; a plain one is refused while the visit holds an unconsumed one (:func:`visit_gate`)."""
+        if submission.decision_id is not None:
+            decision = self._decisions.get_decision(submission.decision_id)
+            return CompletionPlan.resolving(graph, from_node, submission, decision, chunk=chunk, facts=facts)
+        visit = visit_gate(facts, from_node)
+        open_gate = self._decisions.get_decision(visit.decision_id) if visit is not None else None
+        return CompletionPlan.plain(graph, from_node, submission, open_gate=open_gate, produces_mode=produces_mode)
+
+    def _refuse_under_lock(
+        self,
+        chunk: Chunk,
+        graph: Graph,
+        from_node: Node,
+        submission: Completion,
+        locked: ChunkFacts,
+        *,
+        transaction: Transaction,
+        re_escalating: bool = False,
+    ) -> ApplyResult | None:
+        """The failure the facts re-read under the chunk's lock answer this exit with, or ``None`` to
+        write it (``bzh:write-reestablishes-read``): an incoherent attempt, then gate legality —
+        visit membership, closure, resolution and the chosen choice — re-derived from those facts and
+        the decision read in the same unit, never from the pre-lock plan."""
+        try:
+            refuse_incoherent_attempt(
+                locked, graph, from_node=from_node, epoch=submission.epoch, re_escalating=re_escalating
+            )
+            if re_escalating:
+                return None  # nothing is written: the escalation already recorded is the answer
+            if submission.decision_id is not None:
+                decision = self._decisions.get_decision(submission.decision_id, transaction=transaction)
+                CompletionPlan.resolving(graph, from_node, submission, decision, chunk=chunk, facts=locked)
+            else:
+                visit = visit_gate(locked, from_node)
+                refuse_unconsumed_gate(
+                    from_node,
+                    self._decisions.get_decision(visit.decision_id, transaction=transaction)
+                    if visit is not None
+                    else None,
+                )
+        except CompletionRefused as refused:
+            return ApplyResult.failure(refused.detail)
+        return None
 
     def _transition(
         self,
@@ -342,10 +380,11 @@ class ApplyService:
             # refusal for no longer standing at `from_node`.
             raced = self._landed_under_lock(locked, submission)
             if raced is None:
-                try:
-                    refuse_incoherent_attempt(locked, graph, from_node=from_node, epoch=submission.epoch)
-                except CompletionRefused as refused:
-                    return ApplyResult.failure(refused.detail)
+                refused = self._refuse_under_lock(
+                    chunk, graph, from_node, submission, locked, transaction=handle.transaction
+                )
+                if refused is not None:
+                    return refused
                 refusal = self._movement.record_transition_locked(
                     handle,
                     transition_id=fresh_transition_id,
@@ -467,12 +506,11 @@ class ApplyService:
                     epoch=submission.epoch,
                     taken=draft if isinstance(draft, EscalateChoice) else None,
                 )
-                try:
-                    refuse_incoherent_attempt(
-                        facts, graph, from_node=from_node, epoch=submission.epoch, re_escalating=re_escalating
-                    )
-                except CompletionRefused as refused:
-                    return ApplyResult.failure(refused.detail)
+                refused = self._refuse_under_lock(
+                    chunk, graph, from_node, submission, facts, transaction=locked, re_escalating=re_escalating
+                )
+                if refused is not None:
+                    return refused
                 if not re_escalating:
                     # Hub-authored: no runner runtime dir to compose a wrapped takeover command from.
                     escalated = self._escalations.record_escalation(
@@ -512,10 +550,11 @@ class ApplyService:
                 return ApplyResult.failure(f"unknown chunk {chunk.chunk_id}")
             landed = self._landed_under_lock(locked, submission)
             if landed is None:
-                try:
-                    refuse_incoherent_attempt(locked, graph, from_node=from_node, epoch=submission.epoch)
-                except CompletionRefused as refused:
-                    return ApplyResult.failure(refused.detail)
+                refused = self._refuse_under_lock(
+                    chunk, graph, from_node, submission, locked, transaction=handle.transaction
+                )
+                if refused is not None:
+                    return refused
                 outcome = self._movement.record_migration_locked(
                     handle,
                     chunk.chunk_id,

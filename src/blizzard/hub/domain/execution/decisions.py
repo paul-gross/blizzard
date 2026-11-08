@@ -40,11 +40,13 @@ from blizzard.hub.domain.execution.completion import (
     gate_refusal,
     refuse_hub_executed,
     refuse_incoherent_attempt,
+    refuse_unconsumed_gate,
     stored_artifacts,
+    visit_gate,
 )
 from blizzard.hub.domain.execution.submissions import CompletionArtifact, GateSubmission
 from blizzard.hub.domain.graph.model import Graph, Node
-from blizzard.hub.domain.kernel.transactions import IHubTransactions
+from blizzard.hub.domain.kernel.transactions import IHubTransactions, Transaction
 from blizzard.hub.domain.runners.registration import RetiredRunnerGuard
 
 
@@ -129,7 +131,9 @@ class DecisionService:
         produces_mode: str = PRODUCES_WARN,
     ) -> DecisionSubmitResult:
         """Runner-config gate: park the chunk on a decision instead of transitioning. A retired submitting
-        runner is refused with :class:`~blizzard.hub.domain.runners.registration.RunnerRetired` first.
+        runner is refused with :class:`~blizzard.hub.domain.runners.registration.RunnerRetired` first. Past
+        the exact ``(chunk, node, epoch)`` replay, a node visit already holding an unconsumed decision
+        refuses the submission, appending nothing — decided again under the chunk's lock.
 
         Order is behavior."""
         self._retired.refuse_if_retired(submission.runner_id, action="decision")
@@ -162,6 +166,7 @@ class DecisionService:
         try:
             refuse_hub_executed(node)
             refuse_incoherent_attempt(facts, graph, from_node=node, epoch=submission.epoch)
+            self._refuse_competing_gate(facts, node, epoch=submission.epoch)
             # The step's artifacts land here, so the commit-pointer and produces backstops run.
             for rejection in (
                 CommitPointerPolicy(submission.artifacts).rejection(),
@@ -181,6 +186,7 @@ class DecisionService:
                 return DecisionSubmitResult.failure(f"unknown chunk {chunk.chunk_id}")
             try:
                 refuse_incoherent_attempt(locked, graph, from_node=node, epoch=submission.epoch)
+                self._refuse_competing_gate(locked, node, epoch=submission.epoch, transaction=handle.transaction)
             except CompletionRefused as refused:
                 return DecisionSubmitResult.failure(refused.detail)
             recorded = self._decisions.record_decision_locked(
@@ -203,6 +209,18 @@ class DecisionService:
             return DecisionSubmitResult.failure(recorded.detail)
         # `False` — a racing duplicate already opened this decision: the lost-ack replay.
         return DecisionSubmitResult.parked(node, decision_id if recorded else None)
+
+    def _refuse_competing_gate(
+        self, facts: ChunkFacts, node: Node, *, epoch: int, transaction: Transaction | None = None
+    ) -> None:
+        """Refuse a fresh gate while the node's current visit already holds an unconsumed decision
+        (:func:`visit_gate`), read in ``transaction`` when given — whichever claim or lease opened it.
+        One at this very ``epoch`` is a racing duplicate of this submission, left for the record's own
+        replay answer."""
+        visit = visit_gate(facts, node)
+        if visit is None or visit.epoch == epoch:
+            return
+        refuse_unconsumed_gate(node, self._decisions.get_decision(visit.decision_id, transaction=transaction))
 
     @staticmethod
     def _artifact_rows(

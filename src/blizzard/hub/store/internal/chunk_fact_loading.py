@@ -259,6 +259,8 @@ def _load_batch(conn: Connection, batch: Sequence[str] | None, families: frozens
                     submitted_at=d.submitted_at,
                     resolved=d.decision_id in resolved_ids,
                     closed=d.decision_id in closed_ids,
+                    node_id=d.node_id,
+                    epoch=d.epoch,
                 )
             )
 

@@ -17,7 +17,6 @@ import pytest
 from blizzard.foundation.clock import IClock
 from blizzard.foundation.store import batching as batching_module
 from blizzard.hub.domain.chunk.model import ChunkFacts, GateDecision
-from blizzard.hub.domain.chunk.ports.decisions import LiveDecisionStatus
 from blizzard.hub.domain.kernel.transactions import Transaction
 from blizzard.hub.domain.runners.route import Route
 from blizzard.hub.store.internal.chunk_decisions_store import ChunkDecisionsStore
@@ -187,16 +186,16 @@ class _CountingRouteStore(ChunkRouteStore):
 
 
 class _CountingDecisionsStore(ChunkDecisionsStore):
-    """Counts calls to the bulk-by-id-set and per-chunk live-decision reads."""
+    """Counts calls to the bulk-by-id-set and per-chunk decision reads."""
 
     def __init__(self, store: ScopedConnections, clock: IClock) -> None:
         super().__init__(store, clock)
-        self.live_decisions_for_calls = 0
+        self.resolved_choices_calls = 0
         self.decision_for_chunk_calls = 0
 
-    def live_decisions_for(self, chunk_ids: Iterable[str]) -> dict[str, LiveDecisionStatus]:
-        self.live_decisions_for_calls += 1
-        return super().live_decisions_for(chunk_ids)
+    def resolved_choices(self, decision_ids: Iterable[str]) -> dict[str, str]:
+        self.resolved_choices_calls += 1
+        return super().resolved_choices(decision_ids)
 
     def decision_for_chunk(self, chunk_id: str) -> GateDecision | None:
         self.decision_for_chunk_calls += 1
@@ -227,7 +226,7 @@ def test_chunk_statuses_calls_bulk_reads_and_never_the_per_chunk_ones(tmp_path: 
     assert len(resp.json()) == len(chunk_ids)
     assert counting_facts.status_facts_for_calls == 1
     assert counting_route.routes_for_calls == 1
-    assert counting_decisions.live_decisions_for_calls == 1
+    assert counting_decisions.resolved_choices_calls == 1
     assert counting_facts.load_facts_calls == 0
     assert counting_route.route_of_calls == 0
     assert counting_decisions.decision_for_chunk_calls == 0

@@ -66,17 +66,17 @@ def test_a_resolving_transition_needs_this_gates_resolution_to_the_same_choice()
         *,
         chunk_id: str = "chk_1",
         node_id: str = "nd_gate",
-        epoch: int = 1,
+        in_visit: bool = True,
         choice: str = "yes",
     ) -> str | None:
         return decision.resolving_refusal(
-            chunk_id=chunk_id, node_id=node_id, node_name="gate", epoch=epoch, choice=choice
+            chunk_id=chunk_id, node_id=node_id, node_name="gate", in_visit=in_visit, choice=choice
         )
 
     assert refusal(_RESOLVED) is None
     assert refusal(_RESOLVED, chunk_id="chk_2") == "decision dec_1 does not match node `gate`"
     assert refusal(_RESOLVED, node_id="nd_other") == "decision dec_1 does not match node `gate`"
-    assert "not current visit 2" in (refusal(_RESOLVED, epoch=2) or "")
+    assert refusal(_RESOLVED, in_visit=False) == "decision dec_1 is not the current visit's decision at node `gate`"
     assert refusal(_OPEN) == "decision dec_1 is not yet resolved"
     assert refusal(_RESOLVED, choice="no") == "choice `no` is not the resolved choice `yes`"
 

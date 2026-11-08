@@ -54,6 +54,7 @@ from tests.support.completion_facts import (
     GRAPH,
     T1,
     completion_submission,
+    decision_fact,
     gate_decision,
     migration_fact,
 )
@@ -102,7 +103,7 @@ class _Ports:
         return self.refusal
 
     # decisions
-    def get_decision(self, decision_id: str) -> GateDecision | None:
+    def get_decision(self, decision_id: str, *, transaction: object = None) -> GateDecision | None:
         return self.gate
 
     def find_decision(self, chunk_id: str, *, node_id: str, epoch: int) -> None:
@@ -141,6 +142,10 @@ class _LockedRead:
     def facts(self, chunk_id: str) -> ChunkFacts | None:
         self.read_ids.append(chunk_id)
         return self.chunk_facts
+
+    @property
+    def transaction(self) -> object:
+        return self
 
     def __getattr__(self, name: str) -> Any:
         return _raise("handle", name)
@@ -337,7 +342,9 @@ def test_a_migration_lands_its_artifacts_at_the_node_and_epoch_it_left() -> None
 
 
 def test_a_gate_resolving_migration_records_the_decision_it_resolves() -> None:
-    service, ports, _clock = _apply_service(replace(AT_BUILD, promoted=False))
+    held = [decision_fact(node_id="nd_build", resolved=True)]
+    service, ports, _clock = _apply_service(replace(AT_BUILD, promoted=False, decisions=held))
+    ports.pre_lock = replace(AT_BUILD, decisions=held)
     ports.gate = gate_decision(node_id="nd_build", resolved="hand-off")
 
     service.apply(CHUNK, GRAPH, completion_submission("hand-off", decision_id="dec_1"), targets=_HAND_OFF)

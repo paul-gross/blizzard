@@ -22,6 +22,7 @@ from blizzard.hub.domain.chunk.model import (
     Chunk,
     ChunkFacts,
     DecisionChoice,
+    DecisionFact,
     GateDecision,
     MigrationFact,
 )
@@ -62,6 +63,37 @@ class GateDecisionOpen(CompletionRefused):
 class GateResolutionUnapplied(CompletionRefused):
     """A runner-configured gate at this node-step is resolved but no transition has carried it:
     only the resolving transition, naming the decision, moves on — to the resolved choice."""
+
+
+class AmbiguousGateDecision(CompletionRefused):
+    """More than one unclosed decision belongs to the node's current visit — historical duplicate
+    gates. Every exit and every fresh gate is refused; no winner is picked."""
+
+
+def visit_gate(facts: ChunkFacts, node: Node) -> DecisionFact | None:
+    """The current visit's unclosed decision at ``node`` (:meth:`ChunkFacts.visit_decisions`), or
+    ``None``; more than one is refused (:class:`AmbiguousGateDecision`)."""
+    members = facts.visit_decisions(node.node_id)
+    if len(members) > 1:
+        ids = ", ".join(sorted(d.decision_id for d in members))
+        raise AmbiguousGateDecision(
+            f"node `{node.name}` holds more than one unconsumed decision in its current visit ({ids})"
+        )
+    return members[0] if members else None
+
+
+def refuse_unconsumed_gate(node: Node, gate: GateDecision | None) -> None:
+    """Refuse a fresh exit or a fresh gate while ``gate`` — the current visit's unconsumed decision —
+    stands: open (:class:`GateDecisionOpen`), or resolved and awaiting its resolving transition
+    (:class:`GateResolutionUnapplied`)."""
+    if gate is None or gate.transitioned:
+        return
+    if gate.is_open:
+        raise GateDecisionOpen(f"decision {gate.decision_id} is open at node `{node.name}` — resolve it")
+    raise GateResolutionUnapplied(
+        f"decision {gate.decision_id} at node `{node.name}` is resolved to "
+        f"`{gate.resolved_choice}` — submit its resolving transition with decision_id"
+    )
 
 
 # The escalations a repeat of the same report is answered over, with no write.
@@ -193,20 +225,15 @@ class CompletionPlan:
         open_gate: GateDecision | None,
         produces_mode: str,
     ) -> CompletionPlan:
-        """A completion carrying no decision id. Refusals, in order: leaving a human-judged node
-        (only its resolving transition may), a runner-configured gate at this node-step that no
-        transition has carried yet — open, or resolved and awaiting its resolving transition — an
+        """A completion carrying no decision id. ``open_gate`` is the current visit's unconsumed
+        decision (:func:`visit_gate`), whichever claim or lease opened it. Refusals, in order: leaving
+        a human-judged node (only its resolving transition may), that decision
+        (:func:`refuse_unconsumed_gate`), an
         unknown choice, a red check on a choice that requires green ones — a cross-graph choice
          included — then the ``produces`` backstop, and, for a local edge, its destination."""
         if from_node.judged_by is JudgedBy.HUMAN:
             raise CompletionRefused(f"human signoff required: node `{from_node.name}` is a gate — resolve its decision")
-        if open_gate is not None and open_gate.is_open:
-            raise GateDecisionOpen(f"decision {open_gate.decision_id} is open at node `{from_node.name}` — resolve it")
-        if open_gate is not None and open_gate.resolved and not open_gate.transitioned:
-            raise GateResolutionUnapplied(
-                f"decision {open_gate.decision_id} at node `{from_node.name}` is resolved to "
-                f"`{open_gate.resolved_choice}` — submit its resolving transition with decision_id"
-            )
+        refuse_unconsumed_gate(from_node, open_gate)
         edge = graph.edge_for_choice(from_node.node_id, submission.choice)
         if edge is None:
             raise CompletionRefused(f"node {from_node.name} has no choice `{submission.choice}`")
@@ -230,10 +257,13 @@ class CompletionPlan:
         decision: GateDecision | None,
         *,
         chunk: Chunk,
-        visit_epoch: int | None = None,
+        facts: ChunkFacts,
     ) -> CompletionPlan:
-        """The resolving transition out of a gate: the named decision must be this gate's,
-        resolved, and from this visit; then the edge and destination refusals."""
+        """The resolving transition out of a gate: the named decision must be this gate's, the
+        current visit's (:func:`visit_gate`, for a human and a runner node alike), resolved, and to
+        this choice; then the edge and destination refusals."""
+        visit = visit_gate(facts, gate_node)
+        in_visit = visit is not None and decision is not None and visit.decision_id == decision.decision_id
         detail = (
             f"decision {submission.decision_id} does not match node `{gate_node.name}`"
             if decision is None
@@ -241,7 +271,7 @@ class CompletionPlan:
                 chunk_id=chunk.chunk_id,
                 node_id=gate_node.node_id,
                 node_name=gate_node.name,
-                epoch=visit_epoch if visit_epoch is not None else submission.epoch,
+                in_visit=in_visit,
                 choice=submission.choice,
             )
         )
