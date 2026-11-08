@@ -562,8 +562,10 @@ class RunnerRegistryStore:
 
     def rotate_token(self, rotation: TokenRotation) -> int | None:
         # The replaced hash's revocation and the new hash land in one transaction, and the row lock makes a
-        # concurrent rotation read the hash this one stored, so every replaced hash is revoked.
+        # concurrent rotation read the hash this one stored, so every replaced hash is revoked. The lifecycle check
+        # opens the write: an enrollment decided on a lifecycle that has since moved writes nothing.
         with self._store.write("rotate_token") as conn:
+            require_runner_lifecycles(conn, {rotation.runner_id: rotation.expected_lifecycle})
             replaced = locked_token_hash(conn, rotation.runner_id)
             revocation_id: int | None = None
             if replaced is not None:

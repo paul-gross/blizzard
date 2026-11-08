@@ -9,11 +9,12 @@ from __future__ import annotations
 import json
 from collections.abc import Callable
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 import pytest
 
-from blizzard.hub.domain.runners.registration import RunnerRegistration
+from blizzard.foundation.tokens import TokenHash
+from blizzard.hub.domain.runners.registration import IWriteRunnerRegistry, RunnerRegistration, TokenRotation
 from tests.support.scaffolding import HubHarness, build_hub, emitted_events, pointer_token
 
 _RUNNER = "rn_a"
@@ -209,7 +210,7 @@ def test_a_reinstate_decided_before_a_reinstate_and_re_retire_leaves_the_runner_
         _ok(_reinstate(hub))
         _ok(_retire(hub, by="later"))
 
-    _once(monkeypatch, hub.services.registry, "record_lifecycle", reinstate_and_retire_again)
+    _once(monkeypatch, hub.services.fleet._transactions, "begin", reinstate_and_retire_again)  # pyright: ignore[reportPrivateUsage]  # the fleet service's transaction seam is the only point between the read and the unit
 
     refused = _reinstate(hub)
 
@@ -308,3 +309,87 @@ def test_a_token_revocation_decided_before_a_retire_and_reinstate_is_refused(
 
     assert refused.status_code == 409, refused.text
     _ok(hub.client.get("/api/fleet/identity", headers=_bearer(tokens[0])))
+
+
+def _identity(hub: HubHarness, token: str) -> int:
+    return int(hub.client.get("/api/fleet/identity", headers=_bearer(token)).status_code)
+
+
+def _raced_token(hub: HubHarness) -> str:
+    """Retire the runner, then land a token as an enrollment that raced the retire would have: a rotation on the
+    retired version, which the lifecycle fence now refuses on the route, so it goes straight to the store."""
+    _ok(_retire(hub))
+    runner = _runner(hub)
+    token = "raced-token"
+    cast(IWriteRunnerRegistry, hub.services.registry).rotate_token(
+        TokenRotation(_RUNNER, TokenHash(token).hex, hub.clock.now(), "racer", runner.lifecycle_version)
+    )
+    return token
+
+
+def test_a_reinstate_revokes_a_token_raced_in_while_retired_and_a_fresh_enrollment_still_works(
+    hub: HubHarness,
+) -> None:
+    raced = _raced_token(hub)
+
+    _ok(_reinstate(hub))
+
+    assert _identity(hub, raced) == 401
+    fresh = _enroll(hub)
+    assert _identity(hub, fresh) == 200
+
+
+def test_a_stale_reinstate_revokes_nothing_of_a_newer_lifecycle(
+    hub: HubHarness, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _ok(_retire(hub))
+    tokens: list[str] = []
+
+    def rescue_and_enroll() -> None:
+        _ok(_reinstate(hub))
+        tokens.append(_enroll(hub))
+
+    _once(monkeypatch, hub.services.fleet._transactions, "begin", rescue_and_enroll)  # pyright: ignore[reportPrivateUsage]  # the fleet service's transaction seam is the only point between the read and the unit
+
+    refused = _reinstate(hub)
+
+    assert refused.status_code == 409, refused.text
+    assert _identity(hub, tokens[0]) == 200
+
+
+def test_a_delayed_enroll_is_refused_once_the_runner_was_retired_and_reinstated(
+    hub: HubHarness, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    old = _enroll(hub)
+
+    def retire_and_reinstate() -> None:
+        _ok(_retire(hub))
+        _ok(_reinstate(hub))
+
+    _once(monkeypatch, hub.services.registry, "rotate_token", retire_and_reinstate)
+
+    refused = hub.client.post(f"/api/runners/{_RUNNER}/enrollments")
+
+    assert refused.status_code == 409, refused.text
+    assert refused.json()["type"].endswith("runner-lifecycle-conflict")
+    assert _identity(hub, old) == 401  # revoked by the retire, and nothing minted since
+    monkeypatch.undo()
+    assert _identity(hub, _enroll(hub)) == 200
+
+
+def test_a_reinstate_unit_that_fails_rolls_back_fact_and_revocation_together(
+    hub: HubHarness, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    raced = _raced_token(hub)
+
+    def fail(*args: Any, **kwargs: Any) -> Any:
+        raise _Crash
+
+    monkeypatch.setattr(hub.services.registry, "revoke_token", fail)
+    with pytest.raises(_Crash):
+        _reinstate(hub)
+    monkeypatch.undo()
+
+    assert _runner(hub).retired
+    _ok(_reinstate(hub))  # the rolled-back unit left the token for this one to revoke
+    assert _identity(hub, raced) == 401

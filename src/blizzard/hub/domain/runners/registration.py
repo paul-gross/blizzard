@@ -58,7 +58,8 @@ class RunnerState(StrEnum):
 
     UNENROLLED = "unenrolled"
     ENROLLED = "enrolled"
-    #: Retired implies unenrolled — retirement revokes the token in the same pass.
+    #: A retired runner may still carry a token an enrollment that raced the retire minted; reinstating revokes it, so
+    #: a reinstated runner is always unenrolled.
     RETIRED = "retired"
 
 
@@ -128,12 +129,15 @@ class TokenRevocation:
 @dataclass(frozen=True)
 class TokenRotation:
     """Enroll a fresh token hash. Any hash it replaces is recorded as revoked in the same write,
-    so rotating is revoking: the old token is refused from that instant."""
+    so rotating is revoking: the old token is refused from that instant. The write lands only
+    while the runner still stands at ``expected_lifecycle`` — the version the enrollment was
+    decided on — and is refused with :class:`RunnerLifecycleConflict` once it has moved."""
 
     runner_id: str
     token_hash: str
     at: datetime
     by: str
+    expected_lifecycle: int
 
 
 @domain_model
@@ -347,7 +351,13 @@ class RunnerRegistration:
         ``reinstate`` is the one reinstatement lever."""
         if not self.permits(RunnerVerb.ENROLL):
             raise RunnerRetired(self.runner_id, action="enrollment")
-        return TokenRotation(runner_id=self.runner_id, token_hash=token_hash, at=at, by=by)
+        return TokenRotation(
+            runner_id=self.runner_id,
+            token_hash=token_hash,
+            at=at,
+            by=by,
+            expected_lifecycle=self.lifecycle_version,
+        )
 
     def revoke_token(self, *, by: str, at: datetime) -> TokenRevocation:
         """Revoke the held token, leaving the runner added. Raises :class:`RunnerNotEnrolled`
@@ -369,10 +379,10 @@ class RunnerRegistration:
         return LifecycleFact(runner_id=self.runner_id, retired=True, at=at, by=by)
 
     def reinstate(self, *, by: str, at: datetime) -> LifecycleFact:
-        """The ``retired=False`` fact, and only the fact: the runner stays unenrolled, and
-        :meth:`~blizzard.hub.domain.execution.fleet.FleetService.reinstate` finishes the
-        retirement's release pass before writing it. Raises :class:`RunnerNotRetired` unless it
-        is retired."""
+        """The ``retired=False`` fact, and only the fact: the runner ends unenrolled — the service revokes any token it
+        still carries in the same unit — and
+        :meth:`~blizzard.hub.domain.execution.fleet.FleetService.reinstate` finishes the retirement's release pass
+        before writing it. Raises :class:`RunnerNotRetired` unless it is retired."""
         if not self.permits(RunnerVerb.REINSTATE):
             raise RunnerNotRetired(self.runner_id)
         return LifecycleFact(runner_id=self.runner_id, retired=False, at=at, by=by)
@@ -887,7 +897,8 @@ class IWriteRunnerRegistry(IReadRunnerRegistry, Protocol):
 
     def rotate_token(self, rotation: TokenRotation) -> int | None:
         """Set the registration's bearer-token hash, recording any hash it replaces as revoked
-        (stamped ``rotation.at``/``rotation.by``) in the same transaction. Returns the
+        (stamped ``rotation.at``/``rotation.by``) in the same transaction, while the runner stands at
+        ``rotation.expected_lifecycle`` — :class:`RunnerLifecycleConflict` otherwise, writing nothing. Returns the
         ``runner_token_revocations.id`` of that revocation, or ``None`` on a first enrollment."""
         ...
 

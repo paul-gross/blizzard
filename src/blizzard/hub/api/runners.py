@@ -27,7 +27,13 @@ from blizzard.hub.api.problem_exceptions import ProblemHTTPException
 from blizzard.hub.auth.models import ResolvedIdentity
 from blizzard.hub.auth.permissions import Permission
 from blizzard.hub.composition import TenantServices
-from blizzard.hub.domain.execution.fleet import ReinstateInterrupted, ReleasedRoute, RetireInterrupted, RetireOutcome
+from blizzard.hub.domain.execution.fleet import (
+    ReinstateFailed,
+    ReinstateInterrupted,
+    ReleasedRoute,
+    RetireInterrupted,
+    RetireOutcome,
+)
 from blizzard.hub.domain.projects.model import Project, ProjectId
 from blizzard.hub.domain.runners.bindings import BindingFlags, claimable_projects, flag_bindings
 from blizzard.hub.domain.runners.gate_enforceability import flag_unenforceable_gates
@@ -415,12 +421,15 @@ def enroll_runner(runner_id: str, services: Services) -> RunnerEnrollmentRespons
     replaces stops resolving, the one ``add`` minted included.
 
     Requires an added runner (404 otherwise), connected or not. A retired runner is refused
-    409: ``reinstate`` is the one reinstatement lever."""
+    409: ``reinstate`` is the one reinstatement lever. So is a runner retired or reinstated while the enroll was
+    deciding: 409, with nothing minted or revoked."""
     registration = _registration(services, runner_id)
     try:
         token = services.enrollment.enroll(registration)
     except RunnerRetired as exc:
         raise ProblemHTTPException(partial(problems.runner_retired_problem, exc, status_code=409)) from exc
+    except RunnerLifecycleConflict as exc:
+        raise ProblemHTTPException(partial(problems.runner_lifecycle_conflict_problem, exc)) from exc
     return RunnerEnrollmentResponse(runner_id=runner_id, token=token)
 
 
@@ -543,9 +552,10 @@ def _publish_releases(
     dependencies=[Depends(require(Permission.RUNNER_RETIRE))],
 )
 def reinstate_runner(runner_id: str, request: RunnerLifecycleRequest, services: Services) -> RunnerRegistryView:
-    """Reinstate a retired runner — it stays unenrolled until enrolled afresh; 409 when not retired, when it stands
-    under a retired host, and when its lifecycle moved while the reinstate was decided. A route its retirement left
-    held is released first, as the retire's own release pass would, and its ``detached`` frame published."""
+    """Reinstate a retired runner — any token it still carries is revoked with the reversal, and it stays unenrolled
+    until enrolled afresh; 409 when not retired, when it stands under a retired host, and when its lifecycle moved
+    while the reinstate was decided. A route its retirement left held is released first, as the retire's own release
+    pass would, and its ``detached`` frame published."""
     registration = _registration(services, runner_id)
     held = services.chunks.route.live_routes_of_runner(runner_id)
     changes = chunk_events.ChunkChanged.before_many(services, [r.chunk_id for r in held])
@@ -554,6 +564,9 @@ def reinstate_runner(runner_id: str, request: RunnerLifecycleRequest, services: 
     except ReinstateInterrupted as exc:
         _publish_releases(services, exc.released, changes)
         raise ProblemHTTPException(partial(problems_runners.runner_reinstate_interrupted_problem, exc)) from exc
+    except ReinstateFailed as exc:
+        _publish_releases(services, exc.released, changes)
+        raise exc.cause from exc
     except RunnerNotRetired as exc:
         raise ProblemHTTPException(partial(problems_runners.runner_not_retired_problem, exc)) from exc
     except HostRetired as exc:

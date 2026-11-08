@@ -2698,7 +2698,8 @@ export const getRunnerApiRunnersRunnerIdGet = <ThrowOnError extends boolean = fa
  * replaces stops resolving, the one ``add`` minted included.
  *
  * Requires an added runner (404 otherwise), connected or not. A retired runner is refused
- * 409: ``reinstate`` is the one reinstatement lever.
+ * 409: ``reinstate`` is the one reinstatement lever. So is a runner retired or reinstated while the enroll was
+ * deciding: 409, with nothing minted or revoked.
  */
 export const enrollRunnerApiRunnersRunnerIdEnrollmentsPost = <ThrowOnError extends boolean = false>(options: Options<EnrollRunnerApiRunnersRunnerIdEnrollmentsPostData, ThrowOnError>): RequestResult<EnrollRunnerApiRunnersRunnerIdEnrollmentsPostResponses, EnrollRunnerApiRunnersRunnerIdEnrollmentsPostErrors, ThrowOnError> => (options.client ?? client).post<EnrollRunnerApiRunnersRunnerIdEnrollmentsPostResponses, EnrollRunnerApiRunnersRunnerIdEnrollmentsPostErrors, ThrowOnError>({ url: '/api/runners/{runner_id}/enrollments', ...options });
 
@@ -2719,9 +2720,10 @@ export const pauseRunnerApiRunnersRunnerIdPausePost = <ThrowOnError extends bool
 /**
  * Reinstate Runner
  *
- * Reinstate a retired runner — it stays unenrolled until enrolled afresh; 409 when not retired, when it stands
- * under a retired host, and when its lifecycle moved while the reinstate was decided. A route its retirement left
- * held is released first, as the retire's own release pass would, and its ``detached`` frame published.
+ * Reinstate a retired runner — any token it still carries is revoked with the reversal, and it stays unenrolled
+ * until enrolled afresh; 409 when not retired, when it stands under a retired host, and when its lifecycle moved
+ * while the reinstate was decided. A route its retirement left held is released first, as the retire's own release
+ * pass would, and its ``detached`` frame published.
  */
 export const reinstateRunnerApiRunnersRunnerIdReinstatePost = <ThrowOnError extends boolean = false>(options: Options<ReinstateRunnerApiRunnersRunnerIdReinstatePostData, ThrowOnError>): RequestResult<ReinstateRunnerApiRunnersRunnerIdReinstatePostResponses, ReinstateRunnerApiRunnersRunnerIdReinstatePostErrors, ThrowOnError> => (options.client ?? client).post<ReinstateRunnerApiRunnersRunnerIdReinstatePostResponses, ReinstateRunnerApiRunnersRunnerIdReinstatePostErrors, ThrowOnError>({
     url: '/api/runners/{runner_id}/reinstate',

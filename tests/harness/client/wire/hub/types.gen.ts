@@ -30355,7 +30355,7 @@ export type EnrollRunnerApiRunnersRunnerIdEnrollmentsPostErrors = {
     /**
      * Problem
      */
-    409: TenantRequiredProblem | RunnerRetiredProblem;
+    409: TenantRequiredProblem | RunnerRetiredProblem | RunnerLifecycleConflictProblem;
     /**
      * Validation Error
      */

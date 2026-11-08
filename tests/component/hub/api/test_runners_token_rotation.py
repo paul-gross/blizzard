@@ -3,15 +3,17 @@ rather than merely failing to resolve."""
 
 from __future__ import annotations
 
+import threading
 from datetime import UTC, datetime
 from pathlib import Path
+from typing import cast
 
 import pytest
 from sqlalchemy.exc import OperationalError
 
 from blizzard.foundation.store.engine import create_engine_from_url
 from blizzard.foundation.tokens import TokenHash
-from blizzard.hub.domain.runners.registration import RunnerAddition
+from blizzard.hub.domain.runners.registration import IWriteRunnerRegistry, RunnerAddition, TokenRotation
 from blizzard.hub.store.internal.runner_registry_store import RunnerRegistryStore, locked_token_hash
 from tests.support.scaffolding import HubHarness, build_hub, hub_store_connections, migrated_hub_at, runner_token
 
@@ -82,3 +84,36 @@ def test_every_token_three_enrollments_mint_is_current_or_revoked(tmp_path: Path
 
     assert all(_revoked(hub, t) for t in rotated_out)
     assert not _revoked(hub, current)
+
+
+def test_competing_rotations_on_one_lifecycle_leave_one_current_token_and_revoke_the_rest(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    hub = build_hub(tmp_path)
+    assert hub.client.post("/api/fleet/runners", json={"runner_id": "runner-a", "workspace_id": "ws-a"}).is_success
+    registry = cast(IWriteRunnerRegistry, hub.services.registry)
+    original = registry.rotate_token
+    minted: list[str] = []
+    second: list[threading.Thread] = []
+    armed = [True]
+
+    def enroll_second() -> None:
+        minted.append(_enroll(hub))
+
+    def rotate_with_a_competitor(rotation: TokenRotation) -> int | None:
+        if armed:
+            armed.clear()
+            # Admitted and minted before this write lands; it contends for the same tenant-row lock.
+            thread = threading.Thread(target=enroll_second)
+            second.append(thread)
+            thread.start()
+        return original(rotation)
+
+    monkeypatch.setattr(registry, "rotate_token", rotate_with_a_competitor)
+
+    minted.append(_enroll(hub))
+    second[0].join(timeout=60)
+    assert not second[0].is_alive()
+
+    assert len(minted) == 2
+    assert sum(not _revoked(hub, t) for t in minted) == 1

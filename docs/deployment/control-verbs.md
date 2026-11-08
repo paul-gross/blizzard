@@ -253,15 +253,16 @@ and its local worktrees stay held until the process stops.
 
 `blizzard hub runner reinstate <runner_id>` records the reversal. It first releases any chunk the retirement left held —
 a retire a crash stopped before its releases — so each re-derives `ready`, as the retire would have. The runner stays
-unenrolled — its token was revoked at retire — so run `enroll` next; `enroll` on a retired runner refuses with a `409`.
-`reinstate` on a runner that is not retired is a `409`, and so is `reinstate` on a runner still under a retired host:
-release it from that host first (`blizzard hub runner-host release <host_id> <runner_id>`,
-[runner-auth.md](./runner-auth.md#hosts)), and it is reinstated standing alone. When another retire or reinstate of the
-runner lands while `retire` — a re-run included — or `reinstate` is deciding, the verb answers `409`: it revokes no
-token the runner was enrolled with since and releases no chunk it claimed since. The `409` can follow partial progress,
-which stays: a `retire` keeps the fact, the revocation and any release it wrote before the refusal, and a `reinstate`
-the releases it wrote ahead of its refused fact. Running the verb again picks up from the current state. All three verbs
-need the `runner:retire` permission ([runner-auth.md](./runner-auth.md#revocation)).
+unenrolled — `reinstate` revokes any token an enroll that raced the retire left, in the same step as the reversal — so
+run `enroll` next; `enroll` on a retired runner refuses with a `409`. `reinstate` on a runner that is not retired is a
+`409`, and so is `reinstate` on a runner still under a retired host: release it from that host first
+(`blizzard hub runner-host release <host_id> <runner_id>`, [runner-auth.md](./runner-auth.md#hosts)), and it is
+reinstated standing alone. When another retire or reinstate of the runner lands while `retire` — a re-run included — or
+`reinstate` is deciding, the verb answers `409`: it revokes no token the runner was enrolled with since and releases no
+chunk it claimed since. The `409` can follow partial progress, which stays: a `retire` keeps the fact, the revocation
+and any release it wrote before the refusal, and a `reinstate` the releases it wrote ahead of its refused fact; the fact
+and its revocation stay together, so a refused fact revokes nothing. Running the verb again picks up from the current
+state. All three verbs need the `runner:retire` permission ([runner-auth.md](./runner-auth.md#revocation)).
 
 ## Runner gates
 
