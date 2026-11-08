@@ -20,7 +20,14 @@ from blizzard.hub.domain.delivery.flows import FlowResource, LandingTerms, Submi
 from blizzard.hub.domain.kernel.transactions import TransactionMisuse
 from blizzard.hub.store import schema as s
 from blizzard.hub.store.internal.flow_store import FlowStore
-from tests.support.scaffolding import build_hub, chunk_unit, hub_scoped, hub_store_connections, stamp
+from tests.support.scaffolding import (
+    build_hub,
+    capture_statements,
+    chunk_unit,
+    hub_scoped,
+    hub_store_connections,
+    stamp,
+)
 
 _AT = datetime(2026, 10, 27, 12, 0, 0, tzinfo=UTC)
 _MAIN = FlowResource("repo_a", "main")
@@ -257,3 +264,109 @@ def test_the_first_turn_of_a_visit_is_kept_across_its_resubmissions(world: _Worl
 
     assert flows.first_turn_at("ch_1", node_id="nd_deliver", epoch=1) == _AT
     assert flows.first_turn_at("ch_1", node_id="nd_deliver", epoch=2) is None
+
+
+def _plant_terms(engine: Engine, submission: Submission | None, repository_id: str, position: float) -> LandingTerms:
+    assert submission is not None
+    terms = LandingTerms(repository_id, "merge-on-checks", None, position)
+    with engine.begin() as conn:
+        conn.execute(
+            s.flow_submission_terms.insert().values(
+                stamp(
+                    s.flow_submission_terms,
+                    submission_id=submission.submission_id,
+                    repository_id=repository_id,
+                    landing_policy=terms.landing_policy,
+                    park_timeout_hours=terms.park_timeout_hours,
+                    landing_position=terms.landing_position,
+                )
+            )
+        )
+    return terms
+
+
+def _close(engine: Engine, submission: Submission | None) -> None:
+    assert submission is not None
+    with engine.begin() as conn:
+        conn.execute(
+            s.flow_submission_closures.insert().values(
+                stamp(
+                    s.flow_submission_closures,
+                    submission_id=submission.submission_id,
+                    outcome="superseded",
+                    closed_at=_AT,
+                )
+            )
+        )
+
+
+def test_each_repository_takes_the_terms_of_its_own_newest_earlier_generation(world: _World, flows: FlowStore) -> None:
+    both = [_MAIN, _OTHER]
+    zero = world.submit("ch_1", resources=both)
+    older_b = _plant_terms(world.engine, zero, "repo_b", 10.0)
+    _plant_terms(world.engine, zero, "repo_a", 11.0)
+    _close(world.engine, zero)
+    one = world.submit("ch_1", generation=1, resources=[_MAIN])
+    newer_a = _plant_terms(world.engine, one, "repo_a", 12.0)
+    _close(world.engine, one)
+    # Another tenant-visible visit, another node epoch and a later generation all carry distinguishable terms that
+    # must not win for the generation under turn.
+    other_chunk = world.submit("ch_2", generation=1, resources=both)
+    _plant_terms(world.engine, other_chunk, "repo_a", 20.0)
+    _plant_terms(world.engine, other_chunk, "repo_b", 21.0)
+    _close(world.engine, other_chunk)
+    two = world.submit("ch_1", generation=2, resources=both)
+    future = world.submit("ch_1", generation=3, resources=both)
+    _plant_terms(world.engine, future, "repo_a", 30.0)
+    _plant_terms(world.engine, future, "repo_b", 31.0)
+    assert two is not None
+
+    _turn(flows, two.submission_id, (LandingTerms("repo_a", "merge-on-checks", None, 99.0),))
+
+    assert flows.terms_of(two.submission_id) == {"repo_a": newer_a, "repo_b": older_b}
+
+
+def test_a_repository_with_no_earlier_terms_takes_its_candidate_and_one_with_neither_takes_none(
+    world: _World, flows: FlowStore
+) -> None:
+    zero = world.submit("ch_1", resources=[_MAIN])
+    _plant_terms(world.engine, zero, "repo_a", 1.0)
+    _close(world.engine, zero)
+    one = world.submit("ch_1", generation=1, resources=[_MAIN, _OTHER, _THIRD])
+    assert one is not None
+    candidate = LandingTerms("repo_b", "merge-on-checks", None, 5.0)
+
+    _turn(flows, one.submission_id, (candidate,))
+
+    assert flows.terms_of(one.submission_id) == {"repo_a": _TERMS_A, "repo_b": candidate}
+
+
+def _terms_rows_read_by_turn(world: _World, depth: int) -> int:
+    chunk_id = f"ch_depth{depth}"
+    for generation in range(depth):
+        past = world.submit(chunk_id, generation=generation, resources=[_MAIN, _OTHER, _THIRD])
+        for repository_id in ("repo_a", "repo_b", "repo_c", "repo_x", "repo_y"):
+            _plant_terms(world.engine, past, repository_id, float(generation))
+        _close(world.engine, past)
+    current = world.submit(chunk_id, generation=depth, resources=[_MAIN, _OTHER])
+    assert current is not None
+    # Only the statements over the terms table: take_turn's other reads grow with the tenant's other rows.
+    with capture_statements(world.engine) as statements:
+        turn = world.flows.take_turn(current.submission_id, passed_over=frozenset(), terms=(), at=_AT)
+    assert turn is not None
+    world.flows.end_turn_interrupted(turn.turn_id, withdrawal=None, event=_INTERRUPTED, at=_AT)
+    total = 0
+    with world.engine.connect() as conn:
+        for statement, parameters in statements:
+            if statement.lstrip().upper().startswith("SELECT") and "flow_submission_terms" in statement:
+                total += conn.exec_driver_sql(f"SELECT count(*) FROM ({statement})", parameters).scalar_one()
+    _close(world.engine, current)
+    return total
+
+
+def test_the_rows_a_turn_reads_for_earlier_terms_do_not_grow_with_the_visits_history(world: _World) -> None:
+    shallow = _terms_rows_read_by_turn(world, 2)
+    deep = _terms_rows_read_by_turn(world, 6)
+
+    # The held repositories each read one newest earlier row, whatever the history behind it.
+    assert 0 < shallow == deep

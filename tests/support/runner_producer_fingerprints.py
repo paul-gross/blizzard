@@ -32,7 +32,7 @@ src/blizzard/hub/api/garden_runs.py 3 869283859d066beb7fbd002616b36e530fd85b1d44
 src/blizzard/hub/api/graph_names.py 1 94fc4ad8ee85759611835eddf24f2a510811743b2884b73cd4ad0101f5d993b3
 src/blizzard/hub/api/graphs.py 8 c5d141d3365312d774a06270b98a8e795f116a5d27a168f7619009df48b8ecf2
 src/blizzard/hub/api/health.py 1 a8213336f8c34db34352c309e78bfbf29e149932f2928defbb879cada9b2e18e
-src/blizzard/hub/api/hosts.py 21 5d33877d802b03741750379cfe474bcf1feafa2409e27f2171e3c6bcf05fa22d
+src/blizzard/hub/api/hosts.py 21 6eb940a214243a53fdc9cf2499c58d61a6cd05988a212027444fc48051d52f70
 src/blizzard/hub/api/hub_admins.py 2 a7e5df759cc996a9ca1d6643e2ec44ed982d67230778c4bd8e18c4bf1cf9cd1e
 src/blizzard/hub/api/hub_level.py 1 7cc32584034a4bc0dd0c9dddfb6c4a2502d16c93d958a11c1e4558ce63fc4676
 src/blizzard/hub/api/idp.py 18 986466eccd4a962b71587b9b54638868689bbea7eeb9dafd070fcacf5aae84b6

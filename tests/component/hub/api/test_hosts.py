@@ -20,6 +20,7 @@ from tests.support.scaffolding import (
     HubHarness,
     TenantHarness,
     build_hub,
+    count_queries,
     emitted_events,
     hub_store_connections,
     pointer_token,
@@ -634,3 +635,53 @@ def test_a_host_token_resolves_in_its_own_tenant_and_a_header_naming_another_is_
     resp = mine.client.get("/api/fleet/host", headers={**_bearer(added["token"]), "X-Blizzard-Tenant": other.tenant})
 
     assert resp.status_code == 400
+
+
+def _host_with_runners(hub: HubHarness, name: str, runner_ids: list[str]) -> str:
+    host_id = str(hub.client.post("/api/hosts", json={"name": name}).json()["host_id"])
+    for runner_id in runner_ids:
+        seed_runner(hub, runner_id)
+    if runner_ids:
+        adopt = hub.client.post(f"/api/hosts/{host_id}/adoptions", json={"runner_ids": runner_ids})
+        assert adopt.status_code == 200, adopt.text
+    return host_id
+
+
+def test_list_hosts_statements_are_flat_in_the_hosts_and_each_item_equals_its_detail(tmp_path: Path) -> None:
+    hub = build_hub(tmp_path)
+    first = _host_with_runners(hub, "one", ["rn_1a", "rn_1b"])
+    assert hub.client.post("/api/runners/rn_1a/retire", json={"by": "op"}).status_code == 200
+    one_host = count_queries(hub.engine, lambda: hub.client.get("/api/hosts"))
+    others = [
+        _host_with_runners(hub, "two", ["rn_2a"]),
+        _host_with_runners(hub, "three", []),
+        _host_with_runners(hub, "four", ["rn_4a", "rn_4b"]),
+    ]
+    seed_runner(hub, "rn_standalone")
+
+    several = count_queries(hub.engine, lambda: hub.client.get("/api/hosts"))
+    listed = hub.client.get("/api/hosts").json()["hosts"]
+
+    # The empty host adds no singular read, so the extra hosts cost nothing in statements.
+    assert several == one_host
+    by_id = {h["host_id"]: h for h in listed}
+    assert set(by_id) == {first, *others}
+    for item in listed:
+        assert item == hub.client.get(f"/api/hosts/{item['host_id']}").json()
+    assert by_id[first]["runner_ids"] == ["rn_1a", "rn_1b"]
+    assert by_id[others[1]]["runner_ids"] == []
+
+
+def test_list_hosts_with_retired_keeps_a_retired_hosts_runners(tmp_path: Path) -> None:
+    hub = build_hub(tmp_path)
+    live = _host_with_runners(hub, "live", ["rn_l"])
+    gone = _host_with_runners(hub, "gone", ["rn_g"])
+    assert hub.client.post(f"/api/hosts/{gone}/retire", json={}).status_code == 200
+
+    default = hub.client.get("/api/hosts").json()["hosts"]
+    everything = hub.client.get("/api/hosts?include_retired=true").json()["hosts"]
+
+    assert [h["host_id"] for h in default] == [live]
+    assert {h["host_id"]: h["runner_ids"] for h in everything} == {live: ["rn_l"], gone: ["rn_g"]}
+    for item in everything:
+        assert item == hub.client.get(f"/api/hosts/{item['host_id']}").json()

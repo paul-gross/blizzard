@@ -54,7 +54,7 @@ from blizzard.hub.store.internal.flow_rows import (
     write_facts,
     write_landing,
 )
-from blizzard.hub.store.internal.newest_fact import newest_fact_select
+from blizzard.hub.store.internal.newest_fact import newer_row_exists, newest_fact_select
 from blizzard.hub.store.locking import lock_keys
 from blizzard.hub.store.scoped import ScopedConnections
 from blizzard.hub.store.transactions import chunk_handle_connection, connection_for, connection_in
@@ -593,20 +593,40 @@ class FlowStore:
                 self._store.select(_terms, _terms.c.repository_id).where(_terms.c.submission_id == row.submission_id)
             ).scalars()
         )
+        missing = [repository_id for repository_id in held if repository_id not in taken]
         earlier: dict[str, LandingTerms] = {}
-        if row.generation > 0:
+        if row.generation > 0 and missing:
             joined = self._store.scope_join(_terms, _sub, _terms.c.submission_id == _sub.c.submission_id)
-            for prior in conn.execute(
-                self._store.select(joined, *_terms.c)
-                .where(
-                    _sub.c.chunk_id == row.chunk_id,
-                    _sub.c.node_id == row.node_id,
-                    _sub.c.epoch == row.epoch,
-                    _sub.c.generation < row.generation,
-                )
-                .order_by(_sub.c.generation.desc())
-            ):
-                earlier.setdefault(prior.repository_id, _terms_of(prior))
+            rival_terms = _terms.alias("rival_terms")
+            rival_sub = _sub.alias("rival_sub")
+            # The newest earlier generation of this visit per repository: the competing row is held to the same visit
+            # and to earlier generations, so a later or foreign row never knocks out the true winner.
+            beaten = newer_row_exists(
+                self._store,
+                self._store.scope_join(
+                    rival_terms, rival_sub, rival_terms.c.submission_id == rival_sub.c.submission_id
+                ),
+                partition=[(_terms.c.repository_id, rival_terms.c.repository_id)],
+                order=[(_sub.c.generation, rival_sub.c.generation)],
+                where=and_(
+                    rival_sub.c.chunk_id == row.chunk_id,
+                    rival_sub.c.node_id == row.node_id,
+                    rival_sub.c.epoch == row.epoch,
+                    rival_sub.c.generation < row.generation,
+                ),
+            )
+            for batch in id_batches(missing):
+                for prior in conn.execute(
+                    self._store.select(joined, *_terms.c).where(
+                        _sub.c.chunk_id == row.chunk_id,
+                        _sub.c.node_id == row.node_id,
+                        _sub.c.epoch == row.epoch,
+                        _sub.c.generation < row.generation,
+                        _terms.c.repository_id.in_(batch),
+                        ~beaten,
+                    )
+                ):
+                    earlier.setdefault(prior.repository_id, _terms_of(prior))
         fresh = {candidate.repository_id: candidate for candidate in candidates}
         for repository_id in held:
             if repository_id in taken:

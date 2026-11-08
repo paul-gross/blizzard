@@ -487,6 +487,10 @@ class ChunkView:
             pending=self._pending(),
             bounces=self._bounces(),
             flow_places=self._flow_places(),
+            # The whole flow history, not its newest fact: the board derives wait poll counts and first/last time
+            # ranges, landing attempts, the elapsed span and each repository's outcome from the complete sequence.
+            # The read grows with this chunk's history, repeated waits included — even one submission can wait many
+            # times — so it sits outside the page-bounded rule; no detail-load slowdown has been shown.
             flow_record=[
                 fact_view(fact)
                 for fact in self.services.flow_views.chunk_records([self.chunk.chunk_id]).get(self.chunk.chunk_id, [])

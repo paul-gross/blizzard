@@ -2792,6 +2792,7 @@ HUB_CENSUS: dict[tuple[type, str], HubRecipe] = {
     ),
     (IReadRunnerRegistry, "get_runner"): lambda w: w.hub.services.registry.get_runner(HUB_RUNNER_ID),
     (IReadRunnerRegistry, "get_runners"): lambda w: w.hub.services.registry.get_runners([HUB_RUNNER_ID]),
+    (IReadRunnerRegistry, "runners_under"): lambda w: w.hub.services.registry.runners_under([w.host_id]),
     (IReadRunnerRegistry, "runners_serving"): lambda w: w.hub.services.registry.runners_serving("proj_census"),
     (IReadRunnerRegistry, "is_retired"): lambda w: w.hub.services.registry.is_retired(HUB_RUNNER_ID),
     (IReadRunnerRegistry, "list_runners"): lambda w: w.hub.services.registry.list_runners(),

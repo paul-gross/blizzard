@@ -211,3 +211,61 @@ def test_adopt_and_release_refuse_the_first_failure_in_operator_order_and_write_
     assert sorted(_runner_ids(hub, mine)) == ["rn_a", "rn_c"]
     assert hub.client.post(release, json={"runner_ids": ["rn_c", "rn_a", "rn_c"]}).status_code == 200
     assert _runner_ids(hub, mine) == []
+
+
+def test_runners_under_equals_list_runners_per_host_across_a_batch_boundary(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(batching_module, "BATCH_SIZE", 2)
+    hub = build_hub(tmp_path)
+    hosts = [_add_host(hub.client, f"box{i}") for i in range(5)]
+    for index, host_id in enumerate(hosts[:4]):
+        for slot in range(index % 3 + 1):
+            runner_id = f"rn_{index}_{slot}"
+            seed_runner(hub, runner_id)
+            adopt = hub.client.post(f"/api/hosts/{host_id}/adoptions", json={"runner_ids": [runner_id]})
+            assert adopt.status_code == 200
+    assert hub.client.post("/api/runners/rn_1_0/retire", json={"by": "op"}).status_code == 200
+    seed_runner(hub, "rn_standalone")
+    registry = hub.services.registry
+
+    result = registry.runners_under([*hosts, hosts[0], "ho_missing"])
+
+    # The last host stands empty, so it is absent rather than mapped to an empty list.
+    assert set(result) == set(hosts[:4])
+    for host_id in hosts[:4]:
+        assert result[host_id] == registry.list_runners(include_retired=True, host_id=host_id)
+    assert registry.runners_under([]) == {}
+
+
+def test_runners_under_is_tenant_scoped(tmp_path: Path) -> None:
+    hub = build_hub(tmp_path)
+    mine = hub.add_tenant("mine")
+    other = hub.add_tenant("other")
+    seed_runner(other.services, other.runner_id("r1"), register=False)
+    other_host = _add_host(other.client, "theirs")
+    assert (
+        other.client.post(
+            f"/api/hosts/{other_host}/adoptions", json={"runner_ids": [other.runner_id("r1")]}
+        ).status_code
+        == 200
+    )
+
+    assert mine.services.registry.runners_under([other_host]) == {}
+    assert set(other.services.registry.runners_under([other_host])) == {other_host}
+
+
+def test_runners_under_statements_are_flat_in_the_hosts_and_blind_to_unlisted_runners(tmp_path: Path) -> None:
+    hub = build_hub(tmp_path)
+    hosts = [_add_host(hub.client, f"box{i}") for i in range(10)]
+    for index, host_id in enumerate(hosts):
+        runner_id = f"rn_{index}"
+        seed_runner(hub, runner_id)
+        assert hub.client.post(f"/api/hosts/{host_id}/adoptions", json={"runner_ids": [runner_id]}).status_code == 200
+    registry = hub.services.registry
+
+    few = count_queries(hub.engine, lambda: registry.runners_under(hosts[:2]))
+    many = count_queries(hub.engine, lambda: registry.runners_under(hosts))
+
+    assert few == many
+    assert set(registry.runners_under(hosts[:2])) == set(hosts[:2])

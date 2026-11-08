@@ -347,7 +347,14 @@ class CloseDrainSweep:
             return fault
 
     def _due(self) -> dict[TenantId, list[PendingCloseIntent]]:
-        """Every open tenant's due intents, in the corpus's order, from one read."""
+        """Every open tenant's due intents, in the corpus's order, from one read.
+
+        The corpus is deliberately every open tenant's pending intents, due and not yet due: the domain filters it by
+        the newest deferral and the capped exponential backoff (:func:`close_intent_is_due`), and :func:`fair_share`
+        rotation then picks among what remains. ``CLOSE_DRAIN_PASS_LIMIT`` caps the closures a pass attempts, not the
+        rows it reads, so the read stays as large as the backlog, a forge outage included. A global SQL limit applied
+        before fair sharing is not equivalent: it can change which tenants are selected. SQL could express a different,
+        sound scheduling design; this keeps the selection in the domain at the cost of a backlog-sized read."""
         now = self._clock.now()
         due: dict[TenantId, list[PendingCloseIntent]] = {}
         for row in self._corpus.pending_close_intents():
