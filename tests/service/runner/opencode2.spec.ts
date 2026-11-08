@@ -1,4 +1,4 @@
-import { expect, leaseProgress, runnerTest as test, stepUntil } from '../../harness/fixtures';
+import { expect, leaseProgress, PRICES, runnerTest as test, stepUntil } from '../../harness/fixtures';
 import type { MockChunkSpec, MockHub, RunnerHost } from '../../harness/fixtures';
 
 // The OpenCode 2 binding on a stepped runner host: the configured binary is the engine-backed `mock-opencode-2`, whose
@@ -164,5 +164,23 @@ test.describe('with a service that never registers', () => {
     expect([health?.available, health?.cause], JSON.stringify(health)).toEqual([false, 'config_conflict']);
     expect(await leases(), 'no lease was taken').toEqual([]);
     expect(host.logTail()).toContain('no OpenCode service answers');
+  });
+});
+
+test.describe('with a catalog in the service store', () => {
+  test('test_opencode2_a_zero_cost_turn_is_estimated_from_the_catalog_and_pauses_the_runner_at_its_ceiling', async ({ mockHub, runnerHosts }) => {
+    const host = await runnerHosts.create({
+      runnerConfig: { runner: [{ name: 'runner-local', opencode: { enabled: true, binary: '${mockOpencode2}' }, cost: { runner_ceiling_usd: 0.0001 } }] },
+      runnerModelCatalog: { opencode: { 'pulse-alpha-free': PRICES.acme['coder-1']! } },
+    });
+    // The mock service's unpaid model: it reports cost 0, and only the catalog row prices it.
+    const priced = single('gr_opencode2_priced', BUILD);
+    priced.nodes.build!.session_model = ['opencode/pulse-alpha-free'];
+    await mockHub.seed.chunk(priced);
+    const runner = host.runners['runner-local']!;
+
+    const pause = await stepUntil(host, async () => (await runner.status()).body.pause, (state) => state.local, { stallPasses: STALL_PASSES });
+    expect(pause.local_reason).toContain('spend ceiling');
+    expect(pause.local_reason, 'the catalog estimate did not render as the one ~-led figure').toContain('~$');
   });
 });

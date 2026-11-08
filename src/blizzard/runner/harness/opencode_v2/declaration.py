@@ -22,6 +22,7 @@ from blizzard.runner.harness.internal.version_probe import VersionProbe
 from blizzard.runner.harness.offline_compatibility import ICompatibilityCorpus
 from blizzard.runner.harness.opencode_v2.adapter import OpenCodeTwoAdapter
 from blizzard.runner.harness.opencode_v2.health import OpenCodeTwoHealthProbe
+from blizzard.runner.harness.opencode_v2.price_catalog import SqliteOpenCodeTwoPriceCatalog, resolve_catalog_store_path
 from blizzard.runner.harness.opencode_v2.service import ServiceKeeper
 from blizzard.runner.harness.opencode_v2.transcript.normalizer import NORMALIZER_VERSION
 from blizzard.runner.harness.opencode_v2.transport import UrllibServiceTransport
@@ -108,6 +109,7 @@ class OpenCodeTwoDeclaration:
         children: IChildProcesses,
         clock: IClock,
     ) -> HarnessBinding:
+        store_path = resolve_catalog_store_path(shared.worker_env.variables)
         adapter = OpenCodeTwoAdapter(
             runner_id=shared.runner_id,
             worker_env=shared.worker_env,
@@ -123,6 +125,7 @@ class OpenCodeTwoDeclaration:
             effort_aliases=section.effort_aliases,
             supported_models=section.supported_models,
             autonomy=shared.autonomy,
+            price_catalog=SqliteOpenCodeTwoPriceCatalog(store_path) if store_path is not None else None,
         )
         return HarnessBinding(adapter=adapter, transcript_source=adapter.transcript_source())
 

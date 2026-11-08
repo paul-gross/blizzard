@@ -237,6 +237,18 @@ step's `providerID`/`modelID` regardless, and prices from the model it observes 
 pays for that export read, since its own stamp already names what ran; with transcripts unwired, or an export naming no
 model either, the step stays unestimated.
 
+OpenCode 2 prices the same way from a different source: its own models catalog, a row in the SQLite store beside its
+other state (`opencode/opencode.db`), not `models.json`. The runner opens that store read-only, so a running OpenCode
+service keeps writing it, and reads the one model it needs. A step is priced at its own `provider/model` and its own
+prompt size: the largest context override its prompt size reaches prices every token class of that step. An override
+that depends on anything but context size (a service tier, a time of day, a date) is skipped, and the step prices at the
+base rate. A model with no input or output price, or a cache write priced by retention window on a step that wrote cache
+tokens, leaves the whole invocation's estimate absent, as an unknown model does. The store is found at
+`XDG_DATA_HOME/opencode/opencode.db` when `[runner.worker] env_passthrough` passes `XDG_DATA_HOME` through to the
+worker, or at `HOME/.local/share/opencode/opencode.db` otherwise. Only the catalog OpenCode keeps for its default models
+URL is read: a catalog fetched from a custom `OPENCODE_MODELS_URL` is stored under a key blizzard does not read, so
+those models stay cost-absent.
+
 An OpenCode invocation's usage also counts the steps of every descendant session its `task` tool calls spawned — a
 child, and that child's own children — read through `opencode export`, each step priced at its own message's model. The
 runner also recovers root `task` parts still running when an invocation is interrupted, even when stdout stopped before
