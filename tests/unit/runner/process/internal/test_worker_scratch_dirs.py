@@ -174,6 +174,66 @@ def test_missing_marker_does_not_adopt_replacement(tmp_path: Path) -> None:
     assert (path / "sentinel").read_text() == "foreign"
 
 
+def test_missing_payload_is_recreated_and_removed(tmp_path: Path) -> None:
+    dirs = WorkerScratchDirs(str(tmp_path), "rn_1111ABCD")
+    path = Path(dirs.ensure("lease_1111WXYZ"))
+    displaced = path.with_name("displaced")
+    path.rename(displaced)
+    assert dirs.ensure("lease_1111WXYZ") == str(path)
+    assert dirs.ensure("lease_1111WXYZ") == str(path)
+    dirs.remove("lease_1111WXYZ")
+    assert not path.exists() and displaced.exists()
+
+
+@pytest.mark.parametrize("after_publish", [False, True])
+def test_recreation_interruption_recovers(tmp_path: Path, after_publish: bool) -> None:
+    from blizzard.runner.process.internal import worker_scratch_dirs as scratch
+
+    dirs = WorkerScratchDirs(str(tmp_path), "rn_1111ABCD")
+    path = Path(dirs.ensure("lease_1111WXYZ"))
+    path.rename(path.with_name("displaced"))
+    publish = scratch._publish_directory  # pyright: ignore[reportPrivateUsage]
+
+    def interrupt(target: Path, token: str) -> None:
+        if target == path:
+            if after_publish:
+                publish(target, token)
+            raise OSError("interrupted")
+        publish(target, token)
+
+    with patch.object(scratch, "_publish_directory", interrupt), pytest.raises(OSError, match="interrupted"):
+        dirs.ensure("lease_1111WXYZ")
+    restarted = WorkerScratchDirs(str(tmp_path), "rn_1111ABCD")
+    assert restarted.ensure("lease_1111WXYZ") == str(path)
+    assert restarted.ensure("lease_1111WXYZ") == str(path)
+    assert restarted.sweep_orphans(set(), strict=True) == 1
+    assert not path.exists()
+
+
+def test_recreation_does_not_readopt_displaced_payload_after_interruption(tmp_path: Path) -> None:
+    from blizzard.runner.process.internal import worker_scratch_dirs as scratch
+
+    dirs = WorkerScratchDirs(str(tmp_path), "rn_1111ABCD")
+    path = Path(dirs.ensure("lease_1111WXYZ"))
+    displaced = path.with_name("displaced")
+    (path / "sentinel").write_text("data")
+    path.rename(displaced)
+    publish = scratch._publish_directory  # pyright: ignore[reportPrivateUsage]
+
+    def interrupt(target: Path, token: str) -> None:
+        if target == path:
+            raise OSError("interrupted")
+        publish(target, token)
+
+    with patch.object(scratch, "_publish_directory", interrupt), pytest.raises(OSError, match="interrupted"):
+        dirs.ensure("lease_1111WXYZ")
+    displaced.rename(path)
+    with pytest.raises(OSError, match="ownership mismatch"):
+        dirs.ensure("lease_1111WXYZ")
+    assert dirs.sweep_orphans(set()) == 0
+    assert (path / "sentinel").read_text() == "data"
+
+
 def test_deletion_resumes_after_marker_is_removed(tmp_path: Path) -> None:
     import shutil
 

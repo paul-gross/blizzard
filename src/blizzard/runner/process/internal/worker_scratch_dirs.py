@@ -134,8 +134,7 @@ def _valid_component(name: str, identity: str, prefix: str) -> bool:
 class WorkerScratchDirs:
     """Compact reservations under root; an empty root disables scratch.
 
-    ``legacy_root`` is the host's old worker-tmp directory, independent of root.
-    The default runner id retains the old adapter shape for isolated legacy callers.
+    ``legacy_root`` is independent of root; an empty runner id uses the legacy adapter shape.
     """
 
     root: str
@@ -259,6 +258,10 @@ class WorkerScratchDirs:
             if "deleting" in lease_record:
                 raise OSError(f"Scratch deletion in progress: {path}")
             _publish_directory(path.parent, runner_record["token"])
+            if "directory" in lease_record and not os.path.lexists(path):
+                del lease_record["directory"]
+                lease_record["token"] = secrets.token_hex(32)
+                _write(allocation[1], lease_record)
             if os.path.lexists(path) and "directory" in lease_record:
                 if not _payload_owned(path, lease_record):
                     raise OSError(f"Scratch directory ownership mismatch: {path}")

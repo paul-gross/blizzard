@@ -6,12 +6,13 @@ cross-concept write keeps inside this one ``store/internal/`` package."""
 
 from __future__ import annotations
 
-from collections.abc import Sequence
+from collections.abc import Collection, Sequence
 from datetime import datetime
 
 from sqlalchemy import Connection, and_, func
 
 from blizzard.foundation.logging import get_logger
+from blizzard.foundation.store.batching import id_batches
 from blizzard.foundation.store.utc import as_utc
 from blizzard.runner.leases import closure
 from blizzard.runner.leases.model import ClosedLease, Lease, NewLease, NewMint
@@ -98,6 +99,15 @@ class LeaseRecordStore:
         stmt = lease_select(self._store).where(leases.c.lease_id == lease_id)
         rows = self._store.all(stmt)
         return row_to_lease(rows[0]) if rows else None
+
+    def closed_lease_ids(self, lease_ids: Collection[str]) -> set[str]:
+        result: set[str] = set()
+        for batch in id_batches(list(lease_ids)):
+            stmt = self._store.select(lease_closures, lease_closures.c.lease_id).where(
+                lease_closures.c.lease_id.in_(batch)
+            )
+            result.update(str(row.lease_id) for row in self._store.all(stmt))
+        return result
 
     def list_closed_leases(self, limit: int) -> list[ClosedLease]:
         stmt = (

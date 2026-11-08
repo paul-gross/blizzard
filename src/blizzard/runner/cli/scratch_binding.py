@@ -15,6 +15,7 @@ from typing import Protocol
 
 from blizzard.runner.host_layout import DATA_DIRNAME, LEGACY_WORKER_SCRATCH_DIRNAME
 from blizzard.runner.leases.record import IReadLeaseRecordRepository
+from blizzard.runner.process.scratch_cleanup import sweep_closed_legacy
 
 
 class ScratchSweeper(Protocol):
@@ -80,10 +81,7 @@ def reconcile_scratch_roots(
             )
             scratch.sweep_orphans(active[runner], strict=True)
 
-            def closed(lease_id: str, repo: IReadLeaseRecordRepository = repo, runner: str = runner) -> bool:
-                return repo.lease(lease_id) is not None and lease_id not in active[runner]
-
-            scratch.sweep_legacy(closed, strict=True)
+            sweep_closed_legacy(scratch, repo, strict=True)
 
     bind_scratch_root(host_root, root, active=any(active.values()), reconcile=reconcile)
     reconcile(root)

@@ -34,6 +34,8 @@ from blizzard.runner.loop.context import LoopConfig
 from blizzard.runner.loop.tick import tick
 from blizzard.runner.node_steps.chunk_state import ChunkState
 from blizzard.runner.process.child_env import AllowlistedEnv
+from blizzard.runner.process.internal.worker_scratch_dirs import WorkerScratchDirs
+from blizzard.runner.process.scratch_cleanup import sweep_closed_legacy
 from blizzard.runner.status.view import RunnerStatusService
 from tests.support import scaffolding as support
 from tests.support.child_launch import CHILDREN, version_probe
@@ -122,6 +124,31 @@ def _mint(store: SqlAlchemyRunnerStore, lease_id: str, chunk_id: str) -> None:
             )
         )
     )
+
+
+def test_legacy_cleanup_batches_candidate_closures(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    store, engine = _store(tmp_path)
+    ids = [f"lease_{i}" for i in range(7)]
+    for i, lease_id in enumerate(ids):
+        _mint(store, lease_id, f"ch_{i}")
+        if i != 6:
+            store.record_closure(
+                lease_id=lease_id, chunk_id=f"ch_{i}", node_id="nd_build", reason="done", closed_at=_NOW
+            )
+    legacy = tmp_path / "legacy"
+    scratch = WorkerScratchDirs(str(tmp_path / "scratch"), "rn_test", legacy_root=str(legacy))
+
+    def run(names: list[str]) -> int:
+        for name in names:
+            (legacy / name).mkdir(parents=True, exist_ok=True)
+        return support.count_queries(engine, lambda: sweep_closed_legacy(scratch, store, strict=True))
+
+    assert run(ids[:1]) == run([*ids, "unknown"]) == 1
+    assert (legacy / ids[-1]).is_dir()
+    assert (legacy / "unknown").is_dir()
+    assert all(not (legacy / name).exists() for name in ids[:-1])
+    monkeypatch.setattr(batching_module, "BATCH_SIZE", 3)
+    assert run(ids) == 3
 
 
 def test_lease_generations_matches_the_singular_and_drops_an_unknown_id(tmp_path: Path) -> None:

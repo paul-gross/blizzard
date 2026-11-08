@@ -55,6 +55,7 @@ from blizzard.runner.loop.step_passes import HostPassStepper, PassResult, StepLo
 from blizzard.runner.loop.tick import tick
 from blizzard.runner.process.internal.worker_scratch_dirs import WorkerScratchDirs
 from blizzard.runner.process.probe import IProcessProbe
+from blizzard.runner.process.scratch_cleanup import sweep_closed_legacy
 from blizzard.runner.stores import HostStores, RunnerStores
 from blizzard.runner.transcripts.transcript_backfill import (
     TranscriptBackfill,
@@ -142,9 +143,7 @@ class LoopWiring:
         )
         if sweep_worker_scratch:
             _worker_scratch.sweep_orphans(active)
-            _worker_scratch.sweep_legacy(
-                lambda name: stores.lease_record.lease(name) is not None and name not in active,
-            )
+            sweep_closed_legacy(_worker_scratch, stores.lease_record)
         # The tool profile the runner's own `git` and check commands launch under: no lease identity.
         tool_env = config.tool_env(graph.trace_settings)
         loop_config = LoopConfig(

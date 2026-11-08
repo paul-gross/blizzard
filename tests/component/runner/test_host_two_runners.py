@@ -260,6 +260,9 @@ def test_a_pre_upgrade_flat_entry_is_removed_only_when_the_sweeping_runner_holds
             lease_id="lease_closed_here", chunk_id="ch_1", node_id="nd_build", reason="done", closed_at=REGISTERED_AT
         )
 
+        second = host.runners[1]
+        LoopWiring.of(second.config).context(FakeHub(), second, sweep_worker_scratch=True)
+        assert (flat / "lease_closed_here").is_dir()
         LoopWiring.of(first.config).context(FakeHub(), first, sweep_worker_scratch=True)
 
         assert (flat / "lease_never_held").is_dir()

@@ -134,10 +134,7 @@ def test_host_reconciliation_aggregates_runners_before_changing_root(
     first.list_active_leases.return_value = []
     second.list_active_leases.return_value = [SimpleNamespace(lease_id="active")]
 
-    def lease(lease_id: str) -> object | None:
-        return object() if lease_id == "closed" else None
-
-    first.lease.side_effect = lease
+    first.closed_lease_ids.return_value = {"closed"}
     old, new = tmp_path / "old", tmp_path / "new"
     reconcile_scratch_roots(tmp_path, old, {"a": first, "b": second})
     adapters.clear()

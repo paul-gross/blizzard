@@ -117,10 +117,10 @@ periodic sweep prunes both streams once they age past `[worker_stdout] retention
 
 ## Worker scratch directory
 
-Every lease gets a private staging directory exported to its worker as `BLIZZARD_TMPDIR`. New allocations live under
-`<scratch root>/r-<tail>/l-<tail>/`, normally using the lowercase final four characters of the runner and lease IDs.
+Every worker run gets a private staging directory exported as `BLIZZARD_TMPDIR`. New allocations live under
+`<scratch root>/r-<tail>/l-<tail>/`, normally using the lowercase final four characters of the runner and run IDs.
 Collisions extend the newcomer's tail; the full IDs, not the directory names, identify the owners. An allocation stays
-at the same path across spawn, resume, judge, and restart while its lease is open.
+at the same path across spawn, resume, judge, and restart while the run remains open.
 
 The scratch root defaults to `<host directory>/tmp`. To choose another root, set it in `blizzard-host.toml`:
 
@@ -134,15 +134,17 @@ A relative root resolves against the host directory; an absolute root is used as
 the host. Short paths help programs such as Postgres that have Unix socket path-length limits; an arbitrarily long root
 or an extended collision suffix can still exceed those limits.
 
-Unlike `worker-stdout/`, scratch does not outlive its lease: the runner removes it after the lease closes. Startup
+Unlike `worker-stdout/`, scratch does not outlive its run: the runner removes it after the run closes. Startup
 reconciliation preserves active allocations and cleans owned closed allocations left by a crash, without deleting
 unknown or another runner's data. Active allocations from the older `worker-tmp/<runner_id>/<lease_id>/` and
-`worker-tmp/<lease_id>/` layouts are reused until their leases close; legacy entries are cleaned only with evidence of
+`worker-tmp/<lease_id>/` layouts are reused until their runs close; legacy entries are cleaned only with evidence of
 ownership and closure.
 
-Before changing the effective scratch root, drain the host's active leases. The host refuses a root change while any
-remain active; restore the previous setting and drain the leases before trying again. After draining, the host
-reconciles the previous root before switching.
+Before changing the effective scratch root, drain all active worker runs on the host. Pause each runner at the hub to
+stop new claims while in-flight chunks finish ([runner-doors.md](./runner-doors.md#the-two-brakes)); a paused chunk or
+parked session can still hold an open run. The host refuses a root change while any runs remain active; restore the
+previous setting and finish draining before trying again. After draining, the host reconciles the previous root before
+switching.
 
 ## Reading the feed
 
