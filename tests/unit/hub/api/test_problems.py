@@ -375,6 +375,15 @@ def test_incompatible_claim_preserves_capability_and_project_details() -> None:
     assert project.model_dump()["incompatible_runner_id"] == "r"
 
 
+def test_binding_claim_denial_names_the_workspace_refusal_under_the_same_problem_type() -> None:
+    error = ClaimDeniedIncompatible(chunk_id="c", runner_id="r", reason=ClaimDenialReason.BINDING, project_id="p")
+    problem = claim_incompatible_problem(error, instance="/routes", project_name="slug")
+    body = problem.model_dump(mode="json")
+    assert body["reason"] == "binding"
+    assert body["detail"] == "runner is not admitted to the chunk's project slug through the claimed workspace"
+    assert (body["incompatible_runner_id"], body["chunk_id"]) == ("r", "c")
+
+
 def test_paused_claim_preserves_legacy_fields() -> None:
     problem = claim_paused_problem(ClaimDeniedPaused(runner_id="r"), chunk_id="c", instance="/routes")
     assert problem.model_dump(mode="json") == {

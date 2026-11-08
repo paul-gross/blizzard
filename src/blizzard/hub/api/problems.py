@@ -668,6 +668,10 @@ def claim_incompatible_problem(
         detail = (
             f"runner does not serve the chunk's project {project_name if project_name is not None else exc.project_id}"
         )
+    elif exc.reason is ClaimDenialReason.BINDING and exc.project_id is not None:
+        reason = ClaimDenialReason.BINDING
+        shown = project_name if project_name is not None else exc.project_id
+        detail = f"runner is not admitted to the chunk's project {shown} through the claimed workspace"
     else:
         reason = ClaimDenialReason.CAPABILITY
         detail = "runner capabilities no longer satisfy the chunk's reachable lineage"

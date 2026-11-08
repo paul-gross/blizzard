@@ -174,7 +174,9 @@ live host holds is not recorded. The hub publishes a `host-changed` event only w
 A hosted runner's bindings and subscription are checked against its host's latest report. A binding whose workspace the
 host has not reported, and a subscription outside the host's roster, are flagged on the runner's views and in the
 registration answer, never refused; the hub offers the runner no work through a flagged binding, and none at all under a
-flagged subscription.
+flagged subscription. A direct claim is judged the same way against the host's latest report: one through a flagged
+binding, under a flagged subscription, or through a workspace other than the one the runner binds the chunk's project to
+is refused with `409` and `reason: binding`.
 
 `runner-host revoke-token <host_id>` revokes the host's token and leaves the host recorded; `enroll <host_id>` mints a
 new one, printed once as a `BZ_HOST_TOKEN=<token>` line, and records the token it replaces as revoked. A revoked hash

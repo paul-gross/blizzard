@@ -437,7 +437,12 @@ def test_the_predicate_the_matched_peek_and_claim_admission_agree(row: _Agreemen
     )
     try:
         ClaimAdmission(chunk, graph, facts).node(
-            runner_id="r1", existing_route=None, unmet_prerequisite=None, registration=registration
+            runner_id="r1",
+            existing_route=None,
+            unmet_prerequisite=None,
+            registration=registration,
+            host=None,
+            workspace_id="ws-a",
         )
         claimable = True
     except ClaimDeniedIncompatible:

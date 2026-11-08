@@ -62,8 +62,8 @@ class HostRegistryStore:
 
     # --- reads --------------------------------------------------------------
 
-    def get_host(self, host_id: str) -> Host | None:
-        with self._store.read("get_host") as conn:
+    def get_host(self, host_id: str, *, transaction: Transaction | None = None) -> Host | None:
+        with connection_in(self._store, transaction, "get_host") as conn:
             row = conn.execute(self._store.select(s.hosts).where(s.hosts.c.host_id == host_id)).one_or_none()
             if row is None:
                 return None

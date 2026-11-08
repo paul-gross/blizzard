@@ -1212,6 +1212,7 @@ def build_tenant_services(stores: TenantStores, parts: TenantServiceParts, *, ev
             artifacts=chunk_artifacts,
             graphs=graph_store,
             registry=registry_store,
+            hosts=host_store,
             retired=retired,
             exclusive=chunk_exclusive,
             clock=clock,

@@ -33,6 +33,8 @@ from blizzard.hub.domain.chunk.ports.route import IWriteChunkRouteRepository
 from blizzard.hub.domain.execution.eligibility import EligibilityCheck
 from blizzard.hub.domain.execution.envelope import Envelope
 from blizzard.hub.domain.graph.model import Graph, IReadGraphRepository, Node
+from blizzard.hub.domain.runners.bindings import WorkEligibility
+from blizzard.hub.domain.runners.host import Host, IReadHostRegistry
 from blizzard.hub.domain.runners.registration import (
     ClaimBar,
     IReadRunnerRegistry,
@@ -117,7 +119,8 @@ class ClaimDeniedIncompatible(Exception):
     :class:`ClaimDeniedDependency`'s shape. ``capability``: its stored capabilities can no longer run
     every statically reachable runner-owned lineage from the chunk's current node, a registration
     reporting no capabilities included. ``project``: its served declaration does not serve the
-    chunk's project, ``project_id``, which only a ``project`` refusal carries."""
+    chunk's project, ``project_id``, which a ``project`` and a ``binding`` refusal carry. ``binding``: it serves the
+    project, but not through the claimed workspace now (:class:`WorkEligibility`)."""
 
     def __init__(
         self,
@@ -129,6 +132,8 @@ class ClaimDeniedIncompatible(Exception):
     ) -> None:
         if reason is ClaimDenialReason.PROJECT:
             message = f"runner {runner_id} does not serve project {project_id} of chunk {chunk_id}"
+        elif reason is ClaimDenialReason.BINDING:
+            message = f"runner {runner_id} is not admitted to project {project_id} of chunk {chunk_id} here"
         else:
             message = f"runner {runner_id}'s capabilities no longer satisfy chunk {chunk_id}"
         super().__init__(message)
@@ -212,6 +217,20 @@ def refuse_unserved_project(registration: RunnerRegistration, *, chunk_id: str, 
         )
 
 
+def refuse_unadmitted_binding(
+    registration: RunnerRegistration, host: Host | None, *, chunk_id: str, project_id: str, workspace_id: str
+) -> None:
+    """Refuse a claim through ``workspace_id`` that the runner's declaration and its host's latest report do not admit
+    (:class:`ClaimDeniedIncompatible`, reason ``binding``) — what the matched peek would not have offered."""
+    if not WorkEligibility(registration, host).admits_claim(project_id, workspace_id):
+        raise ClaimDeniedIncompatible(
+            chunk_id=chunk_id,
+            runner_id=registration.runner_id,
+            reason=ClaimDenialReason.BINDING,
+            project_id=project_id,
+        )
+
+
 def refuse_rekey(route: Route, facts: ChunkFacts) -> None:
     """Refuse rotating ``route``'s token once its chunk has ended (:class:`RekeyDeniedTerminal`):
     a route left on a stopped or done chunk confers no tenure, so no token is minted for it."""
@@ -240,9 +259,9 @@ def first_unmet_prerequisite(
 class ClaimAdmission:
     """Whether a runner may claim a chunk, judged on what the claim lock read. Refusals run in a fixed order,
     each its own error: unregistered (never connected included), retired, refused on version, ended, held route, not
-    ``ready``, unmet prerequisite, a project the runner does not serve, then incapable runner (a registration
-    reporting no capabilities is incapable of everything). The runner-paused brake is judged before the lock
-    (:func:`refuse_paused_runner`)."""
+    ``ready``, unmet prerequisite, a project the runner does not serve, a workspace its bindings and host do not
+    admit, then incapable runner (a registration reporting no capabilities is incapable of everything). The
+    runner-paused brake is judged before the lock (:func:`refuse_paused_runner`)."""
 
     chunk: Chunk
     graph: Graph
@@ -255,6 +274,8 @@ class ClaimAdmission:
         existing_route: Route | None,
         unmet_prerequisite: str | None,
         registration: RunnerRegistration | None,
+        host: Host | None,
+        workspace_id: str,
     ) -> Node:
         """The node the claim lands the chunk at, or the refusal. Its envelope is built from it."""
         if registration is None or registration.never_connected():
@@ -272,7 +293,11 @@ class ClaimAdmission:
             raise ClaimDeniedNotReady(chunk_id=chunk_id, status=status)
         if unmet_prerequisite is not None:
             raise ClaimDeniedDependency(chunk_id=chunk_id, prerequisite_chunk_id=unmet_prerequisite)
-        refuse_unserved_project(registration, chunk_id=chunk_id, project_id=self.chunk.require_project())
+        project_id = self.chunk.require_project()
+        refuse_unserved_project(registration, chunk_id=chunk_id, project_id=project_id)
+        refuse_unadmitted_binding(
+            registration, host, chunk_id=chunk_id, project_id=project_id, workspace_id=workspace_id
+        )
         node = facts.current_node(self.graph)
         if node is None:  # pragma: no cover - a pinned graph always resolves its own node
             raise ClaimConflict(held_by_runner_id=runner_id)
@@ -305,6 +330,7 @@ class ClaimService:
         artifacts: IReadChunkArtifactsRepository,
         graphs: IReadGraphRepository,
         registry: IReadRunnerRegistry,
+        hosts: IReadHostRegistry,
         retired: RetiredRunnerGuard,
         exclusive: IChunkExclusiveWrites,
         clock: IClock,
@@ -317,6 +343,8 @@ class ClaimService:
         # The pre-lock paused-runner peek only — every guard read inside the CAS itself
         # goes through the locked handle instead (`_claim_locked`'s own re-fetch).
         self._registry = registry
+        # The host report the claim re-judges its binding against, read on the locked unit.
+        self._hosts = hosts
         # ``bzh:store-exclusive-write``.
         self._exclusive = exclusive
         # The rekey's refusal; the claim refuses through the registration it already reads.
@@ -378,11 +406,19 @@ class ClaimService:
         # capability change can land after the pre-lock peek.
         edges = handle.standing_edges_touching(chunk.chunk_id)
         prerequisites = [e.prerequisite_chunk_id for e in edges if e.dependent_chunk_id == chunk.chunk_id]
+        registration = handle.runner_registration(runner_id)
+        host = (
+            self._hosts.get_host(registration.host_id, transaction=handle.transaction)
+            if registration is not None and registration.host_id is not None
+            else None
+        )
         ClaimAdmission(chunk, graph, facts).node(
             runner_id=runner_id,
             existing_route=handle.route_of(chunk.chunk_id),
             unmet_prerequisite=first_unmet_prerequisite(chunk.chunk_id, edges, handle.facts_for(prerequisites)),
-            registration=handle.runner_registration(runner_id),
+            registration=registration,
+            host=host,
+            workspace_id=workspace_id,
         )
         now = self._clock.now()
 
