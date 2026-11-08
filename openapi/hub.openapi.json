@@ -5372,10 +5372,11 @@
         "type": "object"
       },
       "ClaimDenialReason": {
-        "description": "The closed set of reasons an incompatible-claim ``409`` names: ``capability``, the runner's stored\ncapabilities no longer run every statically reachable runner-owned lineage of the chunk; ``project``, the runner\ndoes not serve the chunk's project.",
+        "description": "The closed set of reasons an incompatible-claim ``409`` names: ``capability``, the runner's stored\ncapabilities no longer run every statically reachable runner-owned lineage of the chunk; ``project``, the runner\ndoes not serve the chunk's project; ``binding``, the runner serves the project but not through the claimed\nworkspace now \u2014 the binding is flagged, absent, or for another workspace, or the subscription is unrostered.",
         "enum": [
           "capability",
-          "project"
+          "project",
+          "binding"
         ],
         "title": "ClaimDenialReason",
         "type": "string"

@@ -42,8 +42,10 @@ from blizzard.hub.domain.execution.claim import (
 )
 from blizzard.hub.domain.graph.model import Choice, Edge, Node
 from blizzard.hub.domain.projects.model import ProjectId
+from blizzard.hub.domain.runners.host import Host, HostWorkspace
 from blizzard.hub.domain.runners.registration import (
     ClaimBar,
+    RunnerBinding,
     RunnerCapability,
     RunnerRegistration,
     RunnerRetired,
@@ -96,7 +98,12 @@ def _admit(
     registration: RunnerRegistration | None = _REGISTERED,
 ) -> Node:
     return ClaimAdmission(_CHUNK, _GRAPH, facts).node(
-        runner_id="runner-a", existing_route=route, unmet_prerequisite=unmet, registration=registration
+        runner_id="runner-a",
+        existing_route=route,
+        unmet_prerequisite=unmet,
+        registration=registration,
+        host=None,
+        workspace_id="ws-a",
     )
 
 
@@ -414,6 +421,7 @@ def _service_over(registration: RunnerRegistration | None) -> ClaimService:
         artifacts=cast(Any, None),
         graphs=cast(Any, None),
         registry=cast(Any, _RegistryOf(registration)),
+        hosts=cast(Any, None),
         retired=cast(Any, None),
         exclusive=cast(Any, _UnenterableExclusiveWrites()),
         clock=cast(Any, None),
@@ -441,6 +449,7 @@ def test_a_retired_runner_is_refused_before_the_claim_lock_is_entered() -> None:
         artifacts=cast(Any, None),
         graphs=cast(Any, None),
         registry=cast(Any, _RegistryOf(retired)),
+        hosts=cast(Any, None),
         retired=cast(Any, None),
         exclusive=cast(Any, _UnenterableExclusiveWrites()),
         clock=cast(Any, None),
@@ -452,13 +461,75 @@ def test_a_retired_runner_is_refused_before_the_claim_lock_is_entered() -> None:
     assert str(refused.value) == "runner runner-a is retired — claim refused; `reinstate` it first"
 
 
+# --- The binding refusal's slot ---------------------------------------------------
+
+_HOST = Host(
+    host_id="hs_1",
+    name="box",
+    added_at=_T0,
+    registered_at=_T0,
+    workspaces=(HostWorkspace("ws-a"),),
+    subscriptions=(),
+)
+_BOUND = replace(
+    _REGISTERED, host_id="hs_1", bindings=(RunnerBinding("alpha", "ws-a"),), capabilities=_REGISTERED.capabilities
+)
+
+
+def _admit_through(registration: RunnerRegistration, host: Host | None, workspace_id: str) -> Node:
+    return ClaimAdmission(_CHUNK, _GRAPH, _READY).node(
+        runner_id="runner-a",
+        existing_route=None,
+        unmet_prerequisite=None,
+        registration=registration,
+        host=host,
+        workspace_id=workspace_id,
+    )
+
+
+def test_a_claim_through_the_bound_reported_workspace_is_admitted() -> None:
+    assert _admit_through(_BOUND, _HOST, "ws-a") is not None
+
+
+def test_a_claim_through_another_workspace_is_refused_as_binding() -> None:
+    with pytest.raises(ClaimDeniedIncompatible) as refused:
+        _admit_through(_BOUND, _HOST, "ws-b")
+    assert (refused.value.reason, refused.value.project_id) == (ClaimDenialReason.BINDING, _PROJECT)
+
+
+def test_a_claim_through_a_workspace_the_host_no_longer_reports_is_refused_as_binding() -> None:
+    gone = replace(_HOST, workspaces=())
+    with pytest.raises(ClaimDeniedIncompatible) as refused:
+        _admit_through(_BOUND, gone, "ws-a")
+    assert refused.value.reason is ClaimDenialReason.BINDING
+
+
+def test_an_unserved_project_is_refused_as_project_before_the_binding() -> None:
+    unserved = replace(_BOUND, served=())
+    with pytest.raises(ClaimDeniedIncompatible) as refused:
+        _admit_through(unserved, _HOST, "ws-b")
+    assert refused.value.reason is ClaimDenialReason.PROJECT
+
+
+def test_a_binding_defect_is_refused_before_the_capability() -> None:
+    incapable = replace(_BOUND, capabilities=())
+    with pytest.raises(ClaimDeniedIncompatible) as refused:
+        _admit_through(incapable, _HOST, "ws-b")
+    assert refused.value.reason is ClaimDenialReason.BINDING
+
+
 # --- What each refusal carries -------------------------------------------------
 
 
 def _admit_as_caller(facts: ChunkFacts | None, *, unmet: str | None = None, registration: RunnerRegistration) -> Node:
     """Admit with a caller runner id distinct from the registration's, so a refusal shows which it carries."""
     return ClaimAdmission(_CHUNK, _GRAPH, facts).node(
-        runner_id="runner-caller", existing_route=None, unmet_prerequisite=unmet, registration=registration
+        runner_id="runner-caller",
+        existing_route=None,
+        unmet_prerequisite=unmet,
+        registration=registration,
+        host=None,
+        workspace_id="ws-a",
     )
 
 

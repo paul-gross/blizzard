@@ -721,7 +721,7 @@ def claim_route(
     except ClaimDeniedIncompatible as exc:
         project = (
             services.projects.get(ProjectId(exc.project_id))
-            if exc.reason is ClaimDenialReason.PROJECT and exc.project_id is not None
+            if exc.reason in (ClaimDenialReason.PROJECT, ClaimDenialReason.BINDING) and exc.project_id is not None
             else None
         )
         denial = problems.claim_incompatible_problem(

@@ -47,33 +47,71 @@ def flag_bindings(
     )
 
 
+@domain_model
+@dataclass(frozen=True)
+class WorkEligibility:
+    """What a runner's declaration and its host's latest report admit — the one definition both the matched peek (which
+    projects are offered) and the direct claim (whether this project may be claimed through this workspace) read.
+
+    Nothing is admitted under an unrostered subscription, with bindings or without. A runner with no bindings (legacy)
+    is admitted by its served declaration alone, and its workspace is not judged. One with an empty list is admitted
+    nothing. Otherwise a project is admitted only through a binding that is not withheld and names a served entry
+    resolving to it."""
+
+    registration: RunnerRegistration
+    host: Host | None
+
+    @property
+    def flags(self) -> BindingFlags:
+        return flag_bindings(self.registration.bindings, self.registration.subscription, self.host)
+
+    def offered_projects(self, *, projects: Collection[str] | None = None) -> frozenset[str]:
+        """The ids of the projects the matched peek may offer. ``projects`` keeps the union of the declaration entries
+        it names, each by the entry as declared or the id it resolved to, and offers nothing when empty. It never
+        widens what the runner can reach."""
+        registration = self.registration
+        flags = self.flags
+        if flags.subscription_unrostered:
+            return frozenset()
+        reached = {entry.project_id for entry in registration.served if entry.project_id}
+        if registration.bindings is not None:
+            reachable = {b.project for b in registration.bindings if not flags.withholds(b)}
+            reached = {
+                entry.project_id for entry in registration.served if entry.project_id and entry.entry in reachable
+            }
+        if projects is None:
+            return frozenset(reached)
+        wanted = set(projects)
+        named = {
+            entry.project_id
+            for entry in registration.served
+            if entry.project_id and wanted & {entry.entry, entry.project_id}
+        }
+        return frozenset(reached & named)
+
+    def admits_claim(self, project_id: str, workspace_id: str) -> bool:
+        """Whether a claim on a chunk of ``project_id`` through ``workspace_id`` is admitted."""
+        registration = self.registration
+        flags = self.flags
+        if flags.subscription_unrostered:
+            return False
+        if registration.bindings is None:
+            return True
+        admitting = {
+            b.project for b in registration.bindings if b.workspace_id == workspace_id and not flags.withholds(b)
+        }
+        return any(entry.project_id == project_id and entry.entry in admitting for entry in registration.served)
+
+
 def offered_projects(
     registration: RunnerRegistration,
     host: Host | None,
     *,
     projects: Collection[str] | None = None,
 ) -> frozenset[str]:
-    """The ids of the projects the matched peek may offer ``registration`` work from. None is offered under an
-    unrostered subscription, with bindings or without. Otherwise a runner without bindings is offered every project it
-    serves, and one with them is not offered a project reached only through withheld bindings. ``projects`` keeps the
-    union of the declaration entries it names, each by the entry as declared or the id it resolved to, and offers
-    nothing when empty. It never widens what the runner can reach."""
-    flags = flag_bindings(registration.bindings, registration.subscription, host)
-    if flags.subscription_unrostered:
-        return frozenset()
-    reached = {entry.project_id for entry in registration.served if entry.project_id}
-    if registration.bindings is not None:
-        reachable = {b.project for b in registration.bindings if not flags.withholds(b)}
-        reached = {entry.project_id for entry in registration.served if entry.project_id and entry.entry in reachable}
-    if projects is None:
-        return frozenset(reached)
-    wanted = set(projects)
-    named = {
-        entry.project_id
-        for entry in registration.served
-        if entry.project_id and wanted & {entry.entry, entry.project_id}
-    }
-    return frozenset(reached & named)
+    """The ids of the projects the matched peek may offer ``registration`` work from
+    (:meth:`WorkEligibility.offered_projects`)."""
+    return WorkEligibility(registration, host).offered_projects(projects=projects)
 
 
 def claimable_projects(registration: RunnerRegistration, host: Host | None) -> frozenset[str]:

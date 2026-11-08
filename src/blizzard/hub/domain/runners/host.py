@@ -310,7 +310,9 @@ class HostUsage:
 class IReadHostRegistry(Protocol):
     """Read-only host registry access."""
 
-    def get_host(self, host_id: str) -> Host | None: ...
+    def get_host(self, host_id: str, *, transaction: Transaction | None = None) -> Host | None:
+        """The host, retired included; read in ``transaction``'s unit when given (``bzh:transaction-participation``)."""
+        ...
 
     def get_hosts(self, host_ids: Iterable[str]) -> dict[str, Host]:
         """Each named host, retired ones included, keyed by its id; an id with no host is absent. One read per id

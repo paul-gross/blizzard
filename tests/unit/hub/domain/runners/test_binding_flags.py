@@ -7,7 +7,13 @@ from dataclasses import replace
 from datetime import UTC, datetime
 
 from blizzard.foundation.runner_version import VersionRefusalReason
-from blizzard.hub.domain.runners.bindings import BindingFlags, claimable_projects, flag_bindings, offered_projects
+from blizzard.hub.domain.runners.bindings import (
+    BindingFlags,
+    WorkEligibility,
+    claimable_projects,
+    flag_bindings,
+    offered_projects,
+)
 from blizzard.hub.domain.runners.host import Host, HostWorkspace
 from blizzard.hub.domain.runners.registration import (
     DeclaredSubscription,
@@ -148,3 +154,42 @@ def test_a_runner_is_claimable_on_what_the_peek_offers_unless_a_runner_level_bar
         replace(runner, version_refusal=VersionRefusalReason.TOO_OLD),
     ):
         assert claimable_projects(barred, host) == frozenset()
+
+
+# --- The claim's reading of the same eligibility ---
+
+
+def test_a_claim_is_admitted_only_through_an_unflagged_matching_binding_and_workspace() -> None:
+    eligibility = WorkEligibility(_runner((_A, _X), served=_SERVED), _host("ws-a"))
+
+    assert eligibility.admits_claim("prj_a", "ws-a")
+    assert not eligibility.admits_claim("prj_a", "ws-x")  # another workspace
+    assert not eligibility.admits_claim("prj_b", "ws-x")  # flagged: ws-x unreported
+    assert not eligibility.admits_claim("prj_b", "ws-a")  # not that project's binding
+
+
+def test_a_claim_judges_no_workspace_without_bindings_but_admits_nothing_with_an_empty_list() -> None:
+    assert WorkEligibility(_runner(None, served=_SERVED), _host("ws-a")).admits_claim("prj_a", "anywhere")
+    assert not WorkEligibility(_runner((), served=_SERVED), _host("ws-a")).admits_claim("prj_a", "ws-a")
+
+
+def test_an_unrostered_subscription_admits_no_claim() -> None:
+    eligibility = WorkEligibility(_runner(None, "other", served=_SERVED), _host("ws-a"))
+
+    assert not eligibility.admits_claim("prj_a", "ws-a")
+    assert eligibility.offered_projects() == frozenset()
+
+
+def test_a_hostless_runner_with_bindings_still_needs_the_matching_workspace() -> None:
+    eligibility = WorkEligibility(_runner((_A,), served=_SERVED), None)
+
+    assert eligibility.admits_claim("prj_a", "ws-a")
+    assert not eligibility.admits_claim("prj_a", "ws-b")
+
+
+def test_with_duplicate_aliases_one_valid_matching_binding_is_enough() -> None:
+    bindings = (RunnerBinding("alpha", "ws-x"), RunnerBinding("alpha", "ws-a"))
+    eligibility = WorkEligibility(_runner(bindings, served=_SERVED), _host("ws-a"))
+
+    assert eligibility.admits_claim("prj_a", "ws-a")
+    assert not eligibility.admits_claim("prj_a", "ws-x")
