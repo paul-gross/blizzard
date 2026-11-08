@@ -99,6 +99,7 @@ from blizzard.runner.composition import HostProcess, RunnerProcess, build_runner
 from blizzard.runner.config import HostWorkspace, RunnerConfig, SubscriptionDeclaration
 from blizzard.runner.environments.workspaces import IWorkspaces
 from blizzard.runner.events.broker import EventBroker, RunnerEventPublisher
+from blizzard.runner.events.publisher import IRunnerEventPublisher
 from blizzard.runner.harness.health_cache import HarnessHealthCache, IReadHarnessHealth
 from blizzard.runner.harness.registry import HarnessRegistry, IHarnessRegistry
 from blizzard.runner.harness.workspace_prompts import WorkspacePromptReader, WorkspacePromptService
@@ -238,7 +239,7 @@ def runner_seams(
     clock: IClock,
     process: LinuxProcessProbe,
     children: IChildProcesses,
-    events: EventBroker | None = None,
+    events: IRunnerEventPublisher | None = None,
     harnesses: IHarnessRegistry | None = None,
     runner_stores: RunnerStores | None = None,
     leases: LocalLeaseService | None = None,
@@ -274,7 +275,6 @@ def runner_seams(
     routes that write runner-scoped rows answer 503. ``identity`` is the runner's own holder, which every platform
     span its requests open is stamped from."""
     runner_id = config.served_id()
-    publisher = RunnerEventPublisher.over(events, runner_id)
     seams = State()
     seams.config = config
     seams.identity = identity
@@ -288,7 +288,7 @@ def runner_seams(
     # The controller-facing narrowing of `runner_stores`; the write bundle itself is never stashed.
     seams.runner_read_stores = RunnerReadStores.of(runner_stores) if runner_stores is not None else None
     # The runner's publish seam, stamping its id on every runner-scoped event.
-    seams.events = publisher
+    seams.events = events
     seams.leases = leases
     seams.transcripts = transcripts
     seams.runner_status = runner_status
@@ -301,8 +301,8 @@ def runner_seams(
     # Each single-concept, no cross-collaborator beyond its own write seam and the clock
     # — built here, like `selftests` below, rather than requiring
     # every composer to repeat the derivation `runner_stores` already makes trivial.
-    seams.asks = asks or (AskService(runner_stores.asks, clock, events=publisher) if runner_stores else None)
-    seams.pause = pause or (PauseService(runner_stores.pause, clock, events=publisher) if runner_stores else None)
+    seams.asks = asks or (AskService(runner_stores.asks, clock, events=events) if runner_stores else None)
+    seams.pause = pause or (PauseService(runner_stores.pause, clock, events=events) if runner_stores else None)
     subscription = config.resolved_subscriptions()[0].slug if config.resolved_subscriptions() else None
     seams.runner_floor_clears = (
         RunnerFloorClearService(runner_stores.usage_limits, subscription, clock) if runner_stores else None
@@ -406,7 +406,7 @@ def create_app(
                 clock=clock,
                 process=process,
                 children=children,
-                events=events,
+                events=RunnerEventPublisher.over(events, config.served_id()),
                 harnesses=harnesses,
                 runner_stores=runner_stores,
                 leases=leases,
@@ -754,7 +754,6 @@ def _wire_runner(
     harnesses = graph.harnesses
     clock = host.clock
     process = host.process
-    events = host.events
     platform_tracing = host.platform_tracing
     read_stores = RunnerReadStores.of(runner_stores)
     # ``stale_after`` is left at its default so the two readers never desync (#28).
@@ -864,7 +863,7 @@ def _wire_runner(
         process=process,
         children=graph.children,
         tracing=graph.trace_settings,
-        events=events,
+        events=graph.events,
         binding=connections,
         identity_verdict=graph.identity_verdict,
         # The proxy's forward is a first contact with the hub: it asks which runner its token names.

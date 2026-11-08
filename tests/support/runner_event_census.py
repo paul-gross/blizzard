@@ -184,6 +184,10 @@ WRITE_PROTOCOL_CENSUS: dict[str, Disposition] = {
         "records the hub's answer to the projects a registration the PULL already made declared; no kind "
         "in the vocabulary represents it — status reads it on its next poll, as it reads the identity row."
     ),
+    "forget_runner_identity": Silent(
+        "deletes the identity row of a runner the hub retired; no kind in the vocabulary represents it — status "
+        "reads the row on its next poll, as it reads the recorded one."
+    ),
     "record_runner_identity": Silent(
         "records the id and name of a registration the PULL already made; no kind in the vocabulary "
         "represents it — the panel reads it on its next poll, as it reads the mirrored hub pause."

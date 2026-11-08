@@ -31,7 +31,10 @@ from blizzard.runner.harness.selftest_result import (
 )
 from blizzard.runner.harness.workspace_prompts import IReadWorkspacePromptRepository, IWriteWorkspacePromptRepository
 from blizzard.runner.hub.host_identity import IReadHostIdentityRepository, IWriteHostIdentityRepository
-from blizzard.runner.hub.identity import IReadRunnerIdentityRepository, IWriteRunnerIdentityRepository
+from blizzard.runner.hub.identity import (
+    IReadRunnerIdentityRepository,
+    IRunnerIdentityStore,
+)
 from blizzard.runner.hub.outbound_buffer import IReadOutboundRepository, IWriteOutboundRepository
 from blizzard.runner.hub.served_projects import IReadServedProjectsRepository, IWriteServedProjectsRepository
 from blizzard.runner.leases.asks import IReadAskRepository, IWriteAskRepository
@@ -140,7 +143,7 @@ class IWriteRunnerStore(
     IWriteOverloadRepository,
     IWriteAskRepository,
     IWritePauseRepository,
-    IWriteRunnerIdentityRepository,
+    IRunnerIdentityStore,
     IWriteServedProjectsRepository,
     IWriteTakeoverRepository,
     IWriteRequeueRepository,
@@ -176,7 +179,7 @@ class RunnerStores:
     overload: IWriteOverloadRepository
     asks: IWriteAskRepository
     pause: IWritePauseRepository
-    identity: IWriteRunnerIdentityRepository
+    identity: IRunnerIdentityStore
     served_projects: IWriteServedProjectsRepository
     takeover: IWriteTakeoverRepository
     requeue: IWriteRequeueRepository
