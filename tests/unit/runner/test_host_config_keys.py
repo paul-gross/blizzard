@@ -73,6 +73,7 @@ def _round_tripped(root: Path) -> RunnerConfig:
 
 def test_every_knob_defaults_when_its_key_is_absent(tmp_path: Path) -> None:
     config = _config(tmp_path)
+    assert config.worker_scratch_root == (tmp_path / "tmp").resolve()
     assert config.transcripts_ship is False
     assert (config.transcript_record_max_bytes, config.transcript_chunk_max_bytes) == (None, None)
     assert config.worker_stdout_retention_days == DEFAULT_WORKER_STDOUT_RETENTION_DAYS
@@ -94,6 +95,39 @@ def test_every_knob_defaults_when_its_key_is_absent(tmp_path: Path) -> None:
     assert config.public_urls == () and config.trusted_proxies == ()
     assert config.subscriptions == () and config.gates == ()
     assert (claude_code(config).enabled, opencode(config).enabled) == (True, True)
+
+
+@pytest.mark.parametrize("authored", ["relative/scratch", "/absolute/scratch", "~/scratch", "$HOME/scratch"])
+def test_scratch_root_projects_and_round_trips(tmp_path: Path, authored: str) -> None:
+    config = _config(tmp_path, top=f'[worker_scratch]\nroot = "{authored}"\n')
+    expected = (tmp_path / authored).resolve()
+    host = load_host_config(tmp_path)
+    assert config.worker_scratch_root == expected
+    assert host.resolved_worker_scratch_root == expected
+    paths = {entry.path for entry in host.resolved_durable_paths()}
+    assert str(expected) in paths
+    assert str(expected / "r-<tail>" / "l-<tail>") in paths
+    assert str(tmp_path / "worker-tmp") in paths
+    assert f'root = "{authored}"' in host.to_toml()
+    assert _round_tripped(tmp_path) == replace(config, autonomy_source="")
+
+
+@pytest.mark.parametrize("value", ['""', '"   "', '"bad\\u0000path"', "42", "true", "[]"])
+def test_invalid_scratch_root_refuses_the_host(tmp_path: Path, value: str) -> None:
+    assert "worker_scratch.root" in _refused_host(tmp_path, top=f"[worker_scratch]\nroot = {value}\n")
+
+
+def test_scratch_root_default_inventory_and_render(tmp_path: Path) -> None:
+    _config(tmp_path)
+    host = load_host_config(tmp_path)
+    paths = {entry.path: entry for entry in host.resolved_durable_paths()}
+    assert str(tmp_path / "tmp" / "r-<tail>" / "l-<tail>") in paths
+    assert paths[str(tmp_path / "data" / "worker-scratch-root")].mode == 0o600
+    assert "[worker_scratch]" not in host.to_toml()
+
+
+def test_non_table_scratch_setting_refuses_the_host(tmp_path: Path) -> None:
+    assert "worker_scratch" in _refused_host(tmp_path, top='worker_scratch = "invalid"\n')
 
 
 def test_every_knob_parses_from_a_hand_written_file_and_survives_a_round_trip(tmp_path: Path) -> None:

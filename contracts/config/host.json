@@ -1241,6 +1241,22 @@
     },
     {
       "default": null,
+      "deprecated": false,
+      "path": "worker_scratch",
+      "replaced_by": null,
+      "required": false,
+      "type": "table"
+    },
+    {
+      "default": null,
+      "deprecated": false,
+      "path": "worker_scratch.root",
+      "replaced_by": null,
+      "required": false,
+      "type": "string"
+    },
+    {
+      "default": null,
       "deprecated": true,
       "path": "worker_settings_path",
       "replaced_by": "runner[].worker_settings_path",
@@ -1471,6 +1487,12 @@
       "written_by": []
     },
     {
+      "holds": "host's effective worker scratch root binding",
+      "mode": "0600",
+      "path": "data/worker-scratch-root",
+      "written_by": []
+    },
+    {
       "holds": "each elicitation's output, one file per attempt",
       "mode": null,
       "path": "elicitation-output",
@@ -1514,6 +1536,48 @@
       ]
     },
     {
+      "holds": "worker scratch root (default; overridden by worker_scratch.root)",
+      "mode": null,
+      "path": "tmp",
+      "written_by": []
+    },
+    {
+      "holds": "scratch root allocation and deletion lock",
+      "mode": "0600",
+      "path": "tmp/.lock",
+      "written_by": []
+    },
+    {
+      "holds": "scratch allocation ownership records",
+      "mode": "0700",
+      "path": "tmp/.owners",
+      "written_by": []
+    },
+    {
+      "holds": "lease ownership records for a compact runner",
+      "mode": "0700",
+      "path": "tmp/.owners/r-<tail>",
+      "written_by": []
+    },
+    {
+      "holds": "full runner identity for a compact runner",
+      "mode": "0600",
+      "path": "tmp/.owners/r-<tail>.json",
+      "written_by": []
+    },
+    {
+      "holds": "full lease identity for a compact allocation",
+      "mode": "0600",
+      "path": "tmp/.owners/r-<tail>/l-<tail>.json",
+      "written_by": []
+    },
+    {
+      "holds": "compact per-lease worker scratch (BLIZZARD_TMPDIR)",
+      "mode": null,
+      "path": "tmp/r-<tail>/l-<tail>",
+      "written_by": []
+    },
+    {
       "holds": "the claude-code harness's worker settings",
       "mode": null,
       "path": "worker-settings.json",
@@ -1528,7 +1592,13 @@
       "written_by": []
     },
     {
-      "holds": "one runner's per-lease scratch directories (BLIZZARD_TMPDIR)",
+      "holds": "legacy worker scratch retained for upgrade cleanup",
+      "mode": null,
+      "path": "worker-tmp",
+      "written_by": []
+    },
+    {
+      "holds": "legacy runner scratch retained for upgrade cleanup",
       "mode": null,
       "path": "worker-tmp/<runner-id>",
       "written_by": []

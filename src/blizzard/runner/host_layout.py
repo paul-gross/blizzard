@@ -27,10 +27,11 @@ HOST_SOCKET_FILENAME = "host.sock"
 RUNNERS_DIRNAME = "runners"
 
 #: A runner's runtime root keeps three directories across restarts: each worker's stdout, each elicitation's output
-#: (both lease-keyed files), and the per-lease scratch directories, under a subtree per runner id.
+#: (both lease-keyed files), and the default and legacy per-lease scratch roots.
 WORKER_STDOUT_DIRNAME = "worker-stdout"
 ELICITATION_OUTPUT_DIRNAME = "elicitation-output"
-WORKER_SCRATCH_DIRNAME = "worker-tmp"
+WORKER_SCRATCH_DIRNAME = "tmp"
+LEGACY_WORKER_SCRATCH_DIRNAME = "worker-tmp"
 
 #: What a directory that has not graduated still holds.
 LEGACY_CONFIG_FILENAME = "blizzard-runner.toml"

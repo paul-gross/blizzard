@@ -30,6 +30,7 @@ from blizzard.runner.harness.capability_snapshot import HarnessVersionCache, def
 from blizzard.runner.harness.registry import IHarnessRegistry
 from blizzard.runner.host_layout import (
     ELICITATION_OUTPUT_DIRNAME,
+    LEGACY_WORKER_SCRATCH_DIRNAME,
     WORKER_SCRATCH_DIRNAME,
     WORKER_STDOUT_DIRNAME,
 )
@@ -130,21 +131,18 @@ class LoopWiring:
         # so it is always created, unlike `worker_stdout_dir`'s empty-disables convention.
         elicitation_output_dir = config.root / ELICITATION_OUTPUT_DIRNAME
         elicitation_output_dir.mkdir(parents=True, exist_ok=True)
-        # The per-lease scratch directory (`BLIZZARD_TMPDIR`), created once here so a worker's
-        # staging target always exists by the time a spawn/resume/judge opens it.
-        # Keyed by runner id: a host serves several runners from one root, and each sweeps only its own subtree.
-        worker_scratch_root = config.root / WORKER_SCRATCH_DIRNAME
-        worker_scratch_dir = worker_scratch_root / graph.runner_id
-        worker_scratch_dir.mkdir(parents=True, exist_ok=True)
-        _worker_scratch = WorkerScratchDirs(str(worker_scratch_dir))
+        # Reuse active legacy payloads; new leases reserve compact paths in the effective root.
+        worker_scratch_root = config.worker_scratch_root or config.root / WORKER_SCRATCH_DIRNAME
+        active = {lease.lease_id for lease in stores.lease_record.list_active_leases()}
+        _worker_scratch = WorkerScratchDirs(
+            str(worker_scratch_root),
+            runner_id=graph.runner_id,
+            legacy_root=str(config.root / LEGACY_WORKER_SCRATCH_DIRNAME),
+            legacy_owned=lambda lease_id: stores.lease_record.lease(lease_id) is not None,
+        )
         if sweep_worker_scratch:
-            # A one-shot crash reconciliation — sweeping any orphan a crash left between a
-            # directory's `ensure` and its owning lease's row landing.
-            active = {lease.lease_id for lease in stores.lease_record.list_active_leases()}
             _worker_scratch.sweep_orphans(active)
-            # Pre-upgrade entries sit directly under the shared root, unkeyed by runner. One is this runner's to
-            # remove only when this runner's own store holds its lease and that lease has closed.
-            WorkerScratchDirs(str(worker_scratch_root)).sweep_flat_entries(
+            _worker_scratch.sweep_legacy(
                 lambda name: stores.lease_record.lease(name) is not None and name not in active,
             )
         # The tool profile the runner's own `git` and check commands launch under: no lease identity.
@@ -439,9 +437,7 @@ class RunnerStepper:
                 )
                 self._graph.platform_tracing.instrument_client(client)
                 try:
-                    self._ctx = self._wiring.context(
-                        HttpHubClient(client), self._graph, sweep_worker_scratch=True, tracer=self._graph.tracer
-                    )
+                    self._ctx = self._wiring.context(HttpHubClient(client), self._graph, tracer=self._graph.tracer)
                 except BaseException:
                     client.close()
                     raise

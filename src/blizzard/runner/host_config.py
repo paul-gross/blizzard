@@ -18,7 +18,7 @@ from enum import StrEnum
 from pathlib import Path
 from typing import Any, cast
 
-from blizzard.foundation.config_keys import ConfigRegistry, ConfigView, InvalidConfigValue
+from blizzard.foundation.config_keys import ConfigRegistry, ConfigView, DurablePath, InvalidConfigValue
 from blizzard.foundation.flags import (
     FlagRegistry,
     FlagResolution,
@@ -84,6 +84,7 @@ from blizzard.runner.host_layout import (
     DATA_DIRNAME,
     HOST_CONFIG_FILENAME,
     LEGACY_CONFIG_FILENAME,
+    WORKER_SCRATCH_DIRNAME,
     Graduation,
     HostLayout,
     migrate_remedy,
@@ -317,6 +318,8 @@ class HostConfig:
     strict: bool = False
     transcripts: Transcripts = field(default_factory=lambda: Transcripts.of(None))
     worker_stdout: WorkerStdout = field(default_factory=lambda: WorkerStdout.of(None))
+    #: Authored scratch root, or None for the host-local default.
+    worker_scratch_root: str | None = None
     #: The authored ``[tools]`` table, kept so a rewritten file carries it.
     tools: Table = field(default_factory=lambda: Table.of(None))
     #: The ``PATH`` prepend and environment passthrough the host's own tool children launch under, resolved at load.
@@ -347,6 +350,27 @@ class HostConfig:
     @property
     def data_dir(self) -> Path:
         return self.root / DATA_DIRNAME
+
+    @property
+    def resolved_worker_scratch_root(self) -> Path:
+        return self._resolve_worker_scratch_root()
+
+    def _resolve_worker_scratch_root(self) -> Path:
+        return (self.root / (self.worker_scratch_root or WORKER_SCRATCH_DIRNAME)).resolve()
+
+    def resolved_durable_paths(self) -> tuple[DurablePath, ...]:
+        """The host's durable path registry resolved against its effective scratch root."""
+
+        def resolve(entry: DurablePath) -> DurablePath:
+            if entry.path == WORKER_SCRATCH_DIRNAME:
+                path = self.resolved_worker_scratch_root
+            elif entry.path.startswith(WORKER_SCRATCH_DIRNAME + "/"):
+                path = self.resolved_worker_scratch_root / entry.path[len(WORKER_SCRATCH_DIRNAME) + 1 :]
+            else:
+                path = (self.root / entry.path).resolve()
+            return replace(entry, path=str(path))
+
+        return tuple(resolve(entry) for entry in HOST_REGISTRY.paths)
 
     def projections(self, environ: Mapping[str, str] | None = None) -> tuple[BuiltRunner | HaltedRunner, ...]:
         """Each ``[[runner]]`` as a built runner or a halted one, in file order. Tokens resolve from
@@ -551,6 +575,7 @@ class HostConfig:
             auth_users=self.auth.users,
             trusted_proxies=self.trusted_proxies,
             worker_stdout_retention_days=self.worker_stdout.retention_days,
+            worker_scratch_root=self.resolved_worker_scratch_root,
             tracing=self.tracing,
             flags=self.flags,
             flag_resolution=self.flag_resolution,
@@ -757,6 +782,8 @@ class HostConfig:
         if self.worker_stdout.table.body:
             lines.append("\n[worker_stdout]\n")
             lines.extend(f"{key} = {_toml_scalar(value)}\n" for key, value in self.worker_stdout.table.body.items())
+        if self.worker_scratch_root is not None:
+            lines.append(f"\n[worker_scratch]\nroot = {_toml_scalar(self.worker_scratch_root)}\n")
         if self.tools.body:
             lines.append("\n[tools]\n")
             lines.extend(f"{key} = {_toml_scalar(value)}\n" for key, value in self.tools.body.items())
@@ -869,6 +896,13 @@ def parse(
     )
     worker_stdout = WorkerStdout.of(document.table("worker_stdout"))
     errors.attempt("[worker_stdout]", lambda: worker_stdout.retention_days, 0)
+    scratch_table = document.get("worker_scratch")
+    if scratch_table is not None and not isinstance(scratch_table, dict):
+        errors.add("[worker_scratch] must be a table")
+    scratch = document.table("worker_scratch")
+    scratch_root = scratch.get("root")
+    if "root" in scratch and (not isinstance(scratch_root, str) or not scratch_root.strip() or "\0" in scratch_root):
+        errors.add("worker_scratch.root must be a non-blank string without NUL")
     tools = Table.of(document.table("tools"))
     tools_declared = "tools" in document
     tool_path_prepend = errors.attempt("[tools]", lambda: expanded_path_prepend(tools.names("path_prepend")), ())
@@ -934,6 +968,7 @@ def parse(
         strict=strict,
         transcripts=transcripts,
         worker_stdout=worker_stdout,
+        worker_scratch_root=scratch_root,
         tools=tools,
         tool_path_prepend=tool_path_prepend,
         tool_env_passthrough=tool_env_passthrough,

@@ -78,7 +78,7 @@ from blizzard.runner.host_config import (
     TokenSource,
 )
 from blizzard.runner.host_file import write_runner_id
-from blizzard.runner.host_layout import HOST_CONFIG_FILENAME, HostLayout
+from blizzard.runner.host_layout import HOST_CONFIG_FILENAME, WORKER_SCRATCH_DIRNAME, HostLayout
 from blizzard.runner.hub.bootstrap import (
     BootstrapStop,
     BootstrapStopped,
@@ -136,6 +136,7 @@ from blizzard.runner.runtime import (
     named_store_socket,
     reset_command,
 )
+from blizzard.runner.scratch_binding import reconcile_scratch_roots
 from blizzard.runner.store import MIGRATIONS_DIR
 from blizzard.runner.store.errors import RunnerStoreErrorFactory
 from blizzard.runner.stores import HostReadStores, RunnerReadStores
@@ -1194,6 +1195,11 @@ def _serve_host(
         signal.signal(signal.SIGTERM, _handle_signal)
         signal.signal(signal.SIGINT, _handle_signal)
 
+        # Include halted runners: their active leases also bind the host's root.
+        ids = [runner.runner_id for runner in host.runners]
+        ids.extend(runner.id for runner in host.halted if runner.id is not None)
+        _reconcile_host_scratch(config, host, ids)
+
         # Mark crash-orphaned sessions, for every runner, before any driver or the host tick starts.
         for resume in hosted.resumes:
             resumable = resume.on_startup()
@@ -1272,6 +1278,17 @@ def _pass_drivers(runner: RunnerProcess, stepper: RunnerStepper) -> list[Periodi
     return drivers
 
 
+def _reconcile_host_scratch(config: RunnerConfig, host: HostProcess, runner_ids: list[str]) -> None:
+    errors = RunnerStoreErrorFactory(get_logger("blizzard.runner.store"))
+    runner_ids = list(dict.fromkeys((*runner_ids, *host.host_stores.runner_audit.named_runners())))
+    repositories = {
+        runner_id: build_read_stores(host.engine, errors=errors, runner_id=runner_id).lease_record
+        for runner_id in runner_ids
+    }
+    root = config.worker_scratch_root or config.root / WORKER_SCRATCH_DIRNAME
+    reconcile_scratch_roots(config.root, root, repositories)
+
+
 @click.command("tick")
 @click.option(
     "--dir",
@@ -1335,6 +1352,9 @@ def tick_cmd(ctx: click.Context, directory: str, runner: str | None, host_pass: 
             host_token=config.host_token.value,
         )
         try:
+            _reconcile_host_scratch(
+                runner_built.config, graph.host, [entry.id for entry in config.runners if entry.id is not None]
+            )
             LoopWiring.of(runner_built.config, bundle=bundle).tick_once(process=graph)
         finally:
             graph.close()
