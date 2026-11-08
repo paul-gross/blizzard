@@ -84,6 +84,7 @@ from blizzard.wire.route import (
     RouteTerminalProblem,
 )
 from blizzard.wire.runner import (
+    DuplicateCapabilityHarnessProblem,
     RunnerAlreadyHostedProblem,
     RunnerHoldsRoutesProblem,
     RunnerIdentityProblem,
@@ -150,6 +151,7 @@ PROXY_RESOURCE_DECLARATIONS: tuple[ProblemDeclaration, ...] = (
     ),
     ProblemDeclaration("POST", "/api/fleet/runners", 404, RunnerNotFoundProblem),
     ProblemDeclaration("POST", "/api/fleet/runners", 409, RunnerVersionProblem),
+    ProblemDeclaration("POST", "/api/fleet/runners", 422, DuplicateCapabilityHarnessProblem),
     ProblemDeclaration("GET", "/api/fleet/runners/{runner_id}", 403, RunnerOwnershipProblem),
     ProblemDeclaration("GET", "/api/fleet/runners/{runner_id}", 404, RunnerNotFoundProblem),
     ProblemDeclaration("GET", "/api/fleet/runners/{runner_id}", 409, RunnerNotRegisteredProblem),

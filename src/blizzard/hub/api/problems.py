@@ -31,6 +31,7 @@ from blizzard.hub.domain.operations.pause import ChunkNotPausable
 from blizzard.hub.domain.projects.model import ProjectRequired
 from blizzard.hub.domain.runners.host import HostNameTaken, HostRetired, RunnerAlreadyHosted
 from blizzard.hub.domain.runners.registration import (
+    DuplicateCapabilityHarness,
     RunnerHoldsRoutes,
     RunnerLifecycleConflict,
     RunnerNeverConnected,
@@ -105,6 +106,7 @@ from blizzard.wire.problem import (
     RUNNER_VERSION,
     HubStoreUnavailableProblem,
 )
+from blizzard.wire.problem_types_runners import DUPLICATE_CAPABILITY_HARNESS
 from blizzard.wire.project import (
     ProjectRef,
     ProjectRequiredBody,
@@ -131,6 +133,7 @@ from blizzard.wire.route import (
     RouteTerminalProblem,
 )
 from blizzard.wire.runner import (
+    DuplicateCapabilityHarnessProblem,
     RunnerAlreadyHostedProblem,
     RunnerHoldsRoutesProblem,
     RunnerIdentityProblem,
@@ -807,6 +810,20 @@ def runner_version_problem(exc: RunnerVersionRefused, *, instance: str) -> Runne
         runner_version=exc.judgement.reported_version,
         hub_version=exc.judgement.hub_version,
         floor=exc.judgement.floor,
+    )
+
+
+def duplicate_capability_harness_problem(
+    exc: DuplicateCapabilityHarness, *, instance: str
+) -> DuplicateCapabilityHarnessProblem:
+    return DuplicateCapabilityHarnessProblem(
+        type=DUPLICATE_CAPABILITY_HARNESS,
+        title="Duplicate capability harness",
+        detail=str(exc),
+        instance=instance,
+        status=422,
+        field=exc.field,
+        harness_id=exc.harness_id,
     )
 
 

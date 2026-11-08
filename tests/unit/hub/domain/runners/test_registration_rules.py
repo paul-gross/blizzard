@@ -13,6 +13,7 @@ from blizzard.hub.domain.runners.registration import (
     RUNNER_VERBS,
     STALE_AFTER,
     DeclaredSubscription,
+    DuplicateCapabilityHarness,
     LifecycleFact,
     RunnerBinding,
     RunnerCapability,
@@ -31,6 +32,7 @@ from blizzard.hub.domain.runners.registration import (
     TokenRotation,
     UnregisteredRedirect,
     declared_name,
+    refuse_duplicate_capability_harnesses,
     refuse_runner_token,
 )
 from blizzard.hub.domain.runners.route import Route
@@ -341,3 +343,36 @@ def test_a_new_version_judgement_changes_it() -> None:
 
 def test_a_registration_from_a_stale_runner_changes_it() -> None:
     assert _changes(_SAME, held=replace(_SEEN, last_seen_at=_T0))
+
+
+@pytest.mark.parametrize(
+    "repeat",
+    [
+        RunnerCapability("claude"),
+        RunnerCapability("claude", version="2"),
+        RunnerCapability("claude", tiers=("blizzard:basic",)),
+        RunnerCapability("claude", available=False),
+    ],
+    ids=["identical", "version", "tiers", "availability"],
+)
+def test_a_repeated_harness_id_is_refused_with_its_path_and_id(repeat: RunnerCapability) -> None:
+    capabilities = (RunnerCapability("opencode"), RunnerCapability("claude"), repeat)
+
+    with pytest.raises(DuplicateCapabilityHarness) as refused:
+        refuse_duplicate_capability_harnesses(capabilities)
+
+    assert refused.value.field == "capabilities[2].harness_id"
+    assert refused.value.harness_id == "claude"
+
+
+@pytest.mark.parametrize(
+    "capabilities",
+    [
+        (),
+        (RunnerCapability("claude"),),
+        (RunnerCapability("claude"), RunnerCapability("Claude"), RunnerCapability("x")),
+    ],
+    ids=["empty", "single", "distinct-and-unknown"],
+)
+def test_unique_harness_ids_are_admitted(capabilities: tuple[RunnerCapability, ...]) -> None:
+    refuse_duplicate_capability_harnesses(capabilities)

@@ -4392,6 +4392,43 @@ export type DependentNotEditableView = {
 };
 
 /**
+ * DuplicateCapabilityHarnessProblem
+ *
+ * A registration's capabilities name one harness id more than once.
+ */
+export type DuplicateCapabilityHarnessProblem = {
+    /**
+     * Detail
+     */
+    detail: string;
+    /**
+     * Field
+     */
+    field: string;
+    /**
+     * Harness Id
+     */
+    harness_id: string;
+    /**
+     * Instance
+     */
+    instance: string;
+    /**
+     * Status
+     */
+    status?: number;
+    /**
+     * Title
+     */
+    title: string;
+    /**
+     * Type
+     */
+    type: 'urn:blizzard:problem:duplicate-capability-harness';
+    [key: string]: unknown;
+};
+
+/**
  * DuplicateFindingProblem
  *
  * A bulk finding verb named the same finding twice.

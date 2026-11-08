@@ -1442,7 +1442,8 @@ export const claimRouteApiFleetRoutesPost = <ThrowOnError extends boolean = fals
  *
  * The hub never rejects a registration over its roster — it doubles as the heartbeat every tick,
  * so the tenant it answers, named as the hub holds it now, carries a rename on the next tick. A
- * body ``runner_id`` from an older runner is ignored. A retired runner is refused 403, a refused version 409.
+ * body ``runner_id`` from an older runner is ignored. A retired runner is refused 403, a refused version 409, and a
+ * capability list repeating a harness id 422.
  */
 export const registerRunnerApiFleetRunnersPost = <ThrowOnError extends boolean = false>(options: Options<RegisterRunnerApiFleetRunnersPostData, ThrowOnError>): RequestResult<RegisterRunnerApiFleetRunnersPostResponses, RegisterRunnerApiFleetRunnersPostErrors, ThrowOnError> => (options.client ?? client).post<RegisterRunnerApiFleetRunnersPostResponses, RegisterRunnerApiFleetRunnersPostErrors, ThrowOnError>({
     url: '/api/fleet/runners',

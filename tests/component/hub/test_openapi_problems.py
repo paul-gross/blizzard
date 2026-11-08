@@ -62,6 +62,7 @@ from blizzard.wire.route import (
     RouteTerminalProblem,
 )
 from blizzard.wire.runner import (
+    DuplicateCapabilityHarnessProblem,
     RunnerHoldsRoutesProblem,
     RunnerLifecycleConflictProblem,
     RunnerOwnershipProblem,
@@ -633,6 +634,25 @@ def test_claim_runner_gate_refusals_match_openapi(tmp_path: Path) -> None:
             hub.app.openapi(), "post", "/api/fleet/runners", 409, "application/problem+json", {RunnerVersionProblem}
         )
         == set()
+    )
+    duplicate = hub.client.post(
+        "/api/fleet/runners",
+        json={"runner_id": "paused", "workspace_id": "w1", "capabilities": [{"harness_id": "x"}, {"harness_id": "x"}]},
+    )
+    assert duplicate.status_code == 422, duplicate.text
+    assert (
+        refusal_mismatches(
+            hub.app.openapi(),
+            RefusalObservation(
+                "post",
+                "/api/fleet/runners",
+                422,
+                duplicate.headers["content-type"],
+                DuplicateCapabilityHarnessProblem,
+                duplicate.json(),
+            ),
+        )
+        == []
     )
     assert hub.client.post("/api/runners/paused/pause", json={"by": "operator"}).status_code == 200
     registry = cast(IWriteRunnerRegistry, hub.services.registry)

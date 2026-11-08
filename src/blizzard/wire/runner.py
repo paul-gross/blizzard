@@ -168,6 +168,14 @@ class RunnerVersionProblem(RunnerVersionRefusal, ProblemDetails[Literal["urn:bli
     """The version window refusing a runner, in the problem representation."""
 
 
+class DuplicateCapabilityHarnessProblem(ProblemDetails[Literal["urn:blizzard:problem:duplicate-capability-harness"]]):
+    """A registration's capabilities name one harness id more than once."""
+
+    #: The path of the repeating entry, ``capabilities[<i>].harness_id``.
+    field: str
+    harness_id: str
+
+
 class UnknownServedProjectProblem(ProblemDetails[Literal["urn:blizzard:problem:unknown-served-project"]]):
     """A runner's declared project does not exist in the tenant."""
 

@@ -540,3 +540,34 @@ def test_registry_list_reads_no_node_executors_while_no_runner_declares_a_gate(t
         hub.client.get("/api/runners")
 
     assert not any("graph_nodes" in statement for statement, _ in statements)
+
+
+def test_register_refuses_a_repeated_harness_id_as_a_problem_and_changes_nothing(tmp_path: Path) -> None:
+    hub = build_hub(tmp_path)
+    prior = [{"harness_id": "claude", "default": True}, {"harness_id": "opencode"}]
+    hub.client.post("/api/fleet/runners", json={"runner_id": "runner-a", "workspace_id": "ws-a", "capabilities": prior})
+    before = hub.client.get("/api/fleet/runners/runner-a").json()
+    shapes = (
+        [{"harness_id": "claude"}, {"harness_id": "claude"}],
+        [{"harness_id": "claude", "version": "1"}, {"harness_id": "claude", "version": "2", "available": False}],
+    )
+
+    for capabilities in shapes:
+        resp = hub.client.post(
+            "/api/fleet/runners",
+            json={"runner_id": "runner-a", "workspace_id": "ws-b", "capabilities": capabilities},
+        )
+        assert resp.status_code == 422, resp.text
+        assert resp.headers["content-type"].startswith("application/problem+json")
+        body = resp.json()
+        assert body["type"] == "urn:blizzard:problem:duplicate-capability-harness"
+        assert isinstance(body["detail"], str)
+        assert body["field"] == "capabilities[1].harness_id"
+        assert body["harness_id"] == "claude"
+        assert hub.client.get("/api/fleet/runners/runner-a").json() == before
+
+    unique = hub.client.post(
+        "/api/fleet/runners",
+        json={"runner_id": "runner-a", "workspace_id": "ws-b", "capabilities": [{"harness_id": "claude"}]},
+    )
+    assert unique.status_code == 201, unique.text
