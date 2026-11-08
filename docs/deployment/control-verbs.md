@@ -40,9 +40,9 @@ no-op.
 ## Detach
 
 `chunk detach`, or the board's Detach control — both reach `POST /api/chunks/{id}/detach` — gives the claim away: the
-route is released, every held environment freed, the lease closed, and the chunk re-derives `ready` for any runner,
-including a different one, to claim next; a live worker is abandoned along with everything else, not merely
-killed-and-kept.
+route is released, every held environment freed, the lease closed, and the chunk stays at its node, its status
+re-deriving from its remaining facts — `ready`, claimable by any runner, only when nothing else holds it; a live worker
+is abandoned along with everything else, not merely killed-and-kept.
 
 Detach is not requeue: no supersession fact is recorded and no epoch bumps, so a `needs_human` chunk detached this way
 is still `needs_human` afterward — only the route is gone; detach is refused (409) when there is no live route left to

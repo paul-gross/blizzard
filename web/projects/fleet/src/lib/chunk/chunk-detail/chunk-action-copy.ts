@@ -36,7 +36,7 @@ export function detachCopy(runner: string, nodeName: string): ChunkActionCopy {
   return {
     label: `Detach from ${runner}`,
     subtitle: 'End the agent, lose unpushed work',
-    text: `Releases ${runner}'s claim: ends the agent's session and releases its environment, so uncommitted work is lost. The chunk stays at node ${nodeName} and returns to READY for any runner to claim, unless an open escalation or question still holds it.`,
+    text: `Releases ${runner}'s claim: ends the agent's session and releases its environment, so uncommitted work is lost. The chunk stays at node ${nodeName}, and its status re-derives from its remaining facts — READY only when nothing else holds it.`,
   };
 }
 

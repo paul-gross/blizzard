@@ -1983,7 +1983,7 @@
           "short_help": "Declare that CHUNK_ID depends on PREREQUISITE_CHUNK_ID."
         },
         "detach": {
-          "help": "Forcibly release CHUNK from its runner.\n\nThe chunk is released from its runner and can be claimed again at its current node, unless an\nopen escalation or question still holds it. Refused when nothing holds the chunk \u2014 a stopped or\ndone chunk is held by nothing.",
+          "help": "Forcibly release CHUNK from its runner.\n\nThe runner's claim is removed and the chunk stays at its current node; its status re-derives\nfrom its remaining facts, ready only when nothing else holds it. Refused when nothing holds the\nchunk \u2014 a stopped or done chunk is held by nothing.",
           "params": [
             {
               "hidden": false,

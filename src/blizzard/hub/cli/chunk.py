@@ -360,17 +360,17 @@ def chunk_resume(cli: CliContext, chunk_id: str, by: str) -> None:
 def chunk_detach(cli: CliContext, chunk_id: str) -> None:
     """Forcibly release CHUNK from its runner.
 
-    The chunk is released from its runner and can be claimed again at its current node, unless an
-    open escalation or question still holds it. Refused when nothing holds the chunk — a stopped or
-    done chunk is held by nothing."""
+    The runner's claim is removed and the chunk stays at its current node; its status re-derives
+    from its remaining facts, ready only when nothing else holds it. Refused when nothing holds the
+    chunk — a stopped or done chunk is held by nothing."""
     resp = cli.post(
         f"/api/chunks/{chunk_id}/detach",
         "POST /chunks/{id}/detach",
     )
     cli.finish(
         resp,
-        f"detached {chunk_id} — released from its runner, re-claimable at its current node "
-        "unless an open escalation or question still holds it",
+        f"detached {chunk_id} — claim removed, still at its current node; status re-derives from "
+        "its remaining facts",
     )
 
 
