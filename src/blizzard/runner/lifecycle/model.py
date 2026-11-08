@@ -357,6 +357,14 @@ def adopt_enters_node(latest: Lease | None, view: ChunkState, node_id: str) -> b
     return latest is not None and latest.node_id != node_id and not restart_entry
 
 
+def claim_carries_decision(view: ChunkState, node_id: str) -> bool:
+    """Whether a freshly won claim on ``node_id`` inherits a gate decision its node visit already opened — a
+    chunk detached or released at a gate keeps its decision, so the claimant leaves the node unentered for
+    the held-chunk drive to hold or resolve, whatever its own ``gates`` are."""
+    decision = view.decision
+    return decision is not None and decision.node_id == node_id and not decision.transitioned
+
+
 # --------------------------------------------------------------------------------------------- #
 # Minting a lease.
 # --------------------------------------------------------------------------------------------- #

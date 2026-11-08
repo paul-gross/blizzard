@@ -25,6 +25,7 @@ from blizzard.runner.hub.client import (
     ClaimConflict,
     ClaimRequest,
     DependencyDenial,
+    HubClientError,
     IncompatibleDenial,
     PausedDenial,
     QueueEntry,
@@ -33,7 +34,7 @@ from blizzard.runner.hub.client import (
 )
 from blizzard.runner.lifecycle.claim import InterruptedClaims, ReadyQueue
 from blizzard.runner.loop.context import LoopConfig
-from blizzard.runner.node_steps.chunk_state import ChunkPause, ChunkState
+from blizzard.runner.node_steps.chunk_state import ChunkGate, ChunkPause, ChunkState
 from tests.support.runner_fakes import (
     FIXTURE_RUNNER_ID,
     FakeHarness,
@@ -72,8 +73,11 @@ class _RecordingChunkViews:
 
     hub: FakeHub
     invalidated: list[str] = field(default_factory=list[str])
+    unreadable: bool = False
 
     def get(self, chunk_id: str) -> ChunkState:
+        if self.unreadable:
+            raise HubClientError("chunk view unreadable")
         return ReadThroughChunkViews(hub=self.hub).get(chunk_id)
 
     def prime(self, chunk_ids: Iterable[str]) -> None:
@@ -243,6 +247,70 @@ def test_claim_one_enters_a_won_claim_via_fill():
     assert [r["via"] for r in _records(logs, _SPAWN_SUPPRESSED)] == ["fill"]
 
 
+def _gated(*, node_id: str = "nd_build", resolved_choice: str | None = None, transitioned: bool = False) -> ChunkState:
+    return ChunkState(
+        chunk_id="ch_1",
+        status=ChunkStatus.RUNNING,
+        route_runner_id="r1",
+        latest_epoch=2,
+        decision=ChunkGate(
+            decision_id="dec_1", node_id=node_id, epoch=1, resolved_choice=resolved_choice, transitioned=transitioned
+        ),
+    )
+
+
+@pytest.mark.parametrize(
+    "view",
+    [
+        pytest.param(_gated(), id="pending-on-the-node"),
+        pytest.param(_gated(resolved_choice="pass"), id="resolved-on-the-node"),
+    ],
+)
+def test_claim_one_leaves_a_node_whose_visit_holds_a_decision_unentered(view: ChunkState):
+    store, hub, _views, ctx = _setup([_won()])
+    hub.queue = [QueueEntry(chunk_id="ch_1", graph_id="gr_1", position=0)]
+    hub.chunks["ch_1"] = view
+
+    with capture_logs() as logs:
+        assert ReadyQueue.peeked(ctx, (fixture_route(),)).claim_one() is True
+
+    assert _records(logs, _SPAWN_SUPPRESSED) == []
+    assert store.held_environment_ids() == ["e1"]  # bound, for the held-chunk drive
+    assert store.route_token("ch_1") is not None
+
+
+@pytest.mark.parametrize(
+    "view",
+    [
+        pytest.param(_gated(node_id="nd_other"), id="decision-on-another-node"),
+        pytest.param(_gated(resolved_choice="pass", transitioned=True), id="decision-already-transitioned"),
+        pytest.param(ChunkState(chunk_id="ch_1", status=ChunkStatus.RUNNING, route_runner_id="r1"), id="no-decision"),
+    ],
+)
+def test_claim_one_enters_a_node_whose_visit_holds_no_decision(view: ChunkState):
+    _store, hub, _views, ctx = _setup([_won()])
+    hub.queue = [QueueEntry(chunk_id="ch_1", graph_id="gr_1", position=0)]
+    hub.chunks["ch_1"] = view
+
+    with capture_logs() as logs:
+        ReadyQueue.peeked(ctx, (fixture_route(),)).claim_one()
+
+    assert [r["via"] for r in _records(logs, _SPAWN_SUPPRESSED)] == ["fill"]
+
+
+def test_claim_one_leaves_a_won_claim_unentered_when_its_view_is_unreadable():
+    store, hub, views, ctx = _setup([_won()])
+    hub.queue = [QueueEntry(chunk_id="ch_1", graph_id="gr_1", position=0)]
+    views.unreadable = True
+
+    with capture_logs() as logs:
+        ReadyQueue.peeked(ctx, (fixture_route(),)).claim_one()
+
+    assert _records(logs, _SPAWN_SUPPRESSED) == []
+    assert store.held_environment_ids() == ["e1"]
+    assert store.route_token("ch_1") is not None
+
+
 # InterruptedClaims.reconcile
 
 
@@ -261,6 +329,34 @@ def test_reconcile_reclaims_an_unbraked_ready_binding_via_reclaim():
     assert [c.environment_ids for c in hub.claims] == [["e1"]]
     assert views.invalidated == ["ch_1"]
     assert [r["via"] for r in _records(logs, _SPAWN_SUPPRESSED)] == ["reclaim"]
+    assert store.held_environment_ids() == ["e1"]
+
+
+def test_reclaim_leaves_a_node_whose_visit_holds_a_decision_unspawned():
+    store, hub, views, ctx = _setup([_won()])
+    _bound(store, hub, ChunkState(chunk_id="ch_1", status=ChunkStatus.READY))
+    bindings = store.bindings_for_chunk("ch_1")
+    hub.chunks["ch_1"] = _gated(resolved_choice="pass")
+
+    with capture_logs() as logs:
+        InterruptedClaims(ctx).reclaim("ch_1", bindings)
+
+    assert views.invalidated == ["ch_1"]
+    assert _records(logs, _SPAWN_SUPPRESSED) == []
+    assert store.held_environment_ids() == ["e1"]
+    assert store.route_token("ch_1") is not None
+
+
+def test_reclaim_leaves_a_won_claim_unspawned_when_its_view_is_unreadable():
+    store, hub, views, ctx = _setup([_won()])
+    _bound(store, hub, ChunkState(chunk_id="ch_1", status=ChunkStatus.READY))
+    bindings = store.bindings_for_chunk("ch_1")
+    views.unreadable = True
+
+    with capture_logs() as logs:
+        InterruptedClaims(ctx).reclaim("ch_1", bindings)
+
+    assert _records(logs, _SPAWN_SUPPRESSED) == []
     assert store.held_environment_ids() == ["e1"]
 
 

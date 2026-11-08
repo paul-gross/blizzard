@@ -7,14 +7,21 @@ agree on the wire. Drives the real hub app and real ``pull`` step in one process
 
 from __future__ import annotations
 
+from dataclasses import dataclass
 from datetime import timedelta
 from pathlib import Path
+from typing import Any
+
+import pytest
+import sqlalchemy as sa
 
 from blizzard.hub.domain.tenancy.administration import DEFAULT_PROJECT_SLUG
+from blizzard.hub.store import schema as s
 from blizzard.runner.harness.adapter import WorkerHandle
 from blizzard.runner.harness.identity import CLAUDE_CODE_HARNESS_ID, OPENCODE_HARNESS_ID, SessionReference
 from blizzard.runner.harness.registry import HarnessBinding, HarnessRegistry
-from blizzard.runner.hub.chunk_status_cache import ReadThroughChunkViews
+from blizzard.runner.hub.chunk_status_cache import IChunkViews, ReadThroughChunkViews
+from blizzard.runner.hub.client import HubClientError
 from blizzard.runner.hub.identity import RunnerIdentityHolder
 from blizzard.runner.hub.internal.http_hub import HttpHubClient
 from blizzard.runner.leases.internal.worker_stdout_files import WorkerStdoutFiles
@@ -23,7 +30,7 @@ from blizzard.runner.lifecycle.env_release import EnvironmentRelease
 from blizzard.runner.lifecycle.judgement.internal.elicitation_files import ElicitationFiles
 from blizzard.runner.lifecycle.session import HarnessSelector, SessionResolver
 from blizzard.runner.loop.context import LoopConfig, LoopContext
-from blizzard.runner.loop.steps import Fill, Pull
+from blizzard.runner.loop.steps import Advance, Fill, Pull
 from blizzard.runner.process.internal.worker_scratch_dirs import WorkerScratchDirs
 from blizzard.runner.usage.recorder import UsageRecorder
 from tests.support.runner_fakes import (
@@ -44,7 +51,7 @@ from tests.support.runner_fakes import (
     single_workspace,
 )
 from tests.support.runner_mint import new_mint
-from tests.support.scaffolding import HubHarness, build_hub, pointer_token, report_lease
+from tests.support.scaffolding import HubHarness, build_hub, chunk_rows, hub_scoped, pointer_token, report_lease
 
 _POINTER = {"source": "default", "ref": "38"}
 _HANDLE = WorkerHandle(session_id="sess-a", pid=100, process_start_time="start-100", pgid=100)
@@ -99,6 +106,8 @@ def _ctx(
     identity: RunnerIdentityHolder,
     harnesses: HarnessRegistry | None = None,
     project: str = FIXTURE_PROJECT_ID,
+    gates: tuple[str, ...] = (),
+    chunk_views: IChunkViews | None = None,
 ) -> LoopContext:
     """A loop context over the in-process hub; every other seam a double."""
     registry = harnesses if harnesses is not None else _claude_code_registry()
@@ -111,11 +120,13 @@ def _ctx(
         token_identity=hub_client,
         identity_verdict=matched_verdict(),
         hub_token=fixed_hub_token(),
-        chunk_views=ReadThroughChunkViews(hub_client),
+        chunk_views=chunk_views if chunk_views is not None else ReadThroughChunkViews(hub_client),
         workspaces=single_workspace(provider),
         process=probe,
         worktree_git=FakeWorktreeGit(),
-        config=LoopConfig(runner_name="r1", runner_id=FIXTURE_RUNNER_ID, bindings=serving(project=project), agents=1),
+        config=LoopConfig(
+            runner_name="r1", runner_id=FIXTURE_RUNNER_ID, bindings=serving(project=project), agents=1, gates=gates
+        ),
         identity=identity,
         worker_files=WorkerStdoutFiles("", store),
         elicitation_files=ElicitationFiles(str(tmp_path / "elicit")),
@@ -322,4 +333,185 @@ def test_claim_revalidates_against_a_regressed_registration_through_the_real_run
     Fill(ctx).run()
 
     assert hub.client.get(f"/api/chunks/{chunk_id}").json()["status"] != "ready"
+    assert store.active_lease_for_chunk(chunk_id) is not None
+
+
+# --- a fresh claim carries on its node visit's gate decision ---------------------------------------
+
+_ARTIFACT = {
+    "name": "acme/widget",
+    "kind": "git_commit",
+    "repo": "acme/widget",
+    "branch_name": "b",
+    "commit_hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+}
+
+
+@dataclass
+class _GatedChunk:
+    """A chunk at ``build`` that runner ``r2`` claims and gates by hand at epoch 1, then detaches from."""
+
+    hub: HubHarness
+    chunk_id: str
+    build: str
+    decision_id: str
+
+    @classmethod
+    def detached_at_gate(cls, hub: HubHarness, *, resolve: str | None) -> _GatedChunk:
+        graph = hub.client.post("/api/graphs", json={"definition_yaml": _PLAIN_YAML})
+        assert graph.status_code == 201, graph.text
+        build = next(n["node_id"] for n in graph.json()["nodes"] if n["name"] == "build")
+        chunk_id = hub.client.post("/api/chunks", json={"tokens": [pointer_token(_POINTER)]}).json()["chunk_id"]
+        assert hub.client.post(f"/api/chunks/{chunk_id}/promote").status_code == 202
+        claim = hub.client.post(
+            "/api/fleet/routes",
+            json={"chunk_id": chunk_id, "runner_id": "r2", "workspace_id": "w1", "environment_ids": ["e"]},
+        )
+        assert claim.status_code == 201, claim.text
+        report_lease(hub, chunk_id, epoch=1, seq=1, runner_id="r2")
+        gate = hub.client.post(
+            f"/api/fleet/chunks/{chunk_id}/decisions",
+            json={"from_node_id": build, "epoch": 1, "runner_id": "r2", "artifacts": [_ARTIFACT]},
+        )
+        assert gate.json()["outcome"] == "parked_at_gate", gate.text
+        decision_id = str(hub.client.get(f"/api/chunks/{chunk_id}").json()["decision"]["decision_id"])
+        if resolve is not None:
+            resolved = hub.client.post(f"/api/decisions/{decision_id}/resolutions", json={"choice": resolve})
+            assert resolved.status_code == 200, resolved.text
+        assert hub.client.post(f"/api/chunks/{chunk_id}/detach").status_code == 202
+        return cls(hub, chunk_id, build, decision_id)
+
+    def status(self) -> str:
+        return str(self.hub.client.get(f"/api/chunks/{self.chunk_id}").json()["status"])
+
+    def decision_ids(self) -> list[str]:
+        with self.hub.engine.begin() as conn:
+            return list(
+                conn.execute(
+                    hub_scoped(sa.select(s.decisions.c.decision_id).where(s.decisions.c.chunk_id == self.chunk_id))
+                ).scalars()
+            )
+
+    def transition_decisions(self) -> list[str | None]:
+        with self.hub.engine.begin() as conn:
+            return list(
+                conn.execute(
+                    hub_scoped(sa.select(s.transitions.c.decision_id).where(s.transitions.c.chunk_id == self.chunk_id))
+                ).scalars()
+            )
+
+
+def _runner(
+    hub: HubHarness, tmp_path: Path, *, gates: tuple[str, ...] = (), chunk_views: IChunkViews | None = None
+) -> tuple[LoopContext, SqlAlchemyRunnerStore, FakeHarness]:
+    """The stock runner ``r1`` over the in-process hub, registered by a first PULL."""
+    store = make_store(f"sqlite:///{tmp_path / 'runner.db'}")
+    harness = FakeHarness(handle=_HANDLE, verdict=None)
+    registry = HarnessRegistry(
+        {CLAUDE_CODE_HARNESS_ID: HarnessBinding(adapter=harness, transcript_source=harness.transcript_source())}
+    )
+    ctx = _ctx(
+        hub,
+        store,
+        FakeProvider({"e1": "/ws/e1"}),
+        FakeProbe(alive=set()),
+        tmp_path,
+        identity=RunnerIdentityHolder(),
+        harnesses=registry,
+        project=DEFAULT_PROJECT_SLUG,
+        gates=gates,
+        chunk_views=chunk_views,
+    )
+    Pull(ctx).run()
+    return ctx, store, harness
+
+
+@pytest.mark.parametrize("gates", [("build",), ()], ids=["gated-locally", "ungated-locally"])
+def test_a_fresh_claim_consumes_a_resolved_decision_without_rerunning_the_step(
+    tmp_path: Path, gates: tuple[str, ...]
+) -> None:
+    hub = build_hub(tmp_path)
+    chunk = _GatedChunk.detached_at_gate(hub, resolve="pass")
+    assert chunk.status() == "ready"
+    artifacts = chunk_rows(hub, s.artifacts, chunk.chunk_id)
+    ctx, store, harness = _runner(hub, tmp_path, gates=gates)
+
+    Fill(ctx).run()
+    Advance(ctx).run()
+
+    assert harness.spawns == []
+    assert store.active_lease_for_chunk(chunk.chunk_id) is None
+    assert chunk.transition_decisions() == [chunk.decision_id]
+    assert chunk.decision_ids() == [chunk.decision_id]  # no second gate
+    assert chunk_rows(hub, s.artifacts, chunk.chunk_id) == artifacts
+
+
+def test_a_binding_held_over_a_pending_decision_is_held_without_a_spawn(tmp_path: Path) -> None:
+    hub = build_hub(tmp_path)
+    chunk = _GatedChunk.detached_at_gate(hub, resolve=None)
+    assert chunk.status() == "waiting_on_human"
+    ctx, store, harness = _runner(hub, tmp_path)
+    store.record_binding(
+        chunk_id=chunk.chunk_id, environment_id="e1", workdir="/ws/e1", bound_at=hub.clock.now(), workspace_id="ws1"
+    )
+
+    Fill(ctx).run()
+    Advance(ctx).run()
+
+    assert harness.spawns == []
+    assert store.active_lease_for_chunk(chunk.chunk_id) is None
+    assert chunk.status() == "waiting_on_human"
+    assert chunk.decision_ids() == [chunk.decision_id]
+
+
+@dataclass
+class _UnreadableOnce:
+    """The runner's chunk views, failing the first read of a chunk after its claim invalidates it."""
+
+    inner: IChunkViews
+    armed: bool = False
+
+    def get(self, chunk_id: str) -> Any:
+        if self.armed:
+            self.armed = False
+            raise HubClientError("chunk view unreadable")
+        return self.inner.get(chunk_id)
+
+    def prime(self, chunk_ids: Any) -> None:
+        self.inner.prime(chunk_ids)
+
+    def invalidate(self, chunk_id: str) -> None:
+        self.armed = True
+        self.inner.invalidate(chunk_id)
+
+
+def test_an_unreadable_view_after_a_won_claim_spawns_nothing_and_the_next_reconcile_holds(tmp_path: Path) -> None:
+    hub = build_hub(tmp_path)
+    chunk = _GatedChunk.detached_at_gate(hub, resolve="pass")
+    views = _UnreadableOnce(ReadThroughChunkViews(HttpHubClient(hub.client)))
+    ctx, store, harness = _runner(hub, tmp_path, chunk_views=views)
+
+    Fill(ctx).run()
+
+    assert harness.spawns == []
+    assert store.held_environment_ids() == ["e1"]
+    assert store.route_token(chunk.chunk_id) is not None
+
+    Fill(ctx).run()  # the interrupted-claim reconcile reads the decision and holds
+
+    assert harness.spawns == []
+    assert store.active_lease_for_chunk(chunk.chunk_id) is None
+    assert chunk.decision_ids() == [chunk.decision_id]
+
+
+def test_a_fresh_claim_on_an_ungated_node_spawns_as_ever(tmp_path: Path) -> None:
+    hub = build_hub(tmp_path)
+    assert hub.client.post("/api/graphs", json={"definition_yaml": _PLAIN_YAML}).status_code == 201
+    chunk_id = hub.client.post("/api/chunks", json={"tokens": [pointer_token(_POINTER)]}).json()["chunk_id"]
+    assert hub.client.post(f"/api/chunks/{chunk_id}/promote").status_code == 202
+    ctx, store, harness = _runner(hub, tmp_path, gates=("build",))
+
+    Fill(ctx).run()
+
+    assert len(harness.spawns) == 1
     assert store.active_lease_for_chunk(chunk_id) is not None

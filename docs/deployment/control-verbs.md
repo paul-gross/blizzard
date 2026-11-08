@@ -269,7 +269,8 @@ state. All three verbs need the `runner:retire` permission ([runner-auth.md](./r
 A runner can hold named nodes for a human decision. Set `gates` in its toml, or `BZ_RUNNER_GATES` as a comma-separated
 list of node names, and restart the runner. When the runner finishes a step at one of those nodes it submits a decision
 instead of a transition, and the chunk waits for a person. Only the runner enforces its gates; the hub never reads them
-to route or claim.
+to route or claim. A chunk detached or released at a gate keeps its decision; the next runner to claim it carries the
+decision on, whatever its own `gates` are, without rerunning the step.
 
 The runner reports its gates on every registration, so they show in two places:
 
