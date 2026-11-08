@@ -172,9 +172,9 @@ contains a declared commit and the branch head is safe, the repository resolves 
 checked after a refused open. This resolution is bound to its record, base, branch and submitted commit, so a later
 changed declaration is reconsidered. A `fast-forward` repository whose base already holds the work resolves this way
 too. A `park` repository applies the proof to fresh work only when its forge offers ref reads and comparison; otherwise
-it opens its pull request and waits as usual. It does not create a `merged/<repo>` revision or a repository landing: only an
-actual merge does. Mixed chunks record landings only for the repositories that merged. Work items close when the chunk
-reaches `done`, including when nothing merged.
+it opens its pull request and waits as usual. It does not create a `merged/<repo>` revision or a repository landing:
+only an actual merge does. Mixed chunks record landings only for the repositories that merged. Work items close when the
+chunk reaches `done`, including when nothing merged.
 
 A forge that lacks an operation the action needs refuses the step too, escalating the chunk with
 `forge-capability-missing`, whether the operation is required up front or found needed during the pass
