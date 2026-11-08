@@ -35,7 +35,9 @@ def test_declared_edge_round_trips_through_the_seam(tmp_path: Path) -> None:
     dependencies, exclusive, _ = _dependencies(tmp_path)
 
     with exclusive.locked(["ch_dependent", "ch_prereq"]) as handle:
-        declared = dependencies.declare_locked(handle, "ch_dependent", "ch_prereq", by="user:alice", at=_NOW)
+        declared = dependencies.declare(
+            "ch_dependent", "ch_prereq", by="user:alice", at=_NOW, transaction=handle.transaction
+        )
 
     assert declared.dependent_chunk_id == "ch_dependent"
     assert declared.prerequisite_chunk_id == "ch_prereq"
@@ -53,7 +55,9 @@ def test_declared_edge_round_trips_through_the_seam(tmp_path: Path) -> None:
 def test_released_edge_reads_released_and_still_exists(tmp_path: Path) -> None:
     dependencies, exclusive, engine = _dependencies(tmp_path)
     with exclusive.locked(["ch_dependent", "ch_prereq"]) as handle:
-        declared = dependencies.declare_locked(handle, "ch_dependent", "ch_prereq", by="user:alice", at=_NOW)
+        declared = dependencies.declare(
+            "ch_dependent", "ch_prereq", by="user:alice", at=_NOW, transaction=handle.transaction
+        )
     released_at = _NOW + timedelta(hours=1)
 
     released = dependencies.release("ch_dependent", "ch_prereq", by="user:bob", at=released_at)
@@ -87,12 +91,14 @@ def test_release_is_a_no_op_when_no_edge_stands(tmp_path: Path) -> None:
 def test_declare_after_release_mints_a_fresh_row(tmp_path: Path) -> None:
     dependencies, exclusive, _ = _dependencies(tmp_path)
     with exclusive.locked(["ch_dependent", "ch_prereq"]) as handle:
-        first = dependencies.declare_locked(handle, "ch_dependent", "ch_prereq", by="user:alice", at=_NOW)
+        first = dependencies.declare(
+            "ch_dependent", "ch_prereq", by="user:alice", at=_NOW, transaction=handle.transaction
+        )
     dependencies.release("ch_dependent", "ch_prereq", by="user:alice", at=_NOW + timedelta(hours=1))
 
     with exclusive.locked(["ch_dependent", "ch_prereq"]) as handle:
-        second = dependencies.declare_locked(
-            handle, "ch_dependent", "ch_prereq", by="user:alice", at=_NOW + timedelta(hours=2)
+        second = dependencies.declare(
+            "ch_dependent", "ch_prereq", by="user:alice", at=_NOW + timedelta(hours=2), transaction=handle.transaction
         )
 
     assert second.dependency_id != first.dependency_id
@@ -109,10 +115,12 @@ def test_list_standing_edges_orders_by_declared_at_ascending(tmp_path: Path) -> 
         seed_chunk(conn, "ch_prereq_2", graph_id="gr_1", at=_NOW)
 
     with exclusive.locked(["ch_dependent", "ch_prereq", "ch_prereq_2"]) as handle:
-        later = dependencies.declare_locked(
-            handle, "ch_dependent", "ch_prereq_2", by="user:alice", at=_NOW + timedelta(hours=1)
+        later = dependencies.declare(
+            "ch_dependent", "ch_prereq_2", by="user:alice", at=_NOW + timedelta(hours=1), transaction=handle.transaction
         )
-        earlier = dependencies.declare_locked(handle, "ch_dependent", "ch_prereq", by="user:alice", at=_NOW)
+        earlier = dependencies.declare(
+            "ch_dependent", "ch_prereq", by="user:alice", at=_NOW, transaction=handle.transaction
+        )
 
     ordered = dependencies.list_standing_edges()
 
@@ -126,9 +134,15 @@ def test_standing_edges_for_names_a_chunk_in_either_role(tmp_path: Path) -> None
     with engine.begin() as conn:
         seed_chunk(conn, "ch_dependent_2", graph_id="gr_1", at=_NOW)
     with exclusive.locked(["ch_dependent", "ch_dependent_2", "ch_prereq"]) as handle:
-        as_dependent = dependencies.declare_locked(handle, "ch_dependent", "ch_prereq", by="user:alice", at=_NOW)
-        as_prerequisite = dependencies.declare_locked(
-            handle, "ch_dependent_2", "ch_dependent", by="user:alice", at=_NOW + timedelta(hours=1)
+        as_dependent = dependencies.declare(
+            "ch_dependent", "ch_prereq", by="user:alice", at=_NOW, transaction=handle.transaction
+        )
+        as_prerequisite = dependencies.declare(
+            "ch_dependent_2",
+            "ch_dependent",
+            by="user:alice",
+            at=_NOW + timedelta(hours=1),
+            transaction=handle.transaction,
         )
 
     edges = dependencies.standing_edges_for("ch_dependent")
@@ -141,7 +155,7 @@ def test_standing_edges_for_excludes_edges_naming_other_chunks(tmp_path: Path) -
     with engine.begin() as conn:
         seed_chunk(conn, "ch_other", graph_id="gr_1", at=_NOW)
     with exclusive.locked(["ch_other", "ch_prereq"]) as handle:
-        dependencies.declare_locked(handle, "ch_other", "ch_prereq", by="user:alice", at=_NOW)
+        dependencies.declare("ch_other", "ch_prereq", by="user:alice", at=_NOW, transaction=handle.transaction)
 
     assert dependencies.standing_edges_for("ch_dependent") == []
 
@@ -149,7 +163,7 @@ def test_standing_edges_for_excludes_edges_naming_other_chunks(tmp_path: Path) -
 def test_standing_edges_for_excludes_a_released_edge(tmp_path: Path) -> None:
     dependencies, exclusive, _ = _dependencies(tmp_path)
     with exclusive.locked(["ch_dependent", "ch_prereq"]) as handle:
-        dependencies.declare_locked(handle, "ch_dependent", "ch_prereq", by="user:alice", at=_NOW)
+        dependencies.declare("ch_dependent", "ch_prereq", by="user:alice", at=_NOW, transaction=handle.transaction)
     dependencies.release("ch_dependent", "ch_prereq", by="user:alice", at=_NOW + timedelta(hours=1))
 
     assert dependencies.standing_edges_for("ch_dependent") == []
@@ -163,7 +177,9 @@ def test_record_fold_releases_mints_and_records_grouped_atomically(tmp_path: Pat
     with engine.begin() as conn:
         seed_chunk(conn, "ch_survivor", graph_id="gr_1", at=_NOW)
     with exclusive.locked(["ch_dependent", "ch_prereq"]) as handle:
-        declared = dependencies.declare_locked(handle, "ch_dependent", "ch_prereq", by="user:alice", at=_NOW)
+        declared = dependencies.declare(
+            "ch_dependent", "ch_prereq", by="user:alice", at=_NOW, transaction=handle.transaction
+        )
     at = _NOW + timedelta(hours=1)
 
     with exclusive.locked(["ch_dependent", "ch_prereq", "ch_survivor"]) as handle:
@@ -244,8 +260,12 @@ def test_list_standing_edges_breaks_a_declared_at_tie_by_dependency_id(tmp_path:
         seed_chunk(conn, "ch_prereq_2", graph_id="gr_1", at=_NOW)
 
     with exclusive.locked(["ch_dependent", "ch_prereq", "ch_prereq_2"]) as handle:
-        first = dependencies.declare_locked(handle, "ch_dependent", "ch_prereq", by="user:alice", at=_NOW)
-        second = dependencies.declare_locked(handle, "ch_dependent", "ch_prereq_2", by="user:alice", at=_NOW)
+        first = dependencies.declare(
+            "ch_dependent", "ch_prereq", by="user:alice", at=_NOW, transaction=handle.transaction
+        )
+        second = dependencies.declare(
+            "ch_dependent", "ch_prereq_2", by="user:alice", at=_NOW, transaction=handle.transaction
+        )
 
     ordered = dependencies.list_standing_edges()
 

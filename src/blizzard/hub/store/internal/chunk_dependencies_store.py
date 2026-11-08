@@ -93,31 +93,18 @@ class ChunkDependenciesStore:
         ).all()
         return [_edge(row) for row in rows]
 
-    def declare_in_transaction_locked(
+    def declare(
         self,
-        transaction: LockedTransaction,
         dependent_chunk_id: str,
         prerequisite_chunk_id: str,
         *,
         by: str,
         at: datetime,
+        transaction: LockedTransaction,
     ) -> DependencyEdge:
         conn = connection_for(self._store, transaction, chunk=dependent_chunk_id)
         connection_for(self._store, transaction, chunk=prerequisite_chunk_id)
         return self._declare_conn(conn, dependent_chunk_id, prerequisite_chunk_id, by=by, at=at)
-
-    def declare_locked(
-        self, handle: ILockedChunkRead, dependent_chunk_id: str, prerequisite_chunk_id: str, *, by: str, at: datetime
-    ) -> DependencyEdge:
-        """Mint a fresh standing edge (``bzh:store-exclusive-write``) — the
-        dependency declare's own write, on ``handle``'s already-locked connection."""
-        return self._declare_conn(
-            chunk_handle_connection(handle, self._store, dependent_chunk_id, prerequisite_chunk_id),
-            dependent_chunk_id,
-            prerequisite_chunk_id,
-            by=by,
-            at=at,
-        )
 
     def _declare_conn(
         self, conn: Connection, dependent_chunk_id: str, prerequisite_chunk_id: str, *, by: str, at: datetime

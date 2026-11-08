@@ -188,7 +188,7 @@ def _edged(tmp_path: Path, *, others: int) -> tuple[ChunkStores, Engine]:
     pairs = [("ch_t", "ch_p"), ("ch_d", "ch_t"), *[(f"ch_o{i}", f"ch_q{i}") for i in range(others)]]
     for dependent, prerequisite in pairs:
         with chunks.exclusive.locked([dependent, prerequisite]) as handle:
-            chunks.dependencies.declare_locked(handle, dependent, prerequisite, by="operator", at=_T0)
+            chunks.dependencies.declare(dependent, prerequisite, by="operator", at=_T0, transaction=handle.transaction)
     return chunks, engine
 
 

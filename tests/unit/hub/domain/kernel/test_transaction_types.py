@@ -12,8 +12,8 @@ def test_locked_decision_rejects_unlocked_transaction(tmp_path: Path) -> None:
         "from blizzard.hub.domain.chunk.ports.dependencies import IWriteChunkDependenciesRepository\n"
         "from datetime import datetime\n"
         "def calls(repo: IWriteChunkDependenciesRepository, unlocked: Transaction, locked: LockedTransaction, at: datetime) -> None:\n"
-        "    repo.declare_in_transaction_locked(locked, 'a', 'b', by='test', at=at)\n"
-        "    repo.declare_in_transaction_locked(unlocked, 'a', 'b', by='test', at=at)\n"
+        "    repo.declare('a', 'b', by='test', at=at, transaction=locked)\n"
+        "    repo.declare('a', 'b', by='test', at=at, transaction=unlocked)\n"
     )
     result = subprocess.run(
         ["pyright", "--outputjson", str(fixture)], capture_output=True, text=True, timeout=120, check=False

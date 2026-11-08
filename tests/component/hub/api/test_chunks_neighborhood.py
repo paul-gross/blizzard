@@ -117,7 +117,7 @@ def test_a_neighbor_whose_facts_do_not_resolve_is_present_and_unsatisfied(tmp_pa
     subject_id = ingest(hub, [{"source": "default", "ref": "subject"}])
     dependencies = cast(IWriteChunkDependenciesRepository, hub.services.chunks.dependencies)
     with chunk_stores(hub.engine, hub.clock).exclusive.locked([subject_id, "chk_ghost"]) as handle:
-        dependencies.declare_locked(handle, subject_id, "chk_ghost", by="test", at=hub.clock.now())
+        dependencies.declare(subject_id, "chk_ghost", by="test", at=hub.clock.now(), transaction=handle.transaction)
 
     prerequisites = _detail(hub, subject_id)["neighborhood"]["prerequisites"]
 
