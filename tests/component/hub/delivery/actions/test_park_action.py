@@ -10,6 +10,7 @@ from blizzard.foundation.landing_policy import LandingPolicy
 from blizzard.hub.delivery.actions.land import Land
 from blizzard.hub.domain.actions.visit import Visit
 from blizzard.hub.domain.artifact.model import StoredArtifact
+from blizzard.hub.domain.chunk.no_code import no_code_marker
 from blizzard.hub.domain.config.repositories import RepositoryId
 from blizzard.hub.forge.landing import ChangeState
 from tests.support.github_double import change
@@ -223,3 +224,63 @@ def test_parked_consumer_opens_only_after_library_landing_is_durable():
     blocked, _ = _land(_forge(_GADGET, _WIDGET), visit, held)
     assert blocked.choice == "failure"
     assert f"delivery-pr/{_WIDGET}/1" not in held.markers()
+
+
+_THIRD = "acme/third"
+
+
+def _no_code_row(visit: Visit, repo: str) -> StoredArtifact:
+    declaration = next(
+        row for row in visit.git_commits.payload(visit.resolution.qualified, visit.resolution) if row["repo"] == repo
+    )
+    name, data = no_code_marker(declaration)
+    return _row(ArtifactKind.ASSET, name, data)
+
+
+def _a_b_c() -> Visit:
+    """Landing order A (`widget`), B (`gadget`, PARK), C (`third`, automatic)."""
+    visit = _visit((_WIDGET, _GADGET, _THIRD))
+    targets = tuple(
+        replace(t, landing_policy=LandingPolicy.PARK, landing_position=i) if i == 1 else replace(t, landing_position=i)
+        for i, t in enumerate(visit.resolution.targets)
+    )
+    visit = replace(visit, resolution=replace(visit.resolution, targets=targets))
+    b_pr = _row(ArtifactKind.ASSET, f"delivery-pr/{_GADGET}/2", "{}")
+    return replace(visit, markers=(b_pr,), artifacts=(*visit.artifacts, b_pr))
+
+
+def _with_no_code(visit: Visit, repo: str) -> Visit:
+    row = _no_code_row(visit, repo)
+    return replace(visit, markers=(*visit.markers, row), artifacts=(*visit.artifacts, row))
+
+
+def test_the_watch_skips_a_no_code_first_repository_and_selects_the_parked_one():
+    visit = _with_no_code(_a_b_c(), _WIDGET)
+    assert visit.parked_watch() == RepositoryId(visit.resolution.targets[1].record)
+
+
+def test_the_watch_is_none_without_no_code_evidence_for_the_earlier_repository():
+    assert _a_b_c().parked_watch() is None
+
+
+def test_the_watch_is_none_when_the_no_code_marker_is_from_an_earlier_node():
+    visit = _a_b_c()
+    row = replace(_no_code_row(visit, _WIDGET), node_id="nd_earlier")
+    visit = replace(visit, artifacts=(*visit.artifacts, row))
+    assert visit.parked_watch() is None
+
+
+def test_the_watch_is_none_when_the_no_code_marker_names_another_declaration():
+    visit = _a_b_c()
+    name, data = no_code_marker(
+        {"repo": _WIDGET, "record": "re_widget", "base_branch": "main", "branch": "feat/x", "commit": "d" * 40}
+    )
+    row = _row(ArtifactKind.ASSET, name, data)
+    visit = replace(visit, markers=(*visit.markers, row), artifacts=(*visit.artifacts, row))
+    assert visit.parked_watch() is None
+
+
+def test_the_watch_is_none_after_a_current_epoch_reopen_of_the_parked_repository():
+    visit = _with_no_code(_a_b_c(), _WIDGET)
+    reopen = _row(ArtifactKind.ASSET, f"park-reopen/{_GADGET}/2", "")
+    assert replace(visit, markers=(*visit.markers, reopen)).parked_watch() is None
