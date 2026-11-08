@@ -8,7 +8,7 @@ mid-tick and a restart re-run the tick harmlessly; startup recovery is REAP runn
 from __future__ import annotations
 
 import json
-from collections.abc import Callable, Container, Iterator
+from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 
@@ -17,7 +17,7 @@ from blizzard.foundation.event_log import EVENT_LOG_SEVERITY, EventLogKind
 from blizzard.foundation.fact_kinds import EVENT_RECORDED
 from blizzard.foundation.leases import LeaseClosureReason
 from blizzard.foundation.logging import get_logger
-from blizzard.foundation.store.utc import as_utc, iso_utc
+from blizzard.foundation.store.utc import iso_utc
 from blizzard.runner.environments.repository import (
     EnvBinding,
     group_bindings_by_chunk,
@@ -31,7 +31,6 @@ from blizzard.runner.leases.model import Lease
 from blizzard.runner.leases.overload import backing_off_facts
 from blizzard.runner.lifecycle.attempt import Attempt
 from blizzard.runner.lifecycle.claim import InterruptedClaims
-from blizzard.runner.lifecycle.daemon_liveness import IReadDaemonLivenessRepository
 from blizzard.runner.lifecycle.dormant import DormantSession
 from blizzard.runner.lifecycle.drain import OutboundDrain
 from blizzard.runner.lifecycle.fill import BindingFill
@@ -54,22 +53,19 @@ from blizzard.runner.lifecycle.model import (
     RecordOverload,
     TakeoverHolds,
     advance_move,
-    crash_orphaned,
     exited_worker_classified_move,
     exited_worker_elicitation_move,
     exited_worker_settled_move,
     lease_reconcile_move,
     reap_move,
-    resumable,
 )
 from blizzard.runner.lifecycle.orphan import orphan_resultless_exit
 from blizzard.runner.lifecycle.registration import Registration, registered_runner_id
+from blizzard.runner.lifecycle.restart_resume import RestartResume
 from blizzard.runner.lifecycle.spawn import Spawner
 from blizzard.runner.lifecycle.takeover import TakeoverCloser, TakeoverCloseScope
 from blizzard.runner.lifecycle.usage_limit import classify_worker_usage_limit, mark_and_park_worker
 from blizzard.runner.loop.context import LoopContext
-from blizzard.runner.process.probe import IProcessProbe
-from blizzard.runner.stores import RunnerStores
 from blizzard.runner.throttle.gate import ThrottleGate
 from blizzard.runner.throttle.levers import LeverAnswer
 from blizzard.runner.throttle.overload import (
@@ -90,7 +86,6 @@ __all__ = [
     "Pull",
     "Reap",
     "Resume",
-    "ResumeIntents",
     "Retention",
     "SpendCeiling",
     "Step",
@@ -107,10 +102,6 @@ _DEFAULT_ENV_COUNT = 1
 # REAP — startup recovery runs this first, so these bracket the recovery pass itself.
 _CP_REAP_BEFORE = crashpoint("reap.before-expire", "entered REAP; no lease expired yet")
 _CP_REAP_AFTER = crashpoint("reap.after-expire", "REAP done; stale leases expired")
-
-# RESUME — the restart re-attach. Its un-recordable middle (a resume whose pid is not yet
-# durable) is SPAWN's same by-construction gap; recovery re-runs RESUME idempotently.
-_CP_RESUME_BEFORE = crashpoint("resume.before-reattach", "entered RESUME with marked intents; none re-attached yet")
 
 # PULL — the single outbound flusher (store-and-forward drain).
 _CP_PULL_BEFORE = crashpoint(
@@ -220,103 +211,10 @@ class Reap(Step):
         _CP_REAP_AFTER.reached()
 
 
-@dataclass(frozen=True)
-class ResumeIntents:
-    """Marking in-flight leases for same-lease restart-resume — the graceful-shutdown hook
-    and the startup crash-orphan scan. Store-only: no context, no hub.
-
-    Spans leases, asks (parked) and outbound (pending submission), so it holds the
-    :class:`~blizzard.runner.stores.RunnerStores` bundle."""
-
-    stores: RunnerStores
-
-    def mark_graceful(self, *, now: datetime) -> int:
-        """Mark every in-flight lease, and return the count. One durable row per mark, so a
-        crash mid-marking degrades to the ungraceful path."""
-        marked = self._mark(self._resumable(), now=now)
-        if marked:
-            _log.info("marked in-flight leases for restart-resume", count=marked)
-        return marked
-
-    def mark_crashed(self, *, process: IProcessProbe, liveness: IReadDaemonLivenessRepository, now: datetime) -> int:
-        """Mark the leases a crash orphaned mid-session, and return the count.
-
-        Staleness is measured against ``liveness``'s last beat, not the clock at recovery,
-        which at startup is ``downtime + idle-at-crash``."""
-        ended = self.stores.session.session_ended_lease_ids()
-        # as_utc: this instant is about to be subtracted from, and a naive one compares wrong.
-        last_alive = liveness.last_daemon_liveness()
-        crashed_at = as_utc(last_alive) if last_alive is not None else now
-        marked = self._mark(self._crash_orphaned(ended, process, crashed_at), now=now)
-        if marked:
-            _log.info("marked crash-interrupted leases for restart-resume", count=marked)
-        return marked
-
-    def _resumable(self) -> Iterator[Lease]:
-        """The active leases a restart may mark for same-lease resume (``resumable``)."""
-        parked = self.stores.asks.parked_lease_ids()
-        pending = self.stores.outbound.pending_submission_lease_ids()
-        eliciting = self.stores.elicitations.in_flight_elicitation_lease_ids()
-        backing_off = backing_off_facts(self.stores.overload, self.stores.liveness, self.stores.elicitations)
-        takeovers = TakeoverHolds.of(self.stores.takeover.open_takeovers())
-        for lease in self.stores.lease_record.list_active_leases():
-            if resumable(
-                lease,
-                parked=parked,
-                pending_submission=pending,
-                eliciting=eliciting,
-                backing_off=backing_off,
-                taken_over=takeovers.holds_lease(lease),
-            ):
-                yield lease
-
-    def _crash_orphaned(self, ended: Container[str], process: IProcessProbe, crashed_at: datetime) -> Iterator[Lease]:
-        for lease in self._resumable():
-            liveness = Liveness.of(
-                lease,
-                heartbeat=self.stores.liveness.latest_heartbeat(lease.lease_id),
-                spawn=self.stores.liveness.latest_spawn(lease.lease_id),
-            )
-            if crash_orphaned(
-                lease,
-                session_ended=lease.lease_id in ended,
-                alive=lease.pid is not None and process.is_alive(lease.pid, lease.process_start_time or ""),
-                stale=liveness.stale(crashed_at),
-            ):
-                yield lease
-
-    def _mark(self, leases: Iterator[Lease], *, now: datetime) -> int:
-        marked = 0
-        for lease in leases:
-            self.stores.resume_intent.record_resume_intent(lease_id=lease.lease_id, marked_at=now)
-            marked += 1
-        return marked
-
-
 class Resume(Step):
     def run(self) -> None:
-        """Re-attach to in-flight sessions a restart marked for same-lease resume — startup recovery.
-
-        Each marked lease is either resumed in place — unchanged ``lease_id``/``epoch``/
-        ``session_id``, no retry consumed — or abandoned with no epoch bump. Runs before ADVANCE so a
-        resumed lease reads live again by the time ADVANCE iterates."""
-        ctx = self.ctx
-        intents = ctx.stores.resume_intent.resume_intent_lease_ids()
-        if not intents:
-            return
-        if registered_runner_id(ctx.identity) is None:
-            return  # whether each route is still ours waits for the first registration; the intents are durable
-        _CP_RESUME_BEFORE.reached()  # marked intents present; a crash here re-runs RESUME unchanged
-        active = {lease.lease_id: lease for lease in ctx.stores.lease_record.list_active_leases()}
-        takeovers = TakeoverHolds.of(ctx.stores.takeover.open_takeovers())
-        for lease_id in intents:
-            lease = active.get(lease_id)
-            if lease is None:
-                ctx.stores.resume_intent.record_resume_clear(lease_id=lease_id, cleared_at=ctx.clock.now())
-                continue
-            if takeovers.holds_lease(lease):
-                continue  # a person holds this session — the intent waits for the takeover to end
-            DormantSession(ctx, lease).restart_or_release(Fenced(takeovers))
+        """Re-attach to in-flight sessions a restart marked for same-lease resume — startup recovery."""
+        RestartResume(self.ctx).run()
 
 
 class Pull(Step):

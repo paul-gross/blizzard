@@ -19,9 +19,10 @@ from blizzard.runner.harness.registry import HarnessBinding, HarnessRegistry
 from blizzard.runner.leases.activity import HEARTBEAT_STALENESS_THRESHOLD
 from blizzard.runner.leases.model import NewLease
 from blizzard.runner.lifecycle.orphan import orphan_session
+from blizzard.runner.lifecycle.resume_intents import ResumeIntents
 from blizzard.runner.lifecycle.takeover import TakeoverOpenScope, TakeoverService
 from blizzard.runner.loop.context import LoopContext
-from blizzard.runner.loop.steps import Advance, Pull, Reap, Resume, ResumeIntents
+from blizzard.runner.loop.steps import Advance, Pull, Reap, Resume
 from blizzard.runner.node_steps.chunk_state import ChunkState
 from tests.support.runner_fakes import (
     FakeHarness,

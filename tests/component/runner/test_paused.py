@@ -42,9 +42,10 @@ from blizzard.runner.hub.client import (
 from blizzard.runner.leases.activity import HEARTBEAT_STALENESS_THRESHOLD
 from blizzard.runner.leases.model import NewLease
 from blizzard.runner.lifecycle.dormant import DormantSession
+from blizzard.runner.lifecycle.resume_intents import ResumeIntents
 from blizzard.runner.lifecycle.usage_limit import mark_and_park_worker
 from blizzard.runner.loop.context import LoopConfig, LoopContext, ResolvedSubscription
-from blizzard.runner.loop.steps import Advance, Fill, Pull, Reap, Resume, ResumeIntents, SpendCeiling
+from blizzard.runner.loop.steps import Advance, Fill, Pull, Reap, Resume, SpendCeiling
 from blizzard.runner.loop.tick import tick
 from blizzard.runner.node_steps.chunk_state import ChunkPause, ChunkState
 from blizzard.runner.node_steps.submissions import ApplyReply

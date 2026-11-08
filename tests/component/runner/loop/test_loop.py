@@ -28,8 +28,9 @@ from blizzard.runner.hub.client import (
     QueueEntry,
 )
 from blizzard.runner.leases.model import NewLease
+from blizzard.runner.lifecycle.resume_intents import ResumeIntents
 from blizzard.runner.loop.context import LoopConfig
-from blizzard.runner.loop.steps import Advance, Fill, Pull, Resume, ResumeIntents
+from blizzard.runner.loop.steps import Advance, Fill, Pull, Resume
 from blizzard.runner.node_steps.chunk_state import ChunkState
 from blizzard.runner.node_steps.envelope import Envelope
 from blizzard.runner.node_steps.submissions import ApplyReply

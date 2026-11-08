@@ -43,6 +43,7 @@ from blizzard.runner.lifecycle.identity_check import IdentityCheck
 from blizzard.runner.lifecycle.judgement.internal.elicitation_files import ElicitationFiles
 from blizzard.runner.lifecycle.judgement.internal.subprocess_check_runner import SubprocessCheckRunner
 from blizzard.runner.lifecycle.orphan import orphan_session
+from blizzard.runner.lifecycle.resume_intents import ResumeIntents
 from blizzard.runner.lifecycle.session import HarnessSelector, SessionResolver
 from blizzard.runner.lifecycle.session_reconcile import SessionReconcile
 from blizzard.runner.lifecycle.shutdown_drain import ShutdownDrain
@@ -50,7 +51,6 @@ from blizzard.runner.lifecycle.takeover import TakeoverRecovery
 from blizzard.runner.loop.context import LoopConfig, LoopContext, ResolvedSubscription
 from blizzard.runner.loop.retention_floor import RetentionPasses
 from blizzard.runner.loop.step_passes import HostPassStepper, PassResult, StepLock, TickInProgress, ended
-from blizzard.runner.loop.steps import ResumeIntents
 from blizzard.runner.loop.tick import tick
 from blizzard.runner.process.internal.worker_scratch_dirs import WorkerScratchDirs
 from blizzard.runner.process.probe import IProcessProbe

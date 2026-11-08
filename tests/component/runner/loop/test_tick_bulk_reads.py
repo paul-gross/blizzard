@@ -29,6 +29,7 @@ from blizzard.runner.harness.registry import HarnessBinding, HarnessRegistry
 from blizzard.runner.leases.model import NewLease
 from blizzard.runner.leases.overload import backing_off_facts
 from blizzard.runner.lifecycle.claim import InterruptedClaims
+from blizzard.runner.lifecycle.resume_intents import ResumeIntents
 from blizzard.runner.loop.context import LoopConfig
 from blizzard.runner.loop.tick import tick
 from blizzard.runner.node_steps.chunk_state import ChunkState
@@ -44,6 +45,7 @@ from tests.support.runner_fakes import (
     FakeTranscriptSource,
     SqlAlchemyRunnerStore,
     make_context,
+    make_stores,
     registered_identity,
     runner_store_errors,
     serving,
@@ -603,3 +605,54 @@ def test_active_lease_chunk_ids_names_every_open_lease_chunk(tmp_path: Path) -> 
         }
     )
     assert support.count_queries(engine, store.active_lease_chunk_ids) == 1
+
+
+# --- crash marking -------------------------------------------------------------------------
+
+
+def _seed_crash_orphan(store: SqlAlchemyRunnerStore, i: int) -> None:
+    """An active, spawned lease whose process is gone and whose last beat is long stale."""
+    at = _NOW - timedelta(hours=1)
+    lease_id, chunk_id = f"lease_{i}", f"ch_{i}"
+    _mint(store, lease_id, chunk_id)
+    session = SessionReference(CLAUDE_CODE_HARNESS_ID, f"sess-{i}")
+    store.record_spawn(lease_id, pid=2000 + i, process_start_time=f"t{i}", session=session, spawned_at=at)
+    store.record_heartbeat(lease_id=lease_id, beat_at=at)
+
+
+def _crash_marking_read_count(tmp_path: Path, n: int) -> tuple[int, int]:
+    store, engine = _store(tmp_path)
+    for i in range(n):
+        _seed_crash_orphan(store, i)
+    marked = 0
+
+    def mark() -> None:
+        nonlocal marked
+        marked = ResumeIntents(make_stores(store)).mark_crashed(
+            process=FakeProbe(alive=set()), liveness=store, now=_NOW
+        )
+
+    with support.capture_statements(engine) as statements:
+        mark()
+    reads = sum(1 for statement, _ in statements if statement.lstrip().upper().startswith("SELECT"))
+    return marked, reads
+
+
+def test_crash_marking_read_count_is_flat_across_1_and_5_orphaned_leases(tmp_path: Path) -> None:
+    marked_one, one = _crash_marking_read_count(tmp_path / "one", 1)
+    marked_five, five = _crash_marking_read_count(tmp_path / "five", 5)
+
+    assert (marked_one, marked_five) == (1, 5)
+    assert one == five
+
+
+def test_crash_marking_read_count_grows_per_batch_not_per_lease(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _, unbatched = _crash_marking_read_count(tmp_path / "wide", 6)
+    monkeypatch.setattr(batching_module, "BATCH_SIZE", 3)
+    marked, batched = _crash_marking_read_count(tmp_path / "narrow", 6)
+
+    assert marked == 6
+    # Two batches instead of one: the liveness read repeats per batch (two grouped reads each).
+    assert batched == unbatched + 2

@@ -19,7 +19,8 @@ from blizzard.runner.harness.adapter import WorkerHandle
 from blizzard.runner.harness.identity import CLAUDE_CODE_HARNESS_ID, SessionReference
 from blizzard.runner.harness.registry import HarnessBinding, HarnessRegistry
 from blizzard.runner.leases.model import NewLease
-from blizzard.runner.loop.steps import Resume, ResumeIntents
+from blizzard.runner.lifecycle.resume_intents import ResumeIntents
+from blizzard.runner.loop.steps import Resume
 from blizzard.runner.loop.tick import tick
 from blizzard.runner.node_steps.chunk_state import ChunkState
 from tests.support.runner_fakes import (
