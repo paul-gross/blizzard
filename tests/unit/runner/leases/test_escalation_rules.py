@@ -11,7 +11,15 @@ from blizzard.foundation.chunk_status import ChunkStatus
 from blizzard.foundation.leases import LeaseClosureReason
 from blizzard.runner.environments.repository import EnvBinding
 from blizzard.runner.harness.identity import SessionReference
-from blizzard.runner.leases.closure import ESCALATION_MINT, NO_ACCEPTABLE_HARNESS_MINT, cause_of
+from blizzard.runner.leases.closure import (
+    ESCALATION_MINT,
+    ESCALATION_REASONS,
+    HARNESS_VERSION_REFUSED,
+    NO_ACCEPTABLE_HARNESS_MINT,
+    SPENT_REASONS,
+    UNSPENT_REASONS,
+    cause_of,
+)
 from blizzard.runner.leases.escalations import (
     ESCALATION_TRANSITIONS,
     EscalationState,
@@ -42,6 +50,14 @@ def _view(status: ChunkStatus = ChunkStatus.NEEDS_HUMAN, *, route: str | None = 
 def test_each_mint_reason_implies_its_own_cause() -> None:
     assert cause_of(ESCALATION_MINT) == "owner-unresolvable"
     assert cause_of(NO_ACCEPTABLE_HARNESS_MINT) == "no-acceptable-harness"
+
+
+def test_a_version_refused_close_implies_its_own_cause_and_spends_no_retry() -> None:
+    assert cause_of(HARNESS_VERSION_REFUSED) == "harness-version-changed"
+    assert cause_of(HARNESS_VERSION_REFUSED, "retries-exhausted") == "harness-version-changed"
+    assert HARNESS_VERSION_REFUSED in UNSPENT_REASONS
+    assert HARNESS_VERSION_REFUSED in ESCALATION_REASONS
+    assert HARNESS_VERSION_REFUSED not in SPENT_REASONS
 
 
 def test_a_mint_reason_outranks_whatever_was_recorded() -> None:

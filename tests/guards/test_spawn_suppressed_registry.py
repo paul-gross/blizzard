@@ -61,13 +61,14 @@ def _is_gate_call(node: ast.AST) -> bool:
 
 
 def _calls_in_own_scope(func: ast.FunctionDef | ast.AsyncFunctionDef) -> list[ast.Call]:
-    """Every ``ast.Call`` in ``func``'s own body — not descending into a nested def/lambda,
-    whose calls belong to *that* scope, not this one."""
+    """Every ``ast.Call`` in ``func``'s own body — not descending into a nested def, whose calls belong to *that*
+    scope, not this one. An inline lambda's calls count as this scope's: it is handed straight to a call made here, as
+    a launch is to ``Spawner.launching``, and runs under whatever gate this scope took."""
     calls: list[ast.Call] = []
 
     def _walk(node: ast.AST) -> None:
         for child in ast.iter_child_nodes(node):
-            if isinstance(child, (ast.FunctionDef, ast.AsyncFunctionDef, ast.Lambda)):
+            if isinstance(child, (ast.FunctionDef, ast.AsyncFunctionDef)):
                 continue
             if isinstance(child, ast.Call):
                 calls.append(child)

@@ -71,7 +71,7 @@ from blizzard.runner.node_steps.submissions import ApplyReply, CompletionArtifac
 from blizzard.runner.process.child_env import AllowlistedEnv
 from blizzard.runner.process.internal.worker_scratch_dirs import WorkerScratchDirs
 from blizzard.runner.store.errors import RunnerStoreErrorFactory
-from blizzard.runner.store.schema import lease_spawns
+from blizzard.runner.store.schema import lease_closures, lease_spawns
 from blizzard.runner.store.schema import metadata as runner_metadata
 from tests.support.child_launch import CHILDREN, version_probe
 from tests.support.runner_fakes import (
@@ -2744,14 +2744,20 @@ class _ResolvesAll:
 
 
 class _VersionChangedHarness(FakeHarness):
-    def spawn(self, *args: object, **kwargs: object) -> WorkerHandle:
-        raise HarnessVersionChangedError("the service now reports version 2.2.0, not 2.1.4")
+    """Refuses its first ``refusals`` launches for a changed version, then launches as the fake does."""
+
+    def __init__(self, *args: Any, refusals: int, **kwargs: Any) -> None:
+        super().__init__(*args, **kwargs)
+        self.refusals = refusals
+
+    def spawn(self, *args: Any, **kwargs: Any) -> Any:
+        if self.refusals > 0:
+            self.refusals -= 1
+            raise HarnessVersionChangedError("the service now reports version 2.2.0, not 2.1.4")
+        return super().spawn(*args, **kwargs)
 
 
-def test_a_launch_refused_for_a_changed_version_drops_the_advertised_version(tmp_path: Path):
-    """A harness that refuses a launch because its version changed leaves the cached version to be observed afresh,
-    so the next tick advertises the version the harness now runs, and recalculates its health even when that version
-    reads back unchanged."""
+def _version_change_rig(tmp_path: Path, *, refusals: int):
     store = _store(tmp_path)
     clock = FixedClock(datetime(2026, 11, 5, 12, 0, 0, tzinfo=UTC))
     versions = HarnessVersionCache(clock=clock)
@@ -2761,7 +2767,8 @@ def test_a_launch_refused_for_a_changed_version_drops_the_advertised_version(tmp
         clock=clock, probes={CLAUDE_CODE_HARNESS_ID: probe}, corpus=CommittedCorpus(), selftest_results=None
     )
     health.refresh(CLAUDE_CODE_HARNESS_ID, adapter=_ResolvesAll(), observed_version="2.1.4")
-    harness = _VersionChangedHarness(handle=_HANDLE, verdict="pass")
+    harness = _VersionChangedHarness(handle=_HANDLE, verdict="pass", refusals=refusals)
+    harness.harness_version = "2.2.0"
     ctx = make_context(
         store,
         hub=FakeHub(),
@@ -2772,13 +2779,65 @@ def test_a_launch_refused_for_a_changed_version_drops_the_advertised_version(tmp
         harness_versions=versions,
         harness_health=health,
     )
+    return store, ctx, versions, health, probe
 
-    with pytest.raises(HarnessVersionChangedError):
-        Spawner(ctx).spawn(
-            "ch_1", _build_envelope(), [AcquiredEnvironment(environment_id="e1", workdir="/ws/e1")], via="test"
+
+def _closures(store: Any) -> list[tuple[str, str | None]]:
+    with store.engine.connect() as conn:
+        return [
+            (row.reason, row.escalation_cause)
+            for row in conn.execute(
+                select(lease_closures.c.reason, lease_closures.c.escalation_cause).where(
+                    lease_closures.c.runner_id == FIXTURE_RUNNER_ID
+                )
+            ).all()
+        ]
+
+
+def test_a_spawn_refused_for_a_changed_version_relaunches_once_on_the_version_just_observed(tmp_path: Path):
+    """An in-range change refuses the first launch only: the relaunch runs on the version observed afresh, records
+    that version, and spends nothing. Health is recalculated even when the version reads back unchanged."""
+    store, ctx, _versions, health, probe = _version_change_rig(tmp_path, refusals=1)
+
+    Spawner(ctx).spawn(
+        "ch_1", _build_envelope(), [AcquiredEnvironment(environment_id="e1", workdir="/ws/e1")], via="test"
+    )
+
+    lease = store.active_lease_for_chunk("ch_1")
+    assert lease is not None and lease.session_id == "sess-a"
+    with store.engine.connect() as conn:
+        recorded = (
+            conn.execute(select(lease_spawns.c.harness_version).where(lease_spawns.c.runner_id == FIXTURE_RUNNER_ID))
+            .scalars()
+            .all()
         )
+    assert recorded == ["2.2.0"]
+    assert _closures(store) == []
+    health.refresh(CLAUDE_CODE_HARNESS_ID, adapter=_ResolvesAll(), observed_version="2.1.4")
+    assert probe.calls == 2
 
-    assert versions.get(CLAUDE_CODE_HARNESS_ID, lambda: "2.2.0") == "2.2.0"
+
+def test_a_spawn_refused_again_on_relaunch_escalates_its_lease_unspent(tmp_path: Path):
+    """A refusal the relaunch repeats escalates the minted lease in place, with its own cause and an unspent close,
+    rather than raising for REAP to fail it as a retry. The version is still left to be observed afresh."""
+    store, ctx, versions, health, probe = _version_change_rig(tmp_path, refusals=2)
+    envelope = _build_envelope()
+
+    Spawner(ctx).spawn("ch_1", envelope, [AcquiredEnvironment(environment_id="e1", workdir="/ws/e1")], via="test")
+
+    assert store.active_lease_for_chunk("ch_1") is None
+    assert _closures(store) == [("harness-version-refused", "harness-version-changed")]
+    assert store.attempt_count("ch_1", envelope.node.node_id) == 0
+    escalation = store.open_escalation_for_chunk("ch_1")
+    assert escalation is not None and escalation.cause == "harness-version-changed"
+    payload = json.loads(
+        next(b for b in store.pending_outbound() if b.kind == ESCALATION_RECORDED and b.chunk_id == "ch_1").payload
+    )
+    assert "2.2.0" in payload["detail"] and "restart the runner" in payload["detail"]
+    events = [json.loads(b.payload) for b in store.pending_outbound() if b.kind == EVENT_RECORDED]
+    assert [e["kind"] for e in events] == ["harness-version-changed"]
+    assert events[0]["severity"] == "critical"
+    assert versions.get(CLAUDE_CODE_HARNESS_ID, lambda: "2.3.0") == "2.3.0"
     health.refresh(CLAUDE_CODE_HARNESS_ID, adapter=_ResolvesAll(), observed_version="2.1.4")
     assert probe.calls == 2
 

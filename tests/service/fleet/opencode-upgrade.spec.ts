@@ -1,4 +1,4 @@
-import { expect, type OpencodeRelease, stepChunkUntil, stepUntil, test } from '../../harness/fixtures';
+import { expect, type OpencodeRelease, stepChunkUntil, stepUntil, test, type Wire } from '../../harness/fixtures';
 
 // A machine moved between OpenCode releases, on a real hub: the runner's `opencode` is a host-owned path whose release
 // the case replaces in place, as an operator's upgrade does. Moving to OpenCode 2 is stop, upgrade, start; a runner
@@ -49,7 +49,7 @@ async function world({ api, issue, repository, runnerHosts }: World, release: Op
     expect((await api.post(`/api/chunks/${minted.chunk_id}/promote`)).status).toBe(202);
     const leases = async () => (await runner.leases()).body.items.filter((lease) => lease.chunk_id === minted.chunk_id).sort((a, b) => a.epoch - b.epoch);
     const settled = () => stepChunkUntil(host, api, minted.chunk_id, (status) => ['done', 'stopped', 'needs_human'].includes(status));
-    return { leases, settled };
+    return { chunkId: minted.chunk_id, leases, settled };
   };
   return { host, runner, health, chunk };
 }
@@ -94,16 +94,20 @@ test.describe('opencode upgrade', () => {
     // The runner advertised 2.1.4 and ran on it; OpenCode moves to 3.0.0 beneath it, restarting its service.
     await host.installOpencode('3.0.0');
     const after = await chunk('after the upgrade');
-    // The launch finds the service on another version and is refused before anything starts, failing its pass.
-    const outcomes: string[] = [];
-    while ((await health())?.available !== false && outcomes.length < 40) outcomes.push((await host.step()).outcome);
-    expect(outcomes, 'the refused launch fails its pass').toContain('failed');
+    // The launch finds the service on another major version and is refused before anything starts; the relaunch on
+    // the version just observed is refused again, so the chunk escalates for a restart, spending no retry.
+    expect(await after.settled()).toBe('needs_human');
+    const escalated = (await api.get<Wire.ChunkDetail>(`/api/chunks/${after.chunkId}`)).body;
+    expect(escalated.escalation?.cause).toBe('harness-version-changed');
+    expect(escalated.escalation?.detail).toContain('3.0.0');
+    expect(escalated.escalation?.detail).toContain('restart the runner');
     const refused = await health();
     expect(refused, JSON.stringify(refused)).toMatchObject({ available: false, cause: 'incompatible_version', version: '3.0.0' });
-    // Every launch on 3.0.0 was refused before a session was opened, so no turn ran on another major version.
+    // The one launch on 3.0.0 was refused before a session was opened, so no turn ran on another major version.
     const refusedLeases = await after.leases();
-    expect(refusedLeases.length).toBeGreaterThan(0);
-    expect(refusedLeases.map((lease) => [lease.session_id, lease.harness_version]), JSON.stringify(refusedLeases)).toEqual(refusedLeases.map(() => [null, null]));
+    expect(refusedLeases.map((lease) => [lease.session_id, lease.harness_version, lease.closure_reason]), JSON.stringify(refusedLeases)).toEqual([
+      [null, null, 'harness-version-refused'],
+    ]);
 
     // Back on an OpenCode 2 release, a restart composes the binding afresh: the capability is available, and work lands on it.
     await host.installOpencode('2.1.4');
@@ -112,5 +116,24 @@ test.describe('opencode upgrade', () => {
     const restarted = await chunk('after the restart');
     expect(await restarted.settled()).toBe('done');
     expect((await restarted.leases()).map((lease) => [lease.node_name, lease.harness_version])).toEqual([['build', '2.1.4'], ['review', '2.1.4']]);
+  });
+
+  test('test_a_runner_whose_opencode_changes_minor_version_while_running_relaunches_on_it_and_spends_nothing', async ({ api, issue, repository, runnerHosts }) => {
+    const definition = graph({ prompt: OPENCODE2_REVIEW, judgement: OPENCODE2_PASS }, { prompt: OPENCODE2_REVIEW, judgement: OPENCODE2_PASS });
+    const { host, health, chunk } = await world({ api, issue, repository, runnerHosts }, '2.1.4', definition);
+    const before = await chunk('before the upgrade');
+    expect(await before.settled()).toBe('done');
+
+    // OpenCode moves to 2.2.0 beneath the running runner: the next launch is refused for the change, and its one
+    // relaunch runs on the version just observed.
+    await host.installOpencode('2.2.0');
+    const after = await chunk('after the upgrade');
+    expect(await after.settled()).toBe('done');
+    const leases = await after.leases();
+    expect(leases.map((lease) => [lease.node_name, lease.harness_version, lease.closure_reason]), JSON.stringify(leases)).toEqual([
+      ['build', '2.2.0', 'transitioned'],
+      ['review', '2.2.0', 'transitioned'],
+    ]);
+    expect(await health()).toMatchObject({ available: true, version: '2.2.0' });
   });
 });

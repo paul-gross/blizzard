@@ -49,8 +49,8 @@ class _Window:
 
 
 def close_reason(reason: str) -> str:
-    """The published close reason: either mint reason reads ``escalated``."""
-    return LeaseClosureReason.ESCALATED if reason in closure.MINT_REASONS else reason
+    """The published close reason: every store-only escalation reason reads ``escalated``."""
+    return LeaseClosureReason.ESCALATED if reason in closure.STORE_ESCALATION_REASONS else reason
 
 
 def _dimensions(facts: LeaseTraceFacts) -> dict[str, AttributeValue]:

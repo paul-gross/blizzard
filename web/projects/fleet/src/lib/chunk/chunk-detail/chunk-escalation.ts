@@ -83,6 +83,7 @@ const CAUSE_SENTENCES = openLookup<EscalationCause, string>(
     [EscalationCause.RETRIES_EXHAUSTED]: 'The worker exhausted its retries',
     [EscalationCause.OWNER_UNRESOLVABLE]: "The runner could not resolve the chunk's owner",
     [EscalationCause.NO_ACCEPTABLE_HARNESS]: 'No acceptable harness was available for the chunk',
+    [EscalationCause.HARNESS_VERSION_CHANGED]: "The runner refused to launch the worker on its harness's changed version",
     [EscalationCause.SPEND_CAP]: 'The worker hit its spend cap',
     [EscalationCause.BOUNCE_CAP]: 'The chunk reached its bounce cap',
     [EscalationCause.MIGRATION_TARGET_UNRESOLVABLE]: "The chunk's migration target could not be resolved",

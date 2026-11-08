@@ -438,19 +438,21 @@ def failure_move(*, retried: int, retries_max: int, owner_blocked: bool, detache
     return FailureMove.ESCALATE_EXHAUSTED
 
 
-class OwnerUnresolvableMove(StrEnum):
+class InPlaceEscalationMove(StrEnum):
     ABANDON = "abandon"
     DEFER = "defer"
     ESCALATE = "escalate"
 
 
-def owner_unresolvable_move(*, detached: bool, braked: bool) -> OwnerUnresolvableMove:
-    """The same detached-then-braked precedence :func:`failure_move` takes ahead of its escalation."""
+def in_place_escalation_move(*, detached: bool, braked: bool) -> InPlaceEscalationMove:
+    """The same detached-then-braked precedence :func:`failure_move` takes ahead of its escalation, shared by every
+    escalation an attempt takes in place of a launch: an unresolvable owner, and a launch a changed harness version
+    refused."""
     if detached:
-        return OwnerUnresolvableMove.ABANDON
+        return InPlaceEscalationMove.ABANDON
     if braked and brake_defers(LeaseMove.ESCALATE):
-        return OwnerUnresolvableMove.DEFER
-    return OwnerUnresolvableMove.ESCALATE
+        return InPlaceEscalationMove.DEFER
+    return InPlaceEscalationMove.ESCALATE
 
 
 @domain_model

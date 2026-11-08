@@ -137,19 +137,16 @@ test.describe('the service-level levers', () => {
     expect(usage.every((fact) => (fact.cost_usd ?? 0) === 0), JSON.stringify(usage)).toBe(true);
   });
 
-  test('test_opencode2_a_service_on_another_version_than_its_binary_refuses_the_first_launch_once', async ({ mockHub, runnerHosts }) => {
+  test('test_opencode2_a_service_on_another_version_than_its_binary_refuses_the_first_launch_and_relaunches_on_the_observed_version', async ({ mockHub, runnerHosts }) => {
     const host = await runnerHosts.create({ runnerOpencode2Levers: ['VERSION_MISMATCH'] });
     const { chunk, leases, stepping } = await seeded(mockHub, host, single('gr_oc2_version_mismatch', script("text('MATCHED')")));
 
     const outcomes = await stepping(async () => (await chunk()).status === 'done', 40);
 
     // The runner advertised the binary's version until the first launch found the service's: that launch is refused,
-    // the version observed afresh, and the next lease runs and records the service's own.
-    expect(outcomes[0], 'the refused launch fails its pass').toBe('failed');
-    expect((await leases()).map((lease) => [lease.closure_reason, lease.harness_version])).toEqual([
-      ['reaped', null],
-      ['transitioned', '2.1.5'],
-    ]);
+    // the version observed afresh, and the same lease is launched again at once on it, spending no retry.
+    expect(outcomes, 'the refusal fails no pass').not.toContain('failed');
+    expect((await leases()).map((lease) => [lease.closure_reason, lease.harness_version])).toEqual([['transitioned', '2.1.5']]);
   });
 });
 

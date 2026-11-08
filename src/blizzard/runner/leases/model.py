@@ -134,7 +134,8 @@ class ClosedLease:
     """A lease joined with its closure fact — the panel's recent-history read.
     ``reason`` is the closure vocabulary: ``transitioned`` | ``reaped`` | ``failed`` |
     ``escalated`` | ``parked`` | ``released`` | ``owner-unresolvable-mint`` | ``no-acceptable-harness-mint``
-    (both zero-budget, minted only to escalate a resume owner or mint selection that failed)."""
+    (both zero-budget, minted only to escalate a resume owner or mint selection that failed) |
+    ``harness-version-refused`` (a launch a changed harness version refused, escalated unspent)."""
 
     lease: Lease
     reason: str

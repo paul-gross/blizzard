@@ -62,7 +62,7 @@ from blizzard.runner.lifecycle.model import (
 from blizzard.runner.lifecycle.orphan import orphan_resultless_exit
 from blizzard.runner.lifecycle.registration import Registration, registered_runner_id
 from blizzard.runner.lifecycle.restart_resume import RestartResume
-from blizzard.runner.lifecycle.spawn import Spawner
+from blizzard.runner.lifecycle.spawn import LaunchVersionRefusedError, Spawner
 from blizzard.runner.lifecycle.takeover import TakeoverCloser, TakeoverCloseScope
 from blizzard.runner.lifecycle.usage_limit import classify_worker_usage_limit, mark_and_park_worker
 from blizzard.runner.loop.context import LoopContext
@@ -398,25 +398,30 @@ class Advance(Step):
                 backing_off=lease.lease_id in backing_off,
                 alive=lease.pid is not None and ctx.process.is_alive(lease.pid, lease.process_start_time or ""),
             )
-            if move is AdvanceMove.ON_UNPAUSE and park is not None:
-                if brakes is None:
-                    brakes = Spawner(ctx).brakes()
-                DormantSession(ctx, lease).on_unpause(
-                    park,
-                    in_flight_elicitations.get(lease.lease_id),
-                    bindings=bindings_by_chunk.get(lease.chunk_id, []),
-                    ask_parked=lease.lease_id in ask_parked,
-                    brakes=brakes,
-                )
-            elif move is AdvanceMove.ON_ANSWER:
-                DormantSession(ctx, lease).on_answer()
-            elif move is AdvanceMove.ON_OVERLOAD_BACKOFF:
-                DormantSession(ctx, lease).on_overload_backoff(backing_off[lease.lease_id])
-            elif move is AdvanceMove.EXITED:
-                self._advance_exited_worker(
-                    lease, bindings_by_chunk.get(lease.chunk_id, []), in_flight_elicitations.get(lease.lease_id)
-                )
-                brakes = None
+            try:
+                if move is AdvanceMove.ON_UNPAUSE and park is not None:
+                    if brakes is None:
+                        brakes = Spawner(ctx).brakes()
+                    DormantSession(ctx, lease).on_unpause(
+                        park,
+                        in_flight_elicitations.get(lease.lease_id),
+                        bindings=bindings_by_chunk.get(lease.chunk_id, []),
+                        ask_parked=lease.lease_id in ask_parked,
+                        brakes=brakes,
+                    )
+                elif move is AdvanceMove.ON_ANSWER:
+                    DormantSession(ctx, lease).on_answer()
+                elif move is AdvanceMove.ON_OVERLOAD_BACKOFF:
+                    DormantSession(ctx, lease).on_overload_backoff(backing_off[lease.lease_id])
+                elif move is AdvanceMove.EXITED:
+                    self._advance_exited_worker(
+                        lease, bindings_by_chunk.get(lease.chunk_id, []), in_flight_elicitations.get(lease.lease_id)
+                    )
+                    brakes = None
+            except LaunchVersionRefusedError as exc:
+                # One lease's refused launch escalates that lease alone; the pass goes on to the rest.
+                Attempt(ctx, lease).escalate_harness_version_refused(exc, via=f"advance-{move.value}")
+                brakes = None  # the handler it cut short may have engaged a brake, as the exited path does
 
         # Read AFTER the loop above, not the same set it started with (`bzh:bulk-reconstitution`):
         # that loop can close a lease whose chunk this one must now drive in the same pass.

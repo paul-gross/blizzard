@@ -375,6 +375,17 @@ describe('ChunkEscalation', () => {
       expect(detail).toBe('judge failed 3 attempts');
     });
 
+    it('renders a harness-version-changed cause with the version and remedy its detail names', async () => {
+      const given =
+        'the OpenCode service reported version 3.0.0, outside >=2,<3; restart the runner to take it up' +
+        ' — restart the runner on a supported release, then requeue (via spawn)';
+      const { sentence, detail } = await causeOf('harness-version-changed', given);
+      expect(sentence).toBe(
+        "The runner refused to launch the worker on its harness's changed version (epoch 3).",
+      );
+      expect(detail).toBe(given);
+    });
+
     it("renders an escalate-choice cause as the worker's own judgement, with its detail", async () => {
       const given =
         'node `triage` took choice `unfulfillable`, which escalates for a human';

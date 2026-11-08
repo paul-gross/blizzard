@@ -9,6 +9,7 @@ class EscalationCause(StrEnum):
     RETRIES_EXHAUSTED = "retries-exhausted"
     OWNER_UNRESOLVABLE = "owner-unresolvable"
     NO_ACCEPTABLE_HARNESS = "no-acceptable-harness"
+    HARNESS_VERSION_CHANGED = "harness-version-changed"
     SPEND_CAP = "spend-cap"
     BOUNCE_CAP = "bounce-cap"
     MIGRATION_TARGET_UNRESOLVABLE = "migration-target-unresolvable"

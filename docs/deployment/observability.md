@@ -88,6 +88,13 @@ detail names each attempted harness and why it was skipped; `blizzard runner sta
 availability, and health cause beneath such an escalation. The chunk escalates in place rather than minting under the
 runner's default harness; with no session ever spawned, the escalation carries no takeover command either.
 
+`harness-version-changed` (critical): an OpenCode 2 launch was refused because the operator's service changed version
+since the runner advertised it, and the one relaunch on the version just observed was refused as well — the runner holds
+one major version until it restarts ([worker-spawn.md](./worker-spawn.md#opencode-configuration)). The chunk escalates
+in place, spending no retry, with cause `harness-version-changed` and a detail naming the refused version and the
+remedy: restart the runner on a supported release, then requeue. A fresh spawn has no session, so its escalation carries
+no takeover command; a refused resume or judgement carries its session's takeover as any other escalation does.
+
 Escalations appear in the same feed as a needs-human event kind — one row, one surface; a row leaves when its escalation
 is superseded by any of a requeue, an operator `chunk restart`, the next attempt's lease, or the chunk ending `stopped`
 or `done`.
