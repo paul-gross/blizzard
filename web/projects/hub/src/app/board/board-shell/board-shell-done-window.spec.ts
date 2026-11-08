@@ -5,6 +5,7 @@ import type { ChunkSummary, KitAsyncStateValue } from 'fleet';
 import { chunkCountsView, chunkSummary } from 'fleet/testing';
 import { BoardShell } from './board-shell';
 import { glanceListGroups } from '../glance/glance-board.model';
+import { boardDonePolicy } from '../../core/board-done-policy.model';
 
 /** The DONE column counts the hub-selected rows, rather than the all-time total. */
 describe('BoardShell DONE window', () => {
@@ -53,6 +54,31 @@ describe('BoardShell DONE window', () => {
     expect(head(el, 'ready')?.hasAttribute('title')).toBe(false);
   });
 
+  it('shows zero selected cards even when the all-time count is nonzero', async () => {
+    const el = await render([], 'ready', 207);
+    expect(head(el, 'done')?.querySelector('.n')?.textContent?.trim()).toBe('0');
+    expect(head(el, 'done')?.getAttribute('title')).toContain('207 all time');
+  });
+
+  it.each([
+    { count: 10, completedAt: '2020-01-01T00:00:00Z' },
+    { count: 13, completedAt: '2026-11-08T00:00:00Z' },
+    { count: 3, completedAt: '2020-01-01T00:00:00Z' },
+    { count: 0, completedAt: '2020-01-01T00:00:00Z' },
+  ])('shows all $count selected cards in desktop and glance', async ({ count, completedAt }) => {
+    const chunks = Array.from({ length: count }, (_, i) => ({ ...done(String(i)), completed_at: completedAt }));
+    const fixture = TestBed.createComponent(BoardShell);
+    fixture.componentRef.setInput('chunks', chunks);
+    fixture.componentRef.setInput('state', 'ready');
+    fixture.componentRef.setInput('layout', 'list');
+    await fixture.whenStable();
+    const el = fixture.nativeElement as HTMLElement;
+    const desktop = [...el.querySelectorAll<HTMLElement>('[data-testid="list-row"]')].map((row) => row.dataset['chunk']);
+    const mobile = glanceListGroups(chunks, [], [], [], [], new Map(), new Map(), new Map()).done.map((row) => row.chunkId);
+    expect(desktop).toEqual(chunks.map((chunk) => chunk.chunk_id));
+    expect(mobile).toEqual(desktop);
+  });
+
   it('shows the same server-selected rows as glance despite clock skew and missing timestamps', async () => {
     const chunks = [
       { ...done('old'), completed_at: '2020-01-01T00:00:00Z' },
@@ -69,17 +95,17 @@ describe('BoardShell DONE window', () => {
     const desktop = [...el.querySelectorAll<HTMLElement>('[data-testid="list-row"]')].map((row) => row.dataset['chunk']);
     const mobile = glanceListGroups(chunks, [], [], [], [], new Map(), new Map(), new Map()).done.map((row) => row.chunkId);
     expect(desktop).toEqual(mobile);
-    expect(mobile).toEqual(chunks.map((chunk) => chunk.chunk_id).sort((a, b) => a.includes('future') ? -1 : b.includes('future') ? 1 : 0));
+    expect(mobile).toEqual(['ch_01donefuture', 'ch_01doneold', 'ch_01donemissing', 'ch_01donebad']);
   });
 
   it('uses the supplied server policy for the heading and explanation', async () => {
     const fixture = TestBed.createComponent(BoardShell);
     fixture.componentRef.setInput('state', 'ready');
-    fixture.componentRef.setInput('donePolicy', { heading: 'Finished', explanation: 'Completed within 2 hours or among the newest 3', cutoffs: [] });
+    fixture.componentRef.setInput('donePolicy', boardDonePolicy([{ chunks: [], next_cursor: null, board_done_policy: { window_seconds: 7200, floor: 3, done_since: '2026-11-01T10:00:00Z' } }]));
     await fixture.whenStable();
     const heading = head(fixture.nativeElement as HTMLElement, 'done');
-    expect(heading?.querySelector('.col-lbl')?.textContent?.trim()).toBe('Finished');
-    expect(heading?.getAttribute('title')).toBe('Completed within 2 hours or among the newest 3');
+    expect(heading?.querySelector('.col-lbl')?.textContent?.trim()).toBe('Done');
+    expect(heading?.getAttribute('title')).toBe('At each page read: completed within 2 hours of that read or among the newest 3. Page cutoffs: 2026-11-01T10:00:00Z');
   });
 
   it('withholds its count while the board loads, and its all-time total until the counts read resolves', async () => {

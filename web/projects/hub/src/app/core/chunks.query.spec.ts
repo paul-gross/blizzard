@@ -102,13 +102,15 @@ describe('injectHubBoardChunksQuery', () => {
 
   it('keeps the previous rows and pages in the cache when a later page fails on refresh', async () => {
     let refreshing = false;
+    const oldPolicy = { window_seconds: 7200, floor: 3, done_since: '2026-11-01T00:00:00Z' };
+    const newPolicy = { ...oldPolicy, done_since: '2026-11-02T00:00:00Z' };
     stub = stubHubClient({
       'GET /api/chunks': (request) => {
         const cursor = new URLSearchParams(request.search).get('cursor');
         if (cursor && refreshing) return stubError(503, { detail: 'unavailable' });
         return cursor
-          ? { chunks: [chunk('old-2')], next_cursor: null, board_done_policy: null }
-          : { chunks: [chunk(refreshing ? 'new-1' : 'old-1')], next_cursor: 'next', board_done_policy: null };
+          ? { chunks: [chunk('old-2')], next_cursor: null, board_done_policy: oldPolicy }
+          : { chunks: [chunk(refreshing ? 'new-1' : 'old-1')], next_cursor: 'next', board_done_policy: refreshing ? newPolicy : oldPolicy };
       },
     });
     const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
@@ -120,6 +122,7 @@ describe('injectHubBoardChunksQuery', () => {
     expect(client.getQueryData(options.queryKey)).toEqual(previous);
     expect(previous.chunks.map((c) => c.chunk_id)).toEqual(['old-1', 'old-2']);
     expect(previous.pages.map((page) => page.next_cursor)).toEqual(['next', null]);
+    expect(client.getQueryData<BoardChunksRead>(options.queryKey)?.pages.map((page) => page.board_done_policy)).toEqual([oldPolicy, oldPolicy]);
     expect(stub.forRoute('/api/chunks', 'GET')).toHaveLength(4);
   });
 

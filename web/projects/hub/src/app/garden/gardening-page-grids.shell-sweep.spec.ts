@@ -180,7 +180,7 @@ const routes: Routes = [
     component: GardeningRoutinesPage,
     children: [
       { path: '', component: TestGardeningDetail },
-      { path: ':routineName', component: TestGardeningDetail },
+      { path: ':routineSlug', component: TestGardeningDetail },
     ],
   },
   {

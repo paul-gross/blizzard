@@ -1,6 +1,6 @@
 import { type ChunkSummary, type DecisionView, type QuestionView, type RunnerRegistryView, type WorkItemsView } from 'fleet';
 import { chunkSummary } from 'fleet/testing';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 
 import { filterGlanceRows, type GlanceFilter, glanceListGroups, glanceVitals, liveRunners } from './glance-board.model';
 
@@ -103,6 +103,27 @@ describe('glanceListGroups', () => {
       chunk('ch_undated', 'done', { terminal: true, completed_at: null }),
     ]);
     expect(ids(list.done)).toEqual(['ch_recent', 'ch_stopped', 'ch_stale', 'ch_undated']);
+  });
+
+  it.each([
+    { name: 'ten old', count: 10, completedAt: '2020-01-01T00:00:00Z' },
+    { name: 'more than ten recent', count: 13, completedAt: '2026-06-01T11:00:00Z' },
+    { name: 'fewer than ten', count: 3, completedAt: '2020-01-01T00:00:00Z' },
+    { name: 'zero', count: 0, completedAt: '2020-01-01T00:00:00Z' },
+  ])('keeps $name server-selected rows regardless of browser clock', ({ count, completedAt }) => {
+    const chunks = Array.from({ length: count }, (_, i) => chunk(`ch_${i}`, 'done', { terminal: true, completed_at: completedAt }));
+    vi.useFakeTimers();
+    try {
+      for (const clock of ['2010-01-01T00:00:00Z', '2099-01-01T00:00:00Z']) {
+        vi.setSystemTime(new Date(clock));
+        const list = groups(chunks);
+        expect(ids(list.done)).toEqual(chunks.map((row) => row.chunk_id));
+        expect(glanceVitals([], list).done).toBe(count);
+        expect(ids(filterGlanceRows(list, 'done'))).toEqual(chunks.map((row) => row.chunk_id));
+      }
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it('lists done newest-first, whatever order the read returns them in', () => {

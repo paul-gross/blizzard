@@ -150,7 +150,7 @@ const routes: Routes = [
     component: GardeningRoutinesPage,
     children: [
       { path: '', component: TestRoutineDetail },
-      { path: ':routineName', component: TestRoutineDetail },
+      { path: ':routineSlug', component: TestRoutineDetail },
     ],
   },
 ];
@@ -161,7 +161,7 @@ const realDetailRoutes: Routes = [
     component: GardeningRoutinesPage,
     children: [
       { path: '', component: GardeningRoutineDetail },
-      { path: ':routineName', component: GardeningRoutineDetail },
+      { path: ':routineSlug', component: GardeningRoutineDetail },
     ],
   },
 ];
@@ -335,6 +335,7 @@ describe('gardening routines page independent-scroll shell sweep (web:shell-swee
       ...ROUTINE,
       routine_id: `rtn_${i}`,
       name: `routine-${i}`,
+      slug: `routine-${i}`,
     }));
     const MANY_MEASUREMENTS = Array.from({ length: 30 }, (_, i) =>
       gardenMeasurementReadingView({

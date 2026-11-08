@@ -17,6 +17,14 @@ describe('boardDonePolicy', () => {
   it('recognizes uniform explicit null', () => {
     expect(boardDonePolicy([page(null), page(null)]).explanation).toBe('All completed work in this scope');
   });
+  it('describes nondefault server values rather than assuming the default window and floor', () => {
+    const custom = { window_seconds: 7200, floor: 3, done_since: '2026-11-01T10:00:00Z' };
+    expect(boardDonePolicy([page(custom)])).toEqual({
+      heading: 'Done',
+      explanation: `At each page read: completed within 2 hours of that read or among the newest 3. Page cutoffs: ${custom.done_since}`,
+      cutoffs: [custom.done_since],
+    });
+  });
   it('falls back for absent, mixed, malformed or conflicting policy', () => {
     const missing = { chunks: [], next_cursor: null } as unknown as hubApi.ChunksPageView;
     for (const pages of [[], [missing], [page(null), page(policy)],
