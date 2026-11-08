@@ -7,6 +7,7 @@ permission gate refuses it."""
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from datetime import datetime
 from functools import partial
 from typing import Annotated
@@ -78,7 +79,7 @@ def _iso_or_none(value: datetime | None) -> str | None:
 
 
 def _subscription_usage(
-    host: Host, usage: HostUsage, under: list[RunnerRegistration], *, now: datetime
+    host: Host, usage: HostUsage, under: Sequence[RunnerRegistration], *, now: datetime
 ) -> list[HostSubscriptionUsageView]:
     """Each subscription the host reports, once, through the rules a runner's card follows with the host's reported
     roster as the declaration — so the two agree — naming the live runners under the host spending its slug."""
@@ -93,11 +94,18 @@ def _subscription_usage(
     ]
 
 
-def registry_view(services: TenantServices, host: Host, usage: HostUsage | None = None) -> HostRegistryView:
-    """One host as the operator registry shows it, the runners standing under it read alongside. ``usage`` is the
-    host's reported usage when the caller read it in bulk across several hosts, else it is read here."""
+def registry_view(
+    services: TenantServices,
+    host: Host,
+    usage: HostUsage | None = None,
+    under: Sequence[RunnerRegistration] | None = None,
+) -> HostRegistryView:
+    """One host as the operator registry shows it, the runners standing under it read alongside. ``usage`` and
+    ``under`` are the host's reported usage and its runners (retired included) when the caller read them in bulk
+    across several hosts, else they are read here; a supplied ``under``, even empty, is used as given."""
     now = services.clock.now()
-    under = services.registry.list_runners(include_retired=True, host_id=host.host_id)
+    if under is None:
+        under = services.registry.list_runners(include_retired=True, host_id=host.host_id)
     if usage is None:
         usage = services.hosts.usage_of([host.host_id])[host.host_id]
     return HostRegistryView(
@@ -220,7 +228,10 @@ def list_hosts(services: Services, include_retired: Annotated[bool, Query()] = F
     ``include_retired``. Not paged: a tenant has a handful of hosts, and callers read the whole roster."""
     hosts = services.hosts.list_hosts(include_retired=include_retired)
     usage = services.hosts.usage_of([h.host_id for h in hosts])
-    return HostRegistryListResponse(hosts=[registry_view(services, h, usage[h.host_id]) for h in hosts])
+    under = services.registry.runners_under([h.host_id for h in hosts])
+    return HostRegistryListResponse(
+        hosts=[registry_view(services, h, usage[h.host_id], under.get(h.host_id, [])) for h in hosts]
+    )
 
 
 @router.get("/hosts/{host_id}", response_model=HostRegistryView, dependencies=[Depends(require(Permission.FLEET_VIEW))])

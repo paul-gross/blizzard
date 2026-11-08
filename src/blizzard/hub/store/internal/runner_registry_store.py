@@ -107,6 +107,28 @@ class RunnerRegistryStore:
             ).all()
             return self._hydrate(conn, rows, include_retired=include_retired)
 
+    def runners_under(self, host_ids: Iterable[str]) -> dict[str, list[RunnerRegistration]]:
+        ids = list(dict.fromkeys(host_ids))
+        if not ids:
+            return {}
+        registrations = s.runner_registrations
+        with self._store.read("runners_under") as conn:
+            rows = [
+                row
+                for batch in id_batches(ids)
+                for row in conn.execute(
+                    self._store.select(registrations)
+                    .where(registrations.c.host_id.in_(batch))
+                    .order_by(registrations.c.added_at, registrations.c.runner_id)
+                )
+            ]
+            hydrated = self._hydrate(conn, rows, include_retired=True)
+        by_host: dict[str, list[RunnerRegistration]] = {}
+        for registration in hydrated:
+            if registration.host_id is not None:
+                by_host.setdefault(registration.host_id, []).append(registration)
+        return by_host
+
     def runners_serving(self, project_id: str) -> frozenset[str]:
         registrations = s.runner_registrations
         with self._store.read("runners_serving") as conn:

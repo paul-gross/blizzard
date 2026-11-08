@@ -731,6 +731,12 @@ class IReadRunnerRegistry(Protocol):
         absent. One read per id batch, none for no ids."""
         ...
 
+    def runners_under(self, host_ids: Iterable[str]) -> dict[str, list[RunnerRegistration]]:
+        """Every runner standing under each named host, retired ones included, oldest added first, keyed by host id;
+        a host with no runners, an unknown host, or another tenant's host is absent. One read per id batch, none for
+        no ids."""
+        ...
+
     def runners_serving(self, project_id: str) -> frozenset[str]:
         """The ids of every runner, retired ones included, some entry of whose served declaration resolved to
         ``project_id``, read off the stored declaration alone — no lifecycle, pause, usage, or host read. Rows read
