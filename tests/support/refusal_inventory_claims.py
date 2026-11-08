@@ -42,6 +42,7 @@ DIRECT_PRODUCERS = {
         "register_runner": {
             "problem_response(problems.runner_not_found_problem(runner_id, instance=http_request.url.path))",
             "problem_response(problems.runner_version_problem(exc, instance=http_request.url.path))",
+            "problem_response(problems.duplicate_capability_harness_problem(exc, instance=http_request.url.path))",
         },
     },
     ("POST", "/api/fleet/routes"): {

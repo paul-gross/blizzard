@@ -938,6 +938,27 @@ class IWriteRunnerRegistry(IReadRunnerRegistry, Protocol):
         ...
 
 
+class DuplicateCapabilityHarness(Exception):
+    """A registration naming one ``harness_id`` in more than one capability entry — refused whole."""
+
+    def __init__(self, *, field: str, harness_id: str) -> None:
+        super().__init__(f"{field}: harness_id {harness_id!r} repeats an earlier capability entry")
+        self.field = field
+        self.harness_id = harness_id
+
+
+def refuse_duplicate_capability_harnesses(capabilities: Sequence[RunnerCapability]) -> None:
+    """Raise :class:`DuplicateCapabilityHarness` at the first entry whose ``harness_id`` an earlier entry already
+    named — one capability entry per harness id, compared exactly."""
+    seen: set[str] = set()
+    for index, capability in enumerate(capabilities):
+        if capability.harness_id in seen:
+            raise DuplicateCapabilityHarness(
+                field=f"capabilities[{index}].harness_id", harness_id=capability.harness_id
+            )
+        seen.add(capability.harness_id)
+
+
 class RunnerRetired(Exception):
     """The runner is retired — refused whatever token admitted the caller, keyed on its id."""
 

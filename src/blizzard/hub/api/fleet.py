@@ -82,6 +82,7 @@ from blizzard.hub.domain.projects.model import ProjectId
 from blizzard.hub.domain.runners.bindings import flag_bindings, offered_projects
 from blizzard.hub.domain.runners.registration import (
     DeclaredSubscription,
+    DuplicateCapabilityHarness,
     RunnerBinding,
     RunnerCapability,
     RunnerDeclining,
@@ -981,7 +982,8 @@ def register_runner(
 
     The hub never rejects a registration over its roster — it doubles as the heartbeat every tick,
     so the tenant it answers, named as the hub holds it now, carries a rename on the next tick. A
-    body ``runner_id`` from an older runner is ignored. A retired runner is refused 403, a refused version 409."""
+    body ``runner_id`` from an older runner is ignored. A retired runner is refused 403, a refused version 409, and a
+    capability list repeating a harness id 422."""
     runner_id = fleet.caller_id()
     registration = services.registry.get_runner(runner_id)
     if registration is None:
@@ -1031,6 +1033,8 @@ def register_runner(
             ),
             version=request.version,
         )
+    except DuplicateCapabilityHarness as exc:
+        return problem_response(problems.duplicate_capability_harness_problem(exc, instance=http_request.url.path))
     except RunnerVersionRefused as exc:
         if exc.changed:
             services.events.publish_runner_changed(runner_id, kind="registered", runner_name=registration.name)

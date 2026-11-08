@@ -20,6 +20,7 @@ from blizzard.wire.auth import (
 )
 from blizzard.wire.problem import HubStoreUnavailableProblem
 from blizzard.wire.runner import (
+    DuplicateCapabilityHarnessProblem,
     RunnerIdentityProblem,
     RunnerNotFoundProblem,
     RunnerNotRegisteredProblem,
@@ -85,8 +86,17 @@ def test_runner_registration_and_reads_problem_variants(
     def observe(response: Response, status: int, model: type[BaseModel]) -> None:
         observe_refusal(observations, response, method, path, status, model)
 
-    def request(headers: dict[str, str], *, target: str = url, version: str = "0.2") -> Response:
-        return client.request(method, target, headers=headers, json={"workspace_id": "w1", "version": version})
+    def request(
+        headers: dict[str, str],
+        *,
+        target: str = url,
+        version: str = "0.2",
+        capabilities: list[dict[str, str]] | None = None,
+    ) -> Response:
+        body: dict[str, object] = {"workspace_id": "w1", "version": version}
+        if capabilities is not None:
+            body["capabilities"] = capabilities
+        return client.request(method, target, headers=headers, json=body)
 
     other = hub.add_tenant("other")
     for headers, status, model in (
@@ -103,6 +113,8 @@ def test_runner_registration_and_reads_problem_variants(
         observe(request(bearer(live)), 409, RunnerNotRegisteredProblem)
     if kind == "registration":
         observe(request(bearer(live), version="0.1"), 409, RunnerVersionProblem)
+        duplicate = [{"harness_id": "claude"}, {"harness_id": "claude"}]
+        observe(request(bearer(live), capabilities=duplicate), 422, DuplicateCapabilityHarnessProblem)
     if kind in ("read", "registration"):
         with monkeypatch.context() as patch:
 

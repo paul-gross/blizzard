@@ -7361,6 +7361,55 @@
         "title": "DependentNotEditableView",
         "type": "object"
       },
+      "DuplicateCapabilityHarnessProblem": {
+        "additionalProperties": true,
+        "description": "A registration's capabilities name one harness id more than once.",
+        "properties": {
+          "detail": {
+            "title": "Detail",
+            "type": "string"
+          },
+          "field": {
+            "title": "Field",
+            "type": "string"
+          },
+          "harness_id": {
+            "title": "Harness Id",
+            "type": "string"
+          },
+          "instance": {
+            "title": "Instance",
+            "type": "string"
+          },
+          "status": {
+            "anyOf": [
+              {
+                "type": "integer"
+              }
+            ],
+            "title": "Status"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          },
+          "type": {
+            "const": "urn:blizzard:problem:duplicate-capability-harness",
+            "title": "Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "type",
+          "title",
+          "detail",
+          "instance",
+          "field",
+          "harness_id"
+        ],
+        "title": "DuplicateCapabilityHarnessProblem",
+        "type": "object"
+      },
       "DuplicateFindingProblem": {
         "additionalProperties": true,
         "description": "A bulk finding verb named the same finding twice.",
@@ -44903,7 +44952,7 @@
     },
     "/api/fleet/runners": {
       "post": {
-        "description": "Register the calling runner \u2014 the one its bearer token names \u2014 with its workspace binding\nand the name it declares; idempotent.\n\nThe hub never rejects a registration over its roster \u2014 it doubles as the heartbeat every tick,\nso the tenant it answers, named as the hub holds it now, carries a rename on the next tick. A\nbody ``runner_id`` from an older runner is ignored. A retired runner is refused 403, a refused version 409.",
+        "description": "Register the calling runner \u2014 the one its bearer token names \u2014 with its workspace binding\nand the name it declares; idempotent.\n\nThe hub never rejects a registration over its roster \u2014 it doubles as the heartbeat every tick,\nso the tenant it answers, named as the hub holds it now, carries a rename on the next tick. A\nbody ``runner_id`` from an older runner is ignored. A retired runner is refused 403, a refused version 409, a capability list repeating a harness id 422.",
         "operationId": "register_runner_api_fleet_runners_post",
         "requestBody": {
           "content": {
@@ -44998,6 +45047,11 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DuplicateCapabilityHarnessProblem"
                 }
               }
             },

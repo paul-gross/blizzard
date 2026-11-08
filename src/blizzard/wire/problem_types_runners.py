@@ -11,6 +11,7 @@ HOST_RETIREMENT_UNFINISHED: Final = "urn:blizzard:problem:host-retirement-unfini
 HOST_NOT_ENROLLED: Final = "urn:blizzard:problem:host-not-enrolled"
 HOST_HOLDS_ROUTES: Final = "urn:blizzard:problem:host-holds-routes"
 HOST_RETIREMENT_INTERRUPTED: Final = "urn:blizzard:problem:host-retirement-interrupted"
+DUPLICATE_CAPABILITY_HARNESS: Final = "urn:blizzard:problem:duplicate-capability-harness"
 RUNNER_NOT_RETIRED: Final = "urn:blizzard:problem:runner-not-retired"
 RUNNER_NOT_ENROLLED: Final = "urn:blizzard:problem:runner-not-enrolled"
 RUNNER_REINSTATE_INTERRUPTED: Final = "urn:blizzard:problem:runner-reinstate-interrupted"
@@ -33,6 +34,7 @@ RUNNERS_PROBLEM_TYPES: frozenset[str] = frozenset(
         HOST_NOT_ENROLLED,
         HOST_HOLDS_ROUTES,
         HOST_RETIREMENT_INTERRUPTED,
+        DUPLICATE_CAPABILITY_HARNESS,
         RUNNER_NOT_RETIRED,
         RUNNER_NOT_ENROLLED,
         RUNNER_REINSTATE_INTERRUPTED,

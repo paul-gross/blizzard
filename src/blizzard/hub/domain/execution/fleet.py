@@ -33,6 +33,7 @@ from blizzard.hub.domain.runners.registration import (
     RunnerReport,
     ServedEntry,
     declared_name,
+    refuse_duplicate_capability_harnesses,
 )
 from blizzard.hub.domain.runners.route import Route
 from blizzard.hub.domain.runners.served import IServedProjects, declaration_at_registration
@@ -186,11 +187,11 @@ class FleetService:
         null/empty. A declared ``name`` replaces the one held; none, or a blank one, keeps it. A sent
         ``projects`` replaces the served declaration (``[]`` clears it); ``None`` keeps it, re-resolving
         only its unresolved entries. Sent ``bindings`` replace ``projects`` as the declaration, each binding's project
-        in binding order; ``bindings``, ``subscription``, ``agents`` and ``declining`` are stored as sent. No entry is
-        refused: a
-        registration is also the runner's heartbeat. A retired runner raises
+        in binding order; ``bindings``, ``subscription``, ``agents`` and ``declining`` are stored as sent.
+        A registration is also the runner's heartbeat, so only these are refused: a retired runner raises
         :class:`~blizzard.hub.domain.runners.registration.RunnerRetired` before any write. A ``version`` the window
-        refuses records only the judgement, then raises :class:`RunnerVersionRefused`."""
+        refuses records only the judgement, then raises :class:`RunnerVersionRefused`. ``capabilities`` naming one
+        ``harness_id`` twice raise :class:`DuplicateCapabilityHarness` before any write."""
         held.refuse_if_retired(action="registration")
         runner_id = held.runner_id
         now = self._clock.now()
@@ -210,6 +211,7 @@ class FleetService:
                 floor=judgement.floor,
             )
             raise RunnerVersionRefused(runner_id, judgement, refusal, changed=version_changed)
+        refuse_duplicate_capability_harnesses(capabilities)
         recorded_name = declared_name(name)
         declared = projects if bindings is None else [b.project for b in bindings]
         served = declaration_at_registration(held.served, declared, self._served_projects)
