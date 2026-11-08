@@ -12,7 +12,7 @@ from dataclasses import dataclass
 from datetime import datetime
 from typing import Any
 
-from sqlalchemy import Column, ColumnElement, Connection, Row, Select, Table, and_, or_, true
+from sqlalchemy import Column, ColumnElement, Connection, Row, Select, Table, and_, case, or_, true
 
 from blizzard.foundation.clock import IClock
 from blizzard.foundation.event_log import (
@@ -74,6 +74,20 @@ def _narrow_persisted_severity(*, kind: str, severity: str) -> EventLogSeverity:
         return narrowed
     narrowed_kind = narrow_event_log_kind(kind)
     return EVENT_LOG_SEVERITY[narrowed_kind] if narrowed_kind is not None else EventLogSeverity.CRITICAL
+
+
+def _effective_severity_expr() -> ColumnElement[str]:
+    """SQL twin of :func:`_narrow_persisted_severity`: a recognized stored ``severity`` wins; otherwise the
+    recognized ``kind``'s declared severity; otherwise ``critical``."""
+    t = s.event_log
+    by_severity: dict[EventLogSeverity, list[str]] = {}
+    for kind, sev in EVENT_LOG_SEVERITY.items():
+        by_severity.setdefault(sev, []).append(kind)
+    from_kind = case(
+        *[(t.c.kind.in_(sorted(kinds)), sev.value) for sev, kinds in by_severity.items()],
+        else_=EventLogSeverity.CRITICAL.value,
+    )
+    return case((t.c.severity.in_([sev.value for sev in EventLogSeverity]), t.c.severity), else_=from_kind)
 
 
 def deleted_chunk_ids_stmt(stmts: ScopedStatements) -> Select[Any]:
@@ -409,7 +423,7 @@ class ChunkEventsStore:
         with self._store.read("list_events") as conn:
             stmt = self._store.select(s.event_log)
             if severity is not None:
-                stmt = stmt.where(s.event_log.c.severity == severity)
+                stmt = stmt.where(_effective_severity_expr() == EventLogSeverity(severity).value)
             if runner_id is not None:
                 stmt = stmt.where(s.event_log.c.runner_id == runner_id)
             if chunk_id is not None:
