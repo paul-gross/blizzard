@@ -350,10 +350,13 @@ def test_an_unavailable_secret_of_any_record_refuses_the_visit_naming_the_reposi
     monkeypatch.setattr(secrets, "reveal", reveal_unless_retired)
     chunk_id, nodes = _mint_and_claim(hub)
     _seed_at_deliver(hub, chunk_id, nodes, [("widget", None), ("gadget", None)])
+    before = _event_kinds(hub)
 
     result = _visit(hub, chunk_id, nodes)
 
     assert result.outcome_choice == "failure"
+    # The refusal is an artifact and a route, not an event: the log gains no row.
+    assert _event_kinds(hub) == before
     assert "acme/gadget" not in [repo for _, repo, _ in forge.built] and forge.double.calls == []
     assert "hub-log.repository-secret-unavailable" in _artifact_names(hub, chunk_id)
 

@@ -494,10 +494,18 @@ def test_a_repository_secret_is_revealed_only_for_an_action_that_lands(
     monkeypatch.setattr(hub.services.forges.secrets, "reveal", retired)
     chunk_id = _at_deliver(hub, _graph("test.lands", ("done", "failure")))
     _record_commit(hub, chunk_id, "acme/widget")
+    before = _event_log_kinds(hub, chunk_id)
 
     assert _visit(hub, chunk_id) == choice
+    assert _event_log_kinds(hub, chunk_id) == before
     assert bool(revealed) is lands
     assert (_artifact(hub, chunk_id, "hub-log.repository-secret-unavailable") is not None) is lands
+
+
+def _event_log_kinds(hub: HubHarness, chunk_id: str) -> list[str]:
+    with hub.engine.begin() as conn:
+        rows = conn.execute(hub_scoped(select(s.event_log.c.kind).where(s.event_log.c.chunk_id == chunk_id))).all()
+    return [row.kind for row in rows]
 
 
 def _record_commit(hub: HubHarness, chunk_id: str, repo: str) -> None:

@@ -18,10 +18,11 @@ from blizzard.foundation.artifacts import ArtifactKind
 from blizzard.foundation.clock import FixedClock
 from blizzard.foundation.escalation_causes import EscalationCause
 from blizzard.foundation.hub_event_types import HubEventType
+from blizzard.foundation.landing_policy import LandingPolicy
 from blizzard.hub.config import HubConfig
 from blizzard.hub.delivery.actions.land import Land
 from blizzard.hub.domain.actions.declarations import GitCommits
-from blizzard.hub.domain.actions.effects import LandingRecord
+from blizzard.hub.domain.actions.effects import LandingRecord, MissingCapability
 from blizzard.hub.domain.chunk.model import WorkItemAuthor, decide_close_enqueue
 from blizzard.hub.domain.chunk.no_code import no_code_marker
 from blizzard.hub.domain.chunk.ports.fence import EpochAdmission
@@ -30,6 +31,7 @@ from blizzard.hub.domain.config.repositories import (
     RepositoryId,
     ResolvedRepository,
 )
+from blizzard.hub.domain.config.secrets import SecretName, SecretRetired
 from blizzard.hub.forge.internal.github_landing import GitHubLanding
 from blizzard.hub.forge.landing import (
     Change,
@@ -59,6 +61,7 @@ from blizzard.hub.runtime import Migrations
 from blizzard.hub.store import schema as s
 from blizzard.hub.store.internal.chunk_artifacts_store import ChunkArtifactsStore
 from tests.support.github_double import GREEN, GitHubDouble, change, check, comparison
+from tests.support.hub_node_artifacts import record_hub_asset
 from tests.support.land_action_doubles import (
     _GADGET,  # pyright: ignore[reportPrivateUsage]  # shared test helper, imported from tests.support.land_action_doubles
     _SUBMITTED,  # pyright: ignore[reportPrivateUsage]  # shared test helper, imported from tests.support.land_action_doubles
@@ -1073,11 +1076,185 @@ def test_a_forge_lacking_what_land_requires_escalates_once_before_the_pass(tmp_p
     forge = hub.services.forge_records.get(target.fields.forge_id)
     assert forge is not None
     hub.services.turns.router.escalate_capability_missing(
-        chunk, node, "land", resolved, Capability.CHANGES_MERGE_MERGE, forge=forge, epoch=1
+        chunk,
+        node,
+        resolved,
+        MissingCapability(RepositoryId(resolved.record), (Capability.CHANGES_MERGE_MERGE,)),
+        "repository widget does not offer `changes.merge.merge`, which `land` requires",
+        forge=forge,
+        epoch=1,
     )
     assert _event_kinds(hub).count("forge-capability-missing") == 1
     names = [a.name for a in hub.services.chunks.artifacts.load_artifacts(chunk_id)]
     assert names.count("hub-log.forge-capability-missing") == 1
+
+
+_DIVERGED_GROUP = (Capability.BRANCHES_MERGE, Capability.REFS_CREATE, Capability.REFS_DELETE)
+
+
+def _fast_forward_repositories(*names: str) -> tuple[RepositorySeed, ...]:
+    return tuple(
+        replace(seed, landing_policy=LandingPolicy.FAST_FORWARD) for seed in _REPOSITORIES if seed.repo in names
+    )
+
+
+def _diverged_forge(*repos: str) -> GitHubDouble:
+    double = _forge(*repos)
+    for repo in repos:
+        state = double.repo(repo)
+        state.heads["main"] = "base-tip"
+        state.base_tip = "base-tip"
+        state.compares[("base-tip", _SUBMITTED)] = comparison(ComparisonStatus.DIVERGED)
+    return double
+
+
+def _event_log_rows(hub: HubHarness, chunk_id: str) -> list[str]:
+    with hub.engine.begin() as conn:
+        rows = conn.execute(hub_scoped(select(s.event_log.c.kind).where(s.event_log.c.chunk_id == chunk_id))).all()
+    return sorted(row.kind for row in rows)
+
+
+def _warnings(hub: HubHarness, chunk_id: str) -> list[dict[str, object]]:
+    """The chunk's ``forge-capability-missing`` rows' payloads, each only when its event-logged frame was emitted."""
+    frames = [json.loads(e["data"])["key"] for e in emitted_events(hub) if e["event"] == HubEventType.EVENT_LOGGED]
+    with hub.engine.begin() as conn:
+        rows = conn.execute(
+            hub_scoped(
+                select(s.event_log.c.id, s.event_log.c.detail, s.event_log.c.message).where(
+                    s.event_log.c.chunk_id == chunk_id, s.event_log.c.kind == "forge-capability-missing"
+                )
+            )
+        ).all()
+    assert [f"event_log:{row.id}" for row in rows] == [f for f in frames if f.startswith("event_log:")][-len(rows) :]
+    return [{**json.loads(row.detail), "message": row.message} for row in rows]
+
+
+@pytest.mark.parametrize("omitted", _DIVERGED_GROUP, ids=str)
+def test_a_diverged_fast_forward_missing_a_candidate_capability_announces_the_warning(
+    tmp_path: Path, omitted: Capability
+) -> None:
+    double = _diverged_forge(_WIDGET)
+    offered = frozenset(Capability) - {omitted}
+    hub = build_hub(
+        tmp_path,
+        repositories=_fast_forward_repositories("widget"),
+        forges=double.forges_offering({"github": offered}),
+    )
+    chunk_id = _chunk(hub, _WIDGET)
+
+    assert _take(hub, chunk_id) == "escalated"
+    assert double.writes() == []
+    with hub.engine.begin() as conn:
+        rows = conn.execute(hub_scoped(select(s.escalations).where(s.escalations.c.chunk_id == chunk_id))).all()
+    assert [(row.epoch, row.cause) for row in rows] == [(2, "forge-capability-missing")]
+    warnings = _warnings(hub, chunk_id)
+    assert len(warnings) == 1
+    assert warnings[0]["capability"] == str(omitted)
+    assert warnings[0]["repository"] == _record_id(hub, "widget")
+    assert warnings[0]["forge"] == "http://forge.one"
+    log = _artifact(hub, chunk_id, "hub-log.forge-capability-missing") or ""
+    assert str(omitted) in log and "http://forge.one" in log
+
+    # A second visit finds the chunk escalated: no further warning.
+    assert _take(hub, chunk_id) is None
+    assert len(_warnings(hub, chunk_id)) == 1
+
+
+def test_a_diverged_fast_forward_missing_several_capabilities_announces_the_first_once(tmp_path: Path) -> None:
+    double = _diverged_forge(_WIDGET)
+    offered = frozenset(Capability) - set(_DIVERGED_GROUP)
+    hub = build_hub(
+        tmp_path,
+        repositories=_fast_forward_repositories("widget"),
+        forges=double.forges_offering({"github": offered}),
+    )
+    chunk_id = _chunk(hub, _WIDGET)
+
+    assert _take(hub, chunk_id) == "escalated"
+    warnings = _warnings(hub, chunk_id)
+    assert len(warnings) == 1
+    assert warnings[0]["capability"] == str(_DIVERGED_GROUP[0])
+    log = _artifact(hub, chunk_id, "hub-log.forge-capability-missing") or ""
+    assert all(str(capability) in log for capability in _DIVERGED_GROUP)
+
+
+def _deliver_node_id(hub: HubHarness, chunk_id: str) -> str:
+    chunk = hub.services.chunks.record.get(chunk_id)
+    graph = hub.services.graphs.get(chunk.graph_id) if chunk is not None else None
+    node = graph.node_by_name("deliver") if graph is not None else None
+    assert node is not None
+    return node.node_id
+
+
+def test_a_sibling_with_a_proven_recovered_landing_stays_durable_while_the_other_announces_its_capability_miss(
+    tmp_path: Path,
+) -> None:
+    double = _diverged_forge(_WIDGET, _GADGET)
+    gadget = double.repo(_GADGET)
+    gadget.compares[(_SUBMITTED, "base-tip")] = comparison(ComparisonStatus.AHEAD)
+    offered = frozenset(Capability) - {Capability.REFS_CREATE}
+    hub = build_hub(
+        tmp_path,
+        repositories=_fast_forward_repositories("widget", "gadget"),
+        forges=double.forges_offering({"github": offered}),
+    )
+    chunk_id = _chunk(hub, _WIDGET, _GADGET)
+    record_hub_asset(
+        hub,
+        chunk_id,
+        node_id=_deliver_node_id(hub, chunk_id),
+        node_name="deliver",
+        epoch=1,
+        name=f"fast-forward-candidate/{_GADGET}/{_SUBMITTED}",
+        content=_SUBMITTED,
+    )
+
+    assert _take(hub, chunk_id) == "escalated"
+    warnings = _warnings(hub, chunk_id)
+    assert len(warnings) == 1 and warnings[0]["repository"] == _record_id(hub, "widget")
+    assert [row[0] for row in _landed_rows(hub, chunk_id)] == [_GADGET]
+    assert double.writes() == []
+
+
+def test_a_parked_watch_visit_reveals_and_checks_only_the_watched_repository(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    double = _forge(_WIDGET, _GADGET)
+    seeds = (
+        replace(_REPOSITORIES[0], landing_policy=LandingPolicy.FAST_FORWARD, secret_name="other-forge-token"),
+        replace(_REPOSITORIES[1], landing_policy=LandingPolicy.PARK),
+    )
+    offered = frozenset(Capability) - {Capability.REFS_ADVANCE}
+    hub = build_hub(tmp_path, repositories=seeds, forges=double.forges_offering({"github": offered}))
+    secrets = hub.services.forges.secrets
+    reveal = secrets.reveal
+    revealed: list[str] = []
+
+    def reveal_unless_gadget(name: SecretName):
+        revealed.append(name.value)
+        if name.value == "other-forge-token":
+            raise SecretRetired(name.value)
+        return reveal(name)
+
+    monkeypatch.setattr(secrets, "reveal", reveal_unless_gadget)
+    chunk_id = _chunk(hub, _WIDGET, _GADGET)
+    record_hub_asset(
+        hub,
+        chunk_id,
+        node_id=_deliver_node_id(hub, chunk_id),
+        node_name="deliver",
+        epoch=1,
+        name=f"delivery-pr/{_GADGET}/4",
+        content="4",
+    )
+    before = _event_log_rows(hub, chunk_id)
+
+    _take(hub, chunk_id)
+
+    assert revealed and set(revealed) == {"fixture-forge-token"}
+    assert _artifact(hub, chunk_id, "hub-log.repository-secret-unavailable") is None
+    assert _artifact(hub, chunk_id, "hub-log.forge-capability-missing") is None
+    assert _event_log_rows(hub, chunk_id) == before
 
 
 # --- the landing record's write ------------------------------------------------

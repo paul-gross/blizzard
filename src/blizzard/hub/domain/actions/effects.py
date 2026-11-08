@@ -4,6 +4,7 @@ durable (``bzh:hub-action-purity``)."""
 
 from __future__ import annotations
 
+from collections.abc import Iterable
 from dataclasses import dataclass
 from datetime import datetime
 from enum import StrEnum
@@ -11,6 +12,8 @@ from typing import Protocol
 
 from blizzard.foundation.escalation_causes import EscalationCause
 from blizzard.foundation.roles import domain_model
+from blizzard.hub.domain.config.capabilities import Capability
+from blizzard.hub.domain.config.repositories import RepositoryId
 from blizzard.hub.domain.graph.actions import RESERVED_WAITS
 
 
@@ -75,11 +78,41 @@ class EffectResult:
 
 @domain_model
 @dataclass(frozen=True)
+class MissingCapability:
+    """A forge capability a pass found missing mid-pass: the repository record whose forge lacks it, and every
+    capability it lacks — nonempty, deduplicated, in :class:`Capability` value order."""
+
+    repository: RepositoryId
+    capabilities: tuple[Capability, ...]
+
+    def __post_init__(self) -> None:
+        if not self.capabilities:
+            raise ValueError("a missing-capability reason names at least one capability")
+        if list(self.capabilities) != sorted(set(self.capabilities)):
+            raise ValueError("a missing-capability reason's capabilities are deduplicated and ordered by value")
+
+    @classmethod
+    def of(cls, repository: RepositoryId, missing: Iterable[Capability]) -> MissingCapability:
+        return cls(repository, tuple(sorted(set(missing))))
+
+    @property
+    def first(self) -> Capability:
+        return self.capabilities[0]
+
+
+@domain_model
+@dataclass(frozen=True)
 class ActionEscalation:
-    """Something only a person can settle: the cause the chunk escalates with, and what it is about."""
+    """Something only a person can settle: the cause the chunk escalates with, and what it is about.
+    ``missing`` is the typed reason of a :attr:`EscalationCause.FORGE_CAPABILITY_MISSING` escalation, and only of it."""
 
     cause: EscalationCause
     detail: str
+    missing: MissingCapability | None = None
+
+    def __post_init__(self) -> None:
+        if (self.cause is EscalationCause.FORGE_CAPABILITY_MISSING) != (self.missing is not None):
+            raise ValueError("a missing-capability reason goes with the forge-capability-missing cause, and only it")
 
 
 @domain_model

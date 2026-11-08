@@ -128,11 +128,14 @@ window, naming the forge, the secret, the bucket, the last remaining and limit, 
 
 Each action the hub drives against a forge declares the operations it cannot do without, and each forge kind offers a
 set of them. `land`, for one, reads refs, compares revisions, opens, updates and merges changes, and reads checks.
-Before a `deliver` step's pass, the hub checks every resolved repository's forge against the action's list. A repository
-whose forge lacks one refuses the visit: the hub records a `forge-capability-missing` event naming the capability, the
-repository, and the forge, writes a `hub-log.forge-capability-missing` artifact, and escalates the chunk to a person
-with cause `forge-capability-missing`, before the action runs. Only an operator can change what a forge offers, so the
-remedy is a forge of a kind that offers the capability, or an action that does not ask for it.
+Before a `deliver` step's pass, the hub checks every resolved repository's forge against the action's list. A policy may
+also need an operation only some work reveals, such as the branch operations a diverged fast-forward landing uses; the
+hub checks those when it finds the need, before any unsupported mutation. A repository whose forge lacks one refuses the
+visit: the hub records a `forge-capability-missing` event naming the capability, the repository, and the forge, writes a
+`hub-log.forge-capability-missing` artifact, and escalates the chunk to a person with cause `forge-capability-missing`.
+A step that needs a forge handle reveals credentials only for the repositories that handle serves. Only an operator can
+change what a forge offers, so the remedy is a forge of a kind that offers the capability, or an action that does not
+ask for it.
 
-An action can live without some operations. `land` re-runs a failing check once only when the forge offers it, and
-otherwise routes the failure as it would after one re-run.
+An action can live without some operations, unlike the necessities above. `land` re-runs a failing check once only when
+the forge offers it, and otherwise routes the failure as it would after one re-run.
