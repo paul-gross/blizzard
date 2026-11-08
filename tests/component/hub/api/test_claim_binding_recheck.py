@@ -35,12 +35,13 @@ def _claim(world: BindingWorld, slug: str, workspace_id: str) -> Any:
 def _recorded(world: BindingWorld, slug: str) -> tuple[int, int, int]:
     """The chunk's route, route-token and epoch-owner rows — what a won claim writes."""
     chunk_id = world.chunks[slug]
-    tables = (s.route_created, s.route_token_minted, s.epoch_owners)
     with world.hub.engine.connect() as conn:
-        return tuple(  # type: ignore[return-value]
-            conn.execute(hub_scoped(select(func.count()).select_from(t).where(t.c.chunk_id == chunk_id))).scalar_one()
-            for t in tables
-        )
+
+        def count(table: Any) -> int:
+            query = select(func.count()).select_from(table).where(table.c.chunk_id == chunk_id)
+            return int(conn.execute(hub_scoped(query)).scalar_one())
+
+        return count(s.route_created), count(s.route_token_minted), count(s.epoch_owners)
 
 
 def _route(world: BindingWorld, slug: str) -> Any:
