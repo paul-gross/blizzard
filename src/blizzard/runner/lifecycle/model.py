@@ -342,8 +342,9 @@ def interrupted_claim_move(
 
 
 def recovery_owner(latest: Lease | None) -> str | None:
-    """The owner a recovery spawn mints under: the chunk's latest lease's own owner, else none —
-    the genuinely fresh case the caller's default decides."""
+    """The owner a recovery spawn proposes to mint under: the chunk's latest lease's own owner, else
+    none — the genuinely fresh case the caller's default decides. Only a proposal: the spawn keeps it
+    while the deciding envelope admits it (``carried_owner_move``)."""
     return latest.harness_id if latest is not None else None
 
 
@@ -411,10 +412,23 @@ def escalation_mint_admitted(open_escalation: ParkedEscalation | None) -> bool:
     return open_escalation is None
 
 
-def retry_owner_admitted(harness_id: str | None, acceptable: Sequence[str]) -> bool:
-    """A retry keeps its owner only while that owner is still in the node's acceptable set; an
-    empty set admits any owner."""
-    return not acceptable or harness_id in acceptable
+class CarriedOwnerMove(StrEnum):
+    """What a fresh mint does with the owner it carries from a prior lease."""
+
+    SELECT = "select"
+    KEEP = "keep"
+    REFUSE = "refuse"
+
+
+def carried_owner_move(carried_owner: str | None, acceptable: Sequence[str]) -> CarriedOwnerMove:
+    """A fresh mint that carries its prior lease's owner — a retry, or a recovery spawn — keeps it
+    only while the deciding envelope's acceptable set still admits it (an empty set admits any
+    owner), else refuses it; with no carried owner the mint selects as an ordinary one does."""
+    if carried_owner is None:
+        return CarriedOwnerMove.SELECT
+    if not acceptable or carried_owner in acceptable:
+        return CarriedOwnerMove.KEEP
+    return CarriedOwnerMove.REFUSE
 
 
 # --------------------------------------------------------------------------------------------- #

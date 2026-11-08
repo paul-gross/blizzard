@@ -285,10 +285,12 @@ so a later harness resolving an earlier-preferred model still loses to an earlie
 two or more acceptable harnesses, resolution is strict: a harness resolving none of the model preference is skipped
 entirely rather than falling back within it, so the single-harness fallback above holds only for that single-member case
 — a multi-harness set instead moves on to the next member, and only escalates (`no-acceptable-harness`,
-[observability.md](./observability.md)) once every member is exhausted. A retry keeps its prior lease's own owner when
-that owner is still a member of the (possibly since-edited) acceptable set, and escalates the same way when it has
-fallen out of one. A rotated session pool's replacement is a fresh mint instead: it walks the set from its first member
-and escalates the same way, whatever owned the session it replaces.
+[observability.md](./observability.md)) once every member is exhausted. A retry, and a recovery that starts a fresh
+session for an interrupted claim (an adopted same-node or restart entry, a requeue resumed, a reclaimed claim), keep the
+prior lease's own owner when that owner is still a member of the current envelope's (possibly since-edited) acceptable
+set, and escalate the same way, spawning nothing, when it has fallen out of one; a chunk with no prior owner selects as
+any fresh mint does. A rotated session pool's replacement is a fresh mint instead: it walks the set from its first
+member and escalates the same way, whatever owned the session it replaces.
 
 ## OpenCode configuration
 

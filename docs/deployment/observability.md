@@ -75,13 +75,14 @@ harness is resolvable again (that runner build), the operator can take the sessi
 escalation still takes one of the supersessions below.
 
 `no-acceptable-harness` (critical): distinct from `owner-unresolvable` above in reaching only a fresh mint, with no
-existing session to name — every member of the node's acceptable harness set ([worker-spawn.md](./worker-spawn.md) owns
-that set and its resolution) is unknown, unavailable, **unhealthy**, or resolves none of the session's model preference.
-**Unhealthy** is distinct from unavailable: a bound harness with every capability wired can still fail its own computed
-health — a missing binary, an incompatible or unknown observed version, failed authentication, a `config_conflict` (an
-ambient setting that defeats the runner's own wiring, or, on OpenCode, a failed check of the operator's service or
-store, each named in the runner's log — [worker-spawn.md](./worker-spawn.md#opencode-configuration) lists them), an
-unmapped configured tier, or a recorded selftest failure, all visible with their cause in this runner's own
+existing session to name — a retry or an interrupted-claim recovery whose prior owner is no longer a member of the set,
+or every member of the node's acceptable harness set ([worker-spawn.md](./worker-spawn.md) owns that set and its
+resolution) is unknown, unavailable, **unhealthy**, or resolves none of the session's model preference. **Unhealthy** is
+distinct from unavailable: a bound harness with every capability wired can still fail its own computed health — a
+missing binary, an incompatible or unknown observed version, failed authentication, a `config_conflict` (an ambient
+setting that defeats the runner's own wiring, or, on OpenCode, a failed check of the operator's service or store, each
+named in the runner's log — [worker-spawn.md](./worker-spawn.md#opencode-configuration) lists them), an unmapped
+configured tier, or a recorded selftest failure, all visible with their cause in this runner's own
 `GET
 /runners/{runner_id}/api/harness-health` diagnostics. The escalation's cause is `no-acceptable-harness`, and its
 detail names each attempted harness and why it was skipped; `blizzard runner status` prints each harness's id,

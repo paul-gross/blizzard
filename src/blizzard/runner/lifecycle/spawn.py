@@ -52,8 +52,10 @@ from blizzard.runner.lifecycle.artifacts import IWriteGraphArtifactRepository, P
 from blizzard.runner.lifecycle.env_release import EnvironmentRelease
 from blizzard.runner.lifecycle.judgement.elicitation_files import IElicitationFiles
 from blizzard.runner.lifecycle.model import (
+    CarriedOwnerMove,
     MintOwnerSource,
     SpawnHold,
+    carried_owner_move,
     escalation_mint_admitted,
     mint_owner_source,
     next_lease_epoch,
@@ -567,6 +569,34 @@ class Spawner:
         from blizzard.runner.lifecycle.attempt import Attempt
 
         Attempt(self.ctx, lease).escalate_harness_version_refused(exc, via=via)
+
+    def spawn_carrying_owner(
+        self,
+        chunk_id: str,
+        envelope: Envelope,
+        environments: list[AcquiredEnvironment],
+        *,
+        via: str,
+        carried_owner: str | None,
+    ) -> None:
+        """A fresh mint that carries its prior lease's owner: keeps it while ``envelope`` still
+        admits it, escalates ``no-acceptable-harness`` without substituting another owner when it
+        does not, and selects as an ordinary mint when no owner is carried. Retry and
+        interrupted-claim recovery go through here; a continuation or node entry goes through
+        ``spawn`` or ``enter_node`` and is never guarded."""
+        acceptable = envelope.node.session_harnesses
+        move = carried_owner_move(carried_owner, acceptable)
+        if move is CarriedOwnerMove.REFUSE:
+            assert carried_owner is not None  # only a carried owner can be refused
+            self.escalate_no_acceptable_harness(
+                chunk_id,
+                envelope,
+                attempted=acceptable,
+                skipped=(SkippedHarness(carried_owner, "not-a-member"),),
+                via=via,
+            )
+            return
+        self.spawn(chunk_id, envelope, environments, via=via, harness_id=carried_owner)
 
     def escalate_no_acceptable_harness(
         self,

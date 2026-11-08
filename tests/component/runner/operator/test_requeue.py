@@ -277,6 +277,54 @@ def test_fill_requeue_resume_carries_the_failed_leases_own_harness_owner(tmp_pat
     assert fresh is not None and fresh.session == SessionReference("other", "sess-c")
 
 
+def test_fill_requeue_resume_spawns_nothing_when_the_owner_is_no_longer_admitted(tmp_path: Path) -> None:
+    """A requeue pending across a newer target that excludes the escalated lease's owner mints no worker
+    under it and no substitute. A requeue leaves the chunk's original escalation open, so the refusal's own
+    escalation is not minted a second time: the original stays the one visible escalation, every FILL adds
+    nothing, and the pending mark stays for an operator's restart or a re-admitting target."""
+    store = _store(tmp_path)
+    _seed_escalated_chunk(store, harness_id="other")
+    _service(store).requeue(_scope(store))
+
+    hub = FakeHub()
+    hub.envelopes["ch_1"] = make_envelope(
+        "ch_1", "build", node_id="nd_build", choices=[("pass", "ok")], session_harnesses=[CLAUDE_CODE_HARNESS_ID]
+    )
+    hub.queue = []
+    default = FakeHarness(handle=_HANDLE, verdict=None)
+    other = FakeHarness(
+        handle=WorkerHandle(session_id="sess-c", pid=300, process_start_time="start-300", pgid=300), verdict=None
+    )
+    ctx = make_context(
+        store,
+        hub=hub,
+        provider=FakeProvider({"e1": "/ws/e1"}),
+        harness=default,
+        probe=FakeProbe(),
+        clock=FixedClock(_EVEN_LATER),
+    )
+    registry = HarnessRegistry(
+        {
+            CLAUDE_CODE_HARNESS_ID: HarnessBinding(adapter=default, transcript_source=default.transcript_source()),
+            "other": HarnessBinding(adapter=other, transcript_source=other.transcript_source()),
+        }
+    )
+    ctx = replace(
+        ctx,
+        harnesses=registry,
+        sessions=replace(ctx.sessions, harnesses=registry),
+        usage=replace(ctx.usage, harnesses=registry),
+    )
+
+    Fill(ctx).run()
+    Fill(ctx).run()
+
+    assert default.spawns == [] and other.spawns == []
+    assert store.pending_requeue_chunk_ids() == {"ch_1"}
+    assert [e.lease_id for e in store.open_escalations() if e.chunk_id == "ch_1"] == ["lease_1"]
+    assert store.active_lease_for_chunk("ch_1") is None
+
+
 def test_fill_releases_the_binding_when_a_requeued_chunk_is_no_longer_routed_here(tmp_path: Path) -> None:
     store = _store(tmp_path)
     _seed_escalated_chunk(store)
