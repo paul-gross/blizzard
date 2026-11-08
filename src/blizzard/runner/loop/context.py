@@ -281,6 +281,7 @@ if TYPE_CHECKING:
     from blizzard.runner.lifecycle.judgement.judgement import JudgementContext
     from blizzard.runner.lifecycle.orphan import OrphanContext
     from blizzard.runner.lifecycle.registration import RegistrationContext
+    from blizzard.runner.lifecycle.restart_resume import RestartResumeContext
     from blizzard.runner.lifecycle.spawn import SpawnContext
     from blizzard.runner.lifecycle.usage_limit import UsageLimitContext
     from blizzard.runner.throttle.gate import GateContext
@@ -325,6 +326,8 @@ if TYPE_CHECKING:
     _usage_limit_conforms: type[UsageLimitContext] = LoopContext
 
     _dormant_conforms: type[DormantContext] = LoopContext
+
+    _restart_resume_conforms: type[RestartResumeContext] = LoopContext
 
     _judgement_conforms: type[JudgementContext] = LoopContext
 

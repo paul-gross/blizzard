@@ -36,10 +36,11 @@ from blizzard.runner.leases.activity import HEARTBEAT_STALENESS_THRESHOLD
 from blizzard.runner.leases.model import NewLease
 from blizzard.runner.lifecycle.attempt import Attempt
 from blizzard.runner.lifecycle.held_chunk import HeldChunk
+from blizzard.runner.lifecycle.resume_intents import ResumeIntents
 from blizzard.runner.lifecycle.shutdown_drain import SHUTDOWN_DRAIN_DEADLINE
 from blizzard.runner.lifecycle.spawn import Spawner
 from blizzard.runner.loop.context import LoopConfig, LoopContext
-from blizzard.runner.loop.steps import Advance, Fill, Pull, Reap, ResumeIntents
+from blizzard.runner.loop.steps import Advance, Fill, Pull, Reap
 from blizzard.runner.loop.tick import tick
 from blizzard.runner.node_steps.chunk_state import ChunkPause, ChunkState
 from blizzard.runner.node_steps.submissions import ApplyReply

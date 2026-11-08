@@ -59,10 +59,11 @@ from blizzard.runner.lifecycle.attempt import Attempt
 from blizzard.runner.lifecycle.claim import InterruptedClaims, ReadyQueue
 from blizzard.runner.lifecycle.judgement.judgement import Judgement
 from blizzard.runner.lifecycle.judgement.produces import ProducesReconciler
+from blizzard.runner.lifecycle.resume_intents import ResumeIntents
 from blizzard.runner.lifecycle.session import HarnessSelection, HarnessSelector, SessionResolver, SkippedHarness
 from blizzard.runner.lifecycle.spawn import Spawner
 from blizzard.runner.loop.context import LoopConfig, ResolvedSubscription
-from blizzard.runner.loop.steps import Advance, Fill, Pull, Reap, Resume, ResumeIntents
+from blizzard.runner.loop.steps import Advance, Fill, Pull, Reap, Resume
 from blizzard.runner.loop.tick import tick
 from blizzard.runner.node_steps.chunk_state import ChunkSpend, ChunkState
 from blizzard.runner.node_steps.envelope import ProducesSpec

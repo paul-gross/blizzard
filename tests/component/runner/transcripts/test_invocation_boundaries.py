@@ -19,8 +19,9 @@ from blizzard.runner.harness.transcript import TranscriptPosition
 from blizzard.runner.hub.client import HubQuestion, QueueEntry
 from blizzard.runner.leases.model import NewLease
 from blizzard.runner.lifecycle.attempt import Attempt
+from blizzard.runner.lifecycle.resume_intents import ResumeIntents
 from blizzard.runner.lifecycle.spawn import Spawner
-from blizzard.runner.loop.steps import Advance, Fill, Resume, ResumeIntents
+from blizzard.runner.loop.steps import Advance, Fill, Resume
 from blizzard.runner.node_steps.chunk_state import ChunkState
 from blizzard.runner.node_steps.submissions import ApplyReply
 from tests.support.runner_fakes import (
