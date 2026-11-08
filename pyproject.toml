@@ -315,9 +315,15 @@ src = [".", "src", "exemplars/python"]
 extend-exclude = ["src/blizzard/*/store/migrations/versions"]
 
 [tool.ruff.lint]
-select = ["E", "F", "I", "UP", "B", "C4", "SIM", "RUF"]
+select = ["E", "F", "I", "UP", "B", "C4", "SIM", "RUF", "TID251"]
+
+[tool.ruff.lint.flake8-tidy-imports.banned-api]
+"blizzard.runner.harness.opencode_v2.transport.UrllibServiceTransport".msg = "A runner command reaches the OpenCode 2 service through RunnerCliCollaborators.service (bzh:dependency-injection)."
 
 [tool.ruff.lint.per-file-ignores]
+# The UrllibServiceTransport ban binds runner command modules only; the carrier is where the production one is built.
+"!src/blizzard/runner/cli/*.py" = ["TID251"]
+"src/blizzard/runner/cli/children.py" = ["TID251"]
 # Wire models subclass `WireModel`, which ruff cannot see is a pydantic model; pydantic copies a field's mutable default
 # per instance, as ruff's own exemption for `BaseModel` subclasses assumes.
 "src/blizzard/wire/*" = ["RUF012"]

@@ -8,9 +8,12 @@ in both ``src/blizzard/runner/harness/claude_code/adapter.py`` and
 from __future__ import annotations
 
 import json
+import re
 from collections.abc import Callable, Mapping, Sequence
+from dataclasses import dataclass
 
 from blizzard.foundation.logging import get_logger
+from blizzard.foundation.roles import domain_model
 from blizzard.foundation.trace_export.settings import SUPPORTED_PROTOCOL
 from blizzard.runner.harness.adapter import WorkerPreamble
 from blizzard.runner.harness.json_value import JsonObject, decode_json
@@ -28,6 +31,49 @@ SEMVER_VERSION_GROUP = (
     r"(?P<version>\d+\.\d+\.\d+"
     r"(?:(?:-[0-9A-Za-z][0-9A-Za-z.-]*)|(?:\+[0-9A-Za-z][0-9A-Za-z.-]*)|(?:\.[0-9A-Za-z][0-9A-Za-z.-]*))?)"
 )
+
+#: Cap each text / thinking / tool-output transcript block at this many characters.
+MAX_BLOCK_CHARS = 1024 * 1024
+
+_COMPACTION_WINDOW = re.compile(r"auto|(?P<count>[0-9]+)(?P<thousands>[kK]?)")
+
+
+def cap_block(raw: str) -> tuple[str, bool]:
+    """``raw`` capped at :data:`MAX_BLOCK_CHARS` characters, and whether it was cut. The cap is
+    read at call time, so a test that patches it takes effect."""
+    if len(raw) > MAX_BLOCK_CHARS:
+        return raw[:MAX_BLOCK_CHARS], True
+    return raw, False
+
+
+@domain_model
+@dataclass(frozen=True)
+class CompactionWindow:
+    """A well-formed compaction-window spelling: ``auto`` (``tokens`` is ``None``) or a token count."""
+
+    spelling: str
+    tokens: int | None
+
+
+@domain_model
+@dataclass(frozen=True)
+class InvalidCompactionWindow:
+    """A compaction-window spelling outside ``auto|[0-9]+[kK]?``."""
+
+    spelling: str
+
+
+def parse_compaction_window(value: str | None) -> CompactionWindow | InvalidCompactionWindow | None:
+    """``None`` for no window, else the parsed window or the invalid spelling. Case-sensitive, ASCII
+    digits only, no whitespace tolerance; a ``k``/``K`` suffix multiplies by 1000."""
+    if value is None:
+        return None
+    match = _COMPACTION_WINDOW.fullmatch(value)
+    if match is None:
+        return InvalidCompactionWindow(value)
+    if match["count"] is None:
+        return CompactionWindow(value, None)
+    return CompactionWindow(value, int(match["count"]) * (1000 if match["thousands"] else 1))
 
 
 def decode_json_object(text: str) -> JsonObject:

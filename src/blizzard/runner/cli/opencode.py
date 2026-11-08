@@ -66,9 +66,7 @@ from blizzard.runner.harness.opencode_v2.registration import (
 )
 from blizzard.runner.harness.opencode_v2.request import DriveRequestError, take_request
 from blizzard.runner.harness.opencode_v2.result import Outcome, ResultWriter
-from blizzard.runner.harness.opencode_v2.transport import (
-    UrllibServiceTransport,
-)
+from blizzard.runner.harness.opencode_v2.transport import IServiceTransport
 from blizzard.runner.harness.opencode_v2.version import (
     ADMITTED_OPENCODE_V2_RANGE,
     ADMITTED_OPENCODE_V2_RANGE_TEXT,
@@ -146,6 +144,7 @@ def opencode_compatibility(
     if v2_version is not None and version_admitted(v2_version, ADMITTED_OPENCODE_V2_RANGE):
         _opencode_two_compatibility(
             children,
+            carrier.service,
             tool_env,
             binary,
             ModelReference(provider, model_id, variant),
@@ -206,6 +205,7 @@ _OPENCODE_DIRECTORY_VARIABLES = ("XDG_CONFIG_HOME", "XDG_DATA_HOME", "XDG_STATE_
 
 def _opencode_two_compatibility(
     children: IChildProcesses,
+    service: IServiceTransport,
     tool_env: ChildEnv,
     binary: Path,
     model: ModelReference,
@@ -222,13 +222,12 @@ def _opencode_two_compatibility(
         scratch.mkdir()
         (scratch / "README.md").write_text("blizzard compatibility proof\n")
         host.run(["git", "init", "-q", "."], cwd=scratch, timeout=30)
-        transport = UrllibServiceTransport()
         proof = OpenCodeTwoProof(
             binary=str(binary),
             model=model,
             scratch=scratch,
             host=host,
-            core_factory=lambda: DriverCore(source, transport),
+            core_factory=lambda: DriverCore(source, service),
             migration=StoreMigrationProbe(
                 binary=str(binary),
                 opencode1=str(opencode1_binary) if opencode1_binary else None,
@@ -296,7 +295,8 @@ def _registration(path: Path | None, passwords: set[str]) -> ServiceRegistration
     type=click.Path(dir_okay=False, path_type=Path),
     help="The turn's request file, written by the runner; read once, then removed.",
 )
-def opencode_drive(request_path: Path) -> None:
+@click.pass_context
+def opencode_drive(ctx: click.Context, request_path: Path) -> None:
     """Worker: drive one OpenCode 2 turn on the operator's managed service and print its result.
 
     The worker entrypoint the OpenCode 2 binding launches for each spawn, resume, judgement, and nudge, not meant to
@@ -305,10 +305,11 @@ def opencode_drive(request_path: Path) -> None:
         request = take_request(request_path)
     except DriveRequestError as exc:
         raise click.ClickException(str(exc)) from exc
+    service = RunnerCliCollaborators.of(ctx).service
     environment = dict(os.environ)
     path = registration_path(environment)
     try:
-        core = DriverCore(lambda: read_registration(path) if path is not None else None, UrllibServiceTransport())
+        core = DriverCore(lambda: read_registration(path) if path is not None else None, service)
     except BIND_FAULTS as exc:
         error = TurnError(ErrorKind.SERVICE, f"no OpenCode service to drive the turn on: {exc}")
         ResultWriter(sys.stdout, request.session_id).finish(Outcome.FAILED, "", (), error)
@@ -350,15 +351,17 @@ def _model_reference(ctx: click.Context, param: click.Parameter, value: str | No
     show_default=True,
     help="The OpenCode 2 executable that opens the session.",
 )
-def opencode_attend(session_id: str, model: ModelReference | None, binary: str) -> None:
+@click.pass_context
+def opencode_attend(ctx: click.Context, session_id: str, model: ModelReference | None, binary: str) -> None:
     """Take over a fleet OpenCode 2 session in the operator's own OpenCode.
 
     Interrupts the session's tree, best effort, replaces its rules with the attended set, switches it to --model when
     it runs another, then runs the --opencode executable on it. Refuses a session no blizzard runner minted. The
     runner's takeover composes this; a later driven resume re-applies the unattended rules and the lease's agent."""
+    service = RunnerCliCollaborators.of(ctx).service
     path = registration_path(os.environ)
     try:
-        core = DriverCore(lambda: read_registration(path) if path is not None else None, UrllibServiceTransport())
+        core = DriverCore(lambda: read_registration(path) if path is not None else None, service)
     except BIND_FAULTS as exc:
         raise click.ClickException(f"no OpenCode service holds the session: {exc}") from exc
     try:

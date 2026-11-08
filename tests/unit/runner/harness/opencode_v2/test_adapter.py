@@ -13,6 +13,7 @@ from pathlib import Path
 from typing import Any
 
 import pytest
+from structlog.testing import capture_logs
 
 from blizzard.foundation.ids import Id
 from blizzard.runner.environments.provider import AcquiredEnvironment
@@ -265,6 +266,7 @@ def test_models_and_efforts_resolve_and_takeover_goes_through_attend(tmp_path: P
     assert adapter.resolve_effort("x") == "max" and adapter.resolve_effort("weird") is None
     assert adapter.resolve_compaction_window("auto") == "auto" and adapter.resolve_compaction_window("x") is None
     assert window_tokens("auto") is None and window_tokens("150000") == 150_000
+    assert window_tokens("8K") == 8000 and window_tokens("AUTO") is None and window_tokens("8 k") is None
     command = adapter.resume_command("/w", "ses_1", model="openai/gpt-6-luna", effort="high")
     assert command == "cd /w && blizzard runner opencode attend ses_1 --model 'openai/gpt-6-luna#high'"
     attended = adapter.resume_command("/my work", "ses_1", attended=True)
@@ -389,3 +391,11 @@ def test_a_reported_cost_in_the_records_is_summed(tmp_path: Path) -> None:
     lines = [_record("ses_r", None, _step("msg_1", "openai/gpt-6-luna", cost=0.25))] * 2
     assert adapter.sum_transcript_usage(lines, "spawn").cost_usd == 0.5
     assert adapter.observed_model([]) is None
+
+
+def test_an_invalid_compaction_window_is_dropped_without_a_log(tmp_path: Path) -> None:
+    adapter, _ = _adapter(tmp_path)
+    with capture_logs() as logs:
+        assert adapter.resolve_compaction_window("150k tokens") is None
+        assert adapter.resolve_compaction_window("8K") == "8K"
+    assert logs == []

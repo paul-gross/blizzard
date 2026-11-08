@@ -71,7 +71,6 @@ _EFFORT_ORDINAL = frozenset({"low", "medium", "high", "max"})
 
 # `--autocompact`'s own vocabulary shape: a recognition check, not the
 # CLI's own 100k-1M range (enforced CLI-side, never re-implemented here).
-_COMPACTION_WINDOW_RE = re.compile(r"auto|[0-9]+[kK]?")
 
 # The synthetic record's own reset-time phrasing (the 2026-09-05 shape):
 # "resets 5:40pm (America/Chicago)" — a clock time in an IANA zone, never a duration.
@@ -300,7 +299,7 @@ class ClaudeCodeAdapter:
         """``"auto"`` or a token-count spelling, else dropped and logged once."""
         if value is None:
             return None
-        if _COMPACTION_WINDOW_RE.fullmatch(value):
+        if isinstance(harness_shared.parse_compaction_window(value), harness_shared.CompactionWindow):
             return value
         if value not in self._unrecognized_compaction_windows:
             self._unrecognized_compaction_windows.add(value)

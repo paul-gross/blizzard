@@ -351,7 +351,7 @@ class OpenCodeAdapter:
         """Numeric windows map to a model input limit accounting for OpenCode's reserve."""
         if value is None:
             return None
-        if re.fullmatch(r"auto|[0-9]+[kK]?", value):
+        if isinstance(harness_shared.parse_compaction_window(value), harness_shared.CompactionWindow):
             return value
         if value not in self._unrecognized_compaction_windows:
             self._unrecognized_compaction_windows.add(value)

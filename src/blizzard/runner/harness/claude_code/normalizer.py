@@ -15,6 +15,7 @@ from dataclasses import dataclass, field, replace
 from datetime import UTC, datetime
 
 from blizzard.foundation.roles import adapter_model, domain_model
+from blizzard.runner.harness.harness_shared import cap_block
 from blizzard.runner.harness.json_value import JsonObject, JsonValue, decode_json
 from blizzard.runner.harness.transcript import (
     LateToolOutput,
@@ -28,9 +29,6 @@ from blizzard.runner.harness.transcript import (
 
 #: The normalizer version stamped onto every batch; bumped when this module's output changes.
 NORMALIZER_VERSION = "claude-code-jsonl/2"
-
-#: Cap each text / thinking / tool-output string block at this many characters.
-MAX_BLOCK_CHARS = 1024 * 1024
 
 #: Control records: plumbing, never conversation — named so each drop is explicit.
 _CONTROL_TYPES = frozenset(
@@ -84,17 +82,14 @@ def _infer_agent_type(tool: ToolCall | None, fallback: str | None) -> str | None
 @domain_model
 @dataclass(frozen=True)
 class Text:
-    """One string block, ANSI-stripped and capped at :data:`MAX_BLOCK_CHARS`."""
+    """One string block, ANSI-stripped and capped at :data:`~blizzard.runner.harness.harness_shared.MAX_BLOCK_CHARS`."""
 
     text: str
     truncated: bool
 
     @classmethod
     def of(cls, raw: str) -> Text:
-        stripped = _ANSI_RE.sub("", raw)
-        if len(stripped) > MAX_BLOCK_CHARS:
-            return cls(stripped[:MAX_BLOCK_CHARS], True)
-        return cls(stripped, False)
+        return cls(*cap_block(_ANSI_RE.sub("", raw)))
 
     @classmethod
     def of_content(cls, content: JsonValue | Sequence[JsonValue]) -> Text:

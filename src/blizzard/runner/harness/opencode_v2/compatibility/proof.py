@@ -4,7 +4,6 @@ interrupted and removed on every exit path."""
 
 from __future__ import annotations
 
-import re
 import secrets
 import time
 from collections.abc import Callable, Generator, Mapping, Sequence
@@ -14,6 +13,7 @@ from pathlib import Path
 
 from blizzard.runner.harness.admission import version_admitted
 from blizzard.runner.harness.compatibility import EvidenceState
+from blizzard.runner.harness.harness_shared import find_choice_verdict
 from blizzard.runner.harness.json_value import JsonObject, JsonValue, decode_json
 from blizzard.runner.harness.opencode_v2.client import (
     MESSAGE_PAGE_LIMIT,
@@ -46,7 +46,6 @@ from blizzard.runner.harness.opencode_v2.version import (
 
 PROOF_METADATA_KEY = "blizzard"
 TURN_TIMEOUT_SECONDS = 240.0
-_CHOICE = re.compile(r"<Choice>\s*(?P<choice>[A-Za-z_-]+)\s*</Choice>")
 
 
 type CoreFactory = Callable[[], DriverCore]
@@ -540,11 +539,11 @@ class OpenCodeTwoProof:
         self.turn(session_id, script.RESUME_PROMPT)
         messages = self.turn(session_id, script.JUDGEMENT_PROMPT)
         final = final_assistant_text(messages)
-        match = _CHOICE.search(final)
+        verdict = find_choice_verdict(final)
         isolated = "tool-output-not-the-verdict" not in final
         self.capture("judgement_messages", list[JsonValue](messages))
-        facts: JsonObject = {"choice": match.group("choice") if match else None, "free_of_tool_output": isolated}
-        ok = match is not None and isolated
+        facts: JsonObject = {"choice": verdict, "free_of_tool_output": isolated}
+        ok = verdict is not None and isolated
         return RowObservation(
             ProofRow.JUDGEMENT,
             EvidenceState.OBSERVED if ok else EvidenceState.FAILED,
