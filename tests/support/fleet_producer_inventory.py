@@ -171,7 +171,7 @@ _MODELS = {
         ),
         (
             "blizzard.hub.api.fleet.hub_advance",
-            "HubAdvanceResponse(chunk_id=chunk_id, status=facts.status(), ran=False, detail=describe_standing(facts, node, services.flows.visit_standing(chunk_id, node_id=node.node_id, epoch=epoch), epoch=epoch, now=services.clock.now(), flow_name=_flow_namer(services)))",
+            "HubAdvanceResponse(chunk_id=chunk_id, status=facts.status(), ran=False, detail=describe_standing(facts, node, standing, epoch=epoch, now=services.clock.now(), flow_name=_flow_namer(services, standing.submission.flows if standing is not None else ())))",
         ),
     },
     ("POST", "/api/fleet/chunks/{chunk_id}/release"): {

@@ -10,12 +10,14 @@ from pathlib import Path
 from typing import Any
 
 import pytest
+import sqlalchemy as sa
 
 from blizzard.foundation.escalation_causes import EscalationCause
 from blizzard.hub.api.board_window import BOARD_DONE_WINDOW
 from blizzard.hub.domain.actions.effects import ActionEscalation, Pass
 from blizzard.hub.domain.chunk.model import CloseEnqueueDecision, WorkRef
 from blizzard.hub.domain.delivery.flows import Submission, SubmissionRecord
+from blizzard.hub.store import schema as s
 from blizzard.hub.store.internal.flow_store import FlowStore
 from tests.support.flow_driver_world import (
     _GRAPH,  # pyright: ignore[reportPrivateUsage]  # shared test helper, imported from tests.support.flow_driver_world
@@ -23,7 +25,15 @@ from tests.support.flow_driver_world import (
 )
 from tests.support.flow_route_lines import Line
 from tests.support.hub_node_artifacts import record_landing
-from tests.support.scaffolding import chunk_stores, hub_store_connections, report_lease, seed_runner
+from tests.support.scaffolding import (
+    chunk_stores,
+    count_rows_read,
+    hub_scoped,
+    hub_store_connections,
+    report_lease,
+    seed_runner,
+    stamp,
+)
 
 
 @pytest.fixture
@@ -307,3 +317,161 @@ def test_a_conflict_bounce_is_rework_only_while_its_turn_routes_it_back_and_not_
     second = latest()
     assert world.detail(chunk_id)["status"] == "needs_human"
     assert (second["cause"], second["withdrawn"], second["rework"]) == ("conflict", False, False)
+
+
+# --- open turns bounded by the connected line ---
+
+
+def _seed_submission(
+    line: Line, *, chunk_id: str, node: str, flow_ids: Sequence[str], turning: bool, turn_id: str, ago: int = 0
+) -> str:
+    """A bare open submission of ``chunk_id`` on ``flow_ids`` (none for an unrelated one), optionally mid-turn."""
+    now = line.world.hub.clock.now() - timedelta(seconds=ago)
+    submission_id = f"fsub_{node}"
+    with line.world.hub.engine.begin() as conn:
+        arrival = conn.execute(hub_scoped(sa.select(sa.func.max(s.flow_submissions.c.arrival)))).scalar_one() or 0
+        conn.execute(
+            sa.insert(s.flow_submissions).values(
+                stamp(
+                    s.flow_submissions,
+                    submission_id=submission_id,
+                    chunk_id=chunk_id,
+                    node_id=node,
+                    epoch=1,
+                    generation=0,
+                    arrival=arrival + 1,
+                    submitted_at=now,
+                )
+            )
+        )
+        for flow_id in flow_ids:
+            conn.execute(
+                sa.insert(s.flow_submission_flows).values(
+                    stamp(s.flow_submission_flows, submission_id=submission_id, flow_id=flow_id)
+                )
+            )
+        if turning:
+            conn.execute(
+                sa.insert(s.hub_turns).values(
+                    stamp(s.hub_turns, turn_id=turn_id, submission_id=submission_id, started_at=now)
+                )
+            )
+    return submission_id
+
+
+def _seed_flow(line: Line, name: str) -> str:
+    flow_id = f"flw_{name}"
+    with line.world.hub.engine.begin() as conn:
+        conn.execute(
+            sa.insert(s.flows).values(
+                stamp(
+                    s.flows,
+                    flow_id=flow_id,
+                    resource=f"repo:rp_{name}/main",
+                    repository_id=f"rp_{name}",
+                    branch="main",
+                    created_at=line.world.hub.clock.now(),
+                )
+            )
+        )
+    return flow_id
+
+
+def test_open_turns_on_unrelated_flows_do_not_widen_the_reads(line: Line) -> None:
+    line.world.poll_due()
+    engine = line.world.hub.engine
+    submissions = [
+        _seed_submission(line, chunk_id=line.first, node=f"unrelated{i}", flow_ids=[], turning=False, turn_id="")
+        for i in range(6)
+    ]
+
+    def reads() -> tuple[int, int, Any, Any]:
+        chunks = line.client.get("/api/chunks").json()
+        flow = line.client.get(f"/api/flows/{line.flow_id}").json()
+        return (
+            count_rows_read(engine, lambda: line.client.get("/api/chunks")),
+            count_rows_read(engine, lambda: line.client.get(f"/api/flows/{line.flow_id}")),
+            [(c["chunk_id"], c["flow_places"]) for c in chunks["chunks"]],
+            flow["line"],
+        )
+
+    small = reads()
+    with engine.begin() as conn:
+        for i, submission_id in enumerate(submissions):
+            conn.execute(
+                sa.insert(s.hub_turns).values(
+                    stamp(
+                        s.hub_turns,
+                        turn_id=f"htn_u{i}",
+                        submission_id=submission_id,
+                        started_at=line.world.hub.clock.now(),
+                    )
+                )
+            )
+    assert reads() == small
+
+
+def test_a_paged_chunks_place_reflects_an_off_page_chunk_ahead_of_it_that_is_turning(line: Line) -> None:
+    line.world.poll_due()
+    line.take_turn(line.first)
+
+    seen: dict[str, Any] = {}
+    cursor: str | None = None
+    while True:
+        page = line.client.get("/api/chunks", params={"limit": 1, **({"cursor": cursor} if cursor else {})}).json()
+        assert len(page["chunks"]) == 1
+        seen[page["chunks"][0]["chunk_id"]] = page["chunks"][0]
+        cursor = page.get("next_cursor")
+        if cursor is None:
+            break
+
+    assert [(p["state"], p["position"]) for p in seen[line.second]["flow_places"]] == [("next", 1)]
+    assert [(p["state"], p["position"]) for p in seen[line.first]["flow_places"]] == [("landing", 1)]
+
+
+def test_a_turn_on_another_flow_reached_through_a_two_flow_submission_still_shapes_the_view(line: Line) -> None:
+    third = line.world.at_merge(ref="3")
+    line.world.hub.settle_turns()
+    line.world.poll_due()
+    there = _seed_flow(line, "there")
+    ahead = line.submission(third)
+    with line.world.hub.engine.begin() as conn:
+        # `third` moves ahead of everything, off the requested flow and onto `there`, which `second` also joins.
+        conn.execute(
+            hub_scoped(
+                sa.delete(s.flow_submission_flows).where(s.flow_submission_flows.c.submission_id == ahead.submission_id)
+            )
+        )
+        conn.execute(
+            hub_scoped(
+                sa.update(s.flow_submissions)
+                .where(s.flow_submissions.c.submission_id == ahead.submission_id)
+                .values(arrival=0)
+            )
+        )
+        for submission_id in (ahead.submission_id, line.submission(line.second).submission_id):
+            conn.execute(
+                sa.insert(s.flow_submission_flows).values(
+                    stamp(s.flow_submission_flows, submission_id=submission_id, flow_id=there)
+                )
+            )
+    line.take_turn(line.first)
+
+    def second_state() -> str:
+        body = line.client.get(f"/api/flows/{line.flow_id}").json()
+        return next(p["state"] for p in body["line"] if p["chunk_id"] == line.second)
+
+    behind_the_other_flow = second_state()
+    with line.world.hub.engine.begin() as conn:
+        conn.execute(
+            sa.insert(s.hub_turns).values(
+                stamp(
+                    s.hub_turns,
+                    turn_id="htn_ahead",
+                    submission_id=ahead.submission_id,
+                    started_at=line.world.hub.clock.now(),
+                )
+            )
+        )
+
+    assert (behind_the_other_flow, second_state()) == ("waiting", "next")

@@ -52,7 +52,10 @@ class FlowLineRead:
     def of(cls, services: TenantServices, submissions: Sequence[Submission]) -> FlowLineRead:
         """The line over ``submissions``, which must hold every open submission on each flow any of them holds — a
         place depends on every submission ahead of it there, on whatever page that submission's chunk sits."""
-        turns = {turn.submission_id: turn for turn in services.flows.open_turns()} if submissions else {}
+        turns = {
+            turn.submission_id: turn
+            for turn in services.flows.open_turns_of([sub.submission_id for sub in submissions])
+        }
         repository_ids = sorted({RepositoryId(flow.repository_id) for sub in submissions for flow in sub.flows})
         return cls(
             line=services.flow_line_factory.line(submissions, turning=frozenset(turns)),

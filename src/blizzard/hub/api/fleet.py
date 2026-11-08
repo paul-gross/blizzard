@@ -7,7 +7,7 @@ to the caller through :meth:`FleetRequest.assert_owns`."""
 
 from __future__ import annotations
 
-from collections.abc import Callable
+from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 from datetime import datetime
 from functools import partial
@@ -645,6 +645,7 @@ def hub_advance(
         )
     services.hub_step_wake.wake()
     epoch = facts.latest_epoch() or 0
+    standing = services.flows.visit_standing(chunk_id, node_id=node.node_id, epoch=epoch)
     return HubAdvanceResponse(
         chunk_id=chunk_id,
         status=facts.status(),
@@ -652,19 +653,22 @@ def hub_advance(
         detail=describe_standing(
             facts,
             node,
-            services.flows.visit_standing(chunk_id, node_id=node.node_id, epoch=epoch),
+            standing,
             epoch=epoch,
             now=services.clock.now(),
-            flow_name=_flow_namer(services),
+            flow_name=_flow_namer(services, standing.submission.flows if standing is not None else ()),
         ),
     )
 
 
-def _flow_namer(services: TenantServices) -> Callable[[Flow], str]:
-    """A flow as an operator names it: its repository and branch."""
+def _flow_namer(services: TenantServices, flows: Sequence[Flow]) -> Callable[[Flow], str]:
+    """A flow as an operator names it: its repository and branch. The ``flows``' repository records are read once,
+    up front."""
+    ids = [RepositoryId(repository_id) for repository_id in sorted({flow.repository_id for flow in flows})]
+    records = services.repository_records.get_many(ids) if ids else {}
 
     def name(flow: Flow) -> str:
-        record = services.repository_records.get(RepositoryId(flow.repository_id))
+        record = records.get(RepositoryId(flow.repository_id))
         return f"{record.fields.repo if record is not None else flow.repository_id}/{flow.branch}"
 
     return name

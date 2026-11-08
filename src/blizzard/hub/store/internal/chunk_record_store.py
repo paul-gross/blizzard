@@ -39,6 +39,7 @@ from blizzard.hub.store.internal.chunk_rows import (
     record_deleted_row,
 )
 from blizzard.hub.store.internal.chunk_terminal_predicates import done_completed_at, maybe_live, settled_done
+from blizzard.hub.store.internal.fact_families import ephemeral_tables
 from blizzard.hub.store.scoped import ScopedConnections, ScopedStatements
 from blizzard.hub.store.transactions import (
     chunk_handle_connection,
@@ -76,7 +77,7 @@ def _chunk_page_stmt(
 ) -> Select[Any]:
     stmt = stmts.select(s.chunks)
     # Grouped-away and deleted chunks are gone from every read: excluded here so a page never reads past them.
-    for table in (s.chunk_grouped, s.chunk_deleted):
+    for table in ephemeral_tables():
         stmt = stmt.where(~stmts.exists(table, table.c.chunk_id == s.chunks.c.chunk_id))
     if project is not None:
         stmt = stmt.where(s.chunks.c.project_id == project)
@@ -214,7 +215,7 @@ class ChunkRecordStore:
             nodes.c.action.is_(None),
         )
         stmt = self._store.select(s.chunks, s.chunks.c.chunk_id).where(actionless, maybe_live(self._store))
-        for table in (s.chunk_grouped, s.chunk_deleted):
+        for table in ephemeral_tables():
             stmt = stmt.where(~self._store.exists(table, table.c.chunk_id == s.chunks.c.chunk_id))
         with self._store.read("pinned_to_actionless_hub_nodes") as conn:
             return [r.chunk_id for r in conn.execute(stmt.order_by(s.chunks.c.chunk_id)).all()]
@@ -228,7 +229,7 @@ class ChunkRecordStore:
             raise ValueError(f"limit must be at least 1, got {limit}")
         instant = done_completed_at(self._store)
         stmt = self._store.select(s.chunks, s.chunks.c.chunk_id).where(settled_done(self._store))
-        for table in (s.chunk_grouped, s.chunk_deleted):
+        for table in ephemeral_tables():
             stmt = stmt.where(~self._store.exists(table, table.c.chunk_id == s.chunks.c.chunk_id))
         if project is not None:
             stmt = stmt.where(s.chunks.c.project_id == project)

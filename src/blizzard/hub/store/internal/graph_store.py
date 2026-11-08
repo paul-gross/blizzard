@@ -36,7 +36,7 @@ from blizzard.hub.domain.graph.model import (
     RotatePolicy,
     SessionDecl,
 )
-from blizzard.hub.store.internal.newest_fact import newest_retired_select
+from blizzard.hub.store.internal.newest_fact import newer_row_exists, newest_retired_select
 from blizzard.hub.store.locking import lock_keys
 from blizzard.hub.store.schema import (
     graph_artifacts,
@@ -337,6 +337,38 @@ class GraphStore:
         """`get_enabled_by_name`, resolved on the caller's connection."""
         row = conn.execute(self._enabled_by_name_select(name)).first()
         return self._reify(conn, row) if row is not None else None
+
+    def get_enabled_by_names(self, names: Sequence[str]) -> dict[str, Graph]:
+        """:meth:`get_enabled_by_name` for each of ``names``, keyed by name: per name batch one select resolves each
+        name's newest non-retired graph id (the anti-join form, ``bzh:newest-per-key-read``), then the winners are
+        reified together. A name with no enabled mint is dropped."""
+        if not names:
+            return {}
+        result: dict[str, Graph] = {}
+        rival = graphs.alias("rival_graphs")
+        with self._store.read("get_enabled_by_names") as conn:
+            for batch in id_batches(list(dict.fromkeys(names))):
+                retired = newest_retired_select(
+                    self._store,
+                    graph_lifecycle_facts,
+                    graph_lifecycle_facts.c.graph_id,
+                    self._store.select(graphs, graphs.c.graph_id).where(graphs.c.name.in_(batch)),
+                )
+                beaten = newer_row_exists(
+                    self._store,
+                    rival,
+                    partition=[(graphs.c.name, rival.c.name)],
+                    order=[(graphs.c.created_at, rival.c.created_at), (graphs.c.graph_id, rival.c.graph_id)],
+                    where=rival.c.graph_id.not_in(retired),
+                )
+                rows = conn.execute(
+                    self._store.select(graphs, graphs.c.name, graphs.c.graph_id).where(
+                        graphs.c.name.in_(batch), graphs.c.graph_id.not_in(retired), ~beaten
+                    )
+                ).all()
+                reified = self._reify_many(conn, [row.graph_id for row in rows])
+                result.update((row.name, reified[row.graph_id]) for row in rows)
+        return result
 
     def enabled_names(self, names: Sequence[str]) -> set[str]:
         """One select per batch: the names with a graph outside :func:`newest_retired_select`'s retired set."""

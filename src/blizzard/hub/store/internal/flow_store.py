@@ -104,6 +104,31 @@ class FlowStore:
                 for r in rows
             ]
 
+    def open_turns_of(self, submission_ids: Sequence[str]) -> list[Turn]:
+        ids = sorted(set(submission_ids))
+        if not ids:
+            return []
+        turns = s.hub_turns
+        with self._store.read("open_turns_of") as conn:
+            rows = [
+                r
+                for batch in id_batches(ids)
+                for r in conn.execute(
+                    self._store.select(turns).where(turns.c.submission_id.in_(batch), turns.c.ended_at.is_(None))
+                ).all()
+            ]
+        rows.sort(key=lambda r: r.turn_id)
+        return [
+            Turn(
+                turn_id=r.turn_id,
+                submission_id=r.submission_id,
+                started_at=r.started_at,
+                ended_at=r.ended_at,
+                outcome=r.outcome,
+            )
+            for r in rows
+        ]
+
     def submission_for_visit(
         self, chunk_id: str, *, node_id: str, epoch: int, transaction: Transaction | None = None
     ) -> Submission | None:

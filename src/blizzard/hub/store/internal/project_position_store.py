@@ -10,7 +10,7 @@ from __future__ import annotations
 from collections.abc import Sequence
 from datetime import datetime
 
-from sqlalchemy import func
+from sqlalchemy import func, tuple_
 from sqlalchemy.engine import Connection
 
 from blizzard.foundation.store.batching import id_batches
@@ -32,24 +32,24 @@ from blizzard.hub.store.scoped import ScopedConnections, statements_of
 
 def newest_positions(conn: Connection, pairs: set[tuple[str, str]]) -> dict[tuple[str, str], float | None]:
     """The newest position of each ``(project_id, repository_id)`` link of ``pairs`` that has a fact, read on the
-    caller's connection. One group-by-max join per batch (``bzh:newest-per-key-read``)."""
+    caller's connection. One group-by-max join per batch of the requested pairs, matched by a row-value ``IN``
+    (``bzh:newest-per-key-read``)."""
     stmts = statements_of(conn)
     facts = project_repository_positions
     found: dict[tuple[str, str], float | None] = {}
-    for project_batch in id_batches(sorted({project_id for project_id, _ in pairs})):
-        for name_batch in id_batches(sorted({name for _, name in pairs})):
-            newest = (
-                stmts.select(facts, facts.c.project_id, facts.c.repository_id, func.max(facts.c.id).label("id"))
-                .where(facts.c.project_id.in_(project_batch), facts.c.repository_id.in_(name_batch))
-                .group_by(facts.c.project_id, facts.c.repository_id)
-                .subquery()
+    for batch in id_batches(sorted(pairs)):
+        newest = (
+            stmts.select(facts, facts.c.project_id, facts.c.repository_id, func.max(facts.c.id).label("id"))
+            .where(tuple_(facts.c.project_id, facts.c.repository_id).in_(batch))
+            .group_by(facts.c.project_id, facts.c.repository_id)
+            .subquery()
+        )
+        rows = conn.execute(
+            stmts.select(facts, facts.c.project_id, facts.c.repository_id, facts.c.position).join(
+                newest, facts.c.id == newest.c.id
             )
-            rows = conn.execute(
-                stmts.select(facts, facts.c.project_id, facts.c.repository_id, facts.c.position).join(
-                    newest, facts.c.id == newest.c.id
-                )
-            ).all()
-            found.update(((row[0], row[1]), row[2]) for row in rows if (row[0], row[1]) in pairs)
+        ).all()
+        found.update(((row[0], row[1]), row[2]) for row in rows)
     return found
 
 
