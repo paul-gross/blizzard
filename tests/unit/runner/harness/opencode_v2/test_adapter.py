@@ -35,8 +35,8 @@ from blizzard.runner.node_steps.envelope import Envelope
 from blizzard.runner.process.child_env import AllowlistedEnv, ChildEnv
 from blizzard.runner.process.child_processes import StreamTarget
 from tests.support.child_launch import CHILDREN, tool_env
+from tests.support.opencode2_store import seed_store
 from tests.support.runner_fakes import make_envelope
-from tests.unit.runner.harness.opencode_v2.test_price_catalog import seed_store
 
 NOW = datetime(2026, 11, 4, 12, 0, tzinfo=UTC)
 
