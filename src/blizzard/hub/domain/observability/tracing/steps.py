@@ -190,7 +190,7 @@ def _attempt_steps(facts: StepFacts) -> list[NodeStep]:
                 epoch=epoch,
                 runner_id=owner.runner_id,
                 start=start,
-                position=position_at(facts, start),
+                position=position_at(facts, start, before_epoch=epoch),
                 close=runner_close(facts, epoch, start),
             )
         )
