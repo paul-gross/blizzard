@@ -1,8 +1,7 @@
 """A change a person, rather than the hub, decides whether to merge."""
 
 import json
-from datetime import datetime, timedelta
-from typing import Protocol
+from datetime import timedelta
 
 from blizzard.foundation.crash import crashpoint
 from blizzard.foundation.escalation_causes import EscalationCause
@@ -17,6 +16,13 @@ from blizzard.hub.delivery.actions.landing.repo import (
     Waiting,
 )
 from blizzard.hub.domain.actions.effects import ActionEscalation
+from blizzard.hub.domain.actions.pr_markers import (
+    PrMarker,
+    latest_pr_marker,
+    pr_marker_content,
+    pr_marker_name,
+    pr_marker_number,
+)
 from blizzard.hub.domain.config.capabilities import Capability
 from blizzard.hub.domain.config.landing_policies import DEFAULT_PARK_TIMEOUT_HOURS
 from blizzard.hub.forge.landing import Change, ChangeListing, ChangeState, ForgeNotFound, ForgeRejected
@@ -26,29 +32,13 @@ _MERGED = crashpoint("policy.after-merged-read.before-marker", "a parked change 
 _LIMIT = 100
 
 
-class ParkMarker(Protocol):
-    @property
-    def name(self) -> str: ...
-
-    @property
-    def epoch(self) -> int: ...
-
-    @property
-    def produced_at(self) -> datetime | None: ...
-
-
-def latest_marker(repo: RepoLanding) -> ParkMarker | None:
-    prefix = f"delivery-pr/{repo.repo}/"
-    return next((row for row in reversed(repo.run.visit.markers) if row.name.startswith(prefix)), None)
-
-
 class Park:
     async def step(self, repo: RepoLanding, *, watch: bool = False) -> RepoState:
         visit = repo.run.visit
-        marker = latest_marker(repo)
+        marker = latest_pr_marker(visit.markers, repo.repo)
         change: Change | None = None
         if marker is not None:
-            number = int(marker.name.rsplit("/", 1)[1])
+            number = pr_marker_number(marker)
             try:
                 closed = await repo.ask(repo.forge.changes.recently_closed(repo.base_branch, _LIMIT))
                 change = next((item for item in closed if item.number == number), None)
@@ -102,8 +92,8 @@ class Park:
                 return Waiting(f"{repo.repo}#{change.number} merged without a revision")
             if marker is None or marker.epoch != visit.epoch:
                 await repo.run.post(
-                    f"delivery-pr/{repo.repo}/{change.number}",
-                    json.dumps({"repo": repo.repo, "number": change.number, "url": change.web_url}),
+                    pr_marker_name(repo.repo, change.number),
+                    pr_marker_content(repo.repo, change.number, change.web_url),
                 )
             if not any(row.name == "awaiting-external-merge" and row.epoch == visit.epoch for row in visit.markers):
                 await repo.run.post("awaiting-external-merge", "")
@@ -123,14 +113,16 @@ class Park:
             return NeedsPerson(
                 ActionEscalation(EscalationCause.CHANGE_CLOSED, f"{repo.repo}#{change.number} closed without merging")
             )
-        name = f"delivery-pr/{repo.repo}/{change.number}"
         if marker is None or marker.epoch != visit.epoch:
-            await repo.run.post(name, json.dumps({"repo": repo.repo, "number": change.number, "url": change.web_url}))
+            await repo.run.post(
+                pr_marker_name(repo.repo, change.number),
+                pr_marker_content(repo.repo, change.number, change.web_url),
+            )
         if not any(row.name == "awaiting-external-merge" and row.epoch == visit.epoch for row in visit.markers):
             await repo.run.post("awaiting-external-merge", "")
         return self._waiting(repo, change.number, marker)
 
-    def _waiting(self, repo: RepoLanding, number: int, marker: ParkMarker | None) -> RepoState:
+    def _waiting(self, repo: RepoLanding, number: int, marker: PrMarker | None) -> RepoState:
         visit = repo.run.visit
         if marker is not None and marker.epoch == visit.epoch and marker.produced_at is not None:
             hours = repo.record.park_timeout_hours or DEFAULT_PARK_TIMEOUT_HOURS

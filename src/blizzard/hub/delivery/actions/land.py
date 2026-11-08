@@ -9,7 +9,7 @@ from blizzard.hub.delivery.actions.landing.combine import (
     in_landing_order,
     refuses_before_checks,
 )
-from blizzard.hub.delivery.actions.landing.park import Park, latest_marker
+from blizzard.hub.delivery.actions.landing.park import Park
 from blizzard.hub.delivery.actions.landing.policy import POLICIES
 from blizzard.hub.delivery.actions.landing.repo import (
     PENDING,
@@ -25,6 +25,7 @@ from blizzard.hub.delivery.actions.landing.repo import (
     Waiting,
 )
 from blizzard.hub.domain.actions.effects import IEffectSink, Pass
+from blizzard.hub.domain.actions.pr_markers import latest_pr_marker, reopen_marker_content, reopen_marker_name
 from blizzard.hub.domain.actions.visit import Visit
 from blizzard.hub.domain.config.repositories import RepositoryId
 from blizzard.hub.domain.graph.actions import LAND, LANDED
@@ -85,9 +86,9 @@ class Land:
         if run.visit.parked_watch() == RepositoryId(first.record.record):
             state = await Park().step(first, watch=True)
             if isinstance(state, Held):
-                marker = latest_marker(first)
+                marker = latest_pr_marker(run.visit.markers, first.repo)
                 assert marker is not None
-                await run.post(f"park-reopen/{first.repo}/{marker.name.rsplit('/', 1)[1]}", "")
+                await run.post(reopen_marker_name(first.repo, marker), reopen_marker_content())
                 return run.answer(PENDING)
             if not isinstance(state, Landed):
                 return await combine(run, [(first, state)])

@@ -5,7 +5,6 @@ commit at the head its checks passed on."""
 
 from __future__ import annotations
 
-import json
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, replace
 from typing import Any
@@ -39,6 +38,7 @@ from blizzard.hub.delivery.actions.landing.repo import (
     Waiting,
 )
 from blizzard.hub.domain.actions.effects import ActionEscalation
+from blizzard.hub.domain.actions.pr_markers import pr_marker_content, pr_marker_name
 from blizzard.hub.forge.landing import (
     Change,
     ChangeListing,
@@ -51,8 +51,6 @@ from blizzard.hub.forge.landing import (
     Update,
     UpdateOutcome,
 )
-
-_PR_MARKER_PREFIX = "delivery-pr/"
 
 # GitHub's PR title limit; longer titles get an ellipsis.
 _PR_TITLE_MAX = 256
@@ -167,8 +165,8 @@ class PullRequest:
     async def _record(cls, pull: PullRequest) -> PullRequest:
         """Persist the PR identity before a pass can wait on, reject or merge it — one marker per PR."""
         await pull.target.run.post(
-            f"{_PR_MARKER_PREFIX}{pull.target.repo}/{pull.number}",
-            json.dumps({"repo": pull.target.repo, "number": pull.number, "url": pull.url}),
+            pr_marker_name(pull.target.repo, pull.number),
+            pr_marker_content(pull.target.repo, pull.number, pull.url),
         )
         return pull
 

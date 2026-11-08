@@ -14,6 +14,7 @@ from types import MappingProxyType
 from blizzard.foundation.landing_policy import LandingPolicy
 from blizzard.foundation.roles import domain_model
 from blizzard.hub.domain.actions.declarations import GitCommits, UnconvergedDeliveryError
+from blizzard.hub.domain.actions.pr_markers import is_reopened, latest_pr_marker
 from blizzard.hub.domain.artifact.model import StoredArtifact
 from blizzard.hub.domain.chunk.model import LandedRepos, WorkRef
 from blizzard.hub.domain.chunk.no_code import finished_repos, no_code_marker, no_code_repos
@@ -222,23 +223,19 @@ class Visit:
         return no_code_marker(declaration)
 
     def parked_watch(self) -> RepositoryId | None:
-        """The first unlanded parked repository with an existing change, unless it needs a fresh review."""
-        landed = self.landed_repos()
+        """The first unfinished parked repository with an existing change, unless it needs a fresh review."""
+        finished = self.finished_repos()
         pairs = sorted(
             zip(self.resolution.targets, self.resolution.qualified, strict=True),
             key=lambda pair: landing_sort_key(pair[0].landing_position, pair[0].slug),
         )
         for target, repo in pairs:
-            if repo in landed:
+            if repo in finished:
                 continue
             if target.landing_policy is not LandingPolicy.PARK:
                 return None
-            prefix = f"delivery-pr/{repo}/"
-            marker = next((row for row in reversed(self.markers) if row.name.startswith(prefix)), None)
-            if marker is None or any(
-                row.name == f"park-reopen/{repo}/{marker.name.rsplit('/', 1)[1]}" and row.epoch == self.epoch
-                for row in self.markers
-            ):
+            marker = latest_pr_marker(self.markers, repo)
+            if marker is None or is_reopened(self.markers, repo, marker, self.epoch):
                 return None
             return RepositoryId(target.record)
         return None
