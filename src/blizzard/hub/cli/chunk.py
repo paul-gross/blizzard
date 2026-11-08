@@ -369,8 +369,7 @@ def chunk_detach(cli: CliContext, chunk_id: str) -> None:
     )
     cli.finish(
         resp,
-        f"detached {chunk_id} — claim removed, still at its current node; status re-derives from "
-        "its remaining facts",
+        f"detached {chunk_id} — claim removed, still at its current node; status re-derives from its remaining facts",
     )
 
 
