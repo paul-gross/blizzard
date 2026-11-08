@@ -32,7 +32,7 @@ from blizzard.runner.harness.capability_snapshot import HarnessVersionCache, def
 from blizzard.runner.harness.health_cache import HarnessHealthCache
 from blizzard.runner.harness.identity import SessionReference
 from blizzard.runner.harness.preamble import Preamble
-from blizzard.runner.harness.registry import IHarnessRegistry, UnavailableHarnessError, UnknownHarnessError
+from blizzard.runner.harness.registry import IHarnessKnownRegistry, UnavailableHarnessError, UnknownHarnessError
 from blizzard.runner.harness.spawn_cwd import SpawnCwd
 from blizzard.runner.harness.workspace_prompts import IReadWorkspacePromptRepository, WorkspacePromptReader
 from blizzard.runner.hub.chunk_status_cache import IChunkViews
@@ -61,7 +61,7 @@ from blizzard.runner.lifecycle.model import (
     resolved_retries_max,
     spawn_hold,
 )
-from blizzard.runner.lifecycle.orphan import OrphanContext, OrphanStores
+from blizzard.runner.lifecycle.orphan import OrphanContext, OrphanHarnesses, OrphanStores
 from blizzard.runner.lifecycle.registration import registered_runner_id
 from blizzard.runner.lifecycle.session import HarnessSelector, ResumedSession, SessionResolver, SkippedHarness
 from blizzard.runner.node_steps.envelope import Envelope
@@ -179,6 +179,10 @@ class SpawnConfig(TranscriptPumpConfig, GateConfig, Protocol):
     def worker_program_tracing(self) -> bool: ...
 
 
+class SpawnHarnesses(OrphanHarnesses, IHarnessKnownRegistry, Protocol):
+    """What spawning reads of the registry: orphan's slices plus the known ids that bind the default owner."""
+
+
 class SpawnContext(TranscriptPumpContext, GateContext, OrphanContext, Protocol):
     """What a spawn and an attempt read."""
 
@@ -205,7 +209,7 @@ class SpawnContext(TranscriptPumpContext, GateContext, OrphanContext, Protocol):
     @property
     def harness_selector(self) -> HarnessSelector: ...
     @property
-    def harnesses(self) -> IHarnessRegistry: ...
+    def harnesses(self) -> SpawnHarnesses: ...
     @property
     def harness_versions(self) -> HarnessVersionCache | None: ...
     @property

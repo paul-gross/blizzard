@@ -14,14 +14,6 @@ import pytest
 from structlog.testing import capture_logs
 
 from blizzard.foundation.node_steps import SessionMode
-from blizzard.runner.harness.adapter import (
-    IHarnessLifecycleAndVerdict,
-    IHarnessProviderOverload,
-    IHarnessSelfTestSeam,
-    IHarnessUsageAccounting,
-    IHarnessUsageLimits,
-    IHarnessWorkerLifecycle,
-)
 from blizzard.runner.harness.fingerprint import PreambleFingerprint
 from blizzard.runner.harness.identity import CLAUDE_CODE_HARNESS_ID, SessionReference
 from blizzard.runner.harness.registry import UnavailableHarnessError, UnknownHarnessError
@@ -114,28 +106,6 @@ class _Registry:
         if isinstance(self.source, Exception):
             raise self.source
         return self.source
-
-    @property
-    def known_harnesses(self) -> tuple[str, ...]:
-        raise NotImplementedError
-
-    def lifecycle(self, harness_id: str) -> IHarnessWorkerLifecycle:
-        raise NotImplementedError
-
-    def lifecycle_and_verdict(self, harness_id: str) -> IHarnessLifecycleAndVerdict:
-        raise NotImplementedError
-
-    def self_test(self, harness_id: str) -> IHarnessSelfTestSeam:
-        raise NotImplementedError
-
-    def usage_accounting(self, harness_id: str) -> IHarnessUsageAccounting:
-        raise NotImplementedError
-
-    def usage_limits(self, harness_id: str) -> IHarnessUsageLimits:
-        raise NotImplementedError
-
-    def provider_overload(self, harness_id: str) -> IHarnessProviderOverload:
-        raise NotImplementedError
 
     def source_calls(self) -> list[tuple[str, str, str | None]]:
         assert isinstance(self.source, _Source)

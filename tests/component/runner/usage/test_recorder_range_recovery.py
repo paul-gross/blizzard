@@ -12,13 +12,13 @@ from blizzard.foundation.clock import FixedClock
 from blizzard.foundation.fact_kinds import USAGE_RECORDED
 from blizzard.runner.harness.adapter import WorkerHandle
 from blizzard.runner.harness.identity import CLAUDE_CODE_HARNESS_ID, SessionReference
-from blizzard.runner.harness.registry import HarnessBinding, HarnessRegistry, IHarnessRegistry
+from blizzard.runner.harness.registry import HarnessBinding, HarnessRegistry
 from blizzard.runner.harness.transcript import TranscriptPosition
 from blizzard.runner.harness.usage import UsageSample
 from blizzard.runner.leases.internal.worker_stdout_files import WorkerStdoutFiles
 from blizzard.runner.leases.model import NewLease
 from blizzard.runner.transcripts.invocation_boundaries import InvocationBoundaryKind
-from blizzard.runner.usage.recorder import UsageRecorder
+from blizzard.runner.usage.recorder import UsageRecorder, UsageRecorderHarnesses
 from tests.support.runner_fakes import (
     FakeHarness,
     FakeProvider,
@@ -56,7 +56,7 @@ def _seed_lease(store: SqlAlchemyRunnerStore) -> None:
     )
 
 
-def _recorder(store: SqlAlchemyRunnerStore, registry: IHarnessRegistry) -> UsageRecorder:
+def _recorder(store: SqlAlchemyRunnerStore, registry: UsageRecorderHarnesses) -> UsageRecorder:
     return UsageRecorder(
         leases=store,
         usage=store,

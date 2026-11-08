@@ -19,12 +19,16 @@ from blizzard.foundation.crash import crashpoint
 from blizzard.foundation.logging import get_logger
 from blizzard.runner.harness.adapter import IHarnessUsageLimits
 from blizzard.runner.harness.identity import SessionReference
-from blizzard.runner.harness.registry import UnavailableHarnessError, UnknownHarnessError
+from blizzard.runner.harness.registry import (
+    IHarnessUsageLimitsRegistry,
+    UnavailableHarnessError,
+    UnknownHarnessError,
+)
 from blizzard.runner.harness.usage import UsageLimit
 from blizzard.runner.leases.model import Lease
 from blizzard.runner.leases.overload import InvocationKind
 from blizzard.runner.lifecycle.attempt import Attempt, AttemptContext
-from blizzard.runner.lifecycle.spawn import SpawnConfig, SpawnHostStores, SpawnStores
+from blizzard.runner.lifecycle.spawn import SpawnConfig, SpawnHarnesses, SpawnHostStores, SpawnStores
 from blizzard.runner.throttle.gate import GateSubscription
 from blizzard.runner.throttle.usage_limits import (
     IWriteRunnerUsageLimitRepository,
@@ -64,7 +68,13 @@ class UsageLimitHostStores(SpawnHostStores, Protocol):
     def usage_limits(self) -> IWriteSubscriptionUsageLimitRepository: ...
 
 
+class UsageLimitHarnesses(SpawnHarnesses, IHarnessUsageLimitsRegistry, Protocol):
+    """What usage-limit handling reads of the registry: spawn's slices plus an owner's limit classifier."""
+
+
 class UsageLimitContext(AttemptContext, Protocol):
+    @property
+    def harnesses(self) -> UsageLimitHarnesses: ...
     @property
     def stores(self) -> UsageLimitStores: ...
     @property

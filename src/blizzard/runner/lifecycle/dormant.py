@@ -13,7 +13,11 @@ from blizzard.foundation.store.utc import iso_utc
 from blizzard.runner.environments.repository import EnvBinding
 from blizzard.runner.environments.workspaces import IWorkspaceSessions
 from blizzard.runner.harness.adapter import IHarnessWorkerLifecycle
-from blizzard.runner.harness.registry import UnavailableHarnessError, UnknownHarnessError
+from blizzard.runner.harness.registry import (
+    IHarnessProviderOverloadRegistry,
+    UnavailableHarnessError,
+    UnknownHarnessError,
+)
 from blizzard.runner.harness.spawn_cwd import SpawnCwd
 from blizzard.runner.hub.client import ChunkNotFoundError, HubClientError
 from blizzard.runner.hub.outbound import OutboundFacts
@@ -40,7 +44,7 @@ from blizzard.runner.lifecycle.model import (
 from blizzard.runner.lifecycle.orphan import orphan_session
 from blizzard.runner.lifecycle.registration import registered_runner_id
 from blizzard.runner.lifecycle.spawn import SpawnConfig, Spawner, SuppressionCause
-from blizzard.runner.lifecycle.usage_limit import UsageLimitContext, UsageLimitStores
+from blizzard.runner.lifecycle.usage_limit import UsageLimitContext, UsageLimitHarnesses, UsageLimitStores
 from blizzard.runner.process.owned_process import kill_owned_process, owned_process_alive
 from blizzard.runner.throttle.gate import StartKind
 from blizzard.runner.throttle.overload import OverloadContext, OverloadStores
@@ -131,7 +135,13 @@ class DormantConfig(SpawnConfig, Protocol):
     def gates(self) -> tuple[str, ...]: ...
 
 
+class DormantHarnesses(UsageLimitHarnesses, IHarnessProviderOverloadRegistry, Protocol):
+    """What dormant handling reads of the registry: usage-limit's slices plus provider overload."""
+
+
 class DormantContext(UsageLimitContext, GitCommitsContext, OverloadContext, ReleaseContext, Protocol):
+    @property
+    def harnesses(self) -> DormantHarnesses: ...
     @property
     def stores(self) -> DormantStores: ...
     @property

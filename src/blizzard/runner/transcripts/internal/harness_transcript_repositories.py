@@ -5,17 +5,17 @@ belongs here, at the composition root's own wiring, never inside ``src/blizzard/
 
 from __future__ import annotations
 
-from blizzard.runner.harness.registry import IHarnessRegistry
+from blizzard.runner.harness.registry import IHarnessTranscriptSourceRegistry
 from blizzard.runner.transcripts.internal.projected_transcript_repository import ProjectedTranscriptRepository
 from blizzard.runner.transcripts.repository import IReadTranscriptRepository, ITranscriptRepositoryResolver
 
 
 class HarnessTranscriptRepositories:
     """Implements :class:`ITranscriptRepositoryResolver` over an injected
-    :class:`IHarnessRegistry` — resolving an owner projects its raw transcript source
+    :class:`IHarnessTranscriptSourceRegistry` — resolving an owner projects its raw transcript source
     through :class:`ProjectedTranscriptRepository` fresh on every call."""
 
-    def __init__(self, harnesses: IHarnessRegistry) -> None:
+    def __init__(self, harnesses: IHarnessTranscriptSourceRegistry) -> None:
         self._harnesses = harnesses
 
     def transcript_repository(self, harness_id: str) -> IReadTranscriptRepository:

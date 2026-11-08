@@ -7,7 +7,12 @@ from __future__ import annotations
 from typing import Protocol
 
 from blizzard.foundation.logging import get_logger
-from blizzard.runner.harness.registry import IHarnessRegistry, UnavailableHarnessError, UnknownHarnessError
+from blizzard.runner.harness.registry import (
+    IHarnessLifecycleAndVerdictRegistry,
+    IHarnessLifecycleRegistry,
+    UnavailableHarnessError,
+    UnknownHarnessError,
+)
 from blizzard.runner.leases.model import Lease
 from blizzard.runner.lifecycle.takeover import IReadTakeoverRepository
 
@@ -19,9 +24,13 @@ class OrphanStores(Protocol):
     def takeover(self) -> IReadTakeoverRepository: ...
 
 
+class OrphanHarnesses(IHarnessLifecycleRegistry, IHarnessLifecycleAndVerdictRegistry, Protocol):
+    """What orphan handling reads of the registry: the orphan call and the usable-output verdict."""
+
+
 class OrphanContext(Protocol):
     @property
-    def harnesses(self) -> IHarnessRegistry: ...
+    def harnesses(self) -> OrphanHarnesses: ...
     @property
     def stores(self) -> OrphanStores: ...
 
