@@ -64,7 +64,7 @@ RUNNERS_DECLARATIONS: tuple[ProblemDeclaration, ...] = (
         )
         for declaration in _declare(method, path, 404, RunnerNotFoundProblem)
     ),
-    *_declare("POST", f"{_RUNNER}/enrollments", 409, RunnerRetiredProblem),
+    *_declare("POST", f"{_RUNNER}/enrollments", 409, RunnerRetiredProblem, RunnerLifecycleConflictProblem),
     *_declare(
         "POST",
         f"{_RUNNER}/retire",

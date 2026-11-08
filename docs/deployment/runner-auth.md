@@ -127,7 +127,8 @@ token nobody has. Retire it, then re-run init. An init interrupted between the t
 ## Rotation
 
 `blizzard hub runner enroll <id>` rotates an added runner's token: it mints a new one, prints it once the same way, and
-records the token it replaces as revoked, the one `add` minted included. It 404s on an id the hub never added.
+records the token it replaces as revoked, the one `add` minted included. It 404s on an id the hub never added. It
+answers `409` when the runner was retired or reinstated while the enroll was deciding, and mints and revokes nothing.
 
 ## Revocation
 

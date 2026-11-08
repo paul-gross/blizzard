@@ -58371,7 +58371,7 @@
     },
     "/api/runners/{runner_id}/enrollments": {
       "post": {
-        "description": "Rotate ``runner_id``'s bearer token \u2014 the plaintext is returned once, and the token it\nreplaces stops resolving, the one ``add`` minted included.\n\nRequires an added runner (404 otherwise), connected or not. A retired runner is refused\n409: ``reinstate`` is the one reinstatement lever.",
+        "description": "Rotate ``runner_id``'s bearer token \u2014 the plaintext is returned once, and the token it\nreplaces stops resolving, the one ``add`` minted included.\n\nRequires an added runner (404 otherwise), connected or not. A retired runner is refused\n409: ``reinstate`` is the one reinstatement lever. So is a runner retired or reinstated while the enroll was\ndeciding: 409, with nothing minted or revoked.",
         "operationId": "enroll_runner_api_runners__runner_id__enrollments_post",
         "parameters": [
           {
@@ -58452,6 +58452,9 @@
                     },
                     {
                       "$ref": "#/components/schemas/RunnerRetiredProblem"
+                    },
+                    {
+                      "$ref": "#/components/schemas/RunnerLifecycleConflictProblem"
                     }
                   ]
                 }
@@ -58608,7 +58611,7 @@
     },
     "/api/runners/{runner_id}/reinstate": {
       "post": {
-        "description": "Reinstate a retired runner \u2014 it stays unenrolled until enrolled afresh; 409 when not retired, when it stands\nunder a retired host, and when its lifecycle moved while the reinstate was decided. A route its retirement left\nheld is released first, as the retire's own release pass would, and its ``detached`` frame published.",
+        "description": "Reinstate a retired runner \u2014 any token it still carries is revoked with the reversal, and it stays unenrolled\nuntil enrolled afresh; 409 when not retired, when it stands\nunder a retired host, and when its lifecycle moved while the reinstate was decided. A route its retirement left\nheld is released first, as the retire's own release pass would, and its ``detached`` frame published.",
         "operationId": "reinstate_runner_api_runners__runner_id__reinstate_post",
         "parameters": [
           {

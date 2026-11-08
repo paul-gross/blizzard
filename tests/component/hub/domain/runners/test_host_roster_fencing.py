@@ -220,7 +220,7 @@ def test_a_reinstate_decided_before_the_host_retires_is_refused(
     hub: HubHarness, hosted: str, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     _ok(hub.client.post("/api/runners/rn_a/retire", json={"by": "op"}))
-    _once_before(monkeypatch, hub.services.registry, "record_lifecycle", lambda: _ok(_retire_host(hub, hosted)))
+    _once_before(monkeypatch, hub.services.fleet._transactions, "begin", lambda: _ok(_retire_host(hub, hosted)))
 
     refused = hub.client.post("/api/runners/rn_a/reinstate", json={"by": "op"})
 

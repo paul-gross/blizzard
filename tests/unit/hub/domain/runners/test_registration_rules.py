@@ -109,7 +109,11 @@ def test_a_retired_runners_contact_is_refused_naming_the_action() -> None:
 
 def test_enroll_mints_the_rotation_for_an_unenrolled_runner() -> None:
     assert _UNENROLLED.enroll("hash-new", by="operator", at=_AT) == TokenRotation(
-        runner_id="runner-a", token_hash="hash-new", at=_AT, by="operator"
+        runner_id="runner-a",
+        token_hash="hash-new",
+        at=_AT,
+        by="operator",
+        expected_lifecycle=_UNENROLLED.lifecycle_version,
     )
 
 

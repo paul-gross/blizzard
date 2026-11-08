@@ -83,11 +83,12 @@ class RetireOutcome:
 @domain_model
 @dataclass(frozen=True)
 class ReinstateOutcome:
-    """What one reinstate wrote: the ``retired=False`` fact's id, and each route the retirement it reversed had left
-    held, released first."""
+    """What one reinstate wrote: the ``retired=False`` fact's id, the id of the revocation of any token the runner still
+    carried (``None`` when it held none), and each route the retirement it reversed had left held, released first."""
 
     fact_id: int
     released: tuple[ReleasedRoute, ...]
+    revocation_id: int | None = None
 
 
 class RetireInterrupted(Exception):
@@ -108,6 +109,16 @@ class ReinstateInterrupted(Exception):
         super().__init__(str(refusal))
         self.released = released
         self.refusal = refusal
+
+
+class ReinstateFailed(Exception):
+    """A reinstate's unit failed for a reason other than a refusal after its release pass released a route. The unit
+    rolled back whole; ``released`` is each release that committed before it, and ``cause`` the failure."""
+
+    def __init__(self, released: tuple[ReleasedRoute, ...], cause: Exception) -> None:
+        super().__init__(str(cause))
+        self.released = released
+        self.cause = cause
 
 
 class FleetService:
@@ -132,7 +143,7 @@ class FleetService:
         self._registry = registry
         # The host a runner stands under, whose retirement a reinstate is decided against.
         self._hosts = hosts
-        # The unit a retire's fact and revocation land in together.
+        # The unit a retire's, or a reinstate's, fact and revocation land in together.
         self._transactions = transactions
         # The tenant's projects, which a served declaration resolves against.
         self._served_projects = served_projects
@@ -352,7 +363,8 @@ class FleetService:
 
     def reinstate(self, registration: RunnerRegistration, *, by: str) -> ReinstateOutcome:
         """Finish the retirement ``registration`` was read at, then reverse it. The runner stays
-        unenrolled — its token was revoked at retire — so the operator enrolls it afresh. A
+        unenrolled — any token an enrollment that raced the retire left is revoked in the unit that lands the fact —
+        so the operator enrolls it afresh. A
         runner under a retired host stays retired
         (:class:`~blizzard.hub.domain.runners.host.HostRetired`), and so does one whose host
         retires before the fact lands. Every route the runner still holds is released first, as
@@ -367,29 +379,44 @@ class FleetService:
         runner = RunnerLifecycleVersion(registration.runner_id, registration.lifecycle_version)
         released, refusal = self._release_pass(runner)
         fact_id: int | None = None
+        revocation_id: int | None = None
         if refusal is None:
             try:
-                fact_id = self._record_reinstatement(fact, runner, host)
+                fact_id, revocation_id = self._record_reinstatement(fact, runner, host)
             except (RunnerLifecycleConflict, HostRetired) as exc:
                 refusal = exc
+            except Exception as exc:
+                if released:
+                    raise ReinstateFailed(released, exc) from exc
+                raise
         if fact_id is None:
             assert refusal is not None  # no fact is written only on a refusal
             if not released:
                 raise refusal
             raise ReinstateInterrupted(released, refusal) from refusal
         _log.info("runner reinstated", runner_id=registration.runner_id, by=by, released=[r.chunk_id for r in released])
-        return ReinstateOutcome(fact_id=fact_id, released=released)
+        return ReinstateOutcome(fact_id=fact_id, released=released, revocation_id=revocation_id)
 
-    def _record_reinstatement(self, fact: LifecycleFact, runner: RunnerLifecycleVersion, host: Host | None) -> int:
+    def _record_reinstatement(
+        self, fact: LifecycleFact, runner: RunnerLifecycleVersion, host: Host | None
+    ) -> tuple[int, int | None]:
+        """Land the reversal and revoke any token the runner still carries, in one unit: the revocation is conditioned
+        on the version the fact left, so a stale reinstate fails at the fact and revokes nothing."""
         try:
-            return self._registry.record_lifecycle(
-                fact.runner_id,
-                retired=fact.retired,
-                at=fact.at,
-                by=fact.by,
-                expected_lifecycle=runner.version,
-                expected_host=None if host is None else HostLifecycleVersion(host.host_id, host.lifecycle_version),
-            )
+            with self._transactions.begin() as unit:
+                fact_id = self._registry.record_lifecycle(
+                    fact.runner_id,
+                    retired=fact.retired,
+                    at=fact.at,
+                    by=fact.by,
+                    expected_lifecycle=runner.version,
+                    expected_host=None if host is None else HostLifecycleVersion(host.host_id, host.lifecycle_version),
+                    transaction=unit,
+                )
+                revocation_id = self._registry.revoke_token(
+                    fact.runner_id, at=fact.at, by=fact.by, expected_lifecycle=fact_id, transaction=unit
+                )
+            return fact_id, revocation_id
         except HostLifecycleConflict as exc:
             raise HostRetired(exc.host_id, action="reinstating a runner under it") from exc
 
