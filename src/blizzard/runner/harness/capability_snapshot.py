@@ -5,12 +5,17 @@ from __future__ import annotations
 from collections.abc import Callable
 from dataclasses import dataclass, field
 from datetime import datetime
+from typing import Protocol
 
 from blizzard.foundation.clock import IClock
 from blizzard.foundation.roles import domain_model
 from blizzard.runner.harness.health import reported_health
 from blizzard.runner.harness.health_cache import HARNESS_VERSION_REFRESH_SECONDS, HarnessHealthCache
-from blizzard.runner.harness.registry import IHarnessRegistry
+from blizzard.runner.harness.registry import (
+    IHarnessKnownRegistry,
+    IHarnessLifecycleRegistry,
+    IHarnessModelResolutionRegistry,
+)
 
 
 @domain_model
@@ -55,7 +60,11 @@ class HarnessVersionCache:
         self._observed.pop(harness_id, None)
 
 
-def default_harness_id(harnesses: IHarnessRegistry) -> str | None:
+class CapabilityHarnesses(IHarnessKnownRegistry, IHarnessLifecycleRegistry, IHarnessModelResolutionRegistry, Protocol):
+    """What the capability snapshot reads of the registry: the known ids, each one's version probe and model tiers."""
+
+
+def default_harness_id(harnesses: IHarnessKnownRegistry) -> str | None:
     """The runner's own default harness — the registry's own binding order
     decides which one that is, with no separate config key. ``None`` only for the legacy
     no-bindings registry some tests construct. The one place this is decided."""
@@ -64,7 +73,7 @@ def default_harness_id(harnesses: IHarnessRegistry) -> str | None:
 
 
 def capability_snapshot(
-    harnesses: IHarnessRegistry,
+    harnesses: CapabilityHarnesses,
     versions: HarnessVersionCache | None = None,
     health: HarnessHealthCache | None = None,
 ) -> tuple[HarnessCapability, ...]:
@@ -100,7 +109,7 @@ class TickCapabilities:
     chunk reads. ``versions`` (the composition root's long-lived :class:`HarnessVersionCache`) is what bounds the
     cost *across* ticks; this memo alone only bounds one tick's own repeat calls."""
 
-    harnesses: IHarnessRegistry
+    harnesses: CapabilityHarnesses
     versions: HarnessVersionCache | None = None
     health: HarnessHealthCache | None = None
     _snapshot: tuple[HarnessCapability, ...] | None = field(default=None, compare=False)

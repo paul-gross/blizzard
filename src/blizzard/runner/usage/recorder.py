@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, replace
+from typing import Protocol
 
 from blizzard.foundation.clock import IClock
 from blizzard.foundation.fact_kinds import USAGE_RECORDED
@@ -11,7 +12,12 @@ from blizzard.runner.environments.repository import EnvBinding
 from blizzard.runner.environments.workspaces import IWorkspaceSpawnRoots
 from blizzard.runner.events.publisher import IRunnerEventPublisher
 from blizzard.runner.harness.identity import SessionReference
-from blizzard.runner.harness.registry import IHarnessRegistry, UnavailableHarnessError, UnknownHarnessError
+from blizzard.runner.harness.registry import (
+    IHarnessTranscriptSourceRegistry,
+    IHarnessUsageAccountingRegistry,
+    UnavailableHarnessError,
+    UnknownHarnessError,
+)
 from blizzard.runner.harness.spawn_cwd import SpawnCwd
 from blizzard.runner.harness.transcript import TranscriptPosition
 from blizzard.runner.harness.usage import UsageKind, UsageSample
@@ -36,6 +42,10 @@ from blizzard.runner.usage.repository import (
 _log = get_logger("blizzard.runner.loop")
 
 
+class UsageRecorderHarnesses(IHarnessUsageAccountingRegistry, IHarnessTranscriptSourceRegistry, Protocol):
+    """What the recorder reads of the registry: an owner's usage accounting and transcript source."""
+
+
 @dataclass(frozen=True)
 class UsageRecorder:
     """Records a lease's usage facts, keyed ``(lease, generation, kind)`` so they are
@@ -48,7 +58,7 @@ class UsageRecorder:
     #: The host's workspaces; a range is read in the spawn cwd of the workspace the lease's binding names.
     workspaces: IWorkspaceSpawnRoots
     #: Required; every recorded session's owner resolves through this registry, with no single-harness fallback.
-    harnesses: IHarnessRegistry
+    harnesses: UsageRecorderHarnesses
     #: The generation's own boundary — the range-read fallback's start.
     invocation_boundaries: IReadInvocationBoundaryRepository
     #: The transcripts lane's on/off switch — ``False`` disables only the envelope-less usage fallback.

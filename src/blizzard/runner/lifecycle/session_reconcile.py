@@ -10,7 +10,7 @@ from dataclasses import dataclass
 from typing import Protocol
 
 from blizzard.foundation.logging import get_logger
-from blizzard.runner.harness.registry import IHarnessRegistry, UnavailableHarnessError, UnknownHarnessError
+from blizzard.runner.harness.registry import IHarnessLifecycleRegistry, UnavailableHarnessError, UnknownHarnessError
 from blizzard.runner.leases.elicitation import IReadElicitationRepository
 from blizzard.runner.leases.record import IReadLeaseRecordRepository
 from blizzard.runner.leases.session import IReadLeaseSessionRepository
@@ -37,7 +37,7 @@ class SessionReconcile:
     """One daemon start's reconcile pass over the runner's own active leases."""
 
     stores: SessionReconcileStores
-    harnesses: IHarnessRegistry
+    harnesses: IHarnessLifecycleRegistry
     process: IOwnedProcessControl
 
     def run(self) -> int:

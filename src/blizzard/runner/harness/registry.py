@@ -55,26 +55,64 @@ class IHarnessLifecycleRegistry(Protocol):
     def lifecycle(self, harness_id: str) -> IHarnessWorkerLifecycle: ...
 
 
-class IHarnessRegistry(IHarnessLifecycleRegistry, Protocol):
-    """Resolve one harness's seams by its exact stable id, each narrowed to the role
-    its consumer calls (``bzh:seam-size-ceiling``)."""
+class IHarnessKnownRegistry(Protocol):
+    """The id-enumeration slice of the registry."""
 
     @property
     def known_harnesses(self) -> tuple[str, ...]: ...
 
+
+class IHarnessLifecycleAndVerdictRegistry(Protocol):
+    """The lifecycle-and-verdict slice of the registry."""
+
     def lifecycle_and_verdict(self, harness_id: str) -> IHarnessLifecycleAndVerdict: ...
 
-    def self_test(self, harness_id: str) -> IHarnessSelfTestSeam: ...
+
+class IHarnessModelResolutionRegistry(Protocol):
+    """The model-resolution slice of the registry."""
 
     def model_resolution(self, harness_id: str) -> IHarnessModelResolution: ...
 
+
+class IHarnessUsageAccountingRegistry(Protocol):
+    """The usage-accounting slice of the registry."""
+
     def usage_accounting(self, harness_id: str) -> IHarnessUsageAccounting: ...
+
+
+class IHarnessUsageLimitsRegistry(Protocol):
+    """The usage-limits slice of the registry."""
 
     def usage_limits(self, harness_id: str) -> IHarnessUsageLimits: ...
 
+
+class IHarnessProviderOverloadRegistry(Protocol):
+    """The provider-overload slice of the registry."""
+
     def provider_overload(self, harness_id: str) -> IHarnessProviderOverload: ...
 
+
+class IHarnessTranscriptSourceRegistry(Protocol):
+    """The transcript-source slice of the registry."""
+
     def transcript_source(self, harness_id: str) -> IHarnessTranscriptSource: ...
+
+
+class IHarnessRegistry(
+    IHarnessKnownRegistry,
+    IHarnessLifecycleRegistry,
+    IHarnessLifecycleAndVerdictRegistry,
+    IHarnessModelResolutionRegistry,
+    IHarnessUsageAccountingRegistry,
+    IHarnessUsageLimitsRegistry,
+    IHarnessProviderOverloadRegistry,
+    IHarnessTranscriptSourceRegistry,
+    Protocol,
+):
+    """Resolve one harness's seams by its exact stable id: the composition of every role slice
+    (``bzh:seam-size-ceiling``), for roots and edges that thread the whole registry on."""
+
+    def self_test(self, harness_id: str) -> IHarnessSelfTestSeam: ...
 
 
 class HarnessRegistry:

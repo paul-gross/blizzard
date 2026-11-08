@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from typing import Protocol
 
 from blizzard.foundation.logging import get_logger
 from blizzard.foundation.node_steps import TIER_PREFIX, SessionMode
@@ -10,7 +11,12 @@ from blizzard.foundation.roles import domain_model
 from blizzard.runner.harness.health import reported_health
 from blizzard.runner.harness.health_cache import IReadHarnessHealth
 from blizzard.runner.harness.identity import SessionReference
-from blizzard.runner.harness.registry import IHarnessRegistry, UnavailableHarnessError, UnknownHarnessError
+from blizzard.runner.harness.registry import (
+    IHarnessModelResolutionRegistry,
+    IHarnessTranscriptSourceRegistry,
+    UnavailableHarnessError,
+    UnknownHarnessError,
+)
 from blizzard.runner.harness.transcript import IHarnessTranscriptSource
 from blizzard.runner.leases.model import Lease, PoolHead
 from blizzard.runner.leases.session import IReadLeaseSessionRepository
@@ -55,13 +61,17 @@ class ResumedSession:
         return (self.lease.resolved_model, self.lease.resolved_effort, self.lease.resolved_compaction_window)
 
 
+class SessionResolverHarnesses(IHarnessModelResolutionRegistry, IHarnessTranscriptSourceRegistry, Protocol):
+    """What the resolver reads of the registry: an owner's model resolution and transcript source."""
+
+
 @dataclass(frozen=True)
 class SessionResolver:
     """Resolves a spawn's session identity against the store's own session history."""
 
     leases: IReadLeaseSessionRepository
     #: Required; every recorded session's owner resolves through this registry, with no single-harness fallback.
-    harnesses: IHarnessRegistry
+    harnesses: SessionResolverHarnesses
     #: The transcripts lane's on/off switch — every actual read still dispatches per-owner through ``harnesses``.
     transcripts_wired: bool = False
 
@@ -237,7 +247,7 @@ class HarnessSelector:
     it walks rather than constructing one (``bzh:dependency-injection``). ``Spawner.spawn``
     is its only caller: a resume or a forced continuation never reaches selection at all."""
 
-    harnesses: IHarnessRegistry
+    harnesses: IHarnessModelResolutionRegistry
     #: This runner's own cross-tick health cache; ``None`` skips the health gate entirely.
     health: IReadHarnessHealth | None = None
 
