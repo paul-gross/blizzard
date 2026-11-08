@@ -404,3 +404,88 @@ def test_the_follow_latest_hop_rolls_back_with_its_turn_when_the_landed_gate_fai
 
     assert _detail(hub, chunk_id)["graph_id"] == graph_id
     assert _migrations(hub, chunk_id) == []
+
+
+def test_a_chunk_paused_at_the_hub_node_is_not_hopped_by_the_exit(tmp_path: Path) -> None:
+    hub = build_hub(tmp_path)
+    chunk_id, build_node_id, v1 = to_merge_node(hub, graph_yaml=_FL_YAML)
+    _policy(hub, v1.graph_id, True)
+    assert hub.client.post(f"/api/chunks/{chunk_id}/pause", json={}).status_code == 202
+    post_build_pass(hub, chunk_id, build_node_id, 1)
+    hub.clock.advance(timedelta(minutes=1))
+    _mint_graph(hub, _FL_YAML.replace("Build the change.", "Better."))
+
+    hub.settle_turns()
+
+    assert _migrations(hub, chunk_id) == []
+    assert _detail(hub, chunk_id)["status"] == "paused"
+
+
+def test_a_replayed_hub_exit_writes_one_migration_and_nothing_more(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    hub = build_hub(tmp_path)
+    chunk_id, v2 = _park_then_mint(hub, v1_yaml=_FL_YAML, v2_yaml=_FL_YAML.replace("Build the change.", "Better."))
+    original = hub_node.HubNodeRouter.route
+
+    def _twice(self: hub_node.HubNodeRouter, *args: Any, **kwargs: Any) -> None:
+        original(self, *args, **kwargs)
+        original(self, *args, **kwargs)
+
+    monkeypatch.setattr(hub_node.HubNodeRouter, "route", _twice)
+
+    hub.settle_turns()
+
+    assert _detail(hub, chunk_id)["graph_id"] == v2
+    assert len(_migrations(hub, chunk_id)) == 1
+
+
+def test_an_intent_set_between_the_policy_read_and_the_lock_suppresses_the_hop(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    hub = build_hub(tmp_path)
+    assert hub.client.post("/api/graphs", json={"definition_yaml": _RUNNER_TARGET_YAML}).status_code == 201
+    chunk_id, _v2 = _park_then_mint(hub, v1_yaml=_FL_YAML, v2_yaml=_FL_YAML.replace("Build the change.", "Better."))
+    original = hub_node.HubNodeRouter._drift  # pyright: ignore[reportPrivateUsage]
+
+    def _then_intend(self: hub_node.HubNodeRouter, *args: Any, **kwargs: Any) -> Any:
+        read = original(self, *args, **kwargs)
+        patched = hub.client.patch(f"/api/chunks/{chunk_id}", json={"intended_migration": {"to_graph": "triage"}})
+        assert patched.status_code == 202, patched.text
+        return read
+
+    monkeypatch.setattr(hub_node.HubNodeRouter, "_drift", _then_intend)
+
+    hub.settle_turns()
+
+    assert _migrations(hub, chunk_id) == []
+    assert _detail(hub, chunk_id)["current_node_name"] == "after"
+
+
+def test_a_retired_current_pin_still_drifts_but_a_retired_newest_mint_is_not_a_target(tmp_path: Path) -> None:
+    hub = build_hub(tmp_path)
+    chunk_id, build_node_id, v1 = to_merge_node(hub, graph_yaml=_FL_YAML)
+    _policy(hub, v1.graph_id, True)
+    post_build_pass(hub, chunk_id, build_node_id, 1)
+    hub.clock.advance(timedelta(minutes=1))
+    v2 = _mint_graph(hub, _FL_YAML.replace("Build the change.", "Better."))
+    hub.clock.advance(timedelta(minutes=1))
+    v3 = _mint_graph(hub, _FL_YAML.replace("Build the change.", "Best."))
+    assert hub.client.post(f"/api/graphs/{v3}/retire", json={"by": "operator"}).status_code == 202
+    assert hub.client.post(f"/api/graphs/{v1.graph_id}/retire", json={"by": "operator"}).status_code == 202
+
+    hub.settle_turns()
+
+    assert _detail(hub, chunk_id)["graph_id"] == v2
+
+
+def test_a_later_exit_reads_the_policy_of_the_pin_it_landed_on(tmp_path: Path) -> None:
+    hub = build_hub(tmp_path)
+    chunk_id, v2 = _park_then_mint(hub, v1_yaml=_FL_YAML, v2_yaml=_FL_YAML.replace("Build the change.", "Better."))
+    hub.settle_turns()
+    assert _detail(hub, chunk_id)["graph_id"] == v2
+    hub.clock.advance(timedelta(minutes=1))
+    _mint_graph(hub, _FL_YAML.replace("Build the change.", "Best."))
+
+    # v2 inherits the default (off): nothing follows from it, though v1 was armed.
+    assert len(_migrations(hub, chunk_id)) == 1

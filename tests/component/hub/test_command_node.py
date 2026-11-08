@@ -698,3 +698,108 @@ def test_the_visit_names_every_work_item_by_its_forge_reference_and_links_the_bo
     assert visit.public_url == "https://blizzard.example.com"
     # Only the feature title's one read of the first item — the references read nothing.
     assert source.fetched == [*fetched_before, "42"]
+
+
+_TWO_MERGES_YAML = (
+    _answering("failure")
+    .replace("description: Failed to land.\n          to: build", "description: Failed to land.\n          to: land")
+    .replace("          to: done\n        failure:", "          to: done\n        failure:", 1)
+    + """
+  land:
+    executor: hub
+    action: test.answer
+    with: {choice: [failure]}
+    judgement:
+      choices:
+        success:
+          description: Landed.
+          to: done
+        failure:
+          description: Failed to land.
+          to: build
+"""
+)
+
+
+def test_a_follow_latest_hop_carrying_a_bounce_onto_a_hub_node_counts_that_nodes_own_bounce(tmp_path: Path) -> None:
+    """The hop mints no epoch, so the landed hub node's visit stands at the epoch the hop's bounce was recorded
+    above: its own bounce must still be recorded, or the cap undercounts."""
+    hub = build_hub(tmp_path)
+    chunk_id, build_node_id, graph = to_merge_node(hub, graph_yaml=_TWO_MERGES_YAML)
+    assert (
+        hub.client.post(f"/api/graphs/{graph.graph_id}/follow-latest", json={"follow_latest": True}).status_code == 202
+    )
+    resp = hub.client.post(
+        f"/api/fleet/chunks/{chunk_id}/completions",
+        json={
+            "choice": "pass",
+            "epoch": 1,
+            "runner_id": "r1",
+            "from_node_id": build_node_id,
+            "check_results": [],
+            "artifacts": [
+                {
+                    "name": "w",
+                    "kind": "git_commit",
+                    "repo": "acme/widget",
+                    "branch_name": "b",
+                    "commit_hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+                }
+            ],
+        },
+    )
+    assert resp.status_code == 200, resp.text
+    hub.clock.advance(timedelta(minutes=1))
+    newer = hub.client.post(
+        "/api/graphs", json={"definition_yaml": _TWO_MERGES_YAML.replace("Build the change.", "B.")}
+    )
+    assert newer.status_code == 201, newer.text
+
+    hub.settle_turns()
+
+    detail = hub.client.get(f"/api/chunks/{chunk_id}").json()
+    assert detail["graph_id"] == newer.json()["graph_id"]
+    assert detail["current_node_name"] == "build"
+    assert len(detail["bounces"]) == 2, detail["bounces"]
+
+
+def test_a_bounce_crossing_the_cap_escalates_rather_than_following_the_latest_mint(tmp_path: Path) -> None:
+    hub = build_hub(tmp_path)
+    graph_yaml = _answering("failure").replace("    action: test.answer", "    bounce_cap: 0\n    action: test.answer")
+    chunk_id, build_node_id, graph = to_merge_node(hub, graph_yaml=graph_yaml)
+    assert (
+        hub.client.post(f"/api/graphs/{graph.graph_id}/follow-latest", json={"follow_latest": True}).status_code == 202
+    )
+    resp = hub.client.post(
+        f"/api/fleet/chunks/{chunk_id}/completions",
+        json={
+            "choice": "pass",
+            "epoch": 1,
+            "runner_id": "r1",
+            "from_node_id": build_node_id,
+            "check_results": [],
+            "artifacts": [
+                {
+                    "name": "w",
+                    "kind": "git_commit",
+                    "repo": "acme/widget",
+                    "branch_name": "b",
+                    "commit_hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+                }
+            ],
+        },
+    )
+    assert resp.status_code == 200, resp.text
+    hub.clock.advance(timedelta(minutes=1))
+    assert (
+        hub.client.post(
+            "/api/graphs", json={"definition_yaml": graph_yaml.replace("Build the change.", "B.")}
+        ).status_code
+        == 201
+    )
+
+    hub.settle_turns()
+
+    detail = hub.client.get(f"/api/chunks/{chunk_id}").json()
+    assert detail["status"] == "needs_human"
+    assert detail["graph_id"] == graph.graph_id

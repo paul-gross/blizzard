@@ -879,6 +879,7 @@ class HubNodeRouter:
             cause=cause,
             envelope=envelope,
             at=self._clock.now(),
+            visit_node_id=node.node_id,
         )
         facts = handle.facts(chunk.chunk_id)
         cap = node.bounce_cap if node.bounce_cap is not None else DEFAULT_BOUNCE_CAP

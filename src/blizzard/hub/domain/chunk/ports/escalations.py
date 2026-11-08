@@ -78,11 +78,12 @@ class IWriteChunkEscalationsRepository(IReadChunkEscalationsRepository, Protocol
         cause: str,
         envelope: str,
         at: datetime,
+        visit_node_id: str | None = None,
     ) -> bool:
         """Record one delivery kick-back on ``handle``'s already-locked connection (``bzh:store-exclusive-write``),
-        idempotent by ``(chunk_id, epoch)`` and behind the write fence (``bzh:epoch-fencing``): a replay, a terminal
-        chunk, or a stale ``epoch`` writes nothing. Append-only, and the sole input :meth:`ChunkFacts.bounce_count`
-        derives from. Returns True iff it wrote."""
+        idempotent by ``(chunk_id, epoch)`` — narrowed, given ``visit_node_id``, to that node's own exit — and behind
+        the write fence (``bzh:epoch-fencing``): a replay, a terminal chunk, or a stale ``epoch`` writes nothing.
+        Append-only, and the sole input :meth:`ChunkFacts.bounce_count` derives from. Returns True iff it wrote."""
         ...
 
     def record_bounce_escalation_locked(
