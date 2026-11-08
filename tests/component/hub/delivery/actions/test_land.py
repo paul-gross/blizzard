@@ -1311,3 +1311,22 @@ def test_base_held_work_under_a_foreign_head_is_not_no_code() -> None:
     assert answer.choice != "landed"
     assert not any(name.startswith("no-code/") for name in sink.markers())
     assert sink.landings() == []
+
+
+@pytest.mark.parametrize("tip", ["missing", "refused"])
+def test_base_held_work_with_an_unreadable_branch_tip_is_not_no_code(tip: str) -> None:
+    double = _forge()
+    state = double.repos[_WIDGET]
+    state.compares = {
+        ("main", "feat/x"): comparison(ComparisonStatus.BEHIND),
+        ("main", _SUBMITTED): comparison(ComparisonStatus.BEHIND),
+    }
+    if tip == "missing":
+        state.heads.pop("feat/x", None)
+    else:
+        state.replies["branch_tip"] = [ForgeRejected("branch is gone")]
+    state.replies["open_change"] = [ForgeRejected("No commits between main and feat/x")]
+    answer, sink = _land(double)
+    assert answer.choice != "landed"
+    assert not any(name.startswith("no-code/") for name in sink.markers())
+    assert sink.landings() == []
