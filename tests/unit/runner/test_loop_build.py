@@ -634,8 +634,8 @@ def test_hosted_graph_shares_process_scoped_dependencies_with_loop_and_recovery(
         assert hosted.app.state.event_broker is graph.host.events
         assert ctx.events is graph.events
         assert runner_seams(hosted.app).events is graph.events
-        assert runner_seams(hosted.app).asks._events is graph.events  # pyright: ignore[reportPrivateUsage]
-        assert runner_seams(hosted.app).pause._events is graph.events  # pyright: ignore[reportPrivateUsage]
+        assert runner_seams(hosted.app).asks._events is graph.events
+        assert runner_seams(hosted.app).pause._events is graph.events
         assert hosted.app.state.clock is ctx.clock is hosted.resume.clock is graph.clock
         assert hosted.resume.process is ctx.process is graph.process
         assert ctx.stores is graph.stores
@@ -651,8 +651,8 @@ def test_a_store_free_create_app_derives_its_publisher_from_the_broker_and_serve
     without_broker = create_runner_app(config)
     publisher = runner_seams(with_broker).events
     assert publisher is not None
-    assert publisher._runner_id == config.served_id()  # pyright: ignore[reportPrivateUsage]
-    assert publisher._broker is broker  # pyright: ignore[reportPrivateUsage]
+    assert publisher._runner_id == config.served_id()
+    assert publisher._broker is broker
     assert runner_seams(without_broker).events is None
 
 
