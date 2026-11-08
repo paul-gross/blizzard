@@ -18,10 +18,11 @@ are missing; a missing capability discovered during delivery escalates. Consult 
 the policy.
 
 Parked changes remain `delivering` while the hub polls and yields the branch between polls. Merge the linked pull
-request on the forge; the hub records its merged revision and continues. Closing it without merging escalates. Set
-`--park-timeout <hours>` on a `park` repository to bound human review; the default is 168 hours. A review timeout
-escalates to a person. The node's ordinary pending poll timeout applies to consecutive pending work, not the parked
-review wait.
+request on the forge; the hub records the revision the merge actually produced and continues, even if the pull request's
+final head differs from the worker's commit. A differing head is noted as changed-head evidence, not attributed to
+anyone. Closing it without merging escalates. Set `--park-timeout <hours>` on a `park` repository to bound human review;
+the default is 168 hours. A review timeout escalates to a person. The node's ordinary pending poll timeout applies to
+consecutive pending work, not the parked review wait.
 
 Before rolling back to a build that cannot understand these policies or parked waits, settle affected deliveries and
 restore repository policies to ones that build supports. Inspect open parked changes and decide their disposition rather

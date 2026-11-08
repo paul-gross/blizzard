@@ -23,6 +23,7 @@ from blizzard.hub.delivery.actions.landing.checks import (
     read_verdict,
 )
 from blizzard.hub.delivery.actions.landing.head_gate import gate_head
+from blizzard.hub.delivery.actions.landing.no_code_proof import proves_no_code, record_no_code
 from blizzard.hub.delivery.actions.landing.repo import (
     Admitted,
     Conflict,
@@ -31,7 +32,6 @@ from blizzard.hub.delivery.actions.landing.repo import (
     Landed,
     LandedRevisionUnknown,
     NeedsPerson,
-    NoCode,
     Ready,
     RepoLanding,
     RepoState,
@@ -153,13 +153,7 @@ class PullRequest:
     @staticmethod
     async def _already_held(target: RepoLanding) -> bool:
         """Only affirmative containment of the submission and a safe live head proves no code is needed."""
-        if not await target.base_holds(target.commit) or not await target.base_holds(target.branch):
-            return False
-        try:
-            head = await target.ask(target.forge.refs.branch_tip(target.branch))
-        except ForgeRejected:
-            return False
-        return head is not None and (await gate_head(target, head)).admitted()
+        return await proves_no_code(target)
 
     @classmethod
     async def _record(cls, pull: PullRequest) -> PullRequest:
@@ -281,9 +275,7 @@ class MergeOnChecks:
             pull = await PullRequest.of(repo)
         except NothingToLand as exc:
             run.say(f"{exc} — no code to land")
-            name, content = run.visit.no_code_marker(repo.repo)
-            await run.post(name, content)
-            return NoCode()
+            return await record_no_code(repo)
         except (LandedRevisionUnknown, PullRequestOpenError, PullRequestLookupError) as exc:
             # A degraded read or a create hiccup is worth another poll — never "not merged".
             run.say(str(exc))

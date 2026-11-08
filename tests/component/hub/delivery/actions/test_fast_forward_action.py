@@ -11,6 +11,7 @@ from blizzard.foundation.landing_policy import LandingPolicy
 from blizzard.hub.forge.landing import CheckOutcome, CommitSummary, ComparisonStatus, FileChange, ForgeRejected
 from tests.support.github_double import RED, check, comparison
 from tests.support.land_action_doubles import (
+    _GADGET,  # pyright: ignore[reportPrivateUsage]  # shared test helper, imported from tests.support.land_action_doubles
     _SUBMITTED,  # pyright: ignore[reportPrivateUsage]  # shared test helper, imported from tests.support.land_action_doubles
     _WIDGET,  # pyright: ignore[reportPrivateUsage]  # shared test helper, imported from tests.support.land_action_doubles
     _forge,  # pyright: ignore[reportPrivateUsage]  # shared test helper, imported from tests.support.land_action_doubles
@@ -221,3 +222,65 @@ def test_stale_intent_does_not_prevent_new_candidate_marker():
     answer, sink = _land(forge, replace(_fast_visit(), markers=(marker,)))
     assert answer.choice == "landed"
     assert sink.markers()[f"fast-forward-candidate/{_WIDGET}/{_SUBMITTED}"] == _SUBMITTED
+
+
+def _held(status: ComparisonStatus):
+    """The base holds the submitted commit and the live branch, both as ``status``."""
+    forge = _ahead()
+    state = forge.repo(_WIDGET)
+    state.compares[("base-tip", _SUBMITTED)] = comparison(status)
+    state.compares[("main", _SUBMITTED)] = comparison(status)
+    state.compares[("main", "feat/x")] = comparison(status)
+    return forge
+
+
+@pytest.mark.parametrize("status", [ComparisonStatus.IDENTICAL, ComparisonStatus.BEHIND])
+def test_containment_resolves_as_no_code_not_a_landing(status: ComparisonStatus) -> None:
+    forge = _held(status)
+    answer, sink = _land(forge, _fast_visit())
+    assert answer.choice == "landed"
+    assert sink.landings() == []
+    assert not forge.writes()
+    assert sum(name.startswith("no-code/") for name in sink.markers()) == 1
+    assert not any(name.startswith(("merged/", "fast-forward-candidate/")) for name in sink.markers())
+
+
+def test_containment_in_a_mixed_chunk_lands_only_the_advancing_sibling() -> None:
+    forge = _forge(_WIDGET, _GADGET)
+    held = forge.repo(_WIDGET)
+    held.base_tip = "base-tip"
+    for pair in (("base-tip", _SUBMITTED), ("main", _SUBMITTED), ("main", "feat/x")):
+        held.compares[pair] = comparison(ComparisonStatus.BEHIND)
+    advancing = forge.repo(_GADGET)
+    advancing.base_tip = "base-tip"
+    advancing.heads["main"] = "base-tip"
+    advancing.compares[("base-tip", _SUBMITTED)] = comparison(ComparisonStatus.AHEAD)
+    visit = _visit((_WIDGET, _GADGET))
+    targets = tuple(replace(target, landing_policy=LandingPolicy.FAST_FORWARD) for target in visit.resolution.targets)
+    answer, sink = _land(forge, replace(visit, resolution=replace(visit.resolution, targets=targets)))
+    assert answer.choice == "landed"
+    assert [row.repo for row in sink.landings()] == [_GADGET]
+    assert sum(name.startswith("no-code/") for name in sink.markers()) == 1
+
+
+def test_contained_work_under_a_foreign_head_is_never_no_code() -> None:
+    forge = _held(ComparisonStatus.BEHIND)
+    state = forge.repo(_WIDGET)
+    state.heads["feat/x"] = "foreign"
+    state.compares[(_SUBMITTED, "foreign")] = comparison(
+        ComparisonStatus.AHEAD, commits=(CommitSummary("foreign", (_SUBMITTED,)),)
+    )
+    answer, sink = _land(forge, _fast_visit())
+    assert answer.choice == "failure"
+    assert sink.landings() == []
+    assert not any(name.startswith("no-code/") for name in sink.markers())
+
+
+@pytest.mark.parametrize("missing", [("base-tip", _SUBMITTED), ("main", _SUBMITTED), ("main", "feat/x")])
+def test_an_unreadable_containment_comparison_is_not_proof(missing: tuple[str, str]) -> None:
+    forge = _held(ComparisonStatus.BEHIND)
+    del forge.repo(_WIDGET).compares[missing]
+    answer, sink = _land(forge, _fast_visit())
+    assert answer.choice == "pending"
+    assert sink.landings() == []
+    assert not any(name.startswith("no-code/") for name in sink.markers())

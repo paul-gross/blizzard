@@ -7,6 +7,7 @@ from blizzard.foundation.escalation_causes import EscalationCause
 from blizzard.hub.delivery.actions.landing.base_merge import contributes_only_base_change
 from blizzard.hub.delivery.actions.landing.checks import FOREIGN, failed_checks, read_verdict
 from blizzard.hub.delivery.actions.landing.head_gate import gate_head
+from blizzard.hub.delivery.actions.landing.no_code_proof import proves_no_code, record_no_code
 from blizzard.hub.delivery.actions.landing.repo import (
     Admitted,
     Conflict,
@@ -131,7 +132,10 @@ class FastForward:
         if comparison is None:
             return Waiting(f"{repo.repo}: cannot compare base and work")
         if comparison.status in {ComparisonStatus.IDENTICAL, ComparisonStatus.BEHIND}:
-            return Landed(head)
+            # Containment is not a landing: nothing advances, so only the no-code evidence is written.
+            if await proves_no_code(repo, head, gated=True):
+                return await record_no_code(repo)
+            return Waiting(f"{repo.repo}: cannot prove the base already holds the work")
         candidate = head
         if comparison.status is ComparisonStatus.DIVERGED:
             missing = _DIVERGED - repo.forge.offered
