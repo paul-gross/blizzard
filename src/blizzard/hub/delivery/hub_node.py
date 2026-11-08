@@ -22,7 +22,7 @@ from blizzard.foundation.ids import Id, IdPrefix
 from blizzard.foundation.roles import domain_model
 from blizzard.foundation.wait_kinds import WaitKind
 from blizzard.hub.domain.actions.declarations import GitCommits
-from blizzard.hub.domain.actions.effects import ActionEscalation
+from blizzard.hub.domain.actions.effects import ActionEscalation, MissingCapability
 from blizzard.hub.domain.actions.visit import LandingProject
 from blizzard.hub.domain.artifact.model import StoredArtifact
 from blizzard.hub.domain.chunk.delivery_read import DeliveryRead, DeliverySources
@@ -41,7 +41,6 @@ from blizzard.hub.domain.chunk.ports.exclusive import IChunkExclusiveWrites, ILo
 from blizzard.hub.domain.chunk.ports.fence import EpochAdmission, FenceRefusal
 from blizzard.hub.domain.chunk.ports.hub_exec import IWriteChunkHubExecRepository
 from blizzard.hub.domain.chunk.ports.movement import IWriteChunkMovementRepository
-from blizzard.hub.domain.config.capabilities import Capability
 from blizzard.hub.domain.config.forges import ConfiguredForge, IReadForgeRepository
 from blizzard.hub.domain.config.repositories import (
     IReadRepositoryRecordRepository,
@@ -731,20 +730,18 @@ class HubNodeRouter:
         self,
         chunk: Chunk,
         node: Node,
-        action_name: str,
         target: ResolvedRepository,
-        capability: Capability,
+        missing: MissingCapability,
+        explanation: str,
         *,
         forge: ConfiguredForge,
         epoch: int,
         ending: ITurnEnd = NO_TURN,
     ) -> None:
-        """Refuse the visit before its pass: only an operator can change what a forge offers or what an action asks
-        of it. Its ``hub-log`` artifact is written first, once per visit; its event only when the escalation takes."""
-        detail = (
-            f"repository {target.slug or target.record} on forge {forge.label} does not offer `{capability}`, "
-            f"which `{action_name}` requires"
-        )
+        """Escalate a visit whose forge lacks what the action needs, before its pass or mid-pass: only an operator
+        can change what a forge offers or what an action asks of it. ``explanation`` is the caller's human account.
+        Its ``hub-log`` artifact is written first, once per visit; its event only when the escalation takes."""
+        detail = explanation
         self._artifacts.record_hub_artifact(
             chunk.chunk_id,
             node_id=node.node_id,
@@ -756,7 +753,7 @@ class HubNodeRouter:
             at=self._clock.now(),
             close_decision=self._close_decision(chunk),
         )
-        escalation = ActionEscalation(EscalationCause.FORGE_CAPABILITY_MISSING, detail)
+        escalation = ActionEscalation(EscalationCause.FORGE_CAPABILITY_MISSING, detail, missing)
         outcome = self._escalated(chunk, escalation, epoch=epoch, ending=ending)
         if outcome is BounceEscalationOutcome.RECORDED:
             self._events.record(
@@ -769,7 +766,7 @@ class HubNodeRouter:
                 message=detail,
                 detail={
                     "epoch": epoch,
-                    "capability": str(capability),
+                    "capability": str(missing.first),
                     "repository": target.record,
                     "forge": forge.fields.api_base,
                 },

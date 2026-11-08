@@ -38,6 +38,7 @@ from blizzard.hub.domain.actions.effects import (
     EffectStatus,
     LandingRecord,
     Marker,
+    MissingCapability,
     Pass,
     RecordGardenDelivery,
     RecordReviewFindings,
@@ -380,13 +381,15 @@ class TurnRunner:
         watch = visit.parked_watch() if spec.name == "land" else None
         if (missing := self._missing_capability(spec.name, resolution, only=watch)) is not None:
             target, capability = missing
+            forge = resolution.forge_of(target)
             self._router.escalate_capability_missing(
                 chunk,
                 node,
-                spec.name,
                 target,
-                capability,
-                forge=resolution.forge_of(target),
+                MissingCapability(RepositoryId(target.record), (capability,)),
+                f"repository {target.slug or target.record} on forge {forge.label} does not offer `{capability}`, "
+                f"which `{spec.name}` requires",
+                forge=forge,
                 epoch=epoch,
                 ending=ending,
             )
@@ -600,7 +603,7 @@ class TurnRunner:
         answer = self._answer(chunk, node, spec, run, epoch=epoch)
         log_artifact = self._record_pass_log(chunk, node, spec.name, answer, epoch=epoch)
         if answer.escalation is not None:
-            self._router.escalate(chunk, answer.escalation, epoch=epoch, ending=ending)
+            self._escalate_pass(chunk, node, ready, answer.escalation, epoch=epoch, ending=ending)
         elif answer.waits():
             self._router.record_wait(
                 chunk,
@@ -617,6 +620,31 @@ class TurnRunner:
             self._router.route(
                 chunk, graph, node, epoch=epoch, choice=choice, commits=ready.commits, action=bounced, ending=ending
             )
+
+    def _escalate_pass(
+        self, chunk: Chunk, node: Node, ready: _Ready, escalation: ActionEscalation, *, epoch: int, ending: _TurnEnding
+    ) -> None:
+        """Route a pass's escalation; one that carries a missing-capability reason is announced, resolved against the
+        visit's captured targets. An identity none of them match still reaches a person, unannounced."""
+        reason = escalation.missing
+        target = (
+            next((t for t in ready.resolution.targets if t.record == reason.repository), None)
+            if reason is not None
+            else None
+        )
+        if reason is None or target is None:
+            self._router.escalate(chunk, escalation, epoch=epoch, ending=ending)
+            return
+        self._router.escalate_capability_missing(
+            chunk,
+            node,
+            target,
+            reason,
+            escalation.detail,
+            forge=ready.resolution.forge_of(target),
+            epoch=epoch,
+            ending=ending,
+        )
 
     def _end_cut_off(self, turn: Turn, submission: Submission, ready: _Ready) -> None:
         """A pass let go at its deadline ends its turn ``cut-off`` with its ``hub-action-overran`` event, routing

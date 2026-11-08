@@ -41,6 +41,7 @@ from blizzard.foundation.clock import FixedClock, IClock
 from blizzard.foundation.flags import Flags
 from blizzard.foundation.forwarded import TrustedProxies
 from blizzard.foundation.ids import Id, IdPrefix
+from blizzard.foundation.landing_policy import LandingPolicy
 from blizzard.foundation.logging import get_logger
 from blizzard.foundation.node_steps import Executor, JudgedBy, SessionMode
 from blizzard.foundation.project_colors import ProjectColor
@@ -97,6 +98,7 @@ from blizzard.hub.domain.config.forges import (
     origin_identity,
     suffixed_slug,
 )
+from blizzard.hub.domain.config.landing_policies import DEFAULT_LANDING_POLICY
 from blizzard.hub.domain.config.repositories import RepositoryDraft
 from blizzard.hub.domain.config.secrets import IHubKeyProvider, SecretAlreadyExists, SecretName
 from blizzard.hub.domain.config.work_sources import ConfiguredWorkSource, WorkSourceFields, WorkSourceId
@@ -1495,9 +1497,10 @@ class RepositorySeed:
     repo: str
     base_branch: str
     secret_name: str
+    landing_policy: LandingPolicy = DEFAULT_LANDING_POLICY
 
     def draft(self) -> RepositoryDraft:
-        return RepositoryDraft(self.owner, self.repo, self.base_branch, self.secret_name)
+        return RepositoryDraft(self.owner, self.repo, self.base_branch, self.secret_name, self.landing_policy)
 
 
 #: The address every fixture forge record serves.

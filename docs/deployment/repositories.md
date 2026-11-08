@@ -153,8 +153,8 @@ script can gate on it. The hub's startup log carries the same finding as one war
 A `deliver` step resolves each of its chunk's commit pointers to its own repository record before its action takes a
 pass. Each commit's `repo` is qualified to the record's `owner/repo`, and lands against that record's target: its
 `forge`, `owner` and `base_branch`. The `land` action reaches each repository through the landing seam, an adapter for
-the record's forge kind built from the record and its secret, revealed once per distinct secret for that pass, so the
-secret never leaves the hub.
+the record's forge kind built from the record and its secret, revealed once per distinct secret for that pass and only
+for the repositories the pass needs a handle for, so the secret never leaves the hub.
 
 A pointer matches a record by repo name, narrowed by the origin's owner and forge host when its URL names them; a
 `file://` origin names neither and matches by bare name. A record counts for a chunk when it is enabled, or was retired
@@ -175,7 +175,8 @@ actual merge does. Mixed chunks record landings only for the repositories that m
 reaches `done`, including when nothing merged.
 
 A forge that lacks an operation the action needs refuses the step too, escalating the chunk with
-`forge-capability-missing` ([forges.md](./forges.md#a-missing-capability)).
+`forge-capability-missing`, whether the operation is required up front or found needed during the pass
+([forges.md](./forges.md#a-missing-capability)).
 
 Three outcomes refuse the step before it runs and route its failure choice; the first two also record an event
 ([observability.md](./observability.md)):

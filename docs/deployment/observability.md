@@ -54,9 +54,9 @@ the chunk's project does not link. The step is refused before any command runs a
 is linking the repository to the project ([projects.md](./projects.md#links)), then requeuing.
 
 `forge-capability-missing` (warning): a `deliver` step's repository sits on a forge that lacks an operation the step's
-action requires. The hub refuses the visit before the action runs, writes a `hub-log.forge-capability-missing` artifact,
-and escalates the chunk once, cause `forge-capability-missing`, naming the capability, the repository, and the forge.
-The remedy is the forge or the action ([forges.md](./forges.md#a-missing-capability)).
+action requires. The hub refuses the visit before the unsupported operation, writes a `hub-log.forge-capability-missing`
+artifact, and escalates the chunk once, cause `forge-capability-missing`, naming the capability, the repository, and the
+forge. The remedy is the forge or the action ([forges.md](./forges.md#a-missing-capability)).
 
 `forge-budget-low` (warning): a forge's [rate budget](./forges.md#the-rate-budget) fell low enough to turn a caller away
 before its request was sent. `forge-rate-limited` (warning): the forge refused a call for its rate, so every caller of

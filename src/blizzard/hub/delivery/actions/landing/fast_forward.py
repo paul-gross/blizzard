@@ -20,8 +20,9 @@ from blizzard.hub.delivery.actions.landing.repo import (
     RepoState,
     Waiting,
 )
-from blizzard.hub.domain.actions.effects import ActionEscalation
+from blizzard.hub.domain.actions.effects import ActionEscalation, MissingCapability
 from blizzard.hub.domain.config.capabilities import Capability
+from blizzard.hub.domain.config.repositories import RepositoryId
 from blizzard.hub.forge.landing import ComparisonStatus, ForgeNotFound, ForgeRejected, ForgeUnavailable
 
 _CREATED = crashpoint("policy.after-create-ref.before-merge-into", "landing branch created before candidate merge")
@@ -135,8 +136,15 @@ class FastForward:
         if comparison.status is ComparisonStatus.DIVERGED:
             missing = _DIVERGED - repo.forge.offered
             if missing:
-                detail = f"diverged landing needs {', '.join(sorted(missing))}"
-                return _person(repo, EscalationCause.FORGE_CAPABILITY_MISSING, detail)
+                reason = MissingCapability.of(RepositoryId(repo.record.record), missing)
+                detail = f"diverged landing needs {', '.join(reason.capabilities)}"
+                return NeedsPerson(
+                    ActionEscalation(
+                        EscalationCause.FORGE_CAPABILITY_MISSING,
+                        f"{repo.repo} on forge {repo.forge_label}: {detail}",
+                        reason,
+                    )
+                )
             branch = f"{repo.branch}-landing"
             tip = await repo.ask(repo.forge.refs.branch_tip(branch))
             if tip is not None:
