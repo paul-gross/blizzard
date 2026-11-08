@@ -1,8 +1,8 @@
 """Repository records: the stored shape, validation, sparse merge, and the seams.
 
-A repository has the slugged configured-record shape (``bzh:configured-record``). Every field is required but the
-park timeout, so an edit carrying ``None`` on any other field is refused naming it; ``None`` on the timeout clears
-it."""
+A repository has the configured-record shape (``bzh:configured-record``) and its three names
+(``bzh:configured-record-names``). Every field is required but the park timeout, so an edit carrying ``None`` on any
+other field is refused naming it; ``None`` on the timeout clears it."""
 
 from __future__ import annotations
 

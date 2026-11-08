@@ -1,8 +1,8 @@
 """Forge records: the stored shape, the origin rule, validation, sparse merge, and the seams.
 
-A forge is one server a repository or a work source lives on, with the slugged configured-record shape
-(``bzh:configured-record``). Its kind never changes once it is created, and two forges of a tenant never share an API
-origin."""
+A forge is one server a repository or a work source lives on, with the configured-record shape
+(``bzh:configured-record``) and its three names (``bzh:configured-record-names``). Its kind never changes once it is
+created, and two forges of a tenant never share an API origin."""
 
 from __future__ import annotations
 

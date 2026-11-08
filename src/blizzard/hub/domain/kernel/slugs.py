@@ -1,7 +1,7 @@
 """The grammars every slugged record kind shares: a slug that resolves, and a display name that never does.
 
 A kind's own refusals — a reserved slug, a field error naming its document key — stay the kind's; only the grammar is
-shared (``bzh:configured-record``)."""
+shared (``bzh:configured-record-names``)."""
 
 from __future__ import annotations
 
