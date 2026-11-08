@@ -351,3 +351,15 @@ def test_a_gate_opened_at_the_plan_to_lock_boundary_refuses_the_exit_under_the_l
     assert plain["outcome"] == "failure" and f"decision {decision_id} is open" in plain["detail"]
     assert (chunk.rows(s.transitions), chunk.rows(s.escalations), chunk.rows(s.chunk_migrations)) == (0, 0, 0)
     assert chunk.detail()["status"] == "waiting_on_human"
+
+
+def test_a_resolving_re_escalation_replay_still_must_name_this_nodes_decision(tmp_path: Path) -> None:
+    chunk, decision_id = _resolved_then_reclaimed(build_hub(tmp_path), choice="blocked")
+    first = chunk.complete("r2", choice="blocked", epoch=2, decision_id=decision_id)
+    assert first["outcome"] != "failure", first
+
+    replay = chunk.complete("r2", choice="blocked", epoch=2, decision_id=decision_id)
+    assert replay["outcome"] != "failure", replay
+
+    foreign = chunk.complete("r2", choice="blocked", epoch=2, decision_id="dec_not_this_nodes")
+    assert foreign["outcome"] == "failure" and "does not match node" in foreign["detail"]

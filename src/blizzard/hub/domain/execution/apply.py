@@ -282,6 +282,7 @@ class ApplyService:
             if re_escalating and submission.decision_id is not None:
                 # A resolving re-escalation writes nothing: its escalation already closed the decision.
                 assert edge is not None
+                self._refuse_foreign_decision(chunk, from_node, submission)
                 plan = CompletionPlan(edge, None)
             else:
                 plan = self._gate_plan(chunk, graph, from_node, submission, facts, produces_mode=produces_mode)
@@ -303,6 +304,24 @@ class ApplyService:
         if landing is not None:
             return self._land_migration(chunk, graph, from_node, submission, landing, artifacts)
         return self._transition(chunk, graph, from_node, submission, plan, artifacts)
+
+    def _refuse_foreign_decision(self, chunk: Chunk, from_node: Node, submission: Completion) -> None:
+        """A resolving re-escalation's decision is already closed by its own escalation, so the visit
+        membership no longer applies; it must still be this chunk's and node's, resolved to this choice."""
+        decision = self._decisions.get_decision(submission.decision_id) if submission.decision_id else None
+        detail = (
+            f"decision {submission.decision_id} does not match node `{from_node.name}`"
+            if decision is None
+            else decision.resolving_refusal(
+                chunk_id=chunk.chunk_id,
+                node_id=from_node.node_id,
+                node_name=from_node.name,
+                in_visit=True,
+                choice=submission.choice,
+            )
+        )
+        if detail is not None:
+            raise CompletionRefused(detail)
 
     def _gate_plan(
         self,
