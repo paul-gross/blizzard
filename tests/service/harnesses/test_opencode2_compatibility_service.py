@@ -17,6 +17,7 @@ from pathlib import Path
 import pytest
 from click.testing import CliRunner
 
+from blizzard.foundation.clock import SystemMonotonicClock
 from blizzard.runner.cli import runner as runner_group
 from blizzard.runner.harness.compatibility import CompatibilityClassification, EvidenceState
 from blizzard.runner.harness.opencode_v2.client import ModelReference, ServiceRequestError, ServiceShapeError
@@ -159,7 +160,9 @@ class _Rig:
             model=MODEL,
             scratch=self.scratch,
             host=self.host,
-            core_factory=lambda: DriverCore(lambda: read_registration(path), transport),
+            core_factory=lambda: DriverCore(
+                lambda: read_registration(path), transport, monotonic_clock=SystemMonotonicClock()
+            ),
             migration=StoreMigrationProbe(str(self.binary), None, None, self.scratch.parent / "migration", self.host),
         )
 

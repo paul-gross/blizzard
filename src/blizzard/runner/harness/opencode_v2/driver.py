@@ -4,11 +4,11 @@ proof's settle wait. The turn driver owns a driven turn's own completion rule.""
 
 from __future__ import annotations
 
-import time
 from collections.abc import Callable, Mapping
 from contextlib import suppress
 from dataclasses import dataclass
 
+from blizzard.foundation.clock import IMonotonicClock
 from blizzard.foundation.roles import domain_model
 from blizzard.runner.harness.json_value import JsonObject
 from blizzard.runner.harness.opencode_v2.client import (
@@ -110,17 +110,15 @@ class DriverCore:
         source: RegistrationSource,
         transport: IServiceTransport,
         *,
+        monotonic_clock: IMonotonicClock,
         poll_seconds: float = DEFAULT_POLL_SECONDS,
-        monotonic: Callable[[], float] = time.monotonic,
-        sleep: Callable[[float], None] = time.sleep,
         reach_bound_seconds: float = DEFAULT_REACH_BOUND_SECONDS,
         return_grace_seconds: float = DEFAULT_RETURN_GRACE_SECONDS,
     ) -> None:
         self._source = source
         self._transport = transport
         self._poll_seconds = poll_seconds
-        self._monotonic = monotonic
-        self._sleep = sleep
+        self._clock = monotonic_clock
         self._reach_bound_seconds = reach_bound_seconds
         self._return_grace_seconds = return_grace_seconds
         self._unreachable_since: float | None = None
@@ -166,7 +164,7 @@ class DriverCore:
             self._unreachable_since = None
             return True
         if current is None:
-            now = self._monotonic()
+            now = self._clock.monotonic()
             if self._unreachable_since is None:
                 self._unreachable_since = now
             if now - self._unreachable_since < self._reach_bound_seconds:
@@ -179,20 +177,20 @@ class DriverCore:
         raise ServiceRestartedError("the OpenCode service restarted mid-turn")
 
     def _interrupt_on_return(self, root_id: str) -> None:
-        deadline = self._monotonic() + self._return_grace_seconds
-        while self._monotonic() < deadline:
+        deadline = self._clock.monotonic() + self._return_grace_seconds
+        while self._clock.monotonic() < deadline:
             if self.current_identity() is not None:
                 with suppress(ServiceUnreachableError, ServiceRequestError, ServiceShapeError, RegistrationError):
                     self.rebind()
                     self.interrupt_tree(root_id)
                 return
-            self._sleep(self._poll_seconds or 0.2)
+            self._clock.sleep(self._poll_seconds or 0.2)
 
     def await_settled(self, root_id: str, timeout_seconds: float) -> TreeState:
         """Poll until the root is idle, no descendant runs, and the root's inbox is empty, observed after the last
         descendant settled. Polling alone decides it; the event stream is never the record. A poll the service does
         not answer is retried until the reach bound."""
-        deadline = self._monotonic() + timeout_seconds
+        deadline = self._clock.monotonic() + timeout_seconds
         while True:
             if self.check_service(root_id):
                 try:
@@ -201,9 +199,9 @@ class DriverCore:
                     state = None
                 if state is not None and state.settled():
                     return state
-            if self._monotonic() >= deadline:
+            if self._clock.monotonic() >= deadline:
                 raise TurnTimeoutError(f"session {root_id} did not settle within {timeout_seconds:.0f}s")
-            self._sleep(self._poll_seconds)
+            self._clock.sleep(self._poll_seconds)
 
     def interrupt_tree(self, root_id: str) -> tuple[str, ...]:
         """Interrupt every running descendant, deepest first, then the root; returns what was asked to stop."""

@@ -15,6 +15,7 @@ from urllib.parse import urlsplit
 
 import pytest
 
+from blizzard.foundation.clock import IMonotonicClock, ManualMonotonicClock, SystemMonotonicClock
 from blizzard.runner.harness.autonomy import Autonomy
 from blizzard.runner.harness.opencode_v2.client import ModelReference
 from blizzard.runner.harness.opencode_v2.drive import REFUSAL_MESSAGE, TurnDriver
@@ -55,7 +56,16 @@ def _request(kind: DriveKind = DriveKind.SPAWN, **changes: Any) -> DriveRequest:
 
 
 class Harness:
-    def __init__(self, service: SessionService, request: DriveRequest, *, listen: bool = False) -> None:
+    def __init__(
+        self,
+        service: SessionService,
+        request: DriveRequest,
+        *,
+        listen: bool = False,
+        clock: IMonotonicClock | None = None,
+        grace_seconds: float = 0.5,
+        failing_bound_seconds: float = 30.0,
+    ) -> None:
         self.registration: ServiceRegistration | None = REGISTRATION
         self.transport = SessionTransport(service)
         self.service = service
@@ -63,7 +73,8 @@ class Harness:
         self.heartbeats = 0
         self.restarted: SessionService | None = None
         self.stop = threading.Event()
-        core = DriverCore(lambda: self.registration, self.transport, poll_seconds=0.0)
+        self.clock = clock or ManualMonotonicClock()
+        core = DriverCore(lambda: self.registration, self.transport, monotonic_clock=self.clock, poll_seconds=0.0)
         self.driver = TurnDriver(
             core,
             request,
@@ -71,8 +82,10 @@ class Harness:
             self.out,
             heartbeat=self._beat,
             stop=self.stop,
+            monotonic_clock=self.clock,
             poll_seconds=0.001,
-            grace_seconds=0.5,
+            grace_seconds=grace_seconds,
+            failing_bound_seconds=failing_bound_seconds,
             listen=listen,
         )
 
@@ -344,13 +357,32 @@ def test_polls_that_keep_failing_fail_the_turn_and_interrupt_the_tree() -> None:
         service.running.add(session_id)
         service.failing["/message"] = 500
 
-    service = SessionService(on_prompt=prompt)
-    harness = Harness(service, _request())
-    harness.driver._failing_bound_seconds = 0.05  # pyright: ignore[reportPrivateUsage]  # a short bound
+    clock = ManualMonotonicClock()
+    service = SessionService(on_prompt=prompt, on_poll=lambda _service: clock.advance(1.0))
+    harness = Harness(service, _request(), clock=clock, failing_bound_seconds=5.0)
     result = harness.run()
     assert result.outcome is Outcome.FAILED
     assert result.error is not None and result.error.kind is ErrorKind.SERVICE
+    assert result.error.message == "the OpenCode service failed: every poll failed for 5s"
     assert service.interrupted == [ROOT]
+    assert clock.delays == []
+
+
+def test_the_interrupt_grace_is_measured_on_the_driver_clock_without_really_sleeping() -> None:
+    def prompt(service: SessionService, session_id: str, body: Record) -> None:
+        service.running.add(session_id)
+
+    service = SessionService(on_prompt=prompt)
+    service.failing["/interrupt"] = 200
+    clock = ManualMonotonicClock()
+    harness = Harness(service, _request(), clock=clock, grace_seconds=30.0)
+    service.on_poll = lambda s: harness.stop.set() if s.polls == 2 else None
+    started = time.monotonic()
+    result = harness.run()
+    assert time.monotonic() - started < 10.0
+    assert result.outcome is Outcome.INTERRUPTED
+    assert clock.delays and set(clock.delays) == {0.001}
+    assert clock.reading >= 30.0 and clock.reading - clock.delays[-1] < 30.0
 
 
 def test_a_step_still_streaming_is_read_rather_than_counted_as_a_failed_poll() -> None:
@@ -373,8 +405,12 @@ def test_a_step_still_streaming_is_read_rather_than_counted_as_a_failed_poll() -
             service.messages[ROOT][-1] = assistant("msg_a", "done", tools=(tool("call_1"),))
             service.messages[ROOT].append(idle("msg_i"))
 
-    harness = Harness(SessionService(on_prompt=prompt, on_poll=advance), _request())
-    harness.driver._failing_bound_seconds = 0.05  # pyright: ignore[reportPrivateUsage]  # a short bound
+    harness = Harness(
+        SessionService(on_prompt=prompt, on_poll=advance),
+        _request(),
+        clock=SystemMonotonicClock(),
+        failing_bound_seconds=0.05,
+    )
     result = harness.run()
     assert result.outcome is Outcome.SUCCEEDED and result.text == "done"
 
@@ -400,8 +436,7 @@ def test_a_call_still_streaming_its_arguments_is_read_rather_than_counted_as_a_f
             service.messages[ROOT].append(idle("msg_i"))
 
     service = SessionService(on_prompt=prompt, on_poll=advance)
-    harness = Harness(service, _request())
-    harness.driver._failing_bound_seconds = 0.05  # pyright: ignore[reportPrivateUsage]  # a short bound
+    harness = Harness(service, _request(), clock=SystemMonotonicClock(), failing_bound_seconds=0.05)
     result = harness.run()
     assert result.outcome is Outcome.SUCCEEDED and result.text == "done"
     assert service.interrupted == []

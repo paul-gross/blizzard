@@ -5,12 +5,12 @@ completions, compacting at the lease's window — and its result written. The ev
 from __future__ import annotations
 
 import threading
-import time
 from collections.abc import Callable, Mapping
 from contextlib import suppress
 from dataclasses import dataclass, field
 from typing import TextIO
 
+from blizzard.foundation.clock import IMonotonicClock
 from blizzard.foundation.crash import crashpoint
 from blizzard.foundation.roles import domain_model
 from blizzard.runner.harness.autonomy import Autonomy
@@ -94,11 +94,11 @@ class TurnDriver:
         *,
         heartbeat: Callable[[], None],
         stop: threading.Event,
+        monotonic_clock: IMonotonicClock,
         poll_seconds: float = 1.0,
         grace_seconds: float = DEFAULT_GRACE_SECONDS,
         failing_bound_seconds: float = DEFAULT_REACH_BOUND_SECONDS,
         listen: bool = True,
-        monotonic: Callable[[], float] = time.monotonic,
     ) -> None:
         self._core = core
         self._request = request
@@ -112,7 +112,7 @@ class TurnDriver:
         self._failing_since: float | None = None
         self._prompted = False
         self._listen = listen
-        self._monotonic = monotonic
+        self._clock = monotonic_clock
         self._wake = threading.Event()
         self._done = threading.Event()
         self._tree_ids: frozenset[str] = frozenset({request.session_id})
@@ -270,7 +270,7 @@ class TurnDriver:
         """A poll the service failed — a request gone by the time it was answered, a transient error — is retried
         like an outage, and fails the turn once failures outlast the bound."""
         self._settled_once = False
-        now = self._monotonic()
+        now = self._clock.monotonic()
         if self._failing_since is None:
             self._failing_since = now
         elif now - self._failing_since >= self._failing_bound_seconds:
@@ -346,16 +346,16 @@ class TurnDriver:
         root = self._request.session_id
         with suppress(*_SERVICE_FAULTS):
             self._core.interrupt_tree(root)
-        deadline = self._monotonic() + self._grace_seconds
+        deadline = self._clock.monotonic() + self._grace_seconds
         poll = _Poll()
-        while self._monotonic() < deadline:
+        while self._clock.monotonic() < deadline:
             try:
                 poll = self._poll()
                 if not any(session_id in self._core.client.running_sessions() for session_id in poll.parents):
                     break
             except _SERVICE_FAULTS:
                 pass
-            time.sleep(min(self._poll_seconds, 0.2))
+            self._clock.sleep(min(self._poll_seconds, 0.2))
         return self._finish(Outcome.INTERRUPTED, self._final_text(poll), self._steps(poll), None)
 
     def _conclude(self, poll: _Poll) -> DriverResult:

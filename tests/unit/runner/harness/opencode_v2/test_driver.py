@@ -3,10 +3,12 @@ by a changed identity rather than an outage, and interrupting a tree children fi
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from dataclasses import dataclass, replace
 
 import pytest
 
+from blizzard.foundation.clock import ManualMonotonicClock
 from blizzard.runner.harness.opencode_v2.client import SessionCreate
 from blizzard.runner.harness.opencode_v2.driver import (
     DriverCore,
@@ -22,14 +24,14 @@ from tests.support.opencode_v2_fakes import REGISTRATION, FakeService, FakeTrans
 
 
 @dataclass
-class Clock:
-    now: float = 0.0
+class Clock(ManualMonotonicClock):
+    """A manual clock that also lets a test change the world after each delay the core takes."""
 
-    def monotonic(self) -> float:
-        return self.now
+    after_sleep: Callable[[], None] = lambda: None
 
     def sleep(self, seconds: float) -> None:
-        self.now += seconds
+        super().sleep(seconds)
+        self.after_sleep()
 
 
 @dataclass
@@ -56,9 +58,8 @@ def _core(service: FakeService, clock: Clock | None = None) -> tuple[DriverCore,
     core = DriverCore(
         machine.source,
         machine.transport,
+        monotonic_clock=clock,
         poll_seconds=1.0,
-        monotonic=clock.monotonic,
-        sleep=clock.sleep,
         reach_bound_seconds=5.0,
     )
     return core, machine, clock
@@ -112,22 +113,21 @@ def test_await_settled_polls_until_the_tree_settles() -> None:
     service = FakeService(running={"ses_r"})
     clock = Clock()
     core, _, _ = _core(service, clock)
-    original_sleep = clock.sleep
 
-    def settle_after_three(seconds: float) -> None:
-        original_sleep(seconds)
-        if clock.now >= 3:
+    def settle_after_three() -> None:
+        if clock.reading >= 3:
             service.running.clear()
 
-    core._sleep = settle_after_three  # pyright: ignore[reportPrivateUsage]  # drives the poll loop's time
+    clock.after_sleep = settle_after_three
     state = core.await_settled("ses_r", timeout_seconds=60)
-    assert state.settled() and clock.now == 3
+    assert state.settled() and clock.delays == [1.0, 1.0, 1.0]
 
 
 def test_await_settled_times_out() -> None:
-    core, _, _ = _core(FakeService(running={"ses_r"}))
+    core, _, clock = _core(FakeService(running={"ses_r"}))
     with pytest.raises(TurnTimeoutError):
         core.await_settled("ses_r", timeout_seconds=3)
+    assert clock.delays == [1.0, 1.0, 1.0] and clock.reading == 3
 
 
 def test_a_restart_between_polls_is_recognized_by_identity_and_the_resumed_tree_is_interrupted() -> None:
@@ -146,7 +146,7 @@ def test_a_brief_outage_of_the_same_service_does_not_fail_the_turn() -> None:
     core, machine, clock = _core(service)
     machine.transport.service = None
     core.check_service("ses_r")
-    clock.now += 2
+    clock.advance(2)
     machine.transport.service = service
     core.check_service("ses_r")
     service.running.clear()
@@ -159,14 +159,13 @@ def test_await_settled_rides_out_a_brief_outage_of_the_same_service() -> None:
     machine.transport.service = None
     polls: list[float] = []
 
-    def back_after_two_polls(seconds: float) -> None:
-        clock.now += seconds
-        polls.append(clock.now)
+    def back_after_two_polls() -> None:
+        polls.append(clock.reading)
         if len(polls) == 2:
             machine.transport.service = service
             service.running.clear()
 
-    core._sleep = back_after_two_polls  # pyright: ignore[reportPrivateUsage]  # drives the poll loop's time
+    clock.after_sleep = back_after_two_polls
     assert core.await_settled("ses_r", timeout_seconds=60).settled()
     assert len(polls) == 2
 
@@ -175,9 +174,12 @@ def test_a_service_unreachable_past_the_bound_fails_the_turn() -> None:
     core, machine, clock = _core(FakeService(running={"ses_r"}))
     machine.transport.service = None
     core.check_service("ses_r")
-    clock.now += 5
+    clock.advance(4.5)
+    assert core.check_service("ses_r") is False
+    clock.advance(0.5)
     with pytest.raises(ServiceRestartedError, match="stopped answering"):
         core.check_service("ses_r")
+    assert clock.reading == 5 + 30 and sum(clock.delays) == 30
 
 
 def test_a_service_that_returns_within_the_grace_after_the_bound_has_the_tree_interrupted() -> None:
@@ -186,18 +188,17 @@ def test_a_service_that_returns_within_the_grace_after_the_bound_has_the_tree_in
     core, machine, clock = _core(FakeService(running={"ses_r"}))
     machine.transport.service = None
     core.check_service("ses_r")
-    clock.now += 5
+    clock.advance(5)
     returned = FakeService(pid=200, running={"ses_r"})
 
-    def back_on_the_next_poll(seconds: float) -> None:
-        clock.now += seconds
+    def back_on_the_next_poll() -> None:
         machine.transport.service = returned
         machine.registration = replace(REGISTRATION, id="svc-2", pid=200)
 
-    core._sleep = back_on_the_next_poll  # pyright: ignore[reportPrivateUsage]  # drives the grace loop's time
+    clock.after_sleep = back_on_the_next_poll
     with pytest.raises(ServiceRestartedError, match="stopped answering"):
         core.check_service("ses_r")
-    assert returned.interrupted == ["ses_r"]
+    assert returned.interrupted == ["ses_r"] and clock.delays == [1.0]
 
 
 def test_a_malformed_registration_reads_as_no_service_answering() -> None:

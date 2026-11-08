@@ -9,7 +9,7 @@ from collections.abc import Sequence
 from datetime import datetime, timedelta
 from pathlib import Path
 
-from blizzard.foundation.clock import IClock
+from blizzard.foundation.clock import IClock, SystemMonotonicClock
 from blizzard.foundation.ids import Id
 from blizzard.foundation.logging import get_logger
 from blizzard.foundation.model_support import model_supported
@@ -119,7 +119,9 @@ class OpenCodeTwoAdapter:
             runner_id=runner_id,
         )
         self._price_catalog = price_catalog
-        self._orphaner: ISessionOrphaner = orphaner or SessionOrphaner(self._registration, UrllibServiceTransport())
+        self._orphaner: ISessionOrphaner = orphaner or SessionOrphaner(
+            self._registration, UrllibServiceTransport(), monotonic_clock=SystemMonotonicClock()
+        )
         # The version launches are held to: the one last observed, which is the one the runner advertises.
         self._advertised: str | None = None
 

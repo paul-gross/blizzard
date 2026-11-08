@@ -4,10 +4,9 @@ a service started to do it. A tree running nothing is left alone; a failure is l
 
 from __future__ import annotations
 
-import time
-from collections.abc import Callable
 from typing import Protocol
 
+from blizzard.foundation.clock import IMonotonicClock
 from blizzard.foundation.logging import get_logger
 from blizzard.runner.harness.opencode_v2.driver import BIND_FAULTS, DriverCore, RegistrationSource
 from blizzard.runner.harness.opencode_v2.transport import BoundedTransport, IServiceTransport
@@ -30,20 +29,22 @@ class SessionOrphaner:
         source: RegistrationSource,
         transport: IServiceTransport,
         *,
+        monotonic_clock: IMonotonicClock,
         bound_seconds: float = DEFAULT_ORPHAN_BOUND_SECONDS,
-        monotonic: Callable[[], float] = time.monotonic,
     ) -> None:
         self._source = source
         self._transport = transport
         self._bound_seconds = bound_seconds
-        self._monotonic = monotonic
+        self._clock = monotonic_clock
 
     def orphan(self, session_id: str) -> bool:
         """Interrupt ``session_id``'s running descendants, deepest first, then the session, when its tree runs; whether
         it did."""
-        transport = BoundedTransport(self._transport, self._monotonic() + self._bound_seconds, self._monotonic)
+        transport = BoundedTransport(
+            self._transport, self._clock.monotonic() + self._bound_seconds, self._clock.monotonic
+        )
         try:
-            core = DriverCore(self._source, transport, poll_seconds=0.0)
+            core = DriverCore(self._source, transport, monotonic_clock=self._clock, poll_seconds=0.0)
             state = core.tree_state(session_id)
             if not state.running:
                 _log.debug("an orphaned OpenCode 2 session runs nothing", session_id=session_id)
