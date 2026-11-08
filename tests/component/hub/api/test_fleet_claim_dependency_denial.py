@@ -15,7 +15,7 @@ from typing import cast
 from blizzard.hub.domain.chunk.dependencies import PrerequisiteScope
 from blizzard.hub.domain.chunk.model import DependencyEdge
 from blizzard.hub.domain.chunk.ports.dependencies import IWriteChunkDependenciesRepository
-from blizzard.hub.domain.chunk.ports.exclusive import ILockedChunkRead
+from blizzard.hub.domain.kernel.transactions import LockedTransaction
 from blizzard.wire.problem import CLAIM_DEPENDENCY
 from tests.support.scaffolding import HubHarness, build_hub, count_queries, ingest
 
@@ -117,16 +117,16 @@ def test_claim_denied_the_instant_the_edge_is_declared_mid_tick(tmp_path: Path) 
     entered_write = threading.Event()
     release_write = threading.Event()
     dependencies_store = cast(IWriteChunkDependenciesRepository, hub.services.chunks.dependencies)
-    real_declare_locked = dependencies_store.declare_locked
+    real_declare = dependencies_store.declare
 
-    def _blocking_declare_locked(
-        handle: ILockedChunkRead, dependent_chunk_id: str, prerequisite_chunk_id: str, *, by: str, at: datetime
+    def _blocking_declare(
+        dependent_chunk_id: str, prerequisite_chunk_id: str, *, by: str, at: datetime, transaction: LockedTransaction
     ) -> DependencyEdge:
         entered_write.set()
         assert release_write.wait(timeout=5), "test never released the declaration's write"
-        return real_declare_locked(handle, dependent_chunk_id, prerequisite_chunk_id, by=by, at=at)
+        return real_declare(dependent_chunk_id, prerequisite_chunk_id, by=by, at=at, transaction=transaction)
 
-    dependencies_store.declare_locked = _blocking_declare_locked
+    dependencies_store.declare = _blocking_declare
 
     declare_thread = threading.Thread(
         target=lambda: hub.services.dependencies.declare(

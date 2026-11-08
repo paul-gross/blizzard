@@ -31,6 +31,7 @@ from blizzard.hub.domain.chunk.ports.dependencies import IWriteChunkDependencies
 from blizzard.hub.domain.chunk.ports.exclusive import IChunkExclusiveWrites, ILockedChunkRead
 
 _T0 = datetime(2026, 1, 1, tzinfo=UTC)
+TRANSACTION = object()
 
 
 def _chunk(chunk_id: str) -> Chunk:
@@ -86,6 +87,7 @@ class _FakeDependenciesRepo:
     standing: list[DependencyEdge] = field(default_factory=list[DependencyEdge])
     declared: list[tuple[str, str, str, datetime]] = field(default_factory=list[tuple[str, str, str, datetime]])
     released: list[tuple[str, str, str, datetime]] = field(default_factory=list[tuple[str, str, str, datetime]])
+    declare_transactions: list[Any] = field(default_factory=list[Any])
     _next_id: int = 0
 
     def list_standing_edges(self) -> list[DependencyEdge]:
@@ -97,8 +99,11 @@ class _FakeDependenciesRepo:
                 return edge
         return None
 
-    def declare(self, dependent_chunk_id: str, prerequisite_chunk_id: str, *, by: str, at: datetime) -> DependencyEdge:
+    def declare(
+        self, dependent_chunk_id: str, prerequisite_chunk_id: str, *, by: str, at: datetime, transaction: Any
+    ) -> DependencyEdge:
         self.declared.append((dependent_chunk_id, prerequisite_chunk_id, by, at))
+        self.declare_transactions.append(transaction)
         self._next_id += 1
         edge = DependencyEdge(
             dependency_id=f"dep_{self._next_id}",
@@ -109,11 +114,6 @@ class _FakeDependenciesRepo:
         )
         self.standing.append(edge)
         return edge
-
-    def declare_locked(
-        self, handle: ILockedChunkRead, dependent_chunk_id: str, prerequisite_chunk_id: str, *, by: str, at: datetime
-    ) -> DependencyEdge:
-        return self.declare(dependent_chunk_id, prerequisite_chunk_id, by=by, at=at)
 
     def release(
         self, dependent_chunk_id: str, prerequisite_chunk_id: str, *, by: str, at: datetime
@@ -144,12 +144,13 @@ def _as_dependencies(repo: _FakeDependenciesRepo) -> IWriteChunkDependenciesRepo
 
 @dataclass
 class _FakeLockedChunkRead:
-    """Only ``facts``/``is_ephemeral``/``standing_edges`` are live — see module
-    docstring."""
+    """Only ``facts``/``is_ephemeral``/``standing_edges`` and the ``transaction`` token are live — see
+    module docstring."""
 
     facts_repo: _FakeFactsRepo
     lifecycle_repo: _FakeLifecycleRepo
     dependencies_repo: _FakeDependenciesRepo
+    transaction: Any = TRANSACTION
 
     def facts(self, chunk_id: str) -> ChunkFacts | None:
         return self.facts_repo.load_facts(chunk_id)
@@ -218,6 +219,7 @@ def test_declare_on_an_unclaimed_dependent_stores_the_edge() -> None:
     assert edge.prerequisite_chunk_id == "chk_prereq"
     assert edge.standing is True
     assert repo.declared == [("chk_dependent", "chk_prereq", "user:alice", _T0)]
+    assert repo.declare_transactions == [TRANSACTION]
     assert repo.standing_edge("chk_dependent", "chk_prereq") == edge
 
 

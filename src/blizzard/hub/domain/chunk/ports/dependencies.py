@@ -69,25 +69,19 @@ class IWriteChunkDependenciesRepository(IReadChunkDependenciesRepository, Protoc
 
     def release_outgoing(self, chunk_id: str, *, by: str, at: datetime, transaction: LockedTransaction) -> None: ...
 
-    def declare_in_transaction_locked(
+    def declare(
         self,
-        transaction: LockedTransaction,
         dependent_chunk_id: str,
         prerequisite_chunk_id: str,
         *,
         by: str,
         at: datetime,
-    ) -> DependencyEdge:
-        """Declare an edge in a unit locking both endpoints, after the domain's cycle check."""
-        ...
-
-    def declare_locked(
-        self, handle: ILockedChunkRead, dependent_chunk_id: str, prerequisite_chunk_id: str, *, by: str, at: datetime
+        transaction: LockedTransaction,
     ) -> DependencyEdge:
         """Mint a fresh standing edge for this ordered pair — always a new row, never a
-        revive of a previously-released one — on ``handle``'s already-locked connection
-        (``bzh:store-exclusive-write``). The caller has already checked that declaring is
-        admitted and closes no cycle."""
+        revive of a previously-released one — in a unit whose ``transaction`` locks both
+        endpoints (``bzh:store-exclusive-write``). The caller has already checked that
+        declaring is admitted and closes no cycle."""
         ...
 
     def release(

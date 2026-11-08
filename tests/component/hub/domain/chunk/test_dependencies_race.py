@@ -17,6 +17,7 @@ from blizzard.hub.domain.chunk.dependencies import DependencyWouldCloseCycle, Pr
 from blizzard.hub.domain.chunk.model import Chunk, DependencyEdge
 from blizzard.hub.domain.chunk.ports.dependencies import FoldTarget, IWriteChunkDependenciesRepository
 from blizzard.hub.domain.chunk.ports.exclusive import ILockedChunkRead
+from blizzard.hub.domain.kernel.transactions import LockedTransaction
 from tests.support.scaffolding import HubHarness, build_hub, ingest
 
 
@@ -40,19 +41,19 @@ def test_two_opposing_declarations_racing_resolve_to_exactly_one_commit(tmp_path
 
     entered_write = threading.Event()
     release_write = threading.Event()
-    real_declare_locked = _writable_dependencies(hub).declare_locked
+    real_declare = _writable_dependencies(hub).declare
 
-    def _blocking_declare_locked(
-        handle: ILockedChunkRead, dependent_chunk_id: str, prerequisite_chunk_id: str, *, by: str, at: datetime
+    def _blocking_declare(
+        dependent_chunk_id: str, prerequisite_chunk_id: str, *, by: str, at: datetime, transaction: LockedTransaction
     ) -> DependencyEdge:
         # Only the first declaration pauses — blocking both would pass even with the
         # shared lock removed (a surviving mutant, not a proof).
         if dependent_chunk_id == chunk_a:
             entered_write.set()
             assert release_write.wait(timeout=5), "test never released the first declaration's write"
-        return real_declare_locked(handle, dependent_chunk_id, prerequisite_chunk_id, by=by, at=at)
+        return real_declare(dependent_chunk_id, prerequisite_chunk_id, by=by, at=at, transaction=transaction)
 
-    _writable_dependencies(hub).declare_locked = _blocking_declare_locked
+    _writable_dependencies(hub).declare = _blocking_declare
 
     first_result: dict[str, object] = {}
 
@@ -130,19 +131,19 @@ def test_a_disjoint_cycle_across_four_chunks_is_closed_by_the_shared_lock_not_th
 
     entered_write = threading.Event()
     release_write = threading.Event()
-    real_declare_locked = _writable_dependencies(hub).declare_locked
+    real_declare = _writable_dependencies(hub).declare
 
-    def _blocking_declare_locked(
-        handle: ILockedChunkRead, dependent_chunk_id: str, prerequisite_chunk_id: str, *, by: str, at: datetime
+    def _blocking_declare(
+        dependent_chunk_id: str, prerequisite_chunk_id: str, *, by: str, at: datetime, transaction: LockedTransaction
     ) -> DependencyEdge:
         # Only the first declaration pauses — blocking both would pass even with the
         # shared lock removed (a surviving mutant, not a proof).
         if dependent_chunk_id == chunk_a:
             entered_write.set()
             assert release_write.wait(timeout=5), "test never released the first declaration's write"
-        return real_declare_locked(handle, dependent_chunk_id, prerequisite_chunk_id, by=by, at=at)
+        return real_declare(dependent_chunk_id, prerequisite_chunk_id, by=by, at=at, transaction=transaction)
 
-    _writable_dependencies(hub).declare_locked = _blocking_declare_locked
+    _writable_dependencies(hub).declare = _blocking_declare
 
     first_result: dict[str, object] = {}
 

@@ -162,8 +162,12 @@ class DependencyService:
             )
             if isinstance(decision, DependencyEdge):
                 return decision
-            return self._dependencies.declare_locked(
-                handle, decision.dependent_chunk_id, decision.prerequisite_chunk_id, by=by, at=self._clock.now()
+            return self._dependencies.declare(
+                decision.dependent_chunk_id,
+                decision.prerequisite_chunk_id,
+                by=by,
+                at=self._clock.now(),
+                transaction=handle.transaction,
             )
 
     def release(self, edge: DependencyEdge, *, by: str) -> DependencyEdge:

@@ -305,7 +305,7 @@ def test_failure_after_withdrawal_rolls_back_all_delete_writes(tmp_path: Path, m
     assert chunk is not None
     _mint(chunks, "ch_prereq")
     with chunks.exclusive.locked([chunk.chunk_id, "ch_prereq"]) as handle:
-        chunks.dependencies.declare_locked(handle, chunk.chunk_id, "ch_prereq", by="author", at=_T0)
+        chunks.dependencies.declare(chunk.chunk_id, "ch_prereq", by="author", at=_T0, transaction=handle.transaction)
     original = items.withdraw_open
 
     def fail_after_withdraw(pointer: WorkRef, *, at: datetime, transaction: Transaction | None = None) -> None:
@@ -387,7 +387,7 @@ def test_delete_refuses_a_chunk_that_is_a_standing_prerequisite(tmp_path: Path) 
     prerequisite = _mint(chunks, "ch_prereq")
     _mint(chunks, "ch_dependent")
     with chunks.exclusive.locked(["ch_dependent", "ch_prereq"]) as handle:
-        chunks.dependencies.declare_locked(handle, "ch_dependent", "ch_prereq", by="operator", at=_T0)
+        chunks.dependencies.declare("ch_dependent", "ch_prereq", by="operator", at=_T0, transaction=handle.transaction)
 
     with pytest.raises(ChunkHasDependents) as excinfo:
         delete.delete(prerequisite, by="operator")
@@ -401,7 +401,7 @@ def test_delete_the_dependent_instead_succeeds_and_releases_its_outgoing_edge(tm
     _mint(chunks, "ch_prereq")
     dependent = _mint(chunks, "ch_dependent")
     with chunks.exclusive.locked(["ch_dependent", "ch_prereq"]) as handle:
-        chunks.dependencies.declare_locked(handle, "ch_dependent", "ch_prereq", by="operator", at=_T0)
+        chunks.dependencies.declare("ch_dependent", "ch_prereq", by="operator", at=_T0, transaction=handle.transaction)
 
     delete.delete(dependent, by="operator")
 
@@ -414,7 +414,7 @@ def test_delete_succeeds_once_the_blocking_edge_is_released_first(tmp_path: Path
     prerequisite = _mint(chunks, "ch_prereq")
     _mint(chunks, "ch_dependent")
     with chunks.exclusive.locked(["ch_dependent", "ch_prereq"]) as handle:
-        chunks.dependencies.declare_locked(handle, "ch_dependent", "ch_prereq", by="operator", at=_T0)
+        chunks.dependencies.declare("ch_dependent", "ch_prereq", by="operator", at=_T0, transaction=handle.transaction)
     chunks.dependencies.release("ch_dependent", "ch_prereq", by="operator", at=_at(1))
 
     delete.delete(prerequisite, by="operator")

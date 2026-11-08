@@ -531,8 +531,8 @@ def test_withdraw_is_refused_while_the_unacquired_holder_is_a_standing_prerequis
     dependent = Chunk(chunk_id="ch_dependent", graph_id=graph.graph_id, work_refs=[], minted_at=clock.instant)
     seed_chunk_record(chunks, dependent)
     with chunks.exclusive.locked([dependent.chunk_id, created.chunk_id]) as handle:
-        chunks.dependencies.declare_locked(
-            handle, dependent.chunk_id, created.chunk_id, by="operator", at=clock.instant
+        chunks.dependencies.declare(
+            dependent.chunk_id, created.chunk_id, by="operator", at=clock.instant, transaction=handle.transaction
         )
 
     with pytest.raises(WorkItemHeldByDependents) as excinfo:

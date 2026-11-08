@@ -2064,12 +2064,20 @@ def build_hub_world(tmp_path: Path) -> HubWorld:
     _mint("ch_hub_dep_dependent_2", "1019", at=_ht(79))
     _mint("ch_hub_dep_prerequisite_2", "1020", at=_ht(80))
     with write.exclusive.locked([chunk_dependency_dependent, chunk_dependency_prerequisite]) as handle:
-        write.dependencies.declare_locked(
-            handle, chunk_dependency_dependent, chunk_dependency_prerequisite, by="operator", at=_ht(81)
+        write.dependencies.declare(
+            chunk_dependency_dependent,
+            chunk_dependency_prerequisite,
+            by="operator",
+            at=_ht(81),
+            transaction=handle.transaction,
         )
     with write.exclusive.locked(["ch_hub_dep_dependent_2", "ch_hub_dep_prerequisite_2"]) as handle:
-        write.dependencies.declare_locked(
-            handle, "ch_hub_dep_dependent_2", "ch_hub_dep_prerequisite_2", by="operator", at=_ht(82)
+        write.dependencies.declare(
+            "ch_hub_dep_dependent_2",
+            "ch_hub_dep_prerequisite_2",
+            by="operator",
+            at=_ht(82),
+            transaction=handle.transaction,
         )
 
     # --- lifecycle (ephemeral via a real fold) ---------------------------------------------------
