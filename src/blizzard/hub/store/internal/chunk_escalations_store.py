@@ -129,6 +129,7 @@ class ChunkEscalationsStore:
         cause: str,
         envelope: str,
         at: datetime,
+        visit_node_id: str | None = None,
     ) -> bool:
         return self._bounce_conn(
             chunk_handle_connection(handle, self._store, chunk_id),
@@ -138,6 +139,7 @@ class ChunkEscalationsStore:
             cause=cause,
             envelope=envelope,
             at=at,
+            visit_node_id=visit_node_id,
         )
 
     def _bounce_conn(
@@ -150,13 +152,26 @@ class ChunkEscalationsStore:
         cause: str,
         envelope: str,
         at: datetime,
+        visit_node_id: str | None = None,
     ) -> bool:
-        """The bounce's replay guard and insert, behind the fence."""
+        """The bounce's replay guard and insert, behind the fence. With ``visit_node_id`` the guard matches the exit
+        it replays: a bounce at the epoch counts as this one's replay only once that node's own ``bounce-envelope``
+        rides at the epoch — a follow-latest hop leaves the landed node's visit at the epoch the hop's bounce
+        recorded, and its own later bounce is a different exit."""
         already = conn.execute(
             self._store.select(s.chunk_bounces, s.chunk_bounces.c.id).where(
                 (s.chunk_bounces.c.chunk_id == chunk_id) & (s.chunk_bounces.c.epoch == epoch)
             )
         ).first()
+        if already is not None and visit_node_id is not None:
+            already = conn.execute(
+                self._store.select(s.artifacts, s.artifacts.c.artifact_id).where(
+                    (s.artifacts.c.chunk_id == chunk_id)
+                    & (s.artifacts.c.epoch == epoch)
+                    & (s.artifacts.c.node_id == visit_node_id)
+                    & (s.artifacts.c.name == "bounce-envelope")
+                )
+            ).first()
         if already is not None:
             return False
         if fence(conn, chunk_id, epoch=epoch, admission=admission) is not None:

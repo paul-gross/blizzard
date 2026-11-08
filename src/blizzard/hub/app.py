@@ -678,6 +678,7 @@ def build_hosted_app(
         work_sources=work_source_registry,
         forges=forge_registry,
         public_url=config.public_url,
+        follow_latest_default=config.follow_latest,
         oauth_providers=oauth_providers,
         oauth_http_client=oauth_client,
         signing_keys_dir=signing_keys_dir,

@@ -1696,6 +1696,7 @@ def build_hub(
         core,
         work_sources=tenant_work_sources,
         public_url=public_url,
+        follow_latest_default=config.follow_latest,
         oauth_registry=OAuthProviderRegistry(oauth_providers) if oauth_providers is not None else None,
         # The IdP signing-key lifecycle — wired only under `oauth`, mirroring
         # `src/blizzard/hub/app.py`'s own `build_hosted_app` gating exactly.
