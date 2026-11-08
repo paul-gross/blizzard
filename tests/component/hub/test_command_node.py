@@ -12,12 +12,13 @@ import threading
 from collections.abc import Mapping
 from datetime import timedelta
 from pathlib import Path
-from typing import cast
+from typing import Any, cast
 
 import pytest
 
 from blizzard.hub.delivery.action_registry import HubActions
 from blizzard.hub.delivery.actions.base import IHubAction
+from blizzard.hub.delivery.hub_node import HubNodeRouter
 from blizzard.hub.domain.actions.effects import IEffectSink, Pass
 from blizzard.hub.domain.actions.visit import Visit
 from blizzard.hub.domain.chunk.model import (
@@ -803,3 +804,22 @@ def test_a_bounce_crossing_the_cap_escalates_rather_than_following_the_latest_mi
     detail = hub.client.get(f"/api/chunks/{chunk_id}").json()
     assert detail["status"] == "needs_human"
     assert detail["graph_id"] == graph.graph_id
+
+
+def test_a_replayed_cap_crossing_bounce_is_counted_once(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    hub = build_hub(tmp_path)
+    graph_yaml = _answering("failure").replace("    action: test.answer", "    bounce_cap: 0\n    action: test.answer")
+    chunk_id, build_node_id, _graph = to_merge_node(hub, graph_yaml=graph_yaml)
+    original = HubNodeRouter.route
+
+    def _twice(self: HubNodeRouter, *args: Any, **kwargs: Any) -> None:
+        original(self, *args, **kwargs)
+        original(self, *args, **kwargs)
+
+    monkeypatch.setattr(HubNodeRouter, "route", _twice)
+
+    _submit_build_pass_with_commit(hub, chunk_id, build_node_id, 1, repo="acme/widget")
+
+    detail = hub.client.get(f"/api/chunks/{chunk_id}").json()
+    assert detail["status"] == "needs_human"
+    assert len(detail["bounces"]) == 1

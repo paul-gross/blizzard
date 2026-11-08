@@ -477,6 +477,20 @@ class HubNodeRouter:
             )
         if envelope is not None:
             if self._bounce(handle, chunk, node, hub_epoch=hub_epoch, cause=cause, envelope=envelope):
+                # The envelope rides on the escalation too: it is what marks this node's exit at the epoch, so a
+                # replay of the crossing is recognised by `record_bounce_locked`'s guard and counts nothing twice.
+                self._artifacts.record_hub_artifact(
+                    chunk.chunk_id,
+                    node_id=node.node_id,
+                    node_name=node.name,
+                    epoch=hub_epoch,
+                    admission=EpochAdmission.AT_OR_ABOVE,
+                    name="bounce-envelope",
+                    content=envelope,
+                    at=self._clock.now(),
+                    close_decision=close,
+                    transaction=handle.transaction,
+                )
                 ending.end(handle, outcome=TURN_ESCALATED, closure=None)
                 return
             artifacts.append(self._envelope_artifact(chunk, node, hub_epoch=hub_epoch, envelope=envelope))
