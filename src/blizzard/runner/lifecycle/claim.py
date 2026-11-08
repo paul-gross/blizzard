@@ -475,7 +475,9 @@ class InterruptedClaims:
             Spawner(self.ctx).enter_node(chunk_id, envelope, acquired, via="adopt")
             return
         _log.info("adopting interrupted claim — spawning current node", chunk_id=chunk_id)
-        Spawner(self.ctx).spawn(chunk_id, envelope, acquired, via="adopt", harness_id=recovery_owner(latest))
+        Spawner(self.ctx).spawn_carrying_owner(
+            chunk_id, envelope, acquired, via="adopt", carried_owner=recovery_owner(latest)
+        )
 
     def _resume_requeued(self, chunk_id: str, latest_epoch: int | None) -> None:
         """Spawn a fresh attempt at the chunk's current node — its local hold is cleared (#53).
@@ -491,12 +493,12 @@ class InterruptedClaims:
         if envelope is None:
             return
         _log.info("resuming requeued chunk — spawning current node", chunk_id=chunk_id)
-        Spawner(self.ctx).spawn(
+        Spawner(self.ctx).spawn_carrying_owner(
             chunk_id,
             envelope,
             Environments(bindings).acquired,
             via="requeue-resume",
-            harness_id=self._latest_owner(chunk_id),
+            carried_owner=self._latest_owner(chunk_id),
         )
 
     def reclaim(self, chunk_id: str, bindings: list[EnvBinding]) -> None:
@@ -535,15 +537,16 @@ class InterruptedClaims:
         self.ctx.stores.tokens.set_route_token(chunk_id, token=outcome.claimed.route_token, at=self.ctx.clock.now())
         if _defers_to_open_decision(self.ctx, chunk_id, outcome.claimed.envelope):
             return
-        Spawner(self.ctx).spawn(
-            chunk_id, outcome.claimed.envelope, envs, via="reclaim", harness_id=self._latest_owner(chunk_id)
+        Spawner(self.ctx).spawn_carrying_owner(
+            chunk_id, outcome.claimed.envelope, envs, via="reclaim", carried_owner=self._latest_owner(chunk_id)
         )
 
     def _latest_owner(self, chunk_id: str) -> str | None:
-        """The chunk's most recently minted lease's own owner, if it has one yet — carried
-        into a recovery spawn so it never falls back to the default harness under a chunk
-        this runner already minted under a different owner. ``None`` for a chunk with no
-        prior mint, the genuinely fresh case a caller's own default is free to decide."""
+        """The chunk's most recently minted lease's own owner, if it has one yet — proposed to a
+        recovery spawn, which keeps it only while the deciding envelope still admits it, so it
+        never falls back to the default harness under a chunk this runner already minted under
+        another owner. ``None`` for a chunk with no prior mint, the genuinely fresh case a
+        caller's own default is free to decide."""
         return recovery_owner(self.ctx.stores.lease_record.latest_lease_for_chunk(chunk_id))
 
     def _envelope(self, chunk_id: str, what: str, latest_epoch: int | None) -> Envelope | None:

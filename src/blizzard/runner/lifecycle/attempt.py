@@ -31,7 +31,6 @@ from blizzard.runner.lifecycle.model import (
     failure_move,
     in_place_escalation_move,
     owner_unresolvable_closure,
-    retry_owner_admitted,
     routed_away,
 )
 from blizzard.runner.lifecycle.orphan import orphan_session
@@ -214,28 +213,16 @@ class Attempt:
             return
         except HubClientError:
             return  # the closed attempt is durable; FILL/ADVANCE re-drives next tick
-        acceptable = envelope.node.session_harnesses
-        if not retry_owner_admitted(lease.harness_id, acceptable):
-            # The failed attempt's owner has fallen out of a since-edited acceptable set — a
-            # membership check, not resolvability (`_owner_block` already ran that half above).
-            assert lease.harness_id is not None  # every requeue-reachable lease was minted under a recorded owner
-            Spawner(self.ctx).escalate_no_acceptable_harness(
-                lease.chunk_id,
-                envelope,
-                attempted=acceptable,
-                skipped=(SkippedHarness(lease.harness_id, "not-a-member"),),
-                via="requeue",
-            )
-            return
         _log.info("requeuing at node", chunk_id=lease.chunk_id, node=lease.node_name)
         # A retry mints a new session, but stays under the failed lease's own mint owner —
-        # carried even when that mint never reached spawn-return.
-        Spawner(self.ctx).spawn(
+        # carried even when that mint never reached spawn-return — while the envelope still
+        # admits it (a membership check, not resolvability: `_owner_block` already ran that half).
+        Spawner(self.ctx).spawn_carrying_owner(
             lease.chunk_id,
             envelope,
             Environments(bindings).acquired,
             via="requeue",
-            harness_id=lease.harness_id,
+            carried_owner=lease.harness_id,
         )
 
     def close_escalated(

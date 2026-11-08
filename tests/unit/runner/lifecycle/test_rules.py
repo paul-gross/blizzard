@@ -37,6 +37,7 @@ from blizzard.runner.lifecycle.model import (
     ApplyMove,
     AwaitElicitation,
     BackOff,
+    CarriedOwnerMove,
     ClaimVerdict,
     Classify,
     CloseOverloadStreak,
@@ -66,6 +67,7 @@ from blizzard.runner.lifecycle.model import (
     answer_ready,
     apply_move,
     brake_defers,
+    carried_owner_move,
     claim_disposition,
     claim_verdict,
     completion_move,
@@ -98,7 +100,6 @@ from blizzard.runner.lifecycle.model import (
     resolved_retries_max,
     restart_disposition,
     resumable,
-    retry_owner_admitted,
     routed_away,
     spend_cap_detail,
     spend_cap_reached,
@@ -394,10 +395,12 @@ def test_escalation_mint_refused_while_open() -> None:
     assert escalation_mint_admitted(None)
 
 
-def test_retry_owner_admitted() -> None:
-    assert retry_owner_admitted("cc", [])
-    assert retry_owner_admitted("cc", ["oc", "cc"])
-    assert not retry_owner_admitted("cc", ["oc"])
+def test_carried_owner_move() -> None:
+    assert carried_owner_move("cc", []) is CarriedOwnerMove.KEEP
+    assert carried_owner_move("cc", ["oc", "cc"]) is CarriedOwnerMove.KEEP
+    assert carried_owner_move("cc", ["oc"]) is CarriedOwnerMove.REFUSE
+    assert carried_owner_move(None, ["oc"]) is CarriedOwnerMove.SELECT
+    assert carried_owner_move(None, []) is CarriedOwnerMove.SELECT
 
 
 # --- failing and escalating ------------------------------------------------------------------- #
