@@ -86,8 +86,11 @@ def test_pyright_discovers_the_same_owned_paths(tmp_path: Path) -> None:
         target = tmp_path / path
         target.parent.mkdir(parents=True, exist_ok=True)
         target.write_text('value: int = "wrong"\n')
-    result = subprocess.run(["pyright", "--outputjson"], cwd=tmp_path, capture_output=True, text=True, check=False)
+    result = subprocess.run(
+        ["pyright", "--outputjson", "--project", str(tmp_path)], cwd=ROOT, capture_output=True, text=True, check=False
+    )
     assert result.returncode == 1, result.stderr
+    assert result.stdout, f"pyright produced no JSON output; stderr: {result.stderr}"
     diagnostics = json.loads(result.stdout)["generalDiagnostics"]
     found = {Path(item["file"]).relative_to(tmp_path).as_posix() for item in diagnostics}
     assert found == {path for path, expected in PATHS if expected}

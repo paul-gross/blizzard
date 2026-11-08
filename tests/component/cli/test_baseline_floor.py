@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import sqlite3
+from contextlib import closing
 from pathlib import Path
 
 import pytest
@@ -23,7 +24,7 @@ def test_operator_entry_points_refuse_absorbed_store(
     runtime = hub_runtime if daemon == "hub" else runner_runtime
     (init_hub if daemon == "hub" else init_host)(root)
     db = root / "data" / ("hub.db" if daemon == "hub" else "host.db")
-    with sqlite3.connect(db) as conn:
+    with closing(sqlite3.connect(db)) as conn, conn:
         conn.execute("UPDATE alembic_version SET version_num = 'old_rev'")
         conn.commit()
     monkeypatch.setattr(runtime, "MIGRATIONS_DIR", make_tree(tmp_path))
@@ -39,5 +40,5 @@ def test_operator_entry_points_refuse_absorbed_store(
         assert result.exit_code != 0, (verb, result.output)
         assert "old_rev" in result.output and "v0.2.0" in result.output, (verb, result.output)
         assert "Traceback" not in result.output
-        with sqlite3.connect(db) as conn:
+        with closing(sqlite3.connect(db)) as conn:
             assert conn.execute("SELECT version_num FROM alembic_version").fetchone() == ("old_rev",)

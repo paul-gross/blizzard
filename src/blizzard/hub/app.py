@@ -447,19 +447,31 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     and drive the sweeps across the app's lifetime (pinned:
     ``tests/unit/hub/test_annotation_loop.py::test_lifespan_starts_the_event_derivation_loop_unconditionally``)."""
     services: HubServices | None = app.state.services
-    if services is not None:
-        services.action_loop.start()
-    tasks = [asyncio.create_task(sweep.run()) for sweep in Sweep.all(app)]
-    flow_driver: FlowDriver | None = app.state.flow_driver
-    if flow_driver is not None:
-        tasks.append(asyncio.create_task(flow_driver.run(app.state.shutdown)))
-    yield
-    app.state.shutdown.set()
-    for task in tasks:
-        await task
-    if services is not None:
-        services.close_tenant_objects()
-        services.action_loop.stop()
+    async with contextlib.AsyncExitStack() as cleanup:
+        hosted_cleanup: contextlib.ExitStack | None = getattr(app.state, "hosted_cleanup", None)
+        if hosted_cleanup is not None:
+            cleanup.callback(hosted_cleanup.close)
+        else:
+            if services is not None:
+                cleanup.callback(services.action_loop.stop)
+                cleanup.callback(services.close_tenant_objects)
+        try:
+            if services is not None:
+                services.action_loop.start()
+            for sweep in Sweep.all(app):
+                task = asyncio.create_task(sweep.run())
+                cleanup.push_async_callback(_wait_for_task, task)
+            flow_driver: FlowDriver | None = app.state.flow_driver
+            if flow_driver is not None:
+                task = asyncio.create_task(flow_driver.run(app.state.shutdown))
+                cleanup.push_async_callback(_wait_for_task, task)
+            yield
+        finally:
+            app.state.shutdown.set()
+
+
+async def _wait_for_task(task: asyncio.Task[None]) -> None:
+    await task
 
 
 def create_app(
@@ -617,151 +629,169 @@ def build_hosted_app(
     instrumented through it. ``version_window`` judges each registering runner's version."""
     resolved_clock = resolve_clock(os.environ)
     controlled = isinstance(resolved_clock, ControlledClock)
-    platform_tracing = platform_tracing or build_platform_tracing(
-        config.tracing,
-        os.environ,
-        resource=resource_attributes(os.environ, __version__),
-        scope=PLATFORM_INSTRUMENTATION_SCOPE,
-        scope_version=PLATFORM_INSTRUMENTATION_SCOPE_VERSION,
+    owns_tracing = platform_tracing is None
+    platform_tracing = (
+        platform_tracing
+        if platform_tracing is not None
+        else build_platform_tracing(
+            config.tracing,
+            os.environ,
+            resource=resource_attributes(os.environ, __version__),
+            scope=PLATFORM_INSTRUMENTATION_SCOPE,
+            scope_version=PLATFORM_INSTRUMENTATION_SCOPE_VERSION,
+        )
     )
-    engine = open_hub_engine(config.db_url)
-    platform_tracing.instrument_engine(engine)
-    reader = SqlAlchemyStoreStatusReader(engine)
-    expected = migration_runner(config).script_head()
-    readiness = ReadinessService(reader=reader, expected_revision=expected)
+    with contextlib.ExitStack() as tracing_cleanup, contextlib.ExitStack() as cleanup:
+        if owns_tracing:
+            tracing_cleanup.callback(platform_tracing.shutdown, PLATFORM_TRACING_SHUTDOWN_SECONDS)
+        engine = open_hub_engine(config.db_url)
+        cleanup.callback(engine.dispose)
+        platform_tracing.instrument_engine(engine)
+        reader = SqlAlchemyStoreStatusReader(engine)
+        expected = migration_runner(config).script_head()
+        readiness = ReadinessService(reader=reader, expected_revision=expected)
 
-    core = build_hub_core(engine, clock=resolved_clock)
-    # Minted here on first start when no key source exists yet.
-    secret_keys = hub_key_provider(os.environ, data_dir=config.data_dir)
-    remove_retired_workdirs(config.data_dir)
+        core = build_hub_core(engine, clock=resolved_clock)
+        # Minted here on first start when no key source exists yet.
+        secret_keys = hub_key_provider(os.environ, data_dir=config.data_dir)
+        remove_retired_workdirs(config.data_dir)
 
-    def work_source_registry(stores: TenantStores, live: LiveConfig, budgets: ForgeBudgets) -> IWorkSourceRegistry:
-        return WorkSourceEntry.registry(
-            records=stores.work_source_records,
-            forges=stores.forge_records,
-            objects=live.objects,
-            secrets=live.secrets,
-            users=core.users,
-            work_item_store=stores.work_item_store,
-            edits=stores.work_item_edits,
-            resolution=stores.garden_proposal_resolution,
-            budgets=budgets,
-            close_forge_writes_enabled=config.close_forge_writes_enabled,
-            instrument_client=platform_tracing.instrument_client,
-        )
-
-    def forge_registry(stores: TenantStores, live: LiveConfig, budgets: ForgeBudgets) -> ForgeRegistry:
-        return build_forge_registry(
-            records=stores.repository_records,
-            forges=stores.forge_records,
-            objects=live.objects,
-            secrets=live.secrets,
-            clock=stores.clock,
-            budgets=budgets,
-            instrument=platform_tracing.instrument_client,
-        )
-
-    tracing = TracingSettings.of(os.environ)
-
-    # The provider-login seam is built only under `oauth`: under `none`
-    # there is no login mechanism to serve.
-    oauth_providers = config.auth.oauth_providers if config.auth.mode == AUTH_MODE_OAUTH else ()
-    # The IdP signing-key lifecycle — likewise built only under `oauth`; a
-    # `none` deployment never touches disk for a keypair it will never mint or publish.
-    signing_keys_dir = config.data_dir.joinpath(*SIGNING_KEYS_PARTS) if config.auth.mode == AUTH_MODE_OAUTH else None
-    oauth_client = oauth_http_client or httpx2.Client(timeout=15.0)
-    platform_tracing.instrument_client(oauth_client)
-
-    flags = build_hub_flags(config)
-    services = build_services(
-        core,
-        work_sources=work_source_registry,
-        forges=forge_registry,
-        public_url=config.public_url,
-        follow_latest_default=config.follow_latest,
-        oauth_providers=oauth_providers,
-        oauth_http_client=oauth_client,
-        signing_keys_dir=signing_keys_dir,
-        secret_keys=secret_keys,
-        trusted_proxies=TrustedProxies.parse(config.trusted_proxies),
-        login_throttle=config.auth.login_throttle,
-        transcript_caps=transcript_caps(config),
-        # No exporter is built unless OpenTelemetry's own variables enable tracing.
-        trace_exporter=(
-            OtlpTraceExporter(
-                resource=resource_attributes(os.environ, __version__),
-                scope=INSTRUMENTATION_SCOPE,
-                scope_version=INSTRUMENTATION_SCOPE_VERSION,
+        def work_source_registry(stores: TenantStores, live: LiveConfig, budgets: ForgeBudgets) -> IWorkSourceRegistry:
+            return WorkSourceEntry.registry(
+                records=stores.work_source_records,
+                forges=stores.forge_records,
+                objects=live.objects,
+                secrets=live.secrets,
+                users=core.users,
+                work_item_store=stores.work_item_store,
+                edits=stores.work_item_edits,
+                resolution=stores.garden_proposal_resolution,
+                budgets=budgets,
+                close_forge_writes_enabled=config.close_forge_writes_enabled,
+                instrument_client=platform_tracing.instrument_client,
             )
-            if tracing.enabled()
-            else None
-        ),
-        tracing=config.tracing,
-        tracing_settings=tracing,
-        platform_tracer=platform_tracing.tracer,
-        egress=config.egress,
-        egress_path_key=_egress_path_key(config.egress),
-        annotation_interval_seconds=config.annotation_interval_seconds,
-        action_pass_seconds=config.action_pass_seconds,
-        version_window=version_window,
-        cadences_on=lambda: flags.on("cadences"),
-        announce_minted=announce_minted,
-    )
-    # Only once the store is at the expected schema head: a store mid-migration must
-    # fail *readiness*, not *boot* (pinned:
-    # `tests/component/test_readiness.py::test_ready_probe_false_on_unmigrated_store`).
-    flow_driver: FlowDriver | None = None
-    if readiness.evaluate().ready:
-        tenants = core.every_open()
-        try:
-            LegacyStart.of(
-                [stores.config_import for stores in tenants],
-                read_legacy_keys(config.config_path, os.environ, strict=config.strict),
-            ).check()
-        except LegacyStartRefused as refusal:
-            raise ConfigError(str(refusal)) from refusal
-        OrphanedProviders.of(config, services).check()
-        warn_forge_refusals(engine)
-        KeyCoverage.of([stores.secrets for stores in tenants], secret_keys).check()
-        # Before the hub serves, in each open tenant: the actionless escalations first, so the flow driver's boot
-        # reconcile finds those chunks escalated and submits none of them, then the turns the last process left open.
-        flow_driver = build_flow_driver(services, AnnouncedTurns)
-        for stores in tenants:
-            services.tenants.open_services(stores.scope).flow_lines.escalate_actionless()
-            try:
-                flow_driver.recover_turns(stores.scope.tenant)
-            except Exception:
-                # Observe-only: a tenant whose lines cannot be recovered now is reconciled by the driver's ticks.
-                get_logger("blizzard.hub.flow_driver").exception(
-                    "flow driver boot recovery failed", tenant_id=stores.scope.tenant
+
+        def forge_registry(stores: TenantStores, live: LiveConfig, budgets: ForgeBudgets) -> ForgeRegistry:
+            return build_forge_registry(
+                records=stores.repository_records,
+                forges=stores.forge_records,
+                objects=live.objects,
+                secrets=live.secrets,
+                clock=stores.clock,
+                budgets=budgets,
+                instrument=platform_tracing.instrument_client,
+            )
+
+        tracing = TracingSettings.of(os.environ)
+
+        # The provider-login seam is built only under `oauth`: under `none`
+        # there is no login mechanism to serve.
+        oauth_providers = config.auth.oauth_providers if config.auth.mode == AUTH_MODE_OAUTH else ()
+        # The IdP signing-key lifecycle — likewise built only under `oauth`; a
+        # `none` deployment never touches disk for a keypair it will never mint or publish.
+        signing_keys_dir = (
+            config.data_dir.joinpath(*SIGNING_KEYS_PARTS) if config.auth.mode == AUTH_MODE_OAUTH else None
+        )
+        oauth_client = oauth_http_client if oauth_http_client is not None else httpx2.Client(timeout=15.0)
+        if oauth_http_client is None:
+            cleanup.callback(oauth_client.close)
+        platform_tracing.instrument_client(oauth_client)
+
+        flags = build_hub_flags(config)
+        services = build_services(
+            core,
+            work_sources=work_source_registry,
+            forges=forge_registry,
+            public_url=config.public_url,
+            follow_latest_default=config.follow_latest,
+            oauth_providers=oauth_providers,
+            oauth_http_client=oauth_client,
+            signing_keys_dir=signing_keys_dir,
+            secret_keys=secret_keys,
+            trusted_proxies=TrustedProxies.parse(config.trusted_proxies),
+            login_throttle=config.auth.login_throttle,
+            transcript_caps=transcript_caps(config),
+            # No exporter is built unless OpenTelemetry's own variables enable tracing.
+            trace_exporter=(
+                OtlpTraceExporter(
+                    resource=resource_attributes(os.environ, __version__),
+                    scope=INSTRUMENTATION_SCOPE,
+                    scope_version=INSTRUMENTATION_SCOPE_VERSION,
                 )
-        Superuser(email=config.auth.superuser, auth=services.auth).ensure()
-        _announce_started(expected, services)
-        announce_rejected_tracing(tracing, services)
-        announce_rejected_egress(config.egress, services)
-    control_lock = asyncio.Lock() if controlled else None
-    app = create_app(
-        config,
-        readiness=readiness,
-        services=services,
-        platform_tracing=platform_tracing,
-        flags=flags,
-        test_flow_router=(
-            flow_control_router(flow_driver, resolved_clock, control_lock)
-            if isinstance(resolved_clock, ControlledClock) and control_lock is not None and flow_driver
-            else None
-        ),
-        controlled_clock_router=(
-            clock_router(resolved_clock, control_lock)
-            if isinstance(resolved_clock, ControlledClock) and control_lock is not None
-            else None
-        ),
-    )
-    # `host` disposes this on `app.state` — carried here.
-    app.state.engine = engine
-    # Only a store at the expected head is reconciled; `lifespan` runs the driver it finds here.
-    app.state.flow_driver = None if controlled else flow_driver
-    return app
+                if tracing.enabled()
+                else None
+            ),
+            tracing=config.tracing,
+            tracing_settings=tracing,
+            platform_tracer=platform_tracing.tracer,
+            egress=config.egress,
+            egress_path_key=_egress_path_key(config.egress),
+            annotation_interval_seconds=config.annotation_interval_seconds,
+            action_pass_seconds=config.action_pass_seconds,
+            version_window=version_window,
+            cadences_on=lambda: flags.on("cadences"),
+            announce_minted=announce_minted,
+        )
+        cleanup.callback(services.action_loop.stop)
+        cleanup.callback(services.close_tenant_objects)
+        # Only once the store is at the expected schema head: a store mid-migration must
+        # fail *readiness*, not *boot* (pinned:
+        # `tests/component/test_readiness.py::test_ready_probe_false_on_unmigrated_store`).
+        flow_driver: FlowDriver | None = None
+        if readiness.evaluate().ready:
+            tenants = core.every_open()
+            try:
+                LegacyStart.of(
+                    [stores.config_import for stores in tenants],
+                    read_legacy_keys(config.config_path, os.environ, strict=config.strict),
+                ).check()
+            except LegacyStartRefused as refusal:
+                raise ConfigError(str(refusal)) from refusal
+            OrphanedProviders.of(config, services).check()
+            warn_forge_refusals(engine)
+            KeyCoverage.of([stores.secrets for stores in tenants], secret_keys).check()
+            # Before the hub serves, in each open tenant: the actionless escalations first, so the flow driver's boot
+            # reconcile finds those chunks escalated and submits none of them, then the turns the last process
+            # left open.
+            flow_driver = build_flow_driver(services, AnnouncedTurns)
+            for stores in tenants:
+                services.tenants.open_services(stores.scope).flow_lines.escalate_actionless()
+                try:
+                    flow_driver.recover_turns(stores.scope.tenant)
+                except Exception:
+                    # Observe-only: a tenant whose lines cannot be recovered now is reconciled by the driver's ticks.
+                    get_logger("blizzard.hub.flow_driver").exception(
+                        "flow driver boot recovery failed", tenant_id=stores.scope.tenant
+                    )
+            Superuser(email=config.auth.superuser, auth=services.auth).ensure()
+            _announce_started(expected, services)
+            announce_rejected_tracing(tracing, services)
+            announce_rejected_egress(config.egress, services)
+        control_lock = asyncio.Lock() if controlled else None
+        app = create_app(
+            config,
+            readiness=readiness,
+            services=services,
+            platform_tracing=platform_tracing,
+            flags=flags,
+            test_flow_router=(
+                flow_control_router(flow_driver, resolved_clock, control_lock)
+                if isinstance(resolved_clock, ControlledClock) and control_lock is not None and flow_driver
+                else None
+            ),
+            controlled_clock_router=(
+                clock_router(resolved_clock, control_lock)
+                if isinstance(resolved_clock, ControlledClock) and control_lock is not None
+                else None
+            ),
+        )
+        # Lifespan and the CLI fallback share the hosted resources' one-shot cleanup.
+        app.state.engine = engine
+        # Only a store at the expected head is reconciled; `lifespan` runs the driver it finds here.
+        app.state.flow_driver = None if controlled else flow_driver
+        app.state.hosted_cleanup = cleanup.pop_all()
+        tracing_cleanup.pop_all()
+        return app
 
 
 def _announce_started(revision: str | None, services: HubServices) -> None:

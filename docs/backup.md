@@ -13,7 +13,7 @@ the volumes resolve to fixed names — `blizzard_hub-data`, `blizzard_postgres-d
 
 **The store** is the only irreplaceable state — every chunk, fact, question, graph, and stored transcript segment the
 board reads; always back it up. It is the whole `postgres-data` volume by default, or `data/hub.db` together with its
-`data/hub.db-wal` sidecar (when one exists) on the `hub-data` volume if `BZ_HUB_DB_URL` was moved back to sqlite.
+`data/hub.db-wal` sidecar (when one exists) on the `hub-data` volume if the compose hub is configured to use sqlite.
 
 **Signing keys.** `data/auth/signing-keys/` on the `hub-data` volume holds the IdP RSA keypair(s) plus `meta.json`
 (`src/blizzard/hub/auth/signing.py`), populated only once `auth.mode = "oauth"` is configured — back it up from then on.
@@ -60,8 +60,9 @@ docker compose up -d hub
 ## The hub-data volume
 
 Stop the hub before tarring the `hub-data` volume — a live write mid-tar is not a safe copy. With the store on sqlite
-(`BZ_HUB_DB_URL` unset, `data/hub.db` on this same volume), the whole-volume tar already carries the store too — stop
-the hub first as always.
+(`data/hub.db` on this same volume), the whole-volume tar already carries the store too — stop the hub first as always.
+The reference compose file sets `BZ_HUB_DB_URL` to postgres explicitly; using sqlite requires changing that hub
+environment configuration, not merely unsetting the variable in your shell.
 
 Snapshot:
 
