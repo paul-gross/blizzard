@@ -294,7 +294,7 @@ class ApplyService:
         resolving = submission.decision_id is not None
         artifacts = () if resolving else submission.artifacts
         if plan.escalates:
-            return self._escalate_choice(chunk, graph, from_node, submission, plan.edge, targets)
+            return self._escalate_choice(chunk, graph, from_node, submission, plan.edge, targets, artifacts)
         if plan.migrates:
             return self._migrate_across(chunk, graph, from_node, submission, plan.edge, targets, artifacts)
         assert plan.to_node_id is not None
@@ -480,9 +480,10 @@ class ApplyService:
         submission: Completion,
         edge: Edge,
         targets: MigrationTargets,
+        artifacts: Sequence[CompletionArtifact],
     ) -> ApplyResult:
         """Take the ``escalate`` choice — write an escalation instead of a transition, once per
-        epoch. The worker's reasoning stays in the artifacts it produced."""
+        epoch. The worker's reasoning stays in the artifacts it produced, written with the escalation."""
         return self._escalate(
             chunk,
             graph,
@@ -492,6 +493,7 @@ class ApplyService:
             targets,
             EscalateChoice.of(from_node, submission.choice),
             answer=ApplyResult.escalate_choice(from_node, submission.choice),
+            artifact_rows=self._artifact_rows(chunk, from_node, submission.epoch, artifacts),
         )
 
     def _escalate(
@@ -505,6 +507,7 @@ class ApplyService:
         draft: EscalateChoice | UnresolvableTarget,
         *,
         answer: ApplyResult,
+        artifact_rows: Sequence[StoredArtifact] = (),
     ) -> ApplyResult:
         """Write the hub's own escalation ``draft`` for this completion, deciding from facts re-read
         under the chunk's lock in the unit that writes it (``bzh:write-reestablishes-read``): a
@@ -542,6 +545,8 @@ class ApplyService:
                         decision_id=submission.decision_id,
                         cause=draft.cause,
                         detail=draft.detail,
+                        artifacts=artifact_rows,
+                        close_decision=decide_close_enqueue(chunk.work_refs, self._closer_available),
                         transaction=locked,
                     )
                     if isinstance(escalated, FenceRefusal):
