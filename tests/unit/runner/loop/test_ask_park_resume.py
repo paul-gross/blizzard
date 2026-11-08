@@ -439,3 +439,44 @@ def test_a_superseded_ask_is_neither_open_nor_forwarded_once_the_newer_ask_is_pa
     store.record_park_resume(lease_id="lease_1", question_id="qn_new", resumed_at=_NOW + timedelta(minutes=5))
     assert store.open_asks() == []
     assert store.unforwarded_ask("lease_1") is None
+
+
+def test_a_parked_ask_whose_fact_is_still_queued_survives_a_newer_ask(tmp_path: Path) -> None:
+    """An ask the runner parked on is committed for forwarding, so a newer ask on the same lease does not
+    supersede it even though its ``question.asked`` fact has not drained: the older ask stays forwarded and open,
+    the newer one is the lease's unforwarded ask, and the older fact stays pending."""
+    store = _store(tmp_path)
+    _seed_exited_lease(store)
+    store.record_ask(
+        lease_id="lease_1",
+        chunk_id="ch_1",
+        question_id="qn_a",
+        question="question qn_a?",
+        options=[],
+        asked_at=_NOW,
+    )
+    store.record_park(lease_id="lease_1", chunk_id="ch_1", question_id="qn_a", parked_at=_NOW)
+    store.enqueue_outbound(
+        kind=QUESTION_ASKED,
+        chunk_id="ch_1",
+        lease_id="lease_1",
+        payload='{"question_id": "qn_a"}',
+        created_at=_NOW,
+    )
+    assert store.unforwarded_ask("lease_1") is None
+
+    store.record_ask(
+        lease_id="lease_1",
+        chunk_id="ch_1",
+        question_id="qn_b",
+        question="question qn_b?",
+        options=[],
+        asked_at=_NOW + timedelta(minutes=1),
+    )
+
+    assert {ask.question_id for ask in store.open_asks()} == {"qn_a", "qn_b"}
+    unforwarded = store.unforwarded_ask("lease_1")
+    assert unforwarded is not None
+    assert unforwarded.question_id == "qn_b"
+    queued = [f for f in store.pending_outbound() if f.kind == QUESTION_ASKED]
+    assert [f.payload for f in queued] == ['{"question_id": "qn_a"}']

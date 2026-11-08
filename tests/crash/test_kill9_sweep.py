@@ -3288,6 +3288,22 @@ def _open_question_id(hub: httpx2.Client, chunk_id: str, *, timeout: float = 60.
     raise AssertionError(f"no open question surfaced for {chunk_id}")
 
 
+def _await_question_delivered(hub_dir: Path, question_id: str, *, point: str, timeout: float = 60.0) -> None:
+    """The hub holds exactly one delivery row for ``question_id`` within ``timeout``."""
+    deadline = time.monotonic() + timeout
+    count = 0
+    while time.monotonic() < deadline:
+        engine = create_engine_from_url(load_hub_config(hub_dir).db_url)
+        with engine.connect() as conn:
+            table = hub_schema.answer_deliveries
+            count = len(conn.execute(hub_scoped(select(table).where(table.c.question_id == question_id))).all())
+        engine.dispose()
+        if count:
+            break
+        time.sleep(0.2)
+    assert count == 1, f"question {question_id} has {count} delivery rows after kill at {point}, not exactly one"
+
+
 def _park_resumes(runner_dir: Path, question_id: str) -> list[str]:
     """The lease id of every recorded resume of the park on ``question_id``."""
     with _audit_connection(runner_dir) as conn:
@@ -3300,7 +3316,8 @@ def _park_resumes(runner_dir: Path, question_id: str) -> list[str]:
 def test_kill9_at_answer_crash_point(crash_env: CrashEnv, tmp_path: Path, point: str) -> None:
     """A ``kill -9`` inside the answer wake resumes the session at most once for the
     question: the park resume rides the woken pid's record, so recovery reads either an open
-    park it re-wakes once or a resumed park whose pid is an ordinary recorded generation."""
+    park it re-wakes once or a resumed park whose pid is an ordinary recorded generation; either way the hub reads the question
+    delivered."""
     landed_file = f"LANDED-{point.replace('.', '_')}.md"
     marker = tmp_path / "answered.marker"
     hub_dir, runner_dir = tmp_path / "hub", tmp_path / "runner"
@@ -3334,6 +3351,8 @@ def test_kill9_at_answer_crash_point(crash_env: CrashEnv, tmp_path: Path, point:
         resumes = _park_resumes(runner_dir, question_id)
         assert len(resumes) == 1, f"the answer resumed the park {len(resumes)} times after kill at {point}"
         _assert_invariants(runner_dir, hub_dir, when=f"after convergence past {point}", after_recovery=True)
+        # The receipt rides the resume's own record, so the hub reads the question delivered once the outbox drains.
+        _await_question_delivered(hub_dir, question_id, point=point)
         if status == "done":
             tree = git_bare(crash_env.origins / "toy-api.git", "log", "--oneline", "--", landed_file)
             commits = [line for line in tree.splitlines() if line.strip()]

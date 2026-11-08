@@ -61,6 +61,18 @@ class NewMint:
 
 @domain_model
 @dataclass(frozen=True)
+class ParkResume:
+    """An answered park's resume in full — the question it closes and the rendered ``answer.delivered`` receipt
+    bound for the hub. They commit with the woken pid or not at all, and travel as one value so a receipt can
+    ride no wake that resumes no park."""
+
+    question_id: str
+    fact_kind: str
+    fact_payload: str
+
+
+@domain_model
+@dataclass(frozen=True)
 class PoolHead:
     """A named session pool's current head. ``resolved_model``/
     ``resolved_effort`` are the head's own **stamps**, not a fresh resolution; ``None``

@@ -117,14 +117,24 @@ class PushedFact:
 
 @domain_model
 @dataclass(frozen=True)
-class _Landing:
-    """An admitted fact's write, decided from reads taken before its unit opens. ``write`` runs in the unit that
-    advances the mark and answers the row id the ack carries — or the event it logged, whose row id the ack carries
-    — or the write fence's refusal; ``locks`` names the chunk whose row lock that unit declares; ``committed`` runs
-    on what ``write`` answered once the unit commits — a frame published, a line logged — and never when it rolls
-    back (``bzh:publish-after-commit``)."""
+class _DeliveryRefusal:
+    """An ``answer.delivered`` the locked unit refused — an unknown, unanswered, mis-addressed or restart-superseded
+    question — carrying the detail the answer-specific warning logs."""
 
-    write: Callable[[Transaction], int | LoggedEvent | FenceRefusal | None]
+    question_id: str
+    detail: str
+
+
+@domain_model
+@dataclass(frozen=True)
+class _Landing:
+    """An admitted fact's write. ``write`` runs in the unit that advances the mark — on the token that unit locked —
+    and answers the row id the ack carries, or the event it logged (whose row id the ack carries), or the write
+    fence's refusal, or a delivery refusal decided from reads taken on that token; ``locks`` names the chunk whose
+    row lock that unit declares; ``committed`` runs on what ``write`` answered once the unit commits — a frame
+    published, a line logged — and never when it rolls back (``bzh:publish-after-commit``)."""
+
+    write: Callable[[Transaction], int | LoggedEvent | FenceRefusal | _DeliveryRefusal | None]
     locks: str | None = None
     committed: Callable[[int | LoggedEvent | None], object] | None = None
 
@@ -321,6 +331,9 @@ class FactIngestService:
             written = landing.write(transaction)
             if isinstance(written, FenceRefusal):
                 return self._fenced(fact.kind, payload, written)
+            if isinstance(written, _DeliveryRefusal):
+                _log.warning("answer delivery rejected", question_id=written.question_id, detail=written.detail)
+                return False, None
             self._route.set_runner_high_water(
                 runner_id, seq=fact.seq, expected=expected, at=now, transaction=transaction
             )
@@ -339,8 +352,8 @@ class FactIngestService:
         runner_name: str | None,
         now: datetime,
     ) -> _Landing | None:
-        """The write that lands one fact, decided before its unit opens — the route-token gate and the answer
-        delivery's guard read on their own connections — or ``None`` on an unknown kind or a refusal."""
+        """The write that lands one fact — the route-token gate decided before its unit opens, on its own
+        connection, the answer delivery decided inside its unit — or ``None`` on an unknown kind or a refusal."""
         gated = requires_route_token(kind, fact.text("chunk_id"))
         if gated is None:
             return None
@@ -522,27 +535,29 @@ class FactIngestService:
             ),
         )
 
-    def _answer_landing(self, question_id: str, chunk_id: str, *, now: datetime) -> _Landing | None:
-        """An ``answer.delivered`` as :meth:`NodeQuestion.delivery` decides: written, a replay that writes nothing
-        but still advances the mark, or ``None`` — rejected in the ack (an unknown question too)."""
-        question: NodeQuestion | None = self._questions.get_question(question_id)
-        if question is None:
-            _log.warning("answer delivery for an unknown question", question_id=question_id)
-            return None
-        facts = ChunkFacts.or_default(self._facts.load_facts(question.chunk_id))
-        delivery, detail = question.delivery(
-            chunk_id=chunk_id, superseded_by_restart=facts.restarted_past(question.epoch)
-        )
-        if delivery is QuestionDelivery.REFUSE:
-            _log.warning("answer delivery rejected", question_id=question_id, detail=detail)
-            return None
-        if delivery is QuestionDelivery.REPLAY:
-            return _Landing(write=lambda transaction: None)
-        return _Landing(
-            write=lambda transaction: self._questions.record_answer_delivered(
-                question_id=question_id, chunk_id=chunk_id, at=now, transaction=transaction
+    def _answer_landing(self, question_id: str, chunk_id: str, *, now: datetime) -> _Landing:
+        """An ``answer.delivered`` as :meth:`NodeQuestion.delivery` decides, inside the unit that locks the reported
+        chunk (``bzh:write-reestablishes-read``) so a restart cannot interleave: written, a replay that writes
+        nothing but still advances the mark, or a :class:`_DeliveryRefusal` — rejected in the ack (an unknown
+        question too)."""
+
+        def write(transaction: Transaction) -> _DeliveryRefusal | None:
+            question: NodeQuestion | None = self._questions.get_question(question_id, transaction=transaction)
+            if question is None:
+                return _DeliveryRefusal(question_id, "unknown question")
+            facts = ChunkFacts.or_default(self._facts.load_facts(question.chunk_id, transaction=transaction))
+            delivery, detail = question.delivery(
+                chunk_id=chunk_id, superseded_by_restart=facts.restarted_past(question.epoch)
             )
-        )
+            if delivery is QuestionDelivery.REFUSE:
+                return _DeliveryRefusal(question_id, detail or "refused")
+            if delivery is QuestionDelivery.RECORD:
+                self._questions.record_answer_delivered(
+                    question_id=question_id, chunk_id=chunk_id, at=now, transaction=transaction
+                )
+            return None
+
+        return _Landing(write=write, locks=chunk_id)
 
     def _route_token_ok(self, chunk_id: str, runner_id: str, fact: Payload, *, mode: str) -> bool:
         """Route-token authorization for a chunk-scoped, fence-advancing fact — the

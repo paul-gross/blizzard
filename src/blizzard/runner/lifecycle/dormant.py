@@ -23,7 +23,7 @@ from blizzard.runner.hub.client import ChunkNotFoundError, HubClientError
 from blizzard.runner.hub.outbound import OutboundFacts
 from blizzard.runner.leases.asks import OpenAsk
 from blizzard.runner.leases.elicitation import PendingElicitation
-from blizzard.runner.leases.model import Lease
+from blizzard.runner.leases.model import Lease, ParkResume
 from blizzard.runner.leases.operator_requests import IReadAttachmentRepository
 from blizzard.runner.leases.overload import OverloadExit
 from blizzard.runner.lifecycle.attempt import Attempt
@@ -118,7 +118,8 @@ _ANSWER_WAKE_POINTS = WakePoints(
         "answer.wake.after-launch.before-record", "answer-resumed process exists; pid and park resume not yet durable"
     ),
     after_record=crashpoint(
-        "answer.wake.after-record", "answer-resumed pid and park resume durable; launch not yet disarmed"
+        "answer.wake.after-record",
+        "answer-resumed pid, park resume and answer receipt durable; launch not yet disarmed",
     ),
 )
 
@@ -187,7 +188,7 @@ class DormantSession:
         self.ctx.usage.record_worker(lease, bindings)
         # The nudge already opened its own boundary at the call site — `_wake` self-
         # determines this and skips opening a second one, even for a LATER, unrelated wake.
-        pid, _ = self._wake(message, bindings, harness=harness)
+        pid, _, _ = self._wake(message, bindings, harness=harness)
         _log.info(
             "resumed premature exit for unmet produces",
             chunk_id=lease.chunk_id,
@@ -278,13 +279,16 @@ class DormantSession:
         # The human framing rides a leading `#` comment line and the answer itself is the
         # payload; the exact prose is unpinned.
         who = question.answered_by or "operator"
-        pid, now = self._wake(
+        facts = OutboundFacts(self.ctx)
+        receipt_kind, receipt_payload = facts.answer_delivered_fact(lease, park.question_id)
+        pid, _, receipt_seq = self._wake(
             f"# Answer from {who}. Continue.\n{question.answer}",
             bindings,
             harness=harness,
             points=_ANSWER_WAKE_POINTS,
-            park_resume_question_id=park.question_id,
+            park_resume=ParkResume(park.question_id, receipt_kind, receipt_payload),
         )
+        assert receipt_seq is not None
         if self.ctx.events is not None:
             self.ctx.events.publish_ask_changed(
                 lease.lease_id,
@@ -292,7 +296,7 @@ class DormantSession:
                 park.question_id,
                 cause="answered",
             )
-        OutboundFacts(self.ctx).answer_delivered(lease, park.question_id, at=now)
+        facts.published(receipt_seq, receipt_kind, lease.chunk_id, lease.lease_id)
         _log.info("resumed dormant session with answer", chunk_id=lease.chunk_id, question_id=park.question_id, pid=pid)
 
     def _offer_usage_limited(self, bindings: list[EnvBinding]) -> None:
@@ -393,7 +397,7 @@ class DormantSession:
             return
         # The paused generation's own usage — recorded before `_wake` mints the new one.
         self.ctx.usage.record_worker(lease, bindings)
-        pid, _ = self._wake(UNPAUSE_MESSAGE, bindings, harness=harness, at=now)
+        pid, _, _ = self._wake(UNPAUSE_MESSAGE, bindings, harness=harness, at=now)
         self.ctx.stores.pause.record_pause_park_resume(lease_id=lease.lease_id, resumed_at=now)
         _log.info(
             "resumed dormant session after an operator unpause",
@@ -503,7 +507,7 @@ class DormantSession:
             return
         # The overloaded generation's own usage — recorded before `_wake` mints the new one.
         self.ctx.usage.record_worker(lease, bindings)
-        pid, _ = self._wake(_OVERLOAD_BACKOFF_MESSAGE, bindings, harness=harness, at=now)
+        pid, _, _ = self._wake(_OVERLOAD_BACKOFF_MESSAGE, bindings, harness=harness, at=now)
         _log.info(
             "resumed a worker generation after a provider-overload backoff",
             chunk_id=lease.chunk_id,
@@ -634,7 +638,7 @@ class DormantSession:
             return
         # The crashed generation's own usage — recorded before `_wake` mints the new one.
         self.ctx.usage.record_worker(lease, bindings)
-        pid, _ = self._wake(_RESTART_MESSAGE, bindings, harness=harness, at=now)
+        pid, _, _ = self._wake(_RESTART_MESSAGE, bindings, harness=harness, at=now)
         self.ctx.stores.resume_intent.record_resume_clear(lease_id=lease.lease_id, cleared_at=now)
         _CP_RESUME_AFTER.reached()  # pid recorded, intent cleared — a crash here re-runs as a no-op
         _log.info(
@@ -695,15 +699,15 @@ class DormantSession:
         harness: IHarnessWorkerLifecycle,
         at: datetime | None = None,
         points: WakePoints = _RESUME_WAKE_POINTS,
-        park_resume_question_id: str | None = None,
-    ) -> tuple[int, datetime]:
+        park_resume: ParkResume | None = None,
+    ) -> tuple[int, datetime, int | None]:
         """Deliver ``message`` into the dormant session and record the new pid under the same
-        lease, returning that pid with the instant it was stamped — an omitted ``at`` reads the
+        lease, returning that pid with the instant it was stamped and the receipt seq — an omitted ``at`` reads the
         clock *after* the resume returns. ``harness`` is the caller's already-resolved owner, so
         this method can never be reached with an unresolvable one. Opens a `resume` boundary
         unless :meth:`_worker_boundary_already_open` finds one open already. ``points`` names the
-        crash points it reaches; ``park_resume_question_id`` resumes that park in the pid
-        record's own transaction."""
+        crash points it reaches; ``park_resume`` resumes that park and buffers its receipt in the pid
+        record's own transaction, whose outbox ``seq`` comes back third (``None`` without one)."""
         lease = self.lease
         spawner = Spawner(self.ctx)
         session = lease.session
@@ -748,7 +752,7 @@ class DormantSession:
         stamped = at if at is not None else self.ctx.clock.now()
         assert lease.session is not None
         try:
-            self.ctx.stores.liveness.record_spawn(
+            receipt_seq = self.ctx.stores.liveness.record_spawn(
                 lease.lease_id,
                 pid=resumed.pid,
                 # The launcher's own recorded start time — never re-probed a second
@@ -761,7 +765,7 @@ class DormantSession:
                 spawned_at=stamped,
                 harness_version=version,
                 spawn_cwd=spawn_cwd,
-                park_resume_question_id=park_resume_question_id,
+                park_resume=park_resume,
             )
         except Exception:
             # A plain raise here never disarms the trampoline on its own — kill it
@@ -781,4 +785,4 @@ class DormantSession:
                 lease.chunk_id,
                 cause="spawned",
             )
-        return resumed.pid, stamped
+        return resumed.pid, stamped, receipt_seq

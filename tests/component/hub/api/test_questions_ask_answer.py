@@ -8,17 +8,25 @@ delivered/delivered_at, and GET /questions lists only the open ones.
 from __future__ import annotations
 
 import json
+from collections.abc import Callable
 from datetime import timedelta
 from pathlib import Path
+from typing import Any
 
 import pytest
+import sqlalchemy as sa
 
 from blizzard.foundation.hub_event_types import HubEventType
+from blizzard.hub.store import schema as s
+from blizzard.hub.store.internal.chunk_facts_store import ChunkFactsStore
+from blizzard.hub.store.internal.chunk_questions_store import ChunkQuestionsStore
+from blizzard.hub.store.transactions import HubTransactions
 from tests.support.scaffolding import (
     HubHarness,
     assert_all_timestamps_utc,
     build_hub,
     emitted_events,
+    hub_scoped,
     make_ready,
     pointer_token,
     report_lease,
@@ -450,3 +458,115 @@ def test_an_answer_on_an_ended_chunk_is_refused_and_the_question_stays_unanswere
     poll = hub.client.get("/api/fleet/questions/qn_1").json()
     assert poll["answered"] is False
     assert poll["answer"] is None
+
+
+def test_answer_delivered_for_an_unknown_question_is_rejected_and_the_mark_stays(tmp_path: Path) -> None:
+    hub = build_hub(tmp_path)
+    chunk_id = _claim(hub)
+
+    resp = _deliver(hub, chunk_id, question_id="qn_missing")
+
+    assert resp.status_code == 200, resp.text
+    assert (resp.json()["applied"], resp.json()["rejected"]) == ([], [9])
+    assert resp.json()["high_water"] == 0
+
+
+def test_answer_delivered_naming_another_chunk_is_rejected(tmp_path: Path) -> None:
+    hub = build_hub(tmp_path)
+    chunk_id = _claim(hub)
+    _ask(hub, chunk_id)
+    hub.client.post("/api/questions/qn_1/answers", json={"answer": "rest"})
+
+    resp = _deliver(hub, "ch_other")
+
+    assert (resp.json()["applied"], resp.json()["rejected"]) == ([], [9])
+    assert hub.client.get(f"/api/chunks/{chunk_id}").json()["questions"][0]["delivered"] is False
+
+
+def _delivery_rows(hub: HubHarness) -> int:
+    table = s.answer_deliveries
+    with hub.engine.begin() as conn:
+        return conn.execute(hub_scoped(sa.select(sa.func.count()).select_from(table))).scalar_one()
+
+
+def _restart_after_landing(monkeypatch: pytest.MonkeyPatch, commit: Callable[[], None]) -> None:
+    """Run ``commit`` once, when the next unit opens — after the ingest built its landing, before the unit decides."""
+    original: Callable[..., Any] = HubTransactions.begin
+    armed = [True]
+
+    def begin(self: HubTransactions) -> Any:
+        if armed:
+            armed.clear()
+            commit()
+        return original(self)
+
+    monkeypatch.setattr(HubTransactions, "begin", begin)
+
+
+def _answered(hub: HubHarness) -> str:
+    chunk_id = _claim(hub)
+    report_lease(hub, chunk_id, epoch=1, seq=1)
+    _ask(hub, chunk_id)
+    assert hub.client.post("/api/questions/qn_1/answers", json={"answer": "rest"}).status_code == 201
+    return chunk_id
+
+
+def _restart(hub: HubHarness, chunk_id: str) -> Callable[[], None]:
+    def restart() -> None:
+        assert hub.client.post(f"/api/chunks/{chunk_id}/restart", json={}).status_code == 202
+
+    return restart
+
+
+def test_a_restart_after_the_landing_is_built_rejects_a_first_delivery(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    hub = build_hub(tmp_path)
+    chunk_id = _answered(hub)
+    _restart_after_landing(monkeypatch, _restart(hub, chunk_id))
+
+    resp = _deliver(hub, chunk_id)
+
+    assert (resp.json()["applied"], resp.json()["rejected"]) == ([], [9])
+    assert resp.json()["high_water"] == 1
+    assert _delivery_rows(hub) == 0
+
+
+def test_a_restart_after_the_landing_is_built_rejects_a_replay(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    hub = build_hub(tmp_path)
+    chunk_id = _answered(hub)
+    assert _deliver(hub, chunk_id, seq=9).json()["applied"] == [9]
+    _restart_after_landing(monkeypatch, _restart(hub, chunk_id))
+
+    resp = _deliver(hub, chunk_id, seq=10)
+
+    assert (resp.json()["applied"], resp.json()["rejected"]) == ([], [10])
+    assert resp.json()["high_water"] == 9
+    assert _delivery_rows(hub) == 1
+
+
+def test_the_delivery_decision_reads_on_the_token_the_chunk_lock_returned(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    hub = build_hub(tmp_path)
+    chunk_id = _answered(hub)
+    seen: list[tuple[str, object]] = []
+
+    def spy(cls: type, name: str) -> None:
+        original = getattr(cls, name)
+
+        def wrapper(self: object, *args: Any, **kwargs: Any) -> Any:
+            seen.append((name, kwargs.get("transaction")))
+            return original(self, *args, **kwargs)
+
+        monkeypatch.setattr(cls, name, wrapper)
+
+    spy(ChunkQuestionsStore, "get_question")
+    spy(ChunkFactsStore, "load_facts")
+    spy(ChunkQuestionsStore, "record_answer_delivered")
+    resp = _deliver(hub, chunk_id)
+
+    assert resp.json()["applied"] == [9]
+    tokens = {id(token) for _, token in seen[-3:]}
+    assert [name for name, _ in seen[-3:]] == ["get_question", "load_facts", "record_answer_delivered"]
+    assert len(tokens) == 1 and all(token is not None for _, token in seen[-3:])
