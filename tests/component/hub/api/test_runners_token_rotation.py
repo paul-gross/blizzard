@@ -6,13 +6,14 @@ from __future__ import annotations
 import threading
 from datetime import UTC, datetime
 from pathlib import Path
+from typing import cast
 
 import pytest
 from sqlalchemy.exc import OperationalError
 
 from blizzard.foundation.store.engine import create_engine_from_url
 from blizzard.foundation.tokens import TokenHash
-from blizzard.hub.domain.runners.registration import RunnerAddition, TokenRotation
+from blizzard.hub.domain.runners.registration import IWriteRunnerRegistry, RunnerAddition, TokenRotation
 from blizzard.hub.store.internal.runner_registry_store import RunnerRegistryStore, locked_token_hash
 from tests.support.scaffolding import HubHarness, build_hub, hub_store_connections, migrated_hub_at, runner_token
 
@@ -90,7 +91,8 @@ def test_competing_rotations_on_one_lifecycle_leave_one_current_token_and_revoke
 ) -> None:
     hub = build_hub(tmp_path)
     assert hub.client.post("/api/fleet/runners", json={"runner_id": "runner-a", "workspace_id": "ws-a"}).is_success
-    original = hub.services.registry.rotate_token
+    registry = cast(IWriteRunnerRegistry, hub.services.registry)
+    original = registry.rotate_token
     minted: list[str] = []
     second: list[threading.Thread] = []
     armed = [True]
@@ -107,7 +109,7 @@ def test_competing_rotations_on_one_lifecycle_leave_one_current_token_and_revoke
             thread.start()
         return original(rotation)
 
-    monkeypatch.setattr(hub.services.registry, "rotate_token", rotate_with_a_competitor)
+    monkeypatch.setattr(registry, "rotate_token", rotate_with_a_competitor)
 
     minted.append(_enroll(hub))
     second[0].join(timeout=60)

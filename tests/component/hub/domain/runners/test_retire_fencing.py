@@ -9,12 +9,12 @@ from __future__ import annotations
 import json
 from collections.abc import Callable
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 import pytest
 
 from blizzard.foundation.tokens import TokenHash
-from blizzard.hub.domain.runners.registration import RunnerRegistration, TokenRotation
+from blizzard.hub.domain.runners.registration import IWriteRunnerRegistry, RunnerRegistration, TokenRotation
 from tests.support.scaffolding import HubHarness, build_hub, emitted_events, pointer_token
 
 _RUNNER = "rn_a"
@@ -210,7 +210,7 @@ def test_a_reinstate_decided_before_a_reinstate_and_re_retire_leaves_the_runner_
         _ok(_reinstate(hub))
         _ok(_retire(hub, by="later"))
 
-    _once(monkeypatch, hub.services.fleet._transactions, "begin", reinstate_and_retire_again)
+    _once(monkeypatch, hub.services.fleet._transactions, "begin", reinstate_and_retire_again)  # pyright: ignore[reportPrivateUsage]  # the fleet service's transaction seam is the only point between the read and the unit
 
     refused = _reinstate(hub)
 
@@ -321,7 +321,7 @@ def _raced_token(hub: HubHarness) -> str:
     _ok(_retire(hub))
     runner = _runner(hub)
     token = "raced-token"
-    hub.services.registry.rotate_token(
+    cast(IWriteRunnerRegistry, hub.services.registry).rotate_token(
         TokenRotation(_RUNNER, TokenHash(token).hex, hub.clock.now(), "racer", runner.lifecycle_version)
     )
     return token
@@ -349,7 +349,7 @@ def test_a_stale_reinstate_revokes_nothing_of_a_newer_lifecycle(
         _ok(_reinstate(hub))
         tokens.append(_enroll(hub))
 
-    _once(monkeypatch, hub.services.fleet._transactions, "begin", rescue_and_enroll)
+    _once(monkeypatch, hub.services.fleet._transactions, "begin", rescue_and_enroll)  # pyright: ignore[reportPrivateUsage]  # the fleet service's transaction seam is the only point between the read and the unit
 
     refused = _reinstate(hub)
 
