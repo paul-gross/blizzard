@@ -51,6 +51,9 @@ EVENT_LOG_KIND_CENSUS: dict[str, Disposition] = {
     "worker-lost": Recorded("runner/lifecycle/attempt.py:Attempt.fail", "critical"),
     "owner-unresolvable": Recorded("runner/lifecycle/attempt.py:Attempt.escalate_owner_unresolvable", "critical"),
     "no-acceptable-harness": Recorded("runner/lifecycle/attempt.py:Attempt.escalate_no_acceptable_harness", "critical"),
+    "harness-version-changed": Recorded(
+        "runner/lifecycle/attempt.py:Attempt._escalate_harness_version_refused", "critical"
+    ),
     "hub-node-unroutable-outcome": Recorded("hub/delivery/hub_node.py:HubNodeRouter._unroutable_on", "critical"),
     "hub-action-overran": Recorded("hub/delivery/flow_turn.py:TurnRunner._answer", "warning"),
     "turn-interrupted": Recorded("hub/domain/delivery/reconcile.py:FlowLineReconciler.end_unanswered", "warning"),

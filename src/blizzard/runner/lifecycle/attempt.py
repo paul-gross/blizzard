@@ -22,22 +22,22 @@ from blizzard.runner.harness.registry import UnavailableHarnessError, UnknownHar
 from blizzard.runner.hub.client import ChunkEndedError, ChunkNotFoundError, HubClientError
 from blizzard.runner.hub.outbound import OutboundFacts
 from blizzard.runner.hub.outbound_buffer import escalation_payload
-from blizzard.runner.leases.closure import NO_ACCEPTABLE_HARNESS_MINT
+from blizzard.runner.leases.closure import HARNESS_VERSION_REFUSED, NO_ACCEPTABLE_HARNESS_MINT
 from blizzard.runner.leases.model import Lease
 from blizzard.runner.leases.record import ClosureFact
 from blizzard.runner.lifecycle.model import (
     FailureMove,
-    OwnerUnresolvableMove,
+    InPlaceEscalationMove,
     failure_move,
+    in_place_escalation_move,
     owner_unresolvable_closure,
-    owner_unresolvable_move,
     retry_owner_admitted,
     routed_away,
 )
 from blizzard.runner.lifecycle.orphan import orphan_session
 from blizzard.runner.lifecycle.registration import registered_runner_id
 from blizzard.runner.lifecycle.session import SkippedHarness
-from blizzard.runner.lifecycle.spawn import Environments, SpawnContext, Spawner
+from blizzard.runner.lifecycle.spawn import Environments, LaunchVersionRefusedError, SpawnContext, Spawner
 from blizzard.runner.lifecycle.takeover import EscalationCommands, resolve_resume_command
 from blizzard.runner.process.owned_process import interrupt_owned_process, kill_owned_process
 from blizzard.runner.throttle.pause import USAGE_LIMIT_PARK_CAUSE
@@ -88,6 +88,9 @@ _ATTEMPT_ABANDONED: EventLogKind = "attempt-abandoned"
 
 #: Surfaced when an existing session's recorded harness owner cannot be dispatched to.
 _OWNER_UNRESOLVABLE: EventLogKind = "owner-unresolvable"
+
+#: Surfaced when a changed harness version refused a launch and its one relaunch.
+_HARNESS_VERSION_CHANGED: EventLogKind = "harness-version-changed"
 
 #: Surfaced when a fresh mint's every acceptable harness is unknown, unavailable, or resolves no authored tier.
 _NO_ACCEPTABLE_HARNESS: EventLogKind = "no-acceptable-harness"
@@ -331,8 +334,8 @@ class Attempt:
         escalation."""
         lease = self.lease
         now = self.ctx.clock.now()
-        move = owner_unresolvable_move(detached=self.detached(), braked=self._braked())
-        if move is OwnerUnresolvableMove.ABANDON:
+        move = in_place_escalation_move(detached=self.detached(), braked=self._braked())
+        if move is InPlaceEscalationMove.ABANDON:
             OutboundFacts(self.ctx).event(
                 kind=_ATTEMPT_ABANDONED,
                 chunk_id=lease.chunk_id,
@@ -344,7 +347,7 @@ class Attempt:
             )
             self.abandon(via=via)
             return
-        if move is OwnerUnresolvableMove.DEFER:
+        if move is InPlaceEscalationMove.DEFER:
             # Deliberate deferral, not a surfaced escalation (mirrors `fail`'s own defer) — the
             # lease stays open, untouched, for a later pass once the pause lifts.
             _log.info(
@@ -384,6 +387,63 @@ class Attempt:
             detail=f"recorded harness owner {session.harness_id!r} is {status} (via {via})",
             event=event,
             closure_reason=closure.closure_reason,
+            clear_resume_intent=True,
+        )
+
+    def escalate_harness_version_refused(self, exc: LaunchVersionRefusedError, *, via: str) -> None:
+        """Escalate this still-OPEN lease in place because a changed harness version refused its launch and the one
+        relaunch :meth:`Spawner.launching` made on the version just observed. Spends no retry: nothing launched, and
+        another launch could only be refused again until the runner restarts. Takes the same detached/paused
+        precedence as :meth:`escalate_owner_unresolvable`."""
+        lease = self.lease
+        move = in_place_escalation_move(detached=self.detached(), braked=self._braked())
+        if move is InPlaceEscalationMove.ABANDON:
+            OutboundFacts(self.ctx).event(
+                kind=_ATTEMPT_ABANDONED,
+                chunk_id=lease.chunk_id,
+                lease_id=lease.lease_id,
+                node_name=lease.node_name,
+                message=f"attempt abandoned — chunk reassigned (harness version refused, via {via})",
+                detail={"via": via, "harness_id": exc.harness_id},
+                at=self.ctx.clock.now(),
+            )
+            self.abandon(via=via)
+            return
+        if move is InPlaceEscalationMove.DEFER:
+            # Deliberate deferral, as `escalate_owner_unresolvable`'s: the lease stays open for a later pass.
+            _log.info(
+                "harness-version escalation deferred — locally paused",
+                runner_name=self.ctx.config.runner_name,
+                via=via,
+                chunk_id=lease.chunk_id,
+                lease_id=lease.lease_id,
+            )
+            return
+        self._escalate_harness_version_refused(exc, via=via)
+
+    def _escalate_harness_version_refused(self, exc: LaunchVersionRefusedError, *, via: str) -> None:
+        """The actual close, once :meth:`escalate_harness_version_refused`'s precedence has cleared — unspent under
+        its own reason, with or without a session, and with the resume intent resolved inline so nothing on this
+        lease launches again."""
+        lease = self.lease
+        now = self.ctx.clock.now()
+        self._tear_down()  # best-effort hygiene; the refusal came before anything started
+        detail = f"{exc.refusal} — restart the runner on a supported release, then requeue (via {via})"
+        event: dict[str, object] = {
+            "severity": EVENT_LOG_SEVERITY[_HARNESS_VERSION_CHANGED],
+            "kind": _HARNESS_VERSION_CHANGED,
+            "chunk_id": lease.chunk_id,
+            "lease_id": lease.lease_id,
+            "node_name": lease.node_name,
+            "message": f"escalated — harness {exc.harness_id!r} version refused the launch (via {via})",
+            "detail": {"via": via, "harness_id": exc.harness_id, "refusal": exc.refusal},
+        }
+        self.close_escalated(
+            now,
+            cause=EscalationCause.HARNESS_VERSION_CHANGED,
+            detail=detail,
+            event=event,
+            closure_reason=HARNESS_VERSION_REFUSED,
             clear_resume_intent=True,
         )
 

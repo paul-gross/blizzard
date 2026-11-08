@@ -8223,6 +8223,7 @@
           "retries-exhausted",
           "owner-unresolvable",
           "no-acceptable-harness",
+          "harness-version-changed",
           "spend-cap",
           "bounce-cap",
           "migration-target-unresolvable",

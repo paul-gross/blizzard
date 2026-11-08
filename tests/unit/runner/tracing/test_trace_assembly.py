@@ -174,8 +174,8 @@ def test_each_published_close_reason_is_carried_verbatim(reason: str) -> None:
     assert _worker(assemble_lease(fx.make_facts(reason=reason))).attributes[attr.LEASE_CLOSE_REASON] == reason
 
 
-@pytest.mark.parametrize("reason", sorted(closure.MINT_REASONS))
-def test_mint_reasons_read_escalated(reason: str) -> None:
+@pytest.mark.parametrize("reason", sorted(closure.STORE_ESCALATION_REASONS))
+def test_store_escalation_reasons_read_escalated(reason: str) -> None:
     assert _worker(assemble_lease(fx.make_facts(reason=reason))).attributes[attr.LEASE_CLOSE_REASON] == "escalated"
 
 

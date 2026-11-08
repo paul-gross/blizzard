@@ -476,8 +476,10 @@ class Judgement:
             # that closure — no other runner can resume this exact session to relaunch on.
             return
         binding = self.bindings[0]
-        with Spawner(self.ctx).reobserving_a_changed_version(session.harness_id):
-            handle = harness.judge(
+        handle, _ = Spawner(self.ctx).launching(
+            session.harness_id,
+            harness.observe_version,
+            lambda: harness.judge(
                 SpawnCwd.of_session(self.ctx.workspaces.spawn_root(binding.workspace_id), binding.workdir),
                 session.session_id,
                 message,
@@ -487,7 +489,8 @@ class Judgement:
                 effort=lease.resolved_effort,
                 model=lease.resolved_model,
                 compaction_window=lease.resolved_compaction_window,
-            )
+            ),
+        )
         try:
             self.ctx.stores.elicitations.record_elicitation_started(
                 lease.lease_id,

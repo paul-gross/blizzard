@@ -14,13 +14,14 @@ from pathlib import Path
 from typing import Any
 
 import pytest
+from sqlalchemy import select
 from structlog.testing import capture_logs
 
 from blizzard.foundation.chunk_status import ChunkStatus
 from blizzard.foundation.clock import FixedClock
 from blizzard.foundation.store.utc import iso_utc
 from blizzard.runner.environments.repository import EnvBinding
-from blizzard.runner.harness.adapter import HarnessVersionChangedError, WorkerHandle
+from blizzard.runner.harness.adapter import HarnessSpawnError, HarnessVersionChangedError, WorkerHandle
 from blizzard.runner.harness.capability_snapshot import HarnessVersionCache
 from blizzard.runner.harness.identity import CLAUDE_CODE_HARNESS_ID, SessionReference
 from blizzard.runner.leases.elicitation import PendingElicitation
@@ -28,9 +29,10 @@ from blizzard.runner.leases.model import Lease, NewLease
 from blizzard.runner.lifecycle import dormant
 from blizzard.runner.lifecycle.dormant import DormantSession, PauseParkSettle
 from blizzard.runner.lifecycle.model import UnpauseMove
-from blizzard.runner.lifecycle.spawn import Spawner, Suppression, SuppressionCause
+from blizzard.runner.lifecycle.spawn import LaunchVersionRefusedError, Spawner, Suppression, SuppressionCause
 from blizzard.runner.loop.context import LoopContext
 from blizzard.runner.node_steps.chunk_state import ChunkPause, ChunkState
+from blizzard.runner.store.schema import lease_spawns
 from blizzard.runner.throttle.gate import StartKind
 from blizzard.runner.throttle.pause import PausePark, RunnerBrakes
 from blizzard.runner.throttle.settings import HoldOrRelease, ThrottleSettings
@@ -684,20 +686,63 @@ def test_a_judge_relaunch_move_with_no_standing_elicitation_falls_through_to_the
 
 
 class _VersionChangedResume(FakeHarness):
-    def resume_with_message(self, *args: object, **kwargs: object) -> Any:
-        raise HarnessVersionChangedError("the service now reports version 2.2.0, not 2.1.4")
+    """Refuses its first ``refusals`` resumes for a changed version, then resumes as the fake does."""
+
+    def __init__(self, *args: Any, refusals: int, **kwargs: Any) -> None:
+        super().__init__(*args, **kwargs)
+        self.refusals = refusals
+
+    def resume_with_message(self, *args: Any, **kwargs: Any) -> Any:
+        if self.refusals > 0:
+            self.refusals -= 1
+            raise HarnessVersionChangedError("the service now reports version 2.2.0, not 2.1.4")
+        return super().resume_with_message(*args, **kwargs)
 
 
-def test_a_resume_refused_for_a_changed_version_records_the_advertised_one_and_drops_it(tmp_path: Path):
-    """A resume records the version the runner advertised, and one refused because that version changed leaves it to
-    be observed afresh, as a fresh spawn's refusal does."""
+def _recorded_versions(store: SqlAlchemyRunnerStore) -> list[str | None]:
+    with store.engine.connect() as conn:
+        return list(
+            conn.execute(
+                select(lease_spawns.c.harness_version)
+                .where(lease_spawns.c.runner_id == FIXTURE_RUNNER_ID)
+                .order_by(lease_spawns.c.id)
+            )
+            .scalars()
+            .all()
+        )
+
+
+def test_a_resume_refused_for_a_changed_version_relaunches_once_and_records_the_version_just_observed(
+    tmp_path: Path,
+):
+    """A resume refused because the advertised version changed has it observed afresh and relaunches once; the
+    relaunch records the version it ran on, not the stale one from before the refusal."""
     rig = _rig(tmp_path)
     versions = HarnessVersionCache(clock=rig.clock)
     assert versions.get(CLAUDE_CODE_HARNESS_ID, lambda: "2.1.4") == "2.1.4"
     ctx = replace(rig.ctx, harness_versions=versions)
-    harness = _VersionChangedResume(handle=_HANDLE, verdict="pass")
+    harness = _VersionChangedResume(handle=_HANDLE, verdict="pass", refusals=1)
+    harness.harness_version = "2.2.0"
 
-    with pytest.raises(HarnessVersionChangedError):
+    DormantSession(ctx, rig.lease)._wake("go", rig.bindings, harness=harness)  # pyright: ignore[reportPrivateUsage]
+
+    assert len(harness.resumed) == 1
+    assert _recorded_versions(rig.store)[-1] == "2.2.0"
+
+
+def test_a_resume_refused_again_on_relaunch_raises_the_refusal_and_drops_the_version(tmp_path: Path):
+    """A refusal the relaunch repeats surfaces as the lifecycle's own refusal — never a spawn failure — and leaves the
+    version to be observed afresh."""
+    rig = _rig(tmp_path)
+    versions = HarnessVersionCache(clock=rig.clock)
+    assert versions.get(CLAUDE_CODE_HARNESS_ID, lambda: "2.1.4") == "2.1.4"
+    ctx = replace(rig.ctx, harness_versions=versions)
+    harness = _VersionChangedResume(handle=_HANDLE, verdict="pass", refusals=2)
+
+    with pytest.raises(LaunchVersionRefusedError) as refused:
         DormantSession(ctx, rig.lease)._wake("go", rig.bindings, harness=harness)  # pyright: ignore[reportPrivateUsage]
 
-    assert versions.get(CLAUDE_CODE_HARNESS_ID, lambda: "2.2.0") == "2.2.0"
+    assert not isinstance(refused.value, HarnessSpawnError)
+    assert refused.value.harness_id == CLAUDE_CODE_HARNESS_ID and "2.2.0" in refused.value.refusal
+    assert harness.resumed == []
+    assert versions.get(CLAUDE_CODE_HARNESS_ID, lambda: "2.3.0") == "2.3.0"

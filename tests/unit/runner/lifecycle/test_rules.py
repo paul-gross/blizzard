@@ -47,12 +47,12 @@ from blizzard.runner.lifecycle.model import (
     FailureMove,
     Fenced,
     HeldChunkMove,
+    InPlaceEscalationMove,
     InterruptedClaimMove,
     Judge,
     LeaseMove,
     LeaseReconcileMove,
     MintOwnerSource,
-    OwnerUnresolvableMove,
     ParkOnAsk,
     ParkOnUsageLimit,
     ReapMove,
@@ -81,13 +81,13 @@ from blizzard.runner.lifecycle.model import (
     gate_resolution_lease_id,
     held_chunk_move,
     held_chunk_reads_local_epoch,
+    in_place_escalation_move,
     interrupted_claim_move,
     lease_move_legal,
     lease_reconcile_move,
     mint_owner_source,
     next_lease_epoch,
     owner_unresolvable_closure,
-    owner_unresolvable_move,
     owns_node_entry,
     park_names_elicitation,
     pause_park_drain_expired,
@@ -434,10 +434,10 @@ def test_owner_unresolvable_closure() -> None:
     assert (ran.owner_status, ran.closure_reason) == ("unknown", None)
 
 
-def test_owner_unresolvable_move() -> None:
-    assert owner_unresolvable_move(detached=True, braked=True) is OwnerUnresolvableMove.ABANDON
-    assert owner_unresolvable_move(detached=False, braked=True) is OwnerUnresolvableMove.DEFER
-    assert owner_unresolvable_move(detached=False, braked=False) is OwnerUnresolvableMove.ESCALATE
+def test_in_place_escalation_move() -> None:
+    assert in_place_escalation_move(detached=True, braked=True) is InPlaceEscalationMove.ABANDON
+    assert in_place_escalation_move(detached=False, braked=True) is InPlaceEscalationMove.DEFER
+    assert in_place_escalation_move(detached=False, braked=False) is InPlaceEscalationMove.ESCALATE
 
 
 # --- dormant sessions ------------------------------------------------------------------------- #

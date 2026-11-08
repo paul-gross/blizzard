@@ -3,8 +3,7 @@
 from __future__ import annotations
 
 import uuid
-from collections.abc import Callable, Generator, Sequence
-from contextlib import contextmanager
+from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 from datetime import datetime
 from enum import StrEnum
@@ -103,6 +102,18 @@ _CP_AFTER_IDENTITY = crashpoint(
     "spawn.after-identity.before-session-record", "identity known; authoritative session not yet durable"
 )
 _CP_AFTER_SPAWN = crashpoint("spawn.after-spawn", "worker spawned; pid recorded")
+
+
+class LaunchVersionRefusedError(RuntimeError):
+    """A changed harness version refused a launch and its one relaunch on the version just observed. Not a
+    :class:`HarnessSpawnError`, so no spawn-failure path spends a retry on it: each launch site escalates its own
+    lease (:meth:`blizzard.runner.lifecycle.attempt.Attempt.escalate_harness_version_refused`)."""
+
+    def __init__(self, harness_id: str, refusal: str) -> None:
+        super().__init__(refusal)
+        self.harness_id = harness_id
+        #: The adapter's refusal, naming the version the harness reported.
+        self.refusal = refusal
 
 
 @domain_model
@@ -407,10 +418,11 @@ class Spawner:
         _CP_AFTER_BOUNDARY.reached()
         # Observed before the spawn: a hang or raise here costs only this generation's
         # `harness_version` observation, never runs after the worker is already live and unrecorded.
-        version = self.advertised_version(owner, harness.observe_version)
         try:
-            with self.reobserving_a_changed_version(owner):
-                pending = harness.spawn(
+            pending, version = self.launching(
+                owner,
+                harness.observe_version,
+                lambda: harness.spawn(
                     envelope,
                     self._worker_preamble(chunk_id, lease, environments, rendered, workspace_id),
                     session_hint=str(uuid.uuid4()),
@@ -418,7 +430,13 @@ class Spawner:
                     model=lease.model,
                     effort=lease.effort,
                     compaction_window=lease.compaction_window,
-                )
+                ),
+            )
+        except LaunchVersionRefusedError as exc:
+            # Nothing launched, and another launch could only be refused again: the minted lease
+            # escalates unspent rather than being left for REAP to fail as a retry.
+            self._escalate_version_refused(lease.lease_id, exc, via=via)
+            return
         except HarnessSpawnError as exc:
             # Surface the launch-time failure then RE-RAISE: nothing was ever
             # launched, but the lease minted above is durable — REAP reaps it (a retry), below.
@@ -540,6 +558,16 @@ class Spawner:
 
         Attempt(self.ctx, lease).escalate_owner_unresolvable(session=session, exc=exc, via="resume-owner")
 
+    def _escalate_version_refused(self, lease_id: str, exc: LaunchVersionRefusedError, *, via: str) -> None:
+        """Escalate the lease this spawn minted, whose launch a changed harness version refused."""
+        lease = self.ctx.stores.lease_record.active_lease(lease_id)
+        assert lease is not None  # minted by this same spawn, and nothing else has touched it yet
+        # Deferred: `blizzard.runner.lifecycle.attempt` imports `Spawner` at module scope, so
+        # importing `Attempt` back at module scope here would cycle.
+        from blizzard.runner.lifecycle.attempt import Attempt
+
+        Attempt(self.ctx, lease).escalate_harness_version_refused(exc, via=via)
+
     def escalate_no_acceptable_harness(
         self,
         chunk_id: str,
@@ -597,18 +625,31 @@ class Spawner:
         versions = self.ctx.harness_versions
         return versions.get(harness_id, observe) if versions is not None else observe()
 
-    @contextmanager
-    def reobserving_a_changed_version(self, harness_id: str) -> Generator[None]:
-        """A launch inside refused because ``harness_id``'s version changed since it was advertised has the next
-        snapshot observe it afresh and recalculate its availability."""
+    def launching[T](
+        self, harness_id: str, observe: Callable[[], str | None], launch: Callable[[], T]
+    ) -> tuple[T, str | None]:
+        """Launch on ``harness_id``'s advertised version, returning the launch with the version it ran on. A launch
+        refused because that version changed has the next snapshot observe it afresh and recalculate its
+        availability, then relaunches once on the version just observed — an in-range change clears there. A second
+        refusal raises :class:`LaunchVersionRefusedError`. The refusal precedes every durable write and start, so the
+        relaunch repeats nothing."""
+        version = self.advertised_version(harness_id, observe)
         try:
-            yield
+            return launch(), version
         except HarnessVersionChangedError:
-            if self.ctx.harness_versions is not None:
-                self.ctx.harness_versions.forget(harness_id)
-            if self.ctx.harness_health is not None:
-                self.ctx.harness_health.invalidate(harness_id)
-            raise
+            self._forget_version(harness_id)
+        version = self.advertised_version(harness_id, observe)
+        try:
+            return launch(), version
+        except HarnessVersionChangedError as exc:
+            self._forget_version(harness_id)
+            raise LaunchVersionRefusedError(harness_id, str(exc)) from exc
+
+    def _forget_version(self, harness_id: str) -> None:
+        if self.ctx.harness_versions is not None:
+            self.ctx.harness_versions.forget(harness_id)
+        if self.ctx.harness_health is not None:
+            self.ctx.harness_health.invalidate(harness_id)
 
     def generation(self, lease_id: str) -> int:
         """The spawn generation this lease's next start is about to mint — one past the

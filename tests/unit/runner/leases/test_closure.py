@@ -13,4 +13,4 @@ def test_every_closure_reason_is_classified_exactly_once() -> None:
 
     for left, right in combinations(sets, 2):
         assert left.isdisjoint(right)
-    assert frozenset().union(*sets) == closure.PUBLISHED_REASONS | closure.MINT_REASONS
+    assert frozenset().union(*sets) == closure.PUBLISHED_REASONS | closure.STORE_ESCALATION_REASONS

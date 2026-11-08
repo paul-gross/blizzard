@@ -4921,7 +4921,7 @@ export type ErrandState = 'due' | 'running' | 'waiting' | 'stopped';
 /**
  * EscalationCause
  */
-export type EscalationCause = 'retries-exhausted' | 'owner-unresolvable' | 'no-acceptable-harness' | 'spend-cap' | 'bounce-cap' | 'migration-target-unresolvable' | 'hub-action-missing' | 'hub-action-stuck' | 'unroutable-outcome' | 'forge-auth' | 'forge-config' | 'forge-capability-missing' | 'change-closed' | 'branch-protected' | 'merge-method-refused' | 'park-timeout' | 'escalate-choice';
+export type EscalationCause = 'retries-exhausted' | 'owner-unresolvable' | 'no-acceptable-harness' | 'harness-version-changed' | 'spend-cap' | 'bounce-cap' | 'migration-target-unresolvable' | 'hub-action-missing' | 'hub-action-stuck' | 'unroutable-outcome' | 'forge-auth' | 'forge-config' | 'forge-capability-missing' | 'change-closed' | 'branch-protected' | 'merge-method-refused' | 'park-timeout' | 'escalate-choice';
 
 /**
  * EventLogSeverity
