@@ -17,6 +17,7 @@ from blizzard.runner.harness.internal.process_launcher import ProcessLauncher
 from blizzard.runner.harness.opencode.section import OpenCodeSection
 from blizzard.runner.harness.opencode_v2.adapter import OpenCodeTwoAdapter
 from blizzard.runner.harness.opencode_v2.declaration import OPENCODE_V2_DECLARATION, REQUEST_DIRNAME, driver_command
+from blizzard.runner.harness.opencode_v2.price_catalog import SqliteOpenCodeTwoPriceCatalog
 from blizzard.runner.harness.opencode_v2.transcript.source import OpenCodeTwoTranscriptSource
 from blizzard.runner.harness.wiring import HarnessSections, first_bindings, publish_harness_bundle
 from blizzard.runner.process.child_env import AllowlistedEnv
@@ -86,3 +87,37 @@ def test_scaffold_writes_nothing_and_publish_admits_no_opencode_entry(tmp_path: 
 def test_health_reads_no_spawn_root_so_one_probe_serves_every_root() -> None:
     """Every check reaches the one managed service, so a probe per root would only repeat it."""
     assert OPENCODE_V2_DECLARATION.health_varies_by_spawn_root is False
+
+
+def _binding_adapter(root: Path, worker_env: AllowlistedEnv) -> OpenCodeTwoAdapter:
+    process = LinuxProcessProbe()
+    shared = SharedHarnessInputs(
+        root=root,
+        autonomy=Autonomy.Normal,
+        config_dir=None,
+        worker_env=worker_env,
+        transcripts_root="",
+        runner_id="run_7",
+    )
+    with ThreadPoolExecutor(max_workers=1) as executor:
+        binding = OPENCODE_V2_DECLARATION.binding(
+            _SECTION,
+            shared,
+            process=process,
+            launcher=ProcessLauncher(process, executor=executor, children=CHILDREN),
+            children=CHILDREN,
+            clock=SystemClock(),
+        )
+    assert isinstance(binding.adapter, OpenCodeTwoAdapter)
+    return binding.adapter
+
+
+def test_the_price_catalog_is_built_from_the_worker_environment_and_only_when_it_names_a_store(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.delenv("HOME", raising=False)
+    monkeypatch.delenv("XDG_DATA_HOME", raising=False)
+    assert _binding_adapter(tmp_path, AllowlistedEnv.of(()))._price_catalog is None  # pyright: ignore[reportPrivateUsage]
+    monkeypatch.setenv("XDG_DATA_HOME", str(tmp_path / "data"))
+    adapter = _binding_adapter(tmp_path, AllowlistedEnv.of(("XDG_DATA_HOME",)))
+    assert isinstance(adapter._price_catalog, SqliteOpenCodeTwoPriceCatalog)  # pyright: ignore[reportPrivateUsage]

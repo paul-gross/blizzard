@@ -2,6 +2,7 @@ import * as crypto from 'node:crypto';
 import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
+import { DatabaseSync } from 'node:sqlite';
 import type { APIRequestContext, TestInfo } from '@playwright/test';
 import { parse, stringify } from 'smol-toml';
 import { type CliResult, runCommand } from './cli';
@@ -96,6 +97,12 @@ export interface RunnerHostOptions {
    */
   runnerModelPrices: Record<string, Record<string, { input: number; output: number; cache_read: number; cache_write: number }>>;
   /**
+   * Prices OpenCode 2 models for the host: per-million-token rates by `provider` then `model`, written as the
+   * `models-dev:v2:catalog` row of the `kv` table in `opencode/opencode.db` under a test-owned data home the host's
+   * `XDG_DATA_HOME` names. A `runnerEnv` naming `XDG_DATA_HOME` wins, and the row goes there.
+   */
+  runnerModelCatalog: Record<string, Record<string, { input: number; output: number; cache_read: number; cache_write: number }>>;
+  /**
    * Puts a `winter` that records its invocation and exits 99 first on the host's `PATH`, over the ambient one, so a host
    * that reaches for winter is caught; the handle's `winterInvoked()` reports it. A `runnerEnv.PATH` beside it is refused.
    */
@@ -133,6 +140,7 @@ export const DEFAULT_RUNNER_OPTIONS: RunnerHostOptions = {
   runnerOpencode: 1,
   runnerStubs: {},
   runnerModelPrices: {},
+  runnerModelCatalog: {},
   runnerWinterTrap: false,
   runnerAdopted: undefined,
   runnerDir: undefined,
@@ -493,6 +501,21 @@ export function runnerHostBuilder(given: BuilderContext): RunnerHostBuilder {
         const models = Object.fromEntries(priced.map(([provider, rates]) => [provider, { models: Object.fromEntries(Object.entries(rates).map(([model, cost]) => [model, { cost }])) }]));
         fs.writeFileSync(path.join(cache, 'opencode', 'models.json'), JSON.stringify(models));
         options = { ...options, runnerEnv: { XDG_CACHE_HOME: cache, ...options.runnerEnv } };
+      }
+      const cataloged = Object.entries(options.runnerModelCatalog);
+      if (cataloged.length > 0) {
+        const data = options.runnerEnv.XDG_DATA_HOME ?? path.join(home, '.local', 'share');
+        fs.mkdirSync(path.join(data, 'opencode'), { recursive: true });
+        const catalog = Object.fromEntries(
+          cataloged.map(([provider, rates]) => [
+            provider,
+            { models: Object.fromEntries(Object.entries(rates).map(([model, rate]) => [model, { cost: { text: { input: { price: rate.input, cache: { read: rate.cache_read, write: rate.cache_write } }, output: { price: rate.output } } } }])) },
+          ]),
+        );
+        const store = new DatabaseSync(path.join(data, 'opencode', 'opencode.db'));
+        store.exec('create table if not exists kv (key text primary key, value text)');
+        store.prepare('insert or replace into kv values (?, ?)').run('models-dev:v2:catalog', JSON.stringify({ updatedAt: 0, digest: 'harness', body: JSON.stringify(catalog) }));
+        store.close();
       }
       const env = isolatedEnv(home, path.join(home, '.config'), options.runnerEnv);
       const trapDir = path.join(root, 'trap');

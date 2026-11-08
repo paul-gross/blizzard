@@ -24,6 +24,7 @@ from blizzard.runner.harness.opencode_v2.adapter import OpenCodeTwoAdapter, wind
 from blizzard.runner.harness.opencode_v2.client import ModelReference
 from blizzard.runner.harness.opencode_v2.driver import ServiceIdentity
 from blizzard.runner.harness.opencode_v2.errors import ErrorKind, TurnError
+from blizzard.runner.harness.opencode_v2.price_catalog import SqliteOpenCodeTwoPriceCatalog
 from blizzard.runner.harness.opencode_v2.request import DriveKind, DriveRequest
 from blizzard.runner.harness.opencode_v2.result import Outcome, ResultWriter, Step
 from blizzard.runner.harness.opencode_v2.service import ServiceUnavailableError
@@ -34,6 +35,7 @@ from blizzard.runner.node_steps.envelope import Envelope
 from blizzard.runner.process.child_env import AllowlistedEnv, ChildEnv
 from blizzard.runner.process.child_processes import StreamTarget
 from tests.support.child_launch import CHILDREN, tool_env
+from tests.support.opencode2_store import seed_store
 from tests.support.runner_fakes import make_envelope
 
 NOW = datetime(2026, 11, 4, 12, 0, tzinfo=UTC)
@@ -399,3 +401,105 @@ def test_an_invalid_compaction_window_is_dropped_without_a_log(tmp_path: Path) -
         assert adapter.resolve_compaction_window("150k tokens") is None
         assert adapter.resolve_compaction_window("8K") == "8K"
     assert logs == []
+
+
+def _priced_adapter(tmp_path: Path) -> OpenCodeTwoAdapter:
+    store = seed_store(tmp_path / "data" / "opencode.db")
+    return _adapter(tmp_path, price_catalog=SqliteOpenCodeTwoPriceCatalog(store))[0]
+
+
+def _result(steps: list[Step]) -> str:
+    out = io.StringIO()
+    ResultWriter(out, "ses_root").finish(Outcome.SUCCEEDED, "ok", steps, None)
+    return out.getvalue()
+
+
+_SMALL = Tokens(input=1000, output=100, cache_read=500, cache_write=200)
+_SMALL_COST = 0.00355  # openai/gpt-6.1-sol at its base rate
+
+
+def test_zero_cost_steps_are_estimated_each_at_its_own_model(tmp_path: Path) -> None:
+    adapter = _priced_adapter(tmp_path)
+    steps = [
+        Step("ses_root", None, "m1", "openai/gpt-6.1-sol", _SMALL, 0.0),
+        Step("ses_child", "ses_root", "m2", "xai/grok-4.5", Tokens(input=1000), 0.0),
+    ]
+    sample = adapter.parse_usage(_result(steps), "spawn")
+    assert sample is not None and sample.cost_usd is None
+    assert sample.estimated_cost_usd == pytest.approx(_SMALL_COST + 1000 * 2 / 1e6)
+
+
+def test_a_billed_step_is_never_estimated_and_the_unbilled_ones_still_are(tmp_path: Path) -> None:
+    adapter = _priced_adapter(tmp_path)
+    steps = [
+        Step("ses_root", None, "m1", "openai/gpt-6.1-sol", _SMALL, 0.5),
+        Step("ses_root", None, "m2", "openai/gpt-6.1-sol", _SMALL, 0.0),
+    ]
+    sample = adapter.parse_usage(_result(steps), "spawn")
+    assert sample is not None and sample.cost_usd == 0.5
+    assert sample.estimated_cost_usd == pytest.approx(_SMALL_COST)
+
+
+def test_all_billed_steps_carry_no_estimate(tmp_path: Path) -> None:
+    sample = _priced_adapter(tmp_path).parse_usage(
+        _result([Step("ses_root", None, "m1", "openai/gpt-6.1-sol", _SMALL, 0.5)]), "spawn"
+    )
+    assert sample is not None and sample.estimated_cost_usd is None
+
+
+@pytest.mark.parametrize("model", ["openai/unknown", None, "no-slash"])
+def test_one_unpriceable_zero_cost_step_leaves_the_whole_invocation_unestimated(
+    tmp_path: Path, model: str | None
+) -> None:
+    steps = [
+        Step("ses_root", None, "m1", "openai/gpt-6.1-sol", _SMALL, 0.0),
+        Step("ses_root", None, "m2", model, _SMALL, 0.0),
+    ]
+    sample = _priced_adapter(tmp_path).parse_usage(_result(steps), "spawn")
+    assert sample is not None and sample.estimated_cost_usd is None
+
+
+def test_without_a_catalog_there_is_no_estimate(tmp_path: Path) -> None:
+    adapter, _ = _adapter(tmp_path)
+    steps = [Step("ses_root", None, "m1", "openai/gpt-6.1-sol", _SMALL, 0.0)]
+    sample = adapter.parse_usage(_result(steps), "spawn")
+    assert sample is not None and sample.estimated_cost_usd is None
+
+
+def test_each_model_is_looked_up_once_per_parse(tmp_path: Path) -> None:
+    looked_up: list[tuple[str, str]] = []
+    inner = SqliteOpenCodeTwoPriceCatalog(seed_store(tmp_path / "data" / "opencode.db"))
+
+    class Counting:
+        def price_for(self, provider: str, model: str):
+            looked_up.append((provider, model))
+            return inner.price_for(provider, model)
+
+    adapter, _ = _adapter(tmp_path, price_catalog=Counting())
+    steps = [Step("ses_root", None, f"m{n}", "openai/gpt-6.1-sol", _SMALL, 0.0) for n in range(3)]
+    adapter.parse_usage(_result(steps), "spawn")
+    assert looked_up == [("openai", "gpt-6.1-sol")]
+
+
+def test_a_killed_turns_unbilled_records_are_estimated_at_their_own_model(tmp_path: Path) -> None:
+    adapter = _priced_adapter(tmp_path)
+    lines = [
+        _record("ses_r", None, _step("msg_1", "openai/gpt-6.1-sol")),
+        _record("ses_c", "ses_r", _step("msg_c", "xai/grok-4.5")),
+    ]
+    sample = adapter.sum_transcript_usage(lines, "spawn")
+    # each step: input 10, output 2 + reasoning 1, cache read 5, cache write 1
+    sol = (10 * 2 + 3 * 10 + 5 * 0.1 + 1 * 2.5) / 1e6
+    grok = (10 * 2 + 3 * 6 + 5 * 0.3) / 1e6
+    assert sample.cost_usd is None and sample.estimated_cost_usd == pytest.approx(sol + grok)
+
+
+def test_a_billed_record_does_not_mask_the_estimate_of_an_unbilled_one(tmp_path: Path) -> None:
+    adapter = _priced_adapter(tmp_path)
+    lines = [
+        _record("ses_r", None, _step("msg_1", "openai/gpt-6.1-sol", cost=0.5)),
+        _record("ses_r", None, _step("msg_2", "openai/unknown")),
+    ]
+    assert adapter.sum_transcript_usage(lines, "spawn").estimated_cost_usd is None
+    only_billed = adapter.sum_transcript_usage(lines[:1], "spawn")
+    assert only_billed.cost_usd == 0.5 and only_billed.estimated_cost_usd is None

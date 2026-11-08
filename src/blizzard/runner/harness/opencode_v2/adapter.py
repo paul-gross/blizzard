@@ -31,11 +31,18 @@ from blizzard.runner.harness.opencode_v2.attend import DEFAULT_OPENCODE_BINARY, 
 from blizzard.runner.harness.opencode_v2.client import ModelReference
 from blizzard.runner.harness.opencode_v2.errors import ErrorKind
 from blizzard.runner.harness.opencode_v2.orphan import ISessionOrphaner, SessionOrphaner
+from blizzard.runner.harness.opencode_v2.price_catalog import IOpenCodeTwoPriceCatalog, OpenCodeTwoModelPrice
 from blizzard.runner.harness.opencode_v2.registration import ServiceRegistration, read_registration, registration_path
 from blizzard.runner.harness.opencode_v2.request import DriveKind, DriveRequest, write_request
 from blizzard.runner.harness.opencode_v2.result import DriverResult, parse_result
 from blizzard.runner.harness.opencode_v2.service import IServiceKeeper, ServiceUnavailableError
-from blizzard.runner.harness.opencode_v2.shapes import STEP_TYPES, Message, OpenCodeTwoShapeError, parse_message
+from blizzard.runner.harness.opencode_v2.shapes import (
+    STEP_TYPES,
+    Message,
+    OpenCodeTwoShapeError,
+    Tokens,
+    parse_message,
+)
 from blizzard.runner.harness.opencode_v2.transcript.source import OpenCodeTwoTranscriptSource
 from blizzard.runner.harness.opencode_v2.transport import UrllibServiceTransport
 from blizzard.runner.harness.opencode_v2.version import ADMITTED_OPENCODE_V2_RANGE_TEXT, normalize_opencode_v2_version
@@ -87,6 +94,7 @@ class OpenCodeTwoAdapter:
         autonomy: Autonomy = Autonomy.Dangerous,
         transcript_source: IHarnessTranscriptSource | None = None,
         orphaner: ISessionOrphaner | None = None,
+        price_catalog: IOpenCodeTwoPriceCatalog | None = None,
     ) -> None:
         self._runner_id = runner_id
         self._worker_env = worker_env
@@ -110,6 +118,7 @@ class OpenCodeTwoAdapter:
             TranscriptErrorFactory(get_logger("blizzard.runner.harness.transcript")),
             runner_id=runner_id,
         )
+        self._price_catalog = price_catalog
         self._orphaner: ISessionOrphaner = orphaner or SessionOrphaner(self._registration, UrllibServiceTransport())
         # The version launches are held to: the one last observed, which is the one the runner advertises.
         self._advertised: str | None = None
@@ -426,6 +435,7 @@ class OpenCodeTwoAdapter:
             return None
         steps = result.steps
         costs = [step.cost for step in steps if step.cost]
+        estimate = self._estimate_unbilled([(_split_model(step.model), step.tokens, step.cost) for step in steps])
         return UsageSample(
             kind=kind,
             model=result.root_model() or model or self._model or "unknown",
@@ -434,6 +444,7 @@ class OpenCodeTwoAdapter:
             cache_read_tokens=sum(step.tokens.cache_read for step in steps),
             cache_create_tokens=sum(step.tokens.cache_write for step in steps),
             cost_usd=sum(costs) if costs else None,
+            estimated_cost_usd=estimate,
         )
 
     def sum_transcript_usage(
@@ -451,6 +462,16 @@ class OpenCodeTwoAdapter:
         del invocation_start, invocation_end
         steps = [step for _, step in _transcript_steps(lines)]
         costs = [step.cost for step in steps if step.cost]
+        estimate = self._estimate_unbilled(
+            [
+                (
+                    None if step.model is None else (step.model.provider_id, step.model.id),
+                    step.tokens or Tokens(),
+                    step.cost or 0.0,
+                )
+                for step in steps
+            ]
+        )
         return UsageSample(
             kind=kind,
             model=observed or self.observed_model(lines) or model or self._model or "unknown",
@@ -459,7 +480,28 @@ class OpenCodeTwoAdapter:
             cache_read_tokens=sum(step.tokens.cache_read for step in steps if step.tokens),
             cache_create_tokens=sum(step.tokens.cache_write for step in steps if step.tokens),
             cost_usd=sum(costs) if costs else None,
+            estimated_cost_usd=estimate,
         )
+
+    def _estimate_unbilled(self, steps: Sequence[tuple[tuple[str, str] | None, Tokens, float]]) -> float | None:
+        """The summed estimate of every zero-cost step at its own ``(provider, model)``; ``None`` with no catalog,
+        no zero-cost step, or any such step unpriceable. A step naming no model is unpriceable."""
+        unbilled = [(reference, tokens) for reference, tokens, cost in steps if not cost]
+        if self._price_catalog is None or not unbilled:
+            return None
+        prices: dict[tuple[str, str], OpenCodeTwoModelPrice | None] = {}
+        total = 0.0
+        for reference, tokens in unbilled:
+            if reference is None:
+                return None
+            if reference not in prices:
+                prices[reference] = self._price_catalog.price_for(*reference)
+            price = prices[reference]
+            amount = None if price is None else price.estimate(tokens)
+            if amount is None:
+                return None
+            total += amount
+        return total
 
     def observed_model(self, lines: Sequence[str]) -> str | None:
         """The model the newest root step in the records ran."""
@@ -487,6 +529,14 @@ class OpenCodeTwoAdapter:
         if error is None or error.kind is not ErrorKind.OVERLOAD:
             return None
         return ProviderOverload(detail=error.message)
+
+
+def _split_model(model: str | None) -> tuple[str, str] | None:
+    """A driver-result step's ``provider/model`` split at the first ``/``; ``None`` when it does not name both."""
+    if model is None:
+        return None
+    provider, separator, name = model.partition("/")
+    return (provider, name) if separator and provider and name else None
 
 
 def _transcript_steps(lines: Sequence[str]) -> list[tuple[bool, Message]]:
