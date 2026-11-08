@@ -180,7 +180,7 @@ def test_declare_refuses_a_token_locking_only_the_prerequisite(tmp_path: Path) -
 def test_declare_refuses_an_unlocked_token(tmp_path: Path) -> None:
     engine, store, chunks, now = _declare_fixture(tmp_path)
     with tx.HubTransactions(store).begin() as unit, pytest.raises(TransactionMisuse):
-        chunks.dependencies.declare("ch_a", "ch_b", by="test", at=now, transaction=unit)  # pyright: ignore[reportArgumentType]  # an unlocked unit, passed to prove it is refused
+        chunks.dependencies.declare("ch_a", "ch_b", by="test", at=now, transaction=unit)
     assert chunks.dependencies.standing_edges_for("ch_a") == []
     engine.dispose()
 
