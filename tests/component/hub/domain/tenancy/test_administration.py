@@ -1,5 +1,6 @@
 """Tenant administration driven through the hub's wired service: a tenant is created whole in one transaction — its
-row, the packaged graphs, its ``hub`` sequence, its ``default`` project and its first admin — or not at all; it is
+row, the packaged graphs, its ``hub`` sequence, its ``default`` project, its ``standard`` urgency and the settings naming
+it the default, and its first admin — or not at all; it is
 usable, and the hub's in-memory set of open tenants knows it, the moment its creation commits; its default project is
 an ordinary project, drawing from the ``hub`` source and renamed like any other; names are labels of 1 to 64
 characters with no leading or trailing whitespace; a rename reaches the in-memory set; the list shows every tenant
@@ -31,11 +32,14 @@ from blizzard.hub.domain.tenancy.administration import (
     TenantAdminUnknown,
     TenantNameRefused,
 )
+from blizzard.hub.domain.urgency.model import Urgency
 from blizzard.hub.graph_sync import packaged_minter
 from blizzard.hub.graphs import PACKAGED, GraphFile
 from blizzard.hub.store import schema
 from blizzard.hub.store.errors import HubStoreErrorFactory
 from blizzard.hub.store.internal.tenant_admin_store import TenantAdministrationStore
+from blizzard.hub.store.internal.tenant_settings_store import TenantSettingsStore
+from blizzard.hub.store.internal.urgency_store import UrgencyOrderStore, UrgencyStore
 from blizzard.hub.tenancy import HUB_SCOPED_OPTION, StoreScope, TenantId, UnknownTenant
 from tests.support.scaffolding import (
     HubHarness,
@@ -44,6 +48,7 @@ from tests.support.scaffolding import (
     default_tenant,
     first_color,
     hub_level_connections,
+    scoped_connections,
     seed_user,
 )
 
@@ -67,6 +72,9 @@ def _row_counts(hub: HubHarness) -> dict[str, int]:
                 schema.project_former_slugs,
                 schema.config_changes,
                 schema.membership_facts,
+                schema.urgencies,
+                schema.urgency_positions,
+                schema.tenant_settings,
             )
         }
 
@@ -122,7 +130,40 @@ def test_a_created_tenant_holds_its_default_project_created_by_its_creator_throu
     project_id = project[0]
     assert project_id.startswith("proj_")
     assert project[1:] == ("default", "Default", "", 1)
-    assert changes == [("project", project_id, project_id, "usr_creator", door.value, "create", 1)]
+    assert sorted(changes) == sorted(
+        [
+            ("project", project_id, project_id, "usr_creator", door.value, "create", 1),
+            ("urgency", _standard(hub, created.tenant_id).urgency_id, None, "usr_creator", door.value, "create", 1),
+            ("tenant_settings", created.tenant_id, None, "usr_creator", door.value, "create", 1),
+        ]
+    )
+
+
+def _standard(hub: HubHarness, tenant: TenantId) -> Urgency:
+    standard = UrgencyStore(scoped_connections(hub.engine, tenant)).get_by_slug("standard")
+    assert standard is not None
+    return standard
+
+
+def test_a_created_tenant_holds_standard_first_in_its_order_and_its_settings_name_it_the_default(
+    hub: HubHarness,
+) -> None:
+    created = hub.hub_services.tenant_admin.create("acme", admin_user_id=None, by="usr_creator")
+
+    connections = scoped_connections(hub.engine, created.tenant_id)
+    standard = _standard(hub, created.tenant_id)
+    assert (standard.name, standard.color, standard.emoji, standard.icon, standard.retired) == (
+        "standard",
+        ProjectColor.SLATE,
+        None,
+        None,
+        False,
+    )
+    order = UrgencyOrderStore(connections).order()
+    assert [(p.urgency_id, p.position) for p in order.placed] == [(standard.urgency_id, 0.0)]
+    settings = TenantSettingsStore(connections).get()
+    assert settings is not None
+    assert (settings.default_urgency_id, settings.revision) == (standard.urgency_id, 1)
 
 
 def test_a_created_tenants_default_project_is_stored_with_a_palette_color(hub: HubHarness) -> None:

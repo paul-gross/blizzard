@@ -63,6 +63,7 @@ class IdPrefix(StrEnum):
     HUB_TURN = "htn"  # one turn a submission takes at the head of its flows
     CADENCE = "cad"  # a cadence — its slug is a name unique within its project, never its id
     CHORE = "chr"  # a chore of a cadence — minted when its key first appears there, kept while the key stays
+    URGENCY = "urg"  # an urgency — its slug is fixed at create and never stands in for it
 
 
 @domain_model

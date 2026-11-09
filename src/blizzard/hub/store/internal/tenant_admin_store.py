@@ -28,6 +28,7 @@ from blizzard.hub.domain.tenancy.administration import (
     Tenant,
     TenantAdminUnknown,
 )
+from blizzard.hub.domain.urgency.ports import IWriteTenantSettings, IWriteUrgencyRepository
 from blizzard.hub.store import schema as s
 from blizzard.hub.store.errors import HubStoreConnections
 
@@ -38,6 +39,14 @@ from blizzard.hub.store.internal.graph_store import GraphStore
 # Shares the project_store writes on the same connection; debt pending a domain seam.
 # ast-grep-ignore: bzh:hub-store-adapter-imports
 from blizzard.hub.store.internal.project_store import ProjectStore
+
+# Shares the tenant_settings_store writes on the same connection; debt pending a domain seam.
+# ast-grep-ignore: bzh:hub-store-adapter-imports
+from blizzard.hub.store.internal.tenant_settings_store import TenantSettingsStore
+
+# Shares the urgency_store writes on the same connection; debt pending a domain seam.
+# ast-grep-ignore: bzh:hub-store-adapter-imports
+from blizzard.hub.store.internal.urgency_store import UrgencyStore
 from blizzard.hub.store.scoped import ScopedConnections
 from blizzard.hub.tenancy import StoreScope, TenantId
 
@@ -71,6 +80,8 @@ class _TenantCreation:
         self._writes = writes
         self._graphs = GraphStore(connections)
         self._projects = ProjectStore(connections)
+        self._urgencies = UrgencyStore(connections)
+        self._tenant_settings = TenantSettingsStore(connections)
 
     @property
     def graphs(self) -> IWriteGraphRepository:
@@ -79,6 +90,14 @@ class _TenantCreation:
     @property
     def projects(self) -> IWriteProjectRepository:
         return self._projects
+
+    @property
+    def urgencies(self) -> IWriteUrgencyRepository:
+        return self._urgencies
+
+    @property
+    def tenant_settings(self) -> IWriteTenantSettings:
+        return self._tenant_settings
 
     def seed_hub_sequence(self) -> None:
         with self._connections.write("seed_hub_sequence") as conn:
