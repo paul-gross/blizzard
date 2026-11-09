@@ -1,4 +1,4 @@
-import { ChangeDetectionStrategy, Component, computed, input, output } from '@angular/core';
+import { ChangeDetectionStrategy, Component, computed, input, output, signal } from '@angular/core';
 import { CdkDrag, type CdkDragDrop, CdkDropList } from '@angular/cdk/drag-drop';
 
 import { type BoardCard, boardCardView } from '../board-card/board-card-view.model';
@@ -70,6 +70,8 @@ export function laneDropId(list: BoardReorderList): string {
   styleUrl: './board-column.css',
 })
 export class BoardColumn {
+  protected readonly policyOpen = signal(false);
+
   /** The lane this column renders — its key, engraved label, and stat label. */
   readonly column = input.required<Lane>();
 
@@ -94,7 +96,7 @@ export class BoardColumn {
    * window truncates. */
   readonly count = input<number | null>(null);
 
-  /** The head's hover text, or `null` for none. */
+  /** The head's policy explanation, or `null` for none. */
   readonly headTitle = input<string | null>(null);
 
   /** The chunk whose detail fills the dock, or null — its card carries the highlight. */

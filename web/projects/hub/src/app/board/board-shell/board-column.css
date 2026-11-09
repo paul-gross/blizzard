@@ -1,4 +1,5 @@
 :host {
+  position: relative;
   background: var(--panel-deep);
   display: flex;
   flex-direction: column;
@@ -14,6 +15,30 @@
   text-transform: uppercase;
   color: var(--label);
   text-shadow: 0 1px 0 var(--overlay-90);
+}
+.explained {
+  text-decoration: underline dotted;
+  text-underline-offset: 3px;
+  cursor: help;
+}
+.policy-text {
+  position: absolute;
+  z-index: 2;
+  top: 30px;
+  right: 0;
+  width: 240px;
+  max-height: calc(100% - 34px);
+  box-sizing: border-box;
+  overflow-y: auto;
+  padding: 8px;
+  background: var(--panel-deep);
+  border: 1px solid var(--line);
+  color: var(--label);
+  overflow-wrap: anywhere;
+}
+.explained:focus-visible {
+  outline: 2px solid var(--cyan);
+  outline-offset: 2px;
 }
 .b-col-head {
   display: flex;

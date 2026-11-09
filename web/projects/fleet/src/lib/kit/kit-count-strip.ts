@@ -31,5 +31,5 @@ export class KitCountStrip {
   readonly testid = input<string | null>(null);
   readonly cellClick = output<string>();
 
-  protected readonly columns = computed(() => `repeat(${this.cells().length}, 1fr)`);
+  protected readonly columns = computed(() => `repeat(${this.cells().length}, minmax(0, 1fr))`);
 }

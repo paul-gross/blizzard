@@ -308,7 +308,21 @@ test.describe('server-selected done on the desktop', () => {
     const card = lane.locator(`[data-testid="chunk-card"][data-chunk="${chunk.chunk_id}"]`);
     await expect(card).toBeVisible();
     await expect(lane.getByTestId('lane-count')).toHaveText('1');
-    await expect(lane.locator('.b-col-head')).toHaveAttribute('title', /within 48 hours.*newest 10.*3 all time/);
+    const heading = lane.locator('.b-col-head');
+    const disclosure = heading.locator('details');
+    const summary = disclosure.locator('summary');
+    await heading.hover();
+    await expect(heading).toHaveAttribute('title', /within 48 hours.*newest 10.*3 all time/);
+    await summary.focus();
+    await expect(summary).toBeFocused();
+    await page.keyboard.press('Enter');
+    await expect(disclosure).toHaveAttribute('open', '');
+    await expect(disclosure.locator('.policy-text')).toBeVisible();
+    await expect(disclosure.locator('.policy-text')).toContainText(/within 48 hours.*newest 10.*3 all time/);
+    await expect(disclosure).toHaveAttribute('title', '');
+    await page.keyboard.press('Space');
+    await expect(disclosure).not.toHaveAttribute('open');
+    await expect(disclosure.locator('.policy-text')).toBeHidden();
 
     // The same rows still render when an older server omits the policy field.
     omitPolicy = true;

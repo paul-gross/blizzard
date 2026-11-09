@@ -37,6 +37,13 @@ describe('BoardShell DONE window', () => {
   };
 
   const head = (el: HTMLElement, column: string) => el.querySelector(`[data-col="${column}"] .b-col-head`);
+  const explanation = async (el: HTMLElement) => {
+    const details = head(el, 'done')!.querySelector('details')!;
+    expect(details.open).toBe(false);
+    details.querySelector('summary')!.click();
+    expect(details.open).toBe(true);
+    return details.querySelector('.policy-text')?.textContent?.trim();
+  };
 
   it('uses a generic heading until the policy is supplied', async () => {
     const el = await render([], 'ready', null);
@@ -44,20 +51,21 @@ describe('BoardShell DONE window', () => {
     expect(head(el, 'done')?.querySelector('.col-lbl')?.textContent?.trim()).toBe('Done');
   });
 
-  it('counts the selected cards, not the all-time total, which its head\'s title carries', async () => {
+  it('counts the selected cards and exposes the all-time total on focus', async () => {
     const el = await render([done('a'), done('b')], 'ready', 207);
 
     expect(head(el, 'done')?.querySelector('.n')?.textContent?.trim()).toBe('2');
-    expect(head(el, 'done')?.getAttribute('title')).toBe(
+    expect(head(el, 'done')?.getAttribute('title')).toBe('Server-selected completed work · 207 all time');
+    expect(await explanation(el)).toBe(
       'Server-selected completed work · 207 all time',
     );
-    expect(head(el, 'ready')?.hasAttribute('title')).toBe(false);
+    expect(head(el, 'ready')?.querySelector('.col-lbl')?.hasAttribute('tabindex')).toBe(false);
   });
 
   it('shows zero selected cards even when the all-time count is nonzero', async () => {
     const el = await render([], 'ready', 207);
     expect(head(el, 'done')?.querySelector('.n')?.textContent?.trim()).toBe('0');
-    expect(head(el, 'done')?.getAttribute('title')).toContain('207 all time');
+    expect(await explanation(el)).toContain('207 all time');
   });
 
   it.each([
@@ -105,13 +113,13 @@ describe('BoardShell DONE window', () => {
     await fixture.whenStable();
     const heading = head(fixture.nativeElement as HTMLElement, 'done');
     expect(heading?.querySelector('.col-lbl')?.textContent?.trim()).toBe('Done');
-    expect(heading?.getAttribute('title')).toBe('At each page read: completed within 2 hours of that read or among the newest 3. Page cutoffs: 2026-11-01T10:00:00Z');
+    expect(await explanation(fixture.nativeElement as HTMLElement)).toBe('At each page read: completed within 2 hours of that read or among the newest 3. Page cutoffs: 2026-11-01T10:00:00Z');
   });
 
   it('withholds its count while the board loads, and its all-time total until the counts read resolves', async () => {
     const el = await render([], 'loading', null);
 
     expect(head(el, 'done')?.querySelector('.n')?.textContent?.trim()).toBe('');
-    expect(head(el, 'done')?.getAttribute('title')).toBe('Server-selected completed work');
+    expect(await explanation(el)).toBe('Server-selected completed work');
   });
 });

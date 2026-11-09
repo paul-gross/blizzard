@@ -1,5 +1,12 @@
 <div class="b-col-head" [attr.title]="headTitle()">
-  <span class="col-lbl">{{ column().label }}</span>
+  @if (headTitle(); as explanation) {
+    <details #policy class="policy" [attr.title]="policyOpen() ? '' : null" (toggle)="policyOpen.set(policy.open)">
+      <summary class="col-lbl explained">{{ column().label }}</summary>
+      <span class="policy-text" tabindex="0" aria-label="Done policy explanation">{{ explanation }}</span>
+    </details>
+  } @else {
+    <span class="col-lbl">{{ column().label }}</span>
+  }
   <span class="n" data-testid="lane-count" [style.color]="countColor()">
     <!-- A live lane with occupants announces itself: a flashing square
          ahead of the count, in its lane's tone. Quiet (empty) lanes show none. -->

@@ -152,4 +152,40 @@ describe('glance board layout shell sweep (web:shell-sweep)', () => {
 
     expect(pageErrors, `page errors fired during the sweep: ${pageErrors.join('; ')}`).toEqual([]);
   });
+
+  it('keeps every vital caption inside the strip in a padded 320px workshop', async () => {
+    await page.viewport(320, 800);
+    await TestBed.configureTestingModule({
+      imports: [GlanceView],
+      providers: [provideZonelessChangeDetection(), provideRouter([])],
+    }).compileComponents();
+    const fixture = TestBed.createComponent(GlanceView);
+    fixture.componentRef.setInput('vitals', VITALS);
+    fixture.componentRef.setInput('list', { live: [], ready: [], backlog: [], done: [] });
+    fixture.componentRef.setInput('listState', 'empty');
+    fixture.componentRef.setInput('spendState', 'empty');
+    const root = fixture.nativeElement as HTMLElement;
+    root.style.cssText = 'width: calc(100% - 32px); margin: 16px; height: auto; overflow: visible;';
+    document.body.appendChild(root);
+    try {
+      await fixture.whenStable();
+      await document.fonts.ready;
+      const strip = root.querySelector<HTMLElement>('[data-testid="glance-vitals"]')!;
+      expect(strip.scrollWidth).toBeLessThanOrEqual(strip.clientWidth);
+      const captions = [...strip.querySelectorAll<HTMLElement>('.cell-caption')];
+      expect(captions).toHaveLength(5);
+      expect(captions[4].textContent).toBe('runners up');
+      for (const caption of captions) {
+        const cell = caption.parentElement!.getBoundingClientRect();
+        const text = document.createRange();
+        text.selectNodeContents(caption);
+        for (const rect of text.getClientRects()) {
+          expect(rect.left, caption.textContent!).toBeGreaterThanOrEqual(cell.left - 0.5);
+          expect(rect.right, caption.textContent!).toBeLessThanOrEqual(cell.right + 0.5);
+        }
+      }
+    } finally {
+      root.remove();
+    }
+  });
 });

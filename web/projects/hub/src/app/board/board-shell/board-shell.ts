@@ -244,7 +244,7 @@ export class BoardShell {
     return this.laneTotals()?.get(columnKey) ?? null;
   }
 
-  /** A column head's hover text — DONE's says what its window keeps, and its all-time total. */
+  /** A column head's explanation — DONE's says what its window keeps, and its all-time total. */
   protected headTitleFor(columnKey: string): string | null {
     if (columnKey !== DONE_LANE) return null;
     const total = this.laneTotals()?.get(DONE_LANE);
