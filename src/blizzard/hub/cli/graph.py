@@ -125,10 +125,10 @@ def graph_mint(cli: CliContext, path: str) -> None:
             raise click.ClickException(f"failed to load {path}: {exc}") from exc
 
     resp = cli.send("post", "/api/graphs", json_body={"definition_yaml": definition_yaml})
-    if refusal_of(resp).type == GRAPH_DEFINITION_INVALID:
-        report = resp.json()
-        lines = [f"error: {e}" for e in report.get("errors", [])]
-        lines += [f"warning: {w}" for w in report.get("warnings", [])]
+    refusal = refusal_of(resp)
+    if refusal.type == GRAPH_DEFINITION_INVALID:
+        lines = [f"error: {e}" for e in cast(list[object], refusal.members.get("errors", []))]
+        lines += [f"warning: {w}" for w in cast(list[object], refusal.members.get("warnings", []))]
         raise click.ClickException("graph definition invalid:\n" + "\n".join(lines))
     cli.check(resp, "POST /graphs")
     body = resp.json()

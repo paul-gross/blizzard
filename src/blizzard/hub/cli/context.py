@@ -263,11 +263,15 @@ class CliContext:
             return
         reading = refusal_of(resp)
         if reading.type in AUTHENTICATION_TYPES or (
+            # Old-hub fallback for a body with no problem type; removed with the other old-hub fallbacks at 0.6.
+            # ast-grep-ignore: bzh:cli-refusal-body-confined
             reading.type is None and resp.status_code == HTTPStatus.UNAUTHORIZED
         ):
             raise click.ClickException(_LOGIN_HINT)
         if reading.message is not None:
             raise click.ClickException(reading.message)
+        # Old-hub fallback for a body with no problem type; removed with the other old-hub fallbacks at 0.6.
+        # ast-grep-ignore: bzh:cli-refusal-body-confined
         if reading.type is None and resp.status_code == HTTPStatus.FORBIDDEN:
             raise click.ClickException(_FORBIDDEN_FALLBACK)
         try:
