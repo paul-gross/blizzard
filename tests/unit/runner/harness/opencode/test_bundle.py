@@ -12,12 +12,13 @@ import click
 import pytest
 
 from blizzard.cli.collaborators import CliCollaborators
-from blizzard.foundation.clock import SystemClock
+from blizzard.foundation.clock import SystemClock, SystemMonotonicClock
 from blizzard.runner.cli.runtime import InitCollaborators, publish_runner_bundle
 from blizzard.runner.config import RunnerConfig
 from blizzard.runner.harness.autonomy import Autonomy
 from blizzard.runner.harness.bundle import HarnessBundleError, HarnessComposition
 from blizzard.runner.harness.internal.bundle_publisher import published_snapshot
+from blizzard.runner.harness.internal.committed_corpus import CommittedCorpus
 from blizzard.runner.harness.internal.process_launcher import ProcessLauncher
 from blizzard.runner.harness.json_value import JsonValue
 from blizzard.runner.harness.opencode.adapter import OpenCodeAdapter
@@ -101,14 +102,17 @@ def test_registry_binds_published_config_and_generated_config_without_bundle(
     probe = FakeProbe()
     launcher = ProcessLauncher(probe, executor=spawn_executor, children=CHILDREN)
     bundled = replace(config, harness_config_dir=bundle)
-    binding = OPENCODE_DECLARATION.binding(
+    binding = OPENCODE_DECLARATION.assemble(
         opencode(bundled),
         shared_inputs(bundled.harness_settings(NO_TRACING)),
         process=probe,
         launcher=launcher,
         children=CHILDREN,
         clock=SystemClock(),
-    )
+        monotonic_clock=SystemMonotonicClock(),
+        health_roots=("",),
+        corpus=CommittedCorpus(),
+    ).binding
     assert isinstance(binding.adapter, OpenCodeAdapter)
     env = binding.adapter.config_env()
     assert env["OPENCODE_CONFIG"] == str(snapshot.path / "opencode" / "opencode.json")
@@ -117,14 +121,17 @@ def test_registry_binds_published_config_and_generated_config_without_bundle(
     assert composed["permission"] == {"bash": "deny", "question": "deny"}
     assert composed["plugin"] == ["extra@1", *json.loads(worker.read_text())["plugin"]]
     assert published_snapshot(config.root) == snapshot.path.resolve()
-    plain = OPENCODE_DECLARATION.binding(
+    plain = OPENCODE_DECLARATION.assemble(
         opencode(config),
         shared_inputs(config.harness_settings(NO_TRACING)),
         process=probe,
         launcher=launcher,
         children=CHILDREN,
         clock=SystemClock(),
-    )
+        monotonic_clock=SystemMonotonicClock(),
+        health_roots=("",),
+        corpus=CommittedCorpus(),
+    ).binding
     assert isinstance(plain.adapter, OpenCodeAdapter)
     plain_env = plain.adapter.config_env()
     assert plain_env["OPENCODE_CONFIG"] == str(worker)

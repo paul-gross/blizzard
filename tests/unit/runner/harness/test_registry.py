@@ -2,15 +2,16 @@
 
 from __future__ import annotations
 
-from concurrent.futures import Executor
+from collections.abc import Sequence
+from concurrent.futures import Executor, ThreadPoolExecutor
 from pathlib import Path
 from typing import cast
 
 import pytest
 
-from blizzard.foundation.clock import SystemClock
+from blizzard.foundation.clock import ManualMonotonicClock, SystemClock
 from blizzard.runner.config import RunnerConfig
-from blizzard.runner.harness.adapter import EverySpawnRootProbe, WorkerHandle
+from blizzard.runner.harness.adapter import EverySpawnRootProbe, IHarnessHealthProbe, WorkerHandle
 from blizzard.runner.harness.capability_snapshot import capability_snapshot, default_harness_id
 from blizzard.runner.harness.health import HarnessHealthResult
 from blizzard.runner.harness.health_cache import HarnessHealthCache
@@ -25,11 +26,7 @@ from blizzard.runner.harness.registry import (
     UnavailableHarnessError,
     UnknownHarnessError,
 )
-from blizzard.runner.harness.wiring import (
-    build_production_harness_health_probes,
-    build_production_harness_registry,
-    first_bindings,
-)
+from blizzard.runner.harness.wiring import HarnessSettings, build_production_harnesses, first_bindings
 from blizzard.runner.process.internal.linux_process_probe import LinuxProcessProbe
 from tests.support.child_launch import CHILDREN
 from tests.support.config_inputs import export_runner_app
@@ -143,18 +140,38 @@ def test_export_app_has_an_empty_hermetic_harness_registry() -> None:
     assert runner_seams(app).harnesses.known_harnesses == ()
 
 
+def _harnesses(
+    settings: HarnessSettings,
+    executor: Executor,
+    *,
+    spawn_roots: Sequence[str] = ("",),
+    corpus: CommittedCorpus | None = None,
+) -> tuple[HarnessRegistry, dict[str, IHarnessHealthProbe]]:
+    return build_production_harnesses(
+        settings,
+        selection=first_bindings(),
+        process=LinuxProcessProbe(),
+        executor=executor,
+        children=CHILDREN,
+        clock=SystemClock(),
+        monotonic_clock=ManualMonotonicClock(),
+        spawn_roots=spawn_roots,
+        corpus=corpus or CommittedCorpus(),
+    )
+
+
+def _health_probes(settings: HarnessSettings, *, spawn_roots: Sequence[str] = ("",)) -> dict[str, IHarnessHealthProbe]:
+    with ThreadPoolExecutor(max_workers=1) as executor:
+        return _harnesses(settings, executor, spawn_roots=spawn_roots)[1]
+
+
 def test_production_registry_shares_one_process_launcher_across_both_bindings(
     tmp_path: Path, spawn_executor: Executor
 ) -> None:
     """Both bindings inherit ONE runner-side launcher — an identity check, not equality."""
-    registry = build_production_harness_registry(
-        RunnerConfig(root=tmp_path, db_url="sqlite://").harness_settings(NO_TRACING),
-        selection=first_bindings(),
-        process=LinuxProcessProbe(),
-        executor=spawn_executor,
-        children=CHILDREN,
-        clock=SystemClock(),
-    )
+    registry = _harnesses(RunnerConfig(root=tmp_path, db_url="sqlite://").harness_settings(NO_TRACING), spawn_executor)[
+        0
+    ]
 
     claude_launcher = vars(registry.lifecycle(CLAUDE_CODE_HARNESS_ID))["_launcher"]
     opencode_launcher = vars(registry.lifecycle(OPENCODE_HARNESS_ID))["_launcher"]
@@ -163,14 +180,9 @@ def test_production_registry_shares_one_process_launcher_across_both_bindings(
 
 def test_production_registry_wires_a_real_opencode_transcript_source(tmp_path: Path, spawn_executor: Executor) -> None:
     """OpenCode's binding names a real transcript source, shared by the adapter and the binding."""
-    registry = build_production_harness_registry(
-        RunnerConfig(root=tmp_path, db_url="sqlite://").harness_settings(NO_TRACING),
-        selection=first_bindings(),
-        process=LinuxProcessProbe(),
-        executor=spawn_executor,
-        children=CHILDREN,
-        clock=SystemClock(),
-    )
+    registry = _harnesses(RunnerConfig(root=tmp_path, db_url="sqlite://").harness_settings(NO_TRACING), spawn_executor)[
+        0
+    ]
 
     source = registry.transcript_source(OPENCODE_HARNESS_ID)
     assert isinstance(source, OpenCodeTranscriptSource)
@@ -187,14 +199,7 @@ def test_production_registry_injects_a_file_price_catalog_from_worker_env_passth
     monkeypatch.setenv("XDG_CACHE_HOME", str(tmp_path / "xdg-cache"))
     config = RunnerConfig(root=tmp_path, db_url="sqlite://", worker_env_passthrough=("XDG_CACHE_HOME",))
 
-    registry = build_production_harness_registry(
-        config.harness_settings(NO_TRACING),
-        selection=first_bindings(),
-        process=LinuxProcessProbe(),
-        executor=spawn_executor,
-        children=CHILDREN,
-        clock=SystemClock(),
-    )
+    registry = _harnesses(config.harness_settings(NO_TRACING), spawn_executor)[0]
 
     catalog = vars(registry.lifecycle(OPENCODE_HARNESS_ID))["_price_catalog"]
     assert isinstance(catalog, FileOpenCodePriceCatalog)
@@ -210,14 +215,7 @@ def test_production_registry_binds_no_price_catalog_with_an_unresolvable_cache_r
     monkeypatch.delenv("HOME", raising=False)
     config = RunnerConfig(root=tmp_path, db_url="sqlite://")
 
-    registry = build_production_harness_registry(
-        config.harness_settings(NO_TRACING),
-        selection=first_bindings(),
-        process=LinuxProcessProbe(),
-        executor=spawn_executor,
-        children=CHILDREN,
-        clock=SystemClock(),
-    )
+    registry = _harnesses(config.harness_settings(NO_TRACING), spawn_executor)[0]
 
     assert vars(registry.lifecycle(OPENCODE_HARNESS_ID))["_price_catalog"] is None
 
@@ -226,14 +224,7 @@ def test_production_registry_omits_a_disabled_claude_code_and_defaults_to_openco
     tmp_path: Path, spawn_executor: Executor
 ) -> None:
     config = with_claude_code(RunnerConfig(root=tmp_path, db_url="sqlite://"), enabled=False)
-    registry = build_production_harness_registry(
-        config.harness_settings(NO_TRACING),
-        selection=first_bindings(),
-        process=LinuxProcessProbe(),
-        executor=spawn_executor,
-        children=CHILDREN,
-        clock=SystemClock(),
-    )
+    registry = _harnesses(config.harness_settings(NO_TRACING), spawn_executor)[0]
 
     assert default_harness_id(registry) == OPENCODE_HARNESS_ID
     registry.lifecycle(OPENCODE_HARNESS_ID)
@@ -243,14 +234,10 @@ def test_production_registry_omits_a_disabled_claude_code_and_defaults_to_openco
 
 
 def test_production_registry_omits_a_disabled_opencode(tmp_path: Path, spawn_executor: Executor) -> None:
-    registry = build_production_harness_registry(
+    registry = _harnesses(
         with_opencode(RunnerConfig(root=tmp_path, db_url="sqlite://"), enabled=False).harness_settings(NO_TRACING),
-        selection=first_bindings(),
-        process=LinuxProcessProbe(),
-        executor=spawn_executor,
-        children=CHILDREN,
-        clock=SystemClock(),
-    )
+        spawn_executor,
+    )[0]
 
     assert default_harness_id(registry) == CLAUDE_CODE_HARNESS_ID
     with pytest.raises(UnknownHarnessError):
@@ -261,73 +248,33 @@ def test_production_registry_defaults_to_claude_code_with_both_enabled(
     tmp_path: Path, spawn_executor: Executor
 ) -> None:
     assert default_harness_id(
-        build_production_harness_registry(
-            RunnerConfig(root=tmp_path, db_url="sqlite://").harness_settings(NO_TRACING),
-            selection=first_bindings(),
-            process=LinuxProcessProbe(),
-            executor=spawn_executor,
-            children=CHILDREN,
-            clock=SystemClock(),
-        )
+        _harnesses(RunnerConfig(root=tmp_path, db_url="sqlite://").harness_settings(NO_TRACING), spawn_executor)[0]
     ) == (CLAUDE_CODE_HARNESS_ID)
 
 
 def test_production_health_probes_omit_a_disabled_harness(tmp_path: Path) -> None:
     base = RunnerConfig(root=tmp_path, db_url="sqlite://")
-    assert list(
-        build_production_harness_health_probes(
-            base.harness_settings(NO_TRACING),
-            spawn_roots=("",),
-            corpus=CommittedCorpus(),
-            children=CHILDREN,
-            selection=first_bindings(),
-        )
-    ) == [
+    assert list(_health_probes(base.harness_settings(NO_TRACING))) == [
         CLAUDE_CODE_HARNESS_ID,
         OPENCODE_HARNESS_ID,
     ]
     no_claude = with_claude_code(RunnerConfig(root=tmp_path, db_url="sqlite://"), enabled=False)
-    assert list(
-        build_production_harness_health_probes(
-            no_claude.harness_settings(NO_TRACING),
-            spawn_roots=("",),
-            corpus=CommittedCorpus(),
-            children=CHILDREN,
-            selection=first_bindings(),
-        )
-    ) == [OPENCODE_HARNESS_ID]
+    assert list(_health_probes(no_claude.harness_settings(NO_TRACING))) == [OPENCODE_HARNESS_ID]
     no_opencode = with_opencode(RunnerConfig(root=tmp_path, db_url="sqlite://"), enabled=False)
-    assert list(
-        build_production_harness_health_probes(
-            no_opencode.harness_settings(NO_TRACING),
-            spawn_roots=("",),
-            corpus=CommittedCorpus(),
-            children=CHILDREN,
-            selection=first_bindings(),
-        )
-    ) == [CLAUDE_CODE_HARNESS_ID]
+    assert list(_health_probes(no_opencode.harness_settings(NO_TRACING))) == [CLAUDE_CODE_HARNESS_ID]
 
 
 def test_a_binding_whose_health_reads_no_spawn_root_is_probed_once_for_every_root(tmp_path: Path) -> None:
-    probes = build_production_harness_health_probes(
+    probes = _health_probes(
         RunnerConfig(root=tmp_path, db_url="sqlite://").harness_settings(NO_TRACING),
-        selection=first_bindings(),
         spawn_roots=(str(tmp_path / "a"), str(tmp_path / "b")),
-        corpus=CommittedCorpus(),
-        children=CHILDREN,
     )
     assert isinstance(probes[OPENCODE_HARNESS_ID], OpenCodeHealthProbe)
     assert isinstance(probes[CLAUDE_CODE_HARNESS_ID], EverySpawnRootProbe)
 
 
 def _probe_auth_path(config: RunnerConfig) -> Path | None:
-    probe = build_production_harness_health_probes(
-        config.harness_settings(NO_TRACING),
-        spawn_roots=("",),
-        corpus=CommittedCorpus(),
-        children=CHILDREN,
-        selection=first_bindings(),
-    )[OPENCODE_HARNESS_ID]
+    probe = _health_probes(config.harness_settings(NO_TRACING))[OPENCODE_HARNESS_ID]
     assert isinstance(probe, OpenCodeHealthProbe)
     return vars(probe)["_auth_path"]
 

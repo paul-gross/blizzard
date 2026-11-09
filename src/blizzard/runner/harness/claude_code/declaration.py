@@ -6,10 +6,9 @@ from __future__ import annotations
 from dataclasses import dataclass
 from pathlib import Path
 
-from blizzard.foundation.clock import IClock
+from blizzard.foundation.clock import IClock, IMonotonicClock
 from blizzard.foundation.logging import get_logger
 from blizzard.foundation.roles import domain_model
-from blizzard.runner.harness.adapter import IHarnessHealthProbe
 from blizzard.runner.harness.autonomy import Autonomy
 from blizzard.runner.harness.bundle import HarnessLayout, HarnessSource
 from blizzard.runner.harness.claude_code.adapter import ClaudeCodeAdapter
@@ -35,7 +34,7 @@ from blizzard.runner.harness.identity import CLAUDE_CODE_HARNESS_ID
 from blizzard.runner.harness.internal.version_probe import VersionProbe
 from blizzard.runner.harness.offline_compatibility import ICompatibilityCorpus
 from blizzard.runner.harness.process_launch import IProcessLauncher
-from blizzard.runner.harness.registry import HarnessBinding
+from blizzard.runner.harness.registry import HarnessAssembly, HarnessBinding
 from blizzard.runner.harness.transcript import TranscriptErrorFactory
 from blizzard.runner.process.child_processes import IChildProcesses
 from blizzard.runner.process.probe import IProcessProbe
@@ -71,7 +70,7 @@ class ClaudeCodeDeclaration:
             enabled=shared.harness_telemetry_enabled,
         )
 
-    def binding(
+    def assemble(
         self,
         section: ClaudeCodeSection,
         shared: SharedHarnessInputs,
@@ -80,8 +79,12 @@ class ClaudeCodeDeclaration:
         launcher: IProcessLauncher,
         children: IChildProcesses,
         clock: IClock,
-    ) -> HarnessBinding:
-        del clock
+        monotonic_clock: IMonotonicClock,
+        health_roots: tuple[str, ...],
+        corpus: ICompatibilityCorpus,
+    ) -> HarnessAssembly:
+        # Claude Code admits by its own version range, not a committed corpus — `corpus` goes unread.
+        del clock, monotonic_clock, corpus
         projects_root = shared.transcripts_root or str(Path.home() / ".claude" / "projects")
         transcript_source = ClaudeCodeTranscriptSource(
             projects_root, TranscriptErrorFactory(get_logger("blizzard.runner.harness.transcript"))
@@ -102,29 +105,23 @@ class ClaudeCodeDeclaration:
             versions=VersionProbe(children, shared.worker_env.tool()),
             harness_telemetry=self.telemetry_plan(section, shared),
         )
-        return HarnessBinding(adapter=adapter, transcript_source=transcript_source)
+        probes = tuple(
+            ClaudeCodeHealthProbe(
+                binary=section.binary,
+                credentials_path=section.credentials_path,
+                ambient_sources=claude_code_ambient_sources(shared.worker_env, spawn_root=root),
+                permission_mode=claude_code_permission_mode(shared.autonomy, section.permission_mode),
+                versions=VersionProbe(children, shared.worker_env.tool()),
+            )
+            for root in health_roots
+        )
+        return HarnessAssembly(
+            binding=HarnessBinding(adapter=adapter, transcript_source=transcript_source), health_probes=probes
+        )
 
     @property
     def health_varies_by_spawn_root(self) -> bool:
         return True
-
-    def health_probe(
-        self,
-        section: ClaudeCodeSection,
-        shared: SharedHarnessInputs,
-        *,
-        spawn_root: str,
-        corpus: ICompatibilityCorpus,
-        children: IChildProcesses,
-    ) -> IHarnessHealthProbe:
-        # Claude Code admits by its own version range, not a committed corpus — `corpus` goes unread.
-        return ClaudeCodeHealthProbe(
-            binary=section.binary,
-            credentials_path=section.credentials_path,
-            ambient_sources=claude_code_ambient_sources(shared.worker_env, spawn_root=spawn_root),
-            permission_mode=claude_code_permission_mode(shared.autonomy, section.permission_mode),
-            versions=VersionProbe(children, shared.worker_env.tool()),
-        )
 
     def publish_layout(self, section: ClaudeCodeSection, *, autonomy: Autonomy, runtime_root: Path) -> HarnessLayout:
         return claude_code_bundle_layout(claude_code_permission_mode(autonomy, section.permission_mode))

@@ -12,7 +12,7 @@ from functools import cache
 from pathlib import Path
 from typing import Any
 
-from blizzard.foundation.clock import IClock
+from blizzard.foundation.clock import IClock, IMonotonicClock
 from blizzard.foundation.config_keys import ConfigView
 from blizzard.foundation.roles import domain_model
 from blizzard.runner.config_table import ConfigError
@@ -243,7 +243,7 @@ def shared_inputs(
     )
 
 
-def build_production_harness_registry(
+def build_production_harnesses(
     settings: HarnessSettings,
     *,
     selection: BindingSelection,
@@ -251,13 +251,18 @@ def build_production_harness_registry(
     process: IProcessProbe,
     children: IChildProcesses,
     clock: IClock,
+    monotonic_clock: IMonotonicClock,
+    spawn_roots: Sequence[str],
+    corpus: ICompatibilityCorpus,
     bundle: BundleSnapshot | None = None,
     harness_telemetry_enabled: bool = False,
     runner_environ: Mapping[str, str] | None = None,
-) -> HarnessRegistry:
-    """Build every enabled harness binding once for one graph, over one shared probe/
-    launcher pair. The process graph owns the injected executor and probe for the
-    lifetime of every child launch. ``bundle`` is the snapshot this process published at startup;
+) -> tuple[HarnessRegistry, dict[str, IHarnessHealthProbe]]:
+    """Assemble every enabled binding ``selection`` chose once for one runner, over one shared probe/launcher pair:
+    its registry, and each binding's health probe by harness id. The process graph owns the injected executor and
+    probe for the lifetime of every child launch. A binding whose health reads the spawn root is probed at every
+    distinct root of ``spawn_roots`` — the empty root when there is none — and one that does not at the first alone;
+    each admits versions against ``corpus``. ``bundle`` is the snapshot this process published at startup;
     ``harness_telemetry_enabled`` and ``runner_environ`` are what each binding derives its own telemetry plan from.
     Insertion follows the catalog order."""
     launcher = ProcessLauncher(process, executor=executor, children=children)
@@ -267,36 +272,31 @@ def build_production_harness_registry(
         harness_telemetry_enabled=harness_telemetry_enabled,
         runner_environ=runner_environ,
     )
-    bindings: dict[str, HarnessBinding] = {
-        declaration.harness_id: declaration.binding(
-            section, shared, process=process, launcher=launcher, children=children, clock=clock
-        )
-        for declaration, section in enabled(settings.sections, selection)
-    }
-    return HarnessRegistry(bindings)
-
-
-def build_production_harness_health_probes(
-    settings: HarnessSettings,
-    *,
-    selection: BindingSelection,
-    spawn_roots: Sequence[str],
-    corpus: ICompatibilityCorpus,
-    children: IChildProcesses,
-) -> dict[str, IHarnessHealthProbe]:
-    """Every enabled harness binding's own :class:`~blizzard.runner.harness.adapter.
-    IHarnessHealthProbe`, symmetric with :func:`build_production_harness_registry` — checking ambient
-    settings once per distinct spawn root in ``spawn_roots``, and admitting versions against ``corpus``."""
-    shared = shared_inputs(settings)
     roots = tuple(dict.fromkeys(spawn_roots)) or ("",)
-    probes = {
-        declaration.harness_id: tuple(
-            declaration.health_probe(section, shared, spawn_root=root, corpus=corpus, children=children)
-            for root in (roots if declaration.health_varies_by_spawn_root else roots[:1])
+    bindings: dict[str, HarnessBinding] = {}
+    probes: dict[str, IHarnessHealthProbe] = {}
+    for declaration, section in enabled(settings.sections, selection):
+        health_roots = roots if declaration.health_varies_by_spawn_root else roots[:1]
+        assembly = declaration.assemble(
+            section,
+            shared,
+            process=process,
+            launcher=launcher,
+            children=children,
+            clock=clock,
+            monotonic_clock=monotonic_clock,
+            health_roots=health_roots,
+            corpus=corpus,
         )
-        for declaration, section in enabled(settings.sections, selection)
-    }
-    return {harness_id: each[0] if len(each) == 1 else EverySpawnRootProbe(each) for harness_id, each in probes.items()}
+        if len(assembly.health_probes) != len(health_roots):
+            raise RuntimeError(
+                f"harness {declaration.harness_id!r} assembled {len(assembly.health_probes)} health probes "
+                f"for {len(health_roots)} spawn roots; it owes one per root"
+            )
+        bindings[declaration.harness_id] = assembly.binding
+        each = assembly.health_probes
+        probes[declaration.harness_id] = each[0] if len(each) == 1 else EverySpawnRootProbe(each)
+    return HarnessRegistry(bindings), probes
 
 
 def publish_harness_bundle(
@@ -333,8 +333,7 @@ __all__ = [
     "HARNESS_SECTION_KINDS",
     "HarnessSections",
     "HarnessSettings",
-    "build_production_harness_health_probes",
-    "build_production_harness_registry",
+    "build_production_harnesses",
     "bundle_layouts",
     "combined_telemetry_plan",
     "configured_tiers",

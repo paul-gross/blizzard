@@ -12,16 +12,15 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Protocol, TypeVar, runtime_checkable
 
-from blizzard.foundation.clock import IClock
+from blizzard.foundation.clock import IClock, IMonotonicClock
 from blizzard.foundation.config_keys import ConfigKey, ConfigView
 from blizzard.foundation.roles import domain_model
-from blizzard.runner.harness.adapter import IHarnessHealthProbe
 from blizzard.runner.harness.autonomy import Autonomy
 from blizzard.runner.harness.bundle import BundleSnapshot, HarnessLayout, HarnessSource
 from blizzard.runner.harness.harness_telemetry_plan import HarnessTelemetryNames, HarnessTelemetryPlan
 from blizzard.runner.harness.offline_compatibility import ICompatibilityCorpus
 from blizzard.runner.harness.process_launch import IProcessLauncher
-from blizzard.runner.harness.registry import HarnessBinding
+from blizzard.runner.harness.registry import HarnessAssembly
 from blizzard.runner.process.child_env import AllowlistedEnv
 from blizzard.runner.process.child_processes import IChildProcesses
 from blizzard.runner.process.probe import IProcessProbe
@@ -139,7 +138,13 @@ class IHarnessDeclaration(Protocol[SectionT_contra]):
         """What the binding does with each telemetry signal's exporter under ``section`` and ``shared``."""
         ...
 
-    def binding(
+    @property
+    def health_varies_by_spawn_root(self) -> bool:
+        """Whether this binding's health reads anything of the root its workers start in; one that does not is probed
+        once for every root, so a check reaching a service runs once per evaluation."""
+        ...
+
+    def assemble(
         self,
         section: SectionT_contra,
         shared: SharedHarnessInputs,
@@ -148,26 +153,16 @@ class IHarnessDeclaration(Protocol[SectionT_contra]):
         launcher: IProcessLauncher,
         children: IChildProcesses,
         clock: IClock,
-    ) -> HarnessBinding:
-        """The binding's adapter and transcript source; ``launcher`` starts its worker, judge and resume children,
-        ``children`` every other child it runs (version probes, exports, resolvers), and ``clock`` is the runner's."""
-        ...
-
-    @property
-    def health_varies_by_spawn_root(self) -> bool:
-        """Whether this binding's health reads anything of the root its workers start in; one that does not is probed
-        once for every root, so a check reaching a service runs once per evaluation."""
-        ...
-
-    def health_probe(
-        self,
-        section: SectionT_contra,
-        shared: SharedHarnessInputs,
-        *,
-        spawn_root: str,
+        monotonic_clock: IMonotonicClock,
+        health_roots: tuple[str, ...],
         corpus: ICompatibilityCorpus,
-        children: IChildProcesses,
-    ) -> IHarnessHealthProbe: ...
+    ) -> HarnessAssembly:
+        """The binding's adapter and transcript source, and one health probe per root of ``health_roots`` in its
+        order, built once for one runner so what they share is one object; ``launcher`` starts its worker, judge and
+        resume children, ``children`` every other child it runs (version probes, exports, resolvers), ``clock`` is the
+        runner's and ``monotonic_clock`` measures its deadlines. Building runs nothing: no child, no service, no
+        health evaluation."""
+        ...
 
     def publish_layout(self, section: SectionT_contra, *, autonomy: Autonomy, runtime_root: Path) -> HarnessLayout:
         """The bundle layout with this binding's runner wiring composed in at publish."""

@@ -36,7 +36,7 @@ CONTEXT_TAIL_BYTES = 1024 * 1024
 _CONTEXT_WIDEN = 8
 
 #: Bounds the locator's resolved-path cache — this source's instance lives for the whole
-#: process (`build_production_harness_registry` builds it once), so unbounded growth across
+#: process (`build_production_harnesses` builds it once), so unbounded growth across
 #: a long-lived runner's whole session history would otherwise never be reclaimed.
 _RESOLVED_PATH_CACHE_MAX_ENTRIES = 2048
 

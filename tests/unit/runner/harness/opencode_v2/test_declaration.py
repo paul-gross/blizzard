@@ -8,11 +8,12 @@ from pathlib import Path
 
 import pytest
 
-from blizzard.foundation.clock import SystemClock
+from blizzard.foundation.clock import SystemClock, SystemMonotonicClock
 from blizzard.runner.harness.autonomy import Autonomy
 from blizzard.runner.harness.binding_selection import BindingSelection
 from blizzard.runner.harness.bundle import HarnessBundleError
 from blizzard.runner.harness.declaration import SharedHarnessInputs
+from blizzard.runner.harness.internal.committed_corpus import CommittedCorpus
 from blizzard.runner.harness.internal.process_launcher import ProcessLauncher
 from blizzard.runner.harness.opencode.section import OpenCodeSection
 from blizzard.runner.harness.opencode_v2.adapter import OpenCodeTwoAdapter
@@ -47,14 +48,17 @@ def _shared(root: Path) -> SharedHarnessInputs:
 def test_the_binding_is_the_opencode_2_adapter_over_the_shared_section(tmp_path: Path) -> None:
     process = LinuxProcessProbe()
     with ThreadPoolExecutor(max_workers=1) as executor:
-        binding = OPENCODE_V2_DECLARATION.binding(
+        binding = OPENCODE_V2_DECLARATION.assemble(
             _SECTION,
             _shared(tmp_path),
             process=process,
             launcher=ProcessLauncher(process, executor=executor, children=CHILDREN),
             children=CHILDREN,
             clock=SystemClock(),
-        )
+            monotonic_clock=SystemMonotonicClock(),
+            health_roots=("",),
+            corpus=CommittedCorpus(),
+        ).binding
     adapter = binding.adapter
     assert isinstance(adapter, OpenCodeTwoAdapter)
     assert isinstance(binding.transcript_source, OpenCodeTwoTranscriptSource)
@@ -100,14 +104,17 @@ def _binding_adapter(root: Path, worker_env: AllowlistedEnv) -> OpenCodeTwoAdapt
         runner_id="run_7",
     )
     with ThreadPoolExecutor(max_workers=1) as executor:
-        binding = OPENCODE_V2_DECLARATION.binding(
+        binding = OPENCODE_V2_DECLARATION.assemble(
             _SECTION,
             shared,
             process=process,
             launcher=ProcessLauncher(process, executor=executor, children=CHILDREN),
             children=CHILDREN,
             clock=SystemClock(),
-        )
+            monotonic_clock=SystemMonotonicClock(),
+            health_roots=("",),
+            corpus=CommittedCorpus(),
+        ).binding
     assert isinstance(binding.adapter, OpenCodeTwoAdapter)
     return binding.adapter
 

@@ -6,10 +6,9 @@ from __future__ import annotations
 from dataclasses import dataclass
 from pathlib import Path
 
-from blizzard.foundation.clock import IClock
+from blizzard.foundation.clock import IClock, IMonotonicClock
 from blizzard.foundation.logging import get_logger
 from blizzard.foundation.roles import domain_model
-from blizzard.runner.harness.adapter import IHarnessHealthProbe
 from blizzard.runner.harness.admission import version_admitted
 from blizzard.runner.harness.autonomy import Autonomy
 from blizzard.runner.harness.bundle import HarnessLayout, HarnessSource
@@ -41,7 +40,7 @@ from blizzard.runner.harness.opencode.usage.price_cache import FileOpenCodePrice
 from blizzard.runner.harness.opencode.version import normalize_opencode_version
 from blizzard.runner.harness.opencode.worker_config import write_worker_config
 from blizzard.runner.harness.process_launch import IProcessLauncher
-from blizzard.runner.harness.registry import HarnessBinding
+from blizzard.runner.harness.registry import HarnessAssembly, HarnessBinding
 from blizzard.runner.harness.transcript import TranscriptErrorFactory
 from blizzard.runner.process.child_processes import IChildProcesses
 from blizzard.runner.process.probe import IProcessProbe
@@ -78,7 +77,7 @@ class OpenCodeDeclaration:
         version = normalize_opencode_version(raw)
         return version is not None and version_admitted(version, ADMITTED_OPENCODE_RANGE)
 
-    def binding(
+    def assemble(
         self,
         section: OpenCodeSection,
         shared: SharedHarnessInputs,
@@ -87,10 +86,13 @@ class OpenCodeDeclaration:
         launcher: IProcessLauncher,
         children: IChildProcesses,
         clock: IClock,
-    ) -> HarnessBinding:
+        monotonic_clock: IMonotonicClock,
+        health_roots: tuple[str, ...],
+        corpus: ICompatibilityCorpus,
+    ) -> HarnessAssembly:
         """Build the adapter over the one runner-owned ``process``/``launcher`` pair every binding
-        receives."""
-        del clock
+        receives, and the one health probe every root shares."""
+        del clock, monotonic_clock, health_roots
         worker_env = shared.worker_env
         tool_env = worker_env.tool()
         exporter = SubprocessOpenCodeExporter(binary=section.binary, children=children, env=tool_env)
@@ -124,34 +126,26 @@ class OpenCodeDeclaration:
             launcher=launcher,
             versions=VersionProbe(children, tool_env),
         )
-        return HarnessBinding(adapter=adapter, transcript_source=transcript_source)
-
-    @property
-    def health_varies_by_spawn_root(self) -> bool:
-        return False
-
-    def health_probe(
-        self,
-        section: OpenCodeSection,
-        shared: SharedHarnessInputs,
-        *,
-        spawn_root: str,
-        corpus: ICompatibilityCorpus,
-        children: IChildProcesses,
-    ) -> IHarnessHealthProbe:
         # The file a spawned worker would read: its allowlisted env, not the daemon's own.
         auth_path = (
             Path(section.auth_path)
             if section.auth_path is not None
             else resolve_opencode_auth_path(shared.worker_env.variables)
         )
-        return OpenCodeHealthProbe(
+        probe = OpenCodeHealthProbe(
             binary=section.binary,
             auth_path=auth_path,
             corpus=corpus,
             versions=VersionProbe(children, shared.worker_env.tool()),
             store_path=resolve_opencode_store_path(shared.worker_env.variables),
         )
+        return HarnessAssembly(
+            binding=HarnessBinding(adapter=adapter, transcript_source=transcript_source), health_probes=(probe,)
+        )
+
+    @property
+    def health_varies_by_spawn_root(self) -> bool:
+        return False
 
     def publish_layout(self, section: OpenCodeSection, *, autonomy: Autonomy, runtime_root: Path) -> HarnessLayout:
         return opencode_bundle_layout(section.worker_config_at(runtime_root))

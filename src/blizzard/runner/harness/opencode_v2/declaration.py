@@ -6,13 +6,11 @@ from __future__ import annotations
 
 import sys
 from dataclasses import dataclass
-from functools import cache
 from pathlib import Path
 from typing import Protocol
 
-from blizzard.foundation.clock import IClock
+from blizzard.foundation.clock import IClock, IMonotonicClock
 from blizzard.foundation.roles import domain_model
-from blizzard.runner.harness.adapter import IHarnessHealthProbe
 from blizzard.runner.harness.autonomy import Autonomy
 from blizzard.runner.harness.bundle import HarnessLayout, HarnessSource
 from blizzard.runner.harness.declaration import SharedHarnessInputs
@@ -28,8 +26,7 @@ from blizzard.runner.harness.opencode_v2.transcript.normalizer import NORMALIZER
 from blizzard.runner.harness.opencode_v2.transport import UrllibServiceTransport
 from blizzard.runner.harness.opencode_v2.version_hold import VersionHold, admits_opencode_v2_version
 from blizzard.runner.harness.process_launch import IProcessLauncher
-from blizzard.runner.harness.registry import HarnessBinding
-from blizzard.runner.process.child_env import AllowlistedEnv
+from blizzard.runner.harness.registry import HarnessAssembly, HarnessBinding
 from blizzard.runner.process.child_processes import IChildProcesses
 from blizzard.runner.process.probe import IProcessProbe
 
@@ -57,16 +54,6 @@ def driver_command() -> tuple[str, ...]:
     none."""
     script = Path(sys.executable).with_name("blizzard")
     return (str(script),) if script.is_file() else ("blizzard",)
-
-
-@cache
-def version_hold(binary: str) -> VersionHold:
-    """The one hold ``binary``'s adapter and health probe share for this process."""
-    return VersionHold()
-
-
-def _keeper(section: OpenCodeConfiguration, worker_env: AllowlistedEnv, children: IChildProcesses) -> ServiceKeeper:
-    return ServiceKeeper(section.binary, worker_env, children, UrllibServiceTransport())
 
 
 @domain_model
@@ -99,7 +86,7 @@ class OpenCodeTwoDeclaration:
     def admits_version(self, raw: str | None) -> bool:
         return admits_opencode_v2_version(raw)
 
-    def binding(
+    def assemble(
         self,
         section: OpenCodeConfiguration,
         shared: SharedHarnessInputs,
@@ -108,15 +95,23 @@ class OpenCodeTwoDeclaration:
         launcher: IProcessLauncher,
         children: IChildProcesses,
         clock: IClock,
-    ) -> HarnessBinding:
+        monotonic_clock: IMonotonicClock,
+        health_roots: tuple[str, ...],
+        corpus: ICompatibilityCorpus,
+    ) -> HarnessAssembly:
+        """This runner's adapter and its one health probe, sharing one service keeper and one version hold — the
+        hold refuses a version either observes for as long as this runner's composition lasts."""
+        del process, monotonic_clock, health_roots
+        keeper = ServiceKeeper(section.binary, shared.worker_env, children, UrllibServiceTransport())
+        hold = VersionHold()
         store_path = resolve_catalog_store_path(shared.worker_env.variables)
         adapter = OpenCodeTwoAdapter(
             runner_id=shared.runner_id,
             worker_env=shared.worker_env,
             launcher=launcher,
-            keeper=_keeper(section, shared.worker_env, children),
+            keeper=keeper,
             versions=VersionProbe(children, shared.worker_env.tool()),
-            hold=version_hold(section.binary),
+            hold=hold,
             request_dir=shared.root / REQUEST_DIRNAME,
             clock=clock,
             binary=section.binary,
@@ -127,30 +122,23 @@ class OpenCodeTwoDeclaration:
             autonomy=shared.autonomy,
             price_catalog=SqliteOpenCodeTwoPriceCatalog(store_path) if store_path is not None else None,
         )
-        return HarnessBinding(adapter=adapter, transcript_source=adapter.transcript_source())
-
-    @property
-    def health_varies_by_spawn_root(self) -> bool:
-        return False
-
-    def health_probe(
-        self,
-        section: OpenCodeConfiguration,
-        shared: SharedHarnessInputs,
-        *,
-        spawn_root: str,
-        corpus: ICompatibilityCorpus,
-        children: IChildProcesses,
-    ) -> IHarnessHealthProbe:
-        return OpenCodeTwoHealthProbe(
+        probe = OpenCodeTwoHealthProbe(
             section.binary,
-            keeper=_keeper(section, shared.worker_env, children),
-            hold=version_hold(section.binary),
+            keeper=keeper,
+            hold=hold,
             corpus=corpus,
             versions=VersionProbe(children, shared.worker_env.tool()),
             model_aliases=section.model_aliases,
             effort_aliases=section.effort_aliases,
         )
+        return HarnessAssembly(
+            binding=HarnessBinding(adapter=adapter, transcript_source=adapter.transcript_source()),
+            health_probes=(probe,),
+        )
+
+    @property
+    def health_varies_by_spawn_root(self) -> bool:
+        return False
 
     def publish_layout(
         self, section: OpenCodeConfiguration, *, autonomy: Autonomy, runtime_root: Path
