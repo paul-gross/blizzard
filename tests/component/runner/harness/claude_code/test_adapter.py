@@ -8,7 +8,6 @@ covers usage parsing, the per-lease stdout redirect, and node-entry resume.
 from __future__ import annotations
 
 import json
-import os
 import stat
 import subprocess
 from concurrent.futures import Executor
@@ -19,6 +18,7 @@ import pytest
 from blizzard.runner.environments.provider import AcquiredEnvironment
 from blizzard.runner.harness.adapter import WorkerPreamble
 from blizzard.runner.process.internal.linux_process_probe import LinuxProcessProbe
+from tests.support.child_launch import wait_for_exit
 from tests.support.claude_code_adapter import SENTINEL_UNLISTED_VAR as _SENTINEL_UNLISTED_VAR
 from tests.support.claude_code_adapter import adapter as _adapter
 from tests.support.runner_fakes import make_envelope
@@ -38,7 +38,7 @@ def test_judge_child_env_excludes_the_hub_token_and_an_unlisted_sentinel(
 
     handle = adapter.judge(str(workdir), "sess-1", "assess", str(workdir / "judge-output.json"))
     handle.confirm_durable()  # stands in for the caller's own confirm_durable()
-    os.waitpid(handle.pid, 0)
+    wait_for_exit(handle.pid)
 
     dumped = json.loads((workdir / "env-dump.json").read_text())
     assert "BZ_HUB_TOKEN" not in dumped
@@ -65,7 +65,7 @@ def test_judge_injects_the_lease_identity_when_given_a_preamble(tmp_path: Path, 
         str(workdir), "sess-9", "assess", str(workdir / "judge-output.json"), preamble=preamble, chunk_id="ch_9"
     )
     handle.confirm_durable()  # stands in for the caller's own confirm_durable()
-    os.waitpid(handle.pid, 0)
+    wait_for_exit(handle.pid)
 
     dumped = json.loads((workdir / "env-dump.json").read_text())
     assert dumped["BLIZZARD_LEASE_ID"] == "lease_42"
@@ -93,7 +93,7 @@ def test_judge_child_env_carries_the_elicitation_marker_when_given_a_preamble(
         str(workdir), "sess-9", "assess", str(workdir / "judge-output.json"), preamble=preamble, chunk_id="ch_9"
     )
     handle.confirm_durable()  # stands in for the caller's own confirm_durable()
-    os.waitpid(handle.pid, 0)
+    wait_for_exit(handle.pid)
 
     dumped = json.loads((workdir / "env-dump.json").read_text())
     assert dumped["BLIZZARD_ELICITATION"] == "1"
@@ -113,7 +113,7 @@ def test_resume_with_message_child_env_excludes_the_hub_token_and_an_unlisted_se
 
     resumed = adapter.resume_with_message(str(workdir), "sess-1", "deliver")
     resumed.confirm_durable()  # stands in for the caller's own confirm_durable()
-    os.waitpid(resumed.pid, 0)
+    wait_for_exit(resumed.pid)
 
     dumped = json.loads((workdir / "env-dump.json").read_text())
     assert "BZ_HUB_TOKEN" not in dumped
@@ -140,7 +140,7 @@ def test_resume_with_message_injects_the_lease_identity_when_given_a_preamble(
 
     resumed = adapter.resume_with_message(str(workdir), "sess-9", "continue", preamble=preamble, chunk_id="ch_9")
     resumed.confirm_durable()  # stands in for the caller's own confirm_durable()
-    os.waitpid(resumed.pid, 0)
+    wait_for_exit(resumed.pid)
 
     dumped = json.loads((workdir / "env-dump.json").read_text())
     assert dumped["BLIZZARD_LEASE_ID"] == "lease_42"
@@ -166,7 +166,7 @@ def test_resume_with_message_child_env_excludes_the_elicitation_marker(
 
     resumed = adapter.resume_with_message(str(workdir), "sess-9", "continue", preamble=preamble, chunk_id="ch_9")
     resumed.confirm_durable()  # stands in for the caller's own confirm_durable()
-    os.waitpid(resumed.pid, 0)
+    wait_for_exit(resumed.pid)
 
     dumped = json.loads((workdir / "env-dump.json").read_text())
     assert "BLIZZARD_ELICITATION" not in dumped
@@ -231,7 +231,7 @@ def test_spawn_launches_real_process_in_workdir(tmp_path: Path, spawn_executor: 
     assert handle.pid > 0
     assert handle.process_start_time  # stamped from /proc for pid-reuse-proof liveness
     handle.confirm_durable()  # stands in for the caller's own confirm_durable()
-    os.waitpid(handle.pid, 0)  # let the fire-and-forget child finish
+    wait_for_exit(handle.pid)  # let the fire-and-forget child finish
     assert (workdir / "spawned-here.txt").read_text() == (envelope.prompt or "")  # ran in the acquired workdir
     assert "--permission-mode bypassPermissions" in (workdir / "argv.txt").read_text()  # the autonomy default
     assert "--model claude-opus-5" in (workdir / "argv.txt").read_text()  # pinned Opus, not the ambient default
@@ -291,7 +291,7 @@ def test_a_hung_version_probe_reads_none_and_the_spawn_right_after_still_runs(
 
     handle = adapter.spawn(envelope, preamble, session_hint="sess-123")
     handle.confirm_durable()  # stands in for the caller's own confirm_durable()
-    os.waitpid(handle.pid, 0)
+    wait_for_exit(handle.pid)
 
     assert handle.pid > 0
     assert (workdir / "spawned-here.txt").read_text() == (envelope.prompt or "")
@@ -313,7 +313,7 @@ def test_spawn_pins_a_configured_model(tmp_path: Path, spawn_executor: Executor)
 
     handle = adapter.spawn(envelope, preamble, session_hint="sess-123")
     handle.confirm_durable()  # stands in for the caller's own confirm_durable()
-    os.waitpid(handle.pid, 0)
+    wait_for_exit(handle.pid)
 
     assert "--model claude-sonnet-5" in (workdir / "argv.txt").read_text()
 
@@ -334,7 +334,7 @@ def test_spawn_passes_the_permission_mode_flag_when_configured(tmp_path: Path, s
 
     handle = adapter.spawn(envelope, preamble, session_hint="sess-123")
     handle.confirm_durable()  # stands in for the caller's own confirm_durable()
-    os.waitpid(handle.pid, 0)
+    wait_for_exit(handle.pid)
 
     assert "--permission-mode bypassPermissions" in (workdir / "argv.txt").read_text()
 
@@ -348,7 +348,7 @@ def test_judge_resume_output_parses_to_choice(tmp_path: Path, spawn_executor: Ex
 
     handle = adapter.judge(str(workdir), "sess-123", "Assess the build. Reply <Choice>name</Choice>.", output_path)
     handle.confirm_durable()  # stands in for the caller's own confirm_durable()
-    os.waitpid(handle.pid, 0)
+    wait_for_exit(handle.pid)
 
     output = Path(output_path).read_text()
     assert adapter.parse_verdict(output) == "pass"
@@ -366,7 +366,7 @@ def test_judge_passes_the_permission_mode_flag_when_configured(tmp_path: Path, s
         str(workdir), "sess-123", "Assess. Reply <Choice>name</Choice>.", str(workdir / "judge-output.json")
     )
     handle.confirm_durable()  # stands in for the caller's own confirm_durable()
-    os.waitpid(handle.pid, 0)
+    wait_for_exit(handle.pid)
 
     assert "--permission-mode bypassPermissions" in (workdir / "argv.txt").read_text()
 
@@ -382,7 +382,7 @@ def test_resume_with_message_carries_the_worker_settings_hooks(tmp_path: Path, s
 
     resumed = adapter.resume_with_message(str(workdir), "sess-123", "continue where you left off")
     resumed.confirm_durable()  # stands in for the caller's own confirm_durable()
-    os.waitpid(resumed.pid, 0)
+    wait_for_exit(resumed.pid)
 
     assert f"--settings {settings}" in (workdir / "argv.txt").read_text()
 
@@ -404,7 +404,7 @@ def test_judge_prefix_matches_resume_with_messages_settings_and_effort(
         str(workdir), "sess-123", "continue", model="sonnet", effort="high", compaction_window="150k"
     )
     resumed.confirm_durable()  # stands in for the caller's own confirm_durable()
-    os.waitpid(resumed.pid, 0)
+    wait_for_exit(resumed.pid)
     resumed_prefix, _, resumed_arg = (workdir / "argv.txt").read_text().rpartition(" ")
 
     judge_handle = adapter.judge(
@@ -417,7 +417,7 @@ def test_judge_prefix_matches_resume_with_messages_settings_and_effort(
         compaction_window="150k",
     )
     judge_handle.confirm_durable()  # stands in for the caller's own confirm_durable()
-    os.waitpid(judge_handle.pid, 0)
+    wait_for_exit(judge_handle.pid)
     judge_prefix, _, judge_arg = (workdir / "argv.txt").read_text().rpartition(" ")
 
     assert judge_prefix == resumed_prefix
@@ -450,7 +450,7 @@ def test_spawn_runs_at_workspace_root_and_prepends_prefix(tmp_path: Path, spawn_
 
     handle = adapter.spawn(envelope, preamble, session_hint="sess-123")
     handle.confirm_durable()  # stands in for the caller's own confirm_durable()
-    os.waitpid(handle.pid, 0)
+    wait_for_exit(handle.pid)
 
     # Ran at the workspace root — the marker file the fake writes lands there, not the env dir.
     assert (workspace_root / "spawned-here.txt").exists()
@@ -474,7 +474,7 @@ def test_spawn_falls_back_to_env_workdir_without_a_workspace_root(tmp_path: Path
 
     handle = adapter.spawn(envelope, preamble, session_hint="sess-123")
     handle.confirm_durable()  # stands in for the caller's own confirm_durable()
-    os.waitpid(handle.pid, 0)
+    wait_for_exit(handle.pid)
 
     # No prefix and no workspace root: cwd is the env workdir, prompt is the envelope prompt alone.
     assert (env_workdir / "spawned-here.txt").read_text() == (envelope.prompt or "")
@@ -546,7 +546,7 @@ def test_spawn_redirects_stdout_to_the_injected_stdout_path(tmp_path: Path, spaw
 
     handle = adapter.spawn(envelope, preamble, session_hint="sess-usage")
     handle.confirm_durable()  # stands in for the caller's own confirm_durable()
-    os.waitpid(handle.pid, 0)
+    wait_for_exit(handle.pid)
 
     assert stdout_path.exists()
     sample = adapter.parse_usage(stdout_path.read_text(), "spawn")
@@ -570,7 +570,7 @@ def test_spawn_without_a_stdout_path_still_discards_output(tmp_path: Path, spawn
 
     handle = adapter.spawn(envelope, preamble, session_hint="sess-usage")
     handle.confirm_durable()  # stands in for the caller's own confirm_durable()
-    os.waitpid(handle.pid, 0)
+    wait_for_exit(handle.pid)
 
     assert list(workdir.glob("*.stdout")) == []
 
@@ -586,7 +586,7 @@ def test_resume_with_message_redirects_stdout_to_the_injected_path(tmp_path: Pat
         str(workdir), "sess-usage", "deliver the answer", stdout_path=str(stdout_path)
     )
     resumed.confirm_durable()  # stands in for the caller's own confirm_durable()
-    os.waitpid(resumed.pid, 0)
+    wait_for_exit(resumed.pid)
 
     assert stdout_path.exists()
     sample = adapter.parse_usage(stdout_path.read_text(), "resume")
@@ -609,7 +609,7 @@ def test_resume_with_message_passes_output_format_json_so_cost_is_real(
         str(workdir), "sess-usage", "deliver the answer", stdout_path=str(stdout_path)
     )
     resumed.confirm_durable()  # stands in for the caller's own confirm_durable()
-    os.waitpid(resumed.pid, 0)
+    wait_for_exit(resumed.pid)
 
     sample = adapter.parse_usage(stdout_path.read_text(), "resume")
     assert sample is not None
