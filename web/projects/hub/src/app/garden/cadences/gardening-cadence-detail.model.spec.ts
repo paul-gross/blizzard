@@ -120,8 +120,8 @@ describe('cadencePanelVm', () => {
     ]);
   });
 
-  it('holds each chore’s errands null until they are read, then that chore’s own', () => {
-    expect(cadencePanelVm(cadence, null, undefined)!.chores.map((c) => c.errands)).toEqual([null, null]);
+  it('holds each chore’s errands loading until they are read, then that chore’s own', () => {
+    expect(cadencePanelVm(cadence, null, undefined)!.chores.map((c) => c.errandsState)).toEqual(['loading', 'loading']);
     const vm = cadencePanelVm(cadence, null, [
       gardenCadenceErrandView({ chore: 'nightly', scope: 'a' }),
       gardenCadenceErrandView({ chore: 'nightly', scope: 'b' }),
@@ -130,6 +130,16 @@ describe('cadencePanelVm', () => {
     expect(vm.chores[0].errands?.map((e) => e.scope)).toEqual(['a', 'b']);
     expect(vm.chores[1].errands?.map((e) => e.scope)).toEqual(['web']);
     expect(vm.chores[1].mode).toBe('sampled');
+  });
+
+  it('derives each chore state from the query and its filtered errands, including a background refetch', () => {
+    const errands = [gardenCadenceErrandView({ chore: 'nightly', scope: 'a' })];
+    const query = (pending: boolean, error: boolean) => ({ isPending: () => pending, isError: () => error });
+    expect(cadencePanelVm(cadence, null, undefined, query(true, false))!.chores.map((c) => c.errandsState)).toEqual(['loading', 'loading']);
+    expect(cadencePanelVm(cadence, null, undefined, query(false, true))!.chores.map((c) => c.errandsState)).toEqual(['error', 'error']);
+    const refetch = { ...query(false, false), isFetching: () => true };
+    expect(cadencePanelVm(cadence, null, errands, refetch)!.chores.map((c) => c.errandsState)).toEqual(['ready', 'empty']);
+    expect(cadencePanelVm(cadence, null, [], query(false, false))!.chores.map((c) => c.errandsState)).toEqual(['empty', 'empty']);
   });
 
   it('renders the pending lifecycle, keeping the real flag', () => {

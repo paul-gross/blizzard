@@ -1,21 +1,14 @@
 <app-lens-note surface="Members" />
-<fleet-kit-async-state
+<fleet-kit-error-line class="change-error" [message]="changeError()" testid="members-page-change-error" />
+<app-members-table
   [state]="triadState()"
-  loadingText="Loading members…"
-  loadingTestid="members-page-loading"
-  errorText="Failed to load members."
-  errorTestid="members-page-error"
->
-  <fleet-kit-error-line class="change-error" [message]="changeError()" testid="members-page-change-error" />
-  <app-members-table
-    [members]="membersQuery.data() ?? []"
-    label="Members"
-    [currentUserId]="currentUserId()"
-    [pendingUserIds]="pendingUserIds()"
-    (changeRole)="onChangeRole($event)"
-    (revoke)="onRevoke($event)"
-  />
-</fleet-kit-async-state>
+  [members]="membersQuery.data() ?? []"
+  label="Members"
+  [currentUserId]="currentUserId()"
+  [pendingUserIds]="pendingUserIds()"
+  (changeRole)="onChangeRole($event)"
+  (revoke)="onRevoke($event)"
+/>
 @if (revokeConfirm(); as confirm) {
   <fleet-kit-confirm-dialog
     [open]="true"

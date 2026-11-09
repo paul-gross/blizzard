@@ -30,14 +30,14 @@ describe('GardeningCadenceDetail', () => {
   let stub: RequestClientStub;
   afterEach(() => stub?.restore());
 
-  async function render(opts: { url?: string; patch?: () => unknown } = {}) {
+  async function render(opts: { url?: string; patch?: () => unknown; errands?: () => unknown } = {}) {
     stub = stubHubClient({
       'GET /api/me': () => OPERATOR_ME_RESPONSE,
       'GET /api/projects/{project}/cadences': () => [EVENING],
-      'GET /api/cadences/{cadence_id}/errands': () => [
+      'GET /api/cadences/{cadence_id}/errands': (opts.errands ?? (() => [
         gardenCadenceErrandView({ scope: 'blizzard' }),
         gardenCadenceErrandView({ chore: 'odd', scope: 'web', state: 'due' }),
-      ],
+      ])) as never,
       'PATCH /api/cadences/{cadence_id}': (opts.patch ?? (() => EVENING)) as never,
       'POST /api/cadences/{cadence_id}/retire': () => ({ ...EVENING, retired: true }),
     });
@@ -77,6 +77,19 @@ describe('GardeningCadenceDetail', () => {
     expect(stub.forRoute('/api/cadences/cad_evening/errands', 'GET')).toHaveLength(1);
     expect(q('gardening-cadence-errand-nightly-blizzard')).not.toBeNull();
     expect(q('gardening-cadence-errand-odd-web')?.textContent).toContain('due');
+  });
+
+  it('forwards an errands read failure without hiding cadence controls', async () => {
+    const { q } = await render({ errands: () => stubError(500, { detail: 'failed' }) });
+    expect(q('gardening-cadence-errands-error-nightly')).not.toBeNull();
+    expect(q('gardening-cadence-errands-error-odd')).not.toBeNull();
+    expect(q('gardening-cadence-chore-add')).not.toBeNull();
+  });
+
+  it('shows empty only for chores without matching errands', async () => {
+    const { q } = await render({ errands: () => [gardenCadenceErrandView({ chore: 'nightly', scope: 'a' })] });
+    expect(q('gardening-cadence-errand-nightly-a')).not.toBeNull();
+    expect(q('gardening-cadence-errands-empty-odd')).not.toBeNull();
   });
 
   it('removes a chore by sending the rest of the whole list against the read revision', async () => {

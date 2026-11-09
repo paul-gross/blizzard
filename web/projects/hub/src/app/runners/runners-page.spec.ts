@@ -156,6 +156,46 @@ describe('RunnersPage (mobile Fleet screen)', () => {
   });
 
   describe('the detail (/fleet/:id)', () => {
+    it.each(['runners', 'hosts'] as const)('withholds detail while the %s read is pending and restores it on success', async (pending) => {
+      let release!: () => void;
+      const held = new Promise<void>((resolve) => (release = resolve));
+      const routes: Routes = pending === 'runners'
+        ? { 'GET /api/runners': async () => { await held; return RUNNERS; } }
+        : { 'GET /api/hosts': async () => { await held; return { hosts: [HOST] }; } };
+      const { harness, el } = await open('/fleet/hs_h1', OPERATOR_ME_RESPONSE, routes);
+      try {
+        expect(el.querySelector('[data-testid="mobile-fleet-back"]')?.getAttribute('href')).toBe('/fleet');
+        expect(el.querySelector('[data-testid="mobile-fleet-loading"]')?.textContent).toContain('LOADING');
+        expect(el.querySelector('[data-testid="fleet-detail-title"]')).toBeNull();
+        expect(el.querySelector('[data-testid="fleet-runners-empty"]')).toBeNull();
+        expect(el.querySelector('[data-testid="mobile-fleet-not-found"]')).toBeNull();
+      } finally {
+        release();
+        await settle(harness.fixture);
+      }
+      expect(el.querySelector('[data-testid="fleet-detail-name"]')?.textContent).toContain('build-box');
+      expect(el.querySelector('[data-runner="rn_online"]')).not.toBeNull();
+    });
+
+    it.each(['runners', 'hosts'] as const)('withholds detail when the %s read fails and restores it after retry', async (failed) => {
+      let failing = true;
+      const routes: Routes = failed === 'runners'
+        ? { 'GET /api/runners': () => failing ? stubError(500, { detail: 'boom' }) : RUNNERS }
+        : { 'GET /api/hosts': () => failing ? stubError(500, { detail: 'boom' }) : { hosts: [HOST] } };
+      const { harness, el } = await open('/fleet/hs_h1', OPERATOR_ME_RESPONSE, routes);
+      expect(el.querySelector('[data-testid="mobile-fleet-back"]')?.getAttribute('href')).toBe('/fleet');
+      expect(el.querySelector('[data-testid="mobile-fleet-error"]')?.textContent).toContain('FAILED TO LOAD FLEET');
+      expect(el.querySelector('[data-testid="fleet-detail-title"]')).toBeNull();
+      expect(el.querySelector('[data-testid="fleet-runners-empty"]')).toBeNull();
+      expect(el.querySelector('[data-testid="mobile-fleet-not-found"]')).toBeNull();
+
+      failing = false;
+      await TestBed.inject(QueryClient).refetchQueries();
+      await settle(harness.fixture);
+      expect(el.querySelector('[data-testid="fleet-detail-name"]')?.textContent).toContain('build-box');
+      expect(el.querySelector('[data-runner="rn_online"]')).not.toBeNull();
+    });
+
     it('opens a host behind a back bar to the overview, its held chunks each linking to their chunk page', async () => {
       const { el } = await open('/fleet/hs_h1');
 
@@ -181,6 +221,15 @@ describe('RunnersPage (mobile Fleet screen)', () => {
 
     it('names an id that matches no host or runner', async () => {
       const { el } = await open('/fleet/hs_gone');
+
+      expect(el.querySelector('[data-testid="mobile-fleet-not-found"]')?.textContent).toContain('hs_gone');
+    });
+
+    it('names an id that matches no host or runner when the fleet is empty', async () => {
+      const { el } = await open('/fleet/hs_gone', OPERATOR_ME_RESPONSE, {
+        'GET /api/runners': () => ({ runners: [] }),
+        'GET /api/hosts': () => ({ hosts: [] }),
+      });
 
       expect(el.querySelector('[data-testid="mobile-fleet-not-found"]')?.textContent).toContain('hs_gone');
     });

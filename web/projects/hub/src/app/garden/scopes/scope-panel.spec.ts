@@ -29,6 +29,7 @@ describe('FleetScopePanel', () => {
     const fixture = TestBed.createComponent(FleetScopePanel);
     fixture.componentRef.setInput('vm', inputs.vm === undefined ? VM : inputs.vm);
     fixture.componentRef.setInput('state', inputs.state ?? 'ready');
+    fixture.componentRef.setInput('hasProjectLens', true);
     fixture.componentRef.setInput('canEdit', inputs.canEdit ?? false);
     fixture.componentRef.setInput('actionError', inputs.actionError ?? null);
     fixture.componentRef.setInput('editPending', inputs.editPending ?? false);
@@ -257,6 +258,7 @@ describe('FleetScopePanel', () => {
     expect(section?.querySelector('[data-testid="gardening-scope-panel-routine-default"]')).toBeNull();
 
     fixture.componentRef.setInput('vm', { ...VM, relatedRoutines: [] });
+    fixture.componentRef.setInput('relatedRoutinesState', 'empty');
     await fixture.whenStable();
 
     expect(el.querySelector('[data-testid="gardening-scope-panel-routines"]')?.textContent).toContain(
@@ -264,8 +266,23 @@ describe('FleetScopePanel', () => {
     );
   });
 
-  it('renders no related-routines section while the relation read is still pending', async () => {
+  it.each([
+    ['loading', 'Loading related routines'],
+    ['error', 'Related routines unavailable'],
+    ['empty', 'No routine tends this scope'],
+  ] as const)('renders the relation %s state without stale rows', async (state, text) => {
+    const fixture = await mount({});
+    fixture.componentRef.setInput('relatedRoutinesState', state);
+    await fixture.whenStable();
+    const section = (fixture.nativeElement as HTMLElement).querySelector('[data-testid="gardening-scope-panel-routines"]');
+    expect(section?.textContent).toContain(text);
+    expect(section?.textContent).not.toContain('nightly');
+  });
+
+  it('omits related routines without a project lens', async () => {
     const fixture = await mount({ vm: { ...VM, relatedRoutines: null } });
+    fixture.componentRef.setInput('hasProjectLens', false);
+    await fixture.whenStable();
     const el = fixture.nativeElement as HTMLElement;
 
     expect(el.querySelector('[data-testid="gardening-scope-panel-routines"]')).toBeNull();

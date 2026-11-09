@@ -41,7 +41,7 @@ export interface ErrandRowVm {
   readonly attention: string;
 }
 
-/** One chore of the cadence, with its errands — `null` while the errands read is pending. */
+/** One chore of the cadence, with its errands and read state. */
 export interface ChorePanelVm {
   readonly key: string;
   readonly routine: string;
@@ -51,7 +51,8 @@ export interface ChorePanelVm {
   readonly note: string | null;
   /** The chore as its edit form opens. */
   readonly draft: ChoreDraft;
-  readonly errands: readonly ErrandRowVm[] | null;
+  readonly errands: readonly ErrandRowVm[];
+  readonly errandsState: KitAsyncStateValue;
 }
 
 /** One upcoming moment: its instant and that instant as full local text. */

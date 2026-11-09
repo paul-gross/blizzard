@@ -10,8 +10,3 @@
   margin: 0;
   padding: 0;
 }
-.no-capabilities {
-  color: var(--label-dim);
-  font-size: var(--fs-xs);
-  letter-spacing: 0.08em;
-}

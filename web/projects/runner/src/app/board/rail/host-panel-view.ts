@@ -1,5 +1,5 @@
 import { ChangeDetectionStrategy, Component, input } from '@angular/core';
-import { KitAsyncState, KitBeacon, KitGlyph, KitSlotBar, SubscriptionBlocks, type SubscriptionLine } from 'fleet';
+import { KitAsyncState, KitBeacon, KitGlyph, KitSlotBar, SubscriptionBlocks, type KitAsyncStateValue, type SubscriptionLine } from 'fleet';
 
 import type { HostPanelPool } from '../../core/host-pools.model';
 import type { HostPanelRunner } from './host-panel.model';
@@ -22,6 +22,8 @@ import type { HostPanelRunner } from './host-panel.model';
 })
 export class HostPanelView {
   readonly subscriptions = input.required<readonly SubscriptionLine[]>();
+  readonly subscriptionsState = input.required<KitAsyncStateValue>();
   readonly runners = input.required<readonly HostPanelRunner[]>();
   readonly pools = input.required<readonly HostPanelPool[]>();
+  readonly poolsState = input.required<KitAsyncStateValue>();
 }

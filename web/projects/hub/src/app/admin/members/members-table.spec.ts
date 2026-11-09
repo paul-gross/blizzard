@@ -56,6 +56,7 @@ describe('MembersTable', () => {
   async function mount(inputs: Partial<{ members: readonly MemberView[]; currentUserId: string | null; label: string }> = {}) {
     const fixture = TestBed.createComponent(MembersTable);
     fixture.componentRef.setInput('members', inputs.members ?? MEMBERS);
+    fixture.componentRef.setInput('state', inputs.members?.length === 0 ? 'empty' : 'ready');
     fixture.componentRef.setInput('currentUserId', inputs.currentUserId === undefined ? 'usr_admin' : inputs.currentUserId);
     if (inputs.label !== undefined) fixture.componentRef.setInput('label', inputs.label);
     await fixture.whenStable();
@@ -82,6 +83,17 @@ describe('MembersTable', () => {
 
     expect(el.querySelector('[data-testid="members-table"]')?.getAttribute('aria-label')).toBe('Members');
     expect(el.textContent).toContain('Members');
+  });
+
+  it.each(['loading', 'error', 'empty'] as const)('renders %s within the labeled panel instead of rows', async (state) => {
+    const { fixture, el } = await mount();
+    fixture.componentRef.setInput('state', state);
+    await fixture.whenStable();
+    const testid = state === 'empty' ? 'members-table-empty' : `members-page-${state}`;
+    const panel = el.querySelector('[data-testid="members-table"]');
+    expect(panel?.getAttribute('aria-label')).toBe('Members');
+    expect(panel?.querySelector(`[data-testid="${testid}"]`)).toBeTruthy();
+    expect(panel?.querySelector('table')).toBeNull();
   });
 
   it('tags a member who is a hub administrator', async () => {

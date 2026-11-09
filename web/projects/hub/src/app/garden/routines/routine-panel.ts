@@ -172,6 +172,7 @@ export interface RoutinePanelVm {
 export class FleetRoutinePanel {
   readonly vm = input<RoutinePanelVm | null>(null);
   readonly state = input.required<KitAsyncStateValue>();
+  readonly relatedScopesState = input<KitAsyncStateValue>('ready');
 
   /** The project the routine belongs to, shown beside its name; `null` until read. */
   readonly project = input<string | null>(null);

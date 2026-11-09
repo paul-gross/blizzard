@@ -58,5 +58,6 @@ describe('CapabilityBadgeGroup', () => {
     const empty = el.querySelector('[data-testid="runner-capabilities-empty"]');
     expect(empty).not.toBeNull();
     expect(empty?.textContent?.trim()).toBe('NO CAPABILITIES REPORTED');
+    expect(el.querySelector('fleet-kit-async-state')?.getAttribute('placement')).toBe('inline');
   });
 });

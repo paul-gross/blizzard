@@ -261,6 +261,16 @@ describe('GardeningRoutineDetail', () => {
     );
   });
 
+  it('shows a relation error rather than an empty answer', async () => {
+    const fixture = await render({
+      params: { routineSlug: 'nightly' },
+      routes: { 'GET /api/routines/{routine_id}/scopes': () => stubError(500, { detail: 'unavailable' }) },
+    });
+    const section = (fixture.nativeElement as HTMLElement).querySelector('[data-testid="gardening-routine-scopes"]');
+    expect(section?.textContent).toContain('Related scopes unavailable.');
+    expect(section?.textContent).not.toContain('No scope is related');
+  });
+
   it('lists the related scopes, marking the routine default', async () => {
     const fixture = await render({ params: { routineSlug: 'nightly' } });
     const el = fixture.nativeElement as HTMLElement;

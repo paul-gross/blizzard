@@ -14,6 +14,14 @@
   </a>
   <div class="detail" data-testid="mobile-fleet-detail">
     <fleet-kit-error-line class="notice" [message]="actionError()" testid="mobile-fleet-action-error" />
+    <fleet-kit-async-state
+      [state]="state() === 'empty' ? 'ready' : state()"
+      placement="inline"
+      loadingText="LOADING…"
+      loadingTestid="mobile-fleet-loading"
+      errorText="FAILED TO LOAD FLEET"
+      errorTestid="mobile-fleet-error"
+    >
     @if (selection(); as sel) {
       @switch (sel.kind) {
         @case ('host') {
@@ -38,5 +46,6 @@
         @default {}
       }
     }
+    </fleet-kit-async-state>
   </div>
 }

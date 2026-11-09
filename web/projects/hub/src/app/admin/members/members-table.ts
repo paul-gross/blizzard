@@ -1,6 +1,6 @@
 import { ChangeDetectionStrategy, Component, input, output } from '@angular/core';
 
-import { type hubApi, type KitChipOption, type MemberView, FleetWhen, KitAsyncState, KitBadge, KitButton, KitPanel, KitSelect } from 'fleet';
+import { type hubApi, type KitChipOption, type KitAsyncStateValue, type MemberView, FleetWhen, KitAsyncState, KitBadge, KitButton, KitPanel, KitSelect } from 'fleet';
 import { canChangeRole, canRevoke, roleChoices } from './members-page.model';
 
 /**
@@ -21,6 +21,9 @@ import { canChangeRole, canRevoke, roleChoices } from './members-page.model';
   styleUrl: './members-table.css',
 })
 export class MembersTable {
+  /** The query state governing the table body. */
+  readonly state = input.required<KitAsyncStateValue>();
+
   /** `GET /api/members`'s rows. */
   readonly members = input<readonly MemberView[]>([]);
 

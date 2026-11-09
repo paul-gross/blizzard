@@ -149,27 +149,23 @@
           </fleet-kit-async-state>
         </section>
 
-        @if (panel.relatedScopes; as relatedScopes) {
-          <section class="rp-scopes" data-testid="gardening-routine-scopes">
-            <h4>Related scopes</h4>
-            @if (relatedScopes.length) {
-              <ul>
-                @for (scope of relatedScopes; track scope.slug) {
-                  <li>
-                    {{ scope.slug }}
-                    @if (scope.isDefault) {
-                      <fleet-kit-badge tone="spawning" variant="pill" data-testid="gardening-routine-scope-default">
-                        default
-                      </fleet-kit-badge>
-                    }
-                  </li>
-                }
-              </ul>
-            } @else {
-              <p>No scope is related to this routine.</p>
-            }
-          </section>
-        }
+        <section class="rp-scopes" data-testid="gardening-routine-scopes">
+          <h4>Related scopes</h4>
+          <fleet-kit-async-state [state]="relatedScopesState()" placement="inline"
+            loadingText="Loading related scopes…" errorText="Related scopes unavailable."
+            emptyText="No scope is related to this routine.">
+            <ul>
+              @for (scope of panel.relatedScopes ?? []; track scope.slug) {
+                <li>
+                  {{ scope.slug }}
+                  @if (scope.isDefault) {
+                    <fleet-kit-badge tone="spawning" variant="pill" data-testid="gardening-routine-scope-default">default</fleet-kit-badge>
+                  }
+                </li>
+              }
+            </ul>
+          </fleet-kit-async-state>
+        </section>
       </div>
     }
   </fleet-kit-async-state>

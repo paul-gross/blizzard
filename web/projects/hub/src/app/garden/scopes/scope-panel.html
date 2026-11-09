@@ -97,12 +97,14 @@
         [rows]="factRows(descriptionFact, lastSweptFact)"
       />
 
-      @if (panel.relatedRoutines; as relatedRoutines) {
+      @if (hasProjectLens()) {
         <section class="sp-routines" data-testid="gardening-scope-panel-routines">
           <h4>Tended by</h4>
-          @if (relatedRoutines.length) {
+          <fleet-kit-async-state [state]="relatedRoutinesState()" placement="inline"
+            loadingText="Loading related routines…" errorText="Related routines unavailable."
+            emptyText="No routine tends this scope." emptyTestid="gardening-scope-panel-routines-none">
             <ul>
-              @for (routine of relatedRoutines; track routine.slug) {
+              @for (routine of panel.relatedRoutines ?? []; track routine.slug) {
                 <li>
                   <a
                     class="sp-routine-link"
@@ -118,9 +120,7 @@
                 </li>
               }
             </ul>
-          } @else {
-            <p data-testid="gardening-scope-panel-routines-none">No routine tends this scope.</p>
-          }
+          </fleet-kit-async-state>
         </section>
       }
 

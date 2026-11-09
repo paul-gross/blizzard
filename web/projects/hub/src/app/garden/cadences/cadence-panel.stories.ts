@@ -65,6 +65,8 @@ export const Phone: Story = { globals: { viewport: { value: 'phone', isRotated: 
 export const PhoneSmall: Story = { globals: { viewport: { value: 'phone-sm', isRotated: false } } };
 export const ReadOnly: Story = { args: { canEdit: false } };
 export const ErrandsLoading: Story = { args: { vm: cadencePanelVm(CADENCE, null, undefined) } };
+export const ErrandsError: Story = { args: { vm: cadencePanelVm(CADENCE, null, undefined, { isPending: () => false, isError: () => true }) } };
+export const ErrandsEmpty: Story = { args: { vm: cadencePanelVm(CADENCE, null, []) } };
 export const Retired: Story = {
   args: { vm: cadencePanelVm({ ...CADENCE, retired: true, next_moments: [], attention: [] }, null, ERRANDS.map((e) => ({ ...e, state: 'stopped' as const, due_at: null }))) },
 };

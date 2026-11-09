@@ -1,4 +1,6 @@
 import {
+  asyncState,
+  type AsyncStateQuery,
   type CadenceAttentionView,
   type CadenceEditRequest,
   type CadenceErrandView,
@@ -55,8 +57,8 @@ export function errandRow(errand: CadenceErrandView): ErrandRowVm {
   };
 }
 
-/** The cadence's chores, each with its own errands — `null` errands while the errands read is pending. */
-export function choreRows(cadence: CadenceView, errands: readonly CadenceErrandView[] | undefined): readonly ChorePanelVm[] {
+/** The cadence's chores, each with its own errands and read state. */
+export function choreRows(cadence: CadenceView, errands: readonly CadenceErrandView[] | undefined, query: AsyncStateQuery): readonly ChorePanelVm[] {
   return cadence.chores.map((chore) => ({
     key: chore.key,
     routine: chore.routine,
@@ -65,7 +67,8 @@ export function choreRows(cadence: CadenceView, errands: readonly CadenceErrandV
     promote: chore.promote,
     note: chore.note,
     draft: choreDraftOf(chore),
-    errands: errands === undefined ? null : errands.filter((e) => e.chore === chore.key).map(errandRow),
+    errands: (errands ?? []).filter((e) => e.chore === chore.key).map(errandRow),
+    errandsState: asyncState(query, !(errands ?? []).some((e) => e.chore === chore.key)),
   }));
 }
 
@@ -74,6 +77,7 @@ export function cadencePanelVm(
   cadence: CadenceView | null,
   overrideRetired: boolean | null,
   errands: readonly CadenceErrandView[] | undefined,
+  query: AsyncStateQuery = { isPending: () => errands === undefined, isError: () => false },
 ): CadencePanelVm | null {
   if (cadence === null) return null;
   return {
@@ -86,7 +90,7 @@ export function cadencePanelVm(
     rhythm: rhythmText(cadence),
     nextMoments: cadence.next_moments.map((iso) => ({ iso, text: formatAbsolute(iso) })),
     attention: cadence.attention.map(attentionVm),
-    chores: choreRows(cadence, errands),
+    chores: choreRows(cadence, errands, query),
     draft: cadenceDraftOf(cadence),
   };
 }

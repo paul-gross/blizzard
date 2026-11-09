@@ -82,13 +82,28 @@ let stub: RequestClientStub;
 afterEach(() => stub.restore());
 
 async function render(
-  options: { runners?: () => runnerApi.HostRunnerListResponse | ReturnType<typeof stubError<502, { detail: string }>>; url?: string } = {},
+  options: {
+    runners?: () => runnerApi.HostRunnerListResponse | ReturnType<typeof stubError<502, { detail: string }>>;
+    subscriptionsFail?: boolean;
+    workspacesFail?: boolean;
+    environmentsFail?: boolean;
+    emptyPools?: boolean;
+    emptyEnvironments?: boolean;
+    holdPoolRead?: { read: 'workspaces' | 'environments'; until: Promise<void> };
+    url?: string;
+  } = {},
 ): Promise<{ fixture: ComponentFixture<HostPanel>; el: HTMLElement }> {
   stub = stubRunnerClient({
     'GET /api/host/runners': () => (options.runners ? options.runners() : { items: RUNNERS }),
-    'GET /api/host/subscriptions': () => ({ items: [] }),
-    'GET /api/host/workspaces': () => ({ items: [{ workspace_id: 'workspace-local', max_environments: 2 }] }),
-    'GET /api/host/environments': () => ENVIRONMENTS,
+    'GET /api/host/subscriptions': () => options.subscriptionsFail ? stubError(502, { detail: 'down' }) : ({ items: [] }),
+    'GET /api/host/workspaces': async () => {
+      if (options.holdPoolRead?.read === 'workspaces') await options.holdPoolRead.until;
+      return options.workspacesFail ? stubError(502, { detail: 'down' }) : { items: options.emptyPools ? [] : [{ workspace_id: 'workspace-local', max_environments: 2 }] };
+    },
+    'GET /api/host/environments': async () => {
+      if (options.holdPoolRead?.read === 'environments') await options.holdPoolRead.until;
+      return options.environmentsFail ? stubError(502, { detail: 'down' }) : options.emptyPools || options.emptyEnvironments ? { workspaces: [] } : ENVIRONMENTS;
+    },
     'GET /runners/{runner_id}/api/dashboard': (_request, { runner_id }) => (runner_id === 'rn_2' ? DASHBOARD_RN_2 : DASHBOARD_RN_1),
   });
   await TestBed.configureTestingModule({
@@ -158,6 +173,46 @@ describe('HostPanel', () => {
     const { el } = await render();
 
     expect(el.querySelector('[data-testid="host-panel-subscriptions"]')?.textContent).toContain('none declared');
+  });
+
+  it('keeps runners and pools visible when subscriptions fail', async () => {
+    const { el } = await render({ subscriptionsFail: true });
+    expect(el.querySelector('[data-testid="host-panel-subscriptions"]')?.textContent).toContain('SUBSCRIPTIONS UNAVAILABLE');
+    expect(runnerNames(el)).toHaveLength(2);
+    expect(el.querySelector('[data-testid="host-panel-pool"]')).not.toBeNull();
+  });
+
+  it.each(['workspacesFail', 'environmentsFail'] as const)('reports pool failure for %s without hiding other sections', async (failure) => {
+    const { el } = await render({ [failure]: true });
+    expect(el.querySelector('[data-testid="host-panel-environments"]')?.textContent).toContain('ENVIRONMENTS UNAVAILABLE');
+    expect(el.querySelector('[data-testid="host-panel-subscriptions"]')?.textContent).toContain('none declared');
+    expect(runnerNames(el)).toHaveLength(2);
+  });
+
+  it.each(['workspaces', 'environments'] as const)('waits for %s before claiming pools are empty', async (read) => {
+    let release!: () => void;
+    const until = new Promise<void>((resolve) => (release = resolve));
+    const { fixture, el } = await render({ emptyPools: true, holdPoolRead: { read, until } });
+    const section = el.querySelector('[data-testid="host-panel-environments"]')!;
+    try {
+      expect(section.textContent).toContain('LOADING');
+      expect(section.textContent).not.toContain('none configured');
+    } finally {
+      release();
+      await settle(fixture);
+    }
+    expect(section.textContent).toContain('none configured');
+  });
+
+  it('says none configured only when the derived pools are empty', async () => {
+    const { el } = await render({ emptyPools: true });
+    expect(el.querySelector('[data-testid="host-panel-environments"]')?.textContent).toContain('none configured');
+  });
+
+  it('shows a declared workspace even when no environments have been reported', async () => {
+    const { el } = await render({ emptyEnvironments: true });
+    expect(el.querySelector('[data-testid="host-panel-pool"]')?.getAttribute('data-workspace-id')).toBe('workspace-local');
+    expect(el.querySelector('[data-testid="host-panel-environments"]')?.textContent).not.toContain('none configured');
   });
 
   it("reads HOST UNAVAILABLE once the host's runner list fails", async () => {

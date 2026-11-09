@@ -93,6 +93,16 @@ describe('FleetCadencePanel', () => {
     expect(el.querySelector('a[href="/gardening/routines/nightly"]')).not.toBeNull();
   });
 
+  it.each(['loading', 'error', 'empty'] as const)('shows errands %s inline without hiding controls', async (state) => {
+    const vm = { ...VM, chores: VM.chores.map((chore) => ({ ...chore, errandsState: state })) };
+    const { q } = await mount({ vm });
+    expect(q(`gardening-cadence-errands-${state}-nightly`)).not.toBeNull();
+    expect(q('gardening-cadence-errands-nightly')).toBeNull();
+    expect(q('gardening-cadence-panel-edit')).not.toBeNull();
+    expect(q('gardening-cadence-chore-edit-nightly')).not.toBeNull();
+    expect(q('gardening-cadence-chore-add')).not.toBeNull();
+  });
+
   it('withholds every control from an identity that may not edit', async () => {
     const { q } = await mount({ canEdit: false });
     expect(q('gardening-cadence-panel-edit')).toBeNull();

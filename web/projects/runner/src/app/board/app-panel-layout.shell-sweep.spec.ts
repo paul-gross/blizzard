@@ -2,7 +2,7 @@ import { provideZonelessChangeDetection } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { provideRouter } from '@angular/router';
 import { QueryClient, provideTanStackQuery } from '@tanstack/angular-query-experimental';
-import { type runnerApi } from 'fleet';
+import { type KitAsyncStateValue, type runnerApi } from 'fleet';
 import {
   capacitiesView,
   hostEnvironmentView,
@@ -21,6 +21,7 @@ import { commands, page } from 'vitest/browser';
 import { machineChunkRows } from '../core/chunk-rows.model';
 import type { PanelLease } from '../core/panel-reads.model';
 import { LocalPanelLayout } from './app-panel-layout';
+import { HostPanelView } from './rail/host-panel-view';
 
 /**
  * The desktop board's half of `web:shell-sweep` (`bzh:visual-change-needs-a-render`): the
@@ -276,4 +277,45 @@ describe('runner desktop board shell sweep (web:shell-sweep)', () => {
       });
     }
   }
+});
+
+const states: KitAsyncStateValue[] = ['loading', 'error', 'empty', 'ready'];
+
+describe('host panel independent states shell sweep', () => {
+  it('keeps each state and the runner inside a narrow rail', async () => {
+    await TestBed.configureTestingModule({ imports: [HostPanelView], providers: [provideZonelessChangeDetection()] }).compileComponents();
+    const fixture = TestBed.createComponent(HostPanelView);
+    fixture.componentRef.setInput('subscriptions', [{ slug: 's', name: 'Claude', state: 'unsampled', windows: [], stale: false, age: null }]);
+    fixture.componentRef.setInput('runners', [{ key: 'r', runnerId: 'r', name: 'runner', tone: 'green', halted: false, haltedReasons: [], agentsInUse: 1, maxAgents: 2, bindings: [], localPause: null, hubPaused: false }]);
+    fixture.componentRef.setInput('pools', [{ workspaceId: 'workspace', capacity: 2, inUse: 1, envs: [], slots: [{ on: true, title: 'held' }, { on: false, title: 'free' }] }]);
+    fixture.componentRef.setInput('subscriptionsState', 'loading');
+    fixture.componentRef.setInput('poolsState', 'loading');
+    const root = fixture.nativeElement as HTMLElement;
+    document.body.appendChild(root);
+    try {
+      for (const width of [390, 320]) {
+        await page.viewport(width, 800);
+        for (const state of states) {
+          fixture.componentRef.setInput('subscriptionsState', state);
+          fixture.componentRef.setInput('poolsState', state);
+          fixture.detectChanges();
+          await new Promise((resolve) => requestAnimationFrame(resolve));
+          expect(root.scrollWidth).toBeLessThanOrEqual(root.clientWidth);
+          expect(root.querySelector('[data-testid="host-panel-runner"]')).not.toBeNull();
+          const subs = root.querySelector('[data-testid="host-panel-subscriptions"]')!;
+          const pools = root.querySelector('[data-testid="host-panel-environments"]')!;
+          if (state === 'ready') {
+            expect(subs.querySelector('[data-testid="host-panel-subscription"]')).not.toBeNull();
+            expect(pools.querySelector('[data-testid="host-panel-pool"]')).not.toBeNull();
+          } else {
+            expect(subs.textContent).toContain({ loading: 'LOADING', error: 'SUBSCRIPTIONS UNAVAILABLE', empty: 'none declared' }[state]);
+            expect(pools.textContent).toContain({ loading: 'LOADING', error: 'ENVIRONMENTS UNAVAILABLE', empty: 'none configured' }[state]);
+          }
+        }
+      }
+    } finally {
+      root.remove();
+      fixture.destroy();
+    }
+  });
 });

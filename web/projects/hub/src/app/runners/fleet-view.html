@@ -35,7 +35,7 @@
     data-testid="fleet-detail"
   >
     <fleet-kit-error-line class="notice" [message]="actionError()" testid="fleet-action-error" />
-    @if (selection(); as sel) {
+    @if (state() !== 'loading' && state() !== 'error' && selection(); as sel) {
       @switch (sel.kind) {
         @case ('host') {
           <app-host-detail

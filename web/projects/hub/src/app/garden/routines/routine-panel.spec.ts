@@ -359,6 +359,7 @@ describe('FleetRoutinePanel', () => {
     expect(section?.querySelector('[data-testid="gardening-routine-scope-default"]')).toBeNull();
 
     fixture.componentRef.setInput('vm', { ...VM, relatedScopes: [] });
+    fixture.componentRef.setInput('relatedScopesState', 'empty');
     await fixture.whenStable();
 
     expect(el.querySelector('[data-testid="gardening-routine-scopes"]')?.textContent).toContain(
@@ -366,11 +367,13 @@ describe('FleetRoutinePanel', () => {
     );
   });
 
-  it('renders no related-scopes section while the relation read is still pending', async () => {
+  it('renders loading while the relation read is still pending', async () => {
     const fixture = await mount({ vm: { ...VM, relatedScopes: null } });
     const el = fixture.nativeElement as HTMLElement;
 
-    expect(el.querySelector('[data-testid="gardening-routine-scopes"]')).toBeNull();
+    fixture.componentRef.setInput('relatedScopesState', 'loading');
+    await fixture.whenStable();
+    expect(el.querySelector('[data-testid="gardening-routine-scopes"]')?.textContent).toContain('Loading related scopes');
   });
 
   it('names no CLI read verb anywhere in the panel', async () => {
