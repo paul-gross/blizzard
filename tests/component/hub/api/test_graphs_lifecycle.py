@@ -8,6 +8,7 @@ back to the newest non-retired version (or ``None`` once all are retired), and 4
 from __future__ import annotations
 
 import sqlite3
+from contextlib import closing
 from datetime import timedelta
 from pathlib import Path
 
@@ -74,7 +75,7 @@ def test_retire_returns_202_and_the_view_reports_retired(tmp_path: Path) -> None
 
 
 def _recorded_actors(tmp_path: Path, table: str) -> list[str]:
-    with sqlite3.connect(tmp_path / "hub.db") as conn:
+    with closing(sqlite3.connect(tmp_path / "hub.db")) as conn:
         return [row[0] for row in conn.execute(f"select set_by from {table} order by id")]
 
 

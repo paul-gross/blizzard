@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import sqlite3
+from contextlib import closing
 from pathlib import Path
 
 import pytest
@@ -21,7 +22,7 @@ def tree(tmp_path: Path) -> Path:
 
 
 def _store(path: Path, revision: str) -> None:
-    with sqlite3.connect(path) as conn:
+    with closing(sqlite3.connect(path)) as conn, conn:
         conn.execute("CREATE TABLE alembic_version (version_num VARCHAR(255) NOT NULL PRIMARY KEY)")
         conn.execute("INSERT INTO alembic_version VALUES (?)", (revision,))
         conn.execute("CREATE TABLE facts (value TEXT)")
@@ -29,12 +30,12 @@ def _store(path: Path, revision: str) -> None:
 
 
 def _snapshot(path: Path) -> list[str]:
-    with sqlite3.connect(path) as conn:
+    with closing(sqlite3.connect(path)) as conn:
         return list(conn.iterdump())
 
 
 def _journal_mode(path: Path) -> str:
-    with sqlite3.connect(path) as conn:
+    with closing(sqlite3.connect(path)) as conn:
         return conn.execute("PRAGMA journal_mode").fetchone()[0]
 
 

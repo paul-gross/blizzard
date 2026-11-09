@@ -634,8 +634,8 @@ def test_hosted_graph_shares_process_scoped_dependencies_with_loop_and_recovery(
         assert hosted.app.state.event_broker is graph.host.events
         assert ctx.events is graph.events
         assert runner_seams(hosted.app).events is graph.events
-        assert runner_seams(hosted.app).asks._events is graph.events  # pyright: ignore[reportPrivateUsage]
-        assert runner_seams(hosted.app).pause._events is graph.events  # pyright: ignore[reportPrivateUsage]
+        assert runner_seams(hosted.app).asks._events is graph.events
+        assert runner_seams(hosted.app).pause._events is graph.events
         assert hosted.app.state.clock is ctx.clock is hosted.resume.clock is graph.clock
         assert hosted.resume.process is ctx.process is graph.process
         assert ctx.stores is graph.stores
@@ -651,9 +651,31 @@ def test_a_store_free_create_app_derives_its_publisher_from_the_broker_and_serve
     without_broker = create_runner_app(config)
     publisher = runner_seams(with_broker).events
     assert publisher is not None
-    assert publisher._runner_id == config.served_id()  # pyright: ignore[reportPrivateUsage]
-    assert publisher._broker is broker  # pyright: ignore[reportPrivateUsage]
+    assert publisher._runner_id == config.served_id()
+    assert publisher._broker is broker
     assert runner_seams(without_broker).events is None
+
+
+def test_hosted_close_delegates_owned_host_cleanup(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    config = RunnerConfig(runner_id=FIXTURE_RUNNER_ID, root=tmp_path, db_url=HostLayout(tmp_path).default_db_url)
+    graph = build_runner_process(config, runner_id=FIXTURE_RUNNER_ID)
+    monkeypatch.setattr(runner_app, "build_runner_process", _returning(build_runner_process, graph))
+    closed: list[str] = []
+    real_close = graph.host.close
+    usage_client = graph.host.usage_http_client()
+
+    def close() -> None:
+        closed.append("host")
+        real_close()
+
+    def close_host(_self: object) -> None:
+        close()
+
+    monkeypatch.setattr(type(graph.host), "close", close_host)
+    hosted = build_hosted_app(config)
+    hosted.close()
+    assert closed == ["host"]
+    assert usage_client.is_closed
 
 
 def _returning[**P, R](_real: Callable[P, R], value: R) -> Callable[P, R]:
@@ -685,9 +707,9 @@ def _failing[**P, R](_real: Callable[P, R], message: str) -> Callable[P, R]:
     return failing
 
 
-@pytest.mark.parametrize("owned_graph", [True, False])
+@pytest.mark.parametrize("ownership", ["owned", "host", "process_graph"])
 def test_failed_hosted_app_wiring_closes_partial_clients_and_only_its_own_graph(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, owned_graph: bool
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, ownership: str
 ) -> None:
     config = RunnerConfig(runner_id=FIXTURE_RUNNER_ID, root=tmp_path, db_url=HostLayout(tmp_path).default_db_url)
     graph = build_runner_process(config, runner_id=FIXTURE_RUNNER_ID)
@@ -705,15 +727,17 @@ def test_failed_hosted_app_wiring_closes_partial_clients_and_only_its_own_graph(
     monkeypatch.setattr(runner_app, "create_app", _failing(runner_app.create_app, "app wiring failed"))
     try:
         with pytest.raises(RuntimeError, match="app wiring failed"):
-            if owned_graph:
+            if ownership == "owned":
                 build_hosted_app(config)
+            elif ownership == "host":
+                build_hosted_app(config, host=graph.host)
             else:
                 build_hosted_app(config, process_graph=graph)
         assert len(clients) == 3
         assert all(instance.is_closed for instance in clients)
-        assert disposed == (["engine"] if owned_graph else [])
+        assert disposed == (["engine"] if ownership == "owned" else [])
     finally:
-        if not owned_graph:
+        if ownership != "owned":
             graph.close()
 
 

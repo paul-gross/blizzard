@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import sqlite3
+from contextlib import closing
 from datetime import timedelta
 from pathlib import Path
 
@@ -395,12 +396,12 @@ def test_patch_sets_the_policy_and_an_absent_flag_writes_nothing(tmp_path: Path)
         assert resp.json()["follow_latest"] is value
         assert hub.client.get(f"/api/graphs/{graph_id}").json()["follow_latest"] is value
 
-    with sqlite3.connect(tmp_path / "hub.db") as conn:
+    with closing(sqlite3.connect(tmp_path / "hub.db")) as conn:
         facts_before = conn.execute("select count(*) from graph_policy_facts").fetchone()[0]
     empty = hub.client.patch(f"/api/graphs/{graph_id}", json={})
     assert empty.status_code == 200
     assert empty.json()["follow_latest"] is False
-    with sqlite3.connect(tmp_path / "hub.db") as conn:
+    with closing(sqlite3.connect(tmp_path / "hub.db")) as conn:
         assert conn.execute("select count(*) from graph_policy_facts").fetchone()[0] == facts_before
 
 

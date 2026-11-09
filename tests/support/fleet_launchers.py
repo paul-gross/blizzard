@@ -39,13 +39,13 @@ from tests.support.scaffolding import (
     await_listening_url,
     create_repositories,
     create_work_sources,
-    daemon_log_sink,
     ensure_fixture_forge,
     fixture_repositories,
     fixture_work_source,
     listening_args,
     published_port,
     read_daemon_log,
+    spawn_daemon,
     write_mock_harness_credentials,
 )
 
@@ -124,7 +124,7 @@ def run_forge(bin_dir: Path, origins: Path, *, pinned_port: int | None = None) -
     ``--listening-file`` (the rehearsal's baseline release)."""
     log = origins.parent / "forge.log"
     listening = origins.parent / f"forge.{LISTENING_FILE}"
-    proc = subprocess.Popen(
+    proc = spawn_daemon(
         [
             str(bin_dir / "blizzard-mock-forge"),
             "--repos-dir",
@@ -133,9 +133,7 @@ def run_forge(bin_dir: Path, origins: Path, *, pinned_port: int | None = None) -
             "127.0.0.1",
             *(["--port", str(pinned_port)] if pinned_port is not None else listening_args(listening, 0)),
         ],
-        stdout=daemon_log_sink(log),
-        stderr=subprocess.STDOUT,
-        text=True,
+        log=log,
     )
     try:
         url = (
@@ -196,12 +194,10 @@ def run_hub(
     log = hub_dir / "daemon.log"
     listening = hub_dir / LISTENING_FILE
     port = published_port(listening)
-    proc = subprocess.Popen(
+    proc = spawn_daemon(
         [hub_bin, "host", "--dir", str(hub_dir), "--host", "127.0.0.1", *listening_args(listening, port)],
         env=env,
-        stdout=daemon_log_sink(log),
-        stderr=subprocess.STDOUT,
-        text=True,
+        log=log,
     )
     try:
         client = httpx2.Client(base_url=await_listening_url(proc, listening, log=log), timeout=30.0)
