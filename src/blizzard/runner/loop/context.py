@@ -269,6 +269,7 @@ class LoopContext:
 
 if TYPE_CHECKING:
     from blizzard.runner.hub.outbound import OutboundContext
+    from blizzard.runner.lifecycle.advance import AdvanceContext
     from blizzard.runner.lifecycle.attempt import AttemptContext
     from blizzard.runner.lifecycle.claim import ClaimContext
     from blizzard.runner.lifecycle.dormant import DormantContext
@@ -334,3 +335,5 @@ if TYPE_CHECKING:
     _registration_conforms: type[RegistrationContext] = LoopContext
 
     _identity_check_conforms: type[IdentityCheckContext] = LoopContext
+
+    _advance_conforms: type[AdvanceContext] = LoopContext
