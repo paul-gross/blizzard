@@ -3372,7 +3372,7 @@
               "type": "choice"
             },
             {
-              "help": "Only changes to the record with this name; a project, repository or work source, by its id or slug.",
+              "help": "Only changes to the record with this name; a project, repository or work source, by its id or slug; an urgency by its id.",
               "hidden": false,
               "kind": "option",
               "name": "key",
@@ -11856,6 +11856,116 @@
       "path": "hub secret",
       "short_help": "Manage the write-only secret store."
     },
+    "settings": {
+      "aliases": [
+        "show",
+        "read"
+      ],
+      "commands": {
+        "edit": {
+          "help": "Change the tenant's default urgency. No chunk moves; it decides only what is minted from then on.",
+          "params": [
+            {
+              "help": "The live urgency new chunks take.",
+              "hidden": false,
+              "kind": "option",
+              "name": "default_urgency",
+              "opts": [
+                "--default-urgency"
+              ],
+              "required": true,
+              "secondary_opts": [],
+              "type": "text"
+            },
+            {
+              "help": "Print the raw response body as JSON.",
+              "hidden": false,
+              "kind": "option",
+              "name": "as_json",
+              "opts": [
+                "--json"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "boolean"
+            },
+            {
+              "help": "The tenant to act in, by id (default $BZ_HUB_TENANT); needed only when you belong to several.",
+              "hidden": false,
+              "kind": "option",
+              "name": "tenant",
+              "opts": [
+                "--tenant"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "text"
+            },
+            {
+              "help": "Hub API base URL (default $BZ_HUB_URL or http://127.0.0.1:8421).",
+              "hidden": false,
+              "kind": "option",
+              "name": "hub_url",
+              "opts": [
+                "--hub-url"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "text"
+            }
+          ],
+          "path": "hub settings edit",
+          "short_help": "Change the tenant's default urgency."
+        },
+        "get": {
+          "help": "Show the tenant's settings \u2014 its default urgency, what every new chunk takes when nothing names another.",
+          "params": [
+            {
+              "help": "Print the raw response body as JSON.",
+              "hidden": false,
+              "kind": "option",
+              "name": "as_json",
+              "opts": [
+                "--json"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "boolean"
+            },
+            {
+              "help": "The tenant to act in, by id (default $BZ_HUB_TENANT); needed only when you belong to several.",
+              "hidden": false,
+              "kind": "option",
+              "name": "tenant",
+              "opts": [
+                "--tenant"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "text"
+            },
+            {
+              "help": "Hub API base URL (default $BZ_HUB_URL or http://127.0.0.1:8421).",
+              "hidden": false,
+              "kind": "option",
+              "name": "hub_url",
+              "opts": [
+                "--hub-url"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "text"
+            }
+          ],
+          "path": "hub settings get",
+          "short_help": "Show the tenant's settings \u2014 its default urgency, what every new chunk takes when nothing names another."
+        }
+      },
+      "help": "Show or edit the tenant's settings.",
+      "params": [],
+      "path": "hub settings",
+      "short_help": "Show or edit the tenant's settings."
+    },
     "source": {
       "aliases": [
         "show",
@@ -12761,6 +12871,619 @@
       "params": [],
       "path": "hub traces",
       "short_help": "Inspect and replay the export of the fleet's traces."
+    },
+    "urgency": {
+      "aliases": [
+        "show",
+        "read"
+      ],
+      "commands": {
+        "create": {
+          "help": "Create the urgency SLUG, at the least urgent end unless --after or --first places it.\n\nSLUG is the urgency's immutable handle; a slug a retired urgency holds is taken.",
+          "params": [
+            {
+              "hidden": false,
+              "kind": "argument",
+              "name": "slug",
+              "opts": [
+                "slug"
+              ],
+              "required": true,
+              "secondary_opts": [],
+              "type": "text"
+            },
+            {
+              "help": "The urgency's display name; defaults to the slug.",
+              "hidden": false,
+              "kind": "option",
+              "name": "display_name",
+              "opts": [
+                "--name"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "text"
+            },
+            {
+              "help": "A palette color or #rrggbb; defaults to the palette color least used.",
+              "hidden": false,
+              "kind": "option",
+              "name": "color",
+              "opts": [
+                "--color"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "text"
+            },
+            {
+              "help": "The urgency's mark: one emoji.",
+              "hidden": false,
+              "kind": "option",
+              "name": "emoji",
+              "opts": [
+                "--emoji"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "text"
+            },
+            {
+              "help": "The urgency's mark: a small .png or .webp file.",
+              "hidden": false,
+              "kind": "option",
+              "name": "icon",
+              "opts": [
+                "--icon"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "file"
+            },
+            {
+              "help": "Place it just after this urgency.",
+              "hidden": false,
+              "kind": "option",
+              "name": "after",
+              "opts": [
+                "--after"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "text"
+            },
+            {
+              "help": "Place it first, the most urgent.",
+              "hidden": false,
+              "kind": "option",
+              "name": "first",
+              "opts": [
+                "--first"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "boolean"
+            },
+            {
+              "help": "Print the raw response body as JSON.",
+              "hidden": false,
+              "kind": "option",
+              "name": "as_json",
+              "opts": [
+                "--json"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "boolean"
+            },
+            {
+              "help": "The tenant to act in, by id (default $BZ_HUB_TENANT); needed only when you belong to several.",
+              "hidden": false,
+              "kind": "option",
+              "name": "tenant",
+              "opts": [
+                "--tenant"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "text"
+            },
+            {
+              "help": "Hub API base URL (default $BZ_HUB_URL or http://127.0.0.1:8421).",
+              "hidden": false,
+              "kind": "option",
+              "name": "hub_url",
+              "opts": [
+                "--hub-url"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "text"
+            }
+          ],
+          "path": "hub urgency create",
+          "short_help": "Create the urgency SLUG, at the least urgent end unless --after or --first places it."
+        },
+        "edit": {
+          "help": "Change SLUG's stated fields in place; its slug never changes. Editing to what it already holds writes nothing.",
+          "params": [
+            {
+              "hidden": false,
+              "kind": "argument",
+              "name": "slug",
+              "opts": [
+                "slug"
+              ],
+              "required": true,
+              "secondary_opts": [],
+              "type": "text"
+            },
+            {
+              "help": "The urgency's display name.",
+              "hidden": false,
+              "kind": "option",
+              "name": "display_name",
+              "opts": [
+                "--name"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "text"
+            },
+            {
+              "help": "A palette color or #rrggbb.",
+              "hidden": false,
+              "kind": "option",
+              "name": "color",
+              "opts": [
+                "--color"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "text"
+            },
+            {
+              "help": "Mark it with one emoji, replacing any icon.",
+              "hidden": false,
+              "kind": "option",
+              "name": "emoji",
+              "opts": [
+                "--emoji"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "text"
+            },
+            {
+              "help": "Mark it with a .png or .webp file, replacing any emoji.",
+              "hidden": false,
+              "kind": "option",
+              "name": "icon",
+              "opts": [
+                "--icon"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "file"
+            },
+            {
+              "help": "Clear its emoji or icon.",
+              "hidden": false,
+              "kind": "option",
+              "name": "clear_mark",
+              "opts": [
+                "--clear-mark"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "boolean"
+            },
+            {
+              "help": "Print the raw response body as JSON.",
+              "hidden": false,
+              "kind": "option",
+              "name": "as_json",
+              "opts": [
+                "--json"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "boolean"
+            },
+            {
+              "help": "The tenant to act in, by id (default $BZ_HUB_TENANT); needed only when you belong to several.",
+              "hidden": false,
+              "kind": "option",
+              "name": "tenant",
+              "opts": [
+                "--tenant"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "text"
+            },
+            {
+              "help": "Hub API base URL (default $BZ_HUB_URL or http://127.0.0.1:8421).",
+              "hidden": false,
+              "kind": "option",
+              "name": "hub_url",
+              "opts": [
+                "--hub-url"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "text"
+            }
+          ],
+          "path": "hub urgency edit",
+          "short_help": "Change SLUG's stated fields in place; its slug never changes."
+        },
+        "enable": {
+          "help": "Bring a retired SLUG back at its standing place in the order; no chunk moves back to it.",
+          "params": [
+            {
+              "hidden": false,
+              "kind": "argument",
+              "name": "slug",
+              "opts": [
+                "slug"
+              ],
+              "required": true,
+              "secondary_opts": [],
+              "type": "text"
+            },
+            {
+              "help": "Print the raw response body as JSON.",
+              "hidden": false,
+              "kind": "option",
+              "name": "as_json",
+              "opts": [
+                "--json"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "boolean"
+            },
+            {
+              "help": "The tenant to act in, by id (default $BZ_HUB_TENANT); needed only when you belong to several.",
+              "hidden": false,
+              "kind": "option",
+              "name": "tenant",
+              "opts": [
+                "--tenant"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "text"
+            },
+            {
+              "help": "Hub API base URL (default $BZ_HUB_URL or http://127.0.0.1:8421).",
+              "hidden": false,
+              "kind": "option",
+              "name": "hub_url",
+              "opts": [
+                "--hub-url"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "text"
+            }
+          ],
+          "path": "hub urgency enable",
+          "short_help": "Bring a retired SLUG back at its standing place in the order; no chunk moves back to it."
+        },
+        "get": {
+          "help": "Show SLUG's fields, its place in the order, and how many open chunks carry it.",
+          "params": [
+            {
+              "hidden": false,
+              "kind": "argument",
+              "name": "slug",
+              "opts": [
+                "slug"
+              ],
+              "required": true,
+              "secondary_opts": [],
+              "type": "text"
+            },
+            {
+              "help": "Print the raw response body as JSON.",
+              "hidden": false,
+              "kind": "option",
+              "name": "as_json",
+              "opts": [
+                "--json"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "boolean"
+            },
+            {
+              "help": "The tenant to act in, by id (default $BZ_HUB_TENANT); needed only when you belong to several.",
+              "hidden": false,
+              "kind": "option",
+              "name": "tenant",
+              "opts": [
+                "--tenant"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "text"
+            },
+            {
+              "help": "Hub API base URL (default $BZ_HUB_URL or http://127.0.0.1:8421).",
+              "hidden": false,
+              "kind": "option",
+              "name": "hub_url",
+              "opts": [
+                "--hub-url"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "text"
+            }
+          ],
+          "path": "hub urgency get",
+          "short_help": "Show SLUG's fields, its place in the order, and how many open chunks carry it."
+        },
+        "list": {
+          "help": "List the urgencies in order, most urgent first, the default marked, each with its open-chunk count.",
+          "params": [
+            {
+              "help": "Include retired urgencies.",
+              "hidden": false,
+              "kind": "option",
+              "name": "include_retired",
+              "opts": [
+                "--include-retired"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "boolean"
+            },
+            {
+              "help": "Print the raw response body as JSON.",
+              "hidden": false,
+              "kind": "option",
+              "name": "as_json",
+              "opts": [
+                "--json"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "boolean"
+            },
+            {
+              "help": "The tenant to act in, by id (default $BZ_HUB_TENANT); needed only when you belong to several.",
+              "hidden": false,
+              "kind": "option",
+              "name": "tenant",
+              "opts": [
+                "--tenant"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "text"
+            },
+            {
+              "help": "Hub API base URL (default $BZ_HUB_URL or http://127.0.0.1:8421).",
+              "hidden": false,
+              "kind": "option",
+              "name": "hub_url",
+              "opts": [
+                "--hub-url"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "text"
+            }
+          ],
+          "path": "hub urgency list",
+          "short_help": "List the urgencies in order, most urgent first, the default marked, each with its open-chunk count."
+        },
+        "order": {
+          "help": "Set the whole live order, most urgent first: URGENCIES names every live urgency once. Setting the order that\nalready stands writes nothing.",
+          "params": [
+            {
+              "hidden": false,
+              "kind": "argument",
+              "name": "urgencies",
+              "opts": [
+                "urgencies"
+              ],
+              "required": true,
+              "secondary_opts": [],
+              "type": "text"
+            },
+            {
+              "help": "Print the raw response body as JSON.",
+              "hidden": false,
+              "kind": "option",
+              "name": "as_json",
+              "opts": [
+                "--json"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "boolean"
+            },
+            {
+              "help": "The tenant to act in, by id (default $BZ_HUB_TENANT); needed only when you belong to several.",
+              "hidden": false,
+              "kind": "option",
+              "name": "tenant",
+              "opts": [
+                "--tenant"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "text"
+            },
+            {
+              "help": "Hub API base URL (default $BZ_HUB_URL or http://127.0.0.1:8421).",
+              "hidden": false,
+              "kind": "option",
+              "name": "hub_url",
+              "opts": [
+                "--hub-url"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "text"
+            }
+          ],
+          "path": "hub urgency order",
+          "short_help": "Set the whole live order, most urgent first: URGENCIES names every live urgency once."
+        },
+        "position": {
+          "help": "Move the live urgency SLUG just after another (--after) or to the front (--first).",
+          "params": [
+            {
+              "hidden": false,
+              "kind": "argument",
+              "name": "slug",
+              "opts": [
+                "slug"
+              ],
+              "required": true,
+              "secondary_opts": [],
+              "type": "text"
+            },
+            {
+              "help": "Move it just after this urgency.",
+              "hidden": false,
+              "kind": "option",
+              "name": "after",
+              "opts": [
+                "--after"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "text"
+            },
+            {
+              "help": "Move it first, the most urgent.",
+              "hidden": false,
+              "kind": "option",
+              "name": "first",
+              "opts": [
+                "--first"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "boolean"
+            },
+            {
+              "help": "Print the raw response body as JSON.",
+              "hidden": false,
+              "kind": "option",
+              "name": "as_json",
+              "opts": [
+                "--json"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "boolean"
+            },
+            {
+              "help": "The tenant to act in, by id (default $BZ_HUB_TENANT); needed only when you belong to several.",
+              "hidden": false,
+              "kind": "option",
+              "name": "tenant",
+              "opts": [
+                "--tenant"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "text"
+            },
+            {
+              "help": "Hub API base URL (default $BZ_HUB_URL or http://127.0.0.1:8421).",
+              "hidden": false,
+              "kind": "option",
+              "name": "hub_url",
+              "opts": [
+                "--hub-url"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "text"
+            }
+          ],
+          "path": "hub urgency position",
+          "short_help": "Move the live urgency SLUG just after another (--after) or to the front (--first)."
+        },
+        "retire": {
+          "help": "Retire SLUG, moving the open chunks it carries to --move-to; finished chunks keep it.\n\nRefused for the tenant's default. Without --move-to, on an urgency open chunks carry, prints how many and the\ncommand to run. Moving open chunks needs chunk:control beside config:edit.",
+          "params": [
+            {
+              "hidden": false,
+              "kind": "argument",
+              "name": "slug",
+              "opts": [
+                "slug"
+              ],
+              "required": true,
+              "secondary_opts": [],
+              "type": "text"
+            },
+            {
+              "help": "The live urgency SLUG's open chunks move to.",
+              "hidden": false,
+              "kind": "option",
+              "name": "move_to",
+              "opts": [
+                "--move-to"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "text"
+            },
+            {
+              "help": "Print the raw response body as JSON.",
+              "hidden": false,
+              "kind": "option",
+              "name": "as_json",
+              "opts": [
+                "--json"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "boolean"
+            },
+            {
+              "help": "The tenant to act in, by id (default $BZ_HUB_TENANT); needed only when you belong to several.",
+              "hidden": false,
+              "kind": "option",
+              "name": "tenant",
+              "opts": [
+                "--tenant"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "text"
+            },
+            {
+              "help": "Hub API base URL (default $BZ_HUB_URL or http://127.0.0.1:8421).",
+              "hidden": false,
+              "kind": "option",
+              "name": "hub_url",
+              "opts": [
+                "--hub-url"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "text"
+            }
+          ],
+          "path": "hub urgency retire",
+          "short_help": "Retire SLUG, moving the open chunks it carries to --move-to; finished chunks keep it."
+        }
+      },
+      "help": "Manage the tenant's urgencies \u2014 the ordered set every chunk takes one of.",
+      "params": [],
+      "path": "hub urgency",
+      "short_help": "Manage the tenant's urgencies \u2014 the ordered set every chunk takes one of."
     }
   },
   "help": "Talk to \u2014 or become \u2014 the blizzard hub.",

@@ -34,6 +34,8 @@ _COMMANDS = {
     "forge": f"{_CLI}.forge:forge_group",
     "project": f"{_CLI}.project:project_group",
     "config": f"{_CLI}.config:config_group",
+    "urgency": f"{_CLI}.urgency:urgency_group",
+    "settings": f"{_CLI}.settings:settings_group",
     "routine": f"{_CLI}.routine:routine_group",
     "cadence": f"{_CLI}.cadence:cadence_group",
     "run": f"{_CLI}.garden_run:run_group",

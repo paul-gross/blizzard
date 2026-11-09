@@ -19,7 +19,20 @@ from blizzard.hub.documents import accepted_extensions, codec_for_path
 from blizzard.wire.problem import CONFIG_APPLY_CONFLICT, CONFIG_DOCUMENT_INVALID, CONFIG_MEDIA_TYPE_UNSUPPORTED
 from blizzard.wire.problem_reading import ProblemReading
 
-_KINDS = click.Choice(["work_source", "repository", "forge", "secret", "scope", "routine", "project"])
+_KINDS = click.Choice(
+    [
+        "work_source",
+        "repository",
+        "forge",
+        "secret",
+        "scope",
+        "routine",
+        "project",
+        "urgency",
+        "urgency_order",
+        "tenant_settings",
+    ]
+)
 
 
 class ChangeListing(Listing):
@@ -79,7 +92,10 @@ def config_group() -> None:
     "--key",
     "key",
     default=None,
-    help="Only changes to the record with this name; a project, repository or work source, by its id or slug.",
+    help=(
+        "Only changes to the record with this name; a project, repository or work source, by its id or slug; an "
+        "urgency by its id."
+    ),
 )
 @click.option(
     "--all", "everything", is_flag=True, default=False, help="Print every change rather than the newest page."
