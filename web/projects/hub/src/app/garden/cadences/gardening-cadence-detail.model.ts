@@ -9,14 +9,27 @@ import {
 } from 'fleet';
 
 import type { CadenceDraft } from './cadence-form';
+import { knownAnchor } from './cadence-vocabulary';
 import type { CadenceLifecycleVars } from './cadence-lifecycle.mutations';
-import type { AttentionVm, CadencePanelVm, ChorePanelVm, ErrandRowVm } from './cadence-panel';
-import { attentionReasonLabel, choreModeLabel, errandStateLook } from './cadence-vocabulary';
+import type {
+  AttentionVm,
+  CadencePanelVm,
+  ChorePanelVm,
+  ErrandRowVm,
+} from './cadence-panel';
+import {
+  attentionReasonLabel,
+  choreModeLabel,
+  errandStateLook,
+} from './cadence-vocabulary';
 import type { ChoreDraft } from './chore-form';
 import { rhythmText } from './gardening-cadences-page.model';
 
 /** The cadence `slug` names, or `null` on the bare child route or for a slug no loaded cadence holds. */
-export function cadenceBySlug(slug: string | null, cadences: readonly CadenceView[]): CadenceView | null {
+export function cadenceBySlug(
+  slug: string | null,
+  cadences: readonly CadenceView[],
+): CadenceView | null {
   return slug === null ? null : (cadences.find((c) => c.slug === slug) ?? null);
 }
 
@@ -32,13 +45,18 @@ export function cadenceOverrideRetired(
 
 /** One attention entry as the panel lists it: what it stops, and why. */
 export function attentionVm(attention: CadenceAttentionView): AttentionVm {
-  return { chore: attention.chore, scope: attention.scope, reason: attentionReasonLabel(attention.reason) };
+  return {
+    chore: attention.chore,
+    scope: attention.scope,
+    reason: attentionReasonLabel(attention.reason),
+  };
 }
 
 /** Which scopes a chore runs over, as text: every linked scope, the listed ones, or the routine's default. */
 export function choreScopesText(scopes: ChoreView['scopes']): string {
   if (scopes === 'all') return 'all scopes';
-  if (scopes === null || scopes.length === 0) return "the routine's default scope";
+  if (scopes === null || scopes.length === 0)
+    return "the routine's default scope";
   return scopes.join(', ');
 }
 
@@ -50,12 +68,17 @@ export function errandRow(errand: CadenceErrandView): ErrandRowVm {
     lastRunChunkId: errand.last_run?.chunk_id ?? null,
     lastRunAt: errand.last_run?.scheduled_at ?? null,
     dueAt: errand.due_at,
-    attention: errand.attention.map((a) => attentionReasonLabel(a.reason)).join('; '),
+    attention: errand.attention
+      .map((a) => attentionReasonLabel(a.reason))
+      .join('; '),
   };
 }
 
 /** The cadence's chores, each with its own errands — `null` errands while the errands read is pending. */
-export function choreRows(cadence: CadenceView, errands: readonly CadenceErrandView[] | undefined): readonly ChorePanelVm[] {
+export function choreRows(
+  cadence: CadenceView,
+  errands: readonly CadenceErrandView[] | undefined,
+): readonly ChorePanelVm[] {
   return cadence.chores.map((chore) => ({
     key: chore.key,
     routine: chore.routine,
@@ -64,7 +87,10 @@ export function choreRows(cadence: CadenceView, errands: readonly CadenceErrandV
     promote: chore.promote,
     note: chore.note,
     draft: choreDraftOf(chore),
-    errands: errands === undefined ? null : errands.filter((e) => e.chore === chore.key).map(errandRow),
+    errands:
+      errands === undefined
+        ? null
+        : errands.filter((e) => e.chore === chore.key).map(errandRow),
   }));
 }
 
@@ -83,7 +109,10 @@ export function cadencePanelVm(
     retired: cadence.retired,
     renderedRetired: overrideRetired ?? cadence.retired,
     rhythm: rhythmText(cadence),
-    nextMoments: cadence.next_moments.map((iso) => ({ iso, text: formatAbsolute(iso) })),
+    nextMoments: cadence.next_moments.map((iso) => ({
+      iso,
+      text: formatAbsolute(iso),
+    })),
     attention: cadence.attention.map(attentionVm),
     chores: choreRows(cadence, errands),
     draft: cadenceDraftOf(cadence),
@@ -106,7 +135,7 @@ export function cadenceDraftOf(cadence: CadenceView): CadenceDraft {
     cron: cadence.schedule?.cron ?? '',
     zone: cadence.schedule?.zone ?? '',
     spacing: spacingInput(cadence.spacing_minutes),
-    anchor: cadence.anchor ?? '',
+    anchor: knownAnchor(cadence.anchor ?? null),
   };
 }
 
@@ -146,7 +175,6 @@ export function choreDraftOf(chore: ChoreView): ChoreDraft {
   };
 }
 
-
 /** The document a chore draft states. Scopes read `all`, a comma- or space-separated slug list, or blank for the
  * routine's default scope. */
 export function draftDocument(draft: ChoreDraft): ChoreDocument {
@@ -154,7 +182,12 @@ export function draftDocument(draft: ChoreDraft): ChoreDocument {
   return {
     key: draft.key.trim(),
     routine: draft.routine.trim(),
-    scopes: scopes === 'all' ? 'all' : scopes === '' ? null : scopes.split(/[\s,]+/).filter((s) => s !== ''),
+    scopes:
+      scopes === 'all'
+        ? 'all'
+        : scopes === ''
+          ? null
+          : scopes.split(/[\s,]+/).filter((s) => s !== ''),
     mode: draft.mode as ChoreDocument['mode'],
     promote: draft.promote,
     note: draft.note.trim() || null,
@@ -162,16 +195,28 @@ export function draftDocument(draft: ChoreDraft): ChoreDocument {
 }
 
 /** The whole chore list with `draft` added at its end. */
-export function choresAdding(chores: readonly ChoreView[], draft: ChoreDraft): ChoreDocument[] {
+export function choresAdding(
+  chores: readonly ChoreView[],
+  draft: ChoreDraft,
+): ChoreDocument[] {
   return [...chores.map(choreDocument), draftDocument(draft)];
 }
 
 /** The whole chore list with the chore keyed `key` replaced, in place, by `draft`. */
-export function choresReplacing(chores: readonly ChoreView[], key: string, draft: ChoreDraft): ChoreDocument[] {
-  return chores.map((chore) => (chore.key === key ? draftDocument(draft) : choreDocument(chore)));
+export function choresReplacing(
+  chores: readonly ChoreView[],
+  key: string,
+  draft: ChoreDraft,
+): ChoreDocument[] {
+  return chores.map((chore) =>
+    chore.key === key ? draftDocument(draft) : choreDocument(chore),
+  );
 }
 
 /** The whole chore list without the chore keyed `key`. */
-export function choresRemoving(chores: readonly ChoreView[], key: string): ChoreDocument[] {
+export function choresRemoving(
+  chores: readonly ChoreView[],
+  key: string,
+): ChoreDocument[] {
   return chores.filter((chore) => chore.key !== key).map(choreDocument);
 }

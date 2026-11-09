@@ -1,7 +1,13 @@
 import { inject } from '@angular/core';
-import { QueryClient, injectMutation } from '@tanstack/angular-query-experimental';
+import {
+  QueryClient,
+  injectMutation,
+} from '@tanstack/angular-query-experimental';
 
-import { enableCadenceApiCadencesCadenceIdEnablePost, retireCadenceApiCadencesCadenceIdRetirePost } from 'fleet';
+import {
+  enableCadenceApiCadencesCadenceIdEnablePost,
+  retireCadenceApiCadencesCadenceIdRetirePost,
+} from 'fleet';
 import { cadenceLifecycleMutationKey } from '../../core/mutation-keys';
 import { hubCadenceErrandsKey, hubCadencesKey } from '../core/cadences.query';
 
@@ -35,7 +41,9 @@ export function injectCadenceLifecycleMutation() {
     onSettled: (_data, _error, vars) =>
       Promise.all([
         queryClient.invalidateQueries({ queryKey: hubCadencesKey }),
-        queryClient.invalidateQueries({ queryKey: hubCadenceErrandsKey(vars.cadenceId) }),
+        queryClient.invalidateQueries({
+          queryKey: hubCadenceErrandsKey(vars.cadenceId),
+        }),
       ]),
   }));
 }

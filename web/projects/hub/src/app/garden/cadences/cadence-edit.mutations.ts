@@ -1,5 +1,8 @@
 import { inject } from '@angular/core';
-import { QueryClient, injectMutation } from '@tanstack/angular-query-experimental';
+import {
+  QueryClient,
+  injectMutation,
+} from '@tanstack/angular-query-experimental';
 
 import {
   type CadenceCreateRequest,
@@ -9,7 +12,10 @@ import {
   editCadenceApiCadencesCadenceIdPatch,
 } from 'fleet';
 import { injectProjectFilter } from 'fleet/shell';
-import { createCadenceMutationKey, editCadenceMutationKey } from '../../core/mutation-keys';
+import {
+  createCadenceMutationKey,
+  editCadenceMutationKey,
+} from '../../core/mutation-keys';
 import { hubCadenceErrandsKey, hubCadencesKey } from '../core/cadences.query';
 import { gardenProject } from '../core/garden-project';
 
@@ -31,15 +37,17 @@ export function injectCreateCadenceMutation() {
   return injectMutation(() => ({
     mutationKey: createCadenceMutationKey,
     mutationFn: async (body: CadenceCreateRequest): Promise<CadenceView> => {
-      const { data, error } = await createProjectCadenceApiProjectsProjectCadencesPost({
-        path: { project: gardenProject(project()) },
-        body,
-        throwOnError: false,
-      });
+      const { data, error } =
+        await createProjectCadenceApiProjectsProjectCadencesPost({
+          path: { project: gardenProject(project()) },
+          body,
+          throwOnError: false,
+        });
       if (error) throw error;
       return data!;
     },
-    onSettled: () => queryClient.invalidateQueries({ queryKey: hubCadencesKey }),
+    onSettled: () =>
+      queryClient.invalidateQueries({ queryKey: hubCadencesKey }),
   }));
 }
 
@@ -64,7 +72,9 @@ export function injectEditCadenceMutation() {
     onSettled: (_data, _error, vars) =>
       Promise.all([
         queryClient.invalidateQueries({ queryKey: hubCadencesKey }),
-        queryClient.invalidateQueries({ queryKey: hubCadenceErrandsKey(vars.cadenceId) }),
+        queryClient.invalidateQueries({
+          queryKey: hubCadenceErrandsKey(vars.cadenceId),
+        }),
       ]),
   }));
 }

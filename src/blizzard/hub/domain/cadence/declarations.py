@@ -81,7 +81,7 @@ def effective_edit(edit: CadenceEdit, stored: Cadence) -> CadenceEdit:
     if (
         edit.anchor is not UNSET
         and rhythm.spacing is not None
-        and (_anchor(edit.anchor) or CadenceAnchor.STARTED) == rhythm.effective_anchor()
+        and (edit.anchor or CadenceAnchor.STARTED) == rhythm.effective_anchor()
     ):
         edit = replace(edit, anchor=UNSET)
     return edit
@@ -95,13 +95,3 @@ def _minutes(spacing: str | None) -> int | None | str:
         return Spacing.parse(spacing).minutes
     except ConfigFieldError:
         return spacing
-
-
-def _anchor(anchor: str | None) -> CadenceAnchor | None | str:
-    """The anchor ``anchor`` states, ``None`` for none, or the raw text when it names none of the three."""
-    if anchor is None:
-        return None
-    try:
-        return CadenceAnchor(anchor)
-    except ValueError:
-        return anchor

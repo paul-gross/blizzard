@@ -647,7 +647,7 @@ def _cadence_entry(cadence: Cadence, project: str) -> CadenceEntry:
         if rhythm.schedule is None
         else CadenceScheduleDocument(cron=rhythm.schedule.cron, zone=rhythm.schedule.zone),
         spacing=None if rhythm.spacing is None else _spacing(rhythm.spacing),
-        anchor=None if rhythm.anchor is None else rhythm.anchor.value,
+        anchor=rhythm.anchor,
         chores=[
             ChoreDocument(
                 key=chore.key,

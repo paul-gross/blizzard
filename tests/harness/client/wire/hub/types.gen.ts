@@ -1129,10 +1129,7 @@ export type CadenceAttentionView = {
  * Create a cadence in the path's project; its slug is free there, retired cadences included.
  */
 export type CadenceCreateRequest = {
-    /**
-     * Anchor
-     */
-    anchor?: string | null;
+    anchor?: CadenceAnchor | null;
     /**
      * Chores
      */
@@ -1160,10 +1157,7 @@ export type CadenceCreateRequest = {
  * whose key stays keeps its id. The slug is immutable, so a body carrying it is refused.
  */
 export type CadenceEditRequest = {
-    /**
-     * Anchor
-     */
-    anchor?: string | null;
+    anchor?: CadenceAnchor | null;
     /**
      * Chores
      */
@@ -1186,10 +1180,7 @@ export type CadenceEditRequest = {
  * Its chores name routines and scopes of that project, by slug.
  */
 export type CadenceEntry = {
-    /**
-     * Anchor
-     */
-    anchor?: string | null;
+    anchor?: CadenceAnchor | null;
     /**
      * Chores
      */

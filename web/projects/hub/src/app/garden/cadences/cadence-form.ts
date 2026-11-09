@@ -1,8 +1,21 @@
-import { ChangeDetectionStrategy, Component, input, linkedSignal, output } from '@angular/core';
+import {
+  ChangeDetectionStrategy,
+  Component,
+  input,
+  linkedSignal,
+  output,
+} from '@angular/core';
 
-import { type KitChipOption, KitButton, KitErrorLine, KitSelect, KitTextInput } from 'fleet';
+import {
+  type CadenceAnchor,
+  type KitChipOption,
+  KitButton,
+  KitErrorLine,
+  KitSelect,
+  KitTextInput,
+} from 'fleet';
 
-import { CADENCE_ANCHORS } from './cadence-vocabulary';
+import { CADENCE_ANCHORS, knownAnchor } from './cadence-vocabulary';
 
 /** A cadence as its form states it, every field as typed. A blank field is left unstated. */
 export interface CadenceDraft {
@@ -13,7 +26,7 @@ export interface CadenceDraft {
   /** A whole number and `m`, `h`, or `d` — `10d`. */
   readonly spacing: string;
   /** `scheduled`, `started`, `finished`, or blank. */
-  readonly anchor: string;
+  readonly anchor: CadenceAnchor | '';
 }
 
 const ANCHOR_OPTIONS: readonly KitChipOption[] = [
@@ -49,8 +62,15 @@ export class FleetCadenceForm {
 
   protected readonly draft = linkedSignal(() => this.initial());
 
-  protected set(field: keyof CadenceDraft, value: string): void {
+  protected set(
+    field: Exclude<keyof CadenceDraft, 'anchor'>,
+    value: string,
+  ): void {
     this.draft.update((draft) => ({ ...draft, [field]: value }));
+  }
+
+  protected setAnchor(value: string): void {
+    this.draft.update((draft) => ({ ...draft, anchor: knownAnchor(value) }));
   }
 
   protected save(): void {

@@ -90,6 +90,22 @@ def test_an_entry_that_cannot_mean_anything_is_refused_at_its_field(hub: HubHarn
     assert _cadences(hub) == []
 
 
+def test_an_unknown_anchor_is_refused_at_its_entry_and_nothing_applies(hub: HubHarness) -> None:
+    resp = _apply(
+        hub,
+        {
+            "cadences": [
+                {"slug": "first", "spacing": "1d"},
+                {"slug": "second", "spacing": "1d", "anchor": "whenever"},
+            ]
+        },
+    )
+
+    assert resp.status_code == 422, resp.text
+    assert resp.json()["detail"][0]["loc"] == ["body", "cadences", 1, "anchor"]
+    assert _cadences(hub) == []
+
+
 def test_a_dry_run_reports_the_same_outcomes_and_writes_nothing(hub: HubHarness) -> None:
     document = _declaring(hub)
     before = hub.client.get("/api/config/changes").json()["total"]

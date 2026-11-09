@@ -1,16 +1,20 @@
 @let d = draft();
-<form class="cf" [attr.data-testid]="testid()" (submit)="$event.preventDefault(); save()">
+<form
+  class="cf"
+  [attr.data-testid]="testid()"
+  (submit)="$event.preventDefault(); save()"
+>
   @if (creating()) {
-    <div class="cf-field">
-      <span class="cf-label">Slug</span>
-      <fleet-kit-text-input
-        [value]="d.slug"
-        ariaLabel="Slug"
-        placeholder="evening"
-        [testid]="testid() + '-slug'"
-        (valueChange)="set('slug', $event)"
-      />
-    </div>
+  <div class="cf-field">
+    <span class="cf-label">Slug</span>
+    <fleet-kit-text-input
+      [value]="d.slug"
+      ariaLabel="Slug"
+      placeholder="evening"
+      [testid]="testid() + '-slug'"
+      (valueChange)="set('slug', $event)"
+    />
+  </div>
   }
   <div class="cf-field">
     <span class="cf-label">Name</span>
@@ -62,15 +66,22 @@
         [selectedValue]="d.anchor"
         ariaLabel="Anchor"
         [testid]="testid() + '-anchor'"
-        (choose)="set('anchor', $event)"
+        (choose)="setAnchor($event)"
       />
     </div>
   </div>
   <fleet-kit-error-line [message]="error()" [testid]="testid() + '-error'" />
   <div class="cf-actions">
-    <fleet-kit-button variant="primary" [disabled]="pending()" [testid]="testid() + '-save'" (click)="save()">
+    <fleet-kit-button
+      variant="primary"
+      [disabled]="pending()"
+      [testid]="testid() + '-save'"
+      (click)="save()"
+    >
       {{ creating() ? 'Create' : 'Save' }}
     </fleet-kit-button>
-    <fleet-kit-button [testid]="testid() + '-cancel'" (click)="cancelled.emit()">Cancel</fleet-kit-button>
+    <fleet-kit-button [testid]="testid() + '-cancel'" (click)="cancelled.emit()"
+      >Cancel</fleet-kit-button
+    >
   </div>
 </form>

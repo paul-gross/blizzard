@@ -1,6 +1,20 @@
-import { ChangeDetectionStrategy, Component, computed, input, linkedSignal, output } from '@angular/core';
+import {
+  ChangeDetectionStrategy,
+  Component,
+  computed,
+  input,
+  linkedSignal,
+  output,
+} from '@angular/core';
 
-import { type KitChipOption, KitButton, KitCheckbox, KitChips, KitErrorLine, KitTextInput } from 'fleet';
+import {
+  type KitChipOption,
+  KitButton,
+  KitCheckbox,
+  KitChips,
+  KitErrorLine,
+  KitTextInput,
+} from 'fleet';
 
 import { choreModeLabel } from './cadence-vocabulary';
 
@@ -44,12 +58,20 @@ export class FleetChoreForm {
 
   /** The known modes, and the draft's own when this build does not know it. */
   protected readonly modeOptions = computed<readonly KitChipOption[]>(() => {
-    const known = choreModeLabel.keys.map((mode) => ({ value: mode, label: choreModeLabel(mode) }));
+    const known = choreModeLabel.keys.map((mode) => ({
+      value: mode,
+      label: choreModeLabel(mode),
+    }));
     const mode = this.initial().mode;
-    return choreModeLabel.has(mode) ? known : [...known, { value: mode, label: mode }];
+    return choreModeLabel.has(mode)
+      ? known
+      : [...known, { value: mode, label: mode }];
   });
 
-  protected set(field: 'key' | 'routine' | 'scopes' | 'mode' | 'note', value: string): void {
+  protected set(
+    field: 'key' | 'routine' | 'scopes' | 'mode' | 'note',
+    value: string,
+  ): void {
     this.draft.update((draft) => ({ ...draft, [field]: value }));
   }
 

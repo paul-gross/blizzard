@@ -30,10 +30,24 @@ const CADENCE = gardenCadenceView({
 });
 
 const ERRANDS = [
-  gardenCadenceErrandView({ scope: 'blizzard', last_run: gardenErrandRunView() }),
-  gardenCadenceErrandView({ scope: 'blizzard-mock', state: 'running', due_at: null, last_run: gardenErrandRunView({ status: 'running', finished_at: null }) }),
+  gardenCadenceErrandView({
+    scope: 'blizzard',
+    last_run: gardenErrandRunView(),
+  }),
+  gardenCadenceErrandView({
+    scope: 'blizzard-mock',
+    state: 'running',
+    due_at: null,
+    last_run: gardenErrandRunView({ status: 'running', finished_at: null }),
+  }),
   gardenCadenceErrandView({ chore: 'samples', scope: 'web', state: 'due' }),
-  gardenCadenceErrandView({ chore: 'samples', scope: 'gone', state: 'stopped', due_at: null, attention: [gardenCadenceAttentionView({ chore: 'samples' })] }),
+  gardenCadenceErrandView({
+    chore: 'samples',
+    scope: 'gone',
+    state: 'stopped',
+    due_at: null,
+    attention: [gardenCadenceAttentionView({ chore: 'samples' })],
+  }),
 ];
 
 const VM = cadencePanelVm(CADENCE, null, ERRANDS);
@@ -61,13 +75,48 @@ export default meta;
 type Story = StoryObj<FleetCadencePanel>;
 
 export const Kept: Story = {};
-export const Phone: Story = { globals: { viewport: { value: 'phone', isRotated: false } } };
-export const PhoneSmall: Story = { globals: { viewport: { value: 'phone-sm', isRotated: false } } };
-export const ReadOnly: Story = { args: { canEdit: false } };
-export const ErrandsLoading: Story = { args: { vm: cadencePanelVm(CADENCE, null, undefined) } };
-export const Retired: Story = {
-  args: { vm: cadencePanelVm({ ...CADENCE, retired: true, next_moments: [], attention: [] }, null, ERRANDS.map((e) => ({ ...e, state: 'stopped' as const, due_at: null }))) },
+export const Phone: Story = {
+  globals: { viewport: { value: 'phone', isRotated: false } },
 };
-export const NoChores: Story = { args: { vm: cadencePanelVm({ ...CADENCE, chores: [], attention: [gardenCadenceAttentionView({ chore: null, scope: null, reason: 'no_chores' })] }, null, []) } };
-export const Refused: Story = { args: { actionError: 'the cadence changed since it was read — reload it and try again' } };
+export const PhoneSmall: Story = {
+  globals: { viewport: { value: 'phone-sm', isRotated: false } },
+};
+export const ReadOnly: Story = { args: { canEdit: false } };
+export const ErrandsLoading: Story = {
+  args: { vm: cadencePanelVm(CADENCE, null, undefined) },
+};
+export const Retired: Story = {
+  args: {
+    vm: cadencePanelVm(
+      { ...CADENCE, retired: true, next_moments: [], attention: [] },
+      null,
+      ERRANDS.map((e) => ({ ...e, state: 'stopped' as const, due_at: null })),
+    ),
+  },
+};
+export const NoChores: Story = {
+  args: {
+    vm: cadencePanelVm(
+      {
+        ...CADENCE,
+        chores: [],
+        attention: [
+          gardenCadenceAttentionView({
+            chore: null,
+            scope: null,
+            reason: 'no_chores',
+          }),
+        ],
+      },
+      null,
+      [],
+    ),
+  },
+};
+export const Refused: Story = {
+  args: {
+    actionError:
+      'the cadence changed since it was read — reload it and try again',
+  },
+};
 export const NothingSelected: Story = { args: { vm: null, state: 'empty' } };

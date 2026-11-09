@@ -119,6 +119,19 @@ def test_a_slug_its_project_holds_is_422(hub: HubHarness) -> None:
     assert resp.status_code == 422, resp.text
 
 
+def test_an_edit_naming_an_unknown_anchor_is_422_at_the_body_and_changes_nothing(hub: HubHarness) -> None:
+    created = _create(hub, anchor="finished")
+
+    resp = hub.client.patch(
+        f"/api/cadences/{created['cadence_id']}", json={"anchor": "whenever"}, headers={"If-Match": "1"}
+    )
+
+    assert resp.status_code == 422, resp.text
+    assert resp.json()["detail"][0]["loc"] == ["body", "anchor"]
+    reread = hub.client.get(f"/api/cadences/{created['cadence_id']}")
+    assert (reread.json()["anchor"], reread.json()["revision"]) == ("finished", 1)
+
+
 def test_a_patch_edits_only_its_fields_keeps_a_kept_chores_id_and_409s_on_a_stale_if_match(hub: HubHarness) -> None:
     created = _create(hub, chores=[{"key": "arch", "routine": "arch"}])
     [chore] = created["chores"]

@@ -1825,13 +1825,12 @@
           "anchor": {
             "anyOf": [
               {
-                "type": "string"
+                "$ref": "#/components/schemas/CadenceAnchor"
               },
               {
                 "type": "null"
               }
-            ],
-            "title": "Anchor"
+            ]
           },
           "chores": {
             "default": [],
@@ -1891,13 +1890,12 @@
           "anchor": {
             "anyOf": [
               {
-                "type": "string"
+                "$ref": "#/components/schemas/CadenceAnchor"
               },
               {
                 "type": "null"
               }
-            ],
-            "title": "Anchor"
+            ]
           },
           "chores": {
             "anyOf": [
@@ -1956,13 +1954,12 @@
           "anchor": {
             "anyOf": [
               {
-                "type": "string"
+                "$ref": "#/components/schemas/CadenceAnchor"
               },
               {
                 "type": "null"
               }
-            ],
-            "title": "Anchor"
+            ]
           },
           "chores": {
             "default": [],
