@@ -41,7 +41,11 @@ class OutboundStore:
         stmt = self._store.select(outbound_buffer, outbound_buffer.c.seq).where(
             and_(outbound_buffer.c.lease_id == lease_id, outbound_buffer.c.kind.in_(SUBMISSION_KINDS))
         )
-        rows = self._store.all(stmt.limit(1)) if unit is None else unit_conn(unit).execute(stmt.limit(1)).all()
+        rows = (
+            self._store.all(stmt.limit(1))
+            if unit is None
+            else unit_conn(self._store, unit, lease_id).execute(stmt.limit(1)).all()
+        )
         return bool(rows)
 
     def pending_outbound(self, *, limit: int | None = None) -> list[BufferedFact]:
@@ -101,7 +105,7 @@ class OutboundStore:
             "created_at": created_at,
         }
         if unit is not None:
-            return insert_outbox_row(self._store, unit_conn(unit), outbound_buffer, **values)
+            return insert_outbox_row(self._store, unit_conn(self._store, unit, lease_id), outbound_buffer, **values)
         with self._store.begin() as conn:
             return insert_outbox_row(self._store, conn, outbound_buffer, **values)
 

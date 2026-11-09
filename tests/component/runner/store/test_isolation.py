@@ -79,6 +79,7 @@ from blizzard.runner.usage.repository import (
     IWriteHostLaneMarkRepository,
     IWriteUsageRepository,
 )
+from tests.support.lease_unit_seeds import seed_attachment, seed_git_commit_declaration
 from tests.support.runner_fakes import record_usage, runner_migration_prototype
 from tests.support.store_read_census import GRAPH_ID, RUNNER_CENSUS, RunnerWorld, build_runner_world
 
@@ -355,7 +356,9 @@ WRITE_CENSUS: dict[tuple[type, str], WriteRecipe] = {
     (IWriteEscalationRepository, "record_escalation_closure"): lambda w: w.stores.escalations.record_escalation_closure(
         chunk_id=w.chunk_3, reason="resolved", at=_at(25)
     ),
-    (IWriteAttachmentRepository, "record_attachment"): lambda w: w.stores.attachments.record_attachment(
+    (IWriteAttachmentRepository, "record_attachment"): lambda w: seed_attachment(
+        w.stores.attachments,
+        lock=w.stores.lease_lock,
         lease_id=w.lease_2,
         chunk_id=w.chunk_1,
         node_id=w.node_a,
@@ -395,18 +398,18 @@ WRITE_CENSUS: dict[tuple[type, str], WriteRecipe] = {
     (IWriteCheckRepository, "record_nudge_fired"): lambda w: w.stores.checks.record_nudge_fired(
         lease_id=w.lease_2, epoch=2, at=_at(32)
     ),
-    (IWriteGitCommitDeclarationRepository, "record_git_commit_declaration"): lambda w: (
-        w.stores.git_commit_declarations.record_git_commit_declaration(
-            lease_id=w.lease_2,
-            chunk_id=w.chunk_1,
-            node_id=w.node_a,
-            epoch=2,
-            environment_id="env-1",
-            repo="repoA",
-            branch="main",
-            commit="fff000",
-            declared_at=_at(33),
-        )
+    (IWriteGitCommitDeclarationRepository, "record_git_commit_declaration"): lambda w: seed_git_commit_declaration(
+        w.stores.git_commit_declarations,
+        lock=w.stores.lease_lock,
+        lease_id=w.lease_2,
+        chunk_id=w.chunk_1,
+        node_id=w.node_a,
+        epoch=2,
+        environment_id="env-1",
+        repo="repoA",
+        branch="main",
+        commit="fff000",
+        declared_at=_at(33),
     ),
     (IWriteTakeoverRepository, "record_takeover"): lambda w: w.stores.takeover.record_takeover(
         takeover_id="tko_w",

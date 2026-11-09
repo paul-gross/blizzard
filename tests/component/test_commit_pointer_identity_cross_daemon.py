@@ -22,6 +22,7 @@ from blizzard.runner.leases.model import NewLease
 from blizzard.runner.lifecycle.judgement.git_commits import DeclaredCommits
 from blizzard.runner.node_steps.submissions import CompletionArtifact
 from tests.support.github_double import GitHubDouble
+from tests.support.lease_unit_seeds import seed_git_commit_declaration
 from tests.support.pin_hub_delivery_world import mint_and_claim, writable
 from tests.support.runner_fakes import (
     FakeHarness,
@@ -59,7 +60,8 @@ def _submit(tmp_path: Path, *, origins: dict[str, str], commits: dict[str, str])
         store.record_binding(
             chunk_id="ch_1", environment_id=env, workdir=f"/ws/{env}", bound_at=_NOW, workspace_id="ws1"
         )
-        store.record_git_commit_declaration(
+        seed_git_commit_declaration(
+            store,
             lease_id="lease_1",
             chunk_id="ch_1",
             node_id="nd_build",

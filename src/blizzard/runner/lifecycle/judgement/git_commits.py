@@ -21,7 +21,7 @@ from blizzard.runner.leases.git_commit_declaration import (
     GitCommitDeclaration,
     IReadGitCommitDeclarationRepository,
 )
-from blizzard.runner.leases.lease_lock import ILeaseUnit, IWriteLeaseLock
+from blizzard.runner.leases.lease_lock import ILeaseUnit
 from blizzard.runner.leases.model import Lease
 from blizzard.runner.node_steps.submissions import CompletionArtifact
 
@@ -120,8 +120,6 @@ def converge_pointers(confirmed: Mapping[Key, CompletionArtifact]) -> list[Point
 class GitCommitsStores(OutboundStores, Protocol):
     @property
     def git_commit_declarations(self) -> IReadGitCommitDeclarationRepository: ...
-    @property
-    def lease_lock(self) -> IWriteLeaseLock: ...
 
 
 class GitCommitsContext(OutboundContext, Protocol):

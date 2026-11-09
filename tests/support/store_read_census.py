@@ -259,6 +259,7 @@ from blizzard.runner.usage.repository import (
     IReadUsageRepository,
 )
 from tests.support.hub_node_artifacts import record_landing
+from tests.support.lease_unit_seeds import seed_attachment, seed_git_commit_declaration
 from tests.support.runner_fakes import record_usage
 from tests.support.runner_mint import new_mint
 from tests.support.scaffolding import (
@@ -482,7 +483,9 @@ def build_runner_world(engine: Engine, runner_id: str = RUNNER_ID) -> RunnerWorl
         fingerprint=PreambleFingerprint(blizzard="digest-b", workspace="digest-w"),
         at=_t(9),
     )
-    stores.attachments.record_attachment(
+    seed_attachment(
+        stores.attachments,
+        lock=stores.lease_lock,
         lease_id=lease_2,
         chunk_id=chunk_1,
         node_id=node_a,
@@ -491,7 +494,9 @@ def build_runner_world(engine: Engine, runner_id: str = RUNNER_ID) -> RunnerWorl
         content="content-a",
         attached_at=_t(10),
     )
-    stores.attachments.record_attachment(
+    seed_attachment(
+        stores.attachments,
+        lock=stores.lease_lock,
         lease_id=lease_2,
         chunk_id=chunk_1,
         node_id=node_a,
@@ -500,7 +505,9 @@ def build_runner_world(engine: Engine, runner_id: str = RUNNER_ID) -> RunnerWorl
         content="content-b",
         attached_at=_t(10),
     )
-    stores.git_commit_declarations.record_git_commit_declaration(
+    seed_git_commit_declaration(
+        stores.git_commit_declarations,
+        lock=stores.lease_lock,
         lease_id=lease_2,
         chunk_id=chunk_1,
         node_id=node_a,
@@ -511,7 +518,9 @@ def build_runner_world(engine: Engine, runner_id: str = RUNNER_ID) -> RunnerWorl
         commit="abc123",
         declared_at=_t(11),
     )
-    stores.git_commit_declarations.record_git_commit_declaration(
+    seed_git_commit_declaration(
+        stores.git_commit_declarations,
+        lock=stores.lease_lock,
         lease_id=lease_2,
         chunk_id=chunk_1,
         node_id=node_a,

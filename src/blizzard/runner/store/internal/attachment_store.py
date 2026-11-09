@@ -34,7 +34,7 @@ class AttachmentStore:
         stmt = st.select(
             sa.join(attachments, newest, attachments.c.id == newest.c.id), attachments.c.name, attachments.c.content
         )
-        rows = self._store.all(stmt) if unit is None else unit_conn(unit).execute(stmt).all()
+        rows = self._store.all(stmt) if unit is None else unit_conn(self._store, unit, lease_id).execute(stmt).all()
         return {str(r.name): str(r.content) for r in rows}
 
     def attachment_names_for_lease(self, lease_id: str) -> set[str]:
@@ -53,10 +53,9 @@ class AttachmentStore:
         name: str,
         content: str,
         attached_at: datetime,
-        unit: ILeaseUnit | None = None,
+        unit: ILeaseUnit,
     ) -> None:
-        # Alone, a single committed transaction — durable the instant this returns, so it survives a `kill -9`
-        # right after. In a unit, it commits with the unit.
+        # Commits with the unit, never alone: the admission check and this insert are one lease-locked transaction.
         stmt = self._store.insert(attachments).values(
             lease_id=lease_id,
             chunk_id=chunk_id,
@@ -66,11 +65,7 @@ class AttachmentStore:
             content=content,
             attached_at=attached_at,
         )
-        if unit is None:
-            with self._store.begin() as conn:
-                conn.execute(stmt)
-        else:
-            unit_conn(unit).execute(stmt)
+        unit_conn(self._store, unit, lease_id).execute(stmt)
         _log.info("attachment recorded", lease_id=lease_id, name=name)
 
 

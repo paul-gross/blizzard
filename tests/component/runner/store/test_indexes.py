@@ -25,6 +25,7 @@ from blizzard.runner.node_steps.chunk_state import ChunkState
 from blizzard.runner.node_steps.submissions import ApplyReply
 from tests.support import scaffolding as support
 from tests.support.config_inputs import init_host
+from tests.support.lease_unit_seeds import seed_attachment
 from tests.support.runner_fakes import (
     FakeHarness,
     FakeHub,
@@ -127,8 +128,15 @@ def test_pending_submission_lease_ids_plans_as_an_index_search(tmp_path: Path) -
 def test_attachments_for_lease_plans_as_an_index_search(tmp_path: Path) -> None:
     engine = _migrated_engine(tmp_path)
     store = SqlAlchemyRunnerStore(engine, runner_store_errors())
-    store.record_attachment(
-        lease_id="lease_1", chunk_id="ch_1", node_id="nd_build", epoch=1, name="asset", content="x", attached_at=_NOW
+    seed_attachment(
+        store,
+        lease_id="lease_1",
+        chunk_id="ch_1",
+        node_id="nd_build",
+        epoch=1,
+        name="asset",
+        content="x",
+        attached_at=_NOW,
     )
 
     with support.capture_statements(engine) as statements:

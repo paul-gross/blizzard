@@ -306,3 +306,10 @@ def test_production_opencode_probe_prefers_an_explicit_auth_path(
     config = with_opencode(RunnerConfig(root=tmp_path, db_url="sqlite://"), auth_path=str(explicit))
 
     assert _probe_auth_path(config) == explicit
+
+
+def test_the_composite_registry_declares_no_method_of_its_own():
+    from blizzard.runner.harness.registry import IHarnessRegistry
+
+    own = {n for n in vars(IHarnessRegistry) if not n.startswith("_") and callable(vars(IHarnessRegistry)[n])}
+    assert own == set()

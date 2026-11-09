@@ -28,6 +28,7 @@ from blizzard.runner.loop.steps import Advance, Pull
 from blizzard.runner.node_steps.envelope import ProducesSpec
 from blizzard.runner.node_steps.submissions import ApplyReply
 from blizzard.runner.operator.attachments import AttachmentService, AttachmentTooLate
+from tests.support.lease_unit_seeds import seed_attachment, seed_git_commit_declaration
 from tests.support.runner_fakes import (
     CountingAttachmentStore,
     FakeCheckRunner,
@@ -124,7 +125,8 @@ class _AttachingOnResumeHarness(FakeHarness):
             effort=effort,
             compaction_window=compaction_window,
         )
-        self._store.record_attachment(
+        seed_attachment(
+            self._store,
             lease_id=self._lease_id,
             chunk_id=self._chunk_id,
             node_id=self._node_id,
@@ -192,7 +194,8 @@ class _DeclaringGitCommitOnResumeHarness(FakeHarness):
             effort=effort,
             compaction_window=compaction_window,
         )
-        self._store.record_git_commit_declaration(
+        seed_git_commit_declaration(
+            self._store,
             lease_id=self._lease_id,
             chunk_id=self._chunk_id,
             node_id=self._node_id,
@@ -520,7 +523,8 @@ def test_fully_attached_node_does_not_resume(tmp_path: Path) -> None:
     store = make_store(f"sqlite:///{tmp_path / 'runner.db'}")
     clock = FixedClock(_NOW)
     _seed_exited_lease(store, lease_id="lease_r", chunk_id="ch_1", node_id="nd_review", epoch=1)
-    store.record_attachment(
+    seed_attachment(
+        store,
         lease_id="lease_r",
         chunk_id="ch_1",
         node_id="nd_review",

@@ -18,6 +18,7 @@ from blizzard.runner.environments.workspaces import WorkspaceEntry, WorkspaceReg
 from blizzard.runner.harness.adapter import WorkerHandle
 from blizzard.runner.leases.model import NewLease
 from blizzard.runner.lifecycle.judgement.git_commits import DeclaredCommits
+from tests.support.lease_unit_seeds import seed_git_commit_declaration
 from tests.support.runner_fakes import (
     FakeHarness,
     FakeHub,
@@ -43,7 +44,8 @@ class _Lease:
     commits: DeclaredCommits
 
     def declare(self, env: str, commit: str) -> None:
-        self.store.record_git_commit_declaration(
+        seed_git_commit_declaration(
+            self.store,
             lease_id="lease_1",
             chunk_id="ch_1",
             node_id="nd_build",

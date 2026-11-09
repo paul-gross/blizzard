@@ -25,7 +25,7 @@ class LeaseLockStore:
             conn.execute(
                 self._store.update(leases).where(leases.c.lease_id == lease_id).values(lease_id=leases.c.lease_id)
             )
-            yield LeaseUnit(conn)
+            yield LeaseUnit(conn, lease_id, self._store)
 
 
 _lease_lock_store_conforms: type[IWriteLeaseLock] = LeaseLockStore

@@ -84,13 +84,12 @@ class IWriteGitCommitDeclarationRepository(IReadGitCommitDeclarationRepository, 
         branch: str,
         commit: str,
         declared_at: datetime,
-        unit: ILeaseUnit | None = None,
+        unit: ILeaseUnit,
     ) -> None:
         """Append a worker's explicit git-commit declaration for ``repo`` in
-        ``environment_id``, a single committed transaction so it survives a
+        ``environment_id`` on the lease-locked ``unit``'s transaction, durable when the unit commits, so it survives a
         ``kill -9`` before the collection reads it. Append-only: a later call for the
-        same key is a correction, read back as the replacement, never merged. Given a ``unit``, it joins that
-        transaction and is durable when the unit commits."""
+        same key is a correction, read back as the replacement, never merged."""
         ...
 
 

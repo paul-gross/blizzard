@@ -22,6 +22,7 @@ from blizzard.runner.loop.context import LoopConfig
 from blizzard.runner.loop.steps import Advance, Fill, Pull
 from blizzard.runner.node_steps.chunk_state import ChunkGate, ChunkState
 from blizzard.runner.node_steps.submissions import ApplyReply
+from tests.support.lease_unit_seeds import seed_git_commit_declaration
 from tests.support.runner_fakes import (
     FIXTURE_RUNNER_ID,
     FakeCheckRunner,
@@ -76,7 +77,8 @@ def test_runner_config_gate_buffers_a_decision_not_a_completion(tmp_path: Path):
     """A gated node's exited worker submits a decision (not a transition) and parks."""
     store = _store(tmp_path)
     _seed_running_lease(store)
-    store.record_git_commit_declaration(
+    seed_git_commit_declaration(
+        store,
         lease_id="lease_1",
         chunk_id="ch_1",
         node_id="nd_build",
@@ -152,7 +154,8 @@ def test_runner_config_gate_runs_the_nodes_checks_and_buffers_their_results(tmp_
 def test_gated_node_decision_elicited_exactly_once_while_flush_pending(tmp_path: Path):
     store = _store(tmp_path)
     _seed_running_lease(store)
-    store.record_git_commit_declaration(
+    seed_git_commit_declaration(
+        store,
         lease_id="lease_1",
         chunk_id="ch_1",
         node_id="nd_build",

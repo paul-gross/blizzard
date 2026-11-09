@@ -23,6 +23,7 @@ from blizzard.runner.leases.model import NewLease
 from blizzard.wire.lease import LeaseView
 from tests.support.config_inputs import create_runner_app
 from tests.support.factory_fields import NewLeaseFields
+from tests.support.lease_unit_seeds import seed_git_commit_declaration
 from tests.support.runner_client import runner_client
 from tests.support.runner_fakes import (
     FakeProbe,
@@ -422,7 +423,8 @@ def test_a_chunk_s_leases_carry_their_model_effort_harness_version_and_commits(t
         harness_version="2.0.2",
     )
     for minutes, repo, commit in ((1, "toy-api", "aaa"), (2, "toy-api", "bbb"), (3, "toy-web", "ccc")):
-        store.record_git_commit_declaration(
+        seed_git_commit_declaration(
+            store,
             lease_id="lease_1",
             chunk_id="ch_1",
             node_id="nd_build",
@@ -469,7 +471,8 @@ def test_another_runner_s_leases_of_the_same_chunk_are_absent(tmp_path: Path) ->
     _seed_lease(store, lease_id="lease_mine")
     other = SqlAlchemyRunnerStore(store.engine, runner_store_errors(), "runner_other")
     _seed_lease(other, lease_id="lease_theirs", epoch=2)
-    other.record_git_commit_declaration(
+    seed_git_commit_declaration(
+        other,
         lease_id="lease_mine",
         chunk_id="ch_1",
         node_id="nd_build",
@@ -513,7 +516,8 @@ def test_the_lease_read_s_statement_count_is_flat_in_the_lease_count(tmp_path: P
                 spawned_at=_NOW,
                 harness_version="2.0.1",
             )
-            store.record_git_commit_declaration(
+            seed_git_commit_declaration(
+                store,
                 lease_id=lease_id,
                 chunk_id="ch_1",
                 node_id="nd_build",
