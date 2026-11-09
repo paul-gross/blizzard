@@ -36,7 +36,7 @@ from tests.support.scaffolding import (
 
 _NODE_ID = "nd_record_findings"
 _EPOCH = 1
-_ARTIFACT_NAME = "review-finding-delta"
+ARTIFACT_NAME = "review-finding-delta"
 
 
 def _record_findings_node(node_id: str = _NODE_ID, *, graph_id: str = "gr_record_findings") -> Node:
@@ -55,7 +55,7 @@ def _record_findings_node(node_id: str = _NODE_ID, *, graph_id: str = "gr_record
     )
 
 
-def _seed_chunk(hub: HubHarness) -> str:
+def seed_chunk(hub: HubHarness) -> str:
     store_connections = hub_store_connections(hub.engine)
     node = _record_findings_node()
     graph = Graph(
@@ -73,14 +73,14 @@ def _seed_chunk(hub: HubHarness) -> str:
     return f"ch_{item.ref}"
 
 
-def _record_artifact(hub: HubHarness, chunk_id: str, *, content: str, epoch: int = _EPOCH) -> None:
+def record_artifact(hub: HubHarness, chunk_id: str, *, content: str, epoch: int = _EPOCH) -> None:
     assert record_hub_asset(
         hub,
         chunk_id,
         node_id=_NODE_ID,
         node_name="record-findings",
         epoch=epoch,
-        name=_ARTIFACT_NAME,
+        name=ARTIFACT_NAME,
         content=content,
     )
 
@@ -115,7 +115,7 @@ class _Delivered:
     detail: str = ""
 
 
-def _deliver(hub: HubHarness, chunk_id: str, *, epoch: int = _EPOCH) -> _Delivered:
+def deliver(hub: HubHarness, chunk_id: str, *, epoch: int = _EPOCH) -> _Delivered:
     """Deliver the chunk's newest review-finding delta from its record-findings node at ``epoch``."""
     chunk = hub.services.chunks.record.get(chunk_id)
     assert chunk is not None, chunk_id
@@ -136,7 +136,7 @@ def _deliver(hub: HubHarness, chunk_id: str, *, epoch: int = _EPOCH) -> _Deliver
     return _Delivered("fenced") if outcome is ReviewFindingsOutcome.FENCED else _Delivered("recorded")
 
 
-def _finding_count(hub: HubHarness) -> int:
+def finding_count(hub: HubHarness) -> int:
     with hub.engine.begin() as conn:
         return len(conn.execute(hub_scoped(select(s.findings))).all())
 
@@ -146,10 +146,10 @@ def _finding_count(hub: HubHarness) -> int:
 
 def test_a_deferred_entry_is_recorded_as_a_review_sourced_finding(tmp_path: Path) -> None:
     hub = build_hub(tmp_path)
-    chunk_id = _seed_chunk(hub)
-    _record_artifact(hub, chunk_id, content=_delta([_deferred()]))
+    chunk_id = seed_chunk(hub)
+    record_artifact(hub, chunk_id, content=_delta([_deferred()]))
 
-    delivered = _deliver(hub, chunk_id)
+    delivered = deliver(hub, chunk_id)
 
     assert delivered == _Delivered("recorded")
     with hub.engine.begin() as conn:
@@ -162,32 +162,32 @@ def test_a_deferred_entry_is_recorded_as_a_review_sourced_finding(tmp_path: Path
 
 def test_fixed_and_refuted_entries_mint_nothing(tmp_path: Path) -> None:
     hub = build_hub(tmp_path)
-    chunk_id = _seed_chunk(hub)
-    _record_artifact(hub, chunk_id, content=_delta([_fixed(ref="F1"), _refuted(ref="F2")]))
+    chunk_id = seed_chunk(hub)
+    record_artifact(hub, chunk_id, content=_delta([_fixed(ref="F1"), _refuted(ref="F2")]))
 
-    delivered = _deliver(hub, chunk_id)
+    delivered = deliver(hub, chunk_id)
 
     assert delivered.outcome == "recorded"
-    assert _finding_count(hub) == 0
+    assert finding_count(hub) == 0
 
 
 def test_a_mixed_delta_mints_only_its_deferred_entries(tmp_path: Path) -> None:
     hub = build_hub(tmp_path)
-    chunk_id = _seed_chunk(hub)
-    _record_artifact(hub, chunk_id, content=_delta([_deferred(ref="F1"), _fixed(ref="F2"), _refuted(ref="F3")]))
+    chunk_id = seed_chunk(hub)
+    record_artifact(hub, chunk_id, content=_delta([_deferred(ref="F1"), _fixed(ref="F2"), _refuted(ref="F3")]))
 
-    delivered = _deliver(hub, chunk_id)
+    delivered = deliver(hub, chunk_id)
 
     assert delivered.outcome == "recorded"
-    assert _finding_count(hub) == 1
+    assert finding_count(hub) == 1
 
 
 def test_an_unnamed_scope_is_minted_on_delivery(tmp_path: Path) -> None:
     hub = build_hub(tmp_path)
-    chunk_id = _seed_chunk(hub)
-    _record_artifact(hub, chunk_id, content=_delta([_deferred(scope="brand-new")]))
+    chunk_id = seed_chunk(hub)
+    record_artifact(hub, chunk_id, content=_delta([_deferred(scope="brand-new")]))
 
-    delivered = _deliver(hub, chunk_id)
+    delivered = deliver(hub, chunk_id)
 
     assert delivered.outcome == "recorded"
     with hub.engine.begin() as conn:
@@ -199,48 +199,48 @@ def test_an_unnamed_scope_is_minted_on_delivery(tmp_path: Path) -> None:
 
 def test_a_malformed_artifact_is_invalid(tmp_path: Path) -> None:
     hub = build_hub(tmp_path)
-    chunk_id = _seed_chunk(hub)
-    _record_artifact(hub, chunk_id, content="not valid json")
+    chunk_id = seed_chunk(hub)
+    record_artifact(hub, chunk_id, content="not valid json")
 
-    delivered = _deliver(hub, chunk_id)
+    delivered = deliver(hub, chunk_id)
 
     assert delivered.outcome == "invalid"
-    assert _ARTIFACT_NAME in delivered.detail
-    assert _finding_count(hub) == 0
+    assert ARTIFACT_NAME in delivered.detail
+    assert finding_count(hub) == 0
 
 
 def test_a_deferred_entry_marked_blocking_is_invalid(tmp_path: Path) -> None:
     hub = build_hub(tmp_path)
-    chunk_id = _seed_chunk(hub)
-    _record_artifact(hub, chunk_id, content=_delta([_deferred(severity="blocking")]))
+    chunk_id = seed_chunk(hub)
+    record_artifact(hub, chunk_id, content=_delta([_deferred(severity="blocking")]))
 
-    delivered = _deliver(hub, chunk_id)
+    delivered = deliver(hub, chunk_id)
 
     assert delivered.outcome == "invalid"
     assert "blocking" in delivered.detail
-    assert _finding_count(hub) == 0
+    assert finding_count(hub) == 0
 
 
 def test_a_duplicate_ref_is_invalid(tmp_path: Path) -> None:
     hub = build_hub(tmp_path)
-    chunk_id = _seed_chunk(hub)
-    _record_artifact(hub, chunk_id, content=_delta([_fixed(ref="F1"), _deferred(ref="F1")]))
+    chunk_id = seed_chunk(hub)
+    record_artifact(hub, chunk_id, content=_delta([_fixed(ref="F1"), _deferred(ref="F1")]))
 
-    delivered = _deliver(hub, chunk_id)
+    delivered = deliver(hub, chunk_id)
 
     assert delivered.outcome == "invalid"
     assert "F1" in delivered.detail
-    assert _finding_count(hub) == 0
+    assert finding_count(hub) == 0
 
 
 def test_no_artifact_at_all_is_invalid(tmp_path: Path) -> None:
     hub = build_hub(tmp_path)
-    chunk_id = _seed_chunk(hub)
+    chunk_id = seed_chunk(hub)
 
-    delivered = _deliver(hub, chunk_id)
+    delivered = deliver(hub, chunk_id)
 
     assert delivered.outcome == "invalid"
-    assert _ARTIFACT_NAME in delivered.detail
+    assert ARTIFACT_NAME in delivered.detail
 
 
 # --- replay --------------------------------------------------------------
@@ -248,32 +248,32 @@ def test_no_artifact_at_all_is_invalid(tmp_path: Path) -> None:
 
 def test_a_replayed_delivery_still_reports_recorded_and_mints_nothing_new(tmp_path: Path) -> None:
     hub = build_hub(tmp_path)
-    chunk_id = _seed_chunk(hub)
-    _record_artifact(hub, chunk_id, content=_delta([_deferred()]))
+    chunk_id = seed_chunk(hub)
+    record_artifact(hub, chunk_id, content=_delta([_deferred()]))
 
-    first = _deliver(hub, chunk_id)
+    first = deliver(hub, chunk_id)
     assert first == _Delivered("recorded")
-    assert _finding_count(hub) == 1
+    assert finding_count(hub) == 1
 
-    second = _deliver(hub, chunk_id)
+    second = deliver(hub, chunk_id)
 
     assert second.outcome == "recorded"
-    assert _finding_count(hub) == 1
+    assert finding_count(hub) == 1
 
 
 def test_a_replay_at_a_fresh_epoch_stays_a_no_op(tmp_path: Path) -> None:
     """Idempotence is keyed on the chunk alone, so even a fresh node/epoch visit for
     an already-delivered chunk mints nothing new."""
     hub = build_hub(tmp_path)
-    chunk_id = _seed_chunk(hub)
-    _record_artifact(hub, chunk_id, content=_delta([_deferred()]))
-    first = _deliver(hub, chunk_id)
+    chunk_id = seed_chunk(hub)
+    record_artifact(hub, chunk_id, content=_delta([_deferred()]))
+    first = deliver(hub, chunk_id)
     assert first == _Delivered("recorded")
 
-    second = _deliver(hub, chunk_id, epoch=_EPOCH + 1)
+    second = deliver(hub, chunk_id, epoch=_EPOCH + 1)
 
     assert second.outcome == "recorded"
-    assert _finding_count(hub) == 1
+    assert finding_count(hub) == 1
 
 
 # --- fenced ------------------------------------------------------------------
@@ -281,14 +281,14 @@ def test_a_replay_at_a_fresh_epoch_stays_a_no_op(tmp_path: Path) -> None:
 
 def test_a_delivery_for_a_stopped_chunk_is_fenced_and_lands_nothing(tmp_path: Path) -> None:
     hub = build_hub(tmp_path)
-    chunk_id = _seed_chunk(hub)
-    _record_artifact(hub, chunk_id, content=_delta([_deferred()]))
+    chunk_id = seed_chunk(hub)
+    record_artifact(hub, chunk_id, content=_delta([_deferred()]))
     assert hub.client.post(f"/api/chunks/{chunk_id}/stop", json={"by": "operator"}).status_code == 202
 
-    delivered = _deliver(hub, chunk_id)
+    delivered = deliver(hub, chunk_id)
 
     assert delivered == _Delivered("fenced")
-    assert _finding_count(hub) == 0
+    assert finding_count(hub) == 0
     with hub.engine.begin() as conn:
         assert (
             conn.execute(
@@ -300,11 +300,11 @@ def test_a_delivery_for_a_stopped_chunk_is_fenced_and_lands_nothing(tmp_path: Pa
 
 def test_a_delivery_a_restart_superseded_is_fenced_and_lands_nothing(tmp_path: Path) -> None:
     hub = build_hub(tmp_path)
-    chunk_id = _seed_chunk(hub)
-    _record_artifact(hub, chunk_id, content=_delta([_deferred()]))
+    chunk_id = seed_chunk(hub)
+    record_artifact(hub, chunk_id, content=_delta([_deferred()]))
     seed_lease(hub.engine, chunk_id, epoch=2, runner_id="r1", at=hub.clock.now())
 
-    delivered = _deliver(hub, chunk_id, epoch=1)
+    delivered = deliver(hub, chunk_id, epoch=1)
 
     assert delivered == _Delivered("fenced")
-    assert _finding_count(hub) == 0
+    assert finding_count(hub) == 0

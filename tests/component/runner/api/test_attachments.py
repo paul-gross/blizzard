@@ -474,3 +474,39 @@ def test_a_lifecycle_refusal_takes_precedence_over_a_hub_format_refusal(tmp_path
 
     assert _stage(app, "bad").status_code == 409
     assert asked == []
+
+
+def test_review_content_staged_unchecked_is_still_judged_invalid_by_delivery(tmp_path: Path) -> None:
+    """Staging is not acceptance: content a no-verdict stage let through is delivered by the real
+    ``record-findings`` first delivery, which answers invalid and creates no finding."""
+    from tests.component.hub.domain.garden.review.test_recorder import (
+        ARTIFACT_NAME,
+        deliver,
+        finding_count,
+        record_artifact,
+        seed_chunk,
+    )
+    from tests.support.scaffolding import build_hub
+
+    def down(request: httpx2.Request) -> httpx2.Response:
+        raise httpx2.ConnectError("hub is down", request=request)
+
+    (tmp_path / "runner").mkdir()
+    (tmp_path / "hub").mkdir()
+    app, store = _app_with_hub(tmp_path / "runner", down)
+    _seed_lease(store)
+    with runner_client(app) as client:
+        resp = client.post(
+            "/api/leases/lease_1/attachments",
+            json={"name": ARTIFACT_NAME, "content": "none"},
+            headers={"X-Blizzard-Lease-Token": _TOKEN},
+        )
+    assert resp.status_code == 200
+    staged = store.attachments_for_lease("lease_1")[ARTIFACT_NAME]
+
+    hub = build_hub(tmp_path / "hub")
+    chunk_id = seed_chunk(hub)
+    record_artifact(hub, chunk_id, content=staged)
+
+    assert deliver(hub, chunk_id).outcome == "invalid"
+    assert finding_count(hub) == 0
