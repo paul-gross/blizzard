@@ -39,3 +39,28 @@ def test_the_check_names_the_branch_protection_requires_are_the_ones_the_jobs_em
         "hub image smoke (blizzard:image-smoke)",
         "reference compose smoke (blizzard:compose-smoke)",
     }
+
+
+def test_playwright_uv_bootstrap_has_a_pinned_alternate_source_without_weakening_tests() -> None:
+    assert _JOBS["service-playwright"]["env"]["MISE_DISABLE_TOOLS"] == "uv"
+    steps = _JOBS["service-playwright"]["steps"]
+    primary = next(step for step in steps if step.get("id") == "setup-uv")
+    fallback = next(step for step in steps if step.get("name") == "Install uv from PyPI if GitHub setup failed")
+    python = next(step for step in steps if step.get("name") == "Python for uv bootstrap")
+    mise = next(step for step in steps if step.get("name") == "Node from mise.toml")
+    execution = next(
+        step for step in steps if step.get("name") == "service tier — the Playwright half, `mise run playwright`"
+    )
+    assert (
+        steps.index(python) < steps.index(primary) < steps.index(fallback) < steps.index(mise) < steps.index(execution)
+    )
+    assert python["with"]["python-version"] == "3.12"
+    assert primary["with"]["version"] == "0.13.6"
+    assert "../blizzard-mock/uv.lock" in primary["with"]["cache-dependency-glob"]
+    assert primary["continue-on-error"] is True
+    assert fallback["if"] == "steps.setup-uv.outcome == 'failure'"
+    assert fallback["run"] == "python -m pip install 'uv==0.13.6'"
+    assert not fallback.get("continue-on-error", False)
+    assert mise["with"]["install_args"] == "node"
+    assert not execution.get("continue-on-error", False)
+    assert "--shard=${{ matrix.shard }}/${{ matrix.shards }}" in execution["run"]

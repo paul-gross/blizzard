@@ -24,9 +24,9 @@ from tests.support.runner_join import add_runner, runner_spawn_env
 from tests.support.scaffolding import (
     LISTENING_FILE,
     await_listening_url,
-    daemon_log_sink,
     listening_args,
     shared_daemon_log_dir,
+    spawn_daemon,
 )
 
 # The service tier's own gate — independent of the other tiers' gates so a run can select one tier.
@@ -130,13 +130,7 @@ def _mock_daemon(
     args: list[str], log: Path, listening: Path, env: dict[str, str] | None = None
 ) -> Generator[httpx2.Client]:
     """Spawn one mock daemon on a kernel-picked port and yield a client at the URL it published."""
-    proc = subprocess.Popen(
-        [*args, *listening_args(listening, 0)],
-        env=env,
-        stdout=daemon_log_sink(log),
-        stderr=subprocess.STDOUT,
-        text=True,
-    )
+    proc = spawn_daemon([*args, *listening_args(listening, 0)], env=env, log=log)
     try:
         client = mock_daemon_client(await_listening_url(proc, listening, log=log))
         try:

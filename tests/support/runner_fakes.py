@@ -164,6 +164,7 @@ from blizzard.runner.usage.repository import IWriteUsageRepository, derive_invoc
 from blizzard.tools.invariants import runner_invariants
 from blizzard.wire.chunk import HubAdvanceResponse
 from blizzard.wire.transcript_segment import TranscriptSegmentRecord
+from tests.support import engine_lifecycle
 
 #: The runner every test store is bound to unless a test names another — the id :class:`FakeHub` mints by default, so
 #: a fixture's registration adopts the binding it already holds.
@@ -337,8 +338,9 @@ def runner_migration_prototype() -> Path:
             _runner_prototype_tmp = tempfile.TemporaryDirectory(prefix="blizzard-runner-migration-proto-")
             root = Path(_runner_prototype_tmp.name)
             db_url = f"sqlite:///{root / 'runner.db'}"
-            migration_runner(RunnerConfig(root=root, db_url=db_url)).upgrade("head")
-            _checkpoint_sqlite(db_url)
+            with engine_lifecycle.prototype():
+                migration_runner(RunnerConfig(root=root, db_url=db_url)).upgrade("head")
+                _checkpoint_sqlite(db_url)
             _runner_prototype_db = root / "runner.db"
         return _runner_prototype_db
 

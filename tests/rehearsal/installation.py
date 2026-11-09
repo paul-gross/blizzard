@@ -20,9 +20,9 @@ from tests.support.runner_join import runner_spawn_env
 from tests.support.scaffolding import (
     LISTENING_FILE,
     await_listening_url,
-    daemon_log_sink,
     listening_args,
     refused_address,
+    spawn_daemon,
     write_mock_harness_credentials,
 )
 
@@ -116,10 +116,9 @@ class Hub:
         """Host the directory under ``installation`` and answer a client once ``/api/ready`` does."""
         log, listening = self.dir / "daemon.log", self.dir / LISTENING_FILE
         port_args, publishes = _port_args(installation, "blizzard-hub", listening, self.port)
-        self.proc = subprocess.Popen(
+        self.proc = spawn_daemon(
             [str(installation.bin_dir / "blizzard-hub"), "host", "--dir", str(self.dir), "--host", "127.0.0.1",
-             *port_args, *self._db_flags()],
-            env=installation.env(self._db_env()), stdout=daemon_log_sink(log), stderr=subprocess.STDOUT, text=True,
+             *port_args, *self._db_flags()], env=installation.env(self._db_env()), log=log,
         )  # fmt: skip
         if publishes:
             await_listening_url(self.proc, listening, log=log)
@@ -180,10 +179,7 @@ class Host:
         if len(str(self.dir.resolve() / "host.sock")) > 107:
             command = [str(installation.bin_dir / "python"), "-I", str(Path(__file__).with_name("host_entry.py")),
                        str(self.dir), "host", "--dir", str(self.dir), *port_args]  # fmt: skip
-        self.proc = subprocess.Popen(
-            command,
-            env=env, stdout=daemon_log_sink(log), stderr=subprocess.STDOUT, text=True,
-        )  # fmt: skip
+        self.proc = spawn_daemon(command, env=env, log=log)  # fmt: skip
         if publishes:
             await_listening_url(self.proc, listening, log=log)
         with httpx2.Client(base_url=f"http://127.0.0.1:{self.port}", timeout=30.0) as client:

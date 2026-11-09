@@ -32,7 +32,7 @@ def _client_for(tmp_path: Path, upstream: httpx2.Response) -> TestClient:
     app.add_exception_handler(UpstreamRefusal, relay_upstream_refusal)
 
     @app.get("/relay")
-    def relay() -> dict[str, object]:  # pyright: ignore[reportUnusedFunction]
+    def relay() -> dict[str, object]:
         return proxy.get("/api/fleet/chunks/ch_1").json()
 
     return TestClient(app)

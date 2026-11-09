@@ -82,13 +82,17 @@ def test_throttle_keys_on_the_forwarded_client_ip_from_a_trusted_proxy(tmp_path:
 
     # One forwarded client hammers the endpoint past the bucket capacity...
     noisy = [
-        client.get("/api/auth/github/authorize", headers={"x-forwarded-for": "198.51.100.7"}).status_code
+        client.get(
+            "/api/auth/github/authorize", headers={"x-forwarded-for": "198.51.100.7"}, follow_redirects=False
+        ).status_code
         for _ in range(15)
     ]
     assert 429 in noisy
     # ...while a different forwarded client behind the same proxy is unaffected.
-    quiet = client.get("/api/auth/github/authorize", headers={"x-forwarded-for": "198.51.100.8"})
-    assert quiet.status_code != 429
+    quiet = client.get(
+        "/api/auth/github/authorize", headers={"x-forwarded-for": "198.51.100.8"}, follow_redirects=False
+    )
+    assert quiet.status_code in (302, 307)
 
 
 def test_a_forged_forwarded_for_from_an_untrusted_peer_cannot_dodge_the_throttle(tmp_path: Path) -> None:
@@ -99,7 +103,9 @@ def test_a_forged_forwarded_for_from_an_untrusted_peer_cannot_dodge_the_throttle
     # Rotating a forged X-Forwarded-For does not create fresh buckets — every request
     # keys on the untrusted direct peer, so the throttle still trips.
     statuses = [
-        client.get("/api/auth/github/authorize", headers={"x-forwarded-for": f"1.2.3.{i}"}).status_code
+        client.get(
+            "/api/auth/github/authorize", headers={"x-forwarded-for": f"1.2.3.{i}"}, follow_redirects=False
+        ).status_code
         for i in range(15)
     ]
     assert 429 in statuses

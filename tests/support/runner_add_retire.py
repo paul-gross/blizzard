@@ -12,7 +12,7 @@ from tests.support.runner_init_fakes import FakeInitHub, init_runner
 _HUB = "http://hub.test:8421"
 
 
-def _run(hub: FakeInitHub, *args: str) -> Result:  # pyright: ignore[reportUnusedFunction]
+def _run(hub: FakeInitHub, *args: str) -> Result:
     return init_runner(hub).invoke(blizzard, ["runner", *args])
 
 

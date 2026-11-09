@@ -21,6 +21,7 @@ import pytest
 import yaml
 
 from blizzard.foundation.runner_token_names import hub_token_variable
+from blizzard.runner.config import DEFAULT_WORKSPACE_ID
 from blizzard.runner.hub.internal.token_file import HubTokenFile
 from blizzard.tools.compat.releases import parse_release, parse_releases
 from blizzard.tools.release_install import Installation, download_release, install
@@ -383,7 +384,7 @@ class _Rehearsal:
         conflict = self._ingest(client, "conflict")
         claim = client.post(
             "/api/fleet/routes", headers={"Authorization": f"Bearer {token}"},
-            json={"chunk_id": conflict, "workspace_id": "rehearsal", "environment_ids": []},
+            json={"chunk_id": conflict, "workspace_id": DEFAULT_WORKSPACE_ID, "environment_ids": []},
         )  # fmt: skip
         assert claim.status_code == 201, claim.text
         self._release_refusal_probe(token, conflict, "conflict", runner_id, step)

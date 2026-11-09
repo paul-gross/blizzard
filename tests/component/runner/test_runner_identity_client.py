@@ -74,7 +74,7 @@ def test_one_instrumented_client_serves_every_identity_call_and_presents_the_re_
 
     def recording_client(*args: object, **kwargs: object) -> httpx2.Client:
         kwargs["transport"] = httpx2.MockTransport(lambda request: _retired_answer(request, seen))
-        client = real_client(*args, **kwargs)  # pyright: ignore[reportArgumentType]
+        client = real_client(*args, **kwargs)
         built.append(client)
         return client
 
@@ -137,7 +137,7 @@ def test_a_build_that_fails_after_the_client_opens_closes_it_and_leaves_the_host
     real_client = httpx2.Client
 
     def recording_client(*args: object, **kwargs: object) -> httpx2.Client:
-        client = real_client(*args, **kwargs)  # pyright: ignore[reportArgumentType]
+        client = real_client(*args, **kwargs)
         opened.append(client)
         return client
 

@@ -13,11 +13,13 @@ from datetime import UTC, datetime
 from pathlib import Path
 
 import pytest
+from _pytest.fixtures import SubRequest
 
 from blizzard.foundation.operator_sessions.internal import session_file
 from blizzard.hub.store.tenant_guard import install_tenant_guard
 from blizzard.runner.host_layout import HostLayout
 from blizzard.runner.store.runner_guard import install_runner_guard
+from tests.support import engine_lifecycle
 from tests.support.head_replay_guard import install_head_replay_guard
 from tests.support.repo_files import install_repo_read_guard, repo_root
 from tests.support.revision_age import (
@@ -250,7 +252,7 @@ def _without_opencode(path: str) -> str:
     return os.pathsep.join(kept)
 
 
-def pytest_configure() -> None:
+def pytest_configure(config: pytest.Config) -> None:
     """Apply the daemon environment contract to the suite's environ: every hub and runner subprocess inherits it.
 
     That unsigns every git commit the suite spawns (parallel workers overload a host's gpg-agent), drops the legacy
@@ -260,17 +262,21 @@ def pytest_configure() -> None:
         os.environ.pop(name, None)
     os.environ.update(DAEMON_ENV["set"])
     os.environ["PATH"] = _without_opencode(os.environ.get("PATH", ""))
+    engine_lifecycle.install(config)
     install_tenant_guard()
     install_runner_guard()
 
 
 @pytest.fixture(autouse=True)
-def _isolated_session_store(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+def _isolated_session_store(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, request: SubRequest) -> None:
     """Point the CLI's session-token file at a per-test temp dir.
 
     Without isolation, a real on-disk ``blizzard hub login`` token leaks into any test —
     the same ambient-host-state hazard :func:`_strip_daemon_env` closes for env vars.
     """
+
+    # Keep the isolation fixture in the tracked test scope; the owner defers pytest's tmp_path housekeeping.
+    engine_lifecycle.ensure_test_scope(request, tmp_path)
 
     def user_config_dir(appname: str | None = None) -> str:
         return str(tmp_path / "config" / "blizzard")
