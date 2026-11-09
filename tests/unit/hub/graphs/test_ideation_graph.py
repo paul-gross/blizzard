@@ -14,6 +14,7 @@ from blizzard.foundation.node_steps import Executor, JudgedBy, SessionMode
 from blizzard.hub.domain.graph.model import GraphDoc, NodeDoc
 from blizzard.hub.domain.graph.validation import Validator
 from blizzard.hub.graphs import PACKAGED
+from blizzard.hub.system_artifacts import PACKAGED as SYSTEM_ARTIFACTS
 from tests.support.scaffolding import TEST_CATALOGUE
 
 _GRAPH = PACKAGED.named("ideation")
@@ -88,13 +89,16 @@ def test_ideation_prompts_read_the_formats_from_system_scope() -> None:
     assert "garden/proposal-format" in _prompt("propose")
 
 
-def test_ideation_propose_prefers_the_targets_voice_over_the_system_default() -> None:
-    """The voice a proposal is worded in is the target's when its context states one, and
-    `garden/voice` from system scope otherwise, with the fallback a failed read owes."""
-    prompt = _prompt("propose")
-    assert "the target's own agent-facing context states" in prompt
-    assert "blizzard runner artifact get --scope system garden/voice --content" in prompt
-    assert "If that read fails or comes back empty" in prompt
+def test_ideation_propose_names_the_target_voice_then_garden_voice_then_a_fallback() -> None:
+    """The voice a proposal is worded in is the target's when its context states one, then
+    the packaged `garden/voice`, then the fallback a failed read owes
+    (`bzh:graph-artifact-pointer-fallback`) — in that order."""
+    prompt = " ".join(_prompt("propose").split())
+    target = prompt.index("agent-facing context states for garden proposals")
+    system = prompt.index("blizzard runner artifact get --scope system garden/voice --content")
+    fallback = prompt.index("write for whoever holds the target's intent")
+    assert target < system < fallback
+    assert SYSTEM_ARTIFACTS.named("garden/voice") is not None
 
 
 def test_ideation_propose_states_the_closed_three_class_vocabulary() -> None:

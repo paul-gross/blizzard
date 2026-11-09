@@ -41,8 +41,7 @@ already runs it — so a reader can judge the proposal without re-doing the rese
 ## Who a proposal is for
 
 A proposal's body is written for a person: a senior developer reading it to decide whether to accept it, and again,
-later, to pick up the work an acceptance mints. The voice it is worded in is not this graph's to set. Use the voice the
-target's own agent-facing context states for garden proposals, if it states one; otherwise use the one
-`blizzard runner artifact get --scope system garden/voice --content` returns. By the shapes there, a `remediate`
-proposal is usually a change at named sites, while an `escalate` proposal, or a `prevent` or `mechanize` proposal that
-changes an interface others call, is a design.
+later, to pick up the work an acceptance mints. The voice it is worded in is not this graph's to set: write in the voice
+the propose prompt names. Size the body to the response: a `remediate` proposal usually stays inside the sites its
+findings name, while an `escalate` proposal, or a `prevent` or `mechanize` proposal that changes an interface others
+call, is a design the reader needs to see before accepting.

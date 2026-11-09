@@ -84,6 +84,16 @@ def test_every_guard_pair_matches_its_model_exactly(doc: Path) -> None:
         model.model_validate(payload)
 
 
+@pytest.mark.parametrize("doc", _all_documents(), ids=lambda p: p.name)
+def test_every_pinned_model_heading_is_captured_as_a_guard_pair(doc: Path) -> None:
+    """A `### Model` heading naming a pinned model whose example the pattern fails to match —
+    an unexpected fence, a blank line too many — would go unchecked against its model while
+    every other test here stays green; this fails it loudly instead."""
+    headings = re.findall(r"^### (\w+)$", doc.read_text(), re.MULTILINE)
+    pinned = [name for name in headings if name in _MODELS]
+    assert sorted(name for name, _ in _guard_pairs(doc)) == sorted(pinned)
+
+
 def test_every_pinned_model_is_covered_by_some_document() -> None:
     """The inverse of the per-pair check — a model dropped from every document (a rename
     nobody re-headed) fails here rather than passing by simple omission."""
