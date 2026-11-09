@@ -617,7 +617,11 @@ def _served_identity(scope: Scope) -> ICurrentRunnerIdentity | None:
 
 @dataclass(frozen=True)
 class HostedApp:
-    """The served app and restart-resume hooks wired from one host graph."""
+    """The served app and restart-resume hooks wired from one host graph.
+
+    Closing releases wrapper resources and an internally built host. The exposed
+    engine belongs to the host; a supplied host or process graph remains caller-owned.
+    """
 
     app: FastAPI
     #: One resume hook per hosted runner, in the host's runner order.
@@ -670,7 +674,7 @@ def build_hosted_app(
         if owned:
             startup.callback(host.close)
         hosted = _wire_hosted_app(config, host, startup, owned_host=host if owned else None)
-        startup.pop_all()  # HostedApp.close now owns every registered resource.
+        startup.pop_all()  # HostedApp.close releases the registered wrapper resources and any owned host.
         return hosted
 
 

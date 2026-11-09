@@ -20,6 +20,7 @@ from fastapi.testclient import TestClient
 from jwt.algorithms import RSAAlgorithm
 from structlog.testing import capture_logs
 
+import blizzard.foundation.assets as assets
 from blizzard.foundation.clock import SystemClock
 from blizzard.foundation.host_registration_state import HostRegistrationState
 from blizzard.foundation.store.engine import create_engine_from_url
@@ -50,6 +51,15 @@ _RUNNER_ID = "runner-a"
 _NAMES = CookieNames(_RUNNER_ID)
 _TAILNET = "https://tailnet.example:8431"
 _LOOPBACK = "http://127.0.0.1:8431"
+
+
+@pytest.fixture(autouse=True)
+def _runner_frontend(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Exercise the served shell without depending on a checkout's generated frontend bundle."""
+    directory = tmp_path / "static" / "runner"
+    directory.mkdir(parents=True)
+    (directory / "index.html").write_text("<app-root>runner shell</app-root>")
+    monkeypatch.setattr(assets, "_STATIC_ROOT", directory.parent)
 
 
 def _keypair() -> tuple[rsa.RSAPrivateKey, dict[str, str]]:
@@ -172,6 +182,7 @@ def test_the_web_surface_is_reachable_with_no_session_when_the_hub_runs_no_idp_s
     client = _build_app(tmp_path, oauth_enabled=False)
     resp = client.get("/")
     assert resp.status_code == 200
+    assert "runner shell" in resp.text
 
 
 def test_the_web_surface_bounces_to_login_when_the_hub_runs_an_idp_surface(tmp_path: Path) -> None:

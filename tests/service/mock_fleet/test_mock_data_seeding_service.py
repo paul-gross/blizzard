@@ -20,7 +20,7 @@ import pytest
 
 from tests.support.fleet_launchers import await_http, terminate
 from tests.support.mock_fleet import require_mock_fleet, service_gate
-from tests.support.scaffolding import LISTENING_FILE, await_listening_url, daemon_log_sink, listening_args
+from tests.support.scaffolding import LISTENING_FILE, await_listening_url, listening_args, spawn_daemon
 
 pytestmark = [pytest.mark.service, service_gate]
 
@@ -51,11 +51,8 @@ def _zero_work_source_hub(hub_dir: Path) -> Generator[httpx2.Client]:
     hub_bin = str(Path(sys.executable).parent / "blizzard-hub")
     subprocess.run([hub_bin, "init", str(hub_dir)], check=True, capture_output=True, text=True)
     log, listening = hub_dir / "daemon.log", hub_dir / LISTENING_FILE
-    proc = subprocess.Popen(
-        [hub_bin, "host", "--dir", str(hub_dir), "--host", "127.0.0.1", *listening_args(listening, 0)],
-        stdout=daemon_log_sink(log),
-        stderr=subprocess.STDOUT,
-        text=True,
+    proc = spawn_daemon(
+        [hub_bin, "host", "--dir", str(hub_dir), "--host", "127.0.0.1", *listening_args(listening, 0)], log=log
     )
     try:
         client = httpx2.Client(base_url=await_listening_url(proc, listening, log=log), timeout=30.0)

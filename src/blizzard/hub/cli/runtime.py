@@ -140,24 +140,27 @@ def host(
         config = replace(config, port=bound_port(sock))
         with click_exception_on(ConfigError):
             app = build_hosted_app(config, version_window=window)
-        click.echo(f"serving blizzard-hub on {config.host}:{config.port}")
-        server = build_early_shutdown_server(
-            app,
-            host=config.host,
-            port=config.port,
-            shutdown_signal=app.state.shutdown,
-            listening_file=listening_file,
-        )
-
-        # The server re-raises a caught signal through the handler installed before it ran; the
-        # default would kill the process, so this one lets `run()` return and the disposal run.
-        def _handle_signal(signum: int, frame: types.FrameType | None) -> None:
-            server.handle_exit(signum, frame)
-
-        signal.signal(signal.SIGTERM, _handle_signal)
-        signal.signal(signal.SIGINT, _handle_signal)
         try:
+            click.echo(f"serving blizzard-hub on {config.host}:{config.port}")
+            server = build_early_shutdown_server(
+                app,
+                host=config.host,
+                port=config.port,
+                shutdown_signal=app.state.shutdown,
+                listening_file=listening_file,
+            )
+
+            # The server re-raises a caught signal through the handler installed before it ran; the
+            # default would kill the process, so this one lets `run()` return and the disposal run.
+            def _handle_signal(signum: int, frame: types.FrameType | None) -> None:
+                server.handle_exit(signum, frame)
+
+            signal.signal(signal.SIGTERM, _handle_signal)
+            signal.signal(signal.SIGINT, _handle_signal)
             server.run(sockets=[sock])
         finally:
-            app.state.engine.dispose()
-            app.state.platform_tracing.shutdown(PLATFORM_TRACING_SHUTDOWN_SECONDS)
+            # Lifespan normally closes the hosted resources; cover servers that never enter it too.
+            try:
+                app.state.hosted_cleanup.close()
+            finally:
+                app.state.platform_tracing.shutdown(PLATFORM_TRACING_SHUTDOWN_SECONDS)
