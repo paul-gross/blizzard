@@ -17,6 +17,9 @@ const SURFACE_SEGMENT = openLookup<RecordKind, readonly string[] | null>(
     [RecordKind.CADENCE]: ['/gardening', 'cadences'],
     [RecordKind.PROJECT_SOURCE_LINK]: null,
     [RecordKind.PROJECT_REPOSITORY_LINK]: null,
+    [RecordKind.URGENCY]: null,
+    [RecordKind.URGENCY_ORDER]: null,
+    [RecordKind.TENANT_SETTINGS]: null,
   },
   () => null,
 );

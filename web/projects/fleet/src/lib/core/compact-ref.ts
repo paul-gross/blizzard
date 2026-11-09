@@ -80,6 +80,7 @@ const ENTITY_DISPLAY = openLookup<IdPrefix, EntityDisplay>(
     flw: defaultDisplay('flw'),
     fsub: defaultDisplay('fsub'),
     htn: defaultDisplay('htn'),
+    urg: defaultDisplay('urg'),
   },
   defaultDisplay,
 );
