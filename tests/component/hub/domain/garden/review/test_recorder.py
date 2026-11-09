@@ -7,82 +7,25 @@ need."""
 from __future__ import annotations
 
 import json
-from dataclasses import dataclass
 from pathlib import Path
-from typing import Literal
 
 from sqlalchemy import select
 
-from blizzard.foundation.node_steps import Executor, JudgedBy, SessionMode
-from blizzard.hub.api.garden_formats import GardenFormats
-from blizzard.hub.domain.chunk.model import WorkItemAuthor
-from blizzard.hub.domain.garden.review.materialize import ReviewFindingsMaterialize, ReviewFindingsOutcome
-from blizzard.hub.domain.garden.review.service import ReviewFindingsRecorder
-from blizzard.hub.domain.garden.review.validation import ReviewFindingsRejected
-from blizzard.hub.domain.graph.model import Graph, Node
 from blizzard.hub.store import schema as s
-from blizzard.hub.store.internal.graph_store import GraphStore
-from blizzard.hub.store.internal.review_findings_store import ReviewFindingsStore
-from tests.support.hub_node_artifacts import record_hub_asset
-from tests.support.scaffolding import (
-    HubHarness,
-    build_hub,
-    chunk_stores,
-    hub_scoped,
-    hub_store_connections,
-    seed_lease,
-    seed_work_item,
+from tests.support.review_recorder_world import (
+    ARTIFACT_NAME,
+    EPOCH,
+    Delivered,
+    deliver,
+    finding_count,
+    record_artifact,
+    seed_chunk,
 )
-
-_NODE_ID = "nd_record_findings"
-_EPOCH = 1
-ARTIFACT_NAME = "review-finding-delta"
-
-
-def _record_findings_node(node_id: str = _NODE_ID, *, graph_id: str = "gr_record_findings") -> Node:
-    return Node(
-        node_id=node_id,
-        graph_id=graph_id,
-        name="record-findings",
-        executor=Executor.HUB,
-        prompt=None,
-        checks=[],
-        produces=[],
-        session=SessionMode.FRESH,
-        judged_by=JudgedBy.WORKER,
-        retries_max=None,
-        retries_exhausted=None,
-    )
-
-
-def seed_chunk(hub: HubHarness) -> str:
-    store_connections = hub_store_connections(hub.engine)
-    node = _record_findings_node()
-    graph = Graph(
-        graph_id="gr_record_findings",
-        name="g",
-        entry_node_id=node.node_id,
-        nodes=[node],
-        edges=[],
-        created_at=hub.clock.now(),
-    )
-    GraphStore(store_connections).mint(graph, definition_yaml="", at=hub.clock.now())
-    item = seed_work_item(
-        store_connections, graph_id="gr_record_findings", author=WorkItemAuthor.user("u_1"), at=hub.clock.now()
-    )
-    return f"ch_{item.ref}"
-
-
-def record_artifact(hub: HubHarness, chunk_id: str, *, content: str, epoch: int = _EPOCH) -> None:
-    assert record_hub_asset(
-        hub,
-        chunk_id,
-        node_id=_NODE_ID,
-        node_name="record-findings",
-        epoch=epoch,
-        name=ARTIFACT_NAME,
-        content=content,
-    )
+from tests.support.scaffolding import (
+    build_hub,
+    hub_scoped,
+    seed_lease,
+)
 
 
 def _deferred(ref: str = "F1", *, scope: str = "blizzard", severity: str = "should-fix") -> dict[str, object]:
@@ -109,38 +52,6 @@ def _delta(entries: list[dict[str, object]]) -> str:
     return json.dumps({"entries": entries})
 
 
-@dataclass(frozen=True)
-class _Delivered:
-    outcome: Literal["recorded", "invalid", "fenced"]
-    detail: str = ""
-
-
-def deliver(hub: HubHarness, chunk_id: str, *, epoch: int = _EPOCH) -> _Delivered:
-    """Deliver the chunk's newest review-finding delta from its record-findings node at ``epoch``."""
-    chunk = hub.services.chunks.record.get(chunk_id)
-    assert chunk is not None, chunk_id
-    graph = hub.services.graphs.get(chunk.graph_id)
-    node = graph.node_by_id(_NODE_ID) if graph is not None else None
-    assert node is not None
-    recorder = ReviewFindingsRecorder(
-        artifacts=chunk_stores(hub.engine, hub.clock).artifacts,
-        materialize=ReviewFindingsMaterialize(
-            delivery=ReviewFindingsStore(hub_store_connections(hub.engine)), clock=hub.clock
-        ),
-        formats=GardenFormats(),
-    )
-    try:
-        outcome = recorder.record(chunk=chunk, node=node, epoch=epoch)
-    except ReviewFindingsRejected as exc:
-        return _Delivered("invalid", str(exc))
-    return _Delivered("fenced") if outcome is ReviewFindingsOutcome.FENCED else _Delivered("recorded")
-
-
-def finding_count(hub: HubHarness) -> int:
-    with hub.engine.begin() as conn:
-        return len(conn.execute(hub_scoped(select(s.findings))).all())
-
-
 # --- recorded --------------------------------------------------------------
 
 
@@ -151,7 +62,7 @@ def test_a_deferred_entry_is_recorded_as_a_review_sourced_finding(tmp_path: Path
 
     delivered = deliver(hub, chunk_id)
 
-    assert delivered == _Delivered("recorded")
+    assert delivered == Delivered("recorded")
     with hub.engine.begin() as conn:
         row = conn.execute(hub_scoped(select(s.findings))).one()
     assert row.source == "review"
@@ -252,7 +163,7 @@ def test_a_replayed_delivery_still_reports_recorded_and_mints_nothing_new(tmp_pa
     record_artifact(hub, chunk_id, content=_delta([_deferred()]))
 
     first = deliver(hub, chunk_id)
-    assert first == _Delivered("recorded")
+    assert first == Delivered("recorded")
     assert finding_count(hub) == 1
 
     second = deliver(hub, chunk_id)
@@ -268,9 +179,9 @@ def test_a_replay_at_a_fresh_epoch_stays_a_no_op(tmp_path: Path) -> None:
     chunk_id = seed_chunk(hub)
     record_artifact(hub, chunk_id, content=_delta([_deferred()]))
     first = deliver(hub, chunk_id)
-    assert first == _Delivered("recorded")
+    assert first == Delivered("recorded")
 
-    second = deliver(hub, chunk_id, epoch=_EPOCH + 1)
+    second = deliver(hub, chunk_id, epoch=EPOCH + 1)
 
     assert second.outcome == "recorded"
     assert finding_count(hub) == 1
@@ -287,7 +198,7 @@ def test_a_delivery_for_a_stopped_chunk_is_fenced_and_lands_nothing(tmp_path: Pa
 
     delivered = deliver(hub, chunk_id)
 
-    assert delivered == _Delivered("fenced")
+    assert delivered == Delivered("fenced")
     assert finding_count(hub) == 0
     with hub.engine.begin() as conn:
         assert (
@@ -306,5 +217,5 @@ def test_a_delivery_a_restart_superseded_is_fenced_and_lands_nothing(tmp_path: P
 
     delivered = deliver(hub, chunk_id, epoch=1)
 
-    assert delivered == _Delivered("fenced")
+    assert delivered == Delivered("fenced")
     assert finding_count(hub) == 0

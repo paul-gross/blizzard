@@ -479,7 +479,7 @@ def test_a_lifecycle_refusal_takes_precedence_over_a_hub_format_refusal(tmp_path
 def test_review_content_staged_unchecked_is_still_judged_invalid_by_delivery(tmp_path: Path) -> None:
     """Staging is not acceptance: content a no-verdict stage let through is delivered by the real
     ``record-findings`` first delivery, which answers invalid and creates no finding."""
-    from tests.component.hub.domain.garden.review.test_recorder import (
+    from tests.support.review_recorder_world import (
         ARTIFACT_NAME,
         deliver,
         finding_count,
