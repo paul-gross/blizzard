@@ -5,8 +5,9 @@ per-kind verbs decide, and hands the whole ordered plan to :class:`IConfigApplyW
 transaction. It never retires a record the document leaves out. A record the document omits a field of keeps
 that field (sparse merge, ``bzh:configured-record``); a record that already stands as declared writes nothing.
 
-A section of a kind owned by a package that builds on this one — the ``projects`` section — is planned by its owner
-and handed in already planned; its writes commit after the repositories and before the scopes."""
+A section of a kind owned by a package that builds on this one — the ``projects`` section, and the ``urgencies``,
+``urgency_order`` and ``settings`` sections — is planned by its owner and handed in already planned; the projects'
+writes commit after the repositories, then the urgency sections', both before the scopes."""
 
 from __future__ import annotations
 
@@ -53,6 +54,9 @@ REPOSITORIES_SECTION = "repositories"
 SCOPES_SECTION = "scopes"
 ROUTINES_SECTION = "routines"
 CADENCES_SECTION = "cadences"
+URGENCIES_SECTION = "urgencies"
+URGENCY_ORDER_SECTION = "urgency_order"
+SETTINGS_SECTION = "settings"
 
 
 class SecretNotActive(ConfigFieldError):
@@ -214,6 +218,8 @@ class ApplyPlan:
     outcomes: tuple[EntryOutcome, ...] = ()
     #: The landing-order facts, committed after ``writes`` so a link the plan creates stands before its position.
     positions: tuple[PlannedPosition, ...] = ()
+    #: The keyed locks the writer declares, in their canonical order, before its first write.
+    locks: tuple[tuple[str, str], ...] = ()
 
 
 @domain_model
@@ -225,6 +231,8 @@ class ConfigDeclaration:
     repositories: tuple[RepositoryDeclaration, ...] = ()
     #: The ``projects`` section, planned by the package that owns projects.
     projects: ApplyPlan = ApplyPlan()
+    #: The ``urgencies``, ``urgency_order`` and ``settings`` sections, planned by the package that owns urgencies.
+    urgencies: ApplyPlan = ApplyPlan()
     scopes: tuple[RecordDeclaration, ...] = ()
     routines: tuple[RecordDeclaration, ...] = ()
     cadences: tuple[RecordDeclaration, ...] = ()
@@ -263,10 +271,16 @@ class IConfigApplyWriter(Protocol):
     """Commits every planned write in one transaction."""
 
     def apply(
-        self, writes: Sequence[PlannedWrite], *, dry_run: bool, positions: Sequence[PlannedPosition] = ()
+        self,
+        writes: Sequence[PlannedWrite],
+        *,
+        dry_run: bool,
+        positions: Sequence[PlannedPosition] = (),
+        locks: Sequence[tuple[str, str]] = (),
     ) -> None:
-        """Run each write through the same in-transaction checks its per-record verb runs, in order, then append each
-        of ``positions`` while its project's landing-order sequence stands at its ``from_seq``.
+        """Declare ``locks`` once, then run each write through the same in-transaction checks its per-record verb
+        runs, in order, then append each of ``positions`` while its project's landing-order sequence stands at its
+        ``from_seq``.
         With ``dry_run`` the transaction is rolled back after the last write. The first refusal aborts
         the apply as :class:`ApplyEntryRefused`, leaving the store unchanged."""
         ...
@@ -285,6 +299,8 @@ def reconcile(declaration: ConfigDeclaration, stored: StoredConfig, ctx: ChangeC
     _reconcile_section(_RepositorySection(declaration.repositories, stored, ctx, at), stored.repositories, plan)
     plan.writes.extend(declaration.projects.writes)
     plan.outcomes.extend(declaration.projects.outcomes)
+    plan.writes.extend(declaration.urgencies.writes)
+    plan.outcomes.extend(declaration.urgencies.outcomes)
     # Scopes reconcile first, so a routine may name a scope the same document declares, and cadences last, so a
     # document may declare a routine and the cadence that keeps it.
     for section, kind, declared, stored_records in (
@@ -293,7 +309,12 @@ def reconcile(declaration: ConfigDeclaration, stored: StoredConfig, ctx: ChangeC
         (CADENCES_SECTION, RecordKind.CADENCE, declaration.cadences, stored.cadences),
     ):
         _reconcile_section(_DeclaredRecordSection(section, kind, declared, stored, ctx, at), stored_records, plan)
-    return ApplyPlan(writes=tuple(plan.writes), outcomes=tuple(plan.outcomes), positions=declaration.projects.positions)
+    return ApplyPlan(
+        writes=tuple(plan.writes),
+        outcomes=tuple(plan.outcomes),
+        positions=declaration.projects.positions,
+        locks=declaration.urgencies.locks,
+    )
 
 
 @domain_model
