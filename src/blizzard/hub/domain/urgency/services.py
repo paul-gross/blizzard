@@ -147,7 +147,7 @@ class UrgencyReading:
 
     def _views(self, shown: Sequence[Urgency], order: UrgencyOrder) -> list[UrgencyView]:
         default_id = _settings(self._settings).default_urgency_id
-        places = {p.urgency_id: index for index, p in enumerate(order.live, start=1)}
+        places = {p.urgency_id: index for index, p in enumerate(order.live(), start=1)}
         counts = self._chunks.open_counts([u.urgency_id for u in shown])
         return [
             UrgencyView(

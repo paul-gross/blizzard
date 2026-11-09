@@ -381,7 +381,7 @@ class ConfigApplication:
     def _plan_urgencies(self, entries: DocumentEntries, ctx: ChangeContext) -> ApplyPlan:
         """The planned urgency sections, from the tenant's urgencies, their order — read first, so a position landing
         after it leaves the sequence stale — and its settings; nothing is read for a document stating none."""
-        if not entries.urgencies.stated:
+        if not entries.urgencies.is_stated():
             return ApplyPlan()
         order = self._urgency_order.order()
         settings = self._tenant_settings.get()

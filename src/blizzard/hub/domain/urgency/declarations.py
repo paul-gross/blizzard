@@ -90,8 +90,7 @@ class UrgencySections:
     order: tuple[str, ...] | None = None
     default_urgency: str | None | UnsetType = UNSET
 
-    @property
-    def stated(self) -> bool:
+    def is_stated(self) -> bool:
         return bool(self.urgencies) or self.order is not None or self.default_urgency is not UNSET
 
 

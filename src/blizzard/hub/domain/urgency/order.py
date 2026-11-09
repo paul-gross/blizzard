@@ -83,13 +83,12 @@ class UrgencyOrder:
     def of(cls, placed: Iterable[Placed], seq: int) -> UrgencyOrder:
         return cls(tuple(in_order(placed)), seq)
 
-    @property
     def live(self) -> tuple[Placed, ...]:
         """The live urgencies, in order."""
         return tuple(p for p in self.placed if not p.retired)
 
     def live_slugs(self) -> tuple[str, ...]:
-        return tuple(p.slug for p in self.live)
+        return tuple(p.slug for p in self.live())
 
     def after(self, facts: Sequence[PositionFact]) -> UrgencyOrder:
         """This order once ``facts`` land, its sequence unknown until they do."""
@@ -135,10 +134,10 @@ class UrgencyOrder:
             if urgency_id in seen:
                 raise UrgencyOrderIncomplete(f"urgency {placed.slug} is named twice")
             seen.add(urgency_id)
-        left_out = [p.slug for p in self.live if p.urgency_id not in seen]
+        left_out = [p.slug for p in self.live() if p.urgency_id not in seen]
         if left_out:
             raise UrgencyOrderIncomplete(f"the order leaves out {', '.join(left_out)}")
-        if tuple(p.urgency_id for p in self.live) == tuple(ordered):
+        if tuple(p.urgency_id for p in self.live()) == tuple(ordered):
             return ()
         wanted = {urgency_id: FIRST_POSITION + index for index, urgency_id in enumerate(ordered)}
         return tuple(
