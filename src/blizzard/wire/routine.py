@@ -15,7 +15,8 @@ from blizzard.wire.vocabulary import OPEN
 
 class RoutineCreateRequest(BaseModel):
     """``slug`` is the routine's lineage and handle, ``name`` its display name; at least one is stated, and with
-    one missing the request resolves to the same value for both."""
+    one missing the request resolves to the same value for both. A request stating only ``name`` is deprecated and
+    will be removed in 0.6; state ``slug``."""
 
     slug: str | None = None
     name: str | None = None
@@ -28,10 +29,10 @@ class RoutineCreateRequest(BaseModel):
 
 
 class RoutineDocument(BaseModel):
-    """A routine as a document entry, keyed by its immutable ``slug`` (or, in the older form, its ``name``) — the
-    model whose JSON Schema ``GET /api/config/schema/routines`` serves. ``scopes`` is the linked scope set, the
-    default scope always among it; an entry that omits it leaves the stored set. Every scope an entry names must be
-    stored or declared in the same document, and ``graph_name`` must name an enabled graph."""
+    """A routine as a document entry, keyed by its immutable ``slug`` (or, in the older form, its ``name``, deprecated
+    and removed in 0.6) — the model whose JSON Schema ``GET /api/config/schema/routines`` serves. ``scopes`` is the
+    linked scope set, the default scope always among it; an entry that omits it leaves the stored set. Every scope an
+    entry names must be stored or declared in the same document, and ``graph_name`` must name an enabled graph."""
 
     model_config = ConfigDict(extra="forbid")
 

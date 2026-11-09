@@ -13347,7 +13347,8 @@ export type RoutineBaselineView = {
  * RoutineCreateRequest
  *
  * ``slug`` is the routine's lineage and handle, ``name`` its display name; at least one is stated, and with
- * one missing the request resolves to the same value for both.
+ * one missing the request resolves to the same value for both. A request stating only ``name`` is deprecated and
+ * will be removed in 0.6; state ``slug``.
  */
 export type RoutineCreateRequest = {
     /**

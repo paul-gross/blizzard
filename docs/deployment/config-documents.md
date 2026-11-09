@@ -78,13 +78,14 @@ that must already exist and be active; a document never carries a secret's value
 `blizzard hub secret create`.
 
 A scope entry is keyed by its `slug`, and so is a routine entry; a routine's `name` is its editable display name. An
-entry states its `slug`, its `name`, or both. A `name`-only entry is the older form: it is keyed by the name as the
-slug, and it never touches the stored display name, so re-applying it after an operator renamed the routine leaves that
-name alone. An entry that states `slug` and `name` sets the display name. A routine's `scopes` states its linked scope
-set, its default scope always among it; an entry that leaves `scopes` out keeps the stored set. Every scope a routine
-entry names, as its `default_scope_slug` or in `scopes`, must be stored already or declared in the same document's
-`scopes` section, and its `graph_name` must name an enabled graph when the entry creates the routine or moves it to
-another graph; otherwise the entry is refused. An apply never creates a scope the document does not declare.
+entry states its `slug`, its `name`, or both. A `name`-only entry is the older form, deprecated and removed in 0.6: it
+is keyed by the name as the slug, and it never touches the stored display name, so re-applying it after an operator
+renamed the routine leaves that name alone. An entry that states `slug` and `name` sets the display name. A routine's
+`scopes` states its linked scope set, its default scope always among it; an entry that leaves `scopes` out keeps the
+stored set. Every scope a routine entry names, as its `default_scope_slug` or in `scopes`, must be stored already or
+declared in the same document's `scopes` section, and its `graph_name` must name an enabled graph when the entry creates
+the routine or moves it to another graph; otherwise the entry is refused. An apply never creates a scope the document
+does not declare.
 
 A work source entry and a repository entry are each keyed by its `slug`; its `name` is the display name, the slug when a
 new record's entry leaves it out and as stored when an existing record's does. An entry without a `slug` is refused
