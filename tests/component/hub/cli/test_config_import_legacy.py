@@ -116,9 +116,10 @@ def hub(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> HubConfig:
 
 
 def _past_the_default_project(query: sa.Select[tuple[object, ...]]) -> sa.Select[tuple[object, ...]]:
-    """``query``, leaving out the store's default project's ``create`` row, which the migration wrote."""
+    """``query``, leaving out the ``create`` rows of the store's default project, urgency, and settings, which the
+    migration wrote."""
     if query.get_final_froms() == [config_changes]:
-        return query.where(config_changes.c.record_kind != "project")
+        return query.where(config_changes.c.record_kind.not_in(("project", "urgency", "tenant_settings")))
     return query
 
 
