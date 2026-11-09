@@ -9,6 +9,7 @@ import {
   KitMenuItem,
   KitMenuItemSubtitle,
   KitMenuPanel,
+  ageMs,
   formatHeldFor,
   injectNowSignal,
   pauseCopy,
@@ -78,7 +79,8 @@ export class MachineDetailHeader {
     if (!last) return 'No worker';
     const ending = sessionEnding(last);
     const endedAt = last.closed_at ?? last.last_heartbeat_at;
-    const ago = endedAt ? ` ${formatHeldFor(this.now() - Date.parse(endedAt))} ago` : '';
+    const age = ageMs(endedAt, this.now());
+    const ago = age === null ? '' : ` ${formatHeldFor(age)} ago`;
     const how = ending === null ? '' : ` · ${ending === 'exited' ? 'worker exited' : ending}`;
     return `No live worker — last session ended${ago}${how}`;
   });
