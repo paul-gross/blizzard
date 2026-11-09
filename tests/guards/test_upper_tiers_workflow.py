@@ -42,6 +42,7 @@ def test_the_check_names_the_branch_protection_requires_are_the_ones_the_jobs_em
 
 
 def test_playwright_uv_bootstrap_has_a_pinned_alternate_source_without_weakening_tests() -> None:
+    assert _JOBS["service-playwright"]["env"]["MISE_DISABLE_TOOLS"] == "uv"
     steps = _JOBS["service-playwright"]["steps"]
     primary = next(step for step in steps if step.get("id") == "setup-uv")
     fallback = next(step for step in steps if step.get("name") == "Install uv from PyPI if GitHub setup failed")

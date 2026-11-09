@@ -123,6 +123,8 @@ jobs:
     needs: [mock-ref]
     name: service tier (blizzard:service-test) — playwright shard ${{ matrix.shard }}/${{ matrix.shards }}
     runs-on: ubuntu-latest
+    env:
+      MISE_DISABLE_TOOLS: uv
     strategy:
       fail-fast: false
       matrix:
