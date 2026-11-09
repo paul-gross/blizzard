@@ -10,16 +10,13 @@ from dataclasses import dataclass, field
 from blizzard.foundation.roles import domain_model
 from blizzard.hub.domain.garden.formats import DeferredReviewEntry, ReviewDelta
 from blizzard.hub.domain.garden.scopes import ScopeSlug, ScopeSlugError
+from blizzard.hub.domain.graph.actions import REVIEW_FINDING_DELTA_ARTIFACT
 
 
 class ReviewFindingsRejected(Exception):
     """A delivered review-finding delta failed validation. This exception's own message
     is the operator-legible reason the graph attaches to its bounce — never a raw
     pydantic error."""
-
-
-#: The `review` node's own fixed `produces:` asset name.
-REVIEW_FINDING_DELTA_ARTIFACT = "review-finding-delta"
 
 
 def require_review_delta[A](artifact: A | None, *, chunk_id: str) -> A:

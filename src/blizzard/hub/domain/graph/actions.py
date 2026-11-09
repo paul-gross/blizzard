@@ -23,6 +23,8 @@ CONFLICT = "conflict"
 #: Answers that send a submission back as routine rework — a step the graph authors to take it up — rather than a
 #: failure of the work.
 REWORK_ANSWERS: frozenset[str] = frozenset({CONFLICT})
+#: The fixed asset name the ``record-findings`` action reads — the one home of the literal.
+REVIEW_FINDING_DELTA_ARTIFACT = "review-finding-delta"
 
 
 class ArtifactFormat(StrEnum):
@@ -31,6 +33,7 @@ class ArtifactFormat(StrEnum):
 
     FINDING_DELTA = "finding-delta"
     GARDEN_PROPOSAL_CANDIDATES = "garden-proposal-candidates"
+    REVIEW_FINDING_DELTA = "review-finding-delta"
 
 
 @domain_model
@@ -50,6 +53,8 @@ class ActionSpec:
     lands: bool
     # The format each arg's named artifacts must satisfy, for the args that owe one.
     arg_formats: Mapping[str, ArtifactFormat] = field(default_factory=dict[str, ArtifactFormat])
+    # The format of each fixed-name artifact the action reads regardless of its args.
+    input_formats: Mapping[str, ArtifactFormat] = field(default_factory=dict[str, ArtifactFormat])
 
     def answers_for(self, action_args: Mapping[str, tuple[str, ...]]) -> frozenset[str]:
         """The choices a node passing ``action_args`` may be answered with."""
@@ -101,6 +106,7 @@ RECORD_FINDINGS = ActionSpec(
     answers=frozenset({"recorded", "invalid", "failure"}),
     answers_from_arg=None,
     lands=False,
+    input_formats=MappingProxyType({REVIEW_FINDING_DELTA_ARTIFACT: ArtifactFormat.REVIEW_FINDING_DELTA}),
 )
 GARDEN_DELIVER = ActionSpec(
     name="garden-deliver",

@@ -693,7 +693,8 @@ class Graph:
 
     def artifact_formats(self, name: str, catalogue: HubActionCatalogue) -> frozenset[ArtifactFormat]:
         """The formats the artifact ``name`` must satisfy: the union, over every hub node, of the format its
-        action gives each arg whose ``with:`` lists ``name``."""
+        action gives each arg whose ``with:`` lists ``name`` and the format its action gives ``name`` as a
+        fixed input."""
         formats: set[ArtifactFormat] = set()
         for node in self.nodes:
             if node.action is None:
@@ -701,6 +702,9 @@ class Graph:
             spec = catalogue.get(node.action)
             if spec is None:
                 continue
+            fixed = spec.input_formats.get(name)
+            if fixed is not None:
+                formats.add(fixed)
             for arg, names in node.action_args.items():
                 fmt = spec.arg_formats.get(arg)
                 if fmt is not None and name in names:
