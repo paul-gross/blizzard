@@ -42,8 +42,10 @@ class IWriteWorkItemRepository(IReadWorkItemRepository, Protocol):
         stated_priority: str | None,
         at: datetime,
         chunk: Chunk,
+        transaction: Transaction | None = None,
     ) -> HubWorkItem:
-        """Insert the item and its chunk atomically using an allocated ref."""
+        """Insert the item and its chunk atomically using an allocated ref; joins ``transaction`` when given, else
+        opens its own write."""
         ...
 
     def create_run_with_chunk(
@@ -92,6 +94,8 @@ class IWriteWorkItemRepository(IReadWorkItemRepository, Protocol):
         chunk: Chunk,
         reason: str | None,
         closed_by: str,
+        transaction: Transaction | None = None,
     ) -> HubWorkItem | None:
-        """Atomically mint the item, chunk and proposal closure, or return None if already closed."""
+        """Atomically mint the item, chunk and proposal closure, or return None if already closed; joins
+        ``transaction`` when given, else opens its own write."""
         ...

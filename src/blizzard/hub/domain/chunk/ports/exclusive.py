@@ -60,6 +60,12 @@ class ILockedWorkRefRead(Protocol):
     Deliberately not an :class:`ILockedChunkRead`: a pointer-lock handle holds no chunk-row lock,
     so it cannot satisfy a chunk-row ``*_locked`` write."""
 
+    @property
+    def transaction(self) -> LockedTransaction:
+        """The locked unit this handle reads in, which a repository method taking ``transaction`` joins
+        (``bzh:transaction-participation``)."""
+        ...
+
     def live_holders(self, pointers: Sequence[WorkRef]) -> dict[WorkRef, str]:
         """:meth:`~blizzard.hub.domain.chunk.ports.work_refs.IReadChunkWorkRefsRepository.live_holders`,
         read under the lock."""
@@ -84,13 +90,14 @@ class IChunkExclusiveWrites(Protocol):
         ...
 
     def locked_work_refs(
-        self, pointers: Sequence[WorkRef], *, project: ProjectId | None = None
+        self, pointers: Sequence[WorkRef], *, project: ProjectId | None = None, keys: Sequence[tuple[str, str]] = ()
     ) -> AbstractContextManager[ILockedWorkRefRead]:
         """Lock every named pointer, first, in sorted order, then yield the read handle bound
         to that one connection — for a decision whose race has no chunk row yet to lock. Each
         pointer locks only its own key. With
         ``project``, its source links' key is taken before any pointer's, the one order every
-        locker of both keeps; a source link or unlink of that project waits for the commit. A
+        locker of both keeps; a source link or unlink of that project waits for the commit. ``keys`` are
+        declared beside them in the one lock set, in canonical order. A
         write under the lock goes through a write repository's own ``*_locked`` method, taking
         this same handle."""
         ...

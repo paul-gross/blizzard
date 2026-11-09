@@ -649,6 +649,8 @@ class TenantStores:
     tenant_settings: TenantSettingsStore
     #: The open chunks carrying an urgency, counted and moved.
     urgency_chunks: UrgencyChunksStore
+    #: The tenant's default urgency, read under every mint's locks.
+    tenant_default: TenantDefault
     clock: IClock
 
     @property
@@ -678,6 +680,9 @@ def build_tenant_stores(connections: ScopedConnections, *, clock: IClock) -> Ten
     garden_proposal_store = GardenProposalStore(connections)
     garden_proposal_closure_store = GardenProposalClosureStore(connections)
     project_links = ProjectLinkStore(connections)
+    urgencies = UrgencyStore(connections)
+    tenant_settings = TenantSettingsStore(connections)
+    tenant_default = TenantDefault(settings=tenant_settings, urgencies=urgencies)
     return TenantStores(
         connections=connections,
         transactions=transactions,
@@ -704,10 +709,11 @@ def build_tenant_stores(connections: ScopedConnections, *, clock: IClock) -> Ten
         config_apply=ConfigApplyStore(connections),
         config_import=ConfigImportStore(connections),
         invitations=InvitationStore(connections),
-        urgencies=UrgencyStore(connections),
+        urgencies=urgencies,
         urgency_order=UrgencyOrderStore(connections),
-        tenant_settings=TenantSettingsStore(connections),
+        tenant_settings=tenant_settings,
         urgency_chunks=UrgencyChunksStore(connections),
+        tenant_default=tenant_default,
         work_item_edits=WorkItemEditService(
             items=work_item_store,
             work_refs=chunk_stores.work_refs,
@@ -715,6 +721,8 @@ def build_tenant_stores(connections: ScopedConnections, *, clock: IClock) -> Ten
             facts=chunk_stores.facts,
             clock=clock,
             delete=delete,
+            default=tenant_default,
+            transactions=transactions,
         ),
         garden_proposal_resolution=GardenProposalDeliveryResolution(
             closures=garden_proposal_closure_store,
@@ -1206,6 +1214,7 @@ def build_tenant_services(stores: TenantStores, parts: TenantServiceParts, *, ev
     )
     work_ref_label: WorkRefLabel = work_sources.label
     flow_line_factory = FlowLineFactory(facts=chunk_facts, record=chunk_record, graphs=graph_store)
+    tenant_default = stores.tenant_default
     cadence_attention = CadenceAttention(
         routines=routine_store, routine_scopes=routine_scope_store, scopes=scope_store, graphs=graph_store
     )
@@ -1241,6 +1250,7 @@ def build_tenant_services(stores: TenantStores, parts: TenantServiceParts, *, ev
             items=work_item_store,
             labels=work_sources,
             clock=clock,
+            default=tenant_default,
         ),
         promote=PromoteService(
             record=chunk_record, queue=chunk_queue, facts=chunk_facts, transactions=stores.transactions, clock=clock
@@ -1461,7 +1471,7 @@ def build_tenant_services(stores: TenantStores, parts: TenantServiceParts, *, ev
             transactions=stores.transactions,
             clock=clock,
         ),
-        tenant_default=TenantDefault(settings=stores.tenant_settings, urgencies=stores.urgencies),
+        tenant_default=tenant_default,
         routines=routine_store,
         routine_scopes=routine_scope_store,
         routine_scope_membership=RoutineScopeMembership(routine_scopes=routine_scope_store, clock=clock),
@@ -1492,6 +1502,7 @@ def build_tenant_services(stores: TenantStores, parts: TenantServiceParts, *, ev
             facts=chunk_facts,
             transactions=stores.transactions,
             clock=clock,
+            default=tenant_default,
         ),
         routine_run=RunService(
             routines=routine_store,
@@ -1502,6 +1513,8 @@ def build_tenant_services(stores: TenantStores, parts: TenantServiceParts, *, ev
             items=work_item_store,
             work_refs=chunk_work_refs,
             clock=clock,
+            default=tenant_default,
+            transactions=stores.transactions,
         ),
         routine_baselines=RoutineBaselineService(finding_sets=finding_set_store, delivery=chunk_delivery),
         findings=finding_store,

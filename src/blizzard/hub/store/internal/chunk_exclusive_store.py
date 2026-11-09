@@ -150,13 +150,13 @@ class ChunkExclusiveWrites:
 
     @contextmanager
     def locked_work_refs(
-        self, pointers: Sequence[WorkRef], *, project: ProjectId | None = None
+        self, pointers: Sequence[WorkRef], *, project: ProjectId | None = None, keys: Sequence[tuple[str, str]] = ()
     ) -> Generator[ILockedWorkRefRead, None, None]:
         with self._transactions.begin() as transaction:
-            keys = [(_POINTER_LOCK_NAMESPACE, pointer_lock_key(p)) for p in pointers]
+            declared = [(_POINTER_LOCK_NAMESPACE, pointer_lock_key(p)) for p in pointers]
             if project is not None:
-                keys.append((PROJECT_SOURCE_LINKS_LOCK_NAMESPACE, project))
-            locked = transaction.lock_set(keys=keys)
+                declared.append((PROJECT_SOURCE_LINKS_LOCK_NAMESPACE, project))
+            locked = transaction.lock_set(keys=[*declared, *keys])
             yield LockedWorkRefTransaction(self._store, locked, self._work_refs)
 
 

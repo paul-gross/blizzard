@@ -111,12 +111,13 @@ class WorkItemStore:
         stated_priority: str | None,
         at: datetime,
         chunk: Chunk,
+        transaction: Transaction | None = None,
     ) -> HubWorkItem:
-        """Insert the item row and ``chunk``'s own rows on one ``engine.begin()``
-        connection — the mechanism behind
+        """Insert the item row and ``chunk``'s own rows on one connection — ``transaction``'s when given, else
+        one ``engine.begin()`` — the mechanism behind
         :meth:`~blizzard.hub.domain.chunk.model.IWriteWorkItemRepository.create_with_chunk`'s
         atomicity contract."""
-        with self._store.write("create_with_chunk") as conn:
+        with connection_in(self._store, transaction, "create_with_chunk", write=True) as conn:
             work_item_id = self._insert_item(
                 conn,
                 source=pointer.source,
@@ -295,12 +296,13 @@ class WorkItemStore:
         chunk: Chunk,
         reason: str | None,
         closed_by: str,
+        transaction: Transaction | None = None,
     ) -> HubWorkItem | None:
         """Insert the accepted-and-minted ``garden_proposal_closures`` row, the item, and
         ``chunk``'s own rows on one ``engine.begin()`` connection —
         :meth:`create_with_chunk`'s shape plus the closure row, checked first so an
         already-closed proposal mints nothing."""
-        with self._store.write("accept_create") as conn:
+        with connection_in(self._store, transaction, "accept_create", write=True) as conn:
             if not insert_garden_proposal_closure_row(
                 conn,
                 proposal_id=proposal_id,

@@ -5,7 +5,8 @@ isolation shape)."""
 
 from __future__ import annotations
 
-from collections.abc import Sequence
+from collections.abc import Generator, Sequence
+from contextlib import contextmanager
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from typing import Any, cast
@@ -39,6 +40,9 @@ from blizzard.hub.domain.garden.runs.run import (
 )
 from blizzard.hub.domain.garden.scopes import IReadScopeRepository, Scope
 from blizzard.hub.domain.graph.model import Graph, IReadGraphRepository
+from blizzard.hub.domain.kernel.transactions import IHubTransactions
+from blizzard.hub.domain.urgency.model import UrgencyId
+from blizzard.hub.domain.urgency.services import TenantDefault, default_lock_keys
 from blizzard.hub.domain.work_items.ports import IWriteWorkItemRepository
 
 _PROJECT = "proj_test"
@@ -182,6 +186,47 @@ class _FakeItems:
         raise NotImplementedError(f"should not touch {name!r}")
 
 
+_DEFAULT_URGENCY = UrgencyId("urg_standard")
+
+
+@dataclass
+class _Urgency:
+    urgency_id: UrgencyId
+
+
+class _FakeUnit:
+    """A unit that records the keys it declared and hands itself back as the locked unit."""
+
+    def __init__(self) -> None:
+        self.keys: list[tuple[str, str]] = []
+
+    def lock_set(self, *, chunks: Sequence[str] = (), keys: Sequence[tuple[str, str]] = ()) -> _FakeUnit:
+        self.keys.extend(keys)
+        return self
+
+
+@dataclass
+class _FakeTransactions:
+    units: list[_FakeUnit] = field(default_factory=list[_FakeUnit])
+
+    @contextmanager
+    def begin(self) -> Generator[_FakeUnit, None, None]:
+        unit = _FakeUnit()
+        self.units.append(unit)
+        yield unit
+
+
+class _FakeDefault:
+    """The tenant's default urgency: its locks named before the unit, the urgency read under them."""
+
+    def lock_keys(self) -> list[tuple[str, str]]:
+        return default_lock_keys(_DEFAULT_URGENCY)
+
+    def read(self, transaction: _FakeUnit) -> _Urgency:
+        assert transaction.keys == self.lock_keys(), "the default is read under its locks"
+        return _Urgency(_DEFAULT_URGENCY)
+
+
 def _service(
     *,
     routines: _FakeRoutines | None = None,
@@ -209,6 +254,8 @@ def _service(
         items=cast(IWriteWorkItemRepository, items),
         work_refs=cast(IReadChunkWorkRefsRepository, chunks),
         clock=clock,
+        default=cast(TenantDefault, _FakeDefault()),
+        transactions=cast(IHubTransactions, _FakeTransactions()),
     )
     return service, items, scopes, chunks
 
@@ -359,6 +406,15 @@ def test_run_mints_the_chunk_into_the_routines_own_project() -> None:
     service.run(_ROUTINE, scope=_DEFAULT_SCOPE, mode=RunMode.DELTA, note="first", author=_AUTHOR)
 
     assert items.calls[0]["chunk"].project_id == _PROJECT == items.calls[0]["project_id"]
+
+
+def test_run_mints_the_chunk_with_the_default_urgency_read_inside_its_unit() -> None:
+    service, items, *_ = _service()
+
+    service.run(_ROUTINE, scope=_DEFAULT_SCOPE, mode=RunMode.FULL, note=None, author=_AUTHOR)
+
+    assert items.calls[0]["chunk"].urgency_id == _DEFAULT_URGENCY
+    assert items.calls[0]["transaction"] is not None
 
 
 def test_run_raises_ingest_conflict_when_the_freshly_allocated_ref_races_a_live_holder() -> None:

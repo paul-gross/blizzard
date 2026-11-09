@@ -124,7 +124,7 @@ from blizzard.hub.domain.runners.registration import RunnerAddition, RunnerCapab
 from blizzard.hub.domain.runners.served import resolve_served
 from blizzard.hub.domain.runners.version_window import VersionWindow
 from blizzard.hub.domain.tenancy.administration import DEFAULT_PROJECT_SLUG
-from blizzard.hub.domain.urgency.model import NO_MARK, Urgency
+from blizzard.hub.domain.urgency.model import NO_MARK, Urgency, UrgencyId
 from blizzard.hub.domain.urgency.order import FIRST_POSITION
 from blizzard.hub.domain.urgency.settings import TenantSettings
 from blizzard.hub.egress.writer import (
@@ -463,6 +463,17 @@ def default_project(engine: Engine, tenant: TenantId | None = None) -> str:
     if len(ids) != 1:
         raise AssertionError(f"default_project needs a tenant holding exactly one project; {tenant} holds {len(ids)}")
     return ids[0]
+
+
+def default_urgency(engine: Engine, tenant: TenantId | None = None) -> UrgencyId:
+    """The id of ``tenant``'s default urgency, as its settings name it — the store's only tenant's when ``tenant`` is
+    ``None``."""
+    tenant = tenant if tenant is not None else default_tenant(engine)
+    settings = schema.tenant_settings
+    with engine.connect() as conn:
+        return UrgencyId(
+            conn.execute(sa.select(settings.c.default_urgency_id).where(settings.c.tenant_id == tenant)).scalar_one()
+        )
 
 
 def project_record(hub: HubHarness, project_id: str) -> Project:

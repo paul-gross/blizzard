@@ -13,6 +13,7 @@ from tests.support.scaffolding import (
     build_hub,
     chunk_stores,
     default_project,
+    default_urgency,
     ingest,
     make_ready,
     pointer_token,
@@ -62,7 +63,11 @@ def test_list_row_is_board_legible(tmp_path: Path) -> None:
     )
     unconfigured = WorkRef(source="retired", ref="9")
     unconfigured_chunk = mint_chunk(
-        [unconfigured], graph_id=graph.graph_id, at=hub.clock.now(), project_id=ProjectId(default_project(hub.engine))
+        [unconfigured],
+        graph_id=graph.graph_id,
+        at=hub.clock.now(),
+        project_id=ProjectId(default_project(hub.engine)),
+        urgency_id=default_urgency(hub.engine),
     )
     seed_chunk_record(chunk_stores(hub.engine, hub.clock), unconfigured_chunk)
     unconfigured_id = unconfigured_chunk.chunk_id

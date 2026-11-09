@@ -417,8 +417,12 @@ class TenantDefault:
         self._settings = settings
         self._urgencies = urgencies
 
+    def read_id(self) -> UrgencyId:
+        """The default's id as it stands before the mint's unit — what its locks are named from."""
+        return _settings(self._settings).default_urgency_id
+
     def lock_keys(self) -> list[tuple[str, str]]:
-        return default_lock_keys(_settings(self._settings).default_urgency_id)
+        return default_lock_keys(self.read_id())
 
     def read(self, transaction: Transaction) -> Urgency:
         settings = _settings(self._settings, transaction=transaction)
