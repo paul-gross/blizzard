@@ -9,7 +9,6 @@ from blizzard.wire.problem_types_garden import (
     CadenceAdmissionRefusedProblem,
     CadenceNotFoundProblem,
     CadenceSlugTakenProblem,
-    GardenDefaultGraphRetiredProblem,
     GardenProposalAlreadyClosedProblem,
     GardenProposalInvalidProblem,
     GardenProposalNotFoundProblem,
@@ -158,14 +157,4 @@ def garden_proposal_invalid_problem(detail: str, *, instance: str) -> GardenProp
         detail=detail,
         instance=instance,
         status=422,
-    )
-
-
-def garden_default_graph_retired_problem(detail: str, *, instance: str) -> GardenDefaultGraphRetiredProblem:
-    return GardenDefaultGraphRetiredProblem(
-        type=types.GARDEN_DEFAULT_GRAPH_RETIRED,
-        title="Default graph retired",
-        detail=detail,
-        instance=instance,
-        status=503,
     )

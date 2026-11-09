@@ -132,5 +132,8 @@ def test_accepting_with_the_default_graph_retired_is_503_and_closes_nothing(tmp_
     resp = hub.client.post("/api/garden-proposals/gprop_1/accept", json={"mint_work_item": True})
 
     assert resp.status_code == 503, resp.text
+    assert resp.headers["content-type"].startswith("application/problem+json")
+    assert resp.json()["type"] == "urn:blizzard:problem:default-graph-retired"
+    assert resp.json()["title"] == "Default graph retired"
     assert hub.services.default_graph_doc.name in resp.json()["detail"]
     assert hub.client.get("/api/garden-proposals/gprop_1").json()["closure"] is None

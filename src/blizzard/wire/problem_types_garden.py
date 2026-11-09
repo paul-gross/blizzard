@@ -24,7 +24,6 @@ ROUTINE_NOT_RUNNABLE: Final = "urn:blizzard:problem:routine-not-runnable"
 GARDEN_WINDOW_INVALID: Final = "urn:blizzard:problem:garden-window-invalid"
 GARDEN_PROPOSAL_ALREADY_CLOSED: Final = "urn:blizzard:problem:garden-proposal-already-closed"
 GARDEN_PROPOSAL_INVALID: Final = "urn:blizzard:problem:garden-proposal-invalid"
-GARDEN_DEFAULT_GRAPH_RETIRED: Final = "urn:blizzard:problem:garden-default-graph-retired"
 
 GARDEN_PROBLEM_TYPES: frozenset[str] = frozenset(
     {
@@ -44,7 +43,6 @@ GARDEN_PROBLEM_TYPES: frozenset[str] = frozenset(
         GARDEN_WINDOW_INVALID,
         GARDEN_PROPOSAL_ALREADY_CLOSED,
         GARDEN_PROPOSAL_INVALID,
-        GARDEN_DEFAULT_GRAPH_RETIRED,
     }
 )
 
@@ -115,7 +113,3 @@ class GardenProposalAlreadyClosedProblem(
 class GardenProposalInvalidProblem(ProblemDetails[Literal["urn:blizzard:problem:garden-proposal-invalid"]]):
     """A garden-proposal write states something that cannot hold: a blank or empty field, a body without a mint,
     or an unknown, duplicate, exited, foreign or mislinked finding."""
-
-
-class GardenDefaultGraphRetiredProblem(ProblemDetails[Literal["urn:blizzard:problem:garden-default-graph-retired"]]):
-    """The packaged default graph is retired, so accepting a proposal cannot mint its work item."""

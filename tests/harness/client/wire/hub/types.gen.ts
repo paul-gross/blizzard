@@ -6648,35 +6648,6 @@ export type ForgesListView = {
 };
 
 /**
- * GardenDefaultGraphRetiredProblem
- *
- * The packaged default graph is retired, so accepting a proposal cannot mint its work item.
- */
-export type GardenDefaultGraphRetiredProblem = {
-    /**
-     * Detail
-     */
-    detail: string;
-    /**
-     * Instance
-     */
-    instance: string;
-    /**
-     * Status
-     */
-    status?: number;
-    /**
-     * Title
-     */
-    title: string;
-    /**
-     * Type
-     */
-    type: 'urn:blizzard:problem:garden-default-graph-retired';
-    [key: string]: unknown;
-};
-
-/**
  * GardenProposalAcceptRequest
  *
  * `POST /api/garden-proposals/{proposal_id}/accept`. `mint_work_item`
@@ -25603,7 +25574,7 @@ export type AcceptGardenProposalApiGardenProposalsProposalIdAcceptPostErrors = {
     /**
      * Problem
      */
-    503: HubStoreUnavailableProblem | GardenDefaultGraphRetiredProblem;
+    503: HubStoreUnavailableProblem | DefaultGraphRetiredProblem;
 };
 
 export type AcceptGardenProposalApiGardenProposalsProposalIdAcceptPostError = AcceptGardenProposalApiGardenProposalsProposalIdAcceptPostErrors[keyof AcceptGardenProposalApiGardenProposalsProposalIdAcceptPostErrors];

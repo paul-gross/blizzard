@@ -447,7 +447,6 @@ _RAISED_FACTORIES = {
             "cadence_not_found_problem",
             "cadence_slug_taken_problem",
             "config_field_invalid_problem",
-            "garden_default_graph_retired_problem",
             "garden_proposal_already_closed_problem",
             "garden_proposal_invalid_problem",
             "garden_proposal_not_found_problem",
