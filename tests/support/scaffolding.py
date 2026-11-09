@@ -23,7 +23,7 @@ from contextlib import contextmanager
 from dataclasses import dataclass, field, replace
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
-from typing import IO, Any, NotRequired, Required, TypedDict, cast
+from typing import Any, NotRequired, Required, TypedDict, cast
 from urllib.parse import urlparse
 
 import httpx2
@@ -1867,14 +1867,15 @@ def write_mock_harness_credentials(runner_dir: Path) -> tuple[str, str]:
     return str(claude_credentials), str(opencode_auth)
 
 
-def daemon_log_sink(path: Path) -> IO[str]:
-    """An append-mode file for a spawned daemon's merged stdout/stderr.
-
-    A long-lived daemon must NEVER get ``stdout=PIPE`` (``bzh:daemon-stdout-to-file``):
-    nothing here drains it, so the daemon wedges once the pipe buffer fills, surfacing
-    as an unrelated timeout far from the cause."""
-    path.parent.mkdir(parents=True, exist_ok=True)
-    return path.open("a", buffering=1)
+def spawn_daemon(
+    args: Sequence[str], *, log: Path, env: Mapping[str, str] | None = None, start_new_session: bool = False
+) -> subprocess.Popen[str]:
+    """Spawn with merged output to a file, releasing the parent's handle even on failure."""
+    log.parent.mkdir(parents=True, exist_ok=True)
+    with log.open("a", buffering=1) as sink:
+        return subprocess.Popen(
+            args, env=env, stdout=sink, stderr=subprocess.STDOUT, text=True, start_new_session=start_new_session
+        )
 
 
 def read_daemon_log(path: Path | None) -> str:

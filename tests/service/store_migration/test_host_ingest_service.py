@@ -29,10 +29,10 @@ from tests.support.runner_store_sql import select, utc_text
 from tests.support.scaffolding import (
     LISTENING_FILE,
     await_listening_url,
-    daemon_log_sink,
     listening_args,
     port_of,
     read_daemon_log,
+    spawn_daemon,
     url_of,
 )
 
@@ -237,7 +237,7 @@ def test_a_host_that_ingested_a_colliding_runner_resumes_both_and_delivers_each_
         assert invariants.returncode == 0, invariants.stdout + invariants.stderr
 
         log, listening = here / "daemon.log", here / LISTENING_FILE
-        proc = subprocess.Popen(
+        proc = spawn_daemon(
             [
                 sys.executable,
                 "-m",
@@ -249,9 +249,7 @@ def test_a_host_that_ingested_a_colliding_runner_resumes_both_and_delivers_each_
                 *listening_args(listening, 0),
             ],
             env=runner_spawn_env(hub_url, {"BZ_RUNNER_TICK_SECONDS": "0.5"}),
-            stdout=daemon_log_sink(log),
-            stderr=subprocess.STDOUT,
-            text=True,
+            log=log,
         )
         local = None
         try:

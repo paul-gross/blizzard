@@ -44,12 +44,12 @@ from tests.support.scaffolding import (
     await_listening_url,
     create_repositories,
     create_work_sources,
-    daemon_log_sink,
     ensure_fixture_forge,
     fixture_repositories,
     fixture_work_source,
     listening_args,
     published_port,
+    spawn_daemon,
     write_mock_harness_credentials,
 )
 
@@ -701,7 +701,7 @@ def forge_daemon(bin_dir: Path, origins: Path) -> Generator[httpx2.Client]:
     """The mock forge over ``origins``, on a kernel-picked port; the client's ``base_url`` is its URL."""
     log = origins.parent / "forge.log"
     listening = origins.parent / f"forge.{LISTENING_FILE}"
-    proc = subprocess.Popen(
+    proc = spawn_daemon(
         [
             str(bin_dir / "blizzard-mock-forge"),
             "--repos-dir",
@@ -710,9 +710,7 @@ def forge_daemon(bin_dir: Path, origins: Path) -> Generator[httpx2.Client]:
             "127.0.0.1",
             *listening_args(listening, 0),
         ],
-        stdout=daemon_log_sink(log),
-        stderr=subprocess.STDOUT,
-        text=True,
+        log=log,
     )
     try:
         client = httpx2.Client(base_url=await_listening_url(proc, listening, log=log), timeout=15.0)
@@ -756,12 +754,10 @@ def start_hub(
         env.update(extra_env)
     listening = hub_dir / LISTENING_FILE
     port = published_port(listening)
-    proc = subprocess.Popen(
+    proc = spawn_daemon(
         [hub_bin, "host", "--dir", str(hub_dir), "--host", "127.0.0.1", *listening_args(listening, port)],
         env=env,
-        stdout=daemon_log_sink(hub_dir / "daemon.log"),
-        stderr=subprocess.STDOUT,
-        text=True,
+        log=hub_dir / "daemon.log",
         start_new_session=new_session,
     )
     if port == 0:
@@ -863,12 +859,10 @@ def start_runner(
     )
     _apply_crash_env(env, crash_point)
     listening = runner_dir / LISTENING_FILE
-    return subprocess.Popen(
+    return spawn_daemon(
         [runner_bin, "host", "--dir", str(runner_dir), *listening_args(listening, published_port(listening))],
         env=env,
-        stdout=daemon_log_sink(runner_dir / "daemon.log"),
-        stderr=subprocess.STDOUT,
-        text=True,
+        log=runner_dir / "daemon.log",
     )
 
 
