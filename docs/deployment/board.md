@@ -3,7 +3,7 @@
 The hub's board lays a tenant's chunks out by lane and names each chunk by the work it carries. The project lens that
 narrows it to one project is [projects.md](./projects.md#the-boards-project-lens)'s.
 
-## Board and list layouts
+## Board, list and tracks layouts
 
 The switch in the board's header picks a layout. **Board** is the lane grid. **List** reads every chunk as one
 full-width row, top to bottom: needs human, waiting, and running, each lane newest first; then ready and backlog in the
@@ -21,8 +21,34 @@ dropped, or first at the top. Only ready and backlog rows drag; a row's own cont
 — still act for themselves, and a click anywhere else opens the chunk. Without the permission the rows are the same,
 without the grip.
 
-The layout lives in the URL as `?layout=list`, beside the open chunk's `?chunk=` and under either lens, so a reload or a
-shared link keeps it. With no `layout` the board opens on the grid.
+**Tracks** lays the fleet out in time: one track per environment, grouped under its workspace and the workspace under
+its runner host, with every runner on the host named beside it. Chips pick how far back the window reaches — 6 hours, 24
+hours, 3 days or 7 days — and while it ends at now the bar reads `following now` and the window moves with the clock.
+Panning or zooming pins it where it lands, and `pinned · back to now` returns it to following now.
+
+Each block on a track is a node step a chunk spent in that environment, from when it reached the node to when it left —
+a step still running reaches now. Zoomed out far enough that a chunk's consecutive steps would be too narrow to see,
+they fold into one block spanning them, which names how many steps it holds; zoom in to see each. A block is named by
+its node and shaded by it. A step that failed is cut by darker diagonal stripes over its shade; a step still running
+carries a green edge at its head, red while an escalation of it still waits on a person. An escalation something later
+superseded leaves no mark on the block, though its hover still names it. Under the all-projects lens with more than one
+project, each block is tinted with its chunk's project colour; otherwise it is tinted with its runner's colour, and
+while the runners are few the bar keys each runner's name to its colour. A chunk moved to other environments mid-step
+shows the step on each environment that held it. Beside the timeline, each environment reads what it holds now: the
+chunk and step it is running — halted, with the cause, while an escalation of the step still waits on a person — or the
+one it last went idle after. An environment shows while it holds a step in the window, so one retired since still shows
+the work it held.
+
+Selecting a block opens the step drawer. It names where the step ran — the host, workspace, environment and runner —
+when it began and ended and how long it held, its spend with tokens, and the harness and model its session ran on. It
+lists the step's escalations, the artifacts the node recorded during the step, and the session's transcript, which keeps
+growing while the step runs. Last comes the chunk's path: every step it took, across every environment, on one strip,
+with the waits between them; selecting a step there moves the drawer to it.
+
+The layout lives in the URL as `?layout=list` or `?layout=tracks`, beside the open chunk's `?chunk=` and under either
+lens, so a reload or a shared link keeps it. With no `layout` the board opens on the grid. Under Tracks the open step
+lives there too: `?step=` names it by its session, and `?at=` by the instant it began, for a step no session of a runner
+ran. Selecting a different chunk clears both.
 
 ## Work item titles
 

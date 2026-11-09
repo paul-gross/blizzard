@@ -1,0 +1,216 @@
+<fleet-kit-panel class="sd" [bodyScroll]="false" data-testid="step-drawer" role="region" aria-label="Node step detail">
+  <div class="d-frame">
+    @if (placed() === null && (state() === 'empty' || state() === 'error')) {
+      <!-- No step to name the header: only its close button, so the drawer still closes as it does over a step. -->
+      <header class="d-head">
+        <span class="d-title"></span>
+        <fleet-kit-close-button testid="step-drawer-close" (click)="dismiss.emit()" />
+      </header>
+    }
+    <fleet-kit-async-state
+      [state]="state()"
+      loadingText="Loading step…"
+      errorText="FAILED TO LOAD STEP"
+      errorTestid="step-drawer-error"
+      emptyText="NO NODE STEP YET — THIS CHUNK HAS NOT STARTED A NODE"
+      emptyTestid="step-drawer-empty"
+    />
+    @if (placed(); as here) {
+      @let s = here.segment;
+      <!-- The step's identity: the session that ran it, in full — its own name, which the chunk's node history,
+           its transcripts and the runner's logs all carry; under it the chunk's project and ref (to its page), the
+           node, where it ran, and on what. -->
+      <header class="d-head">
+        <div class="d-title">
+          <span class="d-line">
+            <!-- A step with no session id to name it — a hub-side one, one whose session start the hub never heard, or
+                 a session that took the chunk over on a forced entry — is named by its node. -->
+            @let who = identity(s);
+            <span class="id" data-testid="step-drawer-lease" [title]="who.title">{{ who.label }}</span>
+            @if (who.hub) {
+              <span class="st st-hub">hub step</span>
+            }
+            <!-- Only an escalation still open badges the step; a superseded one stays in the step's escalation list. -->
+            @if (s.escalation_open && s.escalation) {
+              <span class="st st-esc">escalated · {{ s.escalation }}</span>
+            }
+          </span>
+          <span class="d-sub">
+            @if (project(); as p) {
+              <span class="project" [title]="p.name">
+                @if (p.color) {
+                  <fleet-kit-swatch class="project-swatch" [color]="p.color" />
+                }
+                {{ p.name }}
+              </span>
+              <span class="sep" aria-hidden="true">·</span>
+            }
+            <a class="chunk" data-testid="step-drawer-chunk" [title]="s.title ? s.chunk_id + ' · ' + s.title : s.chunk_id" [routerLink]="['/board', 'chunk', s.chunk_id] | lensLink" [queryParams]="origin()">{{
+              ref(s.chunk_id)
+            }}</a>
+            <span class="sep" aria-hidden="true">·</span>
+            @if (s.graph_id) {
+              <a class="node" data-testid="step-drawer-graph" [routerLink]="['/graphs', s.graph_id] | lensLink">{{ s.graph_name === null ? '' : s.graph_name + '/' }}<b>{{ s.node_name }}</b></a>
+            } @else {
+              <span class="node">{{ s.graph_name === null ? '' : s.graph_name + '/' }}<b>{{ s.node_name }}</b></span>
+            }
+            <span class="sep" aria-hidden="true">·</span>
+            <!-- The fleet page lists a host's runners on the host's own page, and only a hostless runner on its own. -->
+            <a class="runner" data-testid="step-drawer-runner" [routerLink]="['/fleet', here.host_id ?? s.runner_id] | lensLink">{{ host(here) }}/{{ s.runner_name }}</a>
+            @if (stepPending()) {
+              <span class="sep" aria-hidden="true">·</span>
+              <fleet-kit-skeleton class="sd-sk-model" [rows]="1" />
+            } @else if (model(); as m) {
+              <span class="sep" aria-hidden="true">·</span>
+              <span class="model">{{ m }}</span>
+            }
+            @if (s.ended_at === null) {
+              <span class="sep" aria-hidden="true">·</span>
+              <span class="st st-live">running</span>
+            }
+          </span>
+        </div>
+        <fleet-kit-close-button testid="step-drawer-close" (click)="dismiss.emit()" />
+      </header>
+
+      <div class="d-body">
+        <section class="d-sec d-wide" aria-label="The chunk's path">
+          <div class="sd-strip">
+            @for (b of journey(); track b.id) {
+              @if (b.gapMs > 0) {
+                <span class="sd-gap" [style.flex-grow]="b.gapMs"></span>
+              }
+              <!-- eslint-disable-next-line no-restricted-syntax -- A block of the path strip, placed and sized by its time: the kit button's padded chrome would break the strip's proportions. -->
+              <button
+                type="button"
+                class="sd-blk tk-n{{ b.shade }}"
+                [class.tk-failed]="b.failed"
+                [class.sd-blk-current]="b.current"
+                [class.sd-blk-live]="b.live"
+                [class.sd-blk-envchange]="b.envChanged"
+                [style.flex-grow]="b.heldMs"
+                [title]="b.title"
+                (click)="selectStep.emit(b.key)"
+              >
+                <span class="sd-blk-name">{{ b.node }}</span>
+              </button>
+            }
+          </div>
+          <div class="sd-around">
+            @if (around().previous; as p) {
+              <!-- eslint-disable-next-line no-restricted-syntax -- An inline text link along the strip, not an action: the kit button's bordered chrome would outweigh the sentence it is. -->
+              <button type="button" class="sd-nb" (click)="selectStep.emit(stepOf(p))">
+                ← from <b>{{ p.segment.node_name }}</b> by <i>{{ p.segment.exit_choice ?? '—' }}</i> · {{ held(p) }}
+              </button>
+            } @else {
+              <span></span>
+            }
+            @if (around().next; as n) {
+              <!-- eslint-disable-next-line no-restricted-syntax -- An inline text link along the strip, not an action: the kit button's bordered chrome would outweigh the sentence it is. -->
+              <button type="button" class="sd-nb" (click)="selectStep.emit(stepOf(n))">
+                on to <b>{{ n.segment.node_name }}</b>{{ n.environment_id !== here.environment_id ? ' on ' + n.environment_id : '' }} · {{ held(n) }} →
+              </button>
+            } @else {
+              <span class="dim">{{ s.ended_at === null ? 'still here' : 'last step on an environment' }}</span>
+            }
+          </div>
+        </section>
+
+        <!-- The step's chunk, for reference — the chunk drawer's own first column. -->
+        <section class="d-sec" aria-label="Chunk">
+          @if (chunk(); as c) {
+            @if (showDelivery()) {
+              <fleet-kit-panel class="d-box" label="Delivery" [bodyScroll]="false">
+                <fleet-chunk-delivery class="d-box-body" [detail]="c" />
+              </fleet-kit-panel>
+            }
+            <fleet-kit-panel class="d-box" label="Work item" [count]="c.work_refs.length" [bodyScroll]="false">
+              <fleet-chunk-detail-facts class="d-box-body" [detail]="c" />
+            </fleet-kit-panel>
+
+            <fleet-chunk-detail-issue-pane [workItems]="workItems()" />
+          } @else {
+            <div class="dim">reading the chunk…</div>
+          }
+        </section>
+
+        <section class="d-sec" aria-label="Step">
+          <fleet-kit-panel class="d-box" label="Step" [bodyScroll]="false">
+            <fleet-kit-fact-list class="d-box-body" [rows]="stepFacts()" testid="step-drawer-facts" />
+          </fleet-kit-panel>
+
+          @for (e of escalations(); track e.recorded_at) {
+            <div class="sd-escalation">
+              <b>escalated · {{ e.cause }}</b> <span class="dim">{{ when(e.recorded_at) }}</span>
+              @if (e.detail) {
+                <div class="dim">{{ e.detail }}</div>
+              }
+            </div>
+          }
+          @if (stepArtifacts(); as d) {
+            <app-chunk-detail-artifacts class="sd-arts" [detail]="d" [carry]="origin()" />
+          }
+        </section>
+
+        <section class="d-sec sd-transcript" aria-label="Transcript">
+          <div class="d-h">Transcript{{ transcript()?.turns?.length ? ' · ' + transcript()?.turns?.length + ' turns' : '' }}</div>
+          @if (s.executor === 'hub') {
+            <div class="dim">a hub-side step — no session, so no transcript</div>
+          } @else if (transcriptState() === 'empty') {
+            <div class="dim">no transcript to read for this step</div>
+          } @else if (transcriptState() === 'loading') {
+            <div class="sd-sk-transcript" data-testid="step-drawer-transcript-loading">
+              @for (turn of transcriptSkeleton; track $index) {
+                <div class="sd-sk-turn">
+                  <fleet-kit-skeleton class="sd-sk-stamp" [rows]="1" />
+                  <fleet-kit-skeleton class="sd-sk-kind" [rows]="1" />
+                  @for (width of turn; track $index) {
+                    <fleet-kit-skeleton class="sd-sk-text" [style.width]="width" [rows]="1" />
+                  }
+                </div>
+              }
+            </div>
+          } @else if (transcriptState() === 'error') {
+            <div class="dim">could not read the transcript</div>
+          } @else if (transcript() === null) {
+            <div class="dim" data-testid="step-drawer-transcript-no-access">no access to the transcript</div>
+          } @else if (transcript(); as t) {
+            @if (t.turns.length === 0) {
+              <div class="dim">no transcript shipped for this session</div>
+            } @else {
+              @if (t.truncated) {
+                <div class="dim">truncated — some turns were dropped</div>
+              }
+              <fleet-transcript-viewer [turns]="t.turns" layout="stacked" />
+            }
+          }
+        </section>
+      </div>
+    }
+  </div>
+</fleet-kit-panel>
+
+<!-- The step facts' marked-up values, for the fact list's templated rows. -->
+<ng-template #beganTpl>
+  @if (placed()?.segment; as s) {
+    <span [title]="absolute(s.started_at)">{{ when(s.started_at) }}</span>
+  }
+</ng-template>
+<ng-template #endedTpl>
+  @if (placed()?.segment; as s) {
+    @if (s.ended_at) {
+      <span [title]="absolute(s.ended_at)">{{ when(s.ended_at) }}</span>
+    } @else {
+      <span class="dim">still running</span>
+    }
+  }
+</ng-template>
+<ng-template #spendTpl>
+  @if (stepPending()) {
+    <fleet-kit-skeleton class="sd-sk-spend" [rows]="1" />
+  } @else if (spend(); as sp) {
+    <fleet-session-efficiency class="sd-spend" [usage]="sp" />
+  } @else {
+    <span class="dim">{{ placed()?.segment?.ended_at === null ? 'no usage yet' : 'no usage recorded' }}</span>
+  }
+</ng-template>

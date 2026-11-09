@@ -184,6 +184,21 @@ hours ago unless it is among the 10 most recently finished `done` chunks (per pr
 `GET /api/chunks/{chunk_id}`. `GET /api/chunk-counts` serves the all-time count per derived status, plus a `total`, over
 exactly the chunks the unfiltered list pages over — the counts ignore the window.
 
+The board's Tracks layout reads three more routes, each refused to a runner's credentials. `GET /api/env-timeline`
+answers every node step a chunk spent in a runner environment within `[since, until)`, grouped host → workspace →
+environment: `since` is required, `until` defaults to now, and a window wider than 14 days is narrowed to the 14 before
+`until`. A step is sent whole whenever it touches the window. With `latest=true` it answers each environment's newest
+step since `since` instead — what it holds now, or what it last held — and ignores `until`; it still looks back no more
+than 14 days. Under `?project=` only that project's chunks are laid on the environments. `GET /api/env-timeline/step`
+answers one step of `chunk_id` in depth: the one run by the session whose id is `lease_id`, else the one beginning at
+`started_at`, else the chunk's newest. It answers a `404` problem when the chunk is unknown (`chunk-not-found`) or has
+no such step (`node-step-not-found`). Both reads need `fleet:view`. `GET /api/env-timeline/step/transcript` answers the
+transcript of the session that ran a step, named by the step's `chunk_id`, `node_id` and `epoch` — the step read's own
+values, the `epoch` telling the step's session apart from the chunk's other sessions at that node: every turn its runner
+shipped, with any shipment a later one replaced left out, and `truncated` when some was lost. A session that has shipped
+nothing yet answers no turns; an unknown chunk answers a `404` `chunk-not-found` problem. It needs `transcript:read`,
+like the chunk's own transcript reads.
+
 ## The hub's sweeps
 
 The hub keeps its derived state current with seven sweeps. Each makes one pass over every tenant on its own timer. A

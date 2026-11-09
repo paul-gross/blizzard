@@ -1,9 +1,21 @@
-import { provideZonelessChangeDetection } from '@angular/core';
+import { ChangeDetectionStrategy, Component, provideZonelessChangeDetection } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 
 import type { ChunkSummary, WorkItemsView } from 'fleet';
 import { workItemEntry, workRefView, chunkSummary } from 'fleet/testing';
-import { BoardShell } from './board-shell';
+import { BoardShell, boardLayoutOf } from './board-shell';
+
+@Component({
+  selector: 'app-test-tracks-host',
+  imports: [BoardShell],
+  changeDetection: ChangeDetectionStrategy.OnPush,
+  template: `
+    <app-board-shell [chunks]="[]" state="empty" layout="tracks">
+      <div boardTracks data-testid="projected-tracks"></div>
+    </app-board-shell>
+  `,
+})
+class TestTracksHost {}
 
 describe('BoardShell layouts', () => {
   const RUNNING = (suffix: string): ChunkSummary => (chunkSummary({
@@ -78,5 +90,38 @@ describe('BoardShell layouts', () => {
       await render('board', new Map([['ch_01runninga', { items: [workItemEntry({ source: 'hub', ref: 'a', title: 'Fix the lease', fetched_at: 't', label: null, body: null, web_url: null })] }]]))
     ).nativeElement as HTMLElement;
     expect(read.querySelector('[data-testid="chunk-title"]')?.textContent?.trim()).toBe('Fix the lease');
+  });
+
+  it('emits tracks from the Tracks tab', async () => {
+    const fixture = await render('board');
+    const chosen: string[] = [];
+    fixture.componentInstance.layoutChange.subscribe((layout) => chosen.push(layout));
+
+    (fixture.nativeElement as HTMLElement).querySelector<HTMLElement>('[data-testid="board-layout-tracks"]')!.click();
+
+    expect(chosen).toEqual(['tracks']);
+  });
+
+  it('renders the projected tracks and no board async-state on the tracks layout', async () => {
+    TestBed.resetTestingModule();
+    await TestBed.configureTestingModule({ imports: [TestTracksHost], providers: [provideZonelessChangeDetection()] }).compileComponents();
+    const fixture = TestBed.createComponent(TestTracksHost);
+    await fixture.whenStable();
+    const el = fixture.nativeElement as HTMLElement;
+
+    expect(el.querySelector('[data-testid="projected-tracks"]')).not.toBeNull();
+    expect(el.querySelector('[data-testid="board"]')).toBeNull();
+    expect(el.querySelector('[data-testid="board-list"]')).toBeNull();
+    expect(el.querySelector('[data-testid="empty-state"]')).toBeNull();
+    expect(el.querySelector('[data-testid="board-loading"]')).toBeNull();
+    expect(el.querySelector('[data-testid="board-error"]')).toBeNull();
+  });
+
+  it('maps list and tracks through and anything else to the board', () => {
+    expect(boardLayoutOf('list')).toBe('list');
+    expect(boardLayoutOf('tracks')).toBe('tracks');
+    expect(boardLayoutOf('board')).toBe('board');
+    expect(boardLayoutOf('grid')).toBe('board');
+    expect(boardLayoutOf(null)).toBe('board');
   });
 });

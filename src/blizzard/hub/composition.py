@@ -161,6 +161,7 @@ from blizzard.hub.domain.observability.egress.event_rows import export_paths
 from blizzard.hub.domain.observability.egress.reset import EgressReset
 from blizzard.hub.domain.observability.egress.status import EgressStatusReader
 from blizzard.hub.domain.observability.egress.sweep import EgressSweep
+from blizzard.hub.domain.observability.env_timeline import EnvTimelineReading
 from blizzard.hub.domain.observability.forge_status import (
     FULL_PASS_FLOOR_INTERVALS,
     AnnotationReconciler,
@@ -233,6 +234,7 @@ from blizzard.hub.store.internal.config_change_store import ConfigChangeStore
 from blizzard.hub.store.internal.config_import_store import ConfigImportStore
 from blizzard.hub.store.internal.config_revisions_store import ConfigRevisionsStore
 from blizzard.hub.store.internal.egress_store import EgressStore
+from blizzard.hub.store.internal.env_timeline_store import EnvTimelineStore
 from blizzard.hub.store.internal.errand_runs_store import ErrandRunsStore
 from blizzard.hub.store.internal.finding_store import FindingSetStore, FindingStore
 from blizzard.hub.store.internal.flow_store import FlowStore
@@ -428,6 +430,8 @@ class TenantServices:
     cadence_reading: CadenceReading
     #: Each errand's last run, read in one snapshot or in a caller's unit.
     errand_runs: IReadErrandRunsRepository
+    #: Every node step a routed chunk spent in a runner environment over a window.
+    env_timeline: EnvTimelineReading
     #: A due set's planning inputs, read in bulk.
     errand_planning: ErrandPlanning
     #: Mint one due errand's run in its own unit of work.
@@ -1406,6 +1410,9 @@ def build_tenant_services(stores: TenantStores, parts: TenantServiceParts, *, ev
             cadences=cadence_store, attention=cadence_attention, runs=errand_runs_store, clock=clock
         ),
         errand_runs=errand_runs_store,
+        env_timeline=EnvTimelineReading(
+            facts=EnvTimelineStore(tenant_connections), graphs=graph_store, artifacts=chunk_artifacts, clock=clock
+        ),
         errand_planning=ErrandPlanning(graphs=graph_store, finding_sets=finding_set_store),
         cadence_mint=CadenceMint(
             items=work_item_store,

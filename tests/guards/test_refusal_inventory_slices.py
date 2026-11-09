@@ -475,6 +475,7 @@ _RAISED_FACTORIES = {
             "host_not_found_problem",
             "host_retirement_interrupted_problem",
             "host_retirement_unfinished_problem",
+            "node_step_not_found_problem",
             "re_derive_scope_refused_problem",
             "runner_not_enrolled_problem",
             "runner_not_retired_problem",

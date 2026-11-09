@@ -69,6 +69,10 @@ export class TranscriptViewer {
   /** The turns to render, in order — this component never fetches or filters them. */
   readonly turns = input.required<readonly TranscriptTurn[]>();
 
+  /** Where each turn's time sits: in a left `gutter` beside a timeline rail (the default), or `stacked` on a line
+   * above the turn, so a narrow column gives the turn its whole width. Nested sidechains follow suit. */
+  readonly layout = input<'gutter' | 'stacked'>('gutter');
+
   /** Emitted with a {@link SidechainOpenEvent} when the operator asks to view a sidechain
    * standalone. This component always renders the
    * sidechain inline too, so listening is optional. */

@@ -24,6 +24,7 @@ import {
   hubBacklogKey,
   hubChunkKey,
   hubChunksKey,
+  hubEnvTimelineLiveKey,
   hubEventsKey,
   hubFleetSpendKey,
   hubFlowsKey,
@@ -163,6 +164,8 @@ function chunkChangedKeys(data: HubEventPayload): readonly (readonly unknown[])[
     ...chunkDetailKeys(data),
     hubFleetSpendKey,
     hubEventsKey,
+    // A routed chunk's move, escalation or usage moves its block on the Tracks layout.
+    hubEnvTimelineLiveKey,
     ...(chunkEnded(data) ? [hubQuestionsKey, hubDecisionsKey] : []),
     ...(chunkDeleted(data) ? [hubActivityKey] : []),
   ];
@@ -216,7 +219,7 @@ const EVENT_INVALIDATION_REGISTRY = openLookup<HubEventType, (data: HubEventPayl
     // payload key, `bzh:ranking-is-per-list`), so both cached orders invalidate.
     [HubEventType.QUEUE_CHANGED]: () => [hubQueueKey, hubBacklogKey],
     // A host's usage samples arrive only as its spenders' frames, so a runner frame re-reads the hosts too.
-    [HubEventType.RUNNER_CHANGED]: () => [hubRunnersKey, hubHostsKey],
+    [HubEventType.RUNNER_CHANGED]: () => [hubRunnersKey, hubHostsKey, hubEnvTimelineLiveKey],
     // Adopt, release and retire move runners between hosts, so a host frame re-reads both registries.
     [HubEventType.HOST_CHANGED]: () => [hubHostsKey, hubRunnersKey],
     // A flow fact moves the line every flow read and every card's place shows, and the named chunk's record.

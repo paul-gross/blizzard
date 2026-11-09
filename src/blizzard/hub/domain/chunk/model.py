@@ -12,6 +12,7 @@ from dataclasses import dataclass, field, replace
 from datetime import datetime
 from enum import StrEnum
 from types import MappingProxyType
+from typing import Protocol
 
 from blizzard.foundation.chunk_migration import MigrationMode
 from blizzard.foundation.chunk_status import TERMINAL_STATUSES, ChunkStatus
@@ -1095,6 +1096,31 @@ def holds_work_refs(status: ChunkStatus) -> bool:
     return not verb_legal_from(ChunkVerb.INGEST_HELD_WORK_REF, status)
 
 
+class _Recorded(Protocol):
+    @property
+    def recorded_at(self) -> datetime: ...
+
+
+def open_escalation_of[E: _Recorded](
+    escalations: Sequence[E],
+    *,
+    mints: Iterable[datetime],
+    requeues: Iterable[datetime],
+    restarts: Iterable[datetime],
+    endings: Iterable[datetime | None],
+) -> E | None:
+    """The chunk's escalation still waiting on a human — the newest of ``escalations`` — or ``None``.
+
+    Closed by supersession, never a resolution fact: a later lease mint, requeue or operator restart hands the work
+    back to the fleet, and a later ending — the chunk done or stopped; a ``None`` in ``endings`` is no ending — is
+    the chunk finishing without one."""
+    if not escalations:
+        return None
+    newest = max(escalations, key=lambda e: e.recorded_at)
+    superseding = (*mints, *requeues, *restarts, *endings)
+    return None if any(at is not None and at > newest.recorded_at for at in superseding) else newest
+
+
 @domain_model
 @dataclass(frozen=True)
 class ChunkFacts:
@@ -1451,21 +1477,15 @@ class ChunkFacts:
         return completed_at is not None and completed_at < instant
 
     def open_escalation(self) -> EscalationFact | None:
-        """The newest escalation nothing later superseded, or ``None``.
-
-        Closed by supersession, never a resolution fact: a later lease mint, a
-        ``requeue.recorded`` or an operator restart hands the work back to the fleet,
-        and a later **completion** — stopped or done — is the chunk ending without one."""
-        if not self.escalations:
-            return None
-        newest = max(self.escalations, key=lambda e: e.recorded_at)
-        superseding = (
-            *(lease.minted_at for lease in self.leases),
-            *(rq.requeued_at for rq in self.requeues),
-            *(restart.recorded_at for restart in self.restarts),
-            self.completed_at(),
+        """The newest escalation nothing later superseded, or ``None`` (:func:`open_escalation_of`) — the chunk's
+        ending is its :meth:`completed_at`."""
+        return open_escalation_of(
+            self.escalations,
+            mints=(lease.minted_at for lease in self.leases),
+            requeues=(rq.requeued_at for rq in self.requeues),
+            restarts=(restart.recorded_at for restart in self.restarts),
+            endings=(self.completed_at(),),
         )
-        return None if any(at is not None and at > newest.recorded_at for at in superseding) else newest
 
     def open_questions(self) -> list[QuestionFact]:
         """The chunk's unanswered questions, oldest first.
@@ -1759,6 +1779,24 @@ class ChunkChange:
         )
 
 
+class UsageAmounts(Protocol):
+    """What :meth:`UsageTotal.of` sums of one invocation: its token classes and its billed and estimated amounts."""
+
+    @property
+    def input_tokens(self) -> int: ...
+    @property
+    def output_tokens(self) -> int: ...
+    @property
+    def cache_read_tokens(self) -> int: ...
+    @property
+    def cache_create_tokens(self) -> int: ...
+    @property
+    def cost_usd(self) -> float | None: ...
+    @property
+    def estimated_cost_usd(self) -> float | None: ...
+    def cost_partial(self) -> bool: ...
+
+
 @domain_model
 @dataclass(frozen=True)
 class UsageTotal:
@@ -1779,7 +1817,7 @@ class UsageTotal:
     billed_cost_usd: float | None = None
 
     @classmethod
-    def of(cls, rows: list[UsageFact]) -> UsageTotal:
+    def of(cls, rows: Sequence[UsageAmounts]) -> UsageTotal:
         """Sum ``rows`` into one total — one chunk's own facts, or an arbitrary set
         (the fleet spend-since window)."""
         estimated_rows = [u.estimated_cost_usd for u in rows if u.estimated_cost_usd is not None]

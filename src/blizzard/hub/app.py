@@ -61,6 +61,7 @@ from blizzard.hub.api.clock import clock_router
 from blizzard.hub.api.config import router as config_router
 from blizzard.hub.api.decisions import router as decisions_router
 from blizzard.hub.api.egress import router as egress_router
+from blizzard.hub.api.env_timeline import router as env_timeline_router
 from blizzard.hub.api.events import router as events_router
 from blizzard.hub.api.findings import project_router as project_findings_router
 from blizzard.hub.api.findings import router as findings_router
@@ -549,6 +550,7 @@ def create_app(
     app.include_router(runners_router)
     app.include_router(hosts_router)
     app.include_router(spend_router)
+    app.include_router(env_timeline_router)
     app.include_router(users_router)
     app.include_router(members_router)
     app.include_router(member_grants_router)

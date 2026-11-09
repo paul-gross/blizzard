@@ -3,7 +3,9 @@
     <div fleetKitPanelHeader class="hdr">
       <fleet-kit-tabs variant="sub" [options]="layoutTabs" [activeValue]="layout()" (choose)="chooseLayout($event)" />
     </div>
-    @if (layout() === 'list') {
+    @if (layout() === 'tracks') {
+      <ng-content select="[boardTracks]" />
+    } @else if (layout() === 'list') {
       <app-board-list
         class="list"
         [groups]="listGroups()"
@@ -37,16 +39,18 @@
         }
       </div>
     }
-    <fleet-kit-async-state
-      [state]="state()"
-      loadingMode="content"
-      errorText="FAILED TO LOAD FLEET"
-      errorTestid="board-error"
-      emptyText="NO CHUNKS — FLEET IDLE"
-      emptyTestid="empty-state"
-    >
-      <!-- The lanes and the list draw their own skeletons in place; this only names the wait. -->
-      <span loading class="loading-note" role="status" data-testid="board-loading">Loading chunks…</span>
-    </fleet-kit-async-state>
+    @if (layout() !== 'tracks') {
+      <fleet-kit-async-state
+        [state]="state()"
+        loadingMode="content"
+        errorText="FAILED TO LOAD FLEET"
+        errorTestid="board-error"
+        emptyText="NO CHUNKS — FLEET IDLE"
+        emptyTestid="empty-state"
+      >
+        <!-- The lanes and the list draw their own skeletons in place; this only names the wait. -->
+        <span loading class="loading-note" role="status" data-testid="board-loading">Loading chunks…</span>
+      </fleet-kit-async-state>
+    }
   </fleet-kit-panel>
 </div>

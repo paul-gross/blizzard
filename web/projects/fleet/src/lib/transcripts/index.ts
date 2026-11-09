@@ -1,4 +1,5 @@
 export { TranscriptSegmentView } from './transcript-segment-view';
+export { TranscriptViewer } from './transcript-viewer';
 export { ChunkTranscriptsContainer } from './chunk-transcripts-container';
 export { ChunkTranscriptsTab } from './chunk-transcripts-tab';
 export { mergeLateLinks } from './merge-late-links';

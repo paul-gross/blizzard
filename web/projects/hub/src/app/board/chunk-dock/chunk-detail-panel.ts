@@ -31,7 +31,7 @@ export type { AnswerQuestionEvent, ResolveDecisionEvent } from 'fleet';
     KitPanel,
   ],
   templateUrl: './chunk-detail-panel.html',
-  styleUrl: './chunk-detail-panel.css',
+  styleUrls: ['../../core/drawer/drawer-body.css', './chunk-detail-panel.css'],
 })
 export class ChunkDetailPanel {
   /** The chunk aggregate to render (status, current node, history, artifacts). */

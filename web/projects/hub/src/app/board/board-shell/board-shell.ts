@@ -14,12 +14,18 @@ const BOARD_DONE_FLOOR = 10;
 /** The two sets the hub keeps are both newest-first, so their union is simply the larger one. */
 const DONE_WINDOW_LABEL = `DONE MAX(${BOARD_DONE_WINDOW_HOURS}H, ${BOARD_DONE_FLOOR})`;
 
-/** How the board lays out its chunks: the lane grid, or one list of full-width rows. */
-export type BoardLayout = 'board' | 'list';
+/** How the board lays out its chunks: the lane grid, one list of full-width rows, or each environment's node steps over time. */
+export type BoardLayout = 'board' | 'list' | 'tracks';
+
+/** A layout named by a tab or the URL, falling back to the lane grid for anything else. */
+export function boardLayoutOf(value: string | null): BoardLayout {
+  return value === 'list' || value === 'tracks' ? value : 'board';
+}
 
 const LAYOUT_TABS: readonly KitTabOption[] = [
   { value: 'board', label: 'Board', testid: 'board-layout-board' },
   { value: 'list', label: 'List', testid: 'board-layout-list' },
+  { value: 'tracks', label: 'Tracks', testid: 'board-layout-tracks' },
 ];
 
 /**
@@ -112,7 +118,7 @@ export class BoardShell {
   /** How many row skeletons the list draws while the chunk read loads (`listSkeletonCount`). */
   readonly listSkeletons = input(0);
 
-  /** Which layout renders — the lane grid or the list. */
+  /** Which layout renders — the lane grid, the list, or the projected `[boardTracks]` content. */
   readonly layout = input<BoardLayout>('board');
 
   /** Emitted with the layout the switch was set to. */
@@ -144,7 +150,7 @@ export class BoardShell {
   });
 
   protected chooseLayout(value: string): void {
-    this.layoutChange.emit(value === 'list' ? 'list' : 'board');
+    this.layoutChange.emit(boardLayoutOf(value));
   }
 
   /** Every chunk rendered as a board card, grouped into its status column. */

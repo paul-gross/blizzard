@@ -33,7 +33,9 @@
     "@dagrejs/dagre": "^3.1.1",
     "@tanstack/angular-query-experimental": "^5.101.2",
     "rxjs": "~7.8.0",
-    "tslib": "^2.3.0"
+    "tslib": "^2.3.0",
+    "vis-data": "^8.0.6",
+    "vis-timeline": "^8.5.6"
   },
   "devDependencies": {
     "@analogjs/vite-plugin-angular": "2.8.1",

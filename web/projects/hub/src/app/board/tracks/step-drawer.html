@@ -1,0 +1,16 @@
+<app-step-drawer-view
+  [state]="state()"
+  [view]="view()"
+  [placed]="placed()"
+  [stepPending]="stepPending()"
+  [nowMs]="nowMs()"
+  [project]="project()"
+  [chunk]="chunk()"
+  [workItems]="workItems()"
+  [stepArtifacts]="stepArtifacts()"
+  [transcript]="transcript.data()"
+  [transcriptState]="transcriptState()"
+  [origin]="origin()"
+  (selectStep)="select($event)"
+  (dismiss)="close()"
+/>

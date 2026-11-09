@@ -158,6 +158,11 @@ _PROBES: dict[tuple[str, str], _Probe] = {
     ("POST", "/api/analytics/re-derive"): _own({}),
     ("POST", "/api/sweeps/{name}/passes"): _own(ids={"name": "sweep"}),
     ("GET", "/api/spend"): _list(**_SINCE),
+    ("GET", "/api/env-timeline"): _list(**_SINCE),
+    ("GET", "/api/env-timeline/step"): _f(params={"chunk_id": "{chunk_id}"}),
+    ("GET", "/api/env-timeline/step/transcript"): _f(
+        params={"chunk_id": "{chunk_id}", "node_id": "nd_1", "epoch": "1"}
+    ),
     # -- backlog and queue -----------------------------------------------------------------------------------
     ("GET", "/api/backlog"): _LIST,
     ("PUT", "/api/backlog"): _f({"chunk_ids": ["{chunk_id}"]}, status=409, reason=_UNLISTED, ids=_BACKLOG),

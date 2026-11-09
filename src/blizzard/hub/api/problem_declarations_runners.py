@@ -19,6 +19,7 @@ from blizzard.wire.problem_types_runners import (
     HostNotFoundProblem,
     HostRetirementInterruptedProblem,
     HostRetirementUnfinishedProblem,
+    NodeStepNotFoundProblem,
     ReDeriveScopeRefusedProblem,
     RunnerNotEnrolledProblem,
     RunnerNotRetiredProblem,
@@ -147,8 +148,14 @@ RUNNERS_DECLARATIONS: tuple[ProblemDeclaration, ...] = (
     *_declare("GET", "/api/spend", 422, SpendInstantInvalidProblem),
     *(
         declaration
-        for path in ("/api/chunks/{chunk_id}/transcripts", "/api/chunks/{chunk_id}/transcripts/{segment_id}")
+        for path in (
+            "/api/chunks/{chunk_id}/transcripts",
+            "/api/chunks/{chunk_id}/transcripts/{segment_id}",
+            "/api/env-timeline/step",
+            "/api/env-timeline/step/transcript",
+        )
         for declaration in _declare("GET", path, 404, ChunkNotFoundProblem)
     ),
+    *_declare("GET", "/api/env-timeline/step", 404, NodeStepNotFoundProblem),
     *_declare("GET", "/api/chunks/{chunk_id}/transcripts/{segment_id}", 404, TranscriptSegmentNotFoundProblem),
 )

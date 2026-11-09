@@ -48,10 +48,20 @@ export class ChunkArtifacts {
    * `false` so the label doesn't render twice. */
   readonly heading = input(true);
 
+  /** Query params each link carries beside its own — what the chunk page's back link returns to, from a host that is
+   * not the board's default view. */
+  readonly carry = input<Readonly<Record<string, string | null>>>({});
+
   /** The key of the artifact the host has open, drawn with the selected row's accent; `null` (the default) marks none. */
   readonly selectedKey = input<string | null>(null);
 
   protected readonly chunkId = computed(() => this.detail().chunk_id);
+
+  protected readonly linkParams = (key: string): Record<string, string | null> => ({
+    ...this.carry(),
+    tab: 'artifacts',
+    artifact: key,
+  });
 
   /** The artifact store, oldest attachment first — see {@link sortArtifacts}. */
   protected readonly artifacts = computed<readonly ArtifactView[]>(() => sortArtifacts(this.detail().artifacts ?? []));

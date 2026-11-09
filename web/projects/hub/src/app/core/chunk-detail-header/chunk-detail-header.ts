@@ -43,7 +43,7 @@ import { LensLink } from 'fleet/shell';
     LensLink,
   ],
   templateUrl: './chunk-detail-header.html',
-  styleUrl: './chunk-detail-header.css',
+  styleUrls: ['../drawer/drawer-header.css', './chunk-detail-header.css'],
 })
 export class ChunkDetailHeader {
   /** The chunk aggregate to render (identity, status, current node, pause, route). */

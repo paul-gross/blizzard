@@ -33,7 +33,22 @@
               "node_modules/@angular/cdk/overlay-prebuilt.css",
               "projects/fleet/src/lib/core/design/tokens.css",
               "projects/fleet/src/lib/core/design/scrollbars.css",
-              "projects/hub/src/styles.css"
+              "projects/hub/src/styles.css",
+              {
+                "input": "node_modules/vis-timeline/styles/vis-timeline-graph2d.min.css",
+                "bundleName": "tracks-timeline",
+                "inject": false
+              },
+              {
+                "input": "projects/hub/src/app/board/tracks/node-shades.css",
+                "bundleName": "tracks-timeline",
+                "inject": false
+              },
+              {
+                "input": "projects/hub/src/app/board/tracks/tracks-timeline.css",
+                "bundleName": "tracks-timeline",
+                "inject": false
+              }
             ]
           },
           "configurations": {

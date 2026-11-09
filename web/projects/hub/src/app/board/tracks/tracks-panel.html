@@ -1,0 +1,17 @@
+<app-tracks-view
+  [tracks]="tracks()"
+  [present]="present()"
+  [progress]="progress()"
+  [startMs]="resolved().startMs"
+  [endMs]="resolved().endMs"
+  [live]="resolved().live"
+  [nowMs]="now()"
+  [span]="span()"
+  [state]="state()"
+  (chooseSpan)="chooseSpan($event)"
+  (scaleChange)="onScale($event)"
+  (rangeChange)="onRange($event.startMs, $event.endMs)"
+  (followNow)="followNow()"
+  (selectStep)="selectStep($event)"
+  (hoverStep)="prefetchStep($event)"
+/>

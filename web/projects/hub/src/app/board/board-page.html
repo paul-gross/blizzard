@@ -21,15 +21,23 @@
       (selectChunk)="select($event)"
       (reposition)="reposition($event)"
       (laneMove)="moveAcrossLanes($event)"
-    />
+    >
+      @if (layout() === 'tracks') {
+        <app-tracks-panel boardTracks class="tracks" />
+      }
+    </app-board-shell>
     <fleet-kit-error-line class="action-notice" [message]="actionError()" testid="board-action-error" />
-    <app-chunk-detail
-      class="dock"
-      [class.closed]="!selected()"
-      [chunkId]="selected()"
-      [graphLinkBase]="['/graphs']"
-      (dismiss)="select(null)"
-    />
+    @if (layout() === 'tracks') {
+      <app-step-drawer class="dock" />
+    } @else {
+      <app-chunk-detail
+        class="dock"
+        [class.closed]="!selected()"
+        [chunkId]="selected()"
+        [graphLinkBase]="['/graphs']"
+        (dismiss)="select(null)"
+      />
+    }
   </div>
   <div class="col rail-right">
     <app-fleet-spend-panel />

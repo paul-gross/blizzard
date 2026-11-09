@@ -1,0 +1,56 @@
+<div class="tk" data-testid="tracks">
+  <div class="tk-bar">
+    <fleet-kit-chips [options]="spanChips" [selectedValue]="span()" (choose)="chooseSpan.emit($event)" />
+    @if (live()) {
+      <span class="tk-follow"><i class="tk-live-mark"></i>following now</span>
+    } @else {
+      <fleet-kit-button testid="tracks-follow-now" (click)="followNow.emit()">pinned · back to now</fleet-kit-button>
+    }
+    <span class="tk-spacer"></span>
+    @if (runnerKey().length > 0) {
+      <span class="tk-key" data-testid="tracks-runner-key">
+        @for (r of runnerKey(); track r.name) {
+          <span class="tk-key-item"><i class="tk-swatch {{ r.hue }}"></i>{{ r.name }}</span>
+        }
+      </span>
+    }
+  </div>
+  <fleet-kit-async-state
+    [state]="state()"
+    loadingText="Loading tracks…"
+    loadingTestid="tracks-loading"
+    errorText="FAILED TO LOAD TRACKS"
+    errorTestid="tracks-error"
+    emptyText="NO ENVIRONMENT ACTIVITY IN THIS WINDOW"
+    emptyTestid="tracks-empty"
+  />
+  <div #body class="tk-body" [class.tk-hidden]="state() !== 'ready'">
+    <div #timeline class="tk-timeline tracks-timeline"></div>
+    <div class="tk-present" data-testid="tracks-present">
+      @for (row of present(); track row.groupId) { @if (boxOf(row.groupId); as box) {
+      <div [class]="'tk-row tk-row-' + row.kind" [style.top.px]="box.top" [style.height.px]="box.height">
+        @if (row.kind === 'host') {
+          <span class="tk-now-head">now</span>
+        } @else if (row.kind === 'workspace') {
+        } @else if (row.kind === 'idle') {
+          <span class="tk-dim">idle{{ row.since ? ' · ' + row.since : '' }}</span>
+        } @else {
+          <span class="tk-line" [title]="row.detail">
+            <i class="tk-dot {{ row.runnerHue ?? '' }}" [class.tk-dot-halted]="row.status === 'halted'"></i>
+            <span class="tk-ref" [class.tk-halted]="row.status === 'halted'">{{ row.ref }}</span>
+            <span class="tk-node">{{ row.node }}</span>
+            <span class="tk-held" [class.tk-halted]="row.status === 'halted'">{{
+              row.status === 'halted' ? 'halted · ' + row.escalation : row.inStep
+            }}</span>
+          </span>
+          <span class="tk-line tk-sub" [title]="row.detail">
+            <span class="tk-runner">{{ row.runner }}</span>
+            <app-node-strip class="tk-progress" [progress]="progress().get(row.chunkId) ?? []" />
+            <span class="tk-cost">{{ row.cost }}</span>
+          </span>
+        }
+      </div>
+      } }
+    </div>
+  </div>
+</div>

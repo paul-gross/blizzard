@@ -635,6 +635,22 @@ describe('BoardPage', () => {
       expect(card(el, RUNNING).classList.contains('selected')).toBe(true);
     });
 
+    it('drops ?step= when a different chunk is selected', async () => {
+      const { harness } = await open(`/board?chunk=${RUNNING}&step=lease_1`);
+
+      await openCard(harness, ASKED);
+
+      expect(TestBed.inject(Router).url).toBe(`/board?chunk=${ASKED}`);
+    });
+
+    it('does not navigate when the current chunk is selected again, keeping its ?step=', async () => {
+      const { harness } = await open(`/board?chunk=${RUNNING}&step=lease_1`);
+
+      await openCard(harness, RUNNING);
+
+      expect(TestBed.inject(Router).url).toBe(`/board?chunk=${RUNNING}&step=lease_1`);
+    });
+
     it('writes the same param when an ask in the right rail opens its chunk', async () => {
       const { el, harness } = await open();
 

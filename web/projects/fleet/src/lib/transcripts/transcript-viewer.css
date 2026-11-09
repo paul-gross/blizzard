@@ -164,3 +164,36 @@
   --kit-button-fs: var(--fs-label);
   --kit-button-pad: 2px 4px;
 }
+
+/* Stacked: the time on its own line above the turn, the turn's kind marked by a short rule beside it — no gutter,
+   so a narrow column keeps its whole width for the turn. */
+.turns.stacked .turn {
+  grid-template-columns: minmax(0, 1fr);
+  gap: 2px;
+  padding: 6px 8px;
+}
+.turns.stacked .turn .t {
+  flex-direction: row;
+  align-items: center;
+  gap: 6px;
+  padding-top: 0;
+}
+.turns.stacked .turn .t::before {
+  content: '';
+  width: 10px;
+  height: 3px;
+  background: var(--label-dim);
+}
+.turns.stacked .turn.k-tool .t::before {
+  background: var(--green);
+}
+.turns.stacked .turn.k-env .t::before {
+  background: var(--cyan);
+}
+.turns.stacked .turn.k-thinking .t::before,
+.turns.stacked .turn.k-sidechain .t::before {
+  background: var(--amber, var(--label-dim));
+}
+.turns.stacked .turn .g {
+  display: none;
+}

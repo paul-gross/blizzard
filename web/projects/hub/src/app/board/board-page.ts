@@ -2,10 +2,12 @@ import { ChangeDetectionStrategy, Component, computed, inject, InjectionToken, s
 import { toSignal } from '@angular/core/rxjs-interop';
 import { ActivatedRoute, Router } from '@angular/router';
 import { map } from 'rxjs';
-import { BoardShell, type BoardLayout } from './board-shell/board-shell';
+import { BoardShell, boardLayoutOf, type BoardLayout } from './board-shell/board-shell';
+import { TracksPanel } from './tracks/tracks-panel';
 import { type BoardLaneMove, type BoardReposition } from './board-shell/board-column';
 import { type ChunkSummary, asyncState, injectChunkUrlSelection, injectRunnerHostNames, errorMessage, type KitAsyncStateValue, injectHubChunkDetailQuery, injectPendingMutationVariables, KitErrorLine } from 'fleet';
 import { ChunkDetail } from './chunk-dock/chunk-detail';
+import { StepDrawer } from './tracks/step-drawer';
 import { ActivityPanel } from './activity/activity-panel';
 import { QuestionsPanel } from './questions/questions-panel';
 import { GatesPanel } from './gates/gates-panel';
@@ -54,7 +56,7 @@ export const BOARD_SKELETON_RANDOM = new InjectionToken<() => number>('BOARD_SKE
   selector: 'app-board-page',
   changeDetection: ChangeDetectionStrategy.OnPush,
   host: { '(document:keydown.escape)': 'onEscape($event)' },
-  imports: [BoardShell, ChunkDetail, ActivityPanel, QuestionsPanel, GatesPanel, RunnerPanel, FleetSpendPanel, KitErrorLine],
+  imports: [BoardShell, TracksPanel, ChunkDetail, ActivityPanel, QuestionsPanel, GatesPanel, RunnerPanel, FleetSpendPanel, KitErrorLine, StepDrawer],
   templateUrl: './board-page.html',
   styleUrl: './board-page.css',
 })
@@ -209,9 +211,9 @@ export class BoardPage {
   private readonly route = inject(ActivatedRoute);
   private readonly router = inject(Router);
 
-  /** The board's layout, the URL's `?layout=list` — absent is the lane grid. */
+  /** The board's layout, the URL's `?layout=list` or `?layout=tracks` — absent is the lane grid. */
   protected readonly layout = toSignal(
-    this.route.queryParamMap.pipe(map((params): BoardLayout => (params.get('layout') === 'list' ? 'list' : 'board'))),
+    this.route.queryParamMap.pipe(map((params): BoardLayout => boardLayoutOf(params.get('layout')))),
     { initialValue: 'board' as BoardLayout },
   );
 
@@ -219,7 +221,7 @@ export class BoardPage {
   protected setLayout(layout: BoardLayout): void {
     void this.router.navigate([], {
       relativeTo: this.route,
-      queryParams: { layout: layout === 'list' ? 'list' : null },
+      queryParams: { layout: layout === 'board' ? null : layout },
       queryParamsHandling: 'merge',
     });
   }
@@ -239,9 +241,15 @@ export class BoardPage {
   /** Every chunk's work items, read once the chunk list has answered. */
   protected readonly workItems = injectBoardWorkItemsQuery(() => orderedChunkIds(this.boardChunks()));
 
-  /** Select a chunk — or clear the selection — by writing the URL. */
+  /** Select a chunk — or clear the selection — by writing the URL. A different chunk drops the Tracks layout's
+   * `?step=` and `?at=`, which name a step of the chunk it replaces. */
   protected select(chunkId: string | null): void {
-    this.selection.select(chunkId);
+    if (chunkId === this.selection.chunkId()) return;
+    void this.router.navigate([], {
+      relativeTo: this.route,
+      queryParams: { chunk: chunkId, step: null, at: null },
+      queryParamsHandling: 'merge',
+    });
   }
 
   /** Escape closes the dock, as its ✕ does — unless something else owns the key: a handler that already took it (a
