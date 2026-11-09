@@ -31,7 +31,7 @@ urgency of the tenant is refused `422 urgency_unknown`, a retired one `422 urgen
 | `slug`  | The handle, 1 to 64 lowercase letters, digits, and single inner hyphens. Fixed at create: an edit stating one is refused. A slug any urgency holds, retired or not, is refused `urgency_slug_taken`.                                 |
 | `name`  | The display name, 1 to 128 characters with no leading or trailing whitespace; the slug when a create leaves it out.                                                                                                                  |
 | `color` | A palette color (`red`, `orange`, `amber`, `lime`, `green`, `teal`, `cyan`, `blue`, `indigo`, `violet`, `pink`, `slate`) or a `#rrggbb` hex color; a create that leaves it out takes the palette color the live urgencies use least. |
-| `emoji` | An optional mark: at most 16 code points, with no whitespace, control character, or letter, and a digit, `#` or `*` only as a keycap's base.                                                                                         |
+| `emoji` | An optional mark: at most 16 code points, with no whitespace, control character, or ASCII letter, and a digit, `#` or `*` only as a keycap's base.                                                                                   |
 | `icon`  | An optional mark: a PNG or WebP image of at most 32 KiB, its bytes matching its stated media type. SVG is refused.                                                                                                                   |
 
 An urgency carries at most one mark: a write leaving both an emoji and an icon set is refused

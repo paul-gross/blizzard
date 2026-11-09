@@ -299,7 +299,7 @@ class WorkItemStore:
         transaction: Transaction | None = None,
     ) -> HubWorkItem | None:
         """Insert the accepted-and-minted ``garden_proposal_closures`` row, the item, and
-        ``chunk``'s own rows on one ``engine.begin()`` connection —
+        ``chunk``'s own rows in ``transaction``, or on one connection of their own without one —
         :meth:`create_with_chunk`'s shape plus the closure row, checked first so an
         already-closed proposal mints nothing."""
         with connection_in(self._store, transaction, "accept_create", write=True) as conn:
