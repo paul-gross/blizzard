@@ -111,9 +111,9 @@ if [ -f "$WEB_DIR/package.json" ]; then
   # minutes on a cold cache. The install is a pure function of the lockfile, so
   # a stamp of its hash (written only after a successful install, and gone
   # whenever node_modules is) makes the skip exactly as trustworthy as the
-  # install it skips. Stale node_modules without a lockfile change can't
-  # happen via npm; if a tree is corrupted some other way, delete
-  # $WEB_DIR/node_modules to force a reinstall.
+  # install it skips. The stamp is shared with scripts/build-wheel.sh. An
+  # out-of-band `npm install` that changes node_modules without changing the
+  # lockfile is not detected — delete $WEB_DIR/node_modules to force a reinstall.
   step "npm ci ($WEB_DIR) — skipped when node_modules already matches the lockfile"
   LOCK_HASH="$(sha256sum "$WEB_DIR/package-lock.json" | cut -d' ' -f1)"
   STAMP="$WEB_DIR/node_modules/.package-lock-hash"

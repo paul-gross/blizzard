@@ -41,7 +41,19 @@ fail() { printf '\n\033[1;31m==> FAIL: %s\033[0m\n' "$*" >&2; exit 1; }
 # this step is a clearly-labeled no-op so the build stays green.
 if [ -f "$WEB_DIR/package.json" ]; then
   log "Building both Angular apps ($WEB_DIR) into the wheel-embed assets dir"
-  ( cd "$WEB_DIR" && npm ci && npm run build )
+  # `npm ci` wipes node_modules — under a live feature env's dev servers and Storybook. Skip it when the lockfile-hash
+  # stamp shared with scripts/ci-gate.sh matches. An out-of-band `npm install` that leaves the lockfile unchanged is
+  # not detected — delete $WEB_DIR/node_modules to force a clean install. CI starts with no node_modules, so it always
+  # installs.
+  LOCK_HASH="$(sha256sum "$WEB_DIR/package-lock.json" | cut -d' ' -f1)"
+  STAMP="$WEB_DIR/node_modules/.package-lock-hash"
+  if [ -f "$STAMP" ] && [ "$(cat "$STAMP")" = "$LOCK_HASH" ]; then
+    echo "OK: node_modules matches package-lock.json — skipping npm ci."
+  else
+    ( cd "$WEB_DIR" && npm ci )
+    printf '%s' "$LOCK_HASH" > "$STAMP"
+  fi
+  ( cd "$WEB_DIR" && npm run build )
   # Fail loud if the build did not actually populate the embed dirs — a silent
   # empty static tree would ship a placeholder wheel while claiming a real one.
   for d in "$HUB_ASSETS" "$RUNNER_ASSETS"; do
