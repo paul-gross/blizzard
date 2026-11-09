@@ -14,6 +14,7 @@ import pytest
 from blizzard.auth_core import Role
 from blizzard.hub.api import auth_session
 from blizzard.hub.auth.permissions import Permission, permissions_for
+from blizzard.wire.problem import CONFIG_DOCUMENT_INVALID
 from tests.support.scaffolding import HubHarness, build_hub
 
 
@@ -103,6 +104,8 @@ def test_an_unknown_anchor_is_refused_at_its_entry_and_nothing_applies(hub: HubH
 
     assert resp.status_code == 422, resp.text
     assert resp.json()["detail"][0]["loc"] == ["body", "cadences", 1, "anchor"]
+    assert resp.json()["type"] == CONFIG_DOCUMENT_INVALID
+    assert resp.json()["detail"][0]["type"] == "enum"
     assert _cadences(hub) == []
 
 

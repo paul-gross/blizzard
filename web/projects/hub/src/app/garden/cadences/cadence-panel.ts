@@ -1,11 +1,4 @@
-import {
-  ChangeDetectionStrategy,
-  Component,
-  type TemplateRef,
-  input,
-  output,
-  signal,
-} from '@angular/core';
+import { ChangeDetectionStrategy, Component, type TemplateRef, input, output, signal } from '@angular/core';
 import { RouterLink } from '@angular/router';
 
 import {
@@ -101,14 +94,7 @@ interface OpenForm {
 }
 
 /** The empty chore a new one opens on. */
-const NEW_CHORE: ChoreDraft = {
-  key: '',
-  routine: '',
-  scopes: 'all',
-  mode: 'full',
-  promote: true,
-  note: '',
-};
+const NEW_CHORE: ChoreDraft = { key: '', routine: '', scopes: 'all', mode: 'full', promote: true, note: '' };
 
 /**
  * The gardening cadence panel — a header with the cadence's name, slug and lifecycle, and Edit and Retire (or
@@ -171,28 +157,14 @@ export class FleetCadencePanel {
   } | null>(null);
 
   /** Whether `form` is open on `panel` as it now reads. */
-  protected isOpen(
-    panel: CadencePanelVm,
-    form: 'cadence' | 'add-chore' | string,
-  ): boolean {
+  protected isOpen(panel: CadencePanelVm, form: 'cadence' | 'add-chore' | string): boolean {
     const open = this.open();
-    if (
-      open === null ||
-      open.cadenceId !== panel.cadenceId ||
-      open.revision !== panel.revision
-    )
-      return false;
-    return typeof open.form === 'string'
-      ? open.form === form
-      : open.form.chore === form;
+    if (open === null || open.cadenceId !== panel.cadenceId || open.revision !== panel.revision) return false;
+    return typeof open.form === 'string' ? open.form === form : open.form.chore === form;
   }
 
   protected openForm(panel: CadencePanelVm, form: OpenForm['form']): void {
-    this.open.set({
-      cadenceId: panel.cadenceId,
-      revision: panel.revision,
-      form,
-    });
+    this.open.set({ cadenceId: panel.cadenceId, revision: panel.revision, form });
   }
 
   protected closeForm(): void {
@@ -200,21 +172,10 @@ export class FleetCadencePanel {
   }
 
   /** The record's facts — its rhythm and its next moments. */
-  protected factRows(
-    moments: TemplateRef<unknown>,
-    rhythm: string,
-  ): readonly KitFact[] {
+  protected factRows(moments: TemplateRef<unknown>, rhythm: string): readonly KitFact[] {
     return [
-      {
-        label: 'Rhythm',
-        value: rhythm,
-        testid: 'gardening-cadence-panel-rhythm',
-      },
-      {
-        label: 'Next',
-        template: moments,
-        testid: 'gardening-cadence-panel-next',
-      },
+      { label: 'Rhythm', value: rhythm, testid: 'gardening-cadence-panel-rhythm' },
+      { label: 'Next', template: moments, testid: 'gardening-cadence-panel-next' },
     ];
   }
 
@@ -248,9 +209,7 @@ export class FleetCadencePanel {
     });
   }
 
-  private confirm(
-    prompt: NonNullable<ReturnType<typeof this.pendingConfirm>>,
-  ): void {
+  private confirm(prompt: NonNullable<ReturnType<typeof this.pendingConfirm>>): void {
     this.pendingConfirm.set(prompt);
   }
 

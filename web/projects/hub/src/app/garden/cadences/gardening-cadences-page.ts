@@ -1,11 +1,4 @@
-import {
-  ChangeDetectionStrategy,
-  Component,
-  computed,
-  effect,
-  inject,
-  signal,
-} from '@angular/core';
+import { ChangeDetectionStrategy, Component, computed, effect, inject, signal } from '@angular/core';
 import { Router, RouterOutlet } from '@angular/router';
 import {
   asyncState,
@@ -49,14 +42,7 @@ import {
 @Component({
   selector: 'app-gardening-cadences-page',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [
-    FleetCadenceForm,
-    FleetCadenceList,
-    KitButton,
-    KitMasterDetail,
-    KitPanel,
-    RouterOutlet,
-  ],
+  imports: [FleetCadenceForm, FleetCadenceList, KitButton, KitMasterDetail, KitPanel, RouterOutlet],
   templateUrl: './gardening-cadences-page.html',
   styleUrl: './gardening-cadences-page.css',
 })
@@ -73,22 +59,14 @@ export class GardeningCadencesPage {
   private readonly createMutation = injectCreateCadenceMutation();
   private readonly project = injectLensedProject();
 
-  protected readonly projectName = computed(
-    () => this.project()?.name ?? this.lens.slug() ?? '',
-  );
-  private readonly cadences = computed<readonly CadenceView[]>(
-    () => this.cadencesQuery.data() ?? [],
-  );
+  protected readonly projectName = computed(() => this.project()?.name ?? this.lens.slug() ?? '');
+  private readonly cadences = computed<readonly CadenceView[]>(() => this.cadencesQuery.data() ?? []);
 
   /** The line saying cadences mint nothing — `null` while the `cadences` flag is on. */
-  protected readonly flagOffLine = computed(() =>
-    flagOffLine(this.flags.on('cadences')),
-  );
+  protected readonly flagOffLine = computed(() => flagOffLine(this.flags.on('cadences')));
 
   /** Whether the current identity may author cadences (`graph:edit`). */
-  protected readonly canEdit = computed(() =>
-    hasPermission(this.meQuery.data(), 'graph:edit'),
-  );
+  protected readonly canEdit = computed(() => hasPermission(this.meQuery.data(), 'graph:edit'));
 
   protected readonly cadenceSlugParam = injectChildRouteParam('cadenceSlug');
 
@@ -96,9 +74,7 @@ export class GardeningCadencesPage {
     presentCadenceSlug(this.cadenceSlugParam(), this.cadences()),
   );
 
-  protected readonly cadenceRows = computed<readonly CadenceRowVm[]>(() =>
-    cadenceRows(this.cadences()),
-  );
+  protected readonly cadenceRows = computed<readonly CadenceRowVm[]>(() => cadenceRows(this.cadences()));
 
   protected readonly cadencesState = computed<KitAsyncStateValue>(() =>
     asyncState(this.cadencesQuery, this.cadenceRows().length === 0),
@@ -107,23 +83,16 @@ export class GardeningCadencesPage {
   /** Whether the create form is open. */
   protected readonly creating = signal(false);
   protected readonly emptyDraft = EMPTY_CADENCE_DRAFT;
-  protected readonly createPending = computed(() =>
-    this.createMutation.isPending(),
-  );
+  protected readonly createPending = computed(() => this.createMutation.isPending());
   /** Set on a refused create; cleared at the next attempt. */
   protected readonly createError = signal<string | null>(null);
 
   protected selectCadence(slug: string): void {
-    void this.router.navigate(
-      this.lens.link(['/gardening', 'cadences', slug]),
-      { queryParamsHandling: 'preserve' },
-    );
+    void this.router.navigate(this.lens.link(['/gardening', 'cadences', slug]), { queryParamsHandling: 'preserve' });
   }
 
   protected onBack(): void {
-    void this.router.navigate(this.lens.link(['/gardening', 'cadences']), {
-      queryParamsHandling: 'preserve',
-    });
+    void this.router.navigate(this.lens.link(['/gardening', 'cadences']), { queryParamsHandling: 'preserve' });
   }
 
   protected openCreate(): void {
@@ -142,30 +111,20 @@ export class GardeningCadencesPage {
         this.creating.set(false);
         this.selectCadence(cadence.slug);
       },
-      onError: (error: unknown) =>
-        this.createError.set(errorMessage(error, 'Create failed.')),
+      onError: (error: unknown) => this.createError.set(errorMessage(error, 'Create failed.')),
     });
   }
 
   constructor() {
     effect(() => {
-      const settled =
-        !this.cadencesQuery.isPending() && !this.cadencesQuery.isError();
+      const settled = !this.cadencesQuery.isPending() && !this.cadencesQuery.isError();
       const slugs = this.cadenceRows().map((row) => row.slug);
-      const first = firstRowToOpen(
-        this.cadenceSlugParam(),
-        slugs,
-        settled,
-        this.mobile(),
-      );
+      const first = firstRowToOpen(this.cadenceSlugParam(), slugs, settled, this.mobile());
       if (first === null) return;
-      void this.router.navigate(
-        this.lens.link(['/gardening', 'cadences', first]),
-        {
-          replaceUrl: true,
-          queryParamsHandling: 'preserve',
-        },
-      );
+      void this.router.navigate(this.lens.link(['/gardening', 'cadences', first]), {
+        replaceUrl: true,
+        queryParamsHandling: 'preserve',
+      });
     });
   }
 }

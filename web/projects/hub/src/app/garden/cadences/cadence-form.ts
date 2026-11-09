@@ -1,19 +1,6 @@
-import {
-  ChangeDetectionStrategy,
-  Component,
-  input,
-  linkedSignal,
-  output,
-} from '@angular/core';
+import { ChangeDetectionStrategy, Component, input, linkedSignal, output } from '@angular/core';
 
-import {
-  type CadenceAnchor,
-  type KitChipOption,
-  KitButton,
-  KitErrorLine,
-  KitSelect,
-  KitTextInput,
-} from 'fleet';
+import { type CadenceAnchor, type KitChipOption, KitButton, KitErrorLine, KitSelect, KitTextInput } from 'fleet';
 
 import { CADENCE_ANCHORS, knownAnchor } from './cadence-vocabulary';
 
@@ -62,10 +49,7 @@ export class FleetCadenceForm {
 
   protected readonly draft = linkedSignal(() => this.initial());
 
-  protected set(
-    field: Exclude<keyof CadenceDraft, 'anchor'>,
-    value: string,
-  ): void {
+  protected set(field: Exclude<keyof CadenceDraft, 'anchor'>, value: string): void {
     this.draft.update((draft) => ({ ...draft, [field]: value }));
   }
 

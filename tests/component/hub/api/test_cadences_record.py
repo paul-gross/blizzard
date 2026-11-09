@@ -111,6 +111,13 @@ def test_a_create_that_cannot_mean_anything_is_422_naming_the_field(
     assert _changes(hub) == []
 
 
+def test_a_create_naming_an_unknown_anchor_is_the_validation_422(hub: HubHarness) -> None:
+    resp = _post(hub, {"slug": "evening", "spacing": "1d", "anchor": "whenever"})
+
+    assert resp.status_code == 422, resp.text
+    assert (resp.json()["detail"][0]["loc"], resp.json()["detail"][0]["type"]) == (["body", "anchor"], "enum")
+
+
 def test_a_slug_its_project_holds_is_422(hub: HubHarness) -> None:
     _create(hub)
 
@@ -127,7 +134,7 @@ def test_an_edit_naming_an_unknown_anchor_is_422_at_the_body_and_changes_nothing
     )
 
     assert resp.status_code == 422, resp.text
-    assert resp.json()["detail"][0]["loc"] == ["body", "anchor"]
+    assert (resp.json()["detail"][0]["loc"], resp.json()["detail"][0]["type"]) == (["body", "anchor"], "enum")
     reread = hub.client.get(f"/api/cadences/{created['cadence_id']}")
     assert (reread.json()["anchor"], reread.json()["revision"]) == ("finished", 1)
 

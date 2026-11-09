@@ -1,10 +1,4 @@
-import {
-  ChangeDetectionStrategy,
-  Component,
-  computed,
-  inject,
-  signal,
-} from '@angular/core';
+import { ChangeDetectionStrategy, Component, computed, inject, signal } from '@angular/core';
 import { toSignal } from '@angular/core/rxjs-interop';
 import { ActivatedRoute } from '@angular/router';
 import {
@@ -19,28 +13,12 @@ import {
 import { map } from 'rxjs';
 
 import { hasPermission, injectMeQuery } from '../../core/auth/me.query';
-import {
-  cadenceLifecycleMutationKey,
-  editCadenceMutationKey,
-} from '../../core/mutation-keys';
-import {
-  injectHubCadenceErrandsQuery,
-  injectHubCadencesQuery,
-} from '../core/cadences.query';
+import { cadenceLifecycleMutationKey, editCadenceMutationKey } from '../../core/mutation-keys';
+import { injectHubCadenceErrandsQuery, injectHubCadencesQuery } from '../core/cadences.query';
 import type { CadenceDraft } from './cadence-form';
-import {
-  type CadenceEditVars,
-  injectEditCadenceMutation,
-} from './cadence-edit.mutations';
-import {
-  type CadenceLifecycleVars,
-  injectCadenceLifecycleMutation,
-} from './cadence-lifecycle.mutations';
-import {
-  type CadencePanelVm,
-  type ChoreEditEvent,
-  FleetCadencePanel,
-} from './cadence-panel';
+import { type CadenceEditVars, injectEditCadenceMutation } from './cadence-edit.mutations';
+import { type CadenceLifecycleVars, injectCadenceLifecycleMutation } from './cadence-lifecycle.mutations';
+import { type CadencePanelVm, type ChoreEditEvent, FleetCadencePanel } from './cadence-panel';
 import type { ChoreDraft } from './chore-form';
 import {
   cadenceBySlug,
@@ -78,94 +56,57 @@ export class GardeningCadenceDetail {
   private readonly editMutation = injectEditCadenceMutation();
   private readonly lifecycleMutation = injectCadenceLifecycleMutation();
 
-  private readonly pendingEdits =
-    injectPendingMutationVariables<CadenceEditVars>(editCadenceMutationKey);
-  private readonly pendingLifecycle =
-    injectPendingMutationVariables<CadenceLifecycleVars>(
-      cadenceLifecycleMutationKey,
-    );
+  private readonly pendingEdits = injectPendingMutationVariables<CadenceEditVars>(editCadenceMutationKey);
+  private readonly pendingLifecycle = injectPendingMutationVariables<CadenceLifecycleVars>(cadenceLifecycleMutationKey);
 
-  private readonly cadenceSlug = toSignal(
-    this.route.paramMap.pipe(map((params) => params.get('cadenceSlug'))),
-    {
-      initialValue: null,
-    },
-  );
+  private readonly cadenceSlug = toSignal(this.route.paramMap.pipe(map((params) => params.get('cadenceSlug'))), {
+    initialValue: null,
+  });
 
   private readonly selected = computed<CadenceView | null>(() =>
     cadenceBySlug(this.cadenceSlug(), this.cadencesQuery.data() ?? []),
   );
 
-  private readonly errandsQuery = injectHubCadenceErrandsQuery(
-    () => this.selected()?.cadence_id ?? null,
-  );
+  private readonly errandsQuery = injectHubCadenceErrandsQuery(() => this.selected()?.cadence_id ?? null);
 
-  protected readonly canEdit = computed(() =>
-    hasPermission(this.meQuery.data(), 'graph:edit'),
-  );
+  protected readonly canEdit = computed(() => hasPermission(this.meQuery.data(), 'graph:edit'));
 
   protected readonly panelVm = computed<CadencePanelVm | null>(() => {
     const cadence = this.selected();
-    return cadencePanelVm(
-      cadence,
-      cadenceOverrideRetired(cadence, this.pendingLifecycle()),
-      this.errandsQuery.data(),
-    );
+    return cadencePanelVm(cadence, cadenceOverrideRetired(cadence, this.pendingLifecycle()), this.errandsQuery.data());
   });
 
   protected readonly panelState = computed<KitAsyncStateValue>(() =>
-    restingAsyncState(
-      this.cadenceSlug() === null,
-      this.cadencesQuery,
-      this.selected() === null,
-    ),
+    restingAsyncState(this.cadenceSlug() === null, this.cadencesQuery, this.selected() === null),
   );
 
   protected readonly actionError = signal<string | null>(null);
 
   protected readonly editPending = computed(() =>
-    isPendingFor(
-      this.pendingEdits(),
-      (v) => v.cadenceId === this.selected()?.cadence_id,
-    ),
+    isPendingFor(this.pendingEdits(), (v) => v.cadenceId === this.selected()?.cadence_id),
   );
 
   protected readonly lifecyclePending = computed(() =>
-    isPendingFor(
-      this.pendingLifecycle(),
-      (v) => v.cadenceId === this.selected()?.cadence_id,
-    ),
+    isPendingFor(this.pendingLifecycle(), (v) => v.cadenceId === this.selected()?.cadence_id),
   );
 
   protected onEdit(draft: CadenceDraft): void {
-    this.send(editCadenceRequest(draft), 'Save failed.');
+    this.send(editCadenceRequest(draft, this.selected() ?? undefined), 'Save failed.');
   }
 
   protected onAddChore(draft: ChoreDraft): void {
     const cadence = this.selected();
-    if (cadence !== null)
-      this.send(
-        { chores: choresAdding(cadence.chores, draft) },
-        'Add chore failed.',
-      );
+    if (cadence !== null) this.send({ chores: choresAdding(cadence.chores, draft) }, 'Add chore failed.');
   }
 
   protected onEditChore(event: ChoreEditEvent): void {
     const cadence = this.selected();
-    if (cadence !== null)
-      this.send(
-        { chores: choresReplacing(cadence.chores, event.key, event.draft) },
-        'Save chore failed.',
-      );
+    if (cadence !== null) this.send({ chores: choresReplacing(cadence.chores, event.key, event.draft) }, 'Save chore failed.');
   }
 
   protected onRemoveChore(key: string): void {
     const cadence = this.selected();
-    if (cadence !== null)
-      this.send(
-        { chores: choresRemoving(cadence.chores, key) },
-        'Remove chore failed.',
-      );
+    if (cadence !== null) this.send({ chores: choresRemoving(cadence.chores, key) }, 'Remove chore failed.');
   }
 
   protected onRetire(): void {
@@ -182,10 +123,7 @@ export class GardeningCadenceDetail {
     this.actionError.set(null);
     this.editMutation.mutate(
       { cadenceId: cadence.cadence_id, revision: cadence.revision, body },
-      {
-        onError: (error: unknown) =>
-          this.actionError.set(errorMessage(error, fallback)),
-      },
+      { onError: (error: unknown) => this.actionError.set(errorMessage(error, fallback)) },
     );
   }
 
@@ -195,10 +133,7 @@ export class GardeningCadenceDetail {
     this.actionError.set(null);
     this.lifecycleMutation.mutate(
       { cadenceId: cadence.cadence_id, revision: cadence.revision, retired },
-      {
-        onError: (error: unknown) =>
-          this.actionError.set(errorMessage(error, fallback)),
-      },
+      { onError: (error: unknown) => this.actionError.set(errorMessage(error, fallback)) },
     );
   }
 }

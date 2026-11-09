@@ -5,10 +5,6 @@ import { CADENCE_ANCHORS } from './cadence-vocabulary';
 
 describe('CADENCE_ANCHORS', () => {
   it('is the generated anchor vocabulary', () => {
-    expect([...CADENCE_ANCHORS]).toEqual([
-      CadenceAnchor.SCHEDULED,
-      CadenceAnchor.STARTED,
-      CadenceAnchor.FINISHED,
-    ]);
+    expect([...CADENCE_ANCHORS]).toEqual([CadenceAnchor.SCHEDULED, CadenceAnchor.STARTED, CadenceAnchor.FINISHED]);
   });
 });

@@ -1,8 +1,4 @@
-import {
-  CadenceAnchor,
-  type CadenceCreateRequest,
-  type CadenceView,
-} from 'fleet';
+import { CadenceAnchor, type CadenceCreateRequest, type CadenceView } from 'fleet';
 
 import type { CadenceDraft } from './cadence-form';
 import type { CadenceCountVm, CadenceRowVm } from './cadence-list';
@@ -18,10 +14,7 @@ export function flagOffLine(minting: boolean): string | null {
 }
 
 /** The effective selection: `slug` while it still names a loaded cadence, else `null`. */
-export function presentCadenceSlug(
-  slug: string | null,
-  cadences: readonly CadenceView[],
-): string | null {
+export function presentCadenceSlug(slug: string | null, cadences: readonly CadenceView[]): string | null {
   if (slug === null) return null;
   return cadences.some((c) => c.slug === slug) ? slug : null;
 }
@@ -29,11 +22,7 @@ export function presentCadenceSlug(
 /** A spacing's minutes in the largest whole unit: `10 days`, `6 hours`, `90 minutes`. */
 export function spacingText(minutes: number): string {
   const [n, unit] =
-    minutes % 1440 === 0
-      ? [minutes / 1440, 'day']
-      : minutes % 60 === 0
-        ? [minutes / 60, 'hour']
-        : [minutes, 'minute'];
+    minutes % 1440 === 0 ? [minutes / 1440, 'day'] : minutes % 60 === 0 ? [minutes / 60, 'hour'] : [minutes, 'minute'];
   return `${n} ${unit}${n === 1 ? '' : 's'}`;
 }
 
@@ -42,20 +31,12 @@ export function spacingText(minutes: number): string {
  * least 10 days apart`. A spacing counted from other than its start names its anchor,
  * an anchor this build does not know included, raw.
  */
-export function rhythmText(
-  cadence: Pick<CadenceView, 'schedule' | 'spacing_minutes' | 'anchor'>,
-): string {
+export function rhythmText(cadence: Pick<CadenceView, 'schedule' | 'spacing_minutes' | 'anchor'>): string {
   const parts: string[] = [];
-  if (cadence.schedule !== null)
-    parts.push(`${cadence.schedule.cron} ${cadence.schedule.zone}`);
+  if (cadence.schedule !== null) parts.push(`${cadence.schedule.cron} ${cadence.schedule.zone}`);
   if (cadence.spacing_minutes !== null) {
-    const anchored =
-      cadence.anchor === null || cadence.anchor === CadenceAnchor.STARTED
-        ? ''
-        : ` from ${cadence.anchor}`;
-    parts.push(
-      `at least ${spacingText(cadence.spacing_minutes)} apart${anchored}`,
-    );
+    const anchored = cadence.anchor === null || cadence.anchor === CadenceAnchor.STARTED ? '' : ` from ${cadence.anchor}`;
+    parts.push(`at least ${spacingText(cadence.spacing_minutes)} apart${anchored}`);
   }
   return parts.length === 0 ? 'no rhythm' : parts.join(', ');
 }
@@ -71,9 +52,7 @@ export function errandCounts(cadence: CadenceView): readonly CadenceCountVm[] {
 }
 
 /** The cadence list's rows: each cadence's name, rhythm, next moment, chores, errand counts, and attention. */
-export function cadenceRows(
-  cadences: readonly CadenceView[],
-): readonly CadenceRowVm[] {
+export function cadenceRows(cadences: readonly CadenceView[]): readonly CadenceRowVm[] {
   return cadences.map((c) => ({
     slug: c.slug,
     name: c.name,
@@ -87,27 +66,16 @@ export function cadenceRows(
 }
 
 /** An empty cadence draft: no slug, no name, no rhythm. */
-export const EMPTY_CADENCE_DRAFT: CadenceDraft = {
-  slug: '',
-  name: '',
-  cron: '',
-  zone: '',
-  spacing: '',
-  anchor: '',
-};
+export const EMPTY_CADENCE_DRAFT: CadenceDraft = { slug: '', name: '', cron: '', zone: '', spacing: '', anchor: '' };
 
 /** The create body a draft states: a field left blank is left out, so the hub's own default applies. */
-export function createCadenceRequest(
-  draft: CadenceDraft,
-): CadenceCreateRequest {
+export function createCadenceRequest(draft: CadenceDraft): CadenceCreateRequest {
   const cron = draft.cron.trim();
   const zone = draft.zone.trim();
   return {
     slug: draft.slug.trim(),
     ...(draft.name.trim() ? { name: draft.name.trim() } : {}),
-    ...(cron || zone
-      ? { schedule: { cron: cron || null, zone: zone || null } }
-      : {}),
+    ...(cron || zone ? { schedule: { cron: cron || null, zone: zone || null } } : {}),
     ...(draft.spacing.trim() ? { spacing: draft.spacing.trim() } : {}),
     ...(draft.anchor ? { anchor: draft.anchor } : {}),
   };
