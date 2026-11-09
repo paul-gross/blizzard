@@ -32,9 +32,10 @@ no id yet. Read the full shape live with `blizzard runner artifact get --scope s
 if that read fails or comes back empty, proceed on the restatement above. Publish the docket with
 `blizzard runner artifact create --name docket` (content on stdin) — even when it is empty, since an empty list is
 itself a statement. `class` is drawn from a closed set of four — `remediate`, `prevent`, `mechanize`, `escalate` — never
-one invented for this run; the ladder artifact above carries what each means. Hold it self-consistent within this run —
-the same kind of response spells its class the same way twice in one docket. The ladder artifact also carries this
-surface's own register: the body is written for a person, not an agent. State the case, not the inventory.
+one invented for this run; the ladder artifact above carries what each means. One kind of response spells its class one
+way per docket. Word `title` and `body` in the voice the target's own context states, else in the one
+`--scope system garden/voice` returns; failing both, write for an engineer deciding: code and file:line first, then the
+case.
 
 ## When the delta is a bail-out
 

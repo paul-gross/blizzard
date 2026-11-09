@@ -20,7 +20,10 @@ ever mints a real id.
 - `locus` — where it lives: normally a repo-relative path, optionally `:line` or `::symbol`. A finding about a whole
   body of ground rather than one point inside it may name that ground instead. blizzard stores the string and never
   resolves it.
-- `summary` — what was observed, in enough words for a person or a later pass to judge without re-deriving it.
+- `summary` — what was observed, in enough words for a person or a later pass to judge without re-deriving it: the
+  standard it breaks, the evidence at the locus, and what conforming would look like when the standard does not make
+  that obvious. How it reads is `garden/voice`'s to say, unless the deployment's own agent-facing context states a voice
+  for garden findings, which then replaces it.
 
 - `introduced` — best effort: the commit that introduced what the finding objects to, from `blame` on the locus. Omit it
   rather than guess — a reformat defeats blame, and a rule that went stale because the standard around it moved has no

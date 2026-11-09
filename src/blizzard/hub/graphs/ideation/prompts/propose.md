@@ -24,6 +24,11 @@ restatement: `direction` is a capability the target does not yet offer at all, `
 unevenly, `retire` is one it still offers that the intent no longer asks for. Hold `class` self-consistent within this
 run.
 
+Word `title` and `body` in the voice the target's own agent-facing context states for garden proposals, if it states
+one; otherwise read `blizzard runner artifact get --scope system garden/voice --content` and write an idea about the
+product in it. If that read fails or comes back empty, write for whoever holds the target's intent: the person whose
+work is hard and what that costs, then the response, in connected prose.
+
 ## When a shortlist entry revives a pass
 
 An entry carrying `revives` and `changed` answers a proposal a person already declined. Name the earlier proposal by id

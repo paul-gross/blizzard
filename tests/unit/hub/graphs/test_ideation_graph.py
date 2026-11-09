@@ -88,6 +88,15 @@ def test_ideation_prompts_read_the_formats_from_system_scope() -> None:
     assert "garden/proposal-format" in _prompt("propose")
 
 
+def test_ideation_propose_prefers_the_targets_voice_over_the_system_default() -> None:
+    """The voice a proposal is worded in is the target's when its context states one, and
+    `garden/voice` from system scope otherwise, with the fallback a failed read owes."""
+    prompt = _prompt("propose")
+    assert "the target's own agent-facing context states" in prompt
+    assert "blizzard runner artifact get --scope system garden/voice --content" in prompt
+    assert "If that read fails or comes back empty" in prompt
+
+
 def test_ideation_propose_states_the_closed_three_class_vocabulary() -> None:
     """`class` is not the proposer's own taxonomy to invent — it is drawn from exactly
     three closed values, distinct from `garden-routine`'s four."""

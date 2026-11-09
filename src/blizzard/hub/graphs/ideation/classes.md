@@ -17,10 +17,11 @@ Hold a docket self-consistent: the same kind of gap spells its class the same wa
 ## Who a proposal is for
 
 A proposal's body is written for a person: whoever holds the target's intent, reading it to decide whether to accept it,
-and again, later, to pick up the work an acceptance mints. Write it in that register — a colleague's opinion about what
-the product could become, offered to be weighed, not a system's compliance report. State the case, not an inventory:
-name what the gap serves, what is missing or surplus today, and why acting is worth the cost — and say plainly when you
-are unsure it is.
+and again, later, to pick up the work an acceptance mints. It is a colleague's opinion about what the product could
+become, offered to be weighed, not a system's compliance report. Name what the gap serves, what is missing or surplus
+today, and why acting is worth the cost, and say plainly when you are unsure it is. Word it in the voice the target's
+own agent-facing context states for garden proposals, if it states one; otherwise in the one
+`blizzard runner artifact get --scope system garden/voice --content` returns, as an idea about the product.
 
 An idea here answers to no rule the target violated; `findings` on every proposal this graph submits is always empty. A
 pass on a proposal is never a claim that the gap was imagined — only that, weighed against everything else waiting, it

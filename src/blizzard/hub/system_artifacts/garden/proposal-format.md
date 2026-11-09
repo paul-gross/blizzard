@@ -13,13 +13,18 @@ mints one; `ref` names it only within its own submission, the same way a finding
 - `class` — the deployment's own taxonomy for a kind of response, exactly as a finding's `class` is its taxonomy for a
   kind of weed. blizzard stores it, indexes it, groups by it, and never interprets it — a deployment declares its own
   vocabulary of proposal classes and settles what any of them mean.
-- `title` — a short label for the response.
-- `body` — the case for it, in enough detail that a person can decide without re-reading the findings behind it.
+- `title` — the issue the proposal answers, stated concretely; `garden/voice` names the one shape titled as the change
+  instead.
+- `body` — markdown: the case for it, in enough detail that a person can decide without re-reading the findings behind
+  it. For a design, the body carries the design itself: the current and proposed interfaces, as code.
 - `findings` — the findings this proposal answers. May be empty — the hub enforces no minimum; whether a submitting
   graph's own proposals must cite one is that graph's own propose prompt to decide, never the hub's. Each entry given is
   either a `fin_` id already live on this routine, or the submission-local `ref` an `add` op in a delta delivered by
   this same call carries — resolved against the id the hub mints for it at delivery, so a proposal may answer a finding
   this very run opened.
+
+How `title` and `body` read is `garden/voice`'s to say, unless the deployment's own agent-facing context states a voice
+for garden proposals, which then replaces it.
 
 ### GardenProposalCandidate
 
@@ -28,7 +33,7 @@ mints one; `ref` names it only within its own submission, the same way a finding
   "ref": "P1",
   "class": "fix-the-source",
   "title": "Author a docstring standard covering change-history narration",
-  "body": "Seventeen modules narrate their own change history in the docstring rather than stating the contract; a written standard gives future edits something to check against instead of re-litigating the question per file.",
+  "body": "**Premise:** 17 modules under `src/billing/` open with a docstring that narrates their change history instead of stating the contract, and no standard says which is right.\n\n## Sites\n- `src/billing/invoice.py:1`\n- `src/billing/ledger.py:1`\n\n## Change\nAdd `docs/standards/docstrings.md`: a module docstring states what the module guarantees; its history stays in git.\n\n## Cost\nOne new document. The axis's criteria point at it, so later runs judge each docstring against it.",
   "findings": ["fin_01JKQ8Z3M4N5P6R7S8T9V0W1X2", "fin_01JKQ8Z3M4N5P6R7S8T9V0W1X3"]
 }
 ```

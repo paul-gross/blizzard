@@ -41,9 +41,12 @@ _MODELS: dict[str, type[BaseModel]] = {
     "ReviewFindingDelta": finding.ReviewFindingDelta,
 }
 
-# `### ModelName`, then a fenced ```json block. Non-greedy body so consecutive pairs in
-# one document are extracted independently rather than one match swallowing the rest.
-_HEADING_AND_BLOCK = re.compile(r"^### (?P<name>\w+)\n+```json\n(?P<body>.*?)\n```", re.MULTILINE | re.DOTALL)
+# `### ModelName`, then a fenced ```json block — or a longer fence, which an example whose
+# own strings carry ``` needs. Non-greedy body so consecutive pairs in one document are
+# extracted independently rather than one match swallowing the rest.
+_HEADING_AND_BLOCK = re.compile(
+    r"^### (?P<name>\w+)\n+(?P<fence>`{3,})json\n(?P<body>.*?)\n(?P=fence)$", re.MULTILINE | re.DOTALL
+)
 
 
 def _all_documents() -> list[Path]:

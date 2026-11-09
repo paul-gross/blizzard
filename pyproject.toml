@@ -285,6 +285,7 @@ also_copy = [
     "web/angular.json",
     "src/blizzard/hub/system_artifacts/garden/finding-format.md",
     "src/blizzard/hub/system_artifacts/garden/proposal-format.md",
+    "src/blizzard/hub/system_artifacts/garden/voice.md",
     "src/blizzard/hub/system_artifacts/review/finding-format.md",
     "src/blizzard/runner/harness/prompts/samples/winter/workspace-prompt.md",
     "README.md",
