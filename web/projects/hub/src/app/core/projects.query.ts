@@ -1,6 +1,7 @@
 import { injectQuery } from '@tanstack/angular-query-experimental';
 
 import {
+  type ProjectNotFoundProblem,
   type ProjectView,
   getProjectApiProjectsProjectGet,
   hubProjectsKey,
@@ -9,7 +10,8 @@ import {
 } from 'fleet/shell';
 
 /** The `type` of the hub's refusal when the tenant holds no such project. */
-const PROJECT_NOT_FOUND = 'urn:blizzard:problem:project-not-found';
+const PROJECT_NOT_FOUND: ProjectNotFoundProblem['type'] =
+  'urn:blizzard:problem:project-not-found';
 
 /** How long a read of the tenant's projects stands before a lens resolution or the lens control reads it again. */
 export const PROJECTS_STALE_MS = 30_000;
