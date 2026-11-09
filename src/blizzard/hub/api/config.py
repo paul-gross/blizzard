@@ -513,6 +513,9 @@ def _apply(
         raise _refusal(exc) from exc
     except CadenceAdmissionRefused as exc:
         raise admission_refused(exc) from exc
+    if not dry_run and any(o.kind is RecordKind.URGENCY_ORDER and o.op is not None for o in applied.outcomes):
+        # The apply has committed; a reordered set moves the queue's claim order as the reorder routes do.
+        services.events.publish_queue_changed()
     return ConfigApplyResponse(
         dry_run=dry_run,
         apply_id=applied.apply_id,
@@ -585,7 +588,7 @@ def export_config(
     project_ids = [project.project_id for project in projects]
     source_links = services.project_links.sources_of_projects(project_ids)
     repository_links = services.project_links.repositories_of_projects(project_ids)
-    live_urgencies = [view.urgency for view in services.urgency_reading.list()]
+    live_urgencies = services.urgency_reading.ordered()
     icons = services.urgency_reading.icons()
     return ConfigDocumentV2(
         version=DOCUMENT_VERSION,

@@ -200,3 +200,17 @@ def test_the_urgencies_and_settings_schemas_are_served(hub: HubHarness) -> None:
         response = hub.client.get(f"/api/config/schema/{kind}")
         assert response.status_code == 200, response.text
         assert field in response.json()["properties"]
+
+
+def test_an_apply_that_reorders_publishes_the_queue_change_and_one_that_does_not_publishes_none(
+    hub: HubHarness, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _create(hub, "later")
+    published: list[None] = []
+    monkeypatch.setattr(hub.services.events, "publish_queue_changed", lambda: published.append(None))
+
+    assert _apply(hub, {"urgency_order": ["later", "standard"]}, dry_run=True).status_code == 200
+    assert _apply(hub, {"urgency_order": ["standard", "later"]}).status_code == 200
+    assert published == []
+    assert _apply(hub, {"urgency_order": ["later", "standard"]}).status_code == 200
+    assert published == [None]
