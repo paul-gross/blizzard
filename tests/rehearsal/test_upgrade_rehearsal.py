@@ -22,7 +22,6 @@ import pytest
 import yaml
 
 from blizzard.foundation.runner_token_names import hub_token_variable
-from blizzard.runner.config import DEFAULT_WORKSPACE_ID
 from blizzard.runner.hub.internal.token_file import HubTokenFile
 from blizzard.tools.compat.releases import parse_release, parse_releases
 from blizzard.tools.release_install import Installation, download_release, install
