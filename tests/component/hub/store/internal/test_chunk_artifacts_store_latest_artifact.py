@@ -56,7 +56,7 @@ def test_an_exact_epoch_and_produced_at_tie_resolves_to_the_same_artifact_every_
     for _ in range(5):
         repeat = hub.services.chunks.artifacts.latest_artifact(chunk_id, "tied")
         assert repeat is not None
-        assert repeat.artifact_id == winner.artifact_id
+        assert repeat == winner
 
 
 def test_an_exact_tie_resolves_to_the_highest_artifact_id_not_to_insertion_order(tmp_path: Path) -> None:
@@ -95,7 +95,7 @@ def test_an_exact_tie_resolves_to_the_highest_artifact_id_not_to_insertion_order
     winner = hub.services.chunks.artifacts.latest_artifact(chunk_id, "seeded-tie")
 
     assert winner is not None
-    assert winner.artifact_id == "art_zzzzzzzzzzzzzzzzzzzzzzzzzz"
+    assert winner[0].artifact_id == "art_zzzzzzzzzzzzzzzzzzzzzzzzzz"
 
 
 def test_latest_artifacts_matches_latest_artifact_per_name_and_drops_an_unknown_name(tmp_path: Path) -> None:
@@ -136,6 +136,94 @@ def test_latest_artifacts_matches_latest_artifact_per_name_and_drops_an_unknown_
     assert set(result) == {"multi", "tied", "single"}
     for name in ("multi", "tied", "single"):
         assert result[name] == repo.latest_artifact(chunk_id, name)
-    assert result["multi"].artifact_id == "art_a2"
-    assert result["tied"].artifact_id == "art_zz"
+    assert result["multi"][0].artifact_id == "art_a2"
+    assert result["tied"][0].artifact_id == "art_zz"
     assert repo.latest_artifacts(chunk_id, []) == {}
+
+
+def test_producer_candidates_are_scoped_and_keep_only_each_producers_newest(tmp_path: Path) -> None:
+    hub = build_hub(tmp_path)
+    chunk_id = ingest(hub, [{"source": "default", "ref": "1"}], promote=True)
+    other = ingest(hub, [{"source": "default", "ref": "2"}], promote=True)
+    at = hub.clock.now()
+    with hub.engine.begin() as conn:
+        for chunk, producer, epoch in [(chunk_id, "alpha", n) for n in range(1, 30)] + [
+            (chunk_id, "beta", 1),
+            (other, "alpha", 99),
+        ]:
+            conn.execute(
+                sa.insert(artifacts).values(
+                    stamp(
+                        artifacts,
+                        artifact_id=f"art_{chunk}_{producer}_{epoch}",
+                        chunk_id=chunk,
+                        node_id=f"nd_{producer}",
+                        node_name=producer,
+                        epoch=epoch,
+                        name="shared",
+                        kind="asset",
+                        data=str(epoch),
+                        produced_at=at,
+                        seq=epoch,
+                    )
+                )
+            )
+    repo = hub.services.chunks.artifacts
+    candidates = repo.latest_artifact(chunk_id, "shared")
+    assert [(a.node_name, a.epoch, a.produced_at) for a in candidates] == [("alpha", 29, at), ("beta", 1, at)]
+    assert repo.latest_artifact(chunk_id, "shared", node_name="beta") == [candidates[1]]
+    assert repo.latest_artifact(chunk_id, "shared", node_name="missing") == []
+    assert repo.latest_artifacts(chunk_id, ["shared", "missing"], node_name="alpha") == {"shared": [candidates[0]]}
+
+
+def test_candidate_reads_batch_names(tmp_path: Path, monkeypatch: object) -> None:
+    from pytest import MonkeyPatch
+
+    from blizzard.foundation.store import batching
+    from tests.support.scaffolding import capture_statements
+
+    assert isinstance(monkeypatch, MonkeyPatch)
+    monkeypatch.setattr(batching, "BATCH_SIZE", 2)
+    hub = build_hub(tmp_path)
+    chunk_id = ingest(hub, [{"source": "default", "ref": "1"}], promote=True)
+    with capture_statements(hub.engine) as statements:
+        assert hub.services.chunks.artifacts.latest_artifacts(chunk_id, ["a", "b", "c", "d", "e"]) == {}
+    assert len(statements) == 3
+
+
+def test_candidate_competition_is_tenant_scoped(tmp_path: Path) -> None:
+    from blizzard.hub.store import schema as s
+    from blizzard.hub.store.internal.chunk_artifacts_store import ChunkArtifactsStore
+    from blizzard.hub.tenancy import TenantId
+    from tests.support.scaffolding import default_tenant, scoped_connections
+
+    hub = build_hub(tmp_path)
+    chunk_id = ingest(hub, [{"source": "default", "ref": "1"}], promote=True)
+    tenant = default_tenant(hub.engine)
+    other = TenantId("ten_other")
+    at = hub.clock.now()
+    with hub.engine.begin() as conn:
+        conn.execute(sa.insert(s.tenants).values(tenant_id=other, name="other", created_at=at, created_by="u"))
+        for tid, epoch in [(tenant, 1), (other, 9)]:
+            conn.execute(
+                sa.insert(artifacts).values(
+                    stamp(
+                        artifacts,
+                        tenant_id=tid,
+                        artifact_id=f"art_{tid}",
+                        chunk_id=chunk_id,
+                        node_id="nd_1",
+                        node_name="producer",
+                        epoch=epoch,
+                        name="shared",
+                        kind="asset",
+                        data=str(epoch),
+                        produced_at=at,
+                        seq=1,
+                    )
+                )
+            )
+    first = ChunkArtifactsStore(scoped_connections(hub.engine, tenant), hub.clock)
+    second = ChunkArtifactsStore(scoped_connections(hub.engine, other), hub.clock)
+    assert [a.epoch for a in first.latest_artifact(chunk_id, "shared")] == [1]
+    assert [a.epoch for a in second.latest_artifact(chunk_id, "shared")] == [9]

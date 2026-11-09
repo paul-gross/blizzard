@@ -219,3 +219,27 @@ def test_a_delivery_a_restart_superseded_is_fenced_and_lands_nothing(tmp_path: P
 
     assert delivered == Delivered("fenced")
     assert finding_count(hub) == 0
+
+
+def test_ambiguous_review_is_refused_but_replay_precedes_artifact_read(tmp_path: Path) -> None:
+    from tests.support.hub_node_artifacts import record_hub_asset
+
+    hub = build_hub(tmp_path)
+    chunk_id = seed_chunk(hub)
+    record_artifact(hub, chunk_id, content=_delta([_deferred()]))
+    assert record_hub_asset(
+        hub, chunk_id, node_id="nd_other", node_name="other", epoch=1, name=ARTIFACT_NAME, content=_delta([])
+    )
+    refused = deliver(hub, chunk_id)
+    assert refused.outcome == "invalid"
+    assert "ambiguous" in refused.detail and "other" in refused.detail
+    assert finding_count(hub) == 0
+
+    with hub.engine.begin() as conn:
+        conn.execute(hub_scoped(s.artifacts.delete().where(s.artifacts.c.node_name == "other")))
+    assert deliver(hub, chunk_id).outcome == "recorded"
+    assert record_hub_asset(
+        hub, chunk_id, node_id="nd_other", node_name="other", epoch=1, name=ARTIFACT_NAME, content=_delta([])
+    )
+    assert deliver(hub, chunk_id).outcome == "recorded"
+    assert finding_count(hub) == 1

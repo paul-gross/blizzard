@@ -7,6 +7,8 @@ from typing import Any, cast
 
 import pytest
 
+from blizzard.foundation.artifacts import ArtifactKind
+from blizzard.hub.domain.artifact.model import StoredArtifact
 from blizzard.hub.domain.chunk.model import Chunk
 from blizzard.hub.domain.garden.delivery.materialize import (
     DeliveryOutcome,
@@ -26,15 +28,18 @@ _PROJECT = "proj_test"
 _RUN = RunContext(project_id=_PROJECT, routine_name="nightly", scope_slug="blizzard", mode="full")
 
 
-class _Artifact:
-    def __init__(self, name: str) -> None:
-        self.data = "{}"
-        self.artifact_id = f"art_{name}"
-
-
 class _Artifacts:
-    def latest_artifacts(self, chunk_id: str, names: Sequence[str]) -> dict[str, _Artifact]:
-        return {name: _Artifact(name) for name in names}
+    def latest_artifacts(
+        self, chunk_id: str, names: Sequence[str], *, node_name: str | None = None
+    ) -> dict[str, list[StoredArtifact]]:
+        return {
+            name: [
+                StoredArtifact(
+                    ArtifactKind.ASSET, name, "{}", None, None, f"art_{name}", chunk_id, "node", "producer", 1
+                )
+            ]
+            for name in names
+        }
 
 
 class _Buckets:

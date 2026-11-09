@@ -33,15 +33,14 @@ class IReadChunkArtifactsRepository(Protocol):
         per-repo landing hashes and PR closures, batched by caller-supplied ids."""
         ...
 
-    def latest_artifact(self, chunk_id: str, name: str) -> StoredArtifact | None:
-        """The chunk's newest artifact row named ``name`` — highest epoch, then latest
-        ``produced_at``. ``None`` when no artifact of that name exists."""
+    def latest_artifact(self, chunk_id: str, name: str, *, node_name: str | None = None) -> list[StoredArtifact]:
+        """Newest row per producer for this name; an optional producer restricts the read."""
         ...
 
-    def latest_artifacts(self, chunk_id: str, names: Sequence[str]) -> dict[str, StoredArtifact]:
-        """`latest_artifact`'s batched sibling (`bzh:bulk-reconstitution`) — each name's
-        newest row, keyed by name, the same row `latest_artifact` picks. A name with no
-        artifact is dropped."""
+    def latest_artifacts(
+        self, chunk_id: str, names: Sequence[str], *, node_name: str | None = None
+    ) -> dict[str, list[StoredArtifact]]:
+        """Batched candidate read; missing names are omitted."""
         ...
 
     def has_hub_artifact(self, chunk_id: str, *, node_id: str, epoch: int, name: str) -> bool:

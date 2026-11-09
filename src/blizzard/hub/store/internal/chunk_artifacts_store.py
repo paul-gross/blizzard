@@ -172,69 +172,39 @@ class ChunkArtifactsStore:
                     grouped.setdefault(a.chunk_id, []).append(_stored_artifact(a))
         return grouped
 
-    def latest_artifact(self, chunk_id: str, name: str) -> StoredArtifact | None:
-        with self._store.read("latest_artifact") as conn:
-            # `artifact_id` is the always-distinct third term (`bzh:sql-portable`): it
-            # settles exact (epoch, produced_at) ties off backend-dependent row order.
-            a = conn.execute(
-                self._store.select(s.artifacts)
-                .where((s.artifacts.c.chunk_id == chunk_id) & (s.artifacts.c.name == name))
-                .order_by(
-                    s.artifacts.c.epoch.desc(), s.artifacts.c.produced_at.desc(), s.artifacts.c.artifact_id.desc()
-                )
-                .limit(1)
-            ).first()
-            if a is None:
-                return None
-            return StoredArtifact(
-                kind=ArtifactKind(a.kind),
-                name=a.name,
-                data=a.data,
-                repo=a.repo,
-                forge=a.forge,
-                artifact_id=a.artifact_id,
-                chunk_id=a.chunk_id,
-                node_id=a.node_id,
-                node_name=a.node_name,
-                epoch=a.epoch,
-            )
+    def latest_artifact(self, chunk_id: str, name: str, *, node_name: str | None = None) -> list[StoredArtifact]:
+        return self.latest_artifacts(chunk_id, [name], node_name=node_name).get(name, [])
 
-    def latest_artifacts(self, chunk_id: str, names: Sequence[str]) -> dict[str, StoredArtifact]:
+    def latest_artifacts(
+        self, chunk_id: str, names: Sequence[str], *, node_name: str | None = None
+    ) -> dict[str, list[StoredArtifact]]:
         if not names:
             return {}
-        result: dict[str, StoredArtifact] = {}
+        result: dict[str, list[StoredArtifact]] = {}
         with self._store.read("latest_artifacts") as conn:
-            for batch in id_batches(names):
-                # The winner is the row no newer row of the same (chunk, name) beats, in
-                # `latest_artifact`'s own order — one statement, so a superseded blob is never read.
+            for batch in id_batches(list(dict.fromkeys(names))):
                 newer = s.artifacts.alias("newer")
                 beaten = newer_row_exists(
                     self._store,
                     newer,
-                    partition=[(s.artifacts.c.chunk_id, newer.c.chunk_id), (s.artifacts.c.name, newer.c.name)],
+                    partition=[
+                        (s.artifacts.c.chunk_id, newer.c.chunk_id),
+                        (s.artifacts.c.name, newer.c.name),
+                        (s.artifacts.c.node_name, newer.c.node_name),
+                    ],
                     order=[
                         (s.artifacts.c.epoch, newer.c.epoch),
                         (s.artifacts.c.produced_at, newer.c.produced_at),
                         (s.artifacts.c.artifact_id, newer.c.artifact_id),
                     ],
                 )
-                for a in conn.execute(
-                    self._store.select(s.artifacts).where(
-                        (s.artifacts.c.chunk_id == chunk_id) & s.artifacts.c.name.in_(batch), ~beaten
-                    )
-                ).all():
-                    result[a.name] = StoredArtifact(
-                        kind=ArtifactKind(a.kind),
-                        name=a.name,
-                        data=a.data,
-                        repo=a.repo,
-                        forge=a.forge,
-                        artifact_id=a.artifact_id,
-                        chunk_id=a.chunk_id,
-                        node_id=a.node_id,
-                        node_name=a.node_name,
-                        epoch=a.epoch,
-                    )
+                query = self._store.select(s.artifacts).where(
+                    s.artifacts.c.chunk_id == chunk_id, s.artifacts.c.name.in_(batch), ~beaten
+                )
+                if node_name is not None:
+                    query = query.where(s.artifacts.c.node_name == node_name)
+                for a in conn.execute(query.order_by(s.artifacts.c.name, s.artifacts.c.node_name)).all():
+                    result.setdefault(a.name, []).append(_stored_artifact(a))
         return result
 
     def has_hub_artifact(self, chunk_id: str, *, node_id: str, epoch: int, name: str) -> bool:

@@ -10,10 +10,11 @@ import re
 from collections.abc import Callable, Iterable, Mapping, Sequence
 from dataclasses import dataclass, field
 from datetime import datetime
-from typing import Protocol
 
 from blizzard.foundation.ids import Id, IdPrefix
 from blizzard.foundation.roles import domain_model
+from blizzard.hub.domain.artifact.model import StoredArtifact
+from blizzard.hub.domain.artifact.reads import ArtifactReadAmbiguous, resolve_artifacts
 from blizzard.hub.domain.garden.findings.bucket import FindingBucket
 from blizzard.hub.domain.garden.formats import (
     DeliveredDelta,
@@ -113,19 +114,15 @@ class SelectedArtifacts:
     artifact_ids: dict[str, str]
 
 
-class NamedArtifact(Protocol):
-    """What a delivery reads of one named artifact: its raw content and its id."""
-
-    @property
-    def data(self) -> str: ...
-
-    @property
-    def artifact_id(self) -> str: ...
-
-
-def select_delta_artifacts(names: Sequence[str], latest: Mapping[str, NamedArtifact]) -> SelectedArtifacts:
+def select_delta_artifacts(
+    names: Sequence[str], candidates: Mapping[str, Sequence[StoredArtifact]]
+) -> SelectedArtifacts:
     """The delta artifacts `names` names, out of `latest` (each name's newest artifact).
     Refuses a delivery naming no delta, or naming one with no artifact."""
+    try:
+        latest = resolve_artifacts(candidates)
+    except ArtifactReadAmbiguous as exc:
+        raise GardenDeliveryRejected(str(exc), GardenDeliveryFault.DELTA) from exc
     missing = [name for name in names if name not in latest]
     if not names or missing:
         raise GardenDeliveryRejected(
@@ -137,9 +134,15 @@ def select_delta_artifacts(names: Sequence[str], latest: Mapping[str, NamedArtif
     )
 
 
-def select_proposal_artifacts(names: Sequence[str], latest: Mapping[str, NamedArtifact]) -> SelectedArtifacts:
+def select_proposal_artifacts(
+    names: Sequence[str], candidates: Mapping[str, Sequence[StoredArtifact]]
+) -> SelectedArtifacts:
     """The proposals artifacts `names` names, out of `latest`; a named one with no artifact
     is skipped."""
+    try:
+        latest = resolve_artifacts(candidates)
+    except ArtifactReadAmbiguous as exc:
+        raise GardenDeliveryRejected(str(exc), GardenDeliveryFault.PROPOSALS) from exc
     present = [name for name in names if name in latest]
     return SelectedArtifacts(
         contents={name: latest[name].data for name in present},

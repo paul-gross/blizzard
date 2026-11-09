@@ -13,6 +13,7 @@ from blizzard.foundation.artifacts import ArtifactKind
 from blizzard.foundation.node_steps import SessionMode
 from blizzard.foundation.roles import domain_model
 from blizzard.hub.domain.artifact.model import StoredArtifact
+from blizzard.hub.domain.artifact.reads import artifact_recency
 from blizzard.hub.domain.chunk.model import Chunk, ChunkFacts, ChunkVerb, MovementKind, TransitionFact, WorkRefLabel
 from blizzard.hub.domain.graph.model import Edge, Graph, Node, RotatePolicy
 
@@ -51,7 +52,7 @@ class CarriedArtifact:
 @domain_model
 @dataclass(frozen=True)
 class LatestArtifacts:
-    """Artifact rows resolved to one per ``{node_name}.{name}``, newest epoch wins."""
+    """Artifact rows resolved to one per ``{node_name}.{name}`` in recency order."""
 
     rows: list[StoredArtifact]
 
@@ -61,9 +62,11 @@ class LatestArtifacts:
         for row in rows:
             key = (row.node_name, row.name)
             current = latest.get(key)
-            if current is None or row.epoch > current.epoch:
+            if current is None or artifact_recency(row) > artifact_recency(current):
                 latest[key] = row
-        return cls(list(latest.values()))
+        return cls(
+            sorted(latest.values(), key=lambda row: (*artifact_recency(row)[:4], row.node_name, row.name), reverse=True)
+        )
 
     @property
     def carried(self) -> list[CarriedArtifact]:

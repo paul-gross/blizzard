@@ -63,7 +63,7 @@ def _deferred(ref: str, *, scope: str = "blizzard") -> DeferredReviewEntry:
 
 def test_a_chunk_with_no_review_delta_refuses() -> None:
     with pytest.raises(ReviewFindingsRejected) as exc:
-        require_review_delta(None, chunk_id="ch_9")
+        require_review_delta([], chunk_id="ch_9")
     assert str(exc.value) == "no 'review-finding-delta' artifact found for chunk ch_9"
 
 
@@ -81,7 +81,7 @@ def test_a_present_review_delta_is_returned() -> None:
         epoch=1,
     )
 
-    assert require_review_delta(artifact, chunk_id="ch_9") is artifact
+    assert require_review_delta([artifact], chunk_id="ch_9") is artifact
 
 
 def test_a_minted_scope_is_described_by_its_chunk() -> None:

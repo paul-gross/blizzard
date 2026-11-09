@@ -714,3 +714,20 @@ def test_artifact_lookups_are_flat_as_the_delta_names_grow(tmp_path: Path) -> No
         return sum(1 for statement, _ in statements if "FROM artifacts" in statement)
 
     assert artifact_selects("one", 1) == artifact_selects("many", 5)
+
+
+def test_ambiguous_delta_is_refused_even_on_replay(tmp_path: Path) -> None:
+    from tests.support.hub_node_artifacts import record_hub_asset
+
+    hub = build_hub(tmp_path)
+    seed_scope(hub, SCOPE)
+    chunk_id = seed_chunk(hub)
+    record_artifact(hub, chunk_id, name="delta", content=garden_delta(findings=[add_op()]))
+    assert deliver(hub, chunk_id, delta=["delta"]).outcome == "recorded"
+    assert record_hub_asset(
+        hub, chunk_id, node_id="nd_other", node_name="other", epoch=1, name="delta", content=garden_delta()
+    )
+    refused = deliver(hub, chunk_id, delta=["delta"])
+    assert refused.outcome == "invalid"
+    assert "ambiguous" in refused.detail and "other" in refused.detail
+    assert finding_count(hub) == 1

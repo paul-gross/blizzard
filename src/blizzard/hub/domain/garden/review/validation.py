@@ -5,9 +5,12 @@ shape check, before anything is written. Pure functions over already-parsed obje
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from dataclasses import dataclass, field
 
 from blizzard.foundation.roles import domain_model
+from blizzard.hub.domain.artifact.model import StoredArtifact
+from blizzard.hub.domain.artifact.reads import ArtifactReadAmbiguous, resolve_artifact
 from blizzard.hub.domain.garden.formats import DeferredReviewEntry, ReviewDelta
 from blizzard.hub.domain.garden.scopes import ScopeSlug, ScopeSlugError
 from blizzard.hub.domain.graph.actions import REVIEW_FINDING_DELTA_ARTIFACT
@@ -19,9 +22,13 @@ class ReviewFindingsRejected(Exception):
     pydantic error."""
 
 
-def require_review_delta[A](artifact: A | None, *, chunk_id: str) -> A:
+def require_review_delta(candidates: Sequence[StoredArtifact], *, chunk_id: str) -> StoredArtifact:
     """`artifact`, the chunk's newest review-finding delta; refuses a delivery whose
     chunk carries none."""
+    try:
+        artifact = resolve_artifact(candidates)
+    except ArtifactReadAmbiguous as exc:
+        raise ReviewFindingsRejected(str(exc)) from exc
     if artifact is None:
         raise ReviewFindingsRejected(f"no {REVIEW_FINDING_DELTA_ARTIFACT!r} artifact found for chunk {chunk_id}")
     return artifact

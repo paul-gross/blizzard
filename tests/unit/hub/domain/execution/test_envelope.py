@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import replace
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta, timezone
 
 import pytest
 from pydantic import ValidationError
@@ -104,6 +104,46 @@ def test_latest_artifacts_series_continues_across_node_ids_for_one_node_name() -
 
     env = node_envelope(Envelope(chunk=_chunk(), graph=_graph(), node=_node(), artifacts=rows, epoch=4))
     assert [(a.node_name, a.name, a.epoch, a.content) for a in env.artifacts] == [("build", "findings", 3, "v3")]
+
+
+def test_latest_artifacts_resolves_and_orders_by_epoch_then_timestamp() -> None:
+    earlier = datetime(2026, 1, 1, tzinfo=UTC)
+    later = datetime(2026, 1, 2, tzinfo=UTC)
+    rows = [
+        replace(_row("same", 2, node_id="old"), artifact_id="z", produced_at=earlier),
+        replace(_row("missing", 2), artifact_id="zz"),
+        replace(_row("lower", 1), produced_at=later),
+        replace(_row("same", 2, node_id="new"), artifact_id="a", produced_at=later),
+        replace(_row("highest", 3), produced_at=earlier),
+        replace(_row("middle", 2), produced_at=earlier),
+    ]
+    expected = ["highest", "same", "middle", "missing", "lower"]
+    for candidates in (rows, list(reversed(rows))):
+        latest = LatestArtifacts.of(candidates)
+        assert [row.name for row in latest.rows] == expected
+        assert latest.rows[1].node_id == "new"
+        assert [artifact.name for artifact in latest.carried] == expected
+
+
+def test_latest_artifacts_breaks_ties_by_artifact_id_and_series() -> None:
+    instant = datetime(2026, 1, 1, tzinfo=UTC)
+    rows = [
+        replace(_row("same", 1), artifact_id="a", produced_at=instant),
+        replace(_row("same", 1), artifact_id="z", produced_at=instant),
+        replace(_row("other", 1, node_name="alpha", node_id="zzzz"), artifact_id="z", produced_at=instant),
+        replace(_row("third", 1), artifact_id="b", produced_at=instant),
+    ]
+    expected = [("build", "same", "z"), ("alpha", "other", "z"), ("build", "third", "b")]
+    for candidates in (rows, list(reversed(rows))):
+        assert [(r.node_name, r.name, r.artifact_id) for r in LatestArtifacts.of(candidates).rows] == expected
+
+
+def test_latest_artifacts_compares_naive_and_offset_timestamps_as_instants() -> None:
+    rows = [
+        replace(_row("naive", 1), produced_at=datetime(2026, 1, 1, 12)),
+        replace(_row("offset", 1), produced_at=datetime(2026, 1, 1, 15, tzinfo=timezone(timedelta(hours=2)))),
+    ]
+    assert [row.name for row in LatestArtifacts.of(rows).rows] == ["offset", "naive"]
 
 
 def test_envelope_carries_authored_judgement_prose_and_choice_set() -> None:

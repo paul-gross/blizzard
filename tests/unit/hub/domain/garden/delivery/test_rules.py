@@ -92,7 +92,7 @@ def _delta(findings: Sequence[Mapping[str, object]]) -> DeliveredDelta:
 
 
 def test_every_named_delta_resolving_is_selected_in_named_order() -> None:
-    latest = {"b": _artifact("b", "B"), "a": _artifact("a", "A")}
+    latest = {"b": [_artifact("b", "B")], "a": [_artifact("a", "A")]}
 
     assert select_delta_artifacts(["a", "b"], latest) == SelectedArtifacts(
         contents={"a": "A", "b": "B"}, artifact_ids={"a": "art_a", "b": "art_b"}
@@ -101,7 +101,7 @@ def test_every_named_delta_resolving_is_selected_in_named_order() -> None:
 
 def test_one_missing_delta_refuses_naming_it() -> None:
     with pytest.raises(GardenDeliveryRejected, match="missing: ghost") as exc:
-        select_delta_artifacts(["a", "ghost"], {"a": _artifact("a", "A")})
+        select_delta_artifacts(["a", "ghost"], {"a": [_artifact("a", "A")]})
     assert exc.value.fault is GardenDeliveryFault.DELTA
 
 
@@ -111,7 +111,7 @@ def test_naming_no_delta_refuses() -> None:
 
 
 def test_a_missing_proposals_artifact_is_skipped() -> None:
-    latest = {"docket": _artifact("docket", "[]")}
+    latest = {"docket": [_artifact("docket", "[]")]}
 
     assert select_proposal_artifacts(["docket", "ghost"], latest) == SelectedArtifacts(
         contents={"docket": "[]"}, artifact_ids={"docket": "art_docket"}
@@ -323,3 +323,16 @@ def test_an_artifact_id_list_not_parallel_to_its_items_refuses(
             proposal_artifact_ids=proposal_ids,
             at=_AT,
         )
+
+
+def test_ambiguous_artifacts_route_to_their_own_fault() -> None:
+    from dataclasses import replace
+
+    artifact = _artifact("a", "A")
+    candidates = {"a": [artifact, replace(artifact, node_name="other", artifact_id="art_other")]}
+    with pytest.raises(GardenDeliveryRejected) as delta:
+        select_delta_artifacts(["a"], candidates)
+    assert delta.value.fault == GardenDeliveryFault.DELTA
+    with pytest.raises(GardenDeliveryRejected) as proposals:
+        select_proposal_artifacts(["a"], candidates)
+    assert proposals.value.fault == GardenDeliveryFault.PROPOSALS

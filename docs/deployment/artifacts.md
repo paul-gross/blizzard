@@ -75,6 +75,10 @@ nothing, so any earlier content under the name stands. The check is the hub's an
 verdict (the hub unreachable or slow, an older hub, an auth refusal, a malformed answer) the content is staged
 unchecked. A local save is not hub acceptance — delivery re-checks it all the same.
 
+When a garden or review delivery input's name has outputs from competing producer nodes, the hub refuses delivery
+instead of choosing one; the refusal names the candidate producers. Resolve the shared name in the graph rather than
+trying to select a producer on the hub action: the worker's `--node` selector is not a hub action option.
+
 The artifact verbs are pure clients of the runner's local API, authorized by the spawn-injected lease identity;
 [openapi/runner.openapi.json](../../openapi/runner.openapi.json) owns the endpoint shapes.
 

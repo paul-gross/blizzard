@@ -284,7 +284,7 @@ def test_latest_artifacts_read_rows_flat_across_history_depth(tmp_path: Path) ->
 
     def read(engine: Engine) -> object:
         latest = ChunkArtifactsStore(hub_store_connections(engine), FixedClock(_T0)).latest_artifacts("ch_1", names)
-        return {name: a.data for name, a in latest.items()}
+        return {name: a[0].data for name, a in latest.items()}
 
     _flat(tmp_path, ["ch_1"], seed, read)
 

@@ -1653,7 +1653,7 @@ def build_hub_world(tmp_path: Path) -> HubWorld:
         admission=EpochAdmission.AT_OR_ABOVE,
         close_decision=_close_decision(run_chunk_1),
     )
-    artifact_1 = write.artifacts.latest_artifact(run_chunk_1, "findings")
+    artifact_1 = write.artifacts.latest_artifact(run_chunk_1, "findings")[0]
     assert artifact_1 is not None
     finding_set_store.create(
         "fins_hub_1",
@@ -1676,7 +1676,7 @@ def build_hub_world(tmp_path: Path) -> HubWorld:
         admission=EpochAdmission.AT_OR_ABOVE,
         close_decision=_close_decision(run_chunk_1),
     )
-    artifact_2 = write.artifacts.latest_artifact(run_chunk_1, "findings-runner")
+    artifact_2 = write.artifacts.latest_artifact(run_chunk_1, "findings-runner")[0]
     assert artifact_2 is not None
     finding_set_store.create(
         "fins_hub_2",
