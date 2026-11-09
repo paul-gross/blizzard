@@ -87,10 +87,10 @@ describe('KitCountStrip', () => {
     await fixture.whenStable();
     const el = fixture.nativeElement as HTMLElement;
     const strip = () => el.querySelector<HTMLElement>('[data-testid="strip"]');
-    expect(strip()?.style.gridTemplateColumns).toBe('repeat(3, 1fr)');
+    expect(strip()?.style.gridTemplateColumns).toBe('repeat(3, minmax(0, 1fr))');
 
     fixture.componentInstance.cells.set(CELLS.slice(0, 2));
     await fixture.whenStable();
-    expect(strip()?.style.gridTemplateColumns).toBe('repeat(2, 1fr)');
+    expect(strip()?.style.gridTemplateColumns).toBe('repeat(2, minmax(0, 1fr))');
   });
 });

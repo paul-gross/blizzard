@@ -116,7 +116,7 @@ describe('RunnerPanel', () => {
       'GET /api/me': () => ALL_PERMISSIONS_ME,
       'GET /api/runners': () => RUNNERS,
       'GET /api/hosts': () => ({ hosts: [] }),
-      'GET /api/chunks': () => ({ chunks: CHUNKS, next_cursor: null }),
+      'GET /api/chunks': () => ({ chunks: CHUNKS, next_cursor: null, board_done_policy: null }),
     });
     await TestBed.configureTestingModule({ imports: [RunnerPanel], providers: PROVIDERS() }).compileComponents();
   });
@@ -194,7 +194,7 @@ describe('RunnerPanel seenLabel (bzh:utc-instants)', () => {
       'GET /api/me': () => OPERATOR_ME_RESPONSE,
       'GET /api/runners': () => runners,
       'GET /api/hosts': () => ({ hosts: [] }),
-      'GET /api/chunks': () => ({ chunks: [], next_cursor: null }),
+      'GET /api/chunks': () => ({ chunks: [], next_cursor: null, board_done_policy: null }),
     });
     return TestBed.configureTestingModule({
       imports: [RunnerPanel],
@@ -301,7 +301,7 @@ describe('RunnerPanel host cards', () => {
       'GET /api/me': () => OPERATOR_ME_RESPONSE,
       'GET /api/runners': () => HOSTED,
       'GET /api/hosts': () => HOSTS,
-      'GET /api/chunks': () => ({ chunks: LIVE, next_cursor: null }),
+      'GET /api/chunks': () => ({ chunks: LIVE, next_cursor: null, board_done_policy: null }),
     });
     await TestBed.configureTestingModule({ imports: [RunnerPanel], providers: PROVIDERS() }).compileComponents();
   });

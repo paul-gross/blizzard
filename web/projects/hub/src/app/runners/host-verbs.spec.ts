@@ -51,7 +51,7 @@ function routes(over: Routes = {}, me: MeResponse = RETIRE_ME): Routes {
     'GET /api/me': () => me,
     'GET /api/runners': () => RUNNERS,
     'GET /api/hosts': () => HOSTS,
-    'GET /api/chunks': () => ({ chunks: [], next_cursor: null }),
+    'GET /api/chunks': () => ({ chunks: [], next_cursor: null, board_done_policy: null }),
     'POST /api/hosts/{host_id}/retire': () => ({
       host: HOST,
       released_chunk_ids: [],

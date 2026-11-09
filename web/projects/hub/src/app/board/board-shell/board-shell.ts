@@ -3,16 +3,11 @@ import { ChangeDetectionStrategy, Component, computed, input, output } from '@an
 import { type ChunkCountsView, type ChunkSummary, type WorkItemsView, chunkLane, workLines, compactRef, DONE_LANE, LANES, laneCounts, UNKNOWN_LANE, unknownLane, KitAsyncState, type KitAsyncStateValue, KitPanel, KitPanelHeader, KitTabs, type KitTabOption } from 'fleet';
 import type { BoardCard } from '../board-card/board-card-view.model';
 import { placeLines } from '../../core/flow-place.model';
-import { BOARD_DONE_WINDOW_HOURS } from '../../core/done-window';
+import { boardDonePolicy, type BoardDonePolicy } from '../../core/board-done-policy.model';
 import { BoardColumn, type BoardLaneMove, type BoardReposition } from './board-column';
 import { BoardList, type BoardListEntry, type BoardListGroups } from '../board-list/board-list';
 
 export type { BoardCard, BoardLaneMove, BoardReposition };
-
-/** The newest done chunks the hub keeps under `board_window` however old, beside its `BOARD_DONE_WINDOW_HOURS`. */
-const BOARD_DONE_FLOOR = 10;
-/** The two sets the hub keeps are both newest-first, so their union is simply the larger one. */
-const DONE_WINDOW_LABEL = `DONE MAX(${BOARD_DONE_WINDOW_HOURS}H, ${BOARD_DONE_FLOOR})`;
 
 /** How the board lays out its chunks: the lane grid, one list of full-width rows, or each environment's node steps over time. */
 export type BoardLayout = 'board' | 'list' | 'tracks';
@@ -49,6 +44,8 @@ const LAYOUT_TABS: readonly KitTabOption[] = [
 })
 export class BoardShell {
   /** The fleet chunk list (derived status + current node); empty when the fleet is idle. */
+  readonly donePolicy = input<BoardDonePolicy>(boardDonePolicy([]));
+
   readonly chunks = input<readonly ChunkSummary[]>([]);
 
   /** The all-time fleet counts each column head shows — `null` while the read is
@@ -126,7 +123,7 @@ export class BoardShell {
 
   protected readonly columns = computed(() => {
     const unknown = unknownLane(this.chunks());
-    const lanes = LANES.map((lane) => (lane.key === DONE_LANE ? { ...lane, label: DONE_WINDOW_LABEL } : lane));
+    const lanes = LANES.map((lane) => (lane.key === DONE_LANE ? { ...lane, label: this.donePolicy().heading } : lane));
     return unknown === null ? lanes : [...lanes, unknown];
   });
 
@@ -240,18 +237,18 @@ export class BoardShell {
   });
 
   /** A lane's all-time count. DONE and the unknown lane count the chunks they show instead: the board
-   * holds only DONE's recent window, and no count covers the unknown lane. */
+   * holds the hub's selected DONE rows, and no count covers the unknown lane. */
   protected countFor(columnKey: string): number | null {
     if (columnKey === UNKNOWN_LANE) return this.cardsFor(columnKey).length;
     if (columnKey === DONE_LANE) return this.state() === 'loading' ? null : this.cardsFor(columnKey).length;
     return this.laneTotals()?.get(columnKey) ?? null;
   }
 
-  /** A column head's hover text — DONE's says what its window keeps, and its all-time total. */
+  /** A column head's explanation — DONE's says what its window keeps, and its all-time total. */
   protected headTitleFor(columnKey: string): string | null {
     if (columnKey !== DONE_LANE) return null;
     const total = this.laneTotals()?.get(DONE_LANE);
-    return `Whichever is more: everything finished in the last ${BOARD_DONE_WINDOW_HOURS}h, or the ${BOARD_DONE_FLOOR} most recent` + (total === undefined ? '' : ` · ${total} all time`);
+    return this.donePolicy().explanation + (total === undefined ? '' : ` · ${total} all time`);
   }
 
   protected cardsFor(columnKey: string): readonly BoardCard[] {

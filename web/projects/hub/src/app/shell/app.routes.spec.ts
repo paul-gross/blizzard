@@ -58,7 +58,7 @@ const IDLE_SHELL: Parameters<typeof stubHubClient>[0] = {
       total: 0,
     }),
   'GET /api/projects': () => ({ projects: [] }),
-  'GET /api/chunks': () => ({ chunks: [], next_cursor: null }),
+  'GET /api/chunks': () => ({ chunks: [], next_cursor: null, board_done_policy: null }),
   'GET /api/queue': () => ({ entries: [], next_cursor: null }),
   'GET /api/backlog': () => ({ entries: [], next_cursor: null }),
   'GET /api/questions': () => [],

@@ -79,7 +79,7 @@ export class TracksPanel {
   private readonly projects = injectProjectsQuery();
   /** The board's own chunk list — already read for the board — for each running chunk's node strip. */
   private readonly boardChunks = injectHubBoardChunksQuery();
-  protected readonly progress = computed(() => progressByChunk(this.boardChunks.data()));
+  protected readonly progress = computed(() => progressByChunk(this.boardChunks.data()?.chunks));
   private readonly projectHues = computed(() => projectHuesOf(this.showProjectColors(), this.projects.data()));
 
   private readonly route = inject(ActivatedRoute);

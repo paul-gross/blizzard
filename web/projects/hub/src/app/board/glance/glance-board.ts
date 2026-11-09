@@ -1,5 +1,6 @@
 import { ChangeDetectionStrategy, Component, computed } from '@angular/core';
-import { asyncState, injectNowSignal, injectRunnerHostNames, type ChunkSummary, type KitAsyncStateValue } from 'fleet';
+import { asyncState, injectRunnerHostNames, type ChunkSummary, type KitAsyncStateValue } from 'fleet';
+import { boardDonePolicy } from '../../core/board-done-policy.model';
 import { injectHubBoardChunksQuery } from '../../core/chunks.query';
 import { injectFleetSpendDays } from '../fleet-spend/fleet-spend-days';
 import { injectHubBacklogQuery, injectHubQueueQuery } from '../queue/queue.query';
@@ -44,14 +45,14 @@ export class GlanceBoard {
     projectColorsById((this.showProjectColors() && this.projectsQuery.data()) || []),
   );
 
-  private readonly now = injectNowSignal();
 
   /** The fleet-wide spend today and yesterday — the desktop rail's same two reads. */
   private readonly spend = injectFleetSpendDays();
   protected readonly spendToday = this.spend.today;
   protected readonly spendYesterday = this.spend.yesterday;
 
-  private readonly chunks = computed<readonly ChunkSummary[]>(() => this.chunksQuery.data() ?? []);
+  private readonly chunks = computed<readonly ChunkSummary[]>(() => this.chunksQuery.data()?.chunks ?? []);
+  protected readonly donePolicy = computed(() => boardDonePolicy(this.chunksQuery.data()?.pages ?? []));
   private readonly runners = computed(() => liveRunners(this.runnersQuery.data() ?? []));
 
   /** Every chunk's work items — the board's own batched read, so the glance and the board share one cache. */
@@ -67,7 +68,6 @@ export class GlanceBoard {
       this.backlogQuery.data() ?? [],
       this.runnerHosts(),
       this.projectColors(),
-      this.now(),
       this.workItems(),
     ),
   );

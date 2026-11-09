@@ -178,7 +178,7 @@ export class DemoDirector {
 
   /** A random chunk off the live fleet list, or `null` before the read lands. */
   private pickChunk(): string | null {
-    const chunks = this.chunksQuery.data() ?? [];
+    const chunks = this.chunksQuery.data()?.chunks ?? [];
     if (chunks.length === 0) return null;
     return chunks[Math.floor(Math.random() * chunks.length)].chunk_id;
   }

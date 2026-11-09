@@ -9,13 +9,14 @@ the old terminal-chunk count grows. The window is widened by a floor: the newest
 from __future__ import annotations
 
 from collections import Counter
-from datetime import datetime, timedelta
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 import pytest
 from sqlalchemy import update
 
 from blizzard.foundation.chunk_status import TERMINAL_STATUSES, ChunkStatus
+from blizzard.foundation.store.utc import iso_utc
 from blizzard.hub.api import chunks as chunks_api
 from blizzard.hub.api.board_window import BOARD_DONE_WINDOW
 from blizzard.hub.api.chunks import BOARD_DONE_FLOOR
@@ -42,6 +43,15 @@ def _listed(hub: HubHarness, *, board_window: bool, limit: int = 200) -> list[st
         if cursor is not None:
             params["cursor"] = cursor
         body = hub.client.get("/api/chunks", params=params).json()
+        assert body["board_done_policy"] == (
+            {
+                "window_seconds": int(BOARD_DONE_WINDOW.total_seconds()),
+                "floor": chunks_api.BOARD_DONE_FLOOR,
+                "done_since": iso_utc(hub.clock.now() - BOARD_DONE_WINDOW),
+            }
+            if board_window
+            else None
+        )
         ids += [c["chunk_id"] for c in body["chunks"]]
         cursor = body["next_cursor"]
         if cursor is None:
@@ -82,6 +92,63 @@ def test_the_window_keeps_recent_done_old_stopped_and_old_live_and_drops_old_don
     assert set(_listed(hub, board_window=False)) == everything
     assert {c["chunk_id"] for c in hub.client.get("/api/chunks").json()["chunks"]} == everything
     assert hub.client.get("/api/chunks/ch_done_outside").status_code == 200
+
+
+def test_policy_cutoff_is_live_and_matches_the_selection_boundary(tmp_path: Path) -> None:
+    hub = hub_with_graph(tmp_path)
+    _fill_floor(hub)
+    done_by_transition(hub, "ch_boundary", ago=BOARD_DONE_WINDOW)
+    done_by_transition(hub, "ch_before", ago=BOARD_DONE_WINDOW + timedelta(seconds=1))
+
+    first = hub.client.get("/api/chunks", params={"board_window": True}).json()
+    assert first["board_done_policy"]["done_since"] == iso_utc(hub.clock.now() - BOARD_DONE_WINDOW)
+    assert "ch_boundary" in {c["chunk_id"] for c in first["chunks"]}
+    assert "ch_before" not in {c["chunk_id"] for c in first["chunks"]}
+
+    hub.clock.advance(timedelta(seconds=1))
+    second = hub.client.get("/api/chunks", params={"board_window": True}).json()
+    assert second["board_done_policy"]["done_since"] == iso_utc(hub.clock.now() - BOARD_DONE_WINDOW)
+    assert first["board_done_policy"]["done_since"] != second["board_done_policy"]["done_since"]
+    assert "ch_boundary" not in {c["chunk_id"] for c in second["chunks"]}
+    assert hub.client.get("/api/chunks").json()["board_done_policy"] is None
+
+
+def test_policy_describes_each_read_as_the_eligible_floor_changes(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(chunks_api, "BOARD_DONE_FLOOR", 2)
+    hub = hub_with_graph(tmp_path)
+    older = _done_old(hub, 3, prefix="changing")
+
+    first = hub.client.get("/api/chunks", params={"board_window": True}).json()
+    assert {c["chunk_id"] for c in first["chunks"]} == set(older[-2:])
+    hub.clock.advance(timedelta(seconds=1))
+    done_by_transition(hub, "ch_new", ago=timedelta(hours=1))
+    second = hub.client.get("/api/chunks", params={"board_window": True}).json()
+
+    assert {c["chunk_id"] for c in second["chunks"]} == {older[-1], "ch_new"}
+    assert first["board_done_policy"] == {
+        "window_seconds": int(BOARD_DONE_WINDOW.total_seconds()),
+        "floor": 2,
+        "done_since": iso_utc(hub.clock.now() - timedelta(seconds=1) - BOARD_DONE_WINDOW),
+    }
+    assert second["board_done_policy"] == {
+        "window_seconds": int(BOARD_DONE_WINDOW.total_seconds()),
+        "floor": 2,
+        "done_since": iso_utc(hub.clock.now() - BOARD_DONE_WINDOW),
+    }
+    assert datetime.fromisoformat(second["board_done_policy"]["done_since"]).utcoffset() == timedelta(0)
+
+
+def test_policy_schema_requires_its_fields_and_wire_cutoff_is_utc(tmp_path: Path) -> None:
+    hub = hub_with_graph(tmp_path)
+    schema = hub.client.get("/openapi.json").json()["components"]["schemas"]["BoardDonePolicyView"]
+    assert set(schema["required"]) == {"window_seconds", "floor", "done_since"}
+    policy = hub.client.get("/api/chunks", params={"board_window": True}).json()["board_done_policy"]
+    cutoff = datetime.fromisoformat(policy["done_since"])
+    assert cutoff.tzinfo is not None
+    assert cutoff.utcoffset() == UTC.utcoffset(cutoff)
+    assert cutoff == hub.clock.now() - BOARD_DONE_WINDOW
 
 
 def _oracle_window(hub: HubHarness, floor: int) -> set[str]:
@@ -273,8 +340,24 @@ def test_the_project_lens_floors_that_projects_done_chunks_only(tmp_path: Path) 
         )
 
     def listed(project: str) -> set[str]:
-        params: dict[str, str | int | bool] = {"board_window": True, "project": project, "limit": 200}
-        return {c["chunk_id"] for c in hub.client.get("/api/chunks", params=params).json()["chunks"]}
+        params: dict[str, str | int | bool] = {"board_window": True, "project": project, "limit": 3}
+        ids: list[str] = []
+        pages = 0
+        while True:
+            body = hub.client.get("/api/chunks", params=params).json()
+            pages += 1
+            assert body["board_done_policy"] == {
+                "window_seconds": int(BOARD_DONE_WINDOW.total_seconds()),
+                "floor": BOARD_DONE_FLOOR,
+                "done_since": iso_utc(hub.clock.now() - BOARD_DONE_WINDOW),
+            }
+            ids.extend(c["chunk_id"] for c in body["chunks"])
+            if body["next_cursor"] is None:
+                break
+            params["cursor"] = body["next_cursor"]
+        assert pages > 1
+        assert len(ids) == len(set(ids))
+        return set(ids)
 
     assert listed("beta") == set(moved[-BOARD_DONE_FLOOR:])
     assert listed("default") == set(ids[1::2][-BOARD_DONE_FLOOR:])

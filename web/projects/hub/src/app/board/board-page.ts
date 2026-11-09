@@ -1,3 +1,4 @@
+import { boardDonePolicy } from '../core/board-done-policy.model';
 import { ChangeDetectionStrategy, Component, computed, inject, InjectionToken, signal } from '@angular/core';
 import { toSignal } from '@angular/core/rxjs-interop';
 import { ActivatedRoute, Router } from '@angular/router';
@@ -129,7 +130,8 @@ export class BoardPage {
 
   /** The board's chunk list — `done` chunks older than the board window are not in it;
    * empty until the first read resolves. */
-  protected readonly chunks = computed(() => this.chunksQuery.data() ?? []);
+  protected readonly donePolicy = computed(() => boardDonePolicy(this.chunksQuery.data()?.pages ?? []));
+  protected readonly chunks = computed(() => this.chunksQuery.data()?.chunks ?? []);
 
   /** Every chunk id with an open decision. */
   protected readonly gatedChunkIds = computed<ReadonlySet<string>>(

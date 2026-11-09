@@ -2,6 +2,7 @@
   <div class="col col-center">
     <app-board-shell
       class="board"
+      [donePolicy]="donePolicy()"
       [chunks]="boardChunks()"
       [counts]="counts()"
       [readyOrder]="readyLaneOrder()"

@@ -72,7 +72,7 @@ class TestBoardRails {
 const ROUTES: Parameters<typeof stubHubClient>[0] = {
   'GET /api/chunks': () => ({
     chunks: [chunkSummary({ chunk_id: 'ch_alpha', graph_id: 'gr_1', status: 'needs_human' })],
-    next_cursor: null,
+    next_cursor: null, board_done_policy: null,
   }),
   'GET /api/chunk-counts': () => chunkCountsView(),
   'GET /api/queue': () => ({ entries: [], next_cursor: null }),
@@ -196,7 +196,7 @@ describe('the board reads under the project lens', () => {
       rails: fixture.nativeElement as HTMLElement,
       chunkIds: fixture.componentInstance.chunks
         .data()
-        ?.map((chunk) => chunk.chunk_id),
+        ?.chunks.map((chunk) => chunk.chunk_id),
     };
   }
 

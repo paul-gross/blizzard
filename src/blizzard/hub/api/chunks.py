@@ -17,7 +17,7 @@ from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 
 from blizzard.foundation.chunk_status import TERMINAL_STATUSES, ChunkDeleteRefusal, ChunkStatus
-from blizzard.foundation.store.utc import as_utc
+from blizzard.foundation.store.utc import as_utc, iso_utc
 from blizzard.hub.api import chunk_events, problems, problems_chunks
 from blizzard.hub.api.auth import reject_runner_principal
 from blizzard.hub.api.auth_session import require, tenant_bound
@@ -86,6 +86,7 @@ from blizzard.hub.domain.projects.model import ProjectId
 from blizzard.hub.work_sources.registry import SelectedWorkSources
 from blizzard.wire.chunk import (
     BlockedView,
+    BoardDonePolicyView,
     ChunkCompleteRequest,
     ChunkCountsView,
     ChunkDeleteRequest,
@@ -356,6 +357,15 @@ def list_chunks(
             for chunk in page_chunks
         ],
         next_cursor=page.next_cursor,
+        board_done_policy=(
+            BoardDonePolicyView(
+                window_seconds=int(BOARD_DONE_WINDOW.total_seconds()),
+                floor=BOARD_DONE_FLOOR,
+                done_since=iso_utc(done_since),
+            )
+            if done_since is not None
+            else None
+        ),
     )
 
 

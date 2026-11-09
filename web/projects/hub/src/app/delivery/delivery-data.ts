@@ -39,7 +39,7 @@ export function injectDeliveryData(): DeliveryData {
 
   const repositories = computed(() => repositoriesQuery.data() ?? []);
   const flows = computed(() => flowsQuery.data() ?? []);
-  const chunks = computed(() => chunksQuery.data() ?? []);
+  const chunks = computed(() => chunksQuery.data()?.chunks ?? []);
   const flowFacts = injectFlowFactsQuery(() => flowIds(flows()));
   const workItems = injectBoardWorkItemsQuery(() => deliveryChunkIds(chunks(), flowFacts().facts));
 

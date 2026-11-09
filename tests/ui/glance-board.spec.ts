@@ -93,3 +93,41 @@ test('test_the_glance_board_shows_a_cost_estimate_never_a_plain_billed_zero', as
   await expect(card).toHaveCount(1);
   await expect(card.getByTestId('glance-cost')).toHaveText('~$0.07');
 });
+
+test.describe('server-selected done on the phone', () => {
+  test.use({ isolation: 'fresh-hub', clockMode: 'controlled' });
+
+  test.afterEach(async ({ page }) => {
+    await page.unrouteAll({ behavior: 'wait' });
+  });
+
+  test('retains an old done row and falls back honestly when policy metadata is absent', async ({ issue, clock, page, narrowViewport }) => {
+    test.setTimeout(120000);
+    // Start with a real hub row, then emulate a server-selected old DONE row in the board read.
+    // This tests rendering and metadata compatibility, not the hub's window-selection algorithm.
+    const { chunk } = await issue('old phone done');
+    const completedAt = new Date(clock.now().getTime() - 49 * 60 * 60 * 1000).toISOString();
+    let omitPolicy = false;
+    await page.route('**/api/chunks?**', async (route) => {
+      const response = await route.fetch();
+      const body = await response.json();
+      body.chunks = body.chunks.map((row: { chunk_id: string }) => row.chunk_id === chunk.chunk_id
+        ? { ...row, status: 'done', terminal: true, promotable: false, current_node_id: 'done', current_node_name: 'done', completed_at: completedAt }
+        : row);
+      if (omitPolicy) delete body.board_done_policy;
+      await route.fulfill({ response, json: body });
+    });
+    await page.setViewportSize(narrowViewport);
+    await page.goto('/board');
+    const card = page.locator(`[data-testid="glance-card"][data-chunk="${chunk.chunk_id}"]`);
+    await expect(card).toBeVisible();
+    await expect(page.getByTestId('glance-done-policy')).toContainText('within 48 hours');
+    await expect(page.getByTestId('glance-done-policy')).toContainText('newest 10');
+
+    // The same rows still render when an older server omits the policy field.
+    omitPolicy = true;
+    await page.reload();
+    await expect(card).toBeVisible();
+    await expect(page.getByTestId('glance-done-policy')).toHaveText('Server-selected completed work');
+  });
+});

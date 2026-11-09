@@ -1,5 +1,6 @@
 :host {
   display: block;
+  container-type: inline-size;
 }
 .strip {
   display: grid;
@@ -12,6 +13,7 @@
   align-items: center;
   justify-content: center;
   gap: 2px;
+  min-width: 0;
   padding: 10px 6px;
   border: 0;
   border-right: 1px solid var(--line);
@@ -57,4 +59,17 @@ button.cell:focus-visible {
   letter-spacing: 0.14em;
   text-transform: uppercase;
   color: var(--label);
+}
+@container (max-width: 300px) {
+  .cell {
+    padding-inline: 2px;
+  }
+  .cell-count,
+  .cell-caption {
+    min-width: 0;
+    overflow-wrap: anywhere;
+  }
+  .cell-caption {
+    letter-spacing: 0.04em;
+  }
 }

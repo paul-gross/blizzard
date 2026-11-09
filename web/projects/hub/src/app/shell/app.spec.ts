@@ -50,7 +50,7 @@ const IDLE_BOARD: Parameters<typeof stubHubClient>[0] = {
   'GET /api/projects': () => ({ projects: LENS_PROJECTS }),
   'GET /api/chunk-counts': () =>
     chunkCountsView({ not_ready: 0, ready: 0, running: 0, delivering: 0, needs_human: 0, done: 0, terminal: 0, total: 0 }),
-  'GET /api/chunks': () => ({ chunks: [], next_cursor: null }),
+  'GET /api/chunks': () => ({ chunks: [], next_cursor: null, board_done_policy: null }),
   'GET /api/queue': () => ({ entries: [], next_cursor: null }),
   'GET /api/backlog': () => ({ entries: [], next_cursor: null }),
   'GET /api/questions': () => [],

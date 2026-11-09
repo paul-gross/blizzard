@@ -508,8 +508,9 @@ def _declared_problem_model_literals() -> set[str]:
     declared: set[str] = set()
     for module_info in pkgutil.walk_packages(wire.__path__, wire.__name__ + "."):
         module = importlib.import_module(module_info.name)
-        for _, model in inspect.getmembers(module, inspect.isclass):
-            if model.__module__ != module.__name__ or not issubclass(model, BaseModel):
+        for name, model in inspect.getmembers(module, inspect.isclass):
+            # Pydantic caches generated generic specializations in the origin's module under non-identifier names.
+            if not name.isidentifier() or model.__module__ != module.__name__ or not issubclass(model, BaseModel):
                 continue
             if model.__pydantic_generic_metadata__["origin"] is not None:
                 continue

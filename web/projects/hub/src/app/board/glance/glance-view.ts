@@ -30,6 +30,7 @@ import { LensLink } from 'fleet/shell';
 import { FleetSpend } from '../fleet-spend/fleet-spend';
 import { NodeStrip } from '../node-strip/node-strip';
 import { showsNodeStrip } from '../node-strip/node-strip.model';
+import { boardDonePolicy, type BoardDonePolicy } from '../../core/board-done-policy.model';
 import { graphStepLabel } from '../../core/step-label';
 import { filterGlanceRows, type GlanceFilter, type GlanceListGroups, type GlanceRow } from './glance-board.model';
 
@@ -45,7 +46,7 @@ export interface Vitals {
   readonly needsYou: number;
   readonly running: number;
   readonly ready: number;
-  readonly doneRecent: number;
+  readonly done: number;
   /** `{online}/{total}` across the fleet registry. */
   readonly runnersUpLabel: string;
 }
@@ -55,7 +56,7 @@ export interface Vitals {
  * `../docs/designs/mobile/core-flows.html`) — one scrolling column: the vitals strip
  * and the day's spend ("Fleet spend · today"), then every chunk as one list of cards,
  * read the way the desktop list reads its rows — attention and work in flight, READY
- * over a divider over BACKLOG, then done in the last 48h.
+ * over a divider over BACKLOG, then done.
  *
  * Presentational (`bzh:frontend-container-presentational`): renders exactly what
  * it is handed and injects no query. Each chunk row carries a whole-row
@@ -88,6 +89,7 @@ export class GlanceView {
     return graphStepLabel(row.graphName, row.node);
   }
 
+  readonly donePolicy = input<BoardDonePolicy>(boardDonePolicy([]));
   readonly vitals = input.required<Vitals>();
   readonly list = input.required<GlanceListGroups>();
   readonly listState = input.required<KitAsyncStateValue>();
@@ -116,7 +118,7 @@ export class GlanceView {
       { key: 'needs', count: v.needsYou, caption: 'needs you', testid: 'vital-needs-you', selectable: true, countColor: v.needsYou > 0 ? this.laneColor('needs') : null },
       { key: 'running', count: v.running, caption: 'running', testid: 'vital-running', selectable: true, countColor: this.laneColor('running') },
       { key: 'ready', count: v.ready, caption: 'ready', testid: 'vital-ready', selectable: true },
-      { key: 'done', count: v.doneRecent, caption: 'done (48h)', testid: 'vital-done-today', selectable: true, countColor: this.laneColor(DONE_LANE) },
+      { key: 'done', count: v.done, caption: this.donePolicy().heading, testid: 'vital-done-today', selectable: true, countColor: this.laneColor(DONE_LANE) },
       { key: 'runners', count: v.runnersUpLabel, caption: 'runners up', testid: 'vital-runners-up', selectable: false },
     ];
   });

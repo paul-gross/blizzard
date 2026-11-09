@@ -1,6 +1,6 @@
 import { provideZonelessChangeDetection } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
-import { commands, page } from 'vitest/browser';
+import { commands, page, userEvent } from 'vitest/browser';
 
 import type { ChunkStatus, ChunkSummary } from 'fleet';
 import { chunkSummary } from 'fleet/testing';
@@ -45,6 +45,47 @@ async function loadDesignTokens(): Promise<void> {
 }
 
 describe('board shell long node name shell sweep (web:shell-sweep)', () => {
+  it('keeps a long done policy keyboard-scrollable inside a short board', async () => {
+    await loadDesignTokens();
+    TestBed.resetTestingModule();
+    await TestBed.configureTestingModule({ imports: [BoardShell], providers: [provideZonelessChangeDetection()] }).compileComponents();
+    const fixture = TestBed.createComponent(BoardShell);
+    const explanation = `${'Page cutoff 2026-11-01T10:00:00Z, '.repeat(30)}END OF POLICY`;
+    fixture.componentRef.setInput('state', 'ready');
+    fixture.componentRef.setInput('donePolicy', { heading: 'Done', explanation, cutoffs: [] });
+    const root = fixture.nativeElement as HTMLElement;
+    root.style.cssText = 'display:block;width:490px;height:180px';
+    document.body.appendChild(root);
+    await page.viewport(1024, 700);
+    await fixture.whenStable();
+    try {
+      const summary = root.querySelector<HTMLElement>('[data-col="done"] summary')!;
+      summary.focus();
+      await userEvent.keyboard('{Enter}');
+      await fixture.whenStable();
+      const text = root.querySelector<HTMLElement>('.policy-text')!;
+      expect(text.textContent).toBe(explanation);
+      expect(text.scrollHeight).toBeGreaterThan(text.clientHeight);
+      text.focus();
+      expect(document.activeElement).toBe(text);
+      await userEvent.keyboard('{End}');
+      await expect.poll(() => text.scrollTop + text.clientHeight).toBeGreaterThanOrEqual(text.scrollHeight - 1);
+      const panel = root.querySelector<HTMLElement>('.p-body')!.getBoundingClientRect();
+      const bounds = text.getBoundingClientRect();
+      expect(bounds.bottom).toBeLessThanOrEqual(panel.bottom + 1);
+      expect(bounds.top).toBeGreaterThanOrEqual(panel.top - 1);
+      const range = document.createRange();
+      range.selectNodeContents(text);
+      range.setStart(text.firstChild!, explanation.length - 'END OF POLICY'.length);
+      const end = range.getBoundingClientRect();
+      expect(end.bottom).toBeLessThanOrEqual(bounds.bottom + 1);
+      expect(end.top).toBeGreaterThanOrEqual(bounds.top - 1);
+    } finally {
+      fixture.destroy();
+      root.remove();
+    }
+  });
+
   it('keeps every lane equal-width and inside a 1440px viewport and the full name on hover', async () => {
     await loadDesignTokens();
     TestBed.resetTestingModule();

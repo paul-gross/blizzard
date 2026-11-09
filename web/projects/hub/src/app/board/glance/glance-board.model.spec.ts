@@ -1,6 +1,6 @@
 import { type ChunkSummary, type DecisionView, type QuestionView, type RunnerRegistryView, type WorkItemsView } from 'fleet';
 import { chunkSummary } from 'fleet/testing';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 
 import { filterGlanceRows, type GlanceFilter, glanceListGroups, glanceVitals, liveRunners } from './glance-board.model';
 
@@ -62,7 +62,6 @@ const groups = (
     (fields.backlogOrder ?? []).map((chunkId) => ({ chunk_id: chunkId })),
     fields.hosts ?? new Map(),
     fields.colors ?? new Map(),
-    NOW,
     fields.workItems ?? NO_ITEMS,
   );
 
@@ -96,17 +95,38 @@ describe('glanceListGroups', () => {
     expect(ids(list.backlog)).toEqual(['ch_b2', 'ch_b1', 'ch_b3']);
   });
 
-  it('keeps only the chunks finished in the last 48 hours, the board\'s own done window', () => {
+  it('keeps every server-selected done chunk, including old and undated rows', () => {
     const list = groups([
       chunk('ch_recent', 'done', { terminal: true, completed_at: ago(HOUR) }),
       chunk('ch_stopped', 'stopped', { terminal: true, completed_at: ago(30 * HOUR) }),
       chunk('ch_stale', 'done', { terminal: true, completed_at: ago(49 * HOUR) }),
       chunk('ch_undated', 'done', { terminal: true, completed_at: null }),
     ]);
-    expect(ids(list.done)).toEqual(['ch_recent', 'ch_stopped']);
+    expect(ids(list.done)).toEqual(['ch_recent', 'ch_stopped', 'ch_stale', 'ch_undated']);
   });
 
-  it('lists the recent done newest-first, whatever order the read returns them in', () => {
+  it.each([
+    { name: 'ten old', count: 10, completedAt: '2020-01-01T00:00:00Z' },
+    { name: 'more than ten recent', count: 13, completedAt: '2026-06-01T11:00:00Z' },
+    { name: 'fewer than ten', count: 3, completedAt: '2020-01-01T00:00:00Z' },
+    { name: 'zero', count: 0, completedAt: '2020-01-01T00:00:00Z' },
+  ])('keeps $name server-selected rows regardless of browser clock', ({ count, completedAt }) => {
+    const chunks = Array.from({ length: count }, (_, i) => chunk(`ch_${i}`, 'done', { terminal: true, completed_at: completedAt }));
+    vi.useFakeTimers();
+    try {
+      for (const clock of ['2010-01-01T00:00:00Z', '2099-01-01T00:00:00Z']) {
+        vi.setSystemTime(new Date(clock));
+        const list = groups(chunks);
+        expect(ids(list.done)).toEqual(chunks.map((row) => row.chunk_id));
+        expect(glanceVitals([], list).done).toBe(count);
+        expect(ids(filterGlanceRows(list, 'done'))).toEqual(chunks.map((row) => row.chunk_id));
+      }
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('lists done newest-first, whatever order the read returns them in', () => {
     const list = groups([
       chunk('ch_old', 'done', { terminal: true, completed_at: ago(5 * HOUR) }),
       chunk('ch_new', 'done', { terminal: true, completed_at: ago(HOUR) }),
@@ -228,7 +248,7 @@ describe('glanceVitals', () => {
       // running, and delivering, which shows under RUNNING
       running: 2,
       ready: 1,
-      doneRecent: 1,
+      done: 1,
       runnersUpLabel: '1/2',
     });
   });
@@ -272,7 +292,7 @@ describe('filterGlanceRows', () => {
 
   it('lists exactly as many cards as the vital it is narrowed to counts', () => {
     const vitals = glanceVitals([], LIST);
-    const counts: Record<GlanceFilter, number> = { needs: vitals.needsYou, running: vitals.running, ready: vitals.ready, done: vitals.doneRecent };
+    const counts: Record<GlanceFilter, number> = { needs: vitals.needsYou, running: vitals.running, ready: vitals.ready, done: vitals.done };
     for (const [filter, count] of Object.entries(counts)) expect(filterGlanceRows(LIST, filter as GlanceFilter)).toHaveLength(count);
   });
 

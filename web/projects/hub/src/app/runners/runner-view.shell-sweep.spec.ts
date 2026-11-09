@@ -84,6 +84,7 @@ const NAME = 'runner-with-a-genuinely-long-operator-chosen-name';
 
 const ROW: RunnerRow = {
   ...REGISTRY,
+  agents: 5,
   runner_id: 'rn_01KXKVVF1J3D6H6VYZ3XYNABF3',
   runner_name: NAME,
   added_at: NOW,
@@ -122,6 +123,7 @@ const ROWS: readonly RunnerRow[] = [
     registered_at: null,
     last_seen_at: null,
     bindingLines: [],
+    agents: null,
     hub_paused: false,
     locally_paused: false,
   },
