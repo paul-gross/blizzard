@@ -73,7 +73,7 @@ export class GardeningCadenceDetail {
 
   protected readonly panelVm = computed<CadencePanelVm | null>(() => {
     const cadence = this.selected();
-    return cadencePanelVm(cadence, cadenceOverrideRetired(cadence, this.pendingLifecycle()), this.errandsQuery.data());
+    return cadencePanelVm(cadence, cadenceOverrideRetired(cadence, this.pendingLifecycle()), this.errandsQuery.data(), this.errandsQuery);
   });
 
   protected readonly panelState = computed<KitAsyncStateValue>(() =>

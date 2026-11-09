@@ -1,10 +1,10 @@
 <!-- Most important first: what the host can still spend, who is spending it, then the room it has. -->
 <section class="sec subs" data-testid="host-panel-subscriptions">
-  @for (sub of subscriptions(); track sub.slug) {
-    <fleet-subscription-blocks data-testid="host-panel-subscription" [line]="sub" />
-  } @empty {
-    <fleet-kit-async-state state="empty" placement="inline" emptyText="none declared" />
-  }
+  <fleet-kit-async-state [state]="subscriptionsState()" placement="inline" loadingText="LOADING…" errorText="SUBSCRIPTIONS UNAVAILABLE" emptyText="none declared">
+    @for (sub of subscriptions(); track sub.slug) {
+      <fleet-subscription-blocks data-testid="host-panel-subscription" [line]="sub" />
+    }
+  </fleet-kit-async-state>
 </section>
 <section class="sec" data-testid="host-panel-runners">
   <ul class="runners">
@@ -62,17 +62,17 @@
   </ul>
 </section>
 <section class="sec envs" data-testid="host-panel-environments">
-  @for (pool of pools(); track pool.workspaceId) {
-    <fleet-kit-slot-bar
-      data-testid="host-panel-pool"
-      [attr.data-workspace-id]="pool.workspaceId"
-      unit="envs"
-      [name]="pool.workspaceId"
-      [used]="pool.inUse"
-      [total]="pool.capacity ?? pool.envs.length"
-      [slots]="pool.slots"
-    />
-  } @empty {
-    <fleet-kit-async-state state="empty" placement="inline" emptyText="none configured" />
-  }
+  <fleet-kit-async-state [state]="poolsState()" placement="inline" loadingText="LOADING…" errorText="ENVIRONMENTS UNAVAILABLE" emptyText="none configured">
+    @for (pool of pools(); track pool.workspaceId) {
+      <fleet-kit-slot-bar
+        data-testid="host-panel-pool"
+        [attr.data-workspace-id]="pool.workspaceId"
+        unit="envs"
+        [name]="pool.workspaceId"
+        [used]="pool.inUse"
+        [total]="pool.capacity ?? pool.envs.length"
+        [slots]="pool.slots"
+      />
+    }
+  </fleet-kit-async-state>
 </section>

@@ -1,6 +1,6 @@
 import { ChangeDetectionStrategy, Component, computed, signal } from '@angular/core';
 
-import { type hubApi, type MemberView, asyncState, injectPendingMutationVariables, KitAsyncState, KitConfirmDialog, KitErrorLine } from 'fleet';
+import { type hubApi, type MemberView, asyncState, injectPendingMutationVariables, KitConfirmDialog, KitErrorLine } from 'fleet';
 import { injectMeQuery } from '../../core/auth/me.query';
 import { memberRoleMutationKey, revokeMemberMutationKey } from '../../core/mutation-keys';
 import { MembersTable } from './members-table';
@@ -24,7 +24,7 @@ import { LensNote } from '../../core/lens-note';
 @Component({
   selector: 'app-members-page',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [MembersTable, KitAsyncState, KitConfirmDialog, KitErrorLine, LensNote],
+  imports: [MembersTable, KitConfirmDialog, KitErrorLine, LensNote],
   templateUrl: './members-page.html',
   styleUrl: './members-page.css',
 })
@@ -42,8 +42,8 @@ export class MembersPage {
 
   protected readonly currentUserId = computed(() => this.meQuery.data()?.user_id ?? null);
 
-  /** `KitAsyncState`'s triad — `empty` is never reached here: an empty listing renders the table's own empty state. */
-  protected readonly triadState = computed(() => asyncState(this.membersQuery, false));
+  /** The listing state, including a settled empty result. */
+  protected readonly triadState = computed(() => asyncState(this.membersQuery, this.membersQuery.data()?.length === 0));
 
   /** The last refused change's own `detail`, or `null`. Starting either change clears the other's error, so the line
    * always speaks of the latest attempt. */

@@ -40,6 +40,8 @@ async function render(inputs: { vm: ScopePanelVm | null; state: 'loading' | 'emp
   fixture.componentRef.setInput('state', inputs.state);
   fixture.componentRef.setInput('vm', inputs.vm);
   fixture.componentRef.setInput('project', 'Blizzard');
+  fixture.componentRef.setInput('hasProjectLens', true);
+  fixture.componentRef.setInput('relatedRoutinesState', inputs.vm?.relatedRoutines?.length ? 'ready' : 'empty');
   fixture.componentRef.setInput('sameSlugIn', ['Winter']);
   fixture.componentRef.setInput('canEdit', true);
   const root = fixture.nativeElement as HTMLElement;
@@ -140,6 +142,29 @@ describe('gardening scope panel layout shell sweep (web:shell-sweep)', () => {
       expect(root.querySelector('[data-testid="gardening-scope-panel-last-swept"]')?.textContent).toContain(
         'not in 28 days',
       );
+    });
+  });
+});
+
+describe('related routines async layout', () => {
+  it.each([1280, 390, 320])('renders each read state without overflow at %ipx', async (width) => {
+    await sweep(width, async () => {
+      const { fixture, root } = await render({ vm: VM, state: 'ready' });
+      for (const [state, routines, text] of [
+        ['loading', null, 'Loading related routines'],
+        ['error', null, 'Related routines unavailable'],
+        ['empty', [], 'No routine tends this scope'],
+        ['ready', VM.relatedRoutines, 'nightly'],
+      ] as const) {
+        fixture.componentRef.setInput('relatedRoutinesState', state);
+        fixture.componentRef.setInput('vm', { ...VM, relatedRoutines: routines });
+        await fixture.whenStable();
+        await frame();
+        const section = root.querySelector<HTMLElement>('[data-testid="gardening-scope-panel-routines"]')!;
+        expect(section.textContent).toContain(text);
+        expect(section.scrollWidth).toBeLessThanOrEqual(section.clientWidth);
+        onScreen(section, width, `${state} related routines`);
+      }
     });
   });
 });

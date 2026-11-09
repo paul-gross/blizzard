@@ -55,10 +55,14 @@ async function sweep(width: number) {
   }).compileComponents();
   const fixture = TestBed.createComponent(MembersTable);
   fixture.componentRef.setInput('members', MEMBERS);
+  fixture.componentRef.setInput('state', 'loading');
   fixture.componentRef.setInput('label', `Members ${LONG}`);
   fixture.componentRef.setInput('currentUserId', 'usr_admin');
   const root = fixture.nativeElement as HTMLElement;
   document.body.appendChild(root);
+  await fixture.whenStable();
+  expect(root.querySelector('[data-testid="members-page-loading"]')).not.toBeNull();
+  fixture.componentRef.setInput('state', 'ready');
   await fixture.whenStable();
   try {
     await page.viewport(width, 900);
@@ -71,17 +75,25 @@ async function sweep(width: number) {
     const panel = root.querySelector<HTMLElement>('[data-testid="members-table"]')!;
     expect(panel.getBoundingClientRect().right, `the panel overruns ${width}px`).toBeLessThanOrEqual(width);
 
-    const table = root.querySelector('table')!;
-    if (width === 360) {
-      expect(table.scrollWidth, 'the table fits a phone, so this width proves nothing').toBeGreaterThan(width);
-    }
+    const scroller = root.querySelector<HTMLElement>('[data-testid="members-table-scroll"]')!;
+    expect(scroller.scrollWidth, 'the table must overflow its scroll container').toBeGreaterThan(scroller.clientWidth);
+    scroller.scrollLeft = scroller.scrollWidth;
+    expect(scroller.scrollLeft, 'the table cannot scroll horizontally').toBeGreaterThan(0);
+    scroller.scrollLeft = 0;
+    expect(scroller.scrollLeft, 'the table cannot scroll back').toBe(0);
 
-    const revoke = root.querySelector<HTMLElement>('[data-testid="members-table-revoke"]')!;
-    revoke.scrollIntoView({ block: 'nearest', inline: 'nearest' });
-    await new Promise((resolve) => requestAnimationFrame(resolve));
-    const box = revoke.getBoundingClientRect();
-    expect(box.width, 'the revoke button has no width').toBeGreaterThan(0);
-    expect(box.right, `the revoke button cannot be scrolled into view at ${width}px`).toBeLessThanOrEqual(width);
+    for (const testid of ['members-table-role-select', 'members-table-revoke']) {
+      const control = root.querySelector<HTMLElement>(`[data-testid="${testid}"]`)!;
+      control.scrollIntoView({ block: 'nearest', inline: 'nearest' });
+      await new Promise((resolve) => requestAnimationFrame(resolve));
+      const box = control.getBoundingClientRect();
+      const viewport = scroller.getBoundingClientRect();
+      expect(box.width, `${testid} has no width`).toBeGreaterThan(0);
+      expect(box.left, `${testid} is clipped on the left at ${width}px`).toBeGreaterThanOrEqual(viewport.left);
+      expect(box.right, `${testid} is clipped on the right at ${width}px`).toBeLessThanOrEqual(viewport.right);
+      expect(box.left, `${testid} is outside the screen at ${width}px`).toBeGreaterThanOrEqual(0);
+      expect(box.right, `${testid} is outside the screen at ${width}px`).toBeLessThanOrEqual(width);
+    }
   } finally {
     root.remove();
     window.removeEventListener('error', onError);
@@ -90,7 +102,7 @@ async function sweep(width: number) {
 }
 
 describe('members table shell sweep (web:shell-sweep)', () => {
-  for (const width of [360, 768, 1280]) {
+  for (const width of [320, 360, 390, 768, 1280]) {
     it(`never scrolls the page sideways at ${width}px`, async () => {
       await sweep(width);
     });

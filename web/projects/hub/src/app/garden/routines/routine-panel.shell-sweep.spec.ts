@@ -347,3 +347,31 @@ describe('gardening routine detail header shell sweep (web:shell-sweep)', () => 
     }
   });
 });
+
+describe('related scopes async layout', () => {
+  it.each([1280, 390, 320])('renders each read state without overflow at %ipx', async (width) => {
+    const fixture = await render();
+    const root = fixture.nativeElement as HTMLElement;
+    document.body.appendChild(root);
+    try {
+      await page.viewport(width, 900);
+      for (const [state, scopes, text] of [
+        ['loading', null, 'Loading related scopes'],
+        ['error', null, 'Related scopes unavailable'],
+        ['empty', [], 'No scope is related to this routine'],
+        ['ready', VM.relatedScopes, 'blizzard'],
+      ] as const) {
+        fixture.componentRef.setInput('relatedScopesState', state);
+        fixture.componentRef.setInput('vm', { ...VM, relatedScopes: scopes });
+        await fixture.whenStable();
+        await new Promise((resolve) => requestAnimationFrame(resolve));
+        const section = root.querySelector<HTMLElement>('[data-testid="gardening-routine-scopes"]')!;
+        expect(section.textContent).toContain(text);
+        expect(section.scrollWidth).toBeLessThanOrEqual(section.clientWidth);
+        expect(section.getBoundingClientRect().right).toBeLessThanOrEqual(width);
+      }
+    } finally {
+      root.remove();
+    }
+  });
+});

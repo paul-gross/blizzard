@@ -1,6 +1,6 @@
 import { ChangeDetectionStrategy, Component, input } from '@angular/core';
 
-import { type RunnerCapability, harnessName, KitBadge, type Tone } from 'fleet';
+import { type RunnerCapability, harnessName, KitAsyncState, KitBadge, type Tone } from 'fleet';
 
 /**
  * The runner registry's per-capability render — one distinct, labelled
@@ -14,7 +14,7 @@ import { type RunnerCapability, harnessName, KitBadge, type Tone } from 'fleet';
 @Component({
   selector: 'app-capability-badge-group',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [KitBadge],
+  imports: [KitAsyncState, KitBadge],
   templateUrl: './capability-badge-group.html',
   styleUrl: './capability-badge-group.css',
 })

@@ -70,6 +70,35 @@ describe('FleetPage', () => {
 
   afterEach(() => stub.restore());
 
+  it.each(['runners', 'hosts'] as const)('does not show capabilities while the %s read is pending', async (pending) => {
+    let release!: () => void;
+    const held = new Promise<void>((resolve) => (release = resolve));
+    const routes: Routes = pending === 'runners'
+      ? { 'GET /api/runners': async () => { await held; return { runners: [runner('rn_solo')] }; } }
+      : { 'GET /api/hosts': async () => { await held; return { hosts: [HOST] }; } };
+    const { harness, el } = await open('/fleet/rn_solo', ME, routes);
+    try {
+      expect(el.querySelector('[data-testid="fleet-loading"]')).toBeTruthy();
+      expect(el.querySelector('[data-testid="runner-capabilities-empty"]')).toBeNull();
+      expect(el.querySelector('[data-testid="runner-capability-badge"]')).toBeNull();
+    } finally {
+      release();
+      await settle(harness.fixture);
+    }
+    expect(el.querySelector('[data-testid="runner-capabilities-empty"]')).toBeTruthy();
+  });
+
+  it.each(['runners', 'hosts'] as const)('does not show capabilities when the %s read fails', async (failed) => {
+    const routes: Routes = failed === 'runners'
+      ? { 'GET /api/runners': () => stubError(500, { detail: 'boom' }) }
+      : { 'GET /api/hosts': () => stubError(500, { detail: 'boom' }) };
+    const { el } = await open('/fleet/rn_solo', ME, routes);
+
+    expect(el.querySelector('[data-testid="fleet-error"]')).toBeTruthy();
+    expect(el.querySelector('[data-testid="runner-capabilities-empty"]')).toBeNull();
+    expect(el.querySelector('[data-testid="runner-capability-badge"]')).toBeNull();
+  });
+
   it('opens the first card on a bare /fleet', async () => {
     const { harness, el } = await open('/fleet');
     await settle(harness.fixture);

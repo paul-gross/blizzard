@@ -142,8 +142,16 @@
                 (cancelled)="closeForm()"
               />
             }
-            @if (chore.errands; as errands) {
-              @if (errands.length) {
+            <fleet-kit-async-state
+              [state]="chore.errandsState"
+              placement="inline"
+              loadingText="Loading errands…"
+              errorText="Errands unavailable."
+              emptyText="No errand: the chore has no scope to run over."
+              [loadingTestid]="'gardening-cadence-errands-loading-' + chore.key"
+              [errorTestid]="'gardening-cadence-errands-error-' + chore.key"
+              [emptyTestid]="'gardening-cadence-errands-empty-' + chore.key"
+            >
                 <div class="cp-table-wrap">
                   <table class="cp-errands" [attr.data-testid]="'gardening-cadence-errands-' + chore.key">
                     <thead>
@@ -155,7 +163,7 @@
                       </tr>
                     </thead>
                     <tbody>
-                      @for (errand of errands; track errand.scope) {
+                      @for (errand of chore.errands; track errand.scope) {
                         <tr [attr.data-testid]="'gardening-cadence-errand-' + chore.key + '-' + errand.scope">
                           <td><code>{{ errand.scope }}</code></td>
                           <td>
@@ -192,12 +200,7 @@
                     </tbody>
                   </table>
                 </div>
-              } @else {
-                <p class="cp-dim">No errand: the chore has no scope to run over.</p>
-              }
-            } @else {
-              <p class="cp-dim">…</p>
-            }
+            </fleet-kit-async-state>
           </article>
         } @empty {
           <p class="cp-dim" data-testid="gardening-cadence-panel-no-chores">The cadence keeps no chore.</p>

@@ -143,6 +143,29 @@ describe('GardeningScopeDetail', () => {
     );
   });
 
+  it('shows loading while the routines list is pending', async () => {
+    const fixture = await render({
+      params: { scopeSlug: 'blizzard' },
+      routeOverride: { 'GET /api/projects/{project}/routines': () => new Promise<never>(() => undefined) },
+    });
+    const section = (fixture.nativeElement as HTMLElement).querySelector('[data-testid="gardening-scope-panel-routines"]');
+    expect(section?.textContent).toContain('Loading related routines');
+    expect(section?.textContent).not.toContain('No routine tends this scope.');
+  });
+
+  it.each([
+    'GET /api/projects/{project}/scopes/{slug}/routines',
+    'GET /api/projects/{project}/routines',
+  ] as const)('shows an error when %s fails', async (route) => {
+    const fixture = await render({
+      params: { scopeSlug: 'blizzard' },
+      routeOverride: { [route]: () => stubError(500, { detail: 'unavailable' }) },
+    });
+    const section = (fixture.nativeElement as HTMLElement).querySelector('[data-testid="gardening-scope-panel-routines"]');
+    expect(section?.textContent).toContain('Related routines unavailable.');
+    expect(section?.textContent).not.toContain('No routine tends this scope.');
+  });
+
   it('shows the description editor and lifecycle control for an identity with graph:edit', async () => {
     const fixture = await render({ me: OPERATOR_ME_RESPONSE, params: { scopeSlug: 'blizzard' } });
     const el = fixture.nativeElement as HTMLElement;

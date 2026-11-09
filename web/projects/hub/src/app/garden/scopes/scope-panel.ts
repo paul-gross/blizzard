@@ -71,6 +71,8 @@ export interface ScopePanelVm {
 export class FleetScopePanel {
   readonly vm = input<ScopePanelVm | null>(null);
   readonly state = input.required<KitAsyncStateValue>();
+  readonly hasProjectLens = input(false);
+  readonly relatedRoutinesState = input<KitAsyncStateValue>('ready');
 
   /** The project the scope belongs to, shown beside its slug; `null` until read. */
   readonly project = input<string | null>(null);

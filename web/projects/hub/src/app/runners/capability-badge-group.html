@@ -1,4 +1,9 @@
-@if (capabilities().length > 0) {
+<fleet-kit-async-state
+  [state]="capabilities().length ? 'ready' : 'empty'"
+  placement="inline"
+  emptyText="NO CAPABILITIES REPORTED"
+  emptyTestid="runner-capabilities-empty"
+>
   <ul class="capabilities" data-testid="runner-capabilities">
     @for (capability of capabilities(); track capability.harness_id) {
       <li>
@@ -15,8 +20,4 @@
       </li>
     }
   </ul>
-} @else {
-  <div class="no-capabilities" data-testid="runner-capabilities-empty" aria-label="No harness capabilities reported">
-    NO CAPABILITIES REPORTED
-  </div>
-}
+</fleet-kit-async-state>

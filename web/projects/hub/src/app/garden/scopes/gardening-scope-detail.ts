@@ -1,7 +1,8 @@
 import { ChangeDetectionStrategy, Component, computed, inject, signal } from '@angular/core';
 import { toSignal } from '@angular/core/rxjs-interop';
 import { ActivatedRoute } from '@angular/router';
-import { FLEET_CLOCK, errorMessage, injectPendingMutationVariables, isPendingFor, restingAsyncState, type KitAsyncStateValue, type ScopeView } from 'fleet';
+import { FLEET_CLOCK, asyncStateOf, errorMessage, injectPendingMutationVariables, isPendingFor, restingAsyncState, type KitAsyncStateValue, type ScopeView } from 'fleet';
+import { injectProjectFilter } from 'fleet/shell';
 import { FleetScopePanel, type RelatedRoutineVm, type ScopePanelVm } from './scope-panel';
 import { relatedRoutineRows, sameSlugProjects, scopeBySlug, scopeOverrideRetired, scopePanelVm } from './gardening-scope-detail.model';
 import { hasPermission, injectMeQuery } from '../../core/auth/me.query';
@@ -53,6 +54,7 @@ export class GardeningScopeDetail {
   private readonly scopesQuery = injectHubScopesQuery();
   private readonly tenantScopesQuery = injectHubScopesQuery({ tenantWide: true });
   private readonly project = injectLensedProject();
+  protected readonly projectFilter = injectProjectFilter();
   private readonly window = defaultRoutineWindow(inject(FLEET_CLOCK)());
   /** The runs window's read, the list beside this pane's own — for when the selected scope was last swept. */
   private readonly runsQuery = injectHubRunsQuery(() => this.window.since);
@@ -102,6 +104,10 @@ export class GardeningScopeDetail {
    * a wrong, settled answer in between. */
   private readonly relatedRoutines = computed<readonly RelatedRoutineVm[] | null>(() =>
     relatedRoutineRows(this.scopeRoutinesQuery.data(), this.selectedScope(), this.routinesQuery.data()),
+  );
+
+  protected readonly relatedRoutinesState = computed<KitAsyncStateValue>(() =>
+    asyncStateOf([this.scopeRoutinesQuery, this.routinesQuery], (this.relatedRoutines()?.length ?? 0) === 0),
   );
 
   /**

@@ -1,5 +1,5 @@
 import { ChangeDetectionStrategy, Component, computed, inject } from '@angular/core';
-import { asyncState, injectNowSignal, KitAsyncState, runnerSubscriptionLines, type SubscriptionLine } from 'fleet';
+import { asyncState, asyncStateOf, injectNowSignal, KitAsyncState, runnerSubscriptionLines, type SubscriptionLine } from 'fleet';
 
 import { PanelFilters } from '../../core/panel-filters';
 import { injectPanelDashboards, injectPanelProjects } from '../../core/panel-reads';
@@ -71,4 +71,8 @@ export class HostPanel {
   /** The runners read leads the triad — it names every holder and spender — and the panel is
    * never empty: each section says when it has nothing. */
   protected readonly triadState = computed(() => asyncState(this.runnersQuery, false));
+  protected readonly subscriptionsState = computed(() => asyncState(this.subscriptionsQuery, this.subscriptions().length === 0));
+  protected readonly poolsState = computed(() =>
+    asyncStateOf([this.workspacesQuery, this.environmentsQuery], this.pools().length === 0),
+  );
 }

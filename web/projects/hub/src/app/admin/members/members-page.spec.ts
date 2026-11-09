@@ -1,7 +1,7 @@
 import { provideZonelessChangeDetection } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { QueryClient, provideTanStackQuery } from '@tanstack/angular-query-experimental';
-import type { MeResponse, MemberView } from 'fleet';
+import { hubMembersKey, type MeResponse, type MemberView } from 'fleet';
 import { memberView, OPERATOR_ME_RESPONSE, type RequestClientStub, settle, stubError, stubHubClient } from 'fleet/testing';
 
 import { MembersPage } from './members-page';
@@ -97,10 +97,42 @@ describe('MembersPage', () => {
     expect(el.querySelector('[data-testid="members-table"]')?.getAttribute('aria-label')).toBe('Members');
   });
 
+  it('keeps the labeled panel for an empty listing', async () => {
+    const { el } = await mount(ME_ADMIN, () => []);
+
+    const panel = el.querySelector('[data-testid="members-table"]');
+    expect(panel?.getAttribute('aria-label')).toBe('Members');
+    expect(panel?.querySelector('[data-testid="members-table-empty"]')).toBeTruthy();
+  });
+
+  it('keeps a refused change visible when the listing becomes empty', async () => {
+    const { fixture, el } = await mount(ME_ADMIN, () => MEMBERS, {
+      'PUT /api/members/{user_id}': () => stubError(409, { detail: 'refused' }),
+    });
+    await choose(fixture, el, 'usr_guest', 'contributor');
+    await settle(fixture);
+    TestBed.inject(QueryClient).setQueryData(hubMembersKey, []);
+    await settle(fixture);
+
+    expect(el.querySelector('[data-testid="members-table-empty"]')).toBeTruthy();
+    expect(el.querySelector('[data-testid="members-page-change-error"]')?.textContent).toContain('refused');
+  });
+
+  it('keeps a pending confirmation when the listing becomes empty', async () => {
+    const { fixture, el } = await mount(ME_ADMIN, () => MEMBERS);
+    el.querySelector<HTMLElement>('[data-user-id="usr_guest"] [data-testid="members-table-revoke"]')!.click();
+    await settle(fixture);
+    TestBed.inject(QueryClient).setQueryData(hubMembersKey, []);
+    await settle(fixture);
+
+    expect(el.querySelector('[data-testid="members-table-empty"]')).toBeTruthy();
+    expect(document.querySelector('[data-testid="members-page-revoke-confirm"]')).toBeTruthy();
+  });
+
   it('renders an error state when the listing is refused (403, below user:manage)', async () => {
     const { el } = await mount(ME_ADMIN, () => stubError(403, { detail: "missing permission 'user:manage'" }));
 
-    expect(el.querySelector('[data-testid="members-page-error"]')).toBeTruthy();
+    expect(el.querySelector('[data-testid="members-table"] [data-testid="members-page-error"]')).toBeTruthy();
   });
 
   it("keeps the actor's own row read-only", async () => {

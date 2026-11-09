@@ -1,6 +1,8 @@
 <app-scope-panel
   [vm]="scopePanelVm()"
   [state]="scopePanelState()"
+  [relatedRoutinesState]="relatedRoutinesState()"
+  [hasProjectLens]="projectFilter() !== null"
   [project]="projectName()"
   [sameSlugIn]="sameSlugIn()"
   [canEdit]="canEditScopes()"

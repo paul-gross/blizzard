@@ -110,6 +110,14 @@ describe('gardening cadence panel layout shell sweep (web:shell-sweep)', () => {
       }
       const retire = root.querySelector<HTMLElement>('[data-testid="gardening-cadence-panel-retire"]')!;
       expect(retire.getBoundingClientRect().right).toBeLessThanOrEqual(width);
+      for (const state of ['loading', 'error', 'empty'] as const) {
+        fixture.componentRef.setInput('vm', { ...VM, chores: VM.chores.map((chore) => ({ ...chore, errandsState: state })) });
+        await fixture.whenStable();
+        const status = root.querySelector<HTMLElement>(`[data-testid="gardening-cadence-errands-${state}-nightly"]`)!;
+        expect(status).not.toBeNull();
+        expect(status.getBoundingClientRect().right).toBeLessThanOrEqual(panel.getBoundingClientRect().right + 1);
+        expect(panel.scrollWidth).toBeLessThanOrEqual(panel.clientWidth);
+      }
       expect(pageErrors).toEqual([]);
     } finally {
       root.remove();

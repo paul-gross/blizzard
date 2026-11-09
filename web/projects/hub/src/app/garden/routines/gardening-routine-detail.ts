@@ -200,6 +200,10 @@ export class GardeningRoutineDetail {
     asyncState(this.sweepsQuery, this.measurements().length === 0),
   );
 
+  protected readonly relatedScopesState = computed<KitAsyncStateValue>(() =>
+    asyncState(this.scopesQuery, (this.relatedScopes()?.length ?? 0) === 0),
+  );
+
   protected readonly panelVm = computed<RoutinePanelVm | null>(() =>
     routinePanelVm(this.selectedRoutine(), {
       blocked: this.blocked(),
