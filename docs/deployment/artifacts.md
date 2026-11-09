@@ -35,9 +35,10 @@ routine's finding and proposal artifacts are meant to conform to, held in lockst
 `blizzard.wire.garden_proposal` models by a dedicated test rather than generated from them. `review/finding-format` is a
 third: the shape a delivery lane's review round publishes as its `review-finding-delta` artifact, read by the
 `record-findings` node — see [findings-and-proposals.md](./findings-and-proposals.md). `garden/voice` is not a shape but
-blizzard's default for how a garden run words a finding's `summary` and a proposal's `title` and `body`. A deployment
-replaces it by stating its own voice for garden findings and proposals anywhere in its agent-facing context, and the
-packaged garden graphs read `garden/voice` only when the target states none.
+blizzard's default for how a garden run words a finding's `summary` and a proposal's `title` and `body`. The packaged
+garden graphs' propose steps read it only when the target's agent-facing context states no voice for garden proposals,
+and a survey reaches it through `garden/finding-format`, which defers to a voice the target states for garden findings.
+[findings-and-proposals.md](./findings-and-proposals.md#garden-proposals) says how a deployment states its own.
 
 A system-scope read is always a live call to the hub, on every invocation, unlike a graph-scope read:
 `artifact get

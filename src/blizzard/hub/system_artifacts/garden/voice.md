@@ -19,8 +19,8 @@ One instance, stated so the reader can check it without opening the scope:
 2. The evidence at the locus, quoted or paraphrased in one line.
 3. What conforming would look like, when that is not obvious from the standard.
 
-> `bzh:one-owner` — `RunnerLease.ttl` is defined here and again in `runner/config.py:41` with a different default (90 s
-> vs 120 s); the runner's copy should read the hub's.
+> `one-owner-per-fact` — `RunnerLease.ttl` is defined here and again in `runner/config.py:41` with a different default
+> (90 s vs 120 s); the runner's copy should read the hub's.
 
 Not: "Some duplication of lease configuration was observed that may cause inconsistency."
 
@@ -124,7 +124,7 @@ A finding in this voice:
   "ref": "F1",
   "class": "duplicated-default",
   "locus": "src/runner/config.py:41",
-  "summary": "Breaks one-owner-per-fact: `lease_ttl` defaults to 120 s here and to 90 s on the hub's `RunnerLease.ttl`. The runner should read the hub's value.",
+  "summary": "`one-owner-per-fact` — `lease_ttl` defaults to 120 s here and to 90 s on the hub's `RunnerLease.ttl`. The runner should read the hub's value.",
   "introduced": "a1b2c3d"
 }
 ```
@@ -154,4 +154,4 @@ These read fluently and say little. Rewrite them when you find them in your own 
 - An opener that restates the title, and meta lines: "This proposal describes…", "Note that…".
 - Em-dash chains stacking asides into one sentence.
 - An inventory of findings where the case for acting should be.
-- A rule id or internal label used in place of saying what is wrong.
+- A rule id or internal label alone, with no statement of what is wrong.

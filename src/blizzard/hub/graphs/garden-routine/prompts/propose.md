@@ -30,12 +30,12 @@ answers the same weed as this run's delta (not an invitation to draft for a neig
 op in this same delta carries: the hub resolves it to the minted id at delivery, so citing your own run's addition needs
 no id yet. Read the full shape live with `blizzard runner artifact get --scope system garden/proposal-format --content`;
 if that read fails or comes back empty, proceed on the restatement above. Publish the docket with
-`blizzard runner artifact create --name docket` (content on stdin) — even when it is empty, since an empty list is
-itself a statement. `class` is drawn from a closed set of four — `remediate`, `prevent`, `mechanize`, `escalate` — never
-one invented for this run; the ladder artifact above carries what each means. One kind of response spells its class one
-way per docket. Word `title` and `body` in the voice the target's own context states, else in the one
-`--scope system garden/voice` returns; failing both, write for an engineer deciding: code and file:line first, then the
-case.
+`blizzard runner artifact create --name docket` (content on stdin) — even when empty, since an empty list is itself a
+statement. `class` is drawn from a closed set of four — `remediate`, `prevent`, `mechanize`, `escalate` — never one
+invented for this run; the ladder artifact above carries what each means. Word `title` and `body` in the voice the
+target's agent-facing context states for garden proposals, else in the one
+`blizzard runner artifact get --scope system garden/voice --content` returns; if both fail, write for an engineer: code
+and file:line first, then the case.
 
 ## When the delta is a bail-out
 

@@ -108,13 +108,19 @@ A proposal can be authored directly, not only raised by a routine's own delivery
 --title <text> --class <text> --body-file <path>|- [--routine <slug>] [--finding <id>...]`
 mints an operator-authored proposal naming zero or more findings from any routines and scopes at once — a proposal
 carries no scope of its own — and an existing routine when `--routine` names one, or none at all.
-`edit <proposal_id> [--title <text>] [--class
-<text>] [--body-file <path>|-]` replaces the given fields in place,
-`attach <proposal_id> <finding_id>...` links more findings to it, and `detach <proposal_id> <finding_id>...` unlinks
-some — all three work on either origin while the proposal is still open, and each 409s once it carries a closure, since
-closure is terminal. `create`/`attach` refuse the whole call on an unknown, exited, or duplicate finding id — a
-`delivered` or `gone` finding is still attachable; `attach` also refuses one already linked to that same proposal, and
-`detach` one that is not linked — a finding may otherwise belong to more than one proposal at once.
+
+A routine's run words its findings and proposals in blizzard's default voice, the `garden/voice` system artifact
+([artifacts.md](./artifacts.md#system-scope-artifacts)), unless the target states its own. To replace it, state the
+voice anywhere the target's agent-facing context reaches from its entry point: one voice for garden findings, one for
+garden proposals, or both. Each one you state replaces the default for that kind of text whole; a kind you leave
+unstated keeps the default. `edit <proposal_id> [--title <text>] [--class
+<text>] [--body-file <path>|-]` replaces the
+given fields in place, `attach <proposal_id> <finding_id>...` links more findings to it, and
+`detach <proposal_id> <finding_id>...` unlinks some — all three work on either origin while the proposal is still open,
+and each 409s once it carries a closure, since closure is terminal. `create`/`attach` refuse the whole call on an
+unknown, exited, or duplicate finding id — a `delivered` or `gone` finding is still attachable; `attach` also refuses
+one already linked to that same proposal, and `detach` one that is not linked — a finding may otherwise belong to more
+than one proposal at once.
 
 `blizzard hub garden-proposal pass <proposal_id> --reason <text>` records that the proposal was considered and declined,
 with a reason required.
@@ -143,11 +149,11 @@ credential in its child environment either, the same shape `blizzard runner gard
 [openapi/runner.openapi.json](../../openapi/runner.openapi.json) owns the endpoint shape.
 
 **The hub board's Gardening tab renders a docket sheet on its own Proposals sub-tab, over the same reads: every
-proposal, filtered by waiting state and by class, each read as prose beside its findings — read live, one finding at a
-time, never a copy the proposal itself carries. Passing and accepting are each a dialog off the selected proposal, the
-reason and the mint/decline choice exposed the same way the CLI takes them; an accepted proposal's linked work item,
-once one exists, is read through the closure's own pointer and shown beside every finding it answers. Neither dialog is
-offered without `chunk:control`.**
+proposal, filtered by waiting state and by class, each body shown as its plain text beside its findings — read live, one
+finding at a time, never a copy the proposal itself carries. Passing and accepting are each a dialog off the selected
+proposal, the reason and the mint/decline choice exposed the same way the CLI takes them; an accepted proposal's linked
+work item, once one exists, is read through the closure's own pointer and shown beside every finding it answers. Neither
+dialog is offered without `chunk:control`.**
 
 On mobile, the Proposals sub-tab likewise opens on its filters and docket rather than automatically selecting the first
 proposal. Selecting one replaces the filters and docket with its full-width detail; Back restores the same filtered
