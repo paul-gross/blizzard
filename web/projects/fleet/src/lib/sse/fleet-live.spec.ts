@@ -69,7 +69,7 @@ describe('FleetLiveUpdates', () => {
     vi.useRealTimers();
   });
 
-  it('invalidates the fleet list, the chunk detail, the queue, the fleet spend read, and the events feed on a chunk-changed event', () => {
+  it('invalidates the fleet list, the chunk detail, the queue, the fleet spend read, the events feed, and the env timeline\'s live reads on a chunk-changed event', () => {
     // Rationale: chunkChangedKeys in fleet-live.ts.
     const invalidate = vi.spyOn(queryClient, 'invalidateQueries');
     TestBed.runInInjectionContext(() => TestBed.inject(FleetLiveUpdates).start());
@@ -85,6 +85,7 @@ describe('FleetLiveUpdates', () => {
     expect(keys).toContainEqual(['hub', 'chunk', 'ch_live']);
     expect(keys).toContainEqual(['hub', 'fleet-spend']);
     expect(keys).toContainEqual(['hub', 'events']);
+    expect(keys).toContainEqual(['hub', 'env-timeline', 'live']);
   });
 
   it('invalidates the questions and decisions rails when a chunk-changed frame is flagged terminal', () => {
@@ -226,7 +227,8 @@ describe('FleetLiveUpdates', () => {
     expect(keys).toContainEqual(['hub', 'backlog']);
     expect(keys).toContainEqual(['hub', 'runners']);
     expect(keys).toContainEqual(['hub', 'hosts']);
-    expect(keys).toHaveLength(4);
+    expect(keys).toContainEqual(['hub', 'env-timeline', 'live']);
+    expect(keys).toHaveLength(5);
   });
 
   it('flushes a lone event within the coalesce window bound on an otherwise quiet stream (issue #310)', () => {

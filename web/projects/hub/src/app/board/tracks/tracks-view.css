@@ -1,0 +1,147 @@
+:host {
+  display: block;
+  height: 100%;
+  min-height: 0;
+  font-family: var(--mono);
+  font-size: var(--fs-xs);
+  color: var(--text);
+}
+.tk {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
+}
+.tk-bar {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 6px 10px;
+  border-bottom: 1px solid var(--line);
+}
+.tk-follow {
+  color: var(--label);
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.tk-live-mark {
+  width: 7px;
+  height: 7px;
+  background: var(--green);
+}
+.tk-body {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 300px;
+  /* The row is as tall as the tracks, not the body — a short board leaves no dead band under its last row. */
+  align-content: start;
+  position: relative;
+}
+.tk-hidden {
+  visibility: hidden;
+}
+.tk-present {
+  position: relative;
+  border-left: 1px solid var(--bezel-hi);
+  background: var(--panel-deep);
+}
+.tk-spacer {
+  flex: 1;
+}
+.tk-key {
+  display: inline-flex;
+  gap: 12px;
+  color: var(--label);
+}
+.tk-key-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+.tk-swatch {
+  width: 9px;
+  height: 9px;
+  background: var(--tk-hue);
+}
+.tk-row {
+  position: absolute;
+  inset-inline: 0;
+  box-sizing: border-box;
+  padding: 0 10px;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 1px;
+  white-space: nowrap;
+  overflow: hidden;
+  border-bottom: 1px solid var(--line);
+}
+.tk-row-host,
+.tk-row-idle {
+  flex-direction: row;
+  align-items: center;
+  justify-content: flex-start;
+}
+.tk-line {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+.tk-dot {
+  flex: none;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--tk-hue, var(--green));
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--tk-hue, var(--green)) 25%, transparent);
+}
+.tk-dot-halted {
+  background: var(--red);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--red) 25%, transparent);
+}
+.tk-now-head {
+  color: var(--label-dim);
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  font-size: var(--fs-label);
+}
+.tk-ref {
+  color: var(--snow);
+  font-weight: 600;
+}
+.tk-node {
+  color: var(--text);
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.tk-held {
+  color: var(--label);
+  flex: none;
+}
+.tk-sub {
+  padding-left: 15px;
+  color: var(--label-dim);
+}
+.tk-runner {
+  flex: none;
+}
+/* The chunk's path through its graph, taking the line's slack between where it runs and what it has spent. */
+.tk-progress {
+  flex: 1;
+  min-width: 0;
+}
+.tk-cost {
+  flex: none;
+}
+.tk-dim {
+  color: var(--label-dim);
+}
+.tk-halted {
+  color: var(--red);
+}

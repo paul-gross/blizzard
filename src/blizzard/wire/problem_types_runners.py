@@ -25,6 +25,7 @@ RE_DERIVE_SCOPE_REFUSED: Final = "urn:blizzard:problem:re-derive-scope-refused"
 SPEND_INSTANT_INVALID: Final = "urn:blizzard:problem:spend-instant-invalid"
 WORK_ITEMS_CHUNK_IDS_REQUIRED: Final = "urn:blizzard:problem:work-items-chunk-ids-required"
 TRANSCRIPT_SEGMENT_NOT_FOUND: Final = "urn:blizzard:problem:transcript-segment-not-found"
+NODE_STEP_NOT_FOUND: Final = "urn:blizzard:problem:node-step-not-found"
 
 RUNNERS_PROBLEM_TYPES: frozenset[str] = frozenset(
     {
@@ -48,6 +49,7 @@ RUNNERS_PROBLEM_TYPES: frozenset[str] = frozenset(
         SPEND_INSTANT_INVALID,
         WORK_ITEMS_CHUNK_IDS_REQUIRED,
         TRANSCRIPT_SEGMENT_NOT_FOUND,
+        NODE_STEP_NOT_FOUND,
     }
 )
 
@@ -128,3 +130,7 @@ class WorkItemsChunkIdsRequiredProblem(ProblemDetails[Literal["urn:blizzard:prob
 
 class TranscriptSegmentNotFoundProblem(ProblemDetails[Literal["urn:blizzard:problem:transcript-segment-not-found"]]):
     """The chunk holds no transcript segment of that id."""
+
+
+class NodeStepNotFoundProblem(ProblemDetails[Literal["urn:blizzard:problem:node-step-not-found"]]):
+    """The chunk has no node step run by the session or starting at the instant asked for, or no node step at all."""

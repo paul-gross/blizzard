@@ -1,0 +1,43 @@
+/*
+ * The node ramp a step's block wears, palest (`tk-n0`) to deepest (`tk-n7`) — `nodeShade` picks the class — so a block
+ * on the tracks and the same step on the drawer's path strip wear one shade. Each class sets `--tk-shade`; the pale
+ * end also sets `--tk-ink`, the dark text a label reads in over it, and drops `--tk-glow`, the light label's halo.
+ * A failed step's block is cut by angled stripes of a darker cut of its fill (`--tk-fill`, else its shade).
+ */
+.tk-n0 {
+  --tk-shade: #2a3140;
+}
+.tk-n1 {
+  --tk-shade: #353d4d;
+}
+.tk-n2 {
+  --tk-shade: #444c5b;
+}
+.tk-n3 {
+  --tk-shade: #555d6a;
+}
+.tk-n4 {
+  --tk-shade: #6b727c;
+}
+.tk-n5 {
+  --tk-shade: #858b92;
+}
+.tk-n6 {
+  --tk-shade: #a6aaae;
+}
+.tk-n7 {
+  --tk-shade: #cfd0cc;
+}
+.tk-n5,
+.tk-n6,
+.tk-n7 {
+  --tk-ink: var(--bg);
+  --tk-glow: none;
+}
+.tk-failed {
+  background-image: repeating-linear-gradient(
+    135deg,
+    var(--tk-fill, var(--tk-shade)) 0 7px,
+    color-mix(in srgb, var(--tk-fill, var(--tk-shade)) 75%, black) 7px 9px
+  );
+}

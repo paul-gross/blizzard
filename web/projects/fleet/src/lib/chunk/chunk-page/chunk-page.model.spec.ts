@@ -1,4 +1,4 @@
-import { chunkProjectColor, chunkTabOptions, nextFocus, preDetailState } from './chunk-page.model';
+import { boardBackParams, chunkProjectColor, chunkTabOptions, nextFocus, preDetailState } from './chunk-page.model';
 
 describe('chunkTabOptions', () => {
   it('offers the Transcripts tab last when the identity may read transcripts', () => {
@@ -52,5 +52,32 @@ describe('chunkProjectColor', () => {
     expect(chunkProjectColor(null, lookup)).toBeNull();
     expect(chunkProjectColor(undefined, lookup)).toBeNull();
     expect(chunkProjectColor('p1', undefined)).toBeNull();
+  });
+});
+
+describe('boardBackParams', () => {
+  const query = (params: Record<string, string>) => ({ get: (name: string) => params[name] ?? null });
+
+  it('returns to the board with the chunk selected, in the layout it was opened from', () => {
+    expect(boardBackParams('ch_1', query({ layout: 'tracks' }))).toEqual({
+      chunk: 'ch_1',
+      layout: 'tracks',
+      step: null,
+      at: null,
+    });
+  });
+
+  it("returns to the step's session as the board's ?step", () => {
+    expect(boardBackParams('ch_1', query({ from: 'lease_1', fromAt: '2026-11-01T00:00:00Z' }))).toMatchObject({
+      step: 'lease_1',
+      at: null,
+    });
+  });
+
+  it("returns to the step's instant as the board's ?at when no session names it", () => {
+    expect(boardBackParams('ch_1', query({ fromAt: '2026-11-01T00:00:00Z' }))).toMatchObject({
+      step: null,
+      at: '2026-11-01T00:00:00Z',
+    });
   });
 });

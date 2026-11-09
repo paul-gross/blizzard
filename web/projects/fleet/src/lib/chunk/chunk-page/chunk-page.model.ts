@@ -51,3 +51,14 @@ export function chunkProjectColor(
 ): string | null {
   return projectId ? (lookup?.(projectId) ?? null) : null;
 }
+
+/** Where the chunk page's back link returns: the board with the chunk selected, in the layout and on the node step the
+ * page was opened from — `from` (the step's session) or else `fromAt` (the instant it began), returned as the board's
+ * `?step` or `?at`. */
+export function boardBackParams(
+  chunkId: string | null,
+  query: { get(name: string): string | null },
+): { chunk: string | null; layout: string | null; step: string | null; at: string | null } {
+  const step = query.get('from');
+  return { chunk: chunkId, layout: query.get('layout'), step, at: step === null ? query.get('fromAt') : null };
+}

@@ -150,6 +150,7 @@ from blizzard.hub.domain.observability.egress.repository import (
     IReadUsageCorpus,
     UsagePosition,
 )
+from blizzard.hub.domain.observability.env_timeline import IReadEnvTimelineFacts
 from blizzard.hub.domain.observability.forge_status import IReadAnnotatedSources
 from blizzard.hub.domain.observability.hub_events import HubEventLogService, IReadHubEventLog
 from blizzard.hub.domain.observability.tracing.cursor import CursorKey
@@ -180,6 +181,7 @@ from blizzard.hub.store.internal.config_apply_store import ConfigApplyStore
 from blizzard.hub.store.internal.config_import_store import ConfigImportStore
 from blizzard.hub.store.internal.config_revisions_store import ConfigRevisionsStore
 from blizzard.hub.store.internal.egress_store import EgressStore
+from blizzard.hub.store.internal.env_timeline_store import EnvTimelineStore
 from blizzard.hub.store.internal.finding_store import FindingSetStore, FindingStore
 from blizzard.hub.store.internal.flow_store import FlowStore
 from blizzard.hub.store.internal.forge_annotation_store import ForgeAnnotationStore
@@ -3033,6 +3035,13 @@ HUB_CENSUS: dict[tuple[type, str], HubRecipe] = {
     (IReadTraceSteps, "newest_export_latch"): lambda w: _trace_store_of(
         w.store_connections, w.hub
     ).newest_export_latch(),
+    (IReadEnvTimelineFacts, "routes"): lambda w: EnvTimelineStore(w.store_connections).routes(
+        since=_ht(0), until=_ht(1000), project=w.project_id
+    ),
+    (IReadEnvTimelineFacts, "chunk_facts"): lambda w: EnvTimelineStore(w.store_connections).chunk_facts(
+        [w.chunk_route_a]
+    ),
+    (IReadEnvTimelineFacts, "roster"): lambda w: EnvTimelineStore(w.store_connections).roster(),
     (IReadEgress, "newest_cursor"): lambda w: _egress_store_of(w.store_connections, w.hub).newest_cursor("steps"),
     (IReadEgress, "usage_after"): lambda w: _egress_store_of(w.store_connections, w.hub).usage_after(
         UsagePosition(_HUB_BASE), _HUB_UNTIL, 50

@@ -1,4 +1,4 @@
-<div class="turns">
+<div class="turns" [class.stacked]="layout() === 'stacked'">
   @for (turn of turns(); track turn.index) {
     <div class="turn" [class]="'k-' + turn.kind" data-testid="transcript-turn">
       <span class="t" [attr.title]="turnClockInfo(turn.timestamp) ? turnAbsolute(turn.timestamp) : null">
@@ -29,7 +29,7 @@
                   >
                     {{ sidechainLabel(sidechain) }} · open standalone
                   </fleet-kit-button>
-                  <fleet-transcript-viewer [turns]="sidechain.turns" (openStandalone)="forwardOpenStandalone(turn, $event)" />
+                  <fleet-transcript-viewer [turns]="sidechain.turns" [layout]="layout()" (openStandalone)="forwardOpenStandalone(turn, $event)" />
                 </div>
               }
             </details>
@@ -53,7 +53,7 @@
                 >
                   {{ sidechainLabel(sidechain) }} · open standalone
                 </fleet-kit-button>
-                <fleet-transcript-viewer [turns]="sidechain.turns" (openStandalone)="forwardOpenStandalone(turn, $event)" />
+                <fleet-transcript-viewer [turns]="sidechain.turns" [layout]="layout()" (openStandalone)="forwardOpenStandalone(turn, $event)" />
               </div>
             }
           }

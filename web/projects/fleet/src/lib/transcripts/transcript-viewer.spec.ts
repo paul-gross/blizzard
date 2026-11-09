@@ -227,6 +227,62 @@ describe('TranscriptViewer', () => {
     expect(el.querySelector('[data-testid="transcript-sidechain-standalone"]')).toBeNull();
   });
 
+  describe('layout', () => {
+    const nestedTurns = (): TranscriptTurn[] => [
+      {
+        index: 0,
+        kind: 'tool',
+        timestamp: '2026-07-16T11:00:00+00:00',
+        text: '',
+        tool: {
+          name: 'Task',
+          input: { prompt: 'find X' },
+          input_unparsed: null,
+          input_shape: 'object',
+          tool_use_id: 't1',
+          output: 'done',
+          output_truncated: false,
+        },
+        thinking_redacted: false,
+        sidechain: {
+          agent_id: 'agent-1',
+          agent_type: 'explorer',
+          link: 'prompt-timestamp',
+          turns: [
+            {
+              index: 0,
+              kind: 'asst',
+              timestamp: '2026-07-16T11:00:01+00:00',
+              text: 'looking around',
+              tool: null,
+              thinking_redacted: false,
+              sidechain: null,
+              truncated: false,
+            },
+          ],
+        },
+        truncated: false,
+      },
+    ];
+
+    it('is the gutter by default, with no stacked class', async () => {
+      const { el } = await render(nestedTurns());
+
+      expect(el.querySelector('.turns')?.classList.contains('stacked')).toBe(false);
+      expect(el.querySelector('[data-testid="transcript-sidechain-nested"] .turns')?.classList.contains('stacked')).toBe(false);
+    });
+
+    it('stacks the turns, nested sidechains included, when asked', async () => {
+      const { el, fixture } = await render([]);
+      fixture.componentRef.setInput('turns', nestedTurns());
+      fixture.componentRef.setInput('layout', 'stacked');
+      await fixture.whenStable();
+
+      expect(el.querySelector('.turns')?.classList.contains('stacked')).toBe(true);
+      expect(el.querySelector('[data-testid="transcript-sidechain-nested"] .turns')?.classList.contains('stacked')).toBe(true);
+    });
+  });
+
   it('gives a nested sidechain the same open-standalone control as an unlinked one (review:F3)', async () => {
     const turn: TranscriptTurn = {
       index: 0,

@@ -430,6 +430,34 @@ describe('ChunkPage on a runner daemon', () => {
     expect(back?.getAttribute('href')).toBe(`/board?chunk=${CHUNK_ID}`);
   });
 
+  it('carries the board layout and the node step the page was opened from on the back link', async () => {
+    const el = await open(`/board/chunk/${CHUNK_ID}?layout=tracks&from=lease_1`);
+
+    const back = el.querySelector<HTMLAnchorElement>('[data-testid="mobile-chunk-back"]');
+    expect(back?.getAttribute('href')).toBe(`/board?chunk=${CHUNK_ID}&layout=tracks&step=lease_1`);
+  });
+
+  it('returns a step named by the instant it began as the board\'s ?at', async () => {
+    const el = await open(`/board/chunk/${CHUNK_ID}?layout=tracks&fromAt=2026-07-13T10:00:00Z`);
+
+    const back = el.querySelector<HTMLAnchorElement>('[data-testid="mobile-chunk-back"]');
+    expect(back?.getAttribute('href')).toBe(`/board?chunk=${CHUNK_ID}&layout=tracks&at=2026-07-13T10:00:00Z`);
+  });
+
+  it('never returns both ?step and ?at, the session winning', async () => {
+    const el = await open(`/board/chunk/${CHUNK_ID}?layout=tracks&from=lease_1&fromAt=2026-07-13T10:00:00Z`);
+
+    const back = el.querySelector<HTMLAnchorElement>('[data-testid="mobile-chunk-back"]');
+    expect(back?.getAttribute('href')).toBe(`/board?chunk=${CHUNK_ID}&layout=tracks&step=lease_1`);
+  });
+
+  it('omits the layout and step from the back link when the page carries none', async () => {
+    const el = await open(`/board/chunk/${CHUNK_ID}`);
+
+    const back = el.querySelector<HTMLAnchorElement>('[data-testid="mobile-chunk-back"]');
+    expect(back?.getAttribute('href')).not.toMatch(/layout|step|at=/);
+  });
+
   it('shows an error state when the chunk detail read fails', async () => {
     stub.restore();
     stub = stubRunner([], {

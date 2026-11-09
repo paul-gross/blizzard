@@ -1,0 +1,265 @@
+:host {
+  display: block;
+  height: 100%;
+  min-height: 0;
+  min-width: 0;
+}
+/* The drawer wears the chunk drawer's frame: a kit panel whose body never scrolls, the header pinned, the sections
+   below on the board's deep panel with a hairline between them. */
+.sd {
+  box-sizing: border-box;
+  height: 100%;
+  font-family: var(--mono);
+  font-size: var(--fs-base);
+  font-variant-numeric: tabular-nums;
+  color: var(--text);
+}
+/* The frame scopes the async state's centred status line. */
+.d-frame {
+  position: relative;
+}
+
+/* The header, as the chunk drawer's: the lease's identity on the left, the close button at the far right */
+.d-title {
+  flex: 1;
+}
+.d-line {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  min-width: 0;
+  white-space: nowrap;
+}
+.d-sub .chunk {
+  flex: none;
+  color: var(--amber);
+  text-decoration: none;
+}
+.d-sub a.node,
+.d-sub a.runner {
+  text-decoration: none;
+}
+.d-sub .chunk:hover,
+.d-sub .chunk:focus-visible,
+.d-sub a.node:hover,
+.d-sub a.node:focus-visible,
+.d-sub a.runner:hover,
+.d-sub a.runner:focus-visible {
+  text-decoration: underline;
+  outline: none;
+}
+.d-sub .project {
+  flex: none;
+}
+.d-sub .node {
+  flex: none;
+  color: var(--label);
+}
+.d-sub .node b {
+  color: var(--snow);
+  font-weight: normal;
+}
+.d-line .st,
+.d-sub .st {
+  flex: none;
+  font-size: var(--fs-label);
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+}
+.st-live {
+  color: var(--green);
+}
+.st-esc {
+  color: var(--red);
+}
+.st-hub {
+  color: var(--label-dim);
+}
+.d-sub {
+  font-size: var(--fs-xs);
+  white-space: nowrap;
+}
+.d-sub .runner {
+  flex: none;
+  color: var(--cyan);
+}
+.d-sub .model {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  color: var(--label);
+}
+
+/* The sections: the path across the top, then step, spend and artifacts side by side, each scrolling on its own */
+.d-body {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-rows: auto minmax(0, 1fr);
+}
+.d-wide {
+  grid-column: 1 / -1;
+  overflow: visible;
+}
+.d-h {
+  color: var(--label);
+  font-size: var(--fs-label);
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  margin-bottom: 6px;
+}
+.dim {
+  color: var(--label-dim);
+}
+
+/* The chunk's path across environments */
+/* The path, one block per step weighted by how long it held: none narrower than 6px, so a step of seconds still
+   shows and can be picked, the longer ones giving way. */
+.sd-strip {
+  position: relative;
+  display: flex;
+  height: 35px;
+  background: var(--panel-deep);
+}
+.sd-blk {
+  position: relative;
+  flex: 1 1 0;
+  min-width: 6px;
+  margin: 3px 0;
+  font: inherit;
+  padding: 0;
+  border: 0;
+  border-left: 1px solid var(--bg);
+  cursor: pointer;
+  background-color: var(--tk-shade);
+  overflow: hidden;
+  container-type: inline-size;
+}
+.sd-blk-envchange {
+  border-left: 2px solid var(--snow);
+}
+.sd-blk-live {
+  border-right: 2px solid var(--green);
+}
+.sd-gap {
+  flex: 1 1 0;
+  min-width: 0;
+}
+.sd-blk-current {
+  margin: 0;
+  outline: 2px solid var(--snow);
+  z-index: 1;
+}
+/* The node a block ran, where the block has the room for it. */
+.sd-blk-name {
+  display: block;
+  padding: 0 4px;
+  overflow: hidden;
+  color: var(--tk-ink, var(--snow));
+  font-family: inherit;
+  font-size: var(--fs-xs);
+  letter-spacing: 0.02em;
+  line-height: 29px;
+  text-shadow: var(--tk-glow, 0 0 3px var(--ground));
+  text-align: left;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+@container (max-width: 36px) {
+  .sd-blk-name {
+    display: none;
+  }
+}
+.sd-blk-current .sd-blk-name {
+  line-height: 35px;
+}
+/* Each skeleton stands exactly as tall as the line it holds the place of — a box of that line's height, the bar centred
+   in it — so the header and the step's facts keep still when the step lands. A text-less box would otherwise sit on
+   the line's baseline and stretch it. */
+.sd-sk-model {
+  align-self: center;
+  justify-content: center;
+  width: 180px;
+  height: 14px;
+  --kit-skeleton-height: 10px;
+}
+.sd-sk-spend {
+  justify-content: center;
+  width: 220px;
+  height: 15px;
+  --kit-skeleton-height: 10px;
+}
+.sd-sk-transcript {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  margin-top: 8px;
+}
+.sd-sk-turn {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding-left: 8px;
+  border-left: 2px solid color-mix(in srgb, var(--label) 20%, transparent);
+}
+.sd-sk-stamp {
+  width: 120px;
+  --kit-skeleton-height: 8px;
+}
+.sd-sk-kind {
+  width: 64px;
+  margin-bottom: 2px;
+  --kit-skeleton-height: 9px;
+}
+.sd-sk-text {
+  --kit-skeleton-height: 11px;
+}
+.sd-blk:hover {
+  filter: brightness(1.25);
+}
+.sd-around {
+  display: flex;
+  justify-content: space-between;
+  margin-top: 6px;
+  gap: 12px;
+  font-size: var(--fs-xs);
+}
+.sd-nb {
+  background: none;
+  border: 0;
+  padding: 0;
+  font: inherit;
+  color: var(--label);
+  cursor: pointer;
+}
+.sd-nb:hover {
+  color: var(--snow);
+}
+.sd-nb b {
+  color: var(--snow);
+}
+
+/* Step */
+.sd-escalation {
+  margin-top: 8px;
+  padding: 4px 8px;
+  border-left: 2px solid var(--red);
+  font-size: var(--fs-xs);
+}
+
+/* Step: its facts and spend, then the chunk drawer's own artifacts list, cut to this step's */
+.sd-spend {
+  color: var(--amber);
+}
+.sd-arts {
+  display: block;
+  margin: 10px -8px 0;
+}
+
+/* The transcript runs to the column's edges; its turns carry their own padding */
+.sd-transcript {
+  padding: 6px 0 0;
+}
+.sd-transcript > .d-h,
+.sd-transcript > .dim {
+  padding: 0 8px;
+}
+

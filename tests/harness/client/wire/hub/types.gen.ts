@@ -4832,6 +4832,405 @@ export type EgressStatusResponse = {
 };
 
 /**
+ * EnvTimelineBlockView
+ *
+ * One node step on an environment's track, its chunk, runner and node named by id into the view's tables.
+ * Every field reads as on ``EnvTimelineSegmentView``.
+ */
+export type EnvTimelineBlockView = {
+    /**
+     * Chunk Id
+     */
+    chunk_id: string;
+    /**
+     * Cost Estimated
+     */
+    cost_estimated: boolean;
+    /**
+     * Cost Usd
+     */
+    cost_usd: number;
+    /**
+     * Ended At
+     */
+    ended_at: string | null;
+    /**
+     * Epoch
+     */
+    epoch: number | null;
+    /**
+     * Escalation
+     */
+    escalation: string | null;
+    /**
+     * Escalation Open
+     */
+    escalation_open: boolean;
+    executor: Executor | null;
+    /**
+     * Exit Choice
+     */
+    exit_choice: string | null;
+    /**
+     * Failed
+     */
+    failed: boolean;
+    /**
+     * Lease Id
+     */
+    lease_id: string | null;
+    /**
+     * Node Id
+     */
+    node_id: string;
+    /**
+     * Runner Id
+     */
+    runner_id: string;
+    /**
+     * Started At
+     */
+    started_at: string;
+};
+
+/**
+ * EnvTimelineChunkView
+ */
+export type EnvTimelineChunkView = {
+    /**
+     * Project Id
+     */
+    project_id: string | null;
+    /**
+     * Title
+     */
+    title: string | null;
+};
+
+/**
+ * EnvTimelineEnvironmentView
+ */
+export type EnvTimelineEnvironmentView = {
+    /**
+     * Blocks
+     */
+    blocks: Array<EnvTimelineBlockView>;
+    /**
+     * Environment Id
+     */
+    environment_id: string;
+};
+
+/**
+ * EnvTimelineHostView
+ *
+ * ``host_id`` and ``host_name`` are ``None`` for the runners on no host record.
+ */
+export type EnvTimelineHostView = {
+    /**
+     * Host Id
+     */
+    host_id: string | null;
+    /**
+     * Host Name
+     */
+    host_name: string | null;
+    /**
+     * Runner Names
+     */
+    runner_names: Array<string>;
+    /**
+     * Workspaces
+     */
+    workspaces: Array<EnvTimelineWorkspaceView>;
+};
+
+/**
+ * EnvTimelineInvocationView
+ *
+ * One harness invocation's usage inside the step: ``kind`` is ``spawn`` (the step's session), ``resume`` (that
+ * session picked back up) or ``judge`` (the call that chose the step's exit).
+ */
+export type EnvTimelineInvocationView = {
+    /**
+     * Cache Create Tokens
+     */
+    cache_create_tokens: number;
+    /**
+     * Cache Read Tokens
+     */
+    cache_read_tokens: number;
+    /**
+     * Cost Usd
+     */
+    cost_usd: number | null;
+    /**
+     * Estimated Cost Usd
+     */
+    estimated_cost_usd: number | null;
+    /**
+     * Harness Id
+     */
+    harness_id: string | null;
+    /**
+     * Input Tokens
+     */
+    input_tokens: number;
+    /**
+     * Kind
+     */
+    kind: string;
+    /**
+     * Model
+     */
+    model: string | null;
+    /**
+     * Output Tokens
+     */
+    output_tokens: number;
+    /**
+     * Recorded At
+     */
+    recorded_at: string;
+};
+
+/**
+ * EnvTimelineNodeView
+ */
+export type EnvTimelineNodeView = {
+    /**
+     * Graph Name
+     */
+    graph_name: string | null;
+    /**
+     * Node Name
+     */
+    node_name: string;
+};
+
+/**
+ * EnvTimelinePlacedStepView
+ *
+ * A node step with the environment, workspace and host that held it.
+ */
+export type EnvTimelinePlacedStepView = {
+    /**
+     * Environment Id
+     */
+    environment_id: string;
+    /**
+     * Host Id
+     */
+    host_id: string | null;
+    /**
+     * Host Name
+     */
+    host_name: string | null;
+    segment: EnvTimelineSegmentView;
+    /**
+     * Workspace Id
+     */
+    workspace_id: string;
+};
+
+/**
+ * EnvTimelineSegmentView
+ *
+ * One node step one chunk spent in one environment. ``ended_at`` is ``None`` while the chunk is still in it;
+ * ``failed`` holds when the step left by a choice other than its node's first-declared one, or escalated —
+ * ``escalation`` then names the cause, and ``escalation_open`` holds while that escalation still waits on a human:
+ * nothing since — a fresh session, a requeue, a restart or the chunk's end — superseded it. ``cost_estimated``
+ * holds when some of ``cost_usd`` is a runner-side estimate rather than a billed amount.
+ */
+export type EnvTimelineSegmentView = {
+    /**
+     * Chunk Id
+     */
+    chunk_id: string;
+    /**
+     * Cost Estimated
+     */
+    cost_estimated: boolean;
+    /**
+     * Cost Usd
+     */
+    cost_usd: number;
+    /**
+     * Ended At
+     */
+    ended_at: string | null;
+    /**
+     * Epoch
+     */
+    epoch: number | null;
+    /**
+     * Escalation
+     */
+    escalation: string | null;
+    /**
+     * Escalation Open
+     */
+    escalation_open: boolean;
+    executor: Executor | null;
+    /**
+     * Exit Choice
+     */
+    exit_choice: string | null;
+    /**
+     * Failed
+     */
+    failed: boolean;
+    /**
+     * Graph Id
+     */
+    graph_id: string | null;
+    /**
+     * Graph Name
+     */
+    graph_name: string | null;
+    /**
+     * Lease Id
+     */
+    lease_id: string | null;
+    /**
+     * Node Id
+     */
+    node_id: string;
+    /**
+     * Node Name
+     */
+    node_name: string;
+    /**
+     * Project Id
+     */
+    project_id: string | null;
+    /**
+     * Runner Id
+     */
+    runner_id: string;
+    /**
+     * Runner Name
+     */
+    runner_name: string;
+    /**
+     * Started At
+     */
+    started_at: string;
+    /**
+     * Title
+     */
+    title: string | null;
+};
+
+/**
+ * EnvTimelineStepEscalationView
+ */
+export type EnvTimelineStepEscalationView = {
+    /**
+     * Cause
+     */
+    cause: string | null;
+    /**
+     * Detail
+     */
+    detail: string | null;
+    /**
+     * Recorded At
+     */
+    recorded_at: string;
+};
+
+/**
+ * EnvTimelineStepView
+ *
+ * One node step in depth: the harness invocations and escalations inside it, and the chunk's whole path across
+ * environments (``journey``, oldest first). ``spend`` sums the invocations under the chunk total's own contract,
+ * ``cost_partial`` and ``billed_partial`` included — absent with no invocation. ``artifact_keys`` names, by their
+ * key on the chunk's artifact list, the artifacts the step's node recorded inside it.
+ */
+export type EnvTimelineStepView = {
+    /**
+     * Artifact Keys
+     */
+    artifact_keys: Array<string>;
+    /**
+     * Escalations
+     */
+    escalations: Array<EnvTimelineStepEscalationView>;
+    /**
+     * Generated At
+     */
+    generated_at: string;
+    /**
+     * Invocations
+     */
+    invocations: Array<EnvTimelineInvocationView>;
+    /**
+     * Journey
+     */
+    journey: Array<EnvTimelinePlacedStepView>;
+    spend: ChunkUsageTotalView | null;
+    step: EnvTimelinePlacedStepView;
+};
+
+/**
+ * EnvTimelineView
+ *
+ * The window ``[since, until)`` the steps touch, and the hub's own now when it answered. Each block's chunk,
+ * runner and node are named once, in ``chunks``, ``runners`` (id → name) and ``nodes``.
+ */
+export type EnvTimelineView = {
+    /**
+     * Chunks
+     */
+    chunks: {
+        [key: string]: EnvTimelineChunkView;
+    };
+    /**
+     * Generated At
+     */
+    generated_at: string;
+    /**
+     * Hosts
+     */
+    hosts: Array<EnvTimelineHostView>;
+    /**
+     * Nodes
+     */
+    nodes: {
+        [key: string]: EnvTimelineNodeView;
+    };
+    /**
+     * Runners
+     */
+    runners: {
+        [key: string]: string;
+    };
+    /**
+     * Since
+     */
+    since: string;
+    /**
+     * Until
+     */
+    until: string;
+};
+
+/**
+ * EnvTimelineWorkspaceView
+ */
+export type EnvTimelineWorkspaceView = {
+    /**
+     * Environments
+     */
+    environments: Array<EnvTimelineEnvironmentView>;
+    /**
+     * Workspace Id
+     */
+    workspace_id: string;
+};
+
+/**
  * EnvelopeArtifact
  *
  * One artifact carried into a node-step, resolved latest-by-epoch.
@@ -9913,6 +10312,35 @@ export type NodeNotOnGraphProblem = {
      * Type
      */
     type: 'urn:blizzard:problem:node-not-on-graph';
+    [key: string]: unknown;
+};
+
+/**
+ * NodeStepNotFoundProblem
+ *
+ * The chunk has no node step run by the session or starting at the instant asked for, or no node step at all.
+ */
+export type NodeStepNotFoundProblem = {
+    /**
+     * Detail
+     */
+    detail: string;
+    /**
+     * Instance
+     */
+    instance: string;
+    /**
+     * Status
+     */
+    status?: number;
+    /**
+     * Title
+     */
+    title: string;
+    /**
+     * Type
+     */
+    type: 'urn:blizzard:problem:node-step-not-found';
     [key: string]: unknown;
 };
 
@@ -21894,6 +22322,188 @@ export type EgressStatusApiEgressStatusGetResponses = {
 };
 
 export type EgressStatusApiEgressStatusGetResponse = EgressStatusApiEgressStatusGetResponses[keyof EgressStatusApiEgressStatusGetResponses];
+
+export type EnvTimelineApiEnvTimelineGetData = {
+    body?: never;
+    path?: never;
+    query: {
+        /**
+         * Since
+         */
+        since: string;
+        /**
+         * Until
+         */
+        until?: string | null;
+        /**
+         * Latest
+         */
+        latest?: boolean;
+        /**
+         * Project
+         */
+        project?: string | null;
+    };
+    url: '/api/env-timeline';
+};
+
+export type EnvTimelineApiEnvTimelineGetErrors = {
+    /**
+     * Problem
+     */
+    400: TenantCredentialMismatchProblem;
+    /**
+     * Problem
+     */
+    401: AuthenticationRequiredProblem;
+    /**
+     * Problem
+     */
+    404: TenantNotFoundProblem;
+    /**
+     * Problem
+     */
+    409: TenantRequiredProblem;
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+    /**
+     * Problem
+     */
+    503: HubStoreUnavailableProblem;
+};
+
+export type EnvTimelineApiEnvTimelineGetError = EnvTimelineApiEnvTimelineGetErrors[keyof EnvTimelineApiEnvTimelineGetErrors];
+
+export type EnvTimelineApiEnvTimelineGetResponses = {
+    /**
+     * Successful Response
+     */
+    200: EnvTimelineView;
+};
+
+export type EnvTimelineApiEnvTimelineGetResponse = EnvTimelineApiEnvTimelineGetResponses[keyof EnvTimelineApiEnvTimelineGetResponses];
+
+export type EnvTimelineStepApiEnvTimelineStepGetData = {
+    body?: never;
+    path?: never;
+    query: {
+        /**
+         * Chunk Id
+         */
+        chunk_id: string;
+        /**
+         * Lease Id
+         */
+        lease_id?: string | null;
+        /**
+         * Started At
+         */
+        started_at?: string | null;
+    };
+    url: '/api/env-timeline/step';
+};
+
+export type EnvTimelineStepApiEnvTimelineStepGetErrors = {
+    /**
+     * Problem
+     */
+    400: TenantCredentialMismatchProblem;
+    /**
+     * Problem
+     */
+    401: AuthenticationRequiredProblem;
+    /**
+     * Problem
+     */
+    404: TenantNotFoundProblem | ChunkNotFoundProblem | NodeStepNotFoundProblem;
+    /**
+     * Problem
+     */
+    409: TenantRequiredProblem;
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+    /**
+     * Problem
+     */
+    503: HubStoreUnavailableProblem;
+};
+
+export type EnvTimelineStepApiEnvTimelineStepGetError = EnvTimelineStepApiEnvTimelineStepGetErrors[keyof EnvTimelineStepApiEnvTimelineStepGetErrors];
+
+export type EnvTimelineStepApiEnvTimelineStepGetResponses = {
+    /**
+     * Successful Response
+     */
+    200: EnvTimelineStepView;
+};
+
+export type EnvTimelineStepApiEnvTimelineStepGetResponse = EnvTimelineStepApiEnvTimelineStepGetResponses[keyof EnvTimelineStepApiEnvTimelineStepGetResponses];
+
+export type EnvTimelineStepTranscriptApiEnvTimelineStepTranscriptGetData = {
+    body?: never;
+    path?: never;
+    query: {
+        /**
+         * Chunk Id
+         */
+        chunk_id: string;
+        /**
+         * Node Id
+         */
+        node_id: string;
+        /**
+         * Epoch
+         */
+        epoch: number;
+    };
+    url: '/api/env-timeline/step/transcript';
+};
+
+export type EnvTimelineStepTranscriptApiEnvTimelineStepTranscriptGetErrors = {
+    /**
+     * Problem
+     */
+    400: TenantCredentialMismatchProblem;
+    /**
+     * Problem
+     */
+    401: AuthenticationRequiredProblem;
+    /**
+     * Problem
+     */
+    403: PermissionRequiredProblem;
+    /**
+     * Problem
+     */
+    404: TenantNotFoundProblem | ChunkNotFoundProblem;
+    /**
+     * Problem
+     */
+    409: TenantRequiredProblem;
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+    /**
+     * Problem
+     */
+    503: HubStoreUnavailableProblem;
+};
+
+export type EnvTimelineStepTranscriptApiEnvTimelineStepTranscriptGetError = EnvTimelineStepTranscriptApiEnvTimelineStepTranscriptGetErrors[keyof EnvTimelineStepTranscriptApiEnvTimelineStepTranscriptGetErrors];
+
+export type EnvTimelineStepTranscriptApiEnvTimelineStepTranscriptGetResponses = {
+    /**
+     * Successful Response
+     */
+    200: LeaseTranscriptView;
+};
+
+export type EnvTimelineStepTranscriptApiEnvTimelineStepTranscriptGetResponse = EnvTimelineStepTranscriptApiEnvTimelineStepTranscriptGetResponses[keyof EnvTimelineStepTranscriptApiEnvTimelineStepTranscriptGetResponses];
 
 export type ListEventsApiEventsGetData = {
     body?: never;

@@ -1,0 +1,226 @@
+/*
+ * The board's theme over vis-timeline's base stylesheet, for the Tracks layout. Bundled with that base CSS and the
+ * node ramp (node-shades.css) into the lazily loaded `tracks-timeline` stylesheet (angular.json), so none of them weighs
+ * on the initial bundle. Its rules are scoped under `.tracks-timeline`, the class the tracks view puts on the timeline's
+ * host — save the runner hues (`tk-rN`), which the present column's dots and the runner key wear too.
+ */
+.tracks-timeline {
+  --tk-row: 40px;
+  --tk-host-row: 34px;
+  --tk-ws-row: 22px;
+  font-family: var(--mono);
+  font-size: var(--fs-xs);
+  color: var(--text);
+}
+
+.tracks-timeline .vis-timeline {
+  border: 0;
+  background: var(--ground);
+}
+.tracks-timeline .vis-panel.vis-center,
+.tracks-timeline .vis-panel.vis-left,
+.tracks-timeline .vis-panel.vis-right,
+.tracks-timeline .vis-panel.vis-top,
+.tracks-timeline .vis-panel.vis-bottom {
+  border-color: var(--line);
+}
+.tracks-timeline .vis-panel.vis-left {
+  background: var(--panel);
+}
+.tracks-timeline .vis-panel .vis-shadow {
+  box-shadow: none;
+}
+
+/* The time axis */
+.tracks-timeline .vis-time-axis .vis-text {
+  color: var(--label-dim);
+  font-size: var(--fs-label);
+}
+.tracks-timeline .vis-time-axis .vis-text.vis-major {
+  color: var(--label);
+}
+.tracks-timeline .vis-time-axis .vis-grid.vis-minor {
+  border-color: var(--line);
+}
+.tracks-timeline .vis-time-axis .vis-grid.vis-major {
+  border-color: var(--bezel);
+}
+.tracks-timeline .vis-custom-time {
+  pointer-events: none;
+  background: var(--snow);
+  opacity: 0.7;
+  width: 1px;
+}
+
+/* Rows: a host header, then one fixed-height row per environment */
+.tracks-timeline .vis-labelset .vis-label,
+.tracks-timeline .vis-foreground .vis-group {
+  border-bottom-color: var(--line);
+}
+.tracks-timeline .vis-labelset .vis-label {
+  color: var(--text);
+}
+/* vis's own sheet loads after this one and indents nested labels by 150px, so these rules carry the labelset in their selector to win */
+.tracks-timeline .vis-labelset .vis-label.vis-label {
+  padding-left: 0;
+}
+.tracks-timeline .vis-labelset .vis-label .vis-inner.vis-inner {
+  box-sizing: border-box;
+  padding: 0 8px;
+  display: flex;
+  align-items: center;
+}
+/* The collapse arrow vis draws before a host's or workspace's name sits on the name's line */
+.tracks-timeline .vis-labelset .vis-label.vis-nesting-group.vis-nesting-group {
+  display: flex;
+  align-items: center;
+  padding-left: 6px;
+}
+.tracks-timeline .vis-labelset .vis-label.vis-nesting-group::before {
+  width: auto;
+  flex: none;
+  font-size: 9px;
+  color: var(--label-dim);
+}
+.tracks-timeline .vis-labelset .vis-label.tk-workspace.vis-nesting-group {
+  padding-left: 12px;
+}
+.tracks-timeline .vis-labelset .vis-label.vis-nesting-group .vis-inner.vis-inner {
+  padding-left: 6px;
+}
+.tracks-timeline .vis-labelset .vis-label.tk-host .vis-inner.vis-inner {
+  height: var(--tk-host-row);
+}
+.tracks-timeline .vis-labelset .vis-label.tk-workspace .vis-inner.vis-inner {
+  height: var(--tk-ws-row);
+  padding-left: 14px;
+}
+.tracks-timeline .vis-labelset .vis-label.tk-env .vis-inner.vis-inner {
+  height: var(--tk-row);
+  padding-left: 24px;
+}
+.tracks-timeline .vis-label.vis-nesting-group {
+  background: var(--panel-deep);
+}
+/* vis outlines any group nested past the level it names in stock red; these rows wear the board's own lines */
+.tracks-timeline .vis-labelset .vis-label.vis-nested-group,
+.tracks-timeline .vis-labelset .vis-label.vis-nesting-group {
+  border: 0;
+  border-bottom: 1px solid var(--line);
+}
+.tracks-timeline .vis-label.vis-nesting-group::before,
+.tracks-timeline .vis-labelset .vis-label.vis-nested-group {
+  background: transparent;
+}
+.tracks-timeline .vis-label.tk-workspace,
+.tracks-timeline .vis-foreground .vis-group.tk-workspace {
+  background: color-mix(in srgb, var(--panel-deep) 50%, transparent);
+}
+.tracks-timeline .tk-workspace .tk-label-name {
+  color: var(--label-dim);
+  font-size: var(--fs-label);
+  letter-spacing: 0.04em;
+}
+.tracks-timeline .tk-env .tk-label-name {
+  color: var(--text);
+}
+.tracks-timeline .vis-foreground .vis-group.tk-host {
+  background: var(--panel-deep);
+}
+.tracks-timeline .tk-label {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  white-space: nowrap;
+}
+.tracks-timeline .tk-host .tk-label-name {
+  color: var(--snow);
+  font-weight: 600;
+}
+.tracks-timeline .tk-label-detail {
+  color: var(--label-dim);
+  font-size: var(--fs-label);
+}
+
+/* Blocks: one per node step, shaded by node */
+.tracks-timeline .vis-item.tk-seg {
+  box-sizing: border-box;
+  height: calc(var(--tk-row) - 12px);
+  border: 0;
+  border-left: 1px solid var(--ground);
+  border-radius: 0;
+  color: var(--tk-ink, var(--snow));
+  font-size: var(--fs-base);
+  letter-spacing: 0.02em;
+  line-height: calc(var(--tk-row) - 12px);
+  box-shadow: none;
+}
+.tracks-timeline .vis-item.tk-seg .vis-item-content {
+  padding: 0 4px;
+  overflow: hidden;
+}
+.tracks-timeline .vis-item.tk-seg .vis-item-overflow {
+  overflow: hidden;
+  container-type: inline-size;
+}
+/* A block too narrow for its whole chunk ref shows none of it, rather than a ref cut mid-character. */
+@container (max-width: 72px) {
+  .tracks-timeline .vis-item.tk-seg .vis-item-content {
+    visibility: hidden;
+  }
+}
+/* A block mixes its runner's hue (tk-rN) with its node's shade (tk-nN, node-shades.css): the runner says whose work it
+   is, the shade where in the graph it sat; a failed step's stripes cut that fill. */
+.tracks-timeline .vis-item.tk-seg {
+  --tk-fill: color-mix(in oklab, var(--tk-hue, transparent) 45%, var(--tk-shade));
+  background-color: var(--tk-fill);
+}
+.tk-r0 {
+  --tk-hue: #3f8fd8;
+}
+.tk-r1 {
+  --tk-hue: #e3913a;
+}
+.tk-r2 {
+  --tk-hue: #4fb59a;
+}
+.tk-r3 {
+  --tk-hue: #a879d8;
+}
+/* The step a chunk is in now: a live edge at its head */
+.tracks-timeline .vis-item.tk-seg.tk-live {
+  border-right: 3px solid var(--green);
+}
+.tracks-timeline .vis-item.tk-seg.tk-live.tk-escalated {
+  border-right-color: var(--red);
+}
+.tracks-timeline .vis-item.tk-seg {
+  cursor: pointer;
+}
+.tracks-timeline .vis-item.tk-seg:hover {
+  filter: brightness(1.2);
+}
+/* The step the drawer shows, and the rest of its chunk's path across the rows */
+.tracks-timeline .vis-item.tk-seg.tk-selected {
+  outline: 2px solid var(--snow);
+  outline-offset: 1px;
+  z-index: 2;
+}
+.tracks-timeline .vis-item.tk-seg.tk-same-chunk {
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--snow) 60%, transparent);
+}
+
+/* The hover tooltip */
+.vis-tooltip {
+  background: var(--snow) !important;
+  color: var(--bg) !important;
+  border: 0 !important;
+  border-radius: 3px !important;
+  box-shadow: 0 6px 24px var(--overlay-40) !important;
+  font-family: var(--mono) !important;
+  font-size: var(--fs-xs) !important;
+  line-height: 1.35;
+  padding: 6px 9px !important;
+  white-space: pre-line !important;
+  max-width: 360px;
+}

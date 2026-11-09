@@ -40,6 +40,11 @@ export const hubActivityKey = ['hub', 'activity'] as const;
  * the `since` instant, so an SSE invalidation naming just this prefix closes every
  * cached window at once (TanStack's default prefix match on `invalidateQueries`). */
 export const hubFleetSpendKey = ['hub', 'fleet-spend'] as const;
+/** The env timeline's key root (`GET /api/env-timeline`) — the board's Tracks layout. */
+export const hubEnvTimelineKey = ['hub', 'env-timeline'] as const;
+/** The env timeline's live reads — the window following now and each environment's present step. Each catches up
+ * from its last answer with a small delta read, so an SSE invalidation of this prefix is cheap. */
+export const hubEnvTimelineLiveKey = [...hubEnvTimelineKey, 'live'] as const;
 export const hubGraphsKey = ['hub', 'graphs'] as const;
 /** The resolved-identity read — `GET /api/me`. No SSE event names an
  * identity change. */

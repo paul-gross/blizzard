@@ -13,6 +13,7 @@ from blizzard.wire.problem_types_runners import (
     HostNotFoundProblem,
     HostRetirementInterruptedProblem,
     HostRetirementUnfinishedProblem,
+    NodeStepNotFoundProblem,
     ReDeriveScopeRefusedProblem,
     RunnerNotEnrolledProblem,
     RunnerNotRetiredProblem,
@@ -190,6 +191,16 @@ def transcript_segment_not_found_problem(segment_id: str, *, instance: str) -> T
         type=types.TRANSCRIPT_SEGMENT_NOT_FOUND,
         title="Transcript segment not found",
         detail=f"unknown segment {segment_id}",
+        instance=instance,
+        status=404,
+    )
+
+
+def node_step_not_found_problem(chunk_id: str, *, instance: str) -> NodeStepNotFoundProblem:
+    return NodeStepNotFoundProblem(
+        type=types.NODE_STEP_NOT_FOUND,
+        title="Node step not found",
+        detail=f"no such node step of {chunk_id}",
         instance=instance,
         status=404,
     )

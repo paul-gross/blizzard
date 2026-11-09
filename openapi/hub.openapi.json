@@ -8057,6 +8057,745 @@
         "title": "EgressStatusResponse",
         "type": "object"
       },
+      "EnvTimelineBlockView": {
+        "description": "One node step on an environment's track, its chunk, runner and node named by id into the view's tables.\nEvery field reads as on ``EnvTimelineSegmentView``.",
+        "properties": {
+          "chunk_id": {
+            "title": "Chunk Id",
+            "type": "string"
+          },
+          "cost_estimated": {
+            "title": "Cost Estimated",
+            "type": "boolean"
+          },
+          "cost_usd": {
+            "title": "Cost Usd",
+            "type": "number"
+          },
+          "ended_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ended At"
+          },
+          "epoch": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Epoch"
+          },
+          "escalation": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Escalation"
+          },
+          "escalation_open": {
+            "default": false,
+            "title": "Escalation Open",
+            "type": "boolean"
+          },
+          "executor": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Executor",
+                "x-blizzard-open": true
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "exit_choice": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Exit Choice"
+          },
+          "failed": {
+            "title": "Failed",
+            "type": "boolean"
+          },
+          "lease_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Lease Id"
+          },
+          "node_id": {
+            "title": "Node Id",
+            "type": "string"
+          },
+          "runner_id": {
+            "title": "Runner Id",
+            "type": "string"
+          },
+          "started_at": {
+            "title": "Started At",
+            "type": "string"
+          }
+        },
+        "required": [
+          "chunk_id",
+          "runner_id",
+          "node_id",
+          "started_at",
+          "ended_at",
+          "exit_choice",
+          "failed",
+          "escalation",
+          "escalation_open",
+          "cost_usd",
+          "cost_estimated",
+          "executor",
+          "epoch",
+          "lease_id"
+        ],
+        "title": "EnvTimelineBlockView",
+        "type": "object"
+      },
+      "EnvTimelineChunkView": {
+        "properties": {
+          "project_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Project Id"
+          },
+          "title": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Title"
+          }
+        },
+        "required": [
+          "title",
+          "project_id"
+        ],
+        "title": "EnvTimelineChunkView",
+        "type": "object"
+      },
+      "EnvTimelineEnvironmentView": {
+        "properties": {
+          "blocks": {
+            "items": {
+              "$ref": "#/components/schemas/EnvTimelineBlockView"
+            },
+            "title": "Blocks",
+            "type": "array"
+          },
+          "environment_id": {
+            "title": "Environment Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "environment_id",
+          "blocks"
+        ],
+        "title": "EnvTimelineEnvironmentView",
+        "type": "object"
+      },
+      "EnvTimelineHostView": {
+        "description": "``host_id`` and ``host_name`` are ``None`` for the runners on no host record.",
+        "properties": {
+          "host_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Host Id"
+          },
+          "host_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Host Name"
+          },
+          "runner_names": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Runner Names",
+            "type": "array"
+          },
+          "workspaces": {
+            "items": {
+              "$ref": "#/components/schemas/EnvTimelineWorkspaceView"
+            },
+            "title": "Workspaces",
+            "type": "array"
+          }
+        },
+        "required": [
+          "host_id",
+          "host_name",
+          "runner_names",
+          "workspaces"
+        ],
+        "title": "EnvTimelineHostView",
+        "type": "object"
+      },
+      "EnvTimelineInvocationView": {
+        "description": "One harness invocation's usage inside the step: ``kind`` is ``spawn`` (the step's session), ``resume`` (that\nsession picked back up) or ``judge`` (the call that chose the step's exit).",
+        "properties": {
+          "cache_create_tokens": {
+            "title": "Cache Create Tokens",
+            "type": "integer"
+          },
+          "cache_read_tokens": {
+            "title": "Cache Read Tokens",
+            "type": "integer"
+          },
+          "cost_usd": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Cost Usd"
+          },
+          "estimated_cost_usd": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Estimated Cost Usd"
+          },
+          "harness_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Harness Id"
+          },
+          "input_tokens": {
+            "title": "Input Tokens",
+            "type": "integer"
+          },
+          "kind": {
+            "title": "Kind",
+            "type": "string"
+          },
+          "model": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Model"
+          },
+          "output_tokens": {
+            "title": "Output Tokens",
+            "type": "integer"
+          },
+          "recorded_at": {
+            "title": "Recorded At",
+            "type": "string"
+          }
+        },
+        "required": [
+          "recorded_at",
+          "kind",
+          "model",
+          "harness_id",
+          "input_tokens",
+          "output_tokens",
+          "cache_read_tokens",
+          "cache_create_tokens",
+          "cost_usd",
+          "estimated_cost_usd"
+        ],
+        "title": "EnvTimelineInvocationView",
+        "type": "object"
+      },
+      "EnvTimelineNodeView": {
+        "properties": {
+          "graph_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Graph Name"
+          },
+          "node_name": {
+            "title": "Node Name",
+            "type": "string"
+          }
+        },
+        "required": [
+          "graph_name",
+          "node_name"
+        ],
+        "title": "EnvTimelineNodeView",
+        "type": "object"
+      },
+      "EnvTimelinePlacedStepView": {
+        "description": "A node step with the environment, workspace and host that held it.",
+        "properties": {
+          "environment_id": {
+            "title": "Environment Id",
+            "type": "string"
+          },
+          "host_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Host Id"
+          },
+          "host_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Host Name"
+          },
+          "segment": {
+            "$ref": "#/components/schemas/EnvTimelineSegmentView"
+          },
+          "workspace_id": {
+            "title": "Workspace Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "workspace_id",
+          "environment_id",
+          "host_id",
+          "host_name",
+          "segment"
+        ],
+        "title": "EnvTimelinePlacedStepView",
+        "type": "object"
+      },
+      "EnvTimelineSegmentView": {
+        "description": "One node step one chunk spent in one environment. ``ended_at`` is ``None`` while the chunk is still in it;\n``failed`` holds when the step left by a choice other than its node's first-declared one, or escalated \u2014\n``escalation`` then names the cause, and ``escalation_open`` holds while that escalation still waits on a human:\nnothing since \u2014 a fresh session, a requeue, a restart or the chunk's end \u2014 superseded it. ``cost_estimated``\nholds when some of ``cost_usd`` is a runner-side estimate rather than a billed amount.",
+        "properties": {
+          "chunk_id": {
+            "title": "Chunk Id",
+            "type": "string"
+          },
+          "cost_estimated": {
+            "title": "Cost Estimated",
+            "type": "boolean"
+          },
+          "cost_usd": {
+            "title": "Cost Usd",
+            "type": "number"
+          },
+          "ended_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ended At"
+          },
+          "epoch": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Epoch"
+          },
+          "escalation": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Escalation"
+          },
+          "escalation_open": {
+            "default": false,
+            "title": "Escalation Open",
+            "type": "boolean"
+          },
+          "executor": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Executor",
+                "x-blizzard-open": true
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "exit_choice": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Exit Choice"
+          },
+          "failed": {
+            "title": "Failed",
+            "type": "boolean"
+          },
+          "graph_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Graph Id"
+          },
+          "graph_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Graph Name"
+          },
+          "lease_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Lease Id"
+          },
+          "node_id": {
+            "title": "Node Id",
+            "type": "string"
+          },
+          "node_name": {
+            "title": "Node Name",
+            "type": "string"
+          },
+          "project_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Project Id"
+          },
+          "runner_id": {
+            "title": "Runner Id",
+            "type": "string"
+          },
+          "runner_name": {
+            "title": "Runner Name",
+            "type": "string"
+          },
+          "started_at": {
+            "title": "Started At",
+            "type": "string"
+          },
+          "title": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Title"
+          }
+        },
+        "required": [
+          "chunk_id",
+          "title",
+          "project_id",
+          "runner_id",
+          "runner_name",
+          "graph_id",
+          "graph_name",
+          "node_id",
+          "node_name",
+          "started_at",
+          "ended_at",
+          "exit_choice",
+          "failed",
+          "escalation",
+          "escalation_open",
+          "cost_usd",
+          "cost_estimated",
+          "executor",
+          "epoch",
+          "lease_id"
+        ],
+        "title": "EnvTimelineSegmentView",
+        "type": "object"
+      },
+      "EnvTimelineStepEscalationView": {
+        "properties": {
+          "cause": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Cause"
+          },
+          "detail": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Detail"
+          },
+          "recorded_at": {
+            "title": "Recorded At",
+            "type": "string"
+          }
+        },
+        "required": [
+          "recorded_at",
+          "cause",
+          "detail"
+        ],
+        "title": "EnvTimelineStepEscalationView",
+        "type": "object"
+      },
+      "EnvTimelineStepView": {
+        "description": "One node step in depth: the harness invocations and escalations inside it, and the chunk's whole path across\nenvironments (``journey``, oldest first). ``spend`` sums the invocations under the chunk total's own contract,\n``cost_partial`` and ``billed_partial`` included \u2014 absent with no invocation. ``artifact_keys`` names, by their\nkey on the chunk's artifact list, the artifacts the step's node recorded inside it.",
+        "properties": {
+          "artifact_keys": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "title": "Artifact Keys",
+            "type": "array"
+          },
+          "escalations": {
+            "items": {
+              "$ref": "#/components/schemas/EnvTimelineStepEscalationView"
+            },
+            "title": "Escalations",
+            "type": "array"
+          },
+          "generated_at": {
+            "title": "Generated At",
+            "type": "string"
+          },
+          "invocations": {
+            "items": {
+              "$ref": "#/components/schemas/EnvTimelineInvocationView"
+            },
+            "title": "Invocations",
+            "type": "array"
+          },
+          "journey": {
+            "items": {
+              "$ref": "#/components/schemas/EnvTimelinePlacedStepView"
+            },
+            "title": "Journey",
+            "type": "array"
+          },
+          "spend": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ChunkUsageTotalView"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "step": {
+            "$ref": "#/components/schemas/EnvTimelinePlacedStepView"
+          }
+        },
+        "required": [
+          "step",
+          "invocations",
+          "escalations",
+          "journey",
+          "generated_at",
+          "spend",
+          "artifact_keys"
+        ],
+        "title": "EnvTimelineStepView",
+        "type": "object"
+      },
+      "EnvTimelineView": {
+        "description": "The window ``[since, until)`` the steps touch, and the hub's own now when it answered. Each block's chunk,\nrunner and node are named once, in ``chunks``, ``runners`` (id \u2192 name) and ``nodes``.",
+        "properties": {
+          "chunks": {
+            "additionalProperties": {
+              "$ref": "#/components/schemas/EnvTimelineChunkView"
+            },
+            "title": "Chunks",
+            "type": "object"
+          },
+          "generated_at": {
+            "title": "Generated At",
+            "type": "string"
+          },
+          "hosts": {
+            "items": {
+              "$ref": "#/components/schemas/EnvTimelineHostView"
+            },
+            "title": "Hosts",
+            "type": "array"
+          },
+          "nodes": {
+            "additionalProperties": {
+              "$ref": "#/components/schemas/EnvTimelineNodeView"
+            },
+            "title": "Nodes",
+            "type": "object"
+          },
+          "runners": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "title": "Runners",
+            "type": "object"
+          },
+          "since": {
+            "title": "Since",
+            "type": "string"
+          },
+          "until": {
+            "title": "Until",
+            "type": "string"
+          }
+        },
+        "required": [
+          "since",
+          "until",
+          "generated_at",
+          "hosts",
+          "chunks",
+          "runners",
+          "nodes"
+        ],
+        "title": "EnvTimelineView",
+        "type": "object"
+      },
+      "EnvTimelineWorkspaceView": {
+        "properties": {
+          "environments": {
+            "items": {
+              "$ref": "#/components/schemas/EnvTimelineEnvironmentView"
+            },
+            "title": "Environments",
+            "type": "array"
+          },
+          "workspace_id": {
+            "title": "Workspace Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "workspace_id",
+          "environments"
+        ],
+        "title": "EnvTimelineWorkspaceView",
+        "type": "object"
+      },
       "EnvelopeArtifact": {
         "description": "One artifact carried into a node-step, resolved latest-by-epoch.",
         "properties": {
@@ -16278,6 +17017,45 @@
           "instance"
         ],
         "title": "NodeNotOnGraphProblem",
+        "type": "object"
+      },
+      "NodeStepNotFoundProblem": {
+        "additionalProperties": true,
+        "description": "The chunk has no node step run by the session or starting at the instant asked for, or no node step at all.",
+        "properties": {
+          "detail": {
+            "title": "Detail",
+            "type": "string"
+          },
+          "instance": {
+            "title": "Instance",
+            "type": "string"
+          },
+          "status": {
+            "anyOf": [
+              {
+                "type": "integer"
+              }
+            ],
+            "title": "Status"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          },
+          "type": {
+            "const": "urn:blizzard:problem:node-step-not-found",
+            "title": "Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "type",
+          "title",
+          "detail",
+          "instance"
+        ],
+        "title": "NodeStepNotFoundProblem",
         "type": "object"
       },
       "NotADecisionChoiceProblem": {
@@ -39039,6 +39817,407 @@
         "summary": "Egress Status",
         "tags": [
           "egress"
+        ]
+      }
+    },
+    "/api/env-timeline": {
+      "get": {
+        "description": "Every node step a routed chunk spent in a runner environment within ``[since, until)`` \u2014 ``until`` defaults\nto now, and a window wider than fourteen days is narrowed to the fourteen before ``until``. A step is sent whole\nwhenever it touches the window, so a read from a client's last answer forward catches every step that has moved\nsince.\n\n``latest`` answers what each environment is doing now instead: only each environment's newest step since\n``since`` (at most fourteen days back) \u2014 its current occupant, or the step it last went idle after; ``until`` is\nignored. Under ``?project=`` only that project's chunks are laid on the environments.",
+        "operationId": "env_timeline_api_env_timeline_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "since",
+            "required": true,
+            "schema": {
+              "format": "date-time",
+              "title": "Since",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "until",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "format": "date-time",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Until"
+            }
+          },
+          {
+            "in": "query",
+            "name": "latest",
+            "required": false,
+            "schema": {
+              "default": false,
+              "title": "Latest",
+              "type": "boolean"
+            }
+          },
+          {
+            "in": "query",
+            "name": "project",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Project"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EnvTimelineView"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "400": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TenantCredentialMismatchProblem"
+                }
+              }
+            },
+            "description": "Problem"
+          },
+          "401": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AuthenticationRequiredProblem"
+                }
+              }
+            },
+            "description": "Problem"
+          },
+          "404": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TenantNotFoundProblem"
+                }
+              }
+            },
+            "description": "Problem"
+          },
+          "409": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TenantRequiredProblem"
+                }
+              }
+            },
+            "description": "Problem"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          },
+          "503": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HubStoreUnavailableProblem"
+                }
+              }
+            },
+            "description": "Problem"
+          }
+        },
+        "summary": "Env Timeline",
+        "tags": [
+          "env-timeline"
+        ]
+      }
+    },
+    "/api/env-timeline/step": {
+      "get": {
+        "description": "One node step of ``chunk_id`` in depth \u2014 the one the session ``lease_id`` ran, else the one starting at\n``started_at`` (a hub step, or one whose session the hub never heard of), else the chunk's newest: where it ran,\nevery harness invocation and escalation inside it, their spend, the artifacts its node recorded, and the chunk's\nwhole path across the environments around it. ``404`` when the chunk is unknown, or has no such step.",
+        "operationId": "env_timeline_step_api_env_timeline_step_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "chunk_id",
+            "required": true,
+            "schema": {
+              "title": "Chunk Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "lease_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Lease Id"
+            }
+          },
+          {
+            "in": "query",
+            "name": "started_at",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "format": "date-time",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Started At"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EnvTimelineStepView"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "400": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TenantCredentialMismatchProblem"
+                }
+              }
+            },
+            "description": "Problem"
+          },
+          "401": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AuthenticationRequiredProblem"
+                }
+              }
+            },
+            "description": "Problem"
+          },
+          "404": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/TenantNotFoundProblem"
+                    },
+                    {
+                      "$ref": "#/components/schemas/ChunkNotFoundProblem"
+                    },
+                    {
+                      "$ref": "#/components/schemas/NodeStepNotFoundProblem"
+                    }
+                  ]
+                }
+              }
+            },
+            "description": "Problem"
+          },
+          "409": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TenantRequiredProblem"
+                }
+              }
+            },
+            "description": "Problem"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          },
+          "503": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HubStoreUnavailableProblem"
+                }
+              }
+            },
+            "description": "Problem"
+          }
+        },
+        "summary": "Env Timeline Step",
+        "tags": [
+          "env-timeline"
+        ]
+      }
+    },
+    "/api/env-timeline/step/transcript": {
+      "get": {
+        "description": "The transcript of the session that ran a node step of ``chunk_id`` \u2014 named by the step's ``node_id`` and\n``epoch`` as the step read answers them: every turn the session's runner shipped, across each time the session\nwas picked back up, with any part a later shipment replaced left out. ``truncated`` holds when some of it was\nlost. A session that has shipped nothing yet answers no turns; ``404`` when the chunk is unknown.",
+        "operationId": "env_timeline_step_transcript_api_env_timeline_step_transcript_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "chunk_id",
+            "required": true,
+            "schema": {
+              "title": "Chunk Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "node_id",
+            "required": true,
+            "schema": {
+              "title": "Node Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "epoch",
+            "required": true,
+            "schema": {
+              "title": "Epoch",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LeaseTranscriptView"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "400": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TenantCredentialMismatchProblem"
+                }
+              }
+            },
+            "description": "Problem"
+          },
+          "401": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AuthenticationRequiredProblem"
+                }
+              }
+            },
+            "description": "Problem"
+          },
+          "403": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PermissionRequiredProblem"
+                }
+              }
+            },
+            "description": "Problem"
+          },
+          "404": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/TenantNotFoundProblem"
+                    },
+                    {
+                      "$ref": "#/components/schemas/ChunkNotFoundProblem"
+                    }
+                  ]
+                }
+              }
+            },
+            "description": "Problem"
+          },
+          "409": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TenantRequiredProblem"
+                }
+              }
+            },
+            "description": "Problem"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          },
+          "503": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HubStoreUnavailableProblem"
+                }
+              }
+            },
+            "description": "Problem"
+          }
+        },
+        "summary": "Env Timeline Step Transcript",
+        "tags": [
+          "env-timeline"
         ]
       }
     },

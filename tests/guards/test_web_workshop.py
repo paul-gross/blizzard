@@ -31,13 +31,15 @@ def _resolved(path: str, *, relative_to: str) -> str:
 def test_workshop_stylesheets_match_the_hub_build_styles() -> None:
     hub_styles = json.loads((_WEB / "angular.json").read_text())["projects"]["hub"]
     hub_styles = (hub_styles.get("architect") or hub_styles["targets"])["build"]["options"]["styles"]
+    # A lazily loaded bundle (``inject: false``) is no global style, so the workshop leaves it out.
+    hub_styles = [entry for entry in hub_styles if isinstance(entry, str) or entry.get("inject", True) is not False]
     assert hub_styles, "the hub build lists no styles — the comparison below would be a green no-op"
     preview = (_FLEET / ".storybook" / "preview.ts").read_text()
     imports = [
         f"node_modules/{spec}" if not spec.startswith(".") else _resolved(spec, relative_to="projects/fleet/.storybook")
         for spec in _CSS_IMPORT.findall(preview)
     ]
-    assert imports == hub_styles, "preview.ts must import, in order, exactly the stylesheets the hub build lists"
+    assert imports == hub_styles, "preview.ts must import, in order, exactly the stylesheets the hub build injects"
 
 
 @pytest.mark.parametrize(

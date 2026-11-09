@@ -17,14 +17,6 @@
   height: 100%;
   color: var(--text);
 }
-/* KitPanel's body is a plain block, so this frame is the full-height flex column
-   that hands the columns a definite height; without `height: 100%` it grows to
-   its content and the columns stop scrolling on their own. */
-.d-frame {
-  display: flex;
-  flex-direction: column;
-  height: 100%;
-}
 /* An outcome sits in the same slot as the failure line and carries the same
    weight, but reads cyan rather than red: a lost answer race is news the operator
    needs, not something that went wrong or that they should retry. */
@@ -43,20 +35,7 @@
    edges either way, and the issue body), the path the chunk took, and what that
    produced. */
 .d-body {
-  flex: 1;
-  min-height: 0;
-  display: grid;
   grid-template-columns: 1fr 1fr 1fr;
-  gap: 1px;
-  background: var(--line);
-  overflow: hidden;
-}
-.d-sec {
-  background: var(--panel-deep);
-  padding: 6px 8px;
-  overflow-y: auto;
-  min-height: 0;
-  min-width: 0;
 }
 /* The node-history and artifacts sections now pad their own host
    (chunk-timeline.ts, chunk-artifacts.ts) — a plain `.d-sec` here would
@@ -64,17 +43,4 @@
    siblings (ChunkAwaitingHuman, ChunkIssuePane), which supply none of their own. */
 .d-sec--flush {
   padding: 0;
-}
-/* Delivery and the work item's facts each sit in a kit panel, so each reads apart from what follows. They sit
-   in a scrolling column, so they size to their content; the body padding is this consumer's layout. */
-.d-box {
-  margin-bottom: 8px;
-}
-.d-box-body {
-  display: block;
-  padding: 6px 8px;
-}
-/* ChunkFacts pads its own host from this property; zero it so the box body's padding is the only one. */
-fleet-chunk-detail-facts.d-box-body {
-  --chunk-facts-pad: 0;
 }

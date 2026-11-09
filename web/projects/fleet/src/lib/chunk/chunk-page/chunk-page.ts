@@ -17,7 +17,7 @@ import { type ChunkDetailTab, injectChunkDetailSelection } from './chunk-detail-
 import { ChunkGeneralTab } from './chunk-general-tab';
 import { ChunkNodeHistoryContainer } from './chunk-node-history-container';
 import { CHUNK_PAGE_DAEMON } from './chunk-page-daemon';
-import { chunkProjectColor, chunkTabOptions, type FocusRequest, nextFocus, preDetailState } from './chunk-page.model';
+import { boardBackParams, chunkProjectColor, chunkTabOptions, type FocusRequest, nextFocus, preDetailState } from './chunk-page.model';
 import { ChunkPageHeader } from './chunk-page-header';
 import { ChunkPageShell } from './chunk-page-shell';
 import { IN_APP_LINK, LensLink } from '../../core/lens-link';
@@ -126,6 +126,13 @@ export class ChunkPage {
 
   /** Off the route's own `:chunkId` segment, never the `?chunk` query param. */
   protected readonly chunkId = computed<string | null>(() => this.params().get('chunkId'));
+
+  private readonly query = toSignal(this.route.queryParamMap, { initialValue: this.route.snapshot.queryParamMap });
+
+  /** Where the back link returns: the board, with this chunk selected — in the layout, and on the node step, the page
+   * was opened from, when a board view other than the default opened it: `?layout`, and `?from` (the step's session)
+   * or `?fromAt` (the instant it began), which return as the board's `?step` or `?at`. */
+  protected readonly backParams = computed(() => boardBackParams(this.chunkId(), this.query()));
 
   protected readonly selection = injectChunkDetailSelection();
 

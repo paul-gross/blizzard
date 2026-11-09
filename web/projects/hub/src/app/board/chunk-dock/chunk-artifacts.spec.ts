@@ -123,6 +123,27 @@ describe('ChunkArtifacts', () => {
     );
   });
 
+  it('carries the host’s params on each link beside tab and artifact, which win over a carried key of their name', async () => {
+    const fixture = TestBed.createComponent(ChunkArtifacts);
+    fixture.componentRef.setInput('detail', REVIEW_FAIL_DETAIL);
+    fixture.componentRef.setInput('carry', { layout: 'tracks', from: null, fromAt: '2026-07-13T10:00:00Z', tab: 'general', artifact: 'other' });
+    await fixture.whenStable();
+    const el = fixture.nativeElement as HTMLElement;
+
+    const hrefs = [...el.querySelectorAll<HTMLAnchorElement>('a.artifact-link')].map((a) => a.getAttribute('href'));
+    const id = REVIEW_FAIL_DETAIL.chunk_id;
+    expect(hrefs).toEqual([
+      expect.stringMatching(new RegExp(`^/board/chunk/${id}\\?`)),
+      expect.stringMatching(new RegExp(`^/board/chunk/${id}\\?`)),
+    ]);
+    const params = hrefs.map((h) => new URLSearchParams(h!.split('?')[1]));
+    expect(params.map((q) => q.get('layout'))).toEqual(['tracks', 'tracks']);
+    expect(params.map((q) => q.get('fromAt'))).toEqual(['2026-07-13T10:00:00Z', '2026-07-13T10:00:00Z']);
+    expect(params.map((q) => q.has('from'))).toEqual([false, false]);
+    expect(params.map((q) => q.get('tab'))).toEqual(['artifacts', 'artifacts']);
+    expect(params.map((q) => q.get('artifact')).sort()).toEqual(['build.widget.1', 'review.review-findings.2']);
+  });
+
   it('orders rows by recorded_at, oldest first', async () => {
     const older = { ...REVIEW_FAIL_DETAIL.artifacts![0], key: 'older', recorded_at: '2026-07-13T00:00:01Z' };
     const newer = { ...REVIEW_FAIL_DETAIL.artifacts![1], key: 'newer', recorded_at: '2026-07-13T00:00:02Z' };

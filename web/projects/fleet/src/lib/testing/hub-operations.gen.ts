@@ -52,6 +52,9 @@ export interface HubOperations {
   'GET /api/config/schema/{kind}': { path: T.GetSchemaApiConfigSchemaKindGetData['path']; responses: T.GetSchemaApiConfigSchemaKindGetResponses; errors: T.GetSchemaApiConfigSchemaKindGetErrors };
   'GET /api/decisions': { path: T.ListDecisionsApiDecisionsGetData['path']; responses: T.ListDecisionsApiDecisionsGetResponses; errors: T.ListDecisionsApiDecisionsGetErrors };
   'GET /api/egress/status': { path: T.EgressStatusApiEgressStatusGetData['path']; responses: T.EgressStatusApiEgressStatusGetResponses; errors: T.EgressStatusApiEgressStatusGetErrors };
+  'GET /api/env-timeline': { path: T.EnvTimelineApiEnvTimelineGetData['path']; responses: T.EnvTimelineApiEnvTimelineGetResponses; errors: T.EnvTimelineApiEnvTimelineGetErrors };
+  'GET /api/env-timeline/step': { path: T.EnvTimelineStepApiEnvTimelineStepGetData['path']; responses: T.EnvTimelineStepApiEnvTimelineStepGetResponses; errors: T.EnvTimelineStepApiEnvTimelineStepGetErrors };
+  'GET /api/env-timeline/step/transcript': { path: T.EnvTimelineStepTranscriptApiEnvTimelineStepTranscriptGetData['path']; responses: T.EnvTimelineStepTranscriptApiEnvTimelineStepTranscriptGetResponses; errors: T.EnvTimelineStepTranscriptApiEnvTimelineStepTranscriptGetErrors };
   'GET /api/events': { path: T.ListEventsApiEventsGetData['path']; responses: T.ListEventsApiEventsGetResponses; errors: T.ListEventsApiEventsGetErrors };
   'GET /api/findings': { path: T.ListFindingsApiFindingsGetData['path']; responses: T.ListFindingsApiFindingsGetResponses; errors: T.ListFindingsApiFindingsGetErrors };
   'GET /api/findings/classes': { path: T.ListFindingClassesApiFindingsClassesGetData['path']; responses: T.ListFindingClassesApiFindingsClassesGetResponses; errors: T.ListFindingClassesApiFindingsClassesGetErrors };

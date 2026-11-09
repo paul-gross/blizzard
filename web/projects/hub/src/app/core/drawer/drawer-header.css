@@ -1,0 +1,55 @@
+/*
+ * A board drawer's header: the identity on the left — an amber id over a line of facts parted by dots — and its
+ * controls at the far right.
+ */
+.d-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 6px 8px;
+  border-bottom: 1px solid var(--line);
+  background: var(--overlay-25);
+  flex: none;
+}
+.d-title {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+.d-title .id {
+  color: var(--amber);
+  font-size: var(--fs-lg);
+  letter-spacing: 0.04em;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  text-decoration: none;
+}
+.d-sub {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  min-width: 0;
+}
+/* The project leading the identity line: its name on the line's baseline, its swatch centred on the name. */
+.d-sub .project {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 4px;
+  color: var(--text);
+  font-size: var(--fs-xs);
+  white-space: nowrap;
+}
+.d-sub .project-swatch {
+  align-self: center;
+}
+/* The dot between adjacent items on the identity line — its own child rather than a
+   pseudo-element on each item, so it never lands inside a pointer's anchor and become
+   part of that link's own click target. */
+.d-sub .sep {
+  flex: none;
+  color: var(--label-dim);
+  font-size: var(--fs-label);
+}
