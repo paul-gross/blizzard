@@ -11,6 +11,7 @@ import pytest
 
 from blizzard.auth_core import Role
 from blizzard.hub.domain.urgency.model import UrgencyId
+from blizzard.hub.store import schema as s
 from blizzard.hub.store.internal.urgency_chunks_store import UrgencyChunksStore
 from tests.support.scaffolding import HubHarness, build_hub, hub_store_connections, ingest, seed_session, seed_user
 
@@ -47,7 +48,18 @@ def _changes(hub: HubHarness, kind: str) -> list[dict[str, Any]]:
 
 
 def _carry(hub: HubHarness, urgency_id: str, *chunk_ids: str) -> None:
-    UrgencyChunksStore(hub_store_connections(hub.engine)).move(list(chunk_ids), to=UrgencyId(urgency_id))
+    """Set each chunk to carry ``urgency_id`` whatever its status — a finished one included, which a move leaves."""
+    store = hub_store_connections(hub.engine)
+    with store.write("carry_urgency") as conn:
+        conn.execute(store.update(s.chunks).where(s.chunks.c.chunk_id.in_(chunk_ids)).values(urgency_id=urgency_id))
+
+
+def _carried(hub: HubHarness, chunk_id: str) -> str:
+    store = hub_store_connections(hub.engine)
+    with store.read("carried_urgency") as conn:
+        return conn.execute(
+            store.select(s.chunks, s.chunks.c.urgency_id).where(s.chunks.c.chunk_id == chunk_id)
+        ).scalar_one()
 
 
 def _field(response: Any) -> tuple[int, list[str], str]:
@@ -150,6 +162,32 @@ def test_a_retire_moves_open_work_and_finished_work_keeps_its_urgency(hub: HubHa
     assert (again.status_code, again.json()["revision"]) == (200, retired.json()["revision"])
 
 
+def test_a_retire_leaves_a_chunk_that_finished_after_its_read_and_counts_only_what_moved(
+    hub: HubHarness, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    urgent = _create(hub, "urgent")
+    open_id = ingest(hub, [{"source": "default", "ref": "open"}])
+    done_id = ingest(hub, [{"source": "default", "ref": "done"}])
+    _carry(hub, urgent["urgency_id"], open_id, done_id)
+    read = UrgencyChunksStore.open_chunks
+    assert hub.client.post(f"/api/chunks/{done_id}/complete", json={}).status_code == 202
+
+    def read_before_it_finished(self: UrgencyChunksStore, *args: Any, **kwargs: Any) -> list[str]:
+        return sorted([*read(self, *args, **kwargs), done_id])
+
+    monkeypatch.setattr(UrgencyChunksStore, "open_chunks", read_before_it_finished)
+    retired = hub.client.post("/api/urgencies/urgent/retire", json={"move_to": "standard"})
+
+    assert retired.status_code == 200, retired.text
+    assert retired.json()["moved_chunks"] == 1
+    assert (_carried(hub, open_id), _carried(hub, done_id)) == (
+        _show(hub, "standard")["urgency_id"],
+        urgent["urgency_id"],
+    )
+    (change,) = [c for c in _changes(hub, "urgency") if c["record_key"] == urgent["urgency_id"] and c["op"] == "retire"]
+    assert {d["field"]: d["new"] for d in change["diff"]}["moved_chunks"] == 1
+
+
 def test_the_default_is_refused_retire_first(hub: HubHarness) -> None:
     _create(hub, "urgent")
     refused = hub.client.post("/api/urgencies/standard/retire", json={"move_to": "urgent"})
@@ -229,3 +267,8 @@ def test_reads_need_fleet_view_and_writes_config_edit(tmp_path: Path) -> None:
     assert hub.client.patch("/api/settings", json={}, headers=contributor).status_code == 403
     assert hub.client.post("/api/urgencies", json={"slug": "u"}, headers=admin).status_code == 201
     assert hub.client.post("/api/urgencies/u/retire", json={}, headers=contributor).status_code == 403
+    # The permission is checked before the key resolves, so an unknown key is 403 to a contributor, never 404.
+    assert hub.client.patch("/api/urgencies/nope", json={"name": "x"}, headers=contributor).status_code == 403
+    assert hub.client.post("/api/urgencies/nope/retire", json={}, headers=contributor).status_code == 403
+    assert hub.client.post("/api/urgencies/nope/enable", headers=contributor).status_code == 403
+    assert hub.client.patch("/api/urgencies/nope", json={"name": "x"}, headers=admin).status_code == 404

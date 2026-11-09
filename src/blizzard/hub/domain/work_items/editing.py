@@ -189,8 +189,9 @@ class WorkItemEditService:
         pointer, draft, at = prepare_mint(
             self._items, self._work_refs, self._clock, source, graph=graph, project_id=project_id
         )
+        keys = self._default.lock_keys()
         with self._transactions.begin() as transaction:
-            locked = transaction.lock_set(keys=self._default.lock_keys())
+            locked = transaction.lock_set(keys=keys)
             chunk = draft.mint(self._default.read(locked).urgency_id)
             item = self._items.create_with_chunk(
                 pointer=pointer,
@@ -224,8 +225,9 @@ class WorkItemEditService:
         pointer, draft, at = prepare_mint(
             self._items, self._work_refs, self._clock, RESERVED_HUB_SOURCE_NAME, graph=graph, project_id=project_id
         )
+        keys = self._default.lock_keys()
         with self._transactions.begin() as transaction:
-            locked = transaction.lock_set(keys=self._default.lock_keys())
+            locked = transaction.lock_set(keys=keys)
             chunk = draft.mint(self._default.read(locked).urgency_id)
             item = self._items.accept_create(
                 proposal_id=proposal_id,

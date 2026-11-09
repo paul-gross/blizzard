@@ -294,9 +294,7 @@ class _Planner:
 
     def default(self, reference: str | None) -> None:
         try:
-            if reference is None:
-                raise ConfigFieldError(DEFAULT_URGENCY_FIELD, "must not be null")
-            default = self._live(DEFAULT_URGENCY_FIELD, reference)
+            default = self._live(DEFAULT_URGENCY_FIELD, TenantSettings.named_default(reference))
             settings = self._stored.settings
             held = next(u for u in self._by_slug.values() if u.urgency_id == settings.default_urgency_id)
             decided = settings.point_at(default, held=held, ctx=self._ctx, if_match=None, at=self._at)

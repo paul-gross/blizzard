@@ -3,7 +3,8 @@
 A chunk carries its urgency in ``chunks.urgency_id``, read through the tenant-led ``ix_chunks_tenant_urgency_id``. Open
 means non-terminal by the status the chunk's facts derive, as the chunk store derives live statuses: the
 :func:`maybe_live` prefilter narrows the candidates, ephemeral chunks drop with it, and the status families' facts
-settle the prefilter's residue. A move rewrites the column in place and touches nothing else of the chunk."""
+settle the prefilter's residue. A move rewrites the column in place and touches nothing else of the chunk; it
+re-applies the prefilter in its own write, so a chunk that finished after the read keeps its urgency."""
 
 from __future__ import annotations
 
@@ -61,17 +62,29 @@ class UrgencyChunksStore:
         with connection_in(self._store, transaction, "urgency_open_chunks") as conn:
             return sorted(_open_holders(conn, [urgency_id]))
 
-    def move(self, chunk_ids: Sequence[str], *, to: UrgencyId, transaction: Transaction | None = None) -> int:
+    def move(
+        self,
+        chunk_ids: Sequence[str],
+        *,
+        from_id: UrgencyId,
+        to: UrgencyId,
+        transaction: Transaction | None = None,
+    ) -> list[str]:
         if not chunk_ids:
-            return 0
-        moved = 0
+            return []
+        moved: list[str] = []
         with connection_in(self._store, transaction, "move_urgency_chunks", write=True) as conn:
             stmts = statements_of(conn)
-            for batch in id_batches(list(chunk_ids)):
-                moved += conn.execute(
-                    stmts.update(s.chunks).where(s.chunks.c.chunk_id.in_(batch)).values(urgency_id=to)
-                ).rowcount
-        return moved
+            for batch in id_batches(sorted(set(chunk_ids))):
+                moved.extend(
+                    conn.execute(
+                        stmts.update(s.chunks)
+                        .where(s.chunks.c.chunk_id.in_(batch), s.chunks.c.urgency_id == from_id, maybe_live(stmts))
+                        .values(urgency_id=to)
+                        .returning(s.chunks.c.chunk_id)
+                    ).scalars()
+                )
+        return sorted(moved)
 
 
 _urgency_chunks_store_conforms: type[IWriteUrgencyChunks] = UrgencyChunksStore

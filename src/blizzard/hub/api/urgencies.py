@@ -1,10 +1,11 @@
 """Urgency routes — create, list, show, edit, retire, enable, the icon, and the set's two reorders.
 
-The controller stays read-only (``bzh:controller-read-only``), resolving ``{key}`` — an id or a slug — before
-delegating to the domain. Every write needs ``config:edit`` and carries the request's :class:`ChangeContext`; a retire
-tells the domain whether the caller holds ``chunk:control``, which a retire moving open work needs beside it. What a
-write moved is published after its commit (``bzh:publish-after-commit``): a reorder the queue's change, a retire each
-moved chunk's ``edited`` change and then the queue's once, since claim order moves with them."""
+The controller stays read-only (``bzh:controller-read-only``), resolving ``{key}`` and every urgency a body names — an
+id or a slug — before delegating to the domain (``bzh:domain-takes-objects``). Every write needs ``config:edit`` and
+carries the request's :class:`ChangeContext`; a retire tells the domain whether the caller holds ``chunk:control``,
+which a retire moving open work needs beside it. What a write moved is published after its commit
+(``bzh:publish-after-commit``): a reorder the queue's change, a retire each moved chunk's ``edited`` change and then
+the queue's once."""
 
 from __future__ import annotations
 
@@ -29,6 +30,7 @@ from blizzard.hub.domain.config.errors import ConfigFieldError, ConfigRevisionCo
 from blizzard.hub.domain.kernel.unset import UNSET
 from blizzard.hub.domain.urgency.mark import IconShape
 from blizzard.hub.domain.urgency.model import (
+    MoveTo,
     Urgency,
     UrgencyEdit,
     UrgencyInUse,
@@ -141,9 +143,14 @@ def create_urgency(
         icon=_icon(request.icon) if "icon" in sent else UNSET,
     )
     try:
-        created = services.urgency_authoring.create(
-            shape, change_context(identity, door), after=request.after if "after" in sent else UNSET
+        after = (
+            UNSET
+            if "after" not in sent
+            else None
+            if request.after is None
+            else services.urgency_reading.named("after", request.after)
         )
+        created = services.urgency_authoring.create(shape, change_context(identity, door), after=after)
     except ConfigFieldError as exc:
         raise _unprocessable(exc) from exc
     return _shown(created, services)
@@ -157,7 +164,8 @@ def put_urgency_order(
     `urgency_order_incomplete` when it leaves a live urgency out, names a retired one, or names one twice, and
     `urgency_unknown` for one the tenant does not hold."""
     try:
-        moved = services.urgency_ordering.set_order(request.urgencies, change_context(identity, door))
+        named = [services.urgency_reading.named("urgencies", key) for key in request.urgencies]
+        moved = services.urgency_ordering.set_order(named, change_context(identity, door))
     except ConfigFieldError as exc:
         raise _unprocessable(exc) from exc
     if moved:
@@ -172,7 +180,9 @@ def position_urgency(
     """Move one urgency to just after `after`, or first under `after: null`; one already there writes nothing. 422
     for an urgency the tenant does not hold, a retired one, or a move after itself."""
     try:
-        moved = services.urgency_ordering.move(request.urgency, change_context(identity, door), after=request.after)
+        moving = services.urgency_reading.named("urgency", request.urgency)
+        after = None if request.after is None else services.urgency_reading.named("after", request.after)
+        moved = services.urgency_ordering.move(moving, change_context(identity, door), after=after)
     except ConfigFieldError as exc:
         raise _unprocessable(exc) from exc
     if moved:
@@ -229,7 +239,8 @@ def retire_urgency(
     `urgency_in_use`, counting them, when open chunks carry it and no `move_to` is named; 422 `urgency_unknown`,
     `urgency_retired` or `urgency_move_to_self` for a `move_to` naming no urgency, a retired one, or this one. A
     retire moving open work needs `chunk:control` (403). 409 on a stale `If-Match`."""
-    move_to = None if request is None else request.move_to
+    key = None if request is None else request.move_to
+    move_to = None if key is None else MoveTo(key, services.urgency_reading.resolve(key))
     try:
         retired = services.urgency_lifecycle.retire(
             urgency,

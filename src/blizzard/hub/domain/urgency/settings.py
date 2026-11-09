@@ -13,6 +13,7 @@ from datetime import datetime
 from blizzard.foundation.roles import domain_model
 from blizzard.hub.domain.config import lifecycle
 from blizzard.hub.domain.config.changes import ChangeContext, ChangeOp, ConfigChange, FieldChange, RecordKind
+from blizzard.hub.domain.config.errors import ConfigFieldError
 from blizzard.hub.domain.urgency.model import Urgency, UrgencyId
 
 #: The field the default is written under on the wire and in a diff.
@@ -38,6 +39,14 @@ class TenantSettings:
         record = cls(tenant_id, default.urgency_id, 1, at, ctx.actor)
         diff = (FieldChange(DEFAULT_URGENCY_FIELD, None, default.slug),)
         return record, record._change(ctx, ChangeOp.CREATE, diff, at)
+
+    @staticmethod
+    def named_default(reference: str | None) -> str:
+        """``reference`` — the urgency an edit names as the default — when it names one: the default is never
+        cleared, so a ``null`` is refused."""
+        if reference is None:
+            raise ConfigFieldError(DEFAULT_URGENCY_FIELD, "must not be null")
+        return reference
 
     def require_revision(self, if_match: int | None) -> None:
         """:class:`ConfigRevisionConflict` when ``if_match`` names a revision other than the stored one."""

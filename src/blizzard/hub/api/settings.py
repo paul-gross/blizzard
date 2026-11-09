@@ -22,6 +22,7 @@ from blizzard.hub.auth.permissions import Permission
 from blizzard.hub.domain.config.errors import ConfigFieldError, ConfigRevisionConflict
 from blizzard.hub.domain.kernel.unset import UNSET
 from blizzard.hub.domain.urgency.services import SettingsView as SettingsRead
+from blizzard.hub.domain.urgency.settings import DEFAULT_URGENCY_FIELD, TenantSettings
 from blizzard.wire.urgency import SettingsDefaultView, SettingsPatchRequest, SettingsView
 
 router = APIRouter(
@@ -59,10 +60,13 @@ def patch_settings(
     `If-Match`."""
     sent = request.model_fields_set
     try:
+        default = (
+            services.urgency_reading.named(DEFAULT_URGENCY_FIELD, TenantSettings.named_default(request.default_urgency))
+            if "default_urgency" in sent
+            else UNSET
+        )
         edited = services.tenant_settings.edit(
-            change_context(identity, door),
-            default_urgency=request.default_urgency if "default_urgency" in sent else UNSET,
-            if_match=if_match,
+            change_context(identity, door), default_urgency=default, if_match=if_match
         )
     except ConfigFieldError as exc:
         raise ProblemHTTPException(

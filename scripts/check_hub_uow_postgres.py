@@ -61,13 +61,20 @@ _PROMOTE: _LockSet = (["a"], [READY_RANKING_LOCK, BACKLOG_RANKING_LOCK])
 #: the hub item, proposal, routine, and ingest mints' set, and the cadence mint's — and a settings edit naming it,
 #: each run each way round. Every one takes the settings' lock, so whichever writer holds its set, the other blocks
 #: there and lands only once the first commits — a mint or an edit never lands on an urgency a retire holds.
-_RETIRE: _LockSet = ([], [tenant_settings_lock(), urgency_lock(_RETIRING), urgency_lock(UrgencyId("urg_other"))])
+_RETIRE: _LockSet = (
+    [],
+    [tenant_settings_lock(), urgency_order_lock(), urgency_lock(_RETIRING), urgency_lock(UrgencyId("urg_other"))],
+)
 _DEFAULT_MINT: _LockSet = (["n"], default_lock_keys(_RETIRING))
 _SETTINGS_EDIT: _LockSet = ([], [tenant_settings_lock(), urgency_lock(_RETIRING)])
 #: A config apply creating urgencies, setting the order, and making ``urg_proof`` the default — the settings', the
 #: set's, and the named urgency's locks — against the retire, each way round: the settings' lock serializes them, so
 #: a retire never commits between the apply's re-checks and its writes.
 _APPLY: _LockSet = ([], [tenant_settings_lock(), urgency_order_lock(), urgency_lock(_RETIRING)])
+#: A reorder or a create — the set's lock alone — against the retire and against an enable of ``urg_proof``, each way
+#: round: both take the set's lock, so the urgencies a reorder decides are live hold still until it commits.
+_REORDER: _LockSet = ([], [urgency_order_lock()])
+_ENABLE: _LockSet = ([], [urgency_order_lock(), urgency_lock(_RETIRING)])
 _LOCK_SETS: dict[str, tuple[_LockSet, _LockSet]] = {
     "cadence mint, then promote": (_MINT, _PROMOTE),
     "promote, then cadence mint": (_PROMOTE, _MINT),
@@ -79,6 +86,10 @@ _LOCK_SETS: dict[str, tuple[_LockSet, _LockSet]] = {
     "settings edit, then urgency retire": (_SETTINGS_EDIT, _RETIRE),
     "config apply, then urgency retire": (_APPLY, _RETIRE),
     "urgency retire, then config apply": (_RETIRE, _APPLY),
+    "urgency retire, then reorder": (_RETIRE, _REORDER),
+    "reorder, then urgency retire": (_REORDER, _RETIRE),
+    "urgency enable, then reorder": (_ENABLE, _REORDER),
+    "reorder, then urgency enable": (_REORDER, _ENABLE),
 }
 
 

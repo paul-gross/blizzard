@@ -342,6 +342,16 @@ def require_live(field: str, key: str, urgency: Urgency | None) -> Urgency:
     return urgency
 
 
+@domain_model
+@dataclass(frozen=True)
+class MoveTo:
+    """The urgency a retire names for its open work, as the edge resolved ``key``: ``urgency`` is ``None`` when ``key``
+    names none, which the retire refuses only once the refusals before it clear."""
+
+    key: str
+    urgency: Urgency | None
+
+
 def require_retirable(
     urgency: Urgency,
     *,

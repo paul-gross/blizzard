@@ -195,18 +195,6 @@ class UrgencyStore:
     def get_by_slug(self, slug: str, *, transaction: Transaction | None = None) -> Urgency | None:
         return self._one(urgencies.c.slug == slug, "get_urgency_by_slug", transaction)
 
-    def get_many(
-        self, urgency_ids: Sequence[UrgencyId], *, transaction: Transaction | None = None
-    ) -> dict[UrgencyId, Urgency]:
-        found: dict[UrgencyId, Urgency] = {}
-        with connection_in(self._store, transaction, "get_many_urgencies") as conn:
-            for batch in id_batches(sorted(set(urgency_ids))):
-                rows = conn.execute(
-                    self._store.select(urgencies, *_VIEW_COLUMNS).where(urgencies.c.urgency_id.in_(batch))
-                ).all()
-                found.update((u.urgency_id, u) for u in _reconstituted(conn, rows))
-        return found
-
     def list_all(self, *, transaction: Transaction | None = None) -> list[Urgency]:
         with connection_in(self._store, transaction, "list_urgencies") as conn:
             rows = conn.execute(self._store.select(urgencies, *_VIEW_COLUMNS).order_by(urgencies.c.slug)).all()

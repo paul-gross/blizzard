@@ -47,12 +47,6 @@ class IReadUrgencyRepository(Protocol):
 
     def get_by_slug(self, slug: str, *, transaction: Transaction | None = None) -> Urgency | None: ...
 
-    def get_many(
-        self, urgency_ids: Sequence[UrgencyId], *, transaction: Transaction | None = None
-    ) -> dict[UrgencyId, Urgency]:
-        """Every named urgency that exists, keyed by id (``bzh:bulk-reconstitution``)."""
-        ...
-
     def list_all(self, *, transaction: Transaction | None = None) -> list[Urgency]:
         """Every urgency of the tenant, retired ones included, by slug."""
         ...
@@ -79,9 +73,10 @@ class IWriteUrgencyRepository(IReadUrgencyRepository, Protocol):
         change: ConfigChange,
         transaction: Transaction | None = None,
     ) -> Urgency:
-        """Insert the urgency with ``mark``'s icon bytes and its first position fact at ``position``. A slug the tenant
-        already holds — a create that lost the race to it — raises
-        :class:`~blizzard.hub.domain.urgency.model.UrgencySlugTaken`."""
+        """Insert the urgency with ``mark``'s icon bytes and its first position fact at ``position``. Outside a unit, a
+        slug the tenant already holds — a create that lost the race to it — raises
+        :class:`~blizzard.hub.domain.urgency.model.UrgencySlugTaken`; inside one, the caller holds the set's lock and
+        has re-read the slug free under it, so no create races it there."""
         ...
 
     def update(
@@ -187,7 +182,15 @@ class IReadUrgencyChunks(Protocol):
 class IWriteUrgencyChunks(IReadUrgencyChunks, Protocol):
     """Adds the move a retire makes."""
 
-    def move(self, chunk_ids: Sequence[str], *, to: UrgencyId, transaction: Transaction | None = None) -> int:
-        """Set every chunk of ``chunk_ids`` to carry ``to``, in one bulk write, its rank untouched; how many rows
-        moved."""
+    def move(
+        self,
+        chunk_ids: Sequence[str],
+        *,
+        from_id: UrgencyId,
+        to: UrgencyId,
+        transaction: Transaction | None = None,
+    ) -> list[str]:
+        """Set each chunk of ``chunk_ids`` still carrying ``from_id`` and still open to carry ``to``, in one bulk
+        write, its rank untouched; the ids of the chunks it moved, by id. A chunk that finished since it was read
+        keeps its urgency."""
         ...

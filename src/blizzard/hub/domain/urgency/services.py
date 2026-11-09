@@ -4,8 +4,9 @@ tenant's default read for a mint.
 Each service loads what it needs, hands it to the model's pure functions, and passes the result to the repository
 (``bzh:domain-orchestration-split``). A write that lands a position, changes the default, or retires an urgency is one
 unit of work declaring its keyed locks once and re-reading under them what it decides on
-(``bzh:write-reestablishes-read``); an edit and an enable are compare-and-set on ``revision`` and lock nothing. The
-caller publishes what a write moved once it commits (``bzh:publish-after-commit``)."""
+(``bzh:write-reestablishes-read``); an edit is a compare-and-set on ``revision`` and locks nothing. The edge
+resolves each urgency a write names before calling in (``bzh:domain-takes-objects``), and the unit re-reads it by id.
+The caller publishes what a write moved once it commits (``bzh:publish-after-commit``)."""
 
 from __future__ import annotations
 
@@ -15,12 +16,12 @@ from dataclasses import dataclass
 from blizzard.foundation.clock import IClock
 from blizzard.foundation.roles import domain_model
 from blizzard.hub.domain.config.changes import ChangeContext
-from blizzard.hub.domain.config.errors import ConfigFieldError
 from blizzard.hub.domain.kernel.transactions import IHubTransactions, Transaction
 from blizzard.hub.domain.kernel.unset import UNSET, UnsetType
 from blizzard.hub.domain.projects.color import ColorPick
 from blizzard.hub.domain.urgency.mark import Icon
 from blizzard.hub.domain.urgency.model import (
+    MoveTo,
     Urgency,
     UrgencyEdit,
     UrgencyId,
@@ -112,13 +113,26 @@ class UrgencyReading:
     def resolve(self, key: str) -> Urgency | None:
         return resolve(self._urgencies, key)
 
+    def named(self, field: str, key: str) -> Urgency:
+        """The urgency ``key`` on ``field`` names; :class:`UrgencyUnknown` when it names none."""
+        found = self.resolve(key)
+        if found is None:
+            raise UrgencyUnknown(field, key)
+        return found
+
     def list(self, *, include_retired: bool = False) -> list[UrgencyView]:
         """The live urgencies in order, most urgent first; with ``include_retired``, the retired ones too, each at
         its standing place."""
         order = self._order.order()
+        return self._views(self._in(order, include_retired=include_retired), order)
+
+    def ordered(self) -> list[Urgency]:
+        """The live urgencies in order, most urgent first, without the counts and places a view carries."""
+        return self._in(self._order.order(), include_retired=False)
+
+    def _in(self, order: UrgencyOrder, *, include_retired: bool) -> list[Urgency]:
         by_id = {u.urgency_id: u for u in self._urgencies.list_all()}
-        shown = [by_id[p.urgency_id] for p in order.placed if include_retired or not p.retired]
-        return self._views(shown, order)
+        return [by_id[p.urgency_id] for p in order.placed if include_retired or not p.retired]
 
     def view(self, urgency: Urgency) -> UrgencyView:
         (view,) = self._views([urgency], self._order.order())
@@ -165,9 +179,10 @@ class UrgencyAuthoring:
         self._pick = pick
         self._clock = clock
 
-    def create(self, shape: UrgencyShape, ctx: ChangeContext, *, after: str | None | UnsetType = UNSET) -> Urgency:
-        """Create an urgency at the least urgent end, or just after the live urgency ``after`` names — first under
-        ``None``. A create stating no color takes the palette color the live urgencies use least."""
+    def create(self, shape: UrgencyShape, ctx: ChangeContext, *, after: Urgency | None | UnsetType = UNSET) -> Urgency:
+        """Create an urgency at the least urgent end, or just after ``after``, which the order re-read under the lock
+        confirms live — first under ``None``. A create stating no color takes the palette color the live urgencies use
+        least."""
         at = self._clock.now()
         with self._transactions.begin() as transaction:
             locked = transaction.lock_set(keys=[urgency_order_lock()])
@@ -181,7 +196,7 @@ class UrgencyAuthoring:
             )
             require_slug_free(urgency.slug, next((u for u in held if u.slug == urgency.slug), None))
             order = self._order.order(transaction=locked)
-            anchor = None if after is UNSET or after is None else _anchor(held, after)
+            anchor = None if after is UNSET or after is None else after.urgency_id
             position, renumber = order.landing(anchor, last=after is UNSET)
             self._order.record_positions(
                 renumber, from_seq=order.seq, at=at, by=ctx.actor, change=None, transaction=locked
@@ -197,13 +212,6 @@ class UrgencyAuthoring:
         return self._urgencies.update(edited, mark=mark, from_revision=urgency.revision, change=change)
 
 
-def _anchor(held: Sequence[Urgency], key: str) -> UrgencyId:
-    """The id of the urgency ``key`` names among ``held``, which the order then confirms live; an unknown key passes
-    through so the order refuses it naming ``after``."""
-    found = next((u for u in held if key in (u.urgency_id, u.slug)), None)
-    return UrgencyId(key) if found is None else found.urgency_id
-
-
 @domain_model
 @dataclass(frozen=True)
 class Retired:
@@ -215,10 +223,13 @@ class Retired:
 
 
 class UrgencyLifecycle:
-    """Retire and enable an urgency. A retire is one unit locking the settings, the retiring urgency and the urgency
-    its open work moves to; under them it re-reads the default, the urgency, its open chunks and ``move_to``, clears
-    the refusals in order, and writes the retired fact, the move and the change together. No chunk is locked: every
-    write setting a chunk to an urgency takes that urgency's lock and confirms it live. Enable moves no chunk back."""
+    """Retire and enable an urgency. A retire is one unit locking the settings, the set, the retiring urgency and the
+    urgency its open work moves to; under them it re-reads the default, the urgency, its open chunks and ``move_to``,
+    clears the refusals in order, and writes the retired fact, the move and the change together. No chunk is locked:
+    every write setting a chunk to an urgency takes that urgency's lock and confirms it live, and the move itself
+    leaves a chunk that finished since the read. An enable locks the set and the urgency and re-reads it under them.
+    Both take the set's lock because a reorder and a create decide on which urgencies are live under it alone. Enable
+    moves no chunk back."""
 
     def __init__(
         self,
@@ -240,14 +251,14 @@ class UrgencyLifecycle:
         urgency: Urgency,
         ctx: ChangeContext,
         *,
-        move_to: str | None,
+        move_to: MoveTo | None,
         may_control: bool,
         if_match: int | None,
     ) -> Retired:
         """Retire ``urgency``, moving its open chunks to the urgency ``move_to`` names. Retiring a retired urgency
         writes nothing. ``may_control`` says whether the writer may edit chunks, which a retire moving any needs."""
-        named = None if move_to is None else resolve(self._urgencies, move_to)
-        keys = [tenant_settings_lock(), urgency_lock(urgency.urgency_id)]
+        named = None if move_to is None else move_to.urgency
+        keys = [tenant_settings_lock(), urgency_order_lock(), urgency_lock(urgency.urgency_id)]
         if named is not None and named.urgency_id != urgency.urgency_id:
             keys.append(urgency_lock(named.urgency_id))
         at = self._clock.now()
@@ -265,16 +276,18 @@ class UrgencyLifecycle:
                 current,
                 default_id=default_id,
                 open_chunks=len(open_chunks),
-                move_to_key=move_to,
+                move_to_key=None if move_to is None else move_to.key,
                 move_to=target,
                 may_control=may_control,
             )
             moved = (
-                self._chunks.move(open_chunks, to=destination.urgency_id, transaction=locked)
+                self._chunks.move(
+                    open_chunks, from_id=current.urgency_id, to=destination.urgency_id, transaction=locked
+                )
                 if destination is not None
-                else 0
+                else []
             )
-            decided = current.set_retired(True, ctx, if_match=None, at=at, extra=moved_diff(destination, moved))
+            decided = current.set_retired(True, ctx, if_match=None, at=at, extra=moved_diff(destination, len(moved)))
             assert decided is not None, "a live urgency always retires"
             retired, change = decided
             stored = self._urgencies.record_lifecycle(
@@ -286,18 +299,28 @@ class UrgencyLifecycle:
                 change=change,
                 transaction=locked,
             )
-        return Retired(stored, tuple(open_chunks) if destination is not None else ())
+        return Retired(stored, tuple(moved))
 
     def enable(self, urgency: Urgency, ctx: ChangeContext, *, if_match: int | None) -> Urgency:
         """Bring a retired urgency back at its standing place; enabling a live one writes nothing."""
         at = self._clock.now()
-        decided = urgency.set_retired(False, ctx, if_match=if_match, at=at)
-        if decided is None:
-            return urgency
-        enabled, change = decided
-        return self._urgencies.record_lifecycle(
-            enabled, retired=False, from_revision=urgency.revision, at=at, by=ctx.actor, change=change
-        )
+        with self._transactions.begin() as transaction:
+            locked = transaction.lock_set(keys=[urgency_order_lock(), urgency_lock(urgency.urgency_id)])
+            current = self._urgencies.get(urgency.urgency_id, transaction=locked)
+            assert current is not None, "an urgency is never deleted"
+            decided = current.set_retired(False, ctx, if_match=if_match, at=at)
+            if decided is None:
+                return current
+            enabled, change = decided
+            return self._urgencies.record_lifecycle(
+                enabled,
+                retired=False,
+                from_revision=current.revision,
+                at=at,
+                by=ctx.actor,
+                change=change,
+                transaction=locked,
+            )
 
 
 class UrgencyOrdering:
@@ -308,42 +331,31 @@ class UrgencyOrdering:
         self,
         *,
         tenant_id: str,
-        urgencies: IReadUrgencyRepository,
         order: IWriteUrgencyOrder,
         transactions: IHubTransactions,
         clock: IClock,
     ) -> None:
         self._tenant_id = tenant_id
-        self._urgencies = urgencies
         self._order = order
         self._transactions = transactions
         self._clock = clock
 
-    def set_order(self, keys: Sequence[str], ctx: ChangeContext) -> bool:
-        """Set the whole live order from ``keys``, each an id or a slug, naming every live urgency once. Whether
-        anything moved."""
+    def set_order(self, urgencies: Sequence[Urgency], ctx: ChangeContext) -> bool:
+        """Set the whole live order to ``urgencies``, naming every live urgency once; the order re-read under the lock
+        refuses a retired one. Whether anything moved."""
         with self._transactions.begin() as transaction:
             locked = transaction.lock_set(keys=[urgency_order_lock()])
-            ids = [self._id_of(key, "urgencies", locked) for key in keys]
             order = self._order.order(transaction=locked)
-            return self._record(order, order.whole(ids), ctx, locked)
+            return self._record(order, order.whole([u.urgency_id for u in urgencies]), ctx, locked)
 
-    def move(self, key: str, ctx: ChangeContext, *, after: str | None) -> bool:
-        """Move the urgency ``key`` names to just after the one ``after`` names, first under ``None``. Whether
-        anything moved."""
+    def move(self, urgency: Urgency, ctx: ChangeContext, *, after: Urgency | None) -> bool:
+        """Move ``urgency`` to just after ``after``, first under ``None``; the order re-read under the lock refuses a
+        retired one. Whether anything moved."""
         with self._transactions.begin() as transaction:
             locked = transaction.lock_set(keys=[urgency_order_lock()])
-            moving = self._id_of(key, "urgency", locked)
-            anchor = None if after is None else self._id_of(after, "after", locked)
             order = self._order.order(transaction=locked)
-            return self._record(order, order.move(moving, after=anchor), ctx, locked)
-
-    def _id_of(self, key: str, field: str, transaction: Transaction) -> UrgencyId:
-        """The id of the urgency ``key`` names; the order then refuses a retired one."""
-        found = resolve(self._urgencies, key, transaction=transaction)
-        if found is None:
-            raise UrgencyUnknown(field, key)
-        return found.urgency_id
+            anchor = None if after is None else after.urgency_id
+            return self._record(order, order.move(urgency.urgency_id, after=anchor), ctx, locked)
 
     def _record(
         self, order: UrgencyOrder, facts: Sequence[PositionFact], ctx: ChangeContext, transaction: Transaction
@@ -381,25 +393,19 @@ class TenantSettingsService:
         assert default is not None, "the default always names a stored urgency"
         return SettingsView(settings, default)
 
-    def edit(
-        self, ctx: ChangeContext, *, default_urgency: str | None | UnsetType, if_match: int | None
-    ) -> SettingsView:
-        """A sparse edit: an absent ``default_urgency`` leaves it, an explicit ``None`` is refused, and one naming an
-        urgency the tenant does not hold or a retired one is refused. One that changes nothing writes nothing."""
+    def edit(self, ctx: ChangeContext, *, default_urgency: Urgency | UnsetType, if_match: int | None) -> SettingsView:
+        """A sparse edit: an absent ``default_urgency`` leaves it, and a retired one is refused. One that changes
+        nothing writes nothing."""
         if default_urgency is UNSET:
             current = self.show()
             current.settings.require_revision(if_match)
             return current
-        if default_urgency is None:
-            raise ConfigFieldError(DEFAULT_URGENCY_FIELD, "must not be null")
-        named = require_live(DEFAULT_URGENCY_FIELD, default_urgency, resolve(self._urgencies, default_urgency))
+        named = require_live(DEFAULT_URGENCY_FIELD, default_urgency.slug, default_urgency)
         with self._transactions.begin() as transaction:
             locked = transaction.lock_set(keys=[tenant_settings_lock(), urgency_lock(named.urgency_id)])
             settings = _settings(self._settings, transaction=locked)
             default = require_live(
-                DEFAULT_URGENCY_FIELD,
-                default_urgency,
-                self._urgencies.get(named.urgency_id, transaction=locked),
+                DEFAULT_URGENCY_FIELD, named.slug, self._urgencies.get(named.urgency_id, transaction=locked)
             )
             held = self._urgencies.get(settings.default_urgency_id, transaction=locked)
             assert held is not None, "the default always names a stored urgency"

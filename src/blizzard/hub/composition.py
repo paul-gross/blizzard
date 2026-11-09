@@ -429,8 +429,6 @@ class TenantServices:
     urgency_ordering: UrgencyOrdering
     #: Show and edit the tenant's settings.
     tenant_settings: TenantSettingsService
-    #: The tenant's default urgency, read under a mint's locks.
-    tenant_default: TenantDefault
     #: The routine read Protocol — the same store instance as
     #: ``routine_authoring``'s writes.
     routines: IReadRoutineRepository
@@ -1464,7 +1462,6 @@ def build_tenant_services(stores: TenantStores, parts: TenantServiceParts, *, ev
         ),
         urgency_ordering=UrgencyOrdering(
             tenant_id=stores.scope.tenant,
-            urgencies=stores.urgencies,
             order=stores.urgency_order,
             transactions=stores.transactions,
             clock=clock,
@@ -1475,7 +1472,6 @@ def build_tenant_services(stores: TenantStores, parts: TenantServiceParts, *, ev
             transactions=stores.transactions,
             clock=clock,
         ),
-        tenant_default=tenant_default,
         routines=routine_store,
         routine_scopes=routine_scope_store,
         routine_scope_membership=RoutineScopeMembership(routine_scopes=routine_scope_store, clock=clock),

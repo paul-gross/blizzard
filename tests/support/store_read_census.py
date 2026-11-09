@@ -2345,7 +2345,11 @@ def build_hub_world(tmp_path: Path) -> HubWorld:
     urgency_store.record_lifecycle(
         retiring[0], retired=True, from_revision=old.revision, at=_ht(42), by="operator", change=retiring[1]
     )
-    urgency_chunks_store.move([chunk_ready_1, chunk_ready_2], to=urgent.urgency_id)
+    urgency_chunks_store.move(
+        [chunk_ready_1, chunk_ready_2],
+        from_id=hub.services.tenant_settings.show().default.urgency_id,
+        to=urgent.urgency_id,
+    )
 
     return HubWorld(
         hub=hub,
@@ -2443,7 +2447,6 @@ HUB_NAMED_READ_SEAMS: tuple[type, ...] = (ISecretCatalog, CredentialReads, Invit
 HUB_CENSUS: dict[tuple[type, str], HubRecipe] = {
     (IReadUrgencyRepository, "get"): lambda w: w.urgencies.get(w.urgency_id),
     (IReadUrgencyRepository, "get_by_slug"): lambda w: w.urgencies.get_by_slug("census-urgent"),
-    (IReadUrgencyRepository, "get_many"): lambda w: w.urgencies.get_many([w.urgency_id]),
     (IReadUrgencyRepository, "list_all"): lambda w: w.urgencies.list_all(),
     (IReadUrgencyRepository, "icon"): lambda w: w.urgencies.icon(w.urgency_id),
     (IReadUrgencyRepository, "icons"): lambda w: w.urgencies.icons(),

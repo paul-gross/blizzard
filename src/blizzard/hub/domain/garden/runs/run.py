@@ -258,8 +258,9 @@ class RunService:
             default_effort=routine.default_effort,
             default_harnesses=routine.default_harnesses,
         )
+        keys = self._default.lock_keys()
         with self._transactions.begin() as transaction:
-            locked = transaction.lock_set(keys=self._default.lock_keys())
+            locked = transaction.lock_set(keys=keys)
             chunk = draft.mint(self._default.read(locked).urgency_id)
             item = self._items.create_run_with_chunk(
                 pointer=pointer,
