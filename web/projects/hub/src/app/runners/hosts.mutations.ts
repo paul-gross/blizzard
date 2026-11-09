@@ -6,6 +6,7 @@ import {
 
 import {
   enrollHostApiHostsHostIdEnrollmentsPost,
+  hubApi,
   hubHostsKey,
   hubRunnersKey,
   problemType,
@@ -19,7 +20,8 @@ import {
 } from '../core/mutation-keys';
 
 /** The `type` of the hub's refusal of an unforced retire whose runners hold chunks. */
-const HOST_HOLDS_ROUTES = 'urn:blizzard:problem:host-holds-routes';
+const HOST_HOLDS_ROUTES: hubApi.HostHoldsRoutesProblem['type'] =
+  'urn:blizzard:problem:host-holds-routes';
 
 /** Retire a host; `force` releases the chunks its runners hold instead of being refused. */
 export interface HostRetireVars {

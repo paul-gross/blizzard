@@ -1,12 +1,6 @@
 :host {
   display: contents;
 }
-.tag {
-  font-size: var(--fs-label);
-  letter-spacing: 0.18em;
-  text-transform: uppercase;
-  color: var(--label);
-}
 .awaiting,
 .answered {
   margin-bottom: 8px;
@@ -58,12 +52,6 @@
   font-size: var(--fs-sm);
   white-space: pre-wrap;
   overflow-wrap: anywhere;
-}
-.gate-head {
-  display: flex;
-  align-items: baseline;
-  gap: 6px;
-  margin-bottom: 4px;
 }
 .gate-node {
   color: var(--cyan);

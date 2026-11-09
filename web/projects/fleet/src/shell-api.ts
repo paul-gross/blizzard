@@ -72,6 +72,7 @@ export type {
   HostRegistryView,
   MeResponse,
   MeTenant,
+  ProjectNotFoundProblem,
   ProjectView,
   ProviderSummary,
   QuestionView,
