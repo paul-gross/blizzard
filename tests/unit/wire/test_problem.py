@@ -537,8 +537,10 @@ def test_problem_model_census_ignores_generated_generic_specializations(monkeypa
     class NamedProblem(generated):
         pass
 
-    monkeypatch.setattr(NamedProblem, "__module__", registry.__name__)
     monkeypatch.setattr(registry, "external_named_control", NamedProblem, raising=False)
+    assert uri not in _declared_problem_model_literals()
+
+    monkeypatch.setattr(NamedProblem, "__module__", registry.__name__)
     assert uri in _declared_problem_model_literals()
 
 
