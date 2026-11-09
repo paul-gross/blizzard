@@ -97,6 +97,10 @@ test('test_the_glance_board_shows_a_cost_estimate_never_a_plain_billed_zero', as
 test.describe('server-selected done on the phone', () => {
   test.use({ isolation: 'fresh-hub', clockMode: 'controlled' });
 
+  test.afterEach(async ({ page }) => {
+    await page.unrouteAll({ behavior: 'wait' });
+  });
+
   test('retains an old done row and falls back honestly when policy metadata is absent', async ({ issue, clock, page, narrowViewport }) => {
     test.setTimeout(120000);
     // Start with a real hub row, then emulate a server-selected old DONE row in the board read.

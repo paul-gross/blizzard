@@ -276,6 +276,10 @@ test('test_board_browser_live_group_reorder_answer_and_pause', async ({ api, iss
 test.describe('server-selected done on the desktop', () => {
   test.use({ isolation: 'fresh-hub', clockMode: 'controlled' });
 
+  test.afterEach(async ({ page }) => {
+    await page.unrouteAll({ behavior: 'wait' });
+  });
+
   test('retains an old done row and falls back honestly when policy metadata is absent', async ({ issue, clock, page, wideViewport }) => {
     test.setTimeout(120000);
     // Start with a real hub row, then emulate a server-selected old DONE row in the board read.
