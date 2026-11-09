@@ -11106,45 +11106,6 @@
         "title": "ForgesListView",
         "type": "object"
       },
-      "GardenDefaultGraphRetiredProblem": {
-        "additionalProperties": true,
-        "description": "The packaged default graph is retired, so accepting a proposal cannot mint its work item.",
-        "properties": {
-          "detail": {
-            "title": "Detail",
-            "type": "string"
-          },
-          "instance": {
-            "title": "Instance",
-            "type": "string"
-          },
-          "status": {
-            "anyOf": [
-              {
-                "type": "integer"
-              }
-            ],
-            "title": "Status"
-          },
-          "title": {
-            "title": "Title",
-            "type": "string"
-          },
-          "type": {
-            "const": "urn:blizzard:problem:garden-default-graph-retired",
-            "title": "Type",
-            "type": "string"
-          }
-        },
-        "required": [
-          "type",
-          "title",
-          "detail",
-          "instance"
-        ],
-        "title": "GardenDefaultGraphRetiredProblem",
-        "type": "object"
-      },
       "GardenProposalAcceptRequest": {
         "additionalProperties": false,
         "description": "`POST /api/garden-proposals/{proposal_id}/accept`. `mint_work_item`\ndefaults to `True`: minting a linked hub work item is the default, and declining it\nis the deliberate act. `body` replaces the proposal's own body as the minted item's\nbody, wrapped in the \"Related findings\" template when the proposal cites findings and\nminted bare otherwise; refused (422) when `mint_work_item` is `False`. A blank\n`reason` is stored as none.",
@@ -47658,7 +47619,7 @@
                       "$ref": "#/components/schemas/HubStoreUnavailableProblem"
                     },
                     {
-                      "$ref": "#/components/schemas/GardenDefaultGraphRetiredProblem"
+                      "$ref": "#/components/schemas/DefaultGraphRetiredProblem"
                     }
                   ]
                 }

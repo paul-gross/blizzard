@@ -12,7 +12,7 @@ from fastapi import APIRouter, Depends, Query, status
 
 from blizzard.foundation.garden_proposals import GardenProposalOrigin
 from blizzard.foundation.store.utc import iso_utc
-from blizzard.hub.api import chunk_events, problems, problems_garden
+from blizzard.hub.api import chunk_events, problems, problems_admin, problems_garden
 from blizzard.hub.api.auth import reject_runner_principal
 from blizzard.hub.api.auth_session import require, tenant_bound
 from blizzard.hub.api.chunk_views import ingest_conflict_refusal
@@ -257,7 +257,7 @@ def accept_garden_proposal(
     except GardenProposalAlreadyClosed as exc:
         raise ProblemHTTPException(partial(problems_garden.garden_proposal_already_closed_problem, str(exc))) from exc
     except DefaultGraphRetired as exc:
-        raise ProblemHTTPException(partial(problems_garden.garden_default_graph_retired_problem, str(exc))) from exc
+        raise ProblemHTTPException(partial(problems_admin.default_graph_retired_problem, str(exc))) from exc
     except IngestConflict as exc:
         raise ingest_conflict_refusal(services, exc) from exc
     if accepted.chunk_id is not None:

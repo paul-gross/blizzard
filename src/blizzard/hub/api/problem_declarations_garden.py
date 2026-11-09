@@ -10,7 +10,6 @@ from blizzard.wire.problem_types_garden import (
     CadenceAdmissionRefusedProblem,
     CadenceNotFoundProblem,
     CadenceSlugTakenProblem,
-    GardenDefaultGraphRetiredProblem,
     GardenProposalAlreadyClosedProblem,
     GardenProposalInvalidProblem,
     GardenProposalNotFoundProblem,
@@ -157,7 +156,7 @@ GARDEN_PROPOSAL_DECLARATIONS = (
             (422, GardenProposalInvalidProblem),
         )
     ),
-    ProblemDeclaration("POST", f"{_PROPOSAL}/accept", 503, GardenDefaultGraphRetiredProblem),
+    ProblemDeclaration("POST", f"{_PROPOSAL}/accept", 503, admin_t.DefaultGraphRetiredProblem),
     *(
         ProblemDeclaration("POST", path, 422, model)
         for path in _PROPOSAL_CREATES
