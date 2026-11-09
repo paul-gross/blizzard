@@ -1,8 +1,8 @@
 # Configuration documents
 
-A configuration document declares forges, work sources, repositories, scopes, routines, and cadences in one YAML or JSON
-file. `blizzard hub config apply` reconciles the hub's stored records to it in a single transaction, and
-`blizzard hub config export` writes the current records back out as a document.
+A configuration document declares forges, work sources, repositories, projects, urgencies, the tenant's settings,
+scopes, routines, and cadences in one YAML or JSON file. `blizzard hub config apply` reconciles the hub's stored records
+to it in a single transaction, and `blizzard hub config export` writes the current records back out as a document.
 
 ```bash
 blizzard hub config apply config.yaml --dry-run
@@ -42,6 +42,15 @@ projects:
     sources: [blizzard]
     repositories: [blizzard]
     landing_order: [blizzard]
+urgencies:
+  - slug: urgent
+    name: Urgent
+    color: red
+    emoji: "🔥"
+  - slug: standard
+urgency_order: [urgent, standard]
+settings:
+  default_urgency: standard
 scopes:
   - slug: blizzard
     project: blizzard
@@ -117,6 +126,16 @@ rank it, and an entry that leaves it out keeps the stored order. A scope or rout
 `project`, an id or a slug; an entry without one belongs to the tenant's only project, and is refused `project_required`
 when the tenant holds several.
 
+An urgency entry is keyed by its `slug` and carries the fields [urgencies.md](./urgencies.md#the-fields) owns, an `icon`
+as its `media_type` and its bytes in base64 `data`. One the tenant does not hold is created at the least urgent end, in
+document order; one it holds is edited in the fields the entry states, and `null` on `emoji` or `icon` clears the mark.
+An entry naming a retired urgency is refused `422 urgency_retired` rather than enabled: enabling an urgency is
+`blizzard hub urgency enable`. A stated `urgency_order` is the whole live order, most urgent first, naming every urgency
+live once the apply has run exactly once, else it is refused `422 urgency_order_incomplete`; left out, the order stands.
+A stated `settings.default_urgency` sets the tenant's default. An order or default naming an urgency neither stored nor
+declared is refused `422 urgency_unknown`, and one naming a retired urgency `422 urgency_retired`. An apply never
+retires an urgency. The three sections apply in that order, after the projects and before the scopes and the routines.
+
 A cadence entry is keyed by its `slug` within its project, and names its project with `project` as a scope entry does. A
 `chores` list it states is the cadence's whole list, matched to the stored chores by `key`; one it leaves out keeps the
 stored chores. A chore's routine and scopes are named by slug and need not resolve: an entry naming a routine nobody
@@ -129,8 +148,8 @@ does: `POST /api/config/apply` takes `application/yaml` or `application/json`, a
 
 ## What an apply does
 
-An apply looks at each record the document names, forges before work sources and repositories, scopes before routines,
-and cadences after routines:
+An apply looks at each record the document names, forges before work sources and repositories, projects next, then
+urgencies, the urgency order, and the settings, then scopes before routines, and cadences after routines:
 
 | The record is…                        | The apply…                                           | Outcome row |
 | ------------------------------------- | ---------------------------------------------------- | ----------- |
@@ -141,13 +160,16 @@ and cadences after routines:
 
 A field the entry leaves out is neither compared nor changed, so a partial entry never reverts a field set elsewhere. A
 record the document does not name is left alone, retired or not: an apply never retires a record. `enable` appears
-before the `edit` it precedes, as two rows.
+before the `edit` it precedes, as two rows. An urgency is the exception: an entry naming a retired one is refused, never
+enabled.
 
 Every write commits in one transaction, so the first refusal leaves the hub exactly as it was. The refusals are the ones
 the per-record verbs give, each located at its entry:
 
 - **422** for an invalid entry, a missing or retired secret, a name listed twice, a work source slugged `hub`, or a
   document that does not decode. The error's `loc` names the entry and field, such as `body.work_sources.1.provider`.
+- **422** for an urgency entry, order, or default naming a retired urgency, or an order or default naming an unknown
+  one.
 - **409** for a taken name, a taken provider and locator or forge coordinate, or a record that changed while the apply
   ran — a project's `landing_order` included, when another landing-order write for the project lands while the apply
   runs. Running the apply again plans it on the order that write left.
@@ -162,10 +184,11 @@ The response lists `outcomes`, each with a `kind`, `key`, `op` and the changed f
 
 ## Export
 
-`config export` prints every active forge, work source, repository, scope, routine, and cadence with every field (a
-routine with both its `slug` and `name`), and every active secret name, as a document that applies back as a no-op.
-`--format` is `yaml` (the default) or `json`. Retired records are left out, because applying one would enable it again.
-Each work source and repository is written with its `slug` and `name`, each repository with its `landing_policy` and any
+`config export` prints every active forge, work source, repository, scope, routine, and cadence with every field, every
+live urgency in order with its icon's bytes, the `urgency_order`, and the `settings` naming the default (a routine with
+both its `slug` and `name`), and every active secret name, as a document that applies back as a no-op. `--format` is
+`yaml` (the default) or `json`. Retired records are left out, because applying one would enable it again. Each work
+source and repository is written with its `slug` and `name`, each repository with its `landing_policy` and any
 `park_timeout_hours`, and each project's `color`, `sources` and `repositories` as slugs. A project that ranks a
 repository also gets its `landing_order`; one that ranks nothing gets none. The built-in `hub` work source is never
 exported.

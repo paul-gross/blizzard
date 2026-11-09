@@ -1,0 +1,123 @@
+# Urgencies
+
+Every chunk carries an urgency: how soon the tenant wants it worked. A tenant's urgencies are one ordered set, most
+urgent first, and one live urgency of it is the tenant's **default**, the one every new chunk takes when nothing names
+another. The set, its order, and the default belong to the tenant, not to a project.
+
+## The set, the order, and the default
+
+A new tenant starts with one urgency, `standard`, slate and with no mark, and its settings name `standard` as the
+default ([tenants.md](./tenants.md#creating-renaming-and-deleting-a-tenant)). `blizzard hub migrate` gives every tenant
+that existed before urgencies the same `standard` and default, and gives every chunk it already held that urgency.
+
+The order runs from the most urgent to the least. A created urgency lands at the least urgent end unless it is placed
+first or just after another. Two reorders move it later:
+
+- **Set the whole order.** The list names every live urgency exactly once. A list that leaves a live urgency out, names
+  a retired one, or names one twice is refused `422 urgency_order_incomplete`, and one naming an urgency the tenant does
+  not hold `422 urgency_unknown`. Setting the order that already stands writes nothing.
+- **Move one urgency** just after another, or first. A retired urgency, an urgency the tenant does not hold, and a move
+  after itself are refused `422`. A move to where it already stands writes nothing.
+
+The default is a field of the tenant's settings, a record every tenant holds from its creation and which is only shown
+and edited. Changing the default moves no chunk; it decides only what is minted from then on. A default naming no
+urgency of the tenant is refused `422 urgency_unknown`, a retired one `422 urgency_retired`, and an explicit `null`
+`422`.
+
+## The fields
+
+| Field   | Meaning                                                                                                                                                                                                                              |
+| ------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `slug`  | The handle, 1 to 64 lowercase letters, digits, and single inner hyphens. Fixed at create: an edit stating one is refused. A slug any urgency holds, retired or not, is refused `urgency_slug_taken`.                                 |
+| `name`  | The display name, 1 to 128 characters with no leading or trailing whitespace; the slug when a create leaves it out.                                                                                                                  |
+| `color` | A palette color (`red`, `orange`, `amber`, `lime`, `green`, `teal`, `cyan`, `blue`, `indigo`, `violet`, `pink`, `slate`) or a `#rrggbb` hex color; a create that leaves it out takes the palette color the live urgencies use least. |
+| `emoji` | An optional mark: at most 16 code points, with no whitespace, control character, or letter, and a digit, `#` or `*` only as a keycap's base.                                                                                         |
+| `icon`  | An optional mark: a PNG or WebP image of at most 32 KiB, its bytes matching its stated media type. SVG is refused.                                                                                                                   |
+
+An urgency carries at most one mark: a write leaving both an emoji and an icon set is refused
+`422 urgency_mark_conflict`. An invalid field is refused `422`, naming the field. `GET /api/urgencies/{key}/icon` serves
+the icon with its media type, the digest of its bytes as the `ETag`, `Content-Security-Policy: default-src 'none'` and
+`X-Content-Type-Options:
+nosniff`, so a browser draws it and never runs it; it answers `304` when `If-None-Match` names
+the digest, and `404` for an urgency carrying no icon.
+
+A view of an urgency, from `GET /api/urgencies` or `GET /api/urgencies/{key}`, adds its `place` in the live order (`1`
+the most urgent, `null` once retired), whether it is the `default`, its `revision`, and `open_chunks`, how many chunks
+not yet done or stopped carry it. `{key}` is an urgency's id or its slug.
+
+```yaml
+urgencies:
+  - slug: urgent
+    name: Urgent
+    color: red
+    emoji: "🔥"
+  - slug: standard
+    name: standard
+    color: slate
+urgency_order: [urgent, standard]
+settings:
+  default_urgency: standard
+```
+
+A [configuration document](./config-documents.md) declares the set in these three sections.
+
+## Retiring with work moved, and enabling
+
+Retiring an urgency takes it out of the live order. Its open chunks move to the urgency `move_to` names, in the same
+write; finished chunks keep the urgency they carried. A retire is refused, in this order:
+
+1. `409 urgency_is_default` for the tenant's default. Change the default first.
+2. `409 urgency_in_use` when open chunks carry it and no `move_to` is named; the refusal counts them.
+3. `422 urgency_unknown`, `urgency_retired`, or `urgency_move_to_self` for a `move_to` naming no urgency, a retired one,
+   or the urgency being retired.
+
+A retire that moves open chunks needs `chunk:control` beside `config:edit`, and is refused `403` without it. Retiring a
+retired urgency writes nothing. The retire's change row lists `move_to` and `moved_chunks` beside the flip of `retired`
+([config-changes.md](./config-changes.md)).
+
+Enabling brings a retired urgency back at its standing place in the order. It moves no chunk back. Enabling a live
+urgency writes nothing.
+
+Every edit, retire, and enable takes `If-Match` on the urgency's `revision`, and the settings' edit on theirs; a stale
+one is refused `409`.
+
+## The CLI
+
+```text
+blizzard hub urgency create SLUG [--name TEXT] [--color COLOR] [--emoji TEXT | --icon FILE] [--after SLUG | --first]
+blizzard hub urgency list [--include-retired]
+blizzard hub urgency get SLUG
+blizzard hub urgency edit SLUG [--name TEXT] [--color COLOR] [--emoji TEXT | --icon FILE | --clear-mark]
+blizzard hub urgency retire SLUG [--move-to SLUG]
+blizzard hub urgency enable SLUG
+blizzard hub urgency order SLUG...
+blizzard hub urgency position SLUG (--after SLUG | --first)
+
+blizzard hub settings get
+blizzard hub settings edit --default-urgency SLUG
+```
+
+`list` prints the urgencies in order, each with its place, name, color, mark, and open-chunk count, the default marked.
+`--icon` reads a `.png` or `.webp` file. On `edit`, `--emoji` replaces any icon and `--icon` any emoji. `retire` without
+`--move-to`, on an urgency open chunks carry, prints how many and the command to run with `--move-to`:
+
+```console
+$ blizzard hub urgency retire urgent
+Error: urgency urgent carries 2 open chunks; name where they go:
+  blizzard hub urgency retire urgent --move-to <SLUG>
+```
+
+Each verb takes `--tenant` and `--json`. Reading takes `fleet:view`; every write takes `config:edit`.
+
+| Verb               | Route                                |
+| ------------------ | ------------------------------------ |
+| `urgency create`   | `POST /api/urgencies`                |
+| `urgency list`     | `GET /api/urgencies[?retired=true]`  |
+| `urgency get`      | `GET /api/urgencies/{key}`           |
+| `urgency edit`     | `PATCH /api/urgencies/{key}`         |
+| `urgency retire`   | `POST /api/urgencies/{key}/retire`   |
+| `urgency enable`   | `POST /api/urgencies/{key}/enable`   |
+| `urgency order`    | `PUT /api/urgencies/order`           |
+| `urgency position` | `POST /api/urgencies/order/position` |
+| `settings get`     | `GET /api/settings`                  |
+| `settings edit`    | `PATCH /api/settings`                |
