@@ -4,6 +4,7 @@ name, and that the refusal is the very message delivery raises for the same cont
 from __future__ import annotations
 
 import json
+from collections.abc import Mapping
 from datetime import UTC, datetime
 
 import pytest
@@ -12,6 +13,7 @@ from blizzard.foundation.node_steps import Executor, JudgedBy, SessionMode
 from blizzard.hub.api.garden_formats import GardenFormats
 from blizzard.hub.domain.garden.delivery.stage_check import GardenStageCheck
 from blizzard.hub.domain.garden.delivery.validation import GardenDeliveryRejected
+from blizzard.hub.domain.garden.review.validation import ReviewFindingsRejected
 from blizzard.hub.domain.graph.actions import SHIPPED_CATALOGUE, ArtifactFormat
 from blizzard.hub.domain.graph.model import Graph, Node
 from blizzard.hub.graphs import PACKAGED
@@ -85,3 +87,87 @@ def test_valid_content_and_an_unvalidated_name_pass() -> None:
     assert _CHECK.refusal(_graph(), "delta", valid) is None
     assert _CHECK.refusal(_graph(), "docket", "[]") is None
     assert _CHECK.refusal(_graph(), "survey", "anything at all") is None
+
+
+# review-finding-delta — the fixed input of the record-findings action
+
+
+def _node(name: str, action: str | None = None, args: Mapping[str, tuple[str, ...]] | None = None) -> Node:
+    return Node(
+        node_id=f"nd_{name}",
+        graph_id="gr_x",
+        name=name,
+        executor=Executor.HUB if action else Executor.RUNNER,
+        prompt=None,
+        checks=[],
+        produces=[],
+        session=SessionMode.FRESH,
+        judged_by=JudgedBy.WORKER,
+        retries_max=None,
+        retries_exhausted=None,
+        action=action,
+        action_args=args or {},
+    )
+
+
+def _built(*nodes: Node) -> Graph:
+    return Graph(
+        graph_id="gr_x",
+        name="x",
+        entry_node_id=nodes[0].node_id,
+        nodes=list(nodes),
+        edges=[],
+        created_at=datetime(2026, 1, 1, tzinfo=UTC),
+    )
+
+
+def _packaged(name: str) -> Graph:
+    doc = PACKAGED.named(name).doc
+    return _built(*(_node(n.name, n.action, n.action_args) for n in doc.nodes))
+
+
+_REVIEW_FORMAT = {ArtifactFormat.REVIEW_FINDING_DELTA}
+
+
+def test_the_advanced_workflow_graph_owes_the_review_delta_its_format() -> None:
+    graph = _packaged("advanced-development-workflow")
+    assert graph.artifact_formats("review-finding-delta", SHIPPED_CATALOGUE) == _REVIEW_FORMAT
+    assert graph.artifact_formats("plan", SHIPPED_CATALOGUE) == frozenset()
+
+
+def test_the_garden_routine_graph_does_not_owe_the_review_delta() -> None:
+    assert _packaged("garden-routine").artifact_formats("review-finding-delta", SHIPPED_CATALOGUE) == frozenset()
+
+
+def test_repeated_record_findings_nodes_collapse_to_one_format() -> None:
+    graph = _built(_node("work"), _node("a", "record-findings"), _node("b", "record-findings"))
+    assert graph.artifact_formats("review-finding-delta", SHIPPED_CATALOGUE) == _REVIEW_FORMAT
+
+
+def test_fixed_and_arg_formats_union_and_a_name_owing_two_refuses_in_order() -> None:
+    graph = _built(
+        _node("a", "record-findings"),
+        _node("b", "garden-deliver", {"delta": ("review-finding-delta",)}),
+    )
+    assert graph.artifact_formats("review-finding-delta", SHIPPED_CATALOGUE) == {
+        ArtifactFormat.FINDING_DELTA,
+        ArtifactFormat.REVIEW_FINDING_DELTA,
+    }
+    content = "none"
+    refusal = _CHECK.refusal(graph, "review-finding-delta", content)
+    with pytest.raises(GardenDeliveryRejected) as raised:
+        _FORMATS.finding_delta("review-finding-delta", content)
+    assert refusal == str(raised.value)
+
+
+@pytest.mark.parametrize("content", ["none", '{"entries":[{"ref":"F1","disposition":"maybe"}]}'])
+def test_a_malformed_review_delta_is_refused_with_the_delivery_message(content: str) -> None:
+    graph = _built(_node("a", "record-findings"))
+    with pytest.raises(ReviewFindingsRejected) as raised:
+        _FORMATS.review_delta("review-finding-delta", content)
+    assert _CHECK.refusal(graph, "review-finding-delta", content) == str(raised.value)
+
+
+def test_a_valid_review_delta_passes() -> None:
+    graph = _built(_node("a", "record-findings"))
+    assert _CHECK.refusal(graph, "review-finding-delta", '{"entries":[{"ref":"F1","disposition":"fixed"}]}') is None

@@ -12,7 +12,6 @@ from blizzard.cli.collaborators import HTTPStatusError
 from blizzard.cli.get_group import GetGroup
 from blizzard.foundation.artifacts import ArtifactKind, ArtifactScope
 from blizzard.foundation.roles import dto
-from blizzard.runner.cli.artifact_validators import validate_artifact_content
 from blizzard.runner.cli.worker_call import WorkerCall
 from blizzard.runner.lifecycle.artifacts import carries_content, read_only_reason
 
@@ -239,10 +238,12 @@ def artifact_get(
 def artifact_create(name: str, scope: str | None) -> None:
     """Worker: durably submit an asset artifact for a ``produces:`` NAME (content on stdin), node
     scope only. A submission *stages* the content, published into the envelope only on completion
-    — read it back with ``artifact staged``. Empty stdin, a body that fails its asset's
-    registered format (``review-finding-delta``), content that fails the format the graph's delivery
-    applies to NAME (the delivery-time message, with nothing stored), and any rejection exit non-zero
-    rather than silently losing the submission."""
+    — read it back with ``artifact staged``. Empty stdin is refused locally. Content the hub's
+    check refuses — it fails the format the chunk's graph's delivery applies to NAME — is refused
+    with the delivery-time message and nothing stored. When the hub gives no usable verdict the
+    content is stored unchecked. A recorded submission is a durable local save, never acceptance:
+    delivery still judges it. Any refusal exits non-zero rather than silently losing the
+    submission."""
     _refuse_read_only_scope("create", scope)
     worker = WorkerCall.of("artifact create")
     content = click.get_text_stream("stdin").read()
@@ -251,9 +252,6 @@ def artifact_create(name: str, scope: str | None) -> None:
             "artifact create: empty stdin — refusing to submit an empty artifact "
             "(any previously staged submission for this name is untouched)"
         )
-    invalid = validate_artifact_content(name, content)
-    if invalid is not None:
-        raise click.ClickException(f"artifact create: {invalid} — nothing was stored")
     resp = worker.post(
         worker.leased("attachments"),
         failure=f"could not record {name!r}",

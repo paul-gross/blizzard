@@ -64,10 +64,12 @@ assessment fallback is not proof the thing was produced.
 
 The hub refuses a `git_commit` without a repo, a branch with no `:` in it, and a full lowercase hash (40 or 64 hex
 characters) — the completion or decision comes back as a failure naming the artifact and the field, and nothing is
-recorded. It stores every asset as submitted, except one whose name feeds a validated delivery argument of the chunk's
-graph (a garden routine's `delta` and `docket`): `artifact create` refuses content failing that argument's format with
-the delivery-time message, exits non-zero and stores nothing, so any earlier content under the name stands. Delivery
-re-checks it all the same. If the runner cannot reach the hub, the content is staged unchecked.
+recorded. It stores every asset as submitted, except one whose name feeds a validated delivery input of the chunk's
+graph (a garden routine's `delta` and `docket`, or the `review-finding-delta` a `record-findings` node reads):
+`artifact create` refuses content failing that input's format with the delivery-time message, exits non-zero and stores
+nothing, so any earlier content under the name stands. The check is the hub's and advisory: when there is no usable
+verdict (the hub unreachable or slow, an older hub, an auth refusal, a malformed answer) the content is staged
+unchecked. A local save is not hub acceptance — delivery re-checks it all the same.
 
 The artifact verbs are pure clients of the runner's local API, authorized by the spawn-injected lease identity;
 [openapi/runner.openapi.json](../../openapi/runner.openapi.json) owns the endpoint shapes.

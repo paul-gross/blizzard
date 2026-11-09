@@ -14,10 +14,10 @@ from blizzard.hub.domain.garden.review.materialize import (
     review_replay_outcome,
 )
 from blizzard.hub.domain.garden.review.validation import (
-    REVIEW_FINDING_DELTA_ARTIFACT,
     require_review_delta,
     validate_review_findings,
 )
+from blizzard.hub.domain.graph.actions import REVIEW_FINDING_DELTA_ARTIFACT
 from blizzard.hub.domain.graph.model import Node
 
 

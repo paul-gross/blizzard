@@ -26,8 +26,9 @@ from blizzard.wire.attachments import (
 
 router = APIRouter(prefix="/api", tags=["runner"])
 
-#: The whole-forward bound on the stage-time format check — below the CLI's ``WRITE_TIMEOUT``, so a slow hub
-#: costs the worker a skipped check rather than a failed submission. Pinned at
+#: The configured bound on the advisory stage-time format check — below the CLI's ``WRITE_TIMEOUT``, so a
+#: slow hub is meant to cost the worker a skipped check rather than a failed submission. It bounds the check,
+#: not the whole request, and promises nothing about the CLI never timing out. Pinned at
 #: tests/unit/runner/cli/test_artifact.py::test_the_stage_check_budget_fits_inside_the_cli_write_timeout.
 STAGE_CHECK_TIMEOUT = 3.0
 
@@ -35,9 +36,10 @@ _log = get_logger(__name__)
 
 
 def _hub_refusal(request: Request, chunk_id: str, body: AttachmentRequest) -> str | None:
-    """The hub's refusal of ``body``'s content for staging, or ``None`` when it passes — and when no verdict
-    could be had: staging is a runner-local write that keeps working while the hub is down, and delivery
-    re-checks."""
+    """The hub's refusal of ``body``'s content for staging, or ``None`` when it passes — and when there is no
+    usable advisory verdict (transport failure or timeout, an old hub's 404, an upstream auth or identity
+    refusal, a malformed answer): staging is a durable runner-local save, not hub acceptance, and delivery
+    stays authoritative."""
     try:
         upstream = HubProxy.of(request, "attachments").post(
             f"/api/fleet/chunks/{chunk_id}/artifact-check",
