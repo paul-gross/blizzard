@@ -638,3 +638,108 @@ def test_second():
         [str(module), "-q", "-c", "/dev/null", "-p", "tests.support.suite_plugin", "-p", "no:cacheprovider"]
     )
     assert result == pytest.ExitCode.OK
+
+
+def test_parametrized_module_instances_close_after_finalizers(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    module = tmp_path / "test_parametrized.py"
+    module.write_text("""\
+from pathlib import Path
+import pytest
+from sqlalchemy import create_engine, event
+
+root = Path(__file__).parent
+closed = []
+finalized = []
+
+def open_engine(name, label):
+    engine = create_engine(f'sqlite:///{root / name}')
+    event.listen(engine, 'close', lambda *_: closed.append(label))
+    with engine.connect() as connection:
+        connection.exec_driver_sql('select 1')
+    return engine
+
+@pytest.fixture(scope='session')
+def wider():
+    engine = open_engine('shared.db', 'wider')
+    yield engine
+    assert set(closed) == {'first', 'first-finalizer', 'second', 'second-finalizer'}
+    with engine.connect() as connection:
+        connection.exec_driver_sql('select 1')
+
+@pytest.fixture(scope='module', params=['first', 'second'])
+def resource(request, wider):
+    name = request.param
+    if name == 'second':
+        assert finalized == ['first']
+        assert set(closed) == {'first', 'first-finalizer'}
+        with wider.connect() as connection:
+            connection.exec_driver_sql('select 1')
+    engine = open_engine('shared.db', name)
+    yield engine
+    assert name not in closed
+    with engine.connect() as connection:
+        connection.exec_driver_sql('select 1')
+    open_engine(f'{name}-finalizer.db', f'{name}-finalizer')
+    finalized.append(name)
+
+def test_resource(resource):
+    with resource.connect() as connection:
+        connection.exec_driver_sql('select 1')
+""")
+    monkeypatch.setenv("PYTEST_DISABLE_PLUGIN_AUTOLOAD", "1")
+    assert pytest.main([str(module), "-q", "-c", "/dev/null", "-p", "no:cacheprovider"]) == pytest.ExitCode.OK
+
+
+@pytest.mark.parametrize("failure", ["setup", "teardown"])
+def test_parametrized_module_failure_does_not_retain_engine(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str], failure: str
+) -> None:
+    module = tmp_path / f"test_parametrized_{failure}_failure.py"
+    module.write_text("""\
+from pathlib import Path
+import pytest
+from sqlalchemy import create_engine, event
+import lifecycle_failure_state as state
+
+root = Path(__file__).parent
+closed = state.closed
+
+@pytest.fixture(scope='module', params=['first', 'second'])
+def resource(request):
+    name = request.param
+    if name == 'second':
+        assert closed == ['first']
+        state.next_instance_checked = True
+    engine = create_engine(f'sqlite:///{root / (name + ".db")}')
+    event.listen(engine, 'close', lambda *_: closed.append(name))
+    with engine.connect() as connection:
+        connection.exec_driver_sql('select 1')
+    if name == 'first' and state.failure == 'setup':
+        raise ValueError('expected setup failure')
+    yield engine
+    assert name not in closed
+    if name == 'first' and state.failure == 'teardown':
+        raise ValueError('expected teardown failure')
+
+def test_resource(resource):
+    with resource.connect() as connection:
+        connection.exec_driver_sql('select 1')
+""")
+
+    class FailureState(ModuleType):
+        failure: str
+        next_instance_checked: bool
+        closed: list[str]
+
+    state = FailureState("lifecycle_failure_state")
+    state.failure = failure
+    state.next_instance_checked = False
+    state.closed = []
+    monkeypatch.setitem(sys.modules, state.__name__, state)
+    monkeypatch.setenv("PYTEST_DISABLE_PLUGIN_AUTOLOAD", "1")
+    result = pytest.main([str(module), "-q", "-c", "/dev/null", "-p", "no:cacheprovider"])
+    assert result == pytest.ExitCode.TESTS_FAILED
+    assert f"expected {failure} failure" in capsys.readouterr().out
+    if failure == "setup":
+        assert state.next_instance_checked
+    assert "first" in state.closed

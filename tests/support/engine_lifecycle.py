@@ -33,18 +33,30 @@ _original_configure = cast(Callable[[Config], None], Config._do_configure)  # py
 _original_finish = cast(Callable[[FixtureDef[Any], SubRequest], None], FixtureDef.finish)  # pyright: ignore[reportUnknownMemberType]
 
 
+class FixtureScope:
+    """One execution of a wider-scoped fixture, including its finalizers."""
+
+    def __init__(self, node: Node) -> None:
+        self.node = node
+        self.session = node.session
+
+
+Scope = Node | FixtureScope
+
+
 class EngineOwner:
     """A session's engine sets, keyed by their pytest scope node."""
 
     def __init__(self, session: pytest.Session) -> None:
         self.session = session
-        self.engines: dict[Node, list[Engine]] = {session: []}
+        self.engines: dict[Scope, list[Engine]] = {session: []}
         self.engine_paths: dict[Engine, set[Path]] = {}
-        self.current: Node = session
+        self.current: Scope = session
+        self.fixtures: dict[FixtureDef[Any], FixtureScope] = {}
         self.session_finalizer_registered = False
         self.temp_finalizers: dict[Node, list[Callable[[], None]]] = {}
         self.temp_paths: dict[Node, Path] = {}
-        self.deferred_paths: dict[Node, set[Path]] = {}
+        self.deferred_paths: dict[Scope, set[Path]] = {}
 
     def track(self, engine: Engine) -> None:
         with _lock:
@@ -53,7 +65,7 @@ class EngineOwner:
                 node = self.current
             # Collection precedes pytest's setup stack, so the session's
             # finalizer is registered when its first fixture starts instead.
-            if node is not self.session:
+            if isinstance(node, Node) and node is not self.session:
                 self.ensure(node)
             self.engines[node].append(engine)
             self.engine_paths[engine] = _sqlite_paths([engine])
@@ -67,7 +79,7 @@ class EngineOwner:
                 self.engines[node] = []
                 node.addfinalizer(lambda: self.dispose(node))
 
-    def dispose(self, node: Node) -> None:
+    def dispose(self, node: Scope) -> None:
         with _lock:
             engines = self.engines.pop(node, [])
         errors: list[BaseException] = []
@@ -88,16 +100,18 @@ class EngineOwner:
                     if shared:
                         owner.deferred_paths.setdefault(other, set()).update(shared)
                         paths -= shared
-        root = self.temp_paths.pop(node, None)
+        root = self.temp_paths.pop(node, None) if isinstance(node, Node) else None
         if root is not None or paths:
             try:
                 findings = open_file_guard.inspect(root, paths)
                 if findings:
-                    scope_name = node.nodeid or f"<{type(node).__name__}:{node.name}>"
+                    scope_node = node.node if isinstance(node, FixtureScope) else node
+                    scope_name = scope_node.nodeid or f"<{type(scope_node).__name__}:{scope_node.name}>"
                     errors.append(AssertionError(open_file_guard.describe(scope_name, findings)))
             except BaseException as error:
                 errors.append(error)
-        for finalizer in self.temp_finalizers.pop(node, []):
+        finalizers = self.temp_finalizers.pop(node, []) if isinstance(node, Node) else []
+        for finalizer in finalizers:
             try:
                 finalizer()
             except BaseException as error:
@@ -209,7 +223,7 @@ def finish(owner: EngineOwner) -> None:
 
 
 @contextmanager
-def scope(owner: EngineOwner, node: Node) -> Generator[None]:
+def scope(owner: EngineOwner, node: Scope) -> Generator[None]:
     previous = getattr(_local, "node", None)
     previous_owner = getattr(_local, "owner", None)
     previous_current = owner.current
@@ -251,7 +265,7 @@ class LifecyclePlugin:
 
     def __init__(self) -> None:
         self.previous_owner: EngineOwner | None = None
-        self.previous_node: Node | None = None
+        self.previous_node: Scope | None = None
         self.workers: set[str] = set()
         self.results: dict[str, str] = {}
         self.last_teardown: tuple[str, str] | None = None
@@ -385,7 +399,14 @@ class LifecyclePlugin:
         owner = request.config.stash[_OWNER]
         # Reserve the node before any fixture finalizer can create its first engine.
         owner.ensure(request.node)
-        with scope(owner, request.node):
+        target: Scope = request.node
+        if request.scope != "function":
+            target = FixtureScope(request.node)
+            owner.engines[target] = []
+            owner.fixtures[fixturedef] = target
+            fixture_scope = target
+            fixturedef.addfinalizer(lambda: owner.dispose(fixture_scope))
+        with scope(owner, target):
             result = yield
         if fixturedef.argname == "tmp_path" and fixturedef.func.__module__ == "_pytest.tmpdir":
             owner.temp_paths[request.node] = result
@@ -430,8 +451,12 @@ def _fixture_finish(fixturedef: FixtureDef[Any], request: SubRequest) -> None:
         if not finalizers:
             finalizers.append(lambda: _original_finish(fixturedef, request))
         return
-    with scope(owner, request.node):
-        _original_finish(fixturedef, request)
+    target = owner.fixtures.get(fixturedef, request.node)
+    try:
+        with scope(owner, target):
+            _original_finish(fixturedef, request)
+    finally:
+        owner.fixtures.pop(fixturedef, None)
 
 
 def ensure_test_scope(request: SubRequest, tmp_path: Path) -> None:
