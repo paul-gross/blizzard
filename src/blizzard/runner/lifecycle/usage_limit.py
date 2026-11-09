@@ -1,6 +1,6 @@
 """Usage-limit exit classification and the mark.
 
-Shared by a worker generation's own exit (:mod:`blizzard.runner.loop.steps`'s ``Advance``)
+Shared by a worker generation's own exit (:mod:`blizzard.runner.lifecycle.advance`'s ``AdvanceSweep``)
 and a judge elicitation's own exit (:mod:`blizzard.runner.lifecycle.judgement.judgement`'s ``Judgement``):
 both react to the same harness fact the same way — mark the limit on the subscription the runner spends, or on the
 runner itself when it spends none, so the floor holds back every runner spending it; park the lease in place, consume

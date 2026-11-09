@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import json
-from collections.abc import Mapping, Sequence
+from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 from typing import Protocol
@@ -376,6 +376,16 @@ class Attempt:
             closure_reason=closure.closure_reason,
             clear_resume_intent=True,
         )
+
+    def escalating_refused_launch(self, launch: Callable[[], None], *, via: str) -> bool:
+        """Run one lease's launch-bearing ``launch``; a refusal from a changed harness version escalates this lease
+        alone under ``via`` and returns True, so the caller's pass goes on to the rest; False when none was refused."""
+        try:
+            launch()
+        except LaunchVersionRefusedError as exc:
+            self.escalate_harness_version_refused(exc, via=via)
+            return True
+        return False
 
     def escalate_harness_version_refused(self, exc: LaunchVersionRefusedError, *, via: str) -> None:
         """Escalate this still-OPEN lease in place because a changed harness version refused its launch and the one

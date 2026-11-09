@@ -345,7 +345,7 @@ def test_an_overload_backoff_wake_refused_escalates_through_the_per_lease_catch(
     def backing_off(*_: object) -> dict[str, object]:
         return {lease_id: object()}
 
-    monkeypatch.setattr("blizzard.runner.loop.steps.backing_off_facts", backing_off)
+    monkeypatch.setattr("blizzard.runner.lifecycle.advance.backing_off_facts", backing_off)
     monkeypatch.setattr(DormantSession, "on_overload_backoff", _refuse)
 
     Advance(ctx).run()  # must not raise

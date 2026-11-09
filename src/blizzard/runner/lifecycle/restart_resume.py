@@ -10,7 +10,6 @@ from blizzard.runner.lifecycle.attempt import Attempt
 from blizzard.runner.lifecycle.dormant import DormantContext, DormantSession
 from blizzard.runner.lifecycle.model import Fenced, TakeoverHolds
 from blizzard.runner.lifecycle.registration import registered_runner_id
-from blizzard.runner.lifecycle.spawn import LaunchVersionRefusedError
 
 # RESUME — the restart re-attach. Its un-recordable middle (a resume whose pid is not yet
 # durable) is SPAWN's same by-construction gap; recovery re-runs RESUME idempotently.
@@ -47,8 +46,8 @@ class RestartResume:
                 continue
             if takeovers.holds_lease(lease):
                 continue  # a person holds this session — the intent waits for the takeover to end
-            try:
-                DormantSession(ctx, lease).restart_or_release(Fenced(takeovers))
-            except LaunchVersionRefusedError as exc:
-                # One lease's refused resume escalates that lease alone; the other intents still resume.
-                Attempt(ctx, lease).escalate_harness_version_refused(exc, via="restart-resume")
+            # One lease's refused resume escalates that lease alone; the other intents still resume.
+            Attempt(ctx, lease).escalating_refused_launch(
+                lambda lease=lease: DormantSession(ctx, lease).restart_or_release(Fenced(takeovers)),
+                via="restart-resume",
+            )

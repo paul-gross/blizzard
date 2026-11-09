@@ -148,7 +148,7 @@ def usage_limited_build_script(landed_file: str) -> str:
     resumed session (after the pause lifts) can proceed straight to judging rather than
     nudging forever — then calls ``usage_limited()`` last in place of ending the turn plainly.
     The generation exits with no verdict at all, the shape the runner's own classifier reacts
-    to organically (``Advance._advance_exited_worker``), with no external pause API call."""
+    to organically (``AdvanceSweep._advance_exited_worker``), with no external pause API call."""
     return (
         "import subprocess, pathlib\n"
         f"repo = {REPO_NAME!r}\n"
@@ -230,7 +230,7 @@ def usage_limited_judge_graph_yaml(landed_file: str, marker: Path) -> str:
 def usage_limited_graph_yaml(landed_file: str) -> str:
     """A single-node ``build`` graph whose entry node's own generation calls
     ``usage_limited()`` and never reaches its judgement — the classifier in
-    ``Advance._advance_exited_worker`` intercepts the exit before any judge is launched.
+    ``AdvanceSweep._advance_exited_worker`` intercepts the exit before any judge is launched.
     Named ``default-delivery`` like :func:`graph_yaml` so ingest resolves it."""
     import yaml
 
