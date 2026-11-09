@@ -25,8 +25,8 @@ from blizzard.hub.delivery.actions.landing.repo import (
     Waiting,
 )
 from blizzard.hub.domain.actions.effects import IEffectSink, Pass
-from blizzard.hub.domain.actions.pr_markers import latest_pr_marker, reopen_marker_content, reopen_marker_name
 from blizzard.hub.domain.actions.visit import Visit
+from blizzard.hub.domain.chunk.pr_markers import latest_pr_marker, reopen_marker_content, reopen_marker_name
 from blizzard.hub.domain.config.repositories import RepositoryId
 from blizzard.hub.domain.graph.actions import LAND, LANDED
 from blizzard.hub.forge.landing import ForgeUnavailable, VisitForges

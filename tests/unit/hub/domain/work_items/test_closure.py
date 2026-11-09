@@ -18,7 +18,7 @@ from blizzard.foundation.artifacts import ArtifactKind
 from blizzard.foundation.clock import FixedClock
 from blizzard.foundation.event_log import EVENT_LOG_SEVERITY, EventLogKind
 from blizzard.hub.domain.artifact.model import StoredArtifact
-from blizzard.hub.domain.chunk.delivery_read import DeliverySources, DeliveryTrace, PrMarker, board_chunk_url
+from blizzard.hub.domain.chunk.delivery_read import DeliverySources, DeliveryTrace, board_chunk_url
 from blizzard.hub.domain.chunk.event_log import EventLogService
 from blizzard.hub.domain.chunk.model import (
     Chunk,
@@ -30,6 +30,7 @@ from blizzard.hub.domain.chunk.ports.artifacts import IReadChunkArtifactsReposit
 from blizzard.hub.domain.chunk.ports.commit_links import CommitLink, IReadLandedCommitLinks, no_commit_link
 from blizzard.hub.domain.chunk.ports.delivery import IWriteChunkDeliveryRepository
 from blizzard.hub.domain.chunk.ports.record import IReadChunkRecordRepository
+from blizzard.hub.domain.chunk.pr_markers import PrMarker
 from blizzard.hub.domain.work_items.closure import (
     CLOSE_DRAIN_BACKOFF_BASE_SECONDS,
     CLOSE_DRAIN_PASS_LIMIT,

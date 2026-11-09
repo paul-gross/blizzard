@@ -9,9 +9,10 @@ import pytest
 
 from blizzard.foundation.artifacts import ArtifactKind
 from blizzard.hub.domain.artifact.model import StoredArtifact
-from blizzard.hub.domain.chunk.delivery_read import DeliveryRead, DeliverySources, PrMarker
+from blizzard.hub.domain.chunk.delivery_read import DeliveryRead, DeliverySources
 from blizzard.hub.domain.chunk.model import ChunkFacts, LandedRepos
 from blizzard.hub.domain.chunk.no_code import no_code_marker
+from blizzard.hub.domain.chunk.pr_markers import PrMarker
 
 
 def marker(name: str, data: str, *, epoch: int = 1) -> StoredArtifact:
