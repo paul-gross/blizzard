@@ -18,7 +18,7 @@ from blizzard.hub.domain.cadence.errands import ErrandKey
 from blizzard.hub.domain.cadence.mint import mint_lock_keys
 from blizzard.hub.domain.chunk.ports.queue import BACKLOG_RANKING_LOCK, READY_RANKING_LOCK
 from blizzard.hub.domain.urgency.model import UrgencyId
-from blizzard.hub.domain.urgency.ports import tenant_settings_lock, urgency_lock
+from blizzard.hub.domain.urgency.ports import tenant_settings_lock, urgency_lock, urgency_order_lock
 from blizzard.hub.domain.urgency.services import default_lock_keys
 from blizzard.hub.store import schema as s
 from blizzard.hub.store import transactions as tx
@@ -64,6 +64,10 @@ _PROMOTE: _LockSet = (["a"], [READY_RANKING_LOCK, BACKLOG_RANKING_LOCK])
 _RETIRE: _LockSet = ([], [tenant_settings_lock(), urgency_lock(_RETIRING), urgency_lock(UrgencyId("urg_other"))])
 _DEFAULT_MINT: _LockSet = (["n"], default_lock_keys(_RETIRING))
 _SETTINGS_EDIT: _LockSet = ([], [tenant_settings_lock(), urgency_lock(_RETIRING)])
+#: A config apply creating urgencies, setting the order, and making ``urg_proof`` the default — the settings', the
+#: set's, and the named urgency's locks — against the retire, each way round: the settings' lock serializes them, so
+#: a retire never commits between the apply's re-checks and its writes.
+_APPLY: _LockSet = ([], [tenant_settings_lock(), urgency_order_lock(), urgency_lock(_RETIRING)])
 _LOCK_SETS: dict[str, tuple[_LockSet, _LockSet]] = {
     "cadence mint, then promote": (_MINT, _PROMOTE),
     "promote, then cadence mint": (_PROMOTE, _MINT),
@@ -73,6 +77,8 @@ _LOCK_SETS: dict[str, tuple[_LockSet, _LockSet]] = {
     "cadence mint, then urgency retire": (_MINT, _RETIRE),
     "urgency retire, then settings edit": (_RETIRE, _SETTINGS_EDIT),
     "settings edit, then urgency retire": (_SETTINGS_EDIT, _RETIRE),
+    "config apply, then urgency retire": (_APPLY, _RETIRE),
+    "urgency retire, then config apply": (_RETIRE, _APPLY),
 }
 
 
