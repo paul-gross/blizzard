@@ -25,6 +25,38 @@ def forge_not_found_problem(detail: str, *, instance: str) -> types.ForgeNotFoun
     )
 
 
+def urgency_not_found_problem(detail: str, *, instance: str) -> types.UrgencyNotFoundProblem:
+    return types.UrgencyNotFoundProblem(
+        type=types.URGENCY_NOT_FOUND, title="Urgency not found", detail=detail, instance=instance, status=404
+    )
+
+
+def urgency_icon_not_found_problem(detail: str, *, instance: str) -> types.UrgencyIconNotFoundProblem:
+    return types.UrgencyIconNotFoundProblem(
+        type=types.URGENCY_ICON_NOT_FOUND, title="Urgency icon not found", detail=detail, instance=instance, status=404
+    )
+
+
+def urgency_is_default_problem(message: str, slug: str, *, instance: str) -> types.UrgencyIsDefaultProblem:
+    return types.UrgencyIsDefaultProblem(
+        type=types.URGENCY_IS_DEFAULT,
+        title="Urgency is the default",
+        detail=types.UrgencyIsDefaultDetail(message=message, slug=slug),
+        instance=instance,
+        status=409,
+    )
+
+
+def urgency_in_use_problem(message: str, slug: str, open_chunks: int, *, instance: str) -> types.UrgencyInUseProblem:
+    return types.UrgencyInUseProblem(
+        type=types.URGENCY_IN_USE,
+        title="Urgency in use",
+        detail=types.UrgencyInUseDetail(message=message, slug=slug, open_chunks=open_chunks),
+        instance=instance,
+        status=409,
+    )
+
+
 def repository_not_found_problem(detail: str, *, instance: str) -> types.RepositoryNotFoundProblem:
     return types.RepositoryNotFoundProblem(
         type=types.REPOSITORY_NOT_FOUND, title="Repository not found", detail=detail, instance=instance, status=404

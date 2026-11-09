@@ -14873,7 +14873,8 @@
           "fsub",
           "htn",
           "cad",
-          "chr"
+          "chr",
+          "urg"
         ],
         "title": "IdPrefix",
         "type": "string"
@@ -19037,7 +19038,7 @@
         "type": "object"
       },
       "RecordKind": {
-        "description": "The kind of configured record a change row names. A project's, a forge's, a repository's and a work source's\n``record_key`` is its id, never its slug; a project link's is the linked source's or repository's id. Linking,\nunlinking and re-linking are ``create``, ``retire`` and ``enable``.",
+        "description": "The kind of configured record a change row names. A project's, a forge's, a repository's and a work source's\n``record_key`` is its id, never its slug; a project link's is the linked source's or repository's id. Linking,\nunlinking and re-linking are ``create``, ``retire`` and ``enable``. An urgency's ``record_key`` is its id; the\nurgency order's and the tenant settings' is the tenant's id.",
         "enum": [
           "work_source",
           "secret",
@@ -19048,7 +19049,10 @@
           "cadence",
           "project",
           "project_source_link",
-          "project_repository_link"
+          "project_repository_link",
+          "urgency",
+          "urgency_order",
+          "tenant_settings"
         ],
         "title": "RecordKind",
         "type": "string"
@@ -24646,6 +24650,71 @@
         "title": "SessionMode",
         "type": "string"
       },
+      "SettingsDefaultView": {
+        "properties": {
+          "slug": {
+            "title": "Slug",
+            "type": "string"
+          },
+          "urgency_id": {
+            "title": "Urgency Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "urgency_id",
+          "slug"
+        ],
+        "title": "SettingsDefaultView",
+        "type": "object"
+      },
+      "SettingsPatchRequest": {
+        "additionalProperties": false,
+        "description": "A sparse edit of the tenant's settings: ``default_urgency``, by id or slug, when stated; ``null`` is\nrefused.",
+        "properties": {
+          "default_urgency": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Default Urgency"
+          }
+        },
+        "title": "SettingsPatchRequest",
+        "type": "object"
+      },
+      "SettingsView": {
+        "description": "The tenant's settings.",
+        "properties": {
+          "default_urgency": {
+            "$ref": "#/components/schemas/SettingsDefaultView"
+          },
+          "revision": {
+            "title": "Revision",
+            "type": "integer"
+          },
+          "updated_at": {
+            "title": "Updated At",
+            "type": "string"
+          },
+          "updated_by": {
+            "title": "Updated By",
+            "type": "string"
+          }
+        },
+        "required": [
+          "default_urgency",
+          "revision",
+          "updated_at",
+          "updated_by"
+        ],
+        "title": "SettingsView",
+        "type": "object"
+      },
       "SidechainSegmentView-Input": {
         "description": "A subagent's private conversation, nested under the tool call that spawned it, or\ncarried on its own ``sidechain`` turn when no spawning call resolved. Recursive: a\nsidechain turn may itself carry a tool call whose own sidechain nests further.",
         "properties": {
@@ -27227,6 +27296,657 @@
           "instance"
         ],
         "title": "UnknownWorkSourceProblem",
+        "type": "object"
+      },
+      "UrgenciesListView": {
+        "properties": {
+          "urgencies": {
+            "items": {
+              "$ref": "#/components/schemas/UrgencyView"
+            },
+            "title": "Urgencies",
+            "type": "array"
+          }
+        },
+        "required": [
+          "urgencies"
+        ],
+        "title": "UrgenciesListView",
+        "type": "object"
+      },
+      "UrgencyCreateRequest": {
+        "additionalProperties": false,
+        "description": "A new urgency. An absent ``name`` takes the slug and an absent ``color`` the palette color the live urgencies\nuse least; an absent ``after`` lands it at the least urgent end, and ``after: null`` first.",
+        "properties": {
+          "after": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "After"
+          },
+          "color": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Color"
+          },
+          "emoji": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Emoji"
+          },
+          "icon": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/UrgencyIconDocument"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Name"
+          },
+          "slug": {
+            "title": "Slug",
+            "type": "string"
+          }
+        },
+        "required": [
+          "slug"
+        ],
+        "title": "UrgencyCreateRequest",
+        "type": "object"
+      },
+      "UrgencyIconDocument": {
+        "additionalProperties": false,
+        "description": "An icon as a request carries it: its media type and its bytes in base64.",
+        "properties": {
+          "data": {
+            "title": "Data",
+            "type": "string"
+          },
+          "media_type": {
+            "title": "Media Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "media_type",
+          "data"
+        ],
+        "title": "UrgencyIconDocument",
+        "type": "object"
+      },
+      "UrgencyIconNotFoundProblem": {
+        "additionalProperties": true,
+        "description": "The urgency carries no icon.",
+        "properties": {
+          "detail": {
+            "title": "Detail",
+            "type": "string"
+          },
+          "instance": {
+            "title": "Instance",
+            "type": "string"
+          },
+          "status": {
+            "anyOf": [
+              {
+                "type": "integer"
+              }
+            ],
+            "title": "Status"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          },
+          "type": {
+            "const": "urn:blizzard:problem:urgency-icon-not-found",
+            "title": "Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "type",
+          "title",
+          "detail",
+          "instance"
+        ],
+        "title": "UrgencyIconNotFoundProblem",
+        "type": "object"
+      },
+      "UrgencyIconView": {
+        "description": "What a view carries of an icon: its media type and the digest of its bytes, never the bytes.",
+        "properties": {
+          "digest": {
+            "title": "Digest",
+            "type": "string"
+          },
+          "media_type": {
+            "title": "Media Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "media_type",
+          "digest"
+        ],
+        "title": "UrgencyIconView",
+        "type": "object"
+      },
+      "UrgencyInUseDetail": {
+        "properties": {
+          "code": {
+            "const": "urgency_in_use",
+            "default": "urgency_in_use",
+            "title": "Code",
+            "type": "string"
+          },
+          "message": {
+            "title": "Message",
+            "type": "string"
+          },
+          "open_chunks": {
+            "title": "Open Chunks",
+            "type": "integer"
+          },
+          "slug": {
+            "title": "Slug",
+            "type": "string"
+          }
+        },
+        "required": [
+          "code",
+          "message",
+          "slug",
+          "open_chunks"
+        ],
+        "title": "UrgencyInUseDetail",
+        "type": "object"
+      },
+      "UrgencyInUseProblem": {
+        "additionalProperties": true,
+        "description": "A retire names an urgency open chunks carry, and no urgency to move them to.",
+        "properties": {
+          "detail": {
+            "$ref": "#/components/schemas/UrgencyInUseDetail"
+          },
+          "instance": {
+            "title": "Instance",
+            "type": "string"
+          },
+          "status": {
+            "anyOf": [
+              {
+                "type": "integer"
+              }
+            ],
+            "title": "Status"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          },
+          "type": {
+            "const": "urn:blizzard:problem:urgency-in-use",
+            "title": "Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "type",
+          "title",
+          "detail",
+          "instance"
+        ],
+        "title": "UrgencyInUseProblem",
+        "type": "object"
+      },
+      "UrgencyIsDefaultDetail": {
+        "properties": {
+          "code": {
+            "const": "urgency_is_default",
+            "default": "urgency_is_default",
+            "title": "Code",
+            "type": "string"
+          },
+          "message": {
+            "title": "Message",
+            "type": "string"
+          },
+          "slug": {
+            "title": "Slug",
+            "type": "string"
+          }
+        },
+        "required": [
+          "code",
+          "message",
+          "slug"
+        ],
+        "title": "UrgencyIsDefaultDetail",
+        "type": "object"
+      },
+      "UrgencyIsDefaultProblem": {
+        "additionalProperties": true,
+        "description": "A retire names the tenant's default urgency; the default must point elsewhere first.",
+        "properties": {
+          "detail": {
+            "$ref": "#/components/schemas/UrgencyIsDefaultDetail"
+          },
+          "instance": {
+            "title": "Instance",
+            "type": "string"
+          },
+          "status": {
+            "anyOf": [
+              {
+                "type": "integer"
+              }
+            ],
+            "title": "Status"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          },
+          "type": {
+            "const": "urn:blizzard:problem:urgency-is-default",
+            "title": "Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "type",
+          "title",
+          "detail",
+          "instance"
+        ],
+        "title": "UrgencyIsDefaultProblem",
+        "type": "object"
+      },
+      "UrgencyNotFoundProblem": {
+        "additionalProperties": true,
+        "description": "A path names an urgency the tenant does not hold.",
+        "properties": {
+          "detail": {
+            "title": "Detail",
+            "type": "string"
+          },
+          "instance": {
+            "title": "Instance",
+            "type": "string"
+          },
+          "status": {
+            "anyOf": [
+              {
+                "type": "integer"
+              }
+            ],
+            "title": "Status"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          },
+          "type": {
+            "const": "urn:blizzard:problem:urgency-not-found",
+            "title": "Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "type",
+          "title",
+          "detail",
+          "instance"
+        ],
+        "title": "UrgencyNotFoundProblem",
+        "type": "object"
+      },
+      "UrgencyOrderRequest": {
+        "additionalProperties": false,
+        "description": "The whole live order, most urgent first, each urgency an id or a slug, naming every live urgency once.",
+        "properties": {
+          "urgencies": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Urgencies",
+            "type": "array"
+          }
+        },
+        "required": [
+          "urgencies"
+        ],
+        "title": "UrgencyOrderRequest",
+        "type": "object"
+      },
+      "UrgencyPatchRequest": {
+        "additionalProperties": false,
+        "description": "A sparse edit: a field left out stays; ``null`` on ``emoji`` or ``icon`` clears it, and is refused on ``name``\nor ``color``. The slug is fixed, so a body stating one is refused.",
+        "properties": {
+          "color": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Color"
+          },
+          "emoji": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Emoji"
+          },
+          "icon": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/UrgencyIconDocument"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Name"
+          },
+          "slug": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Slug"
+          }
+        },
+        "title": "UrgencyPatchRequest",
+        "type": "object"
+      },
+      "UrgencyPositionRequest": {
+        "additionalProperties": false,
+        "description": "One urgency moved to just after ``after``, or first under ``after: null``; each an id or a slug.",
+        "properties": {
+          "after": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "After"
+          },
+          "urgency": {
+            "title": "Urgency",
+            "type": "string"
+          }
+        },
+        "required": [
+          "urgency",
+          "after"
+        ],
+        "title": "UrgencyPositionRequest",
+        "type": "object"
+      },
+      "UrgencyRetireRequest": {
+        "additionalProperties": false,
+        "description": "Where the retiring urgency's open chunks go, by id or slug; ``null`` or absent when none carry it.",
+        "properties": {
+          "move_to": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Move To"
+          }
+        },
+        "title": "UrgencyRetireRequest",
+        "type": "object"
+      },
+      "UrgencyRetireView": {
+        "description": "A retired urgency, and how many open chunks the retire moved.",
+        "properties": {
+          "color": {
+            "title": "Color",
+            "type": "string"
+          },
+          "created_at": {
+            "title": "Created At",
+            "type": "string"
+          },
+          "created_by": {
+            "title": "Created By",
+            "type": "string"
+          },
+          "default": {
+            "title": "Default",
+            "type": "boolean"
+          },
+          "emoji": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Emoji"
+          },
+          "icon": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/UrgencyIconView"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "moved_chunks": {
+            "title": "Moved Chunks",
+            "type": "integer"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "open_chunks": {
+            "title": "Open Chunks",
+            "type": "integer"
+          },
+          "place": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Place"
+          },
+          "retired": {
+            "title": "Retired",
+            "type": "boolean"
+          },
+          "revision": {
+            "title": "Revision",
+            "type": "integer"
+          },
+          "slug": {
+            "title": "Slug",
+            "type": "string"
+          },
+          "urgency_id": {
+            "title": "Urgency Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "urgency_id",
+          "slug",
+          "name",
+          "color",
+          "emoji",
+          "icon",
+          "retired",
+          "place",
+          "default",
+          "revision",
+          "open_chunks",
+          "created_at",
+          "created_by",
+          "moved_chunks"
+        ],
+        "title": "UrgencyRetireView",
+        "type": "object"
+      },
+      "UrgencyView": {
+        "properties": {
+          "color": {
+            "title": "Color",
+            "type": "string"
+          },
+          "created_at": {
+            "title": "Created At",
+            "type": "string"
+          },
+          "created_by": {
+            "title": "Created By",
+            "type": "string"
+          },
+          "default": {
+            "title": "Default",
+            "type": "boolean"
+          },
+          "emoji": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Emoji"
+          },
+          "icon": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/UrgencyIconView"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "open_chunks": {
+            "title": "Open Chunks",
+            "type": "integer"
+          },
+          "place": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Place"
+          },
+          "retired": {
+            "title": "Retired",
+            "type": "boolean"
+          },
+          "revision": {
+            "title": "Revision",
+            "type": "integer"
+          },
+          "slug": {
+            "title": "Slug",
+            "type": "string"
+          },
+          "urgency_id": {
+            "title": "Urgency Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "urgency_id",
+          "slug",
+          "name",
+          "color",
+          "emoji",
+          "icon",
+          "retired",
+          "place",
+          "default",
+          "revision",
+          "open_chunks",
+          "created_at",
+          "created_by"
+        ],
+        "title": "UrgencyView",
         "type": "object"
       },
       "UserIdentityView": {
@@ -62333,6 +63053,224 @@
         ]
       }
     },
+    "/api/settings": {
+      "get": {
+        "description": "The tenant's settings.",
+        "operationId": "get_settings_api_settings_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SettingsView"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "400": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TenantCredentialMismatchProblem"
+                }
+              }
+            },
+            "description": "Problem"
+          },
+          "401": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AuthenticationRequiredProblem"
+                }
+              }
+            },
+            "description": "Problem"
+          },
+          "404": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TenantNotFoundProblem"
+                }
+              }
+            },
+            "description": "Problem"
+          },
+          "409": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TenantRequiredProblem"
+                }
+              }
+            },
+            "description": "Problem"
+          },
+          "503": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HubStoreUnavailableProblem"
+                }
+              }
+            },
+            "description": "Problem"
+          }
+        },
+        "summary": "Get Settings",
+        "tags": [
+          "settings"
+        ]
+      },
+      "patch": {
+        "description": "Edit the stated settings, keeping the revision on a no-op. 422 `urgency_unknown` for a `default_urgency`\nnaming no urgency of the tenant, `urgency_retired` for a retired one, and 422 for `null`; 409 on a stale\n`If-Match`.",
+        "operationId": "patch_settings_api_settings_patch",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "if-match",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "If-Match"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-blizzard-door",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Blizzard-Door"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SettingsPatchRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SettingsView"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "400": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TenantCredentialMismatchProblem"
+                }
+              }
+            },
+            "description": "Problem"
+          },
+          "401": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AuthenticationRequiredProblem"
+                }
+              }
+            },
+            "description": "Problem"
+          },
+          "403": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PermissionRequiredProblem"
+                }
+              }
+            },
+            "description": "Problem"
+          },
+          "404": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TenantNotFoundProblem"
+                }
+              }
+            },
+            "description": "Problem"
+          },
+          "409": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/TenantRequiredProblem"
+                    },
+                    {
+                      "$ref": "#/components/schemas/RevisionConflictProblem"
+                    }
+                  ]
+                }
+              }
+            },
+            "description": "Problem"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ConfigFieldInvalidProblem"
+                }
+              }
+            },
+            "description": "Validation Error"
+          },
+          "503": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HubStoreUnavailableProblem"
+                }
+              }
+            },
+            "description": "Problem"
+          }
+        },
+        "summary": "Patch Settings",
+        "tags": [
+          "settings"
+        ]
+      }
+    },
     "/api/spend": {
       "get": {
         "description": "The fleet's total usage/cost since ``since`` (an ISO-8601 instant) \u2014 summed\nover every usage fact recorded at or after it, across every chunk, or ``?project=``'s\nchunks alone. An optional ``until`` bounds the window's other edge, exclusive.",
@@ -62719,6 +63657,1164 @@
         "summary": "Trace Status",
         "tags": [
           "traces"
+        ]
+      }
+    },
+    "/api/urgencies": {
+      "get": {
+        "description": "The live urgencies in order, most urgent first, the default marked; with `retired=true`, the retired ones\ntoo, each at its standing place.",
+        "operationId": "list_urgencies_api_urgencies_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "retired",
+            "required": false,
+            "schema": {
+              "default": false,
+              "title": "Retired",
+              "type": "boolean"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UrgenciesListView"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "400": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TenantCredentialMismatchProblem"
+                }
+              }
+            },
+            "description": "Problem"
+          },
+          "401": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AuthenticationRequiredProblem"
+                }
+              }
+            },
+            "description": "Problem"
+          },
+          "404": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TenantNotFoundProblem"
+                }
+              }
+            },
+            "description": "Problem"
+          },
+          "409": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TenantRequiredProblem"
+                }
+              }
+            },
+            "description": "Problem"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          },
+          "503": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HubStoreUnavailableProblem"
+                }
+              }
+            },
+            "description": "Problem"
+          }
+        },
+        "summary": "List Urgencies",
+        "tags": [
+          "urgencies"
+        ]
+      },
+      "post": {
+        "description": "Create an urgency at the least urgent end, or just after `after` \u2014 first under `after: null`. 422 naming the\nfield for an invalid one, `urgency_slug_taken` for a slug a live or retired urgency holds, and\n`urgency_mark_conflict` for both an emoji and an icon.",
+        "operationId": "create_urgency_api_urgencies_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "x-blizzard-door",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Blizzard-Door"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UrgencyCreateRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UrgencyView"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "400": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TenantCredentialMismatchProblem"
+                }
+              }
+            },
+            "description": "Problem"
+          },
+          "401": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AuthenticationRequiredProblem"
+                }
+              }
+            },
+            "description": "Problem"
+          },
+          "403": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PermissionRequiredProblem"
+                }
+              }
+            },
+            "description": "Problem"
+          },
+          "404": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TenantNotFoundProblem"
+                }
+              }
+            },
+            "description": "Problem"
+          },
+          "409": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TenantRequiredProblem"
+                }
+              }
+            },
+            "description": "Problem"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ConfigFieldInvalidProblem"
+                }
+              }
+            },
+            "description": "Validation Error"
+          },
+          "503": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HubStoreUnavailableProblem"
+                }
+              }
+            },
+            "description": "Problem"
+          }
+        },
+        "summary": "Create Urgency",
+        "tags": [
+          "urgencies"
+        ]
+      }
+    },
+    "/api/urgencies/order": {
+      "put": {
+        "description": "Set the whole live order, most urgent first; one that already stands writes nothing. 422\n`urgency_order_incomplete` when it leaves a live urgency out, names a retired one, or names one twice, and\n`urgency_unknown` for one the tenant does not hold.",
+        "operationId": "put_urgency_order_api_urgencies_order_put",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "x-blizzard-door",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Blizzard-Door"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UrgencyOrderRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UrgenciesListView"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "400": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TenantCredentialMismatchProblem"
+                }
+              }
+            },
+            "description": "Problem"
+          },
+          "401": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AuthenticationRequiredProblem"
+                }
+              }
+            },
+            "description": "Problem"
+          },
+          "403": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PermissionRequiredProblem"
+                }
+              }
+            },
+            "description": "Problem"
+          },
+          "404": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TenantNotFoundProblem"
+                }
+              }
+            },
+            "description": "Problem"
+          },
+          "409": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TenantRequiredProblem"
+                }
+              }
+            },
+            "description": "Problem"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ConfigFieldInvalidProblem"
+                }
+              }
+            },
+            "description": "Validation Error"
+          },
+          "503": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HubStoreUnavailableProblem"
+                }
+              }
+            },
+            "description": "Problem"
+          }
+        },
+        "summary": "Put Urgency Order",
+        "tags": [
+          "urgencies"
+        ]
+      }
+    },
+    "/api/urgencies/order/position": {
+      "post": {
+        "description": "Move one urgency to just after `after`, or first under `after: null`; one already there writes nothing. 422\nfor an urgency the tenant does not hold, a retired one, or a move after itself.",
+        "operationId": "position_urgency_api_urgencies_order_position_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "x-blizzard-door",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Blizzard-Door"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UrgencyPositionRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UrgenciesListView"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "400": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TenantCredentialMismatchProblem"
+                }
+              }
+            },
+            "description": "Problem"
+          },
+          "401": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AuthenticationRequiredProblem"
+                }
+              }
+            },
+            "description": "Problem"
+          },
+          "403": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PermissionRequiredProblem"
+                }
+              }
+            },
+            "description": "Problem"
+          },
+          "404": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TenantNotFoundProblem"
+                }
+              }
+            },
+            "description": "Problem"
+          },
+          "409": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TenantRequiredProblem"
+                }
+              }
+            },
+            "description": "Problem"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ConfigFieldInvalidProblem"
+                }
+              }
+            },
+            "description": "Validation Error"
+          },
+          "503": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HubStoreUnavailableProblem"
+                }
+              }
+            },
+            "description": "Problem"
+          }
+        },
+        "summary": "Position Urgency",
+        "tags": [
+          "urgencies"
+        ]
+      }
+    },
+    "/api/urgencies/{key}": {
+      "get": {
+        "description": "Show an urgency by id or slug.",
+        "operationId": "get_urgency_api_urgencies__key__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "key",
+            "required": true,
+            "schema": {
+              "title": "Key",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UrgencyView"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "400": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TenantCredentialMismatchProblem"
+                }
+              }
+            },
+            "description": "Problem"
+          },
+          "401": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AuthenticationRequiredProblem"
+                }
+              }
+            },
+            "description": "Problem"
+          },
+          "404": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/TenantNotFoundProblem"
+                    },
+                    {
+                      "$ref": "#/components/schemas/UrgencyNotFoundProblem"
+                    }
+                  ]
+                }
+              }
+            },
+            "description": "Problem"
+          },
+          "409": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TenantRequiredProblem"
+                }
+              }
+            },
+            "description": "Problem"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          },
+          "503": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HubStoreUnavailableProblem"
+                }
+              }
+            },
+            "description": "Problem"
+          }
+        },
+        "summary": "Get Urgency",
+        "tags": [
+          "urgencies"
+        ]
+      },
+      "patch": {
+        "description": "Edit the stated fields, keeping the revision on a no-op; `null` on `emoji` or `icon` clears it. 422 for a\n`slug`, for a `null` `name` or `color`, or for both marks left set; 409 on a stale `If-Match`.",
+        "operationId": "patch_urgency_api_urgencies__key__patch",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "key",
+            "required": true,
+            "schema": {
+              "title": "Key",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "if-match",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "If-Match"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-blizzard-door",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Blizzard-Door"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UrgencyPatchRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UrgencyView"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "400": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TenantCredentialMismatchProblem"
+                }
+              }
+            },
+            "description": "Problem"
+          },
+          "401": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AuthenticationRequiredProblem"
+                }
+              }
+            },
+            "description": "Problem"
+          },
+          "403": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PermissionRequiredProblem"
+                }
+              }
+            },
+            "description": "Problem"
+          },
+          "404": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/TenantNotFoundProblem"
+                    },
+                    {
+                      "$ref": "#/components/schemas/UrgencyNotFoundProblem"
+                    }
+                  ]
+                }
+              }
+            },
+            "description": "Problem"
+          },
+          "409": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/TenantRequiredProblem"
+                    },
+                    {
+                      "$ref": "#/components/schemas/RevisionConflictProblem"
+                    }
+                  ]
+                }
+              }
+            },
+            "description": "Problem"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ConfigFieldInvalidProblem"
+                }
+              }
+            },
+            "description": "Validation Error"
+          },
+          "503": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HubStoreUnavailableProblem"
+                }
+              }
+            },
+            "description": "Problem"
+          }
+        },
+        "summary": "Patch Urgency",
+        "tags": [
+          "urgencies"
+        ]
+      }
+    },
+    "/api/urgencies/{key}/enable": {
+      "post": {
+        "description": "Bring a retired urgency back at its standing place in the order; it moves no chunk back. Enabling a live one\nwrites nothing. 409 on a stale `If-Match`.",
+        "operationId": "enable_urgency_api_urgencies__key__enable_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "key",
+            "required": true,
+            "schema": {
+              "title": "Key",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "if-match",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "If-Match"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-blizzard-door",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Blizzard-Door"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UrgencyView"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "400": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TenantCredentialMismatchProblem"
+                }
+              }
+            },
+            "description": "Problem"
+          },
+          "401": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AuthenticationRequiredProblem"
+                }
+              }
+            },
+            "description": "Problem"
+          },
+          "403": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PermissionRequiredProblem"
+                }
+              }
+            },
+            "description": "Problem"
+          },
+          "404": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/TenantNotFoundProblem"
+                    },
+                    {
+                      "$ref": "#/components/schemas/UrgencyNotFoundProblem"
+                    }
+                  ]
+                }
+              }
+            },
+            "description": "Problem"
+          },
+          "409": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/TenantRequiredProblem"
+                    },
+                    {
+                      "$ref": "#/components/schemas/RevisionConflictProblem"
+                    }
+                  ]
+                }
+              }
+            },
+            "description": "Problem"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          },
+          "503": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HubStoreUnavailableProblem"
+                }
+              }
+            },
+            "description": "Problem"
+          }
+        },
+        "summary": "Enable Urgency",
+        "tags": [
+          "urgencies"
+        ]
+      }
+    },
+    "/api/urgencies/{key}/icon": {
+      "get": {
+        "description": "The urgency's icon, served with its media type, its digest as the entity tag, and a policy that lets no browser\nrun it; 304 when `If-None-Match` names the digest. 404 when the urgency carries none.",
+        "operationId": "get_urgency_icon_api_urgencies__key__icon_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "key",
+            "required": true,
+            "schema": {
+              "title": "Key",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "image/png": {},
+              "image/webp": {}
+            },
+            "description": "The urgency's icon"
+          },
+          "304": {
+            "description": "The icon the client holds is current"
+          },
+          "400": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TenantCredentialMismatchProblem"
+                }
+              }
+            },
+            "description": "Problem"
+          },
+          "401": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AuthenticationRequiredProblem"
+                }
+              }
+            },
+            "description": "Problem"
+          },
+          "404": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/TenantNotFoundProblem"
+                    },
+                    {
+                      "$ref": "#/components/schemas/UrgencyNotFoundProblem"
+                    },
+                    {
+                      "$ref": "#/components/schemas/UrgencyIconNotFoundProblem"
+                    }
+                  ]
+                }
+              }
+            },
+            "description": "Problem"
+          },
+          "409": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TenantRequiredProblem"
+                }
+              }
+            },
+            "description": "Problem"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          },
+          "503": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HubStoreUnavailableProblem"
+                }
+              }
+            },
+            "description": "Problem"
+          }
+        },
+        "summary": "Get Urgency Icon",
+        "tags": [
+          "urgencies"
+        ]
+      }
+    },
+    "/api/urgencies/{key}/retire": {
+      "post": {
+        "description": "Retire an urgency, moving the open chunks it carries to `move_to`; finished chunks keep it. Retiring a\nretired urgency writes nothing. Refused in order: 409 `urgency_is_default` for the tenant's default; 409\n`urgency_in_use`, counting them, when open chunks carry it and no `move_to` is named; 422 `urgency_unknown`,\n`urgency_retired` or `urgency_move_to_self` for a `move_to` naming no urgency, a retired one, or this one. A\nretire moving open work needs `chunk:control` (403). 409 on a stale `If-Match`.",
+        "operationId": "retire_urgency_api_urgencies__key__retire_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "key",
+            "required": true,
+            "schema": {
+              "title": "Key",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "if-match",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "If-Match"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-blizzard-door",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Blizzard-Door"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "anyOf": [
+                  {
+                    "$ref": "#/components/schemas/UrgencyRetireRequest"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Request"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UrgencyRetireView"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "400": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TenantCredentialMismatchProblem"
+                }
+              }
+            },
+            "description": "Problem"
+          },
+          "401": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AuthenticationRequiredProblem"
+                }
+              }
+            },
+            "description": "Problem"
+          },
+          "403": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PermissionRequiredProblem"
+                }
+              }
+            },
+            "description": "Problem"
+          },
+          "404": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/TenantNotFoundProblem"
+                    },
+                    {
+                      "$ref": "#/components/schemas/UrgencyNotFoundProblem"
+                    }
+                  ]
+                }
+              }
+            },
+            "description": "Problem"
+          },
+          "409": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/TenantRequiredProblem"
+                    },
+                    {
+                      "$ref": "#/components/schemas/RevisionConflictProblem"
+                    },
+                    {
+                      "$ref": "#/components/schemas/UrgencyIsDefaultProblem"
+                    },
+                    {
+                      "$ref": "#/components/schemas/UrgencyInUseProblem"
+                    }
+                  ]
+                }
+              }
+            },
+            "description": "Problem"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ConfigFieldInvalidProblem"
+                }
+              }
+            },
+            "description": "Validation Error"
+          },
+          "503": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HubStoreUnavailableProblem"
+                }
+              }
+            },
+            "description": "Problem"
+          }
+        },
+        "summary": "Retire Urgency",
+        "tags": [
+          "urgencies"
         ]
       }
     },

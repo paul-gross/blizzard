@@ -104,6 +104,7 @@ from blizzard.hub.api.scopes import project_router as project_scopes_router
 from blizzard.hub.api.scopes import router as scopes_router
 from blizzard.hub.api.secrets import router as secrets_router
 from blizzard.hub.api.secrets import sanitized_validation_response
+from blizzard.hub.api.settings import router as settings_router
 from blizzard.hub.api.spend import router as spend_router
 from blizzard.hub.api.sweeps import admin_router as admin_sweeps_router
 from blizzard.hub.api.sweeps import router as sweeps_router
@@ -111,6 +112,7 @@ from blizzard.hub.api.test_flow_control import flow_control_router
 from blizzard.hub.api.trace_continuation import TraceGatedFastAPI
 from blizzard.hub.api.traces import router as traces_router
 from blizzard.hub.api.transcripts import router as transcripts_router
+from blizzard.hub.api.urgencies import router as urgencies_router
 from blizzard.hub.api.users import router as users_router
 from blizzard.hub.api.work_item_reads import router as work_item_reads_router
 from blizzard.hub.api.work_source_params import refuse_built_in_work_source
@@ -573,6 +575,8 @@ def create_app(
     app.include_router(work_sources_router)
     app.include_router(repositories_router)
     app.include_router(forges_router)
+    app.include_router(urgencies_router)
+    app.include_router(settings_router)
     app.include_router(projects_router)
     # A project's gardening, nested under `/api/projects/{project}` after the project routes themselves.
     app.include_router(project_scopes_router)

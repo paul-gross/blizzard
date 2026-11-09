@@ -284,6 +284,21 @@ _PROBES: dict[tuple[str, str], _Probe] = {
     ("PATCH", "/api/forges/{forge}"): _f({}),
     ("POST", "/api/forges/{forge}/retire"): _f(),
     ("POST", "/api/forges/{forge}/enable"): _f(),
+    ("GET", "/api/urgencies"): _LIST,
+    ("POST", "/api/urgencies"): _own({"slug": "beta-extra-urgency"}, status=201),
+    ("PUT", "/api/urgencies/order"): _f(
+        {"urgencies": ["{key}"]}, status=422, reason="an order names urgencies in its body: an unknown one is refused"
+    ),
+    ("POST", "/api/urgencies/order/position"): _f(
+        {"urgency": "{key}", "after": None}, status=422, reason="a move names its urgency in its body"
+    ),
+    ("GET", "/api/urgencies/{key}"): _f(),
+    ("PATCH", "/api/urgencies/{key}"): _f({}),
+    ("POST", "/api/urgencies/{key}/retire"): _f(),
+    ("POST", "/api/urgencies/{key}/enable"): _f(),
+    ("GET", "/api/urgencies/{key}/icon"): _f(),
+    ("GET", "/api/settings"): _LIST,
+    ("PATCH", "/api/settings"): _own({}),
     ("GET", "/api/repositories"): _LIST,
     ("POST", "/api/repositories"): _own(
         {

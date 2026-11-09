@@ -397,13 +397,16 @@ def test_the_change_log_pages_newest_first_and_filters(hub: HubHarness) -> None:
     source_id = _create(hub).json()["work_source_id"]
     hub.client.patch("/api/work-sources/demo", json={"annotate": False})
     full = hub.client.get("/api/config/changes").json()
-    # The oldest row is the store's default project's, which the migration wrote.
+    # The oldest rows are the store's default project's, its standard urgency's and its settings', which the
+    # migrations wrote.
     assert [(c["record_kind"], c["op"]) for c in full["changes"]] == [
         ("work_source", "edit"),
         ("work_source", "create"),
         ("forge", "create"),
         ("forge", "create"),
         ("secret", "create"),
+        ("tenant_settings", "create"),
+        ("urgency", "create"),
         ("project", "create"),
     ]
     assert full["next_before"] is None

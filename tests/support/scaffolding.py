@@ -124,6 +124,9 @@ from blizzard.hub.domain.runners.registration import RunnerAddition, RunnerCapab
 from blizzard.hub.domain.runners.served import resolve_served
 from blizzard.hub.domain.runners.version_window import VersionWindow
 from blizzard.hub.domain.tenancy.administration import DEFAULT_PROJECT_SLUG
+from blizzard.hub.domain.urgency.model import NO_MARK, Urgency
+from blizzard.hub.domain.urgency.order import FIRST_POSITION
+from blizzard.hub.domain.urgency.settings import TenantSettings
 from blizzard.hub.egress.writer import (
     EgressBatch,
     EgressFailure,
@@ -152,7 +155,9 @@ from blizzard.hub.store.internal.repository_record_store import RepositoryRecord
 from blizzard.hub.store.internal.runner_registry_store import RunnerRegistryStore
 from blizzard.hub.store.internal.scope_store import ScopeStore
 from blizzard.hub.store.internal.secret_store import SecretStore
+from blizzard.hub.store.internal.tenant_settings_store import TenantSettingsStore
 from blizzard.hub.store.internal.transcript_segment_store import TranscriptSegmentStore
+from blizzard.hub.store.internal.urgency_store import UrgencyStore
 from blizzard.hub.store.internal.work_item_store import WorkItemStore
 from blizzard.hub.store.internal.work_source_record_store import WorkSourceRecordStore
 from blizzard.hub.store.scoped import (
@@ -322,6 +327,12 @@ def add_tenant(engine: Engine, name: str) -> TenantId:
                 created_at=_GRAPH_T0,
             )
         )
+    connections = scoped_connections(engine, tenant)
+    ctx = ChangeContext(actor="test", door=Door.API)
+    standard, standard_change = Urgency.standard(ctx, at=_GRAPH_T0)
+    UrgencyStore(connections).create(standard, mark=NO_MARK, position=FIRST_POSITION, change=standard_change)
+    settings, settings_change = TenantSettings.seed(tenant, standard, ctx, at=_GRAPH_T0)
+    TenantSettingsStore(connections).create(settings, change=settings_change)
     return tenant
 
 
