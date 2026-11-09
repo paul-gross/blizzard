@@ -523,6 +523,26 @@ def test_ensure_mutant_tree_drops_a_frozen_test_file_since_deleted(tmp_path: Pat
     assert _ensure("cli-surface", tmp_path) == ["tests/unit/cli/test_cli.py"]
 
 
+def test_resume_removes_source_guards_from_an_existing_frozen_selection(tmp_path: Path) -> None:
+    kept = "tests/unit/hub/test_hub.py"
+    guards = sorted(m.SOURCE_INSPECTION_GUARDS)
+    for path in [kept, *guards]:
+        _write(tmp_path / path, "from blizzard.hub import domain\n")
+    mutants = tmp_path / "mutants"
+    mutants.mkdir()
+    (mutants / m.SCOPE_MARKER_NAME).write_text("hub-daemon")
+    selection_path = mutants / m.TEST_SELECTION_NAME
+    selection_path.write_text(json.dumps([*guards, kept]))
+
+    selection = _ensure("hub-daemon", tmp_path)
+    assert selection == [kept]
+    assert json.loads(selection_path.read_text()) == [kept]
+    assert m.config_override_for_scope(m.resolve_scope("hub-daemon"), selection).pytest_add_cli_args_test_selection == [
+        kept
+    ]
+    assert _ensure("hub-daemon", tmp_path) == [kept]
+
+
 # --- report building: no mutmut import required ------------------------------------------------
 
 
