@@ -22,7 +22,14 @@ import httpx2
 from sqlalchemy import Engine
 
 from blizzard import __version__
-from blizzard.foundation.clock import IClock, SystemClock, local_zone, resolve_clock
+from blizzard.foundation.clock import (
+    IClock,
+    IMonotonicClock,
+    SystemClock,
+    SystemMonotonicClock,
+    local_zone,
+    resolve_clock,
+)
 from blizzard.foundation.flags import FlagRegistry, Flags, resolve_flags, warn_held_keys, warn_ignored_flags
 from blizzard.foundation.logging import get_logger
 from blizzard.foundation.platform_tracing.handle import (
@@ -59,8 +66,7 @@ from blizzard.runner.harness.health_cache import HarnessHealthCache
 from blizzard.runner.harness.internal.committed_corpus import CommittedCorpus
 from blizzard.runner.harness.registry import HarnessRegistry
 from blizzard.runner.harness.wiring import (
-    build_production_harness_health_probes,
-    build_production_harness_registry,
+    build_production_harnesses,
     combined_telemetry_plan,
     configured_tiers,
     declared_telemetry_names,
@@ -193,6 +199,8 @@ class HostProcess:
     workspaces: IWorkspaces
     events: EventBroker | None
     clock: IClock
+    #: What every runner on the host measures its harnesses' deadlines and delays on — a time source, holding no state.
+    monotonic_clock: IMonotonicClock
     #: The host's local zone, with its daylight-saving rules, that the schedule lever reads the wall clock in.
     zone: tzinfo
     process: LinuxProcessProbe
@@ -546,6 +554,7 @@ def build_host_process(
     received_telemetry: IReceivedTelemetryExport | None = None,
     trace_platform: bool = False,
     tcp_socket: socket.socket | None = None,
+    monotonic_clock: IMonotonicClock | None = None,
 ) -> HostProcess:
     """Construct the host graph from its file, and one runner over it for each of ``runners`` — each bound to its
     configured id before anything runs. ``halted`` are the runners left unbuilt; the host keeps them to report.
@@ -556,13 +565,15 @@ def build_host_process(
     environment decide, stamped from the host's runners; otherwise ``platform_tracing`` and ``received_telemetry`` are
     used as given. ``bundles`` are the harness-config snapshots each runner published, and ``selections`` the bindings
     each chose, by runner id. ``tcp_socket``
-    is a TCP listener already bound at ``host``'s port, adopted rather than bound again."""
+    is a TCP listener already bound at ``host``'s port, adopted rather than bound again. ``monotonic_clock`` is what
+    every runner measures its deadlines on, the system's when absent."""
     graph = _build_host_graph(
         host.host_view(),
         subscriptions=host.subscriptions,
         events=events,
         environ=environ,
         clock=resolve_clock(os.environ if environ is None else environ),
+        monotonic_clock=monotonic_clock or SystemMonotonicClock(),
         platform_tracing=platform_tracing,
         received_telemetry=received_telemetry,
         trace_platform=trace_platform,
@@ -612,6 +623,7 @@ def build_runner_process(
     runner_id: str | None = None,
     token: ResolvedToken | None = None,
     host_token: str = "",
+    monotonic_clock: IMonotonicClock | None = None,
 ) -> RunnerProcess:
     """A host of one and its runner, for the standalone commands and tests that drive one runner: closing the
     returned runner closes the host too. The runner is bound to ``runner_id``, else to the id ``config`` carries;
@@ -623,6 +635,7 @@ def build_runner_process(
         events=events,
         environ=environ,
         clock=SystemClock(),
+        monotonic_clock=monotonic_clock or SystemMonotonicClock(),
         platform_tracing=platform_tracing,
         received_telemetry=received_telemetry,
         trace_platform=False,
@@ -682,6 +695,7 @@ def _build_host_graph(
     events: EventBroker | None,
     environ: Mapping[str, str] | None,
     clock: IClock,
+    monotonic_clock: IMonotonicClock,
     platform_tracing: IPlatformTracing | None,
     received_telemetry: IReceivedTelemetryExport | None,
     trace_platform: bool,
@@ -751,6 +765,7 @@ def _build_host_graph(
             workspaces=workspaces,
             events=events,
             clock=clock,
+            monotonic_clock=monotonic_clock,
             zone=local_zone(os.environ if environ is None else environ),
             process=process,
             children=children,
@@ -906,13 +921,18 @@ def _build_runner(
             harness_telemetry_enabled=telemetry_enabled,
             runner_environ=runner_environ,
         )
-        harnesses = build_production_harness_registry(
+        # One corpus for the cache and the probes alike, so both admit against the same committed manifests.
+        corpus = CommittedCorpus()
+        harnesses, probes = build_production_harnesses(
             harness_settings,
             selection=selection,
             executor=executor,
             process=host.process,
             children=host.children,
             clock=clock,
+            monotonic_clock=host.monotonic_clock,
+            spawn_roots=bound_spawn_roots(config, host.workspaces),
+            corpus=corpus,
             bundle=bundle,
             harness_telemetry_enabled=telemetry_enabled,
             runner_environ=runner_environ,
@@ -920,17 +940,9 @@ def _build_runner(
         default_id = default_harness_id(harnesses)
         if default_id is not None:
             harnesses.transcript_source(default_id)
-        # One corpus for the cache and the probes alike, so both admit against the same committed manifests.
-        corpus = CommittedCorpus()
         health = HarnessHealthCache(
             clock=clock,
-            probes=build_production_harness_health_probes(
-                harness_settings,
-                selection=selection,
-                spawn_roots=bound_spawn_roots(config, host.workspaces),
-                corpus=corpus,
-                children=host.children,
-            ),
+            probes=probes,
             corpus=corpus,
             selftest_results=stores.selftest_results,
             configured_tiers=configured_tiers(config.harness_sections),

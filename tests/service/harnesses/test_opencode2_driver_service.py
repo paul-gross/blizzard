@@ -24,14 +24,16 @@ from typing import Any, ClassVar
 import pytest
 import structlog
 
-from blizzard.foundation.clock import SystemClock
+from blizzard.foundation.clock import SystemClock, SystemMonotonicClock
 from blizzard.runner.environments.provider import AcquiredEnvironment
 from blizzard.runner.harness.adapter import WorkerPreamble
 from blizzard.runner.harness.autonomy import Autonomy
 from blizzard.runner.harness.internal.process_launcher import ProcessLauncher
 from blizzard.runner.harness.opencode_v2.adapter import OpenCodeTwoAdapter
 from blizzard.runner.harness.opencode_v2.client import ModelReference, OpenCodeServiceClient, ServiceRequestError
+from blizzard.runner.harness.opencode_v2.declaration import live_registration, snapshot_registration
 from blizzard.runner.harness.opencode_v2.errors import ErrorKind
+from blizzard.runner.harness.opencode_v2.orphan import SessionOrphaner
 from blizzard.runner.harness.opencode_v2.registration import read_registration
 from blizzard.runner.harness.opencode_v2.request import FIXED_DENIES, DriveKind, DriveRequest, write_request
 from blizzard.runner.harness.opencode_v2.result import DriverResult, Outcome, parse_result
@@ -283,15 +285,34 @@ def test_a_service_restart_mid_turn_fails_the_turn(tmp_path: Path, engine_bin: P
 
 def _adapter(engine: Engine, executor: ThreadPoolExecutor) -> OpenCodeTwoAdapter:
     worker_env = AllowlistedEnv.of((_FENCE_VAR,))
+    transport = UrllibServiceTransport()
+    clock = SystemMonotonicClock()
+    tool_env = worker_env.tool()
+    registration = live_registration(worker_env)
     return OpenCodeTwoAdapter(
         runner_id="run_1",
         worker_env=worker_env,
         launcher=ProcessLauncher(LinuxProcessProbe(), executor=executor, children=CHILDREN),
-        keeper=ServiceKeeper(str(engine.binary), worker_env, CHILDREN, UrllibServiceTransport()),
+        keeper=ServiceKeeper(
+            str(engine.binary),
+            tool_env,
+            CHILDREN,
+            transport,
+            source=snapshot_registration(tool_env),
+            monotonic_clock=clock,
+        ),
         versions=version_probe(),
         hold=VersionHold(),
         request_dir=engine.requests,
         clock=SystemClock(),
+        transcript_source=OpenCodeTwoTranscriptSource(
+            registration,
+            transport,
+            TranscriptErrorFactory(structlog.get_logger("test")),
+            runner_id="run_1",
+            monotonic_clock=clock,
+        ),
+        orphaner=SessionOrphaner(registration, transport, monotonic_clock=clock),
         binary=str(engine.binary),
         driver_command=(_BLIZZARD,),
         model="openai/gpt-6-luna",
@@ -464,7 +485,11 @@ def _transcripts(engine: Engine, runner_id: str = "run_1") -> OpenCodeTwoTranscr
     path = engine.home / ".local" / "state" / "opencode" / "service.json"
     errors = TranscriptErrorFactory(structlog.get_logger("test"))
     return OpenCodeTwoTranscriptSource(
-        lambda: read_registration(path), UrllibServiceTransport(), errors, runner_id=runner_id
+        lambda: read_registration(path),
+        UrllibServiceTransport(),
+        errors,
+        runner_id=runner_id,
+        monotonic_clock=SystemMonotonicClock(),
     )
 
 

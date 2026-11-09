@@ -9,6 +9,7 @@ from dataclasses import dataclass, field
 
 import pytest
 
+from blizzard.foundation.clock import ManualMonotonicClock
 from blizzard.runner.harness.opencode_v2.attend import (
     AttendError,
     SessionHandover,
@@ -50,9 +51,19 @@ def _service() -> SessionService:
     return service
 
 
-def _handover(transport: SessionTransport, warnings: list[str], *, stop_seconds: float = 1.0) -> SessionHandover:
-    core = DriverCore(lambda: REGISTRATION, transport, poll_seconds=0.0)
-    return SessionHandover(core, warn=warnings.append, stop_seconds=stop_seconds, poll_seconds=0.0)
+def _handover(
+    transport: SessionTransport,
+    warnings: list[str],
+    *,
+    stop_seconds: float = 1.0,
+    poll_seconds: float = 0.0,
+    clock: ManualMonotonicClock | None = None,
+) -> SessionHandover:
+    clock = clock or ManualMonotonicClock()
+    core = DriverCore(lambda: REGISTRATION, transport, monotonic_clock=clock, poll_seconds=0.0)
+    return SessionHandover(
+        core, warn=warnings.append, monotonic_clock=clock, stop_seconds=stop_seconds, poll_seconds=poll_seconds
+    )
 
 
 def test_the_tree_is_stopped_and_the_rules_replaced_with_the_attended_set() -> None:
@@ -95,6 +106,16 @@ def test_a_tree_that_keeps_running_is_warned_of_and_handed_over() -> None:
     _handover(SessionTransport(service), warnings, stop_seconds=0.0).prepare(ROOT)
     assert service.sessions[ROOT]["permissions"] == []
     assert len(warnings) == 1 and "still runs" in warnings[0]
+
+
+def test_the_stop_grace_is_measured_on_the_handover_clock() -> None:
+    service = _service()
+    service.failing["/interrupt"] = 200
+    warnings: list[str] = []
+    clock = ManualMonotonicClock()
+    _handover(SessionTransport(service), warnings, stop_seconds=2.0, poll_seconds=0.5, clock=clock).prepare(ROOT)
+    assert clock.delays == [0.5, 0.5, 0.5, 0.5]
+    assert len(warnings) == 1 and "still runs 2s" in warnings[0]
 
 
 def test_rules_that_cannot_be_replaced_refuse_the_handover() -> None:

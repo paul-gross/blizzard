@@ -1,4 +1,4 @@
-"""The major version a runner holds its OpenCode 2 binding to for the rest of its process."""
+"""The major version a runner holds its OpenCode 2 binding to for as long as that runner's composition lasts."""
 
 from __future__ import annotations
 
@@ -13,7 +13,7 @@ def admits_opencode_v2_version(raw: str | None) -> bool:
 
 
 class VersionHold:
-    """The first service version observed outside OpenCode 2's range, kept until the runner restarts: a binding
+    """The first service version observed outside OpenCode 2's range, kept until the runner is composed again: a binding
     composed for one major version never drives another, even after the service returns to it. The adapter and the
     health probe share one hold, so a launch refused for it and the capability's availability agree."""
 

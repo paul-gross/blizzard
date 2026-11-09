@@ -12,6 +12,7 @@ from typing import Protocol
 
 from blizzard.runner.harness.adapter import (
     IHarnessAdapter,
+    IHarnessHealthProbe,
     IHarnessLifecycleAndVerdict,
     IHarnessModelResolution,
     IHarnessProviderOverload,
@@ -47,6 +48,15 @@ class HarnessBinding:
 
     adapter: IHarnessAdapter | None = None
     transcript_source: IHarnessTranscriptSource | None = None
+
+
+@dataclass(frozen=True)
+class HarnessAssembly:
+    """One harness's runtime pieces for one runner, assembled together so what they share is built once: its binding
+    and its health probes, one per spawn root the assembly was given, in that order."""
+
+    binding: HarnessBinding
+    health_probes: tuple[IHarnessHealthProbe, ...]
 
 
 class IHarnessLifecycleRegistry(Protocol):

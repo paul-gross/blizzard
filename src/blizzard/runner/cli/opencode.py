@@ -13,6 +13,7 @@ from pathlib import Path
 
 import click
 
+from blizzard.foundation.clock import IMonotonicClock
 from blizzard.runner.cli.children import RunnerCliCollaborators
 from blizzard.runner.cli.worker import send_heartbeat
 from blizzard.runner.harness.admission import version_admitted
@@ -145,6 +146,7 @@ def opencode_compatibility(
         _opencode_two_compatibility(
             children,
             carrier.service,
+            carrier.monotonic_clock,
             tool_env,
             binary,
             ModelReference(provider, model_id, variant),
@@ -206,6 +208,7 @@ _OPENCODE_DIRECTORY_VARIABLES = ("XDG_CONFIG_HOME", "XDG_DATA_HOME", "XDG_STATE_
 def _opencode_two_compatibility(
     children: IChildProcesses,
     service: IServiceTransport,
+    monotonic_clock: IMonotonicClock,
     tool_env: ChildEnv,
     binary: Path,
     model: ModelReference,
@@ -227,7 +230,7 @@ def _opencode_two_compatibility(
             model=model,
             scratch=scratch,
             host=host,
-            core_factory=lambda: DriverCore(source, service),
+            core_factory=lambda: DriverCore(source, service, monotonic_clock=monotonic_clock),
             migration=StoreMigrationProbe(
                 binary=str(binary),
                 opencode1=str(opencode1_binary) if opencode1_binary else None,
@@ -305,17 +308,29 @@ def opencode_drive(ctx: click.Context, request_path: Path) -> None:
         request = take_request(request_path)
     except DriveRequestError as exc:
         raise click.ClickException(str(exc)) from exc
-    service = RunnerCliCollaborators.of(ctx).service
+    carrier = RunnerCliCollaborators.of(ctx)
     environment = dict(os.environ)
     path = registration_path(environment)
     try:
-        core = DriverCore(lambda: read_registration(path) if path is not None else None, service)
+        core = DriverCore(
+            lambda: read_registration(path) if path is not None else None,
+            carrier.service,
+            monotonic_clock=carrier.monotonic_clock,
+        )
     except BIND_FAULTS as exc:
         error = TurnError(ErrorKind.SERVICE, f"no OpenCode service to drive the turn on: {exc}")
         ResultWriter(sys.stdout, request.session_id).finish(Outcome.FAILED, "", (), error)
         return
     stop = threading.Event()
-    driver = TurnDriver(core, request, environment, sys.stdout, heartbeat=send_heartbeat, stop=stop)
+    driver = TurnDriver(
+        core,
+        request,
+        environment,
+        sys.stdout,
+        heartbeat=send_heartbeat,
+        stop=stop,
+        monotonic_clock=carrier.monotonic_clock,
+    )
 
     def interrupt(signum: int, frame: object) -> None:
         del signum, frame
@@ -358,14 +373,20 @@ def opencode_attend(ctx: click.Context, session_id: str, model: ModelReference |
     Interrupts the session's tree, best effort, replaces its rules with the attended set, switches it to --model when
     it runs another, then runs the --opencode executable on it. Refuses a session no blizzard runner minted. The
     runner's takeover composes this; a later driven resume re-applies the unattended rules and the lease's agent."""
-    service = RunnerCliCollaborators.of(ctx).service
+    carrier = RunnerCliCollaborators.of(ctx)
     path = registration_path(os.environ)
     try:
-        core = DriverCore(lambda: read_registration(path) if path is not None else None, service)
+        core = DriverCore(
+            lambda: read_registration(path) if path is not None else None,
+            carrier.service,
+            monotonic_clock=carrier.monotonic_clock,
+        )
     except BIND_FAULTS as exc:
         raise click.ClickException(f"no OpenCode service holds the session: {exc}") from exc
     try:
-        SessionHandover(core, warn=partial(click.echo, err=True)).prepare(session_id, model)
+        SessionHandover(core, warn=partial(click.echo, err=True), monotonic_clock=carrier.monotonic_clock).prepare(
+            session_id, model
+        )
     except AttendError as exc:
         raise click.ClickException(str(exc)) from exc
     argv = attended_argv(binary, session_id)

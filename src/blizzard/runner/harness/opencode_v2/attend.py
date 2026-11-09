@@ -5,9 +5,9 @@ no blizzard runner minted, is never opened."""
 from __future__ import annotations
 
 import re
-import time
 from collections.abc import Callable
 
+from blizzard.foundation.clock import IMonotonicClock
 from blizzard.runner.harness.opencode_v2.client import ModelReference, ServiceRequestError, ServiceShapeError
 from blizzard.runner.harness.opencode_v2.driver import DriverCore
 from blizzard.runner.harness.opencode_v2.request import ATTENDED_RULES, METADATA_KEY
@@ -49,17 +49,15 @@ class SessionHandover:
         core: DriverCore,
         *,
         warn: Callable[[str], None],
+        monotonic_clock: IMonotonicClock,
         stop_seconds: float = DEFAULT_STOP_SECONDS,
         poll_seconds: float = 0.2,
-        monotonic: Callable[[], float] = time.monotonic,
-        sleep: Callable[[float], None] = time.sleep,
     ) -> None:
         self._core = core
         self._warn = warn
         self._stop_seconds = stop_seconds
         self._poll_seconds = poll_seconds
-        self._monotonic = monotonic
-        self._sleep = sleep
+        self._clock = monotonic_clock
 
     def prepare(self, session_id: str, model: ModelReference | None = None) -> None:
         """Make ``session_id`` the operator's: stop its tree, replace its rules, and switch it to ``model`` when it
@@ -96,12 +94,12 @@ class SessionHandover:
 
     def _stop(self, session_id: str) -> None:
         self._core.interrupt_tree(session_id)
-        deadline = self._monotonic() + self._stop_seconds
+        deadline = self._clock.monotonic() + self._stop_seconds
         while self._core.tree_state(session_id).running:
-            if self._monotonic() >= deadline:
+            if self._clock.monotonic() >= deadline:
                 self._warn(f"session {session_id}'s tree still runs {self._stop_seconds:.0f}s after the interrupt")
                 return
-            self._sleep(self._poll_seconds)
+            self._clock.sleep(self._poll_seconds)
 
 
 __all__ = [

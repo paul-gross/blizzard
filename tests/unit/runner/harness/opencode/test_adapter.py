@@ -19,7 +19,7 @@ import pytest
 from structlog.testing import capture_logs
 
 from blizzard.foundation.artifacts import ArtifactKind
-from blizzard.foundation.clock import SystemClock
+from blizzard.foundation.clock import SystemClock, SystemMonotonicClock
 from blizzard.runner.harness.adapter import HarnessSpawnError, ResumeHandle
 from blizzard.runner.harness.autonomy import Autonomy
 from blizzard.runner.harness.declaration import SharedHarnessInputs
@@ -372,7 +372,7 @@ def test_production_binding_reads_limits_from_worker_cache_for_launch(
     monkeypatch.setattr(subprocess, "Popen", launch)
     monkeypatch.setattr(SubprocessOpenCodePermissionResolver, "resolve", resolve)
     process = FakeProbe()
-    binding = OPENCODE_DECLARATION.binding(
+    binding = OPENCODE_DECLARATION.assemble(
         OpenCodeSection(worker_config_path=str(config)),
         SharedHarnessInputs(
             root=tmp_path, autonomy=Autonomy.Auto, config_dir=None, worker_env=worker_env, transcripts_root=""
@@ -381,7 +381,10 @@ def test_production_binding_reads_limits_from_worker_cache_for_launch(
         launcher=ProcessLauncher(process, executor=spawn_executor, children=CHILDREN),
         children=CHILDREN,
         clock=SystemClock(),
-    )
+        monotonic_clock=SystemMonotonicClock(),
+        health_roots=("",),
+        corpus=CommittedCorpus(),
+    ).binding
     assert binding.adapter is not None
     binding.adapter.resume_with_message(
         str(tmp_path), "ses_prior", "continue", model="provider/model", compaction_window="8k"

@@ -15,6 +15,7 @@ from pathlib import Path
 
 import httpx2
 
+from blizzard.foundation.clock import SystemMonotonicClock
 from blizzard.runner.harness.opencode_v2.client import ServiceRequestError
 from blizzard.runner.harness.opencode_v2.driver import DriverCore
 from blizzard.runner.harness.opencode_v2.registration import ServiceRegistration, read_registration
@@ -144,7 +145,11 @@ class Service:
     def running(self, session_id: str) -> bool:
         """Whether ``session_id``'s tree runs anything on the service now."""
         return bool(
-            DriverCore(self.registration, UrllibServiceTransport(), poll_seconds=0.0).tree_state(session_id).running
+            DriverCore(
+                self.registration, UrllibServiceTransport(), monotonic_clock=SystemMonotonicClock(), poll_seconds=0.0
+            )
+            .tree_state(session_id)
+            .running
         )
 
     def idle(self, session_id: str) -> bool:

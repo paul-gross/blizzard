@@ -4,22 +4,20 @@ runner never stops, restarts, or reconfigures it."""
 
 from __future__ import annotations
 
-import time
-from collections.abc import Callable
-from pathlib import Path
 from typing import Protocol
 
+from blizzard.foundation.clock import IMonotonicClock
 from blizzard.runner.harness.opencode_v2.driver import (
     BIND_FAULTS,
+    RegistrationSource,
     ServiceIdentity,
     bind_service,
 )
-from blizzard.runner.harness.opencode_v2.registration import read_registration, registration_path
 from blizzard.runner.harness.opencode_v2.shapes import ListedModel, OpenCodeTwoShapeError, parse_listed_model
 from blizzard.runner.harness.opencode_v2.transport import (
     IServiceTransport,
 )
-from blizzard.runner.process.child_env import AllowlistedEnv
+from blizzard.runner.process.child_env import ChildEnv
 from blizzard.runner.process.child_processes import ChildLaunchError, IChildProcesses
 
 DEFAULT_START_TIMEOUT_SECONDS = 30.0
@@ -29,6 +27,9 @@ SETTING_TIMEOUT_SECONDS = 10.0
 
 class ServiceUnavailableError(RuntimeError):
     """No managed service answers, and starting one did not make one answer within the bound."""
+
+
+UNLOCATED_DETAIL = "neither XDG_STATE_HOME nor HOME locates the OpenCode service registration"
 
 
 DISABLED_DETAIL = "the operator has disabled the managed OpenCode service; `opencode service unset disabled` enables it"
@@ -68,34 +69,29 @@ class ServiceKeeper:
     def __init__(
         self,
         binary: str,
-        worker_env: AllowlistedEnv,
+        tool_env: ChildEnv,
         children: IChildProcesses,
         transport: IServiceTransport,
         *,
+        source: RegistrationSource,
+        monotonic_clock: IMonotonicClock,
         reach_seconds: float = DEFAULT_REACH_SECONDS,
         poll_seconds: float = 0.2,
-        monotonic: Callable[[], float] = time.monotonic,
-        sleep: Callable[[float], None] = time.sleep,
     ) -> None:
+        """``source`` reads the registration ``tool_env`` locates, raising :class:`ServiceUnavailableError` when
+        nothing does — a fault no bind swallows, so it never reads as permission to start a service."""
         self._binary = binary
-        self._tool_env = worker_env.tool()
+        self._tool_env = tool_env
         self._children = children
         self._transport = transport
+        self._source = source
+        self._clock = monotonic_clock
         self._reach_seconds = reach_seconds
         self._poll_seconds = poll_seconds
-        self._monotonic = monotonic
-        self._sleep = sleep
-
-    def _registration_file(self) -> Path:
-        path = registration_path(self._tool_env.variables)
-        if path is None:
-            raise ServiceUnavailableError("neither XDG_STATE_HOME nor HOME locates the OpenCode service registration")
-        return path
 
     def answering(self) -> ServiceIdentity | None:
-        path = self._registration_file()
         try:
-            _, identity = bind_service(lambda: read_registration(path), self._transport)
+            _, identity = bind_service(self._source, self._transport)
         except BIND_FAULTS:
             return None
         return identity
@@ -115,9 +111,8 @@ class ServiceKeeper:
         return {"true": True, "false": False}.get(run.stdout.strip())
 
     def listed_models(self) -> tuple[ListedModel, ...]:
-        path = self._registration_file()
         try:
-            client, _ = bind_service(lambda: read_registration(path), self._transport)
+            client, _ = bind_service(self._source, self._transport)
             return tuple(parse_listed_model(entry) for entry in client.models())
         except (*BIND_FAULTS, OpenCodeTwoShapeError) as exc:
             raise ServiceUnavailableError(f"cannot read the OpenCode service's model listing: {exc}") from exc
@@ -141,21 +136,22 @@ class ServiceKeeper:
             )
         except ChildLaunchError as exc:
             raise ServiceUnavailableError(f"cannot run `{self._binary} service start`: {exc}") from exc
-        deadline = self._monotonic() + self._reach_seconds
+        deadline = self._clock.monotonic() + self._reach_seconds
         while True:
             identity = self.answering()
             if identity is not None:
                 return identity
-            if self._monotonic() >= deadline:
+            if self._clock.monotonic() >= deadline:
                 raise ServiceUnavailableError(
                     f"no OpenCode service answered within {self._reach_seconds:.0f}s of `service start`"
                 )
-            self._sleep(self._poll_seconds)
+            self._clock.sleep(self._poll_seconds)
 
 
 __all__ = [
     "DEFAULT_REACH_SECONDS",
     "DISABLED_DETAIL",
+    "UNLOCATED_DETAIL",
     "UNREADABLE_DETAIL",
     "IServiceKeeper",
     "ServiceDisabledError",
