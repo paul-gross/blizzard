@@ -4,16 +4,30 @@ within the bound, and the model listing is read from the answering service."""
 
 from __future__ import annotations
 
-from collections.abc import Callable, Sequence
+from collections.abc import Callable, Iterator, Sequence
+from contextlib import AbstractContextManager
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import IO
 
 import pytest
 
-from blizzard.runner.harness.opencode_v2.service import ServiceDisabledError, ServiceKeeper, ServiceUnavailableError
+from blizzard.foundation.clock import ManualMonotonicClock
+from blizzard.runner.harness.opencode_v2.declaration import snapshot_registration
+from blizzard.runner.harness.opencode_v2.service import (
+    UNLOCATED_DETAIL,
+    ServiceDisabledError,
+    ServiceKeeper,
+    ServiceUnavailableError,
+)
 from blizzard.runner.harness.opencode_v2.shapes import ListedModel
-from blizzard.runner.process.child_env import AllowlistedEnv, ChildEnv
+from blizzard.runner.harness.opencode_v2.transport import (
+    IServiceTransport,
+    ServiceRequest,
+    ServiceResponse,
+    ServiceUnreachableError,
+)
+from blizzard.runner.process.child_env import ChildEnv
 from blizzard.runner.process.child_processes import ChildRun, ShellCommand
 from tests.support.opencode_v2_session_service import REGISTRATION, SessionService, SessionTransport
 
@@ -43,38 +57,36 @@ class _Children:
         return ChildRun(exit_code=0, stdout="", stderr="", timed_out=False)
 
 
-class _Clock:
-    def __init__(self) -> None:
-        self.now = 0.0
-
-    def monotonic(self) -> float:
-        return self.now
-
-    def sleep(self, seconds: float) -> None:
-        self.now += seconds
-
-
-def _register(home: Path) -> None:
-    path = home / ".local" / "state" / "opencode" / "service.json"
+def _register(home: Path, *, state: Path | None = None, registration_id: str = REGISTRATION.id) -> None:
+    path = (state or home / ".local" / "state") / "opencode" / "service.json"
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(
-        f'{{"id": "{REGISTRATION.id}", "version": "2.1.4", "url": "{REGISTRATION.url}", '
+        f'{{"id": "{registration_id}", "version": "2.1.4", "url": "{REGISTRATION.url}", '
         f'"pid": {REGISTRATION.pid}, "password": "{REGISTRATION.password}"}}'
     )
 
 
-def _keeper(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, children: _Children) -> tuple[ServiceKeeper, _Clock]:
-    monkeypatch.setenv("HOME", str(tmp_path))
+def _keeper(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    children: _Children,
+    *,
+    tool_env: ChildEnv | None = None,
+    transport: IServiceTransport | None = None,
+) -> tuple[ServiceKeeper, ManualMonotonicClock]:
+    # The snapshot alone locates the registration: the daemon's own environment points nowhere useful.
+    monkeypatch.setenv("HOME", str(tmp_path / "daemon-home"))
     monkeypatch.delenv("XDG_STATE_HOME", raising=False)
-    clock = _Clock()
+    env = tool_env if tool_env is not None else ChildEnv((("HOME", str(tmp_path)),))
+    clock = ManualMonotonicClock()
     keeper = ServiceKeeper(
         "opencode",
-        AllowlistedEnv.of(()),
+        env,
         children,  # pyright: ignore[reportArgumentType] — the keeper reaches only `run`
-        SessionTransport(SessionService()),
+        transport if transport is not None else SessionTransport(SessionService()),
+        source=snapshot_registration(env),
+        monotonic_clock=clock,
         reach_seconds=5.0,
-        monotonic=clock.monotonic,
-        sleep=clock.sleep,
     )
     return keeper, clock
 
@@ -100,9 +112,11 @@ def test_a_missing_service_is_started_under_the_tool_profile(tmp_path: Path, mon
 
 def test_a_service_that_never_answers_fails_within_the_bound(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     keeper, clock = _keeper(tmp_path, monkeypatch, _Children())
-    with pytest.raises(ServiceUnavailableError):
+    with pytest.raises(ServiceUnavailableError, match="within 5s"):
         keeper.ensure()
-    assert clock.now >= 5.0
+    assert clock.reading >= 5.0
+    assert clock.delays and set(clock.delays) == {0.2}
+    assert sum(clock.delays) == pytest.approx(clock.reading)
 
 
 def test_a_disabled_service_is_refused_by_name_and_never_started(
@@ -142,3 +156,79 @@ def test_no_answering_service_lists_no_models(tmp_path: Path, monkeypatch: pytes
     keeper, _ = _keeper(tmp_path, monkeypatch, _Children())
     with pytest.raises(ServiceUnavailableError, match="model listing"):
         keeper.listed_models()
+
+
+def test_the_children_run_under_the_snapshot_handed_in(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    env = ChildEnv((("HOME", str(tmp_path)), ("PATH", "/snapshot/bin")))
+    children = _Children(on_run=lambda: _register(tmp_path))
+    keeper, _ = _keeper(tmp_path, monkeypatch, children, tool_env=env)
+    monkeypatch.setenv("PATH", "/changed/bin")
+    keeper.ensure()
+    assert {variables["PATH"] for _, variables in children.runs} == {"/snapshot/bin"}
+
+
+def test_xdg_state_home_locates_the_registration_before_home(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    state = tmp_path / "state"
+    _register(tmp_path, state=state, registration_id="ses_xdg")
+    _register(tmp_path, registration_id="ses_home")
+    env = ChildEnv((("HOME", str(tmp_path)), ("XDG_STATE_HOME", str(state))))
+    keeper, _ = _keeper(tmp_path, monkeypatch, _Children(), tool_env=env)
+    answering = keeper.answering()
+    assert answering is not None
+    assert answering.registration_id == "ses_xdg"
+
+
+def test_a_snapshot_locating_no_registration_is_unavailable_and_starts_nothing(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    children = _Children(on_run=lambda: _register(tmp_path))
+    keeper, _ = _keeper(tmp_path, monkeypatch, children, tool_env=ChildEnv(()))
+    for call in (keeper.answering, keeper.ensure, keeper.listed_models):
+        with pytest.raises(ServiceUnavailableError) as raised:
+            call()
+        assert str(raised.value) == UNLOCATED_DETAIL
+        assert not isinstance(raised.value, ServiceDisabledError)
+    assert children.runs == []
+
+
+def test_the_registration_is_reread_on_every_use(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    keeper, _ = _keeper(tmp_path, monkeypatch, _Children())
+    assert keeper.answering() is None
+    _register(tmp_path, registration_id="ses_first")
+    first = keeper.answering()
+    _register(tmp_path, registration_id="ses_second")
+    second = keeper.answering()
+    assert first is not None and first.registration_id == "ses_first"
+    assert second is not None and second.registration_id == "ses_second"
+
+
+class _Answering:
+    """A transport whose service stays unreachable for ``silent`` requests, then answers as the session service."""
+
+    def __init__(self, silent: int) -> None:
+        self._inner = SessionTransport(SessionService())
+        self._silent = silent
+        self.sent = 0
+
+    def send(self, request: ServiceRequest) -> ServiceResponse:
+        self.sent += 1
+        if self.sent <= self._silent:
+            raise ServiceUnreachableError("not yet")
+        return self._inner.send(request)
+
+    def stream(self, request: ServiceRequest) -> AbstractContextManager[Iterator[bytes]]:
+        raise AssertionError("the keeper never streams")
+
+
+def test_readiness_polls_on_the_clock_until_the_service_answers(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _register(tmp_path)
+    transport = _Answering(silent=4)
+    children = _Children()
+    keeper, clock = _keeper(tmp_path, monkeypatch, children, transport=transport)
+    assert keeper.ensure().registration_id == REGISTRATION.id
+    assert ["opencode", "service", "start"] in [argv for argv, _ in children.runs]
+    # One unanswered probe before the start, then three polls a poll interval apart.
+    assert clock.delays == [0.2, 0.2, 0.2]
+    assert clock.reading == pytest.approx(0.6)

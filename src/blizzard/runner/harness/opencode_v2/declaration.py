@@ -10,6 +10,7 @@ from pathlib import Path
 from typing import Protocol
 
 from blizzard.foundation.clock import IClock, IMonotonicClock
+from blizzard.foundation.logging import get_logger
 from blizzard.foundation.roles import domain_model
 from blizzard.runner.harness.autonomy import Autonomy
 from blizzard.runner.harness.bundle import HarnessLayout, HarnessSource
@@ -19,14 +20,20 @@ from blizzard.runner.harness.identity import OPENCODE_HARNESS_ID
 from blizzard.runner.harness.internal.version_probe import VersionProbe
 from blizzard.runner.harness.offline_compatibility import ICompatibilityCorpus
 from blizzard.runner.harness.opencode_v2.adapter import OpenCodeTwoAdapter
+from blizzard.runner.harness.opencode_v2.driver import RegistrationSource
 from blizzard.runner.harness.opencode_v2.health import OpenCodeTwoHealthProbe
+from blizzard.runner.harness.opencode_v2.orphan import SessionOrphaner
 from blizzard.runner.harness.opencode_v2.price_catalog import SqliteOpenCodeTwoPriceCatalog, resolve_catalog_store_path
-from blizzard.runner.harness.opencode_v2.service import ServiceKeeper
+from blizzard.runner.harness.opencode_v2.registration import ServiceRegistration, read_registration, registration_path
+from blizzard.runner.harness.opencode_v2.service import UNLOCATED_DETAIL, ServiceKeeper, ServiceUnavailableError
 from blizzard.runner.harness.opencode_v2.transcript.normalizer import NORMALIZER_VERSION
+from blizzard.runner.harness.opencode_v2.transcript.source import OpenCodeTwoTranscriptSource
 from blizzard.runner.harness.opencode_v2.transport import UrllibServiceTransport
 from blizzard.runner.harness.opencode_v2.version_hold import VersionHold, admits_opencode_v2_version
 from blizzard.runner.harness.process_launch import IProcessLauncher
 from blizzard.runner.harness.registry import HarnessAssembly, HarnessBinding
+from blizzard.runner.harness.transcript import TranscriptErrorFactory
+from blizzard.runner.process.child_env import AllowlistedEnv, ChildEnv
 from blizzard.runner.process.child_processes import IChildProcesses
 from blizzard.runner.process.probe import IProcessProbe
 
@@ -54,6 +61,30 @@ def driver_command() -> tuple[str, ...]:
     none."""
     script = Path(sys.executable).with_name("blizzard")
     return (str(script),) if script.is_file() else ("blizzard",)
+
+
+def snapshot_registration(tool_env: ChildEnv) -> RegistrationSource:
+    """The registration ``tool_env`` locates, reread on every call; raises :class:`ServiceUnavailableError` when it
+    locates none, so the keeper sharing that snapshot reports no service rather than start one."""
+
+    def read() -> ServiceRegistration | None:
+        path = registration_path(tool_env.variables)
+        if path is None:
+            raise ServiceUnavailableError(UNLOCATED_DETAIL)
+        return read_registration(path)
+
+    return read
+
+
+def live_registration(worker_env: AllowlistedEnv) -> RegistrationSource:
+    """The registration the worker's current tool profile locates, resolved afresh on every call; ``None`` when it
+    locates none."""
+
+    def read() -> ServiceRegistration | None:
+        path = registration_path(worker_env.tool().variables)
+        return read_registration(path) if path is not None else None
+
+    return read
 
 
 @domain_model
@@ -100,9 +131,29 @@ class OpenCodeTwoDeclaration:
         corpus: ICompatibilityCorpus,
     ) -> HarnessAssembly:
         """This runner's adapter and its one health probe, sharing one service keeper and one version hold — the
-        hold refuses a version either observes for as long as this runner's composition lasts."""
-        del process, monotonic_clock, health_roots
-        keeper = ServiceKeeper(section.binary, shared.worker_env, children, UrllibServiceTransport())
+        hold refuses a version either observes for as long as this runner's composition lasts. The keeper, the
+        transcript source and the orphaner share one transport and ``monotonic_clock``; the keeper reads registration
+        through its own tool-profile snapshot, the other two through the worker's live profile."""
+        del process, health_roots
+        transport = UrllibServiceTransport()
+        tool_env = shared.worker_env.tool()
+        keeper = ServiceKeeper(
+            section.binary,
+            tool_env,
+            children,
+            transport,
+            source=snapshot_registration(tool_env),
+            monotonic_clock=monotonic_clock,
+        )
+        registration = live_registration(shared.worker_env)
+        transcript_source = OpenCodeTwoTranscriptSource(
+            registration,
+            transport,
+            TranscriptErrorFactory(get_logger("blizzard.runner.harness.transcript")),
+            runner_id=shared.runner_id,
+            monotonic_clock=monotonic_clock,
+        )
+        orphaner = SessionOrphaner(registration, transport, monotonic_clock=monotonic_clock)
         hold = VersionHold()
         store_path = resolve_catalog_store_path(shared.worker_env.variables)
         adapter = OpenCodeTwoAdapter(
@@ -114,6 +165,8 @@ class OpenCodeTwoDeclaration:
             hold=hold,
             request_dir=shared.root / REQUEST_DIRNAME,
             clock=clock,
+            transcript_source=transcript_source,
+            orphaner=orphaner,
             binary=section.binary,
             driver_command=driver_command(),
             model_aliases=section.model_aliases,
@@ -132,7 +185,7 @@ class OpenCodeTwoDeclaration:
             effort_aliases=section.effort_aliases,
         )
         return HarnessAssembly(
-            binding=HarnessBinding(adapter=adapter, transcript_source=adapter.transcript_source()),
+            binding=HarnessBinding(adapter=adapter, transcript_source=transcript_source),
             health_probes=(probe,),
         )
 
@@ -169,4 +222,6 @@ __all__ = [
     "OpenCodeConfiguration",
     "OpenCodeTwoDeclaration",
     "driver_command",
+    "live_registration",
+    "snapshot_registration",
 ]

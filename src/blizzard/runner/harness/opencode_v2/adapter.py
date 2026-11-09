@@ -9,7 +9,7 @@ from collections.abc import Sequence
 from datetime import datetime, timedelta
 from pathlib import Path
 
-from blizzard.foundation.clock import IClock, SystemMonotonicClock
+from blizzard.foundation.clock import IClock
 from blizzard.foundation.ids import Id
 from blizzard.foundation.logging import get_logger
 from blizzard.foundation.model_support import model_supported
@@ -30,9 +30,8 @@ from blizzard.runner.harness.json_value import decode_json
 from blizzard.runner.harness.opencode_v2.attend import DEFAULT_OPENCODE_BINARY, model_option
 from blizzard.runner.harness.opencode_v2.client import ModelReference
 from blizzard.runner.harness.opencode_v2.errors import ErrorKind
-from blizzard.runner.harness.opencode_v2.orphan import ISessionOrphaner, SessionOrphaner
+from blizzard.runner.harness.opencode_v2.orphan import ISessionOrphaner
 from blizzard.runner.harness.opencode_v2.price_catalog import IOpenCodeTwoPriceCatalog, OpenCodeTwoModelPrice
-from blizzard.runner.harness.opencode_v2.registration import ServiceRegistration, read_registration, registration_path
 from blizzard.runner.harness.opencode_v2.request import DriveKind, DriveRequest, write_request
 from blizzard.runner.harness.opencode_v2.result import DriverResult, parse_result
 from blizzard.runner.harness.opencode_v2.service import IServiceKeeper, ServiceUnavailableError
@@ -43,14 +42,12 @@ from blizzard.runner.harness.opencode_v2.shapes import (
     Tokens,
     parse_message,
 )
-from blizzard.runner.harness.opencode_v2.transcript.source import OpenCodeTwoTranscriptSource
-from blizzard.runner.harness.opencode_v2.transport import UrllibServiceTransport
 from blizzard.runner.harness.opencode_v2.version import ADMITTED_OPENCODE_V2_RANGE_TEXT, normalize_opencode_v2_version
 from blizzard.runner.harness.opencode_v2.version_hold import VersionHold
 from blizzard.runner.harness.overload import ProviderOverload
 from blizzard.runner.harness.process_launch import IProcessLauncher, LaunchedProcess
 from blizzard.runner.harness.spawn_cwd import SpawnCwd
-from blizzard.runner.harness.transcript import IHarnessTranscriptSource, TranscriptErrorFactory
+from blizzard.runner.harness.transcript import IHarnessTranscriptSource
 from blizzard.runner.harness.usage import UsageKind, UsageLimit, UsageSample
 from blizzard.runner.node_steps.envelope import Envelope
 from blizzard.runner.process.child_env import AllowlistedEnv
@@ -84,6 +81,8 @@ class OpenCodeTwoAdapter:
         hold: VersionHold,
         request_dir: Path,
         clock: IClock,
+        transcript_source: IHarnessTranscriptSource,
+        orphaner: ISessionOrphaner,
         binary: str = DEFAULT_OPENCODE_BINARY,
         driver_command: Sequence[str] = ("blizzard",),
         model: str = "",
@@ -92,8 +91,6 @@ class OpenCodeTwoAdapter:
         effort_aliases: Sequence[tuple[str, str]] = (),
         supported_models: Sequence[str] | None = None,
         autonomy: Autonomy = Autonomy.Dangerous,
-        transcript_source: IHarnessTranscriptSource | None = None,
-        orphaner: ISessionOrphaner | None = None,
         price_catalog: IOpenCodeTwoPriceCatalog | None = None,
     ) -> None:
         self._runner_id = runner_id
@@ -112,16 +109,9 @@ class OpenCodeTwoAdapter:
         self._effort_aliases = dict(effort_aliases)
         self._supported_models = DEFAULT_SUPPORTED_MODELS if supported_models is None else tuple(supported_models)
         self._autonomy = autonomy
-        self._transcript_source: IHarnessTranscriptSource = transcript_source or OpenCodeTwoTranscriptSource(
-            self._registration,
-            UrllibServiceTransport(),
-            TranscriptErrorFactory(get_logger("blizzard.runner.harness.transcript")),
-            runner_id=runner_id,
-        )
+        self._transcript_source = transcript_source
         self._price_catalog = price_catalog
-        self._orphaner: ISessionOrphaner = orphaner or SessionOrphaner(
-            self._registration, UrllibServiceTransport(), monotonic_clock=SystemMonotonicClock()
-        )
+        self._orphaner = orphaner
         # The version launches are held to: the one last observed, which is the one the runner advertises.
         self._advertised: str | None = None
 
@@ -358,10 +348,6 @@ class OpenCodeTwoAdapter:
             process_start_time=launched.process_start_time,
             confirm_durable=launched.confirm_durable,
         )
-
-    def _registration(self) -> ServiceRegistration | None:
-        path = registration_path(self._worker_env.tool().variables)
-        return read_registration(path) if path is not None else None
 
     def orphan(self, session_id: str) -> None:
         """Interrupt the session tree a killed driver left running; best effort, bounded, and never starting a

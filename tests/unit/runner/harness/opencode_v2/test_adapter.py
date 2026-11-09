@@ -36,7 +36,7 @@ from blizzard.runner.process.child_env import AllowlistedEnv, ChildEnv
 from blizzard.runner.process.child_processes import StreamTarget
 from tests.support.child_launch import CHILDREN, tool_env
 from tests.support.opencode2_store import seed_store
-from tests.support.runner_fakes import make_envelope
+from tests.support.runner_fakes import FakeTranscriptSource, make_envelope
 
 NOW = datetime(2026, 11, 4, 12, 0, tzinfo=UTC)
 
@@ -95,8 +95,24 @@ class _Keeper:
         raise AssertionError("the adapter leaves the model listing to its driver")
 
 
+class _Orphaner:
+    def __init__(self, running: frozenset[str] = frozenset()) -> None:
+        self.orphaned: list[str] = []
+        self.running = running
+
+    def orphan(self, session_id: str) -> bool:
+        self.orphaned.append(session_id)
+        return session_id in self.running
+
+
 def _adapter(
-    tmp_path: Path, *, keeper: _Keeper | None = None, hold: VersionHold | None = None, **kwargs: Any
+    tmp_path: Path,
+    *,
+    keeper: _Keeper | None = None,
+    hold: VersionHold | None = None,
+    orphaner: _Orphaner | None = None,
+    transcript_source: FakeTranscriptSource | None = None,
+    **kwargs: Any,
 ) -> tuple[OpenCodeTwoAdapter, _Launcher]:
     launcher = _Launcher()
     adapter = OpenCodeTwoAdapter(
@@ -108,6 +124,8 @@ def _adapter(
         hold=hold or VersionHold(),
         request_dir=tmp_path / "requests",
         clock=_Clock(),
+        transcript_source=transcript_source or FakeTranscriptSource(),
+        orphaner=orphaner or _Orphaner(),
         model="openai/gpt-6-luna",
         **kwargs,
     )
@@ -181,16 +199,6 @@ def test_no_service_fails_the_launch_before_any_request_is_written(tmp_path: Pat
         adapter.spawn(_envelope(), _preamble(tmp_path), None)
     assert keeper.ensured == 1 and not launcher.argvs
     assert not (tmp_path / "requests").exists() or not list((tmp_path / "requests").iterdir())
-
-
-class _Orphaner:
-    def __init__(self, running: frozenset[str] = frozenset()) -> None:
-        self.orphaned: list[str] = []
-        self.running = running
-
-    def orphan(self, session_id: str) -> bool:
-        self.orphaned.append(session_id)
-        return session_id in self.running
 
 
 def test_the_advertised_version_is_the_services_and_the_binarys_while_none_answers(tmp_path: Path) -> None:
@@ -503,3 +511,9 @@ def test_a_billed_record_does_not_mask_the_estimate_of_an_unbilled_one(tmp_path:
     assert adapter.sum_transcript_usage(lines, "spawn").estimated_cost_usd is None
     only_billed = adapter.sum_transcript_usage(lines[:1], "spawn")
     assert only_billed.cost_usd == 0.5 and only_billed.estimated_cost_usd is None
+
+
+def test_the_transcript_source_is_the_one_handed_in(tmp_path: Path) -> None:
+    source = FakeTranscriptSource()
+    adapter, _ = _adapter(tmp_path, transcript_source=source)
+    assert adapter.transcript_source() is source

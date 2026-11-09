@@ -5,12 +5,15 @@ the tree, and a foreign session, a foreign position, or an unreachable service e
 from __future__ import annotations
 
 import json
+from dataclasses import dataclass, field
 from typing import Any
 
 import structlog
 
+from blizzard.foundation.clock import IMonotonicClock, ManualMonotonicClock
 from blizzard.runner.harness.opencode_v2.transcript.normalizer import NORMALIZER_VERSION
 from blizzard.runner.harness.opencode_v2.transcript.source import OpenCodeTwoTranscriptSource
+from blizzard.runner.harness.opencode_v2.transport import ServiceRequest, ServiceResponse
 from blizzard.runner.harness.transcript import TranscriptBatch, TranscriptErrorFactory, TranscriptPosition
 from tests.support.opencode_v2_session_service import (
     REGISTRATION,
@@ -38,10 +41,24 @@ def _service(*messages: dict[str, Any]) -> SessionService:
     return service
 
 
-def _source(service: SessionService | None, **options: Any) -> tuple[OpenCodeTwoTranscriptSource, SessionTransport]:
-    transport = SessionTransport(service)
+def _source(
+    service: SessionService | None,
+    *,
+    transport: SessionTransport | None = None,
+    clock: IMonotonicClock | None = None,
+    **options: Any,
+) -> tuple[OpenCodeTwoTranscriptSource, SessionTransport]:
+    sent = transport if transport is not None else SessionTransport(service)
     errors = TranscriptErrorFactory(structlog.get_logger("test"))
-    return OpenCodeTwoTranscriptSource(lambda: REGISTRATION, transport, errors, runner_id="run_1", **options), transport
+    source = OpenCodeTwoTranscriptSource(
+        lambda: REGISTRATION,
+        sent,
+        errors,
+        runner_id="run_1",
+        monotonic_clock=clock if clock is not None else ManualMonotonicClock(),
+        **options,
+    )
+    return source, sent
 
 
 def _read(source: OpenCodeTwoTranscriptSource, since: TranscriptPosition | None = None) -> TranscriptBatch:
@@ -196,7 +213,9 @@ def test_a_position_this_source_did_not_mint_is_unreadable() -> None:
 def test_an_unreachable_or_unregistered_service_is_unreadable() -> None:
     assert _read(_source(None)[0]).reason == "unreadable"
     errors = TranscriptErrorFactory(structlog.get_logger("test"))
-    unregistered = OpenCodeTwoTranscriptSource(lambda: None, SessionTransport(_service()), errors, runner_id="run_1")
+    unregistered = OpenCodeTwoTranscriptSource(
+        lambda: None, SessionTransport(_service()), errors, runner_id="run_1", monotonic_clock=ManualMonotonicClock()
+    )
     assert _read(unregistered).reason == "unreadable"
 
 
@@ -270,3 +289,53 @@ def test_a_call_still_streaming_its_arguments_ships_once_they_are_complete_and_o
     calls = [turn.tool for turn in second.turns if turn.tool is not None]
     assert len(calls) == 1 and calls[0].input == {"command": "sleep"}
     assert _read(source, second.next_position).turns == []
+
+
+@dataclass
+class _SlowTransport(SessionTransport):
+    """Answers like the service, each answer taking half a second on ``clock``."""
+
+    clock: ManualMonotonicClock = field(default_factory=ManualMonotonicClock)
+
+    def send(self, request: ServiceRequest) -> ServiceResponse:
+        self.clock.advance(0.5)
+        return super().send(request)
+
+
+def _paged_tree() -> SessionService:
+    """A root whose conversation spans three pages and spawns one child, so one read sends many requests."""
+    lines = [_user(f"msg_{n:04d}", f"line {n}") for n in range(450)]
+    service = _service(*lines, assistant("msg_9999", tools=(_subagent("call_1", CHILD),)))
+    service.add_session(CHILD, parent=ROOT, metadata=OURS)
+    service.messages[CHILD] = [assistant("msg_c1", "child done")]
+    return service
+
+
+def test_one_read_holds_every_request_and_page_to_what_is_left_of_one_bound() -> None:
+    transport = _SlowTransport(_paged_tree())
+    # Below every request's own timeout, so each request is cut to what is left of the one bound.
+    source, _ = _source(None, transport=transport, clock=transport.clock, read_bound_seconds=20.0)
+    batch = _read(source)
+    assert batch.reason is None and len(batch.turns) > 450
+    timeouts = [request.timeout_seconds for request in transport.requests]
+    assert len(transport.calls("GET", "/message")) >= 3
+    assert len(timeouts) > 4
+    assert timeouts == [20.0 - 0.5 * sent for sent in range(len(timeouts))]
+
+
+def test_a_read_that_outlasts_its_bound_is_refused_without_sending_further() -> None:
+    transport = _SlowTransport(_paged_tree())
+    source, _ = _source(None, transport=transport, clock=transport.clock, read_bound_seconds=1.2)
+    assert _read(source).reason == "unreadable"
+    # The bound allows three answers, each half a second; the fourth request is refused before it is sent.
+    assert len(transport.requests) == 3
+    assert transport.clock.reading == 1.5
+
+
+def test_each_read_starts_its_own_bound() -> None:
+    transport = _SlowTransport(_paged_tree())
+    source, _ = _source(None, transport=transport, clock=transport.clock, read_bound_seconds=60.0)
+    _read(source)
+    first_read = len(transport.requests)
+    _read(source)
+    assert transport.requests[first_read].timeout_seconds == transport.requests[0].timeout_seconds

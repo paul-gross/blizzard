@@ -6,10 +6,10 @@ are read again by id; a child is a sidechain of the call that spawned it. A sess
 from __future__ import annotations
 
 import json
-import time
-from collections.abc import Callable, Mapping, Sequence
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field, replace
 
+from blizzard.foundation.clock import IMonotonicClock
 from blizzard.foundation.roles import adapter_model
 from blizzard.runner.harness.json_value import JsonObject
 from blizzard.runner.harness.opencode_v2.client import MESSAGE_PAGE_LIMIT, OpenCodeServiceClient, ServiceRequestError
@@ -102,9 +102,9 @@ class OpenCodeTwoTranscriptSource:
         errors: TranscriptErrorFactory,
         *,
         runner_id: str,
+        monotonic_clock: IMonotonicClock,
         read_bound_seconds: float = DEFAULT_READ_BOUND_SECONDS,
         page_budget: int = DEFAULT_PAGE_BUDGET,
-        monotonic: Callable[[], float] = time.monotonic,
     ) -> None:
         self._source = source
         self._transport = transport
@@ -112,7 +112,7 @@ class OpenCodeTwoTranscriptSource:
         self._runner_id = runner_id
         self._read_bound_seconds = read_bound_seconds
         self._page_budget = page_budget
-        self._monotonic = monotonic
+        self._clock = monotonic_clock
 
     # -- the seam ---------------------------------------------------------------------------------------------------
 
@@ -207,8 +207,8 @@ class OpenCodeTwoTranscriptSource:
         registration = self._source()
         if registration is None:
             raise ServiceNotRegisteredError("no OpenCode service is registered")
-        deadline = self._monotonic() + self._read_bound_seconds
-        return OpenCodeServiceClient(registration, BoundedTransport(self._transport, deadline, self._monotonic))
+        deadline = self._clock.monotonic() + self._read_bound_seconds
+        return OpenCodeServiceClient(registration, BoundedTransport(self._transport, deadline, self._clock.monotonic))
 
     def _tree(self, client: OpenCodeServiceClient, root: str) -> list[_Session]:
         """``root`` and its descendants, breadth first; ``root`` must be a session this runner minted."""
