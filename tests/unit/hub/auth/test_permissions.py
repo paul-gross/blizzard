@@ -6,7 +6,14 @@ import pytest
 
 from blizzard.auth_core import Role
 from blizzard.hub.auth.memberships import MEMBERSHIP_ROLES
-from blizzard.hub.auth.permissions import HUB_PERMISSIONS, ROLE_PERMISSIONS, Permission, expand, permissions_for
+from blizzard.hub.auth.permissions import (
+    HUB_PERMISSIONS,
+    ROLE_PERMISSIONS,
+    Permission,
+    expand,
+    may_edit_chunks,
+    permissions_for,
+)
 
 
 def test_pending_holds_no_permissions() -> None:
@@ -172,3 +179,8 @@ def test_permissions_for_a_hub_admin_adds_the_hub_permissions(role: Role | None)
 
 def test_a_hub_admin_without_a_membership_holds_no_tenant_permission() -> None:
     assert permissions_for(None, hub_admin=True) == HUB_PERMISSIONS
+
+
+@pytest.mark.parametrize(("role", "may"), [(Role.GUEST, False), (Role.CONTRIBUTOR, True), (Role.ADMIN, True)])
+def test_a_write_may_move_open_chunks_only_for_a_principal_holding_chunk_control(role: Role, may: bool) -> None:
+    assert may_edit_chunks(expand(role)) is may

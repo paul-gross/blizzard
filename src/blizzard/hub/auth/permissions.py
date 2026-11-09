@@ -119,3 +119,9 @@ def may_admit(permissions: frozenset[Permission]) -> bool:
     """Whether a principal holding ``permissions`` may admit work to the ready queue — what promoting a chunk by
     hand asks for, and so what a write leaving a cadence promoting its runs asks for beside its own permission."""
     return Permission.CHUNK_CONTROL in permissions
+
+
+def may_edit_chunks(permissions: frozenset[Permission]) -> bool:
+    """Whether a principal holding ``permissions`` may edit chunks — what a write moving open chunks to another
+    urgency, such as a retire, asks for beside its own permission."""
+    return Permission.CHUNK_CONTROL in permissions

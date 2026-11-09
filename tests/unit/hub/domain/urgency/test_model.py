@@ -387,3 +387,28 @@ def test_a_retire_moving_open_work_needs_chunk_control_and_one_moving_none_does_
     with pytest.raises(UrgencyMoveRefused):
         retire(1)
     assert retire(0) == target
+
+
+def test_every_refusal_outranks_the_permission_and_each_outranks_the_next() -> None:
+    urgency = _new(UrgencyShape("urgent"))
+
+    def retire(*, default: bool, open_chunks: int, key: str | None, target: Urgency | None) -> Urgency | None:
+        return require_retirable(
+            urgency,
+            default_id=urgency.urgency_id if default else UrgencyId("urg_other"),
+            open_chunks=open_chunks,
+            move_to_key=key,
+            move_to=target,
+            may_control=False,
+        )
+
+    with pytest.raises(UrgencyIsDefault):
+        retire(default=True, open_chunks=2, key="nope", target=None)
+    with pytest.raises(UrgencyInUse):
+        retire(default=False, open_chunks=2, key=None, target=None)
+    with pytest.raises(UrgencyUnknown):
+        retire(default=False, open_chunks=2, key="nope", target=None)
+    with pytest.raises(UrgencyMoveToSelf):
+        retire(default=False, open_chunks=2, key="urgent", target=urgency)
+    with pytest.raises(UrgencyMoveRefused):
+        retire(default=False, open_chunks=2, key="standard", target=_new(UrgencyShape("standard")))

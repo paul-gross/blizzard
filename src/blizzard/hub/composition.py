@@ -205,6 +205,14 @@ from blizzard.hub.domain.sweeps.names import SweepName
 from blizzard.hub.domain.sweeps.roster import SweepRoster
 from blizzard.hub.domain.tenancy.administration import TenantAdministration
 from blizzard.hub.domain.tenancy.teardown import TenantTeardown, TenantTeardownSweep
+from blizzard.hub.domain.urgency.services import (
+    TenantDefault,
+    TenantSettingsService,
+    UrgencyAuthoring,
+    UrgencyLifecycle,
+    UrgencyOrdering,
+    UrgencyReading,
+)
 from blizzard.hub.domain.work_items.closure import CloseDrainSweep, CloseIntentDrainer
 from blizzard.hub.domain.work_items.editing import WorkItemEditService
 from blizzard.hub.egress.factory import EgressUnavailable, build_egress_writer
@@ -265,10 +273,13 @@ from blizzard.hub.store.internal.scope_store import ScopeStore
 from blizzard.hub.store.internal.secret_referrers import SecretReferrersStore
 from blizzard.hub.store.internal.secret_store import SecretStore
 from blizzard.hub.store.internal.tenant_admin_store import TenantAdministrationStore
+from blizzard.hub.store.internal.tenant_settings_store import TenantSettingsStore
 from blizzard.hub.store.internal.tenant_teardown_store import TenantTeardownStore
 from blizzard.hub.store.internal.trace_store import ProjectLabels, TraceStore
 from blizzard.hub.store.internal.transcript_event_store import TranscriptEventStore
 from blizzard.hub.store.internal.transcript_segment_store import TranscriptSegmentStore
+from blizzard.hub.store.internal.urgency_chunks_store import UrgencyChunksStore
+from blizzard.hub.store.internal.urgency_store import UrgencyOrderStore, UrgencyStore
 from blizzard.hub.store.internal.work_item_store import WorkItemStore
 from blizzard.hub.store.internal.work_source_record_store import WorkSourceRecordStore
 from blizzard.hub.store.scoped import ScopedConnections
@@ -408,6 +419,18 @@ class TenantServices:
     project_authoring: ProjectAuthoring
     #: Picks among equally least-used colors for a project created with none — the apply edge's seam.
     color_pick: ColorPick
+    #: List and show urgencies in order, with the default marked and their open chunks counted.
+    urgency_reading: UrgencyReading
+    #: Create and edit an urgency.
+    urgency_authoring: UrgencyAuthoring
+    #: Retire an urgency, moving its open work, and enable one.
+    urgency_lifecycle: UrgencyLifecycle
+    #: The urgency set's two reorders.
+    urgency_ordering: UrgencyOrdering
+    #: Show and edit the tenant's settings.
+    tenant_settings: TenantSettingsService
+    #: The tenant's default urgency, read under a mint's locks.
+    tenant_default: TenantDefault
     #: The routine read Protocol — the same store instance as
     #: ``routine_authoring``'s writes.
     routines: IReadRoutineRepository
@@ -618,6 +641,14 @@ class TenantStores:
     config_apply: ConfigApplyStore
     config_import: ConfigImportStore
     invitations: InvitationStore
+    #: Urgencies — composition-only write half; ``TenantServices`` carries the services over them.
+    urgencies: UrgencyStore
+    #: The urgency set's order — composition-only write half.
+    urgency_order: UrgencyOrderStore
+    #: The tenant's settings — composition-only write half.
+    tenant_settings: TenantSettingsStore
+    #: The open chunks carrying an urgency, counted and moved.
+    urgency_chunks: UrgencyChunksStore
     clock: IClock
 
     @property
@@ -673,6 +704,10 @@ def build_tenant_stores(connections: ScopedConnections, *, clock: IClock) -> Ten
         config_apply=ConfigApplyStore(connections),
         config_import=ConfigImportStore(connections),
         invitations=InvitationStore(connections),
+        urgencies=UrgencyStore(connections),
+        urgency_order=UrgencyOrderStore(connections),
+        tenant_settings=TenantSettingsStore(connections),
+        urgency_chunks=UrgencyChunksStore(connections),
         work_item_edits=WorkItemEditService(
             items=work_item_store,
             work_refs=chunk_stores.work_refs,
@@ -1393,6 +1428,40 @@ def build_tenant_services(stores: TenantStores, parts: TenantServiceParts, *, ev
             clock=clock,
         ),
         color_pick=parts.color_pick,
+        urgency_reading=UrgencyReading(
+            urgencies=stores.urgencies,
+            order=stores.urgency_order,
+            settings=stores.tenant_settings,
+            chunks=stores.urgency_chunks,
+        ),
+        urgency_authoring=UrgencyAuthoring(
+            urgencies=stores.urgencies,
+            order=stores.urgency_order,
+            transactions=stores.transactions,
+            pick=parts.color_pick,
+            clock=clock,
+        ),
+        urgency_lifecycle=UrgencyLifecycle(
+            urgencies=stores.urgencies,
+            settings=stores.tenant_settings,
+            chunks=stores.urgency_chunks,
+            transactions=stores.transactions,
+            clock=clock,
+        ),
+        urgency_ordering=UrgencyOrdering(
+            tenant_id=stores.scope.tenant,
+            urgencies=stores.urgencies,
+            order=stores.urgency_order,
+            transactions=stores.transactions,
+            clock=clock,
+        ),
+        tenant_settings=TenantSettingsService(
+            settings=stores.tenant_settings,
+            urgencies=stores.urgencies,
+            transactions=stores.transactions,
+            clock=clock,
+        ),
+        tenant_default=TenantDefault(settings=stores.tenant_settings, urgencies=stores.urgencies),
         routines=routine_store,
         routine_scopes=routine_scope_store,
         routine_scope_membership=RoutineScopeMembership(routine_scopes=routine_scope_store, clock=clock),
