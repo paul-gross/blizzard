@@ -14,7 +14,14 @@ from pydantic import BaseModel
 
 from blizzard.foundation.unrecognized import Unrecognized
 from blizzard.tools.compat.surfaces.api import classify_api
-from blizzard.tools.compat.surfaces.wire import Document, Operation, Parameter, Schema, classify_spec_diff
+from blizzard.tools.compat.surfaces.wire import (
+    Document,
+    Operation,
+    Parameter,
+    Schema,
+    _nested_schema,
+    classify_spec_diff,
+)
 from blizzard.tools.compat.violation import Violation
 from blizzard.wire.question import QuestionView
 from blizzard.wire.vocabulary import OPEN
@@ -795,8 +802,6 @@ def test_a_question_view_from_an_older_hub_reads_as_not_superseded() -> None:
 
 @pytest.mark.parametrize("key", ["items", "additionalProperties"])
 def test_nested_schema_keeps_an_empty_schema_on_a_non_null_union_member(key: str) -> None:
-    from blizzard.tools.compat.surfaces.wire import _nested_schema
-
     for union in ("anyOf", "oneOf"):
         prop = {union: [{"type": "null"}, {"type": "array" if key == "items" else "object", key: {}}]}
         assert _nested_schema(prop, key) == {}  # type: ignore[arg-type]
