@@ -2403,6 +2403,10 @@ def test_a_membership_naming_a_tenant_absent_from_tenants_is_a_violation(tmp_pat
     assert [v.detail for v in breaches] == [
         f"membership_facts holds 1 row(s) of tenant {second}, which is not in tenants",
         f"projects holds 1 row(s) of tenant {second}, which is not in tenants",
+        f"urgencies holds 1 row(s) of tenant {second}, which is not in tenants",
+        f"config_changes holds 2 row(s) of tenant {second}, which is not in tenants",
+        f"tenant_settings holds 1 row(s) of tenant {second}, which is not in tenants",
+        f"urgency_positions holds 1 row(s) of tenant {second}, which is not in tenants",
     ]
 
 
@@ -2435,6 +2439,10 @@ def test_a_row_naming_a_tenant_absent_from_tenants_is_a_violation(tmp_path: Path
     assert [v.detail for v in breaches] == [
         f"graphs holds 1 row(s) of tenant {second}, which is not in tenants",
         f"projects holds 1 row(s) of tenant {second}, which is not in tenants",
+        f"urgencies holds 1 row(s) of tenant {second}, which is not in tenants",
+        f"config_changes holds 2 row(s) of tenant {second}, which is not in tenants",
+        f"tenant_settings holds 1 row(s) of tenant {second}, which is not in tenants",
+        f"urgency_positions holds 1 row(s) of tenant {second}, which is not in tenants",
     ]
 
 

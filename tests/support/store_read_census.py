@@ -2446,6 +2446,7 @@ HUB_CENSUS: dict[tuple[type, str], HubRecipe] = {
     (IReadUrgencyRepository, "get_many"): lambda w: w.urgencies.get_many([w.urgency_id]),
     (IReadUrgencyRepository, "list_all"): lambda w: w.urgencies.list_all(),
     (IReadUrgencyRepository, "icon"): lambda w: w.urgencies.icon(w.urgency_id),
+    (IReadUrgencyRepository, "icons"): lambda w: w.urgencies.icons(),
     (IReadUrgencyOrder, "order"): lambda w: w.urgency_order.order(),
     (IReadTenantSettings, "get"): lambda w: w.tenant_settings.get(),
     (IReadUrgencyChunks, "open_counts"): lambda w: w.urgency_chunks.open_counts([w.urgency_id]),

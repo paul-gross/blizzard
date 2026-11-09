@@ -188,9 +188,9 @@ def get_urgency(urgency: PathUrgency, services: Services) -> UrgencyView:
 
 @router.patch("/{key}", response_model=UrgencyView)
 def patch_urgency(
+    identity: Editor,
     urgency: PathUrgency,
     request: UrgencyPatchRequest,
-    identity: Editor,
     door: RequestDoor,
     services: Services,
     if_match: Annotated[int | None, Header()] = None,
@@ -217,8 +217,8 @@ def patch_urgency(
 
 @router.post("/{key}/retire", response_model=UrgencyRetireView)
 def retire_urgency(
-    urgency: PathUrgency,
     identity: Editor,
+    urgency: PathUrgency,
     door: RequestDoor,
     services: Services,
     request: UrgencyRetireRequest | None = None,
@@ -262,8 +262,8 @@ def retire_urgency(
 
 @router.post("/{key}/enable", response_model=UrgencyView)
 def enable_urgency(
-    urgency: PathUrgency,
     identity: Editor,
+    urgency: PathUrgency,
     door: RequestDoor,
     services: Services,
     if_match: Annotated[int | None, Header()] = None,

@@ -315,6 +315,11 @@ _TENANT_DELETIONS_REASON = (
     "underway — bounded by the tenants hub administrators created, never by a tenant's own volume."
 )
 
+# The tenant's settings: one row per tenant, read by its tenant-led unique key.
+_TENANT_SETTINGS_REASON = (
+    "the tenant's settings — one row per tenant, read by the tenant-led unique key, so a read touches the one row."
+)
+
 HUB_ALLOWED_SCANS: list[Allowance] = [
     # --- the one-shot legacy-config import ----------------------------------------------
     TableWideAllowance("config_import_facts", 50, _RARE_OPERATOR_EVENT_REASON),
@@ -338,6 +343,7 @@ HUB_ALLOWED_SCANS: list[Allowance] = [
     # --- singletons/near-singletons ------------------------------------------------------
     TableWideAllowance("superuser_bootstrap", 50, _SINGLETON_REASON),
     TableWideAllowance("tenant_deletions", 200, _TENANT_DELETIONS_REASON),
+    TableWideAllowance("tenant_settings", 50, _TENANT_SETTINGS_REASON),
     # --- operator-created fleet entities and their lifecycle facts --------------------
     TableWideAllowance("forge_lifecycle_facts", 200, _FLEET_CONFIG_REASON),
     TableWideAllowance("forges", 200, _FLEET_CONFIG_REASON),
