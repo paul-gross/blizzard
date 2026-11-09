@@ -8,13 +8,8 @@ from pathlib import Path
 from sqlalchemy import select
 
 from blizzard.hub.store import schema as s
-from blizzard.wire.problem import (
-    CHUNK_NOT_FOUND,
-    CLAIM_CONFLICT,
-    CLAIM_PAUSED,
-    CLAIM_RUNNER_UNREGISTERED,
-    CLAIM_TERMINAL,
-)
+from blizzard.wire.chunk import CHUNK_NOT_FOUND
+from blizzard.wire.route import CLAIM_CONFLICT, CLAIM_PAUSED, CLAIM_RUNNER_UNREGISTERED, CLAIM_TERMINAL
 from tests.support.scaffolding import HubHarness, build_hub, hub_scoped, make_ready, pointer_token, report_lease
 
 _POINTER = {"source": "default", "ref": "7"}

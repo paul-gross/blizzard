@@ -18,8 +18,7 @@ from blizzard.hub.domain.observability.egress.config import EgressConfig
 from blizzard.hub.domain.observability.egress.event_rows import FilePathPolicy
 from blizzard.hub.egress.writer import EgressFailure, EgressFailureCause
 from blizzard.hub.store.internal.hub_scoped_reads import build_hub_scoped_reads
-from blizzard.wire.egress import EgressBackfillFailure
-from blizzard.wire.problem import EGRESS_BACKFILL_FAILED
+from blizzard.wire.egress import EGRESS_BACKFILL_FAILED, EgressBackfillFailure
 from tests.support.egress_world import (
     OLD_VERSION,
     SETTLED,

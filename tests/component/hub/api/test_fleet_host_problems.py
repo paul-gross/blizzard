@@ -10,7 +10,8 @@ from blizzard.hub.domain.execution.host_facts import HostFactIngestService
 from blizzard.hub.domain.runners.host import HostRetired
 from blizzard.hub.domain.runners.host_report import HostReportService
 from blizzard.hub.domain.runners.registration import RunnerLifecycleConflict
-from blizzard.wire import problem as problem_types
+from blizzard.wire import host as host_wire
+from blizzard.wire import runner as runner_wire
 from tests.support.hub_request_auth import bearer
 from tests.support.scaffolding import build_hub
 
@@ -29,11 +30,11 @@ def test_unknown_project_and_runner(tmp_path: Path) -> None:
     path = "/api/fleet/host/runners"
     response = hub.client.post(path, json={"name": "runner", "projects": ["missing"]}, headers=headers)
     assert response.status_code == 422
-    assert response.json()["type"] == problem_types.UNKNOWN_SERVED_PROJECT
+    assert response.json()["type"] == runner_wire.UNKNOWN_SERVED_PROJECT
     assert response.json()["instance"] == path
     path += "/rn_missing/retire"
     response = hub.client.post(path, json={}, headers=headers)
-    _assert_problem(response, 404, problem_types.RUNNER_NOT_FOUND, "unknown runner rn_missing", path)
+    _assert_problem(response, 404, runner_wire.RUNNER_NOT_FOUND, "unknown runner rn_missing", path)
 
 
 @pytest.mark.parametrize("interrupted", [False, True])
@@ -55,7 +56,7 @@ def test_retirement_conflict(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, in
     monkeypatch.setattr(FleetService, "retire", refuse)
     path = f"/api/fleet/host/runners/{runner}/retire"
     response = hub.client.post(path, json={}, headers=headers)
-    kind = problem_types.RUNNER_RETIRE_INTERRUPTED if interrupted else problem_types.RUNNER_LIFECYCLE_CONFLICT
+    kind = runner_wire.RUNNER_RETIRE_INTERRUPTED if interrupted else runner_wire.RUNNER_LIFECYCLE_CONFLICT
     _assert_problem(response, 409, kind, str(exc), path)
 
 
@@ -78,4 +79,4 @@ def test_retired_host_race(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, lane
         path = "/api/fleet/host/events"
         payload = {"facts": []}
     response = hub.client.post(path, json=payload, headers=bearer(host["token"]))
-    _assert_problem(response, 403, problem_types.HOST_RETIRED, str(exc), path)
+    _assert_problem(response, 403, host_wire.HOST_RETIRED, str(exc), path)

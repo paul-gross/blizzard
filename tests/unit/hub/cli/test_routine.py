@@ -14,7 +14,7 @@ import pytest
 from click.testing import CliRunner, Result
 
 from blizzard.hub.cli import hub as hub_group
-from blizzard.wire.problem import POINTER_ALREADY_HELD
+from blizzard.wire.chunk import POINTER_ALREADY_HELD
 from tests.support.worker_http import bind_stubs
 
 

@@ -2,9 +2,9 @@
 
 import pytest
 
-from blizzard.wire.problem import FLAG_OFF, TENANT_NOT_FOUND
+from blizzard.wire.flags import FLAG_OFF
 from blizzard.wire.problem_reading import read_problem
-from blizzard.wire.tenant import NO_SUCH_TENANT
+from blizzard.wire.tenant import NO_SUCH_TENANT, TENANT_NOT_FOUND
 
 
 def test_a_problem_with_a_string_detail_shows_that_detail() -> None:

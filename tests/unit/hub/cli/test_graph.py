@@ -15,7 +15,7 @@ import pytest
 from click.testing import CliRunner
 
 from blizzard.hub.cli import hub as hub_group
-from blizzard.wire.problem import GRAPH_DEFINITION_INVALID
+from blizzard.wire.graph import GRAPH_DEFINITION_INVALID
 from tests.support.worker_http import bind_stubs
 
 

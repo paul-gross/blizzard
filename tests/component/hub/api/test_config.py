@@ -20,11 +20,13 @@ from blizzard.hub.store.internal import repository_record_store, work_source_rec
 from blizzard.hub.store.internal.former_slugs import SlugTables
 from blizzard.hub.store.internal.secret_store import SecretStore, record_lifecycle_fact
 from blizzard.wire.config import (
+    CONFIG_APPLY_CONFLICT,
+    CONFIG_DOCUMENT_INVALID,
+    CONFIG_MEDIA_TYPE_UNSUPPORTED,
     ConfigApplyConflictProblem,
     ConfigDocumentInvalidProblem,
     ConfigMediaTypeUnsupportedProblem,
 )
-from blizzard.wire.problem import CONFIG_APPLY_CONFLICT, CONFIG_DOCUMENT_INVALID, CONFIG_MEDIA_TYPE_UNSUPPORTED
 from tests.support.refusal_observation import app_spec, declared_refusal_mismatches
 from tests.support.scaffolding import HubHarness, build_hub, hub_store_connections, seed_session, seed_user
 

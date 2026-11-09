@@ -13,8 +13,7 @@ from fastapi.responses import JSONResponse
 
 from blizzard.foundation.flags import FlagOffError, Flags
 from blizzard.hub.api.problem_rendering import problem_response
-from blizzard.wire.flags import FlagOff, FlagOffProblem, FlagOffResponse
-from blizzard.wire.problem import FLAG_OFF
+from blizzard.wire.flags import FLAG_OFF, FlagOff, FlagOffProblem, FlagOffResponse
 
 
 def flag_guard(

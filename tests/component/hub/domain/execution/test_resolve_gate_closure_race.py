@@ -29,7 +29,7 @@ from blizzard.hub.domain.runners.registration import RetiredRunnerGuard
 from blizzard.hub.store import schema as s
 from blizzard.hub.store.scoped import ScopedConnections
 from blizzard.hub.store.transactions import HubTransactions
-from blizzard.wire.problem_types_chunks import DECISION_CLOSED
+from blizzard.wire.decision import DECISION_CLOSED
 from tests.support.gate_decisions import (
     _open_decision,  # pyright: ignore[reportPrivateUsage]  # shared test helper, imported from tests.support.gate_decisions
 )

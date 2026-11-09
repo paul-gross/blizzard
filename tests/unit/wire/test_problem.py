@@ -1,9 +1,12 @@
 """Problem serialization preserves the legacy claim status distinction."""
 
+import ast
 import importlib
 import inspect
 import json
 import pkgutil
+from collections.abc import Iterator
+from types import ModuleType
 from typing import Literal, get_args
 
 import pytest
@@ -12,9 +15,21 @@ from fastapi.testclient import TestClient
 from pydantic import BaseModel, TypeAdapter, ValidationError
 
 import blizzard.wire as wire
-from blizzard.wire import problem as registry
-from blizzard.wire import problem_types_admin, problem_types_chunks, problem_types_garden, problem_types_runners
+import blizzard.wire.problem_registry as registry
 from blizzard.wire.auth import (
+    CLI_PKCE_REQUIRED,
+    CLI_REDIRECT_REFUSED,
+    CLI_TOKEN_REFUSED,
+    FEDERATION_CLIENT_REFUSED,
+    FEDERATION_NO_PROVIDER,
+    FEDERATION_RESPONSE_MODE,
+    IDP_DISABLED,
+    LOGIN_DISABLED,
+    LOGIN_FAILED,
+    LOGIN_PROVIDER_UNKNOWN,
+    LOGIN_THROTTLED,
+    RUNNER_CREDENTIAL_FORBIDDEN,
+    SSO_REFUSED,
     CliPkceRequiredProblem,
     CliRedirectRefusedProblem,
     CliTokenRefusedProblem,
@@ -29,23 +44,16 @@ from blizzard.wire.auth import (
     RunnerCredentialForbiddenProblem,
     SsoRefusedProblem,
 )
-from blizzard.wire.chunk import ChunkNotFoundProblem
+from blizzard.wire.chunk import CHUNK_NOT_FOUND, ChunkNotFoundProblem
 from blizzard.wire.problem import (
-    CLAIM_CONFLICT,
-    CLAIM_TERMINAL,
-    PROBLEM_TYPES,
-    TENANT_NOT_FOUND,
-    TENANT_REQUIRED,
     ProblemDetails,
 )
 from blizzard.wire.problem_registry import ALL_PROBLEM_TYPES
-from blizzard.wire.problem_types_admin import ADMIN_PROBLEM_TYPES
-from blizzard.wire.problem_types_chunks import CHUNKS_PROBLEM_TYPES
-from blizzard.wire.problem_types_garden import GARDEN_PROBLEM_TYPES
-from blizzard.wire.problem_types_runners import RUNNERS_PROBLEM_TYPES
 from blizzard.wire.project import ProjectRef, ProjectRequiredBody, ProjectRequiredProblem
 from blizzard.wire.release import ReleaseProblem, ReleaseRefusal
 from blizzard.wire.route import (
+    CLAIM_CONFLICT,
+    CLAIM_TERMINAL,
     RouteClaimConflict,
     RouteClaimConflictProblem,
     RouteClaimDependencyDenial,
@@ -56,117 +64,284 @@ from blizzard.wire.route import (
     RouteClaimTerminalProblem,
 )
 from blizzard.wire.runner import (
+    RUNNER_IDENTITY,
+    RUNNER_RETIRE_INTERRUPTED,
     RunnerIdentityProblem,
     RunnerIdentityRefusal,
     RunnerRetireInterruptedProblem,
     RunnerVersionProblem,
     RunnerVersionRefusal,
 )
-from blizzard.wire.tenant import TenantNotFoundProblem, TenantRequiredDetail, TenantRequiredProblem
+from blizzard.wire.tenant import (
+    TENANT_NOT_FOUND,
+    TENANT_REQUIRED,
+    TenantNotFoundProblem,
+    TenantRequiredDetail,
+    TenantRequiredProblem,
+)
+
+
+def _wire_modules() -> Iterator[ModuleType]:
+    """Census the package independently of the registry integrator's imports."""
+    for info in pkgutil.walk_packages(wire.__path__, wire.__name__ + "."):
+        yield importlib.import_module(info.name)
+
+
+def _local_problem_constants(module: ModuleType) -> dict[str, str]:
+    tree = ast.parse(inspect.getsource(module))
+    return {
+        node.target.id: node.value.value
+        for node in tree.body
+        if isinstance(node, ast.AnnAssign)
+        and isinstance(node.target, ast.Name)
+        and _is_final(node.annotation)
+        and isinstance(node.value, ast.Constant)
+        and isinstance(node.value.value, str)
+        and node.value.value.startswith("urn:blizzard:problem:")
+    }
+
+
+def _is_final(annotation: ast.expr) -> bool:
+    if isinstance(annotation, ast.Subscript):
+        annotation = annotation.value
+    return (isinstance(annotation, ast.Name) and annotation.id == "Final") or (
+        isinstance(annotation, ast.Attribute)
+        and isinstance(annotation.value, ast.Name)
+        and annotation.value.id == "typing"
+        and annotation.attr == "Final"
+    )
 
 
 def test_problem_registry_has_unique_stable_uris() -> None:
+    # Captured from the five contributions at the pre-colocation base.
     expected = {
+        "ABSORBER_NOT_LIVE": "urn:blizzard:problem:absorber-not-live",
+        "AUTHENTICATION_REQUIRED": "urn:blizzard:problem:authentication-required",
+        "AUTHENTICATION_REVOKED": "urn:blizzard:problem:authentication-revoked",
+        "AUTHENTICATION_UNRESOLVED": "urn:blizzard:problem:authentication-unresolved",
+        "BLANK_EDIT_VALUE": "urn:blizzard:problem:blank-edit-value",
+        "CADENCE_ADMISSION_REFUSED": "urn:blizzard:problem:cadence-admission-refused",
+        "CADENCE_NOT_FOUND": "urn:blizzard:problem:cadence-not-found",
+        "CADENCE_SLUG_TAKEN": "urn:blizzard:problem:cadence-slug-taken",
+        "CHUNKS_IN_DIFFERENT_PROJECTS": "urn:blizzard:problem:chunks-in-different-projects",
+        "CHUNK_ALREADY_MOVED": "urn:blizzard:problem:chunk-already-moved",
+        "CHUNK_HAS_DEPENDENTS": "urn:blizzard:problem:chunk-has-dependents",
+        "CHUNK_NOT_DELETABLE": "urn:blizzard:problem:chunk-not-deletable",
+        "CHUNK_NOT_DEMOTABLE": "urn:blizzard:problem:chunk-not-demotable",
+        "CHUNK_NOT_EDITABLE": "urn:blizzard:problem:chunk-not-editable",
+        "CHUNK_NOT_ESCALATED": "urn:blizzard:problem:chunk-not-escalated",
+        "CHUNK_NOT_FOUND": "urn:blizzard:problem:chunk-not-found",
+        "CHUNK_NOT_GROUPABLE": "urn:blizzard:problem:chunk-not-groupable",
+        "CHUNK_NOT_PAUSABLE": "urn:blizzard:problem:chunk-not-pausable",
+        "CHUNK_NOT_PROMOTABLE": "urn:blizzard:problem:chunk-not-promotable",
+        "CHUNK_NOT_RESTARTABLE": "urn:blizzard:problem:chunk-not-restartable",
+        "CHUNK_NOT_ROUTED": "urn:blizzard:problem:chunk-not-routed",
+        "CHUNK_NOT_STOPPABLE": "urn:blizzard:problem:chunk-not-stoppable",
         "CLAIM_CONFLICT": "urn:blizzard:problem:claim-conflict",
-        "CLAIM_TERMINAL": "urn:blizzard:problem:claim-terminal",
         "CLAIM_DEPENDENCY": "urn:blizzard:problem:claim-dependency",
         "CLAIM_INCOMPATIBLE": "urn:blizzard:problem:claim-incompatible",
+        "CLAIM_NOT_READY": "urn:blizzard:problem:claim-not-ready",
         "CLAIM_PAUSED": "urn:blizzard:problem:claim-paused",
         "CLAIM_RUNNER_RETIRED": "urn:blizzard:problem:claim-runner-retired",
         "CLAIM_RUNNER_UNREGISTERED": "urn:blizzard:problem:claim-runner-unregistered",
         "CLAIM_RUNNER_VERSION_REFUSED": "urn:blizzard:problem:claim-runner-version-refused",
-        "CLAIM_NOT_READY": "urn:blizzard:problem:claim-not-ready",
-        "RUNNER_IDENTITY": "urn:blizzard:problem:runner-identity",
-        "RUNNER_VERSION": "urn:blizzard:problem:runner-version",
-        "RELEASE_REFUSAL": "urn:blizzard:problem:release-refusal",
-        "TENANT_REQUIRED": "urn:blizzard:problem:tenant-required",
-        "TENANT_NOT_FOUND": "urn:blizzard:problem:tenant-not-found",
-        "TENANT_CREDENTIAL_MISMATCH": "urn:blizzard:problem:tenant-credential-mismatch",
-        "AUTHENTICATION_REQUIRED": "urn:blizzard:problem:authentication-required",
-        "AUTHENTICATION_REVOKED": "urn:blizzard:problem:authentication-revoked",
-        "AUTHENTICATION_UNRESOLVED": "urn:blizzard:problem:authentication-unresolved",
-        "PINNED_GRAPH_MISSING": "urn:blizzard:problem:pinned-graph-missing",
+        "CLAIM_TERMINAL": "urn:blizzard:problem:claim-terminal",
+        "CLI_PKCE_REQUIRED": "urn:blizzard:problem:cli-pkce-required",
+        "CLI_REDIRECT_REFUSED": "urn:blizzard:problem:cli-redirect-refused",
+        "CLI_TOKEN_REFUSED": "urn:blizzard:problem:cli-token-refused",
+        "CONFIG_APPLY_CONFLICT": "urn:blizzard:problem:config-apply-conflict",
+        "CONFIG_DOCUMENT_INVALID": "urn:blizzard:problem:config-document-invalid",
+        "CONFIG_FIELD_INVALID": "urn:blizzard:problem:config-field-invalid",
+        "CONFIG_MEDIA_TYPE_UNSUPPORTED": "urn:blizzard:problem:config-media-type-unsupported",
+        "CONFIG_SCHEMA_NOT_FOUND": "urn:blizzard:problem:config-schema-not-found",
+        "CONTRADICTORY_PLACEMENT": "urn:blizzard:problem:contradictory-placement",
+        "CURRENT_NODE_NOT_ON_GRAPH": "urn:blizzard:problem:current-node-not-on-graph",
+        "DECISION_ALREADY_RESOLVED": "urn:blizzard:problem:decision-already-resolved",
+        "DECISION_CLOSED": "urn:blizzard:problem:decision-closed",
+        "DECISION_NOT_FOUND": "urn:blizzard:problem:decision-not-found",
+        "DEFAULT_GRAPH_RETIRED": "urn:blizzard:problem:default-graph-retired",
+        "DEPENDENCY_WOULD_CLOSE_CYCLE": "urn:blizzard:problem:dependency-would-close-cycle",
+        "DEPENDENT_NOT_EDITABLE": "urn:blizzard:problem:dependent-not-editable",
+        "DUPLICATE_CAPABILITY_HARNESS": "urn:blizzard:problem:duplicate-capability-harness",
+        "DUPLICATE_FINDING": "urn:blizzard:problem:duplicate-finding",
+        "DUPLICATE_REORDER_IDS": "urn:blizzard:problem:duplicate-reorder-ids",
+        "EGRESS_BACKFILL_FAILED": "urn:blizzard:problem:egress-backfill-failed",
+        "EGRESS_BACKFILL_UNAVAILABLE": "urn:blizzard:problem:egress-backfill-unavailable",
+        "EGRESS_BACKFILL_WINDOW_REFUSED": "urn:blizzard:problem:egress-backfill-window-refused",
+        "EGRESS_RESET_REFUSED": "urn:blizzard:problem:egress-reset-refused",
+        "EGRESS_RESET_UNAVAILABLE": "urn:blizzard:problem:egress-reset-unavailable",
+        "FEDERATION_CLIENT_REFUSED": "urn:blizzard:problem:federation-client-refused",
+        "FEDERATION_NO_PROVIDER": "urn:blizzard:problem:federation-no-provider",
+        "FEDERATION_RESPONSE_MODE": "urn:blizzard:problem:federation-response-mode",
+        "FINDING_NOTE_REQUIRED": "urn:blizzard:problem:finding-note-required",
+        "FINDING_NOT_FOUND": "urn:blizzard:problem:finding-not-found",
+        "FINDING_NOT_IN_CHUNK": "urn:blizzard:problem:finding-not-in-chunk",
+        "FINDING_SUPERSEDES_ITSELF": "urn:blizzard:problem:finding-supersedes-itself",
+        "FINDING_TRANSITION_REFUSED": "urn:blizzard:problem:finding-transition-refused",
+        "FINDING_WRITE_CONTENDED": "urn:blizzard:problem:finding-write-contended",
+        "FLAG_OFF": "urn:blizzard:problem:flag-off",
+        "FLOW_NOT_FOUND": "urn:blizzard:problem:flow-not-found",
+        "FOLD_WOULD_CLOSE_CYCLE": "urn:blizzard:problem:fold-would-close-cycle",
+        "FORGE_IN_USE": "urn:blizzard:problem:forge-in-use",
+        "FORGE_NOT_FOUND": "urn:blizzard:problem:forge-not-found",
+        "FORGE_ORIGIN_TAKEN": "urn:blizzard:problem:forge-origin-taken",
+        "FORGE_REVISION_CONFLICT": "urn:blizzard:problem:forge-revision-conflict",
+        "FORGE_SLUG_TAKEN": "urn:blizzard:problem:forge-slug-taken",
+        "GARDEN_PROPOSAL_ALREADY_CLOSED": "urn:blizzard:problem:garden-proposal-already-closed",
+        "GARDEN_PROPOSAL_INVALID": "urn:blizzard:problem:garden-proposal-invalid",
+        "GARDEN_PROPOSAL_NOT_FOUND": "urn:blizzard:problem:garden-proposal-not-found",
+        "GARDEN_WINDOW_INVALID": "urn:blizzard:problem:garden-window-invalid",
+        "GRAPH_DEFINITION_INVALID": "urn:blizzard:problem:graph-definition-invalid",
+        "GRAPH_NOT_FOUND": "urn:blizzard:problem:graph-not-found",
+        "HOST_HOLDS_ROUTES": "urn:blizzard:problem:host-holds-routes",
+        "HOST_LIFECYCLE_CONFLICT": "urn:blizzard:problem:host-lifecycle-conflict",
+        "HOST_NAME_TAKEN": "urn:blizzard:problem:host-name-taken",
+        "HOST_NOT_ENROLLED": "urn:blizzard:problem:host-not-enrolled",
+        "HOST_NOT_FOUND": "urn:blizzard:problem:host-not-found",
+        "HOST_RETIRED": "urn:blizzard:problem:host-retired",
+        "HOST_RETIREMENT_INTERRUPTED": "urn:blizzard:problem:host-retirement-interrupted",
+        "HOST_RETIREMENT_UNFINISHED": "urn:blizzard:problem:host-retirement-unfinished",
+        "HUB_STORE_UNAVAILABLE": "urn:blizzard:problem:hub-store-unavailable",
+        "IDP_DISABLED": "urn:blizzard:problem:idp-disabled",
+        "INGEST_EMPTY": "urn:blizzard:problem:ingest-empty",
+        "INGEST_ITEM_PROJECT_MISMATCH": "urn:blizzard:problem:ingest-item-project-mismatch",
+        "INGEST_TOKEN_UNCLAIMED": "urn:blizzard:problem:ingest-token-unclaimed",
+        "INVALID_HARNESSES": "urn:blizzard:problem:invalid-harnesses",
+        "INVARIANTS_IN_PROGRESS": "urn:blizzard:problem:invariants-in-progress",
+        "INVITATION_ALREADY_RESOLVED": "urn:blizzard:problem:invitation-already-resolved",
+        "INVITATION_NOT_FOUND": "urn:blizzard:problem:invitation-not-found",
+        "LANDING_ORDER_CONFLICT": "urn:blizzard:problem:landing-order-conflict",
+        "LAST_ADMIN_KEPT": "urn:blizzard:problem:last-admin-kept",
+        "LAST_HUB_ADMIN": "urn:blizzard:problem:last-hub-admin",
+        "LAST_TENANT": "urn:blizzard:problem:last-tenant",
+        "LEASE_OWNERSHIP": "urn:blizzard:problem:lease-ownership",
+        "LOGIN_DISABLED": "urn:blizzard:problem:login-disabled",
+        "LOGIN_FAILED": "urn:blizzard:problem:login-failed",
+        "LOGIN_PROVIDER_UNKNOWN": "urn:blizzard:problem:login-provider-unknown",
+        "LOGIN_THROTTLED": "urn:blizzard:problem:login-throttled",
+        "MACHINE_CREDENTIAL_FORBIDDEN": "urn:blizzard:problem:machine-credential-forbidden",
         "MALFORMED_CURSOR": "urn:blizzard:problem:malformed-cursor",
-        "UNKNOWN_SERVED_PROJECT": "urn:blizzard:problem:unknown-served-project",
-        "UNKNOWN_PROJECT": "urn:blizzard:problem:unknown-project",
-        "CHUNK_NOT_FOUND": "urn:blizzard:problem:chunk-not-found",
-        "CHUNK_NOT_PAUSABLE": "urn:blizzard:problem:chunk-not-pausable",
+        "MEMBERSHIP_CHANGE_REFUSED": "urn:blizzard:problem:membership-change-refused",
+        "MEMBER_NOT_FOUND": "urn:blizzard:problem:member-not-found",
+        "MIGRATION_TARGET_IS_CURRENT_PIN": "urn:blizzard:problem:migration-target-is-current-pin",
+        "NODE_STEP_NOT_FOUND": "urn:blizzard:problem:node-step-not-found",
+        "NODE_NOT_ON_GRAPH": "urn:blizzard:problem:node-not-on-graph",
+        "NOT_A_DECISION_CHOICE": "urn:blizzard:problem:not-a-decision-choice",
+        "NOT_IN_LIST": "urn:blizzard:problem:not-in-list",
+        "NO_ANSWERED_PROPOSAL": "urn:blizzard:problem:no-answered-proposal",
         "NO_CURRENT_NODE": "urn:blizzard:problem:no-current-node",
         "NO_RUN_CONTEXT": "urn:blizzard:problem:no-run-context",
-        "NO_ANSWERED_PROPOSAL": "urn:blizzard:problem:no-answered-proposal",
-        "FINDING_NOT_IN_CHUNK": "urn:blizzard:problem:finding-not-in-chunk",
+        "NO_STANDING_DEPENDENCY": "urn:blizzard:problem:no-standing-dependency",
+        "PERMISSION_REQUIRED": "urn:blizzard:problem:permission-required",
+        "PINNED_GRAPH_MISSING": "urn:blizzard:problem:pinned-graph-missing",
+        "POINTER_ALREADY_HELD": "urn:blizzard:problem:pointer-already-held",
+        "PREREQUISITE_EPHEMERAL": "urn:blizzard:problem:prerequisite-ephemeral",
+        "PROJECT_LINK_NOT_FOUND": "urn:blizzard:problem:project-link-not-found",
+        "PROJECT_NOT_FOUND": "urn:blizzard:problem:project-not-found",
+        "PROJECT_REQUIRED": "urn:blizzard:problem:project-required",
+        "PROJECT_SLUG_TAKEN": "urn:blizzard:problem:project-slug-taken",
+        "QUESTION_ALREADY_ANSWERED": "urn:blizzard:problem:question-already-answered",
+        "QUESTION_CLOSED": "urn:blizzard:problem:question-closed",
         "QUESTION_NOT_FOUND": "urn:blizzard:problem:question-not-found",
-        "RUNNER_NOT_FOUND": "urn:blizzard:problem:runner-not-found",
-        "RUNNER_NOT_REGISTERED": "urn:blizzard:problem:runner-not-registered",
-        "RUNNER_RETIRED": "urn:blizzard:problem:runner-retired",
-        "HOST_RETIRED": "urn:blizzard:problem:host-retired",
-        "RUNNER_OWNERSHIP": "urn:blizzard:problem:runner-ownership",
-        "LEASE_OWNERSHIP": "urn:blizzard:problem:lease-ownership",
+        "QUESTION_WRITE_FENCED": "urn:blizzard:problem:question-write-fenced",
+        "RELEASE_REFUSAL": "urn:blizzard:problem:release-refusal",
+        "REPOSITORY_COORDINATE_TAKEN": "urn:blizzard:problem:repository-coordinate-taken",
+        "REPOSITORY_NOT_FOUND": "urn:blizzard:problem:repository-not-found",
+        "REPOSITORY_SLUG_TAKEN": "urn:blizzard:problem:repository-slug-taken",
+        "RESTART_GRAPH_PIN_CHANGED": "urn:blizzard:problem:restart-graph-pin-changed",
+        "REVISION_CONFLICT": "urn:blizzard:problem:revision-conflict",
+        "RE_DERIVE_SCOPE_REFUSED": "urn:blizzard:problem:re-derive-scope-refused",
+        "ROLE_NOT_ASSIGNABLE": "urn:blizzard:problem:role-not-assignable",
         "ROUTE_NOT_FOUND": "urn:blizzard:problem:route-not-found",
         "ROUTE_NOT_HELD": "urn:blizzard:problem:route-not-held",
         "ROUTE_TERMINAL": "urn:blizzard:problem:route-terminal",
-        "SYSTEM_ARTIFACT_NOT_FOUND": "urn:blizzard:problem:system-artifact-not-found",
-        "HOST_NAME_TAKEN": "urn:blizzard:problem:host-name-taken",
+        "ROUTINE_DEFINITION_INVALID": "urn:blizzard:problem:routine-definition-invalid",
+        "ROUTINE_NOT_FOUND": "urn:blizzard:problem:routine-not-found",
+        "ROUTINE_NOT_RUNNABLE": "urn:blizzard:problem:routine-not-runnable",
+        "ROUTINE_SCOPE_NOT_RELATED": "urn:blizzard:problem:routine-scope-not-related",
         "RUNNER_ALREADY_HOSTED": "urn:blizzard:problem:runner-already-hosted",
-        "RUNNER_LIFECYCLE_CONFLICT": "urn:blizzard:problem:runner-lifecycle-conflict",
-        "RUNNER_HOLDS_ROUTES": "urn:blizzard:problem:runner-holds-routes",
-        "RUNNER_RETIRE_INTERRUPTED": "urn:blizzard:problem:runner-retire-interrupted",
-        "PERMISSION_REQUIRED": "urn:blizzard:problem:permission-required",
-        "MACHINE_CREDENTIAL_FORBIDDEN": "urn:blizzard:problem:machine-credential-forbidden",
         "RUNNER_CREDENTIAL_FORBIDDEN": "urn:blizzard:problem:runner-credential-forbidden",
-        "IDP_DISABLED": "urn:blizzard:problem:idp-disabled",
-        "FEDERATION_RESPONSE_MODE": "urn:blizzard:problem:federation-response-mode",
-        "FEDERATION_CLIENT_REFUSED": "urn:blizzard:problem:federation-client-refused",
-        "FEDERATION_NO_PROVIDER": "urn:blizzard:problem:federation-no-provider",
-        "CLI_REDIRECT_REFUSED": "urn:blizzard:problem:cli-redirect-refused",
-        "CLI_PKCE_REQUIRED": "urn:blizzard:problem:cli-pkce-required",
-        "CLI_TOKEN_REFUSED": "urn:blizzard:problem:cli-token-refused",
-        "LOGIN_DISABLED": "urn:blizzard:problem:login-disabled",
-        "LOGIN_PROVIDER_UNKNOWN": "urn:blizzard:problem:login-provider-unknown",
-        "LOGIN_THROTTLED": "urn:blizzard:problem:login-throttled",
-        "LOGIN_FAILED": "urn:blizzard:problem:login-failed",
-        "SSO_REFUSED": "urn:blizzard:problem:sso-refused",
-        "PROJECT_REQUIRED": "urn:blizzard:problem:project-required",
-        "HUB_STORE_UNAVAILABLE": "urn:blizzard:problem:hub-store-unavailable",
-        "FLAG_OFF": "urn:blizzard:problem:flag-off",
-        "INVARIANTS_IN_PROGRESS": "urn:blizzard:problem:invariants-in-progress",
+        "RUNNER_HOLDS_ROUTES": "urn:blizzard:problem:runner-holds-routes",
+        "RUNNER_IDENTITY": "urn:blizzard:problem:runner-identity",
+        "RUNNER_LIFECYCLE_CONFLICT": "urn:blizzard:problem:runner-lifecycle-conflict",
+        "RUNNER_NOT_ENROLLED": "urn:blizzard:problem:runner-not-enrolled",
+        "RUNNER_NOT_FOUND": "urn:blizzard:problem:runner-not-found",
+        "RUNNER_NOT_REGISTERED": "urn:blizzard:problem:runner-not-registered",
+        "RUNNER_NOT_RETIRED": "urn:blizzard:problem:runner-not-retired",
+        "RUNNER_OWNERSHIP": "urn:blizzard:problem:runner-ownership",
+        "RUNNER_REINSTATE_INTERRUPTED": "urn:blizzard:problem:runner-reinstate-interrupted",
+        "RUNNER_RETIRED": "urn:blizzard:problem:runner-retired",
+        "RUNNER_RETIRE_INTERRUPTED": "urn:blizzard:problem:runner-retire-interrupted",
+        "RUNNER_VERSION": "urn:blizzard:problem:runner-version",
+        "RUN_NOT_FOUND": "urn:blizzard:problem:run-not-found",
+        "SCOPE_NOT_FOUND": "urn:blizzard:problem:scope-not-found",
+        "SCOPE_SLUG_INVALID": "urn:blizzard:problem:scope-slug-invalid",
         "SECRET_ALREADY_EXISTS": "urn:blizzard:problem:secret-already-exists",
+        "SECRET_IN_USE": "urn:blizzard:problem:secret-in-use",
+        "SECRET_NAME_INVALID": "urn:blizzard:problem:secret-name-invalid",
         "SECRET_NOT_FOUND": "urn:blizzard:problem:secret-not-found",
-        "DECISION_ALREADY_RESOLVED": "urn:blizzard:problem:decision-already-resolved",
-        "QUESTION_ALREADY_ANSWERED": "urn:blizzard:problem:question-already-answered",
-        "EGRESS_BACKFILL_FAILED": "urn:blizzard:problem:egress-backfill-failed",
+        "SECRET_RETIRED": "urn:blizzard:problem:secret-retired",
+        "SECRET_VALUE_BLANK": "urn:blizzard:problem:secret-value-blank",
+        "SELF_ANCHORED_MOVE": "urn:blizzard:problem:self-anchored-move",
+        "SPEND_INSTANT_INVALID": "urn:blizzard:problem:spend-instant-invalid",
+        "SSO_REFUSED": "urn:blizzard:problem:sso-refused",
+        "SUBMISSION_NOT_FOUND": "urn:blizzard:problem:submission-not-found",
+        "SWEEP_NOT_FOUND": "urn:blizzard:problem:sweep-not-found",
+        "SWEEP_SERVES_NO_TENANT": "urn:blizzard:problem:sweep-serves-no-tenant",
+        "SYSTEM_ARTIFACT_NOT_FOUND": "urn:blizzard:problem:system-artifact-not-found",
+        "TARGET_GRAPH_RETIRED": "urn:blizzard:problem:target-graph-retired",
+        "TENANT_CREDENTIAL_MISMATCH": "urn:blizzard:problem:tenant-credential-mismatch",
+        "TENANT_DELETED": "urn:blizzard:problem:tenant-deleted",
+        "TENANT_NAME_REFUSED": "urn:blizzard:problem:tenant-name-refused",
+        "TENANT_NOT_FOUND": "urn:blizzard:problem:tenant-not-found",
+        "TENANT_REQUIRED": "urn:blizzard:problem:tenant-required",
         "TRACE_REPLAY_FAILED": "urn:blizzard:problem:trace-replay-failed",
-        "REVISION_CONFLICT": "urn:blizzard:problem:revision-conflict",
-        "POINTER_ALREADY_HELD": "urn:blizzard:problem:pointer-already-held",
-        "DEPENDENT_NOT_EDITABLE": "urn:blizzard:problem:dependent-not-editable",
-        "DEPENDENCY_WOULD_CLOSE_CYCLE": "urn:blizzard:problem:dependency-would-close-cycle",
-        "PREREQUISITE_EPHEMERAL": "urn:blizzard:problem:prerequisite-ephemeral",
-        "NO_STANDING_DEPENDENCY": "urn:blizzard:problem:no-standing-dependency",
-        "CONFIG_APPLY_CONFLICT": "urn:blizzard:problem:config-apply-conflict",
-        "CONFIG_MEDIA_TYPE_UNSUPPORTED": "urn:blizzard:problem:config-media-type-unsupported",
-        "CONFIG_DOCUMENT_INVALID": "urn:blizzard:problem:config-document-invalid",
-        "GRAPH_DEFINITION_INVALID": "urn:blizzard:problem:graph-definition-invalid",
+        "TRACE_REPLAY_UNAVAILABLE": "urn:blizzard:problem:trace-replay-unavailable",
+        "TRACE_REPLAY_WINDOW_REFUSED": "urn:blizzard:problem:trace-replay-window-refused",
+        "TRANSCRIPT_SEGMENT_NOT_FOUND": "urn:blizzard:problem:transcript-segment-not-found",
+        "UNKNOWN_PROJECT": "urn:blizzard:problem:unknown-project",
+        "UNKNOWN_ROLE": "urn:blizzard:problem:unknown-role",
+        "UNKNOWN_SERVED_PROJECT": "urn:blizzard:problem:unknown-served-project",
+        "UNKNOWN_WORK_SOURCE": "urn:blizzard:problem:unknown-work-source",
+        "URGENCY_NOT_FOUND": "urn:blizzard:problem:urgency-not-found",
+        "URGENCY_ICON_NOT_FOUND": "urn:blizzard:problem:urgency-icon-not-found",
+        "URGENCY_IS_DEFAULT": "urn:blizzard:problem:urgency-is-default",
+        "URGENCY_IN_USE": "urn:blizzard:problem:urgency-in-use",
+        "USER_NOT_FOUND": "urn:blizzard:problem:user-not-found",
+        "WORK_ITEMS_CHUNK_IDS_REQUIRED": "urn:blizzard:problem:work-items-chunk-ids-required",
+        "WORK_ITEM_FIELD_BLANK": "urn:blizzard:problem:work-item-field-blank",
+        "WORK_ITEM_HELD_BY_DEPENDENTS": "urn:blizzard:problem:work-item-held-by-dependents",
+        "WORK_ITEM_HELD_BY_LIVE_CHUNK": "urn:blizzard:problem:work-item-held-by-live-chunk",
+        "WORK_ITEM_NOT_EDITABLE": "urn:blizzard:problem:work-item-not-editable",
+        "WORK_ITEM_NOT_FOUND": "urn:blizzard:problem:work-item-not-found",
+        "WORK_SOURCE_LOCATOR_TAKEN": "urn:blizzard:problem:work-source-locator-taken",
+        "WORK_SOURCE_NOT_FOUND": "urn:blizzard:problem:work-source-not-found",
+        "WORK_SOURCE_NO_EDITOR": "urn:blizzard:problem:work-source-no-editor",
+        "WORK_SOURCE_SLUG_TAKEN": "urn:blizzard:problem:work-source-slug-taken",
     }
-    constants = {name: value for name, value in vars(registry).items() if name.isupper() and isinstance(value, str)}
-    assert constants == expected
-    assert len(constants) == len(set(constants.values()))
-    assert set(expected.values()) == PROBLEM_TYPES
+    declarations = [
+        (name, value) for module in _wire_modules() for name, value in _local_problem_constants(module).items()
+    ]
+    assert len(declarations) == len(dict(declarations)), "problem constant names must be unique"
+    assert dict(declarations) == expected
+    assert len(declarations) == len({value for _, value in declarations})
+    assert set(expected.values()) == ALL_PROBLEM_TYPES
 
 
 @pytest.mark.parametrize(
     ("model", "uri"),
     [
-        (RunnerCredentialForbiddenProblem, registry.RUNNER_CREDENTIAL_FORBIDDEN),
-        (IdpDisabledProblem, registry.IDP_DISABLED),
-        (FederationResponseModeProblem, registry.FEDERATION_RESPONSE_MODE),
-        (FederationClientRefusedProblem, registry.FEDERATION_CLIENT_REFUSED),
-        (FederationNoProviderProblem, registry.FEDERATION_NO_PROVIDER),
-        (CliRedirectRefusedProblem, registry.CLI_REDIRECT_REFUSED),
-        (CliPkceRequiredProblem, registry.CLI_PKCE_REQUIRED),
-        (CliTokenRefusedProblem, registry.CLI_TOKEN_REFUSED),
-        (LoginDisabledProblem, registry.LOGIN_DISABLED),
-        (LoginProviderUnknownProblem, registry.LOGIN_PROVIDER_UNKNOWN),
-        (LoginThrottledProblem, registry.LOGIN_THROTTLED),
+        (RunnerCredentialForbiddenProblem, RUNNER_CREDENTIAL_FORBIDDEN),
+        (IdpDisabledProblem, IDP_DISABLED),
+        (FederationResponseModeProblem, FEDERATION_RESPONSE_MODE),
+        (FederationClientRefusedProblem, FEDERATION_CLIENT_REFUSED),
+        (FederationNoProviderProblem, FEDERATION_NO_PROVIDER),
+        (CliRedirectRefusedProblem, CLI_REDIRECT_REFUSED),
+        (CliPkceRequiredProblem, CLI_PKCE_REQUIRED),
+        (CliTokenRefusedProblem, CLI_TOKEN_REFUSED),
+        (LoginDisabledProblem, LOGIN_DISABLED),
+        (LoginProviderUnknownProblem, LOGIN_PROVIDER_UNKNOWN),
+        (LoginThrottledProblem, LOGIN_THROTTLED),
     ],
 )
 def test_auth_problem_discriminators(model: type[ProblemDetails[str]], uri: str) -> None:
@@ -174,14 +349,14 @@ def test_auth_problem_discriminators(model: type[ProblemDetails[str]], uri: str)
     assert model.model_validate(body).problem_dump() == body
     assert model.model_json_schema()["properties"]["type"]["const"] == uri
     with pytest.raises(ValidationError):
-        model.model_validate({**body, "type": registry.CLAIM_CONFLICT})
+        model.model_validate({**body, "type": CLAIM_CONFLICT})
 
 
 @pytest.mark.parametrize(
     ("model", "uri", "error"),
     [
-        (LoginFailedProblem, registry.LOGIN_FAILED, "login_failed"),
-        (SsoRefusedProblem, registry.SSO_REFUSED, "sso_refused"),
+        (LoginFailedProblem, LOGIN_FAILED, "login_failed"),
+        (SsoRefusedProblem, SSO_REFUSED, "sso_refused"),
     ],
 )
 def test_provider_callback_preserves_legacy_error(model: type[ProblemDetails[str]], uri: str, error: str) -> None:
@@ -202,20 +377,20 @@ def test_provider_callback_preserves_legacy_error(model: type[ProblemDetails[str
 
 def test_partial_runner_retirement_has_distinct_problem_type() -> None:
     body = RunnerRetireInterruptedProblem(
-        type=registry.RUNNER_RETIRE_INTERRUPTED,
+        type=RUNNER_RETIRE_INTERRUPTED,
         title="Retirement interrupted",
         detail="retirement interrupted",
         instance="/api/fleet/host/runners/r/retire",
         status=409,
     )
-    assert body.problem_dump()["type"] == registry.RUNNER_RETIRE_INTERRUPTED
-    assert body.model_json_schema()["properties"]["type"]["const"] == registry.RUNNER_RETIRE_INTERRUPTED
+    assert body.problem_dump()["type"] == RUNNER_RETIRE_INTERRUPTED
+    assert body.model_json_schema()["properties"]["type"]["const"] == RUNNER_RETIRE_INTERRUPTED
 
 
 def test_pause_missing_chunk_precheck_and_race_share_semantics() -> None:
     # Both the precheck and ChunkNotFound under the pause lock emit this exact detail.
     body = ChunkNotFoundProblem(
-        type=registry.CHUNK_NOT_FOUND,
+        type=CHUNK_NOT_FOUND,
         title="Chunk not found",
         detail="unknown chunk c",
         instance="/api/fleet/chunks/c/pause",
@@ -292,7 +467,7 @@ def test_openapi_response_uses_nonnullable_optional_status_and_sent_defaults() -
     def problem() -> RunnerIdentityProblem:
         return RunnerIdentityProblem.model_validate(
             {
-                "type": registry.RUNNER_IDENTITY,
+                "type": RUNNER_IDENTITY,
                 "title": "Denied",
                 "detail": "denied",
                 "instance": "/",
@@ -305,7 +480,7 @@ def test_openapi_response_uses_nonnullable_optional_status_and_sent_defaults() -
     assert "status" not in schema["required"]
     assert {variant.get("type") for variant in schema["properties"]["status"]["anyOf"]} == {"integer"}
     assert TestClient(app).get("/problem").json() == {
-        "type": registry.RUNNER_IDENTITY,
+        "type": RUNNER_IDENTITY,
         "title": "Denied",
         "detail": "denied",
         "instance": "/",
@@ -318,7 +493,7 @@ def test_openapi_response_uses_nonnullable_optional_status_and_sent_defaults() -
 def test_normal_problem_serializers_preserve_optional_status(status: int | None) -> None:
     problem = RunnerIdentityProblem.model_validate(
         {
-            "type": registry.RUNNER_IDENTITY,
+            "type": RUNNER_IDENTITY,
             "title": "Denied",
             "detail": "denied",
             "instance": "/",
@@ -328,7 +503,7 @@ def test_normal_problem_serializers_preserve_optional_status(status: int | None)
         }
     )
     expected: dict[str, object] = {
-        "type": registry.RUNNER_IDENTITY,
+        "type": RUNNER_IDENTITY,
         "title": "Denied",
         "detail": "denied",
         "instance": "/",
@@ -493,65 +668,87 @@ def test_legacy_defaults_and_required_fields_survive() -> None:
 
 
 def test_every_declared_type_constant_is_in_the_registry() -> None:
-    modules = (registry, problem_types_admin, problem_types_chunks, problem_types_garden, problem_types_runners)
-    declared = {
-        value
-        for module in modules
-        for value in vars(module).values()
-        if isinstance(value, str) and value.startswith("urn:blizzard:problem:")
-    }
-
+    declared = {value for module in _wire_modules() for value in _local_problem_constants(module).values()}
     assert declared == set(ALL_PROBLEM_TYPES)
 
 
-def _declared_problem_model_literals() -> set[str]:
-    declared: set[str] = set()
-    for module_info in pkgutil.walk_packages(wire.__path__, wire.__name__ + "."):
-        module = importlib.import_module(module_info.name)
-        for name, model in inspect.getmembers(module, inspect.isclass):
-            # Pydantic caches generated generic specializations in the origin's module under non-identifier names.
-            if not name.isidentifier() or model.__module__ != module.__name__ or not issubclass(model, BaseModel):
-                continue
-            if model.__pydantic_generic_metadata__["origin"] is not None:
-                continue
-            field = model.model_fields.get("type")
-            if field is not None:
-                declared.update(
-                    value
-                    for value in get_args(field.annotation)
-                    if isinstance(value, str) and value.startswith("urn:blizzard:problem:")
-                )
-    return declared
+def _local_models(module: ModuleType) -> Iterator[type[BaseModel]]:
+    return (
+        model
+        for name, model in inspect.getmembers(module, inspect.isclass)
+        if name.isidentifier()
+        and model.__module__ == module.__name__
+        and issubclass(model, BaseModel)
+        and model.__pydantic_generic_metadata__["origin"] is None
+    )
+
+
+def _problem_literal_values(model: type[BaseModel]) -> set[str]:
+    field = model.model_fields.get("type")
+    if field is None:
+        return set()
+    return {
+        value
+        for value in get_args(field.annotation)
+        if isinstance(value, str) and value.startswith("urn:blizzard:problem:")
+    }
 
 
 def test_every_problem_model_literal_is_registered() -> None:
-    assert _declared_problem_model_literals() <= ALL_PROBLEM_TYPES
+    declared = {
+        value
+        for module in _wire_modules()
+        for model in _local_models(module)
+        for value in _problem_literal_values(model)
+    }
+    assert declared <= ALL_PROBLEM_TYPES
 
 
 def test_problem_model_census_ignores_generated_generic_specializations(monkeypatch: pytest.MonkeyPatch) -> None:
     uri = "urn:blizzard:problem:external-census-control"
     generated = ProblemDetails[Literal["urn:blizzard:problem:external-census-control"]]
     monkeypatch.setattr(registry, "external_generated_control", generated, raising=False)
-    assert uri not in _declared_problem_model_literals()
+    assert uri not in {v for model in _local_models(registry) for v in _problem_literal_values(model)}
 
     class NamedProblem(generated):
         pass
 
     monkeypatch.setattr(registry, "external_named_control", NamedProblem, raising=False)
-    assert uri not in _declared_problem_model_literals()
-
+    assert uri not in {v for model in _local_models(registry) for v in _problem_literal_values(model)}
     monkeypatch.setattr(NamedProblem, "__module__", registry.__name__)
-    assert uri in _declared_problem_model_literals()
+    assert uri in {v for model in _local_models(registry) for v in _problem_literal_values(model)}
 
 
-def test_every_family_type_is_registered_once_and_named_by_its_concept() -> None:
-    families = (
-        ADMIN_PROBLEM_TYPES,
-        CHUNKS_PROBLEM_TYPES,
-        GARDEN_PROBLEM_TYPES,
-        RUNNERS_PROBLEM_TYPES,
-    )
-    everything = [uri for group in (PROBLEM_TYPES, *families) for uri in group]
+def test_every_problem_model_literal_has_a_local_final() -> None:
+    for module in _wire_modules():
+        local_values = set(_local_problem_constants(module).values())
+        for model in _local_models(module):
+            missing = _problem_literal_values(model) - local_values
+            assert not missing, (
+                f"{module.__name__}.{model.__name__} has problem Literal(s) without a local Final: {sorted(missing)}"
+            )
 
-    assert len(everything) == len(set(everything)) == len(ALL_PROBLEM_TYPES)
-    assert all(uri.startswith("urn:blizzard:problem:") for uri in ALL_PROBLEM_TYPES)
+
+def test_every_concept_type_is_registered_exactly_once() -> None:
+    contributions: list[str] = []
+    for module in _wire_modules():
+        tree = ast.parse(inspect.getsource(module))
+        names = [
+            node.target.id
+            for node in tree.body
+            if isinstance(node, ast.AnnAssign)
+            and isinstance(node.target, ast.Name)
+            and (node.target.id == "PROBLEM_TYPES" or node.target.id.endswith("_PROBLEM_TYPES"))
+            and node.target.id != "ALL_PROBLEM_TYPES"
+        ]
+        local = set(_local_problem_constants(module).values())
+        assert len(names) == (1 if local else 0), (
+            f"{module.__name__}: expected one local contribution for its constants"
+        )
+        for name in names:
+            contribution: object = getattr(module, name)
+            assert isinstance(contribution, frozenset)
+            assert contribution == local, f"{module.__name__}.{name} differs from its local constants"
+            contributions.extend(local)
+    assert len(contributions) == len(set(contributions)), "problem type contributed more than once"
+    assert set(contributions) == ALL_PROBLEM_TYPES

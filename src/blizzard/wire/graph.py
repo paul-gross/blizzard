@@ -3,7 +3,7 @@ choice, session, and rotation views; the sync report; and the summary row."""
 
 from __future__ import annotations
 
-from typing import Annotated, Literal
+from typing import Annotated, Final, Literal
 
 from pydantic import BaseModel, ConfigDict
 
@@ -194,3 +194,71 @@ class GraphSummaryView(WireModel):
     effective: bool
     retired: bool = False
     lifecycle: Annotated[GraphLifecycle | Unrecognized, OPEN] = GraphLifecycle.EFFECTIVE
+
+
+GRAPH_DEFINITION_INVALID: Final = "urn:blizzard:problem:graph-definition-invalid"
+
+
+NODE_NOT_ON_GRAPH: Final = "urn:blizzard:problem:node-not-on-graph"
+
+
+CURRENT_NODE_NOT_ON_GRAPH: Final = "urn:blizzard:problem:current-node-not-on-graph"
+
+
+RESTART_GRAPH_PIN_CHANGED: Final = "urn:blizzard:problem:restart-graph-pin-changed"
+
+
+TARGET_GRAPH_RETIRED: Final = "urn:blizzard:problem:target-graph-retired"
+
+
+MIGRATION_TARGET_IS_CURRENT_PIN: Final = "urn:blizzard:problem:migration-target-is-current-pin"
+
+
+GRAPH_NOT_FOUND: Final = "urn:blizzard:problem:graph-not-found"
+
+
+DEFAULT_GRAPH_RETIRED: Final = "urn:blizzard:problem:default-graph-retired"
+
+
+class NodeNotOnGraphProblem(ProblemDetails[Literal["urn:blizzard:problem:node-not-on-graph"]]):
+    """A restart or forced migration named a node its landing graph does not carry."""
+
+
+class CurrentNodeNotOnGraphProblem(ProblemDetails[Literal["urn:blizzard:problem:current-node-not-on-graph"]]):
+    """The chunk stands on a node its own pinned graph does not carry."""
+
+
+class RestartGraphPinChangedProblem(ProblemDetails[Literal["urn:blizzard:problem:restart-graph-pin-changed"]]):
+    """A concurrent edit re-pinned the chunk between the caller's load and the restart."""
+
+
+class TargetGraphRetiredProblem(ProblemDetails[Literal["urn:blizzard:problem:target-graph-retired"]]):
+    """A graph named explicitly as a new target has been retired."""
+
+
+class MigrationTargetIsCurrentPinProblem(
+    ProblemDetails[Literal["urn:blizzard:problem:migration-target-is-current-pin"]]
+):
+    """An intended migration's target graph is the chunk's own current pin."""
+
+
+class GraphNotFoundProblem(ProblemDetails[Literal["urn:blizzard:problem:graph-not-found"]]):
+    """The named graph does not exist in the tenant."""
+
+
+class DefaultGraphRetiredProblem(ProblemDetails[Literal["urn:blizzard:problem:default-graph-retired"]]):
+    """Every graph named after the packaged default is retired."""
+
+
+GRAPH_PROBLEM_TYPES: frozenset[str] = frozenset(
+    {
+        GRAPH_DEFINITION_INVALID,
+        NODE_NOT_ON_GRAPH,
+        CURRENT_NODE_NOT_ON_GRAPH,
+        RESTART_GRAPH_PIN_CHANGED,
+        TARGET_GRAPH_RETIRED,
+        MIGRATION_TARGET_IS_CURRENT_PIN,
+        GRAPH_NOT_FOUND,
+        DEFAULT_GRAPH_RETIRED,
+    }
+)

@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from datetime import datetime
-from typing import Annotated, Literal
+from typing import Annotated, Final, Literal
 
 from pydantic import BaseModel
 
@@ -70,3 +70,25 @@ class TraceReplayFailure(ProblemDetails[Literal["urn:blizzard:problem:trace-repl
     spans: int
     batches: int
     chunks: int = 0
+
+
+TRACE_REPLAY_FAILED: Final = "urn:blizzard:problem:trace-replay-failed"
+
+
+TRACE_REPLAY_WINDOW_REFUSED: Final = "urn:blizzard:problem:trace-replay-window-refused"
+
+
+TRACE_REPLAY_UNAVAILABLE: Final = "urn:blizzard:problem:trace-replay-unavailable"
+
+
+class TraceReplayWindowRefusedProblem(ProblemDetails[Literal["urn:blizzard:problem:trace-replay-window-refused"]]):
+    """The replay window is inverted, too wide, or reaches past now."""
+
+
+class TraceReplayUnavailableProblem(ProblemDetails[Literal["urn:blizzard:problem:trace-replay-unavailable"]]):
+    """Tracing is off, so a replay that must export cannot run."""
+
+
+TRACES_PROBLEM_TYPES: frozenset[str] = frozenset(
+    {TRACE_REPLAY_FAILED, TRACE_REPLAY_WINDOW_REFUSED, TRACE_REPLAY_UNAVAILABLE}
+)

@@ -4,8 +4,7 @@ from pathlib import Path
 
 import pytest
 
-from blizzard.wire.config import ConfigDocumentInvalidProblem
-from blizzard.wire.problem import CONFIG_DOCUMENT_INVALID
+from blizzard.wire.config import CONFIG_DOCUMENT_INVALID, ConfigDocumentInvalidProblem
 from tests.support.refusal_observation import app_spec, declared_refusal_mismatches
 from tests.support.scaffolding import build_hub
 

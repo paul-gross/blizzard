@@ -11,8 +11,7 @@ from blizzard.hub.api.auth_session import refuse_closed_tenant
 from blizzard.hub.tenancy import TenantClosed, TenantId
 from blizzard.runner.hub.client import HostRefusalReason, HostRefused, HubClientError
 from blizzard.runner.hub.internal.http_hub import HttpHostHubClient
-from blizzard.wire.problem import TENANT_NOT_FOUND
-from blizzard.wire.tenant import TenantNotFoundProblem
+from blizzard.wire.tenant import TENANT_NOT_FOUND, TenantNotFoundProblem
 from tests.support.refusal_observation import RefusalObservation, refusal_mismatches
 from tests.support.scaffolding import build_hub
 

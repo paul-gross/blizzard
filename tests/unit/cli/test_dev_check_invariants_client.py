@@ -11,7 +11,7 @@ import httpx2
 import pytest
 
 from blizzard.cli.main import blizzard
-from blizzard.wire.problem import INVARIANTS_IN_PROGRESS
+from blizzard.wire.invariants import INVARIANTS_IN_PROGRESS
 from tests.support.worker_http import bind_transport
 
 HUB = "http://hub.example"

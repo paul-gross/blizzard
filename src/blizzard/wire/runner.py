@@ -4,7 +4,7 @@ and the runner, registry, binding, capability, and subscription-usage views."""
 from __future__ import annotations
 
 from datetime import datetime
-from typing import Annotated, Literal
+from typing import Annotated, Final, Literal
 
 from pydantic import BaseModel, Field, StringConstraints
 
@@ -471,3 +471,81 @@ class RunnerTokenRevocationResponse(BaseModel):
     """The runner after its token was revoked — still added, now unenrolled."""
 
     runner: RunnerRegistryView
+
+
+RUNNER_IDENTITY: Final = "urn:blizzard:problem:runner-identity"
+
+
+RUNNER_VERSION: Final = "urn:blizzard:problem:runner-version"
+
+
+UNKNOWN_SERVED_PROJECT: Final = "urn:blizzard:problem:unknown-served-project"
+
+
+RUNNER_NOT_FOUND: Final = "urn:blizzard:problem:runner-not-found"
+
+
+RUNNER_NOT_REGISTERED: Final = "urn:blizzard:problem:runner-not-registered"
+
+
+RUNNER_RETIRED: Final = "urn:blizzard:problem:runner-retired"
+
+
+RUNNER_OWNERSHIP: Final = "urn:blizzard:problem:runner-ownership"
+
+
+RUNNER_ALREADY_HOSTED: Final = "urn:blizzard:problem:runner-already-hosted"
+
+
+RUNNER_LIFECYCLE_CONFLICT: Final = "urn:blizzard:problem:runner-lifecycle-conflict"
+
+
+RUNNER_HOLDS_ROUTES: Final = "urn:blizzard:problem:runner-holds-routes"
+
+
+RUNNER_RETIRE_INTERRUPTED: Final = "urn:blizzard:problem:runner-retire-interrupted"
+
+
+DUPLICATE_CAPABILITY_HARNESS: Final = "urn:blizzard:problem:duplicate-capability-harness"
+
+
+RUNNER_NOT_RETIRED: Final = "urn:blizzard:problem:runner-not-retired"
+
+
+RUNNER_NOT_ENROLLED: Final = "urn:blizzard:problem:runner-not-enrolled"
+
+
+RUNNER_REINSTATE_INTERRUPTED: Final = "urn:blizzard:problem:runner-reinstate-interrupted"
+
+
+class RunnerNotRetiredProblem(ProblemDetails[Literal["urn:blizzard:problem:runner-not-retired"]]):
+    """Only a retired runner can be reinstated."""
+
+
+class RunnerNotEnrolledProblem(ProblemDetails[Literal["urn:blizzard:problem:runner-not-enrolled"]]):
+    """The runner holds no token to revoke."""
+
+
+class RunnerReinstateInterruptedProblem(ProblemDetails[Literal["urn:blizzard:problem:runner-reinstate-interrupted"]]):
+    """A runner reinstatement was interrupted after committing part of its work."""
+
+
+RUNNER_PROBLEM_TYPES: frozenset[str] = frozenset(
+    {
+        RUNNER_IDENTITY,
+        RUNNER_VERSION,
+        UNKNOWN_SERVED_PROJECT,
+        RUNNER_NOT_FOUND,
+        RUNNER_NOT_REGISTERED,
+        RUNNER_RETIRED,
+        RUNNER_OWNERSHIP,
+        RUNNER_ALREADY_HOSTED,
+        RUNNER_LIFECYCLE_CONFLICT,
+        RUNNER_HOLDS_ROUTES,
+        RUNNER_RETIRE_INTERRUPTED,
+        DUPLICATE_CAPABILITY_HARNESS,
+        RUNNER_NOT_RETIRED,
+        RUNNER_NOT_ENROLLED,
+        RUNNER_REINSTATE_INTERRUPTED,
+    }
+)

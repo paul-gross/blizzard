@@ -8,8 +8,7 @@ import httpx2
 import pytest
 
 from blizzard.hub.domain.runners.version_window import VersionWindow
-from blizzard.wire.problem import RUNNER_VERSION
-from blizzard.wire.runner import RunnerVersionProblem
+from blizzard.wire.runner import RUNNER_VERSION, RunnerVersionProblem
 from tests.support.scaffolding import HubHarness, build_hub, seed_runner
 
 _WINDOW = VersionWindow(floor="0.2")

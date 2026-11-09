@@ -17,7 +17,7 @@ from blizzard.cli.refusal import refusal_of
 from blizzard.hub.cli.command import FleetCommand
 from blizzard.hub.cli.context import CliContext
 from blizzard.hub.cli.views import Listing
-from blizzard.wire.problem import SECRET_ALREADY_EXISTS, SECRET_NOT_FOUND
+from blizzard.wire.secret import SECRET_ALREADY_EXISTS, SECRET_NOT_FOUND
 
 
 class SecretListing(Listing):

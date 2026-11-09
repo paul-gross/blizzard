@@ -7,9 +7,8 @@ from fastapi import Request
 
 from blizzard.hub.api.auth_session import TenantRequest, resolve_tenant
 from blizzard.hub.api.hub_level import Hub
-from blizzard.wire.auth import AuthenticationUnresolvedProblem
-from blizzard.wire.problem import AUTHENTICATION_UNRESOLVED, TENANT_NOT_FOUND
-from blizzard.wire.tenant import TenantNotFoundProblem
+from blizzard.wire.auth import AUTHENTICATION_UNRESOLVED, AuthenticationUnresolvedProblem
+from blizzard.wire.tenant import TENANT_NOT_FOUND, TenantNotFoundProblem
 from tests.support.hub_request_auth import bearer
 from tests.support.refusal_observation import RefusalObservation, refusal_mismatches
 from tests.support.scaffolding import build_hub, close_tenant, seed_runner

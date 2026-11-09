@@ -3,7 +3,7 @@ view with its attention entries."""
 
 from __future__ import annotations
 
-from typing import Annotated, Literal
+from typing import Annotated, Final, Literal
 
 from pydantic import BaseModel, ConfigDict
 
@@ -185,3 +185,32 @@ class CadenceErrandView(WireModel):
 
 class RevisionConflictProblem(ProblemDetails[Literal["urn:blizzard:problem:revision-conflict"]]):
     """A write's ``If-Match`` named a revision the record has since moved past."""
+
+
+REVISION_CONFLICT: Final = "urn:blizzard:problem:revision-conflict"
+
+
+CADENCE_NOT_FOUND: Final = "urn:blizzard:problem:cadence-not-found"
+
+
+CADENCE_ADMISSION_REFUSED: Final = "urn:blizzard:problem:cadence-admission-refused"
+
+
+CADENCE_SLUG_TAKEN: Final = "urn:blizzard:problem:cadence-slug-taken"
+
+
+class CadenceNotFoundProblem(ProblemDetails[Literal["urn:blizzard:problem:cadence-not-found"]]):
+    """The named cadence does not exist in the tenant."""
+
+
+class CadenceAdmissionRefusedProblem(ProblemDetails[Literal["urn:blizzard:problem:cadence-admission-refused"]]):
+    """A write would leave a cadence promoting its runs, by a caller who may not admit work."""
+
+
+class CadenceSlugTakenProblem(ProblemDetails[Literal["urn:blizzard:problem:cadence-slug-taken"]]):
+    """The project already holds a cadence of that slug."""
+
+
+CADENCE_PROBLEM_TYPES: frozenset[str] = frozenset(
+    {REVISION_CONFLICT, CADENCE_NOT_FOUND, CADENCE_ADMISSION_REFUSED, CADENCE_SLUG_TAKEN}
+)

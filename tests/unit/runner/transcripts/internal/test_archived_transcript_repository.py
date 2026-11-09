@@ -14,7 +14,9 @@ from blizzard.runner.transcripts.internal import http_archived_transcript_reposi
 from blizzard.runner.transcripts.internal.http_archived_transcript_repository import (
     HttpArchivedTranscriptRepository,
 )
-from blizzard.wire import problem
+from blizzard.wire import auth as auth_wire
+from blizzard.wire import runner as runner_wire
+from blizzard.wire import transcript_segment as transcript_segment_wire
 
 
 def _repo(handler: Callable[[httpx2.Request], httpx2.Response]) -> HttpArchivedTranscriptRepository:
@@ -224,13 +226,13 @@ def test_401_and_403_are_refused_not_unreachable(status: int) -> None:
 @pytest.mark.parametrize(
     ("status", "kind", "expected"),
     [
-        (401, problem.AUTHENTICATION_REQUIRED, "refused"),
-        (401, problem.AUTHENTICATION_REVOKED, "refused"),
-        (401, problem.AUTHENTICATION_UNRESOLVED, "refused"),
-        (403, problem.LEASE_OWNERSHIP, "refused"),
-        (403, problem.RUNNER_RETIRED, "refused"),
-        (401, problem.LEASE_OWNERSHIP, "unreachable"),
-        (403, problem.AUTHENTICATION_REQUIRED, "unreachable"),
+        (401, auth_wire.AUTHENTICATION_REQUIRED, "refused"),
+        (401, auth_wire.AUTHENTICATION_REVOKED, "refused"),
+        (401, auth_wire.AUTHENTICATION_UNRESOLVED, "refused"),
+        (403, transcript_segment_wire.LEASE_OWNERSHIP, "refused"),
+        (403, runner_wire.RUNNER_RETIRED, "refused"),
+        (401, transcript_segment_wire.LEASE_OWNERSHIP, "unreachable"),
+        (403, auth_wire.AUTHENTICATION_REQUIRED, "unreachable"),
         (403, "unknown", "unreachable"),
         (401, None, "unreachable"),
         (403, [], "unreachable"),

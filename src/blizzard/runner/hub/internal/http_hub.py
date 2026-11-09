@@ -92,7 +92,14 @@ from blizzard.runner.hub.served_projects import ServedProject
 from blizzard.runner.node_steps.chunk_state import ChunkGate, ChunkPause, ChunkSpend, ChunkState
 from blizzard.runner.node_steps.envelope import Envelope
 from blizzard.runner.node_steps.submissions import ApplyReply, Completion, GateSubmission
+from blizzard.wire import auth as auth_wire
+from blizzard.wire import chunk as chunk_wire
+from blizzard.wire import host as host_wire
 from blizzard.wire import problem
+from blizzard.wire import release as release_wire
+from blizzard.wire import route as route_wire
+from blizzard.wire import runner as runner_wire
+from blizzard.wire import tenant as tenant_wire
 from blizzard.wire.chunk import ChunkStatusView, HubAdvanceResponse
 from blizzard.wire.envelope import ApplyResponse, NodeEnvelope
 from blizzard.wire.facts import HostFactAck, RunnerFactAck
@@ -200,15 +207,15 @@ def _claim_paused(body: Any) -> RouteClaimOutcome:
 
 
 _CLAIM_REFUSALS: dict[tuple[int, str], _ClaimOutcome] = {
-    (HTTPStatus.CONFLICT, problem.CLAIM_TERMINAL): _claim_terminal,
-    (HTTPStatus.CONFLICT, problem.CLAIM_NOT_READY): _claim_terminal,
-    (HTTPStatus.CONFLICT, problem.CLAIM_DEPENDENCY): _claim_dependency,
-    (HTTPStatus.CONFLICT, problem.CLAIM_INCOMPATIBLE): _claim_incompatible,
-    (HTTPStatus.CONFLICT, problem.CLAIM_CONFLICT): _claim_conflict,
-    (HTTPStatus.FORBIDDEN, problem.CLAIM_PAUSED): _claim_paused,
-    (HTTPStatus.FORBIDDEN, problem.CLAIM_RUNNER_RETIRED): _claim_paused,
-    (HTTPStatus.FORBIDDEN, problem.CLAIM_RUNNER_UNREGISTERED): _claim_paused,
-    (HTTPStatus.FORBIDDEN, problem.CLAIM_RUNNER_VERSION_REFUSED): _claim_paused,
+    (HTTPStatus.CONFLICT, route_wire.CLAIM_TERMINAL): _claim_terminal,
+    (HTTPStatus.CONFLICT, route_wire.CLAIM_NOT_READY): _claim_terminal,
+    (HTTPStatus.CONFLICT, route_wire.CLAIM_DEPENDENCY): _claim_dependency,
+    (HTTPStatus.CONFLICT, route_wire.CLAIM_INCOMPATIBLE): _claim_incompatible,
+    (HTTPStatus.CONFLICT, route_wire.CLAIM_CONFLICT): _claim_conflict,
+    (HTTPStatus.FORBIDDEN, route_wire.CLAIM_PAUSED): _claim_paused,
+    (HTTPStatus.FORBIDDEN, route_wire.CLAIM_RUNNER_RETIRED): _claim_paused,
+    (HTTPStatus.FORBIDDEN, route_wire.CLAIM_RUNNER_UNREGISTERED): _claim_paused,
+    (HTTPStatus.FORBIDDEN, route_wire.CLAIM_RUNNER_VERSION_REFUSED): _claim_paused,
 }
 
 #: A typeless 409 from an older hub, told apart by the field it carries; none of them is a race loss.
@@ -235,9 +242,9 @@ def _retire_held(operation: str, resp: httpx2.Response) -> HubClientError | None
         return None
     present, kind = _problem_type(resp)
     if present and kind not in (
-        problem.RUNNER_HOLDS_ROUTES,
-        problem.RUNNER_LIFECYCLE_CONFLICT,
-        problem.RUNNER_RETIRE_INTERRUPTED,
+        runner_wire.RUNNER_HOLDS_ROUTES,
+        runner_wire.RUNNER_LIFECYCLE_CONFLICT,
+        runner_wire.RUNNER_RETIRE_INTERRUPTED,
     ):
         return None
     return HostRunnerRetireRefused(f"{operation} -> {resp.status_code}", detail=_detail(resp))
@@ -247,7 +254,7 @@ def _no_such_project(operation: str, resp: httpx2.Response) -> HubClientError | 
     """An add under the host refused for a named project the tenant does not hold (422 with the hub's text)."""
     if resp.status_code != HTTPStatus.UNPROCESSABLE_ENTITY or not _text_detail(resp):
         return None
-    if not _type_matches(resp, problem.UNKNOWN_SERVED_PROJECT):
+    if not _type_matches(resp, runner_wire.UNKNOWN_SERVED_PROJECT):
         return None
     return RunnerAddRefused(
         f"{operation} -> {resp.status_code}", reason=RunnerAddRefusalReason.NO_SUCH_PROJECT, detail=_detail(resp)
@@ -363,7 +370,7 @@ class HttpHubClient:
         resp = self._get(
             f"{_FLEET_API}/chunks/{chunk_id}/envelope",
             not_found_as=ChunkNotFoundError,
-            ended_conflict=problem.NO_CURRENT_NODE,
+            ended_conflict=chunk_wire.NO_CURRENT_NODE,
         )
         return envelope_of(NodeEnvelope.model_validate(resp.json()))
 
@@ -499,8 +506,8 @@ class HttpHubClient:
         resp = self._post(
             f"{_FLEET_API}/chunks/{chunk_id}/route-token",
             None,
-            ended_conflict=problem.ROUTE_TERMINAL,
-            ended_not_found=problem.ROUTE_NOT_FOUND,
+            ended_conflict=route_wire.ROUTE_TERMINAL,
+            ended_not_found=route_wire.ROUTE_NOT_FOUND,
         )
         return RouteTokenRekeyResponse.model_validate(resp.json()).route_token
 
@@ -514,9 +521,9 @@ class HttpHubClient:
         # Every refusal leaves the route held; which one it was is the hub's to log, not the runner's to act on.
         present, kind = _problem_type(resp)
         release_types: dict[int, tuple[str, ...]] = {
-            HTTPStatus.CONFLICT: (problem.RELEASE_REFUSAL,),
-            HTTPStatus.FORBIDDEN: (problem.ROUTE_NOT_HELD, problem.RUNNER_RETIRED),
-            HTTPStatus.NOT_FOUND: (problem.CHUNK_NOT_FOUND, problem.ROUTE_NOT_FOUND),
+            HTTPStatus.CONFLICT: (release_wire.RELEASE_REFUSAL,),
+            HTTPStatus.FORBIDDEN: (route_wire.ROUTE_NOT_HELD, runner_wire.RUNNER_RETIRED),
+            HTTPStatus.NOT_FOUND: (chunk_wire.CHUNK_NOT_FOUND, route_wire.ROUTE_NOT_FOUND),
         }
         if resp.status_code in _RELEASE_REFUSALS and (not present or kind in release_types[resp.status_code]):
             _log.info("hub refused release", chunk_id=chunk_id, status=resp.status_code, detail=_detail(resp))
@@ -582,7 +589,7 @@ class HttpHubClient:
         if (
             not_found_as is not None
             and resp.status_code == HTTPStatus.NOT_FOUND
-            and (not present or (not_found_as is ChunkNotFoundError and kind == problem.CHUNK_NOT_FOUND))
+            and (not present or (not_found_as is ChunkNotFoundError and kind == chunk_wire.CHUNK_NOT_FOUND))
         ):
             _log.info("hub call refused", operation=operation, status=resp.status_code)
             raise not_found_as(message)
@@ -666,17 +673,17 @@ def _host_add_refusal(resp: httpx2.Response) -> HostAddRefusalReason | None:
     present, kind = _problem_type(resp)
     if present:
         reasons: dict[tuple[int, str], HostAddRefusalReason] = {
-            (HTTPStatus.NOT_FOUND, problem.TENANT_NOT_FOUND): HostAddRefusalReason.NO_SUCH_TENANT,
-            (HTTPStatus.CONFLICT, problem.TENANT_REQUIRED): HostAddRefusalReason.TENANT_REQUIRED,
-            (HTTPStatus.CONFLICT, problem.HOST_NAME_TAKEN): HostAddRefusalReason.NAME_TAKEN,
-            (HTTPStatus.CONFLICT, problem.RUNNER_ALREADY_HOSTED): HostAddRefusalReason.NAME_TAKEN,
-            (HTTPStatus.CONFLICT, problem.RUNNER_RETIRED): HostAddRefusalReason.NAME_TAKEN,
-            (HTTPStatus.CONFLICT, problem.RUNNER_LIFECYCLE_CONFLICT): HostAddRefusalReason.NAME_TAKEN,
-            (HTTPStatus.UNAUTHORIZED, problem.AUTHENTICATION_REQUIRED): HostAddRefusalReason.SIGN_IN_REQUIRED,
-            (HTTPStatus.FORBIDDEN, problem.PERMISSION_REQUIRED): HostAddRefusalReason.FORBIDDEN,
-            (HTTPStatus.FORBIDDEN, problem.MACHINE_CREDENTIAL_FORBIDDEN): HostAddRefusalReason.FORBIDDEN,
-            (HTTPStatus.FORBIDDEN, problem.RUNNER_CREDENTIAL_FORBIDDEN): HostAddRefusalReason.FORBIDDEN,
-            (HTTPStatus.NOT_FOUND, problem.RUNNER_NOT_FOUND): HostAddRefusalReason.RUNNER_NOT_FOUND,
+            (HTTPStatus.NOT_FOUND, tenant_wire.TENANT_NOT_FOUND): HostAddRefusalReason.NO_SUCH_TENANT,
+            (HTTPStatus.CONFLICT, tenant_wire.TENANT_REQUIRED): HostAddRefusalReason.TENANT_REQUIRED,
+            (HTTPStatus.CONFLICT, host_wire.HOST_NAME_TAKEN): HostAddRefusalReason.NAME_TAKEN,
+            (HTTPStatus.CONFLICT, runner_wire.RUNNER_ALREADY_HOSTED): HostAddRefusalReason.NAME_TAKEN,
+            (HTTPStatus.CONFLICT, runner_wire.RUNNER_RETIRED): HostAddRefusalReason.NAME_TAKEN,
+            (HTTPStatus.CONFLICT, runner_wire.RUNNER_LIFECYCLE_CONFLICT): HostAddRefusalReason.NAME_TAKEN,
+            (HTTPStatus.UNAUTHORIZED, auth_wire.AUTHENTICATION_REQUIRED): HostAddRefusalReason.SIGN_IN_REQUIRED,
+            (HTTPStatus.FORBIDDEN, auth_wire.PERMISSION_REQUIRED): HostAddRefusalReason.FORBIDDEN,
+            (HTTPStatus.FORBIDDEN, auth_wire.MACHINE_CREDENTIAL_FORBIDDEN): HostAddRefusalReason.FORBIDDEN,
+            (HTTPStatus.FORBIDDEN, auth_wire.RUNNER_CREDENTIAL_FORBIDDEN): HostAddRefusalReason.FORBIDDEN,
+            (HTTPStatus.NOT_FOUND, runner_wire.RUNNER_NOT_FOUND): HostAddRefusalReason.RUNNER_NOT_FOUND,
         }
         return reasons.get((resp.status_code, kind)) if isinstance(kind, str) else None
     if resp.status_code == HTTPStatus.NOT_FOUND and _detail(resp) == NO_SUCH_TENANT:
@@ -765,9 +772,9 @@ class HttpHostHubClient:
             return resp
         present, kind = _problem_type(resp)
         host_types: dict[int, tuple[str, ...]] = {
-            HTTPStatus.UNAUTHORIZED: tuple(problem.AUTHENTICATION_TYPES),
-            HTTPStatus.FORBIDDEN: (problem.HOST_RETIRED,),
-            HTTPStatus.NOT_FOUND: (problem.RUNNER_NOT_FOUND, problem.TENANT_NOT_FOUND),
+            HTTPStatus.UNAUTHORIZED: tuple(auth_wire.AUTHENTICATION_TYPES),
+            HTTPStatus.FORBIDDEN: (host_wire.HOST_RETIRED,),
+            HTTPStatus.NOT_FOUND: (runner_wire.RUNNER_NOT_FOUND, tenant_wire.TENANT_NOT_FOUND),
         }
         reason = _HOST_REFUSALS.get(resp.status_code)
         if present and (reason is None or kind not in host_types[resp.status_code]):
@@ -877,7 +884,7 @@ _host_runner_adder_conforms: type[IHostRunnerAdder] = HttpHostHubClient
 def _identity_refusal(resp: httpx2.Response) -> TokenRefusal | None:
     """The identity route's typed ``401``, or ``None`` for a ``401`` that is not one — a proxy's,
     say — which the caller treats as any other failed call."""
-    if not _type_matches(resp, problem.RUNNER_IDENTITY):
+    if not _type_matches(resp, runner_wire.RUNNER_IDENTITY):
         return None
     try:
         refusal = RunnerIdentityRefusal.model_validate(resp.json())
@@ -895,7 +902,7 @@ def _version_refusal(resp: httpx2.Response) -> VersionRefusal | None:
     """The window's refusal a ``409`` carries, or ``None`` for any other answer."""
     if resp.status_code != HTTPStatus.CONFLICT:
         return None
-    if not _type_matches(resp, problem.RUNNER_VERSION):
+    if not _type_matches(resp, runner_wire.RUNNER_VERSION):
         return None
     try:
         body = RunnerVersionRefusal.model_validate(resp.json())

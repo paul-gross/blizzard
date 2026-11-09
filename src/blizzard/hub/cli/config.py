@@ -16,7 +16,7 @@ from blizzard.hub.cli.context import CliContext, RawBody
 from blizzard.hub.cli.project_option import project_option, project_query
 from blizzard.hub.cli.views import Listing
 from blizzard.hub.documents import accepted_extensions, codec_for_path
-from blizzard.wire.problem import CONFIG_APPLY_CONFLICT, CONFIG_DOCUMENT_INVALID, CONFIG_MEDIA_TYPE_UNSUPPORTED
+from blizzard.wire.config import CONFIG_APPLY_CONFLICT, CONFIG_DOCUMENT_INVALID, CONFIG_MEDIA_TYPE_UNSUPPORTED
 from blizzard.wire.problem_reading import ProblemReading
 
 _KINDS = click.Choice(

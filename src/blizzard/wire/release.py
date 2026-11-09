@@ -6,7 +6,7 @@ presents a route token that does not match it, and ``404`` for a chunk the tenan
 
 from __future__ import annotations
 
-from typing import Annotated, Literal
+from typing import Annotated, Final, Literal
 
 from pydantic import BaseModel, Field
 
@@ -50,3 +50,9 @@ class ReleaseProblem(ReleaseRefusal, ProblemDetails[Literal["urn:blizzard:proble
 
     chunk_id: str = Field(deprecated=True)
     reason: Annotated[ReleaseRefusalReason | Unrecognized, OPEN] = Field(deprecated=True)
+
+
+RELEASE_REFUSAL: Final = "urn:blizzard:problem:release-refusal"
+
+
+RELEASE_PROBLEM_TYPES: frozenset[str] = frozenset({RELEASE_REFUSAL})

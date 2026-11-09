@@ -6,7 +6,7 @@ transition; a graph gate needs none. Resolution — a person picking one — is 
 
 from __future__ import annotations
 
-from typing import Literal
+from typing import Final, Literal
 
 from pydantic import BaseModel
 
@@ -111,3 +111,32 @@ class DecisionResolutionConflict(ProblemDetails[Literal["urn:blizzard:problem:de
     resolved_choice: str = ""
     resolved_at: str = ""
     detail: str = "decision already resolved"
+
+
+DECISION_ALREADY_RESOLVED: Final = "urn:blizzard:problem:decision-already-resolved"
+
+
+DECISION_NOT_FOUND: Final = "urn:blizzard:problem:decision-not-found"
+
+
+NOT_A_DECISION_CHOICE: Final = "urn:blizzard:problem:not-a-decision-choice"
+
+
+DECISION_CLOSED: Final = "urn:blizzard:problem:decision-closed"
+
+
+class DecisionNotFoundProblem(ProblemDetails[Literal["urn:blizzard:problem:decision-not-found"]]):
+    """The named decision does not exist in the tenant."""
+
+
+class NotADecisionChoiceProblem(ProblemDetails[Literal["urn:blizzard:problem:not-a-decision-choice"]]):
+    """A resolution named a choice the gate does not offer."""
+
+
+class DecisionClosedProblem(ProblemDetails[Literal["urn:blizzard:problem:decision-closed"]]):
+    """A resolution reached a gate something already closed undecided."""
+
+
+DECISION_PROBLEM_TYPES: frozenset[str] = frozenset(
+    {DECISION_ALREADY_RESOLVED, DECISION_NOT_FOUND, NOT_A_DECISION_CHOICE, DECISION_CLOSED}
+)

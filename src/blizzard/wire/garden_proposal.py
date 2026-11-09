@@ -6,7 +6,7 @@ docstring for the convention."""
 
 from __future__ import annotations
 
-from typing import Annotated
+from typing import Annotated, Final, Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -17,6 +17,7 @@ from blizzard.foundation.garden_proposals import (
 )
 from blizzard.foundation.unrecognized import Unrecognized
 from blizzard.wire.base import WireModel
+from blizzard.wire.problem import ProblemDetails
 from blizzard.wire.vocabulary import OPEN
 
 
@@ -146,3 +147,32 @@ class GardenProposalFindingsRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     findings: list[str]
+
+
+GARDEN_PROPOSAL_NOT_FOUND: Final = "urn:blizzard:problem:garden-proposal-not-found"
+
+
+GARDEN_PROPOSAL_ALREADY_CLOSED: Final = "urn:blizzard:problem:garden-proposal-already-closed"
+
+
+GARDEN_PROPOSAL_INVALID: Final = "urn:blizzard:problem:garden-proposal-invalid"
+
+
+class GardenProposalNotFoundProblem(ProblemDetails[Literal["urn:blizzard:problem:garden-proposal-not-found"]]):
+    """The named garden proposal does not exist in the tenant."""
+
+
+class GardenProposalAlreadyClosedProblem(
+    ProblemDetails[Literal["urn:blizzard:problem:garden-proposal-already-closed"]]
+):
+    """The proposal already carries a closure, which is terminal."""
+
+
+class GardenProposalInvalidProblem(ProblemDetails[Literal["urn:blizzard:problem:garden-proposal-invalid"]]):
+    """A garden-proposal write states something that cannot hold: a blank or empty field, a body without a mint,
+    or an unknown, duplicate, exited, foreign or mislinked finding."""
+
+
+GARDEN_PROPOSAL_PROBLEM_TYPES: frozenset[str] = frozenset(
+    {GARDEN_PROPOSAL_NOT_FOUND, GARDEN_PROPOSAL_ALREADY_CLOSED, GARDEN_PROPOSAL_INVALID}
+)

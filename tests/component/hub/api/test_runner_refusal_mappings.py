@@ -11,6 +11,8 @@ from blizzard.hub.api.hub_level import hub_services
 from blizzard.hub.api.problem_exceptions import problem_http_exception
 from blizzard.hub.store.internal.graph_store import GraphStore
 from blizzard.wire import problem
+from blizzard.wire import route as route_wire
+from blizzard.wire import runner as runner_wire
 from blizzard.wire.route import PinnedGraphMissingProblem
 from tests.support.hub_request_auth import bearer
 from tests.support.refusal_observation import RefusalObservation, refusal_mismatches
@@ -25,7 +27,7 @@ def test_runner_registry_refusals_and_declarations(tmp_path: Path) -> None:
     response = hub.client.get(path, headers=bearer(token))
     assert response.status_code == 403
     assert response.headers["content-type"] == "application/problem+json"
-    assert response.json()["type"] == problem.RUNNER_OWNERSHIP
+    assert response.json()["type"] == runner_wire.RUNNER_OWNERSHIP
     assert response.json()["detail"] == "token belongs to runner 'runner-a', not 'runner-b'"
     assert response.json()["instance"] == path
 
@@ -46,7 +48,7 @@ def test_runner_never_connected_problem(tmp_path: Path) -> None:
     response = hub.client.get("/api/fleet/runners/ghost")
     assert response.status_code == 409
     assert response.headers["content-type"] == "application/problem+json"
-    assert response.json()["type"] == problem.RUNNER_NOT_REGISTERED
+    assert response.json()["type"] == runner_wire.RUNNER_NOT_REGISTERED
     assert response.json()["detail"] == "runner ghost has not registered"
 
 
@@ -98,7 +100,7 @@ def test_missing_pinned_graph_refusal_from_runner_operations(
 
     assert response.status_code == 500, response.text
     assert response.headers["content-type"] == "application/problem+json"
-    assert response.json()["type"] == problem.PINNED_GRAPH_MISSING
+    assert response.json()["type"] == route_wire.PINNED_GRAPH_MISSING
     assert response.json()["detail"] == "chunk's pinned graph is missing"
     assert response.json()["instance"] == path
     assert hub.app is not None

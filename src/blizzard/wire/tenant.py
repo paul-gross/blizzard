@@ -118,3 +118,45 @@ class HubEventView(WireModel):
     recorded_at: str
     message: str
     detail: dict[str, Any] | None = None
+
+
+TENANT_REQUIRED: Final = "urn:blizzard:problem:tenant-required"
+
+
+TENANT_NOT_FOUND: Final = "urn:blizzard:problem:tenant-not-found"
+
+
+TENANT_CREDENTIAL_MISMATCH: Final = "urn:blizzard:problem:tenant-credential-mismatch"
+
+
+TENANT_NAME_REFUSED: Final = "urn:blizzard:problem:tenant-name-refused"
+
+
+TENANT_DELETED: Final = "urn:blizzard:problem:tenant-deleted"
+
+
+LAST_TENANT: Final = "urn:blizzard:problem:last-tenant"
+
+
+class TenantNameRefusedProblem(ProblemDetails[Literal["urn:blizzard:problem:tenant-name-refused"]]):
+    """The name is not a tenant name's shape."""
+
+
+class TenantDeletedProblem(ProblemDetails[Literal["urn:blizzard:problem:tenant-deleted"]]):
+    """The tenant was already deleted."""
+
+
+class LastTenantDetail(WireModel):
+    code: Literal["last_tenant"] = "last_tenant"
+    message: str
+
+
+class LastTenantProblem(CommonProblemMembers[Literal["urn:blizzard:problem:last-tenant"], LastTenantDetail]):
+    """The hub's only open tenant cannot be deleted."""
+
+    status: int | None = None
+
+
+TENANT_PROBLEM_TYPES: frozenset[str] = frozenset(
+    {TENANT_REQUIRED, TENANT_NOT_FOUND, TENANT_CREDENTIAL_MISMATCH, TENANT_NAME_REFUSED, TENANT_DELETED, LAST_TENANT}
+)

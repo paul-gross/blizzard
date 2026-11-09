@@ -3,12 +3,14 @@ address fields the forge now carries."""
 
 from __future__ import annotations
 
-from typing import Any, ClassVar, Self, cast
+from typing import Any, ClassVar, Final, Literal, Self, cast
 
 from pydantic import BaseModel, ConfigDict, ModelWrapValidatorHandler, PrivateAttr, model_validator
 from pydantic.config import JsonDict
 
 from blizzard.wire.base import WireModel
+from blizzard.wire.problem import CommonProblemMembers, ProblemDetails
+from blizzard.wire.record_referrer import RecordReferrer
 
 #: The JSON Schema mark of a field kept on the wire only until a later release removes it.
 DEPRECATED_FIELD: JsonDict = {"deprecated": True}
@@ -114,3 +116,82 @@ class ForgeDetail(ForgeSummary):
 
 class ForgesListView(WireModel):
     forges: list[ForgeSummary]
+
+
+FORGE_NOT_FOUND: Final = "urn:blizzard:problem:forge-not-found"
+
+
+FORGE_IN_USE: Final = "urn:blizzard:problem:forge-in-use"
+
+
+FORGE_REVISION_CONFLICT: Final = "urn:blizzard:problem:forge-revision-conflict"
+
+
+FORGE_ORIGIN_TAKEN: Final = "urn:blizzard:problem:forge-origin-taken"
+
+
+FORGE_SLUG_TAKEN: Final = "urn:blizzard:problem:forge-slug-taken"
+
+
+class ForgeNotFoundProblem(ProblemDetails[Literal["urn:blizzard:problem:forge-not-found"]]):
+    """A path names a forge the tenant does not hold."""
+
+
+class ForgeInUseDetail(WireModel):
+    code: Literal["forge_in_use"] = "forge_in_use"
+    message: str
+    referrers: list[RecordReferrer]
+
+
+class ForgeRevisionConflictDetail(WireModel):
+    code: Literal["revision_conflict"] = "revision_conflict"
+    message: str
+    current: int
+
+
+class ForgeOriginTakenDetail(WireModel):
+    code: Literal["forge_origin_taken"] = "forge_origin_taken"
+    message: str
+    holder: str
+    api_base: str
+
+
+class ForgeSlugTakenDetail(WireModel):
+    code: Literal["forge_slug_taken"] = "forge_slug_taken"
+    message: str
+    slug: str
+
+
+class ForgeInUseProblem(CommonProblemMembers[Literal["urn:blizzard:problem:forge-in-use"], ForgeInUseDetail]):
+    """Enabled records still name the forge."""
+
+    status: int | None = None
+
+
+class ForgeRevisionConflictProblem(
+    CommonProblemMembers[Literal["urn:blizzard:problem:forge-revision-conflict"], ForgeRevisionConflictDetail]
+):
+    """A forge write read a revision the store no longer holds."""
+
+    status: int | None = None
+
+
+class ForgeOriginTakenProblem(
+    CommonProblemMembers[Literal["urn:blizzard:problem:forge-origin-taken"], ForgeOriginTakenDetail]
+):
+    """Another forge holds the API origin."""
+
+    status: int | None = None
+
+
+class ForgeSlugTakenProblem(
+    CommonProblemMembers[Literal["urn:blizzard:problem:forge-slug-taken"], ForgeSlugTakenDetail]
+):
+    """Another forge holds the slug."""
+
+    status: int | None = None
+
+
+FORGE_PROBLEM_TYPES: frozenset[str] = frozenset(
+    {FORGE_NOT_FOUND, FORGE_IN_USE, FORGE_REVISION_CONFLICT, FORGE_ORIGIN_TAKEN, FORGE_SLUG_TAKEN}
+)

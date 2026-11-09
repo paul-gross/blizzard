@@ -3,7 +3,7 @@ registry and subscription-usage views."""
 
 from __future__ import annotations
 
-from typing import Annotated, Literal
+from typing import Annotated, Final, Literal
 
 from pydantic import BaseModel, Field, StringConstraints
 
@@ -172,3 +172,65 @@ class HostRetireResponse(WireModel):
 
     host: HostRegistryView
     released_chunk_ids: list[str] = []
+
+
+HOST_RETIRED: Final = "urn:blizzard:problem:host-retired"
+
+
+HOST_NAME_TAKEN: Final = "urn:blizzard:problem:host-name-taken"
+
+
+HOST_NOT_FOUND: Final = "urn:blizzard:problem:host-not-found"
+
+
+HOST_LIFECYCLE_CONFLICT: Final = "urn:blizzard:problem:host-lifecycle-conflict"
+
+
+HOST_RETIREMENT_UNFINISHED: Final = "urn:blizzard:problem:host-retirement-unfinished"
+
+
+HOST_NOT_ENROLLED: Final = "urn:blizzard:problem:host-not-enrolled"
+
+
+HOST_HOLDS_ROUTES: Final = "urn:blizzard:problem:host-holds-routes"
+
+
+HOST_RETIREMENT_INTERRUPTED: Final = "urn:blizzard:problem:host-retirement-interrupted"
+
+
+class HostNotFoundProblem(ProblemDetails[Literal["urn:blizzard:problem:host-not-found"]]):
+    """The named host is not available to the caller."""
+
+
+class HostLifecycleConflictProblem(ProblemDetails[Literal["urn:blizzard:problem:host-lifecycle-conflict"]]):
+    """The host's lifecycle changed during the operation."""
+
+
+class HostRetirementUnfinishedProblem(ProblemDetails[Literal["urn:blizzard:problem:host-retirement-unfinished"]]):
+    """The host's retirement has not finished, so its runners cannot be released."""
+
+
+class HostNotEnrolledProblem(ProblemDetails[Literal["urn:blizzard:problem:host-not-enrolled"]]):
+    """The host holds no token to revoke."""
+
+
+class HostHoldsRoutesProblem(ProblemDetails[Literal["urn:blizzard:problem:host-holds-routes"]]):
+    """A non-forced retirement cannot proceed while a runner under the host holds routes."""
+
+
+class HostRetirementInterruptedProblem(ProblemDetails[Literal["urn:blizzard:problem:host-retirement-interrupted"]]):
+    """A host retirement was interrupted after committing part of its work."""
+
+
+HOST_PROBLEM_TYPES: frozenset[str] = frozenset(
+    {
+        HOST_RETIRED,
+        HOST_NAME_TAKEN,
+        HOST_NOT_FOUND,
+        HOST_LIFECYCLE_CONFLICT,
+        HOST_RETIREMENT_UNFINISHED,
+        HOST_NOT_ENROLLED,
+        HOST_HOLDS_ROUTES,
+        HOST_RETIREMENT_INTERRUPTED,
+    }
+)

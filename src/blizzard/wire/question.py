@@ -3,7 +3,7 @@ view."""
 
 from __future__ import annotations
 
-from typing import Literal
+from typing import Final, Literal
 
 from pydantic import BaseModel
 
@@ -98,3 +98,28 @@ class QuestionView(WireModel):
     project_slug: str | None = None
     #: The project's current display name; absent only from a hub older than the project fields.
     project_name: str | None = None
+
+
+QUESTION_NOT_FOUND: Final = "urn:blizzard:problem:question-not-found"
+
+
+QUESTION_ALREADY_ANSWERED: Final = "urn:blizzard:problem:question-already-answered"
+
+
+QUESTION_WRITE_FENCED: Final = "urn:blizzard:problem:question-write-fenced"
+
+
+QUESTION_CLOSED: Final = "urn:blizzard:problem:question-closed"
+
+
+class QuestionWriteFencedProblem(ProblemDetails[Literal["urn:blizzard:problem:question-write-fenced"]]):
+    """The write fence refused a question.asked row."""
+
+
+class QuestionClosedProblem(ProblemDetails[Literal["urn:blizzard:problem:question-closed"]]):
+    """An answer reached a question whose chunk has ended."""
+
+
+QUESTION_PROBLEM_TYPES: frozenset[str] = frozenset(
+    {QUESTION_NOT_FOUND, QUESTION_ALREADY_ANSWERED, QUESTION_WRITE_FENCED, QUESTION_CLOSED}
+)

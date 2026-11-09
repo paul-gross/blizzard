@@ -4,7 +4,7 @@ results; and the pass-through work items."""
 
 from __future__ import annotations
 
-from typing import Annotated, Literal
+from typing import Annotated, Final, Literal
 
 from pydantic import BaseModel, Field
 
@@ -833,3 +833,204 @@ class PrerequisiteIsEphemeralView(ProblemDetails[Literal["urn:blizzard:problem:p
     and so not a legal prerequisite."""
 
     chunk_id: str
+
+
+CHUNK_NOT_FOUND: Final = "urn:blizzard:problem:chunk-not-found"
+
+
+CHUNK_NOT_PAUSABLE: Final = "urn:blizzard:problem:chunk-not-pausable"
+
+
+NO_CURRENT_NODE: Final = "urn:blizzard:problem:no-current-node"
+
+
+NO_RUN_CONTEXT: Final = "urn:blizzard:problem:no-run-context"
+
+
+NO_ANSWERED_PROPOSAL: Final = "urn:blizzard:problem:no-answered-proposal"
+
+
+FINDING_NOT_IN_CHUNK: Final = "urn:blizzard:problem:finding-not-in-chunk"
+
+
+POINTER_ALREADY_HELD: Final = "urn:blizzard:problem:pointer-already-held"
+
+
+DEPENDENT_NOT_EDITABLE: Final = "urn:blizzard:problem:dependent-not-editable"
+
+
+DEPENDENCY_WOULD_CLOSE_CYCLE: Final = "urn:blizzard:problem:dependency-would-close-cycle"
+
+
+PREREQUISITE_EPHEMERAL: Final = "urn:blizzard:problem:prerequisite-ephemeral"
+
+
+NO_STANDING_DEPENDENCY: Final = "urn:blizzard:problem:no-standing-dependency"
+
+
+INGEST_TOKEN_UNCLAIMED: Final = "urn:blizzard:problem:ingest-token-unclaimed"
+
+
+INGEST_EMPTY: Final = "urn:blizzard:problem:ingest-empty"
+
+
+INGEST_ITEM_PROJECT_MISMATCH: Final = "urn:blizzard:problem:ingest-item-project-mismatch"
+
+
+CHUNK_NOT_ESCALATED: Final = "urn:blizzard:problem:chunk-not-escalated"
+
+
+CHUNK_NOT_RESTARTABLE: Final = "urn:blizzard:problem:chunk-not-restartable"
+
+
+CHUNK_NOT_ROUTED: Final = "urn:blizzard:problem:chunk-not-routed"
+
+
+CHUNK_NOT_PROMOTABLE: Final = "urn:blizzard:problem:chunk-not-promotable"
+
+
+CHUNK_NOT_DEMOTABLE: Final = "urn:blizzard:problem:chunk-not-demotable"
+
+
+CHUNK_NOT_STOPPABLE: Final = "urn:blizzard:problem:chunk-not-stoppable"
+
+
+CHUNK_NOT_DELETABLE: Final = "urn:blizzard:problem:chunk-not-deletable"
+
+
+CHUNK_HAS_DEPENDENTS: Final = "urn:blizzard:problem:chunk-has-dependents"
+
+
+CHUNK_NOT_EDITABLE: Final = "urn:blizzard:problem:chunk-not-editable"
+
+
+CHUNK_ALREADY_MOVED: Final = "urn:blizzard:problem:chunk-already-moved"
+
+
+CHUNK_NOT_GROUPABLE: Final = "urn:blizzard:problem:chunk-not-groupable"
+
+
+CHUNKS_IN_DIFFERENT_PROJECTS: Final = "urn:blizzard:problem:chunks-in-different-projects"
+
+
+FOLD_WOULD_CLOSE_CYCLE: Final = "urn:blizzard:problem:fold-would-close-cycle"
+
+
+BLANK_EDIT_VALUE: Final = "urn:blizzard:problem:blank-edit-value"
+
+
+INVALID_HARNESSES: Final = "urn:blizzard:problem:invalid-harnesses"
+
+
+class IngestTokenUnclaimedProblem(ProblemDetails[Literal["urn:blizzard:problem:ingest-token-unclaimed"]]):
+    """An ingest token no configured work source claims."""
+
+
+class IngestEmptyProblem(ProblemDetails[Literal["urn:blizzard:problem:ingest-empty"]]):
+    """An ingest named no work ref."""
+
+
+class IngestItemProjectMismatchProblem(ProblemDetails[Literal["urn:blizzard:problem:ingest-item-project-mismatch"]]):
+    """A hub item the ingest wraps records a project other than the one the ingest mints into."""
+
+
+class ChunkNotEscalatedProblem(ProblemDetails[Literal["urn:blizzard:problem:chunk-not-escalated"]]):
+    """A requeue targeted a chunk that is not waiting on a human."""
+
+
+class ChunkNotRestartableProblem(ProblemDetails[Literal["urn:blizzard:problem:chunk-not-restartable"]]):
+    """A restart targeted a terminal chunk."""
+
+
+class ChunkNotRoutedProblem(ProblemDetails[Literal["urn:blizzard:problem:chunk-not-routed"]]):
+    """A detach targeted a chunk with no live, claimed route."""
+
+
+class ChunkNotPromotableProblem(ProblemDetails[Literal["urn:blizzard:problem:chunk-not-promotable"]]):
+    """A promote targeted a never-promoted chunk outside the promotable window."""
+
+
+class ChunkNotDemotableProblem(ProblemDetails[Literal["urn:blizzard:problem:chunk-not-demotable"]]):
+    """A demote targeted a chunk that is not resting in the ready lane."""
+
+
+class ChunkNotStoppableProblem(ProblemDetails[Literal["urn:blizzard:problem:chunk-not-stoppable"]]):
+    """A stop targeted a chunk that is already done or stopped."""
+
+
+class ChunkNotDeletableProblem(ProblemDetails[Literal["urn:blizzard:problem:chunk-not-deletable"]]):
+    """A delete targeted a chunk outside the pre-claim window."""
+
+
+class ChunkHasDependentsProblem(ProblemDetails[Literal["urn:blizzard:problem:chunk-has-dependents"]]):
+    """A delete targeted a chunk that is a standing prerequisite for other chunks."""
+
+
+class ChunkNotEditableProblem(ProblemDetails[Literal["urn:blizzard:problem:chunk-not-editable"]]):
+    """An edit supplied a field outside that field's editable window."""
+
+
+class ChunkAlreadyMovedProblem(ProblemDetails[Literal["urn:blizzard:problem:chunk-already-moved"]]):
+    """A graph re-pin named a chunk that has already moved."""
+
+
+class ChunkNotGroupableProblem(ProblemDetails[Literal["urn:blizzard:problem:chunk-not-groupable"]]):
+    """A group named a chunk outside the pre-claim window."""
+
+
+class ChunksInDifferentProjectsProblem(ProblemDetails[Literal["urn:blizzard:problem:chunks-in-different-projects"]]):
+    """A group named a chunk of another project than the survivor's."""
+
+
+class FoldWouldCloseCycleProblem(ProblemDetails[Literal["urn:blizzard:problem:fold-would-close-cycle"]]):
+    """A group would close a cycle in the standing dependency graph."""
+
+
+class BlankEditValueProblem(ProblemDetails[Literal["urn:blizzard:problem:blank-edit-value"]]):
+    """An edit supplied a value that is blank once trimmed."""
+
+
+class InvalidHarnessesProblem(ProblemDetails[Literal["urn:blizzard:problem:invalid-harnesses"]]):
+    """A harness preference contains a blank or a duplicate."""
+
+
+NODE_STEP_NOT_FOUND: Final = "urn:blizzard:problem:node-step-not-found"
+
+CHUNK_PROBLEM_TYPES: frozenset[str] = frozenset(
+    {
+        NODE_STEP_NOT_FOUND,
+        CHUNK_NOT_FOUND,
+        CHUNK_NOT_PAUSABLE,
+        NO_CURRENT_NODE,
+        NO_RUN_CONTEXT,
+        NO_ANSWERED_PROPOSAL,
+        FINDING_NOT_IN_CHUNK,
+        POINTER_ALREADY_HELD,
+        DEPENDENT_NOT_EDITABLE,
+        DEPENDENCY_WOULD_CLOSE_CYCLE,
+        PREREQUISITE_EPHEMERAL,
+        NO_STANDING_DEPENDENCY,
+        INGEST_TOKEN_UNCLAIMED,
+        INGEST_EMPTY,
+        INGEST_ITEM_PROJECT_MISMATCH,
+        CHUNK_NOT_ESCALATED,
+        CHUNK_NOT_RESTARTABLE,
+        CHUNK_NOT_ROUTED,
+        CHUNK_NOT_PROMOTABLE,
+        CHUNK_NOT_DEMOTABLE,
+        CHUNK_NOT_STOPPABLE,
+        CHUNK_NOT_DELETABLE,
+        CHUNK_HAS_DEPENDENTS,
+        CHUNK_NOT_EDITABLE,
+        CHUNK_ALREADY_MOVED,
+        CHUNK_NOT_GROUPABLE,
+        CHUNKS_IN_DIFFERENT_PROJECTS,
+        FOLD_WOULD_CLOSE_CYCLE,
+        BLANK_EDIT_VALUE,
+        INVALID_HARNESSES,
+    }
+)
+
+
+class NodeStepNotFoundProblem(ProblemDetails[Literal["urn:blizzard:problem:node-step-not-found"]]):
+    """The chunk has no node step run by the session or starting at the instant asked for, or no node step at all."""

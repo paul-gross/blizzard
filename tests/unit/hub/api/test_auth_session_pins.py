@@ -17,7 +17,8 @@ from blizzard.hub.auth.models import ResolvedIdentity
 from blizzard.hub.auth.permissions import Permission
 from blizzard.hub.config import HubConfig
 from blizzard.hub.tenancy import TenantId, UnknownTenant
-from blizzard.wire.problem import AUTHENTICATION_UNRESOLVED, TENANT_NOT_FOUND
+from blizzard.wire.auth import AUTHENTICATION_UNRESOLVED
+from blizzard.wire.tenant import TENANT_NOT_FOUND
 
 
 def test_require_reports_the_store_unwired_with_no_store_wired() -> None:

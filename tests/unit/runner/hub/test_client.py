@@ -46,7 +46,11 @@ from blizzard.runner.hub.internal.http_hub import HttpHostHubClient, HttpHubClie
 from blizzard.runner.hub.node_steps import envelope_of
 from blizzard.runner.node_steps.envelope import Choice, EnvelopeNode, ProducesSpec, RotateBounds
 from blizzard.runner.node_steps.submissions import Completion
-from blizzard.wire import problem
+from blizzard.wire import auth as auth_wire
+from blizzard.wire import host as host_wire
+from blizzard.wire import route as route_wire
+from blizzard.wire import runner as runner_wire
+from blizzard.wire import tenant as tenant_wire
 from blizzard.wire.envelope import EnvelopeChoice, NodeConfig, NodeEnvelope
 from blizzard.wire.graph import ProducesEntry, RotatePolicyView
 from blizzard.wire.queue import QueuePeekRequest
@@ -62,23 +66,23 @@ def _client(handler: Callable[[httpx2.Request], httpx2.Response]) -> HttpHubClie
 @pytest.mark.parametrize(
     ("status", "body", "reason"),
     [
-        (404, {"type": problem.TENANT_NOT_FOUND, "detail": "changed"}, HostAddRefusalReason.NO_SUCH_TENANT),
-        (409, {"type": problem.TENANT_REQUIRED, "detail": "changed"}, HostAddRefusalReason.TENANT_REQUIRED),
+        (404, {"type": tenant_wire.TENANT_NOT_FOUND, "detail": "changed"}, HostAddRefusalReason.NO_SUCH_TENANT),
+        (409, {"type": tenant_wire.TENANT_REQUIRED, "detail": "changed"}, HostAddRefusalReason.TENANT_REQUIRED),
         (
             409,
-            {"type": problem.HOST_NAME_TAKEN, "detail": {"code": "tenant_required"}},
+            {"type": host_wire.HOST_NAME_TAKEN, "detail": {"code": "tenant_required"}},
             HostAddRefusalReason.NAME_TAKEN,
         ),
         (404, {"detail": "no such tenant"}, HostAddRefusalReason.NO_SUCH_TENANT),
         (409, {"detail": {"code": "tenant_required"}}, HostAddRefusalReason.TENANT_REQUIRED),
         (404, {"detail": "Not Found"}, HostAddRefusalReason.UNSUPPORTED),
         (409, {"detail": "taken"}, HostAddRefusalReason.NAME_TAKEN),
-        (409, {"type": problem.RUNNER_ALREADY_HOSTED, "detail": "changed"}, HostAddRefusalReason.NAME_TAKEN),
-        (409, {"type": problem.RUNNER_RETIRED, "detail": "changed"}, HostAddRefusalReason.NAME_TAKEN),
-        (409, {"type": problem.RUNNER_LIFECYCLE_CONFLICT, "detail": "changed"}, HostAddRefusalReason.NAME_TAKEN),
-        (403, {"type": problem.MACHINE_CREDENTIAL_FORBIDDEN, "detail": "changed"}, HostAddRefusalReason.FORBIDDEN),
-        (403, {"type": problem.RUNNER_CREDENTIAL_FORBIDDEN, "detail": "changed"}, HostAddRefusalReason.FORBIDDEN),
-        (404, {"type": problem.RUNNER_NOT_FOUND, "detail": "changed"}, HostAddRefusalReason.RUNNER_NOT_FOUND),
+        (409, {"type": runner_wire.RUNNER_ALREADY_HOSTED, "detail": "changed"}, HostAddRefusalReason.NAME_TAKEN),
+        (409, {"type": runner_wire.RUNNER_RETIRED, "detail": "changed"}, HostAddRefusalReason.NAME_TAKEN),
+        (409, {"type": runner_wire.RUNNER_LIFECYCLE_CONFLICT, "detail": "changed"}, HostAddRefusalReason.NAME_TAKEN),
+        (403, {"type": auth_wire.MACHINE_CREDENTIAL_FORBIDDEN, "detail": "changed"}, HostAddRefusalReason.FORBIDDEN),
+        (403, {"type": auth_wire.RUNNER_CREDENTIAL_FORBIDDEN, "detail": "changed"}, HostAddRefusalReason.FORBIDDEN),
+        (404, {"type": runner_wire.RUNNER_NOT_FOUND, "detail": "changed"}, HostAddRefusalReason.RUNNER_NOT_FOUND),
     ],
 )
 def test_host_add_refusals(status: int, body: dict[str, object], reason: HostAddRefusalReason) -> None:
@@ -91,7 +95,7 @@ def test_host_add_refusals(status: int, body: dict[str, object], reason: HostAdd
         assert raised.value.detail == "changed"
 
 
-@pytest.mark.parametrize("kind", [None, "unknown", [], problem.TENANT_REQUIRED])
+@pytest.mark.parametrize("kind", [None, "unknown", [], tenant_wire.TENANT_REQUIRED])
 def test_host_add_unknown_or_wrong_status_type_is_not_legacy(kind: object) -> None:
     transport = httpx2.MockTransport(
         lambda request: httpx2.Response(404, json={"type": kind, "detail": "no such tenant"})
@@ -120,11 +124,11 @@ def test_identity_and_version_unknown_present_type_fail_safely(kind: object) -> 
 
 
 def test_typed_identity_and_version_refusals() -> None:
-    assert _client(_refusing(401, json={"type": problem.RUNNER_IDENTITY, "reason": "missing"})).identity() == (
+    assert _client(_refusing(401, json={"type": runner_wire.RUNNER_IDENTITY, "reason": "missing"})).identity() == (
         TokenRefusal(reason=RunnerTokenRefusalReason.MISSING)
     )
     body = {
-        "type": problem.RUNNER_VERSION,
+        "type": runner_wire.RUNNER_VERSION,
         "reason": "too-old",
         "runner_version": "0.1",
         "hub_version": "0.3",
@@ -138,10 +142,10 @@ def test_typed_identity_and_version_refusals() -> None:
 @pytest.mark.parametrize(
     ("status", "kind", "error"),
     [
-        (409, problem.RUNNER_HOLDS_ROUTES, HostRunnerRetireRefused),
-        (409, problem.RUNNER_LIFECYCLE_CONFLICT, HostRunnerRetireRefused),
-        (409, problem.RUNNER_RETIRE_INTERRUPTED, HostRunnerRetireRefused),
-        (422, problem.UNKNOWN_SERVED_PROJECT, RunnerAddRefused),
+        (409, runner_wire.RUNNER_HOLDS_ROUTES, HostRunnerRetireRefused),
+        (409, runner_wire.RUNNER_LIFECYCLE_CONFLICT, HostRunnerRetireRefused),
+        (409, runner_wire.RUNNER_RETIRE_INTERRUPTED, HostRunnerRetireRefused),
+        (422, runner_wire.UNKNOWN_SERVED_PROJECT, RunnerAddRefused),
     ],
 )
 def test_host_operation_refusals_respect_type(status: int, kind: str, error: type[HubClientError]) -> None:
@@ -169,7 +173,7 @@ def test_host_retire_interrupted_preserves_full_detail(typed: bool) -> None:
     detail = "retirement interrupted: " + "failure " * 100
     body = {"detail": detail}
     if typed:
-        body["type"] = problem.RUNNER_RETIRE_INTERRUPTED
+        body["type"] = runner_wire.RUNNER_RETIRE_INTERRUPTED
     transport = httpx2.MockTransport(lambda request: httpx2.Response(409, json=body))
     client = HttpHostHubClient(httpx2.Client(base_url="http://hub.test", transport=transport), token="token")
     with pytest.raises(HostRunnerRetireRefused) as raised:
@@ -364,15 +368,15 @@ def test_claim_route_403_is_a_paused_denial_not_a_conflict() -> None:
 @pytest.mark.parametrize(
     ("status", "kind", "arm"),
     [
-        (409, problem.CLAIM_CONFLICT, "conflict"),
-        (409, problem.CLAIM_TERMINAL, "denied_terminal"),
-        (409, problem.CLAIM_NOT_READY, "denied_terminal"),
-        (409, problem.CLAIM_DEPENDENCY, "denied_dependency"),
-        (409, problem.CLAIM_INCOMPATIBLE, "denied_incompatible"),
-        (403, problem.CLAIM_PAUSED, "denied_paused"),
-        (403, problem.CLAIM_RUNNER_RETIRED, "denied_paused"),
-        (403, problem.CLAIM_RUNNER_UNREGISTERED, "denied_paused"),
-        (403, problem.CLAIM_RUNNER_VERSION_REFUSED, "denied_paused"),
+        (409, route_wire.CLAIM_CONFLICT, "conflict"),
+        (409, route_wire.CLAIM_TERMINAL, "denied_terminal"),
+        (409, route_wire.CLAIM_NOT_READY, "denied_terminal"),
+        (409, route_wire.CLAIM_DEPENDENCY, "denied_dependency"),
+        (409, route_wire.CLAIM_INCOMPATIBLE, "denied_incompatible"),
+        (403, route_wire.CLAIM_PAUSED, "denied_paused"),
+        (403, route_wire.CLAIM_RUNNER_RETIRED, "denied_paused"),
+        (403, route_wire.CLAIM_RUNNER_UNREGISTERED, "denied_paused"),
+        (403, route_wire.CLAIM_RUNNER_VERSION_REFUSED, "denied_paused"),
     ],
 )
 def test_claim_problem_type_takes_precedence(status: int, kind: str, arm: str) -> None:
@@ -399,8 +403,8 @@ def test_claim_problem_type_takes_precedence(status: int, kind: str, arm: str) -
         (403, "unknown"),
         (409, None),
         (403, None),
-        (403, problem.CLAIM_CONFLICT),
-        (409, problem.CLAIM_PAUSED),
+        (403, route_wire.CLAIM_CONFLICT),
+        (409, route_wire.CLAIM_PAUSED),
     ],
 )
 def test_claim_unexpected_present_type_fails_safely(status: int, kind: str | None) -> None:
@@ -414,15 +418,15 @@ def test_claim_unexpected_present_type_fails_safely(status: int, kind: str | Non
 @pytest.mark.parametrize(
     ("status", "kind"),
     [
-        (409, problem.CLAIM_CONFLICT),
-        (409, problem.CLAIM_TERMINAL),
-        (409, problem.CLAIM_NOT_READY),
-        (409, problem.CLAIM_DEPENDENCY),
-        (409, problem.CLAIM_INCOMPATIBLE),
-        (403, problem.CLAIM_PAUSED),
-        (403, problem.CLAIM_RUNNER_RETIRED),
-        (403, problem.CLAIM_RUNNER_UNREGISTERED),
-        (403, problem.CLAIM_RUNNER_VERSION_REFUSED),
+        (409, route_wire.CLAIM_CONFLICT),
+        (409, route_wire.CLAIM_TERMINAL),
+        (409, route_wire.CLAIM_NOT_READY),
+        (409, route_wire.CLAIM_DEPENDENCY),
+        (409, route_wire.CLAIM_INCOMPATIBLE),
+        (403, route_wire.CLAIM_PAUSED),
+        (403, route_wire.CLAIM_RUNNER_RETIRED),
+        (403, route_wire.CLAIM_RUNNER_UNREGISTERED),
+        (403, route_wire.CLAIM_RUNNER_VERSION_REFUSED),
     ],
 )
 def test_claim_malformed_known_type_fails_as_hub_error(status: int, kind: str) -> None:
@@ -916,7 +920,7 @@ def test_release_untyped_refusal_remains_false(status: int) -> None:
 
 
 def test_release_retired_type_on_wrong_status_is_an_error() -> None:
-    client = _client(_refusing(409, json={"type": problem.RUNNER_RETIRED, "detail": "no"}))
+    client = _client(_refusing(409, json={"type": runner_wire.RUNNER_RETIRED, "detail": "no"}))
     with pytest.raises(HubClientError) as raised:
         client.release("ch_1", epoch=1, route_token=None, reason="done")
     assert type(raised.value) is HubClientError

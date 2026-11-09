@@ -40,7 +40,24 @@ from blizzard.hub.domain.runners.registration import (
 )
 from blizzard.hub.domain.runners.served import UnknownServedProject
 from blizzard.hub.domain.runners.version import RunnerVersionRefused
+from blizzard.wire import auth as auth_wire
+from blizzard.wire import cadence as cadence_wire
+from blizzard.wire import chunk as chunk_wire
+from blizzard.wire import config as config_wire
+from blizzard.wire import decision as decision_wire
+from blizzard.wire import egress as egress_wire
+from blizzard.wire import graph as graph_wire
+from blizzard.wire import host as host_wire
 from blizzard.wire import problem as problem_types
+from blizzard.wire import project as project_wire
+from blizzard.wire import question as question_wire
+from blizzard.wire import route as route_wire
+from blizzard.wire import runner as runner_wire
+from blizzard.wire import secret as secret_wire
+from blizzard.wire import system_artifact as system_artifact_wire
+from blizzard.wire import tenant as tenant_wire
+from blizzard.wire import traces as traces_wire
+from blizzard.wire import transcript_segment as transcript_segment_wire
 from blizzard.wire.auth import (
     AuthenticationRequiredProblem,
     AuthenticationRevokedProblem,
@@ -85,8 +102,18 @@ from blizzard.wire.decision import DecisionResolutionConflict
 from blizzard.wire.egress import EgressBackfillCount, EgressBackfillFailure
 from blizzard.wire.graph import GraphValidationReport
 from blizzard.wire.host import HostNameTakenProblem, HostRetiredProblem
-from blizzard.wire.invariants import InvariantsInProgressProblem
-from blizzard.wire.problem import (
+from blizzard.wire.invariants import INVARIANTS_IN_PROGRESS, InvariantsInProgressProblem
+from blizzard.wire.problem import HubStoreUnavailableProblem
+from blizzard.wire.project import (
+    ProjectRef,
+    ProjectRequiredBody,
+    ProjectRequiredProblem,
+    UnknownProjectDetail,
+    UnknownProjectProblem,
+)
+from blizzard.wire.question import QuestionAlreadyAnsweredProblem, QuestionNotFoundProblem
+from blizzard.wire.release import RELEASE_REFUSAL, ReleaseProblem
+from blizzard.wire.route import (
     CLAIM_CONFLICT,
     CLAIM_DEPENDENCY,
     CLAIM_INCOMPATIBLE,
@@ -96,27 +123,10 @@ from blizzard.wire.problem import (
     CLAIM_RUNNER_UNREGISTERED,
     CLAIM_RUNNER_VERSION_REFUSED,
     CLAIM_TERMINAL,
-    INVARIANTS_IN_PROGRESS,
     MALFORMED_CURSOR,
-    RELEASE_REFUSAL,
     ROUTE_NOT_FOUND,
     ROUTE_NOT_HELD,
     ROUTE_TERMINAL,
-    RUNNER_IDENTITY,
-    RUNNER_VERSION,
-    HubStoreUnavailableProblem,
-)
-from blizzard.wire.problem_types_runners import DUPLICATE_CAPABILITY_HARNESS
-from blizzard.wire.project import (
-    ProjectRef,
-    ProjectRequiredBody,
-    ProjectRequiredProblem,
-    UnknownProjectDetail,
-    UnknownProjectProblem,
-)
-from blizzard.wire.question import QuestionAlreadyAnsweredProblem, QuestionNotFoundProblem
-from blizzard.wire.release import ReleaseProblem
-from blizzard.wire.route import (
     ClaimRunnerRetiredProblem,
     ClaimRunnerUnregisteredProblem,
     ClaimRunnerVersionRefusedProblem,
@@ -133,6 +143,9 @@ from blizzard.wire.route import (
     RouteTerminalProblem,
 )
 from blizzard.wire.runner import (
+    DUPLICATE_CAPABILITY_HARNESS,
+    RUNNER_IDENTITY,
+    RUNNER_VERSION,
     DuplicateCapabilityHarnessProblem,
     RunnerAlreadyHostedProblem,
     RunnerHoldsRoutesProblem,
@@ -161,7 +174,7 @@ from blizzard.wire.transcript_segment import LeaseOwnershipProblem
 
 def unknown_query_project_problem(value: str, *, instance: str) -> UnknownProjectProblem:
     return UnknownProjectProblem(
-        type=problem_types.UNKNOWN_PROJECT,
+        type=project_wire.UNKNOWN_PROJECT,
         title="Unknown project",
         detail=[
             UnknownProjectDetail(loc=["query", "project"], msg=f"unknown project {value!r}", type="unknown_project")
@@ -183,7 +196,7 @@ def hub_store_unavailable_problem(*, instance: str) -> HubStoreUnavailableProble
 
 def runner_credential_forbidden_problem(runner_id: str, *, instance: str) -> RunnerCredentialForbiddenProblem:
     return RunnerCredentialForbiddenProblem(
-        type=problem_types.RUNNER_CREDENTIAL_FORBIDDEN,
+        type=auth_wire.RUNNER_CREDENTIAL_FORBIDDEN,
         title="Runner credential forbidden",
         detail=f"runner token for {runner_id!r} is not valid on an operator verb",
         instance=instance,
@@ -193,7 +206,7 @@ def runner_credential_forbidden_problem(runner_id: str, *, instance: str) -> Run
 
 def idp_disabled_problem(*, instance: str) -> IdpDisabledProblem:
     return IdpDisabledProblem(
-        type=problem_types.IDP_DISABLED,
+        type=auth_wire.IDP_DISABLED,
         title="IdP disabled",
         detail="the IdP surface is not enabled",
         instance=instance,
@@ -203,7 +216,7 @@ def idp_disabled_problem(*, instance: str) -> IdpDisabledProblem:
 
 def federation_response_mode_problem(response_mode: str, *, instance: str) -> FederationResponseModeProblem:
     return FederationResponseModeProblem(
-        type=problem_types.FEDERATION_RESPONSE_MODE,
+        type=auth_wire.FEDERATION_RESPONSE_MODE,
         title="Unsupported response mode",
         detail=f"unknown response_mode {response_mode!r}",
         instance=instance,
@@ -213,7 +226,7 @@ def federation_response_mode_problem(response_mode: str, *, instance: str) -> Fe
 
 def federation_client_refused_problem(*, instance: str) -> FederationClientRefusedProblem:
     return FederationClientRefusedProblem(
-        type=problem_types.FEDERATION_CLIENT_REFUSED,
+        type=auth_wire.FEDERATION_CLIENT_REFUSED,
         title="Federation client refused",
         detail="unknown client or unregistered redirect_uri",
         instance=instance,
@@ -223,7 +236,7 @@ def federation_client_refused_problem(*, instance: str) -> FederationClientRefus
 
 def federation_no_provider_problem(*, instance: str) -> FederationNoProviderProblem:
     return FederationNoProviderProblem(
-        type=problem_types.FEDERATION_NO_PROVIDER,
+        type=auth_wire.FEDERATION_NO_PROVIDER,
         title="No authentication provider",
         detail="no hub session, and no configured providers to authenticate against",
         instance=instance,
@@ -233,7 +246,7 @@ def federation_no_provider_problem(*, instance: str) -> FederationNoProviderProb
 
 def cli_redirect_refused_problem(*, instance: str) -> CliRedirectRefusedProblem:
     return CliRedirectRefusedProblem(
-        type=problem_types.CLI_REDIRECT_REFUSED,
+        type=auth_wire.CLI_REDIRECT_REFUSED,
         title="CLI redirect refused",
         detail="client=cli's redirect_uri must be the registered ephemeral loopback form",
         instance=instance,
@@ -243,7 +256,7 @@ def cli_redirect_refused_problem(*, instance: str) -> CliRedirectRefusedProblem:
 
 def cli_pkce_required_problem(*, instance: str) -> CliPkceRequiredProblem:
     return CliPkceRequiredProblem(
-        type=problem_types.CLI_PKCE_REQUIRED,
+        type=auth_wire.CLI_PKCE_REQUIRED,
         title="CLI PKCE required",
         detail="client=cli requires a PKCE code_challenge (S256) — PKCE is mandatory for this public client",
         instance=instance,
@@ -253,7 +266,7 @@ def cli_pkce_required_problem(*, instance: str) -> CliPkceRequiredProblem:
 
 def cli_token_refused_problem(*, instance: str) -> CliTokenRefusedProblem:
     return CliTokenRefusedProblem(
-        type=problem_types.CLI_TOKEN_REFUSED,
+        type=auth_wire.CLI_TOKEN_REFUSED,
         title="CLI token refused",
         detail="invalid or expired code, PKCE verifier, or redirect_uri",
         instance=instance,
@@ -263,7 +276,7 @@ def cli_token_refused_problem(*, instance: str) -> CliTokenRefusedProblem:
 
 def login_disabled_problem(*, instance: str) -> LoginDisabledProblem:
     return LoginDisabledProblem(
-        type=problem_types.LOGIN_DISABLED,
+        type=auth_wire.LOGIN_DISABLED,
         title="Login disabled",
         detail="login is not enabled",
         instance=instance,
@@ -273,7 +286,7 @@ def login_disabled_problem(*, instance: str) -> LoginDisabledProblem:
 
 def login_provider_unknown_problem(name: str, *, instance: str) -> LoginProviderUnknownProblem:
     return LoginProviderUnknownProblem(
-        type=problem_types.LOGIN_PROVIDER_UNKNOWN,
+        type=auth_wire.LOGIN_PROVIDER_UNKNOWN,
         title="Unknown login provider",
         detail=f"unknown provider {name!r}",
         instance=instance,
@@ -283,7 +296,7 @@ def login_provider_unknown_problem(name: str, *, instance: str) -> LoginProvider
 
 def login_throttled_problem(*, instance: str) -> LoginThrottledProblem:
     return LoginThrottledProblem(
-        type=problem_types.LOGIN_THROTTLED,
+        type=auth_wire.LOGIN_THROTTLED,
         title="Login throttled",
         detail="too many login attempts — try again shortly",
         instance=instance,
@@ -293,7 +306,7 @@ def login_throttled_problem(*, instance: str) -> LoginThrottledProblem:
 
 def login_failed_problem(*, instance: str) -> LoginFailedProblem:
     return LoginFailedProblem(
-        type=problem_types.LOGIN_FAILED,
+        type=auth_wire.LOGIN_FAILED,
         title="Login failed",
         detail="login_failed",
         instance=instance,
@@ -304,7 +317,7 @@ def login_failed_problem(*, instance: str) -> LoginFailedProblem:
 
 def sso_refused_problem(*, instance: str) -> SsoRefusedProblem:
     return SsoRefusedProblem(
-        type=problem_types.SSO_REFUSED,
+        type=auth_wire.SSO_REFUSED,
         title="SSO refused",
         detail="sso_refused",
         instance=instance,
@@ -315,7 +328,7 @@ def sso_refused_problem(*, instance: str) -> SsoRefusedProblem:
 
 def tenant_required_problem(*, instance: str) -> TenantRequiredProblem:
     return TenantRequiredProblem(
-        type=problem_types.TENANT_REQUIRED,
+        type=tenant_wire.TENANT_REQUIRED,
         title="Tenant required",
         instance=instance,
         status=409,
@@ -325,7 +338,7 @@ def tenant_required_problem(*, instance: str) -> TenantRequiredProblem:
 
 def tenant_not_found_problem(*, instance: str) -> TenantNotFoundProblem:
     return TenantNotFoundProblem(
-        type=problem_types.TENANT_NOT_FOUND,
+        type=tenant_wire.TENANT_NOT_FOUND,
         title="Tenant not found",
         detail=NO_SUCH_TENANT,
         instance=instance,
@@ -335,7 +348,7 @@ def tenant_not_found_problem(*, instance: str) -> TenantNotFoundProblem:
 
 def tenant_credential_mismatch_problem(*, instance: str) -> TenantCredentialMismatchProblem:
     return TenantCredentialMismatchProblem(
-        type=problem_types.TENANT_CREDENTIAL_MISMATCH,
+        type=tenant_wire.TENANT_CREDENTIAL_MISMATCH,
         title="Tenant credential mismatch",
         detail="X-Blizzard-Tenant names a tenant other than the presented credential's",
         instance=instance,
@@ -346,7 +359,7 @@ def tenant_credential_mismatch_problem(*, instance: str) -> TenantCredentialMism
 def authentication_required_problem(*, instance: str, detail: str) -> AuthenticationRequiredProblem:
     """The caller supplies the applicable existing missing-session or missing-header detail."""
     return AuthenticationRequiredProblem(
-        type=problem_types.AUTHENTICATION_REQUIRED,
+        type=auth_wire.AUTHENTICATION_REQUIRED,
         title="Authentication required",
         detail=detail,
         instance=instance,
@@ -356,7 +369,7 @@ def authentication_required_problem(*, instance: str, detail: str) -> Authentica
 
 def authentication_revoked_problem(*, instance: str) -> AuthenticationRevokedProblem:
     return AuthenticationRevokedProblem(
-        type=problem_types.AUTHENTICATION_REVOKED,
+        type=auth_wire.AUTHENTICATION_REVOKED,
         title="Authentication revoked",
         detail="bearer token has been revoked",
         instance=instance,
@@ -367,7 +380,7 @@ def authentication_revoked_problem(*, instance: str) -> AuthenticationRevokedPro
 def authentication_unresolved_problem(*, instance: str, detail: str) -> AuthenticationUnresolvedProblem:
     """Detail is chosen by the edge for a runner or host, never from a credential."""
     return AuthenticationUnresolvedProblem(
-        type=problem_types.AUTHENTICATION_UNRESOLVED,
+        type=auth_wire.AUTHENTICATION_UNRESOLVED,
         title="Authentication unresolved",
         detail=detail,
         instance=instance,
@@ -377,7 +390,7 @@ def authentication_unresolved_problem(*, instance: str, detail: str) -> Authenti
 
 def permission_required_problem(permission: Permission, *, instance: str) -> PermissionRequiredProblem:
     return PermissionRequiredProblem(
-        type=problem_types.PERMISSION_REQUIRED,
+        type=auth_wire.PERMISSION_REQUIRED,
         title="Permission required",
         detail=f"missing permission {permission!r}",
         instance=instance,
@@ -387,7 +400,7 @@ def permission_required_problem(permission: Permission, *, instance: str) -> Per
 
 def machine_credential_forbidden_problem(*, instance: str) -> MachineCredentialForbiddenProblem:
     return MachineCredentialForbiddenProblem(
-        type=problem_types.MACHINE_CREDENTIAL_FORBIDDEN,
+        type=auth_wire.MACHINE_CREDENTIAL_FORBIDDEN,
         title="Machine credential forbidden",
         detail="a machine credential is not valid here",
         instance=instance,
@@ -397,7 +410,7 @@ def machine_credential_forbidden_problem(*, instance: str) -> MachineCredentialF
 
 def runner_ownership_problem(*, caller_id: str, runner_id: str, instance: str) -> RunnerOwnershipProblem:
     return RunnerOwnershipProblem(
-        type=problem_types.RUNNER_OWNERSHIP,
+        type=runner_wire.RUNNER_OWNERSHIP,
         title="Runner ownership refused",
         detail=f"token belongs to runner {caller_id!r}, not {runner_id!r}",
         instance=instance,
@@ -407,7 +420,7 @@ def runner_ownership_problem(*, caller_id: str, runner_id: str, instance: str) -
 
 def pinned_graph_missing_problem(*, instance: str) -> PinnedGraphMissingProblem:
     return PinnedGraphMissingProblem(
-        type=problem_types.PINNED_GRAPH_MISSING,
+        type=route_wire.PINNED_GRAPH_MISSING,
         title="Pinned graph missing",
         detail="chunk's pinned graph is missing",
         instance=instance,
@@ -417,7 +430,7 @@ def pinned_graph_missing_problem(*, instance: str) -> PinnedGraphMissingProblem:
 
 def chunk_not_found_problem(chunk_id: str, *, instance: str) -> ChunkNotFoundProblem:
     return ChunkNotFoundProblem(
-        type=problem_types.CHUNK_NOT_FOUND,
+        type=chunk_wire.CHUNK_NOT_FOUND,
         title="Chunk not found",
         detail=f"unknown chunk {chunk_id}",
         instance=instance,
@@ -432,7 +445,7 @@ def chunk_disappeared_problem(exc: ChunkNotFound, *, instance: str) -> ChunkNotF
 
 def chunk_not_pausable_problem(exc: ChunkNotPausable, *, instance: str) -> ChunkNotPausableProblem:
     return ChunkNotPausableProblem(
-        type=problem_types.CHUNK_NOT_PAUSABLE,
+        type=chunk_wire.CHUNK_NOT_PAUSABLE,
         title="Chunk not pausable",
         detail=str(exc),
         instance=instance,
@@ -442,7 +455,7 @@ def chunk_not_pausable_problem(exc: ChunkNotPausable, *, instance: str) -> Chunk
 
 def no_run_context_problem(chunk_id: str, *, instance: str) -> NoRunContextProblem:
     return NoRunContextProblem(
-        type=problem_types.NO_RUN_CONTEXT,
+        type=chunk_wire.NO_RUN_CONTEXT,
         title="No run context",
         detail=f"chunk {chunk_id} carries no run context — not a routine run",
         instance=instance,
@@ -452,7 +465,7 @@ def no_run_context_problem(chunk_id: str, *, instance: str) -> NoRunContextProbl
 
 def no_answered_proposal_problem(chunk_id: str, *, instance: str) -> NoAnsweredProposalProblem:
     return NoAnsweredProposalProblem(
-        type=problem_types.NO_ANSWERED_PROPOSAL,
+        type=chunk_wire.NO_ANSWERED_PROPOSAL,
         title="No answered proposal",
         detail=f"chunk {chunk_id} answers no accepted, minted garden proposal",
         instance=instance,
@@ -462,7 +475,7 @@ def no_answered_proposal_problem(chunk_id: str, *, instance: str) -> NoAnsweredP
 
 def finding_not_in_chunk_problem(chunk_id: str, finding_id: str, *, instance: str) -> FindingNotInChunkProblem:
     return FindingNotInChunkProblem(
-        type=problem_types.FINDING_NOT_IN_CHUNK,
+        type=chunk_wire.FINDING_NOT_IN_CHUNK,
         title="Finding not in chunk",
         detail=f"finding {finding_id} is not among the findings chunk {chunk_id} answers",
         instance=instance,
@@ -472,7 +485,7 @@ def finding_not_in_chunk_problem(chunk_id: str, finding_id: str, *, instance: st
 
 def question_not_found_problem(question_id: str, *, instance: str) -> QuestionNotFoundProblem:
     return QuestionNotFoundProblem(
-        type=problem_types.QUESTION_NOT_FOUND,
+        type=question_wire.QUESTION_NOT_FOUND,
         title="Question not found",
         detail=f"unknown question {question_id}",
         instance=instance,
@@ -482,7 +495,7 @@ def question_not_found_problem(question_id: str, *, instance: str) -> QuestionNo
 
 def runner_not_found_problem(runner_id: str, *, instance: str) -> RunnerNotFoundProblem:
     return RunnerNotFoundProblem(
-        type=problem_types.RUNNER_NOT_FOUND,
+        type=runner_wire.RUNNER_NOT_FOUND,
         title="Runner not found",
         detail=f"unknown runner {runner_id}",
         instance=instance,
@@ -492,7 +505,7 @@ def runner_not_found_problem(runner_id: str, *, instance: str) -> RunnerNotFound
 
 def runner_not_registered_problem(exc: RunnerNeverConnected, *, instance: str) -> RunnerNotRegisteredProblem:
     return RunnerNotRegisteredProblem(
-        type=problem_types.RUNNER_NOT_REGISTERED,
+        type=runner_wire.RUNNER_NOT_REGISTERED,
         title="Runner not registered",
         detail=str(exc),
         instance=instance,
@@ -502,7 +515,7 @@ def runner_not_registered_problem(exc: RunnerNeverConnected, *, instance: str) -
 
 def system_artifact_not_found_problem(name: str, *, instance: str) -> SystemArtifactNotFoundProblem:
     return SystemArtifactNotFoundProblem(
-        type=problem_types.SYSTEM_ARTIFACT_NOT_FOUND,
+        type=system_artifact_wire.SYSTEM_ARTIFACT_NOT_FOUND,
         title="System artifact not found",
         detail=f"no system artifact {name!r}",
         instance=instance,
@@ -512,13 +525,13 @@ def system_artifact_not_found_problem(name: str, *, instance: str) -> SystemArti
 
 def no_current_node_problem(exc: NoCurrentNode, *, instance: str) -> NoCurrentNodeProblem:
     return NoCurrentNodeProblem(
-        type=problem_types.NO_CURRENT_NODE, title="No current node", detail=str(exc), instance=instance, status=409
+        type=chunk_wire.NO_CURRENT_NODE, title="No current node", detail=str(exc), instance=instance, status=409
     )
 
 
 def lease_ownership_problem(exc: LeaseSegmentsNotOwned, *, instance: str) -> LeaseOwnershipProblem:
     return LeaseOwnershipProblem(
-        type=problem_types.LEASE_OWNERSHIP,
+        type=transcript_segment_wire.LEASE_OWNERSHIP,
         title="Lease ownership refused",
         detail=str(exc),
         instance=instance,
@@ -539,13 +552,13 @@ def project_required_problem(exc: ProjectRequired, *, instance: str) -> ProjectR
 def project_choice_problem(detail: ProjectRequiredBody, *, instance: str) -> ProjectRequiredProblem:
     """The ``project_required`` refusal carrying ``detail``, the projects a caller chooses among."""
     return ProjectRequiredProblem(
-        type=problem_types.PROJECT_REQUIRED, title="Project required", instance=instance, status=422, detail=detail
+        type=project_wire.PROJECT_REQUIRED, title="Project required", instance=instance, status=422, detail=detail
     )
 
 
 def unknown_served_project_problem(exc: UnknownServedProject, *, instance: str) -> UnknownServedProjectProblem:
     return UnknownServedProjectProblem(
-        type=problem_types.UNKNOWN_SERVED_PROJECT,
+        type=runner_wire.UNKNOWN_SERVED_PROJECT,
         title="Unknown served project",
         detail=str(exc),
         instance=instance,
@@ -555,7 +568,7 @@ def unknown_served_project_problem(exc: UnknownServedProject, *, instance: str) 
 
 def runner_retired_problem(exc: RunnerRetired, *, instance: str, status_code: int = 403) -> RunnerRetiredProblem:
     return RunnerRetiredProblem(
-        type=problem_types.RUNNER_RETIRED,
+        type=runner_wire.RUNNER_RETIRED,
         title="Runner retired",
         detail=str(exc),
         instance=instance,
@@ -565,19 +578,19 @@ def runner_retired_problem(exc: RunnerRetired, *, instance: str, status_code: in
 
 def host_retired_problem(exc: HostRetired, *, instance: str, status_code: int = 403) -> HostRetiredProblem:
     return HostRetiredProblem(
-        type=problem_types.HOST_RETIRED, title="Host retired", detail=str(exc), instance=instance, status=status_code
+        type=host_wire.HOST_RETIRED, title="Host retired", detail=str(exc), instance=instance, status=status_code
     )
 
 
 def host_name_taken_problem(exc: HostNameTaken, *, instance: str) -> HostNameTakenProblem:
     return HostNameTakenProblem(
-        type=problem_types.HOST_NAME_TAKEN, title="Host name taken", detail=str(exc), instance=instance, status=409
+        type=host_wire.HOST_NAME_TAKEN, title="Host name taken", detail=str(exc), instance=instance, status=409
     )
 
 
 def runner_already_hosted_problem(exc: RunnerAlreadyHosted, *, instance: str) -> RunnerAlreadyHostedProblem:
     return RunnerAlreadyHostedProblem(
-        type=problem_types.RUNNER_ALREADY_HOSTED,
+        type=runner_wire.RUNNER_ALREADY_HOSTED,
         title="Runner already hosted",
         detail=str(exc),
         instance=instance,
@@ -587,7 +600,7 @@ def runner_already_hosted_problem(exc: RunnerAlreadyHosted, *, instance: str) ->
 
 def runner_lifecycle_conflict_problem(exc: RunnerLifecycleConflict, *, instance: str) -> RunnerLifecycleConflictProblem:
     return RunnerLifecycleConflictProblem(
-        type=problem_types.RUNNER_LIFECYCLE_CONFLICT,
+        type=runner_wire.RUNNER_LIFECYCLE_CONFLICT,
         title="Runner lifecycle conflict",
         detail=str(exc),
         instance=instance,
@@ -597,7 +610,7 @@ def runner_lifecycle_conflict_problem(exc: RunnerLifecycleConflict, *, instance:
 
 def runner_holds_routes_problem(exc: RunnerHoldsRoutes, *, instance: str) -> RunnerHoldsRoutesProblem:
     return RunnerHoldsRoutesProblem(
-        type=problem_types.RUNNER_HOLDS_ROUTES,
+        type=runner_wire.RUNNER_HOLDS_ROUTES,
         title="Runner holds routes",
         detail=str(exc),
         instance=instance,
@@ -607,7 +620,7 @@ def runner_holds_routes_problem(exc: RunnerHoldsRoutes, *, instance: str) -> Run
 
 def runner_retire_interrupted_problem(exc: RetireInterrupted, *, instance: str) -> RunnerRetireInterruptedProblem:
     return RunnerRetireInterruptedProblem(
-        type=problem_types.RUNNER_RETIRE_INTERRUPTED,
+        type=runner_wire.RUNNER_RETIRE_INTERRUPTED,
         title="Runner retirement interrupted",
         detail=str(exc),
         instance=instance,
@@ -846,7 +859,7 @@ def invariants_in_progress_problem(*, instance: str) -> InvariantsInProgressProb
 
 def secret_already_exists_problem(detail: str, *, instance: str) -> SecretAlreadyExistsProblem:
     return SecretAlreadyExistsProblem(
-        type=problem_types.SECRET_ALREADY_EXISTS,
+        type=secret_wire.SECRET_ALREADY_EXISTS,
         title="Secret already exists",
         detail=detail,
         instance=instance,
@@ -856,7 +869,7 @@ def secret_already_exists_problem(detail: str, *, instance: str) -> SecretAlread
 
 def secret_not_found_problem(name: str, *, instance: str) -> SecretNotFoundProblem:
     return SecretNotFoundProblem(
-        type=problem_types.SECRET_NOT_FOUND,
+        type=secret_wire.SECRET_NOT_FOUND,
         title="Secret not found",
         detail=f"unknown secret {name}",
         instance=instance,
@@ -868,7 +881,7 @@ def decision_already_resolved_problem(
     decision_id: str, already_resolved_by: str, resolved_choice: str, resolved_at: str, *, instance: str
 ) -> DecisionResolutionConflict:
     return DecisionResolutionConflict(
-        type=problem_types.DECISION_ALREADY_RESOLVED,
+        type=decision_wire.DECISION_ALREADY_RESOLVED,
         title="Decision already resolved",
         instance=instance,
         status=409,
@@ -884,7 +897,7 @@ def question_already_answered_problem(
 ) -> QuestionAlreadyAnsweredProblem:
     """The winning answer, for the loser of a first-write-wins race."""
     return QuestionAlreadyAnsweredProblem(
-        type=problem_types.QUESTION_ALREADY_ANSWERED,
+        type=question_wire.QUESTION_ALREADY_ANSWERED,
         title="Question already answered",
         detail="question already answered",
         instance=instance,
@@ -902,7 +915,7 @@ def egress_backfill_failed_problem(
 ) -> EgressBackfillFailure:
     """Fixed text, never the writer's own error; ``datasets`` counts what was committed before it stopped."""
     return EgressBackfillFailure(
-        type=problem_types.EGRESS_BACKFILL_FAILED,
+        type=egress_wire.EGRESS_BACKFILL_FAILED,
         title="Egress backfill failed",
         detail="the egress writer did not accept a batch; the backfill stopped",
         instance=instance,
@@ -917,7 +930,7 @@ def trace_replay_failed_problem(
 ) -> TraceReplayFailure:
     """Fixed text, never the exporter's own error; the counts are what it accepted before it stopped."""
     return TraceReplayFailure(
-        type=problem_types.TRACE_REPLAY_FAILED,
+        type=traces_wire.TRACE_REPLAY_FAILED,
         title="Trace replay failed",
         detail="the trace exporter did not accept a batch; the replay stopped",
         instance=instance,
@@ -931,7 +944,7 @@ def trace_replay_failed_problem(
 
 def revision_conflict_problem(detail: str, *, instance: str) -> RevisionConflictProblem:
     return RevisionConflictProblem(
-        type=problem_types.REVISION_CONFLICT, title="Revision conflict", detail=detail, instance=instance, status=409
+        type=cadence_wire.REVISION_CONFLICT, title="Revision conflict", detail=detail, instance=instance, status=409
     )
 
 
@@ -939,7 +952,7 @@ def pointer_already_held_problem(
     existing_chunk_id: str, source: str, ref: str, slug: str | None, label: str | None, *, instance: str
 ) -> ChunkIngestConflict:
     return ChunkIngestConflict(
-        type=problem_types.POINTER_ALREADY_HELD,
+        type=chunk_wire.POINTER_ALREADY_HELD,
         title="Pointer already held",
         detail="pointer already held by a live chunk",
         instance=instance,
@@ -957,7 +970,7 @@ def dependent_not_editable_problem(
 ) -> DependentNotEditableView:
     """Carries the released chunk-status string as ``status``, so the HTTP status is the caller's."""
     return DependentNotEditableView(
-        type=problem_types.DEPENDENT_NOT_EDITABLE,
+        type=chunk_wire.DEPENDENT_NOT_EDITABLE,
         title="Dependent not editable",
         detail="dependent chunk is not editable at this status",
         instance=instance,
@@ -970,7 +983,7 @@ def dependency_would_close_cycle_problem(
     dependent_chunk_id: str, prerequisite_chunk_id: str, *, instance: str
 ) -> DependencyWouldCloseCycleView:
     return DependencyWouldCloseCycleView(
-        type=problem_types.DEPENDENCY_WOULD_CLOSE_CYCLE,
+        type=chunk_wire.DEPENDENCY_WOULD_CLOSE_CYCLE,
         title="Dependency would close a cycle",
         detail="declaring this edge would close a cycle in the standing dependency graph",
         instance=instance,
@@ -982,7 +995,7 @@ def dependency_would_close_cycle_problem(
 
 def prerequisite_ephemeral_problem(chunk_id: str, *, instance: str) -> PrerequisiteIsEphemeralView:
     return PrerequisiteIsEphemeralView(
-        type=problem_types.PREREQUISITE_EPHEMERAL,
+        type=chunk_wire.PREREQUISITE_EPHEMERAL,
         title="Prerequisite is ephemeral",
         detail="prerequisite chunk is ephemeral and cannot be named as a prerequisite",
         instance=instance,
@@ -995,7 +1008,7 @@ def no_standing_dependency_problem(
     dependent_chunk_id: str, prerequisite_chunk_id: str, *, instance: str
 ) -> NoStandingDependencyView:
     return NoStandingDependencyView(
-        type=problem_types.NO_STANDING_DEPENDENCY,
+        type=chunk_wire.NO_STANDING_DEPENDENCY,
         title="No standing dependency",
         detail="no standing dependency to release",
         instance=instance,
@@ -1007,7 +1020,7 @@ def no_standing_dependency_problem(
 
 def config_apply_conflict_problem(detail: str, *, instance: str) -> ConfigApplyConflictProblem:
     return ConfigApplyConflictProblem(
-        type=problem_types.CONFIG_APPLY_CONFLICT,
+        type=config_wire.CONFIG_APPLY_CONFLICT,
         title="Configuration conflict",
         detail=detail,
         instance=instance,
@@ -1017,7 +1030,7 @@ def config_apply_conflict_problem(detail: str, *, instance: str) -> ConfigApplyC
 
 def config_media_type_unsupported_problem(detail: str, *, instance: str) -> ConfigMediaTypeUnsupportedProblem:
     return ConfigMediaTypeUnsupportedProblem(
-        type=problem_types.CONFIG_MEDIA_TYPE_UNSUPPORTED,
+        type=config_wire.CONFIG_MEDIA_TYPE_UNSUPPORTED,
         title="Unsupported configuration media type",
         detail=detail,
         instance=instance,
@@ -1028,7 +1041,7 @@ def config_media_type_unsupported_problem(detail: str, *, instance: str) -> Conf
 def config_document_invalid_problem(errors: list[dict[str, object]], *, instance: str) -> ConfigDocumentInvalidProblem:
     """Each error as located, every member it carries kept."""
     return ConfigDocumentInvalidProblem(
-        type=problem_types.CONFIG_DOCUMENT_INVALID,
+        type=config_wire.CONFIG_DOCUMENT_INVALID,
         title="Configuration document invalid",
         detail=[ConfigDocumentError.model_validate(error) for error in errors],
         instance=instance,
@@ -1038,7 +1051,7 @@ def config_document_invalid_problem(errors: list[dict[str, object]], *, instance
 
 def graph_definition_invalid_problem(errors: list[str], warnings: list[str], *, instance: str) -> GraphValidationReport:
     return GraphValidationReport(
-        type=problem_types.GRAPH_DEFINITION_INVALID,
+        type=graph_wire.GRAPH_DEFINITION_INVALID,
         title="Graph definition invalid",
         detail="graph definition invalid",
         instance=instance,

@@ -2,9 +2,12 @@
 
 from __future__ import annotations
 
+from typing import Final, Literal
+
 from pydantic import BaseModel
 
 from blizzard.wire.base import WireModel
+from blizzard.wire.problem import ProblemDetails
 
 
 class FleetSpendView(WireModel):
@@ -33,3 +36,13 @@ class FleetSummaryView(BaseModel):
     running: int
     waiting: int
     needs: int
+
+
+SPEND_INSTANT_INVALID: Final = "urn:blizzard:problem:spend-instant-invalid"
+
+
+class SpendInstantInvalidProblem(ProblemDetails[Literal["urn:blizzard:problem:spend-instant-invalid"]]):
+    """A spend window edge is not an ISO-8601 instant."""
+
+
+FLEET_PROBLEM_TYPES: frozenset[str] = frozenset({SPEND_INSTANT_INVALID})

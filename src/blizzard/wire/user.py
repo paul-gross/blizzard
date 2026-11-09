@@ -3,13 +3,14 @@ caller's tenant views."""
 
 from __future__ import annotations
 
-from typing import Annotated
+from typing import Annotated, Final, Literal
 
 from pydantic import BaseModel
 
 from blizzard.auth_core import Role
 from blizzard.foundation.unrecognized import Unrecognized
 from blizzard.wire.base import WireModel
+from blizzard.wire.problem import ProblemDetails
 from blizzard.wire.vocabulary import OPEN
 
 
@@ -87,3 +88,65 @@ class CallerTenantsView(BaseModel):
     id, and nothing else of the answer. Empty from a hub that predates tenants."""
 
     tenants: list[CallerTenantView] = []
+
+
+USER_NOT_FOUND: Final = "urn:blizzard:problem:user-not-found"
+
+
+MEMBER_NOT_FOUND: Final = "urn:blizzard:problem:member-not-found"
+
+
+LAST_HUB_ADMIN: Final = "urn:blizzard:problem:last-hub-admin"
+
+
+LAST_ADMIN_KEPT: Final = "urn:blizzard:problem:last-admin-kept"
+
+
+MEMBERSHIP_CHANGE_REFUSED: Final = "urn:blizzard:problem:membership-change-refused"
+
+
+ROLE_NOT_ASSIGNABLE: Final = "urn:blizzard:problem:role-not-assignable"
+
+
+UNKNOWN_ROLE: Final = "urn:blizzard:problem:unknown-role"
+
+
+class UserNotFoundProblem(ProblemDetails[Literal["urn:blizzard:problem:user-not-found"]]):
+    """The named user does not exist."""
+
+
+class MemberNotFoundProblem(ProblemDetails[Literal["urn:blizzard:problem:member-not-found"]]):
+    """The named user is not a member of the tenant."""
+
+
+class LastHubAdminProblem(ProblemDetails[Literal["urn:blizzard:problem:last-hub-admin"]]):
+    """The last hub administrator cannot be revoked."""
+
+
+class LastAdminKeptProblem(ProblemDetails[Literal["urn:blizzard:problem:last-admin-kept"]]):
+    """The tenant's last admin cannot be demoted or revoked."""
+
+
+class MembershipChangeRefusedProblem(ProblemDetails[Literal["urn:blizzard:problem:membership-change-refused"]]):
+    """A caller may not change their own membership role."""
+
+
+class RoleNotAssignableProblem(ProblemDetails[Literal["urn:blizzard:problem:role-not-assignable"]]):
+    """The role is not assignable through the API."""
+
+
+class UnknownRoleProblem(ProblemDetails[Literal["urn:blizzard:problem:unknown-role"]]):
+    """The named role is not a role."""
+
+
+USER_PROBLEM_TYPES: frozenset[str] = frozenset(
+    {
+        USER_NOT_FOUND,
+        MEMBER_NOT_FOUND,
+        LAST_HUB_ADMIN,
+        LAST_ADMIN_KEPT,
+        MEMBERSHIP_CHANGE_REFUSED,
+        ROLE_NOT_ASSIGNABLE,
+        UNKNOWN_ROLE,
+    }
+)

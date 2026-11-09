@@ -3,7 +3,7 @@ it is on, and the ones its ``[flags]`` table changed."""
 
 from __future__ import annotations
 
-from typing import Literal, Self
+from typing import Final, Literal, Self
 
 from pydantic import BaseModel
 
@@ -42,3 +42,9 @@ class FlagOffProblem(CommonProblemMembers[Literal["urn:blizzard:problem:flag-off
     carried, which a client before problem details reads."""
 
     status: int | None = None
+
+
+FLAG_OFF: Final = "urn:blizzard:problem:flag-off"
+
+
+FLAGS_PROBLEM_TYPES: frozenset[str] = frozenset({FLAG_OFF})

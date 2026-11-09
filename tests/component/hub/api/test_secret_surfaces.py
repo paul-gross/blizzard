@@ -26,8 +26,12 @@ from blizzard.hub.domain.observability.tracing.attributes import (
     PLATFORM_INSTRUMENTATION_SCOPE_VERSION,
     resource_attributes,
 )
-from blizzard.wire.problem import SECRET_ALREADY_EXISTS, SECRET_NOT_FOUND
-from blizzard.wire.secret import SecretAlreadyExistsProblem, SecretNotFoundProblem
+from blizzard.wire.secret import (
+    SECRET_ALREADY_EXISTS,
+    SECRET_NOT_FOUND,
+    SecretAlreadyExistsProblem,
+    SecretNotFoundProblem,
+)
 from tests.support.config_inputs import build_hosted_hub_app, init_hub
 from tests.support.refusal_observation import declared_refusal_mismatches
 from tests.support.worker_http import Bound, bind_stubs

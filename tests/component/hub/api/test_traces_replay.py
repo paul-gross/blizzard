@@ -18,8 +18,7 @@ from blizzard.foundation.trace_export.settings import TracingSettings
 from blizzard.foundation.trace_spans import FinishedSpan
 from blizzard.hub.cli import hub as hub_group
 from blizzard.hub.store import schema
-from blizzard.wire.problem import TRACE_REPLAY_FAILED
-from blizzard.wire.traces import TraceReplayFailure
+from blizzard.wire.traces import TRACE_REPLAY_FAILED, TraceReplayFailure
 from tests.support.hub_event_rows import hub_event_rows
 from tests.support.refusal_observation import declared_refusal_mismatches
 from tests.support.scaffolding import HubHarness, InMemoryTraceExporter, hub_scoped

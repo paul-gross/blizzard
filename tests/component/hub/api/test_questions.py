@@ -9,8 +9,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from blizzard.wire.problem import QUESTION_ALREADY_ANSWERED
-from blizzard.wire.question import QuestionAlreadyAnsweredProblem
+from blizzard.wire.question import QUESTION_ALREADY_ANSWERED, QuestionAlreadyAnsweredProblem
 from tests.support.chunk_questions import (
     _GRAPH_YAML,  # pyright: ignore[reportPrivateUsage]  # shared test helper, imported from tests.support.chunk_questions
     _POINTER,  # pyright: ignore[reportPrivateUsage]  # shared test helper, imported from tests.support.chunk_questions

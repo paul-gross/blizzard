@@ -2,9 +2,12 @@
 
 from __future__ import annotations
 
+from typing import Final, Literal
+
 from pydantic import BaseModel, ConfigDict
 
 from blizzard.wire.base import WireModel
+from blizzard.wire.problem import ProblemDetails
 
 
 class ScopeCreateRequest(BaseModel):
@@ -54,3 +57,20 @@ class ScopeView(WireModel):
     project_slug: str | None = None
     #: The project's current display name; ``None`` where the hub reports none.
     project_name: str | None = None
+
+
+SCOPE_NOT_FOUND: Final = "urn:blizzard:problem:scope-not-found"
+
+
+SCOPE_SLUG_INVALID: Final = "urn:blizzard:problem:scope-slug-invalid"
+
+
+class ScopeNotFoundProblem(ProblemDetails[Literal["urn:blizzard:problem:scope-not-found"]]):
+    """The named scope does not exist in the project (404 on a read or write, 422 when a run names it)."""
+
+
+class ScopeSlugInvalidProblem(ProblemDetails[Literal["urn:blizzard:problem:scope-slug-invalid"]]):
+    """A scope slug is malformed."""
+
+
+SCOPE_PROBLEM_TYPES: frozenset[str] = frozenset({SCOPE_NOT_FOUND, SCOPE_SLUG_INVALID})

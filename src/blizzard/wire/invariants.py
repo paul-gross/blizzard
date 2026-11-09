@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Literal
+from typing import Final, Literal
 
 from blizzard.wire.base import WireModel
 from blizzard.wire.problem import ProblemDetails
@@ -22,3 +22,9 @@ class InvariantsInProgressProblem(ProblemDetails[Literal["urn:blizzard:problem:i
     problem members for a client before problem details."""
 
     code: Literal["invariants_in_progress"] = "invariants_in_progress"
+
+
+INVARIANTS_IN_PROGRESS: Final = "urn:blizzard:problem:invariants-in-progress"
+
+
+INVARIANTS_PROBLEM_TYPES: frozenset[str] = frozenset({INVARIANTS_IN_PROGRESS})

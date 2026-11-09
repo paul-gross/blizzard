@@ -20,10 +20,15 @@ from blizzard.hub.domain.garden.scopes import ScopeSlug, ScopeSlugError
 from blizzard.hub.store import schema as s
 from blizzard.hub.store.internal.finding_store import FindingStore
 from blizzard.hub.store.internal.garden_proposal_store import GardenProposalStore
-from blizzard.wire import problem_types_admin as admin_types
-from blizzard.wire import problem_types_garden as types
-from blizzard.wire.cadence import RevisionConflictProblem
-from blizzard.wire.problem import REVISION_CONFLICT
+from blizzard.wire import cadence as cadence_wire
+from blizzard.wire import config as config_wire
+from blizzard.wire import garden_proposal as garden_proposal_wire
+from blizzard.wire import garden_run as garden_run_wire
+from blizzard.wire import garden_sweeps as garden_sweeps_wire
+from blizzard.wire import garden_window as garden_window_wire
+from blizzard.wire import routine as routine_wire
+from blizzard.wire import scope as scope_wire
+from blizzard.wire.cadence import REVISION_CONFLICT, RevisionConflictProblem
 from tests.support.refusal_observation import declared_refusal_mismatches
 from tests.support.scaffolding import (
     HubHarness,
@@ -113,8 +118,8 @@ def test_an_unknown_routine_is_a_typed_404(hub: HubHarness) -> None:
         "get",
         "/api/routines/{routine_id}",
         404,
-        types.RoutineNotFoundProblem,
-        types.ROUTINE_NOT_FOUND,
+        routine_wire.RoutineNotFoundProblem,
+        routine_wire.ROUTINE_NOT_FOUND,
         "unknown routine rt_missing",
     )
 
@@ -130,8 +135,8 @@ def test_a_retired_routine_refuses_a_run_as_not_runnable(hub: HubHarness) -> Non
         "post",
         "/api/routines/{routine_id}/run",
         503,
-        types.RoutineNotRunnableProblem,
-        types.ROUTINE_NOT_RUNNABLE,
+        routine_wire.RoutineNotRunnableProblem,
+        routine_wire.ROUTINE_NOT_RUNNABLE,
         resp.json()["detail"],
     )
 
@@ -145,8 +150,8 @@ def test_a_run_naming_an_unheld_scope_is_a_typed_422(hub: HubHarness) -> None:
         "post",
         "/api/routines/{routine_id}/run",
         422,
-        types.ScopeNotFoundProblem,
-        types.SCOPE_NOT_FOUND,
+        scope_wire.ScopeNotFoundProblem,
+        scope_wire.SCOPE_NOT_FOUND,
         "unknown scope 'elsewhere'",
     )
 
@@ -164,8 +169,8 @@ def test_a_routine_trend_over_an_unknown_routine_and_a_bad_instant(hub: HubHarne
         "get",
         "/api/routines/trend",
         404,
-        types.RoutineNotFoundProblem,
-        types.ROUTINE_NOT_FOUND,
+        routine_wire.RoutineNotFoundProblem,
+        routine_wire.ROUTINE_NOT_FOUND,
         "unknown routine 'nope'",
     )
     _routine(hub)
@@ -178,8 +183,8 @@ def test_a_routine_trend_over_an_unknown_routine_and_a_bad_instant(hub: HubHarne
         "get",
         "/api/routines/trend",
         422,
-        types.GardenWindowInvalidProblem,
-        types.GARDEN_WINDOW_INVALID,
+        garden_window_wire.GardenWindowInvalidProblem,
+        garden_window_wire.GARDEN_WINDOW_INVALID,
         "since 'x' is not a valid ISO-8601 instant",
     )
 
@@ -192,8 +197,8 @@ def test_an_unknown_scope_and_a_malformed_slug_are_typed(hub: HubHarness) -> Non
         "get",
         "/api/scopes/{slug}",
         404,
-        types.ScopeNotFoundProblem,
-        types.SCOPE_NOT_FOUND,
+        scope_wire.ScopeNotFoundProblem,
+        scope_wire.SCOPE_NOT_FOUND,
         "unknown scope nope",
     )
     with pytest.raises(ScopeSlugError) as caught:
@@ -205,8 +210,8 @@ def test_an_unknown_scope_and_a_malformed_slug_are_typed(hub: HubHarness) -> Non
         "post",
         "/api/scopes",
         422,
-        types.ScopeSlugInvalidProblem,
-        types.SCOPE_SLUG_INVALID,
+        scope_wire.ScopeSlugInvalidProblem,
+        scope_wire.SCOPE_SLUG_INVALID,
         str(caught.value),
     )
 
@@ -220,8 +225,8 @@ def test_a_null_field_and_a_stale_revision_on_a_scope_are_typed(hub: HubHarness)
         "patch",
         "/api/scopes/{slug}",
         422,
-        admin_types.ConfigFieldInvalidProblem,
-        admin_types.CONFIG_FIELD_INVALID,
+        config_wire.ConfigFieldInvalidProblem,
+        config_wire.CONFIG_FIELD_INVALID,
         null_field.json()["detail"],
     )
     assert [(entry["loc"], entry["type"]) for entry in body["detail"]] == [(["body", "description"], "value_error")]
@@ -246,8 +251,8 @@ def test_an_unknown_cadence_is_a_typed_404(hub: HubHarness) -> None:
         "get",
         "/api/cadences/{cadence_id}",
         404,
-        types.CadenceNotFoundProblem,
-        types.CADENCE_NOT_FOUND,
+        cadence_wire.CadenceNotFoundProblem,
+        cadence_wire.CADENCE_NOT_FOUND,
         "unknown cadence cd_missing",
     )
 
@@ -260,8 +265,8 @@ def test_an_unknown_garden_proposal_is_a_typed_404(hub: HubHarness) -> None:
         "get",
         "/api/garden-proposals/{proposal_id}",
         404,
-        types.GardenProposalNotFoundProblem,
-        types.GARDEN_PROPOSAL_NOT_FOUND,
+        garden_proposal_wire.GardenProposalNotFoundProblem,
+        garden_proposal_wire.GARDEN_PROPOSAL_NOT_FOUND,
         "unknown garden proposal gprop_missing",
     )
 
@@ -275,8 +280,8 @@ def test_a_blank_pass_reason_and_a_closed_proposal_are_typed(hub: HubHarness) ->
         "post",
         "/api/garden-proposals/{proposal_id}/pass",
         422,
-        types.GardenProposalInvalidProblem,
-        types.GARDEN_PROPOSAL_INVALID,
+        garden_proposal_wire.GardenProposalInvalidProblem,
+        garden_proposal_wire.GARDEN_PROPOSAL_INVALID,
         blank.json()["detail"],
     )
     assert hub.client.post("/api/garden-proposals/gprop_1/pass", json={"reason": "no"}).status_code == 200
@@ -287,8 +292,8 @@ def test_a_blank_pass_reason_and_a_closed_proposal_are_typed(hub: HubHarness) ->
         "post",
         "/api/garden-proposals/{proposal_id}/pass",
         409,
-        types.GardenProposalAlreadyClosedProblem,
-        types.GARDEN_PROPOSAL_ALREADY_CLOSED,
+        garden_proposal_wire.GardenProposalAlreadyClosedProblem,
+        garden_proposal_wire.GARDEN_PROPOSAL_ALREADY_CLOSED,
         closed.json()["detail"],
     )
 
@@ -302,8 +307,8 @@ def test_an_unknown_finding_id_on_attach_is_a_typed_422(hub: HubHarness) -> None
         "post",
         "/api/garden-proposals/{proposal_id}/attach",
         422,
-        types.GardenProposalInvalidProblem,
-        types.GARDEN_PROPOSAL_INVALID,
+        garden_proposal_wire.GardenProposalInvalidProblem,
+        garden_proposal_wire.GARDEN_PROPOSAL_INVALID,
         "unknown finding id(s): fin_nope",
     )
 
@@ -319,8 +324,8 @@ def test_a_proposal_naming_an_unknown_routine_is_a_typed_422(hub: HubHarness) ->
         "post",
         "/api/garden-proposals",
         422,
-        types.RoutineNotFoundProblem,
-        types.ROUTINE_NOT_FOUND,
+        routine_wire.RoutineNotFoundProblem,
+        routine_wire.ROUTINE_NOT_FOUND,
         "unknown routine 'ghost'",
     )
 
@@ -333,8 +338,8 @@ def test_runs_refuse_a_bad_instant_and_an_unknown_run(hub: HubHarness) -> None:
         "get",
         "/api/runs",
         422,
-        types.GardenWindowInvalidProblem,
-        types.GARDEN_WINDOW_INVALID,
+        garden_window_wire.GardenWindowInvalidProblem,
+        garden_window_wire.GARDEN_WINDOW_INVALID,
         "since 'soon' is not a valid ISO-8601 instant",
     )
     missing = hub.client.get("/api/runs/ch_missing")
@@ -344,8 +349,8 @@ def test_runs_refuse_a_bad_instant_and_an_unknown_run(hub: HubHarness) -> None:
         "get",
         "/api/runs/{chunk_id}",
         404,
-        types.RunNotFoundProblem,
-        types.RUN_NOT_FOUND,
+        garden_run_wire.RunNotFoundProblem,
+        garden_run_wire.RUN_NOT_FOUND,
         "unknown run ch_missing",
     )
 
@@ -358,8 +363,8 @@ def test_an_unknown_sweep_is_a_typed_404_on_both_doors(hub: HubHarness) -> None:
         "post",
         "/api/sweeps/{name}/passes",
         404,
-        types.SweepNotFoundProblem,
-        types.SWEEP_NOT_FOUND,
+        garden_sweeps_wire.SweepNotFoundProblem,
+        garden_sweeps_wire.SWEEP_NOT_FOUND,
         tenant.json()["detail"],
     )
     assert "nope" in body["detail"]
@@ -373,7 +378,7 @@ def test_a_tenant_pass_of_an_every_tenant_sweep_is_a_typed_422(hub: HubHarness) 
         "post",
         "/api/sweeps/{name}/passes",
         422,
-        types.SweepServesNoTenantProblem,
-        types.SWEEP_SERVES_NO_TENANT,
+        garden_sweeps_wire.SweepServesNoTenantProblem,
+        garden_sweeps_wire.SWEEP_SERVES_NO_TENANT,
         resp.json()["detail"],
     )

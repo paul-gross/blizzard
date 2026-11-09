@@ -74,8 +74,15 @@ from blizzard.hub.domain.runners.registration import (
 )
 from blizzard.hub.domain.runners.served import UnknownServedProject
 from blizzard.hub.domain.runners.version import RunnerVersionRefused, VersionJudgement, VersionRefusal
-from blizzard.wire.problem import CLAIM_CONFLICT, CLAIM_DEPENDENCY, CLAIM_TERMINAL, CommonProblemMembers
-from blizzard.wire.route import RouteClaimConflictProblem, RouteClaimDependencyProblem, RouteClaimTerminalProblem
+from blizzard.wire.problem import CommonProblemMembers
+from blizzard.wire.route import (
+    CLAIM_CONFLICT,
+    CLAIM_DEPENDENCY,
+    CLAIM_TERMINAL,
+    RouteClaimConflictProblem,
+    RouteClaimDependencyProblem,
+    RouteClaimTerminalProblem,
+)
 from blizzard.wire.runner import RunnerIdentityProblem
 
 
