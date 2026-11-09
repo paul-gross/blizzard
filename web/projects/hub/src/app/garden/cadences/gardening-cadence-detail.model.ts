@@ -9,6 +9,7 @@ import {
 } from 'fleet';
 
 import type { CadenceDraft } from './cadence-form';
+import { knownAnchor } from './cadence-vocabulary';
 import type { CadenceLifecycleVars } from './cadence-lifecycle.mutations';
 import type { AttentionVm, CadencePanelVm, ChorePanelVm, ErrandRowVm } from './cadence-panel';
 import { attentionReasonLabel, choreModeLabel, errandStateLook } from './cadence-vocabulary';
@@ -106,19 +107,20 @@ export function cadenceDraftOf(cadence: CadenceView): CadenceDraft {
     cron: cadence.schedule?.cron ?? '',
     zone: cadence.schedule?.zone ?? '',
     spacing: spacingInput(cadence.spacing_minutes),
-    anchor: cadence.anchor ?? '',
+    anchor: knownAnchor(cadence.anchor ?? null),
   };
 }
 
 /** The edit body a draft states: its name and whole rhythm, a blank schedule, spacing, or anchor clearing it. */
-export function editCadenceRequest(draft: CadenceDraft): CadenceEditRequest {
+export function editCadenceRequest(draft: CadenceDraft, held?: CadenceView): CadenceEditRequest {
   const cron = draft.cron.trim();
   const zone = draft.zone.trim();
   return {
     name: draft.name.trim(),
     schedule: cron || zone ? { cron: cron || null, zone: zone || null } : null,
     spacing: draft.spacing.trim() || null,
-    anchor: draft.anchor || null,
+    // A stored anchor this build does not know opens blank; leave it as stored rather than clearing it.
+    ...(draft.anchor === '' && held?.anchor && knownAnchor(held.anchor) === '' ? {} : { anchor: draft.anchor || null }),
   };
 }
 

@@ -14,6 +14,7 @@ import pytest
 from blizzard.auth_core import Role
 from blizzard.hub.api import auth_session
 from blizzard.hub.auth.permissions import Permission, permissions_for
+from blizzard.wire.problem import CONFIG_DOCUMENT_INVALID
 from tests.support.scaffolding import HubHarness, build_hub
 
 
@@ -87,6 +88,24 @@ def test_an_entry_that_cannot_mean_anything_is_refused_at_its_field(hub: HubHarn
 
     assert resp.status_code == 422, resp.text
     assert resp.json()["detail"][0]["loc"] == ["body", "cadences", 0, "schedule.cron"]
+    assert _cadences(hub) == []
+
+
+def test_an_unknown_anchor_is_refused_at_its_entry_and_nothing_applies(hub: HubHarness) -> None:
+    resp = _apply(
+        hub,
+        {
+            "cadences": [
+                {"slug": "first", "spacing": "1d"},
+                {"slug": "second", "spacing": "1d", "anchor": "whenever"},
+            ]
+        },
+    )
+
+    assert resp.status_code == 422, resp.text
+    assert resp.json()["detail"][0]["loc"] == ["body", "cadences", 1, "anchor"]
+    assert resp.json()["type"] == CONFIG_DOCUMENT_INVALID
+    assert resp.json()["detail"][0]["type"] == "enum"
     assert _cadences(hub) == []
 
 

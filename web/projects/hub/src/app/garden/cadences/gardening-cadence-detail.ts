@@ -91,7 +91,7 @@ export class GardeningCadenceDetail {
   );
 
   protected onEdit(draft: CadenceDraft): void {
-    this.send(editCadenceRequest(draft), 'Save failed.');
+    this.send(editCadenceRequest(draft, this.selected() ?? undefined), 'Save failed.');
   }
 
   protected onAddChore(draft: ChoreDraft): void {

@@ -41,7 +41,7 @@ describe('FleetCadenceForm', () => {
   });
 
   it('fixes the slug on an edit, opening on the cadence’s own values', async () => {
-    const initial = { slug: 'evening', name: 'Evening', cron: '0 20 * * *', zone: 'UTC', spacing: '', anchor: '' };
+    const initial: CadenceDraft = { slug: 'evening', name: 'Evening', cron: '0 20 * * *', zone: 'UTC', spacing: '', anchor: '' };
     const { q, saved } = await mount(false, initial);
 
     expect(q('slug')).toBeNull();

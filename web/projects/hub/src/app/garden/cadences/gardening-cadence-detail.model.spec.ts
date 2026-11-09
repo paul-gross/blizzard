@@ -166,6 +166,13 @@ describe('the cadence edit form', () => {
       editCadenceRequest({ slug: 'evening', name: 'e', cron: '0 21 * * *', zone: 'UTC', spacing: '2d', anchor: 'started' }),
     ).toEqual({ name: 'e', schedule: { cron: '0 21 * * *', zone: 'UTC' }, spacing: '2d', anchor: 'started' });
   });
+
+  it('leaves a stored anchor this build does not know as stored when the form is blank', () => {
+    const held = gardenCadenceView({ slug: 'evening', anchor: 'sometime' as never });
+    const draft = cadenceDraftOf(held);
+    expect(draft.anchor).toBe('');
+    expect(editCadenceRequest(draft, held)).not.toHaveProperty('anchor');
+  });
 });
 
 describe('the whole chore list', () => {

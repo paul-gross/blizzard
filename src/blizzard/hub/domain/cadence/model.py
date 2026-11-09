@@ -90,27 +90,19 @@ class Rhythm:
         zone: str | None,
         has_schedule: bool,
         spacing: str | None,
-        anchor: str | None,
+        anchor: CadenceAnchor | None,
         at: datetime,
     ) -> Rhythm:
         """The stated rhythm, refused naming the field when nothing would ever come due, the schedule or spacing
-        is malformed, or an anchor is stated without a spacing or outside the three anchors. ``has_schedule`` says
+        is malformed, or an anchor is stated without a spacing. ``has_schedule`` says
         a schedule table was stated, even an empty one; ``at`` is the instant the never-firing check reads from."""
         schedule = Schedule.parse(cron, zone, at=at) if has_schedule else None
         parsed_spacing = Spacing.parse(spacing) if spacing is not None else None
         if schedule is None and parsed_spacing is None:
             raise ConfigFieldError("schedule", "a cadence states a schedule, a spacing, or both")
-        parsed_anchor: CadenceAnchor | None = None
-        if anchor is not None:
-            if parsed_spacing is None:
-                raise ConfigFieldError("anchor", "an anchor counts a spacing, and this cadence states none")
-            try:
-                parsed_anchor = CadenceAnchor(anchor)
-            except ValueError as exc:
-                raise ConfigFieldError(
-                    "anchor", f"an anchor is scheduled, started, or finished, got {anchor!r}"
-                ) from exc
-        return cls(schedule, parsed_spacing, parsed_anchor)
+        if anchor is not None and parsed_spacing is None:
+            raise ConfigFieldError("anchor", "an anchor counts a spacing, and this cadence states none")
+        return cls(schedule, parsed_spacing, anchor)
 
 
 @domain_model
@@ -363,7 +355,7 @@ class CadenceShape:
     name: str | None = None
     schedule: ScheduleShape | None = None
     spacing: str | None = None
-    anchor: str | None = None
+    anchor: CadenceAnchor | None = None
     chores: Sequence[ChoreShape] = ()
 
 
@@ -377,7 +369,7 @@ class CadenceEdit:
     name: str | None | UnsetType = UNSET
     schedule: ScheduleShape | None | UnsetType = UNSET
     spacing: str | None | UnsetType = UNSET
-    anchor: str | None | UnsetType = UNSET
+    anchor: CadenceAnchor | None | UnsetType = UNSET
     chores: Sequence[ChoreShape] | UnsetType = UNSET
 
     def touches_rhythm(self) -> bool:
@@ -429,7 +421,9 @@ def _chore_changes(stored: Sequence[Chore], merge: ChoreMerge) -> tuple[FieldCha
     return tuple(entries)
 
 
-def _parse_rhythm(schedule: ScheduleShape | None, spacing: str | None, anchor: str | None, *, at: datetime) -> Rhythm:
+def _parse_rhythm(
+    schedule: ScheduleShape | None, spacing: str | None, anchor: CadenceAnchor | None, *, at: datetime
+) -> Rhythm:
     return Rhythm.parse(
         cron=schedule.cron if schedule is not None else None,
         zone=schedule.zone if schedule is not None else None,
@@ -543,11 +537,10 @@ class Cadence:
         held = self.rhythm
         held_schedule = None if held.schedule is None else ScheduleShape(held.schedule.cron, held.schedule.zone)
         held_spacing = None if held.spacing is None else f"{held.spacing.minutes}m"
-        held_anchor = None if held.anchor is None else held.anchor.value
         return _parse_rhythm(
             held_schedule if edit.schedule is UNSET else edit.schedule,
             held_spacing if edit.spacing is UNSET else edit.spacing,
-            held_anchor if edit.anchor is UNSET else edit.anchor,
+            held.anchor if edit.anchor is UNSET else edit.anchor,
             at=at,
         )
 

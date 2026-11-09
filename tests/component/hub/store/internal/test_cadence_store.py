@@ -47,7 +47,7 @@ _SHAPE = CadenceShape(
     name="Evening sweep",
     schedule=ScheduleShape("0 20 * * *", "America/Chicago"),
     spacing="10d",
-    anchor="finished",
+    anchor=CadenceAnchor.FINISHED,
     chores=(
         ChoreShape("arch", "architecture-sweep", scopes="all", mode="delta", note="Weigh the lanes."),
         ChoreShape("tests", "test-gaps", scopes=["runner", "hub"], promote=False),

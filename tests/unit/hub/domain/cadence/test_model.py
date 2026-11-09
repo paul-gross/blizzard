@@ -43,7 +43,7 @@ def _rhythm(
     zone: str | None = "America/Chicago",
     has_schedule: bool = True,
     spacing: str | None = None,
-    anchor: str | None = None,
+    anchor: CadenceAnchor | None = None,
 ) -> Rhythm:
     return Rhythm.parse(cron=cron, zone=zone, has_schedule=has_schedule, spacing=spacing, anchor=anchor, at=_AT)
 
@@ -55,7 +55,7 @@ def test_a_schedule_alone_a_spacing_alone_and_both_are_each_a_rhythm() -> None:
     assert _rhythm().spacing is None
     alone = _rhythm(has_schedule=False, spacing="10d")
     assert alone.schedule is None and alone.spacing == Spacing(14400)
-    both = _rhythm(spacing="36h", anchor="finished")
+    both = _rhythm(spacing="36h", anchor=CadenceAnchor.FINISHED)
     assert both.schedule is not None and both.spacing == Spacing(2160) and both.anchor is CadenceAnchor.FINISHED
 
 
@@ -73,9 +73,8 @@ def test_a_spacing_parses_to_whole_minutes(raw: str, minutes: int) -> None:
     ("kwargs", "field"),
     [
         ({"has_schedule": False}, "schedule"),
-        ({"has_schedule": False, "anchor": "started"}, "schedule"),
-        ({"anchor": "started"}, "anchor"),
-        ({"spacing": "1d", "anchor": "minted"}, "anchor"),
+        ({"has_schedule": False, "anchor": CadenceAnchor.STARTED}, "schedule"),
+        ({"anchor": CadenceAnchor.STARTED}, "anchor"),
         ({"cron": None}, "schedule.cron"),
         ({"cron": "0 0 30 2 *"}, "schedule.cron"),
         ({"cron": "0 0 * * * *"}, "schedule.cron"),

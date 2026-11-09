@@ -82,7 +82,7 @@ def _chore(
     return Chore(f"chr_{key}", spec, set_at)
 
 
-def _rhythm(*, cron: str | None = None, spacing: str | None = None, anchor: str | None = None) -> Rhythm:
+def _rhythm(*, cron: str | None = None, spacing: str | None = None, anchor: CadenceAnchor | None = None) -> Rhythm:
     return Rhythm.parse(
         cron=cron, zone="UTC" if cron else None, has_schedule=cron is not None, spacing=spacing, anchor=anchor, at=_AT
     )
@@ -246,15 +246,15 @@ def test_finished_reads_the_earlier_of_the_holder_settling_and_the_item_closing(
 def test_a_live_run_has_no_finished_instant_and_no_eligibility() -> None:
     live = LastRun(_AT, holder=Holder(ChunkStatus.RUNNING, _AT))
     assert live.anchored_at(CadenceAnchor.FINISHED) is None
-    assert eligible_at(_rhythm(spacing="1h", anchor="finished"), live) is None
+    assert eligible_at(_rhythm(spacing="1h", anchor=CadenceAnchor.FINISHED), live) is None
 
 
 @pytest.mark.parametrize(
     ("anchor", "eligible"),
-    [("scheduled", _AT + timedelta(days=1)), ("started", _AT + timedelta(days=1, minutes=5)),
-     ("finished", _AT + timedelta(days=1, minutes=65))],
+    [(CadenceAnchor.SCHEDULED, _AT + timedelta(days=1)), (CadenceAnchor.STARTED, _AT + timedelta(days=1, minutes=5)),
+     (CadenceAnchor.FINISHED, _AT + timedelta(days=1, minutes=65))],
 )  # fmt: skip
-def test_the_spacing_counts_from_the_anchor(anchor: str, eligible: datetime) -> None:
+def test_the_spacing_counts_from_the_anchor(anchor: CadenceAnchor, eligible: datetime) -> None:
     assert eligible_at(_rhythm(spacing="1d", anchor=anchor), _done(_AT)) == eligible
 
 
@@ -266,7 +266,7 @@ def test_a_spacing_alone_with_no_last_run_is_due_at_once() -> None:
 
 
 def test_a_spacing_alone_is_due_once_now_reaches_eligibility() -> None:
-    rhythm, last = _rhythm(spacing="10d", anchor="finished"), _done(_AT)
+    rhythm, last = _rhythm(spacing="10d", anchor=CadenceAnchor.FINISHED), _done(_AT)
     eligible = _AT + timedelta(days=10, minutes=65)
     assert not is_due(rhythm, _errand(), last, eligible - timedelta(hours=1))
     assert is_due(rhythm, _errand(), last, eligible)
@@ -290,7 +290,7 @@ def test_a_schedule_alone_is_not_due_when_the_latest_moment_falls_before_the_ref
 
 
 def test_both_wait_for_the_first_moment_at_or_past_eligibility() -> None:
-    rhythm = _rhythm(cron=_CRON, spacing="36h", anchor="scheduled")
+    rhythm = _rhythm(cron=_CRON, spacing="36h", anchor=CadenceAnchor.SCHEDULED)
     last = _done(_AT.replace(hour=19))  # eligible from Wednesday 07:00
     tuesday = _AT.replace(hour=19) + timedelta(days=1, minutes=1)
     assert not is_due(rhythm, _errand(), last, tuesday)  # Tuesday's moment falls before eligibility
@@ -299,7 +299,7 @@ def test_both_wait_for_the_first_moment_at_or_past_eligibility() -> None:
 
 
 def test_a_spacing_that_passed_while_the_run_was_live_is_due_once_it_settles() -> None:
-    rhythm = _rhythm(spacing="1h", anchor="scheduled")
+    rhythm = _rhythm(spacing="1h", anchor=CadenceAnchor.SCHEDULED)
     now = _AT + timedelta(hours=5)
     assert not is_due(rhythm, _errand(), LastRun(_AT, holder=Holder(ChunkStatus.RUNNING, _AT)), now)
     assert is_due(rhythm, _errand(), LastRun(_AT, holder=Holder(ChunkStatus.DONE, _AT, now)), now)
@@ -338,7 +338,7 @@ def test_a_deleted_run_settles_as_withdrawn_and_waits_for_its_next_moment() -> N
 def test_a_grouped_run_is_held_until_its_survivor_settles() -> None:
     survivor = Holder(ChunkStatus.RUNNING, _AT + timedelta(minutes=3))
     grouped = LastRun(_AT, holder=survivor)
-    rhythm = _rhythm(spacing="1h", anchor="started")
+    rhythm = _rhythm(spacing="1h", anchor=CadenceAnchor.STARTED)
     later = _AT + timedelta(hours=3)
     assert not is_due(rhythm, _errand(), grouped, later)
     settled = replace(grouped, holder=replace(survivor, status=ChunkStatus.DONE, completed_at=later))
@@ -434,7 +434,7 @@ def test_a_never_run_spacing_alone_is_due_at_the_instant_it_joined() -> None:
 
 def test_a_spacing_alone_is_due_at_eligibility() -> None:
     run = _done(_AT)
-    rhythm = _rhythm(spacing="1d", anchor="finished")
+    rhythm = _rhythm(spacing="1d", anchor=CadenceAnchor.FINISHED)
     assert _holds_at_due_at(rhythm, _errand(), run) == eligible_at(rhythm, run)
 
 
@@ -446,7 +446,7 @@ def test_a_schedule_alone_is_due_at_the_first_moment_after_the_reference() -> No
 
 def test_a_schedule_and_a_spacing_are_due_at_the_first_moment_at_or_after_eligibility() -> None:
     run = _done(_AT.replace(hour=19))
-    rhythm = _rhythm(cron=_CRON, spacing="30h", anchor="scheduled")
+    rhythm = _rhythm(cron=_CRON, spacing="30h", anchor=CadenceAnchor.SCHEDULED)
     eligible = eligible_at(rhythm, run)
     assert eligible == _AT.replace(hour=19) + timedelta(hours=30)  # 01:00, between two evening moments
     assert _holds_at_due_at(rhythm, _errand(), run) == _AT.replace(hour=19) + timedelta(days=2)
@@ -454,7 +454,7 @@ def test_a_schedule_and_a_spacing_are_due_at_the_first_moment_at_or_after_eligib
 
 def test_a_moment_that_is_exactly_eligibility_is_the_due_instant() -> None:
     run = _done(_AT.replace(hour=19))
-    assert _holds_at_due_at(_rhythm(cron=_CRON, spacing="1d", anchor="scheduled"), _errand(), run) == (
+    assert _holds_at_due_at(_rhythm(cron=_CRON, spacing="1d", anchor=CadenceAnchor.SCHEDULED), _errand(), run) == (
         _AT.replace(hour=19) + timedelta(days=1)
     )
 

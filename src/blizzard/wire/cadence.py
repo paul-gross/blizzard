@@ -55,7 +55,7 @@ class CadenceDocument(BaseModel):
     name: str | None = None
     schedule: CadenceScheduleDocument | None = None
     spacing: str | None = None
-    anchor: str | None = None
+    anchor: CadenceAnchor | None = None
     chores: list[ChoreDocument] = []
 
 
@@ -73,7 +73,7 @@ class CadenceEditRequest(BaseModel):
     name: str | None = None
     schedule: CadenceScheduleDocument | None = None
     spacing: str | None = None
-    anchor: str | None = None
+    anchor: CadenceAnchor | None = None
     chores: list[ChoreDocument] | None = None
 
 
