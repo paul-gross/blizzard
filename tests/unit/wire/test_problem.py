@@ -4,7 +4,7 @@ import importlib
 import inspect
 import json
 import pkgutil
-from typing import get_args
+from typing import Literal, get_args
 
 import pytest
 from fastapi import FastAPI
@@ -504,12 +504,14 @@ def test_every_declared_type_constant_is_in_the_registry() -> None:
     assert declared == set(ALL_PROBLEM_TYPES)
 
 
-def test_every_problem_model_literal_is_registered() -> None:
+def _declared_problem_model_literals() -> set[str]:
     declared: set[str] = set()
     for module_info in pkgutil.walk_packages(wire.__path__, wire.__name__ + "."):
         module = importlib.import_module(module_info.name)
         for _, model in inspect.getmembers(module, inspect.isclass):
             if model.__module__ != module.__name__ or not issubclass(model, BaseModel):
+                continue
+            if model.__pydantic_generic_metadata__["origin"] is not None:
                 continue
             field = model.model_fields.get("type")
             if field is not None:
@@ -518,7 +520,25 @@ def test_every_problem_model_literal_is_registered() -> None:
                     for value in get_args(field.annotation)
                     if isinstance(value, str) and value.startswith("urn:blizzard:problem:")
                 )
-    assert declared <= ALL_PROBLEM_TYPES
+    return declared
+
+
+def test_every_problem_model_literal_is_registered() -> None:
+    assert _declared_problem_model_literals() <= ALL_PROBLEM_TYPES
+
+
+def test_problem_model_census_ignores_generated_generic_specializations(monkeypatch: pytest.MonkeyPatch) -> None:
+    uri = "urn:blizzard:problem:external-census-control"
+    generated = ProblemDetails[Literal["urn:blizzard:problem:external-census-control"]]
+    monkeypatch.setattr(registry, "external_generated_control", generated, raising=False)
+    assert uri not in _declared_problem_model_literals()
+
+    class NamedProblem(generated):
+        pass
+
+    monkeypatch.setattr(NamedProblem, "__module__", registry.__name__)
+    monkeypatch.setattr(registry, "external_named_control", NamedProblem, raising=False)
+    assert uri in _declared_problem_model_literals()
 
 
 def test_every_family_type_is_registered_once_and_named_by_its_concept() -> None:
