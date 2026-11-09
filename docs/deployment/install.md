@@ -52,6 +52,8 @@ The hub's forge credentials are stored secrets, not environment variables: its w
 [repositories.md](./repositories.md), and each names a secret owned by [secrets.md](./secrets.md) — create them with
 `blizzard hub secret`, `source` and `repo` once the hub answers. `/etc/blizzard/hub.env` carries deployment values only.
 The runner's workspace and harness bindings live in its host directory's `blizzard-host.toml` and carry no credentials.
+The host's optional `[worker_scratch] root` and the drain procedure for changing it are described in
+[Worker scratch directory](./observability.md#worker-scratch-directory).
 
 The hub's deployment-varying values — db_url, host, port — also resolve from the environment at load, precedence CLI
 flag over env var over toml over default: `BZ_HUB_DB_URL` (no flag exists), `BZ_HUB_HOST`, `BZ_HUB_PORT`, with

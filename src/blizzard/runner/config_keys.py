@@ -57,6 +57,7 @@ from blizzard.runner.host_layout import (
     HOST_LOCK_FILENAME,
     HOST_SOCKET_FILENAME,
     HOST_STORE_FILENAME,
+    LEGACY_WORKER_SCRATCH_DIRNAME,
     RUNNERS_DIRNAME,
     WORKER_SCRATCH_DIRNAME,
     WORKER_STDOUT_DIRNAME,
@@ -162,6 +163,8 @@ _HOST_KEYS = (
     ConfigKey("transcripts.chunk_max_bytes", INTEGER),
     ConfigKey("worker_stdout", TABLE),
     ConfigKey("worker_stdout.retention_days", INTEGER, default=DEFAULT_WORKER_STDOUT_RETENTION_DAYS),
+    ConfigKey("worker_scratch", TABLE),
+    ConfigKey("worker_scratch.root", STRING),
     ConfigKey("tools", TABLE),
     ConfigKey("tools.path_prepend", STRING_LIST, default=()),
     ConfigKey("tools.env_passthrough", STRING_LIST, default=()),
@@ -278,9 +281,28 @@ HOST_REGISTRY = ConfigRegistry(
         ),
         DurablePath(WORKER_STDOUT_DIRNAME, "each worker's harness stdout, one file per lease generation"),
         DurablePath(ELICITATION_OUTPUT_DIRNAME, "each elicitation's output, one file per attempt"),
+        DurablePath(WORKER_SCRATCH_DIRNAME, "worker scratch root (default; overridden by worker_scratch.root)"),
         DurablePath(
-            f"{WORKER_SCRATCH_DIRNAME}/<runner-id>", "one runner's per-lease scratch directories (BLIZZARD_TMPDIR)"
+            f"{WORKER_SCRATCH_DIRNAME}/r-<tail>/l-<tail>", "compact per-lease worker scratch (BLIZZARD_TMPDIR)"
         ),
+        DurablePath(f"{WORKER_SCRATCH_DIRNAME}/.lock", "scratch root allocation and deletion lock", mode=0o600),
+        DurablePath(f"{WORKER_SCRATCH_DIRNAME}/.owners", "scratch allocation ownership records", mode=0o700),
+        DurablePath(
+            f"{WORKER_SCRATCH_DIRNAME}/.owners/r-<tail>.json", "full runner identity for a compact runner", mode=0o600
+        ),
+        DurablePath(
+            f"{WORKER_SCRATCH_DIRNAME}/.owners/r-<tail>", "lease ownership records for a compact runner", mode=0o700
+        ),
+        DurablePath(
+            f"{WORKER_SCRATCH_DIRNAME}/.owners/r-<tail>/l-<tail>.json",
+            "full lease identity for a compact allocation",
+            mode=0o600,
+        ),
+        DurablePath(LEGACY_WORKER_SCRATCH_DIRNAME, "legacy worker scratch retained for upgrade cleanup"),
+        DurablePath(
+            f"{LEGACY_WORKER_SCRATCH_DIRNAME}/<runner-id>", "legacy runner scratch retained for upgrade cleanup"
+        ),
+        DurablePath(f"{DATA_DIRNAME}/worker-scratch-root", "host's effective worker scratch root binding", mode=0o600),
         *(DurablePath(path, holds, written_by=("init",)) for path, holds in HARNESS_RUNTIME_FILES),
     ),
     EnvFile(

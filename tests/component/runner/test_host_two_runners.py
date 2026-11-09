@@ -8,6 +8,7 @@ import dataclasses
 from collections import Counter
 from pathlib import Path
 
+import pytest
 from fastapi.testclient import TestClient
 from opentelemetry.proto.collector.trace.v1.trace_service_pb2 import ExportTraceServiceRequest
 from opentelemetry.sdk._logs.export import InMemoryLogRecordExporter
@@ -19,6 +20,8 @@ from blizzard.foundation.platform_tracing.handle import build_platform_tracing
 from blizzard.foundation.tokens import TokenHash
 from blizzard.foundation.trace_ids import StepKey, trace_id
 from blizzard.runner.app import build_hosted_app
+from blizzard.runner.cli.runtime import _reconcile_host_scratch  # pyright: ignore[reportPrivateUsage]
+from blizzard.runner.cli.scratch_binding import reconcile_scratch_roots
 from blizzard.runner.composition import HostProcess, RunnerProcess, build_host_process
 from blizzard.runner.config import RunnerConfig
 from blizzard.runner.host_config import BuiltRunner, ResolvedToken
@@ -26,6 +29,7 @@ from blizzard.runner.host_layout import HostLayout
 from blizzard.runner.hub.identity import RunnerIdentity
 from blizzard.runner.leases.model import NewLease
 from blizzard.runner.loop_wiring import LoopWiring
+from blizzard.runner.process.internal.worker_scratch_dirs import WorkerScratchDirs
 from blizzard.runner.tracing.attributes import RUNNER_ID
 from blizzard.runner.tracing.config import RunnerTracingConfig
 from blizzard.runner.tracing.platform import (
@@ -40,7 +44,7 @@ from tests.support.runner_fakes import REGISTERED_AT, FakeHub, migrated_store_at
 from tests.support.runner_mint import new_mint
 
 _ENDPOINT = {"OTEL_EXPORTER_OTLP_ENDPOINT": "http://127.0.0.1:4318"}
-_RUNNERS = ("rn_a", "rn_b")
+_RUNNERS = ("rn_000a", "rn_000b")
 _PROTOBUF = {"Content-Type": "application/x-protobuf"}
 
 
@@ -200,7 +204,7 @@ def test_each_runners_worker_exports_and_platform_spans_carry_that_runners_ident
             (record.log_record.attributes or {}).get(RUNNER_ID) for record in exports.logs.get_finished_logs()
         )
         for stamped in (by_point, by_record):
-            assert set(stamped) == set(_RUNNERS) and stamped["rn_a"] == stamped["rn_b"] > 0
+            assert set(stamped) == set(_RUNNERS) and stamped[_RUNNERS[0]] == stamped[_RUNNERS[1]] > 0
 
         for runner_id in _RUNNERS:
             assert [_stamp(span) for span in spans if span.name in (f"tick {runner_id}", f"step {runner_id}")] == [
@@ -256,9 +260,108 @@ def test_a_pre_upgrade_flat_entry_is_removed_only_when_the_sweeping_runner_holds
             lease_id="lease_closed_here", chunk_id="ch_1", node_id="nd_build", reason="done", closed_at=REGISTERED_AT
         )
 
+        second = host.runners[1]
+        LoopWiring.of(second.config).context(FakeHub(), second, sweep_worker_scratch=True)
+        assert (flat / "lease_closed_here").is_dir()
         LoopWiring.of(first.config).context(FakeHub(), first, sweep_worker_scratch=True)
 
         assert (flat / "lease_never_held").is_dir()
         assert not (flat / "lease_closed_here").exists()
+    finally:
+        host.close()
+
+
+def test_runner_does_not_adopt_or_remove_another_runners_flat_legacy_payload(tmp_path: Path) -> None:
+    host = _host(tmp_path, _Exports())
+    try:
+        first, second = host.runners
+        _register_with_a_lease(first)
+        lease = f"lease_{first.runner_id}"
+        flat = tmp_path / "worker-tmp" / lease
+        flat.mkdir(parents=True)
+        (flat / "sentinel").write_text("first")
+        first_scratch = LoopWiring.of(first.config).context(FakeHub(), first).worker_scratch
+        second_scratch = LoopWiring.of(second.config).context(FakeHub(), second).worker_scratch
+        assert first_scratch.ensure(lease) == str(flat)
+        assert second_scratch.ensure(lease) != str(flat)
+        second_scratch.remove(lease)
+        assert (flat / "sentinel").read_text() == "first"
+    finally:
+        host.close()
+
+
+def test_root_change_checks_every_runners_scoped_active_leases(tmp_path: Path) -> None:
+    host = _host(tmp_path, _Exports())
+    try:
+        first, second = host.runners
+        repositories = {runner.runner_id: runner.stores.lease_record for runner in host.runners}
+        old, new = tmp_path / "old", tmp_path / "new"
+        reconcile_scratch_roots(tmp_path, old, repositories, scratch_factory=WorkerScratchDirs)
+        second.stores.lease_record.record_mint(
+            new_mint(
+                NewLease(
+                    lease_id="lease_active_second",
+                    chunk_id="ch_1",
+                    graph_id="gr_1",
+                    node_id="nd_build",
+                    node_name="build",
+                    epoch=1,
+                    retries_max=2,
+                    created_at=REGISTERED_AT,
+                )
+            )
+        )
+        assert not first.stores.lease_record.list_active_leases()
+        with pytest.raises(RuntimeError, match="drain leases"):
+            reconcile_scratch_roots(tmp_path, new, repositories, scratch_factory=WorkerScratchDirs)
+        second.stores.lease_record.record_closure(
+            lease_id="lease_active_second", chunk_id="ch_1", node_id="nd_build", reason="done", closed_at=REGISTERED_AT
+        )
+        reconcile_scratch_roots(tmp_path, new, repositories, scratch_factory=WorkerScratchDirs)
+    finally:
+        host.close()
+
+
+def test_root_change_checks_stored_runner_removed_from_config(tmp_path: Path) -> None:
+    host = _host(tmp_path, _Exports())
+    try:
+        first, removed = host.runners
+        old, new = tmp_path / "old", tmp_path / "new"
+        old_config = dataclasses.replace(first.config, worker_scratch_root=old)
+        _reconcile_host_scratch(old_config, host, [first.runner_id])
+        _register_with_a_lease(removed)
+        new_config = dataclasses.replace(first.config, worker_scratch_root=new)
+        with pytest.raises(RuntimeError, match="drain leases"):
+            _reconcile_host_scratch(new_config, host, [first.runner_id])
+        removed.stores.lease_record.record_closure(
+            lease_id=f"lease_{removed.runner_id}",
+            chunk_id=f"ch_{removed.runner_id}",
+            node_id="nd_build",
+            reason="done",
+            closed_at=REGISTERED_AT,
+        )
+        _reconcile_host_scratch(new_config, host, [first.runner_id])
+    finally:
+        host.close()
+
+
+def test_root_change_refuses_real_cleanup_failure(tmp_path: Path) -> None:
+    host = _host(tmp_path, _Exports())
+    try:
+        repositories = {runner.runner_id: runner.stores.lease_record for runner in host.runners}
+        old, new = tmp_path / "old", tmp_path / "new"
+        reconcile_scratch_roots(tmp_path, old, repositories, scratch_factory=WorkerScratchDirs)
+        payload = Path(WorkerScratchDirs(str(old), host.runners[0].runner_id).ensure("lease_1111WXYZ"))
+        (payload / "file").write_text("data")
+        payload.chmod(0o500)
+        try:
+            with pytest.raises(PermissionError):
+                reconcile_scratch_roots(tmp_path, new, repositories, scratch_factory=WorkerScratchDirs)
+            assert (tmp_path / "data" / "worker-scratch-root").read_text() == str(old)
+            assert (payload / "file").exists()
+        finally:
+            payload.chmod(0o700)
+        reconcile_scratch_roots(tmp_path, new, repositories, scratch_factory=WorkerScratchDirs)
+        assert not payload.exists()
     finally:
         host.close()

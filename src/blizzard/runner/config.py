@@ -749,6 +749,7 @@ class RunnerConfig:
 
     root: Path
     db_url: str
+    worker_scratch_root: Path | None = None
     host: str = DEFAULT_HOST
     port: int = DEFAULT_PORT
     # Reconciliation-loop seams.

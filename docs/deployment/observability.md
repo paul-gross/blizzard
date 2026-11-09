@@ -117,13 +117,34 @@ periodic sweep prunes both streams once they age past `[worker_stdout] retention
 
 ## Worker scratch directory
 
-Every worker session gets a private staging directory, under `worker-tmp/<runner_id>/<lease_id>/` in the runtime
-directory, exported into the session as `BLIZZARD_TMPDIR`. Unlike `worker-stdout/`, it does not outlive the lease: the
-runner removes it once the lease closes, however that closure happened — a node transition, a reap, an escalation — and
-recreates it on every later spawn, resume, or judge of a lease that is still open. A directory left behind by a crash is
-swept the next time that runner starts; the sweep covers only this runner's own `worker-tmp/<runner_id>/`, so restarting
-one runner never touches another's scratch. A directory an earlier version left directly under `worker-tmp/` is removed
-only by the runner whose own store holds its lease, once that lease has closed.
+Every worker run gets a private staging directory exported as `BLIZZARD_TMPDIR`. New allocations live under
+`<scratch root>/r-<tail>/l-<tail>/`, normally using the lowercase final four characters of the runner and run IDs.
+Collisions extend the newcomer's tail; the full IDs, not the directory names, identify the owners. An allocation stays
+at the same path across spawn, resume, judge, and restart while the run remains open.
+
+The scratch root defaults to `<host directory>/tmp`. To choose another root, set it in `blizzard-host.toml`:
+
+```toml
+[worker_scratch]
+root = "/short/scratch"
+```
+
+A relative root resolves against the host directory; an absolute root is used as an absolute path. Shell variables and
+`~` are not expanded. The value must be a non-empty string without NUL characters, and the root must be accessible to
+the host. Short paths help programs such as Postgres that have Unix socket path-length limits; an arbitrarily long root
+or an extended collision suffix can still exceed those limits.
+
+Unlike `worker-stdout/`, scratch does not outlive its run: the runner removes it after the run closes. Startup
+reconciliation preserves active allocations and cleans owned closed allocations left by a crash, without deleting
+unknown or another runner's data. Active allocations from the older `worker-tmp/<runner_id>/<lease_id>/` and
+`worker-tmp/<lease_id>/` layouts are reused until their runs close; legacy entries are cleaned only with evidence of
+ownership and closure.
+
+Before changing the effective scratch root, drain all active worker runs on the host. Pause each runner at the hub to
+stop new claims while in-flight chunks finish ([runner-doors.md](./runner-doors.md#the-two-brakes)); a paused chunk or
+parked session can still hold an open run. The host refuses a root change while any runs remain active; restore the
+previous setting and finish draining before trying again. After draining, the host reconciles the previous root before
+switching.
 
 ## Reading the feed
 
