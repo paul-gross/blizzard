@@ -353,6 +353,14 @@ def test_selected_test_files_selects_a_markerless_module_by_its_tier_folder(tmp_
     assert m.selected_test_files(scope, tests_root, tmp_path) == ["tests/guards/test_hub.py", "tests/unit/test_hub.py"]
 
 
+def test_selection_excludes_source_inspection_guards_but_keeps_other_guards(tmp_path: Path) -> None:
+    tests_root = tmp_path / "tests"
+    for name in ("test_handler_applicability.py", "test_producer_delegation.py", "test_other.py"):
+        _write(tests_root / "guards" / name, "from blizzard.hub import domain\n")
+    scope = m.Scope(slug="fixture", only_mutate=(), test_selection_packages=("blizzard.hub",))
+    assert m.selected_test_files(scope, tests_root, tmp_path) == ["tests/guards/test_other.py"]
+
+
 def test_the_selection_tier_is_the_one_pyproject_hands_mutmut() -> None:
     pyproject = tomllib.loads((_SCRIPTS.parent / "pyproject.toml").read_text())
     assert pyproject["tool"]["mutmut"]["pytest_add_cli_args"] == ["-m", m.MUTATION_TIER_MARKER]
@@ -513,6 +521,26 @@ def test_ensure_mutant_tree_drops_a_frozen_test_file_since_deleted(tmp_path: Pat
     _ensure("cli-surface", tmp_path)
     (tmp_path / "tests" / "unit" / "cli" / "test_cli_gone.py").unlink()
     assert _ensure("cli-surface", tmp_path) == ["tests/unit/cli/test_cli.py"]
+
+
+def test_resume_removes_source_guards_from_an_existing_frozen_selection(tmp_path: Path) -> None:
+    kept = "tests/unit/hub/test_hub.py"
+    guards = sorted(m.SOURCE_INSPECTION_GUARDS)
+    for path in [kept, *guards]:
+        _write(tmp_path / path, "from blizzard.hub import domain\n")
+    mutants = tmp_path / "mutants"
+    mutants.mkdir()
+    (mutants / m.SCOPE_MARKER_NAME).write_text("hub-daemon")
+    selection_path = mutants / m.TEST_SELECTION_NAME
+    selection_path.write_text(json.dumps([*guards, kept]))
+
+    selection = _ensure("hub-daemon", tmp_path)
+    assert selection == [kept]
+    assert json.loads(selection_path.read_text()) == [kept]
+    assert m.config_override_for_scope(m.resolve_scope("hub-daemon"), selection).pytest_add_cli_args_test_selection == [
+        kept
+    ]
+    assert _ensure("hub-daemon", tmp_path) == [kept]
 
 
 # --- report building: no mutmut import required ------------------------------------------------

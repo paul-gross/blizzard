@@ -134,6 +134,10 @@ GLOBAL_EXCLUSIONS = (*PYPROJECT_DO_NOT_MUTATE, STANDALONE_SCRIPT_EXCLUSION)
 # The tier [tool.mutmut].pytest_add_cli_args selects; a test file with nothing in this tier
 # would only be deselected, so selection leaves it out of the fingerprint mutmut keys on.
 MUTATION_TIER_MARKER = "unit"
+# These repository guards inspect application source, which mutmut rewrites.
+SOURCE_INSPECTION_GUARDS = frozenset(
+    {"tests/guards/test_handler_applicability.py", "tests/guards/test_producer_delegation.py"}
+)
 TOOLS_PREFIX = "src/blizzard/tools/"
 
 
@@ -312,6 +316,7 @@ def selected_test_files(scope: Scope, tests_root: Path = TESTS_ROOT, repo_root: 
         str(path.relative_to(repo_root))
         for path in tests_root.rglob("*.py")
         if "__pycache__" not in path.parts
+        and path.relative_to(repo_root).as_posix() not in SOURCE_INSPECTION_GUARDS
         and _is_test_file(path)
         and _marks_tier(path, MUTATION_TIER_MARKER, tests_root)
         and test_module_selected(path, scope.test_selection_packages, tests_root)
@@ -370,8 +375,8 @@ def ensure_mutant_tree_for_scope(
     is any tree when `fresh`; a repeat of the same scope keeps it — that is what makes
     resume possible. The selection
     is computed once, when the tree is built, and reused on every resume: mutmut
-    fingerprints it, and any change to it discards every cached verdict. A frozen test file
-    since deleted from the tree is dropped rather than handed to pytest.
+    fingerprints it, and any change to it discards every cached verdict. Deleted test files
+    and source-inspection guards are dropped from frozen selections before reuse.
     """
     repo_files = _load_module_by_path("_mutation_repo_files", REPO_ROOT / "tests" / "support" / "repo_files.py")
     prepare_mutant_tree = repo_files.prepare_mutant_tree
@@ -388,7 +393,11 @@ def ensure_mutant_tree_for_scope(
     selection_path = mutants_dir / TEST_SELECTION_NAME
     if selection_path.is_file():
         frozen = json.loads(selection_path.read_text())
-        selection = [test_file for test_file in frozen if (repo_root / test_file).is_file()]
+        selection = [
+            test_file
+            for test_file in frozen
+            if test_file not in SOURCE_INSPECTION_GUARDS and (repo_root / test_file).is_file()
+        ]
     else:
         selection = selected_test_files(scope, tests_root, repo_root)
     selection_path.write_text(json.dumps(selection, indent=1) + "\n")
