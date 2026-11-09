@@ -38,7 +38,7 @@ from blizzard.hub.delivery.actions.landing.repo import (
     Waiting,
 )
 from blizzard.hub.domain.actions.effects import ActionEscalation
-from blizzard.hub.domain.actions.pr_markers import pr_marker_content, pr_marker_name
+from blizzard.hub.domain.chunk.pr_markers import pr_marker_content, pr_marker_name
 from blizzard.hub.forge.landing import (
     Change,
     ChangeListing,

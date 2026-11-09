@@ -12,6 +12,7 @@ from blizzard.hub.domain.artifact.model import StoredArtifact
 from blizzard.hub.domain.chunk.model import ChunkFacts, LandedRepos, is_landed_revision
 from blizzard.hub.domain.chunk.no_code import no_code_repos
 from blizzard.hub.domain.chunk.ports.commit_links import CommitLink, no_commit_link
+from blizzard.hub.domain.chunk.pr_markers import PrMarker, is_pr_marker_name
 
 
 @domain_model
@@ -26,19 +27,6 @@ class LandingFact:
 def board_chunk_url(public_url: str | None, chunk_id: str) -> str | None:
     """The board's page for ``chunk_id`` under the hub's public URL, or ``None`` with no public URL configured."""
     return f"{public_url.rstrip('/')}/board/chunk/{chunk_id}" if public_url else None
-
-
-@domain_model
-@dataclass(frozen=True)
-class PrMarker:
-    """One well-formed ``delivery-pr/<repo>[/<number>]`` marker: the artifact ``name`` it was written under,
-    its ``epoch``, and the PR its payload names. A marker whose payload is not that shape never becomes one."""
-
-    name: str
-    epoch: int
-    repo: str
-    number: int
-    url: str
 
 
 @domain_model
@@ -122,7 +110,7 @@ class DeliveryRead:
             if row.name == "awaiting-external-merge":
                 external_epochs.add(row.epoch)
         for pr in sources.pr_markers:
-            if pr.name not in {f"delivery-pr/{pr.repo}", f"delivery-pr/{pr.repo}/{pr.number}"}:
+            if not is_pr_marker_name(pr):
                 continue
             prs[(pr.repo, pr.number)] = DeliveryPr(pr.repo, pr.number, pr.url)
             script_prs[pr.repo] = (pr.repo, pr.number)

@@ -23,7 +23,6 @@ from blizzard.foundation.roles import domain_model
 from blizzard.foundation.wait_kinds import WaitKind
 from blizzard.hub.domain.actions.declarations import GitCommits
 from blizzard.hub.domain.actions.effects import ActionEscalation, MissingCapability
-from blizzard.hub.domain.actions.visit import LandingProject
 from blizzard.hub.domain.artifact.model import StoredArtifact
 from blizzard.hub.domain.chunk.delivery_read import DeliveryRead, DeliverySources
 from blizzard.hub.domain.chunk.event_log import EventLogService, LoggedEvent
@@ -50,6 +49,7 @@ from blizzard.hub.domain.config.repositories import (
     resolve_chunk_repositories,
 )
 from blizzard.hub.domain.delivery.flows import TURN_ESCALATED
+from blizzard.hub.domain.delivery.landing_projects import read_landing_project
 from blizzard.hub.domain.delivery.ports.flows import IHubStepRefusals
 from blizzard.hub.domain.execution.completion import Landing, MigrationTargets, UnresolvableTarget
 from blizzard.hub.domain.execution.gate_arrival import open_graph_gate_on_arrival
@@ -751,7 +751,7 @@ class HubNodeRouter:
             self._route_away(chunk, node, destination, epoch=epoch, choice=choice, ending=ending)
             return
         rows = GitCommits.of(self._artifacts.load_artifacts(chunk.chunk_id))
-        project = LandingProject.read(chunk.project_id, projects=self._projects, links=self._links)
+        project = read_landing_project(chunk.project_id, projects=self._projects, links=self._links)
         resolution = resolve_chunk_repositories(
             rows.origins(),
             self._repositories.list_all(include_retired=True),
