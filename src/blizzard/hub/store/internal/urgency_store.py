@@ -22,6 +22,7 @@ from blizzard.foundation.store.batching import id_batches
 from blizzard.hub.domain.config.changes import ConfigChange
 from blizzard.hub.domain.config.errors import ConfigRevisionConflict
 from blizzard.hub.domain.kernel.transactions import Transaction
+from blizzard.hub.domain.urgency.declarations import NamedRevision
 from blizzard.hub.domain.urgency.mark import Icon, IconMark, IconMediaType
 from blizzard.hub.domain.urgency.model import MarkWrite, Urgency, UrgencyId, UrgencySlugTaken
 from blizzard.hub.domain.urgency.order import Placed, PositionFact, UrgencyOrder, UrgencyOrderConflict
@@ -104,6 +105,31 @@ def _move_revision(conn: Connection, urgency: Urgency, from_revision: int, **val
         raise ConfigRevisionConflict("urgency", urgency.slug, current=current)
 
 
+def update_urgency(
+    conn: Connection, urgency: Urgency, *, mark: MarkWrite, from_revision: int, change: ConfigChange
+) -> None:
+    """The edit body, inside the caller's transaction: the compare-and-set and the change."""
+    _move_revision(conn, urgency, from_revision, **_columns(urgency, mark))
+    append_change(conn, change)
+
+
+def require_revisions(conn: Connection, expected: Sequence[NamedRevision]) -> None:
+    """:class:`ConfigRevisionConflict` naming the first urgency of ``expected`` whose stored revision has moved from
+    the one a write was planned on, in one read."""
+    if not expected:
+        return
+    stmts = statements_of(conn)
+    rows = conn.execute(
+        stmts.select(urgencies, urgencies.c.urgency_id, urgencies.c.revision).where(
+            urgencies.c.urgency_id.in_([named.urgency_id for named in expected])
+        )
+    ).all()
+    stored: dict[str, int] = {row.urgency_id: row.revision for row in rows}
+    for named in expected:
+        if stored.get(named.urgency_id) != named.revision:
+            raise ConfigRevisionConflict("urgency", named.slug, current=stored.get(named.urgency_id, 0))
+
+
 class UrgencyStore:
     """Read-write urgency adapter over the hub store."""
 
@@ -139,8 +165,7 @@ class UrgencyStore:
         transaction: Transaction | None = None,
     ) -> Urgency:
         with connection_in(self._store, transaction, "update_urgency", write=True) as conn:
-            _move_revision(conn, urgency, from_revision, **_columns(urgency, mark))
-            append_change(conn, change)
+            update_urgency(conn, urgency, mark=mark, from_revision=from_revision, change=change)
         return urgency
 
     def record_lifecycle(
@@ -198,6 +223,17 @@ class UrgencyStore:
             return None
         return Icon(IconMediaType(row.icon_media_type), bytes(row.icon_data))
 
+    def icons(self) -> dict[UrgencyId, Icon]:
+        with self._store.read("urgency_icons") as conn:
+            rows = conn.execute(
+                self._store.select(
+                    urgencies, urgencies.c.urgency_id, urgencies.c.icon_media_type, urgencies.c.icon_data
+                ).where(urgencies.c.icon_data.is_not(None))
+            ).all()
+        return {
+            UrgencyId(row.urgency_id): Icon(IconMediaType(row.icon_media_type), bytes(row.icon_data)) for row in rows
+        }
+
     def _one(self, where: ColumnElement[bool], operation: str, transaction: Transaction | None) -> Urgency | None:
         with connection_in(self._store, transaction, operation) as conn:
             row = conn.execute(self._store.select(urgencies, *_VIEW_COLUMNS).where(where)).one_or_none()
@@ -242,6 +278,29 @@ def _urgency_of(row: Row[Any], retired: bool) -> Urgency:
         revision=row.revision,
         retired=retired,
     )
+
+
+def require_order_seq(conn: Connection, from_seq: int) -> None:
+    """:class:`UrgencyOrderConflict` when the order's sequence has moved past ``from_seq``."""
+    if _order_seq(conn) != from_seq:
+        raise UrgencyOrderConflict(expected=from_seq)
+
+
+def append_positions(
+    conn: Connection, facts: Sequence[PositionFact], *, at: datetime, by: str, change: ConfigChange | None
+) -> int:
+    """One position fact per entry of ``facts``, in order, and ``change`` with its revision set to the order's
+    sequence once they land; the sequence after."""
+    conn.execute(
+        statements_of(conn).insert_rows(
+            urgency_positions,
+            [{"urgency_id": fact.urgency_id, "position": fact.position, "set_at": at, "set_by": by} for fact in facts],
+        )
+    )
+    seq = _order_seq(conn)
+    if change is not None:
+        append_change(conn, replace(change, revision=seq))
+    return seq
 
 
 def _order_seq(conn: Connection) -> int:
@@ -300,21 +359,8 @@ class UrgencyOrderStore:
         if not facts:
             return from_seq
         with connection_in(self._store, transaction, "record_urgency_positions", write=True) as conn:
-            if _order_seq(conn) != from_seq:
-                raise UrgencyOrderConflict(expected=from_seq)
-            conn.execute(
-                statements_of(conn).insert_rows(
-                    urgency_positions,
-                    [
-                        {"urgency_id": fact.urgency_id, "position": fact.position, "set_at": at, "set_by": by}
-                        for fact in facts
-                    ],
-                )
-            )
-            seq = _order_seq(conn)
-            if change is not None:
-                append_change(conn, replace(change, revision=seq))
-        return seq
+            require_order_seq(conn, from_seq)
+            return append_positions(conn, facts, at=at, by=by, change=change)
 
 
 _urgency_store_conforms: type[IWriteUrgencyRepository] = UrgencyStore

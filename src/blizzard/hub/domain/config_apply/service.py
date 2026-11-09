@@ -1,6 +1,6 @@
 """``ConfigApplication`` — the use case behind a declarative apply: it loads what the entries name, mints the ids and
-the instant they write under, plans the ``projects`` section, and hands the whole declaration to
-:class:`~blizzard.hub.domain.config.authoring.ConfigAuthoring` to reconcile (``bzh:config-apply``)."""
+the instant they write under, plans the ``projects`` section and the urgency sections, and hands the whole
+declaration to :class:`~blizzard.hub.domain.config.authoring.ConfigAuthoring` to reconcile (``bzh:config-apply``)."""
 
 from __future__ import annotations
 
@@ -20,6 +20,7 @@ from blizzard.hub.domain.config.apply import (
     SCOPES_SECTION,
     WORK_SOURCES_SECTION,
     ApplyEntryRefused,
+    ApplyPlan,
     ConfigDeclaration,
     DeclaredReferences,
     EntryOutcome,
@@ -79,6 +80,9 @@ from blizzard.hub.domain.projects.declarations import (
 from blizzard.hub.domain.projects.links import IReadProjectLinks, RepositoryLink, SourceLink
 from blizzard.hub.domain.projects.model import IReadProjectRepository, Project, ProjectId, ProjectSlug
 from blizzard.hub.domain.projects.order import IReadProjectPositions
+from blizzard.hub.domain.urgency.declarations import StoredUrgencies, plan_urgencies
+from blizzard.hub.domain.urgency.ports import IReadTenantSettings, IReadUrgencyOrder, IReadUrgencyRepository
+from blizzard.hub.domain.urgency.services import TenantSettingsMissing
 
 
 @domain_model
@@ -152,6 +156,10 @@ class ConfigApplication:
         cadences: IReadCadenceRepository,
         graphs: IReadGraphRepository,
         secrets: ISecretCatalog,
+        tenant_id: str,
+        urgencies: IReadUrgencyRepository,
+        urgency_order: IReadUrgencyOrder,
+        tenant_settings: IReadTenantSettings,
         pick: ColorPick,
         clock: IClock,
     ) -> None:
@@ -168,6 +176,10 @@ class ConfigApplication:
         self._cadences = cadences
         self._graphs = graphs
         self._secrets = secrets
+        self._tenant_id = tenant_id
+        self._urgencies = urgencies
+        self._urgency_order = urgency_order
+        self._tenant_settings = tenant_settings
         self._pick = pick
         self._clock = clock
 
@@ -184,7 +196,12 @@ class ConfigApplication:
         declared_forges, lookup, former_forges = self._held_forges(entries, held_forges, ctx)
         declaration = self._declaration(entries, projects, repositories, sources, lookup)
         cadences, held_cadences = self._cadence_declarations(entries, projects, may_admit=may_admit)
-        declaration = replace(declaration, declared_forges=declared_forges, cadences=cadences)
+        declaration = replace(
+            declaration,
+            declared_forges=declared_forges,
+            cadences=cadences,
+            urgencies=self._plan_urgencies(entries, ctx),
+        )
         outcomes = self._authoring.apply(
             declaration,
             self._stored(declaration, repositories, sources, held_forges, former_forges, held_cadences),
@@ -360,6 +377,18 @@ class ConfigApplication:
             landing_seqs=landing_seqs,
         )
         return plan_projects(list(entries.projects), stored, ctx, pick=self._pick, at=self._clock.now())
+
+    def _plan_urgencies(self, entries: DocumentEntries, ctx: ChangeContext) -> ApplyPlan:
+        """The planned urgency sections, from the tenant's urgencies, their order — read first, so a position landing
+        after it leaves the sequence stale — and its settings; nothing is read for a document stating none."""
+        if not entries.urgencies.stated:
+            return ApplyPlan()
+        order = self._urgency_order.order()
+        settings = self._tenant_settings.get()
+        if settings is None:
+            raise TenantSettingsMissing
+        stored = StoredUrgencies(self._tenant_id, tuple(self._urgencies.list_all()), order, settings)
+        return plan_urgencies(entries.urgencies, stored, ctx, pick=self._pick, at=self._clock.now())
 
     @staticmethod
     def _declaration(

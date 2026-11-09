@@ -867,7 +867,7 @@ def test_applying_an_export_writes_nothing(hub: HubHarness) -> None:
     }
     before = _changes(hub)
     replay = _apply_json(hub, document)
-    assert [o["op"] for o in replay.json()["outcomes"]] == ["unchanged"] * 5
+    assert [o["op"] for o in replay.json()["outcomes"]] == ["unchanged"] * 8
     assert _changes(hub) == before
 
 

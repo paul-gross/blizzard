@@ -6315,7 +6315,7 @@
       },
       "ConfigDocumentV2": {
         "additionalProperties": false,
-        "description": "A declarative configuration document, version 2 \u2014 the one version a hub applies and exports. Each entry is the\nkind's own document model, so a field an entry omits is left as stored; forges reconcile before the records that\nname them, projects before scopes and routines, and scopes before routines, so an entry may name a forge, a\nproject or a scope the same document declares; ``secrets`` lists secret names that must already be active.\n``GET /api/config/export`` writes every field of every entry, ``projects`` first, and names every project by its\nslug.",
+        "description": "A declarative configuration document, version 2 \u2014 the one version a hub applies and exports. Each entry is the\nkind's own document model, so a field an entry omits is left as stored; forges reconcile before the records that\nname them, projects before scopes and routines, ``urgencies``, ``urgency_order`` and ``settings`` in that order\nafter the projects and before the scopes, and scopes before routines, so an entry may name a forge, a project, an\nurgency or a scope the same document declares; ``secrets`` lists secret names that must already be active.\n``GET /api/config/export`` writes every field of every entry, ``projects`` first, and names every project by its\nslug.",
         "properties": {
           "cadences": {
             "default": [],
@@ -6372,6 +6372,38 @@
             },
             "title": "Secrets",
             "type": "array"
+          },
+          "settings": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/SettingsEntry"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "urgencies": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/UrgencyEntry"
+            },
+            "title": "Urgencies",
+            "type": "array"
+          },
+          "urgency_order": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Urgency Order"
           },
           "version": {
             "const": 2,
@@ -24668,6 +24700,25 @@
         "title": "SettingsDefaultView",
         "type": "object"
       },
+      "SettingsEntry": {
+        "additionalProperties": false,
+        "description": "The tenant's settings as a document states them: ``default_urgency``, by id or slug, sets the urgency every new\nchunk takes when nothing names another; ``null`` is refused.",
+        "properties": {
+          "default_urgency": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Default Urgency"
+          }
+        },
+        "title": "SettingsEntry",
+        "type": "object"
+      },
       "SettingsPatchRequest": {
         "additionalProperties": false,
         "description": "A sparse edit of the tenant's settings: ``default_urgency``, by id or slug, when stated; ``null`` is\nrefused.",
@@ -27381,6 +27432,64 @@
           "slug"
         ],
         "title": "UrgencyCreateRequest",
+        "type": "object"
+      },
+      "UrgencyEntry": {
+        "additionalProperties": false,
+        "description": "An urgency as a document entry, named by its slug: created when the tenant holds none by it \u2014 with no ``name``\ntaking the slug and no ``color`` the palette color the live urgencies use least \u2014 and otherwise a sparse edit of\nthe fields it states. ``null`` on ``emoji`` or ``icon`` clears the mark; an ``icon`` is its media type and base64\nbytes. An entry naming a retired urgency is refused ``urgency_retired``.",
+        "properties": {
+          "color": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Color"
+          },
+          "emoji": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Emoji"
+          },
+          "icon": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/UrgencyIconDocument"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Name"
+          },
+          "slug": {
+            "title": "Slug",
+            "type": "string"
+          }
+        },
+        "required": [
+          "slug"
+        ],
+        "title": "UrgencyEntry",
         "type": "object"
       },
       "UrgencyIconDocument": {
@@ -39884,7 +39993,7 @@
     },
     "/api/config/export": {
       "get": {
-        "description": "Every project with its standing links, every active forge, every active, non-built-in work source and\nrepository, and every active scope, routine (its linked scope set included), and cadence named in its project by\nslug, with every field, and every active secret name, as a version-2 document that applies back as a no-op.\nRetired records are left out, since applying one would enable it. 422 `config_version_retired` for `version=1`.",
+        "description": "Every project with its standing links, every live urgency \u2014 an icon as its media type and base64 bytes \u2014 in\norder with the tenant's default, every active forge, every active, non-built-in work source and\nrepository, and every active scope, routine (its linked scope set included), and cadence named in its project by\nslug, with every field, and every active secret name, as a version-2 document that applies back as a no-op.\nRetired records are left out, since applying one would enable it. 422 `config_version_retired` for `version=1`.",
         "operationId": "export_config_api_config_export_get",
         "parameters": [
           {

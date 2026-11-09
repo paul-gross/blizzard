@@ -1,8 +1,8 @@
 """SQLAlchemy adapter for the declarative apply (package-private).
 
-One ``store.write`` executes every planned write through the same per-operation bodies the per-record
-adapters run, and the first refusal rolls the whole apply back. A dry run is that transaction with a
-rollback after the last write (``bzh:config-apply``)."""
+One ``store.write`` declares the plan's keyed locks once, in their canonical order, then executes every planned write
+through the same per-operation bodies the per-record adapters run, and the first refusal rolls the whole apply back. A
+dry run is that transaction with a rollback after the last write (``bzh:config-apply``)."""
 
 from __future__ import annotations
 
@@ -34,6 +34,9 @@ from blizzard.hub.domain.garden.scopes import Scope, ScopeSlugTakenError
 from blizzard.hub.domain.projects.links import RepositoryLink, SourceLink
 from blizzard.hub.domain.projects.model import Project, ProjectId, ProjectSlugTaken
 from blizzard.hub.domain.projects.order import LandingOrderConflict
+from blizzard.hub.domain.urgency.declarations import SettingsWrite, UrgencyOrderWrite, UrgencyWrite
+from blizzard.hub.domain.urgency.model import UrgencySlugTaken
+from blizzard.hub.domain.urgency.order import UrgencyOrderConflict
 
 # Shares the cadence adapter's create, edit, and lifecycle bodies on the caller's connection.
 # ast-grep-ignore: bzh:hub-store-adapter-imports
@@ -63,10 +66,19 @@ from blizzard.hub.store.internal import routine_store as routine_writes
 # ast-grep-ignore: bzh:hub-store-adapter-imports
 from blizzard.hub.store.internal import scope_store as scope_writes
 
+# Shares the tenant settings' edit body on the caller's connection.
+# ast-grep-ignore: bzh:hub-store-adapter-imports
+from blizzard.hub.store.internal import tenant_settings_store as settings_writes
+
+# Shares the urgency adapter's create, edit, and position bodies on the caller's connection.
+# ast-grep-ignore: bzh:hub-store-adapter-imports
+from blizzard.hub.store.internal import urgency_store as urgency_writes
+
 # Shares the work_source_record_store writes on the same connection; debt pending a domain seam.
 # ast-grep-ignore: bzh:hub-store-adapter-imports
 from blizzard.hub.store.internal import work_source_record_store as work_source_writes
 from blizzard.hub.store.internal.landing_seqs import require_landing_seq
+from blizzard.hub.store.locking import lock_keys
 from blizzard.hub.store.schema import project_repository_positions
 from blizzard.hub.store.scoped import ScopedConnections, statements_of
 
@@ -85,6 +97,7 @@ _REFUSALS = (
     ScopeSlugTakenError,
     ProjectSlugTaken,
     LandingOrderConflict,
+    UrgencyOrderConflict,
 )
 
 
@@ -102,6 +115,8 @@ def _taken(record: object) -> Exception:
         return ScopeSlugTakenError(record.name)
     if isinstance(record, Project):
         return ProjectSlugTaken(record.slug)
+    if isinstance(record, UrgencyWrite):
+        return UrgencySlugTaken(record.urgency.slug, retired=False)
     if isinstance(record, SourceLink | RepositoryLink):
         return ConfigRevisionConflict(record.LABEL, f"{record.project_id}/{record.target()}", current=record.revision)
     assert isinstance(record, ConfiguredRepository)
@@ -117,13 +132,21 @@ class ConfigApplyStore:
         self._store = store
 
     def apply(
-        self, writes: Sequence[PlannedWrite], *, dry_run: bool, positions: Sequence[PlannedPosition] = ()
+        self,
+        writes: Sequence[PlannedWrite],
+        *,
+        dry_run: bool,
+        positions: Sequence[PlannedPosition] = (),
+        locks: Sequence[tuple[str, str]] = (),
     ) -> None:
         try:
             with self._store.write("apply", expect=(ApplyEntryRefused, _DryRunRollback)) as conn:
+                for namespace, key in sorted(set(locks)):
+                    lock_keys(conn, namespace, [key])
+                order = _UrgencyOrderSeq()
                 for write in writes:
                     try:
-                        self._run(conn, write)
+                        self._run(conn, write, order)
                     except IntegrityError as exc:  # a concurrent create won the race
                         cause = _taken(write.record)
                         raise ApplyEntryRefused(write.section, write.index, cause) from exc
@@ -141,11 +164,13 @@ class ConfigApplyStore:
             return
 
     @staticmethod
-    def _run(conn: Connection, write: PlannedWrite) -> None:
+    def _run(conn: Connection, write: PlannedWrite, order: _UrgencyOrderSeq) -> None:
         record, change, from_revision = write.record, write.change, write.from_revision
         lifecycle = change.op in (ChangeOp.RETIRE, ChangeOp.ENABLE)
         retired = change.op is ChangeOp.RETIRE
-        if isinstance(record, ConfiguredForge):
+        if isinstance(record, UrgencyWrite | UrgencyOrderWrite | SettingsWrite):
+            _run_urgency(conn, record, from_revision, change, order)
+        elif isinstance(record, ConfiguredForge):
             if from_revision is None:
                 forge_writes.insert_forge(conn, record, change)
             elif lifecycle:
@@ -214,6 +239,46 @@ class ConfigApplyStore:
             )
         else:
             repository_writes.update_record(conn, record, from_revision, None, change)
+
+
+class _UrgencyOrderSeq:
+    """Whether the apply has confirmed the urgency order's sequence stands where the plan read it. Every position the
+    plan lands was planned on that one sequence, and the set's lock holds every other writer off once it is confirmed,
+    so it is checked once, before the first position the apply appends."""
+
+    def __init__(self) -> None:
+        self.confirmed = False
+
+    def require(self, conn: Connection, from_seq: int) -> None:
+        if not self.confirmed:
+            urgency_writes.require_order_seq(conn, from_seq)
+            self.confirmed = True
+
+
+def _run_urgency(
+    conn: Connection,
+    record: UrgencyWrite | UrgencyOrderWrite | SettingsWrite,
+    from_revision: int | None,
+    change: ConfigChange,
+    order: _UrgencyOrderSeq,
+) -> None:
+    """An urgency created or edited, the order set, or the default pointed elsewhere — each on what the plan read."""
+    if isinstance(record, SettingsWrite):
+        assert from_revision is not None
+        urgency_writes.require_revisions(conn, [record.default])
+        settings_writes.update_settings(conn, record.settings, from_revision=from_revision, change=change)
+    elif isinstance(record, UrgencyOrderWrite):
+        order.require(conn, record.from_seq)
+        urgency_writes.require_revisions(conn, record.named)
+        urgency_writes.append_positions(conn, record.facts, at=change.recorded_at, by=change.actor, change=change)
+    elif from_revision is None:
+        assert record.position is not None
+        order.require(conn, record.order_seq)
+        urgency_writes.insert_urgency(conn, record.urgency, mark=record.mark, position=record.position, change=change)
+    else:
+        urgency_writes.update_urgency(
+            conn, record.urgency, mark=record.mark, from_revision=from_revision, change=change
+        )
 
 
 def _by_project(positions: Sequence[PlannedPosition]) -> list[list[PlannedPosition]]:

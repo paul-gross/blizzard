@@ -61,6 +61,10 @@ class IReadUrgencyRepository(Protocol):
         """The urgency's icon bytes; ``None`` when it carries none or does not exist."""
         ...
 
+    def icons(self) -> dict[UrgencyId, Icon]:
+        """The icon bytes of every urgency of the tenant carrying one, keyed by id, in one read."""
+        ...
+
 
 class IWriteUrgencyRepository(IReadUrgencyRepository, Protocol):
     """Adds the urgency writes; each commits the record, a compare-and-set on ``revision`` where one is held, and its

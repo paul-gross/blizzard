@@ -127,6 +127,10 @@ class UrgencyReading:
     def icon(self, urgency: Urgency) -> Icon | None:
         return self._urgencies.icon(urgency.urgency_id)
 
+    def icons(self) -> dict[UrgencyId, Icon]:
+        """The icon bytes of every urgency carrying one — only the config document's export carries them."""
+        return self._urgencies.icons()
+
     def _views(self, shown: Sequence[Urgency], order: UrgencyOrder) -> list[UrgencyView]:
         default_id = _settings(self._settings).default_urgency_id
         places = {p.urgency_id: index for index, p in enumerate(order.live, start=1)}

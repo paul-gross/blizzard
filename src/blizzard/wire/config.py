@@ -14,6 +14,7 @@ from blizzard.wire.forge import DEPRECATED_FIELD, OldFieldWarning
 from blizzard.wire.problem import CommonProblemMembers, ProblemDetails
 from blizzard.wire.routine import RoutineDocument
 from blizzard.wire.scope import ScopeDocument
+from blizzard.wire.urgency import UrgencyIconDocument
 
 
 class FieldChangeView(WireModel):
@@ -143,11 +144,36 @@ class WorkSourceEntry(BaseModel):
     secret: str | None = None
 
 
+class UrgencyEntry(BaseModel):
+    """An urgency as a document entry, named by its slug: created when the tenant holds none by it — with no ``name``
+    taking the slug and no ``color`` the palette color the live urgencies use least — and otherwise a sparse edit of
+    the fields it states. ``null`` on ``emoji`` or ``icon`` clears the mark; an ``icon`` is its media type and base64
+    bytes. An entry naming a retired urgency is refused ``urgency_retired``."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    slug: str
+    name: str | None = None
+    color: str | None = None
+    emoji: str | None = None
+    icon: UrgencyIconDocument | None = None
+
+
+class SettingsEntry(BaseModel):
+    """The tenant's settings as a document states them: ``default_urgency``, by id or slug, sets the urgency every new
+    chunk takes when nothing names another; ``null`` is refused."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    default_urgency: str | None = None
+
+
 class ConfigDocumentV2(BaseModel):
     """A declarative configuration document, version 2 — the one version a hub applies and exports. Each entry is the
     kind's own document model, so a field an entry omits is left as stored; forges reconcile before the records that
-    name them, projects before scopes and routines, and scopes before routines, so an entry may name a forge, a
-    project or a scope the same document declares; ``secrets`` lists secret names that must already be active.
+    name them, projects before scopes and routines, ``urgencies``, ``urgency_order`` and ``settings`` in that order
+    after the projects and before the scopes, and scopes before routines, so an entry may name a forge, a project, an
+    urgency or a scope the same document declares; ``secrets`` lists secret names that must already be active.
     ``GET /api/config/export`` writes every field of every entry, ``projects`` first, and names every project by its
     slug."""
 
@@ -155,6 +181,10 @@ class ConfigDocumentV2(BaseModel):
 
     version: Literal[2]
     projects: list[ProjectDocument] = []
+    urgencies: list[UrgencyEntry] = []
+    #: The whole live order, most urgent first, naming every urgency live once the apply has run; omitted, it stands.
+    urgency_order: list[str] | None = None
+    settings: SettingsEntry | None = None
     forges: list[ForgeEntry] = []
     secrets: list[str] = []
     work_sources: list[WorkSourceEntry] = []

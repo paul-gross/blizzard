@@ -37,6 +37,26 @@ def insert_settings(conn: Connection, settings: TenantSettings, change: ConfigCh
     append_change(conn, change)
 
 
+def update_settings(conn: Connection, settings: TenantSettings, *, from_revision: int, change: ConfigChange) -> None:
+    """The edit body, inside the caller's transaction: a compare-and-set on ``from_revision`` and the change;
+    :class:`ConfigRevisionConflict` when the stored revision has moved."""
+    stmts = statements_of(conn)
+    moved = conn.execute(
+        stmts.update(tenant_settings)
+        .where(tenant_settings.c.revision == from_revision)
+        .values(
+            default_urgency_id=settings.default_urgency_id,
+            revision=settings.revision,
+            updated_at=settings.updated_at,
+            updated_by=settings.updated_by,
+        )
+    ).rowcount
+    if moved != 1:
+        current = conn.execute(stmts.select(tenant_settings, tenant_settings.c.revision)).scalar_one()
+        raise ConfigRevisionConflict("tenant_settings", settings.tenant_id, current=current)
+    append_change(conn, change)
+
+
 class TenantSettingsStore:
     """Read-write adapter over the tenant's settings."""
 
@@ -72,21 +92,7 @@ class TenantSettingsStore:
         transaction: Transaction | None = None,
     ) -> TenantSettings:
         with connection_in(self._store, transaction, "update_tenant_settings", write=True) as conn:
-            stmts = statements_of(conn)
-            moved = conn.execute(
-                stmts.update(tenant_settings)
-                .where(tenant_settings.c.revision == from_revision)
-                .values(
-                    default_urgency_id=settings.default_urgency_id,
-                    revision=settings.revision,
-                    updated_at=settings.updated_at,
-                    updated_by=settings.updated_by,
-                )
-            ).rowcount
-            if moved != 1:
-                current = conn.execute(stmts.select(tenant_settings, tenant_settings.c.revision)).scalar_one()
-                raise ConfigRevisionConflict("tenant_settings", settings.tenant_id, current=current)
-            append_change(conn, change)
+            update_settings(conn, settings, from_revision=from_revision, change=change)
         return settings
 
 

@@ -303,7 +303,7 @@ class ConfigAuthoring:
         plan = reconcile(declaration, stored, ctx, at=self._clock.now())
         self._require_planned_offered(plan)
         if plan.writes or plan.positions:
-            self._apply_writer.apply(plan.writes, dry_run=dry_run, positions=plan.positions)
+            self._apply_writer.apply(plan.writes, dry_run=dry_run, positions=plan.positions, locks=plan.locks)
         return plan.outcomes
 
     # --- Carry-over --------------------------------------------------------------
