@@ -93,6 +93,8 @@ def runner_add(cli: CliContext, name: str, projects: tuple[str, ...], host_id: s
     if host_id is not None:
         request["host_id"] = host_id
     resp = cli.send("post", "/api/runners", json_body=request)
+    # Old-hub fallback for a body with no problem type; removed with the other old-hub fallbacks at 0.6.
+    # ast-grep-ignore: bzh:cli-refusal-body-confined
     if resp.status_code in _PREDATES_ADD and refusal_of(resp).type is None and host_id is None:
         raise click.ClickException(f"this hub ({cli.hub_url}) predates `hub runner add`")
     cli.check(

@@ -9,7 +9,33 @@ valid:
     detail = row.get("detail")
   - |
     detail = row["detail"]
+  # A refusal's members, through the adapter.
+  - |
+    def mint(resp):
+        refusal = refusal_of(resp)
+        if refusal.type == INVALID:
+            return refusal.members.get("errors", [])
+  # A status read in a function that never asks the adapter.
+  - |
+    def gate(resp):
+        return resp.status_code == 404
+  # A runner-local send answers no hub refusal.
+  - |
+    def clear(self, resp):
+        with RunnerDaemon.reach(self.path) as daemon:
+            resp = daemon.send("post", "/floor")
+            if resp.status_code == 409:
+                refusal_of(resp)
 invalid:
+  - |
+    def check(resp):
+        reading = refusal_of(resp)
+        return reading.type is None and resp.status_code == 401
+  - |
+    def mint(resp):
+        if refusal_of(resp).type == INVALID:
+            report = resp.json()
+
   - |
     slug = resp.json()["detail"]["slug"]
   - |

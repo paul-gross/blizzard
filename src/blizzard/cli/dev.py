@@ -184,6 +184,8 @@ def _ask_hub(ctx: click.Context, client_factory: ClientFactory, hub_url: str) ->
     cli = CliContext.of(hub_url, session, OperatorTrace.source(ctx), client_factory)
     try:
         resp = cli.send("get", _HUB_PATH, timeout=CHECK_TIMEOUT)
+        # Old-hub fallback for a body with no problem type; removed with the other old-hub fallbacks at 0.6.
+        # ast-grep-ignore: bzh:cli-refusal-body-confined
         if resp.status_code == HTTPStatus.CONFLICT and refusal_of(resp).type in (None, INVARIANTS_IN_PROGRESS):
             raise click.ClickException(_RUNNING)
         cli.check(resp, "check-invariants")

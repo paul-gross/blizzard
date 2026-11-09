@@ -4,8 +4,10 @@ id: bzh:cli-refusal-body-confined
 language: Python
 severity: error
 message: >-
-  A refusal body's `detail` is read only by blizzard.cli.refusal, the CLI trees' one problem-details adapter. A command
-  asks `refusal_of(resp)` for the refusal's `type` and `message`, and dispatches on the type (bzh:clients-read-problem-types).
+  A refusal body is read only by blizzard.cli.refusal, the CLI trees' one problem-details adapter. A command asks
+  `refusal_of(resp)` for the refusal's `type`, `message`, and `members`, and dispatches on the type
+  (bzh:clients-read-problem-types) — it neither reads `detail` itself, nor re-reads the body with `resp.json()` inside a
+  `refusal_of` dispatch, nor reads the status code of a response it passed to `refusal_of`.
 files:
   - src/blizzard/cli/**
   - src/blizzard/hub/cli/**
@@ -25,4 +27,32 @@ rule:
             has:
               pattern: $BODY = $RESPONSE.json()
               stopBy: end
+            stopBy: end
+    # The status code of a response the function also hands to the adapter. A runner-local send goes through
+    # RunnerDaemon.reach and answers no hub refusal, so it is not a match.
+    - all:
+        - pattern: $R.status_code
+        - inside:
+            kind: function_definition
+            has:
+              pattern: refusal_of($R)
+              stopBy: end
+            stopBy: end
+        - not:
+            inside:
+              kind: with_statement
+              has:
+                pattern: RunnerDaemon.reach($$$)
+                stopBy: end
+              stopBy: end
+    # A raw re-read of a body inside an `if` whose condition dispatches on the adapter's reading.
+    - all:
+        - pattern: $R.json()
+        - inside:
+            kind: if_statement
+            has:
+              field: condition
+              has:
+                pattern: refusal_of($R)
+                stopBy: end
             stopBy: end

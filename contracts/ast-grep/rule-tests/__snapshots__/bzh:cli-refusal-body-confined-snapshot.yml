@@ -41,6 +41,49 @@ snapshots:
       start: 0
       end: 65
   ? |
+    def check(resp):
+        reading = refusal_of(resp)
+        return reading.type is None and resp.status_code == 401
+  : labels:
+    - source: resp.status_code
+      style: primary
+      start: 84
+      end: 100
+    - source: refusal_of(resp)
+      style: secondary
+      start: 31
+      end: 47
+    - source: |-
+        def check(resp):
+            reading = refusal_of(resp)
+            return reading.type is None and resp.status_code == 401
+      style: secondary
+      start: 0
+      end: 107
+  ? |
+    def mint(resp):
+        if refusal_of(resp).type == INVALID:
+            report = resp.json()
+  : labels:
+    - source: resp.json()
+      style: primary
+      start: 74
+      end: 85
+    - source: refusal_of(resp)
+      style: secondary
+      start: 23
+      end: 39
+    - source: refusal_of(resp)
+      style: secondary
+      start: 23
+      end: 39
+    - source: |-
+        if refusal_of(resp).type == INVALID:
+                report = resp.json()
+      style: secondary
+      start: 20
+      end: 85
+  ? |
     detail = resp.json().get("detail")
   : labels:
     - source: resp.json().get("detail")
