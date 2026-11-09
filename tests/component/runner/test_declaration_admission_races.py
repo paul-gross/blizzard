@@ -28,6 +28,7 @@ from blizzard.runner.lifecycle.judgement.git_commits import DeclaredCommits
 from blizzard.runner.lifecycle.judgement.judgement import Judgement
 from blizzard.runner.node_steps.submissions import CompletionArtifact
 from blizzard.runner.operator.attachments import AttachmentService, AttachmentTooLate
+from tests.support.lease_unit_seeds import seed_git_commit_declaration
 from tests.support.runner_fakes import (
     FakeHarness,
     FakeHub,
@@ -142,7 +143,8 @@ class _DeclaresAfterFirstVerify(DeclaredCommits):
             self.done = True
             store = self.ctx.stores.git_commit_declarations
             assert isinstance(store, SqlAlchemyRunnerStore)
-            store.record_git_commit_declaration(
+            seed_git_commit_declaration(
+                store,
                 lease_id=_LEASE,
                 chunk_id="ch_1",
                 node_id="nd_build",

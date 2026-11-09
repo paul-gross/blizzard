@@ -53,7 +53,9 @@ class GitCommitDeclarationStore:
                 branch=str(r.branch),
                 commit=str(r.commit),
             )
-            for r in (self._store.all(stmt) if unit is None else unit_conn(unit).execute(stmt).all())
+            for r in (
+                self._store.all(stmt) if unit is None else unit_conn(self._store, unit, lease_id).execute(stmt).all()
+            )
         }
 
     def git_commit_declarations_for_leases(self, lease_ids: Sequence[str]) -> dict[str, list[DeclaredLeaseCommit]]:
@@ -106,10 +108,9 @@ class GitCommitDeclarationStore:
         branch: str,
         commit: str,
         declared_at: datetime,
-        unit: ILeaseUnit | None = None,
+        unit: ILeaseUnit,
     ) -> None:
-        # Alone, a single committed transaction — durable the instant this returns, so it survives a `kill -9`
-        # right after. In a unit, it commits with the unit.
+        # Commits with the unit, never alone: the admission check and this insert are one lease-locked transaction.
         stmt = self._store.insert(git_commit_declarations).values(
             lease_id=lease_id,
             chunk_id=chunk_id,
@@ -121,11 +122,7 @@ class GitCommitDeclarationStore:
             commit=commit,
             declared_at=declared_at,
         )
-        if unit is None:
-            with self._store.begin() as conn:
-                conn.execute(stmt)
-        else:
-            unit_conn(unit).execute(stmt)
+        unit_conn(self._store, unit, lease_id).execute(stmt)
         _log.info("git-commit declaration recorded", lease_id=lease_id, repo=repo)
 
 

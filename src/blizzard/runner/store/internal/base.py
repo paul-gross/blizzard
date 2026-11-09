@@ -11,13 +11,13 @@ from __future__ import annotations
 import json
 from dataclasses import dataclass
 from datetime import datetime
-from typing import Any, cast
+from typing import Any
 
 from sqlalchemy import ColumnElement, Connection, Row, Select, Table, and_, join
 from sqlalchemy.exc import IntegrityError
 
 from blizzard.foundation.roles import domain_model
-from blizzard.runner.leases.lease_lock import ILeaseUnit
+from blizzard.runner.leases.lease_lock import ILeaseUnit, LeaseUnitMisuse
 from blizzard.runner.leases.model import Lease, WorkRefStamp
 from blizzard.runner.store.schema import (
     OUTBOX_LANE_OUTBOUND,
@@ -47,14 +47,25 @@ NO_NORMALIZER_VERSION = ""
 @dataclass(frozen=True)
 class LeaseUnit:
     """The concrete lease-locked unit — the statements it joins run on :attr:`conn`, the transaction the lease's row was
-    locked on. :class:`~blizzard.runner.leases.lease_lock.ILeaseUnit` is what the domain holds it as."""
+    locked on, for :attr:`lease_id`, minted by :attr:`store`.
+    :class:`~blizzard.runner.leases.lease_lock.ILeaseUnit` is what the domain holds it as."""
 
     conn: Connection
+    lease_id: str
+    store: RunnerStoreConnections
 
 
-def unit_conn(unit: ILeaseUnit) -> Connection:
-    """Recover the transaction from a domain-held unit; only the lease-lock adapter builds one."""
-    return cast(LeaseUnit, unit).conn
+def unit_conn(store: RunnerStoreConnections, unit: ILeaseUnit, lease_id: str | None) -> Connection:
+    """The one door every unit-joined statement passes through: the unit's transaction, but only for a unit that
+    ``store`` minted, whose block is still open, and that locked ``lease_id``. Anything else raises
+    :class:`LeaseUnitMisuse` before a statement runs."""
+    if not isinstance(unit, LeaseUnit) or unit.store is not store:
+        raise LeaseUnitMisuse("the lease unit was not minted by this runner store")
+    if not unit.conn.in_transaction():
+        raise LeaseUnitMisuse(f"the lease unit for {unit.lease_id!r} is no longer open")
+    if lease_id is None or unit.lease_id != lease_id:
+        raise LeaseUnitMisuse(f"the lease unit locks {unit.lease_id!r}, not {lease_id!r}")
+    return unit.conn
 
 
 @domain_model

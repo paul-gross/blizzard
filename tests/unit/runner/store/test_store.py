@@ -6,7 +6,9 @@ assert the SQL derivations the loop relies on, against a real tmp sqlite store.
 
 from __future__ import annotations
 
+import inspect
 import json
+from collections.abc import Callable
 from dataclasses import replace
 from datetime import datetime, timedelta
 from pathlib import Path
@@ -18,9 +20,15 @@ from blizzard.foundation.ids import Id, IdPrefix
 from blizzard.runner.harness.fingerprint import PreambleFingerprint
 from blizzard.runner.harness.identity import CLAUDE_CODE_HARNESS_ID, SessionReference
 from blizzard.runner.harness.usage import UsageKind, UsageSample
+from blizzard.runner.leases.lease_lock import ILeaseUnit, LeaseUnitMisuse
+from blizzard.runner.leases.operator_requests import IWriteAttachmentRepository
+from blizzard.runner.lifecycle.judgement.git_commit_declaration import IWriteGitCommitDeclarationRepository
+from blizzard.runner.store.internal.attachment_store import AttachmentStore
+from blizzard.runner.store.internal.git_commit_declaration_store import GitCommitDeclarationStore
 from blizzard.runner.store.schema import transcript_outbound_buffer
 from blizzard.runner.usage.repository import InvocationCost
-from tests.support.runner_fakes import FIXTURE_RUNNER_ID, SqlAlchemyRunnerStore, record_usage
+from tests.support.lease_unit_seeds import seed_attachment
+from tests.support.runner_fakes import FIXTURE_RUNNER_ID, SqlAlchemyRunnerStore, make_store, record_usage
 from tests.support.runner_store import (
     _NOW,  # pyright: ignore[reportPrivateUsage]
     _mint,  # pyright: ignore[reportPrivateUsage]
@@ -647,7 +655,8 @@ def test_attachments_for_lease_is_empty_when_nothing_attached(tmp_path: Path):
 def test_attachments_for_lease_round_trips_what_was_recorded(tmp_path: Path):
     store = _store(tmp_path)
     _mint(store)
-    store.record_attachment(
+    seed_attachment(
+        store,
         lease_id="lease_1",
         chunk_id="ch_1",
         node_id="nd_build",
@@ -664,11 +673,25 @@ def test_attachments_for_lease_is_latest_wins_per_name(tmp_path: Path):
     row for the pair is what reads back."""
     store = _store(tmp_path)
     _mint(store)
-    store.record_attachment(
-        lease_id="lease_1", chunk_id="ch_1", node_id="nd_build", epoch=1, name="n", content="first", attached_at=_NOW
+    seed_attachment(
+        store,
+        lease_id="lease_1",
+        chunk_id="ch_1",
+        node_id="nd_build",
+        epoch=1,
+        name="n",
+        content="first",
+        attached_at=_NOW,
     )
-    store.record_attachment(
-        lease_id="lease_1", chunk_id="ch_1", node_id="nd_build", epoch=1, name="n", content="second", attached_at=_NOW
+    seed_attachment(
+        store,
+        lease_id="lease_1",
+        chunk_id="ch_1",
+        node_id="nd_build",
+        epoch=1,
+        name="n",
+        content="second",
+        attached_at=_NOW,
     )
     assert store.attachments_for_lease("lease_1") == {"n": "second"}
 
@@ -677,11 +700,25 @@ def test_attachments_for_lease_is_scoped_per_lease(tmp_path: Path):
     store = _store(tmp_path)
     _mint(store, lease="lease_1")
     _mint(store, lease="lease_2", chunk="ch_2")
-    store.record_attachment(
-        lease_id="lease_1", chunk_id="ch_1", node_id="nd_build", epoch=1, name="n", content="one", attached_at=_NOW
+    seed_attachment(
+        store,
+        lease_id="lease_1",
+        chunk_id="ch_1",
+        node_id="nd_build",
+        epoch=1,
+        name="n",
+        content="one",
+        attached_at=_NOW,
     )
-    store.record_attachment(
-        lease_id="lease_2", chunk_id="ch_2", node_id="nd_build", epoch=1, name="n", content="two", attached_at=_NOW
+    seed_attachment(
+        store,
+        lease_id="lease_2",
+        chunk_id="ch_2",
+        node_id="nd_build",
+        epoch=1,
+        name="n",
+        content="two",
+        attached_at=_NOW,
     )
     assert store.attachments_for_lease("lease_1") == {"n": "one"}
     assert store.attachments_for_lease("lease_2") == {"n": "two"}
@@ -1458,3 +1495,60 @@ def test_a_finalized_segment_takes_no_content_and_no_stop(tmp_path: Path):
         None,
     )
     assert [d.final for d in store.pending_transcript_outbound()] == [True]
+
+
+def _attach(store: SqlAlchemyRunnerStore, unit: ILeaseUnit, lease: str, chunk: str) -> None:
+    store.record_attachment(
+        lease_id=lease, chunk_id=chunk, node_id="nd_build", epoch=1, name="n", content="x", attached_at=_NOW, unit=unit
+    )
+
+
+def test_a_unit_locked_on_one_lease_is_refused_for_a_write_to_another(tmp_path: Path):
+    store = _store(tmp_path)
+    _mint(store, lease="lease_1")
+    _mint(store, lease="lease_2", chunk="ch_2")
+    with pytest.raises(LeaseUnitMisuse), store.locked("lease_1") as unit:
+        _attach(store, unit, "lease_2", "ch_2")
+    assert store.attachments_for_lease("lease_2") == {}
+
+
+def test_a_unit_minted_by_another_store_is_refused(tmp_path: Path):
+    store = _store(tmp_path)
+    other = make_store(f"sqlite:///{tmp_path / 'other.db'}")
+    _mint(store)
+    _mint(other)
+    with pytest.raises(LeaseUnitMisuse), other.locked("lease_1") as unit:
+        _attach(store, unit, "lease_1", "ch_1")
+    assert store.attachments_for_lease("lease_1") == {}
+
+
+def test_a_unit_used_after_its_block_is_refused(tmp_path: Path):
+    store = _store(tmp_path)
+    _mint(store)
+    with store.locked("lease_1") as unit:
+        pass
+    with pytest.raises(LeaseUnitMisuse):
+        _attach(store, unit, "lease_1", "ch_1")
+    assert store.attachments_for_lease("lease_1") == {}
+
+
+def test_the_matching_unit_writes_and_commits_with_the_block(tmp_path: Path):
+    store = _store(tmp_path)
+    _mint(store)
+    with store.locked("lease_1") as unit:
+        _attach(store, unit, "lease_1", "ch_1")
+    assert store.attachments_for_lease("lease_1") == {"n": "x"}
+
+
+@pytest.mark.parametrize(
+    "method",
+    [
+        IWriteAttachmentRepository.record_attachment,
+        IWriteGitCommitDeclarationRepository.record_git_commit_declaration,
+        AttachmentStore.record_attachment,
+        GitCommitDeclarationStore.record_git_commit_declaration,
+    ],
+)
+def test_the_admission_writes_require_a_unit(method: Callable[..., object]):
+    param = inspect.signature(method).parameters["unit"]
+    assert param.default is inspect.Parameter.empty

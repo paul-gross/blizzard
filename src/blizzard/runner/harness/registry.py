@@ -108,6 +108,12 @@ class IHarnessTranscriptSourceRegistry(Protocol):
     def transcript_source(self, harness_id: str) -> IHarnessTranscriptSource: ...
 
 
+class IHarnessSelfTestRegistry(Protocol):
+    """The self-test slice of the registry."""
+
+    def self_test(self, harness_id: str) -> IHarnessSelfTestSeam: ...
+
+
 class IHarnessRegistry(
     IHarnessKnownRegistry,
     IHarnessLifecycleRegistry,
@@ -117,12 +123,11 @@ class IHarnessRegistry(
     IHarnessUsageLimitsRegistry,
     IHarnessProviderOverloadRegistry,
     IHarnessTranscriptSourceRegistry,
+    IHarnessSelfTestRegistry,
     Protocol,
 ):
     """Resolve one harness's seams by its exact stable id: the composition of every role slice
     (``bzh:seam-size-ceiling``), for roots and edges that thread the whole registry on."""
-
-    def self_test(self, harness_id: str) -> IHarnessSelfTestSeam: ...
 
 
 class HarnessRegistry:

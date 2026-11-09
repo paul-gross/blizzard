@@ -70,10 +70,10 @@ class IWriteAttachmentRepository(IReadAttachmentRepository, Protocol):
         name: str,
         content: str,
         attached_at: datetime,
-        unit: ILeaseUnit | None = None,
+        unit: ILeaseUnit,
     ) -> None:
-        """Append a worker's explicit artifact submission for ``name``, a
-        single committed transaction so it survives a ``kill -9`` before the completion
+        """Append a worker's explicit artifact submission for ``name`` on the lease-locked ``unit``'s transaction,
+        durable when the unit commits, so it survives a ``kill -9`` before the completion
         submission reads it. Append-only: a later call for the same ``(lease_id, name)``
         is a correction, read back as the replacement, never merged."""
         ...

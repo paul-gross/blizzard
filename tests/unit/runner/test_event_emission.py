@@ -34,6 +34,7 @@ from blizzard.runner.loop.steps import Advance, Fill, Reap
 from blizzard.runner.node_steps.chunk_state import ChunkState
 from blizzard.runner.node_steps.envelope import Envelope
 from blizzard.runner.process.internal.worker_scratch_dirs import WorkerScratchDirs
+from tests.support.lease_unit_seeds import seed_git_commit_declaration
 from tests.support.runner_fakes import (
     FakeCheckRunner,
     FakeHarness,
@@ -284,7 +285,8 @@ def test_git_verify_failure_emits_a_command_failed_and_continues(tmp_path: Path)
     dropped and ADVANCE proceeds into its ordinary verdict-less-exit failure path."""
     store = _store(tmp_path)
     _seed_lease(store, retries_max=2)
-    store.record_git_commit_declaration(
+    seed_git_commit_declaration(
+        store,
         lease_id="lease_1",
         chunk_id="ch_1",
         node_id="nd_build",

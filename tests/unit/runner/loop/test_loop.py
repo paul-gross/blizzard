@@ -74,6 +74,7 @@ from blizzard.runner.store.errors import RunnerStoreErrorFactory
 from blizzard.runner.store.schema import lease_closures, lease_spawns
 from blizzard.runner.store.schema import metadata as runner_metadata
 from tests.support.child_launch import CHILDREN, version_probe
+from tests.support.lease_unit_seeds import seed_git_commit_declaration
 from tests.support.runner_fakes import (
     FIXTURE_RUNNER_ID,
     FakeHarness,
@@ -1741,7 +1742,8 @@ def test_fill_peeks_pass_over_by_default(tmp_path: Path):
 def test_advance_buffers_completion_then_flush_enters_hub_node(tmp_path: Path):
     store = _store(tmp_path)
     _seed_running_lease(store)
-    store.record_git_commit_declaration(
+    seed_git_commit_declaration(
+        store,
         lease_id="lease_1",
         chunk_id="ch_1",
         node_id="nd_build",
@@ -1799,7 +1801,8 @@ def test_advance_reports_and_drops_a_declaration_whose_verify_is_false(tmp_path:
     nudge), and is also reported, since silent non-coverage would let a chunk land done."""
     store = _store(tmp_path)
     _seed_running_lease(store)
-    store.record_git_commit_declaration(
+    seed_git_commit_declaration(
+        store,
         lease_id="lease_1",
         chunk_id="ch_1",
         node_id="nd_build",
@@ -1843,7 +1846,8 @@ def test_advance_drives_only_the_declared_branch_never_head_inference(tmp_path: 
     too: no fake here carries a ``push``/``_current_branch`` method to infer from."""
     store = _store(tmp_path)
     _seed_running_lease(store)
-    store.record_git_commit_declaration(
+    seed_git_commit_declaration(
+        store,
         lease_id="lease_1",
         chunk_id="ch_1",
         node_id="nd_build",
@@ -3876,7 +3880,8 @@ def test_advance_harvests_git_commits_from_every_bound_environment(tmp_path: Pat
     _seed_running_lease(store)
     store.record_binding(chunk_id="ch_1", environment_id="e2", workdir="/ws/e2", bound_at=_NOW, workspace_id="ws1")
     for env, commit in (("e1", "aaa111"), ("e2", "bbb222")):
-        store.record_git_commit_declaration(
+        seed_git_commit_declaration(
+            store,
             lease_id="lease_1",
             chunk_id="ch_1",
             node_id="nd_build",
@@ -3930,7 +3935,8 @@ def _two_env_commit_submission(tmp_path: Path, *, origins: dict[str, str], commi
     _seed_running_lease(store)
     store.record_binding(chunk_id="ch_1", environment_id="e2", workdir="/ws/e2", bound_at=_NOW, workspace_id="ws1")
     for env in ("e1", "e2"):
-        store.record_git_commit_declaration(
+        seed_git_commit_declaration(
+            store,
             lease_id="lease_1",
             chunk_id="ch_1",
             node_id="nd_build",

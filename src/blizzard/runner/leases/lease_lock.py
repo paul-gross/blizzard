@@ -10,7 +10,13 @@ from __future__ import annotations
 from contextlib import AbstractContextManager
 from typing import Protocol
 
-__all__ = ["ILeaseUnit", "IWriteLeaseLock"]
+__all__ = ["ILeaseUnit", "IWriteLeaseLock", "LeaseUnitMisuse"]
+
+
+class LeaseUnitMisuse(RuntimeError):
+    """A lease-locked unit was handed to a statement it was not minted for — another lease's unit, another runner
+    store's unit, or a unit whose block has ended. A programming error: no caller catches it, and the statement
+    writes nothing."""
 
 
 class ILeaseUnit(Protocol):

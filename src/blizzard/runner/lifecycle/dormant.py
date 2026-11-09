@@ -23,6 +23,7 @@ from blizzard.runner.hub.client import ChunkNotFoundError, HubClientError
 from blizzard.runner.hub.outbound import OutboundFacts
 from blizzard.runner.leases.asks import OpenAsk
 from blizzard.runner.leases.elicitation import PendingElicitation
+from blizzard.runner.leases.lease_lock import IWriteLeaseLock
 from blizzard.runner.leases.model import Lease, ParkResume
 from blizzard.runner.leases.operator_requests import IReadAttachmentRepository
 from blizzard.runner.leases.overload import OverloadExit
@@ -125,6 +126,8 @@ _ANSWER_WAKE_POINTS = WakePoints(
 
 
 class DormantStores(UsageLimitStores, GitCommitsStores, OverloadStores, Protocol):
+    @property
+    def lease_lock(self) -> IWriteLeaseLock: ...
     @property
     def attachments(self) -> IReadAttachmentRepository: ...
     @property
