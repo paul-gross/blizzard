@@ -83,11 +83,15 @@ def _create(store: RoutineStore, routine: Routine, *, scope_mint: ScopeMint | No
 
 
 def _changes(engine: Engine) -> list[tuple[str, str, int, str]]:
-    """The change log past the store's default project, whose ``create`` row the migration wrote."""
+    """The change log past the store's default project, urgency, and settings, whose ``create`` rows the migration wrote."""
     changes = s.config_changes
     with engine.connect() as conn:
         rows = conn.execute(
-            hub_scoped(select(changes).where(changes.c.record_kind != "project").order_by(changes.c.id))
+            hub_scoped(
+                select(changes)
+                .where(changes.c.record_kind.not_in(("project", "urgency", "tenant_settings")))
+                .order_by(changes.c.id)
+            )
         ).all()
     return [(row.record_kind, row.record_key, row.revision, row.op) for row in rows]
 

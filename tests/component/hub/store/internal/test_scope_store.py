@@ -64,8 +64,8 @@ def _set_retired(scope: Scope, retired: bool) -> tuple[Scope, ConfigChange]:
 
 
 def _changes(engine: Engine) -> list[tuple[str, str, int, str]]:
-    """The change log past the store's default project, whose ``create`` row the migration wrote."""
-    past_the_project = config_changes.c.record_kind != "project"
+    """The change log past the store's default project, urgency, and settings, whose ``create`` rows the migration wrote."""
+    past_the_project = config_changes.c.record_kind.not_in(("project", "urgency", "tenant_settings"))
     with engine.connect() as conn:
         rows = conn.execute(
             hub_store_connections(engine).select(config_changes).where(past_the_project).order_by(config_changes.c.id)
