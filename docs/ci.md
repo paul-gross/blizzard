@@ -385,7 +385,9 @@ multi-arch GHCR push — only a real tag cut's `build` run proves that.
 humans, and the release workflow alike. It builds both Angular apps into the wheel-embed assets dir
 `src/blizzard/static/{hub,runner}`, builds the wheel (`uv build --wheel`) embedding those assets plus both Alembic
 migration trees, verifies the wheel actually contains them, then proves a Node-free install by running
-`blizzard --version` from a clean node-free virtualenv.
+`blizzard --version` from a clean node-free virtualenv. The Angular step skips `npm ci` when
+`web/node_modules/.package-lock-hash` matches `package-lock.json` — the same stamp `scripts/ci-gate.sh` uses — while
+`npm run build` always runs. Delete `web/node_modules` to force a clean install.
 
 Setting `BLIZZARD_VERSION=<v>` overrides the wheel version — the dev-build and release `build` jobs set it — and the
 original is restored after the build.
