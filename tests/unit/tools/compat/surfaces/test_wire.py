@@ -791,3 +791,12 @@ def test_a_question_view_from_an_older_hub_reads_as_not_superseded() -> None:
     )
 
     assert view.superseded is False
+
+
+@pytest.mark.parametrize("key", ["items", "additionalProperties"])
+def test_nested_schema_keeps_an_empty_schema_on_a_non_null_union_member(key: str) -> None:
+    from blizzard.tools.compat.surfaces.wire import _nested_schema
+
+    for union in ("anyOf", "oneOf"):
+        prop = {union: [{"type": "null"}, {"type": "array" if key == "items" else "object", key: {}}]}
+        assert _nested_schema(prop, key) == {}  # type: ignore[arg-type]

@@ -288,8 +288,10 @@ def _nested_schema(schema: Schema, key: Literal["items", "additionalProperties"]
     if nested is not None:
         return nested
     for member in (*schema.get("anyOf", []), *schema.get("oneOf", [])):
-        nested = member.get("type") != "null" and _nested_of(member, key)
-        if nested:
+        if member.get("type") == "null":
+            continue
+        nested = _nested_of(member, key)
+        if nested is not None:
             return nested
     return None
 
