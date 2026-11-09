@@ -6,11 +6,10 @@ Timestamps arrive already stamped (``bzh:injected-clock``)."""
 
 from __future__ import annotations
 
-import json
 from collections import defaultdict
 from collections.abc import Sequence
 from datetime import datetime
-from typing import Any, cast
+from typing import Any
 
 from sqlalchemy import Row, or_
 
@@ -19,10 +18,11 @@ from blizzard.foundation.clock import IClock
 from blizzard.foundation.ids import Id, IdPrefix
 from blizzard.foundation.store.batching import id_batches
 from blizzard.hub.domain.artifact.model import StoredArtifact
-from blizzard.hub.domain.chunk.delivery_read import DeliverySources, PrMarker
+from blizzard.hub.domain.chunk.delivery_read import DeliverySources
 from blizzard.hub.domain.chunk.model import CloseEnqueueDecision
 from blizzard.hub.domain.chunk.ports.artifacts import IWriteChunkArtifactsRepository
 from blizzard.hub.domain.chunk.ports.fence import EpochAdmission
+from blizzard.hub.domain.chunk.pr_markers import PR_MARKER_PREFIX, PrMarker, decode_pr_marker
 from blizzard.hub.domain.kernel.transactions import Transaction
 from blizzard.hub.store import schema as s
 from blizzard.hub.store.internal.chunk_rows import (
@@ -35,24 +35,6 @@ from blizzard.hub.store.internal.chunk_rows import (
 from blizzard.hub.store.internal.newest_fact import newer_row_exists
 from blizzard.hub.store.scoped import ScopedConnections
 from blizzard.hub.store.transactions import chunk_locked_connection, connection_in
-
-
-def _pr_marker(name: str, epoch: int, data: str) -> PrMarker | None:
-    """The PR a ``delivery-pr/`` marker's JSON payload names, or ``None`` when it is not that shape."""
-    try:
-        loaded: object = json.loads(data)
-    except ValueError:
-        return None
-    if not isinstance(loaded, dict):
-        return None
-    payload = cast(dict[str, Any], loaded)
-    if not (
-        isinstance(payload.get("repo"), str)
-        and isinstance(payload.get("number"), int)
-        and isinstance(payload.get("url"), str)
-    ):
-        return None
-    return PrMarker(name=name, epoch=epoch, repo=payload["repo"], number=payload["number"], url=payload["url"])
 
 
 def _stored_artifact(a: Row[Any]) -> StoredArtifact:
@@ -98,7 +80,7 @@ class ChunkArtifactsStore:
                             & or_(
                                 s.artifacts.c.name.like("merged/%"),
                                 s.artifacts.c.name.like("no-code/%"),
-                                s.artifacts.c.name.like("delivery-pr/%"),
+                                s.artifacts.c.name.like(f"{PR_MARKER_PREFIX}%"),
                                 s.artifacts.c.name == "awaiting-external-merge",
                             ),
                         ),
@@ -123,10 +105,10 @@ class ChunkArtifactsStore:
                             )
                         )
                         continue
-                    if a.name.startswith("delivery-pr/"):
+                    if a.name.startswith(PR_MARKER_PREFIX):
                         # A payload that is not a PR reference is skipped here, so the domain only ever
                         # folds well-formed markers.
-                        pr = _pr_marker(a.name, a.epoch, a.data)
+                        pr = decode_pr_marker(a.name, a.epoch, a.data)
                         if pr is not None:
                             pr_markers[a.chunk_id].append(pr)
                         continue

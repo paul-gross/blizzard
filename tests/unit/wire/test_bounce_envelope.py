@@ -8,7 +8,8 @@ import pytest
 
 from blizzard.hub.delivery.hub_node import BouncedAction
 from blizzard.hub.delivery.hub_node import BounceEnvelope as DomainEnvelope
-from blizzard.hub.domain.chunk.delivery_read import DeliverySources, PrMarker
+from blizzard.hub.domain.chunk.delivery_read import DeliverySources
+from blizzard.hub.domain.chunk.pr_markers import PrMarker
 from blizzard.wire.bounce import BounceEnvelope
 
 _PR = PrMarker("delivery-pr/acme/one/7", 1, "acme/one", 7, "https://forge.one/acme/one/pull/7")

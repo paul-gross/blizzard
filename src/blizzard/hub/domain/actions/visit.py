@@ -14,10 +14,10 @@ from types import MappingProxyType
 from blizzard.foundation.landing_policy import LandingPolicy
 from blizzard.foundation.roles import domain_model
 from blizzard.hub.domain.actions.declarations import GitCommits, UnconvergedDeliveryError
-from blizzard.hub.domain.actions.pr_markers import is_reopened, latest_pr_marker
 from blizzard.hub.domain.artifact.model import StoredArtifact
 from blizzard.hub.domain.chunk.model import LandedRepos, WorkRef
 from blizzard.hub.domain.chunk.no_code import finished_repos, no_code_marker, no_code_repos
+from blizzard.hub.domain.chunk.pr_markers import is_reopened, latest_pr_marker
 from blizzard.hub.domain.config.forges import ConfiguredForge
 from blizzard.hub.domain.config.landing_policies import landing_sort_key
 from blizzard.hub.domain.config.repositories import (
@@ -29,8 +29,7 @@ from blizzard.hub.domain.config.repositories import (
     resolve_chunk_repositories,
 )
 from blizzard.hub.domain.graph.actions import ActionSpec
-from blizzard.hub.domain.projects.links import IReadProjectLinks
-from blizzard.hub.domain.projects.model import IReadProjectRepository, ProjectId
+from blizzard.hub.domain.projects.model import ProjectId
 
 
 @domain_model
@@ -44,36 +43,6 @@ class LandingProject:
     slug: str = ""
     linked: frozenset[str] = frozenset()
     positions: Mapping[str, float | None] = field(default_factory=lambda: MappingProxyType({}))
-
-    @classmethod
-    def read(
-        cls, project_id: ProjectId | None, *, projects: IReadProjectRepository, links: IReadProjectLinks
-    ) -> LandingProject:
-        """The chunk's project and the repository records it links, read now."""
-        return cls.read_many([project_id], projects=projects, links=links)[project_id]
-
-    @classmethod
-    def read_many(
-        cls, project_ids: Iterable[ProjectId | None], *, projects: IReadProjectRepository, links: IReadProjectLinks
-    ) -> dict[ProjectId | None, LandingProject]:
-        """:meth:`read` for each distinct id of ``project_ids``, in a bounded number of reads
-        (``bzh:bulk-reconstitution``); ``None`` is the empty project."""
-        ids = sorted({project_id for project_id in project_ids if project_id is not None})
-        found = projects.get_many(ids) if ids else {}
-        standing = links.repositories_of_projects(ids) if ids else {}
-        result: dict[ProjectId | None, LandingProject] = {None: cls()}
-        for project_id in ids:
-            project = found.get(project_id)
-            positions: dict[str, float | None] = {
-                link.repository_id: link.position for link in standing.get(project_id, [])
-            }
-            result[project_id] = cls(
-                project_id=project_id,
-                slug=project.slug if project is not None else project_id,
-                linked=frozenset(positions),
-                positions=MappingProxyType(positions),
-            )
-        return result
 
 
 @domain_model

@@ -19,8 +19,8 @@ from blizzard.hub.delivery.actions.landing.repo import (
     Waiting,
 )
 from blizzard.hub.domain.actions.effects import ActionEscalation
-from blizzard.hub.domain.actions.pr_markers import (
-    PrMarker,
+from blizzard.hub.domain.artifact.model import StoredArtifact
+from blizzard.hub.domain.chunk.pr_markers import (
     latest_pr_marker,
     pr_marker_content,
     pr_marker_name,
@@ -124,7 +124,7 @@ class Park:
     def _proof_offered(repo: RepoLanding) -> bool:
         return {Capability.REFS_READ, Capability.COMPARE} <= repo.forge.offered
 
-    async def _annotate(self, repo: RepoLanding, change: Change, marker: PrMarker | None) -> None:
+    async def _annotate(self, repo: RepoLanding, change: Change, marker: StoredArtifact | None) -> None:
         """The merged change's reference and changed-head evidence, each written best-effort after the landing."""
         visit = repo.run.visit
         steps: list[tuple[str, str]] = []
@@ -157,7 +157,7 @@ class Park:
             except NotRecorded as exc:
                 repo.run.say(f"{repo.repo}: {name} was not written (non-fatal): {exc}")
 
-    def _waiting(self, repo: RepoLanding, number: int, marker: PrMarker | None) -> RepoState:
+    def _waiting(self, repo: RepoLanding, number: int, marker: StoredArtifact | None) -> RepoState:
         visit = repo.run.visit
         if marker is not None and marker.epoch == visit.epoch and marker.produced_at is not None:
             hours = repo.record.park_timeout_hours or DEFAULT_PARK_TIMEOUT_HOURS

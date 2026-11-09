@@ -18,7 +18,7 @@ from blizzard.foundation.hub_event_types import FlowChangeKind
 from blizzard.foundation.logging import get_logger
 from blizzard.foundation.roles import domain_model
 from blizzard.foundation.store.utc import iso_utc
-from blizzard.hub.domain.actions.visit import LandingProject, VisitRefusal, resolve_visit
+from blizzard.hub.domain.actions.visit import VisitRefusal, resolve_visit
 from blizzard.hub.domain.artifact.model import StoredArtifact
 from blizzard.hub.domain.chunk.flow_writes import FlowFactWritten
 from blizzard.hub.domain.chunk.model import Chunk, ChunkFacts
@@ -42,6 +42,7 @@ from blizzard.hub.domain.delivery.flows import (
     withdrawal_for,
     written_on,
 )
+from blizzard.hub.domain.delivery.landing_projects import read_landing_project, read_landing_projects
 from blizzard.hub.domain.delivery.lines import FlowLineFactory
 from blizzard.hub.domain.delivery.ports.flows import IHubStepRefusals, IWriteFlows
 from blizzard.hub.domain.graph.actions import HubActionCatalogue
@@ -272,7 +273,7 @@ class FlowLineReconciler:
         }
         chunks = self._record.get_many(sorted({sub.chunk_id for sub in subs}))
         project_ids = [chunk.project_id for chunk in chunks.values()]
-        projects = LandingProject.read_many(project_ids, projects=self._projects, links=self._links)
+        projects = read_landing_projects(project_ids, projects=self._projects, links=self._links)
         candidates: dict[str, tuple[LandingTerms, ...]] = {}
         for sub in subs:
             chunk = chunks.get(sub.chunk_id)
@@ -352,7 +353,7 @@ class FlowLineReconciler:
             artifacts,
             action=node.action,
             spec=self._catalogue.get(node.action) if node.action is not None else None,
-            project=LandingProject.read(chunk.project_id, projects=self._projects, links=self._links),
+            project=read_landing_project(chunk.project_id, projects=self._projects, links=self._links),
             minted_at=chunk.minted_at,
             repositories=self._repositories.list_all(include_retired=True),
             forges=self._forge_records.list_all(include_retired=True),

@@ -44,7 +44,7 @@ from blizzard.hub.domain.actions.effects import (
     RecordReviewFindings,
 )
 from blizzard.hub.domain.actions.requirements import ACTION_REQUIREMENTS, Requirement
-from blizzard.hub.domain.actions.visit import LandingProject, Visit, VisitChunk, VisitNode, VisitRefusal, resolve_visit
+from blizzard.hub.domain.actions.visit import Visit, VisitChunk, VisitNode, VisitRefusal, resolve_visit
 from blizzard.hub.domain.chunk.event_log import EventLogService
 from blizzard.hub.domain.chunk.flow_writes import FlowFactWritten
 from blizzard.hub.domain.chunk.model import Chunk, ChunkFacts, decide_close_enqueue
@@ -80,6 +80,7 @@ from blizzard.hub.domain.delivery.flows import (
     stamp_terms,
     withdrawal_for,
 )
+from blizzard.hub.domain.delivery.landing_projects import read_landing_project
 from blizzard.hub.domain.delivery.ports.flows import IFlowChangePublisher, IWriteFlows
 from blizzard.hub.domain.garden.delivery.materialize import DeliveryOutcome
 from blizzard.hub.domain.garden.delivery.service import GardenDeliveryRecorder
@@ -322,7 +323,7 @@ class TurnRunner:
     ) -> _Ready | None:
         chunk, graph, node, epoch = at.chunk, at.graph, at.node, at.epoch
         artifacts = self._artifacts.load_artifacts(chunk.chunk_id)
-        project = LandingProject.read(chunk.project_id, projects=self._projects, links=self._links)
+        project = read_landing_project(chunk.project_id, projects=self._projects, links=self._links)
         resolved = resolve_visit(
             artifacts,
             action=node.action,

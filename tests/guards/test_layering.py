@@ -2254,20 +2254,30 @@ def test_a_domain_init_that_imports_a_name_is_flagged(tmp_path: Path) -> None:
 
 def _module_bindings(tree: ast.Module) -> tuple[set[str], set[str]]:
     """The names a module binds at its top level — including inside a top-level ``if``, ``try``, or
-    ``with`` — split into the ones it defines and the ones it only imports."""
+    ``with`` — split into the ones it defines and the ones it only imports. A module-level ``Alias = Imported`` or
+    ``type Alias = Imported`` whose value is a bare name the same module imports only imports ``Alias``: it is a
+    second spelling of the imported name, not a definition."""
     defined: set[str] = set()
     imported: set[str] = set()
+    aliases: list[tuple[set[str], str]] = []
 
     def walk(body: list[ast.stmt]) -> None:
         for node in body:
             if isinstance(node, ast.FunctionDef | ast.AsyncFunctionDef | ast.ClassDef):
                 defined.add(node.name)
             elif isinstance(node, ast.Assign):
-                defined.update(n.id for target in node.targets for n in ast.walk(target) if isinstance(n, ast.Name))
+                targets = {n.id for target in node.targets for n in ast.walk(target) if isinstance(n, ast.Name)}
+                if isinstance(node.value, ast.Name):
+                    aliases.append((targets, node.value.id))
+                else:
+                    defined.update(targets)
             elif isinstance(node, ast.AnnAssign | ast.AugAssign) and isinstance(node.target, ast.Name):
                 defined.add(node.target.id)
             elif isinstance(node, ast.TypeAlias):
-                defined.add(node.name.id)
+                if isinstance(node.value, ast.Name):
+                    aliases.append(({node.name.id}, node.value.id))
+                else:
+                    defined.add(node.name.id)
             elif isinstance(node, ast.Import):
                 imported.update((alias.asname or alias.name).split(".")[0] for alias in node.names)
             elif isinstance(node, ast.ImportFrom):
@@ -2280,6 +2290,11 @@ def _module_bindings(tree: ast.Module) -> tuple[set[str], set[str]]:
                     walk(handler.body)
 
     walk(tree.body)
+    for targets, value in aliases:
+        if value in imported:
+            imported.update(targets)
+        else:
+            defined.update(targets)
     return defined, imported - defined
 
 
@@ -2347,6 +2362,7 @@ def _plant_second_spelling(tmp_path: Path, rel: str, text: str) -> list[str]:
             "from blizzard.hub.domain.chunk import errors as chunk_errors\n"
             "if TYPE_CHECKING:\n    from blizzard.hub.domain.chunk.errors import ChunkNotFound as Missing\n"
             "from blizzard.foundation.ids import Id\nId = Id\n"
+            "RenamedAssign = Id\ntype RenamedTypeAlias = Id\nComputed = Id | None\n"
             "class GroupService:\n    pass\n"
         ),
         tmp_path / rel: text,
@@ -2367,7 +2383,11 @@ def _plant_second_spelling(tmp_path: Path, rel: str, text: str) -> list[str]:
         ("src/blizzard/hub/domain/operations/run.py", "from .queue import ChunkNotFound\n", True),
         ("src/blizzard/hub/api/chunks.py", "from ..domain.operations.queue import ChunkNotFound\n", True),
         ("tests/test_queue.py", "from blizzard.hub.domain.chunk.errors import ChunkNotFound\n", False),
-        ("tests/test_queue.py", "from blizzard.hub.domain.operations.queue import GroupService, Id\n", False),
+        ("tests/test_queue.py", "from blizzard.hub.domain.operations.queue import GroupService\n", False),
+        ("tests/test_queue.py", "from blizzard.hub.domain.operations.queue import Id\n", True),
+        ("tests/test_queue.py", "from blizzard.hub.domain.operations.queue import RenamedAssign\n", True),
+        ("tests/test_queue.py", "from blizzard.hub.domain.operations.queue import RenamedTypeAlias\n", True),
+        ("tests/test_queue.py", "from blizzard.hub.domain.operations.queue import Computed\n", False),
         ("tests/test_queue.py", "from blizzard.hub.domain.operations import queue\n", False),
         ("src/blizzard/hub/domain/operations/run.py", "from ..chunk.errors import ChunkNotFound\n", False),
         ("tests/test_queue.py", "from blizzard.foundation.ids import Id\n", False),
@@ -2501,6 +2521,8 @@ _ACTION_BLIZZARD = frozenset(
     {
         "blizzard.hub.domain.actions",
         "blizzard.hub.domain.graph.actions",
+        "blizzard.hub.domain.artifact.model",
+        "blizzard.hub.domain.chunk.pr_markers",
         "blizzard.hub.domain.kernel.garden_delivery_fault",
         "blizzard.hub.domain.config.repositories",
         "blizzard.hub.domain.config.capabilities",
