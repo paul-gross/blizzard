@@ -10,7 +10,7 @@ import json
 
 import httpx2
 import pytest
-from click.testing import CliRunner, Result
+from click.testing import CliRunner
 
 from blizzard.runner.api.attachments import STAGE_CHECK_TIMEOUT
 from blizzard.runner.cli import runner as runner_group
@@ -874,73 +874,29 @@ def test_show_and_read_behave_as_get(monkeypatch: pytest.MonkeyPatch, alias: str
     assert aliased.output == canonical.output
 
 
-# create — submit-time format validation
+# create — no local name-based veto
 
 
-def _create_delta(body: str) -> tuple[Result, list[object]]:
+def test_create_posts_malformed_review_finding_delta_unvetoed_and_renders_the_runners_refusal() -> None:
+    refusal = "artifact 'review-finding-delta' does not match the review-finding-delta shape: entries: Field required"
     posted: list[object] = []
 
-    def fake_post(*args: object, **kwargs: object) -> _FakeResponse:
+    class _Refused:
+        def raise_for_status(self) -> None:
+            request = httpx2.Request("POST", "http://runner.local")
+            response = httpx2.Response(422, json={"detail": refusal}, request=request)
+            raise httpx2.HTTPStatusError("422", request=request, response=response)
+
+    def fake_post(*args: object, **kwargs: object) -> _Refused:
         posted.append(args)
-        return _FakeResponse(payload={"recorded": True, "name": "review-finding-delta", "bytes": len(body)})
+        return _Refused()
 
     bound = bind_stubs(post=fake_post)
     result = bound.runner.invoke(
-        runner_group, ["artifact", "create", "--name", "review-finding-delta"], env=_ENV, input=body
+        runner_group, ["artifact", "create", "--name", "review-finding-delta"], env=_ENV, input="none"
     )
-    return result, posted
 
-
-@pytest.mark.parametrize(
-    "body",
-    ['{"entries":[{"ref":"F1","disposition":"fixed"}]}', '{"entries": []}'],
-)
-def test_create_review_finding_delta_accepts_valid_json(body: str) -> None:
-    result, posted = _create_delta(body)
-
-    assert result.exit_code == 0, result.output
     assert len(posted) == 1
-
-
-@pytest.mark.parametrize("body", ["none", "## Findings\n- F1 fixed"])
-def test_create_review_finding_delta_refuses_malformed_json(body: str) -> None:
-    result, posted = _create_delta(body)
-
     assert result.exit_code != 0
-    assert "review-finding-delta" in result.output
+    assert refusal in result.output
     assert "nothing was stored" in result.output
-    assert posted == []
-
-
-def test_create_review_finding_delta_refuses_schema_invalid_json_with_the_field() -> None:
-    result, posted = _create_delta('{"entries":[{"ref":"F1","disposition":"maybe"}]}')
-
-    assert result.exit_code != 0
-    assert "entries.0" in result.output
-    assert posted == []
-
-
-def test_create_without_a_registered_validator_stores_prose_as_given() -> None:
-    bound = bind_stubs(post=lambda *a, **k: _FakeResponse(payload={"name": "review-findings", "bytes": 4}))
-    result = bound.runner.invoke(
-        runner_group, ["artifact", "create", "--name", "review-findings"], env=_ENV, input="none"
-    )
-
-    assert result.exit_code == 0, result.output
-
-
-def test_artifact_validators_load_no_wire_model_until_a_registered_asset_is_submitted() -> None:
-    import subprocess
-    import sys
-
-    probe = (
-        "import sys; import blizzard.runner.cli.artifact_validators as v; "
-        "assert 'pydantic' not in sys.modules; "
-        "assert 'blizzard.wire.finding' not in sys.modules; "
-        "assert v.validate_artifact_content('other-asset', 'prose') is None; "
-        "assert 'pydantic' not in sys.modules; "
-        "assert 'blizzard.wire.finding' not in sys.modules; "
-        "assert v.validate_artifact_content('review-finding-delta', 'none') is not None; "
-        "assert 'blizzard.wire.finding' in sys.modules"
-    )
-    subprocess.run([sys.executable, "-c", probe], check=True)

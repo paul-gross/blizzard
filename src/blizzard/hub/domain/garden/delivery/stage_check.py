@@ -1,4 +1,4 @@
-"""The stage-time check of a garden artifact — whether content a worker is about to stage under ``name``
+"""The stage-time check of a garden or review artifact — whether content a worker is about to stage under ``name``
 meets the format a delivery arg of the chunk's graph applies to it. The verdict is the one delivery would
 reach: each format is judged by the same :class:`~blizzard.hub.domain.garden.formats.IGardenFormats` method
 delivery calls, so the two messages are identical by construction. The rule — which formats a name owes —
@@ -8,11 +8,16 @@ from __future__ import annotations
 
 from blizzard.hub.domain.garden.delivery.validation import GardenDeliveryRejected
 from blizzard.hub.domain.garden.formats import IGardenFormats
+from blizzard.hub.domain.garden.review.validation import ReviewFindingsRejected
 from blizzard.hub.domain.graph.actions import ArtifactFormat, HubActionCatalogue
 from blizzard.hub.domain.graph.model import Graph
 
 # Judged in a fixed order so a name owing both formats refuses the same way each time.
-_ORDER: tuple[ArtifactFormat, ...] = (ArtifactFormat.FINDING_DELTA, ArtifactFormat.GARDEN_PROPOSAL_CANDIDATES)
+_ORDER: tuple[ArtifactFormat, ...] = (
+    ArtifactFormat.FINDING_DELTA,
+    ArtifactFormat.GARDEN_PROPOSAL_CANDIDATES,
+    ArtifactFormat.REVIEW_FINDING_DELTA,
+)
 
 
 class GardenStageCheck:
@@ -32,8 +37,10 @@ class GardenStageCheck:
                     continue
                 if fmt is ArtifactFormat.FINDING_DELTA:
                     self._formats.finding_delta(name, content)
-                else:
+                elif fmt is ArtifactFormat.GARDEN_PROPOSAL_CANDIDATES:
                     self._formats.proposal_candidates(name, content)
-        except GardenDeliveryRejected as exc:
+                else:
+                    self._formats.review_delta(name, content)
+        except (GardenDeliveryRejected, ReviewFindingsRejected) as exc:
             return str(exc)
         return None

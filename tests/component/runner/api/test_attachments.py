@@ -13,10 +13,12 @@ from pathlib import Path
 from typing import Unpack
 
 import httpx2
+import pytest
 from fastapi import FastAPI
 
 from blizzard.foundation.clock import FixedClock
 from blizzard.foundation.tokens import TokenHash
+from blizzard.runner.api.attachments import STAGE_CHECK_TIMEOUT
 from blizzard.runner.config import RunnerConfig
 from blizzard.runner.harness.identity import CLAUDE_CODE_HARNESS_ID, SessionReference
 from blizzard.runner.leases.model import NewLease
@@ -396,22 +398,58 @@ def test_a_no_refusal_verdict_stages_the_content(tmp_path: Path) -> None:
     assert store.attachments_for_lease("lease_1") == {"delta": "fine"}
 
 
-def test_an_unreachable_hub_or_a_404_stages_the_content(tmp_path: Path) -> None:
-    (tmp_path / "0").mkdir()
-    (tmp_path / "1").mkdir()
-
+def _no_verdict_handlers() -> dict[str, Callable[[httpx2.Request], httpx2.Response]]:
     def down(request: httpx2.Request) -> httpx2.Response:
         raise httpx2.ConnectError("hub is down", request=request)
 
-    def missing(_request: httpx2.Request) -> httpx2.Response:
-        return httpx2.Response(404, json={"detail": "unknown chunk"})
+    def slow(request: httpx2.Request) -> httpx2.Response:
+        raise httpx2.ReadTimeout("hub is slow", request=request)
 
-    handlers: list[Callable[[httpx2.Request], httpx2.Response]] = [down, missing]
-    for index, handler in enumerate(handlers):
-        app, store = _app_with_hub(tmp_path / str(index), handler)
-        _seed_lease(store)
-        assert _stage(app, "unchecked").status_code == 200
-        assert store.attachments_for_lease("lease_1") == {"delta": "unchecked"}
+    return {
+        "connect-error": down,
+        "timeout": slow,
+        "old-hub-404": lambda _r: httpx2.Response(404, json={"detail": "unknown route"}),
+        "upstream-401": lambda _r: httpx2.Response(401, json={"detail": "no"}),
+        "upstream-403": lambda _r: httpx2.Response(403, json={"detail": "no"}),
+        "invalid-json": lambda _r: httpx2.Response(200, content=b"not json"),
+        "wrong-shape": lambda _r: httpx2.Response(200, json={"verdict": "ok"}),
+    }
+
+
+@pytest.mark.parametrize("case", list(_no_verdict_handlers()))
+def test_no_usable_verdict_stages_the_content_unchecked(tmp_path: Path, case: str) -> None:
+    app, store = _app_with_hub(tmp_path, _no_verdict_handlers()[case])
+    _seed_lease(store)
+    assert _stage(app, "unchecked").status_code == 200
+    assert store.attachments_for_lease("lease_1") == {"delta": "unchecked"}
+
+
+def test_a_review_finding_delta_refusal_is_422_with_nothing_written(tmp_path: Path) -> None:
+    refusal = "artifact 'review-finding-delta' does not match the review-finding-delta shape: entries: Field required"
+    app, store = _app_with_hub(tmp_path, lambda _r: httpx2.Response(200, json={"refusal": refusal}))
+    _seed_lease(store)
+    with runner_client(app) as client:
+        resp = client.post(
+            "/api/leases/lease_1/attachments",
+            json={"name": "review-finding-delta", "content": "none"},
+            headers={"X-Blizzard-Lease-Token": _TOKEN},
+        )
+    assert resp.status_code == 422
+    assert resp.json()["detail"] == refusal
+    assert store.attachments_for_lease("lease_1") == {}
+
+
+def test_the_hub_call_carries_the_configured_stage_check_timeout(tmp_path: Path) -> None:
+    seen: list[httpx2.Request] = []
+
+    def handler(request: httpx2.Request) -> httpx2.Response:
+        seen.append(request)
+        return httpx2.Response(200, json={"refusal": None})
+
+    app, store = _app_with_hub(tmp_path, handler)
+    _seed_lease(store)
+    assert _stage(app, "fine").status_code == 200
+    assert seen[0].extensions["timeout"]["read"] == STAGE_CHECK_TIMEOUT
 
 
 def test_a_lifecycle_refusal_takes_precedence_over_a_hub_format_refusal(tmp_path: Path) -> None:
