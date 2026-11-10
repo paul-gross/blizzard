@@ -8,8 +8,6 @@ recorded in ``bzh:crash-exemptions-runner``."""
 from __future__ import annotations
 
 import json
-import shutil
-import tempfile
 from collections.abc import Callable, Generator, Mapping
 from contextlib import contextmanager, nullcontext
 from dataclasses import dataclass, replace
@@ -44,7 +42,6 @@ from blizzard.runner.host_layout import (
     RUNNERS_DIRNAME,
     Graduation,
     HostLayout,
-    hold_host,
 )
 from blizzard.runner.hub.client import HostRecord, HostRefused, HubClientError, IHostRecordReader
 from blizzard.runner.hub.host_identity import HostIdentity, HostIdentityAlreadyRecorded, adopted
@@ -52,11 +49,10 @@ from blizzard.runner.hub.host_registration import standing_of
 from blizzard.runner.hub.identity import HostStanding
 from blizzard.runner.runtime import (
     StoreResetRefused,
-    backup_sqlite,
-    set_aside_sqlite,
     sqlite_store_file,
     sqlite_url,
 )
+from blizzard.runner.transfer.host_files import IHostFiles
 from blizzard.runner.transfer.refusals import (
     HostNotHolding,
     SourceRunning,
@@ -107,9 +103,6 @@ _CP_AFTER_CONFIG = crashpoint(
     "ingest.after-config.before-removal",
     "this host holds the runner's configuration and token and the source's token is gone; its rows are still there",
 )
-
-#: The name every source copy's directory in this host's data directory starts with.
-_COPY_PREFIX = "ingest-copy-"
 
 #: The revision from which every runner-owned table carries its runner, so one runner's rows can be removed from a
 #: store that holds others.
@@ -257,6 +250,7 @@ class RunnerIngest:
     hub: IHostRecordReader
     #: What answers on a socket path, if anything.
     holder: Callable[[Path], str | None]
+    files: IHostFiles
     clock: IClock
     #: The migrations of the runner store at a source copy's URL.
     migrations: Callable[[str], MigrationRunner]
@@ -279,9 +273,8 @@ class RunnerIngest:
     @contextmanager
     def _held(self, layout: HostLayout, which: str) -> Generator[None, None, None]:
         """``layout``'s directory held for the run: its lock taken, and nothing answering on its sockets."""
-        with hold_host(
-            layout,
-            (layout.socket_path, layout.legacy_socket_path),
+        with self.files.hold(
+            layout.root,
             self.holder,
             lambda held: SourceRunning(f"{which} is running ({held}); stop it, then re-run"),
         ):
@@ -431,7 +424,7 @@ class RunnerIngest:
         _CP_AFTER_CONFIG.reached()
         if source.kind is SourceKind.UNGRADUATED:
             # Its one runner is the whole store, which stays at the schema it ran: it is moved aside, not edited.
-            moved = set_aside_sqlite(source.store, now=self.clock.now()).moved
+            moved = self.files.set_aside(source.store, now=self.clock.now())
         else:
             runner.remove_runner_rows(sqlite_url(source.store), keep_counters=False)
             moved = self._set_aside_emptied(source)
@@ -441,14 +434,7 @@ class RunnerIngest:
     @contextmanager
     def _copy_of(self, store: Path) -> Generator[_SourceCopy, None, None]:
         """A backup copy of the source ``store`` beside this host's store, migrated to head, removed on leaving."""
-        data = self.host.layout.data_dir
-        # This run holds the host's lock, so a copy left here is one a killed run never removed.
-        for stale in data.glob(f"{_COPY_PREFIX}*"):
-            shutil.rmtree(stale, ignore_errors=True)
-        directory = Path(tempfile.mkdtemp(prefix=_COPY_PREFIX, dir=data))
-        try:
-            copy = directory / store.name
-            backup_sqlite(store, copy)
+        with self.files.copy_of(store, self.host.layout.data_dir) as copy:
             migrations = self.migrations(sqlite_url(copy))
             current = migrations.current_revision()
             migrations.refuse_below_floor(store=str(store), current=current)
@@ -463,8 +449,6 @@ class RunnerIngest:
             except (MigrationConnectionError, MigrationRefused) as exc:
                 raise SourceUnsupported(f"the copy of the source store {store} cannot be migrated: {exc}") from exc
             yield _SourceCopy(sqlite_url(copy), runner_scoped)
-        finally:
-            shutil.rmtree(directory, ignore_errors=True)
 
     def _refuse_fresh(
         self, source: _Source, entry: RunnerEntry, runner_id: str, view: RunnerStoreView, copy: _SourceCopy
@@ -646,10 +630,9 @@ class RunnerIngest:
         if plan.runner_table is not None:
             for located, copied in plan.files:
                 if located.is_dir():
-                    shutil.copytree(located, copied, dirs_exist_ok=True)
+                    self.files.copy_tree(located, copied)
                 elif located.exists():
-                    copied.parent.mkdir(parents=True, exist_ok=True)
-                    shutil.copy2(located, copied)
+                    self.files.copy_file(located, copied)
             (self.host.root / RUNNERS_DIRNAME / entry.name).mkdir(parents=True, exist_ok=True)
             if entry.name not in _declared(layout, "runner", "name", strict=strict):
                 self.host_file.append_runner(layout, plan.runner_table)
@@ -663,7 +646,7 @@ class RunnerIngest:
         """The source store moved aside whole when no runner is left in it."""
         if not source.store.exists() or self.stores.named_runners(sqlite_url(source.store)):
             return ()
-        return set_aside_sqlite(source.store, now=self.clock.now()).moved
+        return self.files.set_aside(source.store, now=self.clock.now())
 
 
 def _shape(workspace: HostWorkspace, root: Path) -> WorkspaceShape:
