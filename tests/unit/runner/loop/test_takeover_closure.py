@@ -28,6 +28,7 @@ from tests.support.runner_fakes import (
     make_store,
 )
 from tests.support.runner_mint import new_mint
+from tests.support.takeover_unit import record_takeover_in_unit
 
 _NOW = datetime(2026, 7, 24, 12, 0, 0, tzinfo=UTC)
 _HANDLE = WorkerHandle(session_id="sess-a", pid=100, process_start_time="start-100", pgid=100)
@@ -64,7 +65,8 @@ def _seed_taken_over(
         spawned_at=at,
     )
     store.record_closure(lease_id=lease, chunk_id=chunk, node_id="nd_build", reason="escalated", closed_at=at)
-    store.record_takeover(
+    record_takeover_in_unit(
+        store,
         takeover_id=f"tko_{lease}",
         chunk_id=chunk,
         lease_id=lease,

@@ -10,6 +10,7 @@ from __future__ import annotations
 import json
 import shlex
 from collections.abc import Iterable, Mapping, Sequence
+from contextlib import AbstractContextManager
 from dataclasses import dataclass, field
 from datetime import datetime
 from enum import StrEnum
@@ -63,6 +64,7 @@ __all__ = [
     "ChunkNotTakeable",
     "EscalationCommands",
     "IReadTakeoverRepository",
+    "ITakeoverUnit",
     "IWriteTakeoverRepository",
     "LiveWorkerConflict",
     "OpenTakeover",
@@ -78,9 +80,11 @@ __all__ = [
     "TakeoverRecovery",
     "TakeoverService",
     "TakeoverState",
+    "TakeoverUnitMisuse",
     "TakeoverVerb",
     "admit_takeover",
     "bounded_takeover_env",
+    "refuse_open_takeover",
     "resolve_resume_command",
     "takeover_closing",
 ]
@@ -223,11 +227,12 @@ class IReadTakeoverRepository(Protocol):
         reference lease it names, not the lease's own activeness."""
         ...
 
-    def open_takeover_for_chunk(self, chunk_id: str) -> OpenTakeover | None:
+    def open_takeover_for_chunk(self, chunk_id: str, *, unit: ITakeoverUnit | None = None) -> OpenTakeover | None:
         """The chunk's open takeover, or ``None`` — a ``takeovers`` row with no
         ``takeover_ends`` row for the same ``takeover_id``.
 
-        At most one open takeover exists per chunk at a time."""
+        At most one open takeover exists per chunk at a time. With ``unit`` the read joins the unit's
+        transaction; without, it reads on its own connection."""
         ...
 
     def open_takeovers_for(self, chunk_ids: Iterable[str]) -> dict[str, OpenTakeover]:
@@ -249,12 +254,28 @@ class IReadTakeoverRepository(Protocol):
         ...
 
 
+class TakeoverUnitMisuse(RuntimeError):
+    """A takeover unit was handed to a statement it was not minted for — another runner store's unit, or a unit whose
+    block has ended. A programming error: no caller catches it, and the statement writes nothing."""
+
+
+class ITakeoverUnit(Protocol):
+    """The opaque token of an open takeover-locked unit. A repository method that takes one runs on the unit's
+    transaction; the domain only passes it through, and the adapter alone knows what it carries."""
+
+
 class IWriteTakeoverRepository(IReadTakeoverRepository, Protocol):
     """Read-write takeover store — held only by the domain."""
+
+    def locked_takeover(self) -> AbstractContextManager[ITakeoverUnit]:
+        """One write transaction whose first statement locks the bound runner's identity row: takeover opens on this
+        runner serialize on it. Commits when the block leaves cleanly; rolls back when it raises."""
+        ...
 
     def record_takeover(
         self,
         *,
+        unit: ITakeoverUnit,
         takeover_id: str,
         chunk_id: str,
         lease_id: str | None,
@@ -271,7 +292,8 @@ class IWriteTakeoverRepository(IReadTakeoverRepository, Protocol):
         is returned, so no later tick can race the human for the chunk.
 
         The takeover row, the ``lease.minted`` fence fact (``fence_payload``), the reference lease's re-minted
-        token hash and — when nothing is left to kill — the entry fact (``entered_at``) commit in ONE transaction.
+        token hash and — when nothing is left to kill — the entry fact (``entered_at``) commit in the ``unit``'s
+        transaction.
         Returns the fence fact's ``seq``, ``None`` when no fence was written."""
         ...
 
@@ -405,6 +427,15 @@ class TakeoverAdmission:
     hold_epoch: int
 
 
+def refuse_open_takeover(chunk_id: str, open_takeover: OpenTakeover | None) -> None:
+    """Raise :class:`ChunkNotTakeable` when ``open_takeover`` stands — ``TAKEOVER_TRANSITIONS`` decides. The one
+    owner of the at-most-one-open-takeover refusal, run at admission and again under the unit's lock."""
+    if TAKEOVER_TRANSITIONS[_state(open_takeover)][TakeoverVerb.OPEN] is TakeoverVerdict.REFUSE:
+        raise ChunkNotTakeable(
+            f"chunk {chunk_id} already has an open takeover — end it with `blizzard runner takeover {chunk_id} --end`"
+        )
+
+
 def admit_takeover(scope: TakeoverOpenScope, *, force: bool) -> TakeoverAdmission:
     """Admit a takeover over ``scope.chunk_id``, or raise the refusal.
 
@@ -412,10 +443,7 @@ def admit_takeover(scope: TakeoverOpenScope, *, force: bool) -> TakeoverAdmissio
     active lease that is not parked, since each such can still land a verdict — refuses unless forced,
     and a forced entry over an already-buffered submission is refused, as the fence could never apply."""
     chunk_id = scope.chunk_id
-    if TAKEOVER_TRANSITIONS[_state(scope.open_takeover)][TakeoverVerb.OPEN] is TakeoverVerdict.REFUSE:
-        raise ChunkNotTakeable(
-            f"chunk {chunk_id} already has an open takeover — end it with `blizzard runner takeover {chunk_id} --end`"
-        )
+    refuse_open_takeover(chunk_id, scope.open_takeover)
     if not scope.bindings:
         raise ChunkNotTakeable(f"chunk {chunk_id} is not held by this runner — nothing to take over")
     if scope.requeue_pending:
@@ -613,21 +641,26 @@ class TakeoverService:
         # Fact-before-command (bzh:crash-point-registry): the whole decision — the takeover, the fence fact for
         # a live entry, the re-minted token, and the entry itself when nothing is left to kill — commits
         # in one transaction before anything is killed or returned.
-        seq = self._takeover.record_takeover(
-            takeover_id=takeover_id,
-            chunk_id=chunk_id,
-            lease_id=reference.lease_id,
-            session=session,
-            workdir=workdir,
-            fence_epoch=fence_epoch,
-            hold_epoch=admission.hold_epoch,
-            opened_at=now,
-            # The fence bump: reported like a fresh lease mint, so the killed worker's
-            # buffered completion lands on a stale epoch.
-            fence_payload=json.dumps({"chunk_id": chunk_id, "epoch": fence_epoch}) if kills else None,
-            lease_token_hash=token_hash,
-            entered_at=None if kills else now,
-        )
+        # The at-most-one guard is re-read under the runner-identity lock, so two opens that both passed admission
+        # serialize here and the later one is refused.
+        with self._takeover.locked_takeover() as unit:
+            refuse_open_takeover(chunk_id, self._takeover.open_takeover_for_chunk(chunk_id, unit=unit))
+            seq = self._takeover.record_takeover(
+                unit=unit,
+                takeover_id=takeover_id,
+                chunk_id=chunk_id,
+                lease_id=reference.lease_id,
+                session=session,
+                workdir=workdir,
+                fence_epoch=fence_epoch,
+                hold_epoch=admission.hold_epoch,
+                opened_at=now,
+                # The fence bump: reported like a fresh lease mint, so the killed worker's
+                # buffered completion lands on a stale epoch.
+                fence_payload=json.dumps({"chunk_id": chunk_id, "epoch": fence_epoch}) if kills else None,
+                lease_token_hash=token_hash,
+                entered_at=None if kills else now,
+            )
         if self._events is not None:
             self._events.publish_takeover_changed(chunk_id, takeover_id, cause="opened")
             if seq is not None:

@@ -37,6 +37,7 @@ from tests.support.runner_fakes import (
     serving,
 )
 from tests.support.runner_mint import new_mint
+from tests.support.takeover_unit import record_takeover_in_unit
 
 _NOW = datetime(2026, 9, 14, 12, 0, 0, tzinfo=UTC)
 _HANDLE = WorkerHandle(session_id="sess-a", pid=100, process_start_time="start-100", pgid=100)
@@ -101,7 +102,8 @@ def _seed_escalated(store: SqlAlchemyRunnerStore, *, chunk: str, lease: str):
 def _seed_taken_over(store: SqlAlchemyRunnerStore, *, chunk: str, lease: str):
     """A lease minted, closed ``escalated``, then taken over — the open-takeover shape."""
     _seed_escalated(store, chunk=chunk, lease=lease)
-    store.record_takeover(
+    record_takeover_in_unit(
+        store,
         takeover_id=f"tko_{lease}",
         chunk_id=chunk,
         lease_id=lease,

@@ -18,6 +18,7 @@ from tests.support.config_inputs import create_runner_app
 from tests.support.runner_client import runner_client
 from tests.support.runner_fakes import SqlAlchemyRunnerStore, make_host_stores, make_store, make_stores
 from tests.support.runner_mint import new_mint
+from tests.support.takeover_unit import record_takeover_in_unit
 
 _NOW = datetime(2026, 7, 17, 12, 0, 0, tzinfo=UTC)
 _LATER = datetime(2026, 7, 17, 13, 0, 0, tzinfo=UTC)  # strictly after the seeded lease's _NOW
@@ -79,7 +80,8 @@ def test_requeue_over_an_escalated_chunk_returns_202(tmp_path: Path) -> None:
 def test_requeue_while_a_takeover_is_open_is_409(tmp_path: Path) -> None:
     app, store = _app_with_requeue(tmp_path)
     _seed_escalated_chunk(store)
-    store.record_takeover(
+    record_takeover_in_unit(
+        store,
         takeover_id="tko_1",
         chunk_id="ch_1",
         lease_id=None,
@@ -138,7 +140,8 @@ def test_requeue_after_an_ended_takeover_returns_202(tmp_path: Path) -> None:
     """The pasted-command flow: a takeover opened and ended over the escalated chunk."""
     app, store = _app_with_requeue(tmp_path)
     _seed_escalated_chunk(store)
-    store.record_takeover(
+    record_takeover_in_unit(
+        store,
         takeover_id="tko_1",
         chunk_id="ch_1",
         lease_id=None,

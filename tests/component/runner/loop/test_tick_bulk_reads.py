@@ -55,6 +55,7 @@ from tests.support.runner_fakes import (
 )
 from tests.support.runner_mint import new_mint
 from tests.support.runner_tick_engines import migrated_engine
+from tests.support.takeover_unit import record_takeover_in_unit
 
 _NOW = datetime(2026, 9, 26, 12, 0, 0, tzinfo=UTC)
 
@@ -486,7 +487,8 @@ def test_escalations_statement_count_is_flat_across_1_and_10_open_escalations(
 
 
 def _open_takeover(store: SqlAlchemyRunnerStore, takeover_id: str, chunk_id: str, *, at: datetime) -> None:
-    store.record_takeover(
+    record_takeover_in_unit(
+        store,
         takeover_id=takeover_id,
         chunk_id=chunk_id,
         lease_id=None,

@@ -19,6 +19,7 @@ from sqlalchemy.exc import IntegrityError
 from blizzard.foundation.roles import domain_model
 from blizzard.runner.leases.lease_lock import ILeaseUnit, LeaseUnitMisuse
 from blizzard.runner.leases.model import Lease, WorkRefStamp
+from blizzard.runner.lifecycle.takeover import ITakeoverUnit, TakeoverUnitMisuse
 from blizzard.runner.store.schema import (
     OUTBOX_LANE_OUTBOUND,
     OUTBOX_LANE_TRANSCRIPT,
@@ -35,6 +36,7 @@ from blizzard.runner.store.schema import (
     pause_parks,
     resume_clears,
     resume_intents,
+    runner_identity,
     transcript_outbound_buffer,
 )
 from blizzard.runner.store.scoped import RUNNER_COLUMN, RunnerStoreConnections
@@ -66,6 +68,33 @@ def unit_conn(store: RunnerStoreConnections, unit: ILeaseUnit, lease_id: str | N
     if lease_id is None or unit.lease_id != lease_id:
         raise LeaseUnitMisuse(f"the lease unit locks {unit.lease_id!r}, not {lease_id!r}")
     return unit.conn
+
+
+@dataclass(frozen=True)
+class TakeoverUnit:
+    """The concrete takeover-locked unit — the statements it joins run on :attr:`conn`, the transaction the runner's
+    identity row was locked on, minted by :attr:`store`.
+    :class:`~blizzard.runner.lifecycle.takeover.ITakeoverUnit` is what the domain holds it as."""
+
+    conn: Connection
+    store: RunnerStoreConnections
+
+
+def takeover_unit_conn(store: RunnerStoreConnections, unit: ITakeoverUnit) -> Connection:
+    """The door every takeover-unit-joined statement passes through: the unit's transaction, but only for a unit that
+    ``store`` minted and whose block is still open. Anything else raises :class:`TakeoverUnitMisuse` before a
+    statement runs."""
+    if not isinstance(unit, TakeoverUnit) or unit.store is not store:
+        raise TakeoverUnitMisuse("the takeover unit was not minted by this runner store")
+    if not unit.conn.in_transaction():
+        raise TakeoverUnitMisuse("the takeover unit is no longer open")
+    return unit.conn
+
+
+def lock_identity_row(conn: Connection, store: RunnerStoreConnections) -> None:
+    """A no-op ``UPDATE`` of the bound runner's identity row — on its first write, the transaction's lock on it. A
+    runner holding no identity row yet has no neighbour to race."""
+    conn.execute(store.update(runner_identity).values(runner_id=runner_identity.c.runner_id))
 
 
 @domain_model

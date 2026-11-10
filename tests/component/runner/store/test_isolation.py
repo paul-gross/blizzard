@@ -82,6 +82,7 @@ from blizzard.runner.usage.repository import (
 from tests.support.lease_unit_seeds import seed_attachment, seed_git_commit_declaration
 from tests.support.runner_fakes import record_usage, runner_migration_prototype
 from tests.support.store_read_census import GRAPH_ID, RUNNER_CENSUS, RunnerWorld, build_runner_world
+from tests.support.takeover_unit import record_takeover_in_unit
 
 RUNNER_A = "rn_a"
 RUNNER_B = "rn_b"
@@ -241,6 +242,12 @@ def _lock_lease(w: RunnerWorld) -> None:
     """One lease-locked unit over the world's runner alone, on one of its own leases."""
     with w.stores.lease_lock.locked(w.lease_2):
         pass
+
+
+def _lock_takeover(w: RunnerWorld) -> None:
+    """One takeover-locked unit over the world's runner alone."""
+    with w.stores.takeover.locked_takeover() as unit:
+        w.stores.takeover.open_takeover_for_chunk(w.chunk_4, unit=unit)
 
 
 def _engage_under_lock(w: RunnerWorld) -> None:
@@ -411,7 +418,8 @@ WRITE_CENSUS: dict[tuple[type, str], WriteRecipe] = {
         commit="fff000",
         declared_at=_at(33),
     ),
-    (IWriteTakeoverRepository, "record_takeover"): lambda w: w.stores.takeover.record_takeover(
+    (IWriteTakeoverRepository, "record_takeover"): lambda w: record_takeover_in_unit(
+        w.stores.takeover,
         takeover_id="tko_w",
         chunk_id=w.chunk_2,
         lease_id=w.lease_3,
@@ -432,6 +440,7 @@ WRITE_CENSUS: dict[tuple[type, str], WriteRecipe] = {
     ),
     (IWriteLeaseLock, "locked"): lambda w: _lock_lease(w),
     (IWritePauseRepository, "locked_brakes"): lambda w: _engage_under_lock(w),
+    (IWriteTakeoverRepository, "locked_takeover"): lambda w: _lock_takeover(w),
     (IWritePauseRepository, "local_brake_locked"): lambda w: _engage_under_lock(w),
     (IWritePauseRepository, "record_local_pause_locked"): lambda w: _engage_under_lock(w),
     (IWritePauseRepository, "record_pause_park"): lambda w: w.stores.pause.record_pause_park(

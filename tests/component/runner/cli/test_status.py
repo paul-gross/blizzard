@@ -48,6 +48,7 @@ from tests.support.runner_cli_home import (
 )
 from tests.support.runner_fakes import SqlAlchemyRunnerStore
 from tests.support.runner_mint import new_mint
+from tests.support.takeover_unit import record_takeover_in_unit
 from tests.support.worker_http import Bound, bind_local_only
 
 pytestmark = pytest.mark.usefixtures("short_host_sockets")
@@ -145,7 +146,8 @@ def test_status_renders_the_full_view_with_the_hub_unreachable(tmp_path: Path) -
     # A third chunk under an open operator takeover — status renders regardless of
     # how the takeover got left open.
     store.record_binding(chunk_id="ch_3", environment_id="e3", workdir="/ws/e3", bound_at=_NOW)
-    store.record_takeover(
+    record_takeover_in_unit(
+        store,
         takeover_id="tko_1",
         chunk_id="ch_3",
         lease_id=None,

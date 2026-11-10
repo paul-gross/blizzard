@@ -18,6 +18,7 @@ from blizzard.runner.leases.model import NewLease
 from tests.support.runner_cli_home import init_runner_home, registered_store, serve_local_api
 from tests.support.runner_fakes import SqlAlchemyRunnerStore
 from tests.support.runner_mint import new_mint
+from tests.support.takeover_unit import record_takeover_in_unit
 from tests.support.worker_http import bind_local_only
 
 pytestmark = pytest.mark.usefixtures("short_host_sockets")
@@ -68,7 +69,8 @@ def test_requeue_refuses_while_a_takeover_is_open(tmp_path: Path) -> None:
     root = init_runner_home(tmp_path)
     store = registered_store(root)
     _seed_escalated_chunk(store)
-    store.record_takeover(
+    record_takeover_in_unit(
+        store,
         takeover_id="tko_1",
         chunk_id="ch_1",
         lease_id=None,

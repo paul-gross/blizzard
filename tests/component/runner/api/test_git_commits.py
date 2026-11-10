@@ -44,6 +44,7 @@ from tests.support.runner_fakes import (
     single_workspace,
 )
 from tests.support.runner_mint import new_mint
+from tests.support.takeover_unit import record_takeover_in_unit
 from tests.support.winter_provider_fakes import FakeGit, FakeWinter
 
 _NOW = datetime(2026, 7, 22, 12, 0, 0, tzinfo=UTC)
@@ -200,7 +201,8 @@ def test_an_open_takeover_authorizes_a_closed_reference_lease(tmp_path: Path) ->
     _seed_lease(store)
     store.record_closure(lease_id="lease_1", chunk_id="ch_1", node_id="nd_build", reason="escalated", closed_at=_NOW)
     takeover_token = "the-takeover-token"
-    store.record_takeover(
+    record_takeover_in_unit(
+        store,
         takeover_id="tko_1",
         chunk_id="ch_1",
         lease_id="lease_1",
@@ -400,7 +402,8 @@ def test_a_declaration_against_a_closed_takeover_lease_says_it_rides_no_completi
     _seed_lease(store)
     store.record_closure(lease_id="lease_1", chunk_id="ch_1", node_id="nd_build", reason="escalated", closed_at=_NOW)
     takeover_token = "the-takeover-token"
-    store.record_takeover(
+    record_takeover_in_unit(
+        store,
         takeover_id="tko_1",
         chunk_id="ch_1",
         lease_id="lease_1",

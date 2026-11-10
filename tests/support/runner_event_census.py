@@ -203,6 +203,7 @@ WRITE_PROTOCOL_CENSUS: dict[str, Disposition] = {
     ),
     "locked": Silent("opens the lease-locked unit; it writes no fact itself."),
     "locked_brakes": Silent("opens the locked brake transaction; it writes no fact itself."),
+    "locked_takeover": Silent("opens the takeover-locked unit; it writes no fact itself."),
     "local_brake_locked": Silent("a read of the brake on a locked transaction."),
     "record_local_pause_locked": Published(
         RunnerEventType.FACT_CHANGED,

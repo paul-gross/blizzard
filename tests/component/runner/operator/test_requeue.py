@@ -42,6 +42,7 @@ from tests.support.runner_fakes import (
     make_store,
 )
 from tests.support.runner_mint import new_mint
+from tests.support.takeover_unit import record_takeover_in_unit
 
 _NOW = datetime(2026, 7, 17, 12, 0, 0, tzinfo=UTC)
 _LATER = datetime(2026, 7, 17, 13, 0, 0, tzinfo=UTC)
@@ -122,7 +123,8 @@ def test_requeue_appends_a_clearing_fact_and_leaves_the_escalation_open(tmp_path
 def test_requeue_refuses_while_a_takeover_is_open(tmp_path: Path) -> None:
     store = _store(tmp_path)
     _seed_escalated_chunk(store)
-    store.record_takeover(
+    record_takeover_in_unit(
+        store,
         takeover_id="tko_1",
         chunk_id="ch_1",
         lease_id=None,
@@ -166,7 +168,8 @@ def test_requeue_works_after_an_ended_takeover_with_no_recorded_escalation_chang
     reason underneath never changed, so the same needs_human read covers it."""
     store = _store(tmp_path)
     _seed_escalated_chunk(store)
-    store.record_takeover(
+    record_takeover_in_unit(
+        store,
         takeover_id="tko_1",
         chunk_id="ch_1",
         lease_id=None,

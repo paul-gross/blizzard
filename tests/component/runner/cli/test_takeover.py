@@ -31,6 +31,7 @@ from blizzard.runner.process.internal.subprocess_child_processes import Subproce
 from tests.support.runner_cli_home import TWO_RUNNERS, host_of, init_runner_home, registered_store, serve_local_api
 from tests.support.runner_fakes import SqlAlchemyRunnerStore
 from tests.support.runner_mint import new_mint
+from tests.support.takeover_unit import record_takeover_in_unit
 from tests.support.worker_http import bind_local_only
 
 pytestmark = pytest.mark.usefixtures("short_host_sockets")
@@ -315,7 +316,8 @@ def test_pasting_the_composed_command_on_a_host_of_several_runners_reaches_the_n
 
 def _open_stranded_takeover(store: SqlAlchemyRunnerStore) -> None:
     """The dropped-SSH shape: a takeover fact opened with no session behind it."""
-    store.record_takeover(
+    record_takeover_in_unit(
+        store,
         takeover_id="tko_1",
         chunk_id="ch_1",
         lease_id="lease_1",

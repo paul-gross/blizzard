@@ -15,6 +15,7 @@ from blizzard.foundation.logging import get_logger
 from blizzard.runner.store.internal.base import (
     insert_fact_row,
     insert_outbox_row,
+    lock_identity_row,
     open_pause_park,
     pause_parked_lease_ids,
 )
@@ -24,7 +25,6 @@ from blizzard.runner.store.schema import (
     outbound_buffer,
     pause_park_resumes,
     pause_parks,
-    runner_identity,
 )
 from blizzard.runner.store.scoped import RunnerStoreConnections
 from blizzard.runner.throttle.pause import ILockedBrakes, IWritePauseRepository, LocalBrake, PausePark
@@ -180,7 +180,7 @@ class PauseStore:
         # The runner's identity row is locked as the first statement: the first write takes SQLite's writer lock, and
         # Postgres queues every writer of this runner's brake on the same row.
         with self._store.begin() as conn:
-            _lock_identity_row(conn, self._store)
+            lock_identity_row(conn, self._store)
             yield _LockedBrakes(conn)
 
     def local_brake_locked(self, handle: ILockedBrakes) -> LocalBrake:
@@ -249,12 +249,6 @@ class PauseStore:
         with self._store.begin() as conn:
             insert_fact_row(self._store, conn, pause_park_resumes, lease_id=lease_id, resumed_at=resumed_at)
         _log.info("pause park resumed", lease_id=lease_id)
-
-
-def _lock_identity_row(conn: Connection, store: RunnerStoreConnections) -> None:
-    """A no-op ``UPDATE`` of the bound runner's identity row — on its first write, the transaction's lock on it. A
-    runner holding no identity row yet has no neighbour to race."""
-    conn.execute(store.update(runner_identity).values(runner_id=runner_identity.c.runner_id))
 
 
 _pause_store_conforms: type[IWritePauseRepository] = PauseStore

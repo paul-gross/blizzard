@@ -55,6 +55,7 @@ from tests.support.runner_fakes import (
 )
 from tests.support.runner_mint import new_mint
 from tests.support.scaffolding import assert_all_timestamps_utc
+from tests.support.takeover_unit import record_takeover_in_unit
 
 _NOW = datetime(2026, 7, 16, 12, 0, 0, tzinfo=UTC)
 
@@ -869,7 +870,8 @@ def test_an_open_takeover_appears_with_its_id_and_held_since(tmp_path: Path) -> 
     app, store = _app_with_status(tmp_path)
     store.record_binding(chunk_id="ch_1", environment_id="e1", workdir="/ws/e1", bound_at=_NOW, workspace_id="ws1")
     opened_at = _NOW + timedelta(minutes=5)
-    store.record_takeover(
+    record_takeover_in_unit(
+        store,
         takeover_id="tko_1",
         chunk_id="ch_1",
         lease_id=None,
@@ -897,7 +899,8 @@ def test_an_open_takeover_appears_with_its_id_and_held_since(tmp_path: Path) -> 
 def test_a_closed_takeover_does_not_appear(tmp_path: Path) -> None:
     app, store = _app_with_status(tmp_path)
     store.record_binding(chunk_id="ch_1", environment_id="e1", workdir="/ws/e1", bound_at=_NOW, workspace_id="ws1")
-    store.record_takeover(
+    record_takeover_in_unit(
+        store,
         takeover_id="tko_1",
         chunk_id="ch_1",
         lease_id=None,

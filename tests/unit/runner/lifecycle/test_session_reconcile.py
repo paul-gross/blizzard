@@ -22,6 +22,7 @@ from tests.support.runner_fakes import (
     make_store,
 )
 from tests.support.runner_mint import new_mint
+from tests.support.takeover_unit import record_takeover_in_unit
 
 _NOW = datetime(2026, 11, 6, 12, 0, 0, tzinfo=UTC)
 _HANDLE = WorkerHandle(session_id="sess-x", pid=900, process_start_time="start-900", pgid=900)
@@ -68,7 +69,8 @@ def test_only_unfinished_workerless_untaken_sessions_are_handed_to_their_owner(t
     # 3: its worker declared its session done.
     store.record_session_end(lease_id="lease_3", ended_at=_NOW)
     # 4: a person holds it.
-    store.record_takeover(
+    record_takeover_in_unit(
+        store,
         takeover_id="tk_4",
         chunk_id="ch_4",
         lease_id="lease_4",

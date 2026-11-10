@@ -27,6 +27,7 @@ from tests.support.factory_fields import NewLeaseFields
 from tests.support.runner_client import runner_client
 from tests.support.runner_fakes import SqlAlchemyRunnerStore, make_host_stores, make_store, make_stores, no_retry_clock
 from tests.support.runner_mint import new_mint
+from tests.support.takeover_unit import record_takeover_in_unit
 
 _NOW = datetime(2026, 7, 21, 12, 0, 0, tzinfo=UTC)
 _TOKEN = "the-lease-token"
@@ -212,7 +213,8 @@ def test_an_open_takeover_authorizes_a_closed_reference_lease(tmp_path: Path) ->
     _seed_lease(store)
     store.record_closure(lease_id="lease_1", chunk_id=_CHUNK, node_id="nd_build", reason="escalated", closed_at=_NOW)
     takeover_token = "the-takeover-token"
-    store.record_takeover(
+    record_takeover_in_unit(
+        store,
         takeover_id="tko_1",
         chunk_id=_CHUNK,
         lease_id="lease_1",

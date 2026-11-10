@@ -33,6 +33,7 @@ from tests.support import runner_trace_fixtures as fx
 from tests.support.runner_fakes import SqlAlchemyRunnerStore, make_store
 from tests.support.runner_mint import new_mint
 from tests.support.scaffolding import capture_statements, count_queries, offending_index_scans
+from tests.support.takeover_unit import record_takeover_in_unit
 
 _NODE_ID = "g1-build"
 _HARNESS = "claude-code"
@@ -165,7 +166,8 @@ def _write_lease(store: SqlAlchemyRunnerStore, lease_id: str, chunk_id: str, *, 
     )
     store.record_checks_ran(lease_id=lease_id, epoch=fx.EPOCH, at=fx.at(85))
     takeover_id = f"tko_{lease_id}"
-    store.record_takeover(
+    record_takeover_in_unit(
+        store,
         takeover_id=takeover_id,
         chunk_id=chunk_id,
         lease_id=lease_id,
