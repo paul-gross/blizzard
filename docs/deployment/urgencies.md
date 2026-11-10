@@ -126,6 +126,27 @@ An urgent chunk behind an unfinished prerequisite is not raised, and neither is 
 after C that it can use, and D keeps its place in the standard group. Under hold the runner is offered nothing for C's
 project until D finishes. To get C worked sooner, give D the urgency too.
 
+### A runner's next claim
+
+`GET /api/runners/{runner_id}/next-claim` explains, for one runner, what its walk reaches for next. It walks claim order
+from what the hub holds of the runner: the projects it serves, its bindings, and its latest capability snapshot. It is
+the hub's best account, not a promise: the runner peeks with what it holds at that moment, and the queue can change
+before it does. A retired or paused runner is answered like any other. Each field answers one question:
+
+| Field          | Answers                                                                                                                      |
+| -------------- | ---------------------------------------------------------------------------------------------------------------------------- |
+| `next`         | Which chunk the runner reaches for next under pass-over; absent when it can use none.                                        |
+| `passed`       | Which chunks of its projects it steps past before `next`, at most twenty, each with its `reason`.                            |
+| `reason`       | Why a chunk was passed: `blocked`, naming its first unfinished `prerequisite` and the `prerequisite_count`, or `ineligible`. |
+| `passed_total` | How many chunks it passes in all, listed or not.                                                                             |
+| `unserved`     | How many chunks ahead of `next` belong to projects the runner does not serve.                                                |
+| `if_holding`   | Which chunk it would reach for under a per-project hold.                                                                     |
+| `held_at`      | Where each served project's hold stops, at a chunk it cannot use, with its project and `reason`.                             |
+
+Each entry names its chunk, graph, project, urgency, and `position` in the whole tenant's claim order. In the worked
+example, C appears in `passed` as `blocked` with D as its prerequisite, and `next` is the first chunk after C that the
+runner can use.
+
 ## The CLI
 
 ```text
@@ -140,6 +161,8 @@ blizzard hub urgency position SLUG (--after SLUG | --first)
 
 blizzard hub settings get
 blizzard hub settings edit --default-urgency SLUG
+
+blizzard hub runner next RUNNER
 ```
 
 `list` prints the urgencies in order, each with its place, name, color, mark, and open-chunk count, the default marked.
@@ -150,6 +173,17 @@ blizzard hub settings edit --default-urgency SLUG
 $ blizzard hub urgency retire urgent
 Error: urgency urgent carries 2 open chunks; name where they go:
   blizzard hub urgency retire urgent --move-to <SLUG>
+```
+
+`runner next` prints the runner's next chunk, then each passed chunk with its position, urgency, and reason, a blocked
+one naming its prerequisite and how many more it has. When the hub passed more chunks than it lists, a last line gives
+how many more. With no usable chunk, the `next` line says so:
+
+```console
+$ blizzard hub runner next rn_01JC4Z8Q3XKQ1V5W2M7N9P0R6T
+next  3  ch_next  urgency=standard
+  passed  0  ch_dep  urgency=urgent  blocked by ch_pre (+2 more)
+  passed  1  ch_gpu  urgency=-  ineligible
 ```
 
 Each verb takes `--tenant` and `--json`. Reading takes `fleet:view`; every write takes `config:edit`.
@@ -166,3 +200,4 @@ Each verb takes `--tenant` and `--json`. Reading takes `fleet:view`; every write
 | `urgency position` | `POST /api/urgencies/order/position` |
 | `settings get`     | `GET /api/settings`                  |
 | `settings edit`    | `PATCH /api/settings`                |
+| `runner next`      | `GET /api/runners/{id}/next-claim`   |

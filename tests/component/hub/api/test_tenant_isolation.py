@@ -379,6 +379,7 @@ _PROBES: dict[tuple[str, str], _Probe] = {
     ("POST", "/api/runners"): _own({"name": "beta-extra"}, status=201),
     ("GET", "/api/runners"): _LIST,
     ("GET", "/api/runners/{runner_id}"): _f(),
+    ("GET", "/api/runners/{runner_id}/next-claim"): _f(),
     ("POST", "/api/runners/{runner_id}/enrollments"): _f(),
     ("POST", "/api/runners/{runner_id}/pause"): _f({}),
     ("POST", "/api/runners/{runner_id}/reinstate"): _f({}),

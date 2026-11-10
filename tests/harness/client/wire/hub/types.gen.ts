@@ -3120,6 +3120,13 @@ export type ChunksPageView = {
 export type ClaimDenialReason = 'capability' | 'project' | 'binding';
 
 /**
+ * ClaimPassReason
+ *
+ * Why a runner's walk passed a chunk: it carries a blocked marking, or the runner cannot run its current node.
+ */
+export type ClaimPassReason = 'blocked' | 'ineligible';
+
+/**
  * ClaimRunnerRetiredProblem
  *
  * A claim from a retired runner.
@@ -10124,6 +10131,110 @@ export type MigrationView = {
      * To Graph Name
      */
     to_graph_name: string | null;
+};
+
+/**
+ * NextClaimEntry
+ *
+ * One ready chunk a runner's walk reaches, at its place in claim order.
+ */
+export type NextClaimEntry = {
+    /**
+     * Chunk Id
+     */
+    chunk_id: string;
+    /**
+     * Graph Id
+     */
+    graph_id: string;
+    /**
+     * Position
+     */
+    position: number;
+    /**
+     * Project Id
+     */
+    project_id: string | null;
+    /**
+     * Project Name
+     */
+    project_name: string | null;
+    /**
+     * Project Slug
+     */
+    project_slug: string | null;
+    urgency: UrgencyRef | null;
+};
+
+/**
+ * NextClaimPassedEntry
+ *
+ * One chunk the walk passed, with why; a blocked one names the first prerequisite of its marking and the count.
+ */
+export type NextClaimPassedEntry = {
+    /**
+     * Chunk Id
+     */
+    chunk_id: string;
+    /**
+     * Graph Id
+     */
+    graph_id: string;
+    /**
+     * Position
+     */
+    position: number;
+    /**
+     * Prerequisite
+     */
+    prerequisite: string | null;
+    /**
+     * Prerequisite Count
+     */
+    prerequisite_count: number;
+    /**
+     * Project Id
+     */
+    project_id: string | null;
+    /**
+     * Project Name
+     */
+    project_name: string | null;
+    /**
+     * Project Slug
+     */
+    project_slug: string | null;
+    reason: ClaimPassReason;
+    urgency: UrgencyRef | null;
+};
+
+/**
+ * NextClaimResponse
+ *
+ * ``GET /api/runners/{runner_id}/next-claim`` — the hub's best account of what one runner reaches for next, walked
+ * from what the hub holds of it: ``next`` under pass-over with the chunks ``passed`` before it (at most twenty,
+ * ``passed_total`` counting all), ``if_holding`` under a per-project hold with the head each served project's hold
+ * stops at (``held_at``), and ``unserved``, the chunks ahead of ``next`` of projects the runner does not reach.
+ */
+export type NextClaimResponse = {
+    /**
+     * Held At
+     */
+    held_at: Array<NextClaimPassedEntry>;
+    if_holding: NextClaimEntry | null;
+    next: NextClaimEntry | null;
+    /**
+     * Passed
+     */
+    passed: Array<NextClaimPassedEntry>;
+    /**
+     * Passed Total
+     */
+    passed_total: number;
+    /**
+     * Unserved
+     */
+    unserved: number;
 };
 
 /**
@@ -31591,6 +31702,56 @@ export type EnrollRunnerApiRunnersRunnerIdEnrollmentsPostResponses = {
 };
 
 export type EnrollRunnerApiRunnersRunnerIdEnrollmentsPostResponse = EnrollRunnerApiRunnersRunnerIdEnrollmentsPostResponses[keyof EnrollRunnerApiRunnersRunnerIdEnrollmentsPostResponses];
+
+export type GetRunnerNextClaimApiRunnersRunnerIdNextClaimGetData = {
+    body?: never;
+    path: {
+        /**
+         * Runner Id
+         */
+        runner_id: string;
+    };
+    query?: never;
+    url: '/api/runners/{runner_id}/next-claim';
+};
+
+export type GetRunnerNextClaimApiRunnersRunnerIdNextClaimGetErrors = {
+    /**
+     * Problem
+     */
+    400: TenantCredentialMismatchProblem;
+    /**
+     * Problem
+     */
+    401: AuthenticationRequiredProblem;
+    /**
+     * Problem
+     */
+    404: TenantNotFoundProblem | RunnerNotFoundProblem;
+    /**
+     * Problem
+     */
+    409: TenantRequiredProblem;
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+    /**
+     * Problem
+     */
+    503: HubStoreUnavailableProblem;
+};
+
+export type GetRunnerNextClaimApiRunnersRunnerIdNextClaimGetError = GetRunnerNextClaimApiRunnersRunnerIdNextClaimGetErrors[keyof GetRunnerNextClaimApiRunnersRunnerIdNextClaimGetErrors];
+
+export type GetRunnerNextClaimApiRunnersRunnerIdNextClaimGetResponses = {
+    /**
+     * Successful Response
+     */
+    200: NextClaimResponse;
+};
+
+export type GetRunnerNextClaimApiRunnersRunnerIdNextClaimGetResponse = GetRunnerNextClaimApiRunnersRunnerIdNextClaimGetResponses[keyof GetRunnerNextClaimApiRunnersRunnerIdNextClaimGetResponses];
 
 export type PauseRunnerApiRunnersRunnerIdPausePostData = {
     body: RunnerPauseRequest;

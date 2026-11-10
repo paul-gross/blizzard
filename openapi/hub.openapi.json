@@ -5502,6 +5502,15 @@
         "title": "ClaimDenialReason",
         "type": "string"
       },
+      "ClaimPassReason": {
+        "description": "Why a runner's walk passed a chunk: it carries a blocked marking, or the runner cannot run its current node.",
+        "enum": [
+          "blocked",
+          "ineligible"
+        ],
+        "title": "ClaimPassReason",
+        "type": "string"
+      },
       "ClaimRunnerRetiredProblem": {
         "additionalProperties": true,
         "description": "A claim from a retired runner.",
@@ -16751,6 +16760,232 @@
           "recorded_at"
         ],
         "title": "MigrationView",
+        "type": "object"
+      },
+      "NextClaimEntry": {
+        "description": "One ready chunk a runner's walk reaches, at its place in claim order.",
+        "properties": {
+          "chunk_id": {
+            "title": "Chunk Id",
+            "type": "string"
+          },
+          "graph_id": {
+            "title": "Graph Id",
+            "type": "string"
+          },
+          "position": {
+            "title": "Position",
+            "type": "integer"
+          },
+          "project_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Project Id"
+          },
+          "project_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Project Name"
+          },
+          "project_slug": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Project Slug"
+          },
+          "urgency": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/UrgencyRef"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "chunk_id",
+          "graph_id",
+          "position",
+          "project_id",
+          "project_slug",
+          "project_name",
+          "urgency"
+        ],
+        "title": "NextClaimEntry",
+        "type": "object"
+      },
+      "NextClaimPassedEntry": {
+        "description": "One chunk the walk passed, with why; a blocked one names the first prerequisite of its marking and the count.",
+        "properties": {
+          "chunk_id": {
+            "title": "Chunk Id",
+            "type": "string"
+          },
+          "graph_id": {
+            "title": "Graph Id",
+            "type": "string"
+          },
+          "position": {
+            "title": "Position",
+            "type": "integer"
+          },
+          "prerequisite": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Prerequisite"
+          },
+          "prerequisite_count": {
+            "default": 0,
+            "title": "Prerequisite Count",
+            "type": "integer"
+          },
+          "project_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Project Id"
+          },
+          "project_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Project Name"
+          },
+          "project_slug": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Project Slug"
+          },
+          "reason": {
+            "$ref": "#/components/schemas/ClaimPassReason",
+            "x-blizzard-open": true
+          },
+          "urgency": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/UrgencyRef"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "chunk_id",
+          "graph_id",
+          "position",
+          "project_id",
+          "project_slug",
+          "project_name",
+          "urgency",
+          "reason",
+          "prerequisite",
+          "prerequisite_count"
+        ],
+        "title": "NextClaimPassedEntry",
+        "type": "object"
+      },
+      "NextClaimResponse": {
+        "description": "``GET /api/runners/{runner_id}/next-claim`` \u2014 the hub's best account of what one runner reaches for next, walked\nfrom what the hub holds of it: ``next`` under pass-over with the chunks ``passed`` before it (at most twenty,\n``passed_total`` counting all), ``if_holding`` under a per-project hold with the head each served project's hold\nstops at (``held_at``), and ``unserved``, the chunks ahead of ``next`` of projects the runner does not reach.",
+        "properties": {
+          "held_at": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/NextClaimPassedEntry"
+            },
+            "title": "Held At",
+            "type": "array"
+          },
+          "if_holding": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/NextClaimEntry"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "next": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/NextClaimEntry"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "passed": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/NextClaimPassedEntry"
+            },
+            "title": "Passed",
+            "type": "array"
+          },
+          "passed_total": {
+            "default": 0,
+            "title": "Passed Total",
+            "type": "integer"
+          },
+          "unserved": {
+            "default": 0,
+            "title": "Unserved",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "next",
+          "passed",
+          "passed_total",
+          "unserved",
+          "if_holding",
+          "held_at"
+        ],
+        "title": "NextClaimResponse",
         "type": "object"
       },
       "NoAnsweredProposalProblem": {
@@ -60764,6 +60999,106 @@
           }
         },
         "summary": "Enroll Runner",
+        "tags": [
+          "runners"
+        ]
+      }
+    },
+    "/api/runners/{runner_id}/next-claim": {
+      "get": {
+        "description": "The hub's best account of the chunk one runner reaches for next and every chunk it passes on the way \u2014 walked\nfrom the runner's served projects and bindings and its latest capability snapshot. A retired or paused runner is\nanswered like any other; 404 on unknown.",
+        "operationId": "get_runner_next_claim_api_runners__runner_id__next_claim_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "runner_id",
+            "required": true,
+            "schema": {
+              "title": "Runner Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NextClaimResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "400": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TenantCredentialMismatchProblem"
+                }
+              }
+            },
+            "description": "Problem"
+          },
+          "401": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AuthenticationRequiredProblem"
+                }
+              }
+            },
+            "description": "Problem"
+          },
+          "404": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/TenantNotFoundProblem"
+                    },
+                    {
+                      "$ref": "#/components/schemas/RunnerNotFoundProblem"
+                    }
+                  ]
+                }
+              }
+            },
+            "description": "Problem"
+          },
+          "409": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TenantRequiredProblem"
+                }
+              }
+            },
+            "description": "Problem"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          },
+          "503": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HubStoreUnavailableProblem"
+                }
+              }
+            },
+            "description": "Problem"
+          }
+        },
+        "summary": "Get Runner Next Claim",
         "tags": [
           "runners"
         ]

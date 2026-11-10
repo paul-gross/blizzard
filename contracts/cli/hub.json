@@ -10300,6 +10300,60 @@
           "path": "hub runner list",
           "short_help": "The fleet registry \u2014 every added runner, oldest first: its id, name, connection and paused state."
         },
+        "next": {
+          "help": "The chunk RUNNER_ID reaches for next, and each chunk it passes on the way with its urgency and why \u2014 the hub's\nbest account from what it holds of the runner, not a promise of what the runner claims.",
+          "params": [
+            {
+              "hidden": false,
+              "kind": "argument",
+              "name": "runner_id",
+              "opts": [
+                "runner_id"
+              ],
+              "required": true,
+              "secondary_opts": [],
+              "type": "text"
+            },
+            {
+              "help": "Print the raw response body as JSON.",
+              "hidden": false,
+              "kind": "option",
+              "name": "as_json",
+              "opts": [
+                "--json"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "boolean"
+            },
+            {
+              "help": "The tenant to act in, by id (default $BZ_HUB_TENANT); needed only when you belong to several.",
+              "hidden": false,
+              "kind": "option",
+              "name": "tenant",
+              "opts": [
+                "--tenant"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "text"
+            },
+            {
+              "help": "Hub API base URL (default $BZ_HUB_URL or http://127.0.0.1:8421).",
+              "hidden": false,
+              "kind": "option",
+              "name": "hub_url",
+              "opts": [
+                "--hub-url"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "text"
+            }
+          ],
+          "path": "hub runner next",
+          "short_help": "The chunk RUNNER_ID reaches for next, and each chunk it passes on the way with its urgency and why \u2014 the hub's best account from what it holds of the runner, not a promise of what the runner claims."
+        },
         "pause": {
           "help": "Pause runner RUNNER_ID \u2014 it stops claiming new work; in-flight chunks run on.",
           "params": [
