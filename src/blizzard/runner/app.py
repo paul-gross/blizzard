@@ -110,6 +110,7 @@ from blizzard.runner.hub.host_identity import HostIdentityHolder, ICurrentHostId
 from blizzard.runner.hub.host_registration import HostRegistrationHolder, ICurrentHostRegistration
 from blizzard.runner.hub.identity import ICurrentIdentityVerdict, ICurrentRunnerIdentity, IIdentityOnContact
 from blizzard.runner.hub.internal.http_hub import HeldTokenAuth, HttpHubClient
+from blizzard.runner.hub.verified import VerifiedHubClient
 from blizzard.runner.leases.activity import LocalLeaseService
 from blizzard.runner.leases.asks import AskService
 from blizzard.runner.leases.liveness import LeaseLivenessService
@@ -847,7 +848,13 @@ def _wire_runner(
         events=graph.events,
     )
     requeue = RequeueService(runner_stores.requeue, clock)
-    attachments = AttachmentService(runner_stores.attachments, clock, runner_stores.outbound, runner_stores.lease_lock)
+    attachments = AttachmentService(
+        runner_stores.attachments,
+        clock,
+        runner_stores.outbound,
+        runner_stores.lease_lock,
+        stage_check=VerifiedHubClient(HttpHubClient(hub_proxy_client), graph.identity_verdict),
+    )
     # Takes the workspaces too: a declaration is checked against the environment's repo manifest, which the
     # provider of the environment's workspace declares.
     git_commit_declarations = GitCommitDeclarationService(

@@ -100,6 +100,7 @@ from blizzard.wire import release as release_wire
 from blizzard.wire import route as route_wire
 from blizzard.wire import runner as runner_wire
 from blizzard.wire import tenant as tenant_wire
+from blizzard.wire.attachments import ArtifactCheckRequest, ArtifactCheckResponse
 from blizzard.wire.chunk import ChunkStatusView
 from blizzard.wire.envelope import ApplyResponse, NodeEnvelope
 from blizzard.wire.facts import HostFactAck, RunnerFactAck
@@ -151,6 +152,12 @@ _FLEET_API = "/api/fleet"
 
 #: Overrides the shared client's own default timeout for this one call.
 _TRANSCRIPT_PUSH_TIMEOUT_SECONDS = 5.0
+
+#: The configured bound on the advisory stage-time format check — below the CLI's ``WRITE_TIMEOUT``, so a
+#: slow hub is meant to cost the worker a skipped check rather than a failed submission. It bounds the check,
+#: not the whole request, and promises nothing about the CLI never timing out. Pinned at
+#: tests/unit/runner/cli/test_artifact.py::test_the_stage_check_budget_fits_inside_the_cli_write_timeout.
+STAGE_CHECK_TIMEOUT_SECONDS = 3.0
 
 #: Caps a single ``chunk-statuses`` GET's ``chunk_id`` query-param count, bounding its URL length.
 _CHUNK_STATUSES_BATCH_LIMIT = 500
@@ -365,6 +372,24 @@ class HttpHubClient:
             capped=ack.capped,
             refused=ack.refused,
         )
+
+    def check_artifact(self, chunk_id: str, name: str, content: str) -> str | None:
+        operation = f"POST {_FLEET_API}/chunks/{chunk_id}/artifact-check"
+        body = ArtifactCheckRequest(name=name, content=content).model_dump()
+        # The check is advisory and its callers continue past a failure, so this raises without logging at error;
+        # the caller logs the tolerated failure at warning.
+        try:
+            resp = self._client.post(
+                f"{_FLEET_API}/chunks/{chunk_id}/artifact-check", json=body, timeout=STAGE_CHECK_TIMEOUT_SECONDS
+            )
+        except httpx2.HTTPError as exc:
+            raise HubClientError(f"{operation} failed: {exc}") from exc
+        if not resp.is_success:
+            raise HubClientError(f"{operation} -> {resp.status_code}: {resp.text[:200]}")
+        try:
+            return ArtifactCheckResponse.model_validate(resp.json()).refusal
+        except ValueError as exc:
+            raise HubClientError(f"{operation}: malformed reply: {exc}") from exc
 
     def get_envelope(self, chunk_id: str) -> Envelope:
         resp = self._get(

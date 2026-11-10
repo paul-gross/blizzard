@@ -12,9 +12,9 @@ import httpx2
 import pytest
 from click.testing import CliRunner
 
-from blizzard.runner.api.attachments import STAGE_CHECK_TIMEOUT
 from blizzard.runner.cli import runner as runner_group
 from blizzard.runner.cli.worker_call import WRITE_TIMEOUT
+from blizzard.runner.hub.internal.http_hub import STAGE_CHECK_TIMEOUT_SECONDS
 from tests.support.worker_http import bind_stubs
 
 _ENV = {
@@ -692,7 +692,7 @@ def test_create_shows_the_hubs_refusal_verbatim_and_says_nothing_was_stored() ->
 
 
 def test_the_stage_check_budget_fits_inside_the_cli_write_timeout() -> None:
-    assert STAGE_CHECK_TIMEOUT < WRITE_TIMEOUT
+    assert STAGE_CHECK_TIMEOUT_SECONDS < WRITE_TIMEOUT
 
 
 def test_create_refuses_graph_scope_without_posting(monkeypatch: pytest.MonkeyPatch) -> None:

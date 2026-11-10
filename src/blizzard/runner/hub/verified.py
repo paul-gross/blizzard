@@ -78,6 +78,9 @@ class VerifiedHubClient:
     def push_transcripts(self, records: Sequence[TranscriptPush]) -> TranscriptPushAck:
         return self._verified().push_transcripts(records)
 
+    def check_artifact(self, chunk_id: str, name: str, content: str) -> str | None:
+        return self._verified().check_artifact(chunk_id, name, content)
+
     def get_envelope(self, chunk_id: str) -> Envelope:
         return self._verified().get_envelope(chunk_id)
 

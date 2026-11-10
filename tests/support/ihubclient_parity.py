@@ -16,6 +16,7 @@ _IHUBCLIENT_ENDPOINTS: dict[str, tuple[str, str]] = {
     "get_envelope": ("GET", "/api/fleet/chunks/{chunk_id}/envelope"),
     "chunk_statuses": ("GET", "/api/fleet/chunk-statuses"),
     "hub_advance": ("POST", "/api/fleet/chunks/{chunk_id}/hub-advance"),
+    "check_artifact": ("POST", "/api/fleet/chunks/{chunk_id}/artifact-check"),
     "get_question": ("GET", "/api/fleet/questions/{question_id}"),
     "register_runner": ("POST", "/api/fleet/runners"),
     "fetch_runner_paused": ("GET", "/api/fleet/runners/{runner_id}"),

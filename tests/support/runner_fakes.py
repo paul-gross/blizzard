@@ -553,6 +553,22 @@ class ReleaseCall:
     reason: str
 
 
+class FakeArtifactChecker:
+    """A scriptable :class:`IArtifactChecker`: passes, refuses with ``refusal``, or raises ``HubClientError``
+    while ``down``; records every call as ``(chunk_id, name, content)``."""
+
+    def __init__(self, *, refusal: str | None = None, down: bool = False) -> None:
+        self.refusal = refusal
+        self.down = down
+        self.calls: list[tuple[str, str, str]] = []
+
+    def check_artifact(self, chunk_id: str, name: str, content: str) -> str | None:
+        self.calls.append((chunk_id, name, content))
+        if self.down:
+            raise HubClientError("fake hub is down")
+        return self.refusal
+
+
 class FakeHub:
     """A scriptable :class:`IHubClient`: canned queue/claim/apply/envelope/chunk.
 
@@ -822,6 +838,11 @@ class FakeHub:
         if self.down:
             raise HubClientError("fake hub is down")
         self.hub_advance_calls.append(chunk_id)
+
+    def check_artifact(self, chunk_id: str, name: str, content: str) -> str | None:
+        if self.down:
+            raise HubClientError("fake hub is down")
+        return None
 
     def get_question(self, question_id: str) -> HubQuestion:
         self.get_question_calls.append(question_id)

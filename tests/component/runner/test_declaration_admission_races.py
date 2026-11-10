@@ -30,6 +30,7 @@ from blizzard.runner.node_steps.submissions import CompletionArtifact
 from blizzard.runner.operator.attachments import AttachmentService, AttachmentTooLate
 from tests.support.lease_unit_seeds import seed_git_commit_declaration
 from tests.support.runner_fakes import (
+    FakeArtifactChecker,
     FakeHarness,
     FakeHub,
     FakeProbe,
@@ -123,7 +124,7 @@ def _world(tmp_path: Path, commits_cls: type[DeclaredCommits] = DeclaredCommits)
         store=store,
         judgement=Judgement(ctx, lease, envelope, bindings),
         lease=lease,
-        attach=AttachmentService(store, clock, store, store),
+        attach=AttachmentService(store, clock, store, store, stage_check=FakeArtifactChecker()),
         declare=GitCommitDeclarationService(
             store, clock, workspaces, environments=store, outbound=store, lease_lock=store
         ),
