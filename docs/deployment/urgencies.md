@@ -103,6 +103,29 @@ cleared routine default or chore override. Enabling a live urgency writes nothin
 Every edit, retire, and enable takes `If-Match` on the urgency's `revision`, and the settings' edit on theirs; a stale
 one is refused `409`.
 
+## Claim order
+
+A tenant's ready chunks have two orders. **Rank order** is the order an operator sets with the queue's reorder and
+reposition writes, and what `GET /api/queue`, `blizzard hub queue get`, and the board's lists show. **Claim order** is
+the order runners are offered work in: the ready chunks grouped by their urgency's place in the set, most urgent group
+first, and within a group in rank order. It is worked out on every read from the two, never stored, and changes the
+moment either changes: move an urgency in the set, or set a chunk's urgency, and the next peek walks the new order. With
+one live urgency, claim order is rank order.
+
+Both runner peeks, `GET` and `POST /api/fleet/queue/peek`, walk claim order, so an urgent chunk ranked last is offered
+before a standard chunk ranked first. The positions they return are indexes into the whole tenant's claim order. Runners
+of every release get this with no upgrade, because the peek's wire is unchanged.
+
+Hold and pass-over apply to claim order. Under pass-over, the walk steps past a chunk the runner cannot use, one that is
+blocked or that the runner cannot work, to the next in claim order, down a group when an urgency is spent. Under hold,
+the walk stops at the first chunk it cannot use, or at each project's first when the peek names projects, so an urgent
+chunk the runner cannot use holds its project's less urgent work behind it.
+
+An urgent chunk behind an unfinished prerequisite is not raised, and neither is the prerequisite. Say chunk C is
+`urgent` and depends on chunk D, which is `standard` and not done. Under pass-over the runner is offered the first chunk
+after C that it can use, and D keeps its place in the standard group. Under hold the runner is offered nothing for C's
+project until D finishes. To get C worked sooner, give D the urgency too.
+
 ## The CLI
 
 ```text
