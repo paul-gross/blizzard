@@ -238,3 +238,13 @@ test('a caller-supplied barrier returns the frames before it and hides its own',
     stub.stop();
   }
 });
+
+test('a runner stream without a barrier names both ways to open one', async ({ runnerStream }) => {
+  const stub = await hostStub();
+  try {
+    const subscription = await runnerStream(stub.url);
+    await expect(subscription.barrier()).rejects.toThrow(/events\.open\(\{ barrier: true \}\).*runnerStream/);
+  } finally {
+    stub.stop();
+  }
+});

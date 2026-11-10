@@ -53,9 +53,9 @@ type ChunkField<K extends keyof ChunkDetail> = K;
 type ChunkProgressSource = { status: string } & Partial<Pick<ChunkDetail, ChunkField<'current_node_name' | 'latest_epoch' | 'pending'>>> & {
   [K in ChunkField<'history' | 'bounces' | 'open_prs' | 'closed_prs' | 'landed_repos'>]?: readonly unknown[];
 } & { [K in ChunkField<'flow_places'>]?: readonly Pick<ChunkFlowPlaceView, 'flow_id' | 'state'>[] };
-
 /** The flow-place states a waiting submission cycles through on every poll, which `chunkProgress` reads as one. */
-const IN_LINE: ReadonlySet<FlowPlaceState> = new Set(['landing', 'next', 'waiting', 'polling']);
+/** The flow-place states that hold a queue position, matching the hub's `FlowPlace.in_line`: a waiting submission cycles through them on every poll, which `chunkProgress` reads as one. */
+const IN_LINE: ReadonlySet<FlowPlaceState> = new Set(['next', 'waiting', 'polling']);
 
 /**
  * A chunk detail's progress, for `StepWait.progress`: its status, node, epoch, transitions, pending hub node, bounces,
