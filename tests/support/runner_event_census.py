@@ -54,7 +54,7 @@ _INTERNAL_BOOKKEEPING = (
 #: The three retention prunes' shared reason — see
 #: `IWriteOutboundRepository.prune_outbound` and its siblings for the retention contract.
 _RETENTION_PRUNE = (
-    "Retention.run (runner/loop/steps.py) — a prune changes no client-facing read's answer "
+    "RetentionPrune.run (runner/lifecycle/retention.py) — a prune changes no client-facing read's answer "
     "(issue #520), so there is nothing for a kind to announce."
 )
 

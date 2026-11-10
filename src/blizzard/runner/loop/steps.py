@@ -8,7 +8,6 @@ mid-tick and a restart re-run the tick harmlessly; startup recovery is REAP runn
 from __future__ import annotations
 
 import json
-from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 
@@ -33,6 +32,7 @@ from blizzard.runner.lifecycle.ownership_reconcile import OwnershipReconcile
 from blizzard.runner.lifecycle.reap import ReapSweep
 from blizzard.runner.lifecycle.registration import Registration
 from blizzard.runner.lifecycle.restart_resume import RestartResume
+from blizzard.runner.lifecycle.retention import RetentionPrune
 from blizzard.runner.lifecycle.spawn import Spawner
 from blizzard.runner.lifecycle.spend_ceiling import SpendCeilingCheck
 from blizzard.runner.loop.context import LoopContext
@@ -177,43 +177,11 @@ class Advance(Step):
 
 
 class Retention(Step):
-    """Prune every append-only observation/report lane once per floor, so none grows without
-    bound — each lane's own retention contract lives at its own method (the
-    store's `IWriteOutboundRepository.prune_outbound` and its siblings, or the filesystem
-    sweep of `WorkerStdoutFiles.sweep`), each its own isolated prune. Gated by `RetentionPasses.due` —
-    `bzh:probe-gated-pass`'s floor-only form."""
+    """Prune every append-only observation/report lane once per floor — owned by
+    :class:`~blizzard.runner.lifecycle.retention.RetentionPrune`."""
 
     def run(self) -> None:
-        """One prune per lane, each isolated (each lane its own
-        isolated item): one lane's failure must not skip the others, and this step gates nothing
-        else in the tick either way."""
-        ctx = self.ctx
-        now = ctx.clock.now()
-        passes = ctx.retention_passes
-        if passes is not None and not passes.due(now):
-            return
-        lanes: tuple[tuple[str, Callable[[], int]], ...] = (
-            ("outbound buffer", lambda: ctx.stores.outbound.prune_outbound(now=now)),
-            ("heartbeat", lambda: ctx.stores.liveness.prune_heartbeats(now=now)),
-            ("external usage sample", lambda: ctx.host_stores.external_usage.prune_external_usage_samples(now=now)),
-            ("credential renewal", lambda: ctx.host_stores.external_usage.prune_credential_renewals(now=now)),
-            ("subscription usage limit", lambda: ctx.host_stores.usage_limits.prune_usage_limits(now=now)),
-            ("runner usage limit", lambda: ctx.stores.usage_limits.prune_usage_limits(now=now)),
-            (
-                "worker stdout",
-                lambda: ctx.worker_files.sweep(
-                    now=now, retention=timedelta(days=ctx.config.worker_stdout_retention_days)
-                ),
-            ),
-        )
-        for label, prune in lanes:
-            try:
-                prune()
-            except Exception as exc:  # one lane's prune failure must not skip the others
-                _log.warning("retention prune failed", lane=label, detail=str(exc))
-        # Every lane was attempted, whatever its outcome: a lane that raised retries at the next floor.
-        if passes is not None:
-            passes.record(now)
+        RetentionPrune(self.ctx).run()
 
 
 class ContextSample(Step):
