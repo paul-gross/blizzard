@@ -20,7 +20,7 @@ test('test_a_runner_claims_the_urgent_chunk_ranked_last', async ({ api, issue, m
   const runner = await mockRunner('runner-claim-order');
   expect((await runner.drive('register')).body.status).toBe(201);
   const peek = await runner.drive('peek');
-  expect(peek.body.response.entries[0].chunk_id).toBe(urgent);
+  expect(peek.body.response.entries.at(0)?.chunk_id).toBe(urgent);
 
   expect((await runner.drive('claim', { chunk_id: urgent })).body.claimed).toBe(true);
   expect((await api.get(`/api/chunks/${urgent}`)).body.status).toBe('running');
