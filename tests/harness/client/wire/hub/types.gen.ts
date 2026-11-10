@@ -1490,6 +1490,10 @@ export type ChoreDocument = {
      * Scopes
      */
     scopes?: 'all' | Array<string> | null;
+    /**
+     * Urgency
+     */
+    urgency?: string | null;
 };
 
 /**
@@ -1527,6 +1531,10 @@ export type ChoreView = {
      * Scopes Set At
      */
     scopes_set_at: string;
+    /**
+     * Urgency
+     */
+    urgency: string | null;
 };
 
 /**
@@ -12843,6 +12851,10 @@ export type RoutineCreateRequest = {
      */
     default_scope_slug: string;
     /**
+     * Default Urgency
+     */
+    default_urgency?: string | null;
+    /**
      * Graph Name
      */
     graph_name: string;
@@ -12891,7 +12903,7 @@ export type RoutineDefinitionInvalidProblem = {
  *
  * A sparse edit: an absent field is unchanged, a present one is set. A present
  * ``slug`` may only restate the current one; ``name`` sets the display name. An explicit ``null`` clears
- * ``default_effort`` and is refused on every other field.
+ * ``default_effort`` or ``default_urgency`` and is refused on every other field.
  */
 export type RoutineEditRequest = {
     /**
@@ -12910,6 +12922,10 @@ export type RoutineEditRequest = {
      * Default Scope Slug
      */
     default_scope_slug?: string | null;
+    /**
+     * Default Urgency
+     */
+    default_urgency?: string | null;
     /**
      * Graph Name
      */
@@ -12947,6 +12963,10 @@ export type RoutineEntry = {
      * Default Scope Slug
      */
     default_scope_slug: string;
+    /**
+     * Default Urgency
+     */
+    default_urgency?: string | null;
     /**
      * Graph Name
      */
@@ -13178,6 +13198,10 @@ export type RoutineView = {
      * Default Scope Slug
      */
     default_scope_slug: string;
+    /**
+     * Default Urgency
+     */
+    default_urgency: string | null;
     /**
      * Graph Name
      */

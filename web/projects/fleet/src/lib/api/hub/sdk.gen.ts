@@ -395,7 +395,8 @@ export const getCadenceApiCadencesCadenceIdGet = <ThrowOnError extends boolean =
  * Apply only the fields present — the name, the schedule, the spacing, the anchor, and the whole chore list,
  * matched to the stored chores by key so a chore whose key stays keeps its id; an explicit `null` clears
  * `schedule`, `spacing`, or `anchor`. An edit that changes nothing writes nothing. 404 on an unknown id; 422
- * naming the field on a `null` name or chore list, or a merged shape that cannot mean anything; 403 when the
+ * naming the field on a `null` name or chore list, a merged shape that cannot mean anything, or a chore's
+ * `urgency` naming no urgency (`urgency_unknown`) or a retired one (`urgency_retired`); 403 when the
  * cadence would stay live keeping a promoting chore and the caller may not promote chunks; 409 on a stale
  * `If-Match`.
  */
@@ -2104,7 +2105,8 @@ export const listProjectCadencesApiProjectsProjectCadencesGet = <ThrowOnError ex
  * Create a cadence in the project. 422 naming the field on a shape that cannot mean anything — no schedule and
  * no spacing, a malformed cron, zone, spacing, anchor, or chore — or on a slug the project already holds; 403 when
  * it would keep a promoting chore and the caller may not promote chunks; 404 on an unknown project. A chore whose
- * routine or scopes do not resolve is accepted, and shown in the cadence's `attention`.
+ * routine or scopes do not resolve is accepted, and shown in the cadence's `attention`; a chore's `urgency`, by id
+ * or slug, is refused 422 `urgency_unknown` or `urgency_retired` when it names no urgency or a retired one.
  */
 export const createProjectCadenceApiProjectsProjectCadencesPost = <ThrowOnError extends boolean = false>(options: Options<CreateProjectCadenceApiProjectsProjectCadencesPostData, ThrowOnError>): RequestResult<CreateProjectCadenceApiProjectsProjectCadencesPostResponses, CreateProjectCadenceApiProjectsProjectCadencesPostErrors, ThrowOnError> => (options.client ?? client).post<CreateProjectCadenceApiProjectsProjectCadencesPostResponses, CreateProjectCadenceApiProjectsProjectCadencesPostErrors, ThrowOnError>({
     url: '/api/projects/{project}/cadences',
@@ -2230,7 +2232,8 @@ export const listProjectRoutinesApiProjectsProjectRoutinesGet = <ThrowOnError ex
  * Create Project Routine
  *
  * Mint a routine in the project, its default scope resolved or minted there; 422 on a duplicate slug in the
- * project, a malformed default scope slug, or a graph name with no enabled mint; 404 on an unknown project.
+ * project, a malformed default scope slug, or a graph name with no enabled mint, and 422 `urgency_unknown` or
+ * `urgency_retired` on a `default_urgency` naming no urgency or a retired one; 404 on an unknown project.
  */
 export const createProjectRoutineApiProjectsProjectRoutinesPost = <ThrowOnError extends boolean = false>(options: Options<CreateProjectRoutineApiProjectsProjectRoutinesPostData, ThrowOnError>): RequestResult<CreateProjectRoutineApiProjectsProjectRoutinesPostResponses, CreateProjectRoutineApiProjectsProjectRoutinesPostErrors, ThrowOnError> => (options.client ?? client).post<CreateProjectRoutineApiProjectsProjectRoutinesPostResponses, CreateProjectRoutineApiProjectsProjectRoutinesPostErrors, ThrowOnError>({
     url: '/api/projects/{project}/routines',
@@ -2582,10 +2585,11 @@ export const getRoutineApiRoutinesRoutineIdGet = <ThrowOnError extends boolean =
  * Edit Routine
  *
  * Apply only the fields present — the display name, the graph, the default scope, and the model, effort,
- * and harness defaults; an explicit `null` clears `default_effort`. A present `slug` must
- * restate the current one. An edit that changes nothing writes nothing. 404 on an unknown
+ * harness, and urgency defaults; an explicit `null` clears `default_effort` or `default_urgency`. A present `slug`
+ * must restate the current one. An edit that changes nothing writes nothing. 404 on an unknown
  * id; 422 on a slug change, a `null` field, a malformed default scope slug, or a graph name
- * with no enabled mint; 409 on a stale `If-Match` naming the current revision.
+ * with no enabled mint, and 422 `urgency_unknown` or `urgency_retired` on a `default_urgency` naming no urgency or
+ * a retired one; 409 on a stale `If-Match` naming the current revision.
  */
 export const editRoutineApiRoutinesRoutineIdPatch = <ThrowOnError extends boolean = false>(options: Options<EditRoutineApiRoutinesRoutineIdPatchData, ThrowOnError>): RequestResult<EditRoutineApiRoutinesRoutineIdPatchResponses, EditRoutineApiRoutinesRoutineIdPatchErrors, ThrowOnError> => (options.client ?? client).patch<EditRoutineApiRoutinesRoutineIdPatchResponses, EditRoutineApiRoutinesRoutineIdPatchErrors, ThrowOnError>({
     url: '/api/routines/{routine_id}',
