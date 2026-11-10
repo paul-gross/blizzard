@@ -590,7 +590,17 @@ class ITranscriptPusher(Protocol):
         ...
 
 
-class IHubClient(IChunkStatusReader, ITranscriptPusher, Protocol):
+class IArtifactChecker(Protocol):
+    """The advisory artifact-format check alone, narrowed from :class:`IHubClient` (``bzh:seam-size-ceiling``)."""
+
+    def check_artifact(self, chunk_id: str, name: str, content: str) -> str | None:
+        """``POST /api/fleet/chunks/{id}/artifact-check`` — the hub's refusal of ``content`` for the format its
+        graph owes ``name``, or ``None`` when it passes. Every failure to get a usable verdict (transport error,
+        timeout, an old hub's 404, an upstream auth refusal, a malformed reply) raises ``HubClientError``."""
+        ...
+
+
+class IHubClient(IChunkStatusReader, ITranscriptPusher, IArtifactChecker, Protocol):
     """The runner's client of the hub API. Outbound-only."""
 
     def peek_queue(

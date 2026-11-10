@@ -167,6 +167,7 @@ _HUB_CLIENT: dict[str, Callable[[HttpHubClient], object]] = {
     "get_envelope": lambda c: c.get_envelope("ch_1"),
     "chunk_statuses": lambda c: c.chunk_statuses(["ch_1"]),
     "hub_advance": lambda c: c.hub_advance("ch_1"),
+    "check_artifact": lambda c: c.check_artifact("ch_1", "delta", "body"),
     "get_question": lambda c: c.get_question("q_1"),
     "register_runner": lambda c: c.register_runner("r", "ws", projects=("p",), subscription="s"),
     "fetch_runner_paused": lambda c: c.fetch_runner_paused("rn_1"),

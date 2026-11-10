@@ -24,6 +24,7 @@ from blizzard.runner.tracing.assembly import assemble_lease
 from tests.support.config_inputs import create_runner_app
 from tests.support.runner_client import runner_client
 from tests.support.runner_fakes import (
+    FakeArtifactChecker,
     FakeHarness,
     FakeHub,
     FakeProbe,
@@ -48,7 +49,7 @@ def test_advance_prefers_a_real_attachment_and_falls_back_for_the_rest(tmp_path:
     both to the shared assessment."""
     store = make_store(f"sqlite:///{tmp_path / 'runner.db'}")
     config = RunnerConfig(root=tmp_path, db_url=f"sqlite:///{tmp_path / 'runner.db'}")
-    attachments = AttachmentService(store, FixedClock(_NOW), store, store)
+    attachments = AttachmentService(store, FixedClock(_NOW), store, store, stage_check=FakeArtifactChecker())
     app = create_runner_app(
         config, runner_stores=make_stores(store), host_stores=make_host_stores(store), attachments=attachments
     )

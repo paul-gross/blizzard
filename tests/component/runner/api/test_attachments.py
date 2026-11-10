@@ -18,15 +18,16 @@ from fastapi import FastAPI
 
 from blizzard.foundation.clock import FixedClock
 from blizzard.foundation.tokens import TokenHash
-from blizzard.runner.api.attachments import STAGE_CHECK_TIMEOUT
 from blizzard.runner.config import RunnerConfig
 from blizzard.runner.harness.identity import CLAUDE_CODE_HARNESS_ID, SessionReference
+from blizzard.runner.hub.internal.http_hub import STAGE_CHECK_TIMEOUT_SECONDS, HttpHubClient
 from blizzard.runner.leases.model import NewLease
 from blizzard.runner.operator.attachments import AttachmentService
 from tests.support.config_inputs import create_runner_app
 from tests.support.factory_fields import NewLeaseFields
 from tests.support.runner_client import runner_client
 from tests.support.runner_fakes import (
+    FakeArtifactChecker,
     SqlAlchemyRunnerStore,
     make_host_stores,
     make_store,
@@ -43,7 +44,7 @@ _TOKEN = "the-lease-token"
 def _app_with_attachments(tmp_path: Path):
     store = make_store(f"sqlite:///{tmp_path / 'runner.db'}")
     config = RunnerConfig(root=tmp_path, db_url=f"sqlite:///{tmp_path / 'runner.db'}")
-    service = AttachmentService(store, FixedClock(_NOW), store, store)
+    service = AttachmentService(store, FixedClock(_NOW), store, store, stage_check=FakeArtifactChecker())
     return create_runner_app(
         config, runner_stores=make_stores(store), host_stores=make_host_stores(store), attachments=service
     ), store
@@ -75,7 +76,7 @@ def test_503_when_attachment_service_unwired(tmp_path: Path) -> None:
 def test_503_when_store_unwired(tmp_path: Path) -> None:
     store = make_store(f"sqlite:///{tmp_path / 'runner.db'}")
     config = RunnerConfig(root=tmp_path, db_url=f"sqlite:///{tmp_path / 'runner.db'}")
-    service = AttachmentService(store, FixedClock(_NOW), store, store)
+    service = AttachmentService(store, FixedClock(_NOW), store, store, stage_check=FakeArtifactChecker())
     # The service is wired, but ``runner_stores`` — the controller's own read-only
     # resolution seam — is not: the edge must still answer 503, not raise.
     app = create_runner_app(config, attachments=service)
@@ -352,13 +353,13 @@ _REFUSAL = "artifact 'delta' does not match the finding-delta shape: measurement
 def _app_with_hub(tmp_path: Path, handler: Callable[[httpx2.Request], httpx2.Response]):
     store = make_store(f"sqlite:///{tmp_path / 'runner.db'}")
     config = RunnerConfig(root=tmp_path, db_url=f"sqlite:///{tmp_path / 'runner.db'}", hub_url=_HUB_URL)
-    service = AttachmentService(store, FixedClock(_NOW), store, store)
+    hub_client = httpx2.Client(transport=httpx2.MockTransport(handler), base_url=_HUB_URL)
+    service = AttachmentService(store, FixedClock(_NOW), store, store, stage_check=HttpHubClient(hub_client))
     app = create_runner_app(
         config,
         runner_stores=make_stores(store),
         host_stores=make_host_stores(store),
         attachments=service,
-        hub_proxy_client=httpx2.Client(transport=httpx2.MockTransport(handler)),
         hub_retry_clock=no_retry_clock(),
     )
     return app, store
@@ -451,7 +452,7 @@ def test_the_hub_call_carries_the_configured_stage_check_timeout(tmp_path: Path)
     app, store = _app_with_hub(tmp_path, handler)
     _seed_lease(store)
     assert _stage(app, "fine").status_code == 200
-    assert seen[0].extensions["timeout"]["read"] == STAGE_CHECK_TIMEOUT
+    assert seen[0].extensions["timeout"]["read"] == STAGE_CHECK_TIMEOUT_SECONDS
 
 
 def test_a_lifecycle_refusal_takes_precedence_over_a_hub_format_refusal(tmp_path: Path) -> None:

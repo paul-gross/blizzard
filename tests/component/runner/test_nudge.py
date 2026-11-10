@@ -31,6 +31,7 @@ from blizzard.runner.operator.attachments import AttachmentService, AttachmentTo
 from tests.support.lease_unit_seeds import seed_attachment, seed_git_commit_declaration
 from tests.support.runner_fakes import (
     CountingAttachmentStore,
+    FakeArtifactChecker,
     FakeCheckRunner,
     FakeHarness,
     FakeHub,
@@ -597,7 +598,7 @@ def test_an_attach_between_worker_exit_and_buffering_rides_the_completion_and_a_
         worktree_git=FakeWorktreeGit(),
         clock=FixedClock(_NOW),
     )
-    service = AttachmentService(store, FixedClock(_NOW), store, store)
+    service = AttachmentService(store, FixedClock(_NOW), store, store, stage_check=FakeArtifactChecker())
     lease = store.lease("lease_r")
     assert lease is not None
     worker = WorkerLease(lease=lease, active=True)
