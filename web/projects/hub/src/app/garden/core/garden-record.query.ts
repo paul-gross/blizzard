@@ -2,13 +2,13 @@ import {
   getFindingApiFindingsFindingIdGet,
   getGardenProposalApiGardenProposalsProposalIdGet,
   runDeltaApiRunsChunkIdGet,
+  type RunDeltaView,
+  type FindingDetailView,
+  type GardenProposalView,
 } from 'fleet';
 
 /** The project fields a garden record's own read carries. */
-export interface GardenRecordProject {
-  readonly project_slug?: string | null;
-  readonly project_id?: string | null;
-}
+export type GardenRecordProject = Pick<RunDeltaView | FindingDetailView | GardenProposalView, 'project_slug' | 'project_id'>;
 
 /** The gardening tabs whose record segment is an id unique in the tenant, each with the read of that record. */
 const RECORD_READS: Readonly<Record<string, (id: string) => Promise<GardenRecordProject | undefined>>> = {

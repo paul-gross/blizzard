@@ -158,9 +158,9 @@ export class GraphExplorerList {
     return compactRef(graphId);
   }
 
-  /** The version's wire `lifecycle`; the hub always sends it, and `effective` is its default. */
+  /** The version's wire `lifecycle`. */
   protected lifecycle(version: GraphSummaryView): GraphLifecycle {
-    return version.lifecycle ?? 'effective';
+    return version.lifecycle;
   }
 
   /** {@link graphLifecycleTone}'s lookup, bound to a version rather than a bare lifecycle so
