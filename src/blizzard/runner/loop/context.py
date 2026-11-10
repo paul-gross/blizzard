@@ -281,6 +281,7 @@ if TYPE_CHECKING:
     from blizzard.runner.lifecycle.judgement.git_commits import GitCommitsContext
     from blizzard.runner.lifecycle.judgement.judgement import JudgementContext
     from blizzard.runner.lifecycle.orphan import OrphanContext
+    from blizzard.runner.lifecycle.ownership_reconcile import OwnershipReconcileContext
     from blizzard.runner.lifecycle.registration import RegistrationContext
     from blizzard.runner.lifecycle.restart_resume import RestartResumeContext
     from blizzard.runner.lifecycle.spawn import SpawnContext
@@ -337,3 +338,5 @@ if TYPE_CHECKING:
     _identity_check_conforms: type[IdentityCheckContext] = LoopContext
 
     _advance_conforms: type[AdvanceContext] = LoopContext
+
+    _ownership_reconcile_conforms: type[OwnershipReconcileContext] = LoopContext
