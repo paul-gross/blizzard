@@ -319,10 +319,10 @@ def test_get_before_pages_stops_exactly_when_next_before_is_none() -> None:
     assert len(calls) == 1
 
 
-def test_get_before_pages_with_want_zero_reads_one_page() -> None:
+def test_get_before_pages_first_page_only_reads_one_page() -> None:
     ctx, calls = _keyset_ctx([([1], 10), ([2], None)])
 
-    rows, next_before = ctx.get_before_pages("/api/x", "GET /x", key="rows", want=0)
+    rows, next_before = ctx.get_before_pages("/api/x", "GET /x", key="rows", want=None, first_page_only=True)
 
     assert rows == [1]
     assert next_before == 10

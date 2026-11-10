@@ -111,7 +111,8 @@ def config_changes(cli: CliContext, kind: str | None, key: str | None, everythin
         "GET /config/changes",
         key="changes",
         params=params,
-        want=None if everything else 0,
+        want=None,
+        first_page_only=not everything,
     )
     cli.show({"changes": rows}, ChangeListing(rows))
 
