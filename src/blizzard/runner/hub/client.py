@@ -25,7 +25,6 @@ from blizzard.runner.hub.served_projects import ServedProject
 from blizzard.runner.node_steps.chunk_state import ChunkState
 from blizzard.runner.node_steps.envelope import Envelope
 from blizzard.runner.node_steps.submissions import ApplyReply, Completion, GateSubmission
-from blizzard.wire.chunk import HubAdvanceResponse
 
 
 class HubClientError(RuntimeError):
@@ -195,6 +194,10 @@ class HostRecord:
     tenant_id: str
     host_name: str
     runners: tuple[HostHeldRunner, ...] = ()
+
+    def serves(self, tenant_id: str | None) -> bool:
+        """Whether this host serves the named tenant, or no tenant was requested."""
+        return tenant_id is None or self.tenant_id == tenant_id
 
 
 @domain_model
@@ -626,7 +629,7 @@ class IHubClient(IChunkStatusReader, ITranscriptPusher, Protocol):
         that has ended."""
         ...
 
-    def hub_advance(self, chunk_id: str) -> HubAdvanceResponse:
+    def hub_advance(self, chunk_id: str) -> None:
         """``POST /api/fleet/chunks/{id}/hub-advance`` — drive a chunk parked at a generic
         hub command node one step.
 

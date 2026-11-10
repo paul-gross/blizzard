@@ -123,6 +123,24 @@ class IStandingRunner(Protocol):
     def retirement(self) -> IForgetRetiredRunner: ...
 
 
+def status_after_refusal(answer: HostRefused, prior: HostRegistrationStatus) -> tuple[HostRegistrationStatus, bool]:
+    """Return the refusal status and whether runner standings must become unknown."""
+    if answer.reason is HostRefusalReason.VERSION_REFUSED:
+        return HostRegistrationStatus(
+            state=HostRegistrationState.VERSION_REFUSED,
+            answered_at=prior.answered_at,
+            host_name=prior.host_name,
+            held_runner_ids=prior.held_runner_ids,
+            detail=answer.detail,
+        ), False
+    state = (
+        HostRegistrationState.NO_HOSTS
+        if answer.reason is HostRefusalReason.NOT_FOUND
+        else HostRegistrationState.REFUSED
+    )
+    return HostRegistrationStatus(state=state, detail=f"{answer.status}: {answer.detail}"), True
+
+
 def standing_of(
     runner_id: str, tenant_id: str | None, record: HostRecord, identity: HostIdentity
 ) -> tuple[HostStanding, str | None]:
@@ -179,25 +197,11 @@ class HostRegistration:
                 )
             )
             return
-        if isinstance(answer, HostRefused) and answer.reason is HostRefusalReason.VERSION_REFUSED:
-            self._hold(
-                HostRegistrationStatus(
-                    state=HostRegistrationState.VERSION_REFUSED,
-                    answered_at=self.status.current().answered_at,
-                    host_name=self.status.current().host_name,
-                    held_runner_ids=self.status.current().held_runner_ids,
-                    detail=answer.detail,
-                )
-            )
-            return
         if isinstance(answer, HostRefused):
-            self._unknown_standings()
-            state = (
-                HostRegistrationState.NO_HOSTS
-                if answer.reason is HostRefusalReason.NOT_FOUND
-                else HostRegistrationState.REFUSED
-            )
-            self._hold(HostRegistrationStatus(state=state, detail=f"{answer.status}: {answer.detail}"))
+            status, unknown = status_after_refusal(answer, self.status.current())
+            if unknown:
+                self._unknown_standings()
+            self._hold(status)
             return
         now = self.clock.now()
         try:

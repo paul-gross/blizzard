@@ -420,6 +420,17 @@ def test_runner_does_not_import_hub() -> None:
     assert not violations, f"C — the runner must not import the hub: {violations}"
 
 
+def test_runner_hub_client_port_does_not_import_wire() -> None:
+    path = _RUNNER_DIR / "hub" / "client.py"
+    violations = [
+        f"{path.relative_to(_REPO_ROOT)}:{line} imports {'.'.join(name)}"
+        for line, names in _import_statements(path, _SRC_DIR.parent)
+        for name in names
+        if name[:2] == ["blizzard", "wire"]
+    ]
+    assert not violations, f"runner hub client port must not import wire: {violations}"
+
+
 def _kernel_modules() -> list[str]:
     return [
         ".".join(path.relative_to(_SRC_DIR.parent).with_suffix("").parts).removesuffix(".__init__")

@@ -14,7 +14,7 @@ from dataclasses import dataclass
 from blizzard.foundation.clock import IClock
 from blizzard.foundation.crash import crashpoint
 from blizzard.foundation.logging import get_logger
-from blizzard.runner.hub.client import HostRefused, HubClientError, IHostFactPusher, PushedFact
+from blizzard.runner.hub.client import HostFactPushAck, HostRefused, HubClientError, IHostFactPusher, PushedFact
 from blizzard.runner.hub.host_registration import ICurrentHostRegistration
 from blizzard.runner.usage.repository import IWriteHostLaneMarkRepository
 
@@ -26,6 +26,15 @@ HOST_LANE_DRAIN_LIMIT = 100
 # Push -> answered mark. A crash here leaves the pushed facts buffered; the next pass re-pushes them and the hub
 # answers them already applied.
 _CP_AFTER_PUSH = crashpoint("hostlane.after-push.before-mark", "hub applied the host's facts; its mark not recorded")
+
+
+def host_lane_mark(ack: HostFactPushAck) -> int:
+    """Advance past rejected facts as well as the hub mark, so one bad fact cannot wedge the lane.
+
+    Unlike the runner lane's per-sequence acknowledgement, the host lane has one high-water mark per host;
+    hub ingest withholds that mark at a rejected fact, so the runner advances past rejected sequences itself.
+    """
+    return max([ack.high_water, *ack.rejected])
 
 
 @dataclass(frozen=True)
@@ -62,5 +71,5 @@ class HostLaneDrain:
         for seq in ack.rejected:
             # A contract rejection is not idempotency: surface it, and clear it rather than wedge the lane.
             _log.error("hub rejected a buffered host fact", seq=seq)
-        mark = max([ack.high_water, *ack.rejected])
+        mark = host_lane_mark(ack)
         self.lane.record_host_high_water(seq=mark, at=self.clock.now())
