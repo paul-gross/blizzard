@@ -8,7 +8,7 @@ from __future__ import annotations
 
 from typing import Annotated
 
-from blizzard.foundation.leases import LeaseDisplayStatus, LeaseState
+from blizzard.foundation.leases import LeaseDisplayStatus, LeaseLiveness, LeaseState
 from blizzard.foundation.unrecognized import Unrecognized
 from blizzard.wire.base import WireModel
 from blizzard.wire.git_commits import LeaseGitCommitView
@@ -33,6 +33,8 @@ class LeaseView(WireModel):
     created_at: str
     last_heartbeat_at: str | None
     state: Annotated[LeaseState | Unrecognized, OPEN]
+    #: Whether the lease has ended (``exited`` or ``closed``) or is still ``live``.
+    liveness: Annotated[LeaseLiveness | Unrecognized, OPEN]
     #: The lease's displayed status: ``state``, or the chunk's open takeover, escalation, or ask that outranks it.
     display_status: Annotated[LeaseDisplayStatus | Unrecognized, OPEN]
     #: Whether a closed lease ended healthily (``transitioned``); ``False`` for an active one.

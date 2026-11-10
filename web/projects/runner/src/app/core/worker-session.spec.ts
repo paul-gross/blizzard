@@ -1,6 +1,6 @@
 import type { runnerApi } from 'fleet';
 
-import { sessionEnding } from './worker-session';
+import { hasEnded, isLiveLease, sessionEnding } from './worker-session';
 
 function lease(overrides: Partial<runnerApi.LeaseView> = {}): runnerApi.LeaseView {
   return {
@@ -26,19 +26,34 @@ function lease(overrides: Partial<runnerApi.LeaseView> = {}): runnerApi.LeaseVie
     harness_version: null,
     git_commits: [],
     state: 'running',
+    liveness: 'live',
     ...overrides,
   } as runnerApi.LeaseView;
 }
 
 describe('sessionEnding', () => {
   it('words a published closure reason, and shows an unknown one as itself', () => {
-    expect(sessionEnding(lease({ state: 'closed', closure_reason: 'preempted' }))).toBe('restarted');
-    expect(sessionEnding(lease({ state: 'closed', closure_reason: 'mystery' }))).toBe('mystery');
-    expect(sessionEnding(lease({ state: 'closed', closure_reason: 'constructor' }))).toBe('constructor');
+    const closed = { state: 'closed', liveness: 'ended' } as const;
+    expect(sessionEnding(lease({ ...closed, closure_reason: 'preempted' }))).toBe('restarted');
+    expect(sessionEnding(lease({ ...closed, closure_reason: 'mystery' }))).toBe('mystery');
+    expect(sessionEnding(lease({ ...closed, closure_reason: 'constructor' }))).toBe('constructor');
   });
 
   it('is null while live and exited once its worker exited', () => {
     expect(sessionEnding(lease())).toBeNull();
-    expect(sessionEnding(lease({ state: 'exited' }))).toBe('exited');
+    expect(sessionEnding(lease({ state: 'exited', liveness: 'ended' }))).toBe('exited');
+  });
+
+  it('is null for a liveness this build does not recognize', () => {
+    expect(sessionEnding(lease({ state: 'exited', liveness: 'mystery' as runnerApi.LeaseLiveness }))).toBeNull();
+  });
+});
+
+describe('hasEnded / isLiveLease', () => {
+  it('ends a lease only on a positive ended reading', () => {
+    expect([hasEnded(lease()), isLiveLease(lease())]).toEqual([false, true]);
+    expect([hasEnded(lease({ liveness: 'ended' })), isLiveLease(lease({ liveness: 'ended' }))]).toEqual([true, false]);
+    const unknown = lease({ liveness: 'mystery' as runnerApi.LeaseLiveness });
+    expect([hasEnded(unknown), isLiveLease(unknown)]).toEqual([false, true]);
   });
 });

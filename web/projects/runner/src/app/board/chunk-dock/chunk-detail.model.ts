@@ -1,7 +1,7 @@
 import { ageMs, compactRef, type DaemonTarget, formatAge, runnerClient, type runnerApi } from 'fleet';
 
 import type { PanelLease } from '../../core/panel-reads.model';
-import { isLiveLease } from '../../core/worker-session';
+import { hasEnded, isLiveLease } from '../../core/worker-session';
 
 /** The detail read's target — the runner `runnerId` names, or `null` while no chunk is selected. */
 export function runnerTarget(runnerId: string | null): DaemonTarget | null {
@@ -20,11 +20,11 @@ export function leaseRefLabel(lease: runnerApi.LeaseView | null): string {
 
 /**
  * `-34s` shorthand, or `—` before the first beat / past the skew bound / once the
- * lease is closed — decoration only; the server-derived state carries liveness
+ * lease has ended — decoration only; the server-derived state carries liveness
  * (`bzh:utc-instants`).
  */
 export function heartbeatLabel(lease: runnerApi.LeaseView | null, now: number): string {
-  if (!lease || lease.state === 'closed') return '—';
+  if (!lease || hasEnded(lease)) return '—';
   const age = ageMs(lease.last_heartbeat_at, now);
   return age === null ? '—' : formatAge(age);
 }

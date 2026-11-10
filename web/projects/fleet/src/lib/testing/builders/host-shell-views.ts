@@ -55,6 +55,7 @@ export function hostSubscriptionView(
     spenders: [],
     windows: [],
     windows_sampled_at: null,
+    condition: null,
     ...overrides,
   };
 }

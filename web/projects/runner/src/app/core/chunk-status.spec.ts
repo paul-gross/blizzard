@@ -17,6 +17,7 @@ function lease(overrides: Partial<runnerApi.LeaseView> = {}): runnerApi.LeaseVie
     created_at: '2026-07-16T11:00:00.000Z',
     last_heartbeat_at: '2026-07-16T11:59:00.000Z',
     state: 'running',
+    liveness: 'live',
     display_status: 'running',
     closure_healthy: false,
     closed_at: null,
@@ -50,14 +51,14 @@ describe('deriveMachineChunkStatus', () => {
       label: 'SPAWNING',
       tone: 'spawning',
     });
-    expect(deriveMachineChunkStatus(lease({ state: 'exited', display_status: 'exited' }))).toEqual({
+    expect(deriveMachineChunkStatus(lease({ state: 'exited', liveness: 'ended', display_status: 'exited' }))).toEqual({
       label: 'WORKER EXITED',
       tone: 'idle',
     });
   });
 
   it('reads a healthy closure as the done tone, other closures dim', () => {
-    const closed = { state: 'closed', display_status: 'closed' } as const;
+    const closed = { state: 'closed', liveness: 'ended', display_status: 'closed' } as const;
     expect(
       deriveMachineChunkStatus(lease({ ...closed, closure_reason: 'transitioned', closure_healthy: true })),
     ).toEqual({ label: 'COMPLETED', tone: 'done' });
@@ -72,7 +73,7 @@ describe('deriveMachineChunkStatus', () => {
       label: 'WAITING · ASK',
       tone: 'waiting',
     });
-    expect(deriveMachineChunkStatus(lease({ state: 'closed', display_status: 'needs-human' }))).toEqual({
+    expect(deriveMachineChunkStatus(lease({ state: 'closed', liveness: 'ended', display_status: 'needs-human' }))).toEqual({
       label: 'NEEDS HUMAN',
       tone: 'needs',
     });

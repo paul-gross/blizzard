@@ -10,6 +10,14 @@ from typing import Literal
 LeaseState = Literal["running", "stale", "parked", "backing-off", "spawning", "exited", "closed"]
 
 
+class LeaseLiveness(StrEnum):
+    """Whether a lease's worker is still part of the fleet's work: ``live``, or ``ended`` — its process exited or its
+    lease closed. Derived at read time from the lease's state, never stored."""
+
+    LIVE = "live"
+    ENDED = "ended"
+
+
 class LeaseClosureReason(StrEnum):
     """The published ``lease_closures.reason`` values; the store-only mint reasons are not among them."""
 

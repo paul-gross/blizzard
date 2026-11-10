@@ -20,6 +20,7 @@ function lease(overrides: Partial<PanelLease> = {}): PanelLease {
     created_at: '2026-07-16T11:00:00.000Z',
     last_heartbeat_at: '2026-07-16T11:59:00.000Z',
     state: 'running',
+    liveness: 'live',
     display_status: 'running',
     closure_healthy: false,
     closed_at: null,
@@ -49,12 +50,12 @@ describe('BOARD_LANES', () => {
 
 describe('boardLane', () => {
   it('puts an escalation or an open ask in needs human', () => {
-    expect(boardLane(lease({ state: 'closed', display_status: 'needs-human' }))).toBe('needs');
+    expect(boardLane(lease({ state: 'closed', liveness: 'ended', display_status: 'needs-human' }))).toBe('needs');
     expect(boardLane(lease({ state: 'parked', display_status: 'waiting-ask' }))).toBe('needs');
   });
 
   it('keeps a session a human holds in progress, even once its worker exited', () => {
-    expect(boardLane(lease({ state: 'exited', display_status: 'human-in-session' }))).toBe('progress');
+    expect(boardLane(lease({ state: 'exited', liveness: 'ended', display_status: 'human-in-session' }))).toBe('progress');
   });
 
   it('keeps a live worker — running, stale, or parked — in progress', () => {
@@ -64,8 +65,8 @@ describe('boardLane', () => {
   });
 
   it('puts an ended session — exited or closed — in done', () => {
-    expect(boardLane(lease({ state: 'exited', display_status: 'exited' }))).toBe('done');
-    expect(boardLane(lease({ state: 'closed', display_status: 'closed' }))).toBe('done');
+    expect(boardLane(lease({ state: 'exited', liveness: 'ended', display_status: 'exited' }))).toBe('done');
+    expect(boardLane(lease({ state: 'closed', liveness: 'ended', display_status: 'closed' }))).toBe('done');
   });
 });
 
@@ -73,7 +74,7 @@ describe('machineChunkRows', () => {
   it('groups leases by chunk, newest lease first, attempts oldest → newest', () => {
     const a2 = lease({ lease_id: 'a2', chunk_id: 'ch_a', epoch: 2 });
     const b1 = lease({ lease_id: 'b1', chunk_id: 'ch_b', state: 'stale', display_status: 'stale' });
-    const a1 = lease({ lease_id: 'a1', chunk_id: 'ch_a', state: 'closed', display_status: 'closed' });
+    const a1 = lease({ lease_id: 'a1', chunk_id: 'ch_a', state: 'closed', liveness: 'ended', display_status: 'closed' });
     const rows = machineChunkRows([a2, b1, a1]);
     expect(rows.map((r) => r.lease)).toEqual([a2, b1]);
     expect(rows[0].leases).toEqual([a1, a2]);
@@ -86,7 +87,7 @@ describe('machineChunkRows', () => {
 
   it("folds the newest lease's live worker and lane into the row", () => {
     const live = lease({ chunk_id: 'ch_live' });
-    const ended = lease({ chunk_id: 'ch_done', state: 'closed', display_status: 'closed' });
+    const ended = lease({ chunk_id: 'ch_done', state: 'closed', liveness: 'ended', display_status: 'closed' });
     const [liveRow, endedRow] = machineChunkRows([live, ended]);
     expect(liveRow.live).toBe(live);
     expect(liveRow.lane).toBe('progress');
@@ -115,6 +116,7 @@ describe('machineChunkRows', () => {
     const [only] = machineChunkRows([
       lease({
         state: 'closed',
+        liveness: 'ended',
         display_status: 'closed',
         closure_reason: runnerApi.LeaseClosureReason.TRANSITIONED,
         closure_healthy: true,

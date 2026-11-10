@@ -128,11 +128,6 @@ export function renewalLabel(
   }
 }
 
-/** A subscription's newest reading is a lapsed credential — log in again. */
-function lapsedNow(sub: runnerApi.HostSubscriptionView): boolean {
-  return sub.ok === false && sub.miss_reason === 'credential_lapsed';
-}
-
 /** One shared subscription row per declared subscription, in wire order, aged against
  * `now`: its newest sampled snapshot's windows as pace bars, refreshed against that snapshot,
  * naming the runners spending it — `runnerName` resolves a spender's id to its display name.
@@ -146,7 +141,8 @@ export function runnerSubscriptionPaces(
   return subs.map((sub) => {
     const windowsSampledAt = sub.windows_sampled_at ?? null;
     const delta = windowsSampledAt === null ? null : ageMs(windowsSampledAt, now);
-    const lapsed = lapsedNow(sub);
+    const condition = sub.condition ?? null;
+    const lapsed = condition === SampleMissReason.CREDENTIAL_LAPSED;
     const ok = sub.ok ?? null;
     const missReason = sub.miss_reason ?? null;
     return {

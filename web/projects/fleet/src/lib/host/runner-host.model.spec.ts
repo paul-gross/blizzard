@@ -32,6 +32,7 @@ const UNREPORTED = {
   spenders: [],
   windows: [],
   windows_sampled_at: null,
+  condition: null,
 } satisfies Omit<runnerApi.HostSubscriptionView, 'slug' | 'name' | 'provider'>;
 
 describe('heldForLabel', () => {
@@ -265,11 +266,24 @@ describe('runnerSubscriptionPaces', () => {
 
   it('reads a lapsed credential as lapsed, whatever windows it last carried', () => {
     const [pace] = runnerSubscriptionPaces(
-      [{ ...UNREPORTED, slug: 'claude-max', name: 'Claude Max', provider: 'anthropic', ok: false, miss_reason: 'credential_lapsed', sampled_at: '2026-07-16T11:59:00.000Z' }],
+      [{ ...UNREPORTED, slug: 'claude-max', name: 'Claude Max', provider: 'anthropic', ok: false, miss_reason: 'credential_lapsed', condition: 'credential_lapsed', sampled_at: '2026-07-16T11:59:00.000Z' }],
       NOW,
       runnerName,
     );
     expect(pace).toMatchObject({ condition: 'credential_lapsed', missReason: 'credential_lapsed', sample: null });
+  });
+
+  it('reads the wire condition, not the raw miss: a lapse-looking miss without the condition is not lapsed, and an unknown condition is not lapsed', () => {
+    const [raw, unknown] = runnerSubscriptionPaces(
+      [
+        { ...UNREPORTED, slug: 'a', name: 'A', provider: 'anthropic', ok: false, miss_reason: 'credential_lapsed' },
+        { ...UNREPORTED, slug: 'b', name: 'B', provider: 'anthropic', ok: false, miss_reason: 'credential_lapsed', condition: 'mystery' as runnerApi.SampleMissReason },
+      ],
+      NOW,
+      runnerName,
+    );
+    expect(raw.condition).toBeNull();
+    expect(unknown.condition).toBeNull();
   });
 });
 
@@ -285,7 +299,7 @@ describe('runnerSubscriptionLines', () => {
           windows_sampled_at: '2026-07-16T11:55:00.000Z',
           windows: [{ window: '5h', utilization_pct: 62, resets_at: '2026-07-16T13:30:00.000Z', window_seconds: 5 * 3600 }],
         },
-        { ...UNREPORTED, slug: 'lapsed', name: 'Lapsed', provider: 'anthropic', ok: false, miss_reason: 'credential_lapsed' },
+        { ...UNREPORTED, slug: 'lapsed', name: 'Lapsed', provider: 'anthropic', ok: false, miss_reason: 'credential_lapsed', condition: 'credential_lapsed' },
         { ...UNREPORTED, slug: 'missed', name: 'Missed', provider: 'anthropic', ok: false, miss_reason: 'endpoint_unreachable', sampled_at: '2026-07-16T11:59:26.000Z' },
         { ...UNREPORTED, slug: 'never', name: 'Never', provider: 'anthropic' },
       ],

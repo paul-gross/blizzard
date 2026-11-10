@@ -30,6 +30,7 @@ function lease(overrides: Partial<runnerApi.LeaseView> = {}): runnerApi.LeaseVie
     created_at: '2026-07-16T11:00:00.000Z',
     last_heartbeat_at: '2026-07-16T11:59:26.000Z',
     state: 'running',
+    liveness: 'live',
     display_status: 'running',
     closure_healthy: false,
     closed_at: null,
@@ -68,8 +69,8 @@ describe('liveWorker', () => {
   });
 
   it('is null once the worker exited or the session closed', () => {
-    expect(liveWorker(panelLease({ state: 'exited' }))).toBeNull();
-    expect(liveWorker(panelLease({ state: 'closed' }))).toBeNull();
+    expect(liveWorker(panelLease({ state: 'exited', liveness: 'ended' }))).toBeNull();
+    expect(liveWorker(panelLease({ state: 'closed', liveness: 'ended' }))).toBeNull();
   });
 
   it('is null with nothing selected', () => {
@@ -94,7 +95,9 @@ describe('heartbeatLabel', () => {
 
   it('renders an em dash with no lease or a closed lease', () => {
     expect(heartbeatLabel(null, NOW)).toBe('—');
-    expect(heartbeatLabel(lease({ state: 'closed' }), NOW)).toBe('—');
+    expect(heartbeatLabel(lease({ state: 'closed', liveness: 'ended' }), NOW)).toBe('—');
+    expect(heartbeatLabel(lease({ state: 'exited', liveness: 'ended' }), NOW)).toBe('—');
+    expect(heartbeatLabel(lease({ liveness: 'mystery' as runnerApi.LeaseLiveness }), NOW)).toBe('-34s');
   });
 
   it('renders an em dash before the first beat or past the skew bound', () => {

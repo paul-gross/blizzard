@@ -13,7 +13,7 @@ from datetime import datetime, timedelta
 from typing import Protocol
 
 from blizzard.foundation.clock import IClock
-from blizzard.foundation.leases import LeaseClosureReason, LeaseDisplayStatus, LeaseState
+from blizzard.foundation.leases import LeaseClosureReason, LeaseDisplayStatus, LeaseLiveness, LeaseState
 from blizzard.foundation.roles import domain_model
 from blizzard.foundation.store.utc import as_utc
 from blizzard.runner.environments.repository import EnvBinding, IReadEnvironmentRepository, group_bindings_by_chunk
@@ -63,6 +63,12 @@ class Liveness:
 
 
 # --- Derived lease state — the panel's read model ----------------
+
+
+def lease_liveness(state: LeaseState) -> LeaseLiveness:
+    """Whether a lease with this ``state`` has ended: an exited worker's exit is its done declaration, and a closed
+    lease is over. Every other state is still live."""
+    return LeaseLiveness.ENDED if state in ("exited", "closed") else LeaseLiveness.LIVE
 
 
 def lease_display_status(state: LeaseState, *, takeover: bool, escalated: bool, asking: bool) -> LeaseDisplayStatus:
@@ -186,6 +192,10 @@ class LeaseActivity:
         return self._derive_state()
 
     @property
+    def liveness(self) -> LeaseLiveness:
+        return lease_liveness(self.state)
+
+    @property
     def display_status(self) -> LeaseDisplayStatus:
         return self.human.display_status(self.state)
 
@@ -223,6 +233,10 @@ class ClosedLeaseActivity:
     @property
     def state(self) -> LeaseState:
         return "closed"
+
+    @property
+    def liveness(self) -> LeaseLiveness:
+        return lease_liveness(self.state)
 
     @property
     def display_status(self) -> LeaseDisplayStatus:

@@ -129,6 +129,7 @@ def test_running_lease_shape_and_binding_join(tmp_path: Path) -> None:
         "created_at": _NOW.isoformat(),
         "last_heartbeat_at": beat_at.isoformat(),
         "state": "running",
+        "liveness": "live",
         "display_status": "running",
         "project_id": None,
         "closure_healthy": False,
@@ -299,17 +300,17 @@ def _seed_closed(store: SqlAlchemyRunnerStore) -> None:
 
 
 @pytest.mark.parametrize(
-    ("seed", "now", "state"),
+    ("seed", "now", "state", "liveness"),
     [
-        (_seed_active, _NOW, "running"),
-        (_seed_parked, _NOW, "parked"),
-        (_seed_spawning, _NOW, "spawning"),
-        (_seed_active, _NOW + timedelta(hours=2), "stale"),
-        (_seed_closed, _NOW, "closed"),
+        (_seed_active, _NOW, "running", "live"),
+        (_seed_parked, _NOW, "parked", "live"),
+        (_seed_spawning, _NOW, "spawning", "live"),
+        (_seed_active, _NOW + timedelta(hours=2), "stale", "live"),
+        (_seed_closed, _NOW, "closed", "ended"),
     ],
 )
 def test_every_lease_state_serializes_the_same_ordered_keys(
-    tmp_path: Path, seed: Callable[[SqlAlchemyRunnerStore], None], now: datetime, state: str
+    tmp_path: Path, seed: Callable[[SqlAlchemyRunnerStore], None], now: datetime, state: str, liveness: str
 ) -> None:
     app, store = _app_with_leases(tmp_path, clock=FixedClock(now), probe=FakeProbe(alive={(100, "start-100")}))
     _seed_lease(store)
@@ -321,7 +322,20 @@ def test_every_lease_state_serializes_the_same_ordered_keys(
     assert resp.status_code == 200, resp.text
     (item,) = resp.json()["items"]
     assert item["state"] == state
+    assert item["liveness"] == liveness
     assert list(item) == list(LeaseView.model_fields)
+
+
+def test_an_exited_lease_is_ended(tmp_path: Path) -> None:
+    app, store = _app_with_leases(tmp_path, probe=FakeProbe(alive=set()))
+    _seed_lease(store)
+    _seed_active(store)
+
+    with runner_client(app) as client:
+        (item,) = client.get("/api/leases").json()["items"]
+
+    assert item["state"] == "exited"
+    assert item["liveness"] == "ended"
 
 
 def test_a_transitioned_closure_is_healthy_and_a_failed_one_is_not(tmp_path: Path) -> None:

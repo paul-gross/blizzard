@@ -22,6 +22,7 @@ const LEASE = (overrides: Partial<PanelLease> = {}): PanelLease => ({
   created_at: '2026-07-16T11:00:00.000Z',
   last_heartbeat_at: '2026-07-16T11:59:00.000Z',
   state: 'running',
+  liveness: 'live',
   display_status: 'running',
   closure_healthy: false,
   closed_at: null,
@@ -41,7 +42,7 @@ const LEASE = (overrides: Partial<PanelLease> = {}): PanelLease => ({
 /** One chunk per lane, in the merged order the container folds — done first, so the list's
  * lane ranking is visible. */
 const ROWS: readonly MachineChunkRow[] = machineChunkRows([
-  LEASE({ chunk_id: 'ch_done', lease_id: 'l_done', state: 'closed', display_status: 'closed', closure_healthy: true }),
+  LEASE({ chunk_id: 'ch_done', lease_id: 'l_done', state: 'closed', liveness: 'ended', display_status: 'closed', closure_healthy: true }),
   LEASE({ chunk_id: 'ch_run', lease_id: 'l_run' }),
   LEASE({ chunk_id: 'ch_ask', lease_id: 'l_ask', state: 'parked', display_status: 'waiting-ask' }),
   LEASE({ chunk_id: 'ch_run2', lease_id: 'l_run2', owner: { runnerId: 'rn_2', name: 'r2', label: 'r2' } }),
