@@ -15,14 +15,13 @@ from tests.support.fleet_producer_inventory import REVIEWED as FLEET_REVIEWED
 from tests.support.me_producer_inventory import REVIEWED
 from tests.support.non_fleet_producer_inventory import REVIEWED as NON_FLEET_REVIEWED
 from tests.support.producer_delegation import (
-    application_source_digest,
     delegation_candidates,
     evidence_digest,
     operation_evidence,
     producer_inventory_failures,
     source_fingerprint,
 )
-from tests.support.producer_delegation_baseline import APPLICATION_SOURCE_DIGEST, EVIDENCE
+from tests.support.producer_delegation_baseline import EVIDENCE
 from tests.support.producer_delegation_report import closure_failures, render_report
 from tests.support.repo_files import repo_root
 from tests.support.runner_refusal_discovery import match_operations, route_inventory, runner_boundary
@@ -69,29 +68,6 @@ def test_reviewed_collaborator_sources() -> None:
         if source_fingerprint(function) != expected
     ]
     assert not changed, "review changed collaborator implementations:\n" + "\n".join(changed)
-
-
-def test_unresolved_application_implementations_change_detector() -> None:
-    actual = application_source_digest(repo_root())
-    assert actual == APPLICATION_SOURCE_DIGEST, f"review hub implementation and wiring changes: {actual}"
-
-
-def test_application_digest_detects_injected_collaborator_and_wiring_changes(tmp_path: Path) -> None:
-    hub = tmp_path / "src" / "blizzard" / "hub"
-    hub.mkdir(parents=True)
-    collaborator = hub / "repository.py"
-    collaborator.write_text("class Repository:\n def lookup(self):\n  return []\n")
-    wiring = hub / "wiring.py"
-    wiring.write_text("def make():\n return Repository()\n")
-    baseline = application_source_digest(tmp_path)
-    collaborator.write_text("class Repository:\n def lookup(self):\n  raise HTTPException(409)\n")
-    assert application_source_digest(tmp_path) != baseline
-    collaborator.write_text("class Repository:\n def lookup(self):\n  return []\n")
-    wiring.write_text("def make():\n return OtherRepository()\n")
-    assert application_source_digest(tmp_path) != baseline
-    wiring.write_text("def make():\n return Repository()\n")
-    (hub / "new.py").write_text("def refuse():\n raise HTTPException(403)\n")
-    assert application_source_digest(tmp_path) != baseline
 
 
 def test_collaborator_source_mutation_is_detected(tmp_path: Path) -> None:

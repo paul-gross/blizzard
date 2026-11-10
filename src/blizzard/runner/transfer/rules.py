@@ -11,9 +11,11 @@ from blizzard.foundation.roles import domain_model
 from blizzard.runner.environments.repository import EnvBinding
 from blizzard.runner.transfer.refusals import (
     BindingConflict,
+    HostNotHolding,
     RunnerAlreadyHere,
     RunnerBusy,
     SourceMoved,
+    SourceUnsupported,
     TokenConflict,
     WorkspaceConflict,
 )
@@ -30,7 +32,9 @@ __all__ = [
     "refuse_busy",
     "refuse_declared_here",
     "refuse_source_moved",
+    "refuse_standing",
     "refuse_token_conflict",
+    "refuse_unscoped_source",
     "resumes",
 ]
 
@@ -90,6 +94,42 @@ def refuse_source_moved(
             f"liveness stamp moved from {record.source_alive_at} to {last_alive_at}), so the copy may be stale; "
             f"nothing was changed. To start over, run `blizzard runner store reset --runner {runner_name}` on this "
             "host, then ingest again"
+        )
+
+
+def refuse_standing(
+    *, not_held: bool, tenant_differs: bool, reason: str | None, runner_name: str, runner_id: str, host_id: str
+) -> None:
+    """Raises :class:`HostNotHolding` when the hub does not hold the runner under this host (``host_id``), or holds it
+    in another tenant, so this host cannot take it in. The two flags are the hub standing's verdicts, so this layer
+    names no hub type."""
+    if not_held:
+        raise HostNotHolding(
+            f"the hub holds runner {runner_name} ({runner_id}) {reason}: take it under this host first with "
+            f"`blizzard hub runner-host adopt {host_id} {runner_id}`"
+        )
+    if tenant_differs:
+        raise HostNotHolding(f"runner {runner_name} ({runner_id}) {reason}, so this host cannot take it in")
+
+
+def refuse_unscoped_source(
+    view: RunnerStoreView,
+    *,
+    runner_name: str,
+    runner_id: str,
+    source_store: str,
+    ungraduated: bool,
+    runner_scoped: bool,
+    scope_revision: str,
+) -> None:
+    """Raises :class:`SourceUnsupported` when the source store's identity rows do not name the runner, or when a
+    graduated source predates ``scope_revision``, so one runner's rows cannot be removed from it by themselves."""
+    if runner_id not in view.named_runners:
+        raise SourceUnsupported(f"the source store {source_store} holds no runner {runner_name} ({runner_id})")
+    if not ungraduated and not runner_scoped:
+        raise SourceUnsupported(
+            f"the source store {source_store} predates the revision {scope_revision}, so one runner's rows "
+            "cannot be removed from it by themselves: run a blizzard release that migrates it, then re-run"
         )
 
 
