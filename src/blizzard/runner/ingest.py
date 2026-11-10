@@ -73,7 +73,9 @@ from blizzard.runner.transfer.rules import (
     refuse_busy,
     refuse_declared_here,
     refuse_source_moved,
+    refuse_standing,
     refuse_token_conflict,
+    refuse_unscoped_source,
     resumes,
 )
 from blizzard.runner.transfer.runner_stores import (
@@ -471,20 +473,23 @@ class RunnerIngest:
         record = self._hub_record()
         identity = self._host_identity(record)
         standing, reason = standing_of(runner_id, view.tenant_id, record, identity)
-        if standing is HostStanding.NOT_HELD:
-            raise HostNotHolding(
-                f"the hub holds runner {entry.name} ({runner_id}) {reason}: take it under this host first with "
-                f"`blizzard hub runner-host adopt {identity.host_id} {runner_id}`"
-            )
-        if standing is HostStanding.TENANT_DIFFERS:
-            raise HostNotHolding(f"runner {entry.name} ({runner_id}) {reason}, so this host cannot take it in")
-        if runner_id not in view.named_runners:
-            raise SourceUnsupported(f"the source store {source.store} holds no runner {entry.name} ({runner_id})")
-        if source.kind is not SourceKind.UNGRADUATED and not copy.runner_scoped:
-            raise SourceUnsupported(
-                f"the source store {source.store} predates the revision {_RUNNER_SCOPE_REVISION}, so one runner's rows "
-                "cannot be removed from it by themselves: run a blizzard release that migrates it, then re-run"
-            )
+        refuse_standing(
+            not_held=standing is HostStanding.NOT_HELD,
+            tenant_differs=standing is HostStanding.TENANT_DIFFERS,
+            reason=reason,
+            runner_name=entry.name,
+            runner_id=runner_id,
+            host_id=identity.host_id,
+        )
+        refuse_unscoped_source(
+            view,
+            runner_name=entry.name,
+            runner_id=runner_id,
+            source_store=str(source.store),
+            ungraduated=source.kind is SourceKind.UNGRADUATED,
+            runner_scoped=copy.runner_scoped,
+            scope_revision=_RUNNER_SCOPE_REVISION,
+        )
         refuse_busy(view, runner_name=entry.name)
         if source.config is not None:
             refuse_declared_here(

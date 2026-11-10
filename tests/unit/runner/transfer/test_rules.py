@@ -14,9 +14,11 @@ from blizzard.runner.hub.host_registration import standing_of
 from blizzard.runner.hub.identity import HostStanding
 from blizzard.runner.transfer.refusals import (
     BindingConflict,
+    HostNotHolding,
     RunnerAlreadyHere,
     RunnerBusy,
     SourceMoved,
+    SourceUnsupported,
     TokenConflict,
     WorkspaceConflict,
 )
@@ -31,7 +33,9 @@ from blizzard.runner.transfer.rules import (
     refuse_busy,
     refuse_declared_here,
     refuse_source_moved,
+    refuse_standing,
     refuse_token_conflict,
+    refuse_unscoped_source,
     resumes,
 )
 from blizzard.runner.transfer.runner_stores import HeldBinding, RunnerStoreView
@@ -219,3 +223,52 @@ def test_a_runner_the_host_does_not_hold_stands_not_held() -> None:
 def test_a_runner_recorded_in_another_tenant_stands_apart() -> None:
     standing, reason = standing_of("rn_1", "tn_2", _HOLDING, _HOST)
     assert standing is HostStanding.TENANT_DIFFERS and reason is not None and "tn_2" in reason
+
+
+def test_a_runner_the_hub_does_not_hold_under_this_host_is_refused_with_the_adopt_command() -> None:
+    with pytest.raises(HostNotHolding, match="adopt hs_1 rn_1"):
+        refuse_standing(
+            not_held=True, tenant_differs=False, reason="not held", runner_name="r", runner_id="rn_1", host_id="hs_1"
+        )
+
+
+def test_a_runner_the_hub_holds_in_another_tenant_is_refused() -> None:
+    with pytest.raises(HostNotHolding, match="cannot take it in"):
+        refuse_standing(
+            not_held=False, tenant_differs=True, reason="in tn_2", runner_name="r", runner_id="rn_1", host_id="hs_1"
+        )
+
+
+def test_a_held_or_unknown_standing_is_not_refused() -> None:
+    refuse_standing(
+        not_held=False, tenant_differs=False, reason=None, runner_name="r", runner_id="rn_1", host_id="hs_1"
+    )
+
+
+def _unscoped(
+    view: RunnerStoreView, *, ungraduated: bool = False, runner_scoped: bool = True, runner_id: str = "rn_1"
+) -> None:
+    refuse_unscoped_source(
+        view,
+        runner_name="r",
+        runner_id=runner_id,
+        source_store="/src/store.db",
+        ungraduated=ungraduated,
+        runner_scoped=runner_scoped,
+        scope_revision="rev_x",
+    )
+
+
+def test_a_source_whose_identity_rows_do_not_name_the_runner_is_refused() -> None:
+    with pytest.raises(SourceUnsupported, match="holds no runner r"):
+        _unscoped(_view(), runner_id="rn_2")
+
+
+def test_a_graduated_source_older_than_the_scope_revision_is_refused() -> None:
+    with pytest.raises(SourceUnsupported, match="predates the revision rev_x"):
+        _unscoped(_view(), runner_scoped=False)
+
+
+@pytest.mark.parametrize(("ungraduated", "runner_scoped"), [(True, False), (False, True)])
+def test_an_ungraduated_or_scoped_source_is_accepted(ungraduated: bool, runner_scoped: bool) -> None:
+    _unscoped(_view(), ungraduated=ungraduated, runner_scoped=runner_scoped)
