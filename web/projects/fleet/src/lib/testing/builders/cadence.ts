@@ -19,6 +19,7 @@ export function gardenChoreView(overrides: Partial<ChoreView> = {}): ChoreView {
     promote: true,
     note: null,
     scopes_set_at: fixtureInstant(-7 * 24 * 3600),
+    urgency: null,
     ...overrides,
   };
 }

@@ -931,6 +931,7 @@ export type BacklogPeekEntry = {
      * Project Slug
      */
     project_slug: string | null;
+    urgency: UrgencyRef | null;
     /**
      * Work Refs
      */
@@ -2121,6 +2122,7 @@ export type ChunkDetail = {
      * Terminal
      */
     terminal: boolean;
+    urgency: UrgencyRef | null;
     /**
      * Usage
      */
@@ -2761,6 +2763,10 @@ export type ChunkPatchRequest = {
      */
     graph_id?: string | null;
     intended_migration?: IntendedMigrationPatch | null;
+    /**
+     * Urgency
+     */
+    urgency?: string | null;
 };
 
 /**
@@ -2804,6 +2810,7 @@ export type ChunkPatchResponse = {
      * Project Slug
      */
     project_slug: string | null;
+    urgency: UrgencyRef | null;
 };
 
 /**
@@ -3067,6 +3074,7 @@ export type ChunkSummary = {
      * Terminal
      */
     terminal: boolean;
+    urgency: UrgencyRef | null;
     /**
      * Work Refs
      */
@@ -11958,6 +11966,7 @@ export type QueuePeekEntry = {
      * Project Slug
      */
     project_slug: string | null;
+    urgency: UrgencyRef | null;
     /**
      * Work Refs
      */
@@ -17884,6 +17893,22 @@ export type UrgencyPositionRequest = {
      * Urgency
      */
     urgency: string;
+};
+
+/**
+ * UrgencyRef
+ *
+ * The urgency a chunk carries, by id and slug; a reader joins it to the tenant's urgency set for the rest.
+ */
+export type UrgencyRef = {
+    /**
+     * Slug
+     */
+    slug: string;
+    /**
+     * Urgency Id
+     */
+    urgency_id: string;
 };
 
 /**
