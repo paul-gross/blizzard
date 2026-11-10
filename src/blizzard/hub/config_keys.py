@@ -81,6 +81,27 @@ HUB_REGISTRY = ConfigRegistry(
         ConfigKey("transcripts.chunk_budget_max_bytes", INTEGER),
         ConfigKey("transcripts.runner_daily_rate_max_bytes", INTEGER),
         *TRACING_KEYS,
+        # Runner-only keys the hub never read: declared so an existing file's key resolves, refused at load.
+        ConfigKey(
+            "tracing.worker_programs",
+            BOOLEAN,
+            default=False,
+            deprecated=True,
+            replaced_by="tracing.worker_programs in blizzard-host.toml",
+        ),
+        ConfigKey(
+            "tracing.worker_program_services",
+            OPEN_TABLE,
+            deprecated=True,
+            replaced_by="tracing.worker_program_services in blizzard-host.toml",
+        ),
+        ConfigKey(
+            "tracing.harness_telemetry",
+            BOOLEAN,
+            default=False,
+            deprecated=True,
+            replaced_by="tracing.harness_telemetry in blizzard-host.toml",
+        ),
         ConfigKey("egress", TABLE),
         ConfigKey("egress.directory", STRING),
         ConfigKey("egress.format", STRING, default=_EGRESS.format),

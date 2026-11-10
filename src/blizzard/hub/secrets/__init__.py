@@ -1,15 +1,13 @@
-"""The secret store's key source, cipher, reader, and startup key-coverage check.
+"""The secret store's key source, cipher, and reader.
 
 The key is a process setting (``bzh:config-read-on-use`` Scope): ``BZ_HUB_SECRET_KEY``,
 when set, is the only source; otherwise ``data/auth/secret-keys/`` holds the generations."""
 
 from __future__ import annotations
 
-from collections.abc import Iterable, Mapping
-from dataclasses import dataclass
+from collections.abc import Mapping
 from pathlib import Path
 
-from blizzard.foundation.roles import domain_model
 from blizzard.hub.config import ConfigError
 from blizzard.hub.domain.config.secrets import (
     IHubKeyProvider,
@@ -22,7 +20,6 @@ from blizzard.hub.domain.config.secrets import (
     SecretNotFound,
     SecretValue,
     require_revealable,
-    uncovered_key_ids,
 )
 from blizzard.hub.layout import SECRET_KEYS_PARTS
 from blizzard.hub.secrets.internal.aes_gcm import AesGcmSecretCipher
@@ -77,34 +74,9 @@ class StoreSecretReader:
 _store_secret_reader_conforms: type[ISecretReader] = StoreSecretReader
 
 
-@domain_model
-@dataclass(frozen=True)
-class KeyCoverage:
-    """Every key generation a stored row is sealed under that no provider generation answers — across
-    every open tenant, since the key is the hub's."""
-
-    missing: frozenset[str]
-
-    @classmethod
-    def of(cls, catalogs: Iterable[ISecretCatalog], keys: IHubKeyProvider) -> KeyCoverage:
-        """``catalogs`` holds one catalog per open tenant."""
-        in_use = frozenset(key_id for catalog in catalogs for key_id in catalog.key_ids_in_use())
-        return cls(uncovered_key_ids(in_use, keys.available_ids()))
-
-    def check(self) -> None:
-        """Refuse to start rather than serve secrets no generation can open."""
-        if self.missing:
-            raise ConfigError(
-                f"stored secrets are sealed under key generation(s) {sorted(self.missing)} the hub key "
-                f"source does not hold — restore the generation under data/auth/secret-keys/ or set "
-                f"{ENV_SECRET_KEY}/{ENV_SECRET_KEY_PREVIOUS} to it"
-            )
-
-
 __all__ = [
     "ENV_SECRET_KEY",
     "ENV_SECRET_KEY_PREVIOUS",
-    "KeyCoverage",
     "StoreSecretReader",
     "hub_key_provider",
     "require_hub_key",

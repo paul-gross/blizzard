@@ -26,7 +26,15 @@ from blizzard.hub.domain.config.changes import (
     RecordState,
 )
 from blizzard.hub.domain.config.errors import ConfigFieldError
-from blizzard.hub.domain.config.forges import ConfiguredForge, ForgeEdit, ForgeFields, ForgeId, ForgeKindImmutable
+from blizzard.hub.domain.config.forges import (
+    ConfiguredForge,
+    ForgeEdit,
+    ForgeFields,
+    ForgeId,
+    ForgeKindImmutable,
+    canonical_fields,
+    merge,
+)
 from blizzard.hub.domain.config.records import (
     ConfiguredRecord,
     NamedRetirableConfiguredRecord,
@@ -569,6 +577,50 @@ def require_declarable_forge(
     _require_unclaimed("forge", slug, record, left)
     if record is not None and kind != record.kind:
         raise ForgeKindImmutable("kind", f"forge {slug} is a {record.kind} forge; kind is immutable")
+
+
+@domain_model
+@dataclass(frozen=True)
+class DeclaredForgeFacts:
+    """What the forge apply decision reads of one document entry: its slug and kind, its create fields, and the
+    sparse edit of only the fields it states."""
+
+    slug: str
+    kind: str
+    fields: ForgeFields
+    edit: ForgeEdit
+
+
+def require_appliable_forges(
+    entries: Sequence[DeclaredForgeFacts],
+    held: Mapping[str, ConfiguredForge],
+    former: Mapping[str, ConfiguredForge],
+) -> None:
+    """:class:`ApplyEntryRefused` in the ``forges`` section at the first entry that cannot be applied: a slug named
+    twice, an entry :func:`require_declarable_forge` refuses, or an API origin two forges would hold once the
+    document applies — a stored forge's fields merged with its entry's sparse edit, a new entry's own fields."""
+    projected = {slug: forge.fields for slug, forge in held.items()}
+    seen: set[str] = set()
+    for index, entry in enumerate(entries):
+        try:
+            if entry.slug in seen:
+                raise ConfigFieldError("slug", f"{entry.slug!r} is named twice in this document")
+            seen.add(entry.slug)
+            stored = held.get(entry.slug)
+            require_declarable_forge(entry.slug, entry.kind, stored, former.get(entry.slug))
+            projected[entry.slug] = (
+                canonical_fields(entry.fields) if stored is None else merge(stored.fields, entry.edit)
+            )
+        except ConfigFieldError as exc:
+            raise ApplyEntryRefused(FORGES_SECTION, index, exc) from exc
+    origins: dict[str, str] = {}
+    for slug, fields in projected.items():
+        if (holder := origins.get(fields.api_base)) is not None and holder != slug:
+            index = next((i for i, e in enumerate(entries) if e.slug == slug), 0)
+            raise ApplyEntryRefused(
+                FORGES_SECTION, index, ConfigFieldError("api_base", f"origin is held by forge {holder}")
+            )
+        origins[fields.api_base] = slug
 
 
 def _settle[K: Hashable, D, R: ConfiguredRecord](

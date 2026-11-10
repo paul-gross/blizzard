@@ -41,13 +41,19 @@ def test_flags_is_one_open_table_with_no_keys_beneath_it(name: str, registry: Co
 
 
 @pytest.mark.parametrize(("name", "registry"), CONFIGS, ids=[name for name, _ in CONFIGS])
-def test_a_deprecated_key_names_a_declared_replacement_or_none(name: str, registry: ConfigRegistry) -> None:
+def test_a_deprecated_key_names_a_declared_replacement_or_another_file_or_none(
+    name: str, registry: ConfigRegistry
+) -> None:
     document = document_from_registry(registry)
     declared = {key["path"] for key in document["keys"]}
     for key in document["keys"]:
         if key["replaced_by"] is not None:
             assert key["deprecated"], key["path"]
-            assert key["replaced_by"] in declared, f"{key['path']} -> {key['replaced_by']}"
+            home = key["replaced_by"]
+            # A key whose home is another file's registry names it as `<path> in <file>.toml`.
+            if " in " in home and home.endswith(".toml"):
+                continue
+            assert home in declared, f"{key['path']} -> {home}"
 
 
 def _host() -> dict[str, Any]:

@@ -9,16 +9,21 @@ from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from pathlib import Path
 
-from blizzard.foundation.clock import FixedClock
+import pytest
+from sqlalchemy.exc import OperationalError
+
+from blizzard.foundation.clock import FixedClock, IClock
 from blizzard.foundation.event_log import EventLogSeverity
+from blizzard.foundation.store.migrations import MigrationConnectionError, MigrationRunner
 from blizzard.hub import runtime as hub_runtime
-from blizzard.hub.config import HubConfig
+from blizzard.hub.config import ConfigError, HubConfig
 from blizzard.hub.domain.observability.hub_events import (
     HubEvent,
     HubEventEntry,
     HubEventKind,
     HubEventLogService,
 )
+from blizzard.hub.store import MIGRATIONS_DIR
 from tests.support.config_inputs import FLAG_REGISTRY, STRICT, init_hub
 
 _AT = datetime(2026, 3, 4, 5, 6, tzinfo=UTC)
@@ -73,6 +78,37 @@ class _FakeOpener:
 
 def _runtime(root: Path, opener: _FakeOpener) -> hub_runtime.Runtime:
     return hub_runtime.Runtime(root, FixedClock(_AT), open_event_log=opener, flag_registry=FLAG_REGISTRY, strict=STRICT)
+
+
+class _UpgradeFailingRunner(MigrationRunner):
+    """Reads the store's revision for real; its upgrade fails to reach the store."""
+
+    def upgrade(self, revision: str = "head") -> None:
+        raise MigrationConnectionError("unable to open database file") from OperationalError(
+            "upgrade", None, Exception("unable to open database file")
+        )
+
+
+def _upgrade_failing_runner(config: HubConfig, clock: IClock) -> MigrationRunner:
+    return _UpgradeFailingRunner(script_location=MIGRATIONS_DIR, url=config.db_url, clock=clock)
+
+
+def test_an_init_whose_upgrade_fails_refuses_naming_the_upgrade_not_the_open(tmp_path: Path) -> None:
+    config = init_hub(tmp_path)
+    runtime = hub_runtime.Runtime(
+        tmp_path,
+        FixedClock(_AT),
+        open_event_log=_FakeOpener(),
+        migration_runner=_upgrade_failing_runner,
+        flag_registry=FLAG_REGISTRY,
+        strict=STRICT,
+    )
+
+    with pytest.raises(ConfigError) as refused:
+        runtime.init()
+
+    assert f"the upgrade of the hub store at {config.db_url} failed" in str(refused.value)
+    assert "cannot open" not in str(refused.value)
 
 
 def test_a_migrate_that_moved_the_revision_records_one_hub_migrated_at_the_clocks_instant(tmp_path: Path) -> None:

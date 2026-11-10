@@ -13,6 +13,7 @@ from blizzard.hub.domain.config.apply import (
     ApplyEntryRefused,
     ApplyPlan,
     ConfigDeclaration,
+    DeclaredForgeFacts,
     DeclaredReferences,
     EntryOutcome,
     PlannedWrite,
@@ -21,10 +22,11 @@ from blizzard.hub.domain.config.apply import (
     StoredConfig,
     WorkSourceDeclaration,
     reconcile,
+    require_appliable_forges,
 )
 from blizzard.hub.domain.config.changes import ChangeContext, ChangeOp, Door, RecordKind, RecordState
 from blizzard.hub.domain.config.errors import ConfigFieldError
-from blizzard.hub.domain.config.forges import ForgeId
+from blizzard.hub.domain.config.forges import ConfiguredForge, ForgeEdit, ForgeFields, ForgeId
 from blizzard.hub.domain.config.repositories import ConfiguredRepository, RepositoryEdit, RepositoryFields, RepositoryId
 from blizzard.hub.domain.config.work_sources import ConfiguredWorkSource, WorkSourceEdit, WorkSourceFields, WorkSourceId
 from blizzard.hub.domain.garden.declarations import RoutineDeclaration, ScopeDeclaration
@@ -440,3 +442,59 @@ def test_a_planned_section_commits_after_the_repositories_and_before_the_scopes(
     plan = _plan(declaration, _garden())
     assert [w.section for w in plan.writes] == ["repositories", "projects", "scopes"]
     assert [o.kind for o in plan.outcomes] == [RecordKind.REPOSITORY, RecordKind.PROJECT, RecordKind.SCOPE]
+
+
+def _stored_forge(slug: str, api_base: str) -> ConfiguredForge:
+    record, _ = ConfiguredForge.new(slug, None, "github", ForgeFields(api_base, None), _CTX, at=_AT)
+    return record
+
+
+def _refusal(entries: list[DeclaredForgeFacts], held: dict[str, ConfiguredForge]) -> ApplyEntryRefused:
+    with pytest.raises(ApplyEntryRefused) as caught:
+        require_appliable_forges(entries, held, {})
+    return caught.value
+
+
+def test_a_forge_slug_named_twice_is_refused_at_its_second_entry() -> None:
+    entry = DeclaredForgeFacts("gh", "github", ForgeFields("https://api.github.com", None), ForgeEdit())
+    refused = _refusal([entry, entry], {})
+    assert (refused.section, refused.index) == ("forges", 1)
+    assert isinstance(refused.cause, ConfigFieldError)
+    assert refused.cause.field == "slug"
+    assert "'gh' is named twice in this document" in str(refused.cause)
+
+
+def test_two_new_forges_on_one_api_origin_are_refused_naming_the_holder() -> None:
+    fields = ForgeFields("https://ghe.example.com", None)
+    entries = [
+        DeclaredForgeFacts("one", "github", fields, ForgeEdit()),
+        DeclaredForgeFacts("two", "github", fields, ForgeEdit()),
+    ]
+    refused = _refusal(entries, {})
+    assert (refused.section, refused.index) == ("forges", 1)
+    assert "origin is held by forge one" in str(refused.cause)
+
+
+def test_a_new_forge_on_a_stored_forges_unedited_origin_is_refused() -> None:
+    held = {"gh": _stored_forge("gh", "https://ghe.example.com")}
+    entries = [
+        DeclaredForgeFacts("gh", "github", ForgeFields("https://ghe.example.com", None), ForgeEdit()),
+        DeclaredForgeFacts("other", "github", ForgeFields("https://ghe.example.com", None), ForgeEdit()),
+    ]
+    refused = _refusal(entries, held)
+    assert refused.index == 1
+    assert "origin is held by forge gh" in str(refused.cause)
+
+
+def test_a_stored_forge_moved_off_an_origin_frees_it_for_a_new_forge() -> None:
+    held = {"gh": _stored_forge("gh", "https://ghe.example.com")}
+    entries = [
+        DeclaredForgeFacts(
+            "gh",
+            "github",
+            ForgeFields("https://ghe2.example.com", None),
+            ForgeEdit(api_base="https://ghe2.example.com"),
+        ),
+        DeclaredForgeFacts("other", "github", ForgeFields("https://ghe.example.com", None), ForgeEdit()),
+    ]
+    require_appliable_forges(entries, held, {})

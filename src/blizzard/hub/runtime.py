@@ -36,6 +36,9 @@ HUB_LOG_FLOOR_REVISION = "20261018_1200_project_color"
 #: config has loaded, so the seam is a factory.
 HubEventLogOpener = Callable[[HubConfig], AbstractContextManager[HubEventLogService]]
 
+#: Builds the migration runner for a resolved config, stamping revisions that read a time from the clock.
+MigrationRunnerFactory = Callable[[HubConfig, IClock], MigrationRunner]
+
 _log = get_logger("blizzard.hub.runtime")
 
 
@@ -56,6 +59,10 @@ class Migrations:
         self.runner.check_current(store=STORE_NAME, remedy=f"{MIGRATE_COMMAND} --dir {self.config.root}")
 
 
+def _hub_migration_runner(config: HubConfig, clock: IClock) -> MigrationRunner:
+    return Migrations(config, clock).runner
+
+
 @dataclass(frozen=True)
 class Runtime:
     """A hub runtime root, administered while the daemon is down."""
@@ -64,6 +71,8 @@ class Runtime:
     clock: IClock
     #: Opens the hub event log ``init`` and ``migrate`` record ``hub-migrated`` in.
     open_event_log: HubEventLogOpener = field(kw_only=True)
+    #: Builds the runner ``init`` and ``migrate`` move the store with.
+    migration_runner: MigrationRunnerFactory = field(default=_hub_migration_runner, kw_only=True)
     allow_external_db: bool = False
     #: The registry every load of the root's config resolves its flags against.
     flag_registry: FlagRegistry = field(kw_only=True)
@@ -96,12 +105,8 @@ class Runtime:
         except OSError as exc:
             raise ConfigError(f"cannot write the hub runtime at {root}: {exc}") from exc
 
-        try:
-            runner = Migrations(config, self.clock).runner
-            self._move_store(config, runner, lambda: runner.upgrade("head"))
-        except (MigrationConnectionError, OperationalError) as exc:
-            # The revision read that brackets the move opens the store too, so it can fail before the upgrade does.
-            raise ConfigError(f"cannot open the hub store at {config.db_url}: {exc}") from exc
+        runner = self.migration_runner(config, self.clock)
+        self._move_store(config, runner, lambda: runner.upgrade("head"), refuse_as_config=True)
         _log.info("hub store migrated to head", root=str(root), db_url=config.db_url)
         hub_key_provider(os.environ, data_dir=config.data_dir)
         return config
@@ -111,7 +116,7 @@ class Runtime:
         either direction, records one ``hub-migrated`` in the hub's own event log, naming the revisions it moved
         between; a store left below the hub log's own revision records nothing."""
         config = self.loaded(self.root)
-        runner = Migrations(config, self.clock).runner
+        runner = self.migration_runner(config, self.clock)
         if down is not None:
             self._move_store(config, runner, lambda: runner.downgrade(down))
             _log.info("hub store downgraded", root=str(self.root), to=down)
@@ -119,10 +124,25 @@ class Runtime:
             self._move_store(config, runner, lambda: runner.upgrade("head"))
             _log.info("hub store upgraded to head", root=str(self.root))
 
-    def _move_store(self, config: HubConfig, runner: MigrationRunner, move: Callable[[], None]) -> None:
-        """Run ``move``, then record the revision change in the target revision's hub log, in a write of its own."""
-        before = runner.current_revision()
-        move()
+    def _move_store(
+        self, config: HubConfig, runner: MigrationRunner, move: Callable[[], None], *, refuse_as_config: bool = False
+    ) -> None:
+        """Run ``move``, then record the revision change in the target revision's hub log, in a write of its own.
+
+        With ``refuse_as_config``, a failure to open the store for the first revision read, or of the move itself to
+        reach it, is a ``ConfigError``; anything after the move propagates as raised."""
+        if not refuse_as_config:
+            before = runner.current_revision()
+            move()
+        else:
+            try:
+                before = runner.current_revision()
+            except OperationalError as exc:
+                raise ConfigError(f"cannot open the hub store at {config.db_url}: {exc}") from exc
+            try:
+                move()
+            except MigrationConnectionError as exc:
+                raise ConfigError(f"the upgrade of the hub store at {config.db_url} failed: {exc}") from exc
         after = runner.current_revision()
         if after == before or not runner.reaches(after, HUB_LOG_FLOOR_REVISION):
             return
