@@ -6,14 +6,14 @@ separate fields."""
 
 from __future__ import annotations
 
-from typing import Annotated, Literal
+from typing import Annotated, Final, Literal
 
 from pydantic import BaseModel, ConfigDict
 
 from blizzard.foundation.project_colors import HexColor, ProjectColor
 from blizzard.foundation.unrecognized import Unrecognized
 from blizzard.wire.base import WireModel
-from blizzard.wire.problem import CommonProblemMembers
+from blizzard.wire.problem import CommonProblemMembers, ProblemDetails
 from blizzard.wire.vocabulary import OPEN
 
 
@@ -173,3 +173,58 @@ class SourceNotLinkedBody(BaseModel):
     source: str
     slug: str | None = None
     project: ProjectRef | None
+
+
+UNKNOWN_PROJECT: Final = "urn:blizzard:problem:unknown-project"
+
+
+PROJECT_REQUIRED: Final = "urn:blizzard:problem:project-required"
+
+
+PROJECT_NOT_FOUND: Final = "urn:blizzard:problem:project-not-found"
+
+
+PROJECT_LINK_NOT_FOUND: Final = "urn:blizzard:problem:project-link-not-found"
+
+
+PROJECT_SLUG_TAKEN: Final = "urn:blizzard:problem:project-slug-taken"
+
+
+LANDING_ORDER_CONFLICT: Final = "urn:blizzard:problem:landing-order-conflict"
+
+
+class ProjectNotFoundProblem(ProblemDetails[Literal["urn:blizzard:problem:project-not-found"]]):
+    """A path names a project the tenant does not hold."""
+
+
+class ProjectLinkNotFoundProblem(ProblemDetails[Literal["urn:blizzard:problem:project-link-not-found"]]):
+    """The project holds no link to the named work source or repository."""
+
+
+class ProjectSlugTakenProblem(ProblemDetails[Literal["urn:blizzard:problem:project-slug-taken"]]):
+    """Another project of the tenant holds the slug."""
+
+
+class LandingOrderConflictDetail(WireModel):
+    code: Literal["landing_order_conflict"] = "landing_order_conflict"
+    message: str
+
+
+class LandingOrderConflictProblem(
+    CommonProblemMembers[Literal["urn:blizzard:problem:landing-order-conflict"], LandingOrderConflictDetail]
+):
+    """Concurrent landing-order writes kept changing the order."""
+
+    status: int | None = None
+
+
+PROJECT_PROBLEM_TYPES: frozenset[str] = frozenset(
+    {
+        UNKNOWN_PROJECT,
+        PROJECT_REQUIRED,
+        PROJECT_NOT_FOUND,
+        PROJECT_LINK_NOT_FOUND,
+        PROJECT_SLUG_TAKEN,
+        LANDING_ORDER_CONFLICT,
+    }
+)

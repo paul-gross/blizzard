@@ -15,7 +15,7 @@ from blizzard.foundation.roles import dto
 from blizzard.foundation.store.utc import iso_utc
 from blizzard.hub.cli.command import AdminCommand
 from blizzard.hub.cli.context import CliContext
-from blizzard.wire.problem import TRACE_REPLAY_FAILED
+from blizzard.wire.traces import TRACE_REPLAY_FAILED
 
 #: A replay runs inside the request, and a week-long window outlasts the default client timeout.
 _REPLAY_TIMEOUT = 600.0

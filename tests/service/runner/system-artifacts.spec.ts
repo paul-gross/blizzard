@@ -110,6 +110,29 @@ test('test_system_scope_list_and_get_serve_the_seeded_set_end_to_end', async ({ 
   expect(gotContent!.stdout).toBe('the finding format text');
 });
 
+test('test_missing_system_artifact_is_reported_to_the_worker_as_not_found', async ({ mockHub, runnerHost }) => {
+  const name = 'garden/ghost';
+  const leaseId = await spawnWorker(mockHub, runnerHost, [['get', '--scope', 'system', name]]);
+
+  // The same runner credential used for the proxy sees a typed miss, not an authorization refusal.
+  const upstream = await mockHub.fleetOf(runnerHost, RUNNER).get(`/api/fleet/system-artifacts/${name}`);
+  expect(upstream.status).toBe(404);
+  expect(upstream.headers['content-type']).toContain('application/problem+json');
+  expect(upstream.body).toMatchObject({
+    type: 'urn:blizzard:problem:system-artifact-not-found',
+    title: 'System artifact not found',
+    status: 404,
+    instance: `/api/fleet/system-artifacts/${name}`,
+    detail: `no system artifact '${name}'`,
+  });
+
+  const [got] = await release(mockHub, runnerHost, leaseId);
+  expect(got!.code).not.toBe(0);
+  expect(got!.stdout).toBe('');
+  expect(got!.stderr).toContain(`no system artifact '${name}'`);
+  expect(got!.stderr).not.toMatch(/forbidden|unauthorized/i);
+});
+
 test('test_system_scope_read_fails_rather_than_resolving_locally_when_the_hub_is_unreachable', async ({ mockHub, runnerHost }) => {
   // The system scope has no runner-local fallback, so the read outwaits the runner's bounded hub retry before it fails.
   test.slow();

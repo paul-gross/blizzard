@@ -8,7 +8,7 @@ import httpx2
 from click.testing import Result
 
 from blizzard.hub.cli import hub as hub_group
-from blizzard.wire.problem_types_admin import TENANT_DELETED
+from blizzard.wire.tenant import TENANT_DELETED
 from tests.support.worker_http import bind_stubs
 
 _HUB_URL = "http://testserver"

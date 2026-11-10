@@ -16,15 +16,11 @@ from blizzard.cli.operator_trace import ITraceHeaders
 from blizzard.cli.refusal import refusal_of
 from blizzard.foundation.operator_sessions import IReadSessionStore
 from blizzard.foundation.roles import dto
-from blizzard.wire.problem import (
-    AUTHENTICATION_TYPES,
-    FLAG_OFF,
-    PROJECT_REQUIRED,
-    TENANT_NOT_FOUND,
-    TENANT_REQUIRED,
-)
+from blizzard.wire.auth import AUTHENTICATION_TYPES
+from blizzard.wire.flags import FLAG_OFF
 from blizzard.wire.problem_reading import ProblemReading, is_kind
-from blizzard.wire.tenant import NO_SUCH_TENANT
+from blizzard.wire.project import PROJECT_REQUIRED
+from blizzard.wire.tenant import NO_SUCH_TENANT, TENANT_NOT_FOUND, TENANT_REQUIRED
 
 
 class View(Protocol):

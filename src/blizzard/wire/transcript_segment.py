@@ -6,7 +6,7 @@ high-water sequence, ``(segment_id, turn_range_start)`` the re-offer dedupe key.
 
 from __future__ import annotations
 
-from typing import Literal
+from typing import Final, Literal
 
 from pydantic import BaseModel
 
@@ -174,3 +174,16 @@ class LeaseTranscriptView(WireModel):
     epoch: int
     truncated: bool
     turns: list[TurnSegmentView] = []
+
+
+LEASE_OWNERSHIP: Final = "urn:blizzard:problem:lease-ownership"
+
+
+TRANSCRIPT_SEGMENT_NOT_FOUND: Final = "urn:blizzard:problem:transcript-segment-not-found"
+
+
+class TranscriptSegmentNotFoundProblem(ProblemDetails[Literal["urn:blizzard:problem:transcript-segment-not-found"]]):
+    """The chunk holds no transcript segment of that id."""
+
+
+TRANSCRIPT_SEGMENT_PROBLEM_TYPES: frozenset[str] = frozenset({LEASE_OWNERSHIP, TRANSCRIPT_SEGMENT_NOT_FOUND})

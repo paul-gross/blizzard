@@ -39,7 +39,7 @@ from blizzard.hub.domain.config.secrets import (
     listed,
     retirable,
 )
-from blizzard.wire.problem_types_admin import RecordReferrer
+from blizzard.wire.record_referrer import RecordReferrer
 from blizzard.wire.secret import RecordRefView, SecretCreateRequest, SecretReplaceRequest, SecretView
 
 SECRETS_PREFIX = "/api/secrets"

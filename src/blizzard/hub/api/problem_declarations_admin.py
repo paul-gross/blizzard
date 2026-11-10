@@ -4,7 +4,17 @@ tenants, hub administrators, users and graphs."""
 from __future__ import annotations
 
 from blizzard.hub.api.problem_declaration import ProblemDeclaration
-from blizzard.wire import problem_types_admin as t
+from blizzard.wire import config as config_wire
+from blizzard.wire import forge as forge_wire
+from blizzard.wire import graph as graph_wire
+from blizzard.wire import invitation as invitation_wire
+from blizzard.wire import project as project_wire
+from blizzard.wire import repository as repository_wire
+from blizzard.wire import secret as secret_wire
+from blizzard.wire import tenant as tenant_wire
+from blizzard.wire import urgency as urgency_wire
+from blizzard.wire import user as user_wire
+from blizzard.wire import work_source as work_source_wire
 from blizzard.wire.cadence import RevisionConflictProblem
 from blizzard.wire.chunk import ChunkNotFoundProblem
 from blizzard.wire.project import UnknownProjectProblem
@@ -128,32 +138,48 @@ _MEMBERSHIP_CHANGE_OPERATIONS = (
 )
 
 ADMIN_FAMILY_DECLARATIONS: tuple[ProblemDeclaration, ...] = (
-    *(ProblemDeclaration(method, path, 404, t.ProjectNotFoundProblem) for method, path in _PROJECT_PATH_OPERATIONS),
+    *(
+        ProblemDeclaration(method, path, 404, project_wire.ProjectNotFoundProblem)
+        for method, path in _PROJECT_PATH_OPERATIONS
+    ),
     ProblemDeclaration("POST", "/api/chunks", 422, UnknownProjectProblem),
     *(ProblemDeclaration(method, path, 409, RevisionConflictProblem) for method, path in _REVISION_CONFLICT_OPERATIONS),
-    *(ProblemDeclaration(method, path, 422, t.ConfigFieldInvalidProblem) for method, path in _FIELD_INVALID_OPERATIONS),
-    ProblemDeclaration("POST", "/api/projects", 409, t.ProjectSlugTakenProblem),
-    ProblemDeclaration("PATCH", "/api/projects/{project}", 409, t.ProjectSlugTakenProblem),
-    ProblemDeclaration(
-        "POST", "/api/projects/{project}/source-links/{source}/retire", 404, t.ProjectLinkNotFoundProblem
-    ),
-    ProblemDeclaration(
-        "POST", "/api/projects/{project}/repository-links/{repository}/retire", 404, t.ProjectLinkNotFoundProblem
-    ),
-    ProblemDeclaration("PUT", "/api/projects/{project}/source-links/{source}", 404, t.WorkSourceNotFoundProblem),
-    ProblemDeclaration(
-        "POST", "/api/projects/{project}/source-links/{source}/retire", 404, t.WorkSourceNotFoundProblem
-    ),
-    ProblemDeclaration(
-        "PUT", "/api/projects/{project}/repository-links/{repository}", 404, t.RepositoryNotFoundProblem
-    ),
-    ProblemDeclaration(
-        "POST", "/api/projects/{project}/repository-links/{repository}/retire", 404, t.RepositoryNotFoundProblem
-    ),
-    ProblemDeclaration("PUT", "/api/projects/{project}/landing-order", 409, t.LandingOrderConflictProblem),
-    ProblemDeclaration("POST", "/api/projects/{project}/landing-order/position", 409, t.LandingOrderConflictProblem),
     *(
-        ProblemDeclaration(method, path, 404, t.ForgeNotFoundProblem)
+        ProblemDeclaration(method, path, 422, config_wire.ConfigFieldInvalidProblem)
+        for method, path in _FIELD_INVALID_OPERATIONS
+    ),
+    ProblemDeclaration("POST", "/api/projects", 409, project_wire.ProjectSlugTakenProblem),
+    ProblemDeclaration("PATCH", "/api/projects/{project}", 409, project_wire.ProjectSlugTakenProblem),
+    ProblemDeclaration(
+        "POST", "/api/projects/{project}/source-links/{source}/retire", 404, project_wire.ProjectLinkNotFoundProblem
+    ),
+    ProblemDeclaration(
+        "POST",
+        "/api/projects/{project}/repository-links/{repository}/retire",
+        404,
+        project_wire.ProjectLinkNotFoundProblem,
+    ),
+    ProblemDeclaration(
+        "PUT", "/api/projects/{project}/source-links/{source}", 404, work_source_wire.WorkSourceNotFoundProblem
+    ),
+    ProblemDeclaration(
+        "POST", "/api/projects/{project}/source-links/{source}/retire", 404, work_source_wire.WorkSourceNotFoundProblem
+    ),
+    ProblemDeclaration(
+        "PUT", "/api/projects/{project}/repository-links/{repository}", 404, repository_wire.RepositoryNotFoundProblem
+    ),
+    ProblemDeclaration(
+        "POST",
+        "/api/projects/{project}/repository-links/{repository}/retire",
+        404,
+        repository_wire.RepositoryNotFoundProblem,
+    ),
+    ProblemDeclaration("PUT", "/api/projects/{project}/landing-order", 409, project_wire.LandingOrderConflictProblem),
+    ProblemDeclaration(
+        "POST", "/api/projects/{project}/landing-order/position", 409, project_wire.LandingOrderConflictProblem
+    ),
+    *(
+        ProblemDeclaration(method, path, 404, forge_wire.ForgeNotFoundProblem)
         for method, path in (
             ("GET", "/api/forges/{forge}"),
             ("PATCH", "/api/forges/{forge}"),
@@ -164,22 +190,25 @@ ADMIN_FAMILY_DECLARATIONS: tuple[ProblemDeclaration, ...] = (
     *(
         ProblemDeclaration(method, path, 409, model)
         for method, path, model in (
-            ("POST", "/api/forges", t.ForgeSlugTakenProblem),
-            ("POST", "/api/forges", t.ForgeOriginTakenProblem),
-            ("PATCH", "/api/forges/{forge}", t.ForgeRevisionConflictProblem),
-            ("PATCH", "/api/forges/{forge}", t.ForgeSlugTakenProblem),
-            ("PATCH", "/api/forges/{forge}", t.ForgeOriginTakenProblem),
-            ("POST", "/api/forges/{forge}/retire", t.ForgeRevisionConflictProblem),
-            ("POST", "/api/forges/{forge}/retire", t.ForgeInUseProblem),
-            ("POST", "/api/forges/{forge}/enable", t.ForgeRevisionConflictProblem),
+            ("POST", "/api/forges", forge_wire.ForgeSlugTakenProblem),
+            ("POST", "/api/forges", forge_wire.ForgeOriginTakenProblem),
+            ("PATCH", "/api/forges/{forge}", forge_wire.ForgeRevisionConflictProblem),
+            ("PATCH", "/api/forges/{forge}", forge_wire.ForgeSlugTakenProblem),
+            ("PATCH", "/api/forges/{forge}", forge_wire.ForgeOriginTakenProblem),
+            ("POST", "/api/forges/{forge}/retire", forge_wire.ForgeRevisionConflictProblem),
+            ("POST", "/api/forges/{forge}/retire", forge_wire.ForgeInUseProblem),
+            ("POST", "/api/forges/{forge}/enable", forge_wire.ForgeRevisionConflictProblem),
         )
     ),
-    *(ProblemDeclaration(method, path, 404, t.UrgencyNotFoundProblem) for method, path in _URGENCY_KEY_OPERATIONS),
-    ProblemDeclaration("GET", "/api/urgencies/{key}/icon", 404, t.UrgencyIconNotFoundProblem),
-    ProblemDeclaration("POST", "/api/urgencies/{key}/retire", 409, t.UrgencyIsDefaultProblem),
-    ProblemDeclaration("POST", "/api/urgencies/{key}/retire", 409, t.UrgencyInUseProblem),
     *(
-        ProblemDeclaration(method, path, 404, t.RepositoryNotFoundProblem)
+        ProblemDeclaration(method, path, 404, urgency_wire.UrgencyNotFoundProblem)
+        for method, path in _URGENCY_KEY_OPERATIONS
+    ),
+    ProblemDeclaration("GET", "/api/urgencies/{key}/icon", 404, urgency_wire.UrgencyIconNotFoundProblem),
+    ProblemDeclaration("POST", "/api/urgencies/{key}/retire", 409, urgency_wire.UrgencyIsDefaultProblem),
+    ProblemDeclaration("POST", "/api/urgencies/{key}/retire", 409, urgency_wire.UrgencyInUseProblem),
+    *(
+        ProblemDeclaration(method, path, 404, repository_wire.RepositoryNotFoundProblem)
         for method, path in (
             ("GET", "/api/repositories/{repository}"),
             ("PATCH", "/api/repositories/{repository}"),
@@ -190,14 +219,14 @@ ADMIN_FAMILY_DECLARATIONS: tuple[ProblemDeclaration, ...] = (
     *(
         ProblemDeclaration(method, path, 409, model)
         for method, path, model in (
-            ("POST", "/api/repositories", t.RepositorySlugTakenProblem),
-            ("POST", "/api/repositories", t.RepositoryCoordinateTakenProblem),
-            ("PATCH", "/api/repositories/{repository}", t.RepositorySlugTakenProblem),
-            ("PATCH", "/api/repositories/{repository}", t.RepositoryCoordinateTakenProblem),
+            ("POST", "/api/repositories", repository_wire.RepositorySlugTakenProblem),
+            ("POST", "/api/repositories", repository_wire.RepositoryCoordinateTakenProblem),
+            ("PATCH", "/api/repositories/{repository}", repository_wire.RepositorySlugTakenProblem),
+            ("PATCH", "/api/repositories/{repository}", repository_wire.RepositoryCoordinateTakenProblem),
         )
     ),
     *(
-        ProblemDeclaration(method, path, 404, t.WorkSourceNotFoundProblem)
+        ProblemDeclaration(method, path, 404, work_source_wire.WorkSourceNotFoundProblem)
         for method, path in (
             ("GET", "/api/work-sources/{source}"),
             ("PATCH", "/api/work-sources/{source}"),
@@ -209,18 +238,23 @@ ADMIN_FAMILY_DECLARATIONS: tuple[ProblemDeclaration, ...] = (
     *(
         ProblemDeclaration(method, path, 409, model)
         for method, path, model in (
-            ("POST", "/api/work-sources", t.WorkSourceSlugTakenProblem),
-            ("POST", "/api/work-sources", t.WorkSourceLocatorTakenProblem),
-            ("PATCH", "/api/work-sources/{source}", t.WorkSourceSlugTakenProblem),
-            ("PATCH", "/api/work-sources/{source}", t.WorkSourceLocatorTakenProblem),
+            ("POST", "/api/work-sources", work_source_wire.WorkSourceSlugTakenProblem),
+            ("POST", "/api/work-sources", work_source_wire.WorkSourceLocatorTakenProblem),
+            ("PATCH", "/api/work-sources/{source}", work_source_wire.WorkSourceSlugTakenProblem),
+            ("PATCH", "/api/work-sources/{source}", work_source_wire.WorkSourceLocatorTakenProblem),
         )
     ),
-    *(ProblemDeclaration(method, path, 409, t.WorkSourceNoEditorProblem) for method, path in _WORK_SOURCE_ITEM_PATHS),
-    ProblemDeclaration("POST", "/api/work-sources/{source}/items", 422, t.WorkItemFieldBlankProblem),
-    ProblemDeclaration("PATCH", "/api/work-sources/{source}/items/{ref}", 422, t.WorkItemFieldBlankProblem),
-    ProblemDeclaration("POST", "/api/work-sources/{source}/items", 503, t.DefaultGraphRetiredProblem),
     *(
-        ProblemDeclaration(method, path, 404, t.WorkItemNotFoundProblem)
+        ProblemDeclaration(method, path, 409, work_source_wire.WorkSourceNoEditorProblem)
+        for method, path in _WORK_SOURCE_ITEM_PATHS
+    ),
+    ProblemDeclaration("POST", "/api/work-sources/{source}/items", 422, work_source_wire.WorkItemFieldBlankProblem),
+    ProblemDeclaration(
+        "PATCH", "/api/work-sources/{source}/items/{ref}", 422, work_source_wire.WorkItemFieldBlankProblem
+    ),
+    ProblemDeclaration("POST", "/api/work-sources/{source}/items", 503, graph_wire.DefaultGraphRetiredProblem),
+    *(
+        ProblemDeclaration(method, path, 404, work_source_wire.WorkItemNotFoundProblem)
         for method, path in (
             ("GET", "/api/work-sources/{source}/items/{ref}"),
             ("PATCH", "/api/work-sources/{source}/items/{ref}"),
@@ -228,19 +262,33 @@ ADMIN_FAMILY_DECLARATIONS: tuple[ProblemDeclaration, ...] = (
         )
     ),
     ProblemDeclaration("DELETE", "/api/work-sources/{source}/items/{ref}", 404, ChunkNotFoundProblem),
-    ProblemDeclaration("PATCH", "/api/work-sources/{source}/items/{ref}", 409, t.WorkItemNotEditableProblem),
-    ProblemDeclaration("DELETE", "/api/work-sources/{source}/items/{ref}", 409, t.WorkItemNotEditableProblem),
-    ProblemDeclaration("DELETE", "/api/work-sources/{source}/items/{ref}", 409, t.WorkItemHeldByLiveChunkProblem),
-    ProblemDeclaration("DELETE", "/api/work-sources/{source}/items/{ref}", 409, t.WorkItemHeldByDependentsProblem),
-    *(ProblemDeclaration("GET", path, 422, t.UnknownWorkSourceProblem) for path in _ANALYTICS_SOURCE_PATHS),
-    *(ProblemDeclaration(method, path, 422, t.SecretNameInvalidProblem) for method, path in _SECRET_NAME_OPERATIONS),
-    ProblemDeclaration("POST", "/api/secrets", 422, t.SecretValueBlankProblem),
-    ProblemDeclaration("PUT", "/api/secrets/{name}/value", 422, t.SecretValueBlankProblem),
-    ProblemDeclaration("PUT", "/api/secrets/{name}/value", 409, t.SecretRetiredProblem),
-    ProblemDeclaration("POST", "/api/secrets/{name}/retire", 409, t.SecretInUseProblem),
-    ProblemDeclaration("GET", "/api/config/schema/{kind}", 404, t.ConfigSchemaNotFoundProblem),
+    ProblemDeclaration(
+        "PATCH", "/api/work-sources/{source}/items/{ref}", 409, work_source_wire.WorkItemNotEditableProblem
+    ),
+    ProblemDeclaration(
+        "DELETE", "/api/work-sources/{source}/items/{ref}", 409, work_source_wire.WorkItemNotEditableProblem
+    ),
+    ProblemDeclaration(
+        "DELETE", "/api/work-sources/{source}/items/{ref}", 409, work_source_wire.WorkItemHeldByLiveChunkProblem
+    ),
+    ProblemDeclaration(
+        "DELETE", "/api/work-sources/{source}/items/{ref}", 409, work_source_wire.WorkItemHeldByDependentsProblem
+    ),
     *(
-        ProblemDeclaration(method, path, 404, t.GraphNotFoundProblem)
+        ProblemDeclaration("GET", path, 422, work_source_wire.UnknownWorkSourceProblem)
+        for path in _ANALYTICS_SOURCE_PATHS
+    ),
+    *(
+        ProblemDeclaration(method, path, 422, secret_wire.SecretNameInvalidProblem)
+        for method, path in _SECRET_NAME_OPERATIONS
+    ),
+    ProblemDeclaration("POST", "/api/secrets", 422, secret_wire.SecretValueBlankProblem),
+    ProblemDeclaration("PUT", "/api/secrets/{name}/value", 422, secret_wire.SecretValueBlankProblem),
+    ProblemDeclaration("PUT", "/api/secrets/{name}/value", 409, secret_wire.SecretRetiredProblem),
+    ProblemDeclaration("POST", "/api/secrets/{name}/retire", 409, secret_wire.SecretInUseProblem),
+    ProblemDeclaration("GET", "/api/config/schema/{kind}", 404, config_wire.ConfigSchemaNotFoundProblem),
+    *(
+        ProblemDeclaration(method, path, 404, graph_wire.GraphNotFoundProblem)
         for method, path in (
             ("GET", "/api/graphs/{graph_id}"),
             ("POST", "/api/graphs/{graph_id}/retire"),
@@ -251,25 +299,29 @@ ADMIN_FAMILY_DECLARATIONS: tuple[ProblemDeclaration, ...] = (
             ("POST", "/api/chunks/{chunk_id}/restart"),
         )
     ),
-    ProblemDeclaration("POST", "/api/admin/tenants", 422, t.TenantNameRefusedProblem),
-    ProblemDeclaration("POST", "/api/admin/tenants", 404, t.UserNotFoundProblem),
-    ProblemDeclaration("PATCH", "/api/admin/tenants/{tenant_id}", 422, t.TenantNameRefusedProblem),
-    ProblemDeclaration("DELETE", "/api/admin/tenants/{tenant_id}", 409, t.LastTenantProblem),
-    ProblemDeclaration("DELETE", "/api/admin/tenants/{tenant_id}", 410, t.TenantDeletedProblem),
-    ProblemDeclaration("PUT", "/api/admin/hub-admins/{user_id}", 404, t.UserNotFoundProblem),
-    ProblemDeclaration("DELETE", "/api/admin/hub-admins/{user_id}", 404, t.UserNotFoundProblem),
-    ProblemDeclaration("DELETE", "/api/admin/hub-admins/{user_id}", 409, t.LastHubAdminProblem),
-    ProblemDeclaration("POST", "/api/invitations/{invitation_id}/revocations", 404, t.InvitationNotFoundProblem),
-    ProblemDeclaration("POST", "/api/invitations/{invitation_id}/revocations", 409, t.InvitationAlreadyResolvedProblem),
+    ProblemDeclaration("POST", "/api/admin/tenants", 422, tenant_wire.TenantNameRefusedProblem),
+    ProblemDeclaration("POST", "/api/admin/tenants", 404, user_wire.UserNotFoundProblem),
+    ProblemDeclaration("PATCH", "/api/admin/tenants/{tenant_id}", 422, tenant_wire.TenantNameRefusedProblem),
+    ProblemDeclaration("DELETE", "/api/admin/tenants/{tenant_id}", 409, tenant_wire.LastTenantProblem),
+    ProblemDeclaration("DELETE", "/api/admin/tenants/{tenant_id}", 410, tenant_wire.TenantDeletedProblem),
+    ProblemDeclaration("PUT", "/api/admin/hub-admins/{user_id}", 404, user_wire.UserNotFoundProblem),
+    ProblemDeclaration("DELETE", "/api/admin/hub-admins/{user_id}", 404, user_wire.UserNotFoundProblem),
+    ProblemDeclaration("DELETE", "/api/admin/hub-admins/{user_id}", 409, user_wire.LastHubAdminProblem),
+    ProblemDeclaration(
+        "POST", "/api/invitations/{invitation_id}/revocations", 404, invitation_wire.InvitationNotFoundProblem
+    ),
+    ProblemDeclaration(
+        "POST", "/api/invitations/{invitation_id}/revocations", 409, invitation_wire.InvitationAlreadyResolvedProblem
+    ),
     *(
         ProblemDeclaration(method, path, status, model)
         for method, path in _MEMBERSHIP_CHANGE_OPERATIONS
         for status, model in (
-            (404, t.MemberNotFoundProblem),
-            (403, t.MembershipChangeRefusedProblem),
-            (409, t.LastAdminKeptProblem),
+            (404, user_wire.MemberNotFoundProblem),
+            (403, user_wire.MembershipChangeRefusedProblem),
+            (409, user_wire.LastAdminKeptProblem),
         )
     ),
-    ProblemDeclaration("POST", "/api/users/{user_id}/role", 400, t.UnknownRoleProblem),
-    ProblemDeclaration("POST", "/api/users/{user_id}/role", 403, t.RoleNotAssignableProblem),
+    ProblemDeclaration("POST", "/api/users/{user_id}/role", 400, user_wire.UnknownRoleProblem),
+    ProblemDeclaration("POST", "/api/users/{user_id}/role", 403, user_wire.RoleNotAssignableProblem),
 )

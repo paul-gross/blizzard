@@ -5,7 +5,7 @@ from pathlib import Path
 from fastapi.testclient import TestClient
 
 from blizzard.hub.domain.observability.transcripts import TranscriptCaps
-from blizzard.wire import problem
+from blizzard.wire import transcript_segment as transcript_segment_wire
 from blizzard.wire.auth import AuthenticationRequiredProblem
 from blizzard.wire.transcript_segment import LeaseOwnershipProblem
 from tests.support.hub_request_auth import bearer, ingest_chunk
@@ -59,7 +59,7 @@ def test_foreign_lease_refusal_matches_openapi_and_preserves_archive(tmp_path: P
 
     assert response.status_code == 403, response.text
     assert response.headers["content-type"] == "application/problem+json"
-    assert response.json()["type"] == problem.LEASE_OWNERSHIP
+    assert response.json()["type"] == transcript_segment_wire.LEASE_OWNERSHIP
     assert response.json()["instance"] == path
     assert "owner-secret" not in response.text
     observation = RefusalObservation(
@@ -137,7 +137,7 @@ def test_cap_rejected_only_lease_still_refuses_a_foreign_runner(tmp_path: Path) 
     response = hub.client.get(path, params=params, headers=other)
     assert response.status_code == 403, response.text
     assert response.headers["content-type"] == "application/problem+json"
-    assert response.json()["type"] == problem.LEASE_OWNERSHIP
+    assert response.json()["type"] == transcript_segment_wire.LEASE_OWNERSHIP
     assert response.json()["instance"] == path
     assert "owner-secret" not in response.text
     observation = RefusalObservation(

@@ -18,7 +18,7 @@ from blizzard.hub.cli.command import FleetCommand
 from blizzard.hub.cli.context import CliContext, project_required
 from blizzard.hub.cli.project_option import project_option, project_path, project_query
 from blizzard.hub.cli.views import Listing, ProposalOrigin
-from blizzard.wire.problem import POINTER_ALREADY_HELD
+from blizzard.wire.chunk import POINTER_ALREADY_HELD
 
 _ROUTINE_MODEL_HELP = (
     "The routine's default model preference. Repeatable and ORDERED — the first entry "

@@ -18,16 +18,14 @@ from blizzard.hub.composition import TenantServices
 from blizzard.hub.domain.chunk.dependencies import PrerequisiteScope
 from blizzard.hub.store import schema as s
 from blizzard.wire.chunk import (
-    DependencyWouldCloseCycleView,
-    DependentNotEditableView,
-    NoStandingDependencyView,
-    PrerequisiteIsEphemeralView,
-)
-from blizzard.wire.problem import (
     DEPENDENCY_WOULD_CLOSE_CYCLE,
     DEPENDENT_NOT_EDITABLE,
     NO_STANDING_DEPENDENCY,
     PREREQUISITE_EPHEMERAL,
+    DependencyWouldCloseCycleView,
+    DependentNotEditableView,
+    NoStandingDependencyView,
+    PrerequisiteIsEphemeralView,
 )
 from tests.support.refusal_observation import app_spec, declared_refusal_mismatches
 from tests.support.scaffolding import HubHarness, build_hub, hub_scoped, ingest, report_lease, stamp

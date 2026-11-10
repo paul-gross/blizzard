@@ -23,7 +23,7 @@ from blizzard.runner.host_layout import HostLayout
 from blizzard.runner.status.invariants import HostInvariantCheck
 from blizzard.runner.store import schema as runner_schema
 from blizzard.tools.invariants import runner_invariants
-from blizzard.wire.problem import INVARIANTS_IN_PROGRESS
+from blizzard.wire.invariants import INVARIANTS_IN_PROGRESS
 from tests.support.config_inputs import create_runner_app
 from tests.support.host_files import one_workspace
 from tests.support.runner_fakes import FIXTURE_RUNNER_ID, FakeProbe, migrated_store_at

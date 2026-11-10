@@ -17,7 +17,7 @@ from blizzard.hub.cli.context import CliContext
 from blizzard.hub.cli.views import Listing
 from blizzard.hub.documents import YAML_CODEC
 from blizzard.hub.graphs import GraphFile
-from blizzard.wire.problem import GRAPH_DEFINITION_INVALID
+from blizzard.wire.graph import GRAPH_DEFINITION_INVALID
 
 
 class GraphListing(Listing):

@@ -3,7 +3,7 @@ position requests; and the chunk group request and response."""
 
 from __future__ import annotations
 
-from typing import Annotated
+from typing import Annotated, Final, Literal
 
 from pydantic import BaseModel
 
@@ -11,6 +11,7 @@ from blizzard.foundation.queue_policy import QueueMatchPolicy
 from blizzard.foundation.unrecognized import Unrecognized
 from blizzard.wire.base import WireModel
 from blizzard.wire.chunk import BlockedView, WorkRefModel
+from blizzard.wire.problem import ProblemDetails
 from blizzard.wire.runner import RunnerCapability
 from blizzard.wire.vocabulary import ToleratedRequestVocabulary
 
@@ -149,3 +150,36 @@ class ChunkGroupResponse(WireModel):
     chunk_id: str
     work_refs: list[WorkRefModel] = []
     merged_chunk_ids: list[str] = []
+
+
+NOT_IN_LIST: Final = "urn:blizzard:problem:not-in-list"
+
+
+SELF_ANCHORED_MOVE: Final = "urn:blizzard:problem:self-anchored-move"
+
+
+CONTRADICTORY_PLACEMENT: Final = "urn:blizzard:problem:contradictory-placement"
+
+
+DUPLICATE_REORDER_IDS: Final = "urn:blizzard:problem:duplicate-reorder-ids"
+
+
+class NotInListProblem(ProblemDetails[Literal["urn:blizzard:problem:not-in-list"]]):
+    """A reorder named a chunk outside the list it ranks."""
+
+
+class SelfAnchoredMoveProblem(ProblemDetails[Literal["urn:blizzard:problem:self-anchored-move"]]):
+    """A single-chunk reorder named the chunk as its own anchor."""
+
+
+class ContradictoryPlacementProblem(ProblemDetails[Literal["urn:blizzard:problem:contradictory-placement"]]):
+    """A placement named both an anchor and the top."""
+
+
+class DuplicateReorderIdsProblem(ProblemDetails[Literal["urn:blizzard:problem:duplicate-reorder-ids"]]):
+    """A whole-order replacement named one chunk twice."""
+
+
+QUEUE_PROBLEM_TYPES: frozenset[str] = frozenset(
+    {NOT_IN_LIST, SELF_ANCHORED_MOVE, CONTRADICTORY_PLACEMENT, DUPLICATE_REORDER_IDS}
+)

@@ -9,7 +9,8 @@ from starlette.exceptions import HTTPException
 
 from blizzard.hub.api.idp import router
 from blizzard.hub.api.problem_exceptions import problem_http_exception
-from blizzard.wire.problem import HUB_STORE_UNAVAILABLE, IDP_DISABLED
+from blizzard.wire.auth import IDP_DISABLED
+from blizzard.wire.problem import HUB_STORE_UNAVAILABLE
 
 
 @pytest.mark.parametrize(

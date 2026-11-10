@@ -6,9 +6,12 @@ and the operational datasets over ``GET /api/analytics/durations/*``,
 
 from __future__ import annotations
 
+from typing import Final, Literal
+
 from pydantic import BaseModel, Field
 
 from blizzard.wire.base import WireModel
+from blizzard.wire.problem import ProblemDetails
 
 
 class AnalyticsEventView(BaseModel):
@@ -173,3 +176,13 @@ class ReDeriveResponse(WireModel):
     derived: int
     remaining: int
     not_visible: bool = False
+
+
+RE_DERIVE_SCOPE_REFUSED: Final = "urn:blizzard:problem:re-derive-scope-refused"
+
+
+class ReDeriveScopeRefusedProblem(ProblemDetails[Literal["urn:blizzard:problem:re-derive-scope-refused"]]):
+    """A re-derive names both a segment and a chunk."""
+
+
+ANALYTICS_PROBLEM_TYPES: frozenset[str] = frozenset({RE_DERIVE_SCOPE_REFUSED})

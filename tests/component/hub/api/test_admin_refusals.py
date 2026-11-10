@@ -11,9 +11,17 @@ from pydantic import BaseModel
 
 from blizzard.auth_core import Role
 from blizzard.hub.config import AUTH_MODE_OAUTH
-from blizzard.wire import problem_types_admin as t
-from blizzard.wire.cadence import RevisionConflictProblem
-from blizzard.wire.problem import REVISION_CONFLICT
+from blizzard.wire import config as config_wire
+from blizzard.wire import forge as forge_wire
+from blizzard.wire import graph as graph_wire
+from blizzard.wire import invitation as invitation_wire
+from blizzard.wire import project as project_wire
+from blizzard.wire import repository as repository_wire
+from blizzard.wire import secret as secret_wire
+from blizzard.wire import tenant as tenant_wire
+from blizzard.wire import user as user_wire
+from blizzard.wire import work_source as work_source_wire
+from blizzard.wire.cadence import REVISION_CONFLICT, RevisionConflictProblem
 from tests.support.refusal_observation import declared_refusal_mismatches
 from tests.support.scaffolding import (
     HubHarness,
@@ -61,8 +69,8 @@ def test_an_unknown_record_on_a_path_is_a_problem_naming_it(tmp_path: Path) -> N
             "/api/projects/nope",
             "/api/projects/{project}",
             404,
-            t.ProjectNotFoundProblem,
-            t.PROJECT_NOT_FOUND,
+            project_wire.ProjectNotFoundProblem,
+            project_wire.PROJECT_NOT_FOUND,
             "unknown project 'nope'",
         ),
         (
@@ -70,8 +78,8 @@ def test_an_unknown_record_on_a_path_is_a_problem_naming_it(tmp_path: Path) -> N
             "/api/forges/nope",
             "/api/forges/{forge}",
             404,
-            t.ForgeNotFoundProblem,
-            t.FORGE_NOT_FOUND,
+            forge_wire.ForgeNotFoundProblem,
+            forge_wire.FORGE_NOT_FOUND,
             "unknown forge 'nope'",
         ),
         (
@@ -79,8 +87,8 @@ def test_an_unknown_record_on_a_path_is_a_problem_naming_it(tmp_path: Path) -> N
             "/api/repositories/nope",
             "/api/repositories/{repository}",
             404,
-            t.RepositoryNotFoundProblem,
-            t.REPOSITORY_NOT_FOUND,
+            repository_wire.RepositoryNotFoundProblem,
+            repository_wire.REPOSITORY_NOT_FOUND,
             "unknown repository 'nope'",
         ),
         (
@@ -88,8 +96,8 @@ def test_an_unknown_record_on_a_path_is_a_problem_naming_it(tmp_path: Path) -> N
             "/api/work-sources/nope",
             "/api/work-sources/{source}",
             404,
-            t.WorkSourceNotFoundProblem,
-            t.WORK_SOURCE_NOT_FOUND,
+            work_source_wire.WorkSourceNotFoundProblem,
+            work_source_wire.WORK_SOURCE_NOT_FOUND,
             "unknown work source 'nope'",
         ),
         (
@@ -97,8 +105,8 @@ def test_an_unknown_record_on_a_path_is_a_problem_naming_it(tmp_path: Path) -> N
             "/api/work-sources/nope/items",
             "/api/work-sources/{source}/items",
             404,
-            t.WorkSourceNotFoundProblem,
-            t.WORK_SOURCE_NOT_FOUND,
+            work_source_wire.WorkSourceNotFoundProblem,
+            work_source_wire.WORK_SOURCE_NOT_FOUND,
             "unknown work source 'nope'",
         ),
         (
@@ -106,8 +114,8 @@ def test_an_unknown_record_on_a_path_is_a_problem_naming_it(tmp_path: Path) -> N
             "/api/work-sources/hub/items/nope",
             "/api/work-sources/{source}/items/{ref}",
             404,
-            t.WorkItemNotFoundProblem,
-            t.WORK_ITEM_NOT_FOUND,
+            work_source_wire.WorkItemNotFoundProblem,
+            work_source_wire.WORK_ITEM_NOT_FOUND,
             None,
         ),
         (
@@ -115,8 +123,8 @@ def test_an_unknown_record_on_a_path_is_a_problem_naming_it(tmp_path: Path) -> N
             "/api/graphs/nope",
             "/api/graphs/{graph_id}",
             404,
-            t.GraphNotFoundProblem,
-            t.GRAPH_NOT_FOUND,
+            graph_wire.GraphNotFoundProblem,
+            graph_wire.GRAPH_NOT_FOUND,
             "unknown graph nope",
         ),
         (
@@ -124,8 +132,8 @@ def test_an_unknown_record_on_a_path_is_a_problem_naming_it(tmp_path: Path) -> N
             "/api/config/schema/nope",
             "/api/config/schema/{kind}",
             404,
-            t.ConfigSchemaNotFoundProblem,
-            t.CONFIG_SCHEMA_NOT_FOUND,
+            config_wire.ConfigSchemaNotFoundProblem,
+            config_wire.CONFIG_SCHEMA_NOT_FOUND,
             "no document schema for 'nope'",
         ),
     ):
@@ -147,8 +155,8 @@ def test_a_query_naming_an_unknown_work_source_is_a_problem_locating_it(tmp_path
         "get",
         "/api/analytics/events",
         422,
-        t.UnknownWorkSourceProblem,
-        t.UNKNOWN_WORK_SOURCE,
+        work_source_wire.UnknownWorkSourceProblem,
+        work_source_wire.UNKNOWN_WORK_SOURCE,
         [{"loc": ["query", "source"], "msg": "unknown work source 'nope'", "type": "unknown_work_source"}],
     )
 
@@ -174,8 +182,8 @@ def test_a_taken_or_stale_configuration_write_is_a_problem(tmp_path: Path) -> No
         "post",
         "/api/projects",
         409,
-        t.ProjectSlugTakenProblem,
-        t.PROJECT_SLUG_TAKEN,
+        project_wire.ProjectSlugTakenProblem,
+        project_wire.PROJECT_SLUG_TAKEN,
         "project slug widgets is already taken",
     )
     stale = hub.client.patch("/api/projects/widgets", json={"name": "W"}, headers={"If-Match": "9"})
@@ -193,7 +201,9 @@ def test_a_taken_or_stale_configuration_write_is_a_problem(tmp_path: Path) -> No
     invalid = hub.client.post("/api/projects", json={"slug": "Not A Slug", "name": "x"})
     assert invalid.status_code == 422
     assert (
-        declared_refusal_mismatches(_spec(hub), invalid, "post", "/api/projects", 422, t.ConfigFieldInvalidProblem)
+        declared_refusal_mismatches(
+            _spec(hub), invalid, "post", "/api/projects", 422, config_wire.ConfigFieldInvalidProblem
+        )
         == []
     )
     assert invalid.json()["detail"][0]["loc"] == ["body", "slug"]
@@ -207,8 +217,8 @@ def test_a_taken_or_stale_configuration_write_is_a_problem(tmp_path: Path) -> No
         "post",
         "/api/forges",
         409,
-        t.ForgeSlugTakenProblem,
-        t.FORGE_SLUG_TAKEN,
+        forge_wire.ForgeSlugTakenProblem,
+        forge_wire.FORGE_SLUG_TAKEN,
         {"code": "forge_slug_taken", "message": "forge ghe already exists", "slug": "ghe"},
     )
     stale_forge = hub.client.patch("/api/forges/ghe", json={}, headers={"If-Match": "9"})
@@ -218,8 +228,8 @@ def test_a_taken_or_stale_configuration_write_is_a_problem(tmp_path: Path) -> No
         "patch",
         "/api/forges/{forge}",
         409,
-        t.ForgeRevisionConflictProblem,
-        t.FORGE_REVISION_CONFLICT,
+        forge_wire.ForgeRevisionConflictProblem,
+        forge_wire.FORGE_REVISION_CONFLICT,
         {
             "code": "revision_conflict",
             "message": stale_forge.json()["detail"]["message"],
@@ -234,10 +244,12 @@ def test_a_refused_secret_write_is_a_problem(tmp_path: Path) -> None:
     badly_named = hub.client.post("/api/secrets", json={"name": "Bad Name", "value": "v"})
     assert badly_named.status_code == 422
     assert (
-        declared_refusal_mismatches(_spec(hub), badly_named, "post", "/api/secrets", 422, t.SecretNameInvalidProblem)
+        declared_refusal_mismatches(
+            _spec(hub), badly_named, "post", "/api/secrets", 422, secret_wire.SecretNameInvalidProblem
+        )
         == []
     )
-    assert badly_named.json()["type"] == t.SECRET_NAME_INVALID
+    assert badly_named.json()["type"] == secret_wire.SECRET_NAME_INVALID
 
     assert hub.client.post("/api/secrets", json={"name": "tok", "value": "v"}).status_code == 201
     assert hub.client.post("/api/secrets/tok/retire").status_code == 200
@@ -250,7 +262,7 @@ def test_a_refused_secret_write_is_a_problem(tmp_path: Path) -> None:
             "put",
             "/api/secrets/{name}/value",
             409,
-            t.SecretRetiredProblem,
+            secret_wire.SecretRetiredProblem,
         )
         == []
     )
@@ -269,14 +281,23 @@ def test_a_tenant_refusal_is_a_problem(tmp_path: Path) -> None:
         "delete",
         "/api/admin/tenants/{tenant_id}",
         409,
-        t.LastTenantProblem,
-        t.LAST_TENANT,
+        tenant_wire.LastTenantProblem,
+        tenant_wire.LAST_TENANT,
         {"code": "last_tenant", "message": "the hub's only open tenant cannot be deleted"},
     )
     nobody = hub.client.post(
         "/api/admin/tenants", json={"name": "acme", "admin_user_id": "usr_nobody"}, headers=headers
     )
-    _refused(hub, nobody, "post", "/api/admin/tenants", 404, t.UserNotFoundProblem, t.USER_NOT_FOUND, "no such user")
+    _refused(
+        hub,
+        nobody,
+        "post",
+        "/api/admin/tenants",
+        404,
+        user_wire.UserNotFoundProblem,
+        user_wire.USER_NOT_FOUND,
+        "no such user",
+    )
     created = hub.client.post("/api/admin/tenants", json={"name": "acme"}, headers=headers).json()
     assert hub.client.delete(f"/api/admin/tenants/{created['tenant_id']}", headers=headers).status_code == 200
     gone = hub.client.delete(f"/api/admin/tenants/{created['tenant_id']}", headers=headers)
@@ -286,8 +307,8 @@ def test_a_tenant_refusal_is_a_problem(tmp_path: Path) -> None:
         "delete",
         "/api/admin/tenants/{tenant_id}",
         410,
-        t.TenantDeletedProblem,
-        t.TENANT_DELETED,
+        tenant_wire.TenantDeletedProblem,
+        tenant_wire.TENANT_DELETED,
         "tenant deleted",
     )
 
@@ -307,8 +328,8 @@ def test_a_member_user_and_hub_administrator_refusal_is_a_problem(tmp_path: Path
         "delete",
         "/api/admin/hub-admins/{user_id}",
         409,
-        t.LastHubAdminProblem,
-        t.LAST_HUB_ADMIN,
+        user_wire.LastHubAdminProblem,
+        user_wire.LAST_HUB_ADMIN,
         last.json()["detail"],
     )
     missing = hub.client.put("/api/admin/hub-admins/usr_nobody", headers=root_headers)
@@ -318,8 +339,8 @@ def test_a_member_user_and_hub_administrator_refusal_is_a_problem(tmp_path: Path
         "put",
         "/api/admin/hub-admins/{user_id}",
         404,
-        t.UserNotFoundProblem,
-        t.USER_NOT_FOUND,
+        user_wire.UserNotFoundProblem,
+        user_wire.USER_NOT_FOUND,
         "no such user",
     )
 
@@ -330,8 +351,8 @@ def test_a_member_user_and_hub_administrator_refusal_is_a_problem(tmp_path: Path
         "post",
         "/api/users/{user_id}/role",
         400,
-        t.UnknownRoleProblem,
-        t.UNKNOWN_ROLE,
+        user_wire.UnknownRoleProblem,
+        user_wire.UNKNOWN_ROLE,
         "unknown role 'wizard'",
     )
     superuser = hub.client.post(f"/api/users/{admin.user_id}/role", json={"role": "superuser"}, headers=admin_headers)
@@ -341,8 +362,8 @@ def test_a_member_user_and_hub_administrator_refusal_is_a_problem(tmp_path: Path
         "post",
         "/api/users/{user_id}/role",
         403,
-        t.RoleNotAssignableProblem,
-        t.ROLE_NOT_ASSIGNABLE,
+        user_wire.RoleNotAssignableProblem,
+        user_wire.ROLE_NOT_ASSIGNABLE,
         "superuser is not assignable through the API",
     )
     own = hub.client.put(f"/api/members/{admin.user_id}", json={"role": "guest"}, headers=admin_headers)
@@ -352,8 +373,8 @@ def test_a_member_user_and_hub_administrator_refusal_is_a_problem(tmp_path: Path
         "put",
         "/api/members/{user_id}",
         403,
-        t.MembershipChangeRefusedProblem,
-        t.MEMBERSHIP_CHANGE_REFUSED,
+        user_wire.MembershipChangeRefusedProblem,
+        user_wire.MEMBERSHIP_CHANGE_REFUSED,
         own.json()["detail"],
     )
     stranger = hub.client.delete("/api/members/usr_nobody", headers=admin_headers)
@@ -363,8 +384,8 @@ def test_a_member_user_and_hub_administrator_refusal_is_a_problem(tmp_path: Path
         "delete",
         "/api/members/{user_id}",
         404,
-        t.MemberNotFoundProblem,
-        t.MEMBER_NOT_FOUND,
+        user_wire.MemberNotFoundProblem,
+        user_wire.MEMBER_NOT_FOUND,
         "no such user",
     )
 
@@ -375,7 +396,7 @@ def test_a_member_user_and_hub_administrator_refusal_is_a_problem(tmp_path: Path
         "post",
         "/api/invitations/{invitation_id}/revocations",
         404,
-        t.InvitationNotFoundProblem,
-        t.INVITATION_NOT_FOUND,
+        invitation_wire.InvitationNotFoundProblem,
+        invitation_wire.INVITATION_NOT_FOUND,
         nothing.json()["detail"],
     )

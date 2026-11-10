@@ -31,8 +31,7 @@ from blizzard.runner.config_table import ConfigError as RunnerConfigError
 from blizzard.runner.host_config import HostConfig
 from blizzard.runner.host_layout import HostLayout
 from blizzard.tools.invariants import Invariants
-from blizzard.wire.invariants import InvariantsResponse
-from blizzard.wire.problem import INVARIANTS_IN_PROGRESS
+from blizzard.wire.invariants import INVARIANTS_IN_PROGRESS, InvariantsResponse
 
 # The hub's fact checks read every chunk, so a client waits longer than the verbs' fifteen seconds.
 CHECK_TIMEOUT = 60.0

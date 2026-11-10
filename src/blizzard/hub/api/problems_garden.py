@@ -2,50 +2,54 @@
 
 from __future__ import annotations
 
-from blizzard.wire import problem_types_admin as admin_types
-from blizzard.wire import problem_types_garden as types
-from blizzard.wire.problem import ValidationEntry
-from blizzard.wire.problem_types_garden import (
-    CadenceAdmissionRefusedProblem,
-    CadenceNotFoundProblem,
-    CadenceSlugTakenProblem,
+from blizzard.wire import cadence as cadence_wire
+from blizzard.wire import config as config_wire
+from blizzard.wire import garden_proposal as garden_proposal_wire
+from blizzard.wire import garden_run as garden_run_wire
+from blizzard.wire import garden_sweeps as garden_sweeps_wire
+from blizzard.wire import garden_window as garden_window_wire
+from blizzard.wire import routine as routine_wire
+from blizzard.wire import scope as scope_wire
+from blizzard.wire.cadence import CadenceAdmissionRefusedProblem, CadenceNotFoundProblem, CadenceSlugTakenProblem
+from blizzard.wire.garden_proposal import (
     GardenProposalAlreadyClosedProblem,
     GardenProposalInvalidProblem,
     GardenProposalNotFoundProblem,
-    GardenWindowInvalidProblem,
+)
+from blizzard.wire.garden_run import RunNotFoundProblem
+from blizzard.wire.garden_sweeps import SweepNotFoundProblem, SweepServesNoTenantProblem
+from blizzard.wire.garden_window import GardenWindowInvalidProblem
+from blizzard.wire.problem import ValidationEntry
+from blizzard.wire.routine import (
     RoutineDefinitionInvalidProblem,
     RoutineNotFoundProblem,
     RoutineNotRunnableProblem,
     RoutineScopeNotRelatedProblem,
-    RunNotFoundProblem,
-    ScopeNotFoundProblem,
-    ScopeSlugInvalidProblem,
-    SweepNotFoundProblem,
-    SweepServesNoTenantProblem,
 )
+from blizzard.wire.scope import ScopeNotFoundProblem, ScopeSlugInvalidProblem
 
 
 def routine_not_found_problem(detail: str, status: int, *, instance: str) -> RoutineNotFoundProblem:
     return RoutineNotFoundProblem(
-        type=types.ROUTINE_NOT_FOUND, title="Routine not found", detail=detail, instance=instance, status=status
+        type=routine_wire.ROUTINE_NOT_FOUND, title="Routine not found", detail=detail, instance=instance, status=status
     )
 
 
 def scope_not_found_problem(detail: str, status: int, *, instance: str) -> ScopeNotFoundProblem:
     return ScopeNotFoundProblem(
-        type=types.SCOPE_NOT_FOUND, title="Scope not found", detail=detail, instance=instance, status=status
+        type=scope_wire.SCOPE_NOT_FOUND, title="Scope not found", detail=detail, instance=instance, status=status
     )
 
 
 def cadence_not_found_problem(detail: str, *, instance: str) -> CadenceNotFoundProblem:
     return CadenceNotFoundProblem(
-        type=types.CADENCE_NOT_FOUND, title="Cadence not found", detail=detail, instance=instance, status=404
+        type=cadence_wire.CADENCE_NOT_FOUND, title="Cadence not found", detail=detail, instance=instance, status=404
     )
 
 
 def garden_proposal_not_found_problem(detail: str, *, instance: str) -> GardenProposalNotFoundProblem:
     return GardenProposalNotFoundProblem(
-        type=types.GARDEN_PROPOSAL_NOT_FOUND,
+        type=garden_proposal_wire.GARDEN_PROPOSAL_NOT_FOUND,
         title="Garden proposal not found",
         detail=detail,
         instance=instance,
@@ -55,19 +59,19 @@ def garden_proposal_not_found_problem(detail: str, *, instance: str) -> GardenPr
 
 def run_not_found_problem(detail: str, *, instance: str) -> RunNotFoundProblem:
     return RunNotFoundProblem(
-        type=types.RUN_NOT_FOUND, title="Run not found", detail=detail, instance=instance, status=404
+        type=garden_run_wire.RUN_NOT_FOUND, title="Run not found", detail=detail, instance=instance, status=404
     )
 
 
 def sweep_not_found_problem(detail: str, *, instance: str) -> SweepNotFoundProblem:
     return SweepNotFoundProblem(
-        type=types.SWEEP_NOT_FOUND, title="Sweep not found", detail=detail, instance=instance, status=404
+        type=garden_sweeps_wire.SWEEP_NOT_FOUND, title="Sweep not found", detail=detail, instance=instance, status=404
     )
 
 
 def sweep_serves_no_tenant_problem(detail: str, *, instance: str) -> SweepServesNoTenantProblem:
     return SweepServesNoTenantProblem(
-        type=types.SWEEP_SERVES_NO_TENANT,
+        type=garden_sweeps_wire.SWEEP_SERVES_NO_TENANT,
         title="Sweep serves no tenant",
         detail=detail,
         instance=instance,
@@ -77,7 +81,7 @@ def sweep_serves_no_tenant_problem(detail: str, *, instance: str) -> SweepServes
 
 def cadence_admission_refused_problem(detail: str, *, instance: str) -> CadenceAdmissionRefusedProblem:
     return CadenceAdmissionRefusedProblem(
-        type=types.CADENCE_ADMISSION_REFUSED,
+        type=cadence_wire.CADENCE_ADMISSION_REFUSED,
         title="Cadence admission refused",
         detail=detail,
         instance=instance,
@@ -87,14 +91,14 @@ def cadence_admission_refused_problem(detail: str, *, instance: str) -> CadenceA
 
 def cadence_slug_taken_problem(detail: str, *, instance: str) -> CadenceSlugTakenProblem:
     return CadenceSlugTakenProblem(
-        type=types.CADENCE_SLUG_TAKEN, title="Cadence slug taken", detail=detail, instance=instance, status=422
+        type=cadence_wire.CADENCE_SLUG_TAKEN, title="Cadence slug taken", detail=detail, instance=instance, status=422
     )
 
 
-def config_field_invalid_problem(field: str, message: str, *, instance: str) -> admin_types.ConfigFieldInvalidProblem:
+def config_field_invalid_problem(field: str, message: str, *, instance: str) -> config_wire.ConfigFieldInvalidProblem:
     """The refused field, located in the body — the shape FastAPI's own validation answers."""
-    return admin_types.ConfigFieldInvalidProblem(
-        type=admin_types.CONFIG_FIELD_INVALID,
+    return config_wire.ConfigFieldInvalidProblem(
+        type=config_wire.CONFIG_FIELD_INVALID,
         title="Field invalid",
         detail=[ValidationEntry(loc=["body", field], msg=message, type="value_error")],
         instance=instance,
@@ -104,13 +108,13 @@ def config_field_invalid_problem(field: str, message: str, *, instance: str) -> 
 
 def scope_slug_invalid_problem(detail: str, *, instance: str) -> ScopeSlugInvalidProblem:
     return ScopeSlugInvalidProblem(
-        type=types.SCOPE_SLUG_INVALID, title="Scope slug invalid", detail=detail, instance=instance, status=422
+        type=scope_wire.SCOPE_SLUG_INVALID, title="Scope slug invalid", detail=detail, instance=instance, status=422
     )
 
 
 def routine_definition_invalid_problem(detail: str, *, instance: str) -> RoutineDefinitionInvalidProblem:
     return RoutineDefinitionInvalidProblem(
-        type=types.ROUTINE_DEFINITION_INVALID,
+        type=routine_wire.ROUTINE_DEFINITION_INVALID,
         title="Routine definition invalid",
         detail=detail,
         instance=instance,
@@ -120,7 +124,7 @@ def routine_definition_invalid_problem(detail: str, *, instance: str) -> Routine
 
 def routine_scope_not_related_problem(detail: str, *, instance: str) -> RoutineScopeNotRelatedProblem:
     return RoutineScopeNotRelatedProblem(
-        type=types.ROUTINE_SCOPE_NOT_RELATED,
+        type=routine_wire.ROUTINE_SCOPE_NOT_RELATED,
         title="Scope not related to routine",
         detail=detail,
         instance=instance,
@@ -130,19 +134,27 @@ def routine_scope_not_related_problem(detail: str, *, instance: str) -> RoutineS
 
 def routine_not_runnable_problem(detail: str, *, instance: str) -> RoutineNotRunnableProblem:
     return RoutineNotRunnableProblem(
-        type=types.ROUTINE_NOT_RUNNABLE, title="Routine not runnable", detail=detail, instance=instance, status=503
+        type=routine_wire.ROUTINE_NOT_RUNNABLE,
+        title="Routine not runnable",
+        detail=detail,
+        instance=instance,
+        status=503,
     )
 
 
 def garden_window_invalid_problem(detail: str, *, instance: str) -> GardenWindowInvalidProblem:
     return GardenWindowInvalidProblem(
-        type=types.GARDEN_WINDOW_INVALID, title="Window invalid", detail=detail, instance=instance, status=422
+        type=garden_window_wire.GARDEN_WINDOW_INVALID,
+        title="Window invalid",
+        detail=detail,
+        instance=instance,
+        status=422,
     )
 
 
 def garden_proposal_already_closed_problem(detail: str, *, instance: str) -> GardenProposalAlreadyClosedProblem:
     return GardenProposalAlreadyClosedProblem(
-        type=types.GARDEN_PROPOSAL_ALREADY_CLOSED,
+        type=garden_proposal_wire.GARDEN_PROPOSAL_ALREADY_CLOSED,
         title="Garden proposal already closed",
         detail=detail,
         instance=instance,
@@ -152,7 +164,7 @@ def garden_proposal_already_closed_problem(detail: str, *, instance: str) -> Gar
 
 def garden_proposal_invalid_problem(detail: str, *, instance: str) -> GardenProposalInvalidProblem:
     return GardenProposalInvalidProblem(
-        type=types.GARDEN_PROPOSAL_INVALID,
+        type=garden_proposal_wire.GARDEN_PROPOSAL_INVALID,
         title="Garden proposal invalid",
         detail=detail,
         instance=instance,

@@ -10,7 +10,7 @@ from blizzard.hub.cli.context import CliContext
 from blizzard.hub.cli.inputs import read_body_file
 from blizzard.hub.cli.project_option import project_option, project_query
 from blizzard.hub.cli.views import pointer_label
-from blizzard.wire.problem import POINTER_ALREADY_HELD
+from blizzard.wire.chunk import POINTER_ALREADY_HELD
 
 
 class WorkToken(click.ParamType[tuple[str, str]]):

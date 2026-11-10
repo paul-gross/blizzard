@@ -11,24 +11,29 @@ from pydantic import BaseModel
 
 from blizzard.foundation.trace_export.config import TracingConfig
 from blizzard.foundation.trace_export.settings import TracingSettings
-from blizzard.wire import problem_types_runners as t
-from blizzard.wire.host import HostRetiredProblem
-from blizzard.wire.problem import ProblemDetails
-from blizzard.wire.problem_types_runners import (
+from blizzard.wire import egress as egress_wire
+from blizzard.wire import fleet as fleet_wire
+from blizzard.wire import host as host_wire
+from blizzard.wire import runner as runner_wire
+from blizzard.wire import traces as traces_wire
+from blizzard.wire import transcript_segment as transcript_segment_wire
+from blizzard.wire.egress import (
     EgressBackfillUnavailableProblem,
     EgressBackfillWindowRefusedProblem,
     EgressResetRefusedProblem,
     EgressResetUnavailableProblem,
-    HostNotEnrolledProblem,
-    HostNotFoundProblem,
-    RunnerNotEnrolledProblem,
-    RunnerNotRetiredProblem,
-    SpendInstantInvalidProblem,
-    TraceReplayUnavailableProblem,
-    TraceReplayWindowRefusedProblem,
-    TranscriptSegmentNotFoundProblem,
 )
-from blizzard.wire.runner import RunnerNotFoundProblem, UnknownServedProjectProblem
+from blizzard.wire.fleet import SpendInstantInvalidProblem
+from blizzard.wire.host import HostNotEnrolledProblem, HostNotFoundProblem, HostRetiredProblem
+from blizzard.wire.problem import ProblemDetails
+from blizzard.wire.runner import (
+    RunnerNotEnrolledProblem,
+    RunnerNotFoundProblem,
+    RunnerNotRetiredProblem,
+    UnknownServedProjectProblem,
+)
+from blizzard.wire.traces import TraceReplayUnavailableProblem, TraceReplayWindowRefusedProblem
+from blizzard.wire.transcript_segment import TranscriptSegmentNotFoundProblem
 from tests.support.egress_world import egress_hub
 from tests.support.refusal_observation import declared_refusal_mismatches
 from tests.support.scaffolding import HubHarness, build_hub, pointer_token
@@ -61,7 +66,7 @@ def test_an_unknown_host_is_a_problem_on_every_by_id_verb_and_a_runner_add(tmp_p
         ("post", "/api/runners", "/api/runners", {"name": "r", "host_id": "hs_nope"}),
     ):
         resp = hub.client.request(method, path, json=body) if body is not None else hub.client.request(method, path)
-        refused = _refused(hub, resp, method, template, 404, HostNotFoundProblem, t.HOST_NOT_FOUND)
+        refused = _refused(hub, resp, method, template, 404, HostNotFoundProblem, host_wire.HOST_NOT_FOUND)
         assert refused["detail"] == "unknown host hs_nope"
 
 
@@ -87,7 +92,13 @@ def test_revoking_an_unenrolled_host_token_is_host_not_enrolled(tmp_path: Path) 
     resp = hub.client.post(path, json={})
 
     refused = _refused(
-        hub, resp, "post", "/api/hosts/{host_id}/token-revocations", 409, HostNotEnrolledProblem, t.HOST_NOT_ENROLLED
+        hub,
+        resp,
+        "post",
+        "/api/hosts/{host_id}/token-revocations",
+        409,
+        HostNotEnrolledProblem,
+        host_wire.HOST_NOT_ENROLLED,
     )
     assert refused["detail"]
 
@@ -139,7 +150,13 @@ def test_reinstating_a_live_runner_and_revoking_an_unenrolled_one_are_typed_conf
 
     reinstate = hub.client.post(f"{base}/reinstate", json={"by": "op"})
     _refused(
-        hub, reinstate, "post", "/api/runners/{runner_id}/reinstate", 409, RunnerNotRetiredProblem, t.RUNNER_NOT_RETIRED
+        hub,
+        reinstate,
+        "post",
+        "/api/runners/{runner_id}/reinstate",
+        409,
+        RunnerNotRetiredProblem,
+        runner_wire.RUNNER_NOT_RETIRED,
     )
     assert hub.client.post(f"{base}/token-revocations", json={"by": "op"}).status_code == 201
     revoke = hub.client.post(f"{base}/token-revocations", json={"by": "op"})
@@ -150,7 +167,7 @@ def test_reinstating_a_live_runner_and_revoking_an_unenrolled_one_are_typed_conf
         "/api/runners/{runner_id}/token-revocations",
         409,
         RunnerNotEnrolledProblem,
-        t.RUNNER_NOT_ENROLLED,
+        runner_wire.RUNNER_NOT_ENROLLED,
     )
 
 
@@ -161,7 +178,7 @@ def test_an_egress_reset_refusal_and_unavailability_are_typed(tmp_path: Path) ->
     off = hub.client.post("/api/egress/reset", json={"dataset": "steps", "to": now})
 
     refused = _refused(
-        hub, off, "post", "/api/egress/reset", 409, EgressResetUnavailableProblem, t.EGRESS_RESET_UNAVAILABLE
+        hub, off, "post", "/api/egress/reset", 409, EgressResetUnavailableProblem, egress_wire.EGRESS_RESET_UNAVAILABLE
     )
     assert "not configured" in str(refused["detail"])
 
@@ -175,7 +192,9 @@ def test_an_egress_reset_of_a_future_instant_is_refused(tmp_path: Path) -> None:
 
     resp = hub.client.post("/api/egress/reset", json={"dataset": "steps", "to": future})
 
-    refused = _refused(hub, resp, "post", "/api/egress/reset", 422, EgressResetRefusedProblem, t.EGRESS_RESET_REFUSED)
+    refused = _refused(
+        hub, resp, "post", "/api/egress/reset", 422, EgressResetRefusedProblem, egress_wire.EGRESS_RESET_REFUSED
+    )
     assert "future" in str(refused["detail"])
 
 
@@ -189,7 +208,13 @@ def test_an_egress_backfill_with_the_export_off_is_unavailable_and_an_inverted_w
     wet = hub.client.post("/api/egress/backfill", json={**window, "dry_run": False})
 
     refused = _refused(
-        hub, wet, "post", "/api/egress/backfill", 409, EgressBackfillUnavailableProblem, t.EGRESS_BACKFILL_UNAVAILABLE
+        hub,
+        wet,
+        "post",
+        "/api/egress/backfill",
+        409,
+        EgressBackfillUnavailableProblem,
+        egress_wire.EGRESS_BACKFILL_UNAVAILABLE,
     )
     assert "not configured" in str(refused["detail"])
     inverted = hub.client.post(
@@ -203,7 +228,7 @@ def test_an_egress_backfill_with_the_export_off_is_unavailable_and_an_inverted_w
         "/api/egress/backfill",
         422,
         EgressBackfillWindowRefusedProblem,
-        t.EGRESS_BACKFILL_WINDOW_REFUSED,
+        egress_wire.EGRESS_BACKFILL_WINDOW_REFUSED,
     )
     assert "until must be after since" in str(refused["detail"])
 
@@ -221,14 +246,20 @@ def test_a_trace_replay_with_tracing_off_is_unavailable_and_an_inverted_window_i
     wet = hub.client.post("/api/traces/replay", json=window)
 
     refused = _refused(
-        hub, wet, "post", "/api/traces/replay", 409, TraceReplayUnavailableProblem, t.TRACE_REPLAY_UNAVAILABLE
+        hub, wet, "post", "/api/traces/replay", 409, TraceReplayUnavailableProblem, traces_wire.TRACE_REPLAY_UNAVAILABLE
     )
     assert refused["detail"]
     inverted = hub.client.post(
         "/api/traces/replay", json={"since": now.isoformat(), "until": (now - timedelta(seconds=1)).isoformat()}
     )
     _refused(
-        hub, inverted, "post", "/api/traces/replay", 422, TraceReplayWindowRefusedProblem, t.TRACE_REPLAY_WINDOW_REFUSED
+        hub,
+        inverted,
+        "post",
+        "/api/traces/replay",
+        422,
+        TraceReplayWindowRefusedProblem,
+        traces_wire.TRACE_REPLAY_WINDOW_REFUSED,
     )
 
 
@@ -237,7 +268,9 @@ def test_a_malformed_spend_instant_is_a_problem_naming_the_field(tmp_path: Path)
 
     resp = hub.client.get("/api/spend", params={"since": "not-a-timestamp"})
 
-    refused = _refused(hub, resp, "get", "/api/spend", 422, SpendInstantInvalidProblem, t.SPEND_INSTANT_INVALID)
+    refused = _refused(
+        hub, resp, "get", "/api/spend", 422, SpendInstantInvalidProblem, fleet_wire.SPEND_INSTANT_INVALID
+    )
     assert refused["detail"] == "since 'not-a-timestamp' is not a valid ISO-8601 instant"
 
 
@@ -256,6 +289,6 @@ def test_an_unknown_transcript_segment_is_a_problem(tmp_path: Path) -> None:
         "/api/chunks/{chunk_id}/transcripts/{segment_id}",
         404,
         TranscriptSegmentNotFoundProblem,
-        t.TRANSCRIPT_SEGMENT_NOT_FOUND,
+        transcript_segment_wire.TRANSCRIPT_SEGMENT_NOT_FOUND,
     )
     assert refused["detail"] == "unknown segment sg_nope"

@@ -3,13 +3,14 @@ the read views, and the exit requests."""
 
 from __future__ import annotations
 
-from typing import Annotated, Literal
+from typing import Annotated, Final, Literal
 
 from pydantic import AfterValidator, BaseModel, ConfigDict, Field
 
 from blizzard.foundation.findings import FindingExit, FindingFactKind, FindingSeverity, FindingSource, FindingState
 from blizzard.foundation.unrecognized import Unrecognized
 from blizzard.wire.base import WireModel
+from blizzard.wire.problem import ProblemDetails
 from blizzard.wire.vocabulary import OPEN
 
 
@@ -222,3 +223,65 @@ class FindingSupersedeRequest(FindingExitRequest):
     """`POST /api/findings/supersede` — `FindingExitRequest` plus the absorbing finding."""
 
     superseded_by: str
+
+
+FINDING_NOT_FOUND: Final = "urn:blizzard:problem:finding-not-found"
+
+
+FINDING_TRANSITION_REFUSED: Final = "urn:blizzard:problem:finding-transition-refused"
+
+
+FINDING_WRITE_CONTENDED: Final = "urn:blizzard:problem:finding-write-contended"
+
+
+FINDING_NOTE_REQUIRED: Final = "urn:blizzard:problem:finding-note-required"
+
+
+DUPLICATE_FINDING: Final = "urn:blizzard:problem:duplicate-finding"
+
+
+FINDING_SUPERSEDES_ITSELF: Final = "urn:blizzard:problem:finding-supersedes-itself"
+
+
+ABSORBER_NOT_LIVE: Final = "urn:blizzard:problem:absorber-not-live"
+
+
+class FindingNotFoundProblem(ProblemDetails[Literal["urn:blizzard:problem:finding-not-found"]]):
+    """The named finding does not exist in the tenant."""
+
+
+class FindingTransitionRefusedProblem(ProblemDetails[Literal["urn:blizzard:problem:finding-transition-refused"]]):
+    """A finding verb was applied to a finding whose state does not allow it."""
+
+
+class FindingWriteContendedProblem(ProblemDetails[Literal["urn:blizzard:problem:finding-write-contended"]]):
+    """A finding verb's write kept losing to concurrent writes."""
+
+
+class FindingNoteRequiredProblem(ProblemDetails[Literal["urn:blizzard:problem:finding-note-required"]]):
+    """A finding verb carried a blank or missing note."""
+
+
+class DuplicateFindingProblem(ProblemDetails[Literal["urn:blizzard:problem:duplicate-finding"]]):
+    """A bulk finding verb named the same finding twice."""
+
+
+class FindingSupersedesItselfProblem(ProblemDetails[Literal["urn:blizzard:problem:finding-supersedes-itself"]]):
+    """A supersede named its own finding as the absorber."""
+
+
+class AbsorberNotLiveProblem(ProblemDetails[Literal["urn:blizzard:problem:absorber-not-live"]]):
+    """A supersede named an absorber that is not itself live."""
+
+
+FINDING_PROBLEM_TYPES: frozenset[str] = frozenset(
+    {
+        FINDING_NOT_FOUND,
+        FINDING_TRANSITION_REFUSED,
+        FINDING_WRITE_CONTENDED,
+        FINDING_NOTE_REQUIRED,
+        DUPLICATE_FINDING,
+        FINDING_SUPERSEDES_ITSELF,
+        ABSORBER_NOT_LIVE,
+    }
+)

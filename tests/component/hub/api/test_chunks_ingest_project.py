@@ -12,8 +12,7 @@ from blizzard.hub.api import problems
 from blizzard.hub.domain.chunk.ingest import IngestSourceNotLinked
 from blizzard.hub.domain.chunk.model import WorkItemAuthor, WorkRef
 from blizzard.hub.domain.projects.model import ProjectId
-from blizzard.wire.chunk import ChunkIngestConflict
-from blizzard.wire.problem import POINTER_ALREADY_HELD
+from blizzard.wire.chunk import POINTER_ALREADY_HELD, ChunkIngestConflict
 from tests.support.project_ingest import ingest_project, two_projects
 from tests.support.refusal_observation import app_spec, declared_refusal_mismatches
 from tests.support.scaffolding import (

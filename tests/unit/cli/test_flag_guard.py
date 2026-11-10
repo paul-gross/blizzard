@@ -17,8 +17,7 @@ from blizzard.hub.cli.command import FleetCommand
 from blizzard.hub.cli.context import CliContext
 from blizzard.hub.cli.flag_gate import hub_flag_command, hub_flag_option
 from blizzard.hub.cli.session_service import SessionService
-from blizzard.wire.flags import FlagOff
-from blizzard.wire.problem import FLAG_OFF
+from blizzard.wire.flags import FLAG_OFF, FlagOff
 from tests.support.session_store_fakes import InMemorySessionStore
 from tests.support.worker_http import Bound, bind_stubs
 

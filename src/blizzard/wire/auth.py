@@ -1,6 +1,6 @@
 """Authentication refusals shared by runner-reached hub operations."""
 
-from typing import Literal
+from typing import Final, Literal
 
 from pydantic import Field
 
@@ -81,3 +81,86 @@ class SsoRefusedProblem(ProblemDetails[Literal["urn:blizzard:problem:sso-refused
     """A provider callback's state belongs to a different provider."""
 
     error: Literal["sso_refused"] = Field(deprecated=True)
+
+
+AUTHENTICATION_REQUIRED: Final = "urn:blizzard:problem:authentication-required"
+
+
+AUTHENTICATION_REVOKED: Final = "urn:blizzard:problem:authentication-revoked"
+
+
+AUTHENTICATION_UNRESOLVED: Final = "urn:blizzard:problem:authentication-unresolved"
+
+
+PERMISSION_REQUIRED: Final = "urn:blizzard:problem:permission-required"
+
+
+MACHINE_CREDENTIAL_FORBIDDEN: Final = "urn:blizzard:problem:machine-credential-forbidden"
+
+
+RUNNER_CREDENTIAL_FORBIDDEN: Final = "urn:blizzard:problem:runner-credential-forbidden"
+
+
+IDP_DISABLED: Final = "urn:blizzard:problem:idp-disabled"
+
+
+FEDERATION_RESPONSE_MODE: Final = "urn:blizzard:problem:federation-response-mode"
+
+
+FEDERATION_CLIENT_REFUSED: Final = "urn:blizzard:problem:federation-client-refused"
+
+
+FEDERATION_NO_PROVIDER: Final = "urn:blizzard:problem:federation-no-provider"
+
+
+CLI_REDIRECT_REFUSED: Final = "urn:blizzard:problem:cli-redirect-refused"
+
+
+CLI_PKCE_REQUIRED: Final = "urn:blizzard:problem:cli-pkce-required"
+
+
+CLI_TOKEN_REFUSED: Final = "urn:blizzard:problem:cli-token-refused"
+
+
+LOGIN_DISABLED: Final = "urn:blizzard:problem:login-disabled"
+
+
+LOGIN_PROVIDER_UNKNOWN: Final = "urn:blizzard:problem:login-provider-unknown"
+
+
+LOGIN_THROTTLED: Final = "urn:blizzard:problem:login-throttled"
+
+
+LOGIN_FAILED: Final = "urn:blizzard:problem:login-failed"
+
+
+SSO_REFUSED: Final = "urn:blizzard:problem:sso-refused"
+
+
+AUTHENTICATION_TYPES: frozenset[str] = frozenset(
+    {AUTHENTICATION_REQUIRED, AUTHENTICATION_REVOKED, AUTHENTICATION_UNRESOLVED}
+)
+
+
+AUTH_PROBLEM_TYPES: frozenset[str] = frozenset(
+    {
+        AUTHENTICATION_REQUIRED,
+        AUTHENTICATION_REVOKED,
+        AUTHENTICATION_UNRESOLVED,
+        PERMISSION_REQUIRED,
+        MACHINE_CREDENTIAL_FORBIDDEN,
+        RUNNER_CREDENTIAL_FORBIDDEN,
+        IDP_DISABLED,
+        FEDERATION_RESPONSE_MODE,
+        FEDERATION_CLIENT_REFUSED,
+        FEDERATION_NO_PROVIDER,
+        CLI_REDIRECT_REFUSED,
+        CLI_PKCE_REQUIRED,
+        CLI_TOKEN_REFUSED,
+        LOGIN_DISABLED,
+        LOGIN_PROVIDER_UNKNOWN,
+        LOGIN_THROTTLED,
+        LOGIN_FAILED,
+        SSO_REFUSED,
+    }
+)

@@ -17,7 +17,7 @@ from blizzard.cli.refusal import refusal_of
 from blizzard.foundation.roles import collaborator
 from blizzard.runner.host_layout import HostLayout
 from blizzard.runner.route_paths import runner_prefix
-from blizzard.wire.problem import FLAG_OFF
+from blizzard.wire.flags import FLAG_OFF
 from blizzard.wire.problem_reading import is_kind
 
 # A machine-local round trip, so a hook-scale budget rather than the hub-client one.

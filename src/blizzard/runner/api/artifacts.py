@@ -26,7 +26,7 @@ from blizzard.runner.lifecycle.artifacts import (
     IReadGraphArtifactRepository,
 )
 from blizzard.wire.envelope import EnvelopeArtifact, NodeEnvelope, WorkerArtifact
-from blizzard.wire.problem import SYSTEM_ARTIFACT_NOT_FOUND
+from blizzard.wire.system_artifact import SYSTEM_ARTIFACT_NOT_FOUND
 
 router = APIRouter(prefix="/api", tags=["runner"])
 

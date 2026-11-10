@@ -15,7 +15,7 @@ from blizzard.cli.operator_trace import ITraceHeaders
 from blizzard.hub.cli import hub as hub_group
 from blizzard.runner.cli import runner as runner_group
 from blizzard.runner.cli.daemon import RunnerDaemon
-from blizzard.wire.problem import POINTER_ALREADY_HELD
+from blizzard.wire.chunk import POINTER_ALREADY_HELD
 from tests.support.ingest_and_pause_verbs import (
     _init_runner,  # pyright: ignore[reportPrivateUsage]
 )

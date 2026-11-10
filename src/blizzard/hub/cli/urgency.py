@@ -16,7 +16,7 @@ from blizzard.cli.refusal import refusal_of
 from blizzard.hub.cli.command import FleetCommand
 from blizzard.hub.cli.context import CliContext
 from blizzard.hub.cli.views import Listing
-from blizzard.wire.problem_types_admin import URGENCY_IN_USE
+from blizzard.wire.urgency import URGENCY_IN_USE
 
 #: The icon media types the hub accepts, by the file's suffix.
 _ICON_TYPES = {".png": "image/png", ".webp": "image/webp"}

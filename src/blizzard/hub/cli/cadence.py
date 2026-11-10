@@ -20,7 +20,7 @@ from blizzard.hub.cli.context import CliContext, project_required
 from blizzard.hub.cli.flag_gate import hub_flag_on
 from blizzard.hub.cli.project_option import project_option, project_path, project_query
 from blizzard.hub.cli.views import Listing
-from blizzard.wire.problem import REVISION_CONFLICT
+from blizzard.wire.cadence import REVISION_CONFLICT
 
 _FLAG_OFF_NOTICE = "note: cadences mint nothing until the flag cadences is on"
 _ANCHORS = click.Choice(["scheduled", "started", "finished"])

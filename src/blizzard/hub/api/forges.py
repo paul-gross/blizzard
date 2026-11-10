@@ -38,7 +38,7 @@ from blizzard.wire.forge import (
     ForgesListView,
     ForgeSummary,
 )
-from blizzard.wire.problem_types_admin import RecordReferrer
+from blizzard.wire.record_referrer import RecordReferrer
 
 router = APIRouter(
     prefix="/api/forges", tags=["forges"], dependencies=[Depends(reject_runner_principal), Depends(tenant_bound)]

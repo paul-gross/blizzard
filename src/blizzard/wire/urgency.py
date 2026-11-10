@@ -6,9 +6,12 @@ so a ``null`` that clears a mark is never mistaken for a field left alone."""
 
 from __future__ import annotations
 
+from typing import Final, Literal
+
 from pydantic import BaseModel, ConfigDict
 
 from blizzard.wire.base import WireModel
+from blizzard.wire.problem import CommonProblemMembers, ProblemDetails
 
 
 class UrgencyIconDocument(BaseModel):
@@ -129,3 +132,49 @@ class SettingsView(WireModel):
     revision: int
     updated_at: str
     updated_by: str
+
+
+URGENCY_NOT_FOUND: Final = "urn:blizzard:problem:urgency-not-found"
+URGENCY_ICON_NOT_FOUND: Final = "urn:blizzard:problem:urgency-icon-not-found"
+URGENCY_IS_DEFAULT: Final = "urn:blizzard:problem:urgency-is-default"
+URGENCY_IN_USE: Final = "urn:blizzard:problem:urgency-in-use"
+
+URGENCY_PROBLEM_TYPES: frozenset[str] = frozenset(
+    {URGENCY_NOT_FOUND, URGENCY_ICON_NOT_FOUND, URGENCY_IS_DEFAULT, URGENCY_IN_USE}
+)
+
+
+class UrgencyNotFoundProblem(ProblemDetails[Literal["urn:blizzard:problem:urgency-not-found"]]):
+    """A path names an urgency the tenant does not hold."""
+
+
+class UrgencyIconNotFoundProblem(ProblemDetails[Literal["urn:blizzard:problem:urgency-icon-not-found"]]):
+    """The urgency carries no icon."""
+
+
+class UrgencyIsDefaultDetail(WireModel):
+    code: Literal["urgency_is_default"] = "urgency_is_default"
+    message: str
+    slug: str
+
+
+class UrgencyInUseDetail(WireModel):
+    code: Literal["urgency_in_use"] = "urgency_in_use"
+    message: str
+    slug: str
+    #: How many open chunks carry the urgency, so a client can ask where they go.
+    open_chunks: int
+
+
+class UrgencyIsDefaultProblem(
+    CommonProblemMembers[Literal["urn:blizzard:problem:urgency-is-default"], UrgencyIsDefaultDetail]
+):
+    """A retire names the tenant's default urgency; the default must point elsewhere first."""
+
+    status: int | None = None
+
+
+class UrgencyInUseProblem(CommonProblemMembers[Literal["urn:blizzard:problem:urgency-in-use"], UrgencyInUseDetail]):
+    """A retire names an urgency open chunks carry, and no urgency to move them to."""
+
+    status: int | None = None

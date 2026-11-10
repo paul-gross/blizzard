@@ -3,11 +3,12 @@ closure."""
 
 from __future__ import annotations
 
-from typing import Annotated
+from typing import Annotated, Final, Literal
 
 from blizzard.foundation.landing_policy import LandingPolicy
 from blizzard.foundation.unrecognized import Unrecognized
 from blizzard.wire.base import WireModel
+from blizzard.wire.problem import ProblemDetails
 from blizzard.wire.vocabulary import OPEN
 
 
@@ -62,3 +63,13 @@ class SubmissionTurnsPage(WireModel):
 
     items: list[SubmissionTurnView]
     next_before: str | None
+
+
+SUBMISSION_NOT_FOUND: Final = "urn:blizzard:problem:submission-not-found"
+
+
+class SubmissionNotFoundProblem(ProblemDetails[Literal["urn:blizzard:problem:submission-not-found"]]):
+    """The named flow submission does not belong to the chunk."""
+
+
+FLOW_SUBMISSIONS_PROBLEM_TYPES: frozenset[str] = frozenset({SUBMISSION_NOT_FOUND})

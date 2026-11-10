@@ -11,7 +11,7 @@ from blizzard.hub.cli.command import FleetCommand
 from blizzard.hub.cli.context import CliContext
 from blizzard.hub.cli.project_option import project_option, project_query
 from blizzard.hub.cli.views import Listing, QuestionLine
-from blizzard.wire.problem import QUESTION_ALREADY_ANSWERED
+from blizzard.wire.question import QUESTION_ALREADY_ANSWERED
 
 
 class QuestionListing(Listing):

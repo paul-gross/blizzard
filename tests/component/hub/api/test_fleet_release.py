@@ -12,9 +12,9 @@ import pytest
 
 from blizzard.foundation.hub_event_types import HubEventType
 from blizzard.hub.domain.execution.auth.route import ROUTE_TOKEN_ENFORCE
-from blizzard.wire.problem import CHUNK_NOT_FOUND, RELEASE_REFUSAL, ROUTE_NOT_HELD
-from blizzard.wire.release import ReleaseProblem
-from blizzard.wire.route import RouteNotHeldProblem
+from blizzard.wire.chunk import CHUNK_NOT_FOUND
+from blizzard.wire.release import RELEASE_REFUSAL, ReleaseProblem
+from blizzard.wire.route import ROUTE_NOT_HELD, RouteNotHeldProblem
 from tests.support.scaffolding import HubHarness, build_hub, emitted_events, pointer_token
 
 _GRAPH_YAML = """

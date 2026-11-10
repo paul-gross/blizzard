@@ -2,13 +2,14 @@
 
 from __future__ import annotations
 
-from typing import Annotated
+from typing import Annotated, Final, Literal
 
 from blizzard.foundation.flow_place_state import FlowPlaceState
 from blizzard.foundation.flow_verdict import FlowVerdict
 from blizzard.foundation.hub_event_types import FlowChangeKind
 from blizzard.foundation.unrecognized import Unrecognized
 from blizzard.wire.base import WireModel
+from blizzard.wire.problem import ProblemDetails
 from blizzard.wire.vocabulary import OPEN
 
 
@@ -113,3 +114,13 @@ class FlowRecordPage(WireModel):
 
     facts: list[FlowFactView] = []
     next_before: int | None = None
+
+
+FLOW_NOT_FOUND: Final = "urn:blizzard:problem:flow-not-found"
+
+
+class FlowNotFoundProblem(ProblemDetails[Literal["urn:blizzard:problem:flow-not-found"]]):
+    """The named flow does not exist in the tenant."""
+
+
+FLOW_PROBLEM_TYPES: frozenset[str] = frozenset({FLOW_NOT_FOUND})

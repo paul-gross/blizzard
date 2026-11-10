@@ -4,7 +4,7 @@
 from __future__ import annotations
 
 from datetime import datetime
-from typing import Annotated, Literal
+from typing import Annotated, Final, Literal
 
 from pydantic import BaseModel
 
@@ -98,3 +98,47 @@ class EgressBackfillFailure(ProblemDetails[Literal["urn:blizzard:problem:egress-
 
     cause: str
     datasets: list[EgressBackfillCount]
+
+
+EGRESS_BACKFILL_FAILED: Final = "urn:blizzard:problem:egress-backfill-failed"
+
+
+EGRESS_RESET_REFUSED: Final = "urn:blizzard:problem:egress-reset-refused"
+
+
+EGRESS_RESET_UNAVAILABLE: Final = "urn:blizzard:problem:egress-reset-unavailable"
+
+
+EGRESS_BACKFILL_WINDOW_REFUSED: Final = "urn:blizzard:problem:egress-backfill-window-refused"
+
+
+EGRESS_BACKFILL_UNAVAILABLE: Final = "urn:blizzard:problem:egress-backfill-unavailable"
+
+
+class EgressResetRefusedProblem(ProblemDetails[Literal["urn:blizzard:problem:egress-reset-refused"]]):
+    """The dataset is unconfigured or the instant is in the future."""
+
+
+class EgressResetUnavailableProblem(ProblemDetails[Literal["urn:blizzard:problem:egress-reset-unavailable"]]):
+    """The export is off or rejected, so a cursor cannot be reset."""
+
+
+class EgressBackfillWindowRefusedProblem(
+    ProblemDetails[Literal["urn:blizzard:problem:egress-backfill-window-refused"]]
+):
+    """The backfill window is inverted, too wide, or reaches past now, or the dataset is unknown."""
+
+
+class EgressBackfillUnavailableProblem(ProblemDetails[Literal["urn:blizzard:problem:egress-backfill-unavailable"]]):
+    """The export is off or rejected, so a wet backfill cannot run."""
+
+
+EGRESS_PROBLEM_TYPES: frozenset[str] = frozenset(
+    {
+        EGRESS_BACKFILL_FAILED,
+        EGRESS_RESET_REFUSED,
+        EGRESS_RESET_UNAVAILABLE,
+        EGRESS_BACKFILL_WINDOW_REFUSED,
+        EGRESS_BACKFILL_UNAVAILABLE,
+    }
+)

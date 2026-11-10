@@ -4,26 +4,29 @@ runs, and sweeps."""
 from __future__ import annotations
 
 from blizzard.hub.api.problem_declaration import ProblemDeclaration
-from blizzard.wire import problem_types_admin as admin_t
-from blizzard.wire.cadence import RevisionConflictProblem
-from blizzard.wire.problem_types_garden import (
+from blizzard.wire import config as config_wire
+from blizzard.wire import graph as graph_wire
+from blizzard.wire.cadence import (
     CadenceAdmissionRefusedProblem,
     CadenceNotFoundProblem,
     CadenceSlugTakenProblem,
+    RevisionConflictProblem,
+)
+from blizzard.wire.garden_proposal import (
     GardenProposalAlreadyClosedProblem,
     GardenProposalInvalidProblem,
     GardenProposalNotFoundProblem,
-    GardenWindowInvalidProblem,
+)
+from blizzard.wire.garden_run import RunNotFoundProblem
+from blizzard.wire.garden_sweeps import SweepNotFoundProblem, SweepServesNoTenantProblem
+from blizzard.wire.garden_window import GardenWindowInvalidProblem
+from blizzard.wire.routine import (
     RoutineDefinitionInvalidProblem,
     RoutineNotFoundProblem,
     RoutineNotRunnableProblem,
     RoutineScopeNotRelatedProblem,
-    RunNotFoundProblem,
-    ScopeNotFoundProblem,
-    ScopeSlugInvalidProblem,
-    SweepNotFoundProblem,
-    SweepServesNoTenantProblem,
 )
+from blizzard.wire.scope import ScopeNotFoundProblem, ScopeSlugInvalidProblem
 
 _PROJECT = "/api/projects/{project}"
 _ROUTINE_CREATES = ("/api/routines", f"{_PROJECT}/routines")
@@ -37,7 +40,7 @@ ROUTINE_DECLARATIONS = (
     *(
         ProblemDeclaration("POST", path, 422, model)
         for path in _ROUTINE_CREATES
-        for model in (ScopeSlugInvalidProblem, RoutineDefinitionInvalidProblem, admin_t.ConfigFieldInvalidProblem)
+        for model in (ScopeSlugInvalidProblem, RoutineDefinitionInvalidProblem, config_wire.ConfigFieldInvalidProblem)
     ),
     ProblemDeclaration("GET", "/api/routines/trend", 404, RoutineNotFoundProblem),
     ProblemDeclaration("GET", "/api/routines/trend", 422, GardenWindowInvalidProblem),
@@ -64,7 +67,7 @@ ROUTINE_DECLARATIONS = (
         for status, model in (
             (404, RoutineNotFoundProblem),
             (409, RevisionConflictProblem),
-            (422, admin_t.ConfigFieldInvalidProblem),
+            (422, config_wire.ConfigFieldInvalidProblem),
             (422, ScopeSlugInvalidProblem),
             (422, RoutineDefinitionInvalidProblem),
         )
@@ -91,7 +94,7 @@ CADENCE_DECLARATIONS = (
         ProblemDeclaration("POST", f"{_PROJECT}/cadences", status, model)
         for status, model in (
             (403, CadenceAdmissionRefusedProblem),
-            (422, admin_t.ConfigFieldInvalidProblem),
+            (422, config_wire.ConfigFieldInvalidProblem),
             (422, CadenceSlugTakenProblem),
         )
     ),
@@ -104,7 +107,7 @@ CADENCE_DECLARATIONS = (
         for status, model in (
             (403, CadenceAdmissionRefusedProblem),
             (404, CadenceNotFoundProblem),
-            (422, admin_t.ConfigFieldInvalidProblem),
+            (422, config_wire.ConfigFieldInvalidProblem),
         )
     ),
     ProblemDeclaration("POST", "/api/cadences/{cadence_id}/retire", 404, CadenceNotFoundProblem),
@@ -126,7 +129,7 @@ SCOPE_DECLARATIONS = (
             (404, ScopeNotFoundProblem),
             (409, RevisionConflictProblem),
             (422, ScopeSlugInvalidProblem),
-            (422, admin_t.ConfigFieldInvalidProblem),
+            (422, config_wire.ConfigFieldInvalidProblem),
         )
     ),
     *(
@@ -156,7 +159,7 @@ GARDEN_PROPOSAL_DECLARATIONS = (
             (422, GardenProposalInvalidProblem),
         )
     ),
-    ProblemDeclaration("POST", f"{_PROPOSAL}/accept", 503, admin_t.DefaultGraphRetiredProblem),
+    ProblemDeclaration("POST", f"{_PROPOSAL}/accept", 503, graph_wire.DefaultGraphRetiredProblem),
     *(
         ProblemDeclaration("POST", path, 422, model)
         for path in _PROPOSAL_CREATES

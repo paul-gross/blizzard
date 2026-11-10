@@ -6,7 +6,7 @@ ids — and its bearer token names the runner. Exactly one claim per chunk is ac
 
 from __future__ import annotations
 
-from typing import Annotated, Literal
+from typing import Annotated, Final, Literal
 
 from pydantic import BaseModel, Field
 
@@ -200,3 +200,65 @@ class RouteTokenRekeyResponse(BaseModel):
 
     chunk_id: str
     route_token: str
+
+
+CLAIM_CONFLICT: Final = "urn:blizzard:problem:claim-conflict"
+
+
+CLAIM_TERMINAL: Final = "urn:blizzard:problem:claim-terminal"
+
+
+CLAIM_DEPENDENCY: Final = "urn:blizzard:problem:claim-dependency"
+
+
+CLAIM_INCOMPATIBLE: Final = "urn:blizzard:problem:claim-incompatible"
+
+
+CLAIM_PAUSED: Final = "urn:blizzard:problem:claim-paused"
+
+
+CLAIM_RUNNER_RETIRED: Final = "urn:blizzard:problem:claim-runner-retired"
+
+
+CLAIM_RUNNER_UNREGISTERED: Final = "urn:blizzard:problem:claim-runner-unregistered"
+
+
+CLAIM_RUNNER_VERSION_REFUSED: Final = "urn:blizzard:problem:claim-runner-version-refused"
+
+
+CLAIM_NOT_READY: Final = "urn:blizzard:problem:claim-not-ready"
+
+
+PINNED_GRAPH_MISSING: Final = "urn:blizzard:problem:pinned-graph-missing"
+
+
+MALFORMED_CURSOR: Final = "urn:blizzard:problem:malformed-cursor"
+
+
+ROUTE_NOT_FOUND: Final = "urn:blizzard:problem:route-not-found"
+
+
+ROUTE_NOT_HELD: Final = "urn:blizzard:problem:route-not-held"
+
+
+ROUTE_TERMINAL: Final = "urn:blizzard:problem:route-terminal"
+
+
+ROUTE_PROBLEM_TYPES: frozenset[str] = frozenset(
+    {
+        CLAIM_CONFLICT,
+        CLAIM_TERMINAL,
+        CLAIM_DEPENDENCY,
+        CLAIM_INCOMPATIBLE,
+        CLAIM_PAUSED,
+        CLAIM_RUNNER_RETIRED,
+        CLAIM_RUNNER_UNREGISTERED,
+        CLAIM_RUNNER_VERSION_REFUSED,
+        CLAIM_NOT_READY,
+        PINNED_GRAPH_MISSING,
+        MALFORMED_CURSOR,
+        ROUTE_NOT_FOUND,
+        ROUTE_NOT_HELD,
+        ROUTE_TERMINAL,
+    }
+)

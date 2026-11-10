@@ -5,12 +5,13 @@ view carries it, a ciphertext, or a key id."""
 
 from __future__ import annotations
 
-from typing import Literal
+from typing import Final, Literal
 
 from pydantic import BaseModel, SecretStr
 
 from blizzard.wire.base import WireModel
-from blizzard.wire.problem import ProblemDetails
+from blizzard.wire.problem import CommonProblemMembers, ProblemDetails
+from blizzard.wire.record_referrer import RecordReferrer
 
 
 class SecretAlreadyExistsProblem(ProblemDetails[Literal["urn:blizzard:problem:secret-already-exists"]]):
@@ -55,3 +56,50 @@ class SecretView(WireModel):
     retired: bool = False
     retirable: bool = True
     references: list[RecordRefView] = []
+
+
+SECRET_ALREADY_EXISTS: Final = "urn:blizzard:problem:secret-already-exists"
+
+
+SECRET_NOT_FOUND: Final = "urn:blizzard:problem:secret-not-found"
+
+
+SECRET_RETIRED: Final = "urn:blizzard:problem:secret-retired"
+
+
+SECRET_NAME_INVALID: Final = "urn:blizzard:problem:secret-name-invalid"
+
+
+SECRET_VALUE_BLANK: Final = "urn:blizzard:problem:secret-value-blank"
+
+
+SECRET_IN_USE: Final = "urn:blizzard:problem:secret-in-use"
+
+
+class SecretRetiredProblem(ProblemDetails[Literal["urn:blizzard:problem:secret-retired"]]):
+    """The secret is retired and must be enabled first."""
+
+
+class SecretNameInvalidProblem(ProblemDetails[Literal["urn:blizzard:problem:secret-name-invalid"]]):
+    """The secret name is not a valid name."""
+
+
+class SecretValueBlankProblem(ProblemDetails[Literal["urn:blizzard:problem:secret-value-blank"]]):
+    """The secret value is blank."""
+
+
+class SecretInUseDetail(WireModel):
+    code: Literal["secret_in_use"] = "secret_in_use"
+    message: str
+    referrers: list[RecordReferrer]
+
+
+class SecretInUseProblem(CommonProblemMembers[Literal["urn:blizzard:problem:secret-in-use"], SecretInUseDetail]):
+    """Active records still reference the secret."""
+
+    status: int | None = None
+
+
+SECRET_PROBLEM_TYPES: frozenset[str] = frozenset(
+    {SECRET_ALREADY_EXISTS, SECRET_NOT_FOUND, SECRET_RETIRED, SECRET_NAME_INVALID, SECRET_VALUE_BLANK, SECRET_IN_USE}
+)

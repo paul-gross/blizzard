@@ -3,13 +3,14 @@ baseline, and run read views."""
 
 from __future__ import annotations
 
-from typing import Annotated
+from typing import Annotated, Final, Literal
 
 from pydantic import BaseModel, ConfigDict
 
 from blizzard.foundation.run_mode import RunMode
 from blizzard.foundation.unrecognized import Unrecognized
 from blizzard.wire.base import WireModel
+from blizzard.wire.problem import ProblemDetails
 from blizzard.wire.vocabulary import OPEN
 
 
@@ -141,3 +142,37 @@ class RoutineRunResponse(WireModel):
     baseline_finding_set_id: str | None = None
     baseline_revisions: dict[str, str] | None = None
     created_at: str
+
+
+ROUTINE_NOT_FOUND: Final = "urn:blizzard:problem:routine-not-found"
+
+
+ROUTINE_DEFINITION_INVALID: Final = "urn:blizzard:problem:routine-definition-invalid"
+
+
+ROUTINE_SCOPE_NOT_RELATED: Final = "urn:blizzard:problem:routine-scope-not-related"
+
+
+ROUTINE_NOT_RUNNABLE: Final = "urn:blizzard:problem:routine-not-runnable"
+
+
+class RoutineNotFoundProblem(ProblemDetails[Literal["urn:blizzard:problem:routine-not-found"]]):
+    """The named routine does not exist in the project (404 on a read or write, 422 when a body names it)."""
+
+
+class RoutineDefinitionInvalidProblem(ProblemDetails[Literal["urn:blizzard:problem:routine-definition-invalid"]]):
+    """A routine write states a definition that cannot hold: a bad or taken slug, an unresolved graph, a scope of
+    another project, invalid harnesses, an immutable slug changed, or the default scope unlinked."""
+
+
+class RoutineScopeNotRelatedProblem(ProblemDetails[Literal["urn:blizzard:problem:routine-scope-not-related"]]):
+    """A run names a scope outside the routine's related set."""
+
+
+class RoutineNotRunnableProblem(ProblemDetails[Literal["urn:blizzard:problem:routine-not-runnable"]]):
+    """A routine run is refused: the routine or the effective scope is retired, or the graph has no enabled mint."""
+
+
+ROUTINE_PROBLEM_TYPES: frozenset[str] = frozenset(
+    {ROUTINE_NOT_FOUND, ROUTINE_DEFINITION_INVALID, ROUTINE_SCOPE_NOT_RELATED, ROUTINE_NOT_RUNNABLE}
+)

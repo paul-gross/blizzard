@@ -15,8 +15,7 @@ from blizzard.hub.api import auth_session
 from blizzard.hub.auth.permissions import Permission, permissions_for
 from blizzard.hub.domain.config.changes import ChangeContext, Door
 from blizzard.hub.domain.garden.scopes import ScopeSlug
-from blizzard.wire.cadence import RevisionConflictProblem
-from blizzard.wire.problem import REVISION_CONFLICT
+from blizzard.wire.cadence import REVISION_CONFLICT, RevisionConflictProblem
 from tests.support.refusal_observation import app_spec, declared_refusal_mismatches
 from tests.support.scaffolding import HubHarness, build_hub, count_queries, default_project, project_record
 

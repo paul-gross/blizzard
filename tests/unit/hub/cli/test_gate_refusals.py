@@ -7,7 +7,8 @@ from __future__ import annotations
 from typing import Any
 
 from blizzard.hub.cli import hub as hub_group
-from blizzard.wire.problem import DECISION_ALREADY_RESOLVED, QUESTION_ALREADY_ANSWERED
+from blizzard.wire.decision import DECISION_ALREADY_RESOLVED
+from blizzard.wire.question import QUESTION_ALREADY_ANSWERED
 from tests.support.worker_http import bind_stubs
 
 

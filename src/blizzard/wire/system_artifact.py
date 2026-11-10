@@ -3,7 +3,7 @@ documents, scoped under ``ArtifactScope.SYSTEM``."""
 
 from __future__ import annotations
 
-from typing import Literal
+from typing import Final, Literal
 
 from pydantic import BaseModel
 
@@ -19,3 +19,9 @@ class SystemArtifactView(BaseModel):
 
     name: str
     content: str
+
+
+SYSTEM_ARTIFACT_NOT_FOUND: Final = "urn:blizzard:problem:system-artifact-not-found"
+
+
+SYSTEM_ARTIFACT_PROBLEM_TYPES: frozenset[str] = frozenset({SYSTEM_ARTIFACT_NOT_FOUND})

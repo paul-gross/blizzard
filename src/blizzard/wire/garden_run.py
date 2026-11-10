@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Annotated
+from typing import Annotated, Final, Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -10,6 +10,7 @@ from blizzard.foundation.chunk_status import ChunkStatus
 from blizzard.foundation.run_mode import RunMode
 from blizzard.foundation.unrecognized import Unrecognized
 from blizzard.wire.base import WireModel
+from blizzard.wire.problem import ProblemDetails
 from blizzard.wire.vocabulary import OPEN
 
 
@@ -115,3 +116,13 @@ class RunDeltaView(WireModel):
     project_slug: str | None = None
     #: The project's current display name; ``None`` where the hub reports none.
     project_name: str | None = None
+
+
+RUN_NOT_FOUND: Final = "urn:blizzard:problem:run-not-found"
+
+
+class RunNotFoundProblem(ProblemDetails[Literal["urn:blizzard:problem:run-not-found"]]):
+    """The named garden run does not exist (in the project, when the request is project-scoped)."""
+
+
+GARDEN_RUN_PROBLEM_TYPES: frozenset[str] = frozenset({RUN_NOT_FOUND})

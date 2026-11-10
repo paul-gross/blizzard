@@ -2,11 +2,14 @@
 
 from __future__ import annotations
 
+from typing import Final, Literal
+
 from pydantic import Field
 
 from blizzard.foundation.landing_policy import LandingPolicy
 from blizzard.wire.base import WireModel
 from blizzard.wire.forge import DEPRECATED_FIELD, MovedFieldsRequest, OldFieldWarning
+from blizzard.wire.problem import ProblemDetails
 
 
 class RepositorySummary(WireModel):
@@ -80,3 +83,29 @@ class RepositoriesListView(WireModel):
     """Every stored repository — ``GET /api/repositories``."""
 
     repositories: list[RepositorySummary] = []
+
+
+REPOSITORY_NOT_FOUND: Final = "urn:blizzard:problem:repository-not-found"
+
+
+REPOSITORY_SLUG_TAKEN: Final = "urn:blizzard:problem:repository-slug-taken"
+
+
+REPOSITORY_COORDINATE_TAKEN: Final = "urn:blizzard:problem:repository-coordinate-taken"
+
+
+class RepositoryNotFoundProblem(ProblemDetails[Literal["urn:blizzard:problem:repository-not-found"]]):
+    """A path names a repository the tenant does not hold."""
+
+
+class RepositorySlugTakenProblem(ProblemDetails[Literal["urn:blizzard:problem:repository-slug-taken"]]):
+    """Another repository of the tenant holds the slug."""
+
+
+class RepositoryCoordinateTakenProblem(ProblemDetails[Literal["urn:blizzard:problem:repository-coordinate-taken"]]):
+    """Another repository holds the forge, owner and repo."""
+
+
+REPOSITORY_PROBLEM_TYPES: frozenset[str] = frozenset(
+    {REPOSITORY_NOT_FOUND, REPOSITORY_SLUG_TAKEN, REPOSITORY_COORDINATE_TAKEN}
+)

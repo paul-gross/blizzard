@@ -11,8 +11,12 @@ from starlette.exceptions import HTTPException as StarletteHTTPException
 from blizzard.hub.api import problems
 from blizzard.hub.api.problem_exceptions import ProblemFactory, ProblemHTTPException, problem_http_exception
 from blizzard.hub.auth.permissions import Permission
+from blizzard.wire import auth as auth_wire
 from blizzard.wire import problem as problem_types
-from blizzard.wire.problem import AUTHENTICATION_REQUIRED, CHUNK_NOT_FOUND
+from blizzard.wire import project as project_wire
+from blizzard.wire import tenant as tenant_wire
+from blizzard.wire.auth import AUTHENTICATION_REQUIRED
+from blizzard.wire.chunk import CHUNK_NOT_FOUND
 
 
 def _app() -> FastAPI:
@@ -34,7 +38,7 @@ def test_unknown_query_project_is_scoped_and_preserves_detail() -> None:
     response = client.get("/api/fleet/queue/peek?project=missing")
     assert response.status_code == 422
     assert response.headers["content-type"] == "application/problem+json"
-    assert response.json()["type"] == problem_types.UNKNOWN_PROJECT
+    assert response.json()["type"] == project_wire.UNKNOWN_PROJECT
     assert response.json()["detail"] == expected
     assert client.get("/unrelated?project=missing").json() == {"detail": expected}
     assert client.get("/api/fleet/queue/peek?project=missing&count=bad").headers["content-type"] == "application/json"
@@ -92,31 +96,31 @@ def test_untyped_refusal_with_a_declared_variants_wording_keeps_the_default_body
             partial(problems.authentication_required_problem, detail="authentication required"),
             401,
             "authentication required",
-            problem_types.AUTHENTICATION_REQUIRED,
+            auth_wire.AUTHENTICATION_REQUIRED,
         ),
         (
             problems.tenant_required_problem,
             409,
             {"code": "tenant_required", "message": "name the tenant to act in with X-Blizzard-Tenant"},
-            problem_types.TENANT_REQUIRED,
+            tenant_wire.TENANT_REQUIRED,
         ),
         (
             problems.machine_credential_forbidden_problem,
             403,
             "a machine credential is not valid here",
-            problem_types.MACHINE_CREDENTIAL_FORBIDDEN,
+            auth_wire.MACHINE_CREDENTIAL_FORBIDDEN,
         ),
         (
             partial(problems.permission_required_problem, Permission.RUNNER_RETIRE),
             403,
             f"missing permission {Permission.RUNNER_RETIRE!r}",
-            problem_types.PERMISSION_REQUIRED,
+            auth_wire.PERMISSION_REQUIRED,
         ),
         (
             partial(problems.runner_credential_forbidden_problem, "runner-1"),
             403,
             "runner token for 'runner-1' is not valid on an operator verb",
-            problem_types.RUNNER_CREDENTIAL_FORBIDDEN,
+            auth_wire.RUNNER_CREDENTIAL_FORBIDDEN,
         ),
     ],
 )
@@ -154,7 +158,7 @@ def test_login_refusals_preserve_headers_and_ignore_other_routes() -> None:
     client = TestClient(app)
     response = client.get("/api/auth/github/callback?state=secret")
     assert response.headers["retry-after"] == "30"
-    assert response.json()["type"] == problem_types.LOGIN_THROTTLED
+    assert response.json()["type"] == auth_wire.LOGIN_THROTTLED
     assert response.json()["instance"] == "/api/auth/github/callback"
     unrelated = client.get("/other/github/callback")
     assert unrelated.headers["retry-after"] == "30"

@@ -11,7 +11,7 @@ from blizzard.hub.cli.command import FleetCommand
 from blizzard.hub.cli.context import CliContext
 from blizzard.hub.cli.project_option import project_option, project_query
 from blizzard.hub.cli.views import Listing
-from blizzard.wire.problem import DECISION_ALREADY_RESOLVED
+from blizzard.wire.decision import DECISION_ALREADY_RESOLVED
 
 
 class DecisionListing(Listing):

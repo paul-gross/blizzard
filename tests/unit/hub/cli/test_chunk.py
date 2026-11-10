@@ -12,7 +12,7 @@ import pytest
 from click.testing import CliRunner
 
 from blizzard.hub.cli import hub as hub_group
-from blizzard.wire.problem import (
+from blizzard.wire.chunk import (
     DEPENDENCY_WOULD_CLOSE_CYCLE,
     DEPENDENT_NOT_EDITABLE,
     NO_STANDING_DEPENDENCY,

@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Annotated
+from typing import Annotated, Final, Literal
 
 from pydantic import BaseModel, Field, StringConstraints
 
@@ -15,6 +15,7 @@ from blizzard.foundation.invitations import (
 )
 from blizzard.foundation.unrecognized import Unrecognized
 from blizzard.wire.base import WireModel
+from blizzard.wire.problem import ProblemDetails
 from blizzard.wire.vocabulary import OPEN
 
 
@@ -56,3 +57,20 @@ class InvitationListResponse(BaseModel):
     """Every invitation of the request's tenant, oldest first."""
 
     invitations: list[InvitationView]
+
+
+INVITATION_NOT_FOUND: Final = "urn:blizzard:problem:invitation-not-found"
+
+
+INVITATION_ALREADY_RESOLVED: Final = "urn:blizzard:problem:invitation-already-resolved"
+
+
+class InvitationNotFoundProblem(ProblemDetails[Literal["urn:blizzard:problem:invitation-not-found"]]):
+    """The tenant holds no such invitation."""
+
+
+class InvitationAlreadyResolvedProblem(ProblemDetails[Literal["urn:blizzard:problem:invitation-already-resolved"]]):
+    """The invitation was already accepted or revoked."""
+
+
+INVITATION_PROBLEM_TYPES: frozenset[str] = frozenset({INVITATION_NOT_FOUND, INVITATION_ALREADY_RESOLVED})

@@ -17,7 +17,10 @@ from blizzard.runner.transcripts.archived_repository import (
 )
 from blizzard.runner.transcripts.internal.segment_projection import to_turn
 from blizzard.runner.transcripts.repository import MAX_TURNS, recent_window
+from blizzard.wire import auth as auth_wire
 from blizzard.wire import problem
+from blizzard.wire import runner as runner_wire
+from blizzard.wire import transcript_segment as transcript_segment_wire
 from blizzard.wire.transcript_segment import LeaseTranscriptView
 
 _log = get_logger("blizzard.runner.transcripts.archived")
@@ -100,6 +103,6 @@ def _is_refusal(resp: httpx2.Response) -> bool:
 
 
 _REFUSAL_TYPES: dict[int, frozenset[str]] = {
-    httpx2.codes.UNAUTHORIZED: problem.AUTHENTICATION_TYPES,
-    httpx2.codes.FORBIDDEN: frozenset({problem.LEASE_OWNERSHIP, problem.RUNNER_RETIRED}),
+    httpx2.codes.UNAUTHORIZED: auth_wire.AUTHENTICATION_TYPES,
+    httpx2.codes.FORBIDDEN: frozenset({transcript_segment_wire.LEASE_OWNERSHIP, runner_wire.RUNNER_RETIRED}),
 }

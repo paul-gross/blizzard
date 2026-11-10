@@ -9,8 +9,7 @@ from blizzard.foundation.artifacts import ArtifactKind
 from blizzard.hub.documents import YAML_CODEC
 from blizzard.hub.domain.graph.model import GraphArtifact, ProducesSpec
 from blizzard.hub.graphs import PACKAGED, GraphFile
-from blizzard.wire.graph import GraphValidationReport
-from blizzard.wire.problem import GRAPH_DEFINITION_INVALID
+from blizzard.wire.graph import GRAPH_DEFINITION_INVALID, GraphValidationReport
 from tests.support.refusal_observation import app_spec, declared_refusal_mismatches
 from tests.support.scaffolding import build_hub
 

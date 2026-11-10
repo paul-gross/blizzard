@@ -18,7 +18,7 @@ from blizzard.hub.cli.context import CliContext
 from blizzard.hub.cli.flow import flow_label, place_label
 from blizzard.hub.cli.project_option import project_option, project_query
 from blizzard.hub.cli.views import ChunkLine, ChunkRow, Cost, Listing, pointer_label
-from blizzard.wire.problem import (
+from blizzard.wire.chunk import (
     DEPENDENCY_WOULD_CLOSE_CYCLE,
     DEPENDENT_NOT_EDITABLE,
     NO_STANDING_DEPENDENCY,

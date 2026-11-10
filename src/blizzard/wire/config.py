@@ -3,7 +3,7 @@ declarative document (``POST /api/config/apply``, ``GET /api/config/export``).""
 
 from __future__ import annotations
 
-from typing import Literal
+from typing import Final, Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -11,7 +11,7 @@ from blizzard.foundation.landing_policy import LandingPolicy
 from blizzard.wire.base import WireModel
 from blizzard.wire.cadence import CadenceDocument
 from blizzard.wire.forge import DEPRECATED_FIELD, OldFieldWarning
-from blizzard.wire.problem import CommonProblemMembers, ProblemDetails
+from blizzard.wire.problem import CommonProblemMembers, ProblemDetails, ValidationEntry
 from blizzard.wire.routine import RoutineDocument
 from blizzard.wire.scope import ScopeDocument
 from blizzard.wire.urgency import UrgencyIconDocument
@@ -240,3 +240,41 @@ class ConfigDocumentInvalidProblem(
     """A configuration document, or the version a read names, the hub refuses; ``detail`` locates every error."""
 
     status: int | None = None
+
+
+CONFIG_APPLY_CONFLICT: Final = "urn:blizzard:problem:config-apply-conflict"
+
+
+CONFIG_MEDIA_TYPE_UNSUPPORTED: Final = "urn:blizzard:problem:config-media-type-unsupported"
+
+
+CONFIG_DOCUMENT_INVALID: Final = "urn:blizzard:problem:config-document-invalid"
+
+
+CONFIG_SCHEMA_NOT_FOUND: Final = "urn:blizzard:problem:config-schema-not-found"
+
+
+CONFIG_FIELD_INVALID: Final = "urn:blizzard:problem:config-field-invalid"
+
+
+class ConfigSchemaNotFoundProblem(ProblemDetails[Literal["urn:blizzard:problem:config-schema-not-found"]]):
+    """No document schema exists for the named record kind."""
+
+
+class ConfigFieldInvalidProblem(
+    CommonProblemMembers[Literal["urn:blizzard:problem:config-field-invalid"], list[ValidationEntry]]
+):
+    """A configured record's field cannot mean anything; ``detail`` locates it in the body."""
+
+    status: int | None = None
+
+
+CONFIG_PROBLEM_TYPES: frozenset[str] = frozenset(
+    {
+        CONFIG_APPLY_CONFLICT,
+        CONFIG_MEDIA_TYPE_UNSUPPORTED,
+        CONFIG_DOCUMENT_INVALID,
+        CONFIG_SCHEMA_NOT_FOUND,
+        CONFIG_FIELD_INVALID,
+    }
+)

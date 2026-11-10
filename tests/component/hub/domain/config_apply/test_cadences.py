@@ -14,7 +14,7 @@ import pytest
 from blizzard.auth_core import Role
 from blizzard.hub.api import auth_session
 from blizzard.hub.auth.permissions import Permission, permissions_for
-from blizzard.wire.problem import CONFIG_DOCUMENT_INVALID
+from blizzard.wire.config import CONFIG_DOCUMENT_INVALID
 from tests.support.scaffolding import HubHarness, build_hub
 
 

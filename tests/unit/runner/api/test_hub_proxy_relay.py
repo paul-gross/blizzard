@@ -12,7 +12,8 @@ from fastapi.testclient import TestClient
 from blizzard.foundation.clock import ManualMonotonicClock
 from blizzard.runner.api.hub_proxy import HubProxy, UpstreamRefusal, relay_upstream_refusal
 from blizzard.runner.config import RunnerConfig
-from blizzard.wire.problem import CHUNK_NOT_FOUND, SYSTEM_ARTIFACT_NOT_FOUND
+from blizzard.wire.chunk import CHUNK_NOT_FOUND
+from blizzard.wire.system_artifact import SYSTEM_ARTIFACT_NOT_FOUND
 
 _PROBLEM = {
     "type": CHUNK_NOT_FOUND,

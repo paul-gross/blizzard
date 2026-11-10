@@ -9,8 +9,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from blizzard.wire.decision import DecisionResolutionConflict
-from blizzard.wire.problem import DECISION_ALREADY_RESOLVED
+from blizzard.wire.decision import DECISION_ALREADY_RESOLVED, DecisionResolutionConflict
 from tests.support.gate_decisions import (
     _open_decision,  # pyright: ignore[reportPrivateUsage]  # shared test helper, imported from tests.support.gate_decisions
 )
