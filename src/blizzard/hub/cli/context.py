@@ -126,6 +126,37 @@ class CliContext:
             if cursor is None:
                 return rows
 
+    def get_before_pages(
+        self,
+        path: str,
+        operation: str,
+        *,
+        key: str,
+        params: dict[str, str] | None = None,
+        want: int | None,
+        first_page_only: bool = False,
+    ) -> tuple[list[Any], Any]:
+        """Rows of a keyset-paginated read (``next_before`` fed back as ``before``), newest first: ``key``'s rows
+        concatenated across pages until ``want`` are held (``None``: every page), and the walk stops early when
+        ``next_before`` is ``None``. ``first_page_only`` reads the first page alone, sending ``params`` as given.
+        Returns the rows and the last ``next_before``.
+
+        With ``want`` set, each page asks for ``limit`` = what is still wanted, capped at the ``limit`` in
+        ``params`` when one is given."""
+        page_params = dict(params or {})
+        cap = int(page_params["limit"]) if "limit" in page_params else None
+        rows: list[Any] = []
+        while True:
+            if want is not None and not first_page_only:
+                remaining = want - len(rows)
+                page_params["limit"] = str(remaining if cap is None else min(remaining, cap))
+            body = self.get(path, operation, params=page_params).json()
+            rows.extend(body[key])
+            next_before = body["next_before"]
+            if next_before is None or first_page_only or (want is not None and len(rows) >= want):
+                return rows, next_before
+            page_params["before"] = str(next_before)
+
     def post(
         self,
         path: str,

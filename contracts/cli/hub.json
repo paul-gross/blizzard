@@ -297,7 +297,7 @@
               "type": "text"
             },
             {
-              "help": "Resume from a prior page's next_cursor.",
+              "help": "Resume from a prior page's next_cursor; one call reads one page.",
               "hidden": false,
               "kind": "option",
               "name": "cursor",
@@ -634,7 +634,7 @@
               "type": "text"
             },
             {
-              "help": "Resume from a prior page's next_cursor (spend-chunks only).",
+              "help": "Resume from a prior page's next_cursor (spend-chunks only); one call reads one page.",
               "hidden": false,
               "kind": "option",
               "name": "cursor",
