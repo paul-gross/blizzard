@@ -34,10 +34,10 @@ from blizzard.runner.lifecycle.reap import ReapSweep
 from blizzard.runner.lifecycle.registration import Registration
 from blizzard.runner.lifecycle.restart_resume import RestartResume
 from blizzard.runner.lifecycle.spawn import Spawner
+from blizzard.runner.lifecycle.spend_ceiling import SpendCeilingCheck
 from blizzard.runner.loop.context import LoopContext
 from blizzard.runner.throttle.gate import ThrottleGate
 from blizzard.runner.throttle.levers import LeverAnswer
-from blizzard.runner.throttle.pause import PauseService, spend_ceiling_reason
 from blizzard.runner.throttle.report import FLOOR_LEVER
 from blizzard.runner.usage.repository import ContextSampleState
 
@@ -89,32 +89,9 @@ class SpendCeiling(Step):
     """The tick-level kill-switch — first in the tick."""
 
     def run(self) -> None:
-        """Engage the local pause brake once this runner's rolling-window spend reaches
-        ``cost.runner_ceiling_usd``; absent, there is no ceiling. Runs **first** in
-        the tick so a crossing is visible to every later step in the same pass, engages exactly
-        once, and never lifts — only a conscious clear does (tests/unit/runner/test_paused.py)."""
-        ctx = self.ctx
-        cap = ctx.config.runner_ceiling_usd
-        if cap is None:
-            return
-        if ctx.stores.pause.local_paused():
-            return  # already engaged — engage-once; `blizzard runner start` is the only clear
-        now = ctx.clock.now()
-        window_hours = ctx.config.runner_ceiling_window_hours
-        totals = ctx.stores.usage.usage_since(now - timedelta(hours=window_hours))
-        if not totals.reaches(cap):
-            return
-        reason = spend_ceiling_reason(cap=cap, window_hours=window_hours, spend=totals.figure)
-        _log.warning(
-            f"runner locally paused — {reason}",
-            runner_name=ctx.config.runner_name,
-            ceiling_usd=cap,
-            spend_usd=totals.spend_usd,
-            window_hours=ctx.config.runner_ceiling_window_hours,
-            cost_partial=totals.cost_partial,
-            estimated_cost_usd=totals.estimated_cost_usd,
-        )
-        PauseService(ctx.stores.pause, ctx.clock, events=ctx.events).engage(by="runner-ceiling", reason=reason)
+        """Engage the local pause brake once spend reaches the ceiling; runs **first** in the tick so a
+        crossing is visible to every later step in the same pass."""
+        SpendCeilingCheck(self.ctx).run()
 
 
 class Reap(Step):

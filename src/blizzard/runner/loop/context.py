@@ -286,6 +286,7 @@ if TYPE_CHECKING:
     from blizzard.runner.lifecycle.registration import RegistrationContext
     from blizzard.runner.lifecycle.restart_resume import RestartResumeContext
     from blizzard.runner.lifecycle.spawn import SpawnContext
+    from blizzard.runner.lifecycle.spend_ceiling import SpendCeilingContext
     from blizzard.runner.lifecycle.usage_limit import UsageLimitContext
     from blizzard.runner.throttle.gate import GateContext
     from blizzard.runner.throttle.overload import OverloadContext
@@ -339,6 +340,8 @@ if TYPE_CHECKING:
     _identity_check_conforms: type[IdentityCheckContext] = LoopContext
 
     _reap_conforms: type[ReapContext] = LoopContext
+
+    _spend_ceiling_conforms: type[SpendCeilingContext] = LoopContext
 
     _advance_conforms: type[AdvanceContext] = LoopContext
 
