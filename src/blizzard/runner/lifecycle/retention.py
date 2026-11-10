@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from collections.abc import Callable
 from dataclasses import dataclass
-from datetime import timedelta
+from datetime import datetime, timedelta
 from typing import Protocol
 
 from blizzard.foundation.clock import IClock
@@ -12,7 +12,6 @@ from blizzard.foundation.logging import get_logger
 from blizzard.runner.hub.outbound_buffer import IWriteOutboundRepository
 from blizzard.runner.leases.liveness import IWriteLeaseLivenessRepository
 from blizzard.runner.leases.worker_stdout import IWorkerStdoutFiles
-from blizzard.runner.loop.retention_floor import RetentionPasses
 from blizzard.runner.throttle.usage_limits import (
     IWriteRunnerUsageLimitRepository,
     IWriteSubscriptionUsageLimitRepository,
@@ -25,6 +24,13 @@ _log = get_logger("blizzard.runner.loop")
 class RetentionConfig(Protocol):
     @property
     def worker_stdout_retention_days(self) -> int: ...
+
+
+class RetentionFloor(Protocol):
+    """The cross-tick floor gating the pass (`loop.retention_floor.RetentionPasses` satisfies it)."""
+
+    def due(self, now: datetime) -> bool: ...
+    def record(self, now: datetime) -> None: ...
 
 
 class RetentionStores(Protocol):
@@ -53,7 +59,7 @@ class RetentionContext(Protocol):
     @property
     def worker_files(self) -> IWorkerStdoutFiles: ...
     @property
-    def retention_passes(self) -> RetentionPasses | None: ...
+    def retention_passes(self) -> RetentionFloor | None: ...
     @property
     def clock(self) -> IClock: ...
 
