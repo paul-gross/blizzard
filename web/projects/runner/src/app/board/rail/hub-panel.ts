@@ -1,7 +1,8 @@
 import { ChangeDetectionStrategy, Component, computed, effect, signal } from '@angular/core';
-import { asyncState, FleetWhen, KitAsyncState, type runnerApi, STATUS_TONE, toneColor } from 'fleet';
+import { asyncState, FleetWhen, KitAsyncState, KitBadge, type runnerApi, STATUS_TONE, toneColor } from 'fleet';
 
 import { injectPanelDashboards } from '../../core/panel-reads';
+import { hubLink } from '../../core/runner-health.model';
 import { hubSummary, latestFleetSummary } from './hub-panel.model';
 
 /**
@@ -17,7 +18,7 @@ import { hubSummary, latestFleetSummary } from './hub-panel.model';
 @Component({
   selector: 'app-hub-panel',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [FleetWhen, KitAsyncState],
+  imports: [FleetWhen, KitAsyncState, KitBadge],
   templateUrl: './hub-panel.html',
   styleUrl: './hub-panel.css',
 })
@@ -25,6 +26,14 @@ export class HubPanel {
   private readonly dashboards = injectPanelDashboards('all');
 
   protected readonly summary = computed(() => hubSummary(this.dashboards.data()));
+
+  /** The reachable runners folded to the one badge. */
+  protected readonly link = computed(() => {
+    const hub = this.summary();
+    return hubLink(hub?.reachable ?? 0, hub?.total ?? 0);
+  });
+
+  protected readonly issueColor = toneColor;
 
   private readonly currentFleet = computed<runnerApi.FleetSummaryView | null>(
     () => latestFleetSummary(this.dashboards.data()),

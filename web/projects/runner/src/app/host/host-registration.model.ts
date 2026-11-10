@@ -13,12 +13,13 @@ export interface HostRegistrationSummary {
   readonly answeredAt: string | null;
 }
 
-/** Each registration state's label and tone; a state this build does not know reads raw, in `idle`. */
+/** Each registration state's label and tone — the one tone the host's badge and light both read; a state this
+ * build does not know reads raw, in `idle`. */
 const LABEL = openLookup<runnerApi.HostRegistrationView['state'], readonly [string, Tone]>(
   {
     unregistered: ['unregistered', 'idle'],
     pending: ['pending', 'waiting'],
-    registered: ['registered', 'running'],
+    registered: ['registered', 'done'],
     refused: ['refused', 'needs'],
     no_hosts: ['hub without hosts', 'waiting'],
     unreachable: ['unreachable', 'stale'],

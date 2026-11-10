@@ -48,6 +48,7 @@ describe('SubscriptionBlocks', () => {
     const el = await render({ ...PACED, state: 'lapsed', windows: [] });
 
     expect(el.querySelector('[data-testid="subscription-blocks-lapsed"]')).not.toBeNull();
+    expect(el.querySelector<HTMLElement>('[data-testid="subscription-blocks-lapsed"]')?.style.color).toBe('var(--red)');
     expect(el.querySelector('[data-testid="subscription-blocks-window"]')).toBeNull();
   });
 

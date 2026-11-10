@@ -1,17 +1,7 @@
 import type { HostEnvGroup } from './host-environments.model';
-import { envsInUseLabel, hostRefLabel, hostRowsInFilter, hostRunnersEmptyText, hostTone } from './host-page.model';
-import type { HostRegistrationSummary } from './host-registration.model';
+import { envsInUseLabel, hostRefLabel, hostRowsInFilter, hostRunnersEmptyText } from './host-page.model';
 import type { HostRunnerRow } from './host-runner-row.model';
 import type { PanelProject, RunnerProjects } from '../core/panel-reads.model';
-
-const REG = (state: HostRegistrationSummary['state']): HostRegistrationSummary => ({
-  state,
-  label: state,
-  tone: 'idle',
-  lines: [],
-  detail: null,
-  answeredAt: null,
-});
 
 const ROW = (name: string, runnerId: string | null): HostRunnerRow => ({ name, runnerId, key: runnerId ?? name }) as HostRunnerRow;
 
@@ -43,18 +33,6 @@ describe('hostRefLabel', () => {
     const ref = hostRefLabel('hs_01KXKVVF1J3D6H6VYZ3XYN3YJ9');
     expect(ref).not.toBeNull();
     expect(ref!.length).toBeLessThan('hs_01KXKVVF1J3D6H6VYZ3XYN3YJ9'.length);
-  });
-});
-
-describe('hostTone', () => {
-  it('is green once registered, red refused or unreachable, amber otherwise', () => {
-    expect(hostTone(REG('registered'))).toBe('green');
-    expect(hostTone(REG('refused'))).toBe('red');
-    expect(hostTone(REG('unreachable'))).toBe('red');
-    expect(hostTone(REG('pending'))).toBe('amber');
-    expect(hostTone(REG('unregistered'))).toBe('amber');
-    expect(hostTone(REG('no_hosts'))).toBe('amber');
-    expect(hostTone(null)).toBe('amber');
   });
 });
 

@@ -1,19 +1,12 @@
-import { type BeaconTone, compactRef } from 'fleet';
+import { compactRef } from 'fleet';
 
 import { type RunnerProjects, servesProject } from '../core/panel-reads.model';
 import type { HostEnvGroup } from './host-environments.model';
-import type { HostRegistrationSummary } from './host-registration.model';
 import type { HostRunnerRow } from './host-runner-row.model';
 
 /** The host's compact ref beside its name, `null` before it registers under an id. */
 export function hostRefLabel(hostId: string | null): string | null {
   return hostId ? compactRef(hostId) : null;
-}
-
-/** The host's light: green once registered, red when refused or cut off, amber on the way there. */
-export function hostTone(registration: HostRegistrationSummary | null): BeaconTone {
-  if (registration?.state === 'registered') return 'green';
-  return registration?.state === 'refused' || registration?.state === 'unreachable' ? 'red' : 'amber';
 }
 
 /**

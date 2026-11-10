@@ -21,7 +21,7 @@ const ROW = (overrides: Partial<HostRunnerRow> = {}): HostRunnerRow => ({
   ],
   gates: [],
   throttle: null,
-  hub: { endpoint: 'http://hub', reachable: true, lastContactAt: null, buffered: 2, refusal: null, hubVersion: null, window: null },
+  hub: { endpoint: 'http://hub', reachable: true, link: { label: 'CONNECTED', tone: 'done' }, lastContactAt: null, buffered: 2, refusal: null, hubVersion: null, window: null },
   problems: [],
   state: [{ label: 'WORKING', tone: 'running', title: null }],
   heldPending: false,
@@ -92,6 +92,7 @@ describe('HostRunnerRowView', () => {
         hub: {
           endpoint: 'http://hub',
           reachable: false,
+          link: { label: 'UNREACHABLE', tone: 'stale' },
           lastContactAt: null,
           buffered: 2,
           refusal: { label: 'REFUSED', tone: 'needs', title: null },
@@ -108,7 +109,7 @@ describe('HostRunnerRowView', () => {
   });
 
   it('names the hub\'s version and the window it admits, and nothing before a registration answers', async () => {
-    const hub = { endpoint: 'http://hub', reachable: true, lastContactAt: null, buffered: 0, refusal: null };
+    const hub = { endpoint: 'http://hub', reachable: true, link: { label: 'CONNECTED', tone: 'done' as const }, lastContactAt: null, buffered: 0, refusal: null };
     const answered = await render(ROW({ hub: { ...hub, hubVersion: '0.3.0', window: 'admits 0.2 – 0.3' } }));
     expect(text(answered, 'host-runner-hub-version')).toBe('· hub 0.3.0 admits 0.2 – 0.3');
 

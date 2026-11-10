@@ -44,19 +44,12 @@
   letter-spacing: 0.08em;
 }
 .sub-lapsed {
-  color: var(--amber);
   font-size: var(--fs-xs);
   letter-spacing: 0.08em;
 }
 .sub-refreshed {
   font-size: var(--fs-xs);
   letter-spacing: 0.04em;
-}
-.sub-refreshed[data-freshness='aging'] {
-  color: var(--amber);
-}
-.sub-refreshed[data-freshness='stale'] {
-  color: var(--red);
 }
 .sub-provider {
   color: var(--label);
@@ -65,9 +58,6 @@
 .sub-condition {
   color: var(--text);
   font-size: var(--fs-sm);
-}
-.sub-condition.miss {
-  color: var(--red);
 }
 .sub-sampled,
 .sub-renewal {

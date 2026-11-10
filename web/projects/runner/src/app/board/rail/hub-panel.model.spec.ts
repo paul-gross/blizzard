@@ -60,7 +60,7 @@ describe('hubSummary', () => {
 
     expect(summary?.reachable).toBe(1);
     expect(summary?.total).toBe(2);
-    expect(summary?.issues).toEqual([{ key: 'rn_2:link', runner: 'r2', text: 'cannot reach the hub', title: 'http://hub.example' }]);
+    expect(summary?.issues).toEqual([{ key: 'rn_2:link', runner: 'r2', text: 'cannot reach the hub', title: 'http://hub.example', tone: 'stale' }]);
   });
 
   it('words each identity problem for the operator, the remedy on hover', () => {
@@ -72,13 +72,17 @@ describe('hubSummary', () => {
       entry('rn_3', { identity: identity('not_held', { reason: 'held elsewhere' }) }),
       entry('rn_4', { identity: identity('tenant_differs') }),
       entry('rn_5', { identity: identity('matched') }),
+      entry('rn_6', { identity: identity('version_refused', { reason: 'too old' }) }),
+      entry('rn_7', { identity: identity('quarantined') }),
     ]);
 
     expect(summary?.issues).toEqual([
-      { key: 'rn_1:identity', runner: 'r1', text: 'refusing — its token belongs to R-ABF3', title: 'reset it' },
-      { key: 'rn_2:identity', runner: 'r2', text: 'the hub refuses its token', title: 'token revoked — reset it' },
-      { key: 'rn_3:identity', runner: 'r3', text: 'halted — not held by its host', title: 'held elsewhere' },
-      { key: 'rn_4:identity', runner: 'r4', text: "halted — tenant differs from its host's", title: null },
+      { key: 'rn_1:identity', runner: 'r1', text: 'refusing — its token belongs to R-ABF3', title: 'reset it', tone: 'needs' },
+      { key: 'rn_2:identity', runner: 'r2', text: 'the hub refuses its token', title: 'token revoked — reset it', tone: 'needs' },
+      { key: 'rn_3:identity', runner: 'r3', text: 'halted — not held by its host', title: 'held elsewhere', tone: 'needs' },
+      { key: 'rn_4:identity', runner: 'r4', text: "halted — tenant differs from its host's", title: null, tone: 'needs' },
+      { key: 'rn_6:identity', runner: 'r6', text: 'the hub refuses its version', title: 'too old', tone: 'needs' },
+      { key: 'rn_7:identity', runner: 'r7', text: 'quarantined', title: null, tone: 'idle' },
     ]);
   });
 
@@ -88,7 +92,7 @@ describe('hubSummary', () => {
     ]);
 
     expect(summary?.issues).toEqual([
-      { key: 'rn_1:conflict:proj_1', runner: 'r1', text: 'blizzard, bz name one project — claiming nothing', title: 'proj_1' },
+      { key: 'rn_1:conflict:proj_1', runner: 'r1', text: 'blizzard, bz name one project — claiming nothing', title: 'proj_1', tone: 'needs' },
     ]);
   });
 });

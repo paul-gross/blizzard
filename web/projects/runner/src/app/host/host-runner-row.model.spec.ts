@@ -91,7 +91,7 @@ describe('hostRunnerRows', () => {
 
     expect(row.tone).toBe('red');
     expect(row.state).toEqual([{ label: 'HUB UNREACHABLE', tone: 'stale', title: 'http://hub' }]);
-    expect(row.hub).toEqual({ endpoint: 'http://hub', reachable: false, lastContactAt: null, buffered: 3, refusal: null, hubVersion: null, window: null });
+    expect(row.hub).toEqual({ endpoint: 'http://hub', reachable: false, link: { label: 'UNREACHABLE', tone: 'stale' }, lastContactAt: null, buffered: 3, refusal: null, hubVersion: null, window: null });
   });
 
   it('reads a runner whose identity the hub refuses red, naming the refusal', () => {

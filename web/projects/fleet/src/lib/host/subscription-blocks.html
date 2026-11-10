@@ -20,7 +20,7 @@
       }
     }
     @case ('lapsed') {
-      <span class="miss lapsed" data-testid="subscription-blocks-lapsed" title="Credential lapsed — log in again">✕ lapsed</span>
+      <span class="miss" data-testid="subscription-blocks-lapsed" [style.color]="lapsedColor" title="Credential lapsed — log in again">✕ lapsed</span>
     }
     @default {
       @if (line().note; as note) {

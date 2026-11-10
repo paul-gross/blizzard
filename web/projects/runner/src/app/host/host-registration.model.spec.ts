@@ -19,7 +19,7 @@ describe('hostRegistrationSummary', () => {
       tenant_id: null,
     });
 
-    expect(summary?.tone).toBe('running');
+    expect(summary?.tone).toBe('done');
     expect(summary?.lines).toEqual(['host hs_1', '1 runner held']);
     expect(summary?.answeredAt).toBe('2026-07-16T11:59:26.000Z');
   });
@@ -64,5 +64,27 @@ describe('hostRegistrationSummary', () => {
     expect(summary?.tone).toBe('idle');
     expect(summary?.state).toBe('suspended');
     expect(summary?.lines).toEqual(['host hs_1', 'held for review']);
+  });
+});
+
+describe('the registration tone the host light and badge both read', () => {
+  const tones: Record<runnerApi.HostRegistrationView['state'], string> = {
+    unregistered: 'idle',
+    pending: 'waiting',
+    registered: 'done',
+    refused: 'needs',
+    no_hosts: 'waiting',
+    unreachable: 'stale',
+    version_refused: 'needs',
+  };
+
+  it.each(Object.entries(tones))('reads %s in %s', (state, tone) => {
+    const view = { state, buffered_facts: 0, answered_at: null, detail: null, held_runner_ids: [], host_id: null, host_name: null, tenant_id: null };
+    expect(hostRegistrationSummary(view as runnerApi.HostRegistrationView)?.tone).toBe(tone);
+  });
+
+  it('reads a state it does not know in idle', () => {
+    const view = { state: 'suspended', buffered_facts: 0, answered_at: null, detail: null, held_runner_ids: [], host_id: null, host_name: null, tenant_id: null };
+    expect(hostRegistrationSummary(view as unknown as runnerApi.HostRegistrationView)?.tone).toBe('idle');
   });
 });

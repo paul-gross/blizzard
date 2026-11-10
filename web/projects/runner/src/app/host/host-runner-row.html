@@ -145,9 +145,7 @@
 <ng-template #hub>
   @if (row().hub; as hub) {
     <span class="badges">
-      <fleet-kit-badge variant="soft" [tone]="hub.reachable ? 'done' : 'stale'" [title]="hub.endpoint">{{
-        hub.reachable ? 'CONNECTED' : 'UNREACHABLE'
-      }}</fleet-kit-badge>
+      <fleet-kit-badge variant="soft" [tone]="hub.link.tone" [title]="hub.endpoint">{{ hub.link.label }}</fleet-kit-badge>
       @if (hub.refusal; as refusal) {
         <fleet-kit-badge variant="soft" [tone]="refusal.tone" [title]="refusal.title ?? ''">{{ refusal.label }}</fleet-kit-badge>
       }

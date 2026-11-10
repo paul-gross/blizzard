@@ -150,9 +150,9 @@ the URL as `?runner=`. Beside the board, a rail shows the hub link, the host's s
 open asks. The host page, `/host`, shows the subscriptions' usage first, then one row per runner with its bindings,
 spend, harness health, hub link, gates, problems and state, the chunks it holds, and its pause and stop controls, then
 the environments of each workspace and who holds them. A runner the hub's version window refuses reads `VERSION REFUSED`
-on its hub link, which also names the hub's version and the window it admits, and the host page's title spells out the
-hub's sentence naming what to upgrade. An older per-runner link under `/runners/<id>/` redirects to the same page
-filtered to that runner — a bare `/runners/<id>` to the board — and `/machine` to `/host`.
+on its hub link, which also names the hub's version and the window it admits, and also on the rail's hub panel; the host
+page's title spells out the hub's sentence naming what to upgrade. An older per-runner link under `/runners/<id>/`
+redirects to the same page filtered to that runner — a bare `/runners/<id>` to the board — and `/machine` to `/host`.
 
 A runner whose machine-local panel is opened from a browser on another machine needs the runner-side federation
 configuration owned by [`docs/deployment/human-auth.md`](./deployment/human-auth.md)'s "Federating a runner's web

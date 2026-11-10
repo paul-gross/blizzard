@@ -7,7 +7,7 @@ import { HostTitle } from './host-title';
 const REGISTERED: HostRegistrationSummary = {
   state: 'registered',
   label: 'registered',
-  tone: 'running',
+  tone: 'done',
   lines: [],
   detail: null,
   answeredAt: '2026-07-16T11:59:26.000Z',
@@ -24,7 +24,6 @@ describe('HostTitle', () => {
     fixture.componentRef.setInput('hostId', 'hst_01KXKVVF1J3D6H6VYZ3XYN3YJ9');
     fixture.componentRef.setInput('hostRef', 'N3YJ9');
     fixture.componentRef.setInput('registration', registration);
-    fixture.componentRef.setInput('tone', 'green');
     await fixture.whenStable();
     return fixture.nativeElement as HTMLElement;
   }

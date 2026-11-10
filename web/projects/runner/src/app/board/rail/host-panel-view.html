@@ -29,7 +29,7 @@
             }
           </span>
           @if (runner.halted) {
-            <span class="halted" data-testid="host-panel-runner-halted">halted</span>
+            <fleet-kit-badge variant="soft" tone="needs" data-testid="host-panel-runner-halted">HALTED</fleet-kit-badge>
           }
         </div>
         @if (runner.halted) {
