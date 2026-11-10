@@ -35,6 +35,9 @@ def test_the_upgrade_creates_the_tables_as_the_schema_declares(tmp_path: Path) -
     declared = create_engine_from_url(f"sqlite:///{tmp_path / 'declared.db'}")
     try:
         s.metadata.create_all(declared)
+        # This column belongs to the later urgency-references revision, not the cadences revision.
+        with declared.begin() as conn:
+            conn.execute(sa.text("ALTER TABLE cadence_chores DROP COLUMN urgency_id"))
         assert _created(engine) == _created(declared)
     finally:
         declared.dispose()

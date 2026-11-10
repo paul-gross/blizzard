@@ -11,7 +11,7 @@ from __future__ import annotations
 from collections.abc import Sequence
 from dataclasses import replace
 from datetime import datetime
-from typing import Any
+from typing import Any, Protocol
 
 from sqlalchemy import ColumnElement, Row, func
 from sqlalchemy.engine import Connection
@@ -113,11 +113,24 @@ def update_urgency(
     append_change(conn, change)
 
 
-def require_revisions(conn: Connection, expected: Sequence[NamedRevision]) -> None:
-    """:class:`ConfigRevisionConflict` naming the first urgency of ``expected`` whose stored revision has moved from
-    the one a write was planned on, in one read."""
+class _HeldAt(Protocol):
+    """An urgency a write was planned on, at the revision the plan read."""
+
+    @property
+    def urgency_id(self) -> str: ...
+
+    @property
+    def revision(self) -> int: ...
+
+    @property
+    def slug(self) -> str: ...
+
+
+def stale_revision[H: _HeldAt](conn: Connection, expected: Sequence[H]) -> tuple[H, int] | None:
+    """The first of ``expected`` whose stored revision has moved from the one a write was planned on, beside the
+    revision stored now, in one read; ``None`` when none has."""
     if not expected:
-        return
+        return None
     stmts = statements_of(conn)
     rows = conn.execute(
         stmts.select(urgencies, urgencies.c.urgency_id, urgencies.c.revision).where(
@@ -127,7 +140,16 @@ def require_revisions(conn: Connection, expected: Sequence[NamedRevision]) -> No
     stored: dict[str, int] = {row.urgency_id: row.revision for row in rows}
     for named in expected:
         if stored.get(named.urgency_id) != named.revision:
-            raise ConfigRevisionConflict("urgency", named.slug, current=stored.get(named.urgency_id, 0))
+            return named, stored.get(named.urgency_id, 0)
+    return None
+
+
+def require_revisions(conn: Connection, expected: Sequence[NamedRevision]) -> None:
+    """:class:`ConfigRevisionConflict` naming the first urgency of ``expected`` whose stored revision has moved."""
+    stale = stale_revision(conn, expected)
+    if stale is not None:
+        named, current = stale
+        raise ConfigRevisionConflict("urgency", named.slug, current=current)
 
 
 class UrgencyStore:

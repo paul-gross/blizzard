@@ -104,6 +104,8 @@ class GardenProposalAcceptRequest(BaseModel):
     reason: str | None = None
     body: str | None = None
     mint_work_item: bool = True
+    #: The minted chunk's urgency by id or slug, else the tenant default; refused without `mint_work_item`.
+    urgency: str | None = None
 
 
 class GardenProposalAcceptResponse(GardenProposalView):

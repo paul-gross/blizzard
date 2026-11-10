@@ -61,6 +61,7 @@ routines:
     graph_name: garden-routine
     default_scope_slug: blizzard
     default_model: [claude-opus]
+    default_urgency: standard
     project: blizzard
     scopes: [blizzard]
 cadences:
@@ -74,6 +75,7 @@ cadences:
       - key: arch
         routine: architecture-drift
         scopes: all
+        urgency: urgent
 ```
 
 `version` is `2`: a document with any other `version`, or none, is refused `422 config_version_retired` at `version`,
@@ -95,6 +97,11 @@ stored set. Every scope a routine entry names, as its `default_scope_slug` or in
 declared in the same document's `scopes` section, and its `graph_name` must name an enabled graph when the entry creates
 the routine or moves it to another graph; otherwise the entry is refused. An apply never creates a scope the document
 does not declare.
+
+A routine's `default_urgency` and a chore's `urgency` name an urgency by slug, and each must name one stored already or
+declared in the same document's `urgencies` section; one naming neither is refused `422 urgency_unknown`, and one naming
+a retired urgency `422 urgency_retired`. These are the only references a cadence entry is refused for. Export writes
+both as slugs.
 
 A work source entry and a repository entry are each keyed by its `slug`; its `name` is the display name, the slug when a
 new record's entry leaves it out and as stored when an existing record's does. An entry without a `slug` is refused
@@ -138,10 +145,10 @@ retires an urgency. The three sections apply in that order, after the projects a
 
 A cadence entry is keyed by its `slug` within its project, and names its project with `project` as a scope entry does. A
 `chores` list it states is the cadence's whole list, matched to the stored chores by `key`; one it leaves out keeps the
-stored chores. A chore's routine and scopes are named by slug and need not resolve: an entry naming a routine nobody
-declared is applied, and the cadence's view shows it as attention ([cadences.md](./cadences.md#attention)). A cadence
-entry is compared by its effective value, so a spacing stated as `240m` matches a stored `4h`, and an entry leaving
-`anchor`, `promote`, or `name` out matches their defaults.
+stored chores. A chore's routine and scopes are named by slug and need not resolve, unlike its `urgency`: an entry
+naming a routine nobody declared is applied, and the cadence's view shows it as attention
+([cadences.md](./cadences.md#attention)). A cadence entry is compared by its effective value, so a spacing stated as
+`240m` matches a stored `4h`, and an entry leaving `anchor`, `promote`, or `name` out matches their defaults.
 
 The file's extension picks the format: `.yaml` and `.yml` read as YAML, `.json` as JSON. Over HTTP the `Content-Type`
 does: `POST /api/config/apply` takes `application/yaml` or `application/json`, and any other type is refused with 415.
@@ -169,7 +176,7 @@ the per-record verbs give, each located at its entry:
 - **422** for an invalid entry, a missing or retired secret, a name listed twice, a work source slugged `hub`, or a
   document that does not decode. The error's `loc` names the entry and field, such as `body.work_sources.1.provider`.
 - **422** for an urgency entry, order, or default naming a retired urgency, or an order or default naming an unknown
-  one.
+  one, and for a routine's `default_urgency` or a chore's `urgency` naming either.
 - **409** for a taken name, a taken provider and locator or forge coordinate, or a record that changed while the apply
   ran — a project's `landing_order` included, when another landing-order write for the project lands while the apply
   runs. Running the apply again plans it on the order that write left.

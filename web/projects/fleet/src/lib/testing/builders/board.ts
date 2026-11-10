@@ -69,6 +69,7 @@ export function chunkSummary(
     runner_name: null,
     workspace_id: null,
     terminal: false,
+    urgency: null,
     work_refs: [],
     ...overrides,
   };

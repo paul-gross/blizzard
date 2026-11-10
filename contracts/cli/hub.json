@@ -821,6 +821,18 @@
                   "type": "boolean"
                 },
                 {
+                  "help": "The urgency the chore's runs take over its routine's default, by id or slug; without one they take the routine's.",
+                  "hidden": false,
+                  "kind": "option",
+                  "name": "urgency",
+                  "opts": [
+                    "--urgency"
+                  ],
+                  "required": false,
+                  "secondary_opts": [],
+                  "type": "text"
+                },
+                {
                   "help": "The project the record belongs to, by id or slug. Needed only when the tenant holds several projects; with one, the record goes to it.",
                   "hidden": false,
                   "kind": "option",
@@ -981,6 +993,30 @@
                   "secondary_opts": [
                     "--promote"
                   ],
+                  "type": "boolean"
+                },
+                {
+                  "help": "The urgency the chore's runs take over its routine's default, by id or slug; without one they take the routine's.",
+                  "hidden": false,
+                  "kind": "option",
+                  "name": "urgency",
+                  "opts": [
+                    "--urgency"
+                  ],
+                  "required": false,
+                  "secondary_opts": [],
+                  "type": "text"
+                },
+                {
+                  "help": "Clear the chore's urgency, so its runs take the routine's.",
+                  "hidden": false,
+                  "kind": "option",
+                  "name": "clear_urgency",
+                  "opts": [
+                    "--clear-urgency"
+                  ],
+                  "required": false,
+                  "secondary_opts": [],
                   "type": "boolean"
                 },
                 {
@@ -2222,7 +2258,7 @@
           "short_help": "Merge MERGE_IDS into CHUNK_ID, which keeps its own status and gains their work items and dependencies."
         },
         "ingest": {
-          "help": "Ingest work items by token, minting a chunk.\n\nEach POINTER is a source-native token \u2014 ``source:ref``, ``source#ref``, or a pasted\nwork item URL; a batch mints one chunk carrying every pointer. Refused when no\nconfigured work source claims a token, a pointer's source is not linked to the\nproject, or another chunk already holds a pointer.",
+          "help": "Ingest work items by token, minting a chunk.\n\nEach POINTER is ``source:ref``, ``source#ref``, or a work item URL; a batch mints one chunk. Refused for an\nunclaimed token, an unlinked source, a pointer another chunk holds, or an --urgency naming no live urgency.",
           "params": [
             {
               "hidden": false,
@@ -2242,6 +2278,18 @@
               "name": "project",
               "opts": [
                 "--project"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "text"
+            },
+            {
+              "help": "The urgency the minted chunk takes, by id or slug (default: the tenant's default urgency).",
+              "hidden": false,
+              "kind": "option",
+              "name": "urgency",
+              "opts": [
+                "--urgency"
               ],
               "required": false,
               "secondary_opts": [],
@@ -2930,7 +2978,7 @@
           "short_help": "Resume a paused CHUNK \u2014 clear the pause."
         },
         "set": {
-          "help": "Repin CHUNK's graph and/or default model/effort/harnesses in one call.\n\nThe given fields apply together or not at all; at least one option is required.\nDefaults are refused once a runner has claimed CHUNK, and ``--graph`` once CHUNK is\nclaimed or has moved off its first node.",
+          "help": "Repin CHUNK's graph, default model/effort/harnesses, and/or urgency in one call.\n\nThe fields apply together or not at all. Defaults are refused once CHUNK is claimed, ``--graph`` once it is\nclaimed or off its first node, ``--urgency`` once it is done or stopped or naming no live urgency.",
           "params": [
             {
               "hidden": false,
@@ -2992,6 +3040,18 @@
               "type": "text"
             },
             {
+              "help": "Set CHUNK's urgency, by id or slug. Leaves its place in its list where it was.",
+              "hidden": false,
+              "kind": "option",
+              "name": "urgency",
+              "opts": [
+                "--urgency"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "text"
+            },
+            {
               "help": "Print the raw response body as JSON.",
               "hidden": false,
               "kind": "option",
@@ -3029,7 +3089,7 @@
             }
           ],
           "path": "hub chunk set",
-          "short_help": "Repin CHUNK's graph and/or default model/effort/harnesses in one call."
+          "short_help": "Repin CHUNK's graph, default model/effort/harnesses, and/or urgency in one call."
         },
         "stop": {
           "help": "Terminally abandon CHUNK \u2014 the operator's last-resort verb.\n\nCHUNK becomes ``stopped`` and is never offered to a runner again; its runner is\nreleased and any open escalation closed. Refused when CHUNK is already done or\nstopped. There is no ``un-stop``.",
@@ -5232,7 +5292,7 @@
       ],
       "commands": {
         "accept": {
-          "help": "Accept PROPOSAL_ID.\n\nMints a linked hub work item by default, from the proposal's own body unless --body-file\nsupplies another; the body is wrapped in the \"Related findings\" template when the\nproposal cites findings, and minted bare otherwise. --no-work-item mints nothing and\nrecords the decline; the hub refuses it alongside --body-file, a body only a minted item\ncarries.",
+          "help": "Accept PROPOSAL_ID.\n\nMints a linked hub work item from the proposal's body or --body-file, wrapped in the \"Related findings\"\ntemplate when it cites findings. --no-work-item records the decline, refused beside --body-file or --urgency.",
           "params": [
             {
               "hidden": false,
@@ -5280,6 +5340,18 @@
               "required": false,
               "secondary_opts": [],
               "type": "boolean"
+            },
+            {
+              "help": "The urgency the minted item's chunk takes, by id or slug (default: the tenant's default urgency).",
+              "hidden": false,
+              "kind": "option",
+              "name": "urgency",
+              "opts": [
+                "--urgency"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "text"
             },
             {
               "help": "Print the raw response body as JSON.",
@@ -6556,6 +6628,18 @@
               "name": "source",
               "opts": [
                 "--source"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "text"
+            },
+            {
+              "help": "The urgency the minted chunk takes, by id or slug (default: the tenant's default urgency).",
+              "hidden": false,
+              "kind": "option",
+              "name": "urgency",
+              "opts": [
+                "--urgency"
               ],
               "required": false,
               "secondary_opts": [],
@@ -8758,6 +8842,18 @@
               "type": "text"
             },
             {
+              "help": "The urgency a run of the routine takes when nothing above it names one, by id or slug; without one a run takes the tenant's default.",
+              "hidden": false,
+              "kind": "option",
+              "name": "default_urgency",
+              "opts": [
+                "--default-urgency"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "text"
+            },
+            {
               "help": "The project the record belongs to, by id or slug. Needed only when the tenant holds several projects; with one, the record goes to it.",
               "hidden": false,
               "kind": "option",
@@ -8810,7 +8906,7 @@
           "short_help": "Mint a routine whose slug is NAME, running GRAPH_NAME with DEFAULT_SCOPE_SLUG's scope."
         },
         "edit": {
-          "help": "Change ROUTINE_ID's display name, graph, default scope, or model/effort/harnesses defaults; only the\noptions given change, and its slug never changes.\n\nA given --model or --harnesses replaces the whole ordered list.",
+          "help": "Change ROUTINE_ID's display name, graph, default scope, or model/effort/harnesses/urgency defaults; only the\noptions given change, and its slug never changes.\n\nA given --model or --harnesses replaces the whole ordered list.",
           "params": [
             {
               "hidden": false,
@@ -8908,6 +9004,30 @@
               "type": "choice"
             },
             {
+              "help": "The urgency a run of the routine takes when nothing above it names one, by id or slug; without one a run takes the tenant's default.",
+              "hidden": false,
+              "kind": "option",
+              "name": "default_urgency",
+              "opts": [
+                "--default-urgency"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "text"
+            },
+            {
+              "help": "Clear the routine's default urgency, so a run takes the tenant's default.",
+              "hidden": false,
+              "kind": "option",
+              "name": "clear_default_urgency",
+              "opts": [
+                "--clear-default-urgency"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "boolean"
+            },
+            {
               "help": "Print the raw response body as JSON.",
               "hidden": false,
               "kind": "option",
@@ -8945,7 +9065,7 @@
             }
           ],
           "path": "hub routine edit",
-          "short_help": "Change ROUTINE_ID's display name, graph, default scope, or model/effort/harnesses defaults; only the options given change, and its slug never changes."
+          "short_help": "Change ROUTINE_ID's display name, graph, default scope, or model/effort/harnesses/urgency defaults; only the options given change, and its slug never changes."
         },
         "enable": {
           "help": "Re-enable a retired routine NAME (its slug).",
@@ -9371,6 +9491,18 @@
               "name": "note",
               "opts": [
                 "--note"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "text"
+            },
+            {
+              "help": "The urgency the run's chunk takes, by id or slug, over the routine's default for this run alone.",
+              "hidden": false,
+              "kind": "option",
+              "name": "urgency",
+              "opts": [
+                "--urgency"
               ],
               "required": false,
               "secondary_opts": [],

@@ -22,6 +22,16 @@ class BlockedRow(TypedDict):
     prerequisite_chunk_id: str
 
 
+class UrgencyRefRow(TypedDict):
+    urgency_id: str
+    slug: str
+
+
+def urgency_label(urgency: UrgencyRefRow | None) -> str:
+    """The urgency a chunk view names, by slug; ``-`` from a hub that names none."""
+    return urgency["slug"] if urgency else "-"
+
+
 class ChunkRow(TypedDict):
     chunk_id: str
     status: str
@@ -29,6 +39,7 @@ class ChunkRow(TypedDict):
     current_node_id: NotRequired[str | None]
     cost: NotRequired[CostRow | None]
     blocked: NotRequired[BlockedRow | None]
+    urgency: NotRequired[UrgencyRefRow | None]
 
 
 class DecliningRow(TypedDict):
@@ -96,6 +107,8 @@ class ChunkLine:
     row: ChunkRow
     #: True renders the node's name when known; false renders its id.
     prefer_node_name: bool = True
+    #: True renders the chunk's urgency column after its status.
+    show_urgency: bool = False
 
     @property
     def node(self) -> str:  # ast-grep-ignore: bzh:property-delegates
@@ -106,7 +119,8 @@ class ChunkLine:
         rendered = Cost.of(self.row.get("cost")).rendered
         blocked = self.row.get("blocked")
         marking = f"  [blocked on {blocked['prerequisite_chunk_id']}]" if blocked else ""
-        return f"{self.row['chunk_id']}  {self.row['status']:<16} @ {self.node}  {rendered:>10}{marking}"
+        urgency = f"{urgency_label(self.row.get('urgency')):<12} " if self.show_urgency else ""
+        return f"{self.row['chunk_id']}  {self.row['status']:<16} {urgency}@ {self.node}  {rendered:>10}{marking}"
 
 
 def _declining_reason(reason: DecliningRow) -> str:

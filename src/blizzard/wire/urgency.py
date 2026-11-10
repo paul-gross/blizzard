@@ -120,7 +120,10 @@ class SettingsPatchRequest(BaseModel):
     default_urgency: str | None = None
 
 
-class SettingsDefaultView(WireModel):
+class UrgencyRef(WireModel):
+    """An urgency a chunk carries or the settings name as the default, by id and slug; a reader joins it to the
+    tenant's urgency set for the rest."""
+
     urgency_id: str
     slug: str
 
@@ -128,7 +131,7 @@ class SettingsDefaultView(WireModel):
 class SettingsView(WireModel):
     """The tenant's settings."""
 
-    default_urgency: SettingsDefaultView
+    default_urgency: UrgencyRef
     revision: int
     updated_at: str
     updated_by: str

@@ -13,6 +13,7 @@ from blizzard.wire.base import WireModel
 from blizzard.wire.chunk import BlockedView, WorkRefModel
 from blizzard.wire.problem import ProblemDetails
 from blizzard.wire.runner import RunnerCapability
+from blizzard.wire.urgency import UrgencyRef
 from blizzard.wire.vocabulary import ToleratedRequestVocabulary
 
 
@@ -31,6 +32,8 @@ class QueuePeekEntry(WireModel):
     project_slug: str | None = None
     #: The project's current display name; ``None`` where the hub reports none.
     project_name: str | None = None
+    #: The urgency the chunk carries; ``None`` from a hub that predates it.
+    urgency: UrgencyRef | None = None
 
 
 class QueuePeekResponse(WireModel):
@@ -100,6 +103,8 @@ class BacklogPeekEntry(WireModel):
     project_slug: str | None = None
     #: The project's current display name; ``None`` where the hub reports none.
     project_name: str | None = None
+    #: The urgency the chunk carries; ``None`` from a hub that predates it.
+    urgency: UrgencyRef | None = None
 
 
 class BacklogPeekResponse(WireModel):

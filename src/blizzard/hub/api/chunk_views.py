@@ -19,6 +19,7 @@ from blizzard.hub.api.graph_names import GraphNames
 from blizzard.hub.api.problem_exceptions import ProblemHTTPException
 from blizzard.hub.api.project_label_fields import ProjectLabelFields, project_label_fields
 from blizzard.hub.api.questions import question_view
+from blizzard.hub.api.urgency_refs import urgency_ref
 from blizzard.hub.composition import TenantServices
 from blizzard.hub.domain.artifact.model import GitCommitArtifact, StoredArtifact
 from blizzard.hub.domain.chunk.delivery_read import DeliveryRead, DeliverySources
@@ -44,6 +45,7 @@ from blizzard.hub.domain.operations.edit import is_graph_editable
 from blizzard.hub.domain.operations.promote import is_promotable
 from blizzard.hub.domain.projects.model import Project, ProjectId
 from blizzard.hub.domain.runners.route import Route
+from blizzard.hub.domain.urgency.model import Urgency, UrgencyId
 from blizzard.hub.forge.web import web_links
 from blizzard.hub.work_sources.registry import SelectedWorkSources
 from blizzard.wire.chunk import (
@@ -71,6 +73,7 @@ from blizzard.wire.chunk import (
     WorkRefView,
 )
 from blizzard.wire.flow import ChunkFlowPlaceView
+from blizzard.wire.urgency import UrgencyRef
 from blizzard.wire.vocabulary import open_value
 
 
@@ -188,6 +191,8 @@ class ChunkView:
     flow_places: Mapping[str, list[ChunkFlowPlaceView]] | None = None
     #: Submissions by chunk id — the caller's own batched read; ``None`` makes a bounced chunk's render read its own.
     submissions: Mapping[str, list[SubmissionRecord]] | None = None
+    #: The tenant's urgencies by id, retired included, read once per response; ``None`` makes each render read them.
+    urgencies: Mapping[UrgencyId, Urgency] | None = None
 
     @classmethod
     def of(
@@ -230,6 +235,7 @@ class ChunkView:
         sources: SelectedWorkSources | None = None,
         flow_places: Mapping[str, list[ChunkFlowPlaceView]] | None = None,
         submissions: Mapping[str, list[SubmissionRecord]] | None = None,
+        urgencies: Mapping[UrgencyId, Urgency] | None = None,
     ) -> ChunkView:
         """The bulk-read counterpart to :meth:`of`: a fan-out list read injects
         already-fetched facts, route, pointer live-holders, runner names and projects, skipping
@@ -249,6 +255,7 @@ class ChunkView:
             sources=sources,
             flow_places=flow_places,
             submissions=submissions,
+            urgencies=urgencies,
         )
 
     def _flow_places(self) -> list[ChunkFlowPlaceView]:
@@ -259,6 +266,11 @@ class ChunkView:
             else chunk_flow_places(self.services, [self.chunk.chunk_id])
         )
         return places.get(self.chunk.chunk_id, [])
+
+    def urgency(self) -> UrgencyRef | None:
+        """The chunk's urgency reference: joined to the injected set, else to one read of the set."""
+        urgencies = self.urgencies if self.urgencies is not None else self.services.urgency_reading.by_id()
+        return urgency_ref(self.chunk.urgency_id, urgencies)
 
     def _project_fields(self) -> ProjectLabelFields:
         """The chunk's project labels: from the injected projects, else one read of its own project."""
@@ -357,6 +369,7 @@ class ChunkView:
             **self._delivery_fields(self._delivery()),
             **self._project_fields(),
             graph_name=self.names.graph_name(self.chunk.graph_id),
+            urgency=self.urgency(),
             graph_progress=[] if status in TERMINAL_STATUSES else self._graph_progress(node_id),
             latest_bounce=bounces[-1] if (bounces := self._bounces()) else None,
             bounce_count=self.facts.bounce_count(),
@@ -461,6 +474,7 @@ class ChunkView:
             default_effort=self.chunk.default_effort,
             default_harnesses=list(self.chunk.default_harnesses),
             intended_migration=self.intended_migration(),
+            urgency=self.urgency(),
             route=self._route(route, runner_names),
             escalation=self._escalation(),
             pause=self._pause(),

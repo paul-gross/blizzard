@@ -41,6 +41,7 @@ const ROUTINE: RoutineView = {
   default_model: ['claude-sonnet-5'],
   default_effort: 'medium',
   default_harnesses: [],
+  default_urgency: null,
   created_at: '2026-01-01T00:00:00Z',
   project_id: null,
   project_name: null,

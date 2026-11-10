@@ -23,6 +23,7 @@ from blizzard.hub.api.cadences import admission_refused, cadence_shape, chore_sc
 from blizzard.hub.api.deps import Services
 from blizzard.hub.api.problem_exceptions import ProblemHTTPException
 from blizzard.hub.api.project_params import PROJECT_REQUIRED, QueryProject
+from blizzard.hub.api.urgency_refs import urgency_slug
 from blizzard.hub.api.user_names import user_names
 from blizzard.hub.auth.models import ResolvedIdentity
 from blizzard.hub.auth.permissions import Permission, may_admit
@@ -54,6 +55,7 @@ from blizzard.hub.domain.projects.links import RepositoryLink
 from blizzard.hub.domain.projects.model import ProjectEdit, ProjectId
 from blizzard.hub.domain.urgency.declarations import UrgencyDeclaration, UrgencySections, urgency_color
 from blizzard.hub.domain.urgency.mark import IconShape
+from blizzard.hub.domain.urgency.model import Urgency, UrgencyId
 from blizzard.wire.cadence import CadenceDocument, CadenceScheduleDocument, ChoreDocument
 from blizzard.wire.config import (
     CadenceEntry,
@@ -337,7 +339,7 @@ def _entries(document: ConfigDocumentV2) -> DocumentEntries:
     routines: list[DeclaredRoutine] = []
     for routine in document.routines:
         # A name-only entry is the older form keyed by the name as the handle: it never touches the display name.
-        not_edits: set[str] = {"scopes", "project"}
+        not_edits: set[str] = {"scopes", "project", "default_urgency"}
         if "slug" not in routine.model_fields_set:
             not_edits.add("name")
         stated = {name: getattr(routine, name) for name in routine.model_fields_set if name not in not_edits}
@@ -350,6 +352,7 @@ def _entries(document: ConfigDocumentV2) -> DocumentEntries:
                 default_model=routine.default_model,
                 default_effort=routine.default_effort,
                 default_harnesses=routine.default_harnesses,
+                default_urgency=routine.default_urgency if "default_urgency" in routine.model_fields_set else UNSET,
                 edit=RoutineEdit(**stated),
                 project=routine.project,
                 scopes=routine.scopes if "scopes" in routine.model_fields_set else None,
@@ -391,6 +394,7 @@ def _declared_cadence(entry: CadenceEntry) -> DeclaredCadence:
             chores=chore_shapes(entry.chores) if "chores" in stated else UNSET,
         ),
         project=entry.project,
+        chore_urgencies=tuple(chore.urgency for chore in entry.chores),
     )
 
 
@@ -590,6 +594,7 @@ def export_config(
     repository_links = services.project_links.repositories_of_projects(project_ids)
     live_urgencies = services.urgency_reading.ordered()
     icons = services.urgency_reading.icons()
+    urgencies = services.urgency_reading.by_id()
     return ConfigDocumentV2(
         version=DOCUMENT_VERSION,
         urgencies=[
@@ -635,12 +640,13 @@ def export_config(
                 default_model=r.default_model,
                 default_effort=r.default_effort,
                 default_harnesses=r.default_harnesses,
+                default_urgency=urgency_slug(r.default_urgency_id, urgencies),
                 scopes=scope_links[r.routine_id],
                 project=slug_of[r.project_id],
             )
             for r in live_routines
         ],
-        cadences=[_cadence_entry(c, slug_of[c.project_id]) for c in live_cadences],
+        cadences=[_cadence_entry(c, slug_of[c.project_id], urgencies) for c in live_cadences],
         forges=[
             ForgeEntry(slug=f.slug, name=f.name, kind=f.kind, api_base=f.fields.api_base, web_base=f.fields.web_base)
             for f in services.forge_records.list_all(include_retired=False)
@@ -691,7 +697,7 @@ def _spacing(spacing: Spacing) -> str:
     return f"{spacing.minutes}m"
 
 
-def _cadence_entry(cadence: Cadence, project: str) -> CadenceEntry:
+def _cadence_entry(cadence: Cadence, project: str, urgencies: Mapping[UrgencyId, Urgency]) -> CadenceEntry:
     """``cadence`` as the entry that declares it, every field written."""
     rhythm = cadence.rhythm
     return CadenceEntry(
@@ -710,6 +716,7 @@ def _cadence_entry(cadence: Cadence, project: str) -> CadenceEntry:
                 mode=chore.spec.mode,
                 note=chore.spec.note,
                 promote=chore.spec.promote,
+                urgency=urgency_slug(chore.spec.urgency_id, urgencies),
             )
             for chore in cadence.chores
         ],

@@ -2,10 +2,11 @@
 
 A chunk's pinned graph and its default model, effort, and harness set are editable through `PATCH /api/chunks/{id}` only
 while the chunk is unclaimed — `not_ready`, or `ready` with no runner holding it; any other status refuses 409. The
-PATCH can carry any of `graph_id`, `default_model`, `default_effort`, `default_harnesses`, and `intended_migration`,
-all-or-nothing: a supplied field outside its own editable window refuses the whole request — a 409 naming the field,
-except the already-moved refusal, which names the chunk and points at migration — and nothing is applied. The CLI client
-is `blizzard hub chunk set`, which requires at least one option.
+PATCH can carry any of `graph_id`, `default_model`, `default_effort`, `default_harnesses`, `intended_migration`, and
+`urgency`, all-or-nothing — the urgency with its own, wider window ([Urgency](#urgency)): a supplied field outside its
+own editable window refuses the whole request — a 409 naming the field, except the already-moved refusal, which names
+the chunk and points at migration — and nothing is applied. The CLI client is `blizzard hub chunk set`, which requires
+at least one option.
 
 ## Re-pinning the graph
 
@@ -42,3 +43,14 @@ field: independently for model, effort, and harnesses, the precedence is the gra
 chunk default, then the runner default — so a `sessions:` entry declaring only `model` still inherits the chunk's
 `default_effort` and `default_harnesses`. Deliberately, no web surface edits the defaults; read-back is `chunk show` or
 the detail payload's `default_model`/`default_effort`/`default_harnesses` fields.
+
+## Urgency
+
+`blizzard hub chunk set --urgency <urgency>`, or `urgency` on the PATCH, sets the chunk's [urgency](../urgencies.md), by
+id or slug. Its window is wider than the build properties': any chunk not yet `done` or `stopped` takes it, claimed or
+not, and a finished one refuses 409. An urgency naming none is refused `422 urgency_unknown`, a retired one
+`422 urgency_retired`, and an explicit `null` `422`, since a chunk always carries an urgency.
+
+The edit leaves the chunk's rank alone: it keeps its place in its list. Naming the urgency the chunk already carries
+writes nothing. An edit that changes the urgency publishes the queue's change beside the chunk's, so a board reading the
+queue sees it. The CLI prints the urgency it changed to.

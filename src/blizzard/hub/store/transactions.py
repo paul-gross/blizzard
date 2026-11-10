@@ -1,11 +1,12 @@
 """Tenant write units, opaque tokens, and validated adapter participation."""
 
 import json
-from collections.abc import Generator, Sequence
+from collections.abc import Callable, Generator, Sequence
 from contextlib import AbstractContextManager, contextmanager, nullcontext
 from typing import Any
 
-from sqlalchemy import Connection, event
+from sqlalchemy import Connection, Select, event
+from sqlalchemy.exc import IntegrityError
 
 from blizzard.hub.domain.chunk.model import WorkRef
 from blizzard.hub.domain.chunk.ports.exclusive import ILockedChunkRead, ILockedWorkRefRead
@@ -145,6 +146,20 @@ def connection_in(
     if transaction is not None:
         return nullcontext(connection_for(store, transaction))
     return store.write(operation) if write else store.read(operation)
+
+
+def create_in_unit(
+    conn: Connection, insert: Callable[[Connection], None], *, holder: Select[Any], taken: Exception
+) -> None:
+    """A create inside the caller's unit: a savepoint holds ``insert``, so a concurrent create that took the record's
+    name first raises ``taken`` — when ``holder`` finds the row holding it — and the unit can still be read in."""
+    try:
+        with conn.begin_nested():
+            insert(conn)
+    except IntegrityError as exc:
+        if conn.execute(holder).first() is not None:
+            raise taken from exc
+        raise
 
 
 @contextmanager

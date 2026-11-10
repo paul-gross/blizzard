@@ -33,6 +33,7 @@ from blizzard.hub.domain.chunk.ports.exclusive import IChunkExclusiveWrites, ILo
 from blizzard.hub.domain.chunk.ports.record import IWriteChunkRecordRepository
 from blizzard.hub.domain.graph.harnesses import InvalidHarnesses
 from blizzard.hub.domain.graph.model import RESERVED_TERMINAL, IReadGraphRepository, Node, TargetGraphRetired
+from blizzard.hub.domain.kernel.transactions import LockedTransaction, Transaction
 from blizzard.hub.domain.kernel.unset import UNSET
 from blizzard.hub.domain.operations.edit import (
     ChunkAlreadyMoved,
@@ -43,7 +44,10 @@ from blizzard.hub.domain.operations.edit import (
     MigrationTargetIsCurrentPin,
     is_graph_editable,
 )
+from blizzard.hub.domain.urgency.model import Urgency, UrgencyId, UrgencyRetired, UrgencyUnknown
+from blizzard.hub.domain.urgency.ports import IReadUrgencyRepository, urgency_lock
 from tests.support.scaffolding import make_graph
+from tests.support.urgency import urgency
 
 _T0 = datetime(2026, 1, 1, tzinfo=UTC)
 _CHUNK = Chunk(chunk_id="chk_1", graph_id="gr_1", work_refs=[], minted_at=_T0)
@@ -91,6 +95,9 @@ class _FakeChunkRepo:
     intended_migrations_set: list[tuple[str, IntendedMigration | None]] = field(
         default_factory=list[tuple[str, IntendedMigration | None]]
     )
+    urgencies_set: list[tuple[str, UrgencyId]] = field(default_factory=list[tuple[str, UrgencyId]])
+    #: The keys each ``locked`` call declared beside the row.
+    keys_locked: list[list[tuple[str, str]]] = field(default_factory=list[list[tuple[str, str]]])
 
     def read_facts(self, chunk_id: str) -> ChunkFacts | None:
         return self.facts
@@ -117,6 +124,9 @@ class _FakeChunkRepo:
     ) -> None:
         self.intended_migrations_set.append((chunk_id, intended))
 
+    def set_urgency(self, chunk_id: str, *, urgency_id: UrgencyId, transaction: LockedTransaction) -> None:
+        self.urgencies_set.append((chunk_id, urgency_id))
+
     def __getattr__(self, name: str) -> Any:
         raise NotImplementedError(f"EditService should not touch {name!r}")
 
@@ -133,6 +143,10 @@ class _FakeLockedChunkRead:
     def record(self, chunk_id: str) -> Chunk | None:
         return self.repo.read_record(chunk_id)
 
+    @property
+    def transaction(self) -> LockedTransaction:
+        return cast(LockedTransaction, object())
+
     def __getattr__(self, name: str) -> Any:
         raise NotImplementedError(f"EditService should not touch handle.{name!r}")
 
@@ -145,7 +159,8 @@ class _FakeExclusiveWrites:
     repo: _FakeChunkRepo
 
     @contextmanager
-    def locked(self, chunk_ids: Sequence[str]) -> Generator[ILockedChunkRead]:
+    def locked(self, chunk_ids: Sequence[str], *, keys: Sequence[tuple[str, str]] = ()) -> Generator[ILockedChunkRead]:
+        self.repo.keys_locked.append(list(keys))
         yield cast(ILockedChunkRead, _FakeLockedChunkRead(self.repo))
 
 
@@ -177,7 +192,22 @@ def _as_read_graph_repo(repo: _FakeGraphRepo) -> IReadGraphRepository:
     return cast(IReadGraphRepository, repo)
 
 
-def _service(repo: _FakeChunkRepo, graphs: _FakeGraphRepo | None = None) -> EditService:
+@dataclass
+class _FakeUrgencyRepo:
+    """Only ``get`` is live: the urgencies as the edit's lock re-reads them."""
+
+    held: dict[UrgencyId, Urgency] = field(default_factory=dict[UrgencyId, Urgency])
+
+    def get(self, urgency_id: UrgencyId, *, transaction: Transaction | None = None) -> Urgency | None:
+        return self.held.get(urgency_id)
+
+    def __getattr__(self, name: str) -> Any:
+        raise NotImplementedError(f"EditService should not touch {name!r}")
+
+
+def _service(
+    repo: _FakeChunkRepo, graphs: _FakeGraphRepo | None = None, urgencies: _FakeUrgencyRepo | None = None
+) -> EditService:
     """Build an ``EditService`` over ``repo`` with a fresh, single-test row lock (see
     module docstring — the shared-lock race is proven at the component tier).
     ``graphs`` defaults to a fake reporting no graph retired."""
@@ -185,6 +215,7 @@ def _service(repo: _FakeChunkRepo, graphs: _FakeGraphRepo | None = None) -> Edit
         record=_as_record(repo),
         graphs=_as_read_graph_repo(graphs or _FakeGraphRepo()),
         exclusive=_as_exclusive(repo),
+        urgencies=cast(IReadUrgencyRepository, urgencies or _FakeUrgencyRepo()),
     )
 
 
@@ -387,7 +418,9 @@ def test_set_graph_holds_the_locked_transaction_across_its_check_and_write() -> 
     @dataclass
     class _SpyExclusiveWrites:
         @contextmanager
-        def locked(self, chunk_ids: Sequence[str]) -> Generator[ILockedChunkRead]:
+        def locked(
+            self, chunk_ids: Sequence[str], *, keys: Sequence[tuple[str, str]] = ()
+        ) -> Generator[ILockedChunkRead]:
             calls.append("acquire")
             try:
                 yield cast(ILockedChunkRead, _FakeLockedChunkRead(repo))
@@ -398,6 +431,7 @@ def test_set_graph_holds_the_locked_transaction_across_its_check_and_write() -> 
         record=_as_record(repo),
         graphs=_as_read_graph_repo(_FakeGraphRepo()),
         exclusive=cast(IChunkExclusiveWrites, _SpyExclusiveWrites()),
+        urgencies=cast(IReadUrgencyRepository, _FakeUrgencyRepo()),
     )
 
     service.set_graph(_CHUNK, graph=_TARGET_GRAPH)
@@ -504,6 +538,91 @@ def test_edit_intended_migration_refuses_a_terminal_status(facts_factory: Callab
 
     assert excinfo.value.field == "intended_migration"
     assert repo.intended_migrations_set == []
+
+
+# --- edit() — urgency's window: any non-terminal status; it writes the column alone. ---
+
+
+_STANDARD = urgency("standard")
+_URGENT = urgency("urgent")
+_CARRYING_STANDARD = Chunk(
+    chunk_id="chk_1", graph_id="gr_1", work_refs=[], minted_at=_T0, urgency_id=_STANDARD.urgency_id
+)
+
+
+def _urgency_service(facts: ChunkFacts, *held: Urgency) -> tuple[EditService, _FakeChunkRepo]:
+    repo = _FakeChunkRepo(facts=facts, current=_CARRYING_STANDARD)
+    return _service(repo, urgencies=_FakeUrgencyRepo({u.urgency_id: u for u in held})), repo
+
+
+@pytest.mark.parametrize(
+    "facts_factory",
+    [
+        _not_ready_facts,
+        _ready_facts,
+        _running_facts,
+        _waiting_on_human_facts,
+        _needs_human_facts,
+        _paused_facts,
+        _delivering_facts,
+    ],
+    ids=["not_ready", "ready", "running", "waiting_on_human", "needs_human", "paused", "delivering"],
+)
+def test_edit_urgency_writes_on_every_non_terminal_status(facts_factory: Callable[[], ChunkFacts]) -> None:
+    service, repo = _urgency_service(facts_factory(), _URGENT)
+
+    plan = service.edit(_CARRYING_STANDARD, ChunkEdit(urgency=_URGENT))
+
+    assert repo.urgencies_set == [("chk_1", _URGENT.urgency_id)]
+    assert plan.urgency_id == _URGENT.urgency_id
+    assert repo.keys_locked == [[urgency_lock(_URGENT.urgency_id)]]
+
+
+@pytest.mark.parametrize("facts_factory", [_stopped_facts, _done_facts], ids=["stopped", "done"])
+def test_edit_urgency_refuses_a_terminal_status(facts_factory: Callable[[], ChunkFacts]) -> None:
+    service, repo = _urgency_service(facts_factory(), _URGENT)
+
+    with pytest.raises(ChunkNotEditable) as excinfo:
+        service.edit(_CARRYING_STANDARD, ChunkEdit(urgency=_URGENT))
+
+    assert excinfo.value.field == "urgency"
+    assert repo.urgencies_set == []
+
+
+def test_edit_urgency_the_chunk_already_carries_writes_nothing() -> None:
+    service, repo = _urgency_service(_ready_facts(), _STANDARD)
+
+    plan = service.edit(_CARRYING_STANDARD, ChunkEdit(urgency=_STANDARD))
+
+    assert repo.urgencies_set == []
+    assert plan.urgency_id is None
+
+
+def test_edit_urgency_retired_under_the_lock_is_refused_and_writes_nothing() -> None:
+    service, repo = _urgency_service(_ready_facts(), urgency("urgent", retired=True))
+
+    with pytest.raises(UrgencyRetired):
+        service.edit(_CARRYING_STANDARD, ChunkEdit(urgency=_URGENT))
+
+    assert repo.urgencies_set == []
+
+
+def test_edit_urgency_gone_under_the_lock_is_refused_unknown() -> None:
+    service, repo = _urgency_service(_ready_facts())
+
+    with pytest.raises(UrgencyUnknown):
+        service.edit(_CARRYING_STANDARD, ChunkEdit(urgency=_URGENT))
+
+    assert repo.urgencies_set == []
+
+
+def test_edit_without_an_urgency_locks_no_urgency_key() -> None:
+    service, repo = _urgency_service(_ready_facts())
+
+    service.edit(_CARRYING_STANDARD, ChunkEdit(default_effort="high"))
+
+    assert repo.keys_locked == [[]]
+    assert repo.urgencies_set == []
 
 
 def test_edit_intended_migration_clear_via_null_is_distinct_from_absent() -> None:

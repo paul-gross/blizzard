@@ -17,8 +17,8 @@ from blizzard.foundation.garden_proposals import (
 from blizzard.hub.domain.chunk.model import HubWorkItem, WorkItemAuthor
 from blizzard.hub.domain.garden.findings.model import Finding
 from blizzard.hub.domain.garden.proposals.closure import (
-    GardenProposalBodyWithoutMint,
     GardenProposalClosure,
+    GardenProposalMintFieldWithoutMint,
     GardenProposalPassReasonRequired,
     MintingAccept,
     accept_reason,
@@ -426,7 +426,7 @@ def test_declining_accept_records_declined_with_its_normalized_reason() -> None:
 def test_declining_accept_refuses_closed_before_a_body_override() -> None:
     with pytest.raises(GardenProposalAlreadyClosed):
         GardenProposalClosure.accepted_declining(_proposal(), _PASSED, reason=None, body="b", by="u1", at=_T1)
-    with pytest.raises(GardenProposalBodyWithoutMint):
+    with pytest.raises(GardenProposalMintFieldWithoutMint):
         GardenProposalClosure.accepted_declining(_proposal(), None, reason=None, body="b", by="u1", at=_T1)
 
 

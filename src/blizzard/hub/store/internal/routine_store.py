@@ -24,6 +24,8 @@ from blizzard.hub.domain.config.changes import ConfigChange
 from blizzard.hub.domain.config.errors import ConfigRevisionConflict
 from blizzard.hub.domain.garden.routines import IWriteRoutineRepository, Routine, RoutineSlugTakenError
 from blizzard.hub.domain.garden.scopes import ScopeMint
+from blizzard.hub.domain.kernel.transactions import Transaction
+from blizzard.hub.domain.urgency.model import UrgencyId
 
 # Appends the config audit record on the caller's connection, atomically with the write.
 # ast-grep-ignore: bzh:hub-store-adapter-imports
@@ -35,6 +37,7 @@ from blizzard.hub.store.internal.newest_fact import newest_retired_select
 from blizzard.hub.store.internal.scope_store import ensure_scope, scope_id_of
 from blizzard.hub.store.schema import routine_lifecycle_facts, routine_scopes, routines, scopes
 from blizzard.hub.store.scoped import ScopedConnections, ScopedStatements, statements_of
+from blizzard.hub.store.transactions import connection_in, create_in_unit
 
 
 @adapter_model
@@ -64,6 +67,7 @@ def _columns(stmts: ScopedStatements, routine: Routine) -> dict[str, object]:
         "default_model": MODEL.encode(routine.default_model),
         "default_effort": routine.default_effort,
         "default_harnesses": HARNESSES.encode(routine.default_harnesses),
+        "default_urgency_id": routine.default_urgency_id,
     }
 
 
@@ -171,6 +175,27 @@ def set_linked_scopes(
     append_change(conn, change)
 
 
+def clear_default_urgency(
+    conn: Connection, routine: Routine, *, from_revision: int, urgency_id: str, change: ConfigChange
+) -> bool:
+    """Clear the routine's default urgency and move its revision to ``routine.revision``, with ``change``, only while
+    it stands at ``from_revision`` still naming ``urgency_id``; whether it wrote."""
+    moved = conn.execute(
+        statements_of(conn)
+        .update(routines)
+        .where(
+            routines.c.routine_id == routine.routine_id,
+            routines.c.revision == from_revision,
+            routines.c.default_urgency_id == urgency_id,
+        )
+        .values(revision=routine.revision, default_urgency_id=None)
+    ).rowcount
+    if moved != 1:
+        return False
+    append_change(conn, change)
+    return True
+
+
 def _routine_select(stmts: ScopedStatements) -> Select[Any]:
     """Every ``routines`` column beside its default scope's slug, labelled
     ``default_scope_slug`` — the one read :meth:`RoutineStore._of` maps."""
@@ -184,12 +209,32 @@ class RoutineStore:
     def __init__(self, store: ScopedConnections) -> None:
         self._store = store
 
-    def create(self, routine: Routine, *, change: ConfigChange, scope_mint: ScopeMint | None) -> Routine:
+    def create(
+        self,
+        routine: Routine,
+        *,
+        change: ConfigChange,
+        scope_mint: ScopeMint | None,
+        transaction: Transaction | None = None,
+    ) -> Routine:
+        def insert(conn: Connection) -> None:
+            if scope_mint is not None:
+                ensure_scope(conn, scope_mint)
+            insert_routine(conn, routine, change)
+
+        if transaction is not None:
+            with connection_in(self._store, transaction, "create", write=True) as conn:
+                holder = statements_of(conn).select(routines, routines.c.routine_id)
+                create_in_unit(
+                    conn,
+                    insert,
+                    holder=holder.where(routines.c.project_id == routine.project_id, routines.c.slug == routine.slug),
+                    taken=RoutineSlugTakenError(routine.slug),
+                )
+            return routine
         try:
             with self._store.write("create", expect=(IntegrityError,)) as conn:
-                if scope_mint is not None:
-                    ensure_scope(conn, scope_mint)
-                insert_routine(conn, routine, change)
+                insert(conn)
         except IntegrityError as exc:
             # The post-write re-check: a concurrent create that took the slug first
             # loses here, and reads as the same refusal the domain's pre-check raises.
@@ -199,13 +244,47 @@ class RoutineStore:
         return routine
 
     def update(
-        self, routine: Routine, *, from_revision: int, change: ConfigChange, scope_mint: ScopeMint | None
+        self,
+        routine: Routine,
+        *,
+        from_revision: int,
+        change: ConfigChange,
+        scope_mint: ScopeMint | None,
+        transaction: Transaction | None = None,
     ) -> Routine:
-        with self._store.write("update", expect=(ConfigRevisionConflict,)) as conn:
+        with (
+            connection_in(self._store, transaction, "update", write=True)
+            if transaction is not None
+            else self._store.write("update", expect=(ConfigRevisionConflict,))
+        ) as conn:
             if scope_mint is not None:
                 ensure_scope(conn, scope_mint)
             update_routine(conn, routine, from_revision, change)
         return routine
+
+    def naming_urgency(self, urgency_id: UrgencyId, *, transaction: Transaction) -> list[Routine]:
+        with connection_in(self._store, transaction, "naming_urgency") as conn:
+            rows = conn.execute(
+                _routine_select(self._store)
+                .where(routines.c.default_urgency_id == urgency_id)
+                .order_by(routines.c.routine_id)
+            ).all()
+            retired = _retired_ids(conn, [row.routine_id for row in rows])
+        return [self._of(row, retired=row.routine_id in retired) for row in rows]
+
+    def clear_default_urgency(
+        self,
+        routine: Routine,
+        *,
+        from_revision: int,
+        urgency_id: UrgencyId,
+        change: ConfigChange,
+        transaction: Transaction,
+    ) -> bool:
+        with connection_in(self._store, transaction, "clear_default_urgency", write=True) as conn:
+            return clear_default_urgency(
+                conn, routine, from_revision=from_revision, urgency_id=urgency_id, change=change
+            )
 
     def record_lifecycle(
         self, routine: Routine, *, retired: bool, from_revision: int, at: datetime, by: str, change: ConfigChange
@@ -276,6 +355,7 @@ class RoutineStore:
             default_model=MODEL.decode(row.default_model),
             default_effort=row.default_effort,
             default_harnesses=HARNESSES.decode(row.default_harnesses),
+            default_urgency_id=row.default_urgency_id,
             revision=row.revision,
             retired=retired,
         )

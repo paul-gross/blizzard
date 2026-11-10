@@ -28,6 +28,7 @@ from blizzard.hub.auth.permissions import Permission, may_edit_chunks
 from blizzard.hub.composition import TenantServices
 from blizzard.hub.domain.config.errors import ConfigFieldError, ConfigRevisionConflict
 from blizzard.hub.domain.kernel.unset import UNSET
+from blizzard.hub.domain.urgency.chain import URGENCY_FIELD
 from blizzard.hub.domain.urgency.mark import IconShape
 from blizzard.hub.domain.urgency.model import (
     MoveTo,
@@ -36,7 +37,9 @@ from blizzard.hub.domain.urgency.model import (
     UrgencyInUse,
     UrgencyIsDefault,
     UrgencyMoveRefused,
+    UrgencyRetired,
     UrgencyShape,
+    UrgencyUnknown,
 )
 from blizzard.hub.domain.urgency.services import UrgencyView as UrgencyRead
 from blizzard.wire.urgency import (
@@ -73,6 +76,24 @@ def path_urgency(key: str, services: Services) -> Urgency:
 
 
 PathUrgency = Annotated[Urgency, Depends(path_urgency)]
+
+
+def urgency_refusal(exc: ConfigFieldError) -> ProblemHTTPException:
+    """A mint's or chunk edit's stated urgency refused, ``urgency_unknown`` or ``urgency_retired``, in the body."""
+    return ProblemHTTPException(
+        partial(problems_admin.config_field_invalid_problem, "body", exc.field, exc.message, exc.code)
+    )
+
+
+def stated_urgency(key: str | None, services: TenantServices) -> Urgency | None:
+    """The live urgency a mint request states by id or slug, checked before anything is written; ``None`` when it
+    states none. 422 ``urgency_unknown`` or ``urgency_retired`` otherwise."""
+    if key is None:
+        return None
+    try:
+        return services.urgency_reading.live(URGENCY_FIELD, key)
+    except (UrgencyUnknown, UrgencyRetired) as exc:
+        raise urgency_refusal(exc) from exc
 
 
 def _view(read: UrgencyRead) -> UrgencyView:

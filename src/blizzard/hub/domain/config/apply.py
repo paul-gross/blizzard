@@ -133,6 +133,19 @@ class ForgeDeclaration:
 
 @domain_model
 @dataclass(frozen=True)
+class UrgencyReferenceGuard:
+    """A stored urgency the write of the entry at ``section`` and ``index`` newly names, at the revision the plan read
+    it at; the writer refuses the entry as stale once that revision has moved, as a retire moves it."""
+
+    section: str
+    index: int
+    urgency_id: str
+    slug: str
+    revision: int
+
+
+@domain_model
+@dataclass(frozen=True)
 class DeclaredReferences:
     """What an entry's reference checks read: every ``(project id, slug)`` of a scope stored or declared in the
     document, the graph names that resolve to an enabled graph, and each stored routine's linked scope set by its
@@ -228,6 +241,8 @@ class ApplyPlan:
     positions: tuple[PlannedPosition, ...] = ()
     #: The keyed locks the writer declares, in their canonical order, before its first write.
     locks: tuple[tuple[str, str], ...] = ()
+    #: The urgencies the writes newly name, checked under ``locks`` before the first write.
+    guards: tuple[UrgencyReferenceGuard, ...] = ()
 
 
 @domain_model
@@ -244,6 +259,9 @@ class ConfigDeclaration:
     scopes: tuple[RecordDeclaration, ...] = ()
     routines: tuple[RecordDeclaration, ...] = ()
     cadences: tuple[RecordDeclaration, ...] = ()
+    #: The urgencies the routine and cadence writes newly name; their locks are declared beside the urgency sections'.
+    reference_guards: tuple[UrgencyReferenceGuard, ...] = ()
+    reference_locks: tuple[tuple[str, str], ...] = ()
 
 
 @domain_model
@@ -285,10 +303,11 @@ class IConfigApplyWriter(Protocol):
         dry_run: bool,
         positions: Sequence[PlannedPosition] = (),
         locks: Sequence[tuple[str, str]] = (),
+        guards: Sequence[UrgencyReferenceGuard] = (),
     ) -> None:
-        """Declare ``locks`` once, then run each write through the same in-transaction checks its per-record verb
-        runs, in order, then append each of ``positions`` while its project's landing-order sequence stands at its
-        ``from_seq``.
+        """Declare ``locks`` once and refuse the entry of the first of ``guards`` whose urgency moved, then run each
+        write through the same in-transaction checks its per-record verb runs, in order, then append each of
+        ``positions`` while its project's landing-order sequence stands at its ``from_seq``.
         With ``dry_run`` the transaction is rolled back after the last write. The first refusal aborts
         the apply as :class:`ApplyEntryRefused`, leaving the store unchanged."""
         ...
@@ -321,7 +340,8 @@ def reconcile(declaration: ConfigDeclaration, stored: StoredConfig, ctx: ChangeC
         writes=tuple(plan.writes),
         outcomes=tuple(plan.outcomes),
         positions=declaration.projects.positions,
-        locks=declaration.urgencies.locks,
+        locks=tuple(sorted({*declaration.urgencies.locks, *declaration.reference_locks})),
+        guards=declaration.reference_guards,
     )
 
 

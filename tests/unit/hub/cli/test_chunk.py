@@ -452,6 +452,7 @@ class _DetailFields(TypedDict, total=False):
     neighborhood: dict[str, list[dict[str, str | bool]]]
     route: dict[str, str | list[str]]
     cost: dict[str, float | bool]
+    urgency: dict[str, str]
 
 
 def _detail(chunk_id: str, **extra: Unpack[_DetailFields]) -> _FakeResponse:
@@ -834,3 +835,83 @@ def test_placement_verbs_post_the_anchor_when_named(verb: str) -> None:
 
     assert result.exit_code == 0, result.output
     assert calls == [(f"http://hub.local:8421/api/chunks/ch_1/{verb}", {"after_chunk_id": "ch_2"})]
+
+
+# `chunk` urgency — the list column, the get header, and the set echo.
+# --------------------------------------------------------------------------- #
+
+
+def test_chunk_list_renders_each_chunks_urgency_and_dashes_one_naming_none() -> None:
+    def fake_get(url: str, *, timeout: float, params: object | None = None) -> _FakeResponse:
+        return _FakeResponse(
+            200,
+            {
+                "chunks": [
+                    {
+                        "chunk_id": "ch_1",
+                        "status": "ready",
+                        "current_node_id": "nd_1",
+                        "cost": dict[str, float](),
+                        "urgency": {"urgency_id": "urg_1", "slug": "urgent"},
+                    },
+                    {"chunk_id": "ch_2", "status": "ready", "current_node_id": "nd_1", "cost": dict[str, float]()},
+                ],
+                "next_cursor": None,
+            },
+        )
+
+    bound = bind_stubs(get=fake_get)
+    result = bound.runner.invoke(hub_group, ["chunk", "list"])
+
+    assert result.exit_code == 0, result.output
+    lines = result.output.splitlines()
+    assert lines[0].split()[2] == "urgent"
+    assert lines[1].split()[2] == "-"
+
+
+def test_show_header_names_the_chunks_urgency() -> None:
+    def fake_get(url: str, *, timeout: float) -> _FakeResponse:
+        return _detail("ch_1", urgency={"urgency_id": "urg_1", "slug": "urgent"})
+
+    bound = bind_stubs(get=fake_get)
+    result = bound.runner.invoke(hub_group, ["chunk", "get", "ch_1"])
+
+    assert result.exit_code == 0, result.output
+    assert result.output.splitlines()[0] == "ch_1  status=not_ready  urgency=urgent  graph=gr_1"
+
+
+def test_show_header_dashes_an_urgency_the_hub_names_none() -> None:
+    def fake_get(url: str, *, timeout: float) -> _FakeResponse:
+        return _detail("ch_1")
+
+    bound = bind_stubs(get=fake_get)
+    result = bound.runner.invoke(hub_group, ["chunk", "get", "ch_1"])
+
+    assert result.exit_code == 0, result.output
+    assert "  urgency=-  " in result.output.splitlines()[0]
+
+
+def test_set_urgency_sends_it_alone_and_echoes_the_slug_the_hub_resolved() -> None:
+    """The echo names the urgency the hub's view carries, not the argument."""
+    calls: list[object] = []
+
+    def fake_patch(url: str, *, json: object, timeout: float) -> _FakeResponse:
+        calls.append(json)
+        return _FakeResponse(
+            202,
+            {
+                "chunk_id": "ch_1",
+                "graph_id": "gr_1",
+                "default_model": [],
+                "default_effort": None,
+                "intended_migration": None,
+                "urgency": {"urgency_id": "urg_1", "slug": "urgent"},
+            },
+        )
+
+    bound = bind_stubs(patch=fake_patch)
+    result = bound.runner.invoke(hub_group, ["chunk", "set", "ch_1", "--urgency", "urg_1"])
+
+    assert result.exit_code == 0, result.output
+    assert calls == [{"urgency": "urg_1"}]
+    assert "ch_1: urgency → urgent" in result.output

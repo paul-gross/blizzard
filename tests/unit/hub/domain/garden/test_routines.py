@@ -7,7 +7,9 @@ scope minting it through the real :class:`ScopeRegistry` — the
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from collections.abc import Generator, Sequence
+from contextlib import contextmanager
+from dataclasses import dataclass, field, replace
 from datetime import UTC, datetime
 from typing import Any, TypedDict, Unpack, cast
 
@@ -30,6 +32,7 @@ from blizzard.hub.domain.garden.routines import (
     RoutineSlugError,
     RoutineSlugImmutableError,
     RoutineSlugTakenError,
+    RoutineUrgencyClearing,
     require_graph_change_resolves,
     resolved_handle,
     stated_handle,
@@ -37,7 +40,12 @@ from blizzard.hub.domain.garden.routines import (
 from blizzard.hub.domain.garden.scopes import IWriteScopeRepository, Scope, ScopeMint, ScopeRegistry, ScopeSlug
 from blizzard.hub.domain.graph.harnesses import InvalidHarnesses
 from blizzard.hub.domain.graph.model import Graph, IReadGraphRepository
+from blizzard.hub.domain.kernel.transactions import IHubTransactions, Transaction
 from blizzard.hub.domain.projects.model import Project, ProjectId
+from blizzard.hub.domain.urgency.model import Urgency, UrgencyId, UrgencyRetired, UrgencyUnknown
+from blizzard.hub.domain.urgency.ports import IReadUrgencyRepository, urgency_lock
+from blizzard.hub.domain.urgency.services import UrgencyReferences
+from tests.support.urgency import urgency
 
 _PROJECT = "proj_test"
 
@@ -133,6 +141,7 @@ class _FakeRoutineRepo:
     mints: list[ScopeMint] = field(default_factory=list[ScopeMint])
     updates: list[int] = field(default_factory=list[int])
     recorded: list[tuple[str, bool, int, str]] = field(default_factory=list[tuple[str, bool, int, str]])
+    units: list[Transaction | None] = field(default_factory=list[Transaction | None])
 
     def get(self, routine_id: str) -> Routine | None:
         return self.by_id.get(routine_id)
@@ -150,14 +159,45 @@ class _FakeRoutineRepo:
             self.mints.append(scope_mint)
         return routine
 
-    def create(self, routine: Routine, *, change: ConfigChange, scope_mint: ScopeMint | None) -> Routine:
+    def create(
+        self,
+        routine: Routine,
+        *,
+        change: ConfigChange,
+        scope_mint: ScopeMint | None,
+        transaction: Transaction | None = None,
+    ) -> Routine:
+        self.units.append(transaction)
         return self._write(routine, change, scope_mint)
 
     def update(
-        self, routine: Routine, *, from_revision: int, change: ConfigChange, scope_mint: ScopeMint | None
+        self,
+        routine: Routine,
+        *,
+        from_revision: int,
+        change: ConfigChange,
+        scope_mint: ScopeMint | None,
+        transaction: Transaction | None = None,
     ) -> Routine:
         self.updates.append(from_revision)
+        self.units.append(transaction)
         return self._write(routine, change, scope_mint)
+
+    def naming_urgency(self, urgency_id: UrgencyId, *, transaction: Transaction) -> list[Routine]:
+        return [r for r in self.by_id.values() if r.default_urgency_id == urgency_id]
+
+    def clear_default_urgency(
+        self,
+        routine: Routine,
+        *,
+        from_revision: int,
+        urgency_id: UrgencyId,
+        change: ConfigChange,
+        transaction: Transaction,
+    ) -> bool:
+        self.updates.append(from_revision)
+        self._write(routine, change, None)
+        return True
 
     def record_lifecycle(
         self, routine: Routine, *, retired: bool, from_revision: int, at: datetime, by: str, change: ConfigChange
@@ -171,10 +211,53 @@ def _as_write_routines(fake: _FakeRoutineRepo) -> IWriteRoutineRepository:
     return cast(IWriteRoutineRepository, fake)
 
 
+_URGENT = UrgencyId("urg_urgent")
+
+
+@dataclass
+class _FakeUrgencies:
+    """The tenant's urgencies by slug; ``retire_under_lock`` names one a retire lands on before the read under its
+    lock."""
+
+    held: dict[str, Urgency] = field(default_factory=dict[str, Urgency])
+    retire_under_lock: str | None = None
+
+    def get(self, urgency_id: UrgencyId, *, transaction: Transaction | None = None) -> Urgency | None:
+        found = next((u for u in self.held.values() if u.urgency_id == urgency_id), None)
+        if found is not None and transaction is not None and found.slug == self.retire_under_lock:
+            return replace(found, retired=True)
+        return found
+
+    def get_by_slug(self, slug: str, *, transaction: Transaction | None = None) -> Urgency | None:
+        return self.held.get(slug)
+
+
+@dataclass
+class _FakeUnit:
+    keys: list[tuple[str, str]] = field(default_factory=list[tuple[str, str]])
+
+    def lock_set(self, *, chunks: Sequence[str] = (), keys: Sequence[tuple[str, str]] = ()) -> _FakeUnit:
+        self.keys.extend(keys)
+        return self
+
+
+@dataclass
+class _FakeTransactions:
+    opened: list[_FakeUnit] = field(default_factory=list[_FakeUnit])
+
+    @contextmanager
+    def begin(self) -> Generator[_FakeUnit, None, None]:
+        unit = _FakeUnit()
+        self.opened.append(unit)
+        yield unit
+
+
 def _authoring(
     *,
     graphs: _FakeGraphs | None = None,
     scopes: _FakeScopeRepo | None = None,
+    urgencies: _FakeUrgencies | None = None,
+    transactions: _FakeTransactions | None = None,
 ) -> tuple[RoutineAuthoring, _FakeRoutineRepo, _FakeScopeRepo, _FakeRoutineScopeRepo]:
     clock = FixedClock(instant=_T0)
     routines = _FakeRoutineRepo()
@@ -183,6 +266,10 @@ def _authoring(
         routines=_as_write_routines(routines),
         graphs=_as_read_graphs(graphs or _FakeGraphs()),
         scope_registry=ScopeRegistry(scopes=_as_write_scopes(scopes), clock=clock),
+        urgencies=UrgencyReferences(
+            urgencies=cast(IReadUrgencyRepository, urgencies or _FakeUrgencies()),
+            transactions=cast(IHubTransactions, transactions or _FakeTransactions()),
+        ),
         clock=clock,
     )
     return authoring, routines, scopes, routines.joins
@@ -482,6 +569,99 @@ def test_edit_clears_default_effort_with_null() -> None:
     routine = _create(authoring, default_effort="high")
 
     assert authoring.edit(routine, RoutineEdit(default_effort=None), _CTX).default_effort is None
+
+
+def test_edit_setting_a_default_urgency_lands_its_id_under_that_urgencys_lock() -> None:
+    transactions = _FakeTransactions()
+    authoring, routines, _, _ = _authoring(
+        urgencies=_FakeUrgencies({"urgent": urgency("urgent")}), transactions=transactions
+    )
+    routine = _create(authoring)
+
+    edited = authoring.edit(routine, RoutineEdit(default_urgency_id=_URGENT), _CTX)
+
+    assert (edited.default_urgency_id, edited.revision) == (_URGENT, 2)
+    assert routines.changes[-1].diff == (FieldChange("default_urgency_id", None, _URGENT),)
+    assert [unit.keys for unit in transactions.opened] == [[urgency_lock(UrgencyId("urg_urgent"))]]
+    assert routines.units[-1] is transactions.opened[0]
+
+
+def test_edit_clearing_the_default_urgency_with_null_opens_no_unit() -> None:
+    transactions = _FakeTransactions()
+    authoring, routines, _, _ = _authoring(
+        urgencies=_FakeUrgencies({"urgent": urgency("urgent")}), transactions=transactions
+    )
+    routine = _create(authoring, default_urgency=urgency("urgent"))
+
+    edited = authoring.edit(routine, RoutineEdit(default_urgency_id=None), _CTX)
+
+    assert edited.default_urgency_id is None
+    assert routines.changes[-1].diff == (FieldChange("default_urgency_id", _URGENT, None),)
+    assert len(transactions.opened) == 1
+    assert routines.units[-1] is None
+
+
+def test_edit_restating_the_default_urgency_writes_nothing() -> None:
+    authoring, routines, _, _ = _authoring(urgencies=_FakeUrgencies({"urgent": urgency("urgent")}))
+    routine = _create(authoring, default_urgency=urgency("urgent"))
+
+    assert authoring.edit(routine, RoutineEdit(default_urgency_id=_URGENT), _CTX) is routine
+    assert routines.updates == []
+
+
+def test_an_edit_leaving_a_retired_default_urgency_takes_no_urgency_lock_and_leaves_the_revision_to_guard() -> None:
+    transactions = _FakeTransactions()
+    urgencies = _FakeUrgencies({"urgent": urgency("urgent")}, retire_under_lock="urgent")
+    authoring, routines, _, _ = _authoring(urgencies=urgencies, transactions=transactions)
+    routine = replace(_create(authoring), default_urgency_id=_URGENT)
+    opened = len(transactions.opened)
+
+    edited = authoring.edit(routine, RoutineEdit(name="renamed"), _CTX)
+
+    assert (edited.name, edited.default_urgency_id) == ("renamed", _URGENT)
+    assert len(transactions.opened) == opened
+    assert routines.updates == [routine.revision]
+
+
+@pytest.mark.parametrize(
+    ("held", "refusal"),
+    [({}, UrgencyUnknown), ({"urgent": urgency("urgent", retired=True)}, UrgencyRetired)],
+)
+def test_edit_naming_an_unknown_or_retired_urgency_is_refused_naming_the_field(
+    held: dict[str, Urgency], refusal: type[ConfigFieldError]
+) -> None:
+    authoring, routines, _, _ = _authoring(urgencies=_FakeUrgencies(held))
+    routine = _create(authoring)
+
+    with pytest.raises(refusal) as exc_info:
+        authoring.edit(routine, RoutineEdit(default_urgency_id=_URGENT), _CTX)
+    assert exc_info.value.field == "default_urgency"
+    assert routines.updates == []
+
+
+def test_edit_naming_an_urgency_retired_before_its_lock_is_taken_is_refused_under_the_lock() -> None:
+    urgencies = _FakeUrgencies({"urgent": urgency("urgent")}, retire_under_lock="urgent")
+    authoring, routines, _, _ = _authoring(urgencies=urgencies)
+    routine = _create(authoring)
+
+    with pytest.raises(UrgencyRetired):
+        authoring.edit(routine, RoutineEdit(default_urgency_id=_URGENT), _CTX)
+    assert routines.updates == []
+
+
+def test_a_retire_clears_each_routine_default_naming_it_with_its_own_revision_and_change() -> None:
+    authoring, routines, _, _ = _authoring(urgencies=_FakeUrgencies({"urgent": urgency("urgent")}))
+    named = _create(authoring, slug="named", default_urgency=urgency("urgent"))
+    other = _create(authoring, slug="other")
+    clearing = RoutineUrgencyClearing(routines=_as_write_routines(routines))
+
+    clearing.clear(urgency("urgent"), _CTX, at=_T0, transaction=cast(Transaction, _FakeUnit()))
+
+    cleared = routines.by_id[named.routine_id]
+    assert (cleared.default_urgency_id, cleared.revision) == (None, 2)
+    assert routines.changes[-1].record_key == "named"
+    assert routines.changes[-1].diff == (FieldChange("default_urgency_id", _URGENT, None),)
+    assert routines.by_id[other.routine_id].revision == 1
 
 
 @pytest.mark.parametrize("name", ["name", "graph_name", "default_scope_slug", "default_model", "default_harnesses"])

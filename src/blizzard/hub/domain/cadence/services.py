@@ -32,7 +32,10 @@ from blizzard.hub.domain.garden.brake import BrakeVerb
 from blizzard.hub.domain.garden.routines import IReadRoutineRepository, IReadRoutineScopeRepository
 from blizzard.hub.domain.garden.scopes import IReadScopeRepository
 from blizzard.hub.domain.graph.model import IReadGraphRepository
+from blizzard.hub.domain.kernel.transactions import Transaction
 from blizzard.hub.domain.projects.model import Project
+from blizzard.hub.domain.urgency.model import Urgency
+from blizzard.hub.domain.urgency.services import UrgencyReferences
 
 #: How many of a schedule's coming moments a cadence's view carries.
 NEXT_MOMENTS = 5
@@ -244,10 +247,13 @@ def _errand_view(
 
 class CadenceAuthoring:
     """Create and edit a cadence. A write that leaves the cadence admitting work needs ``may_admit``; one that
-    changes nothing writes nothing and asks nothing."""
+    changes nothing writes nothing and asks nothing. A write whose chores newly override with urgencies is one unit
+    holding each of those urgencies' locks, confirming each live under them (:class:`UrgencyReferences`); an override
+    the write leaves is the revision's to guard, since a retire clearing it moves the revision."""
 
-    def __init__(self, *, cadences: IWriteCadenceRepository, clock: IClock) -> None:
+    def __init__(self, *, cadences: IWriteCadenceRepository, urgencies: UrgencyReferences, clock: IClock) -> None:
         self._cadences = cadences
+        self._urgencies = urgencies
         self._clock = clock
 
     def create(self, shape: CadenceShape, *, project: Project, ctx: ChangeContext, may_admit: bool) -> Cadence:
@@ -257,7 +263,8 @@ class CadenceAuthoring:
         if self._cadences.get_by_slug(project_id, cadence.slug) is not None:
             raise CadenceSlugTakenError(cadence.slug)
         cadence.require_admission(may_admit=may_admit)
-        return self._cadences.create(cadence, change=change)
+        with self._urgencies.held(cadence.urgencies_named_beyond(None)) as transaction:
+            return self._cadences.create(cadence, change=change, transaction=transaction)
 
     def edit(
         self, cadence: Cadence, edit: CadenceEdit, ctx: ChangeContext, *, may_admit: bool, if_match: int | None = None
@@ -268,7 +275,31 @@ class CadenceAuthoring:
             return cadence
         edited, change = decided
         edited.require_admission(may_admit=may_admit)
-        return self._cadences.update(edited, from_revision=cadence.revision, change=change)
+        with self._urgencies.held(edited.urgencies_named_beyond(cadence)) as transaction:
+            return self._cadences.update(edited, from_revision=cadence.revision, change=change, transaction=transaction)
+
+
+class CadenceUrgencyClearing:
+    """A retire's clearing of the chore overrides naming the retiring urgency: each cadence keeping such a chore is
+    edited so the chore names none, with the cadence's own ``revision`` and change row, in the retire's unit."""
+
+    def __init__(self, *, cadences: IWriteCadenceRepository) -> None:
+        self._cadences = cadences
+
+    def clear(self, urgency: Urgency, ctx: ChangeContext, *, at: datetime, transaction: Transaction) -> None:
+        # A cadence a concurrent edit moved since the read is read again; one moved off the urgency drops out.
+        while naming := self._cadences.naming_urgency(urgency.urgency_id, transaction=transaction):
+            for cadence in naming:
+                decided = cadence.without_urgency(urgency.urgency_id, ctx, at=at)
+                assert decided is not None, "a cadence naming the urgency always clears"
+                cleared, change = decided
+                self._cadences.clear_urgency(
+                    cleared,
+                    from_revision=cadence.revision,
+                    urgency_id=urgency.urgency_id,
+                    change=change,
+                    transaction=transaction,
+                )
 
 
 class CadenceLifecycle:

@@ -1065,6 +1065,7 @@ def test_an_export_with_scopes_and_routines_applies_back_as_a_no_op(hub: HubHarn
             "default_model": [],
             "default_effort": None,
             "default_harnesses": [],
+            "default_urgency": None,
             "scopes": ["core", "edge"],
             "project": "default",
         }

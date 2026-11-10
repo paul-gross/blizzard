@@ -144,6 +144,7 @@ export function chunkDetail(overrides: Partial<ChunkDetail> = {}): ChunkDetail {
     graph_created_at: null,
     graph_editable: false,
     intended_migration: null,
+    urgency: null,
     landed: false,
     landed_repos: [],
     migrations: [],

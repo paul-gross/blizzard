@@ -10,6 +10,7 @@ export function queuePeekEntry(
     project_id: null,
     project_name: null,
     project_slug: null,
+    urgency: null,
     work_refs: [],
     ...overrides,
   };
@@ -25,6 +26,7 @@ export function backlogPeekEntry(
     project_id: null,
     project_name: null,
     project_slug: null,
+    urgency: null,
     work_refs: [],
     ...overrides,
   };

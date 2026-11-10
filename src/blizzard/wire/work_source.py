@@ -141,6 +141,8 @@ class WorkItemCreateRequest(BaseModel):
     title: str
     body: str
     stated_priority: WorkItemPriority = WorkItemPriority.NORMAL
+    #: The urgency the item's chunk is minted with, by id or slug; ``None`` takes the tenant's default.
+    urgency: str | None = None
 
 
 class WorkItemPatchRequest(BaseModel):

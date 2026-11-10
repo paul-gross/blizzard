@@ -17,7 +17,7 @@ from blizzard.hub.cli.command import FleetCommand
 from blizzard.hub.cli.context import CliContext
 from blizzard.hub.cli.flow import flow_label, place_label
 from blizzard.hub.cli.project_option import project_option, project_query
-from blizzard.hub.cli.views import ChunkLine, ChunkRow, Cost, Listing, pointer_label
+from blizzard.hub.cli.views import ChunkLine, ChunkRow, Cost, Listing, pointer_label, urgency_label
 from blizzard.wire.chunk import (
     DEPENDENCY_WOULD_CLOSE_CYCLE,
     DEPENDENT_NOT_EDITABLE,
@@ -41,7 +41,7 @@ class ChunkListing(Listing):
     empty = "no chunks"
 
     def line(self, row: Any) -> str:
-        return ChunkLine(row).line()
+        return ChunkLine(row, show_urgency=True).line()
 
 
 @dto
@@ -51,7 +51,9 @@ class ChunkDetail:
 
     def lines(self) -> Iterator[str]:
         body = self.body
-        yield f"{body['chunk_id']}  status={body['status']}  graph={body.get('graph_name') or body['graph_id']}"
+        graph = body.get("graph_name") or body["graph_id"]
+        urgency = urgency_label(body.get("urgency"))
+        yield f"{body['chunk_id']}  status={body['status']}  urgency={urgency}  graph={graph}"
         for place in cast(list[dict[str, Any]], body.get("flow_places") or []):
             yield f"  on {flow_label(place)} ({place['flow_id']}): {place_label(place)}"
         yield f"  node: {ChunkLine(cast(ChunkRow, body)).node}"
@@ -184,17 +186,24 @@ class Pointer(click.ParamType[str]):
     help="The project to mint the chunk in, by id or slug. Without it, the project the pointers' work sources are "
     "linked to; needed when they name none or disagree.",
 )
-def chunk_ingest(cli: CliContext, pointers: tuple[str, ...], project: str | None) -> None:
+@click.option(
+    "--urgency",
+    "urgency",
+    default=None,
+    metavar="URGENCY",
+    help="The urgency the minted chunk takes, by id or slug (default: the tenant's default urgency).",
+)
+def chunk_ingest(cli: CliContext, pointers: tuple[str, ...], project: str | None, urgency: str | None) -> None:
     """Ingest work items by token, minting a chunk.
 
-    Each POINTER is a source-native token — ``source:ref``, ``source#ref``, or a pasted
-    work item URL; a batch mints one chunk carrying every pointer. Refused when no
-    configured work source claims a token, a pointer's source is not linked to the
-    project, or another chunk already holds a pointer."""
+    Each POINTER is ``source:ref``, ``source#ref``, or a work item URL; a batch mints one chunk. Refused for an
+    unclaimed token, an unlinked source, a pointer another chunk holds, or an --urgency naming no live urgency."""
     tokens = list(pointers)
     request: dict[str, object] = {"tokens": tokens}
     if project is not None:
         request["project"] = project
+    if urgency is not None:
+        request["urgency"] = urgency
     resp = cli.send("post", "/api/chunks", json_body=request)
     refusal = refusal_of(resp)
     if refusal.type == POINTER_ALREADY_HELD:
@@ -235,6 +244,13 @@ def chunk_ingest(cli: CliContext, pointers: tuple[str, ...], project: str | None
         "that resolves at session mint wins."
     ),
 )
+@click.option(
+    "--urgency",
+    "urgency",
+    default=None,
+    metavar="URGENCY",
+    help="Set CHUNK's urgency, by id or slug. Leaves its place in its list where it was.",
+)
 def chunk_set(
     cli: CliContext,
     chunk_id: str,
@@ -242,15 +258,15 @@ def chunk_set(
     default_model: tuple[str, ...],
     default_effort: str | None,
     default_harnesses: tuple[str, ...],
+    urgency: str | None,
 ) -> None:
-    """Repin CHUNK's graph and/or default model/effort/harnesses in one call.
+    """Repin CHUNK's graph, default model/effort/harnesses, and/or urgency in one call.
 
-    The given fields apply together or not at all; at least one option is required.
-    Defaults are refused once a runner has claimed CHUNK, and ``--graph`` once CHUNK is
-    claimed or has moved off its first node."""
-    if graph_id is None and not default_model and default_effort is None and not default_harnesses:
+    The fields apply together or not at all. Defaults are refused once CHUNK is claimed, ``--graph`` once it is
+    claimed or off its first node, ``--urgency`` once it is done or stopped or naming no live urgency."""
+    if graph_id is None and not default_model and default_effort is None and not default_harnesses and urgency is None:
         raise click.UsageError(
-            "at least one of --graph/--default-model/--default-effort/--default-harnesses is required"
+            "at least one of --graph/--default-model/--default-effort/--default-harnesses/--urgency is required"
         )
     body: dict[str, object] = {}
     if graph_id is not None:
@@ -261,6 +277,8 @@ def chunk_set(
         body["default_effort"] = default_effort
     if default_harnesses:
         body["default_harnesses"] = list(default_harnesses)
+    if urgency is not None:
+        body["urgency"] = urgency
     resp = cli.patch(
         f"/api/chunks/{chunk_id}",
         "PATCH /chunks/{id}",
@@ -276,6 +294,8 @@ def chunk_set(
         parts.append(f"default effort → {view.get('default_effort') or '-'}")
     if default_harnesses:
         parts.append(f"default harnesses → {', '.join(view.get('default_harnesses') or []) or '-'}")
+    if urgency is not None:
+        parts.append(f"urgency → {urgency_label(view.get('urgency'))}")
     cli.show_lines(view, f"{chunk_id}: {', '.join(parts)}")
 
 

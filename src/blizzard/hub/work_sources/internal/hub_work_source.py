@@ -13,6 +13,7 @@ from blizzard.hub.domain.garden.proposals.resolution import GardenProposalDelive
 from blizzard.hub.domain.graph.model import Graph
 from blizzard.hub.domain.kernel.hub_source import RESERVED_HUB_SOURCE_NAME
 from blizzard.hub.domain.projects.model import ProjectId
+from blizzard.hub.domain.urgency.model import Urgency
 from blizzard.hub.domain.work_items.editing import CreatedWorkItem, WithdrawnWorkItem, WorkItemEditService
 from blizzard.hub.domain.work_items.model import WorkItemEdit, is_readable
 from blizzard.hub.domain.work_items.ports import IReadWorkItemRepository
@@ -129,6 +130,7 @@ class HubWorkSource:
         stated_priority: WorkItemPriority | None,
         graph: Graph,
         project_id: ProjectId,
+        urgency: Urgency | None = None,
     ) -> CreatedWorkItem:
         return self._edits.create(
             source=RESERVED_HUB_SOURCE_NAME,
@@ -138,6 +140,7 @@ class HubWorkSource:
             stated_priority=stated_priority,
             graph=graph,
             project_id=project_id,
+            urgency=urgency,
         )
 
     def edit(self, pointer: WorkRef, edit: WorkItemEdit) -> HubWorkItem:

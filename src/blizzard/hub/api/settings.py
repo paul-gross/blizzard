@@ -23,7 +23,7 @@ from blizzard.hub.domain.config.errors import ConfigFieldError, ConfigRevisionCo
 from blizzard.hub.domain.kernel.unset import UNSET
 from blizzard.hub.domain.urgency.services import SettingsView as SettingsRead
 from blizzard.hub.domain.urgency.settings import DEFAULT_URGENCY_FIELD, TenantSettings
-from blizzard.wire.urgency import SettingsDefaultView, SettingsPatchRequest, SettingsView
+from blizzard.wire.urgency import SettingsPatchRequest, SettingsView, UrgencyRef
 
 router = APIRouter(
     prefix="/api/settings",
@@ -34,7 +34,7 @@ router = APIRouter(
 
 def _view(read: SettingsRead) -> SettingsView:
     return SettingsView(
-        default_urgency=SettingsDefaultView(urgency_id=read.default.urgency_id, slug=read.default.slug),
+        default_urgency=UrgencyRef(urgency_id=read.default.urgency_id, slug=read.default.slug),
         revision=read.settings.revision,
         updated_at=iso_utc(read.settings.updated_at),
         updated_by=read.settings.updated_by,

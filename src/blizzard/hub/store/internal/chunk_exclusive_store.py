@@ -141,9 +141,11 @@ class ChunkExclusiveWrites:
         return self._registry
 
     @contextmanager
-    def locked(self, chunk_ids: Sequence[str]) -> Generator[ILockedChunkRead, None, None]:
+    def locked(
+        self, chunk_ids: Sequence[str], *, keys: Sequence[tuple[str, str]] = ()
+    ) -> Generator[ILockedChunkRead, None, None]:
         with self._transactions.begin() as transaction:
-            locked = transaction.lock_chunks(chunk_ids)
+            locked = transaction.lock_set(chunks=chunk_ids, keys=keys)
             yield LockedChunkTransaction(
                 self._store, locked, self._facts, self._record, self._dependencies, self._registry
             )

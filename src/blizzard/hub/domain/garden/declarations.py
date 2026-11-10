@@ -28,6 +28,7 @@ from blizzard.hub.domain.garden.routines import (
 )
 from blizzard.hub.domain.garden.scopes import Scope, ScopeEdit, ScopeSlug, ScopeSlugError
 from blizzard.hub.domain.graph.harnesses import InvalidHarnesses, validated_harnesses
+from blizzard.hub.domain.urgency.model import UrgencyId
 
 
 @domain_model
@@ -87,6 +88,7 @@ class RoutineDeclaration:
     edit: RoutineEdit
     project_id: str
     scopes: Sequence[str] | None = None
+    default_urgency_id: UrgencyId | None = None
 
     @property
     def handle(self) -> str:
@@ -138,6 +140,7 @@ class RoutineDeclaration:
             default_model=self.default_model,
             default_effort=self.default_effort,
             default_harnesses=self.default_harnesses,
+            default_urgency_id=self.default_urgency_id,
             ctx=ctx,
             at=at,
         )

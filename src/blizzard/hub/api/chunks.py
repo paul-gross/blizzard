@@ -31,6 +31,7 @@ from blizzard.hub.api.problem_exceptions import ProblemHTTPException
 from blizzard.hub.api.problem_rendering import declared_problem_response
 from blizzard.hub.api.project_label_fields import project_label_fields
 from blizzard.hub.api.project_params import QueryProject, body_project, project_of_call, project_ref
+from blizzard.hub.api.urgencies import stated_urgency, urgency_refusal
 from blizzard.hub.api.work_item_reads import read_chunk_work_items
 from blizzard.hub.auth.models import ResolvedIdentity
 from blizzard.hub.auth.permissions import Permission
@@ -83,6 +84,7 @@ from blizzard.hub.domain.operations.restart import (
 )
 from blizzard.hub.domain.operations.stop import ChunkNotStoppable
 from blizzard.hub.domain.projects.model import ProjectId
+from blizzard.hub.domain.urgency.model import UrgencyRetired, UrgencyUnknown
 from blizzard.hub.work_sources.registry import SelectedWorkSources
 from blizzard.wire.chunk import (
     BlockedView,
@@ -183,16 +185,14 @@ def ingest_project_refusal(
     dependencies=[Depends(require(Permission.CHUNK_INGEST))],
 )
 def ingest_chunk(request: ChunkIngestRequest, services: Services, http_request: Request) -> object:
-    """Ingest by source-native token into the project named, or the one the tokens' sources
-    agree on; 422 on a project the tenant does not hold, a token no configured source
-    claims, a project the tokens leave open (``project_required``), a source the
-    project is not linked to (``source_not_linked``) and a hub item recorded in another
-    project; 409 on a pointer held by a live chunk;
-    503 if every graph named after the packaged default has been retired (the operator's
-    brake, not a code bug: re-enable one or mint a new one)."""
+    """Ingest by source-native token into the project named, or the one the tokens' sources agree on. 422 on an
+    unheld project, an unclaimed token, ``project_required``, ``source_not_linked``, a hub item of another project,
+    or ``urgency_unknown``/``urgency_retired``; 409 on a pointer a live chunk holds; 503 when every default-named
+    graph is retired (the operator's brake: re-enable one or mint a new one)."""
     # Resolution before minting, and before the live-holder check: an unresolvable
     # token should not consult the store, and the request rejects as a whole.
     named = body_project(request.project, services).project_id if request.project is not None else None
+    urgency = stated_urgency(request.urgency, services)
     pointers: list[WorkRef] = []
     for token in request.tokens:
         pointer = services.work_sources.resolve(token)
@@ -222,7 +222,9 @@ def ingest_chunk(request: ChunkIngestRequest, services: Services, http_request: 
     except DefaultGraphRetired as exc:
         raise ProblemHTTPException(partial(problems_chunks.default_graph_retired_problem, str(exc))) from exc
     try:
-        chunk_id = services.ingest.ingest(pointers, graph=graph, project=project)
+        chunk_id = services.ingest.ingest(pointers, graph=graph, project=project, urgency=urgency)
+    except (UrgencyUnknown, UrgencyRetired) as exc:  # retired after the edge's check
+        raise urgency_refusal(exc) from exc
     except IngestSourceNotLinked as exc:  # unlinked after the project was chosen
         return ingest_project_refusal(http_request, services, exc)
     except IngestConflict as exc:
@@ -319,6 +321,8 @@ def list_chunks(
     runner_names = services.registry.names_for(
         route.runner_id for chunk in page_chunks if (route := routes.get(chunk.chunk_id)) is not None
     )
+    # The tenant's urgencies — one read of the set, joined to every row.
+    urgencies = services.urgency_reading.by_id()
     # The page's projects — one batched read, narrowed to the page.
     projects = services.projects.get_many(sorted({c.project_id for c in page_chunks if c.project_id is not None}))
     # Config revisions are read once per distinct source on each request, never cached across requests.
@@ -353,6 +357,7 @@ def list_chunks(
                 sources=sources,
                 flow_places=flow_places,
                 submissions=submissions,
+                urgencies=urgencies,
             ).summary()
             for chunk in page_chunks
         ],
@@ -864,16 +869,15 @@ def demote_chunk(chunk_id: str, services: Services, request: ChunkPlacementReque
     dependencies=[Depends(require(Permission.CHUNK_CONTROL))],
 )
 def patch_chunk(chunk_id: str, request: ChunkPatchRequest, services: Services) -> ChunkPatchResponse:
-    """Apply the body's fields in one all-or-nothing edit.
-
-    404 for an unknown chunk or an unresolvable graph, 422 for a blank value, 409 for a
-    refused edit."""
+    """Apply the body's fields in one all-or-nothing edit; an urgency change also publishes the queue's change.
+    404 for an unknown chunk or an unresolvable graph, 422 for a blank value, ``urgency_unknown``/``urgency_retired``,
+    or a ``null`` ``urgency``; 409 for a refused edit."""
     chunk = services.chunks.record.get(chunk_id)
     if chunk is None:
         raise ProblemHTTPException(partial(problems.chunk_not_found_problem, chunk_id))
     change = chunk_events.ChunkChanged.before(services, chunk_id)
     try:
-        ChunkPatchBody(request, services).apply(chunk)
+        plan = ChunkPatchBody(request, services).apply(chunk)
     except ChunkNotFound as exc:
         raise ProblemHTTPException(partial(problems.chunk_disappeared_problem, exc)) from exc
     except ChunkNotEditable as exc:
@@ -890,13 +894,17 @@ def patch_chunk(chunk_id: str, request: ChunkPatchRequest, services: Services) -
     updated = services.chunks.record.get(chunk_id)
     assert updated is not None, "the chunk existed a moment ago and this edit does not delete chunks"
     facts = change.publish(cause="edited")
+    if plan.urgency_id is not None:
+        services.events.publish_queue_changed()  # the queue views carry urgency
+    view = ChunkView.of(services, updated, facts=facts)
     return ChunkPatchResponse(
         chunk_id=chunk_id,
         graph_id=updated.graph_id,
         default_model=list(updated.default_model),
         default_effort=updated.default_effort,
         default_harnesses=list(updated.default_harnesses),
-        intended_migration=ChunkView.of(services, updated, facts=facts).intended_migration(),
+        intended_migration=view.intended_migration(),
+        urgency=view.urgency(),
         **project_label_fields(
             updated.project_id, services.projects.get(updated.project_id) if updated.project_id is not None else None
         ),

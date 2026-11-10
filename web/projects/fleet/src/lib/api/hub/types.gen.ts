@@ -931,6 +931,7 @@ export type BacklogPeekEntry = {
      * Project Slug
      */
     project_slug: string | null;
+    urgency: UrgencyRef | null;
     /**
      * Work Refs
      */
@@ -1589,6 +1590,10 @@ export type ChoreDocument = {
      * Scopes
      */
     scopes?: 'all' | Array<string> | null;
+    /**
+     * Urgency
+     */
+    urgency?: string | null;
 };
 
 /**
@@ -1626,6 +1631,10 @@ export type ChoreView = {
      * Scopes Set At
      */
     scopes_set_at: string;
+    /**
+     * Urgency
+     */
+    urgency: string | null;
 };
 
 /**
@@ -2113,6 +2122,7 @@ export type ChunkDetail = {
      * Terminal
      */
     terminal: boolean;
+    urgency: UrgencyRef | null;
     /**
      * Usage
      */
@@ -2340,6 +2350,10 @@ export type ChunkIngestRequest = {
      * Tokens
      */
     tokens: Array<string>;
+    /**
+     * Urgency
+     */
+    urgency?: string | null;
 };
 
 /**
@@ -2749,6 +2763,10 @@ export type ChunkPatchRequest = {
      */
     graph_id?: string | null;
     intended_migration?: IntendedMigrationPatch | null;
+    /**
+     * Urgency
+     */
+    urgency?: string | null;
 };
 
 /**
@@ -2792,6 +2810,7 @@ export type ChunkPatchResponse = {
      * Project Slug
      */
     project_slug: string | null;
+    urgency: UrgencyRef | null;
 };
 
 /**
@@ -3055,6 +3074,7 @@ export type ChunkSummary = {
      * Terminal
      */
     terminal: boolean;
+    urgency: UrgencyRef | null;
     /**
      * Work Refs
      */
@@ -7400,6 +7420,10 @@ export type GardenProposalAcceptRequest = {
      * Reason
      */
     reason?: string | null;
+    /**
+     * Urgency
+     */
+    urgency?: string | null;
 };
 
 /**
@@ -11942,6 +11966,7 @@ export type QueuePeekEntry = {
      * Project Slug
      */
     project_slug: string | null;
+    urgency: UrgencyRef | null;
     /**
      * Work Refs
      */
@@ -13405,6 +13430,10 @@ export type RoutineCreateRequest = {
      */
     default_scope_slug: string;
     /**
+     * Default Urgency
+     */
+    default_urgency?: string | null;
+    /**
      * Graph Name
      */
     graph_name: string;
@@ -13453,7 +13482,7 @@ export type RoutineDefinitionInvalidProblem = {
  *
  * A sparse edit: an absent field is unchanged, a present one is set. A present
  * ``slug`` may only restate the current one; ``name`` sets the display name. An explicit ``null`` clears
- * ``default_effort`` and is refused on every other field.
+ * ``default_effort`` or ``default_urgency`` and is refused on every other field.
  */
 export type RoutineEditRequest = {
     /**
@@ -13472,6 +13501,10 @@ export type RoutineEditRequest = {
      * Default Scope Slug
      */
     default_scope_slug?: string | null;
+    /**
+     * Default Urgency
+     */
+    default_urgency?: string | null;
     /**
      * Graph Name
      */
@@ -13509,6 +13542,10 @@ export type RoutineEntry = {
      * Default Scope Slug
      */
     default_scope_slug: string;
+    /**
+     * Default Urgency
+     */
+    default_urgency?: string | null;
     /**
      * Graph Name
      */
@@ -13637,6 +13674,10 @@ export type RoutineRunRequest = {
      * Scope Slug
      */
     scope_slug?: string | null;
+    /**
+     * Urgency
+     */
+    urgency?: string | null;
 };
 
 /**
@@ -13751,6 +13792,10 @@ export type RoutineView = {
      * Default Scope Slug
      */
     default_scope_slug: string;
+    /**
+     * Default Urgency
+     */
+    default_urgency: string | null;
     /**
      * Graph Name
      */
@@ -15789,20 +15834,6 @@ export const SessionMode = { RESUME: 'resume', FRESH: 'fresh' } as const;
 export type SessionMode = typeof SessionMode[keyof typeof SessionMode];
 
 /**
- * SettingsDefaultView
- */
-export type SettingsDefaultView = {
-    /**
-     * Slug
-     */
-    slug: string;
-    /**
-     * Urgency Id
-     */
-    urgency_id: string;
-};
-
-/**
  * SettingsEntry
  *
  * The tenant's settings as a document states them: ``default_urgency``, by id or slug, sets the urgency every new
@@ -15834,7 +15865,7 @@ export type SettingsPatchRequest = {
  * The tenant's settings.
  */
 export type SettingsView = {
-    default_urgency: SettingsDefaultView;
+    default_urgency: UrgencyRef;
     /**
      * Revision
      */
@@ -17851,6 +17882,23 @@ export type UrgencyPositionRequest = {
 };
 
 /**
+ * UrgencyRef
+ *
+ * An urgency a chunk carries or the settings name as the default, by id and slug; a reader joins it to the
+ * tenant's urgency set for the rest.
+ */
+export type UrgencyRef = {
+    /**
+     * Slug
+     */
+    slug: string;
+    /**
+     * Urgency Id
+     */
+    urgency_id: string;
+};
+
+/**
  * UrgencyRetireRequest
  *
  * Where the retiring urgency's open chunks go, by id or slug; ``null`` or absent when none carry it.
@@ -18214,6 +18262,10 @@ export type WorkItemCreateRequest = {
      * Title
      */
     title: string;
+    /**
+     * Urgency
+     */
+    urgency?: string | null;
 };
 
 /**

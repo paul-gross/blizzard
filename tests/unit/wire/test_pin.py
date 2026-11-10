@@ -55,9 +55,9 @@ def test_attachment_request_carries_no_scope_field() -> None:
 
 def test_chunk_ingest_accepts_source_native_tokens_only() -> None:
     """Ingest has exactly one intake shape (``tokens``), beside the optional ``project`` it
-    ingests into: a second, pre-resolved ``{source, ref}`` field would reintroduce the
+    ingests into and ``urgency`` it mints with: a second, pre-resolved ``{source, ref}`` field would reintroduce the
     config-blind guess that resolving against the configured sources removes."""
-    assert set(ChunkIngestRequest.model_fields) == {"tokens", "project"}
+    assert set(ChunkIngestRequest.model_fields) == {"tokens", "project", "urgency"}
 
 
 def test_chunk_history_view_requires_all_three_history_lists() -> None:

@@ -25,6 +25,7 @@ from blizzard.hub.api.deps import Services
 from blizzard.hub.api.problem_exceptions import ProblemHTTPException
 from blizzard.hub.api.project_label_fields import project_label_fields
 from blizzard.hub.api.project_params import QueryProject
+from blizzard.hub.api.urgency_refs import urgency_ref
 from blizzard.hub.auth.permissions import Permission
 from blizzard.hub.composition import TenantServices
 from blizzard.hub.domain.chunk.dependencies import derive_blocked_prerequisites
@@ -49,6 +50,7 @@ from blizzard.hub.domain.operations.queue import (
 )
 from blizzard.hub.domain.projects.model import Project, ProjectId
 from blizzard.hub.domain.runners.registration import RunnerCapability
+from blizzard.hub.domain.urgency.model import Urgency, UrgencyId
 from blizzard.wire.chunk import WorkRefModel
 from blizzard.wire.queue import (
     BacklogPageView,
@@ -143,9 +145,13 @@ def _projects_of(services: TenantServices, entries: Iterable[QueueEntry]) -> dic
 
 
 def _entry_view[Entry: (QueuePeekEntry, BacklogPeekEntry)](
-    model: type[Entry], entry: QueueEntry, markings: Mapping[str, list[str]], projects: Mapping[ProjectId, Project]
+    model: type[Entry],
+    entry: QueueEntry,
+    markings: Mapping[str, list[str]],
+    projects: Mapping[ProjectId, Project],
+    urgencies: Mapping[UrgencyId, Urgency],
 ) -> Entry:
-    """One queue or backlog row at its whole-order position, labelled with its chunk's project."""
+    """One queue or backlog row at its whole-order position, labelled with its chunk's project and urgency."""
     chunk = entry.chunk
     project = projects.get(chunk.project_id) if chunk.project_id is not None else None
     return model(
@@ -155,6 +161,7 @@ def _entry_view[Entry: (QueuePeekEntry, BacklogPeekEntry)](
         work_refs=[WorkRefModel(source=p.source, ref=p.ref) for p in chunk.work_refs],
         blocked=blocked_view(markings.get(chunk.chunk_id)),
         **project_label_fields(chunk.project_id, project),
+        urgency=urgency_ref(chunk.urgency_id, urgencies),
     )
 
 
@@ -169,6 +176,7 @@ class ReadyQueue:
     entries: list[QueueEntry]
     markings: dict[str, list[str]]
     projects: dict[ProjectId, Project]
+    urgencies: dict[UrgencyId, Urgency]
 
     @classmethod
     def of(
@@ -188,12 +196,20 @@ class ReadyQueue:
         """The queue as ``ordered`` ranks it — a write's own decided order — decorated with
         ``statuses``' blocked markings."""
         entries = entries_of(ordered, None if project is None else {project})
-        return cls(entries, _blocked_markings(services, statuses), _projects_of(services, entries))
+        return cls(
+            entries,
+            _blocked_markings(services, statuses),
+            _projects_of(services, entries),
+            services.urgency_reading.by_id(),
+        )
 
     @property
     def view(self) -> QueuePeekResponse:
         return QueuePeekResponse(
-            entries=[_entry_view(QueuePeekEntry, entry, self.markings, self.projects) for entry in self.entries]
+            entries=[
+                _entry_view(QueuePeekEntry, entry, self.markings, self.projects, self.urgencies)
+                for entry in self.entries
+            ]
         )
 
 
@@ -223,6 +239,7 @@ class MatchedPeek:
 
     entry: MatchedEntry | None
     project: Project | None
+    urgencies: dict[UrgencyId, Urgency]
 
     @classmethod
     def of(
@@ -263,7 +280,11 @@ class MatchedPeek:
             hold_per_project=per_project,
         )
         project_id = entry.chunk.project_id if entry is not None else None
-        return cls(entry, services.projects.get(project_id) if project_id is not None else None)
+        return cls(
+            entry,
+            services.projects.get(project_id) if project_id is not None else None,
+            services.urgency_reading.by_id() if entry is not None else {},
+        )
 
     @property
     def view(self) -> QueuePeekResponse:  # ast-grep-ignore: bzh:property-delegates
@@ -281,16 +302,20 @@ class MatchedPeek:
                     # policy check covers that dimension too before one is ever selected).
                     blocked=None,
                     **project_label_fields(chunk.project_id, self.project),
+                    urgency=urgency_ref(chunk.urgency_id, self.urgencies),
                 )
             ]
         )
 
 
 def _page_view(
-    page: QueuePage, markings: Mapping[str, list[str]], projects: Mapping[ProjectId, Project]
+    page: QueuePage,
+    markings: Mapping[str, list[str]],
+    projects: Mapping[ProjectId, Project],
+    urgencies: Mapping[UrgencyId, Urgency],
 ) -> QueuePageView:
     return QueuePageView(
-        entries=[_entry_view(QueuePeekEntry, entry, markings, projects) for entry in page.entries],
+        entries=[_entry_view(QueuePeekEntry, entry, markings, projects, urgencies) for entry in page.entries],
         next_cursor=page.next_cursor,
     )
 
@@ -314,6 +339,7 @@ def get_queue(
         page,
         _blocked_markings(services, statuses, [entry.chunk.chunk_id for entry in page.entries]),
         _projects_of(services, page.entries),
+        services.urgency_reading.by_id(),
     )
 
 
@@ -356,6 +382,7 @@ class Backlog:
     entries: list[QueueEntry]
     markings: dict[str, list[str]]
     projects: dict[ProjectId, Project]
+    urgencies: dict[UrgencyId, Urgency]
 
     @classmethod
     def of(cls, services: TenantServices, statuses: Mapping[str, ChunkStatus]) -> Backlog:
@@ -366,20 +393,31 @@ class Backlog:
         """The backlog as ``ordered`` ranks it — a write's own decided order — decorated with
         ``statuses``' blocked markings."""
         entries = entries_of(ordered)
-        return cls(entries, _blocked_markings(services, statuses), _projects_of(services, entries))
+        return cls(
+            entries,
+            _blocked_markings(services, statuses),
+            _projects_of(services, entries),
+            services.urgency_reading.by_id(),
+        )
 
     @property
     def view(self) -> BacklogPeekResponse:
         return BacklogPeekResponse(
-            entries=[_entry_view(BacklogPeekEntry, entry, self.markings, self.projects) for entry in self.entries]
+            entries=[
+                _entry_view(BacklogPeekEntry, entry, self.markings, self.projects, self.urgencies)
+                for entry in self.entries
+            ]
         )
 
 
 def _backlog_page_view(
-    page: QueuePage, markings: Mapping[str, list[str]], projects: Mapping[ProjectId, Project]
+    page: QueuePage,
+    markings: Mapping[str, list[str]],
+    projects: Mapping[ProjectId, Project],
+    urgencies: Mapping[UrgencyId, Urgency],
 ) -> BacklogPageView:
     return BacklogPageView(
-        entries=[_entry_view(BacklogPeekEntry, entry, markings, projects) for entry in page.entries],
+        entries=[_entry_view(BacklogPeekEntry, entry, markings, projects, urgencies) for entry in page.entries],
         next_cursor=page.next_cursor,
     )
 
@@ -404,6 +442,7 @@ def get_backlog(
         page,
         _blocked_markings(services, statuses, [entry.chunk.chunk_id for entry in page.entries]),
         _projects_of(services, page.entries),
+        services.urgency_reading.by_id(),
     )
 
 

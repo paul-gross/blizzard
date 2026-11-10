@@ -57,8 +57,17 @@ def item_group() -> None:
     default=_DEFAULT_ITEM_SOURCE,
     help=f"Work source to author at, by id or slug (default {_DEFAULT_ITEM_SOURCE!r}, the one source with an editor).",
 )
+@click.option(
+    "--urgency",
+    "urgency",
+    default=None,
+    metavar="URGENCY",
+    help="The urgency the minted chunk takes, by id or slug (default: the tenant's default urgency).",
+)
 @project_option(required_by_hub=True)
-def item_create(cli: CliContext, title: str, body_file: str, priority: str, source: str, project: str | None) -> None:
+def item_create(
+    cli: CliContext, title: str, body_file: str, priority: str, source: str, urgency: str | None, project: str | None
+) -> None:
     """Author a fresh item at SOURCE, minting its resting chunk.
 
     --body-file may be '-' to read the body from stdin, so an agent can pipe a composed
@@ -67,7 +76,12 @@ def item_create(cli: CliContext, title: str, body_file: str, priority: str, sour
     resp = cli.send(
         "post",
         f"/api/work-sources/{source}/items",
-        json_body={"title": title, "body": body, "stated_priority": priority},
+        json_body={
+            "title": title,
+            "body": body,
+            "stated_priority": priority,
+            **({"urgency": urgency} if urgency is not None else {}),
+        },
         params=project_query(project) or None,
     )
     refusal = refusal_of(resp)

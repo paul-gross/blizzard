@@ -42,7 +42,7 @@ from blizzard.hub.domain.garden.scopes import IReadScopeRepository, Scope
 from blizzard.hub.domain.graph.model import Graph, IReadGraphRepository
 from blizzard.hub.domain.kernel.transactions import IHubTransactions
 from blizzard.hub.domain.urgency.model import UrgencyId
-from blizzard.hub.domain.urgency.services import TenantDefault, default_lock_keys
+from blizzard.hub.domain.urgency.services import MintAhead, TenantDefault
 from blizzard.hub.domain.work_items.ports import IWriteWorkItemRepository
 
 _PROJECT = "proj_test"
@@ -219,11 +219,11 @@ class _FakeTransactions:
 class _FakeDefault:
     """The tenant's default urgency: its locks named before the unit, the urgency read under them."""
 
-    def lock_keys(self) -> list[tuple[str, str]]:
-        return default_lock_keys(_DEFAULT_URGENCY)
+    def ahead(self, **_: object) -> MintAhead:
+        return MintAhead(default_id=_DEFAULT_URGENCY)
 
-    def read(self, transaction: _FakeUnit) -> _Urgency:
-        assert transaction.keys == self.lock_keys(), "the default is read under its locks"
+    def resolve(self, ahead: MintAhead, transaction: _FakeUnit) -> _Urgency:
+        assert transaction.keys == ahead.lock_keys(), "the chain is resolved under its locks"
         return _Urgency(_DEFAULT_URGENCY)
 
 

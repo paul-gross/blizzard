@@ -10,7 +10,7 @@ from blizzard.cli.get_group import GetGroup
 from blizzard.hub.cli.command import FleetCommand
 from blizzard.hub.cli.context import CliContext
 from blizzard.hub.cli.project_option import project_option, project_query
-from blizzard.hub.cli.views import Listing
+from blizzard.hub.cli.views import Listing, urgency_label
 
 
 class QueueListing(Listing):
@@ -19,7 +19,8 @@ class QueueListing(Listing):
     def line(self, row: Any) -> str:
         blocked = row.get("blocked")
         marking = f"  [blocked on {blocked['prerequisite_chunk_id']}]" if blocked else ""
-        return f"{row['position']}  {row['chunk_id']}  graph={row.get('graph_id')}{marking}"
+        urgency = urgency_label(row.get("urgency"))
+        return f"{row['position']}  {row['chunk_id']}  urgency={urgency}  graph={row.get('graph_id')}{marking}"
 
 
 @click.group("queue", cls=GetGroup)

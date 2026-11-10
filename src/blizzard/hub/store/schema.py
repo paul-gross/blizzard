@@ -748,6 +748,8 @@ routines = Table(
     Column("revision", Integer, nullable=False, server_default="1"),
     Column("tenant_id", String, ForeignKey("tenants.tenant_id", name="fk_routines_tenant_id"), nullable=False),
     Column("project_id", String, ForeignKey("projects.project_id", name="fk_routines_projects"), nullable=False),
+    # The urgency a run of the routine takes when nothing above it names one; null takes the tenant's default.
+    Column("default_urgency_id", String, nullable=True),
     UniqueConstraint("project_id", "slug", name="uq_routines_project_slug"),
 )
 
@@ -824,6 +826,8 @@ cadence_chores = Table(
     Column("position", Integer, nullable=False),
     Column("created_at", UtcDateTime, nullable=False),
     Column("tenant_id", String, ForeignKey("tenants.tenant_id", name="fk_cadence_chores_tenant_id"), nullable=False),
+    # The urgency the chore's runs take over its routine's default; null takes the routine's.
+    Column("urgency_id", String, nullable=True),
     UniqueConstraint("cadence_id", "key", name="uq_cadence_chores_cadence_key"),
 )
 

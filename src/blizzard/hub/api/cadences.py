@@ -11,7 +11,7 @@ cadence promoting its runs needs. Every view carries the cadence's attention, re
 
 from __future__ import annotations
 
-from collections.abc import Sequence
+from collections.abc import Callable, Mapping, Sequence
 from functools import partial
 from typing import Annotated, Literal
 
@@ -28,6 +28,7 @@ from blizzard.hub.api.problem_exceptions import ProblemHTTPException
 from blizzard.hub.api.project_label_fields import ProjectLabelFields
 from blizzard.hub.api.project_labels import ProjectLabels
 from blizzard.hub.api.project_params import PathProject, QueryProject
+from blizzard.hub.api.urgency_refs import urgency_slug
 from blizzard.hub.auth.models import ResolvedIdentity
 from blizzard.hub.auth.permissions import Permission, may_admit
 from blizzard.hub.composition import TenantServices
@@ -49,6 +50,7 @@ from blizzard.hub.domain.cadence.services import ErrandView
 from blizzard.hub.domain.config.errors import ConfigFieldError, ConfigRevisionConflict
 from blizzard.hub.domain.kernel.unset import UNSET
 from blizzard.hub.domain.projects.model import Project
+from blizzard.hub.domain.urgency.model import Urgency, UrgencyId
 from blizzard.wire.cadence import (
     CadenceAttentionView,
     CadenceCreateRequest,
@@ -77,8 +79,13 @@ def schedule_shape(schedule: CadenceScheduleDocument | None) -> ScheduleShape | 
     return None if schedule is None else ScheduleShape(schedule.cron, schedule.zone)
 
 
-def chore_shapes(chores: Sequence[ChoreDocument]) -> tuple[ChoreShape, ...]:
-    """The chores a request or document entry states, in the order written."""
+#: Turns the key a chore's ``urgency`` names, on its field, into the urgency's id.
+UrgencyNamer = Callable[[str, str], UrgencyId]
+
+
+def chore_shapes(chores: Sequence[ChoreDocument], urgency: UrgencyNamer | None = None) -> tuple[ChoreShape, ...]:
+    """The chores a request or document entry states, in the order written, each chore's ``urgency`` resolved by
+    ``urgency``; without one — a document, whose apply resolves them — each chore names none."""
     return tuple(
         ChoreShape(
             key=chore.key,
@@ -87,12 +94,15 @@ def chore_shapes(chores: Sequence[ChoreDocument]) -> tuple[ChoreShape, ...]:
             mode=None if chore.mode is None else chore.mode.value,
             note=chore.note,
             promote=chore.promote,
+            urgency_id=None
+            if chore.urgency is None or urgency is None
+            else urgency(f"chores[{index}].urgency", chore.urgency),
         )
-        for chore in chores
+        for index, chore in enumerate(chores)
     )
 
 
-def cadence_shape(document: CadenceDocument) -> CadenceShape:
+def cadence_shape(document: CadenceDocument, urgency: UrgencyNamer | None = None) -> CadenceShape:
     """The create shape a request or document entry states."""
     return CadenceShape(
         slug=document.slug,
@@ -100,8 +110,14 @@ def cadence_shape(document: CadenceDocument) -> CadenceShape:
         schedule=schedule_shape(document.schedule),
         spacing=document.spacing,
         anchor=document.anchor,
-        chores=chore_shapes(document.chores),
+        chores=chore_shapes(document.chores, urgency),
     )
+
+
+def _named_urgency(services: TenantServices) -> UrgencyNamer:
+    """A request names an urgency by id or slug: each resolves to the id of the urgency the tenant holds, and one
+    naming none is refused ``urgency_unknown``."""
+    return lambda field, key: services.urgency_reading.named(field, key).urgency_id
 
 
 def chore_scopes(chore: Chore) -> Literal["all"] | list[str] | None:
@@ -137,7 +153,7 @@ def _errand_view(row: ErrandView) -> CadenceErrandView:
     )
 
 
-def _cadence_view(read: CadenceRead, labels: ProjectLabelFields) -> CadenceView:
+def _cadence_view(read: CadenceRead, labels: ProjectLabelFields, urgencies: Mapping[UrgencyId, Urgency]) -> CadenceView:
     cadence = read.cadence
     rhythm = cadence.rhythm
     anchor = rhythm.effective_anchor()
@@ -160,6 +176,7 @@ def _cadence_view(read: CadenceRead, labels: ProjectLabelFields) -> CadenceView:
                 note=chore.spec.note,
                 promote=chore.spec.promote,
                 scopes_set_at=iso_utc(chore.scopes_set_at),
+                urgency=urgency_slug(chore.spec.urgency_id, urgencies),
             )
             for chore in cadence.chores
         ],
@@ -176,17 +193,22 @@ def _cadence_view(read: CadenceRead, labels: ProjectLabelFields) -> CadenceView:
 def _labelled(cadence: Cadence, services: TenantServices) -> CadenceView:
     """``cadence``'s view as a write left it, labelled from one read of its project."""
     read = services.cadence_reading.view(cadence)
-    return _cadence_view(read, ProjectLabels.read(services, [cadence.project_id]).fields(cadence.project_id))
+    return _cadence_view(
+        read,
+        ProjectLabels.read(services, [cadence.project_id]).fields(cadence.project_id),
+        services.urgency_reading.by_id(),
+    )
 
 
 def _listing(services: TenantServices, project_id: str | None, *, include_retired: bool) -> list[CadenceView]:
     reads = services.cadence_reading.list_cadences(project_id, include_retired=include_retired)
     labels = ProjectLabels.read(services, (r.cadence.project_id for r in reads))
-    return [_cadence_view(r, labels.fields(r.cadence.project_id)) for r in reads]
+    urgencies = services.urgency_reading.by_id()
+    return [_cadence_view(r, labels.fields(r.cadence.project_id), urgencies) for r in reads]
 
 
 def _unprocessable(exc: ConfigFieldError) -> HTTPException:
-    return ProblemHTTPException(partial(problems_garden.config_field_invalid_problem, exc.field, exc.message))
+    return ProblemHTTPException(partial(problems_garden.config_field_invalid_problem, exc.field, exc.message, exc.code))
 
 
 def _revision_conflict(exc: ConfigRevisionConflict) -> HTTPException:
@@ -214,7 +236,7 @@ def _create(
 ) -> CadenceView:
     try:
         cadence = services.cadence_authoring.create(
-            cadence_shape(request),
+            cadence_shape(request, _named_urgency(services)),
             project=project,
             ctx=change_context(identity, door),
             may_admit=may_admit(identity.permissions),
@@ -226,7 +248,9 @@ def _create(
     except CadenceAdmissionRefused as exc:
         raise admission_refused(exc) from exc
     read = services.cadence_reading.view(cadence)
-    return _cadence_view(read, ProjectLabels.of_project(project).fields(cadence.project_id))
+    return _cadence_view(
+        read, ProjectLabels.of_project(project).fields(cadence.project_id), services.urgency_reading.by_id()
+    )
 
 
 @project_router.post("/cadences", response_model=CadenceView, status_code=status.HTTP_201_CREATED)
@@ -240,7 +264,8 @@ def create_project_cadence(
     """Create a cadence in the project. 422 naming the field on a shape that cannot mean anything — no schedule and
     no spacing, a malformed cron, zone, spacing, anchor, or chore — or on a slug the project already holds; 403 when
     it would keep a promoting chore and the caller may not promote chunks; 404 on an unknown project. A chore whose
-    routine or scopes do not resolve is accepted, and shown in the cadence's `attention`."""
+    routine or scopes do not resolve is accepted, and shown in the cadence's `attention`; a chore's `urgency`, by id
+    or slug, is refused 422 `urgency_unknown` or `urgency_retired` when it names no urgency or a retired one."""
     return _create(request, identity, door, services, project)
 
 
@@ -277,7 +302,7 @@ def get_cadence(cadence_id: str, services: Services) -> CadenceView:
     if read is None:
         raise ProblemHTTPException(partial(problems_garden.cadence_not_found_problem, f"unknown cadence {cadence_id}"))
     labels = ProjectLabels.read(services, [read.cadence.project_id])
-    return _cadence_view(read, labels.fields(read.cadence.project_id))
+    return _cadence_view(read, labels.fields(read.cadence.project_id), services.urgency_reading.by_id())
 
 
 @router.get(
@@ -294,7 +319,7 @@ def list_cadence_errands(cadence_id: str, services: Services) -> list[CadenceErr
     return [_errand_view(row) for row in services.cadence_reading.errands(cadence)]
 
 
-def _cadence_edit(request: CadenceEditRequest) -> CadenceEdit:
+def _cadence_edit(request: CadenceEditRequest, services: TenantServices) -> CadenceEdit:
     """The sparse edit ``request`` states — only its present fields; ``chores`` may not be cleared."""
     stated = request.model_fields_set
     if "chores" in stated and request.chores is None:
@@ -304,7 +329,7 @@ def _cadence_edit(request: CadenceEditRequest) -> CadenceEdit:
         schedule=schedule_shape(request.schedule) if "schedule" in stated else UNSET,
         spacing=request.spacing if "spacing" in stated else UNSET,
         anchor=request.anchor if "anchor" in stated else UNSET,
-        chores=UNSET if request.chores is None else chore_shapes(request.chores),
+        chores=UNSET if request.chores is None else chore_shapes(request.chores, _named_urgency(services)),
     )
 
 
@@ -317,17 +342,15 @@ def edit_cadence(
     services: Services,
     if_match: Annotated[int | None, Header()] = None,
 ) -> CadenceView:
-    """Apply only the fields present — the name, the schedule, the spacing, the anchor, and the whole chore list,
-    matched to the stored chores by key so a chore whose key stays keeps its id; an explicit `null` clears
-    `schedule`, `spacing`, or `anchor`. An edit that changes nothing writes nothing. 404 on an unknown id; 422
-    naming the field on a `null` name or chore list, or a merged shape that cannot mean anything; 403 when the
-    cadence would stay live keeping a promoting chore and the caller may not promote chunks; 409 on a stale
-    `If-Match`."""
+    """Apply only the fields present; chores match the stored ones by key, keeping their ids, and `null` clears
+    `schedule`, `spacing`, or `anchor`. A no-op writes nothing. 404 unknown id; 422 naming the field on a `null` name
+    or chore list, a meaningless merged shape, or a chore `urgency` unknown or retired; 403 keeping a promoting chore
+    live without promote rights; 409 stale `If-Match`."""
     cadence = _cadence_or_404(cadence_id, services)
     try:
         edited = services.cadence_authoring.edit(
             cadence,
-            _cadence_edit(request),
+            _cadence_edit(request, services),
             change_context(identity, door),
             may_admit=may_admit(identity.permissions),
             if_match=if_match,

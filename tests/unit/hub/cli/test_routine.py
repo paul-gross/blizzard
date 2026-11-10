@@ -696,6 +696,39 @@ def test_routine_run_threads_scope_mode_and_note() -> None:
     assert post_calls[0][1] == {"scope_slug": "cold", "mode": "delta", "note": "focus on auth"}
 
 
+def test_routine_run_sends_a_named_urgency_for_this_run() -> None:
+    post_calls: list[object] = []
+
+    def fake_get(url: str, *, params: dict[str, str], timeout: float) -> _FakeResponse:
+        return _FakeResponse(200, [{"routine_id": "rtn_1", "slug": "gardening", "name": "gardening"}])
+
+    def fake_post(url: str, *, json: object, timeout: float, headers: dict[str, str] | None = None) -> _FakeResponse:
+        post_calls.append(json)
+        return _FakeResponse(
+            201,
+            {
+                "chunk_id": "ch_1",
+                "source": "hub",
+                "ref": "1",
+                "title": "t",
+                "body": "b",
+                "routine_name": "gardening",
+                "scope_slug": "cold",
+                "effective_mode": "full",
+                "downgraded": False,
+                "baseline_finding_set_id": "fins_1",
+                "baseline_revisions": {"blizzard": "a1b2c3d"},
+                "created_at": "2026-01-01T00:00:00+00:00",
+            },
+        )
+
+    bound = bind_stubs(get=_in_one_project(fake_get), post=fake_post)
+    result = bound.runner.invoke(hub_group, ["routine", "run", "gardening", "--urgency", "urgent"])
+
+    assert result.exit_code == 0, result.output
+    assert post_calls[0] == {"scope_slug": None, "mode": "full", "note": None, "urgency": "urgent"}
+
+
 def test_routine_run_names_a_downgrade_in_its_output() -> None:
     def fake_get(url: str, *, params: dict[str, str], timeout: float) -> _FakeResponse:
         return _FakeResponse(200, [{"routine_id": "rtn_1", "slug": "gardening", "name": "gardening"}])

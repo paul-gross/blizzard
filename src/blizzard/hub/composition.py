@@ -80,6 +80,7 @@ from blizzard.hub.domain.cadence.services import (
     CadenceAuthoring,
     CadenceLifecycle,
     CadenceReading,
+    CadenceUrgencyClearing,
 )
 from blizzard.hub.domain.cadence.sweep import CadenceSweep, TenantCadence
 from blizzard.hub.domain.chunk.dependencies import DependencyService
@@ -138,6 +139,7 @@ from blizzard.hub.domain.garden.routines import (
     RoutineAuthoring,
     RoutineLifecycle,
     RoutineScopeMembership,
+    RoutineUrgencyClearing,
 )
 from blizzard.hub.domain.garden.run_context import IReadRunContextRepository
 from blizzard.hub.domain.garden.runs.baselines import RoutineBaselineService
@@ -213,6 +215,7 @@ from blizzard.hub.domain.urgency.services import (
     UrgencyLifecycle,
     UrgencyOrdering,
     UrgencyReading,
+    UrgencyReferences,
 )
 from blizzard.hub.domain.work_items.closure import CloseDrainSweep, CloseIntentDrainer
 from blizzard.hub.domain.work_items.editing import WorkItemEditService
@@ -1136,6 +1139,7 @@ def build_tenant_services(stores: TenantStores, parts: TenantServiceParts, *, ev
     routine_store = RoutineStore(tenant_connections)
     routine_scope_store = RoutineScopeStore(tenant_connections)
     cadence_store = CadenceStore(tenant_connections)
+    urgency_references = UrgencyReferences(urgencies=stores.urgencies, transactions=stores.transactions)
     errand_runs_store = ErrandRunsStore(tenant_connections)
     config_authoring = build_config_authoring(stores, cipher=parts.secret_cipher, offers=forges)
     finding_set_store = FindingSetStore(tenant_connections)
@@ -1316,7 +1320,9 @@ def build_tenant_services(stores: TenantStores, parts: TenantServiceParts, *, ev
             clock=clock,
             closer_available=lambda source: work_sources.closer(source) is not None,
         ),
-        edit=EditService(record=chunk_record, graphs=graph_store, exclusive=chunk_exclusive),
+        edit=EditService(
+            record=chunk_record, graphs=graph_store, exclusive=chunk_exclusive, urgencies=stores.urgencies
+        ),
         dependencies=DependencyService(
             dependencies=chunk_dependencies,
             exclusive=chunk_exclusive,
@@ -1464,6 +1470,10 @@ def build_tenant_services(stores: TenantStores, parts: TenantServiceParts, *, ev
             chunks=stores.urgency_chunks,
             transactions=stores.transactions,
             clock=clock,
+            references=(
+                RoutineUrgencyClearing(routines=routine_store),
+                CadenceUrgencyClearing(cadences=cadence_store),
+            ),
         ),
         urgency_ordering=UrgencyOrdering(
             tenant_id=stores.scope.tenant,
@@ -1484,11 +1494,12 @@ def build_tenant_services(stores: TenantStores, parts: TenantServiceParts, *, ev
             routines=routine_store,
             graphs=graph_store,
             scope_registry=scope_registry,
+            urgencies=urgency_references,
             clock=clock,
         ),
         routine_lifecycle=RoutineLifecycle(routines=routine_store, clock=clock),
         cadences=cadence_store,
-        cadence_authoring=CadenceAuthoring(cadences=cadence_store, clock=clock),
+        cadence_authoring=CadenceAuthoring(cadences=cadence_store, urgencies=urgency_references, clock=clock),
         cadence_lifecycle=CadenceLifecycle(cadences=cadence_store, clock=clock),
         cadence_reading=CadenceReading(
             cadences=cadence_store, attention=cadence_attention, runs=errand_runs_store, clock=clock

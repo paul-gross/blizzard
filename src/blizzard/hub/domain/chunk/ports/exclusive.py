@@ -82,11 +82,14 @@ class IChunkExclusiveWrites(Protocol):
     """Opens the locked write transaction an exactly-one-wins decision and its excluded
     writers share."""
 
-    def locked(self, chunk_ids: Sequence[str]) -> AbstractContextManager[ILockedChunkRead]:
+    def locked(
+        self, chunk_ids: Sequence[str], *, keys: Sequence[tuple[str, str]] = ()
+    ) -> AbstractContextManager[ILockedChunkRead]:
         """Lock every named row, first, in sorted chunk-id order (closes cross-writer
-        deadlock on Postgres — ``bzh:store-exclusive-write``), then yield the read handle
-        bound to that one connection. A write against a locked chunk id goes through a
-        write repository's own ``*_locked`` method, taking this same handle."""
+        deadlock on Postgres — ``bzh:store-exclusive-write``), then ``keys`` in canonical order in the
+        same lock set, then yield the read handle bound to that one connection. A write against a locked
+        chunk id goes through a write repository's own ``*_locked`` method, taking this same handle, or a
+        method taking its ``transaction``."""
         ...
 
     def locked_work_refs(

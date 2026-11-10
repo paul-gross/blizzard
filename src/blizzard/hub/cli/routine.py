@@ -30,6 +30,10 @@ _ROUTINE_HARNESSES_HELP = (
 )
 
 _CLEARABLE = click.Choice(["model", "effort", "harnesses"])
+_ROUTINE_URGENCY_HELP = (
+    "The urgency a run of the routine takes when nothing above it names one, by id or slug; "
+    "without one a run takes the tenant's default."
+)
 
 
 class RoutineListing(Listing):
@@ -57,6 +61,7 @@ class RoutineDetail:
         yield f"  default model: {models}   default effort: {body.get('default_effort') or '-'}"
         harnesses = ", ".join(body.get("default_harnesses") or []) or "-"
         yield f"  default harnesses: {harnesses}"
+        yield f"  default urgency: {body.get('default_urgency') or '- (the tenant default)'}"
         yield f"  scopes: {', '.join(self.scopes)}"
 
 
@@ -73,6 +78,7 @@ def routine_group() -> None:
 @click.option("--model", "default_model", multiple=True, help=_ROUTINE_MODEL_HELP)
 @click.option("--effort", "default_effort", default=None, help="The routine's default effort.")
 @click.option("--harnesses", "default_harnesses", multiple=True, help=_ROUTINE_HARNESSES_HELP)
+@click.option("--default-urgency", "default_urgency", default=None, help=_ROUTINE_URGENCY_HELP)
 @project_option(required_by_hub=True)
 def routine_create(
     cli: CliContext,
@@ -83,6 +89,7 @@ def routine_create(
     default_model: tuple[str, ...],
     default_effort: str | None,
     default_harnesses: tuple[str, ...],
+    default_urgency: str | None,
     project: str | None,
 ) -> None:
     """Mint a routine whose slug is NAME, running GRAPH_NAME with DEFAULT_SCOPE_SLUG's scope.
@@ -101,6 +108,7 @@ def routine_create(
             "default_model": list(default_model),
             "default_effort": default_effort,
             "default_harnesses": list(default_harnesses),
+            **({"default_urgency": default_urgency} if default_urgency is not None else {}),
         },
         door=True,
     )
@@ -150,6 +158,13 @@ def routine_show(cli: CliContext, routine_id: str) -> None:
     type=_CLEARABLE,
     help="Clear a default back to unset; repeatable.",
 )
+@click.option("--default-urgency", "default_urgency", default=None, help=_ROUTINE_URGENCY_HELP)
+@click.option(
+    "--clear-default-urgency",
+    is_flag=True,
+    default=False,
+    help="Clear the routine's default urgency, so a run takes the tenant's default.",
+)
 def routine_edit(
     cli: CliContext,
     routine_id: str,
@@ -160,8 +175,10 @@ def routine_edit(
     default_effort: str | None,
     default_harnesses: tuple[str, ...],
     clear: tuple[str, ...],
+    default_urgency: str | None,
+    clear_default_urgency: bool,
 ) -> None:
-    """Change ROUTINE_ID's display name, graph, default scope, or model/effort/harnesses defaults; only the
+    """Change ROUTINE_ID's display name, graph, default scope, or model/effort/harnesses/urgency defaults; only the
     options given change, and its slug never changes.
 
     A given --model or --harnesses replaces the whole ordered list."""
@@ -174,9 +191,14 @@ def routine_edit(
             "default_model": list(default_model) or None,
             "default_effort": default_effort,
             "default_harnesses": list(default_harnesses) or None,
+            "default_urgency": default_urgency,
         }.items()
         if v is not None
     }
+    if clear_default_urgency:
+        if default_urgency is not None:
+            raise click.UsageError("--default-urgency and --clear-default-urgency contradict each other")
+        body["default_urgency"] = None
     for field in clear:
         key = f"default_{field}"
         if key in body:
@@ -293,9 +315,22 @@ def _set_routine_lifecycle(cli: CliContext, name: str, *, verb: str, by: str, pr
     help="delta downgrades to full when the routine/scope pair has recorded no baseline.",
 )
 @click.option("--note", default=None, help='A note appended to the run\'s charge as a "This run" section.')
+@click.option(
+    "--urgency",
+    "urgency",
+    default=None,
+    metavar="URGENCY",
+    help="The urgency the run's chunk takes, by id or slug, over the routine's default for this run alone.",
+)
 @project_option(required_by_hub=True)
 def routine_run(
-    cli: CliContext, name: str, scope_slug: str | None, mode: str, note: str | None, project: str | None
+    cli: CliContext,
+    name: str,
+    scope_slug: str | None,
+    mode: str,
+    note: str | None,
+    urgency: str | None,
+    project: str | None,
 ) -> None:
     """Create a work item from routine NAME (its slug) and a chunk carrying it.
 
@@ -305,7 +340,12 @@ def routine_run(
     resp = cli.send(
         "post",
         f"/api/routines/{routine_id}/run",
-        json_body={"scope_slug": scope_slug, "mode": mode, "note": note},
+        json_body={
+            "scope_slug": scope_slug,
+            "mode": mode,
+            "note": note,
+            **({"urgency": urgency} if urgency is not None else {}),
+        },
     )
     refusal = refusal_of(resp)
     if refusal.type == POINTER_ALREADY_HELD:

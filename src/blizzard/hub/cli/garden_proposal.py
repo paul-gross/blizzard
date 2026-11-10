@@ -113,21 +113,32 @@ def garden_proposal_pass(cli: CliContext, proposal_id: str, reason: str) -> None
     ),
 )
 @click.option("--no-work-item", "no_work_item", is_flag=True, default=False, help="Decline to mint a linked work item.")
+@click.option(
+    "--urgency",
+    "urgency",
+    default=None,
+    metavar="URGENCY",
+    help="The urgency the minted item's chunk takes, by id or slug (default: the tenant's default urgency).",
+)
 def garden_proposal_accept(
-    cli: CliContext, proposal_id: str, reason: str | None, body_file: str | None, no_work_item: bool
+    cli: CliContext,
+    proposal_id: str,
+    reason: str | None,
+    body_file: str | None,
+    no_work_item: bool,
+    urgency: str | None,
 ) -> None:
     """Accept PROPOSAL_ID.
 
-    Mints a linked hub work item by default, from the proposal's own body unless --body-file
-    supplies another; the body is wrapped in the "Related findings" template when the
-    proposal cites findings, and minted bare otherwise. --no-work-item mints nothing and
-    records the decline; the hub refuses it alongside --body-file, a body only a minted item
-    carries."""
+    Mints a linked hub work item from the proposal's body or --body-file, wrapped in the "Related findings"
+    template when it cites findings. --no-work-item records the decline, refused beside --body-file or --urgency."""
     json_body: dict[str, object] = {"mint_work_item": not no_work_item}
     if reason is not None:
         json_body["reason"] = reason
     if body_file is not None:
         json_body["body"] = read_body_file(body_file)
+    if urgency is not None:
+        json_body["urgency"] = urgency
     resp = cli.post(
         f"/api/garden-proposals/{proposal_id}/accept",
         "POST /garden-proposals/{id}/accept",

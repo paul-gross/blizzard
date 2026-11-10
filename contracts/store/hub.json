@@ -1,5 +1,5 @@
 {
-  "head_revision": "20261108_0900_urgencies",
+  "head_revision": "20261109_0900_urgency_references",
   "store": "hub",
   "tables": {
     "answer_deliveries": {
@@ -428,6 +428,12 @@
         "tenant_id": {
           "deprecated": null,
           "nullable": false,
+          "server_default": false,
+          "type": "String"
+        },
+        "urgency_id": {
+          "deprecated": null,
+          "nullable": true,
           "server_default": false,
           "type": "String"
         }
@@ -7348,6 +7354,12 @@
         "default_scope_id": {
           "deprecated": null,
           "nullable": false,
+          "server_default": false,
+          "type": "String"
+        },
+        "default_urgency_id": {
+          "deprecated": null,
+          "nullable": true,
           "server_default": false,
           "type": "String"
         },

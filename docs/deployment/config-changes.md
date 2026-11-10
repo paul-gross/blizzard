@@ -50,7 +50,8 @@ the tenant's id, whose `order` field lists the live order by slug before and aft
 of kind `tenant_settings`, keyed by the tenant's id, and list `default_urgency` by slug; a new tenant's `create` rows
 for its `standard` urgency and its settings come from the door of the call that created it, and those
 `blizzard hub migrate` writes for a tenant that predates urgencies from the `migration` door. None of these rows names a
-project. [urgencies.md](./urgencies.md) owns the records.
+project. [urgencies.md](./urgencies.md) owns the records. A routine's row lists its default urgency as
+`default_urgency_id`, and a cadence's row each chore's override as its `urgency_id`, by the urgency's id.
 
 A routine's scope link or unlink is an `edit` whose changed field is `scopes`. A secret's value never appears in a row,
 so a secret's `create` and `replace` list no fields. A secret's `retire` and `enable` record the secret's unchanged

@@ -723,6 +723,7 @@ export type ChunkDetail = {
      * Terminal
      */
     terminal: boolean;
+    urgency: UrgencyRef | null;
     /**
      * Usage
      */
@@ -1012,6 +1013,7 @@ export type ChunkSummary = {
      * Terminal
      */
     terminal: boolean;
+    urgency: UrgencyRef | null;
     /**
      * Work Refs
      */
@@ -4743,6 +4745,23 @@ export type UnmatchedBindingView = {
      * Workdir
      */
     workdir: string;
+};
+
+/**
+ * UrgencyRef
+ *
+ * An urgency a chunk carries or the settings name as the default, by id and slug; a reader joins it to the
+ * tenant's urgency set for the rest.
+ */
+export type UrgencyRef = {
+    /**
+     * Slug
+     */
+    slug: string;
+    /**
+     * Urgency Id
+     */
+    urgency_id: string;
 };
 
 /**

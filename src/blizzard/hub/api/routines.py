@@ -12,6 +12,7 @@ and an optional ``If-Match`` (``bzh:configured-record``). ``GET /routines/trend`
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from datetime import datetime
 from functools import partial
 from typing import Annotated
@@ -30,6 +31,8 @@ from blizzard.hub.api.problem_exceptions import ProblemHTTPException
 from blizzard.hub.api.project_label_fields import ProjectLabelFields
 from blizzard.hub.api.project_labels import ProjectLabels
 from blizzard.hub.api.project_params import CallProject, PathProject, QueryProject, project_of_call
+from blizzard.hub.api.urgencies import stated_urgency, urgency_refusal
+from blizzard.hub.api.urgency_refs import urgency_slug
 from blizzard.hub.auth.models import ResolvedIdentity
 from blizzard.hub.auth.permissions import Permission
 from blizzard.hub.composition import TenantServices
@@ -39,6 +42,7 @@ from blizzard.hub.domain.config.errors import ConfigFieldError, ConfigRevisionCo
 from blizzard.hub.domain.garden.findings.trend import Trend, TrendWindow
 from blizzard.hub.domain.garden.proposals.model import GardenProposalCounts
 from blizzard.hub.domain.garden.routines import (
+    DEFAULT_URGENCY_FIELD,
     Routine,
     RoutineDefaultScopeUnlinkError,
     RoutineEdit,
@@ -55,6 +59,7 @@ from blizzard.hub.domain.garden.runs.window import InvalidWindowError, require_u
 from blizzard.hub.domain.garden.scopes import Scope, ScopeSlug, ScopeSlugError
 from blizzard.hub.domain.graph.harnesses import InvalidHarnesses
 from blizzard.hub.domain.projects.model import Project
+from blizzard.hub.domain.urgency.model import Urgency, UrgencyId, UrgencyRetired, UrgencyUnknown
 from blizzard.wire.garden_proposal_counts import GardenProposalCountsRowView, GardenProposalCountsView
 from blizzard.wire.garden_sweeps import GardenSweepsView, MeasurementReadingView, ScopeSweepView
 from blizzard.wire.garden_trend import TrendAgeView, TrendPeriodView, TrendView
@@ -74,7 +79,7 @@ router = APIRouter(prefix="/api", tags=["routines"], dependencies=_GUARDS)
 project_router = APIRouter(prefix="/api/projects/{project}", tags=["routines"], dependencies=_GUARDS)
 
 
-def _routine_view(routine: Routine, labels: ProjectLabelFields) -> RoutineView:
+def _routine_view(routine: Routine, labels: ProjectLabelFields, urgencies: Mapping[UrgencyId, Urgency]) -> RoutineView:
     return RoutineView(
         routine_id=routine.routine_id,
         slug=routine.slug,
@@ -84,6 +89,7 @@ def _routine_view(routine: Routine, labels: ProjectLabelFields) -> RoutineView:
         default_model=list(routine.default_model),
         default_effort=routine.default_effort,
         default_harnesses=list(routine.default_harnesses),
+        default_urgency=urgency_slug(routine.default_urgency_id, urgencies),
         created_at=iso_utc(routine.created_at),
         retired=routine.retired,
         revision=routine.revision,
@@ -93,17 +99,22 @@ def _routine_view(routine: Routine, labels: ProjectLabelFields) -> RoutineView:
 
 def _labelled(routine: Routine, services: TenantServices) -> RoutineView:
     """``routine``'s view, labelled from one read of its project."""
-    return _routine_view(routine, ProjectLabels.read(services, [routine.project_id]).fields(routine.project_id))
+    return _routine_view(
+        routine,
+        ProjectLabels.read(services, [routine.project_id]).fields(routine.project_id),
+        services.urgency_reading.by_id(),
+    )
 
 
 def _listing(services: TenantServices, project_id: str | None, *, include_retired: bool) -> list[RoutineView]:
     routines = [r for r in services.routines.list_all(project_id) if include_retired or not r.retired]
     labels = ProjectLabels.read(services, (r.project_id for r in routines))
-    return [_routine_view(r, labels.fields(r.project_id)) for r in routines]
+    urgencies = services.urgency_reading.by_id()
+    return [_routine_view(r, labels.fields(r.project_id), urgencies) for r in routines]
 
 
 def _unprocessable(exc: ConfigFieldError) -> HTTPException:
-    return ProblemHTTPException(partial(problems_garden.config_field_invalid_problem, exc.field, exc.message))
+    return ProblemHTTPException(partial(problems_garden.config_field_invalid_problem, exc.field, exc.message, exc.code))
 
 
 def _revision_conflict(exc: ConfigRevisionConflict) -> HTTPException:
@@ -135,6 +146,11 @@ def _create(
 ) -> RoutineView:
     try:
         slug = ScopeSlug.parse(request.default_scope_slug)
+        urgency = (
+            None
+            if request.default_urgency is None
+            else services.urgency_reading.named(DEFAULT_URGENCY_FIELD, request.default_urgency)
+        )
         routine = services.routine_authoring.create(
             project=project,
             slug=request.slug,
@@ -145,6 +161,7 @@ def _create(
             default_model=request.default_model,
             default_effort=request.default_effort,
             default_harnesses=request.default_harnesses,
+            default_urgency=urgency,
         )
     except (
         ScopeSlugError,
@@ -157,7 +174,9 @@ def _create(
         raise _definition_refusal(exc) from exc
     except ConfigFieldError as exc:
         raise _unprocessable(exc) from exc
-    return _routine_view(routine, ProjectLabels.of_project(project).fields(routine.project_id))
+    return _routine_view(
+        routine, ProjectLabels.of_project(project).fields(routine.project_id), services.urgency_reading.by_id()
+    )
 
 
 @router.post("/routines", response_model=RoutineView, status_code=status.HTTP_201_CREATED, deprecated=True)
@@ -183,7 +202,8 @@ def create_project_routine(
     project: PathProject,
 ) -> RoutineView:
     """Mint a routine in the project, its default scope resolved or minted there; 422 on a duplicate slug in the
-    project, a malformed default scope slug, or a graph name with no enabled mint; 404 on an unknown project."""
+    project, a malformed default scope slug, or a graph name with no enabled mint, and 422 `urgency_unknown` or
+    `urgency_retired` on a `default_urgency` naming no urgency or a retired one; 404 on an unknown project."""
     return _create(request, identity, door, services, project)
 
 
@@ -457,12 +477,18 @@ def unlink_routine_scope(
     return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
-def _routine_edit(request: RoutineEditRequest) -> RoutineEdit:
-    """The sparse edit ``request`` states — only its present fields, the default scope slug parsed."""
+def _routine_edit(request: RoutineEditRequest, services: TenantServices) -> RoutineEdit:
+    """The sparse edit ``request`` states — only its present fields, the default scope slug parsed and the default
+    urgency, named by id or slug, resolved to its id."""
     present = {name: getattr(request, name) for name in request.model_fields_set}
     slug = present.get("default_scope_slug")
     if slug is not None:
         present["default_scope_slug"] = ScopeSlug.parse(slug)
+    if DEFAULT_URGENCY_FIELD in present:
+        urgency = present.pop(DEFAULT_URGENCY_FIELD)
+        present["default_urgency_id"] = (
+            None if urgency is None else services.urgency_reading.named(DEFAULT_URGENCY_FIELD, urgency).urgency_id
+        )
     return RoutineEdit(**present)
 
 
@@ -475,15 +501,14 @@ def edit_routine(
     services: Services,
     if_match: Annotated[int | None, Header()] = None,
 ) -> RoutineView:
-    """Apply only the fields present — the display name, the graph, the default scope, and the model, effort,
-    and harness defaults; an explicit `null` clears `default_effort`. A present `slug` must
-    restate the current one. An edit that changes nothing writes nothing. 404 on an unknown
-    id; 422 on a slug change, a `null` field, a malformed default scope slug, or a graph name
-    with no enabled mint; 409 on a stale `If-Match` naming the current revision."""
+    """Apply only the fields present; an explicit `null` clears `default_effort` or `default_urgency`, and a present
+    `slug` must restate the current one. A no-op writes nothing. 404 unknown id; 422 on a slug change, a `null` field,
+    a malformed default scope slug, a graph name with no enabled mint, or `urgency_unknown`/`urgency_retired`; 409 on
+    a stale `If-Match`."""
     routine = _routine_or_404(routine_id, services)
     try:
         edited = services.routine_authoring.edit(
-            routine, _routine_edit(request), change_context(identity, door), if_match=if_match
+            routine, _routine_edit(request, services), change_context(identity, door), if_match=if_match
         )
     except ConfigFieldError as exc:
         raise _unprocessable(exc) from exc
@@ -624,16 +649,11 @@ def run_routine(
     services: Services,
     identity: Annotated[ResolvedIdentity, Depends(require(Permission.CHUNK_CONTROL))],
 ) -> object:
-    """Mint and ingest a hub work item from the routine, in one act; its chunk rests ``not_ready``
-    until promoted.
-    422 on an unknown ``mode`` (request validation, before any lookup); 404 on an unknown id;
-    422 on a malformed ``scope_slug``, or an effective scope no scope row holds or outside the
-    routine's own related set (never minted); 503 on a retired routine
-    (checked before the scope is even parsed), a retired effective
-    scope, or a graph name with no
-    enabled mint (mirroring ``POST /work-sources/{source}/items``'s own
-    retired-default-graph shape); 409 on an out-of-band ingest already holding the
-    allocated ref's pointer."""
+    """Mint and ingest a hub work item from the routine; its chunk rests ``not_ready`` until promoted. 422 on an
+    unknown ``mode`` (before any lookup), a malformed, unheld, or unrelated scope, or ``urgency_unknown``/
+    ``urgency_retired`` (a stated urgency outranks the routine's default for this run); 404 unknown id; 503 on a
+    retired routine (before the scope is parsed), a retired scope, or a graph with no enabled mint; 409 on an
+    out-of-band ingest holding the allocated pointer."""
     routine = services.routines.get(routine_id)
     if routine is None:
         raise ProblemHTTPException(
@@ -643,6 +663,7 @@ def run_routine(
         services.routine_run.refuse_if_retired(routine)
     except RoutineRetiredError as exc:
         raise ProblemHTTPException(partial(problems_garden.routine_not_runnable_problem, str(exc))) from exc
+    urgency = stated_urgency(request.urgency, services)
     try:
         slug = routine.effective_scope_slug(
             ScopeSlug.parse(request.scope_slug) if request.scope_slug is not None else None
@@ -661,7 +682,10 @@ def run_routine(
             mode=request.mode,
             note=request.note,
             author=WorkItemAuthor.user(identity.user_id),
+            urgency=urgency,
         )
+    except (UrgencyUnknown, UrgencyRetired) as exc:  # retired after the edge's check
+        raise urgency_refusal(exc) from exc
     except ScopeNotRelatedError as exc:
         raise ProblemHTTPException(
             partial(

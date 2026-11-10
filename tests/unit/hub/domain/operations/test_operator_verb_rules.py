@@ -147,6 +147,7 @@ def test_each_fixture_derives_the_status_it_is_keyed_by() -> None:
         (ChunkVerb.EDIT_GRAPH_PIN, PRE_CLAIM_STATUSES),
         (ChunkVerb.EDIT_DEFAULTS, PRE_CLAIM_STATUSES),
         (ChunkVerb.EDIT_INTENDED_MIGRATION, _NON_TERMINAL),
+        (ChunkVerb.EDIT_URGENCY, _NON_TERMINAL),
         (ChunkVerb.REORDER_READY, frozenset({ChunkStatus.READY})),
         (ChunkVerb.REORDER_BACKLOG, frozenset({ChunkStatus.NOT_READY})),
     ],

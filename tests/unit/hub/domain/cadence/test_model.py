@@ -28,12 +28,15 @@ from blizzard.hub.domain.cadence.model import (
     merge_chores,
     parse_chores,
 )
+from blizzard.hub.domain.config.changes import ChangeContext, Door
 from blizzard.hub.domain.config.errors import ConfigFieldError
 from blizzard.hub.domain.garden.routines import Routine
 from blizzard.hub.domain.garden.scopes import Scope
+from blizzard.hub.domain.urgency.model import UrgencyId
 
 _AT = datetime(2026, 11, 5, 12, tzinfo=UTC)
 _LATER = _AT + timedelta(days=1)
+_URGENT = UrgencyId("urg_urgent")
 _PROJECT = "proj_test"
 
 
@@ -175,6 +178,14 @@ def test_a_kept_key_keeps_its_id_whatever_else_it_changes() -> None:
     assert (merge.added, merge.removed, merge.changed) == ((), (), ("arch",))
 
 
+def test_an_urgency_only_change_keeps_the_chores_id_and_its_scopes_stamp() -> None:
+    (held,) = _stored(_spec())
+    merge = merge_chores([held], [_spec(urgency_id=_URGENT)], at=_LATER)
+    (chore,) = merge.chores
+    assert (chore.chore_id, chore.scopes_set_at, chore.spec.urgency_id) == (held.chore_id, _AT, _URGENT)
+    assert merge.changed == ("arch",)
+
+
 def test_a_chore_restated_unchanged_is_kept_whole_and_reported_nowhere() -> None:
     (held,) = _stored(_spec())
     merge = merge_chores([held], [_spec(scopes=("b", "a"))], at=_LATER)
@@ -314,6 +325,27 @@ def test_each_chore_reports_its_own_attention_in_the_cadences_order() -> None:
 
 def _cadence(*specs: ChoreSpec, retired: bool = False) -> Cadence:
     return Cadence("cad_x", "evening", "evening", _rhythm(), _stored(*specs), _AT, _PROJECT, retired=retired)
+
+
+def test_clearing_an_urgency_edits_only_the_chores_naming_it_keeping_their_ids() -> None:
+    cadence = _cadence(_spec("arch", urgency_id=_URGENT), _spec("tests"))
+    decided = cadence.without_urgency(_URGENT, ChangeContext(actor="op", door=Door.API), at=_LATER)
+    assert decided is not None
+    cleared, change = decided
+    assert [c.spec.urgency_id for c in cleared.chores] == [None, None]
+    assert [c.chore_id for c in cleared.chores] == [c.chore_id for c in cadence.chores]
+    assert cleared.revision == cadence.revision + 1
+    assert [d.field for d in change.diff] == ["chores.arch"]
+    ctx = ChangeContext(actor="op", door=Door.API)
+    assert cadence.without_urgency(UrgencyId("urg_background"), ctx, at=_LATER) is None
+
+
+def test_a_cadence_names_each_chore_override_its_stored_form_names_on_no_chore_by_the_chores_field() -> None:
+    background = UrgencyId("urg_background")
+    held = _cadence(_spec("arch", urgency_id=background))
+    cadence = _cadence(_spec("arch", urgency_id=background), _spec("tests", urgency_id=_URGENT))
+    assert cadence.urgencies_named_beyond(None) == {"chores[0].urgency": background, "chores[1].urgency": _URGENT}
+    assert cadence.urgencies_named_beyond(held) == {"chores[1].urgency": _URGENT}
 
 
 def test_a_cadence_admits_work_only_while_live_and_keeping_a_promoting_chore() -> None:

@@ -52,13 +52,13 @@ def test_a_run_moved_when_it_is_another_or_unfinished_or_newly_there() -> None:
 
 
 def test_the_lock_set_sorts_the_errand_ahead_of_the_ranking_and_urgency_locks() -> None:
-    promoting = mint_lock_keys(_KEY, promote=True, default_id=_URGENCY)
+    promoting = mint_lock_keys(_KEY, promote=True, urgencies=default_lock_keys(_URGENCY))
     defaults = default_lock_keys(_URGENCY)
 
     assert sorted(promoting)[0][0] == ERRAND_LOCK_NAMESPACE
     assert sorted(promoting)[1:3] == sorted([READY_RANKING_LOCK, BACKLOG_RANKING_LOCK])
     assert set(promoting[1:]) == {READY_RANKING_LOCK, BACKLOG_RANKING_LOCK, *defaults}
-    assert mint_lock_keys(_KEY, promote=False, default_id=_URGENCY) == [promoting[0], *defaults]
-    assert mint_lock_keys(ErrandKey("a,b", "c"), promote=False, default_id=_URGENCY) != mint_lock_keys(
-        ErrandKey("a", "b,c"), promote=False, default_id=_URGENCY
-    )
+    assert mint_lock_keys(_KEY, promote=False, urgencies=default_lock_keys(_URGENCY)) == [promoting[0], *defaults]
+    assert mint_lock_keys(
+        ErrandKey("a,b", "c"), promote=False, urgencies=default_lock_keys(_URGENCY)
+    ) != mint_lock_keys(ErrandKey("a", "b,c"), promote=False, urgencies=default_lock_keys(_URGENCY))

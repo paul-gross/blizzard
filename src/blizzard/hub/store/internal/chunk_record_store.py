@@ -25,6 +25,7 @@ from blizzard.hub.domain.chunk.ports.record import ChunkPage, IWriteChunkRecordR
 from blizzard.hub.domain.kernel.pagination import MalformedCursor, decode_cursor, encode_cursor
 from blizzard.hub.domain.kernel.transactions import LockedTransaction, Transaction
 from blizzard.hub.domain.projects.model import ProjectId
+from blizzard.hub.domain.urgency.model import UrgencyId
 from blizzard.hub.store import schema as s
 from blizzard.hub.store.internal.chunk_rows import (
     DEFAULT_HARNESSES,
@@ -104,6 +105,11 @@ class ChunkRecordStore:
 
     def record_deleted(self, chunk_id: str, *, by: str, at: datetime, transaction: LockedTransaction) -> int:
         return record_deleted_row(connection_for(self._store, transaction, chunk=chunk_id), chunk_id, by=by, at=at)
+
+    def set_urgency(self, chunk_id: str, *, urgency_id: UrgencyId, transaction: LockedTransaction) -> None:
+        connection_for(self._store, transaction, chunk=chunk_id).execute(
+            self._store.update(s.chunks).where(s.chunks.c.chunk_id == chunk_id).values(urgency_id=urgency_id)
+        )
 
     def get(self, chunk_id: str, *, transaction: Transaction | None = None) -> Chunk | None:
         connection = connection_in(self._store, transaction, "get")

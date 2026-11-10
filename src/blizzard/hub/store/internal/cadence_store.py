@@ -34,6 +34,8 @@ from blizzard.hub.domain.cadence.ports import IWriteCadenceRepository
 from blizzard.hub.domain.cadence.schedule import Schedule
 from blizzard.hub.domain.config.changes import ConfigChange
 from blizzard.hub.domain.config.errors import ConfigRevisionConflict
+from blizzard.hub.domain.kernel.transactions import Transaction
+from blizzard.hub.domain.urgency.model import UrgencyId
 
 # Appends the config audit record on the caller's connection, atomically with the write.
 # ast-grep-ignore: bzh:hub-store-adapter-imports
@@ -41,6 +43,7 @@ from blizzard.hub.store.internal.config_change_store import append_change
 from blizzard.hub.store.internal.newest_fact import newest_retired_select
 from blizzard.hub.store.schema import cadence_chore_scopes, cadence_chores, cadence_lifecycle_facts, cadences
 from blizzard.hub.store.scoped import ScopedConnections, statements_of
+from blizzard.hub.store.transactions import connection_in, create_in_unit
 
 
 def _columns(cadence: Cadence) -> dict[str, object]:
@@ -57,6 +60,7 @@ def _columns(cadence: Cadence) -> dict[str, object]:
 def _chore_columns(chore: Chore, position: int) -> dict[str, object]:
     spec = chore.spec
     return {
+        "urgency_id": spec.urgency_id,
         "routine_slug": spec.routine_slug,
         "scope_selection": spec.selection.value,
         "scopes_set_at": chore.scopes_set_at,
@@ -171,13 +175,45 @@ def record_cadence_lifecycle(
     append_change(conn, change)
 
 
+def clear_chore_urgency(
+    conn: Connection, cadence: Cadence, *, from_revision: int, urgency_id: str, change: ConfigChange
+) -> bool:
+    """Clear every chore override of ``urgency_id`` the cadence keeps and move its revision, with ``change``, only
+    while it stands at ``from_revision``; whether it wrote."""
+    stmts = statements_of(conn)
+    moved = conn.execute(
+        stmts.update(cadences)
+        .where(cadences.c.cadence_id == cadence.cadence_id, cadences.c.revision == from_revision)
+        .values(revision=cadence.revision)
+    ).rowcount
+    if moved != 1:
+        return False
+    conn.execute(
+        stmts.update(cadence_chores)
+        .where(cadence_chores.c.cadence_id == cadence.cadence_id, cadence_chores.c.urgency_id == urgency_id)
+        .values(urgency_id=None)
+    )
+    append_change(conn, change)
+    return True
+
+
 class CadenceStore:
     """Read-write cadence adapter over the hub store engine."""
 
     def __init__(self, store: ScopedConnections) -> None:
         self._store = store
 
-    def create(self, cadence: Cadence, *, change: ConfigChange) -> Cadence:
+    def create(self, cadence: Cadence, *, change: ConfigChange, transaction: Transaction | None = None) -> Cadence:
+        if transaction is not None:
+            with connection_in(self._store, transaction, "create", write=True) as conn:
+                holder = statements_of(conn).select(cadences, cadences.c.cadence_id)
+                create_in_unit(
+                    conn,
+                    lambda unit: insert_cadence(unit, cadence, change),
+                    holder=holder.where(cadences.c.project_id == cadence.project_id, cadences.c.slug == cadence.slug),
+                    taken=CadenceSlugTakenError(cadence.slug),
+                )
+            return cadence
         try:
             with self._store.write("create", expect=(IntegrityError,)) as conn:
                 insert_cadence(conn, cadence, change)
@@ -188,10 +224,39 @@ class CadenceStore:
             raise
         return cadence
 
-    def update(self, cadence: Cadence, *, from_revision: int, change: ConfigChange) -> Cadence:
-        with self._store.write("update", expect=(ConfigRevisionConflict,)) as conn:
+    def update(
+        self, cadence: Cadence, *, from_revision: int, change: ConfigChange, transaction: Transaction | None = None
+    ) -> Cadence:
+        with (
+            connection_in(self._store, transaction, "update", write=True)
+            if transaction is not None
+            else self._store.write("update", expect=(ConfigRevisionConflict,))
+        ) as conn:
             update_cadence(conn, cadence, from_revision, change)
         return cadence
+
+    def naming_urgency(self, urgency_id: UrgencyId, *, transaction: Transaction) -> list[Cadence]:
+        with connection_in(self._store, transaction, "naming_urgency") as conn:
+            stmts = statements_of(conn)
+            naming = stmts.select(cadence_chores, cadence_chores.c.cadence_id).where(
+                cadence_chores.c.urgency_id == urgency_id
+            )
+            rows = conn.execute(
+                stmts.select(cadences).where(cadences.c.cadence_id.in_(naming)).order_by(cadences.c.cadence_id)
+            ).all()
+            return _reconstituted(conn, rows)
+
+    def clear_urgency(
+        self,
+        cadence: Cadence,
+        *,
+        from_revision: int,
+        urgency_id: UrgencyId,
+        change: ConfigChange,
+        transaction: Transaction,
+    ) -> bool:
+        with connection_in(self._store, transaction, "clear_chore_urgency", write=True) as conn:
+            return clear_chore_urgency(conn, cadence, from_revision=from_revision, urgency_id=urgency_id, change=change)
 
     def record_lifecycle(
         self, cadence: Cadence, *, retired: bool, from_revision: int, at: datetime, by: str, change: ConfigChange
@@ -270,6 +335,7 @@ def _chore_of(row: Row[Any], scopes: list[str]) -> Chore:
         mode=RunMode(row.mode),
         note=row.note,
         promote=bool(row.promote),
+        urgency_id=row.urgency_id,
     )
     return Chore(chore_id=row.chore_id, spec=spec, scopes_set_at=row.scopes_set_at)
 

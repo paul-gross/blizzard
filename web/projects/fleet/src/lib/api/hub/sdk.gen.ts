@@ -392,12 +392,10 @@ export const getCadenceApiCadencesCadenceIdGet = <ThrowOnError extends boolean =
 /**
  * Edit Cadence
  *
- * Apply only the fields present — the name, the schedule, the spacing, the anchor, and the whole chore list,
- * matched to the stored chores by key so a chore whose key stays keeps its id; an explicit `null` clears
- * `schedule`, `spacing`, or `anchor`. An edit that changes nothing writes nothing. 404 on an unknown id; 422
- * naming the field on a `null` name or chore list, or a merged shape that cannot mean anything; 403 when the
- * cadence would stay live keeping a promoting chore and the caller may not promote chunks; 409 on a stale
- * `If-Match`.
+ * Apply only the fields present; chores match the stored ones by key, keeping their ids, and `null` clears
+ * `schedule`, `spacing`, or `anchor`. A no-op writes nothing. 404 unknown id; 422 naming the field on a `null` name
+ * or chore list, a meaningless merged shape, or a chore `urgency` unknown or retired; 403 keeping a promoting chore
+ * live without promote rights; 409 stale `If-Match`.
  */
 export const editCadenceApiCadencesCadenceIdPatch = <ThrowOnError extends boolean = false>(options: Options<EditCadenceApiCadencesCadenceIdPatchData, ThrowOnError>): RequestResult<EditCadenceApiCadencesCadenceIdPatchResponses, EditCadenceApiCadencesCadenceIdPatchErrors, ThrowOnError> => (options.client ?? client).patch<EditCadenceApiCadencesCadenceIdPatchResponses, EditCadenceApiCadencesCadenceIdPatchErrors, ThrowOnError>({
     url: '/api/cadences/{cadence_id}',
@@ -474,13 +472,10 @@ export const listChunksApiChunksGet = <ThrowOnError extends boolean = false>(opt
 /**
  * Ingest Chunk
  *
- * Ingest by source-native token into the project named, or the one the tokens' sources
- * agree on; 422 on a project the tenant does not hold, a token no configured source
- * claims, a project the tokens leave open (``project_required``), a source the
- * project is not linked to (``source_not_linked``) and a hub item recorded in another
- * project; 409 on a pointer held by a live chunk;
- * 503 if every graph named after the packaged default has been retired (the operator's
- * brake, not a code bug: re-enable one or mint a new one).
+ * Ingest by source-native token into the project named, or the one the tokens' sources agree on. 422 on an
+ * unheld project, an unclaimed token, ``project_required``, ``source_not_linked``, a hub item of another project,
+ * or ``urgency_unknown``/``urgency_retired``; 409 on a pointer a live chunk holds; 503 when every default-named
+ * graph is retired (the operator's brake: re-enable one or mint a new one).
  */
 export const ingestChunkApiChunksPost = <ThrowOnError extends boolean = false>(options: Options<IngestChunkApiChunksPostData, ThrowOnError>): RequestResult<IngestChunkApiChunksPostResponses, IngestChunkApiChunksPostErrors, ThrowOnError> => (options.client ?? client).post<IngestChunkApiChunksPostResponses, IngestChunkApiChunksPostErrors, ThrowOnError>({
     url: '/api/chunks',
@@ -519,10 +514,9 @@ export const getChunkApiChunksChunkIdGet = <ThrowOnError extends boolean = false
 /**
  * Patch Chunk
  *
- * Apply the body's fields in one all-or-nothing edit.
- *
- * 404 for an unknown chunk or an unresolvable graph, 422 for a blank value, 409 for a
- * refused edit.
+ * Apply the body's fields in one all-or-nothing edit; an urgency change also publishes the queue's change.
+ * 404 for an unknown chunk or an unresolvable graph, 422 for a blank value, ``urgency_unknown``/``urgency_retired``,
+ * or a ``null`` ``urgency``; 409 for a refused edit.
  */
 export const patchChunkApiChunksChunkIdPatch = <ThrowOnError extends boolean = false>(options: Options<PatchChunkApiChunksChunkIdPatchData, ThrowOnError>): RequestResult<PatchChunkApiChunksChunkIdPatchResponses, PatchChunkApiChunksChunkIdPatchErrors, ThrowOnError> => (options.client ?? client).patch<PatchChunkApiChunksChunkIdPatchResponses, PatchChunkApiChunksChunkIdPatchErrors, ThrowOnError>({
     url: '/api/chunks/{chunk_id}',
@@ -1696,13 +1690,10 @@ export const editGardenProposalApiGardenProposalsProposalIdPatch = <ThrowOnError
 /**
  * Accept Garden Proposal
  *
- * Accept the proposal at `{proposal_id}`. When `mint_work_item` is true, mints a linked
- * hub work item from `body` (or the proposal's own), wrapped in the "Related findings"
- * template when the proposal names findings and bare when it names none. When it is
- * false, mints nothing and records the decline. Promotes nothing and changes no
- * finding's state. A blank reason is stored as none. 404 unknown proposal, 422 a `body`
- * with `mint_work_item` false or a minted item left with a blank title or body, 409
- * already closed or a raced ingest, 503 the packaged default graph retired.
+ * Accept the proposal. `mint_work_item` mints a linked hub item from `body` (or the proposal's own), wrapped in
+ * the "Related findings" template when it names findings; false records the decline. Promotes nothing; a blank
+ * reason is stored as none. 404 unknown; 422 `body` or `urgency` without a mint, `urgency_unknown`/`urgency_retired`,
+ * or a blank minted title or body; 409 closed or a raced ingest; 503 the default graph retired.
  */
 export const acceptGardenProposalApiGardenProposalsProposalIdAcceptPost = <ThrowOnError extends boolean = false>(options: Options<AcceptGardenProposalApiGardenProposalsProposalIdAcceptPostData, ThrowOnError>): RequestResult<AcceptGardenProposalApiGardenProposalsProposalIdAcceptPostResponses, AcceptGardenProposalApiGardenProposalsProposalIdAcceptPostErrors, ThrowOnError> => (options.client ?? client).post<AcceptGardenProposalApiGardenProposalsProposalIdAcceptPostResponses, AcceptGardenProposalApiGardenProposalsProposalIdAcceptPostErrors, ThrowOnError>({
     url: '/api/garden-proposals/{proposal_id}/accept',
@@ -2104,7 +2095,8 @@ export const listProjectCadencesApiProjectsProjectCadencesGet = <ThrowOnError ex
  * Create a cadence in the project. 422 naming the field on a shape that cannot mean anything — no schedule and
  * no spacing, a malformed cron, zone, spacing, anchor, or chore — or on a slug the project already holds; 403 when
  * it would keep a promoting chore and the caller may not promote chunks; 404 on an unknown project. A chore whose
- * routine or scopes do not resolve is accepted, and shown in the cadence's `attention`.
+ * routine or scopes do not resolve is accepted, and shown in the cadence's `attention`; a chore's `urgency`, by id
+ * or slug, is refused 422 `urgency_unknown` or `urgency_retired` when it names no urgency or a retired one.
  */
 export const createProjectCadenceApiProjectsProjectCadencesPost = <ThrowOnError extends boolean = false>(options: Options<CreateProjectCadenceApiProjectsProjectCadencesPostData, ThrowOnError>): RequestResult<CreateProjectCadenceApiProjectsProjectCadencesPostResponses, CreateProjectCadenceApiProjectsProjectCadencesPostErrors, ThrowOnError> => (options.client ?? client).post<CreateProjectCadenceApiProjectsProjectCadencesPostResponses, CreateProjectCadenceApiProjectsProjectCadencesPostErrors, ThrowOnError>({
     url: '/api/projects/{project}/cadences',
@@ -2230,7 +2222,8 @@ export const listProjectRoutinesApiProjectsProjectRoutinesGet = <ThrowOnError ex
  * Create Project Routine
  *
  * Mint a routine in the project, its default scope resolved or minted there; 422 on a duplicate slug in the
- * project, a malformed default scope slug, or a graph name with no enabled mint; 404 on an unknown project.
+ * project, a malformed default scope slug, or a graph name with no enabled mint, and 422 `urgency_unknown` or
+ * `urgency_retired` on a `default_urgency` naming no urgency or a retired one; 404 on an unknown project.
  */
 export const createProjectRoutineApiProjectsProjectRoutinesPost = <ThrowOnError extends boolean = false>(options: Options<CreateProjectRoutineApiProjectsProjectRoutinesPostData, ThrowOnError>): RequestResult<CreateProjectRoutineApiProjectsProjectRoutinesPostResponses, CreateProjectRoutineApiProjectsProjectRoutinesPostErrors, ThrowOnError> => (options.client ?? client).post<CreateProjectRoutineApiProjectsProjectRoutinesPostResponses, CreateProjectRoutineApiProjectsProjectRoutinesPostErrors, ThrowOnError>({
     url: '/api/projects/{project}/routines',
@@ -2581,11 +2574,10 @@ export const getRoutineApiRoutinesRoutineIdGet = <ThrowOnError extends boolean =
 /**
  * Edit Routine
  *
- * Apply only the fields present — the display name, the graph, the default scope, and the model, effort,
- * and harness defaults; an explicit `null` clears `default_effort`. A present `slug` must
- * restate the current one. An edit that changes nothing writes nothing. 404 on an unknown
- * id; 422 on a slug change, a `null` field, a malformed default scope slug, or a graph name
- * with no enabled mint; 409 on a stale `If-Match` naming the current revision.
+ * Apply only the fields present; an explicit `null` clears `default_effort` or `default_urgency`, and a present
+ * `slug` must restate the current one. A no-op writes nothing. 404 unknown id; 422 on a slug change, a `null` field,
+ * a malformed default scope slug, a graph name with no enabled mint, or `urgency_unknown`/`urgency_retired`; 409 on
+ * a stale `If-Match`.
  */
 export const editRoutineApiRoutinesRoutineIdPatch = <ThrowOnError extends boolean = false>(options: Options<EditRoutineApiRoutinesRoutineIdPatchData, ThrowOnError>): RequestResult<EditRoutineApiRoutinesRoutineIdPatchResponses, EditRoutineApiRoutinesRoutineIdPatchErrors, ThrowOnError> => (options.client ?? client).patch<EditRoutineApiRoutinesRoutineIdPatchResponses, EditRoutineApiRoutinesRoutineIdPatchErrors, ThrowOnError>({
     url: '/api/routines/{routine_id}',
@@ -2637,16 +2629,11 @@ export const retireRoutineApiRoutinesRoutineIdRetirePost = <ThrowOnError extends
 /**
  * Run Routine
  *
- * Mint and ingest a hub work item from the routine, in one act; its chunk rests ``not_ready``
- * until promoted.
- * 422 on an unknown ``mode`` (request validation, before any lookup); 404 on an unknown id;
- * 422 on a malformed ``scope_slug``, or an effective scope no scope row holds or outside the
- * routine's own related set (never minted); 503 on a retired routine
- * (checked before the scope is even parsed), a retired effective
- * scope, or a graph name with no
- * enabled mint (mirroring ``POST /work-sources/{source}/items``'s own
- * retired-default-graph shape); 409 on an out-of-band ingest already holding the
- * allocated ref's pointer.
+ * Mint and ingest a hub work item from the routine; its chunk rests ``not_ready`` until promoted. 422 on an
+ * unknown ``mode`` (before any lookup), a malformed, unheld, or unrelated scope, or ``urgency_unknown``/
+ * ``urgency_retired`` (a stated urgency outranks the routine's default for this run); 404 unknown id; 503 on a
+ * retired routine (before the scope is parsed), a retired scope, or a graph with no enabled mint; 409 on an
+ * out-of-band ingest holding the allocated pointer.
  */
 export const runRoutineApiRoutinesRoutineIdRunPost = <ThrowOnError extends boolean = false>(options: Options<RunRoutineApiRoutinesRoutineIdRunPostData, ThrowOnError>): RequestResult<RunRoutineApiRoutinesRoutineIdRunPostResponses, RunRoutineApiRoutinesRoutineIdRunPostErrors, ThrowOnError> => (options.client ?? client).post<RunRoutineApiRoutinesRoutineIdRunPostResponses, RunRoutineApiRoutinesRoutineIdRunPostErrors, ThrowOnError>({
     url: '/api/routines/{routine_id}/run',
@@ -3281,13 +3268,10 @@ export const listWorkItemsApiWorkSourcesSourceItemsGet = <ThrowOnError extends b
 /**
  * Create Work Item
  *
- * Allocate a fresh item at SOURCE, open, authored by the caller, and mint its
- * resting ``not_ready`` chunk in the same transaction, both in the project ``?project=`` names
- * — the tenant's only one when it names none. 404/409 from the source's editor gate,
- * 422 for a blank title or body, an unknown project, or no project named in a tenant
- * holding several (``project_required``), 409 if an out-of-band ingest already holds the
- * allocated ref's pointer, 503 if every graph named after the packaged default has
- * been retired (the operator's brake, mirroring ``POST /chunks``).
+ * Allocate an open item at SOURCE and mint its resting ``not_ready`` chunk in one transaction, in the project
+ * ``?project=`` names or the tenant's only one. 404/409 from the editor gate; 422 for a blank title or body,
+ * ``urgency_unknown``/``urgency_retired``, an unknown project, or ``project_required``; 409 if an out-of-band
+ * ingest holds the allocated pointer; 503 if every default-named graph is retired (mirroring ``POST /chunks``).
  */
 export const createWorkItemApiWorkSourcesSourceItemsPost = <ThrowOnError extends boolean = false>(options: Options<CreateWorkItemApiWorkSourcesSourceItemsPostData, ThrowOnError>): RequestResult<CreateWorkItemApiWorkSourcesSourceItemsPostResponses, CreateWorkItemApiWorkSourcesSourceItemsPostErrors, ThrowOnError> => (options.client ?? client).post<CreateWorkItemApiWorkSourcesSourceItemsPostResponses, CreateWorkItemApiWorkSourcesSourceItemsPostErrors, ThrowOnError>({
     url: '/api/work-sources/{source}/items',

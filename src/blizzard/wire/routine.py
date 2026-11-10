@@ -27,6 +27,8 @@ class RoutineCreateRequest(BaseModel):
     default_effort: str | None = None
     # The routine's default harness preference — the `default_model` shape.
     default_harnesses: list[str] = []
+    #: A run's urgency when nothing above names one, by id or slug; ``None`` takes the tenant's default.
+    default_urgency: str | None = None
 
 
 class RoutineDocument(BaseModel):
@@ -44,13 +46,15 @@ class RoutineDocument(BaseModel):
     default_model: list[str] = []
     default_effort: str | None = None
     default_harnesses: list[str] = []
+    #: A run's live urgency by slug, stored or declared alongside; ``None`` takes the tenant's default.
+    default_urgency: str | None = None
     scopes: list[str] = []
 
 
 class RoutineEditRequest(BaseModel):
     """A sparse edit: an absent field is unchanged, a present one is set. A present
     ``slug`` may only restate the current one; ``name`` sets the display name. An explicit ``null`` clears
-    ``default_effort`` and is refused on every other field."""
+    ``default_effort`` or ``default_urgency`` and is refused on every other field."""
 
     model_config = ConfigDict(extra="forbid")
 
@@ -61,6 +65,8 @@ class RoutineEditRequest(BaseModel):
     default_model: list[str] | None = None
     default_effort: str | None = None
     default_harnesses: list[str] | None = None
+    #: The urgency a run takes when nothing above the routine names one, by id or slug.
+    default_urgency: str | None = None
 
 
 class RoutineLifecycleRequest(BaseModel):
@@ -82,6 +88,8 @@ class RoutineView(WireModel):
     default_model: list[str] = []
     default_effort: str | None = None
     default_harnesses: list[str] = []
+    #: The slug of a run's urgency when nothing above names one; ``None`` takes the tenant's default.
+    default_urgency: str | None = None
     created_at: str
     retired: bool = False
     revision: int | None = None
@@ -104,6 +112,8 @@ class RoutineRunRequest(BaseModel):
     scope_slug: str | None = None
     mode: RunMode = RunMode.FULL
     note: str | None = None
+    #: This run's urgency by id or slug, over the routine's default; ``None`` falls down the chain.
+    urgency: str | None = None
 
 
 class RoutineBaselineRepoView(BaseModel):

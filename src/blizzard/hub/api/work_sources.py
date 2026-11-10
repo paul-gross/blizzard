@@ -26,6 +26,7 @@ from blizzard.hub.api.door import RequestDoor, change_context
 from blizzard.hub.api.forge_choice import forge_choice
 from blizzard.hub.api.problem_exceptions import ProblemHTTPException
 from blizzard.hub.api.project_params import QueryProject, project_of_call
+from blizzard.hub.api.urgencies import stated_urgency, urgency_refusal
 from blizzard.hub.api.user_names import user_names
 from blizzard.hub.api.work_source_params import PathSourceKey, PathWorkSource, resolved_work_source
 from blizzard.hub.auth.models import ResolvedIdentity
@@ -48,6 +49,7 @@ from blizzard.hub.domain.config.work_sources import (
 from blizzard.hub.domain.graph.authoring import DefaultGraphRetired
 from blizzard.hub.domain.kernel.hub_source import RESERVED_HUB_SOURCE_NAME
 from blizzard.hub.domain.kernel.unset import UNSET
+from blizzard.hub.domain.urgency.model import UrgencyRetired, UrgencyUnknown
 from blizzard.hub.domain.work_items.editing import (
     WithdrawalLostToClosure,
     WithdrawnWorkItem,
@@ -371,13 +373,10 @@ def create_work_item(
     services: Services,
     project: QueryProject = None,
 ) -> object:
-    """Allocate a fresh item at SOURCE, open, authored by the caller, and mint its
-    resting ``not_ready`` chunk in the same transaction, both in the project ``?project=`` names
-    — the tenant's only one when it names none. 404/409 from the source's editor gate,
-    422 for a blank title or body, an unknown project, or no project named in a tenant
-    holding several (``project_required``), 409 if an out-of-band ingest already holds the
-    allocated ref's pointer, 503 if every graph named after the packaged default has
-    been retired (the operator's brake, mirroring ``POST /chunks``)."""
+    """Allocate an open item at SOURCE and mint its resting ``not_ready`` chunk in one transaction, in the project
+    ``?project=`` names or the tenant's only one. 404/409 from the editor gate; 422 for a blank title or body,
+    ``urgency_unknown``/``urgency_retired``, an unknown project, or ``project_required``; 409 if an out-of-band
+    ingest holds the allocated pointer; 503 if every default-named graph is retired (mirroring ``POST /chunks``)."""
     source_obj, editor = _require_editor(source, services)
     # Validated before graph resolution, so a blank title/body rejects the whole request
     # without the store consulted — the ordering POST /chunks holds for its own guard too.
@@ -385,6 +384,7 @@ def create_work_item(
         text = WorkItemText.of(title=request.title, body=request.body)
     except WorkItemFieldBlank as exc:
         raise _blank(exc) from exc
+    urgency = stated_urgency(request.urgency, services)
     project_id = project if project is not None else project_of_call(services).project_id
     try:
         graph = services.graph_mint.ensure_default(
@@ -400,7 +400,10 @@ def create_work_item(
             stated_priority=request.stated_priority,
             graph=graph,
             project_id=project_id,
+            urgency=urgency,
         )
+    except (UrgencyUnknown, UrgencyRetired) as exc:  # retired after the edge's check
+        raise urgency_refusal(exc) from exc
     except IngestConflict as exc:
         raise ingest_conflict_refusal(services, exc) from exc
     # A freshly minted chunk rests `not_ready`, exactly as a `POST /chunks` ingest does.

@@ -73,9 +73,10 @@ class CadenceDetail:
         for chore in chores:
             held = "" if chore["promote"] else "  held"
             note = f"  note={chore['note']!r}" if chore.get("note") else ""
+            urgency = f"  urgency={chore['urgency']}" if chore.get("urgency") else ""
             yield (
                 f"  chore {chore['key']}  {chore['chore_id']}  routine={chore['routine']}  "
-                f"{_scopes_text(chore.get('scopes'))}  mode={chore['mode']}{held}{note}"
+                f"{_scopes_text(chore.get('scopes'))}  mode={chore['mode']}{held}{urgency}{note}"
             )
         counts: dict[str, int] = body.get("errand_counts") or {}
         yield "  errands: " + "  ".join(f"{state}={counts.get(state, 0)}" for state in _STATES)
@@ -320,6 +321,11 @@ def cadence_chore_group() -> None:
     """Add, edit, or remove a cadence's chores — each an edit of the cadence."""
 
 
+_CHORE_URGENCY_HELP = (
+    "The urgency the chore's runs take over its routine's default, by id or slug; without one they take the routine's."
+)
+
+
 def _documents(cadence: dict[str, Any]) -> list[dict[str, Any]]:
     """The cadence's chores as the edit request writes them back."""
     return [
@@ -330,6 +336,7 @@ def _documents(cadence: dict[str, Any]) -> list[dict[str, Any]]:
             "mode": chore["mode"],
             "note": chore.get("note"),
             "promote": chore["promote"],
+            "urgency": chore.get("urgency"),
         }
         for chore in _chores(cadence)
     ]
@@ -360,6 +367,7 @@ def _scope_selection(all_scopes: bool, scopes: tuple[str, ...], default_scope: b
 @click.option("--mode", type=_MODES, default=None, help="The run mode; full when unstated.")
 @click.option("--note", default=None, help="A note each run's charge carries.")
 @click.option("--hold", is_flag=True, default=False, help="Leave each minted chunk not ready rather than promoting it.")
+@click.option("--urgency", default=None, help=_CHORE_URGENCY_HELP)
 @project_option(required_by_hub=True)
 def chore_add(
     cli: CliContext,
@@ -371,6 +379,7 @@ def chore_add(
     mode: str | None,
     note: str | None,
     hold: bool,
+    urgency: str | None,
     project: str | None,
 ) -> None:
     """Add chore KEY to cadence SLUG, running --routine over its default scope unless --scope or --all-scopes."""
@@ -378,7 +387,7 @@ def chore_add(
     cadence = _resolve_cadence(cli, slug, project)
     chores = _documents(cadence)
     chore: dict[str, Any] = {"key": key, "routine": routine, "scopes": selection, "promote": not hold}
-    chore |= {k: v for k, v in {"mode": mode, "note": note}.items() if v is not None}
+    chore |= {k: v for k, v in {"mode": mode, "note": note, "urgency": urgency}.items() if v is not None}
     _patch(cli, cadence, {"chores": [*chores, chore]}, done=f"added chore {key!r} to cadence {slug!r}")
 
 
@@ -392,6 +401,10 @@ def chore_add(
 @click.option("--mode", type=_MODES, default=None, help="The run mode.")
 @click.option("--note", default=None, help="A note each run's charge carries.")
 @click.option("--hold/--promote", "hold", default=None, help="Leave each minted chunk not ready, or promote it.")
+@click.option("--urgency", default=None, help=_CHORE_URGENCY_HELP)
+@click.option(
+    "--clear-urgency", is_flag=True, default=False, help="Clear the chore's urgency, so its runs take the routine's."
+)
 @project_option(required_by_hub=True)
 def chore_edit(
     cli: CliContext,
@@ -404,6 +417,8 @@ def chore_edit(
     mode: str | None,
     note: str | None,
     hold: bool | None,
+    urgency: str | None,
+    clear_urgency: bool,
     project: str | None,
 ) -> None:
     """Change chore KEY of cadence SLUG; only the options given change, and the chore keeps its id."""
@@ -413,9 +428,13 @@ def chore_edit(
     chore = next((c for c in chores if c["key"] == key), None)
     if chore is None:
         raise click.ClickException(f"cadence {slug!r} has no chore {key!r}")
+    if urgency is not None and clear_urgency:
+        raise click.UsageError("--urgency and --clear-urgency contradict each other")
     changes: dict[str, Any] = {
-        k: v for k, v in {"routine": routine, "mode": mode, "note": note}.items() if v is not None
+        k: v for k, v in {"routine": routine, "mode": mode, "note": note, "urgency": urgency}.items() if v is not None
     }
+    if clear_urgency:
+        changes["urgency"] = None
     if selected:
         changes["scopes"] = selection
     if hold is not None:
