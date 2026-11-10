@@ -15,6 +15,7 @@ from typing import Annotated
 from fastapi import APIRouter, Depends, Query
 
 from blizzard.foundation.chunk_status import ChunkStatus
+from blizzard.foundation.claim_pass_reason import ClaimPassReason
 from blizzard.foundation.queue_policy import QueueMatchPolicy
 from blizzard.foundation.roles import dto
 from blizzard.hub.api import chunk_events, problems, problems_chunks
@@ -30,8 +31,10 @@ from blizzard.hub.auth.permissions import Permission
 from blizzard.hub.composition import TenantServices
 from blizzard.hub.domain.chunk.dependencies import derive_blocked_prerequisites
 from blizzard.hub.domain.chunk.errors import ChunkNotFound
-from blizzard.hub.domain.chunk.model import PRE_CLAIM_STATUSES, Chunk
+from blizzard.hub.domain.chunk.model import PRE_CLAIM_STATUSES, Chunk, ChunkFacts
+from blizzard.hub.domain.graph.model import Graph
 from blizzard.hub.domain.kernel.pagination import DEFAULT_LIMIT, MAX_LIMIT, MalformedCursor
+from blizzard.hub.domain.operations.claim_explanation import ClaimExplanation, explain_next_claim
 from blizzard.hub.domain.operations.queue import (
     ChunkNotGroupable,
     ChunksInDifferentProjects,
@@ -39,6 +42,8 @@ from blizzard.hub.domain.operations.queue import (
     FoldWouldCloseCycle,
     MatchedEntry,
     NotInList,
+    PassedEntry,
+    PassedReason,
     QueueEntry,
     QueueList,
     QueuePage,
@@ -60,6 +65,9 @@ from blizzard.wire.queue import (
     BacklogReplaceRequest,
     ChunkGroupRequest,
     ChunkGroupResponse,
+    NextClaimEntry,
+    NextClaimPassedEntry,
+    NextClaimResponse,
     QueuePageView,
     QueuePeekEntry,
     QueuePeekRequest,
@@ -231,6 +239,28 @@ def _domain_capabilities(capabilities: Sequence[WireRunnerCapability]) -> tuple[
 
 @dto
 @dataclass(frozen=True)
+class WalkReads:
+    """The reads a matched walk judges ``candidates`` by — their blocked markings, movement facts, and graphs — each one
+    plural bulk read (``bzh:bulk-reconstitution``), so the statement count stays flat as the ready order grows."""
+
+    markings: dict[str, list[str]]
+    facts: dict[str, ChunkFacts]
+    graphs: dict[str, Graph]
+
+    @classmethod
+    def of(
+        cls, services: TenantServices, statuses: Mapping[str, ChunkStatus], candidates: Sequence[Chunk]
+    ) -> WalkReads:
+        chunk_ids = [chunk.chunk_id for chunk in candidates]
+        return cls(
+            _blocked_markings(services, statuses, chunk_ids),
+            services.chunks.facts.movement_facts_for(chunk_ids),
+            services.graphs.get_many(sorted({chunk.graph_id for chunk in candidates})),
+        )
+
+
+@dto
+@dataclass(frozen=True)
 class MatchedPeek:
     """The matched fleet peek — at most one ready entry of a project the calling runner
     serves that it can both work (``EligibilityCheck``) and claim (existing
@@ -266,17 +296,14 @@ class MatchedPeek:
             candidates = list(heads.values())
         else:
             candidates = served_chunks[:1]
-        markings = _blocked_markings(services, statuses, [chunk.chunk_id for chunk in candidates])
-        facts = services.chunks.facts.movement_facts_for([chunk.chunk_id for chunk in candidates])
-        graph_ids = sorted({chunk.graph_id for chunk in candidates})
-        graphs = services.graphs.get_many(graph_ids)
+        reads = WalkReads.of(services, statuses, candidates)
         entry = select_matched_entry(
             chunks,
             served=served,
-            graphs=graphs,
-            facts=facts,
+            graphs=reads.graphs,
+            facts=reads.facts,
             capabilities=_domain_capabilities(request.capabilities),
-            blocked=markings,
+            blocked=reads.markings,
             policy=policy,
             hold_per_project=per_project,
         )
@@ -306,6 +333,90 @@ class MatchedPeek:
                     urgency=urgency_ref(chunk.urgency_id, self.urgencies),
                 )
             ]
+        )
+
+
+_PASS_REASONS = {PassedReason.BLOCKED: ClaimPassReason.BLOCKED, PassedReason.INELIGIBLE: ClaimPassReason.INELIGIBLE}
+
+
+def _next_claim_entry(
+    chunk: Chunk, position: int, projects: Mapping[ProjectId, Project], urgencies: Mapping[UrgencyId, Urgency]
+) -> NextClaimEntry:
+    """One chunk a runner's walk reaches, at its claim-order position, labelled with its project and urgency."""
+    project = projects.get(chunk.project_id) if chunk.project_id is not None else None
+    return NextClaimEntry(
+        chunk_id=chunk.chunk_id,
+        graph_id=chunk.graph_id,
+        position=position,
+        **project_label_fields(chunk.project_id, project),
+        urgency=urgency_ref(chunk.urgency_id, urgencies),
+    )
+
+
+def _next_claim_passed(
+    entry: PassedEntry, projects: Mapping[ProjectId, Project], urgencies: Mapping[UrgencyId, Urgency]
+) -> NextClaimPassedEntry:
+    """One passed chunk with why, its reason mapped onto the wire's own vocabulary."""
+    return NextClaimPassedEntry(
+        **_next_claim_entry(entry.chunk, entry.position, projects, urgencies).model_dump(),
+        reason=_PASS_REASONS[entry.reason],
+        prerequisite=entry.prerequisite,
+        prerequisite_count=entry.prerequisite_count,
+    )
+
+
+@dto
+@dataclass(frozen=True)
+class NextClaim:
+    """One runner's next claim, explained (:func:`explain_next_claim`) over every served ready chunk — the candidates a
+    pass-over peek reads, and a superset of a hold peek's — so one read feeds every walk. ``served`` and
+    ``capabilities`` are what the hub holds of the runner; no claim bar is applied."""
+
+    explanation: ClaimExplanation
+    projects: dict[ProjectId, Project]
+    urgencies: dict[UrgencyId, Urgency]
+
+    @classmethod
+    def of(
+        cls,
+        services: TenantServices,
+        statuses: Mapping[str, ChunkStatus],
+        *,
+        served: Collection[str],
+        capabilities: Sequence[RunnerCapability],
+    ) -> NextClaim:
+        chunks = services.queue.claim_ordered_ready(statuses=statuses)
+        reads = WalkReads.of(services, statuses, [chunk for chunk in chunks if chunk.project_id in served])
+        explanation = explain_next_claim(
+            chunks,
+            served=served,
+            graphs=reads.graphs,
+            facts=reads.facts,
+            capabilities=capabilities,
+            blocked=reads.markings,
+        )
+        shown = [
+            entry.chunk
+            for entry in (explanation.next, explanation.if_holding, *explanation.passed, *explanation.held_at)
+            if entry is not None
+        ]
+        project_ids = sorted({chunk.project_id for chunk in shown if chunk.project_id is not None})
+        return cls(explanation, services.projects.get_many(project_ids), services.urgency_reading.by_id())
+
+    @property
+    def view(self) -> NextClaimResponse:  # ast-grep-ignore: bzh:property-delegates
+        explained, projects, urgencies = self.explanation, self.projects, self.urgencies
+        return NextClaimResponse(
+            next=None
+            if explained.next is None
+            else _next_claim_entry(explained.next.chunk, explained.next.position, projects, urgencies),
+            passed=[_next_claim_passed(entry, projects, urgencies) for entry in explained.passed],
+            passed_total=explained.passed_total,
+            unserved=explained.unserved,
+            if_holding=None
+            if explained.if_holding is None
+            else _next_claim_entry(explained.if_holding.chunk, explained.if_holding.position, projects, urgencies),
+            held_at=[_next_claim_passed(entry, projects, urgencies) for entry in explained.held_at],
         )
 
 

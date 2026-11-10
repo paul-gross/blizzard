@@ -177,6 +177,7 @@ HUMAN: dict[tuple[str, str], Permission] = {
     ("POST", "/api/runners/{runner_id}/enrollments"): Permission.RUNNER_ADD,
     ("GET", "/api/runners"): Permission.FLEET_VIEW,
     ("GET", "/api/runners/{runner_id}"): Permission.FLEET_VIEW,
+    ("GET", "/api/runners/{runner_id}/next-claim"): Permission.FLEET_VIEW,
     ("POST", "/api/runners/{runner_id}/pause"): Permission.RUNNER_PAUSE,
     ("POST", "/api/runners/{runner_id}/resume"): Permission.RUNNER_PAUSE,
     ("POST", "/api/runners/{runner_id}/retire"): Permission.RUNNER_RETIRE,

@@ -56,6 +56,7 @@ RUNNERS_DECLARATIONS: tuple[ProblemDeclaration, ...] = (
         declaration
         for method, path in (
             ("GET", _RUNNER),
+            ("GET", f"{_RUNNER}/next-claim"),
             ("POST", f"{_RUNNER}/enrollments"),
             ("POST", f"{_RUNNER}/pause"),
             ("POST", f"{_RUNNER}/resume"),

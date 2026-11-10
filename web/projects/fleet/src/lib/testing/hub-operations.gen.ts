@@ -130,6 +130,7 @@ export interface HubOperations {
   'GET /api/routines/{routine_id}/sweeps': { path: T.RoutineSweepsApiRoutinesRoutineIdSweepsGetData['path']; responses: T.RoutineSweepsApiRoutinesRoutineIdSweepsGetResponses; errors: T.RoutineSweepsApiRoutinesRoutineIdSweepsGetErrors };
   'GET /api/runners': { path: T.ListRunnersApiRunnersGetData['path']; responses: T.ListRunnersApiRunnersGetResponses; errors: T.ListRunnersApiRunnersGetErrors };
   'GET /api/runners/{runner_id}': { path: T.GetRunnerApiRunnersRunnerIdGetData['path']; responses: T.GetRunnerApiRunnersRunnerIdGetResponses; errors: T.GetRunnerApiRunnersRunnerIdGetErrors };
+  'GET /api/runners/{runner_id}/next-claim': { path: T.GetRunnerNextClaimApiRunnersRunnerIdNextClaimGetData['path']; responses: T.GetRunnerNextClaimApiRunnersRunnerIdNextClaimGetResponses; errors: T.GetRunnerNextClaimApiRunnersRunnerIdNextClaimGetErrors };
   'GET /api/runs': { path: T.ListRunsApiRunsGetData['path']; responses: T.ListRunsApiRunsGetResponses; errors: T.ListRunsApiRunsGetErrors };
   'GET /api/runs/{chunk_id}': { path: T.RunDeltaApiRunsChunkIdGetData['path']; responses: T.RunDeltaApiRunsChunkIdGetResponses; errors: T.RunDeltaApiRunsChunkIdGetErrors };
   'GET /api/scopes': { path: T.ListScopesApiScopesGetData['path']; responses: T.ListScopesApiScopesGetResponses; errors: T.ListScopesApiScopesGetErrors };

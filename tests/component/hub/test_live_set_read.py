@@ -220,6 +220,7 @@ _READS = [
     "/api/events",
     "/api/chunks/ch_live_00/work-items",
     "/api/work-sources/hub/items",
+    "/api/runners/runner-a/next-claim",
 ]
 
 

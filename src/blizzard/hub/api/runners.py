@@ -20,6 +20,7 @@ from blizzard.foundation.node_steps import Executor
 from blizzard.foundation.store.utc import iso_utc
 from blizzard.foundation.subscription_miss import SampleMissReason
 from blizzard.hub.api import chunk_events, problems, problems_runners
+from blizzard.hub.api import queue as queue_api
 from blizzard.hub.api.auth import reject_runner_principal
 from blizzard.hub.api.auth_session import require, tenant_bound
 from blizzard.hub.api.deps import Services
@@ -35,7 +36,7 @@ from blizzard.hub.domain.execution.fleet import (
     RetireOutcome,
 )
 from blizzard.hub.domain.projects.model import Project, ProjectId
-from blizzard.hub.domain.runners.bindings import BindingFlags, claimable_projects, flag_bindings
+from blizzard.hub.domain.runners.bindings import BindingFlags, claimable_projects, flag_bindings, offered_projects
 from blizzard.hub.domain.runners.gate_enforceability import flag_unenforceable_gates
 from blizzard.hub.domain.runners.host import Host, HostRetired
 from blizzard.hub.domain.runners.registration import (
@@ -51,6 +52,7 @@ from blizzard.hub.domain.runners.registration import (
     ServedEntry,
 )
 from blizzard.hub.domain.runners.served import UnknownServedProject
+from blizzard.wire.queue import NextClaimResponse
 from blizzard.wire.runner import (
     ExternalSubscriptionUsageWindowView,
     RunnerAddRequest,
@@ -460,6 +462,25 @@ def get_runner(runner_id: str, services: Services) -> RunnerRegistryView:
     """One runner's connection condition and paused state — the operator's detail read,
     symmetric with the list. 404 on unknown."""
     return _detail(services, _registration(services, runner_id))
+
+
+@router.get(
+    "/runners/{runner_id}/next-claim",
+    response_model=NextClaimResponse,
+    dependencies=[Depends(require(Permission.FLEET_VIEW))],
+)
+def get_runner_next_claim(runner_id: str, services: Services) -> NextClaimResponse:
+    """The hub's best account of the chunk one runner reaches for next and every chunk it passes on the way — walked
+    from the runner's served projects and bindings and its latest capability snapshot. A retired or paused runner is
+    answered like any other; 404 on unknown."""
+    registration = _registration(services, runner_id)
+    host = services.hosts.get_host(registration.host_id) if registration.host_id is not None else None
+    return queue_api.NextClaim.of(
+        services,
+        services.chunks.facts.load_live_statuses(),
+        served=offered_projects(registration, host),
+        capabilities=registration.capabilities,
+    ).view
 
 
 @router.post(

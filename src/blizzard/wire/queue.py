@@ -7,6 +7,7 @@ from typing import Annotated, Final, Literal
 
 from pydantic import BaseModel
 
+from blizzard.foundation.claim_pass_reason import ClaimPassReason
 from blizzard.foundation.queue_policy import QueueMatchPolicy
 from blizzard.foundation.unrecognized import Unrecognized
 from blizzard.wire.base import WireModel
@@ -14,7 +15,7 @@ from blizzard.wire.chunk import BlockedView, WorkRefModel
 from blizzard.wire.problem import ProblemDetails
 from blizzard.wire.runner import RunnerCapability
 from blizzard.wire.urgency import UrgencyRef
-from blizzard.wire.vocabulary import ToleratedRequestVocabulary
+from blizzard.wire.vocabulary import OPEN, ToleratedRequestVocabulary
 
 
 class QueuePeekEntry(WireModel):
@@ -59,6 +60,45 @@ class QueuePeekRequest(BaseModel):
     #: resolved to, and — under ``policy="hold"`` — holds per project rather than across them. ``None`` peeks every
     #: project the runner serves; an empty list offers nothing.
     projects: list[str] | None = None
+
+
+class NextClaimEntry(WireModel):
+    """One ready chunk a runner's walk reaches, at its place in claim order."""
+
+    chunk_id: str
+    graph_id: str
+    #: The chunk's index in the whole ready queue's claim order.
+    position: int
+    #: The id of the project this belongs to; ``None`` where the hub reports none.
+    project_id: str | None = None
+    #: The project's current slug; ``None`` where the hub reports none.
+    project_slug: str | None = None
+    #: The project's current display name; ``None`` where the hub reports none.
+    project_name: str | None = None
+    #: The urgency the chunk carries; ``None`` where it carries none.
+    urgency: UrgencyRef | None = None
+
+
+class NextClaimPassedEntry(NextClaimEntry):
+    """One chunk the walk passed, with why; a blocked one names the first prerequisite of its marking and the count."""
+
+    reason: Annotated[ClaimPassReason | Unrecognized, OPEN]
+    prerequisite: str | None = None
+    prerequisite_count: int = 0
+
+
+class NextClaimResponse(WireModel):
+    """``GET /api/runners/{runner_id}/next-claim`` — the hub's best account of what one runner reaches for next, walked
+    from what the hub holds of it: ``next`` under pass-over with the chunks ``passed`` before it (at most twenty,
+    ``passed_total`` counting all), ``if_holding`` under a per-project hold with the head each served project's hold
+    stops at (``held_at``), and ``unserved``, the chunks ahead of ``next`` of projects the runner does not reach."""
+
+    next: NextClaimEntry | None = None
+    passed: list[NextClaimPassedEntry] = []
+    passed_total: int = 0
+    unserved: int = 0
+    if_holding: NextClaimEntry | None = None
+    held_at: list[NextClaimPassedEntry] = []
 
 
 class QueuePageView(WireModel):
