@@ -36,6 +36,7 @@ describe('forge admin models', () => {
       ...GITHUB,
       budgets: [],
       offered: [],
+      landing_policies: [],
       repositories: [{ kind: 'repository', key: 'repo_1', label: 'blizzard' }],
       work_sources: [{ kind: 'work_source', key: 'wsrc_1', label: 'issues' }],
     };
@@ -49,7 +50,7 @@ describe('forge admin models', () => {
 
   it('shows the capabilities it offers and one fact per budget reading', () => {
     const detail: ForgeDetail = {
-      ...GITHUB, repositories: [], work_sources: [], offered: ['checks', 'merge'],
+      ...GITHUB, repositories: [], work_sources: [], offered: ['checks', 'merge'], landing_policies: [],
       budgets: [
         { bucket: 'core', secret_name: 'gh', remaining: 4000, limit: 5000, reset: new Date(2026, 10, 1, 12, 0, 0).toISOString() },
         { bucket: 'graphql', secret_name: null, remaining: 10, limit: 100, reset: new Date(2026, 10, 1, 13, 0, 0).toISOString() },
@@ -62,7 +63,7 @@ describe('forge admin models', () => {
   });
 
   it('reads none for no capabilities and no reading yet for no budgets', () => {
-    const detail: ForgeDetail = { ...GITHUB, repositories: [], work_sources: [], offered: [], budgets: [] };
+    const detail: ForgeDetail = { ...GITHUB, repositories: [], work_sources: [], offered: [], landing_policies: [], budgets: [] };
     const facts = forgeRecordVm(detail)!.facts.map((fact) => [fact.label, fact.value]);
     expect(facts).toContainEqual(['Capabilities', 'none']);
     expect(budgetFacts([])).toEqual([{ label: 'Budgets', value: 'no reading yet' }]);

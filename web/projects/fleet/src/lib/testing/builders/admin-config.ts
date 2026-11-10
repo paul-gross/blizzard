@@ -148,6 +148,7 @@ export function forgeDetail(overrides: Partial<ForgeDetail> = {}): ForgeDetail {
     web_origin: 'https://github.com',
     budgets: [],
     offered: [],
+    landing_policies: [],
     repositories: [],
     work_sources: [],
     retired: false,
