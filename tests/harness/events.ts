@@ -314,7 +314,9 @@ class StreamReader implements BarrierSubscription {
 
   async barrier(): Promise<Frame[]> {
     const barrier = this.reader.barrier;
-    if (barrier === undefined) throw new Error('this subscription was not opened with { barrier: true }');
+    if (barrier === undefined) {
+      throw new Error('this subscription has no barrier: open it with events.open({ barrier: true }), or pass a barrier object to runnerStream');
+    }
     await barrier.act();
     const at = await this.until(
       () => {
