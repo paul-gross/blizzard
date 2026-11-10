@@ -17,7 +17,7 @@ from sqlalchemy import case, func
 from blizzard.hub.domain.chunk.close_read import CloseAttempt, CloseClosure, CloseIntent
 from blizzard.hub.domain.chunk.delivery_read import LandingFact
 from blizzard.hub.domain.chunk.model import CloseEnqueueDecision, PendingCloseIntent, WorkItemCloseOutcome, WorkRef
-from blizzard.hub.domain.chunk.ports.delivery import IWriteChunkDeliveryRepository
+from blizzard.hub.domain.chunk.ports.delivery import DeliveryWrite, IWriteChunkDeliveryRepository
 from blizzard.hub.domain.work_items.closure import TERMINAL_CLOSE_OUTCOMES
 from blizzard.hub.store import schema as s
 from blizzard.hub.store.internal.chunk_rows import (
@@ -165,10 +165,14 @@ class ChunkDeliveryStore:
                 )
             )
 
-    def record_delivery_landed(self, chunk_id: str, *, at: datetime, close_decision: CloseEnqueueDecision) -> None:
+    def record_delivery_landed(
+        self, chunk_id: str, *, at: datetime, close_decision: CloseEnqueueDecision
+    ) -> DeliveryWrite:
         with self._store.write("record_delivery_landed") as conn:
             conn.execute(self._store.insert(s.delivery_landed).values(chunk_id=chunk_id, landed_at=at))
-            enqueue_close_intents(conn, chunk_id, at=at, close_decision=close_decision)
+            return DeliveryWrite(
+                wrote=True, close_skipped=enqueue_close_intents(conn, chunk_id, at=at, close_decision=close_decision)
+            )
 
     def finalize_delivery(
         self,
@@ -182,7 +186,7 @@ class ChunkDeliveryStore:
         transition_id: str,
         at: datetime,
         close_decision: CloseEnqueueDecision,
-    ) -> bool:
+    ) -> DeliveryWrite:
         """`src/blizzard/hub/domain/chunk/ports/delivery.py`'s `IWriteChunkDeliveryRepository.finalize_delivery`.
 
         The hub lease, ``delivery.landed``, the terminal transition and the route release
@@ -195,7 +199,7 @@ class ChunkDeliveryStore:
                 )
             ).first()
             if already is not None:
-                return False
+                return DeliveryWrite(wrote=False)
             record_hub_lease(conn, chunk_id, epoch=epoch, runner_id=runner_id, at=at)
             conn.execute(self._store.insert(s.delivery_landed).values(chunk_id=chunk_id, landed_at=at))
             conn.execute(
@@ -217,8 +221,9 @@ class ChunkDeliveryStore:
                     chunk_id=chunk_id, released_at=at, seq=next_route_seq(conn, chunk_id)
                 )
             )
-            enqueue_close_intents(conn, chunk_id, at=at, close_decision=close_decision)
-            return True
+            return DeliveryWrite(
+                wrote=True, close_skipped=enqueue_close_intents(conn, chunk_id, at=at, close_decision=close_decision)
+            )
 
     def record_work_item_closure(
         self, chunk_id: str, *, pointer: WorkRef, outcome: WorkItemCloseOutcome, reason: str | None, at: datetime

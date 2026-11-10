@@ -28,9 +28,9 @@ from blizzard.foundation.fact_kinds import (
 )
 from blizzard.foundation.logging import get_logger
 from blizzard.foundation.roles import domain_model
-from blizzard.hub.domain.chunk.event_log import EventLogService, LoggedEvent
+from blizzard.hub.domain.chunk.event_log import EventLogService, LoggedEvent, close_skipped_events
 from blizzard.hub.domain.chunk.model import PROJECTED_EVENT_KINDS, Chunk, ChunkFacts, NodeQuestion, QuestionDelivery
-from blizzard.hub.domain.chunk.ports.escalations import IWriteChunkEscalationsRepository
+from blizzard.hub.domain.chunk.ports.escalations import EscalationWrite, IWriteChunkEscalationsRepository
 from blizzard.hub.domain.chunk.ports.facts import IReadChunkFactsRepository
 from blizzard.hub.domain.chunk.ports.fence import Claimant, EpochAdmission, FenceRefusal
 from blizzard.hub.domain.chunk.ports.questions import IWriteChunkQuestionsRepository
@@ -59,7 +59,11 @@ _ROUTE_TOKEN_GATED_KINDS = frozenset({LEASE_MINTED, ESCALATION_RECORDED, QUESTIO
 _CHUNK_LOCKED_KINDS = frozenset({LEASE_MINTED, ESCALATION_RECORDED, QUESTION_ASKED})
 
 
-def _logged(written: int | LoggedEvent | None) -> LoggedEvent:
+#: What a landing's ``write`` answers once admitted: a row id, the event it logged, or the escalation it wrote.
+_Written = int | LoggedEvent | EscalationWrite | None
+
+
+def _logged(written: _Written) -> LoggedEvent:
     """The event an ``event.recorded`` write answered."""
     if not isinstance(written, LoggedEvent):
         raise TypeError("the write answered no logged event")
@@ -134,9 +138,9 @@ class _Landing:
     row lock that unit declares; ``committed`` runs on what ``write`` answered once the unit commits — a frame
     published, a line logged — and never when it rolls back (``bzh:publish-after-commit``)."""
 
-    write: Callable[[Transaction], int | LoggedEvent | FenceRefusal | _DeliveryRefusal | None]
+    write: Callable[[Transaction], _Written | FenceRefusal | _DeliveryRefusal]
     locks: str | None = None
-    committed: Callable[[int | LoggedEvent | None], object] | None = None
+    committed: Callable[[_Written], object] | None = None
 
 
 @domain_model
@@ -339,7 +343,11 @@ class FactIngestService:
             )
         if landing.committed is not None:
             landing.committed(written)
-        return True, written.row_id if isinstance(written, LoggedEvent) else written
+        if isinstance(written, LoggedEvent):
+            return True, written.row_id
+        if isinstance(written, EscalationWrite):
+            return True, written.escalation_id
+        return True, written
 
     def _landing(
         self,
@@ -441,6 +449,7 @@ class FactIngestService:
                     at=now,
                     transaction=transaction,
                 ),
+                committed=lambda written: self._publish_close_skipped(chunk_id, written),
             )
         # question.asked — the runner authors the question_id so it can poll the answer back.
         return _Landing(
@@ -461,6 +470,14 @@ class FactIngestService:
                 transaction=transaction,
             ),
         )
+
+    def _publish_close_skipped(self, chunk_id: str, written: _Written) -> None:
+        """Publish the ``work-item-close-skipped`` frames an escalation's committed unit wrote."""
+        if not isinstance(written, EscalationWrite) or not written.close_skipped:
+            return
+        chunk = self._chunks.get(chunk_id)
+        if chunk is not None:
+            self._events.publish(*close_skipped_events(written.close_skipped, chunk=chunk))
 
     def _event_landing(
         self, runner_id: str, fact: Payload, *, chunks: Mapping[str, Chunk], runner_name: str | None, now: datetime

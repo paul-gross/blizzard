@@ -17,6 +17,7 @@ from blizzard.foundation.ids import Id, IdPrefix
 from blizzard.foundation.node_steps import ApplyOutcome
 from blizzard.foundation.roles import domain_model
 from blizzard.hub.domain.artifact.model import StoredArtifact
+from blizzard.hub.domain.chunk.event_log import EventLogService, close_skipped_events
 from blizzard.hub.domain.chunk.model import Chunk, ChunkFacts, WorkRefLabel, decide_close_enqueue
 from blizzard.hub.domain.chunk.ports.artifacts import IReadChunkArtifactsRepository
 from blizzard.hub.domain.chunk.ports.decisions import IWriteChunkDecisionsRepository
@@ -203,8 +204,10 @@ class ApplyService:
         hub_step_wake: IHubStepWake,
         label: WorkRefLabel,
         closer_available: Callable[[str], bool],
+        events: EventLogService,
     ) -> None:
         self._facts = facts
+        self._events = events
         self._movement = movement
         self._decisions = decisions
         self._escalations = escalations
@@ -391,6 +394,7 @@ class ApplyService:
         assert plan.to_node_id is not None
         fresh_transition_id = Id.mint(IdPrefix.TRANSITION, self._clock).value
         artifact_rows = self._artifact_rows(chunk, from_node, submission.epoch, artifacts)
+        close_skipped: tuple[int, ...] = ()
         with self._exclusive.locked([chunk.chunk_id]) as handle:
             locked = handle.facts(chunk.chunk_id)
             if locked is None:
@@ -404,7 +408,7 @@ class ApplyService:
                 )
                 if refused is not None:
                     return refused
-                refusal = self._movement.record_transition_locked(
+                transitioned = self._movement.record_transition_locked(
                     handle,
                     transition_id=fresh_transition_id,
                     chunk_id=chunk.chunk_id,
@@ -420,9 +424,9 @@ class ApplyService:
                     close_decision=decide_close_enqueue(chunk.work_refs, self._closer_available),
                     decision_id=submission.decision_id,
                 )
-                if refusal is not None:
-                    return ApplyResult.failure(refusal.detail)
-                open_graph_gate_on_arrival(
+                if isinstance(transitioned, FenceRefusal):
+                    return ApplyResult.failure(transitioned.detail)
+                close_skipped = transitioned.close_skipped + open_graph_gate_on_arrival(
                     self._decisions,
                     handle,
                     self._clock,
@@ -433,6 +437,7 @@ class ApplyService:
                     claimant=self._exit_claimant(locked, chunk.chunk_id, submission),
                     close_decision=decide_close_enqueue(chunk.work_refs, self._closer_available),
                 )
+        self._events.publish(*close_skipped_events(close_skipped, chunk=chunk))
         if raced is not None:
             return self._answer_raced(chunk, graph, from_node, submission, raced)
         return self._respond(
@@ -514,6 +519,7 @@ class ApplyService:
         movement a racing submission recorded at this ``(node, epoch)`` answers as its replay, the
         escalation already written answers ``answer`` and writes nothing, and any other refusal
         :func:`refuse_incoherent_attempt` raises is answered as a failure."""
+        close_skipped: tuple[int, ...] = ()
         with self._transactions.begin() as unit:
             locked = unit.lock_chunks([chunk.chunk_id])
             facts = self._facts.load_facts(chunk.chunk_id, transaction=locked)
@@ -551,6 +557,8 @@ class ApplyService:
                     )
                     if isinstance(escalated, FenceRefusal):
                         return ApplyResult.failure(escalated.detail)
+                    close_skipped = escalated.close_skipped
+        self._events.publish(*close_skipped_events(close_skipped, chunk=chunk))
         if raced is not None:
             return self._answer_raced(chunk, graph, from_node, submission, raced)
         return answer
@@ -568,6 +576,7 @@ class ApplyService:
         release/retain + intent clear), then govern by the landed node's executor."""
         artifact_rows = self._artifact_rows(chunk, from_node, submission.epoch, artifacts)
         migration_id = Id.mint(IdPrefix.MIGRATION, self._clock).value
+        close_skipped: tuple[int, ...] = ()
         with self._exclusive.locked([chunk.chunk_id]) as handle:
             locked = handle.facts(chunk.chunk_id)
             if locked is None:
@@ -602,8 +611,8 @@ class ApplyService:
                 )
                 if isinstance(outcome, FenceRefusal):
                     return ApplyResult.failure(outcome.detail)
-                landed = outcome
-                open_graph_gate_on_arrival(
+                landed = outcome.migration_id if outcome is not None else None
+                close_skipped = (outcome.close_skipped if outcome is not None else ()) + open_graph_gate_on_arrival(
                     self._decisions,
                     handle,
                     self._clock,
@@ -613,6 +622,7 @@ class ApplyService:
                     epoch=submission.epoch,
                     close_decision=decide_close_enqueue(chunk.work_refs, self._closer_available),
                 )
+        self._events.publish(*close_skipped_events(close_skipped, chunk=chunk))
         if isinstance(landed, _Raced):
             return self._answer_raced(chunk, graph, from_node, submission, landed)
         _CP_MIGRATE_AFTER_RECORD.reached()

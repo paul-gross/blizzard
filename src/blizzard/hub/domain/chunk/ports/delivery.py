@@ -3,12 +3,24 @@ close-intent tail a delivered chunk leaves behind."""
 
 from __future__ import annotations
 
+from dataclasses import dataclass
 from datetime import datetime
 from typing import Protocol
 
+from blizzard.foundation.roles import domain_model
 from blizzard.hub.domain.chunk.close_read import CloseAttempt, CloseClosure, CloseIntent
 from blizzard.hub.domain.chunk.delivery_read import LandingFact
 from blizzard.hub.domain.chunk.model import CloseEnqueueDecision, PendingCloseIntent, WorkItemCloseOutcome, WorkRef
+
+
+@domain_model
+@dataclass(frozen=True)
+class DeliveryWrite:
+    """What a delivery landing did: whether it wrote — ``False`` for a replay — and the ids of the
+    ``work-item-close-skipped`` event rows it wrote."""
+
+    wrote: bool
+    close_skipped: tuple[int, ...] = ()
 
 
 class IReadChunkDeliveryRepository(Protocol):
@@ -40,7 +52,9 @@ class IReadChunkDeliveryRepository(Protocol):
 class IWriteChunkDeliveryRepository(IReadChunkDeliveryRepository, Protocol):
     """Read-write chunk-delivery access."""
 
-    def record_delivery_landed(self, chunk_id: str, *, at: datetime, close_decision: CloseEnqueueDecision) -> None: ...
+    def record_delivery_landed(
+        self, chunk_id: str, *, at: datetime, close_decision: CloseEnqueueDecision
+    ) -> DeliveryWrite: ...
 
     def finalize_delivery(
         self,
@@ -54,9 +68,9 @@ class IWriteChunkDeliveryRepository(IReadChunkDeliveryRepository, Protocol):
         transition_id: str,
         at: datetime,
         close_decision: CloseEnqueueDecision,
-    ) -> bool:
+    ) -> DeliveryWrite:
         """Land the terminal delivery atomically and idempotently — one transaction, a
-        no-op if already landed (crash recovery). Returns True iff it wrote."""
+        no-op if already landed (crash recovery). Answers ``wrote`` True iff it wrote."""
         ...
 
     def record_work_item_closure(

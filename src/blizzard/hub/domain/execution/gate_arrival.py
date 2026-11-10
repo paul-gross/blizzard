@@ -21,11 +21,12 @@ def open_graph_gate_on_arrival(
     epoch: int,
     close_decision: CloseEnqueueDecision,
     claimant: Claimant | None = None,
-) -> None:
-    """Join the landing write's lock and transaction; hub-owned restarts have no claimant."""
+) -> tuple[int, ...]:
+    """Join the landing write's lock and transaction; hub-owned restarts have no claimant. Answers the ids of the
+    ``work-item-close-skipped`` event rows the decision wrote, for the unit's owner to publish once it commits."""
     step = NextStep.of(graph, node_id)
     if step.kind is not NextStepKind.GATE or step.node is None:
-        return
+        return ()
     result = decisions.record_decision_locked(
         handle,
         decision_id=Id.mint(IdPrefix.DECISION, clock).value,
@@ -43,3 +44,4 @@ def open_graph_gate_on_arrival(
     )
     if isinstance(result, FenceRefusal):
         raise RuntimeError(f"gate arrival refused after movement: {result.detail}")
+    return result.close_skipped

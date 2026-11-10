@@ -25,7 +25,7 @@ from blizzard.hub.domain.actions.declarations import GitCommits
 from blizzard.hub.domain.actions.effects import ActionEscalation, MissingCapability
 from blizzard.hub.domain.artifact.model import StoredArtifact
 from blizzard.hub.domain.chunk.delivery_read import DeliveryRead, DeliverySources
-from blizzard.hub.domain.chunk.event_log import EventLogService, LoggedEvent
+from blizzard.hub.domain.chunk.event_log import EventLogService, LoggedEvent, close_skipped_events
 from blizzard.hub.domain.chunk.model import (
     Chunk,
     ChunkFacts,
@@ -37,9 +37,9 @@ from blizzard.hub.domain.chunk.ports.artifacts import IWriteChunkArtifactsReposi
 from blizzard.hub.domain.chunk.ports.decisions import IWriteChunkDecisionsRepository
 from blizzard.hub.domain.chunk.ports.escalations import BounceEscalationOutcome, IWriteChunkEscalationsRepository
 from blizzard.hub.domain.chunk.ports.exclusive import IChunkExclusiveWrites, ILockedChunkRead
-from blizzard.hub.domain.chunk.ports.fence import EpochAdmission, FenceRefusal
+from blizzard.hub.domain.chunk.ports.fence import EpochAdmission
 from blizzard.hub.domain.chunk.ports.hub_exec import IWriteChunkHubExecRepository
-from blizzard.hub.domain.chunk.ports.movement import IWriteChunkMovementRepository
+from blizzard.hub.domain.chunk.ports.movement import IWriteChunkMovementRepository, MigrationWrite
 from blizzard.hub.domain.config.forges import ConfiguredForge, IReadForgeRepository
 from blizzard.hub.domain.config.repositories import (
     IReadRepositoryRecordRepository,
@@ -394,7 +394,7 @@ class HubNodeRouter:
             )
             return
         with self._exclusive.locked([chunk.chunk_id]) as handle:
-            self._migrate_on(
+            logged = self._migrate_on(
                 handle,
                 chunk,
                 node,
@@ -404,6 +404,7 @@ class HubNodeRouter:
                 close=close_decision,
                 ending=ending,
             )
+        self._events.publish(*logged)
 
     def _commit(
         self,
@@ -421,7 +422,7 @@ class HubNodeRouter:
         else beside the transition its envelope rides on, and the turn's end."""
         close_decision = self._close_decision(chunk)
         with self._exclusive.locked([chunk.chunk_id]) as handle:
-            self._commit_on(
+            logged = self._commit_on(
                 handle,
                 graph,
                 chunk,
@@ -433,6 +434,7 @@ class HubNodeRouter:
                 close=close_decision,
                 ending=ending,
             )
+        self._events.publish(*logged)
 
     def _commit_on(
         self,
@@ -447,7 +449,9 @@ class HubNodeRouter:
         bounce: tuple[str, str | None],
         close: CloseEnqueueDecision,
         ending: ITurnEnd,
-    ) -> None:
+    ) -> list[LoggedEvent]:
+        """The transition on ``handle`` — or the bounce, or the migration a drift routes it into — and the turn's
+        end; the close-skip events it wrote, to publish once the transaction commits."""
         hub_epoch = epoch + 1
         cause, envelope = bounce
         artifacts: list[StoredArtifact] = []
@@ -459,7 +463,7 @@ class HubNodeRouter:
             facts = handle.facts(chunk.chunk_id)
             if locked is None or facts is None or not facts.delivering_at(node.node_id, epoch=epoch):
                 ending.end(handle, outcome=choice, closure=None)
-                return
+                return []
             edge = graph.edge_for_choice(node.node_id, choice)
             assert edge is not None, f"a transition destination resolved from an edge of `{choice}` on `{node.name}`"
             landing = Landing.consult(
@@ -479,7 +483,7 @@ class HubNodeRouter:
             if self._bounce(handle, chunk, node, hub_epoch=hub_epoch, cause=cause, envelope=envelope):
                 # The envelope rides on the escalation too: it is what marks this node's exit at the epoch, so a
                 # replay of the crossing is recognised by `record_bounce_locked`'s guard and counts nothing twice.
-                self._artifacts.record_hub_artifact(
+                written = self._artifacts.record_hub_artifact(
                     chunk.chunk_id,
                     node_id=node.node_id,
                     node_name=node.name,
@@ -492,10 +496,10 @@ class HubNodeRouter:
                     transaction=handle.transaction,
                 )
                 ending.end(handle, outcome=TURN_ESCALATED, closure=None)
-                return
+                return list(close_skipped_events(written.close_skipped, chunk=chunk))
             artifacts.append(self._envelope_artifact(chunk, node, hub_epoch=hub_epoch, envelope=envelope))
         if landing is not None:
-            self._migrate_on(
+            return self._migrate_on(
                 handle,
                 chunk,
                 node,
@@ -506,8 +510,7 @@ class HubNodeRouter:
                 ending=ending,
                 artifacts=artifacts,
             )
-            return
-        wrote = self._hub_exec.record_hub_step_transition_locked(
+        written = self._hub_exec.record_hub_step_transition_locked(
             handle,
             chunk.chunk_id,
             from_node_id=node.node_id,
@@ -522,8 +525,9 @@ class HubNodeRouter:
             release_route=destination.to_node_id == RESERVED_TERMINAL,
             close_decision=close,
         )
-        if wrote:
-            open_graph_gate_on_arrival(
+        close_skipped = written.close_skipped
+        if written.wrote:
+            close_skipped += open_graph_gate_on_arrival(
                 self._decisions,
                 handle,
                 self._clock,
@@ -533,7 +537,8 @@ class HubNodeRouter:
                 epoch=hub_epoch,
                 close_decision=close,
             )
-        ending.end(handle, outcome=choice, closure=choice if wrote else None)
+        ending.end(handle, outcome=choice, closure=choice if written.wrote else None)
+        return list(close_skipped_events(close_skipped, chunk=chunk))
 
     def _migrate_on(
         self,
@@ -547,9 +552,10 @@ class HubNodeRouter:
         close: CloseEnqueueDecision,
         ending: ITurnEnd,
         artifacts: list[StoredArtifact] | None = None,
-    ) -> None:
+    ) -> list[LoggedEvent]:
         """The migration onto ``landing`` at the visit's own ``epoch`` — it mints none — a standing intent staying
-        parked, and the landed node's gate opened. ``artifacts`` ride on the migration's own transaction."""
+        parked, and the landed node's gate opened. ``artifacts`` ride on the migration's own transaction. Answers the
+        close-skip events it wrote, to publish once the transaction commits."""
         outcome = self._movement.record_migration_locked(
             handle,
             chunk.chunk_id,
@@ -571,9 +577,10 @@ class HubNodeRouter:
             migration_id=Id.mint(IdPrefix.MIGRATION, self._clock).value,
             close_decision=close,
         )
-        wrote = outcome is not None and not isinstance(outcome, FenceRefusal)
-        if wrote:
-            open_graph_gate_on_arrival(
+        close_skipped: tuple[int, ...] = ()
+        wrote = isinstance(outcome, MigrationWrite)
+        if isinstance(outcome, MigrationWrite):
+            close_skipped = outcome.close_skipped + open_graph_gate_on_arrival(
                 self._decisions,
                 handle,
                 self._clock,
@@ -584,6 +591,7 @@ class HubNodeRouter:
                 close_decision=close,
             )
         ending.end(handle, outcome=choice, closure=choice if wrote else None)
+        return list(close_skipped_events(close_skipped, chunk=chunk))
 
     def refuse(
         self,
@@ -614,7 +622,7 @@ class HubNodeRouter:
                 ending.end(handle, outcome=destination.turn_outcome(choice), closure=None)
                 return
             now = self._clock.now()
-            self._artifacts.record_hub_artifact(
+            written = self._artifacts.record_hub_artifact(
                 chunk.chunk_id,
                 node_id=node.node_id,
                 node_name=node.name,
@@ -626,6 +634,7 @@ class HubNodeRouter:
                 close_decision=close_decision,
                 transaction=handle.transaction,
             )
+            logged.extend(close_skipped_events(written.close_skipped, chunk=chunk))
             if resolution is not None and (kind := REFUSAL_EVENT[resolution.outcome]) and visit.first(name):
                 logged.append(
                     self._events.record(
@@ -674,12 +683,13 @@ class HubNodeRouter:
         """Route ``choice`` to ``destination`` on ``handle``, as :meth:`route` routes a choice with no delivery to
         bounce — the events it wrote, to publish once the transaction commits."""
         if isinstance(destination, _Migrate):
-            self._migrate_on(
+            return self._migrate_on(
                 handle, chunk, node, destination.landing, epoch=epoch, choice=choice, close=close, ending=ending
             )
-        elif isinstance(destination, _Escalate):
+        if isinstance(destination, _Escalate):
             self._escalated_on(handle, chunk, destination.escalation, epoch=epoch, ending=ending)
-        elif isinstance(destination, _Unroutable):
+            return []
+        if isinstance(destination, _Unroutable):
             return self._unroutable_on(
                 handle,
                 visit,
@@ -691,20 +701,18 @@ class HubNodeRouter:
                 close=close,
                 ending=ending,
             )
-        else:
-            self._commit_on(
-                handle,
-                graph,
-                chunk,
-                node,
-                destination,
-                epoch=epoch,
-                choice=choice,
-                bounce=(choice, None),
-                close=close,
-                ending=ending,
-            )
-        return []
+        return self._commit_on(
+            handle,
+            graph,
+            chunk,
+            node,
+            destination,
+            epoch=epoch,
+            choice=choice,
+            bounce=(choice, None),
+            close=close,
+            ending=ending,
+        )
 
     def _standing_visit(
         self, handle: ILockedChunkRead, chunk: Chunk, node: Node, *, epoch: int
@@ -821,7 +829,7 @@ class HubNodeRouter:
         can change what a forge offers or what an action asks of it. ``explanation`` is the caller's human account.
         Its ``hub-log`` artifact is written first, once per visit; its event only when the escalation takes."""
         detail = explanation
-        self._artifacts.record_hub_artifact(
+        written = self._artifacts.record_hub_artifact(
             chunk.chunk_id,
             node_id=node.node_id,
             node_name=node.name,
@@ -832,6 +840,7 @@ class HubNodeRouter:
             at=self._clock.now(),
             close_decision=self._close_decision(chunk),
         )
+        self._events.publish(*close_skipped_events(written.close_skipped, chunk=chunk))
         escalation = ActionEscalation(EscalationCause.FORGE_CAPABILITY_MISSING, detail, missing)
         outcome = self._escalated(chunk, escalation, epoch=epoch, ending=ending)
         if outcome is BounceEscalationOutcome.RECORDED:
@@ -960,7 +969,7 @@ class HubNodeRouter:
         else:
             detail = f"choice `{choice}` on hub node `{node.name}` routes to unknown node `{to_node}`"
         authored = sorted(c.name for c in node.choices)
-        self._artifacts.record_hub_artifact(
+        written = self._artifacts.record_hub_artifact(
             chunk.chunk_id,
             node_id=node.node_id,
             node_name=node.name,
@@ -976,7 +985,7 @@ class HubNodeRouter:
             close_decision=close,
             transaction=handle.transaction,
         )
-        logged: list[LoggedEvent] = []
+        logged = list(close_skipped_events(written.close_skipped, chunk=chunk))
         if visit.first(_UNROUTABLE_ARTIFACT_NAME):
             logged.append(
                 self._events.record(

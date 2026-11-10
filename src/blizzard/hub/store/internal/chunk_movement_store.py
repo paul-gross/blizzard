@@ -24,7 +24,7 @@ from blizzard.hub.domain.chunk.flow_writes import LeverWrite
 from blizzard.hub.domain.chunk.model import CloseEnqueueDecision
 from blizzard.hub.domain.chunk.ports.exclusive import ILockedChunkRead
 from blizzard.hub.domain.chunk.ports.fence import Claimant, EpochAdmission, EpochOwner, FenceRefusal
-from blizzard.hub.domain.chunk.ports.movement import IWriteChunkMovementRepository
+from blizzard.hub.domain.chunk.ports.movement import IWriteChunkMovementRepository, MigrationWrite, TransitionWrite
 from blizzard.hub.domain.graph.model import RESERVED_TERMINAL
 from blizzard.hub.store import schema as s
 from blizzard.hub.store.internal.chunk_rows import (
@@ -84,7 +84,7 @@ class ChunkMovementStore:
         artifacts: list[StoredArtifact],
         close_decision: CloseEnqueueDecision,
         decision_id: str | None = None,
-    ) -> FenceRefusal | None:
+    ) -> TransitionWrite | FenceRefusal:
         with self._store.write("record_transition") as conn:
             lock_chunk_row(conn, chunk_id)
             return self._record_transition_conn(
@@ -121,7 +121,7 @@ class ChunkMovementStore:
         artifacts: list[StoredArtifact],
         close_decision: CloseEnqueueDecision,
         decision_id: str | None = None,
-    ) -> FenceRefusal | None:
+    ) -> TransitionWrite | FenceRefusal:
         """:meth:`record_transition` on ``handle``'s already-locked connection
         (``bzh:store-exclusive-write``) — the caller's guard reads and this write share one lock."""
         return self._record_transition_conn(
@@ -158,7 +158,7 @@ class ChunkMovementStore:
         artifacts: list[StoredArtifact],
         close_decision: CloseEnqueueDecision,
         decision_id: str | None = None,
-    ) -> FenceRefusal | None:
+    ) -> TransitionWrite | FenceRefusal:
         refusal = fence(conn, chunk_id, epoch=epoch, admission=admission, claimant=claimant)
         if refusal is not None:
             return refusal
@@ -194,8 +194,8 @@ class ChunkMovementStore:
                 )
             )
         if to_node_id == RESERVED_TERMINAL or any(is_landing_marker(row.name, row.data) for row in artifacts):
-            enqueue_close_intents(conn, chunk_id, at=at, close_decision=close_decision)
-        return None
+            return TransitionWrite(enqueue_close_intents(conn, chunk_id, at=at, close_decision=close_decision))
+        return TransitionWrite()
 
     def record_migration(
         self,
@@ -218,7 +218,7 @@ class ChunkMovementStore:
         release_route: bool = True,
         clear_intent: bool = False,
         migration_id: str | None = None,
-    ) -> str | FenceRefusal | None:
+    ) -> MigrationWrite | FenceRefusal | None:
         """See ``src/blizzard/hub/domain/chunk/ports/movement.py``'s
         ``IWriteChunkMovementRepository.record_migration``."""
         with self._store.write("record_migration") as conn:
@@ -267,7 +267,7 @@ class ChunkMovementStore:
         release_route: bool = True,
         clear_intent: bool = False,
         migration_id: str | None = None,
-    ) -> str | FenceRefusal | None:
+    ) -> MigrationWrite | FenceRefusal | None:
         """:meth:`record_migration` on ``handle``'s already-locked connection
         (``bzh:store-exclusive-write``) — the caller's guard reads and this write share one lock."""
         return self._record_migration_conn(
@@ -314,7 +314,7 @@ class ChunkMovementStore:
         release_route: bool = True,
         clear_intent: bool = False,
         migration_id: str | None = None,
-    ) -> str | FenceRefusal | None:
+    ) -> MigrationWrite | FenceRefusal | None:
         if self._migration_exists(conn, chunk_id, from_node_id=from_node_id, epoch=epoch):
             return None
         refusal = fence(conn, chunk_id, epoch=epoch, admission=admission, claimant=claimant)
@@ -371,8 +371,10 @@ class ChunkMovementStore:
                 )
             )
         if any(is_landing_marker(row.name, row.data) for row in artifacts):
-            enqueue_close_intents(conn, chunk_id, at=at, close_decision=close_decision)
-        return resolved_migration_id
+            return MigrationWrite(
+                resolved_migration_id, enqueue_close_intents(conn, chunk_id, at=at, close_decision=close_decision)
+            )
+        return MigrationWrite(resolved_migration_id)
 
     def record_restart_locked(
         self,

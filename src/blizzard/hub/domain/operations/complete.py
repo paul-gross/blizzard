@@ -11,6 +11,7 @@ from collections.abc import Callable
 from blizzard.foundation.chunk_status import ChunkStatus
 from blizzard.foundation.clock import IClock
 from blizzard.hub.domain.chunk.errors import ChunkNotFound
+from blizzard.hub.domain.chunk.event_log import EventLogService, close_skipped_events
 from blizzard.hub.domain.chunk.flow_writes import LeverWrite
 from blizzard.hub.domain.chunk.model import Chunk, ChunkFacts, decide_close_enqueue
 from blizzard.hub.domain.chunk.ports.exclusive import IChunkExclusiveWrites
@@ -32,8 +33,10 @@ class CompleteService:
         exclusive: IChunkExclusiveWrites,
         clock: IClock,
         closer_available: Callable[[str], bool],
+        events: EventLogService,
     ) -> None:
         self._lifecycle = lifecycle
+        self._events = events
         self._clock = clock
         self._closer_available = closer_available
         # ``bzh:store-exclusive-write``.
@@ -45,8 +48,9 @@ class CompleteService:
         loaded chunk (``bzh:domain-takes-objects``); the already-``done`` guard is re-derived fresh under the row
         lock (``bzh:store-exclusive-write``), so a concurrent completion cannot land a second fact past a stale read.
         A no-op on an already-``done`` chunk — returns ``None``; otherwise the fresh ``chunk_completed.id`` and the
-        ``withdrawn`` flow facts, for the caller to announce once committed. Raises :class:`ChunkNotFound` for a chunk
-        gone under the lock. ``at`` is stamped from the injected clock after the row lock is taken, never before it."""
+        ``withdrawn`` flow facts, for the caller to announce once committed; the close-skip events it wrote are
+        published here, once the unit has committed. Raises :class:`ChunkNotFound` for a chunk gone under the lock.
+        ``at`` is stamped from the injected clock after the row lock is taken, never before it."""
         with self._exclusive.locked([chunk.chunk_id]) as handle:
             facts = handle.facts(chunk.chunk_id)
             if facts is None:
@@ -56,10 +60,12 @@ class CompleteService:
             current = handle.record(chunk.chunk_id)
             if current is None:
                 raise ChunkNotFound(chunk.chunk_id)
-            return self._lifecycle.record_completion_locked(
+            written = self._lifecycle.record_completion_locked(
                 handle,
                 chunk.chunk_id,
                 by=by,
                 at=self._clock.now(),
                 close_decision=decide_close_enqueue(current.work_refs, self._closer_available),
             )
+        self._events.publish(*close_skipped_events(written.close_skipped, chunk=chunk))
+        return written

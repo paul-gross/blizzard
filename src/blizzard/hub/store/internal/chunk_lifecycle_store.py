@@ -84,9 +84,9 @@ class ChunkLifecycleStore:
                 )
             )
         withdrawn = withdraw_waiting(conn, chunk_id, outcome="completed", at=at)
-        enqueue_close_intents(conn, chunk_id, at=at, close_decision=close_decision)
+        close_skipped = enqueue_close_intents(conn, chunk_id, at=at, close_decision=close_decision)
         key = result.inserted_primary_key
-        return LeverWrite(int(key[0]) if key is not None else 0, withdrawn)
+        return LeverWrite(int(key[0]) if key is not None else 0, withdrawn, close_skipped)
 
 
 _lifecycle_conforms: type[IWriteChunkLifecycleRepository] = ChunkLifecycleStore

@@ -176,7 +176,7 @@ def test_detail_artifact_production_time_is_the_stored_marker_clock(tmp_path: Pa
         content='{"repo":"acme/widget","number":1,"url":"http://forge/acme/widget/pull/1"}',
         at=produced_at,
         close_decision=decide_close_enqueue([WorkRef(source="default", ref="7")], lambda _: True),
-    )
+    ).wrote
 
     response = hub.client.get(f"/api/chunks/{chunk_id}")
     assert response.status_code == 200, response.text

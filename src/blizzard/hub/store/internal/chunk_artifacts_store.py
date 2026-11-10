@@ -20,7 +20,11 @@ from blizzard.foundation.store.batching import id_batches
 from blizzard.hub.domain.artifact.model import StoredArtifact
 from blizzard.hub.domain.chunk.delivery_read import DeliverySources
 from blizzard.hub.domain.chunk.model import CloseEnqueueDecision
-from blizzard.hub.domain.chunk.ports.artifacts import IWriteChunkArtifactsRepository
+from blizzard.hub.domain.chunk.ports.artifacts import (
+    ArtifactLandingWrite,
+    HubArtifactWrite,
+    IWriteChunkArtifactsRepository,
+)
 from blizzard.hub.domain.chunk.ports.fence import EpochAdmission
 from blizzard.hub.domain.chunk.pr_markers import PR_MARKER_PREFIX, PrMarker, decode_pr_marker
 from blizzard.hub.domain.kernel.transactions import Transaction
@@ -264,7 +268,7 @@ class ChunkArtifactsStore:
         at: datetime,
         close_decision: CloseEnqueueDecision,
         transaction: Transaction | None = None,
-    ) -> bool:
+    ) -> HubArtifactWrite:
         """See ``src/blizzard/hub/domain/chunk/ports/artifacts.py``'s
         ``IWriteChunkArtifactsRepository.record_hub_artifact``."""
         with chunk_locked_connection(self._store, chunk_id, transaction, "record_hub_artifact") as conn:
@@ -277,9 +281,9 @@ class ChunkArtifactsStore:
                 )
             ).first()
             if already is not None:
-                return False
+                return HubArtifactWrite(wrote=False)
             if fence(conn, chunk_id, epoch=epoch, admission=admission) is not None:
-                return False
+                return HubArtifactWrite(wrote=False)
             conn.execute(
                 self._store.insert(s.artifacts).values(
                     artifact_id=Id.mint(IdPrefix.ARTIFACT, self._clock).value,
@@ -297,8 +301,11 @@ class ChunkArtifactsStore:
                 )
             )
             if is_landing_marker(name, content):
-                enqueue_close_intents(conn, chunk_id, at=at, close_decision=close_decision)
-            return True
+                return HubArtifactWrite(
+                    wrote=True,
+                    close_skipped=enqueue_close_intents(conn, chunk_id, at=at, close_decision=close_decision),
+                )
+            return HubArtifactWrite(wrote=True)
 
     def record_landing(
         self,
@@ -313,11 +320,11 @@ class ChunkArtifactsStore:
         repository_id: str,
         at: datetime,
         close_decision: CloseEnqueueDecision,
-    ) -> bool:
+    ) -> ArtifactLandingWrite:
         """See ``src/blizzard/hub/domain/chunk/ports/artifacts.py``'s
         ``IWriteChunkArtifactsRepository.record_landing``."""
         with self._store.write("record_landing") as conn:
-            refused, _wrote = write_landing_rows(
+            refused, _wrote, close_skipped = write_landing_rows(
                 conn,
                 chunk_id,
                 node_id=node_id,
@@ -331,7 +338,7 @@ class ChunkArtifactsStore:
                 artifact_id=Id.mint(IdPrefix.ARTIFACT, self._clock).value,
                 at=at,
             )
-            return refused
+            return ArtifactLandingWrite(refused=refused, close_skipped=close_skipped)
 
 
 _artifacts_conforms: type[IWriteChunkArtifactsRepository] = ChunkArtifactsStore

@@ -595,7 +595,7 @@ def test_a_restart_mid_hub_node_run_fences_out_that_nodes_exit_transition(tmp_pa
             release_route=False,
             admission=EpochAdmission.ABOVE,
             close_decision=decide_close_enqueue([WorkRef(**_POINTER)], lambda _: True),
-        )
+        ).wrote
 
     assert wrote is False
     detail = _detail(hub, chunk_id)
@@ -624,7 +624,7 @@ def test_an_uncontested_hub_node_exit_still_records(tmp_path: Path) -> None:
             release_route=True,
             admission=EpochAdmission.ABOVE,
             close_decision=decide_close_enqueue([WorkRef(**_POINTER)], lambda _: True),
-        )
+        ).wrote
 
     assert wrote is True
     assert _detail(hub, chunk_id)["status"] == "done"

@@ -38,7 +38,7 @@ def test_same_millisecond_marker_writes_read_back_in_write_order(
         at=at,
         admission=EpochAdmission.AT_OR_ABOVE,
         close_decision=decide_close_enqueue([WorkRef(source="default", ref="1")], lambda _: True),
-    )
+    ).wrote
     minted: Iterator[str] = iter(_INVERTED_IDS)
 
     def inverted_mint(cls: type[Id], prefix: str, clock: IClock) -> Id:
@@ -56,7 +56,7 @@ def test_same_millisecond_marker_writes_read_back_in_write_order(
             at=at,
             admission=EpochAdmission.AT_OR_ABOVE,
             close_decision=decide_close_enqueue([WorkRef(source="default", ref="1")], lambda _: True),
-        )
+        ).wrote
 
     sources = hub.services.chunks.artifacts.delivery_sources_for([chunk_id])[chunk_id]
 

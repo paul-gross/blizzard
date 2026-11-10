@@ -190,7 +190,7 @@ def test_a_stopped_chunk_fences_out_a_still_running_step_transition(tmp_path: Pa
             artifacts=[],
             release_route=True,
             admission=EpochAdmission.ABOVE,
-        )
+        ).wrote
 
     assert recorded is False
     detail = hub.client.get(f"/api/chunks/{chunk_id}").json()

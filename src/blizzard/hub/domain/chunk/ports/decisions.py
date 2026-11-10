@@ -25,6 +25,16 @@ from blizzard.hub.domain.projects.model import ProjectId
 
 @domain_model
 @dataclass(frozen=True)
+class DecisionWrite:
+    """What opening a gate decision past the fence did: whether it wrote — ``False`` for the lost-ack replay that
+    found the decision open — and the ids of the ``work-item-close-skipped`` event rows it wrote."""
+
+    wrote: bool
+    close_skipped: tuple[int, ...] = ()
+
+
+@domain_model
+@dataclass(frozen=True)
 class LiveDecisionStatus:
     """A live gate decision's identity and resolution — no choices."""
 
@@ -94,7 +104,7 @@ class IWriteChunkDecisionsRepository(IReadChunkDecisionsRepository, Protocol):
         artifacts: list[StoredArtifact],
         imposed_by_runner_id: str | None,
         close_decision: CloseEnqueueDecision,
-    ) -> FenceRefusal | None:
+    ) -> DecisionWrite | FenceRefusal:
         """Open a gate decision, committing any step artifacts atomically, behind
         the write fence (``bzh:epoch-fencing``) — a refusal writes nothing and is returned.
 
@@ -119,10 +129,10 @@ class IWriteChunkDecisionsRepository(IReadChunkDecisionsRepository, Protocol):
         artifacts: list[StoredArtifact],
         imposed_by_runner_id: str | None,
         close_decision: CloseEnqueueDecision,
-    ) -> bool | FenceRefusal:
+    ) -> DecisionWrite | FenceRefusal:
         """:meth:`record_decision` on ``handle``'s already-locked connection
         (``bzh:store-exclusive-write``), so the caller's guard reads and this write share one
-        lock. A decision already open at ``(chunk_id, node_id, epoch)`` answers ``False`` — the
+        lock. A decision already open at ``(chunk_id, node_id, epoch)`` answers ``wrote`` ``False`` — the
         lost-ack replay, nothing written; ``True`` is a fresh write; a refusal writes nothing."""
         ...
 

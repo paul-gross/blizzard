@@ -4,15 +4,35 @@ cross-graph migrations, restarts, and requeues."""
 from __future__ import annotations
 
 from collections.abc import Sequence
+from dataclasses import dataclass
 from datetime import datetime
 from typing import Protocol
 
 from blizzard.foundation.migration_source import MigrationSource
+from blizzard.foundation.roles import domain_model
 from blizzard.hub.domain.artifact.model import StoredArtifact
 from blizzard.hub.domain.chunk.flow_writes import LeverWrite
 from blizzard.hub.domain.chunk.model import CloseEnqueueDecision
 from blizzard.hub.domain.chunk.ports.exclusive import ILockedChunkRead
 from blizzard.hub.domain.chunk.ports.fence import Claimant, EpochAdmission, FenceRefusal
+
+
+@domain_model
+@dataclass(frozen=True)
+class TransitionWrite:
+    """What a transition admitted past the fence wrote: the ids of the ``work-item-close-skipped`` event rows."""
+
+    close_skipped: tuple[int, ...] = ()
+
+
+@domain_model
+@dataclass(frozen=True)
+class MigrationWrite:
+    """What a fresh cross-graph migration wrote: its ``migration_id``, and the ids of the
+    ``work-item-close-skipped`` event rows."""
+
+    migration_id: str
+    close_skipped: tuple[int, ...] = ()
 
 
 class IReadChunkMovementRepository(Protocol):
@@ -50,7 +70,7 @@ class IWriteChunkMovementRepository(IReadChunkMovementRepository, Protocol):
         artifacts: list[StoredArtifact],
         close_decision: CloseEnqueueDecision,
         decision_id: str | None = None,
-    ) -> FenceRefusal | None:
+    ) -> TransitionWrite | FenceRefusal:
         """One node-step's transition and its artifacts, written atomically
         behind the write fence (``bzh:epoch-fencing``) — a refusal writes nothing and is
         returned. ``decision_id`` is set only on a gate-resolving transition."""
@@ -77,11 +97,11 @@ class IWriteChunkMovementRepository(IReadChunkMovementRepository, Protocol):
         release_route: bool = True,
         clear_intent: bool = False,
         migration_id: str | None = None,
-    ) -> str | FenceRefusal | None:
+    ) -> MigrationWrite | FenceRefusal | None:
         """Record a cross-graph migration atomically and idempotently per ``(chunk_id, from_node_id, epoch)``,
         behind the write fence (``bzh:epoch-fencing``): the ``chunk_migrations`` fact, the ``chunks.graph_id``
         re-pin, the route release (unless ``release_route`` is ``False``), the step's ``artifacts``, and — when
-        ``clear_intent`` — the intent clear. Returns the ``migration_id``, ``None`` on replay, or the
+        ``clear_intent`` — the intent clear. Returns the :class:`MigrationWrite`, ``None`` on replay, or the
         :class:`FenceRefusal` that wrote nothing."""
         ...
 
@@ -102,7 +122,7 @@ class IWriteChunkMovementRepository(IReadChunkMovementRepository, Protocol):
         artifacts: list[StoredArtifact],
         close_decision: CloseEnqueueDecision,
         decision_id: str | None = None,
-    ) -> FenceRefusal | None:
+    ) -> TransitionWrite | FenceRefusal:
         """:meth:`record_transition` on ``handle``'s already-locked connection (``bzh:store-exclusive-write``):
         the caller's guard reads and this write share one lock."""
         ...
@@ -129,7 +149,7 @@ class IWriteChunkMovementRepository(IReadChunkMovementRepository, Protocol):
         release_route: bool = True,
         clear_intent: bool = False,
         migration_id: str | None = None,
-    ) -> str | FenceRefusal | None:
+    ) -> MigrationWrite | FenceRefusal | None:
         """:meth:`record_migration` on ``handle``'s already-locked connection (``bzh:store-exclusive-write``):
         the caller's guard reads and this write share one lock."""
         ...

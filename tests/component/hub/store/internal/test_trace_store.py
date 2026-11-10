@@ -232,7 +232,7 @@ class _HubStepToDone:
                 artifacts=[],
                 release_route=True,
                 close_decision=decide_close_enqueue([WorkRef("default", "1")], lambda _source: False),
-            )
+            ).wrote
         self.committed = True
 
 
