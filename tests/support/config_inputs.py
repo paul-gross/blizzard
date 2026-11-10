@@ -14,6 +14,7 @@ from blizzard.cli.config_inputs import packaged_flag_registry
 from blizzard.foundation.clock import SystemClock
 from blizzard.foundation.config_keys import ConfigRegistry
 from blizzard.foundation.flags import FlagRegistry, Flags, resolve_flags
+from blizzard.foundation.store.migrations import MigrationRunner
 from blizzard.hub import app as hub_app
 from blizzard.hub import runtime as hub_runtime
 from blizzard.hub.config import HubConfig
@@ -137,14 +138,21 @@ def host_runtime_of(
     hub_url: str | None = None,
     projects: tuple[str, ...] | None = None,
     holder: Callable[[Path], str | None] | None = None,
+    migrations: Callable[[str], MigrationRunner] = runner_runtime.runner_store_migrations,
 ) -> runner_runtime.Runtime:
     """The host runtime at ``root`` with the suite's inputs; ``holder`` defaults to the runtime's own."""
     if holder is None:
         return runner_runtime.Runtime(
-            root, hub_url=hub_url, projects=projects, flag_registry=FLAG_REGISTRY, strict=STRICT
+            root, hub_url=hub_url, projects=projects, flag_registry=FLAG_REGISTRY, strict=STRICT, migrations=migrations
         )
     return runner_runtime.Runtime(
-        root, hub_url=hub_url, projects=projects, holder=holder, flag_registry=FLAG_REGISTRY, strict=STRICT
+        root,
+        hub_url=hub_url,
+        projects=projects,
+        holder=holder,
+        flag_registry=FLAG_REGISTRY,
+        strict=STRICT,
+        migrations=migrations,
     )
 
 
