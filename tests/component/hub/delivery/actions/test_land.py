@@ -469,7 +469,7 @@ def test_a_blank_landing_marker_is_not_a_landing() -> None:
 def test_a_repo_landed_at_an_earlier_node_is_never_the_parked_watch() -> None:
     visit = _visit(earlier_node_markers=(f"merged/{_WIDGET}",))
     assert visit.landed_repos() == frozenset({_WIDGET})
-    assert visit.parked_watch() is None
+    assert visit.watched_repo() is None
 
 
 def test_a_base_held_submission_records_no_code_only_for_that_repo() -> None:

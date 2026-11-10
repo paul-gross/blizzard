@@ -1,5 +1,5 @@
 """Whether a live head is still the submitted work: the submitted commit itself, or a descendant of it through base
-merges alone — the gate every landing policy puts a head through before it lands."""
+merges alone — the gate automatic landing policies and the no-code proof use."""
 
 from __future__ import annotations
 

@@ -11,7 +11,16 @@ from blizzard.foundation.landing_policy import LandingPolicy
 from blizzard.hub.delivery.actions.landing.fast_forward import FastForward
 from blizzard.hub.delivery.actions.landing.merge_on_checks import MergeOnChecks
 from blizzard.hub.delivery.actions.landing.park import Park
-from blizzard.hub.delivery.actions.landing.repo import Admitted, RepoLanding, RepoState
+from blizzard.hub.delivery.actions.landing.repo import (
+    Admitted,
+    AwaitingMerge,
+    Landed,
+    NeedsFreshReview,
+    NeedsPerson,
+    RepoLanding,
+    RepoState,
+    Waiting,
+)
 
 
 class ILandingPolicy(Protocol):
@@ -21,8 +30,16 @@ class ILandingPolicy(Protocol):
         ...
 
 
+class IWatchingPolicy(Protocol):
+    async def watch(self, repo: RepoLanding) -> Landed | Waiting | NeedsPerson | AwaitingMerge | NeedsFreshReview: ...
+
+
+_PARK = Park()
+
 POLICIES: Mapping[LandingPolicy, ILandingPolicy] = {
     LandingPolicy.MERGE_ON_CHECKS: MergeOnChecks(),
     LandingPolicy.FAST_FORWARD: FastForward(),
-    LandingPolicy.PARK: Park(),
+    LandingPolicy.PARK: _PARK,
 }
+
+WATCHERS: Mapping[LandingPolicy, IWatchingPolicy] = {LandingPolicy.PARK: _PARK}

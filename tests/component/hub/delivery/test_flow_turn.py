@@ -17,13 +17,14 @@ import pytest
 from sqlalchemy import insert, select
 
 from blizzard.foundation.clock import FixedClock
+from blizzard.foundation.landing_policy import LandingPolicy
 from blizzard.hub.delivery.action_registry import HubActions
 from blizzard.hub.delivery.flow_turn import TurnRunner
 from blizzard.hub.domain.actions.effects import IEffectSink, Marker, Pass
 from blizzard.hub.domain.actions.visit import Visit
 from blizzard.hub.domain.chunk.flow_writes import FlowFactWritten
 from blizzard.hub.domain.config.capabilities import Capability
-from blizzard.hub.domain.config.repositories import RepositoryEdit
+from blizzard.hub.domain.config.repositories import RepositoryEdit, ResolvedRepository
 from blizzard.hub.domain.delivery.flows import Submission
 from blizzard.hub.domain.graph.actions import ActionSpec
 from blizzard.hub.domain.projects.model import ProjectId
@@ -34,10 +35,12 @@ from blizzard.hub.forge.registry import BudgetGate, ForgeCallRefused, RefsHandle
 from blizzard.hub.store import schema as s
 from blizzard.hub.store.internal.flow_store import FlowStore
 from blizzard.tools.invariants import hub_invariants
+from tests.support.hub_node_artifacts import record_hub_asset
 from tests.support.scaffolding import (
     OP,
     TEST_HUB_ACTIONS,
     HubHarness,
+    RepositorySeed,
     build_hub,
     default_project,
     hub_scoped,
@@ -70,9 +73,11 @@ class _Hooked:
         self.answer = Pass(choice="pending")
         self.hook: Callable[[Visit], None] = lambda visit: None
         self.passes = 0
+        self.forges: list[VisitForges] = []
 
     async def take(self, visit: Visit, forges: VisitForges, effects: IEffectSink) -> Pass:
         self.passes += 1
+        self.forges.append(forges)
         self.hook(visit)
         return self.answer
 
@@ -152,12 +157,27 @@ nodes:
 
 
 class _World:
-    def __init__(self, tmp_path: Path, *, pass_seconds: float = _BOUND) -> None:
+    def __init__(self, tmp_path: Path, *, pass_seconds: float = _BOUND, two_repos: bool = False) -> None:
         self.hooked = _Hooked()
         actions = HubActions.of([*TEST_HUB_ACTIONS.implementations.values(), self.hooked, _BlockThenMark(), _Mark()])
+        repositories = None
+        if two_repos:
+            repositories = (
+                RepositorySeed(
+                    "http://forge.fixture", "acme", "gadget", "main", "fixture-forge-token", LandingPolicy.PARK
+                ),
+                RepositorySeed(
+                    "http://forge.fixture", "acme", "widget", "main", "fixture-forge-token", LandingPolicy.FAST_FORWARD
+                ),
+            )
         self.hub: HubHarness = build_hub(
-            tmp_path, actions=actions, action_pass_seconds=pass_seconds, action_pass_grace=_GRACE
+            tmp_path,
+            actions=actions,
+            action_pass_seconds=pass_seconds,
+            action_pass_grace=_GRACE,
+            repositories=repositories,
         )
+        self.two_repos = two_repos
         self.minted = 0
 
     @property
@@ -190,7 +210,8 @@ class _World:
                 "from_node_id": build,
                 "check_results": [],
                 "artifacts": [
-                    {"name": "w", "kind": "git_commit", "repo": _REPO, "branch_name": "b", "commit_hash": "a" * 40}
+                    {"name": f"w{i}", "kind": "git_commit", "repo": repo, "branch_name": "b", "commit_hash": "a" * 40}
+                    for i, repo in enumerate(("acme/gadget", _REPO) if self.two_repos else (_REPO,))
                 ],
             },
         )
@@ -587,3 +608,70 @@ def test_a_pass_that_waits_records_a_pending_wait(world: _World) -> None:
     facts = world.hub.services.chunks.facts.load_facts(chunk_id)
     assert facts is not None
     assert [(poll.kind, poll.last_polled_at) for poll in facts.hub_node_polls] == [("pending", None)]
+
+
+def test_any_landing_action_scopes_a_parked_watch_to_its_repository(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    world = _World(tmp_path, two_repos=True)
+    chunk_id = world.at_step("test.hooked")
+    graph = world.hub.services.graphs.get(world.detail(chunk_id)["graph_id"])
+    assert graph is not None
+    step = graph.node_by_name("step")
+    assert step is not None
+    record_hub_asset(
+        world.hub,
+        chunk_id,
+        node_id=step.node_id,
+        node_name="step",
+        epoch=1,
+        name="delivery-pr/acme/gadget/4",
+        content="4",
+    )
+    records = {
+        record.fields.repo: record.repository_id
+        for record in world.hub.services.repository_records.list_all(include_retired=False)
+    }
+    watched, sibling = records["gadget"], records["widget"]
+    offered_calls: list[object] = []
+    forge_calls: list[object] = []
+    forges = world.hub.services.forges
+    offered = forges.offered
+    repository_forge = forges.repository_forge
+
+    def check_offered(forge: Any, repository: Any) -> frozenset[Capability]:
+        offered_calls.append(repository)
+        if repository == sibling:
+            return frozenset()
+        return offered(forge, repository)
+
+    def open_forge(repository: Any, **kwargs: Any) -> Any:
+        forge_calls.append(repository)
+        assert repository != sibling
+        return repository_forge(repository, **kwargs)
+
+    def required(target: ResolvedRepository) -> frozenset[Capability]:
+        return frozenset({Capability.CHANGES_READ})
+
+    monkeypatch.setattr(world.turns, "_requirements", {"test.hooked": required})
+    monkeypatch.setattr(forges, "offered", check_offered)
+    monkeypatch.setattr(forges, "repository_forge", open_forge)
+
+    world.tick()
+
+    assert world.outcomes(chunk_id) == ["pending"]
+    assert offered_calls and set(offered_calls) == {watched}
+    assert forge_calls == [watched]
+    assert set(world.hooked.forges[0]) == {watched}
+
+
+def test_a_nonlanding_action_does_not_consult_the_parked_watch(world: _World, monkeypatch: pytest.MonkeyPatch) -> None:
+    chunk_id = world.at_step("test.answer", " \n    with: {choice: [success]}")
+
+    def unexpected(visit: Visit) -> None:
+        raise AssertionError("nonlanding action asked for a parked watch")
+
+    monkeypatch.setattr(Visit, "watched_repo", unexpected)
+    world.tick()
+
+    assert world.outcomes(chunk_id) == ["success"]

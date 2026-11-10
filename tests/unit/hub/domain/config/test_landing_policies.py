@@ -9,6 +9,7 @@ from blizzard.hub.domain.config.capabilities import Capability
 from blizzard.hub.domain.config.errors import ConfigFieldError
 from blizzard.hub.domain.config.landing_policies import (
     POLICY_CAPABILITIES,
+    POLICY_FACTS,
     ForgeCapabilityMissing,
     landing_sort_key,
     parse_policy,
@@ -56,6 +57,33 @@ def test_merge_on_checks_requires_the_pull_request_capabilities_and_uses_a_rerun
 
 def test_every_policy_has_its_capabilities() -> None:
     assert set(POLICY_CAPABILITIES) == set(LandingPolicy)
+
+
+def test_every_policy_has_facts_and_only_park_watches() -> None:
+    assert set(POLICY_FACTS) == set(LandingPolicy)
+    assert {policy for policy, facts in POLICY_FACTS.items() if facts.watches} == {LandingPolicy.PARK}
+
+
+def test_park_requires_only_opening_and_reading_changes() -> None:
+    capabilities = POLICY_CAPABILITIES[LandingPolicy.PARK]
+    assert capabilities.requires == {Capability.CHANGES_OPEN, Capability.CHANGES_READ}
+    assert capabilities.uses == set()
+
+
+def test_fast_forward_requires_ref_advance_and_uses_optional_recovery_capabilities() -> None:
+    capabilities = POLICY_CAPABILITIES[LandingPolicy.FAST_FORWARD]
+    assert capabilities.requires == {
+        Capability.REFS_READ,
+        Capability.COMPARE,
+        Capability.CHECKS_READ,
+        Capability.REFS_ADVANCE,
+    }
+    assert capabilities.uses == {
+        Capability.REFS_CREATE,
+        Capability.REFS_DELETE,
+        Capability.BRANCHES_MERGE,
+        Capability.CHECKS_RERUN,
+    }
 
 
 def test_a_forge_offering_every_requirement_passes() -> None:

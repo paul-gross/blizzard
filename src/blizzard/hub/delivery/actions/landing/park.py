@@ -8,12 +8,15 @@ from blizzard.foundation.escalation_causes import EscalationCause
 from blizzard.hub.delivery.actions.landing.merge_on_checks import pr_body, pr_title
 from blizzard.hub.delivery.actions.landing.no_code_proof import proves_no_code, record_no_code
 from blizzard.hub.delivery.actions.landing.repo import (
+    Admitted,
     AwaitingMerge,
     ForgeEscalation,
-    Held,
     Landed,
+    NeedsFreshReview,
     NeedsPerson,
+    NoCode,
     NotRecorded,
+    Ready,
     RepoLanding,
     RepoState,
     Waiting,
@@ -43,10 +46,41 @@ _LIMIT = 100
 
 
 class Park:
-    async def step(self, repo: RepoLanding, *, watch: bool = False) -> RepoState:
+    async def step(self, repo: RepoLanding) -> RepoState | Admitted:
+        marker, change, outcome = await self._assess(repo)
+        if outcome is not None and not isinstance(outcome, NeedsFreshReview):
+            return outcome
+        if isinstance(outcome, NeedsFreshReview):
+            marker, change, outcome = await self._assess_unmarked(repo)
+            if outcome is not None:
+                return outcome
+        if change is not None and change.state is ChangeState.MERGED:
+            return self._merged(repo, change, marker)
+
+        async def proceed() -> RepoState:
+            return Ready(lambda: self._land(repo, marker, change))
+
+        return Admitted(proceed)
+
+    async def watch(self, repo: RepoLanding) -> Landed | Waiting | NeedsPerson | AwaitingMerge | NeedsFreshReview:
+        marker, change, outcome = await self._assess(repo)
+        if outcome is not None:
+            if isinstance(outcome, AwaitingMerge):
+                await self._awaiting_marker(repo)
+            return outcome
+        assert change is not None
+        if change.state is ChangeState.MERGED:
+            return self._merged(repo, change, marker)
+        if change.state is ChangeState.CLOSED:
+            return self._closed(repo, change)
+        return await self._mark_open(repo, change, marker)
+
+    async def _assess(
+        self, repo: RepoLanding
+    ) -> tuple[StoredArtifact | None, Change | None, Waiting | NeedsPerson | AwaitingMerge | NeedsFreshReview | None]:
+        """Read an associated change, recovering a merge before considering optional no-code proof."""
         visit = repo.run.visit
         marker = latest_pr_marker(visit.markers, repo.repo)
-        change: Change | None = None
         if marker is not None:
             number = pr_marker_number(marker)
             try:
@@ -54,71 +88,94 @@ class Park:
                 change = next((item for item in closed if item.number == number), None)
                 if change is None and len(closed) == _LIMIT:
                     change = await repo.ask(repo.forge.changes.change(number))
-                if change is None:
-                    change = await repo.ask(repo.forge.changes.change(number)) if marker.epoch != visit.epoch else None
+                if change is None and marker.epoch != visit.epoch:
+                    change = await repo.ask(repo.forge.changes.change(number))
             except (ForgeRejected, ForgeNotFound):
-                return self._waiting(repo, number, marker)
+                return marker, None, self._waiting(repo, number, marker)
             if change is None:
-                if not any(row.name == "awaiting-external-merge" and row.epoch == visit.epoch for row in visit.markers):
-                    await repo.run.post("awaiting-external-merge", "")
-                return self._waiting(repo, number, marker)
-            if change.state is ChangeState.CLOSED and (
-                (change.closed_at is not None and change.closed_at < visit.first_turn_at)
-                or (change.closed_at is None and marker.epoch != visit.epoch)
-            ):
-                if watch:
-                    return Held()
-                change = None
-                marker = None
-        if change is None and marker is None:
+                return marker, None, self._waiting(repo, number, marker)
+            if change.state is ChangeState.CLOSED:
+                if (change.closed_at is not None and change.closed_at < visit.first_turn_at) or (
+                    change.closed_at is None and marker.epoch != visit.epoch
+                ):
+                    return marker, change, NeedsFreshReview()
+                return marker, change, self._closed(repo, change)
+            return marker, change, None
+        return await self._assess_unmarked(repo)
+
+    async def _assess_unmarked(self, repo: RepoLanding) -> tuple[None, Change | None, Waiting | None]:
+        visit = repo.run.visit
+        try:
+            closed = await repo.ask(repo.forge.changes.changes(ChangeListing.CLOSED, repo.base_branch, repo.branch))
+        except (ForgeRejected, ForgeNotFound) as exc:
+            return None, None, Waiting(str(exc))
+        change = next(
+            (
+                item
+                for item in closed
+                if item.state is ChangeState.MERGED
+                and item.closed_at is not None
+                and item.closed_at >= visit.first_turn_at
+            ),
+            None,
+        )
+        return None, change, None
+
+    async def _land(
+        self, repo: RepoLanding, marker: StoredArtifact | None, change: Change | None
+    ) -> Landed | Waiting | NeedsPerson | AwaitingMerge | NoCode:
+        if change is None:
             try:
-                closed = await repo.ask(repo.forge.changes.changes(ChangeListing.CLOSED, repo.base_branch, repo.branch))
-                change = next(
-                    (
-                        item
-                        for item in closed
-                        if item.state is ChangeState.MERGED
-                        and item.closed_at is not None
-                        and item.closed_at >= visit.first_turn_at
-                    ),
-                    None,
-                )
-                if change is None and self._proof_offered(repo) and await proves_no_code(repo):
+                if self._proof_offered(repo) and await proves_no_code(repo):
                     return await record_no_code(repo)
-                if change is None:
-                    found = await repo.ask(
-                        repo.forge.changes.changes(ChangeListing.OPEN, repo.base_branch, repo.branch)
+                found = await repo.ask(repo.forge.changes.changes(ChangeListing.OPEN, repo.base_branch, repo.branch))
+                if found:
+                    change = found[0]
+                else:
+                    change = await repo.ask(
+                        repo.forge.changes.open_change(repo.branch, repo.base_branch, pr_title(repo), pr_body(repo))
                     )
-                    if found:
-                        change = found[0]
-                    else:
-                        change = await repo.ask(
-                            repo.forge.changes.open_change(repo.branch, repo.base_branch, pr_title(repo), pr_body(repo))
-                        )
-                        _OPEN.reached()
+                    _OPEN.reached()
             except (ForgeRejected, ForgeNotFound) as exc:
                 return Waiting(str(exc))
-        assert change is not None
         if change.state is ChangeState.MERGED:
-            if change.base != repo.base_branch:
-                return self._waiting(repo, change.number, marker)
-            if change.merged_revision is None:
-                return Waiting(f"{repo.repo}#{change.number} merged without a revision")
-            _MERGED.reached()
-            # The forge's merge controls are the authority: the merged revision lands whatever the final head.
-            return Landed(change.merged_revision, lambda: self._annotate(repo, change, marker))
+            return self._merged(repo, change, marker)
         if change.state is ChangeState.CLOSED:
-            return NeedsPerson(
-                ActionEscalation(EscalationCause.CHANGE_CLOSED, f"{repo.repo}#{change.number} closed without merging")
-            )
-        if marker is None or marker.epoch != visit.epoch:
+            return self._closed(repo, change)
+        return await self._mark_open(repo, change, marker)
+
+    def _merged(
+        self, repo: RepoLanding, change: Change, marker: StoredArtifact | None
+    ) -> Landed | Waiting | NeedsPerson | AwaitingMerge:
+        if change.base != repo.base_branch:
+            return self._waiting(repo, change.number, marker)
+        if change.merged_revision is None:
+            return Waiting(f"{repo.repo}#{change.number} merged without a revision")
+        _MERGED.reached()
+        return Landed(change.merged_revision, lambda: self._annotate(repo, change, marker))
+
+    @staticmethod
+    def _closed(repo: RepoLanding, change: Change) -> NeedsPerson:
+        return NeedsPerson(
+            ActionEscalation(EscalationCause.CHANGE_CLOSED, f"{repo.repo}#{change.number} closed without merging")
+        )
+
+    async def _mark_open(
+        self, repo: RepoLanding, change: Change, marker: StoredArtifact | None
+    ) -> Waiting | NeedsPerson | AwaitingMerge:
+        if marker is None or marker.epoch != repo.run.visit.epoch:
             await repo.run.post(
                 pr_marker_name(repo.repo, change.number),
                 pr_marker_content(repo.repo, change.number, change.web_url),
             )
+        await self._awaiting_marker(repo)
+        return self._waiting(repo, change.number, marker)
+
+    @staticmethod
+    async def _awaiting_marker(repo: RepoLanding) -> None:
+        visit = repo.run.visit
         if not any(row.name == "awaiting-external-merge" and row.epoch == visit.epoch for row in visit.markers):
             await repo.run.post("awaiting-external-merge", "")
-        return self._waiting(repo, change.number, marker)
 
     @staticmethod
     def _proof_offered(repo: RepoLanding) -> bool:
@@ -157,7 +214,7 @@ class Park:
             except NotRecorded as exc:
                 repo.run.say(f"{repo.repo}: {name} was not written (non-fatal): {exc}")
 
-    def _waiting(self, repo: RepoLanding, number: int, marker: StoredArtifact | None) -> RepoState:
+    def _waiting(self, repo: RepoLanding, number: int, marker: StoredArtifact | None) -> AwaitingMerge | NeedsPerson:
         visit = repo.run.visit
         if marker is not None and marker.epoch == visit.epoch and marker.produced_at is not None:
             hours = repo.record.park_timeout_hours or DEFAULT_PARK_TIMEOUT_HOURS

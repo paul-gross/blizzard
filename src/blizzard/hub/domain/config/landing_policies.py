@@ -26,6 +26,21 @@ PARKING_POLICIES: frozenset[LandingPolicy] = frozenset({LandingPolicy.PARK})
 
 @domain_model
 @dataclass(frozen=True)
+class PolicyFacts:
+    """Domain properties of a landing policy."""
+
+    watches: bool = False
+
+
+POLICY_FACTS: Mapping[LandingPolicy, PolicyFacts] = {
+    LandingPolicy.PARK: PolicyFacts(watches=True),
+    LandingPolicy.FAST_FORWARD: PolicyFacts(),
+    LandingPolicy.MERGE_ON_CHECKS: PolicyFacts(),
+}
+
+
+@domain_model
+@dataclass(frozen=True)
 class PolicyCapabilities:
     """What a policy cannot land without, and what it uses when its forge offers it."""
 

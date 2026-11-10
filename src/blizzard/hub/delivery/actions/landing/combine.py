@@ -14,14 +14,12 @@ from typing import Any
 from blizzard.foundation.landing_policy import LandingPolicy
 from blizzard.hub.delivery.actions.landing.checks import INHERITED_FAILURE, Findings
 from blizzard.hub.delivery.actions.landing.fast_forward import cleanup
-from blizzard.hub.delivery.actions.landing.park import Park
 from blizzard.hub.delivery.actions.landing.repo import (
     PENDING,
     Admitted,
     AwaitingMerge,
     Conflict,
     Failure,
-    Held,
     Inherited,
     Landed,
     LandingRun,
@@ -62,7 +60,7 @@ def refuses_before_checks(state: RepoState | Admitted) -> bool:
 
 async def combine(run: LandingRun, stepped: Sequence[tuple[RepoLanding, RepoState]]) -> Pass:
     """Fold each unlanded repository's state into the pass's answer, landing every ready one in order once all
-    are prepared. A held park opens its change only after other repositories are prepared."""
+    are prepared."""
     ordered = sorted(stepped, key=lambda pair: _landing_key(pair[0]))
     states = [state for _, state in ordered]
     for repo, state in ordered:
@@ -105,18 +103,6 @@ async def combine(run: LandingRun, stepped: Sequence[tuple[RepoLanding, RepoStat
 
     # Every repository is prepared: land each in order, each durable before the next is touched.
     for repo, state in ordered:
-        if isinstance(state, Held):
-            parked = await Park().step(repo)
-            if isinstance(parked, AwaitingMerge):
-                return run.answer("awaiting-merge")
-            if isinstance(parked, NeedsPerson):
-                return run.escalate(parked.escalation)
-            if isinstance(parked, Landed):
-                await run.settle(repo, parked)
-                continue
-            if isinstance(parked, NoCode):
-                continue
-            return run.answer(PENDING)
         if not isinstance(state, Ready):
             continue
         outcome = await state.land()
@@ -125,6 +111,10 @@ async def combine(run: LandingRun, stepped: Sequence[tuple[RepoLanding, RepoStat
             return run.answer(PENDING)
         if isinstance(outcome, NeedsPerson):
             return run.escalate(outcome.escalation)
+        if isinstance(outcome, AwaitingMerge):
+            return run.answer("awaiting-merge")
+        if isinstance(outcome, NoCode):
+            continue
         await run.settle(repo, outcome)
         if repo.record.landing_policy is LandingPolicy.FAST_FORWARD:
             await cleanup(repo, outcome.revision)
