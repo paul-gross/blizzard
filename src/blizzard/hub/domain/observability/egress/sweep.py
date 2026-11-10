@@ -87,7 +87,7 @@ class EgressSweep:
         events: HubEventLogService,
         clock: IClock,
         config: EgressConfig,
-        pass_lock: threading.Lock | None = None,
+        pass_lock: threading.Lock,
     ) -> None:
         if EVENTS_SCHEMA.name in config.datasets and paths is None:
             raise ValueError("the events dataset needs a file path policy")
@@ -106,7 +106,7 @@ class EgressSweep:
         self._latch = OutageLatch(
             timedelta(seconds=config.sweep_seconds), lambda: egress.newest_egress_latch() == _FAILED
         )
-        self._pass_lock = pass_lock or threading.Lock()
+        self._pass_lock = pass_lock
 
     def sweep(self) -> None:
         """One pass, or none: while an operator's reset holds the pass lock the tick is skipped, not queued."""

@@ -39,7 +39,8 @@ from blizzard.hub.forge.landing import (
     UpdateMethod,
     UpdateOutcome,
 )
-from blizzard.hub.forge.registry import ForgeBinding, ForgeRegistry, IForgeAdapter
+from blizzard.hub.forge.rates import rate_dialect
+from blizzard.hub.forge.registry import ForgeBinding, ForgeRegistry, IForgeAdapter, WriteLocks
 
 
 def check(
@@ -148,14 +149,18 @@ class GitHubDouble:
         self.tokens[repo] = binding.token
         return _Adapter(self, repo)
 
-    def forges(self, stores: TenantStores, live: LiveConfig, budgets: ForgeBudgets) -> ForgeRegistry:
+    def forges(
+        self, stores: TenantStores, live: LiveConfig, budgets: ForgeBudgets, write_locks: WriteLocks
+    ) -> ForgeRegistry:
         """The :data:`ForgeRegistryFactory` a hub under test builds each tenant's registry with."""
-        return self.forges_offering(FORGE_KIND_CAPABILITIES)(stores, live, budgets)
+        return self.forges_offering(FORGE_KIND_CAPABILITIES)(stores, live, budgets, write_locks)
 
     def forges_offering(self, capabilities: Mapping[str, frozenset[Capability]]) -> ForgeRegistryFactory:
         """A registry factory whose forges offer only ``capabilities``, by kind."""
 
-        def build(stores: TenantStores, live: LiveConfig, budgets: ForgeBudgets) -> ForgeRegistry:
+        def build(
+            stores: TenantStores, live: LiveConfig, budgets: ForgeBudgets, write_locks: WriteLocks
+        ) -> ForgeRegistry:
             return ForgeRegistry(
                 records=stores.repository_records,
                 forges=stores.forge_records,
@@ -164,6 +169,8 @@ class GitHubDouble:
                 build=self.adapter,
                 capabilities=capabilities,
                 budgets=budgets,
+                write_locks=write_locks,
+                dialects=rate_dialect,
             )
 
         return build

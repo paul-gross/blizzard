@@ -37,7 +37,7 @@ from blizzard.hub.forge.budget import BudgetKey, ForgeBudgetLow, ForgeBudgets, F
 from blizzard.hub.forge.internal.github_landing import GitHubLanding
 from blizzard.hub.forge.landing import ForgeCapabilityMissing, ForgeRateLimited, MergeMethod
 from blizzard.hub.forge.rates import rate_dialect
-from blizzard.hub.forge.registry import ForgeBinding, ForgeRegistry, TurnCutOff
+from blizzard.hub.forge.registry import ForgeBinding, ForgeRegistry, TurnCutOff, WriteLocks
 from blizzard.hub.secrets import hub_key_provider, secret_cipher
 from blizzard.hub.store.internal.repository_record_store import RepositoryRecordStore
 from blizzard.hub.tenancy import StoreScope
@@ -121,6 +121,8 @@ class _World:
             build=self._build,
             capabilities=capabilities,
             budgets=self.budgets,
+            write_locks=WriteLocks(),
+            dialects=rate_dialect,
         )
 
     def _build(self, binding: ForgeBinding) -> GitHubLanding:
@@ -199,7 +201,7 @@ def test_an_unchanged_record_hands_out_the_same_adapter(world: _World, loop: Act
 def test_a_hub_shut_down_closes_its_cached_adapters_before_the_action_loop_stops(tmp_path: Path) -> None:
     transport = _Transport()
 
-    def forges(stores: TenantStores, live: LiveConfig, budgets: ForgeBudgets) -> ForgeRegistry:
+    def forges(stores: TenantStores, live: LiveConfig, budgets: ForgeBudgets, write_locks: WriteLocks) -> ForgeRegistry:
         return ForgeRegistry(
             records=stores.repository_records,
             forges=stores.forge_records,
@@ -208,6 +210,8 @@ def test_a_hub_shut_down_closes_its_cached_adapters_before_the_action_loop_stops
             build=lambda binding: GitHubLanding(binding, clock=FixedClock(_NOW), transport=transport),
             capabilities=FORGE_KIND_CAPABILITIES,
             budgets=budgets,
+            write_locks=write_locks,
+            dialects=rate_dialect,
         )
 
     hub = build_hub(tmp_path, forges=forges)

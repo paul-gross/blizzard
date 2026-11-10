@@ -7,9 +7,6 @@ from __future__ import annotations
 import dataclasses
 import importlib
 import inspect
-import os
-import subprocess
-import sys
 from collections.abc import Mapping
 from datetime import UTC, datetime
 from types import MappingProxyType, ModuleType
@@ -20,7 +17,7 @@ from typing_extensions import TypeIs
 
 from blizzard.foundation.artifacts import ArtifactKind
 from blizzard.foundation.crash import ENV_CRASH_FENCE
-from blizzard.hub.delivery.action_registry import ENV_TEST_ACTIONS, SHIPPED_ACTIONS, TEST_ACTIONS
+from blizzard.hub.delivery.action_registry import ENV_TEST_ACTIONS, SHIPPED_ACTIONS, TEST_ACTIONS, build_hub_actions
 from blizzard.hub.domain.actions.declarations import GitCommits
 from blizzard.hub.domain.actions.requirements import ACTION_REQUIREMENTS
 from blizzard.hub.domain.actions.visit import LandingProject, Visit, VisitChunk, VisitNode
@@ -50,14 +47,7 @@ def test_every_admitted_action_declares_its_forge_requirements() -> None:
 
 
 def _served_names(env: dict[str, str]) -> set[str]:
-    script = (
-        "from blizzard.hub.delivery.action_registry import HUB_ACTIONS; print(*sorted(HUB_ACTIONS.catalogue.names))"
-    )
-    clean = {k: v for k, v in os.environ.items() if k not in (ENV_TEST_ACTIONS, ENV_CRASH_FENCE)}
-    out = subprocess.run(
-        [sys.executable, "-c", script], env={**clean, **env}, capture_output=True, text=True, check=True
-    )
-    return set(out.stdout.split())
+    return set(build_hub_actions(env).catalogue.names)
 
 
 @pytest.mark.parametrize(

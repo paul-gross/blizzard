@@ -6,8 +6,14 @@ from __future__ import annotations
 import pytest
 
 from blizzard.hub.domain.observability.analytics.events import KIND_AGENT_SPAWN, KIND_FILE_READ, KIND_SKILL_INVOCATION
-from blizzard.hub.domain.observability.analytics.extraction import extract_events
+from blizzard.hub.domain.observability.analytics.extraction import ExtractedEvent, shipped_extractors
+from blizzard.hub.domain.observability.analytics.extraction import extract_events as _extract_events
 from blizzard.hub.domain.observability.transcripts import TranscriptTurn, TurnSidechain, TurnToolCall
+
+
+def extract_events(turns: list[TranscriptTurn], *, normalizer_version: str) -> list[ExtractedEvent]:
+    return _extract_events(turns, normalizer_version=normalizer_version, extractors=shipped_extractors())
+
 
 _DIALECT = "claude-code-jsonl/2"
 

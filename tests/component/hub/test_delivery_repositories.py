@@ -23,7 +23,8 @@ from blizzard.hub.domain.chunk.ports.movement import IWriteChunkMovementReposito
 from blizzard.hub.domain.config.forges import FORGE_KIND_CAPABILITIES
 from blizzard.hub.domain.config.secrets import SecretName, SecretRetired
 from blizzard.hub.forge.budget import ForgeBudgets
-from blizzard.hub.forge.registry import ForgeBinding, ForgeRegistry, IForgeAdapter
+from blizzard.hub.forge.rates import rate_dialect
+from blizzard.hub.forge.registry import ForgeBinding, ForgeRegistry, IForgeAdapter, WriteLocks
 from blizzard.hub.graphs import PACKAGED
 from blizzard.hub.store import schema
 from tests.support.github_double import GitHubDouble
@@ -141,7 +142,9 @@ class _Forge:
         self.built.append((binding.api_url, f"{binding.owner}/{binding.repo}", binding.token))
         return self.double.adapter(binding)
 
-    def forges(self, stores: TenantStores, live: LiveConfig, budgets: ForgeBudgets) -> ForgeRegistry:
+    def forges(
+        self, stores: TenantStores, live: LiveConfig, budgets: ForgeBudgets, write_locks: WriteLocks
+    ) -> ForgeRegistry:
         return ForgeRegistry(
             records=stores.repository_records,
             forges=stores.forge_records,
@@ -150,6 +153,8 @@ class _Forge:
             build=self.adapter,
             capabilities=FORGE_KIND_CAPABILITIES,
             budgets=budgets,
+            write_locks=write_locks,
+            dialects=rate_dialect,
         )
 
     def push(self, *repos: str) -> None:

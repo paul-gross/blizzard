@@ -15,8 +15,8 @@ from pathlib import Path
 from blizzard.foundation.clock import IClock
 from blizzard.foundation.logging import get_logger
 from blizzard.foundation.roles import domain_model
-from blizzard.hub.delivery.action_registry import HUB_ACTIONS
 from blizzard.hub.documents.codec import ConfigDecodeError, IConfigCodec
+from blizzard.hub.domain.graph.actions import HubActionCatalogue
 from blizzard.hub.domain.graph.authoring import GraphMintService
 from blizzard.hub.domain.graph.legacy_run import translated
 from blizzard.hub.domain.graph.model import GraphDoc, GraphParseError, IReadGraphRepository, IWriteGraphRepository
@@ -137,12 +137,14 @@ def reconcile_open_tenants(
     return reports
 
 
-def packaged_minter(clock: IClock, yaml: IConfigCodec) -> Callable[[IWriteGraphRepository], list[GraphSyncOutcome]]:
+def packaged_minter(
+    clock: IClock, yaml: IConfigCodec, catalogue: HubActionCatalogue
+) -> Callable[[IWriteGraphRepository], list[GraphSyncOutcome]]:
     """Reconciles the packaged set into the graphs it is handed — a new tenant's, on its creation's transaction."""
 
     def mint(graphs: IWriteGraphRepository) -> list[GraphSyncOutcome]:
         return GraphReconciliation(
-            GraphMintService(graphs=graphs, clock=clock, catalogue=HUB_ACTIONS.catalogue), graphs, yaml
+            GraphMintService(graphs=graphs, clock=clock, catalogue=catalogue), graphs, yaml
         ).outcomes()
 
     return mint

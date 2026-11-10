@@ -28,7 +28,7 @@ from blizzard.hub.domain.observability.analytics.derivation import (
     TenantEventDerivation,
 )
 from blizzard.hub.domain.observability.analytics.events import KIND_FILE_READ
-from blizzard.hub.domain.observability.analytics.extraction import EXTRACTOR_VERSION
+from blizzard.hub.domain.observability.analytics.extraction import EXTRACTOR_VERSION, shipped_extractors
 from blizzard.hub.domain.observability.transcripts import TranscriptSlice
 from blizzard.hub.store import schema as s
 from blizzard.hub.store.internal.chunk_facts_store import ChunkFactsStore
@@ -122,7 +122,11 @@ class _Fixture:
             admission=EpochAdmission.AT_OR_ABOVE,
         )
         self.service = EventDerivationService(
-            events=self.events, facts=self.chunks.facts, record=self.chunks.record, clock=self.clock
+            extractors=shipped_extractors(),
+            events=self.events,
+            facts=self.chunks.facts,
+            record=self.chunks.record,
+            clock=self.clock,
         )
         self.reconciler = self.reconciler_over(self.service)
 
@@ -278,7 +282,11 @@ def test_sweep_resolves_graph_pins_with_one_movement_facts_for_and_one_graph_id_
     counting_facts = _CountingFactsStore(hub_store_connections(fixture.engine), fixture.clock)
     counting_record = _CountingRecordStore(hub_store_connections(fixture.engine), fixture.clock)
     service = EventDerivationService(
-        events=fixture.events, facts=counting_facts, record=counting_record, clock=fixture.clock
+        extractors=shipped_extractors(),
+        events=fixture.events,
+        facts=counting_facts,
+        record=counting_record,
+        clock=fixture.clock,
     )
     reconciler = fixture.reconciler_over(service)
 
@@ -323,6 +331,7 @@ def test_a_version_bump_re_derives_history_leaving_the_prior_version_intact(fixt
     assert marker_v1 is not None
 
     bumped_service = EventDerivationService(
+        extractors=shipped_extractors(),
         events=fixture.events,
         facts=fixture.chunks.facts,
         record=fixture.chunks.record,
@@ -353,6 +362,7 @@ def test_the_bump_leaves_a_prior_versions_un_backfilled_rows_untouched(fixture: 
         at=_NOW,
     )
     prior_service = EventDerivationService(
+        extractors=shipped_extractors(),
         events=fixture.events,
         facts=fixture.chunks.facts,
         record=fixture.chunks.record,
@@ -531,6 +541,7 @@ def test_one_underivable_segment_does_not_cost_the_rest_of_the_tick(fixture: _Fi
     fixture.segments.insert_accepted(_segment_record(segment_id="sg_2", chunk_id="ch_2"), byte_count=10, at=_NOW)
     poisoned = _PoisonedService(
         poison="sg_1",
+        extractors=shipped_extractors(),
         events=fixture.events,
         facts=fixture.chunks.facts,
         record=fixture.chunks.record,
@@ -554,6 +565,7 @@ def test_a_pin_resolution_fault_skips_the_whole_pass_without_raising(fixture: _F
     derives, and the sweep itself does not raise."""
     fixture.segments.insert_accepted(_segment_record(), byte_count=10, at=_NOW)
     poisoned = _PoisonedGraphPinsService(
+        extractors=shipped_extractors(),
         events=fixture.events,
         facts=fixture.chunks.facts,
         record=fixture.chunks.record,
@@ -670,6 +682,7 @@ def test_an_extractor_version_bump_decodes_each_segment_at_most_once(
     monkeypatch.setattr(zlib, "decompress", _counting)
 
     bumped_service = EventDerivationService(
+        extractors=shipped_extractors(),
         events=fixture.events,
         facts=fixture.chunks.facts,
         record=fixture.chunks.record,
@@ -781,7 +794,11 @@ def _spied_reconciler(
     log: list[tuple[str, tuple[str, ...]]] = []
     spy = _SpyEvents(hub_store_connections(fixture.engine), log, fail_plural=fail_plural)
     service = EventDerivationService(
-        events=spy, facts=fixture.chunks.facts, record=fixture.chunks.record, clock=fixture.clock
+        extractors=shipped_extractors(),
+        events=spy,
+        facts=fixture.chunks.facts,
+        record=fixture.chunks.record,
+        clock=fixture.clock,
     )
     tenant = TenantEventDerivation(service=service, events=spy, clock=fixture.clock)
     reconciler = EventDerivationReconciler(

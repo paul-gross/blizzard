@@ -67,7 +67,7 @@ from blizzard.hub.config import HubConfig, LoginThrottleConfig, OAuthProviderCon
 from blizzard.hub.config_defaults import DEFAULT_ACTION_PASS_SECONDS
 from blizzard.hub.delivery.action_loop import ActionLoop
 from blizzard.hub.delivery.action_pass import ACTION_PASS_GRACE, ActionPassDriver, PassBound
-from blizzard.hub.delivery.action_registry import HUB_ACTIONS, HubActions
+from blizzard.hub.delivery.action_registry import HubActions
 from blizzard.hub.delivery.flow_driver import FlowDriver, FlowLineStores, ITurnRunner, StepWake
 from blizzard.hub.delivery.flow_turn import TurnRunner
 from blizzard.hub.delivery.hub_node import HubNodeRouter
@@ -153,6 +153,7 @@ from blizzard.hub.domain.observability.analytics.derivation import (
     EventDerivationService,
     TenantEventDerivation,
 )
+from blizzard.hub.domain.observability.analytics.extraction import ITurnEventExtractor
 from blizzard.hub.domain.observability.analytics.operational import IReadOperationalAnalytics
 from blizzard.hub.domain.observability.analytics.queries import IReadAnalyticsEventQueries
 from blizzard.hub.domain.observability.egress.backfill import EgressBackfill
@@ -226,7 +227,7 @@ from blizzard.hub.forge.commit_check import SeamCommitResolver
 from blizzard.hub.forge.commit_links import LandedCommitLinks
 from blizzard.hub.forge.internal.factory import build_forge_registry
 from blizzard.hub.forge.rates import rate_dialect
-from blizzard.hub.forge.registry import ForgeRegistry
+from blizzard.hub.forge.registry import ForgeRegistry, WriteLocks
 from blizzard.hub.graph_sync import packaged_minter
 from blizzard.hub.graphs import PACKAGED
 from blizzard.hub.live_config import ConfigObjectCache
@@ -1010,10 +1011,12 @@ def _backfill_writers(config: EgressConfig, settings: EgressWriterSettings) -> C
 type WorkSourceRegistryFactory = Callable[[TenantStores, LiveConfig, ForgeBudgets], IWorkSourceRegistry]
 
 #: Builds a tenant's forge registry over its stores, its live configuration, and its rate budgets.
-type ForgeRegistryFactory = Callable[[TenantStores, LiveConfig, ForgeBudgets], ForgeRegistry]
+type ForgeRegistryFactory = Callable[[TenantStores, LiveConfig, ForgeBudgets, WriteLocks], ForgeRegistry]
 
 
-def default_forge_registry(stores: TenantStores, live: LiveConfig, budgets: ForgeBudgets) -> ForgeRegistry:
+def default_forge_registry(
+    stores: TenantStores, live: LiveConfig, budgets: ForgeBudgets, write_locks: WriteLocks
+) -> ForgeRegistry:
     """A tenant's forge registry with every forge kind's adapter, uninstrumented."""
     return build_forge_registry(
         records=stores.repository_records,
@@ -1022,6 +1025,7 @@ def default_forge_registry(stores: TenantStores, live: LiveConfig, budgets: Forg
         secrets=live.secrets,
         clock=stores.clock,
         budgets=budgets,
+        write_locks=write_locks,
     )
 
 
@@ -1046,6 +1050,7 @@ class TenantServiceParts:
     color_pick: ColorPick
     versions: IVersionWindow
     actions: HubActions
+    extractors: Sequence[ITurnEventExtractor]
     action_passes: ActionPassDriver
     step_wake: StepWake
     #: Publishes a committed cadence mint's frames through the tenant's services — handed in by the hub's app,
@@ -1086,13 +1091,13 @@ def build_tenant_services(stores: TenantStores, parts: TenantServiceParts, *, ev
     # Held per tenant outside the adapter cache, so an edit that rebuilds an adapter keeps the budget it spends.
     forge_budgets = ForgeBudgets(clock=clock, dialects=rate_dialect)
     work_sources = parts.work_sources(stores, live, forge_budgets)
-    forges = parts.forges(stores, live, forge_budgets)
+    forges = parts.forges(stores, live, forge_budgets, WriteLocks())
     transcript_caps = parts.transcript_caps
     graph_store = GraphStore(tenant_connections)
     transcript_store = TranscriptSegmentStore(tenant_connections)
     event_store = TranscriptEventStore(tenant_connections)
     event_derivation_service = EventDerivationService(
-        events=event_store, facts=chunk_facts, record=chunk_record, clock=clock
+        events=event_store, facts=chunk_facts, record=chunk_record, clock=clock, extractors=parts.extractors
     )
     analytics_event_queries = AnalyticsEventQueryStore(tenant_connections)
     operational_analytics = AnalyticsOperationalStore(tenant_connections)
@@ -1613,7 +1618,8 @@ def build_services(
     annotation_interval_seconds: int,
     version_window: VersionWindow,
     hub_version: str = __version__,
-    actions: HubActions = HUB_ACTIONS,
+    actions: HubActions,
+    extractors: Sequence[ITurnEventExtractor],
     action_pass_seconds: float = DEFAULT_ACTION_PASS_SECONDS,
     action_pass_grace: timedelta = ACTION_PASS_GRACE,
     cadences_on: Callable[[], bool],
@@ -1625,8 +1631,9 @@ def build_services(
     the cache. ``work_sources`` builds a tenant's
     work-source registry, ``forges`` its forge registry; an explicit ``oauth_registry`` wins over
     ``oauth_providers``; ``hub_version`` defaults to the installed one; ``actions`` are the hub actions a node
-    may name, and a pass is bounded by ``action_pass_seconds``, its caller letting go ``action_pass_grace``
-    later. ``cadences_on`` answers, each cadence pass, whether the ``cadences`` flag lets it mint, and
+    may name, ``extractors`` the turn-event extractors the derivation runs, and a pass is bounded by
+    ``action_pass_seconds``, its caller letting go ``action_pass_grace`` later. ``cadences_on`` answers, each
+    cadence pass, whether the ``cadences`` flag lets it mint, and
     ``announce_minted`` publishes each mint it commits."""
     clock = core.clock
     # One per hub process, shared by every tenant's turns.
@@ -1655,6 +1662,7 @@ def build_services(
         color_pick=color_pick,
         versions=HubVersionWindow(hub_version, version_window),
         actions=actions,
+        extractors=extractors,
         action_passes=ActionPassDriver(action_loop, PassBound(action_pass_seconds, action_pass_grace)),
         step_wake=step_wake,
         announce_minted=announce_minted,
@@ -1812,7 +1820,7 @@ def build_services(
     )
     tenant_admin = TenantAdministration(
         tenants=TenantAdministrationStore(store_connections, identity_transactions),
-        mint_packaged=packaged_minter(clock, YAML_CODEC),
+        mint_packaged=packaged_minter(clock, YAML_CODEC, actions.catalogue),
         changed=open_tenants.refresh,
         pick=color_pick,
         clock=clock,
