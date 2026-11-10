@@ -1,0 +1,76 @@
+:host {
+  display: block;
+  flex: none;
+  min-width: 0;
+}
+/* The breadcrumb — `Gardening › {project} › {surface}`, the lens shown in place. */
+.crumbs {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: 8px;
+  min-height: 36px;
+  padding: 0 14px;
+  border-bottom: 1px solid var(--bezel);
+  font-size: var(--fs-sm);
+  overflow-x: auto;
+}
+.crumb {
+  color: var(--label);
+  white-space: nowrap;
+}
+.crumb.current {
+  color: var(--snow);
+}
+.crumb-link {
+  color: var(--cyan);
+  text-decoration: none;
+}
+.crumb-link:hover,
+.crumb-link:focus-visible {
+  text-decoration: underline;
+}
+/* The project menu: what a choice keeps, then each project with its proposals waiting. */
+fleet-kit-menu-panel {
+  box-sizing: border-box;
+  max-width: calc(100vw - 16px);
+  max-height: min(320px, 50vh);
+  overflow-y: auto;
+}
+fleet-kit-menu-item-radio {
+  flex: none;
+}
+.menu-head {
+  flex: none;
+  padding: 6px 12px;
+  border-bottom: 1px solid var(--line);
+  color: var(--label);
+  font-size: var(--fs-xs);
+  white-space: normal;
+}
+.menu-choice {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  min-width: 0;
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+.menu-choice > span:first-child {
+  flex: 1;
+  min-width: 0;
+}
+.menu-waiting {
+  flex: none;
+  color: var(--label);
+  font-size: var(--fs-xs);
+  white-space: nowrap;
+}
+.sep {
+  color: var(--label-dim);
+}
+.project-crumb [trigger] {
+  color: var(--amber-hi);
+  white-space: nowrap;
+}

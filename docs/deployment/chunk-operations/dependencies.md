@@ -104,3 +104,6 @@ owns what the marking means and which chunks can carry one.
 
 The board carries no declare or release control — an operator reaches those two verbs only through
 `blizzard hub chunk depend`/`release-dependency` or the API routes above, never the dock.
+
+Both peeks walk the ready queue in claim order, urgency before rank, and a blocked urgent chunk is passed over or held
+at without raising its prerequisite ([Claim order](../urgencies.md#claim-order)).

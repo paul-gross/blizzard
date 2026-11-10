@@ -21,6 +21,7 @@ from blizzard.hub.domain.kernel.transactions import Transaction
 from blizzard.hub.domain.operations.queue import QueueService
 from blizzard.hub.store.internal.chunk_facts_store import ChunkFactsStore
 from blizzard.hub.store.internal.chunk_record_store import ChunkRecordStore
+from blizzard.hub.store.internal.urgency_store import UrgencyOrderStore
 from blizzard.hub.store.scoped import ScopedConnections
 from blizzard.hub.store.transactions import HubTransactions
 from tests.support.scaffolding import (
@@ -148,6 +149,7 @@ def _wire_counting_facts(hub: HubHarness) -> _CountingFactsStore:
                 facts=counting,
                 transactions=HubTransactions(hub_store_connections(hub.engine)),
                 clock=hub.clock,
+                urgency_order=UrgencyOrderStore(hub_store_connections(hub.engine)),
             ),
         ),
     )

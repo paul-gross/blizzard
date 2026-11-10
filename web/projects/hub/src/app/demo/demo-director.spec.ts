@@ -7,8 +7,11 @@ import { RouterTestingHarness } from '@angular/router/testing';
 import { QueryClient, provideTanStackQuery } from '@tanstack/angular-query-experimental';
 import { assetArtifactView, chunkDetail, chunkSummary, OPERATOR_ME_RESPONSE, type RequestClientStub, stubHubClient } from 'fleet/testing';
 
+import { FLEET_CLOCK } from 'fleet';
 import { readDemoConfig } from './demo-config';
 import { DemoDirector } from './demo-director';
+import { DEMO_RANDOM } from './demo-random';
+import { DemoKiosk } from './demo-kiosk';
 
 /**
  * The demo pilot, driven through a **real** router against stand-in pages.
@@ -23,6 +26,7 @@ import { DemoDirector } from './demo-director';
  * what is under test, not its wall-clock length.
  */
 const CHUNK = 'ch_01KXKVVF1J3D6H6VYZ3XYN3YJ9';
+const OTHER_CHUNK = 'ch_01KXKVVF1J3D6H6VYZ3XYN3YJA';
 const ARTIFACTS = ['branch/main', 'review/findings'];
 
 const CHUNK_FIELDS = {
@@ -38,7 +42,11 @@ const CHUNK_FIELDS = {
 
 const HUB_ROUTES: Parameters<typeof stubHubClient>[0] = {
   'GET /api/me': () => OPERATOR_ME_RESPONSE,
-  'GET /api/chunks': () => ({ chunks: [chunkSummary(CHUNK_FIELDS)], next_cursor: null, board_done_policy: null }),
+  'GET /api/chunks': () => ({
+    chunks: [chunkSummary(CHUNK_FIELDS), chunkSummary({ ...CHUNK_FIELDS, chunk_id: OTHER_CHUNK })],
+    next_cursor: null,
+    board_done_policy: null,
+  }),
   'GET /api/chunks/{chunk_id}': () =>
     chunkDetail({
       ...CHUNK_FIELDS,
@@ -89,14 +97,27 @@ class ChunkStub {
 
 describe('DemoDirector', () => {
   let stub: RequestClientStub;
-  let pump: ReturnType<typeof setInterval>;
+  let now: number;
+  let seed: number;
   let director: DemoDirector;
 
   beforeEach(() => {
+    now = 0;
+    seed = 1;
     stub = stubHubClient(HUB_ROUTES);
     TestBed.configureTestingModule({
       providers: [
         provideZonelessChangeDetection(),
+        { provide: FLEET_CLOCK, useValue: () => now },
+        { provide: DEMO_RANDOM, useValue: () => ((seed = (seed * 16807) % 2147483647) - 1) / 2147483646 },
+        {
+          provide: DemoKiosk,
+          useValue: {
+            begin: vi.fn().mockResolvedValue(undefined),
+            end: vi.fn().mockResolvedValue(undefined),
+            reloadIfStale: async () => false,
+          },
+        },
         provideTanStackQuery(new QueryClient({ defaultOptions: { queries: { retry: false } } })),
         provideRouter(
           [
@@ -108,21 +129,11 @@ describe('DemoDirector', () => {
         provideLocationMocks(),
       ],
     });
-    // The director waits on rendered DOM, so something has to keep the app
-    // ticking while its loop runs — the fixture's own change detection is not
-    // pumped by a spec that never awaits it.
-    pump = setInterval(() => {
-      try {
-        TestBed.inject(ApplicationRef).tick();
-      } catch {
-        // Torn down between ticks.
-      }
-    }, 5);
   });
 
   afterEach(() => {
-    clearInterval(pump);
     director?.stop();
+    vi.useRealTimers();
     stub.restore();
   });
 
@@ -130,45 +141,36 @@ describe('DemoDirector', () => {
   async function run(search: string): Promise<Router> {
     const harness = await RouterTestingHarness.create();
     await harness.navigateByUrl('/board');
+    vi.useFakeTimers();
     director = TestBed.inject(DemoDirector);
     director.start(readDemoConfig(search));
     return TestBed.inject(Router);
   }
 
-  /** Poll the router's URL until `matches` accepts one, collecting every distinct
-   * URL seen — the tour's trail. */
+  async function step(ms = 5): Promise<void> {
+    now += ms;
+    TestBed.inject(ApplicationRef).tick();
+    await vi.advanceTimersByTimeAsync(ms);
+    TestBed.inject(ApplicationRef).tick();
+    await Promise.resolve();
+  }
+
   async function trail(router: Router, until: (seen: string[]) => boolean, timeoutMs = 8000): Promise<string[]> {
     const seen: string[] = [];
-    const deadline = Date.now() + timeoutMs;
-    for (;;) {
+    for (let elapsed = 0; elapsed <= timeoutMs; elapsed += 5) {
       if (seen[seen.length - 1] !== router.url) seen.push(router.url);
       if (until(seen)) return seen;
-      if (Date.now() > deadline) throw new Error(`timed out; saw:\n${seen.join('\n')}`);
-      await new Promise((resolve) => setTimeout(resolve, 5));
+      await step();
     }
+    throw new Error(`timed out; saw:\n${seen.join('\n')}`);
   }
 
-  /** How long the running tour takes to move the router off its current URL — the observed
-   * cadence a "it stayed put" assertion is then sized against. Floored at the configured
-   * artifact interval rather than at 1ms: a scheduling hiccup that observes an immediate
-   * move would otherwise shrink the window to nothing and let the assertion pass vacuously. */
-  async function moveMs(router: Router, timeoutMs = 8000): Promise<number> {
-    const from = router.url;
-    const started = Date.now();
-    for (;;) {
-      if (router.url !== from) return Math.max(Date.now() - started, FAST_ARTIFACT_INTERVAL_MS);
-      if (Date.now() - started > timeoutMs) throw new Error(`the tour never moved off ${from}`);
-      await new Promise((resolve) => setTimeout(resolve, 5));
-    }
-  }
-
-  const FAST_ARTIFACT_INTERVAL_MS = 150;
   const FAST = 'demo_swap_chunk_interval=2&demo_board_scroll=0.05&demo_artifact_interval=0.15&demo_reload_after=0';
 
   it('does nothing at all without ?demo', async () => {
     const router = await run('?chunk=ch_other');
 
-    await new Promise((resolve) => setTimeout(resolve, 300));
+    await step(300);
 
     expect(router.url).toBe('/board');
   });
@@ -184,18 +186,38 @@ describe('DemoDirector', () => {
     expect(artifactUrl).toContain('tab=artifacts');
   });
 
+  it('selects a chunk using the supplied random sequence', async () => {
+    seed = 100000;
+    const router = await run(`?demo=true&${FAST}`);
+
+    await trail(router, (urls) => urls.some((url) => url.includes(`chunk=${OTHER_CHUNK}`)));
+    expect(router.url).toContain(`chunk=${OTHER_CHUNK}`);
+  });
+
   it('holds the board for its whole dwell even when the dock has nowhere to scroll', async () => {
     // The stand-in dock overflows nothing, which is the case that used to skip
     // the board entirely and flicker straight through to the chunk page.
     const router = await run('?demo=true&demo_swap_chunk_interval=4&demo_board_scroll=0.6&demo_artifact_interval=0.15');
 
-    const openedAt = Date.now();
+    const openedAt = now;
     await trail(router, (urls) => urls.some((url) => url.includes(`chunk=${CHUNK}`)));
-    const boardAt = Date.now();
+    const boardAt = now;
     await trail(router, (urls) => urls.some((url) => url.startsWith('/board/chunk/')));
 
-    expect(Date.now() - boardAt).toBeGreaterThanOrEqual(400);
-    expect(Date.now() - openedAt).toBeLessThan(4000);
+    expect(now - boardAt).toBeGreaterThanOrEqual(595);
+    expect(now - boardAt).toBeLessThanOrEqual(620);
+    expect(now - openedAt).toBeLessThan(4000);
+  });
+
+  it.each([3_600_000, -3_600_000])('keeps the board dwell across a wall-clock correction of %i ms', async (correction) => {
+    const router = await run('?demo=true&demo_swap_chunk_interval=4&demo_board_scroll=0.6&demo_artifact_interval=0.15');
+    await trail(router, (urls) => urls.some((url) => url.includes(`chunk=${CHUNK}`)));
+    await step(100);
+    now += correction;
+    await step(300);
+    expect(router.url).toContain(`chunk=${CHUNK}`);
+    await trail(router, (urls) => urls.some((url) => url.startsWith('/board/chunk/')), 400);
+    expect(router.url).toContain('/board/chunk/');
   });
 
   it('rotates through the chunk store, a different artifact each dwell', async () => {
@@ -210,7 +232,7 @@ describe('DemoDirector', () => {
       return keys.size >= ARTIFACTS.length;
     });
 
-    expect([...keys].sort()).toEqual([...ARTIFACTS].sort());
+    expect([...keys]).toEqual(ARTIFACTS);
   });
 
   it('carries the demo params on every navigation, so a kiosk reload resumes the tour', async () => {
@@ -227,6 +249,9 @@ describe('DemoDirector', () => {
   it('returns to the board when the swap interval is up', async () => {
     const router = await run(`?demo=true&${FAST}`);
 
+    await trail(router, (urls) => urls.some((url) => url.includes(`chunk=${CHUNK}`)));
+    const boardAt = now;
+
     // …board, …chunk page, …board again: the cycle closes on its own.
     const seen = await trail(router, (urls) => {
       const descended = urls.findIndex((url) => url.startsWith('/board/chunk/'));
@@ -234,6 +259,8 @@ describe('DemoDirector', () => {
     });
 
     expect(seen.filter((url) => url.startsWith('/board?')).length).toBeGreaterThanOrEqual(2);
+    expect(now - boardAt).toBeGreaterThanOrEqual(1990);
+    expect(now - boardAt).toBeLessThanOrEqual(2050);
   });
 
   it('is idempotent — a second start does not put a second tour on the screen', async () => {
@@ -252,14 +279,12 @@ describe('DemoDirector', () => {
     const router = await run(`?demo=true&${FAST}`);
     await trail(router, (urls) => urls.some((url) => url.startsWith('/board/chunk/')));
 
-    // A "did not move" claim is worth only the window it is made over, so the
-    // window is derived from the running tour's own measured cadence rather than
-    // guessed: a fixed 400ms passed with `stop()` deleted entirely.
-    const cadenceMs = await moveMs(router);
+    // Observe a transition first, then advance beyond two whole cycles.
+    await trail(router, (urls) => urls.length >= 2);
 
     director.stop();
     const parked = router.url;
-    await new Promise((resolve) => setTimeout(resolve, cadenceMs * 4));
+    for (let i = 0; i < 1000; i++) await step();
 
     expect(router.url).toBe(parked);
   });

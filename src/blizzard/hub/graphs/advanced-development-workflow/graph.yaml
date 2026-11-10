@@ -241,7 +241,7 @@ nodes:
           description: The change verified end to end through verification methods the project declares.
           to: review
         fail:
-          description: Verification surfaced failures the finale could not close, recorded in the verification-report asset.
+          description: Verification surfaced failures, recorded in the verification-report asset for build to repair.
           to: build
           prompt_addendum: ./prompts/build.from-verify.md
     retries:

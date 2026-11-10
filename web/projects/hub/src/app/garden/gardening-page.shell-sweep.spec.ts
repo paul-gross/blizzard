@@ -47,9 +47,9 @@ class TestGardenSweepHost {}
 const PROJECTS = [gardenProjectView({ project_id: 'proj_b', slug: 'blizzard', name: 'Blizzard' })];
 const waiting = (id: string) => gardenProposalView({ proposal_id: id, project_id: 'proj_b' });
 
-async function render(proposals: GardenProposalView[]) {
+async function render(proposals: GardenProposalView[], projects = PROJECTS) {
   const stub = stubHubClient({
-    'GET /api/projects': () => ({ projects: PROJECTS }),
+    'GET /api/projects': () => ({ projects }),
     'GET /api/runners': () => ({ runners: [] }),
     'GET /api/garden-proposals': () => ({ proposals, next_cursor: null }),
     'GET /api/projects/{project}/garden-proposals': () => ({ proposals, next_cursor: null }),
@@ -136,6 +136,46 @@ describe('gardening page sub-strip shell sweep (web:shell-sweep)', () => {
       const count = root.querySelector<HTMLElement>('[data-testid="gardening-tab-count-proposals"]')!;
       expect(count.textContent).toBe('0');
       expect(getComputedStyle(count).color).toBe(token('--snow'));
+    } finally {
+      root.remove();
+      stub.restore();
+    }
+  });
+
+  it.each([320, 390, 1280])('keeps a long project menu and its End-focused choice visible at %ipx', async (width) => {
+    await page.viewport(width, 800);
+    const projects = [
+      ...PROJECTS,
+      ...Array.from({ length: 29 }, (_, i) => gardenProjectView({
+        project_id: `proj_${i}`, slug: `project-${i}`, name: `Project${i}${'longunbrokenname'.repeat(4)}`,
+      })),
+    ];
+    const { root, stub } = await render([], projects);
+    try {
+      root.querySelector<HTMLButtonElement>('[data-testid="gardening-crumb-project"]')!.click();
+      await new Promise((resolve) => requestAnimationFrame(resolve));
+      const panel = document.body.querySelector<HTMLElement>('[data-testid="gardening-crumb-project-panel"]')!;
+      const items = [...panel.querySelectorAll<HTMLElement>('[role="menuitemradio"]')];
+      expect(items).toHaveLength(31);
+      expect(panel.scrollHeight).toBeGreaterThan(panel.clientHeight);
+      expect(panel.scrollWidth).toBeLessThanOrEqual(panel.clientWidth);
+      const waiting = panel.querySelector<HTMLElement>('[data-testid="gardening-crumb-waiting-project-0"]')!;
+      expect(waiting.textContent?.trim()).toBeTruthy();
+      const choiceBounds = waiting.closest<HTMLElement>('[role="menuitemradio"]')!.getBoundingClientRect();
+      expect(waiting.getBoundingClientRect().right).toBeLessThanOrEqual(choiceBounds.right);
+      const bounds = panel.getBoundingClientRect();
+      expect(bounds.top).toBeGreaterThanOrEqual(0);
+      expect(bounds.bottom).toBeLessThanOrEqual(800);
+      expect(bounds.left).toBeGreaterThanOrEqual(0);
+      expect(bounds.right).toBeLessThanOrEqual(width + 1);
+      items[0].focus();
+      items[0].dispatchEvent(new KeyboardEvent('keydown', { key: 'End', keyCode: 35, bubbles: true }));
+      await new Promise((resolve) => requestAnimationFrame(resolve));
+      const last = items.at(-1)!;
+      expect(document.activeElement).toBe(last);
+      expect(panel.scrollTop).toBeGreaterThan(0);
+      expect(last.getBoundingClientRect().bottom).toBeLessThanOrEqual(bounds.bottom);
+      expect(last.getBoundingClientRect().top).toBeGreaterThanOrEqual(bounds.top);
     } finally {
       root.remove();
       stub.restore();

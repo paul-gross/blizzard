@@ -55,6 +55,8 @@
  *     runner's desktop board (`LocalPanelLayout`): the lanes and the right rail
  *     sit side by side, the rail's panels stack, and nothing overflows at 1280px
  *     and 1024px, with the chunk dock open or closed.
+ *   - projects/runner/src/app/board/rail/hub-panel.shell-sweep.spec.ts — the hub
+ *     link, issue rows and fleet strip keep their 6px gap at phone and desktop widths.
  *   - projects/hub/src/app/runners/runner-view.shell-sweep.spec.ts — the
  *     runner registry's rate-limit pace bars (issue #218): the stacked
  *     utilization/elapsed pair per sampled window genuinely stacks, with no
@@ -342,6 +344,7 @@ const SWEEPS = [
   { project: 'runner', spec: 'projects/runner/src/app/shell/nav/app-header.shell-sweep.spec.ts' },
   { project: 'runner', spec: 'projects/runner/src/app/board/app-panel-mobile.shell-sweep.spec.ts' },
   { project: 'runner', spec: 'projects/runner/src/app/board/app-panel-layout.shell-sweep.spec.ts' },
+  { project: 'runner', spec: 'projects/runner/src/app/board/rail/hub-panel.shell-sweep.spec.ts' },
   { project: 'hub', spec: 'projects/hub/src/app/runners/runner-view.shell-sweep.spec.ts' },
   { project: 'hub', spec: 'projects/hub/src/app/runners/host-detail.shell-sweep.spec.ts' },
   { project: 'hub', spec: 'projects/hub/src/app/runners/fleet-page.shell-sweep.spec.ts' },

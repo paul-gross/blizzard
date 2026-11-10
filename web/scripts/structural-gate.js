@@ -145,15 +145,8 @@ function isGatingSpec(relPath) {
   return relPath.endsWith('.spec.ts') && !relPath.endsWith('.shell-sweep.spec.ts');
 }
 
-/**
- * Gating specs whose wait is genuinely time-driven, each with a reason:
- *
- * - `demo-director.spec.ts` drives the kiosk tour's forever-loop through a real
- *   router harness and asserts on the trail it walks; its waits are polls of that
- *   loop, sized off the tour's own measured cadence (issue #275), not sleeps
- *   standing in for a timer that could be advanced.
- */
-const REAL_TIMER_EXEMPT_FILES = [path.join('hub', 'src', 'app', 'demo', 'demo-director.spec.ts')];
+/** Gating specs whose wait is genuinely time-driven, each with a reason. */
+const REAL_TIMER_EXEMPT_FILES = [];
 
 /** Every file below `dir` whose name ends in one of `extensions`.
  * @param {string} dir

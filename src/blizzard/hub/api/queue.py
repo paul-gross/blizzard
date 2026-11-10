@@ -168,7 +168,8 @@ def _entry_view[Entry: (QueuePeekEntry, BacklogPeekEntry)](
 @dto
 @dataclass(frozen=True)
 class ReadyQueue:
-    """The hub-ordered ready queue as every peek renders it — position is the whole order's
+    """The ready queue as a peek or a queue write renders it, in the order given: :meth:`of` reads claim order
+    (urgency before rank), :meth:`ranked` a write's own rank order. Position is the whole order's
     own index, kept when ``project`` narrows the entries. ``markings`` and ``projects`` are
     resolved once in :meth:`of`, alongside ``entries``, so :attr:`view` stays a pure
     projection over already-fetched state rather than an I/O-performing property."""
@@ -182,7 +183,7 @@ class ReadyQueue:
     def of(
         cls, services: TenantServices, statuses: Mapping[str, ChunkStatus], *, project: ProjectId | None = None
     ) -> ReadyQueue:
-        return cls.ranked(services, services.queue.ordered_ready(statuses=statuses), statuses, project=project)
+        return cls.ranked(services, services.queue.claim_ordered_ready(statuses=statuses), statuses, project=project)
 
     @classmethod
     def ranked(
@@ -250,7 +251,7 @@ class MatchedPeek:
         *,
         served: Collection[str],
     ) -> MatchedPeek:
-        chunks = services.queue.ordered_ready(statuses=statuses)
+        chunks = services.queue.claim_ordered_ready(statuses=statuses)
         policy = queue_match_policy(request.policy)
         served_chunks = [chunk for chunk in chunks if chunk.project_id in served]
         per_project = request.projects is not None

@@ -304,3 +304,45 @@ def test_the_queue_reads_its_page_projects_once_however_many_projects_the_page_s
         assert len(_entries(hub, "/api/queue", runner=False)) == 4
 
     assert count_queries(one.engine, lambda: listed(one)) == count_queries(two.engine, lambda: listed(two))
+
+
+def _urgent_first(hub: HubHarness, chunk_id: str) -> None:
+    """Place a new ``urgent`` urgency ahead of ``standard`` and set ``chunk_id`` to it."""
+    created = hub.client.post("/api/urgencies", json={"slug": "urgent", "after": None})
+    assert created.status_code == 201, created.text
+    patched = hub.client.patch(f"/api/chunks/{chunk_id}", json={"urgency": "urgent"})
+    assert patched.status_code == 202, patched.text
+
+
+def test_both_peeks_walk_claim_order_while_the_queue_stays_in_rank_order(tmp_path: Path) -> None:
+    hub, _ = _two_project_hub(tmp_path)
+    first = _ingest(hub, "1", "default")
+    second = _ingest(hub, "2", "default")
+    urgent = _ingest(hub, "3", "beta")
+    _urgent_first(hub, urgent)
+    token = seed_runner(hub, "r-both", projects=("default", "beta"))
+
+    # Claim order: the urgent chunk, last in rank, leads; positions are claim-order indexes.
+    assert _peek(hub, token) == [(urgent, 0)]
+    assert [(e["chunk_id"], e["position"]) for e in _entries(hub, "/api/fleet/queue/peek", runner=True)] == [
+        (urgent, 0),
+        (first, 1),
+        (second, 2),
+    ]
+    assert [e["chunk_id"] for e in _entries(hub, "/api/queue", runner=False)] == [first, second, urgent]
+
+
+def test_a_per_project_hold_stops_at_a_blocked_urgent_chunk_of_its_own_project_only(tmp_path: Path) -> None:
+    hub, _ = _two_project_hub(tmp_path)
+    prerequisite = _ingest(hub, "1", "default", promote=False)
+    plain = _ingest(hub, "2", "default")
+    other = _ingest(hub, "3", "beta")
+    urgent = _ingest(hub, "4", "default")
+    _urgent_first(hub, urgent)
+    edge = hub.client.post(f"/api/chunks/{urgent}/dependencies", json={"prerequisite_chunk_id": prerequisite})
+    assert edge.status_code < 300, edge.text
+    token = seed_runner(hub, "r-both", projects=("default", "beta"))
+
+    assert _peek(hub, token, policy="hold", projects=["default", "beta"]) == [(other, 2)]
+    assert _peek(hub, token, policy="hold", projects=["default"]) == []
+    assert _peek(hub, token) == [(plain, 1)]

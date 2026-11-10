@@ -38,6 +38,15 @@ describe('scrollersIn', () => {
 });
 
 describe('slowScrollToBottom', () => {
+  beforeEach(() => {
+    vi.useFakeTimers();
+    vi.setSystemTime(0);
+  });
+
+  afterEach(() => vi.useRealTimers());
+
+  const now = () => Date.now();
+
   /** The three fields the animation reads and writes — no layout needed. */
   function target(scrollHeight: number, clientHeight: number): HTMLElement {
     return { scrollTop: 0, scrollHeight, clientHeight } as unknown as HTMLElement;
@@ -47,7 +56,9 @@ describe('slowScrollToBottom', () => {
     const a = target(1000, 200);
     const b = target(500, 100);
 
-    await slowScrollToBottom([a, b], 60, new AbortController().signal);
+    const scrolling = slowScrollToBottom([a, b], 60, new AbortController().signal, now);
+    await vi.advanceTimersByTimeAsync(100);
+    await scrolling;
 
     expect(a.scrollTop).toBe(800);
     expect(b.scrollTop).toBe(400);
@@ -67,7 +78,9 @@ describe('slowScrollToBottom', () => {
       clientHeight: 200,
     } as unknown as HTMLElement;
 
-    await slowScrollToBottom([watched], 200, new AbortController().signal);
+    const scrolling = slowScrollToBottom([watched], 200, new AbortController().signal, now);
+    await vi.advanceTimersByTimeAsync(250);
+    await scrolling;
 
     // The first written position is a sliver of the 800px travel, not a jump-cut.
     expect(seen[0]).toBeLessThan(80);
@@ -87,7 +100,9 @@ describe('slowScrollToBottom', () => {
       clientHeight: 200,
     } as unknown as HTMLElement;
 
-    await slowScrollToBottom([growing], 80, new AbortController().signal);
+    const scrolling = slowScrollToBottom([growing], 80, new AbortController().signal, now);
+    await vi.advanceTimersByTimeAsync(100);
+    await scrolling;
 
     expect(growing.scrollTop).toBe(1800);
   });
@@ -95,7 +110,7 @@ describe('slowScrollToBottom', () => {
   it('gives up the moment the run is torn down', async () => {
     const el = target(1000, 200);
     const controller = new AbortController();
-    const scrolling = slowScrollToBottom([el], 5000, controller.signal);
+    const scrolling = slowScrollToBottom([el], 5000, controller.signal, now);
     controller.abort();
 
     await expect(scrolling).rejects.toThrow('demo aborted');
@@ -103,6 +118,6 @@ describe('slowScrollToBottom', () => {
   });
 
   it('does nothing when there is nothing to scroll', async () => {
-    await expect(slowScrollToBottom([], 1000, new AbortController().signal)).resolves.toBeUndefined();
+    await expect(slowScrollToBottom([], 1000, new AbortController().signal, now)).resolves.toBeUndefined();
   });
 });
