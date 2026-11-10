@@ -45,6 +45,7 @@ from blizzard.hub.domain.projects.model import Project, ProjectId
 from blizzard.hub.domain.urgency.model import Urgency, UrgencyId, UrgencyRetired, UrgencyUnknown
 from blizzard.hub.domain.urgency.ports import IReadUrgencyRepository, urgency_lock
 from blizzard.hub.domain.urgency.services import UrgencyReferences
+from tests.support.urgency import urgency
 
 _PROJECT = "proj_test"
 
@@ -211,20 +212,6 @@ def _as_write_routines(fake: _FakeRoutineRepo) -> IWriteRoutineRepository:
 
 
 _URGENT = UrgencyId("urg_urgent")
-
-
-def _urgency(slug: str, *, retired: bool = False) -> Urgency:
-    return Urgency(
-        urgency_id=UrgencyId(f"urg_{slug}"),
-        slug=slug,
-        name=slug,
-        color=ProjectColor.SLATE,
-        emoji=None,
-        icon=None,
-        created_at=_T0,
-        created_by="op",
-        retired=retired,
-    )
 
 
 @dataclass
@@ -587,7 +574,7 @@ def test_edit_clears_default_effort_with_null() -> None:
 def test_edit_setting_a_default_urgency_lands_its_id_under_that_urgencys_lock() -> None:
     transactions = _FakeTransactions()
     authoring, routines, _, _ = _authoring(
-        urgencies=_FakeUrgencies({"urgent": _urgency("urgent")}), transactions=transactions
+        urgencies=_FakeUrgencies({"urgent": urgency("urgent")}), transactions=transactions
     )
     routine = _create(authoring)
 
@@ -602,9 +589,9 @@ def test_edit_setting_a_default_urgency_lands_its_id_under_that_urgencys_lock() 
 def test_edit_clearing_the_default_urgency_with_null_opens_no_unit() -> None:
     transactions = _FakeTransactions()
     authoring, routines, _, _ = _authoring(
-        urgencies=_FakeUrgencies({"urgent": _urgency("urgent")}), transactions=transactions
+        urgencies=_FakeUrgencies({"urgent": urgency("urgent")}), transactions=transactions
     )
-    routine = _create(authoring, default_urgency=_urgency("urgent"))
+    routine = _create(authoring, default_urgency=urgency("urgent"))
 
     edited = authoring.edit(routine, RoutineEdit(default_urgency_id=None), _CTX)
 
@@ -615,8 +602,8 @@ def test_edit_clearing_the_default_urgency_with_null_opens_no_unit() -> None:
 
 
 def test_edit_restating_the_default_urgency_writes_nothing() -> None:
-    authoring, routines, _, _ = _authoring(urgencies=_FakeUrgencies({"urgent": _urgency("urgent")}))
-    routine = _create(authoring, default_urgency=_urgency("urgent"))
+    authoring, routines, _, _ = _authoring(urgencies=_FakeUrgencies({"urgent": urgency("urgent")}))
+    routine = _create(authoring, default_urgency=urgency("urgent"))
 
     assert authoring.edit(routine, RoutineEdit(default_urgency_id=_URGENT), _CTX) is routine
     assert routines.updates == []
@@ -624,7 +611,7 @@ def test_edit_restating_the_default_urgency_writes_nothing() -> None:
 
 def test_an_edit_leaving_a_retired_default_urgency_takes_no_urgency_lock_and_leaves_the_revision_to_guard() -> None:
     transactions = _FakeTransactions()
-    urgencies = _FakeUrgencies({"urgent": _urgency("urgent")}, retire_under_lock="urgent")
+    urgencies = _FakeUrgencies({"urgent": urgency("urgent")}, retire_under_lock="urgent")
     authoring, routines, _, _ = _authoring(urgencies=urgencies, transactions=transactions)
     routine = replace(_create(authoring), default_urgency_id=_URGENT)
     opened = len(transactions.opened)
@@ -638,7 +625,7 @@ def test_an_edit_leaving_a_retired_default_urgency_takes_no_urgency_lock_and_lea
 
 @pytest.mark.parametrize(
     ("held", "refusal"),
-    [({}, UrgencyUnknown), ({"urgent": _urgency("urgent", retired=True)}, UrgencyRetired)],
+    [({}, UrgencyUnknown), ({"urgent": urgency("urgent", retired=True)}, UrgencyRetired)],
 )
 def test_edit_naming_an_unknown_or_retired_urgency_is_refused_naming_the_field(
     held: dict[str, Urgency], refusal: type[ConfigFieldError]
@@ -653,7 +640,7 @@ def test_edit_naming_an_unknown_or_retired_urgency_is_refused_naming_the_field(
 
 
 def test_edit_naming_an_urgency_retired_before_its_lock_is_taken_is_refused_under_the_lock() -> None:
-    urgencies = _FakeUrgencies({"urgent": _urgency("urgent")}, retire_under_lock="urgent")
+    urgencies = _FakeUrgencies({"urgent": urgency("urgent")}, retire_under_lock="urgent")
     authoring, routines, _, _ = _authoring(urgencies=urgencies)
     routine = _create(authoring)
 
@@ -663,12 +650,12 @@ def test_edit_naming_an_urgency_retired_before_its_lock_is_taken_is_refused_unde
 
 
 def test_a_retire_clears_each_routine_default_naming_it_with_its_own_revision_and_change() -> None:
-    authoring, routines, _, _ = _authoring(urgencies=_FakeUrgencies({"urgent": _urgency("urgent")}))
-    named = _create(authoring, slug="named", default_urgency=_urgency("urgent"))
+    authoring, routines, _, _ = _authoring(urgencies=_FakeUrgencies({"urgent": urgency("urgent")}))
+    named = _create(authoring, slug="named", default_urgency=urgency("urgent"))
     other = _create(authoring, slug="other")
     clearing = RoutineUrgencyClearing(routines=_as_write_routines(routines))
 
-    clearing.clear(_urgency("urgent"), _CTX, at=_T0, transaction=cast(Transaction, _FakeUnit()))
+    clearing.clear(urgency("urgent"), _CTX, at=_T0, transaction=cast(Transaction, _FakeUnit()))
 
     cleared = routines.by_id[named.routine_id]
     assert (cleared.default_urgency_id, cleared.revision) == (None, 2)

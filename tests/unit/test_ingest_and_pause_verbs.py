@@ -589,3 +589,17 @@ def test_dir_and_runner_url_conflict_only_on_the_command_line(tmp_path: Path) ->
     assert ambient.exit_code != 0
     assert "mutually exclusive" not in ambient.output
     assert "could not reach the runner at http://127.0.0.1:9" in ambient.output
+
+
+def test_ingest_sends_a_named_urgency_beside_the_tokens() -> None:
+    calls: list[object] = []
+
+    def fake_post(url: str, *, json: object, timeout: float) -> _FakeResponse:
+        calls.append(json)
+        return _FakeResponse(201, {"chunk_id": "ch_new"})
+
+    bound = bind_stubs(post=fake_post)
+    result = bound.runner.invoke(hub_group, ["chunk", "ingest", "blizzard:8", "--urgency", "urgent"])
+
+    assert result.exit_code == 0, result.output
+    assert calls[0] == {"tokens": ["blizzard:8"], "urgency": "urgent"}

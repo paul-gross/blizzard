@@ -9,7 +9,6 @@ from typing import cast
 
 import pytest
 
-from blizzard.foundation.project_colors import ProjectColor
 from blizzard.hub.domain.kernel.transactions import Transaction
 from blizzard.hub.domain.urgency.chain import URGENCY_FIELD, ChainLinks, resolve_chain
 from blizzard.hub.domain.urgency.model import Urgency, UrgencyId, UrgencyRetired
@@ -21,28 +20,15 @@ from blizzard.hub.domain.urgency.ports import (
 )
 from blizzard.hub.domain.urgency.services import MintAhead, TenantDefault
 from blizzard.hub.domain.urgency.settings import TenantSettings
+from tests.support.urgency import urgency
 
 _AT = datetime(2026, 11, 9, 9, 0, tzinfo=UTC)
 
 
-def _urgency(slug: str, *, retired: bool = False) -> Urgency:
-    return Urgency(
-        urgency_id=UrgencyId(f"urg_{slug}"),
-        slug=slug,
-        name=slug,
-        color=ProjectColor.SLATE,
-        emoji=None,
-        icon=None,
-        created_at=_AT,
-        created_by="usr_op",
-        retired=retired,
-    )
-
-
-_DEFAULT = _urgency("standard")
-_STATED = _urgency("stated")
-_CHORE = _urgency("chore")
-_ROUTINE = _urgency("routine")
+_DEFAULT = urgency("standard")
+_STATED = urgency("stated")
+_CHORE = urgency("chore")
+_ROUTINE = urgency("routine")
 
 
 def test_a_run_stating_an_urgency_takes_it_over_every_other_link() -> None:

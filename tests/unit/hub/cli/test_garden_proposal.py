@@ -385,3 +385,25 @@ def test_attach_an_unknown_proposal_is_reported_as_404() -> None:
 
     assert result.exit_code != 0
     assert "unknown garden proposal gprop_ghost" in result.output
+
+
+def test_accept_sends_a_named_urgency_for_the_minted_items_chunk() -> None:
+    calls: list[object] = []
+
+    def fake_post(url: str, *, json: object, timeout: float) -> _FakeResponse:
+        calls.append(json)
+        return _FakeResponse(
+            200,
+            {
+                **_proposal_view(
+                    closure=_closure(closure="accepted", item_outcome="minted", source="hub", ref="9", reason=None)
+                ),
+                "chunk_id": "ch_new",
+            },
+        )
+
+    bound = bind_stubs(post=fake_post)
+    result = bound.runner.invoke(hub_group, ["garden-proposal", "accept", "gprop_1", "--urgency", "urgent"])
+
+    assert result.exit_code == 0, result.output
+    assert calls[0] == {"mint_work_item": True, "urgency": "urgent"}

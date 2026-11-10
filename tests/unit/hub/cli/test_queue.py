@@ -214,3 +214,29 @@ def test_queue_move_echoes_where_the_hub_landed_the_chunk_not_the_argument() -> 
 
     assert result.exit_code == 0, result.output
     assert "moved ch_a to position 0" in result.output
+
+
+def test_queue_show_renders_each_entrys_urgency_and_dashes_one_naming_none() -> None:
+    def fake_get(url: str, *, timeout: float, params: object | None = None) -> _FakeResponse:
+        return _FakeResponse(
+            200,
+            {
+                "entries": [
+                    {
+                        "chunk_id": "ch_1",
+                        "graph_id": "gr_1",
+                        "position": 0,
+                        "urgency": {"urgency_id": "urg_1", "slug": "urgent"},
+                    },
+                    {"chunk_id": "ch_2", "graph_id": "gr_1", "position": 1},
+                ]
+            },
+        )
+
+    bound = bind_stubs(get=fake_get)
+    result = bound.runner.invoke(hub_group, ["queue", "get"])
+
+    assert result.exit_code == 0, result.output
+    lines = result.output.splitlines()
+    assert lines[0] == "0  ch_1  urgency=urgent  graph=gr_1"
+    assert lines[1] == "1  ch_2  urgency=-  graph=gr_1"

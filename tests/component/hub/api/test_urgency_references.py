@@ -113,22 +113,26 @@ def test_a_routine_or_chore_naming_an_unknown_or_retired_urgency_is_refused_nami
 
 
 def test_an_urgency_only_chore_edit_keeps_the_chore_and_leaves_the_other_chores_override(hub: HubHarness) -> None:
-    urgent = _urgency(hub, "urgent")
+    _urgency(hub, "urgent")
+    _urgency(hub, "background")
     _routine(hub)
-    created = _cadence(hub, {"key": "nightly", "routine": "sweep", "urgency": urgent["urgency_id"]})
+    created = _cadence(
+        hub,
+        {"key": "nightly", "routine": "sweep", "urgency": "urgent"},
+        {"key": "weekly", "routine": "sweep", "urgency": "background"},
+    )
     assert created.status_code == 201, created.text
     cadence = created.json()
-    (chore,) = cadence["chores"]
-    assert chore["urgency"] == "urgent"
 
     chores = [
-        {"key": "nightly", "routine": "sweep", "urgency": "urgent"},
-        {"key": "weekly", "routine": "sweep"},
+        {"key": "nightly", "routine": "sweep", "urgency": None},
+        {"key": "weekly", "routine": "sweep", "urgency": "background"},
     ]
     edited = hub.client.patch(f"/api/cadences/{cadence['cadence_id']}", json={"chores": chores})
     assert edited.status_code == 200, edited.text
-    kept, added = edited.json()["chores"]
-    assert (kept["chore_id"], kept["urgency"], added["urgency"]) == (chore["chore_id"], "urgent", None)
+    after = [(c["chore_id"], c["urgency"]) for c in edited.json()["chores"]]
+    before = [c["chore_id"] for c in cadence["chores"]]
+    assert after == [(before[0], None), (before[1], "background")]
 
 
 def test_a_retire_leaves_a_routines_default_and_a_chores_override_reading_none(hub: HubHarness) -> None:
@@ -189,30 +193,20 @@ def test_one_document_declares_an_urgency_and_the_routine_and_chore_naming_it(hu
 
 
 @pytest.mark.parametrize(
-    ("section", "entry", "field"),
-    [
-        (
-            "routines",
-            {"slug": "sweep", "default_scope_slug": "blizzard", "default_urgency": "{key}"},
-            "default_urgency",
-        ),
-        (
-            "cadences",
-            {"slug": "evening", "spacing": "10d", "chores": [{"key": "a", "routine": "x", "urgency": "{key}"}]},
-            "chores[0].urgency",
-        ),
-    ],
+    ("section", "field"),
+    [("routines", "default_urgency"), ("cadences", "chores[0].urgency")],
 )
 @pytest.mark.parametrize(("key", "refusal"), [("old", "urgency_retired"), ("nosuch", "urgency_unknown")])
 def test_a_document_naming_a_retired_or_unknown_urgency_is_refused_at_the_entry(
-    hub: HubHarness, section: str, entry: dict[str, Any], field: str, key: str, refusal: str
+    hub: HubHarness, section: str, field: str, key: str, refusal: str
 ) -> None:
     _urgency(hub, "old")
     _retire(hub, "old")
-    if section == "routines":
-        entry = {**entry, "graph_name": _graph(hub), "default_urgency": key}
-    else:
-        entry = {**entry, "chores": [{**entry["chores"][0], "urgency": key}]}
+    entry: dict[str, Any] = (
+        {"slug": "sweep", "graph_name": _graph(hub), "default_scope_slug": "blizzard", "default_urgency": key}
+        if section == "routines"
+        else {"slug": "evening", "spacing": "10d", "chores": [{"key": "a", "routine": "x", "urgency": key}]}
+    )
 
     refused = _apply(hub, {"scopes": [{"slug": "blizzard"}], section: [entry]})
 

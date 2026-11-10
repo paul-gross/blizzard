@@ -17,7 +17,6 @@ import pytest
 from blizzard.foundation.chunk_migration import MigrationMode
 from blizzard.foundation.chunk_status import ChunkStatus
 from blizzard.foundation.node_steps import Executor, JudgedBy, SessionMode
-from blizzard.foundation.project_colors import ProjectColor
 from blizzard.hub.domain.chunk.errors import ChunkNotFound
 from blizzard.hub.domain.chunk.model import (
     Chunk,
@@ -48,6 +47,7 @@ from blizzard.hub.domain.operations.edit import (
 from blizzard.hub.domain.urgency.model import Urgency, UrgencyId, UrgencyRetired, UrgencyUnknown
 from blizzard.hub.domain.urgency.ports import IReadUrgencyRepository, urgency_lock
 from tests.support.scaffolding import make_graph
+from tests.support.urgency import urgency
 
 _T0 = datetime(2026, 1, 1, tzinfo=UTC)
 _CHUNK = Chunk(chunk_id="chk_1", graph_id="gr_1", work_refs=[], minted_at=_T0)
@@ -543,22 +543,8 @@ def test_edit_intended_migration_refuses_a_terminal_status(facts_factory: Callab
 # --- edit() — urgency's window: any non-terminal status; it writes the column alone. ---
 
 
-def _urgency(slug: str, *, retired: bool = False) -> Urgency:
-    return Urgency(
-        urgency_id=UrgencyId(f"urg_{slug}"),
-        slug=slug,
-        name=slug,
-        color=ProjectColor.SLATE,
-        emoji=None,
-        icon=None,
-        created_at=_T0,
-        created_by="usr_op",
-        retired=retired,
-    )
-
-
-_STANDARD = _urgency("standard")
-_URGENT = _urgency("urgent")
+_STANDARD = urgency("standard")
+_URGENT = urgency("urgent")
 _CARRYING_STANDARD = Chunk(
     chunk_id="chk_1", graph_id="gr_1", work_refs=[], minted_at=_T0, urgency_id=_STANDARD.urgency_id
 )
@@ -613,7 +599,7 @@ def test_edit_urgency_the_chunk_already_carries_writes_nothing() -> None:
 
 
 def test_edit_urgency_retired_under_the_lock_is_refused_and_writes_nothing() -> None:
-    service, repo = _urgency_service(_ready_facts(), _urgency("urgent", retired=True))
+    service, repo = _urgency_service(_ready_facts(), urgency("urgent", retired=True))
 
     with pytest.raises(UrgencyRetired):
         service.edit(_CARRYING_STANDARD, ChunkEdit(urgency=_URGENT))

@@ -274,3 +274,19 @@ def test_delete_of_a_live_held_item_surfaces_the_held_chunk_detail_not_the_canne
     assert result.exit_code != 0
     assert "hub:42 is held by live chunk ch_1" in result.output
     assert "has no editor" not in result.output
+
+
+def test_create_sends_a_named_urgency_with_the_item() -> None:
+    calls: list[object] = []
+
+    def fake_post(url: str, *, json: object, timeout: float) -> _FakeResponse:
+        calls.append(json)
+        return _FakeResponse(201, {**_item_view(), "chunk_id": "ch_new"})
+
+    bound = bind_stubs(post=fake_post)
+    result = bound.runner.invoke(
+        hub_group, ["item", "create", "--title", "t", "--body-file", "-", "--urgency", "urgent"], input="b"
+    )
+
+    assert result.exit_code == 0, result.output
+    assert calls[0] == {"title": "t", "body": "b", "stated_priority": "normal", "urgency": "urgent"}
