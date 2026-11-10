@@ -209,6 +209,17 @@ describe('DemoDirector', () => {
     expect(now - openedAt).toBeLessThan(4000);
   });
 
+  it.each([3_600_000, -3_600_000])('keeps the board dwell across a wall-clock correction of %i ms', async (correction) => {
+    const router = await run('?demo=true&demo_swap_chunk_interval=4&demo_board_scroll=0.6&demo_artifact_interval=0.15');
+    await trail(router, (urls) => urls.some((url) => url.includes(`chunk=${CHUNK}`)));
+    await step(100);
+    now += correction;
+    await step(300);
+    expect(router.url).toContain(`chunk=${CHUNK}`);
+    await trail(router, (urls) => urls.some((url) => url.startsWith('/board/chunk/')), 400);
+    expect(router.url).toContain('/board/chunk/');
+  });
+
   it('rotates through the chunk store, a different artifact each dwell', async () => {
     const router = await run(`?demo=true&${FAST}`);
 

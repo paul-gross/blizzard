@@ -36,7 +36,7 @@ export function scrollersIn(root: HTMLElement): HTMLElement[] {
  * step — the dock's three columns descend together rather than one after
  * another.
  *
- * Paced off `FLEET_CLOCK` against an absolute deadline (see
+ * Paced off the supplied elapsed-time clock (see
  * `demo-timing.ts`), and each element's travel is re-measured every frame: the
  * board is live, so an SSE update that appends a timeline row mid-scroll
  * lengthens the target instead of stranding the pane short of the new bottom.

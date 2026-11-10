@@ -1,15 +1,28 @@
+import { InjectionToken, inject } from '@angular/core';
+import { FLEET_CLOCK } from 'fleet';
+
 /**
  * Demo mode's waiting primitives.
  *
  * Every wait in the director is (a) abortable, so tearing the demo down never
- * leaves a timer running against a dead page, and (b) paced against the **wall
- * clock** rather than against accumulated timer callbacks. The second point is
+ * leaves a timer running against a dead page, and (b) paced against elapsed
+ * time rather than against accumulated timer callbacks. The second point is
  * what keeps a kiosk honest: a browser throttles timers and stops
  * `requestAnimationFrame` outright in a backgrounded or occluded tab, so a
  * cycle built by summing `setTimeout`s drifts arbitrarily far behind real time.
- * Deadlines here are absolute `FLEET_CLOCK` instants, so a throttled
+ * Deadlines use a monotonic clock, so a throttled
  * stretch resumes at the right place instead of accumulating lag.
  */
+
+/** Anchor to the fleet clock once, then measure durations independently of wall-clock corrections. */
+export const DEMO_CLOCK = new InjectionToken<() => number>('DEMO_CLOCK', {
+  providedIn: 'root',
+  factory: () => {
+    const anchor = inject(FLEET_CLOCK)();
+    const started = performance.now();
+    return () => anchor + performance.now() - started;
+  },
+});
 
 /** Thrown out of every wait once the run is torn down. */
 export class DemoAborted extends Error {
@@ -40,7 +53,7 @@ export function sleep(ms: number, signal: AbortSignal): Promise<void> {
   });
 }
 
-/** Sleep until an absolute wall-clock deadline. */
+/** Sleep until an absolute deadline on the supplied elapsed-time clock. */
 export function sleepUntil(deadline: number, signal: AbortSignal, now: () => number): Promise<void> {
   return sleep(deadline - now(), signal);
 }

@@ -1,4 +1,7 @@
-import { DemoAborted, nextFrame, sleepUntil, waitFor } from './demo-timing';
+import { TestBed } from '@angular/core/testing';
+import { FLEET_CLOCK } from 'fleet';
+import { DEMO_CLOCK, DemoAborted, nextFrame, sleepUntil, waitFor } from './demo-timing';
+import { slowScrollToBottom } from './demo-scroll';
 
 describe('demo timing', () => {
   let now: number;
@@ -15,7 +18,7 @@ describe('demo timing', () => {
     vi.useRealTimers();
   });
 
-  it('sleeps for the remaining wall-clock time', async () => {
+  it('sleeps for the remaining time', async () => {
     const done = vi.fn();
     const sleeping = sleepUntil(1050, signal, () => now).then(done);
     await vi.advanceTimersByTimeAsync(49);
@@ -23,6 +26,21 @@ describe('demo timing', () => {
     await vi.advanceTimersByTimeAsync(1);
     await sleeping;
     expect(done).toHaveBeenCalledOnce();
+  });
+
+  it.each([3_600_000, -3_600_000])('paces scrolling through a wall-clock correction of %i ms', async (correction) => {
+    TestBed.configureTestingModule({ providers: [{ provide: FLEET_CLOCK, useValue: () => now }] });
+    const clock = TestBed.inject(DEMO_CLOCK);
+    const target = { scrollTop: 0, scrollHeight: 1000, clientHeight: 200 } as HTMLElement;
+    const scrolling = slowScrollToBottom([target], 1000, signal, clock);
+    await vi.advanceTimersByTimeAsync(250);
+    now += correction;
+    await vi.advanceTimersByTimeAsync(250);
+    expect(target.scrollTop).toBeGreaterThan(300);
+    expect(target.scrollTop).toBeLessThan(500);
+    await vi.advanceTimersByTimeAsync(550);
+    await scrolling;
+    expect(target.scrollTop).toBe(800);
   });
 
   it('times out against the injected clock even when frames are throttled', async () => {

@@ -1,13 +1,13 @@
 import { Injectable, inject, signal } from '@angular/core';
 import { Router } from '@angular/router';
-import { type ArtifactView, FLEET_CLOCK, injectHubChunkDetailQuery, sortArtifacts } from 'fleet';
+import { type ArtifactView, injectHubChunkDetailQuery, sortArtifacts } from 'fleet';
 import { injectHubBoardChunksQuery } from '../core/chunks.query';
 
 import { type DemoConfig, demoQueryParams, readDemoConfig } from './demo-config';
 import { DEMO_RANDOM } from './demo-random';
 import { DemoKiosk } from './demo-kiosk';
 import { scrollersIn, slowScrollToBottom } from './demo-scroll';
-import { DemoAborted, sleep, sleepUntil, waitFor } from './demo-timing';
+import { DEMO_CLOCK, DemoAborted, sleep, sleepUntil, waitFor } from './demo-timing';
 import { ProjectLens } from '../core/project-lens';
 
 /**
@@ -42,7 +42,7 @@ import { ProjectLens } from '../core/project-lens';
 @Injectable({ providedIn: 'root' })
 export class DemoDirector {
   private readonly lens = inject(ProjectLens);
-  private readonly clock = inject(FLEET_CLOCK);
+  private readonly clock = inject(DEMO_CLOCK);
   private readonly random = inject(DEMO_RANDOM);
 
   private readonly router = inject(Router);

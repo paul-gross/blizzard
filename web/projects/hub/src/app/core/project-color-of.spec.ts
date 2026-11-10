@@ -1,3 +1,5 @@
+import { chunkDetail } from 'fleet/testing';
+
 import { openProjectColor, projectColorOf } from './project-lens-colors';
 
 describe('projectColorOf', () => {
@@ -23,6 +25,7 @@ describe('projectColorOf', () => {
   });
 
   it('uses the same lookup for the open chunk', () => {
+    expect(openProjectColor(true, chunkDetail({ project_id: 'second' }), projects)).toBe('#abcdef');
     expect(openProjectColor(true, undefined, projects)).toBeNull();
   });
 });
