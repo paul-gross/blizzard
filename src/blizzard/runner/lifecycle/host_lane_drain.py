@@ -29,10 +29,9 @@ _CP_AFTER_PUSH = crashpoint("hostlane.after-push.before-mark", "hub applied the 
 
 
 def host_lane_mark(ack: HostFactPushAck) -> int:
-    """Advance past rejected facts as well as the hub mark, so one bad fact cannot wedge the lane.
+    """Advance past rejected facts so one bad fact cannot wedge the lane.
 
-    Unlike the runner lane's per-sequence acknowledgement, the host lane has one high-water mark per host;
-    hub ingest withholds that mark at a rejected fact, so the runner advances past rejected sequences itself.
+    See ``test_host_lane_mark`` and ``src/blizzard/hub/domain/execution/host_facts.py``.
     """
     return max([ack.high_water, *ack.rejected])
 
