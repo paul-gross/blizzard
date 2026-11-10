@@ -104,8 +104,6 @@ _CP_AFTER_CONFIG = crashpoint(
     "this host holds the runner's configuration and token and the source's token is gone; its rows are still there",
 )
 
-#: The name every source copy's directory in this host's data directory starts with.
-
 #: The revision from which every runner-owned table carries its runner, so one runner's rows can be removed from a
 #: store that holds others.
 _RUNNER_SCOPE_REVISION = "20261015_1000_host_ingests"
