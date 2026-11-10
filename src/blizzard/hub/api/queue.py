@@ -182,7 +182,7 @@ class ReadyQueue:
     def of(
         cls, services: TenantServices, statuses: Mapping[str, ChunkStatus], *, project: ProjectId | None = None
     ) -> ReadyQueue:
-        return cls.ranked(services, services.queue.ordered_ready(statuses=statuses), statuses, project=project)
+        return cls.ranked(services, services.queue.claim_ordered_ready(statuses=statuses), statuses, project=project)
 
     @classmethod
     def ranked(
@@ -250,7 +250,7 @@ class MatchedPeek:
         *,
         served: Collection[str],
     ) -> MatchedPeek:
-        chunks = services.queue.ordered_ready(statuses=statuses)
+        chunks = services.queue.claim_ordered_ready(statuses=statuses)
         policy = queue_match_policy(request.policy)
         served_chunks = [chunk for chunk in chunks if chunk.project_id in served]
         per_project = request.projects is not None

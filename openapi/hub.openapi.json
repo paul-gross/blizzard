@@ -46759,7 +46759,7 @@
     },
     "/api/fleet/queue/peek": {
       "get": {
-        "description": "The runner's FILL read \u2014 the whole ready-queue order: a filling runner needs every\nready chunk in one read. Kept as-is for a previous-minor caller;\n``POST /queue/peek`` below is the matched counterpart. ``?project=`` narrows it to that\nproject's chunks at their whole-queue positions, never reranked.",
+        "description": "The runner's FILL read \u2014 the whole ready queue in claim order (urgency before rank): a filling runner needs every\nready chunk in one read. Kept as-is for a previous-minor caller;\n``POST /queue/peek`` below is the matched counterpart. ``?project=`` narrows it to that\nproject's chunks at their whole-queue positions, never reranked.",
         "operationId": "peek_queue_api_fleet_queue_peek_get",
         "parameters": [
           {

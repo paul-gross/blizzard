@@ -17,9 +17,19 @@ from blizzard.hub.domain.chunk.model import Chunk, ChunkFacts, MigrationFact, Re
 from blizzard.hub.domain.execution import eligibility
 from blizzard.hub.domain.execution.eligibility import EligibilityCheck
 from blizzard.hub.domain.graph.model import RESERVED_TERMINAL, Edge, Graph, Node, SessionDecl
-from blizzard.hub.domain.operations.queue import MatchedEntry, queue_match_policy, select_matched_entry
+from blizzard.hub.domain.operations.queue import (
+    MatchedEntry,
+    MatchedWalk,
+    PassedReason,
+    claim_order,
+    queue_match_policy,
+    select_matched_entry,
+    walk_matched_entries,
+)
 from blizzard.hub.domain.projects.model import ProjectId
 from blizzard.hub.domain.runners.registration import RunnerCapability
+from blizzard.hub.domain.urgency.model import UrgencyId
+from blizzard.hub.domain.urgency.order import Placed, UrgencyOrder
 
 
 def _node(
@@ -576,3 +586,127 @@ def test_a_peek_policy_this_build_does_not_know_reads_as_pass_over() -> None:
     assert queue_match_policy(QueueMatchPolicy.HOLD) is QueueMatchPolicy.HOLD
     assert queue_match_policy(QueueMatchPolicy.PASS_OVER) is QueueMatchPolicy.PASS_OVER
     assert queue_match_policy(Unrecognized("some-future-value")) is QueueMatchPolicy.PASS_OVER
+
+
+# --- Claim order and the walk's trace ---
+
+
+def _urgent(chunk_id: str, urgency: str | None, *, project: ProjectId = _PROJECT) -> Chunk:
+    return replace(
+        _chunk(),
+        chunk_id=chunk_id,
+        project_id=project,
+        urgency_id=None if urgency is None else UrgencyId(urgency),
+    )
+
+
+def _order(*slugs: str, retired: tuple[str, ...] = ()) -> UrgencyOrder:
+    return UrgencyOrder.of(
+        [Placed(UrgencyId(f"urg_{s}"), s, float(i), retired=s in retired) for i, s in enumerate(slugs)], seq=1
+    )
+
+
+def _walk(
+    chunks: list[Chunk],
+    *,
+    blocked: dict[str, list[str]] | None = None,
+    policy: QueueMatchPolicy = QueueMatchPolicy.PASS_OVER,
+    served: set[str] | None = None,
+    per_project: bool = False,
+) -> MatchedWalk:
+    graph = _graph([_BUILD])
+    return walk_matched_entries(
+        chunks,
+        served=served or {_PROJECT},
+        graphs={graph.graph_id: graph},
+        facts={c.chunk_id: ChunkFacts(minted=True, promoted=True) for c in chunks},
+        capabilities=[_capability("claude", default=True)],
+        blocked=blocked or {},
+        policy=policy,
+        hold_per_project=per_project,
+    )
+
+
+def test_claim_order_groups_by_urgency_place_and_keeps_rank_within_a_group() -> None:
+    ranked = [
+        _urgent("a", "urg_standard"),
+        _urgent("b", "urg_standard"),
+        _urgent("c", "urg_urgent"),
+        _urgent("d", "urg_urgent"),
+    ]
+    ordered = claim_order(ranked, _order("urgent", "standard"))
+    assert [c.chunk_id for c in ordered] == ["c", "d", "a", "b"]
+
+
+def test_claim_order_with_one_urgency_is_rank_order() -> None:
+    ranked = [_urgent(i, "urg_standard") for i in "abcd"]
+    assert claim_order(ranked, _order("standard")) == ranked
+
+
+def test_reordering_the_set_reorders_claim_order() -> None:
+    ranked = [_urgent("a", "urg_standard"), _urgent("c", "urg_urgent")]
+    assert [c.chunk_id for c in claim_order(ranked, _order("urgent", "standard"))] == ["c", "a"]
+    assert [c.chunk_id for c in claim_order(ranked, _order("standard", "urgent"))] == ["a", "c"]
+
+
+def test_claim_order_sorts_a_chunk_without_a_live_urgency_last_and_keeps_it() -> None:
+    ranked = [_urgent("a", None), _urgent("b", "urg_gone"), _urgent("c", "urg_urgent")]
+    ordered = claim_order(ranked, _order("urgent", "gone", retired=("gone",)))
+    assert [c.chunk_id for c in ordered] == ["c", "a", "b"]
+
+
+def test_pass_over_steps_past_a_blocked_urgent_chunk_then_down_a_group() -> None:
+    chunks = [_urgent("u1", "urg_urgent"), _urgent("u2", "urg_urgent"), _urgent("s1", "urg_standard")]
+    ordered = claim_order(chunks, _order("urgent", "standard"))
+    walk = _walk(ordered, blocked={"u1": ["pre_1", "pre_2"], "u2": ["pre_3"]})
+    assert walk.choice == MatchedEntry(chunk=chunks[2], position=2)
+    assert [(p.chunk.chunk_id, p.reason, p.prerequisite, p.prerequisite_count) for p in walk.passed] == [
+        ("u1", PassedReason.BLOCKED, "pre_1", 2),
+        ("u2", PassedReason.BLOCKED, "pre_3", 1),
+    ]
+
+
+def test_hold_stops_at_a_blocked_urgent_chunk_and_per_project_hold_goes_on_to_others() -> None:
+    chunks = [_urgent("u1", "urg_urgent"), _urgent("s1", "urg_standard"), _urgent("o1", "urg_standard", project=_OTHER)]
+    held = _walk(chunks, blocked={"u1": ["p"]}, policy=QueueMatchPolicy.HOLD, served={_PROJECT, _OTHER})
+    assert held.choice is None
+    assert [p.chunk.chunk_id for p in held.passed] == ["u1"]
+    per_project = _walk(
+        chunks, blocked={"u1": ["p"]}, policy=QueueMatchPolicy.HOLD, served={_PROJECT, _OTHER}, per_project=True
+    )
+    assert per_project.choice is not None and per_project.choice.chunk.chunk_id == "o1"
+    assert [p.chunk.chunk_id for p in per_project.passed] == ["u1"]
+
+
+def test_the_walk_counts_unserved_chunks_ahead_of_its_choice_and_traces_ineligible_ones() -> None:
+    chunks = [_urgent("x", "urg_urgent", project=_OTHER), _urgent("a", "urg_standard")]
+    walk = _walk(chunks)
+    assert walk.unserved == 1
+    assert walk.choice is not None and walk.choice.chunk.chunk_id == "a"
+    ineligible = walk_matched_entries(
+        chunks[1:],
+        served={_PROJECT},
+        graphs={"gr_1": _graph([_BUILD])},
+        facts={},
+        capabilities=[],
+        blocked={},
+        policy=QueueMatchPolicy.PASS_OVER,
+    )
+    assert ineligible.choice is None
+    assert [p.reason for p in ineligible.passed] == [PassedReason.INELIGIBLE]
+
+
+def test_the_choice_of_the_walk_is_what_select_matched_entry_returns() -> None:
+    chunks = [_urgent("u1", "urg_urgent"), _urgent("s1", "urg_standard")]
+    graphs = {"gr_1": _graph([_BUILD])}
+    facts = {c.chunk_id: ChunkFacts(minted=True, promoted=True) for c in chunks}
+    capabilities = [_capability("claude", default=True)]
+    blocked = {"u1": ["p"]}
+    policy = QueueMatchPolicy.PASS_OVER
+    selected = select_matched_entry(
+        chunks, served={_PROJECT}, graphs=graphs, facts=facts, capabilities=capabilities, blocked=blocked, policy=policy
+    )
+    walked = walk_matched_entries(
+        chunks, served={_PROJECT}, graphs=graphs, facts=facts, capabilities=capabilities, blocked=blocked, policy=policy
+    )
+    assert selected == walked.choice
