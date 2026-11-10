@@ -29,6 +29,7 @@ from blizzard.hub.domain.config.forges import (
     ForgeOriginTaken,
     ForgeSlugTaken,
 )
+from blizzard.hub.domain.config.landing_policies import POLICY_CAPABILITIES, missing_capabilities
 from blizzard.wire.forge import (
     ForgeBudgetView,
     ForgeCreateRequest,
@@ -37,6 +38,7 @@ from blizzard.wire.forge import (
     ForgeReferenceView,
     ForgesListView,
     ForgeSummary,
+    PolicyHonour,
 )
 from blizzard.wire.record_referrer import RecordReferrer
 
@@ -65,6 +67,7 @@ def _summary(record: ConfiguredForge, names: Mapping[str, str]) -> ForgeSummary:
 def _detail(record: ConfiguredForge, services: TenantServices) -> ForgeDetail:
     repositories = services.repository_records.list_all(include_retired=True)
     sources = services.work_source_records.list_all(include_retired=True)
+    offered = services.forges.offered(record)
     return ForgeDetail(
         **_summary(record, user_names(services, [record.created_by])).model_dump(),
         repositories=[
@@ -77,7 +80,12 @@ def _detail(record: ConfiguredForge, services: TenantServices) -> ForgeDetail:
             for s in sources
             if s.fields.forge_id == record.forge_id
         ],
-        offered=sorted(services.forges.offered(record)),
+        offered=sorted(offered),
+        landing_policies=[
+            PolicyHonour(policy=policy, honoured=not missing, missing=sorted(missing))
+            for policy in POLICY_CAPABILITIES
+            for missing in [missing_capabilities(policy, offered)]
+        ],
         budgets=[
             ForgeBudgetView(
                 secret_name=key.secret_name,

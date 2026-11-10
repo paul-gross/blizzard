@@ -6717,6 +6717,10 @@ export type ForgeDetail = {
      */
     kind: string;
     /**
+     * Landing Policies
+     */
+    landing_policies: Array<PolicyHonour>;
+    /**
      * Name
      */
     name: string;
@@ -9474,6 +9478,24 @@ export type LandingOrderRequest = {
 export type LandingPolicyName = 'merge-on-checks' | 'fast-forward' | 'park';
 
 /**
+ * LandingPolicyNeedsView
+ *
+ * What one landing policy needs of its forge: the capabilities it cannot land without (``requires``) and the ones
+ * it uses when the forge offers them (``uses``), each sorted.
+ */
+export type LandingPolicyNeedsView = {
+    policy: LandingPolicyName;
+    /**
+     * Requires
+     */
+    requires: Array<string>;
+    /**
+     * Uses
+     */
+    uses: Array<string>;
+};
+
+/**
  * LandingPositionRequest
  *
  * One move in a project's landing order: ``repository`` to just after ``after_repository``, to the front when
@@ -10771,6 +10793,23 @@ export type PinnedGraphMissingProblem = {
      */
     type: 'urn:blizzard:problem:pinned-graph-missing';
     [key: string]: unknown;
+};
+
+/**
+ * PolicyHonour
+ *
+ * Whether the forge can honour one landing policy: ``missing`` names each required capability it does not offer.
+ */
+export type PolicyHonour = {
+    /**
+     * Honoured
+     */
+    honoured: boolean;
+    /**
+     * Missing
+     */
+    missing: Array<string>;
+    policy: LandingPolicyName;
 };
 
 /**
@@ -22757,6 +22796,24 @@ export type ExportConfigApiConfigExportGetResponses = {
 };
 
 export type ExportConfigApiConfigExportGetResponse = ExportConfigApiConfigExportGetResponses[keyof ExportConfigApiConfigExportGetResponses];
+
+export type ListLandingPoliciesApiConfigLandingPoliciesGetData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/config/landing-policies';
+};
+
+export type ListLandingPoliciesApiConfigLandingPoliciesGetResponses = {
+    /**
+     * Response List Landing Policies Api Config Landing Policies Get
+     *
+     * Successful Response
+     */
+    200: Array<LandingPolicyNeedsView>;
+};
+
+export type ListLandingPoliciesApiConfigLandingPoliciesGetResponse = ListLandingPoliciesApiConfigLandingPoliciesGetResponses[keyof ListLandingPoliciesApiConfigLandingPoliciesGetResponses];
 
 export type GetSchemaApiConfigSchemaKindGetData = {
     body?: never;

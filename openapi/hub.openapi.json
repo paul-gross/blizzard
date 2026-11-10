@@ -11407,6 +11407,14 @@
             "title": "Kind",
             "type": "string"
           },
+          "landing_policies": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/PolicyHonour"
+            },
+            "title": "Landing Policies",
+            "type": "array"
+          },
           "name": {
             "title": "Name",
             "type": "string"
@@ -11477,6 +11485,7 @@
           "repositories",
           "work_sources",
           "offered",
+          "landing_policies",
           "budgets"
         ],
         "title": "ForgeDetail",
@@ -15788,6 +15797,36 @@
         "title": "LandingPolicyName",
         "type": "string"
       },
+      "LandingPolicyNeedsView": {
+        "description": "What one landing policy needs of its forge: the capabilities it cannot land without (``requires``) and the ones\nit uses when the forge offers them (``uses``), each sorted.",
+        "properties": {
+          "policy": {
+            "$ref": "#/components/schemas/LandingPolicyName",
+            "x-blizzard-open": true
+          },
+          "requires": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Requires",
+            "type": "array"
+          },
+          "uses": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Uses",
+            "type": "array"
+          }
+        },
+        "required": [
+          "policy",
+          "requires",
+          "uses"
+        ],
+        "title": "LandingPolicyNeedsView",
+        "type": "object"
+      },
       "LandingPositionRequest": {
         "additionalProperties": false,
         "description": "One move in a project's landing order: ``repository`` to just after ``after_repository``, to the front when\nthat is ``null``, or to unranked with ``unranked``. Each repository is an id or a slug.",
@@ -17849,6 +17888,33 @@
           "instance"
         ],
         "title": "PinnedGraphMissingProblem",
+        "type": "object"
+      },
+      "PolicyHonour": {
+        "description": "Whether the forge can honour one landing policy: ``missing`` names each required capability it does not offer.",
+        "properties": {
+          "honoured": {
+            "title": "Honoured",
+            "type": "boolean"
+          },
+          "missing": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Missing",
+            "type": "array"
+          },
+          "policy": {
+            "$ref": "#/components/schemas/LandingPolicyName",
+            "x-blizzard-open": true
+          }
+        },
+        "required": [
+          "policy",
+          "honoured",
+          "missing"
+        ],
+        "title": "PolicyHonour",
         "type": "object"
       },
       "PrView": {
@@ -40551,9 +40617,35 @@
         ]
       }
     },
+    "/api/config/landing-policies": {
+      "get": {
+        "description": "Every landing policy with the forge capabilities it requires and the ones it uses, each sorted.",
+        "operationId": "list_landing_policies_api_config_landing_policies_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/LandingPolicyNeedsView"
+                  },
+                  "title": "Response List Landing Policies Api Config Landing Policies Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "List Landing Policies",
+        "tags": [
+          "config"
+        ]
+      }
+    },
     "/api/config/schema/{kind}": {
       "get": {
-        "description": "The JSON Schema of a record kind's version-2 document entry; 404 for a kind with none yet, and 422\n`config_version_retired` for `version=1`. The `repositories` schema lists, under `x-blizzard-landing-policies`,\nevery landing policy with the capabilities its forge must offer (`requires`) and the ones it uses when offered\n(`uses`).",
+        "description": "The JSON Schema of a record kind's version-2 document entry; 404 for a kind with none yet, and 422\n`config_version_retired` for `version=1`. The `repositories` schema lists, under `x-blizzard-landing-policies`,\nevery landing policy with the capabilities its forge must offer (`requires`) and the ones it uses when offered\n(`uses`); that key is deprecated in favour of `GET /api/config/landing-policies` and\n`ForgeDetail.landing_policies`.",
         "operationId": "get_schema_api_config_schema__kind__get",
         "parameters": [
           {

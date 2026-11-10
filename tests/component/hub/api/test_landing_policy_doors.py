@@ -15,7 +15,10 @@ from fastapi.testclient import TestClient
 from sqlalchemy import func, select
 
 from blizzard.foundation.landing_policy import LandingPolicy
+from blizzard.hub.domain.config.capabilities import Capability
+from blizzard.hub.domain.config.forges import ConfiguredForge
 from blizzard.hub.domain.config.landing_policies import POLICY_CAPABILITIES
+from blizzard.hub.domain.config.repositories import RepositoryId
 from blizzard.hub.store.schema import project_repository_positions
 from tests.support.scaffolding import HubHarness, build_hub, default_tenant
 
@@ -137,6 +140,36 @@ def test_the_forge_detail_carries_what_it_offers(hub: HubHarness) -> None:
 
     assert offered == sorted(offered)
     assert POLICY_CAPABILITIES[LandingPolicy.MERGE_ON_CHECKS].requires <= set(offered)
+
+
+def test_the_landing_policies_route_lists_every_policy_with_its_sorted_needs(hub: HubHarness) -> None:
+    listed = _ok(hub.client.get("/api/config/landing-policies"))
+
+    assert [entry["policy"] for entry in listed] == [policy.value for policy in POLICY_CAPABILITIES]
+    assert listed == [
+        {"policy": policy.value, "requires": sorted(needs.requires), "uses": sorted(needs.uses)}
+        for policy, needs in POLICY_CAPABILITIES.items()
+    ]
+
+
+def test_the_forge_detail_says_which_policies_it_honours_and_what_it_lacks(
+    hub: HubHarness, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    forge = _ok(hub.client.get("/api/repositories/acme-app"))["forge_id"]
+
+    everything = _ok(hub.client.get(f"/api/forges/{forge}"))["landing_policies"]
+    assert everything == [{"policy": policy.value, "honoured": True, "missing": []} for policy in POLICY_CAPABILITIES]
+
+    offered = hub.services.forges.offered
+
+    def without_checks(forge: ConfiguredForge, repository: RepositoryId | None = None) -> frozenset[Capability]:
+        return offered(forge, repository) - {Capability.CHECKS_READ}
+
+    monkeypatch.setattr(hub.services.forges, "offered", without_checks)
+    lacking = {entry["policy"]: entry for entry in _ok(hub.client.get(f"/api/forges/{forge}"))["landing_policies"]}
+    assert lacking["merge-on-checks"] == {"policy": "merge-on-checks", "honoured": False, "missing": ["checks.read"]}
+    assert lacking["fast-forward"] == {"policy": "fast-forward", "honoured": False, "missing": ["checks.read"]}
+    assert lacking["park"] == {"policy": "park", "honoured": True, "missing": []}
 
 
 # --- The project's landing order ---------------------------------------------------------------------------------

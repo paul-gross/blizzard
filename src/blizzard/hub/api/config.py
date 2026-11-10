@@ -66,6 +66,7 @@ from blizzard.wire.config import (
     ConfigDocumentV2,
     FieldChangeView,
     ForgeEntry,
+    LandingPolicyNeedsView,
     ProjectDocument,
     RepositoryEntry,
     RoutineEntry,
@@ -206,7 +207,17 @@ def _view(
 
 
 #: The schema extension listing each landing policy with the forge capabilities it requires and the ones it uses.
+#: Deprecated in favour of ``GET /api/config/landing-policies`` and ``ForgeDetail.landing_policies``.
 LANDING_POLICIES_KEY = "x-blizzard-landing-policies"
+
+
+@router.get("/landing-policies", response_model=list[LandingPolicyNeedsView], dependencies=[_VIEW])
+def list_landing_policies() -> list[LandingPolicyNeedsView]:
+    """Every landing policy with the forge capabilities it requires and the ones it uses, each sorted."""
+    return [
+        LandingPolicyNeedsView(policy=policy, requires=sorted(needs.requires), uses=sorted(needs.uses))
+        for policy, needs in POLICY_CAPABILITIES.items()
+    ]
 
 
 @router.get("/schema/{kind}", dependencies=[_VIEW])
@@ -214,7 +225,8 @@ def get_schema(kind: str, version: Annotated[int, Query(ge=1, le=2)] = DOCUMENT_
     """The JSON Schema of a record kind's version-2 document entry; 404 for a kind with none yet, and 422
     `config_version_retired` for `version=1`. The `repositories` schema lists, under `x-blizzard-landing-policies`,
     every landing policy with the capabilities its forge must offer (`requires`) and the ones it uses when offered
-    (`uses`)."""
+    (`uses`); that key is deprecated in favour of `GET /api/config/landing-policies` and
+    `ForgeDetail.landing_policies`."""
     if version != DOCUMENT_VERSION:
         raise _version_retired(["query", "version"], version)
     model = _SCHEMAS.get(kind)

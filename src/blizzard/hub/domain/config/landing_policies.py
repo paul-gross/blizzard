@@ -93,9 +93,14 @@ def parse_policy(raw: str) -> LandingPolicy:
         raise ConfigFieldError("landing_policy", f"unknown policy {raw!r}; expected one of {known}") from None
 
 
+def missing_capabilities(policy: LandingPolicy, offered: frozenset[Capability]) -> frozenset[Capability]:
+    """The capabilities ``policy`` requires that ``offered`` lacks — empty when a forge offering them honours it."""
+    return POLICY_CAPABILITIES[policy].requires - offered
+
+
 def require_offered(policy: LandingPolicy, offered: frozenset[Capability], *, forge: str) -> None:
     """:class:`ForgeCapabilityMissing` when ``offered`` lacks any capability ``policy`` requires."""
-    missing = POLICY_CAPABILITIES[policy].requires - offered
+    missing = missing_capabilities(policy, offered)
     if missing:
         raise ForgeCapabilityMissing(policy, forge, missing)
 
