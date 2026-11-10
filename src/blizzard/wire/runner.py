@@ -8,6 +8,7 @@ from typing import Annotated, Final, Literal
 
 from pydantic import BaseModel, Field, StringConstraints
 
+from blizzard.foundation.declared_lever import DeclaredLever
 from blizzard.foundation.gate_enforceability import UnenforceableGateReason
 from blizzard.foundation.runner_connection import RunnerConnection
 from blizzard.foundation.runner_tokens import RunnerTokenRefusalReason
@@ -91,9 +92,10 @@ class RunnerDeclining(BaseModel):
 
 class RunnerDecliningView(WireModel):
     """One throttle a runner reported as saying no, as the hub holds it: the response-side shape of the registration
-    request's ``declining`` member."""
+    request's ``declining`` member. ``lever`` is deprecated: it repeats ``lever_kind``'s value, read ``lever_kind``."""
 
-    lever: str
+    lever: str = Field(deprecated=True)
+    lever_kind: Annotated[DeclaredLever | Unrecognized, OPEN]
     detail: str
     subscription: str | None = None
     until: str | None = None

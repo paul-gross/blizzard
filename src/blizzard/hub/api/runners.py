@@ -15,6 +15,7 @@ from typing import Annotated, ClassVar
 
 from fastapi import APIRouter, Depends, Query, status
 
+from blizzard.foundation.declared_lever import DeclaredLever
 from blizzard.foundation.hub_event_types import RunnerChangeKind
 from blizzard.foundation.node_steps import Executor
 from blizzard.foundation.store.utc import iso_utc
@@ -77,6 +78,7 @@ from blizzard.wire.runner import (
 from blizzard.wire.runner import (
     SubscriptionUsageView as SubscriptionUsageViewWire,
 )
+from blizzard.wire.vocabulary import open_value
 
 router = APIRouter(
     prefix="/api", tags=["runners"], dependencies=[Depends(reject_runner_principal), Depends(tenant_bound)]
@@ -336,7 +338,13 @@ def usage_views(views: Iterable[PerSubscriptionUsageView]) -> list[SubscriptionU
 
 def declining_views(r: RunnerRegistration) -> list[RunnerDecliningView]:
     return [
-        RunnerDecliningView(lever=d.lever, detail=d.detail, subscription=d.subscription, until=_iso_or_none(d.until))
+        RunnerDecliningView(
+            lever=d.lever,
+            lever_kind=open_value(DeclaredLever, d.lever),
+            detail=d.detail,
+            subscription=d.subscription,
+            until=_iso_or_none(d.until),
+        )
         for d in r.declining
     ]
 

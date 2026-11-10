@@ -4279,6 +4279,11 @@ export type DecisionView = {
 };
 
 /**
+ * DeclaredLever
+ */
+export type DeclaredLever = 'floor' | 'pace' | 'utilization' | 'budget' | 'schedule';
+
+/**
  * DefaultGraphRetiredProblem
  *
  * Every graph named after the packaged default is retired.
@@ -13857,7 +13862,7 @@ export type RunnerDeclining = {
  * RunnerDecliningView
  *
  * One throttle a runner reported as saying no, as the hub holds it: the response-side shape of the registration
- * request's ``declining`` member.
+ * request's ``declining`` member. ``lever`` is deprecated: it repeats ``lever_kind``'s value, read ``lever_kind``.
  */
 export type RunnerDecliningView = {
     /**
@@ -13866,8 +13871,11 @@ export type RunnerDecliningView = {
     detail: string;
     /**
      * Lever
+     *
+     * @deprecated
      */
     lever: string;
+    lever_kind: DeclaredLever;
     /**
      * Subscription
      */
