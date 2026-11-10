@@ -9,7 +9,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from pathlib import Path
 
-from blizzard.foundation.roles import collaborator, domain_model
+from blizzard.foundation.roles import collaborator
 from blizzard.hub.domain.artifact.model import is_valid_system_artifact_name
 
 #: Every packaged document's own extension — stripped to form the artifact's name.
@@ -43,7 +43,7 @@ class SystemArtifactFile:
         return self.path.read_text()
 
 
-@domain_model
+@collaborator
 @dataclass(frozen=True)
 class PackagedSystemArtifacts:
     """The system-artifact set shipped in this package — one ``.md`` file per name, named

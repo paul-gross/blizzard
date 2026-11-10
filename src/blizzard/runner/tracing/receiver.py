@@ -229,7 +229,7 @@ _PROGRAM_ALLOWLIST = Allowlist(scope=None, attributes=None)
 _HARNESS_ALLOWLIST = Allowlist(scope=None, attributes=None, stamp_runner=True)
 
 
-@adapter_model
+@domain_model
 @dataclass(frozen=True)
 class SpanRouting:
     """One trace export, routed. ``harness`` is the bindings' own tracing scopes (kept only under

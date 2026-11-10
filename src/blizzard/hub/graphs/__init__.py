@@ -10,7 +10,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from pathlib import Path
 
-from blizzard.foundation.roles import collaborator, domain_model
+from blizzard.foundation.roles import collaborator
 from blizzard.foundation.untyped import as_list, as_table
 from blizzard.hub.documents import accepted_extensions, codec_for_path
 from blizzard.hub.documents.codec import IConfigCodec
@@ -64,7 +64,7 @@ class ArtifactInliner:
         return inlined
 
 
-@domain_model
+@collaborator
 @dataclass(frozen=True)
 class Inliner:
     """Prompt file references resolved against one directory and substituted in place."""
@@ -126,7 +126,7 @@ class GraphFile:
         return yaml.encode(self.body).decode("utf-8")
 
 
-@domain_model
+@collaborator
 @dataclass(frozen=True)
 class PackagedGraphs:
     """The graph set shipped in this package — one directory per graph."""

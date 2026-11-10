@@ -13,7 +13,7 @@ from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 from typing import Protocol, cast, runtime_checkable
 
-from blizzard.foundation.roles import domain_model
+from blizzard.foundation.roles import adapter_model
 from blizzard.hub.domain.config.changes import RecordKind
 from blizzard.hub.domain.config.revisions import ConfigRevisions, IReadConfigRevisions
 
@@ -23,7 +23,7 @@ class SupportsClose(Protocol):
     def close(self) -> None: ...
 
 
-@domain_model
+@adapter_model
 @dataclass(frozen=True)
 class CacheKey:
     kind: RecordKind
