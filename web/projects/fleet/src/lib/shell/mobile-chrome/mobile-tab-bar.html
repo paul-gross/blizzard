@@ -1,34 +1,30 @@
-<nav class="tabbar" [attr.data-testid]="testid()">
-  @for (item of items(); track item.testid) {
-    @if (item.route && !item.inert) {
-      <a
-        class="tab"
-        [routerLink]="item.route | lensLink"
-        [queryParamsHandling]="item.queryParamsHandling ?? ''"
-        routerLinkActive="on"
-        [routerLinkActiveOptions]="{ exact: item.exact ?? false }"
-        [attr.data-testid]="item.testid"
-      >
-        {{ item.label }}
-        @if (item.badge) {
-          <fleet-kit-count-badge class="count" [count]="item.badge" [testid]="item.badgeTestid ?? null" />
-        }
-      </a>
-    } @else {
-      <!-- eslint-disable-next-line no-restricted-syntax -- Inert navigation tabs share native button semantics and router-link tab chrome. -->
-      <button
-        class="tab"
-        [class.inert]="item.inert"
-        [class.on]="item.active"
-        type="button"
-        [disabled]="!!item.inert"
-        [attr.data-testid]="item.testid"
-      >
-        {{ item.label }}
-        @if (item.badge) {
-          <fleet-kit-count-badge class="count" [count]="item.badge" [testid]="item.badgeTestid ?? null" />
-        }
-      </button>
-    }
-  }
+<nav fleetKitTabStrip variant="bottom" [attr.data-testid]="testid()">
+  @for (item of items(); track item.testid) { @if (item.route && !item.inert) {
+  <a
+    fleetKitTab
+    variant="bottom"
+    [routerLink]="item.route | lensLink"
+    [queryParamsHandling]="item.queryParamsHandling ?? ''"
+    routerLinkActive="active"
+    [routerLinkActiveOptions]="{ exact: item.exact ?? false }"
+    [count]="item.badge || null"
+    [countTestid]="item.badgeTestid ?? null"
+    [attr.data-testid]="item.testid"
+  >
+    {{ item.label }}
+  </a>
+  } @else {
+  <a
+    fleetKitTab
+    variant="bottom"
+    role="link"
+    [unavailable]="!!item.inert"
+    [class.active]="item.active"
+    [count]="item.badge || null"
+    [countTestid]="item.badgeTestid ?? null"
+    [attr.data-testid]="item.testid"
+  >
+    {{ item.label }}
+  </a>
+  } }
 </nav>

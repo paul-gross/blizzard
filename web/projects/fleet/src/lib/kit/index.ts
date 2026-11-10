@@ -7,7 +7,10 @@ export { KitAccordionSection } from './kit-accordion-section';
 export { KitCountBadge } from './kit-count-badge';
 export { KitDialog } from './kit-dialog';
 export { KitErrorLine } from './kit-error-line';
-export { KitConfirmDialog, type KitConfirmDialogPrompt } from './kit-confirm-dialog';
+export {
+  KitConfirmDialog,
+  type KitConfirmDialogPrompt,
+} from './kit-confirm-dialog';
 export { KitFactList, type KitFact } from './kit-fact-list';
 export { KitGlyph } from './kit-glyph';
 export { KitPanel, KitPanelHeader } from './kit-panel';
@@ -15,7 +18,12 @@ export { KitAsyncState, type KitAsyncStateValue } from './kit-async-state';
 export { KitAvatar } from './kit-avatar';
 export { KitBackBar } from './kit-back-bar';
 export { KitBadge, toneColor } from './kit-badge';
-export { KitBeacon, type BeaconBlink, type BeaconTone } from './kit-beacon';
+export {
+  KitBeacon,
+  type BeaconBlink,
+  type BeaconShape,
+  type BeaconTone,
+} from './kit-beacon';
 export { KitSwatch } from './kit-swatch';
 export { projectTint } from './kit-swatch-color';
 export { KitColorInput } from './kit-color-input';
@@ -29,7 +37,11 @@ export { KitLinkTile } from './kit-link-tile';
 export { KitMarkdown } from './kit-markdown';
 export { KitMasterDetail } from './kit-master-detail';
 export { KitMenu, KitMenuPanel } from './kit-menu';
-export { KitMenuItem, KitMenuItemRadio, KitMenuItemSubtitle } from './kit-menu-item';
+export {
+  KitMenuItem,
+  KitMenuItemRadio,
+  KitMenuItemSubtitle,
+} from './kit-menu-item';
 export { KitOption } from './kit-option';
 export { KitPaceBar } from './kit-pace-bar';
 export { KitProseBlock } from './kit-prose-block';

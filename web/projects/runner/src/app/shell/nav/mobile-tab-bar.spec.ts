@@ -1,16 +1,32 @@
 import { provideZonelessChangeDetection } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { provideRouter } from '@angular/router';
-import { QueryClient, provideTanStackQuery } from '@tanstack/angular-query-experimental';
+import {
+  QueryClient,
+  provideTanStackQuery,
+} from '@tanstack/angular-query-experimental';
 import { type runnerApi } from 'fleet';
-import { hostRunnerView, type RequestClientStub, runnerAskView, runnerDashboardView, runnerStatusView, settle, stubRunnerClient } from 'fleet/testing';
+import {
+  hostRunnerView,
+  type RequestClientStub,
+  runnerAskView,
+  runnerDashboardView,
+  runnerStatusView,
+  settle,
+  stubRunnerClient,
+} from 'fleet/testing';
 
 import { MobileTabBar } from './mobile-tab-bar';
 
 /** Two serving runners on the host. */
 const RUNNERS = {
   items: ['rn_1', 'rn_2'].map((runnerId, i) =>
-    hostRunnerView({ runner_id: runnerId, name: `r${i + 1}`, bindings: [{ project: 'p', workspace_id: 'ws', agents: 4 }], max_agents: 4 }),
+    hostRunnerView({
+      runner_id: runnerId,
+      name: `r${i + 1}`,
+      bindings: [{ project: 'p', workspace_id: 'ws', agents: 4 }],
+      max_agents: 4,
+    }),
   ),
 };
 
@@ -26,7 +42,9 @@ describe('MobileTabBar', () => {
       'GET /runners/{runner_id}/api/dashboard': (_request, { runner_id }) =>
         runnerDashboardView({
           runner: runnerStatusView({ runner_id }),
-          asks: { items: runner_id === 'rn_1' ? asks.slice(0, 1) : asks.slice(1) },
+          asks: {
+            items: runner_id === 'rn_1' ? asks.slice(0, 1) : asks.slice(1),
+          },
         }),
     });
     await TestBed.configureTestingModule({
@@ -34,7 +52,9 @@ describe('MobileTabBar', () => {
       providers: [
         provideZonelessChangeDetection(),
         provideRouter([]),
-        provideTanStackQuery(new QueryClient({ defaultOptions: { queries: { retry: false } } })),
+        provideTanStackQuery(
+          new QueryClient({ defaultOptions: { queries: { retry: false } } }),
+        ),
       ],
     }).compileComponents();
     const fixture = TestBed.createComponent(MobileTabBar);
@@ -46,30 +66,54 @@ describe('MobileTabBar', () => {
     const fixture = await render([]);
     const el = fixture.nativeElement as HTMLElement;
 
-    expect(el.querySelector('[data-testid="tab-board"]')?.getAttribute('href')).toBe('/board');
-    expect(el.querySelector('[data-testid="tab-events"]')?.getAttribute('href')).toBe('/events');
-    expect(el.querySelector('[data-testid="tab-host"]')?.getAttribute('href')).toBe('/host');
+    expect(
+      el.querySelector('[data-testid="tab-board"]')?.getAttribute('href'),
+    ).toBe('/board');
+    expect(
+      el.querySelector('[data-testid="tab-events"]')?.getAttribute('href'),
+    ).toBe('/events');
+    expect(
+      el.querySelector('[data-testid="tab-host"]')?.getAttribute('href'),
+    ).toBe('/host');
     expect(el.querySelector('[data-testid="tab-machine"]')).toBeNull();
     const asks = el.querySelector('[data-testid="tab-asks-runner"]');
     expect(asks?.textContent).toContain('Asks');
-    expect(asks?.hasAttribute('disabled')).toBe(true);
-    expect(asks?.classList.contains('inert')).toBe(true);
+    expect(asks?.getAttribute('aria-disabled')).toBe('true');
+    expect(asks?.classList.contains('unavailable')).toBe(true);
   });
 
   it('omits the Asks badge when there are no open asks', async () => {
     const fixture = await render([]);
     const el = fixture.nativeElement as HTMLElement;
 
-    expect(el.querySelector('[data-testid="tab-asks-runner-badge"]')).toBeNull();
+    expect(
+      el.querySelector('[data-testid="tab-asks-runner-badge"]'),
+    ).toBeNull();
   });
 
   it('shows the open-asks count across every covered runner on the Asks tab', async () => {
     const fixture = await render([
-      runnerAskView({ question_id: 'qn_1', chunk_id: 'ch_1', lease_id: 'lease_1', question: 'a?', options: [], session_id: null }),
-      runnerAskView({ question_id: 'qn_2', chunk_id: 'ch_2', lease_id: 'lease_2', question: 'b?', options: [], session_id: null }),
+      runnerAskView({
+        question_id: 'qn_1',
+        chunk_id: 'ch_1',
+        lease_id: 'lease_1',
+        question: 'a?',
+        options: [],
+        session_id: null,
+      }),
+      runnerAskView({
+        question_id: 'qn_2',
+        chunk_id: 'ch_2',
+        lease_id: 'lease_2',
+        question: 'b?',
+        options: [],
+        session_id: null,
+      }),
     ]);
     const el = fixture.nativeElement as HTMLElement;
 
-    expect(el.querySelector('[data-testid="tab-asks-runner-badge"]')?.textContent).toBe('2');
+    expect(
+      el.querySelector('[data-testid="tab-asks-runner-badge"]')?.textContent,
+    ).toBe('2');
   });
 });

@@ -11,7 +11,9 @@ const meta: Meta<KitTab> = {
   component: KitTab,
   decorators: [moduleMetadata({ imports: [KitTabStrip] })],
   args: { variant: 'top' },
-  argTypes: { variant: { control: 'inline-radio', options: ['top', 'sub'] } },
+  argTypes: {
+    variant: { control: 'inline-radio', options: ['top', 'sub', 'bottom'] },
+  },
   render: (args) => ({
     props: args,
     template: `
@@ -67,4 +69,31 @@ export const NarrowPhone: Story = {
 };
 export const NarrowPhoneSmall: Story = {
   globals: { viewport: { value: 'phone-sm', isRotated: false } },
+};
+export const Bottom: Story = {
+  args: { variant: 'bottom' },
+  render: (args) => ({
+    props: args,
+    template: `
+      <nav fleetKitTabStrip [variant]="variant">
+        <a fleetKitTab [variant]="variant" class="active">Board</a>
+        <a fleetKitTab [variant]="variant" [count]="3" countTestid="bottom-count">Asks</a>
+        <a fleetKitTab [variant]="variant" role="link" [unavailable]="true">Transcripts</a>
+      </nav>`,
+  }),
+  globals: { viewport: { value: 'phone', isRotated: false } },
+};
+export const BottomPhoneSmall: Story = {
+  ...Bottom,
+  globals: { viewport: { value: 'phone-sm', isRotated: false } },
+};
+export const Unavailable: Story = {
+  render: (args) => ({
+    props: args,
+    template: `
+      <nav fleetKitTabStrip [variant]="variant">
+        <a fleetKitTab [variant]="variant" class="active">General</a>
+        <a fleetKitTab [variant]="variant" role="link" [unavailable]="true">Artifacts</a>
+      </nav>`,
+  }),
 };

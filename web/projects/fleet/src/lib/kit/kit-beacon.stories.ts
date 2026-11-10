@@ -9,10 +9,12 @@ const meta: Meta<KitBeacon> = {
     active: false,
     tone: 'amber',
     blink: 'pulse',
+    shape: 'square',
+    glow: false,
   },
   render: (args) => ({
     props: args,
-    template: `<fleet-kit-beacon [active]="active" [tone]="tone" [blink]="blink" />`,
+    template: `<fleet-kit-beacon [active]="active" [tone]="tone" [blink]="blink" [shape]="shape" [glow]="glow" />`,
   }),
 };
 export default meta;
@@ -28,4 +30,12 @@ export const StatusTone: Story = { args: { active: true, tone: 'waiting' } };
 export const Step: Story = { args: { active: true, blink: 'step' } };
 export const Hold: Story = {
   args: { active: true, tone: 'green', blink: 'hold' },
+};
+/** The mobile titlebar's live light: round, glowing, throbbing. */
+export const ActiveDot: Story = {
+  args: { active: true, tone: 'spawning', shape: 'dot', glow: true },
+};
+export const InactiveDot: Story = { args: { shape: 'dot', glow: true } };
+export const DotWithoutGlow: Story = {
+  args: { active: true, tone: 'spawning', shape: 'dot' },
 };

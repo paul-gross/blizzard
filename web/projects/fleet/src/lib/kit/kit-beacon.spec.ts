@@ -1,18 +1,35 @@
-import { Component, provideZonelessChangeDetection, signal } from '@angular/core';
+import {
+  Component,
+  provideZonelessChangeDetection,
+  signal,
+} from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 
 import type { Tone } from './tone';
-import { KitBeacon, type BeaconBlink, type BeaconTone } from './kit-beacon';
+import {
+  KitBeacon,
+  type BeaconBlink,
+  type BeaconShape,
+  type BeaconTone,
+} from './kit-beacon';
 
 @Component({
   selector: 'fleet-test-host',
   imports: [KitBeacon],
-  template: `<fleet-kit-beacon [active]="active()" [tone]="tone()" [blink]="blink()" />`,
+  template: `<fleet-kit-beacon
+    [active]="active()"
+    [tone]="tone()"
+    [blink]="blink()"
+    [shape]="shape()"
+    [glow]="glow()"
+  />`,
 })
 class TestHost {
   readonly active = signal(false);
   readonly tone = signal<BeaconTone | Tone>('amber');
   readonly blink = signal<BeaconBlink>('pulse');
+  readonly shape = signal<BeaconShape>('square');
+  readonly glow = signal(false);
 }
 
 describe('KitBeacon', () => {
@@ -51,7 +68,9 @@ describe('KitBeacon', () => {
     await fixture.whenStable();
     const el = fixture.nativeElement as HTMLElement;
 
-    expect((el.querySelector('.beacon') as HTMLElement).getAttribute('style')).toContain('var(--amber)');
+    expect(
+      (el.querySelector('.beacon') as HTMLElement).getAttribute('style'),
+    ).toContain('var(--amber)');
   });
 
   it('takes the green tone', async () => {
@@ -61,14 +80,18 @@ describe('KitBeacon', () => {
     await fixture.whenStable();
     const el = fixture.nativeElement as HTMLElement;
 
-    expect((el.querySelector('.beacon') as HTMLElement).getAttribute('style')).toContain('var(--green)');
+    expect(
+      (el.querySelector('.beacon') as HTMLElement).getAttribute('style'),
+    ).toContain('var(--green)');
   });
 
   it('pulses by default and steps when asked', async () => {
     const fixture = TestBed.createComponent(TestHost);
     fixture.componentInstance.active.set(true);
     await fixture.whenStable();
-    const beacon = (fixture.nativeElement as HTMLElement).querySelector('.beacon') as HTMLElement;
+    const beacon = (fixture.nativeElement as HTMLElement).querySelector(
+      '.beacon',
+    ) as HTMLElement;
     expect(beacon.classList.contains('step')).toBe(false);
 
     fixture.componentInstance.blink.set('step');
@@ -96,6 +119,34 @@ describe('KitBeacon', () => {
     await fixture.whenStable();
     const el = fixture.nativeElement as HTMLElement;
 
-    expect((el.querySelector('.beacon') as HTMLElement).getAttribute('style')).toContain('var(--amber-hi)');
+    expect(
+      (el.querySelector('.beacon') as HTMLElement).getAttribute('style'),
+    ).toContain('var(--amber-hi)');
+  });
+
+  it('is square by default and round as a dot', async () => {
+    const fixture = TestBed.createComponent(TestHost);
+    await fixture.whenStable();
+    const beacon = (fixture.nativeElement as HTMLElement).querySelector(
+      '.beacon',
+    ) as HTMLElement;
+    expect(beacon.classList.contains('dot')).toBe(false);
+    fixture.componentInstance.shape.set('dot');
+    await fixture.whenStable();
+    expect(beacon.classList.contains('dot')).toBe(true);
+  });
+
+  it('glows in its own color only while active', async () => {
+    const fixture = TestBed.createComponent(TestHost);
+    fixture.componentInstance.glow.set(true);
+    fixture.componentInstance.tone.set('green');
+    await fixture.whenStable();
+    const beacon = (fixture.nativeElement as HTMLElement).querySelector(
+      '.beacon',
+    ) as HTMLElement;
+    expect(beacon.style.boxShadow).toBe('');
+    fixture.componentInstance.active.set(true);
+    await fixture.whenStable();
+    expect(beacon.style.boxShadow).toContain('var(--green)');
   });
 });

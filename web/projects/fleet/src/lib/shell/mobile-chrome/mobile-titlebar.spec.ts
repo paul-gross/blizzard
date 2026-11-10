@@ -1,4 +1,8 @@
-import { Component, provideZonelessChangeDetection, signal } from '@angular/core';
+import {
+  Component,
+  provideZonelessChangeDetection,
+  signal,
+} from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 
 import { KitMenuItem, KitMenuPanel } from '../../kit';
@@ -10,10 +14,18 @@ import { MobileTitlebar } from './mobile-titlebar';
   selector: 'fleet-test-host',
   imports: [KitMenuItem, KitMenuPanel, MobileTitlebar],
   template: `
-    <fleet-mobile-titlebar [live]="live()" [testid]="testid()" [caption]="caption()" [detail]="detail()" [menu]="shellMenu" />
+    <fleet-mobile-titlebar
+      [live]="live()"
+      [testid]="testid()"
+      [caption]="caption()"
+      [detail]="detail()"
+      [menu]="shellMenu"
+    />
     <ng-template #shellMenu>
       <fleet-kit-menu-panel [testid]="testid() + '-menu-panel'">
-        <fleet-kit-menu-item testid="shell-item">Appearance</fleet-kit-menu-item>
+        <fleet-kit-menu-item testid="shell-item"
+          >Appearance</fleet-kit-menu-item
+        >
       </fleet-kit-menu-panel>
     </ng-template>
   `,
@@ -41,43 +53,69 @@ describe('MobileTitlebar', () => {
   });
 
   it('renders the brand mark and wordmark under its default testid', () => {
-    expect(el.querySelector('[data-testid="mobile-titlebar"]')?.textContent).toContain('blizzard');
+    expect(
+      el.querySelector('[data-testid="mobile-titlebar"]')?.textContent,
+    ).toContain('blizzard');
     expect(el.querySelector('fleet-brand-mark')).not.toBeNull();
   });
 
   it('reflects the live input on the live dot', async () => {
     fixture.componentInstance.live.set(false);
     await fixture.whenStable();
-    expect(el.querySelector('[data-testid="mobile-titlebar-livedot"]')?.classList.contains('active')).toBe(false);
+    expect(
+      el
+        .querySelector('[data-testid="mobile-titlebar-livedot"] .beacon')
+        ?.classList.contains('active'),
+    ).toBe(false);
 
     fixture.componentInstance.live.set(true);
     await fixture.whenStable();
-    expect(el.querySelector('[data-testid="mobile-titlebar-livedot"]')?.classList.contains('active')).toBe(true);
+    expect(
+      el
+        .querySelector('[data-testid="mobile-titlebar-livedot"] .beacon')
+        ?.classList.contains('active'),
+    ).toBe(true);
   });
 
   it('buries the consumer-supplied menu panel, closed by default', async () => {
-    expect(document.body.querySelector('[data-testid="mobile-titlebar-menu-panel"]')).toBeNull();
+    expect(
+      document.body.querySelector('[data-testid="mobile-titlebar-menu-panel"]'),
+    ).toBeNull();
 
-    el.querySelector<HTMLElement>('[data-testid="mobile-titlebar-menu"]')?.click();
+    el.querySelector<HTMLElement>(
+      '[data-testid="mobile-titlebar-menu"]',
+    )?.click();
     await fixture.whenStable();
 
     // The CDK renders the panel into an overlay on `document.body`, not inside
     // the titlebar's own element.
-    expect(document.body.querySelector('[data-testid="mobile-titlebar-menu-panel"] [data-testid="shell-item"]')).not.toBeNull();
+    expect(
+      document.body.querySelector(
+        '[data-testid="mobile-titlebar-menu-panel"] [data-testid="shell-item"]',
+      ),
+    ).not.toBeNull();
   });
 
   it('derives every handle it renders from a custom testid, so two mounts never collide', async () => {
     fixture.componentInstance.testid.set('runner-mobile-titlebar');
     await fixture.whenStable();
 
-    expect(el.querySelector('[data-testid="runner-mobile-titlebar"]')).not.toBeNull();
-    expect(el.querySelector('[data-testid="runner-mobile-titlebar-livedot"]')).not.toBeNull();
-    expect(el.querySelector('[data-testid="runner-mobile-titlebar-menu"]')).not.toBeNull();
+    expect(
+      el.querySelector('[data-testid="runner-mobile-titlebar"]'),
+    ).not.toBeNull();
+    expect(
+      el.querySelector('[data-testid="runner-mobile-titlebar-livedot"]'),
+    ).not.toBeNull();
+    expect(
+      el.querySelector('[data-testid="runner-mobile-titlebar-menu"]'),
+    ).not.toBeNull();
     expect(el.querySelector('[data-testid="mobile-titlebar"]')).toBeNull();
   });
 
   it('renders no caption until one is given, then names it beside the wordmark with its full text on hover', async () => {
-    expect(el.querySelector('[data-testid="mobile-titlebar-caption"]')).toBeNull();
+    expect(
+      el.querySelector('[data-testid="mobile-titlebar-caption"]'),
+    ).toBeNull();
 
     fixture.componentInstance.caption.set('Acme Robotics');
     await fixture.whenStable();
@@ -90,7 +128,9 @@ describe('MobileTitlebar', () => {
   it('renders no detail until one is given, then names it after the caption with its full text on hover', async () => {
     fixture.componentInstance.caption.set('Acme Robotics');
     await fixture.whenStable();
-    expect(el.querySelector('[data-testid="mobile-titlebar-detail"]')).toBeNull();
+    expect(
+      el.querySelector('[data-testid="mobile-titlebar-detail"]'),
+    ).toBeNull();
 
     fixture.componentInstance.detail.set('Glacier');
     await fixture.whenStable();
@@ -98,7 +138,10 @@ describe('MobileTitlebar', () => {
     const detail = el.querySelector('[data-testid="mobile-titlebar-detail"]');
     expect(detail?.textContent?.trim()).toBe('Glacier');
     expect(detail?.getAttribute('title')).toBe('Glacier');
-    expect(el.querySelector('[data-testid="mobile-titlebar-caption"]')?.nextElementSibling).toBe(detail);
+    expect(
+      el.querySelector('[data-testid="mobile-titlebar-caption"]')
+        ?.nextElementSibling,
+    ).toBe(detail);
   });
 });
 
@@ -110,7 +153,9 @@ describe('MobileTitlebar', () => {
       <span fleetMobileTitle data-testid="slot-title">lens</span>
       <span fleetMobileStatus data-testid="slot-status">$1.23</span>
     </fleet-mobile-titlebar>
-    <ng-template #shellMenu><fleet-kit-menu-panel testid="slot-menu-panel" /></ng-template>
+    <ng-template #shellMenu
+      ><fleet-kit-menu-panel testid="slot-menu-panel"
+    /></ng-template>
   `,
 })
 class SlotHost {}
@@ -123,12 +168,17 @@ describe('MobileTitlebar slots', () => {
     }).compileComponents();
     const fixture = TestBed.createComponent(SlotHost);
     await fixture.whenStable();
-    const bar = (fixture.nativeElement as HTMLElement).querySelector('header.mt-appbar')!;
+    const bar = (fixture.nativeElement as HTMLElement).querySelector(
+      'header.mt-appbar',
+    )!;
 
     const children = [...bar.children];
-    const at = (selector: string): number => children.findIndex((c) => c.matches(selector));
+    const at = (selector: string): number =>
+      children.findIndex((c) => c.matches(selector));
     expect(at('[data-testid="slot-title"]')).toBe(at('.word') + 1);
     expect(at('[data-testid="slot-status"]')).toBe(at('.spacer') + 1);
-    expect(at('[data-testid="slot-status"]')).toBeLessThan(at('.livedot'));
+    expect(at('[data-testid="slot-status"]')).toBeLessThan(
+      at('[data-testid="mobile-titlebar-livedot"]'),
+    );
   });
 });

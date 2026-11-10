@@ -58,3 +58,35 @@
 :host(.sub) .cnt.hot {
   color: var(--amber-hi);
 }
+
+/* The mobile bottom bar's tab: an equal share of the bar, its active state a bar on the top edge instead of a fill. */
+:host(.bottom) {
+  flex: 1;
+  justify-content: center;
+  padding: 10px 0 8px;
+  border-right: 0;
+  color: var(--label-dim);
+  position: relative;
+}
+:host(.bottom.active) {
+  color: var(--amber);
+  background: transparent;
+}
+:host(.bottom.active)::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 25%;
+  right: 25%;
+  height: 2px;
+  background: var(--amber);
+}
+/* The kit count chip beside the label, nudged off it. */
+.chip {
+  margin-left: 5px;
+}
+/* Present but not yet functional — dimmed further than an inactive tab so it reads as neither live nor broken. */
+:host(.unavailable) {
+  opacity: 0.55;
+  cursor: default;
+}
