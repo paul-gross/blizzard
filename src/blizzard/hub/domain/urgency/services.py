@@ -142,6 +142,11 @@ class UrgencyReading:
         by_id = {u.urgency_id: u for u in self._urgencies.list_all()}
         return [by_id[p.urgency_id] for p in order.placed if include_retired or not p.retired]
 
+    def by_id(self) -> dict[UrgencyId, Urgency]:
+        """Every urgency of the tenant by id, the retired ones included, in one read — what a response naming
+        chunks' urgencies joins them to."""
+        return {u.urgency_id: u for u in self._urgencies.list_all()}
+
     def view(self, urgency: Urgency) -> UrgencyView:
         (view,) = self._views([urgency], self._order.order())
         return view
@@ -233,12 +238,13 @@ class Retired:
 class UrgencyLifecycle:
     """Retire and enable an urgency. A retire is one unit locking the settings, the set, the retiring urgency and the
     urgency its open work moves to; under them it re-reads the default, the urgency, its open chunks and ``move_to``,
-    clears the refusals in order, and writes the retired fact, the move and the change together. No chunk is locked:
-    every write setting a chunk to an urgency takes that urgency's lock and confirms it live, and the move itself
-    leaves a chunk that finished since the read. In the same unit, every routine default and chore override naming the
-    retiring urgency is cleared through ``references``. An enable locks the set and the urgency and re-reads it under
-    them. Both take the set's lock because a reorder and a create decide on which urgencies are live under it alone.
-    Enable moves no chunk back and restores no cleared reference."""
+    clears the refusals in order, and writes the retired fact, the move and the change together. The unit also locks
+    the open chunks it moves, read ahead of it, ahead of the keys, as a chunk edit locks its row before the urgency it
+    names; a chunk the re-read finds open outside that set took the urgency after the read ahead, and the unit runs
+    again over the wider set. The move itself leaves a chunk that finished since the read. In the same unit, every
+    routine default and chore override naming the retiring urgency is cleared through ``references``. An enable locks
+    the set and the urgency and re-reads it under them. Both take the set's lock because a reorder and a create decide
+    on which urgencies are live under it alone. Enable moves no chunk back and restores no cleared reference."""
 
     def __init__(
         self,
@@ -272,9 +278,32 @@ class UrgencyLifecycle:
         keys = [tenant_settings_lock(), urgency_order_lock(), urgency_lock(urgency.urgency_id)]
         if named is not None and named.urgency_id != urgency.urgency_id:
             keys.append(urgency_lock(named.urgency_id))
+        chunk_ids = frozenset(self._chunks.open_chunks(urgency.urgency_id))
+        while True:
+            outcome = self._retire_locked(
+                urgency, ctx, keys, chunk_ids, move_to=move_to, may_control=may_control, if_match=if_match
+            )
+            if isinstance(outcome, Retired):
+                return outcome
+            chunk_ids = chunk_ids | outcome
+
+    def _retire_locked(
+        self,
+        urgency: Urgency,
+        ctx: ChangeContext,
+        keys: Sequence[tuple[str, str]],
+        chunk_ids: frozenset[str],
+        *,
+        move_to: MoveTo | None,
+        may_control: bool,
+        if_match: int | None,
+    ) -> Retired | frozenset[str]:
+        """One run of the retire's unit over ``chunk_ids``: the retire, or — writing nothing — the open chunks the
+        re-read found outside the locked set."""
+        named = None if move_to is None else move_to.urgency
         at = self._clock.now()
         with self._transactions.begin() as transaction:
-            locked = transaction.lock_set(keys=keys)
+            locked = transaction.lock_set(chunks=sorted(chunk_ids), keys=keys)
             current = self._urgencies.get(urgency.urgency_id, transaction=locked)
             assert current is not None, "an urgency is never deleted"
             current.require_revision(if_match)
@@ -282,6 +311,9 @@ class UrgencyLifecycle:
                 return Retired(current, ())
             default_id = _settings(self._settings, transaction=locked).default_urgency_id
             open_chunks = self._chunks.open_chunks(current.urgency_id, transaction=locked)
+            unlocked = frozenset(open_chunks) - chunk_ids
+            if unlocked:
+                return unlocked
             target = None if named is None else self._urgencies.get(named.urgency_id, transaction=locked)
             destination = require_retirable(
                 current,

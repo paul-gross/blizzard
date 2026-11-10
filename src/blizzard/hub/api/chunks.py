@@ -325,6 +325,8 @@ def list_chunks(
     runner_names = services.registry.names_for(
         route.runner_id for chunk in page_chunks if (route := routes.get(chunk.chunk_id)) is not None
     )
+    # The tenant's urgencies — one read of the set, joined to every row.
+    urgencies = services.urgency_reading.by_id()
     # The page's projects — one batched read, narrowed to the page.
     projects = services.projects.get_many(sorted({c.project_id for c in page_chunks if c.project_id is not None}))
     # Config revisions are read once per distinct source on each request, never cached across requests.
@@ -359,6 +361,7 @@ def list_chunks(
                 sources=sources,
                 flow_places=flow_places,
                 submissions=submissions,
+                urgencies=urgencies,
             ).summary()
             for chunk in page_chunks
         ],
@@ -870,16 +873,18 @@ def demote_chunk(chunk_id: str, services: Services, request: ChunkPlacementReque
     dependencies=[Depends(require(Permission.CHUNK_CONTROL))],
 )
 def patch_chunk(chunk_id: str, request: ChunkPatchRequest, services: Services) -> ChunkPatchResponse:
-    """Apply the body's fields in one all-or-nothing edit.
+    """Apply the body's fields in one all-or-nothing edit. An edit changing the chunk's urgency publishes the
+    queue's change beside the chunk's.
 
-    404 for an unknown chunk or an unresolvable graph, 422 for a blank value, 409 for a
+    404 for an unknown chunk or an unresolvable graph, 422 for a blank value, an ``urgency`` naming no urgency
+    (``urgency_unknown``) or a retired one (``urgency_retired``), or an explicit ``null`` ``urgency``; 409 for a
     refused edit."""
     chunk = services.chunks.record.get(chunk_id)
     if chunk is None:
         raise ProblemHTTPException(partial(problems.chunk_not_found_problem, chunk_id))
     change = chunk_events.ChunkChanged.before(services, chunk_id)
     try:
-        ChunkPatchBody(request, services).apply(chunk)
+        plan = ChunkPatchBody(request, services).apply(chunk)
     except ChunkNotFound as exc:
         raise ProblemHTTPException(partial(problems.chunk_disappeared_problem, exc)) from exc
     except ChunkNotEditable as exc:
@@ -896,13 +901,17 @@ def patch_chunk(chunk_id: str, request: ChunkPatchRequest, services: Services) -
     updated = services.chunks.record.get(chunk_id)
     assert updated is not None, "the chunk existed a moment ago and this edit does not delete chunks"
     facts = change.publish(cause="edited")
+    if plan.urgency_id is not None:
+        services.events.publish_queue_changed()  # claim order may have moved
+    view = ChunkView.of(services, updated, facts=facts)
     return ChunkPatchResponse(
         chunk_id=chunk_id,
         graph_id=updated.graph_id,
         default_model=list(updated.default_model),
         default_effort=updated.default_effort,
         default_harnesses=list(updated.default_harnesses),
-        intended_migration=ChunkView.of(services, updated, facts=facts).intended_migration(),
+        intended_migration=view.intended_migration(),
+        urgency=view.urgency(),
         **project_label_fields(
             updated.project_id, services.projects.get(updated.project_id) if updated.project_id is not None else None
         ),

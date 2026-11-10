@@ -1,9 +1,10 @@
-"""Chunk build-property edits — graph, defaults, intended migration.
+"""Chunk operator-property edits — graph, defaults, intended migration, urgency.
 
 Editability is validated **per field**: each field reads its own
 :class:`~blizzard.hub.domain.chunk.model.ChunkVerb` row (:data:`_FIELD_VERB`). An edit is a plain column
-overwrite, and shares one lock with a claim since both check for a live route. :func:`plan_edit` decides;
-:class:`EditService` reads, locks, and writes what it decided."""
+overwrite, and shares one lock with a claim since both check for a live route. An edit naming an urgency also
+takes that urgency's lock, after the row, and confirms it live under both (``bzh:write-reestablishes-read``).
+:func:`plan_edit` decides; :class:`EditService` reads, locks, and writes what it decided."""
 
 from __future__ import annotations
 
@@ -16,11 +17,14 @@ from blizzard.foundation.chunk_status import ChunkStatus
 from blizzard.foundation.roles import domain_model
 from blizzard.hub.domain.chunk.errors import ChunkNotFound
 from blizzard.hub.domain.chunk.model import Chunk, ChunkFacts, ChunkVerb, IntendedMigration
-from blizzard.hub.domain.chunk.ports.exclusive import IChunkExclusiveWrites
+from blizzard.hub.domain.chunk.ports.exclusive import IChunkExclusiveWrites, ILockedChunkRead
 from blizzard.hub.domain.chunk.ports.record import IWriteChunkRecordRepository
 from blizzard.hub.domain.graph.harnesses import validated_harnesses
 from blizzard.hub.domain.graph.model import Graph, GraphStanding, IReadGraphRepository
 from blizzard.hub.domain.kernel.unset import UNSET, UnsetType
+from blizzard.hub.domain.urgency.chain import URGENCY_FIELD
+from blizzard.hub.domain.urgency.model import Urgency, UrgencyId, UrgencyUnknown, require_live
+from blizzard.hub.domain.urgency.ports import IReadUrgencyRepository, urgency_lock
 
 #: The verb each field :class:`ChunkEdit` carries is admitted by — its status window.
 _FIELD_VERB: Mapping[str, ChunkVerb] = MappingProxyType(
@@ -30,6 +34,7 @@ _FIELD_VERB: Mapping[str, ChunkVerb] = MappingProxyType(
         "default_effort": ChunkVerb.EDIT_DEFAULTS,
         "default_harnesses": ChunkVerb.EDIT_DEFAULTS,
         "intended_migration": ChunkVerb.EDIT_INTENDED_MIGRATION,
+        "urgency": ChunkVerb.EDIT_URGENCY,
     }
 )
 
@@ -117,13 +122,15 @@ class ChunkEdit:
     """The fields a single all-or-nothing edit request supplies.
 
     ``intended_migration`` and ``default_effort`` accept ``None`` to mean "clear it";
-    an empty ``default_model``/``default_harnesses`` list is the same clear."""
+    an empty ``default_model``/``default_harnesses`` list is the same clear. ``urgency`` is the urgency the edge
+    resolved and confirmed live, never cleared."""
 
     graph_id: str | UnsetType = field(default=UNSET)
     default_model: list[str] | UnsetType = field(default=UNSET)
     default_effort: str | None | UnsetType = field(default=UNSET)
     default_harnesses: list[str] | UnsetType = field(default=UNSET)
     intended_migration: IntendedMigration | None | UnsetType = field(default=UNSET)
+    urgency: Urgency | UnsetType = field(default=UNSET)
 
     def supplies_defaults(self) -> bool:
         """Whether any of the default trio is supplied."""
@@ -150,6 +157,8 @@ class EditPlan:
     graph_id: str | None
     defaults: ChunkDefaults | None
     intended_migration: IntendedMigration | None | UnsetType
+    #: The urgency to write; ``None`` when not supplied or naming the one the chunk already carries.
+    urgency_id: UrgencyId | None = None
 
 
 def _require_editable(chunk_id: str, facts: ChunkFacts, field_name: str) -> None:
@@ -180,12 +189,14 @@ def plan_edit(
     graph_target_retired: bool = False,
     migration_target: Graph | None = None,
     migration_target_retired: bool = False,
+    urgency: Urgency | None = None,
 ) -> EditPlan:
     """Decide an all-or-nothing edit of ``chunk`` at ``facts``: every supplied field is
     validated before anything is planned, in field order, so a refusal writes nothing.
 
     A graph pin edit names its loaded target graph and the target's retirement; the retirement check is
-    pinned by ``test_edit_graph_id_retirement_check_is_not_bypassed_by_a_different_migration_target``."""
+    pinned by ``test_edit_graph_id_retirement_check_is_not_bypassed_by_a_different_migration_target``. An urgency
+    edit names ``urgency`` as read under its lock, refused once retired."""
     graph_id: str | None = None
     if edit.graph_id is not UNSET:
         if graph_target is None or graph_target.graph_id != edit.graph_id:
@@ -211,10 +222,19 @@ def plan_edit(
             require_valid_migration_target(
                 chunk, edit.intended_migration, migration_target, retired=migration_target_retired
             )
+    urgency_id: UrgencyId | None = None
+    if edit.urgency is not UNSET:
+        _require_editable(chunk.chunk_id, facts, "urgency")
+        if urgency is None or urgency.urgency_id != edit.urgency.urgency_id:
+            raise ValueError("an urgency edit requires its urgency read under the lock")
+        live = require_live(URGENCY_FIELD, urgency.slug, urgency)
+        if live.urgency_id != chunk.urgency_id:
+            urgency_id = live.urgency_id
     return EditPlan(
         graph_id=graph_id,
         defaults=edit.defaults_over(chunk, harnesses=harnesses) if edit.supplies_defaults() else None,
         intended_migration=edit.intended_migration,
+        urgency_id=urgency_id,
     )
 
 
@@ -233,9 +253,11 @@ class EditService:
         record: IWriteChunkRecordRepository,
         graphs: IReadGraphRepository,
         exclusive: IChunkExclusiveWrites,
+        urgencies: IReadUrgencyRepository,
     ) -> None:
         self._record = record
         self._graphs = graphs
+        self._urgencies = urgencies
         # ``bzh:store-exclusive-write``.
         self._exclusive = exclusive
 
@@ -269,12 +291,15 @@ class EditService:
         *,
         graph_target: Graph | None = None,
         migration_target: Graph | None = None,
-    ) -> None:
-        """Apply every field ``edit`` supplies, all-or-nothing, as :func:`plan_edit` decides.
+    ) -> EditPlan:
+        """Apply every field ``edit`` supplies, all-or-nothing, as :func:`plan_edit` decides; the plan it wrote.
 
         The facts and the record are re-read under the shared row lock, so a concurrent edit landing
-        before it neither loses its write to the trio's carry-forward nor skews the pin check."""
-        with self._exclusive.locked([chunk.chunk_id]) as handle:
+        before it neither loses its write to the trio's carry-forward nor skews the pin check. An urgency
+        edit locks the urgency's key beside the row and re-reads the urgency under it; it takes no settings
+        lock, since it names its urgency and never the default."""
+        keys = [] if edit.urgency is UNSET else [urgency_lock(edit.urgency.urgency_id)]
+        with self._exclusive.locked([chunk.chunk_id], keys=keys) as handle:
             facts = handle.facts(chunk.chunk_id)
             if facts is None:
                 raise ChunkNotFound(chunk.chunk_id)
@@ -290,6 +315,7 @@ class EditService:
                 migration_target=migration_target,
                 migration_target_retired=migration_target is not None
                 and self._graphs.is_retired(migration_target.graph_id),
+                urgency=None if edit.urgency is UNSET else self._urgency_again(edit.urgency, handle),
             )
             if plan.graph_id is not None:
                 self._record.set_graph_locked(handle, chunk.chunk_id, graph_id=plan.graph_id)
@@ -303,3 +329,12 @@ class EditService:
                 )
             if plan.intended_migration is not UNSET:
                 self._record.set_intended_migration_locked(handle, chunk.chunk_id, intended=plan.intended_migration)
+            if plan.urgency_id is not None:
+                self._record.set_urgency(chunk.chunk_id, urgency_id=plan.urgency_id, transaction=handle.transaction)
+        return plan
+
+    def _urgency_again(self, urgency: Urgency, handle: ILockedChunkRead) -> Urgency:
+        held = self._urgencies.get(urgency.urgency_id, transaction=handle.transaction)
+        if held is None:
+            raise UrgencyUnknown(URGENCY_FIELD, urgency.urgency_id)
+        return held

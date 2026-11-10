@@ -14,6 +14,7 @@ from blizzard.hub.domain.chunk.model import Chunk, IntendedMigration
 from blizzard.hub.domain.chunk.ports.exclusive import ILockedChunkRead, ILockedWorkRefRead
 from blizzard.hub.domain.kernel.transactions import LockedTransaction, Transaction
 from blizzard.hub.domain.projects.model import ProjectId
+from blizzard.hub.domain.urgency.model import UrgencyId
 
 
 @domain_model
@@ -91,6 +92,11 @@ class IWriteChunkRecordRepository(IReadChunkRecordRepository, Protocol):
     """Read-write chunk-record access."""
 
     def record_deleted(self, chunk_id: str, *, by: str, at: datetime, transaction: LockedTransaction) -> int: ...
+
+    def set_urgency(self, chunk_id: str, *, urgency_id: UrgencyId, transaction: LockedTransaction) -> None:
+        """Overwrite a chunk's urgency in place, in ``transaction``, which locks the chunk's row and the
+        urgency's key; its rank and every other column untouched."""
+        ...
 
     def mint_locked(self, handle: ILockedWorkRefRead, chunk: Chunk) -> None:
         """Insert a freshly minted chunk's rows, on ``handle``'s already-locked connection

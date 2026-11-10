@@ -1315,7 +1315,9 @@ def build_tenant_services(stores: TenantStores, parts: TenantServiceParts, *, ev
             clock=clock,
             closer_available=lambda source: work_sources.closer(source) is not None,
         ),
-        edit=EditService(record=chunk_record, graphs=graph_store, exclusive=chunk_exclusive),
+        edit=EditService(
+            record=chunk_record, graphs=graph_store, exclusive=chunk_exclusive, urgencies=stores.urgencies
+        ),
         dependencies=DependencyService(
             dependencies=chunk_dependencies,
             exclusive=chunk_exclusive,

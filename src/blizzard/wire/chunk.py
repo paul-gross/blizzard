@@ -21,6 +21,7 @@ from blizzard.wire.decision import DecisionView
 from blizzard.wire.flow import ChunkFlowPlaceView, FlowFactView
 from blizzard.wire.problem import ProblemDetails, ProblemMembers
 from blizzard.wire.question import QuestionView
+from blizzard.wire.urgency import UrgencyRef
 from blizzard.wire.vocabulary import OPEN
 from blizzard.wire.work_source import WorkItemAuthorView
 
@@ -248,6 +249,8 @@ class ChunkSummary(WireModel):
     project_name: str | None = None
     #: The pinned graph's name; ``None`` when the graph is unresolvable.
     graph_name: str | None = None
+    #: The urgency the chunk carries; ``None`` from a hub that predates it.
+    urgency: UrgencyRef | None = None
     #: Every node of the pinned graph start to finish, each read against the chunk's visits: the node it stands on,
     #: its last visit passed or sent back, or unvisited. Empty for a terminal chunk and for an unresolvable graph.
     graph_progress: list[GraphProgressNodeView] = []
@@ -543,6 +546,9 @@ class ChunkPatchRequest(BaseModel):
     # `None` means "leave unchanged", the `default_model` wire convention.
     default_harnesses: list[str] | None = None
     intended_migration: IntendedMigrationPatch | None = None
+    #: The urgency the chunk carries from now on, by id or slug; omitted leaves it, and an explicit ``null`` is
+    #: refused.
+    urgency: str | None = None
 
 
 class ChunkPatchResponse(WireModel):
@@ -562,6 +568,8 @@ class ChunkPatchResponse(WireModel):
     project_slug: str | None = None
     #: The project's current display name; ``None`` where the hub reports none.
     project_name: str | None = None
+    #: The urgency the chunk carries; ``None`` from a hub that predates it.
+    urgency: UrgencyRef | None = None
 
 
 class PauseView(BaseModel):
@@ -629,6 +637,8 @@ class ChunkDetail(WireModel):
     # The chunk's standing migration intent — non-None iff an `auto` or `forced` intent
     # is set. See IntendedMigrationView.
     intended_migration: IntendedMigrationView | None = None
+    #: The urgency the chunk carries; ``None`` from a hub that predates it.
+    urgency: UrgencyRef | None = None
     route: RouteView | None = None
     # The operator's per-chunk pause brake — non-None iff currently paused, and carried
     # independently of ``status`` so a gated-and-paused chunk stays legible (see PauseView).

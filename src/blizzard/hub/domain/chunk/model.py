@@ -1084,6 +1084,8 @@ class ChunkVerb(StrEnum):
     EDIT_DEFAULTS = "edit-defaults"
     #: Set, overwrite, or clear the intended migration.
     EDIT_INTENDED_MIGRATION = "edit-intended-migration"
+    #: Set the chunk's urgency; an open chunk's urgency still decides where it stands in the queue.
+    EDIT_URGENCY = "edit-urgency"
     #: Be named in a reorder of the ``ready`` queue.
     REORDER_READY = "reorder-ready"
     #: Be named in a reorder of the ``not_ready`` backlog.
@@ -1129,6 +1131,7 @@ CHUNK_VERB_LEGALITY: Mapping[ChunkVerb, frozenset[ChunkStatus]] = MappingProxyTy
         ChunkVerb.EDIT_GRAPH_PIN: PRE_CLAIM_STATUSES,
         ChunkVerb.EDIT_DEFAULTS: PRE_CLAIM_STATUSES,
         ChunkVerb.EDIT_INTENDED_MIGRATION: _NON_TERMINAL,
+        ChunkVerb.EDIT_URGENCY: _NON_TERMINAL,
         ChunkVerb.REORDER_READY: frozenset({ChunkStatus.READY}),
         ChunkVerb.REORDER_BACKLOG: frozenset({ChunkStatus.NOT_READY}),
         ChunkVerb.CLAIM: frozenset({ChunkStatus.READY}),

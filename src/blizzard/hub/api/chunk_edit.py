@@ -8,12 +8,22 @@ from functools import partial
 from blizzard.hub.api import problems_chunks
 from blizzard.hub.api.graph_names import graph_by_ref
 from blizzard.hub.api.problem_exceptions import ProblemHTTPException
+from blizzard.hub.api.urgencies import stated_urgency, urgency_refusal
 from blizzard.hub.composition import TenantServices
 from blizzard.hub.domain.chunk.model import Chunk, IntendedMigration
+from blizzard.hub.domain.config.errors import ConfigFieldError
 from blizzard.hub.domain.graph.harnesses import InvalidHarnesses
 from blizzard.hub.domain.graph.model import Graph
 from blizzard.hub.domain.kernel.unset import UNSET, UnsetType
-from blizzard.hub.domain.operations.edit import BlankEditValue, ChunkEdit, filled, filled_entries
+from blizzard.hub.domain.operations.edit import (
+    BlankEditValue,
+    ChunkEdit,
+    EditPlan,
+    filled,
+    filled_entries,
+)
+from blizzard.hub.domain.urgency.chain import URGENCY_FIELD
+from blizzard.hub.domain.urgency.model import Urgency, UrgencyRetired, UrgencyUnknown
 from blizzard.wire.chunk import ChunkPatchRequest
 
 
@@ -28,7 +38,9 @@ class ChunkPatchBody:
     request: ChunkPatchRequest
     services: TenantServices
 
-    def apply(self, chunk: Chunk) -> None:
+    def apply(self, chunk: Chunk) -> EditPlan:
+        """The edit applied — the plan it wrote. 422 ``urgency_unknown`` or ``urgency_retired`` for an ``urgency``
+        naming no urgency or a retired one, and for an explicit ``null``."""
         try:
             graph_target = self._graph_target()
             migration_target, intended_migration = self._migration()
@@ -38,13 +50,26 @@ class ChunkPatchBody:
                 default_effort=self._default_effort(),
                 default_harnesses=self._default_harnesses(),
                 intended_migration=intended_migration,
+                urgency=self._urgency(),
             )
         except BlankEditValue as exc:
             raise ProblemHTTPException(partial(problems_chunks.blank_edit_value_problem, str(exc))) from exc
         try:
-            self.services.edit.edit(chunk, edit, graph_target=graph_target, migration_target=migration_target)
+            return self.services.edit.edit(chunk, edit, graph_target=graph_target, migration_target=migration_target)
         except InvalidHarnesses as exc:
             raise ProblemHTTPException(partial(problems_chunks.invalid_harnesses_problem, str(exc))) from exc
+        except (UrgencyUnknown, UrgencyRetired) as exc:  # retired after the edge's check
+            raise urgency_refusal(exc) from exc
+
+    def _urgency(self) -> Urgency | UnsetType:
+        if "urgency" not in self.request.model_fields_set:
+            return UNSET
+        reference = self.request.urgency
+        if reference is None:  # a chunk always carries an urgency, so an explicit null is no clear
+            raise urgency_refusal(ConfigFieldError(URGENCY_FIELD, "must not be null"))
+        urgency = stated_urgency(reference, self.services)
+        assert urgency is not None, "a named reference resolves to an urgency or is refused"
+        return urgency
 
     def _graph_target(self) -> Graph | None:
         ref = self.request.graph_id

@@ -1171,6 +1171,16 @@
             "title": "Terminal",
             "type": "boolean"
           },
+          "urgency": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/UrgencyRef"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "usage": {
             "default": [],
             "items": {
@@ -1202,6 +1212,7 @@
           "default_effort",
           "default_harnesses",
           "intended_migration",
+          "urgency",
           "route",
           "pause",
           "pausable",
@@ -1738,6 +1749,16 @@
             "title": "Terminal",
             "type": "boolean"
           },
+          "urgency": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/UrgencyRef"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "work_refs": {
             "default": [],
             "items": {
@@ -1787,6 +1808,7 @@
           "project_slug",
           "project_name",
           "graph_name",
+          "urgency",
           "graph_progress",
           "latest_bounce",
           "bounce_count"
@@ -7878,6 +7900,25 @@
           "held_since"
         ],
         "title": "UnmatchedBindingView",
+        "type": "object"
+      },
+      "UrgencyRef": {
+        "description": "The urgency a chunk carries, by id and slug; a reader joins it to the tenant's urgency set for the rest.",
+        "properties": {
+          "slug": {
+            "title": "Slug",
+            "type": "string"
+          },
+          "urgency_id": {
+            "title": "Urgency Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "urgency_id",
+          "slug"
+        ],
+        "title": "UrgencyRef",
         "type": "object"
       },
       "UsageFactView": {

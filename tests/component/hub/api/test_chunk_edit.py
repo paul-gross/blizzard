@@ -9,7 +9,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from tests.support.scaffolding import HubHarness, build_hub, default_project, emitted_events, ingest
+from tests.support.scaffolding import HubHarness, build_hub, default_project, default_urgency, emitted_events, ingest
 
 _POINTER = {"source": "default", "ref": "12"}
 
@@ -118,6 +118,7 @@ def test_patch_applies_graph_id_and_both_defaults_together(tmp_path: Path) -> No
         "default_effort": "medium",
         "default_harnesses": [],
         "intended_migration": None,
+        "urgency": {"urgency_id": default_urgency(hub.engine), "slug": "standard"},
     }
     detail = hub.client.get(f"/api/chunks/{chunk_id}").json()
     assert detail["graph_id"] == alt_graph_id

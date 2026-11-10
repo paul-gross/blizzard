@@ -1428,6 +1428,16 @@
             ],
             "title": "Project Slug"
           },
+          "urgency": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/UrgencyRef"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "work_refs": {
             "default": [],
             "items": {
@@ -1445,7 +1455,8 @@
           "blocked",
           "project_id",
           "project_slug",
-          "project_name"
+          "project_name",
+          "urgency"
         ],
         "title": "BacklogPeekEntry",
         "type": "object"
@@ -3512,6 +3523,16 @@
             "title": "Terminal",
             "type": "boolean"
           },
+          "urgency": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/UrgencyRef"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "usage": {
             "default": [],
             "items": {
@@ -3543,6 +3564,7 @@
           "default_effort",
           "default_harnesses",
           "intended_migration",
+          "urgency",
           "route",
           "pause",
           "pausable",
@@ -4533,6 +4555,17 @@
                 "type": "null"
               }
             ]
+          },
+          "urgency": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Urgency"
           }
         },
         "title": "ChunkPatchRequest",
@@ -4618,6 +4651,16 @@
               }
             ],
             "title": "Project Slug"
+          },
+          "urgency": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/UrgencyRef"
+              },
+              {
+                "type": "null"
+              }
+            ]
           }
         },
         "required": [
@@ -4629,7 +4672,8 @@
           "intended_migration",
           "project_id",
           "project_slug",
-          "project_name"
+          "project_name",
+          "urgency"
         ],
         "title": "ChunkPatchResponse",
         "type": "object"
@@ -5108,6 +5152,16 @@
             "title": "Terminal",
             "type": "boolean"
           },
+          "urgency": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/UrgencyRef"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "work_refs": {
             "default": [],
             "items": {
@@ -5157,6 +5211,7 @@
           "project_slug",
           "project_name",
           "graph_name",
+          "urgency",
           "graph_progress",
           "latest_bounce",
           "bounce_count"
@@ -18830,6 +18885,16 @@
             ],
             "title": "Project Slug"
           },
+          "urgency": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/UrgencyRef"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "work_refs": {
             "default": [],
             "items": {
@@ -18847,7 +18912,8 @@
           "blocked",
           "project_id",
           "project_slug",
-          "project_name"
+          "project_name",
+          "urgency"
         ],
         "title": "QueuePeekEntry",
         "type": "object"
@@ -27946,6 +28012,25 @@
           "after"
         ],
         "title": "UrgencyPositionRequest",
+        "type": "object"
+      },
+      "UrgencyRef": {
+        "description": "The urgency a chunk carries, by id and slug; a reader joins it to the tenant's urgency set for the rest.",
+        "properties": {
+          "slug": {
+            "title": "Slug",
+            "type": "string"
+          },
+          "urgency_id": {
+            "title": "Urgency Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "urgency_id",
+          "slug"
+        ],
+        "title": "UrgencyRef",
         "type": "object"
       },
       "UrgencyRetireRequest": {
@@ -37097,7 +37182,7 @@
         ]
       },
       "patch": {
-        "description": "Apply the body's fields in one all-or-nothing edit.\n\n404 for an unknown chunk or an unresolvable graph, 422 for a blank value, 409 for a\nrefused edit.",
+        "description": "Apply the body's fields in one all-or-nothing edit. An edit changing the chunk's urgency publishes the\nqueue's change beside the chunk's.\n\n404 for an unknown chunk or an unresolvable graph, 422 for a blank value, an ``urgency`` naming no urgency\n(``urgency_unknown``) or a retired one (``urgency_retired``), or an explicit ``null`` ``urgency``; 409 for a\nrefused edit.",
         "operationId": "patch_chunk_api_chunks__chunk_id__patch",
         "parameters": [
           {

@@ -2978,7 +2978,7 @@
           "short_help": "Resume a paused CHUNK \u2014 clear the pause."
         },
         "set": {
-          "help": "Repin CHUNK's graph and/or default model/effort/harnesses in one call.\n\nThe given fields apply together or not at all; at least one option is required.\nDefaults are refused once a runner has claimed CHUNK, and ``--graph`` once CHUNK is\nclaimed or has moved off its first node.",
+          "help": "Repin CHUNK's graph, default model/effort/harnesses, and/or urgency in one call.\n\nThe given fields apply together or not at all; at least one option is required.\nDefaults are refused once a runner has claimed CHUNK, ``--graph`` once CHUNK is\nclaimed or has moved off its first node, and ``--urgency`` once CHUNK is done or\nstopped, or when it names no live urgency.",
           "params": [
             {
               "hidden": false,
@@ -3040,6 +3040,18 @@
               "type": "text"
             },
             {
+              "help": "Set CHUNK's urgency, by id or slug. Leaves its place in its list where it was.",
+              "hidden": false,
+              "kind": "option",
+              "name": "urgency",
+              "opts": [
+                "--urgency"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "text"
+            },
+            {
               "help": "Print the raw response body as JSON.",
               "hidden": false,
               "kind": "option",
@@ -3077,7 +3089,7 @@
             }
           ],
           "path": "hub chunk set",
-          "short_help": "Repin CHUNK's graph and/or default model/effort/harnesses in one call."
+          "short_help": "Repin CHUNK's graph, default model/effort/harnesses, and/or urgency in one call."
         },
         "stop": {
           "help": "Terminally abandon CHUNK \u2014 the operator's last-resort verb.\n\nCHUNK becomes ``stopped`` and is never offered to a runner again; its runner is\nreleased and any open escalation closed. Refused when CHUNK is already done or\nstopped. There is no ``un-stop``.",

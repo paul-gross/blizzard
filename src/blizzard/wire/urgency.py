@@ -120,6 +120,13 @@ class SettingsPatchRequest(BaseModel):
     default_urgency: str | None = None
 
 
+class UrgencyRef(WireModel):
+    """The urgency a chunk carries, by id and slug; a reader joins it to the tenant's urgency set for the rest."""
+
+    urgency_id: str
+    slug: str
+
+
 class SettingsDefaultView(WireModel):
     urgency_id: str
     slug: str
