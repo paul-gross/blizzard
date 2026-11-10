@@ -109,6 +109,7 @@ from blizzard.hub.domain.graph.actions import SHIPPED_CATALOGUE, TEST_ACTION_SPE
 from blizzard.hub.domain.graph.model import Edge, Graph, Node
 from blizzard.hub.domain.kernel.hub_source import RESERVED_HUB_SOURCE_NAME
 from blizzard.hub.domain.kernel.transactions import LockedTransaction
+from blizzard.hub.domain.observability.analytics.extraction import ITurnEventExtractor, shipped_extractors
 from blizzard.hub.domain.observability.egress.config import EgressConfig
 from blizzard.hub.domain.observability.transcripts import (
     EncodedTurns,
@@ -1649,6 +1650,7 @@ def build_hub(
     hub_version: str | None = None,
     version_window: VersionWindow = VERSION_WINDOW,
     actions: HubActions = TEST_HUB_ACTIONS,
+    extractors: Sequence[ITurnEventExtractor] = shipped_extractors(),
     action_pass_seconds: float = DEFAULT_ACTION_PASS_SECONDS,
     action_pass_grace: timedelta = ACTION_PASS_GRACE,
     forges: ForgeRegistryFactory = default_forge_registry,
@@ -1742,6 +1744,7 @@ def build_hub(
         hub_version=hub_version or __version__,
         version_window=version_window,
         actions=actions,
+        extractors=extractors,
         action_pass_seconds=action_pass_seconds,
         action_pass_grace=action_pass_grace,
         forges=forges,

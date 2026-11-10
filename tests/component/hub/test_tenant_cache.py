@@ -29,6 +29,7 @@ from blizzard.hub.composition import (
     build_services,
     build_tenant_stores,
 )
+from blizzard.hub.domain.observability.analytics.extraction import shipped_extractors
 from blizzard.hub.events.brokers import TenantBrokers
 from blizzard.hub.forge.budget import ForgeBudgets
 from blizzard.hub.secrets import hub_key_provider
@@ -37,6 +38,7 @@ from blizzard.hub.tenancy import HUB_SCOPED_OPTION, StoreScope, TenantClosed, Te
 from blizzard.hub.work_sources.source import IWorkSourceRegistry
 from tests.support.config_inputs import VERSION_WINDOW
 from tests.support.scaffolding import (
+    TEST_HUB_ACTIONS,
     WorkSourceRegistry,
     add_tenant,
     close_tenant,
@@ -227,6 +229,8 @@ def _served(core: HubCore, tmp_path: Path, brokers: TenantBrokers) -> HubService
         follow_latest_default=False,
         annotation_interval_seconds=120,
         version_window=VERSION_WINDOW,
+        actions=TEST_HUB_ACTIONS,
+        extractors=shipped_extractors(),
         cadences_on=lambda: False,
         announce_minted=announce_minted,
     )

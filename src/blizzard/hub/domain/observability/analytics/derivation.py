@@ -27,7 +27,6 @@ from blizzard.hub.domain.observability.analytics.events import (
     TranscriptEvent,
 )
 from blizzard.hub.domain.observability.analytics.extraction import (
-    DEFAULT_EXTRACTORS,
     EXTRACTOR_VERSION,
     ExtractedEvent,
     ITurnEventExtractor,
@@ -178,7 +177,7 @@ class EventDerivationService:
         facts: IReadChunkFactsRepository,
         record: IReadChunkRecordRepository,
         clock: IClock,
-        extractors: Sequence[ITurnEventExtractor] = DEFAULT_EXTRACTORS,
+        extractors: Sequence[ITurnEventExtractor],
         extractor_version: str = EXTRACTOR_VERSION,
     ) -> None:
         self._events = events

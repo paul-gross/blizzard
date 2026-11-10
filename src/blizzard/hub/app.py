@@ -131,6 +131,7 @@ from blizzard.hub.composition import (
     build_services,
 )
 from blizzard.hub.config import AUTH_MODE_OAUTH, ConfigError, HubConfig, StoreUrl, read_legacy_keys
+from blizzard.hub.delivery.action_registry import build_hub_actions
 from blizzard.hub.delivery.flow_driver import FlowDriver
 from blizzard.hub.domain.config.carry_over import ExistingConfig, ImportResult, LegacyStart, LegacyStartRefused
 from blizzard.hub.domain.config.forge_check import ForgeCheck
@@ -138,6 +139,7 @@ from blizzard.hub.domain.config.forges import ForgeKindOffers
 from blizzard.hub.domain.config.oauth_providers import ProvidersOrphaned, require_providers_configured
 from blizzard.hub.domain.config.secrets import KeysUncovered, require_keys_covered
 from blizzard.hub.domain.config.work_sources import BuiltInWorkSource
+from blizzard.hub.domain.observability.analytics.extraction import shipped_extractors
 from blizzard.hub.domain.observability.egress.config import EgressConfig
 from blizzard.hub.domain.observability.egress.event_rows import missing_key_reason
 from blizzard.hub.domain.observability.tracing.attributes import (
@@ -157,7 +159,7 @@ from blizzard.hub.domain.sweeps.locks import SweepInProgress
 from blizzard.hub.domain.sweeps.names import SweepMode, SweepName
 from blizzard.hub.forge.budget import ForgeBudgets
 from blizzard.hub.forge.internal.factory import build_forge_registry
-from blizzard.hub.forge.registry import ForgeRegistry
+from blizzard.hub.forge.registry import ForgeRegistry, WriteLocks
 from blizzard.hub.layout import SIGNING_KEYS_PARTS, remove_retired_workdirs
 from blizzard.hub.runtime import migration_runner
 from blizzard.hub.secrets import (
@@ -685,7 +687,9 @@ def build_hosted_app(
                 instrument_client=platform_tracing.instrument_client,
             )
 
-        def forge_registry(stores: TenantStores, live: LiveConfig, budgets: ForgeBudgets) -> ForgeRegistry:
+        def forge_registry(
+            stores: TenantStores, live: LiveConfig, budgets: ForgeBudgets, write_locks: WriteLocks
+        ) -> ForgeRegistry:
             return build_forge_registry(
                 records=stores.repository_records,
                 forges=stores.forge_records,
@@ -693,6 +697,7 @@ def build_hosted_app(
                 secrets=live.secrets,
                 clock=stores.clock,
                 budgets=budgets,
+                write_locks=write_locks,
                 instrument=platform_tracing.instrument_client,
             )
 
@@ -738,6 +743,8 @@ def build_hosted_app(
             tracing=config.tracing,
             tracing_settings=tracing,
             platform_tracer=platform_tracing.tracer,
+            actions=build_hub_actions(os.environ),
+            extractors=shipped_extractors(),
             egress=config.egress,
             egress_path_key=_egress_path_key(config.egress),
             annotation_interval_seconds=config.annotation_interval_seconds,
