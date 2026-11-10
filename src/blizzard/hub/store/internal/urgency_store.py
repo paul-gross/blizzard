@@ -11,7 +11,7 @@ from __future__ import annotations
 from collections.abc import Sequence
 from dataclasses import replace
 from datetime import datetime
-from typing import Any
+from typing import Any, Protocol
 
 from sqlalchemy import ColumnElement, Row, func
 from sqlalchemy.engine import Connection
@@ -24,7 +24,7 @@ from blizzard.hub.domain.config.errors import ConfigRevisionConflict
 from blizzard.hub.domain.kernel.transactions import Transaction
 from blizzard.hub.domain.urgency.declarations import NamedRevision
 from blizzard.hub.domain.urgency.mark import Icon, IconMark, IconMediaType
-from blizzard.hub.domain.urgency.model import MarkWrite, Urgency, UrgencyId, UrgencySlugTaken, require_live
+from blizzard.hub.domain.urgency.model import MarkWrite, Urgency, UrgencyId, UrgencySlugTaken
 from blizzard.hub.domain.urgency.order import Placed, PositionFact, UrgencyOrder, UrgencyOrderConflict
 from blizzard.hub.domain.urgency.ports import IWriteUrgencyOrder, IWriteUrgencyRepository
 
@@ -113,11 +113,24 @@ def update_urgency(
     append_change(conn, change)
 
 
-def require_revisions(conn: Connection, expected: Sequence[NamedRevision]) -> None:
-    """:class:`ConfigRevisionConflict` naming the first urgency of ``expected`` whose stored revision has moved from
-    the one a write was planned on, in one read."""
+class _HeldAt(Protocol):
+    """An urgency a write was planned on, at the revision the plan read."""
+
+    @property
+    def urgency_id(self) -> str: ...
+
+    @property
+    def revision(self) -> int: ...
+
+    @property
+    def slug(self) -> str: ...
+
+
+def stale_revision[H: _HeldAt](conn: Connection, expected: Sequence[H]) -> tuple[H, int] | None:
+    """The first of ``expected`` whose stored revision has moved from the one a write was planned on, beside the
+    revision stored now, in one read; ``None`` when none has."""
     if not expected:
-        return
+        return None
     stmts = statements_of(conn)
     rows = conn.execute(
         stmts.select(urgencies, urgencies.c.urgency_id, urgencies.c.revision).where(
@@ -127,7 +140,16 @@ def require_revisions(conn: Connection, expected: Sequence[NamedRevision]) -> No
     stored: dict[str, int] = {row.urgency_id: row.revision for row in rows}
     for named in expected:
         if stored.get(named.urgency_id) != named.revision:
-            raise ConfigRevisionConflict("urgency", named.slug, current=stored.get(named.urgency_id, 0))
+            return named, stored.get(named.urgency_id, 0)
+    return None
+
+
+def require_revisions(conn: Connection, expected: Sequence[NamedRevision]) -> None:
+    """:class:`ConfigRevisionConflict` naming the first urgency of ``expected`` whose stored revision has moved."""
+    stale = stale_revision(conn, expected)
+    if stale is not None:
+        named, current = stale
+        raise ConfigRevisionConflict("urgency", named.slug, current=current)
 
 
 class UrgencyStore:
@@ -266,20 +288,6 @@ def _urgency_of(row: Row[Any], retired: bool) -> Urgency:
         revision=row.revision,
         retired=retired,
     )
-
-
-def live_urgency_id(conn: Connection, field: str, slug: str | None) -> str | None:
-    """The id of the urgency ``slug`` names, for a record that references it to store — ``None`` for ``None``.
-    :class:`~blizzard.hub.domain.urgency.model.UrgencyUnknown` or
-    :class:`~blizzard.hub.domain.urgency.model.UrgencyRetired`, naming ``field``, when it is not live: the write
-    refuses rather than land a reference to an urgency retired since it was read (``bzh:store-refuses-stale``)."""
-    if slug is None:
-        return None
-    row = conn.execute(
-        statements_of(conn).select(urgencies, *_VIEW_COLUMNS).where(urgencies.c.slug == slug)
-    ).one_or_none()
-    held = None if row is None else _reconstituted(conn, [row])[0]
-    return require_live(field, slug, held).urgency_id
 
 
 def require_order_seq(conn: Connection, from_seq: int) -> None:

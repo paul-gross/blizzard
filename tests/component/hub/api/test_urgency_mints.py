@@ -19,6 +19,7 @@ from blizzard.hub.domain.cadence.model import CadenceShape, ChoreShape
 from blizzard.hub.domain.cadence.services import CadenceAttention
 from blizzard.hub.domain.config.changes import ChangeContext, Door
 from blizzard.hub.domain.garden.scopes import ScopeSlug
+from blizzard.hub.domain.urgency.model import UrgencyId
 from blizzard.hub.store import schema as s
 from blizzard.hub.store.internal.garden_proposal_store import GardenProposalStore
 from tests.support.scaffolding import (
@@ -97,11 +98,11 @@ def _proposal(hub: HubHarness) -> None:
     )
 
 
-def _cadence_mint(hub: HubHarness, *, chore_urgency: str | None) -> MintedErrand:
+def _cadence_mint(hub: HubHarness, *, chore_urgency: UrgencyId | None) -> MintedErrand:
     project = project_record(hub, default_project(hub.engine))
     cadence = hub.services.cadence_authoring.create(
         CadenceShape(
-            slug="nightly", spacing="1h", chores=(ChoreShape("plain", "sweep", promote=True, urgency=chore_urgency),)
+            slug="nightly", spacing="1h", chores=(ChoreShape("plain", "sweep", promote=True, urgency_id=chore_urgency),)
         ),
         project=project,
         ctx=_CTX,
@@ -254,7 +255,7 @@ def test_a_cadence_mint_takes_the_chore_override_over_the_routine_default(hub: H
     chore = _urgency(hub, "urgent")
     _routine(hub, "sweep", default_urgency="later")
 
-    minted = _cadence_mint(hub, chore_urgency="urgent")
+    minted = _cadence_mint(hub, chore_urgency=UrgencyId(chore))
 
     assert _urgencies(hub) == {minted.chunk.chunk_id: chore}
 

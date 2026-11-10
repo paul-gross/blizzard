@@ -11,7 +11,10 @@ from typing import Any
 import httpx2
 import pytest
 
+from blizzard.hub.domain.cadence.model import CadenceEdit
 from blizzard.hub.domain.config.changes import ChangeContext, Door
+from blizzard.hub.domain.config.errors import ConfigRevisionConflict
+from blizzard.hub.domain.garden.routines import RoutineEdit
 from blizzard.hub.domain.garden.scopes import ScopeSlug
 from tests.support.scaffolding import HubHarness, build_hub, default_project, project_record
 
@@ -72,7 +75,7 @@ def _apply(hub: HubHarness, document: dict[str, object]) -> httpx2.Response:
 
 def test_a_routine_takes_its_default_by_id_or_slug_reads_it_by_slug_and_clears_it_with_null(hub: HubHarness) -> None:
     urgent = _urgency(hub, "urgent")
-    _urgency(hub, "background")
+    background = _urgency(hub, "background")
 
     created = _routine(hub, default_urgency=urgent["urgency_id"])
     assert created.status_code == 201, created.text
@@ -84,7 +87,10 @@ def test_a_routine_takes_its_default_by_id_or_slug_reads_it_by_slug_and_clears_i
     cleared = hub.client.patch(f"/api/routines/{routine['routine_id']}", json={"default_urgency": None})
     assert (cleared.json()["default_urgency"], cleared.json()["revision"]) == (None, 3)
     diffs = [[(d["field"], d["old"], d["new"]) for d in c["diff"]] for c in _changes(hub, "routine")[1:]]
-    assert diffs == [[("default_urgency", "urgent", "background")], [("default_urgency", "background", None)]]
+    assert diffs == [
+        [("default_urgency_id", urgent["urgency_id"], background["urgency_id"])],
+        [("default_urgency_id", background["urgency_id"], None)],
+    ]
 
 
 def test_a_routine_or_chore_naming_an_unknown_or_retired_urgency_is_refused_naming_the_field(hub: HubHarness) -> None:
@@ -126,7 +132,7 @@ def test_an_urgency_only_chore_edit_keeps_the_chore_and_leaves_the_other_chores_
 
 
 def test_a_retire_leaves_a_routines_default_and_a_chores_override_reading_none(hub: HubHarness) -> None:
-    _urgency(hub, "urgent")
+    urgent = _urgency(hub, "urgent")
     routine = _routine(hub, default_urgency="urgent").json()
     _routine(hub, "other")
     cadence = _cadence(
@@ -143,10 +149,12 @@ def test_a_retire_leaves_a_routines_default_and_a_chores_override_reading_none(h
     assert ([c["urgency"] for c in kept["chores"]], kept["revision"]) == ([None, None], 2)
     assert [c["chore_id"] for c in kept["chores"]] == [c["chore_id"] for c in cadence["chores"]]
     (routine_change,) = [c for c in _changes(hub, "routine") if c["record_key"] == "sweep" and c["revision"] == 2]
-    assert [(d["field"], d["old"], d["new"]) for d in routine_change["diff"]] == [("default_urgency", "urgent", None)]
+    assert [(d["field"], d["old"], d["new"]) for d in routine_change["diff"]] == [
+        ("default_urgency_id", urgent["urgency_id"], None)
+    ]
     (cadence_change,) = [c for c in _changes(hub, "cadence") if c["revision"] == 2]
     assert [d["field"] for d in cadence_change["diff"]] == ["chores.nightly"]
-    assert cadence_change["diff"][0]["new"]["urgency"] is None
+    assert cadence_change["diff"][0]["new"]["urgency_id"] is None
 
 
 def test_one_document_declares_an_urgency_and_the_routine_and_chore_naming_it(hub: HubHarness) -> None:
@@ -231,3 +239,19 @@ def test_an_export_applied_back_writes_nothing(hub: HubHarness) -> None:
 
     assert applied.status_code == 200, applied.text
     assert {o["op"] for o in applied.json()["outcomes"]} == {"unchanged"}
+
+
+def test_an_edit_read_before_a_retire_cleared_a_reference_it_leaves_is_refused_as_stale(hub: HubHarness) -> None:
+    _urgency(hub, "urgent")
+    routine_id = _routine(hub, default_urgency="urgent").json()["routine_id"]
+    cadence_id = _cadence(hub, {"key": "nightly", "routine": "sweep", "urgency": "urgent"}).json()["cadence_id"]
+    routine = hub.services.routines.get(routine_id)
+    cadence = hub.services.cadences.get(cadence_id)
+    assert routine is not None and cadence is not None
+
+    _retire(hub, "urgent")
+
+    with pytest.raises(ConfigRevisionConflict):
+        hub.services.routine_authoring.edit(routine, RoutineEdit(name="renamed"), _CTX)
+    with pytest.raises(ConfigRevisionConflict):
+        hub.services.cadence_authoring.edit(cadence, CadenceEdit(name="renamed"), _CTX, may_admit=True)

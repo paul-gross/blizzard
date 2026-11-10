@@ -44,11 +44,11 @@ _FIELDS = (
     "default_model",
     "default_effort",
     "default_harnesses",
-    "default_urgency",
+    "default_urgency_id",
 )
 #: The fields an edit may set but never clear.
 _REQUIRED_FIELDS = ("name", "graph_name", "default_scope_slug", "default_model", "default_harnesses")
-#: The wire name of the routine's default urgency, in a diff and on a refusal.
+#: The wire name of the routine's default urgency on a request and a refusal.
 DEFAULT_URGENCY_FIELD = "default_urgency"
 #: The wire name a link or unlink reports the routine's linked set under.
 SCOPES_FIELD = "scopes"
@@ -123,8 +123,8 @@ class RoutineVerb(StrEnum):
 @dataclass(frozen=True)
 class RoutineEdit:
     """A sparse routine edit: :data:`UNSET` leaves a field. ``slug`` may only restate the
-    current one and ``name`` sets the display name; ``None`` clears ``default_effort`` or ``default_urgency`` — the
-    urgency's slug — and is refused on every other field."""
+    current one and ``name`` sets the display name; ``None`` clears ``default_effort`` or ``default_urgency_id`` and is
+    refused on every other field."""
 
     slug: str | None | UnsetType = UNSET
     name: str | None | UnsetType = UNSET
@@ -133,7 +133,7 @@ class RoutineEdit:
     default_model: Sequence[str] | None | UnsetType = UNSET
     default_effort: str | None | UnsetType = UNSET
     default_harnesses: Sequence[str] | None | UnsetType = UNSET
-    default_urgency: str | None | UnsetType = UNSET
+    default_urgency_id: UrgencyId | None | UnsetType = UNSET
 
 
 def require_slug_free(holder: Routine | None, slug: str) -> None:
@@ -201,8 +201,8 @@ class Routine:
     default_effort: str | None = None
     # The routine's default harness preference, `default_model`'s shape: empty is no preference.
     default_harnesses: list[str] = field(default_factory=list[str])
-    # The slug of the urgency a run takes when nothing above the routine names one; ``None`` takes the tenant's.
-    default_urgency: str | None = None
+    # The urgency a run takes when nothing above the routine names one; ``None`` takes the tenant's.
+    default_urgency_id: UrgencyId | None = None
     revision: int = 1
     retired: bool = False
 
@@ -238,7 +238,7 @@ class Routine:
         at: datetime,
         slug: str | None = None,
         name: str | None = None,
-        default_urgency: str | None = None,
+        default_urgency_id: UrgencyId | None = None,
     ) -> tuple[Routine, ConfigChange]:
         """A new routine of ``project_id`` at revision 1 pointing at ``default_scope_slug``, a scope of the same
         project, with its ``create`` change. The routine's id is minted here, from ``at``; its slug and display
@@ -255,7 +255,7 @@ class Routine:
             default_model=list(default_model),
             default_effort=default_effort,
             default_harnesses=validated_harnesses(list(default_harnesses)),
-            default_urgency=default_urgency,
+            default_urgency_id=default_urgency_id,
         )
         return record, record._change(ctx, 1, ChangeOp.CREATE, record._diff(None), at)
 
@@ -350,8 +350,8 @@ class Routine:
             changes["default_harnesses"] = validated_harnesses(list(edit.default_harnesses))
         if edit.default_effort is not UNSET:
             changes["default_effort"] = edit.default_effort
-        if edit.default_urgency is not UNSET:
-            changes["default_urgency"] = edit.default_urgency
+        if edit.default_urgency_id is not UNSET:
+            changes["default_urgency_id"] = edit.default_urgency_id
         return replace(self, **changes)
 
     def _diff(self, old: Routine | None) -> tuple[FieldChange, ...]:
@@ -538,7 +538,7 @@ class RoutineAuthoring:
         require_slug_free(self._routines.get_by_slug(project_id, resolved_slug), resolved_slug)
         require_graph_change_resolves(None, graph_name, self._resolves)
         scope, scope_mint = self._scope_registry.resolve(project_id, default_scope_slug, ctx)
-        urgency_slug = None if default_urgency is None else default_urgency.slug
+        urgency_id = None if default_urgency is None else default_urgency.urgency_id
         routine, change = Routine.new(
             project_id=project_id,
             slug=slug,
@@ -548,19 +548,20 @@ class RoutineAuthoring:
             default_model=default_model or [],
             default_effort=default_effort,
             default_harnesses=harnesses,
-            default_urgency=urgency_slug,
+            default_urgency_id=urgency_id,
             ctx=ctx,
             at=self._clock.now(),
         )
         routine.require_own_scope(scope)
-        with self._urgencies.held(_named(urgency_slug)) as transaction:
+        with self._urgencies.held(_named(urgency_id)) as transaction:
             return self._routines.create(routine, change=change, scope_mint=scope_mint, transaction=transaction)
 
     def edit(self, routine: Routine, edit: RoutineEdit, ctx: ChangeContext, *, if_match: int | None = None) -> Routine:
         """Apply a sparse edit. Graph resolution and default-scope minting run only when their
         field is present and, for the graph, changes it; an edit that changes nothing writes nothing. A new default is
         linked; a previous default is deliberately left linked — the routine still sweeps
-        it, and a set larger than its default is legal. A default urgency the edit sets is held live while it lands."""
+        it, and a set larger than its default is legal. A default urgency the edit newly names is held live while it
+        lands; one it leaves is the revision's to guard, since a retire clearing it moves the revision."""
         decided = routine.edit(edit, ctx, if_match=if_match, at=self._clock.now())
         if isinstance(edit.graph_name, str):
             require_graph_change_resolves(routine.graph_name, edit.graph_name, self._resolves)
@@ -571,15 +572,15 @@ class RoutineAuthoring:
         if isinstance(edit.default_scope_slug, ScopeSlug):
             scope, scope_mint = self._scope_registry.resolve(routine.project_id, edit.default_scope_slug, ctx)
             routine.require_own_scope(scope)
-        named = edit.default_urgency if isinstance(edit.default_urgency, str) else None
+        named = None if edited.default_urgency_id == routine.default_urgency_id else edited.default_urgency_id
         with self._urgencies.held(_named(named)) as transaction:
             return self._routines.update(
                 edited, from_revision=routine.revision, change=change, scope_mint=scope_mint, transaction=transaction
             )
 
 
-def _named(urgency_slug: str | None) -> dict[str, str]:
-    return {} if urgency_slug is None else {DEFAULT_URGENCY_FIELD: urgency_slug}
+def _named(urgency_id: UrgencyId | None) -> dict[str, UrgencyId]:
+    return {} if urgency_id is None else {DEFAULT_URGENCY_FIELD: urgency_id}
 
 
 class RoutineUrgencyClearing:
@@ -593,7 +594,7 @@ class RoutineUrgencyClearing:
         # A routine a concurrent edit moved since the read is read again; one moved off the urgency drops out.
         while naming := self._routines.naming_urgency(urgency.urgency_id, transaction=transaction):
             for routine in naming:
-                decided = routine.edit(RoutineEdit(default_urgency=None), ctx, if_match=None, at=at)
+                decided = routine.edit(RoutineEdit(default_urgency_id=None), ctx, if_match=None, at=at)
                 assert decided is not None, "a routine naming the urgency always clears"
                 cleared, change = decided
                 self._routines.clear_default_urgency(

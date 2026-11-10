@@ -17,7 +17,6 @@ from blizzard.hub.domain.config.changes import ChangeContext, ConfigChange
 from blizzard.hub.domain.config.errors import ConfigFieldError
 from blizzard.hub.domain.config.records import NamedRetirableConfiguredRecord
 from blizzard.hub.domain.garden.routines import (
-    DEFAULT_URGENCY_FIELD,
     SCOPES_FIELD,
     Routine,
     RoutineEdit,
@@ -29,7 +28,7 @@ from blizzard.hub.domain.garden.routines import (
 )
 from blizzard.hub.domain.garden.scopes import Scope, ScopeEdit, ScopeSlug, ScopeSlugError
 from blizzard.hub.domain.graph.harnesses import InvalidHarnesses, validated_harnesses
-from blizzard.hub.domain.urgency.model import require_referenced
+from blizzard.hub.domain.urgency.model import UrgencyId
 
 
 @domain_model
@@ -77,8 +76,7 @@ class ScopeDeclaration:
 class RoutineDeclaration:
     """A routine the document names within ``project_id``, by ``slug`` or — in the older form — by ``name`` alone:
     its create fields, the sparse edit of what it states, and the linked scope set it states (``None`` leaves the
-    stored set). At least one of ``slug`` and ``name`` is stated; ``default_urgency`` is the slug of the urgency a
-    create names."""
+    stored set). At least one of ``slug`` and ``name`` is stated."""
 
     slug: str | None
     name: str | None
@@ -90,7 +88,7 @@ class RoutineDeclaration:
     edit: RoutineEdit
     project_id: str
     scopes: Sequence[str] | None = None
-    default_urgency: str | None = None
+    default_urgency_id: UrgencyId | None = None
 
     @property
     def handle(self) -> str:
@@ -131,14 +129,6 @@ class RoutineDeclaration:
         for slug in self.scopes or ():
             if (self.project_id, slug) not in refs.scopes:
                 raise ConfigFieldError(SCOPES_FIELD, _unknown_scope(slug))
-        if (named := self.named_urgency(stored)) is not None:
-            require_referenced(DEFAULT_URGENCY_FIELD, named, refs.urgencies)
-
-    def named_urgency(self, stored: NamedRetirableConfiguredRecord | None) -> str | None:
-        """The slug of the urgency the entry sets as the default — on a create, or on an edit stating one."""
-        if stored is None:
-            return self.default_urgency
-        return self.edit.default_urgency if isinstance(self.edit.default_urgency, str) else None
 
     def create(self, ctx: ChangeContext, *, at: datetime) -> tuple[Routine, ConfigChange]:
         return Routine.new(
@@ -150,7 +140,7 @@ class RoutineDeclaration:
             default_model=self.default_model,
             default_effort=self.default_effort,
             default_harnesses=self.default_harnesses,
-            default_urgency=self.default_urgency,
+            default_urgency_id=self.default_urgency_id,
             ctx=ctx,
             at=at,
         )

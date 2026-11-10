@@ -141,7 +141,6 @@ class _FakeRoutineRepo:
     updates: list[int] = field(default_factory=list[int])
     recorded: list[tuple[str, bool, int, str]] = field(default_factory=list[tuple[str, bool, int, str]])
     units: list[Transaction | None] = field(default_factory=list[Transaction | None])
-    urgency_slugs: dict[str, str] = field(default_factory=dict[str, str])
 
     def get(self, routine_id: str) -> Routine | None:
         return self.by_id.get(routine_id)
@@ -184,7 +183,7 @@ class _FakeRoutineRepo:
         return self._write(routine, change, scope_mint)
 
     def naming_urgency(self, urgency_id: UrgencyId, *, transaction: Transaction) -> list[Routine]:
-        return [r for r in self.by_id.values() if r.default_urgency == self.urgency_slugs.get(urgency_id)]
+        return [r for r in self.by_id.values() if r.default_urgency_id == urgency_id]
 
     def clear_default_urgency(
         self,
@@ -211,6 +210,9 @@ def _as_write_routines(fake: _FakeRoutineRepo) -> IWriteRoutineRepository:
     return cast(IWriteRoutineRepository, fake)
 
 
+_URGENT = UrgencyId("urg_urgent")
+
+
 def _urgency(slug: str, *, retired: bool = False) -> Urgency:
     return Urgency(
         urgency_id=UrgencyId(f"urg_{slug}"),
@@ -227,8 +229,8 @@ def _urgency(slug: str, *, retired: bool = False) -> Urgency:
 
 @dataclass
 class _FakeUrgencies:
-    """The tenant's urgencies by slug; ``retire_under_lock`` names one a retire lands on between the read ahead of the
-    unit and the read under its lock."""
+    """The tenant's urgencies by slug; ``retire_under_lock`` names one a retire lands on before the read under its
+    lock."""
 
     held: dict[str, Urgency] = field(default_factory=dict[str, Urgency])
     retire_under_lock: str | None = None
@@ -582,17 +584,17 @@ def test_edit_clears_default_effort_with_null() -> None:
     assert authoring.edit(routine, RoutineEdit(default_effort=None), _CTX).default_effort is None
 
 
-def test_edit_setting_a_default_urgency_lands_its_slug_under_that_urgencys_lock() -> None:
+def test_edit_setting_a_default_urgency_lands_its_id_under_that_urgencys_lock() -> None:
     transactions = _FakeTransactions()
     authoring, routines, _, _ = _authoring(
         urgencies=_FakeUrgencies({"urgent": _urgency("urgent")}), transactions=transactions
     )
     routine = _create(authoring)
 
-    edited = authoring.edit(routine, RoutineEdit(default_urgency="urgent"), _CTX)
+    edited = authoring.edit(routine, RoutineEdit(default_urgency_id=_URGENT), _CTX)
 
-    assert (edited.default_urgency, edited.revision) == ("urgent", 2)
-    assert routines.changes[-1].diff == (FieldChange("default_urgency", None, "urgent"),)
+    assert (edited.default_urgency_id, edited.revision) == (_URGENT, 2)
+    assert routines.changes[-1].diff == (FieldChange("default_urgency_id", None, _URGENT),)
     assert [unit.keys for unit in transactions.opened] == [[urgency_lock(UrgencyId("urg_urgent"))]]
     assert routines.units[-1] is transactions.opened[0]
 
@@ -604,10 +606,10 @@ def test_edit_clearing_the_default_urgency_with_null_opens_no_unit() -> None:
     )
     routine = _create(authoring, default_urgency=_urgency("urgent"))
 
-    edited = authoring.edit(routine, RoutineEdit(default_urgency=None), _CTX)
+    edited = authoring.edit(routine, RoutineEdit(default_urgency_id=None), _CTX)
 
-    assert edited.default_urgency is None
-    assert routines.changes[-1].diff == (FieldChange("default_urgency", "urgent", None),)
+    assert edited.default_urgency_id is None
+    assert routines.changes[-1].diff == (FieldChange("default_urgency_id", _URGENT, None),)
     assert len(transactions.opened) == 1
     assert routines.units[-1] is None
 
@@ -616,8 +618,22 @@ def test_edit_restating_the_default_urgency_writes_nothing() -> None:
     authoring, routines, _, _ = _authoring(urgencies=_FakeUrgencies({"urgent": _urgency("urgent")}))
     routine = _create(authoring, default_urgency=_urgency("urgent"))
 
-    assert authoring.edit(routine, RoutineEdit(default_urgency="urgent"), _CTX) is routine
+    assert authoring.edit(routine, RoutineEdit(default_urgency_id=_URGENT), _CTX) is routine
     assert routines.updates == []
+
+
+def test_an_edit_leaving_a_retired_default_urgency_takes_no_urgency_lock_and_leaves_the_revision_to_guard() -> None:
+    transactions = _FakeTransactions()
+    urgencies = _FakeUrgencies({"urgent": _urgency("urgent")}, retire_under_lock="urgent")
+    authoring, routines, _, _ = _authoring(urgencies=urgencies, transactions=transactions)
+    routine = replace(_create(authoring), default_urgency_id=_URGENT)
+    opened = len(transactions.opened)
+
+    edited = authoring.edit(routine, RoutineEdit(name="renamed"), _CTX)
+
+    assert (edited.name, edited.default_urgency_id) == ("renamed", _URGENT)
+    assert len(transactions.opened) == opened
+    assert routines.updates == [routine.revision]
 
 
 @pytest.mark.parametrize(
@@ -631,7 +647,7 @@ def test_edit_naming_an_unknown_or_retired_urgency_is_refused_naming_the_field(
     routine = _create(authoring)
 
     with pytest.raises(refusal) as exc_info:
-        authoring.edit(routine, RoutineEdit(default_urgency="urgent"), _CTX)
+        authoring.edit(routine, RoutineEdit(default_urgency_id=_URGENT), _CTX)
     assert exc_info.value.field == "default_urgency"
     assert routines.updates == []
 
@@ -642,7 +658,7 @@ def test_edit_naming_an_urgency_retired_before_its_lock_is_taken_is_refused_unde
     routine = _create(authoring)
 
     with pytest.raises(UrgencyRetired):
-        authoring.edit(routine, RoutineEdit(default_urgency="urgent"), _CTX)
+        authoring.edit(routine, RoutineEdit(default_urgency_id=_URGENT), _CTX)
     assert routines.updates == []
 
 
@@ -650,15 +666,14 @@ def test_a_retire_clears_each_routine_default_naming_it_with_its_own_revision_an
     authoring, routines, _, _ = _authoring(urgencies=_FakeUrgencies({"urgent": _urgency("urgent")}))
     named = _create(authoring, slug="named", default_urgency=_urgency("urgent"))
     other = _create(authoring, slug="other")
-    routines.urgency_slugs[UrgencyId("urg_urgent")] = "urgent"
     clearing = RoutineUrgencyClearing(routines=_as_write_routines(routines))
 
     clearing.clear(_urgency("urgent"), _CTX, at=_T0, transaction=cast(Transaction, _FakeUnit()))
 
     cleared = routines.by_id[named.routine_id]
-    assert (cleared.default_urgency, cleared.revision) == (None, 2)
+    assert (cleared.default_urgency_id, cleared.revision) == (None, 2)
     assert routines.changes[-1].record_key == "named"
-    assert routines.changes[-1].diff == (FieldChange("default_urgency", "urgent", None),)
+    assert routines.changes[-1].diff == (FieldChange("default_urgency_id", _URGENT, None),)
     assert routines.by_id[other.routine_id].revision == 1
 
 

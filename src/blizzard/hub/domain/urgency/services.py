@@ -12,7 +12,7 @@ from __future__ import annotations
 
 from collections.abc import Generator, Mapping, Sequence
 from contextlib import contextmanager
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 from blizzard.foundation.clock import IClock
 from blizzard.foundation.roles import domain_model
@@ -465,46 +465,35 @@ class TenantSettingsService:
 @domain_model
 @dataclass(frozen=True)
 class MintAhead:
-    """A mint's urgency chain as read ahead of its unit: the urgency each link names, and the default's id.
+    """A mint's urgency chain as read ahead of its unit: the id each link names, and the default's.
     :meth:`lock_keys` names the locks the unit declares beside its own — the settings' and every named urgency's."""
 
     default_id: UrgencyId
-    stated: Urgency | None = None
-    chore: Urgency | None = None
-    routine: Urgency | None = None
+    links: ChainLinks[UrgencyId] = field(default_factory=ChainLinks[UrgencyId])
 
     def lock_keys(self) -> list[tuple[str, str]]:
-        named = {u.urgency_id for u in (self.stated, self.chore, self.routine) if u is not None} - {self.default_id}
+        named = set(self.links.named()) - {self.default_id}
         return [*default_lock_keys(self.default_id), *sorted(urgency_lock(urgency_id) for urgency_id in named)]
 
 
 class TenantDefault:
-    """The mint's urgency seam, in two halves (``bzh:write-reestablishes-read``). :meth:`ahead`, before the mint's
-    unit, reads what each link of the chain names and the default, so the unit declares their locks beside its own;
-    :meth:`resolve`, under them, re-reads each named urgency by id and the default, and resolves the chain over what
-    it read there (:func:`~blizzard.hub.domain.urgency.chain.resolve_chain`). The settings' lock holds the default
-    still, since every change of the default and every retire takes it, so a default that moved between the two
-    reads is still live. A chore's or a routine's urgency retired ahead of the unit names none and takes no lock."""
+    """The mint's urgency seam (``bzh:write-reestablishes-read``): :meth:`ahead`, before the mint's unit, names the
+    locks of the default and of every urgency a link names, retired or not; :meth:`resolve`, under them, re-reads
+    each and resolves the chain (:func:`~blizzard.hub.domain.urgency.chain.resolve_chain`)."""
 
     def __init__(self, *, settings: IReadTenantSettings, urgencies: IReadUrgencyRepository) -> None:
         self._settings = settings
         self._urgencies = urgencies
 
     def ahead(
-        self, *, stated: Urgency | None = None, chore: str | None = None, routine: str | None = None
+        self, *, stated: Urgency | None = None, chore: UrgencyId | None = None, routine: UrgencyId | None = None
     ) -> MintAhead:
         """The chain ahead of the unit: ``stated`` — the urgency the request names, which the edge resolved and
-        confirmed live — and the slugs a chore's override and a routine's default name."""
+        confirmed live — and the ids a chore's override and a routine's default name."""
         return MintAhead(
             default_id=_settings(self._settings).default_urgency_id,
-            stated=stated,
-            chore=self._live(chore),
-            routine=self._live(routine),
+            links=ChainLinks(stated=None if stated is None else stated.urgency_id, chore=chore, routine=routine),
         )
-
-    def _live(self, slug: str | None) -> Urgency | None:
-        found = None if slug is None else self._urgencies.get_by_slug(slug)
-        return found if found is not None and not found.retired else None
 
     def resolve(self, ahead: MintAhead, transaction: Transaction) -> Urgency:
         """The urgency the chunk is minted with, read under the locks ``ahead`` named.
@@ -515,49 +504,53 @@ class TenantDefault:
             settings.default_urgency_id,
             self._urgencies.get(settings.default_urgency_id, transaction=transaction),
         )
-        stated = None if ahead.stated is None else self._again(ahead.stated, URGENCY_FIELD, transaction)
+        links = ahead.links
         return resolve_chain(
             ChainLinks(
-                stated=stated,
-                chore=self._again_or_none(ahead.chore, transaction),
-                routine=self._again_or_none(ahead.routine, transaction),
+                stated=self._again(URGENCY_FIELD, links.stated, transaction),
+                chore=self._again(URGENCY_FIELD, links.chore, transaction),
+                routine=self._again(DEFAULT_URGENCY_FIELD, links.routine, transaction),
             ),
             default,
         )
 
-    def _again(self, urgency: Urgency, field: str, transaction: Transaction) -> Urgency:
-        held = self._urgencies.get(urgency.urgency_id, transaction=transaction)
-        if held is None:
-            raise UrgencyUnknown(field, urgency.urgency_id)
-        return held
+    def _again(self, field: str, urgency_id: UrgencyId | None, transaction: Transaction) -> Urgency | None:
+        return None if urgency_id is None else reread(self._urgencies, field, urgency_id, transaction=transaction)
 
-    def _again_or_none(self, urgency: Urgency | None, transaction: Transaction) -> Urgency | None:
-        return None if urgency is None else self._urgencies.get(urgency.urgency_id, transaction=transaction)
+
+def reread(
+    urgencies: IReadUrgencyRepository, field: str, urgency_id: UrgencyId, *, transaction: Transaction
+) -> Urgency:
+    """The urgency ``urgency_id`` names, read again in ``transaction`` under its lock; :class:`UrgencyUnknown`, naming
+    ``field``, when none is stored."""
+    held = urgencies.get(urgency_id, transaction=transaction)
+    if held is None:
+        raise UrgencyUnknown(field, urgency_id)
+    return held
 
 
 class UrgencyReferences:
-    """Holds still the urgencies a routine's or a chore's write names. :meth:`held` confirms each live ahead of the
-    unit, opens one unit locking them all, and confirms each live again under the locks, so no reference lands on an
-    urgency in the moment it is retired (``bzh:write-reestablishes-read``)."""
+    """Holds still the urgencies a routine's or a chore's write newly names: :meth:`held` opens one unit locking them
+    all and confirms each live under the locks, so no reference lands on an urgency in the moment it is retired
+    (``bzh:write-reestablishes-read``)."""
 
     def __init__(self, *, urgencies: IReadUrgencyRepository, transactions: IHubTransactions) -> None:
         self._urgencies = urgencies
         self._transactions = transactions
 
     @contextmanager
-    def held(self, named: Mapping[str, str]) -> Generator[Transaction | None, None, None]:
-        """``named`` maps each field that names an urgency to the slug it names. With none named it opens no unit and
-        yields ``None``; otherwise it yields the locked unit the write joins. :class:`UrgencyUnknown` or
-        :class:`UrgencyRetired`, naming the field, when one is not live — before the unit, or under its locks."""
+    def held(self, named: Mapping[str, UrgencyId]) -> Generator[Transaction | None, None, None]:
+        """``named`` maps each field that names an urgency to its id. With none named it opens no unit and yields
+        ``None``; otherwise it yields the locked unit the write joins. :class:`UrgencyUnknown` or
+        :class:`UrgencyRetired`, naming the field, when one is not live under the locks."""
         if not named:
             yield None
             return
-        ahead = {field: require_live(field, slug, self._urgencies.get_by_slug(slug)) for field, slug in named.items()}
-        keys = sorted({urgency_lock(urgency.urgency_id) for urgency in ahead.values()})
+        keys = sorted({urgency_lock(urgency_id) for urgency_id in named.values()})
         with self._transactions.begin() as transaction:
             locked = transaction.lock_set(keys=keys)
-            for field, urgency in ahead.items():
-                require_live(field, urgency.slug, self._urgencies.get(urgency.urgency_id, transaction=locked))
+            for field, urgency_id in named.items():
+                require_live(field, urgency_id, reread(self._urgencies, field, urgency_id, transaction=locked))
             yield locked
 
 

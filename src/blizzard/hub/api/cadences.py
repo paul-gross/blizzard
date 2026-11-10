@@ -11,7 +11,7 @@ cadence promoting its runs needs. Every view carries the cadence's attention, re
 
 from __future__ import annotations
 
-from collections.abc import Callable, Sequence
+from collections.abc import Callable, Mapping, Sequence
 from functools import partial
 from typing import Annotated, Literal
 
@@ -28,6 +28,7 @@ from blizzard.hub.api.problem_exceptions import ProblemHTTPException
 from blizzard.hub.api.project_label_fields import ProjectLabelFields
 from blizzard.hub.api.project_labels import ProjectLabels
 from blizzard.hub.api.project_params import PathProject, QueryProject
+from blizzard.hub.api.urgency_refs import urgency_slug
 from blizzard.hub.auth.models import ResolvedIdentity
 from blizzard.hub.auth.permissions import Permission, may_admit
 from blizzard.hub.composition import TenantServices
@@ -49,6 +50,7 @@ from blizzard.hub.domain.cadence.services import ErrandView
 from blizzard.hub.domain.config.errors import ConfigFieldError, ConfigRevisionConflict
 from blizzard.hub.domain.kernel.unset import UNSET
 from blizzard.hub.domain.projects.model import Project
+from blizzard.hub.domain.urgency.model import Urgency, UrgencyId
 from blizzard.wire.cadence import (
     CadenceAttentionView,
     CadenceCreateRequest,
@@ -77,16 +79,13 @@ def schedule_shape(schedule: CadenceScheduleDocument | None) -> ScheduleShape | 
     return None if schedule is None else ScheduleShape(schedule.cron, schedule.zone)
 
 
-def _as_written(field: str, key: str) -> str:
-    """A document names an urgency by its slug, so its key is the slug as written."""
-    return key
+#: Turns the key a chore's ``urgency`` names, on its field, into the urgency's id.
+UrgencyNamer = Callable[[str, str], UrgencyId]
 
 
-def chore_shapes(
-    chores: Sequence[ChoreDocument], urgency_slug: Callable[[str, str], str] = _as_written
-) -> tuple[ChoreShape, ...]:
-    """The chores a request or document entry states, in the order written; ``urgency_slug`` turns the key a chore's
-    ``urgency`` names, on its field, into the urgency's slug."""
+def chore_shapes(chores: Sequence[ChoreDocument], urgency: UrgencyNamer | None = None) -> tuple[ChoreShape, ...]:
+    """The chores a request or document entry states, in the order written, each chore's ``urgency`` resolved by
+    ``urgency``; without one — a document, whose apply resolves them — each chore names none."""
     return tuple(
         ChoreShape(
             key=chore.key,
@@ -95,13 +94,15 @@ def chore_shapes(
             mode=None if chore.mode is None else chore.mode.value,
             note=chore.note,
             promote=chore.promote,
-            urgency=None if chore.urgency is None else urgency_slug(f"chores[{index}].urgency", chore.urgency),
+            urgency_id=None
+            if chore.urgency is None or urgency is None
+            else urgency(f"chores[{index}].urgency", chore.urgency),
         )
         for index, chore in enumerate(chores)
     )
 
 
-def cadence_shape(document: CadenceDocument, urgency_slug: Callable[[str, str], str] = _as_written) -> CadenceShape:
+def cadence_shape(document: CadenceDocument, urgency: UrgencyNamer | None = None) -> CadenceShape:
     """The create shape a request or document entry states."""
     return CadenceShape(
         slug=document.slug,
@@ -109,14 +110,14 @@ def cadence_shape(document: CadenceDocument, urgency_slug: Callable[[str, str], 
         schedule=schedule_shape(document.schedule),
         spacing=document.spacing,
         anchor=document.anchor,
-        chores=chore_shapes(document.chores, urgency_slug),
+        chores=chore_shapes(document.chores, urgency),
     )
 
 
-def _named_urgency(services: TenantServices) -> Callable[[str, str], str]:
-    """A request names an urgency by id or slug: each resolves to the slug of the urgency the tenant holds, and one
+def _named_urgency(services: TenantServices) -> UrgencyNamer:
+    """A request names an urgency by id or slug: each resolves to the id of the urgency the tenant holds, and one
     naming none is refused ``urgency_unknown``."""
-    return lambda field, key: services.urgency_reading.named(field, key).slug
+    return lambda field, key: services.urgency_reading.named(field, key).urgency_id
 
 
 def chore_scopes(chore: Chore) -> Literal["all"] | list[str] | None:
@@ -152,7 +153,7 @@ def _errand_view(row: ErrandView) -> CadenceErrandView:
     )
 
 
-def _cadence_view(read: CadenceRead, labels: ProjectLabelFields) -> CadenceView:
+def _cadence_view(read: CadenceRead, labels: ProjectLabelFields, urgencies: Mapping[UrgencyId, Urgency]) -> CadenceView:
     cadence = read.cadence
     rhythm = cadence.rhythm
     anchor = rhythm.effective_anchor()
@@ -175,7 +176,7 @@ def _cadence_view(read: CadenceRead, labels: ProjectLabelFields) -> CadenceView:
                 note=chore.spec.note,
                 promote=chore.spec.promote,
                 scopes_set_at=iso_utc(chore.scopes_set_at),
-                urgency=chore.spec.urgency,
+                urgency=urgency_slug(chore.spec.urgency_id, urgencies),
             )
             for chore in cadence.chores
         ],
@@ -192,13 +193,18 @@ def _cadence_view(read: CadenceRead, labels: ProjectLabelFields) -> CadenceView:
 def _labelled(cadence: Cadence, services: TenantServices) -> CadenceView:
     """``cadence``'s view as a write left it, labelled from one read of its project."""
     read = services.cadence_reading.view(cadence)
-    return _cadence_view(read, ProjectLabels.read(services, [cadence.project_id]).fields(cadence.project_id))
+    return _cadence_view(
+        read,
+        ProjectLabels.read(services, [cadence.project_id]).fields(cadence.project_id),
+        services.urgency_reading.by_id(),
+    )
 
 
 def _listing(services: TenantServices, project_id: str | None, *, include_retired: bool) -> list[CadenceView]:
     reads = services.cadence_reading.list_cadences(project_id, include_retired=include_retired)
     labels = ProjectLabels.read(services, (r.cadence.project_id for r in reads))
-    return [_cadence_view(r, labels.fields(r.cadence.project_id)) for r in reads]
+    urgencies = services.urgency_reading.by_id()
+    return [_cadence_view(r, labels.fields(r.cadence.project_id), urgencies) for r in reads]
 
 
 def _unprocessable(exc: ConfigFieldError) -> HTTPException:
@@ -242,7 +248,9 @@ def _create(
     except CadenceAdmissionRefused as exc:
         raise admission_refused(exc) from exc
     read = services.cadence_reading.view(cadence)
-    return _cadence_view(read, ProjectLabels.of_project(project).fields(cadence.project_id))
+    return _cadence_view(
+        read, ProjectLabels.of_project(project).fields(cadence.project_id), services.urgency_reading.by_id()
+    )
 
 
 @project_router.post("/cadences", response_model=CadenceView, status_code=status.HTTP_201_CREATED)
@@ -294,7 +302,7 @@ def get_cadence(cadence_id: str, services: Services) -> CadenceView:
     if read is None:
         raise ProblemHTTPException(partial(problems_garden.cadence_not_found_problem, f"unknown cadence {cadence_id}"))
     labels = ProjectLabels.read(services, [read.cadence.project_id])
-    return _cadence_view(read, labels.fields(read.cadence.project_id))
+    return _cadence_view(read, labels.fields(read.cadence.project_id), services.urgency_reading.by_id())
 
 
 @router.get(

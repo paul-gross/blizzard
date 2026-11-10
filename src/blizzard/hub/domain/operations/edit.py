@@ -17,14 +17,15 @@ from blizzard.foundation.chunk_status import ChunkStatus
 from blizzard.foundation.roles import domain_model
 from blizzard.hub.domain.chunk.errors import ChunkNotFound
 from blizzard.hub.domain.chunk.model import Chunk, ChunkFacts, ChunkVerb, IntendedMigration
-from blizzard.hub.domain.chunk.ports.exclusive import IChunkExclusiveWrites, ILockedChunkRead
+from blizzard.hub.domain.chunk.ports.exclusive import IChunkExclusiveWrites
 from blizzard.hub.domain.chunk.ports.record import IWriteChunkRecordRepository
 from blizzard.hub.domain.graph.harnesses import validated_harnesses
 from blizzard.hub.domain.graph.model import Graph, GraphStanding, IReadGraphRepository
 from blizzard.hub.domain.kernel.unset import UNSET, UnsetType
 from blizzard.hub.domain.urgency.chain import URGENCY_FIELD
-from blizzard.hub.domain.urgency.model import Urgency, UrgencyId, UrgencyUnknown, require_live
+from blizzard.hub.domain.urgency.model import Urgency, UrgencyId, require_live
 from blizzard.hub.domain.urgency.ports import IReadUrgencyRepository, urgency_lock
+from blizzard.hub.domain.urgency.services import reread
 
 #: The verb each field :class:`ChunkEdit` carries is admitted by — its status window.
 _FIELD_VERB: Mapping[str, ChunkVerb] = MappingProxyType(
@@ -315,7 +316,9 @@ class EditService:
                 migration_target=migration_target,
                 migration_target_retired=migration_target is not None
                 and self._graphs.is_retired(migration_target.graph_id),
-                urgency=None if edit.urgency is UNSET else self._urgency_again(edit.urgency, handle),
+                urgency=None
+                if edit.urgency is UNSET
+                else reread(self._urgencies, URGENCY_FIELD, edit.urgency.urgency_id, transaction=handle.transaction),
             )
             if plan.graph_id is not None:
                 self._record.set_graph_locked(handle, chunk.chunk_id, graph_id=plan.graph_id)
@@ -332,9 +335,3 @@ class EditService:
             if plan.urgency_id is not None:
                 self._record.set_urgency(chunk.chunk_id, urgency_id=plan.urgency_id, transaction=handle.transaction)
         return plan
-
-    def _urgency_again(self, urgency: Urgency, handle: ILockedChunkRead) -> Urgency:
-        held = self._urgencies.get(urgency.urgency_id, transaction=handle.transaction)
-        if held is None:
-            raise UrgencyUnknown(URGENCY_FIELD, urgency.urgency_id)
-        return held

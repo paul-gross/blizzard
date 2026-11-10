@@ -19,16 +19,19 @@ URGENCY_FIELD = "urgency"
 
 @domain_model
 @dataclass(frozen=True)
-class ChainLinks:
-    """What each link above the tenant's default names — ``None`` for a link naming none, or one the mint has
-    none of."""
+class ChainLinks[T]:
+    """What each link above the tenant's default names — by id ahead of the mint's unit, as the urgency read under
+    its locks — ``None`` for a link naming none, or one the mint has none of."""
 
-    stated: Urgency | None = None
-    chore: Urgency | None = None
-    routine: Urgency | None = None
+    stated: T | None = None
+    chore: T | None = None
+    routine: T | None = None
+
+    def named(self) -> list[T]:
+        return [link for link in (self.stated, self.chore, self.routine) if link is not None]
 
 
-def resolve_chain(links: ChainLinks, default: Urgency) -> Urgency:
+def resolve_chain(links: ChainLinks[Urgency], default: Urgency) -> Urgency:
     """The urgency the chunk is minted with. :class:`~blizzard.hub.domain.urgency.model.UrgencyRetired` when the
     stated urgency, or the default the chain falls through to, is retired."""
     if links.stated is not None:

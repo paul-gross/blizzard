@@ -191,7 +191,7 @@ class CadenceMint:
             default_harnesses=routine.default_harnesses,
         )
         promote = errand.chore.spec.promote
-        ahead = self._default.ahead(chore=errand.chore.spec.urgency, routine=routine.default_urgency)
+        ahead = self._default.ahead(chore=errand.chore.spec.urgency_id, routine=routine.default_urgency_id)
         with self._transactions.begin() as transaction:
             locked = transaction.lock_set(
                 chunks=[draft.chunk_id] if promote else [],

@@ -1,8 +1,7 @@
 """The cadence entry of a configuration document (``bzh:config-apply``).
 
-An entry is held to the rules a create and an edit are, and to one reference check: a chore's routine and scopes are
-named by slug and need not resolve, since what does not is shown as the cadence's attention, but a chore's urgency
-must name one stored or created by the document, and not a retired one. An entry is compared
+An entry is held to the rules a create and an edit are, and to no reference check: a chore's routine and scopes are
+named by slug and need not resolve, since what does not is shown as the cadence's attention. An entry is compared
 with its stored cadence by effective value — a spacing by its minutes, an unstated anchor as ``started`` — so a
 document export writes applies back with no write. A planned write that leaves the cadence admitting work needs
 ``may_admit``; an entry that already stands as declared plans none, and so asks nothing."""
@@ -20,7 +19,6 @@ from blizzard.hub.domain.config.changes import ChangeContext, ConfigChange
 from blizzard.hub.domain.config.errors import ConfigFieldError
 from blizzard.hub.domain.config.records import NamedRetirableConfiguredRecord
 from blizzard.hub.domain.kernel.unset import UNSET
-from blizzard.hub.domain.urgency.model import require_referenced
 
 
 @domain_model
@@ -46,17 +44,8 @@ class CadenceDeclaration:
         return (self.project_id, self.handle)
 
     def check(self, refs: DeclaredReferences, stored: NamedRetirableConfiguredRecord | None) -> None:
-        """Only a chore's urgency is checked: an unresolved routine or scope is attention, never a refusal."""
-        for field, slug in self.named_urgencies(stored).items():
-            require_referenced(field, slug, refs.urgencies)
-
-    def named_urgencies(self, stored: NamedRetirableConfiguredRecord | None) -> dict[str, str]:
-        """The urgency each chore the entry writes overrides with, by the chore's field — the create's chores, or an
-        edit's when it states them."""
-        chores = self.shape.chores if stored is None else (() if self.edit.chores is UNSET else self.edit.chores)
-        return {
-            f"chores[{index}].urgency": chore.urgency for index, chore in enumerate(chores) if chore.urgency is not None
-        }
+        """Nothing a chore names is checked: an unresolved one is attention, never a refusal."""
+        return None
 
     def create(self, ctx: ChangeContext, *, at: datetime) -> tuple[Cadence, ConfigChange]:
         return Cadence.new(self.shape, project_id=self.project_id, ctx=ctx, at=at)

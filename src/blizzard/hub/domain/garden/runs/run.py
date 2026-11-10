@@ -260,7 +260,7 @@ class RunService:
             default_effort=routine.default_effort,
             default_harnesses=routine.default_harnesses,
         )
-        ahead = self._default.ahead(stated=urgency, routine=routine.default_urgency)
+        ahead = self._default.ahead(stated=urgency, routine=routine.default_urgency_id)
         with self._transactions.begin() as transaction:
             locked = transaction.lock_set(keys=ahead.lock_keys())
             chunk = draft.mint(self._default.resolve(ahead, locked).urgency_id)

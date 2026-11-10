@@ -4,13 +4,14 @@ declaration to :class:`~blizzard.hub.domain.config.authoring.ConfigAuthoring` to
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from dataclasses import dataclass, field, replace
 
 from blizzard.foundation.clock import IClock
 from blizzard.foundation.ids import Id, IdPrefix
 from blizzard.foundation.roles import domain_model
 from blizzard.hub.domain.cadence.declarations import CadenceDeclaration
-from blizzard.hub.domain.cadence.model import Cadence
+from blizzard.hub.domain.cadence.model import Cadence, ChoreShape
 from blizzard.hub.domain.cadence.ports import IReadCadenceRepository
 from blizzard.hub.domain.config.apply import (
     CADENCES_SECTION,
@@ -26,9 +27,9 @@ from blizzard.hub.domain.config.apply import (
     DeclaredReferences,
     EntryOutcome,
     ForgeDeclaration,
-    ReferencedUrgency,
     RepositoryDeclaration,
     StoredConfig,
+    UrgencyReferenceGuard,
     WorkSourceDeclaration,
     require_appliable_forges,
 )
@@ -60,9 +61,10 @@ from blizzard.hub.domain.config.work_sources import (
     WorkSourceSlug,
     require_known_provider,
 )
-from blizzard.hub.domain.config_apply.entries import DeclaredRoutine, DocumentEntries
+from blizzard.hub.domain.config_apply.entries import DeclaredCadence, DeclaredRoutine, DocumentEntries
 from blizzard.hub.domain.garden.declarations import RoutineDeclaration, ScopeDeclaration
 from blizzard.hub.domain.garden.routines import (
+    DEFAULT_URGENCY_FIELD,
     IReadRoutineRepository,
     IReadRoutineScopeRepository,
     Routine,
@@ -83,7 +85,7 @@ from blizzard.hub.domain.projects.links import IReadProjectLinks, RepositoryLink
 from blizzard.hub.domain.projects.model import IReadProjectRepository, Project, ProjectId, ProjectSlug
 from blizzard.hub.domain.projects.order import IReadProjectPositions
 from blizzard.hub.domain.urgency.declarations import StoredUrgencies, UrgencyWrite, plan_urgencies
-from blizzard.hub.domain.urgency.model import UrgencyId
+from blizzard.hub.domain.urgency.model import Urgency, UrgencyId, require_live
 from blizzard.hub.domain.urgency.ports import (
     IReadTenantSettings,
     IReadUrgencyOrder,
@@ -144,6 +146,40 @@ class _WorkSources:
         return (*(r.ref() for r in self.stored.values()), *created), {s: r.ref() for s, r in self.former.items()}
 
 
+class _UrgencyNames:
+    """The urgencies the routine and cadence entries may name, by slug: every stored one, read on the first entry
+    naming one, and each the document creates, under the id the plan minted for it. :meth:`id_of` resolves an entry's
+    slug at the apply's edge, so no declaration holds one."""
+
+    def __init__(self, urgencies: IReadUrgencyRepository, plan: ApplyPlan) -> None:
+        self._urgencies = urgencies
+        self._created = {
+            write.record.urgency.slug: write.record.urgency
+            for write in plan.writes
+            if isinstance(write.record, UrgencyWrite) and write.from_revision is None
+        }
+        self._by_slug: dict[str, Urgency] | None = None
+
+    def id_of(self, section: str, index: int, field: str, slug: str) -> UrgencyId:
+        """The live urgency ``slug`` names on the entry's ``field``; the entry is refused ``urgency_unknown`` or
+        ``urgency_retired`` otherwise."""
+        if self._by_slug is None:
+            self._by_slug = {u.slug: u for u in self._urgencies.list_all()} | self._created
+        try:
+            return require_live(field, slug, self._by_slug.get(slug)).urgency_id
+        except ConfigFieldError as exc:
+            raise ApplyEntryRefused(section, index, exc) from exc
+
+    def guards(self, section: str, index: int, named: set[UrgencyId]) -> list[UrgencyReferenceGuard]:
+        """A guard for each stored urgency of ``named`` — one the document creates needs none."""
+        stored = {u.urgency_id: u for u in (self._by_slug or {}).values() if u.slug not in self._created}
+        return [
+            UrgencyReferenceGuard(section, index, urgency_id, stored[urgency_id].slug, stored[urgency_id].revision)
+            for urgency_id in sorted(named)
+            if urgency_id in stored
+        ]
+
+
 class ConfigApplication:
     """Reconciles a document's entries against the tenant's stored records in one transaction, or rolls the same
     transaction back for a dry run."""
@@ -202,23 +238,19 @@ class ConfigApplication:
         projects = self._plan_projects(entries, ctx, repositories, sources)
         held_forges = {f.slug: f for f in self._forges.list_all(include_retired=True)}
         declared_forges, lookup, former_forges = self._held_forges(entries, held_forges, ctx)
-        declaration = self._declaration(entries, projects, repositories, sources, lookup)
-        cadences, held_cadences = self._cadence_declarations(entries, projects, may_admit=may_admit)
         urgency_plan = self._plan_urgencies(entries, ctx)
-        referenced = self._referenced_urgencies(entries, urgency_plan)
+        names = _UrgencyNames(self._urgencies, urgency_plan)
+        declaration = self._declaration(entries, projects, repositories, sources, lookup, names)
+        cadences, held_cadences = self._cadence_declarations(entries, projects, names, may_admit=may_admit)
+        declaration = replace(declaration, declared_forges=declared_forges, cadences=cadences, urgencies=urgency_plan)
+        stored = self._stored(declaration, repositories, sources, held_forges, former_forges, held_cadences)
+        guards = _reference_guards(declaration, stored, names)
         declaration = replace(
             declaration,
-            declared_forges=declared_forges,
-            cadences=cadences,
-            urgencies=urgency_plan,
-            reference_locks=tuple(sorted({urgency_lock(UrgencyId(held.urgency_id)) for held in referenced.values()})),
+            reference_guards=guards,
+            reference_locks=tuple(sorted({urgency_lock(UrgencyId(guard.urgency_id)) for guard in guards})),
         )
-        outcomes = self._authoring.apply(
-            declaration,
-            self._stored(declaration, repositories, sources, held_forges, former_forges, held_cadences, referenced),
-            ctx,
-            dry_run=dry_run,
-        )
+        outcomes = self._authoring.apply(declaration, stored, ctx, dry_run=dry_run)
         return ApplyResult(apply_id, tuple(outcomes))
 
     def _held_forges(
@@ -391,20 +423,6 @@ class ConfigApplication:
         stored = StoredUrgencies(self._tenant_id, tuple(self._urgencies.list_all()), order, settings)
         return plan_urgencies(entries.urgencies, stored, ctx, pick=self._pick, at=self._clock.now())
 
-    def _referenced_urgencies(self, entries: DocumentEntries, plan: ApplyPlan) -> dict[str, ReferencedUrgency]:
-        """Every urgency the routine and cadence entries name that is stored or created by the document, by slug — the
-        stored ones read only when an entry names one, and a created one under the id the plan minted for it. A slug
-        naming none is absent, which the entry's check refuses."""
-        named = _named_urgencies(entries)
-        if not named:
-            return {}
-        held = {u.slug: ReferencedUrgency(u.urgency_id, u.retired) for u in self._urgencies.list_all()}
-        for write in plan.writes:
-            if isinstance(write.record, UrgencyWrite) and write.from_revision is None:
-                created = write.record.urgency
-                held[created.slug] = ReferencedUrgency(created.urgency_id, retired=False)
-        return {slug: held[slug] for slug in sorted(named) if slug in held}
-
     @staticmethod
     def _declaration(
         entries: DocumentEntries,
@@ -412,6 +430,7 @@ class ConfigApplication:
         held: _Repositories,
         sources_held: _WorkSources,
         forges: PlannedForges,
+        names: _UrgencyNames,
     ) -> ConfigDeclaration:
         """The domain's declarations from the entries: each record under the id it takes and on the forge it names,
         and each scope and routine within the project it names, as the apply leaves the projects. An entry's
@@ -484,18 +503,25 @@ class ConfigApplication:
                 for index, scope in enumerate(entries.scopes)
             ),
             routines=tuple(
-                ConfigApplication._routine_declaration(index, routine, projects)
+                ConfigApplication._routine_declaration(index, routine, projects, names)
                 for index, routine in enumerate(entries.routines)
             ),
         )
 
     @staticmethod
-    def _routine_declaration(index: int, routine: DeclaredRoutine, projects: ProjectsPlan) -> RoutineDeclaration:
-        """The declaration of one routine entry; an entry stating neither slug nor name is refused at the entry."""
+    def _routine_declaration(
+        index: int, routine: DeclaredRoutine, projects: ProjectsPlan, names: _UrgencyNames
+    ) -> RoutineDeclaration:
+        """The declaration of one routine entry, its default urgency resolved; an entry stating neither slug nor name
+        is refused at the entry."""
         try:
             stated_handle(routine.slug, routine.name)
         except ConfigFieldError as exc:
             raise ApplyEntryRefused(ROUTINES_SECTION, index, exc) from exc
+        slug = routine.default_urgency
+        urgency_id = (
+            slug if slug is None or slug is UNSET else names.id_of(ROUTINES_SECTION, index, DEFAULT_URGENCY_FIELD, slug)
+        )
         return RoutineDeclaration(
             slug=routine.slug,
             name=routine.name,
@@ -504,19 +530,19 @@ class ConfigApplication:
             default_model=routine.default_model,
             default_effort=routine.default_effort,
             default_harnesses=routine.default_harnesses,
-            edit=routine.edit,
+            edit=routine.edit if urgency_id is UNSET else replace(routine.edit, default_urgency_id=urgency_id),
             project_id=projects.project_of(ROUTINES_SECTION, index, routine.project).project_id,
             scopes=routine.scopes,
-            default_urgency=routine.default_urgency,
+            default_urgency_id=None if urgency_id is UNSET else urgency_id,
         )
 
     def _cadence_declarations(
-        self, entries: DocumentEntries, projects: ProjectsPlan, *, may_admit: bool
+        self, entries: DocumentEntries, projects: ProjectsPlan, names: _UrgencyNames, *, may_admit: bool
     ) -> tuple[tuple[CadenceDeclaration, ...], dict[tuple[str, str], Cadence]]:
-        """Each cadence entry within the project it names, beside the revision of the stored cadence it names, and
-        those stored cadences by key — one read per project the entries name."""
+        """Each cadence entry within the project it names, its chores' urgencies resolved, beside the revision of the
+        stored cadence it names, and those stored cadences by key — one read per project the entries name."""
         keyed = [
-            (projects.project_of(CADENCES_SECTION, index, entry.project).project_id, entry)
+            (projects.project_of(CADENCES_SECTION, index, entry.project).project_id, _resolved(index, entry, names))
             for index, entry in enumerate(entries.cadences)
         ]
         held: dict[tuple[str, str], Cadence] = {}
@@ -542,7 +568,6 @@ class ConfigApplication:
         forges: dict[str, ConfiguredForge],
         former_forges: dict[str, ConfiguredForge],
         cadences: dict[tuple[str, str], Cadence],
-        urgencies: dict[str, ReferencedUrgency],
     ) -> StoredConfig:
         secrets = self._secrets.get_many(list(declaration.secrets))
         declared_slugs = {d.slug for d in declaration.repositories}
@@ -583,20 +608,46 @@ class ConfigApplication:
                 scopes=frozenset(scopes) | {d.key for d in declared_scopes},
                 enabled_graphs=frozenset(self._graphs.enabled_names(sorted(graph_names))),
                 linked_scopes=linked,
-                urgencies=urgencies,
             ),
         )
 
 
-def _named_urgencies(entries: DocumentEntries) -> set[str]:
-    """The slug of every urgency a routine or cadence entry names, on its create shape or its edit."""
-    named: set[str] = set()
-    for routine in entries.routines:
-        if routine.default_urgency is not None:
-            named.add(routine.default_urgency)
-        if isinstance(routine.edit.default_urgency, str):
-            named.add(routine.edit.default_urgency)
-    for cadence in entries.cadences:
-        chores = [*cadence.shape.chores, *(() if cadence.edit.chores is UNSET else cadence.edit.chores)]
-        named.update(chore.urgency for chore in chores if chore.urgency is not None)
-    return named
+def _resolved(index: int, entry: DeclaredCadence, names: _UrgencyNames) -> DeclaredCadence:
+    """``entry`` with the urgency each chore names resolved into its create shape and, when it states chores, its
+    edit."""
+    if not any(entry.chore_urgencies):
+        return entry
+    ids = [
+        None if slug is None else names.id_of(CADENCES_SECTION, index, f"chores[{position}].urgency", slug)
+        for position, slug in enumerate(entry.chore_urgencies)
+    ]
+
+    def named(chores: Sequence[ChoreShape]) -> tuple[ChoreShape, ...]:
+        return tuple(replace(chore, urgency_id=urgency_id) for chore, urgency_id in zip(chores, ids, strict=True))
+
+    edit = entry.edit if entry.edit.chores is UNSET else replace(entry.edit, chores=named(entry.edit.chores))
+    return replace(entry, shape=replace(entry.shape, chores=named(entry.shape.chores)), edit=edit)
+
+
+def _reference_guards(
+    declaration: ConfigDeclaration, stored: StoredConfig, names: _UrgencyNames
+) -> tuple[UrgencyReferenceGuard, ...]:
+    """A guard for each stored urgency a routine's or a cadence's write newly names — one its stored record does not
+    already name. A reference the write leaves is the record's revision's to guard, since a retire clearing it moves
+    that revision."""
+    guards: list[UrgencyReferenceGuard] = []
+    for index, routine in enumerate(declaration.routines):
+        assert isinstance(routine, RoutineDeclaration)
+        held = stored.routines.get(routine.key)
+        named = routine.default_urgency_id if held is None else routine.edit.default_urgency_id
+        before = held.default_urgency_id if isinstance(held, Routine) else None
+        if isinstance(named, str) and named != before:
+            guards.extend(names.guards(ROUTINES_SECTION, index, {named}))
+    for index, cadence in enumerate(declaration.cadences):
+        assert isinstance(cadence, CadenceDeclaration)
+        held = stored.cadences.get(cadence.key)
+        chores = cadence.shape.chores if held is None else cadence.edit.chores
+        named = {c.urgency_id for c in (() if chores is UNSET else chores) if c.urgency_id is not None}
+        before = {c.spec.urgency_id for c in (held.chores if isinstance(held, Cadence) else ())}
+        guards.extend(names.guards(CADENCES_SECTION, index, named - before))
+    return tuple(guards)

@@ -12,6 +12,7 @@ and an optional ``If-Match`` (``bzh:configured-record``). ``GET /routines/trend`
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from datetime import datetime
 from functools import partial
 from typing import Annotated
@@ -31,6 +32,7 @@ from blizzard.hub.api.project_label_fields import ProjectLabelFields
 from blizzard.hub.api.project_labels import ProjectLabels
 from blizzard.hub.api.project_params import CallProject, PathProject, QueryProject, project_of_call
 from blizzard.hub.api.urgencies import stated_urgency, urgency_refusal
+from blizzard.hub.api.urgency_refs import urgency_slug
 from blizzard.hub.auth.models import ResolvedIdentity
 from blizzard.hub.auth.permissions import Permission
 from blizzard.hub.composition import TenantServices
@@ -57,7 +59,7 @@ from blizzard.hub.domain.garden.runs.window import InvalidWindowError, require_u
 from blizzard.hub.domain.garden.scopes import Scope, ScopeSlug, ScopeSlugError
 from blizzard.hub.domain.graph.harnesses import InvalidHarnesses
 from blizzard.hub.domain.projects.model import Project
-from blizzard.hub.domain.urgency.model import UrgencyRetired, UrgencyUnknown
+from blizzard.hub.domain.urgency.model import Urgency, UrgencyId, UrgencyRetired, UrgencyUnknown
 from blizzard.wire.garden_proposal_counts import GardenProposalCountsRowView, GardenProposalCountsView
 from blizzard.wire.garden_sweeps import GardenSweepsView, MeasurementReadingView, ScopeSweepView
 from blizzard.wire.garden_trend import TrendAgeView, TrendPeriodView, TrendView
@@ -77,7 +79,7 @@ router = APIRouter(prefix="/api", tags=["routines"], dependencies=_GUARDS)
 project_router = APIRouter(prefix="/api/projects/{project}", tags=["routines"], dependencies=_GUARDS)
 
 
-def _routine_view(routine: Routine, labels: ProjectLabelFields) -> RoutineView:
+def _routine_view(routine: Routine, labels: ProjectLabelFields, urgencies: Mapping[UrgencyId, Urgency]) -> RoutineView:
     return RoutineView(
         routine_id=routine.routine_id,
         slug=routine.slug,
@@ -87,7 +89,7 @@ def _routine_view(routine: Routine, labels: ProjectLabelFields) -> RoutineView:
         default_model=list(routine.default_model),
         default_effort=routine.default_effort,
         default_harnesses=list(routine.default_harnesses),
-        default_urgency=routine.default_urgency,
+        default_urgency=urgency_slug(routine.default_urgency_id, urgencies),
         created_at=iso_utc(routine.created_at),
         retired=routine.retired,
         revision=routine.revision,
@@ -97,13 +99,18 @@ def _routine_view(routine: Routine, labels: ProjectLabelFields) -> RoutineView:
 
 def _labelled(routine: Routine, services: TenantServices) -> RoutineView:
     """``routine``'s view, labelled from one read of its project."""
-    return _routine_view(routine, ProjectLabels.read(services, [routine.project_id]).fields(routine.project_id))
+    return _routine_view(
+        routine,
+        ProjectLabels.read(services, [routine.project_id]).fields(routine.project_id),
+        services.urgency_reading.by_id(),
+    )
 
 
 def _listing(services: TenantServices, project_id: str | None, *, include_retired: bool) -> list[RoutineView]:
     routines = [r for r in services.routines.list_all(project_id) if include_retired or not r.retired]
     labels = ProjectLabels.read(services, (r.project_id for r in routines))
-    return [_routine_view(r, labels.fields(r.project_id)) for r in routines]
+    urgencies = services.urgency_reading.by_id()
+    return [_routine_view(r, labels.fields(r.project_id), urgencies) for r in routines]
 
 
 def _unprocessable(exc: ConfigFieldError) -> HTTPException:
@@ -167,7 +174,9 @@ def _create(
         raise _definition_refusal(exc) from exc
     except ConfigFieldError as exc:
         raise _unprocessable(exc) from exc
-    return _routine_view(routine, ProjectLabels.of_project(project).fields(routine.project_id))
+    return _routine_view(
+        routine, ProjectLabels.of_project(project).fields(routine.project_id), services.urgency_reading.by_id()
+    )
 
 
 @router.post("/routines", response_model=RoutineView, status_code=status.HTTP_201_CREATED, deprecated=True)
@@ -470,14 +479,16 @@ def unlink_routine_scope(
 
 def _routine_edit(request: RoutineEditRequest, services: TenantServices) -> RoutineEdit:
     """The sparse edit ``request`` states — only its present fields, the default scope slug parsed and the default
-    urgency, named by id or slug, resolved to its slug."""
+    urgency, named by id or slug, resolved to its id."""
     present = {name: getattr(request, name) for name in request.model_fields_set}
     slug = present.get("default_scope_slug")
     if slug is not None:
         present["default_scope_slug"] = ScopeSlug.parse(slug)
-    urgency = present.get(DEFAULT_URGENCY_FIELD)
-    if urgency is not None:
-        present[DEFAULT_URGENCY_FIELD] = services.urgency_reading.named(DEFAULT_URGENCY_FIELD, urgency).slug
+    if DEFAULT_URGENCY_FIELD in present:
+        urgency = present.pop(DEFAULT_URGENCY_FIELD)
+        present["default_urgency_id"] = (
+            None if urgency is None else services.urgency_reading.named(DEFAULT_URGENCY_FIELD, urgency).urgency_id
+        )
     return RoutineEdit(**present)
 
 

@@ -13,6 +13,7 @@ from blizzard.hub.domain.config.repositories import RepositoryDraft, RepositoryE
 from blizzard.hub.domain.config.work_sources import WorkSourceDraft, WorkSourceEdit
 from blizzard.hub.domain.garden.routines import RoutineEdit
 from blizzard.hub.domain.garden.scopes import ScopeEdit
+from blizzard.hub.domain.kernel.unset import UNSET, UnsetType
 from blizzard.hub.domain.projects.declarations import ProjectDeclaration
 from blizzard.hub.domain.urgency.declarations import UrgencySections
 
@@ -69,7 +70,8 @@ class DeclaredScope:
 class DeclaredRoutine:
     """A routine the document names within ``project`` — a project slug, ``None`` for the tenant's only one — by
     ``slug`` or, in the older form, ``name`` alone; at least one is stated. A ``scopes`` of ``None`` leaves the
-    stored linked scope set; ``default_urgency`` is the slug of the urgency it names, ``None`` for none."""
+    stored linked scope set. ``default_urgency`` is the slug of the urgency it names — ``None`` for none,
+    :data:`UNSET` when the entry leaves it — resolved by the apply, as ``edit`` leaves it."""
 
     slug: str | None
     name: str | None
@@ -81,18 +83,20 @@ class DeclaredRoutine:
     edit: RoutineEdit
     project: str | None
     scopes: Sequence[str] | None = None
-    default_urgency: str | None = None
+    default_urgency: str | None | UnsetType = UNSET
 
 
 @domain_model
 @dataclass(frozen=True)
 class DeclaredCadence:
     """A cadence the document names by slug within ``project`` — a project slug, ``None`` for the tenant's only one:
-    its create shape and the sparse edit of what it states."""
+    its create shape and the sparse edit of what it states, each chore naming no urgency, and the slug of the urgency
+    each chore of the entry names, in order, which the apply resolves into both."""
 
     shape: CadenceShape
     edit: CadenceEdit
     project: str | None
+    chore_urgencies: tuple[str | None, ...] = ()
 
 
 @domain_model

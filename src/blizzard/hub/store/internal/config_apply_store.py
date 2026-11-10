@@ -18,6 +18,7 @@ from blizzard.hub.domain.config.apply import (
     IConfigApplyWriter,
     PlannedPosition,
     PlannedWrite,
+    UrgencyReferenceGuard,
 )
 from blizzard.hub.domain.config.changes import ChangeOp, ConfigChange
 from blizzard.hub.domain.config.errors import ConfigFieldError, ConfigRevisionConflict
@@ -138,11 +139,16 @@ class ConfigApplyStore:
         dry_run: bool,
         positions: Sequence[PlannedPosition] = (),
         locks: Sequence[tuple[str, str]] = (),
+        guards: Sequence[UrgencyReferenceGuard] = (),
     ) -> None:
         try:
             with self._store.write("apply", expect=(ApplyEntryRefused, _DryRunRollback)) as conn:
                 for namespace, key in sorted(set(locks)):
                     lock_keys(conn, namespace, [key])
+                if (stale := urgency_writes.stale_revision(conn, guards)) is not None:
+                    guard, current = stale
+                    moved = ConfigRevisionConflict("urgency", guard.slug, current=current)
+                    raise ApplyEntryRefused(guard.section, guard.index, moved)
                 order = _UrgencyOrderSeq()
                 for write in writes:
                     try:
