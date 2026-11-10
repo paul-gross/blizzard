@@ -233,7 +233,7 @@ def _scope_params(
 @_model_option
 @_effort_option
 @project_option(required_by_hub=False)
-@click.option("--cursor", default=None, help="Resume from a prior page's next_cursor.")
+@click.option("--cursor", default=None, help="Resume from a prior page's next_cursor; one call reads one page.")
 @click.option(
     "--limit", default=None, type=int, help="Max rows in one page (1-1000, default 200). Illegal with --ndjson."
 )
@@ -411,7 +411,11 @@ _SPEND_CHUNKS_NDJSON_PATH = "/api/analytics/spend/chunks/ndjson"
 @_model_option
 @_effort_option
 @project_option(required_by_hub=False)
-@click.option("--cursor", default=None, help="Resume from a prior page's next_cursor (spend-chunks only).")
+@click.option(
+    "--cursor",
+    default=None,
+    help="Resume from a prior page's next_cursor (spend-chunks only); one call reads one page.",
+)
 @click.option(
     "--limit",
     default=None,

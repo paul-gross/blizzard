@@ -264,3 +264,66 @@ def test_stream_surfaces_tenant_required_with_the_callers_tenants() -> None:
         next(iter(_ctx(bound).stream("/api/x", "GET /x")))
 
     assert f"  {_BRAVO}  bravo  (guest)" in exc_info.value.message.splitlines()
+
+
+def _keyset_ctx(pages: list[tuple[list[int], int | None]]) -> tuple[CliContext, list[dict[str, str]]]:
+    """A context over a ``rows``/``next_before`` read that serves ``pages`` in order, recording each request's params."""
+    calls: list[dict[str, str]] = []
+
+    def fake_get(url: str, *, timeout: float, params: dict[str, str] | None = None) -> _FakeResponse:
+        calls.append(dict(params or {}))
+        rows, next_before = pages[len(calls) - 1]
+        return _FakeResponse(200, {"rows": rows, "next_before": next_before})
+
+    return _ctx(bind_stubs(get=fake_get)), calls
+
+
+def test_get_before_pages_stops_at_the_wanted_row_count() -> None:
+    ctx, calls = _keyset_ctx([([1, 2], 10), ([3, 4], 20), ([5, 6], 30)])
+
+    rows, next_before = ctx.get_before_pages("/api/x", "GET /x", key="rows", params={"limit": "2"}, want=4)
+
+    assert rows == [1, 2, 3, 4]
+    assert next_before == 20
+    assert [c.get("before") for c in calls] == [None, "10"]
+    assert [c["limit"] for c in calls] == ["2", "2"]
+
+
+def test_get_before_pages_shrinks_the_last_page_to_what_is_still_wanted() -> None:
+    ctx, calls = _keyset_ctx([([1, 2], 10), ([3], 20)])
+
+    rows, _ = ctx.get_before_pages("/api/x", "GET /x", key="rows", params={"limit": "2"}, want=3)
+
+    assert rows == [1, 2, 3]
+    assert [c["limit"] for c in calls] == ["2", "1"]
+
+
+def test_get_before_pages_without_a_want_reads_every_page() -> None:
+    ctx, calls = _keyset_ctx([([1], 10), ([2], 20), ([3], None)])
+
+    rows, next_before = ctx.get_before_pages("/api/x", "GET /x", key="rows", want=None)
+
+    assert rows == [1, 2, 3]
+    assert next_before is None
+    assert len(calls) == 3
+    assert all("limit" not in c for c in calls)
+
+
+def test_get_before_pages_stops_exactly_when_next_before_is_none() -> None:
+    ctx, calls = _keyset_ctx([([1, 2], None)])
+
+    rows, next_before = ctx.get_before_pages("/api/x", "GET /x", key="rows", want=50)
+
+    assert rows == [1, 2]
+    assert next_before is None
+    assert len(calls) == 1
+
+
+def test_get_before_pages_with_want_zero_reads_one_page() -> None:
+    ctx, calls = _keyset_ctx([([1], 10), ([2], None)])
+
+    rows, next_before = ctx.get_before_pages("/api/x", "GET /x", key="rows", want=0)
+
+    assert rows == [1]
+    assert next_before == 10
+    assert len(calls) == 1 and "limit" not in calls[0]

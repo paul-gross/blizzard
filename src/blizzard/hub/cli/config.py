@@ -106,13 +106,13 @@ def config_changes(cli: CliContext, kind: str | None, key: str | None, everythin
 
     Shows the newest page unless --all. A secret's value never appears."""
     params = {k: v for k, v in (("record_kind", kind), ("record_key", key)) if v is not None} | project_query(project)
-    rows: list[Any] = []
-    while True:
-        body = cli.get("/api/config/changes", "GET /config/changes", params=params).json()
-        rows.extend(body["changes"])
-        if not everything or body["next_before"] is None:
-            break
-        params["before"] = str(body["next_before"])
+    rows, _ = cli.get_before_pages(
+        "/api/config/changes",
+        "GET /config/changes",
+        key="changes",
+        params=params,
+        want=None if everything else 0,
+    )
     cli.show({"changes": rows}, ChangeListing(rows))
 
 
