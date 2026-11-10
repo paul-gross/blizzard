@@ -16,20 +16,22 @@ from blizzard.foundation.work_items import WorkItemClosure, WorkItemPriority
 from blizzard.hub.domain.chunk.errors import ChunkNotFound
 from blizzard.hub.domain.chunk.ingest import require_no_live_holder
 from blizzard.hub.domain.chunk.model import (
-    Chunk,
+    ChunkDraft,
     ChunkFacts,
     HubWorkItem,
     WorkItemAuthor,
     WorkRef,
-    mint_chunk,
+    draft_chunk,
 )
 from blizzard.hub.domain.chunk.ports.facts import IReadChunkFactsRepository
 from blizzard.hub.domain.chunk.ports.record import IReadChunkRecordRepository
 from blizzard.hub.domain.chunk.ports.work_refs import IReadChunkWorkRefsRepository
 from blizzard.hub.domain.graph.model import Graph
 from blizzard.hub.domain.kernel.hub_source import RESERVED_HUB_SOURCE_NAME
+from blizzard.hub.domain.kernel.transactions import IHubTransactions
 from blizzard.hub.domain.operations.delete import ChunkHasDependents, ChunkNotDeletable, DeleteService
 from blizzard.hub.domain.projects.model import ProjectId
+from blizzard.hub.domain.urgency.services import TenantDefault
 from blizzard.hub.domain.work_items.model import (
     Transition,
     WorkItemEdit,
@@ -54,16 +56,17 @@ def prepare_mint(
     default_model: list[str] | None = None,
     default_effort: str | None = None,
     default_harnesses: list[str] | None = None,
-) -> tuple[WorkRef, Chunk, datetime]:
-    """The guard sequence every item-minting create path shares: allocate the ref,
-    refuse a live holder, mint the resting chunk into ``project_id`` — the project each path
-    names, never one inferred. ``default_model``/``default_effort``/``default_harnesses`` fall
-    back to ``mint_chunk``'s own empty-preference default."""
+) -> tuple[WorkRef, ChunkDraft, datetime]:
+    """The guard sequence every item-minting create path shares, run before its unit: allocate the ref,
+    refuse a live holder, draft the resting chunk into ``project_id`` — the project each path
+    names, never one inferred. The draft is minted inside the path's unit, with the default urgency read
+    under its locks. ``default_model``/``default_effort``/``default_harnesses`` fall
+    back to ``draft_chunk``'s own empty-preference default."""
     ref = items.allocate_ref(source)
     pointer = WorkRef(source=source, ref=ref)
     require_no_live_holder(work_refs, pointer)
     at = clock.now()
-    chunk = mint_chunk(
+    draft = draft_chunk(
         [pointer],
         graph_id=graph.graph_id,
         at=at,
@@ -72,7 +75,7 @@ def prepare_mint(
         default_effort=default_effort,
         default_harnesses=default_harnesses,
     )
-    return pointer, chunk, at
+    return pointer, draft, at
 
 
 @domain_model
@@ -149,8 +152,12 @@ class WorkItemEditService:
         facts: IReadChunkFactsRepository,
         clock: IClock,
         delete: DeleteService,
+        default: TenantDefault,
+        transactions: IHubTransactions,
     ) -> None:
         self._items = items
+        self._default = default
+        self._transactions = transactions
         self._work_refs = work_refs
         self._record = record
         self._facts = facts
@@ -172,24 +179,30 @@ class WorkItemEditService:
         graph: Graph,
         project_id: ProjectId,
     ) -> CreatedWorkItem:
-        """File the item and mint its resting chunk of ``project_id`` in one transaction, pinned to
+        """File the item and mint its resting chunk of ``project_id`` in one unit, carrying the tenant's default
+        urgency read under the default's locks, pinned to
         ``graph``, holding the pointer this call allocates. An out-of-band ingest of the same ref can
         pre-empt it, raising :class:`~blizzard.hub.domain.chunk.ingest.IngestConflict` and burning the
         ref. A blank title or body raises
         :class:`~blizzard.hub.domain.work_items.model.WorkItemFieldBlank` before allocating."""
         text = WorkItemText.of(title=title, body=body)
-        pointer, chunk, at = prepare_mint(
+        pointer, draft, at = prepare_mint(
             self._items, self._work_refs, self._clock, source, graph=graph, project_id=project_id
         )
-        item = self._items.create_with_chunk(
-            pointer=pointer,
-            title=text.title,
-            body=text.body,
-            author=author,
-            stated_priority=stated_priority.value if stated_priority is not None else None,
-            at=at,
-            chunk=chunk,
-        )
+        keys = self._default.lock_keys()
+        with self._transactions.begin() as transaction:
+            locked = transaction.lock_set(keys=keys)
+            chunk = draft.mint(self._default.read(locked).urgency_id)
+            item = self._items.create_with_chunk(
+                pointer=pointer,
+                title=text.title,
+                body=text.body,
+                author=author,
+                stated_priority=stated_priority.value if stated_priority is not None else None,
+                at=at,
+                chunk=chunk,
+                transaction=locked,
+            )
         return CreatedWorkItem(item=item, chunk_id=chunk.chunk_id)
 
     def accept_create(
@@ -209,20 +222,25 @@ class WorkItemEditService:
         connection. Raises as
         :meth:`create` does; returns ``None`` when already closed."""
         text = WorkItemText.of(title=title, body=body)
-        pointer, chunk, at = prepare_mint(
+        pointer, draft, at = prepare_mint(
             self._items, self._work_refs, self._clock, RESERVED_HUB_SOURCE_NAME, graph=graph, project_id=project_id
         )
-        item = self._items.accept_create(
-            proposal_id=proposal_id,
-            pointer=pointer,
-            title=text.title,
-            body=text.body,
-            author=author,
-            at=at,
-            chunk=chunk,
-            reason=reason,
-            closed_by=closed_by,
-        )
+        keys = self._default.lock_keys()
+        with self._transactions.begin() as transaction:
+            locked = transaction.lock_set(keys=keys)
+            chunk = draft.mint(self._default.read(locked).urgency_id)
+            item = self._items.accept_create(
+                proposal_id=proposal_id,
+                pointer=pointer,
+                title=text.title,
+                body=text.body,
+                author=author,
+                at=at,
+                chunk=chunk,
+                reason=reason,
+                closed_by=closed_by,
+                transaction=locked,
+            )
         if item is None:
             return None
         return CreatedWorkItem(item=item, chunk_id=chunk.chunk_id)

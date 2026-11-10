@@ -2031,19 +2031,22 @@ _DOMAIN_PACKAGE_LAYERS: dict[str, frozenset[str]] = {
     "artifact": frozenset(),
     "config": frozenset(),
     "projects": frozenset({"config"}),
+    "urgency": frozenset({"config", "projects"}),
     "graph": frozenset({"artifact"}),
     "runners": frozenset(),
-    "chunk": frozenset({"graph", "runners", "artifact", "projects"}),
+    "chunk": frozenset({"graph", "runners", "artifact", "projects", "urgency"}),
     "actions": frozenset({"chunk", "graph", "artifact", "config", "projects"}),
     "delivery": frozenset({"actions", "chunk", "graph", "artifact", "config", "projects"}),
     "execution": frozenset({"chunk", "graph", "runners", "artifact"}),
     "operations": frozenset({"execution", "chunk", "graph", "runners"}),
-    "work_items": frozenset({"operations", "chunk", "graph", "projects", "sweeps"}),
-    "garden": frozenset({"work_items", "chunk", "graph", "config", "projects"}),
-    "cadence": frozenset({"garden", "work_items", "operations", "chunk", "graph", "config", "projects", "sweeps"}),
-    "config_apply": frozenset({"cadence", "garden", "graph", "config", "projects"}),
+    "work_items": frozenset({"operations", "chunk", "graph", "projects", "sweeps", "urgency"}),
+    "garden": frozenset({"work_items", "chunk", "graph", "config", "projects", "urgency"}),
+    "cadence": frozenset(
+        {"garden", "work_items", "operations", "chunk", "graph", "config", "projects", "sweeps", "urgency"}
+    ),
+    "config_apply": frozenset({"cadence", "garden", "graph", "config", "projects", "urgency"}),
     "observability": frozenset({"chunk", "graph", "runners"}),
-    "tenancy": frozenset({"graph", "config", "projects", "observability"}),
+    "tenancy": frozenset({"graph", "config", "projects", "observability", "urgency"}),
     "sweeps": frozenset(),
 }
 _DOMAIN_SHARED_KERNEL = "kernel"

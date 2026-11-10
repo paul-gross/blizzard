@@ -52,6 +52,8 @@ from blizzard.hub.domain.kernel.unset import UNSET
 from blizzard.hub.domain.projects.declarations import EntryProjectRequired, ProjectDeclaration
 from blizzard.hub.domain.projects.links import RepositoryLink
 from blizzard.hub.domain.projects.model import ProjectEdit, ProjectId
+from blizzard.hub.domain.urgency.declarations import UrgencyDeclaration, UrgencySections, urgency_color
+from blizzard.hub.domain.urgency.mark import IconShape
 from blizzard.wire.cadence import CadenceDocument, CadenceScheduleDocument, ChoreDocument
 from blizzard.wire.config import (
     CadenceEntry,
@@ -66,10 +68,13 @@ from blizzard.wire.config import (
     RepositoryEntry,
     RoutineEntry,
     ScopeEntry,
+    SettingsEntry,
+    UrgencyEntry,
     WorkSourceEntry,
 )
 from blizzard.wire.routine import RoutineDocument
 from blizzard.wire.scope import ScopeDocument
+from blizzard.wire.urgency import UrgencyIconDocument
 
 router = APIRouter(
     prefix="/api/config",
@@ -99,6 +104,8 @@ _SCHEMAS = {
     "scopes": ScopeDocument,
     "routines": RoutineDocument,
     "cadences": CadenceDocument,
+    "urgencies": UrgencyEntry,
+    "settings": SettingsEntry,
 }
 
 
@@ -364,6 +371,7 @@ def _entries(document: ConfigDocumentV2) -> DocumentEntries:
         work_sources=tuple(sources),
         repositories=tuple(repositories),
         projects=tuple(_project_declaration(entry) for entry in document.projects),
+        urgencies=_urgency_sections(document),
         scopes=tuple(scopes),
         routines=tuple(routines),
     )
@@ -383,6 +391,32 @@ def _declared_cadence(entry: CadenceEntry) -> DeclaredCadence:
             chores=chore_shapes(entry.chores) if "chores" in stated else UNSET,
         ),
         project=entry.project,
+    )
+
+
+def _urgency_sections(document: ConfigDocumentV2) -> UrgencySections:
+    """The urgency sections as the document states them: each entry's fields it states, the order when stated, and
+    the default when the settings state one."""
+    urgencies: list[UrgencyDeclaration] = []
+    for entry in document.urgencies:
+        stated = entry.model_fields_set
+        icon = entry.icon
+        urgencies.append(
+            UrgencyDeclaration(
+                slug=entry.slug,
+                name=entry.name if "name" in stated else UNSET,
+                color=entry.color if "color" in stated else UNSET,
+                emoji=entry.emoji if "emoji" in stated else UNSET,
+                icon=(None if icon is None else IconShape(icon.media_type, icon.data)) if "icon" in stated else UNSET,
+            )
+        )
+    settings = document.settings
+    return UrgencySections(
+        urgencies=tuple(urgencies),
+        order=None if document.urgency_order is None else tuple(document.urgency_order),
+        default_urgency=settings.default_urgency
+        if settings is not None and "default_urgency" in settings.model_fields_set
+        else UNSET,
     )
 
 
@@ -479,6 +513,9 @@ def _apply(
         raise _refusal(exc) from exc
     except CadenceAdmissionRefused as exc:
         raise admission_refused(exc) from exc
+    if not dry_run and any(o.kind is RecordKind.URGENCY_ORDER and o.op is not None for o in applied.outcomes):
+        # The apply has committed; a reordered set moves the queue's claim order as the reorder routes do.
+        services.events.publish_queue_changed()
     return ConfigApplyResponse(
         dry_run=dry_run,
         apply_id=applied.apply_id,
@@ -524,7 +561,8 @@ async def apply_config(
 def export_config(
     services: Services, version: Annotated[int, Query(ge=1, le=2)] = DOCUMENT_VERSION
 ) -> ConfigDocumentV2:
-    """Every project with its standing links, every active forge, every active, non-built-in work source and
+    """Every project with its standing links, every live urgency — an icon as its media type and base64 bytes — in
+    order with the tenant's default, every active forge, every active, non-built-in work source and
     repository, and every active scope, routine (its linked scope set included), and cadence named in its project by
     slug, with every field, and every active secret name, as a version-2 document that applies back as a no-op.
     Retired records are left out, since applying one would enable it. 422 `config_version_retired` for `version=1`."""
@@ -550,8 +588,24 @@ def export_config(
     project_ids = [project.project_id for project in projects]
     source_links = services.project_links.sources_of_projects(project_ids)
     repository_links = services.project_links.repositories_of_projects(project_ids)
+    live_urgencies = services.urgency_reading.ordered()
+    icons = services.urgency_reading.icons()
     return ConfigDocumentV2(
         version=DOCUMENT_VERSION,
+        urgencies=[
+            UrgencyEntry(
+                slug=u.slug,
+                name=u.name,
+                color=urgency_color(u),
+                emoji=u.emoji,
+                icon=None
+                if (icon := icons.get(u.urgency_id)) is None
+                else UrgencyIconDocument(media_type=icon.media_type.value, data=icon.encoded),
+            )
+            for u in live_urgencies
+        ],
+        urgency_order=[u.slug for u in live_urgencies],
+        settings=SettingsEntry(default_urgency=services.tenant_settings.show().default.slug),
         projects=[
             ProjectDocument(
                 slug=project.slug,

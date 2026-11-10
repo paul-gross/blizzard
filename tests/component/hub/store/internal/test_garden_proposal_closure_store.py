@@ -36,6 +36,7 @@ from tests.support.scaffolding import (
     build_hub,
     count_queries,
     default_project,
+    default_urgency,
     hub_scoped,
     hub_store_connections,
     stamp,
@@ -292,7 +293,13 @@ def test_accept_create_mints_the_closure_item_and_chunk_atomically_and_is_idempo
     items = cast(IWriteWorkItemRepository, WorkItemStore(store))
     author = WorkItemAuthor.user("u1")
     pointer = WorkRef(source="hub", ref=items.allocate_ref("hub"))
-    chunk = mint_chunk([pointer], graph_id=graph.graph_id, at=_NOW, project_id=ProjectId(default_project(hub.engine)))
+    chunk = mint_chunk(
+        [pointer],
+        graph_id=graph.graph_id,
+        at=_NOW,
+        project_id=ProjectId(default_project(hub.engine)),
+        urgency_id=default_urgency(hub.engine),
+    )
 
     first = items.accept_create(
         proposal_id="gprop_1",
@@ -342,7 +349,13 @@ def test_accept_create_writes_nothing_when_the_proposal_is_already_closed(tmp_pa
     closures.record_pass("gprop_1", reason="already passed", closed_by="u0", at=_NOW)
     items = cast(IWriteWorkItemRepository, WorkItemStore(store))
     pointer = WorkRef(source="hub", ref=items.allocate_ref("hub"))
-    chunk = mint_chunk([pointer], graph_id=graph.graph_id, at=_NOW, project_id=ProjectId(default_project(hub.engine)))
+    chunk = mint_chunk(
+        [pointer],
+        graph_id=graph.graph_id,
+        at=_NOW,
+        project_id=ProjectId(default_project(hub.engine)),
+        urgency_id=default_urgency(hub.engine),
+    )
 
     result = items.accept_create(
         proposal_id="gprop_1",

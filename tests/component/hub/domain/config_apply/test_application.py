@@ -17,7 +17,9 @@ from blizzard.hub.domain.config_apply.entries import DeclaredRepository, Documen
 from blizzard.hub.domain.config_apply.service import ConfigApplication
 from blizzard.hub.domain.projects.declarations import ProjectDeclaration
 from blizzard.hub.domain.projects.model import ProjectEdit
-from tests.support.scaffolding import HubHarness, build_hub, seed_forge
+from blizzard.hub.store.internal.tenant_settings_store import TenantSettingsStore
+from blizzard.hub.store.internal.urgency_store import UrgencyOrderStore, UrgencyStore
+from tests.support.scaffolding import HubHarness, build_hub, default_tenant, hub_store_connections, seed_forge
 
 _AT = datetime(2031, 5, 6, 7, 8, 9, tzinfo=UTC)
 
@@ -45,6 +47,7 @@ def hub(tmp_path: Path) -> HubHarness:
 
 def _application(hub: HubHarness, clock: FixedClock) -> ConfigApplication:
     services = hub.services
+    connections = hub_store_connections(hub.engine)
     return ConfigApplication(
         authoring=services.config_authoring,
         repositories=services.repository_records,
@@ -59,6 +62,10 @@ def _application(hub: HubHarness, clock: FixedClock) -> ConfigApplication:
         cadences=services.cadences,
         graphs=services.graphs,
         secrets=services.secret_catalog,
+        tenant_id=default_tenant(hub.engine),
+        urgencies=UrgencyStore(connections),
+        urgency_order=UrgencyOrderStore(connections),
+        tenant_settings=TenantSettingsStore(connections),
         pick=services.color_pick,
         clock=clock,
     )

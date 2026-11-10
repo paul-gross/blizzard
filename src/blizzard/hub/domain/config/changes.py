@@ -36,7 +36,8 @@ class Door(StrEnum):
 class RecordKind(StrEnum):
     """The kind of configured record a change row names. A project's, a forge's, a repository's and a work source's
     ``record_key`` is its id, never its slug; a project link's is the linked source's or repository's id. Linking,
-    unlinking and re-linking are ``create``, ``retire`` and ``enable``."""
+    unlinking and re-linking are ``create``, ``retire`` and ``enable``. An urgency's ``record_key`` is its id; the
+    urgency order's and the tenant settings' is the tenant's id."""
 
     WORK_SOURCE = "work_source"
     SECRET = "secret"
@@ -48,6 +49,9 @@ class RecordKind(StrEnum):
     PROJECT = "project"
     PROJECT_SOURCE_LINK = "project_source_link"
     PROJECT_REPOSITORY_LINK = "project_repository_link"
+    URGENCY = "urgency"
+    URGENCY_ORDER = "urgency_order"
+    TENANT_SETTINGS = "tenant_settings"
 
 
 class ChangeOp(StrEnum):

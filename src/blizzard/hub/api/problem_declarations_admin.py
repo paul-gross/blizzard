@@ -78,6 +78,10 @@ _REVISION_CONFLICT_OPERATIONS = (
     ("POST", "/api/work-sources/{source}/retire"),
     ("POST", "/api/work-sources/{source}/enable"),
     ("PUT", "/api/secrets/{name}/value"),
+    ("PATCH", "/api/urgencies/{key}"),
+    ("POST", "/api/urgencies/{key}/retire"),
+    ("POST", "/api/urgencies/{key}/enable"),
+    ("PATCH", "/api/settings"),
 )
 
 _FIELD_INVALID_OPERATIONS = (
@@ -93,6 +97,20 @@ _FIELD_INVALID_OPERATIONS = (
     ("POST", "/api/work-sources"),
     ("PATCH", "/api/work-sources/{source}"),
     ("POST", "/api/work-sources/{source}/enable"),
+    ("POST", "/api/urgencies"),
+    ("PATCH", "/api/urgencies/{key}"),
+    ("POST", "/api/urgencies/{key}/retire"),
+    ("PUT", "/api/urgencies/order"),
+    ("POST", "/api/urgencies/order/position"),
+    ("PATCH", "/api/settings"),
+)
+
+_URGENCY_KEY_OPERATIONS = (
+    ("GET", "/api/urgencies/{key}"),
+    ("PATCH", "/api/urgencies/{key}"),
+    ("POST", "/api/urgencies/{key}/retire"),
+    ("POST", "/api/urgencies/{key}/enable"),
+    ("GET", "/api/urgencies/{key}/icon"),
 )
 
 _SECRET_NAME_OPERATIONS = (
@@ -156,6 +174,10 @@ ADMIN_FAMILY_DECLARATIONS: tuple[ProblemDeclaration, ...] = (
             ("POST", "/api/forges/{forge}/enable", t.ForgeRevisionConflictProblem),
         )
     ),
+    *(ProblemDeclaration(method, path, 404, t.UrgencyNotFoundProblem) for method, path in _URGENCY_KEY_OPERATIONS),
+    ProblemDeclaration("GET", "/api/urgencies/{key}/icon", 404, t.UrgencyIconNotFoundProblem),
+    ProblemDeclaration("POST", "/api/urgencies/{key}/retire", 409, t.UrgencyIsDefaultProblem),
+    ProblemDeclaration("POST", "/api/urgencies/{key}/retire", 409, t.UrgencyInUseProblem),
     *(
         ProblemDeclaration(method, path, 404, t.RepositoryNotFoundProblem)
         for method, path in (

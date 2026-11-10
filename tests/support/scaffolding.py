@@ -124,6 +124,9 @@ from blizzard.hub.domain.runners.registration import RunnerAddition, RunnerCapab
 from blizzard.hub.domain.runners.served import resolve_served
 from blizzard.hub.domain.runners.version_window import VersionWindow
 from blizzard.hub.domain.tenancy.administration import DEFAULT_PROJECT_SLUG
+from blizzard.hub.domain.urgency.model import NO_MARK, Urgency, UrgencyId
+from blizzard.hub.domain.urgency.order import FIRST_POSITION
+from blizzard.hub.domain.urgency.settings import TenantSettings
 from blizzard.hub.egress.writer import (
     EgressBatch,
     EgressFailure,
@@ -152,7 +155,9 @@ from blizzard.hub.store.internal.repository_record_store import RepositoryRecord
 from blizzard.hub.store.internal.runner_registry_store import RunnerRegistryStore
 from blizzard.hub.store.internal.scope_store import ScopeStore
 from blizzard.hub.store.internal.secret_store import SecretStore
+from blizzard.hub.store.internal.tenant_settings_store import TenantSettingsStore
 from blizzard.hub.store.internal.transcript_segment_store import TranscriptSegmentStore
+from blizzard.hub.store.internal.urgency_store import UrgencyStore
 from blizzard.hub.store.internal.work_item_store import WorkItemStore
 from blizzard.hub.store.internal.work_source_record_store import WorkSourceRecordStore
 from blizzard.hub.store.scoped import (
@@ -302,7 +307,8 @@ _default_tenants: weakref.WeakKeyDictionary[Engine, TenantId] = weakref.WeakKeyD
 
 def add_tenant(engine: Engine, name: str) -> TenantId:
     """Add a tenant named ``name`` to the store under a freshly minted id, holding its ``default``
-    project, as tenant administration would, and return its id. Once a store holds two tenants, :func:`default_tenant` and :func:`stamp`
+    project, as tenant administration would, and return its id. A store migrated past the urgency tables also holds its
+    ``standard`` urgency and settings. Once a store holds two tenants, :func:`default_tenant` and :func:`stamp`
     no longer name one — a test adding one names the tenant on every raw read and write."""
     tenant = TenantId(Id.mint_at(IdPrefix.TENANT, _GRAPH_T0).value)
     project = Id.mint_at(IdPrefix.PROJECT, _GRAPH_T0).value
@@ -322,6 +328,14 @@ def add_tenant(engine: Engine, name: str) -> TenantId:
                 created_at=_GRAPH_T0,
             )
         )
+    if not sa.inspect(engine).has_table(schema.urgencies.name):
+        return tenant  # a store migrated to a revision before the urgency tables seeds no urgency
+    connections = scoped_connections(engine, tenant)
+    ctx = ChangeContext(actor="test", door=Door.API)
+    standard, standard_change = Urgency.standard(ctx, at=_GRAPH_T0)
+    UrgencyStore(connections).create(standard, mark=NO_MARK, position=FIRST_POSITION, change=standard_change)
+    settings, settings_change = TenantSettings.seed(tenant, standard, ctx, at=_GRAPH_T0)
+    TenantSettingsStore(connections).create(settings, change=settings_change)
     return tenant
 
 
@@ -452,6 +466,17 @@ def default_project(engine: Engine, tenant: TenantId | None = None) -> str:
     if len(ids) != 1:
         raise AssertionError(f"default_project needs a tenant holding exactly one project; {tenant} holds {len(ids)}")
     return ids[0]
+
+
+def default_urgency(engine: Engine, tenant: TenantId | None = None) -> UrgencyId:
+    """The id of ``tenant``'s default urgency, as its settings name it — the store's only tenant's when ``tenant`` is
+    ``None``."""
+    tenant = tenant if tenant is not None else default_tenant(engine)
+    settings = schema.tenant_settings
+    with engine.connect() as conn:
+        return UrgencyId(
+            conn.execute(sa.select(settings.c.default_urgency_id).where(settings.c.tenant_id == tenant)).scalar_one()
+        )
 
 
 def project_record(hub: HubHarness, project_id: str) -> Project:

@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from collections.abc import Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 from blizzard.foundation.roles import domain_model
 from blizzard.hub.domain.cadence.model import CadenceEdit, CadenceShape
@@ -14,6 +14,7 @@ from blizzard.hub.domain.config.work_sources import WorkSourceDraft, WorkSourceE
 from blizzard.hub.domain.garden.routines import RoutineEdit
 from blizzard.hub.domain.garden.scopes import ScopeEdit
 from blizzard.hub.domain.projects.declarations import ProjectDeclaration
+from blizzard.hub.domain.urgency.declarations import UrgencySections
 
 
 @domain_model
@@ -103,6 +104,7 @@ class DocumentEntries:
     work_sources: tuple[DeclaredWorkSource, ...] = ()
     repositories: tuple[DeclaredRepository, ...] = ()
     projects: tuple[ProjectDeclaration, ...] = ()
+    urgencies: UrgencySections = field(default_factory=UrgencySections)
     scopes: tuple[DeclaredScope, ...] = ()
     routines: tuple[DeclaredRoutine, ...] = ()
     cadences: tuple[DeclaredCadence, ...] = ()

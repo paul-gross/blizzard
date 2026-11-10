@@ -137,8 +137,12 @@ export interface HubOperations {
   'GET /api/scopes/{slug}/routines': { path: T.ListScopeRoutinesApiScopesSlugRoutinesGetData['path']; responses: T.ListScopeRoutinesApiScopesSlugRoutinesGetResponses; errors: T.ListScopeRoutinesApiScopesSlugRoutinesGetErrors };
   'GET /api/secrets': { path: T.ListSecretsApiSecretsGetData['path']; responses: T.ListSecretsApiSecretsGetResponses; errors: T.ListSecretsApiSecretsGetErrors };
   'GET /api/secrets/{name}': { path: T.GetSecretApiSecretsNameGetData['path']; responses: T.GetSecretApiSecretsNameGetResponses; errors: T.GetSecretApiSecretsNameGetErrors };
+  'GET /api/settings': { path: T.GetSettingsApiSettingsGetData['path']; responses: T.GetSettingsApiSettingsGetResponses; errors: T.GetSettingsApiSettingsGetErrors };
   'GET /api/spend': { path: T.FleetSpendApiSpendGetData['path']; responses: T.FleetSpendApiSpendGetResponses; errors: T.FleetSpendApiSpendGetErrors };
   'GET /api/traces/status': { path: T.TraceStatusApiTracesStatusGetData['path']; responses: T.TraceStatusApiTracesStatusGetResponses; errors: T.TraceStatusApiTracesStatusGetErrors };
+  'GET /api/urgencies': { path: T.ListUrgenciesApiUrgenciesGetData['path']; responses: T.ListUrgenciesApiUrgenciesGetResponses; errors: T.ListUrgenciesApiUrgenciesGetErrors };
+  'GET /api/urgencies/{key}': { path: T.GetUrgencyApiUrgenciesKeyGetData['path']; responses: T.GetUrgencyApiUrgenciesKeyGetResponses; errors: T.GetUrgencyApiUrgenciesKeyGetErrors };
+  'GET /api/urgencies/{key}/icon': { path: T.GetUrgencyIconApiUrgenciesKeyIconGetData['path']; responses: T.GetUrgencyIconApiUrgenciesKeyIconGetResponses; errors: T.GetUrgencyIconApiUrgenciesKeyIconGetErrors };
   'GET /api/users': { path: T.ListUsersApiUsersGetData['path']; responses: T.ListUsersApiUsersGetResponses; errors: T.ListUsersApiUsersGetErrors };
   'GET /api/work-items': { path: T.GetBulkWorkItemsApiWorkItemsGetData['path']; responses: T.GetBulkWorkItemsApiWorkItemsGetResponses; errors: T.GetBulkWorkItemsApiWorkItemsGetErrors };
   'GET /api/work-sources': { path: T.ListWorkSourcesApiWorkSourcesGetData['path']; responses: T.ListWorkSourcesApiWorkSourcesGetResponses; errors: T.ListWorkSourcesApiWorkSourcesGetErrors };
@@ -156,6 +160,8 @@ export interface HubOperations {
   'PATCH /api/repositories/{repository}': { path: T.PatchRepositoryApiRepositoriesRepositoryPatchData['path']; responses: T.PatchRepositoryApiRepositoriesRepositoryPatchResponses; errors: T.PatchRepositoryApiRepositoriesRepositoryPatchErrors };
   'PATCH /api/routines/{routine_id}': { path: T.EditRoutineApiRoutinesRoutineIdPatchData['path']; responses: T.EditRoutineApiRoutinesRoutineIdPatchResponses; errors: T.EditRoutineApiRoutinesRoutineIdPatchErrors };
   'PATCH /api/scopes/{slug}': { path: T.EditScopeApiScopesSlugPatchData['path']; responses: T.EditScopeApiScopesSlugPatchResponses; errors: T.EditScopeApiScopesSlugPatchErrors };
+  'PATCH /api/settings': { path: T.PatchSettingsApiSettingsPatchData['path']; responses: T.PatchSettingsApiSettingsPatchResponses; errors: T.PatchSettingsApiSettingsPatchErrors };
+  'PATCH /api/urgencies/{key}': { path: T.PatchUrgencyApiUrgenciesKeyPatchData['path']; responses: T.PatchUrgencyApiUrgenciesKeyPatchResponses; errors: T.PatchUrgencyApiUrgenciesKeyPatchErrors };
   'PATCH /api/work-sources/{source}': { path: T.PatchWorkSourceApiWorkSourcesSourcePatchData['path']; responses: T.PatchWorkSourceApiWorkSourcesSourcePatchResponses; errors: T.PatchWorkSourceApiWorkSourcesSourcePatchErrors };
   'PATCH /api/work-sources/{source}/items/{ref}': { path: T.PatchWorkItemApiWorkSourcesSourceItemsRefPatchData['path']; responses: T.PatchWorkItemApiWorkSourcesSourceItemsRefPatchResponses; errors: T.PatchWorkItemApiWorkSourcesSourceItemsRefPatchErrors };
   'POST /api/admin/graphs/sync': { path: T.SyncEveryTenantApiAdminGraphsSyncPostData['path']; responses: T.SyncEveryTenantApiAdminGraphsSyncPostResponses; errors: T.SyncEveryTenantApiAdminGraphsSyncPostErrors };
@@ -265,6 +271,10 @@ export interface HubOperations {
   'POST /api/secrets/{name}/retire': { path: T.RetireSecretApiSecretsNameRetirePostData['path']; responses: T.RetireSecretApiSecretsNameRetirePostResponses; errors: T.RetireSecretApiSecretsNameRetirePostErrors };
   'POST /api/sweeps/{name}/passes': { path: T.RunTenantPassApiSweepsNamePassesPostData['path']; responses: T.RunTenantPassApiSweepsNamePassesPostResponses; errors: T.RunTenantPassApiSweepsNamePassesPostErrors };
   'POST /api/traces/replay': { path: T.TraceReplayApiTracesReplayPostData['path']; responses: T.TraceReplayApiTracesReplayPostResponses; errors: T.TraceReplayApiTracesReplayPostErrors };
+  'POST /api/urgencies': { path: T.CreateUrgencyApiUrgenciesPostData['path']; responses: T.CreateUrgencyApiUrgenciesPostResponses; errors: T.CreateUrgencyApiUrgenciesPostErrors };
+  'POST /api/urgencies/order/position': { path: T.PositionUrgencyApiUrgenciesOrderPositionPostData['path']; responses: T.PositionUrgencyApiUrgenciesOrderPositionPostResponses; errors: T.PositionUrgencyApiUrgenciesOrderPositionPostErrors };
+  'POST /api/urgencies/{key}/enable': { path: T.EnableUrgencyApiUrgenciesKeyEnablePostData['path']; responses: T.EnableUrgencyApiUrgenciesKeyEnablePostResponses; errors: T.EnableUrgencyApiUrgenciesKeyEnablePostErrors };
+  'POST /api/urgencies/{key}/retire': { path: T.RetireUrgencyApiUrgenciesKeyRetirePostData['path']; responses: T.RetireUrgencyApiUrgenciesKeyRetirePostResponses; errors: T.RetireUrgencyApiUrgenciesKeyRetirePostErrors };
   'POST /api/users/{user_id}/role': { path: T.AssignRoleApiUsersUserIdRolePostData['path']; responses: T.AssignRoleApiUsersUserIdRolePostResponses; errors: T.AssignRoleApiUsersUserIdRolePostErrors };
   'POST /api/work-sources': { path: T.CreateWorkSourceApiWorkSourcesPostData['path']; responses: T.CreateWorkSourceApiWorkSourcesPostResponses; errors: T.CreateWorkSourceApiWorkSourcesPostErrors };
   'POST /api/work-sources/{source}/enable': { path: T.EnableWorkSourceApiWorkSourcesSourceEnablePostData['path']; responses: T.EnableWorkSourceApiWorkSourcesSourceEnablePostResponses; errors: T.EnableWorkSourceApiWorkSourcesSourceEnablePostErrors };
@@ -279,4 +289,5 @@ export interface HubOperations {
   'PUT /api/queue': { path: T.ReplaceQueueApiQueuePutData['path']; responses: T.ReplaceQueueApiQueuePutResponses; errors: T.ReplaceQueueApiQueuePutErrors };
   'PUT /api/routines/{routine_id}/scopes/{scope_slug}': { path: T.LinkRoutineScopeApiRoutinesRoutineIdScopesScopeSlugPutData['path']; responses: T.LinkRoutineScopeApiRoutinesRoutineIdScopesScopeSlugPutResponses; errors: T.LinkRoutineScopeApiRoutinesRoutineIdScopesScopeSlugPutErrors };
   'PUT /api/secrets/{name}/value': { path: T.ReplaceSecretApiSecretsNameValuePutData['path']; responses: T.ReplaceSecretApiSecretsNameValuePutResponses; errors: T.ReplaceSecretApiSecretsNameValuePutErrors };
+  'PUT /api/urgencies/order': { path: T.PutUrgencyOrderApiUrgenciesOrderPutData['path']; responses: T.PutUrgencyOrderApiUrgenciesOrderPutResponses; errors: T.PutUrgencyOrderApiUrgenciesOrderPutErrors };
 }

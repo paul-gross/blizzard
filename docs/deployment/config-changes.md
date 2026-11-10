@@ -1,8 +1,8 @@
 # Configuration changes
 
-Every committed write to a stored forge, work source, repository, secret, project, project link, scope, or routine
-appends one row to the hub's change log, in the same transaction as the write. A write that changes nothing appends
-nothing.
+Every committed write to a stored forge, work source, repository, secret, project, project link, scope, routine,
+urgency, the urgency order, or the tenant's settings appends one row to the hub's change log, in the same transaction as
+the write. A write that changes nothing appends nothing.
 
 ## Reading the log
 
@@ -14,9 +14,9 @@ blizzard hub config changes --kind forge --key github
 
 Rows come newest first. Each carries the acting user, the door, the kind and key of the record, the record's revision
 after the change, the operation, and the fields that changed. Without `--all` the verb prints the newest page; `--kind`
-is `forge`, `work_source`, `repository`, `secret`, `scope`, `routine`, or `project`, and `--key` narrows to one record —
-a scope's slug, a routine's slug, or a project's, work source's or repository's id or slug. `--json` prints the raw
-rows.
+is `forge`, `work_source`, `repository`, `secret`, `scope`, `routine`, `project`, `urgency`, `urgency_order`, or
+`tenant_settings`, and `--key` narrows to one record — a scope's slug, a routine's slug, a project's, work source's or
+repository's id or slug, or an urgency's id. `--json` prints the raw rows.
 
 A forge's, a project's, a work source's and a repository's rows are keyed by id, as are a project link's rows by the
 linked record's id, so they follow the record across slug changes; each row carries the record's current slug as
@@ -43,6 +43,14 @@ and fields, and the log's total as the tab's count. An older page loads on reque
 | `retire`  | A record is retired          | `retired`, from false to true                      |
 | `enable`  | A retired record is enabled  | `retired`, from true to false                      |
 | `replace` | A secret's value is replaced | None                                               |
+
+An urgency's rows are keyed by its id. A retire that moves open chunks lists `move_to`, the urgency they moved to by
+slug, and `moved_chunks`, how many moved, beside `retired`. A reorder is an `edit` row of kind `urgency_order`, keyed by
+the tenant's id, whose `order` field lists the live order by slug before and after. The tenant's settings are one record
+of kind `tenant_settings`, keyed by the tenant's id, and list `default_urgency` by slug; a new tenant's `create` rows
+for its `standard` urgency and its settings come from the door of the call that created it, and those
+`blizzard hub migrate` writes for a tenant that predates urgencies from the `migration` door. None of these rows names a
+project. [urgencies.md](./urgencies.md) owns the records.
 
 A routine's scope link or unlink is an `edit` whose changed field is `scopes`. A secret's value never appears in a row,
 so a secret's `create` and `replace` list no fields. A secret's `retire` and `enable` record the secret's unchanged

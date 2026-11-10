@@ -875,6 +875,93 @@ Index(
     cadence_lifecycle_facts.c.cadence_id,
 )
 
+# --- Urgencies (a tenant's ordered set; surrogate id, slug fixed at create) ---
+
+urgencies = Table(
+    "urgencies",
+    metadata,
+    Column("urgency_id", String, primary_key=True, info={"hub_unique": True}),  # urg_<ulid>
+    Column("slug", String, nullable=False),  # fixed at create, unique in the tenant, retired urgencies included
+    Column("name", String, nullable=False),  # the editable display name
+    Column("color", String, nullable=False),  # a palette name or a lowercase #rrggbb
+    Column("emoji", String, nullable=True),
+    # The icon mark: its media type, its bytes, and their digest — all null when the urgency carries none.
+    Column("icon_media_type", String, nullable=True),
+    Column("icon_data", LargeBinary, nullable=True),
+    Column("icon_digest", String, nullable=True),
+    Column("created_at", UtcDateTime, nullable=False),
+    Column("created_by", String, nullable=False),
+    Column("revision", Integer, nullable=False, server_default="1"),
+    Column("tenant_id", String, ForeignKey("tenants.tenant_id", name="fk_urgencies_tenant_id"), nullable=False),
+    UniqueConstraint("tenant_id", "slug", name="uq_urgencies_tenant_slug"),
+)
+
+# The urgency's reversible retire/enable brake — newest fact wins.
+urgency_lifecycle_facts = Table(
+    "urgency_lifecycle_facts",
+    metadata,
+    Column("id", Integer, primary_key=True, autoincrement=True),
+    Column(
+        "urgency_id",
+        String,
+        ForeignKey("urgencies.urgency_id", name="fk_urgency_lifecycle_facts_urgencies"),
+        nullable=False,
+    ),
+    Column("retired", Boolean, nullable=False),
+    Column("set_at", UtcDateTime, nullable=False),
+    Column("set_by", String, nullable=False),
+    Column(
+        "tenant_id",
+        String,
+        ForeignKey("tenants.tenant_id", name="fk_urgency_lifecycle_facts_tenant_id"),
+        nullable=False,
+    ),
+)
+Index(
+    "ix_urgency_lifecycle_facts_tenant_urgency_id",
+    urgency_lifecycle_facts.c.tenant_id,
+    urgency_lifecycle_facts.c.urgency_id,
+)
+
+# An urgency's place in its tenant's order — newest fact per urgency wins, lower more urgent.
+urgency_positions = Table(
+    "urgency_positions",
+    metadata,
+    Column("id", Integer, primary_key=True, autoincrement=True),
+    Column(
+        "urgency_id",
+        String,
+        ForeignKey("urgencies.urgency_id", name="fk_urgency_positions_urgencies"),
+        nullable=False,
+    ),
+    Column("position", Float(), nullable=False),
+    Column("set_at", UtcDateTime, nullable=False),
+    Column("set_by", String, nullable=False),
+    Column("tenant_id", String, ForeignKey("tenants.tenant_id", name="fk_urgency_positions_tenant_id"), nullable=False),
+)
+Index("ix_urgency_positions_tenant_urgency_id", urgency_positions.c.tenant_id, urgency_positions.c.urgency_id)
+
+# The tenant's settings: one row per tenant, keyed by it.
+tenant_settings = Table(
+    "tenant_settings",
+    metadata,
+    Column(
+        "tenant_id",
+        String,
+        ForeignKey("tenants.tenant_id", name="fk_tenant_settings_tenant_id"),
+        primary_key=True,
+    ),
+    Column(
+        "default_urgency_id",
+        String,
+        ForeignKey("urgencies.urgency_id", name="fk_tenant_settings_urgencies"),
+        nullable=False,
+    ),
+    Column("revision", Integer, nullable=False, server_default="1"),
+    Column("updated_at", UtcDateTime, nullable=False),
+    Column("updated_by", String, nullable=False),
+)
+
 # --- Chunks and their work refs (chunk.minted) ------------------------------
 
 chunks = Table(
@@ -895,7 +982,11 @@ chunks = Table(
     Column("tenant_id", String, ForeignKey("tenants.tenant_id", name="fk_chunks_tenant_id"), nullable=False),
     # Set once at mint; every chunk-owned fact reaches its project through it.
     Column("project_id", String, ForeignKey("projects.project_id", name="fk_chunks_projects"), nullable=False),
+    # The chunk's urgency, overwritten in place; nullable in the schema, filled on every row.
+    Column("urgency_id", String, nullable=True),
 )
+# The open chunks carrying an urgency, counted and moved within the tenant.
+Index("ix_chunks_tenant_urgency_id", chunks.c.tenant_id, chunks.c.urgency_id)
 # (tenant_id, minted_at, chunk_id) for newest-first bounded reads since a timestamp.
 Index("ix_chunks_tenant_minted_at_chunk_id", chunks.c.tenant_id, chunks.c.minted_at, chunks.c.chunk_id)
 # The same, within one project — and the join a project's chunk-owned rows are read through.

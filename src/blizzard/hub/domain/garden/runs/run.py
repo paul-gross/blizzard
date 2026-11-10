@@ -29,7 +29,9 @@ from blizzard.hub.domain.garden.routines import (
 from blizzard.hub.domain.garden.scopes import IReadScopeRepository, Scope, ScopeVerb
 from blizzard.hub.domain.graph.model import Graph, IReadGraphRepository
 from blizzard.hub.domain.kernel.hub_source import RESERVED_HUB_SOURCE_NAME
+from blizzard.hub.domain.kernel.transactions import IHubTransactions
 from blizzard.hub.domain.projects.model import ProjectId
+from blizzard.hub.domain.urgency.services import TenantDefault
 from blizzard.hub.domain.work_items.editing import prepare_mint
 from blizzard.hub.domain.work_items.ports import IWriteWorkItemRepository
 
@@ -206,7 +208,11 @@ class RunService:
         items: IWriteWorkItemRepository,
         work_refs: IReadChunkWorkRefsRepository,
         clock: IClock,
+        default: TenantDefault,
+        transactions: IHubTransactions,
     ) -> None:
+        self._default = default
+        self._transactions = transactions
         self._routines = routines
         self._scopes = scopes
         self._routine_scopes = routine_scopes
@@ -241,7 +247,7 @@ class RunService:
             baseline=self._finding_sets.newest_for_routine_scope(routine.project_id, routine.slug, scope.slug),
             note=note,
         )
-        pointer, chunk, pointer_at = prepare_mint(
+        pointer, draft, pointer_at = prepare_mint(
             self._items,
             self._work_refs,
             self._clock,
@@ -252,18 +258,23 @@ class RunService:
             default_effort=routine.default_effort,
             default_harnesses=routine.default_harnesses,
         )
-        item = self._items.create_run_with_chunk(
-            pointer=pointer,
-            title=plan.title,
-            body=plan.charge,
-            author=author,
-            project_id=routine.project_id,
-            routine_name=routine.slug,
-            scope_slug=scope.slug,
-            run_mode=plan.effective_mode.value,
-            at=pointer_at,
-            chunk=chunk,
-        )
+        keys = self._default.lock_keys()
+        with self._transactions.begin() as transaction:
+            locked = transaction.lock_set(keys=keys)
+            chunk = draft.mint(self._default.read(locked).urgency_id)
+            item = self._items.create_run_with_chunk(
+                pointer=pointer,
+                title=plan.title,
+                body=plan.charge,
+                author=author,
+                project_id=routine.project_id,
+                routine_name=routine.slug,
+                scope_slug=scope.slug,
+                run_mode=plan.effective_mode.value,
+                at=pointer_at,
+                chunk=chunk,
+                transaction=locked,
+            )
         return RunResult(
             item=item,
             chunk_id=chunk.chunk_id,

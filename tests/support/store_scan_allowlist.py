@@ -301,8 +301,8 @@ _TOMBSTONE_NO_KEY_INDEX_REASON = (
 
 # Every table below holds an operator-created fleet entity, bounded by entity count, not chunk/work-item volume.
 _FLEET_CONFIG_REASON = (
-    "an operator-created fleet entity (registered runner, scope, secret, work source, routine, cadence, graph, hub "
-    "user) or an auth event about one — bounded by how many of those entities exist "
+    "an operator-created fleet entity (registered runner, scope, secret, work source, routine, cadence, urgency, "
+    "graph, hub user) or an auth event about one — bounded by how many of those entities exist "
     "across the whole fleet's lifetime, not by chunk/work-item volume."
 )
 
@@ -313,6 +313,11 @@ _SINGLETON_REASON = "a declared singleton (superuser_bootstrap) — at most one 
 _TENANT_DELETIONS_REASON = (
     "one fact per tenant the hub ever deleted, read whole by the tenant-teardown sweep for the deletions still "
     "underway — bounded by the tenants hub administrators created, never by a tenant's own volume."
+)
+
+# The tenant's settings: one row per tenant, read by its tenant-led unique key.
+_TENANT_SETTINGS_REASON = (
+    "the tenant's settings — one row per tenant, read by the tenant-led unique key, so a read touches the one row."
 )
 
 HUB_ALLOWED_SCANS: list[Allowance] = [
@@ -338,6 +343,7 @@ HUB_ALLOWED_SCANS: list[Allowance] = [
     # --- singletons/near-singletons ------------------------------------------------------
     TableWideAllowance("superuser_bootstrap", 50, _SINGLETON_REASON),
     TableWideAllowance("tenant_deletions", 200, _TENANT_DELETIONS_REASON),
+    TableWideAllowance("tenant_settings", 50, _TENANT_SETTINGS_REASON),
     # --- operator-created fleet entities and their lifecycle facts --------------------
     TableWideAllowance("forge_lifecycle_facts", 200, _FLEET_CONFIG_REASON),
     TableWideAllowance("forges", 200, _FLEET_CONFIG_REASON),
@@ -351,6 +357,9 @@ HUB_ALLOWED_SCANS: list[Allowance] = [
     TableWideAllowance("repositories", 200, _FLEET_CONFIG_REASON),
     TableWideAllowance("repository_lifecycle_facts", 200, _FLEET_CONFIG_REASON),
     TableWideAllowance("cadences", 200, _FLEET_CONFIG_REASON),
+    TableWideAllowance("urgencies", 200, _FLEET_CONFIG_REASON),
+    TableWideAllowance("urgency_lifecycle_facts", 200, _FLEET_CONFIG_REASON),
+    TableWideAllowance("urgency_positions", 200, _FLEET_CONFIG_REASON),
     TableWideAllowance("routine_lifecycle_facts", 200, _FLEET_CONFIG_REASON),
     TableWideAllowance("routine_scopes", 200, _FLEET_CONFIG_REASON),
     TableWideAllowance("routines", 200, _FLEET_CONFIG_REASON),

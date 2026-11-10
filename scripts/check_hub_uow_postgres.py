@@ -17,6 +17,9 @@ from structlog import get_logger
 from blizzard.hub.domain.cadence.errands import ErrandKey
 from blizzard.hub.domain.cadence.mint import mint_lock_keys
 from blizzard.hub.domain.chunk.ports.queue import BACKLOG_RANKING_LOCK, READY_RANKING_LOCK
+from blizzard.hub.domain.urgency.model import UrgencyId
+from blizzard.hub.domain.urgency.ports import tenant_settings_lock, urgency_lock, urgency_order_lock
+from blizzard.hub.domain.urgency.services import default_lock_keys
 from blizzard.hub.store import schema as s
 from blizzard.hub.store import transactions as tx
 from blizzard.hub.store.errors import HubStoreConnections, HubStoreErrorFactory
@@ -47,14 +50,46 @@ class _CompatibleGuard(ScopedConnections):
 
 _LockSet = tuple[list[str], list[tuple[str, str]]]
 
-#: The cadence mint's lock set against the queue's own promote — a fresh chunk naming no row yet, the errand, and
-#: both ranking locks, beside the promoted chunk and both ranking locks — run each way round. Each first writer holds
-#: every lock it declares, so the second blocks on the ranking locks and lands only once the first commits.
-_MINT: _LockSet = (["n"], mint_lock_keys(ErrandKey("chr_proof", "scp_proof"), promote=True))
+_RETIRING = UrgencyId("urg_proof")
+#: The cadence mint's lock set against the queue's own promote — a fresh chunk naming no row yet, the errand, both
+#: ranking locks, and the default ``urg_proof``'s, beside the promoted chunk and both ranking locks — run each way
+#: round. Each first writer holds every lock it declares, so the second blocks on the ranking locks and lands only
+#: once the first commits.
+_MINT: _LockSet = (["n"], mint_lock_keys(ErrandKey("chr_proof", "scp_proof"), promote=True, default_id=_RETIRING))
 _PROMOTE: _LockSet = (["a"], [READY_RANKING_LOCK, BACKLOG_RANKING_LOCK])
+#: A retire of ``urg_proof`` moving its work to ``urg_other`` against a mint writing ``urg_proof`` as the default —
+#: the hub item, proposal, routine, and ingest mints' set, and the cadence mint's — and a settings edit naming it,
+#: each run each way round. Every one takes the settings' lock, so whichever writer holds its set, the other blocks
+#: there and lands only once the first commits — a mint or an edit never lands on an urgency a retire holds.
+_RETIRE: _LockSet = (
+    [],
+    [tenant_settings_lock(), urgency_order_lock(), urgency_lock(_RETIRING), urgency_lock(UrgencyId("urg_other"))],
+)
+_DEFAULT_MINT: _LockSet = (["n"], default_lock_keys(_RETIRING))
+_SETTINGS_EDIT: _LockSet = ([], [tenant_settings_lock(), urgency_lock(_RETIRING)])
+#: A config apply creating urgencies, setting the order, and making ``urg_proof`` the default — the settings', the
+#: set's, and the named urgency's locks — against the retire, each way round: the settings' lock serializes them, so
+#: a retire never commits between the apply's re-checks and its writes.
+_APPLY: _LockSet = ([], [tenant_settings_lock(), urgency_order_lock(), urgency_lock(_RETIRING)])
+#: A reorder or a create — the set's lock alone — against the retire and against an enable of ``urg_proof``, each way
+#: round: both take the set's lock, so the urgencies a reorder decides are live hold still until it commits.
+_REORDER: _LockSet = ([], [urgency_order_lock()])
+_ENABLE: _LockSet = ([], [urgency_order_lock(), urgency_lock(_RETIRING)])
 _LOCK_SETS: dict[str, tuple[_LockSet, _LockSet]] = {
     "cadence mint, then promote": (_MINT, _PROMOTE),
     "promote, then cadence mint": (_PROMOTE, _MINT),
+    "urgency retire, then mint": (_RETIRE, _DEFAULT_MINT),
+    "mint, then urgency retire": (_DEFAULT_MINT, _RETIRE),
+    "urgency retire, then cadence mint": (_RETIRE, _MINT),
+    "cadence mint, then urgency retire": (_MINT, _RETIRE),
+    "urgency retire, then settings edit": (_RETIRE, _SETTINGS_EDIT),
+    "settings edit, then urgency retire": (_SETTINGS_EDIT, _RETIRE),
+    "config apply, then urgency retire": (_APPLY, _RETIRE),
+    "urgency retire, then config apply": (_RETIRE, _APPLY),
+    "urgency retire, then reorder": (_RETIRE, _REORDER),
+    "reorder, then urgency retire": (_REORDER, _RETIRE),
+    "urgency enable, then reorder": (_ENABLE, _REORDER),
+    "reorder, then urgency enable": (_REORDER, _ENABLE),
 }
 
 

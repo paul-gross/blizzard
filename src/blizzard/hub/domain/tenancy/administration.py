@@ -3,7 +3,8 @@
 
 A tenant is created in one write transaction: its ``tenants`` row, the packaged graphs minted into it, its built-in
 ``hub`` work source's sequence, its ``default`` project (``blizzard-product:/plans/projects/hub/spec/model.md`` §Every
-tenant starts with a project), and — when one is named — its first admin's membership. Nothing of a tenant whose
+tenant starts with a project), its ``standard`` urgency and the settings naming it the default, and — when one is
+named — its first admin's membership. Nothing of a tenant whose
 creation failed survives, and a tenant is usable the moment its creation commits. A tenant's name is a label of 1 to 64
 characters with no leading or trailing whitespace: it is never refused for being taken, and never stands in for the
 tenant's id."""
@@ -24,6 +25,10 @@ from blizzard.hub.domain.config.changes import ChangeContext, Door
 from blizzard.hub.domain.graph.model import IWriteGraphRepository
 from blizzard.hub.domain.projects.color import ColorPick, least_used
 from blizzard.hub.domain.projects.model import IWriteProjectRepository, Project
+from blizzard.hub.domain.urgency.model import NO_MARK, Urgency
+from blizzard.hub.domain.urgency.order import FIRST_POSITION
+from blizzard.hub.domain.urgency.ports import IWriteTenantSettings, IWriteUrgencyRepository
+from blizzard.hub.domain.urgency.settings import TenantSettings
 from blizzard.hub.tenancy import TenantId, UnknownTenant
 
 
@@ -94,6 +99,16 @@ class ITenantCreation(Protocol):
         """The new tenant's projects, which its default project is written into."""
         ...
 
+    @property
+    def urgencies(self) -> IWriteUrgencyRepository:
+        """The new tenant's urgencies, which its ``standard`` urgency is written into."""
+        ...
+
+    @property
+    def tenant_settings(self) -> IWriteTenantSettings:
+        """The new tenant's settings, seeded naming ``standard`` its default."""
+        ...
+
     def grant_admin(self, user_id: str, *, by: str, at: datetime) -> None:
         """Make ``user_id`` an ``admin`` member of the new tenant; :class:`TenantAdminUnknown` when no such user
         exists."""
@@ -141,10 +156,10 @@ class TenantAdministration:
         self._clock = clock
 
     def create(self, name: str, *, admin_user_id: str | None, by: str, door: Door = Door.API) -> Tenant:
-        """Create a tenant named ``name`` in one transaction, holding its default project, ``admin_user_id`` its first
-        admin when named. The creator is granted nothing they did not name themselves for; the project's ``create``
-        change names the creator and ``door``. :class:`TenantNameRefused` when ``name`` is not a tenant name's shape —
-        nothing is created."""
+        """Create a tenant named ``name`` in one transaction, holding its default project, its ``standard`` urgency and
+        the settings naming it the default, and ``admin_user_id`` its first admin when named. The creator is granted
+        nothing they did not name themselves for; each seeded record's ``create`` change names the creator and
+        ``door``. :class:`TenantNameRefused` when ``name`` is not a tenant name's shape — nothing is created."""
         name = tenant_name(name)
         at = self._clock.now()
         tenant = TenantId(Id.mint(IdPrefix.TENANT, self._clock).value)
@@ -159,6 +174,11 @@ class TenantAdministration:
                 at=at,
             )
             creation.projects.create(project, change=change)
+            ctx = ChangeContext(actor=by, door=door)
+            standard, standard_change = Urgency.standard(ctx, at=at)
+            creation.urgencies.create(standard, mark=NO_MARK, position=FIRST_POSITION, change=standard_change)
+            settings, settings_change = TenantSettings.seed(tenant, standard, ctx, at=at)
+            creation.tenant_settings.create(settings, change=settings_change)
             if admin_user_id is not None:
                 creation.grant_admin(admin_user_id, by=by, at=at)
         self._changed()

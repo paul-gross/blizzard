@@ -26,6 +26,7 @@ from blizzard.hub.domain.chunk.model import (
 from blizzard.hub.domain.chunk.ports.work_refs import IReadChunkWorkRefsRepository
 from blizzard.hub.domain.kernel.hub_source import RESERVED_HUB_SOURCE_NAME
 from blizzard.hub.domain.projects.model import ProjectId
+from blizzard.hub.domain.urgency.model import UrgencyId
 from blizzard.hub.domain.work_items.editing import prepare_mint
 from blizzard.hub.domain.work_items.ports import IWriteWorkItemRepository
 from tests.support.scaffolding import make_graph
@@ -138,7 +139,7 @@ def test_a_named_project_refuses_the_first_source_not_linked_to_it() -> None:
 
 
 def test_a_minted_chunk_carries_the_project_it_names() -> None:
-    chunk = mint_chunk([_FORGE_1], graph_id="gr_1", at=_T0, project_id=_ALPHA)
+    chunk = mint_chunk([_FORGE_1], graph_id="gr_1", at=_T0, project_id=_ALPHA, urgency_id=UrgencyId("urg_1"))
 
     assert (chunk.project_id, chunk.require_project()) == (_ALPHA, _ALPHA)
 
@@ -167,8 +168,8 @@ class _NoHolders:
         raise NotImplementedError(f"should not touch {name!r}")
 
 
-def test_prepare_mint_mints_the_allocated_pointer_into_the_project_it_names() -> None:
-    pointer, chunk, at = prepare_mint(
+def test_prepare_mint_drafts_the_allocated_pointer_into_the_project_it_names() -> None:
+    pointer, draft, at = prepare_mint(
         cast(IWriteWorkItemRepository, _Items()),
         cast(IReadChunkWorkRefsRepository, _NoHolders()),
         FixedClock(instant=_T0),
@@ -178,4 +179,5 @@ def test_prepare_mint_mints_the_allocated_pointer_into_the_project_it_names() ->
     )
 
     assert pointer == WorkRef(source=RESERVED_HUB_SOURCE_NAME, ref="7")
-    assert (chunk.work_refs, chunk.project_id, at) == ([pointer], _BETA, _T0)
+    chunk = draft.mint(UrgencyId("urg_1"))
+    assert (chunk.work_refs, chunk.project_id, chunk.urgency_id, at) == ([pointer], _BETA, "urg_1", _T0)

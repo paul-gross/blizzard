@@ -28,6 +28,7 @@ from blizzard.hub.domain.graph.model import Graph
 from blizzard.hub.domain.operations.delete import DeleteService
 from blizzard.hub.domain.projects.model import ProjectId
 from blizzard.hub.domain.runners.route import Route
+from blizzard.hub.domain.urgency.services import TenantDefault
 from blizzard.hub.domain.work_items.editing import (
     WithdrawalLostToClosure,
     WorkItemEditService,
@@ -39,6 +40,8 @@ from blizzard.hub.store import schema as s
 from blizzard.hub.store.internal.finding_store import FindingStore
 from blizzard.hub.store.internal.garden_proposal_closure_store import GardenProposalClosureStore
 from blizzard.hub.store.internal.garden_proposal_store import GardenProposalStore
+from blizzard.hub.store.internal.tenant_settings_store import TenantSettingsStore
+from blizzard.hub.store.internal.urgency_store import UrgencyStore
 from blizzard.hub.store.internal.work_item_store import WorkItemStore
 from blizzard.hub.store.transactions import HubTransactions
 from blizzard.hub.work_sources.closer import WorkItemGoneError
@@ -75,7 +78,14 @@ def _source(tmp_path: Path) -> tuple[HubWorkSource, WorkItemStore, ChunkStores, 
         cycle_lock=threading.Lock(),
     )
     edits = WorkItemEditService(
-        items=items, work_refs=chunks.work_refs, record=chunks.record, facts=chunks.facts, clock=clock, delete=delete
+        items=items,
+        work_refs=chunks.work_refs,
+        record=chunks.record,
+        facts=chunks.facts,
+        clock=clock,
+        delete=delete,
+        default=TenantDefault(settings=TenantSettingsStore(store), urgencies=UrgencyStore(store)),
+        transactions=HubTransactions(store),
     )
     users = UserRepository(store, RepoErrorFactory(get_logger("tests.test_hub_work_source")))
     resolution = GardenProposalDeliveryResolution(
@@ -852,8 +862,16 @@ def _edits(items: WorkItemStore, chunks: ChunkStores, clock: FixedClock, engine:
         transactions=HubTransactions(hub_store_connections(engine)),
         cycle_lock=threading.Lock(),
     )
+    store = hub_store_connections(engine)
     return WorkItemEditService(
-        items=items, work_refs=chunks.work_refs, record=chunks.record, facts=chunks.facts, clock=clock, delete=delete
+        items=items,
+        work_refs=chunks.work_refs,
+        record=chunks.record,
+        facts=chunks.facts,
+        clock=clock,
+        delete=delete,
+        default=TenantDefault(settings=TenantSettingsStore(store), urgencies=UrgencyStore(store)),
+        transactions=HubTransactions(store),
     )
 
 

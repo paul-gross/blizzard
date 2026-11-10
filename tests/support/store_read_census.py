@@ -7,6 +7,7 @@ migrated-to-head store, seeded once per gate run entirely through each concept's
 
 from __future__ import annotations
 
+import base64
 import json
 from collections.abc import Callable
 from dataclasses import dataclass
@@ -172,6 +173,14 @@ from blizzard.hub.domain.runners.registration import IReadRunnerRegistry
 from blizzard.hub.domain.runners.route import Route
 from blizzard.hub.domain.tenancy.administration import IReadTenantDirectory
 from blizzard.hub.domain.tenancy.teardown import IReadTenantTeardowns
+from blizzard.hub.domain.urgency.mark import IconShape
+from blizzard.hub.domain.urgency.model import Urgency, UrgencyId, UrgencyShape
+from blizzard.hub.domain.urgency.ports import (
+    IReadTenantSettings,
+    IReadUrgencyChunks,
+    IReadUrgencyOrder,
+    IReadUrgencyRepository,
+)
 from blizzard.hub.domain.work_items.closure import IReadCloseIntentCorpus
 from blizzard.hub.domain.work_items.ports import IReadWorkItemRepository
 from blizzard.hub.secrets import hub_key_provider, secret_cipher
@@ -198,9 +207,12 @@ from blizzard.hub.store.internal.invitation_store import InvitationStore
 from blizzard.hub.store.internal.repository_record_store import RepositoryRecordStore
 from blizzard.hub.store.internal.review_findings_store import ReviewFindingsStore
 from blizzard.hub.store.internal.secret_store import SecretStore
+from blizzard.hub.store.internal.tenant_settings_store import TenantSettingsStore
 from blizzard.hub.store.internal.tenant_teardown_store import TenantTeardownStore
 from blizzard.hub.store.internal.trace_store import ProjectLabels, TraceStore
 from blizzard.hub.store.internal.transcript_event_store import TranscriptEventStore
+from blizzard.hub.store.internal.urgency_chunks_store import UrgencyChunksStore
+from blizzard.hub.store.internal.urgency_store import UrgencyOrderStore, UrgencyStore
 from blizzard.hub.store.internal.work_item_store import WorkItemStore
 from blizzard.hub.store.internal.work_source_record_store import WorkSourceRecordStore
 from blizzard.hub.store.scoped import ScopedConnections
@@ -1311,6 +1323,12 @@ class HubWorld:
     flow_submission_id: str
     #: The first flow that visit holds.
     flow_id: str
+    urgencies: UrgencyStore
+    urgency_order: UrgencyOrderStore
+    tenant_settings: TenantSettingsStore
+    urgency_chunks: UrgencyChunksStore
+    #: ``census-urgent``, placed first with an icon and carrying two ready chunks; ``census-old`` beside it is retired.
+    urgency_id: UrgencyId
 
 
 def build_hub_world(tmp_path: Path) -> HubWorld:
@@ -2306,6 +2324,35 @@ def build_hub_world(tmp_path: Path) -> HubWorld:
     for errand in census_errands:
         hub.services.cadence_mint.mint(errand, judged=None, inputs=census_inputs[errand.key])
 
+    # --- urgencies: `census-urgent` first with an icon, carrying two ready chunks; `census-old` retired ---------
+    urgency_store = UrgencyStore(store_connections)
+    urgency_order_store = UrgencyOrderStore(store_connections)
+    urgency_chunks_store = UrgencyChunksStore(store_connections)
+    urgency_ctx = ChangeContext(actor="operator", door=Door.API)
+    census_icon = IconShape("image/png", base64.b64encode(b"\x89PNG\r\n\x1a\n" + b"\x00" * 8).decode())
+    urgent, urgent_mark, urgent_change = Urgency.new(
+        UrgencyShape("census-urgent", icon=census_icon), urgency_ctx, siblings=tuple, pick=lambda c: c[0], at=_ht(40)
+    )
+    census_order = urgency_order_store.order()
+    first, _ = census_order.landing(None, last=False)
+    urgency_store.create(urgent, mark=urgent_mark, position=first, change=urgent_change)
+    old, old_mark, old_change = Urgency.new(
+        UrgencyShape("census-old", emoji="🐢"), urgency_ctx, siblings=tuple, pick=lambda c: c[0], at=_ht(41)
+    )
+    urgency_store.create(
+        old, mark=old_mark, position=urgency_order_store.order().landing(None, last=True)[0], change=old_change
+    )
+    retiring = old.set_retired(True, urgency_ctx, if_match=None, at=_ht(42))
+    assert retiring is not None
+    urgency_store.record_lifecycle(
+        retiring[0], retired=True, from_revision=old.revision, at=_ht(42), by="operator", change=retiring[1]
+    )
+    urgency_chunks_store.move(
+        [chunk_ready_1, chunk_ready_2],
+        from_id=hub.services.tenant_settings.show().default.urgency_id,
+        to=urgent.urgency_id,
+    )
+
     return HubWorld(
         hub=hub,
         engine=engine,
@@ -2385,6 +2432,11 @@ def build_hub_world(tmp_path: Path) -> HubWorld:
         flow_chunk=flow_chunk,
         flow_submission_id=flow_submission.submission_id,
         flow_id=flow_submission.flows[0].flow_id,
+        urgencies=urgency_store,
+        urgency_order=urgency_order_store,
+        tenant_settings=TenantSettingsStore(store_connections),
+        urgency_chunks=urgency_chunks_store,
+        urgency_id=urgent.urgency_id,
     )
 
 
@@ -2395,6 +2447,15 @@ HubRecipe = Callable[[HubWorld], object]
 HUB_NAMED_READ_SEAMS: tuple[type, ...] = (ISecretCatalog, CredentialReads, InvitationReads)
 
 HUB_CENSUS: dict[tuple[type, str], HubRecipe] = {
+    (IReadUrgencyRepository, "get"): lambda w: w.urgencies.get(w.urgency_id),
+    (IReadUrgencyRepository, "get_by_slug"): lambda w: w.urgencies.get_by_slug("census-urgent"),
+    (IReadUrgencyRepository, "list_all"): lambda w: w.urgencies.list_all(),
+    (IReadUrgencyRepository, "icon"): lambda w: w.urgencies.icon(w.urgency_id),
+    (IReadUrgencyRepository, "icons"): lambda w: w.urgencies.icons(),
+    (IReadUrgencyOrder, "order"): lambda w: w.urgency_order.order(),
+    (IReadTenantSettings, "get"): lambda w: w.tenant_settings.get(),
+    (IReadUrgencyChunks, "open_counts"): lambda w: w.urgency_chunks.open_counts([w.urgency_id]),
+    (IReadUrgencyChunks, "open_chunks"): lambda w: w.urgency_chunks.open_chunks(w.urgency_id),
     (IReadAuthStateRepository, "get"): lambda w: w.auth_state.get(w.auth_state_value),
     (IReadAuthFactsRepository, "list_recent"): lambda w: w.auth_facts.list_recent(limit=50),
     (IReadIdentityRepository, "get"): lambda w: w.hub.hub_services.identities.get("github", "12345"),

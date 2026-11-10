@@ -24,6 +24,7 @@ from blizzard.hub.store.transactions import HubTransactions
 from tests.support.scaffolding import (
     chunk_stores,
     default_project,
+    default_urgency,
     hub_store_connections,
     migrated_hub_at,
     seed_chunk,
@@ -35,7 +36,13 @@ _NOW = datetime(2026, 7, 16, 12, 0, 0, tzinfo=UTC)
 
 
 def _chunk(engine: Engine, pointer: WorkRef) -> Chunk:
-    return mint_chunk([pointer], graph_id="gr_1", at=_NOW, project_id=ProjectId(default_project(engine)))
+    return mint_chunk(
+        [pointer],
+        graph_id="gr_1",
+        at=_NOW,
+        project_id=ProjectId(default_project(engine)),
+        urgency_id=default_urgency(engine),
+    )
 
 
 def _mint(items: WorkItemStore, engine: Engine, chunk: Chunk, *, author: WorkItemAuthor, **kwargs: Any) -> None:
@@ -73,6 +80,7 @@ def test_item_lands_open_and_carries_the_runs_indexed_values(tmp_path: Path) -> 
         graph_id="gr_1",
         at=_NOW,
         project_id=ProjectId(default_project(engine)),
+        urgency_id=default_urgency(engine),
         default_model=["opus"],
         default_effort="high",
     )
@@ -112,6 +120,7 @@ def test_chunk_lands_not_ready_carrying_the_routines_defaults(tmp_path: Path) ->
         graph_id="gr_1",
         at=_NOW,
         project_id=ProjectId(default_project(engine)),
+        urgency_id=default_urgency(engine),
         default_model=["opus"],
         default_effort="high",
     )
@@ -154,6 +163,7 @@ def test_a_failing_write_rolls_back_the_whole_composite(tmp_path: Path) -> None:
         work_refs=[pointer],
         minted_at=_NOW,
         project_id=ProjectId(default_project(engine)),
+        urgency_id=default_urgency(engine),
     )
 
     with pytest.raises(HubStoreError):

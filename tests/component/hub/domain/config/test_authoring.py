@@ -71,7 +71,7 @@ _CLI = ChangeContext(actor="alice", door=Door.CLI)
 
 
 #: The kinds whose change rows the world writes before any test acts.
-_SETUP_KINDS = (RecordKind.PROJECT, RecordKind.FORGE)
+_SETUP_KINDS = (RecordKind.PROJECT, RecordKind.FORGE, RecordKind.URGENCY, RecordKind.TENANT_SETTINGS)
 
 
 class _World:
@@ -328,7 +328,7 @@ def test_the_log_pages_newest_first_and_filters_by_record(world: _World) -> None
     everything = world.log.page(before=None, limit=100, record_kind=None, record_key=None)
     ids = [c.id for c in everything if c.id is not None]
     assert ids == sorted(ids, reverse=True)
-    assert len(everything) == 3 + 2  # and the store's default project's, which the migration wrote, and the forge's
+    assert len(everything) == 3 + 4  # and the migration's project, urgency, and settings rows, and the forge's
     older = world.log.page(before=ids[0], limit=1, record_kind=None, record_key=None)
     assert [c.id for c in older] == [ids[1]]
     only = world.log.page(

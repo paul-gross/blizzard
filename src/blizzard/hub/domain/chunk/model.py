@@ -28,6 +28,7 @@ from blizzard.hub.domain.artifact.model import StoredArtifact
 from blizzard.hub.domain.graph.model import RESERVED_TERMINAL, Graph, Node
 from blizzard.hub.domain.projects.model import ProjectId
 from blizzard.hub.domain.runners.registration import RecordedPause
+from blizzard.hub.domain.urgency.model import UrgencyId
 
 # --- Domain objects ---------------------------------------------------------
 
@@ -233,6 +234,9 @@ class Chunk:
     # The project the chunk was minted into, never changed after. Every mint names it and every
     # read of a stored chunk fills it; ``None`` only on a record built by hand.
     project_id: ProjectId | None = None
+    # The chunk's urgency — the tenant's default at mint, overwritten in place by a retire's move. Every
+    # mint names it and every read of a stored chunk fills it; ``None`` only on a record built by hand.
+    urgency_id: UrgencyId | None = None
 
     def require_project(self) -> ProjectId:
         """The chunk's project — :class:`ChunkProjectMissing` on a record that carries none."""
@@ -246,7 +250,37 @@ class Chunk:
         return self.work_refs[0] if self.work_refs else None
 
 
-def mint_chunk(
+@domain_model
+@dataclass(frozen=True)
+class ChunkDraft:
+    """A chunk prepared before its mint's unit — its id, work refs, project, and preferences settled, its urgency
+    not yet read. :meth:`mint` names the urgency read under the unit's locks."""
+
+    chunk_id: str
+    graph_id: str
+    work_refs: tuple[WorkRef, ...]
+    minted_at: datetime
+    project_id: ProjectId
+    default_model: tuple[str, ...] = ()
+    default_effort: str | None = None
+    default_harnesses: tuple[str, ...] = ()
+
+    def mint(self, urgency_id: UrgencyId) -> Chunk:
+        """The resting chunk this draft mints, carrying ``urgency_id``."""
+        return Chunk(
+            chunk_id=self.chunk_id,
+            graph_id=self.graph_id,
+            work_refs=list(self.work_refs),
+            minted_at=self.minted_at,
+            default_model=list(self.default_model),
+            default_effort=self.default_effort,
+            default_harnesses=list(self.default_harnesses),
+            project_id=self.project_id,
+            urgency_id=urgency_id,
+        )
+
+
+def draft_chunk(
     work_refs: Sequence[WorkRef],
     *,
     graph_id: str,
@@ -255,20 +289,45 @@ def mint_chunk(
     default_model: list[str] | None = None,
     default_effort: str | None = None,
     default_harnesses: list[str] | None = None,
-) -> Chunk:
-    """Mint a resting chunk of ``project_id`` pinned to ``graph_id`` holding ``work_refs``,
-    timestamped at the caller's own already-stamped ``at`` (``bzh:injected-clock``). Every
-    mint names its project; none is inferred here. An omitted preference is empty."""
-    return Chunk(
+) -> ChunkDraft:
+    """Draft a chunk of ``project_id`` pinned to ``graph_id`` holding ``work_refs``, its id minted at the caller's
+    own already-stamped ``at`` (``bzh:injected-clock``). Every draft names its project; none is inferred here. An
+    omitted preference is empty."""
+    return ChunkDraft(
         chunk_id=Id.mint_at(IdPrefix.CHUNK, at).value,
         graph_id=graph_id,
-        work_refs=list(work_refs),
+        work_refs=tuple(work_refs),
         minted_at=at,
-        default_model=list(default_model or []),
-        default_effort=default_effort,
-        default_harnesses=list(default_harnesses or []),
         project_id=project_id,
+        default_model=tuple(default_model or ()),
+        default_effort=default_effort,
+        default_harnesses=tuple(default_harnesses or ()),
     )
+
+
+def mint_chunk(
+    work_refs: Sequence[WorkRef],
+    *,
+    graph_id: str,
+    at: datetime,
+    project_id: ProjectId,
+    urgency_id: UrgencyId,
+    default_model: list[str] | None = None,
+    default_effort: str | None = None,
+    default_harnesses: list[str] | None = None,
+) -> Chunk:
+    """Mint a resting chunk of ``project_id`` pinned to ``graph_id`` holding ``work_refs`` at ``at`` — the
+    :func:`draft_chunk` minted at once. Every mint names its project and its urgency, the tenant's default read
+    under the mint's locks; neither is inferred here."""
+    return draft_chunk(
+        work_refs,
+        graph_id=graph_id,
+        at=at,
+        project_id=project_id,
+        default_model=default_model,
+        default_effort=default_effort,
+        default_harnesses=default_harnesses,
+    ).mint(urgency_id)
 
 
 @domain_model

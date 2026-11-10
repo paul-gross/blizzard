@@ -3869,8 +3869,9 @@ export type ConfigDocumentInvalidProblem = {
  *
  * A declarative configuration document, version 2 — the one version a hub applies and exports. Each entry is the
  * kind's own document model, so a field an entry omits is left as stored; forges reconcile before the records that
- * name them, projects before scopes and routines, and scopes before routines, so an entry may name a forge, a
- * project or a scope the same document declares; ``secrets`` lists secret names that must already be active.
+ * name them, projects before scopes and routines, ``urgencies``, ``urgency_order`` and ``settings`` in that order
+ * after the projects and before the scopes, and scopes before routines, so an entry may name a forge, a project, an
+ * urgency or a scope the same document declares; ``secrets`` lists secret names that must already be active.
  * ``GET /api/config/export`` writes every field of every entry, ``projects`` first, and names every project by its
  * slug.
  */
@@ -3903,6 +3904,15 @@ export type ConfigDocumentV2 = {
      * Secrets
      */
     secrets?: Array<string>;
+    settings?: SettingsEntry | null;
+    /**
+     * Urgencies
+     */
+    urgencies?: Array<UrgencyEntry>;
+    /**
+     * Urgency Order
+     */
+    urgency_order?: Array<string> | null;
     /**
      * Version
      */
@@ -9305,7 +9315,8 @@ export const IdPrefix = {
     FSUB: 'fsub',
     HTN: 'htn',
     CAD: 'cad',
-    CHR: 'chr'
+    CHR: 'chr',
+    URG: 'urg'
 } as const;
 
 /**
@@ -12130,7 +12141,8 @@ export type ReceiverStatus = {
  *
  * The kind of configured record a change row names. A project's, a forge's, a repository's and a work source's
  * ``record_key`` is its id, never its slug; a project link's is the linked source's or repository's id. Linking,
- * unlinking and re-linking are ``create``, ``retire`` and ``enable``.
+ * unlinking and re-linking are ``create``, ``retire`` and ``enable``. An urgency's ``record_key`` is its id; the
+ * urgency order's and the tenant settings' is the tenant's id.
  */
 export const RecordKind = {
     WORK_SOURCE: 'work_source',
@@ -12142,7 +12154,10 @@ export const RecordKind = {
     CADENCE: 'cadence',
     PROJECT: 'project',
     PROJECT_SOURCE_LINK: 'project_source_link',
-    PROJECT_REPOSITORY_LINK: 'project_repository_link'
+    PROJECT_REPOSITORY_LINK: 'project_repository_link',
+    URGENCY: 'urgency',
+    URGENCY_ORDER: 'urgency_order',
+    TENANT_SETTINGS: 'tenant_settings'
 } as const;
 
 /**
@@ -12150,7 +12165,8 @@ export const RecordKind = {
  *
  * The kind of configured record a change row names. A project's, a forge's, a repository's and a work source's
  * ``record_key`` is its id, never its slug; a project link's is the linked source's or repository's id. Linking,
- * unlinking and re-linking are ``create``, ``retire`` and ``enable``.
+ * unlinking and re-linking are ``create``, ``retire`` and ``enable``. An urgency's ``record_key`` is its id; the
+ * urgency order's and the tenant settings' is the tenant's id.
  */
 export type RecordKind = typeof RecordKind[keyof typeof RecordKind];
 
@@ -15773,6 +15789,67 @@ export const SessionMode = { RESUME: 'resume', FRESH: 'fresh' } as const;
 export type SessionMode = typeof SessionMode[keyof typeof SessionMode];
 
 /**
+ * SettingsDefaultView
+ */
+export type SettingsDefaultView = {
+    /**
+     * Slug
+     */
+    slug: string;
+    /**
+     * Urgency Id
+     */
+    urgency_id: string;
+};
+
+/**
+ * SettingsEntry
+ *
+ * The tenant's settings as a document states them: ``default_urgency``, by id or slug, sets the urgency every new
+ * chunk takes when nothing names another; ``null`` is refused.
+ */
+export type SettingsEntry = {
+    /**
+     * Default Urgency
+     */
+    default_urgency?: string | null;
+};
+
+/**
+ * SettingsPatchRequest
+ *
+ * A sparse edit of the tenant's settings: ``default_urgency``, by id or slug, when stated; ``null`` is
+ * refused.
+ */
+export type SettingsPatchRequest = {
+    /**
+     * Default Urgency
+     */
+    default_urgency?: string | null;
+};
+
+/**
+ * SettingsView
+ *
+ * The tenant's settings.
+ */
+export type SettingsView = {
+    default_urgency: SettingsDefaultView;
+    /**
+     * Revision
+     */
+    revision: number;
+    /**
+     * Updated At
+     */
+    updated_at: string;
+    /**
+     * Updated By
+     */
+    updated_by: string;
+};
+
+/**
  * SidechainSegmentView
  *
  * A subagent's private conversation, nested under the tool call that spawned it, or
@@ -17467,6 +17544,438 @@ export type UnknownWorkSourceProblem = {
      */
     type: 'urn:blizzard:problem:unknown-work-source';
     [key: string]: unknown;
+};
+
+/**
+ * UrgenciesListView
+ */
+export type UrgenciesListView = {
+    /**
+     * Urgencies
+     */
+    urgencies: Array<UrgencyView>;
+};
+
+/**
+ * UrgencyCreateRequest
+ *
+ * A new urgency. An absent ``name`` takes the slug and an absent ``color`` the palette color the live urgencies
+ * use least; an absent ``after`` lands it at the least urgent end, and ``after: null`` first.
+ */
+export type UrgencyCreateRequest = {
+    /**
+     * After
+     */
+    after?: string | null;
+    /**
+     * Color
+     */
+    color?: string | null;
+    /**
+     * Emoji
+     */
+    emoji?: string | null;
+    icon?: UrgencyIconDocument | null;
+    /**
+     * Name
+     */
+    name?: string | null;
+    /**
+     * Slug
+     */
+    slug: string;
+};
+
+/**
+ * UrgencyEntry
+ *
+ * An urgency as a document entry, named by its slug: created when the tenant holds none by it — with no ``name``
+ * taking the slug and no ``color`` the palette color the live urgencies use least — and otherwise a sparse edit of
+ * the fields it states. ``null`` on ``emoji`` or ``icon`` clears the mark; an ``icon`` is its media type and base64
+ * bytes. An entry naming a retired urgency is refused ``urgency_retired``.
+ */
+export type UrgencyEntry = {
+    /**
+     * Color
+     */
+    color?: string | null;
+    /**
+     * Emoji
+     */
+    emoji?: string | null;
+    icon?: UrgencyIconDocument | null;
+    /**
+     * Name
+     */
+    name?: string | null;
+    /**
+     * Slug
+     */
+    slug: string;
+};
+
+/**
+ * UrgencyIconDocument
+ *
+ * An icon as a request carries it: its media type and its bytes in base64.
+ */
+export type UrgencyIconDocument = {
+    /**
+     * Data
+     */
+    data: string;
+    /**
+     * Media Type
+     */
+    media_type: string;
+};
+
+/**
+ * UrgencyIconNotFoundProblem
+ *
+ * The urgency carries no icon.
+ */
+export type UrgencyIconNotFoundProblem = {
+    /**
+     * Detail
+     */
+    detail: string;
+    /**
+     * Instance
+     */
+    instance: string;
+    /**
+     * Status
+     */
+    status?: number;
+    /**
+     * Title
+     */
+    title: string;
+    /**
+     * Type
+     */
+    type: 'urn:blizzard:problem:urgency-icon-not-found';
+    [key: string]: unknown;
+};
+
+/**
+ * UrgencyIconView
+ *
+ * What a view carries of an icon: its media type and the digest of its bytes, never the bytes.
+ */
+export type UrgencyIconView = {
+    /**
+     * Digest
+     */
+    digest: string;
+    /**
+     * Media Type
+     */
+    media_type: string;
+};
+
+/**
+ * UrgencyInUseDetail
+ */
+export type UrgencyInUseDetail = {
+    /**
+     * Code
+     */
+    code: 'urgency_in_use';
+    /**
+     * Message
+     */
+    message: string;
+    /**
+     * Open Chunks
+     */
+    open_chunks: number;
+    /**
+     * Slug
+     */
+    slug: string;
+};
+
+/**
+ * UrgencyInUseProblem
+ *
+ * A retire names an urgency open chunks carry, and no urgency to move them to.
+ */
+export type UrgencyInUseProblem = {
+    detail: UrgencyInUseDetail;
+    /**
+     * Instance
+     */
+    instance: string;
+    /**
+     * Status
+     */
+    status?: number;
+    /**
+     * Title
+     */
+    title: string;
+    /**
+     * Type
+     */
+    type: 'urn:blizzard:problem:urgency-in-use';
+    [key: string]: unknown;
+};
+
+/**
+ * UrgencyIsDefaultDetail
+ */
+export type UrgencyIsDefaultDetail = {
+    /**
+     * Code
+     */
+    code: 'urgency_is_default';
+    /**
+     * Message
+     */
+    message: string;
+    /**
+     * Slug
+     */
+    slug: string;
+};
+
+/**
+ * UrgencyIsDefaultProblem
+ *
+ * A retire names the tenant's default urgency; the default must point elsewhere first.
+ */
+export type UrgencyIsDefaultProblem = {
+    detail: UrgencyIsDefaultDetail;
+    /**
+     * Instance
+     */
+    instance: string;
+    /**
+     * Status
+     */
+    status?: number;
+    /**
+     * Title
+     */
+    title: string;
+    /**
+     * Type
+     */
+    type: 'urn:blizzard:problem:urgency-is-default';
+    [key: string]: unknown;
+};
+
+/**
+ * UrgencyNotFoundProblem
+ *
+ * A path names an urgency the tenant does not hold.
+ */
+export type UrgencyNotFoundProblem = {
+    /**
+     * Detail
+     */
+    detail: string;
+    /**
+     * Instance
+     */
+    instance: string;
+    /**
+     * Status
+     */
+    status?: number;
+    /**
+     * Title
+     */
+    title: string;
+    /**
+     * Type
+     */
+    type: 'urn:blizzard:problem:urgency-not-found';
+    [key: string]: unknown;
+};
+
+/**
+ * UrgencyOrderRequest
+ *
+ * The whole live order, most urgent first, each urgency an id or a slug, naming every live urgency once.
+ */
+export type UrgencyOrderRequest = {
+    /**
+     * Urgencies
+     */
+    urgencies: Array<string>;
+};
+
+/**
+ * UrgencyPatchRequest
+ *
+ * A sparse edit: a field left out stays; ``null`` on ``emoji`` or ``icon`` clears it, and is refused on ``name``
+ * or ``color``. The slug is fixed, so a body stating one is refused.
+ */
+export type UrgencyPatchRequest = {
+    /**
+     * Color
+     */
+    color?: string | null;
+    /**
+     * Emoji
+     */
+    emoji?: string | null;
+    icon?: UrgencyIconDocument | null;
+    /**
+     * Name
+     */
+    name?: string | null;
+    /**
+     * Slug
+     */
+    slug?: string | null;
+};
+
+/**
+ * UrgencyPositionRequest
+ *
+ * One urgency moved to just after ``after``, or first under ``after: null``; each an id or a slug.
+ */
+export type UrgencyPositionRequest = {
+    /**
+     * After
+     */
+    after: string | null;
+    /**
+     * Urgency
+     */
+    urgency: string;
+};
+
+/**
+ * UrgencyRetireRequest
+ *
+ * Where the retiring urgency's open chunks go, by id or slug; ``null`` or absent when none carry it.
+ */
+export type UrgencyRetireRequest = {
+    /**
+     * Move To
+     */
+    move_to?: string | null;
+};
+
+/**
+ * UrgencyRetireView
+ *
+ * A retired urgency, and how many open chunks the retire moved.
+ */
+export type UrgencyRetireView = {
+    /**
+     * Color
+     */
+    color: string;
+    /**
+     * Created At
+     */
+    created_at: string;
+    /**
+     * Created By
+     */
+    created_by: string;
+    /**
+     * Default
+     */
+    default: boolean;
+    /**
+     * Emoji
+     */
+    emoji: string | null;
+    icon: UrgencyIconView | null;
+    /**
+     * Moved Chunks
+     */
+    moved_chunks: number;
+    /**
+     * Name
+     */
+    name: string;
+    /**
+     * Open Chunks
+     */
+    open_chunks: number;
+    /**
+     * Place
+     */
+    place: number | null;
+    /**
+     * Retired
+     */
+    retired: boolean;
+    /**
+     * Revision
+     */
+    revision: number;
+    /**
+     * Slug
+     */
+    slug: string;
+    /**
+     * Urgency Id
+     */
+    urgency_id: string;
+};
+
+/**
+ * UrgencyView
+ */
+export type UrgencyView = {
+    /**
+     * Color
+     */
+    color: string;
+    /**
+     * Created At
+     */
+    created_at: string;
+    /**
+     * Created By
+     */
+    created_by: string;
+    /**
+     * Default
+     */
+    default: boolean;
+    /**
+     * Emoji
+     */
+    emoji: string | null;
+    icon: UrgencyIconView | null;
+    /**
+     * Name
+     */
+    name: string;
+    /**
+     * Open Chunks
+     */
+    open_chunks: number;
+    /**
+     * Place
+     */
+    place: number | null;
+    /**
+     * Retired
+     */
+    retired: boolean;
+    /**
+     * Revision
+     */
+    revision: number;
+    /**
+     * Slug
+     */
+    slug: string;
+    /**
+     * Urgency Id
+     */
+    urgency_id: string;
 };
 
 /**
@@ -32848,6 +33357,106 @@ export type ReplaceSecretApiSecretsNameValuePutResponses = {
 
 export type ReplaceSecretApiSecretsNameValuePutResponse = ReplaceSecretApiSecretsNameValuePutResponses[keyof ReplaceSecretApiSecretsNameValuePutResponses];
 
+export type GetSettingsApiSettingsGetData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/settings';
+};
+
+export type GetSettingsApiSettingsGetErrors = {
+    /**
+     * Problem
+     */
+    400: TenantCredentialMismatchProblem;
+    /**
+     * Problem
+     */
+    401: AuthenticationRequiredProblem;
+    /**
+     * Problem
+     */
+    404: TenantNotFoundProblem;
+    /**
+     * Problem
+     */
+    409: TenantRequiredProblem;
+    /**
+     * Problem
+     */
+    503: HubStoreUnavailableProblem;
+};
+
+export type GetSettingsApiSettingsGetError = GetSettingsApiSettingsGetErrors[keyof GetSettingsApiSettingsGetErrors];
+
+export type GetSettingsApiSettingsGetResponses = {
+    /**
+     * Successful Response
+     */
+    200: SettingsView;
+};
+
+export type GetSettingsApiSettingsGetResponse = GetSettingsApiSettingsGetResponses[keyof GetSettingsApiSettingsGetResponses];
+
+export type PatchSettingsApiSettingsPatchData = {
+    body: SettingsPatchRequest;
+    headers?: {
+        /**
+         * If-Match
+         */
+        'if-match'?: number | null;
+        /**
+         * X-Blizzard-Door
+         */
+        'x-blizzard-door'?: string | null;
+    };
+    path?: never;
+    query?: never;
+    url: '/api/settings';
+};
+
+export type PatchSettingsApiSettingsPatchErrors = {
+    /**
+     * Problem
+     */
+    400: TenantCredentialMismatchProblem;
+    /**
+     * Problem
+     */
+    401: AuthenticationRequiredProblem;
+    /**
+     * Problem
+     */
+    403: PermissionRequiredProblem;
+    /**
+     * Problem
+     */
+    404: TenantNotFoundProblem;
+    /**
+     * Problem
+     */
+    409: TenantRequiredProblem | RevisionConflictProblem;
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+    /**
+     * Problem
+     */
+    503: HubStoreUnavailableProblem;
+};
+
+export type PatchSettingsApiSettingsPatchError = PatchSettingsApiSettingsPatchErrors[keyof PatchSettingsApiSettingsPatchErrors];
+
+export type PatchSettingsApiSettingsPatchResponses = {
+    /**
+     * Successful Response
+     */
+    200: SettingsView;
+};
+
+export type PatchSettingsApiSettingsPatchResponse = PatchSettingsApiSettingsPatchResponses[keyof PatchSettingsApiSettingsPatchResponses];
+
 export type FleetSpendApiSpendGetData = {
     body?: never;
     path?: never;
@@ -33037,6 +33646,514 @@ export type TraceStatusApiTracesStatusGetResponses = {
 };
 
 export type TraceStatusApiTracesStatusGetResponse = TraceStatusApiTracesStatusGetResponses[keyof TraceStatusApiTracesStatusGetResponses];
+
+export type ListUrgenciesApiUrgenciesGetData = {
+    body?: never;
+    path?: never;
+    query?: {
+        /**
+         * Retired
+         */
+        retired?: boolean;
+    };
+    url: '/api/urgencies';
+};
+
+export type ListUrgenciesApiUrgenciesGetErrors = {
+    /**
+     * Problem
+     */
+    400: TenantCredentialMismatchProblem;
+    /**
+     * Problem
+     */
+    401: AuthenticationRequiredProblem;
+    /**
+     * Problem
+     */
+    404: TenantNotFoundProblem;
+    /**
+     * Problem
+     */
+    409: TenantRequiredProblem;
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+    /**
+     * Problem
+     */
+    503: HubStoreUnavailableProblem;
+};
+
+export type ListUrgenciesApiUrgenciesGetError = ListUrgenciesApiUrgenciesGetErrors[keyof ListUrgenciesApiUrgenciesGetErrors];
+
+export type ListUrgenciesApiUrgenciesGetResponses = {
+    /**
+     * Successful Response
+     */
+    200: UrgenciesListView;
+};
+
+export type ListUrgenciesApiUrgenciesGetResponse = ListUrgenciesApiUrgenciesGetResponses[keyof ListUrgenciesApiUrgenciesGetResponses];
+
+export type CreateUrgencyApiUrgenciesPostData = {
+    body: UrgencyCreateRequest;
+    headers?: {
+        /**
+         * X-Blizzard-Door
+         */
+        'x-blizzard-door'?: string | null;
+    };
+    path?: never;
+    query?: never;
+    url: '/api/urgencies';
+};
+
+export type CreateUrgencyApiUrgenciesPostErrors = {
+    /**
+     * Problem
+     */
+    400: TenantCredentialMismatchProblem;
+    /**
+     * Problem
+     */
+    401: AuthenticationRequiredProblem;
+    /**
+     * Problem
+     */
+    403: PermissionRequiredProblem;
+    /**
+     * Problem
+     */
+    404: TenantNotFoundProblem;
+    /**
+     * Problem
+     */
+    409: TenantRequiredProblem;
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+    /**
+     * Problem
+     */
+    503: HubStoreUnavailableProblem;
+};
+
+export type CreateUrgencyApiUrgenciesPostError = CreateUrgencyApiUrgenciesPostErrors[keyof CreateUrgencyApiUrgenciesPostErrors];
+
+export type CreateUrgencyApiUrgenciesPostResponses = {
+    /**
+     * Successful Response
+     */
+    201: UrgencyView;
+};
+
+export type CreateUrgencyApiUrgenciesPostResponse = CreateUrgencyApiUrgenciesPostResponses[keyof CreateUrgencyApiUrgenciesPostResponses];
+
+export type PutUrgencyOrderApiUrgenciesOrderPutData = {
+    body: UrgencyOrderRequest;
+    headers?: {
+        /**
+         * X-Blizzard-Door
+         */
+        'x-blizzard-door'?: string | null;
+    };
+    path?: never;
+    query?: never;
+    url: '/api/urgencies/order';
+};
+
+export type PutUrgencyOrderApiUrgenciesOrderPutErrors = {
+    /**
+     * Problem
+     */
+    400: TenantCredentialMismatchProblem;
+    /**
+     * Problem
+     */
+    401: AuthenticationRequiredProblem;
+    /**
+     * Problem
+     */
+    403: PermissionRequiredProblem;
+    /**
+     * Problem
+     */
+    404: TenantNotFoundProblem;
+    /**
+     * Problem
+     */
+    409: TenantRequiredProblem;
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+    /**
+     * Problem
+     */
+    503: HubStoreUnavailableProblem;
+};
+
+export type PutUrgencyOrderApiUrgenciesOrderPutError = PutUrgencyOrderApiUrgenciesOrderPutErrors[keyof PutUrgencyOrderApiUrgenciesOrderPutErrors];
+
+export type PutUrgencyOrderApiUrgenciesOrderPutResponses = {
+    /**
+     * Successful Response
+     */
+    200: UrgenciesListView;
+};
+
+export type PutUrgencyOrderApiUrgenciesOrderPutResponse = PutUrgencyOrderApiUrgenciesOrderPutResponses[keyof PutUrgencyOrderApiUrgenciesOrderPutResponses];
+
+export type PositionUrgencyApiUrgenciesOrderPositionPostData = {
+    body: UrgencyPositionRequest;
+    headers?: {
+        /**
+         * X-Blizzard-Door
+         */
+        'x-blizzard-door'?: string | null;
+    };
+    path?: never;
+    query?: never;
+    url: '/api/urgencies/order/position';
+};
+
+export type PositionUrgencyApiUrgenciesOrderPositionPostErrors = {
+    /**
+     * Problem
+     */
+    400: TenantCredentialMismatchProblem;
+    /**
+     * Problem
+     */
+    401: AuthenticationRequiredProblem;
+    /**
+     * Problem
+     */
+    403: PermissionRequiredProblem;
+    /**
+     * Problem
+     */
+    404: TenantNotFoundProblem;
+    /**
+     * Problem
+     */
+    409: TenantRequiredProblem;
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+    /**
+     * Problem
+     */
+    503: HubStoreUnavailableProblem;
+};
+
+export type PositionUrgencyApiUrgenciesOrderPositionPostError = PositionUrgencyApiUrgenciesOrderPositionPostErrors[keyof PositionUrgencyApiUrgenciesOrderPositionPostErrors];
+
+export type PositionUrgencyApiUrgenciesOrderPositionPostResponses = {
+    /**
+     * Successful Response
+     */
+    200: UrgenciesListView;
+};
+
+export type PositionUrgencyApiUrgenciesOrderPositionPostResponse = PositionUrgencyApiUrgenciesOrderPositionPostResponses[keyof PositionUrgencyApiUrgenciesOrderPositionPostResponses];
+
+export type GetUrgencyApiUrgenciesKeyGetData = {
+    body?: never;
+    path: {
+        /**
+         * Key
+         */
+        key: string;
+    };
+    query?: never;
+    url: '/api/urgencies/{key}';
+};
+
+export type GetUrgencyApiUrgenciesKeyGetErrors = {
+    /**
+     * Problem
+     */
+    400: TenantCredentialMismatchProblem;
+    /**
+     * Problem
+     */
+    401: AuthenticationRequiredProblem;
+    /**
+     * Problem
+     */
+    404: TenantNotFoundProblem | UrgencyNotFoundProblem;
+    /**
+     * Problem
+     */
+    409: TenantRequiredProblem;
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+    /**
+     * Problem
+     */
+    503: HubStoreUnavailableProblem;
+};
+
+export type GetUrgencyApiUrgenciesKeyGetError = GetUrgencyApiUrgenciesKeyGetErrors[keyof GetUrgencyApiUrgenciesKeyGetErrors];
+
+export type GetUrgencyApiUrgenciesKeyGetResponses = {
+    /**
+     * Successful Response
+     */
+    200: UrgencyView;
+};
+
+export type GetUrgencyApiUrgenciesKeyGetResponse = GetUrgencyApiUrgenciesKeyGetResponses[keyof GetUrgencyApiUrgenciesKeyGetResponses];
+
+export type PatchUrgencyApiUrgenciesKeyPatchData = {
+    body: UrgencyPatchRequest;
+    headers?: {
+        /**
+         * If-Match
+         */
+        'if-match'?: number | null;
+        /**
+         * X-Blizzard-Door
+         */
+        'x-blizzard-door'?: string | null;
+    };
+    path: {
+        /**
+         * Key
+         */
+        key: string;
+    };
+    query?: never;
+    url: '/api/urgencies/{key}';
+};
+
+export type PatchUrgencyApiUrgenciesKeyPatchErrors = {
+    /**
+     * Problem
+     */
+    400: TenantCredentialMismatchProblem;
+    /**
+     * Problem
+     */
+    401: AuthenticationRequiredProblem;
+    /**
+     * Problem
+     */
+    403: PermissionRequiredProblem;
+    /**
+     * Problem
+     */
+    404: TenantNotFoundProblem | UrgencyNotFoundProblem;
+    /**
+     * Problem
+     */
+    409: TenantRequiredProblem | RevisionConflictProblem;
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+    /**
+     * Problem
+     */
+    503: HubStoreUnavailableProblem;
+};
+
+export type PatchUrgencyApiUrgenciesKeyPatchError = PatchUrgencyApiUrgenciesKeyPatchErrors[keyof PatchUrgencyApiUrgenciesKeyPatchErrors];
+
+export type PatchUrgencyApiUrgenciesKeyPatchResponses = {
+    /**
+     * Successful Response
+     */
+    200: UrgencyView;
+};
+
+export type PatchUrgencyApiUrgenciesKeyPatchResponse = PatchUrgencyApiUrgenciesKeyPatchResponses[keyof PatchUrgencyApiUrgenciesKeyPatchResponses];
+
+export type EnableUrgencyApiUrgenciesKeyEnablePostData = {
+    body?: never;
+    headers?: {
+        /**
+         * If-Match
+         */
+        'if-match'?: number | null;
+        /**
+         * X-Blizzard-Door
+         */
+        'x-blizzard-door'?: string | null;
+    };
+    path: {
+        /**
+         * Key
+         */
+        key: string;
+    };
+    query?: never;
+    url: '/api/urgencies/{key}/enable';
+};
+
+export type EnableUrgencyApiUrgenciesKeyEnablePostErrors = {
+    /**
+     * Problem
+     */
+    400: TenantCredentialMismatchProblem;
+    /**
+     * Problem
+     */
+    401: AuthenticationRequiredProblem;
+    /**
+     * Problem
+     */
+    403: PermissionRequiredProblem;
+    /**
+     * Problem
+     */
+    404: TenantNotFoundProblem | UrgencyNotFoundProblem;
+    /**
+     * Problem
+     */
+    409: TenantRequiredProblem | RevisionConflictProblem;
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+    /**
+     * Problem
+     */
+    503: HubStoreUnavailableProblem;
+};
+
+export type EnableUrgencyApiUrgenciesKeyEnablePostError = EnableUrgencyApiUrgenciesKeyEnablePostErrors[keyof EnableUrgencyApiUrgenciesKeyEnablePostErrors];
+
+export type EnableUrgencyApiUrgenciesKeyEnablePostResponses = {
+    /**
+     * Successful Response
+     */
+    200: UrgencyView;
+};
+
+export type EnableUrgencyApiUrgenciesKeyEnablePostResponse = EnableUrgencyApiUrgenciesKeyEnablePostResponses[keyof EnableUrgencyApiUrgenciesKeyEnablePostResponses];
+
+export type GetUrgencyIconApiUrgenciesKeyIconGetData = {
+    body?: never;
+    path: {
+        /**
+         * Key
+         */
+        key: string;
+    };
+    query?: never;
+    url: '/api/urgencies/{key}/icon';
+};
+
+export type GetUrgencyIconApiUrgenciesKeyIconGetErrors = {
+    /**
+     * Problem
+     */
+    400: TenantCredentialMismatchProblem;
+    /**
+     * Problem
+     */
+    401: AuthenticationRequiredProblem;
+    /**
+     * Problem
+     */
+    404: TenantNotFoundProblem | UrgencyNotFoundProblem | UrgencyIconNotFoundProblem;
+    /**
+     * Problem
+     */
+    409: TenantRequiredProblem;
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+    /**
+     * Problem
+     */
+    503: HubStoreUnavailableProblem;
+};
+
+export type GetUrgencyIconApiUrgenciesKeyIconGetError = GetUrgencyIconApiUrgenciesKeyIconGetErrors[keyof GetUrgencyIconApiUrgenciesKeyIconGetErrors];
+
+export type GetUrgencyIconApiUrgenciesKeyIconGetResponses = {
+    /**
+     * The urgency's icon
+     */
+    200: unknown;
+};
+
+export type RetireUrgencyApiUrgenciesKeyRetirePostData = {
+    /**
+     * Request
+     */
+    body?: UrgencyRetireRequest | null;
+    headers?: {
+        /**
+         * If-Match
+         */
+        'if-match'?: number | null;
+        /**
+         * X-Blizzard-Door
+         */
+        'x-blizzard-door'?: string | null;
+    };
+    path: {
+        /**
+         * Key
+         */
+        key: string;
+    };
+    query?: never;
+    url: '/api/urgencies/{key}/retire';
+};
+
+export type RetireUrgencyApiUrgenciesKeyRetirePostErrors = {
+    /**
+     * Problem
+     */
+    400: TenantCredentialMismatchProblem;
+    /**
+     * Problem
+     */
+    401: AuthenticationRequiredProblem;
+    /**
+     * Problem
+     */
+    403: PermissionRequiredProblem;
+    /**
+     * Problem
+     */
+    404: TenantNotFoundProblem | UrgencyNotFoundProblem;
+    /**
+     * Problem
+     */
+    409: TenantRequiredProblem | RevisionConflictProblem | UrgencyIsDefaultProblem | UrgencyInUseProblem;
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+    /**
+     * Problem
+     */
+    503: HubStoreUnavailableProblem;
+};
+
+export type RetireUrgencyApiUrgenciesKeyRetirePostError = RetireUrgencyApiUrgenciesKeyRetirePostErrors[keyof RetireUrgencyApiUrgenciesKeyRetirePostErrors];
+
+export type RetireUrgencyApiUrgenciesKeyRetirePostResponses = {
+    /**
+     * Successful Response
+     */
+    200: UrgencyRetireView;
+};
+
+export type RetireUrgencyApiUrgenciesKeyRetirePostResponse = RetireUrgencyApiUrgenciesKeyRetirePostResponses[keyof RetireUrgencyApiUrgenciesKeyRetirePostResponses];
 
 export type ListUsersApiUsersGetData = {
     body?: never;

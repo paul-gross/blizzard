@@ -54,6 +54,10 @@ FORGE_SLUG_TAKEN: Final = "urn:blizzard:problem:forge-slug-taken"
 SECRET_IN_USE: Final = "urn:blizzard:problem:secret-in-use"
 CONFIG_FIELD_INVALID: Final = "urn:blizzard:problem:config-field-invalid"
 UNKNOWN_WORK_SOURCE: Final = "urn:blizzard:problem:unknown-work-source"
+URGENCY_NOT_FOUND: Final = "urn:blizzard:problem:urgency-not-found"
+URGENCY_ICON_NOT_FOUND: Final = "urn:blizzard:problem:urgency-icon-not-found"
+URGENCY_IS_DEFAULT: Final = "urn:blizzard:problem:urgency-is-default"
+URGENCY_IN_USE: Final = "urn:blizzard:problem:urgency-in-use"
 
 ADMIN_PROBLEM_TYPES: frozenset[str] = frozenset(
     {
@@ -99,6 +103,10 @@ ADMIN_PROBLEM_TYPES: frozenset[str] = frozenset(
         SECRET_IN_USE,
         CONFIG_FIELD_INVALID,
         UNKNOWN_WORK_SOURCE,
+        URGENCY_NOT_FOUND,
+        URGENCY_ICON_NOT_FOUND,
+        URGENCY_IS_DEFAULT,
+        URGENCY_IN_USE,
     }
 )
 
@@ -113,6 +121,14 @@ class ProjectLinkNotFoundProblem(ProblemDetails[Literal["urn:blizzard:problem:pr
 
 class ForgeNotFoundProblem(ProblemDetails[Literal["urn:blizzard:problem:forge-not-found"]]):
     """A path names a forge the tenant does not hold."""
+
+
+class UrgencyNotFoundProblem(ProblemDetails[Literal["urn:blizzard:problem:urgency-not-found"]]):
+    """A path names an urgency the tenant does not hold."""
+
+
+class UrgencyIconNotFoundProblem(ProblemDetails[Literal["urn:blizzard:problem:urgency-icon-not-found"]]):
+    """The urgency carries no icon."""
 
 
 class RepositoryNotFoundProblem(ProblemDetails[Literal["urn:blizzard:problem:repository-not-found"]]):
@@ -355,5 +371,33 @@ class UnknownWorkSourceProblem(
     CommonProblemMembers[Literal["urn:blizzard:problem:unknown-work-source"], list[UnknownWorkSourceDetail]]
 ):
     """A query names a work source the tenant does not hold."""
+
+    status: int | None = None
+
+
+class UrgencyIsDefaultDetail(WireModel):
+    code: Literal["urgency_is_default"] = "urgency_is_default"
+    message: str
+    slug: str
+
+
+class UrgencyInUseDetail(WireModel):
+    code: Literal["urgency_in_use"] = "urgency_in_use"
+    message: str
+    slug: str
+    #: How many open chunks carry the urgency, so a client can ask where they go.
+    open_chunks: int
+
+
+class UrgencyIsDefaultProblem(
+    CommonProblemMembers[Literal["urn:blizzard:problem:urgency-is-default"], UrgencyIsDefaultDetail]
+):
+    """A retire names the tenant's default urgency; the default must point elsewhere first."""
+
+    status: int | None = None
+
+
+class UrgencyInUseProblem(CommonProblemMembers[Literal["urn:blizzard:problem:urgency-in-use"], UrgencyInUseDetail]):
+    """A retire names an urgency open chunks carry, and no urgency to move them to."""
 
     status: int | None = None

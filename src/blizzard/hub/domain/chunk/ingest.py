@@ -24,6 +24,8 @@ from blizzard.hub.domain.graph.model import Graph
 from blizzard.hub.domain.kernel.hub_source import RESERVED_HUB_SOURCE_NAME
 from blizzard.hub.domain.projects.links import IReadProjectLinks
 from blizzard.hub.domain.projects.model import ProjectId
+from blizzard.hub.domain.urgency.model import UrgencyId
+from blizzard.hub.domain.urgency.services import TenantDefault
 
 
 class IWorkItemProjectRead(Protocol):
@@ -205,13 +207,15 @@ def decide_ingest(
     live_holders: Mapping[WorkRef, str],
     graph: Graph,
     project_id: ProjectId,
+    urgency_id: UrgencyId,
     at: datetime,
 ) -> Chunk:
-    """The resting chunk of ``project_id`` an ingest of ``pointers`` mints on ``graph`` at ``at``, or the
-    refusal: :class:`EmptyIngest` for no work ref, :class:`IngestConflict` for one a live chunk holds."""
+    """The resting chunk of ``project_id`` and ``urgency_id`` an ingest of ``pointers`` mints on ``graph`` at
+    ``at``, or the refusal: :class:`EmptyIngest` for no work ref, :class:`IngestConflict` for one a live chunk
+    holds."""
     work_refs = ingest_work_refs(pointers)
     require_unheld(work_refs, live_holders)
-    return mint_chunk(work_refs, graph_id=graph.graph_id, at=at, project_id=project_id)
+    return mint_chunk(work_refs, graph_id=graph.graph_id, at=at, project_id=project_id, urgency_id=urgency_id)
 
 
 def require_no_live_holder(work_refs: IReadChunkWorkRefsRepository, pointer: WorkRef) -> None:
@@ -233,7 +237,9 @@ class IngestService:
         items: IWorkItemProjectRead,
         labels: IWorkRefLabels,
         clock: IClock,
+        default: TenantDefault,
     ) -> None:
+        self._default = default
         self._record = record
         self._labels = labels
         # The locked-transaction seam (``bzh:store-exclusive-write``): whether a pointer is held
@@ -265,17 +271,19 @@ class IngestService:
 
         The links are read once to choose the project, then again under that project's source-link
         lock — taken before the pointers' — so a source unlinked in between refuses the ingest
-        rather than minting a chunk its project no longer draws from."""
+        rather than minting a chunk its project no longer draws from. The same unit takes the tenant's
+        default urgency's locks and re-reads the default under them for the chunk."""
         work_refs = ingest_work_refs(pointers)
         chosen = self.choose_project(work_refs, project)
         try:
-            with self._exclusive.locked_work_refs(work_refs, project=chosen) as handle:
+            with self._exclusive.locked_work_refs(work_refs, project=chosen, keys=self._default.lock_keys()) as handle:
                 choose_ingest_project(chosen, work_refs, handle.source_links(configured_sources(work_refs)), {})
                 chunk = decide_ingest(
                     work_refs,
                     live_holders=handle.live_holders(work_refs),
                     graph=graph,
                     project_id=chosen,
+                    urgency_id=self._default.read(handle.transaction).urgency_id,
                     at=self._clock.now(),
                 )
                 self._record.mint_locked(handle, chunk)

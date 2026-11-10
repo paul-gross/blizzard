@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import base64
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -212,6 +213,10 @@ def _seed(hub: HubHarness, harness: TenantHarness, label: str) -> _Tenant:
     created_repository = _ok(c.post("/api/repositories", json=repository), 201)
     t.keep("repository", created_repository["repository_id"])
     t.keep("forge", created_repository["forge_id"])
+    icon = {"media_type": "image/png", "data": base64.b64encode(b"\x89PNG\r\n\x1a\n" + label.encode()).decode()}
+    urgency = _ok(c.post("/api/urgencies", json={"slug": f"{label}-urgency", "icon": icon}), 201)
+    t.keep("key", urgency["urgency_id"])
+    t.markers.add(urgency["slug"])
     with chunk_unit(scoped_connections(hub.engine, harness.tenant), chunk) as unit:
         flow = FlowStore(scoped_connections(hub.engine, harness.tenant), hub.clock).submit(
             chunk,

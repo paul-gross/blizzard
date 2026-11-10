@@ -5,7 +5,7 @@ refuses in the same order and settles the mode the same way, over inputs read fo
 (``bzh:bulk-reconstitution``). The mint itself is one transaction (``bzh:unit-of-work``): it locks the errand, and the
 ranking locks a promote takes when its chore promotes, re-reads the errand's last run under them
 (``bzh:write-reestablishes-read``), and only then writes the run and, for a promoting chore, its landing at the tail of
-the ready queue."""
+the ready queue. Its locks hold the tenant's default urgency too, re-read under them and written on the run's chunk."""
 
 from __future__ import annotations
 
@@ -38,6 +38,8 @@ from blizzard.hub.domain.operations.queue import (
     write_positions,
 )
 from blizzard.hub.domain.projects.model import ProjectId
+from blizzard.hub.domain.urgency.model import UrgencyId
+from blizzard.hub.domain.urgency.services import TenantDefault, default_lock_keys
 from blizzard.hub.domain.work_items.editing import prepare_mint
 from blizzard.hub.domain.work_items.ports import IWriteWorkItemRepository
 
@@ -108,10 +110,15 @@ class ErrandPlanning:
         }
 
 
-def mint_lock_keys(key: ErrandKey, *, promote: bool) -> list[tuple[str, str]]:
-    """The keyed locks an errand's mint takes: its errand's, and for a promoting chore both lists' ranking locks, as
-    the queue's own promote takes them. The store takes them in canonical order: errand, then ranking."""
-    return [errand_lock(key), *((READY_RANKING_LOCK, BACKLOG_RANKING_LOCK) if promote else ())]
+def mint_lock_keys(key: ErrandKey, *, promote: bool, default_id: UrgencyId) -> list[tuple[str, str]]:
+    """The keyed locks an errand's mint takes: its errand's, for a promoting chore both lists' ranking locks, as
+    the queue's own promote takes them, and the default urgency's, as every mint takes them. The store takes them in
+    canonical order: errand, then ranking, then urgency."""
+    return [
+        errand_lock(key),
+        *((READY_RANKING_LOCK, BACKLOG_RANKING_LOCK) if promote else ()),
+        *default_lock_keys(default_id),
+    ]
 
 
 def run_moved(judged: ErrandRun | None, current: ErrandRun | None) -> bool:
@@ -149,7 +156,9 @@ class CadenceMint:
         facts: IReadChunkFactsRepository,
         transactions: IHubTransactions,
         clock: IClock,
+        default: TenantDefault,
     ) -> None:
+        self._default = default
         self._items = items
         self._work_refs = work_refs
         self._runs = runs
@@ -170,7 +179,7 @@ class CadenceMint:
         requires the unit to lock."""
         plan = plan_errand(errand, inputs)
         routine = inputs.routine
-        pointer, chunk, at = prepare_mint(
+        pointer, draft, at = prepare_mint(
             self._items,
             self._work_refs,
             self._clock,
@@ -182,12 +191,15 @@ class CadenceMint:
             default_harnesses=routine.default_harnesses,
         )
         promote = errand.chore.spec.promote
+        default_id = self._default.read_id()
         with self._transactions.begin() as transaction:
             locked = transaction.lock_set(
-                chunks=[chunk.chunk_id] if promote else [], keys=mint_lock_keys(errand.key, promote=promote)
+                chunks=[draft.chunk_id] if promote else [],
+                keys=mint_lock_keys(errand.key, promote=promote, default_id=default_id),
             )
             if run_moved(judged, self._runs.last_runs([errand.key], transaction=locked).get(errand.key)):
                 return None
+            chunk = draft.mint(self._default.read(locked).urgency_id)
             item = self._items.create_run_with_chunk(
                 pointer=pointer,
                 title=plan.title,
