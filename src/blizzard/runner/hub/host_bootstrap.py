@@ -136,7 +136,7 @@ class HostBootstrap:
         if held is not None:
             answer = self._host_client(held.token).record()
             if isinstance(answer, HostRecord):
-                if tenant_id is not None and answer.tenant_id != tenant_id:
+                if not answer.serves(tenant_id):
                     raise HostBootstrapStopped(HostBootstrapStop.ANOTHER_TENANT, held=answer)
                 return JoinedHost(token=held.token, record=answer, added=False)
             self._refuse_unless_readded(answer, held=held, allow_readd=allow_readd)

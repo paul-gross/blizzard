@@ -562,10 +562,9 @@ def test_push_transcripts_overrides_the_shared_clients_default_timeout() -> None
 def test_hub_advance_posts_to_the_fleet_path() -> None:
     def handler(request: httpx2.Request) -> httpx2.Response:
         assert request.url.path == "/api/fleet/chunks/ch_1/hub-advance"
-        return httpx2.Response(200, json={"chunk_id": "ch_1", "status": "running", "ran": False, "detail": "busy"})
+        return httpx2.Response(200, text="body is ignored")
 
-    resp = _client(handler).hub_advance("ch_1")
-    assert resp.ran is False
+    assert _client(handler).hub_advance("ch_1") is None
 
 
 def test_chunk_statuses_parses_the_batch_response() -> None:

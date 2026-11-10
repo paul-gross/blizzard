@@ -31,7 +31,6 @@ from blizzard.runner.hub.identity import ICurrentIdentityVerdict
 from blizzard.runner.node_steps.chunk_state import ChunkState
 from blizzard.runner.node_steps.envelope import Envelope
 from blizzard.runner.node_steps.submissions import ApplyReply, Completion, GateSubmission
-from blizzard.wire.chunk import HubAdvanceResponse
 
 
 class IdentityNotVerified(HubClientError):
@@ -82,8 +81,8 @@ class VerifiedHubClient:
     def get_envelope(self, chunk_id: str) -> Envelope:
         return self._verified().get_envelope(chunk_id)
 
-    def hub_advance(self, chunk_id: str) -> HubAdvanceResponse:
-        return self._verified().hub_advance(chunk_id)
+    def hub_advance(self, chunk_id: str) -> None:
+        self._verified().hub_advance(chunk_id)
 
     def get_question(self, question_id: str) -> HubQuestion:
         return self._verified().get_question(question_id)

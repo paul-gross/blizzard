@@ -162,7 +162,6 @@ from blizzard.runner.transcripts.repository import IReadTranscriptRepository
 from blizzard.runner.usage.recorder import UsageRecorder
 from blizzard.runner.usage.repository import IWriteUsageRepository, derive_invocation_cost
 from blizzard.tools.invariants import runner_invariants
-from blizzard.wire.chunk import HubAdvanceResponse
 from blizzard.wire.transcript_segment import TranscriptSegmentRecord
 from tests.support import engine_lifecycle
 
@@ -642,7 +641,6 @@ class FakeHub:
         self.ended: set[str] = set()
         self.get_envelope_calls: list[str] = []  # chunk ids `get_envelope` was called for
         self.hub_advance_calls: list[str] = []  # chunk ids `hub_advance` was called for (#66)
-        self.hub_advance_responses: dict[str, HubAdvanceResponse] = {}
         self.rekey_calls: list[str] = []  # chunk ids `rekey_route_token` was called for
         self.get_question_calls: list[str] = []  # question ids `get_question` was called for
         self.rekey_responses: dict[str, str] = {}  # chunk_id -> the plaintext to hand back
@@ -819,15 +817,10 @@ class FakeHub:
             )
         return found
 
-    def hub_advance(self, chunk_id: str) -> HubAdvanceResponse:
+    def hub_advance(self, chunk_id: str) -> None:
         if self.down:
             raise HubClientError("fake hub is down")
         self.hub_advance_calls.append(chunk_id)
-        if chunk_id in self.hub_advance_responses:
-            return self.hub_advance_responses[chunk_id]
-        return HubAdvanceResponse(
-            chunk_id=chunk_id, status=ChunkStatus.DELIVERING, ran=False, detail="scripted default"
-        )
 
     def get_question(self, question_id: str) -> HubQuestion:
         self.get_question_calls.append(question_id)

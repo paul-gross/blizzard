@@ -100,7 +100,7 @@ from blizzard.wire import release as release_wire
 from blizzard.wire import route as route_wire
 from blizzard.wire import runner as runner_wire
 from blizzard.wire import tenant as tenant_wire
-from blizzard.wire.chunk import ChunkStatusView, HubAdvanceResponse
+from blizzard.wire.chunk import ChunkStatusView
 from blizzard.wire.envelope import ApplyResponse, NodeEnvelope
 from blizzard.wire.facts import HostFactAck, RunnerFactAck
 from blizzard.wire.host import (
@@ -384,14 +384,13 @@ class HttpHubClient:
                 result[view.chunk_id] = chunk_state(view)
         return result
 
-    def hub_advance(self, chunk_id: str) -> HubAdvanceResponse:
+    def hub_advance(self, chunk_id: str) -> None:
         path = f"{_FLEET_API}/chunks/{chunk_id}/hub-advance"
         try:
             resp = self._client.post(path)
         except httpx2.HTTPError as exc:
             raise self._wrap(exc, f"POST {path}") from exc
         self._raise_for_status(resp, f"POST {path}")
-        return HubAdvanceResponse.model_validate(resp.json())
 
     def get_question(self, question_id: str) -> HubQuestion:
         resp = self._get(f"{_FLEET_API}/questions/{question_id}")
