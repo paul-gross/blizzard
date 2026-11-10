@@ -329,6 +329,7 @@ def test_get_before_pages_first_page_only_reads_one_page() -> None:
     assert next_before == 10
     assert len(calls) == 1 and "limit" not in calls[0]
 
+
 _NO_TENANTS_HEADLINE = "you belong to several tenants — name the one to act in with --tenant <tenant_id>"
 
 
