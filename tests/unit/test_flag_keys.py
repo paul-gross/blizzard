@@ -6,12 +6,14 @@ from __future__ import annotations
 
 from dataclasses import replace
 from pathlib import Path
+from types import MappingProxyType
 
 import pytest
 import structlog
 
 from blizzard.foundation.config_keys import ConfigKey, ConfigRegistry
 from blizzard.foundation.flags import FlagRegistry
+from blizzard.foundation.flags.keys import held_keys
 from blizzard.hub.composition import build_hub_flags
 from blizzard.hub.config import ConfigError, HubConfig
 from blizzard.hub.config_defaults import DEFAULT_ANNOTATION_INTERVAL_SECONDS
@@ -94,6 +96,13 @@ def test_a_hub_key_with_its_flag_on_applies_and_an_absent_one_is_not_held(tmp_pa
     assert (on.annotation_interval_seconds, on.held_keys) == (99, ())
     absent = _hub(tmp_path, "")
     assert (absent.annotation_interval_seconds, absent.held_keys) == (DEFAULT_ANNOTATION_INTERVAL_SECONDS, ())
+
+
+def test_held_keys_finds_nested_non_dict_mappings(tmp_path: Path) -> None:
+    registry = ConfigRegistry("fixture", (ConfigKey("section.value", "integer", flag="hub-thing"),))
+    flags = build_hub_flags(_hub(tmp_path, ""))
+    document = MappingProxyType({"section": MappingProxyType({"value": 1})})
+    assert [(key.key, key.flag) for key in held_keys(registry, document, flags)] == [("section.value", "hub-thing")]
 
 
 @pytest.mark.parametrize("flags", ["", "[flags]\nhub-thing = true\n"])

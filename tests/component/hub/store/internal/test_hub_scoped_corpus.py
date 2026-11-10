@@ -292,6 +292,16 @@ def test_step_facts_are_the_open_tenants_chunks_each_tagged_and_labelled_in_its_
     }
 
 
+def test_step_facts_statement_count_is_constant_within_one_batch(world: _World) -> None:
+    one = [_live(world.carried)]
+    two = [*one, _live(_OPEN)]
+    assert set(world.corpus.step_facts_for(two, _tenant_label)) == set(two)
+    small = count_queries(world.engine, lambda: world.corpus.step_facts_for(one, _tenant_label))
+    large = count_queries(world.engine, lambda: world.corpus.step_facts_for(two, _tenant_label))
+    assert small > 0
+    assert large == small
+
+
 def test_step_facts_leave_out_a_closed_tenants_row_in_every_table_they_read(world: _World) -> None:
     """The closed tenant holds a row beside its chunk in each table the trace reads (``_seed_tenant`` seeds the
     rest): none comes back."""
