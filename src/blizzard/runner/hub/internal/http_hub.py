@@ -376,7 +376,8 @@ class HttpHubClient:
     def check_artifact(self, chunk_id: str, name: str, content: str) -> str | None:
         operation = f"POST {_FLEET_API}/chunks/{chunk_id}/artifact-check"
         body = ArtifactCheckRequest(name=name, content=content).model_dump()
-        # The check is advisory and its callers continue past a failure, so every failure here logs at warning.
+        # The check is advisory and its callers continue past a failure, so this raises without logging at error;
+        # the caller logs the tolerated failure at warning.
         try:
             resp = self._client.post(
                 f"{_FLEET_API}/chunks/{chunk_id}/artifact-check", json=body, timeout=STAGE_CHECK_TIMEOUT_SECONDS
