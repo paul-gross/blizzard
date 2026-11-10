@@ -7,12 +7,12 @@ from __future__ import annotations
 
 import json
 from collections.abc import Callable
-from datetime import UTC, datetime
 from pathlib import Path
 
 import httpx2
 
 from blizzard.foundation.clock import IClock
+from blizzard.foundation.instants import epoch_millis_instant, reset_instant
 from blizzard.foundation.logging import get_logger
 from blizzard.foundation.store.utc import iso_utc
 from blizzard.foundation.subscription_miss import SampleMissReason
@@ -159,7 +159,7 @@ class AnthropicSubscriptionSampler:
                 path=self._credentials_path,
             )
             return SampleMiss(SampleMissReason.CREDENTIAL_UNREADABLE)
-        expires_at = self._parse_epoch_millis(oauth.get("expiresAt"))
+        expires_at = epoch_millis_instant(oauth.get("expiresAt"))
         if expires_at is None:
             _log.warning(
                 "external subscription usage sample failed: missing/unparseable token expiry",
@@ -188,7 +188,7 @@ class AnthropicSubscriptionSampler:
             resets_at_raw = entry.get("resets_at")
             if utilization is None or resets_at_raw is None or not isinstance(utilization, int | float):
                 continue
-            resets_at = self._parse_resets_at(resets_at_raw)
+            resets_at = reset_instant(resets_at_raw)
             if resets_at is None:
                 continue
             windows.append(
@@ -197,27 +197,6 @@ class AnthropicSubscriptionSampler:
                 )
             )
         return windows
-
-    @staticmethod
-    def _parse_epoch_millis(value: object) -> datetime | None:
-        """Claude Code's own credential file stamps ``expiresAt`` in epoch milliseconds."""
-        if not isinstance(value, int | float):
-            return None
-        return datetime.fromtimestamp(value / 1000, tz=UTC)
-
-    @staticmethod
-    def _parse_resets_at(value: object) -> datetime | None:
-        """``resets_at`` as either epoch seconds (int/float) or an ISO-8601 string,
-        coerced to the same UTC-aware instant either way (``bzh:utc-instants``)."""
-        if isinstance(value, int | float):
-            return datetime.fromtimestamp(value, tz=UTC)
-        if isinstance(value, str):
-            try:
-                parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
-            except ValueError:
-                return None
-            return parsed.astimezone(UTC) if parsed.tzinfo is not None else parsed.replace(tzinfo=UTC)
-        return None
 
 
 _subscription_sampler_conforms: type[ISubscriptionSampler] = AnthropicSubscriptionSampler

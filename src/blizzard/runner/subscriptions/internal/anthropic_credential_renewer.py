@@ -8,11 +8,12 @@ for refresh without forcing rotation of the live credential's refresh token."""
 from __future__ import annotations
 
 import json
-from datetime import UTC, datetime, timedelta
+from datetime import datetime, timedelta
 from pathlib import Path
 
 from blizzard.foundation.clock import IClock
 from blizzard.foundation.credential_renewal import RenewalFailureReason
+from blizzard.foundation.instants import epoch_millis_instant
 from blizzard.foundation.logging import get_logger
 from blizzard.foundation.untyped import as_table
 from blizzard.runner.process.child_env import ChildEnv
@@ -115,12 +116,7 @@ class AnthropicCredentialRenewer:
         oauth = data.get("claudeAiOauth") if data is not None else None
         oauth_block = as_table(oauth)
         expires_at = oauth_block.get("expiresAt") if oauth_block is not None else None
-        if isinstance(expires_at, bool) or not isinstance(expires_at, int | float):
-            return None
-        try:
-            return datetime.fromtimestamp(expires_at / 1000, tz=UTC)
-        except (OverflowError, OSError, ValueError):
-            return None
+        return epoch_millis_instant(expires_at)
 
 
 _credential_renewer_conforms: type[ICredentialRenewer] = AnthropicCredentialRenewer
