@@ -61,6 +61,14 @@ class SecretReferenced(Exception):
         self.referrers = referrers
 
 
+class KeysUncovered(Exception):
+    """Stored secrets are sealed under key generations the hub key source does not hold."""
+
+    def __init__(self, missing: frozenset[str]) -> None:
+        super().__init__(f"stored secrets are sealed under key generation(s) {sorted(missing)} no key answers")
+        self.missing = missing
+
+
 class SecretUnreadable(Exception):
     """A sealed value failed to open: its key generation is absent or it was tampered
     with, moved to another row, or replayed at another revision."""
@@ -167,6 +175,13 @@ def listed(
 def uncovered_key_ids(in_use: Collection[str], available: Collection[str]) -> frozenset[str]:
     """Every key generation a stored row is sealed under that no available generation answers."""
     return frozenset(in_use) - frozenset(available)
+
+
+def require_keys_covered(in_use: Collection[str], available: Collection[str]) -> None:
+    """Refuse to start rather than serve secrets no generation can open."""
+    missing = uncovered_key_ids(in_use, available)
+    if missing:
+        raise KeysUncovered(missing)
 
 
 def stale_seals(rows: Sequence[SealedSecret], target_key_id: str) -> list[SealedSecret]:

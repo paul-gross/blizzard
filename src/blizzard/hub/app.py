@@ -37,7 +37,7 @@ from blizzard.foundation.platform_tracing.handle import (
     IPlatformTracing,
     build_platform_tracing,
 )
-from blizzard.foundation.roles import collaborator, domain_model
+from blizzard.foundation.roles import collaborator
 from blizzard.foundation.store.engine import create_engine_from_url
 from blizzard.foundation.store.internal.store_status_reader import SqlAlchemyStoreStatusReader
 from blizzard.foundation.store.readiness import ReadinessService
@@ -135,6 +135,8 @@ from blizzard.hub.delivery.flow_driver import FlowDriver
 from blizzard.hub.domain.config.carry_over import ExistingConfig, ImportResult, LegacyStart, LegacyStartRefused
 from blizzard.hub.domain.config.forge_check import ForgeCheck
 from blizzard.hub.domain.config.forges import ForgeKindOffers
+from blizzard.hub.domain.config.oauth_providers import ProvidersOrphaned, require_providers_configured
+from blizzard.hub.domain.config.secrets import KeysUncovered, require_keys_covered
 from blizzard.hub.domain.config.work_sources import BuiltInWorkSource
 from blizzard.hub.domain.observability.egress.config import EgressConfig
 from blizzard.hub.domain.observability.egress.event_rows import missing_key_reason
@@ -158,7 +160,13 @@ from blizzard.hub.forge.internal.factory import build_forge_registry
 from blizzard.hub.forge.registry import ForgeRegistry
 from blizzard.hub.layout import SIGNING_KEYS_PARTS, remove_retired_workdirs
 from blizzard.hub.runtime import migration_runner
-from blizzard.hub.secrets import KeyCoverage, hub_key_provider, require_hub_key, secret_cipher
+from blizzard.hub.secrets import (
+    ENV_SECRET_KEY,
+    ENV_SECRET_KEY_PREVIOUS,
+    hub_key_provider,
+    require_hub_key,
+    secret_cipher,
+)
 from blizzard.hub.secrets.rotation import RotationResult, rotate_keys
 from blizzard.hub.store.forge_check_reads import UnreadableStore, read_forge_addresses
 from blizzard.hub.store.tenant_guard import install_tenant_guard
@@ -747,15 +755,32 @@ def build_hosted_app(
         if readiness.evaluate().ready:
             tenants = core.every_open()
             try:
-                LegacyStart.of(
-                    [stores.config_import for stores in tenants],
-                    read_legacy_keys(config.config_path, os.environ, strict=config.strict),
+                # The import is the hub's, recorded once into the one tenant it wrote, so any tenant answers it.
+                LegacyStart(
+                    recorded=any(stores.config_import.recorded() for stores in tenants),
+                    keys=read_legacy_keys(config.config_path, os.environ, strict=config.strict),
                 ).check()
             except LegacyStartRefused as refusal:
                 raise ConfigError(str(refusal)) from refusal
-            OrphanedProviders.of(config, services).check()
+            try:
+                require_providers_configured(
+                    {provider.name for provider in config.auth.oauth_providers},
+                    services.identities.distinct_provider_names(),
+                )
+            except ProvidersOrphaned as refusal:
+                raise ConfigError(str(refusal)) from refusal
             warn_forge_refusals(engine)
-            KeyCoverage.of([stores.secrets for stores in tenants], secret_keys).check()
+            try:
+                require_keys_covered(
+                    {key_id for stores in tenants for key_id in stores.secrets.key_ids_in_use()},
+                    secret_keys.available_ids(),
+                )
+            except KeysUncovered as refusal:
+                raise ConfigError(
+                    f"stored secrets are sealed under key generation(s) {sorted(refusal.missing)} the hub key "
+                    f"source does not hold — restore the generation under data/auth/secret-keys/ or set "
+                    f"{ENV_SECRET_KEY}/{ENV_SECRET_KEY_PREVIOUS} to it"
+                ) from refusal
             # Before the hub serves, in each open tenant: the actionless escalations first, so the flow driver's boot
             # reconcile finds those chunks escalated and submits none of them, then the turns the last process
             # left open.
@@ -851,30 +876,6 @@ def _egress_path_key(egress: EgressConfig) -> bytes | None:
     """The file path hash key, read once here from the variable ``egress.path_key_env`` names; empty is unset."""
     value = os.environ.get(egress.path_key_env, "")
     return value.encode() if value else None
-
-
-@domain_model
-@dataclass(frozen=True)
-class OrphanedProviders:
-    """Provider names stored identities reference that ``[[auth.oauth.provider]]`` no longer declares."""
-
-    names: frozenset[str]
-
-    @classmethod
-    def of(cls, config: HubConfig, services: HubServices) -> OrphanedProviders:
-        configured = {provider.name for provider in config.auth.oauth_providers}
-        return cls(frozenset(services.identities.distinct_provider_names() - configured))
-
-    def check(self) -> None:
-        """Fail boot with an actionable error (pinned:
-        ``tests/component/hub/test_auth_provider_immutability.py::test_boot_fails_when_a_stored_identity_names_an_unconfigured_provider``)."""
-        if self.names:
-            raise ConfigError(
-                "stored identities reference OAuth provider name(s) "
-                f"{sorted(self.names)} absent from [[auth.oauth.provider]] — a provider name is "
-                "immutable once identities reference it; restore the entry (or its name) rather "
-                "than deleting/renaming it"
-            )
 
 
 def create_app_for_export(flag_registry: FlagRegistry) -> FastAPI:

@@ -12,6 +12,7 @@ import pytest
 
 from blizzard.hub.domain.config.changes import RecordKind, RecordRef
 from blizzard.hub.domain.config.secrets import (
+    KeysUncovered,
     SealedSecret,
     SealedValue,
     SecretMetadata,
@@ -20,6 +21,7 @@ from blizzard.hub.domain.config.secrets import (
     SecretValue,
     SecretValueBlank,
     listed,
+    require_keys_covered,
     require_revealable,
     require_unreferenced,
     retirable,
@@ -93,3 +95,14 @@ def test_retirable_is_the_predicate_require_unreferenced_refuses_on() -> None:
     with pytest.raises(SecretReferenced):
         require_unreferenced("gh-test", [ref])
     require_unreferenced("gh-test", [])
+
+
+def test_uncovered_keys_refuse_naming_the_missing_set() -> None:
+    with pytest.raises(KeysUncovered) as refused:
+        require_keys_covered({"k1", "k2"}, {"k2"})
+    assert refused.value.missing == frozenset({"k1"})
+
+
+def test_covered_keys_pass() -> None:
+    require_keys_covered({"k1"}, {"k1", "k2"})
+    require_keys_covered(set(), set())
