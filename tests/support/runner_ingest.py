@@ -3,8 +3,10 @@ scaffolded runner, ``there`` a second runner ``r2`` beside its own, with ``r2``'
 
 from __future__ import annotations
 
-from collections.abc import Mapping
-from dataclasses import dataclass
+from collections.abc import Callable, Generator, Mapping
+from contextlib import AbstractContextManager, contextmanager
+from dataclasses import dataclass, field
+from datetime import datetime
 from pathlib import Path
 from typing import Any
 
@@ -15,7 +17,7 @@ from blizzard.cli.main import blizzard
 from blizzard.foundation.clock import SystemClock
 from blizzard.foundation.logging import get_logger
 from blizzard.foundation.store.engine import create_engine_from_url
-from blizzard.runner.composition import build_host_stores
+from blizzard.runner.composition import HostFiles, build_host_stores
 from blizzard.runner.hub.host_identity import HostIdentity
 from blizzard.runner.store import schema
 from blizzard.runner.store.errors import RunnerStoreErrorFactory
@@ -157,3 +159,41 @@ def contents(engine: sa.Engine, table: str, **where: object) -> list[dict[str, A
 def invariant_violations(engine: sa.Engine) -> list[object]:
     # No recorded process is alive: the seeded leases name pids of this machine's own processes.
     return list(runner_invariants(engine, process=FakeProbe()).run())
+
+
+@dataclass
+class RecordingHostFiles:
+    """The real host file operations, each recorded in ``journal`` by name — a context manager's entry and exit as
+    ``name`` and ``name:exit`` — beside the crash points a test appends to the same list."""
+
+    journal: list[str] = field(default_factory=list[str])
+    _real: HostFiles = field(default_factory=HostFiles)
+
+    @contextmanager
+    def _recorded(self, name: str, inner: AbstractContextManager[Any]) -> Generator[Any, None, None]:
+        self.journal.append(name)
+        try:
+            with inner as entered:
+                yield entered
+        finally:
+            self.journal.append(f"{name}:exit")
+
+    def copy_of(self, store: Path, beside: Path) -> AbstractContextManager[Path]:
+        return self._recorded("copy_of", self._real.copy_of(store, beside))
+
+    def copy_tree(self, src: Path, dst: Path) -> None:
+        self.journal.append("copy_tree")
+        self._real.copy_tree(src, dst)
+
+    def copy_file(self, src: Path, dst: Path) -> None:
+        self.journal.append("copy_file")
+        self._real.copy_file(src, dst)
+
+    def set_aside(self, store: Path, *, now: datetime) -> tuple[Path, ...]:
+        self.journal.append("set_aside")
+        return self._real.set_aside(store, now=now)
+
+    def hold(
+        self, root: Path, probe: Callable[[Path], str | None], refusal: Callable[[str], Exception]
+    ) -> AbstractContextManager[None]:
+        return self._recorded("hold", self._real.hold(root, probe, refusal))

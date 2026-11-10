@@ -5,10 +5,12 @@ reset archive ingests back."""
 
 from __future__ import annotations
 
+import re
 import tomllib
 from collections.abc import Callable
 from datetime import timedelta
 from pathlib import Path
+from typing import Any
 
 import pytest
 import sqlalchemy as sa
@@ -26,12 +28,13 @@ from blizzard.runner.composition import (
     DotenvTokenFiles,
     RunnerBoundStoreFiles,
     build_host_stores,
+    build_runner_ingest,
     build_stores,
 )
-from blizzard.runner.host_config import BuiltRunner
+from blizzard.runner.host_config import BuiltRunner, HostConfig
 from blizzard.runner.host_file import HostFileEditor, append_workspace
 from blizzard.runner.host_layout import HostLayout, HostLock
-from blizzard.runner.hub.client import HostRefusalReason, HostRefused, HubClientError
+from blizzard.runner.hub.client import HostRefusalReason, HostRefused, HubClientError, IHostHubClient
 from blizzard.runner.hub.host_identity import HostIdentity
 from blizzard.runner.hub.identity import RunnerIdentity
 from blizzard.runner.hub.internal.token_file import HubTokenFile
@@ -48,6 +51,7 @@ from tests.support.runner_ingest import (
     MOVING_ID,
     RUNNER_TABLES,
     TENANT,
+    RecordingHostFiles,
     TwoHosts,
     contents,
     invariant_violations,
@@ -668,6 +672,72 @@ def test_a_rerun_after_a_kill_at_either_point_is_refused_once_the_source_ran(
     engine.dispose()
 
     _refuse(fake_init_hub, hosts, "has run since", "--workspace-id", _NEW_WORKSPACE)
+
+
+def _recording(monkeypatch: pytest.MonkeyPatch) -> RecordingHostFiles:
+    """The ingest CLI built over a recording of its host file operations, the ``ingest.`` crash points reached
+    journaled in the same order."""
+    recorder = RecordingHostFiles()
+
+    def build(host: HostConfig, hub: IHostHubClient, **kwargs: Any) -> RunnerIngest:
+        return build_runner_ingest(host, hub, files=recorder, **kwargs)
+
+    monkeypatch.setattr(runners_cli, "build_runner_ingest", build)
+    reached = CrashPoint.reached
+
+    def record(self: CrashPoint) -> None:
+        if self.name.startswith("ingest."):
+            recorder.journal.append(self.name)
+        reached(self)
+
+    monkeypatch.setattr(CrashPoint, "reached", record)
+    return recorder
+
+
+def test_the_copy_goes_before_the_first_crash_point_and_the_path_files_between_the_two(
+    tmp_path: Path, fake_init_hub: FakeInitHub, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    hosts = two_hosts(tmp_path, fake_init_hub)
+    theirs = HostLayout(hosts.there).config_path
+    (hosts.there / "standing.md").write_text("standing prompt\n")
+    (hosts.there / "transcripts").mkdir()
+    text = theirs.read_text()
+    for key, value in (("runner_prompt_file", "standing.md"), ("transcripts_root", "transcripts")):
+        text = re.sub(rf'^{key} = ""$', f'{key} = "{value}"', text, count=0, flags=re.M)
+    assert "standing.md" in text and 'transcripts_root = "transcripts"' in text, text
+    theirs.write_text(text)
+    recorder = _recording(monkeypatch)
+
+    result = _ingest(fake_init_hub, hosts, "--workspace-id", _NEW_WORKSPACE)
+
+    assert result.exit_code == 0, result.output
+    journal = recorder.journal
+    after_copy, after_config = (
+        journal.index("ingest.after-copy.before-config"),
+        journal.index("ingest.after-config.before-removal"),
+    )
+    assert journal.index("copy_of:exit") < after_copy
+    copies = [i for i, op in enumerate(journal) if op in ("copy_file", "copy_tree")]
+    assert copies and all(after_copy < i < after_config for i in copies)
+    assert "set_aside" not in journal, "the source keeps its own runner"
+    assert journal[0] == "hold" and journal[-1] == "hold:exit"
+
+
+def test_an_emptied_archive_is_set_aside_after_the_second_crash_point(
+    tmp_path: Path, fake_init_hub: FakeInitHub, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    hosts = _seeded(tmp_path, fake_init_hub)
+    assert _ingest(fake_init_hub, hosts, "--workspace-id", _NEW_WORKSPACE).exit_code == 0
+    ok(fake_init_hub, "store", "reset", str(hosts.here), "--runner", MOVING)
+    [archive] = [p for p in HostLayout(hosts.here).data_dir.iterdir() if p.name.startswith("host.db.r2.")]
+    recorder = _recording(monkeypatch)
+
+    result = _ingest(fake_init_hub, hosts, source=archive)
+
+    assert result.exit_code == 0, result.output
+    journal = recorder.journal
+    assert journal.index("copy_of:exit") < journal.index("ingest.after-copy.before-config")
+    assert journal.index("ingest.after-config.before-removal") < journal.index("set_aside")
 
 
 class _Clock:
