@@ -76,6 +76,11 @@ function withPosition(sections: LandingSections, body: LandingPositionRequest): 
   return { ranked, unranked };
 }
 
+/** The keys of the repositories a position write of `projectId` is in flight for — the rows whose drag waits. */
+export function pendingRepositionKeys(pending: readonly LandingPositionVars[], projectId: string | null): ReadonlySet<string> {
+  return new Set(pending.filter((vars) => vars.projectId === projectId).map((vars) => vars.body.repository));
+}
+
 /** `sections` with each of this project's pending position writes folded in, oldest first, so a move renders before it settles. */
 export function foldLandingPositions(
   sections: LandingSections,

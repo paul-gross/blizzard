@@ -1,6 +1,6 @@
 import type { RepositoryLinkView } from 'fleet';
 
-import { foldLandingPositions, landingSections, type LandingSections, resolveLandingDrop } from './project-landing-order.model';
+import { foldLandingPositions, pendingRepositionKeys, landingSections, type LandingSections, resolveLandingDrop } from './project-landing-order.model';
 import type { ProjectLinkRowVm } from './projects.model';
 
 const row = (key: string, name: string): ProjectLinkRowVm => ({ key, name, detail: '', builtIn: false, revision: 1 });
@@ -98,5 +98,17 @@ describe('foldLandingPositions', () => {
     const folded = foldLandingPositions(SECTIONS, [{ projectId: 'proj_o', body: { repository: 'repo_c', after_repository: null } }], 'proj_b');
 
     expect(folded).toBe(SECTIONS);
+  });
+});
+
+describe('pendingRepositionKeys', () => {
+  it('collects the repositories this project has a write in flight for', () => {
+    const pending = [
+      { projectId: 'p1', body: { repository: 'repo_a', unranked: true } },
+      { projectId: 'p2', body: { repository: 'repo_b', unranked: true } },
+      { projectId: 'p1', body: { repository: 'repo_c', after_repository: null } },
+    ];
+    expect([...pendingRepositionKeys(pending, 'p1')]).toEqual(['repo_a', 'repo_c']);
+    expect(pendingRepositionKeys(pending, null).size).toBe(0);
   });
 });

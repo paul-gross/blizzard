@@ -6,6 +6,14 @@ import type {
   SourceLinkView,
 } from 'fleet';
 
+/** The project page's tabs: what it is and who serves it, then each kind of link it holds. */
+export type ProjectTab = 'overview' | 'sources' | 'repositories';
+
+/** The tab a string names, or `null` for one that is no tab. */
+export function parseProjectTab(value: string): ProjectTab | null {
+  return value === 'overview' || value === 'sources' || value === 'repositories' ? value : null;
+}
+
 /** A project page's tabs, each kind of link counted once its read answers (`null` until then). */
 export function projectTabs(sourceCount: number | null, repositoryCount: number | null): readonly KitTabOption[] {
   return [

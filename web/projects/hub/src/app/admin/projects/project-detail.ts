@@ -43,6 +43,7 @@ import { injectWorkSourcesQuery } from '../work-sources/work-sources.query';
 import { ProjectColorPicker } from './project-color-picker';
 import {
   foldLandingPositions,
+  pendingRepositionKeys,
   landingSections,
   type LandingPositionVars,
 } from './project-landing-order.model';
@@ -71,7 +72,7 @@ import {
   sourceChoices,
   sourceLinkRows,
 } from './projects.model';
-import { linkCount, projectTabs, servedByLines } from './project-overview.model';
+import { linkCount, parseProjectTab, projectTabs, servedByLines } from './project-overview.model';
 import {
   injectProjectChunkCountsQuery,
   injectProjectQuery,
@@ -221,6 +222,8 @@ export class ProjectDetail {
   protected readonly pendingRepositoryKeys = computed(() =>
     pendingUnlinkNames(this.pendingLinks(), this.projectId(), 'repository'),
   );
+  /** Every reposition in flight, so a moving row cannot be dragged again before its write settles. */
+  protected readonly pendingRepositionKeys = computed(() => pendingRepositionKeys(this.pendingPositions(), this.projectId()));
   protected readonly sourceError = computed(() => failureFor(this.linkFailure(), 'source'));
   protected readonly repositoryError = computed(() => failureFor(this.linkFailure(), 'repository'));
 
@@ -243,7 +246,8 @@ export class ProjectDetail {
   }
 
   protected onTab(value: string): void {
-    if (value === 'overview' || value === 'sources' || value === 'repositories') this.tab.set(value);
+    const tab = parseProjectTab(value);
+    if (tab !== null) this.tab.set(tab);
   }
 
   protected onEdit(): void {

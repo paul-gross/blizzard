@@ -33,7 +33,9 @@
               (cdkDropListDropped)="dropped(section.key, $event)"
             >
               @for (row of order[section.key]; track row.key) {
-                <li class="row armed" cdkDrag [cdkDragData]="row.key" [attr.data-testid]="testid() + '-row-' + row.name">
+                <li class="row armed" cdkDrag
+                  [cdkDragData]="row.key"
+                  [cdkDragDisabled]="pendingRepositionKeys().has(row.key)" [attr.data-testid]="testid() + '-row-' + row.name">
                   <ng-container *ngTemplateOutlet="rowBody; context: { $implicit: row }" />
                 </li>
               }

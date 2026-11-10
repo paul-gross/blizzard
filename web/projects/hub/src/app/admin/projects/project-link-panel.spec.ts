@@ -87,4 +87,18 @@ describe('ProjectLinkPanel', () => {
     expect(el.querySelector('[data-testid="p-ranked"]')).toBeNull();
     expect(el.querySelectorAll('[data-testid="p-rows"] .name')).toHaveLength(3);
   });
+
+  it('disables the drag of a row whose reposition is in flight, and re-arms it once the move settles', async () => {
+    const fixture = await mount(true);
+    const drags = () => fixture.debugElement.queryAll(By.directive(CdkDrag)).map((node) => node.injector.get(CdkDrag).disabled);
+    expect(drags()).toEqual([false, false, false]);
+
+    fixture.componentRef.setInput('pendingRepositionKeys', new Set(['repo_b']));
+    fixture.detectChanges();
+    expect(drags()).toEqual([false, true, false]);
+
+    fixture.componentRef.setInput('pendingRepositionKeys', new Set());
+    fixture.detectChanges();
+    expect(drags()).toEqual([false, false, false]);
+  });
 });
