@@ -26,6 +26,7 @@ from blizzard.hub.domain.config.apply import (
     DeclaredReferences,
     EntryOutcome,
     ForgeDeclaration,
+    ReferencedUrgency,
     RepositoryDeclaration,
     StoredConfig,
     WorkSourceDeclaration,
@@ -81,8 +82,14 @@ from blizzard.hub.domain.projects.declarations import (
 from blizzard.hub.domain.projects.links import IReadProjectLinks, RepositoryLink, SourceLink
 from blizzard.hub.domain.projects.model import IReadProjectRepository, Project, ProjectId, ProjectSlug
 from blizzard.hub.domain.projects.order import IReadProjectPositions
-from blizzard.hub.domain.urgency.declarations import StoredUrgencies, plan_urgencies
-from blizzard.hub.domain.urgency.ports import IReadTenantSettings, IReadUrgencyOrder, IReadUrgencyRepository
+from blizzard.hub.domain.urgency.declarations import StoredUrgencies, UrgencyWrite, plan_urgencies
+from blizzard.hub.domain.urgency.model import UrgencyId
+from blizzard.hub.domain.urgency.ports import (
+    IReadTenantSettings,
+    IReadUrgencyOrder,
+    IReadUrgencyRepository,
+    urgency_lock,
+)
 from blizzard.hub.domain.urgency.services import TenantSettingsMissing
 
 
@@ -197,15 +204,18 @@ class ConfigApplication:
         declared_forges, lookup, former_forges = self._held_forges(entries, held_forges, ctx)
         declaration = self._declaration(entries, projects, repositories, sources, lookup)
         cadences, held_cadences = self._cadence_declarations(entries, projects, may_admit=may_admit)
+        urgency_plan = self._plan_urgencies(entries, ctx)
+        referenced = self._referenced_urgencies(entries, urgency_plan)
         declaration = replace(
             declaration,
             declared_forges=declared_forges,
             cadences=cadences,
-            urgencies=self._plan_urgencies(entries, ctx),
+            urgencies=urgency_plan,
+            reference_locks=tuple(sorted({urgency_lock(UrgencyId(held.urgency_id)) for held in referenced.values()})),
         )
         outcomes = self._authoring.apply(
             declaration,
-            self._stored(declaration, repositories, sources, held_forges, former_forges, held_cadences),
+            self._stored(declaration, repositories, sources, held_forges, former_forges, held_cadences, referenced),
             ctx,
             dry_run=dry_run,
         )
@@ -381,6 +391,20 @@ class ConfigApplication:
         stored = StoredUrgencies(self._tenant_id, tuple(self._urgencies.list_all()), order, settings)
         return plan_urgencies(entries.urgencies, stored, ctx, pick=self._pick, at=self._clock.now())
 
+    def _referenced_urgencies(self, entries: DocumentEntries, plan: ApplyPlan) -> dict[str, ReferencedUrgency]:
+        """Every urgency the routine and cadence entries name that is stored or created by the document, by slug — the
+        stored ones read only when an entry names one, and a created one under the id the plan minted for it. A slug
+        naming none is absent, which the entry's check refuses."""
+        named = _named_urgencies(entries)
+        if not named:
+            return {}
+        held = {u.slug: ReferencedUrgency(u.urgency_id, u.retired) for u in self._urgencies.list_all()}
+        for write in plan.writes:
+            if isinstance(write.record, UrgencyWrite) and write.from_revision is None:
+                created = write.record.urgency
+                held[created.slug] = ReferencedUrgency(created.urgency_id, retired=False)
+        return {slug: held[slug] for slug in sorted(named) if slug in held}
+
     @staticmethod
     def _declaration(
         entries: DocumentEntries,
@@ -483,6 +507,7 @@ class ConfigApplication:
             edit=routine.edit,
             project_id=projects.project_of(ROUTINES_SECTION, index, routine.project).project_id,
             scopes=routine.scopes,
+            default_urgency=routine.default_urgency,
         )
 
     def _cadence_declarations(
@@ -517,6 +542,7 @@ class ConfigApplication:
         forges: dict[str, ConfiguredForge],
         former_forges: dict[str, ConfiguredForge],
         cadences: dict[tuple[str, str], Cadence],
+        urgencies: dict[str, ReferencedUrgency],
     ) -> StoredConfig:
         secrets = self._secrets.get_many(list(declaration.secrets))
         declared_slugs = {d.slug for d in declaration.repositories}
@@ -557,5 +583,20 @@ class ConfigApplication:
                 scopes=frozenset(scopes) | {d.key for d in declared_scopes},
                 enabled_graphs=frozenset(self._graphs.enabled_names(sorted(graph_names))),
                 linked_scopes=linked,
+                urgencies=urgencies,
             ),
         )
+
+
+def _named_urgencies(entries: DocumentEntries) -> set[str]:
+    """The slug of every urgency a routine or cadence entry names, on its create shape or its edit."""
+    named: set[str] = set()
+    for routine in entries.routines:
+        if routine.default_urgency is not None:
+            named.add(routine.default_urgency)
+        if isinstance(routine.edit.default_urgency, str):
+            named.add(routine.edit.default_urgency)
+    for cadence in entries.cadences:
+        chores = [*cadence.shape.chores, *(() if cadence.edit.chores is UNSET else cadence.edit.chores)]
+        named.update(chore.urgency for chore in chores if chore.urgency is not None)
+    return named

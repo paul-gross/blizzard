@@ -69,7 +69,7 @@ class DeclaredScope:
 class DeclaredRoutine:
     """A routine the document names within ``project`` — a project slug, ``None`` for the tenant's only one — by
     ``slug`` or, in the older form, ``name`` alone; at least one is stated. A ``scopes`` of ``None`` leaves the
-    stored linked scope set."""
+    stored linked scope set; ``default_urgency`` is the slug of the urgency it names, ``None`` for none."""
 
     slug: str | None
     name: str | None
@@ -81,6 +81,7 @@ class DeclaredRoutine:
     edit: RoutineEdit
     project: str | None
     scopes: Sequence[str] | None = None
+    default_urgency: str | None = None
 
 
 @domain_model

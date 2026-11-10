@@ -10,7 +10,8 @@ The caller publishes what a write moved once it commits (``bzh:publish-after-com
 
 from __future__ import annotations
 
-from collections.abc import Sequence
+from collections.abc import Generator, Mapping, Sequence
+from contextlib import contextmanager
 from dataclasses import dataclass
 
 from blizzard.foundation.clock import IClock
@@ -39,6 +40,7 @@ from blizzard.hub.domain.urgency.ports import (
     IReadUrgencyChunks,
     IReadUrgencyOrder,
     IReadUrgencyRepository,
+    IUrgencyReferenceClearing,
     IWriteTenantSettings,
     IWriteUrgencyChunks,
     IWriteUrgencyOrder,
@@ -227,9 +229,10 @@ class UrgencyLifecycle:
     urgency its open work moves to; under them it re-reads the default, the urgency, its open chunks and ``move_to``,
     clears the refusals in order, and writes the retired fact, the move and the change together. No chunk is locked:
     every write setting a chunk to an urgency takes that urgency's lock and confirms it live, and the move itself
-    leaves a chunk that finished since the read. An enable locks the set and the urgency and re-reads it under them.
-    Both take the set's lock because a reorder and a create decide on which urgencies are live under it alone. Enable
-    moves no chunk back."""
+    leaves a chunk that finished since the read. In the same unit, every routine default and chore override naming the
+    retiring urgency is cleared through ``references``. An enable locks the set and the urgency and re-reads it under
+    them. Both take the set's lock because a reorder and a create decide on which urgencies are live under it alone.
+    Enable moves no chunk back and restores no cleared reference."""
 
     def __init__(
         self,
@@ -239,12 +242,14 @@ class UrgencyLifecycle:
         chunks: IWriteUrgencyChunks,
         transactions: IHubTransactions,
         clock: IClock,
+        references: Sequence[IUrgencyReferenceClearing] = (),
     ) -> None:
         self._urgencies = urgencies
         self._settings = settings
         self._chunks = chunks
         self._transactions = transactions
         self._clock = clock
+        self._references = tuple(references)
 
     def retire(
         self,
@@ -287,6 +292,8 @@ class UrgencyLifecycle:
                 if destination is not None
                 else []
             )
+            for references in self._references:
+                references.clear(current, ctx, at=at, transaction=locked)
             decided = current.set_retired(True, ctx, if_match=None, at=at, extra=moved_diff(destination, len(moved)))
             assert decided is not None, "a live urgency always retires"
             retired, change = decided
@@ -438,6 +445,32 @@ class TenantDefault:
         settings = _settings(self._settings, transaction=transaction)
         held = self._urgencies.get(settings.default_urgency_id, transaction=transaction)
         return require_live(DEFAULT_URGENCY_FIELD, settings.default_urgency_id, held)
+
+
+class UrgencyReferences:
+    """Holds still the urgencies a routine's or a chore's write names. :meth:`held` confirms each live ahead of the
+    unit, opens one unit locking them all, and confirms each live again under the locks, so no reference lands on an
+    urgency in the moment it is retired (``bzh:write-reestablishes-read``)."""
+
+    def __init__(self, *, urgencies: IReadUrgencyRepository, transactions: IHubTransactions) -> None:
+        self._urgencies = urgencies
+        self._transactions = transactions
+
+    @contextmanager
+    def held(self, named: Mapping[str, str]) -> Generator[Transaction | None, None, None]:
+        """``named`` maps each field that names an urgency to the slug it names. With none named it opens no unit and
+        yields ``None``; otherwise it yields the locked unit the write joins. :class:`UrgencyUnknown` or
+        :class:`UrgencyRetired`, naming the field, when one is not live — before the unit, or under its locks."""
+        if not named:
+            yield None
+            return
+        ahead = {field: require_live(field, slug, self._urgencies.get_by_slug(slug)) for field, slug in named.items()}
+        keys = sorted({urgency_lock(urgency.urgency_id) for urgency in ahead.values()})
+        with self._transactions.begin() as transaction:
+            locked = transaction.lock_set(keys=keys)
+            for field, urgency in ahead.items():
+                require_live(field, urgency.slug, self._urgencies.get(urgency.urgency_id, transaction=locked))
+            yield locked
 
 
 def default_lock_keys(default_id: UrgencyId) -> list[tuple[str, str]]:

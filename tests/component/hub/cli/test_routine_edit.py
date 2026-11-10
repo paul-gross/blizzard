@@ -89,3 +89,22 @@ def test_an_unknown_routine_is_answered_by_the_patch_itself(client: TestClient) 
 
     assert result.exit_code != 0
     assert "unknown routine rtn_ghost" in result.output
+
+
+def test_the_default_urgency_is_set_by_slug_and_cleared_and_a_contradiction_is_refused(client: TestClient) -> None:
+    assert client.post("/api/graphs", json={"definition_yaml": _GRAPH}).status_code == 201
+    assert client.post("/api/urgencies", json={"slug": "urgent"}).status_code == 201
+    created = client.post(
+        "/api/routines", json={"slug": "nightly", "graph_name": "alpha", "default_scope_slug": "blizzard"}
+    )
+    routine_id = created.json()["routine_id"]
+
+    assert _edit(routine_id, "--default-urgency", "urgent").exit_code == 0
+    assert client.get(f"/api/routines/{routine_id}").json()["default_urgency"] == "urgent"
+    contradicted = _edit(routine_id, "--default-urgency", "urgent", "--clear-default-urgency")
+    assert contradicted.exit_code != 0
+    assert "contradict" in contradicted.output
+    assert _edit(routine_id, "--clear-default-urgency").exit_code == 0
+    assert client.get(f"/api/routines/{routine_id}").json()["default_urgency"] is None
+    refused = _edit(routine_id, "--default-urgency", "nosuch")
+    assert refused.exit_code != 0

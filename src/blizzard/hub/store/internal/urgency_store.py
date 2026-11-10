@@ -24,7 +24,7 @@ from blizzard.hub.domain.config.errors import ConfigRevisionConflict
 from blizzard.hub.domain.kernel.transactions import Transaction
 from blizzard.hub.domain.urgency.declarations import NamedRevision
 from blizzard.hub.domain.urgency.mark import Icon, IconMark, IconMediaType
-from blizzard.hub.domain.urgency.model import MarkWrite, Urgency, UrgencyId, UrgencySlugTaken
+from blizzard.hub.domain.urgency.model import MarkWrite, Urgency, UrgencyId, UrgencySlugTaken, require_live
 from blizzard.hub.domain.urgency.order import Placed, PositionFact, UrgencyOrder, UrgencyOrderConflict
 from blizzard.hub.domain.urgency.ports import IWriteUrgencyOrder, IWriteUrgencyRepository
 
@@ -266,6 +266,20 @@ def _urgency_of(row: Row[Any], retired: bool) -> Urgency:
         revision=row.revision,
         retired=retired,
     )
+
+
+def live_urgency_id(conn: Connection, field: str, slug: str | None) -> str | None:
+    """The id of the urgency ``slug`` names, for a record that references it to store — ``None`` for ``None``.
+    :class:`~blizzard.hub.domain.urgency.model.UrgencyUnknown` or
+    :class:`~blizzard.hub.domain.urgency.model.UrgencyRetired`, naming ``field``, when it is not live: the write
+    refuses rather than land a reference to an urgency retired since it was read (``bzh:store-refuses-stale``)."""
+    if slug is None:
+        return None
+    row = conn.execute(
+        statements_of(conn).select(urgencies, *_VIEW_COLUMNS).where(urgencies.c.slug == slug)
+    ).one_or_none()
+    held = None if row is None else _reconstituted(conn, [row])[0]
+    return require_live(field, slug, held).urgency_id
 
 
 def require_order_seq(conn: Connection, from_seq: int) -> None:

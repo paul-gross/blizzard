@@ -39,6 +39,7 @@ from blizzard.hub.domain.config.errors import ConfigFieldError, ConfigRevisionCo
 from blizzard.hub.domain.garden.findings.trend import Trend, TrendWindow
 from blizzard.hub.domain.garden.proposals.model import GardenProposalCounts
 from blizzard.hub.domain.garden.routines import (
+    DEFAULT_URGENCY_FIELD,
     Routine,
     RoutineDefaultScopeUnlinkError,
     RoutineEdit,
@@ -84,6 +85,7 @@ def _routine_view(routine: Routine, labels: ProjectLabelFields) -> RoutineView:
         default_model=list(routine.default_model),
         default_effort=routine.default_effort,
         default_harnesses=list(routine.default_harnesses),
+        default_urgency=routine.default_urgency,
         created_at=iso_utc(routine.created_at),
         retired=routine.retired,
         revision=routine.revision,
@@ -103,7 +105,7 @@ def _listing(services: TenantServices, project_id: str | None, *, include_retire
 
 
 def _unprocessable(exc: ConfigFieldError) -> HTTPException:
-    return ProblemHTTPException(partial(problems_garden.config_field_invalid_problem, exc.field, exc.message))
+    return ProblemHTTPException(partial(problems_garden.config_field_invalid_problem, exc.field, exc.message, exc.code))
 
 
 def _revision_conflict(exc: ConfigRevisionConflict) -> HTTPException:
@@ -135,6 +137,11 @@ def _create(
 ) -> RoutineView:
     try:
         slug = ScopeSlug.parse(request.default_scope_slug)
+        urgency = (
+            None
+            if request.default_urgency is None
+            else services.urgency_reading.named(DEFAULT_URGENCY_FIELD, request.default_urgency)
+        )
         routine = services.routine_authoring.create(
             project=project,
             slug=request.slug,
@@ -145,6 +152,7 @@ def _create(
             default_model=request.default_model,
             default_effort=request.default_effort,
             default_harnesses=request.default_harnesses,
+            default_urgency=urgency,
         )
     except (
         ScopeSlugError,
@@ -183,7 +191,8 @@ def create_project_routine(
     project: PathProject,
 ) -> RoutineView:
     """Mint a routine in the project, its default scope resolved or minted there; 422 on a duplicate slug in the
-    project, a malformed default scope slug, or a graph name with no enabled mint; 404 on an unknown project."""
+    project, a malformed default scope slug, or a graph name with no enabled mint, and 422 `urgency_unknown` or
+    `urgency_retired` on a `default_urgency` naming no urgency or a retired one; 404 on an unknown project."""
     return _create(request, identity, door, services, project)
 
 
@@ -457,12 +466,16 @@ def unlink_routine_scope(
     return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
-def _routine_edit(request: RoutineEditRequest) -> RoutineEdit:
-    """The sparse edit ``request`` states — only its present fields, the default scope slug parsed."""
+def _routine_edit(request: RoutineEditRequest, services: TenantServices) -> RoutineEdit:
+    """The sparse edit ``request`` states — only its present fields, the default scope slug parsed and the default
+    urgency, named by id or slug, resolved to its slug."""
     present = {name: getattr(request, name) for name in request.model_fields_set}
     slug = present.get("default_scope_slug")
     if slug is not None:
         present["default_scope_slug"] = ScopeSlug.parse(slug)
+    urgency = present.get(DEFAULT_URGENCY_FIELD)
+    if urgency is not None:
+        present[DEFAULT_URGENCY_FIELD] = services.urgency_reading.named(DEFAULT_URGENCY_FIELD, urgency).slug
     return RoutineEdit(**present)
 
 
@@ -476,14 +489,15 @@ def edit_routine(
     if_match: Annotated[int | None, Header()] = None,
 ) -> RoutineView:
     """Apply only the fields present — the display name, the graph, the default scope, and the model, effort,
-    and harness defaults; an explicit `null` clears `default_effort`. A present `slug` must
-    restate the current one. An edit that changes nothing writes nothing. 404 on an unknown
+    harness, and urgency defaults; an explicit `null` clears `default_effort` or `default_urgency`. A present `slug`
+    must restate the current one. An edit that changes nothing writes nothing. 404 on an unknown
     id; 422 on a slug change, a `null` field, a malformed default scope slug, or a graph name
-    with no enabled mint; 409 on a stale `If-Match` naming the current revision."""
+    with no enabled mint, and 422 `urgency_unknown` or `urgency_retired` on a `default_urgency` naming no urgency or
+    a retired one; 409 on a stale `If-Match` naming the current revision."""
     routine = _routine_or_404(routine_id, services)
     try:
         edited = services.routine_authoring.edit(
-            routine, _routine_edit(request), change_context(identity, door), if_match=if_match
+            routine, _routine_edit(request, services), change_context(identity, door), if_match=if_match
         )
     except ConfigFieldError as exc:
         raise _unprocessable(exc) from exc

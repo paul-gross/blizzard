@@ -27,6 +27,9 @@ class RoutineCreateRequest(BaseModel):
     default_effort: str | None = None
     # The routine's default harness preference — the `default_model` shape.
     default_harnesses: list[str] = []
+    #: The urgency a run takes when nothing above the routine names one, by id or slug; absent or ``None`` takes the
+    #: tenant's default.
+    default_urgency: str | None = None
 
 
 class RoutineDocument(BaseModel):
@@ -44,13 +47,16 @@ class RoutineDocument(BaseModel):
     default_model: list[str] = []
     default_effort: str | None = None
     default_harnesses: list[str] = []
+    #: The urgency a run takes when nothing above the routine names one, by slug; it must be live, stored or declared
+    #: in the same document. Absent or ``None`` takes the tenant's default.
+    default_urgency: str | None = None
     scopes: list[str] = []
 
 
 class RoutineEditRequest(BaseModel):
     """A sparse edit: an absent field is unchanged, a present one is set. A present
     ``slug`` may only restate the current one; ``name`` sets the display name. An explicit ``null`` clears
-    ``default_effort`` and is refused on every other field."""
+    ``default_effort`` or ``default_urgency`` and is refused on every other field."""
 
     model_config = ConfigDict(extra="forbid")
 
@@ -61,6 +67,8 @@ class RoutineEditRequest(BaseModel):
     default_model: list[str] | None = None
     default_effort: str | None = None
     default_harnesses: list[str] | None = None
+    #: The urgency a run takes when nothing above the routine names one, by id or slug.
+    default_urgency: str | None = None
 
 
 class RoutineLifecycleRequest(BaseModel):
@@ -82,6 +90,9 @@ class RoutineView(WireModel):
     default_model: list[str] = []
     default_effort: str | None = None
     default_harnesses: list[str] = []
+    #: The slug of the urgency a run takes when nothing above the routine names one; ``None`` takes the tenant's
+    #: default.
+    default_urgency: str | None = None
     created_at: str
     retired: bool = False
     revision: int | None = None

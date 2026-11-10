@@ -133,16 +133,27 @@ class ForgeDeclaration:
 
 @domain_model
 @dataclass(frozen=True)
+class ReferencedUrgency:
+    """An urgency an entry may name: its id — minted at plan time for one the document creates — and whether it is
+    retired once the apply has run."""
+
+    urgency_id: str
+    retired: bool
+
+
+@domain_model
+@dataclass(frozen=True)
 class DeclaredReferences:
     """What an entry's reference checks read: every ``(project id, slug)`` of a scope stored or declared in the
-    document, the graph names that resolve to an enabled graph, and each stored routine's linked scope set by its
-    ``(project id, name)``."""
+    document, the graph names that resolve to an enabled graph, each stored routine's linked scope set by its
+    ``(project id, name)``, and every urgency stored or created by the document, by slug."""
 
     scopes: frozenset[tuple[str, str]] = frozenset()
     enabled_graphs: frozenset[str] = frozenset()
     linked_scopes: Mapping[tuple[str, str], tuple[str, ...]] = field(
         default_factory=dict[tuple[str, str], tuple[str, ...]]
     )
+    urgencies: Mapping[str, ReferencedUrgency] = field(default_factory=dict[str, ReferencedUrgency])
 
 
 class RecordDeclaration(Protocol):
@@ -244,6 +255,8 @@ class ConfigDeclaration:
     scopes: tuple[RecordDeclaration, ...] = ()
     routines: tuple[RecordDeclaration, ...] = ()
     cadences: tuple[RecordDeclaration, ...] = ()
+    #: The keyed locks of the urgencies the routine and cadence entries name, declared beside the urgency sections'.
+    reference_locks: tuple[tuple[str, str], ...] = ()
 
 
 @domain_model
@@ -321,7 +334,7 @@ def reconcile(declaration: ConfigDeclaration, stored: StoredConfig, ctx: ChangeC
         writes=tuple(plan.writes),
         outcomes=tuple(plan.outcomes),
         positions=declaration.projects.positions,
-        locks=declaration.urgencies.locks,
+        locks=tuple(sorted({*declaration.urgencies.locks, *declaration.reference_locks})),
     )
 
 

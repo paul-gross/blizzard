@@ -10,7 +10,7 @@ from collections.abc import Sequence
 from datetime import datetime
 from typing import Protocol
 
-from blizzard.hub.domain.config.changes import ConfigChange
+from blizzard.hub.domain.config.changes import ChangeContext, ConfigChange
 from blizzard.hub.domain.kernel.transactions import Transaction
 from blizzard.hub.domain.urgency.mark import Icon
 from blizzard.hub.domain.urgency.model import MarkWrite, Urgency, UrgencyId
@@ -193,4 +193,15 @@ class IWriteUrgencyChunks(IReadUrgencyChunks, Protocol):
         """Set each chunk of ``chunk_ids`` still carrying ``from_id`` and still open to carry ``to``, in one bulk
         write, its rank untouched; the ids of the chunks it moved, by id. A chunk that finished since it was read
         keeps its urgency."""
+        ...
+
+
+class IUrgencyReferenceClearing(Protocol):
+    """Clears the references a record kind above this package holds to an urgency being retired — a routine's
+    default, a chore's override. Each kind implements it over its own model and is wired in at composition, so a
+    retire reaches them without this package importing theirs (``bzh:dependency-inversion``)."""
+
+    def clear(self, urgency: Urgency, ctx: ChangeContext, *, at: datetime, transaction: Transaction) -> None:
+        """Clear every reference to ``urgency`` in the retire's locked ``transaction``, each record with its own
+        ``revision`` and change row. A record a concurrent write has already moved off ``urgency`` is skipped."""
         ...

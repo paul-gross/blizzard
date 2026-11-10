@@ -350,6 +350,7 @@ def _entries(document: ConfigDocumentV2) -> DocumentEntries:
                 default_model=routine.default_model,
                 default_effort=routine.default_effort,
                 default_harnesses=routine.default_harnesses,
+                default_urgency=routine.default_urgency,
                 edit=RoutineEdit(**stated),
                 project=routine.project,
                 scopes=routine.scopes if "scopes" in routine.model_fields_set else None,
@@ -635,6 +636,7 @@ def export_config(
                 default_model=r.default_model,
                 default_effort=r.default_effort,
                 default_harnesses=r.default_harnesses,
+                default_urgency=r.default_urgency,
                 scopes=scope_links[r.routine_id],
                 project=slug_of[r.project_id],
             )
@@ -710,6 +712,7 @@ def _cadence_entry(cadence: Cadence, project: str) -> CadenceEntry:
                 mode=chore.spec.mode,
                 note=chore.spec.note,
                 promote=chore.spec.promote,
+                urgency=chore.spec.urgency,
             )
             for chore in cadence.chores
         ],

@@ -39,6 +39,9 @@ class ChoreDocument(BaseModel):
     mode: RunMode | None = None
     note: str | None = None
     promote: bool | None = None
+    #: The urgency the chore's runs take over its routine's default — by slug in a document, by id or slug in a
+    #: request; it must be live. Absent or ``None`` takes the routine's.
+    urgency: str | None = None
 
 
 class CadenceDocument(BaseModel):
@@ -105,6 +108,8 @@ class ChoreView(WireModel):
     promote: bool
     #: When the chore last changed which scopes it names.
     scopes_set_at: str
+    #: The slug of the urgency the chore's runs take over its routine's default; ``None`` takes the routine's.
+    urgency: str | None = None
 
 
 class CadenceAttentionView(WireModel):

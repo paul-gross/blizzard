@@ -95,12 +95,15 @@ def cadence_slug_taken_problem(detail: str, *, instance: str) -> CadenceSlugTake
     )
 
 
-def config_field_invalid_problem(field: str, message: str, *, instance: str) -> config_wire.ConfigFieldInvalidProblem:
-    """The refused field, located in the body — the shape FastAPI's own validation answers."""
+def config_field_invalid_problem(
+    field: str, message: str, code: str = "value_error", *, instance: str
+) -> config_wire.ConfigFieldInvalidProblem:
+    """The refused field, located in the body — the shape FastAPI's own validation answers; ``code`` tells a
+    refusal with its own code apart from a malformed field."""
     return config_wire.ConfigFieldInvalidProblem(
         type=config_wire.CONFIG_FIELD_INVALID,
         title="Field invalid",
-        detail=[ValidationEntry(loc=["body", field], msg=message, type="value_error")],
+        detail=[ValidationEntry(loc=["body", field], msg=message, type=code)],
         instance=instance,
         status=422,
     )

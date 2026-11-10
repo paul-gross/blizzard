@@ -32,6 +32,7 @@ from blizzard.hub.domain.config.errors import ConfigFieldError
 from blizzard.hub.domain.garden.routines import Routine
 from blizzard.hub.domain.garden.scopes import Scope, ScopeSlug, ScopeSlugError
 from blizzard.hub.domain.kernel.unset import UNSET, UnsetType
+from blizzard.hub.domain.urgency.model import UrgencySlug
 
 _SPACING_PATTERN = re.compile(r"^([0-9]+)([mhd])$")
 _UNIT_MINUTES = {"m": 1, "h": 60, "d": 24 * 60}
@@ -109,7 +110,8 @@ class Rhythm:
 @dataclass(frozen=True)
 class ChoreShape:
     """One chore as written, before validation. ``scopes`` is ``"all"``, a list of slugs, or ``None`` for the
-    routine's default scope; every other ``None`` is a field left unstated."""
+    routine's default scope; ``urgency`` is the slug of the urgency its runs take over the routine's default, or
+    ``None`` for none; every other ``None`` is a field left unstated."""
 
     key: str | None
     routine: str | None
@@ -117,13 +119,14 @@ class ChoreShape:
     mode: str | None = None
     note: str | None = None
     promote: bool | None = None
+    urgency: str | None = None
 
 
 @domain_model
 @dataclass(frozen=True)
 class ChoreSpec:
     """A validated chore, without the identity the merge gives it. ``scopes`` holds slugs only when ``selection``
-    is :attr:`ScopeSelection.LISTED`."""
+    is :attr:`ScopeSelection.LISTED`; ``urgency`` is the slug of the chore's override, ``None`` for none."""
 
     key: str
     routine_slug: str
@@ -132,6 +135,7 @@ class ChoreSpec:
     mode: RunMode
     note: str | None
     promote: bool
+    urgency: str | None = None
 
     def names_same_scopes(self, other: ChoreSpec) -> bool:
         """Whether ``other`` names the same scope set — the selection and, for a listed one, the slugs."""
@@ -168,7 +172,9 @@ def _chore_spec(shape: ChoreShape, where: str) -> ChoreSpec:
     except ValueError as exc:
         raise ConfigFieldError(f"{where}.mode", f"a mode is full or delta, got {shape.mode!r}") from exc
     promote = True if shape.promote is None else shape.promote
-    return ChoreSpec(key, shape.routine, selection, scopes, mode, shape.note, promote)
+    if shape.urgency is not None and UrgencySlug.of(shape.urgency) is None:
+        raise ConfigFieldError(f"{where}.urgency", f"an urgency is named by its slug, got {shape.urgency!r}")
+    return ChoreSpec(key, shape.routine, selection, scopes, mode, shape.note, promote, shape.urgency)
 
 
 def parse_chores(shapes: Sequence[ChoreShape]) -> tuple[ChoreSpec, ...]:
@@ -398,6 +404,7 @@ def _chore_value(spec: ChoreSpec) -> dict[str, object]:
         "mode": spec.mode.value,
         "note": spec.note,
         "promote": spec.promote,
+        "urgency": spec.urgency,
     }
 
 
@@ -531,6 +538,30 @@ class Cadence:
         moved = replace(self, revision=self.revision + 1, retired=retired)
         flip = lifecycle.field_changes(((RETIRED_FIELD, self.retired, retired),))
         return moved, self._change(ctx, moved.revision, op, flip, at)
+
+    def without_urgency(
+        self, urgency_slug: str, ctx: ChangeContext, *, at: datetime
+    ) -> tuple[Cadence, ConfigChange] | None:
+        """Every chore overriding with ``urgency_slug`` cleared to name none — an ``edit`` that keeps each chore's id;
+        ``None`` when no chore names it."""
+        declared = [
+            replace(chore.spec, urgency=None) if chore.spec.urgency == urgency_slug else chore.spec
+            for chore in self.chores
+        ]
+        merge = merge_chores(self.chores, declared, at=at)
+        changes = _chore_changes(self.chores, merge)
+        if not changes:
+            return None
+        cleared = replace(self, chores=merge.chores, revision=self.revision + 1)
+        return cleared, self._change(ctx, cleared.revision, ChangeOp.EDIT, changes, at)
+
+    def named_urgencies(self) -> dict[str, str]:
+        """The urgency each chore overriding with one names, by the chore's field: ``chores[<index>].urgency``."""
+        return {
+            f"{CHORES_FIELD}[{index}].urgency": chore.spec.urgency
+            for index, chore in enumerate(self.chores)
+            if chore.spec.urgency is not None
+        }
 
     def _merged_rhythm(self, edit: CadenceEdit, *, at: datetime) -> Rhythm:
         """The stored rhythm with each stated field of ``edit`` over it, validated whole."""

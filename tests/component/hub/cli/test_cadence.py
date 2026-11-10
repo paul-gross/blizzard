@@ -144,6 +144,21 @@ def test_chore_add_edit_and_remove_keep_the_id_and_move_the_revision(client: Tes
     assert [c["key"] for c in _shown()["chores"]] == ["arch"]
 
 
+def test_a_chores_urgency_is_set_cleared_and_kept_across_another_chores_edit(client: TestClient) -> None:
+    assert client.post("/api/urgencies", json={"slug": "urgent"}).status_code == 201
+    _ok("create", "evening", "--spacing", "10d")
+    _ok("chore", "add", "evening", "arch", "--routine", "arch", "--urgency", "urgent")
+    _ok("chore", "add", "evening", "other", "--routine", "arch", "--hold")
+    assert "urgency=urgent" in _ok("get", "evening").output
+
+    _ok("chore", "edit", "evening", "other", "--note", "weigh it")
+    assert [c["urgency"] for c in _shown()["chores"]] == ["urgent", None]
+
+    assert _cli("chore", "edit", "evening", "arch", "--urgency", "urgent", "--clear-urgency").exit_code != 0
+    _ok("chore", "edit", "evening", "arch", "--clear-urgency")
+    assert [c["urgency"] for c in _shown()["chores"]] == [None, None]
+
+
 def test_chore_verbs_refuse_a_duplicate_or_missing_key(client: TestClient) -> None:
     _ok("create", "evening", "--spacing", "10d")
     _ok("chore", "add", "evening", "arch", "--routine", "arch")

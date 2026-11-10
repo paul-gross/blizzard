@@ -821,6 +821,18 @@
                   "type": "boolean"
                 },
                 {
+                  "help": "The urgency the chore's runs take over its routine's default, by id or slug; without one they take the routine's.",
+                  "hidden": false,
+                  "kind": "option",
+                  "name": "urgency",
+                  "opts": [
+                    "--urgency"
+                  ],
+                  "required": false,
+                  "secondary_opts": [],
+                  "type": "text"
+                },
+                {
                   "help": "The project the record belongs to, by id or slug. Needed only when the tenant holds several projects; with one, the record goes to it.",
                   "hidden": false,
                   "kind": "option",
@@ -981,6 +993,30 @@
                   "secondary_opts": [
                     "--promote"
                   ],
+                  "type": "boolean"
+                },
+                {
+                  "help": "The urgency the chore's runs take over its routine's default, by id or slug; without one they take the routine's.",
+                  "hidden": false,
+                  "kind": "option",
+                  "name": "urgency",
+                  "opts": [
+                    "--urgency"
+                  ],
+                  "required": false,
+                  "secondary_opts": [],
+                  "type": "text"
+                },
+                {
+                  "help": "Clear the chore's urgency, so its runs take the routine's.",
+                  "hidden": false,
+                  "kind": "option",
+                  "name": "clear_urgency",
+                  "opts": [
+                    "--clear-urgency"
+                  ],
+                  "required": false,
+                  "secondary_opts": [],
                   "type": "boolean"
                 },
                 {
@@ -8758,6 +8794,18 @@
               "type": "text"
             },
             {
+              "help": "The urgency a run of the routine takes when nothing above it names one, by id or slug; without one a run takes the tenant's default.",
+              "hidden": false,
+              "kind": "option",
+              "name": "default_urgency",
+              "opts": [
+                "--default-urgency"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "text"
+            },
+            {
               "help": "The project the record belongs to, by id or slug. Needed only when the tenant holds several projects; with one, the record goes to it.",
               "hidden": false,
               "kind": "option",
@@ -8810,7 +8858,7 @@
           "short_help": "Mint a routine whose slug is NAME, running GRAPH_NAME with DEFAULT_SCOPE_SLUG's scope."
         },
         "edit": {
-          "help": "Change ROUTINE_ID's display name, graph, default scope, or model/effort/harnesses defaults; only the\noptions given change, and its slug never changes.\n\nA given --model or --harnesses replaces the whole ordered list.",
+          "help": "Change ROUTINE_ID's display name, graph, default scope, or model/effort/harnesses/urgency defaults; only the\noptions given change, and its slug never changes.\n\nA given --model or --harnesses replaces the whole ordered list.",
           "params": [
             {
               "hidden": false,
@@ -8908,6 +8956,30 @@
               "type": "choice"
             },
             {
+              "help": "The urgency a run of the routine takes when nothing above it names one, by id or slug; without one a run takes the tenant's default.",
+              "hidden": false,
+              "kind": "option",
+              "name": "default_urgency",
+              "opts": [
+                "--default-urgency"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "text"
+            },
+            {
+              "help": "Clear the routine's default urgency, so a run takes the tenant's default.",
+              "hidden": false,
+              "kind": "option",
+              "name": "clear_default_urgency",
+              "opts": [
+                "--clear-default-urgency"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "boolean"
+            },
+            {
               "help": "Print the raw response body as JSON.",
               "hidden": false,
               "kind": "option",
@@ -8945,7 +9017,7 @@
             }
           ],
           "path": "hub routine edit",
-          "short_help": "Change ROUTINE_ID's display name, graph, default scope, or model/effort/harnesses defaults; only the options given change, and its slug never changes."
+          "short_help": "Change ROUTINE_ID's display name, graph, default scope, or model/effort/harnesses/urgency defaults; only the options given change, and its slug never changes."
         },
         "enable": {
           "help": "Re-enable a retired routine NAME (its slug).",

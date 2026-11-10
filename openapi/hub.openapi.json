@@ -2524,6 +2524,17 @@
               }
             ],
             "title": "Scopes"
+          },
+          "urgency": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Urgency"
           }
         },
         "required": [
@@ -2588,6 +2599,17 @@
           "scopes_set_at": {
             "title": "Scopes Set At",
             "type": "string"
+          },
+          "urgency": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Urgency"
           }
         },
         "required": [
@@ -2598,7 +2620,8 @@
           "mode",
           "note",
           "promote",
-          "scopes_set_at"
+          "scopes_set_at",
+          "urgency"
         ],
         "title": "ChoreView",
         "type": "object"
@@ -20875,6 +20898,17 @@
             "title": "Default Scope Slug",
             "type": "string"
           },
+          "default_urgency": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Default Urgency"
+          },
           "graph_name": {
             "title": "Graph Name",
             "type": "string"
@@ -20950,7 +20984,7 @@
       },
       "RoutineEditRequest": {
         "additionalProperties": false,
-        "description": "A sparse edit: an absent field is unchanged, a present one is set. A present\n``slug`` may only restate the current one; ``name`` sets the display name. An explicit ``null`` clears\n``default_effort`` and is refused on every other field.",
+        "description": "A sparse edit: an absent field is unchanged, a present one is set. A present\n``slug`` may only restate the current one; ``name`` sets the display name. An explicit ``null`` clears\n``default_effort`` or ``default_urgency`` and is refused on every other field.",
         "properties": {
           "default_effort": {
             "anyOf": [
@@ -21001,6 +21035,17 @@
               }
             ],
             "title": "Default Scope Slug"
+          },
+          "default_urgency": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Default Urgency"
           },
           "graph_name": {
             "anyOf": [
@@ -21073,6 +21118,17 @@
           "default_scope_slug": {
             "title": "Default Scope Slug",
             "type": "string"
+          },
+          "default_urgency": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Default Urgency"
           },
           "graph_name": {
             "title": "Graph Name",
@@ -21424,6 +21480,17 @@
             "title": "Default Scope Slug",
             "type": "string"
           },
+          "default_urgency": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Default Urgency"
+          },
           "graph_name": {
             "title": "Graph Name",
             "type": "string"
@@ -21499,6 +21566,7 @@
           "default_model",
           "default_effort",
           "default_harnesses",
+          "default_urgency",
           "created_at",
           "retired",
           "revision",
@@ -35764,7 +35832,7 @@
         ]
       },
       "patch": {
-        "description": "Apply only the fields present \u2014 the name, the schedule, the spacing, the anchor, and the whole chore list,\nmatched to the stored chores by key so a chore whose key stays keeps its id; an explicit `null` clears\n`schedule`, `spacing`, or `anchor`. An edit that changes nothing writes nothing. 404 on an unknown id; 422\nnaming the field on a `null` name or chore list, or a merged shape that cannot mean anything; 403 when the\ncadence would stay live keeping a promoting chore and the caller may not promote chunks; 409 on a stale\n`If-Match`.",
+        "description": "Apply only the fields present \u2014 the name, the schedule, the spacing, the anchor, and the whole chore list,\nmatched to the stored chores by key so a chore whose key stays keeps its id; an explicit `null` clears\n`schedule`, `spacing`, or `anchor`. An edit that changes nothing writes nothing. 404 on an unknown id; 422\nnaming the field on a `null` name or chore list, a merged shape that cannot mean anything, or a chore's\n`urgency` naming no urgency (`urgency_unknown`) or a retired one (`urgency_retired`); 403 when the\ncadence would stay live keeping a promoting chore and the caller may not promote chunks; 409 on a stale\n`If-Match`.",
         "operationId": "edit_cadence_api_cadences__cadence_id__patch",
         "parameters": [
           {
@@ -53150,7 +53218,7 @@
         ]
       },
       "post": {
-        "description": "Create a cadence in the project. 422 naming the field on a shape that cannot mean anything \u2014 no schedule and\nno spacing, a malformed cron, zone, spacing, anchor, or chore \u2014 or on a slug the project already holds; 403 when\nit would keep a promoting chore and the caller may not promote chunks; 404 on an unknown project. A chore whose\nroutine or scopes do not resolve is accepted, and shown in the cadence's `attention`.",
+        "description": "Create a cadence in the project. 422 naming the field on a shape that cannot mean anything \u2014 no schedule and\nno spacing, a malformed cron, zone, spacing, anchor, or chore \u2014 or on a slug the project already holds; 403 when\nit would keep a promoting chore and the caller may not promote chunks; 404 on an unknown project. A chore whose\nroutine or scopes do not resolve is accepted, and shown in the cadence's `attention`; a chore's `urgency`, by id\nor slug, is refused 422 `urgency_unknown` or `urgency_retired` when it names no urgency or a retired one.",
         "operationId": "create_project_cadence_api_projects__project__cadences_post",
         "parameters": [
           {
@@ -54781,7 +54849,7 @@
         ]
       },
       "post": {
-        "description": "Mint a routine in the project, its default scope resolved or minted there; 422 on a duplicate slug in the\nproject, a malformed default scope slug, or a graph name with no enabled mint; 404 on an unknown project.",
+        "description": "Mint a routine in the project, its default scope resolved or minted there; 422 on a duplicate slug in the\nproject, a malformed default scope slug, or a graph name with no enabled mint, and 422 `urgency_unknown` or\n`urgency_retired` on a `default_urgency` naming no urgency or a retired one; 404 on an unknown project.",
         "operationId": "create_project_routine_api_projects__project__routines_post",
         "parameters": [
           {
@@ -58812,7 +58880,7 @@
         ]
       },
       "patch": {
-        "description": "Apply only the fields present \u2014 the display name, the graph, the default scope, and the model, effort,\nand harness defaults; an explicit `null` clears `default_effort`. A present `slug` must\nrestate the current one. An edit that changes nothing writes nothing. 404 on an unknown\nid; 422 on a slug change, a `null` field, a malformed default scope slug, or a graph name\nwith no enabled mint; 409 on a stale `If-Match` naming the current revision.",
+        "description": "Apply only the fields present \u2014 the display name, the graph, the default scope, and the model, effort,\nharness, and urgency defaults; an explicit `null` clears `default_effort` or `default_urgency`. A present `slug`\nmust restate the current one. An edit that changes nothing writes nothing. 404 on an unknown\nid; 422 on a slug change, a `null` field, a malformed default scope slug, or a graph name\nwith no enabled mint, and 422 `urgency_unknown` or `urgency_retired` on a `default_urgency` naming no urgency or\na retired one; 409 on a stale `If-Match` naming the current revision.",
         "operationId": "edit_routine_api_routines__routine_id__patch",
         "parameters": [
           {

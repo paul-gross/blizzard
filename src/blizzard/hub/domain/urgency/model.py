@@ -8,7 +8,7 @@ it, or ``None`` when it changes nothing. A change row names no project."""
 
 from __future__ import annotations
 
-from collections.abc import Callable, Iterable
+from collections.abc import Callable, Iterable, Mapping
 from dataclasses import dataclass, replace
 from datetime import datetime
 from typing import NewType
@@ -17,6 +17,7 @@ from blizzard.foundation.ids import Id, IdPrefix
 from blizzard.foundation.project_colors import HexColor, ProjectColor
 from blizzard.foundation.roles import domain_model
 from blizzard.hub.domain.config import lifecycle
+from blizzard.hub.domain.config.apply import ReferencedUrgency
 from blizzard.hub.domain.config.changes import (
     RETIRED_FIELD,
     ChangeContext,
@@ -340,6 +341,17 @@ def require_live(field: str, key: str, urgency: Urgency | None) -> Urgency:
     if urgency.retired:
         raise UrgencyRetired(field, urgency.slug)
     return urgency
+
+
+def require_referenced(field: str, slug: str, urgencies: Mapping[str, ReferencedUrgency]) -> ReferencedUrgency:
+    """The urgency a document entry's ``field`` names by ``slug``, among those stored or created by the document;
+    :class:`UrgencyUnknown` when it names none, :class:`UrgencyRetired` when it names a retired one."""
+    held = urgencies.get(slug)
+    if held is None:
+        raise UrgencyUnknown(field, slug)
+    if held.retired:
+        raise UrgencyRetired(field, slug)
+    return held
 
 
 @domain_model
