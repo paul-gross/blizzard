@@ -141,14 +141,10 @@ class GitCommitDeclarationService:
         commit: str,
         environment_id: str | None = None,
     ) -> DeclaredGitCommit:
-        """Record ``(env, repo, branch, commit)`` for the scope's lease and report the resolved
-        environment. The worker is already resolved and its token checked by the caller
-        (``bzh:domain-takes-objects``). Raises :class:`GitCommitDeclarationUnknownRepo` when the
-        env is unresolvable or does not list ``repo``, :class:`GitCommitDeclarationOnClosedLease`
-        when the lease's standing refuses the verb, or :class:`GitCommitDeclarationTooLate` once
-        the lease's outcome is buffered, acked or not.
-        Append-and-read-newest (``bzh:facts-not-status``): a repeat call for the same ``(lease, env,
-        repo)`` is a correction. The env is part of that key, so one env cannot overwrite another."""
+        """Record a commit for the authorized worker and report its resolved environment.
+
+        Repeating a ``(lease, env, repo)`` declaration corrects it (``bzh:facts-not-status``).
+        """
         worker = scope.worker
         lease = worker.lease
         bindings = scope.bindings

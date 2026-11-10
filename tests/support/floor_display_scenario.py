@@ -1,29 +1,8 @@
-"""Disposable two-runner floor display for manual verification against a local hub.
+"""Serve two disposable runner floors against a local no-auth hub.
 
-From the workspace root, provision and start the feature environment, then, with a
-tenant ID selected from its local hub, run this in a foreground terminal::
-
-    winter provision bz5
-    winter service up bz5 --wait
-    source <(winter env bz5)
-    cd bz5/blizzard
-    (
-      trap 'winter service up bz5/runner --wait' EXIT
-      winter service down bz5/runner || exit 1
-      PYTHONPATH="$PWD" ./.venv/bin/python -m tests.support.floor_display_scenario \
-        --scratch "$SCRATCH" --hub "$BZ_HUB_URL" --tenant "$TENANT_ID" --port "$BZ_RUNNER_PORT"
-    )
-
-Set SCRATCH to an existing disposable directory and TENANT_ID to a tenant on a local,
-non-live hub with authentication disabled. This helper supplies no operator session;
-an authenticated hub refuses enrollment. It enrolls two independent runners, but does
-not enroll or register their host at the hub: the host page will say UNREGISTERED.
-Each runner ID is printed immediately on enrollment and remains at the hub after exit,
-including on a later setup failure. The caller owns the port and service restoration.
-The helper creates a fresh host child directory. Its printed ``ready`` object names that directory
-and the runner IDs. Inspect the host and machine pages while it runs; a later periodic
-tick is reported in ``later-ticks.json``. Create ``stop`` inside the printed directory
-to exit early, or wait for ``--seconds`` to elapse. The trap restores the env runner.
+Runner identities persist in the hub; the host is not registered. The caller owns
+the port and service restoration. The printed ready directory accepts a ``stop`` file.
+Run ``uv run python -m tests.support.floor_display_scenario --help`` for arguments.
 """
 
 from __future__ import annotations
