@@ -1,0 +1,52 @@
+:host {
+  display: contents;
+}
+.link-line {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 4px 8px;
+  font-size: var(--fs-xs);
+}
+.mut {
+  color: var(--label-dim);
+}
+.board-link {
+  margin-left: auto;
+  color: var(--cyan);
+  text-decoration: none;
+  letter-spacing: 0.06em;
+}
+.board-link:hover,
+.board-link:focus-visible {
+  text-decoration: underline;
+  outline: none;
+}
+.issue {
+  font-size: var(--fs-xs);
+}
+.issue .runner {
+  color: var(--cyan);
+}
+/* The hub's whole fleet in four counts. */
+.fleet {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 5px 8px;
+  border: 1px solid var(--bezel);
+  background: var(--overlay-25);
+}
+.fleet.stale {
+  opacity: 0.45;
+}
+.fn {
+  font-size: var(--fs-sm);
+}
+.fn small {
+  display: block;
+  color: var(--label);
+  text-transform: uppercase;
+  font-size: var(--fs-label);
+  letter-spacing: 0.14em;
+}

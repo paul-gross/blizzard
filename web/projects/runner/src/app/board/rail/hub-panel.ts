@@ -1,9 +1,10 @@
 import { ChangeDetectionStrategy, Component, computed, effect, signal } from '@angular/core';
-import { asyncState, FleetWhen, KitAsyncState, KitBadge, type runnerApi, STATUS_TONE, toneColor } from 'fleet';
+import { asyncState, KitAsyncState, type runnerApi } from 'fleet';
 
 import { injectPanelDashboards } from '../../core/panel-reads';
 import { hubLink } from '../../core/runner-health.model';
 import { hubSummary, latestFleetSummary } from './hub-panel.model';
+import { HubPanelView } from './hub-panel-view';
 
 /**
  * The board rail's hub panel — the hub this host's runners report to, read at a glance: its
@@ -18,7 +19,7 @@ import { hubSummary, latestFleetSummary } from './hub-panel.model';
 @Component({
   selector: 'app-hub-panel',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [FleetWhen, KitAsyncState, KitBadge],
+  imports: [KitAsyncState, HubPanelView],
   templateUrl: './hub-panel.html',
   styleUrl: './hub-panel.css',
 })
@@ -32,8 +33,6 @@ export class HubPanel {
     const hub = this.summary();
     return hubLink(hub?.reachable ?? 0, hub?.total ?? 0);
   });
-
-  protected readonly issueColor = toneColor;
 
   private readonly currentFleet = computed<runnerApi.FleetSummaryView | null>(
     () => latestFleetSummary(this.dashboards.data()),
@@ -49,14 +48,6 @@ export class HubPanel {
 
   /** No runner's read carries the counts now — the strip shows the last known, dimmed. */
   protected readonly fleetStale = computed(() => this.currentFleet() === null);
-
-  /** Each fleet-count bucket's colour, from the chunk status it counts. */
-  protected readonly bucketColor = {
-    ready: toneColor(STATUS_TONE('ready')),
-    running: toneColor(STATUS_TONE('running')),
-    waiting: toneColor(STATUS_TONE('waiting_on_human')),
-    needs: toneColor(STATUS_TONE('needs_human')),
-  } as const;
 
   protected readonly triadState = computed(() => asyncState(this.dashboards, this.summary() === null));
 }
