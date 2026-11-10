@@ -188,17 +188,13 @@ class AuthService:
         longer exists (takes the already-loaded ``Session``). Skips the write when
         the elapsed time since ``last_seen_at`` is under ``touch_granularity``."""
         now = self._clock.now()
-        if session.expires_at <= now:
-            return None
-        if now - session.created_at >= self._absolute_max_age:
+        if session.expired(now, absolute_max_age=self._absolute_max_age):
             return None
         user = self._users.get(session.user_id)
         if user is None:
             return None
-        # Elapsed time, not the expiry slide: the slide saturates at `absolute_max_age`
-        # while the session is still live, which would freeze that delta at zero.
-        if now - session.last_seen_at >= self._touch_granularity:
-            new_expires_at = min(session.created_at + self._absolute_max_age, now + self._idle_ttl)
+        if session.touch_due(now, touch_granularity=self._touch_granularity):
+            new_expires_at = session.slid_expiry(now, idle_ttl=self._idle_ttl, absolute_max_age=self._absolute_max_age)
             self._sessions.touch(session.id_hash, last_seen_at=now, expires_at=new_expires_at)
         role = self._memberships.role_in(tenant, user.user_id) if tenant is not None else None
         return principal(user, tenant=tenant, role=role, hub_admin=self._hub_admins.is_hub_admin(user.user_id))
