@@ -45,6 +45,13 @@ describe('revisionRows', () => {
     }] })]);
     expect(rows[0].fields).toBe('forge: github · GitHub → enterprise · Enterprise');
   });
+  it('renders labels for any field, falling back to values and then a dash', () => {
+    const rows = revisionRows([change(10, 3, { diff: [
+      { field: 'owner', old: 'usr_1', new: 'usr_2', old_label: 'Ada', new_label: null },
+      { field: 'team', old: null, new: 'team_2', old_label: null, new_label: 'Core' },
+    ] })]);
+    expect(rows[0].fields).toBe('owner: Ada → usr_2, team: — → Core');
+  });
   it('maps each change, joining the fields it changed', () => {
     const rows = revisionRows([
       change(9, 2, { diff: [{ field: 'annotate', old: false, new: true, old_label: null, new_label: null }, { field: 'secret', old: 'a', new: 'b', old_label: null, new_label: null }] }),
