@@ -211,7 +211,8 @@ WRITE_PROTOCOL_CENSUS: dict[str, Disposition] = {
     ),
     # --- escalations -----------------------------------------------------------
     "record_escalation_closure": Published(
-        RunnerEventType.ESCALATION_CHANGED, "Pull._reconcile_escalations (runner/loop/steps.py) — cause='closed'"
+        RunnerEventType.ESCALATION_CHANGED,
+        "OwnershipReconcile._reconcile_escalations (runner/lifecycle/ownership_reconcile.py) — cause='closed'",
     ),
     "record_requeue": Silent(
         "clears only the internal pending-requeue mark that gates FILL's interrupted-claim "
@@ -226,8 +227,8 @@ WRITE_PROTOCOL_CENSUS: dict[str, Disposition] = {
     "record_takeover_entry": Silent(_INTERNAL_BOOKKEEPING + " (the entry fact; the open already published)"),
     "record_takeover_end": Published(
         RunnerEventType.TAKEOVER_CHANGED,
-        "TakeoverService.close (runner/lifecycle/takeover.py) and Pull._reconcile_takeovers "
-        "(runner/loop/steps.py) — both cause='closed', the CLI's own end and the hub-terminal "
+        "TakeoverService.close (runner/lifecycle/takeover.py) and OwnershipReconcile._reconcile_takeovers "
+        "(runner/lifecycle/ownership_reconcile.py) — both cause='closed', the CLI's own end and the hub-terminal "
         "supersession.",
     ),
     # --- environments --------------------------------------------------------------
