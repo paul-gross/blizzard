@@ -6,6 +6,7 @@ from __future__ import annotations
 import contextlib
 from collections.abc import Generator, Iterator
 from dataclasses import replace
+from typing import cast
 
 import click
 import httpx2
@@ -327,3 +328,91 @@ def test_get_before_pages_first_page_only_reads_one_page() -> None:
     assert rows == [1]
     assert next_before == 10
     assert len(calls) == 1 and "limit" not in calls[0]
+
+
+_NO_TENANTS_HEADLINE = "you belong to several tenants — name the one to act in with --tenant <tenant_id>"
+
+
+@pytest.mark.parametrize(
+    "me_body",
+    [
+        ["not", "an", "object"],
+        "text",
+        {"tenants": "not a list"},
+        {"tenants": None},
+        {"other": []},
+        {"tenants": ["not a row", 7]},
+        {"tenants": [{"tenant_id": "ten_1", "name": "alpha"}]},
+        {"tenants": [{"tenant_id": "", "name": "alpha", "role": "admin"}]},
+    ],
+)
+def test_an_me_body_without_readable_tenant_rows_lists_none(me_body: object) -> None:
+    answers = {"/api/x": _FakeResponse(409, _TENANT_REQUIRED), "/api/me": _FakeResponse(200, me_body)}
+    bound = bind_stubs(get=_get_answering(answers, []))
+
+    with pytest.raises(click.ClickException) as exc_info:
+        _ctx(bound).send("get", "/api/x")
+
+    assert exc_info.value.message == _NO_TENANTS_HEADLINE
+
+
+def test_an_unparseable_me_body_lists_no_tenants() -> None:
+    answers = {"/api/x": _FakeResponse(409, _TENANT_REQUIRED), "/api/me": _FakeResponse(200)}
+    bound = bind_stubs(get=_get_answering(answers, []))
+
+    with pytest.raises(click.ClickException) as exc_info:
+        _ctx(bound).send("get", "/api/x")
+
+    assert exc_info.value.message == _NO_TENANTS_HEADLINE
+
+
+def test_only_complete_tenant_rows_are_listed_and_rendered_as_strings() -> None:
+    me = {
+        "tenants": [
+            {"tenant_id": "ten_1", "name": "alpha", "role": "admin"},
+            {"tenant_id": "ten_2", "name": "", "role": "guest"},
+            {"tenant_id": "ten_3", "name": "gamma", "role": "guest"},
+        ]
+    }
+    answers = {"/api/x": _FakeResponse(409, _TENANT_REQUIRED), "/api/me": _FakeResponse(200, me)}
+    bound = bind_stubs(get=_get_answering(answers, []))
+
+    with pytest.raises(click.ClickException) as exc_info:
+        _ctx(bound).send("get", "/api/x")
+
+    assert exc_info.value.message.splitlines() == [
+        _NO_TENANTS_HEADLINE,
+        "your tenants:",
+        "  ten_1  alpha  (admin)",
+        "  ten_3  gamma  (guest)",
+    ]
+
+
+def test_get_all_follows_the_cursor_across_pages_and_asks_for_a_thousand() -> None:
+    sent: list[dict[str, object]] = []
+    pages = [
+        _FakeResponse(200, {"rows": [{"n": 1}, {"n": 2}], "next_cursor": "c1"}),
+        _FakeResponse(200, {"rows": [{"n": 3}], "next_cursor": None}),
+    ]
+
+    def fake_get(url: str, **kwargs: object) -> _FakeResponse:
+        params = cast(dict[str, str], kwargs["params"])
+        sent.append({**kwargs, "params": dict(params)})
+        return pages[len(sent) - 1]
+
+    rows = _ctx(bind_stubs(get=fake_get)).get_all("/api/x", "GET /x", key="rows", params={"project": "p"})
+
+    assert rows == [{"n": 1}, {"n": 2}, {"n": 3}]
+    assert [s["params"] for s in sent] == [
+        {"project": "p", "limit": "1000"},
+        {"project": "p", "limit": "1000", "cursor": "c1"},
+    ]
+
+
+def test_get_all_names_its_operation_when_a_page_fails() -> None:
+    bound = bind_stubs(get=_get_answering({"/api/x": _FakeResponse(500)}, []))
+
+    with pytest.raises(click.ClickException) as exc_info:
+        _ctx(bound).get_all("/api/x", "GET /the-label", key="rows")
+
+    assert exc_info.value.message.startswith("GET /the-label failed: ")

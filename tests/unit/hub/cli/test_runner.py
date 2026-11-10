@@ -174,3 +174,54 @@ def test_show_of_a_never_connected_runner_renders_no_missing_field_as_none() -> 
         "  added=2026-10-06T00:00:00Z by ada",
     ]
     assert "None" not in result.output
+
+
+def test_an_active_runner_detail_renders_three_exact_lines() -> None:
+    from blizzard.hub.cli.runner import RunnerDetail
+
+    body = {
+        "runner_id": "rn_1",
+        "runner_name": "xps",
+        "online": True,
+        "workspace_id": "ws_1",
+        "added_at": "2026-09-01T00:00:00Z",
+        "added_by": "op",
+        "hub_paused": False,
+        "locally_paused": True,
+    }
+
+    assert list(RunnerDetail(body).lines()) == [
+        "rn_1  xps  online  ws=ws_1",
+        "  added=2026-09-01T00:00:00Z by op",
+        "  hub_paused=False  locally_paused=True",
+    ]
+
+
+def test_a_sparse_runner_detail_falls_back_to_dashes() -> None:
+    from blizzard.hub.cli.runner import RunnerDetail
+
+    assert list(RunnerDetail({"runner_id": "rn_1"}).lines()) == [
+        "rn_1  -  offline  ws=-",
+        "  added=- by -",
+        "  hub_paused=None  locally_paused=None",
+    ]
+
+
+def test_a_retired_runner_detail_adds_its_retirement_line() -> None:
+    from blizzard.hub.cli.runner import RunnerDetail
+
+    body = {
+        "runner_id": "rn_1",
+        "runner_name": "xps",
+        "connection": "never_connected",
+        "retired": True,
+        "retired_at": "2026-10-01T00:00:00Z",
+        "retired_by": "op",
+    }
+
+    assert list(RunnerDetail(body).lines()) == [
+        "rn_1  xps  never-connected  ws=-",
+        "  added=- by -",
+        "  hub_paused=None  locally_paused=None",
+        "  retired=2026-10-01T00:00:00Z by op",
+    ]

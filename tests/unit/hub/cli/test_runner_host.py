@@ -192,3 +192,49 @@ def test_the_daemon_launcher_keeps_the_host_name() -> None:
 
 def test_the_printed_env_line_names_the_host_token_variable() -> None:
     assert token_lines("t")[1] == f"{HOST_TOKEN_VARIABLE}=t"
+
+
+def test_a_full_host_detail_renders_every_line() -> None:
+    from blizzard.hub.cli.runner_host import HostDetail
+
+    body = {
+        "host_id": "hs_a",
+        "host_name": "box",
+        "online": True,
+        "runner_ids": ["rn_1", "rn_2"],
+        "added_at": "2026-09-01T00:00:00Z",
+        "added_by": "op",
+        "url": "http://box:9000",
+        "enrolled": True,
+        "workspaces": [{"workspace_id": "ws_1"}, {"workspace_id": "ws_2"}],
+        "subscriptions": [{"slug": "max"}, {"slug": "pro"}],
+    }
+
+    assert list(HostDetail(body).lines()) == [
+        "hs_a  box              online          runners=2",
+        "  added=2026-09-01T00:00:00Z by op",
+        "  url=http://box:9000  enrolled=True",
+        "  workspaces=ws_1, ws_2",
+        "  subscriptions=max, pro",
+        "  runners=rn_1, rn_2",
+    ]
+
+
+def test_an_empty_host_detail_dashes_every_absent_field() -> None:
+    from blizzard.hub.cli.runner_host import HostDetail
+
+    body: dict[str, object] = {
+        "host_id": "hs_a",
+        "connection": "never_connected",
+        "workspaces": [],
+        "subscriptions": None,
+    }
+
+    assert list(HostDetail(body).lines()) == [
+        "hs_a  -                never-connected runners=0",
+        "  added=- by -",
+        "  url=-  enrolled=None",
+        "  workspaces=-",
+        "  subscriptions=-",
+        "  runners=-",
+    ]

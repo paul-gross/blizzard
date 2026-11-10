@@ -178,3 +178,15 @@ def test_an_escalation_row_keeps_its_detail_on_the_text_line() -> None:
     row = _EVENT | {"detail": {"cause": "retries-exhausted", "detail": "build failed 3 times"}}
 
     assert FeedListing([row]).line(row).endswith("retried (build failed 3 times)")
+
+
+@pytest.mark.parametrize(
+    "detail",
+    ["a plain string", ["a", "list"], 7, None, {"detail": ""}, {"detail": 5}, {"other": "x"}],
+)
+def test_a_detail_that_is_not_an_explanation_adds_nothing_to_the_text_line(detail: object) -> None:
+    row = _EVENT | {"detail": detail}
+
+    assert FeedListing([row]).line(row) == (
+        "2026-08-12T09:00:00Z  warning  attempt-failed runner=r1 chunk=ch_a node=build  retried"
+    )
