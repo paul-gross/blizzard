@@ -8,7 +8,7 @@ import pytest
 
 from blizzard.foundation.clock import FixedClock
 from blizzard.foundation.config_keys import ConfigView
-from blizzard.hub.auth.throttle import IpThrottle, _Bucket
+from blizzard.hub.auth.throttle import IpThrottle, TokenBucket
 from blizzard.hub.config import AuthConfig, ConfigError
 from blizzard.hub.config_keys import HUB_REGISTRY
 
@@ -56,7 +56,7 @@ def test_invalid_login_throttle_is_refused_naming_the_key(table: dict[str, objec
 
 
 def test_bucket_admit_refills_by_elapsed_time_up_to_capacity() -> None:
-    bucket = _Bucket(tokens=0.0, last_refill_seconds=100.0)
+    bucket = TokenBucket(tokens=0.0, last_refill_seconds=100.0)
     assert bucket.admit(100.0, capacity=2, refill_per_second=0.5) is False
     assert bucket.admit(102.0, capacity=2, refill_per_second=0.5) is True
     assert bucket.tokens == 0.0
@@ -65,7 +65,7 @@ def test_bucket_admit_refills_by_elapsed_time_up_to_capacity() -> None:
 
 
 def test_bucket_admit_ignores_a_clock_that_ran_backwards() -> None:
-    bucket = _Bucket(tokens=1.0, last_refill_seconds=100.0)
+    bucket = TokenBucket(tokens=1.0, last_refill_seconds=100.0)
     assert bucket.admit(50.0, capacity=2, refill_per_second=1.0) is True
     assert bucket.tokens == 0.0
     assert bucket.last_refill_seconds == 50.0

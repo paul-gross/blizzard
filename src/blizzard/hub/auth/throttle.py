@@ -21,7 +21,7 @@ DEFAULT_REFILL_PER_SECOND = 1 / DEFAULT_REFILL_SECONDS
 
 @domain_model
 @dataclass
-class _Bucket:
+class TokenBucket:
     tokens: float
     last_refill_seconds: float
 
@@ -51,12 +51,12 @@ class IpThrottle:
         self._clock = clock
         self._capacity = capacity
         self._refill_per_second = refill_per_second
-        self._buckets: dict[str, _Bucket] = {}
+        self._buckets: dict[str, TokenBucket] = {}
 
     def allow(self, ip: str) -> bool:
         now_seconds = self._clock.now().timestamp()
         bucket = self._buckets.get(ip)
         if bucket is None:
-            bucket = _Bucket(tokens=float(self._capacity), last_refill_seconds=now_seconds)
+            bucket = TokenBucket(tokens=float(self._capacity), last_refill_seconds=now_seconds)
             self._buckets[ip] = bucket
         return bucket.admit(now_seconds, capacity=self._capacity, refill_per_second=self._refill_per_second)
