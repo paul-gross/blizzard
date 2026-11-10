@@ -1,12 +1,12 @@
 import { ChangeDetectionStrategy, Component, computed, input, output, signal } from '@angular/core';
-import { KitAsyncState, KitButton, KitConfirmDialog, type KitAsyncStateValue, type runnerApi, KitErrorLine } from 'fleet';
+import { KitAsyncState, KitButton, KitConfirmDialog, type KitAsyncStateValue, type runnerApi, KitErrorLine, KitFactList, type KitFact } from 'fleet';
 
 import { throttleLines, throttleSummary } from '../core/throttle.model';
 
 @Component({
   selector: 'app-throttle-view',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [KitAsyncState, KitButton, KitConfirmDialog, KitErrorLine],
+  imports: [KitAsyncState, KitButton, KitConfirmDialog, KitErrorLine, KitFactList],
   templateUrl: './throttle-view.html',
 })
 export class ThrottleView {
@@ -19,6 +19,7 @@ export class ThrottleView {
   readonly clearFloor = output<void>();
   protected readonly confirming = signal(false);
   protected readonly lines = computed(() => this.throttle() ? throttleLines(this.throttle()!) : []);
+  protected readonly rows = computed<readonly KitFact[]>(() => this.lines().map((line) => ({ label: line.label, value: line.text })));
   protected readonly summary = computed(() => this.throttle() ? throttleSummary(this.throttle()!) : '');
   protected readonly prompt = computed(() => this.throttle()?.floor.subscription
     ? `Clear ${this.throttle()!.floor.subscription}'s floor for ${this.scope()}?`

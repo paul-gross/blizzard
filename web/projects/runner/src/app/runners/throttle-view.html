@@ -1,11 +1,7 @@
 <fleet-kit-async-state [state]="state()" placement="inline" loadingText="LOADING…" errorText="THROTTLE UNAVAILABLE" emptyText="NO THROTTLE REPORTED">
   @if (throttle(); as status) {
     <div data-testid="throttle-state">{{ summary() }}</div>
-    <dl data-testid="throttle-lines">
-      @for (line of lines(); track line.label) {
-        <dt>{{ line.label }}</dt><dd>{{ line.text }}</dd>
-      }
-    </dl>
+    <fleet-kit-fact-list testid="throttle-lines" [rows]="rows()" />
     @if (!status.floor.admits) {
       <fleet-kit-button testid="clear-floor" [disabled]="pending() || !scopeReady()" (click)="confirming.set(true)">Clear floor</fleet-kit-button>
     }

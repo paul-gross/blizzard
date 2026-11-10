@@ -224,7 +224,7 @@ describe('ChunkPage on a runner daemon', () => {
 
     expect(el.querySelector('[data-testid="tab-artifacts"]')?.getAttribute('aria-selected')).toBe('true');
     expect(el.querySelector('fleet-chunk-artifacts-panel')).not.toBeNull();
-    expect(el.querySelector('[data-testid="artifacts-tab-nav-item"]')?.getAttribute('data-artifact-key')).toBe(
+    expect(el.querySelector('fleet-kit-select-row[data-artifact-key]')?.getAttribute('data-artifact-key')).toBe(
       'build.retrospective.1',
     );
     expect(el.querySelector('[data-testid="section-work-item"]')).toBeNull();
@@ -241,7 +241,7 @@ describe('ChunkPage on a runner daemon', () => {
     el = harness.fixture.nativeElement as HTMLElement;
 
     expect(TestBed.inject(Router).url).toBe(`/board/chunk/${CHUNK_ID}?tab=artifacts&artifact=build.retrospective.1`);
-    expect(el.querySelector('[data-testid="artifacts-tab-nav-item"]')?.closest('li')?.classList.contains('selected')).toBe(true);
+    expect(el.querySelector('[data-testid="artifacts-tab-nav-item"]')?.classList.contains('selected')).toBe(true);
   });
 
   it('renders the Node history tab with the shared timeline, row activation on, and no transcript pane before a pick', async () => {

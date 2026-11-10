@@ -198,7 +198,7 @@ test('test_board_browser_live_group_reorder_answer_and_pause', async ({ api, iss
   await firstLink.click();
   await expect(page).toHaveURL(`/board/chunk/${chunkB}?tab=artifacts&artifact=${targetKey}`);
   await expect(page.getByTestId('tab-artifacts')).toHaveAttribute('aria-selected', 'true');
-  await expect(page.locator(`[data-testid="artifacts-tab-nav-item"][data-artifact-key="${targetKey}"]`)).toHaveAttribute('aria-pressed', 'true');
+  await expect(page.locator(`[data-artifact-key="${targetKey}"] [data-testid="artifacts-tab-nav-item"]`)).toHaveAttribute('aria-current', 'true');
   const artifact = ((await api.get(`/api/chunks/${chunkB}`)).body.artifacts as { key: string; kind: string; content: string; commit_hash: string }[]).find((a) => a.key === targetKey)!;
   const viewer = page.getByTestId('artifacts-tab-artifact');
   await expect(viewer).toBeVisible();
