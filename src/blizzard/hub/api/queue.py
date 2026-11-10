@@ -168,7 +168,8 @@ def _entry_view[Entry: (QueuePeekEntry, BacklogPeekEntry)](
 @dto
 @dataclass(frozen=True)
 class ReadyQueue:
-    """The hub-ordered ready queue as every peek renders it — position is the whole order's
+    """The ready queue as a peek or a queue write renders it, in the order given: :meth:`of` reads claim order
+    (urgency before rank), :meth:`ranked` a write's own rank order. Position is the whole order's
     own index, kept when ``project`` narrows the entries. ``markings`` and ``projects`` are
     resolved once in :meth:`of`, alongside ``entries``, so :attr:`view` stays a pure
     projection over already-fetched state rather than an I/O-performing property."""
