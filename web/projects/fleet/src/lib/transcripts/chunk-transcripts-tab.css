@@ -64,10 +64,6 @@
 .step-head .dot {
   color: var(--label-dim);
 }
-.step-head .unmatched {
-  color: var(--amber);
-  text-transform: none;
-}
 .harness {
   color: var(--label-dim);
   font-size: var(--fs-xs);

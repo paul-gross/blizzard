@@ -38,6 +38,11 @@
   background: var(--red);
   border-color: var(--red-dim);
 }
+/* A wire state this build does not know: idle grey, never the dark of a node never visited. */
+.block[data-state='unknown'] {
+  background: var(--label-dim);
+  border-color: var(--label-dim);
+}
 /* The node the chunk stands on: the registry's overload cyan, on its pulse. */
 .block[data-state='current'] {
   background: var(--cyan);

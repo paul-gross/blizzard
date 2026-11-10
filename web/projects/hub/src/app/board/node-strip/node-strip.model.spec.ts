@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { groupBlocks, isDenseStrip, type NodeBlock, showsNodeStrip } from './node-strip.model';
+import { blockState, groupBlocks, isDenseStrip, type NodeBlock, showsNodeStrip } from './node-strip.model';
 
 describe('groupBlocks', () => {
   const blocks = (n: number): NodeBlock[] => Array.from({ length: n }, (_, i) => ({ node_id: `nd_${i}`, name: `n${i}`, state: 'unvisited' }));
@@ -32,5 +32,12 @@ describe('showsNodeStrip', () => {
   it('hides on a terminal chunk whatever lane its status reads as', () => {
     expect(showsNodeStrip({ status: 'stopped', terminal: true })).toBe(false);
     expect(showsNodeStrip({ status: 'running', terminal: true })).toBe(false);
+  });
+});
+
+describe('blockState', () => {
+  it('passes known states through and folds anything else to unknown', () => {
+    expect(['current', 'passed', 'failed', 'unvisited'].map(blockState)).toEqual(['current', 'passed', 'failed', 'unvisited']);
+    expect(blockState('newer-state')).toBe('unknown');
   });
 });

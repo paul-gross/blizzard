@@ -29,6 +29,13 @@ describe('NodeStrip', () => {
     expect(blocks(el)[1].title).toBe('n1 · failed');
   });
 
+  it('draws a state this build does not know as unknown, never unvisited, keeping the raw state in the title', async () => {
+    const el = await render([{ node_id: 'nd_x', name: 'x', state: 'newer' as NodeBlock['state'] }]);
+
+    expect(blocks(el)[0].getAttribute('data-state')).toBe('unknown');
+    expect(blocks(el)[0].title).toBe('x · newer');
+  });
+
   it('breaks the strip into groups of ten, packing it dense past twenty', async () => {
     const el = await render(progress(25));
 

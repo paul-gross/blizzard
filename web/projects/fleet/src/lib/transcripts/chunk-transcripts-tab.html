@@ -40,7 +40,7 @@
         @if (step.matched) {
         <span>{{ stepName(step) }}</span>
         } @else {
-        <span>{{ unmatchedRef(step) }}</span><span class="dot">·</span><span class="unmatched">Unmatched</span>
+        <span>{{ unmatchedRef(step) }}</span><span class="dot">·</span><fleet-kit-badge class="unmatched" variant="pill" tone="running">Unmatched</fleet-kit-badge>
         } @if (step.epoch !== null) {
         <span class="dot">·</span><span [attr.title]="'epoch ' + step.epoch">E{{ step.epoch }}</span>
         } @if (step.current) {

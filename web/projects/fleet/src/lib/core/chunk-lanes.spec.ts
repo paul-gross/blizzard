@@ -1,5 +1,5 @@
-import type { ChunkStatus } from '../api/hub';
-import { LANES, STATUS_TONE, UNKNOWN_LANE, laneTone, chunkLane, unknownLane } from './chunk-lanes';
+import { ChunkStatus } from '../api/hub';
+import { LANES, STATUS_LANE, STATUS_TONE, UNKNOWN_LANE, laneTone, chunkLane, unknownLane } from './chunk-lanes';
 
 /** A status a newer hub may send that this build's generated vocabulary does not list. */
 const NEWER_STATUS = 'newer-status' as ChunkStatus;
@@ -56,6 +56,10 @@ describe('laneTone', () => {
       running: 'running',
       done: 'done',
     });
+  });
+
+  it('agrees with STATUS_TONE for every status', () => {
+    for (const status of Object.values(ChunkStatus)) expect(laneTone(STATUS_LANE(status))).toBe(STATUS_TONE(status));
   });
 
   it('reads idle for the unknown lane and any other key', () => {

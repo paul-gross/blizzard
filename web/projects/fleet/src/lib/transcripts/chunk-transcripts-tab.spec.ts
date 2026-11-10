@@ -118,7 +118,7 @@ describe('ChunkTranscriptsTab', () => {
     const heads = [...el.querySelectorAll('[data-testid="transcript-step"] .step-head')];
     const orphan = heads.find((h) => h.querySelector('.unmatched'))!;
     expect(orphan.textContent?.replace(/\s+/g, ' ').trim()).toBe('N-ZZZZ·Unmatched·E7');
-    expect(orphan.querySelector('fleet-kit-badge')).toBeNull();
+    expect(orphan.querySelector('fleet-kit-badge.unmatched')?.getAttribute('tone')).toBe('running');
   });
 
   it('opts into phone drill-down as a list without a segment and a detail with one', async () => {

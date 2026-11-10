@@ -12,7 +12,7 @@
           [testid]="'gardening-finding-row-' + row.findingId"
           (picked)="findingPick.emit(row.findingId)"
         >
-          <div class="fl-body" [class.fl-body--gone]="isGone(row)" [class.fl-body--exited]="isExited(row)">
+          <div class="fl-body" [class.fl-body--gone]="isGone(row)" [style.--fl-gone-tone]="isGone(row) ? stateColor(row) : null" [class.fl-body--exited]="isExited(row)">
             <p class="fl-summary">{{ row.summary }}</p>
             <div class="fl-hdr">
               <div class="fl-hdr-primary">

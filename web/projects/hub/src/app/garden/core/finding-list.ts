@@ -1,7 +1,7 @@
 import { ChangeDetectionStrategy, Component, input, output } from '@angular/core';
 import { RouterLink } from '@angular/router';
 
-import { compactRef, type hubApi, KitAsyncState, type KitAsyncStateValue, KitBadge, KitSelectRow, FleetWhen, type Tone } from 'fleet';
+import { compactRef, type hubApi, KitAsyncState, type KitAsyncStateValue, KitBadge, KitSelectRow, FleetWhen, type Tone, toneColor } from 'fleet';
 import { findingSeverityTone, findingStateTone, isFindingExited, isFindingGoneFlagged } from './finding-state';
 import { LensLink } from 'fleet/shell';
 
@@ -84,6 +84,11 @@ export class FleetFindingList {
   /** The row's state badge tone, per `findingStateTone`. */
   protected stateTone(row: FindingListRowVm): Tone {
     return findingStateTone(row.state);
+  }
+
+  /** The row's state tone as a bare color, per `toneColor`. */
+  protected stateColor(row: FindingListRowVm): string {
+    return toneColor(this.stateTone(row));
   }
 
   /** The row's severity badge tone, when the row carries a severity. */

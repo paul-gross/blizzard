@@ -1,8 +1,18 @@
-import { type ChunkStatus, type hubApi, STATUS_LANE } from 'fleet';
+import { type ChunkStatus, hubApi, STATUS_LANE } from 'fleet';
 
 /** One drawn block: a node of the chunk's graph and how the chunk's visits left it — the hub's
  * `ChunkSummary.graph_progress` entry. */
 export type NodeBlock = hubApi.GraphProgressNodeView;
+
+/** What a block draws as: a known {@link hubApi.GraphProgressState}, or `unknown` for a wire state this build does not know. */
+export type BlockState = hubApi.GraphProgressState | 'unknown';
+
+const KNOWN_STATES: ReadonlySet<string> = new Set(Object.values(hubApi.GraphProgressState));
+
+/** A wire state folded for drawing: a known state passes through, anything else is `unknown`, so it never reads as `unvisited`. */
+export function blockState(state: string): BlockState {
+  return KNOWN_STATES.has(state) ? (state as hubApi.GraphProgressState) : 'unknown';
+}
 
 /** Blocks per group — the strip breaks into tens, as a subscription's window blocks do. */
 export const NODE_STRIP_GROUP = 10;
