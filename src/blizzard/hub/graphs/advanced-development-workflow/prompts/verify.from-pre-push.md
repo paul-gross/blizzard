@@ -7,5 +7,5 @@ asset in this envelope records which, with each conflict, the choice made, and t
 The branches have been rewritten since you last saw them, so the tip your last report recorded predates the rebase:
 scope this visit by the change's own commits, as *Scope this visit* directs for a rebase, and re-verify through the
 project's declared methods the behavior the `pre-push-summary`'s resolutions reach. Every lint or test failure the
-summary reports is a standing failure, whatever the range-diff shows: re-run it, fix it, and re-verify what the fix
-reaches, alongside the resolutions.
+summary reports is a standing failure, whatever the range-diff shows: re-run it alongside the resolutions, and report
+any that still fails.

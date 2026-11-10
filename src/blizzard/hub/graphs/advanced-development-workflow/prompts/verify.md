@@ -27,8 +27,8 @@ you cannot settle is re-verified in full. A first visit has nothing to scope: ve
 ## Verify
 
 Verify the change **through a method the project declares**, exercising real runtime behavior in the leased
-environment(s). A green build or type-check is not a verification. Fix what verification surfaces and re-verify until
-the method passes.
+environment(s). A green build or type-check is not a verification. Verify observes; build repairs. Commit no fix here:
+record each failure in the report, with what reproduces it.
 
 The `reviewed-plan`'s manual method is owed on the same terms: perform it, and on a re-visit re-perform it when the
 delta touches what it exercises. A runtime method is not yours to decline on the grounds that the verification table
@@ -39,7 +39,7 @@ exercises.
 
 Submit the node's `verification-report` asset before you declare done: run
 `blizzard runner artifact create --name verification-report` with the content on stdin — what you exercised, what
-passed, anything you could not close, and always:
+passed, what failed and how to reproduce it, and always:
 
 - **the tip verified**, per repo — `<repo> <branch> <sha>`, the full sha, so the next visit can diff from it;
 - **the standing result of every declared method** — passed, failed, or not run and why, and on a re-visit whether this
