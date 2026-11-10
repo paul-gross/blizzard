@@ -14,7 +14,14 @@ from pydantic import BaseModel
 
 from blizzard.foundation.unrecognized import Unrecognized
 from blizzard.tools.compat.surfaces.api import classify_api
-from blizzard.tools.compat.surfaces.wire import Document, Operation, Parameter, Schema, classify_spec_diff
+from blizzard.tools.compat.surfaces.wire import (
+    Document,
+    Operation,
+    Parameter,
+    Schema,
+    classify_spec_diff,
+    nested_schema,
+)
 from blizzard.tools.compat.violation import Violation
 from blizzard.wire.question import QuestionView
 from blizzard.wire.vocabulary import OPEN
@@ -791,3 +798,21 @@ def test_a_question_view_from_an_older_hub_reads_as_not_superseded() -> None:
     )
 
     assert view.superseded is False
+
+
+def _union_of(union: str, *members: Schema) -> Schema:
+    schema: Schema = {}
+    schema[union] = list(members)
+    return schema
+
+
+@pytest.mark.parametrize("union", ["anyOf", "oneOf"])
+def test_nested_schema_keeps_an_empty_items_schema_on_a_non_null_union_member(union: str) -> None:
+    prop = _union_of(union, {"type": "null"}, {"type": "array", "items": {}})
+    assert nested_schema(prop, "items") == {}
+
+
+@pytest.mark.parametrize("union", ["anyOf", "oneOf"])
+def test_nested_schema_keeps_an_empty_additional_properties_schema_on_a_non_null_union_member(union: str) -> None:
+    prop = _union_of(union, {"type": "null"}, {"type": "object", "additionalProperties": {}})
+    assert nested_schema(prop, "additionalProperties") == {}
