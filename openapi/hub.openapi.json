@@ -15569,6 +15569,42 @@
         "title": "JudgedBy",
         "type": "string"
       },
+      "KeptByView": {
+        "description": "One chore keeping a routine: its cadence, its key, and the cadence's next scheduled moment.",
+        "properties": {
+          "cadence_name": {
+            "title": "Cadence Name",
+            "type": "string"
+          },
+          "cadence_slug": {
+            "title": "Cadence Slug",
+            "type": "string"
+          },
+          "chore_key": {
+            "title": "Chore Key",
+            "type": "string"
+          },
+          "next_moment": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Next Moment"
+          }
+        },
+        "required": [
+          "cadence_slug",
+          "cadence_name",
+          "chore_key",
+          "next_moment"
+        ],
+        "title": "KeptByView",
+        "type": "object"
+      },
       "LandedRepoView": {
         "description": "One repo's actual merged revision; URL from its PR's or repository record's forge, absent with neither.",
         "properties": {
@@ -21594,6 +21630,14 @@
             "title": "Graph Name",
             "type": "string"
           },
+          "kept_by": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/KeptByView"
+            },
+            "title": "Kept By",
+            "type": "array"
+          },
           "name": {
             "title": "Name",
             "type": "string"
@@ -21671,7 +21715,8 @@
           "revision",
           "project_id",
           "project_slug",
-          "project_name"
+          "project_name",
+          "kept_by"
         ],
         "title": "RoutineView",
         "type": "object"

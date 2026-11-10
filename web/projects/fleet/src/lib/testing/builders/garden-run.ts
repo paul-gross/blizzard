@@ -126,6 +126,7 @@ export function gardenRoutineView(overrides: Pick<RoutineView, 'routine_id' | 'n
     default_model: [],
     default_scope_slug: 'blizzard',
     default_urgency: null,
+    kept_by: [],
     graph_name: 'gardening',
     project_id: null,
     project_name: null,
