@@ -55,6 +55,13 @@ class FloorHold:
     awaits_sample: bool
     lease_id: str | None = None
 
+    @property
+    def grace_opens_at(self) -> datetime | None:
+        return self._grace_opens_at()
+
+    def _grace_opens_at(self) -> datetime | None:
+        return self.expected_reset + FLOOR_UNCONFIRMED_GRACE if self.awaits_sample else None
+
 
 @domain_model
 @dataclass(frozen=True)
@@ -146,7 +153,8 @@ def _mark_hold(
     if sample is not None and _evidence_since(sample, expected):
         # A window it shows exhausted in its new period stands as its own hold, under its own reset.
         return None
-    if now >= expected + FLOOR_UNCONFIRMED_GRACE:
+    grace_opens_at = hold.grace_opens_at
+    if grace_opens_at is not None and now >= grace_opens_at:
         return None
     return hold
 
@@ -185,11 +193,13 @@ def _window_hold(window: ExternalSubscriptionUsageWindow, now: datetime) -> Floo
     period, so no evidence it turned over — until the grace runs out."""
     if window.utilization_pct < 100.0:
         return None
-    if now >= window.resets_at + FLOOR_UNCONFIRMED_GRACE:
-        return None
-    return FloorHold(
+    hold = FloorHold(
         kind=HoldKind.WINDOW, harness_id=None, window=window.window, expected_reset=window.resets_at, awaits_sample=True
     )
+    grace_opens_at = hold.grace_opens_at
+    if grace_opens_at is not None and now >= grace_opens_at:
+        return None
+    return hold
 
 
 def _cleared(window: ExternalSubscriptionUsageWindow, clear_sample: ExternalUsageSampleSummary | None) -> bool:

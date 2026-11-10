@@ -861,7 +861,6 @@ def _wire_runner(
         runner_stores.git_commit_declarations,
         clock,
         workspaces,
-        environments=runner_stores.environments,
         outbound=runner_stores.outbound,
         lease_lock=runner_stores.lease_lock,
     )

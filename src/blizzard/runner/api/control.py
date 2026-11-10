@@ -14,7 +14,7 @@ from blizzard.foundation.store.utc import iso_utc
 from blizzard.runner.api.wiring import RunnerWiring
 from blizzard.runner.hub.identity import IdentityVerdict
 from blizzard.runner.status.view import RunnerStatusService, ThrottleStatus
-from blizzard.runner.throttle.floor import FLOOR_UNCONFIRMED_GRACE, FloorAnswer
+from blizzard.runner.throttle.floor import FloorAnswer
 from blizzard.runner.throttle.levers import LeverAnswer
 from blizzard.runner.throttle.report import FLOOR_LEVER
 from blizzard.wire.runner import UnenforceableGateView, VersionWindowView
@@ -189,8 +189,8 @@ def throttle_view(status: ThrottleStatus) -> ThrottleStatusView:
                 window=hold.window,
                 expected_reset=iso_utc(hold.expected_reset).replace("+00:00", "Z"),
                 awaits_sample=hold.awaits_sample,
-                grace_opens_at=iso_utc(hold.expected_reset + FLOOR_UNCONFIRMED_GRACE).replace("+00:00", "Z")
-                if hold.awaits_sample
+                grace_opens_at=iso_utc(hold.grace_opens_at).replace("+00:00", "Z")
+                if hold.grace_opens_at is not None
                 else None,
             )
             if hold is not None
