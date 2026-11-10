@@ -282,6 +282,7 @@ if TYPE_CHECKING:
     from blizzard.runner.lifecycle.judgement.judgement import JudgementContext
     from blizzard.runner.lifecycle.orphan import OrphanContext
     from blizzard.runner.lifecycle.ownership_reconcile import OwnershipReconcileContext
+    from blizzard.runner.lifecycle.reap import ReapContext
     from blizzard.runner.lifecycle.registration import RegistrationContext
     from blizzard.runner.lifecycle.restart_resume import RestartResumeContext
     from blizzard.runner.lifecycle.spawn import SpawnContext
@@ -336,6 +337,8 @@ if TYPE_CHECKING:
     _registration_conforms: type[RegistrationContext] = LoopContext
 
     _identity_check_conforms: type[IdentityCheckContext] = LoopContext
+
+    _reap_conforms: type[ReapContext] = LoopContext
 
     _advance_conforms: type[AdvanceContext] = LoopContext
 
