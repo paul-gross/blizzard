@@ -2,8 +2,8 @@
 
 The **pre-prompt** is the node's base prompt, the inlined arrival addendum of the edge the chunk took to
 reach the node, and a generated required-artifacts table. The **judgement prompt** is the
-node's authored prose only. Node-scope artifacts resolve **latest-by-epoch per
-``{node_name}.{name}``**; the graph mint's baked-in declarations ride alongside as authored."""
+node's authored prose only. Node-scope artifacts resolve by recency per
+``{node_name}.{name}``; the graph mint's baked-in declarations ride alongside as authored."""
 
 from __future__ import annotations
 
@@ -259,5 +259,5 @@ class Envelope:
 
     @property
     def carried_artifacts(self) -> list[CarriedArtifact]:
-        """The node-scope artifacts this step carries, latest-by-epoch per ``{node_name}.{name}``."""
+        """The newest node-scope artifacts per ``{node_name}.{name}``, in recency order."""
         return LatestArtifacts.of(self.artifacts).carried
