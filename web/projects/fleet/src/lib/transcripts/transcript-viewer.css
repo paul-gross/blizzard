@@ -71,6 +71,9 @@
   color: var(--label);
   margin-bottom: 1px;
 }
+.turn .unlisted {
+  color: var(--label-dim);
+}
 .turn.k-env .who {
   color: var(--cyan);
 }

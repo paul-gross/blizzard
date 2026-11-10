@@ -36,7 +36,7 @@ export interface SidechainOpenEvent {
  * nothing and owns no query; a container passes `turns` and this component only ever
  * renders what it is given (`bzh:frontend-container-presentational`).
  *
- * Four turn kinds render distinctly:
+ * Four turn kinds render distinctly, and a kind the client does not declare renders raw in the idle colour:
  * - `env`/`asst` — plain text.
  * - `tool` — a `<details>` card naming the call, its structured input, and its output
  *   (or a running placeholder while `tool.output` is still `null`); a tool call that

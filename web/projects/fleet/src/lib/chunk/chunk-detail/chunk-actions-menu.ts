@@ -2,6 +2,7 @@ import { ChangeDetectionStrategy, Component, computed, input, signal } from '@an
 
 import { ChunkDeleteRefusal, type ChunkDetail, type PauseView } from '../../api/hub';
 import { compactRef } from '../../core/compact-ref';
+import { unlisted } from '../../core/open-lookup';
 import { KitConfirmDialog, type KitConfirmDialogPrompt } from '../../kit/kit-confirm-dialog';
 import { KitMenu, KitMenuPanel } from '../../kit/kit-menu';
 import { KitMenuItem, KitMenuItemSubtitle } from '../../kit/kit-menu-item';
@@ -75,15 +76,18 @@ export class ChunkActionsMenu {
   /** Delete's subtitle — why the hub refuses it (a runner has claimed the chunk, or the
    * unsatisfied dependents it names hold it), else `deleteCopy()`'s own. */
   protected readonly deleteSubtitle = computed<string>(() => {
-    switch (this.deleteRefusal()) {
+    const refusal = this.deleteRefusal();
+    switch (refusal) {
       case ChunkDeleteRefusal.STATUS:
         return 'Only before a runner claims it';
       case ChunkDeleteRefusal.DEPENDENTS: {
         const ids = (this.detail().neighborhood?.dependents ?? []).filter((n) => !n.satisfied).map((n) => compactRef(n.chunk_id));
         return `Blocked: ${ids.join(', ')} depend on this`;
       }
-      default:
+      case null:
         return deleteCopy().subtitle ?? '';
+      default:
+        return `Refused (${unlisted(refusal)})`;
     }
   });
 

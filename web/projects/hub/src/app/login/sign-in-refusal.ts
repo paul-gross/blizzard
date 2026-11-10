@@ -12,8 +12,8 @@ const TEXTS = openLookup<hubApi.SignInRefusal, string>(
     [hubApi.SignInRefusal.INVITATION_EMAIL_MISMATCH]:
       'This invitation is for a different email address. Sign in with the account that uses it, or reach out to your administrator.',
   },
-  // A code this board does not know reads as `invite_only`, the refusal that admits nothing.
-  () => NO_ACCESS,
+  // A code this board does not know reads raw, never as a known refusal's copy.
+  (raw) => `Sign-in was refused (${raw}). Reach out to your administrator.`,
 );
 
 /** The sign-in page's text for a refusal `code`, `null` when there is none. */

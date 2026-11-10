@@ -71,6 +71,22 @@ describe('TranscriptViewer', () => {
     expect(turns[2].textContent).toContain('running…');
   });
 
+  it('labels an asst turn "assistant" and an undeclared kind with its raw kind', async () => {
+    const base = { timestamp: '2026-07-16T11:00:05+00:00', tool: null, thinking_redacted: false, sidechain: null, truncated: false };
+    const { el } = await render([
+      { ...base, index: 0, kind: 'asst', text: 'Starting.' },
+      { ...base, index: 1, kind: 'novel' as never, text: 'Something new.' },
+    ]);
+
+    const turns = el.querySelectorAll('[data-testid="transcript-turn"]');
+    expect(turns[0].querySelector('.who')?.textContent?.trim()).toBe('assistant');
+    expect(turns[0].querySelector('.unlisted')).toBeNull();
+    const who = turns[1].querySelector('.who');
+    expect(who?.textContent?.trim()).toBe('novel');
+    expect(who?.classList.contains('unlisted')).toBe(true);
+    expect(turns[1].textContent).toContain('Something new.');
+  });
+
   it('renders the tool output once it resolves, replacing the running placeholder (review:F8)', async () => {
     const { el } = await render([
       {

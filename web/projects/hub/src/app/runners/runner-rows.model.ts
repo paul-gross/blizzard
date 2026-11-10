@@ -12,6 +12,7 @@ import {
   formatWhen,
   hubSubscriptionPaces,
   type Tone,
+  unlisted,
 } from 'fleet';
 import type { ChunkSummary } from 'fleet/shell';
 
@@ -58,15 +59,18 @@ export interface VersionStandingBadge {
  * decides the standing; this only words it.
  */
 export function versionStandingBadge(row: RunnerRegistryView): VersionStandingBadge | null {
-  switch (row.version_standing) {
+  const standing = row.version_standing ?? null;
+  switch (standing) {
     case RunnerVersionStanding.IN_WINDOW:
       return { label: 'in window', tone: 'running' };
     case RunnerVersionStanding.UNVERSIONED:
       return { label: 'unversioned', tone: 'idle' };
     case RunnerVersionStanding.REFUSED:
       return { label: row.version_refusal ? `refused (${row.version_refusal})` : 'refused', tone: 'needs' };
-    default:
+    case null:
       return null;
+    default:
+      return { label: unlisted(standing), tone: 'idle' };
   }
 }
 

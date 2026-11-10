@@ -27,7 +27,7 @@ const CORNER_RADIUS = 9;
     '[attr.data-selected]': "selected() ? 'true' : null",
     '[attr.data-incident]': "incident() ? 'true' : null",
     '[class.exec-hub]': "node().executor === Executor.HUB",
-    '[class.exec-runner]': "node().executor !== Executor.HUB",
+    '[class.exec-runner]': "node().executor === Executor.RUNNER",
     '[class.selected]': 'selected()',
     '[class.incident]': 'incident()',
   },

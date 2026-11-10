@@ -113,6 +113,15 @@ describe('FleetProposalPanel', () => {
     expect(spans).toEqual(['GP-X1Y2', 'fix-the-source', 'operator · u_1 · comments', '09:05']);
   });
 
+  it('renders an origin the client does not declare as its raw value', async () => {
+    const fixture = await mount({ vm: { ...BASE_VM, origin: { kind: 'unlisted', raw: 'importer' } } });
+    const el = fixture.nativeElement as HTMLElement;
+
+    const meta = el.querySelector('[data-testid="gardening-proposal-case"] .pp-meta');
+    const spans = Array.from(meta?.querySelectorAll('span') ?? []).map((s) => s.textContent?.trim());
+    expect(spans).toEqual(['GP-X1Y2', 'fix-the-source', 'importer', '09:05']);
+  });
+
   it('renders a routine-less operator-authored proposal as operator · <created_by> alone', async () => {
     const fixture = await mount({
       vm: { ...BASE_VM, origin: { kind: 'operator', createdBy: 'u_1', routineName: null } },
@@ -242,6 +251,23 @@ describe('FleetProposalPanel', () => {
 
       expect(emitted).toEqual([{ findingId: 'fin_1', verb: 'wont-fix' }]);
     });
+  });
+
+  it('renders a closure the client does not declare as its raw value, with its reason', async () => {
+    const closure: ProposalClosureVm = {
+      kind: 'unlisted',
+      raw: 'deferred',
+      closedBy: 'u_1',
+      closedAt: '2026-01-04T00:00:00Z',
+      reason: 'later',
+    };
+    const fixture = await mount({ vm: { ...BASE_VM, closure } });
+    const el = fixture.nativeElement as HTMLElement;
+
+    const closureEl = el.querySelector('[data-testid="gardening-proposal-closure-unlisted"]');
+    expect(closureEl?.textContent).toContain('deferred by u_1');
+    expect(closureEl?.textContent).toContain('later');
+    expect(el.querySelector('[data-testid="gardening-proposal-closure-accepted-declined"]')).toBeNull();
   });
 
   it('renders a passed closure with its reason', async () => {

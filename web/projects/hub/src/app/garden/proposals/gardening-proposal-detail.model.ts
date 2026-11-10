@@ -8,6 +8,7 @@ import {
   type KitAsyncStateValue,
   type RoutineView,
   type WorkItemView,
+  unlisted,
 } from 'fleet';
 import { type FindingExitVars } from '../core/finding.mutations';
 import { routineDisplayName } from '../core/routine-display-name';
@@ -72,14 +73,18 @@ export function proposalWorkItemVm(
 /** Who raised the proposal: an operator by name, or a routine run — the routine read by its display name. */
 export function proposalOriginVm(proposal: GardenProposalView, routines: readonly RoutineView[] | undefined): ProposalOriginVm {
   const slug = proposal.routine_name;
-  if (proposal.origin === 'operator') {
-    return {
-      kind: 'operator',
-      createdBy: proposal.created_by!,
-      routineName: slug === null ? null : routineDisplayName(slug, routines),
-    };
+  switch (proposal.origin) {
+    case 'operator':
+      return {
+        kind: 'operator',
+        createdBy: proposal.created_by!,
+        routineName: slug === null ? null : routineDisplayName(slug, routines),
+      };
+    case 'routine-run':
+      return { kind: 'routine-run', routineName: routineDisplayName(slug!, routines) };
+    default:
+      return { kind: 'unlisted', raw: unlisted(proposal.origin) };
   }
-  return { kind: 'routine-run', routineName: routineDisplayName(slug!, routines) };
 }
 
 /** How the proposal closed; only an accepted-and-minted closure carries the work item. */
@@ -87,16 +92,20 @@ export function proposalClosureVm(
   closure: GardenProposalClosureView,
   workItem: ProposalWorkItemVm | null,
 ): ProposalClosureVm {
-  if (closure.closure === 'passed') {
-    return { kind: 'passed', closedBy: closure.closed_by, closedAt: closure.closed_at, reason: closure.reason };
+  switch (closure.closure) {
+    case 'passed':
+      return { kind: 'passed', closedBy: closure.closed_by, closedAt: closure.closed_at, reason: closure.reason };
+    case 'accepted':
+      return {
+        kind: 'accepted',
+        closedBy: closure.closed_by,
+        closedAt: closure.closed_at,
+        reason: closure.reason,
+        workItem: closure.item_outcome === 'minted' ? workItem : null,
+      };
+    default:
+      return { kind: 'unlisted', raw: unlisted(closure.closure), closedBy: closure.closed_by, closedAt: closure.closed_at, reason: closure.reason };
   }
-  return {
-    kind: 'accepted',
-    closedBy: closure.closed_by,
-    closedAt: closure.closed_at,
-    reason: closure.reason,
-    workItem: closure.item_outcome === 'minted' ? workItem : null,
-  };
 }
 
 /** The panel's view model for the selected proposal, or `null` with nothing selected. */

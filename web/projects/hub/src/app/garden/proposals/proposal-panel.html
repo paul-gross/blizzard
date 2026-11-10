@@ -50,6 +50,15 @@
                   <fleet-kit-prose-block [text]="closure.reason" testid="gardening-proposal-closure-reason" />
                 }
               </section>
+            } @else if (closure.kind === 'unlisted') {
+              <section class="pp-closure pp-closure-unlisted" data-testid="gardening-proposal-closure-unlisted">
+                <p>
+                  {{ closure.raw }} by {{ closure.closedBy }} <fleet-when [iso]="closure.closedAt" />
+                </p>
+                @if (closure.reason) {
+                  <fleet-kit-prose-block [text]="closure.reason" testid="gardening-proposal-closure-reason" />
+                }
+              </section>
             } @else if (closure.workItem) {
               <section class="pp-closure" data-testid="gardening-proposal-closure-accepted-minted">
                 <p>Accepted by {{ closure.closedBy }} <fleet-when [iso]="closure.closedAt" /></p>
