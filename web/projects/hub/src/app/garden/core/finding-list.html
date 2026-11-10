@@ -6,76 +6,73 @@
 >
   <ul class="fl-list" data-testid="gardening-findings-list">
     @for (row of rows(); track row.findingId) {
-    <li>
-      <fleet-kit-select-row
-        [selected]="row.findingId === selectedId()"
-        [testid]="'gardening-finding-row-' + row.findingId"
-        (picked)="findingPick.emit(row.findingId)"
-      >
-        <div
-          class="fl-body"
-          [class.fl-body--gone]="isGone(row)"
-          [style.--fl-gone-tone]="isGone(row) ? stateColor(row) : null"
-          [class.fl-body--exited]="isExited(row)"
+      <li>
+        <fleet-kit-select-row
+          [selected]="row.findingId === selectedId()"
+          [testid]="'gardening-finding-row-' + row.findingId"
+          (picked)="findingPick.emit(row.findingId)"
         >
-          <p class="fl-summary">{{ row.summary }}</p>
-          <div class="fl-hdr">
-            <div class="fl-hdr-primary">
-              <span class="fl-class">{{ row.findingClass }}</span>
-              <span class="fl-ref" [title]="row.findingId"
-                >{{ compactRef(row.findingId) }}</span
-              >
+          <div class="fl-body" [class.fl-body--gone]="isGone(row)" [style.--fl-gone-tone]="isGone(row) ? stateColor(row) : null" [class.fl-body--exited]="isExited(row)">
+            <p class="fl-summary">{{ row.summary }}</p>
+            <div class="fl-hdr">
+              <div class="fl-hdr-primary">
+                <span class="fl-class">{{ row.findingClass }}</span>
+                <span class="fl-ref" [title]="row.findingId">{{ compactRef(row.findingId) }}</span>
+              </div>
+              @if (row.routineName || row.scopeSlug || row.source === 'review') {
+                <div class="fl-hdr-secondary">
+                  @if (row.routineName) {
+                    <span class="fl-routine">{{ row.routineName }}</span>
+                  }
+                  @if (row.scopeSlug) {
+                    <span class="fl-scope">{{ row.scopeSlug }}</span>
+                  }
+                  @if (row.source === 'review') {
+                    <span class="fl-source" [attr.data-testid]="'gardening-finding-source-' + row.findingId"
+                      >review</span
+                    >
+                    @if (row.severity) {
+                      <fleet-kit-badge
+                        class="fl-severity"
+                        [attr.data-testid]="'gardening-finding-severity-' + row.findingId"
+                        [tone]="severityTone(row)"
+                        variant="soft"
+                        >{{ row.severity }}</fleet-kit-badge
+                      >
+                    }
+                    @if (row.raisedByChunkId; as raisedByChunkId) {
+                      <a
+                        class="fl-raised-by"
+                        [routerLink]="['/board', 'chunk', raisedByChunkId] | lensLink"
+                        [title]="raisedByChunkId"
+                        [attr.data-testid]="'gardening-finding-raised-by-' + row.findingId"
+                        >{{ compactRef(raisedByChunkId) }}</a
+                      >
+                    }
+                  }
+                </div>
+              }
             </div>
-            @if (row.routineName || row.scopeSlug || row.source === 'review') {
-            <div class="fl-hdr-secondary">
-              @if (row.routineName) {
-              <span class="fl-routine">{{ row.routineName }}</span>
-              } @if (row.scopeSlug) {
-              <span class="fl-scope">{{ row.scopeSlug }}</span>
-              } @if (row.source === 'review') {
-              <span
-                class="fl-source"
-                [attr.data-testid]="'gardening-finding-source-' + row.findingId"
-                >review</span
-              >
-              @if (row.severity) {
+            <p class="fl-locus">{{ row.locus }}</p>
+            <p class="fl-seen">
+              <span class="fl-seen-when">
+                @if (row.lastSeenAt) {
+                  <fleet-when [iso]="row.lastSeenAt" />
+                } @else {
+                  —
+                }
+              </span>
               <fleet-kit-badge
-                class="fl-severity"
-                [attr.data-testid]="'gardening-finding-severity-' + row.findingId"
-                [tone]="severityTone(row)"
+                class="fl-state"
+                [attr.data-testid]="'gardening-finding-state-' + row.findingId"
+                [tone]="stateTone(row)"
                 variant="soft"
-                >{{ row.severity }}</fleet-kit-badge
+                >{{ row.state }}</fleet-kit-badge
               >
-              } @if (row.raisedByChunkId; as raisedByChunkId) {
-              <a
-                class="fl-raised-by"
-                [routerLink]="['/board', 'chunk', raisedByChunkId] | lensLink"
-                [title]="raisedByChunkId"
-                [attr.data-testid]="'gardening-finding-raised-by-' + row.findingId"
-                >{{ compactRef(raisedByChunkId) }}</a
-              >
-              } }
-            </div>
-            }
+            </p>
           </div>
-          <p class="fl-locus">{{ row.locus }}</p>
-          <p class="fl-seen">
-            <span class="fl-seen-when">
-              @if (row.lastSeenAt) {
-              <fleet-when [iso]="row.lastSeenAt" />
-              } @else { — }
-            </span>
-            <fleet-kit-badge
-              class="fl-state"
-              [attr.data-testid]="'gardening-finding-state-' + row.findingId"
-              [tone]="stateTone(row)"
-              variant="soft"
-              >{{ row.state }}</fleet-kit-badge
-            >
-          </p>
-        </div>
-      </fleet-kit-select-row>
-    </li>
+        </fleet-kit-select-row>
+      </li>
     }
   </ul>
 </fleet-kit-async-state>

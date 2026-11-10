@@ -1,16 +1,6 @@
-import {
-  ChangeDetectionStrategy,
-  Component,
-  computed,
-  input,
-} from '@angular/core';
+import { ChangeDetectionStrategy, Component, computed, input } from '@angular/core';
 
-import {
-  blockState,
-  groupBlocks,
-  isDenseStrip,
-  type NodeBlock,
-} from './node-strip.model';
+import { blockState, groupBlocks, isDenseStrip, type NodeBlock } from './node-strip.model';
 
 /**
  * A chunk's progress through its graph: one block per node, start to finish, each lit by the chunk's last visit

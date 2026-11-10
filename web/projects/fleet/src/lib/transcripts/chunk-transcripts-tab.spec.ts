@@ -1,11 +1,7 @@
 import { provideZonelessChangeDetection } from '@angular/core';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 
-import type {
-  TranscriptSegmentContentView,
-  TranscriptSegmentIndexEntry,
-  TurnSegmentViewOutput,
-} from '../api/hub';
+import type { TranscriptSegmentContentView, TranscriptSegmentIndexEntry, TurnSegmentViewOutput } from '../api/hub';
 import type { KitAsyncStateValue } from '../kit/kit-async-state';
 import { transcriptSegmentIndexEntry } from '../testing/builders/transcript';
 import { ChunkTranscriptsTab } from './chunk-transcripts-tab';
@@ -25,12 +21,7 @@ interface Props {
   drilldown?: boolean;
 }
 
-async function render(
-  props: Props,
-): Promise<{
-  el: HTMLElement;
-  fixture: ComponentFixture<ChunkTranscriptsTab>;
-}> {
+async function render(props: Props): Promise<{ el: HTMLElement; fixture: ComponentFixture<ChunkTranscriptsTab> }> {
   await TestBed.configureTestingModule({
     imports: [ChunkTranscriptsTab],
     providers: [provideZonelessChangeDetection()],
@@ -38,32 +29,22 @@ async function render(
   const fixture = TestBed.createComponent(ChunkTranscriptsTab);
   fixture.componentRef.setInput('history', props.history ?? []);
   fixture.componentRef.setInput('currentNodeId', props.currentNodeId ?? null);
-  fixture.componentRef.setInput(
-    'currentNodeName',
-    props.currentNodeName ?? null,
-  );
+  fixture.componentRef.setInput('currentNodeName', props.currentNodeName ?? null);
   fixture.componentRef.setInput('latestEpoch', props.latestEpoch ?? null);
   fixture.componentRef.setInput('segments', props.segments ?? []);
   fixture.componentRef.setInput('indexState', props.indexState ?? 'ready');
   fixture.componentRef.setInput('isForbidden', props.isForbidden ?? false);
   fixture.componentRef.setInput('segmentId', props.segmentId ?? null);
   fixture.componentRef.setInput('sidechainPath', props.sidechainPath ?? null);
-  fixture.componentRef.setInput(
-    'segmentState',
-    props.segmentState ?? (props.segmentId ? 'ready' : 'empty'),
-  );
+  fixture.componentRef.setInput('segmentState', props.segmentState ?? (props.segmentId ? 'ready' : 'empty'));
   fixture.componentRef.setInput('segmentData', props.segmentData);
   fixture.componentRef.setInput('drilldown', props.drilldown ?? false);
   // This component is presentational — a URL-held selection, like `ChunkPage` owns for
   // real, is what turns a `pickSegment`/`pickSidechain` output into the next `segmentId`/
   // `sidechainPath` input, and `ChunkPage`'s own queries into the next `segmentState`/
   // `segmentData` input. Stand in for that container role here.
-  fixture.componentInstance.pickSegment.subscribe((id) =>
-    fixture.componentRef.setInput('segmentId', id),
-  );
-  fixture.componentInstance.pickSidechain.subscribe((path) =>
-    fixture.componentRef.setInput('sidechainPath', path),
-  );
+  fixture.componentInstance.pickSegment.subscribe((id) => fixture.componentRef.setInput('segmentId', id));
+  fixture.componentInstance.pickSidechain.subscribe((path) => fixture.componentRef.setInput('sidechainPath', path));
   await fixture.whenStable();
   return { el: fixture.nativeElement as HTMLElement, fixture };
 }
@@ -80,9 +61,7 @@ const HISTORY = [
   },
 ];
 
-function turn(
-  overrides: Partial<TurnSegmentViewOutput> = {},
-): TurnSegmentViewOutput {
+function turn(overrides: Partial<TurnSegmentViewOutput> = {}): TurnSegmentViewOutput {
   return {
     index: 0,
     kind: 'asst',
@@ -96,9 +75,7 @@ function turn(
   };
 }
 
-function segment(
-  overrides: Partial<TranscriptSegmentIndexEntry> = {},
-): TranscriptSegmentIndexEntry {
+function segment(overrides: Partial<TranscriptSegmentIndexEntry> = {}): TranscriptSegmentIndexEntry {
   return transcriptSegmentIndexEntry({
     segment_id: 'seg-1',
     node_id: 'build',
@@ -121,93 +98,47 @@ describe('ChunkTranscriptsTab', () => {
   it('lists one group per node-history entry and renders the select-a-segment rest state', async () => {
     const { el } = await render({ history: HISTORY, segments: [segment()] });
 
-    expect(el.querySelectorAll('[data-testid="transcript-step"]')).toHaveLength(
-      1,
-    );
-    expect(
-      el.querySelector('[data-testid="transcript-segment-item"]')?.textContent,
-    ).toContain('Segment 1');
-    expect(
-      el.querySelector('[data-testid="transcript-segment-empty"]')?.textContent,
-    ).toContain('SELECT A SEGMENT');
+    expect(el.querySelectorAll('[data-testid="transcript-step"]')).toHaveLength(1);
+    expect(el.querySelector('[data-testid="transcript-segment-item"]')?.textContent).toContain('Segment 1');
+    expect(el.querySelector('[data-testid="transcript-segment-empty"]')?.textContent).toContain('SELECT A SEGMENT');
   });
 
   it('heads a matched step with its node name and its epoch as `E<n>`', async () => {
     const { el } = await render({ history: HISTORY, segments: [segment()] });
 
-    const head = el.querySelector(
-      '[data-testid="transcript-step"] .step-head',
-    )!;
+    const head = el.querySelector('[data-testid="transcript-step"] .step-head')!;
     expect(head.textContent?.replace(/\s+/g, ' ').trim()).toBe('Build·E1');
     expect(head.querySelector('[title="epoch 1"]')?.textContent).toBe('E1');
     expect(head.querySelector('.unmatched')).toBeNull();
   });
 
   it('heads a segment matching no node-history entry with its node compact ref and `Unmatched`', async () => {
-    const { el } = await render({
-      history: HISTORY,
-      segments: [
-        segment({ node_id: 'nd_01orphan00000000000000ZZZZ', epoch: 7 }),
-      ],
-    });
+    const { el } = await render({ history: HISTORY, segments: [segment({ node_id: 'nd_01orphan00000000000000ZZZZ', epoch: 7 })] });
 
-    const heads = [
-      ...el.querySelectorAll('[data-testid="transcript-step"] .step-head'),
-    ];
+    const heads = [...el.querySelectorAll('[data-testid="transcript-step"] .step-head')];
     const orphan = heads.find((h) => h.querySelector('.unmatched'))!;
-    expect(orphan.textContent?.replace(/\s+/g, ' ').trim()).toBe(
-      'N-ZZZZ·Unmatched·E7',
-    );
-    expect(
-      orphan.querySelector('fleet-kit-badge.unmatched')?.getAttribute('tone'),
-    ).toBe('running');
+    expect(orphan.textContent?.replace(/\s+/g, ' ').trim()).toBe('N-ZZZZ·Unmatched·E7');
+    expect(orphan.querySelector('fleet-kit-badge.unmatched')?.getAttribute('tone')).toBe('running');
   });
 
   it('opts into phone drill-down as a list without a segment and a detail with one', async () => {
-    const { el, fixture } = await render({
-      history: HISTORY,
-      segments: [segment()],
-      drilldown: true,
-    });
+    const { el, fixture } = await render({ history: HISTORY, segments: [segment()], drilldown: true });
 
-    expect(
-      el
-        .querySelector('[data-testid="transcripts-tab-nav"]')
-        ?.closest('.kmd-pane--hidden'),
-    ).toBeNull();
-    expect(
-      el
-        .querySelector('[data-testid="transcript-segment-empty"]')
-        ?.closest('.kmd-pane--hidden'),
-    ).not.toBeNull();
-    expect(
-      el.querySelector('[data-testid="transcript-segment-back"]'),
-    ).toBeNull();
+    expect(el.querySelector('[data-testid="transcripts-tab-nav"]')?.closest('.kmd-pane--hidden')).toBeNull();
+    expect(el.querySelector('[data-testid="transcript-segment-empty"]')?.closest('.kmd-pane--hidden')).not.toBeNull();
+    expect(el.querySelector('[data-testid="transcript-segment-back"]')).toBeNull();
 
     fixture.componentRef.setInput('segmentId', 'seg-1');
     fixture.componentRef.setInput('segmentState', 'ready');
-    fixture.componentRef.setInput('segmentData', {
-      segment_id: 'seg-1',
-      final: true,
-      truncated: false,
-      turns: [],
-    });
+    fixture.componentRef.setInput('segmentData', { segment_id: 'seg-1', final: true, truncated: false, turns: [] });
     await fixture.whenStable();
     // The list stays mounted under drill-down, only hidden — the kit's pane carries the hide.
-    expect(
-      el
-        .querySelector('[data-testid="transcripts-tab-nav"]')
-        ?.closest('.kmd-pane--hidden'),
-    ).not.toBeNull();
-    expect(
-      el.querySelector('[data-testid="transcript-segment-back"]'),
-    ).not.toBeNull();
+    expect(el.querySelector('[data-testid="transcripts-tab-nav"]')?.closest('.kmd-pane--hidden')).not.toBeNull();
+    expect(el.querySelector('[data-testid="transcript-segment-back"]')).not.toBeNull();
 
     const picked: (string | null)[] = [];
     fixture.componentInstance.pickSegment.subscribe((id) => picked.push(id));
-    el.querySelector<HTMLButtonElement>(
-      '[data-testid="transcript-segment-back"]',
-    )?.click();
+    el.querySelector<HTMLButtonElement>('[data-testid="transcript-segment-back"]')?.click();
     expect(picked).toContain(null);
   });
 
@@ -217,9 +148,7 @@ describe('ChunkTranscriptsTab', () => {
       segments: [segment()],
     });
 
-    el.querySelector<HTMLButtonElement>(
-      '[data-testid="transcript-segment-item"]',
-    )?.click();
+    el.querySelector<HTMLButtonElement>('[data-testid="transcript-segment-item"]')?.click();
     fixture.componentRef.setInput('segmentState', 'ready');
     fixture.componentRef.setInput('segmentData', {
       segment_id: 'seg-1',
@@ -229,96 +158,52 @@ describe('ChunkTranscriptsTab', () => {
     });
     await fixture.whenStable();
 
-    expect(
-      el.querySelector('[data-testid="transcript-segment-body"]')?.textContent,
-    ).toContain('hello from the segment');
+    expect(el.querySelector('[data-testid="transcript-segment-body"]')?.textContent).toContain(
+      'hello from the segment',
+    );
   });
 
   it('renders the loading state while segmentState is loading', async () => {
-    const { el } = await render({
-      history: HISTORY,
-      segments: [segment()],
-      segmentId: 'seg-1',
-      segmentState: 'loading',
-    });
+    const { el } = await render({ history: HISTORY, segments: [segment()], segmentId: 'seg-1', segmentState: 'loading' });
 
-    expect(
-      el.querySelector('[data-testid="transcript-segment-loading"]'),
-    ).not.toBeNull();
+    expect(el.querySelector('[data-testid="transcript-segment-loading"]')).not.toBeNull();
   });
 
   it('renders continued-from and continues-in links resolving to each other, for a multi-segment step', async () => {
     const { el, fixture } = await render({
       history: HISTORY,
-      segments: [
-        segment({ segment_id: 'seg-1', spawn_generation: 1 }),
-        segment({ segment_id: 'seg-2', spawn_generation: 2 }),
-      ],
+      segments: [segment({ segment_id: 'seg-1', spawn_generation: 1 }), segment({ segment_id: 'seg-2', spawn_generation: 2 })],
       segmentId: 'seg-2',
-      segmentData: {
-        segment_id: 'seg-2',
-        final: true,
-        truncated: false,
-        turns: [],
-      },
+      segmentData: { segment_id: 'seg-2', final: true, truncated: false, turns: [] },
     });
 
-    const items = el.querySelectorAll(
-      '[data-testid="transcript-segment-item"]',
-    );
-    expect(Array.from(items, (item) => item.textContent?.trim())).toEqual([
-      'Segment 1',
-      'Segment 2',
-    ]);
-    const back = el.querySelector<HTMLButtonElement>(
-      '[data-testid="transcript-continued-from"]',
-    );
+    const items = el.querySelectorAll('[data-testid="transcript-segment-item"]');
+    expect(Array.from(items, (item) => item.textContent?.trim())).toEqual(['Segment 1', 'Segment 2']);
+    const back = el.querySelector<HTMLButtonElement>('[data-testid="transcript-continued-from"]');
     expect(back?.textContent).toContain('segment 1');
-    expect(
-      el.querySelector('[data-testid="transcript-continues-in"]'),
-    ).toBeNull();
+    expect(el.querySelector('[data-testid="transcript-continues-in"]')).toBeNull();
 
     back?.click();
-    fixture.componentRef.setInput('segmentData', {
-      segment_id: 'seg-1',
-      final: true,
-      truncated: false,
-      turns: [],
-    });
+    fixture.componentRef.setInput('segmentData', { segment_id: 'seg-1', final: true, truncated: false, turns: [] });
     await fixture.whenStable();
-    expect(
-      el.querySelector('[data-testid="transcript-continued-from"]'),
-    ).toBeNull();
-    expect(
-      el.querySelector('[data-testid="transcript-continues-in"]')?.textContent,
-    ).toContain('segment 2');
+    expect(el.querySelector('[data-testid="transcript-continued-from"]')).toBeNull();
+    expect(el.querySelector('[data-testid="transcript-continues-in"]')?.textContent).toContain('segment 2');
   });
 
   it('names the recorded harness as plain text on the segment list, and only there', async () => {
     const { el } = await render({
       history: HISTORY,
-      segments: [
-        segment({ harness_id: 'claude_code', harness_version: '1.2.3' }),
-      ],
+      segments: [segment({ harness_id: 'claude_code', harness_version: '1.2.3' })],
       segmentId: 'seg-1',
-      segmentData: {
-        segment_id: 'seg-1',
-        final: true,
-        truncated: false,
-        turns: [],
-      },
+      segmentData: { segment_id: 'seg-1', final: true, truncated: false, turns: [] },
     });
 
-    const listHarness = el.querySelector(
-      '[data-testid="transcript-segment-harness"][data-harness-id="claude_code"]',
-    );
+    const listHarness = el.querySelector('[data-testid="transcript-segment-harness"][data-harness-id="claude_code"]');
     expect(listHarness?.textContent?.trim()).toBe('claude code');
     expect(listHarness?.classList.contains('harness')).toBe(true);
     expect(listHarness?.closest('fleet-kit-badge')).toBeNull();
     // The open segment body no longer repeats the stamp.
-    expect(
-      el.querySelectorAll('[data-testid="transcript-segment-harness"]'),
-    ).toHaveLength(1);
+    expect(el.querySelectorAll('[data-testid="transcript-segment-harness"]')).toHaveLength(1);
   });
 
   it('renders no harness affordance at all for a segment that recorded none', async () => {
@@ -326,17 +211,10 @@ describe('ChunkTranscriptsTab', () => {
       history: HISTORY,
       segments: [segment()],
       segmentId: 'seg-1',
-      segmentData: {
-        segment_id: 'seg-1',
-        final: true,
-        truncated: false,
-        turns: [],
-      },
+      segmentData: { segment_id: 'seg-1', final: true, truncated: false, turns: [] },
     });
 
-    expect(
-      el.querySelector('[data-testid="transcript-segment-harness"]'),
-    ).toBeNull();
+    expect(el.querySelector('[data-testid="transcript-segment-harness"]')).toBeNull();
   });
 
   it('renders a truncated segment through KitAsyncState-style banner, never as empty or a generic error', async () => {
@@ -344,47 +222,24 @@ describe('ChunkTranscriptsTab', () => {
       history: HISTORY,
       segments: [segment({ truncated: true })],
       segmentId: 'seg-1',
-      segmentData: {
-        segment_id: 'seg-1',
-        final: true,
-        truncated: true,
-        turns: [],
-      },
+      segmentData: { segment_id: 'seg-1', final: true, truncated: true, turns: [] },
     });
 
-    expect(
-      el.querySelector('[data-testid="transcript-segment-truncated"]')
-        ?.textContent,
-    ).toContain('TRUNCATED');
-    expect(
-      el.querySelector('[data-testid="transcript-segment-body"]'),
-    ).not.toBeNull();
+    expect(el.querySelector('[data-testid="transcript-segment-truncated"]')?.textContent).toContain('TRUNCATED');
+    expect(el.querySelector('[data-testid="transcript-segment-body"]')).not.toBeNull();
   });
 
   it('caps a large segment’s rendered turns and says so (review:F7)', async () => {
-    const turns: TurnSegmentViewOutput[] = Array.from(
-      { length: 1200 },
-      (_, i) => turn({ index: i, text: `turn ${i}` }),
-    );
+    const turns: TurnSegmentViewOutput[] = Array.from({ length: 1200 }, (_, i) => turn({ index: i, text: `turn ${i}` }));
     const { el } = await render({
       history: HISTORY,
       segments: [segment()],
       segmentId: 'seg-1',
-      segmentData: {
-        segment_id: 'seg-1',
-        final: true,
-        truncated: false,
-        turns,
-      },
+      segmentData: { segment_id: 'seg-1', final: true, truncated: false, turns },
     });
 
-    expect(
-      el.querySelector('[data-testid="transcript-segment-turns-capped"]')
-        ?.textContent,
-    ).toContain('1000');
-    expect(el.querySelectorAll('[data-testid="transcript-turn"]')).toHaveLength(
-      1000,
-    );
+    expect(el.querySelector('[data-testid="transcript-segment-turns-capped"]')?.textContent).toContain('1000');
+    expect(el.querySelectorAll('[data-testid="transcript-turn"]')).toHaveLength(1000);
     expect(el.textContent).toContain('turn 1199');
     expect(el.textContent).not.toContain('turn 0');
   });
@@ -392,37 +247,27 @@ describe('ChunkTranscriptsTab', () => {
   it('renders the 403 as its own honest state, not a generic error', async () => {
     const { el } = await render({ history: HISTORY, isForbidden: true });
 
-    expect(
-      el.querySelector('[data-testid="transcripts-forbidden"]')?.textContent,
-    ).toContain('NO PERMISSION');
+    expect(el.querySelector('[data-testid="transcripts-forbidden"]')?.textContent).toContain('NO PERMISSION');
     expect(el.querySelector('[data-testid="transcripts-error"]')).toBeNull();
   });
 
   it('renders a genuine transport failure distinctly from the permission state', async () => {
     const { el } = await render({ history: HISTORY, indexState: 'error' });
 
-    expect(
-      el.querySelector('[data-testid="transcripts-error"]')?.textContent,
-    ).toContain('UNAVAILABLE');
-    expect(
-      el.querySelector('[data-testid="transcripts-forbidden"]'),
-    ).toBeNull();
+    expect(el.querySelector('[data-testid="transcripts-error"]')?.textContent).toContain('UNAVAILABLE');
+    expect(el.querySelector('[data-testid="transcripts-forbidden"]')).toBeNull();
   });
 
   it('renders the loading state while the index read is in flight', async () => {
     const { el } = await render({ history: HISTORY, indexState: 'loading' });
 
-    expect(
-      el.querySelector('[data-testid="transcripts-loading"]'),
-    ).not.toBeNull();
+    expect(el.querySelector('[data-testid="transcripts-loading"]')).not.toBeNull();
   });
 
   it('says so when there are no segments at all', async () => {
     const { el } = await render({});
 
-    expect(
-      el.querySelector('[data-testid="transcripts-empty"]')?.textContent,
-    ).toContain('NO TRANSCRIPT SEGMENTS');
+    expect(el.querySelector('[data-testid="transcripts-empty"]')?.textContent).toContain('NO TRANSCRIPT SEGMENTS');
   });
 
   it('opens a sidechain standalone and back again, both URL-selectable (D7)', async () => {
@@ -441,31 +286,18 @@ describe('ChunkTranscriptsTab', () => {
       history: HISTORY,
       segments: [segment()],
       segmentId: 'seg-1',
-      segmentData: {
-        segment_id: 'seg-1',
-        final: true,
-        truncated: false,
-        turns: [sidechainTurn],
-      },
+      segmentData: { segment_id: 'seg-1', final: true, truncated: false, turns: [sidechainTurn] },
     });
 
-    el.querySelector<HTMLButtonElement>(
-      '[data-testid="transcript-sidechain-open"]',
-    )?.click();
+    el.querySelector<HTMLButtonElement>('[data-testid="transcript-sidechain-open"]')?.click();
     await fixture.whenStable();
 
-    expect(
-      el.querySelector('[data-testid="transcript-sidechain-back"]'),
-    ).not.toBeNull();
+    expect(el.querySelector('[data-testid="transcript-sidechain-back"]')).not.toBeNull();
     expect(el.textContent).toContain('standalone sidechain text');
 
-    el.querySelector<HTMLButtonElement>(
-      '[data-testid="transcript-sidechain-back"]',
-    )?.click();
+    el.querySelector<HTMLButtonElement>('[data-testid="transcript-sidechain-back"]')?.click();
     await fixture.whenStable();
-    expect(
-      el.querySelector('[data-testid="transcript-sidechain-back"]'),
-    ).toBeNull();
+    expect(el.querySelector('[data-testid="transcript-sidechain-back"]')).toBeNull();
   });
 
   it('opens a nested sidechain (under a tool call) standalone too, not just an unlinked one (review:F3)', async () => {
@@ -493,12 +325,7 @@ describe('ChunkTranscriptsTab', () => {
       history: HISTORY,
       segments: [segment()],
       segmentId: 'seg-1',
-      segmentData: {
-        segment_id: 'seg-1',
-        final: true,
-        truncated: false,
-        turns: [nestedSidechainTurn],
-      },
+      segmentData: { segment_id: 'seg-1', final: true, truncated: false, turns: [nestedSidechainTurn] },
     });
 
     el.querySelector<HTMLButtonElement>(
@@ -506,9 +333,7 @@ describe('ChunkTranscriptsTab', () => {
     )?.click();
     await fixture.whenStable();
 
-    expect(
-      el.querySelector('[data-testid="transcript-sidechain-back"]'),
-    ).not.toBeNull();
+    expect(el.querySelector('[data-testid="transcript-sidechain-back"]')).not.toBeNull();
     expect(el.textContent).toContain('nested sidechain text');
   });
 
@@ -559,27 +384,17 @@ describe('ChunkTranscriptsTab', () => {
       history: HISTORY,
       segments: [segment()],
       segmentId: 'seg-1',
-      segmentData: {
-        segment_id: 'seg-1',
-        final: true,
-        truncated: false,
-        turns: [outerSidechainTurn],
-      },
+      segmentData: { segment_id: 'seg-1', final: true, truncated: false, turns: [outerSidechainTurn] },
     });
 
     const innerOpenButton = el.querySelector<HTMLButtonElement>(
       '[data-testid="transcript-sidechain-nested"] [data-testid="transcript-sidechain-nested"] [data-testid="transcript-sidechain-open"]',
     );
-    expect(
-      innerOpenButton,
-      'no doubly-nested open-standalone button in the DOM',
-    ).not.toBeNull();
+    expect(innerOpenButton, 'no doubly-nested open-standalone button in the DOM').not.toBeNull();
     innerOpenButton?.click();
     await fixture.whenStable();
 
-    expect(
-      el.querySelector('[data-testid="transcript-sidechain-back"]'),
-    ).not.toBeNull();
+    expect(el.querySelector('[data-testid="transcript-sidechain-back"]')).not.toBeNull();
     expect(el.textContent).toContain('innermost text');
     expect(el.textContent).not.toContain('InnerTask');
   });
@@ -614,26 +429,16 @@ describe('ChunkTranscriptsTab', () => {
       segments: [segment()],
       segmentId: 'seg-1',
       sidechainPath: '3',
-      segmentData: {
-        segment_id: 'seg-1',
-        final: true,
-        truncated: false,
-        turns: [standaloneOpenedTurn],
-      },
+      segmentData: { segment_id: 'seg-1', final: true, truncated: false, turns: [standaloneOpenedTurn] },
     });
 
     const emitted: (string | null)[] = [];
-    fixture.componentInstance.pickSidechain.subscribe((path) =>
-      emitted.push(path),
-    );
+    fixture.componentInstance.pickSidechain.subscribe((path) => emitted.push(path));
 
     const deeperOpenButton = el.querySelector<HTMLButtonElement>(
       '[data-testid="transcript-sidechain-standalone"] [data-testid="transcript-sidechain-open"]',
     );
-    expect(
-      deeperOpenButton,
-      'no open-standalone control on the standalone view’s own nested sidechain',
-    ).not.toBeNull();
+    expect(deeperOpenButton, 'no open-standalone control on the standalone view’s own nested sidechain').not.toBeNull();
     deeperOpenButton?.click();
     await fixture.whenStable();
 
@@ -643,15 +448,13 @@ describe('ChunkTranscriptsTab', () => {
     // this case exists for. What the click has to change is the selection, and the path
     // it names has to be the full address from the segment's own turns, not the deeper
     // sidechain's locally-indexed `'0'`.
-    expect(
-      emitted,
-      'the standalone view’s open-standalone control emitted nothing — its binding is dead',
-    ).toEqual(['3.0']);
+    expect(emitted, 'the standalone view’s open-standalone control emitted nothing — its binding is dead').toEqual([
+      '3.0',
+    ]);
     // Rendering follows the selection: the deeper sidechain is now the standalone view
     // itself, so its own wrapper — the one that held the clicked control — is gone.
     expect(
-      el.querySelectorAll('[data-testid="transcript-sidechain-standalone"]')
-        .length,
+      el.querySelectorAll('[data-testid="transcript-sidechain-standalone"]').length,
       'the standalone view did not descend into the deeper sidechain',
     ).toBe(0);
     expect(el.textContent).toContain('deeper text');
