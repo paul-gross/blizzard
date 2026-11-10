@@ -35943,7 +35943,7 @@
         ]
       },
       "patch": {
-        "description": "Apply only the fields present \u2014 the name, the schedule, the spacing, the anchor, and the whole chore list,\nmatched to the stored chores by key so a chore whose key stays keeps its id; an explicit `null` clears\n`schedule`, `spacing`, or `anchor`. An edit that changes nothing writes nothing. 404 on an unknown id; 422\nnaming the field on a `null` name or chore list, a merged shape that cannot mean anything, or a chore's\n`urgency` naming no urgency (`urgency_unknown`) or a retired one (`urgency_retired`); 403 when the\ncadence would stay live keeping a promoting chore and the caller may not promote chunks; 409 on a stale\n`If-Match`.",
+        "description": "Apply only the fields present; chores match the stored ones by key, keeping their ids, and `null` clears\n`schedule`, `spacing`, or `anchor`. A no-op writes nothing. 404 unknown id; 422 naming the field on a `null` name\nor chore list, a meaningless merged shape, or a chore `urgency` unknown or retired; 403 keeping a promoting chore\nlive without promote rights; 409 stale `If-Match`.",
         "operationId": "edit_cadence_api_cadences__cadence_id__patch",
         "parameters": [
           {
@@ -36801,7 +36801,7 @@
         ]
       },
       "post": {
-        "description": "Ingest by source-native token into the project named, or the one the tokens' sources\nagree on; 422 on a project the tenant does not hold, a token no configured source\nclaims, a project the tokens leave open (``project_required``), a source the\nproject is not linked to (``source_not_linked``), a hub item recorded in another\nproject, and an ``urgency`` naming no urgency (``urgency_unknown``) or a retired one\n(``urgency_retired``); 409 on a pointer held by a live chunk;\n503 if every graph named after the packaged default has been retired (the operator's\nbrake, not a code bug: re-enable one or mint a new one).",
+        "description": "Ingest by source-native token into the project named, or the one the tokens' sources agree on. 422 on an\nunheld project, an unclaimed token, ``project_required``, ``source_not_linked``, a hub item of another project,\nor ``urgency_unknown``/``urgency_retired``; 409 on a pointer a live chunk holds; 503 when every default-named\ngraph is retired (the operator's brake: re-enable one or mint a new one).",
         "operationId": "ingest_chunk_api_chunks_post",
         "requestBody": {
           "content": {
@@ -37164,7 +37164,7 @@
         ]
       },
       "patch": {
-        "description": "Apply the body's fields in one all-or-nothing edit. An edit changing the chunk's urgency publishes the\nqueue's change beside the chunk's.\n\n404 for an unknown chunk or an unresolvable graph, 422 for a blank value, an ``urgency`` naming no urgency\n(``urgency_unknown``) or a retired one (``urgency_retired``), or an explicit ``null`` ``urgency``; 409 for a\nrefused edit.",
+        "description": "Apply the body's fields in one all-or-nothing edit; an urgency change also publishes the queue's change.\n404 for an unknown chunk or an unresolvable graph, 422 for a blank value, ``urgency_unknown``/``urgency_retired``,\nor a ``null`` ``urgency``; 409 for a refused edit.",
         "operationId": "patch_chunk_api_chunks__chunk_id__patch",
         "parameters": [
           {
@@ -49713,7 +49713,7 @@
     },
     "/api/garden-proposals/{proposal_id}/accept": {
       "post": {
-        "description": "Accept the proposal at `{proposal_id}`. When `mint_work_item` is true, mints a linked\nhub work item from `body` (or the proposal's own), wrapped in the \"Related findings\"\ntemplate when the proposal names findings and bare when it names none. When it is\nfalse, mints nothing and records the decline. Promotes nothing and changes no\nfinding's state. A blank reason is stored as none. 404 unknown proposal, 422 a `body`\nor an `urgency` with `mint_work_item` false, an `urgency` naming no urgency\n(`urgency_unknown`) or a retired one (`urgency_retired`), or a minted item left with a blank title or body, 409\nalready closed or a raced ingest, 503 the packaged default graph retired.",
+        "description": "Accept the proposal. `mint_work_item` mints a linked hub item from `body` (or the proposal's own), wrapped in\nthe \"Related findings\" template when it names findings; false records the decline. Promotes nothing; a blank\nreason is stored as none. 404 unknown; 422 `body` or `urgency` without a mint, `urgency_unknown`/`urgency_retired`,\nor a blank minted title or body; 409 closed or a raced ingest; 503 the default graph retired.",
         "operationId": "accept_garden_proposal_api_garden_proposals__proposal_id__accept_post",
         "parameters": [
           {
@@ -58991,7 +58991,7 @@
         ]
       },
       "patch": {
-        "description": "Apply only the fields present \u2014 the display name, the graph, the default scope, and the model, effort,\nharness, and urgency defaults; an explicit `null` clears `default_effort` or `default_urgency`. A present `slug`\nmust restate the current one. An edit that changes nothing writes nothing. 404 on an unknown\nid; 422 on a slug change, a `null` field, a malformed default scope slug, or a graph name\nwith no enabled mint, and 422 `urgency_unknown` or `urgency_retired` on a `default_urgency` naming no urgency or\na retired one; 409 on a stale `If-Match` naming the current revision.",
+        "description": "Apply only the fields present; an explicit `null` clears `default_effort` or `default_urgency`, and a present\n`slug` must restate the current one. A no-op writes nothing. 404 unknown id; 422 on a slug change, a `null` field,\na malformed default scope slug, a graph name with no enabled mint, or `urgency_unknown`/`urgency_retired`; 409 on\na stale `If-Match`.",
         "operationId": "edit_routine_api_routines__routine_id__patch",
         "parameters": [
           {
@@ -59587,7 +59587,7 @@
     },
     "/api/routines/{routine_id}/run": {
       "post": {
-        "description": "Mint and ingest a hub work item from the routine, in one act; its chunk rests ``not_ready``\nuntil promoted.\n422 on an unknown ``mode`` (request validation, before any lookup); 404 on an unknown id;\n422 on a malformed ``scope_slug``, or an effective scope no scope row holds or outside the\nroutine's own related set (never minted); 503 on a retired routine\n(checked before the scope is even parsed), a retired effective\nscope, or a graph name with no\nenabled mint (mirroring ``POST /work-sources/{source}/items``'s own\nretired-default-graph shape); 409 on an out-of-band ingest already holding the\nallocated ref's pointer; 422 ``urgency_unknown`` or ``urgency_retired`` on an ``urgency``\nnaming no urgency or a retired one, which outranks the routine's default for this run alone.",
+        "description": "Mint and ingest a hub work item from the routine; its chunk rests ``not_ready`` until promoted. 422 on an\nunknown ``mode`` (before any lookup), a malformed, unheld, or unrelated scope, or ``urgency_unknown``/\n``urgency_retired`` (a stated urgency outranks the routine's default for this run); 404 unknown id; 503 on a\nretired routine (before the scope is parsed), a retired scope, or a graph with no enabled mint; 409 on an\nout-of-band ingest holding the allocated pointer.",
         "operationId": "run_routine_api_routines__routine_id__run_post",
         "parameters": [
           {
@@ -66213,7 +66213,7 @@
         ]
       },
       "post": {
-        "description": "Allocate a fresh item at SOURCE, open, authored by the caller, and mint its\nresting ``not_ready`` chunk in the same transaction, both in the project ``?project=`` names\n\u2014 the tenant's only one when it names none. 404/409 from the source's editor gate,\n422 for a blank title or body, an ``urgency`` naming no urgency (``urgency_unknown``) or a\nretired one (``urgency_retired``), an unknown project, or no project named in a tenant\nholding several (``project_required``), 409 if an out-of-band ingest already holds the\nallocated ref's pointer, 503 if every graph named after the packaged default has\nbeen retired (the operator's brake, mirroring ``POST /chunks``).",
+        "description": "Allocate an open item at SOURCE and mint its resting ``not_ready`` chunk in one transaction, in the project\n``?project=`` names or the tenant's only one. 404/409 from the editor gate; 422 for a blank title or body,\n``urgency_unknown``/``urgency_retired``, an unknown project, or ``project_required``; 409 if an out-of-band\ningest holds the allocated pointer; 503 if every default-named graph is retired (mirroring ``POST /chunks``).",
         "operationId": "create_work_item_api_work_sources__source__items_post",
         "parameters": [
           {

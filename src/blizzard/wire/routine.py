@@ -27,8 +27,7 @@ class RoutineCreateRequest(BaseModel):
     default_effort: str | None = None
     # The routine's default harness preference — the `default_model` shape.
     default_harnesses: list[str] = []
-    #: The urgency a run takes when nothing above the routine names one, by id or slug; absent or ``None`` takes the
-    #: tenant's default.
+    #: A run's urgency when nothing above names one, by id or slug; ``None`` takes the tenant's default.
     default_urgency: str | None = None
 
 
@@ -47,8 +46,7 @@ class RoutineDocument(BaseModel):
     default_model: list[str] = []
     default_effort: str | None = None
     default_harnesses: list[str] = []
-    #: The urgency a run takes when nothing above the routine names one, by slug; it must be live, stored or declared
-    #: in the same document. Absent or ``None`` takes the tenant's default.
+    #: A run's live urgency by slug, stored or declared alongside; ``None`` takes the tenant's default.
     default_urgency: str | None = None
     scopes: list[str] = []
 
@@ -90,8 +88,7 @@ class RoutineView(WireModel):
     default_model: list[str] = []
     default_effort: str | None = None
     default_harnesses: list[str] = []
-    #: The slug of the urgency a run takes when nothing above the routine names one; ``None`` takes the tenant's
-    #: default.
+    #: The slug of a run's urgency when nothing above names one; ``None`` takes the tenant's default.
     default_urgency: str | None = None
     created_at: str
     retired: bool = False
@@ -115,8 +112,7 @@ class RoutineRunRequest(BaseModel):
     scope_slug: str | None = None
     mode: RunMode = RunMode.FULL
     note: str | None = None
-    #: The urgency the run's chunk takes, by id or slug, over the routine's default for this run alone; ``None``
-    #: takes the routine's default, or else the tenant's.
+    #: This run's urgency by id or slug, over the routine's default; ``None`` falls down the chain.
     urgency: str | None = None
 
 

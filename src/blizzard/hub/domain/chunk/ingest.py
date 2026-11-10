@@ -266,16 +266,11 @@ class IngestService:
     def ingest(
         self, pointers: Sequence[WorkRef], *, graph: Graph, project: ProjectId | None, urgency: Urgency | None = None
     ) -> str:
-        """Mint a chunk wrapping ``pointers`` into ``project`` — or, with ``None``, the project
-        :func:`choose_ingest_project` infers. Raises :class:`EmptyIngest` for no pointer, the
-        project refusals of :func:`choose_ingest_project`, and :class:`IngestConflict` for a pointer
-        a live chunk holds. Of two overlapping ingests of one pointer, exactly one mints.
-
-        The links are read once to choose the project, then again under that project's source-link
-        lock — taken before the pointers' — so a source unlinked in between refuses the ingest
-        rather than minting a chunk its project no longer draws from. The same unit takes the locks of
-        ``urgency`` — the live urgency the caller states — and of the tenant's default, and resolves the chunk's
-        urgency over them re-read there."""
+        """Mint a chunk wrapping ``pointers`` into ``project``, or the one :func:`choose_ingest_project` infers;
+        raises :class:`EmptyIngest`, that function's refusals, or :class:`IngestConflict` for a held pointer. The
+        links are re-read under the project's source-link lock, before the pointers', so an unlink in between
+        refuses; the unit also locks the stated ``urgency`` and the tenant default and resolves over their
+        re-read."""
         work_refs = ingest_work_refs(pointers)
         chosen = self.choose_project(work_refs, project)
         ahead = self._default.ahead(stated=urgency)

@@ -1,9 +1,7 @@
 """Chunk operator-property edits — graph, defaults, intended migration, urgency.
 
-Editability is validated **per field**: each field reads its own
-:class:`~blizzard.hub.domain.chunk.model.ChunkVerb` row (:data:`_FIELD_VERB`). An edit is a plain column
-overwrite, and shares one lock with a claim since both check for a live route. An edit naming an urgency also
-takes that urgency's lock, after the row, and confirms it live under both (``bzh:write-reestablishes-read``).
+Each field reads its own :class:`~blizzard.hub.domain.chunk.model.ChunkVerb` row (:data:`_FIELD_VERB`). An edit is
+a column overwrite sharing a claim's lock; an urgency edit also locks the urgency after the row and confirms it live.
 :func:`plan_edit` decides; :class:`EditService` reads, locks, and writes what it decided."""
 
 from __future__ import annotations
@@ -122,9 +120,8 @@ class ChunkDefaults:
 class ChunkEdit:
     """The fields a single all-or-nothing edit request supplies.
 
-    ``intended_migration`` and ``default_effort`` accept ``None`` to mean "clear it";
-    an empty ``default_model``/``default_harnesses`` list is the same clear. ``urgency`` is the urgency the edge
-    resolved and confirmed live, never cleared."""
+    ``None`` clears ``intended_migration`` or ``default_effort``, as an empty ``default_model``/``default_harnesses``
+    does; ``urgency`` is the live urgency the edge resolved, never cleared."""
 
     graph_id: str | UnsetType = field(default=UNSET)
     default_model: list[str] | UnsetType = field(default=UNSET)
@@ -195,9 +192,8 @@ def plan_edit(
     """Decide an all-or-nothing edit of ``chunk`` at ``facts``: every supplied field is
     validated before anything is planned, in field order, so a refusal writes nothing.
 
-    A graph pin edit names its loaded target graph and the target's retirement; the retirement check is
-    pinned by ``test_edit_graph_id_retirement_check_is_not_bypassed_by_a_different_migration_target``. An urgency
-    edit names ``urgency`` as read under its lock, refused once retired."""
+    A graph pin edit names its loaded target graph, refused once retired; an urgency edit names ``urgency`` as read
+    under its lock, likewise."""
     graph_id: str | None = None
     if edit.graph_id is not UNSET:
         if graph_target is None or graph_target.graph_id != edit.graph_id:
@@ -295,10 +291,8 @@ class EditService:
     ) -> EditPlan:
         """Apply every field ``edit`` supplies, all-or-nothing, as :func:`plan_edit` decides; the plan it wrote.
 
-        The facts and the record are re-read under the shared row lock, so a concurrent edit landing
-        before it neither loses its write to the trio's carry-forward nor skews the pin check. An urgency
-        edit locks the urgency's key beside the row and re-reads the urgency under it; it takes no settings
-        lock, since it names its urgency and never the default."""
+        Facts and record are re-read under the shared row lock, so a prior concurrent edit is neither lost nor
+        skews the pin check; an urgency edit also locks and re-reads its urgency, never the settings."""
         keys = [] if edit.urgency is UNSET else [urgency_lock(edit.urgency.urgency_id)]
         with self._exclusive.locked([chunk.chunk_id], keys=keys) as handle:
             facts = handle.facts(chunk.chunk_id)

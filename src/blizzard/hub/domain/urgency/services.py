@@ -236,15 +236,10 @@ class Retired:
 
 
 class UrgencyLifecycle:
-    """Retire and enable an urgency. A retire is one unit locking the settings, the set, the retiring urgency and the
-    urgency its open work moves to; under them it re-reads the default, the urgency, its open chunks and ``move_to``,
-    clears the refusals in order, and writes the retired fact, the move and the change together. The unit also locks
-    the open chunks it moves, read ahead of it, ahead of the keys, as a chunk edit locks its row before the urgency it
-    names; a chunk the re-read finds open outside that set took the urgency after the read ahead, and the unit runs
-    again over the wider set. The move itself leaves a chunk that finished since the read. In the same unit, every
-    routine default and chore override naming the retiring urgency is cleared through ``references``. An enable locks
-    the set and the urgency and re-reads it under them. Both take the set's lock because a reorder and a create decide
-    on which urgencies are live under it alone. Enable moves no chunk back and restores no cleared reference."""
+    """Retire and enable an urgency, each under the set's lock. A retire locks its open chunks (read ahead), then the
+    settings, the urgency and ``move_to``; re-reads all, refuses, then retires, moves, and clears ``references`` in
+    one unit — rerunning wider if the re-read finds a chunk outside the locked set. An enable re-reads the urgency
+    under its lock and restores neither chunks nor references."""
 
     def __init__(
         self,

@@ -373,14 +373,10 @@ def create_work_item(
     services: Services,
     project: QueryProject = None,
 ) -> object:
-    """Allocate a fresh item at SOURCE, open, authored by the caller, and mint its
-    resting ``not_ready`` chunk in the same transaction, both in the project ``?project=`` names
-    — the tenant's only one when it names none. 404/409 from the source's editor gate,
-    422 for a blank title or body, an ``urgency`` naming no urgency (``urgency_unknown``) or a
-    retired one (``urgency_retired``), an unknown project, or no project named in a tenant
-    holding several (``project_required``), 409 if an out-of-band ingest already holds the
-    allocated ref's pointer, 503 if every graph named after the packaged default has
-    been retired (the operator's brake, mirroring ``POST /chunks``)."""
+    """Allocate an open item at SOURCE and mint its resting ``not_ready`` chunk in one transaction, in the project
+    ``?project=`` names or the tenant's only one. 404/409 from the editor gate; 422 for a blank title or body,
+    ``urgency_unknown``/``urgency_retired``, an unknown project, or ``project_required``; 409 if an out-of-band
+    ingest holds the allocated pointer; 503 if every default-named graph is retired (mirroring ``POST /chunks``)."""
     source_obj, editor = _require_editor(source, services)
     # Validated before graph resolution, so a blank title/body rejects the whole request
     # without the store consulted — the ordering POST /chunks holds for its own guard too.

@@ -130,11 +130,8 @@ def garden_proposal_accept(
 ) -> None:
     """Accept PROPOSAL_ID.
 
-    Mints a linked hub work item by default, from the proposal's own body unless --body-file
-    supplies another; the body is wrapped in the "Related findings" template when the
-    proposal cites findings, and minted bare otherwise. --no-work-item mints nothing and
-    records the decline; the hub refuses it alongside --body-file or --urgency, which only a
-    minted item carries."""
+    Mints a linked hub work item from the proposal's body or --body-file, wrapped in the "Related findings"
+    template when it cites findings. --no-work-item records the decline, refused beside --body-file or --urgency."""
     json_body: dict[str, object] = {"mint_work_item": not no_work_item}
     if reason is not None:
         json_body["reason"] = reason

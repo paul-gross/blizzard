@@ -196,10 +196,8 @@ class Pointer(click.ParamType[str]):
 def chunk_ingest(cli: CliContext, pointers: tuple[str, ...], project: str | None, urgency: str | None) -> None:
     """Ingest work items by token, minting a chunk.
 
-    Each POINTER is a source-native token — ``source:ref``, ``source#ref``, or a pasted
-    work item URL; a batch mints one chunk carrying every pointer. Refused when no
-    configured work source claims a token, a pointer's source is not linked to the
-    project, another chunk already holds a pointer, or --urgency names no live urgency."""
+    Each POINTER is ``source:ref``, ``source#ref``, or a work item URL; a batch mints one chunk. Refused for an
+    unclaimed token, an unlinked source, a pointer another chunk holds, or an --urgency naming no live urgency."""
     tokens = list(pointers)
     request: dict[str, object] = {"tokens": tokens}
     if project is not None:
@@ -264,10 +262,8 @@ def chunk_set(
 ) -> None:
     """Repin CHUNK's graph, default model/effort/harnesses, and/or urgency in one call.
 
-    The given fields apply together or not at all; at least one option is required.
-    Defaults are refused once a runner has claimed CHUNK, ``--graph`` once CHUNK is
-    claimed or has moved off its first node, and ``--urgency`` once CHUNK is done or
-    stopped, or when it names no live urgency."""
+    The fields apply together or not at all. Defaults are refused once CHUNK is claimed, ``--graph`` once it is
+    claimed or off its first node, ``--urgency`` once it is done or stopped or naming no live urgency."""
     if graph_id is None and not default_model and default_effort is None and not default_harnesses and urgency is None:
         raise click.UsageError(
             "at least one of --graph/--default-model/--default-effort/--default-harnesses/--urgency is required"

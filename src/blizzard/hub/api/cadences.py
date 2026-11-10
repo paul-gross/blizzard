@@ -342,13 +342,10 @@ def edit_cadence(
     services: Services,
     if_match: Annotated[int | None, Header()] = None,
 ) -> CadenceView:
-    """Apply only the fields present — the name, the schedule, the spacing, the anchor, and the whole chore list,
-    matched to the stored chores by key so a chore whose key stays keeps its id; an explicit `null` clears
-    `schedule`, `spacing`, or `anchor`. An edit that changes nothing writes nothing. 404 on an unknown id; 422
-    naming the field on a `null` name or chore list, a merged shape that cannot mean anything, or a chore's
-    `urgency` naming no urgency (`urgency_unknown`) or a retired one (`urgency_retired`); 403 when the
-    cadence would stay live keeping a promoting chore and the caller may not promote chunks; 409 on a stale
-    `If-Match`."""
+    """Apply only the fields present; chores match the stored ones by key, keeping their ids, and `null` clears
+    `schedule`, `spacing`, or `anchor`. A no-op writes nothing. 404 unknown id; 422 naming the field on a `null` name
+    or chore list, a meaningless merged shape, or a chore `urgency` unknown or retired; 403 keeping a promoting chore
+    live without promote rights; 409 stale `If-Match`."""
     cadence = _cadence_or_404(cadence_id, services)
     try:
         edited = services.cadence_authoring.edit(

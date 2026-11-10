@@ -79,7 +79,7 @@ PathUrgency = Annotated[Urgency, Depends(path_urgency)]
 
 
 def urgency_refusal(exc: ConfigFieldError) -> ProblemHTTPException:
-    """A mint's stated urgency refused — ``urgency_unknown`` or ``urgency_retired`` — located in the body."""
+    """A mint's or chunk edit's stated urgency refused, ``urgency_unknown`` or ``urgency_retired``, in the body."""
     return ProblemHTTPException(
         partial(problems_admin.config_field_invalid_problem, "body", exc.field, exc.message, exc.code)
     )

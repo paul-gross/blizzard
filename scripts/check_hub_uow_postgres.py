@@ -60,18 +60,12 @@ _MINT: _LockSet = (
     mint_lock_keys(ErrandKey("chr_proof", "scp_proof"), promote=True, urgencies=default_lock_keys(_RETIRING)),
 )
 _PROMOTE: _LockSet = (["a"], [READY_RANKING_LOCK, BACKLOG_RANKING_LOCK])
-#: A retire of ``urg_proof`` moving its open chunk ``a`` to ``urg_other`` against a mint writing ``urg_proof`` as the
-#: default — the hub item, proposal, routine, and ingest mints' set, and the cadence mint's — and a settings edit
-#: naming it, each run each way round. Every one takes the settings' lock, so whichever writer holds its set, the
-#: other blocks there and lands only once the first commits — a mint or an edit never lands on an urgency a retire
-#: holds.
+#: A retire of ``urg_proof`` against each default-taking mint and a settings edit, both orders, on the settings' lock.
 _RETIRE: _LockSet = (
     ["a"],
     [tenant_settings_lock(), urgency_order_lock(), urgency_lock(_RETIRING), urgency_lock(UrgencyId("urg_other"))],
 )
-#: A chunk edit setting ``a`` to ``urg_proof`` — its row, then the urgency's key — against the retire, each way round.
-#: Both take the row first, so the second blocks there and lands only once the first commits: the edit never lands on
-#: an urgency being retired, and the retire's move never waits on a key an edit holding its row has taken.
+#: A chunk edit setting ``a`` to ``urg_proof`` against the retire, both orders; both lock the row before the key.
 _CHUNK_EDIT: _LockSet = (["a"], [urgency_lock(_RETIRING)])
 _DEFAULT_MINT: _LockSet = (["n"], default_lock_keys(_RETIRING))
 _SETTINGS_EDIT: _LockSet = ([], [tenant_settings_lock(), urgency_lock(_RETIRING)])

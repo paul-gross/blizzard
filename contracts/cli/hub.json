@@ -2258,7 +2258,7 @@
           "short_help": "Merge MERGE_IDS into CHUNK_ID, which keeps its own status and gains their work items and dependencies."
         },
         "ingest": {
-          "help": "Ingest work items by token, minting a chunk.\n\nEach POINTER is a source-native token \u2014 ``source:ref``, ``source#ref``, or a pasted\nwork item URL; a batch mints one chunk carrying every pointer. Refused when no\nconfigured work source claims a token, a pointer's source is not linked to the\nproject, another chunk already holds a pointer, or --urgency names no live urgency.",
+          "help": "Ingest work items by token, minting a chunk.\n\nEach POINTER is ``source:ref``, ``source#ref``, or a work item URL; a batch mints one chunk. Refused for an\nunclaimed token, an unlinked source, a pointer another chunk holds, or an --urgency naming no live urgency.",
           "params": [
             {
               "hidden": false,
@@ -2978,7 +2978,7 @@
           "short_help": "Resume a paused CHUNK \u2014 clear the pause."
         },
         "set": {
-          "help": "Repin CHUNK's graph, default model/effort/harnesses, and/or urgency in one call.\n\nThe given fields apply together or not at all; at least one option is required.\nDefaults are refused once a runner has claimed CHUNK, ``--graph`` once CHUNK is\nclaimed or has moved off its first node, and ``--urgency`` once CHUNK is done or\nstopped, or when it names no live urgency.",
+          "help": "Repin CHUNK's graph, default model/effort/harnesses, and/or urgency in one call.\n\nThe fields apply together or not at all. Defaults are refused once CHUNK is claimed, ``--graph`` once it is\nclaimed or off its first node, ``--urgency`` once it is done or stopped or naming no live urgency.",
           "params": [
             {
               "hidden": false,
@@ -5292,7 +5292,7 @@
       ],
       "commands": {
         "accept": {
-          "help": "Accept PROPOSAL_ID.\n\nMints a linked hub work item by default, from the proposal's own body unless --body-file\nsupplies another; the body is wrapped in the \"Related findings\" template when the\nproposal cites findings, and minted bare otherwise. --no-work-item mints nothing and\nrecords the decline; the hub refuses it alongside --body-file or --urgency, which only a\nminted item carries.",
+          "help": "Accept PROPOSAL_ID.\n\nMints a linked hub work item from the proposal's body or --body-file, wrapped in the \"Related findings\"\ntemplate when it cites findings. --no-work-item records the decline, refused beside --body-file or --urgency.",
           "params": [
             {
               "hidden": false,

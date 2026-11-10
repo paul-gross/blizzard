@@ -40,7 +40,7 @@ class ChunkPatchBody:
 
     def apply(self, chunk: Chunk) -> EditPlan:
         """The edit applied — the plan it wrote. 422 ``urgency_unknown`` or ``urgency_retired`` for an ``urgency``
-        naming no urgency or a retired one, and for an explicit ``null``."""
+        naming no urgency or a retired one; an explicit ``null`` is a "must not be null" ``value_error``."""
         try:
             graph_target = self._graph_target()
             migration_target, intended_migration = self._migration()

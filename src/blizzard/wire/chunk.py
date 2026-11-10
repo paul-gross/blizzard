@@ -546,8 +546,7 @@ class ChunkPatchRequest(BaseModel):
     # `None` means "leave unchanged", the `default_model` wire convention.
     default_harnesses: list[str] | None = None
     intended_migration: IntendedMigrationPatch | None = None
-    #: The urgency the chunk carries from now on, by id or slug; omitted leaves it, and an explicit ``null`` is
-    #: refused.
+    #: The urgency the chunk carries from now on, by id or slug; omitted leaves it, ``null`` is refused.
     urgency: str | None = None
 
 

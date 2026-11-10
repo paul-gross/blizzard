@@ -1,8 +1,6 @@
 """urgency references — a routine's default urgency and a chore's override.
 
-Adds nullable `routines.default_urgency_id` and `cadence_chores.urgency_id`, each with no foreign key, as
-`chunks.urgency_id` has none. Every existing row reads null: a routine whose runs take the tenant's default, a chore whose
-runs take its routine's. Nothing is backfilled. Downgrade drops both.
+Adds nullable `routines.default_urgency_id` and `cadence_chores.urgency_id`, no foreign keys or backfill.
 Revision ID: 20261109_0900_urgency_references
 Revises: 20261108_0900_urgencies
 """

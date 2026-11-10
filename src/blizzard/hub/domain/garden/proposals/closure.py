@@ -96,14 +96,14 @@ class GardenProposalClosure:
         urgency: Urgency | None = None,
     ) -> GardenProposalClosure:
         """The closure of an accept that mints no item. Refuses a closed proposal first,
-        then a `body` override or an `urgency` (:class:`GardenProposalBodyWithoutMint`) —
+        then a `body` override or an `urgency` (:class:`GardenProposalMintFieldWithoutMint`) —
         what only a minted item could carry. The reason is optional: stored stripped, a blank
         one as none."""
         proposal.require_legal(GardenProposalVerb.ACCEPT, existing)
         if body is not None:
-            raise GardenProposalBodyWithoutMint(proposal.proposal_id)
+            raise GardenProposalMintFieldWithoutMint(proposal.proposal_id, "body")
         if urgency is not None:
-            raise GardenProposalBodyWithoutMint(proposal.proposal_id, "urgency")
+            raise GardenProposalMintFieldWithoutMint(proposal.proposal_id, "urgency")
         return cls(
             proposal_id=proposal.proposal_id,
             closure=GardenProposalClosureKind.ACCEPTED,
@@ -180,11 +180,11 @@ class AcceptedGardenProposal:
     chunk_id: str | None
 
 
-class GardenProposalBodyWithoutMint(ValueError):
+class GardenProposalMintFieldWithoutMint(ValueError):
     """An accept declining to mint named a `body` override or an `urgency` — each is the
     minted item's, so an accept minting nothing can never carry it."""
 
-    def __init__(self, proposal_id: str, field: str = "body") -> None:
+    def __init__(self, proposal_id: str, field: str) -> None:
         super().__init__(f"accepting garden proposal {proposal_id} without minting takes no {field}")
         self.proposal_id = proposal_id
         self.field = field
@@ -302,10 +302,9 @@ class GardenProposalClosureService:
         urgency: Urgency | None = None,
     ) -> AcceptedGardenProposal:
         """Accept ``proposal`` — ``blizzard-context:/domain/findings-and-proposals.md`` §Closing a proposal.
-        ``mint=True`` resolves the default graph only once the proposal is known open and composes the item
-        body from the already-loaded ``findings``; its chunk carries ``urgency`` — the live urgency the caller
-        states — or else the tenant's default. Raises :class:`GardenProposalAlreadyClosed`,
-        :class:`GardenProposalBodyWithoutMint` for a body on a non-minting accept, and
+        ``mint=True`` resolves the default graph once the proposal is known open; its chunk carries the stated
+        ``urgency`` or the tenant's default. Raises :class:`GardenProposalAlreadyClosed`,
+        :class:`GardenProposalMintFieldWithoutMint` for a body or urgency on a non-minting accept, and
         :class:`~blizzard.hub.domain.chunk.ingest.IngestConflict` on a raced ref."""
         existing = self._closures.get(proposal.proposal_id)
         if not mint:

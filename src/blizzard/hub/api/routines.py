@@ -501,12 +501,10 @@ def edit_routine(
     services: Services,
     if_match: Annotated[int | None, Header()] = None,
 ) -> RoutineView:
-    """Apply only the fields present — the display name, the graph, the default scope, and the model, effort,
-    harness, and urgency defaults; an explicit `null` clears `default_effort` or `default_urgency`. A present `slug`
-    must restate the current one. An edit that changes nothing writes nothing. 404 on an unknown
-    id; 422 on a slug change, a `null` field, a malformed default scope slug, or a graph name
-    with no enabled mint, and 422 `urgency_unknown` or `urgency_retired` on a `default_urgency` naming no urgency or
-    a retired one; 409 on a stale `If-Match` naming the current revision."""
+    """Apply only the fields present; an explicit `null` clears `default_effort` or `default_urgency`, and a present
+    `slug` must restate the current one. A no-op writes nothing. 404 unknown id; 422 on a slug change, a `null` field,
+    a malformed default scope slug, a graph name with no enabled mint, or `urgency_unknown`/`urgency_retired`; 409 on
+    a stale `If-Match`."""
     routine = _routine_or_404(routine_id, services)
     try:
         edited = services.routine_authoring.edit(
@@ -651,17 +649,11 @@ def run_routine(
     services: Services,
     identity: Annotated[ResolvedIdentity, Depends(require(Permission.CHUNK_CONTROL))],
 ) -> object:
-    """Mint and ingest a hub work item from the routine, in one act; its chunk rests ``not_ready``
-    until promoted.
-    422 on an unknown ``mode`` (request validation, before any lookup); 404 on an unknown id;
-    422 on a malformed ``scope_slug``, or an effective scope no scope row holds or outside the
-    routine's own related set (never minted); 503 on a retired routine
-    (checked before the scope is even parsed), a retired effective
-    scope, or a graph name with no
-    enabled mint (mirroring ``POST /work-sources/{source}/items``'s own
-    retired-default-graph shape); 409 on an out-of-band ingest already holding the
-    allocated ref's pointer; 422 ``urgency_unknown`` or ``urgency_retired`` on an ``urgency``
-    naming no urgency or a retired one, which outranks the routine's default for this run alone."""
+    """Mint and ingest a hub work item from the routine; its chunk rests ``not_ready`` until promoted. 422 on an
+    unknown ``mode`` (before any lookup), a malformed, unheld, or unrelated scope, or ``urgency_unknown``/
+    ``urgency_retired`` (a stated urgency outranks the routine's default for this run); 404 unknown id; 503 on a
+    retired routine (before the scope is parsed), a retired scope, or a graph with no enabled mint; 409 on an
+    out-of-band ingest holding the allocated pointer."""
     routine = services.routines.get(routine_id)
     if routine is None:
         raise ProblemHTTPException(

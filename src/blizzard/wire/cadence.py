@@ -39,8 +39,7 @@ class ChoreDocument(BaseModel):
     mode: RunMode | None = None
     note: str | None = None
     promote: bool | None = None
-    #: The urgency the chore's runs take over its routine's default — by slug in a document, by id or slug in a
-    #: request; it must be live. Absent or ``None`` takes the routine's.
+    #: The live urgency over the routine's default (slug in a document, id or slug in a request); ``None`` keeps it.
     urgency: str | None = None
 
 

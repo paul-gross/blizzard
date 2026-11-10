@@ -1084,7 +1084,7 @@ class ChunkVerb(StrEnum):
     EDIT_DEFAULTS = "edit-defaults"
     #: Set, overwrite, or clear the intended migration.
     EDIT_INTENDED_MIGRATION = "edit-intended-migration"
-    #: Set the chunk's urgency; an open chunk's urgency still decides where it stands in the queue.
+    #: Set the chunk's urgency, which the queue views carry.
     EDIT_URGENCY = "edit-urgency"
     #: Be named in a reorder of the ``ready`` queue.
     REORDER_READY = "reorder-ready"

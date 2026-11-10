@@ -191,8 +191,7 @@ class ChunkView:
     flow_places: Mapping[str, list[ChunkFlowPlaceView]] | None = None
     #: Submissions by chunk id — the caller's own batched read; ``None`` makes a bounced chunk's render read its own.
     submissions: Mapping[str, list[SubmissionRecord]] | None = None
-    #: The tenant's urgencies by id, the retired ones included — the caller's one read per response; ``None`` makes
-    #: each render read the set.
+    #: The tenant's urgencies by id, retired included, read once per response; ``None`` makes each render read them.
     urgencies: Mapping[UrgencyId, Urgency] | None = None
 
     @classmethod

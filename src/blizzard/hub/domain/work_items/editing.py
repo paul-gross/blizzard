@@ -181,11 +181,9 @@ class WorkItemEditService:
         project_id: ProjectId,
         urgency: Urgency | None = None,
     ) -> CreatedWorkItem:
-        """File the item and mint its resting chunk of ``project_id`` in one unit, carrying ``urgency`` — the
-        live urgency the caller states — or else the tenant's default, read again under their locks, pinned to
-        ``graph``, holding the pointer this call allocates. An out-of-band ingest of the same ref can
-        pre-empt it, raising :class:`~blizzard.hub.domain.chunk.ingest.IngestConflict` and burning the
-        ref. A blank title or body raises
+        """File the item and mint its resting chunk of ``project_id`` on ``graph`` in one unit, carrying the stated
+        ``urgency`` or the tenant's default, re-read under their locks. A raced out-of-band ingest raises
+        :class:`~blizzard.hub.domain.chunk.ingest.IngestConflict`, burning the ref; a blank title or body raises
         :class:`~blizzard.hub.domain.work_items.model.WorkItemFieldBlank` before allocating."""
         text = WorkItemText.of(title=title, body=body)
         pointer, draft, at = prepare_mint(
