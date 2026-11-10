@@ -7,7 +7,7 @@
  * what keeps a kiosk honest: a browser throttles timers and stops
  * `requestAnimationFrame` outright in a backgrounded or occluded tab, so a
  * cycle built by summing `setTimeout`s drifts arbitrarily far behind real time.
- * Deadlines here are absolute `performance.now()` instants, so a throttled
+ * Deadlines here are absolute `FLEET_CLOCK` instants, so a throttled
  * stretch resumes at the right place instead of accumulating lag.
  */
 
@@ -40,9 +40,9 @@ export function sleep(ms: number, signal: AbortSignal): Promise<void> {
   });
 }
 
-/** Sleep until an absolute `performance.now()` deadline. */
-export function sleepUntil(deadline: number, signal: AbortSignal): Promise<void> {
-  return sleep(deadline - performance.now(), signal);
+/** Sleep until an absolute wall-clock deadline. */
+export function sleepUntil(deadline: number, signal: AbortSignal, now: () => number): Promise<void> {
+  return sleep(deadline - now(), signal);
 }
 
 /**
@@ -90,12 +90,13 @@ export async function waitFor<T>(
   read: () => T | null,
   timeoutMs: number,
   signal: AbortSignal,
+  now: () => number,
 ): Promise<T | null> {
-  const deadline = performance.now() + timeoutMs;
+  const deadline = now() + timeoutMs;
   for (;;) {
     const value = read();
     if (value !== null) return value;
-    if (performance.now() >= deadline) return null;
+    if (now() >= deadline) return null;
     await nextFrame(signal);
   }
 }

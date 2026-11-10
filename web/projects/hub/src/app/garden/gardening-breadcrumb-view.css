@@ -1,0 +1,58 @@
+:host {
+  display: block;
+  flex: none;
+  min-width: 0;
+}
+/* The breadcrumb — `Gardening › {project} › {surface}`, the lens shown in place. */
+.crumbs {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: 8px;
+  min-height: 36px;
+  padding: 0 14px;
+  border-bottom: 1px solid var(--bezel);
+  font-size: var(--fs-sm);
+  overflow-x: auto;
+}
+.crumb {
+  color: var(--label);
+  white-space: nowrap;
+}
+.crumb.current {
+  color: var(--snow);
+}
+.crumb-link {
+  color: var(--cyan);
+  text-decoration: none;
+}
+.crumb-link:hover,
+.crumb-link:focus-visible {
+  text-decoration: underline;
+}
+/* The project menu: what a choice keeps, then each project with its proposals waiting. */
+.menu-head {
+  padding: 6px 12px;
+  border-bottom: 1px solid var(--line);
+  color: var(--label);
+  font-size: var(--fs-xs);
+  white-space: nowrap;
+}
+.menu-choice {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  min-width: 0;
+}
+.menu-waiting {
+  color: var(--label);
+  font-size: var(--fs-xs);
+  white-space: nowrap;
+}
+.sep {
+  color: var(--label-dim);
+}
+.project-crumb [trigger] {
+  color: var(--amber-hi);
+  white-space: nowrap;
+}

@@ -1,44 +1,12 @@
-<nav class="crumbs" aria-label="Breadcrumb" data-testid="gardening-crumbs">
-  <a class="crumb crumb-link" [attr.href]="doorwayUrl" data-testid="gardening-crumb-doorway" (click)="openDoorway($event)"
-    >Gardening</a
-  >
-  <span class="sep" aria-hidden="true">›</span>
-  <fleet-kit-menu
-    class="project-crumb"
-    ariaLabel="Switch project"
-    testid="gardening-crumb-project"
-    [menu]="projectMenu"
-  >
-    <span trigger>{{ projectName() }} ▾</span>
-  </fleet-kit-menu>
-  @if (surfaceLabel(); as label) {
-    <span class="sep" aria-hidden="true">›</span>
-    <span class="crumb current" data-testid="gardening-crumb-surface">{{ label }}</span>
-  }
-</nav>
-<ng-template #projectMenu>
-  <fleet-kit-menu-panel testid="gardening-crumb-project-panel">
-    <div class="menu-head" data-testid="gardening-crumb-project-head">
-      Switch project — stays on {{ surfaceLabel() ?? 'this surface' }}
-    </div>
-    @for (choice of projectChoices(); track choice.slug) {
-      <fleet-kit-menu-item-radio
-        [checked]="choice.slug === lensSlug()"
-        [testid]="'gardening-crumb-project-' + (choice.slug ?? 'all')"
-        (triggered)="chooseProject(choice.slug)"
-      >
-        <span class="menu-choice">
-          <span>{{ choice.label }}</span>
-          @if (choice.waiting !== null) {
-            <span class="menu-waiting" [attr.data-testid]="'gardening-crumb-waiting-' + choice.slug">{{
-              waitingLabel(choice.waiting)
-            }}</span>
-          }
-        </span>
-      </fleet-kit-menu-item-radio>
-    }
-  </fleet-kit-menu-panel>
-</ng-template>
+<app-gardening-breadcrumb-view
+  [doorwayHref]="doorwayUrl"
+  [projectLabel]="projectName()"
+  [checkedSlug]="lensSlug()"
+  [surfaceLabel]="surfaceLabel()"
+  [choices]="projectChoices()"
+  (doorwayClick)="openDoorway($event)"
+  (projectSelected)="chooseProject($event)"
+/>
 <nav fleetKitTabStrip variant="sub" class="subnav" data-testid="gardening-subnav">
   @for (tab of tabs(); track tab.surface) {
     <a

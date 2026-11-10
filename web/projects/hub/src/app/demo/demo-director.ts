@@ -1,9 +1,10 @@
 import { Injectable, inject, signal } from '@angular/core';
 import { Router } from '@angular/router';
-import { type ArtifactView, injectHubChunkDetailQuery, sortArtifacts } from 'fleet';
+import { type ArtifactView, FLEET_CLOCK, injectHubChunkDetailQuery, sortArtifacts } from 'fleet';
 import { injectHubBoardChunksQuery } from '../core/chunks.query';
 
 import { type DemoConfig, demoQueryParams, readDemoConfig } from './demo-config';
+import { DEMO_RANDOM } from './demo-random';
 import { DemoKiosk } from './demo-kiosk';
 import { scrollersIn, slowScrollToBottom } from './demo-scroll';
 import { DemoAborted, sleep, sleepUntil, waitFor } from './demo-timing';
@@ -41,6 +42,8 @@ import { ProjectLens } from '../core/project-lens';
 @Injectable({ providedIn: 'root' })
 export class DemoDirector {
   private readonly lens = inject(ProjectLens);
+  private readonly clock = inject(FLEET_CLOCK);
+  private readonly random = inject(DEMO_RANDOM);
 
   private readonly router = inject(Router);
   private readonly kiosk = inject(DemoKiosk);
@@ -92,7 +95,7 @@ export class DemoDirector {
   }
 
   private async runCycle(signal: AbortSignal): Promise<void> {
-    const chunkId = await waitFor(() => this.pickChunk(), 60_000, signal);
+    const chunkId = await waitFor(() => this.pickChunk(), 60_000, signal, this.clock);
     if (chunkId === null) {
       // An empty (or unresolved) fleet — wait a beat and ask again rather than
       // spin the router against nothing.
@@ -100,11 +103,11 @@ export class DemoDirector {
       return;
     }
 
-    const cycleEnd = performance.now() + this.config.swapChunkMs;
+    const cycleEnd = this.clock() + this.config.swapChunkMs;
     this.touring.set(chunkId);
 
     await this.go(['/board'], { chunk: chunkId, tab: null, artifact: null });
-    const dock = await waitFor(() => showing('chunk-detail', 'detail-id', chunkId), 15_000, signal);
+    const dock = await waitFor(() => showing('chunk-detail', 'detail-id', chunkId), 15_000, signal, this.clock);
 
     // The board holds for the **whole** `boardScrollMs`, whether or not the dock
     // has anywhere to scroll. A short chunk's dock fits without overflowing, and
@@ -112,15 +115,15 @@ export class DemoDirector {
     // pages rather than a beat of its own — the dwell is the point, the scroll is
     // just what fills it. Timed from the dock's arrival, so a slow read costs the
     // demo waiting time, never scrolling time.
-    const boardEnd = performance.now() + this.config.boardScrollMs;
-    if (dock !== null) await slowScrollToBottom(scrollersIn(dock), this.config.boardScrollMs, signal);
-    await sleepUntil(boardEnd, signal);
+    const boardEnd = this.clock() + this.config.boardScrollMs;
+    if (dock !== null) await slowScrollToBottom(scrollersIn(dock), this.config.boardScrollMs, signal, this.clock);
+    await sleepUntil(boardEnd, signal, this.clock);
 
     // Belt to the config clamp's braces (`MAX_BOARD_SHARE`): descend only if the
     // cycle has time left to spend down there. Navigating with nothing remaining
     // would show the chunk page for a single frame before the swap — the flicker
     // the board dwell exists to prevent, reintroduced one step later.
-    if (performance.now() < cycleEnd) {
+    if (this.clock() < cycleEnd) {
       await this.go(['/board/chunk', chunkId], { chunk: null, tab: 'artifacts', artifact: null });
       await this.tourArtifacts(chunkId, cycleEnd, signal);
     }
@@ -145,26 +148,26 @@ export class DemoDirector {
   private async tourArtifacts(chunkId: string, cycleEnd: number, signal: AbortSignal): Promise<void> {
     let shown: string | null = null;
 
-    while (performance.now() < cycleEnd) {
-      const artifacts = await waitFor(() => this.artifacts(), 10_000, signal);
+    while (this.clock() < cycleEnd) {
+      const artifacts = await waitFor(() => this.artifacts(), 10_000, signal, this.clock);
       if (artifacts === null || artifacts.length === 0) {
         // Nothing to tour. Hold the chunk page for one dwell so the swap reads as
         // a slide rather than a flicker, then let the cycle end early — the next
         // chunk is the more interesting thing to show.
-        await sleep(Math.min(this.config.artifactMs, Math.max(0, cycleEnd - performance.now())), signal);
+        await sleep(Math.min(this.config.artifactMs, Math.max(0, cycleEnd - this.clock())), signal);
         return;
       }
 
-      const dwellEnd = Math.min(performance.now() + this.config.artifactMs, cycleEnd);
-      const key = pickAnother(artifacts, shown);
+      const dwellEnd = Math.min(this.clock() + this.config.artifactMs, cycleEnd);
+      const key = pickAnother(artifacts, shown, this.random);
       shown = key;
 
       await this.go(['/board/chunk', chunkId], { tab: 'artifacts', artifact: key });
-      const body = await waitFor(() => showing('artifacts-tab-artifact', 'artifacts-tab-artifact-key', key), 8000, signal);
+      const body = await waitFor(() => showing('artifacts-tab-artifact', 'artifacts-tab-artifact-key', key), 8000, signal, this.clock);
       if (body !== null) {
-        await slowScrollToBottom(scrollersIn(body), Math.max(0, dwellEnd - performance.now()), signal);
+        await slowScrollToBottom(scrollersIn(body), Math.max(0, dwellEnd - this.clock()), signal, this.clock);
       }
-      await sleepUntil(dwellEnd, signal);
+      await sleepUntil(dwellEnd, signal, this.clock);
     }
   }
 
@@ -180,7 +183,7 @@ export class DemoDirector {
   private pickChunk(): string | null {
     const chunks = this.chunksQuery.data()?.chunks ?? [];
     if (chunks.length === 0) return null;
-    return chunks[Math.floor(Math.random() * chunks.length)].chunk_id;
+    return chunks[Math.floor(this.random() * chunks.length)].chunk_id;
   }
 
   /** Navigate, carrying the demo params. Params named `null` are cleared, so a
@@ -194,10 +197,10 @@ export class DemoDirector {
 
 /** A random entry that is not `current`, falling back to `current` when the
  * store holds nothing else to move to. */
-function pickAnother(artifacts: readonly ArtifactView[], current: string | null): string {
+function pickAnother(artifacts: readonly ArtifactView[], current: string | null, random: () => number): string {
   const others = artifacts.filter((artifact) => artifact.key !== current);
   const pool = others.length > 0 ? others : artifacts;
-  return pool[Math.floor(Math.random() * pool.length)].key;
+  return pool[Math.floor(random() * pool.length)].key;
 }
 
 /**

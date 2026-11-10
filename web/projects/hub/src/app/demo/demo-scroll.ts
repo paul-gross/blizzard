@@ -36,7 +36,7 @@ export function scrollersIn(root: HTMLElement): HTMLElement[] {
  * step — the dock's three columns descend together rather than one after
  * another.
  *
- * Paced off `performance.now()` against an absolute deadline (see
+ * Paced off `FLEET_CLOCK` against an absolute deadline (see
  * `demo-timing.ts`), and each element's travel is re-measured every frame: the
  * board is live, so an SSE update that appends a timeline row mid-scroll
  * lengthens the target instead of stranding the pane short of the new bottom.
@@ -48,14 +48,15 @@ export async function slowScrollToBottom(
   targets: readonly HTMLElement[],
   durationMs: number,
   signal: AbortSignal,
+  now: () => number,
 ): Promise<void> {
   if (targets.length === 0 || durationMs <= 0) return;
 
   const starts = targets.map((el) => el.scrollTop);
-  const startedAt = performance.now();
+  const startedAt = now();
 
   for (;;) {
-    const elapsed = performance.now() - startedAt;
+    const elapsed = now() - startedAt;
     const progress = Math.min(1, elapsed / durationMs);
     const eased = (1 - Math.cos(Math.PI * progress)) / 2;
 

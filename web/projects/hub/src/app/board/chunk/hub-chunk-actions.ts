@@ -5,7 +5,7 @@ import { type AnswerVars, injectAnswerQuestionMutation, injectResolveDecisionMut
 import { answerQuestionMutationKey } from '../../core/mutation-keys';
 import { hasPermission, injectMeQuery } from '../../core/auth/me.query';
 import { injectProjectsQuery } from '../../core/projects.query';
-import { injectShowProjectColors } from '../../core/project-lens-colors';
+import { injectShowProjectColors, projectColorOf } from '../../core/project-lens-colors';
 
 /** The graphs view's own path segments — the target every hub composition site links a
  * graph badge to. */
@@ -96,7 +96,7 @@ export const HUB_CHUNK_PAGE_PROVIDERS: Provider[] = [
       boardLinkBase: () => BOARD_LINK_BASE,
       actions: injectHubChunkActions,
       projectColor: (projectId: string) =>
-        showProjectColors() ? (projects.data()?.find((p) => p.project_id === projectId)?.color ?? null) : null,
+        projectColorOf(showProjectColors(), projects.data(), projectId),
     };
   }),
 ];
