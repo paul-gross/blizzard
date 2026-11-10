@@ -1662,8 +1662,9 @@ _LOOP_CONTEXT = frozenset({"LoopContext"})
 
 
 def _without_dispatch(tree: ast.Module) -> ast.Module:
-    """``tree`` minus the dispatch code of ``loop/steps.py``: the ``LoopContext`` import and the ``Step`` base
-    class's ``ctx`` field. Every phase body is left in, so it is held to the same guards as any step."""
+    """``tree`` minus the dispatch code of ``src/blizzard/runner/loop/steps.py``: the ``LoopContext`` import
+    and the ``Step`` base class's ``ctx`` field. Every phase body is left in, so it is held to the same
+    guards as any step."""
     tree.body = [
         node
         for node in tree.body
