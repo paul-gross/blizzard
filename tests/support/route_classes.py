@@ -313,6 +313,7 @@ HUMAN: dict[tuple[str, str], Permission] = {
     ("POST", "/api/projects/{project}/garden-proposals"): Permission.CHUNK_CONTROL,
     ("GET", "/api/projects/{project}/runs"): Permission.FLEET_VIEW,
     ("GET", "/api/projects/{project}/runs/{chunk_id}"): Permission.FLEET_VIEW,
+    ("GET", "/api/config/landing-policies"): Permission.FLEET_VIEW,
     ("GET", "/api/config/schema/{kind}"): Permission.FLEET_VIEW,
     ("GET", "/api/config/changes"): Permission.FLEET_VIEW,
     ("GET", "/api/config/export"): Permission.FLEET_VIEW,
