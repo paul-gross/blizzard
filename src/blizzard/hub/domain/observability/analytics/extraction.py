@@ -133,13 +133,14 @@ class AgentSpawnExtractor:
         return [{"agent_type": agent_type}]
 
 
-#: The registered set this build derives — appending a new extractor here is the
-#: whole of "adding a kind."
-DEFAULT_EXTRACTORS: tuple[ITurnEventExtractor, ...] = (
-    FileReadExtractor(),
-    SkillInvocationExtractor(),
-    AgentSpawnExtractor(),
-)
+def shipped_extractors() -> tuple[ITurnEventExtractor, ...]:
+    """The registered set this build derives — appending a new extractor here is the
+    whole of "adding a kind." The composition root builds it once and injects it."""
+    return (
+        FileReadExtractor(),
+        SkillInvocationExtractor(),
+        AgentSpawnExtractor(),
+    )
 
 
 def _parse_occurred_at(raw: str | None) -> datetime | None:
@@ -158,7 +159,7 @@ def extract_events(
     turns: list[TranscriptTurn],
     *,
     normalizer_version: str,
-    extractors: Sequence[ITurnEventExtractor] = DEFAULT_EXTRACTORS,
+    extractors: Sequence[ITurnEventExtractor],
 ) -> list[ExtractedEvent]:
     """Every extractor's recognized events across ``turns`` and every nested sidechain:
     depth 0 at the main lane, incrementing once per sidechain nesting level;

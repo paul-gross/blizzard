@@ -94,7 +94,7 @@ def egress_sweep(
         events=hub_event_log_of(hub.engine),
         clock=hub.clock,
         config=config,
-        pass_lock=pass_lock,
+        pass_lock=pass_lock or threading.Lock(),
     )
 
 

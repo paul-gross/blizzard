@@ -16,7 +16,8 @@ from blizzard.hub.domain.config.repositories import IReadRepositoryRecordReposit
 from blizzard.hub.domain.config.secrets import ISecretReader
 from blizzard.hub.forge.budget import ForgeBudgets
 from blizzard.hub.forge.internal.github_landing import GitHubLanding
-from blizzard.hub.forge.registry import ForgeBinding, ForgeRegistry, IForgeAdapter
+from blizzard.hub.forge.rates import rate_dialect
+from blizzard.hub.forge.registry import ForgeBinding, ForgeRegistry, IForgeAdapter, WriteLocks
 from blizzard.hub.live_config import ConfigObjectCache
 
 
@@ -39,6 +40,7 @@ def build_forge_registry(
     secrets: ISecretReader,
     clock: IClock,
     budgets: ForgeBudgets,
+    write_locks: WriteLocks,
     capabilities: Mapping[str, frozenset[Capability]] = FORGE_KIND_CAPABILITIES,
     instrument: Callable[[httpx2.AsyncClient], None] | None = None,
 ) -> ForgeRegistry:
@@ -51,4 +53,6 @@ def build_forge_registry(
         build=lambda binding: build_forge_adapter(binding, clock=clock, instrument=instrument),
         capabilities=capabilities,
         budgets=budgets,
+        write_locks=write_locks,
+        dialects=rate_dialect,
     )

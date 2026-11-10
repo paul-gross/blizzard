@@ -42,6 +42,7 @@ from blizzard.hub.store.internal.tenant_settings_store import TenantSettingsStor
 from blizzard.hub.store.internal.urgency_store import UrgencyOrderStore, UrgencyStore
 from blizzard.hub.tenancy import HUB_SCOPED_OPTION, StoreScope, TenantId, UnknownTenant
 from tests.support.scaffolding import (
+    TEST_HUB_ACTIONS,
     HubHarness,
     build_hub,
     close_tenant,
@@ -254,7 +255,7 @@ def test_an_unknown_admin_creates_nothing_though_the_graphs_were_already_minted(
 
 
 def test_a_creation_interrupted_after_its_mints_leaves_no_partial_tenant(hub: HubHarness) -> None:
-    mint = packaged_minter(hub.clock, YAML_CODEC)
+    mint = packaged_minter(hub.clock, YAML_CODEC, TEST_HUB_ACTIONS.catalogue)
     minted: list[int] = []
 
     def mint_then_fail(graphs: IWriteGraphRepository) -> None:

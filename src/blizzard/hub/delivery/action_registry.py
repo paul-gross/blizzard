@@ -2,13 +2,12 @@
 pass with, keyed by one name.
 
 The test actions join only when ``BLIZZARD_TEST_ACTIONS=1`` is set beside the crash fence
-``BLIZZARD_CRASH_FENCE=1``, read once at import as ``src/blizzard/foundation/crash.py`` reads its fence, so an
+``BLIZZARD_CRASH_FENCE=1``, read from the environ the hub's root hands to :func:`build_hub_actions`, so an
 installation can never mint them. The read lives here, outside ``hub/delivery/actions/``, whose modules
 may not import ``os`` (``bzh:hub-action-purity``)."""
 
 from __future__ import annotations
 
-import os
 from collections.abc import Iterable, Mapping
 from dataclasses import dataclass
 from types import MappingProxyType
@@ -51,13 +50,12 @@ SHIPPED_ACTIONS = HubActions.of([Land(), RecordFindings(), GardenDeliver(), Pass
 TEST_ACTIONS: tuple[IHubAction, ...] = (AnswerAction(), SequenceAction(), BlockAction())
 
 
-def _test_actions_admitted() -> bool:
-    return os.environ.get(ENV_TEST_ACTIONS) == "1" and os.environ.get(ENV_CRASH_FENCE) == "1"
+def _test_actions_admitted(environ: Mapping[str, str]) -> bool:
+    return environ.get(ENV_TEST_ACTIONS) == "1" and environ.get(ENV_CRASH_FENCE) == "1"
 
 
-#: What this hub process serves: the shipped actions, and the test actions behind both fences.
-HUB_ACTIONS = (
-    HubActions.of([*SHIPPED_ACTIONS.implementations.values(), *TEST_ACTIONS])
-    if _test_actions_admitted()
-    else SHIPPED_ACTIONS
-)
+def build_hub_actions(environ: Mapping[str, str]) -> HubActions:
+    """What a hub process serves: the shipped actions, and the test actions behind both fences in ``environ``."""
+    if _test_actions_admitted(environ):
+        return HubActions.of([*SHIPPED_ACTIONS.implementations.values(), *TEST_ACTIONS])
+    return SHIPPED_ACTIONS

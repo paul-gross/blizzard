@@ -11,7 +11,7 @@ import asyncio
 import json
 import threading
 import time
-from collections.abc import Iterator, Mapping
+from collections.abc import Callable, Iterator, Mapping
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
@@ -33,11 +33,11 @@ from blizzard.hub.domain.config.repositories import (
     RepositorySecretUnavailable,
 )
 from blizzard.hub.domain.config.secrets import SecretName
-from blizzard.hub.forge.budget import BudgetKey, ForgeBudgetLow, ForgeBudgets, ForgePriority
+from blizzard.hub.forge.budget import BudgetKey, ForgeBudgetLow, ForgeBudgets, ForgePriority, IForgeRateDialect
 from blizzard.hub.forge.internal.github_landing import GitHubLanding
 from blizzard.hub.forge.landing import ForgeCapabilityMissing, ForgeRateLimited, MergeMethod
 from blizzard.hub.forge.rates import rate_dialect
-from blizzard.hub.forge.registry import ForgeBinding, ForgeRegistry, TurnCutOff
+from blizzard.hub.forge.registry import ForgeBinding, ForgeRegistry, TurnCutOff, WriteLocks
 from blizzard.hub.secrets import hub_key_provider, secret_cipher
 from blizzard.hub.store.internal.repository_record_store import RepositoryRecordStore
 from blizzard.hub.tenancy import StoreScope
@@ -96,7 +96,14 @@ def _closed(transport: _Transport) -> str | None:
 
 
 class _World:
-    def __init__(self, tmp_path: Path, capabilities: Mapping[str, frozenset[Capability]]) -> None:
+    def __init__(
+        self,
+        tmp_path: Path,
+        capabilities: Mapping[str, frozenset[Capability]],
+        *,
+        write_locks: WriteLocks | None = None,
+        dialects: Callable[[str], IForgeRateDialect] = rate_dialect,
+    ) -> None:
         db_url = f"sqlite:///{tmp_path / 'hub.db'}"
         migrated_hub_at(db_url)
         engine = create_engine_from_url(db_url)
@@ -109,6 +116,7 @@ class _World:
         self.repository = self.authoring.create_repository("widget", None, _DRAFT.on(self.forge_id), OP).repository_id
         live = build_live_config(self.stores, cipher=secret_cipher(keys))
         self.transports: list[_Transport] = []
+        self.bindings: list[ForgeBinding] = []
         self.hold_next = False
         self.next_headers: dict[str, str] = {}
         self.budgets = ForgeBudgets(clock=clock, dialects=rate_dialect)
@@ -121,9 +129,12 @@ class _World:
             build=self._build,
             capabilities=capabilities,
             budgets=self.budgets,
+            write_locks=write_locks or WriteLocks(),
+            dialects=dialects,
         )
 
     def _build(self, binding: ForgeBinding) -> GitHubLanding:
+        self.bindings.append(binding)
         transport = _Transport(hold=self.hold_next)
         transport.headers = self.next_headers
         self.transports.append(transport)
@@ -176,6 +187,22 @@ def test_an_adapter_superseded_by_an_edit_closes_on_the_action_loop_after_its_pa
     assert _closed(first) == "hub-action-loop"
 
 
+def test_a_binding_carries_the_write_locks_and_dialect_the_registry_was_handed(tmp_path: Path) -> None:
+    locks = WriteLocks()
+    asked: list[str] = []
+
+    def dialects(kind: str) -> IForgeRateDialect:
+        asked.append(kind)
+        return rate_dialect(kind)
+
+    world = _World(tmp_path, FORGE_KIND_CAPABILITIES, write_locks=locks, dialects=dialects)
+    world.registry.changes(world.repository, priority=ForgePriority.LANDING)
+
+    (binding,) = world.bindings
+    assert asked == ["github"]
+    assert binding.write_lock() is locks.lock(world.forge_id, "gh")
+
+
 def test_a_forge_edit_rebuilds_the_adapter_on_its_new_address(world: _World, loop: ActionLoop) -> None:
     loop.submit(world.registry.changes(world.repository, priority=ForgePriority.LANDING).change(7)).result(5)
     world.authoring.edit_forge(world.forge(), ForgeEdit(api_base="http://forge2.fixture"), OP)
@@ -199,7 +226,7 @@ def test_an_unchanged_record_hands_out_the_same_adapter(world: _World, loop: Act
 def test_a_hub_shut_down_closes_its_cached_adapters_before_the_action_loop_stops(tmp_path: Path) -> None:
     transport = _Transport()
 
-    def forges(stores: TenantStores, live: LiveConfig, budgets: ForgeBudgets) -> ForgeRegistry:
+    def forges(stores: TenantStores, live: LiveConfig, budgets: ForgeBudgets, write_locks: WriteLocks) -> ForgeRegistry:
         return ForgeRegistry(
             records=stores.repository_records,
             forges=stores.forge_records,
@@ -208,6 +235,8 @@ def test_a_hub_shut_down_closes_its_cached_adapters_before_the_action_loop_stops
             build=lambda binding: GitHubLanding(binding, clock=FixedClock(_NOW), transport=transport),
             capabilities=FORGE_KIND_CAPABILITIES,
             budgets=budgets,
+            write_locks=write_locks,
+            dialects=rate_dialect,
         )
 
     hub = build_hub(tmp_path, forges=forges)

@@ -51,7 +51,6 @@ from blizzard.hub.forge.landing import (
     Rerun,
     Update,
 )
-from blizzard.hub.forge.rates import rate_dialect
 from blizzard.hub.live_config import ConfigObjectCache
 
 
@@ -108,6 +107,8 @@ class ForgeRegistry:
         build: Callable[[ForgeBinding], IForgeAdapter],
         capabilities: Mapping[str, frozenset[Capability]],
         budgets: ForgeBudgets,
+        write_locks: WriteLocks,
+        dialects: Callable[[str], IForgeRateDialect],
     ) -> None:
         self._records = records
         self._forges = forges
@@ -115,7 +116,8 @@ class ForgeRegistry:
         self._secrets = secrets
         self._build = build
         self._capabilities = capabilities
-        self._locks = WriteLocks()
+        self._locks = write_locks
+        self._dialects = dialects
         self._budgets = budgets
 
     @property
@@ -195,7 +197,7 @@ class ForgeRegistry:
                 repo=fields.repo,
                 token=token,
                 write_lock=partial(self._locks.lock, forge.forge_id, fields.secret_name),
-                dialect=rate_dialect(forge.kind),
+                dialect=self._dialects(forge.kind),
                 learn=partial(self._budgets.learn, BudgetKey(forge.forge_id, fields.secret_name)),
             )
         )
