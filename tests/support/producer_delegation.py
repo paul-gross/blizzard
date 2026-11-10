@@ -5,7 +5,6 @@ import hashlib
 import inspect
 import re
 import textwrap
-from pathlib import Path
 from types import FunctionType, MethodType, ModuleType
 from typing import Any
 
@@ -294,15 +293,6 @@ def source_fingerprint(function: FunctionType) -> str:
     """Fingerprint implementation syntax, independent of formatting and line numbers."""
     source = textwrap.dedent(inspect.getsource(function))
     return hashlib.sha256(stable_dump(ast.parse(source)).encode()).hexdigest()
-
-
-def application_source_digest(root: Path) -> str:
-    """Cover unresolved hub collaborator implementations and their wiring conservatively."""
-    sources = root / "src" / "blizzard" / "hub"
-    entries = {
-        str(path.relative_to(sources)): stable_dump(ast.parse(path.read_text())) for path in sources.rglob("*.py")
-    }
-    return hashlib.sha256(repr(sorted(entries.items())).encode()).hexdigest()
 
 
 def producer_inventory_failures(
