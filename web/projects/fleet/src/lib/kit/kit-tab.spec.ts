@@ -1,8 +1,4 @@
-import {
-  Component,
-  provideZonelessChangeDetection,
-  signal,
-} from '@angular/core';
+import { Component, provideZonelessChangeDetection, signal } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 
 import { KitTab, KitTabStrip } from './kit-tab';
@@ -11,9 +7,7 @@ import { KitTab, KitTabStrip } from './kit-tab';
   selector: 'fleet-test-host',
   imports: [KitTab, KitTabStrip],
   template: `<nav fleetKitTabStrip>
-    <a fleetKitTab [count]="count()" [countHot]="hot()" countTestid="tab-count"
-      >Proposals</a
-    >
+    <a fleetKitTab [count]="count()" [countHot]="hot()" countTestid="tab-count">Proposals</a>
   </nav>`,
 })
 class TestHost {
@@ -37,9 +31,7 @@ describe('KitTab count', () => {
 
   it('renders no count span while the count is null', async () => {
     const fixture = await render();
-    expect(
-      (fixture.nativeElement as HTMLElement).querySelector('.cnt'),
-    ).toBeNull();
+    expect((fixture.nativeElement as HTMLElement).querySelector('.cnt')).toBeNull();
   });
 
   it('renders a count, zero included, with the testid, after the projected label', async () => {
@@ -72,13 +64,7 @@ describe('KitTab count', () => {
   selector: 'fleet-test-bottom-host',
   imports: [KitTab, KitTabStrip],
   template: `<nav fleetKitTabStrip variant="bottom">
-    <a
-      fleetKitTab
-      variant="bottom"
-      role="link"
-      [unavailable]="unavailable()"
-      [count]="count()"
-      countTestid="tab-count"
+    <a fleetKitTab variant="bottom" role="link" [unavailable]="unavailable()" [count]="count()" countTestid="tab-count"
       >Asks</a
     >
   </nav>`,
@@ -111,9 +97,7 @@ describe('KitTab bottom variant', () => {
     await fixture.whenStable();
     const el = fixture.nativeElement as HTMLElement;
     expect(el.querySelector('.cnt')).toBeNull();
-    const badge = el.querySelector(
-      'fleet-kit-count-badge [data-testid="tab-count"]',
-    );
+    const badge = el.querySelector('fleet-kit-count-badge [data-testid="tab-count"]');
     expect(badge?.textContent?.trim()).toBe('2');
   });
 

@@ -1,9 +1,4 @@
-import {
-  ChangeDetectionStrategy,
-  Component,
-  computed,
-  input,
-} from '@angular/core';
+import { ChangeDetectionStrategy, Component, computed, input } from '@angular/core';
 
 import { toneColor } from './kit-badge';
 import type { Tone } from './tone';
@@ -29,9 +24,7 @@ const BEACON_COLOR: Record<BeaconTone, string> = {
 /** The token color for either vocabulary: a {@link BeaconTone} through its own ladder, a
  * {@link Tone} through {@link toneColor}. The two share no key. */
 function beaconColor(tone: BeaconTone | Tone): string {
-  return tone === 'amber' || tone === 'red' || tone === 'green'
-    ? BEACON_COLOR[tone]
-    : toneColor(tone);
+  return tone === 'amber' || tone === 'red' || tone === 'green' ? BEACON_COLOR[tone] : toneColor(tone);
 }
 
 /**
@@ -64,11 +57,7 @@ export class KitBeacon {
   /** Whether an active beacon throws a halo of its own color; nothing shows while inactive. */
   readonly glow = input(false);
 
-  protected readonly glowShadow = computed(() =>
-    this.glow() && this.active() ? `0 0 8px ${this.color()}` : null,
-  );
+  protected readonly glowShadow = computed(() => (this.glow() && this.active() ? `0 0 8px ${this.color()}` : null));
 
-  protected readonly color = computed(() =>
-    this.active() ? beaconColor(this.tone()) : 'var(--label-dim)',
-  );
+  protected readonly color = computed(() => (this.active() ? beaconColor(this.tone()) : 'var(--label-dim)'));
 }

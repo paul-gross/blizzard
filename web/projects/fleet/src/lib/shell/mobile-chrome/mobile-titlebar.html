@@ -3,19 +3,10 @@
   <span class="word">blizzard</span>
   <ng-content select="[fleetMobileTitle]" />
   @if (caption()) {
-  <span
-    class="caption"
-    [attr.title]="caption()"
-    [attr.data-testid]="captionTestid()"
-    >{{ caption() }}</span
-  >
-  } @if (detail()) {
-  <span
-    class="detail"
-    [attr.title]="detail()"
-    [attr.data-testid]="detailTestid()"
-    >{{ detail() }}</span
-  >
+    <span class="caption" [attr.title]="caption()" [attr.data-testid]="captionTestid()">{{ caption() }}</span>
+  }
+  @if (detail()) {
+    <span class="detail" [attr.title]="detail()" [attr.data-testid]="detailTestid()">{{ detail() }}</span>
   }
   <span class="spacer"></span>
   <ng-content select="[fleetMobileStatus]" />
@@ -27,10 +18,5 @@
     [attr.title]="live() ? 'live' : 'offline'"
     [attr.data-testid]="livedotTestid()"
   />
-  <fleet-kit-menu
-    class="menu"
-    ariaLabel="Shell options"
-    [testid]="menuTestid()"
-    [menu]="menu()"
-  />
+  <fleet-kit-menu class="menu" ariaLabel="Shell options" [testid]="menuTestid()" [menu]="menu()" />
 </header>

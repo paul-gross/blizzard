@@ -1,10 +1,4 @@
-import {
-  ChangeDetectionStrategy,
-  Component,
-  TemplateRef,
-  computed,
-  input,
-} from '@angular/core';
+import { ChangeDetectionStrategy, Component, TemplateRef, computed, input } from '@angular/core';
 
 import { BrandMark } from '../../core/design';
 import { KitBeacon, KitMenu } from '../../kit';

@@ -1,16 +1,8 @@
 import { provideZonelessChangeDetection } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { provideRouter, Router } from '@angular/router';
-import {
-  QueryClient,
-  provideTanStackQuery,
-} from '@tanstack/angular-query-experimental';
-import {
-  EVENT_SOURCE_FACTORY,
-  ViewportService,
-  type EventSourceFactory,
-  type FleetEventSource,
-} from 'fleet';
+import { QueryClient, provideTanStackQuery } from '@tanstack/angular-query-experimental';
+import { EVENT_SOURCE_FACTORY, ViewportService, type EventSourceFactory, type FleetEventSource } from 'fleet';
 import {
   capacitiesView,
   hostEnvironmentView,
@@ -48,14 +40,7 @@ class FakeEventSource {
 
 /** One serving runner, `r1` (`rn_1`), on the host. */
 const RUNNERS = {
-  items: [
-    hostRunnerView({
-      runner_id: 'rn_1',
-      name: 'r1',
-      bindings: [{ project: 'p', workspace_id: 'ws', agents: 4 }],
-      max_agents: 4,
-    }),
-  ],
+  items: [hostRunnerView({ runner_id: 'rn_1', name: 'r1', bindings: [{ project: 'p', workspace_id: 'ws', agents: 4 }], max_agents: 4 })],
 };
 
 /** `r1`'s dashboard — reaching its hub, nothing open. */
@@ -64,52 +49,19 @@ const DASHBOARD = runnerDashboardView({
     runner_id: 'rn_1',
     runner_name: 'r1',
     workspace_id: 'ws',
-    capacities: capacitiesView({
-      bindings: [
-        {
-          project: 'p',
-          project_id: 'proj_p',
-          workspace_id: 'ws',
-          agents: 4,
-          used: 0,
-          free: 4,
-        },
-      ],
-    }),
+    capacities: capacitiesView({ bindings: [{ project: 'p', project_id: 'proj_p', workspace_id: 'ws', agents: 4, used: 0, free: 4 }] }),
     hub: hubConnectivityView({ endpoint: 'http://127.0.0.1:8421' }),
-    served_projects: [
-      servedProjectStatusView({
-        entry: 'p',
-        project_id: 'proj_p',
-        slug: 'p',
-        name: 'P',
-        color: 'slate',
-      }),
-    ],
+    served_projects: [servedProjectStatusView({ entry: 'p', project_id: 'proj_p', slug: 'p', name: 'P', color: 'slate' })],
   }),
 });
 
 /** The host's own reads, beyond its runners. */
 const HOST: Parameters<typeof stubRunnerClient>[0] = {
-  'GET /api/host/environments': () => ({
-    workspaces: [
-      {
-        workspace_id: 'ws',
-        items: [hostEnvironmentView({ environment_id: 'e1' })],
-      },
-    ],
-  }),
-  'GET /api/host/workspaces': () => ({
-    items: [{ workspace_id: 'ws', max_environments: 1 }],
-  }),
+  'GET /api/host/environments': () => ({ workspaces: [{ workspace_id: 'ws', items: [hostEnvironmentView({ environment_id: 'e1' })] }] }),
+  'GET /api/host/workspaces': () => ({ items: [{ workspace_id: 'ws', max_environments: 1 }] }),
   'GET /api/host/subscriptions': () => ({ items: [] }),
   'GET /api/host/registration': () =>
-    hostRegistrationView({
-      host_id: 'hs_1',
-      tenant_id: 'ten_1',
-      host_name: 'xps',
-      held_runner_ids: ['rn_1'],
-    }),
+    hostRegistrationView({ host_id: 'hs_1', tenant_id: 'ten_1', host_name: 'xps', held_runner_ids: ['rn_1'] }),
 };
 
 describe('runner App', () => {
@@ -125,26 +77,20 @@ describe('runner App', () => {
       'GET /api/auth/session': () => ({ auth_enabled: false, username: null }),
       'GET /api/flags': () => ({ flags: {}, overridden: [] }),
       'GET /runners/{runner_id}/api/dashboard': (_request, { runner_id }) =>
-        runner_id === 'rn_1'
-          ? DASHBOARD
-          : stubError(404, { detail: 'unknown runner' }),
-      'GET /runners/{runner_id}/api/chunks/{chunk_id}': () =>
-        stubError(404, { detail: 'unknown chunk' }),
+        runner_id === 'rn_1' ? DASHBOARD : stubError(404, { detail: 'unknown runner' }),
+      'GET /runners/{runner_id}/api/chunks/{chunk_id}': () => stubError(404, { detail: 'unknown chunk' }),
       'GET /runners/{runner_id}/api/leases': () => ({ items: [] }),
       'GET /runners/{runner_id}/api/facts': () => ({ items: [] }),
       'GET /runners/{runner_id}/api/asks': () => ({ items: [] }),
       'GET /runners/{runner_id}/api/escalations': () => ({ items: [] }),
       'GET /runners/{runner_id}/api/takeovers': () => ({ items: [] }),
     });
-    const factory: EventSourceFactory = () =>
-      new FakeEventSource() as unknown as FleetEventSource;
+    const factory: EventSourceFactory = () => new FakeEventSource() as unknown as FleetEventSource;
     await TestBed.configureTestingModule({
       imports: [App],
       providers: [
         provideZonelessChangeDetection(),
-        provideTanStackQuery(
-          new QueryClient({ defaultOptions: { queries: { retry: false } } }),
-        ),
+        provideTanStackQuery(new QueryClient({ defaultOptions: { queries: { retry: false } } })),
         provideFlags(runnerFlagsRead),
         provideRouter(routes),
         // `App` starts `RunnerLiveUpdates` unconditionally —
@@ -161,12 +107,7 @@ describe('runner App', () => {
     const fixture = TestBed.createComponent(App);
     const resolved = await router.navigateByUrl(url);
     await settle(fixture);
-    return {
-      router,
-      fixture,
-      resolved,
-      el: fixture.nativeElement as HTMLElement,
-    };
+    return { router, fixture, resolved, el: fixture.nativeElement as HTMLElement };
   }
 
   it('lands the root on the board, with the Board tab active and the filters in the tab strip', async () => {
@@ -174,19 +115,9 @@ describe('runner App', () => {
 
     expect(router.url).toBe('/board');
     expect(el.querySelector('app-panel')).toBeTruthy();
-    expect(
-      el
-        .querySelector('[data-testid="nav-board"]')
-        ?.classList.contains('active'),
-    ).toBe(true);
-    expect(
-      el.querySelector('[data-testid="app-nav"] [data-testid="runner-filter"]'),
-    ).toBeTruthy();
-    expect(
-      el.querySelector(
-        '[data-testid="app-nav"] [data-testid="project-filter"]',
-      ),
-    ).toBeTruthy();
+    expect(el.querySelector('[data-testid="nav-board"]')?.classList.contains('active')).toBe(true);
+    expect(el.querySelector('[data-testid="app-nav"] [data-testid="runner-filter"]')).toBeTruthy();
+    expect(el.querySelector('[data-testid="app-nav"] [data-testid="project-filter"]')).toBeTruthy();
   });
 
   it('lands an unknown path on the board', async () => {
@@ -196,9 +127,7 @@ describe('runner App', () => {
   });
 
   it('mounts the board with its selection kept in the URL', async () => {
-    const { router, el, resolved } = await open(
-      '/board?chunk=ch_01KXKVVF1J3D6H6VYZ3XYN3YJ9',
-    );
+    const { router, el, resolved } = await open('/board?chunk=ch_01KXKVVF1J3D6H6VYZ3XYN3YJ9');
 
     expect(resolved).toBe(true);
     expect(router.url).toBe('/board?chunk=ch_01KXKVVF1J3D6H6VYZ3XYN3YJ9');
@@ -217,16 +146,8 @@ describe('runner App', () => {
     const { el } = await open('/host');
 
     expect(el.querySelector('[data-testid="host-page"]')).toBeTruthy();
-    expect(
-      el
-        .querySelector('[data-testid="nav-host"]')
-        ?.classList.contains('active'),
-    ).toBe(true);
-    expect(
-      el
-        .querySelector('[data-testid="nav-board"]')
-        ?.classList.contains('active'),
-    ).toBe(false);
+    expect(el.querySelector('[data-testid="nav-host"]')?.classList.contains('active')).toBe(true);
+    expect(el.querySelector('[data-testid="nav-board"]')?.classList.contains('active')).toBe(false);
   });
 
   it('redirects the old machine page to the host page, keeping the filters', async () => {
@@ -268,11 +189,7 @@ describe('runner App', () => {
       const { router, el } = await open('/runners/rn_1/machine');
 
       expect(router.url).toBe('/host?runner=r1');
-      expect(
-        el
-          .querySelector('[data-testid="nav-host"]')
-          ?.classList.contains('active'),
-      ).toBe(true);
+      expect(el.querySelector('[data-testid="nav-host"]')?.classList.contains('active')).toBe(true);
     });
   });
 
@@ -287,12 +204,7 @@ describe('runner App', () => {
       const nav = el.querySelector('[data-testid="app-nav"]');
       expect(header).toBeTruthy();
       expect(nav).toBeTruthy();
-      expect(
-        Boolean(
-          header!.compareDocumentPosition(nav!) &
-          Node.DOCUMENT_POSITION_FOLLOWING,
-        ),
-      ).toBe(true);
+      expect(Boolean(header!.compareDocumentPosition(nav!) & Node.DOCUMENT_POSITION_FOLLOWING)).toBe(true);
     });
 
     it('keeps the header mounted on the events page, outside the board route', async () => {
@@ -306,32 +218,16 @@ describe('runner App', () => {
     const { router, fixture } = await open('/board?runner=r1&chunk=ch_1');
     let el = fixture.nativeElement as HTMLElement;
 
-    expect(
-      el
-        .querySelector('[data-testid="nav-board"]')
-        ?.classList.contains('active'),
-    ).toBe(true);
-    expect(
-      el
-        .querySelector('[data-testid="nav-events"]')
-        ?.classList.contains('active'),
-    ).toBe(false);
-    expect(
-      el
-        .querySelector('[data-testid="nav-host"]')
-        ?.classList.contains('active'),
-    ).toBe(false);
+    expect(el.querySelector('[data-testid="nav-board"]')?.classList.contains('active')).toBe(true);
+    expect(el.querySelector('[data-testid="nav-events"]')?.classList.contains('active')).toBe(false);
+    expect(el.querySelector('[data-testid="nav-host"]')?.classList.contains('active')).toBe(false);
 
     el.querySelector<HTMLElement>('[data-testid="nav-events"]')?.click();
     await settle(fixture);
     el = fixture.nativeElement as HTMLElement;
 
     expect(router.url).toBe('/events?runner=r1&chunk=ch_1');
-    expect(
-      el
-        .querySelector('[data-testid="nav-events"]')
-        ?.classList.contains('active'),
-    ).toBe(true);
+    expect(el.querySelector('[data-testid="nav-events"]')?.classList.contains('active')).toBe(true);
 
     el.querySelector<HTMLElement>('[data-testid="nav-board"]')?.click();
     await settle(fixture);
@@ -345,35 +241,13 @@ describe('runner App', () => {
       const { el } = await open('/board');
 
       expect(el.querySelector('[data-testid="app-nav"]')).toBeNull();
-      expect(
-        el.querySelector('[data-testid="local-panel-mobile-tab-bar"]'),
-      ).toBeTruthy();
-      expect(
-        el.querySelector(
-          'app-panel-filters.mobile [data-testid="runner-filter"]',
-        ),
-      ).toBeTruthy();
-      expect(
-        el.querySelector(
-          'app-panel-filters.mobile [data-testid="project-filter"]',
-        ),
-      ).toBeTruthy();
-      expect(
-        el
-          .querySelector('[data-testid="tab-board"]')
-          ?.classList.contains('active'),
-      ).toBe(true);
-      expect(
-        el
-          .querySelector('[data-testid="tab-host"]')
-          ?.classList.contains('active'),
-      ).toBe(false);
+      expect(el.querySelector('[data-testid="local-panel-mobile-tab-bar"]')).toBeTruthy();
+      expect(el.querySelector('app-panel-filters.mobile [data-testid="runner-filter"]')).toBeTruthy();
+      expect(el.querySelector('app-panel-filters.mobile [data-testid="project-filter"]')).toBeTruthy();
+      expect(el.querySelector('[data-testid="tab-board"]')?.classList.contains('active')).toBe(true);
+      expect(el.querySelector('[data-testid="tab-host"]')?.classList.contains('active')).toBe(false);
       expect(el.querySelector('[data-testid="tab-events"]')).toBeTruthy();
-      expect(
-        el
-          .querySelector('[data-testid="tab-asks-runner"]')
-          ?.getAttribute('aria-disabled'),
-      ).toBe('true');
+      expect(el.querySelector('[data-testid="tab-asks-runner"]')?.getAttribute('aria-disabled')).toBe('true');
     });
   });
 });

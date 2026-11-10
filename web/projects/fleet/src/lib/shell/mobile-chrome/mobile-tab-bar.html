@@ -1,30 +1,32 @@
 <nav fleetKitTabStrip variant="bottom" [attr.data-testid]="testid()">
-  @for (item of items(); track item.testid) { @if (item.route && !item.inert) {
-  <a
-    fleetKitTab
-    variant="bottom"
-    [routerLink]="item.route | lensLink"
-    [queryParamsHandling]="item.queryParamsHandling ?? ''"
-    routerLinkActive="active"
-    [routerLinkActiveOptions]="{ exact: item.exact ?? false }"
-    [count]="item.badge || null"
-    [countTestid]="item.badgeTestid ?? null"
-    [attr.data-testid]="item.testid"
-  >
-    {{ item.label }}
-  </a>
-  } @else {
-  <a
-    fleetKitTab
-    variant="bottom"
-    role="link"
-    [unavailable]="!!item.inert"
-    [class.active]="item.active"
-    [count]="item.badge || null"
-    [countTestid]="item.badgeTestid ?? null"
-    [attr.data-testid]="item.testid"
-  >
-    {{ item.label }}
-  </a>
-  } }
+  @for (item of items(); track item.testid) {
+    @if (item.route && !item.inert) {
+      <a
+        fleetKitTab
+        variant="bottom"
+        [routerLink]="item.route | lensLink"
+        [queryParamsHandling]="item.queryParamsHandling ?? ''"
+        routerLinkActive="active"
+        [routerLinkActiveOptions]="{ exact: item.exact ?? false }"
+        [count]="item.badge || null"
+        [countTestid]="item.badgeTestid ?? null"
+        [attr.data-testid]="item.testid"
+      >
+        {{ item.label }}
+      </a>
+    } @else {
+      <a
+        fleetKitTab
+        variant="bottom"
+        role="link"
+        [unavailable]="!!item.inert"
+        [class.active]="item.active"
+        [count]="item.badge || null"
+        [countTestid]="item.badgeTestid ?? null"
+        [attr.data-testid]="item.testid"
+      >
+        {{ item.label }}
+      </a>
+    }
+  }
 </nav>

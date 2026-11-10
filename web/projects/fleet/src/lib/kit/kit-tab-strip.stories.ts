@@ -11,9 +11,7 @@ const meta: Meta<KitTabStrip> = {
   component: KitTabStrip,
   decorators: [moduleMetadata({ imports: [KitTab] })],
   args: { variant: 'top' },
-  argTypes: {
-    variant: { control: 'inline-radio', options: ['top', 'sub', 'bottom'] },
-  },
+  argTypes: { variant: { control: 'inline-radio', options: ['top', 'sub', 'bottom'] } },
   render: (args) => ({
     props: args,
     template: `

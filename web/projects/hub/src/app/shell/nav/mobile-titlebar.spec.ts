@@ -1,61 +1,32 @@
 import { Component, provideZonelessChangeDetection } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { Router, provideRouter } from '@angular/router';
-import {
-  QueryClient,
-  provideTanStackQuery,
-} from '@tanstack/angular-query-experimental';
+import { QueryClient, provideTanStackQuery } from '@tanstack/angular-query-experimental';
 import { vi } from 'vitest';
 
 import type { MeResponse } from 'fleet';
-import {
-  OPERATOR_ME_RESPONSE,
-  projectView,
-  type RequestClientStub,
-  settle,
-  stubHubClient,
-} from 'fleet/testing';
-import {
-  LAST_TENANT_KEY,
-  PAGE_RELOAD,
-  TAB_TENANT_KEY,
-} from '../../core/auth/tenant-context';
+import { OPERATOR_ME_RESPONSE, projectView, type RequestClientStub, settle, stubHubClient } from 'fleet/testing';
+import { LAST_TENANT_KEY, PAGE_RELOAD, TAB_TENANT_KEY } from '../../core/auth/tenant-context';
 import { provideProjectLens } from '../../core/project-lens';
 import { MobileTitlebar } from './mobile-titlebar';
 
 @Component({ selector: 'app-test-titlebar-view', template: '' })
 class TestView {}
 
-const GLACIER = projectView({
-  project_id: 'proj_glacier',
-  slug: 'glacier',
-  name: 'Glacier',
-  created_at: '2026-10-01T00:00:00Z',
-});
+const GLACIER = projectView({ project_id: 'proj_glacier', slug: 'glacier', name: 'Glacier', created_at: '2026-10-01T00:00:00Z' });
 
 /** A caller holding two memberships — the only caller the switcher is offered to. */
 const TWO_TENANTS: MeResponse = {
   ...OPERATOR_ME_RESPONSE,
   tenants: [
-    {
-      tenant_id: 'ten_acme',
-      name: 'Acme',
-      role: 'admin',
-      permissions: ['fleet:view'],
-    },
-    {
-      tenant_id: 'ten_globex',
-      name: 'Globex',
-      role: 'guest',
-      permissions: ['fleet:view'],
-    },
+    { tenant_id: 'ten_acme', name: 'Acme', role: 'admin', permissions: ['fleet:view'] },
+    { tenant_id: 'ten_globex', name: 'Globex', role: 'guest', permissions: ['fleet:view'] },
   ],
 };
 
 /** The CDK renders each menu into an overlay on `document.body`, outside the
  * fixture's own element. */
-const inOverlay = (selector: string) =>
-  document.body.querySelector<HTMLElement>(selector);
+const inOverlay = (selector: string) => document.body.querySelector<HTMLElement>(selector);
 
 describe('MobileTitlebar', () => {
   let me: MeResponse;
@@ -75,16 +46,11 @@ describe('MobileTitlebar', () => {
       imports: [MobileTitlebar],
       providers: [
         provideZonelessChangeDetection(),
-        provideTanStackQuery(
-          new QueryClient({ defaultOptions: { queries: { retry: false } } }),
-        ),
+        provideTanStackQuery(new QueryClient({ defaultOptions: { queries: { retry: false } } })),
         { provide: PAGE_RELOAD, useValue: reload },
         provideProjectLens(),
         provideRouter([
-          {
-            path: 'p/:projectSlug',
-            children: [{ path: '**', component: TestView }],
-          },
+          { path: 'p/:projectSlug', children: [{ path: '**', component: TestView }] },
           { path: '**', component: TestView },
         ]),
       ],
@@ -108,9 +74,7 @@ describe('MobileTitlebar', () => {
     await fixture.whenStable();
     const el = fixture.nativeElement as HTMLElement;
 
-    expect(
-      el.querySelector('[data-testid="mobile-titlebar"]')?.textContent,
-    ).toContain('blizzard');
+    expect(el.querySelector('[data-testid="mobile-titlebar"]')?.textContent).toContain('blizzard');
     expect(el.querySelector('[data-testid="nav-board"]')).toBeNull();
     expect(el.querySelector('[data-testid="nav-graphs"]')).toBeNull();
   });
@@ -120,20 +84,12 @@ describe('MobileTitlebar', () => {
     fixture.componentRef.setInput('live', false);
     await fixture.whenStable();
     let el = fixture.nativeElement as HTMLElement;
-    expect(
-      el
-        .querySelector('[data-testid="mobile-titlebar-livedot"] .beacon')
-        ?.classList.contains('active'),
-    ).toBe(false);
+    expect(el.querySelector('[data-testid="mobile-titlebar-livedot"] .beacon')?.classList.contains('active')).toBe(false);
 
     fixture.componentRef.setInput('live', true);
     await fixture.whenStable();
     el = fixture.nativeElement as HTMLElement;
-    expect(
-      el
-        .querySelector('[data-testid="mobile-titlebar-livedot"] .beacon')
-        ?.classList.contains('active'),
-    ).toBe(true);
+    expect(el.querySelector('[data-testid="mobile-titlebar-livedot"] .beacon')?.classList.contains('active')).toBe(true);
   });
 
   it('buries the appearance switcher behind the overflow menu, closed by default', async () => {
@@ -144,24 +100,18 @@ describe('MobileTitlebar', () => {
 
     expect(inOverlay('[data-testid="mobile-titlebar-appearance"]')).toBeNull();
 
-    el.querySelector<HTMLElement>(
-      '[data-testid="mobile-titlebar-menu"]',
-    )?.click();
+    el.querySelector<HTMLElement>('[data-testid="mobile-titlebar-menu"]')?.click();
     await fixture.whenStable();
 
     expect(
-      inOverlay(
-        '[data-testid="mobile-titlebar-menu-panel"] [data-testid="mobile-titlebar-appearance"]',
-      ),
+      inOverlay('[data-testid="mobile-titlebar-menu-panel"] [data-testid="mobile-titlebar-appearance"]'),
     ).not.toBeNull();
 
     inOverlay('[data-testid="mobile-titlebar-appearance"]')?.click();
     await fixture.whenStable();
 
     expect(
-      inOverlay(
-        '[data-testid="mobile-titlebar-appearance-panel"] [data-testid="viewport-menu-auto"]',
-      ),
+      inOverlay('[data-testid="mobile-titlebar-appearance-panel"] [data-testid="viewport-menu-auto"]'),
     ).not.toBeNull();
   });
 
@@ -170,41 +120,27 @@ describe('MobileTitlebar', () => {
     const fixture = await mountIn(TWO_TENANTS);
     const el = fixture.nativeElement as HTMLElement;
 
-    const lens = el.querySelector<HTMLAnchorElement>(
-      '[data-testid="mobile-titlebar-lens"]',
-    );
+    const lens = el.querySelector<HTMLAnchorElement>('[data-testid="mobile-titlebar-lens"]');
     expect(lens?.querySelector('.name')?.textContent?.trim()).toBe('Glacier');
     expect(lens?.getAttribute('href')).toBe('/p/glacier/lens?from=%2Ffleet');
     // The tenant is no longer named in the bar; the switcher stays in the menu.
-    expect(
-      el.querySelector('[data-testid="mobile-titlebar-caption"]'),
-    ).toBeNull();
+    expect(el.querySelector('[data-testid="mobile-titlebar-caption"]')).toBeNull();
   });
 
   it('carries the whole unlensed location it is on to the picker', async () => {
-    await TestBed.inject(Router).navigateByUrl(
-      '/p/glacier/board/chunk/chk_1?layout=list#x',
-    );
+    await TestBed.inject(Router).navigateByUrl('/p/glacier/board/chunk/chk_1?layout=list#x');
     const fixture = await mountIn(TWO_TENANTS);
-    const lens = (
-      fixture.nativeElement as HTMLElement
-    ).querySelector<HTMLAnchorElement>('[data-testid="mobile-titlebar-lens"]');
+    const lens = (fixture.nativeElement as HTMLElement).querySelector<HTMLAnchorElement>('[data-testid="mobile-titlebar-lens"]');
 
-    expect(lens?.getAttribute('href')).toBe(
-      '/p/glacier/lens?from=%2Fboard%2Fchunk%2Fchk_1%3Flayout%3Dlist%23x',
-    );
+    expect(lens?.getAttribute('href')).toBe('/p/glacier/lens?from=%2Fboard%2Fchunk%2Fchk_1%3Flayout%3Dlist%23x');
   });
 
   it('names All projects on All, linking to the unlensed picker, and reads no projects there', async () => {
     await TestBed.inject(Router).navigateByUrl('/board');
     const fixture = await mountIn(TWO_TENANTS);
-    const lens = (
-      fixture.nativeElement as HTMLElement
-    ).querySelector<HTMLAnchorElement>('[data-testid="mobile-titlebar-lens"]');
+    const lens = (fixture.nativeElement as HTMLElement).querySelector<HTMLAnchorElement>('[data-testid="mobile-titlebar-lens"]');
 
-    expect(lens?.querySelector('.name')?.textContent?.trim()).toBe(
-      'All projects',
-    );
+    expect(lens?.querySelector('.name')?.textContent?.trim()).toBe('All projects');
     expect(lens?.getAttribute('href')).toBe('/lens?from=%2Fboard');
     expect(stub.forRoute('/api/projects', 'GET')).toHaveLength(0);
   });
@@ -212,9 +148,7 @@ describe('MobileTitlebar', () => {
   it('shows the spend today beside the live dot once it resolves, and nothing before', async () => {
     const fixture = await mountIn(TWO_TENANTS);
     const el = fixture.nativeElement as HTMLElement;
-    expect(
-      el.querySelector('[data-testid="mobile-titlebar-spend"]'),
-    ).toBeNull();
+    expect(el.querySelector('[data-testid="mobile-titlebar-spend"]')).toBeNull();
 
     fixture.componentRef.setInput('spendToday', {
       since: '2026-07-20T00:00:00Z',
@@ -228,53 +162,30 @@ describe('MobileTitlebar', () => {
       estimated_cost_usd: null,
     });
     await settle(fixture);
-    expect(
-      el
-        .querySelector('[data-testid="mobile-titlebar-spend"]')
-        ?.textContent?.trim(),
-    ).toBe('$4.20+');
+    expect(el.querySelector('[data-testid="mobile-titlebar-spend"]')?.textContent?.trim()).toBe('$4.20+');
   });
 
   it('offers no tenant switcher to a caller with one membership', async () => {
     const fixture = await mountIn({
       ...OPERATOR_ME_RESPONSE,
-      tenants: [
-        {
-          tenant_id: 'ten_acme',
-          name: 'Acme',
-          role: 'admin',
-          permissions: ['fleet:view'],
-        },
-      ],
+      tenants: [{ tenant_id: 'ten_acme', name: 'Acme', role: 'admin', permissions: ['fleet:view'] }],
     });
-    (fixture.nativeElement as HTMLElement)
-      .querySelector<HTMLElement>('[data-testid="mobile-titlebar-menu"]')
-      ?.click();
+    (fixture.nativeElement as HTMLElement).querySelector<HTMLElement>('[data-testid="mobile-titlebar-menu"]')?.click();
     await settle(fixture);
 
-    expect(
-      inOverlay('[data-testid="mobile-titlebar-appearance"]'),
-    ).not.toBeNull();
+    expect(inOverlay('[data-testid="mobile-titlebar-appearance"]')).not.toBeNull();
     expect(inOverlay('[data-testid="mobile-titlebar-tenant"]')).toBeNull();
   });
 
   it('switches tenant from the overflow menu: tab tenant and last choice set, the view reloaded', async () => {
     const fixture = await mountIn(TWO_TENANTS);
-    (fixture.nativeElement as HTMLElement)
-      .querySelector<HTMLElement>('[data-testid="mobile-titlebar-menu"]')
-      ?.click();
+    (fixture.nativeElement as HTMLElement).querySelector<HTMLElement>('[data-testid="mobile-titlebar-menu"]')?.click();
     await settle(fixture);
     inOverlay('[data-testid="mobile-titlebar-tenant"]')?.click();
     await settle(fixture);
 
-    expect(
-      inOverlay(
-        '[data-testid="mobile-titlebar-tenant-panel-ten_acme"]',
-      )?.getAttribute('aria-checked'),
-    ).toBe('true');
-    inOverlay(
-      '[data-testid="mobile-titlebar-tenant-panel-ten_globex"]',
-    )?.click();
+    expect(inOverlay('[data-testid="mobile-titlebar-tenant-panel-ten_acme"]')?.getAttribute('aria-checked')).toBe('true');
+    inOverlay('[data-testid="mobile-titlebar-tenant-panel-ten_globex"]')?.click();
 
     expect(sessionStorage.getItem(TAB_TENANT_KEY)).toBe('ten_globex');
     expect(localStorage.getItem(LAST_TENANT_KEY)).toBe('ten_globex');

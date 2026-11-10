@@ -1,10 +1,7 @@
 import { provideZonelessChangeDetection } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { provideRouter, Router } from '@angular/router';
-import {
-  QueryClient,
-  provideTanStackQuery,
-} from '@tanstack/angular-query-experimental';
+import { QueryClient, provideTanStackQuery } from '@tanstack/angular-query-experimental';
 import { type runnerApi } from 'fleet';
 import {
   capacitiesView,
@@ -24,12 +21,7 @@ import { MobileTitlebar } from './mobile-titlebar';
 /** Two serving runners on the host. */
 const RUNNERS = {
   items: ['rn_1', 'rn_2'].map((runnerId, i) =>
-    hostRunnerView({
-      runner_id: runnerId,
-      name: `r${i + 1}`,
-      bindings: [{ project: 'p', workspace_id: 'ws', agents: 4 }],
-      max_agents: 4,
-    }),
+    hostRunnerView({ runner_id: runnerId, name: `r${i + 1}`, bindings: [{ project: 'p', workspace_id: 'ws', agents: 4 }], max_agents: 4 }),
   ),
 };
 
@@ -39,22 +31,8 @@ function dashboard(reachable: boolean) {
     runner: runnerStatusView({
       runner_id: 'runner-local',
       workspace_id: 'workspace-local',
-      hub: hubConnectivityView({
-        endpoint: 'http://127.0.0.1:8421',
-        reachable,
-      }),
-      capacities: capacitiesView({
-        bindings: [
-          {
-            project: 'p',
-            project_id: 'p',
-            workspace_id: 'ws',
-            agents: 4,
-            used: 0,
-            free: 4,
-          },
-        ],
-      }),
+      hub: hubConnectivityView({ endpoint: 'http://127.0.0.1:8421', reachable }),
+      capacities: capacitiesView({ bindings: [{ project: 'p', project_id: 'p', workspace_id: 'ws', agents: 4, used: 0, free: 4 }] }),
     }),
   });
 }
@@ -75,9 +53,7 @@ async function render() {
     imports: [MobileTitlebar],
     providers: [
       provideZonelessChangeDetection(),
-      provideTanStackQuery(
-        new QueryClient({ defaultOptions: { queries: { retry: false } } }),
-      ),
+      provideTanStackQuery(new QueryClient({ defaultOptions: { queries: { retry: false } } })),
       provideRouter([]),
     ],
   }).compileComponents();
@@ -99,19 +75,11 @@ describe('MobileTitlebar (runner)', () => {
     const fixture = await render();
     const el = fixture.nativeElement as HTMLElement;
 
-    expect(
-      el.querySelector('[data-testid="local-panel-mobile-titlebar"]'),
-    ).not.toBeNull();
+    expect(el.querySelector('[data-testid="local-panel-mobile-titlebar"]')).not.toBeNull();
     // The CDK renders the menu into an overlay on `document.body`.
-    expect(
-      document.body.querySelector(
-        '[data-testid="local-panel-mobile-appearance"]',
-      ),
-    ).toBeNull();
+    expect(document.body.querySelector('[data-testid="local-panel-mobile-appearance"]')).toBeNull();
 
-    el.querySelector<HTMLElement>(
-      '[data-testid="local-panel-mobile-titlebar-menu"]',
-    )?.click();
+    el.querySelector<HTMLElement>('[data-testid="local-panel-mobile-titlebar-menu"]')?.click();
     await fixture.whenStable();
 
     expect(
@@ -126,17 +94,12 @@ describe('MobileTitlebar (runner)', () => {
     stub = stubRunnerClient(
       titlebarRoutes({
         'GET /api/host/runners': () => RUNNERS,
-        'GET /runners/{runner_id}/api/dashboard': (_request, { runner_id }) =>
-          dashboard(reachable[runner_id] ?? false),
+        'GET /runners/{runner_id}/api/dashboard': (_request, { runner_id }) => dashboard(reachable[runner_id] ?? false),
       }),
     );
   };
   const liveDot = (el: HTMLElement) =>
-    el
-      .querySelector(
-        '[data-testid="local-panel-mobile-titlebar-livedot"] .beacon',
-      )
-      ?.classList.contains('active');
+    el.querySelector('[data-testid="local-panel-mobile-titlebar-livedot"] .beacon')?.classList.contains('active');
 
   it('lights the live dot while any covered runner reaches its hub', async () => {
     withHubs({ rn_1: false, rn_2: true });
@@ -171,55 +134,37 @@ describe('MobileTitlebar (runner)', () => {
     const withSession = (session: runnerApi.RunnerAuthSessionView) => {
       stub.restore();
       stub = stubRunnerClient(
-        titlebarRoutes({
-          'GET /api/auth/session': () => session,
-          'POST /api/auth/logout': () => undefined,
-        }),
+        titlebarRoutes({ 'GET /api/auth/session': () => session, 'POST /api/auth/logout': () => undefined }),
       );
     };
 
     const openMenu = async (fixture: Awaited<ReturnType<typeof render>>) => {
       (fixture.nativeElement as HTMLElement)
-        .querySelector<HTMLElement>(
-          '[data-testid="local-panel-mobile-titlebar-menu"]',
-        )
+        .querySelector<HTMLElement>('[data-testid="local-panel-mobile-titlebar-menu"]')
         ?.click();
       await settle(fixture);
-      return document.body.querySelector(
-        '[data-testid="local-panel-mobile-titlebar-menu-panel"]',
-      )!;
+      return document.body.querySelector('[data-testid="local-panel-mobile-titlebar-menu-panel"]')!;
     };
 
     it('offers Log out as a real menu item the roving focus can reach', async () => {
       withSession({ auth_enabled: true, username: 'alice' });
       const panel = await openMenu(await render());
 
-      const logout = panel.querySelector(
-        '[data-testid="local-panel-mobile-logout"]',
-      );
+      const logout = panel.querySelector('[data-testid="local-panel-mobile-logout"]');
       expect(logout?.getAttribute('role')).toBe('menuitem');
       // In the tab order or one arrow key away — either way the key manager owns
       // it, which a plain <button> in here would never be.
       expect(logout?.getAttribute('tabindex')).not.toBeNull();
       // The identity block itself stays a non-focusable label: no second button.
       expect(panel.querySelector('[data-testid="identity-logout"]')).toBeNull();
-      expect(
-        panel.querySelector('[data-testid="identity-username"]')?.textContent,
-      ).toContain('alice');
+      expect(panel.querySelector('[data-testid="identity-username"]')?.textContent).toContain('alice');
     });
 
     it('owns only menu items and presentational rows, per the role="menu" content model', async () => {
       withSession({ auth_enabled: true, username: 'alice' });
       const panel = await openMenu(await render());
 
-      const allowed = [
-        'menuitem',
-        'menuitemradio',
-        'menuitemcheckbox',
-        'group',
-        'separator',
-        'presentation',
-      ];
+      const allowed = ['menuitem', 'menuitemradio', 'menuitemcheckbox', 'group', 'separator', 'presentation'];
       const untyped = Array.from(panel.children).filter(
         (child) => !allowed.includes(child.getAttribute('role') ?? ''),
       );
@@ -232,24 +177,18 @@ describe('MobileTitlebar (runner)', () => {
       // prototype because the identity block lives inside the CDK overlay, out of
       // the fixture's own DebugElement tree.
       const reload = vi
-        .spyOn(
-          RunnerLogout.prototype as unknown as { reload: () => void },
-          'reload',
-        )
+        .spyOn(RunnerLogout.prototype as unknown as { reload: () => void }, 'reload')
         .mockImplementation(() => undefined);
       const fixture = await render();
       const panel = await openMenu(fixture);
 
-      panel
-        .querySelector<HTMLElement>('[data-testid="local-panel-mobile-logout"]')
-        ?.click();
+      panel.querySelector<HTMLElement>('[data-testid="local-panel-mobile-logout"]')?.click();
       // Plain macrotask ticks rather than `settle`: triggering a menu item closes
       // the whole menu stack, so the overlay — and the identity block inside it —
       // is torn down while the logout POST is still in flight, and the fixture
       // never reports stable again. The request still goes out and the reload
       // still runs, which is what this asserts.
-      for (let i = 0; i < 8; i += 1)
-        await new Promise((resolve) => setTimeout(resolve, 0));
+      for (let i = 0; i < 8; i += 1) await new Promise((resolve) => setTimeout(resolve, 0));
 
       expect(stub.forRoute('/api/auth/logout', 'POST')).toHaveLength(1);
       expect(reload).toHaveBeenCalledTimes(1);
@@ -259,14 +198,10 @@ describe('MobileTitlebar (runner)', () => {
       withSession({ auth_enabled: false, username: null });
       const panel = await openMenu(await render());
 
-      expect(
-        panel.querySelector('[data-testid="local-panel-mobile-logout"]'),
-      ).toBeNull();
+      expect(panel.querySelector('[data-testid="local-panel-mobile-logout"]')).toBeNull();
       expect(panel.querySelector('[data-testid="local-identity"]')).toBeNull();
       // The appearance switcher is unconditional — it is not an auth concern.
-      expect(
-        panel.querySelector('[data-testid="local-panel-mobile-appearance"]'),
-      ).not.toBeNull();
+      expect(panel.querySelector('[data-testid="local-panel-mobile-appearance"]')).not.toBeNull();
     });
   });
 });
