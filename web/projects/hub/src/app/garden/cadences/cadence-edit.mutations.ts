@@ -7,6 +7,7 @@ import {
   type CadenceView,
   createProjectCadenceApiProjectsProjectCadencesPost,
   editCadenceApiCadencesCadenceIdPatch,
+  hubRoutinesKey,
 } from 'fleet';
 import { injectProjectFilter } from 'fleet/shell';
 import { createCadenceMutationKey, editCadenceMutationKey } from '../../core/mutation-keys';
@@ -39,7 +40,11 @@ export function injectCreateCadenceMutation() {
       if (error) throw error;
       return data!;
     },
-    onSettled: () => queryClient.invalidateQueries({ queryKey: hubCadencesKey }),
+    onSettled: () =>
+      Promise.all([
+        queryClient.invalidateQueries({ queryKey: hubCadencesKey }),
+        queryClient.invalidateQueries({ queryKey: hubRoutinesKey }),
+      ]),
   }));
 }
 
@@ -65,6 +70,7 @@ export function injectEditCadenceMutation() {
       Promise.all([
         queryClient.invalidateQueries({ queryKey: hubCadencesKey }),
         queryClient.invalidateQueries({ queryKey: hubCadenceErrandsKey(vars.cadenceId) }),
+        queryClient.invalidateQueries({ queryKey: hubRoutinesKey }),
       ]),
   }));
 }

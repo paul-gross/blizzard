@@ -126,9 +126,9 @@ export interface RoutinePanelVm {
   readonly measurementsState: KitAsyncStateValue;
   /** The Runs fact: how many runs the window holds, labelled with the window — `null` while the runs read is pending. */
   readonly runsLabel: string | null;
-  /** The chores keeping this routine — `null` while the cadences read is pending. */
+  /** The chores keeping this routine — `null` while no routine is selected. */
   readonly keptBy: readonly KeptByVm[] | null;
-  /** The Kept by fact's own async state, gated on the cadences read (`bzh:frontend-empty-state-gated`); `'empty'`
+  /** The Kept by fact's own async state, gated on the routine read (`bzh:frontend-empty-state-gated`); `'empty'`
    * says no cadence keeps the routine. */
   readonly keptByState: KitAsyncStateValue;
 }

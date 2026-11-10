@@ -1,5 +1,4 @@
-import { asyncState, type AsyncStateQuery, type CadenceView, type GraphSummaryView, type RoutineView } from 'fleet';
-import { keptByRows } from './gardening-routine-detail.model';
+import { asyncState, type AsyncStateQuery, type GraphSummaryView, type RoutineView } from 'fleet';
 import { isRoutineBlocked } from './gardening-effective-graph';
 import type { RoutineListRowVm } from './routine-list';
 
@@ -11,16 +10,13 @@ export function presentRoutineSlug(routineSlug: string | null, routines: readonl
 }
 
 /** The routine list's rows, each flagged blocked when its graph has no effective mint, and kept when a cadence chore
- * keeps it. A graphs read that is pending or failed asserts nothing — no row is blocked until it has resolved; a
- * cadences read that is pending or failed likewise leaves `kept` `null`, so no row is labelled either way. */
+ * keeps it — the routine's own `kept_by` says so. A graphs read that is pending or failed asserts nothing — no row is
+ * blocked until it has resolved. */
 export function routineListRows(
   routines: readonly RoutineView[],
   graphs: readonly GraphSummaryView[],
   graphsQuery: AsyncStateQuery,
-  cadences: readonly CadenceView[] | undefined,
-  cadencesQuery: AsyncStateQuery,
 ): readonly RoutineListRowVm[] {
-  const cadencesUnread = asyncState(cadencesQuery, false) !== 'ready';
   const graphsUnread = asyncState(graphsQuery, false) !== 'ready';
   return routines.map((r) => ({
     routineId: r.routine_id,
@@ -29,6 +25,6 @@ export function routineListRows(
     graphName: r.graph_name,
     blocked: isRoutineBlocked(graphs, graphsUnread, r.graph_name),
     retired: r.retired ?? false,
-    kept: cadencesUnread ? null : (keptByRows(cadences, r)?.length ?? 0) > 0,
+    kept: (r.kept_by ?? []).length > 0,
   }));
 }

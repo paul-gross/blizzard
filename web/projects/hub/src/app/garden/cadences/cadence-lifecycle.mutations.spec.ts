@@ -43,7 +43,7 @@ describe('injectCadenceLifecycleMutation', () => {
     expect(calls[0].headers['if-match']).toBe('5');
   });
 
-  it('invalidates the cadence list and its errands', async () => {
+  it('invalidates the cadence list, its errands, and the routines', async () => {
     const spy = vi.spyOn(queryClient, 'invalidateQueries');
     const mutation = TestBed.runInInjectionContext(() => injectCadenceLifecycleMutation());
 
@@ -53,6 +53,7 @@ describe('injectCadenceLifecycleMutation', () => {
     expect(keys).toEqual([
       ['hub', 'cadences'],
       ['hub', 'cadence-errands', 'cad_evening'],
+      ['hub', 'routines'],
     ]);
   });
 });

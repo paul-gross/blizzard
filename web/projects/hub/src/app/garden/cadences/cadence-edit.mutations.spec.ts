@@ -41,6 +41,7 @@ describe('cadence edit mutations', () => {
     expect(calls).toHaveLength(1);
     expect(calls[0].body).toEqual({ slug: 'evening', spacing: '1d' });
     expect(invalidated(spy)).toContainEqual(['hub', 'cadences']);
+    expect(invalidated(spy)).toContainEqual(['hub', 'routines']);
   });
 
   it('patches the whole chore list against the read revision', async () => {
@@ -67,7 +68,7 @@ describe('cadence edit mutations', () => {
     const settled = mutation.mutateAsync({ cadenceId: 'cad_evening', revision: 1, body: { name: 'e' } }).then(() => {
       done = true;
     });
-    await vi.waitFor(() => expect(spy).toHaveBeenCalledTimes(2));
+    await vi.waitFor(() => expect(spy).toHaveBeenCalledTimes(3));
     await new Promise((resolve) => setTimeout(resolve, 0));
     expect(done).toBe(false);
     release();
@@ -76,6 +77,7 @@ describe('cadence edit mutations', () => {
     expect(invalidated(spy)).toEqual([
       ['hub', 'cadences'],
       ['hub', 'cadence-errands', 'cad_evening'],
+      ['hub', 'routines'],
     ]);
   });
 
