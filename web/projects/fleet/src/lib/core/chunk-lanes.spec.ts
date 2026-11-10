@@ -1,5 +1,13 @@
-import type { ChunkStatus } from '../api/hub';
-import { LANES, STATUS_TONE, UNKNOWN_LANE, laneTone, chunkLane, unknownLane } from './chunk-lanes';
+import { ChunkStatus } from '../api/hub';
+import {
+  LANES,
+  STATUS_LANE,
+  STATUS_TONE,
+  UNKNOWN_LANE,
+  laneTone,
+  chunkLane,
+  unknownLane,
+} from './chunk-lanes';
 
 /** A status a newer hub may send that this build's generated vocabulary does not list. */
 const NEWER_STATUS = 'newer-status' as ChunkStatus;
@@ -20,19 +28,35 @@ describe('chunkLane', () => {
   });
 
   it('sits a chunk with a status this build does not know in the unknown lane', () => {
-    expect(chunkLane({ status: NEWER_STATUS, terminal: false })).toBe(UNKNOWN_LANE);
+    expect(chunkLane({ status: NEWER_STATUS, terminal: false })).toBe(
+      UNKNOWN_LANE,
+    );
     expect(chunkLane({ status: NEWER_STATUS, terminal: true })).toBe('done');
   });
 });
 
 describe('unknownLane', () => {
   it('is absent while every chunk carries a status this build knows', () => {
-    expect(unknownLane([{ status: 'running', terminal: false }, { status: 'ready', terminal: false }])).toBeNull();
+    expect(
+      unknownLane([
+        { status: 'running', terminal: false },
+        { status: 'ready', terminal: false },
+      ]),
+    ).toBeNull();
   });
 
   it('heads the lane with each raw status a chunk carries, once each', () => {
-    const lane = unknownLane([{ status: NEWER_STATUS, terminal: false }, { status: 'running', terminal: false }, { status: NEWER_STATUS, terminal: false }, { status: 'other-newer-status' as ChunkStatus, terminal: false }]);
-    expect(lane).toEqual({ key: UNKNOWN_LANE, label: 'newer-status · other-newer-status', headerLabel: 'newer-status · other-newer-status' });
+    const lane = unknownLane([
+      { status: NEWER_STATUS, terminal: false },
+      { status: 'running', terminal: false },
+      { status: NEWER_STATUS, terminal: false },
+      { status: 'other-newer-status' as ChunkStatus, terminal: false },
+    ]);
+    expect(lane).toEqual({
+      key: UNKNOWN_LANE,
+      label: 'newer-status · other-newer-status',
+      headerLabel: 'newer-status · other-newer-status',
+    });
   });
 
   it('leaves out a chunk the hub flags terminal, which DONE holds', () => {
@@ -47,8 +71,17 @@ describe('STATUS_TONE', () => {
 });
 
 describe('laneTone', () => {
+  it('agrees with STATUS_TONE for every status', () => {
+    for (const status of Object.values(ChunkStatus))
+      expect(laneTone(STATUS_LANE(status))).toBe(STATUS_TONE(status));
+  });
+});
+
+describe('laneTone', () => {
   it('gives every board lane its tone', () => {
-    expect(Object.fromEntries(LANES.map((lane) => [lane.key, laneTone(lane.key)]))).toEqual({
+    expect(
+      Object.fromEntries(LANES.map((lane) => [lane.key, laneTone(lane.key)])),
+    ).toEqual({
       notready: 'idle',
       ready: 'idle',
       waiting: 'waiting',

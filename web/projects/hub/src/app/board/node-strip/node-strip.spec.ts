@@ -6,11 +6,23 @@ import { NodeStrip } from './node-strip';
 import type { NodeBlock } from './node-strip.model';
 
 /** `n` nodes, each in the state `states` names at its index, else unvisited. */
-const progress = (n: number, states: readonly NodeBlock['state'][] = []): NodeBlock[] =>
-  Array.from({ length: n }, (_, i) => ({ node_id: `nd_n${i}`, name: `n${i}`, state: states[i] ?? 'unvisited' }));
+const progress = (
+  n: number,
+  states: readonly NodeBlock['state'][] = [],
+): NodeBlock[] =>
+  Array.from({ length: n }, (_, i) => ({
+    node_id: `nd_n${i}`,
+    name: `n${i}`,
+    state: states[i] ?? 'unvisited',
+  }));
 
 describe('NodeStrip', () => {
-  beforeEach(() => TestBed.configureTestingModule({ imports: [NodeStrip], providers: [provideZonelessChangeDetection()] }));
+  beforeEach(() =>
+    TestBed.configureTestingModule({
+      imports: [NodeStrip],
+      providers: [provideZonelessChangeDetection()],
+    }),
+  );
 
   async function render(blocks: readonly NodeBlock[]) {
     const fixture = TestBed.createComponent(NodeStrip);
@@ -19,20 +31,41 @@ describe('NodeStrip', () => {
     return fixture.nativeElement as HTMLElement;
   }
 
-  const blocks = (el: HTMLElement) => [...el.querySelectorAll<HTMLElement>('.block')];
+  const blocks = (el: HTMLElement) => [
+    ...el.querySelectorAll<HTMLElement>('.block'),
+  ];
 
   it('draws a block per node in the order handed in, each in its state', async () => {
     const el = await render(progress(4, ['current', 'failed']));
 
-    expect(el.querySelector('[data-testid="node-strip"]')?.getAttribute('aria-label')).toBe('Graph progress');
-    expect(blocks(el).map((block) => block.getAttribute('data-state'))).toEqual(['current', 'failed', 'unvisited', 'unvisited']);
+    expect(
+      el
+        .querySelector('[data-testid="node-strip"]')
+        ?.getAttribute('aria-label'),
+    ).toBe('Graph progress');
+    expect(blocks(el).map((block) => block.getAttribute('data-state'))).toEqual(
+      ['current', 'failed', 'unvisited', 'unvisited'],
+    );
     expect(blocks(el)[1].title).toBe('n1 · failed');
+  });
+
+  it('draws a state this build does not know as unknown, never unvisited, keeping the raw state in the title', async () => {
+    const el = await render([
+      { node_id: 'nd_x', name: 'x', state: 'newer' as NodeBlock['state'] },
+    ]);
+
+    expect(blocks(el)[0].getAttribute('data-state')).toBe('unknown');
+    expect(blocks(el)[0].title).toBe('x · newer');
   });
 
   it('breaks the strip into groups of ten, packing it dense past twenty', async () => {
     const el = await render(progress(25));
 
-    expect([...el.querySelectorAll('.group')].map((group) => group.querySelectorAll('.block').length)).toEqual([10, 10, 5]);
+    expect(
+      [...el.querySelectorAll('.group')].map(
+        (group) => group.querySelectorAll('.block').length,
+      ),
+    ).toEqual([10, 10, 5]);
     expect(el.classList).toContain('dense');
   });
 
@@ -44,6 +77,8 @@ describe('NodeStrip', () => {
   });
 
   it('draws nothing for a chunk with no progress', async () => {
-    expect((await render([])).querySelector('[data-testid="node-strip"]')).toBeNull();
+    expect(
+      (await render([])).querySelector('[data-testid="node-strip"]'),
+    ).toBeNull();
   });
 });

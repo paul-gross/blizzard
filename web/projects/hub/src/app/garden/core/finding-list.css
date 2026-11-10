@@ -23,12 +23,12 @@
   min-width: 0;
   overflow-wrap: anywhere;
 }
-/* A `gone`-flagged row renders tinted against the amber family — "flagged for
+/* A `gone`-flagged row renders tinted against its state's tone (`--fl-gone-tone`, set from `finding-state.ts`) — "flagged for
  * review", distinct from an escalated run's red (`run-list.css`'s own
  * `.rl-body--escalated`) and from an exited row's plain dimming below. `gone` is
  * *not* exited: this row stays a normal, fully rendered, selectable-looking row. */
 .fl-body--gone {
-  background: color-mix(in srgb, var(--amber) 10%, transparent);
+  background: color-mix(in srgb, var(--fl-gone-tone) 10%, transparent);
 }
 /* An exited row (state one of `finding-state.ts`'s `FINDING_EXIT_STATES`) renders
  * dimmed but present — reduced opacity, never removed from the DOM. */

@@ -40,11 +40,17 @@
         @if (step.matched) {
         <span>{{ stepName(step) }}</span>
         } @else {
-        <span>{{ unmatchedRef(step) }}</span><span class="dot">·</span><span class="unmatched">Unmatched</span>
+        <span>{{ unmatchedRef(step) }}</span><span class="dot">·</span
+        ><fleet-kit-badge class="unmatched" variant="pill" tone="running"
+          >Unmatched</fleet-kit-badge
+        >
         } @if (step.epoch !== null) {
-        <span class="dot">·</span><span [attr.title]="'epoch ' + step.epoch">E{{ step.epoch }}</span>
+        <span class="dot">·</span
+        ><span [attr.title]="'epoch ' + step.epoch">E{{ step.epoch }}</span>
         } @if (step.current) {
-        <fleet-kit-badge variant="pill" tone="idle">in progress</fleet-kit-badge>
+        <fleet-kit-badge variant="pill" tone="idle"
+          >in progress</fleet-kit-badge
+        >
         }
       </div>
       @if (step.segments.length === 0) {
@@ -56,13 +62,13 @@
       } @else {
       <ul class="seg-list">
         @for (seg of step.segments; track seg.segment_id) {
-         <li>
-           <fleet-kit-select-row
-             class="seg-item"
-             [selected]="seg.segment_id === segmentId()"
-             testid="transcript-segment-item"
-             [attr.data-segment-id]="seg.segment_id"
-             (picked)="pickSegment.emit(seg.segment_id)"
+        <li>
+          <fleet-kit-select-row
+            class="seg-item"
+            [selected]="seg.segment_id === segmentId()"
+            testid="transcript-segment-item"
+            [attr.data-segment-id]="seg.segment_id"
+            (picked)="pickSegment.emit(seg.segment_id)"
           >
             <span class="seg-line">
               <span>Segment {{ seg.spawn_generation }}</span>
@@ -74,12 +80,14 @@
                 >{{ harnessName(seg.harness_id) }}</span
               >
               } @if (seg.truncated) {
-              <fleet-kit-badge variant="pill" tone="running">truncated</fleet-kit-badge>
+              <fleet-kit-badge variant="pill" tone="running"
+                >truncated</fleet-kit-badge
+              >
               } @if (!seg.final) {
               <fleet-kit-badge variant="pill" tone="idle">open</fleet-kit-badge>
               }
             </span>
-           </fleet-kit-select-row>
+          </fleet-kit-select-row>
         </li>
         }
       </ul>
@@ -109,12 +117,12 @@
     } @else {
     <div class="seg-body" data-testid="transcript-segment-body">
       @if (standaloneSidechain(); as sidechain) {
-       <fleet-kit-button
-         testid="transcript-sidechain-back"
-         (click)="pickSidechain.emit(null)"
+      <fleet-kit-button
+        testid="transcript-sidechain-back"
+        (click)="pickSidechain.emit(null)"
       >
         ← Back to segment
-       </fleet-kit-button>
+      </fleet-kit-button>
       <fleet-transcript-viewer
         [turns]="sidechain.turns"
         (openStandalone)="onStandaloneOpenStandalone($event)"
