@@ -272,6 +272,7 @@ if TYPE_CHECKING:
     from blizzard.runner.lifecycle.advance import AdvanceContext
     from blizzard.runner.lifecycle.attempt import AttemptContext
     from blizzard.runner.lifecycle.claim import ClaimContext
+    from blizzard.runner.lifecycle.context_sample import ContextSampleContext
     from blizzard.runner.lifecycle.dormant import DormantContext
     from blizzard.runner.lifecycle.drain import DrainContext
     from blizzard.runner.lifecycle.fill import FillContext
@@ -345,6 +346,8 @@ if TYPE_CHECKING:
     _spend_ceiling_conforms: type[SpendCeilingContext] = LoopContext
 
     _retention_conforms: type[RetentionContext] = LoopContext
+
+    _context_sample_conforms: type[ContextSampleContext] = LoopContext
 
     _advance_conforms: type[AdvanceContext] = LoopContext
 

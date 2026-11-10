@@ -280,7 +280,7 @@ WRITE_PROTOCOL_CENSUS: dict[str, Disposition] = {
     ),
     "record_context_sample": Published(
         RunnerEventType.FACT_CHANGED,
-        "ContextSample._sample (runner/loop/steps.py) — kind='event.recorded', only on a first "
+        "ContextSampleSweep._sample (runner/lifecycle/context_sample.py) — kind='event.recorded', only on a first "
         "crossing (report_kind is empty otherwise, and nothing is enqueued to announce then). D7's "
         "elapsed-time-derived reason covers the sampler's own cadence, not this occasional fact-log "
         "row (blizzard#317 review round 4, F1 — same class as record_usage above).",
