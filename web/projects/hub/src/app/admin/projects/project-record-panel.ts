@@ -19,12 +19,11 @@ import type { LandingSections } from './project-landing-order.model';
 import { ProjectLinkPanel } from './project-link-panel';
 import { ProjectOverviewCard } from './project-overview-card';
 import { projectFacts } from './project-facts';
-import type { OverviewLineVm } from './project-overview.model';
+import type { OverviewLineVm, ProjectTab } from './project-overview.model';
 import type { ProjectLinkKind } from './projects.mutations';
 import type { ProjectLinkRowVm } from './projects.model';
 
-/** The project page's tabs: what it is and who serves it, then each kind of link it holds. */
-export type ProjectTab = 'overview' | 'sources' | 'repositories';
+export type { ProjectTab };
 
 /** An Unlink asked for on one row of one kind's panel. */
 export interface ProjectUnlinkEvent {
@@ -71,6 +70,7 @@ export class ProjectRecordPanel {
   /** The keys of the links an unlink is in flight for, per kind. */
   readonly pendingSourceKeys = input<ReadonlySet<string>>(new Set());
   readonly pendingRepositoryKeys = input<ReadonlySet<string>>(new Set());
+  readonly pendingRepositionKeys = input<ReadonlySet<string>>(new Set());
   readonly sourceError = input<string | null>(null);
   readonly repositoryError = input<string | null>(null);
   /** The linked repositories as a landing order, ranked then unranked. */

@@ -43,6 +43,8 @@ export class ProjectLinkPanel {
   readonly state = input<KitAsyncStateValue>('ready');
   /** The keys of the links an unlink is in flight for, whose Unlink waits. */
   readonly pendingKeys = input<ReadonlySet<string>>(new Set());
+  /** The keys of the links a reposition is in flight for, whose drag waits. */
+  readonly pendingRepositionKeys = input<ReadonlySet<string>>(new Set());
   readonly error = input<string | null>(null);
   readonly testid = input.required<string>();
   /** The rows as a landing order, split ranked and unranked; `null` lists them flat. */
