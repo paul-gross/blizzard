@@ -1,4 +1,4 @@
-import { openLookup, runnerApi } from 'fleet';
+import { openLookup, runnerApi } from 'fleet/runner-shell';
 
 /** Whether `lease` has ended, as the runner reads it — only a positive `ended` reading ends it; an unrecognized one
  * keeps the lease live. */
