@@ -4,6 +4,7 @@
   [class.selected]="selected()"
   [class.bare]="bare()"
   [attr.data-testid]="testid()"
+  [attr.aria-current]="selected() ? 'true' : null"
   [attr.aria-label]="ariaLabel()"
   (click)="picked.emit()"
 >

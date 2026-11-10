@@ -73,8 +73,7 @@ describe("ChunkPage's Artifacts tab", () => {
     const el = fixture.nativeElement as HTMLElement;
 
     expect(el.querySelector('[data-testid="artifacts-tab-artifact"]')?.textContent).toContain('THE FINDINGS BODY');
-    const active = el.querySelector('fleet-kit-select-row:has(button.selected)');
-    expect(el.querySelector('[data-testid="artifacts-tab-nav-item"].selected')).not.toBeNull();
+    const active = el.querySelector('fleet-kit-select-row:has(button.selected[aria-current="true"])');
     expect(active?.getAttribute('data-artifact-key')).toBe(NEWER.key);
   });
 
