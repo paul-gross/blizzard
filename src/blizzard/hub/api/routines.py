@@ -36,6 +36,7 @@ from blizzard.hub.api.urgency_refs import urgency_slug
 from blizzard.hub.auth.models import ResolvedIdentity
 from blizzard.hub.auth.permissions import Permission
 from blizzard.hub.composition import TenantServices
+from blizzard.hub.domain.cadence.kept_by import KeptBy
 from blizzard.hub.domain.chunk.ingest import IngestConflict
 from blizzard.hub.domain.chunk.model import WorkItemAuthor
 from blizzard.hub.domain.config.errors import ConfigFieldError, ConfigRevisionConflict
@@ -64,6 +65,7 @@ from blizzard.wire.garden_proposal_counts import GardenProposalCountsRowView, Ga
 from blizzard.wire.garden_sweeps import GardenSweepsView, MeasurementReadingView, ScopeSweepView
 from blizzard.wire.garden_trend import TrendAgeView, TrendPeriodView, TrendView
 from blizzard.wire.routine import (
+    KeptByView,
     RoutineBaselineRepoView,
     RoutineBaselineView,
     RoutineCreateRequest,
@@ -79,7 +81,12 @@ router = APIRouter(prefix="/api", tags=["routines"], dependencies=_GUARDS)
 project_router = APIRouter(prefix="/api/projects/{project}", tags=["routines"], dependencies=_GUARDS)
 
 
-def _routine_view(routine: Routine, labels: ProjectLabelFields, urgencies: Mapping[UrgencyId, Urgency]) -> RoutineView:
+def _routine_view(
+    routine: Routine,
+    labels: ProjectLabelFields,
+    urgencies: Mapping[UrgencyId, Urgency],
+    keeping: tuple[KeptBy, ...],
+) -> RoutineView:
     return RoutineView(
         routine_id=routine.routine_id,
         slug=routine.slug,
@@ -93,6 +100,15 @@ def _routine_view(routine: Routine, labels: ProjectLabelFields, urgencies: Mappi
         created_at=iso_utc(routine.created_at),
         retired=routine.retired,
         revision=routine.revision,
+        kept_by=[
+            KeptByView(
+                cadence_slug=k.cadence_slug,
+                cadence_name=k.cadence_name,
+                chore_key=k.chore_key,
+                next_moment=None if k.next_moment is None else iso_utc(k.next_moment),
+            )
+            for k in keeping
+        ],
         **labels,
     )
 
@@ -103,14 +119,20 @@ def _labelled(routine: Routine, services: TenantServices) -> RoutineView:
         routine,
         ProjectLabels.read(services, [routine.project_id]).fields(routine.project_id),
         services.urgency_reading.by_id(),
+        _keeping(routine, services),
     )
+
+
+def _keeping(routine: Routine, services: TenantServices) -> tuple[KeptBy, ...]:
+    return services.cadence_reading.kept_by([routine], project_id=routine.project_id)[routine.routine_id]
 
 
 def _listing(services: TenantServices, project_id: str | None, *, include_retired: bool) -> list[RoutineView]:
     routines = [r for r in services.routines.list_all(project_id) if include_retired or not r.retired]
     labels = ProjectLabels.read(services, (r.project_id for r in routines))
     urgencies = services.urgency_reading.by_id()
-    return [_routine_view(r, labels.fields(r.project_id), urgencies) for r in routines]
+    keeping = services.cadence_reading.kept_by(routines, project_id=project_id)
+    return [_routine_view(r, labels.fields(r.project_id), urgencies, keeping[r.routine_id]) for r in routines]
 
 
 def _unprocessable(exc: ConfigFieldError) -> HTTPException:
@@ -175,7 +197,10 @@ def _create(
     except ConfigFieldError as exc:
         raise _unprocessable(exc) from exc
     return _routine_view(
-        routine, ProjectLabels.of_project(project).fields(routine.project_id), services.urgency_reading.by_id()
+        routine,
+        ProjectLabels.of_project(project).fields(routine.project_id),
+        services.urgency_reading.by_id(),
+        _keeping(routine, services),
     )
 
 

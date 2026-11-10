@@ -35,6 +35,7 @@ const NIGHTLY: RoutineView = {
   default_effort: null,
   default_harnesses: [],
   default_urgency: null,
+  kept_by: [],
   project_id: null,
   project_name: null,
   project_slug: null,

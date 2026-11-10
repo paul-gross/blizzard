@@ -17,6 +17,7 @@ from blizzard.foundation.cadence_attention import ErrandState
 from blizzard.foundation.clock import IClock
 from blizzard.foundation.roles import domain_model
 from blizzard.hub.domain.cadence.errands import Errand, ErrandRun, chore_errands, due_at, errand_state
+from blizzard.hub.domain.cadence.kept_by import KeptBy, kept_by
 from blizzard.hub.domain.cadence.model import (
     Attention,
     AttentionFacts,
@@ -29,7 +30,7 @@ from blizzard.hub.domain.cadence.model import (
 from blizzard.hub.domain.cadence.ports import IReadCadenceRepository, IReadErrandRunsRepository, IWriteCadenceRepository
 from blizzard.hub.domain.config.changes import ChangeContext
 from blizzard.hub.domain.garden.brake import BrakeVerb
-from blizzard.hub.domain.garden.routines import IReadRoutineRepository, IReadRoutineScopeRepository
+from blizzard.hub.domain.garden.routines import IReadRoutineRepository, IReadRoutineScopeRepository, Routine
 from blizzard.hub.domain.garden.scopes import IReadScopeRepository
 from blizzard.hub.domain.graph.model import IReadGraphRepository
 from blizzard.hub.domain.kernel.transactions import Transaction
@@ -160,6 +161,13 @@ class CadenceReading:
         """The tenant's cadences, or ``project_id``'s, newest first; retired ones only when asked for."""
         held = [c for c in self._cadences.list_all(project_id) if include_retired or not c.retired]
         return self._views(held)
+
+    def kept_by(self, routines: Sequence[Routine], *, project_id: str | None) -> dict[str, tuple[KeptBy, ...]]:
+        """Each of ``routines`` (by id) with the chores keeping it, from one read of ``project_id``'s cadences
+        (the tenant's when ``None``) and one clock read."""
+        held = self._cadences.list_all(project_id)
+        now = self._clock.now()
+        return {r.routine_id: kept_by(r, held, now) for r in routines}
 
     def show(self, cadence_id: str) -> CadenceView | None:
         """One cadence with its attention; ``None`` when no cadence holds ``cadence_id``."""

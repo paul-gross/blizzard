@@ -75,6 +75,16 @@ class RoutineLifecycleRequest(BaseModel):
     by: str = "operator"
 
 
+class KeptByView(WireModel):
+    """One chore keeping a routine: its cadence, its key, and the cadence's next scheduled moment."""
+
+    cadence_slug: str
+    cadence_name: str
+    chore_key: str
+    #: The cadence's next scheduled moment, ISO-8601 UTC; ``None`` for a cadence with no schedule.
+    next_moment: str | None = None
+
+
 class RoutineView(WireModel):
     """A routine as served by the create/list/read/edit/lifecycle routes."""
 
@@ -99,6 +109,8 @@ class RoutineView(WireModel):
     project_slug: str | None = None
     #: The project's current display name; ``None`` where the hub reports none.
     project_name: str | None = None
+    #: The chores that keep this routine (``bzh:routine-kept-by``), one per chore on an enabled cadence of its project.
+    kept_by: list[KeptByView] = []
 
 
 class RoutineRunRequest(BaseModel):
