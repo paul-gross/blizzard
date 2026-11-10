@@ -13,8 +13,8 @@ from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 from blizzard.foundation.clock import FixedClock
+from blizzard.foundation.credential_renewal import RenewalFailureReason, RenewalResult
 from blizzard.runner.process.child_env import ChildEnv
-from blizzard.runner.subscriptions.credential_renewer import RenewalFailureReason, RenewalOutcomeKind
 from blizzard.runner.subscriptions.internal.openai_credential_renewer import OpenAICredentialRenewer
 from blizzard.runner.subscriptions.one_shot_process import OneShotResult
 from tests.support.child_launch import tool_env
@@ -114,7 +114,7 @@ def test_a_token_inside_the_lead_window_is_due(tmp_path: Path) -> None:
 
     outcome = renewer.renew()
 
-    assert outcome.kind is RenewalOutcomeKind.RENEWED
+    assert outcome.kind is RenewalResult.RENEWED
     assert len(subprocess.calls) == 1
 
 
@@ -130,7 +130,7 @@ def test_an_already_expired_token_is_due(tmp_path: Path) -> None:
 
     outcome = renewer.renew()
 
-    assert outcome.kind is RenewalOutcomeKind.RENEWED
+    assert outcome.kind is RenewalResult.RENEWED
 
 
 # The request shape.
@@ -177,7 +177,7 @@ def test_a_timeout_is_failed_timed_out(tmp_path: Path) -> None:
 
     outcome = renewer.renew()
 
-    assert outcome.kind is RenewalOutcomeKind.FAILED
+    assert outcome.kind is RenewalResult.FAILED
     assert outcome.failure_reason is RenewalFailureReason.TIMED_OUT
 
 
@@ -192,7 +192,7 @@ def test_a_launch_failure_is_failed_renewer_unavailable(tmp_path: Path) -> None:
 
     outcome = renewer.renew()
 
-    assert outcome.kind is RenewalOutcomeKind.FAILED
+    assert outcome.kind is RenewalResult.FAILED
     assert outcome.failure_reason is RenewalFailureReason.RENEWER_UNAVAILABLE
 
 
@@ -205,7 +205,7 @@ def test_a_nonzero_exit_is_failed_vendor_refused(tmp_path: Path) -> None:
 
     outcome = renewer.renew()
 
-    assert outcome.kind is RenewalOutcomeKind.FAILED
+    assert outcome.kind is RenewalResult.FAILED
     assert outcome.failure_reason is RenewalFailureReason.VENDOR_REFUSED
 
 
@@ -219,7 +219,7 @@ def test_no_matching_response_is_failed_protocol_error(tmp_path: Path) -> None:
 
     outcome = renewer.renew()
 
-    assert outcome.kind is RenewalOutcomeKind.FAILED
+    assert outcome.kind is RenewalResult.FAILED
     assert outcome.failure_reason is RenewalFailureReason.PROTOCOL_ERROR
 
 
@@ -233,7 +233,7 @@ def test_a_json_rpc_error_is_failed_vendor_refused(tmp_path: Path) -> None:
 
     outcome = renewer.renew()
 
-    assert outcome.kind is RenewalOutcomeKind.FAILED
+    assert outcome.kind is RenewalResult.FAILED
     assert outcome.failure_reason is RenewalFailureReason.VENDOR_REFUSED
 
 
@@ -247,7 +247,7 @@ def test_a_null_account_is_failed_vendor_refused(tmp_path: Path) -> None:
 
     outcome = renewer.renew()
 
-    assert outcome.kind is RenewalOutcomeKind.FAILED
+    assert outcome.kind is RenewalResult.FAILED
     assert outcome.failure_reason is RenewalFailureReason.VENDOR_REFUSED
 
 
@@ -261,7 +261,7 @@ def test_a_reply_that_leaves_the_expiry_unchanged_is_failed_vendor_refused(tmp_p
 
     outcome = renewer.renew()
 
-    assert outcome.kind is RenewalOutcomeKind.FAILED
+    assert outcome.kind is RenewalResult.FAILED
     assert outcome.failure_reason is RenewalFailureReason.VENDOR_REFUSED
 
 
@@ -286,4 +286,4 @@ def test_an_interleaved_notification_before_the_matching_response_is_skipped(tmp
 
     outcome = renewer.renew()
 
-    assert outcome.kind is RenewalOutcomeKind.RENEWED
+    assert outcome.kind is RenewalResult.RENEWED

@@ -47,6 +47,9 @@ _KERNEL_DIRS = (_FOUNDATION_DIR, _WIRE_DIR, _AUTH_CORE_DIR)
 _NON_KERNEL_PACKAGES = ("blizzard.hub", "blizzard.runner", "blizzard.cli", "blizzard.tools")
 
 _MOVED_HOMES = {
+    "RenewalFailureReason": "blizzard.foundation.credential_renewal",
+    "RenewalResult": "blizzard.foundation.credential_renewal",
+    "SampleMissReason": "blizzard.foundation.subscription_miss",
     "OperatorWindow": "blizzard.foundation.operator_window",
     "WindowFault": "blizzard.foundation.operator_window",
     "fault_message": "blizzard.foundation.operator_window",
@@ -211,7 +214,8 @@ def _misrouted_moved_names(root: Path) -> list[str]:
                 misrouted = node.level > 0 or (node.module is not None and node.module.startswith("blizzard"))
                 if misrouted and node.module != home:
                     origin = f"{'.' * node.level}{node.module or ''}"
-                    violations.append(f"{path.relative_to(_REPO_ROOT)} imports {alias.name} from {origin}")
+                    shown = path.relative_to(_REPO_ROOT) if path.is_relative_to(_REPO_ROOT) else path
+                    violations.append(f"{shown} imports {alias.name} from {origin}")
     return violations
 
 
@@ -469,6 +473,23 @@ def test_neither_daemon_root_loads_the_other_daemon() -> None:
         for m in _loaded_non_kernel(_loaded_after_importing(root), ("blizzard.hub",))
     ]
     assert not leaks, f"B/C — a daemon root loaded the other daemon: {leaks}"
+
+
+@pytest.mark.parametrize(
+    ("text", "misrouted"),
+    [
+        ("from blizzard.runner.subscriptions.credential_renewer import RenewalFailureReason\n", True),
+        ("from blizzard.runner.subscriptions.subscription_sampler import SampleMissReason\n", True),
+        ("from blizzard.runner.subscriptions.credential_renewer import RenewalResult\n", True),
+        ("from blizzard.foundation.credential_renewal import RenewalFailureReason, RenewalResult\n", False),
+        ("from blizzard.foundation.subscription_miss import SampleMissReason\n", False),
+    ],
+)
+def test_moved_vocabulary_check_fails_a_runner_module_reexporting_a_kernel_name(
+    tmp_path: Path, text: str, misrouted: bool
+) -> None:
+    root = _plant_kernel(tmp_path, {"runner/consumer.py": text})
+    assert bool(_misrouted_moved_names(root)) is misrouted
 
 
 def test_moved_vocabulary_has_exactly_one_importable_home() -> None:

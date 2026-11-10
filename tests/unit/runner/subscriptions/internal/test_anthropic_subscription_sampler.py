@@ -17,12 +17,9 @@ import pytest
 from structlog.testing import capture_logs
 
 from blizzard.foundation.clock import FixedClock
+from blizzard.foundation.subscription_miss import SampleMissReason
 from blizzard.runner.subscriptions.internal.anthropic_subscription_sampler import AnthropicSubscriptionSampler
-from blizzard.runner.subscriptions.subscription_sampler import (
-    ExternalSubscriptionUsageSnapshot,
-    SampleMiss,
-    SampleMissReason,
-)
+from blizzard.runner.subscriptions.subscription_sampler import ExternalSubscriptionUsageSnapshot, SampleMiss
 
 _NOW = datetime(2026, 8, 1, 12, 0, 0, tzinfo=UTC)
 

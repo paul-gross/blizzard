@@ -15,10 +15,12 @@ import pytest
 from structlog.testing import capture_logs
 
 from blizzard.foundation.clock import FixedClock
+from blizzard.foundation.store.utc import iso_utc
+from blizzard.foundation.subscription_miss import SampleMissReason
+from blizzard.foundation.usage_windows import admit_usage_window
 from blizzard.runner.subscriptions.subscription_sampler import (
     ExternalSubscriptionUsageSnapshot,
     ExternalSubscriptionUsageWindow,
-    SampleMissReason,
 )
 from blizzard.runner.throttle.resample import FloorResampleTriggers
 from blizzard.runner.usage.external_usage_sample import ExternalUsageSamplePass, SampledSubscription
@@ -106,6 +108,29 @@ def _ctx(
     store: SqlAlchemyRunnerStore, *, sampler: FakeSubscriptionSampler, clock: FixedClock, interval_seconds: int = 300
 ):
     return _pass(store, clock, _declared(interval_seconds=interval_seconds, sampler=sampler))
+
+
+def test_a_sampled_window_is_reported_as_the_admitted_window_stores_it(tmp_path: Path) -> None:
+    store = _store(tmp_path)
+    snapshot = _snapshot()
+    ctx = _ctx(store, sampler=FakeSubscriptionSampler(snapshot=snapshot), clock=FixedClock(_NOW))
+
+    ctx.run()
+
+    fact = next(f for f in store.pending_outbound() if f.kind == _SAMPLED_KIND)
+    expected: list[object] = []
+    for window in snapshot.windows:
+        admitted = admit_usage_window(
+            {
+                "window": window.window,
+                "utilization_pct": window.utilization_pct,
+                "resets_at": iso_utc(window.resets_at),
+                "window_seconds": window.window_seconds,
+            }
+        )
+        assert not isinstance(admitted, str)
+        expected.append(admitted.stored)
+    assert json.loads(fact.payload)["windows"] == expected
 
 
 # AC 1 — cadence gate.

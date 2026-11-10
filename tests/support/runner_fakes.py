@@ -22,12 +22,14 @@ from sqlalchemy import Engine, MetaData, make_url
 
 from blizzard.foundation.chunk_status import ChunkStatus
 from blizzard.foundation.clock import FixedClock, IClock, ManualMonotonicClock, SystemClock
+from blizzard.foundation.credential_renewal import RenewalResult
 from blizzard.foundation.invariants import Violation
 from blizzard.foundation.node_steps import ApplyOutcome, SessionMode
 from blizzard.foundation.queue_policy import QueueMatchPolicy
 from blizzard.foundation.runner_identity_state import IdentityState
 from blizzard.foundation.runner_tokens import RunnerTokenRefusalReason
 from blizzard.foundation.store.engine import create_engine_from_url
+from blizzard.foundation.subscription_miss import SampleMissReason
 from blizzard.foundation.trace_export.settings import TracingSettings
 from blizzard.runner.composition import RunnerProcess, build_runner_process
 from blizzard.runner.config import RunnerConfig
@@ -149,12 +151,11 @@ from blizzard.runner.stores import (
     IWriteRunnerStore,
     RunnerStores,
 )
-from blizzard.runner.subscriptions.credential_renewer import ICredentialRenewer, RenewalOutcome, RenewalOutcomeKind
+from blizzard.runner.subscriptions.credential_renewer import ICredentialRenewer, RenewalOutcome
 from blizzard.runner.subscriptions.subscription_sampler import (
     ExternalSubscriptionUsageSnapshot,
     ISubscriptionSampler,
     SampleMiss,
-    SampleMissReason,
 )
 from blizzard.runner.throttle.usage_limits import UsageLimitMark
 from blizzard.runner.transcripts.archived_repository import ArchivedTranscript
@@ -1536,7 +1537,7 @@ class FakeCredentialRenewer:
         on_renew: Callable[[], None] | None = None,
     ) -> None:
         self.due = due
-        self.outcome = outcome if outcome is not None else RenewalOutcome(RenewalOutcomeKind.RENEWED)
+        self.outcome = outcome if outcome is not None else RenewalOutcome(RenewalResult.RENEWED)
         self.on_renew = on_renew
         self.due_calls = 0
         self.renew_calls = 0

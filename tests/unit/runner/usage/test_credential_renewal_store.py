@@ -8,7 +8,7 @@ from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 from blizzard.foundation.credential_renewal import RenewalFailureReason, RenewalResult
-from blizzard.runner.subscriptions.credential_renewer import RenewalOutcome, RenewalOutcomeKind
+from blizzard.runner.subscriptions.credential_renewer import RenewalOutcome
 from blizzard.runner.usage.repository import CredentialRenewalSummary
 from tests.support.runner_fakes import SqlAlchemyRunnerStore, make_store
 
@@ -28,8 +28,8 @@ def _renew(store: SqlAlchemyRunnerStore, slug: str, at: datetime, outcome: Renew
 
 def test_each_slugs_newest_renewal_round_trips_typed(tmp_path: Path) -> None:
     store = _store(tmp_path)
-    _renew(store, "renewed", _NOW, RenewalOutcome(RenewalOutcomeKind.RENEWED))
-    _renew(store, "failed", _NOW, RenewalOutcome(RenewalOutcomeKind.FAILED, RenewalFailureReason.VENDOR_REFUSED))
+    _renew(store, "renewed", _NOW, RenewalOutcome(RenewalResult.RENEWED))
+    _renew(store, "failed", _NOW, RenewalOutcome(RenewalResult.FAILED, RenewalFailureReason.VENDOR_REFUSED))
     _renew(store, "unrecorded", _NOW, None)
 
     renewals = store.latest_credential_renewals_by_slug(["renewed", "failed", "unrecorded", "never"])
@@ -44,9 +44,9 @@ def test_each_slugs_newest_renewal_round_trips_typed(tmp_path: Path) -> None:
 
 def test_the_newest_claim_wins_and_a_same_instant_tie_breaks_on_the_later_claim(tmp_path: Path) -> None:
     store = _store(tmp_path)
-    _renew(store, "codex", _NOW - timedelta(hours=1), RenewalOutcome(RenewalOutcomeKind.RENEWED))
-    _renew(store, "codex", _NOW, RenewalOutcome(RenewalOutcomeKind.RENEWED))
-    _renew(store, "codex", _NOW, RenewalOutcome(RenewalOutcomeKind.FAILED, RenewalFailureReason.TIMED_OUT))
+    _renew(store, "codex", _NOW - timedelta(hours=1), RenewalOutcome(RenewalResult.RENEWED))
+    _renew(store, "codex", _NOW, RenewalOutcome(RenewalResult.RENEWED))
+    _renew(store, "codex", _NOW, RenewalOutcome(RenewalResult.FAILED, RenewalFailureReason.TIMED_OUT))
 
     summary = store.latest_credential_renewals_by_slug(["codex"])["codex"]
 
@@ -58,9 +58,9 @@ def test_the_newest_claim_wins_and_a_same_instant_tie_breaks_on_the_later_claim(
 def test_retention_prunes_superseded_claims_with_their_outcomes_but_never_a_slugs_newest(tmp_path: Path) -> None:
     store = _store(tmp_path)
     old = _NOW - timedelta(days=3)
-    _renew(store, "codex", old, RenewalOutcome(RenewalOutcomeKind.RENEWED))
-    _renew(store, "codex", _NOW - timedelta(days=2), RenewalOutcome(RenewalOutcomeKind.RENEWED))
-    _renew(store, "stale", old, RenewalOutcome(RenewalOutcomeKind.FAILED, RenewalFailureReason.TIMED_OUT))
+    _renew(store, "codex", old, RenewalOutcome(RenewalResult.RENEWED))
+    _renew(store, "codex", _NOW - timedelta(days=2), RenewalOutcome(RenewalResult.RENEWED))
+    _renew(store, "stale", old, RenewalOutcome(RenewalResult.FAILED, RenewalFailureReason.TIMED_OUT))
 
     pruned = store.prune_credential_renewals(now=_NOW)
 
@@ -83,12 +83,12 @@ def test_retention_never_prunes_a_same_instant_tied_newest_pair(tmp_path: Path) 
 
 def test_the_newest_claimed_at_wins_over_a_later_inserted_older_claim(tmp_path: Path) -> None:
     store = _store(tmp_path)
-    _renew(store, "codex", _NOW, RenewalOutcome(RenewalOutcomeKind.RENEWED))
+    _renew(store, "codex", _NOW, RenewalOutcome(RenewalResult.RENEWED))
     _renew(
         store,
         "codex",
         _NOW - timedelta(hours=1),
-        RenewalOutcome(RenewalOutcomeKind.FAILED, RenewalFailureReason.TIMED_OUT),
+        RenewalOutcome(RenewalResult.FAILED, RenewalFailureReason.TIMED_OUT),
     )
 
     assert store.latest_credential_renewals_by_slug(["codex"]) == {
@@ -98,10 +98,10 @@ def test_the_newest_claimed_at_wins_over_a_later_inserted_older_claim(tmp_path: 
 
 def test_a_same_instant_tie_picks_the_later_claim_per_slug_independently(tmp_path: Path) -> None:
     store = _store(tmp_path)
-    _renew(store, "codex", _NOW, RenewalOutcome(RenewalOutcomeKind.FAILED, RenewalFailureReason.TIMED_OUT))
-    _renew(store, "claude", _NOW, RenewalOutcome(RenewalOutcomeKind.FAILED, RenewalFailureReason.VENDOR_REFUSED))
+    _renew(store, "codex", _NOW, RenewalOutcome(RenewalResult.FAILED, RenewalFailureReason.TIMED_OUT))
+    _renew(store, "claude", _NOW, RenewalOutcome(RenewalResult.FAILED, RenewalFailureReason.VENDOR_REFUSED))
     _renew(store, "codex", _NOW, None)
-    _renew(store, "claude", _NOW, RenewalOutcome(RenewalOutcomeKind.RENEWED))
+    _renew(store, "claude", _NOW, RenewalOutcome(RenewalResult.RENEWED))
 
     assert store.latest_credential_renewals_by_slug(["codex", "claude"]) == {
         "codex": CredentialRenewalSummary("codex", _NOW, RenewalResult.UNRECORDED, None),
@@ -112,9 +112,9 @@ def test_a_same_instant_tie_picks_the_later_claim_per_slug_independently(tmp_pat
 def test_retention_keeps_a_superseded_claim_still_inside_the_window(tmp_path: Path) -> None:
     store = _store(tmp_path)
     cutoff = _NOW - timedelta(days=1)
-    _renew(store, "codex", cutoff - timedelta(seconds=1), RenewalOutcome(RenewalOutcomeKind.RENEWED))
-    _renew(store, "codex", cutoff, RenewalOutcome(RenewalOutcomeKind.RENEWED))
-    _renew(store, "codex", _NOW, RenewalOutcome(RenewalOutcomeKind.RENEWED))
+    _renew(store, "codex", cutoff - timedelta(seconds=1), RenewalOutcome(RenewalResult.RENEWED))
+    _renew(store, "codex", cutoff, RenewalOutcome(RenewalResult.RENEWED))
+    _renew(store, "codex", _NOW, RenewalOutcome(RenewalResult.RENEWED))
 
     assert store.prune_credential_renewals(now=_NOW) == 1
     with store.engine.connect() as conn:
@@ -127,9 +127,9 @@ def test_retention_keeps_a_superseded_claim_still_inside_the_window(tmp_path: Pa
 def test_retention_judges_each_slug_against_its_own_newest_claim(tmp_path: Path) -> None:
     store = _store(tmp_path)
     old = _NOW - timedelta(days=3)
-    _renew(store, "codex", old, RenewalOutcome(RenewalOutcomeKind.RENEWED))
-    _renew(store, "claude", old - timedelta(hours=1), RenewalOutcome(RenewalOutcomeKind.RENEWED))
-    _renew(store, "claude", _NOW, RenewalOutcome(RenewalOutcomeKind.RENEWED))
+    _renew(store, "codex", old, RenewalOutcome(RenewalResult.RENEWED))
+    _renew(store, "claude", old - timedelta(hours=1), RenewalOutcome(RenewalResult.RENEWED))
+    _renew(store, "claude", _NOW, RenewalOutcome(RenewalResult.RENEWED))
 
     assert store.prune_credential_renewals(now=_NOW) == 1
     assert store.last_credential_renewal_claim_at("codex") == old

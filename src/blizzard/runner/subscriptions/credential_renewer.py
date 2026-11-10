@@ -9,29 +9,17 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import datetime, timedelta
-from enum import StrEnum
 from typing import Protocol
 
-from blizzard.foundation.credential_renewal import RenewalFailureReason
+from blizzard.foundation.credential_renewal import RenewalFailureReason, RenewalResult
 from blizzard.foundation.roles import domain_model
 
 __all__ = [
     "RENEWAL_FAILURE_TEXT",
     "ICredentialRenewer",
-    "RenewalFailureReason",
     "RenewalOutcome",
-    "RenewalOutcomeKind",
     "renewal_due",
 ]
-
-
-class RenewalOutcomeKind(StrEnum):
-    """One fired renewal's shape. ``RENEWED`` — the vendor CLI refreshed the credential.
-    ``FAILED`` — the renewal was attempted but did not succeed; see
-    :attr:`RenewalOutcome.failure_reason`."""
-
-    RENEWED = "renewed"
-    FAILED = "failed"
 
 
 # Operator-facing text per closed-set failure reason — what the failure was, not the machine word.
@@ -47,10 +35,15 @@ RENEWAL_FAILURE_TEXT: dict[RenewalFailureReason, str] = {
 @dataclass(frozen=True)
 class RenewalOutcome:
     """One ``renew()`` call's result. ``failure_reason`` is set only when
-    ``kind`` is :attr:`RenewalOutcomeKind.FAILED`."""
+    ``kind`` is :attr:`RenewalResult.FAILED`. A renewer never returns ``UNRECORDED`` — that is an attempt with no
+    outcome on record — so construction refuses it."""
 
-    kind: RenewalOutcomeKind
+    kind: RenewalResult
     failure_reason: RenewalFailureReason | None = None
+
+    def __post_init__(self) -> None:
+        if self.kind is RenewalResult.UNRECORDED:
+            raise ValueError("a renewal outcome is RENEWED or FAILED, never UNRECORDED")
 
 
 def renewal_due(expires_at: datetime, now: datetime, lead: timedelta) -> bool:
