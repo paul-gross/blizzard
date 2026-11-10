@@ -35,7 +35,9 @@ from blizzard.hub.store.scoped import is_tenant_owned
 from blizzard.hub.tenancy import TenantId
 from blizzard.runner.config import DEFAULT_WORKSPACE_ID
 from blizzard.runner.environments.internal.basic_provider import BasicWorkspaceProvider
-from blizzard.runner.harness.identity import CLAUDE_CODE_HARNESS_ID, OPENCODE_HARNESS_ID, SessionReference
+from blizzard.runner.harness.claude_code.section import CLAUDE_CODE_HARNESS_ID
+from blizzard.runner.harness.identity import SessionReference
+from blizzard.runner.harness.opencode.section import OPENCODE_HARNESS_ID
 from blizzard.runner.host_layout import HostLayout
 from blizzard.runner.hub.internal.token_file import HubTokenFile
 from blizzard.runner.hub.token_file import assigned_token

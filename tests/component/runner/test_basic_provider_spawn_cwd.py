@@ -14,7 +14,8 @@ from blizzard.runner.composition import build_runner_process
 from blizzard.runner.config import DEFAULT_WORKSPACE_ID, RunnerConfig
 from blizzard.runner.environments.provider import WorkspaceRepo
 from blizzard.runner.events.broker import EventBroker
-from blizzard.runner.harness.identity import CLAUDE_CODE_HARNESS_ID, SessionReference
+from blizzard.runner.harness.claude_code.section import CLAUDE_CODE_HARNESS_ID
+from blizzard.runner.harness.identity import SessionReference
 from blizzard.runner.harness.spawn_cwd import SpawnCwd
 from blizzard.runner.hub.identity import RunnerIdentity
 from blizzard.runner.leases.model import NewLease

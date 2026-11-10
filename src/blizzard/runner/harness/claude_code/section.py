@@ -14,8 +14,9 @@ from pathlib import Path
 from blizzard.foundation.config_keys import BOOLEAN, OPEN_TABLE, STRING, STRING_LIST, TABLE, ConfigKey, ConfigView
 from blizzard.foundation.roles import domain_model
 from blizzard.runner.config_table import ConfigError, Table
-from blizzard.runner.harness.identity import CLAUDE_CODE_HARNESS_ID
 
+# The immutable owner code every existing production session binds.
+CLAUDE_CODE_HARNESS_ID = "claude_code"
 DEFAULT_HARNESS_BINARY = "claude"
 # Injected per feature env, so a fresh `runner init` names the env's harness binary.
 ENV_HARNESS_BINARY = "BZ_HARNESS_BINARY"

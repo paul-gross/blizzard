@@ -10,7 +10,8 @@ from sqlalchemy import Engine
 
 from blizzard.foundation.clock import FixedClock
 from blizzard.foundation.store.engine import create_engine_from_url
-from blizzard.runner.harness.identity import CLAUDE_CODE_HARNESS_ID, SessionReference
+from blizzard.runner.harness.claude_code.section import CLAUDE_CODE_HARNESS_ID
+from blizzard.runner.harness.identity import SessionReference
 from blizzard.runner.leases.activity import (
     HEARTBEAT_STALENESS_THRESHOLD,
     RECENT_LEASE_LIMIT,

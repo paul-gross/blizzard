@@ -14,7 +14,6 @@ from blizzard.runner.harness.autonomy import Autonomy
 from blizzard.runner.harness.bundle import HarnessLayout, HarnessSource
 from blizzard.runner.harness.declaration import SharedHarnessInputs
 from blizzard.runner.harness.harness_telemetry_plan import HarnessTelemetryNames, HarnessTelemetryPlan
-from blizzard.runner.harness.identity import OPENCODE_HARNESS_ID
 from blizzard.runner.harness.internal.bundle_publisher import published_snapshot
 from blizzard.runner.harness.internal.version_probe import VersionProbe
 from blizzard.runner.harness.offline_compatibility import ICompatibilityCorpus
@@ -31,7 +30,7 @@ from blizzard.runner.harness.opencode.plugin import (
     plugin_reference,
     write_plugin,
 )
-from blizzard.runner.harness.opencode.section import OpenCodeSection
+from blizzard.runner.harness.opencode.section import OPENCODE_HARNESS_ID, OpenCodeSection
 from blizzard.runner.harness.opencode.transcript.export import SubprocessOpenCodeExporter
 from blizzard.runner.harness.opencode.transcript.normalizer import NORMALIZER_VERSION
 from blizzard.runner.harness.opencode.transcript.transcript_source import OpenCodeTranscriptSource

@@ -11,7 +11,8 @@ from pathlib import Path
 
 import sqlalchemy as sa
 
-from blizzard.runner.harness.identity import CLAUDE_CODE_HARNESS_ID, SessionReference
+from blizzard.runner.harness.claude_code.section import CLAUDE_CODE_HARNESS_ID
+from blizzard.runner.harness.identity import SessionReference
 from blizzard.runner.leases.model import NewLease
 from blizzard.runner.store.schema import external_usage_samples, heartbeats
 from tests.support.runner_fakes import FIXTURE_RUNNER_ID, SqlAlchemyRunnerStore

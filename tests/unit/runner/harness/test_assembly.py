@@ -19,14 +19,15 @@ from blizzard.runner.harness.binding_selection import BindingSelection
 from blizzard.runner.harness.bundle import HarnessLayout, HarnessSource
 from blizzard.runner.harness.claude_code.declaration import CLAUDE_CODE_DECLARATION
 from blizzard.runner.harness.claude_code.health import ClaudeCodeHealthProbe
+from blizzard.runner.harness.claude_code.section import CLAUDE_CODE_HARNESS_ID
 from blizzard.runner.harness.declaration import HarnessSection, IHarnessDeclaration, SharedHarnessInputs
 from blizzard.runner.harness.harness_telemetry_plan import HarnessTelemetryNames, HarnessTelemetryPlan
-from blizzard.runner.harness.identity import CLAUDE_CODE_HARNESS_ID, OPENCODE_HARNESS_ID
 from blizzard.runner.harness.internal.committed_corpus import CommittedCorpus
 from blizzard.runner.harness.internal.process_launcher import ProcessLauncher
 from blizzard.runner.harness.offline_compatibility import ICompatibilityCorpus
 from blizzard.runner.harness.opencode.declaration import OPENCODE_DECLARATION
 from blizzard.runner.harness.opencode.health import OpenCodeHealthProbe
+from blizzard.runner.harness.opencode.section import OPENCODE_HARNESS_ID
 from blizzard.runner.harness.opencode_v2.declaration import OPENCODE_V2_DECLARATION
 from blizzard.runner.harness.opencode_v2.health import OpenCodeTwoHealthProbe
 from blizzard.runner.harness.process_launch import IProcessLauncher

@@ -7,9 +7,9 @@ from pathlib import Path
 
 from blizzard.foundation.clock import ManualMonotonicClock, SystemClock
 from blizzard.runner.config import RunnerConfig
-from blizzard.runner.harness.identity import OPENCODE_HARNESS_ID
 from blizzard.runner.harness.internal.committed_corpus import CommittedCorpus
 from blizzard.runner.harness.opencode.health import OpenCodeHealthProbe
+from blizzard.runner.harness.opencode.section import OPENCODE_HARNESS_ID
 from blizzard.runner.harness.wiring import build_production_harnesses, first_bindings
 from blizzard.runner.process.internal.linux_process_probe import LinuxProcessProbe
 from tests.support.child_launch import CHILDREN

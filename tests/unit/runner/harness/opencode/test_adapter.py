@@ -23,7 +23,6 @@ from blizzard.foundation.clock import SystemClock, SystemMonotonicClock
 from blizzard.runner.harness.adapter import HarnessSpawnError, ResumeHandle
 from blizzard.runner.harness.autonomy import Autonomy
 from blizzard.runner.harness.declaration import SharedHarnessInputs
-from blizzard.runner.harness.identity import OPENCODE_HARNESS_ID
 from blizzard.runner.harness.internal.committed_corpus import CommittedCorpus
 from blizzard.runner.harness.internal.process_launcher import ProcessLauncher
 from blizzard.runner.harness.json_value import JsonObject
@@ -40,7 +39,7 @@ from blizzard.runner.harness.opencode.permissions.permission_resolver import (
     OpenCodePermissionResolveError,
     SubprocessOpenCodePermissionResolver,
 )
-from blizzard.runner.harness.opencode.section import OpenCodeSection
+from blizzard.runner.harness.opencode.section import OPENCODE_HARNESS_ID, OpenCodeSection
 from blizzard.runner.harness.opencode.shapes import OpenCodePermissionRule
 from blizzard.runner.harness.opencode.usage.price_cache import (
     FileOpenCodePriceCatalog,

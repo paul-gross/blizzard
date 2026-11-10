@@ -11,11 +11,6 @@ from dataclasses import dataclass
 
 from blizzard.foundation.roles import domain_model
 
-# The immutable owner code every existing production session binds.
-CLAUDE_CODE_HARNESS_ID = "claude_code"
-# The OpenCode binding's own immutable owner code (harness-selection spec).
-OPENCODE_HARNESS_ID = "opencode"
-
 
 @domain_model
 @dataclass(frozen=True)

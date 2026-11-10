@@ -52,9 +52,9 @@ from blizzard.runner.harness.adapter import (
     WorkerPreamble,
 )
 from blizzard.runner.harness.capability_snapshot import HarnessCapability, HarnessVersionCache
+from blizzard.runner.harness.claude_code.section import CLAUDE_CODE_HARNESS_ID
 from blizzard.runner.harness.health import HarnessHealthResult
 from blizzard.runner.harness.health_cache import HarnessHealthCache
-from blizzard.runner.harness.identity import CLAUDE_CODE_HARNESS_ID
 from blizzard.runner.harness.overload import ProviderOverload
 from blizzard.runner.harness.registry import HarnessBinding, HarnessRegistry
 from blizzard.runner.harness.transcript import IHarnessTranscriptSource, TranscriptBatch, TranscriptPosition

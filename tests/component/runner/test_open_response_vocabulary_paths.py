@@ -20,7 +20,8 @@ from blizzard.foundation.chunk_status import ChunkStatus
 from blizzard.foundation.unrecognized import Unrecognized
 from blizzard.runner.config import RunnerConfig
 from blizzard.runner.harness.adapter import WorkerHandle
-from blizzard.runner.harness.identity import CLAUDE_CODE_HARNESS_ID, SessionReference
+from blizzard.runner.harness.claude_code.section import CLAUDE_CODE_HARNESS_ID
+from blizzard.runner.harness.identity import SessionReference
 from blizzard.runner.hub.node_steps import apply_reply_of, completion_submission
 from blizzard.runner.hub.outbound import COMPLETION_KIND
 from blizzard.runner.leases.model import NewLease

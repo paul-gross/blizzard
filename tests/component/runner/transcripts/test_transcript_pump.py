@@ -16,7 +16,8 @@ from blizzard.foundation.clock import FixedClock
 from blizzard.foundation.leases import LeaseClosureReason
 from blizzard.hub.domain.observability.transcripts import RECORD_MAX_BYTES as HUB_RECORD_MAX_BYTES
 from blizzard.runner.harness.adapter import WorkerHandle
-from blizzard.runner.harness.identity import CLAUDE_CODE_HARNESS_ID, SessionReference
+from blizzard.runner.harness.claude_code.section import CLAUDE_CODE_HARNESS_ID
+from blizzard.runner.harness.identity import SessionReference
 from blizzard.runner.harness.json_value import JsonValue
 from blizzard.runner.harness.transcript import (
     LateToolOutput,

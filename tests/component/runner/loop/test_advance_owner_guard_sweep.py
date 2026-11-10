@@ -20,7 +20,8 @@ from blizzard.foundation.fact_kinds import ESCALATION_RECORDED, EVENT_RECORDED, 
 from blizzard.foundation.leases import LeaseClosureReason
 from blizzard.foundation.node_steps import SessionMode
 from blizzard.runner.harness.adapter import WorkerHandle
-from blizzard.runner.harness.identity import CLAUDE_CODE_HARNESS_ID, SessionReference
+from blizzard.runner.harness.claude_code.section import CLAUDE_CODE_HARNESS_ID
+from blizzard.runner.harness.identity import SessionReference
 from blizzard.runner.harness.registry import HarnessBinding, HarnessRegistry
 from blizzard.runner.leases.model import NewLease
 from blizzard.runner.lifecycle.attempt import Attempt

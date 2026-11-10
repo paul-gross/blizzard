@@ -10,7 +10,7 @@ import json
 
 from blizzard.foundation.fact_kinds import LEASE_MINTED
 from blizzard.foundation.tokens import TokenHash
-from blizzard.runner.harness.identity import CLAUDE_CODE_HARNESS_ID
+from blizzard.runner.harness.claude_code.section import CLAUDE_CODE_HARNESS_ID
 from blizzard.runner.hub.outbound_buffer import lease_minted_payload
 from blizzard.runner.leases.model import NewLease, NewMint
 

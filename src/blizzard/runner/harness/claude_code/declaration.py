@@ -24,13 +24,16 @@ from blizzard.runner.harness.claude_code.bundle import (
 )
 from blizzard.runner.harness.claude_code.health import ClaudeCodeHealthProbe
 from blizzard.runner.harness.claude_code.normalizer import NORMALIZER_VERSION
-from blizzard.runner.harness.claude_code.section import WORKER_SETTINGS_FILENAME, ClaudeCodeSection
+from blizzard.runner.harness.claude_code.section import (
+    CLAUDE_CODE_HARNESS_ID,
+    WORKER_SETTINGS_FILENAME,
+    ClaudeCodeSection,
+)
 from blizzard.runner.harness.claude_code.telemetry_plan import CLAUDE_CODE_TELEMETRY_NAMES, plan_harness_telemetry
 from blizzard.runner.harness.claude_code.transcript import ClaudeCodeTranscriptSource
 from blizzard.runner.harness.claude_code.worker_settings import WorkerSettings
 from blizzard.runner.harness.declaration import SharedHarnessInputs
 from blizzard.runner.harness.harness_telemetry_plan import HarnessTelemetryNames, HarnessTelemetryPlan
-from blizzard.runner.harness.identity import CLAUDE_CODE_HARNESS_ID
 from blizzard.runner.harness.internal.version_probe import VersionProbe
 from blizzard.runner.harness.offline_compatibility import ICompatibilityCorpus
 from blizzard.runner.harness.process_launch import IProcessLauncher

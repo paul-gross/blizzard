@@ -29,7 +29,8 @@ from blizzard.foundation.fact_kinds import (
 from blizzard.foundation.node_steps import ApplyOutcome
 from blizzard.foundation.store.utc import iso_utc
 from blizzard.runner.harness.adapter import WorkerHandle
-from blizzard.runner.harness.identity import CLAUDE_CODE_HARNESS_ID, SessionReference
+from blizzard.runner.harness.claude_code.section import CLAUDE_CODE_HARNESS_ID
+from blizzard.runner.harness.identity import SessionReference
 from blizzard.runner.harness.usage import UsageLimit
 from blizzard.runner.hub.client import (
     HubClientError,

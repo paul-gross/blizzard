@@ -24,8 +24,10 @@ from blizzard.foundation.logging import get_logger
 from blizzard.foundation.node_steps import ApplyOutcome, SessionMode
 from blizzard.runner.environments.provider import AcquiredEnvironment
 from blizzard.runner.harness.adapter import WorkerHandle
+from blizzard.runner.harness.claude_code.section import CLAUDE_CODE_HARNESS_ID
 from blizzard.runner.harness.claude_code.transcript import ClaudeCodeTranscriptSource
-from blizzard.runner.harness.identity import CLAUDE_CODE_HARNESS_ID, OPENCODE_HARNESS_ID, SessionReference
+from blizzard.runner.harness.identity import SessionReference
+from blizzard.runner.harness.opencode.section import OPENCODE_HARNESS_ID
 from blizzard.runner.harness.opencode.transcript.transcript_source import OpenCodeTranscriptSource
 from blizzard.runner.harness.registry import HarnessBinding, HarnessRegistry
 from blizzard.runner.harness.transcript import IHarnessTranscriptSource, TranscriptErrorFactory

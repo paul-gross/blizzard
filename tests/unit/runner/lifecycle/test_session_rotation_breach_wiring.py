@@ -14,8 +14,9 @@ import pytest
 from structlog.testing import capture_logs
 
 from blizzard.foundation.node_steps import SessionMode
+from blizzard.runner.harness.claude_code.section import CLAUDE_CODE_HARNESS_ID
 from blizzard.runner.harness.fingerprint import PreambleFingerprint
-from blizzard.runner.harness.identity import CLAUDE_CODE_HARNESS_ID, SessionReference
+from blizzard.runner.harness.identity import SessionReference
 from blizzard.runner.harness.registry import UnavailableHarnessError, UnknownHarnessError
 from blizzard.runner.harness.transcript import TranscriptBatch, TranscriptPosition
 from blizzard.runner.leases.model import Lease, PoolHead

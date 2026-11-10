@@ -18,7 +18,9 @@ import sqlalchemy as sa
 from blizzard.hub.domain.tenancy.administration import DEFAULT_PROJECT_SLUG
 from blizzard.hub.store import schema as s
 from blizzard.runner.harness.adapter import WorkerHandle
-from blizzard.runner.harness.identity import CLAUDE_CODE_HARNESS_ID, OPENCODE_HARNESS_ID, SessionReference
+from blizzard.runner.harness.claude_code.section import CLAUDE_CODE_HARNESS_ID
+from blizzard.runner.harness.identity import SessionReference
+from blizzard.runner.harness.opencode.section import OPENCODE_HARNESS_ID
 from blizzard.runner.harness.registry import HarnessBinding, HarnessRegistry
 from blizzard.runner.hub.chunk_status_cache import IChunkViews, ReadThroughChunkViews
 from blizzard.runner.hub.client import HubClientError

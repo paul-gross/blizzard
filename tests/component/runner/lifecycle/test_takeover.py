@@ -26,8 +26,9 @@ from blizzard.runner.environments.provider import AcquiredEnvironment
 from blizzard.runner.environments.workspaces import WorkspaceEntry, WorkspaceRegistry
 from blizzard.runner.harness.adapter import IHarnessAdapter, WorkerHandle
 from blizzard.runner.harness.claude_code.adapter import ClaudeCodeAdapter
+from blizzard.runner.harness.claude_code.section import CLAUDE_CODE_HARNESS_ID
 from blizzard.runner.harness.harness_telemetry_plan import HarnessTelemetryPlan
-from blizzard.runner.harness.identity import CLAUDE_CODE_HARNESS_ID, SessionReference
+from blizzard.runner.harness.identity import SessionReference
 from blizzard.runner.harness.internal.process_launcher import ProcessLauncher
 from blizzard.runner.harness.registry import HarnessBinding, HarnessRegistry
 from blizzard.runner.leases.activity import HEARTBEAT_STALENESS_THRESHOLD

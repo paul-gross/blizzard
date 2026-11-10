@@ -16,7 +16,8 @@ from fastapi import FastAPI
 from blizzard.foundation.tokens import TokenHash
 from blizzard.runner.api.history import rows
 from blizzard.runner.config import RunnerConfig
-from blizzard.runner.harness.identity import CLAUDE_CODE_HARNESS_ID, SessionReference
+from blizzard.runner.harness.claude_code.section import CLAUDE_CODE_HARNESS_ID
+from blizzard.runner.harness.identity import SessionReference
 from blizzard.runner.leases.model import NewLease
 from blizzard.wire.history import ChunkHistoryView
 from tests.support.chunk_history_api import CHUNK, DETAIL

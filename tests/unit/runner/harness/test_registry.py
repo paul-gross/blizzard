@@ -13,11 +13,13 @@ from blizzard.foundation.clock import ManualMonotonicClock, SystemClock
 from blizzard.runner.config import RunnerConfig
 from blizzard.runner.harness.adapter import EverySpawnRootProbe, IHarnessHealthProbe, WorkerHandle
 from blizzard.runner.harness.capability_snapshot import capability_snapshot, default_harness_id
+from blizzard.runner.harness.claude_code.section import CLAUDE_CODE_HARNESS_ID
 from blizzard.runner.harness.health import HarnessHealthResult
 from blizzard.runner.harness.health_cache import HarnessHealthCache
-from blizzard.runner.harness.identity import CLAUDE_CODE_HARNESS_ID, OPENCODE_HARNESS_ID, SessionReference
+from blizzard.runner.harness.identity import SessionReference
 from blizzard.runner.harness.internal.committed_corpus import CommittedCorpus
 from blizzard.runner.harness.opencode.health import OpenCodeHealthProbe
+from blizzard.runner.harness.opencode.section import OPENCODE_HARNESS_ID
 from blizzard.runner.harness.opencode.transcript.transcript_source import OpenCodeTranscriptSource
 from blizzard.runner.harness.opencode.usage.price_cache import FileOpenCodePriceCatalog
 from blizzard.runner.harness.registry import (

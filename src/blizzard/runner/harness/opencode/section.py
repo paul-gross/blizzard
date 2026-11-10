@@ -12,8 +12,9 @@ from pathlib import Path
 from blizzard.foundation.config_keys import BOOLEAN, OPEN_TABLE, STRING, STRING_LIST, TABLE, ConfigKey, ConfigView
 from blizzard.foundation.roles import domain_model
 from blizzard.runner.config_table import ConfigError, Table
-from blizzard.runner.harness.identity import OPENCODE_HARNESS_ID
 
+# The OpenCode binding's own immutable owner code (harness-selection spec).
+OPENCODE_HARNESS_ID = "opencode"
 DEFAULT_OPENCODE_BINARY = "opencode"
 # The runner-owned OpenCode permission/plugin document `init` scaffolds.
 OPENCODE_WORKER_CONFIG_FILENAME = "opencode-worker-config.json"

@@ -13,7 +13,8 @@ from datetime import UTC, datetime
 from typing import Any
 
 from blizzard.runner.harness.adapter import WorkerHandle
-from blizzard.runner.harness.identity import OPENCODE_HARNESS_ID, SessionReference
+from blizzard.runner.harness.identity import SessionReference
+from blizzard.runner.harness.opencode.section import OPENCODE_HARNESS_ID
 from blizzard.runner.harness.opencode.transcript.export import OpenCodeExportError
 from blizzard.runner.harness.opencode.transcript.transcript_source import OpenCodeTranscriptSource
 from blizzard.runner.harness.registry import HarnessBinding, HarnessRegistry
