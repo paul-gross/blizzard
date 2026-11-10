@@ -11,11 +11,13 @@ from __future__ import annotations
 import contextlib
 import functools
 import os
+import shutil
 import socket
+import tempfile
 from collections.abc import Callable, Generator, Mapping, Sequence
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass, field, replace
-from datetime import tzinfo
+from datetime import datetime, tzinfo
 from pathlib import Path
 
 import httpx2
@@ -74,7 +76,7 @@ from blizzard.runner.harness.wiring import (
 )
 from blizzard.runner.host_config import BuiltRunner, HaltedRunner, HostConfig, ResolvedToken
 from blizzard.runner.host_file import HostFileEditor
-from blizzard.runner.host_layout import HostLayout
+from blizzard.runner.host_layout import HostLayout, hold_host
 from blizzard.runner.hub.client import HostReport, HostReportedWorkspace, IHostHubClient
 from blizzard.runner.hub.client import SubscriptionDeclaration as HubSubscriptionDeclaration
 from blizzard.runner.hub.flags import FlagsHolder
@@ -99,7 +101,12 @@ from blizzard.runner.process.child_env import ChildEnv
 from blizzard.runner.process.child_processes import IChildProcesses
 from blizzard.runner.process.internal.linux_process_probe import LinuxProcessProbe
 from blizzard.runner.process.internal.subprocess_child_processes import SubprocessChildProcesses
-from blizzard.runner.runtime import migration_runner, runner_store_migrations
+from blizzard.runner.runtime import (
+    backup_sqlite,
+    migration_runner,
+    runner_store_migrations,
+    set_aside_sqlite,
+)
 from blizzard.runner.status.invariants import HostInvariantCheck
 from blizzard.runner.store.errors import RunnerStoreErrorFactory
 from blizzard.runner.store.internal.ask_store import AskStore
@@ -168,6 +175,7 @@ from blizzard.runner.tracing.receiver_limits import ReceiverBounds, ReceiverCoun
 from blizzard.runner.tracing.receiving import TelemetryReceiver
 from blizzard.runner.tracing.replay import LeaseTraceReplay
 from blizzard.runner.tracing.sweep import LeaseTraceSweep
+from blizzard.runner.transfer.host_files import IHostFiles
 from blizzard.runner.transfer.rows import HostIngest, IRunnerRowRemoval, IRunnerTransfer
 from blizzard.runner.transfer.runner_stores import HeldBinding, IRunnerBoundStores, RunnerStoreView
 from blizzard.runner.usage.credential_renewal import CredentialRenewalPass, RenewableSubscription
@@ -1245,6 +1253,48 @@ class DotenvTokenFiles:
 
 _token_files_conforms: type[ITokenFiles] = DotenvTokenFiles
 
+_COPY_PREFIX = "ingest-copy-"
+
+
+@collaborator
+@dataclass(frozen=True)
+class HostFiles:
+    """An ingest's file operations on the host's disk."""
+
+    @contextlib.contextmanager
+    def copy_of(self, store: Path, beside: Path) -> Generator[Path, None, None]:
+        # The caller holds the host's lock, so a copy left here is one a killed run never removed.
+        for stale in beside.glob(f"{_COPY_PREFIX}*"):
+            shutil.rmtree(stale, ignore_errors=True)
+        directory = Path(tempfile.mkdtemp(prefix=_COPY_PREFIX, dir=beside))
+        try:
+            copy = directory / store.name
+            backup_sqlite(store, copy)
+            yield copy
+        finally:
+            shutil.rmtree(directory, ignore_errors=True)
+
+    def copy_tree(self, src: Path, dst: Path) -> None:
+        shutil.copytree(src, dst, dirs_exist_ok=True)
+
+    def copy_file(self, src: Path, dst: Path) -> None:
+        dst.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(src, dst)
+
+    def set_aside(self, store: Path, *, now: datetime) -> tuple[Path, ...]:
+        return set_aside_sqlite(store, now=now).moved
+
+    @contextlib.contextmanager
+    def hold(
+        self, root: Path, probe: Callable[[Path], str | None], refusal: Callable[[str], Exception]
+    ) -> Generator[None, None, None]:
+        layout = HostLayout(root)
+        with hold_host(layout, (layout.socket_path, layout.legacy_socket_path), probe, lambda held: refusal(str(held))):
+            yield
+
+
+_host_files_conforms: type[IHostFiles] = HostFiles
+
 
 def build_runner_ingest(
     host: HostConfig,
@@ -1253,6 +1303,7 @@ def build_runner_ingest(
     holder: Callable[[Path], str | None],
     clock: IClock | None = None,
     migrations: Callable[[str], MigrationRunner] = runner_store_migrations,
+    files: IHostFiles | None = None,
 ) -> RunnerIngest:
     """The ingest into the host ``host``, reaching its hub through ``hub``, probing sockets with ``holder``, and
     migrating each source copy through ``migrations``."""
@@ -1264,6 +1315,7 @@ def build_runner_ingest(
         tokens=DotenvTokenFiles(),
         hub=hub,
         holder=holder,
+        files=files or HostFiles(),
         clock=resolved,
         migrations=migrations,
     )

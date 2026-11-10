@@ -9,6 +9,7 @@ import tomllib
 from collections.abc import Callable
 from datetime import timedelta
 from pathlib import Path
+from typing import Any
 
 import pytest
 import sqlalchemy as sa
@@ -26,12 +27,13 @@ from blizzard.runner.composition import (
     DotenvTokenFiles,
     RunnerBoundStoreFiles,
     build_host_stores,
+    build_runner_ingest,
     build_stores,
 )
-from blizzard.runner.host_config import BuiltRunner
+from blizzard.runner.host_config import BuiltRunner, HostConfig
 from blizzard.runner.host_file import HostFileEditor, append_workspace
 from blizzard.runner.host_layout import HostLayout, HostLock
-from blizzard.runner.hub.client import HostRefusalReason, HostRefused, HubClientError
+from blizzard.runner.hub.client import HostRefusalReason, HostRefused, HubClientError, IHostHubClient
 from blizzard.runner.hub.host_identity import HostIdentity
 from blizzard.runner.hub.identity import RunnerIdentity
 from blizzard.runner.hub.internal.token_file import HubTokenFile
@@ -48,6 +50,7 @@ from tests.support.runner_ingest import (
     MOVING_ID,
     RUNNER_TABLES,
     TENANT,
+    RecordingHostFiles,
     TwoHosts,
     contents,
     invariant_violations,
@@ -668,6 +671,39 @@ def test_a_rerun_after_a_kill_at_either_point_is_refused_once_the_source_ran(
     engine.dispose()
 
     _refuse(fake_init_hub, hosts, "has run since", "--workspace-id", _NEW_WORKSPACE)
+
+
+def test_the_copy_is_removed_before_the_first_crash_point_and_the_host_is_held_throughout(
+    tmp_path: Path, fake_init_hub: FakeInitHub, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    hosts = two_hosts(tmp_path, fake_init_hub)
+    recorder = RecordingHostFiles()
+
+    def build(host: HostConfig, hub: IHostHubClient, **kwargs: Any) -> RunnerIngest:
+        return build_runner_ingest(host, hub, files=recorder, **kwargs)
+
+    monkeypatch.setattr(runners_cli, "build_runner_ingest", build)
+    reached = CrashPoint.reached
+
+    def record(self: CrashPoint) -> None:
+        if self.name.startswith("ingest."):
+            recorder.journal.append(self.name)
+        reached(self)
+
+    monkeypatch.setattr(CrashPoint, "reached", record)
+
+    result = _ingest(fake_init_hub, hosts, "--workspace-id", _NEW_WORKSPACE)
+
+    assert result.exit_code == 0, result.output
+    journal = recorder.journal
+    after_copy, after_config = (
+        journal.index("ingest.after-copy.before-config"),
+        journal.index("ingest.after-config.before-removal"),
+    )
+    assert journal.index("copy_of:exit") < after_copy < after_config
+    # The source keeps its own runner here, so nothing is set aside; were it emptied, the set-aside follows.
+    assert "set_aside" not in journal or journal.index("set_aside") > after_config
+    assert journal[0] == "hold" and journal[-1] == "hold:exit"
 
 
 class _Clock:
