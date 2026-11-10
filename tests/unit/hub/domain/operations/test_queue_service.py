@@ -22,6 +22,7 @@ from blizzard.hub.domain.chunk.ports.queue import BACKLOG_RANKING_LOCK, READY_RA
 from blizzard.hub.domain.chunk.ports.record import IReadChunkRecordRepository
 from blizzard.hub.domain.kernel.transactions import IHubTransactions, LockedTransaction, Transaction
 from blizzard.hub.domain.operations.queue import QueueList, QueueRanking, QueueService
+from blizzard.hub.domain.urgency.ports import IReadUrgencyOrder
 
 _NO_STATUSES: dict[str, ChunkStatus] = {}
 """The fake repo below pre-filters `ready`/`not_ready` itself, so `QueueService` never
@@ -146,6 +147,7 @@ def _service(repo: _FakeChunkRepo) -> QueueService:
         facts=cast(IReadChunkFactsRepository, repo),
         transactions=cast(IHubTransactions, repo),
         clock=FixedClock(instant=_T0),
+        urgency_order=cast(IReadUrgencyOrder, repo),
     )
 
 

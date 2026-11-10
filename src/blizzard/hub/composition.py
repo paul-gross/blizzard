@@ -1357,7 +1357,12 @@ def build_tenant_services(stores: TenantStores, parts: TenantServiceParts, *, ev
             questions=chunk_questions, facts=chunk_facts, transactions=stores.transactions, clock=clock
         ),
         queue=QueueService(
-            queue=chunk_queue, record=chunk_record, facts=chunk_facts, transactions=stores.transactions, clock=clock
+            queue=chunk_queue,
+            record=chunk_record,
+            facts=chunk_facts,
+            transactions=stores.transactions,
+            clock=clock,
+            urgency_order=stores.urgency_order,
         ),
         group=GroupService(
             work_refs=chunk_work_refs,

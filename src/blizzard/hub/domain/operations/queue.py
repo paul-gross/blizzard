@@ -48,6 +48,8 @@ from blizzard.hub.domain.kernel import float_slots
 from blizzard.hub.domain.kernel.pagination import MalformedCursor, decode_cursor, encode_cursor
 from blizzard.hub.domain.kernel.transactions import IHubTransactions, LockedTransaction, Transaction
 from blizzard.hub.domain.runners.registration import RunnerCapability
+from blizzard.hub.domain.urgency.order import UrgencyOrder
+from blizzard.hub.domain.urgency.ports import IReadUrgencyOrder
 
 _log = get_logger("blizzard.hub.queue")
 
@@ -92,6 +94,97 @@ def _capability_ineligible(
     return not EligibilityCheck(chunk, graph, node, capabilities).eligible
 
 
+def claim_order(ranked: Sequence[Chunk], order: UrgencyOrder) -> list[Chunk]:
+    """``ranked`` — the ready chunks in rank order — in claim order: grouped by each chunk's urgency's place in
+    ``order.live()``, rank order kept within a group. A chunk whose urgency is absent or not live sorts after every live
+    group rather than being dropped. Derived on every read, never stored."""
+    place = {p.urgency_id: index for index, p in enumerate(order.live())}
+    last = len(place)
+    return sorted(ranked, key=lambda chunk: place.get(chunk.urgency_id, last) if chunk.urgency_id is not None else last)
+
+
+class PassedReason(Enum):
+    """Why the walk judged a chunk unusable before its choice."""
+
+    BLOCKED = "blocked"
+    INELIGIBLE = "ineligible"
+
+
+@domain_model
+@dataclass(frozen=True)
+class PassedEntry:
+    """One chunk the walk judged unusable. A blocked entry also names the first prerequisite of its marking and the
+    marking's count."""
+
+    chunk: Chunk
+    position: int
+    reason: PassedReason
+    prerequisite: str | None = None
+    prerequisite_count: int = 0
+
+
+@domain_model
+@dataclass(frozen=True)
+class MatchedWalk:
+    """What the matched walk did: its ``choice``, the chunks it ``passed`` (judged unusable, in claim order), and how
+    many chunks it never looked at because their project is outside ``served`` (``unserved``)."""
+
+    choice: MatchedEntry | None
+    passed: tuple[PassedEntry, ...]
+    unserved: int
+
+
+def walk_matched_entries(
+    chunks: Sequence[Chunk],
+    *,
+    served: Collection[str],
+    graphs: Mapping[str, Graph],
+    facts: Mapping[str, ChunkFacts],
+    capabilities: Sequence[RunnerCapability],
+    blocked: Mapping[str, list[str]],
+    policy: QueueMatchPolicy,
+    hold_per_project: bool = False,
+) -> MatchedWalk:
+    """The matched peek's own walk over ``chunks`` in claim order (:func:`claim_order`): the first chunk of a project in
+    ``served`` the caller can both work (capability-eligible) and claim (not dependency-blocked) is the choice. A chunk
+    of a project outside ``served`` is never examined, so it is never the head :attr:`QueueMatchPolicy.HOLD` stops at;
+    an empty ``served`` chooses nothing. Under :attr:`QueueMatchPolicy.HOLD` only the served head is examined;
+    :attr:`PASS_OVER` walks the whole order. With ``hold_per_project`` the hold is scoped to a project: an unusable
+    chunk stops only its own project, whose later chunks are skipped, neither judged nor traced, while the walk goes
+    on to the others. Nothing here reads a rank or raises a prerequisite."""
+    stopped: set[str | None] = set()
+    passed: list[PassedEntry] = []
+    unserved = 0
+    for position, chunk in enumerate(chunks):
+        if chunk.project_id not in served:
+            unserved += 1
+            continue
+        if chunk.project_id in stopped:
+            continue
+        graph = graphs.get(chunk.graph_id)
+        marking = blocked.get(chunk.chunk_id)
+        if marking is not None:
+            reason = PassedReason.BLOCKED
+        elif graph is None or _capability_ineligible(chunk, graph, facts.get(chunk.chunk_id), capabilities):
+            reason = PassedReason.INELIGIBLE
+        else:
+            return MatchedWalk(MatchedEntry(chunk=chunk, position=position), tuple(passed), unserved)
+        passed.append(
+            PassedEntry(
+                chunk=chunk,
+                position=position,
+                reason=reason,
+                prerequisite=marking[0] if marking else None,
+                prerequisite_count=len(marking) if marking else 0,
+            )
+        )
+        if policy is QueueMatchPolicy.HOLD:
+            if not hold_per_project:
+                break
+            stopped.add(chunk.project_id)
+    return MatchedWalk(None, tuple(passed), unserved)
+
+
 def select_matched_entry(
     chunks: Sequence[Chunk],
     *,
@@ -103,33 +196,17 @@ def select_matched_entry(
     policy: QueueMatchPolicy,
     hold_per_project: bool = False,
 ) -> MatchedEntry | None:
-    """The matched peek's own selection: ``chunks``'s order is first narrowed to the
-    projects in ``served`` — the caller's served set — and the first narrowed entry the
-    caller can both work (capability-eligible) and claim (not dependency-blocked) is
-    returned. A chunk of a project outside ``served`` is never examined, so it is never
-    the head :attr:`QueueMatchPolicy.HOLD` stops at; an empty ``served`` selects nothing.
-    Under :attr:`QueueMatchPolicy.HOLD` only the narrowed head is examined;
-    :attr:`PASS_OVER` scans the whole narrowed order. With ``hold_per_project`` the hold is scoped to a project: an
-    unusable entry stops only its own project, whose later entries are skipped while the scan goes on to the others."""
-    stopped: set[str | None] = set()
-    for entry in entries_of(chunks, served):
-        if entry.chunk.project_id in stopped:
-            continue
-        chunk, position = entry.chunk, entry.position
-        graph = graphs.get(chunk.graph_id)
-        if graph is None:  # pragma: no cover - a pinned graph always resolves
-            unusable = True
-        else:
-            unusable = chunk.chunk_id in blocked or _capability_ineligible(
-                chunk, graph, facts.get(chunk.chunk_id), capabilities
-            )
-        if not unusable:
-            return MatchedEntry(chunk=chunk, position=position)
-        if policy is QueueMatchPolicy.HOLD:
-            if not hold_per_project:
-                return None
-            stopped.add(entry.chunk.project_id)
-    return None
+    """The choice of :func:`walk_matched_entries` — the one walk, without its trace."""
+    return walk_matched_entries(
+        chunks,
+        served=served,
+        graphs=graphs,
+        facts=facts,
+        capabilities=capabilities,
+        blocked=blocked,
+        policy=policy,
+        hold_per_project=hold_per_project,
+    ).choice
 
 
 class ChunkNotGroupable(ValueError):
@@ -525,7 +602,9 @@ class QueueService:
         facts: IReadChunkFactsRepository,
         transactions: IHubTransactions,
         clock: IClock,
+        urgency_order: IReadUrgencyOrder,
     ) -> None:
+        self._urgency_order = urgency_order
         self._queue = queue
         self._record = record
         self._facts = facts
@@ -559,6 +638,10 @@ class QueueService:
     def ordered_ready(self, *, statuses: Mapping[str, ChunkStatus]) -> list[Chunk]:
         """Ready chunks in queue order — ascending by effective position."""
         return self.ordered(QueueList.READY, statuses=statuses)
+
+    def claim_ordered_ready(self, *, statuses: Mapping[str, ChunkStatus]) -> list[Chunk]:
+        """Ready chunks in claim order (:func:`claim_order`): the ranking read plus one read of the urgency order."""
+        return claim_order(self.ordered_ready(statuses=statuses), self._urgency_order.order())
 
     def ordered_not_ready(self, *, statuses: Mapping[str, ChunkStatus]) -> list[Chunk]:
         """``not_ready`` chunks in backlog order — ascending by effective position."""

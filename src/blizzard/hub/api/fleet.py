@@ -241,7 +241,7 @@ def _migration_targets(
 
 @router.get("/queue/peek", response_model=QueuePeekResponse)
 def peek_queue(services: Services, project: QueryProject) -> QueuePeekResponse:
-    """The runner's FILL read — the whole ready-queue order: a filling runner needs every
+    """The runner's FILL read — the whole ready queue in claim order (urgency before rank): a filling runner needs every
     ready chunk in one read. Kept as-is for a previous-minor caller;
     ``POST /queue/peek`` below is the matched counterpart. ``?project=`` narrows it to that
     project's chunks at their whole-queue positions, never reranked."""
