@@ -22,6 +22,7 @@ import blizzard.runner.app as runner_app
 import blizzard.runner.composition as composition
 import blizzard.runner.loop_wiring as loop_wiring
 from blizzard.foundation.clock import FixedClock
+from blizzard.foundation.credential_renewal import RenewalResult
 from blizzard.foundation.platform_tracing.handle import build_platform_tracing
 from blizzard.runner.app import build_hosted_app
 from blizzard.runner.composition import build_runner_process
@@ -52,7 +53,7 @@ from blizzard.runner.loop.context import LoopContext
 from blizzard.runner.loop.tick import tick
 from blizzard.runner.loop_wiring import LoopWiring, PeriodicDriver, ResumeMarking
 from blizzard.runner.stores import RunnerReadStores
-from blizzard.runner.subscriptions.credential_renewer import RenewalOutcome, RenewalOutcomeKind
+from blizzard.runner.subscriptions.credential_renewer import RenewalOutcome
 from blizzard.runner.subscriptions.internal.anthropic_subscription_sampler import AnthropicSubscriptionSampler
 from blizzard.runner.subscriptions.internal.openai_credential_renewer import OpenAICredentialRenewer
 from blizzard.runner.subscriptions.internal.openai_subscription_sampler import OpenAISubscriptionSampler
@@ -256,7 +257,7 @@ def test_a_tick_with_an_openai_subscription_never_invokes_a_renewer(
 
     def _renew(self: OpenAICredentialRenewer) -> RenewalOutcome:
         calls.append("renew")
-        return RenewalOutcome(RenewalOutcomeKind.RENEWED)
+        return RenewalOutcome(RenewalResult.RENEWED)
 
     monkeypatch.setattr(OpenAICredentialRenewer, "renewal_due", _due)
     monkeypatch.setattr(OpenAICredentialRenewer, "renew", _renew)

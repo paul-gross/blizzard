@@ -10,12 +10,9 @@ from pathlib import Path
 
 from fastapi.testclient import TestClient
 
+from blizzard.foundation.credential_renewal import RenewalFailureReason, RenewalResult
 from blizzard.runner.config import DEFAULT_RUNNER_NAME, RunnerConfig, SubscriptionDeclaration
-from blizzard.runner.subscriptions.credential_renewer import (
-    RenewalFailureReason,
-    RenewalOutcome,
-    RenewalOutcomeKind,
-)
+from blizzard.runner.subscriptions.credential_renewer import RenewalOutcome
 from blizzard.runner.subscriptions.subscription_sampler import PROVIDER_ANTHROPIC, PROVIDER_OPENAI
 from tests.support.config_inputs import create_runner_app
 from tests.support.runner_fakes import SqlAlchemyRunnerStore, make_host_stores, make_store, make_stores
@@ -149,7 +146,7 @@ def test_a_renewed_outcome_reports_typed_beside_the_attempt(tmp_path: Path) -> N
     )
     claim_id = store.claim_credential_renewal(slug="codex", claimed_at=_NOW)
     store.record_credential_renewal_outcome(
-        claim_id=claim_id, outcome=RenewalOutcome(RenewalOutcomeKind.RENEWED), recorded_at=_NOW
+        claim_id=claim_id, outcome=RenewalOutcome(RenewalResult.RENEWED), recorded_at=_NOW
     )
 
     resp = client.get("/api/host/subscriptions")
@@ -168,7 +165,7 @@ def test_a_failed_outcome_reports_its_typed_reason(tmp_path: Path) -> None:
     claim_id = store.claim_credential_renewal(slug="codex", claimed_at=_NOW)
     store.record_credential_renewal_outcome(
         claim_id=claim_id,
-        outcome=RenewalOutcome(RenewalOutcomeKind.FAILED, RenewalFailureReason.TIMED_OUT),
+        outcome=RenewalOutcome(RenewalResult.FAILED, RenewalFailureReason.TIMED_OUT),
         recorded_at=_NOW,
     )
 

@@ -26,7 +26,6 @@ __all__ = [
     "ExternalSubscriptionUsageWindow",
     "ISubscriptionSampler",
     "SampleMiss",
-    "SampleMissReason",
     "SubscriptionSource",
     "credential_lapsed",
     "sample_due",

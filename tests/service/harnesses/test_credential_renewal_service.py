@@ -18,7 +18,6 @@ import pytest
 
 from blizzard.foundation.clock import FixedClock
 from blizzard.foundation.credential_renewal import RenewalResult
-from blizzard.runner.subscriptions.credential_renewer import RenewalOutcomeKind
 from blizzard.runner.subscriptions.internal.openai_credential_renewer import OpenAICredentialRenewer
 from blizzard.runner.subscriptions.internal.subprocess_one_shot_process import SubprocessOneShotProcess
 from blizzard.runner.usage.credential_renewal import CredentialRenewalPass, RenewableSubscription
@@ -70,7 +69,7 @@ def test_a_due_renewal_against_the_real_mock_codex_process_rotates_the_credentia
 
     outcome = renewer.renew()
 
-    assert outcome.kind is RenewalOutcomeKind.RENEWED
+    assert outcome.kind is RenewalResult.RENEWED
     rotated = json.loads(auth_path.read_text())
     assert rotated["tokens"]["refresh_token"] != "original-refresh-token"
     assert rotated["tokens"]["account_id"] == "acct-svc-1"
@@ -98,7 +97,7 @@ def test_a_concurrent_vendor_style_writer_never_corrupts_the_file_and_the_rotate
         + "\n"
     )
 
-    outcomes: list[RenewalOutcomeKind] = []
+    outcomes: list[RenewalResult] = []
     vendor_writer_results: list[subprocess.CompletedProcess[str]] = []
     errors: list[BaseException] = []
 
@@ -130,7 +129,7 @@ def test_a_concurrent_vendor_style_writer_never_corrupts_the_file_and_the_rotate
         t.join(timeout=15.0)
 
     assert errors == []
-    assert outcomes == [RenewalOutcomeKind.RENEWED]
+    assert outcomes == [RenewalResult.RENEWED]
     assert len(vendor_writer_results) == 1
     assert vendor_writer_results[0].returncode == 0
 

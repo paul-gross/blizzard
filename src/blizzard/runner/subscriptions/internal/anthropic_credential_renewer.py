@@ -12,17 +12,12 @@ from datetime import datetime, timedelta
 from pathlib import Path
 
 from blizzard.foundation.clock import IClock
-from blizzard.foundation.credential_renewal import RenewalFailureReason
+from blizzard.foundation.credential_renewal import RenewalFailureReason, RenewalResult
 from blizzard.foundation.instants import epoch_millis_instant
 from blizzard.foundation.logging import get_logger
 from blizzard.foundation.untyped import as_table
 from blizzard.runner.process.child_env import ChildEnv
-from blizzard.runner.subscriptions.credential_renewer import (
-    ICredentialRenewer,
-    RenewalOutcome,
-    RenewalOutcomeKind,
-    renewal_due,
-)
+from blizzard.runner.subscriptions.credential_renewer import ICredentialRenewer, RenewalOutcome, renewal_due
 from blizzard.runner.subscriptions.one_shot_process import IOneShotProcess
 from blizzard.runner.subscriptions.subscription_sampler import ANTHROPIC_DEFAULT_CREDENTIALS_PATH
 
@@ -91,16 +86,16 @@ class AnthropicCredentialRenewer:
         if result.exit_code is None:
             if result.timed_out:
                 _log.warning("credential renewal timed out", config_dir=config_dir)
-                return RenewalOutcome(RenewalOutcomeKind.FAILED, RenewalFailureReason.TIMED_OUT)
+                return RenewalOutcome(RenewalResult.FAILED, RenewalFailureReason.TIMED_OUT)
             _log.warning("credential renewal could not launch the vendor CLI", detail=result.stderr)
-            return RenewalOutcome(RenewalOutcomeKind.FAILED, RenewalFailureReason.RENEWER_UNAVAILABLE)
+            return RenewalOutcome(RenewalResult.FAILED, RenewalFailureReason.RENEWER_UNAVAILABLE)
         renewed_until = self._read_expiry()
         if renewed_until is not None and (expires_at is None or renewed_until > expires_at):
-            return RenewalOutcome(RenewalOutcomeKind.RENEWED)
+            return RenewalOutcome(RenewalResult.RENEWED)
         _log.warning(
             "credential renewal vendor CLI did not advance the credential's expiry", exit_code=result.exit_code
         )
-        return RenewalOutcome(RenewalOutcomeKind.FAILED, RenewalFailureReason.VENDOR_REFUSED)
+        return RenewalOutcome(RenewalResult.FAILED, RenewalFailureReason.VENDOR_REFUSED)
 
     def _child_env(self, config_dir: str) -> ChildEnv:
         kept = ChildEnv(tuple((k, v) for k, v in self._env.pairs if k not in _OVERRIDING_CREDENTIAL_VARS))

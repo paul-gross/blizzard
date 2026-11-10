@@ -13,8 +13,8 @@ from pathlib import Path
 import pytest
 
 from blizzard.foundation.clock import FixedClock
+from blizzard.foundation.credential_renewal import RenewalFailureReason, RenewalResult
 from blizzard.runner.process.child_env import AllowlistedEnv, ChildEnv
-from blizzard.runner.subscriptions.credential_renewer import RenewalFailureReason, RenewalOutcomeKind
 from blizzard.runner.subscriptions.internal.anthropic_credential_renewer import AnthropicCredentialRenewer
 from blizzard.runner.subscriptions.one_shot_process import OneShotResult
 from tests.support.child_launch import tool_env
@@ -86,7 +86,7 @@ def test_renew_runs_the_haiku_one_shot_under_the_credential_home(tmp_path: Path)
 
     outcome = _renewer(path, subprocess).renew()
 
-    assert outcome.kind is RenewalOutcomeKind.RENEWED
+    assert outcome.kind is RenewalResult.RENEWED
     argv, env = subprocess.calls[0]
     assert list(argv) == [
         "claude", "-p", "ok", "--model", "haiku", "--max-turns", "1", "--tools", "",
@@ -101,14 +101,14 @@ def test_renew_runs_the_haiku_one_shot_under_the_credential_home(tmp_path: Path)
 def test_a_throttled_call_that_still_moved_the_expiry_is_renewed(tmp_path: Path) -> None:
     path = _write_credentials(tmp_path / ".credentials.json", expires_at=_millis(_NOW))
     outcome = _renewer(path, _ScriptedSubprocess(_exit(1), rotates=path)).renew()
-    assert outcome.kind is RenewalOutcomeKind.RENEWED
+    assert outcome.kind is RenewalResult.RENEWED
 
 
 @pytest.mark.parametrize("code", [0, 1])
 def test_an_unmoved_expiry_is_vendor_refused_whatever_the_exit_code(tmp_path: Path, code: int) -> None:
     path = _write_credentials(tmp_path / ".credentials.json", expires_at=_millis(_NOW))
     outcome = _renewer(path, _ScriptedSubprocess(_exit(code))).renew()
-    assert outcome.kind is RenewalOutcomeKind.FAILED
+    assert outcome.kind is RenewalResult.FAILED
     assert outcome.failure_reason is RenewalFailureReason.VENDOR_REFUSED
 
 

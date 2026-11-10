@@ -261,19 +261,20 @@ def _sampled_payload(
     same complete windows."""
     windows: list[dict[str, object]] = []
     for window in snapshot.windows:
-        payload: dict[str, object] = {
-            "window": window.window,
-            "utilization_pct": window.utilization_pct,
-            "resets_at": iso_utc(window.resets_at),
-            "window_seconds": window.window_seconds,
-        }
-        admitted = admit_usage_window(payload)
+        admitted = admit_usage_window(
+            {
+                "window": window.window,
+                "utilization_pct": window.utilization_pct,
+                "resets_at": iso_utc(window.resets_at),
+                "window_seconds": window.window_seconds,
+            }
+        )
         if isinstance(admitted, str):
             _log.warning(
                 "dropped malformed external usage window", slug=subscription.slug, window=window.window, reason=admitted
             )
             continue
-        windows.append(payload)
+        windows.append(admitted.stored)
     return {
         "slug": subscription.slug,
         "name": subscription.name,

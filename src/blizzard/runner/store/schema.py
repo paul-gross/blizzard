@@ -870,7 +870,7 @@ credential_renewal_outcomes = Table(
     Column("id", Integer, primary_key=True, autoincrement=True),
     # The claim this outcome closes; at most one outcome per claim.
     Column("claim_id", Integer, nullable=False, unique=True, info={"refers_to": "credential_renewal_claims.id"}),
-    # The closed-set RenewalOutcomeKind value: "renewed" or "failed".
+    # The closed-set RenewalResult value: "renewed" or "failed".
     Column("kind", String, nullable=False),
     # The closed-set RenewalFailureReason value on a failure, NULL on a renewal.
     Column("failure_reason", String, nullable=True),

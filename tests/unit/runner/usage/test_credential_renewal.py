@@ -10,6 +10,8 @@ from collections.abc import Sequence
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
+import pytest
+
 from blizzard.foundation.clock import FixedClock
 from blizzard.foundation.credential_renewal import RenewalFailureReason, RenewalResult
 from blizzard.foundation.logging import get_logger
@@ -17,7 +19,7 @@ from blizzard.runner.harness.adapter import WorkerHandle
 from blizzard.runner.loop.context import LoopConfig
 from blizzard.runner.loop.periodic_pass_driver import PeriodicPassDriver
 from blizzard.runner.loop.tick import tick
-from blizzard.runner.subscriptions.credential_renewer import RenewalOutcome, RenewalOutcomeKind
+from blizzard.runner.subscriptions.credential_renewer import RenewalOutcome
 from blizzard.runner.usage.credential_renewal import CredentialRenewalPass, RenewableSubscription
 from blizzard.runner.usage.repository import CredentialRenewalSummary, IWriteCredentialRenewalRepository
 from tests.support.runner_fakes import (
@@ -100,7 +102,7 @@ def test_a_due_renewal_is_claimed_then_renewed_and_its_outcome_recorded(tmp_path
 
 def test_a_failed_renewal_records_its_typed_reason(tmp_path: Path) -> None:
     store = _store(tmp_path)
-    renewer = FakeCredentialRenewer(outcome=RenewalOutcome(RenewalOutcomeKind.FAILED, RenewalFailureReason.TIMED_OUT))
+    renewer = FakeCredentialRenewer(outcome=RenewalOutcome(RenewalResult.FAILED, RenewalFailureReason.TIMED_OUT))
 
     _pass(store, renewer, FixedClock(_NOW)).run()
 
@@ -233,3 +235,8 @@ def test_a_renewal_blocked_on_its_driver_never_delays_a_concurrent_tick(tmp_path
         assert time.monotonic() - stop_started < 2
     finally:
         release.set()
+
+
+def test_a_renewal_outcome_refuses_unrecorded_at_construction() -> None:
+    with pytest.raises(ValueError, match="UNRECORDED"):
+        RenewalOutcome(RenewalResult.UNRECORDED)

@@ -9,12 +9,12 @@ from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 
 from blizzard.foundation.fact_kinds import EXTERNAL_SUBSCRIPTION_USAGE_MISSED, EXTERNAL_SUBSCRIPTION_USAGE_SAMPLED
+from blizzard.foundation.subscription_miss import SampleMissReason
 from blizzard.runner.harness.usage import SessionCostBasis, UsageSample
 from blizzard.runner.subscriptions.subscription_sampler import (
     ExternalSubscriptionUsageSnapshot,
     ExternalSubscriptionUsageWindow,
     SampleMiss,
-    SampleMissReason,
 )
 from blizzard.runner.usage.repository import (
     ChargeRange,

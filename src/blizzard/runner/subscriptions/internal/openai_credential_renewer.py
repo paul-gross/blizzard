@@ -11,16 +11,11 @@ from datetime import datetime, timedelta
 from pathlib import Path
 
 from blizzard.foundation.clock import IClock
-from blizzard.foundation.credential_renewal import RenewalFailureReason
+from blizzard.foundation.credential_renewal import RenewalFailureReason, RenewalResult
 from blizzard.foundation.logging import get_logger
 from blizzard.foundation.untyped import as_table
 from blizzard.runner.process.child_env import ChildEnv
-from blizzard.runner.subscriptions.credential_renewer import (
-    ICredentialRenewer,
-    RenewalOutcome,
-    RenewalOutcomeKind,
-    renewal_due,
-)
+from blizzard.runner.subscriptions.credential_renewer import ICredentialRenewer, RenewalOutcome, renewal_due
 from blizzard.runner.subscriptions.internal.jwt_expiry import parse_jwt_expiry
 from blizzard.runner.subscriptions.one_shot_process import IOneShotProcess
 
@@ -98,30 +93,30 @@ class OpenAICredentialRenewer:
         if result.exit_code is None:
             if result.timed_out:
                 _log.warning("credential renewal timed out", codex_home=codex_home)
-                return RenewalOutcome(RenewalOutcomeKind.FAILED, RenewalFailureReason.TIMED_OUT)
+                return RenewalOutcome(RenewalResult.FAILED, RenewalFailureReason.TIMED_OUT)
             _log.warning("credential renewal could not launch the vendor CLI", detail=result.stderr)
-            return RenewalOutcome(RenewalOutcomeKind.FAILED, RenewalFailureReason.RENEWER_UNAVAILABLE)
+            return RenewalOutcome(RenewalResult.FAILED, RenewalFailureReason.RENEWER_UNAVAILABLE)
         if result.exit_code != 0:
             _log.warning("credential renewal vendor CLI exited non-zero", exit_code=result.exit_code)
-            return RenewalOutcome(RenewalOutcomeKind.FAILED, RenewalFailureReason.VENDOR_REFUSED)
+            return RenewalOutcome(RenewalResult.FAILED, RenewalFailureReason.VENDOR_REFUSED)
         response = _find_response(result.stdout, _ACCOUNT_READ_ID)
         if response is None:
             _log.warning("credential renewal got no matching account/read response")
-            return RenewalOutcome(RenewalOutcomeKind.FAILED, RenewalFailureReason.PROTOCOL_ERROR)
+            return RenewalOutcome(RenewalResult.FAILED, RenewalFailureReason.PROTOCOL_ERROR)
         if "error" in response:
             _log.warning("credential renewal vendor CLI reported an error", detail=response.get("error"))
-            return RenewalOutcome(RenewalOutcomeKind.FAILED, RenewalFailureReason.VENDOR_REFUSED)
+            return RenewalOutcome(RenewalResult.FAILED, RenewalFailureReason.VENDOR_REFUSED)
         payload = response.get("result")
         payload_table = as_table(payload)
         account = payload_table.get("account") if payload_table is not None else None
         if not isinstance(account, dict):
             _log.warning("credential renewal vendor CLI reports no login to refresh", codex_home=codex_home)
-            return RenewalOutcome(RenewalOutcomeKind.FAILED, RenewalFailureReason.VENDOR_REFUSED)
+            return RenewalOutcome(RenewalResult.FAILED, RenewalFailureReason.VENDOR_REFUSED)
         renewed_until = self._read_access_token_expiry()
         if renewed_until is None or (expires_at is not None and renewed_until <= expires_at):
             _log.warning("credential renewal vendor CLI answered but the credential's expiry did not advance")
-            return RenewalOutcome(RenewalOutcomeKind.FAILED, RenewalFailureReason.VENDOR_REFUSED)
-        return RenewalOutcome(RenewalOutcomeKind.RENEWED)
+            return RenewalOutcome(RenewalResult.FAILED, RenewalFailureReason.VENDOR_REFUSED)
+        return RenewalOutcome(RenewalResult.RENEWED)
 
 
 def _rpc_request(request_id: int, method: str, params: dict[str, object]) -> str:

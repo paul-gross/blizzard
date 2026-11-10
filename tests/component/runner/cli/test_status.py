@@ -18,6 +18,7 @@ import pytest
 import uvicorn
 from click.testing import CliRunner
 
+from blizzard.foundation.credential_renewal import RenewalFailureReason, RenewalResult
 from blizzard.runner.app import build_hosted_app
 from blizzard.runner.cli import runner as runner_group
 from blizzard.runner.cli.daemon import RunnerDaemon
@@ -28,11 +29,7 @@ from blizzard.runner.hub.identity import RunnerIdentity
 from blizzard.runner.hub.served_projects import ServedProject
 from blizzard.runner.leases.model import NewLease
 from blizzard.runner.listeners import Uds
-from blizzard.runner.subscriptions.credential_renewer import (
-    RenewalFailureReason,
-    RenewalOutcome,
-    RenewalOutcomeKind,
-)
+from blizzard.runner.subscriptions.credential_renewer import RenewalOutcome
 from tests.support.config_inputs import load_host_config
 from tests.support.host_files import load_runner_config
 from tests.support.runner_cli_home import (
@@ -359,9 +356,9 @@ def test_status_renders_a_miss_reason_for_a_lapsed_subscription(tmp_path: Path) 
 @pytest.mark.parametrize(
     ("outcome", "expected"),
     [
-        (RenewalOutcome(RenewalOutcomeKind.RENEWED), "renewal: renewed at 2026-07-16T12:00:00+00:00"),
+        (RenewalOutcome(RenewalResult.RENEWED), "renewal: renewed at 2026-07-16T12:00:00+00:00"),
         (
-            RenewalOutcome(RenewalOutcomeKind.FAILED, RenewalFailureReason.TIMED_OUT),
+            RenewalOutcome(RenewalResult.FAILED, RenewalFailureReason.TIMED_OUT),
             "renewal: failed (timed out) at 2026-07-16T12:00:00+00:00",
         ),
         (None, "renewal: attempted at 2026-07-16T12:00:00+00:00, outcome not recorded"),
