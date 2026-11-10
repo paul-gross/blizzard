@@ -281,7 +281,7 @@ def _nested_of(schema: Schema, key: Literal["items", "additionalProperties"]) ->
     return nested if isinstance(nested, dict) else None
 
 
-def _nested_schema(schema: Schema, key: Literal["items", "additionalProperties"]) -> Schema | None:
+def nested_schema(schema: Schema, key: Literal["items", "additionalProperties"]) -> Schema | None:
     """The ``items`` or ``additionalProperties`` schema a property carries itself or on its
     non-null ``anyOf``/``oneOf`` member (``list[X] | None`` compiles to the latter)."""
     nested = _nested_of(schema, key)
@@ -404,7 +404,7 @@ def _diff_property(
         ("additionalProperties", "{}"),
     )
     for key, suffix in nested_keys:
-        b_nested, h_nested = _nested_schema(bp, key), _nested_schema(hp, key)
+        b_nested, h_nested = nested_schema(bp, key), nested_schema(hp, key)
         if b_nested is not None and h_nested is not None:
             _diff_property(label + suffix, b_nested, h_nested, is_request, is_response, violations, head_schemas)
 

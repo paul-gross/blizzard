@@ -19,8 +19,8 @@ from blizzard.tools.compat.surfaces.wire import (
     Operation,
     Parameter,
     Schema,
-    _nested_schema,
     classify_spec_diff,
+    nested_schema,
 )
 from blizzard.tools.compat.violation import Violation
 from blizzard.wire.question import QuestionView
@@ -800,8 +800,19 @@ def test_a_question_view_from_an_older_hub_reads_as_not_superseded() -> None:
     assert view.superseded is False
 
 
-@pytest.mark.parametrize("key", ["items", "additionalProperties"])
-def test_nested_schema_keeps_an_empty_schema_on_a_non_null_union_member(key: str) -> None:
-    for union in ("anyOf", "oneOf"):
-        prop = {union: [{"type": "null"}, {"type": "array" if key == "items" else "object", key: {}}]}
-        assert _nested_schema(prop, key) == {}  # type: ignore[arg-type]
+def _union_of(union: str, *members: Schema) -> Schema:
+    schema: Schema = {}
+    schema[union] = list(members)
+    return schema
+
+
+@pytest.mark.parametrize("union", ["anyOf", "oneOf"])
+def test_nested_schema_keeps_an_empty_items_schema_on_a_non_null_union_member(union: str) -> None:
+    prop = _union_of(union, {"type": "null"}, {"type": "array", "items": {}})
+    assert nested_schema(prop, "items") == {}
+
+
+@pytest.mark.parametrize("union", ["anyOf", "oneOf"])
+def test_nested_schema_keeps_an_empty_additional_properties_schema_on_a_non_null_union_member(union: str) -> None:
+    prop = _union_of(union, {"type": "null"}, {"type": "object", "additionalProperties": {}})
+    assert nested_schema(prop, "additionalProperties") == {}
