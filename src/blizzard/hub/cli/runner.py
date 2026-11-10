@@ -15,7 +15,7 @@ from blizzard.foundation.roles import dto
 from blizzard.foundation.runner_token_names import hub_token_variable
 from blizzard.hub.cli.command import FleetCommand
 from blizzard.hub.cli.context import CliContext
-from blizzard.hub.cli.views import Listing, RunnerLine, RunnerRow
+from blizzard.hub.cli.views import Listing, RunnerLine, RunnerRow, urgency_label
 
 #: How a hub from before ``hub runner add`` answers ``POST /api/runners`` — with no detail worth showing.
 _PREDATES_ADD = frozenset({HTTPStatus.NOT_FOUND, HTTPStatus.METHOD_NOT_ALLOWED})
@@ -43,6 +43,42 @@ class RunnerDetail:
         yield f"  hub_paused={self.body.get('hub_paused')}  locally_paused={self.body.get('locally_paused')}"
         if self.body.get("retired"):
             yield f"  retired={self.body.get('retired_at')} by {self.body.get('retired_by')}"
+
+
+def _claim_entry(entry: dict[str, Any]) -> str:
+    return f"{entry['position']}  {entry['chunk_id']}  urgency={urgency_label(entry.get('urgency'))}"
+
+
+def _pass_reason(entry: dict[str, Any]) -> str:
+    """Why the walk passed a chunk; a blocked one names its first prerequisite and how many more it has."""
+    reason = entry["reason"]
+    if reason != "blocked" or not entry.get("prerequisite"):
+        return reason
+    others = entry.get("prerequisite_count", 1) - 1
+    more = f" (+{others} more)" if others > 0 else ""
+    return f"blocked by {entry['prerequisite']}{more}"
+
+
+@dto
+@dataclass(frozen=True)
+class NextClaimDetail:
+    """A runner's next claim as the hub accounts for it: the chunk it reaches for, then each chunk passed on the way,
+    and how many more were passed than are listed."""
+
+    body: dict[str, Any]
+
+    def lines(self) -> Iterator[str]:
+        upcoming = self.body.get("next")
+        if upcoming:
+            yield f"next  {_claim_entry(upcoming)}"
+        else:
+            yield "next  - (nothing in claim order this runner can use)"
+        passed = self.body.get("passed", [])
+        for entry in passed:
+            yield f"  passed  {_claim_entry(entry)}  {_pass_reason(entry)}"
+        remainder = self.body.get("passed_total", 0) - len(passed)
+        if remainder > 0:
+            yield f"  ... and {remainder} more passed"
 
 
 def _token_lines(runner_name: str, token: str) -> tuple[str, str]:
@@ -128,6 +164,15 @@ def runner_show(cli: CliContext, runner_id: str) -> None:
     resp = cli.get(f"/api/runners/{runner_id}", "GET /runners/{id}")
     body = resp.json()
     cli.show(body, RunnerDetail(body))
+
+
+@runner_group.command("next", cls=FleetCommand)
+@click.argument("runner_id")
+def runner_next(cli: CliContext, runner_id: str) -> None:
+    """The chunk RUNNER_ID reaches for next, and each chunk it passes on the way with its urgency and why — the hub's
+    best account from what it holds of the runner, not a promise of what the runner claims."""
+    body = cli.get(f"/api/runners/{runner_id}/next-claim", "GET /runners/{id}/next-claim").json()
+    cli.show(body, NextClaimDetail(body))
 
 
 @runner_group.command("pause", cls=FleetCommand)
