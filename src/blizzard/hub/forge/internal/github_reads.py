@@ -8,7 +8,7 @@ import re
 from collections import OrderedDict
 from dataclasses import dataclass
 
-from blizzard.foundation.roles import domain_model
+from blizzard.foundation.roles import adapter_model
 from blizzard.hub.forge.landing import Comparison
 
 #: Kept answers per adapter.
@@ -24,7 +24,7 @@ def is_object_id(revision: str) -> bool:
     return _OBJECT_ID.fullmatch(revision) is not None
 
 
-@domain_model
+@adapter_model
 @dataclass(frozen=True)
 class KeptAnswer:
     etag: str
