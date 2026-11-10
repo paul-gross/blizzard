@@ -57,9 +57,7 @@ _WORKSPACES = single_workspace(_PROVIDER, workspace_id=DEFAULT_WORKSPACE_ID)
 def _app_with_declarations(tmp_path: Path):
     store = make_store(f"sqlite:///{tmp_path / 'runner.db'}")
     config = RunnerConfig(root=tmp_path, db_url=f"sqlite:///{tmp_path / 'runner.db'}")
-    service = GitCommitDeclarationService(
-        store, FixedClock(_NOW), _WORKSPACES, environments=store, outbound=store, lease_lock=store
-    )
+    service = GitCommitDeclarationService(store, FixedClock(_NOW), _WORKSPACES, outbound=store, lease_lock=store)
     return create_runner_app(
         config, runner_stores=make_stores(store), host_stores=make_host_stores(store), git_commit_declarations=service
     ), store
@@ -102,9 +100,7 @@ def test_503_when_declaration_service_unwired(tmp_path: Path) -> None:
 def test_503_when_store_unwired(tmp_path: Path) -> None:
     store = make_store(f"sqlite:///{tmp_path / 'runner.db'}")
     config = RunnerConfig(root=tmp_path, db_url=f"sqlite:///{tmp_path / 'runner.db'}")
-    service = GitCommitDeclarationService(
-        store, FixedClock(_NOW), _WORKSPACES, environments=store, outbound=store, lease_lock=store
-    )
+    service = GitCommitDeclarationService(store, FixedClock(_NOW), _WORKSPACES, outbound=store, lease_lock=store)
     # The service is wired, but ``runner_stores`` — the controller's own read-only
     # resolution seam — is not: the edge must still answer 503, not raise.
     app = create_runner_app(config, git_commit_declarations=service)
@@ -140,6 +136,21 @@ def test_403_for_a_wrong_token(tmp_path: Path) -> None:
         )
     assert resp.status_code == 403
     assert store.git_commit_declarations_for_lease("lease_1") == {}
+
+
+def test_wrong_token_does_not_read_bindings(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    app, store = _app_with_declarations(tmp_path)
+    _seed_lease(store)
+
+    def unexpected_read(chunk_id: str) -> None:
+        pytest.fail(f"read bindings for unauthorized chunk {chunk_id}")
+
+    monkeypatch.setattr(store, "bindings_for_chunk", unexpected_read)
+    with runner_client(app) as client:
+        response = client.post(
+            "/api/leases/lease_1/git-commits", json=_BODY, headers={"X-Blizzard-Lease-Token": "wrong"}
+        )
+    assert response.status_code == 403
 
 
 def test_200_records_the_declaration_with_the_dedicated_header(tmp_path: Path) -> None:
@@ -262,7 +273,6 @@ def test_400_when_several_environments_are_held_and_none_is_named(tmp_path: Path
         store,
         FixedClock(_NOW),
         single_workspace(provider, workspace_id=DEFAULT_WORKSPACE_ID),
-        environments=store,
         outbound=store,
         lease_lock=store,
     )
@@ -299,7 +309,6 @@ def test_the_same_repo_in_two_environments_is_two_declarations(tmp_path: Path) -
         store,
         FixedClock(_NOW),
         single_workspace(provider, workspace_id=DEFAULT_WORKSPACE_ID),
-        environments=store,
         outbound=store,
         lease_lock=store,
     )
@@ -436,9 +445,7 @@ def test_a_declaration_is_checked_against_the_repos_of_the_workspace_its_environ
             WorkspaceEntry("ws_b", FakeProvider({"e1": "/b/e1"}, repos={"e1": [("repo-b", "o-b")]}), spawn_root=""),
         ]
     )
-    service = GitCommitDeclarationService(
-        store, FixedClock(_NOW), workspaces, environments=store, outbound=store, lease_lock=store
-    )
+    service = GitCommitDeclarationService(store, FixedClock(_NOW), workspaces, outbound=store, lease_lock=store)
     app = create_runner_app(
         config, runner_stores=make_stores(store), host_stores=make_host_stores(store), git_commit_declarations=service
     )

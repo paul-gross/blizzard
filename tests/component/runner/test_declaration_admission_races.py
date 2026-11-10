@@ -23,7 +23,7 @@ from blizzard.runner.leases.git_commit_declaration import GitCommitDeclarationTo
 from blizzard.runner.leases.lease_lock import ILeaseUnit
 from blizzard.runner.leases.model import Lease, NewLease
 from blizzard.runner.leases.worker_lease import WorkerLease
-from blizzard.runner.lifecycle.judgement.git_commit_declaration import GitCommitDeclarationService
+from blizzard.runner.lifecycle.judgement.git_commit_declaration import GitCommitDeclarationService, GitCommitScope
 from blizzard.runner.lifecycle.judgement.git_commits import DeclaredCommits
 from blizzard.runner.lifecycle.judgement.judgement import Judgement
 from blizzard.runner.node_steps.submissions import CompletionArtifact
@@ -63,7 +63,12 @@ class _World:
         return WorkerLease(self.lease, active=True)
 
     def declare_commit(self, commit: str) -> None:
-        self.declare.declare(self.worker, repo="widget", branch="feat/x", commit=commit)
+        self.declare.declare(
+            GitCommitScope(self.worker, tuple(self.store.bindings_for_chunk(self.lease.chunk_id))),
+            repo="widget",
+            branch="feat/x",
+            commit=commit,
+        )
 
     def buffer(self) -> None:
         """Capture the outcome the way a judgement does — a completion carrying the pointers and the attachments."""
@@ -125,9 +130,7 @@ def _world(tmp_path: Path, commits_cls: type[DeclaredCommits] = DeclaredCommits)
         judgement=Judgement(ctx, lease, envelope, bindings),
         lease=lease,
         attach=AttachmentService(store, clock, store, store, stage_check=FakeArtifactChecker()),
-        declare=GitCommitDeclarationService(
-            store, clock, workspaces, environments=store, outbound=store, lease_lock=store
-        ),
+        declare=GitCommitDeclarationService(store, clock, workspaces, outbound=store, lease_lock=store),
         commits=commits_cls(ctx, lease, bindings),
     )
 
@@ -215,7 +218,12 @@ def test_the_takeover_reference_lease_still_takes_a_pointer_after_its_submission
     world = _world(tmp_path)
     world.buffer()
     reference = WorkerLease(world.lease, active=False)
-    note = world.declare.declare(reference, repo="widget", branch="feat/x", commit="c-ref").note
+    note = world.declare.declare(
+        GitCommitScope(reference, tuple(world.store.bindings_for_chunk(reference.lease.chunk_id))),
+        repo="widget",
+        branch="feat/x",
+        commit="c-ref",
+    ).note
     assert note is not None
     assert world.store.git_commit_declarations_for_lease(_LEASE)[("e1", "widget")].commit == "c-ref"
     with pytest.raises(Exception, match="closed"):

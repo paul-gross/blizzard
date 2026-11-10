@@ -19,7 +19,11 @@ from blizzard.runner.throttle.floor import FloorAnswer, floor_answer
 from blizzard.runner.throttle.levers import LeverAnswer, budget_answer, pace_answer, schedule_answer, utilization_answer
 from blizzard.runner.throttle.pause import RunnerBrakes
 from blizzard.runner.throttle.settings import ThrottleSettings
-from blizzard.runner.throttle.usage_limits import IReadRunnerUsageLimitRepository, IReadSubscriptionUsageLimitRepository
+from blizzard.runner.throttle.usage_limits import (
+    IReadRunnerUsageLimitRepository,
+    IReadSubscriptionUsageLimitRepository,
+    UsageLimitMark,
+)
 from blizzard.runner.usage.repository import (
     ExternalUsageSampleSummary,
     IReadExternalUsageRepository,
@@ -38,6 +42,7 @@ __all__ = [
     "GateVerdict",
     "StartKind",
     "ThrottleGate",
+    "floor_from_mark",
     "floor_from_sample",
     "subscription_floor",
 ]
@@ -315,6 +320,28 @@ def floor_from_sample(
     now: datetime,
 ) -> FloorAnswer:
     """:func:`subscription_floor` over a ``sample`` the caller already read."""
+    return floor_from_mark(
+        slug,
+        sampled=sampled,
+        mark=usage_limits.latest_usage_limit_mark(slug),
+        sample=sample,
+        usage_limits=usage_limits,
+        external_usage=external_usage,
+        now=now,
+    )
+
+
+def floor_from_mark(
+    slug: str,
+    *,
+    sampled: bool,
+    mark: UsageLimitMark | None,
+    sample: ExternalUsageSampleSummary | None,
+    usage_limits: IReadSubscriptionUsageLimitRepository,
+    external_usage: IReadExternalUsageRepository,
+    now: datetime,
+) -> FloorAnswer:
+    """The floor over an already loaded mark and sample."""
     clear = usage_limits.latest_floor_clear(slug)
     clear_sample = None
     if clear is not None and sample is not None and sample.sampled_at > clear.cleared_at:
@@ -322,7 +349,7 @@ def floor_from_sample(
     return floor_answer(
         slug=slug,
         sampled=sampled,
-        mark=usage_limits.latest_usage_limit_mark(slug),
+        mark=mark,
         sample=sample,
         clear=clear,
         clear_sample=clear_sample,

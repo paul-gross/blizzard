@@ -9,8 +9,16 @@ from __future__ import annotations
 from fastapi import Request
 
 from blizzard.runner.api.wiring import RunnerWiring
+from blizzard.runner.leases.worker_lease import WorkerLease
+from blizzard.runner.lifecycle.judgement.git_commit_declaration import GitCommitScope
 from blizzard.runner.lifecycle.takeover import TakeoverCloseScope, TakeoverOpenScope
 from blizzard.runner.operator.requeue import RequeueScope
+
+
+def resolved_git_commit_scope(worker: WorkerLease, request: Request) -> GitCommitScope:
+    """Load the authorized worker's chunk bindings for a commit declaration."""
+    bindings = RunnerWiring.of(request).read_stores().environments.bindings_for_chunk(worker.lease.chunk_id)
+    return GitCommitScope(worker=worker, bindings=tuple(bindings))
 
 
 def resolved_requeue_scope(chunk_id: str, request: Request) -> RequeueScope:

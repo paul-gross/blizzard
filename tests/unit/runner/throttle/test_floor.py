@@ -14,6 +14,7 @@ from blizzard.runner.throttle.floor import (
     FLOOR_NO_RESET_FALLBACK,
     FLOOR_UNCONFIRMED_GRACE,
     FloorAnswer,
+    FloorHold,
     HoldKind,
     RunnerFloorClearRefused,
     floor_answer,
@@ -75,6 +76,14 @@ def _floor(
 
 
 # --- a mark ----------------------------------------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize("awaits_sample, expected", [(True, _RESET + timedelta(hours=1)), (False, None)])
+def test_hold_grace_deadline_depends_on_whether_it_awaits_a_sample(
+    awaits_sample: bool, expected: datetime | None
+) -> None:
+    hold = FloorHold(HoldKind.MARK, "claude-code", None, _RESET, awaits_sample)
+    assert hold.grace_opens_at == expected
 
 
 def test_nothing_on_record_admits() -> None:
@@ -241,6 +250,7 @@ def test_an_exhausted_window_past_its_reset_awaits_a_sample_within_the_grace() -
     shut = _sample(_MARKED, _window(100.0, _RESET))
 
     assert not _floor(now=_RESET + timedelta(minutes=30), sample=shut).admits
+    assert not _floor(now=_RESET + FLOOR_UNCONFIRMED_GRACE - timedelta(microseconds=1), sample=shut).admits
     assert _floor(now=_RESET + FLOOR_UNCONFIRMED_GRACE, sample=shut).admits
 
 

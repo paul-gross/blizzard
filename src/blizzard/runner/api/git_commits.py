@@ -10,6 +10,7 @@ from __future__ import annotations
 from fastapi import APIRouter, Request, status
 from fastapi.exceptions import HTTPException
 
+from blizzard.runner.api.chunk_scope import resolved_git_commit_scope
 from blizzard.runner.api.lease_scope import authorized_worker_lease
 from blizzard.runner.api.wiring import RunnerWiring
 from blizzard.runner.leases.git_commit_declaration import (
@@ -35,9 +36,10 @@ def record_git_commit_declaration(
     its lease."""
     service = RunnerWiring.of(request).git_commits()
     worker = authorized_worker_lease(lease_id, request)
+    scope = resolved_git_commit_scope(worker, request)
     try:
         declared = service.declare(
-            worker,
+            scope,
             repo=request_body.repo,
             branch=request_body.branch,
             commit=request_body.commit,

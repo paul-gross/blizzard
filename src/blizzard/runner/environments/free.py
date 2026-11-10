@@ -5,10 +5,21 @@ acquire has no bounded pool and always counts as free. Acquisition stays authori
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from typing import Protocol
 
 from blizzard.runner.environments.provider import IWorkspaceProvider
 from blizzard.runner.environments.repository import EnvBinding
+
+
+def has_free_environment(pool: tuple[str, ...] | None, held: Sequence[EnvBinding]) -> bool:
+    """Whether a known pool can hand out an environment; an empty pool mints on acquire."""
+    if pool is None:
+        return False
+    if not pool:
+        return True
+    held_ids = {binding.environment_id for binding in held}
+    return any(environment_id not in held_ids for environment_id in pool)
 
 
 class IWorkspaceFreeEnvironment(Protocol):
@@ -36,9 +47,6 @@ class FreeEnvironments:
 
     def has_free_environment(self, workspace_id: str) -> bool:
         provider = self._providers.provider(workspace_id)
-        if provider is None:
-            return False
-        if not provider.pool():
-            return True
-        held = {binding.environment_id for binding in self._pool.held_workspace_bindings(workspace_id)}
-        return any(environment_id not in held for environment_id in provider.pool())
+        pool = provider.pool() if provider is not None else None
+        held = self._pool.held_workspace_bindings(workspace_id) if pool else []
+        return has_free_environment(pool, held)

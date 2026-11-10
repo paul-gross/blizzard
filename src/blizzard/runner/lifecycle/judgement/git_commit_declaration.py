@@ -13,7 +13,7 @@ from typing import Protocol
 from blizzard.foundation.clock import IClock
 from blizzard.foundation.crash import crashpoint
 from blizzard.foundation.roles import domain_model
-from blizzard.runner.environments.repository import IReadEnvironmentRepository
+from blizzard.runner.environments.repository import EnvBinding
 from blizzard.runner.environments.workspaces import IWorkspaceProviders
 from blizzard.runner.hub.outbound_buffer import IReadOutboundRepository
 from blizzard.runner.leases.git_commit_declaration import (
@@ -28,6 +28,7 @@ __all__ = [
     "RIDES_NO_COMPLETION_NOTE",
     "DeclaredGitCommit",
     "GitCommitDeclarationService",
+    "GitCommitScope",
     "IWriteGitCommitDeclarationRepository",
     "resolve_declaring_environment",
 ]
@@ -69,6 +70,15 @@ class DeclaredGitCommit:
     note: str | None = None
 
 
+@domain_model
+@dataclass(frozen=True)
+class GitCommitScope:
+    """The authorized worker and its chunk's loaded environment bindings."""
+
+    worker: WorkerLease
+    bindings: tuple[EnvBinding, ...]
+
+
 class IWriteGitCommitDeclarationRepository(IReadGitCommitDeclarationRepository, Protocol):
     """Read-write git-commit declaration store — held only by the domain."""
 
@@ -102,7 +112,7 @@ _CP_DECLARE_COMMIT_AFTER_RECORD = crashpoint(
 
 
 class GitCommitDeclarationService:
-    """Composition-root-wired: the write store, the environment store, the host's workspaces, the
+    """Composition-root-wired: the write store, the host's workspaces, the
     outbound buffer (whether the lease's outcome is buffered), the lease lock, and the clock. The repo manifest of the
     provider of the workspace the environment's binding names says which repos the lease authorizes and is the one
     source of each origin later verified."""
@@ -113,7 +123,6 @@ class GitCommitDeclarationService:
         clock: IClock,
         workspaces: IWorkspaceProviders,
         *,
-        environments: IReadEnvironmentRepository,
         outbound: IReadOutboundRepository,
         lease_lock: IWriteLeaseLock,
     ) -> None:
@@ -121,28 +130,24 @@ class GitCommitDeclarationService:
         self._lease_lock = lease_lock
         self._clock = clock
         self._workspaces = workspaces
-        self._environments = environments
         self._outbound = outbound
 
     def declare(
         self,
-        worker: WorkerLease,
+        scope: GitCommitScope,
         *,
         repo: str,
         branch: str,
         commit: str,
         environment_id: str | None = None,
     ) -> DeclaredGitCommit:
-        """Record ``(env, repo, branch, commit)`` for ``worker``'s lease and report the resolved
-        environment. ``worker`` is already resolved and its token checked by the caller
-        (``bzh:domain-takes-objects``). Raises :class:`GitCommitDeclarationUnknownRepo` when the
-        env is unresolvable or does not list ``repo``, :class:`GitCommitDeclarationOnClosedLease`
-        when the lease's standing refuses the verb, or :class:`GitCommitDeclarationTooLate` once
-        the lease's outcome is buffered, acked or not.
-        Append-and-read-newest (``bzh:facts-not-status``): a repeat call for the same ``(lease, env,
-        repo)`` is a correction. The env is part of that key, so one env cannot overwrite another."""
+        """Record a commit for the authorized worker and report its resolved environment.
+
+        Repeating a ``(lease, env, repo)`` declaration corrects it (``bzh:facts-not-status``).
+        """
+        worker = scope.worker
         lease = worker.lease
-        bindings = self._environments.bindings_for_chunk(lease.chunk_id)
+        bindings = scope.bindings
         resolved_env = resolve_declaring_environment(
             lease.chunk_id, [binding.environment_id for binding in bindings], environment_id
         )
