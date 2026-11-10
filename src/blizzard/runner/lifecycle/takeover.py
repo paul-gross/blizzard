@@ -23,7 +23,6 @@ from blizzard.foundation.crash import crashpoint
 from blizzard.foundation.fact_kinds import LEASE_MINTED
 from blizzard.foundation.ids import Id, IdPrefix
 from blizzard.foundation.roles import domain_model
-from blizzard.runner.auth.tokens import IWriteTokenRepository
 from blizzard.runner.environments.provider import AcquiredEnvironment
 from blizzard.runner.environments.workspaces import IWorkspaceSpawnRoots
 from blizzard.runner.events.publisher import IRunnerEventPublisher
@@ -31,7 +30,6 @@ from blizzard.runner.harness.adapter import IHarnessWorkerLifecycle, WorkerPream
 from blizzard.runner.harness.identity import SessionReference
 from blizzard.runner.harness.registry import IHarnessLifecycleRegistry, UnavailableHarnessError, UnknownHarnessError
 from blizzard.runner.harness.spawn_cwd import SpawnCwd
-from blizzard.runner.hub.outbound_buffer import IWriteOutboundRepository
 from blizzard.runner.leases.elicitation import IWriteElicitationRepository
 from blizzard.runner.leases.escalations import resume_workdir
 from blizzard.runner.leases.lease_auth import LeaseToken
@@ -595,8 +593,6 @@ class TakeoverService:
         process: IOwnedProcessControl,
         *,
         takeover: IWriteTakeoverRepository,
-        outbound: IWriteOutboundRepository,
-        tokens: IWriteTokenRepository,
         elicitations: IWriteElicitationRepository,
         local_api_url: str,
         harnesses: IHarnessLifecycleRegistry,
@@ -604,8 +600,6 @@ class TakeoverService:
         events: IRunnerEventPublisher | None = None,
     ) -> None:
         self._takeover = takeover
-        self._outbound = outbound
-        self._tokens = tokens
         self._elicitations = elicitations
         self._workspaces = workspaces
         self._clock = clock

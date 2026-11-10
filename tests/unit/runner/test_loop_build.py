@@ -59,6 +59,7 @@ from blizzard.runner.subscriptions.internal.openai_subscription_sampler import O
 from blizzard.runner.subscriptions.internal.usage_http_client import LazyUsageHttpClient
 from blizzard.runner.subscriptions.subscription_sampler import PROVIDER_ANTHROPIC, PROVIDER_OPENAI
 from blizzard.runner.tracing.config import RunnerTracingConfig
+from blizzard.runner.transcripts.transcript_pump import TranscriptPump
 from tests.support.config_inputs import create_runner_app
 from tests.support.harness_sections import sections
 from tests.support.host_files import load_runner_config, one_workspace, write_minimal_host
@@ -582,7 +583,8 @@ class _HubCallingBackfill:
     """Stands in for the transcript backfill: each verb makes one lease-path hub call through the
     context it was handed, so the test sees whether that context's hub forwards."""
 
-    def __init__(self, ctx: LoopContext) -> None:
+    def __init__(self, ctx: LoopContext, pump: TranscriptPump) -> None:
+        assert pump.ctx is ctx
         self._ctx = ctx
 
     def run(self, *, dry_run: bool, limit: int | None) -> object:

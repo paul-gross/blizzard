@@ -7,7 +7,9 @@ its end**, so a session this run could not finish stays open for the next one to
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from dataclasses import dataclass
+from functools import cache
 from typing import Protocol
 
 from blizzard.foundation.logging import get_logger
@@ -30,6 +32,7 @@ from blizzard.runner.transcripts.ledger import TranscriptSegmentState, Truncatio
 from blizzard.runner.transcripts.transcript_drain import TranscriptDrain, TranscriptDrainContext
 from blizzard.runner.transcripts.transcript_pump import (
     MAX_BUFFERED_BYTES,
+    ResolvedBindings,
     TranscriptPump,
     TranscriptPumpStores,
 )
@@ -96,6 +99,7 @@ class TranscriptBackfill:
     """The ``blizzard runner transcript backfill`` verb's domain half."""
 
     ctx: TranscriptBackfillContext
+    pump: TranscriptPump
 
     def run(self, *, dry_run: bool = False, limit: int | None = None) -> TranscriptBackfillReport:
         """Import every session-bearing lease's transcript still on disk and not already
@@ -107,24 +111,34 @@ class TranscriptBackfill:
             return TranscriptBackfillReport(imported=0, already_present=0, gone=0, deferred=0, capped=0)
 
         unfinished = self._unfinished()
+        leases = self.ctx.stores.transcript_ledger.transcript_backfill_leases()
+
+        @cache
+        def bindings() -> ResolvedBindings:
+            return self.pump.bindings_for_chunks(
+                {s.chunk_id for s in unfinished} | {lease.chunk_id for lease in leases}, all_newest=True
+            )
+
         imported = already = gone = deferred = 0
         imported_segment_ids: list[str] = []
         seen = {segment.session for segment in unfinished}
         for segment in unfinished:
             if dry_run:
                 imported += 1
-            elif self._finish(segment.segment_id):
+            elif self._finish(segment.segment_id, bindings()):
                 imported += 1
                 imported_segment_ids.append(segment.segment_id)
             else:
                 deferred += 1
 
         backpressured = False
-        for lease in self.ctx.stores.transcript_ledger.transcript_backfill_leases():
+        for lease in leases:
             if lease.session in seen:
                 continue
             seen.add(lease.session)
-            readable = not lease.has_segment and not self._unreadable(lease.session, chunk_id=lease.chunk_id)
+            readable = not lease.has_segment and not self._unreadable(
+                lease.session, chunk_id=lease.chunk_id, bindings=bindings
+            )
             # Latched once tripped: nothing here shrinks the buffer again, since the flush
             # below is exactly what failed to.
             backpressured = backpressured or (
@@ -144,8 +158,10 @@ class TranscriptBackfill:
             elif dry_run:
                 imported += 1
             else:
-                segment_id = self._open(SegmentOpening.merged_import(lease, spawn_cwd=self._spawn_cwd(lease.chunk_id)))
-                if self._finish(segment_id):
+                segment_id = self._open(
+                    SegmentOpening.merged_import(lease, spawn_cwd=self._spawn_cwd(lease.chunk_id, bindings()))
+                )
+                if self._finish(segment_id, bindings()):
                     imported += 1
                     imported_segment_ids.append(segment_id)
                 else:
@@ -193,7 +209,15 @@ class TranscriptBackfill:
                 f"session {source.session_id}'s recorded owner {source.harness_id!r} is not "
                 f"resolvable by this runner right now: {exc}"
             ) from exc
-        if readable.size_bytes(source.session_id, spawn_cwd=self._spawn_cwd(source.chunk_id)) is None:
+        if (
+            readable.size_bytes(
+                source.session_id,
+                spawn_cwd=self._spawn_cwd(
+                    source.chunk_id, self.pump.bindings_for_chunks({source.chunk_id}, all_newest=True)
+                ),
+            )
+            is None
+        ):
             # Nothing is written on this path, so a rerun retries once the root is right.
             raise TranscriptReshipError(
                 f"session {source.session_id} is not readable by this runner — "
@@ -244,14 +268,17 @@ class TranscriptBackfill:
         configured = self.ctx.config.transcript_chunk_max_bytes
         return CHUNK_TRANSCRIPT_MAX_BYTES if configured is None else configured
 
-    def _finish(self, segment_id: str) -> bool:
+    def _finish(self, segment_id: str, bindings: ResolvedBindings | None = None) -> bool:
         """Drain one segment and close it out, shipping what it produced before the next
         session is read — without that flush a long run buries itself under the pump's own
         buffered-bytes backpressure. ``False`` leaves it open for a later run to resume."""
         # No deadline: an operator verb has all the time the file needs, unlike the tick's
         # shared budget, and the pump's own iteration valve still bounds a stuck source.
-        caught_up = TranscriptPump(self.ctx).drain_segment(
-            segment_id, deadline=None, incomplete_reason=TruncationReason.BACKFILL_INCOMPLETE
+        caught_up = self.pump.drain_segment(
+            segment_id,
+            deadline=None,
+            incomplete_reason=TruncationReason.BACKFILL_INCOMPLETE,
+            bindings_by_chunk=bindings,
         )
         if caught_up:
             self.ctx.stores.transcript_ledger.finalize_transcript_segment(segment_id, finalized_at=self.ctx.clock.now())
@@ -275,14 +302,16 @@ class TranscriptBackfill:
         active_lease_ids = {lease.lease_id for lease in self.ctx.stores.lease_record.list_active_leases()}
         return unfinished(self.ctx.stores.transcript_ledger.open_transcript_segments(), active_lease_ids)
 
-    def _spawn_cwd(self, chunk_id: str) -> str | None:
+    def _spawn_cwd(self, chunk_id: str, bindings: ResolvedBindings) -> str | None:
         """The closed lease's spawn cwd, read through the workspace its newest binding names — released by now."""
-        binding = self.ctx.stores.environments.newest_binding_for_chunk(chunk_id)
+        binding = bindings.newest.get(chunk_id)
         if binding is None:
             return None
         return SpawnCwd(self.ctx.workspaces.spawn_root(binding.workspace_id), binding.workdir).path
 
-    def _unreadable(self, session: SessionReference, *, chunk_id: str) -> bool:
+    def _unreadable(
+        self, session: SessionReference, *, chunk_id: str, bindings: Callable[[], ResolvedBindings]
+    ) -> bool:
         """True when ``session``'s transcript cannot be read right now — a rotated-away
         file, a wrong transcripts root, or a recorded owner this run's registry cannot
         resolve. Never raises, so one such session is skipped rather than aborting the run."""
@@ -296,4 +325,4 @@ class TranscriptBackfill:
                 detail=str(exc),
             )
             return True
-        return source.size_bytes(session.session_id, spawn_cwd=self._spawn_cwd(chunk_id)) is None
+        return source.size_bytes(session.session_id, spawn_cwd=self._spawn_cwd(chunk_id, bindings())) is None

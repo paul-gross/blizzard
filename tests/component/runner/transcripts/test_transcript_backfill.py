@@ -19,7 +19,7 @@ from blizzard.runner.harness.transcript import NormalizedTurn, TranscriptBatch, 
 from blizzard.runner.leases.model import NewLease
 from blizzard.runner.loop.context import LoopConfig, LoopContext
 from blizzard.runner.transcripts.transcript_backfill import TranscriptBackfill, TranscriptReshipError
-from blizzard.runner.transcripts.transcript_pump import MAX_BUFFERED_BYTES
+from blizzard.runner.transcripts.transcript_pump import MAX_BUFFERED_BYTES, TranscriptPump
 from tests.support.runner_fakes import (
     FIXTURE_RUNNER_ID,
     FakeHarness,
@@ -27,6 +27,7 @@ from tests.support.runner_fakes import (
     FakeProbe,
     FakeProvider,
     FakeTranscriptSource,
+    SqlAlchemyRunnerStore,
     StubbedBufferBytesStore,
     make_context,
     make_store,
@@ -34,6 +35,7 @@ from tests.support.runner_fakes import (
     strip_transcript_segments,
 )
 from tests.support.runner_mint import new_mint
+from tests.support.scaffolding import capture_statements, count_queries
 
 _NOW = datetime(2026, 8, 10, 12, 0, 0, tzinfo=UTC)
 
@@ -91,6 +93,10 @@ def _ctx(*, sessions: dict[str, list[NormalizedTurn]], on_disk: set[str] | None 
     return ctx, source
 
 
+def _backfill(ctx: LoopContext) -> TranscriptBackfill:
+    return TranscriptBackfill(ctx, TranscriptPump(ctx))
+
+
 def _with_source(ctx: LoopContext, source: FakeTranscriptSource) -> LoopContext:
     """Replace the production-shaped exact-owner source as well as the legacy sentinel."""
     adapter = ctx.harnesses.lifecycle(CLAUDE_CODE_HARNESS_ID)
@@ -103,14 +109,21 @@ def _with_source(ctx: LoopContext, source: FakeTranscriptSource) -> LoopContext:
 
 
 def _historical_lease(
-    ctx: LoopContext, *, lease_id: str, session_id: str, epoch: int, node_id: str = "nd_build", at: datetime = _NOW
+    ctx: LoopContext,
+    *,
+    lease_id: str,
+    session_id: str,
+    epoch: int,
+    node_id: str = "nd_build",
+    at: datetime = _NOW,
+    chunk_id: str = "ch_1",
 ) -> None:
     """A closed lease that ran ``session_id`` and left no segment — the pre-lane shape."""
     ctx.stores.lease_record.record_mint(
         new_mint(
             NewLease(
                 lease_id=lease_id,
-                chunk_id="ch_1",
+                chunk_id=chunk_id,
                 graph_id="gr_1",
                 node_id=node_id,
                 node_name=node_id.removeprefix("nd_"),
@@ -128,7 +141,7 @@ def _historical_lease(
         spawned_at=at,
     )
     ctx.stores.lease_record.record_closure(
-        lease_id=lease_id, chunk_id="ch_1", node_id=node_id, reason="transitioned", closed_at=at
+        lease_id=lease_id, chunk_id=chunk_id, node_id=node_id, reason="transitioned", closed_at=at
     )
 
 
@@ -167,7 +180,7 @@ def test_it_imports_a_historical_session_as_one_finalized_segment() -> None:
     _historical_lease(ctx, lease_id="lease_1", session_id="sess-a", epoch=1)
     strip_transcript_segments(ctx.stores.transcript_ledger)
 
-    report = TranscriptBackfill(ctx).run()
+    report = _backfill(ctx).run()
 
     assert (report.imported, report.already_present, report.gone) == (1, 0, 0)
     assert ctx.stores.transcript_ledger.open_transcript_segments() == []  # finalized, not left open
@@ -186,7 +199,7 @@ def test_a_backfilled_segment_ships_a_version_stamped_final_marker() -> None:
     _historical_lease(ctx, lease_id="lease_1", session_id="sess-a", epoch=1)
     strip_transcript_segments(ctx.stores.transcript_ledger)
 
-    TranscriptBackfill(ctx).run()
+    _backfill(ctx).run()
 
     final = [b for b in _shipped_bodies(ctx) if b["final"]]
     assert len(final) == 1
@@ -202,7 +215,7 @@ def test_it_reads_only_the_sessions_its_own_store_names() -> None:
     _historical_lease(ctx, lease_id="lease_1", session_id="sess-a", epoch=1)
     strip_transcript_segments(ctx.stores.transcript_ledger)
 
-    TranscriptBackfill(ctx).run()
+    _backfill(ctx).run()
 
     assert [call[0] for call in source.turns_since_calls] == ["sess-a"]
     assert source.size_bytes_calls == ["sess-a"]
@@ -216,9 +229,9 @@ def test_a_second_run_imports_nothing_twice() -> None:
     _historical_lease(ctx, lease_id="lease_2", session_id="sess-a", epoch=2, at=_NOW + timedelta(hours=1))
     strip_transcript_segments(ctx.stores.transcript_ledger)
 
-    TranscriptBackfill(ctx).run()
+    _backfill(ctx).run()
     shipped_after_first = len(_shipped_bodies(ctx))
-    second = TranscriptBackfill(ctx).run()
+    second = _backfill(ctx).run()
 
     assert (second.imported, second.already_present, second.gone) == (0, 1, 0)
     assert len(_shipped_bodies(ctx)) == shipped_after_first
@@ -232,7 +245,7 @@ def test_a_session_the_live_lane_already_segmented_under_a_later_lease_is_left_a
     strip_transcript_segments(ctx.stores.transcript_ledger)
     _historical_lease(ctx, lease_id="lease_2", session_id="sess-a", epoch=2, at=_NOW + timedelta(hours=1))
 
-    report = TranscriptBackfill(ctx).run()
+    report = _backfill(ctx).run()
 
     assert (report.imported, report.already_present) == (0, 1)
     assert _shipped_bodies(ctx) == []
@@ -248,7 +261,7 @@ def test_a_session_resumed_across_leases_imports_once_at_its_first_lease() -> No
     )
     strip_transcript_segments(ctx.stores.transcript_ledger)
 
-    report = TranscriptBackfill(ctx).run()
+    report = _backfill(ctx).run()
 
     assert report.imported == 1
     segments = _shipped_bodies(ctx)
@@ -266,7 +279,7 @@ def test_a_session_whose_file_is_gone_is_reported_not_errored() -> None:
     _historical_lease(ctx, lease_id="lease_2", session_id="sess-b", epoch=2, at=_NOW + timedelta(hours=1))
     strip_transcript_segments(ctx.stores.transcript_ledger)
 
-    report = TranscriptBackfill(ctx).run()
+    report = _backfill(ctx).run()
 
     assert (report.imported, report.already_present, report.gone) == (1, 0, 1)
     bodies = _shipped_bodies(ctx)
@@ -284,7 +297,7 @@ def test_a_session_whose_owner_is_unresolvable_is_reported_not_errored() -> None
     _foreign_owner_lease(ctx, lease_id="lease_2", session_id="sess-b", epoch=2, at=_NOW + timedelta(hours=1))
     strip_transcript_segments(ctx.stores.transcript_ledger)
 
-    report = TranscriptBackfill(ctx).run()
+    report = _backfill(ctx).run()
 
     assert (report.imported, report.already_present, report.gone) == (1, 0, 1)
     bodies = _shipped_bodies(ctx)
@@ -296,7 +309,7 @@ def test_a_dry_run_classifies_without_writing_or_shipping() -> None:
     _historical_lease(ctx, lease_id="lease_1", session_id="sess-a", epoch=1)
     strip_transcript_segments(ctx.stores.transcript_ledger)
 
-    report = TranscriptBackfill(ctx).run(dry_run=True)
+    report = _backfill(ctx).run(dry_run=True)
 
     assert report.imported == 1
     assert _shipped_bodies(ctx) == []
@@ -320,7 +333,7 @@ def test_an_interrupted_run_finishes_its_own_unfinalized_segment() -> None:
         stamped_at=_NOW,
     )
 
-    report = TranscriptBackfill(ctx).run()
+    report = _backfill(ctx).run()
 
     assert (report.imported, report.already_present) == (1, 0)
     assert ctx.stores.transcript_ledger.open_transcript_segments() == []
@@ -353,7 +366,7 @@ def test_a_live_leases_open_segment_is_left_to_the_tick() -> None:
         spawned_at=_NOW,
     )
 
-    report = TranscriptBackfill(ctx).run()
+    report = _backfill(ctx).run()
 
     assert (report.imported, report.already_present) == (0, 1)
     assert len(ctx.stores.transcript_ledger.open_transcript_segments()) == 1
@@ -365,7 +378,7 @@ def test_it_defers_the_tail_once_the_outbound_buffer_is_full() -> None:
     ctx, _ = _ctx(sessions={"sess-a": [_turn(0, "hello")]})
     _historical_lease(ctx, lease_id="lease_1", session_id="sess-a", epoch=1)
     strip_transcript_segments(ctx.stores.transcript_ledger)
-    backpressured = TranscriptBackfill(
+    backpressured = _backfill(
         replace(
             ctx,
             stores=replace(
@@ -391,7 +404,7 @@ def test_a_buffer_that_fills_mid_drain_defers_the_session_instead_of_sealing_it(
     # Under cap for the between-sessions pre-check, over it by the pump's own read.
     stubbed = StubbedBufferBytesStore(ctx.stores.transcript_ledger, 0, MAX_BUFFERED_BYTES)
 
-    report = TranscriptBackfill(replace(ctx, stores=replace(ctx.stores, transcript_ledger=stubbed))).run()
+    report = _backfill(replace(ctx, stores=replace(ctx.stores, transcript_ledger=stubbed))).run()
 
     assert (report.imported, report.deferred) == (0, 1)
     assert len(ctx.stores.transcript_ledger.open_transcript_segments()) == 1  # left open for the rerun to resume
@@ -419,7 +432,7 @@ def test_a_session_unreadable_after_the_on_disk_probe_is_deferred_not_sealed() -
     _historical_lease(ctx, lease_id="lease_1", session_id="sess-a", epoch=1)
     strip_transcript_segments(ctx.stores.transcript_ledger)
 
-    first = TranscriptBackfill(ctx).run()
+    first = _backfill(ctx).run()
 
     assert (first.imported, first.deferred, first.gone) == (0, 1, 0)
     assert _shipped_bodies(ctx) == []
@@ -427,7 +440,7 @@ def test_a_session_unreadable_after_the_on_disk_probe_is_deferred_not_sealed() -
 
     # The file comes back; the rerun resumes that same segment rather than reporting it present.
     source.script_batch("sess-a", _batch("sess-a", [_turn(0, "hello")]))
-    second = TranscriptBackfill(ctx).run()
+    second = _backfill(ctx).run()
 
     assert (second.imported, second.already_present) == (1, 0)
     assert [t["text"] for b in _shipped_bodies(ctx) if not b["final"] for t in b["turns"]] == ["hello"]
@@ -442,11 +455,11 @@ def test_a_limit_bounds_one_run_and_defers_the_rest() -> None:
     _historical_lease(ctx, lease_id="lease_2", session_id="sess-b", epoch=2, at=_NOW + timedelta(hours=1))
     strip_transcript_segments(ctx.stores.transcript_ledger)
 
-    report = TranscriptBackfill(ctx).run(limit=1)
+    report = _backfill(ctx).run(limit=1)
 
     assert (report.imported, report.deferred) == (1, 1)
     assert len({b["segment_id"] for b in _shipped_bodies(ctx)}) == 1
-    assert TranscriptBackfill(ctx).run(limit=1).imported == 1  # the rerun takes the next one
+    assert _backfill(ctx).run(limit=1).imported == 1  # the rerun takes the next one
 
 
 def test_a_hub_capped_import_is_reported_apart_from_a_whole_one() -> None:
@@ -459,7 +472,7 @@ def test_a_hub_capped_import_is_reported_apart_from_a_whole_one() -> None:
     assert isinstance(hub, FakeHub)
     hub.reject_transcript_seqs = {1, 2}
 
-    report = TranscriptBackfill(ctx).run()
+    report = _backfill(ctx).run()
 
     assert (report.imported, report.capped) == (1, 1)
 
@@ -473,7 +486,7 @@ def test_a_hub_refused_import_is_counted_capped() -> None:
     assert isinstance(hub, FakeHub)
     hub.refuse_transcript_seqs = {1, 2}
 
-    report = TranscriptBackfill(ctx).run()
+    report = _backfill(ctx).run()
 
     assert (report.imported, report.capped) == (1, 1)
 
@@ -486,7 +499,7 @@ def test_the_ship_switch_is_held_in_the_domain_not_only_at_the_cli() -> None:
     strip_transcript_segments(ctx.stores.transcript_ledger)
     off = replace(ctx, config=replace(ctx.config, transcripts_ship=False))
 
-    report = TranscriptBackfill(off).run()
+    report = _backfill(off).run()
 
     assert (report.imported, report.already_present, report.gone) == (0, 0, 0)
     assert source.size_bytes_calls == []
@@ -499,7 +512,7 @@ def _import_one(ctx: LoopContext, *, session_id: str = "sess-a") -> str:
     """Backfill a single historical session and return the segment id it landed under."""
     _historical_lease(ctx, lease_id="lease_1", session_id=session_id, epoch=1)
     strip_transcript_segments(ctx.stores.transcript_ledger)
-    TranscriptBackfill(ctx).run()
+    _backfill(ctx).run()
     content = [b for b in _shipped_bodies(ctx) if not b["final"]]
     assert len(content) == 1
     return str(content[0]["segment_id"])
@@ -511,7 +524,7 @@ def test_reship_sends_the_session_again_under_a_new_segment_id() -> None:
     ctx, _ = _ctx(sessions={"sess-a": [_turn(0, "hello"), _turn(1, "world")]})
     first = _import_one(ctx)
 
-    report = TranscriptBackfill(ctx).reship(first)
+    report = _backfill(ctx).reship(first)
 
     assert report.segment_id != first
     assert (report.source_segment_id, report.session_id, report.complete) == (first, "sess-a", True)
@@ -530,7 +543,7 @@ def test_reship_leaves_the_original_segment_exactly_as_it_shipped() -> None:
     first = _import_one(ctx)
     before = ctx.stores.transcript_ledger.transcript_segment(first)
 
-    TranscriptBackfill(ctx).reship(first)
+    _backfill(ctx).reship(first)
 
     assert ctx.stores.transcript_ledger.transcript_segment(first) == before
 
@@ -541,7 +554,7 @@ def test_reship_closes_its_new_segment_out_and_ships_a_final_marker() -> None:
     ctx, _ = _ctx(sessions={"sess-a": [_turn(0, "hello")]})
     first = _import_one(ctx)
 
-    report = TranscriptBackfill(ctx).reship(first)
+    report = _backfill(ctx).reship(first)
 
     assert ctx.stores.transcript_ledger.open_transcript_segments() == []
     final = [b for b in _shipped_bodies(ctx) if b["final"]]
@@ -554,7 +567,7 @@ def test_reship_refuses_an_unknown_segment_id() -> None:
     _import_one(ctx)
 
     with pytest.raises(TranscriptReshipError, match="no such transcript segment"):
-        TranscriptBackfill(ctx).reship("seg_nope")
+        _backfill(ctx).reship("seg_nope")
 
     assert len(_shipped_bodies(ctx)) == 2  # the original import's content + final marker only
 
@@ -572,7 +585,7 @@ def test_reship_refuses_a_session_no_longer_readable() -> None:
     )
 
     with pytest.raises(TranscriptReshipError, match="not readable by this runner"):
-        TranscriptBackfill(rotated).reship(first)
+        _backfill(rotated).reship(first)
 
     assert ctx.stores.transcript_ledger.open_transcript_segments() == []
 
@@ -585,7 +598,7 @@ def test_reship_refuses_a_session_whose_owner_is_unresolvable() -> None:
     unresolved = replace(ctx, harnesses=HarnessRegistry({}))
 
     with pytest.raises(TranscriptReshipError, match="not resolvable"):
-        TranscriptBackfill(unresolved).reship(first)
+        _backfill(unresolved).reship(first)
 
     assert ctx.stores.transcript_ledger.open_transcript_segments() == []
 
@@ -597,7 +610,7 @@ def test_the_reship_ship_switch_is_held_in_the_domain_not_only_at_the_cli() -> N
     off = replace(ctx, config=replace(ctx.config, transcripts_ship=False))
 
     with pytest.raises(TranscriptReshipError, match="ship is false"):
-        TranscriptBackfill(off).reship(first)
+        _backfill(off).reship(first)
 
 
 def test_reship_is_refused_up_front_when_the_chunk_budget_is_spent() -> None:
@@ -609,7 +622,7 @@ def test_reship_is_refused_up_front_when_the_chunk_budget_is_spent() -> None:
     capped = replace(ctx, config=replace(ctx.config, transcript_chunk_max_bytes=spent))
 
     with pytest.raises(TranscriptReshipError, match="spent its transcript budget"):
-        TranscriptBackfill(capped).reship(first)
+        _backfill(capped).reship(first)
 
     assert [s.segment_id for s in ctx.stores.transcript_ledger.transcript_segments_for_chunk("ch_1")] == [first]
 
@@ -622,9 +635,9 @@ def test_reship_resumes_its_own_unfinished_segment_instead_of_stranding_it() -> 
     first = _import_one(ctx)
     stalled = _with_source(ctx, FakeTranscriptSource(sizes_by_session={"sess-a": 1024}))
 
-    incomplete = TranscriptBackfill(stalled).reship(first)  # source unreadable mid-drain -> stays open
+    incomplete = _backfill(stalled).reship(first)  # source unreadable mid-drain -> stays open
     assert not incomplete.complete
-    second = TranscriptBackfill(ctx).reship(first)
+    second = _backfill(ctx).reship(first)
 
     assert second.segment_id == incomplete.segment_id  # resumed, not a third segment
     assert second.complete
@@ -660,7 +673,7 @@ def test_reship_refuses_a_segment_whose_lease_is_still_active() -> None:
     live = next(s for s in ctx.stores.transcript_ledger.open_transcript_segments() if s.lease_id == "lease_live")
 
     with pytest.raises(TranscriptReshipError, match="still active"):
-        TranscriptBackfill(ctx).reship(live.segment_id)
+        _backfill(ctx).reship(live.segment_id)
 
     assert first  # the closed-lease segment above is untouched by the refusal
 
@@ -701,7 +714,7 @@ def test_reship_carries_the_superseded_segments_spawn_cwd_onto_its_new_segment()
     ctx.stores.environments.record_binding(chunk_id="ch_1", environment_id="e1", workdir="/ws/e1", bound_at=_NOW)
     first = _import_one(ctx)
 
-    report = TranscriptBackfill(ctx).reship(first)
+    report = _backfill(ctx).reship(first)
 
     reshipped = ctx.stores.transcript_ledger.transcript_segment(report.segment_id)
     assert reshipped is not None and reshipped.spawn_cwd == "/ws/e1"
@@ -714,10 +727,83 @@ def test_reship_points_its_new_segment_at_the_one_it_supersedes() -> None:
     ctx, _ = _ctx(sessions={"sess-a": [_turn(0, "hello")]})
     first = _import_one(ctx)
 
-    report = TranscriptBackfill(ctx).reship(first)
+    report = _backfill(ctx).reship(first)
 
     bodies = [b for b in _shipped_bodies(ctx) if b["segment_id"] == report.segment_id]
     assert bodies and all(b["supersedes"] == first for b in bodies)
     assert any(b["final"] for b in bodies)  # including the closing marker
     # The original's own records claim to supersede nothing, or the hub drops them both.
     assert all(b["supersedes"] is None for b in _shipped_bodies(ctx) if b["segment_id"] == first)
+
+
+@pytest.mark.parametrize("count", [1, 4])
+@pytest.mark.parametrize("unfinished_first", [False, True])
+def test_backfill_reads_bindings_once_per_run(count: int, unfinished_first: bool) -> None:
+    sessions = {f"sess-{i}": [_turn(0, str(i))] for i in range(count)}
+    ctx, _ = _ctx(sessions=sessions)
+    for i in range(count):
+        _historical_lease(ctx, lease_id=f"lease_{i}", session_id=f"sess-{i}", epoch=i + 1, chunk_id=f"ch_{i}")
+    strip_transcript_segments(ctx.stores.transcript_ledger)
+    if unfinished_first:
+        ctx.stores.transcript_ledger.open_transcript_segment(
+            chunk_id="ch_0",
+            node_id="nd_build",
+            epoch=1,
+            generation=1,
+            lease_id="lease_0",
+            session=SessionReference(CLAUDE_CODE_HARNESS_ID, "sess-0"),
+            stamped_at=_NOW,
+        )
+    store = ctx.stores.environments
+    assert isinstance(store, SqlAlchemyRunnerStore)
+    assert count_queries(store.engine, lambda: store.newest_bindings_for(["ch_1"])) == 1
+    with capture_statements(store.engine) as statements:
+        report = _backfill(ctx).run()
+    binding_reads = [sql for sql, _ in statements if "FROM env_bindings" in sql]
+    assert report.imported == count
+    assert len(binding_reads) == 2  # held and newest, each once for the whole run
+    assert sum("max(env_bindings.id)" in sql for sql in binding_reads) == 1
+
+
+def test_unfinished_and_new_import_use_their_own_workspace_bindings(monkeypatch: pytest.MonkeyPatch) -> None:
+    ctx, source = _ctx(sessions={"unfinished": [_turn(0, "old")], "new": [_turn(0, "new")]})
+    ctx = replace(
+        ctx,
+        workspaces=WorkspaceRegistry(
+            [
+                WorkspaceEntry("old_ws", FakeProvider({"old_env": "/old/env"}), spawn_root="/old"),
+                WorkspaceEntry("new_ws", FakeProvider({"new_env": "/new/env"}), spawn_root="/new"),
+            ]
+        ),
+    )
+    _historical_lease(ctx, lease_id="old_lease", session_id="unfinished", epoch=1, chunk_id="old_chunk")
+    _historical_lease(ctx, lease_id="new_lease", session_id="new", epoch=1, chunk_id="new_chunk")
+    strip_transcript_segments(ctx.stores.transcript_ledger)
+    for chunk, env, workdir, workspace in [
+        ("old_chunk", "old_env", "/old/env", "old_ws"),
+        ("new_chunk", "new_env", "/new/env", "new_ws"),
+    ]:
+        ctx.stores.environments.record_binding(
+            chunk_id=chunk, environment_id=env, workdir=workdir, workspace_id=workspace, bound_at=_NOW
+        )
+    ctx.stores.transcript_ledger.open_transcript_segment(
+        chunk_id="old_chunk",
+        node_id="nd_build",
+        epoch=1,
+        generation=1,
+        lease_id="old_lease",
+        session=SessionReference(CLAUDE_CODE_HARNESS_ID, "unfinished"),
+        stamped_at=_NOW,
+    )
+    store = ctx.stores.transcript_ledger
+    leases = store.transcript_backfill_leases()
+    monkeypatch.setattr(
+        store, "transcript_backfill_leases", lambda: [lease for lease in leases if lease.chunk_id == "new_chunk"]
+    )
+
+    report = _backfill(ctx).run()
+
+    assert report.imported == 2
+    assert {(session, cwd) for session, cwd, _ in source.turns_since_calls} == {("unfinished", "/old"), ("new", "/new")}
+    new_segments = ctx.stores.transcript_ledger.transcript_segments_for_chunk("new_chunk")
+    assert len(new_segments) == 1 and new_segments[0].spawn_cwd == "/new"

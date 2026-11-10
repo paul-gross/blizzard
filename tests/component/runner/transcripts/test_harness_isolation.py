@@ -188,7 +188,7 @@ def test_backfill_imports_both_owners_of_the_same_raw_session_id() -> None:
         )
     strip_transcript_segments(ctx.stores.transcript_ledger)  # the pre-lane shape: no segment survives
 
-    report = TranscriptBackfill(ctx).run()
+    report = TranscriptBackfill(ctx, TranscriptPump(ctx)).run()
 
     assert (report.imported, report.already_present, report.gone) == (2, 0, 0)
     hub = ctx.hub

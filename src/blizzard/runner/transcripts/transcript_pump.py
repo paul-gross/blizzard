@@ -52,9 +52,8 @@ _EVENT_TRANSCRIPT_SIDECHAIN_DROPPED: EventLogKind = "transcript-sidechain-droppe
 
 @domain_model
 @dataclass(frozen=True)
-class _ResolvedBindings:
-    """One call's resolved environment bindings, per chunk: the held ones, and the newest binding of
-    each chunk holding none."""
+class ResolvedBindings:
+    """One call's held and newest environment bindings, keyed by chunk."""
 
     held: dict[str, list[EnvBinding]]
     newest: dict[str, EnvBinding]
@@ -171,7 +170,7 @@ class TranscriptPump:
         # totals without re-querying a store this same run's own writes would make stale.
         budget = _OutstandingBudget(self.ctx.stores.transcript_ledger.outstanding_transcript_buffer_bytes())
         shipped = self._shipped_bytes_mirror(segments)
-        bindings_by_chunk = self._bindings_by_chunk(segments)
+        bindings_by_chunk = self.bindings_for_chunks({segment.chunk_id for segment in segments})
         for segment in segments:
             if deadline is not None and self.ctx.clock.now() >= deadline:
                 break  # this run's bound reached — the rest catch up on a later tick
@@ -188,7 +187,7 @@ class TranscriptPump:
         segments = self.ctx.stores.transcript_ledger.open_transcript_segments_for_lease(lease_id)
         budget = _OutstandingBudget(self.ctx.stores.transcript_ledger.outstanding_transcript_buffer_bytes())
         shipped = self._shipped_bytes_mirror(segments)
-        bindings_by_chunk = self._bindings_by_chunk(segments)
+        bindings_by_chunk = self.bindings_for_chunks({segment.chunk_id for segment in segments})
         for i, segment in enumerate(segments):
             if deadline is not None and self.ctx.clock.now() >= deadline:
                 # Every remaining segment loses just as silently as a partially-drained one.
@@ -211,7 +210,7 @@ class TranscriptPump:
         incomplete_reason: TruncationReason = TruncationReason.LEASE_CLOSURE_INCOMPLETE,
         budget: _OutstandingBudget | None = None,
         shipped: _ShippedBytesMirror | None = None,
-        bindings_by_chunk: _ResolvedBindings | None = None,
+        bindings_by_chunk: ResolvedBindings | None = None,
     ) -> bool:
         """Read one segment forward until it is caught up, ``deadline`` passes, or reading
         again would gain nothing — marking ``incomplete_reason`` in the latter two cases.
@@ -227,7 +226,7 @@ class TranscriptPump:
             if shipped is None:
                 shipped = self._shipped_bytes_mirror([segment])
             if bindings_by_chunk is None:
-                bindings_by_chunk = self._bindings_by_chunk([segment])
+                bindings_by_chunk = self.bindings_for_chunks({segment.chunk_id})
         for _ in range(_PUMP_LEASE_MAX_ITERATIONS):
             segment = self.ctx.stores.transcript_ledger.transcript_segment(segment_id)
             if segment is None:
@@ -260,17 +259,17 @@ class TranscriptPump:
         totals = self.ctx.stores.transcript_ledger.chunk_transcript_shipped_bytes(chunk_ids)
         return _ShippedBytesMirror(totals)
 
-    def _bindings_by_chunk(self, segments: list[TranscriptSegmentState]) -> _ResolvedBindings:
+    def bindings_for_chunks(self, chunks: set[str], *, all_newest: bool = False) -> ResolvedBindings:
         """The bindings this call's segments could need, read once for their chunk set: the held
-        ones, plus the newest of each chunk holding none (the workspace a released chunk reads in).
-        Skipped entirely with no segments to pump."""
-        chunk_ids = sorted({segment.chunk_id for segment in segments})
+        ones, plus the newest of each chunk holding none (or every chunk with ``all_newest``).
+        Skipped entirely with no chunks."""
+        chunk_ids = sorted(chunks)
         if not chunk_ids:
-            return _ResolvedBindings({}, {})
+            return ResolvedBindings({}, {})
         environments = self.ctx.stores.environments
         held = environments.held_bindings_for(chunk_ids)
-        newest = environments.newest_bindings_for([c for c in chunk_ids if not held.get(c)])
-        return _ResolvedBindings(held, newest)
+        newest = environments.newest_bindings_for([c for c in chunk_ids if all_newest or not held.get(c)])
+        return ResolvedBindings(held, newest)
 
     def _pump_one_safe(
         self,
@@ -278,7 +277,7 @@ class TranscriptPump:
         *,
         budget: _OutstandingBudget,
         shipped: _ShippedBytesMirror,
-        bindings_by_chunk: _ResolvedBindings,
+        bindings_by_chunk: ResolvedBindings,
     ) -> PumpOutcome:
         """One segment's own failure must not abort the loop. Returns
         ``"not_attempted"`` on a caught exception — a raising segment must
@@ -300,7 +299,7 @@ class TranscriptPump:
         *,
         budget: _OutstandingBudget,
         shipped: _ShippedBytesMirror,
-        bindings_by_chunk: _ResolvedBindings,
+        bindings_by_chunk: ResolvedBindings,
     ) -> PumpOutcome:
         """Advance ``segment`` one read window forward and return its ``PumpOutcome``.
         :func:`~blizzard.runner.transcripts.shipping.pre_read` and ``plan_window`` decide; this carries it out."""

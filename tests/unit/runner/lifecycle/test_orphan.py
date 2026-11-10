@@ -201,8 +201,6 @@ def test_a_forced_takeover_kills_the_worker_and_orphans_nothing(tmp_path: Path) 
         FixedClock(_NOW),
         probe,
         takeover=store,
-        outbound=store,
-        tokens=store,
         elicitations=store,
         local_api_url="http://127.0.0.1:8431",
         workspaces=single_workspace(FakeProvider({})),
