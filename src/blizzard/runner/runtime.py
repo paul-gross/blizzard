@@ -52,6 +52,11 @@ _SQLITE_SIBLING_SUFFIXES = ("-wal", "-shm", "-journal")
 _log = get_logger("blizzard.runner.runtime")
 
 
+def runner_store_migrations(url: str) -> MigrationRunner:
+    """The runner store's own migrations against the store at ``url``."""
+    return MigrationRunner(script_location=MIGRATIONS_DIR, url=url)
+
+
 class IStoreLocation(Protocol):
     """Where a host's store is: its directory and the URL it is opened by."""
 
@@ -69,7 +74,7 @@ class Migrations:
 
     @property
     def runner(self) -> MigrationRunner:
-        return MigrationRunner(script_location=MIGRATIONS_DIR, url=self.location.db_url)
+        return runner_store_migrations(self.location.db_url)
 
     def check_current(self) -> None:
         """Refuse to run on a store-revision mismatch, naming the migrate command."""
@@ -212,6 +217,7 @@ class Runtime:
     flag_registry: FlagRegistry = field(kw_only=True)
     #: Whether every load of the host file reads it strictly.
     strict: bool = field(kw_only=True)
+    migrations: Callable[[str], MigrationRunner] = field(default=runner_store_migrations, kw_only=True)
 
     def init(self, select_bindings: Callable[[RunnerConfig], BindingSelection]) -> HostConfig:
         """Scaffold the host file + data dir + a migrated store. Idempotent. ``select_bindings`` names the
@@ -291,7 +297,7 @@ class Runtime:
             for leftover in (pending, *(pending.with_name(pending.name + s) for s in _SQLITE_SIBLING_SUFFIXES)):
                 leftover.unlink(missing_ok=True)
             try:
-                MigrationRunner(script_location=MIGRATIONS_DIR, url=sqlite_url(pending)).upgrade("head")
+                self.migrations(sqlite_url(pending)).upgrade("head")
             except (MigrationConnectionError, MigrationRefused) as exc:
                 raise ConfigError(f"cannot create the archive store at {pending}: {exc}") from exc
             moving = rows.for_runner(runner_id)
@@ -373,7 +379,7 @@ class Runtime:
             return
         with self._exclusive(layout, f"adopt {layout.legacy_store_path} as the host store"):
             if not layout.store_path.exists():
-                legacy = MigrationRunner(script_location=MIGRATIONS_DIR, url=sqlite_url(layout.legacy_store_path))
+                legacy = self.migrations(sqlite_url(layout.legacy_store_path))
                 legacy.refuse_below_floor(store=str(layout.legacy_store_path))
                 move_sqlite(layout.legacy_store_path, layout.store_path)
                 _log.info("pre-host store adopted", store=str(layout.store_path))
@@ -485,6 +491,7 @@ __all__ = [
     "migration_runner",
     "move_sqlite",
     "reset_command",
+    "runner_store_migrations",
     "set_aside_sqlite",
     "single_file",
     "sqlite_store_file",

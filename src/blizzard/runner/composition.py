@@ -99,9 +99,8 @@ from blizzard.runner.process.child_env import ChildEnv
 from blizzard.runner.process.child_processes import IChildProcesses
 from blizzard.runner.process.internal.linux_process_probe import LinuxProcessProbe
 from blizzard.runner.process.internal.subprocess_child_processes import SubprocessChildProcesses
-from blizzard.runner.runtime import migration_runner
+from blizzard.runner.runtime import migration_runner, runner_store_migrations
 from blizzard.runner.status.invariants import HostInvariantCheck
-from blizzard.runner.store import MIGRATIONS_DIR
 from blizzard.runner.store.errors import RunnerStoreErrorFactory
 from blizzard.runner.store.internal.ask_store import AskStore
 from blizzard.runner.store.internal.attachment_store import AttachmentStore
@@ -1245,11 +1244,6 @@ class DotenvTokenFiles:
 
 
 _token_files_conforms: type[ITokenFiles] = DotenvTokenFiles
-
-
-def runner_store_migrations(url: str) -> MigrationRunner:
-    """The runner store's own migrations, run against the store at ``url``."""
-    return MigrationRunner(script_location=MIGRATIONS_DIR, url=url)
 
 
 def build_runner_ingest(

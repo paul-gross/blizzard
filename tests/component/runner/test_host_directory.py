@@ -15,16 +15,19 @@ from collections.abc import Callable
 from contextlib import closing
 from datetime import UTC, datetime
 from pathlib import Path
+from unittest.mock import MagicMock
 
 import pytest
 from click.testing import CliRunner
 
 from blizzard.cli.collaborators import Client
 from blizzard.cli.main import blizzard
+from blizzard.foundation.store.migrations import MigrationRunner
 from blizzard.runner.cli.daemon import Door
 from blizzard.runner.config_table import ConfigError
 from blizzard.runner.host_layout import HostLayout, HostLock
-from blizzard.runner.runtime import migration_runner
+from blizzard.runner.runtime import migration_runner, runner_store_migrations, sqlite_url
+from blizzard.runner.transfer.runner_stores import IRunnerBoundStoresFactory
 from tests.support.config_inputs import host_runtime_of, selector_over
 from tests.support.runner_init_fakes import init_runner
 
@@ -144,6 +147,39 @@ def test_a_store_left_with_no_config_beside_it_is_refused_naming_graduation_unle
 
 
 # --- adoption and the upgrade -------------------------------------------------------------------
+
+
+def test_adoption_passes_legacy_url_to_injected_migrations(tmp_path: Path) -> None:
+    root = _pre_host(tmp_path)
+    layout = HostLayout(root)
+    runner = MagicMock(spec=MigrationRunner, wraps=runner_store_migrations(sqlite_url(layout.legacy_store_path)))
+    factory = MagicMock(return_value=runner)
+
+    host_runtime_of(root, migrations=factory).migrate()
+
+    factory.assert_called_once_with(sqlite_url(layout.legacy_store_path))
+    runner.refuse_below_floor.assert_called_once_with(store=str(layout.legacy_store_path))
+    assert layout.store_path.is_file()
+
+
+def test_reset_runner_passes_pending_archive_url_to_injected_migrations(tmp_path: Path) -> None:
+    root = _host(tmp_path)
+    layout = HostLayout(root)
+    pending = layout.store_path.with_name(f"{layout.store_path.name}.rn_test.{_STAMP}.tmp")
+    runner = MagicMock(spec=MigrationRunner)
+
+    def create_store(_revision: str) -> None:
+        sqlite3.connect(pending).close()
+
+    runner.upgrade.side_effect = create_store
+    factory = MagicMock(return_value=runner)
+    rows = MagicMock(spec=IRunnerBoundStoresFactory)
+
+    archive = host_runtime_of(root, migrations=factory).reset_runner("rn_test", now=_NOW, rows=rows)
+
+    factory.assert_called_once_with(sqlite_url(pending))
+    runner.upgrade.assert_called_once_with("head")
+    assert archive.archive.is_file()
 
 
 def test_migrate_adopts_the_pre_host_store_as_the_host_store_and_upgrades_it(tmp_path: Path) -> None:

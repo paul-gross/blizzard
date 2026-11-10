@@ -60,7 +60,6 @@ from blizzard.runner.composition import (
     build_identity_service,
     build_read_stores,
     build_runner_process,
-    runner_store_migrations,
 )
 from blizzard.runner.config import DEFAULT_RUNNER_NAME, RunnerConfig, worker_shell_refusal
 from blizzard.runner.config_table import ConfigError
@@ -137,6 +136,7 @@ from blizzard.runner.runtime import (
     migration_runner,
     named_store_socket,
     reset_command,
+    runner_store_migrations,
 )
 from blizzard.runner.store import MIGRATIONS_DIR
 from blizzard.runner.store.errors import RunnerStoreErrorFactory
