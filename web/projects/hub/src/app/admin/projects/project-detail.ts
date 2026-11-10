@@ -223,7 +223,9 @@ export class ProjectDetail {
     pendingUnlinkNames(this.pendingLinks(), this.projectId(), 'repository'),
   );
   /** Every reposition in flight, so a moving row cannot be dragged again before its write settles. */
-  protected readonly pendingRepositionKeys = computed(() => pendingRepositionKeys(this.pendingPositions(), this.projectId()));
+  protected readonly pendingRepositionKeys = computed(() =>
+    pendingRepositionKeys(this.pendingPositions(), this.projectId()),
+  );
   protected readonly sourceError = computed(() => failureFor(this.linkFailure(), 'source'));
   protected readonly repositoryError = computed(() => failureFor(this.linkFailure(), 'repository'));
 
