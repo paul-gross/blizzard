@@ -65,7 +65,7 @@ class PauseState:
 
     Reported apart because they are cleared by different verbs
     (``blizzard runner start`` vs. ``blizzard hub runner resume``). ``local_reason`` is the
-    local brake's own reason (a usage limit, the spend ceiling), ``None`` on a plain operator
+    local brake's own reason (the runner spend ceiling), ``None`` on a plain operator
     pause or when the brake is not engaged locally at all."""
 
     local: bool

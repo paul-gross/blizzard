@@ -2972,7 +2972,7 @@ export type OpenTakeoverView = {
  *
  * The pause brake's two independent surfaces, plus their effective OR.
  *
- * ``local_reason`` is the local brake's own reason — a usage limit, the spend ceiling, or
+ * ``local_reason`` is the local brake's own reason — the runner spend ceiling, or
  * ``None`` on a plain operator pause.
  */
 export type PauseStateView = {

@@ -1572,14 +1572,14 @@ def test_two_open_pause_parks_on_one_lease_is_a_violation(tmp_path: Path) -> Non
     keeping a standing pause to a single open park (plan §7)."""
     engine = _runner_engine(tmp_path)
     with engine.begin() as conn:
-        for _ in range(2):  # the same standing pause parked twice — the dropped-guard shape
-            conn.execute(insert(runner.pause_parks).values(lease_id="lease_a", chunk_id="ch_1", parked_at=NOW))
+        for seq in (1, 2):  # the same standing pause parked twice — the dropped-guard shape
+            conn.execute(insert(runner.pause_parks).values(lease_id="lease_a", chunk_id="ch_1", parked_at=NOW, seq=seq))
     slugs = {v.invariant for v in runner_invariants(engine).run()}
     assert "runner:one-open-pause-park-per-lease" in slugs
 
-    # Resuming the lease closes both parks (the resume is at/after each) — no violation.
+    # Resuming the lease closes both parks (the resume is appended after each) — no violation.
     with engine.begin() as conn:
-        conn.execute(insert(runner.pause_park_resumes).values(lease_id="lease_a", resumed_at=NOW))
+        conn.execute(insert(runner.pause_park_resumes).values(lease_id="lease_a", resumed_at=NOW, seq=3))
     assert runner_invariants(engine).run() == []
 
 
@@ -1591,9 +1591,9 @@ def test_a_repause_on_one_lease_is_not_a_violation(tmp_path: Path) -> None:
     t1 = datetime(2026, 7, 14, 1, tzinfo=UTC)
     t2 = datetime(2026, 7, 14, 2, tzinfo=UTC)
     with engine.begin() as conn:
-        conn.execute(insert(runner.pause_parks).values(lease_id="lease_a", chunk_id="ch_1", parked_at=NOW))
-        conn.execute(insert(runner.pause_park_resumes).values(lease_id="lease_a", resumed_at=t1))
-        conn.execute(insert(runner.pause_parks).values(lease_id="lease_a", chunk_id="ch_1", parked_at=t2))
+        conn.execute(insert(runner.pause_parks).values(lease_id="lease_a", chunk_id="ch_1", parked_at=NOW, seq=1))
+        conn.execute(insert(runner.pause_park_resumes).values(lease_id="lease_a", resumed_at=t1, seq=2))
+        conn.execute(insert(runner.pause_parks).values(lease_id="lease_a", chunk_id="ch_1", parked_at=t2, seq=3))
     assert runner_invariants(engine).run() == []
 
 
@@ -1602,8 +1602,8 @@ def test_a_closed_leases_double_park_is_not_an_open_pause_park(tmp_path: Path) -
     closed with it, so two parks on it are no violation."""
     engine = _runner_engine(tmp_path)
     with engine.begin() as conn:
-        for _ in range(2):
-            conn.execute(insert(runner.pause_parks).values(lease_id="lease_a", chunk_id="ch_1", parked_at=NOW))
+        for seq in (1, 2):
+            conn.execute(insert(runner.pause_parks).values(lease_id="lease_a", chunk_id="ch_1", parked_at=NOW, seq=seq))
         conn.execute(
             insert(runner.lease_closures).values(
                 lease_id="lease_a", chunk_id="ch_1", node_id="nd", reason="terminal", closed_at=NOW
@@ -1623,20 +1623,43 @@ def test_open_pause_parks_on_different_leases_are_not_a_violation(tmp_path: Path
 
 
 def test_a_double_park_after_a_repause_is_still_a_violation(tmp_path: Path) -> None:
-    """The ``>=`` correlation in the checker's mirror is load-bearing: only a resume at
-    or after a given park closes *that* park, not any resume on the lease."""
+    """The ``seq`` correlation in the checker's mirror is load-bearing: only a resume
+    appended after a given park closes *that* park, not any resume on the lease."""
     engine = _runner_engine(tmp_path)
     t1 = datetime(2026, 7, 14, 1, tzinfo=UTC)
     t2 = datetime(2026, 7, 14, 2, tzinfo=UTC)
     with engine.begin() as conn:
-        conn.execute(insert(runner.pause_parks).values(lease_id="lease_a", chunk_id="ch_1", parked_at=NOW))
-        conn.execute(insert(runner.pause_park_resumes).values(lease_id="lease_a", resumed_at=t1))
+        conn.execute(insert(runner.pause_parks).values(lease_id="lease_a", chunk_id="ch_1", parked_at=NOW, seq=1))
+        conn.execute(insert(runner.pause_park_resumes).values(lease_id="lease_a", resumed_at=t1, seq=2))
         # Re-paused, then parked again by a tick that lost its guard — two parks open
         # above the resume, on a lease that *does* carry a resume fact.
-        conn.execute(insert(runner.pause_parks).values(lease_id="lease_a", chunk_id="ch_1", parked_at=t2))
-        conn.execute(insert(runner.pause_parks).values(lease_id="lease_a", chunk_id="ch_1", parked_at=t2))
+        conn.execute(insert(runner.pause_parks).values(lease_id="lease_a", chunk_id="ch_1", parked_at=t2, seq=3))
+        conn.execute(insert(runner.pause_parks).values(lease_id="lease_a", chunk_id="ch_1", parked_at=t2, seq=4))
     slugs = {v.invariant for v in runner_invariants(engine).run()}
     assert "runner:one-open-pause-park-per-lease" in slugs
+
+
+def test_a_same_instant_double_open_after_a_resume_is_a_violation(tmp_path: Path) -> None:
+    """Pause, resume, re-pause and a second park all at one instant: the resume closes
+    only the first park by ``seq``, so the re-pause and the second park are two open."""
+    engine = _runner_engine(tmp_path)
+    with engine.begin() as conn:
+        conn.execute(insert(runner.pause_parks).values(lease_id="lease_a", chunk_id="ch_1", parked_at=NOW, seq=1))
+        conn.execute(insert(runner.pause_park_resumes).values(lease_id="lease_a", resumed_at=NOW, seq=2))
+        conn.execute(insert(runner.pause_parks).values(lease_id="lease_a", chunk_id="ch_1", parked_at=NOW, seq=3))
+        conn.execute(insert(runner.pause_parks).values(lease_id="lease_a", chunk_id="ch_1", parked_at=NOW, seq=4))
+    slugs = {v.invariant for v in runner_invariants(engine).run()}
+    assert "runner:one-open-pause-park-per-lease" in slugs
+
+
+def test_a_same_instant_pause_resume_repause_is_not_a_violation(tmp_path: Path) -> None:
+    """The legal same-instant sequence: the re-pause is the one open park."""
+    engine = _runner_engine(tmp_path)
+    with engine.begin() as conn:
+        conn.execute(insert(runner.pause_parks).values(lease_id="lease_a", chunk_id="ch_1", parked_at=NOW, seq=1))
+        conn.execute(insert(runner.pause_park_resumes).values(lease_id="lease_a", resumed_at=NOW, seq=2))
+        conn.execute(insert(runner.pause_parks).values(lease_id="lease_a", chunk_id="ch_1", parked_at=NOW, seq=3))
+    assert runner_invariants(engine).run() == []
 
 
 def test_a_consistent_migration_is_not_a_violation(tmp_path: Path) -> None:

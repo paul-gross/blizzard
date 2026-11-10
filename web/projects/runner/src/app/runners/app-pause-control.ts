@@ -56,7 +56,7 @@ export class LocalPauseControl {
   /** The hub's brake, as last mirrored by PULL — untouched by this control. */
   protected readonly hubPaused = computed<boolean>(() => this.dashboardQuery.data()?.runner?.pause?.hub ?? false);
 
-  /** The local brake's own reason — a usage limit, the spend ceiling, or
+  /** The local brake's own reason — the runner spend ceiling, or
    * `null` on a plain manual pause or while nothing overrides it (`overridePaused` names no
    * reason of its own, so a pending flip shows no stale reason until the real read catches
    * up). Read straight off `pause.local_reason`, never derived from `localPaused`'s own
