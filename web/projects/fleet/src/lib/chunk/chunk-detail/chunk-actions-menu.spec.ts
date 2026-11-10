@@ -482,6 +482,18 @@ describe('ChunkActionsMenu', () => {
     expect(item?.textContent).not.toContain('depend on this');
   });
 
+  it('disables Delete and names a refusal the client does not declare, raw', async () => {
+    const fixture = TestBed.createComponent(ChunkActionsMenu);
+    fixture.componentRef.setInput('detail', { ...ISSUE_DETAIL, status: 'ready', delete_refusal: 'something_new' });
+    mount(fixture);
+    await fixture.whenStable();
+    await openMenu(fixture);
+
+    const item = inOverlay('[data-testid="delete-chunk"]');
+    expect(item?.getAttribute('aria-disabled')).toBe('true');
+    expect(item?.textContent).toContain('something_new');
+  });
+
   it('withholds Pause without chunk:control, even with a live route', async () => {
     const fixture = TestBed.createComponent(ChunkActionsMenu);
     fixture.componentRef.setInput('detail', ROUTED_DETAIL);

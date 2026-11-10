@@ -130,7 +130,7 @@ describe('LoginPage', () => {
       'invitation_email_mismatch',
       'This invitation is for a different email address. Sign in with the account that uses it, or reach out to your administrator.',
     ],
-    ['not_a_known_code', "You don't have access to anything here yet. Reach out to your administrator for access."],
+    ['not_a_known_code', 'Sign-in was refused (not_a_known_code). Reach out to your administrator.'],
   ])('shows why the hub turned the sign-in away (refusal=%s), with the providers still offered', async (code, text) => {
     const fixture = await mount([{ name: 'github', display_name: 'GitHub', type: 'github' }], { refusal: code });
     const el = fixture.nativeElement as HTMLElement;

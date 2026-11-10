@@ -108,3 +108,7 @@
   gap: 6px;
   margin-left: auto;
 }
+
+.pp-closure-unlisted > p:first-child {
+  color: var(--label-dim);
+}

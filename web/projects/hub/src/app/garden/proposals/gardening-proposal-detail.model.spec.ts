@@ -166,6 +166,10 @@ describe('proposalOriginVm', () => {
     ).toEqual({ kind: 'operator', createdBy: 'alice', routineName: 'Nightly sweep' });
   });
 
+  it('gives an origin the client does not declare the unlisted arm, raw', () => {
+    expect(proposalOriginVm(proposal({ origin: 'importer' as never }), [])).toEqual({ kind: 'unlisted', raw: 'importer' });
+  });
+
   it('names an operator and the routine it may cite', () => {
     expect(proposalOriginVm(proposal({ origin: 'operator', created_by: 'alice', routine_name: null }), [])).toEqual({
       kind: 'operator',
@@ -179,6 +183,16 @@ describe('proposalClosureVm', () => {
   it('maps a passed closure without a work item', () => {
     expect(proposalClosureVm(closure({ closure: 'passed', item_outcome: null }), WORK_ITEM)).toEqual({
       kind: 'passed',
+      closedBy: 'op',
+      closedAt: '2026-01-02T00:00:00Z',
+      reason: 'worth it',
+    });
+  });
+
+  it('gives a closure the client does not declare the unlisted arm, raw', () => {
+    expect(proposalClosureVm(closure({ closure: 'deferred' as never }), WORK_ITEM)).toEqual({
+      kind: 'unlisted',
+      raw: 'deferred',
       closedBy: 'op',
       closedAt: '2026-01-02T00:00:00Z',
       reason: 'worth it',

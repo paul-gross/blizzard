@@ -114,6 +114,10 @@ describe('versionStandingBadge', () => {
     );
   });
 
+  it('words a standing the client does not declare raw, in idle', () => {
+    expect(versionStandingBadge(judged({ version_standing: 'quarantined' as never }))).toEqual({ label: 'quarantined', tone: 'idle' });
+  });
+
   it('shows no badge for a runner the hub has not judged', () => {
     expect(versionStandingBadge(judged({ version_standing: null }))).toBeNull();
     expect(versionStandingBadge(judged({}))).toBeNull();

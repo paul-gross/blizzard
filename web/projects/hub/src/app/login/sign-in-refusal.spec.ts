@@ -25,8 +25,8 @@ describe('refusalText', () => {
     );
   });
 
-  it('reads a code it does not know, or one shaped like an object key, as invite-only', () => {
-    expect(refusalText('something_new')).toBe(refusalText(hubApi.SignInRefusal.INVITE_ONLY));
-    expect(refusalText('toString')).toBe(refusalText(hubApi.SignInRefusal.INVITE_ONLY));
+  it('quotes a code it does not know, or one shaped like an object key, never as a known refusal', () => {
+    expect(refusalText('something_new')).toBe('Sign-in was refused (something_new). Reach out to your administrator.');
+    expect(refusalText('toString')).toBe('Sign-in was refused (toString). Reach out to your administrator.');
   });
 });
