@@ -43,7 +43,7 @@ describe('ChunkArtifactSurvey', () => {
 
     expect(el.querySelector('[data-testid="artifact-survey-scope"]')?.textContent).toContain('runner-daemon');
     const revisions = el.querySelector('[data-testid="artifact-survey-revisions"]');
-    expect(revisions?.textContent).toContain('05eb39ec51');
+    expect(revisions?.textContent).toContain('05eb39e');
     expect(revisions?.textContent).not.toContain('05eb39ec51ccf5fc3773dca6af414d059fcba1d5');
     expect(revisions?.querySelector('[title="05eb39ec51ccf5fc3773dca6af414d059fcba1d5"]')).toBeTruthy();
   });
@@ -73,7 +73,7 @@ describe('ChunkArtifactSurvey', () => {
     expect(candidates?.textContent).toContain('wide-seam');
     expect(candidates?.textContent).toContain('src/a.py::IHarnessAdapter');
     expect(candidates?.textContent).toContain('F1');
-    expect(candidates?.textContent).toContain('38faf3daf');
+    expect(candidates?.textContent).toContain('38faf3d');
     expect(el.querySelector('[data-testid="artifact-survey-candidate-summary-0"]')?.textContent).toContain(
       'IHarnessAdapter declares 15 methods',
     );

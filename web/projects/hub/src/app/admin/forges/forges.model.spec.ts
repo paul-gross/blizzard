@@ -51,14 +51,14 @@ describe('forge admin models', () => {
     const detail: ForgeDetail = {
       ...GITHUB, repositories: [], work_sources: [], offered: ['checks', 'merge'],
       budgets: [
-        { bucket: 'core', secret_name: 'gh', remaining: 4000, limit: 5000, reset: '2026-11-01T12:00:00Z' },
-        { bucket: 'graphql', secret_name: null, remaining: 10, limit: 100, reset: '2026-11-01T13:00:00Z' },
+        { bucket: 'core', secret_name: 'gh', remaining: 4000, limit: 5000, reset: new Date(2026, 10, 1, 12, 0, 0).toISOString() },
+        { bucket: 'graphql', secret_name: null, remaining: 10, limit: 100, reset: new Date(2026, 10, 1, 13, 0, 0).toISOString() },
       ],
     };
     const facts = forgeRecordVm(detail)!.facts.map((fact) => [fact.label, fact.value]);
     expect(facts).toContainEqual(['Capabilities', 'checks, merge']);
-    expect(facts).toContainEqual(['Budget core · gh', '4000/5000 remaining, resets 2026-11-01T12:00:00Z']);
-    expect(facts).toContainEqual(['Budget graphql', '10/100 remaining, resets 2026-11-01T13:00:00Z']);
+    expect(facts).toContainEqual(['Budget core · gh', '4000/5000 remaining, resets 2026/11/01 12:00:00']);
+    expect(facts).toContainEqual(['Budget graphql', '10/100 remaining, resets 2026/11/01 13:00:00']);
   });
 
   it('reads none for no capabilities and no reading yet for no budgets', () => {
@@ -67,4 +67,9 @@ describe('forge admin models', () => {
     expect(facts).toContainEqual(['Capabilities', 'none']);
     expect(budgetFacts([])).toEqual([{ label: 'Budgets', value: 'no reading yet' }]);
   });
+  it('shows an unparseable budget reset verbatim', () => {
+    expect(budgetFacts([{ bucket: 'core', secret_name: null, remaining: 1, limit: 2, reset: 'bad reset' }])[0].value)
+      .toBe('1/2 remaining, resets bad reset');
+  });
+
 });

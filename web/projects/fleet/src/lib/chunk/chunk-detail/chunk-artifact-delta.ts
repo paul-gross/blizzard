@@ -6,7 +6,7 @@ import { KitFactList, type KitFact } from '../../kit/kit-fact-list';
 import { KitProseBlock } from '../../kit/kit-prose-block';
 import { ChunkArtifactRawDisclosure } from './chunk-artifact-raw-disclosure';
 import { ChunkFindingEntry } from './chunk-finding-entry';
-import { shortSha } from './short-sha';
+import { shortCommitHash } from '../../core/commit-hash';
 
 /**
  * A parsed `FindingDelta` asset artifact, laid out. Presentational only
@@ -35,7 +35,7 @@ export class ChunkArtifactDelta {
   readonly testid = input('artifact');
 
   protected readonly compactRef = compactRef;
-  protected readonly shortSha = shortSha;
+  protected readonly shortCommitHash = shortCommitHash;
 
   protected readonly added = computed(() => this.delta().findings.filter((f): f is AddFindingOp => f.op === 'add'));
   protected readonly observed = computed(() =>

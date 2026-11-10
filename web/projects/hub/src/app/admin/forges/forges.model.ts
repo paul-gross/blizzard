@@ -1,4 +1,4 @@
-import { hubApi, RecordKind, type ForgeCreateRequest, type ForgeDetail, type ForgeSummary } from 'fleet';
+import { formatAbsolute, hubApi, RecordKind, type ForgeCreateRequest, type ForgeDetail, type ForgeSummary } from 'fleet';
 import { lifecycleTone } from '../../core/lifecycle-tone';
 import { type ConfigFieldDef, createText } from '../config-edit.model';
 import { filterByLifecycle, type LifecycleFilter } from '../config-filter.model';
@@ -42,7 +42,7 @@ export function budgetFacts(budgets: readonly hubApi.ForgeBudgetView[]): readonl
   if (budgets.length === 0) return [{ label: 'Budgets', value: 'no reading yet' }];
   return budgets.map((budget) => ({
     label: budget.secret_name ? `Budget ${budget.bucket} · ${budget.secret_name}` : `Budget ${budget.bucket}`,
-    value: `${budget.remaining}/${budget.limit} remaining, resets ${budget.reset}`,
+    value: `${budget.remaining}/${budget.limit} remaining, resets ${formatAbsolute(budget.reset) || budget.reset}`,
   }));
 }
 

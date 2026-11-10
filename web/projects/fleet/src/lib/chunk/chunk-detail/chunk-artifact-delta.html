@@ -4,7 +4,7 @@
     <ng-template #revisionsValue>
       <ul class="fd-revisions">
         @for (rev of revisionEntries(); track rev[0]) {
-          <li><span class="fd-repo">{{ rev[0] }}</span>@<span [title]="rev[1]">{{ shortSha(rev[1]) }}</span></li>
+          <li><span class="fd-repo">{{ rev[0] }}</span>@<span [title]="rev[1]">{{ shortCommitHash(rev[1]) }}</span></li>
         }
       </ul>
     </ng-template>

@@ -38,7 +38,7 @@ describe('ChunkFindingEntry', () => {
     const el = await mount(ENTRY);
 
     const introduced = el.querySelector('.fe-introduced');
-    expect(introduced?.textContent).toContain('38faf3daf1…');
+    expect(introduced?.textContent).toContain('38faf3d');
     expect(introduced?.textContent).not.toContain(ENTRY.introduced!);
     expect(introduced?.querySelector(`[title="${ENTRY.introduced}"]`)).toBeTruthy();
   });
