@@ -53,7 +53,7 @@ else:
 measurement = f'e2e sweep of {scope}: {len(cands)} flagged'
 publish('survey', json.dumps({'scope': scope, 'revisions': {'${repo}': rev},
                               'measurement': measurement, 'candidates': cands}))
-publish('delta', json.dumps({'scope': scope, 'revisions': {'${repo}': rev},
+publish('survey-delta', json.dumps({'scope': scope, 'revisions': {'${repo}': rev},
                              'measurement': measurement, 'findings': []}))
 `;
   const reconcile = String.raw`envelope = json.loads(sh('blizzard', 'runner', 'artifact', 'get', 'survey', '--content'))
@@ -215,7 +215,7 @@ test('test_garden_routine_runs_end_to_end_on_all_six_paths', async ({ api, clock
   ]);
   expect([foundSet.observed, foundSet.gone]).toEqual([[], []]);
 
-  const clean = await run('clean', CLEAN, [['survey', 'clean'], ['deliver', 'recorded']]);
+  const clean = await run('clean', CLEAN, [['survey', 'clean'], ['deliver-clean', 'recorded']]);
   expect(await findings(CLEAN)).toEqual([]);
   const cleanSet = await delivered(clean);
   expect(cleanSet.measurement).toBe(`e2e sweep of ${CLEAN}: 0 flagged`);
@@ -237,6 +237,10 @@ test('test_garden_routine_runs_end_to_end_on_all_six_paths', async ({ api, clock
   const before = new Map(foundRows.map((item) => [item.finding_id, item.observed_count]));
   const invalid = await run('invalid', FOUND, [['survey', 'found'], ['reconcile', 'converged'], ['propose', 'none'],
     ['deliver', 'invalid'], ['reconcile', 'nothing-to-propose'], ['deliver', 'recorded']]);
+  const invalidSet = await delivered(invalid);
+  expect(invalidSet.added).toEqual([]);
+  expect(invalidSet.observed).toHaveLength(2);
+  expect(invalidSet.gone).toEqual([]);
   const after = await findings(FOUND);
   expect(new Set(after.map((item) => item.finding_id))).toEqual(new Set(before.keys()));
   for (const item of after) expect(item.observed_count).toBe(before.get(item.finding_id)! + 1);

@@ -21,9 +21,9 @@ re-check the registry once; an answered ask ordinarily means someone has just up
 Still undeclared, and no prior ask on record: ask now, `blizzard runner ask` naming the axis and asking that its entry
 be added (or that its absence be confirmed deliberate), and let the answer arrive before you continue.
 
-Still undeclared after that: publish `survey` and `delta` empty — `scope`, `revisions: {}`, the measurement stated for
-nothing swept, `candidates`/`findings` empty lists — and your judgement choice is `undeclared`. Nothing else about this
-pass runs.
+Still undeclared after that: publish `survey` and `survey-delta` empty — `scope`, `revisions: {}`, the measurement
+stated for nothing swept, `candidates`/`findings` empty lists — and your judgement choice is `undeclared`. Nothing else
+about this pass runs.
 
 ## Always full
 
@@ -46,12 +46,12 @@ paths the delta you publish here is the one delivered; propose restates it once 
 
 Publish two assets, each with content on stdin: `blizzard runner artifact create --name survey`, a JSON object carrying
 `scope`, `revisions: {}`, `measurement`, and `candidates`, since reconcile enters cold and only this session knows them;
-then `blizzard runner artifact create --name delta`, the finding-delta shape — the same `scope`, `revisions: {}`, and
-`measurement`, with `findings` an empty list, since this graph never adds, observes, or closes a finding. Its full shape
-is `blizzard runner artifact get --scope system garden/finding-format --content`; if that read fails or comes back
+then `blizzard runner artifact create --name survey-delta`, the finding-delta shape — the same `scope`, `revisions: {}`,
+and `measurement`, with `findings` an empty list, since this graph never adds, observes, or closes a finding. Its full
+shape is `blizzard runner artifact get --scope system garden/finding-format --content`; if that read fails or comes back
 empty, proceed on the restatement above.
 
 ## When nothing is missing
 
 If you swept the whole scope and found nothing wanting, your judgement choice is `empty` and the run goes straight to
-delivery: the skeleton `delta` you published is the artifact delivered, and its datapoint is the run's product.
+delivery: the skeleton `survey-delta` you published is the artifact delivered, and its datapoint is the run's product.

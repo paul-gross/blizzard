@@ -51,7 +51,7 @@ async function deliver(api: HubApi, runner: MockRunner, routineId: string, repo:
   expect((await runner.drive('claim', { chunk_id: chunkId })).body.claimed).toBe(true);
   const delta = { name: 'delta', kind: 'asset', content: JSON.stringify({ scope: SCOPE, revisions: { [`${repo.owner}/${repo.name}`]: head }, measurement: 'service sweep', findings: ops }), attached: true };
   const surveyed = await runner.drive('complete', {
-    chunk_id: chunkId, choice: 'found', artifacts: [{ name: 'survey', kind: 'asset', content: '{}', attached: true }, delta],
+    chunk_id: chunkId, choice: 'found', artifacts: [{ name: 'survey', kind: 'asset', content: '{}', attached: true }],
   });
   expect(surveyed.body.response?.outcome).toBe('next');
   const reconciled = await runner.drive('complete', { chunk_id: chunkId, choice: 'nothing-to-propose', artifacts: [delta] });

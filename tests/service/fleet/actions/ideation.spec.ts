@@ -57,7 +57,7 @@ else:
     cands = []
 measurement = f'e2e ideation sweep of {scope}: {len(cands)} flagged, 0 proposed'
 publish('survey', json.dumps({'scope': scope, 'revisions': {}, 'measurement': measurement, 'candidates': cands}))
-publish('delta', json.dumps({'scope': scope, 'revisions': {}, 'measurement': measurement, 'findings': []}))
+publish('survey-delta', json.dumps({'scope': scope, 'revisions': {}, 'measurement': measurement, 'findings': []}))
 `;
 const surveyJudgement = String.raw`if axis_marker.exists():
     choice = 'undeclared' if axis_marker.read_text().strip() == 'undeclared' else 'empty'
@@ -147,7 +147,7 @@ item = json.loads(sh('blizzard', 'runner', 'work-items', chunk_id))['items'][0]
 scope = next(l for l in item['body'].splitlines() if l.startswith('Scope:')).split()[1]
 measurement = f'e2e ideation sweep of {scope}: ${tail}'
 publish('survey', json.dumps({'scope': scope, 'revisions': {}, 'measurement': measurement, 'candidates': []}))
-publish('delta', json.dumps({'scope': scope, 'revisions': {}, 'measurement': measurement, 'findings': []}))
+publish('survey-delta', json.dumps({'scope': scope, 'revisions': {}, 'measurement': measurement, 'findings': []}))
 pathlib.Path(f'.ideation-axis-{chunk_id}').write_text('${marker}')
 `;
 }
@@ -275,7 +275,7 @@ test('test_ideation_runs_end_to_end_on_all_authored_paths', async ({ api, runner
   expect(passed.status).toBe(200);
   expect(passed.body.closure.closure).toBe('passed');
 
-  const drop = await run('reconcile-drop', scopes.novel, [['survey', 'found'], ['reconcile', 'nothing-new'], ['deliver', 'recorded']]);
+  const drop = await run('reconcile-drop', scopes.novel, [['survey', 'found'], ['reconcile', 'nothing-new'], ['deliver-clean', 'recorded']]);
   expect(await proposals()).toHaveLength(3);
   expect((await delivered(drop)).measurement).toBe(`e2e ideation sweep of ${scopes.novel}: 3 flagged, 0 proposed`);
   await run('revive', scopes.novel, [['survey', 'found'], ['reconcile', 'novel'], ['propose', 'proposed'], ['deliver', 'recorded']]);
@@ -286,7 +286,7 @@ test('test_ideation_runs_end_to_end_on_all_authored_paths', async ({ api, runner
   expect(revival[0]!.body).toContain(tweak.proposal_id);
   expect(revival[0]!.findings).toEqual([]);
 
-  const clean = await run('clean', scopes.clean, [['survey', 'empty'], ['deliver', 'recorded']]);
+  const clean = await run('clean', scopes.clean, [['survey', 'empty'], ['deliver-clean', 'recorded']]);
   expect(await delivered(clean)).toMatchObject({ added: [], observed: [], gone: [], revisions: {},
     measurement: `e2e ideation sweep of ${scopes.clean}: 0 flagged, 0 proposed` });
   const none = await run('none', scopes.none, [['survey', 'found'], ['reconcile', 'novel'], ['propose', 'none'], ['deliver', 'recorded']]);
@@ -295,7 +295,9 @@ test('test_ideation_runs_end_to_end_on_all_authored_paths', async ({ api, runner
   expect((await proposals()).filter((item) => item.title.includes(scopes.none))).toEqual([]);
   const invalid = await run('invalid', scopes.invalid, [['survey', 'found'], ['reconcile', 'novel'], ['propose', 'proposed'],
     ['deliver', 'invalid'], ['propose', 'proposed'], ['deliver', 'recorded']]);
-  expect(await delivered(invalid)).toMatchObject({ added: [], observed: [], gone: [] });
+  expect(await delivered(invalid)).toMatchObject({ added: [], observed: [], gone: [], revisions: {},
+    measurement: `e2e ideation sweep of ${scopes.invalid}: 3 proposed` });
+  expect((await proposals()).filter((item) => item.title.includes(scopes.invalid))).toHaveLength(3);
 
   await mint(true);
   const failure = await start('failure', scopes.failure);
@@ -313,9 +315,11 @@ test('test_ideation_runs_end_to_end_on_all_authored_paths', async ({ api, runner
   expect(noDelivery.status).toBe(200);
   expect(noDelivery.body.sets).toEqual([]);
   expect((await proposals()).filter((item) => item.title.includes(scopes.undeclared))).toEqual([]);
-  await viaAsk('ask-declared', scopes.declared,
+  const declared = await viaAsk('ask-declared', scopes.declared,
     answerAxis('declared', '0 flagged after the registry was updated'), 'ideation-e2e axis',
-    [['survey', 'empty'], ['deliver', 'recorded']]);
+    [['survey', 'empty'], ['deliver-clean', 'recorded']]);
+  expect(await delivered(declared)).toMatchObject({ added: [], observed: [], gone: [], revisions: {},
+    measurement: `e2e ideation sweep of ${scopes.declared}: 0 flagged after the registry was updated` });
 
   const response = await runnerHost.runners['runner-local']!.leasesForChunk(found);
   expect(response.status).toBe(200);

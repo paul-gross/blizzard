@@ -14,11 +14,9 @@ Conventions for the `prompts/` tree are owned by the
   policy is unchanged: `survey` on `fresh:sweep`, `reconcile` on `fresh:match`, `propose` on `resume:match`.
 - **`deliver` names its artifacts.** The plan named the `garden-deliver` action bare; the shipped action takes the
   delivering artifact names, so the packaged node passes them `with: {delta: delta, proposals: docket}`.
-- **`survey` also produces `delta`.** The `clean` choice routes `survey → deliver` with no `reconcile` in between, and
-  delivery validates an artifact named `delta` — but a completion publishes only the names its node declares, so
-  `survey` declares `delta` and every sweep publishes the empty skeleton carrying the run's scope, revisions, and
-  measurement. Delivery reads the newest `delta`, so reconcile's assembled one supersedes the skeleton on every path
-  where reconcile runs.
+- **Clean delivery uses a separate skeleton.** `survey` publishes `survey-delta`; `deliver-clean` reads it on the clean
+  path. `reconcile` alone publishes `delta`, read by `deliver` on the other paths. Distinct names avoid ambiguous
+  producers. A failed clean delivery returns to survey with a bounded recovery addendum.
 - **The prompts name their verbs.** The plan's prompts pointed at "the `findings` doc" and "the CLI" abstractly, from
   before the verbs existed; the packaged prompts name the runtime reads
   (`blizzard runner artifact get --scope system

@@ -47,7 +47,7 @@ async function deliver(g: Garden, ops: object[], options: { scope?: string; prop
     scope: targetScope, revisions: { [g.repository.name]: g.head }, measurement: 'service sweep', findings: ops,
   }), attached: true };
   const surveyed = await g.runner.drive('complete', {
-    chunk_id: chunkId, choice: 'found', artifacts: [{ name: 'survey', kind: 'asset', content: '{}', attached: true }, delta],
+    chunk_id: chunkId, choice: 'found', artifacts: [{ name: 'survey', kind: 'asset', content: '{}', attached: true }],
   });
   expect(surveyed.body.response?.outcome).toBe('next');
   let handed;

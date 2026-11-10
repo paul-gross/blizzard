@@ -47,7 +47,7 @@ def test_garden_routine_shape_is_survey_reconcile_propose_deliver() -> None:
     doc = _doc()
     assert doc.name == "garden-routine"
     assert doc.entry == "survey"
-    assert [n.name for n in doc.nodes] == ["survey", "reconcile", "propose", "deliver"]
+    assert [n.name for n in doc.nodes] == ["survey", "reconcile", "propose", "deliver", "deliver-clean"]
     assert _node(doc, "survey").executor is Executor.RUNNER
     assert _node(doc, "reconcile").executor is Executor.RUNNER
     assert _node(doc, "propose").executor is Executor.RUNNER
@@ -233,7 +233,7 @@ def test_garden_routine_survey_routes_the_four_ways_out() -> None:
         "found": "reconcile",
         "excessive": "reconcile",
         "no-strategy": "reconcile",
-        "clean": "deliver",
+        "clean": "deliver-clean",
     }
 
 
@@ -279,17 +279,16 @@ def test_garden_routine_deliver_takes_the_garden_deliver_action_naming_its_artif
 
 
 def test_garden_routine_produces_lists_and_never_a_commit() -> None:
-    """A delivery lane ends in commits; this graph ends in lists. `survey` declares
-    `delta` too — a completion publishes only declared names, and the clean path's
-    empty delta is the survey's to publish since no later node runs on it."""
+    """Each delivery input has one declared producer."""
     doc = _doc()
     produces = {(p.name, p.kind) for n in doc.nodes for p in n.produces}
     assert produces == {
         ("survey", ArtifactKind.ASSET),
+        ("survey-delta", ArtifactKind.ASSET),
         ("delta", ArtifactKind.ASSET),
         ("docket", ArtifactKind.ASSET),
     }
-    assert [p.name for p in _node(doc, "survey").produces] == ["survey", "delta"]
+    assert [p.name for p in _node(doc, "survey").produces] == ["survey", "survey-delta"]
     assert [p.name for p in _node(doc, "reconcile").produces] == ["delta"]
     assert [p.name for p in _node(doc, "propose").produces] == ["docket"]
 
@@ -311,3 +310,24 @@ def test_garden_routine_prompts_are_inlined_not_paths() -> None:
         or (node.judgement is not None and (node.judgement.prompt or "").startswith("./"))
     ]
     assert raw_refs == []
+
+
+def test_clean_delivery_uses_only_the_survey_skeleton_and_has_bounded_recovery() -> None:
+    doc = _doc()
+    clean = doc.node("deliver-clean")
+    assert clean is not None and clean.is_hub_command_node
+    assert clean.action == "garden-deliver"
+    assert dict(clean.action_args) == {"delta": ("survey-delta",), "proposals": ("docket",)}
+    assert clean.judgement is not None
+    choices = {choice.name: choice for choice in clean.judgement.choices}
+    assert choices["recorded"].to == "done"
+    for name in ("invalid", "invalid-proposals", "failure"):
+        assert choices[name].to == "survey"
+        assert choices[name].prompt_addendum is not None
+        assert "two or more" in (choices[name].prompt_addendum or "")
+    producers = {
+        artifact: [node.name for node in doc.nodes if any(p.name == artifact for p in node.produces)]
+        for artifact in ("survey-delta", "delta")
+    }
+    assert producers["survey-delta"] == ["survey"]
+    assert producers["delta"] == ["reconcile"]

@@ -56,11 +56,10 @@ out.
 
 Publish two assets, content on stdin: `blizzard runner artifact create --name survey`, a JSON object carrying `scope`,
 `revisions` (per repository), `measurement`, and `candidates`, since reconcile enters cold; then
-`blizzard runner artifact create --name delta`, the finding-delta shape from the same format document, same `scope`,
-`revisions`, `measurement`, empty `findings`.
+`blizzard runner artifact create --name survey-delta`, the finding-delta shape from the same format document, same
+`scope`, `revisions`, `measurement`, empty `findings`.
 
 ## A clean sweep still delivers
 
-If you observed nothing worth recording, your choice is `clean` and the run goes straight to delivery: your empty
-`delta` is delivered, its datapoint the run's product. On every other path reconcile assembles the real delta over
-yours.
+If nothing is worth recording, choose `clean`: your empty `survey-delta` is delivered, its datapoint the run's product.
+On every other path reconcile assembles the real delta over yours.

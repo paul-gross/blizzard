@@ -50,9 +50,7 @@ nodes:
     produces:
       - survey                   # candidate observations, no ids yet — or, on the
                                  # `excessive`/`no-strategy` paths, one bail-out candidate
-      - delta                    # the empty skeleton `clean` delivers directly; see
-                                 # ./README.md's Corrections section for why survey
-                                 # also declares it
+      - survey-delta             # empty delivery skeleton carrying the measurement
     judgement:
       prompt: ./prompts/survey.judgement.md
       choices:
@@ -67,7 +65,7 @@ nodes:
           to: reconcile
         clean:
           description: The scope was swept and nothing was observed. The run still delivers, because its measurement is the product whether or not it found anything.
-          to: deliver
+          to: deliver-clean
     retries:
       max: 2
       exhausted: escalate
@@ -142,3 +140,25 @@ nodes:
           description: The garden-deliver action answered failure rather than a clean outcome — the record was refused because the chunk had moved past this visit, or the pass itself raised. The delta and docket stand as drafted; routed to propose to re-affirm them and retry, the same recovery point the sibling lanes return to on this outcome.
           to: propose
           prompt_addendum: ./prompts/propose.from-deliver-failure.md
+
+  deliver-clean:
+    executor: hub
+    action: garden-deliver
+    with: {delta: survey-delta, proposals: docket}
+    judgement:
+      choices:
+        recorded:
+          description: The empty delta and measurement are durable.
+          to: done
+        invalid:
+          description: The skeleton delta failed validation. Nothing was written.
+          to: survey
+          prompt_addendum: ./prompts/survey.from-deliver-clean.md
+        invalid-proposals:
+          description: The docket failed validation. Nothing was written.
+          to: survey
+          prompt_addendum: ./prompts/survey.from-deliver-clean.md
+        failure:
+          description: Delivery failed without recording the run.
+          to: survey
+          prompt_addendum: ./prompts/survey.from-deliver-clean.md

@@ -16,8 +16,8 @@ claims.
 
 Choose `clean` if you swept the scope you were given and observed nothing worth recording. This is a success, not a
 failure, and it still delivers: the run's measurement and the revision it read are the product of a clean pass, and the
-flat trendline they draw is the evidence that the garden is being held. Do not choose it before the run's empty `delta`
-asset is submitted — delivery reads that artifact on this path, and no later node runs to write it.
+flat trendline they draw is the evidence that the garden is being held. Do not choose it before the run's empty
+`survey-delta` asset is submitted — delivery reads that artifact on this path, and no later node runs to write it.
 
 Do not choose `clean` because the sweep was hard, because the scope was unclear, or because you ran short of context. If
 you could not actually cover the scope, say so and let the retry or the escalation handle it — a run that reports clean

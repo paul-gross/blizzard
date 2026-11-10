@@ -50,7 +50,7 @@ def test_ideation_shape_is_survey_reconcile_propose_deliver() -> None:
     doc = _doc()
     assert doc.name == "ideation"
     assert doc.entry == "survey"
-    assert [n.name for n in doc.nodes] == ["survey", "reconcile", "propose", "deliver"]
+    assert [n.name for n in doc.nodes] == ["survey", "reconcile", "propose", "deliver", "deliver-clean"]
     assert _node("survey").executor is Executor.RUNNER
     assert _node("reconcile").executor is Executor.RUNNER
     assert _node("propose").executor is Executor.RUNNER
@@ -195,7 +195,7 @@ def test_ideation_survey_routes_the_three_ways_out() -> None:
     routes = {c.name: c.to for c in survey.judgement.choices}
     assert routes == {
         "found": "reconcile",
-        "empty": "deliver",
+        "empty": "deliver-clean",
         "undeclared": "done",
     }
 
@@ -207,7 +207,7 @@ def test_ideation_reconcile_and_propose_both_end_at_deliver() -> None:
     assert propose is not None and propose.judgement is not None
     assert {c.name: c.to for c in reconcile.judgement.choices} == {
         "novel": "propose",
-        "nothing-new": "deliver",
+        "nothing-new": "deliver-clean",
     }
     assert {c.name: c.to for c in propose.judgement.choices} == {"proposed": "deliver", "none": "deliver"}
 
@@ -253,18 +253,17 @@ def test_ideation_deliver_loop_bound_is_a_count_the_worker_can_evaluate(prompt: 
 
 
 def test_ideation_produces_lists_and_never_a_commit() -> None:
-    """`survey` declares both its own assets; `propose` republishes `delta` alongside
-    `docket` so delivery always has a `delta` to read regardless of which path reached
-    it."""
+    """Each delivery input has one declared producer."""
     doc = _doc()
     produces = {(p.name, p.kind) for n in doc.nodes for p in n.produces}
     assert produces == {
         ("survey", ArtifactKind.ASSET),
+        ("survey-delta", ArtifactKind.ASSET),
         ("delta", ArtifactKind.ASSET),
         ("shortlist", ArtifactKind.ASSET),
         ("docket", ArtifactKind.ASSET),
     }
-    assert [p.name for p in _node("survey").produces] == ["survey", "delta"]
+    assert [p.name for p in _node("survey").produces] == ["survey", "survey-delta"]
     assert [p.name for p in _node("reconcile").produces] == ["shortlist"]
     assert [p.name for p in _node("propose").produces] == ["docket", "delta"]
 
@@ -295,3 +294,24 @@ def test_ideation_prompts_are_inlined_not_paths() -> None:
         if (choice.prompt_addendum or "").startswith("./")
     ]
     assert not addendum_refs
+
+
+def test_clean_delivery_uses_only_the_survey_skeleton_and_has_bounded_recovery() -> None:
+    doc = _doc()
+    clean = doc.node("deliver-clean")
+    assert clean is not None and clean.is_hub_command_node
+    assert clean.action == "garden-deliver"
+    assert dict(clean.action_args) == {"delta": ("survey-delta",), "proposals": ("docket",)}
+    assert clean.judgement is not None
+    choices = {choice.name: choice for choice in clean.judgement.choices}
+    assert choices["recorded"].to == "done"
+    for name in ("invalid", "invalid-proposals", "failure"):
+        assert choices[name].to == "survey"
+        assert choices[name].prompt_addendum is not None
+        assert "two or more" in (choices[name].prompt_addendum or "")
+    producers = {
+        artifact: [node.name for node in doc.nodes if any(p.name == artifact for p in node.produces)]
+        for artifact in ("survey-delta", "delta")
+    }
+    assert producers["survey-delta"] == ["survey"]
+    assert producers["delta"] == ["propose"]

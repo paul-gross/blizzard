@@ -49,7 +49,6 @@ const test = base.extend<{
         choice: 'found',
         artifacts: [
           { name: 'survey', kind: 'asset', content: '{}', attached: true },
-          { name: 'delta', kind: 'asset', content: delta, attached: true },
         ],
       });
       expect(surveyed.body.response?.outcome).toBe('next');

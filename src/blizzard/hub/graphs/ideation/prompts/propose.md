@@ -36,9 +36,10 @@ and state plainly what changed since — do not draft it as if this were the fir
 
 ## Republish the delta
 
-Republish `delta` — same `scope`, `revisions: {}`, `findings: []` as the skeleton survey published — with `measurement`
-corrected for what this run actually proposed, since survey recorded it before any of this was known.
-`blizzard runner artifact create --name delta` (content on stdin).
+Republish `delta` — same `scope`, `revisions: {}`, `findings: []` as `survey-delta` (read with
+`blizzard runner artifact get survey-delta --content`) — with `measurement` corrected for what this run actually
+proposed, since survey recorded it before any of this was known. `blizzard runner artifact create --name delta` (content
+on stdin).
 
 ## What you are not doing
 
