@@ -62,6 +62,7 @@ from blizzard.runner.transcripts.transcript_backfill import (
     TranscriptBackfillReport,
     TranscriptReshipReport,
 )
+from blizzard.runner.transcripts.transcript_pump import TranscriptPump
 from blizzard.runner.usage.recorder import UsageRecorder
 
 _log = get_logger("blizzard.runner.loop")
@@ -278,12 +279,16 @@ class LoopWiring:
         wired here rather than at the CLI so the composition root stays the one place a
         context is built."""
         return self.with_context(
-            lambda ctx: TranscriptBackfill(_identity_checked(ctx)).run(dry_run=dry_run, limit=limit)
+            lambda ctx: TranscriptBackfill(_identity_checked(ctx), TranscriptPump(ctx)).run(
+                dry_run=dry_run, limit=limit
+            )
         )
 
     def reship_transcript(self, segment_id: str) -> TranscriptReshipReport:
         """Re-ship one already-imported segment — wired here for the reason above."""
-        return self.with_context(lambda ctx: TranscriptBackfill(_identity_checked(ctx)).reship(segment_id))
+        return self.with_context(
+            lambda ctx: TranscriptBackfill(_identity_checked(ctx), TranscriptPump(ctx)).reship(segment_id)
+        )
 
 
 def _identity_checked(ctx: LoopContext) -> LoopContext:

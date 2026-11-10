@@ -99,6 +99,7 @@ class TranscriptBackfill:
     """The ``blizzard runner transcript backfill`` verb's domain half."""
 
     ctx: TranscriptBackfillContext
+    pump: TranscriptPump
 
     def run(self, *, dry_run: bool = False, limit: int | None = None) -> TranscriptBackfillReport:
         """Import every session-bearing lease's transcript still on disk and not already
@@ -111,11 +112,10 @@ class TranscriptBackfill:
 
         unfinished = self._unfinished()
         leases = self.ctx.stores.transcript_ledger.transcript_backfill_leases()
-        pump = TranscriptPump(self.ctx)
 
         @cache
         def bindings() -> ResolvedBindings:
-            return pump.bindings_for_chunks(
+            return self.pump.bindings_for_chunks(
                 {s.chunk_id for s in unfinished} | {lease.chunk_id for lease in leases}, all_newest=True
             )
 
@@ -213,7 +213,7 @@ class TranscriptBackfill:
             readable.size_bytes(
                 source.session_id,
                 spawn_cwd=self._spawn_cwd(
-                    source.chunk_id, TranscriptPump(self.ctx).bindings_for_chunks({source.chunk_id}, all_newest=True)
+                    source.chunk_id, self.pump.bindings_for_chunks({source.chunk_id}, all_newest=True)
                 ),
             )
             is None
@@ -274,7 +274,7 @@ class TranscriptBackfill:
         buffered-bytes backpressure. ``False`` leaves it open for a later run to resume."""
         # No deadline: an operator verb has all the time the file needs, unlike the tick's
         # shared budget, and the pump's own iteration valve still bounds a stuck source.
-        caught_up = TranscriptPump(self.ctx).drain_segment(
+        caught_up = self.pump.drain_segment(
             segment_id,
             deadline=None,
             incomplete_reason=TruncationReason.BACKFILL_INCOMPLETE,
