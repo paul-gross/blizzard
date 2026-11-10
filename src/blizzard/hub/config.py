@@ -18,7 +18,7 @@ from urllib.parse import urlsplit
 
 from sqlalchemy.engine import make_url
 
-from blizzard.foundation.config_keys import ConfigRegistry, ConfigView, InvalidConfigValue
+from blizzard.foundation.config_keys import ConfigRegistry, ConfigView, InvalidConfigValue, UndeclaredConfigKey
 from blizzard.foundation.flags import (
     FlagRegistry,
     FlagResolution,
@@ -77,9 +77,18 @@ RENAMED_WORK_SOURCE_KEY = "pm_source"
 
 _KNOWN_AUTH_MODES = {AUTH_MODE_NONE, AUTH_MODE_OAUTH}
 
-# `[tracing]` keys only the runner acts on, which the registry no longer declares: a hub file carrying one fails the
-# load, naming the file that owns it, rather than reading as an undeclared key or being ignored.
+# `[tracing]` keys only the runner acts on, declared deprecated with their `blizzard-host.toml` home as `replaced_by`:
+# a hub file carrying one fails the load, naming the file that owns it.
 RUNNER_ONLY_TRACING_KEYS = ("worker_programs", "worker_program_services", "harness_telemetry")
+
+
+def _replaced_by(registry: ConfigRegistry, path: str) -> str:
+    """The home a deprecated key names through its registry declaration."""
+    declared = registry.key(path)
+    if declared is None or declared.replaced_by is None:
+        raise UndeclaredConfigKey(path, registry.name)
+    return declared.replaced_by
+
 
 # `[[auth.oauth.provider]]` required keys — structural presence only;
 # secret resolution and `type`/`issuer` validation happen where a provider is consumed.
@@ -789,11 +798,13 @@ class HubConfig:
                 f"{path}. Leaving the old key would configure zero external work sources: "
                 "every board label for a pointer outside the built-in `hub` source would render null."
             )
-        runner_only = [key for key in RUNNER_ONLY_TRACING_KEYS if key in raw.table("tracing").body]
+        tracing_table = raw.table("tracing")
+        runner_only = [key for key in RUNNER_ONLY_TRACING_KEYS if key in tracing_table]
         if runner_only:
+            homes = [_replaced_by(raw.registry, f"tracing.{key}") for key in runner_only]
             raise ConfigError(
                 f"[tracing] {', '.join(runner_only)} in {path} belong{'s' if len(runner_only) == 1 else ''} to the "
-                "runner — the hub reads none of them; delete them here, or set them in blizzard-host.toml."
+                f"runner — the hub reads none of them; delete them here, or set {', '.join(homes)}."
             )
         toml_port = int(raw.get("port", DEFAULT_PORT))
         env = Env()

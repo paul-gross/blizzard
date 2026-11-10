@@ -49,6 +49,7 @@ _SAMPLE_BY_PATH: dict[str, object] = {
     "runner[].throttle.on_decline": "release",
     "runner[].throttle.on_usage_limit": "release",
     "tracing.platform_sample_ratio": 0.5,
+    "tracing.worker_programs": False,
 }
 
 

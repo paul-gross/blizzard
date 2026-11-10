@@ -20,6 +20,7 @@ from blizzard.hub.config import ENV_HOST as HUB_ENV_HOST
 from blizzard.hub.config import ENV_PORT as HUB_ENV_PORT
 from blizzard.hub.config import ConfigError as HubConfigError
 from blizzard.hub.config import HubConfig, parse_egress_config, read_legacy_keys, render_egress_toml
+from blizzard.hub.config_keys import HUB_REGISTRY
 from blizzard.hub.domain.config.legacy_keys import LegacyKeys, WorkSourceConfig
 from blizzard.hub.domain.execution.auth.produces import PRODUCES_ENFORCE
 from blizzard.hub.domain.observability.egress.config import EgressConfig
@@ -826,6 +827,22 @@ def test_a_runner_only_tracing_key_fails_the_hub_load_naming_the_host_file(tmp_p
     header = "" if block.startswith("[") else "[tracing]\n"
     (root / "blizzard-hub.toml").write_text(f'db_url = "{HubConfig.default_db_url(root)}"\n\n{header}{block}')
     with pytest.raises(HubConfigError, match=re.escape("blizzard-host.toml")):
+        load_hub_config(root)
+
+
+@pytest.mark.parametrize("key", ["worker_programs", "worker_program_services", "harness_telemetry"])
+def test_a_runner_only_tracing_key_refusal_names_its_registry_home(tmp_path: Path, key: str) -> None:
+    root = tmp_path / "hub"
+    root.mkdir()
+    value = "{}" if key == "worker_program_services" else "true"
+    (root / "blizzard-hub.toml").write_text(
+        f'db_url = "{HubConfig.default_db_url(root)}"\n\n[tracing]\n{key} = {value}\n'
+    )
+    declared = HUB_REGISTRY.key(f"tracing.{key}")
+    assert declared is not None
+    assert declared.deprecated
+    assert declared.replaced_by == f"tracing.{key} in blizzard-host.toml"
+    with pytest.raises(HubConfigError, match=re.escape(f"tracing.{key} in blizzard-host.toml")):
         load_hub_config(root)
 
 
