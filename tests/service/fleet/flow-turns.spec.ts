@@ -309,7 +309,7 @@ test('test_a_garden_delivery_lands_while_a_chunk_is_held_on_a_branch', async ({ 
     `revision = {${JSON.stringify(repo.name)}: rev}`,
     "survey = {'scope': 'flow-garden-clean', 'revisions': revision, 'measurement': 'clean', 'candidates': []}",
     "delta = {'scope': 'flow-garden-clean', 'revisions': revision, 'measurement': 'clean', 'findings': []}",
-    "for name, data in [('survey', survey), ('delta', delta)]:",
+    "for name, data in [('survey', survey), ('survey-delta', delta)]:",
     "    subprocess.run(['blizzard', 'runner', 'artifact', 'create', '--name', name], input=json.dumps(data), text=True, check=True)",
   ].join('\n');
   gardenGraph.nodes.survey!.judgement.prompt = "verdict('clean', 'clean sweep')\n";
@@ -325,7 +325,7 @@ test('test_a_garden_delivery_lands_while_a_chunk_is_held_on_a_branch', async ({ 
   const detail = await stepUntil(host, async () => (await api.get<Wire.ChunkDetail>(`/api/chunks/${garden}`)).body,
     (row) => ['done', 'needs_human', 'stopped'].includes(row.status), { stallPasses: 100, progress: chunkProgress });
   expect(detail.status).toBe('done');
-  expect(detail.history.map((row) => [row.from_node_name, row.choice_name])).toEqual([['survey', 'clean'], ['deliver', 'recorded']]);
+  expect(detail.history.map((row) => [row.from_node_name, row.choice_name])).toEqual([['survey', 'clean'], ['deliver-clean', 'recorded']]);
   const gardenSubmissions = await submissions(api, garden);
   expect(gardenSubmissions).toHaveLength(1);
   expect(gardenSubmissions[0]!.flow_ids).toEqual([]);

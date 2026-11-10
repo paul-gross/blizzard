@@ -180,6 +180,8 @@ test.describe('delivery and tenant-wide findings', () => {
   });
 
   test('test_an_exited_finding_is_no_longer_a_delta_target_but_a_gone_flagged_one_still_is', async ({ api, forge, repository, mockRunner }) => {
+    // Four sequential daemon deliveries share the hub with other workers; budget the whole walk, not one delivery.
+    test.setTimeout(120_000);
     const repo = await repository();
     const commit = await forge.call('GET', `/repos/${repo.owner}/${repo.name}/commits/main`);
     expect(commit.status).toBe(200);
