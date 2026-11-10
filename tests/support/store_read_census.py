@@ -280,6 +280,7 @@ from tests.support.scaffolding import (
     seed_work_item,
     stamp,
 )
+from tests.support.takeover_unit import record_takeover_in_unit
 
 _BASE = datetime(2026, 9, 14, 12, 0, 0, tzinfo=UTC)
 
@@ -650,7 +651,8 @@ def build_runner_world(engine: Engine, runner_id: str = RUNNER_ID) -> RunnerWorl
         session=SessionReference(CLAUDE_CODE_HARNESS_ID, "sess-4"),
         spawned_at=_t(41),
     )
-    stores.takeover.record_takeover(
+    record_takeover_in_unit(
+        stores.takeover,
         takeover_id="tko_1",
         chunk_id=chunk_4,
         lease_id=lease_5,

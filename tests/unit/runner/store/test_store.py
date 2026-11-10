@@ -36,6 +36,7 @@ from tests.support.runner_store import (
     _session_id,  # pyright: ignore[reportPrivateUsage]
     _store,  # pyright: ignore[reportPrivateUsage]
 )
+from tests.support.takeover_unit import record_takeover_in_unit
 
 
 def test_lease_round_trips_its_own_written_instant(tmp_path: Path):
@@ -67,7 +68,8 @@ def test_lease_for_open_takeover_resolves_a_closed_reference_lease(tmp_path: Pat
     store.record_closure(lease_id="lease_1", chunk_id="ch_1", node_id="nd_build", reason="escalated", closed_at=_NOW)
     assert store.active_lease("lease_1") is None
 
-    store.record_takeover(
+    record_takeover_in_unit(
+        store,
         takeover_id="tko_1",
         chunk_id="ch_1",
         lease_id="lease_1",
@@ -95,7 +97,8 @@ def test_lease_for_open_takeover_is_none_once_the_takeover_ends(tmp_path: Path):
     store = _store(tmp_path)
     _mint(store)
     store.record_closure(lease_id="lease_1", chunk_id="ch_1", node_id="nd_build", reason="escalated", closed_at=_NOW)
-    store.record_takeover(
+    record_takeover_in_unit(
+        store,
         takeover_id="tko_1",
         chunk_id="ch_1",
         lease_id="lease_1",

@@ -37,6 +37,7 @@ from tests.support.runner_fakes import (
     single_workspace,
 )
 from tests.support.runner_mint import new_mint
+from tests.support.takeover_unit import record_takeover_in_unit
 
 _NOW = datetime(2026, 7, 13, 12, 0, 0, tzinfo=UTC)
 _HANDLE = WorkerHandle(session_id="sess-b", pid=200, process_start_time="start-200", pgid=200)
@@ -100,7 +101,8 @@ def _harness() -> FakeHarness:
 
 
 def _hold_by_takeover(store: SqlAlchemyRunnerStore, *, fence_epoch: int = 2) -> None:
-    store.record_takeover(
+    record_takeover_in_unit(
+        store,
         takeover_id="tk_1",
         chunk_id="ch_1",
         lease_id="lease_1",

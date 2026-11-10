@@ -13,6 +13,7 @@ from blizzard.runner.harness.usage import UsageSample
 from blizzard.runner.leases.model import NewLease
 from tests.support.runner_fakes import make_store, record_usage
 from tests.support.runner_mint import new_mint
+from tests.support.takeover_unit import record_takeover_in_unit
 
 _NOW = datetime(2026, 9, 11, 12, 0, tzinfo=UTC)
 
@@ -78,7 +79,8 @@ def test_equal_raw_session_ids_are_isolated_across_runner_session_repositories(t
             session=session,
             asked_at=at,
         )
-        store.record_takeover(
+        record_takeover_in_unit(
+            store,
             takeover_id=f"takeover_{ordinal}",
             chunk_id=f"chunk_{ordinal}",
             lease_id=lease_id,

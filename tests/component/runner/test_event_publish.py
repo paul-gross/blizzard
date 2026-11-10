@@ -58,6 +58,7 @@ from tests.support.runner_fakes import (
     single_workspace,
 )
 from tests.support.runner_mint import new_mint
+from tests.support.takeover_unit import record_takeover_in_unit
 
 _NOW = datetime(2026, 7, 13, 12, 0, 0, tzinfo=UTC)
 _HANDLE = WorkerHandle(session_id="sess-a", pid=100, process_start_time="start-100", pgid=100)
@@ -593,7 +594,8 @@ def test_pull_reconcile_takeovers_publishes_takeover_closed(tmp_path: Path) -> N
     events = EventBroker()
     _seed_lease(store, retries_max=2)
     store.record_closure(lease_id="lease_1", chunk_id="ch_1", node_id="nd_build", reason="escalated", closed_at=_NOW)
-    store.record_takeover(
+    record_takeover_in_unit(
+        store,
         takeover_id="tko_1",
         chunk_id="ch_1",
         lease_id="lease_1",

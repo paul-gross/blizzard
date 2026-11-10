@@ -7,6 +7,7 @@ second slice drives REAP/ADVANCE against an open takeover."""
 
 from __future__ import annotations
 
+import threading
 from concurrent.futures import Executor
 from dataclasses import replace
 from datetime import UTC, datetime, timedelta
@@ -62,6 +63,7 @@ from tests.support.runner_fakes import (
     single_workspace,
 )
 from tests.support.runner_mint import new_mint
+from tests.support.takeover_unit import record_takeover_in_unit
 
 _NOW = datetime(2026, 7, 17, 12, 0, 0, tzinfo=UTC)
 _HANDLE = WorkerHandle(session_id="sess-a", pid=100, process_start_time="start-100", pgid=100)
@@ -362,6 +364,51 @@ def test_takeover_refuses_a_second_open_takeover(tmp_path: Path) -> None:
         service.open(_open_scope(store), force=False)
 
 
+def test_a_second_open_that_passed_admission_waits_for_the_first_and_is_refused(tmp_path: Path) -> None:
+    """Both opens resolved their scope before either wrote, so admission alone sees no open takeover; the second, run
+    on another thread against a held takeover unit, must block on the lock and refuse once the first commits."""
+    store = _store(tmp_path)
+    _seed_lease(store)
+    store.record_park(lease_id="lease_1", chunk_id="ch_1", question_id="qn_1", parked_at=_NOW)
+    stale_scope = _open_scope(store)
+    outbound_before = store.pending_outbound()
+    outcome: list[BaseException | None] = []
+    started = threading.Event()
+
+    def open_second() -> None:
+        started.set()
+        try:
+            _service(store).open(stale_scope, force=False)
+            outcome.append(None)
+        except BaseException as exc:
+            outcome.append(exc)
+
+    with store.locked_takeover() as unit:
+        thread = threading.Thread(target=open_second)
+        thread.start()
+        started.wait()
+        thread.join(timeout=0.5)
+        assert thread.is_alive(), "the second open ran through a held takeover unit"
+        store.record_takeover(
+            unit=unit,
+            takeover_id="tko_first",
+            chunk_id="ch_1",
+            lease_id="lease_1",
+            workdir="/ws/e1",
+            fence_epoch=None,
+            opened_at=_NOW,
+            session=SessionReference(CLAUDE_CODE_HARNESS_ID, "sess-a"),
+            lease_token_hash="a" * 64,
+            entered_at=_NOW,
+        )
+    thread.join(timeout=10)
+
+    assert not thread.is_alive()
+    assert len(outcome) == 1 and isinstance(outcome[0], ChunkNotTakeable)
+    assert [t.takeover_id for t in store.open_takeovers()] == ["tko_first"]
+    assert store.pending_outbound() == outbound_before
+
+
 # A live worker attempt — 409 without force, superseded with it
 # --------------------------------------------------------------------------- #
 
@@ -541,7 +588,8 @@ def test_reap_skips_a_stalled_worker_under_an_open_takeover(tmp_path: Path) -> N
     _seed_lease(store, pid=100)
     # A forced takeover already killed pid 100 and fenced the chunk — this mirrors that
     # end state without going through the API, isolating REAP's own guard.
-    store.record_takeover(
+    record_takeover_in_unit(
+        store,
         takeover_id="tko_1",
         chunk_id="ch_1",
         lease_id="lease_1",
@@ -571,7 +619,8 @@ def test_reap_reaps_a_fresh_lease_minted_above_a_stale_takeovers_reference(tmp_p
     store = _store(tmp_path)
     _seed_lease(store, pid=100)
     store.record_closure(lease_id="lease_1", chunk_id="ch_1", node_id="nd_build", reason="released", closed_at=_NOW)
-    store.record_takeover(
+    record_takeover_in_unit(
+        store,
         takeover_id="tko_1",
         chunk_id="ch_1",
         lease_id="lease_1",
@@ -603,7 +652,8 @@ def test_reap_reaps_a_fresh_lease_minted_above_a_stale_takeovers_reference(tmp_p
 def test_advance_skips_judgement_and_the_held_chunk_poll_under_an_open_takeover(tmp_path: Path) -> None:
     store = _store(tmp_path)
     _seed_lease(store, pid=100)
-    store.record_takeover(
+    record_takeover_in_unit(
+        store,
         takeover_id="tko_1",
         chunk_id="ch_1",
         lease_id="lease_1",
@@ -630,7 +680,8 @@ def test_advance_releases_a_done_held_chunk_under_an_open_takeover(tmp_path: Pat
     # A gate-parked chunk: a held binding, no active lease (its lease already closed
     # "parked"), and an open takeover over it.
     store.record_binding(chunk_id="ch_1", environment_id="e1", workdir="/ws/e1", bound_at=_NOW, workspace_id="ws1")
-    store.record_takeover(
+    record_takeover_in_unit(
+        store,
         takeover_id="tko_1",
         chunk_id="ch_1",
         lease_id=None,
@@ -674,7 +725,8 @@ def test_fill_reclaims_a_park_the_hub_superseded_even_under_an_open_takeover(tmp
     store = _store(tmp_path)
     _seed_lease(store)
     store.record_closure(lease_id="lease_1", chunk_id="ch_1", node_id="nd_build", reason="escalated", closed_at=_NOW)
-    store.record_takeover(
+    record_takeover_in_unit(
+        store,
         takeover_id="tko_1",
         chunk_id="ch_1",
         lease_id="lease_1",
@@ -874,7 +926,8 @@ def _active_in(store: SqlAlchemyRunnerStore, chunk_id: str, lease_ids: set[str])
 def _interrupted_forced_entry(store: SqlAlchemyRunnerStore) -> None:
     """The durable state a crash right after a forced entry's decision transaction leaves: the takeover, its fence
     and the re-minted token — the worker not yet killed, no entry fact."""
-    store.record_takeover(
+    record_takeover_in_unit(
+        store,
         takeover_id="tko_1",
         chunk_id="ch_1",
         lease_id="lease_1",
@@ -900,7 +953,8 @@ def test_the_decision_transaction_is_all_or_none(tmp_path: Path) -> None:
     store.record_lease_token("lease_1", "prior-token-hash", _NOW)
 
     with pytest.raises(SQLAlchemyError):
-        store.record_takeover(
+        record_takeover_in_unit(
+            store,
             takeover_id="tko_1",
             chunk_id="ch_1",
             lease_id="lease_1",

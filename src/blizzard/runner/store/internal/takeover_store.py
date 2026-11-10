@@ -2,19 +2,28 @@
 
 from __future__ import annotations
 
-from collections.abc import Iterable
+from collections.abc import Generator, Iterable
+from contextlib import contextmanager
 from datetime import datetime
 from typing import Any
 
-from sqlalchemy import ColumnElement, Row, Select, and_, or_
+from sqlalchemy import ColumnElement, Connection, Row, Select, and_, or_
 
 from blizzard.foundation.fact_kinds import LEASE_MINTED
 from blizzard.foundation.logging import get_logger
 from blizzard.foundation.store.batching import id_batches
 from blizzard.runner.harness.identity import SessionReference
 from blizzard.runner.leases.model import Lease
-from blizzard.runner.lifecycle.takeover import IWriteTakeoverRepository, OpenTakeover
-from blizzard.runner.store.internal.base import Unclosed, insert_outbox_row, lease_select, row_to_lease
+from blizzard.runner.lifecycle.takeover import ITakeoverUnit, IWriteTakeoverRepository, OpenTakeover
+from blizzard.runner.store.internal.base import (
+    TakeoverUnit,
+    Unclosed,
+    insert_outbox_row,
+    lease_select,
+    lock_identity_row,
+    row_to_lease,
+    takeover_unit_conn,
+)
 from blizzard.runner.store.schema import (
     lease_tokens,
     leases,
@@ -47,25 +56,38 @@ class TakeoverStore:
         rows = self._store.all(stmt)
         return row_to_lease(rows[0]) if rows else None
 
-    def open_takeover_for_chunk(self, chunk_id: str) -> OpenTakeover | None:
-        return self.open_takeovers_for([chunk_id]).get(chunk_id)
+    @contextmanager
+    def locked_takeover(self) -> Generator[ITakeoverUnit, None, None]:
+        # The runner's identity row is locked as the first statement: the first write takes SQLite's writer lock, and
+        # Postgres queues every takeover open of this runner on the same row (``bzh:store-exclusive-write``).
+        with self._store.begin() as conn:
+            lock_identity_row(conn, self._store)
+            yield TakeoverUnit(conn, self._store)
+
+    def open_takeover_for_chunk(self, chunk_id: str, *, unit: ITakeoverUnit | None = None) -> OpenTakeover | None:
+        if unit is None:
+            return self.open_takeovers_for([chunk_id]).get(chunk_id)
+        return self._open_takeovers_on(takeover_unit_conn(self._store, unit), [chunk_id]).get(chunk_id)
 
     def open_takeovers_for(self, chunk_ids: Iterable[str]) -> dict[str, OpenTakeover]:
         keys = sorted(set(chunk_ids))
         if not keys:
             return {}
+        with self._store.connect() as conn:
+            return self._open_takeovers_on(conn, keys)
+
+    def _open_takeovers_on(self, conn: Connection, chunk_ids: Iterable[str]) -> dict[str, OpenTakeover]:
         st = self._store
         result: dict[str, OpenTakeover] = {}
-        with st.connect() as conn:
-            for batch in id_batches(keys):
-                stmt = (
-                    self._takeover_select(st)
-                    .where(takeovers.c.chunk_id.in_(batch))
-                    .where(_OPEN_TAKEOVER.clause(st))
-                    .where(~self._newer_open_takeover(st))
-                )
-                for r in conn.execute(stmt):
-                    result[str(r.chunk_id)] = self._row_to_takeover(r)
+        for batch in id_batches(sorted(set(chunk_ids))):
+            stmt = (
+                self._takeover_select(st)
+                .where(takeovers.c.chunk_id.in_(batch))
+                .where(_OPEN_TAKEOVER.clause(st))
+                .where(~self._newer_open_takeover(st))
+            )
+            for r in conn.execute(stmt):
+                result[str(r.chunk_id)] = self._row_to_takeover(r)
         return result
 
     def open_takeover_chunk_ids(self) -> set[str]:
@@ -83,6 +105,7 @@ class TakeoverStore:
     def record_takeover(
         self,
         *,
+        unit: ITakeoverUnit,
         takeover_id: str,
         chunk_id: str,
         lease_id: str | None,
@@ -95,45 +118,43 @@ class TakeoverStore:
         lease_token_hash: str | None = None,
         entered_at: datetime | None = None,
     ) -> int | None:
-        # The whole decision commits together or not at all: the takeover, its fence fact, the re-minted
-        # token and — when nothing is left to kill — the entry itself.
+        # The whole decision commits together or not at all with the unit: the takeover, its fence fact, the
+        # re-minted token and — when nothing is left to kill — the entry itself.
         seq: int | None = None
-        with self._store.begin() as conn:
+        conn = takeover_unit_conn(self._store, unit)
+        conn.execute(
+            self._store.insert(takeovers).values(
+                takeover_id=takeover_id,
+                chunk_id=chunk_id,
+                lease_id=lease_id,
+                session_id=session.session_id,
+                harness_id=session.harness_id,
+                workdir=workdir,
+                fence_epoch=fence_epoch,
+                hold_epoch=hold_epoch,
+                opened_at=opened_at,
+            )
+        )
+        if fence_payload is not None:
+            seq = insert_outbox_row(
+                self._store,
+                conn,
+                outbound_buffer,
+                kind=LEASE_MINTED,
+                chunk_id=chunk_id,
+                lease_id=None,
+                payload=fence_payload,
+                created_at=opened_at,
+            )
+        if lease_token_hash is not None and lease_id is not None:
+            conn.execute(self._store.delete(lease_tokens).where(lease_tokens.c.lease_id == lease_id))
             conn.execute(
-                self._store.insert(takeovers).values(
-                    takeover_id=takeover_id,
-                    chunk_id=chunk_id,
-                    lease_id=lease_id,
-                    session_id=session.session_id,
-                    harness_id=session.harness_id,
-                    workdir=workdir,
-                    fence_epoch=fence_epoch,
-                    hold_epoch=hold_epoch,
-                    opened_at=opened_at,
+                self._store.insert(lease_tokens).values(
+                    lease_id=lease_id, token_hash=lease_token_hash, minted_at=opened_at
                 )
             )
-            if fence_payload is not None:
-                seq = insert_outbox_row(
-                    self._store,
-                    conn,
-                    outbound_buffer,
-                    kind=LEASE_MINTED,
-                    chunk_id=chunk_id,
-                    lease_id=None,
-                    payload=fence_payload,
-                    created_at=opened_at,
-                )
-            if lease_token_hash is not None and lease_id is not None:
-                conn.execute(self._store.delete(lease_tokens).where(lease_tokens.c.lease_id == lease_id))
-                conn.execute(
-                    self._store.insert(lease_tokens).values(
-                        lease_id=lease_id, token_hash=lease_token_hash, minted_at=opened_at
-                    )
-                )
-            if entered_at is not None:
-                conn.execute(
-                    self._store.insert(takeover_entries).values(takeover_id=takeover_id, entered_at=entered_at)
-                )
+        if entered_at is not None:
+            conn.execute(self._store.insert(takeover_entries).values(takeover_id=takeover_id, entered_at=entered_at))
         _log.info("takeover opened", takeover_id=takeover_id, chunk_id=chunk_id, lease_id=lease_id, forced=fence_epoch)
         return seq
 

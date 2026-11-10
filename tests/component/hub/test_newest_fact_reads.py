@@ -50,6 +50,7 @@ from tests.support.scaffolding import (
     hub_store_connections,
     stamp,
 )
+from tests.support.takeover_unit import record_takeover_in_unit
 
 _T0 = datetime(2026, 1, 1, tzinfo=UTC)
 _KEYS = ["k1", "k2", "k3"]
@@ -340,7 +341,8 @@ def _runner_history(tmp_path: Path, *, depth: int) -> tuple[SqlAlchemyRunnerStor
     for key in _KEYS:
         for n in range(depth):
             at = _T0.replace(minute=n)
-            store.record_takeover(
+            record_takeover_in_unit(
+                store,
                 takeover_id=f"tko_{key}_{n}",
                 chunk_id=key,
                 lease_id=None,

@@ -33,6 +33,7 @@ from tests.support.runner_fakes import (
     make_stores,
 )
 from tests.support.runner_mint import new_mint
+from tests.support.takeover_unit import record_takeover_in_unit
 
 _NOW = datetime(2026, 7, 13, 12, 0, 0, tzinfo=UTC)
 _HANDLE = WorkerHandle(session_id="sess-a", pid=100, process_start_time="start-100", pgid=100)
@@ -189,7 +190,8 @@ def test_pull_never_preempts_a_session_a_person_is_inside(tmp_path: Path):
     """A forced takeover's epoch must not cause the operator's terminal to be killed."""
     store = _store(tmp_path)
     _seed_running_lease(store)
-    store.record_takeover(
+    record_takeover_in_unit(
+        store,
         takeover_id="tk_1",
         chunk_id="ch_1",
         lease_id="lease_1",
