@@ -1,4 +1,6 @@
-import type { runnerApi } from 'fleet';
+import { formatAbsolute, type runnerApi } from 'fleet';
+
+const displayInstant = (instant: string): string => formatAbsolute(instant) || instant;
 
 export interface ThrottleLine {
   readonly label: string;
@@ -9,7 +11,7 @@ function leverLine(lever: runnerApi.ThrottleStatusView['levers'][number]): Throt
   const name = typeof lever['name'] === 'string' ? lever['name'] : 'Lever';
   const setting = typeof lever['setting'] === 'string' ? lever['setting'] : '';
   const reading = typeof lever['reading'] === 'string' ? lever['reading'] : '';
-  const until = typeof lever['until'] === 'string' ? ` · until ${lever['until']}` : '';
+  const until = typeof lever['until'] === 'string' ? ` · until ${displayInstant(lever['until'])}` : '';
   const admits = lever['admits'] === true ? 'yes' : lever['admits'] === false ? 'no' : 'unknown';
   return { label: name, text: [setting, reading].filter(Boolean).join(' · ') + ` · ${admits}${until}` };
 }
@@ -20,9 +22,9 @@ export function throttleLines(throttle: runnerApi.ThrottleStatusView): readonly 
   const owner = floor.subscription ?? 'this runner';
   const hold = floor.hold;
   const floorText = floor.clear && floor.admits
-    ? `open — cleared by ${floor.clear.by} at ${floor.clear.cleared_at}`
+    ? `open — cleared by ${floor.clear.by} at ${displayInstant(floor.clear.cleared_at)}`
     : hold
-      ? `exhausted — ${hold.kind}${hold.harness_id ? ` via ${hold.harness_id}` : ''}, resets ${hold.expected_reset}${hold.awaits_sample ? ` · awaiting fresh sample${hold.grace_opens_at ? `, opens ${hold.grace_opens_at}` : ''}` : ''}`
+      ? `exhausted — ${hold.kind}${hold.harness_id ? ` via ${hold.harness_id}` : ''}, resets ${displayInstant(hold.expected_reset)}${hold.awaits_sample ? ` · awaiting fresh sample${hold.grace_opens_at ? `, opens ${displayInstant(hold.grace_opens_at)}` : ''}` : ''}`
       : 'open';
   return [
     { label: 'Floor', text: `${owner}: ${floorText} · ${floor.admits ? 'yes' : 'no'}` },
@@ -36,5 +38,5 @@ export function throttleSummary(throttle: runnerApi.ThrottleStatusView): string 
   const lever = throttle.levers.find((l) => l['name'] === first && l['admits'] === false);
   const until = lever && typeof lever['until'] === 'string' ? lever['until'] : null;
   const reset = first === 'floor' ? throttle.floor.hold?.expected_reset : until;
-  return `${throttle.state}${first ? ` — ${first}${reset ? `, ${first === 'floor' ? 'resets' : 'until'} ${reset}` : ''}` : ''}`;
+  return `${throttle.state}${first ? ` — ${first}${reset ? `, ${first === 'floor' ? 'resets' : 'until'} ${displayInstant(reset)}` : ''}` : ''}`;
 }

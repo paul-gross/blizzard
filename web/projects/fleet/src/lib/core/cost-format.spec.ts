@@ -53,13 +53,15 @@ describe('formatTokens', () => {
     expect(formatTokens(999)).toBe('999');
   });
 
-  it('renders a count in the thousands to one decimal place, suffixed k', () => {
-    expect(formatTokens(1_000)).toBe('1.0k');
-    expect(formatTokens(3_400)).toBe('3.4k');
+  it('renders a count in the thousands to three significant digits, suffixed k', () => {
+    expect(formatTokens(1_000)).toBe('1.00k');
+    expect(formatTokens(3_400)).toBe('3.40k');
+    expect(formatTokens(32_700)).toBe('32.7k');
+    expect(formatTokens(999_999)).toBe('1.00M');
   });
 
-  it('renders a count in the millions to one decimal place, suffixed M', () => {
-    expect(formatTokens(1_000_000)).toBe('1.0M');
-    expect(formatTokens(3_400_000)).toBe('3.4M');
+  it('renders a count in the millions to three significant digits, suffixed M', () => {
+    expect(formatTokens(1_000_000)).toBe('1.00M');
+    expect(formatTokens(3_400_000)).toBe('3.40M');
   });
 });

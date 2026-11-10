@@ -2,7 +2,7 @@ import { ChangeDetectionStrategy, Component, input } from '@angular/core';
 
 import type { FindingCandidate } from '../../api/hub';
 import { KitProseBlock } from '../../kit/kit-prose-block';
-import { shortSha } from './short-sha';
+import { shortCommitHash } from '../../core/commit-hash';
 
 /** The fields a finding reads by before it has an identity — a survey's
  * `FindingCandidate`. */
@@ -35,5 +35,5 @@ export class ChunkFindingEntry {
    * it knows which surface and which index this entry sits at. */
   readonly summaryTestid = input<string | null>(null);
 
-  protected readonly shortSha = shortSha;
+  protected readonly shortCommitHash = shortCommitHash;
 }

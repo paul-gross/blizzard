@@ -1,6 +1,7 @@
 import { ChangeDetectionStrategy, Component, computed, input } from '@angular/core';
 
 import { ArtifactKind, type ArtifactView, type BounceEnvelope, type FindingDelta, type FindingSurvey } from '../../api/hub';
+import { shortCommitHash } from '../../core/commit-hash';
 import { FleetWhen } from '../../core/when-display/fleet-when';
 import { ChunkArtifactBounce } from './chunk-artifact-bounce';
 import { ChunkArtifactDelta } from './chunk-artifact-delta';
@@ -70,8 +71,8 @@ export class ChunkArtifactBody {
   protected readonly refTestid = computed(() => `${this.testid()}-ref`);
   protected readonly branchTestid = computed(() => `${this.testid()}-branch`);
 
-  /** The commit's first eight characters; the full hash rides the element's title. */
-  protected readonly shortHash = computed(() => (this.artifact().commit_hash ?? '').slice(0, 8));
+  /** The commit's short hash; the full hash rides the element's title. */
+  protected readonly shortHash = computed(() => shortCommitHash(this.artifact().commit_hash ?? ''));
   protected readonly isAsset = computed(() => this.artifact().kind === ArtifactKind.ASSET);
 
   /** The asset's content, parsed as a `FindingDelta` — `null` when there is no

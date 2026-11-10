@@ -1,4 +1,4 @@
-import { formatCost } from './cost-format';
+import { formatCost, formatTokens } from './cost-format';
 
 /** One step's token classes and cost — what the session efficiency cost reads. */
 export interface SessionEfficiencyInput {
@@ -27,8 +27,8 @@ export function sessionEfficiencyParts(u: SessionEfficiencyInput): readonly stri
   const miss = cacheMissPercent(distinct, u.cacheReadTokens);
   return [
     cost,
-    `· ${sigTokens(distinct)}I`,
-    `/ ${sigTokens(u.outputTokens)}O`,
+    `· ${formatTokens(distinct)}I`,
+    `/ ${formatTokens(u.outputTokens)}O`,
     `× ${miss === null ? '—' : `${sigPercent(miss)}%`}`,
   ];
 }
@@ -47,14 +47,6 @@ export function sessionEfficiencyTitle(u: SessionEfficiencyInput): string {
 function cacheMissPercent(distinct: number, cacheRead: number): number | null {
   const total = distinct + cacheRead;
   return total === 0 ? null : (distinct / total) * 100;
-}
-
-/** A token count to three significant digits — `850`, `32.7k`, `1.23M`. */
-function sigTokens(count: number): string {
-  if (count < 1000) return String(Math.round(count));
-  const k = Number((count / 1000).toPrecision(3));
-  if (k < 1000) return `${(count / 1000).toPrecision(3)}k`;
-  return `${(count / 1_000_000).toPrecision(3)}M`;
 }
 
 /** A percent to three significant digits — `0.412`, `2.57`, `12.3` — and `100` at or above a hundred. */

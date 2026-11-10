@@ -47,7 +47,7 @@ describe('ChunkArtifactDelta', () => {
     expect(el.querySelector('[data-testid="artifact-delta-scope"]')?.textContent).toContain('runner-daemon');
     const revisions = el.querySelector('[data-testid="artifact-delta-revisions"]');
     expect(revisions?.textContent).toContain('blizzard');
-    expect(revisions?.textContent).toContain('05eb39ec51'); // shortened
+    expect(revisions?.textContent).toContain('05eb39e'); // shortened
     expect(revisions?.textContent).not.toContain('05eb39ec51ccf5fc3773dca6af414d059fcba1d5'); // full sha not in text
     expect(revisions?.querySelector('[title="05eb39ec51ccf5fc3773dca6af414d059fcba1d5"]')).toBeTruthy();
   });

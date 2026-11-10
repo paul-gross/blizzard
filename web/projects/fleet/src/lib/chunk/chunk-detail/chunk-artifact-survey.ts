@@ -5,7 +5,7 @@ import { KitFactList, type KitFact } from '../../kit/kit-fact-list';
 import { KitProseBlock } from '../../kit/kit-prose-block';
 import { ChunkArtifactRawDisclosure } from './chunk-artifact-raw-disclosure';
 import { ChunkFindingEntry } from './chunk-finding-entry';
-import { shortSha } from './short-sha';
+import { shortCommitHash } from '../../core/commit-hash';
 
 /**
  * A survey-shaped asset artifact, laid out — {@link parseFindingSurvey}'s match branch
@@ -50,7 +50,7 @@ export class ChunkArtifactSurvey {
    * mobile single-artifact page) never collide on one `data-testid`. */
   readonly testid = input('artifact');
 
-  protected readonly shortSha = shortSha;
+  protected readonly shortCommitHash = shortCommitHash;
 
   protected readonly revisionEntries = computed(() => Object.entries(this.survey().revisions));
 

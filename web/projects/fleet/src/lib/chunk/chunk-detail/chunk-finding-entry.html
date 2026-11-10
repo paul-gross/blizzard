@@ -7,6 +7,6 @@
   }
 </p>
 @if (e.introduced) {
-  <p class="fe-introduced">introduced <span [title]="e.introduced">{{ shortSha(e.introduced) }}</span></p>
+  <p class="fe-introduced">introduced <span [title]="e.introduced">{{ shortCommitHash(e.introduced) }}</span></p>
 }
 <fleet-kit-prose-block [text]="e.summary" [testid]="summaryTestid()" />

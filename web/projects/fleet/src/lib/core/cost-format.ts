@@ -25,10 +25,10 @@ export function hasCostFigure(costUsd: number, estimatedCostUsd: number | null |
   return costUsd > 0 || estimatedCostUsd != null || costPartial;
 }
 
-/** A token count's board/CLI legible form — `1.2k`/`3.4M` above 1000, exact below,
- * so a large chunk's tokens-by-class breakdown stays scannable in a narrow column. */
+/** A token count to three significant digits — `850`, `32.7k`, `1.23M`. */
 export function formatTokens(count: number): string {
-  if (count >= 1_000_000) return `${(count / 1_000_000).toFixed(1)}M`;
-  if (count >= 1_000) return `${(count / 1_000).toFixed(1)}k`;
-  return String(count);
+  if (count < 1000) return String(Math.round(count));
+  const k = Number((count / 1000).toPrecision(3));
+  if (k < 1000) return `${(count / 1000).toPrecision(3)}k`;
+  return `${(count / 1_000_000).toPrecision(3)}M`;
 }

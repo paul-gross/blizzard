@@ -121,9 +121,9 @@ describe('ChunkArtifactBody', () => {
       return fixture.nativeElement as HTMLElement;
     }
 
-    it('shows the commit as its first eight characters, the full hash in its title', async () => {
+    it('shows the commit as its first seven characters, the full hash in its title', async () => {
       const commit = (await render('full')).querySelector('.a-commit');
-      expect(commit?.textContent?.trim()).toBe('@ 01234567');
+      expect(commit?.textContent?.trim()).toBe('@ 0123456');
       expect(commit?.getAttribute('title')).toBe(LINKED.commit_hash);
     });
 
