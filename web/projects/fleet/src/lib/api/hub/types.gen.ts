@@ -23534,6 +23534,31 @@ export type ListLandingPoliciesApiConfigLandingPoliciesGetData = {
     url: '/api/config/landing-policies';
 };
 
+export type ListLandingPoliciesApiConfigLandingPoliciesGetErrors = {
+    /**
+     * Problem
+     */
+    400: TenantCredentialMismatchProblem;
+    /**
+     * Problem
+     */
+    401: AuthenticationRequiredProblem;
+    /**
+     * Problem
+     */
+    404: TenantNotFoundProblem;
+    /**
+     * Problem
+     */
+    409: TenantRequiredProblem;
+    /**
+     * Problem
+     */
+    503: HubStoreUnavailableProblem;
+};
+
+export type ListLandingPoliciesApiConfigLandingPoliciesGetError = ListLandingPoliciesApiConfigLandingPoliciesGetErrors[keyof ListLandingPoliciesApiConfigLandingPoliciesGetErrors];
+
 export type ListLandingPoliciesApiConfigLandingPoliciesGetResponses = {
     /**
      * Response List Landing Policies Api Config Landing Policies Get

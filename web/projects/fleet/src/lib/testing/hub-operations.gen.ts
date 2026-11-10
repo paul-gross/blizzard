@@ -49,7 +49,7 @@ export interface HubOperations {
   'GET /api/chunks/{chunk_id}/work-items': { path: T.GetWorkItemsApiChunksChunkIdWorkItemsGetData['path']; responses: T.GetWorkItemsApiChunksChunkIdWorkItemsGetResponses; errors: T.GetWorkItemsApiChunksChunkIdWorkItemsGetErrors };
   'GET /api/config/changes': { path: T.ListChangesApiConfigChangesGetData['path']; responses: T.ListChangesApiConfigChangesGetResponses; errors: T.ListChangesApiConfigChangesGetErrors };
   'GET /api/config/export': { path: T.ExportConfigApiConfigExportGetData['path']; responses: T.ExportConfigApiConfigExportGetResponses; errors: T.ExportConfigApiConfigExportGetErrors };
-  'GET /api/config/landing-policies': { path: T.ListLandingPoliciesApiConfigLandingPoliciesGetData['path']; responses: T.ListLandingPoliciesApiConfigLandingPoliciesGetResponses; errors: {} };
+  'GET /api/config/landing-policies': { path: T.ListLandingPoliciesApiConfigLandingPoliciesGetData['path']; responses: T.ListLandingPoliciesApiConfigLandingPoliciesGetResponses; errors: T.ListLandingPoliciesApiConfigLandingPoliciesGetErrors };
   'GET /api/config/schema/{kind}': { path: T.GetSchemaApiConfigSchemaKindGetData['path']; responses: T.GetSchemaApiConfigSchemaKindGetResponses; errors: T.GetSchemaApiConfigSchemaKindGetErrors };
   'GET /api/decisions': { path: T.ListDecisionsApiDecisionsGetData['path']; responses: T.ListDecisionsApiDecisionsGetResponses; errors: T.ListDecisionsApiDecisionsGetErrors };
   'GET /api/egress/status': { path: T.EgressStatusApiEgressStatusGetData['path']; responses: T.EgressStatusApiEgressStatusGetResponses; errors: T.EgressStatusApiEgressStatusGetErrors };

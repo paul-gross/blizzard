@@ -40635,6 +40635,56 @@
               }
             },
             "description": "Successful Response"
+          },
+          "400": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TenantCredentialMismatchProblem"
+                }
+              }
+            },
+            "description": "Problem"
+          },
+          "401": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AuthenticationRequiredProblem"
+                }
+              }
+            },
+            "description": "Problem"
+          },
+          "404": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TenantNotFoundProblem"
+                }
+              }
+            },
+            "description": "Problem"
+          },
+          "409": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TenantRequiredProblem"
+                }
+              }
+            },
+            "description": "Problem"
+          },
+          "503": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HubStoreUnavailableProblem"
+                }
+              }
+            },
+            "description": "Problem"
           }
         },
         "summary": "List Landing Policies",
