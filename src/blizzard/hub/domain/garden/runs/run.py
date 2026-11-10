@@ -31,6 +31,7 @@ from blizzard.hub.domain.graph.model import Graph, IReadGraphRepository
 from blizzard.hub.domain.kernel.hub_source import RESERVED_HUB_SOURCE_NAME
 from blizzard.hub.domain.kernel.transactions import IHubTransactions
 from blizzard.hub.domain.projects.model import ProjectId
+from blizzard.hub.domain.urgency.model import Urgency
 from blizzard.hub.domain.urgency.services import TenantDefault
 from blizzard.hub.domain.work_items.editing import prepare_mint
 from blizzard.hub.domain.work_items.ports import IWriteWorkItemRepository
@@ -235,6 +236,7 @@ class RunService:
         mode: RunMode,
         note: str | None,
         author: WorkItemAuthor,
+        urgency: Urgency | None = None,
     ) -> RunResult:
         plan = plan_run(
             routine,
@@ -258,10 +260,10 @@ class RunService:
             default_effort=routine.default_effort,
             default_harnesses=routine.default_harnesses,
         )
-        keys = self._default.lock_keys()
+        ahead = self._default.ahead(stated=urgency, routine=routine.default_urgency)
         with self._transactions.begin() as transaction:
-            locked = transaction.lock_set(keys=keys)
-            chunk = draft.mint(self._default.read(locked).urgency_id)
+            locked = transaction.lock_set(keys=ahead.lock_keys())
+            chunk = draft.mint(self._default.resolve(ahead, locked).urgency_id)
             item = self._items.create_run_with_chunk(
                 pointer=pointer,
                 title=plan.title,

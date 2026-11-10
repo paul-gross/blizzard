@@ -20,6 +20,7 @@ from blizzard.hub.domain.config.changes import ChangeContext
 from blizzard.hub.domain.kernel.transactions import IHubTransactions, Transaction
 from blizzard.hub.domain.kernel.unset import UNSET, UnsetType
 from blizzard.hub.domain.projects.color import ColorPick
+from blizzard.hub.domain.urgency.chain import URGENCY_FIELD, ChainLinks, resolve_chain
 from blizzard.hub.domain.urgency.mark import Icon
 from blizzard.hub.domain.urgency.model import (
     MoveTo,
@@ -121,6 +122,11 @@ class UrgencyReading:
         if found is None:
             raise UrgencyUnknown(field, key)
         return found
+
+    def live(self, field: str, key: str) -> Urgency:
+        """The live urgency ``key`` on ``field`` names — a mint's stated urgency, checked before its unit;
+        :class:`UrgencyUnknown` when it names none, :class:`UrgencyRetired` when it names a retired one."""
+        return require_live(field, key, self.resolve(key))
 
     def list(self, *, include_retired: bool = False) -> list[UrgencyView]:
         """The live urgencies in order, most urgent first; with ``include_retired``, the retired ones too, each at
@@ -424,27 +430,77 @@ class TenantSettingsService:
         return SettingsView(stored, default)
 
 
+@domain_model
+@dataclass(frozen=True)
+class MintAhead:
+    """A mint's urgency chain as read ahead of its unit: the urgency each link names, and the default's id.
+    :meth:`lock_keys` names the locks the unit declares beside its own — the settings' and every named urgency's."""
+
+    default_id: UrgencyId
+    stated: Urgency | None = None
+    chore: Urgency | None = None
+    routine: Urgency | None = None
+
+    def lock_keys(self) -> list[tuple[str, str]]:
+        named = {u.urgency_id for u in (self.stated, self.chore, self.routine) if u is not None} - {self.default_id}
+        return [*default_lock_keys(self.default_id), *sorted(urgency_lock(urgency_id) for urgency_id in named)]
+
+
 class TenantDefault:
-    """The tenant's default urgency for a mint. :meth:`lock_keys`, read before the mint's unit, names the locks the
-    unit declares beside its own; :meth:`read`, under them, re-reads the default and confirms it live. The settings'
-    lock holds the default still, since every change of the default and every retire takes it, so a default that
-    moved between the two reads is still live."""
+    """The mint's urgency seam, in two halves (``bzh:write-reestablishes-read``). :meth:`ahead`, before the mint's
+    unit, reads what each link of the chain names and the default, so the unit declares their locks beside its own;
+    :meth:`resolve`, under them, re-reads each named urgency by id and the default, and resolves the chain over what
+    it read there (:func:`~blizzard.hub.domain.urgency.chain.resolve_chain`). The settings' lock holds the default
+    still, since every change of the default and every retire takes it, so a default that moved between the two
+    reads is still live. A chore's or a routine's urgency retired ahead of the unit names none and takes no lock."""
 
     def __init__(self, *, settings: IReadTenantSettings, urgencies: IReadUrgencyRepository) -> None:
         self._settings = settings
         self._urgencies = urgencies
 
-    def read_id(self) -> UrgencyId:
-        """The default's id as it stands before the mint's unit — what its locks are named from."""
-        return _settings(self._settings).default_urgency_id
+    def ahead(
+        self, *, stated: Urgency | None = None, chore: str | None = None, routine: str | None = None
+    ) -> MintAhead:
+        """The chain ahead of the unit: ``stated`` — the urgency the request names, which the edge resolved and
+        confirmed live — and the slugs a chore's override and a routine's default name."""
+        return MintAhead(
+            default_id=_settings(self._settings).default_urgency_id,
+            stated=stated,
+            chore=self._live(chore),
+            routine=self._live(routine),
+        )
 
-    def lock_keys(self) -> list[tuple[str, str]]:
-        return default_lock_keys(self.read_id())
+    def _live(self, slug: str | None) -> Urgency | None:
+        found = None if slug is None else self._urgencies.get_by_slug(slug)
+        return found if found is not None and not found.retired else None
 
-    def read(self, transaction: Transaction) -> Urgency:
+    def resolve(self, ahead: MintAhead, transaction: Transaction) -> Urgency:
+        """The urgency the chunk is minted with, read under the locks ``ahead`` named.
+        :class:`~blizzard.hub.domain.urgency.model.UrgencyRetired` when the stated urgency was retired since."""
         settings = _settings(self._settings, transaction=transaction)
-        held = self._urgencies.get(settings.default_urgency_id, transaction=transaction)
-        return require_live(DEFAULT_URGENCY_FIELD, settings.default_urgency_id, held)
+        default = require_live(
+            DEFAULT_URGENCY_FIELD,
+            settings.default_urgency_id,
+            self._urgencies.get(settings.default_urgency_id, transaction=transaction),
+        )
+        stated = None if ahead.stated is None else self._again(ahead.stated, URGENCY_FIELD, transaction)
+        return resolve_chain(
+            ChainLinks(
+                stated=stated,
+                chore=self._again_or_none(ahead.chore, transaction),
+                routine=self._again_or_none(ahead.routine, transaction),
+            ),
+            default,
+        )
+
+    def _again(self, urgency: Urgency, field: str, transaction: Transaction) -> Urgency:
+        held = self._urgencies.get(urgency.urgency_id, transaction=transaction)
+        if held is None:
+            raise UrgencyUnknown(field, urgency.urgency_id)
+        return held
+
+    def _again_or_none(self, urgency: Urgency | None, transaction: Transaction) -> Urgency | None:
+        return None if urgency is None else self._urgencies.get(urgency.urgency_id, transaction=transaction)
 
 
 class UrgencyReferences:

@@ -31,6 +31,7 @@ from blizzard.hub.api.problem_exceptions import ProblemHTTPException
 from blizzard.hub.api.problem_rendering import declared_problem_response
 from blizzard.hub.api.project_label_fields import project_label_fields
 from blizzard.hub.api.project_params import QueryProject, body_project, project_of_call, project_ref
+from blizzard.hub.api.urgencies import stated_urgency, urgency_refusal
 from blizzard.hub.api.work_item_reads import read_chunk_work_items
 from blizzard.hub.auth.models import ResolvedIdentity
 from blizzard.hub.auth.permissions import Permission
@@ -83,6 +84,7 @@ from blizzard.hub.domain.operations.restart import (
 )
 from blizzard.hub.domain.operations.stop import ChunkNotStoppable
 from blizzard.hub.domain.projects.model import ProjectId
+from blizzard.hub.domain.urgency.model import UrgencyRetired, UrgencyUnknown
 from blizzard.hub.work_sources.registry import SelectedWorkSources
 from blizzard.wire.chunk import (
     BlockedView,
@@ -186,13 +188,15 @@ def ingest_chunk(request: ChunkIngestRequest, services: Services, http_request: 
     """Ingest by source-native token into the project named, or the one the tokens' sources
     agree on; 422 on a project the tenant does not hold, a token no configured source
     claims, a project the tokens leave open (``project_required``), a source the
-    project is not linked to (``source_not_linked``) and a hub item recorded in another
-    project; 409 on a pointer held by a live chunk;
+    project is not linked to (``source_not_linked``), a hub item recorded in another
+    project, and an ``urgency`` naming no urgency (``urgency_unknown``) or a retired one
+    (``urgency_retired``); 409 on a pointer held by a live chunk;
     503 if every graph named after the packaged default has been retired (the operator's
     brake, not a code bug: re-enable one or mint a new one)."""
     # Resolution before minting, and before the live-holder check: an unresolvable
     # token should not consult the store, and the request rejects as a whole.
     named = body_project(request.project, services).project_id if request.project is not None else None
+    urgency = stated_urgency(request.urgency, services)
     pointers: list[WorkRef] = []
     for token in request.tokens:
         pointer = services.work_sources.resolve(token)
@@ -222,7 +226,9 @@ def ingest_chunk(request: ChunkIngestRequest, services: Services, http_request: 
     except DefaultGraphRetired as exc:
         raise ProblemHTTPException(partial(problems_chunks.default_graph_retired_problem, str(exc))) from exc
     try:
-        chunk_id = services.ingest.ingest(pointers, graph=graph, project=project)
+        chunk_id = services.ingest.ingest(pointers, graph=graph, project=project, urgency=urgency)
+    except (UrgencyUnknown, UrgencyRetired) as exc:  # retired after the edge's check
+        raise urgency_refusal(exc) from exc
     except IngestSourceNotLinked as exc:  # unlinked after the project was chosen
         return ingest_project_refusal(http_request, services, exc)
     except IngestConflict as exc:

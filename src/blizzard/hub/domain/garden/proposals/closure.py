@@ -26,6 +26,7 @@ from blizzard.hub.domain.garden.proposals.model import (
 )
 from blizzard.hub.domain.graph.model import Graph
 from blizzard.hub.domain.projects.model import ProjectId
+from blizzard.hub.domain.urgency.model import Urgency
 from blizzard.hub.domain.work_items.editing import WorkItemEditService
 
 
@@ -92,14 +93,17 @@ class GardenProposalClosure:
         body: str | None,
         by: str,
         at: datetime,
+        urgency: Urgency | None = None,
     ) -> GardenProposalClosure:
         """The closure of an accept that mints no item. Refuses a closed proposal first,
-        then a `body` override (:class:`GardenProposalBodyWithoutMint`) — an override
-        only a minted item could carry. The reason is optional: stored stripped, a blank
+        then a `body` override or an `urgency` (:class:`GardenProposalBodyWithoutMint`) —
+        what only a minted item could carry. The reason is optional: stored stripped, a blank
         one as none."""
         proposal.require_legal(GardenProposalVerb.ACCEPT, existing)
         if body is not None:
             raise GardenProposalBodyWithoutMint(proposal.proposal_id)
+        if urgency is not None:
+            raise GardenProposalBodyWithoutMint(proposal.proposal_id, "urgency")
         return cls(
             proposal_id=proposal.proposal_id,
             closure=GardenProposalClosureKind.ACCEPTED,
@@ -177,12 +181,13 @@ class AcceptedGardenProposal:
 
 
 class GardenProposalBodyWithoutMint(ValueError):
-    """An accept declining to mint named a `body` override — the override is the minted
-    item's body, so an accept minting nothing can never carry it."""
+    """An accept declining to mint named a `body` override or an `urgency` — each is the
+    minted item's, so an accept minting nothing can never carry it."""
 
-    def __init__(self, proposal_id: str) -> None:
-        super().__init__(f"accepting garden proposal {proposal_id} without minting takes no body")
+    def __init__(self, proposal_id: str, field: str = "body") -> None:
+        super().__init__(f"accepting garden proposal {proposal_id} without minting takes no {field}")
         self.proposal_id = proposal_id
+        self.field = field
 
 
 class GardenProposalPassReasonRequired(ValueError):
@@ -294,16 +299,18 @@ class GardenProposalClosureService:
         body: str | None,
         mint: bool,
         findings: Sequence[Finding],
+        urgency: Urgency | None = None,
     ) -> AcceptedGardenProposal:
         """Accept ``proposal`` — ``blizzard-context:/domain/findings-and-proposals.md`` §Closing a proposal.
         ``mint=True`` resolves the default graph only once the proposal is known open and composes the item
-        body from the already-loaded ``findings``. Raises :class:`GardenProposalAlreadyClosed`,
+        body from the already-loaded ``findings``; its chunk carries ``urgency`` — the live urgency the caller
+        states — or else the tenant's default. Raises :class:`GardenProposalAlreadyClosed`,
         :class:`GardenProposalBodyWithoutMint` for a body on a non-minting accept, and
         :class:`~blizzard.hub.domain.chunk.ingest.IngestConflict` on a raced ref."""
         existing = self._closures.get(proposal.proposal_id)
         if not mint:
             closure = GardenProposalClosure.accepted_declining(
-                proposal, existing, reason=reason, body=body, by=by, at=self._clock.now()
+                proposal, existing, reason=reason, body=body, by=by, at=self._clock.now(), urgency=urgency
             )
             if not self._closures.record_accept_decline(
                 proposal.proposal_id, reason=closure.reason, closed_by=by, at=closure.closed_at
@@ -320,6 +327,7 @@ class GardenProposalClosureService:
             project_id=ProjectId(proposal.project_id),
             reason=accept.reason,
             closed_by=by,
+            urgency=urgency,
         )
         if minted is None:
             self._raise_already_closed(proposal.proposal_id)

@@ -115,6 +115,9 @@ class RoutineRunRequest(BaseModel):
     scope_slug: str | None = None
     mode: RunMode = RunMode.FULL
     note: str | None = None
+    #: The urgency the run's chunk takes, by id or slug, over the routine's default for this run alone; ``None``
+    #: takes the routine's default, or else the tenant's.
+    urgency: str | None = None
 
 
 class RoutineBaselineRepoView(BaseModel):

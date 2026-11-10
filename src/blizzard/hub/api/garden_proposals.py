@@ -21,6 +21,7 @@ from blizzard.hub.api.problem_exceptions import ProblemHTTPException
 from blizzard.hub.api.project_label_fields import ProjectLabelFields
 from blizzard.hub.api.project_labels import ProjectLabels
 from blizzard.hub.api.project_params import PathProject, QueryProject, project_of_call
+from blizzard.hub.api.urgencies import stated_urgency, urgency_refusal
 from blizzard.hub.auth.models import ResolvedIdentity
 from blizzard.hub.auth.permissions import Permission
 from blizzard.hub.composition import TenantServices
@@ -51,6 +52,7 @@ from blizzard.hub.domain.graph.authoring import DefaultGraphRetired
 from blizzard.hub.domain.kernel.pagination import DEFAULT_LIMIT, MAX_LIMIT, MalformedCursor
 from blizzard.hub.domain.kernel.unset import UNSET
 from blizzard.hub.domain.projects.model import Project
+from blizzard.hub.domain.urgency.model import UrgencyRetired, UrgencyUnknown
 from blizzard.hub.domain.work_items.model import WorkItemFieldBlank
 from blizzard.wire.garden_proposal import (
     GardenProposalAcceptRequest,
@@ -239,9 +241,11 @@ def accept_garden_proposal(
     template when the proposal names findings and bare when it names none. When it is
     false, mints nothing and records the decline. Promotes nothing and changes no
     finding's state. A blank reason is stored as none. 404 unknown proposal, 422 a `body`
-    with `mint_work_item` false or a minted item left with a blank title or body, 409
+    or an `urgency` with `mint_work_item` false, an `urgency` naming no urgency
+    (`urgency_unknown`) or a retired one (`urgency_retired`), or a minted item left with a blank title or body, 409
     already closed or a raced ingest, 503 the packaged default graph retired."""
     proposal = _get_or_404(proposal_id, services)
+    urgency = stated_urgency(request.urgency, services)
     proposal_findings = resolve_proposal_findings(services.findings, proposal.findings)
     try:
         accepted = services.garden_proposal_closure.accept(
@@ -251,7 +255,10 @@ def accept_garden_proposal(
             body=request.body,
             mint=request.mint_work_item,
             findings=proposal_findings,
+            urgency=urgency,
         )
+    except (UrgencyUnknown, UrgencyRetired) as exc:  # retired after the edge's check
+        raise urgency_refusal(exc) from exc
     except (GardenProposalBodyWithoutMint, WorkItemFieldBlank) as exc:
         raise ProblemHTTPException(partial(problems_garden.garden_proposal_invalid_problem, str(exc))) from exc
     except GardenProposalAlreadyClosed as exc:

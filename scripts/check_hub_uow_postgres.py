@@ -55,7 +55,10 @@ _RETIRING = UrgencyId("urg_proof")
 #: ranking locks, and the default ``urg_proof``'s, beside the promoted chunk and both ranking locks — run each way
 #: round. Each first writer holds every lock it declares, so the second blocks on the ranking locks and lands only
 #: once the first commits.
-_MINT: _LockSet = (["n"], mint_lock_keys(ErrandKey("chr_proof", "scp_proof"), promote=True, default_id=_RETIRING))
+_MINT: _LockSet = (
+    ["n"],
+    mint_lock_keys(ErrandKey("chr_proof", "scp_proof"), promote=True, urgencies=default_lock_keys(_RETIRING)),
+)
 _PROMOTE: _LockSet = (["a"], [READY_RANKING_LOCK, BACKLOG_RANKING_LOCK])
 #: A retire of ``urg_proof`` moving its work to ``urg_other`` against a mint writing ``urg_proof`` as the default —
 #: the hub item, proposal, routine, and ingest mints' set, and the cadence mint's — and a settings edit naming it,

@@ -24,7 +24,7 @@ from blizzard.hub.domain.graph.model import Graph
 from blizzard.hub.domain.kernel.hub_source import RESERVED_HUB_SOURCE_NAME
 from blizzard.hub.domain.projects.links import IReadProjectLinks
 from blizzard.hub.domain.projects.model import ProjectId
-from blizzard.hub.domain.urgency.model import UrgencyId
+from blizzard.hub.domain.urgency.model import Urgency, UrgencyId
 from blizzard.hub.domain.urgency.services import TenantDefault
 
 
@@ -263,7 +263,9 @@ class IngestService:
         except IngestSourceNotLinked as exc:
             raise exc.labelled(self._labels) from None
 
-    def ingest(self, pointers: Sequence[WorkRef], *, graph: Graph, project: ProjectId | None) -> str:
+    def ingest(
+        self, pointers: Sequence[WorkRef], *, graph: Graph, project: ProjectId | None, urgency: Urgency | None = None
+    ) -> str:
         """Mint a chunk wrapping ``pointers`` into ``project`` — or, with ``None``, the project
         :func:`choose_ingest_project` infers. Raises :class:`EmptyIngest` for no pointer, the
         project refusals of :func:`choose_ingest_project`, and :class:`IngestConflict` for a pointer
@@ -271,19 +273,21 @@ class IngestService:
 
         The links are read once to choose the project, then again under that project's source-link
         lock — taken before the pointers' — so a source unlinked in between refuses the ingest
-        rather than minting a chunk its project no longer draws from. The same unit takes the tenant's
-        default urgency's locks and re-reads the default under them for the chunk."""
+        rather than minting a chunk its project no longer draws from. The same unit takes the locks of
+        ``urgency`` — the live urgency the caller states — and of the tenant's default, and resolves the chunk's
+        urgency over them re-read there."""
         work_refs = ingest_work_refs(pointers)
         chosen = self.choose_project(work_refs, project)
+        ahead = self._default.ahead(stated=urgency)
         try:
-            with self._exclusive.locked_work_refs(work_refs, project=chosen, keys=self._default.lock_keys()) as handle:
+            with self._exclusive.locked_work_refs(work_refs, project=chosen, keys=ahead.lock_keys()) as handle:
                 choose_ingest_project(chosen, work_refs, handle.source_links(configured_sources(work_refs)), {})
                 chunk = decide_ingest(
                     work_refs,
                     live_holders=handle.live_holders(work_refs),
                     graph=graph,
                     project_id=chosen,
-                    urgency_id=self._default.read(handle.transaction).urgency_id,
+                    urgency_id=self._default.resolve(ahead, handle.transaction).urgency_id,
                     at=self._clock.now(),
                 )
                 self._record.mint_locked(handle, chunk)

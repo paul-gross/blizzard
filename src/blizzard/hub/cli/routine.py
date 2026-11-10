@@ -315,9 +315,22 @@ def _set_routine_lifecycle(cli: CliContext, name: str, *, verb: str, by: str, pr
     help="delta downgrades to full when the routine/scope pair has recorded no baseline.",
 )
 @click.option("--note", default=None, help='A note appended to the run\'s charge as a "This run" section.')
+@click.option(
+    "--urgency",
+    "urgency",
+    default=None,
+    metavar="URGENCY",
+    help="The urgency the run's chunk takes, by id or slug, over the routine's default for this run alone.",
+)
 @project_option(required_by_hub=True)
 def routine_run(
-    cli: CliContext, name: str, scope_slug: str | None, mode: str, note: str | None, project: str | None
+    cli: CliContext,
+    name: str,
+    scope_slug: str | None,
+    mode: str,
+    note: str | None,
+    urgency: str | None,
+    project: str | None,
 ) -> None:
     """Create a work item from routine NAME (its slug) and a chunk carrying it.
 
@@ -327,7 +340,12 @@ def routine_run(
     resp = cli.send(
         "post",
         f"/api/routines/{routine_id}/run",
-        json_body={"scope_slug": scope_slug, "mode": mode, "note": note},
+        json_body={
+            "scope_slug": scope_slug,
+            "mode": mode,
+            "note": note,
+            **({"urgency": urgency} if urgency is not None else {}),
+        },
     )
     refusal = refusal_of(resp)
     if refusal.type == POINTER_ALREADY_HELD:

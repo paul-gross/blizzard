@@ -184,17 +184,26 @@ class Pointer(click.ParamType[str]):
     help="The project to mint the chunk in, by id or slug. Without it, the project the pointers' work sources are "
     "linked to; needed when they name none or disagree.",
 )
-def chunk_ingest(cli: CliContext, pointers: tuple[str, ...], project: str | None) -> None:
+@click.option(
+    "--urgency",
+    "urgency",
+    default=None,
+    metavar="URGENCY",
+    help="The urgency the minted chunk takes, by id or slug (default: the tenant's default urgency).",
+)
+def chunk_ingest(cli: CliContext, pointers: tuple[str, ...], project: str | None, urgency: str | None) -> None:
     """Ingest work items by token, minting a chunk.
 
     Each POINTER is a source-native token — ``source:ref``, ``source#ref``, or a pasted
     work item URL; a batch mints one chunk carrying every pointer. Refused when no
     configured work source claims a token, a pointer's source is not linked to the
-    project, or another chunk already holds a pointer."""
+    project, another chunk already holds a pointer, or --urgency names no live urgency."""
     tokens = list(pointers)
     request: dict[str, object] = {"tokens": tokens}
     if project is not None:
         request["project"] = project
+    if urgency is not None:
+        request["urgency"] = urgency
     resp = cli.send("post", "/api/chunks", json_body=request)
     refusal = refusal_of(resp)
     if refusal.type == POINTER_ALREADY_HELD:

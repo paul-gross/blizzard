@@ -31,6 +31,7 @@ from blizzard.hub.domain.kernel.hub_source import RESERVED_HUB_SOURCE_NAME
 from blizzard.hub.domain.kernel.transactions import IHubTransactions
 from blizzard.hub.domain.operations.delete import ChunkHasDependents, ChunkNotDeletable, DeleteService
 from blizzard.hub.domain.projects.model import ProjectId
+from blizzard.hub.domain.urgency.model import Urgency
 from blizzard.hub.domain.urgency.services import TenantDefault
 from blizzard.hub.domain.work_items.model import (
     Transition,
@@ -178,9 +179,10 @@ class WorkItemEditService:
         stated_priority: WorkItemPriority | None,
         graph: Graph,
         project_id: ProjectId,
+        urgency: Urgency | None = None,
     ) -> CreatedWorkItem:
-        """File the item and mint its resting chunk of ``project_id`` in one unit, carrying the tenant's default
-        urgency read under the default's locks, pinned to
+        """File the item and mint its resting chunk of ``project_id`` in one unit, carrying ``urgency`` — the
+        live urgency the caller states — or else the tenant's default, read again under their locks, pinned to
         ``graph``, holding the pointer this call allocates. An out-of-band ingest of the same ref can
         pre-empt it, raising :class:`~blizzard.hub.domain.chunk.ingest.IngestConflict` and burning the
         ref. A blank title or body raises
@@ -189,10 +191,10 @@ class WorkItemEditService:
         pointer, draft, at = prepare_mint(
             self._items, self._work_refs, self._clock, source, graph=graph, project_id=project_id
         )
-        keys = self._default.lock_keys()
+        ahead = self._default.ahead(stated=urgency)
         with self._transactions.begin() as transaction:
-            locked = transaction.lock_set(keys=keys)
-            chunk = draft.mint(self._default.read(locked).urgency_id)
+            locked = transaction.lock_set(keys=ahead.lock_keys())
+            chunk = draft.mint(self._default.resolve(ahead, locked).urgency_id)
             item = self._items.create_with_chunk(
                 pointer=pointer,
                 title=text.title,
@@ -216,6 +218,7 @@ class WorkItemEditService:
         project_id: ProjectId,
         reason: str | None,
         closed_by: str,
+        urgency: Urgency | None = None,
     ) -> CreatedWorkItem | None:
         """A garden-proposal acceptance's mint path: :meth:`create`'s guard sequence into the reserved hub
         source and the proposal's ``project_id``, writing the item, its chunk, and the closure row on one
@@ -225,10 +228,10 @@ class WorkItemEditService:
         pointer, draft, at = prepare_mint(
             self._items, self._work_refs, self._clock, RESERVED_HUB_SOURCE_NAME, graph=graph, project_id=project_id
         )
-        keys = self._default.lock_keys()
+        ahead = self._default.ahead(stated=urgency)
         with self._transactions.begin() as transaction:
-            locked = transaction.lock_set(keys=keys)
-            chunk = draft.mint(self._default.read(locked).urgency_id)
+            locked = transaction.lock_set(keys=ahead.lock_keys())
+            chunk = draft.mint(self._default.resolve(ahead, locked).urgency_id)
             item = self._items.accept_create(
                 proposal_id=proposal_id,
                 pointer=pointer,

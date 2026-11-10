@@ -30,6 +30,7 @@ from blizzard.hub.api.problem_exceptions import ProblemHTTPException
 from blizzard.hub.api.project_label_fields import ProjectLabelFields
 from blizzard.hub.api.project_labels import ProjectLabels
 from blizzard.hub.api.project_params import CallProject, PathProject, QueryProject, project_of_call
+from blizzard.hub.api.urgencies import stated_urgency, urgency_refusal
 from blizzard.hub.auth.models import ResolvedIdentity
 from blizzard.hub.auth.permissions import Permission
 from blizzard.hub.composition import TenantServices
@@ -56,6 +57,7 @@ from blizzard.hub.domain.garden.runs.window import InvalidWindowError, require_u
 from blizzard.hub.domain.garden.scopes import Scope, ScopeSlug, ScopeSlugError
 from blizzard.hub.domain.graph.harnesses import InvalidHarnesses
 from blizzard.hub.domain.projects.model import Project
+from blizzard.hub.domain.urgency.model import UrgencyRetired, UrgencyUnknown
 from blizzard.wire.garden_proposal_counts import GardenProposalCountsRowView, GardenProposalCountsView
 from blizzard.wire.garden_sweeps import GardenSweepsView, MeasurementReadingView, ScopeSweepView
 from blizzard.wire.garden_trend import TrendAgeView, TrendPeriodView, TrendView
@@ -647,7 +649,8 @@ def run_routine(
     scope, or a graph name with no
     enabled mint (mirroring ``POST /work-sources/{source}/items``'s own
     retired-default-graph shape); 409 on an out-of-band ingest already holding the
-    allocated ref's pointer."""
+    allocated ref's pointer; 422 ``urgency_unknown`` or ``urgency_retired`` on an ``urgency``
+    naming no urgency or a retired one, which outranks the routine's default for this run alone."""
     routine = services.routines.get(routine_id)
     if routine is None:
         raise ProblemHTTPException(
@@ -657,6 +660,7 @@ def run_routine(
         services.routine_run.refuse_if_retired(routine)
     except RoutineRetiredError as exc:
         raise ProblemHTTPException(partial(problems_garden.routine_not_runnable_problem, str(exc))) from exc
+    urgency = stated_urgency(request.urgency, services)
     try:
         slug = routine.effective_scope_slug(
             ScopeSlug.parse(request.scope_slug) if request.scope_slug is not None else None
@@ -675,7 +679,10 @@ def run_routine(
             mode=request.mode,
             note=request.note,
             author=WorkItemAuthor.user(identity.user_id),
+            urgency=urgency,
         )
+    except (UrgencyUnknown, UrgencyRetired) as exc:  # retired after the edge's check
+        raise urgency_refusal(exc) from exc
     except ScopeNotRelatedError as exc:
         raise ProblemHTTPException(
             partial(

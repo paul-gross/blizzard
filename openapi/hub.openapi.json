@@ -3917,6 +3917,17 @@
             },
             "title": "Tokens",
             "type": "array"
+          },
+          "urgency": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Urgency"
           }
         },
         "required": [
@@ -11962,6 +11973,17 @@
               }
             ],
             "title": "Reason"
+          },
+          "urgency": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Urgency"
           }
         },
         "title": "GardenProposalAcceptRequest",
@@ -21312,6 +21334,17 @@
               }
             ],
             "title": "Scope Slug"
+          },
+          "urgency": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Urgency"
           }
         },
         "title": "RoutineRunRequest",
@@ -28466,6 +28499,17 @@
           "title": {
             "title": "Title",
             "type": "string"
+          },
+          "urgency": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Urgency"
           }
         },
         "required": [
@@ -36690,7 +36734,7 @@
         ]
       },
       "post": {
-        "description": "Ingest by source-native token into the project named, or the one the tokens' sources\nagree on; 422 on a project the tenant does not hold, a token no configured source\nclaims, a project the tokens leave open (``project_required``), a source the\nproject is not linked to (``source_not_linked``) and a hub item recorded in another\nproject; 409 on a pointer held by a live chunk;\n503 if every graph named after the packaged default has been retired (the operator's\nbrake, not a code bug: re-enable one or mint a new one).",
+        "description": "Ingest by source-native token into the project named, or the one the tokens' sources\nagree on; 422 on a project the tenant does not hold, a token no configured source\nclaims, a project the tokens leave open (``project_required``), a source the\nproject is not linked to (``source_not_linked``), a hub item recorded in another\nproject, and an ``urgency`` naming no urgency (``urgency_unknown``) or a retired one\n(``urgency_retired``); 409 on a pointer held by a live chunk;\n503 if every graph named after the packaged default has been retired (the operator's\nbrake, not a code bug: re-enable one or mint a new one).",
         "operationId": "ingest_chunk_api_chunks_post",
         "requestBody": {
           "content": {
@@ -49602,7 +49646,7 @@
     },
     "/api/garden-proposals/{proposal_id}/accept": {
       "post": {
-        "description": "Accept the proposal at `{proposal_id}`. When `mint_work_item` is true, mints a linked\nhub work item from `body` (or the proposal's own), wrapped in the \"Related findings\"\ntemplate when the proposal names findings and bare when it names none. When it is\nfalse, mints nothing and records the decline. Promotes nothing and changes no\nfinding's state. A blank reason is stored as none. 404 unknown proposal, 422 a `body`\nwith `mint_work_item` false or a minted item left with a blank title or body, 409\nalready closed or a raced ingest, 503 the packaged default graph retired.",
+        "description": "Accept the proposal at `{proposal_id}`. When `mint_work_item` is true, mints a linked\nhub work item from `body` (or the proposal's own), wrapped in the \"Related findings\"\ntemplate when the proposal names findings and bare when it names none. When it is\nfalse, mints nothing and records the decline. Promotes nothing and changes no\nfinding's state. A blank reason is stored as none. 404 unknown proposal, 422 a `body`\nor an `urgency` with `mint_work_item` false, an `urgency` naming no urgency\n(`urgency_unknown`) or a retired one (`urgency_retired`), or a minted item left with a blank title or body, 409\nalready closed or a raced ingest, 503 the packaged default graph retired.",
         "operationId": "accept_garden_proposal_api_garden_proposals__proposal_id__accept_post",
         "parameters": [
           {
@@ -59476,7 +59520,7 @@
     },
     "/api/routines/{routine_id}/run": {
       "post": {
-        "description": "Mint and ingest a hub work item from the routine, in one act; its chunk rests ``not_ready``\nuntil promoted.\n422 on an unknown ``mode`` (request validation, before any lookup); 404 on an unknown id;\n422 on a malformed ``scope_slug``, or an effective scope no scope row holds or outside the\nroutine's own related set (never minted); 503 on a retired routine\n(checked before the scope is even parsed), a retired effective\nscope, or a graph name with no\nenabled mint (mirroring ``POST /work-sources/{source}/items``'s own\nretired-default-graph shape); 409 on an out-of-band ingest already holding the\nallocated ref's pointer.",
+        "description": "Mint and ingest a hub work item from the routine, in one act; its chunk rests ``not_ready``\nuntil promoted.\n422 on an unknown ``mode`` (request validation, before any lookup); 404 on an unknown id;\n422 on a malformed ``scope_slug``, or an effective scope no scope row holds or outside the\nroutine's own related set (never minted); 503 on a retired routine\n(checked before the scope is even parsed), a retired effective\nscope, or a graph name with no\nenabled mint (mirroring ``POST /work-sources/{source}/items``'s own\nretired-default-graph shape); 409 on an out-of-band ingest already holding the\nallocated ref's pointer; 422 ``urgency_unknown`` or ``urgency_retired`` on an ``urgency``\nnaming no urgency or a retired one, which outranks the routine's default for this run alone.",
         "operationId": "run_routine_api_routines__routine_id__run_post",
         "parameters": [
           {
@@ -66102,7 +66146,7 @@
         ]
       },
       "post": {
-        "description": "Allocate a fresh item at SOURCE, open, authored by the caller, and mint its\nresting ``not_ready`` chunk in the same transaction, both in the project ``?project=`` names\n\u2014 the tenant's only one when it names none. 404/409 from the source's editor gate,\n422 for a blank title or body, an unknown project, or no project named in a tenant\nholding several (``project_required``), 409 if an out-of-band ingest already holds the\nallocated ref's pointer, 503 if every graph named after the packaged default has\nbeen retired (the operator's brake, mirroring ``POST /chunks``).",
+        "description": "Allocate a fresh item at SOURCE, open, authored by the caller, and mint its\nresting ``not_ready`` chunk in the same transaction, both in the project ``?project=`` names\n\u2014 the tenant's only one when it names none. 404/409 from the source's editor gate,\n422 for a blank title or body, an ``urgency`` naming no urgency (``urgency_unknown``) or a\nretired one (``urgency_retired``), an unknown project, or no project named in a tenant\nholding several (``project_required``), 409 if an out-of-band ingest already holds the\nallocated ref's pointer, 503 if every graph named after the packaged default has\nbeen retired (the operator's brake, mirroring ``POST /chunks``).",
         "operationId": "create_work_item_api_work_sources__source__items_post",
         "parameters": [
           {

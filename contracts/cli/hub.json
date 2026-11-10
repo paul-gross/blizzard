@@ -2258,7 +2258,7 @@
           "short_help": "Merge MERGE_IDS into CHUNK_ID, which keeps its own status and gains their work items and dependencies."
         },
         "ingest": {
-          "help": "Ingest work items by token, minting a chunk.\n\nEach POINTER is a source-native token \u2014 ``source:ref``, ``source#ref``, or a pasted\nwork item URL; a batch mints one chunk carrying every pointer. Refused when no\nconfigured work source claims a token, a pointer's source is not linked to the\nproject, or another chunk already holds a pointer.",
+          "help": "Ingest work items by token, minting a chunk.\n\nEach POINTER is a source-native token \u2014 ``source:ref``, ``source#ref``, or a pasted\nwork item URL; a batch mints one chunk carrying every pointer. Refused when no\nconfigured work source claims a token, a pointer's source is not linked to the\nproject, another chunk already holds a pointer, or --urgency names no live urgency.",
           "params": [
             {
               "hidden": false,
@@ -2278,6 +2278,18 @@
               "name": "project",
               "opts": [
                 "--project"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "text"
+            },
+            {
+              "help": "The urgency the minted chunk takes, by id or slug (default: the tenant's default urgency).",
+              "hidden": false,
+              "kind": "option",
+              "name": "urgency",
+              "opts": [
+                "--urgency"
               ],
               "required": false,
               "secondary_opts": [],
@@ -5268,7 +5280,7 @@
       ],
       "commands": {
         "accept": {
-          "help": "Accept PROPOSAL_ID.\n\nMints a linked hub work item by default, from the proposal's own body unless --body-file\nsupplies another; the body is wrapped in the \"Related findings\" template when the\nproposal cites findings, and minted bare otherwise. --no-work-item mints nothing and\nrecords the decline; the hub refuses it alongside --body-file, a body only a minted item\ncarries.",
+          "help": "Accept PROPOSAL_ID.\n\nMints a linked hub work item by default, from the proposal's own body unless --body-file\nsupplies another; the body is wrapped in the \"Related findings\" template when the\nproposal cites findings, and minted bare otherwise. --no-work-item mints nothing and\nrecords the decline; the hub refuses it alongside --body-file or --urgency, which only a\nminted item carries.",
           "params": [
             {
               "hidden": false,
@@ -5316,6 +5328,18 @@
               "required": false,
               "secondary_opts": [],
               "type": "boolean"
+            },
+            {
+              "help": "The urgency the minted item's chunk takes, by id or slug (default: the tenant's default urgency).",
+              "hidden": false,
+              "kind": "option",
+              "name": "urgency",
+              "opts": [
+                "--urgency"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "text"
             },
             {
               "help": "Print the raw response body as JSON.",
@@ -6592,6 +6616,18 @@
               "name": "source",
               "opts": [
                 "--source"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "text"
+            },
+            {
+              "help": "The urgency the minted chunk takes, by id or slug (default: the tenant's default urgency).",
+              "hidden": false,
+              "kind": "option",
+              "name": "urgency",
+              "opts": [
+                "--urgency"
               ],
               "required": false,
               "secondary_opts": [],
@@ -9443,6 +9479,18 @@
               "name": "note",
               "opts": [
                 "--note"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "text"
+            },
+            {
+              "help": "The urgency the run's chunk takes, by id or slug, over the routine's default for this run alone.",
+              "hidden": false,
+              "kind": "option",
+              "name": "urgency",
+              "opts": [
+                "--urgency"
               ],
               "required": false,
               "secondary_opts": [],

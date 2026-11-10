@@ -77,6 +77,8 @@ class ChunkIngestRequest(BaseModel):
     tokens: list[str]
     #: The project to ingest into, by id or slug; ``None`` infers it from the tokens' configured sources.
     project: str | None = None
+    #: The urgency the chunk is minted with, by id or slug; ``None`` takes the tenant's default.
+    urgency: str | None = None
 
 
 class ChunkIngestResponse(WireModel):

@@ -38,8 +38,7 @@ from blizzard.hub.domain.operations.queue import (
     write_positions,
 )
 from blizzard.hub.domain.projects.model import ProjectId
-from blizzard.hub.domain.urgency.model import UrgencyId
-from blizzard.hub.domain.urgency.services import TenantDefault, default_lock_keys
+from blizzard.hub.domain.urgency.services import TenantDefault
 from blizzard.hub.domain.work_items.editing import prepare_mint
 from blizzard.hub.domain.work_items.ports import IWriteWorkItemRepository
 
@@ -110,14 +109,15 @@ class ErrandPlanning:
         }
 
 
-def mint_lock_keys(key: ErrandKey, *, promote: bool, default_id: UrgencyId) -> list[tuple[str, str]]:
+def mint_lock_keys(key: ErrandKey, *, promote: bool, urgencies: Sequence[tuple[str, str]]) -> list[tuple[str, str]]:
     """The keyed locks an errand's mint takes: its errand's, for a promoting chore both lists' ranking locks, as
-    the queue's own promote takes them, and the default urgency's, as every mint takes them. The store takes them in
+    the queue's own promote takes them, and ``urgencies`` — the settings' and those of the urgencies its chain names,
+    as every mint takes them. The store takes them in
     canonical order: errand, then ranking, then urgency."""
     return [
         errand_lock(key),
         *((READY_RANKING_LOCK, BACKLOG_RANKING_LOCK) if promote else ()),
-        *default_lock_keys(default_id),
+        *urgencies,
     ]
 
 
@@ -191,15 +191,15 @@ class CadenceMint:
             default_harnesses=routine.default_harnesses,
         )
         promote = errand.chore.spec.promote
-        default_id = self._default.read_id()
+        ahead = self._default.ahead(chore=errand.chore.spec.urgency, routine=routine.default_urgency)
         with self._transactions.begin() as transaction:
             locked = transaction.lock_set(
                 chunks=[draft.chunk_id] if promote else [],
-                keys=mint_lock_keys(errand.key, promote=promote, default_id=default_id),
+                keys=mint_lock_keys(errand.key, promote=promote, urgencies=ahead.lock_keys()),
             )
             if run_moved(judged, self._runs.last_runs([errand.key], transaction=locked).get(errand.key)):
                 return None
-            chunk = draft.mint(self._default.read(locked).urgency_id)
+            chunk = draft.mint(self._default.resolve(ahead, locked).urgency_id)
             item = self._items.create_run_with_chunk(
                 pointer=pointer,
                 title=plan.title,
