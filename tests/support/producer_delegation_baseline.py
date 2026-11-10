@@ -1,6 +1,6 @@
 """Source-bound candidate and unresolved fingerprints, not refusal declarations."""
 
-APPLICATION_SOURCE_DIGEST = "9d7f1a48eac93ca289eeb5575b750e786f64fda41b7636bbd4a5c46b01f71193"
+APPLICATION_SOURCE_DIGEST = "a5e687e1b89475e3d73936c3bbc4dcef0e907d5fd253b08879dddf8b214314af"
 
 EVIDENCE = """\
 GET /api/auth/authorize ff20205ca0727f2306058646cfcb63897e66a3ceb35aab37cb57231fab3ea8ed f8e902b97fd1fbf35ae48402f44c1c8bc6b580c55e9c8778fdf54c03d2e64409
