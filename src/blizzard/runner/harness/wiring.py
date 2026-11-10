@@ -19,8 +19,8 @@ from blizzard.runner.config_table import ConfigError
 from blizzard.runner.harness.adapter import EverySpawnRootProbe, IHarnessHealthProbe
 from blizzard.runner.harness.autonomy import Autonomy
 from blizzard.runner.harness.binding_selection import BindingSelection, HarnessFamilies, select_bindings
-from blizzard.runner.harness.bundle import BundleSnapshot, HarnessLayout, HarnessSource
-from blizzard.runner.harness.claude_code.section import CLAUDE_CODE_SECTION, WORKER_SETTINGS_FILENAME
+from blizzard.runner.harness.bundle import BundleSnapshot, HarnessBundleNotPublished, HarnessLayout, HarnessSource
+from blizzard.runner.harness.claude_code.section import CLAUDE_CODE_SECTION
 from blizzard.runner.harness.declaration import (
     HarnessSection,
     IHarnessDeclaration,
@@ -29,12 +29,16 @@ from blizzard.runner.harness.declaration import (
     SharedHarnessInputs,
 )
 from blizzard.runner.harness.harness_telemetry_plan import HarnessTelemetryNames, HarnessTelemetryPlan
-from blizzard.runner.harness.internal.bundle_publisher import inspect_bundle, publish_bundle, published_snapshot
+from blizzard.runner.harness.internal.bundle_publisher import (
+    inspect_bundle,
+    load_published_bundle,
+    publish_bundle,
+    published_snapshot,
+)
 from blizzard.runner.harness.internal.process_launcher import ProcessLauncher
 from blizzard.runner.harness.internal.version_probe import VersionProbe
 from blizzard.runner.harness.offline_compatibility import ICompatibilityCorpus
-from blizzard.runner.harness.opencode.plugin import PLUGIN_DIRNAME, PLUGIN_FILENAME
-from blizzard.runner.harness.opencode.section import OPENCODE_SECTION, OPENCODE_WORKER_CONFIG_FILENAME
+from blizzard.runner.harness.opencode.section import OPENCODE_SECTION
 from blizzard.runner.harness.registry import HarnessBinding, HarnessRegistry
 from blizzard.runner.process.child_env import AllowlistedEnv
 from blizzard.runner.process.child_processes import IChildProcesses
@@ -44,14 +48,8 @@ from blizzard.runner.process.probe import IProcessProbe
 HARNESS_SECTION_KINDS: tuple[IHarnessSectionKind, ...] = (CLAUDE_CODE_SECTION, OPENCODE_SECTION)
 
 #: Each file ``scaffold_runtime`` writes under the host root — its path there and what it holds — across the catalog.
-HARNESS_RUNTIME_FILES: tuple[tuple[str, str], ...] = (
-    (WORKER_SETTINGS_FILENAME, "the claude-code harness's worker settings"),
-    (f"{PLUGIN_DIRNAME}/{PLUGIN_FILENAME}", "the opencode harness's heartbeat plugin"),
-    (
-        OPENCODE_WORKER_CONFIG_FILENAME,
-        "the opencode harness's worker config, the default location that the opencode section's "
-        "`worker_config_path` overrides",
-    ),
+HARNESS_RUNTIME_FILES: tuple[tuple[str, str], ...] = tuple(
+    (file.path, file.holds) for kind in HARNESS_SECTION_KINDS for file in kind.runtime_files
 )
 
 
@@ -272,6 +270,8 @@ def build_production_harnesses(
         harness_telemetry_enabled=harness_telemetry_enabled,
         runner_environ=runner_environ,
     )
+    if settings.config_dir is not None and bundle is None:
+        raise ValueError("a harness config_dir is set but no bundle snapshot was supplied; publish or load it first")
     roots = tuple(dict.fromkeys(spawn_roots)) or ("",)
     bindings: dict[str, HarnessBinding] = {}
     probes: dict[str, IHarnessHealthProbe] = {}
@@ -323,6 +323,18 @@ def inspect_harness_bundle(config_dir: Path, selection: BindingSelection) -> tup
     return inspect_bundle(config_dir, bundle_layouts(selection))
 
 
+def load_published_harness_bundle(
+    config_dir: Path, runtime_root: Path, *, selection: BindingSelection
+) -> BundleSnapshot:
+    """The already-published snapshot of ``config_dir`` for a verb that composes bindings without serving: read-only,
+    never moving ``current`` under a live daemon. Refuses a bundle with no published snapshot
+    (:class:`~blizzard.runner.harness.bundle.HarnessBundleNotPublished`)."""
+    snapshot = load_published_bundle(config_dir, runtime_root, bundle_layouts(selection))
+    if snapshot is None:
+        raise HarnessBundleNotPublished(config_dir)
+    return snapshot
+
+
 def published_harness_snapshot(runtime_root: Path) -> Path | None:
     """The snapshot ``runtime_root``'s ``current`` resolves to, or ``None`` when nothing is published."""
     return published_snapshot(runtime_root)
@@ -345,6 +357,7 @@ __all__ = [
     "harness_catalog",
     "harness_families",
     "inspect_harness_bundle",
+    "load_published_harness_bundle",
     "publish_harness_bundle",
     "published_harness_snapshot",
     "select_harness_bindings",

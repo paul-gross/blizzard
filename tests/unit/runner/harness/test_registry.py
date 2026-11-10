@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from collections.abc import Sequence
 from concurrent.futures import Executor, ThreadPoolExecutor
+from dataclasses import replace
 from pathlib import Path
 from typing import cast
 
@@ -31,7 +32,7 @@ from blizzard.runner.harness.registry import (
 from blizzard.runner.harness.wiring import HarnessSettings, build_production_harnesses, first_bindings
 from blizzard.runner.process.internal.linux_process_probe import LinuxProcessProbe
 from tests.support.child_launch import CHILDREN
-from tests.support.config_inputs import export_runner_app
+from tests.support.config_inputs import export_runner_app, init_host
 from tests.support.harness_sections import with_claude_code, with_opencode
 from tests.support.runner_client import runner_seams
 from tests.support.runner_fakes import NO_TRACING, FakeHarness, FakeTranscriptSource
@@ -160,6 +161,12 @@ def _harnesses(
         spawn_roots=spawn_roots,
         corpus=corpus or CommittedCorpus(),
     )
+
+
+def test_a_config_dir_without_a_bundle_is_refused_at_assembly(tmp_path: Path) -> None:
+    config = replace(init_host(tmp_path / "runtime").runner_config(), harness_config_dir=tmp_path / "bundle")
+    with ThreadPoolExecutor(max_workers=1) as executor, pytest.raises(ValueError, match="no bundle snapshot"):
+        _harnesses(config.harness_settings(NO_TRACING), executor)
 
 
 def _health_probes(settings: HarnessSettings, *, spawn_roots: Sequence[str] = ("",)) -> dict[str, IHarnessHealthProbe]:

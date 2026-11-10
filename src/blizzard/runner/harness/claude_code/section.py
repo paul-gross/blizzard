@@ -14,6 +14,7 @@ from pathlib import Path
 from blizzard.foundation.config_keys import BOOLEAN, OPEN_TABLE, STRING, STRING_LIST, TABLE, ConfigKey, ConfigView
 from blizzard.foundation.roles import domain_model
 from blizzard.runner.config_table import ConfigError, Table
+from blizzard.runner.harness.declaration import RunnerPathKey, RuntimeFile
 
 # The immutable owner code every existing production session binds.
 CLAUDE_CODE_HARNESS_ID = "claude_code"
@@ -105,6 +106,17 @@ class ClaudeCodeSectionKind:
     @property
     def table(self) -> str:
         return "claude_code"
+
+    @property
+    def runtime_files(self) -> tuple[RuntimeFile, ...]:
+        return (RuntimeFile(WORKER_SETTINGS_FILENAME, "the claude-code harness's worker settings"),)
+
+    @property
+    def path_keys(self) -> tuple[RunnerPathKey, ...]:
+        return (
+            RunnerPathKey(("worker_settings_path",), "ClaudeCodeSection.worker_settings_path"),
+            RunnerPathKey(("claude_code_credentials_path",), "ClaudeCodeSection.credentials_path"),
+        )
 
     @property
     def keys(self) -> tuple[ConfigKey, ...]:

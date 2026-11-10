@@ -12,6 +12,8 @@ from pathlib import Path
 from blizzard.foundation.config_keys import BOOLEAN, OPEN_TABLE, STRING, STRING_LIST, TABLE, ConfigKey, ConfigView
 from blizzard.foundation.roles import domain_model
 from blizzard.runner.config_table import ConfigError, Table
+from blizzard.runner.harness.declaration import RunnerPathKey, RuntimeFile
+from blizzard.runner.harness.opencode.plugin import PLUGIN_DIRNAME, PLUGIN_FILENAME
 
 # The OpenCode binding's own immutable owner code (harness-selection spec).
 OPENCODE_HARNESS_ID = "opencode"
@@ -102,6 +104,24 @@ class OpenCodeSectionKind:
     @property
     def table(self) -> str:
         return "opencode"
+
+    @property
+    def runtime_files(self) -> tuple[RuntimeFile, ...]:
+        return (
+            RuntimeFile(f"{PLUGIN_DIRNAME}/{PLUGIN_FILENAME}", "the opencode harness's heartbeat plugin"),
+            RuntimeFile(
+                OPENCODE_WORKER_CONFIG_FILENAME,
+                "the opencode harness's worker config, the default location that the opencode section's "
+                "`worker_config_path` overrides",
+            ),
+        )
+
+    @property
+    def path_keys(self) -> tuple[RunnerPathKey, ...]:
+        return (
+            RunnerPathKey(("opencode", "worker_config_path"), "OpenCodeSection.worker_config_path"),
+            RunnerPathKey(("opencode", "auth_path"), "OpenCodeSection.auth_path"),
+        )
 
     @property
     def keys(self) -> tuple[ConfigKey, ...]:

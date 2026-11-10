@@ -79,7 +79,8 @@ from blizzard.runner.config import (
 from blizzard.runner.config_keys import HOST_REGISTRY, RUNNER_HOME_KEYS
 from blizzard.runner.config_table import ConfigError, Table
 from blizzard.runner.environments.factory import WORKSPACE_PROVIDERS
-from blizzard.runner.harness.wiring import HarnessSections
+from blizzard.runner.harness.declaration import RunnerPathKey
+from blizzard.runner.harness.wiring import HARNESS_SECTION_KINDS, HarnessSections
 from blizzard.runner.host_layout import (
     DATA_DIRNAME,
     HOST_CONFIG_FILENAME,
@@ -179,25 +180,12 @@ _GRADUATED_HOST_KEYS = tuple(
 )
 
 
-@domain_model
-@dataclass(frozen=True)
-class RunnerPathKey:
-    """A key of a ``[[runner]]`` that names a file or directory: its path under the runner, such as
-    ``("harness", "config_dir")``, and the parsed field it fills, as ``<class>.<field>``."""
-
-    key: tuple[str, ...]
-    field: str
-
-
 #: Every ``[[runner]]`` path key, the harness sections' with the runner's: what ``runner ingest`` copies and rewrites.
 RUNNER_PATH_KEYS: tuple[RunnerPathKey, ...] = (
     RunnerPathKey(("runner_prompt_file",), "RunnerConfig.runner_prompt_file"),
     RunnerPathKey(("transcripts_root",), "RunnerConfig.transcripts_root"),
     RunnerPathKey(("harness", "config_dir"), "RunnerConfig.harness_config_dir"),
-    RunnerPathKey(("worker_settings_path",), "ClaudeCodeSection.worker_settings_path"),
-    RunnerPathKey(("claude_code_credentials_path",), "ClaudeCodeSection.credentials_path"),
-    RunnerPathKey(("opencode", "worker_config_path"), "OpenCodeSection.worker_config_path"),
-    RunnerPathKey(("opencode", "auth_path"), "OpenCodeSection.auth_path"),
+    *(key for kind in HARNESS_SECTION_KINDS for key in kind.path_keys),
 )
 
 #: Keys that belong to a ``[[workspace]]``, so are refused at the top level: every graduated workspace key but its id.

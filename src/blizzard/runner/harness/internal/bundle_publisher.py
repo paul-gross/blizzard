@@ -103,6 +103,23 @@ def published_snapshot(runtime_root: Path) -> Path | None:
     return link.resolve() if link.is_dir() else None
 
 
+def load_published_bundle(
+    config_dir: Path, runtime_root: Path, layouts: tuple[HarnessLayout, ...]
+) -> BundleSnapshot | None:
+    """The snapshot ``current`` resolves to, read as a :class:`BundleSnapshot` without publishing or touching
+    ``current``; ``None`` when nothing is published. Each layout's directory lists the entry points it holds."""
+    snapshot = published_snapshot(runtime_root)
+    if snapshot is None:
+        return None
+    sources: list[HarnessSource] = []
+    for layout in layouts:
+        effective = snapshot / layout.dirname
+        if effective.is_dir():
+            present = tuple(entry.name for entry in layout.entry_points if (effective / entry.name).exists())
+            sources.append(HarnessSource(layout.dirname, config_dir / layout.dirname, effective, present))
+    return BundleSnapshot(source_dir=config_dir, path=snapshot, harnesses=tuple(sources))
+
+
 def _plan(config_dir: Path, layouts: tuple[HarnessLayout, ...]) -> _Plan:
     if not config_dir.is_dir():
         raise HarnessBundleError(config_dir, "the configured bundle directory is missing or is not a directory")

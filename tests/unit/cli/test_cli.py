@@ -496,6 +496,44 @@ def test_runner_transcript_backfill_drives_its_whole_production_route(tmp_path: 
     assert "would import 0, already present 0, gone 0" in result.output
 
 
+def _configure_bundle(root: Path, bundle: Path) -> None:
+    config_path = root / "blizzard-host.toml"
+    config_path.write_text(
+        config_path.read_text().replace("[runner.harness]\n", f'[runner.harness]\nconfig_dir = "{bundle}"\n', 1)
+    )
+
+
+def test_runner_transcript_backfill_composes_over_the_published_bundle(tmp_path: Path) -> None:
+    root = tmp_path / "runner"
+    assert init_runner().invoke(blizzard, ["runner", "init", str(root)]).exit_code == 0
+    _enable_transcript_shipping(root)
+    bundle = tmp_path / "bundle"
+    (bundle / "opencode").mkdir(parents=True)
+    (bundle / "opencode" / "opencode.json").write_text("{}")
+    _configure_bundle(root, bundle)
+    publish_harness_bundle(bundle, root, selection=first_bindings())
+
+    result = init_runner().invoke(blizzard, ["runner", "transcript", "backfill", "--dir", str(root), "--dry-run"])
+
+    assert result.exit_code == 0, result.output
+    assert "would import 0, already present 0, gone 0" in result.output
+
+
+@pytest.mark.parametrize("verb", [["reship", "seg_x"], ["backfill", "--dry-run"]])
+def test_runner_transcript_verbs_refuse_a_bundle_nothing_published(tmp_path: Path, verb: list[str]) -> None:
+    root = tmp_path / "runner"
+    assert init_runner().invoke(blizzard, ["runner", "init", str(root)]).exit_code == 0
+    _enable_transcript_shipping(root)
+    bundle = tmp_path / "bundle"
+    (bundle / "opencode").mkdir(parents=True)
+    _configure_bundle(root, bundle)
+
+    result = init_runner().invoke(blizzard, ["runner", "transcript", *verb, "--dir", str(root)])
+
+    assert result.exit_code != 0
+    assert "no snapshot is published" in result.output
+
+
 def test_runner_transcript_reship_drives_its_whole_production_route(tmp_path: Path) -> None:
     """`bzh:gating-tier-pins-production-paths`, for the second verb: the component tier
     constructs the service directly, so the CLI -> `LoopWiring.reship_transcript` ->
