@@ -22,13 +22,14 @@ from blizzard.hub.domain.config.apply import (
     ApplyEntryRefused,
     ApplyPlan,
     ConfigDeclaration,
+    DeclaredForgeFacts,
     DeclaredReferences,
     EntryOutcome,
     ForgeDeclaration,
     RepositoryDeclaration,
     StoredConfig,
     WorkSourceDeclaration,
-    require_declarable_forge,
+    require_appliable_forges,
 )
 from blizzard.hub.domain.config.authoring import ConfigAuthoring
 from blizzard.hub.domain.config.changes import ChangeContext, Door, RecordState
@@ -219,27 +220,25 @@ class ConfigApplication:
                 left = self._forges.get_by_former_slug(slug)
                 if left is not None:
                     former[entry.slug] = left
+        at = self._clock.now()
+        require_appliable_forges(
+            [DeclaredForgeFacts(e.slug, e.kind, e.fields, e.edit) for e in entries.forges], held, former
+        )
         projected = dict(held)
         declarations: list[ForgeDeclaration] = []
-        seen: set[str] = set()
         for index, entry in enumerate(entries.forges):
             try:
-                if entry.slug in seen:
-                    raise ConfigFieldError("slug", f"{entry.slug!r} is named twice in this document")
-                seen.add(entry.slug)
                 stored = held.get(entry.slug)
-                require_declarable_forge(entry.slug, entry.kind, stored, former.get(entry.slug))
-                forge_id = stored.forge_id if stored else ForgeId(Id.mint(IdPrefix.FORGE, self._clock).value)
                 if stored is None:
+                    forge_id = ForgeId(Id.mint(IdPrefix.FORGE, self._clock).value)
                     record, _ = ConfiguredForge.new(
-                        entry.slug, entry.name, entry.kind, entry.fields, ctx, at=self._clock.now(), forge_id=forge_id
+                        entry.slug, entry.name, entry.kind, entry.fields, ctx, at=at, forge_id=forge_id
                     )
                 else:
-                    enabled = (
-                        stored.set_retired(False, ctx, if_match=None, at=self._clock.now()) if stored.retired else None
-                    )
+                    forge_id = stored.forge_id
+                    enabled = stored.set_retired(False, ctx, if_match=None, at=at) if stored.retired else None
                     record = stored if enabled is None else enabled[0]
-                    edited = record.edit(entry.edit, ctx, if_match=None, at=self._clock.now())
+                    edited = record.edit(entry.edit, ctx, if_match=None, at=at)
                     record = record if edited is None else edited[0]
                 projected[entry.slug] = record
                 declarations.append(
@@ -247,14 +246,6 @@ class ConfigApplication:
                 )
             except ConfigFieldError as exc:
                 raise ApplyEntryRefused(FORGES_SECTION, index, exc) from exc
-        origins: dict[str, str] = {}
-        for forge in projected.values():
-            if (holder := origins.get(forge.fields.api_base)) is not None and holder != forge.slug:
-                index = next((i for i, e in enumerate(entries.forges) if e.slug == forge.slug), 0)
-                raise ApplyEntryRefused(
-                    FORGES_SECTION, index, ConfigFieldError("api_base", f"origin is held by forge {holder}")
-                )
-            origins[forge.fields.api_base] = forge.slug
         return tuple(declarations), PlannedForges(tuple(projected.values()), former), former
 
     def _held_repositories(self, entries: DocumentEntries) -> _Repositories:
