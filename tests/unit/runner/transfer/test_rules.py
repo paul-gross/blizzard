@@ -227,17 +227,22 @@ def test_a_runner_recorded_in_another_tenant_stands_apart() -> None:
 
 def test_a_runner_the_hub_does_not_hold_under_this_host_is_refused_with_the_adopt_command() -> None:
     with pytest.raises(HostNotHolding, match="adopt hs_1 rn_1"):
-        refuse_standing(HostStanding.NOT_HELD, "not held", runner_name="r", runner_id="rn_1", host_id="hs_1")
+        refuse_standing(
+            not_held=True, tenant_differs=False, reason="not held", runner_name="r", runner_id="rn_1", host_id="hs_1"
+        )
 
 
 def test_a_runner_the_hub_holds_in_another_tenant_is_refused() -> None:
     with pytest.raises(HostNotHolding, match="cannot take it in"):
-        refuse_standing(HostStanding.TENANT_DIFFERS, "in tn_2", runner_name="r", runner_id="rn_1", host_id="hs_1")
+        refuse_standing(
+            not_held=False, tenant_differs=True, reason="in tn_2", runner_name="r", runner_id="rn_1", host_id="hs_1"
+        )
 
 
-@pytest.mark.parametrize("standing", [HostStanding.HELD, HostStanding.UNKNOWN])
-def test_a_held_or_unknown_standing_is_not_refused(standing: HostStanding) -> None:
-    refuse_standing(standing, None, runner_name="r", runner_id="rn_1", host_id="hs_1")
+def test_a_held_or_unknown_standing_is_not_refused() -> None:
+    refuse_standing(
+        not_held=False, tenant_differs=False, reason=None, runner_name="r", runner_id="rn_1", host_id="hs_1"
+    )
 
 
 def _unscoped(

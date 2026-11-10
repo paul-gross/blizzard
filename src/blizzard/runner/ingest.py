@@ -49,6 +49,7 @@ from blizzard.runner.host_layout import (
 from blizzard.runner.hub.client import HostRecord, HostRefused, HubClientError, IHostRecordReader
 from blizzard.runner.hub.host_identity import HostIdentity, HostIdentityAlreadyRecorded, adopted
 from blizzard.runner.hub.host_registration import standing_of
+from blizzard.runner.hub.identity import HostStanding
 from blizzard.runner.runtime import (
     StoreResetRefused,
     backup_sqlite,
@@ -472,7 +473,14 @@ class RunnerIngest:
         record = self._hub_record()
         identity = self._host_identity(record)
         standing, reason = standing_of(runner_id, view.tenant_id, record, identity)
-        refuse_standing(standing, reason, runner_name=entry.name, runner_id=runner_id, host_id=identity.host_id)
+        refuse_standing(
+            not_held=standing is HostStanding.NOT_HELD,
+            tenant_differs=standing is HostStanding.TENANT_DIFFERS,
+            reason=reason,
+            runner_name=entry.name,
+            runner_id=runner_id,
+            host_id=identity.host_id,
+        )
         refuse_unscoped_source(
             view,
             runner_name=entry.name,
