@@ -2348,6 +2348,10 @@ export type ChunkIngestRequest = {
      * Tokens
      */
     tokens: Array<string>;
+    /**
+     * Urgency
+     */
+    urgency?: string | null;
 };
 
 /**
@@ -7408,6 +7412,10 @@ export type GardenProposalAcceptRequest = {
      * Reason
      */
     reason?: string | null;
+    /**
+     * Urgency
+     */
+    urgency?: string | null;
 };
 
 /**
@@ -13657,6 +13665,10 @@ export type RoutineRunRequest = {
      * Scope Slug
      */
     scope_slug?: string | null;
+    /**
+     * Urgency
+     */
+    urgency?: string | null;
 };
 
 /**
@@ -18238,6 +18250,10 @@ export type WorkItemCreateRequest = {
      * Title
      */
     title: string;
+    /**
+     * Urgency
+     */
+    urgency?: string | null;
 };
 
 /**

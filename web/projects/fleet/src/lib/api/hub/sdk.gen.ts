@@ -478,8 +478,9 @@ export const listChunksApiChunksGet = <ThrowOnError extends boolean = false>(opt
  * Ingest by source-native token into the project named, or the one the tokens' sources
  * agree on; 422 on a project the tenant does not hold, a token no configured source
  * claims, a project the tokens leave open (``project_required``), a source the
- * project is not linked to (``source_not_linked``) and a hub item recorded in another
- * project; 409 on a pointer held by a live chunk;
+ * project is not linked to (``source_not_linked``), a hub item recorded in another
+ * project, and an ``urgency`` naming no urgency (``urgency_unknown``) or a retired one
+ * (``urgency_retired``); 409 on a pointer held by a live chunk;
  * 503 if every graph named after the packaged default has been retired (the operator's
  * brake, not a code bug: re-enable one or mint a new one).
  */
@@ -1702,7 +1703,8 @@ export const editGardenProposalApiGardenProposalsProposalIdPatch = <ThrowOnError
  * template when the proposal names findings and bare when it names none. When it is
  * false, mints nothing and records the decline. Promotes nothing and changes no
  * finding's state. A blank reason is stored as none. 404 unknown proposal, 422 a `body`
- * with `mint_work_item` false or a minted item left with a blank title or body, 409
+ * or an `urgency` with `mint_work_item` false, an `urgency` naming no urgency
+ * (`urgency_unknown`) or a retired one (`urgency_retired`), or a minted item left with a blank title or body, 409
  * already closed or a raced ingest, 503 the packaged default graph retired.
  */
 export const acceptGardenProposalApiGardenProposalsProposalIdAcceptPost = <ThrowOnError extends boolean = false>(options: Options<AcceptGardenProposalApiGardenProposalsProposalIdAcceptPostData, ThrowOnError>): RequestResult<AcceptGardenProposalApiGardenProposalsProposalIdAcceptPostResponses, AcceptGardenProposalApiGardenProposalsProposalIdAcceptPostErrors, ThrowOnError> => (options.client ?? client).post<AcceptGardenProposalApiGardenProposalsProposalIdAcceptPostResponses, AcceptGardenProposalApiGardenProposalsProposalIdAcceptPostErrors, ThrowOnError>({
@@ -2650,7 +2652,8 @@ export const retireRoutineApiRoutinesRoutineIdRetirePost = <ThrowOnError extends
  * scope, or a graph name with no
  * enabled mint (mirroring ``POST /work-sources/{source}/items``'s own
  * retired-default-graph shape); 409 on an out-of-band ingest already holding the
- * allocated ref's pointer.
+ * allocated ref's pointer; 422 ``urgency_unknown`` or ``urgency_retired`` on an ``urgency``
+ * naming no urgency or a retired one, which outranks the routine's default for this run alone.
  */
 export const runRoutineApiRoutinesRoutineIdRunPost = <ThrowOnError extends boolean = false>(options: Options<RunRoutineApiRoutinesRoutineIdRunPostData, ThrowOnError>): RequestResult<RunRoutineApiRoutinesRoutineIdRunPostResponses, RunRoutineApiRoutinesRoutineIdRunPostErrors, ThrowOnError> => (options.client ?? client).post<RunRoutineApiRoutinesRoutineIdRunPostResponses, RunRoutineApiRoutinesRoutineIdRunPostErrors, ThrowOnError>({
     url: '/api/routines/{routine_id}/run',
@@ -3288,7 +3291,8 @@ export const listWorkItemsApiWorkSourcesSourceItemsGet = <ThrowOnError extends b
  * Allocate a fresh item at SOURCE, open, authored by the caller, and mint its
  * resting ``not_ready`` chunk in the same transaction, both in the project ``?project=`` names
  * — the tenant's only one when it names none. 404/409 from the source's editor gate,
- * 422 for a blank title or body, an unknown project, or no project named in a tenant
+ * 422 for a blank title or body, an ``urgency`` naming no urgency (``urgency_unknown``) or a
+ * retired one (``urgency_retired``), an unknown project, or no project named in a tenant
  * holding several (``project_required``), 409 if an out-of-band ingest already holds the
  * allocated ref's pointer, 503 if every graph named after the packaged default has
  * been retired (the operator's brake, mirroring ``POST /chunks``).
