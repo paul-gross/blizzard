@@ -152,9 +152,9 @@ about 971s for a pessimistic ordinary service shard. Those estimates covered mor
 are not comparable directly to the following local subset. The eight traced fleet scenario ports run in
 `service-fleet/`, with migration's browser half in `ui/`. An earlier three-shard local CI-shaped run (`CI=1`, two
 workers, service and harness projects) passed in 9.3, 7.7, and 3.5 minutes; the full service project passed in 17.2
-minutes and UI in 3.3 minutes. The current four-shard measurements are below. These are local durations; authoritative
-CI timings arrive with the PR run. The merge gate's slowest pytest shard was about 20 minutes at preflight, and every
-measured service shard remains below it and the timeout.
+minutes and UI in 3.3 minutes. The current four-shard measurements are below. These are local durations; CI runs when a
+PR is open at delivery, and its timings are the authoritative ones. The merge gate's slowest pytest shard was about 20
+minutes at preflight, and every measured service shard remains below it and the timeout.
 
 Final runner-tier measurement, with the Python original of every runner-tier test ported and `tests/service/` holding
 only the pytest half. A full `mise run playwright -- --project='service-*'` run, 10 workers on a 20-thread local machine
@@ -162,9 +162,9 @@ with no CPU pinning, passed all 220 tests in 337s wall time. The runner project'
 fleet project's 39 tests to 880s. The fleet-auth project's 3 tests sum to 63s. Each runner and fleet test starts its own
 runner host, so the dedicated-host count is at most 127, at the spike's median of about 6.6s per host from init to
 healthy (the spike's figure; the run's own fixture timings do not report it). The pytest half, `mise run service-test`,
-ran 71 tests across 4 xdist workers in 97s. Compare these against the gate's slowest job before reshaping any shard.
+ran 71 tests across 4 xdist workers in 97s. The gate's slowest job is the figure these are measured against.
 
-Measured port times, from the build's own Playwright run until the `ui (blizzard:ui)` job has run the change:
+Measured port times, from the build's own Playwright run:
 
 | Port                                      | Project | Measured serial time |
 | ----------------------------------------- | ------- | -------------------- |
@@ -175,8 +175,7 @@ Measured port times, from the build's own Playwright run until the `ui (blizzard
 
 UI auth totals 73s and the UI default project 52s, so no project nears the 30-minute step.
 
-Each landed board port records its spec's time below. The measured time is the spec's local `--workers=1` run until the
-`upper-tiers / ui (blizzard:ui)` job's time replaces it.
+Each landed board port records its spec's time below. The measured time is the spec's local `--workers=1` run.
 
 | Ported spec                                     | Project    | Measured |
 | ----------------------------------------------- | ---------- | -------- |
