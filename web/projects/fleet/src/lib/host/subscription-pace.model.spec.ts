@@ -2,6 +2,9 @@ import {
   FRESHNESS_AGING_AFTER_MS,
   FRESHNESS_STALE_AFTER_MS,
   classifySubscriptionFreshness,
+  freshnessTone,
+  LAPSED_TONE,
+  sampleTone,
   toPaceBars,
   windowElapsedPct,
 } from './subscription-pace.model';
@@ -74,5 +77,24 @@ describe('toPaceBars', () => {
       { window: '5h', utilizationPct: 40, elapsedPct: 50 },
       { window: '7d', utilizationPct: 10, elapsedPct: 0 },
     ]);
+  });
+});
+
+describe('subscription condition tones', () => {
+  it('reads a lapsed credential as needs', () => {
+    expect(LAPSED_TONE).toBe('needs');
+  });
+
+  it('carries no tone for a fresh or unread reading, waiting for aging, stale for stale', () => {
+    expect(freshnessTone('fresh')).toBeNull();
+    expect(freshnessTone(null)).toBeNull();
+    expect(freshnessTone('aging')).toBe('waiting');
+    expect(freshnessTone('stale')).toBe('stale');
+  });
+
+  it('alarms only on a missed sample', () => {
+    expect(sampleTone(false)).toBe('stale');
+    expect(sampleTone(true)).toBeNull();
+    expect(sampleTone(null)).toBeNull();
   });
 });

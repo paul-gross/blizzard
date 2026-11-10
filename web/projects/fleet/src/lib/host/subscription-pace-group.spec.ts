@@ -91,6 +91,7 @@ describe('SubscriptionPaceGroup', () => {
     expect(group?.querySelector('[data-testid="subscription-pace-group-unsampled"]')).toBeNull();
     const lapsed = group?.querySelector('[data-testid="subscription-pace-group-lapsed"]');
     expect(lapsed).not.toBeNull();
+    expect((lapsed as HTMLElement).style.color).toBe('var(--red)');
     expect(lapsed?.textContent?.trim()).toBe('credential lapsed — log in again on this runner');
   });
 
@@ -181,7 +182,7 @@ describe('SubscriptionPaceGroup', () => {
     expect(group?.querySelector('[data-testid="subscription-pace-group-provider"]')?.textContent).toBe('openai');
     const condition = group?.querySelector('[data-testid="subscription-pace-group-condition"]');
     expect(condition?.textContent?.trim()).toBe('miss: endpoint unreachable');
-    expect(condition?.classList.contains('miss')).toBe(true);
+    expect((condition as HTMLElement).style.color).toBe('var(--red)');
     expect(group?.querySelector('[data-testid="subscription-pace-group-sampled"]')?.textContent).toBe('sampled 2m ago');
     expect(group?.querySelector('[data-testid="subscription-pace-group-no-sample"]')).toBeNull();
   });
@@ -190,7 +191,7 @@ describe('SubscriptionPaceGroup', () => {
     const el = await render([pace({ slug: 'codex', name: 'Codex', sample: { conditionLabel: 'ok', sampledAgo: '1s ago', ok: true } })]);
 
     const condition = el.querySelector('[data-testid="subscription-pace-group-condition"]');
-    expect(condition?.classList.contains('miss')).toBe(false);
+    expect((condition as HTMLElement).style.color).toBe('');
   });
 
   it('names the renewal only when the row carries it, and never the spenders', async () => {
@@ -207,5 +208,22 @@ describe('SubscriptionPaceGroup', () => {
     const unspent = el.querySelector('[data-subscription-slug="openai"]');
     expect(unspent?.querySelector('[data-testid="subscription-pace-group-renewal"]')).toBeNull();
     expect(unspent?.querySelector('[data-testid="subscription-pace-group-provider"]')).toBeNull();
+  });
+
+  it('colours the reading age by its tier and a missed sample red, leaving a fresh reading and a hit uncoloured', async () => {
+    const el = await render([
+      pace({ slug: 'a', name: 'A', refreshedTag: '[5m]', freshness: 'fresh' }),
+      pace({ slug: 'b', name: 'B', refreshedTag: '[30m]', freshness: 'aging' }),
+      pace({ slug: 'c', name: 'C', refreshedTag: '[2h]', freshness: 'stale', sample: { conditionLabel: 'miss', sampledAgo: '1m ago', ok: false } }),
+      pace({ slug: 'd', name: 'D', sample: { conditionLabel: 'ok', sampledAgo: '1s ago', ok: true } }),
+    ]);
+
+    const color = (slug: string, testid: string) =>
+      el.querySelector<HTMLElement>(`[data-subscription-slug="${slug}"] [data-testid="${testid}"]`)?.style.color;
+    expect(color('a', 'subscription-pace-group-refreshed')).toBe('');
+    expect(color('b', 'subscription-pace-group-refreshed')).toBe('var(--amber-hi)');
+    expect(color('c', 'subscription-pace-group-refreshed')).toBe('var(--red)');
+    expect(color('c', 'subscription-pace-group-condition')).toBe('var(--red)');
+    expect(color('d', 'subscription-pace-group-condition')).toBe('');
   });
 });

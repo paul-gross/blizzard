@@ -82,7 +82,7 @@ describe('HubPanel', () => {
     });
 
     expect(text(el, 'hub-link')).toBe('CONNECTED');
-    expect(el.querySelector('[data-testid="hub-link"]')?.classList).toContain('up');
+    expect(el.querySelector<HTMLElement>('[data-testid="hub-link"] .badge')?.style.color).toBe('var(--green)');
     expect(el.querySelector('[data-testid="board-link"]')?.getAttribute('href')).toBe('http://127.0.0.1:4522');
     expect(el.querySelector('[data-testid="hub-issue"]')).toBeNull();
     expect(el.querySelector('[data-testid="hub-buffered"]')).toBeNull();
@@ -100,7 +100,7 @@ describe('HubPanel', () => {
     });
 
     expect(text(el, 'hub-link')).toBe('1 / 2 CONNECTED');
-    expect(el.querySelector('[data-testid="hub-link"]')?.classList).toContain('part');
+    expect(el.querySelector<HTMLElement>('[data-testid="hub-link"] .badge')?.style.color).toBe('var(--amber-hi)');
     expect(text(el, 'hub-buffered')).toBe('· 7 buffered');
     const issues = Array.from(el.querySelectorAll('[data-testid="hub-issue"]')).map((issue) => issue.textContent?.replace(/\s+/g, ' ').trim());
     expect(issues).toEqual(['r2 cannot reach the hub']);
@@ -110,7 +110,7 @@ describe('HubPanel', () => {
     const { el } = await render([hostRunner('rn_1', 'r1')], { rn_1: dashboard({ reachable: false }, null) });
 
     expect(text(el, 'hub-link')).toBe('UNREACHABLE');
-    expect(el.querySelector('[data-testid="hub-link"]')?.classList).toContain('down');
+    expect(el.querySelector<HTMLElement>('[data-testid="hub-link"] .badge')?.style.color).toBe('var(--red)');
   });
 
   it('dims the fleet strip to its last-known counts once the hub stops answering', async () => {

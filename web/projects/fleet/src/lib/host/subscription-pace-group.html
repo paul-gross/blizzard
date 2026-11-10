@@ -9,6 +9,7 @@
             class="sub-refreshed"
             data-testid="subscription-pace-group-refreshed"
             [attr.data-freshness]="group.freshness"
+            [style.color]="freshnessColor(group.freshness)"
             [attr.title]="group.refreshedLabel"
           >{{ group.refreshedTag }}</span>
         }
@@ -18,13 +19,14 @@
       }
     </div>
     @if (group.sample; as sample) {
-      <div class="sub-condition" data-testid="subscription-pace-group-condition" [class.miss]="sample.ok === false">
+      <div class="sub-condition" data-testid="subscription-pace-group-condition" [style.color]="sampleColor(sample.ok)">
         {{ sample.conditionLabel }}
       </div>
       <div class="sub-sampled" data-testid="subscription-pace-group-sampled">sampled {{ sample.sampledAgo }}</div>
     } @else if (group.condition === SampleMissReason.CREDENTIAL_LAPSED) {
       <div
         class="sub-lapsed"
+        [style.color]="lapsedColor"
         data-testid="subscription-pace-group-lapsed"
         [attr.aria-label]="group.name + ' credential lapsed — log in again on this runner'"
       >

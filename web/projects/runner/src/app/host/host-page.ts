@@ -23,7 +23,7 @@ import { PanelFilters } from '../core/panel-filters';
 import { injectPanelDashboards, injectPanelLeases, injectPanelProjects, injectRunnerProjects } from '../core/panel-reads';
 import { dashboardsByRunner } from '../core/panel-reads.model';
 import { LocalPauseControl } from '../runners/app-pause-control';
-import { envsInUseLabel, hostRefLabel, hostRowsInFilter, hostRunnersEmptyText, hostTone } from './host-page.model';
+import { envsInUseLabel, hostRefLabel, hostRowsInFilter, hostRunnersEmptyText } from './host-page.model';
 import { hostRegistrationSummary } from './host-registration.model';
 import { hostRunnerRows, type HostRunnerRow } from './host-runner-row.model';
 import { HostRunnerRowView } from './host-runner-row';
@@ -80,9 +80,6 @@ export class HostPage {
   protected readonly hostId = computed(() => this.registrationQuery.data()?.host_id ?? null);
 
   protected readonly hostRef = computed(() => hostRefLabel(this.hostId()));
-
-  /** Green once registered, red when refused or cut off, amber on the way there. */
-  protected readonly hostTone = computed(() => hostTone(this.registration()));
 
   private readonly allRows = computed<readonly HostRunnerRow[]>(() =>
     hostRunnerRows(this.runnersQuery.data() ?? [], {

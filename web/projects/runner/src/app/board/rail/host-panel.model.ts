@@ -1,6 +1,7 @@
 import { type BeaconTone, type runnerApi } from 'fleet';
 
 import type { RunnerDashboard } from '../../core/panel-reads.model';
+import { runnerLight } from '../../core/runner-health.model';
 
 /** One binding of a runner: the project it serves in one workspace, and its agents in use of those it declares. */
 export interface HostPanelBinding {
@@ -16,7 +17,7 @@ export interface HostPanelRunner {
   readonly key: string;
   readonly runnerId: string | null;
   readonly name: string;
-  /** Red for a halted runner, yellow while either brake holds it, else green. */
+  /** The runner's light, as {@link runnerLight} reads it. */
   readonly tone: BeaconTone;
   readonly halted: boolean;
   readonly haltedReasons: readonly string[];
@@ -64,35 +65,30 @@ function bindingLines(
   });
 }
 
-/** One {@link HostPanelRunner} per runner the host serves or holds halted, in wire order, each serving runner's bindings
- * filled from its slot accounting in `capacities` (by runner id). */
+/** One {@link HostPanelRunner} per runner the host serves or holds halted, in wire order, each judged by its own
+ * `statuses` read (by runner id): its light, its brakes, and each serving runner's bindings off its slot accounting. */
 export function hostPanelRunners(
   runners: readonly runnerApi.HostRunnerView[],
-  capacities: ReadonlyMap<string, runnerApi.CapacitiesView>,
+  statuses: ReadonlyMap<string, runnerApi.RunnerStatusView>,
 ): readonly HostPanelRunner[] {
   return runners.map((runner, index) => {
+    const status = statuses.get(runner.runner_id ?? '');
+    const pause = status?.pause ?? runner.pause;
     const halted = runner.state !== 'serving';
-    const localPause = halted ? null : localPauseText(runner.pause);
-    const hubPaused = !halted && (runner.pause?.hub ?? false);
+    const localPause = halted ? null : localPauseText(pause);
+    const hubPaused = !halted && (pause?.hub ?? false);
     return {
       key: runner.runner_id ?? `${runner.name}#${index}`,
       runnerId: runner.runner_id,
       name: runner.name,
-      tone: halted
-        ? 'red'
-        : localPause !== null || hubPaused
-          ? 'amber'
-          : 'green',
+      tone: runnerLight(runner, status),
       halted,
       haltedReasons: halted ? runner.halted_reasons : [],
       agentsInUse: runner.agents_in_use,
       maxAgents: runner.max_agents,
       bindings: halted
         ? []
-        : bindingLines(
-            runner.bindings,
-            capacities.get(runner.runner_id ?? ''),
-          ),
+        : bindingLines(runner.bindings, status?.capacities),
       localPause,
       hubPaused,
     };
@@ -107,13 +103,11 @@ export function runnersNamed(
   return name === null ? runners : runners.filter((runner) => runner.name === name);
 }
 
-/** Each runner's own slot accounting by runner id, off its dashboard. */
-export function capacitiesByRunner(
+/** Each runner's own status by runner id, off its dashboard. */
+export function statusesByRunner(
   dashboards: readonly RunnerDashboard[],
-): ReadonlyMap<string, runnerApi.CapacitiesView> {
+): ReadonlyMap<string, runnerApi.RunnerStatusView> {
   return new Map(
-    dashboards.map(
-      (entry) => [entry.owner.runnerId, entry.dashboard.runner.capacities] as const,
-    ),
+    dashboards.map((entry) => [entry.owner.runnerId, entry.dashboard.runner] as const),
   );
 }

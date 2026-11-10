@@ -60,9 +60,12 @@ const DASHBOARD_RN_1 = runnerDashboardView({
   }),
 });
 
-/** `rn_2`'s dashboard: its brake holds it, so its slot accounting names no binding in use. */
+/** `rn_2`'s dashboard: its own brake holds it, as it reports, so its slot accounting names no binding in use. */
 const DASHBOARD_RN_2 = runnerDashboardView({
-  runner: { ...DASHBOARD_RN_1.runner, runner_id: 'rn_2', capacities: capacitiesView() },
+  runner: { ...DASHBOARD_RN_1.runner, runner_id: 'rn_2',
+    capacities: capacitiesView(),
+    pause: { local: true, hub: false, effective: true, local_reason: 'OpenCode is not installed' },
+  },
 });
 
 const ENVIRONMENTS: runnerApi.HostEnvironmentListResponse = {

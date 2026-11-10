@@ -2,7 +2,8 @@ import { ChangeDetectionStrategy, Component, input } from '@angular/core';
 
 import { SampleMissReason } from '../api/hub';
 import { KitPaceBar } from '../kit/kit-pace-bar';
-import type { SubscriptionPace } from './subscription-pace.model';
+import { toneColor } from '../kit/kit-badge';
+import { freshnessTone, LAPSED_TONE, sampleTone, type SubscriptionPace } from './subscription-pace.model';
 
 /**
  * The shared subscription list — one group per subscription, headed by its
@@ -31,6 +32,21 @@ import type { SubscriptionPace } from './subscription-pace.model';
 })
 export class SubscriptionPaceGroup {
   protected readonly SampleMissReason = SampleMissReason;
+
+  /** The lapsed notice's colour — the one tone the blocks line reads too. */
+  protected readonly lapsedColor = toneColor(LAPSED_TONE);
+
+  /** The colour of a reading's age tier, `null` (inherited) for a fresh one. */
+  protected freshnessColor(freshness: SubscriptionPace['freshness']): string | null {
+    const tone = freshnessTone(freshness);
+    return tone && toneColor(tone);
+  }
+
+  /** The colour of the daemon's sampling line, `null` (inherited) unless the attempt missed. */
+  protected sampleColor(ok: boolean | null): string | null {
+    const tone = sampleTone(ok);
+    return tone && toneColor(tone);
+  }
 
   /** Every subscription, each pre-folded to its row. */
   readonly subscriptionPaces = input.required<readonly SubscriptionPace[]>();

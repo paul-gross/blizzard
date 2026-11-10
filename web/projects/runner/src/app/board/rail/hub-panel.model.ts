@@ -1,6 +1,7 @@
-import { compactRef, type runnerApi } from 'fleet';
+import { type runnerApi, type Tone } from 'fleet';
 
 import type { RunnerDashboard } from '../../core/panel-reads.model';
+import { identityRefusal } from '../../core/runner-health.model';
 
 /** Something about one runner's link the operator has to act on. */
 export interface HubIssue {
@@ -9,6 +10,8 @@ export interface HubIssue {
   readonly text: string;
   /** The remedy or the hub's reason, for the line's hover. */
   readonly title: string | null;
+  /** The line's colour: `stale` for a dead link, `needs` for a refusal or conflict, `idle` for a state read raw. */
+  readonly tone: Tone;
 }
 
 /** The host's runners' hub links folded into one reading — the hub, whether they reach it, and only what is wrong. */
@@ -24,22 +27,6 @@ export interface HubSummary {
   readonly issues: readonly HubIssue[];
 }
 
-/** The identity verdict's problem in operator words, `null` while it checks out or goes unchecked. */
-function identityIssue(identity: runnerApi.IdentityVerdictView | null | undefined): { text: string; title: string | null } | null {
-  switch (identity?.state) {
-    case 'mismatched':
-      return { text: `refusing — its token belongs to ${compactRef(identity.token_runner_id ?? '')}`, title: identity.reset_command };
-    case 'refused':
-      return { text: 'the hub refuses its token', title: [identity.reason, identity.reset_command].filter(Boolean).join(' — ') || null };
-    case 'not_held':
-      return { text: 'halted — not held by its host', title: identity.reason ?? null };
-    case 'tenant_differs':
-      return { text: "halted — tenant differs from its host's", title: identity.reason ?? null };
-    default:
-      return null;
-  }
-}
-
 /** Folds every runner's dashboard into one {@link HubSummary}; `null` before any dashboard lands. */
 export function hubSummary(dashboards: readonly RunnerDashboard[]): HubSummary | null {
   const statuses = dashboards.flatMap(({ owner, dashboard }) => (dashboard.runner?.hub ? [{ owner, status: dashboard.runner }] : []));
@@ -47,16 +34,19 @@ export function hubSummary(dashboards: readonly RunnerDashboard[]): HubSummary |
   const issues: HubIssue[] = [];
   for (const { owner, status } of statuses) {
     if (!status.hub.reachable) {
-      issues.push({ key: `${owner.runnerId}:link`, runner: owner.label, text: 'cannot reach the hub', title: status.hub.endpoint });
+      issues.push({ key: `${owner.runnerId}:link`, runner: owner.label, text: 'cannot reach the hub', title: status.hub.endpoint, tone: 'stale' });
     }
-    const identity = identityIssue(status.identity);
-    if (identity) issues.push({ key: `${owner.runnerId}:identity`, runner: owner.label, ...identity });
+    const refusal = identityRefusal(status.identity);
+    if (refusal) {
+      issues.push({ key: `${owner.runnerId}:identity`, runner: owner.label, text: refusal.issue, title: refusal.title, tone: refusal.tone });
+    }
     for (const conflict of status.routing_conflicts ?? []) {
       issues.push({
         key: `${owner.runnerId}:conflict:${conflict.project_id}`,
         runner: owner.label,
         text: `${conflict.entries.join(', ')} name one project — claiming nothing`,
         title: conflict.project_id,
+        tone: 'needs',
       });
     }
   }

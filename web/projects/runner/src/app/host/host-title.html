@@ -1,6 +1,6 @@
 <div class="hd" data-testid="host-title">
   @if (registration(); as reg) {
-    <fleet-kit-beacon class="dot" aria-hidden="true" [active]="true" [tone]="tone()" [blink]="tone() === 'green' ? 'pulse' : 'hold'" />
+    <fleet-kit-beacon class="dot" aria-hidden="true" [active]="true" [tone]="reg.tone" [blink]="reg.tone === 'done' ? 'pulse' : 'hold'" />
   }
   <h2 class="name" data-testid="host-name">{{ name() }}</h2>
   @if (hostRef(); as ref) {

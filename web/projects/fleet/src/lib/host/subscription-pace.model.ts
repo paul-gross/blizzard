@@ -1,4 +1,6 @@
 import type { ExternalSubscriptionUsageWindowView, SampleMissReason } from '../api/hub';
+import { unlisted } from '../core/open-lookup';
+import type { Tone } from '../kit/tone';
 
 /** One rate-limit window's pacing pair for a subscription's pace bar —
  * `window` is the harness-native label (`"5h"`/`"7d"`), `utilizationPct` is read
@@ -27,6 +29,30 @@ export function classifySubscriptionFreshness(sampleAgeMs: number): Subscription
   if (sampleAgeMs <= FRESHNESS_AGING_AFTER_MS) return 'fresh';
   if (sampleAgeMs <= FRESHNESS_STALE_AFTER_MS) return 'aging';
   return 'stale';
+}
+
+/** The tone of a lapsed credential — the one reading every surface that shows it binds. */
+export const LAPSED_TONE: Tone = 'needs';
+
+/** The tone of a subscription's reading age: a fresh reading carries none, an aging one waits, a stale one alarms. */
+export function freshnessTone(freshness: SubscriptionFreshness | null): Tone | null {
+  switch (freshness) {
+    case null:
+    case 'fresh':
+      return null;
+    case 'aging':
+      return 'waiting';
+    case 'stale':
+      return 'stale';
+    default:
+      void unlisted(freshness);
+      return null;
+  }
+}
+
+/** The tone of a daemon's newest sampling attempt: a miss (`ok === false`) alarms; a hit or no attempt carries none. */
+export function sampleTone(ok: boolean | null): Tone | null {
+  return ok === false ? 'stale' : null;
 }
 
 /** A daemon's own newest sampling attempt in operator words — the runner's dashboard

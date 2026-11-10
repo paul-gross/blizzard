@@ -63,12 +63,6 @@
 .brake[data-glyph='stop'] {
   color: var(--red);
 }
-.halted {
-  color: var(--red);
-  font-size: var(--fs-label);
-  text-transform: uppercase;
-  letter-spacing: 0.1em;
-}
 .reason {
   color: var(--label);
   font-size: var(--fs-label);

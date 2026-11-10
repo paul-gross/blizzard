@@ -1,5 +1,5 @@
 import { ChangeDetectionStrategy, Component, input } from '@angular/core';
-import { type BeaconTone, FleetWhen, KitBadge, KitBeacon } from 'fleet';
+import { FleetWhen, KitBadge, KitBeacon } from 'fleet';
 
 import type { HostRegistrationSummary } from './host-registration.model';
 
@@ -23,5 +23,4 @@ export class HostTitle {
   readonly hostId = input.required<string | null>();
   readonly hostRef = input.required<string | null>();
   readonly registration = input.required<HostRegistrationSummary | null>();
-  readonly tone = input.required<BeaconTone>();
 }

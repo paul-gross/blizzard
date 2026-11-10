@@ -16,6 +16,15 @@ const meta: Meta<HostPanelView> = {
 export default meta;
 type Story = StoryObj<HostPanelView>;
 export const Loaded: Story = {};
+const RUNNER = { runnerId: 'r2', agentsInUse: 0, maxAgents: 2, bindings: [], localPause: null, hubPaused: false };
+export const Halted: Story = {
+  args: {
+    runners: [{ ...RUNNER, key: 'r2', name: 'r-halted', tone: 'red', halted: true, haltedReasons: ['no token; no hub'] }],
+  },
+};
+export const RedLight: Story = {
+  args: { runners: [{ ...RUNNER, key: 'r3', runnerId: 'r3', name: 'r-cut-off', tone: 'red', halted: false, haltedReasons: [] }] },
+};
 export const Loading: Story = { args: { subscriptionsState: 'loading', poolsState: 'loading' } };
 export const Error: Story = { args: { subscriptionsState: 'error', poolsState: 'error' } };
 export const Empty: Story = { args: { subscriptionsState: 'empty', poolsState: 'empty' } };

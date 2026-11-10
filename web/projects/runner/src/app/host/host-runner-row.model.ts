@@ -3,6 +3,7 @@ import { type BeaconTone, compactRef, harnessName, type runnerApi, type Tone } f
 import type { MachineChunkRow } from '../core/chunk-rows.model';
 import type { PanelProject } from '../core/panel-reads.model';
 import { slugForEntry } from '../core/panel-reads.model';
+import { hubLink, identityRefusal, runnerLight } from '../core/runner-health.model';
 import { throttleLines, throttleSummary, type ThrottleLine } from '../core/throttle.model';
 
 /** One binding of a runner: the project it serves in one workspace, and its agents in use of those it declares. */
@@ -41,6 +42,8 @@ export interface HostRunnerBadge {
 export interface HostRunnerHub {
   readonly endpoint: string;
   readonly reachable: boolean;
+  /** The link badge: the runner's one hub, connected or not. */
+  readonly link: { readonly label: string; readonly tone: Tone };
   readonly lastContactAt: string | null;
   readonly buffered: number;
   /** The hub's own version, `null` until a registration has answered. */
@@ -87,22 +90,10 @@ export interface HostRunnerRow {
   readonly heldPending: boolean;
 }
 
-/** Why the hub refuses the runner's work, from its identity verdict; `null` while it checks out or goes unchecked. */
+/** The identity refusal as a badge on the runner's hub line; `null` while the identity checks out or goes unchecked. */
 function refusal(identity: runnerApi.IdentityVerdictView | null | undefined): HostRunnerBadge | null {
-  switch (identity?.state) {
-    case 'mismatched':
-      return { label: 'REFUSING', tone: 'needs', title: identity.reset_command };
-    case 'refused':
-      return { label: 'REFUSED', tone: 'needs', title: [identity.reason, identity.reset_command].filter(Boolean).join(' — ') || null };
-    case 'not_held':
-      return { label: 'NOT HELD', tone: 'needs', title: identity.reason ?? null };
-    case 'tenant_differs':
-      return { label: 'TENANT DIFFERS', tone: 'needs', title: identity.reason ?? null };
-    case 'version_refused':
-      return { label: 'VERSION REFUSED', tone: 'needs', title: identity.reason ?? null };
-    default:
-      return null;
-  }
+  const found = identityRefusal(identity);
+  return found && { label: found.label, tone: found.tone, title: found.title };
 }
 
 /** The runner's bindings, the host's declaration joined to the runner's own slot accounting and its projects' names. */
@@ -161,7 +152,7 @@ function stateBadges(
   }
   const pause = status?.pause ?? runner.pause;
   const badges: HostRunnerBadge[] = [];
-  if (status && !status.hub.reachable) badges.push({ label: 'HUB UNREACHABLE', tone: 'stale', title: status.hub.endpoint });
+  if (status && !status.hub.reachable) badges.push({ label: 'HUB UNREACHABLE', tone: hubLink(0, 1).tone, title: status.hub.endpoint });
   if (pause?.local) {
     badges.push({ label: 'PAUSED HERE', tone: 'idle', title: pause.local_reason ?? 'Paused on this runner — no new claims' });
   }
@@ -170,13 +161,6 @@ function stateBadges(
     badges.push({ label: held > 0 ? 'WORKING' : 'IDLE', tone: held > 0 ? 'running' : 'idle', title: null });
   }
   return badges;
-}
-
-/** Red for a halted runner or one cut off from its hub, amber while either brake holds it, else green. */
-function tone(runner: runnerApi.HostRunnerView, status: runnerApi.RunnerStatusView | undefined): BeaconTone {
-  if (runner.state !== 'serving' || (status && !status.hub.reachable) || refusal(status?.identity)) return 'red';
-  const pause = status?.pause ?? runner.pause;
-  return pause?.local || pause?.hub ? 'amber' : 'green';
 }
 
 /** "Claude Code · 24 agents · 7 busy". */
@@ -221,7 +205,7 @@ export function hostRunnerRows(runners: readonly runnerApi.HostRunnerView[], rea
       runnerId: id,
       name: runner.name,
       ref: id === null ? null : compactRef(id),
-      tone: tone(runner, status),
+      tone: runnerLight(runner, status),
       halted: runner.state !== 'serving',
       summary: summary(runner, health),
       lastTickAt: status?.last_tick_at ?? null,
@@ -234,6 +218,7 @@ export function hostRunnerRows(runners: readonly runnerApi.HostRunnerView[], rea
         ? {
             endpoint: status.hub.endpoint,
             reachable: status.hub.reachable,
+            link: hubLink(status.hub.reachable ? 1 : 0, 1),
             lastContactAt: status.hub.last_contact_at ?? null,
             buffered: status.hub.buffer_depth,
             hubVersion: status.hub.hub_version ?? null,

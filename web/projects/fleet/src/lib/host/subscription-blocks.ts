@@ -1,6 +1,8 @@
 import { ChangeDetectionStrategy, Component, input } from '@angular/core';
 
 import { KitPaceBar } from '../kit/kit-pace-bar';
+import { toneColor } from '../kit/kit-badge';
+import { LAPSED_TONE } from './subscription-pace.model';
 import type { SubscriptionLine } from './subscription-blocks.model';
 
 /**
@@ -20,4 +22,7 @@ import type { SubscriptionLine } from './subscription-blocks.model';
 })
 export class SubscriptionBlocks {
   readonly line = input.required<SubscriptionLine>();
+
+  /** The lapsed cross's colour — the one tone the pace group's notice reads too. */
+  protected readonly lapsedColor = toneColor(LAPSED_TONE);
 }

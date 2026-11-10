@@ -10,7 +10,7 @@ import {
   injectHostWorkspacesQuery,
 } from '../../core/host.query';
 import { type HostPanelPool, hostPoolsFor, runnerFocus } from '../../core/host-pools.model';
-import { capacitiesByRunner, hostPanelRunners, type HostPanelRunner, runnersNamed } from './host-panel.model';
+import { hostPanelRunners, type HostPanelRunner, runnersNamed, statusesByRunner } from './host-panel.model';
 import { HostPanelView } from './host-panel-view';
 
 /**
@@ -49,11 +49,11 @@ export class HostPanel {
     runnerSubscriptionLines(this.subscriptionsQuery.data() ?? [], this.now()),
   );
 
-  /** Each runner's own slot accounting by runner id — the agents in use per binding. */
-  private readonly capacities = computed(() => capacitiesByRunner(this.dashboards.data()));
+  /** Each runner's own status by runner id — its light, its brakes, and the agents in use per binding. */
+  private readonly statuses = computed(() => statusesByRunner(this.dashboards.data()));
 
   protected readonly runners = computed<readonly HostPanelRunner[]>(() =>
-    hostPanelRunners(this.scopedRunners(), this.capacities()),
+    hostPanelRunners(this.scopedRunners(), this.statuses()),
   );
 
   protected readonly pools = computed<readonly HostPanelPool[]>(() =>
