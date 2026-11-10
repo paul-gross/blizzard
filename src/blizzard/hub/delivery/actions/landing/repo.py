@@ -222,16 +222,15 @@ class Waiting:
 @domain_model
 @dataclass(frozen=True)
 class Ready:
-    """Proven and landable: ``land`` is the one forge write that lands it, taken when the order allows. It answers
-    :class:`Landed`, or :class:`Waiting` when the write did not land."""
+    """Prepared for the ordered landing callback, which may land, wait, request a person, or find no code."""
 
-    land: Callable[[], Awaitable[Landed | Waiting | NeedsPerson]]
+    land: Callable[[], Awaitable[Landed | Waiting | NeedsPerson | AwaitingMerge | NoCode]]
 
 
 @domain_model
 @dataclass(frozen=True)
-class Held:
-    """A parked repository whose change is not yet to open."""
+class NeedsFreshReview:
+    """The previous change closed before this visit and needs a new review."""
 
 
 @domain_model
@@ -276,7 +275,7 @@ class NeedsPerson:
     escalation: ActionEscalation
 
 
-type RepoState = Landed | NoCode | Ready | Waiting | Held | AwaitingMerge | Conflict | Failure | Inherited | NeedsPerson
+type RepoState = Landed | NoCode | Ready | Waiting | AwaitingMerge | Conflict | Failure | Inherited | NeedsPerson
 
 
 @domain_model

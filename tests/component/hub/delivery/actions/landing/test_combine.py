@@ -21,6 +21,7 @@ from blizzard.hub.delivery.actions.landing.repo import (
     Landed,
     LandingRun,
     NeedsPerson,
+    NoCode,
     Ready,
     RepoLanding,
     RepoState,
@@ -184,3 +185,45 @@ def test_an_open_park_waits_without_landing_a_prepared_repository() -> None:
     answer, sink = _fold([("a", AwaitingMerge(7)), ("b", _ready("rb"))])
     assert answer.choice == "awaiting-merge"
     assert sink.landed() == []
+
+
+def test_park_callback_waits_and_does_not_touch_later_repository() -> None:
+    calls: list[str] = []
+
+    async def park() -> AwaitingMerge:
+        calls.append("park")
+        return AwaitingMerge(7)
+
+    answer, sink = _fold([("a", Ready(park)), ("b", _ready("later", calls))])
+
+    assert answer.choice == "awaiting-merge"
+    assert calls == ["park"]
+    assert sink.landed() == []
+
+
+def test_no_code_callback_continues_to_the_next_repository() -> None:
+    calls: list[str] = []
+
+    async def no_code() -> NoCode:
+        calls.append("no-code")
+        return NoCode()
+
+    answer, sink = _fold([("a", Ready(no_code)), ("b", _ready("later", calls))])
+
+    assert answer.choice == "landed"
+    assert calls == ["no-code", "later"]
+    assert sink.landed() == ["acme/b"]
+
+
+def test_unprepared_sibling_prevents_park_callback_effects() -> None:
+    calls: list[str] = []
+
+    async def park() -> AwaitingMerge:
+        calls.append("park")
+        return AwaitingMerge(7)
+
+    answer, sink = _fold([("a", Ready(park)), ("b", Waiting("checks"))])
+
+    assert answer.choice == "pending"
+    assert calls == []
+    assert sink.effects == []

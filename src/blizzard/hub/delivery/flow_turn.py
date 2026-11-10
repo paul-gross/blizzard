@@ -379,7 +379,7 @@ class TurnRunner:
             first_turn_at=self._first_turn_at(submission),
             now=self._clock.now(),
         )
-        watch = visit.parked_watch() if spec.name == "land" else None
+        watch = visit.watched_repo() if spec.lands else None
         if (missing := self._missing_capability(spec.name, resolution, only=watch)) is not None:
             target, capability = missing
             forge = resolution.forge_of(target)

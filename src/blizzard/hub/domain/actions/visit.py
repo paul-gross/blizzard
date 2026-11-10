@@ -11,7 +11,6 @@ from dataclasses import dataclass, field
 from datetime import datetime
 from types import MappingProxyType
 
-from blizzard.foundation.landing_policy import LandingPolicy
 from blizzard.foundation.roles import domain_model
 from blizzard.hub.domain.actions.declarations import GitCommits, UnconvergedDeliveryError
 from blizzard.hub.domain.artifact.model import StoredArtifact
@@ -19,7 +18,7 @@ from blizzard.hub.domain.chunk.model import LandedRepos, WorkRef
 from blizzard.hub.domain.chunk.no_code import finished_repos, no_code_marker, no_code_repos
 from blizzard.hub.domain.chunk.pr_markers import is_reopened, latest_pr_marker
 from blizzard.hub.domain.config.forges import ConfiguredForge
-from blizzard.hub.domain.config.landing_policies import landing_sort_key
+from blizzard.hub.domain.config.landing_policies import POLICY_FACTS, landing_sort_key
 from blizzard.hub.domain.config.repositories import (
     ConfiguredRepository,
     RepositoryId,
@@ -191,7 +190,7 @@ class Visit:
         )
         return no_code_marker(declaration)
 
-    def parked_watch(self) -> RepositoryId | None:
+    def watched_repo(self) -> RepositoryId | None:
         """The first unfinished parked repository with an existing change, unless it needs a fresh review."""
         finished = self.finished_repos()
         pairs = sorted(
@@ -201,7 +200,7 @@ class Visit:
         for target, repo in pairs:
             if repo in finished:
                 continue
-            if target.landing_policy is not LandingPolicy.PARK:
+            if not POLICY_FACTS[target.landing_policy].watches:
                 return None
             marker = latest_pr_marker(self.markers, repo)
             if marker is None or is_reopened(self.markers, repo, marker, self.epoch):

@@ -5,16 +5,20 @@ import json
 from dataclasses import replace
 from datetime import timedelta
 
+import pytest
+
 from blizzard.foundation.artifacts import ArtifactKind
 from blizzard.foundation.escalation_causes import EscalationCause
 from blizzard.foundation.landing_policy import LandingPolicy
 from blizzard.hub.delivery.actions.land import Land
+from blizzard.hub.delivery.actions.landing.park import Park
+from blizzard.hub.delivery.actions.landing.repo import Admitted, Landed, LandingRun, RepoLanding, Waiting
 from blizzard.hub.domain.actions.visit import Visit
 from blizzard.hub.domain.artifact.model import StoredArtifact
 from blizzard.hub.domain.chunk.no_code import no_code_marker
 from blizzard.hub.domain.config.capabilities import Capability
 from blizzard.hub.domain.config.repositories import RepositoryId
-from blizzard.hub.forge.landing import ChangeState, CommitSummary, ComparisonStatus
+from blizzard.hub.forge.landing import ChangeState, CommitSummary, ComparisonStatus, ForgeRejected, ForgeUnavailable
 from tests.support.github_double import GitHubDouble, change, comparison
 from tests.support.land_action_doubles import (
     _GADGET,  # pyright: ignore[reportPrivateUsage]  # shared test helper, imported from tests.support.land_action_doubles
@@ -43,6 +47,100 @@ def marker(visit: Visit, epoch: int = 1, age: int = 0) -> StoredArtifact:
         epoch=epoch,
         produced_at=visit.now - timedelta(hours=age),
     )
+
+
+def _assess(forge: GitHubDouble, visit: Visit):
+    sink = _Sink()
+    repository = RepositoryId(visit.resolution.targets[0].record)
+    run = LandingRun(visit, sink)
+    record = visit.resolution.targets[0]
+    repo = RepoLanding(
+        run,
+        _WIDGET,
+        "feat/x",
+        _SUBMITTED,
+        record,
+        forge.forge(repository, _WIDGET),
+        visit.resolution.forge_of(record).label,
+    )
+    return asyncio.run(Park().step(repo)), sink
+
+
+def test_initial_park_assessment_is_read_only_and_admits_unmerged_work():
+    visit = parked_visit()
+    forge = _forge()
+
+    state, sink = _assess(forge, visit)
+
+    assert isinstance(state, Admitted)
+    assert forge.named("changes")
+    assert forge.writes() == []
+    assert sink.effects == []
+    assert not forge.named("compare") and not forge.named("branch_tip")
+
+
+def test_initial_park_assessment_recovers_in_visit_merge_before_admission():
+    visit = parked_visit()
+    forge = _forge()
+    forge.repo(_WIDGET).changes[1] = _merged(visit, head="person-added")
+
+    state, sink = _assess(forge, visit)
+
+    assert isinstance(state, Landed)
+    assert state.revision == "merged"
+    assert sink.effects == []
+    assert forge.writes() == []
+    assert not forge.named("compare") and not forge.named("branch_tip")
+
+
+def test_initial_park_assessment_does_not_recover_a_previsit_merge():
+    visit = parked_visit()
+    forge = _forge()
+    forge.repo(_WIDGET).changes[1] = replace(_merged(visit), closed_at=visit.first_turn_at - timedelta(seconds=1))
+
+    state, sink = _assess(forge, visit)
+
+    assert isinstance(state, Admitted)
+    assert sink.effects == [] and forge.writes() == []
+
+
+@pytest.mark.parametrize("field", ["head", "base"])
+def test_initial_park_assessment_does_not_recover_an_unassociated_merge(field: str):
+    visit = parked_visit()
+    forge = _forge()
+    forge.repo(_WIDGET).changes[1] = replace(_merged(visit), **{field: "other"})
+
+    state, sink = _assess(forge, visit)
+
+    assert isinstance(state, Admitted)
+    assert sink.effects == [] and forge.writes() == []
+
+
+def test_initial_park_assessment_waits_for_merged_revision():
+    visit = parked_visit()
+    forge = _forge()
+    forge.repo(_WIDGET).changes[1] = _merged(visit, revision=None)
+
+    state, sink = _assess(forge, visit)
+
+    assert isinstance(state, Waiting)
+    assert sink.effects == [] and forge.writes() == []
+
+
+def test_initial_park_assessment_waits_on_refused_recovery_read():
+    forge = _forge(replies={"changes": [ForgeRejected("cannot list changes")]})
+
+    state, sink = _assess(forge, parked_visit())
+
+    assert isinstance(state, Waiting)
+    assert sink.effects == [] and forge.writes() == []
+
+
+def test_initial_park_assessment_propagates_unavailable_recovery_read():
+    forge = _forge(replies={"changes": [ForgeUnavailable("offline")]})
+    with pytest.raises(ForgeUnavailable):
+        _assess(forge, parked_visit())
+    assert forge.writes() == []
 
 
 def test_open_parked_change_never_runs_checks_or_merge():
@@ -104,7 +202,7 @@ def test_partial_forge_set_watches_only_parked_repo_then_defers_after_merge():
     visit = replace(visit, markers=(marker(visit),))
     forge = _forge(_WIDGET, _GADGET)
     repository = RepositoryId(visit.resolution.targets[0].record)
-    assert visit.parked_watch() == repository
+    assert visit.watched_repo() == repository
     handles = {repository: forge.forge(repository, _WIDGET)}
     answer = asyncio.run(Land().take(visit, handles, _Sink()))
     assert answer.choice == "awaiting-merge"
@@ -145,6 +243,19 @@ def test_merge_seen_after_open_before_marker_recovers_both_park_markers():
     assert "awaiting-external-merge" in sink.markers()
 
 
+def test_recovery_of_merged_change_precedes_optional_no_code_proof():
+    visit = parked_visit()
+    forge = _forge()
+    forge.repo(_WIDGET).changes[1] = _merged(visit)
+    forge.repo(_WIDGET).replies["compare"] = [ForgeUnavailable("proof unavailable")]
+
+    answer, sink = _land(forge, visit)
+
+    assert answer.choice == "landed"
+    assert [row.revision for row in sink.landings()] == ["merged"]
+    assert not forge.named("compare")
+
+
 def test_closed_change_escalates_and_old_closed_change_is_replaced():
     visit = parked_visit()
     forge = _forge()
@@ -167,6 +278,7 @@ def test_requeued_closed_change_waits_until_other_heads_are_reproved():
     requeued = replace(visit, epoch=2, markers=(marker(visit),))
     answer, _ = _land(forge, requeued)
     assert answer.choice == "pending"
+    assert all(repo == _WIDGET for _, repo, _ in forge.calls)
     reopened = replace(_row(ArtifactKind.ASSET, f"park-reopen/{_WIDGET}/1", ""), epoch=2)
     forge.repo(_GADGET).checks[_SUBMITTED] = ()
     answer, _ = _land(forge, replace(requeued, markers=(*requeued.markers, reopened)))
@@ -178,9 +290,42 @@ def test_unopened_park_waits_for_other_repositories_checks():
     visit = parked_visit((_WIDGET, _GADGET))
     forge = _forge(_WIDGET, _GADGET)
     forge.repo(_GADGET).checks[_SUBMITTED] = ()
-    answer, _ = _land(forge, visit)
+    answer, sink = _land(forge, visit)
     assert answer.choice == "pending"
-    assert not any(repo == _WIDGET for _, repo, _ in forge.calls)
+    assert not any(repo == _WIDGET for repo, _ in forge.named("open_change"))
+    assert f"delivery-pr/{_WIDGET}/1" not in sink.markers()
+    assert "awaiting-external-merge" not in sink.markers()
+
+
+def test_proven_no_code_park_emits_no_effect_until_sibling_is_ready():
+    visit = parked_visit((_WIDGET, _GADGET))
+    forge = _contained(_forge(_WIDGET, _GADGET))
+    forge.repo(_GADGET).checks[_SUBMITTED] = ()
+
+    answer, sink = _land(forge, visit)
+
+    assert answer.choice == "pending"
+    assert not any(name.startswith("no-code/") for name in sink.markers())
+    assert not any(repo == _WIDGET for repo, _ in forge.named("open_change"))
+
+
+def test_foreign_sibling_head_prevents_park_open_and_markers():
+    visit = parked_visit((_WIDGET, _GADGET))
+    forge = _forge(_WIDGET, _GADGET)
+    forge.repo(_GADGET).heads["feat/x"] = "foreign"
+    forge.repo(_GADGET).compares[(_SUBMITTED, "foreign")] = comparison(
+        ComparisonStatus.AHEAD, commits=(CommitSummary("foreign", (_SUBMITTED,)),)
+    )
+
+    answer, sink = _land(forge, visit)
+
+    assert answer.choice == "failure"
+    assert all(repo != _WIDGET for repo, _ in forge.named("open_change"))
+    assert not sink.landings()
+    assert not any(name.startswith(f"delivery-pr/{_WIDGET}/") for name in sink.markers())
+    assert "awaiting-external-merge" not in sink.markers()
+    assert not any(repo == _WIDGET for repo, _ in forge.named("compare"))
+    assert not any(repo == _WIDGET for repo, _ in forge.named("branch_tip"))
 
 
 def test_parked_library_blocks_prepared_consumer_until_the_person_merges():
@@ -258,18 +403,18 @@ def _with_no_code(visit: Visit, repo: str) -> Visit:
 
 def test_the_watch_skips_a_no_code_first_repository_and_selects_the_parked_one():
     visit = _with_no_code(_a_b_c(), _WIDGET)
-    assert visit.parked_watch() == RepositoryId(visit.resolution.targets[1].record)
+    assert visit.watched_repo() == RepositoryId(visit.resolution.targets[1].record)
 
 
 def test_the_watch_is_none_without_no_code_evidence_for_the_earlier_repository():
-    assert _a_b_c().parked_watch() is None
+    assert _a_b_c().watched_repo() is None
 
 
 def test_the_watch_is_none_when_the_no_code_marker_is_from_an_earlier_node():
     visit = _a_b_c()
     row = replace(_no_code_row(visit, _WIDGET), node_id="nd_earlier")
     visit = replace(visit, artifacts=(*visit.artifacts, row))
-    assert visit.parked_watch() is None
+    assert visit.watched_repo() is None
 
 
 def test_the_watch_is_none_when_the_no_code_marker_names_another_declaration():
@@ -279,13 +424,13 @@ def test_the_watch_is_none_when_the_no_code_marker_names_another_declaration():
     )
     row = _row(ArtifactKind.ASSET, name, data)
     visit = replace(visit, markers=(*visit.markers, row), artifacts=(*visit.artifacts, row))
-    assert visit.parked_watch() is None
+    assert visit.watched_repo() is None
 
 
 def test_the_watch_is_none_after_a_current_epoch_reopen_of_the_parked_repository():
     visit = _with_no_code(_a_b_c(), _WIDGET)
     reopen = _row(ArtifactKind.ASSET, f"park-reopen/{_GADGET}/2", "")
-    assert replace(visit, markers=(*visit.markers, reopen)).parked_watch() is None
+    assert replace(visit, markers=(*visit.markers, reopen)).watched_repo() is None
 
 
 def _merged(visit: Visit, *, head: str = _SUBMITTED, base: str = "main", revision: str | None = "merged"):
