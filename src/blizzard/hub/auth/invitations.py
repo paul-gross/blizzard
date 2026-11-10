@@ -222,7 +222,6 @@ class InvitationService:
         """Issue an invitation admitting ``email`` as ``role`` for ``lifetime_days``, by the user ``by``. Raises
         :class:`MembershipRoleRefused` for a role no membership holds and :class:`InvitationLifetimeRefused` for a
         lifetime out of range."""
-        # Refusals come before the token and id are minted.
         now = self._clock.now()
         token = InvitationToken.mint()
         invitation = Invitation.requested(
