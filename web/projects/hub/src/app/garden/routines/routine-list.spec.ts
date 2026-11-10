@@ -54,6 +54,14 @@ describe('FleetRoutineList', () => {
     expect(kept?.querySelector('[data-testid="gardening-routine-cadence"]')?.textContent).toBe('cadence');
   });
 
+  it('labels a row neither cadence nor manual while its kept state is unread', async () => {
+    const fixture = await mount({ rows: ROWS.map((r) => ({ ...r, kept: null })) });
+    const el = fixture.nativeElement as HTMLElement;
+
+    expect(el.querySelectorAll('[data-testid="gardening-routine-row-nightly"]').length).toBe(1);
+    expect(el.querySelector('[data-testid="gardening-routine-cadence"]')).toBeNull();
+  });
+
   it('renders the routine id as a compact ref, right-aligned, with the full id as its title', async () => {
     const fixture = await mount({});
     const el = fixture.nativeElement as HTMLElement;
