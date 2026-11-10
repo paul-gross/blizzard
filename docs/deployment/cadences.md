@@ -32,6 +32,7 @@ chores:
     routine: docs-drift
     scopes: [blizzard, blizzard-context]
     promote: false
+    urgency: urgent
 ```
 
 | Field      | Meaning                                                                                                                   |
@@ -49,9 +50,17 @@ expression that never fires, and an unknown zone are each refused `422`, naming 
 A chore names its `routine` by slug. Its `scopes` is `all`, for every scope linked to the routine, a list of scope
 slugs, or left out, for the routine's default scope. Its `mode` is `full` or `delta`, `full` when left out. Its `note`
 is carried into each run's charge. Its `promote` is `true` when left out; `false` leaves each chunk it mints not ready.
+Its `urgency` is the chore's **override**: the [urgency](./urgencies.md) each chunk it mints takes over its routine's
+default urgency ([urgencies.md](./urgencies.md#the-chain)). Left out, the chore's chunks take the routine's default, or
+the tenant's. A request names it by id or slug, and a document and the view by slug.
 
-A chore keeps its `chr_` id while its key stays in the list, across every edit. Removing a key and adding it back mints
-a new chore.
+Unlike a routine or scope that does not resolve, an urgency the chore names must: a write naming no urgency is refused
+`422 urgency_unknown`, and one naming a retired urgency `422 urgency_retired`. Retiring an urgency clears it from every
+chore that names it ([urgencies.md](./urgencies.md#retiring-with-work-moved-and-enabling)), and an override retired in
+some other way names none, so its chunks fall through to the routine's default.
+
+A chore keeps its `chr_` id while its key stays in the list, across every edit, its urgency's included. Removing a key
+and adding it back mints a new chore.
 
 A cadence's view also carries `next_moments`: its schedule's next five moments after the read, earliest first. It is
 empty when the cadence has no schedule or is retired.
@@ -188,8 +197,8 @@ blizzard hub cadence edit evening [--name TEXT] [--cron EXPR] [--zone ZONE] [--s
 blizzard hub cadence retire evening [--by WHO]
 blizzard hub cadence enable evening [--by WHO]
 
-blizzard hub cadence chore add evening arch --routine architecture-drift [--all-scopes | --scope S ...] [--mode delta] [--note TEXT] [--hold]
-blizzard hub cadence chore edit evening arch [--routine R] [--all-scopes | --scope S ... | --default-scope] [--mode M] [--note TEXT] [--hold | --promote]
+blizzard hub cadence chore add evening arch --routine architecture-drift [--all-scopes | --scope S ...] [--mode delta] [--note TEXT] [--hold] [--urgency U]
+blizzard hub cadence chore edit evening arch [--routine R] [--all-scopes | --scope S ... | --default-scope] [--mode M] [--note TEXT] [--hold | --promote] [--urgency U | --clear-urgency]
 blizzard hub cadence chore remove evening arch
 ```
 
@@ -202,7 +211,8 @@ restores it.
 A `chore` verb is an edit of its cadence: it reads the cadence, rewrites its chore list, and writes it back on the
 revision it read, so a cadence changed in between is refused `409` rather than overwritten. Each edit moves the
 cadence's revision and writes a row to the [change log](./config-changes.md) naming each chore added, removed, or
-changed by its key. `--hold` writes `promote: false`, and `--promote` writes it back.
+changed by its key. `--hold` writes `promote: false`, and `--promote` writes it back. `--urgency` sets the chore's
+override, and `--clear-urgency` removes it; a chore verb carries every other chore's override through unchanged.
 
 Every write needs `graph:edit`. A write that leaves a live cadence with a promoting chore also needs `chunk:control`;
 retiring needs only `graph:edit`.

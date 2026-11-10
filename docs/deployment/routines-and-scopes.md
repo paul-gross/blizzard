@@ -30,14 +30,21 @@ list. The selected child route remains in the URL, so a detail can still be open
 
 ## Routines
 
-`blizzard hub routine create <slug> <graph_name> <default_scope_slug> [--name <display name>] [--model] [--effort] [--harnesses]`,
+`blizzard hub routine create <slug> <graph_name> <default_scope_slug> [--name <display name>] [--model] [--effort] [--harnesses] [--default-urgency <urgency>]`,
 `list`, `get <routine_id>`, and
-`edit <routine_id> [--name <display name>] [--graph <name>] [--scope <slug>] [--model] [--effort] [--harnesses] [--clear model|effort|harnesses]`
+`edit <routine_id> [--name <display name>] [--graph <name>] [--scope <slug>] [--model] [--effort] [--harnesses] [--default-urgency <urgency> | --clear-default-urgency] [--clear model|effort|harnesses]`
 are the routine verbs. `edit` sends only the options given; anything left out stands. `GRAPH_NAME` must resolve to a
 currently-enabled graph — a create, or an edit that changes the graph, naming one that does not refuses, naming it.
 Restating the graph a routine already points at is accepted even after that graph retires. `DEFAULT_SCOPE_SLUG` is
 minted through the same path `scope create` uses if the slug is unseen, so a routine's default scope never needs a
 separate `scope create` first.
+
+A routine's **default urgency** is the [urgency](./urgencies.md) its runs take when the run itself names none. It is
+optional: a routine without one leaves its runs to the tenant's default. `--default-urgency` names it by id or slug, and
+the routine stores and shows it by slug; `routine get` prints it, or that the tenant's default stands.
+`--clear-default-urgency` removes it. A create or an edit naming no urgency is refused `422 urgency_unknown`, and one
+naming a retired urgency `422 urgency_retired`. Retiring an urgency clears it from every routine that names it as the
+default ([urgencies.md](./urgencies.md#retiring-with-work-moved-and-enabling)).
 
 A routine's `slug` is its lineage and handle, and is immutable once minted: `routine edit` never changes it, and a
 create naming an already-existing routine slug — a retired routine's included — is refused rather than duplicating it. A
@@ -78,22 +85,27 @@ A write that would change nothing writes nothing: no revision, no row.
 
 Over HTTP, `PATCH /api/scopes/{slug}` and `PATCH /api/routines/{routine_id}` are sparse: an absent field is unchanged, a
 present one is set, and a field that is not part of the record is refused. A routine's `graph_name` and
-`default_scope_slug` refuse an explicit `null`; `default_effort` takes `null` to clear it. Send `If-Match: <revision>`
-to refuse the write with `409` if the record moved since you read it. Both kinds can also be declared in a configuration
-document ([config-documents.md](config-documents.md)).
+`default_scope_slug` refuse an explicit `null`; `default_effort` and `default_urgency` take `null` to clear them. Send
+`If-Match: <revision>` to refuse the write with `409` if the record moved since you read it. Both kinds can also be
+declared in a configuration document ([config-documents.md](config-documents.md)).
 
 ## Running one
 
-`blizzard hub routine run <slug> [--scope <slug>] [--mode full|delta] [--note <text>]` mints and ingests a hub work item
-from the named routine, in one act. The minted chunk rests `not_ready` — on the board, not yet claimable — until
-`blizzard hub chunk promote <chunk-id>` promotes it, exactly as for any ingested chunk; the CLI prints that next step.
-`SLUG` resolves to the routine's `routine_id` through the routine list; `--scope` overrides the routine's own default
-with a scope already linked into the routine's own related set — naming one that is not, or a slug no scope row holds,
-refuses rather than minting it (`routine scope add` links one first). `--mode` defaults to `full`; a requested `delta`
-against a routine/scope pair with no recorded baseline downgrades to `full` rather than refusing — the CLI names the
-downgrade in its output, and the item's own charge does too. A retired routine, a retired effective scope, or a routine
-whose graph has lost every enabled mint, refuses the run rather than running it anyway — a retired routine is checked
-first, before any scope is resolved.
+`blizzard hub routine run <slug> [--scope <slug>] [--mode full|delta] [--note <text>] [--urgency <urgency>]` mints and
+ingests a hub work item from the named routine, in one act. The minted chunk rests `not_ready` — on the board, not yet
+claimable — until `blizzard hub chunk promote <chunk-id>` promotes it, exactly as for any ingested chunk; the CLI prints
+that next step. `SLUG` resolves to the routine's `routine_id` through the routine list; `--scope` overrides the
+routine's own default with a scope already linked into the routine's own related set — naming one that is not, or a slug
+no scope row holds, refuses rather than minting it (`routine scope add` links one first). `--mode` defaults to `full`; a
+requested `delta` against a routine/scope pair with no recorded baseline downgrades to `full` rather than refusing — the
+CLI names the downgrade in its output, and the item's own charge does too. A retired routine, a retired effective scope,
+or a routine whose graph has lost every enabled mint, refuses the run rather than running it anyway — a retired routine
+is checked first, before any scope is resolved.
+
+The run's chunk takes the urgency `--urgency` names, by id or slug, for this run alone; without it, the routine's
+default urgency, and without that, the tenant's default ([urgencies.md](./urgencies.md#the-chain)). A stated urgency
+naming none is refused `422 urgency_unknown`, and a retired one `422 urgency_retired`. A routine's default that was
+retired since it was set names none, so the run takes the tenant's default.
 
 The hub board's Gardening tab offers the same act as a dialog on its Routines sub-tab, reachable from the selected
 routine's own panel; its confirmation names the minted chunk and says it rests `not_ready` until promoted. The scope

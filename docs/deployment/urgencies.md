@@ -24,6 +24,26 @@ and edited. Changing the default moves no chunk; it decides only what is minted 
 urgency of the tenant is refused `422 urgency_unknown`, a retired one `422 urgency_retired`, and an explicit `null`
 `422`.
 
+## The chain
+
+A new chunk takes the urgency of the first link of its chain that names one:
+
+1. The urgency the mint states: `--urgency` on `chunk ingest`, `item create`, `routine run`, and
+   `garden-proposal accept`, or `urgency` on their requests, by id or slug.
+2. For a chunk a cadence mints, its chore's override ([cadences.md](./cadences.md#the-record)).
+3. For a routine's run, its routine's default urgency ([routines-and-scopes.md](./routines-and-scopes.md#routines)).
+4. The tenant's default.
+
+A stated urgency naming none is refused `422 urgency_unknown`, and a retired one `422 urgency_retired`. A chore's or a
+routine's urgency that is retired names none, so the chain falls through to the next link. The chain is resolved under
+the mint's locks, so an urgency retired while the mint is in flight never lands on its chunk. A `garden-proposal accept`
+that mints no work item is refused `422` for stating an urgency.
+
+A chunk's urgency is changed afterwards through `chunk set --urgency`
+([chunk-operations/editing.md](./chunk-operations/editing.md#urgency)). Grouping keeps the surviving chunk's urgency.
+Every chunk view carries `urgency`, the chunk's urgency as `{urgency_id, slug}`; `chunk list`, `queue get`, and the
+header line of `chunk get` show its slug.
+
 ## The fields
 
 | Field   | Meaning                                                                                                                                                                                                                              |
@@ -64,7 +84,9 @@ A [configuration document](./config-documents.md) declares the set in these thre
 ## Retiring with work moved, and enabling
 
 Retiring an urgency takes it out of the live order. Its open chunks move to the urgency `move_to` names, in the same
-write; finished chunks keep the urgency they carried. A retire is refused, in this order:
+write; finished chunks keep the urgency they carried. In the same write, every routine's default urgency and every
+chore's override naming it is cleared, each with its own change row, so their runs fall through to the next link of the
+chain. A retire is refused, in this order:
 
 1. `409 urgency_is_default` for the tenant's default. Change the default first.
 2. `409 urgency_in_use` when open chunks carry it and no `move_to` is named; the refusal counts them.
@@ -75,8 +97,8 @@ A retire that moves open chunks needs `chunk:control` beside `config:edit`, and 
 retired urgency writes nothing. The retire's change row lists `move_to` and `moved_chunks` beside the flip of `retired`
 ([config-changes.md](./config-changes.md)).
 
-Enabling brings a retired urgency back at its standing place in the order. It moves no chunk back. Enabling a live
-urgency writes nothing.
+Enabling brings a retired urgency back at its standing place in the order. It moves no chunk back and restores no
+cleared routine default or chore override. Enabling a live urgency writes nothing.
 
 Every edit, retire, and enable takes `If-Match` on the urgency's `revision`, and the settings' edit on theirs; a stale
 one is refused `409`.
