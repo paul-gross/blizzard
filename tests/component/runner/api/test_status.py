@@ -337,7 +337,7 @@ def test_pause_states_reported_apart_and_effective_is_the_or(tmp_path: Path) -> 
 
 
 def test_pause_local_reason_surfaces_when_locally_paused_with_one(tmp_path: Path) -> None:
-    """A reasoned local pause (a usage limit, the spend ceiling) reads its reason back on the
+    """A reasoned local pause (the runner spend ceiling) reads its reason back on the
     runner's own status wire — the local mirror of the hub's `RunnerView.locally_paused_reason`."""
     app, store = _app_with_status(tmp_path)
     store.record_local_pause(

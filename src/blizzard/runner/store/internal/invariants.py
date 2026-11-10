@@ -4,7 +4,6 @@ from __future__ import annotations
 
 from collections import Counter
 from dataclasses import dataclass
-from datetime import datetime
 from typing import ClassVar
 
 from sqlalchemy import Connection, Table, and_, func, or_, select
@@ -355,12 +354,12 @@ class TranscriptSegmentFinalizedExactlyOnce(QueryCheck):
 
 
 class OneOpenPauseParkPerLease(QueryCheck):
-    """An *open* pause-park is a park fact with no pause-resume at or after it;
-    a re-pause is legal."""
+    """An *open* pause-park is a park fact with no pause-resume appended after it (a
+    greater ``seq``); a re-pause is legal."""
 
     def run(self) -> list[Violation]:
         violations: list[Violation] = []
-        open_parks = Counter(lease_id for lease_id, _ in self._open_pause_parks())
+        open_parks = Counter(lease_id for lease_id in self._open_pause_parks())
         for lease_id, n in open_parks.items():
             if n > 1:
                 violations.append(
@@ -368,22 +367,22 @@ class OneOpenPauseParkPerLease(QueryCheck):
                 )
         return violations
 
-    def _open_pause_parks(self) -> list[tuple[str, datetime]]:
-        """The plain-query mirror of the store adapter's ``open_pause_park`` — same ``>=``
-        (a same-instant resume is a resume), same per-lease correlation, and the same
-        exclusion of a closed lease's park."""
+    def _open_pause_parks(self) -> list[str]:
+        """The plain-query mirror of the store adapter's ``open_pause_park`` — same ``seq``
+        ordering (a resume closes only a park appended before it, so a same-instant
+        re-pause stays open), same per-lease correlation, and the same exclusion of a
+        closed lease's park."""
         closed = {row[0] for row in self.conn.execute(select(runner.lease_closures.c.lease_id))}
-        resumes: dict[str, list[datetime]] = {}
-        for lease_id, resumed_at in self.conn.execute(
-            select(runner.pause_park_resumes.c.lease_id, runner.pause_park_resumes.c.resumed_at)
+        resumes: dict[str, list[int]] = {}
+        for lease_id, seq in self.conn.execute(
+            select(runner.pause_park_resumes.c.lease_id, runner.pause_park_resumes.c.seq)
         ):
-            resumes.setdefault(lease_id, []).append(resumed_at)
+            if seq is not None:
+                resumes.setdefault(lease_id, []).append(seq)
         return [
-            (lease_id, parked_at)
-            for lease_id, parked_at in self.conn.execute(
-                select(runner.pause_parks.c.lease_id, runner.pause_parks.c.parked_at)
-            )
-            if lease_id not in closed and not any(r >= parked_at for r in resumes.get(lease_id, ()))
+            lease_id
+            for lease_id, seq in self.conn.execute(select(runner.pause_parks.c.lease_id, runner.pause_parks.c.seq))
+            if lease_id not in closed and not (seq is not None and any(r > seq for r in resumes.get(lease_id, ())))
         ]
 
 
