@@ -89,13 +89,9 @@ class ExternalUsageAttemptSummary:
     ok: bool
     miss_reason: str | None
 
-    @property
     def condition(self) -> SampleMissReason | None:
-        """``CREDENTIAL_LAPSED`` iff this newest attempt is a miss with that reason, else ``None``."""
-        return self.lapsed_condition()
-
-    def lapsed_condition(self) -> SampleMissReason | None:
-        """The lapsed-credential reading of this attempt: ``CREDENTIAL_LAPSED`` for a lapsed miss, else ``None``."""
+        """``CREDENTIAL_LAPSED`` iff this newest attempt is a miss with that reason, else ``None``. A plain method,
+        so mutation testing reaches the rule."""
         if not self.ok and self.miss_reason == SampleMissReason.CREDENTIAL_LAPSED:
             return SampleMissReason.CREDENTIAL_LAPSED
         return None

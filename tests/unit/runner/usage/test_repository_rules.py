@@ -157,7 +157,7 @@ def test_snapshot_records_sampled_kind() -> None:
 
 def test_an_attempt_reads_lapsed_only_when_it_is_a_credential_lapsed_miss() -> None:
     def condition(*, ok: bool, miss_reason: str | None) -> SampleMissReason | None:
-        return ExternalUsageAttemptSummary("s", _NOW, ok=ok, miss_reason=miss_reason).condition
+        return ExternalUsageAttemptSummary("s", _NOW, ok=ok, miss_reason=miss_reason).condition()
 
     assert condition(ok=False, miss_reason="credential_lapsed") is SampleMissReason.CREDENTIAL_LAPSED
     assert condition(ok=False, miss_reason="credential_unreadable") is None
