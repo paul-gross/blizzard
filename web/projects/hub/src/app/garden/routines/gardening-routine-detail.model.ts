@@ -1,6 +1,5 @@
 import {
   type AsyncStateQuery,
-  type CadenceView,
   type GardenProposalCountsView,
   type GardenSweepsView,
   type GraphSummaryView,
@@ -154,26 +153,15 @@ export function routineRunsLabel(recent: readonly RecentRunVm[] | null, windowLa
   return recent === null ? null : `${recent.length} in the ${windowLabel}`;
 }
 
-/** The chores keeping `routine`, one row each, cadence by cadence in the list's order — a chore keeps a routine when
- * its `routine` is the routine's slug, on an enabled cadence of the routine's own project. A retired cadence keeps
- * nothing. `null` while the cadences read is pending or no routine is selected. */
-export function keptByRows(
-  cadences: readonly CadenceView[] | undefined,
-  routine: Pick<RoutineView, 'slug' | 'project_id'> | null,
-): readonly KeptByVm[] | null {
-  if (cadences === undefined || routine === null) return null;
-  return cadences
-    .filter((cadence) => !cadence.retired && cadence.project_id === routine.project_id)
-    .flatMap((cadence) =>
-      cadence.chores
-        .filter((chore) => chore.routine === routine.slug)
-        .map((chore) => ({
-          cadenceSlug: cadence.slug,
-          cadenceName: cadence.name,
-          choreKey: chore.key,
-          nextMoment: cadence.next_moments[0] ?? null,
-        })),
-    );
+/** The chores keeping `routine`, one row each, as the hub serves them on its `kept_by`; `null` with no routine selected. */
+export function keptByVms(routine: Pick<RoutineView, 'kept_by'> | null): readonly KeptByVm[] | null {
+  if (routine === null) return null;
+  return (routine.kept_by ?? []).map((k) => ({
+    cadenceSlug: k.cadence_slug,
+    cadenceName: k.cadence_name,
+    choreKey: k.chore_key,
+    nextMoment: k.next_moment,
+  }));
 }
 
 /** Everything {@link routinePanelVm} composes beside the routine itself. */

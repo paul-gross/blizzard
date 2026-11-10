@@ -10,10 +10,10 @@ import type {
   TrendView,
 } from 'fleet';
 import { describe, expect, it } from 'vitest';
-import { fixtureInstant, gardenCadenceView, gardenChoreView } from 'fleet/testing';
+import { fixtureInstant } from 'fleet/testing';
 
 import {
-  keptByRows,
+  keptByVms,
   modelEffortLabel,
   routineRecentRuns,
   routineRunsLabel,
@@ -319,45 +319,23 @@ describe('trendTotals', () => {
   });
 });
 
-describe('keptByRows', () => {
-  it('answers null while the cadences read is pending or no routine is selected', () => {
-    expect(keptByRows(undefined, ROUTINE)).toBeNull();
-    expect(keptByRows([], null)).toBeNull();
+describe('keptByVms', () => {
+  it('keeps nothing when the routine carries no kept_by', () => {
+    expect(keptByVms(ROUTINE)).toEqual([]);
   });
 
-  it('keeps nothing when no chore names the routine', () => {
-    const other = gardenCadenceView({ slug: 'evening', chores: [gardenChoreView({ routine: 'weekly' })] });
-    expect(keptByRows([other], ROUTINE)).toEqual([]);
-  });
-
-  it("names the one chore keeping the routine, with its cadence's next moment", () => {
-    const evening = gardenCadenceView({ slug: 'evening', name: 'Evening', chores: [gardenChoreView()] });
-    expect(keptByRows([evening], ROUTINE)).toEqual([
+  it('maps every keeping chore to a row, in the hub’s order', () => {
+    const routine: RoutineView = {
+      ...ROUTINE,
+      kept_by: [
+        { cadence_slug: 'evening', cadence_name: 'Evening', chore_key: 'nightly', next_moment: fixtureInstant(14 * 3600) },
+        { cadence_slug: 'weekly', cadence_name: 'Weekly', chore_key: 'deep', next_moment: null },
+      ],
+    };
+    expect(keptByVms(routine)).toEqual([
       { cadenceSlug: 'evening', cadenceName: 'Evening', choreKey: 'nightly', nextMoment: fixtureInstant(14 * 3600) },
+      { cadenceSlug: 'weekly', cadenceName: 'Weekly', choreKey: 'deep', nextMoment: null },
     ]);
-  });
-
-  it('names every chore across several cadences, in list order', () => {
-    const evening = gardenCadenceView({
-      slug: 'evening',
-      chores: [gardenChoreView(), gardenChoreView({ chore_id: 'chr_2', key: 'docs', routine: 'weekly' })],
-    });
-    const weekly = gardenCadenceView({
-      slug: 'weekly',
-      next_moments: [],
-      chores: [gardenChoreView({ chore_id: 'chr_3', key: 'deep' }), gardenChoreView({ chore_id: 'chr_4', key: 'web' })],
-    });
-    expect(keptByRows([evening, weekly], ROUTINE)?.map((k) => [k.cadenceSlug, k.choreKey, k.nextMoment])).toEqual([
-      ['evening', 'nightly', fixtureInstant(14 * 3600)],
-      ['weekly', 'deep', null],
-      ['weekly', 'web', null],
-    ]);
-  });
-
-  it("skips a retired cadence and one of another project", () => {
-    const retired = gardenCadenceView({ slug: 'old', retired: true, chores: [gardenChoreView()] });
-    const elsewhere = gardenCadenceView({ slug: 'far', project_id: 'prj_2', chores: [gardenChoreView()] });
-    expect(keptByRows([retired, elsewhere], ROUTINE)).toEqual([]);
   });
 });
 

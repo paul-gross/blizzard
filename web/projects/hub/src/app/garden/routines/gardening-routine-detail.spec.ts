@@ -5,8 +5,6 @@ import { QueryClient, provideTanStackQuery } from '@tanstack/angular-query-exper
 import { FLEET_CLOCK, type GraphSummaryView, type MeResponse, type RoutineView } from 'fleet';
 import {
   OPERATOR_ME_RESPONSE,
-  gardenCadenceView,
-  gardenChoreView,
   gardenGraphSummaryView,
   gardenMeasurementReadingView,
   gardenProposalCountsRowView,
@@ -121,7 +119,6 @@ describe('GardeningRoutineDetail', () => {
       // `injectHubScopesQuery` independently of this pane.
       'GET /api/scopes': () => [],
       'GET /api/runs': () => [],
-      'GET /api/cadences': () => [],
       'GET /api/me': () => me,
       'POST /api/routines/{routine_id}/retire': (_request, { routine_id }) =>
         gardenRoutineView({ ...ROUTINE, routine_id, retired: true }),
@@ -236,20 +233,26 @@ describe('GardeningRoutineDetail', () => {
     expect(record?.textContent).toContain('medium');
   });
 
-  it('names the cadence chore keeping the routine off the cadences read', async () => {
+  it('names the chore keeping the routine off the routine read', async () => {
     const fixture = await render({
       params: { routineSlug: 'nightly' },
-      routes: {
-        'GET /api/cadences': () => [
-          gardenCadenceView({ slug: 'evening', name: 'Evening', chores: [gardenChoreView({ routine: ROUTINE.slug })] }),
-        ],
-      },
+      routines: [
+        gardenRoutineView({
+          ...ROUTINE,
+          kept_by: [
+            { cadence_slug: 'evening', cadence_name: 'Evening', chore_key: 'nightly', next_moment: null },
+            { cadence_slug: 'weekly', cadence_name: 'Weekly', chore_key: 'deep', next_moment: null },
+          ],
+        }),
+      ],
     });
     const el = fixture.nativeElement as HTMLElement;
 
     const fact = el.querySelector('[data-testid="gardening-routine-fact-kept-by"]');
     expect(fact?.textContent).toContain('Evening');
     expect(fact?.textContent).toContain('chore nightly');
+    expect(fact?.textContent).toContain('Weekly');
+    expect(fact?.textContent).toContain('chore deep');
   });
 
   it('says no cadence keeps a routine no chore names', async () => {

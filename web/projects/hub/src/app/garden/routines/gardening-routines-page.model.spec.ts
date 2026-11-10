@@ -1,7 +1,6 @@
 import type { AsyncStateQuery, GraphSummaryView, RoutineView } from 'fleet';
 import { describe, expect, it } from 'vitest';
 
-import { gardenCadenceView, gardenChoreView } from 'fleet/testing';
 import { presentRoutineSlug, routineListRows } from './gardening-routines-page.model';
 
 const NIGHTLY: RoutineView = {
@@ -60,37 +59,29 @@ const query = (state: 'pending' | 'error' | 'success'): AsyncStateQuery => ({
 
 describe('routineListRows', () => {
   it('flags a routine blocked when its graph has no effective mint', () => {
-    expect(routineListRows([NIGHTLY, ORPHAN], [EFFECTIVE_GRAPH], query('success'), [], query('success'))).toEqual([
+    expect(routineListRows([NIGHTLY, ORPHAN], [EFFECTIVE_GRAPH], query('success'))).toEqual([
       { routineId: 'rtn_1', slug: 'nightly', name: 'Nightly sweep', graphName: 'garden-routine', blocked: false, retired: false, kept: false },
       { routineId: 'rtn_2', slug: 'orphan', name: 'Orphan', graphName: 'unminted', blocked: true, retired: true, kept: false },
     ]);
   });
 
   it('flags no routine blocked while the graph read is pending', () => {
-    expect(routineListRows([ORPHAN], [], query('pending'), [], query('success')).map((row) => row.blocked)).toEqual([false]);
+    expect(routineListRows([ORPHAN], [], query('pending')).map((row) => row.blocked)).toEqual([false]);
   });
 
   it('flags no routine blocked when the graph read failed', () => {
-    expect(routineListRows([ORPHAN], [], query('error'), [], query('success')).map((row) => row.blocked)).toEqual([false]);
+    expect(routineListRows([ORPHAN], [], query('error')).map((row) => row.blocked)).toEqual([false]);
   });
 
-  it('marks a routine kept when a chore on an enabled cadence names it, and not when none does', () => {
-    const evening = gardenCadenceView({ slug: 'evening', chores: [gardenChoreView()] });
-    expect(routineListRows([NIGHTLY, ORPHAN], [EFFECTIVE_GRAPH], query('success'), [evening], query('success')).map((r) => r.kept)).toEqual([
-      true,
-      false,
-    ]);
-  });
-
-  it('labels no routine while the cadences read is pending or failed', () => {
-    const evening = gardenCadenceView({ slug: 'evening', chores: [gardenChoreView()] });
-    for (const state of ['pending', 'error'] as const) {
-      expect(routineListRows([NIGHTLY], [EFFECTIVE_GRAPH], query('success'), undefined, query(state)).map((r) => r.kept)).toEqual([null]);
-      expect(routineListRows([NIGHTLY], [EFFECTIVE_GRAPH], query('success'), [evening], query(state)).map((r) => r.kept)).toEqual([null]);
-    }
+  it('marks a routine kept when its kept_by is non-empty, and not when it is empty', () => {
+    const kept: RoutineView = {
+      ...NIGHTLY,
+      kept_by: [{ cadence_slug: 'evening', cadence_name: 'Evening', chore_key: 'nightly', next_moment: null }],
+    };
+    expect(routineListRows([kept, ORPHAN], [EFFECTIVE_GRAPH], query('success')).map((r) => r.kept)).toEqual([true, false]);
   });
 
   it('answers no rows for no routines', () => {
-    expect(routineListRows([], [EFFECTIVE_GRAPH], query('success'), [], query('success'))).toEqual([]);
+    expect(routineListRows([], [EFFECTIVE_GRAPH], query('success'))).toEqual([]);
   });
 });
