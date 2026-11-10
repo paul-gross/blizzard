@@ -4,9 +4,10 @@ from __future__ import annotations
 
 import math
 from dataclasses import dataclass
-from datetime import UTC, datetime
+from datetime import datetime
 from typing import TypeGuard
 
+from blizzard.foundation.instants import epoch_millis_instant, epoch_seconds_instant
 from blizzard.foundation.roles import domain_model
 from blizzard.foundation.store.utc import as_utc, iso_utc
 from blizzard.foundation.untyped import as_mapping
@@ -70,9 +71,8 @@ def _instant(value: object) -> datetime | None:
         except ValueError:
             try:
                 return as_utc(datetime.fromisoformat(value))
-            except ValueError:
+            except (OverflowError, ValueError):
                 return None
-    if not _is_number(value) or not math.isfinite(value):
+    if not _is_number(value):
         return None
-    seconds = value / 1000 if abs(value) > _MILLISECONDS_ABOVE else value
-    return datetime.fromtimestamp(seconds, UTC)
+    return epoch_millis_instant(value) if abs(value) > _MILLISECONDS_ABOVE else epoch_seconds_instant(value)

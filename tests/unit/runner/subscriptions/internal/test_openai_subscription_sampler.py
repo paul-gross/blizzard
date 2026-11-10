@@ -496,6 +496,28 @@ def test_two_windows_reporting_one_length_yield_a_single_labelled_window(tmp_pat
     assert snapshot.windows[0].utilization_pct == 10.0
 
 
+@pytest.mark.parametrize("reset_at", [True, 1e18, 1e30, 10**400])
+def test_an_absurd_reset_at_drops_its_window_not_the_sample(tmp_path: Path, reset_at: object) -> None:
+    clock = FixedClock(_NOW)
+    creds = _live_credentials(tmp_path / "auth.json", clock)
+
+    def handler(request: httpx2.Request) -> httpx2.Response:
+        return httpx2.Response(
+            200,
+            json=_usage_body(
+                primary=_window(used_percent=1.0, window_seconds=_FIVE_HOURS, reset_at=reset_at),
+                secondary=_window(
+                    used_percent=2.0, window_seconds=_SEVEN_DAYS, reset_at=(_NOW + timedelta(days=7)).timestamp()
+                ),
+            ),
+        )
+
+    snapshot = _sampler(creds, handler, clock=clock).sample()
+
+    assert isinstance(snapshot, ExternalSubscriptionUsageSnapshot)
+    assert [w.window for w in snapshot.windows] == ["7d"]
+
+
 def test_reset_at_epoch_seconds_and_iso_string_parse_to_the_same_instant(tmp_path: Path) -> None:
     clock = FixedClock(_NOW)
     creds = _live_credentials(tmp_path / "auth.json", clock)

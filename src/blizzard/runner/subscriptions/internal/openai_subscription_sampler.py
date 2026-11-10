@@ -9,12 +9,12 @@ from __future__ import annotations
 import json
 import math
 from collections.abc import Callable
-from datetime import UTC, datetime
 from pathlib import Path
 
 import httpx2
 
 from blizzard.foundation.clock import IClock
+from blizzard.foundation.instants import reset_instant
 from blizzard.foundation.logging import get_logger
 from blizzard.foundation.store.utc import iso_utc
 from blizzard.foundation.subscription_miss import SampleMissReason
@@ -202,7 +202,7 @@ class OpenAISubscriptionSampler:
                 continue
             if window_seconds is None:
                 continue
-            resets_at = self._parse_resets_at(entry.get("reset_at"))
+            resets_at = reset_instant(entry.get("reset_at"))
             if resets_at is None:
                 continue
             label = _window_label(window_seconds)
@@ -231,27 +231,6 @@ class OpenAISubscriptionSampler:
         if not math.isfinite(value) or value <= 0:
             return None
         return int(value)
-
-    @staticmethod
-    def _parse_resets_at(value: object) -> datetime | None:
-        """``reset_at`` as either epoch seconds or an ISO-8601 string, coerced to the same
-        UTC-aware instant either way (``bzh:utc-instants``). This endpoint returns epoch
-        seconds; the string form is carried because an unparseable reset instant drops its
-        window, and a single undocumented shape change would otherwise silence the sampler."""
-        if isinstance(value, bool):
-            return None
-        if isinstance(value, int | float):
-            try:
-                return datetime.fromtimestamp(value, tz=UTC)
-            except (OverflowError, OSError, ValueError):
-                return None
-        if isinstance(value, str):
-            try:
-                parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
-            except ValueError:
-                return None
-            return parsed.astimezone(UTC) if parsed.tzinfo is not None else parsed.replace(tzinfo=UTC)
-        return None
 
 
 def _window_label(window_seconds: int) -> str:
