@@ -1,0 +1,20 @@
+id: bzh:loop-steps-no-store-reads
+snapshots:
+  ? |
+    class Bad(Step):
+        def run(self) -> None:
+            rows = ctx.host_stores.hosts.list()
+  : labels:
+    - source: ctx.host_stores.hosts
+      style: primary
+      start: 59
+      end: 80
+  ? |
+    class Bad(Step):
+        def run(self) -> None:
+            rows = self.ctx.stores.leases.list()
+  : labels:
+    - source: self.ctx.stores.leases
+      style: primary
+      start: 59
+      end: 81

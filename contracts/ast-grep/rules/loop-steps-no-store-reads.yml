@@ -1,0 +1,15 @@
+# yaml-language-server: $schema=https://raw.githubusercontent.com/ast-grep/ast-grep/main/schemas/rule.json
+
+id: bzh:loop-steps-no-store-reads
+language: Python
+severity: error
+message: >-
+  A phase in runner/loop/steps.py delegates to a lifecycle step and reads no store itself
+  (bzh:narrow-seams) — move the read into the step the phase delegates to, which takes its
+  own narrow seam.
+files:
+  - src/blizzard/runner/loop/steps.py
+rule:
+  any:
+    - pattern: $C.stores.$M
+    - pattern: $C.host_stores.$M

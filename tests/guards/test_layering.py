@@ -1654,18 +1654,47 @@ def test_the_process_probe_is_declared_under_runner_process() -> None:
 
 
 _LOOP_DIR = _RUNNER_DIR / "loop"
-_LOOP_DRIVER = frozenset({_LOOP_DIR / "context.py", _LOOP_DIR / "tick.py", _LOOP_DIR / "steps.py"})
+_LOOP_DRIVER = frozenset({_LOOP_DIR / "context.py", _LOOP_DIR / "tick.py"})
+_LOOP_STEPS = _LOOP_DIR / "steps.py"
 _RUNNER_EDGES = (_RUNNER_DIR / "api", _RUNNER_DIR / "cli")
 _STORE_BUNDLES = frozenset({"RunnerStores", "RunnerReadStores", "IReadRunnerStore", "IWriteRunnerStore"})
 _LOOP_CONTEXT = frozenset({"LoopContext"})
 
 
-def _scanned(root: Path, exempt: frozenset[Path], exempt_dirs: tuple[Path, ...]) -> list[tuple[Path, ast.Module]]:
-    return [
-        (path, ast.parse(path.read_text(), filename=str(path)))
-        for path in _production_files(root)
-        if path not in exempt and not any(path.is_relative_to(d) for d in exempt_dirs)
+def _without_dispatch(tree: ast.Module) -> ast.Module:
+    """``tree`` minus the dispatch code of ``src/blizzard/runner/loop/steps.py``: the ``LoopContext`` import
+    and the ``Step`` base class's ``ctx`` field. Every phase body is left in, so it is held to the same
+    guards as any step."""
+    tree.body = [
+        node
+        for node in tree.body
+        if not (isinstance(node, ast.ImportFrom) and [alias.name for alias in node.names] == ["LoopContext"])
     ]
+    for node in tree.body:
+        if isinstance(node, ast.ClassDef) and node.name == "Step":
+            node.body = [
+                stmt
+                for stmt in node.body
+                if not (
+                    isinstance(stmt, ast.AnnAssign) and isinstance(stmt.target, ast.Name) and stmt.target.id == "ctx"
+                )
+            ]
+    return tree
+
+
+def _scanned(
+    root: Path,
+    exempt: frozenset[Path],
+    exempt_dirs: tuple[Path, ...],
+    dispatch: frozenset[Path] = frozenset({_LOOP_STEPS}),
+) -> list[tuple[Path, ast.Module]]:
+    scanned: list[tuple[Path, ast.Module]] = []
+    for path in _production_files(root):
+        if path in exempt or any(path.is_relative_to(d) for d in exempt_dirs):
+            continue
+        tree = ast.parse(path.read_text(), filename=str(path))
+        scanned.append((path, _without_dispatch(tree) if path in dispatch else tree))
+    return scanned
 
 
 def _naming_sites(
@@ -1675,9 +1704,10 @@ def _naming_sites(
     exempt: frozenset[Path],
     exempt_dirs: tuple[Path, ...] = (),
     src_root: Path = _SRC_DIR,
+    dispatch: frozenset[Path] = frozenset({_LOOP_STEPS}),
 ) -> list[str]:
     sites: set[tuple[str, int, str]] = set()
-    for path, tree in _scanned(root, exempt, exempt_dirs):
+    for path, tree in _scanned(root, exempt, exempt_dirs, dispatch):
         shown = str(path.relative_to(src_root.parent.parent))
         for node in ast.walk(tree):
             if isinstance(node, ast.Name) and node.id in names:
@@ -1742,12 +1772,17 @@ def _named_types(annotation: ast.expr | None) -> set[str]:
 
 
 def _step_contexts(
-    root: Path, *, exempt: frozenset[Path], exempt_dirs: tuple[Path, ...], src_root: Path = _SRC_DIR
+    root: Path,
+    *,
+    exempt: frozenset[Path],
+    exempt_dirs: tuple[Path, ...],
+    src_root: Path = _SRC_DIR,
+    dispatch: frozenset[Path] = frozenset({_LOOP_STEPS}),
 ) -> tuple[list[str], set[str]]:
     """Each step's context typing: a ``ctx`` must be a Protocol its own module declares, and any other
     parameter or field typed by a step context — ``LoopContext``, or a Protocol some ``ctx`` is typed by —
     must name one its own module declares, so renaming the parameter never smuggles in a foreign context."""
-    scanned = _scanned(root, exempt, exempt_dirs)
+    scanned = _scanned(root, exempt, exempt_dirs, dispatch)
     violations: list[str] = []
     contexts: set[str] = set()
     local_by_path: dict[Path, set[str]] = {}
@@ -1912,6 +1947,42 @@ def test_step_context_check_admits_a_local_protocol(tmp_path: Path) -> None:
     )
     src = _plant_tree(tmp_path, {"runner/loop/step.py": _STEP_PROTOCOL + body})
     assert _step_contexts(src / "runner", exempt=frozenset(), exempt_dirs=(), src_root=src) == ([], {"StepContext"})
+
+
+_STEPS_DISPATCH = (
+    "from dataclasses import dataclass\n"
+    "from blizzard.runner.loop.context import LoopContext\n"
+    "@dataclass(frozen=True)\nclass Step:\n    ctx: LoopContext\n"
+)
+
+
+def test_steps_dispatch_is_the_only_loop_context_use_steps_py_may_hold(tmp_path: Path) -> None:
+    src = _plant_tree(tmp_path, {"runner/loop/steps.py": _STEPS_DISPATCH})
+    steps = frozenset({src / "runner/loop/steps.py"})
+    assert _naming_sites(src, _LOOP_CONTEXT, exempt=frozenset(), src_root=src, dispatch=steps) == []
+    assert _step_contexts(src / "runner", exempt=frozenset(), exempt_dirs=(), src_root=src, dispatch=steps) == (
+        [],
+        set(),
+    )
+
+
+@pytest.mark.parametrize(
+    "phase",
+    [
+        "def helper(ctx: LoopContext) -> None: ...",
+        "class Fill(Step):\n    def run(self) -> None:\n        scratch: LoopContext = self.ctx",
+        "def helper(context: LoopContext) -> None: ...",
+    ],
+)
+def test_steps_py_phase_naming_loop_context_is_caught(tmp_path: Path, phase: str) -> None:
+    src = _plant_tree(tmp_path, {"runner/loop/steps.py": _STEPS_DISPATCH + phase + "\n"})
+    steps = frozenset({src / "runner/loop/steps.py"})
+    named = _naming_sites(src, _LOOP_CONTEXT, exempt=frozenset(), src_root=src, dispatch=steps)
+    assert len(named) == 1
+    assert named[0].startswith("src/blizzard/runner/loop/steps.py:")
+    if phase.startswith("def"):
+        violations, _ = _step_contexts(src / "runner", exempt=frozenset(), exempt_dirs=(), src_root=src, dispatch=steps)
+        assert len(violations) == 1
 
 
 def test_conformance_check_catches_a_step_context_without_a_sentinel(tmp_path: Path) -> None:
