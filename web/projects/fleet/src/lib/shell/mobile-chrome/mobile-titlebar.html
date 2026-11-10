@@ -10,11 +10,13 @@
   }
   <span class="spacer"></span>
   <ng-content select="[fleetMobileStatus]" />
-  <span
-    class="livedot"
-    [class.active]="live()"
+  <fleet-kit-beacon
+    shape="dot"
+    [glow]="true"
+    tone="spawning"
+    [active]="live()"
     [attr.title]="live() ? 'live' : 'offline'"
     [attr.data-testid]="livedotTestid()"
-  ></span>
+  />
   <fleet-kit-menu class="menu" ariaLabel="Shell options" [testid]="menuTestid()" [menu]="menu()" />
 </header>

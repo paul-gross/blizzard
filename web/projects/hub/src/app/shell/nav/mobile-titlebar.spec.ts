@@ -84,12 +84,12 @@ describe('MobileTitlebar', () => {
     fixture.componentRef.setInput('live', false);
     await fixture.whenStable();
     let el = fixture.nativeElement as HTMLElement;
-    expect(el.querySelector('[data-testid="mobile-titlebar-livedot"]')?.classList.contains('active')).toBe(false);
+    expect(el.querySelector('[data-testid="mobile-titlebar-livedot"] .beacon')?.classList.contains('active')).toBe(false);
 
     fixture.componentRef.setInput('live', true);
     await fixture.whenStable();
     el = fixture.nativeElement as HTMLElement;
-    expect(el.querySelector('[data-testid="mobile-titlebar-livedot"]')?.classList.contains('active')).toBe(true);
+    expect(el.querySelector('[data-testid="mobile-titlebar-livedot"] .beacon')?.classList.contains('active')).toBe(true);
   });
 
   it('buries the appearance switcher behind the overflow menu, closed by default', async () => {

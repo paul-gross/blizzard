@@ -48,11 +48,11 @@ describe('MobileTitlebar', () => {
   it('reflects the live input on the live dot', async () => {
     fixture.componentInstance.live.set(false);
     await fixture.whenStable();
-    expect(el.querySelector('[data-testid="mobile-titlebar-livedot"]')?.classList.contains('active')).toBe(false);
+    expect(el.querySelector('[data-testid="mobile-titlebar-livedot"] .beacon')?.classList.contains('active')).toBe(false);
 
     fixture.componentInstance.live.set(true);
     await fixture.whenStable();
-    expect(el.querySelector('[data-testid="mobile-titlebar-livedot"]')?.classList.contains('active')).toBe(true);
+    expect(el.querySelector('[data-testid="mobile-titlebar-livedot"] .beacon')?.classList.contains('active')).toBe(true);
   });
 
   it('buries the consumer-supplied menu panel, closed by default', async () => {
@@ -129,6 +129,6 @@ describe('MobileTitlebar slots', () => {
     const at = (selector: string): number => children.findIndex((c) => c.matches(selector));
     expect(at('[data-testid="slot-title"]')).toBe(at('.word') + 1);
     expect(at('[data-testid="slot-status"]')).toBe(at('.spacer') + 1);
-    expect(at('[data-testid="slot-status"]')).toBeLessThan(at('.livedot'));
+    expect(at('[data-testid="slot-status"]')).toBeLessThan(at('[data-testid="mobile-titlebar-livedot"]'));
   });
 });

@@ -26,14 +26,15 @@ describe('MobileTabBar', () => {
     expect(tab?.textContent).toContain('Board');
   });
 
-  it('renders a statically active tab as a highlighted, non-routed button', async () => {
+  it('renders a statically active tab as a highlighted, non-routed tab', async () => {
     const fixture = await render([{ testid: 'tab-machine', label: 'Machine', active: true }]);
     const el = fixture.nativeElement as HTMLElement;
 
     const tab = el.querySelector('[data-testid="tab-machine"]');
-    expect(tab?.tagName).toBe('BUTTON');
-    expect(tab?.classList.contains('on')).toBe(true);
-    expect(tab?.hasAttribute('disabled')).toBe(false);
+    expect(tab?.tagName).toBe('A');
+    expect(tab?.classList.contains('active')).toBe(true);
+    expect(tab?.hasAttribute('href')).toBe(false);
+    expect(tab?.hasAttribute('aria-disabled')).toBe(false);
   });
 
   it('renders an inert tab dimmed and disabled', async () => {
@@ -41,8 +42,8 @@ describe('MobileTabBar', () => {
     const el = fixture.nativeElement as HTMLElement;
 
     const tab = el.querySelector('[data-testid="tab-transcripts"]');
-    expect(tab?.classList.contains('inert')).toBe(true);
-    expect(tab?.hasAttribute('disabled')).toBe(true);
+    expect(tab?.classList.contains('unavailable')).toBe(true);
+    expect(tab?.getAttribute('aria-disabled')).toBe('true');
   });
 
   it('omits the badge when falsy', async () => {

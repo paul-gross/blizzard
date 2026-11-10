@@ -244,10 +244,10 @@ describe('runner App', () => {
       expect(el.querySelector('[data-testid="local-panel-mobile-tab-bar"]')).toBeTruthy();
       expect(el.querySelector('app-panel-filters.mobile [data-testid="runner-filter"]')).toBeTruthy();
       expect(el.querySelector('app-panel-filters.mobile [data-testid="project-filter"]')).toBeTruthy();
-      expect(el.querySelector('[data-testid="tab-board"]')?.classList.contains('on')).toBe(true);
-      expect(el.querySelector('[data-testid="tab-host"]')?.classList.contains('on')).toBe(false);
+      expect(el.querySelector('[data-testid="tab-board"]')?.classList.contains('active')).toBe(true);
+      expect(el.querySelector('[data-testid="tab-host"]')?.classList.contains('active')).toBe(false);
       expect(el.querySelector('[data-testid="tab-events"]')).toBeTruthy();
-      expect(el.querySelector('[data-testid="tab-asks-runner"]')?.hasAttribute('disabled')).toBe(true);
+      expect(el.querySelector('[data-testid="tab-asks-runner"]')?.getAttribute('aria-disabled')).toBe('true');
     });
   });
 });

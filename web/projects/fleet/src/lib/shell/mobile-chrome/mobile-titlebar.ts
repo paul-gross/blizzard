@@ -1,7 +1,7 @@
 import { ChangeDetectionStrategy, Component, TemplateRef, computed, input } from '@angular/core';
 
 import { BrandMark } from '../../core/design';
-import { KitMenu } from '../../kit';
+import { KitBeacon, KitMenu } from '../../kit';
 
 /**
  * The generic mobile titlebar (mock screen C's `.appbar`,
@@ -25,7 +25,7 @@ import { KitMenu } from '../../kit';
 @Component({
   selector: 'fleet-mobile-titlebar',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [BrandMark, KitMenu],
+  imports: [BrandMark, KitBeacon, KitMenu],
   templateUrl: './mobile-titlebar.html',
   styleUrl: './mobile-titlebar.css',
 })

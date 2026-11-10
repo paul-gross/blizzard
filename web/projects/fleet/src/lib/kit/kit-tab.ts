@@ -1,9 +1,13 @@
 import { ChangeDetectionStrategy, Component, input } from '@angular/core';
 
+import { KitCountBadge } from './kit-count-badge';
+
 /** Which tier a tab strip sits at: `top` is the app's primary strip (amber
  * active tab), `sub` a strip nested inside a page (cyan active tab, a shorter
- * `--panel-deep` row) — so the hierarchy reads at a glance. */
-export type KitTabVariant = 'top' | 'sub';
+ * `--panel-deep` row) — so the hierarchy reads at a glance. `bottom` is the
+ * mobile shell's bottom bar: full width, equal-share tabs, the amber active tab
+ * marked by an indicator on its top edge, and its count an amber chip. */
+export type KitTabVariant = 'top' | 'sub' | 'bottom';
 
 /**
  * The tab-strip chrome shared by every tab strip in the app —
@@ -24,6 +28,7 @@ export type KitTabVariant = 'top' | 'sub';
   styleUrl: './kit-tab-strip.css',
   host: {
     '[class.sub]': "variant() === 'sub'",
+    '[class.bottom]': "variant() === 'bottom'",
   },
 })
 export class KitTabStrip {
@@ -40,10 +45,14 @@ export class KitTabStrip {
 @Component({
   selector: '[fleetKitTab]',
   changeDetection: ChangeDetectionStrategy.OnPush,
+  imports: [KitCountBadge],
   templateUrl: './kit-tab.html',
   styleUrl: './kit-tab.css',
   host: {
     '[class.sub]': "variant() === 'sub'",
+    '[class.bottom]': "variant() === 'bottom'",
+    '[class.unavailable]': 'unavailable()',
+    '[attr.aria-disabled]': "unavailable() ? 'true' : null",
   },
 })
 export class KitTab {
@@ -55,6 +64,11 @@ export class KitTab {
 
   /** The count span's `data-testid`, or `null` for none (the name {@link KitPanel} gives the same input). */
   readonly countTestid = input<string | null>(null);
+
+  /** The dimmed, non-interactive look of a tab with no screen of its own yet. Sets `aria-disabled` on the host; the
+   * caller still owns the element and its role, and leaves it without an `href` or handler. Not named `inert`, which
+   * would shadow the HTML global attribute. */
+  readonly unavailable = input(false);
 
   /** Reads the count in the amber-hi attention color, for a count of things waiting on a person. */
   readonly countHot = input(false);

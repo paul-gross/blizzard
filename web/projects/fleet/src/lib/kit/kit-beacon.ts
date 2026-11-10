@@ -12,6 +12,9 @@ export type BeaconTone = 'amber' | 'red' | 'green';
  * on/off blink that marks a missing machine, `hold` shows its tone steady. */
 export type BeaconBlink = 'pulse' | 'step' | 'hold';
 
+/** The beacon's form — `square` is the 7px lane marker, `dot` the 8px round live light. */
+export type BeaconShape = 'square' | 'dot';
+
 const BEACON_COLOR: Record<BeaconTone, string> = {
   amber: 'var(--amber)',
   red: 'var(--red)',
@@ -47,6 +50,14 @@ export class KitBeacon {
   /** The animation an active beacon uses — a throb, a hard blink, or `hold` for a
    * steady light — ignored while inactive. */
   readonly blink = input<BeaconBlink>('pulse');
+
+  /** The beacon's form: the default square, or a round dot. */
+  readonly shape = input<BeaconShape>('square');
+
+  /** Whether an active beacon throws a halo of its own color; nothing shows while inactive. */
+  readonly glow = input(false);
+
+  protected readonly glowShadow = computed(() => (this.glow() && this.active() ? `0 0 8px ${this.color()}` : null));
 
   protected readonly color = computed(() => (this.active() ? beaconColor(this.tone()) : 'var(--label-dim)'));
 }

@@ -1,4 +1,8 @@
 <ng-content />
 @if (count() !== null) {
-  <span class="cnt" [class.hot]="countHot()" [attr.data-testid]="countTestid()">{{ count() }}</span>
+  @if (variant() === 'bottom') {
+    <fleet-kit-count-badge class="chip" [count]="count()!" [testid]="countTestid()" />
+  } @else {
+    <span class="cnt" [class.hot]="countHot()" [attr.data-testid]="countTestid()">{{ count() }}</span>
+  }
 }

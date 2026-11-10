@@ -13,7 +13,7 @@
 }
 /* Everything but the caption and the detail holds its size, so only those two give way. */
 fleet-brand-mark,
-.livedot,
+fleet-kit-beacon,
 .menu {
   flex: none;
 }
@@ -46,26 +46,6 @@ fleet-brand-mark,
 }
 .spacer {
   flex: 1;
-}
-.livedot {
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
-  background: var(--label-dim);
-}
-.livedot.active {
-  background: var(--cyan);
-  box-shadow: 0 0 8px var(--cyan);
-}
-@media (prefers-reduced-motion: no-preference) {
-  .livedot.active {
-    animation: mobile-titlebar-pulse 2.2s ease-in-out infinite;
-  }
-}
-@keyframes mobile-titlebar-pulse {
-  50% {
-    opacity: 0.35;
-  }
 }
 .menu {
   color: var(--label);

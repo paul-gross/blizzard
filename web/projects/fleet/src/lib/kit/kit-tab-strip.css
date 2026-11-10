@@ -34,3 +34,12 @@
   height: 30px;
   background: var(--panel-deep);
 }
+
+/* The mobile bottom bar: full width and as tall as its tabs, the bezel line on top. */
+:host(.bottom) {
+  height: auto;
+  border-top: 1px solid var(--bezel);
+  border-bottom: 0;
+  background: linear-gradient(180deg, var(--header-hi), var(--header-lo));
+  letter-spacing: 0.12em;
+}

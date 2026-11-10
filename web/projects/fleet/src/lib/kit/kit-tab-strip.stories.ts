@@ -11,7 +11,7 @@ const meta: Meta<KitTabStrip> = {
   component: KitTabStrip,
   decorators: [moduleMetadata({ imports: [KitTab] })],
   args: { variant: 'top' },
-  argTypes: { variant: { control: 'inline-radio', options: ['top', 'sub'] } },
+  argTypes: { variant: { control: 'inline-radio', options: ['top', 'sub', 'bottom'] } },
   render: (args) => ({
     props: args,
     template: `
@@ -28,6 +28,10 @@ type Story = StoryObj<KitTabStrip>;
 
 export const Top: Story = {};
 export const Sub: Story = { args: { variant: 'sub' } };
+export const Bottom: Story = {
+  args: { variant: 'bottom' },
+  globals: { viewport: { value: 'phone', isRotated: false } },
+};
 export const OverflowingInConstrainedWidth: Story = {
   render: (args) => ({
     props: args,

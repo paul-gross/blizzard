@@ -99,7 +99,7 @@ describe('MobileTitlebar (runner)', () => {
     );
   };
   const liveDot = (el: HTMLElement) =>
-    el.querySelector('[data-testid="local-panel-mobile-titlebar-livedot"]')?.classList.contains('active');
+    el.querySelector('[data-testid="local-panel-mobile-titlebar-livedot"] .beacon')?.classList.contains('active');
 
   it('lights the live dot while any covered runner reaches its hub', async () => {
     withHubs({ rn_1: false, rn_2: true });

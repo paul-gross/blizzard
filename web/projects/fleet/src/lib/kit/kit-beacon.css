@@ -15,6 +15,11 @@
 .beacon.active.hold {
   animation: none;
 }
+.beacon.dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+}
 @keyframes beacon-blink {
   50% {
     opacity: 0;

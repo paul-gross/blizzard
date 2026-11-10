@@ -59,3 +59,55 @@ describe('KitTab count', () => {
     expect(el.querySelector('.cnt')?.classList.contains('hot')).toBe(true);
   });
 });
+
+@Component({
+  selector: 'fleet-test-bottom-host',
+  imports: [KitTab, KitTabStrip],
+  template: `<nav fleetKitTabStrip variant="bottom">
+    <a fleetKitTab variant="bottom" role="link" [unavailable]="unavailable()" [count]="count()" countTestid="tab-count"
+      >Asks</a
+    >
+  </nav>`,
+})
+class BottomHost {
+  readonly unavailable = signal(false);
+  readonly count = signal<number | null>(null);
+}
+
+describe('KitTab bottom variant', () => {
+  async function render() {
+    await TestBed.configureTestingModule({
+      imports: [BottomHost],
+      providers: [provideZonelessChangeDetection()],
+    }).compileComponents();
+    const fixture = TestBed.createComponent(BottomHost);
+    await fixture.whenStable();
+    return fixture;
+  }
+
+  it('marks the strip and the tab bottom', async () => {
+    const el = (await render()).nativeElement as HTMLElement;
+    expect(el.querySelector('nav')?.classList.contains('bottom')).toBe(true);
+    expect(el.querySelector('a')?.classList.contains('bottom')).toBe(true);
+  });
+
+  it('renders the count as the kit count badge carrying the testid', async () => {
+    const fixture = await render();
+    fixture.componentInstance.count.set(2);
+    await fixture.whenStable();
+    const el = fixture.nativeElement as HTMLElement;
+    expect(el.querySelector('.cnt')).toBeNull();
+    const badge = el.querySelector('fleet-kit-count-badge [data-testid="tab-count"]');
+    expect(badge?.textContent?.trim()).toBe('2');
+  });
+
+  it('sets aria-disabled only while unavailable', async () => {
+    const fixture = await render();
+    const tab = (fixture.nativeElement as HTMLElement).querySelector('a')!;
+    expect(tab.hasAttribute('aria-disabled')).toBe(false);
+    fixture.componentInstance.unavailable.set(true);
+    await fixture.whenStable();
+    expect(tab.getAttribute('aria-disabled')).toBe('true');
+    expect(tab.classList.contains('unavailable')).toBe(true);
+  });
+});

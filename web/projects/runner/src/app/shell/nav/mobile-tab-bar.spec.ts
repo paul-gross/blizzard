@@ -52,8 +52,8 @@ describe('MobileTabBar', () => {
     expect(el.querySelector('[data-testid="tab-machine"]')).toBeNull();
     const asks = el.querySelector('[data-testid="tab-asks-runner"]');
     expect(asks?.textContent).toContain('Asks');
-    expect(asks?.hasAttribute('disabled')).toBe(true);
-    expect(asks?.classList.contains('inert')).toBe(true);
+    expect(asks?.getAttribute('aria-disabled')).toBe('true');
+    expect(asks?.classList.contains('unavailable')).toBe(true);
   });
 
   it('omits the Asks badge when there are no open asks', async () => {

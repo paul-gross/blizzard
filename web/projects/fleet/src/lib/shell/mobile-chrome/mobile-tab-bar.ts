@@ -1,7 +1,7 @@
 import { ChangeDetectionStrategy, Component, input } from '@angular/core';
 import { RouterLink, RouterLinkActive } from '@angular/router';
 
-import { KitCountBadge } from '../../kit/kit-count-badge';
+import { KitTab, KitTabStrip } from '../../kit/kit-tab';
 import { LensLink } from '../../core/lens-link';
 
 /**
@@ -10,10 +10,10 @@ import { LensLink } from '../../core/lens-link';
  * strip actually need. A tab is either **routed** (`route` set — every tab
  * with a screen of its own today, rendered as an `<a routerLink>` with
  * `routerLinkActive` deriving the highlighted state) or **static** (`active`
- * set instead — for a shell with no router of its own, rendered as a
- * `<button>` whose highlighted state the caller asserts directly). `inert`
- * dims and disables a tab with no screen of its own yet (mock screen C's
- * footnote), the same `.tab.inert` treatment either element kind gets.
+ * set instead — for a shell with no router of its own, rendered as an
+ * href-less `<a role="link">` whose highlighted state the caller asserts directly). `inert`
+ * dims a tab with no screen of its own yet (mock screen C's footnote) and marks it
+ * `aria-disabled`.
  */
 export interface MobileTabItem {
   /** This tab's own `data-testid` — must be unique across every mount
@@ -40,7 +40,7 @@ export interface MobileTabItem {
   /** Statically marks this tab highlighted — for a shell with no router of
    * its own, whose one always-current screen has no route to reflect. */
   readonly active?: boolean;
-  /** Dims the tab and disables its click/nav — no screen of its own yet. */
+  /** Dims the tab and marks it unavailable, with no click/nav — no screen of its own yet. */
   readonly inert?: boolean;
   /** Highlights a routed tab only on its exact route — for a root route every other
    * route sits under. */
@@ -57,7 +57,7 @@ export interface MobileTabItem {
 @Component({
   selector: 'fleet-mobile-tab-bar',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [KitCountBadge, RouterLink, RouterLinkActive, LensLink],
+  imports: [KitTab, KitTabStrip, RouterLink, RouterLinkActive, LensLink],
   templateUrl: './mobile-tab-bar.html',
   styleUrl: './mobile-tab-bar.css',
 })
