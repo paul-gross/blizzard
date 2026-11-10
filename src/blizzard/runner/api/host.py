@@ -224,6 +224,7 @@ def subscription_list(
                 spenders=spenders.get(declaration.slug, []),
                 windows=[_window_view(w) for w in sample.windows] if sample is not None else [],
                 windows_sampled_at=iso_utc(sample.sampled_at) if sample is not None else None,
+                condition=attempt.condition if attempt is not None else None,
             )
         )
     return HostSubscriptionListResponse(items=items)

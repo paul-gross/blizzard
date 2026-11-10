@@ -22,6 +22,7 @@ const LEASE = (overrides: Partial<PanelLease> = {}): PanelLease => ({
   created_at: '2026-07-16T11:00:00.000Z',
   last_heartbeat_at: '2026-07-16T11:59:26.000Z',
   state: 'running',
+  liveness: 'live',
   display_status: 'running',
   closure_healthy: false,
   closed_at: null,
@@ -113,7 +114,7 @@ describe('the fleet card, filled by the runner', () => {
 
   it('names the status and drops the worker line once the session ended', async () => {
     const { el, card } = await render({
-      row: rowOf({ state: 'closed', display_status: 'closed', closure_healthy: true, closed_at: '2026-07-16T11:30:00.000Z', closure_reason: 'transitioned' }),
+      row: rowOf({ state: 'closed', liveness: 'ended', display_status: 'closed', closure_healthy: true, closed_at: '2026-07-16T11:30:00.000Z', closure_reason: 'transitioned' }),
     });
 
     expect(el.querySelector('[data-testid="chunk-row-worker"]')).toBeNull();

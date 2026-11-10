@@ -21,6 +21,7 @@ from blizzard.runner.leases.activity import (
     OpenHumanFacts,
     is_healthy_closure,
     lease_display_status,
+    lease_liveness,
 )
 from blizzard.runner.leases.model import Lease, NewLease
 from tests.support.factory_fields import LeaseFields
@@ -329,6 +330,19 @@ def test_display_status_precedence_is_takeover_then_escalation_then_ask_then_sta
 def test_display_status_falls_through_to_every_lease_state() -> None:
     states: list[LeaseState] = ["running", "stale", "parked", "backing-off", "spawning", "exited", "closed"]
     assert [lease_display_status(s, takeover=False, escalated=False, asking=False).value for s in states] == states
+
+
+def test_only_an_exited_or_closed_lease_is_ended() -> None:
+    states: list[LeaseState] = ["running", "stale", "parked", "backing-off", "spawning", "exited", "closed"]
+    assert {s: lease_liveness(s).value for s in states} == {
+        "running": "live",
+        "stale": "live",
+        "parked": "live",
+        "backing-off": "live",
+        "spawning": "live",
+        "exited": "ended",
+        "closed": "ended",
+    }
 
 
 def test_only_a_transitioned_closure_is_healthy() -> None:

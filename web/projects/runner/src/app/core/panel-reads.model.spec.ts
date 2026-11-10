@@ -81,6 +81,7 @@ function lease(overrides: Partial<runnerApi.LeaseView> = {}): runnerApi.LeaseVie
     harness_version: null,
     git_commits: [],
     state: 'running',
+    liveness: 'live',
     ...overrides,
   } as runnerApi.LeaseView;
 }
@@ -219,16 +220,38 @@ describe('mergeLeases', () => {
   it('puts live leases first, then newest first, across runners', () => {
     const merged = mergeLeases([
       [
-        panelLease({ lease_id: 'old-closed', state: 'closed', created_at: '2026-07-16T09:00:00+00:00' }, R1, null),
+        panelLease({ lease_id: 'old-closed', state: 'closed', liveness: 'ended', created_at: '2026-07-16T09:00:00+00:00' }, R1, null),
         panelLease({ lease_id: 'old-live', created_at: '2026-07-16T10:00:00+00:00' }, R1, null),
       ],
       [
-        panelLease({ lease_id: 'new-closed', state: 'closed', created_at: '2026-07-16T12:00:00+00:00' }, R2, null),
+        panelLease({ lease_id: 'new-closed', state: 'closed', liveness: 'ended', created_at: '2026-07-16T12:00:00+00:00' }, R2, null),
         panelLease({ lease_id: 'new-live', state: 'stale', created_at: '2026-07-16T11:00:00+00:00' }, R2, null),
       ],
     ]);
 
     expect(merged.map((l) => l.lease_id)).toEqual(['new-live', 'old-live', 'new-closed', 'old-closed']);
+  });
+
+  it("ranks an exited older attempt below a newer closed one, both ended, by recency", () => {
+    const merged = mergeLeases([
+      [
+        panelLease({ lease_id: 'older-exited', state: 'exited', liveness: 'ended', created_at: '2026-07-16T09:00:00+00:00' }, R1, null),
+        panelLease({ lease_id: 'newer-closed', state: 'closed', liveness: 'ended', created_at: '2026-07-16T10:00:00+00:00' }, R1, null),
+      ],
+    ]);
+
+    expect(merged.map((l) => l.lease_id)).toEqual(['newer-closed', 'older-exited']);
+  });
+
+  it('keeps a lease with an unrecognized liveness among the live', () => {
+    const merged = mergeLeases([
+      [
+        panelLease({ lease_id: 'closed', state: 'closed', liveness: 'ended', created_at: '2026-07-16T12:00:00+00:00' }, R1, null),
+        panelLease({ lease_id: 'unknown', liveness: 'mystery' as runnerApi.LeaseLiveness, created_at: '2026-07-16T09:00:00+00:00' }, R1, null),
+      ],
+    ]);
+
+    expect(merged.map((l) => l.lease_id)).toEqual(['unknown', 'closed']);
   });
 });
 

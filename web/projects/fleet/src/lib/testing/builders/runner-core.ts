@@ -3,6 +3,7 @@ import { fixtureInstant } from './clock';
 
 /** A live lease on `ch_1`, heartbeating. */
 export function runnerLeaseView(overrides: Partial<LeaseView> = {}): LeaseView {
+  const state = overrides.state ?? 'running';
   return {
     lease_id: 'L-1',
     chunk_id: 'ch_1',
@@ -27,7 +28,8 @@ export function runnerLeaseView(overrides: Partial<LeaseView> = {}): LeaseView {
     closure_healthy: true,
     closure_reason: null,
     display_status: 'running',
-    state: 'running',
+    state,
+    liveness: state === 'exited' || state === 'closed' ? 'ended' : 'live',
     ...overrides,
   };
 }

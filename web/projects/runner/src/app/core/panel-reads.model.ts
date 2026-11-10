@@ -1,5 +1,7 @@
 import type { runnerApi } from 'fleet/runner-shell';
 
+import { isLiveLease } from './worker-session';
+
 /** The runner a merged item came from — what its actions and links target. */
 export interface RunnerOwner {
   readonly runnerId: string;
@@ -128,7 +130,7 @@ export function attributedProject(item: { readonly project_id?: string | null },
  * the first lease seen per chunk is its freshest attempt. */
 export function mergeLeases(perRunner: readonly (readonly PanelLease[])[]): readonly PanelLease[] {
   return perRunner.flat().sort((a, b) => {
-    const live = Number(b.state !== 'closed') - Number(a.state !== 'closed');
+    const live = Number(isLiveLease(b)) - Number(isLiveLease(a));
     return live !== 0 ? live : b.created_at.localeCompare(a.created_at);
   });
 }

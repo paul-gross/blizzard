@@ -31,6 +31,7 @@ const LEASE = (overrides: Partial<runnerApi.LeaseView> = {}): runnerApi.LeaseVie
   created_at: '2026-07-16T11:00:00.000Z',
   last_heartbeat_at: '2026-07-16T11:59:26.000Z',
   state: 'running',
+  liveness: 'live',
   display_status: 'running',
   closure_healthy: false,
   closed_at: null,
@@ -309,7 +310,7 @@ describe('LocalPanel', () => {
 
   describe('the board folds leases into chunks', () => {
     it('renders one card per distinct chunk, its older attempts folded away', async () => {
-      const older = LEASE({ lease_id: 'lease_01KXKVVF1J3D6H6VYZ3XYNBBBB', epoch: 1, state: 'closed', closure_reason: 'failed', display_status: 'closed' });
+      const older = LEASE({ lease_id: 'lease_01KXKVVF1J3D6H6VYZ3XYNBBBB', epoch: 1, state: 'closed', liveness: 'ended', closure_reason: 'failed', display_status: 'closed' });
       stub = stubRunnerClient(routes({ leases: { rn_1: [LEASE(), older] } }));
       const el = await render();
 
@@ -331,6 +332,7 @@ describe('LocalPanel', () => {
         lease_id: 'lease_01KXKVVF1J3D6H6VYZ3XYNCCCC',
         chunk_id: OTHER_CHUNK,
         state: 'closed',
+        liveness: 'ended',
         display_status: 'closed',
         closure_reason: 'transitioned',
         closure_healthy: true,
@@ -348,7 +350,7 @@ describe('LocalPanel', () => {
     it('puts an escalated chunk in Needs human, outranking its closed lease', async () => {
       stub = stubRunnerClient(
         routes({
-          leases: { rn_1: [LEASE({ state: 'closed', closure_reason: 'escalated', display_status: 'needs-human' })] },
+          leases: { rn_1: [LEASE({ state: 'closed', liveness: 'ended', closure_reason: 'escalated', display_status: 'needs-human' })] },
           dashboards: { rn_1: { escalations: { items: [ESCALATION] } } },
         }),
       );
@@ -407,7 +409,7 @@ describe('LocalPanel', () => {
     });
 
     it('shows facts for the newest attempt of a multi-attempt chunk', async () => {
-      const older = LEASE({ lease_id: 'lease_01KXKVVF1J3D6H6VYZ3XYNBBBB', epoch: 1, state: 'closed', closure_reason: 'failed', session_id: 'sess-old' });
+      const older = LEASE({ lease_id: 'lease_01KXKVVF1J3D6H6VYZ3XYNBBBB', epoch: 1, state: 'closed', liveness: 'ended', closure_reason: 'failed', session_id: 'sess-old' });
       stub = stubRunnerClient(routes({ leases: { rn_1: [LEASE(), older] } }));
       const el = await render({ chunk: CHUNK });
 
@@ -427,7 +429,7 @@ describe('LocalPanel', () => {
     it("shows the resume command of the escalation its own runner holds", async () => {
       stub = stubRunnerClient(
         routes({
-          leases: { rn_1: [LEASE({ state: 'closed', closure_reason: 'escalated', display_status: 'needs-human' })] },
+          leases: { rn_1: [LEASE({ state: 'closed', liveness: 'ended', closure_reason: 'escalated', display_status: 'needs-human' })] },
           dashboards: {
             rn_1: { escalations: { items: [ESCALATION] } },
             rn_2: { escalations: { items: [{ ...ESCALATION, resume_command: 'another runner’s command' }] } },
@@ -512,7 +514,7 @@ describe('LocalPanel', () => {
     });
 
     it('issues one work-items request per distinct chunk, on its own runner, even with several leases for it', async () => {
-      const older = LEASE({ lease_id: 'lease_01KXKVVF1J3D6H6VYZ3XYNBBBB', epoch: 1, state: 'closed' });
+      const older = LEASE({ lease_id: 'lease_01KXKVVF1J3D6H6VYZ3XYNBBBB', epoch: 1, state: 'closed', liveness: 'ended' });
       stub = stubRunnerClient(routes({ leases: { rn_1: [LEASE(), older] } }));
       await render();
 

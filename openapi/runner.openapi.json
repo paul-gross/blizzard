@@ -4269,6 +4269,17 @@
       "HostSubscriptionView": {
         "description": "One declared subscription's diagnostics, naming the runners that spend it, with its newest sampled snapshot's\nusage ``windows`` \u2014 the hub's own window shape \u2014 and that snapshot's ``windows_sampled_at``. A miss never masks\nthem: they stand until a newer sample replaces them. Empty, and ``None``, before a first sample.",
         "properties": {
+          "condition": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/SampleMissReason",
+                "x-blizzard-open": true
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "miss_reason": {
             "anyOf": [
               {
@@ -4385,7 +4396,8 @@
           "renewal_failure_reason",
           "spenders",
           "windows",
-          "windows_sampled_at"
+          "windows_sampled_at",
+          "condition"
         ],
         "title": "HostSubscriptionView",
         "type": "object"
@@ -4933,6 +4945,15 @@
         "title": "LeaseListResponse",
         "type": "object"
       },
+      "LeaseLiveness": {
+        "description": "Whether a lease's worker is still part of the fleet's work: ``live``, or ``ended`` \u2014 its process exited or its\nlease closed. Derived at read time from the lease's state, never stored.",
+        "enum": [
+          "live",
+          "ended"
+        ],
+        "title": "LeaseLiveness",
+        "type": "string"
+      },
       "LeaseUsageResponse": {
         "description": "The usage facts one lease recorded, oldest first.",
         "properties": {
@@ -5060,6 +5081,10 @@
             "title": "Lease Id",
             "type": "string"
           },
+          "liveness": {
+            "$ref": "#/components/schemas/LeaseLiveness",
+            "x-blizzard-open": true
+          },
           "node_id": {
             "title": "Node Id",
             "type": "string"
@@ -5168,6 +5193,7 @@
           "created_at",
           "last_heartbeat_at",
           "state",
+          "liveness",
           "display_status",
           "closure_healthy",
           "closed_at",

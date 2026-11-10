@@ -56,6 +56,7 @@ def test_a_never_attempted_slug_reports_every_field_none(tmp_path: Path) -> None
                 "spenders": [DEFAULT_RUNNER_NAME],
                 "windows": [],
                 "windows_sampled_at": None,
+                "condition": None,
             }
         ]
     }
@@ -104,6 +105,37 @@ def test_a_miss_reports_ok_false_and_its_reason(tmp_path: Path) -> None:
     item = resp.json()["items"][0]
     assert item["ok"] is False
     assert item["miss_reason"] == "credential_lapsed"
+    assert item["condition"] == "credential_lapsed"
+
+
+def test_a_miss_other_than_a_lapse_and_a_success_report_no_condition(tmp_path: Path) -> None:
+    client, store = _client(
+        tmp_path,
+        subscriptions=(
+            SubscriptionDeclaration(slug="codex", name="Codex", provider=PROVIDER_OPENAI),
+            SubscriptionDeclaration(slug="anthropic", name="Anthropic", provider=PROVIDER_ANTHROPIC),
+        ),
+    )
+    store.record_external_usage_attempt(
+        slug="codex",
+        sampled_at=_NOW,
+        payload=None,
+        report_kind="",
+        report_payload="",
+        miss_reason="endpoint_unreachable",
+    )
+    store.record_external_usage_attempt(
+        slug="anthropic",
+        sampled_at=_NOW,
+        payload="{}",
+        report_kind="external_subscription_usage.sampled",
+        report_payload="{}",
+    )
+
+    items = {i["slug"]: i for i in client.get("/api/host/subscriptions").json()["items"]}
+
+    assert items["codex"]["condition"] is None
+    assert items["anthropic"]["condition"] is None
 
 
 def _renewal_fields(item: dict[str, object]) -> tuple[object, object, object]:

@@ -1,8 +1,14 @@
-import { openLookup, type runnerApi } from 'fleet';
+import { openLookup, runnerApi } from 'fleet';
+
+/** Whether `lease` has ended, as the runner reads it — only a positive `ended` reading ends it; an unrecognized one
+ * keeps the lease live. */
+export function hasEnded(lease: Pick<runnerApi.LeaseView, 'liveness'>): boolean {
+  return lease.liveness === runnerApi.LeaseLiveness.ENDED;
+}
 
 /** Whether `lease` is a live worker — not yet exited or closed. A chunk has at most one. */
 export function isLiveLease(lease: runnerApi.LeaseView): boolean {
-  return lease.state !== 'exited' && lease.state !== 'closed';
+  return !hasEnded(lease);
 }
 
 /** How a closed lease's closure reads to an operator, by `closure_reason` — every published reason, so a new one
@@ -26,8 +32,8 @@ const ENDINGS = openLookup<runnerApi.LeaseClosureReason, string>(
  * shows as itself).
  */
 export function sessionEnding(lease: runnerApi.LeaseView): string | null {
+  if (!hasEnded(lease)) return null;
   if (lease.state === 'exited') return 'exited';
-  if (lease.state !== 'closed') return null;
   const reason = lease.closure_reason ?? 'unknown';
   return ENDINGS(reason);
 }

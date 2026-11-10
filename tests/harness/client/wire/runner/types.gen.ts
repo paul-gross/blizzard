@@ -2348,6 +2348,7 @@ export type HostSubscriptionListResponse = {
  * them: they stand until a newer sample replaces them. Empty, and ``None``, before a first sample.
  */
 export type HostSubscriptionView = {
+    condition: SampleMissReason | null;
     miss_reason: SampleMissReason | null;
     /**
      * Name
@@ -2710,6 +2711,14 @@ export type LeaseListResponse = {
 };
 
 /**
+ * LeaseLiveness
+ *
+ * Whether a lease's worker is still part of the fleet's work: ``live``, or ``ended`` — its process exited or its
+ * lease closed. Derived at read time from the lease's state, never stored.
+ */
+export type LeaseLiveness = 'live' | 'ended';
+
+/**
  * LeaseUsageResponse
  *
  * The usage facts one lease recorded, oldest first.
@@ -2785,6 +2794,7 @@ export type LeaseView = {
      * Lease Id
      */
     lease_id: string;
+    liveness: LeaseLiveness;
     /**
      * Node Id
      */

@@ -10,6 +10,7 @@ from pydantic import BaseModel, Field
 
 from blizzard.foundation.host_registration_state import HostRegistrationState
 from blizzard.foundation.host_runner_state import HostRunnerState
+from blizzard.foundation.subscription_miss import SampleMissReason
 from blizzard.foundation.unrecognized import Unrecognized
 from blizzard.wire.base import WireModel
 from blizzard.wire.runner import ExternalSubscriptionUsageWindowView
@@ -109,6 +110,8 @@ class HostSubscriptionView(SubscriptionView):
         default_factory=lambda: list[ExternalSubscriptionUsageWindowView]()
     )
     windows_sampled_at: str | None = None
+    #: ``"credential_lapsed"`` when the newest attempt is a miss for that reason; ``None`` otherwise.
+    condition: Annotated[SampleMissReason | Unrecognized, OPEN] | None = None
 
 
 class HostSubscriptionListResponse(WireModel):

@@ -17,6 +17,7 @@ function lease(overrides: Partial<runnerApi.LeaseView> = {}): runnerApi.LeaseVie
     created_at: '2026-07-16T11:00:00.000Z',
     last_heartbeat_at: '2026-07-16T11:59:00.000Z',
     state: 'running',
+    liveness: 'live',
     display_status: 'running',
     closure_healthy: false,
     closed_at: null,
@@ -39,19 +40,19 @@ describe('deriveLeaseStatus', () => {
     expect(deriveLeaseStatus(lease({ state: 'parked' }))).toEqual({ label: 'PARKED', tone: 'waiting' });
     expect(deriveLeaseStatus(lease({ state: 'backing-off' }))).toEqual({ label: 'BACKING OFF', tone: 'waiting' });
     expect(deriveLeaseStatus(lease({ state: 'spawning' }))).toEqual({ label: 'SPAWNING', tone: 'spawning' });
-    expect(deriveLeaseStatus(lease({ state: 'exited' }))).toEqual({ label: 'WORKER EXITED', tone: 'idle' });
+    expect(deriveLeaseStatus(lease({ state: 'exited', liveness: 'ended' }))).toEqual({ label: 'WORKER EXITED', tone: 'idle' });
   });
 
   it('reads a healthy closure as completed and any other closure dim, naming how its session ended', () => {
-    expect(deriveLeaseStatus(lease({ state: 'closed', closure_reason: 'transitioned', closure_healthy: true }))).toEqual({
+    expect(deriveLeaseStatus(lease({ state: 'closed', liveness: 'ended', closure_reason: 'transitioned', closure_healthy: true }))).toEqual({
       label: 'COMPLETED',
       tone: 'done',
     });
-    expect(deriveLeaseStatus(lease({ state: 'closed', closure_reason: 'reaped' }))).toEqual({
+    expect(deriveLeaseStatus(lease({ state: 'closed', liveness: 'ended', closure_reason: 'reaped' }))).toEqual({
       label: 'ENDED · TIMED OUT',
       tone: 'idle',
     });
-    expect(deriveLeaseStatus(lease({ state: 'closed', closure_reason: null }))).toEqual({
+    expect(deriveLeaseStatus(lease({ state: 'closed', liveness: 'ended', closure_reason: null }))).toEqual({
       label: 'ENDED · UNKNOWN',
       tone: 'idle',
     });

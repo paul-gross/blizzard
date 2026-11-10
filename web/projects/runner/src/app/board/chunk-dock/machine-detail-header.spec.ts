@@ -24,6 +24,7 @@ function endedLease(closedAt: string): runnerApi.LeaseView {
     created_at: '2026-07-16T10:00:00.000Z',
     last_heartbeat_at: null,
     state: 'closed',
+    liveness: 'ended',
     display_status: 'closed',
     closure_healthy: true,
     closed_at: closedAt,

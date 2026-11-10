@@ -10,7 +10,7 @@ from typing import TypedDict
 
 from fastapi import APIRouter, Request
 
-from blizzard.foundation.leases import LeaseDisplayStatus
+from blizzard.foundation.leases import LeaseDisplayStatus, LeaseLiveness
 from blizzard.foundation.store.utc import iso_utc
 from blizzard.runner.api.wiring import RunnerWiring
 from blizzard.runner.leases.activity import HEARTBEAT_STALENESS_THRESHOLD, ClosedLeaseActivity, LeaseActivity
@@ -34,6 +34,7 @@ class _CommonFields(TypedDict):
     pid: int | None
     created_at: str
     display_status: LeaseDisplayStatus
+    liveness: LeaseLiveness
     project_id: str | None
     stale_after_seconds: int
     resolved_model: str | None
@@ -55,6 +56,7 @@ def _view(activity: LeaseActivity | ClosedLeaseActivity) -> LeaseView:
         "harness_id": lease.harness_id,
         "pid": lease.pid,
         "created_at": iso_utc(lease.created_at),
+        "liveness": activity.liveness,
         "display_status": activity.display_status,
         "project_id": activity.project_id,
         "stale_after_seconds": int(HEARTBEAT_STALENESS_THRESHOLD.total_seconds()),
