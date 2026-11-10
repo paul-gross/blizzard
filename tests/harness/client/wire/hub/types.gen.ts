@@ -9327,6 +9327,30 @@ export type InvitationView = {
 export type JudgedBy = 'worker' | 'human';
 
 /**
+ * KeptByView
+ *
+ * One chore keeping a routine: its cadence, its key, and the cadence's next scheduled moment.
+ */
+export type KeptByView = {
+    /**
+     * Cadence Name
+     */
+    cadence_name: string;
+    /**
+     * Cadence Slug
+     */
+    cadence_slug: string;
+    /**
+     * Chore Key
+     */
+    chore_key: string;
+    /**
+     * Next Moment
+     */
+    next_moment: string | null;
+};
+
+/**
  * LandedRepoView
  *
  * One repo's actual merged revision; URL from its PR's or repository record's forge, absent with neither.
@@ -13227,6 +13251,10 @@ export type RoutineView = {
      * Graph Name
      */
     graph_name: string;
+    /**
+     * Kept By
+     */
+    kept_by: Array<KeptByView>;
     /**
      * Name
      */

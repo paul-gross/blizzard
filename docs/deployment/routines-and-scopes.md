@@ -9,7 +9,8 @@ names one by slug or name, takes `--project <id|slug>` when the tenant holds sev
 it to show one project's records ([projects.md](./projects.md#a-call-that-names-no-project)).
 
 A routine runs when someone starts it, or when a [cadence](./cadences.md) keeps it: a cadence runs each routine its
-chores name, over the scopes they name, on a schedule or a spacing.
+chores name, over the scopes they name, on a schedule or a spacing. A routine's view carries `kept_by`: one entry for each chore
+keeping it, with its cadence's next scheduled moment. A retired routine is still kept.
 
 ## Scopes
 
