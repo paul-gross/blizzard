@@ -285,6 +285,7 @@ if TYPE_CHECKING:
     from blizzard.runner.lifecycle.reap import ReapContext
     from blizzard.runner.lifecycle.registration import RegistrationContext
     from blizzard.runner.lifecycle.restart_resume import RestartResumeContext
+    from blizzard.runner.lifecycle.retention import RetentionContext
     from blizzard.runner.lifecycle.spawn import SpawnContext
     from blizzard.runner.lifecycle.spend_ceiling import SpendCeilingContext
     from blizzard.runner.lifecycle.usage_limit import UsageLimitContext
@@ -342,6 +343,8 @@ if TYPE_CHECKING:
     _reap_conforms: type[ReapContext] = LoopContext
 
     _spend_ceiling_conforms: type[SpendCeilingContext] = LoopContext
+
+    _retention_conforms: type[RetentionContext] = LoopContext
 
     _advance_conforms: type[AdvanceContext] = LoopContext
 
