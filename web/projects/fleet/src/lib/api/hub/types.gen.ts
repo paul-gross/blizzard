@@ -15834,20 +15834,6 @@ export const SessionMode = { RESUME: 'resume', FRESH: 'fresh' } as const;
 export type SessionMode = typeof SessionMode[keyof typeof SessionMode];
 
 /**
- * SettingsDefaultView
- */
-export type SettingsDefaultView = {
-    /**
-     * Slug
-     */
-    slug: string;
-    /**
-     * Urgency Id
-     */
-    urgency_id: string;
-};
-
-/**
  * SettingsEntry
  *
  * The tenant's settings as a document states them: ``default_urgency``, by id or slug, sets the urgency every new
@@ -15879,7 +15865,7 @@ export type SettingsPatchRequest = {
  * The tenant's settings.
  */
 export type SettingsView = {
-    default_urgency: SettingsDefaultView;
+    default_urgency: UrgencyRef;
     /**
      * Revision
      */
@@ -17898,7 +17884,8 @@ export type UrgencyPositionRequest = {
 /**
  * UrgencyRef
  *
- * The urgency a chunk carries, by id and slug; a reader joins it to the tenant's urgency set for the rest.
+ * An urgency a chunk carries or the settings name as the default, by id and slug; a reader joins it to the
+ * tenant's urgency set for the rest.
  */
 export type UrgencyRef = {
     /**

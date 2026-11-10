@@ -4392,7 +4392,8 @@ export type UnmatchedBindingView = {
 /**
  * UrgencyRef
  *
- * The urgency a chunk carries, by id and slug; a reader joins it to the tenant's urgency set for the rest.
+ * An urgency a chunk carries or the settings name as the default, by id and slug; a reader joins it to the
+ * tenant's urgency set for the rest.
  */
 export type UrgencyRef = {
     /**
