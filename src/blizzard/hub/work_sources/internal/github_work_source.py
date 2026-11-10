@@ -20,8 +20,14 @@ from blizzard.foundation.roles import adapter_model
 from blizzard.foundation.untyped import as_list, as_table
 from blizzard.hub.domain.chunk.delivery_read import DeliveryTrace
 from blizzard.hub.domain.chunk.model import WorkRef
-from blizzard.hub.work_sources.annotator import IWorkAnnotator, WorkAnnotateError, WorkStatusMarker
-from blizzard.hub.work_sources.closer import IWorkCloser, WorkCloseError, WorkItemGoneError
+from blizzard.hub.domain.chunk.ports.work_sources import (
+    IWorkAnnotator,
+    IWorkCloser,
+    WorkAnnotateError,
+    WorkCloseError,
+    WorkItemGoneError,
+)
+from blizzard.hub.domain.chunk.status_marker import WorkStatusMarker
 from blizzard.hub.work_sources.rate_gate import IWorkSourceRateGate
 from blizzard.hub.work_sources.source import IWorkSource, IWorkSourceBatchReader, WorkItem, WorkSourceError
 
@@ -64,8 +70,8 @@ class Label:
 class GitHubWorkSource:
     """Vendor-native issue reader over a GitHub-shaped forge, pinned to one repo.
 
-    Also implements :class:`~blizzard.hub.work_sources.annotator.IWorkAnnotator` and
-    :class:`~blizzard.hub.work_sources.closer.IWorkCloser` over the same client."""
+    Also implements :class:`~blizzard.hub.domain.chunk.ports.work_sources.IWorkAnnotator` and
+    :class:`~blizzard.hub.domain.chunk.ports.work_sources.IWorkCloser` over the same client."""
 
     def __init__(
         self,

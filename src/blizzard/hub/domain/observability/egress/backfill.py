@@ -27,12 +27,7 @@ from blizzard.hub.domain.observability.egress.config import EgressConfig
 from blizzard.hub.domain.observability.egress.event_rows import FilePathPolicy, missing_key_reason
 from blizzard.hub.domain.observability.egress.events_window import derivations_by_marker, events_rows, position_of
 from blizzard.hub.domain.observability.egress.lifecycle import ExportVerb, export_allows
-from blizzard.hub.domain.observability.egress.repository import EpochKey, IReadEgress, IReadEgressEvents, UsagePosition
-from blizzard.hub.domain.observability.egress.schema import EVENTS_SCHEMA, INVOCATIONS_SCHEMA, STEPS_SCHEMA
-from blizzard.hub.domain.observability.tracing.cursor import CursorKey
-from blizzard.hub.domain.observability.tracing.repository import IReadTraceSteps
-from blizzard.hub.domain.observability.tracing.window import read_window
-from blizzard.hub.egress.writer import (
+from blizzard.hub.domain.observability.egress.ports import (
     DatasetSchema,
     EgressBatch,
     EgressFailure,
@@ -41,6 +36,11 @@ from blizzard.hub.egress.writer import (
     IEgressWriter,
     PlacedFile,
 )
+from blizzard.hub.domain.observability.egress.repository import EpochKey, IReadEgress, IReadEgressEvents, UsagePosition
+from blizzard.hub.domain.observability.egress.schema import EVENTS_SCHEMA, INVOCATIONS_SCHEMA, STEPS_SCHEMA
+from blizzard.hub.domain.observability.tracing.cursor import CursorKey
+from blizzard.hub.domain.observability.tracing.repository import IReadTraceSteps
+from blizzard.hub.domain.observability.tracing.window import read_window
 
 _ONE_MICROSECOND = timedelta(microseconds=1)
 _Rows = list[tuple[date, EgressValues]]

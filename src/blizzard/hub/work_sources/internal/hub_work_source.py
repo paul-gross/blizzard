@@ -9,6 +9,7 @@ from blizzard.foundation.work_items import WorkItemPriority
 from blizzard.hub.auth.users import IReadUserRepository
 from blizzard.hub.domain.chunk.delivery_read import DeliveryTrace
 from blizzard.hub.domain.chunk.model import HubWorkItem, WorkItemAuthor, WorkRef
+from blizzard.hub.domain.chunk.ports.work_sources import IWorkCloser, WorkItemGoneError
 from blizzard.hub.domain.garden.proposals.resolution import GardenProposalDeliveryResolution
 from blizzard.hub.domain.graph.model import Graph
 from blizzard.hub.domain.kernel.hub_source import RESERVED_HUB_SOURCE_NAME
@@ -17,7 +18,6 @@ from blizzard.hub.domain.urgency.model import Urgency
 from blizzard.hub.domain.work_items.editing import CreatedWorkItem, WithdrawnWorkItem, WorkItemEditService
 from blizzard.hub.domain.work_items.model import WorkItemEdit, is_readable
 from blizzard.hub.domain.work_items.ports import IReadWorkItemRepository
-from blizzard.hub.work_sources.closer import IWorkCloser, WorkItemGoneError
 from blizzard.hub.work_sources.editor import IWorkEditor, WorkItemRefUnknownError
 from blizzard.hub.work_sources.source import (
     IWorkSource,

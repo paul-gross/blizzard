@@ -21,6 +21,17 @@ from blizzard.foundation.lane_retry import BACKOFF_CAP
 from blizzard.hub import app as hub_app
 from blizzard.hub.app import Sweep
 from blizzard.hub.domain.observability.egress.config import EgressConfig
+from blizzard.hub.domain.observability.egress.ports import (
+    DatasetSchema,
+    EgressBatch,
+    EgressFailure,
+    EgressFailureCause,
+    EgressPass,
+    FilesWritten,
+    IEgressWriter,
+    ManifestCommitted,
+    PlacedFile,
+)
 from blizzard.hub.domain.observability.egress.repository import EgressCheckpoint, EventsPosition, UsagePosition
 from blizzard.hub.domain.observability.egress.rows import ExportedInvocation, ExportedStep
 from blizzard.hub.domain.observability.egress.schema import INVOCATIONS_SCHEMA, STEPS_SCHEMA
@@ -29,18 +40,7 @@ from blizzard.hub.domain.observability.tracing.facts import StepFacts
 from blizzard.hub.domain.observability.tracing.repository import ClosingCandidates, IReadTraceSteps, TraceCheckpoint
 from blizzard.hub.egress.factory import EgressUnavailable
 from blizzard.hub.egress.internal.ndjson import NdjsonEgressWriter
-from blizzard.hub.egress.writer import (
-    DatasetSchema,
-    EgressBatch,
-    EgressFailure,
-    EgressFailureCause,
-    EgressPass,
-    EgressWriterSettings,
-    FilesWritten,
-    IEgressWriter,
-    ManifestCommitted,
-    PlacedFile,
-)
+from blizzard.hub.egress.writer import EgressWriterSettings
 from blizzard.hub.store import schema
 from blizzard.hub.store.internal import corpus_rows
 from blizzard.hub.store.internal.egress_store import EgressStore

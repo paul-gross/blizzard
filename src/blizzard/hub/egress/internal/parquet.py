@@ -14,16 +14,9 @@ from typing import BinaryIO
 import pyarrow as pa
 import pyarrow.parquet as pq
 
+from blizzard.hub.domain.observability.egress.ports import ColumnType, DatasetSchema, EgressValues, IEgressWriter
 from blizzard.hub.egress.internal.files import DirectoryEgressWriter
-from blizzard.hub.egress.writer import (
-    MONEY_PRECISION,
-    MONEY_SCALE,
-    ColumnType,
-    DatasetSchema,
-    EgressValues,
-    EgressWriterSettings,
-    IEgressWriter,
-)
+from blizzard.hub.egress.writer import MONEY_PRECISION, MONEY_SCALE, EgressWriterSettings
 
 _ARROW_TYPES: dict[ColumnType, pa.DataType] = {
     ColumnType.STRING: pa.string(),

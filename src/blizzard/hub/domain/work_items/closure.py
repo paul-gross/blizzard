@@ -27,11 +27,10 @@ from blizzard.hub.domain.chunk.ports.artifacts import IReadChunkArtifactsReposit
 from blizzard.hub.domain.chunk.ports.commit_links import IReadLandedCommitLinks, no_commit_link
 from blizzard.hub.domain.chunk.ports.delivery import IWriteChunkDeliveryRepository
 from blizzard.hub.domain.chunk.ports.record import IReadChunkRecordRepository
+from blizzard.hub.domain.chunk.ports.work_sources import IWorkClosers, WorkCloseError, WorkItemGoneError
 from blizzard.hub.domain.kernel.tenant_fault import TenantFault
 from blizzard.hub.domain.sweeps.fair_share import fair_share
 from blizzard.hub.tenancy import TenantClosed, TenantId, UnknownTenant
-from blizzard.hub.work_sources.closer import WorkCloseError, WorkItemGoneError
-from blizzard.hub.work_sources.source import IWorkSourceRegistry
 
 _log = get_logger("blizzard.hub.work_closure")
 
@@ -160,7 +159,7 @@ class CloseIntentDrainer:
         artifacts: IReadChunkArtifactsRepository,
         chunks: IReadChunkRecordRepository,
         events: EventLogService,
-        work_sources: IWorkSourceRegistry,
+        work_sources: IWorkClosers,
         clock: IClock,
         commit_links: IReadLandedCommitLinks,
         public_url: str | None = None,

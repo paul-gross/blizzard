@@ -39,6 +39,17 @@ from blizzard.hub.domain.observability.egress.event_rows import (
     derivation_rows,
     dropped_row,
 )
+from blizzard.hub.domain.observability.egress.ports import (
+    ColumnSpec,
+    ColumnType,
+    DatasetSchema,
+    EgressBatch,
+    EgressPass,
+    EgressValues,
+    FilesWritten,
+    PlacedFile,
+    rfc3339_utc,
+)
 from blizzard.hub.domain.observability.egress.repository import EventsPosition
 from blizzard.hub.domain.observability.egress.rows import AttributedUsage, ExportedInvocation, ExportedStep, step_row
 from blizzard.hub.domain.observability.egress.schema import (
@@ -55,19 +66,7 @@ from blizzard.hub.domain.observability.tracing.summary import summarize_step
 from blizzard.hub.egress.internal.files import DirectoryEgressWriter, schema_document
 from blizzard.hub.egress.internal.ndjson import NdjsonEncoder
 from blizzard.hub.egress.internal.parquet import ParquetEncoder, arrow_schema
-from blizzard.hub.egress.writer import (
-    MONEY_SCALE,
-    ColumnSpec,
-    ColumnType,
-    DatasetSchema,
-    EgressBatch,
-    EgressPass,
-    EgressValues,
-    EgressWriterSettings,
-    FilesWritten,
-    PlacedFile,
-    rfc3339_utc,
-)
+from blizzard.hub.egress.writer import MONEY_SCALE, EgressWriterSettings
 from blizzard.hub.tenancy import TenantId
 from tests.support import trace_fixtures as fx
 from tests.support.egress_recipes import COST_BY_NODE_BY_DAY, SLOWEST_STATION_OF_THE_WEEK, recipe

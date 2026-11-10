@@ -22,11 +22,7 @@ from blizzard.hub.domain.observability.analytics.extraction import EXTRACTOR_VER
 from blizzard.hub.domain.observability.egress import sweep as sweep_module
 from blizzard.hub.domain.observability.egress.config import EgressConfig
 from blizzard.hub.domain.observability.egress.event_rows import FilePathPolicy
-from blizzard.hub.domain.observability.egress.sweep import EgressSweep
-from blizzard.hub.domain.observability.tracing.repository import IReadTraceSteps
-from blizzard.hub.domain.observability.transcripts import TranscriptSlice
-from blizzard.hub.domain.projects.model import ProjectId
-from blizzard.hub.egress.writer import (
+from blizzard.hub.domain.observability.egress.ports import (
     ColumnSpec,
     ColumnType,
     DatasetSchema,
@@ -35,6 +31,10 @@ from blizzard.hub.egress.writer import (
     EgressValues,
     IEgressWriter,
 )
+from blizzard.hub.domain.observability.egress.sweep import EgressSweep
+from blizzard.hub.domain.observability.tracing.repository import IReadTraceSteps
+from blizzard.hub.domain.observability.transcripts import TranscriptSlice
+from blizzard.hub.domain.projects.model import ProjectId
 from blizzard.hub.store import schema
 from blizzard.hub.store.internal.egress_store import EgressStore
 from blizzard.hub.store.internal.hub_scoped_reads import build_hub_scoped_reads

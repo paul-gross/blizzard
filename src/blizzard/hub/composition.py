@@ -113,7 +113,7 @@ from blizzard.hub.domain.execution.release import ReleaseService
 from blizzard.hub.domain.garden.delivery.materialize import GardenDelivery
 from blizzard.hub.domain.garden.delivery.service import GardenDeliveryRecorder
 from blizzard.hub.domain.garden.delivery.stage_check import GardenStageCheck
-from blizzard.hub.domain.garden.delivery.validation import CommitResolver
+from blizzard.hub.domain.garden.delivery.validation import ICommitResolver
 from blizzard.hub.domain.garden.findings.bucket import FindingBucketReader
 from blizzard.hub.domain.garden.findings.model import (
     FindingExitService,
@@ -161,6 +161,7 @@ from blizzard.hub.domain.observability.analytics.queries import IReadAnalyticsEv
 from blizzard.hub.domain.observability.egress.backfill import EgressBackfill
 from blizzard.hub.domain.observability.egress.config import EgressConfig
 from blizzard.hub.domain.observability.egress.event_rows import export_paths
+from blizzard.hub.domain.observability.egress.ports import IEgressWriter
 from blizzard.hub.domain.observability.egress.reset import EgressReset
 from blizzard.hub.domain.observability.egress.status import EgressStatusReader
 from blizzard.hub.domain.observability.egress.sweep import EgressSweep
@@ -221,7 +222,7 @@ from blizzard.hub.domain.work_items.closure import CloseDrainSweep, CloseIntentD
 from blizzard.hub.domain.work_items.editing import WorkItemEditService
 from blizzard.hub.egress.factory import EgressUnavailable, build_egress_writer
 from blizzard.hub.egress.space import free_bytes
-from blizzard.hub.egress.writer import EgressWriterSettings, IEgressWriter, mint_process_token
+from blizzard.hub.egress.writer import EgressWriterSettings, mint_process_token
 from blizzard.hub.events.broker import EventBroker
 from blizzard.hub.events.brokers import TenantBrokers
 from blizzard.hub.forge.budget import ForgeBudgets
@@ -493,7 +494,7 @@ class TenantServices:
     #: Issue, list and revoke the tenant's invitations.
     invitations: InvitationService
     #: A project's resolver of a cited commit, against the forge of a repository the project links.
-    commit_resolver_for: Callable[[ProjectId], CommitResolver]
+    commit_resolver_for: Callable[[ProjectId], ICommitResolver]
     #: A routine's finding inflow-against-outflow over a window.
     garden_trend: GardenTrendService
     #: A routine's per-scope last-swept table and windowed measurement series.
@@ -1155,7 +1156,7 @@ def build_tenant_services(stores: TenantStores, parts: TenantServiceParts, *, ev
         repository_records=stores.repository_records,
         forge_records=stores.forge_records,
     )
-    # A project to a plain `delivery.validation.CommitResolver` callable.
+    # A project to a plain `delivery.validation.ICommitResolver` callable.
     commit_resolver_for = SeamCommitResolver(
         repositories=stores.repository_records,
         forge_records=stores.forge_records,

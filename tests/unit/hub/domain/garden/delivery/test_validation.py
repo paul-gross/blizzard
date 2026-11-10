@@ -17,9 +17,9 @@ from blizzard.foundation.ids import Id, IdPrefix
 from blizzard.hub.api.garden_formats import GardenFormats
 from blizzard.hub.domain.garden.delivery.validation import (
     CommitResolution,
-    CommitResolver,
-    ExitedResolver,
     GardenDeliveryRejected,
+    ICommitResolver,
+    IExitedResolver,
     check_add_refs,
     check_proposal,
     check_proposal_refs,
@@ -69,8 +69,8 @@ def _validate(
     proposal_artifacts: dict[str, str],
     bucket: FindingBucket,
     formats: GardenFormats,
-    resolve_commit: CommitResolver | None = None,
-    resolve_exited: ExitedResolver = lambda _ids: frozenset(),
+    resolve_commit: ICommitResolver | None = None,
+    resolve_exited: IExitedResolver = lambda _ids: frozenset(),
 ):
     """What the recorder does around the rules: parse, resolve every cited commit up front, then validate."""
     parsed = parse_artifacts(delta_artifacts=delta_artifacts, proposal_artifacts=proposal_artifacts, formats=formats)
@@ -85,7 +85,7 @@ def _check(
     *,
     run: RunContext,
     live_findings: dict[str, str],
-    resolve_commit: CommitResolver | None = None,
+    resolve_commit: ICommitResolver | None = None,
 ):
     """:func:`check_delta` over the resolutions the recorder would have made for `delta`."""
     resolutions = resolve_commits(commits_to_resolve([delta], run=run), resolve_commit)
@@ -134,7 +134,7 @@ def _finding(
     )
 
 
-def _resolver(result: bool | None) -> CommitResolver:
+def _resolver(result: bool | None) -> ICommitResolver:
     resolution = None if result is None else CommitResolution(exists=result)
     return lambda repo, sha: resolution
 

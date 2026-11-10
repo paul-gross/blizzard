@@ -11,6 +11,7 @@ from datetime import date, datetime, timedelta
 
 from blizzard.foundation.logging import get_logger
 from blizzard.foundation.roles import domain_model
+from blizzard.hub.domain.observability.egress.ports import EgressFailure, EgressFailureCause, EgressValues
 from blizzard.hub.domain.observability.egress.repository import EgressCheckpoint, EventsPosition, UsagePosition
 from blizzard.hub.domain.observability.egress.rows import AttributedUsage, invocation_row, step_row
 from blizzard.hub.domain.observability.egress.schema import (
@@ -26,7 +27,6 @@ from blizzard.hub.domain.observability.tracing.facts import StepFacts
 from blizzard.hub.domain.observability.tracing.steps import NodeStep, StepKind, identify_steps
 from blizzard.hub.domain.observability.tracing.summary import summarize_step
 from blizzard.hub.domain.observability.tracing.window import TraceWindow
-from blizzard.hub.egress.writer import EgressFailure, EgressFailureCause, EgressValues
 
 _log = get_logger("blizzard.hub.egress")
 

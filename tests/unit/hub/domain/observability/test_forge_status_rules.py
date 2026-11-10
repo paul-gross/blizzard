@@ -8,6 +8,7 @@ from datetime import UTC, datetime, timedelta
 import pytest
 
 from blizzard.hub.domain.chunk.ports.work_refs import WorkRefsSignature
+from blizzard.hub.domain.chunk.status_marker import WorkStatusMarker
 from blizzard.hub.domain.observability.forge_status import (
     AnnotationMemoryChange,
     AnnotationProbe,
@@ -15,7 +16,6 @@ from blizzard.hub.domain.observability.forge_status import (
     departed,
     marker_action,
 )
-from blizzard.hub.work_sources.annotator import WorkStatusMarker
 
 _INGESTED = WorkStatusMarker.INGESTED
 _IN_PROGRESS = WorkStatusMarker.IN_PROGRESS

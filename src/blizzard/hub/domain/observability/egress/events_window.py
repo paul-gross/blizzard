@@ -20,10 +20,10 @@ from blizzard.hub.domain.observability.egress.event_rows import (
     derivation_rows,
     dropped_row,
 )
+from blizzard.hub.domain.observability.egress.ports import EgressValues
 from blizzard.hub.domain.observability.egress.repository import EventsPosition
 from blizzard.hub.domain.observability.egress.schema import events_egress_row, partition_of
 from blizzard.hub.domain.observability.tracing.facts import StepFacts
-from blizzard.hub.egress.writer import EgressValues
 from blizzard.hub.tenancy import TenantId
 
 _log = get_logger("blizzard.hub.egress")

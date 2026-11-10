@@ -7,7 +7,7 @@ objects (`bzh:domain-takes-objects`), no I/O. Materializing a passing result is
 from __future__ import annotations
 
 import re
-from collections.abc import Callable, Iterable, Mapping, Sequence
+from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Protocol
@@ -27,7 +27,7 @@ from blizzard.hub.domain.garden.run_context import RunContext
 from blizzard.hub.domain.kernel.garden_delivery_fault import GardenDeliveryFault
 
 # Lowercase hex, 7-40 characters — a well-formed commit sha's shape. Says nothing about
-# whether the commit actually exists; that is `CommitResolver`'s question.
+# whether the commit actually exists; that is `ICommitResolver`'s question.
 _COMMIT_RE = re.compile(r"^[0-9a-f]{7,40}$")
 
 
@@ -47,9 +47,11 @@ class GardenDeliveryRejected(Exception):
 LiveFindings = Mapping[str, str]
 
 
-# Which of the given ids are exited findings this run's bucket would otherwise hold: one bulk read
-# over only the ids a delivery cites, so exited history is never read whole.
-ExitedResolver = Callable[[frozenset[str]], frozenset[str]]
+class IExitedResolver(Protocol):
+    """Which of the given ids are exited findings this run's bucket would otherwise hold: one bulk read
+    over only the ids a delivery cites, so exited history is never read whole."""
+
+    def __call__(self, refs: frozenset[str], /) -> frozenset[str]: ...
 
 
 @domain_model
@@ -59,9 +61,12 @@ class CommitResolution:
     authored_at: datetime | None = None
 
 
-# Resolves `(repo, commit_sha)`: a :class:`CommitResolution` when `repo` is addressable,
-# `None` when it is not, degrading that commit to a well-formedness check.
-CommitResolver = Callable[[str, str], CommitResolution | None]
+class ICommitResolver(Protocol):
+    """Resolves `(repo, commit_sha)`: a :class:`CommitResolution` when `repo` is addressable,
+    `None` when it is not, degrading that commit to a well-formedness check."""
+
+    def __call__(self, repo: str, commit: str, /) -> CommitResolution | None: ...
+
 
 # What resolving the commits a delivery cites produced, keyed `(repo, sha)`: a key absent was never asked,
 # a `None` value is a repository the resolver found unaddressable.
@@ -348,7 +353,7 @@ def commits_to_resolve(deltas: Sequence[DeliveredDelta], *, run: RunContext) -> 
     return frozenset(asked)
 
 
-def resolve_commits(commits: Iterable[tuple[str, str]], resolver: CommitResolver | None) -> CommitResolutions:
+def resolve_commits(commits: Iterable[tuple[str, str]], resolver: ICommitResolver | None) -> CommitResolutions:
     """Ask `resolver` once about each of `commits`; with no resolver nothing is asked."""
     if resolver is None:
         return {}
@@ -361,7 +366,7 @@ def validate_delivery(
     parsed: ParsedArtifacts,
     bucket: FindingBucket,
     resolutions: CommitResolutions | None = None,
-    resolve_exited: ExitedResolver = lambda _ids: frozenset(),
+    resolve_exited: IExitedResolver = lambda _ids: frozenset(),
 ) -> ValidatedDelivery:
     """The delivery node's whole check over `parsed` artifacts and the `resolutions` of the commits they cite
     (:func:`commits_to_resolve`). `bucket` is the run's :class:`FindingBucket`: what it may cite;

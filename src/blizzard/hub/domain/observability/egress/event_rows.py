@@ -23,11 +23,11 @@ from blizzard.hub.domain.observability.analytics.events import (
 )
 from blizzard.hub.domain.observability.egress.assembly import runner_step
 from blizzard.hub.domain.observability.egress.config import EgressConfig
+from blizzard.hub.domain.observability.egress.ports import rfc3339_utc
 from blizzard.hub.domain.observability.egress.rows import trace_id_text
 from blizzard.hub.domain.observability.egress.schema import EVENTS_SCHEMA
 from blizzard.hub.domain.observability.tracing.facts import StepFacts
 from blizzard.hub.domain.observability.tracing.steps import identify_steps
-from blizzard.hub.egress.writer import rfc3339_utc
 
 __all__ = [
     "RECORD_DERIVATION",

@@ -11,10 +11,16 @@ from dataclasses import fields
 from datetime import UTC, date, datetime
 from typing import TYPE_CHECKING
 
+from blizzard.hub.domain.observability.egress.ports import (
+    ColumnSpec,
+    ColumnType,
+    DatasetSchema,
+    EgressValues,
+    rfc3339_utc,
+)
 from blizzard.hub.domain.observability.egress.repository import EventsPosition, UsagePosition
 from blizzard.hub.domain.observability.egress.rows import ExportedInvocation, ExportedStep
 from blizzard.hub.domain.observability.tracing.cursor import CursorKey
-from blizzard.hub.egress.writer import ColumnSpec, ColumnType, DatasetSchema, EgressValues, rfc3339_utc
 
 if TYPE_CHECKING:
     from blizzard.hub.domain.observability.egress.event_rows import ExportedEventsEntry

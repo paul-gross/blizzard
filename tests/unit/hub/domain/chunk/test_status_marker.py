@@ -5,7 +5,7 @@ from __future__ import annotations
 import pytest
 
 from blizzard.foundation.chunk_status import ChunkStatus
-from blizzard.hub.work_sources.annotator import WorkStatusMarker
+from blizzard.hub.domain.chunk.status_marker import WorkStatusMarker
 
 
 def test_marker_of_is_exhaustive_over_chunk_status() -> None:

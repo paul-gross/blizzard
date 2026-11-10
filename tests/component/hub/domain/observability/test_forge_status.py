@@ -15,11 +15,12 @@ from fastapi.testclient import TestClient
 from blizzard.foundation.chunk_status import ChunkStatus
 from blizzard.hub.composition import HubServices, TenantServices
 from blizzard.hub.domain.chunk.model import OperationalEvent, WorkRef
+from blizzard.hub.domain.chunk.ports.work_sources import IWorkAnnotator, WorkAnnotateError
+from blizzard.hub.domain.chunk.status_marker import WorkStatusMarker
 from blizzard.hub.domain.observability.forge_status import AnnotationReconciler, TenantAnnotation
 from blizzard.hub.store.internal.forge_annotation_store import ForgeAnnotationStore
 from blizzard.hub.store.internal.hub_scoped_reads import build_hub_scoped_reads
 from blizzard.hub.tenancy import StoreScope, TenantId
-from blizzard.hub.work_sources.annotator import IWorkAnnotator, WorkAnnotateError, WorkStatusMarker
 from tests.support.config_inputs import build_hosted_hub_app, init_hub
 from tests.support.scaffolding import (
     FakeAnnotator,

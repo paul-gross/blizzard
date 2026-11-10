@@ -7,14 +7,14 @@ from decimal import Decimal
 
 import pytest
 
-from blizzard.hub.egress.writer import (
+from blizzard.hub.domain.observability.egress.ports import (
     EgressFailure,
     EgressFailureCause,
     EgressValues,
     FilesWritten,
     ManifestCommitted,
-    mint_process_token,
 )
+from blizzard.hub.egress.writer import mint_process_token
 from tests.support.egress_world import PASS, RowFields, batch, row
 from tests.support.scaffolding import InMemoryEgressWriter
 

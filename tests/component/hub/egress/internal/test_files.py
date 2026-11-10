@@ -20,9 +20,7 @@ import pyarrow as pa
 import pyarrow.parquet as pq
 import pytest
 
-from blizzard.hub.egress.factory import EgressUnavailable, build_egress_writer
-from blizzard.hub.egress.internal.files import DirectoryEgressWriter, schema_document
-from blizzard.hub.egress.writer import (
+from blizzard.hub.domain.observability.egress.ports import (
     ColumnSpec,
     ColumnType,
     DatasetSchema,
@@ -31,12 +29,14 @@ from blizzard.hub.egress.writer import (
     EgressFailureCause,
     EgressPass,
     EgressValues,
-    EgressWriterSettings,
     FilesWritten,
     IEgressWriter,
     ManifestCommitted,
     PlacedFile,
 )
+from blizzard.hub.egress.factory import EgressUnavailable, build_egress_writer
+from blizzard.hub.egress.internal.files import DirectoryEgressWriter, schema_document
+from blizzard.hub.egress.writer import EgressWriterSettings
 from tests.support.egress_recipes import LOAD_NDJSON, LOAD_PARQUET, load
 from tests.support.egress_world import PASS, SCHEMA, batch, row
 
