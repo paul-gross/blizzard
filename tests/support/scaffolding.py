@@ -307,7 +307,8 @@ _default_tenants: weakref.WeakKeyDictionary[Engine, TenantId] = weakref.WeakKeyD
 
 def add_tenant(engine: Engine, name: str) -> TenantId:
     """Add a tenant named ``name`` to the store under a freshly minted id, holding its ``default``
-    project, as tenant administration would, and return its id. Once a store holds two tenants, :func:`default_tenant` and :func:`stamp`
+    project, as tenant administration would, and return its id. A store migrated past the urgency tables also holds its
+    ``standard`` urgency and settings. Once a store holds two tenants, :func:`default_tenant` and :func:`stamp`
     no longer name one — a test adding one names the tenant on every raw read and write."""
     tenant = TenantId(Id.mint_at(IdPrefix.TENANT, _GRAPH_T0).value)
     project = Id.mint_at(IdPrefix.PROJECT, _GRAPH_T0).value
@@ -327,6 +328,8 @@ def add_tenant(engine: Engine, name: str) -> TenantId:
                 created_at=_GRAPH_T0,
             )
         )
+    if not sa.inspect(engine).has_table(schema.urgencies.name):
+        return tenant  # a store migrated to a revision before the urgency tables seeds no urgency
     connections = scoped_connections(engine, tenant)
     ctx = ChangeContext(actor="test", door=Door.API)
     standard, standard_change = Urgency.standard(ctx, at=_GRAPH_T0)
