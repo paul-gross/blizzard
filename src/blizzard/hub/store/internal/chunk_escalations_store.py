@@ -15,7 +15,11 @@ from sqlalchemy import Connection, Row
 from blizzard.foundation.clock import IClock
 from blizzard.hub.domain.artifact.model import StoredArtifact
 from blizzard.hub.domain.chunk.model import CloseEnqueueDecision, EscalationOpen
-from blizzard.hub.domain.chunk.ports.escalations import BounceEscalationOutcome, IWriteChunkEscalationsRepository
+from blizzard.hub.domain.chunk.ports.escalations import (
+    BounceEscalationOutcome,
+    EscalationWrite,
+    IWriteChunkEscalationsRepository,
+)
 from blizzard.hub.domain.chunk.ports.exclusive import ILockedChunkRead
 from blizzard.hub.domain.chunk.ports.facts import IReadChunkFactsRepository
 from blizzard.hub.domain.chunk.ports.fence import Claimant, EpochAdmission, FenceRefusal
@@ -80,7 +84,7 @@ class ChunkEscalationsStore:
         artifacts: Sequence[StoredArtifact] = (),
         close_decision: CloseEnqueueDecision | None = None,
         transaction: Transaction | None = None,
-    ) -> int | FenceRefusal:
+    ) -> EscalationWrite | FenceRefusal:
         with chunk_locked_connection(self._store, chunk_id, transaction, "record_escalation") as conn:
             refusal = fence(conn, chunk_id, epoch=epoch, admission=admission, claimant=claimant)
             if refusal is not None:
@@ -115,9 +119,12 @@ class ChunkEscalationsStore:
                         seq=next_artifact_seq(conn, row.chunk_id),
                     )
                 )
+            escalation_id = int(key[0]) if key is not None else 0
             if close_decision is not None and any(is_landing_marker(row.name, row.data) for row in artifacts):
-                enqueue_close_intents(conn, chunk_id, at=at, close_decision=close_decision)
-            return int(key[0]) if key is not None else 0
+                return EscalationWrite(
+                    escalation_id, enqueue_close_intents(conn, chunk_id, at=at, close_decision=close_decision)
+                )
+            return EscalationWrite(escalation_id)
 
     def record_bounce_locked(
         self,

@@ -17,6 +17,7 @@ from blizzard.foundation.migration_source import MigrationSource
 from blizzard.hub.domain.artifact.model import StoredArtifact
 from blizzard.hub.domain.chunk.model import WorkRef, decide_close_enqueue
 from blizzard.hub.domain.chunk.ports.fence import EpochAdmission, FenceRefusal
+from blizzard.hub.domain.chunk.ports.movement import MigrationWrite
 from blizzard.hub.store import schema as s
 from tests.support.scaffolding import (
     FactAck,
@@ -302,7 +303,7 @@ def test_a_stale_or_stopped_migration_is_refused_and_writes_nothing(tmp_path: Pa
     chunk = Chunk(hub)
     chunk.lease(2)
 
-    def migrate(epoch: int) -> str | FenceRefusal | None:
+    def migrate(epoch: int) -> MigrationWrite | FenceRefusal | None:
         return chunk.stores.movement.record_migration(
             chunk.chunk_id,
             from_node_id=chunk.nodes["build"],

@@ -247,12 +247,13 @@ class FlowLanding:
 @dataclass(frozen=True)
 class LandingWrite:
     """What recording a turn's merge did: whether the fence would have refused it, the ``flow-landed`` event row
-    it wrote — ``None`` for a replay that found the marker written — and the ``landed`` fact it wrote, none on a
-    replay."""
+    it wrote — ``None`` for a replay that found the marker written — the ``landed`` fact it wrote, none on a
+    replay, and the ids of the ``work-item-close-skipped`` event rows it wrote."""
 
     refused: bool
     event_id: int | None
     written: tuple[FlowFactWritten, ...] = ()
+    close_skipped: tuple[int, ...] = ()
 
 
 @domain_model

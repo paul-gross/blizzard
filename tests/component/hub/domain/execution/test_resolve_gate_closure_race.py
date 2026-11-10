@@ -203,6 +203,7 @@ def test_a_resolution_reads_and_writes_on_the_token_its_chunk_lock_returned(tmp_
         retired=RetiredRunnerGuard(registry=cast(Any, None)),
         clock=hub.clock,
         closer_available=lambda _source: False,
+        events=hub.services.event_log,
     )
     decision = stores.decisions.get_decision(decision_id)
     assert decision is not None

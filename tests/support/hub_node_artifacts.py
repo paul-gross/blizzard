@@ -23,16 +23,20 @@ def record_hub_asset(
 ) -> bool:
     """Record ``name`` on the visit ``(chunk_id, node_id, epoch)``, idempotently per that visit and name; answers
     whether it wrote."""
-    return chunk_stores(hub.engine, hub.clock).artifacts.record_hub_artifact(
-        chunk_id,
-        node_id=node_id,
-        node_name=node_name,
-        epoch=epoch,
-        admission=EpochAdmission.AT_OR_ABOVE,
-        name=name,
-        content=content,
-        at=hub.clock.now(),
-        close_decision=_close_decision(hub, chunk_id),
+    return (
+        chunk_stores(hub.engine, hub.clock)
+        .artifacts.record_hub_artifact(
+            chunk_id,
+            node_id=node_id,
+            node_name=node_name,
+            epoch=epoch,
+            admission=EpochAdmission.AT_OR_ABOVE,
+            name=name,
+            content=content,
+            at=hub.clock.now(),
+            close_decision=_close_decision(hub, chunk_id),
+        )
+        .wrote
     )
 
 

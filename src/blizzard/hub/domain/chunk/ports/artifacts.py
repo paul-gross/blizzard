@@ -4,14 +4,36 @@ including the hub-node marker/log artifacts written outside a transition."""
 from __future__ import annotations
 
 from collections.abc import Sequence
+from dataclasses import dataclass
 from datetime import datetime
 from typing import Protocol
 
+from blizzard.foundation.roles import domain_model
 from blizzard.hub.domain.artifact.model import StoredArtifact
 from blizzard.hub.domain.chunk.delivery_read import DeliverySources
 from blizzard.hub.domain.chunk.model import CloseEnqueueDecision
 from blizzard.hub.domain.chunk.ports.fence import EpochAdmission
 from blizzard.hub.domain.kernel.transactions import Transaction
+
+
+@domain_model
+@dataclass(frozen=True)
+class HubArtifactWrite:
+    """What appending a hub-node artifact did: whether it wrote, and the ids of the ``work-item-close-skipped`` event
+    rows a landing marker owed."""
+
+    wrote: bool
+    close_skipped: tuple[int, ...] = ()
+
+
+@domain_model
+@dataclass(frozen=True)
+class ArtifactLandingWrite:
+    """What recording a merge did: whether the fence would have refused it, and the ids of the
+    ``work-item-close-skipped`` event rows it wrote — written even when refused."""
+
+    refused: bool
+    close_skipped: tuple[int, ...] = ()
 
 
 class IReadChunkArtifactsRepository(Protocol):
@@ -66,14 +88,14 @@ class IWriteChunkArtifactsRepository(IReadChunkArtifactsRepository, Protocol):
         at: datetime,
         close_decision: CloseEnqueueDecision,
         transaction: Transaction | None = None,
-    ) -> bool:
+    ) -> HubArtifactWrite:
         """Append one hub-node progress artifact OUTSIDE a transition.
 
         Idempotent per ``(chunk, node, name, epoch)`` natural key: a re-run that already
         recorded this artifact writes nothing a second time. Also behind the write fence
         (``bzh:epoch-fencing``): a refused write writes nothing either. Ordinary artifact rows, durable exactly like a
         worker-produced one. Written in ``transaction`` when given — a unit that locks the chunk — else in a write of
-        its own that locks it first (``bzh:transaction-participation``). Returns True iff it wrote."""
+        its own that locks it first (``bzh:transaction-participation``). Answers ``wrote`` True iff it wrote."""
         ...
 
     def record_landing(
@@ -89,11 +111,11 @@ class IWriteChunkArtifactsRepository(IReadChunkArtifactsRepository, Protocol):
         repository_id: str,
         at: datetime,
         close_decision: CloseEnqueueDecision,
-    ) -> bool:
+    ) -> ArtifactLandingWrite:
         """Record a merge that has happened in one transaction: the ``merged/<repo>`` marker at ``revision``,
         its ``delivery_repo_landed`` row stamped with ``repository_id``, and the chunk's close intents.
 
         Admitted past the write fence (``bzh:epoch-fencing``) — a terminal chunk or a stale epoch does not
         refuse it, because it records what the forge already did. Idempotent per ``(chunk, node, name,
-        epoch)``: a replay writes nothing a second time. Returns whether the fence would have refused it."""
+        epoch)``: a replay writes nothing a second time. Answers whether the fence would have refused it."""
         ...

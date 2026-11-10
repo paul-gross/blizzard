@@ -14,6 +14,7 @@ from blizzard.foundation.chunk_status import ChunkStatus
 from blizzard.foundation.clock import IClock
 from blizzard.foundation.roles import domain_model
 from blizzard.hub.domain.chunk.errors import ChunkNotFound
+from blizzard.hub.domain.chunk.event_log import EventLogService, close_skipped_events
 from blizzard.hub.domain.chunk.flow_writes import LeverWrite
 from blizzard.hub.domain.chunk.model import Chunk, ChunkFacts, ChunkVerb, decide_close_enqueue, person_note
 from blizzard.hub.domain.chunk.ports.decisions import IWriteChunkDecisionsRepository
@@ -177,8 +178,10 @@ class RestartService:
         clock: IClock,
         exclusive: IChunkExclusiveWrites,
         closer_available: Callable[[str], bool],
+        events: EventLogService,
     ) -> None:
         self._movement = movement
+        self._events = events
         self._decisions = decisions
         # Read for one thing only — whether a cross-graph target is retired. The
         # graphs themselves arrive resolved (``bzh:domain-takes-objects``).
@@ -203,7 +206,7 @@ class RestartService:
         ``to_graph`` makes it the eager cross-graph move: a migration fact and a restart fact in one
         write. :func:`plan_restart` decides against the facts and the record re-read under the row
         lock; every refusal writes nothing. Returns the ``chunk_restarts.id`` and the ``withdrawn`` flow facts, for the
-        caller to announce once committed."""
+        caller to announce once committed; the close-skip events a gate opened on arrival wrote are published here."""
         with self._exclusive.locked([chunk.chunk_id]) as handle:
             facts = handle.facts(chunk.chunk_id)
             if facts is None:
@@ -237,7 +240,7 @@ class RestartService:
             )
             landed = handle.facts(chunk.chunk_id)
             assert landed is not None
-            open_graph_gate_on_arrival(
+            close_skipped = open_graph_gate_on_arrival(
                 self._decisions,
                 handle,
                 self._clock,
@@ -247,4 +250,5 @@ class RestartService:
                 epoch=landed.epoch_floor(),
                 close_decision=decide_close_enqueue(current.work_refs, self._closer_available),
             )
-            return written
+        self._events.publish(*close_skipped_events(close_skipped, chunk=current))
+        return written

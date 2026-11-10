@@ -21,17 +21,21 @@ _NAME = "progress/one"
 
 
 def _record(hub: HubHarness, chunk_id: str, transaction: Transaction | None = None) -> bool:
-    return cast(IWriteChunkArtifactsRepository, hub.services.chunks.artifacts).record_hub_artifact(
-        chunk_id,
-        node_id="nd_deliver",
-        node_name="deliver",
-        epoch=1,
-        name=_NAME,
-        content="x",
-        at=hub.clock.now(),
-        admission=EpochAdmission.AT_OR_ABOVE,
-        close_decision=CloseEnqueueDecision(closable=frozenset(), skipped=frozenset()),
-        transaction=transaction,
+    return (
+        cast(IWriteChunkArtifactsRepository, hub.services.chunks.artifacts)
+        .record_hub_artifact(
+            chunk_id,
+            node_id="nd_deliver",
+            node_name="deliver",
+            epoch=1,
+            name=_NAME,
+            content="x",
+            at=hub.clock.now(),
+            admission=EpochAdmission.AT_OR_ABOVE,
+            close_decision=CloseEnqueueDecision(closable=frozenset(), skipped=frozenset()),
+            transaction=transaction,
+        )
+        .wrote
     )
 
 

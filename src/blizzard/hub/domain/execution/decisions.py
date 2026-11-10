@@ -16,6 +16,7 @@ from blizzard.foundation.node_steps import ApplyOutcome
 from blizzard.foundation.roles import domain_model
 from blizzard.hub.domain.artifact.model import StoredArtifact
 from blizzard.hub.domain.chunk.errors import ChunkNotFound
+from blizzard.hub.domain.chunk.event_log import EventLogService, close_skipped_events
 from blizzard.hub.domain.chunk.model import (
     Chunk,
     ChunkFacts,
@@ -110,10 +111,12 @@ class DecisionService:
         retired: RetiredRunnerGuard,
         clock: IClock,
         closer_available: Callable[[str], bool],
+        events: EventLogService,
     ) -> None:
         self._facts = facts
         self._route = route
         self._decisions = decisions
+        self._events = events
         # ``bzh:store-exclusive-write``.
         self._exclusive = exclusive
         self._transactions = transactions
@@ -207,8 +210,9 @@ class DecisionService:
             )
         if isinstance(recorded, FenceRefusal):
             return DecisionSubmitResult.failure(recorded.detail)
-        # `False` — a racing duplicate already opened this decision: the lost-ack replay.
-        return DecisionSubmitResult.parked(node, decision_id if recorded else None)
+        self._events.publish(*close_skipped_events(recorded.close_skipped, chunk=chunk))
+        # Not written — a racing duplicate already opened this decision: the lost-ack replay.
+        return DecisionSubmitResult.parked(node, decision_id if recorded.wrote else None)
 
     def _refuse_competing_gate(
         self, facts: ChunkFacts, node: Node, *, epoch: int, transaction: Transaction | None = None

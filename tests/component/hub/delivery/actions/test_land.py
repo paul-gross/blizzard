@@ -1285,7 +1285,7 @@ def test_a_landing_record_is_written_past_the_fence_once_and_answers_whether_it_
             repository_id="re_widget",
             at=hub.clock.now(),
             close_decision=close_decision,
-        )
+        ).refused
 
     hub.services.stop.stop(chunk, by="operator")
 

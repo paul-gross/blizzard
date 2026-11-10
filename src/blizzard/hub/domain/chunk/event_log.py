@@ -6,13 +6,14 @@ the unit commits (``bzh:publish-after-commit``)."""
 
 from __future__ import annotations
 
-from collections.abc import Mapping
+from collections.abc import Iterable, Mapping
 from dataclasses import dataclass
 from datetime import datetime
 from typing import overload
 
 from blizzard.foundation.event_log import EVENT_LOG_SEVERITY, EventLogKind, EventLogSeverity
 from blizzard.foundation.roles import domain_model
+from blizzard.hub.domain.chunk.model import Chunk
 from blizzard.hub.domain.chunk.ports.events import IEventLogPublisher, IWriteChunkEventsRepository
 from blizzard.hub.domain.kernel.transactions import Transaction
 from blizzard.hub.domain.projects.model import ProjectId
@@ -31,6 +32,24 @@ class LoggedEvent:
     runner_id: str | None
     runner_name: str | None
     project_id: ProjectId | None
+
+
+def close_skipped_events(row_ids: Iterable[int], *, chunk: Chunk) -> tuple[LoggedEvent, ...]:
+    """The frames for the ``work-item-close-skipped`` rows a unit wrote about ``chunk`` while accounting for its open
+    work refs, for the unit's owner to :meth:`EventLogService.publish` once it commits."""
+    kind: EventLogKind = "work-item-close-skipped"
+    return tuple(
+        LoggedEvent(
+            row_id=row_id,
+            severity=EVENT_LOG_SEVERITY[kind],
+            kind=kind,
+            chunk_id=chunk.chunk_id,
+            runner_id=None,
+            runner_name=None,
+            project_id=chunk.project_id,
+        )
+        for row_id in row_ids
+    )
 
 
 class EventLogService:

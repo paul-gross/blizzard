@@ -190,7 +190,7 @@ def _transition(world: _World, handle: ILockedChunkRead, chunk_id: str, *, epoch
         at=world.hub.clock.now(),
         artifacts=[],
         release_route=False,
-    )
+    ).wrote
 
 
 def test_a_verdict_commits_its_transition_with_the_turns_end_and_closure(world: _World) -> None:

@@ -17,7 +17,6 @@ from collections import defaultdict
 from collections.abc import Sequence
 from dataclasses import dataclass
 from datetime import datetime, timedelta
-from functools import partial
 from typing import Any
 
 from sqlalchemy import Column, CompoundSelect, Connection, CursorResult, Row, Select, Table, func, literal, select
@@ -46,7 +45,7 @@ from blizzard.hub.store.internal.chunk_terminal_predicates import chunk_is_termi
 from blizzard.hub.store.internal.fact_families import ephemeral_tables
 from blizzard.hub.store.internal.newest_fact import newer_row_exists
 from blizzard.hub.store.locking import lock_chunk_row
-from blizzard.hub.store.scoped import ScopedStatements, after_commit, event_publisher, statements_of
+from blizzard.hub.store.scoped import ScopedStatements, statements_of
 
 
 @adapter_model
@@ -557,13 +556,14 @@ def is_terminal(conn: Connection, chunk_id: str) -> bool:
 
 def enqueue_close_intents(
     conn: Connection, chunk_id: str, *, at: datetime, close_decision: CloseEnqueueDecision
-) -> None:
+) -> tuple[int, ...]:
     """Account for open work refs on the landing/completion write's transaction.
 
     Bound refs get an intent; refs without a bound closer get a durable terminal skip
-    and chunk event. Existing terminal outcomes and replays produce no duplicate event."""
+    and chunk event. Existing terminal outcomes and replays produce no duplicate event.
+    Answers the ids of the skip event rows written, for the unit's owner to publish once it commits."""
     if is_ephemeral_id(conn, chunk_id):
-        return
+        return ()
     stmts = statements_of(conn)
     refs = conn.execute(
         stmts.select(s.chunk_work_refs, s.chunk_work_refs.c.source, s.chunk_work_refs.c.ref).where(
@@ -571,7 +571,7 @@ def enqueue_close_intents(
         )
     ).all()
     if not refs:
-        return
+        return ()
     listed = frozenset(WorkRef(row.source, row.ref) for row in refs)
     if close_decision.closable & close_decision.skipped or listed != close_decision.closable | close_decision.skipped:
         raise ValueError("close decision must partition every chunk work ref")
@@ -592,17 +592,7 @@ def enqueue_close_intents(
             )
         ).all()
     }
-    project_id_cache: list[str | None] = []
-
-    def project_id_of_chunk() -> str | None:
-        if not project_id_cache:
-            project_id_cache.append(
-                conn.execute(
-                    stmts.select(s.chunks, s.chunks.c.project_id).where(s.chunks.c.chunk_id == chunk_id)
-                ).scalar_one()
-            )
-        return project_id_cache[0]
-
+    skip_row_ids: list[int] = []
     for row in refs:
         pointer = WorkRef(row.source, row.ref)
         if (row.source, row.ref) in terminal:
@@ -644,30 +634,16 @@ def enqueue_close_intents(
                     recorded_at=at,
                 )
             )
-            publisher = event_publisher(conn)
-            if publisher is not None:
-                project_id = project_id_of_chunk()
-                primary_key = result.inserted_primary_key
-                assert primary_key is not None
-                key = f"event_log:{primary_key[0]}"
-                after_commit(
-                    conn,
-                    partial(
-                        publisher.publish_event_logged,
-                        severity=EVENT_LOG_SEVERITY[kind],
-                        kind=kind,
-                        chunk_id=chunk_id,
-                        runner_id=None,
-                        key=key,
-                        project_id=project_id,
-                    ),
-                )
+            primary_key = result.inserted_primary_key
+            assert primary_key is not None
+            skip_row_ids.append(int(primary_key[0]))
         elif (row.source, row.ref) not in already:
             conn.execute(
                 stmts.insert(s.close_intents).values(
                     chunk_id=chunk_id, source=row.source, ref=row.ref, enqueued_at=at, retired_at=None
                 )
             )
+    return tuple(skip_row_ids)
 
 
 def chunk_row(conn: Connection, row: Row[Any]) -> Chunk:
@@ -708,10 +684,10 @@ def write_landing_rows(
     artifact_id: str,
     at: datetime,
     close_decision: CloseEnqueueDecision,
-) -> tuple[bool, bool]:
+) -> tuple[bool, bool, tuple[int, ...]]:
     """One merge's ``merged/<repo>`` marker, its ``delivery_repo_landed`` row and the chunk's close intents, admitted
-    past the fence. Answers whether the fence would have refused, and whether this wrote — a replay finds the marker
-    and writes nothing."""
+    past the fence. Answers whether the fence would have refused, whether this wrote — a replay finds the marker
+    and writes nothing — and the ids of the close-skip event rows it wrote."""
     lock_chunk_row(conn, chunk_id)
     stmts = statements_of(conn)
     name = f"{MARKER_PREFIX}{repo}"
@@ -725,7 +701,7 @@ def write_landing_rows(
         )
     ).first()
     if already is not None:
-        return refused, False
+        return refused, False, ()
     conn.execute(
         stmts.insert(s.artifacts).values(
             artifact_id=artifact_id,
@@ -747,5 +723,5 @@ def write_landing_rows(
             chunk_id=chunk_id, repo=repo, commit_hash=revision, repository_id=repository_id, landed_at=at
         )
     )
-    enqueue_close_intents(conn, chunk_id, at=at, close_decision=close_decision)
-    return refused, True
+    skip_row_ids = enqueue_close_intents(conn, chunk_id, at=at, close_decision=close_decision)
+    return refused, True, skip_row_ids

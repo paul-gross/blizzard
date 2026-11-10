@@ -3,14 +3,26 @@ transition/poll bookkeeping."""
 
 from __future__ import annotations
 
+from dataclasses import dataclass
 from datetime import datetime
 from typing import Protocol
 
+from blizzard.foundation.roles import domain_model
 from blizzard.foundation.wait_kinds import WaitKind
 from blizzard.hub.domain.artifact.model import StoredArtifact
 from blizzard.hub.domain.chunk.model import CloseEnqueueDecision
 from blizzard.hub.domain.chunk.ports.exclusive import ILockedChunkRead
 from blizzard.hub.domain.chunk.ports.fence import EpochAdmission
+
+
+@domain_model
+@dataclass(frozen=True)
+class HubStepTransitionWrite:
+    """What recording a hub step's transition did: whether it wrote, and the ids of the ``work-item-close-skipped``
+    event rows it wrote."""
+
+    wrote: bool
+    close_skipped: tuple[int, ...] = ()
 
 
 class IReadChunkHubExecRepository(Protocol):
@@ -36,10 +48,10 @@ class IWriteChunkHubExecRepository(IReadChunkHubExecRepository, Protocol):
         artifacts: list[StoredArtifact],
         release_route: bool,
         close_decision: CloseEnqueueDecision,
-    ) -> bool:
+    ) -> HubStepTransitionWrite:
         """Record a hub command node's exit transition on ``handle``'s already-locked connection
         (``bzh:store-exclusive-write``) — a turn's verdict, committed with the turn's end. ``release_route`` is True
-        only when ``to_node_id`` is the reserved terminal. Returns False, writing nothing, on a replay — the
+        only when ``to_node_id`` is the reserved terminal. Answers ``wrote`` False, writing nothing, on a replay — the
         transition's existence at ``(chunk_id, from_node_id, epoch)`` — or when the write fence refuses
         (``bzh:epoch-fencing``)."""
         ...

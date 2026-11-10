@@ -9,6 +9,7 @@ import pytest
 
 from blizzard.foundation.clock import FixedClock
 from blizzard.hub.domain.chunk.errors import ChunkNotFound
+from blizzard.hub.domain.chunk.event_log import EventLogService
 from blizzard.hub.domain.chunk.model import Chunk, ChunkFacts
 from blizzard.hub.domain.chunk.ports.decisions import IWriteChunkDecisionsRepository
 from blizzard.hub.domain.chunk.ports.exclusive import IChunkExclusiveWrites, ILockedChunkRead
@@ -44,6 +45,7 @@ def test_restart_refuses_a_chunk_gone_under_the_lock_and_writes_nothing() -> Non
         clock=FixedClock(_T0),
         exclusive=cast(IChunkExclusiveWrites, _FakeExclusiveWrites()),
         closer_available=lambda source: source == "hub",
+        events=cast(EventLogService, _Untouchable()),
     )
 
     with pytest.raises(ChunkNotFound):

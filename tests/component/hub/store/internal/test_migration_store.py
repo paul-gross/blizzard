@@ -24,7 +24,7 @@ from blizzard.hub.domain.chunk.model import (
     decide_close_enqueue,
 )
 from blizzard.hub.domain.chunk.ports.fence import EpochAdmission, FenceRefusal
-from blizzard.hub.domain.chunk.ports.movement import IWriteChunkMovementRepository
+from blizzard.hub.domain.chunk.ports.movement import IWriteChunkMovementRepository, MigrationWrite
 from blizzard.hub.domain.chunk.ports.record import IWriteChunkRecordRepository
 from blizzard.hub.store import schema as s
 from tests.support.scaffolding import (
@@ -166,7 +166,7 @@ def test_record_migration_is_idempotent_on_replay(tmp_path: Path) -> None:
     assert pre_migration is not None
     source_graph_id = pre_migration.graph_id
 
-    def do_migrate() -> str | FenceRefusal | None:
+    def do_migrate() -> MigrationWrite | FenceRefusal | None:
         return chunks.record_migration(
             chunk_id,
             close_decision=decide_close_enqueue([WorkRef(**_POINTER)], lambda _: True),

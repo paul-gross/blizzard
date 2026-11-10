@@ -41,8 +41,9 @@ class FlowFactWritten:
 @domain_model
 @dataclass(frozen=True)
 class LeverWrite:
-    """What a lever's write did: the id of the fact it appended, and the ``withdrawn`` facts of the flow
-    submissions it closed."""
+    """What a lever's write did: the id of the fact it appended, the ``withdrawn`` facts of the flow
+    submissions it closed, and the ids of the ``work-item-close-skipped`` event rows it wrote."""
 
     fact_id: int
     withdrawn: tuple[FlowFactWritten, ...] = ()
+    close_skipped: tuple[int, ...] = ()

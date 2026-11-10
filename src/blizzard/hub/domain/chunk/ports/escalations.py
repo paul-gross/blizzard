@@ -4,10 +4,12 @@
 from __future__ import annotations
 
 from collections.abc import Sequence
+from dataclasses import dataclass
 from datetime import datetime
 from enum import StrEnum
 from typing import Protocol
 
+from blizzard.foundation.roles import domain_model
 from blizzard.hub.domain.artifact.model import StoredArtifact
 from blizzard.hub.domain.chunk.model import CloseEnqueueDecision, EscalationOpen
 from blizzard.hub.domain.chunk.ports.exclusive import ILockedChunkRead
@@ -25,6 +27,16 @@ class BounceEscalationOutcome(StrEnum):
     RECORDED = "recorded"
     ALREADY_RECORDED = "already_recorded"
     REFUSED = "refused"
+
+
+@domain_model
+@dataclass(frozen=True)
+class EscalationWrite:
+    """What an escalation admitted past the fence wrote: its row id, and the ids of the ``work-item-close-skipped``
+    event rows its landing-marker artifacts owed."""
+
+    escalation_id: int
+    close_skipped: tuple[int, ...] = ()
 
 
 class IReadChunkEscalationsRepository(Protocol):
@@ -56,10 +68,10 @@ class IWriteChunkEscalationsRepository(IReadChunkEscalationsRepository, Protocol
         artifacts: Sequence[StoredArtifact] = (),
         close_decision: CloseEnqueueDecision | None = None,
         transaction: Transaction | None = None,
-    ) -> int | FenceRefusal:
+    ) -> EscalationWrite | FenceRefusal:
         """Record an ``escalation.recorded`` fact — the chunk derives ``needs_human``
         until something supersedes it — behind the write fence (``bzh:epoch-fencing``); a
-        refusal writes nothing and is returned in place of the row id. The takeover command rides along so the
+        refusal writes nothing and is returned in place of the write. The takeover command rides along so the
         parked session is resumable (`blizzard-context:/domain/humans/escalation.md`). ``decision_id``,
         when set, closes a gate decision no transition or migration will. ``artifacts`` land behind the same fence, on
         the same connection, as the escalation row, so the two commit or roll back together; a landing-marker row among

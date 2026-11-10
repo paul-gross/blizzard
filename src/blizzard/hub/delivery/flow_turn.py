@@ -45,7 +45,7 @@ from blizzard.hub.domain.actions.effects import (
 )
 from blizzard.hub.domain.actions.requirements import ACTION_REQUIREMENTS, Requirement
 from blizzard.hub.domain.actions.visit import Visit, VisitChunk, VisitNode, VisitRefusal, resolve_visit
-from blizzard.hub.domain.chunk.event_log import EventLogService
+from blizzard.hub.domain.chunk.event_log import EventLogService, close_skipped_events
 from blizzard.hub.domain.chunk.flow_writes import FlowFactWritten
 from blizzard.hub.domain.chunk.model import Chunk, ChunkFacts, decide_close_enqueue
 from blizzard.hub.domain.chunk.no_code import finished_repos
@@ -458,7 +458,7 @@ class TurnRunner:
         if at is None:
             self._end(submission, ending, outcome=TURN_SUPERSEDED)
             return
-        self._artifacts.record_hub_artifact(
+        written = self._artifacts.record_hub_artifact(
             at.chunk.chunk_id,
             node_id=at.node.node_id,
             node_name=at.node.name,
@@ -471,6 +471,7 @@ class TurnRunner:
                 at.chunk.work_refs, lambda source: self._work_sources.closer(source) is not None
             ),
         )
+        self._events.publish(*close_skipped_events(written.close_skipped, chunk=at.chunk))
         self._router.route(
             at.chunk, at.graph, at.node, epoch=at.epoch, choice=HUB_DEFAULT_FAILURE_CHOICE, ending=ending
         )
@@ -492,7 +493,7 @@ class TurnRunner:
         """Make one effect a pass recorded durable, answering how the hub took it."""
         match effect:
             case Marker(name=name, content=content):
-                wrote = self._artifacts.record_hub_artifact(
+                written = self._artifacts.record_hub_artifact(
                     chunk.chunk_id,
                     node_id=node.node_id,
                     node_name=node.name,
@@ -505,7 +506,8 @@ class TurnRunner:
                         chunk.work_refs, lambda source: self._work_sources.closer(source) is not None
                     ),
                 )
-                if wrote or self._artifacts.has_hub_artifact(
+                self._events.publish(*close_skipped_events(written.close_skipped, chunk=chunk))
+                if written.wrote or self._artifacts.has_hub_artifact(
                     chunk.chunk_id, node_id=node.node_id, epoch=epoch, name=name
                 ):
                     return EffectResult(EffectStatus.RECORDED)
@@ -555,7 +557,7 @@ class TurnRunner:
         flow = next((f for f in submission.flows if f.repository_id == repository), None)
         at = self._clock.now()
         if flow is None:
-            return self._artifacts.record_landing(
+            landed = self._artifacts.record_landing(
                 chunk.chunk_id,
                 node_id=node.node_id,
                 node_name=node.name,
@@ -569,6 +571,8 @@ class TurnRunner:
                     chunk.work_refs, lambda source: self._work_sources.closer(source) is not None
                 ),
             )
+            self._events.publish(*close_skipped_events(landed.close_skipped, chunk=chunk))
+            return landed.refused
         landing = FlowLanding.of(flow, submission, project_id=chunk.project_id, node_name=node.name, revision=revision)
         written = self._flows.record_landing(
             landing,
@@ -583,6 +587,7 @@ class TurnRunner:
                 chunk.work_refs, lambda source: self._work_sources.closer(source) is not None
             ),
         )
+        self._events.publish(*close_skipped_events(written.close_skipped, chunk=chunk))
         publish_flow_facts(self._publisher, written.written)
         if written.event_id is not None:
             self._publisher.publish_event_logged(
@@ -712,7 +717,7 @@ class TurnRunner:
         if not answer.log:
             return None
         name = f"{HUB_LOG_PREFIX}{action_name}"
-        self._artifacts.record_hub_artifact(
+        written = self._artifacts.record_hub_artifact(
             chunk.chunk_id,
             node_id=node.node_id,
             node_name=node.name,
@@ -725,6 +730,7 @@ class TurnRunner:
                 chunk.work_refs, lambda source: self._work_sources.closer(source) is not None
             ),
         )
+        self._events.publish(*close_skipped_events(written.close_skipped, chunk=chunk))
         return name
 
     def _resolve_feature_title(self, chunk: Chunk) -> str | None:

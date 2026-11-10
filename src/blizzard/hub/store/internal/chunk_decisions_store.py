@@ -23,7 +23,7 @@ from blizzard.hub.domain.chunk.model import (
     GateDecision,
     GateResolution,
 )
-from blizzard.hub.domain.chunk.ports.decisions import IWriteChunkDecisionsRepository, LiveDecisionStatus
+from blizzard.hub.domain.chunk.ports.decisions import DecisionWrite, IWriteChunkDecisionsRepository, LiveDecisionStatus
 from blizzard.hub.domain.chunk.ports.exclusive import ILockedChunkRead
 from blizzard.hub.domain.chunk.ports.fence import Claimant, EpochAdmission, FenceRefusal
 from blizzard.hub.domain.kernel.transactions import LockedTransaction, Transaction
@@ -234,7 +234,7 @@ class ChunkDecisionsStore:
         artifacts: list[StoredArtifact],
         imposed_by_runner_id: str | None,
         close_decision: CloseEnqueueDecision,
-    ) -> FenceRefusal | None:
+    ) -> DecisionWrite | FenceRefusal:
         with self._store.write("record_decision") as conn:
             lock_chunk_row(conn, chunk_id)
             return self._record_decision_conn(
@@ -271,14 +271,14 @@ class ChunkDecisionsStore:
         artifacts: list[StoredArtifact],
         imposed_by_runner_id: str | None,
         close_decision: CloseEnqueueDecision,
-    ) -> bool | FenceRefusal:
+    ) -> DecisionWrite | FenceRefusal:
         """:meth:`record_decision` on ``handle``'s already-locked connection
         (``bzh:store-exclusive-write``). A decision already open at ``(chunk_id, node_id, epoch)``
-        answers ``False`` — the lost-ack replay, nothing written; ``True`` is a fresh write."""
+        answers ``wrote`` ``False`` — the lost-ack replay, nothing written; ``True`` is a fresh write."""
         conn = chunk_handle_connection(handle, self._store, chunk_id)
         if self._decision_exists(conn, chunk_id, node_id=node_id, epoch=epoch):
-            return False
-        refusal = self._record_decision_conn(
+            return DecisionWrite(wrote=False)
+        return self._record_decision_conn(
             conn,
             decision_id=decision_id,
             chunk_id=chunk_id,
@@ -294,7 +294,6 @@ class ChunkDecisionsStore:
             imposed_by_runner_id=imposed_by_runner_id,
             close_decision=close_decision,
         )
-        return refusal if refusal is not None else True
 
     def _record_decision_conn(
         self,
@@ -313,7 +312,7 @@ class ChunkDecisionsStore:
         artifacts: list[StoredArtifact],
         imposed_by_runner_id: str | None,
         close_decision: CloseEnqueueDecision,
-    ) -> FenceRefusal | None:
+    ) -> DecisionWrite | FenceRefusal:
         payload = json.dumps(
             [{"name": c.name, "description": c.description, "requires_checks": c.requires_checks} for c in choices]
         )
@@ -356,8 +355,10 @@ class ChunkDecisionsStore:
                 )
             )
         if any(is_landing_marker(row.name, row.data) for row in artifacts):
-            enqueue_close_intents(conn, chunk_id, at=at, close_decision=close_decision)
-        return None
+            return DecisionWrite(
+                wrote=True, close_skipped=enqueue_close_intents(conn, chunk_id, at=at, close_decision=close_decision)
+            )
+        return DecisionWrite(wrote=True)
 
     @staticmethod
     def _decision_exists(conn: Connection, chunk_id: str, *, node_id: str, epoch: int) -> bool:

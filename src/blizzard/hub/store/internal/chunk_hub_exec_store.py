@@ -20,7 +20,7 @@ from blizzard.hub.domain.artifact.model import StoredArtifact
 from blizzard.hub.domain.chunk.model import CloseEnqueueDecision
 from blizzard.hub.domain.chunk.ports.exclusive import ILockedChunkRead
 from blizzard.hub.domain.chunk.ports.fence import EpochAdmission
-from blizzard.hub.domain.chunk.ports.hub_exec import IWriteChunkHubExecRepository
+from blizzard.hub.domain.chunk.ports.hub_exec import HubStepTransitionWrite, IWriteChunkHubExecRepository
 from blizzard.hub.domain.graph.model import RESERVED_TERMINAL
 from blizzard.hub.store import schema as s
 from blizzard.hub.store.internal.chunk_rows import (
@@ -60,7 +60,7 @@ class ChunkHubExecStore:
         artifacts: list[StoredArtifact],
         release_route: bool,
         close_decision: CloseEnqueueDecision,
-    ) -> bool:
+    ) -> HubStepTransitionWrite:
         return self._transition_conn(
             chunk_handle_connection(handle, self._store, chunk_id),
             chunk_id,
@@ -93,7 +93,7 @@ class ChunkHubExecStore:
         artifacts: list[StoredArtifact],
         release_route: bool,
         close_decision: CloseEnqueueDecision,
-    ) -> bool:
+    ) -> HubStepTransitionWrite:
         lock_chunk_row(conn, chunk_id)
         already = conn.execute(
             self._store.select(s.transitions, s.transitions.c.transition_id).where(
@@ -103,9 +103,9 @@ class ChunkHubExecStore:
             )
         ).first()
         if already is not None:
-            return False
+            return HubStepTransitionWrite(wrote=False)
         if fence(conn, chunk_id, epoch=epoch, admission=admission) is not None:
-            return False
+            return HubStepTransitionWrite(wrote=False)
         record_hub_lease(conn, chunk_id, epoch=epoch, runner_id=runner_id, at=at)
         conn.execute(
             self._store.insert(s.transitions).values(
@@ -145,8 +145,9 @@ class ChunkHubExecStore:
                 )
             )
         if to_node_id == RESERVED_TERMINAL or any(is_landing_marker(row.name, row.data) for row in artifacts):
-            enqueue_close_intents(conn, chunk_id, at=at, close_decision=close_decision)
-        return True
+            close_skipped = enqueue_close_intents(conn, chunk_id, at=at, close_decision=close_decision)
+            return HubStepTransitionWrite(wrote=True, close_skipped=close_skipped)
+        return HubStepTransitionWrite(wrote=True)
 
     def record_hub_node_poll_locked(
         self,

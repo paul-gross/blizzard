@@ -20,6 +20,7 @@ from blizzard.foundation.artifacts import ArtifactKind
 from blizzard.foundation.clock import FixedClock
 from blizzard.foundation.migration_source import MigrationSource
 from blizzard.foundation.node_steps import ApplyOutcome, Executor
+from blizzard.hub.domain.chunk.event_log import EventLogService
 from blizzard.hub.domain.chunk.model import (
     Chunk,
     ChunkFacts,
@@ -31,12 +32,13 @@ from blizzard.hub.domain.chunk.model import (
     decide_close_enqueue,
 )
 from blizzard.hub.domain.chunk.ports.artifacts import IReadChunkArtifactsRepository
-from blizzard.hub.domain.chunk.ports.decisions import IWriteChunkDecisionsRepository
+from blizzard.hub.domain.chunk.ports.decisions import DecisionWrite, IWriteChunkDecisionsRepository
 from blizzard.hub.domain.chunk.ports.escalations import IWriteChunkEscalationsRepository
+from blizzard.hub.domain.chunk.ports.events import IEventLogPublisher, IWriteChunkEventsRepository
 from blizzard.hub.domain.chunk.ports.exclusive import IChunkExclusiveWrites, ILockedChunkRead
 from blizzard.hub.domain.chunk.ports.facts import IReadChunkFactsRepository
 from blizzard.hub.domain.chunk.ports.fence import Claimant, EpochAdmission, FenceRefusal
-from blizzard.hub.domain.chunk.ports.movement import IWriteChunkMovementRepository
+from blizzard.hub.domain.chunk.ports.movement import IWriteChunkMovementRepository, MigrationWrite, TransitionWrite
 from blizzard.hub.domain.chunk.ports.route import IReadChunkRouteRepository, IWriteChunkRouteRepository
 from blizzard.hub.domain.execution.apply import ApplyResult, ApplyService
 from blizzard.hub.domain.execution.completion import MigrationTargets
@@ -93,14 +95,16 @@ class _Ports:
     def accepted_transition_target(self, chunk_id: str, *, from_node_id: str, epoch: int) -> str | None:
         return None
 
-    def record_migration_locked(self, handle: ILockedChunkRead, chunk_id: str, **kwargs: Any) -> str | FenceRefusal:
+    def record_migration_locked(
+        self, handle: ILockedChunkRead, chunk_id: str, **kwargs: Any
+    ) -> MigrationWrite | FenceRefusal:
         self.migration_handles.append(handle)
         self.migrations.append({"chunk_id": chunk_id, **kwargs})
-        return self.refusal or "mg_recorded"
+        return self.refusal or MigrationWrite("mg_recorded")
 
-    def record_transition_locked(self, handle: ILockedChunkRead, **kwargs: Any) -> FenceRefusal | None:
+    def record_transition_locked(self, handle: ILockedChunkRead, **kwargs: Any) -> TransitionWrite | FenceRefusal:
         self.transitions.append(kwargs)
-        return self.refusal
+        return self.refusal or TransitionWrite()
 
     # decisions
     def get_decision(self, decision_id: str, *, transaction: object = None) -> GateDecision | None:
@@ -109,9 +113,9 @@ class _Ports:
     def find_decision(self, chunk_id: str, *, node_id: str, epoch: int) -> None:
         return None
 
-    def record_decision_locked(self, handle: ILockedChunkRead, **kwargs: Any) -> bool | FenceRefusal:
+    def record_decision_locked(self, handle: ILockedChunkRead, **kwargs: Any) -> DecisionWrite | FenceRefusal:
         self.decisions.append(kwargs)
-        return self.refusal or True
+        return self.refusal or DecisionWrite(wrote=True)
 
     # route / artifacts / registry / hub executor
     def route_of(self, chunk_id: str) -> None:
@@ -166,6 +170,11 @@ class _FakeExclusiveWrites:
         yield cast(ILockedChunkRead, self.handles[-1])
 
 
+def _events(ports: _Ports) -> EventLogService:
+    """The event log over the untouchable ports: a write that skipped no close publishes nothing."""
+    return EventLogService(events=cast(IWriteChunkEventsRepository, ports), publisher=cast(IEventLogPublisher, ports))
+
+
 def _wired(under_lock: ChunkFacts | None, *, pre_lock: ChunkFacts = AT_BUILD) -> tuple[_Ports, FixedClock, Any]:
     assert under_lock != pre_lock, "a race case needs the lock to see facts the pre-lock read did not"
     ports = _Ports(pre_lock=pre_lock)
@@ -196,6 +205,7 @@ def _apply_service_with_lock(
         hub_step_wake=ports,
         label=lambda _ref: None,
         closer_available=lambda source: source == "hub",
+        events=_events(ports),
     )
     return service, ports, clock, exclusive
 
@@ -211,6 +221,7 @@ def _decision_service(under_lock: ChunkFacts) -> tuple[DecisionService, _Ports, 
         retired=RetiredRunnerGuard(registry=cast(Any, ports)),
         clock=clock,
         closer_available=lambda source: source == "hub",
+        events=_events(ports),
     )
     return service, ports, clock
 

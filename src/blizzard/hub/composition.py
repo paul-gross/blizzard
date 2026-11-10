@@ -1066,7 +1066,6 @@ def build_tenant_services(stores: TenantStores, parts: TenantServiceParts, *, ev
     :class:`TenantStores`, publishing to ``events`` — the tenant's broker."""
     clock = parts.clock
     tenant_connections = stores.connections
-    tenant_connections.event_publisher = events
     chunk_stores = stores.chunk_stores
     work_item_store = stores.work_item_store
     finding_store = stores.finding_store
@@ -1290,6 +1289,7 @@ def build_tenant_services(stores: TenantStores, parts: TenantServiceParts, *, ev
             hub_step_wake=parts.step_wake,
             label=work_ref_label,
             closer_available=lambda source: work_sources.closer(source) is not None,
+            events=event_log,
         ),
         decisions=DecisionService(
             facts=chunk_facts,
@@ -1300,6 +1300,7 @@ def build_tenant_services(stores: TenantStores, parts: TenantServiceParts, *, ev
             retired=retired,
             clock=clock,
             closer_available=lambda source: work_sources.closer(source) is not None,
+            events=event_log,
         ),
         requeue=RequeueService(movement=chunk_movement, route=chunk_route, exclusive=chunk_exclusive, clock=clock),
         restart=RestartService(
@@ -1309,6 +1310,7 @@ def build_tenant_services(stores: TenantStores, parts: TenantServiceParts, *, ev
             clock=clock,
             exclusive=chunk_exclusive,
             closer_available=lambda source: work_sources.closer(source) is not None,
+            events=event_log,
         ),
         detach=detach,
         release=ReleaseService(route=chunk_route, exclusive=chunk_exclusive, clock=clock),
@@ -1319,6 +1321,7 @@ def build_tenant_services(stores: TenantStores, parts: TenantServiceParts, *, ev
             exclusive=chunk_exclusive,
             clock=clock,
             closer_available=lambda source: work_sources.closer(source) is not None,
+            events=event_log,
         ),
         edit=EditService(
             record=chunk_record, graphs=graph_store, exclusive=chunk_exclusive, urgencies=stores.urgencies
