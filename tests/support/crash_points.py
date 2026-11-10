@@ -23,6 +23,7 @@ _INSTRUMENTED_MODULES = (
     "blizzard.runner.lifecycle.claim",
     "blizzard.runner.lifecycle.dormant",
     "blizzard.runner.lifecycle.restart_resume",
+    "blizzard.runner.lifecycle.reap",
     "blizzard.runner.operator.attachments",
     "blizzard.runner.lifecycle.takeover",
     "blizzard.runner.lifecycle.judgement.git_commit_declaration",
