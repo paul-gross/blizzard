@@ -7,7 +7,7 @@ this module's only job is the hub-local *identity* shapes they attach to."""
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import datetime, timedelta
 
 from blizzard.auth_core import Role
 from blizzard.foundation.roles import domain_model
@@ -52,6 +52,20 @@ class Session:
     created_at: datetime
     expires_at: datetime
     last_seen_at: datetime
+
+    def expired(self, now: datetime, *, absolute_max_age: timedelta) -> bool:
+        """Whether the session is idle-expired at ``now`` or past its absolute maximum age."""
+        return self.expires_at <= now or now - self.created_at >= absolute_max_age
+
+    def touch_due(self, now: datetime, *, touch_granularity: timedelta) -> bool:
+        """Whether enough time has passed since ``last_seen_at`` to record a touch. Elapsed time, not the expiry
+        slide: the slide saturates at the absolute maximum age while the session is still live, which would freeze
+        that delta at zero."""
+        return now - self.last_seen_at >= touch_granularity
+
+    def slid_expiry(self, now: datetime, *, idle_ttl: timedelta, absolute_max_age: timedelta) -> datetime:
+        """The expiry a touch at ``now`` slides to: a further idle window, capped at the absolute maximum age."""
+        return min(self.created_at + absolute_max_age, now + idle_ttl)
 
 
 @domain_model

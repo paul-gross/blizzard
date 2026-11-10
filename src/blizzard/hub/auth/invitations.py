@@ -69,6 +69,37 @@ class Invitation:
     created_at: datetime
     expires_at: datetime
 
+    @classmethod
+    def requested(
+        cls,
+        *,
+        invitation_id: str,
+        tenant: TenantId,
+        email: str,
+        role: Role,
+        token_hash: str,
+        created_by: str,
+        now: datetime,
+        lifetime_days: int,
+    ) -> Invitation:
+        """The invitation asked for at ``now``: ``email`` normalized, expiring ``lifetime_days`` on. Raises
+        :class:`MembershipRoleRefused` for a role no membership holds and :class:`InvitationLifetimeRefused` for a
+        lifetime out of range."""
+        if role not in MEMBERSHIP_ROLES:
+            raise MembershipRoleRefused(role)
+        if not MIN_LIFETIME_DAYS <= lifetime_days <= MAX_LIFETIME_DAYS:
+            raise InvitationLifetimeRefused(lifetime_days)
+        return cls(
+            invitation_id=invitation_id,
+            tenant=tenant,
+            email=email.strip().lower(),
+            role=role,
+            token_hash=token_hash,
+            created_by=created_by,
+            created_at=now,
+            expires_at=now + timedelta(days=lifetime_days),
+        )
+
     def admits(self, identity: ProviderIdentity) -> bool:
         """Whether ``identity`` may accept this invitation: its provider vouches for every address it reports as
         verified, and one of them is this invitation's, compared case-insensitively."""
@@ -191,21 +222,18 @@ class InvitationService:
         """Issue an invitation admitting ``email`` as ``role`` for ``lifetime_days``, by the user ``by``. Raises
         :class:`MembershipRoleRefused` for a role no membership holds and :class:`InvitationLifetimeRefused` for a
         lifetime out of range."""
-        if role not in MEMBERSHIP_ROLES:
-            raise MembershipRoleRefused(role)
-        if not MIN_LIFETIME_DAYS <= lifetime_days <= MAX_LIFETIME_DAYS:
-            raise InvitationLifetimeRefused(lifetime_days)
+        # Refusals come before the token and id are minted.
         now = self._clock.now()
         token = InvitationToken.mint()
-        invitation = Invitation(
+        invitation = Invitation.requested(
             invitation_id=Id.mint(IdPrefix.INVITATION, self._clock).value,
             tenant=self._tenant(),
-            email=email.strip().lower(),
+            email=email,
             role=role,
             token_hash=token.hash,
             created_by=by,
-            created_at=now,
-            expires_at=now + timedelta(days=lifetime_days),
+            now=now,
+            lifetime_days=lifetime_days,
         )
         self._invitations.create(invitation)
         return IssuedInvitation(InvitationRecord(invitation, None), token)

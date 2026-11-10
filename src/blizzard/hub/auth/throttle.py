@@ -25,6 +25,17 @@ class _Bucket:
     tokens: float
     last_refill_seconds: float
 
+    def admit(self, now_seconds: float, *, capacity: int, refill_per_second: float) -> bool:
+        """Refill for the time elapsed since the last check, then consume one token; ``False``, consuming nothing,
+        when fewer than one is left."""
+        elapsed = max(0.0, now_seconds - self.last_refill_seconds)
+        self.tokens = min(capacity, self.tokens + elapsed * refill_per_second)
+        self.last_refill_seconds = now_seconds
+        if self.tokens < 1:
+            return False
+        self.tokens -= 1
+        return True
+
 
 class IpThrottle:
     """``allow(ip)`` consumes one token, refilling continuously since the bucket's last
@@ -48,11 +59,4 @@ class IpThrottle:
         if bucket is None:
             bucket = _Bucket(tokens=float(self._capacity), last_refill_seconds=now_seconds)
             self._buckets[ip] = bucket
-        else:
-            elapsed = max(0.0, now_seconds - bucket.last_refill_seconds)
-            bucket.tokens = min(self._capacity, bucket.tokens + elapsed * self._refill_per_second)
-            bucket.last_refill_seconds = now_seconds
-        if bucket.tokens < 1:
-            return False
-        bucket.tokens -= 1
-        return True
+        return bucket.admit(now_seconds, capacity=self._capacity, refill_per_second=self._refill_per_second)
