@@ -194,7 +194,7 @@ WRITE_PROTOCOL_CENSUS: dict[str, Disposition] = {
     ),
     "record_local_pause": Published(
         RunnerEventType.FACT_CHANGED,
-        "SpendCeiling.run and patch_runner (runner/loop/steps.py, runner/api/control.py) — kind is "
+        "SpendCeilingCheck.run and patch_runner (runner/lifecycle/spend_ceiling.py, runner/api/control.py) — kind is "
         "the write's own report_kind (runner.locally_paused/resumed). The runner's own pause brake "
         "(issue #43/#61b) is distinct from the hub-sourced pause fact D7 already covers via the "
         "chunk-detail backstop; this frame is for the fact-log row this write always buffers "
