@@ -1,0 +1,16 @@
+id: bzh:loop-steps-no-store-reads
+valid:
+  # A phase that only delegates.
+  - |
+    class Advance(Step):
+        def run(self) -> None:
+            AdvanceSweep(self.ctx).run()
+invalid:
+  - |
+    class Bad(Step):
+        def run(self) -> None:
+            rows = self.ctx.stores.leases.list()
+  - |
+    class Bad(Step):
+        def run(self) -> None:
+            rows = ctx.host_stores.hosts.list()

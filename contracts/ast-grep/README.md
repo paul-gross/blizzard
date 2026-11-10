@@ -93,6 +93,14 @@ disregards ignore files, as pyright does, and prunes pyright's generated and dep
     `asyncio.create_subprocess_*`, `os.spawn*`, `os.system` and `os.fork` are not matched — a floor, not a proof.
   - No exemption stands.
 
+- **`bzh:loop-steps-no-store-reads`** (`rules/loop-steps-no-store-reads.yml`) — a phase in the runner loop's
+  `steps.py` delegates to a lifecycle step and reads no store itself; the read belongs in the step it delegates to, which
+  takes its own narrow seam (`bzh:narrow-seams`).
+  - Scoped to `src/blizzard/runner/loop/steps.py`.
+  - Matches `$C.stores.$M` and `$C.host_stores.$M` — any attribute read off a context's store bundle, such as
+    `self.ctx.stores.x` or `ctx.host_stores.x`. A delegating call such as `AdvanceSweep(self.ctx).run()` is unmatched.
+  - No exemption stands.
+
 - **`bzh:property-delegates`** (`rules/property-delegates.yml`) — a property body only delegates. The rule's own prose
   home is `blizzard-context:/standards/python.md#a-property-body-only-delegates-bzhproperty-delegates`; this file states
   none of that prose, only what the rule mechanically checks.
