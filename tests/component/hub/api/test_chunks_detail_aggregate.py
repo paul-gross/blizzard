@@ -274,6 +274,18 @@ def test_the_commit_link_binding_resolves_a_landed_name_through_the_chunks_linke
     assert links["ch_orphan"]("acme/widget", "abc") is None
 
 
+def test_forked_branch_and_landed_commit_link_to_the_same_repository(tmp_path: Path) -> None:
+    hub = build_hub(tmp_path)
+    forked = {**_BUILD_ARTIFACT, "repo": "fork/widget", "forge": "http://forge.fixture/acme/widget.git"}
+    chunk_id, _ = _pass_build(hub, [forked])
+    chunk = hub.services.chunks.record.get_many([chunk_id])[chunk_id]
+
+    branch = _branch_urls(hub, chunk_id)["acme/widget"]
+    commit = hub.services.commit_links.for_chunks([chunk])[chunk_id]("acme/widget", "abc")
+    assert branch == "http://forge.fixture/acme/widget/tree/feature/widget"
+    assert commit == "http://forge.fixture/acme/widget/commit/abc"
+
+
 def test_detail_carries_the_pinned_graphs_name_and_created_at(tmp_path: Path) -> None:
     """``ChunkDetail`` carries the pinned graph's name and mint instant;
     asserts it matches what `GET /api/graphs` independently reports."""

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from datetime import UTC, datetime
+from types import MappingProxyType
 
 import pytest
 
@@ -28,3 +29,9 @@ def test_seconds_milliseconds_numeric_strings_and_iso_keep_being_admitted(resets
     admitted = admit_usage_window(_entry(resets_at))
     assert isinstance(admitted, AdmittedUsageWindow)
     assert admitted.resets_at == datetime(2026, 8, 1, 18, 0, tzinfo=UTC)
+
+
+def test_a_non_dict_mapping_is_admitted() -> None:
+    entry = _entry("2026-08-01T18:00:00Z")
+    assert admit_usage_window(MappingProxyType(entry)) == admit_usage_window(entry)
+    assert isinstance(admit_usage_window(MappingProxyType(entry)), AdmittedUsageWindow)
