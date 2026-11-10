@@ -221,7 +221,7 @@ def test_resets_at_epoch_seconds_and_iso_string_parse_to_the_same_instant(
     assert snap_epoch.windows[0].resets_at == snap_iso.windows[0].resets_at == instant
 
 
-@pytest.mark.parametrize("expires_at", [True, 1e30, 1e300, "soon"])
+@pytest.mark.parametrize("expires_at", [True, 1e30, 1e300, "soon", 10**400])
 def test_an_unreadable_expires_at_is_a_credential_miss_not_a_raise(tmp_path: Path, expires_at: object) -> None:
     creds = tmp_path / ".credentials.json"
     creds.write_text(json.dumps({"claudeAiOauth": {"accessToken": "tok-live", "expiresAt": expires_at}}))
@@ -232,7 +232,7 @@ def test_an_unreadable_expires_at_is_a_credential_miss_not_a_raise(tmp_path: Pat
     assert result.reason == SampleMissReason.CREDENTIAL_UNREADABLE
 
 
-@pytest.mark.parametrize("resets_at", [True, 1e18, 1e30])
+@pytest.mark.parametrize("resets_at", [True, 1e18, 1e30, 10**400])
 def test_an_absurd_resets_at_drops_its_window_not_the_sample(tmp_path: Path, resets_at: object) -> None:
     clock = FixedClock(_NOW)
     creds = _write_credentials(tmp_path / ".credentials.json", expires_at_ms=_future_expiry_ms(clock))

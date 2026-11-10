@@ -15,7 +15,7 @@ def _entry(resets_at: object) -> dict[str, object]:
 
 @pytest.mark.parametrize(
     "resets_at",
-    [1e18, "1e30", -1e30, 1e30, True, float("nan"), "nan", "inf", "soon", None],
+    [10**400, -(10**400), 1e18, "1e30", -1e30, 1e30, True, float("nan"), "nan", "inf", "soon", None],
 )
 def test_a_reset_that_is_no_instant_is_refused_by_name(resets_at: object) -> None:
     assert admit_usage_window(_entry(resets_at)) == "resets_at"

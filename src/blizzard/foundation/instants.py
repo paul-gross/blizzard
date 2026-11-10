@@ -12,9 +12,12 @@ from datetime import UTC, datetime
 
 def epoch_seconds_instant(value: object) -> datetime | None:
     """A Unix timestamp in seconds as a UTC-aware instant."""
-    if isinstance(value, bool) or not isinstance(value, int | float) or not math.isfinite(value):
+    if isinstance(value, bool) or not isinstance(value, int | float):
         return None
     try:
+        # An int past float range raises OverflowError here, as does the conversion itself.
+        if not math.isfinite(value):
+            return None
         return datetime.fromtimestamp(value, tz=UTC)
     except (OverflowError, OSError, ValueError):
         return None
@@ -24,7 +27,10 @@ def epoch_millis_instant(value: object) -> datetime | None:
     """A Unix timestamp in milliseconds as a UTC-aware instant."""
     if isinstance(value, bool) or not isinstance(value, int | float):
         return None
-    return epoch_seconds_instant(value / 1000)
+    try:
+        return epoch_seconds_instant(value / 1000)
+    except OverflowError:
+        return None
 
 
 def iso_instant(value: object) -> datetime | None:

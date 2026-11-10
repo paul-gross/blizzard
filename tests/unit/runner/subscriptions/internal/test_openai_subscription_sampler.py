@@ -496,7 +496,7 @@ def test_two_windows_reporting_one_length_yield_a_single_labelled_window(tmp_pat
     assert snapshot.windows[0].utilization_pct == 10.0
 
 
-@pytest.mark.parametrize("reset_at", [True, 1e18, 1e30])
+@pytest.mark.parametrize("reset_at", [True, 1e18, 1e30, 10**400])
 def test_an_absurd_reset_at_drops_its_window_not_the_sample(tmp_path: Path, reset_at: object) -> None:
     clock = FixedClock(_NOW)
     creds = _live_credentials(tmp_path / "auth.json", clock)

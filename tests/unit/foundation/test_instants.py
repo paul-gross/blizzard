@@ -9,7 +9,21 @@ import pytest
 from blizzard.foundation.instants import epoch_millis_instant, epoch_seconds_instant, iso_instant, reset_instant
 
 _T = datetime(2026, 8, 1, 18, 0, 0, tzinfo=UTC)
-_BAD_NUMBERS: list[object] = [True, False, float("nan"), float("inf"), float("-inf"), 1e18, 1e30, -1e30, None, [], {}]
+_BAD_NUMBERS: list[object] = [
+    True,
+    False,
+    float("nan"),
+    float("inf"),
+    float("-inf"),
+    1e18,
+    1e30,
+    -1e30,
+    10**400,
+    -(10**400),
+    None,
+    [],
+    {},
+]
 
 
 @pytest.mark.parametrize("value", [*_BAD_NUMBERS, "1785607200"])
