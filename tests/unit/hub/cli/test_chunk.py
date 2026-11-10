@@ -915,3 +915,88 @@ def test_set_urgency_sends_it_alone_and_echoes_the_slug_the_hub_resolved() -> No
     assert result.exit_code == 0, result.output
     assert calls == [{"urgency": "urg_1"}]
     assert "ch_1: urgency → urgent" in result.output
+
+
+def test_a_bare_chunk_detail_falls_back_to_graph_id_and_dashes() -> None:
+    from blizzard.hub.cli.chunk import ChunkDetail
+
+    body = {"chunk_id": "ch_1", "status": "ready", "graph_id": "gr_1"}
+
+    assert list(ChunkDetail(body).lines()) == [
+        "ch_1  status=ready  urgency=-  graph=gr_1",
+        "  node: -",
+        "  default model: -   default effort: -",
+        "  default harnesses: -",
+        "  cost: $0.00",
+    ]
+
+
+def test_a_full_chunk_detail_renders_every_line_in_order() -> None:
+    from blizzard.hub.cli.chunk import ChunkDetail
+
+    body = {
+        "chunk_id": "ch_1",
+        "status": "in_progress",
+        "graph_id": "gr_1",
+        "graph_name": "basic",
+        "urgency": {"urgency_id": "ur_1", "slug": "high"},
+        "current_node_name": "build",
+        "default_model": ["opus", "sonnet"],
+        "default_effort": "high",
+        "default_harnesses": ["claude_code", "codex"],
+        "work_refs": [
+            {"label": "Fix it", "slug": "gh", "source": "github", "ref": "1"},
+            {"slug": "gh", "source": "github", "ref": "2"},
+            {"source": "github", "ref": "3"},
+        ],
+        "route": {"runner_id": "rn_1", "environment_ids": ["e1", "e2"]},
+        "blocked": {"prerequisite_chunk_id": "ch_0"},
+        "neighborhood": {
+            "prerequisites": [{"chunk_id": "ch_0", "satisfied": True}, {"chunk_id": "ch_9", "satisfied": False}],
+            "dependents": [{"chunk_id": "ch_2", "satisfied": False}],
+        },
+        "cost": {"cost_usd": 1.5},
+    }
+
+    assert list(ChunkDetail(body).lines()) == [
+        "ch_1  status=in_progress  urgency=high  graph=basic",
+        "  node: build",
+        "  default model: opus, sonnet   default effort: high",
+        "  default harnesses: claude_code, codex",
+        "  pointers: Fix it, gh#2, github#3",
+        "  runner: rn_1  environments: 2",
+        "  blocked: waiting on ch_0",
+        "  prerequisites: ch_0 (satisfied), ch_9 (unsatisfied)",
+        "  dependents: ch_2 (unsatisfied)",
+        "  cost: $1.50",
+    ]
+
+
+def test_a_route_on_a_terminal_chunk_is_not_rendered_and_a_route_without_environments_counts_zero() -> None:
+    from blizzard.hub.cli.chunk import ChunkDetail
+
+    route = {"runner_id": "rn_1"}
+    done = {"chunk_id": "ch_1", "status": "done", "graph_id": "gr_1", "route": route}
+    live = {"chunk_id": "ch_1", "status": "ready", "graph_id": "gr_1", "route": route}
+
+    assert not any("runner:" in line for line in ChunkDetail(done).lines())
+    assert "  runner: rn_1  environments: 0" in list(ChunkDetail(live).lines())
+
+
+def test_a_chunk_detail_names_its_flow_places() -> None:
+    from blizzard.hub.cli.chunk import ChunkDetail
+
+    place = {
+        "flow_id": "fl_1",
+        "repository_slug": "blizzard",
+        "resource": "r",
+        "branch": "b",
+        "state": "polling",
+        "position": 2,
+        "next_poll_at": "2026-10-01T00:00:00Z",
+    }
+    body = {"chunk_id": "ch_1", "status": "ready", "graph_id": "gr_1", "flow_places": [place]}
+
+    assert "  on blizzard@b (fl_1): polling  position 2  next poll 2026-10-01T00:00:00Z" in list(
+        ChunkDetail(body).lines()
+    )

@@ -137,3 +137,55 @@ def test_paste_code_login_exchanges_the_pasted_code() -> None:
     assert token == "the-session-token"
     assert captured_exchange["code"] == "pasted-code"
     assert captured_exchange["redirect_uri"] == cli_login.OOB_REDIRECT_URI
+
+
+def _paste_login(base_url: str, post: object) -> cli_login.Login:
+    factory = bind_stubs(post=post).collaborators.client_factory  # type: ignore[arg-type]
+    return cli_login.Login.paste_code(base_url, client_factory=factory, prompt_for_code=lambda: "c")
+
+
+def test_the_exchange_posts_to_the_token_route_without_doubling_a_trailing_slash() -> None:
+    urls: list[str] = []
+
+    def fake_post(url: str, *, json: dict[str, object], timeout: float) -> _FakeTokenResponse:
+        urls.append(url)
+        return _FakeTokenResponse(200, {"token": "t"})
+
+    assert _paste_login("http://hub.example/", fake_post).token() == "t"
+    assert urls == ["http://hub.example/api/auth/cli/token"]
+
+
+def test_the_authorize_url_does_not_double_a_trailing_slash() -> None:
+    login = _paste_login("http://hub.example/", lambda *a, **k: _FakeTokenResponse(200, {}))
+
+    assert login.authorize_url.startswith("http://hub.example/api/auth/authorize?")
+
+
+@pytest.mark.parametrize("body", [{}, {"token": ""}, {"token": 5}, {"token": None}])
+def test_a_malformed_token_in_a_successful_exchange_is_refused(body: dict[str, object]) -> None:
+    login = _paste_login("http://hub.example", lambda url, *, json, timeout: _FakeTokenResponse(200, body))
+
+    with pytest.raises(cli_login.LoginError) as raised:
+        login.token()
+
+    assert str(raised.value) == "the hub's login exchange response carried no token"
+
+
+def test_a_non_object_exchange_body_is_refused_as_carrying_no_token() -> None:
+    login = _paste_login("http://hub.example", lambda url, *, json, timeout: _FakeTokenResponse(200, ["t"]))  # type: ignore[arg-type]
+
+    with pytest.raises(cli_login.LoginError) as raised:
+        login.token()
+
+    assert str(raised.value) == "the hub's login exchange response carried no token"
+
+
+def test_a_rejected_exchange_says_what_did_not_match() -> None:
+    login = _paste_login("http://hub.example", lambda url, *, json, timeout: _FakeTokenResponse(400, {}))
+
+    with pytest.raises(cli_login.LoginError) as raised:
+        login.token()
+
+    assert str(raised.value) == (
+        "the hub rejected the login exchange — the code, PKCE verifier, or redirect_uri did not match"
+    )

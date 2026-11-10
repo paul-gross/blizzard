@@ -514,3 +514,38 @@ def test_graph_mint_renders_a_decode_error_naming_the_key_and_line(tmp_path: Pat
     assert result.exit_code != 0
     assert "duplicate key 'name'" in result.output
     assert "line 2" in result.output
+
+
+def test_a_session_with_no_pinning_reads_as_unpinned() -> None:
+    from blizzard.hub.cli.graph import _session_summary
+
+    empty = {"model": [], "effort": None, "rotate": None, "compaction_window": None, "harnesses": []}
+
+    assert _session_summary(empty) == "(no pinning)"
+    assert _session_summary({}) == "(no pinning)"
+    assert _session_summary({"rotate": {"max_invocations": None}}) == "(no pinning)"
+
+
+def test_a_fully_pinned_session_joins_each_pin_with_two_spaces_in_order() -> None:
+    from blizzard.hub.cli.graph import _session_summary
+
+    session = {
+        "model": ["blizzard:basic", "opus"],
+        "effort": "medium",
+        "compaction_window": "150000",
+        "harnesses": ["claude_code", "codex"],
+        "rotate": {"max_context_tokens": 9, "max_transcript_bytes": None, "max_invocations": 30},
+    }
+
+    assert _session_summary(session) == (
+        "model=blizzard:basic,opus  effort=medium  compaction_window=150000  harnesses=claude_code,codex  "
+        "rotate=(max_context_tokens=9, max_invocations=30)"
+    )
+
+
+def test_a_session_pinning_one_thing_renders_only_that_pin() -> None:
+    from blizzard.hub.cli.graph import _session_summary
+
+    assert _session_summary({"effort": "high"}) == "effort=high"
+    assert _session_summary({"model": ["opus"]}) == "model=opus"
+    assert _session_summary({"rotate": {"max_invocations": 3}}) == "rotate=(max_invocations=3)"
