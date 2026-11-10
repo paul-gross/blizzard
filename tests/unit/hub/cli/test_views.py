@@ -34,7 +34,7 @@ def test_an_estimate_of_exactly_zero_still_prefixes_a_tilde() -> None:
 
 
 def test_a_pointer_reads_as_its_hub_rendered_label_over_everything_else() -> None:
-    row = {"label": "Fix the thing", "slug": "gh", "source": "github", "ref": "12"}
+    row: dict[str, object] = {"label": "Fix the thing", "slug": "gh", "source": "github", "ref": "12"}
 
     assert pointer_label(row) == "Fix the thing"
 

@@ -6,6 +6,7 @@ from __future__ import annotations
 import contextlib
 from collections.abc import Generator, Iterator
 from dataclasses import replace
+from typing import cast
 
 import click
 import httpx2
@@ -394,7 +395,8 @@ def test_get_all_follows_the_cursor_across_pages_and_asks_for_a_thousand() -> No
     ]
 
     def fake_get(url: str, **kwargs: object) -> _FakeResponse:
-        sent.append(dict(kwargs, params=dict(kwargs["params"])))  # type: ignore[call-overload]
+        params = cast(dict[str, str], kwargs["params"])
+        sent.append({**kwargs, "params": dict(params)})
         return pages[len(sent) - 1]
 
     rows = _ctx(bind_stubs(get=fake_get)).get_all("/api/x", "GET /x", key="rows", params={"project": "p"})

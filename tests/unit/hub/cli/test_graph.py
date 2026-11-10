@@ -9,12 +9,14 @@ from __future__ import annotations
 
 from collections.abc import Callable
 from pathlib import Path
+from typing import Any
 
 import httpx2
 import pytest
 from click.testing import CliRunner
 
 from blizzard.hub.cli import hub as hub_group
+from blizzard.hub.cli.graph import GraphDetail
 from blizzard.wire.graph import GRAPH_DEFINITION_INVALID
 from tests.support.worker_http import bind_stubs
 
@@ -516,20 +518,22 @@ def test_graph_mint_renders_a_decode_error_naming_the_key_and_line(tmp_path: Pat
     assert "line 2" in result.output
 
 
+def _session_line(session: dict[str, object]) -> str:
+    """The pinning summary ``GraphDetail`` renders after a session's name."""
+    body: dict[str, Any] = {"graph_id": "gr_1", "name": "alpha", "sessions": [{"name": "code", **session}]}
+    return list(GraphDetail(body).lines())[1].removeprefix("  session code  ")
+
+
 def test_a_session_with_no_pinning_reads_as_unpinned() -> None:
-    from blizzard.hub.cli.graph import _session_summary
+    empty: dict[str, object] = {"model": [], "effort": None, "rotate": None, "compaction_window": None, "harnesses": []}
 
-    empty = {"model": [], "effort": None, "rotate": None, "compaction_window": None, "harnesses": []}
-
-    assert _session_summary(empty) == "(no pinning)"
-    assert _session_summary({}) == "(no pinning)"
-    assert _session_summary({"rotate": {"max_invocations": None}}) == "(no pinning)"
+    assert _session_line(empty) == "(no pinning)"
+    assert _session_line({}) == "(no pinning)"
+    assert _session_line({"rotate": {"max_invocations": None}}) == "(no pinning)"
 
 
 def test_a_fully_pinned_session_joins_each_pin_with_two_spaces_in_order() -> None:
-    from blizzard.hub.cli.graph import _session_summary
-
-    session = {
+    session: dict[str, object] = {
         "model": ["blizzard:basic", "opus"],
         "effort": "medium",
         "compaction_window": "150000",
@@ -537,15 +541,13 @@ def test_a_fully_pinned_session_joins_each_pin_with_two_spaces_in_order() -> Non
         "rotate": {"max_context_tokens": 9, "max_transcript_bytes": None, "max_invocations": 30},
     }
 
-    assert _session_summary(session) == (
+    assert _session_line(session) == (
         "model=blizzard:basic,opus  effort=medium  compaction_window=150000  harnesses=claude_code,codex  "
         "rotate=(max_context_tokens=9, max_invocations=30)"
     )
 
 
 def test_a_session_pinning_one_thing_renders_only_that_pin() -> None:
-    from blizzard.hub.cli.graph import _session_summary
-
-    assert _session_summary({"effort": "high"}) == "effort=high"
-    assert _session_summary({"model": ["opus"]}) == "model=opus"
-    assert _session_summary({"rotate": {"max_invocations": 3}}) == "rotate=(max_invocations=3)"
+    assert _session_line({"effort": "high"}) == "effort=high"
+    assert _session_line({"model": ["opus"]}) == "model=opus"
+    assert _session_line({"rotate": {"max_invocations": 3}}) == "rotate=(max_invocations=3)"

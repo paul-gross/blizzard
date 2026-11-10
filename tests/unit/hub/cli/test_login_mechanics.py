@@ -7,6 +7,7 @@ The loopback case drives a real HTTP GET at the ephemeral port ``Loopback`` bind
 from __future__ import annotations
 
 import threading
+from collections.abc import Callable
 from urllib.parse import parse_qs, urlparse
 
 import httpx2
@@ -19,11 +20,11 @@ _NO_HTTP = bind_stubs().collaborators.client_factory
 
 
 class _FakeTokenResponse:
-    def __init__(self, status_code: int, body: dict[str, object]) -> None:
+    def __init__(self, status_code: int, body: object) -> None:
         self.status_code = status_code
         self._body = body
 
-    def json(self) -> dict[str, object]:
+    def json(self) -> object:
         return self._body
 
 
@@ -139,8 +140,15 @@ def test_paste_code_login_exchanges_the_pasted_code() -> None:
     assert captured_exchange["redirect_uri"] == cli_login.OOB_REDIRECT_URI
 
 
-def _paste_login(base_url: str, post: object) -> cli_login.Login:
-    factory = bind_stubs(post=post).collaborators.client_factory  # type: ignore[arg-type]
+def _answering(status_code: int, body: object) -> Callable[..., _FakeTokenResponse]:
+    def fake_post(url: str, *, json: dict[str, object], timeout: float) -> _FakeTokenResponse:
+        return _FakeTokenResponse(status_code, body)
+
+    return fake_post
+
+
+def _paste_login(base_url: str, post: Callable[..., _FakeTokenResponse]) -> cli_login.Login:
+    factory = bind_stubs(post=post).collaborators.client_factory
     return cli_login.Login.paste_code(base_url, client_factory=factory, prompt_for_code=lambda: "c")
 
 
@@ -156,14 +164,14 @@ def test_the_exchange_posts_to_the_token_route_without_doubling_a_trailing_slash
 
 
 def test_the_authorize_url_does_not_double_a_trailing_slash() -> None:
-    login = _paste_login("http://hub.example/", lambda *a, **k: _FakeTokenResponse(200, {}))
+    login = _paste_login("http://hub.example/", _answering(200, {}))
 
     assert login.authorize_url.startswith("http://hub.example/api/auth/authorize?")
 
 
 @pytest.mark.parametrize("body", [{}, {"token": ""}, {"token": 5}, {"token": None}])
 def test_a_malformed_token_in_a_successful_exchange_is_refused(body: dict[str, object]) -> None:
-    login = _paste_login("http://hub.example", lambda url, *, json, timeout: _FakeTokenResponse(200, body))
+    login = _paste_login("http://hub.example", _answering(200, body))
 
     with pytest.raises(cli_login.LoginError) as raised:
         login.token()
@@ -172,7 +180,7 @@ def test_a_malformed_token_in_a_successful_exchange_is_refused(body: dict[str, o
 
 
 def test_a_non_object_exchange_body_is_refused_as_carrying_no_token() -> None:
-    login = _paste_login("http://hub.example", lambda url, *, json, timeout: _FakeTokenResponse(200, ["t"]))  # type: ignore[arg-type]
+    login = _paste_login("http://hub.example", _answering(200, ["t"]))
 
     with pytest.raises(cli_login.LoginError) as raised:
         login.token()
@@ -181,7 +189,7 @@ def test_a_non_object_exchange_body_is_refused_as_carrying_no_token() -> None:
 
 
 def test_a_rejected_exchange_says_what_did_not_match() -> None:
-    login = _paste_login("http://hub.example", lambda url, *, json, timeout: _FakeTokenResponse(400, {}))
+    login = _paste_login("http://hub.example", _answering(400, {}))
 
     with pytest.raises(cli_login.LoginError) as raised:
         login.token()

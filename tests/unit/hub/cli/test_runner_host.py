@@ -223,7 +223,12 @@ def test_a_full_host_detail_renders_every_line() -> None:
 def test_an_empty_host_detail_dashes_every_absent_field() -> None:
     from blizzard.hub.cli.runner_host import HostDetail
 
-    body = {"host_id": "hs_a", "connection": "never_connected", "workspaces": [], "subscriptions": None}
+    body: dict[str, object] = {
+        "host_id": "hs_a",
+        "connection": "never_connected",
+        "workspaces": [],
+        "subscriptions": None,
+    }
 
     assert list(HostDetail(body).lines()) == [
         "hs_a  -                never-connected runners=0",
