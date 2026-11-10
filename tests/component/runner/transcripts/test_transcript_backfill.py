@@ -27,6 +27,7 @@ from tests.support.runner_fakes import (
     FakeProbe,
     FakeProvider,
     FakeTranscriptSource,
+    SqlAlchemyRunnerStore,
     StubbedBufferBytesStore,
     make_context,
     make_store,
@@ -34,6 +35,7 @@ from tests.support.runner_fakes import (
     strip_transcript_segments,
 )
 from tests.support.runner_mint import new_mint
+from tests.support.scaffolding import capture_statements, count_queries
 
 _NOW = datetime(2026, 8, 10, 12, 0, 0, tzinfo=UTC)
 
@@ -103,14 +105,21 @@ def _with_source(ctx: LoopContext, source: FakeTranscriptSource) -> LoopContext:
 
 
 def _historical_lease(
-    ctx: LoopContext, *, lease_id: str, session_id: str, epoch: int, node_id: str = "nd_build", at: datetime = _NOW
+    ctx: LoopContext,
+    *,
+    lease_id: str,
+    session_id: str,
+    epoch: int,
+    node_id: str = "nd_build",
+    at: datetime = _NOW,
+    chunk_id: str = "ch_1",
 ) -> None:
     """A closed lease that ran ``session_id`` and left no segment — the pre-lane shape."""
     ctx.stores.lease_record.record_mint(
         new_mint(
             NewLease(
                 lease_id=lease_id,
-                chunk_id="ch_1",
+                chunk_id=chunk_id,
                 graph_id="gr_1",
                 node_id=node_id,
                 node_name=node_id.removeprefix("nd_"),
@@ -128,7 +137,7 @@ def _historical_lease(
         spawned_at=at,
     )
     ctx.stores.lease_record.record_closure(
-        lease_id=lease_id, chunk_id="ch_1", node_id=node_id, reason="transitioned", closed_at=at
+        lease_id=lease_id, chunk_id=chunk_id, node_id=node_id, reason="transitioned", closed_at=at
     )
 
 
@@ -721,3 +730,32 @@ def test_reship_points_its_new_segment_at_the_one_it_supersedes() -> None:
     assert any(b["final"] for b in bodies)  # including the closing marker
     # The original's own records claim to supersede nothing, or the hub drops them both.
     assert all(b["supersedes"] is None for b in _shipped_bodies(ctx) if b["segment_id"] == first)
+
+
+@pytest.mark.parametrize("count", [1, 4])
+@pytest.mark.parametrize("unfinished_first", [False, True])
+def test_backfill_reads_bindings_once_per_run(count: int, unfinished_first: bool) -> None:
+    sessions = {f"sess-{i}": [_turn(0, str(i))] for i in range(count)}
+    ctx, _ = _ctx(sessions=sessions)
+    for i in range(count):
+        _historical_lease(ctx, lease_id=f"lease_{i}", session_id=f"sess-{i}", epoch=i + 1, chunk_id=f"ch_{i}")
+    strip_transcript_segments(ctx.stores.transcript_ledger)
+    if unfinished_first:
+        ctx.stores.transcript_ledger.open_transcript_segment(
+            chunk_id="ch_0",
+            node_id="nd_build",
+            epoch=1,
+            generation=1,
+            lease_id="lease_0",
+            session=SessionReference(CLAUDE_CODE_HARNESS_ID, "sess-0"),
+            stamped_at=_NOW,
+        )
+    store = ctx.stores.environments
+    assert isinstance(store, SqlAlchemyRunnerStore)
+    assert count_queries(store.engine, lambda: store.newest_bindings_for(["ch_1"])) == 1
+    with capture_statements(store.engine) as statements:
+        report = TranscriptBackfill(ctx).run()
+    binding_reads = [sql for sql, _ in statements if "FROM env_bindings" in sql]
+    assert report.imported == count
+    assert len(binding_reads) == 2  # held and newest, each once for the whole run
+    assert sum("max(env_bindings.id)" in sql for sql in binding_reads) == 1

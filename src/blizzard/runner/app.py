@@ -839,8 +839,6 @@ def _wire_runner(
         clock,
         process,
         takeover=runner_stores.takeover,
-        outbound=runner_stores.outbound,
-        tokens=runner_stores.tokens,
         elicitations=runner_stores.elicitations,
         # The same derivation the spawn preamble uses, so the two agree.
         local_api_url=config.local_api_url,
