@@ -13,7 +13,6 @@ import tempfile
 from collections.abc import Callable, Generator, Mapping
 from contextlib import contextmanager, nullcontext
 from dataclasses import dataclass, replace
-from enum import StrEnum
 from pathlib import Path
 from typing import Protocol
 
@@ -42,7 +41,6 @@ from blizzard.runner.host_file import runner_table, with_runner_values
 from blizzard.runner.host_layout import (
     HOST_CONFIG_FILENAME,
     RUNNERS_DIRNAME,
-    Graduation,
     HostLayout,
     hold_host,
 )
@@ -57,6 +55,7 @@ from blizzard.runner.runtime import (
     sqlite_store_file,
     sqlite_url,
 )
+from blizzard.runner.transfer.paths import rebase_path_keys
 from blizzard.runner.transfer.refusals import (
     HostNotHolding,
     SourceRunning,
@@ -84,6 +83,7 @@ from blizzard.runner.transfer.runner_stores import (
     IRunnerBoundStoresFactory,
     RunnerStoreView,
 )
+from blizzard.runner.transfer.source import SQLITE_HEADER, DirectoryState, SourceKind, classify_source
 
 __all__ = [
     "INGEST_COMMAND",
@@ -93,7 +93,6 @@ __all__ = [
     "IngestOutcome",
     "IngestRequest",
     "RunnerIngest",
-    "SourceKind",
     "source_kind",
 ]
 
@@ -115,36 +114,23 @@ _COPY_PREFIX = "ingest-copy-"
 #: store that holds others.
 _RUNNER_SCOPE_REVISION = "20261015_1000_host_ingests"
 
-#: The first bytes of every SQLite database file.
-_SQLITE_HEADER = b"SQLite format 3\x00"
-
 _log = get_logger("blizzard.runner.ingest")
 
 
-class SourceKind(StrEnum):
-    """What an ingest source is."""
-
-    HOST_DIRECTORY = "host directory"
-    ARCHIVE = "archive store"
-    UNGRADUATED = "runner directory that has not graduated"
-
-
 def source_kind(source: Path) -> SourceKind:
-    """What ``source`` is: a host directory, a SQLite archive store, or a runner directory that has not graduated.
-    Raises :class:`SourceUnsupported` for anything else."""
+    """Observe and classify the source before resolving its path."""
+    directory = None
+    is_file = False
+    header = b""
     if source.is_dir():
-        graduation = HostLayout(source).graduation()
-        if graduation is Graduation.GRADUATED:
-            return SourceKind.HOST_DIRECTORY
-        if graduation is Graduation.UNGRADUATED:
-            return SourceKind.UNGRADUATED
-        raise SourceUnsupported(f"{source} holds no {HOST_CONFIG_FILENAME}, so it is not a host directory")
-    if source.is_file():
+        directory = DirectoryState(HostLayout(source).graduation().value)
+    elif source.is_file():
+        is_file = True
         with source.open("rb") as handle:
-            if handle.read(len(_SQLITE_HEADER)) == _SQLITE_HEADER:
-                return SourceKind.ARCHIVE
-        raise SourceUnsupported(f"{source} is not a SQLite store, so it is not an archive `runner store reset` wrote")
-    raise SourceUnsupported(f"{source} does not exist")
+            header = handle.read(len(SQLITE_HEADER))
+    return classify_source(
+        str(source), directory=directory, is_file=is_file, header=header, host_config_filename=HOST_CONFIG_FILENAME
+    )
 
 
 @domain_model
@@ -589,23 +575,17 @@ class RunnerIngest:
             values[("projects",)] = bindings_literal(
                 tuple(ProjectBinding(b.project, ids.get(b.workspace, b.workspace)) for b in entry.bindings)
             )
-        files: list[tuple[Path, Path]] = []
         runner_dir = self.host.root / RUNNERS_DIRNAME / entry.name
         runner = _runner_of(table, strict=self.host.strict)
-        for path_key in RUNNER_PATH_KEYS:
-            value = _lookup(runner, path_key.key)
-            if not isinstance(value, str) or not value:
-                continue
-            located = Path(value).expanduser()
-            located = (located if located.is_absolute() else config.root / located).resolve()
-            if not located.is_relative_to(config.root):
-                continue
-            inside = located.relative_to(config.root)
-            if inside.parts[:2] == (RUNNERS_DIRNAME, entry.name):
-                inside = Path(*inside.parts[2:])
-            copied = runner_dir / inside
-            files.append((located, copied))
-            values[path_key.key] = _string_literal(str(copied))
+        paths: dict[tuple[str, ...], Path] = {}
+        keys = tuple(path_key.key for path_key in RUNNER_PATH_KEYS)
+        for key in keys:
+            value = _lookup(runner, key)
+            if isinstance(value, str) and value:
+                located = Path(value).expanduser()
+                paths[key] = (located if located.is_absolute() else config.root / located).resolve()
+        replacements, files = rebase_path_keys(paths, keys, config.root, Path(RUNNERS_DIRNAME) / entry.name, runner_dir)
+        values.update({key: _string_literal(str(path)) for key, path in replacements.items()})
         try:
             return with_runner_values(table, values, strict=self.host.strict), tuple(files)
         except ConfigError as exc:
