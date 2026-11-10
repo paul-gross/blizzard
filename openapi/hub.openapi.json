@@ -31928,7 +31928,7 @@
     },
     "/api/analytics/durations/graphs": {
       "get": {
-        "description": "The same rollup grouped by the graph the step happened in \u2014 the transition's\nown ``graph_id``, never the chunk's current pin. Complete history unless filtered.",
+        "description": "The same rollup grouped by the graph the step happened in \u2014 the transition's\nown ``graph_id``, never the chunk's current pin. Complete history unless filtered, so the read's cost grows with\nthe history it covers.",
         "operationId": "durations_by_graph_api_analytics_durations_graphs_get",
         "parameters": [
           {
@@ -32157,7 +32157,7 @@
     },
     "/api/analytics/durations/nodes": {
       "get": {
-        "description": "Completed-step duration rollups grouped by node \u2014 see\n``AnalyticsDurationView`` for the wall-clock semantics. Complete history unless filtered.",
+        "description": "Completed-step duration rollups grouped by node \u2014 see\n``AnalyticsDurationView`` for the wall-clock semantics. Complete history unless filtered, so the read's cost\ngrows with the history it covers.",
         "operationId": "durations_by_node_api_analytics_durations_nodes_get",
         "parameters": [
           {
@@ -33078,7 +33078,7 @@
     },
     "/api/analytics/outcomes/nodes": {
       "get": {
-        "description": "Judged-choice distribution and attempt-failure counts grouped by node \u2014\na judged failure edge and a retry-consuming attempt failure reported separately,\nnever blended into one rate. A delivery kick-back (``chunk_bounces``) counts as\nneither. Complete history unless filtered.",
+        "description": "Judged-choice distribution and attempt-failure counts grouped by node \u2014\na judged failure edge and a retry-consuming attempt failure reported separately,\nnever blended into one rate. A delivery kick-back (``chunk_bounces``) counts as\nneither. Complete history unless filtered, so the read's cost grows with the history it covers.",
         "operationId": "outcomes_by_node_api_analytics_outcomes_nodes_get",
         "parameters": [
           {
@@ -59991,7 +59991,7 @@
     },
     "/api/routines/{routine_id}/sweeps": {
       "get": {
-        "description": "``routine_id``'s per-scope last-swept table \u2014 the routine's declared\nset, retired scopes filtered out unless already swept while linked \u2014 and its\nmeasurement series over ``[since, until)``. 404 on an unknown id; 422 on a\nmalformed instant or a non-positive span. Positive spans are uncapped for historical comparison.",
+        "description": "``routine_id``'s per-scope last-swept table \u2014 the routine's declared\nset, retired scopes filtered out unless already swept while linked \u2014 and its\nmeasurement series over ``[since, until)``; the last-swept table is not windowed. 404 on an unknown id; 422 on a\nmalformed instant or a non-positive span. Positive spans are uncapped for historical comparison.",
         "operationId": "routine_sweeps_api_routines__routine_id__sweeps_get",
         "parameters": [
           {

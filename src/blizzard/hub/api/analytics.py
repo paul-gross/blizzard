@@ -469,7 +469,8 @@ def durations_by_node(
     services: Services, scope: Annotated[OperationalScopeFilters, Depends(OperationalScopeFilters.of)]
 ) -> AnalyticsDurationsResponse:
     """Completed-step duration rollups grouped by node — see
-    ``AnalyticsDurationView`` for the wall-clock semantics. Complete history unless filtered."""
+    ``AnalyticsDurationView`` for the wall-clock semantics. Complete history unless filtered, so the read's cost
+    grows with the history it covers."""
     return _durations_response(services.operational_analytics.durations_by_node(scope.criteria))
 
 
@@ -482,7 +483,8 @@ def durations_by_graph(
     services: Services, scope: Annotated[OperationalScopeFilters, Depends(OperationalScopeFilters.of)]
 ) -> AnalyticsDurationsResponse:
     """The same rollup grouped by the graph the step happened in — the transition's
-    own ``graph_id``, never the chunk's current pin. Complete history unless filtered."""
+    own ``graph_id``, never the chunk's current pin. Complete history unless filtered, so the read's cost grows with
+    the history it covers."""
     return _durations_response(services.operational_analytics.durations_by_graph(scope.criteria))
 
 
@@ -646,5 +648,5 @@ def outcomes_by_node(
     """Judged-choice distribution and attempt-failure counts grouped by node —
     a judged failure edge and a retry-consuming attempt failure reported separately,
     never blended into one rate. A delivery kick-back (``chunk_bounces``) counts as
-    neither. Complete history unless filtered."""
+    neither. Complete history unless filtered, so the read's cost grows with the history it covers."""
     return _outcomes_response(services.operational_analytics.outcomes_by_node(scope.criteria))

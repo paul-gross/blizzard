@@ -4878,7 +4878,7 @@ def test_the_exemplars_cross_no_internal_package() -> None:
 
 
 def test_the_exemplars_keep_every_block_within_its_cap() -> None:
-    """Every exemplar comment and docstring fits its ``bzh:prose-budget`` cap outright, with no baseline."""
+    """Every exemplar comment and docstring fits its ``bzh:prose-budget`` cap outright."""
     spec = importlib.util.spec_from_file_location("prose_caps", _REPO_ROOT / "scripts" / "prose_caps.py")
     assert spec is not None and spec.loader is not None
     prose_caps = importlib.util.module_from_spec(spec)
