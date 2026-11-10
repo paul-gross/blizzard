@@ -5,7 +5,7 @@ import { mergeConfig, type Plugin } from 'vite';
 
 const config: StorybookConfig = {
   framework: '@storybook/angular-vite',
-  stories: ['../src/lib/**/*.stories.ts', '../../hub/src/app/admin/members/**/*.stories.ts', '../../hub/src/app/board/**/*.stories.ts', '../../hub/src/app/shell/**/*.stories.ts', '../../hub/src/app/garden/cadences/**/*.stories.ts', '../../hub/src/app/garden/routines/**/*.stories.ts', '../../hub/src/app/garden/scopes/**/*.stories.ts', '../../hub/src/app/runners/**/*.stories.ts', '../../runner/src/app/board/rail/**/*.stories.ts', '../../runner/src/app/runners/**/*.stories.ts'],
+  stories: ['../src/lib/**/*.stories.ts', '../../hub/src/app/admin/members/**/*.stories.ts', '../../hub/src/app/board/**/*.stories.ts', '../../hub/src/app/shell/**/*.stories.ts', '../../hub/src/app/garden/*.stories.ts', '../../hub/src/app/garden/cadences/**/*.stories.ts', '../../hub/src/app/garden/routines/**/*.stories.ts', '../../hub/src/app/garden/scopes/**/*.stories.ts', '../../hub/src/app/runners/**/*.stories.ts', '../../runner/src/app/board/rail/**/*.stories.ts', '../../runner/src/app/runners/**/*.stories.ts'],
   // Vite does not read `tsconfig.json`'s `paths`, so the spec-support barrel that stories draw
   // their data from, `fleet/testing`, is aliased here to the file the tsconfig maps it to.
   // The static build runs in Vite's production mode, which folds `ngDevMode` to false and strips

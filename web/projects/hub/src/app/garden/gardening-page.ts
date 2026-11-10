@@ -2,12 +2,13 @@ import { ChangeDetectionStrategy, Component, computed, inject } from '@angular/c
 import { toSignal } from '@angular/core/rxjs-interop';
 import { NavigationEnd, Router, RouterLink, RouterOutlet } from '@angular/router';
 import { filter, map } from 'rxjs';
-import { FLEET_CLOCK, KitMenu, KitMenuItemRadio, KitMenuPanel, KitTab, KitTabStrip } from 'fleet';
+import { FLEET_CLOCK, KitTab, KitTabStrip } from 'fleet';
 import { LensLink } from 'fleet/shell';
 
 import { injectLensedProject } from '../core/lensed-project';
 import { ProjectLens } from '../core/project-lens';
 import { injectProjectsQuery } from '../core/projects.query';
+import { GardeningBreadcrumbView } from './gardening-breadcrumb-view';
 import { gardenPathOf } from './garden-lens.guard';
 import { GARDENING_DOORWAY_URL } from './core/garden-project';
 import { injectHubCadencesQuery } from './core/cadences.query';
@@ -20,7 +21,6 @@ import {
   gardenSurfaceTabs,
   surfaceLabel,
   surfaceOf,
-  waitingLabel,
 } from './gardening-page.model';
 import { injectHubGardenProposalsQuery } from './proposals/garden-proposals.query';
 import { injectHubRunsQuery } from './runs/garden-runs.query';
@@ -43,9 +43,7 @@ import { injectHubRunsQuery } from './runs/garden-runs.query';
   selector: 'app-gardening-page',
   changeDetection: ChangeDetectionStrategy.OnPush,
   imports: [
-    KitMenu,
-    KitMenuItemRadio,
-    KitMenuPanel,
+    GardeningBreadcrumbView,
     KitTab,
     KitTabStrip,
     LensLink,
@@ -108,8 +106,6 @@ export class GardeningPage {
 
   /** The surface crumb: the surface's label. */
   protected readonly surfaceLabel = computed(() => surfaceLabel(this.tab()));
-
-  protected readonly waitingLabel = waitingLabel;
 
   /** Switches the lens to `slug`, keeping the surface — or opens the doorway for All. */
   protected chooseProject(slug: string | null): void {

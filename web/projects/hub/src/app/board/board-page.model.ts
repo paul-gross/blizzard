@@ -6,7 +6,7 @@ export interface LaneMove {
   readonly afterChunkId: string | null;
 }
 
-/** Each project's palette color by project id — what the board joins onto a card by its chunk's `project_id`. */
+/** Builds the already-gated lookup shared by the board's many cards. */
 export function projectColorsById(
   projects: readonly { readonly project_id: string; readonly color: string }[],
 ): ReadonlyMap<string, string> {

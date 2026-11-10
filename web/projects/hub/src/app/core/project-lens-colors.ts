@@ -25,6 +25,15 @@ export function injectShowProjectColors(): Signal<boolean> {
   );
 }
 
+export function projectColorOf(
+  shown: boolean,
+  projects: readonly { readonly project_id: string; readonly color: string }[] | undefined,
+  projectId: string | null | undefined,
+): string | null {
+  if (!shown || !projectId) return null;
+  return projects?.find((project) => project.project_id === projectId)?.color ?? null;
+}
+
 /** The open chunk's project's color, joined from the projects list by `project_id` — `null` where project colours
  * are not shown ({@link injectShowProjectColors}), while the dock is closed, before the list is read, or when the
  * project is unknown. */
@@ -35,9 +44,5 @@ export function openProjectColor(
     | readonly { readonly project_id: string; readonly color: string }[]
     | undefined,
 ): string | null {
-  const projectId = detail?.project_id;
-  if (!shown || !projectId) return null;
-  return (
-    projects?.find((project) => project.project_id === projectId)?.color ?? null
-  );
+  return projectColorOf(shown, projects, detail?.project_id);
 }
