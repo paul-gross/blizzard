@@ -47,12 +47,14 @@ import {
   landingSections,
   type LandingPositionVars,
 } from './project-landing-order.model';
+import { ProjectBranchDialog } from './project-branch-dialog';
 import { ProjectLinkDialog } from './project-link-dialog';
 import { ProjectRecordPanel, type ProjectTab, type ProjectUnlinkEvent } from './project-record-panel';
 import {
   injectEditProjectMutation,
   injectLandingPositionMutation,
   injectProjectLinkMutation,
+  injectRepositoryBranchMutation,
   type ProjectLinkKind,
   type ProjectLinkVars,
 } from './projects.mutations';
@@ -62,6 +64,7 @@ import {
   overviewCallout,
   pendingUnlinkNames,
   type PanelFailure,
+  type ProjectLinkRowVm,
   PROJECT_FIELDS,
   projectFormValues,
   projectPatch,
@@ -86,7 +89,8 @@ import {
  * slug or a former slug still opens it, and the URL is rewritten to the id. Its Overview tab
  * answers "is this project wired?": where its work comes from, where it may land, who serves
  * it — with a callout for what is missing — each card opening the tab that edits it; the
- * Linked sources and Linked repositories tabs link and unlink.
+ * Linked sources and Linked repositories tabs link and unlink, and a repository link's branch is edited or cleared
+ * in its own dialog.
  */
 @Component({
   selector: 'app-project-detail',
@@ -97,6 +101,7 @@ import {
     KitButton,
     KitDialog,
     KitErrorLine,
+    ProjectBranchDialog,
     ProjectColorPicker,
     ProjectLinkDialog,
     ProjectRecordPanel,
@@ -201,6 +206,10 @@ export class ProjectDetail {
   protected readonly editMutation = injectEditProjectMutation();
   protected readonly linkMutation = injectProjectLinkMutation();
   private readonly positionMutation = injectLandingPositionMutation();
+  protected readonly branchMutation = injectRepositoryBranchMutation();
+  /** The repository link row whose branch dialog is open. */
+  protected readonly branchRow = signal<ProjectLinkRowVm | null>(null);
+  protected readonly branchError = signal<string | null>(null);
   protected readonly fields = PROJECT_FIELDS;
   protected readonly slugHint = SLUG_HINT;
   protected readonly shown = computed(() => projectFormValues(this.project()));
@@ -331,6 +340,31 @@ export class ProjectDetail {
     } catch (error) {
       this.linkFailure.set({ kind, message: errorMessage(error, 'Unlink failed.') });
     }
+  }
+
+  protected onBranchOpen(row: ProjectLinkRowVm): void {
+    this.branchError.set(null);
+    this.branchRow.set(row);
+  }
+
+  protected onBranchClose(): void {
+    if (this.branchMutation.isPending()) return;
+    this.branchRow.set(null);
+  }
+
+  /** Set or clear the link's own branch against the revision on screen; a refusal shows in the dialog. */
+  protected onBranch(baseBranch: string | null): void {
+    const projectId = this.projectId();
+    const row = this.branchRow();
+    if (projectId === null || row === null || row.revision === null) return;
+    this.branchError.set(null);
+    this.branchMutation.mutate(
+      { projectId, repositoryId: row.key, revision: row.revision, baseBranch },
+      {
+        onSuccess: () => this.branchRow.set(null),
+        onError: (error) => this.branchError.set(errorMessage(error, 'Save failed.')),
+      },
+    );
   }
 
   /** One drop's landing position; a refusal shows on the repositories panel's error line. */

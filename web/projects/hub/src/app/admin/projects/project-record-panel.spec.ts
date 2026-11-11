@@ -15,7 +15,7 @@ const PROJECT: ProjectView = {
   revision: 3,
   created_at: '2026-10-01T00:00:00Z',
 };
-const JIRA: ProjectLinkRowVm = { key: 'wsrc_j', name: 'jira', detail: 'jira · acme', builtIn: false, revision: 2 };
+const JIRA: ProjectLinkRowVm = { key: 'wsrc_j', name: 'jira', detail: 'jira · acme', builtIn: false, revision: 2, branch: null };
 
 describe('ProjectRecordPanel', () => {
   async function mount(tab: ProjectTab = 'overview', canEdit = true) {

@@ -34,8 +34,8 @@ export interface ProjectUnlinkEvent {
 /**
  * The selected project's record — its header (swatch, name, description, Color and Edit), the tab strip, and the
  * Overview, Linked sources and Linked repositories bodies. Presentational: the project, its reads' view models and
- * states, the pending unlinks, the landing order and the panels' failures in; edit, color, tab, link, unlink and
- * reposition out.
+ * states, the pending unlinks, the landing order and the panels' failures in; edit, color, tab, link, unlink,
+ * reposition and a repository link's branch edit out.
  */
 @Component({
   selector: 'app-project-record-panel',
@@ -82,6 +82,8 @@ export class ProjectRecordPanel {
   readonly link = output<ProjectLinkKind>();
   readonly unlink = output<ProjectUnlinkEvent>();
   readonly reposition = output<LandingPositionRequest>();
+  /** The repository link row whose branch the viewer asks to edit. */
+  readonly editBranch = output<ProjectLinkRowVm>();
 
   private readonly createdTemplate = viewChild<TemplateRef<unknown>>('createdFact');
   private readonly colorTemplate = viewChild<TemplateRef<unknown>>('colorFact');

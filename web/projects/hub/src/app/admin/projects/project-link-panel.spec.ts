@@ -8,7 +8,7 @@ import type { LandingSection, LandingSections } from './project-landing-order.mo
 import { ProjectLinkPanel } from './project-link-panel';
 import type { ProjectLinkRowVm } from './projects.model';
 
-const row = (key: string, name: string): ProjectLinkRowVm => ({ key, name, detail: '', builtIn: false, revision: 1 });
+const row = (key: string, name: string): ProjectLinkRowVm => ({ key, name, detail: '', builtIn: false, revision: 1, branch: null });
 const SECTIONS: LandingSections = { ranked: [row('repo_a', 'alpha'), row('repo_b', 'bravo')], unranked: [row('repo_x', 'xray')] };
 
 describe('ProjectLinkPanel', () => {

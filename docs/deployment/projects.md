@@ -72,8 +72,7 @@ projects and their links takes `fleet:view`.
 
 `create` names the project after its slug unless `--name` is given. A slug that is another project's current slug
 answers `409`; a malformed slug, or a blank or padded name, answers `422` naming the field. A project cannot be retired.
-On the board the same lives under Admin → Projects; a link's base branch is set from the CLI, the API, or a
-configuration document. A configuration document may declare projects and their links too
+On the board the same lives under Admin → Projects, a link's base branch included. A configuration document may declare projects and their links too
 ([config-documents.md](./config-documents.md)), and every change to a project or a link is recorded in the change log
 ([config-changes.md](./config-changes.md)).
 
@@ -153,6 +152,9 @@ effective branch, marked `inherited` or `override`, and `GET /api/projects/{proj
 link's `base_branch`, `null` when it inherits, and its `effective_base_branch`. The `PATCH` takes `{"base_branch": …}`:
 a name sets it, `null` clears it, and a body without it changes nothing. Unlinking a repository keeps the link's branch,
 and linking it again restores it.
+
+On the board, Admin → Projects shows each linked repository's effective branch, marked `inherited` or `override`. A user
+with `config:edit` opens its Branch dialog to name the link's branch, or Inherit to clear it.
 
 An edit reaches the chunks that have not yet captured the repository's branch; a chunk captures it at its claim and
 keeps it through every lease, retry and restart ([repositories.md](./repositories.md#how-delivery-uses-a-record)).

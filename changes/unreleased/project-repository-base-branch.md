@@ -1,6 +1,6 @@
 ---
 kind: added
-surfaces: [http-api, wire, cli, config, store]
+surfaces: [http-api, wire, cli, config, store, board]
 ---
 
 A project's link to a repository may name its own base branch, so two projects may work on different branches of one
@@ -10,7 +10,8 @@ repository's `base_branch`, as every existing link does. Each edit moves the lin
 change log, and a name that is no git branch name is refused `422` on `base_branch`. Repository-link reads carry
 `base_branch` and `effective_base_branch`, `blizzard hub project get` shows each repository's effective branch and
 whether it is inherited, and a configuration document's project entry takes a `repository_branches` map, which export
-writes for a project whose link names its own branch.
+writes for a project whose link names its own branch. On the board, Admin → Projects shows each linked repository's
+effective branch, marked inherited or override, and a user with `config:edit` edits or clears it in a Branch dialog.
 
 A chunk captures each repository's effective branch at its claim, or at its first delivery for a repository it has not
 captured, and starts from and lands into it from then on: a later branch edit reaches only chunks that have not captured

@@ -210,6 +210,11 @@ export const projectLinkMutationKey = [
   'mutation',
   'project-link',
 ] as const;
+export const repositoryBranchMutationKey = [
+  'hub',
+  'mutation',
+  'repository-branch',
+] as const;
 export const landingPositionMutationKey = [
   'hub',
   'mutation',

@@ -1,0 +1,40 @@
+<fleet-kit-dialog [open]="true" [ariaLabel]="heading()" [testid]="testidPrefix() + '-dialog'" (closed)="onClosed()">
+  <h2 fleetKitDialogHeader [attr.data-testid]="testidPrefix() + '-dialog-title'">{{ heading() }}</h2>
+
+  <div class="field">
+    <fleet-kit-text-input
+      ariaLabel="Branch"
+      [placeholder]="branch().inherits ?? 'Branch name'"
+      [value]="value()"
+      [testid]="testidPrefix() + '-input'"
+      (valueChange)="value.set($event)"
+    />
+  </div>
+  <p class="note" [attr.data-testid]="testidPrefix() + '-note'">
+    This project's chunks start from this branch and land into it. Other projects linking the repository keep their own.
+    @if (branch().inherits; as inherits) {
+      Inherit to follow the repository's {{ inherits }} again.
+    }
+  </p>
+
+  <div fleetKitDialogFooter class="footer">
+    <fleet-kit-error-line class="submit-error" [message]="submitError()" [testid]="testidPrefix() + '-submit-error'" />
+    <fleet-kit-button size="cta" [disabled]="submitting()" [testid]="testidPrefix() + '-cancel'" (click)="onClosed()">
+      Cancel
+    </fleet-kit-button>
+    @if (branch().override !== null) {
+      <fleet-kit-button size="cta" [disabled]="!canInherit()" [testid]="testidPrefix() + '-inherit'" (click)="onInherit()">
+        Inherit
+      </fleet-kit-button>
+    }
+    <fleet-kit-button
+      size="cta"
+      variant="primary"
+      [disabled]="!canSave()"
+      [testid]="testidPrefix() + '-submit'"
+      (click)="onSave()"
+    >
+      Save
+    </fleet-kit-button>
+  </div>
+</fleet-kit-dialog>
