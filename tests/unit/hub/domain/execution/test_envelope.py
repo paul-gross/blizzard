@@ -90,6 +90,24 @@ def test_latest_artifacts_keeps_the_highest_epoch() -> None:
     assert latest == {("build", "findings"): 3, ("build", "other"): 1}
 
 
+def test_latest_artifacts_are_newest_first_by_epoch_then_produced_at_then_id() -> None:
+    def at(row: StoredArtifact, minute: int) -> StoredArtifact:
+        return replace(row, produced_at=datetime(2026, 7, 13, 12, minute, tzinfo=UTC))
+
+    rows = [
+        _row("a", 1, node_name="triage"),
+        at(_row("b", 3, node_name="build"), 5),
+        at(_row("c", 3, node_name="review"), 9),
+        at(_row("d", 2, node_name="plan"), 1),
+        at(_row("e", 3, node_name="alpha"), 5),
+        at(_row("f", 3, node_name="zeta"), 5),
+    ]
+
+    ordered = [r.artifact_id for r in LatestArtifacts.of(rows).rows]
+    # epoch 3 first: produced 12:09, then the 12:05 trio broken by artifact id descending; then epoch 2, epoch 1.
+    assert ordered == ["art_c3", "art_f3", "art_e3", "art_b3", "art_d2", "art_a1"]
+
+
 def test_latest_artifacts_series_continues_across_node_ids_for_one_node_name() -> None:
     # A republication or migration re-mints the node under a new node id but the same name, so
     # the series keys on node name: a key on node id would resolve one row per id instead.
