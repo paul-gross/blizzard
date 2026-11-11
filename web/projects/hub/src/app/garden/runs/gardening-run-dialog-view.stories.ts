@@ -13,3 +13,5 @@ export default meta;
 type Story = StoryObj<GardeningRunDialogView>;
 export const Default: Story = {};
 export const Phone: Story = { globals: { viewport: { value: 'phone-sm', isRotated: false } } };
+export const SubmitError: Story = { args: { submitError: 'The run could not be submitted. Please try again.' } };
+export const Submitting: Story = { args: { submitting: true } };
