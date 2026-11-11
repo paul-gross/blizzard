@@ -117,8 +117,8 @@ export class GardeningRunDialogView {
   protected readonly deltaAvailable = computed(() => this.selectedBaseline() !== undefined);
 
   protected readonly canSubmit = computed(() => {
-    if (this.submitting()) return false;
-    return this.scopeSelection().length > 0;
+    if (this.submitting() || this.state() !== 'ready') return false;
+    return this.scopes().some((scope) => scope.slug === this.scopeSelection());
   });
 
   constructor() {
@@ -126,8 +126,9 @@ export class GardeningRunDialogView {
     // instant the read resolves — a bare empty selection otherwise leaves nothing
     // checked until the operator acts.
     effect(() => {
+      if (this.state() !== 'ready') return;
       const scopes = this.scopes();
-      if (scopes.length > 0 && !this.scopeSelection()) {
+      if (scopes.length > 0 && !scopes.some((scope) => scope.slug === this.scopeSelection())) {
         this.scopeSelection.set(scopes[0].slug);
       }
     });

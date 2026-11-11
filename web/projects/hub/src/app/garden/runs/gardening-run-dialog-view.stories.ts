@@ -12,6 +12,9 @@ const meta: Meta<GardeningRunDialogView> = {
 export default meta;
 type Story = StoryObj<GardeningRunDialogView>;
 export const Default: Story = {};
+export const Loading: Story = { args: { state: 'loading' } };
+export const Error: Story = { args: { state: 'error' } };
+export const Empty: Story = { args: { state: 'empty', scopes: [] } };
 export const Phone: Story = { globals: { viewport: { value: 'phone-sm', isRotated: false } } };
 export const SubmitError: Story = { args: { submitError: 'The run could not be submitted. Please try again.' } };
 export const Submitting: Story = { args: { submitting: true } };

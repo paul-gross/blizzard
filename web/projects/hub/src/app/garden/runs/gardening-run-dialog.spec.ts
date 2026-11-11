@@ -52,7 +52,7 @@ async function pump(fixture: { detectChanges(): void }, ticks = 5): Promise<void
   fixture.detectChanges();
 }
 
-async function mount(routes: Parameters<typeof stubHubClient>[0] = {}) {
+async function mount(routes: Parameters<typeof stubHubClient>[0] = {}, pending = false) {
   const stub = stubHubClient({ ...defaultRoutes(), ...routes });
   await TestBed.configureTestingModule({
     imports: [GardeningRunDialog],
@@ -65,7 +65,8 @@ async function mount(routes: Parameters<typeof stubHubClient>[0] = {}) {
   const fixture = TestBed.createComponent(GardeningRunDialog);
   fixture.componentRef.setInput('routineId', 'rtn_1');
   fixture.componentRef.setInput('routineName', 'gardening');
-  await settle(fixture);
+  if (pending) await pump(fixture);
+  else await settle(fixture);
   return { fixture, stub, el: fixture.nativeElement as HTMLElement };
 }
 
@@ -81,6 +82,36 @@ function defaultRoutes(): Parameters<typeof stubHubClient>[0] {
 describe('GardeningRunDialog', () => {
   let stub: RequestClientStub;
   afterEach(() => stub?.restore());
+
+  it('waits for baselines before enabling Run and choosing the previously swept scope', async () => {
+    let resolveBaselines!: (value: typeof BASELINES) => void;
+    const baselines = new Promise<typeof BASELINES>((resolve) => { resolveBaselines = resolve; });
+    const mounted = await mount({ 'GET /api/routines/{routine_id}/baselines': () => baselines }, true);
+    stub = mounted.stub;
+    const { el, fixture } = mounted;
+    const button = el.querySelector<HTMLButtonElement>('[data-testid="run-dialog-submit"]')!;
+    expect(el.querySelector('[data-testid="run-dialog-loading"]')).not.toBeNull();
+    expect(button.disabled).toBe(true);
+    button.click();
+    expect(stub.forRoute('/api/routines/rtn_1/run', 'POST')).toHaveLength(0);
+
+    resolveBaselines(BASELINES);
+    await settle(fixture);
+    expect(button.disabled).toBe(false);
+    button.click();
+    await settle(fixture);
+    expect(stub.forRoute('/api/routines/rtn_1/run', 'POST')[0].body).toMatchObject({ scope_slug: 'web', mode: 'full' });
+  });
+
+  it('does not allow Run when a read fails', async () => {
+    const mounted = await mount({ 'GET /api/routines/{routine_id}/baselines': () => stubError(503, { detail: 'Unavailable' }) });
+    stub = mounted.stub;
+    expect(mounted.el.querySelector('[data-testid="run-dialog-error"]')).not.toBeNull();
+    const button = mounted.el.querySelector<HTMLButtonElement>('[data-testid="run-dialog-submit"]')!;
+    expect(button.disabled).toBe(true);
+    button.click();
+    expect(stub.forRoute('/api/routines/rtn_1/run', 'POST')).toHaveLength(0);
+  });
 
   it('offers scope, mode, urgency, and a charge note', async () => {
     const mounted = await mount();
@@ -116,6 +147,7 @@ describe('GardeningRunDialog', () => {
       'no related scope to run against yet',
     );
     expect(el.querySelector('[data-testid="run-scope-field"]')).toBeNull();
+    expect(el.querySelector<HTMLButtonElement>('[data-testid="run-dialog-submit"]')!.disabled).toBe(true);
   });
 
   it('renders the empty state when the routine\'s only related scope is retired', async () => {
