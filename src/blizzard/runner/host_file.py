@@ -19,10 +19,12 @@ from typing import Any
 from blizzard.foundation.config_keys import ConfigView
 from blizzard.foundation.roles import collaborator
 from blizzard.foundation.untyped import as_list
+from blizzard.runner.config import HostWorkspace, ProjectBinding, SubscriptionDeclaration
 from blizzard.runner.config_keys import HOST_REGISTRY
 from blizzard.runner.config_table import ConfigError
-from blizzard.runner.host_config import decode_host_text
+from blizzard.runner.host_config import decode_host_text, subscription_toml, workspace_toml
 from blizzard.runner.host_layout import HOST_CONFIG_FILENAME, HostLayout
+from blizzard.runner.transfer.hosts import DeclaredSubscription, DeclaredWorkspace
 
 _OWNER_ONLY = 0o600
 
@@ -154,18 +156,78 @@ def with_runner_values(table: str, values: Mapping[tuple[str, ...], str], *, str
 @dataclass(frozen=True)
 class HostFileEditor:
     """The host file's appends, as one collaborator over the functions above, for a service that takes its edits as a
-    seam; ``strict`` is the strictness of the host it edits for."""
+    seam; ``strict`` is the strictness of the host it edits for. It maps the transfer declarations back to the host
+    file's own types and renders them with the host's renderers."""
 
     strict: bool
 
-    def append_workspace(self, layout: HostLayout, table: str) -> None:
-        append_workspace(layout, table, strict=self.strict)
+    def declared(self, root: Path, table: str, key: str) -> frozenset[str]:
+        """The ``key`` of every ``[[table]]`` the host file holds now."""
+        layout = HostLayout(root)
+        document = decode_host_text(layout.config_path.read_text(), what=str(layout.config_path))
+        view = ConfigView.root(HOST_REGISTRY, document, strict=self.strict)
+        return frozenset(str(entry.get(key)) for entry in view.entries(table) if entry.body)
 
-    def append_subscription(self, layout: HostLayout, table: str) -> None:
-        append_subscription(layout, table, strict=self.strict)
+    def append_workspace(self, root: Path, workspace: DeclaredWorkspace) -> None:
+        append_workspace(HostLayout(root), workspace_toml(host_workspace(workspace)), strict=self.strict)
 
-    def append_runner(self, layout: HostLayout, table: str) -> None:
-        append_runner(layout, table, strict=self.strict)
+    def append_subscription(self, root: Path, subscription: DeclaredSubscription) -> None:
+        append_subscription(
+            HostLayout(root), subscription_toml(subscription_declaration(subscription)), strict=self.strict
+        )
+
+    def append_runner(self, root: Path, table: str) -> None:
+        append_runner(HostLayout(root), table, strict=self.strict)
+
+
+def host_workspace(workspace: DeclaredWorkspace) -> HostWorkspace:
+    """The ``[[workspace]]`` a transfer declaration stands for."""
+    return HostWorkspace(
+        id=workspace.id,
+        root=workspace.root,
+        provider=workspace.provider,
+        envs=workspace.envs,
+        max_environments=workspace.max_environments,
+        repos=workspace.repos,
+        base_branch=workspace.base_branch,
+        prompt=workspace.prompt,
+        prompt_file=workspace.prompt_file,
+        prompt_package=workspace.prompt_package,
+    )
+
+
+def subscription_declaration(subscription: DeclaredSubscription) -> SubscriptionDeclaration:
+    """The ``[[subscription]]`` a transfer declaration stands for."""
+    return SubscriptionDeclaration(
+        slug=subscription.slug,
+        name=subscription.name,
+        provider=subscription.provider,
+        credentials_path=subscription.credentials_path,
+        sample_interval_seconds=subscription.sample_interval_seconds,
+        usage_api_base=subscription.usage_api_base,
+    )
+
+
+def string_literal(value: str) -> str:
+    """``value`` as a TOML basic-string literal."""
+    return json.dumps(value)
+
+
+def bindings_literal(bindings: tuple[ProjectBinding, ...]) -> str:
+    """``bindings`` as the TOML inline array a ``[[runner]]``'s ``projects`` holds."""
+    entries = (
+        f"{{ project = {string_literal(b.project)}, workspace = {string_literal(b.workspace)} }}" for b in bindings
+    )
+    return "[" + ", ".join(entries) + "]"
+
+
+def runner_value(table: str, key: tuple[str, ...], *, strict: bool) -> object:
+    """The value the one-``[[runner]]`` ``table`` sets at ``key`` under the runner, or ``None``."""
+    view = ConfigView.root(HOST_REGISTRY, decode_host_text(table, what="the [[runner]]"), strict=strict)
+    node = next(view.entries("runner"))
+    for part in key[:-1]:
+        node = node.table(part)
+    return node.get(key[-1])
 
 
 def remove_runner(layout: HostLayout, runner_name: str, *, strict: bool) -> None:

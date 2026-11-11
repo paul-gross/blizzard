@@ -891,7 +891,7 @@ def test_an_archive_carries_the_prompt_of_the_workspace_its_runner_is_bound_to_t
 
 def test_a_rewritten_bindings_literal_names_each_binding_by_project_and_workspace() -> None:
     from blizzard.runner.config import ProjectBinding
-    from blizzard.runner.ingest import bindings_literal
+    from blizzard.runner.host_file import bindings_literal
 
     literal = bindings_literal((ProjectBinding("a", "w"), ProjectBinding("b", "w")))
 
