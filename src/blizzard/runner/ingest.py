@@ -20,7 +20,6 @@ from blizzard.foundation.roles import domain_model
 from blizzard.foundation.runner_token_names import hub_token_variable
 from blizzard.foundation.store.migrations import MigrationConnectionError, MigrationRefused, MigrationRunner
 from blizzard.runner.config_table import ConfigError
-from blizzard.runner.host_layout import RUNNERS_DIRNAME
 from blizzard.runner.hub.client import HostRecord, HostRefused, HubClientError, IHostRecordReader
 from blizzard.runner.hub.host_identity import HostIdentity, HostIdentityAlreadyRecorded, adopted
 from blizzard.runner.hub.host_registration import standing_of
@@ -490,7 +489,7 @@ class RunnerIngest:
             located,
             tuple(located),
             source.declared.root if source.declared is not None else Path(),
-            Path(RUNNERS_DIRNAME) / entry.name,
+            self.host.runners_dir.relative_to(self.host.root) / entry.name,
             self.host.runners_dir / entry.name,
         )
         return self.sources.carried(source, entry.name, projects=projects, copies=copies), files
