@@ -22,10 +22,12 @@ export function lifecycleTone(retired: boolean): Tone {
 export const builtInTone: Tone = 'idle';
 
 /**
- * A project link's own-branch override marker's {@link Tone} — amber, so an override stands out from the grey
- * inherited marker, which reads {@link builtInTone}'s provenance grey.
+ * A project link's branch marker → badge {@link Tone}: an `override` reads amber, so it stands out from the
+ * `inherited` marker, which reads {@link builtInTone}'s provenance grey.
  */
-export const overrideTone: Tone = 'waiting';
+export function branchMarkerTone(marker: 'inherited' | 'override'): Tone {
+  return marker === 'override' ? 'waiting' : builtInTone;
+}
 
 /**
  * A graph version's wire `lifecycle` → badge {@link Tone}. `effective` and `retired` come from

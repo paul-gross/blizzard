@@ -1,4 +1,5 @@
 import {
+  branchMarkerTone,
   builtInTone,
   graphLifecycleTone,
   lifecycleTone,
@@ -15,6 +16,13 @@ describe('builtInTone', () => {
   it('reads the built-in marker grey (idle), never the enabled cyan', () => {
     expect(builtInTone).toBe('idle');
     expect(builtInTone).not.toBe(lifecycleTone(false));
+  });
+});
+
+describe('branchMarkerTone', () => {
+  it('reads an override amber (waiting) and an inherited branch the built-in grey', () => {
+    expect(branchMarkerTone('override')).toBe('waiting');
+    expect(branchMarkerTone('inherited')).toBe(builtInTone);
   });
 });
 

@@ -12,7 +12,7 @@ import {
   type LandingPositionRequest,
 } from 'fleet';
 
-import { builtInTone, overrideTone } from '../../core/lifecycle-tone';
+import { branchMarkerTone, builtInTone } from '../../core/lifecycle-tone';
 import { type LandingSection, type LandingSections, resolveLandingDrop } from './project-landing-order.model';
 import type { ProjectLinkRowVm } from './projects.model';
 
@@ -33,7 +33,7 @@ import type { ProjectLinkRowVm } from './projects.model';
 })
 export class ProjectLinkPanel {
   protected readonly builtInTone = builtInTone;
-  protected readonly overrideTone = overrideTone;
+  protected readonly branchMarkerTone = branchMarkerTone;
   readonly heading = input.required<string>();
   readonly explainer = input.required<string>();
   readonly rows = input.required<readonly ProjectLinkRowVm[]>();

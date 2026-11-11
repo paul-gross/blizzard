@@ -73,7 +73,7 @@
   @if (row.branch; as branch) {
     <span class="branch" [attr.data-testid]="testid() + '-branch-' + row.name">
       <span class="branch-name">{{ branch.name }}</span>
-      <fleet-kit-badge [tone]="branch.marker === 'override' ? overrideTone : builtInTone" variant="soft">
+      <fleet-kit-badge [tone]="branchMarkerTone(branch.marker)" variant="soft">
         {{ branch.marker }}
       </fleet-kit-badge>
     </span>
