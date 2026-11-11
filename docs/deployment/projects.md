@@ -145,13 +145,13 @@ blizzard hub project base blizzard blizzard --inherit
 `--branch` names the link's branch, and `--inherit` clears it, so the link inherits again; give exactly one. Setting the
 branch the link already has writes nothing. The name must be a valid git branch name — no whitespace or control
 characters, none of `~ ^ : ? * [ \`, no `..` or `@{`, no leading `-`, no leading, trailing or doubled `/`, no trailing
-`.`, and no component ending in `.lock` — or the edit is refused `422` naming `base_branch`. Whether the branch exists
-on the forge is not checked when you set it. Each edit moves the link's revision and records a change of `base_branch`
-([config-changes.md](./config-changes.md)); a stale `--if-match` is refused `409`. `get` shows each repository's
-effective branch, marked `inherited` or `override`, and `GET /api/projects/{project}/repository-links` returns each
-link's `base_branch`, `null` when it inherits, and its `effective_base_branch`. The `PATCH` takes `{"base_branch": …}`:
-a name sets it, `null` clears it, and a body without it changes nothing. Unlinking a repository keeps the link's branch,
-and linking it again restores it.
+`.`, no component starting with `.` or ending in `.lock`, and neither `@` nor `HEAD` alone — or the edit is refused
+`422` naming `base_branch`. Whether the branch exists on the forge is not checked when you set it. Each edit moves the
+link's revision and records a change of `base_branch` ([config-changes.md](./config-changes.md)); a stale `--if-match`
+is refused `409`. `get` shows each repository's effective branch, marked `inherited` or `override`, and
+`GET /api/projects/{project}/repository-links` returns each link's `base_branch`, `null` when it inherits, and its
+`effective_base_branch`. The `PATCH` takes `{"base_branch": …}`: a name sets it, `null` clears it, and a body without it
+changes nothing. Unlinking a repository keeps the link's branch, and linking it again restores it.
 
 On the board, Admin → Projects shows each linked repository's effective branch, marked `inherited` or `override`. A user
 with `config:edit` opens its Branch dialog to name the link's branch, or Inherit to clear it.

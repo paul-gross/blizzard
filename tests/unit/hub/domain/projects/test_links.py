@@ -203,6 +203,8 @@ def test_a_valid_branch_name_is_kept(name: str) -> None:
         "main.lock",
         "a.lock/b",
         "a/.hidden",
+        "@",
+        "HEAD",
     ],
 )
 def test_a_name_that_is_no_git_branch_name_is_refused_on_base_branch(name: str) -> None:

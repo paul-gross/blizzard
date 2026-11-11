@@ -65,8 +65,8 @@ def _branch_problem(name: str) -> str | None:
         return "must not end with '.'"
     if any(component.startswith(".") or component.endswith(".lock") for component in name.split("/")):
         return "must hold no component starting with '.' or ending in '.lock'"
-    if name == "@":
-        return "must not be '@'"
+    if name in ("@", "HEAD"):
+        return "must not be '@' or 'HEAD'"
     return None
 
 
