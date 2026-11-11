@@ -1,11 +1,4 @@
-import {
-  ChangeDetectionStrategy,
-  Component,
-  computed,
-  effect,
-  inject,
-  signal,
-} from '@angular/core';
+import { ChangeDetectionStrategy, Component, computed, effect, inject, signal } from '@angular/core';
 import { toSignal } from '@angular/core/rxjs-interop';
 import { ActivatedRoute, Router } from '@angular/router';
 import {
@@ -20,30 +13,16 @@ import { map } from 'rxjs';
 
 import { hasPermission, injectMeQuery } from '../../core/auth/me.query';
 import { ProjectLens } from '../../core/project-lens';
-import {
-  injectRepositoryLifecycleMutation,
-  injectEditRepositoryMutation,
-} from './repositories.mutations';
-import {
-  type ConfigFailure,
-  configActions,
-  failureFor,
-} from '../config-actions.model';
-import {
-  type ConfigFormValues,
-  configEdit,
-  shownFormValues,
-} from '../config-edit.model';
+import { injectRepositoryLifecycleMutation, injectEditRepositoryMutation } from './repositories.mutations';
+import { type ConfigFailure, configActions, failureFor } from '../config-actions.model';
+import { type ConfigFormValues, configEdit, shownFormValues } from '../config-edit.model';
 import { ConfigFormDialog } from '../config-form-dialog';
 import { detailCliCommand } from '../config-cli.model';
 import { lastChange, revisionRows } from '../config-history.model';
 import { injectConfigHistoryQuery } from '../config-history.query';
 import { ConfigRecordPanel } from '../config-record-panel';
 import { repositoryFields, repositoryRecordVm } from './repositories.model';
-import {
-  injectRepositoryQuery,
-  injectLandingPoliciesQuery,
-} from './repositories.query';
+import { injectRepositoryQuery, injectLandingPoliciesQuery } from './repositories.query';
 import { injectForgeQuery, injectForgesQuery } from '../forges/forges.query';
 
 /**
@@ -64,43 +43,25 @@ export class RepositoryDetail {
   private readonly lens = inject(ProjectLens);
   private readonly viewport = inject(ViewportService);
 
-  private readonly key = toSignal(
-    this.route.paramMap.pipe(map((params) => params.get('key'))),
-    {
-      initialValue: null,
-    },
-  );
+  private readonly key = toSignal(this.route.paramMap.pipe(map((params) => params.get('key'))), {
+    initialValue: null,
+  });
   private readonly repositoryQuery = injectRepositoryQuery(() => this.key());
-  private readonly historyQuery = injectConfigHistoryQuery(
-    RecordKind.REPOSITORY,
-    () => this.repositoryQuery.data()?.repository_id ?? null,
+  private readonly historyQuery = injectConfigHistoryQuery(RecordKind.REPOSITORY, () =>
+    this.repositoryQuery.data()?.repository_id ?? null,
   );
 
-  protected readonly vm = computed(() =>
-    repositoryRecordVm(this.repositoryQuery.data()),
-  );
+  protected readonly vm = computed(() => repositoryRecordVm(this.repositoryQuery.data()));
   protected readonly state = computed<KitAsyncStateValue>(() =>
-    restingAsyncState(
-      this.key() === null,
-      this.repositoryQuery,
-      this.vm() === null,
-    ),
+    restingAsyncState(this.key() === null, this.repositoryQuery, this.vm() === null),
   );
-  protected readonly lastChange = computed(() =>
-    lastChange(this.historyQuery.data()),
-  );
-  protected readonly revisions = computed(() =>
-    revisionRows(this.historyQuery.data()),
-  );
+  protected readonly lastChange = computed(() => lastChange(this.historyQuery.data()));
+  protected readonly revisions = computed(() => revisionRows(this.historyQuery.data()));
   protected readonly revisionsState = computed<KitAsyncStateValue>(() =>
     asyncState(this.historyQuery, this.revisions().length === 0),
   );
   protected readonly cliCommand = computed(() =>
-    detailCliCommand(
-      this.viewport.mode(),
-      RecordKind.REPOSITORY,
-      this.repositoryQuery.data()?.slug,
-    ),
+    detailCliCommand(this.viewport.mode(), RecordKind.REPOSITORY, this.repositoryQuery.data()?.slug),
   );
 
   private readonly meQuery = injectMeQuery();
@@ -111,12 +72,8 @@ export class RepositoryDetail {
   private readonly landingPoliciesQuery = injectLandingPoliciesQuery();
   /** The forge the edit form has picked; until it picks one, the repository's own. */
   private readonly pickedForge = signal<string | null>(null);
-  private readonly chosenForge = computed(
-    () => this.pickedForge() ?? this.repositoryQuery.data()?.forge_id ?? null,
-  );
-  private readonly forgeQuery = injectForgeQuery(() =>
-    this.editOpen() ? this.chosenForge() : null,
-  );
+  private readonly chosenForge = computed(() => this.pickedForge() ?? this.repositoryQuery.data()?.forge_id ?? null);
+  private readonly forgeQuery = injectForgeQuery(() => (this.editOpen() ? this.chosenForge() : null));
   protected readonly fields = computed(() =>
     repositoryFields(
       this.forgesQuery.data() ?? [],
@@ -130,25 +87,14 @@ export class RepositoryDetail {
   private readonly failure = signal<ConfigFailure | null>(null);
 
   protected readonly actions = computed(() =>
-    configActions(
-      this.viewport.mode(),
-      hasPermission(this.meQuery.data(), 'config:edit'),
-      this.repositoryQuery.data(),
-    ),
+    configActions(this.viewport.mode(), hasPermission(this.meQuery.data(), 'config:edit'), this.repositoryQuery.data()),
   );
   protected readonly shown = computed(() => {
     const record = this.repositoryQuery.data();
-    return shownFormValues(
-      this.fields(),
-      record && { ...record, forge: record.forge_id },
-    );
+    return shownFormValues(this.fields(), record && { ...record, forge: record.forge_id });
   });
-  protected readonly busy = computed(
-    () => this.pendingKey() !== null && this.pendingKey() === this.key(),
-  );
-  protected readonly actionError = computed(() =>
-    failureFor(this.failure(), this.key()),
-  );
+  protected readonly busy = computed(() => this.pendingKey() !== null && this.pendingKey() === this.key());
+  protected readonly actionError = computed(() => failureFor(this.failure(), this.key()));
 
   constructor() {
     // A slug or former slug in the URL opens the repository; the URL then names it by id.
@@ -156,13 +102,10 @@ export class RepositoryDetail {
       const repository = this.repositoryQuery.data();
       const key = this.key();
       if (repository && key !== null && key !== repository.repository_id) {
-        void this.router.navigate(
-          this.lens.link(['/admin', 'repositories', repository.repository_id]),
-          {
-            replaceUrl: true,
-            queryParamsHandling: 'preserve',
-          },
-        );
+        void this.router.navigate(this.lens.link(['/admin', 'repositories', repository.repository_id]), {
+          replaceUrl: true,
+          queryParamsHandling: 'preserve',
+        });
       }
     });
   }
@@ -175,9 +118,7 @@ export class RepositoryDetail {
 
   protected onValues(values: ConfigFormValues): void {
     const forge = values['forge'];
-    this.pickedForge.set(
-      typeof forge === 'string' && forge !== '' ? forge : null,
-    );
+    this.pickedForge.set(typeof forge === 'string' && forge !== '' ? forge : null);
   }
 
   protected onSave(values: ConfigFormValues): void {
@@ -193,8 +134,7 @@ export class RepositoryDetail {
       },
       {
         onSuccess: () => this.editOpen.set(false),
-        onError: (error) =>
-          this.editError.set(errorMessage(error, 'Save failed.')),
+        onError: (error) => this.editError.set(errorMessage(error, 'Save failed.')),
       },
     );
   }

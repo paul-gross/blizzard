@@ -1,24 +1,10 @@
-import {
-  ChangeDetectionStrategy,
-  Component,
-  computed,
-  inject,
-  signal,
-} from '@angular/core';
+import { ChangeDetectionStrategy, Component, computed, inject, signal } from '@angular/core';
 import { Router, RouterOutlet } from '@angular/router';
-import {
-  asyncState,
-  errorMessage,
-  type KitAsyncStateValue,
-  ViewportService,
-} from 'fleet';
+import { asyncState, errorMessage, type KitAsyncStateValue, ViewportService } from 'fleet';
 
 import { hasPermission, injectMeQuery } from '../../core/auth/me.query';
 import { injectCreateRepositoryMutation } from './repositories.mutations';
-import {
-  injectChildRouteParam,
-  injectQueryFilters,
-} from '../../core/route-state';
+import { injectChildRouteParam, injectQueryFilters } from '../../core/route-state';
 import { type ConfigFormValues, createBody } from '../config-edit.model';
 import { ConfigFormDialog } from '../config-form-dialog';
 import {
@@ -32,15 +18,8 @@ import { ConfigMaster } from '../config-master';
 import { injectLensLinks, withinLens } from '../projects/lens-links';
 import { lensedListState } from '../projects/projects.model';
 import type { ConfigRowVm } from '../config-record-list';
-import {
-  repositoryCreate,
-  repositoryFields,
-  repositoryRows,
-} from './repositories.model';
-import {
-  injectRepositoriesQuery,
-  injectLandingPoliciesQuery,
-} from './repositories.query';
+import { repositoryCreate, repositoryFields, repositoryRows } from './repositories.model';
+import { injectRepositoriesQuery, injectLandingPoliciesQuery } from './repositories.query';
 import { ProjectLens } from '../../core/project-lens';
 import { injectForgeQuery, injectForgesQuery } from '../forges/forges.query';
 
@@ -65,25 +44,14 @@ export class RepositoriesPage {
   private readonly filters = injectQueryFilters();
 
   protected readonly mobile = computed(() => this.viewport.mode() === 'mobile');
-  protected readonly lifecycle = computed(() =>
-    parseLifecycleFilter(this.filters.read(LIFECYCLE_FILTER_PARAM)),
-  );
+  protected readonly lifecycle = computed(() => parseLifecycleFilter(this.filters.read(LIFECYCLE_FILTER_PARAM)));
   /** Under a project lens the list narrows to the records that project links. */
   private readonly lensLinks = injectLensLinks('repository');
-  private readonly repositoriesQuery = injectRepositoriesQuery(() =>
-    includeRetired(this.lifecycle()),
-  );
+  private readonly repositoriesQuery = injectRepositoriesQuery(() => includeRetired(this.lifecycle()));
 
   protected readonly selectedKey = injectChildRouteParam('key');
   protected readonly rows = computed<readonly ConfigRowVm[]>(() =>
-    repositoryRows(
-      withinLens(
-        this.repositoriesQuery.data() ?? [],
-        (repository) => repository.repository_id,
-        this.lensLinks.names(),
-      ),
-      this.lifecycle(),
-    ),
+    repositoryRows(withinLens(this.repositoriesQuery.data() ?? [], (repository) => repository.repository_id, this.lensLinks.names()), this.lifecycle()),
   );
   protected readonly state = computed<KitAsyncStateValue>(() =>
     lensedListState(
@@ -92,14 +60,9 @@ export class RepositoriesPage {
       asyncState(this.repositoriesQuery, this.rows().length === 0),
     ),
   );
-  protected readonly caption = computed(() =>
-    this.lensLinks.caption('Repositories'),
-  );
+  protected readonly caption = computed(() => this.lensLinks.caption('Repositories'));
   protected readonly emptyText = computed(() =>
-    this.lensLinks.emptyText(
-      lifecycleEmptyText('repositories', this.lifecycle()),
-      'repositories',
-    ),
+    this.lensLinks.emptyText(lifecycleEmptyText('repositories', this.lifecycle()), 'repositories'),
   );
 
   protected onFilter(value: string): void {
@@ -138,9 +101,7 @@ export class RepositoriesPage {
   protected readonly createError = signal<string | null>(null);
 
   /** New is a write: a desktop with `config:edit` only. */
-  protected readonly canCreate = computed(
-    () => !this.mobile() && hasPermission(this.meQuery.data(), 'config:edit'),
-  );
+  protected readonly canCreate = computed(() => !this.mobile() && hasPermission(this.meQuery.data(), 'config:edit'));
 
   protected onNew(): void {
     this.createError.set(null);
@@ -150,9 +111,7 @@ export class RepositoriesPage {
 
   protected onValues(values: ConfigFormValues): void {
     const forge = values['forge'];
-    this.pickedForge.set(
-      typeof forge === 'string' && forge !== '' ? forge : null,
-    );
+    this.pickedForge.set(typeof forge === 'string' && forge !== '' ? forge : null);
   }
 
   protected onCreate(values: ConfigFormValues): void {
@@ -161,15 +120,11 @@ export class RepositoriesPage {
     this.createMutation.mutate(body, {
       onSuccess: () => {
         this.createOpen.set(false);
-        void this.router.navigate(
-          this.lens.link(['/admin', 'repositories', body.slug]),
-          {
-            queryParamsHandling: 'preserve',
-          },
-        );
+        void this.router.navigate(this.lens.link(['/admin', 'repositories', body.slug]), {
+          queryParamsHandling: 'preserve',
+        });
       },
-      onError: (error) =>
-        this.createError.set(errorMessage(error, 'Create failed.')),
+      onError: (error) => this.createError.set(errorMessage(error, 'Create failed.')),
     });
   }
 }

@@ -36,29 +36,18 @@ const BLIZZARD: RepositorySummary = {
   created_by_name: null,
   retired: false,
 };
-const OLD: RepositorySummary = {
-  ...BLIZZARD,
-  repository_id: 'repo_2',
-  slug: 'old',
-  name: 'Old one',
-  retired: true,
-};
+const OLD: RepositorySummary = { ...BLIZZARD, repository_id: 'repo_2', slug: 'old', name: 'Old one', retired: true };
 
 describe('repositoryBadges', () => {
   it('badges only a retired repository', () => {
-    expect(repositoryBadges(OLD)).toEqual([
-      { label: 'retired', tone: lifecycleTone(true) },
-    ]);
+    expect(repositoryBadges(OLD)).toEqual([{ label: 'retired', tone: lifecycleTone(true) }]);
     expect(repositoryBadges(BLIZZARD)).toEqual([]);
   });
 });
 
 describe('repositoryRows', () => {
   it('filters by lifecycle and maps each repository', () => {
-    expect(repositoryRows([BLIZZARD, OLD], 'all').map((r) => r.key)).toEqual([
-      'repo_1',
-      'repo_2',
-    ]);
+    expect(repositoryRows([BLIZZARD, OLD], 'all').map((r) => r.key)).toEqual(['repo_1', 'repo_2']);
     expect(repositoryRows([BLIZZARD, OLD], 'active')).toEqual([
       {
         key: 'repo_1',
@@ -81,7 +70,7 @@ describe('repositoryRecordVm', () => {
     const vm = repositoryRecordVm(BLIZZARD)!;
     expect(vm.facts.map((f) => [f.label, f.value])).toEqual([
       ['Name', 'blizzard'],
-      ['Forge', 'GitHub'],
+       ['Forge', 'GitHub'],
       ['Owner', 'paul-gross'],
       ['Repository', 'blizzard'],
       ['Base branch', 'master'],
@@ -89,29 +78,18 @@ describe('repositoryRecordVm', () => {
       ['Created by', 'pgross'],
     ]);
     expect(vm.revision).toBe(2);
-    expect(vm.links?.links.map((l) => l.name)).toEqual([
-      'github',
-      'gh-blizzard',
-    ]);
+    expect(vm.links?.links.map((l) => l.name)).toEqual(['github', 'gh-blizzard']);
     expect(vm.hasHistory).toBe(true);
   });
 
   it('shows who created it by name, falling back to the id', () => {
-    const createdBy = (repository: RepositorySummary) =>
-      repositoryRecordVm(repository)!.facts.find(
-        (f) => f.label === 'Created by',
-      )?.value;
-    expect(createdBy({ ...BLIZZARD, created_by_name: 'Paul Gross' })).toBe(
-      'Paul Gross',
-    );
+    const createdBy = (repository: RepositorySummary) => repositoryRecordVm(repository)!.facts.find((f) => f.label === 'Created by')?.value;
+    expect(createdBy({ ...BLIZZARD, created_by_name: 'Paul Gross' })).toBe('Paul Gross');
     expect(createdBy(BLIZZARD)).toBe('pgross');
   });
 
   it('titles a row by slug and shows a name that differs from it', () => {
-    expect(repositoryRows([OLD], 'all')[0]).toMatchObject({
-      title: 'old',
-      sub: ['Old one', 'paul-gross/blizzard', 'base master'],
-    });
+    expect(repositoryRows([OLD], 'all')[0]).toMatchObject({ title: 'old', sub: ['Old one', 'paul-gross/blizzard', 'base master'] });
   });
 
   it('notes a retired repository', () => {
@@ -122,7 +100,7 @@ describe('repositoryRecordVm', () => {
     const body = {
       slug: 'blizzard',
       name: '',
-      forge: 'frg_github',
+       forge: 'frg_github',
       owner: 'paul-gross',
       repo: 'blizzard',
       base_branch: 'master',
@@ -130,15 +108,13 @@ describe('repositoryRecordVm', () => {
     };
     expect(repositoryCreate(body)).toEqual({
       slug: 'blizzard',
-      forge: 'frg_github',
+       forge: 'frg_github',
       owner: 'paul-gross',
       repo: 'blizzard',
       base_branch: 'master',
       secret_name: 'gh-blizzard',
     });
-    expect(repositoryCreate({ ...body, name: 'Blizzard' }).name).toBe(
-      'Blizzard',
-    );
+    expect(repositoryCreate({ ...body, name: 'Blizzard' }).name).toBe('Blizzard');
   });
 });
 
@@ -231,79 +207,46 @@ describe('landing policy choices', () => {
 
 describe('park timeout', () => {
   const FORM = {
-    slug: 'b',
-    name: '',
-    forge: 'frg_1',
-    owner: 'o',
-    repo: 'r',
-    base_branch: 'main',
-    secret_name: 's',
+    slug: 'b', name: '', forge: 'frg_1', owner: 'o', repo: 'r', base_branch: 'main', secret_name: 's',
     park_timeout_hours: '12',
   };
 
   it('shows only for park', () => {
-    const shown = (policy: string) =>
-      shownFields(REPOSITORY_FIELDS, { landing_policy: policy }).map(
-        (field) => field.key,
-      );
+    const shown = (policy: string) => shownFields(REPOSITORY_FIELDS, { landing_policy: policy }).map((field) => field.key);
     expect(shown('park')).toContain('park_timeout_hours');
     expect(shown('merge-on-checks')).not.toContain('park_timeout_hours');
     expect(shown('')).not.toContain('park_timeout_hours');
   });
 
   it('is sent as a number on a parking create, and never when hidden', () => {
-    expect(
-      repositoryCreate(
-        createBody(REPOSITORY_FIELDS, { ...FORM, landing_policy: 'park' }),
-      ),
-    ).toMatchObject({
+    expect(repositoryCreate(createBody(REPOSITORY_FIELDS, { ...FORM, landing_policy: 'park' }))).toMatchObject({
       landing_policy: 'park',
       park_timeout_hours: 12,
     });
-    const hidden = repositoryCreate(
-      createBody(REPOSITORY_FIELDS, {
-        ...FORM,
-        landing_policy: 'fast-forward',
-      }),
-    );
+    const hidden = repositoryCreate(createBody(REPOSITORY_FIELDS, { ...FORM, landing_policy: 'fast-forward' }));
     expect(hidden.landing_policy).toBe('fast-forward');
     expect(hidden).not.toHaveProperty('park_timeout_hours');
-    expect(
-      repositoryCreate(
-        createBody(REPOSITORY_FIELDS, { ...FORM, landing_policy: '' }),
-      ),
-    ).not.toHaveProperty('landing_policy');
-    expect(
-      missingRequired(REPOSITORY_FIELDS, { ...FORM, landing_policy: 'park' }),
-    ).toEqual([]);
+    expect(repositoryCreate(createBody(REPOSITORY_FIELDS, { ...FORM, landing_policy: '' }))).not.toHaveProperty(
+      'landing_policy',
+    );
+    expect(missingRequired(REPOSITORY_FIELDS, { ...FORM, landing_policy: 'park' })).toEqual([]);
   });
 });
 
 describe('repository detail policy facts', () => {
   const facts = (repository: RepositorySummary) =>
-    Object.fromEntries(
-      repositoryRecordVm(repository)!.facts.map((fact) => [
-        fact.label,
-        fact.value,
-      ]),
-    );
+    Object.fromEntries(repositoryRecordVm(repository)!.facts.map((fact) => [fact.label, fact.value]));
 
   it('shows the policy, and the timeout only for park', () => {
     expect(facts(BLIZZARD)['Park timeout']).toBeUndefined();
-    expect(
-      facts({ ...BLIZZARD, landing_policy: 'park', park_timeout_hours: 6 }),
-    ).toMatchObject({
+    expect(facts({ ...BLIZZARD, landing_policy: 'park', park_timeout_hours: 6 })).toMatchObject({
       'Landing policy': 'park',
       'Park timeout': '6 h',
     });
-    expect(facts({ ...BLIZZARD, landing_policy: 'park' })['Park timeout']).toBe(
-      'default',
-    );
+    expect(facts({ ...BLIZZARD, landing_policy: 'park' })['Park timeout']).toBe('default');
   });
 
   it('reads an unknown stored policy raw', () => {
-    expect(
-      facts({ ...BLIZZARD, landing_policy: 'rebase' })['Landing policy'],
-    ).toBe('rebase');
+    expect(facts({ ...BLIZZARD, landing_policy: 'rebase' })['Landing policy']).toBe('rebase');
   });
 });

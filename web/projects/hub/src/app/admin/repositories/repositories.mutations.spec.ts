@@ -1,17 +1,10 @@
 import { provideZonelessChangeDetection } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
-import {
-  QueryClient,
-  provideTanStackQuery,
-} from '@tanstack/angular-query-experimental';
+import { QueryClient, provideTanStackQuery } from '@tanstack/angular-query-experimental';
 import { vi } from 'vitest';
 
 import { hubConfigKey } from 'fleet';
-import {
-  type RequestClientStub,
-  repositorySummary,
-  stubHubClient,
-} from 'fleet/testing';
+import { type RequestClientStub, repositorySummary, stubHubClient } from 'fleet/testing';
 import {
   injectCreateRepositoryMutation,
   injectEditRepositoryMutation,
@@ -24,39 +17,28 @@ describe('repository mutations', () => {
 
   beforeEach(() => {
     stub = stubHubClient({
-      'POST /api/repositories': () =>
-        repositorySummary({ repository_id: 'a', slug: 'a' }),
-      'PATCH /api/repositories/{repository}': () =>
-        repositorySummary({ repository_id: 'a', revision: 4 }),
-      'POST /api/repositories/{repository}/retire': () =>
-        repositorySummary({ repository_id: 'a', retired: true }),
-      'POST /api/repositories/{repository}/enable': () =>
-        repositorySummary({ repository_id: 'a' }),
+      'POST /api/repositories': () => repositorySummary({ repository_id: 'a', slug: 'a' }),
+      'PATCH /api/repositories/{repository}': () => repositorySummary({ repository_id: 'a', revision: 4 }),
+      'POST /api/repositories/{repository}/retire': () => repositorySummary({ repository_id: 'a', retired: true }),
+      'POST /api/repositories/{repository}/enable': () => repositorySummary({ repository_id: 'a' }),
     });
     queryClient = new QueryClient({
       defaultOptions: { queries: { retry: false } },
     });
     TestBed.configureTestingModule({
-      providers: [
-        provideZonelessChangeDetection(),
-        provideTanStackQuery(queryClient),
-      ],
+      providers: [provideZonelessChangeDetection(), provideTanStackQuery(queryClient)],
     });
   });
 
   afterEach(() => stub.restore());
 
   function invalidatedKeys(spy: { mock: { calls: unknown[][] } }): unknown[] {
-    return spy.mock.calls.map(
-      (call) => (call[0] as { queryKey: unknown }).queryKey,
-    );
+    return spy.mock.calls.map((call) => (call[0] as { queryKey: unknown }).queryKey);
   }
 
   it('edits with the shown revision as If-Match, then invalidates every config read', async () => {
     const spy = vi.spyOn(queryClient, 'invalidateQueries');
-    const mutation = TestBed.runInInjectionContext(() =>
-      injectEditRepositoryMutation(),
-    );
+    const mutation = TestBed.runInInjectionContext(() => injectEditRepositoryMutation());
 
     await mutation.mutateAsync({
       repositoryId: 'a',
@@ -72,38 +54,18 @@ describe('repository mutations', () => {
   });
 
   it('routes retire and enable by the desired state, each sending If-Match', async () => {
-    const mutation = TestBed.runInInjectionContext(() =>
-      injectRepositoryLifecycleMutation(),
-    );
+    const mutation = TestBed.runInInjectionContext(() => injectRepositoryLifecycleMutation());
 
-    await mutation.mutateAsync({
-      repositoryId: 'a',
-      revision: 2,
-      retired: true,
-    });
-    await mutation.mutateAsync({
-      repositoryId: 'a',
-      revision: 3,
-      retired: false,
-    });
+    await mutation.mutateAsync({ repositoryId: 'a', revision: 2, retired: true });
+    await mutation.mutateAsync({ repositoryId: 'a', revision: 3, retired: false });
 
-    expect(
-      stub.forRoute('/api/repositories/a/retire', 'POST')[0].headers[
-        'if-match'
-      ],
-    ).toBe('2');
-    expect(
-      stub.forRoute('/api/repositories/a/enable', 'POST')[0].headers[
-        'if-match'
-      ],
-    ).toBe('3');
+    expect(stub.forRoute('/api/repositories/a/retire', 'POST')[0].headers['if-match']).toBe('2');
+    expect(stub.forRoute('/api/repositories/a/enable', 'POST')[0].headers['if-match']).toBe('3');
   });
 
   it('creates, then invalidates every config read', async () => {
     const spy = vi.spyOn(queryClient, 'invalidateQueries');
-    const mutation = TestBed.runInInjectionContext(() =>
-      injectCreateRepositoryMutation(),
-    );
+    const mutation = TestBed.runInInjectionContext(() => injectCreateRepositoryMutation());
 
     await mutation.mutateAsync({
       slug: 'a',

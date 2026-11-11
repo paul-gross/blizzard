@@ -41,12 +41,10 @@ export function injectRepositoryQuery(key: () => string | null) {
       queryKey: hubConfigRecordKey(NOUN, recordName),
       enabled: recordName !== null,
       queryFn: async (): Promise<RepositorySummary> => {
-        const { data, error } = await getRepositoryApiRepositoriesRepositoryGet(
-          {
-            path: { repository: recordName! },
-            throwOnError: false,
-          },
-        );
+        const { data, error } = await getRepositoryApiRepositoriesRepositoryGet({
+          path: { repository: recordName! },
+          throwOnError: false,
+        });
         if (error) throw error;
         return data!;
       },
@@ -60,10 +58,7 @@ export function injectLandingPoliciesQuery() {
   return injectQuery(() => ({
     queryKey: [...hubConfigKey, 'landing-policies'],
     queryFn: async (): Promise<LandingPolicyNeedsView[]> => {
-      const { data, error } =
-        await hubApi.listLandingPoliciesApiConfigLandingPoliciesGet({
-          throwOnError: false,
-        });
+      const { data, error } = await hubApi.listLandingPoliciesApiConfigLandingPoliciesGet({ throwOnError: false });
       if (error) throw error;
       return data ?? [];
     },
