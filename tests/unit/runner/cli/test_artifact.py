@@ -944,8 +944,18 @@ def test_bad_read_answer_fails_without_leaking_payload(args: list[str], payload:
     result = bound.runner.invoke(runner_group, ["artifact", *args], env=_ENV)
     assert result.exit_code != 0
     assert "unreadable answer" in result.stderr
+    assert "runner at http://127.0.0.1:8431" in result.stderr
     assert "private-content" not in result.output
     assert result.stdout == ""
+
+
+def test_bad_answer_redacts_runner_url_credentials() -> None:
+    env = {**_ENV, "BLIZZARD_RUNNER_URL": "http://user:secret@127.0.0.1:8431/path?token=secret"}
+    bound = bind_stubs(get=lambda *a, **k: _FakeResponse(payload={"name": "private-content"}))
+    result = bound.runner.invoke(runner_group, ["artifact", "get", "plan"], env=env)
+    assert "artifact get: unreadable answer from the runner at http://127.0.0.1:8431" in result.stderr
+    assert "secret" not in result.output
+    assert "private-content" not in result.output
 
 
 def test_bad_create_answer_does_not_confirm() -> None:

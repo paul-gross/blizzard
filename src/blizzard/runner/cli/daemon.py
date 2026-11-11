@@ -157,13 +157,12 @@ class RunnerDaemon:
             self._runner["id"] = self._resolve_runner_id()
         return self._runner["id"]
 
+    def decode_answer[T](self, response: Response, adapter: TypeAdapter[T]) -> tuple[Any, T]:
+        """Decode an answer naming the host this verb reached."""
+        return decode_answer(response, adapter, verb=self.verb, where=self.where)
+
     def _resolve_runner_id(self) -> str:
-        _, answer = decode_answer(
-            self._call("get", "/api/host/runners"),
-            TypeAdapter(HostRunnerListResponse),
-            verb=self.verb,
-            where=self.where,
-        )
+        _, answer = self.decode_answer(self._call("get", "/api/host/runners"), TypeAdapter(HostRunnerListResponse))
         items = answer.items
         if self.selector is not None:
             matched = [item for item in items if self.selector in (item.name, item.runner_id)]

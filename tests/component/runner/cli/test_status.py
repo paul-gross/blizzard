@@ -689,10 +689,78 @@ def test_status_rejects_a_late_unreadable_answer_without_stdout(
         return original(self, path)
 
     monkeypatch.setattr(RunnerDaemon, "get_from_host", malformed)
-    with serve_local_api(root):
+    with serve_local_api(root) as (socket_path, _):
         result = bound.runner.invoke(runner_group, ["status", "--dir", str(root)])
 
     assert result.exit_code != 0
     assert result.stdout == ""
     assert "unreadable answer" in result.stderr
+    assert f"runner at {socket_path}" in result.stderr
     assert "secret" not in result.stderr
+
+
+@pytest.mark.parametrize(("miss_reason", "expected"), [("future_reason", "future_reason"), ("", ""), (None, "None")])
+def test_status_renders_open_and_missing_miss_reasons(tmp_path: Path, miss_reason: str | None, expected: str) -> None:
+    from tests.support.worker_http import bind_transport
+
+    root = init_runner_home(tmp_path)
+    _store(root).record_external_usage_attempt(
+        slug="anthropic",
+        sampled_at=_NOW,
+        payload=None,
+        report_kind="",
+        report_payload="",
+        miss_reason="credential_lapsed",
+    )
+    with serve_local_api(root) as (_, tcp_url):
+
+        def answer(request: httpx2.Request) -> httpx2.Response:
+            response = httpx2.get(f"{tcp_url}{request.url.raw_path.decode()}")
+            if request.url.path == "/api/host/subscriptions":
+                body = response.json()
+                body["items"][0]["miss_reason"] = miss_reason
+                body["items"][0]["condition"] = None
+                return httpx2.Response(200, json=body)
+            return response
+
+        result = bind_transport(answer).runner.invoke(runner_group, ["status", "--runner-url", "http://runner.test"])
+
+    assert result.exit_code == 0, result.output
+    assert f"anthropic (anthropic): miss ({expected})" in result.output
+
+
+def test_status_omits_ended_lease_even_when_state_is_not_closed(tmp_path: Path) -> None:
+    from tests.support.worker_http import bind_transport
+
+    root = init_runner_home(tmp_path)
+    store = registered_store(root)
+    store.record_mint(
+        new_mint(
+            NewLease(
+                lease_id="lease_ended",
+                chunk_id="ch_ended",
+                graph_id="gr_1",
+                node_id="nd_build",
+                node_name="build",
+                epoch=1,
+                retries_max=0,
+                created_at=_NOW,
+            )
+        )
+    )
+    with serve_local_api(root) as (_, tcp_url):
+
+        def answer(request: httpx2.Request) -> httpx2.Response:
+            response = httpx2.get(f"{tcp_url}{request.url.raw_path.decode()}")
+            if request.url.path.endswith("/api/leases"):
+                body = response.json()
+                body["items"][0]["liveness"] = "ended"
+                body["items"][0]["state"] = "running"
+                return httpx2.Response(200, json=body)
+            return response
+
+        result = bind_transport(answer).runner.invoke(runner_group, ["status", "--runner-url", "http://runner.test"])
+
+    assert result.exit_code == 0, result.output
+    assert "leases (0):" in result.output
+    assert "lease_ended" not in result.output

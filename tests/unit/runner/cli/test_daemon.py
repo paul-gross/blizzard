@@ -3,6 +3,7 @@ from __future__ import annotations
 import httpx2
 import pytest
 from click import ClickException
+from pydantic import TypeAdapter
 
 from blizzard.runner.cli.daemon import RunnerDaemon
 
@@ -44,6 +45,18 @@ def test_bad_runner_list_is_redacted(body: bytes) -> None:
     with _daemon(httpx2.Response(200, content=body)) as daemon, pytest.raises(ClickException) as caught:
         daemon.runner_id()
     assert "status: unreadable answer from the runner at socket" in str(caught.value)
+    assert "secret" not in str(caught.value)
+
+
+@pytest.mark.parametrize(
+    "where,expected",
+    [("/tmp/runner.sock", "/tmp/runner.sock"), ("http://user:secret@host:8431/path?token=secret", "http://host:8431")],
+)
+def test_decode_answer_names_safe_host_address(where: str, expected: str) -> None:
+    client = httpx2.Client()
+    with RunnerDaemon("traces replay", client, where) as daemon, pytest.raises(ClickException) as caught:
+        daemon.decode_answer(httpx2.Response(200, content=b'{"secret":'), TypeAdapter(dict[str, str]))
+    assert f"traces replay: unreadable answer from the runner at {expected}" in str(caught.value)
     assert "secret" not in str(caught.value)
 
 

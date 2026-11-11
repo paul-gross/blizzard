@@ -15,7 +15,6 @@ from blizzard.cli.window import refuse_bad_window, replay_windows, resume_since,
 from blizzard.foundation.store.utc import iso_utc
 from blizzard.runner.cli.daemon import Door, RunnerDaemon, runner_option
 from blizzard.runner.cli.env import DEFAULT_DIR, ENV_RUNNER_DIR
-from blizzard.runner.cli.response import decode_answer
 from blizzard.wire.runner_traces import (
     HarnessTelemetryStatus,
     RunnerTraceReplayFailure,
@@ -124,11 +123,9 @@ def traces_status(
     """Whether tracing is on, the endpoint's origin, the cursor and its lag, the last export, and the
     last error. A credential in the endpoint is never shown."""
     with RunnerDaemon.reach("traces status", directory, runner_url, Door.of(ctx), runner) as daemon:
-        raw, status = decode_answer(
+        raw, status = daemon.decode_answer(
             daemon.get("/api/traces/status"),
             TypeAdapter(RunnerTraceStatusResponse),
-            verb="traces status",
-            where="/api/traces/status",
         )
     if as_json:
         click.echo(json.dumps(raw, indent=2))
@@ -161,16 +158,11 @@ def traces_replay(
     total = {"leases": 0, "spans": 0, "batches": 0, "windows": 0}
     progress: list[str] = []
     with RunnerDaemon.reach("traces replay", directory, runner_url, Door.of(ctx), runner) as daemon:
-        _, status = decode_answer(
+        _, status = daemon.decode_answer(
             daemon.get("/api/traces/status"),
             TypeAdapter(_ReplayStatus),
-            verb="traces replay",
-            where="/api/traces/status",
         )
-        width = status.replay_max_window_seconds
-        if width is not None and width >= (until - since).total_seconds():
-            width = None
-        windows = replay_windows(since, until, width)
+        windows = replay_windows(since, until, status.replay_max_window_seconds)
         for number, (start, stop) in enumerate(windows, 1):
             body = {"since": iso_utc(start), "until": iso_utc(stop), "dry_run": dry_run}
             where = f"window {number} of {len(windows)}; resume with --since {resume_since(start)}"
@@ -179,9 +171,10 @@ def traces_replay(
             except HTTPError as exc:
                 raise click.ClickException(f"{daemon.unreachable(exc).message} ({where})") from exc
             if resp.status_code == HTTPStatus.BAD_GATEWAY:
-                _, failure = decode_answer(
-                    resp, TypeAdapter(RunnerTraceReplayFailure), verb="traces replay", where=where
-                )
+                try:
+                    _, failure = daemon.decode_answer(resp, TypeAdapter(RunnerTraceReplayFailure))
+                except click.ClickException as exc:
+                    raise click.ClickException(f"{exc.message} ({where})") from None
                 raise click.ClickException(
                     f"{failure.detail} (told {failure.leases} leases, {failure.spans} spans "
                     f"in {failure.batches} batches before it stopped; {where})"
@@ -193,7 +186,10 @@ def traces_replay(
                 resp.raise_for_status()
             except HTTPError as exc:
                 raise click.ClickException(f"{daemon.unreachable(exc).message} ({where})") from exc
-            _, result = decode_answer(resp, TypeAdapter(RunnerTraceReplayResponse), verb="traces replay", where=where)
+            try:
+                _, result = daemon.decode_answer(resp, TypeAdapter(RunnerTraceReplayResponse))
+            except click.ClickException as exc:
+                raise click.ClickException(f"{exc.message} ({where})") from None
             for key in ("leases", "spans", "batches"):
                 total[key] += getattr(result, key)
             total["windows"] = number

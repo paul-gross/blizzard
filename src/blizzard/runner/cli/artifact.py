@@ -69,7 +69,7 @@ def _staged_for_scope(worker: WorkerCall, scope: str | None) -> list[dict[str, o
     except click.ClickException as exc:
         click.echo(f"artifact list: {exc.message}; omitting staged entries", err=True)
         return []
-    raw, _ = decode_answer(resp, TypeAdapter(list[StagedAttachment]), verb="artifact list", where="attachments")
+    raw, _ = decode_answer(resp, TypeAdapter(list[StagedAttachment]), verb="artifact list", where=worker.runner_url)
     return cast("list[dict[str, object]]", raw)
 
 
@@ -102,7 +102,7 @@ def artifact_list(content: bool, scope: str | None) -> None:
         failure="could not read the artifacts",
         params={"scope": scope} if scope else None,
     )
-    raw, _ = decode_answer(resp, TypeAdapter(list[WorkerArtifact]), verb="artifact list", where="artifacts")
+    raw, _ = decode_answer(resp, TypeAdapter(list[WorkerArtifact]), verb="artifact list", where=worker.runner_url)
     published = cast("list[dict[str, object]]", raw)
     staged = _staged_for_scope(worker, scope)
     entries = [{**a, "staged": False} for a in published] + [{**a, "staged": True} for a in staged]
@@ -117,7 +117,9 @@ def _staged_names(worker: WorkerCall) -> set[str] | None:
     failed staged-check must never mask the original not-found error."""
     try:
         resp = worker.get(worker.leased("attachments"), failure="could not read the staged artifacts")
-        _, staged = decode_answer(resp, TypeAdapter(list[StagedAttachment]), verb="artifact get", where="attachments")
+        _, staged = decode_answer(
+            resp, TypeAdapter(list[StagedAttachment]), verb="artifact get", where=worker.runner_url
+        )
     except click.ClickException:
         return None
     return {a.name for a in staged}
@@ -199,7 +201,7 @@ def artifact_get(
                 "this node-step completes)"
             ) from exc
         raise
-    _, artifact = decode_answer(resp, TypeAdapter(WorkerArtifact), verb="artifact get", where="artifacts")
+    _, artifact = decode_answer(resp, TypeAdapter(WorkerArtifact), verb="artifact get", where=worker.runner_url)
     if not content:
         click.echo(resp.text)
         return
@@ -249,7 +251,7 @@ def artifact_create(name: str, scope: str | None) -> None:
         rejected=f"could not record {name!r}, nothing was stored",
         json_body={"name": name, "content": content},
     )
-    _, body = decode_answer(resp, TypeAdapter(AttachmentResponse), verb="artifact create", where="attachments")
+    _, body = decode_answer(resp, TypeAdapter(AttachmentResponse), verb="artifact create", where=worker.runner_url)
     click.echo(f"recorded {body.name!r} ({body.bytes} bytes)")
 
 
@@ -274,7 +276,9 @@ def artifact_staged(content: bool, scope: str | None) -> None:
     _refuse_read_only_scope("staged", scope)
     worker = WorkerCall.of("artifact staged")
     resp = worker.get(worker.leased("attachments"), failure="could not read the staged artifacts")
-    _, staged = decode_answer(resp, TypeAdapter(list[StagedAttachment]), verb="artifact staged", where="attachments")
+    _, staged = decode_answer(
+        resp, TypeAdapter(list[StagedAttachment]), verb="artifact staged", where=worker.runner_url
+    )
     if content:
         click.echo(resp.text)
         return
@@ -325,7 +329,7 @@ def artifact_commit(environment_id: str | None, repo: str, branch: str, commit_s
         json_body=body,
     )
     _, answer = decode_answer(
-        resp, TypeAdapter(GitCommitDeclarationResponse), verb="artifact commit", where="git-commits"
+        resp, TypeAdapter(GitCommitDeclarationResponse), verb="artifact commit", where=worker.runner_url
     )
     click.echo(f"recorded {repo!r} at {branch!r} ({commit_sha})")
     note = answer.note

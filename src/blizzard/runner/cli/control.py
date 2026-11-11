@@ -3,10 +3,9 @@ requeue, selftest."""
 
 from __future__ import annotations
 
-from collections.abc import Mapping
 from dataclasses import dataclass
 from datetime import datetime
-from typing import Any, cast
+from typing import cast
 
 import click
 from pydantic import TypeAdapter
@@ -23,25 +22,29 @@ from blizzard.foundation.unrecognized import Unrecognized
 from blizzard.runner.cli.children import command_children
 from blizzard.runner.cli.daemon import Door, RunnerDaemon, runner_option
 from blizzard.runner.cli.env import DEFAULT_DIR, ENV_RUNNER_DIR
-from blizzard.runner.cli.response import decode_answer
 from blizzard.runner.cli.traces import harness_telemetry_lines
 from blizzard.runner.hub.identity import IdentityVerdict
 from blizzard.runner.process.child_env import ChildEnv
 from blizzard.runner.process.child_processes import ShellCommand
 from blizzard.runner.subscriptions.credential_renewer import RENEWAL_FAILURE_TEXT
 from blizzard.runner.subscriptions.subscription_sampler import MISS_REASON_TEXT
-from blizzard.wire.decision import OpenDecisionsResponse
+from blizzard.wire.decision import DecisionView, OpenDecisionsResponse
 from blizzard.wire.lease import LeaseListResponse
+from blizzard.wire.runner import UnenforceableGateView
 from blizzard.wire.runner_control import RunnerControlView
-from blizzard.wire.runner_host import HostEnvironmentListResponse, HostSubscriptionListResponse
+from blizzard.wire.runner_host import HostEnvironmentListResponse, HostSubscriptionListResponse, HostSubscriptionView
 from blizzard.wire.runner_selftest import SelfTestView
 from blizzard.wire.runner_status import (
     AskListResponse,
     EscalationListResponse,
+    EscalationView,
     HarnessHealthListResponse,
+    HarnessHealthView,
     IdentityVerdictView,
     OpenTakeoverListResponse,
     RunnerStatusView,
+    ServedProjectStatusView,
+    ThrottleStatusView,
 )
 from blizzard.wire.runner_traces import RunnerTraceStatusResponse
 from blizzard.wire.takeover import TakeoverOpenResponse
@@ -60,21 +63,18 @@ def _set_local_paused(
 ) -> None:
     """PATCH the runner singleton's own pause brake — the declarative pattern applied locally."""
     with RunnerDaemon.reach("pause" if paused else "start", directory, runner_url, door, runner) as daemon:
-        _, answer = decode_answer(
-            daemon.patch("/api/runner", json_body={"paused": paused, "by": by}),
-            TypeAdapter(RunnerControlView),
-            verb="pause" if paused else "start",
-            where="/api/runner",
+        _, answer = daemon.decode_answer(
+            daemon.patch("/api/runner", json_body={"paused": paused, "by": by}), TypeAdapter(RunnerControlView)
         )
-        view = answer.model_dump(mode="json")
+        view = answer
     if paused:
-        click.echo(f"runner {view['runner_name']} is now locally paused — it starts no new workers")
-        if view.get("hub_paused"):
-            click.echo(_hub_pause_note("is also", view.get("runner_id")))
+        click.echo(f"runner {view.runner_name} is now locally paused — it starts no new workers")
+        if view.hub_paused:
+            click.echo(_hub_pause_note("is also", view.runner_id))
         return
-    click.echo(f"runner {view['runner_name']} is no longer locally paused")
-    if view.get("hub_paused"):
-        click.echo(_hub_pause_note("stays", view.get("runner_id")))
+    click.echo(f"runner {view.runner_name} is no longer locally paused")
+    if view.hub_paused:
+        click.echo(_hub_pause_note("stays", view.runner_id))
 
 
 def _hub_pause_note(stance: str, runner_id: str | None) -> str:
@@ -88,7 +88,7 @@ def _hub_pause_note(stance: str, runner_id: str | None) -> str:
     return f"note: it {stance} paused at the hub — clear that with `blizzard hub runner resume {runner_id}`"
 
 
-def gate_decision_lines(decisions: list[dict[str, Any]] | None) -> list[str]:
+def gate_decision_lines(decisions: list[DecisionView] | None) -> list[str]:
     """The ``gate decisions`` section: each open decision this runner's gates imposed, or a single ``hub unreachable``
     line when the hub could not answer (``None``)."""
     if decisions is None:
@@ -96,25 +96,25 @@ def gate_decision_lines(decisions: list[dict[str, Any]] | None) -> list[str]:
     return [
         "",
         f"gate decisions ({len(decisions)}):",
-        *(f"  chunk={d['chunk_id']}  node={d['node_name']}  parked at {d['submitted_at']}" for d in decisions),
+        *(f"  chunk={d.chunk_id}  node={d.node_name}  parked at {d.submitted_at}" for d in decisions),
     ]
 
 
-def _gates_line(gates: list[str], unenforceable: list[dict[str, Any]] | None) -> str:
+def _gates_line(gates: list[str], unenforceable: list[UnenforceableGateView] | None) -> str:
     """The configured gates, each the hub flagged annotated with why it can never hold a chunk; plain until a hub that
     reports flags has answered."""
-    reasons = {flag["node"]: flag["reason"] for flag in unenforceable or []}
+    reasons = {flag.node: flag.reason for flag in unenforceable or []}
     return ", ".join(f"{g} (not enforceable: {reasons[g]})" if g in reasons else g for g in gates) or "none"
 
 
-def _served_line(served: list[dict[str, Any]] | None) -> str | None:
+def _served_line(served: list[ServedProjectStatusView] | None) -> str | None:
     """The status's ``serves:`` line — each project the hub resolved, by slug, then each entry no project
     answers to and each configured entry not answered yet, marked so — or ``None`` when nothing names any."""
     if served is None:
         return None
-    resolved = [p.get("slug") or p["entry"] for p in served if p["resolved"]]
-    unresolved = [f'"{p["entry"]}"' for p in served if p.get("answered", True) and not p["resolved"]]
-    pending = [f'"{p["entry"]}"' for p in served if not p.get("answered", True)]
+    resolved = [p.slug or p.entry for p in served if p.resolved]
+    unresolved = [f'"{p.entry}"' for p in served if p.answered and not p.resolved]
+    pending = [f'"{p.entry}"' for p in served if not p.answered]
     parts = [", ".join(resolved)] if resolved else ([] if pending else ["nothing"])
     if unresolved:
         parts.append(f"unresolved: {', '.join(unresolved)}")
@@ -123,39 +123,39 @@ def _served_line(served: list[dict[str, Any]] | None) -> str | None:
     return f"  serves: {'; '.join(parts)}"
 
 
-def _tenant_part(view: dict[str, Any]) -> str:
+def _tenant_part(view: RunnerStatusView) -> str:
     """The tenant clause of the status headline — ``"  tenant=acme (tn_1)"`` — or empty until a hub that
     names the runner's tenant has answered."""
-    tenant_id = view.get("tenant_id")
+    tenant_id = view.tenant_id
     if tenant_id is None:
         return ""
-    return f"  tenant={view.get('tenant_name') or tenant_id} ({tenant_id})"
+    return f"  tenant={view.tenant_name or tenant_id} ({tenant_id})"
 
 
-def throttle_lines(throttle: dict[str, Any] | None) -> list[str]:
+def throttle_lines(throttle: ThrottleStatusView | None) -> list[str]:
     if throttle is None:
         return []
-    declining = ", ".join(throttle.get("declining", [])) or "none"
-    floor = throttle["floor"]
-    target = floor.get("subscription") or "runner"
-    hold = floor.get("hold")
-    answer = "admit" if floor["admits"] else "hold"
+    declining = ", ".join(throttle.declining) or "none"
+    floor = throttle.floor
+    target = floor.subscription or "runner"
+    hold = floor.hold
+    answer = "admit" if floor.admits else "hold"
     if hold is not None:
-        until = hold.get("grace_opens_at") or hold["expected_reset"]
-        detail = f"{hold['kind']} ({hold.get('window') or hold.get('harness_id') or 'usage limit'}), until {until}"
-        if hold["awaits_sample"]:
-            detail += f"; reset {hold['expected_reset']}, awaiting sample"
-    elif (clear := floor.get("clear")) is not None:
-        detail = f"hand clear by {clear['by']} at {clear['cleared_at']}"
+        until = hold.grace_opens_at or hold.expected_reset
+        detail = f"{hold.kind} ({hold.window or hold.harness_id or 'usage limit'}), until {until}"
+        if hold.awaits_sample:
+            detail += f"; reset {hold.expected_reset}, awaiting sample"
+    elif (clear := floor.clear) is not None:
+        detail = f"hand clear by {clear.by} at {clear.cleared_at}"
     else:
         detail = "open"
-    lines = [f"  throttle: {throttle['state']} (declining: {declining})", f"    floor ({target}): {answer} — {detail}"]
-    for lever in throttle.get("levers", []):
+    lines = [f"  throttle: {throttle.state} (declining: {declining})", f"    floor ({target}): {answer} — {detail}"]
+    for lever in throttle.levers:
         lines.append(
-            f"    {lever['name']} ({lever['setting']}): {'admit' if lever['admits'] else 'hold'}"
-            f" — {lever['reading']}; until {lever['until'] or 'none'}"
+            f"    {lever.name} ({lever.setting}): {'admit' if lever.admits else 'hold'}"
+            f" — {lever.reading}; until {lever.until or 'none'}"
         )
-    lines.append(f"    on_decline: {throttle['on_decline']}; on_usage_limit: {throttle['on_usage_limit']}")
+    lines.append(f"    on_decline: {throttle.on_decline}; on_usage_limit: {throttle.on_usage_limit}")
     return lines
 
 
@@ -167,12 +167,12 @@ class SessionLabel:
     Empty when the escalation carries none of the three, so a bare line reads as
     "not recorded" rather than inventing one."""
 
-    escalation: dict[str, Any]
+    escalation: EscalationView
 
     @property
     def text(self) -> str:  # ast-grep-ignore: bzh:property-delegates
-        pool = self.escalation.get("session_name")
-        config = ", ".join(str(v) for v in (self.escalation.get("model"), self.escalation.get("effort")) if v)
+        pool = self.escalation.session_name
+        config = ", ".join(str(v) for v in (self.escalation.model, self.escalation.effort) if v)
         if not pool and not config:
             return ""
         if not pool:
@@ -210,158 +210,134 @@ def status(ctx: click.Context, directory: str, runner_url: str | None, runner: s
         escalations_resp = daemon.get("/api/escalations")
         takeovers_resp = daemon.get("/api/takeovers")
         subscriptions_resp = daemon.get_from_host("/api/host/subscriptions")
-        _, escalations_answer = decode_answer(
-            escalations_resp, TypeAdapter(EscalationListResponse), verb="status", where="/api/escalations"
-        )
-        escalations = escalations_answer.model_dump(mode="json")["items"]
-        harness_health: list[dict[str, Any]] = []
-        if any(esc.get("cause") == EscalationCause.NO_ACCEPTABLE_HARNESS for esc in escalations):
-            _, health_answer = decode_answer(
-                daemon.get("/api/harness-health"),
-                TypeAdapter(HarnessHealthListResponse),
-                verb="status",
-                where="/api/harness-health",
+        _, escalations_answer = daemon.decode_answer(escalations_resp, TypeAdapter(EscalationListResponse))
+        escalations = escalations_answer.items
+        harness_health: list[HarnessHealthView] = []
+        if any(esc.cause == EscalationCause.NO_ACCEPTABLE_HARNESS for esc in escalations):
+            _, health_answer = daemon.decode_answer(
+                daemon.get("/api/harness-health"), TypeAdapter(HarnessHealthListResponse)
             )
-            harness_health = health_answer.model_dump(mode="json")["items"]
+            harness_health = health_answer.items
         # Not raised on: a runner that cannot serve its trace status still renders every other section.
         traces_resp = daemon.send("get", "/api/traces/status")
         # Not raised on: the decisions live on the hub, so a hub that cannot answer costs only this section.
         decisions_resp = daemon.send("get", "/api/gate-decisions")
 
-    _, typed_view = decode_answer(view_resp, TypeAdapter(RunnerStatusView), verb="status", where="/api/runner")
-    _, typed_leases = decode_answer(leases_resp, TypeAdapter(LeaseListResponse), verb="status", where="/api/leases")
-    _, envs_answer = decode_answer(
-        envs_resp, TypeAdapter(HostEnvironmentListResponse), verb="status", where="/api/host/environments"
-    )
-    _, asks_answer = decode_answer(asks_resp, TypeAdapter(AskListResponse), verb="status", where="/api/asks")
-    _, takeovers_answer = decode_answer(
-        takeovers_resp, TypeAdapter(OpenTakeoverListResponse), verb="status", where="/api/takeovers"
-    )
-    _, subscriptions_answer = decode_answer(
-        subscriptions_resp, TypeAdapter(HostSubscriptionListResponse), verb="status", where="/api/host/subscriptions"
-    )
+    _, typed_view = daemon.decode_answer(view_resp, TypeAdapter(RunnerStatusView))
+    _, typed_leases = daemon.decode_answer(leases_resp, TypeAdapter(LeaseListResponse))
+    _, envs_answer = daemon.decode_answer(envs_resp, TypeAdapter(HostEnvironmentListResponse))
+    _, asks_answer = daemon.decode_answer(asks_resp, TypeAdapter(AskListResponse))
+    _, takeovers_answer = daemon.decode_answer(takeovers_resp, TypeAdapter(OpenTakeoverListResponse))
+    _, subscriptions_answer = daemon.decode_answer(subscriptions_resp, TypeAdapter(HostSubscriptionListResponse))
     traces = (
-        decode_answer(traces_resp, TypeAdapter(RunnerTraceStatusResponse), verb="status", where="/api/traces/status")[1]
-        if traces_resp.is_success
-        else None
+        daemon.decode_answer(traces_resp, TypeAdapter(RunnerTraceStatusResponse))[1] if traces_resp.is_success else None
     )
     decisions_data = (
-        decode_answer(decisions_resp, TypeAdapter(OpenDecisionsResponse), verb="status", where="/api/gate-decisions")[1]
+        daemon.decode_answer(decisions_resp, TypeAdapter(OpenDecisionsResponse))[1]
         if decisions_resp.is_success
         else None
     )
 
-    view = typed_view.model_dump(mode="json")
-    leases_data = typed_leases.model_dump(mode="json")
-    envs_data = envs_answer.model_dump(mode="json")
-    asks_data = asks_answer.model_dump(mode="json")
-    takeovers_data = takeovers_answer.model_dump(mode="json")
-    subscriptions_data = subscriptions_answer.model_dump(mode="json")
+    view = typed_view
     click.echo(
-        f"runner {view['runner_name']} ({view.get('runner_id') or 'not registered'}){_tenant_part(view)}"
-        f"  workspace={view['workspace_id']}"
+        f"runner {view.runner_name} ({view.runner_id or 'not registered'}){_tenant_part(view)}"
+        f"  workspace={view.workspace_id}"
     )
     identity = typed_view.identity
     if identity is not None:
         echo_identity(identity)
-    pause = view["pause"]
-    brakes = [name for name, on in (("local", pause["local"]), ("hub", pause["hub"])) if on]
-    brake_state = f"paused [{'+'.join(brakes)}]" if pause["effective"] else "running"
-    reason = f" — {pause.get('local_reason')}" if pause.get("local_reason") else ""
+    pause = view.pause
+    brakes = [name for name, on in (("local", pause.local), ("hub", pause.hub)) if on]
+    brake_state = f"paused [{'+'.join(brakes)}]" if pause.effective else "running"
+    reason = f" — {pause.local_reason}" if pause.local_reason else ""
     click.echo(f"  {brake_state}{reason}")
-    for line in throttle_lines(view.get("throttle")):
+    for line in throttle_lines(view.throttle):
         click.echo(line)
-    cap = view["capacities"]
-    bindings = cap.get("bindings", [])
-    click.echo(f"  capacity: {cap['used']}/{cap['agents']} used")
+    cap = view.capacities
+    bindings = cap.bindings
+    click.echo(f"  capacity: {cap.used}/{cap.agents} used")
     for b in bindings:
-        resolved = "" if b.get("project_id") else " (unresolved)"
-        click.echo(f"    {b['project']}{resolved} -> {b['workspace_id']}: {b['used']} working")
-    for conflict in view.get("routing_conflicts", []):
+        resolved = "" if b.project_id else " (unresolved)"
+        click.echo(f"    {b.project}{resolved} -> {b.workspace_id}: {b.used} working")
+    for conflict in view.routing_conflicts:
         click.echo(
-            f"  NOT CLAIMING: {', '.join(conflict['entries'])} all resolve to project {conflict['project_id']}"
+            f"  NOT CLAIMING: {', '.join(conflict.entries)} all resolve to project {conflict.project_id}"
             " — bind each project once"
         )
-    hub = view["hub"]
-    reachability = "reachable" if hub["reachable"] else "unreachable"
-    contact = hub["last_contact_at"] or "never"
-    click.echo(f"  hub: {reachability} (last contact {contact}), {hub['buffer_depth']} fact(s) buffered")
-    click.echo(f"  last tick: {view['last_tick_at'] or 'never'}")
-    click.echo(f"  gates: {_gates_line(view['gates'], view.get('unenforceable_gates'))}")
-    served = _served_line(view.get("served_projects"))
+    hub = view.hub
+    reachability = "reachable" if hub.reachable else "unreachable"
+    contact = hub.last_contact_at or "never"
+    click.echo(f"  hub: {reachability} (last contact {contact}), {hub.buffer_depth} fact(s) buffered")
+    click.echo(f"  last tick: {view.last_tick_at or 'never'}")
+    click.echo(f"  gates: {_gates_line(view.gates, view.unenforceable_gates)}")
+    served = _served_line(view.served_projects)
     if served is not None:
         click.echo(served)
 
-    leases = [
-        raw
-        for raw, typed in zip(leases_data.get("items", []), typed_leases.items, strict=True)
-        if typed.liveness != LeaseLiveness.ENDED
-    ]
+    leases = [lease for lease in typed_leases.items if lease.liveness != LeaseLiveness.ENDED]
     click.echo(f"\nleases ({len(leases)}):")
     for lease in leases:
-        click.echo(f"  {lease['lease_id']}  {lease['state']:<12} chunk={lease['chunk_id']} node={lease['node_name']}")
+        click.echo(f"  {lease.lease_id}  {lease.state!s:<12} chunk={lease.chunk_id} node={lease.node_name}")
 
     # `GET /api/host/environments` carries every workspace's whole pool; this section
     # is this runner's *held*-environments view, so it keeps the slots this runner holds.
     envs = [
         env
-        for workspace in envs_data.get("workspaces", [])
-        for env in workspace.get("items", [])
-        if env.get("held") and env.get("runner_id") == runner_id
+        for workspace in envs_answer.workspaces
+        for env in workspace.items
+        if env.held and env.runner_id == runner_id
     ]
     click.echo(f"\nheld environments ({len(envs)}):")
     for env in envs:
-        click.echo(f"  {env['environment_id']}  chunk={env['chunk_id']}  held since {env['held_since']}")
+        click.echo(f"  {env.environment_id}  chunk={env.chunk_id}  held since {env.held_since}")
     # Absent from a runner that predates the field; each one still holds its lease and agent slot.
-    unmatched: list[dict[str, Any]] = view.get("unmatched_bindings") or []
+    unmatched = view.unmatched_bindings
     if unmatched:
         click.echo(f"\nheld bindings matching no workspace ({len(unmatched)}):")
         for binding in unmatched:
             click.echo(
-                f"  {binding['environment_id']}  chunk={binding['chunk_id']}  workdir={binding['workdir']}"
-                f"  held since {binding['held_since']}"
+                f"  {binding.environment_id}  chunk={binding.chunk_id}  workdir={binding.workdir}"
+                f"  held since {binding.held_since}"
             )
 
-    asks = asks_data.get("items", [])
+    asks = asks_answer.items
     click.echo(f"\nopen asks ({len(asks)}):")
     for ask in asks:
-        opts = f"  [{'|'.join(ask.get('options') or [])}]" if ask.get("options") else ""
-        click.echo(f"  {ask['question_id']}  (chunk {ask['chunk_id']}): {ask['question']}{opts}")
+        opts = f"  [{'|'.join(ask.options or [])}]" if ask.options else ""
+        click.echo(f"  {ask.question_id}  (chunk {ask.chunk_id}): {ask.question}{opts}")
 
-    for line in gate_decision_lines(decisions_data.model_dump(mode="json")["decisions"] if decisions_data else None):
+    for line in gate_decision_lines(decisions_data.decisions if decisions_data else None):
         click.echo(line)
 
     click.echo(f"\nescalations ({len(escalations)}):")
     for esc in escalations:
-        click.echo(
-            f"  chunk {esc['chunk_id']}  node={esc['node_id']}  since {esc['closed_at']}{SessionLabel(esc).text}"
-        )
-        if esc.get("wrapped_takeover_command"):
-            click.echo(f"    takeover: {esc.get('wrapped_takeover_command')}")
-        click.echo(f"    resume: {esc['resume_command']}")
-        if esc.get("cause"):
-            click.echo(f"    cause: {esc.get('cause')}")
-        if esc.get("cause") == EscalationCause.NO_ACCEPTABLE_HARNESS:
+        click.echo(f"  chunk {esc.chunk_id}  node={esc.node_id}  since {esc.closed_at}{SessionLabel(esc).text}")
+        if esc.wrapped_takeover_command:
+            click.echo(f"    takeover: {esc.wrapped_takeover_command}")
+        click.echo(f"    resume: {esc.resume_command}")
+        if esc.cause:
+            click.echo(f"    cause: {esc.cause}")
+        if esc.cause == EscalationCause.NO_ACCEPTABLE_HARNESS:
             for health in harness_health:
-                availability = "available" if health["available"] else "unavailable"
-                click.echo(f"    harness {health['harness_id']}: {availability}, cause={health['cause'] or 'none'}")
+                availability = "available" if health.available else "unavailable"
+                click.echo(f"    harness {health.harness_id}: {availability}, cause={health.cause or 'none'}")
 
-    takeovers = takeovers_data.get("items", [])
+    takeovers = takeovers_answer.items
     click.echo(f"\nopen takeovers ({len(takeovers)}):")
     for tko in takeovers:
-        click.echo(f"  chunk {tko['chunk_id']}  takeover={tko['takeover_id']}  held since {tko['held_since']}")
+        click.echo(f"  chunk {tko.chunk_id}  takeover={tko.takeover_id}  held since {tko.held_since}")
 
-    subscriptions = [sub for sub in subscriptions_data.get("items", []) if runner_id in sub.get("spenders", [])]
+    subscriptions = [sub for sub in subscriptions_answer.items if runner_id in sub.spenders]
     click.echo(f"\nsubscriptions ({len(subscriptions)}):")
     for sub in subscriptions:
-        if sub["sampled_at"] is None:
-            click.echo(f"  {sub['slug']} ({sub['provider']}): never sampled")
-        elif sub.get("ok") and sub.get("condition") is None:
-            click.echo(f"  {sub['slug']} ({sub['provider']}): ok, sampled at {sub['sampled_at']}")
+        if sub.sampled_at is None:
+            click.echo(f"  {sub.slug} ({sub.provider}): never sampled")
+        elif sub.ok and sub.condition is None:
+            click.echo(f"  {sub.slug} ({sub.provider}): ok, sampled at {sub.sampled_at}")
         else:
-            reason = sub.get("miss_reason") or sub.get("condition") or "unknown"
-            miss_text = MISS_REASON_TEXT.get(SampleMissReason(reason), reason) if reason in SampleMissReason else reason
-            click.echo(f"  {sub['slug']} ({sub['provider']}): miss ({miss_text}), last attempt {sub['sampled_at']}")
+            reason = sub.miss_reason if sub.miss_reason is not None else sub.condition
+            miss_text = _miss_reason_text(reason)
+            click.echo(f"  {sub.slug} ({sub.provider}): miss ({miss_text}), last attempt {sub.sampled_at}")
         renewal = renewal_text(sub)
         if renewal is not None:
             click.echo(f"    renewal: {renewal}")
@@ -532,19 +508,17 @@ def takeover(
         if resp.status_code == 409:
             raise click.ClickException(f"takeover: {resp.json().get('detail', 'chunk is not takeable')}")
         resp.raise_for_status()
-        _, answer = decode_answer(
-            resp, TypeAdapter(TakeoverOpenResponse), verb="takeover", where=f"/api/chunks/{chunk_id}/takeovers"
-        )
-        view = answer.model_dump(mode="json")
-        click.echo(f"taking over chunk {chunk_id} in {view['workdir']}: {view['command']}")
+        _, answer = daemon.decode_answer(resp, TypeAdapter(TakeoverOpenResponse))
+        view = answer
+        click.echo(f"taking over chunk {chunk_id} in {view.workdir}: {view.command}")
         try:
             exit_code = command_children(ctx).run_foreground(
-                ShellCommand(view["command"]),
-                cwd=view["workdir"],
-                env=ChildEnv.operator_shell(view.get("env", {})),
+                ShellCommand(view.command),
+                cwd=view.workdir,
+                env=ChildEnv.operator_shell(view.env),
             )
         finally:
-            daemon.patch(f"/api/chunks/{chunk_id}/takeovers/{view['takeover_id']}")
+            daemon.patch(f"/api/chunks/{chunk_id}/takeovers/{view.takeover_id}")
     if exit_code != 0:
         raise SystemExit(exit_code)
 
@@ -552,15 +526,12 @@ def takeover(
 def _end_open_takeover(chunk_id: str, directory: str, runner_url: str | None, runner: str | None, door: Door) -> None:
     """Close the chunk's open takeover through the runner's own API; idempotent when none is open."""
     with RunnerDaemon.reach("takeover", directory, runner_url, door, runner) as daemon:
-        _, answer = decode_answer(
-            daemon.get("/api/takeovers"), TypeAdapter(OpenTakeoverListResponse), verb="takeover", where="/api/takeovers"
-        )
-        data = answer.model_dump(mode="json")
-        open_for_chunk = [t for t in data.get("items", []) if t["chunk_id"] == chunk_id]
+        _, answer = daemon.decode_answer(daemon.get("/api/takeovers"), TypeAdapter(OpenTakeoverListResponse))
+        open_for_chunk = [t for t in answer.items if t.chunk_id == chunk_id]
         if not open_for_chunk:
             click.echo(f"no open takeover for chunk {chunk_id}")
             return
-        takeover_id = open_for_chunk[0]["takeover_id"]
+        takeover_id = open_for_chunk[0].takeover_id
         resp = daemon.send("patch", f"/api/chunks/{chunk_id}/takeovers/{takeover_id}")
         if resp.status_code == 404:
             click.echo(f"takeover {takeover_id} on chunk {chunk_id} was already ended elsewhere")
@@ -630,43 +601,51 @@ def selftest(
         if resp.status_code == 422:
             raise click.ClickException(resp.json().get("detail", "unknown coding harness"))
         resp.raise_for_status()
-        _, answer = decode_answer(resp, TypeAdapter(SelfTestView), verb="selftest", where="/api/selftests")
-        run = answer.model_dump(mode="json")
+        _, answer = daemon.decode_answer(resp, TypeAdapter(SelfTestView))
+        run = answer
         monotonic_clock = CliCollaborators.of(ctx).monotonic_clock
         deadline = monotonic_clock.monotonic() + _SELFTEST_POLL_TIMEOUT
-        while run["status"] == "running":
+        while run.status == "running":
             if monotonic_clock.monotonic() > deadline:
                 raise click.ClickException(
-                    f"selftest {run['id']} did not finish within {_SELFTEST_POLL_TIMEOUT:g}s — the runner may be wedged"
+                    f"selftest {run.id} did not finish within {_SELFTEST_POLL_TIMEOUT:g}s — the runner may be wedged"
                 )
             monotonic_clock.sleep(_SELFTEST_POLL_INTERVAL)
-            path = f"/api/selftests/{run['id']}"
-            _, answer = decode_answer(daemon.get(path), TypeAdapter(SelfTestView), verb="selftest", where=path)
-            run = answer.model_dump(mode="json")
+            path = f"/api/selftests/{run.id}"
+            _, answer = daemon.decode_answer(daemon.get(path), TypeAdapter(SelfTestView))
+            run = answer
 
-    for check in run["checks"]:
-        mark = "PASS" if check["passed"] else "FAIL"
-        click.echo(f"[{mark}] {check['name']}: {check['detail']}")
-    if run["status"] != "passed":
-        if run.get("error"):
-            click.echo(f"selftest error: {run['error']}", err=True)
-        click.echo(f"selftest {run['id']} FAILED for {coding_harness}", err=True)
+    for check in run.checks:
+        mark = "PASS" if check.passed else "FAIL"
+        click.echo(f"[{mark}] {check.name}: {check.detail}")
+    if run.status != "passed":
+        if run.error:
+            click.echo(f"selftest error: {run.error}", err=True)
+        click.echo(f"selftest {run.id} FAILED for {coding_harness}", err=True)
         raise click.exceptions.Exit(1)
-    click.echo(f"selftest {run['id']} passed for {coding_harness}")
+    click.echo(f"selftest {run.id} passed for {coding_harness}")
 
 
-def renewal_text(sub: Mapping[str, object]) -> str | None:
+def _miss_reason_text(reason: SampleMissReason | Unrecognized | None) -> str:
+    if reason is None:
+        return "None"
+    if isinstance(reason, SampleMissReason):
+        return MISS_REASON_TEXT[reason]
+    return str(reason)
+
+
+def renewal_text(sub: HostSubscriptionView) -> str | None:
     """One subscription's newest credential renewal in operator words, from the wire's typed
     fields alone — ``None`` when it was never renewed."""
-    result = RenewalResult.recognized(sub.get("renewal_result"))
+    result = sub.renewal_result
     if result is None:
         return None
-    attempted_at = sub.get("renewal_attempted_at")
+    attempted_at = sub.renewal_attempted_at
     if result is RenewalResult.RENEWED:
         return f"renewed at {attempted_at}"
     if result is RenewalResult.FAILED:
-        reason = RenewalFailureReason.recognized(sub.get("renewal_failure_reason"))
-        cause = RENEWAL_FAILURE_TEXT[reason] if reason is not None else "unknown cause"
+        reason = sub.renewal_failure_reason
+        cause = RENEWAL_FAILURE_TEXT[reason] if isinstance(reason, RenewalFailureReason) else "unknown cause"
         return f"failed ({cause}) at {attempted_at}"
     return f"attempted at {attempted_at}, outcome not recorded"
 
