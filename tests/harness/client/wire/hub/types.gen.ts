@@ -1424,6 +1424,10 @@ export type CadenceView = {
  * Repository terms captured by the submission's first turn.
  */
 export type CapturedLandingTermsView = {
+    /**
+     * Allow No Ci
+     */
+    allow_no_ci: boolean;
     landing_policy: LandingPolicyName;
     /**
      * Landing Position
@@ -12055,6 +12059,10 @@ export type RepositoryCoordinateTakenProblem = {
  */
 export type RepositoryCreateRequest = {
     /**
+     * Allow No Ci
+     */
+    allow_no_ci?: boolean;
+    /**
      * Base Branch
      */
     base_branch: string;
@@ -12095,6 +12103,10 @@ export type RepositoryCreateRequest = {
  * A version-2 repository entry, naming its forge instead of an address.
  */
 export type RepositoryEntry = {
+    /**
+     * Allow No Ci
+     */
+    allow_no_ci?: boolean;
     /**
      * Base Branch
      */
@@ -12243,6 +12255,10 @@ export type RepositoryNotFoundProblem = {
  */
 export type RepositoryPatchRequest = {
     /**
+     * Allow No Ci
+     */
+    allow_no_ci?: boolean | null;
+    /**
      * Base Branch
      */
     base_branch?: string | null;
@@ -12313,6 +12329,10 @@ export type RepositorySlugTakenProblem = {
  * what every stored reference holds; ``slug`` is the handle people type, and ``name`` a display label.
  */
 export type RepositorySummary = {
+    /**
+     * Allow No Ci
+     */
+    allow_no_ci: boolean;
     /**
      * Base Branch
      */

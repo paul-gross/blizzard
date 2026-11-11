@@ -8,11 +8,27 @@ from dataclasses import dataclass
 from typing import Any, ClassVar
 
 from blizzard.foundation.roles import domain_model
-from blizzard.hub.delivery.actions.landing.repo import Failure, Inherited, NotRecorded, RepoLanding, RepoState, Waiting
+from blizzard.hub.delivery.actions.landing.repo import (
+    Failure,
+    Inherited,
+    NeedsPerson,
+    NotRecorded,
+    RepoLanding,
+    RepoState,
+    Waiting,
+)
+from blizzard.hub.domain.actions.check_observations import (
+    GRACE,
+    marker_content,
+    marker_name,
+    missing_checks,
+    observation,
+)
 from blizzard.hub.domain.config.capabilities import Capability
 from blizzard.hub.forge.landing import (
     Check,
     CheckOutcome,
+    CheckSource,
     ForgeNotFound,
     ForgeRejected,
     ForgeUnavailable,
@@ -68,13 +84,13 @@ class Verdict:
         or empty read is never green."""
         return bool(self.checks) and all(check.outcome in _GREEN_OUTCOMES for check in self.checks or ())
 
-    def red(self, name: str) -> bool | None:
+    def red(self, name: str, source: CheckSource = CheckSource.CHECK_RUN) -> bool | None:
         """Whether this ref's own check named ``name`` failed — ``None`` on a degraded read, ``False`` when read
         but carrying no failed check of that name."""
         if self.checks is None:
             return None
         for check in self.checks:
-            if check.name == name:
+            if check.name == name and check.source is source:
                 return check.outcome is CheckOutcome.FAILED
         return False
 
@@ -84,7 +100,7 @@ class Verdict:
                 "name": check.name,
                 "conclusion": check.detail,
                 "details_url": check.details_url,
-                "base_red": base.red(check.name),
+                "base_red": base.red(check.name, check.source),
             }
             for check in self.failing
         ]
@@ -144,6 +160,26 @@ async def read_verdict(repo: RepoLanding, ref: str) -> Verdict:
         return Verdict(None)
 
 
+async def eligibility(repo: RepoLanding, sha: str, verdict: Verdict) -> bool | Waiting | NeedsPerson:
+    """Apply the same empty-check policy to each landing candidate."""
+    if verdict.green:
+        return True
+    if verdict.checks != ():
+        return False
+    if repo.record.allow_no_ci:
+        return True
+    visit = repo.run.visit
+    first = observation(visit.markers, visit.epoch, repo.record.record, sha)
+    if first is None:
+        await repo.run.post(
+            marker_name(repo.record.record, sha), marker_content(repo.repo, repo.record.landing_policy, sha, visit.now)
+        )
+        return Waiting(f"{repo.repo}: waiting for checks on {sha}")
+    if visit.now - first >= GRACE:
+        return NeedsPerson(missing_checks(repo.repo, repo.record.landing_policy, sha, first))
+    return Waiting(f"{repo.repo}: waiting for checks on {sha}")
+
+
 async def rerun_once(repo: RepoLanding, check: Check, head_sha: str) -> RerunOutcome | None:
     """Ask the forge once to re-run ``check``, then record its signature marker when it accepted. The forge's
     outcome; ``None`` when it did not answer (pinned by
@@ -184,6 +220,7 @@ async def failed_checks(
         check
         for check in failing
         if Capability.CHECKS_RERUN in repo.forge.offered
+        and check.source is CheckSource.CHECK_RUN
         and rerun_marker(repo.repo, check.name, head) not in run.visit.marker_names()
     ]
     if unsigned:

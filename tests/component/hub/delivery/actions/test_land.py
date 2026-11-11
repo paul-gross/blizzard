@@ -104,7 +104,12 @@ def test_pending_landing_polls_use_only_conditional_forge_reads_after_the_first_
         elif path == f"/repos/{_WIDGET}/pulls/1":
             body = _pending_pull()
         elif path == f"/repos/{_WIDGET}/commits/{_SUBMITTED}/check-runs":
-            body = {"check_runs": [{"id": 1, "name": "ci", "status": "in_progress", "conclusion": None}]}
+            body = {
+                "total_count": 1,
+                "check_runs": [{"id": 1, "name": "ci", "status": "in_progress", "conclusion": None}],
+            }
+        elif path == f"/repos/{_WIDGET}/commits/{_SUBMITTED}/status":
+            body = {"state": "pending", "total_count": 0, "statuses": []}
         elif path == f"/repos/{_WIDGET}/compare/main...{_SUBMITTED}":
             body = {"status": "ahead", "ahead_by": 1, "behind_by": 0, "commits": [], "files": []}
         else:
@@ -146,7 +151,7 @@ def test_pending_landing_polls_use_only_conditional_forge_reads_after_the_first_
             await asyncio.sleep(0)
 
     asyncio.run(polls())
-    assert len(answers) == 50
+    assert len(answers) == 60
     assert all(status == 304 and request.headers.get("if-none-match") for request, status in answers)
     lookups = [request for request, _ in answers if request.url.path.endswith("/pulls")]
     assert len([request for request in lookups if request.url.params["state"] == "closed"]) == 10
@@ -638,7 +643,26 @@ def test_a_pr_merged_by_an_earlier_pass_is_recovered_without_a_second_pr_or_merg
     answer, sink = _land(double)
     assert answer.choice == "landed"
     assert double.named("open_change") == []
+    assert double.named("merge") == []
     assert sink.landings()[0].revision == "m4"
+
+
+def test_a_merged_pr_recovers_without_reading_checks() -> None:
+    double = _forge(checks={_SUBMITTED: None})
+    double.repos[_WIDGET].changes[4] = change(
+        _WIDGET,
+        4,
+        branch="feat/x",
+        sha=_SUBMITTED,
+        base="main",
+        state=ChangeState.MERGED,
+        merged_revision="m4",
+        mergeability=Mergeability.MERGEABLE,
+    )
+    answer, sink = _land(double)
+    assert answer.choice == "landed"
+    assert sink.landings()[0].revision == "m4"
+    assert not double.named("checks") and not double.named("merge")
 
 
 def test_a_stale_merged_pr_on_a_reused_branch_name_is_not_a_landing() -> None:
@@ -1445,3 +1469,62 @@ def test_base_held_work_with_an_unreadable_branch_tip_is_not_no_code(tip: str) -
     assert answer.choice != "landed"
     assert not any(name.startswith("no-code/") for name in sink.markers())
     assert sink.landings() == []
+
+
+@pytest.mark.parametrize("policy", [LandingPolicy.MERGE_ON_CHECKS, LandingPolicy.FAST_FORWARD])
+def test_empty_checks_grace_is_durable_and_opt_in_is_explicit(policy: LandingPolicy) -> None:
+    double = _forge()
+    double.repos[_WIDGET].checks[_SUBMITTED] = ()
+    double.repos[_WIDGET].compares[("base-tip", _SUBMITTED)] = comparison()
+    visit = _visit()
+    target = replace(visit.resolution.targets[0], landing_policy=policy)
+    visit = replace(visit, resolution=replace(visit.resolution, targets=(target,)))
+    first, sink = _land(double, visit)
+    assert first.choice == "pending"
+    name = f"empty-checks/re_widget/{_SUBMITTED}"
+    marker = _row(ArtifactKind.ASSET, name, sink.markers()[name])
+    later = replace(visit, markers=(marker,), now=visit.now + timedelta(minutes=10))
+    answer, _ = _land(double, later)
+    assert answer.escalation is not None
+    assert answer.escalation.cause == EscalationCause.MISSING_CHECKS
+    assert _SUBMITTED in answer.escalation.detail
+    assert not double.named("merge") and not double.named("advance_ref")
+
+    opted = replace(target, allow_no_ci=True)
+    allowed = replace(visit, resolution=replace(visit.resolution, targets=(opted,)))
+    opted_double = _forge(checks={_SUBMITTED: ()}, compares={("base-tip", _SUBMITTED): comparison()})
+    opted_double.repos[_WIDGET].heads["main"] = "base-tip"
+    result, _ = _land(opted_double, allowed)
+    assert result.choice == "landed"
+
+
+@pytest.mark.parametrize("policy", [LandingPolicy.MERGE_ON_CHECKS, LandingPolicy.FAST_FORWARD])
+def test_refused_empty_marker_never_progresses(policy: LandingPolicy) -> None:
+    double = _forge(checks={_SUBMITTED: ()}, compares={("base-tip", _SUBMITTED): comparison()})
+    visit = _visit()
+    target = replace(visit.resolution.targets[0], landing_policy=policy)
+    visit = replace(visit, resolution=replace(visit.resolution, targets=(target,)))
+    answer, _ = _land(double, visit, _Sink(refuse=("empty-checks/",)))
+    assert answer.choice == "failure"
+    assert not double.named("merge") and not double.named("advance_ref")
+
+
+@pytest.mark.parametrize("policy", [LandingPolicy.MERGE_ON_CHECKS, LandingPolicy.FAST_FORWARD])
+def test_empty_grace_only_escalates_on_a_current_empty_read(policy: LandingPolicy) -> None:
+    double = _forge(checks={_SUBMITTED: ()}, compares={("base-tip", _SUBMITTED): comparison()})
+    visit = _visit()
+    target = replace(visit.resolution.targets[0], landing_policy=policy)
+    visit = replace(visit, resolution=replace(visit.resolution, targets=(target,)))
+    _, sink = _land(double, visit)
+    name = f"empty-checks/re_widget/{_SUBMITTED}"
+    marker = _row(ArtifactKind.ASSET, name, sink.markers()[name])
+    before = replace(visit, markers=(marker,), now=visit.now + timedelta(minutes=9, seconds=59))
+    assert _land(double, before)[0].choice == "pending"
+    expired = replace(before, now=visit.now + timedelta(minutes=10))
+    double.repos[_WIDGET].checks[_SUBMITTED] = None
+    assert _land(double, expired)[0].choice == "pending"
+    double.repos[_WIDGET].checks[_SUBMITTED] = (check(outcome=CheckOutcome.PENDING),)
+    assert _land(double, expired)[0].choice == "pending"
+    double.repos[_WIDGET].checks[_SUBMITTED] = ()
+    escalation = _land(double, expired)[0].escalation
+    assert escalation is not None and escalation.cause == EscalationCause.MISSING_CHECKS

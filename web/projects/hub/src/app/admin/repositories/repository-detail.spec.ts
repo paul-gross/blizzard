@@ -28,6 +28,7 @@ const CORE: RepositorySummary = {
   base_branch: 'main',
   secret_name: 'gh',
   landing_policy: 'merge-on-checks',
+  allow_no_ci: false,
   park_timeout_hours: null,
   revision: 3,
   created_at: '2026-10-01T00:00:00Z',

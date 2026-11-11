@@ -42,7 +42,7 @@ RepositoryId = NewType("RepositoryId", str)
 #: The mutable text fields, in the order a diff lists them; none may be blank.
 _FIELDS = ("forge_id", "owner", "repo", "base_branch", "secret_name")
 #: The landing fields, listed after the text fields.
-_LANDING_FIELDS = ("landing_policy", "park_timeout_hours")
+_LANDING_FIELDS = ("landing_policy", "park_timeout_hours", "allow_no_ci")
 #: Every field a diff lists, by wire name: the record's own handle and label, then the mutable fields — the forge
 #: recorded by its id under ``forge``, as every reference is held.
 _DIFF_FIELDS = ("slug", "name", "forge", *_FIELDS[1:], *_LANDING_FIELDS)
@@ -125,6 +125,7 @@ class RepositoryFields:
     secret_name: str
     landing_policy: LandingPolicy = DEFAULT_LANDING_POLICY
     park_timeout_hours: int | None = None
+    allow_no_ci: bool = False
 
 
 @domain_model
@@ -138,6 +139,7 @@ class RepositoryDraft:
     secret_name: str
     landing_policy: LandingPolicy = DEFAULT_LANDING_POLICY
     park_timeout_hours: int | None = None
+    allow_no_ci: bool = False
 
     def on(self, forge_id: ForgeId) -> RepositoryFields:
         """The fields of a repository on the forge ``forge_id``."""
@@ -149,6 +151,7 @@ class RepositoryDraft:
             self.secret_name,
             self.landing_policy,
             self.park_timeout_hours,
+            self.allow_no_ci,
         )
 
 
@@ -269,6 +272,7 @@ class RepositoryEdit:
     secret_name: str | None | UnsetType = UNSET
     landing_policy: LandingPolicy | None | UnsetType = UNSET
     park_timeout_hours: int | None | UnsetType = UNSET
+    allow_no_ci: bool | None | UnsetType = UNSET
 
 
 @domain_model
@@ -288,6 +292,7 @@ class ResolvedRepository:
     landing_policy: LandingPolicy = DEFAULT_LANDING_POLICY
     landing_position: float | None = None
     park_timeout_hours: int | None = None
+    allow_no_ci: bool = False
 
 
 @domain_model
@@ -452,6 +457,7 @@ def resolve_chunk_repositories(
                 row.repository_id,
                 row.slug,
                 row.fields.landing_policy,
+                allow_no_ci=row.fields.allow_no_ci,
             )
             for row in picked
         ),
@@ -523,6 +529,7 @@ def merge(current: RepositoryFields, edit: RepositoryEdit) -> RepositoryFields:
         secret_name=_merged_required("secret_name", current.secret_name, edit.secret_name),
         landing_policy=policy,
         park_timeout_hours=timeout,
+        allow_no_ci=_merged_required("allow_no_ci", current.allow_no_ci, edit.allow_no_ci),
     )
 
 

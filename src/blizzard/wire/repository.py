@@ -28,6 +28,7 @@ class RepositorySummary(WireModel):
     secret_name: str
     #: How the repository's changes land; a policy this build does not know is passed through as it reads.
     landing_policy: str
+    allow_no_ci: bool = False
     #: How long a parked change may wait, in hours; ``None`` reads as the default.
     park_timeout_hours: int | None = None
     revision: int
@@ -57,6 +58,7 @@ class RepositoryCreateRequest(MovedFieldsRequest):
     base_branch: str
     secret_name: str
     landing_policy: LandingPolicy = LandingPolicy.MERGE_ON_CHECKS
+    allow_no_ci: bool = False
     park_timeout_hours: int | None = None
 
 
@@ -76,6 +78,7 @@ class RepositoryPatchRequest(MovedFieldsRequest):
     base_branch: str | None = None
     secret_name: str | None = None
     landing_policy: LandingPolicy | None = None
+    allow_no_ci: bool | None = None
     park_timeout_hours: int | None = None
 
 

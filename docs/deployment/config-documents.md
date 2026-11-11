@@ -110,8 +110,11 @@ new record's entry leaves it out and as stored when an existing record's does. A
 the same kind has left is refused `422`, naming that record: name it by its current slug
 ([work-sources.md](./work-sources.md#naming-a-work-source), [repositories.md](./repositories.md#naming-a-repository)). A
 work source entry whose slug is `hub`, the built-in source's, is refused `422` at its `slug`. A repository entry may
-carry `landing_policy` and `park_timeout_hours` ([repositories.md](./repositories.md#fields)); an unknown policy, or one
-the repository's forge cannot honour, is refused `422` at the entry's `landing_policy`.
+carry `landing_policy`, `allow_no_ci`, and `park_timeout_hours` ([repositories.md](./repositories.md#fields)); an
+unknown policy, or one the repository's forge cannot honour, is refused `422` at the entry's `landing_policy`.
+`allow_no_ci` defaults to false on creation; explicitly set it to true only for a repository intentionally without CI.
+An omitted field on an existing record leaves its setting alone. See
+[delivery policy](./delivery-policy.md#checks-and-missing-ci) for the grace period and recovery of an in-flight visit.
 
 A work source or repository entry names its forge with `forge`, an id or a slug; the forge carries the API and web
 origins, so an entry carrying `forge_api_url`, `api_base`, or `web_base` is refused as an unknown field.
@@ -201,8 +204,8 @@ The response lists `outcomes`, each with a `kind`, `key`, `op` and the changed f
 live urgency in order with its icon's bytes, the `urgency_order`, and the `settings` naming the default (a routine with
 both its `slug` and `name`), and every active secret name, as a document that applies back as a no-op. `--format` is
 `yaml` (the default) or `json`. Retired records are left out, because applying one would enable it again. Each work
-source and repository is written with its `slug` and `name`, each repository with its `landing_policy` and any
-`park_timeout_hours`, and each project's `color`, `sources` and `repositories` as slugs. A project that ranks a
+source and repository is written with its `slug` and `name`, each repository with its `landing_policy`, `allow_no_ci`,
+and any `park_timeout_hours`, and each project's `color`, `sources` and `repositories` as slugs. A project that ranks a
 repository also gets its `landing_order`; one that ranks nothing gets none. A project with a link that names its own
 base branch gets its `repository_branches`; one whose links all inherit gets none. The built-in `hub` work source is
 never exported.

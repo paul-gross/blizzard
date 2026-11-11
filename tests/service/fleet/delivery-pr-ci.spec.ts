@@ -463,7 +463,7 @@ test.describe('poll timeout, on the controlled clock', () => {
     expect(await host.originHead(repo.name, 'main')).toBe(before);
   });
 
-  test('test_pr_ci_bounces_a_revision_with_no_check_at_its_poll_timeout', async ({ repository, issue, api, clock, forge, runnerHosts }) => {
+  test('test_pr_ci_escalates_a_revision_with_no_check_at_its_poll_timeout', async ({ repository, issue, api, clock, forge, runnerHosts }) => {
     const repo = await repository();
     const host = await runnerHosts.create({ runnerRepositories: { [repo.name]: repo.origin! } });
     await lever(forge, repo, 'checks_pending');
@@ -479,9 +479,8 @@ test.describe('poll timeout, on the controlled clock', () => {
     await clock.advance(1);
     await api.flowStep();
     await clock.advance(5);
-    await stepUntil(host, () => stepped(api, chunk.chunk_id), (s) => s.bounces.length > 0, { stallPasses: 80, progress: chunkProgress });
-    const bounced = (await api.get<Wire.ChunkDetail>(`/api/chunks/${chunk.chunk_id}`)).body;
-    expect(bounced.bounces[0]!.cause).toBe('poll-timeout');
+    const escalated = await stepUntil(host, () => stepped(api, chunk.chunk_id), (s) => s.status === 'needs_human', { stallPasses: 80, progress: chunkProgress });
+    expect(escalated.escalation?.cause).toBe('missing-checks');
     const result = await pulls(forge, repo);
     expect(result.length).toBeGreaterThan(0);
     expect(result.some((pull) => pull.merged)).toBe(false);

@@ -2,7 +2,7 @@ import type { hubApi, RepositorySummary } from 'fleet';
 import { describe, expect, it } from 'vitest';
 
 import { lifecycleTone } from '../../core/lifecycle-tone';
-import { createBody, missingRequired, shownFields } from '../config-edit.model';
+import { configEdit, createBody, formValuesOf, missingRequired, shownFields } from '../config-edit.model';
 import {
   landingPolicyOptions,
   REPOSITORY_FIELDS,
@@ -29,6 +29,7 @@ const BLIZZARD: RepositorySummary = {
   base_branch: 'master',
   secret_name: 'gh-blizzard',
   landing_policy: 'merge-on-checks',
+  allow_no_ci: false,
   park_timeout_hours: null,
   revision: 2,
   created_at: '2026-01-01T00:00:00Z',
@@ -75,6 +76,8 @@ describe('repositoryRecordVm', () => {
       ['Repository', 'blizzard'],
       ['Base branch', 'master'],
       ['Landing policy', 'merge on checks'],
+      ['Allow no CI', 'No'],
+      ['No CI policy', 'Only permits absent checks, not failing or pending checks. Snapshotted at the first turn of a visit; changes affect later visits.'],
       ['Created by', 'pgross'],
     ]);
     expect(vm.revision).toBe(2);
@@ -115,6 +118,17 @@ describe('repositoryRecordVm', () => {
       secret_name: 'gh-blizzard',
     });
     expect(repositoryCreate({ ...body, name: 'Blizzard' }).name).toBe('Blizzard');
+  });
+});
+
+describe('allow no CI', () => {
+  it('maps both checkbox values on create and sparse edits', () => {
+    const shown = formValuesOf(REPOSITORY_FIELDS, BLIZZARD);
+    expect(repositoryCreate(createBody(REPOSITORY_FIELDS, shown)).allow_no_ci).toBe(false);
+    expect(repositoryCreate(createBody(REPOSITORY_FIELDS, { ...shown, allow_no_ci: true })).allow_no_ci).toBe(true);
+    expect(configEdit(REPOSITORY_FIELDS, shown, { ...shown, allow_no_ci: true }).body).toEqual({ allow_no_ci: true });
+    expect(configEdit(REPOSITORY_FIELDS, { ...shown, allow_no_ci: true }, shown).body).toEqual({ allow_no_ci: false });
+    expect(repositoryRecordVm({ ...BLIZZARD, allow_no_ci: true })?.facts.find((f) => f.label === 'Allow no CI')?.value).toBe('Yes');
   });
 });
 

@@ -15,10 +15,12 @@ from blizzard.hub.delivery.actions.landing.checks import (
     CI_WATCH_STATES,
     FAILED,
     FOREIGN,
+    PUSH,
     UPDATE,
     WAIT,
     Route,
     Verdict,
+    eligibility,
     failed_checks,
     read_verdict,
 )
@@ -309,10 +311,25 @@ async def _checked(pull: PullRequest) -> RepoState:
 async def _routed(pull: PullRequest) -> RepoState:
     repo, run = pull.target, pull.target.run
     head_sha = pull.head_sha
+    if pull.merged:
+        if pull.change.merged_revision is None:
+            return Waiting(f"{pull} merged but no read carries its landed commit")
+
+        async def recovered() -> Landed:
+            assert pull.change.merged_revision is not None
+            return Landed(pull.change.merged_revision)
+
+        return Ready(recovered)
     state = pull.mergeability
     # A verdict is only worth reading for the states merge eligibility turns on — read once.
     verdict = await read_verdict(repo, head_sha) if state in CI_WATCH_STATES else None
     decision = Route(state, merged=pull.merged, verdict=verdict).decision
+    if verdict is not None and verdict.checks == ():
+        eligible = await eligibility(repo, head_sha, verdict)
+        if isinstance(eligible, (Waiting, NeedsPerson)):
+            return eligible
+        if eligible is True:
+            decision = PUSH
     if decision == BOUNCE:
         return Conflict(f"{pull} is dirty (a real merge conflict)")
     if decision == UPDATE:

@@ -137,6 +137,7 @@ def test_a_set_field_is_applied_and_the_rest_are_left() -> None:
         ("repo", "repo"),
         ("base_branch", "base_branch"),
         ("secret_name", "secret_name"),
+        ("allow_no_ci", "allow_no_ci"),
     ],
 )
 def test_an_explicit_none_is_refused_on_every_field(field: str, named: str) -> None:
@@ -155,6 +156,7 @@ def test_a_create_diff_lists_every_field_against_none() -> None:
         FieldChange("base_branch", None, "master"),
         FieldChange("secret_name", None, "gh"),
         FieldChange("landing_policy", None, LandingPolicy.MERGE_ON_CHECKS),
+        FieldChange("allow_no_ci", None, False),
     )
 
 
@@ -216,3 +218,10 @@ def test_a_policy_or_timeout_edit_is_listed_in_the_diff() -> None:
     record = _record()
     timed = replace(record, fields=replace(record.fields, park_timeout_hours=24))
     assert diff(timed, record) == (FieldChange("park_timeout_hours", 24, None),)
+
+
+def test_allow_no_ci_is_sparse_and_can_be_disabled() -> None:
+    assert _FIELDS.allow_no_ci is False
+    opted_in = merge(_FIELDS, RepositoryEdit(allow_no_ci=True))
+    assert merge(opted_in, RepositoryEdit()).allow_no_ci is True
+    assert merge(opted_in, RepositoryEdit(allow_no_ci=False)).allow_no_ci is False

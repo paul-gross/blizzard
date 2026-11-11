@@ -87,6 +87,11 @@ class CheckOutcome(StrEnum):
     NEUTRAL = "neutral"
 
 
+class CheckSource(StrEnum):
+    CHECK_RUN = "check-run"
+    STATUS = "status"
+
+
 class ForgeObject(StrEnum):
     """What a :class:`ForgeNotFound` says does not exist."""
 
@@ -187,6 +192,7 @@ class Check:
     outcome: CheckOutcome
     detail: str
     details_url: str | None
+    source: CheckSource = CheckSource.CHECK_RUN
 
 
 class ForgeError(Exception):

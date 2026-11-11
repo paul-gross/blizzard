@@ -268,6 +268,7 @@ class LandingTerms:
     landing_policy: str
     park_timeout_hours: int | None = None
     landing_position: float | None = None
+    allow_no_ci: bool = False
 
     @classmethod
     def candidate(
@@ -278,7 +279,7 @@ class LandingTerms:
         if record is None:
             return cls(repository_id, str(DEFAULT_LANDING_POLICY), None, position)
         fields = record.fields
-        return cls(repository_id, str(fields.landing_policy), fields.park_timeout_hours, position)
+        return cls(repository_id, str(fields.landing_policy), fields.park_timeout_hours, position, fields.allow_no_ci)
 
 
 @domain_model
@@ -368,6 +369,7 @@ def stamp_terms(
                 landing_policy=LandingPolicy(taken.landing_policy),
                 landing_position=taken.landing_position,
                 park_timeout_hours=taken.park_timeout_hours,
+                allow_no_ci=taken.allow_no_ci,
             )
             if (taken := terms.get(target.record)) is not None
             else replace(target, landing_position=positions.get(target.record))

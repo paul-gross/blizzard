@@ -178,7 +178,7 @@ def test_records_the_store_already_holds_are_skipped() -> None:
         repository_id=RepositoryId("repo_mine"),
         slug="mine",
         name="mine",
-        fields=RepositoryFields(_GITHUB.forge_id, "blizzard", "widget", "main", "x"),
+        fields=RepositoryFields(_GITHUB.forge_id, "blizzard", "widget", "main", "x", allow_no_ci=True),
         revision=1,
         created_at=_AT,
         created_by="op",
@@ -191,6 +191,7 @@ def test_records_the_store_already_holds_are_skipped() -> None:
     )
     values = {"BZ_FORGE_URL": "https://api.github.com"}
     plan = _plan(_legacy(_source("a", "acme/a")), values, (CommitCoordinate(None, "widget"),), existing)
+    assert held_repo.fields.allow_no_ci is True
     assert plan.secrets == plan.work_sources == plan.repositories == plan.forges == ()
     assert set(plan.outcomes) == {
         ImportOutcome(RecordKind.SECRET, "bz-shared-token", created=False),

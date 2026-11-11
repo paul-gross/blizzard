@@ -194,14 +194,14 @@ def test_change_checks_reads_the_checks_of_the_changes_head() -> None:
     harness = Harness(
         {
             ("GET", f"{REPO}/pulls/7"): [reply(200, pull())],
-            ("GET", f"{REPO}/commits/h1/check-runs"): [reply(200, {"check_runs": [workflow_run()]})],
+            ("GET", f"{REPO}/commits/h1/check-runs"): [reply(200, {"total_count": 1, "check_runs": [workflow_run()]})],
         }
     )
 
     found = harness.run(lambda forge: forge.change_checks(7))
 
     assert [c.name for c in found] == ["build"]
-    assert harness.recorded.paths() == [f"{REPO}/pulls/7", f"{REPO}/commits/h1/check-runs"]
+    assert harness.recorded.paths() == [f"{REPO}/pulls/7", f"{REPO}/commits/h1/check-runs", f"{REPO}/commits/h1/status"]
 
 
 # kept reads
@@ -224,7 +224,9 @@ async def _twice(forge: GitHubLanding) -> tuple[Any, Any]:
 
 def test_checks_always_reach_the_transport_even_after_an_all_completed_answer() -> None:
     path = f"{REPO}/commits/h1/check-runs"
-    harness = Harness({("GET", path): [reply(200, {"check_runs": [workflow_run()]}, {"ETag": '"c1"'})]})
+    harness = Harness(
+        {("GET", path): [reply(200, {"total_count": 1, "check_runs": [workflow_run()]}, {"ETag": '"c1"'})]}
+    )
 
     async def thrice(forge: GitHubLanding) -> None:
         for _ in range(3):
@@ -232,7 +234,7 @@ def test_checks_always_reach_the_transport_even_after_an_all_completed_answer() 
 
     harness.run(thrice)
 
-    assert len(harness.recorded.requests) == 3
+    assert len(harness.recorded.requests) == 6
 
 
 def test_a_304_with_nothing_kept_is_asked_again_unconditionally() -> None:

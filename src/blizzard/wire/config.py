@@ -125,6 +125,7 @@ class RepositoryEntry(BaseModel):
     base_branch: str
     secret_name: str
     landing_policy: LandingPolicy | None = None
+    allow_no_ci: bool = False
     park_timeout_hours: int | None = None
 
 

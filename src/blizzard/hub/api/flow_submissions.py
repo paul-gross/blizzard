@@ -46,6 +46,7 @@ def _view(record: SubmissionRecord) -> FlowSubmissionView:
             CapturedLandingTermsView(
                 repository_id=t.repository_id,
                 landing_policy=open_value(LandingPolicy, t.landing_policy),
+                allow_no_ci=t.allow_no_ci,
                 park_timeout_hours=t.park_timeout_hours,
                 landing_position=t.landing_position,
             )

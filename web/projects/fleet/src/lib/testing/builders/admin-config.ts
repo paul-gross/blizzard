@@ -93,6 +93,7 @@ export function repositorySummary(overrides: Partial<RepositorySummary> = {}): R
     forge_name: 'GitHub',
     forge_slug: 'github',
     landing_policy: 'merge',
+    allow_no_ci: false,
     park_timeout_hours: null,
     secret_name: 'gh-token',
     retired: false,

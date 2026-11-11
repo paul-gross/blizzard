@@ -2404,6 +2404,11 @@
       "CapturedLandingTermsView": {
         "description": "Repository terms captured by the submission's first turn.",
         "properties": {
+          "allow_no_ci": {
+            "default": false,
+            "title": "Allow No Ci",
+            "type": "boolean"
+          },
           "landing_policy": {
             "$ref": "#/components/schemas/LandingPolicyName",
             "x-blizzard-open": true
@@ -2438,6 +2443,7 @@
         "required": [
           "repository_id",
           "landing_policy",
+          "allow_no_ci",
           "park_timeout_hours",
           "landing_position"
         ],
@@ -19886,6 +19892,11 @@
         "additionalProperties": false,
         "description": "The ``POST /api/repositories`` body: every field of a repository's document entry, with ``forge`` \u2014 a forge's id\nor slug \u2014 naming the forge it is on. A body naming no forge is refused.",
         "properties": {
+          "allow_no_ci": {
+            "default": false,
+            "title": "Allow No Ci",
+            "type": "boolean"
+          },
           "base_branch": {
             "title": "Base Branch",
             "type": "string"
@@ -19958,6 +19969,11 @@
         "additionalProperties": false,
         "description": "A version-2 repository entry, naming its forge instead of an address.",
         "properties": {
+          "allow_no_ci": {
+            "default": false,
+            "title": "Allow No Ci",
+            "type": "boolean"
+          },
           "base_branch": {
             "title": "Base Branch",
             "type": "string"
@@ -20174,6 +20190,17 @@
         "additionalProperties": false,
         "description": "A sparse edit: an absent field is unchanged, a present one is set, and an explicit ``null`` is refused on every\nfield but ``park_timeout_hours``, where it clears the timeout back to its default. ``forge`` re-points the\nrepository at a forge by id or slug. A slug that changes keeps resolving to the repository until another claims\nit.",
         "properties": {
+          "allow_no_ci": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Allow No Ci"
+          },
           "base_branch": {
             "anyOf": [
               {
@@ -20318,6 +20345,11 @@
       "RepositorySummary": {
         "description": "One repository \u2014 the ``GET /api/repositories`` listing row and every record verb's view. ``repository_id`` is\nwhat every stored reference holds; ``slug`` is the handle people type, and ``name`` a display label.",
         "properties": {
+          "allow_no_ci": {
+            "default": false,
+            "title": "Allow No Ci",
+            "type": "boolean"
+          },
           "base_branch": {
             "title": "Base Branch",
             "type": "string"
@@ -20423,6 +20455,7 @@
           "base_branch",
           "secret_name",
           "landing_policy",
+          "allow_no_ci",
           "park_timeout_hours",
           "revision",
           "created_at",

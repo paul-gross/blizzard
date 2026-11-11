@@ -31,6 +31,7 @@ from blizzard.hub.delivery.action_registry import HubActions
 from blizzard.hub.delivery.actions.base import IHubAction
 from blizzard.hub.delivery.flow_changes import publish_flow_facts
 from blizzard.hub.delivery.hub_node import HUB_LOG_PREFIX, BouncedAction, HubNodeRouter
+from blizzard.hub.domain.actions.check_observations import timeout_observation
 from blizzard.hub.domain.actions.effects import (
     ActionEscalation,
     Effect,
@@ -330,7 +331,12 @@ class TurnRunner:
             return None
         pending_since = facts.hub_node_pending_since(node_id=node.node_id, epoch=epoch)
         if pending_since is not None and self._clock.now() - pending_since >= PollPolicy.of(node).timeout:
-            self._router.route_pending_timeout(chunk, graph, node, epoch=epoch, ending=ending)
+            markers = tuple(self._artifacts.load_artifacts(chunk.chunk_id)) if node.action == "land" else ()
+            missing = timeout_observation(markers, node.node_id, epoch)
+            if missing is not None:
+                self._router.escalate(chunk, missing, epoch=epoch, ending=ending)
+            else:
+                self._router.route_pending_timeout(chunk, graph, node, epoch=epoch, ending=ending)
             return None
         action = self._actions.action(node.action) if node.action is not None else None
         return self.resolve(at, action, submission, ending, cut_off)
