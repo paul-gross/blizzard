@@ -63,6 +63,15 @@ fleet-kit-panel {
   flex: 1;
   min-width: 0;
 }
+.rp-urgency {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 8px;
+  margin: 0;
+}
+.rp-urgency dd {
+  margin: 0;
+}
 .rp-dim {
   color: var(--label);
 }

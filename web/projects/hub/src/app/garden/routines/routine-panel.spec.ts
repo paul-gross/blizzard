@@ -542,6 +542,15 @@ describe('FleetRoutinePanel', () => {
     await fixture.whenStable();
     expect(el.querySelector('[data-testid="gardening-routine-panel-graph-input"]')).toBeNull();
   });
+  it('renders read-only urgency as a labelled fact', async () => {
+    const fixture = await mount({});
+    const fact = (fixture.nativeElement as HTMLElement).querySelector('[data-testid="gardening-routine-urgency"]')!;
+    expect(fact.tagName.toLowerCase()).toBe('dl');
+    expect(fact.querySelector('dt')?.textContent?.trim()).toBe('Default urgency');
+    expect(fact.querySelector('dd')?.textContent?.trim()).toBe('Tenant default');
+    expect(fact.querySelector('fleet-kit-select')).toBeNull();
+  });
+
   it('edits the routine default and leaves the draft open on refusal', async () => {
     const fixture = await mount({ canEdit: true });
     fixture.componentRef.setInput('urgenciesReady', true);
