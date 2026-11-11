@@ -1,8 +1,6 @@
 """chunk repository targets — the branch each chunk captured for each repository its project links.
 
-Creates `chunk_repository_targets`, tenant-keyed, unique on `(tenant_id, chunk_id, repository_id)`, with no backfill:
-a chunk claimed before this revision captures each repository at its next delivery. The upgrade skips a table a stopped
-run already made. The downgrade drops the table, and with it every captured target.
+Creates `chunk_repository_targets`, unique per tenant, chunk and repository, no backfill; a rerun skips it.
 Revision ID: 20261111_1000_chunk_repository_targets
 Revises: 20261111_0900_repository_link_base_branch
 """

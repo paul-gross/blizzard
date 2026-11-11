@@ -3296,12 +3296,10 @@ export type ChunksPageView = {
 /**
  * ClaimDenialReason
  *
- * The closed set of reasons an incompatible-claim ``409`` names: ``capability``, the runner's stored
- * capabilities no longer run every statically reachable runner-owned lineage of the chunk; ``project``, the runner
- * does not serve the chunk's project; ``binding``, the runner serves the project but not through the claimed
- * workspace now — the binding is flagged, absent, or for another workspace, or the subscription is unrostered;
- * ``targets``, the repository targets the runner prepared its environments at are not the chunk's — stale, or absent
- * while a project link names its own branch.
+ * The closed set of reasons an incompatible-claim ``409`` names: ``capability``, the runner can no longer run
+ * the chunk's reachable runner-owned lineages; ``project``, it does not serve the chunk's project; ``binding``, it
+ * serves the project but not through the claimed workspace now; ``targets``, its environments stand at repository
+ * targets that are not the chunk's.
  */
 export const ClaimDenialReason = {
     CAPABILITY: 'capability',
@@ -3313,12 +3311,10 @@ export const ClaimDenialReason = {
 /**
  * ClaimDenialReason
  *
- * The closed set of reasons an incompatible-claim ``409`` names: ``capability``, the runner's stored
- * capabilities no longer run every statically reachable runner-owned lineage of the chunk; ``project``, the runner
- * does not serve the chunk's project; ``binding``, the runner serves the project but not through the claimed
- * workspace now — the binding is flagged, absent, or for another workspace, or the subscription is unrostered;
- * ``targets``, the repository targets the runner prepared its environments at are not the chunk's — stale, or absent
- * while a project link names its own branch.
+ * The closed set of reasons an incompatible-claim ``409`` names: ``capability``, the runner can no longer run
+ * the chunk's reachable runner-owned lineages; ``project``, it does not serve the chunk's project; ``binding``, it
+ * serves the project but not through the claimed workspace now; ``targets``, its environments stand at repository
+ * targets that are not the chunk's.
  */
 export type ClaimDenialReason = typeof ClaimDenialReason[keyof typeof ClaimDenialReason];
 
@@ -11546,20 +11542,10 @@ export type ProjectCreateRequest = {
 /**
  * ProjectDocument
  *
- * A project as a document entry, named by its slug. A ``name``, ``description`` or ``color`` the entry omits is
- * left as stored; a project the document creates needs a ``name`` and, with no ``color``, takes the tenant's
- * least-used palette color; a ``color`` is a palette name or a ``#rrggbb``. A ``sources`` or ``repositories`` list
- * the entry states is the project's whole set of links of that kind — a record it leaves out is unlinked; a list it
- * omits is left as stored. A source or repository is named by its id or its slug, a slug it left included. A slug a
- * project left is refused: name that project by its current slug. A ``landing_order`` lists the linked repositories
- * the project ranks, first to land first, and leaves every other linked one unranked; it is applied after the
- * entry's links, so an entry may link a repository and rank it together, and one it omits leaves the order as it
- * stands. Export writes it only for a project that ranks a repository. A ``repository_branches`` map, from a linked
- * repository — by id or slug — to a branch name, is the project's whole set of link base branches: each repository it
- * names lands on that branch, and every other repository the project links inherits its repository's
- * ``base_branch``; it is applied after the entry's links, and naming a repository the project does not link is
- * refused. One the entry omits leaves the branches as they stand. Export writes it only for a project whose link
- * names its own branch.
+ * A project as a document entry, named by its slug; a field it omits is left as stored, and a slug a project left
+ * is refused. ``sources``, ``repositories`` and ``repository_branches`` are each the project's whole set of that kind,
+ * keyed by record id or slug; ``landing_order`` ranks linked repositories, first to land first. Both apply after the
+ * links, and export writes each only when set (``docs/deployment/config-documents.md``).
  */
 export type ProjectDocument = {
     /**
@@ -12735,11 +12721,10 @@ export type RepositoryLinkPatchRequest = {
 /**
  * RepositoryLinkView
  *
- * A project's link to a repository, by the repository's ``repository_id``, with its current ``slug`` and ``name``.
- * ``linked`` is false once the link is retired (unlinked). ``position`` is the link's place in the project's landing
- * order, lower landing first — ``null`` when unranked. ``base_branch`` is the link's own integration branch —
- * ``null`` when it inherits the repository's — and ``effective_base_branch`` the branch the project's chunks start
- * from and land into in the repository: its own, else the repository's ``base_branch``.
+ * A project's link to a repository, with its current ``slug`` and ``name``; ``linked`` is false once unlinked.
+ * ``position`` is its landing-order place, lower first, ``null`` unranked. ``base_branch`` is the link's own branch,
+ * ``null`` when it inherits; ``effective_base_branch`` is the one the project's chunks start from and land into —
+ * its own, else the repository's ``base_branch``.
  */
 export type RepositoryLinkView = {
     /**

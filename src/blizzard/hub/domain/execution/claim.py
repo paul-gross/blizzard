@@ -116,13 +116,9 @@ class ClaimDeniedDependency(Exception):
 
 
 class ClaimDeniedIncompatible(Exception):
-    """The claiming runner cannot take the chunk, for ``reason`` — refused outright, mirroring
-    :class:`ClaimDeniedDependency`'s shape. ``capability``: its stored capabilities can no longer run
-    every statically reachable runner-owned lineage from the chunk's current node, a registration
-    reporting no capabilities included. ``project``: its served declaration does not serve the
-    chunk's project, ``project_id``, which a ``project`` and a ``binding`` refusal carry. ``binding``: it serves the
-    project, but not through the claimed workspace now (:class:`WorkEligibility`). ``targets``: the repository targets
-    it prepared its environments at are not the chunk's."""
+    """The claiming runner cannot take the chunk, for ``reason`` (:class:`ClaimDenialReason`) — refused outright,
+    mirroring :class:`ClaimDeniedDependency`'s shape. A ``project`` and a ``binding`` refusal carry the chunk's
+    ``project_id``; a ``binding`` one is judged by :class:`WorkEligibility`."""
 
     def __init__(
         self,
@@ -438,9 +434,8 @@ class ClaimService:
             workspace_id=workspace_id,
         )
         now = self._clock.now()
-        # The runner prepared before it claimed, so its environments must stand at what the chunk captured — or, before
-        # any capture, at what this claim captures now. The branch each linked repository starts from and lands into is
-        # fixed here, once, for every later lease.
+        # The runner prepared before it claimed: its environments must stand at the targets this claim fixes for every
+        # later lease.
         captured = self._targets.capture_prepared(
             TargetChunk(chunk.chunk_id, chunk.project_id), repository_targets, at=now, transaction=handle.transaction
         )

@@ -1542,8 +1542,7 @@ delivery_repo_landed = Table(
 )
 Index("ix_delivery_repo_landed_tenant_chunk_id", delivery_repo_landed.c.tenant_id, delivery_repo_landed.c.chunk_id)
 
-# The branch a chunk captured for one repository its project links — the base it starts from and lands into. One
-# immutable row per (chunk, repository), inserted once under the chunk's lock and never updated.
+# The branch a chunk captured for one linked repository: one immutable row per (chunk, repository), under its lock.
 chunk_repository_targets = Table(
     "chunk_repository_targets",
     metadata,

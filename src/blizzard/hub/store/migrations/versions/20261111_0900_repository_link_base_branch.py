@@ -1,7 +1,6 @@
 """repository link base branch — a project's link to a repository may name its own integration branch.
 
-Adds nullable `project_repository_links.base_branch`, no backfill: every existing link reads null and inherits its
-repository's `base_branch`. Downgrade drops the column, and with it every override.
+Adds nullable `project_repository_links.base_branch`, no backfill: an existing link inherits. Downgrade drops it.
 Revision ID: 20261111_0900_repository_link_base_branch
 Revises: 20261109_0900_urgency_references
 """

@@ -90,11 +90,10 @@ class SourceLinksView(WireModel):
 
 
 class RepositoryLinkView(BaseModel):
-    """A project's link to a repository, by the repository's ``repository_id``, with its current ``slug`` and ``name``.
-    ``linked`` is false once the link is retired (unlinked). ``position`` is the link's place in the project's landing
-    order, lower landing first — ``null`` when unranked. ``base_branch`` is the link's own integration branch —
-    ``null`` when it inherits the repository's — and ``effective_base_branch`` the branch the project's chunks start
-    from and land into in the repository: its own, else the repository's ``base_branch``."""
+    """A project's link to a repository, with its current ``slug`` and ``name``; ``linked`` is false once unlinked.
+    ``position`` is its landing-order place, lower first, ``null`` unranked. ``base_branch`` is the link's own branch,
+    ``null`` when it inherits; ``effective_base_branch`` is the one the project's chunks start from and land into —
+    its own, else the repository's ``base_branch``."""
 
     project_id: str
     repository_id: str

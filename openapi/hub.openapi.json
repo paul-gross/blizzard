@@ -5543,7 +5543,7 @@
         "type": "object"
       },
       "ClaimDenialReason": {
-        "description": "The closed set of reasons an incompatible-claim ``409`` names: ``capability``, the runner's stored\ncapabilities no longer run every statically reachable runner-owned lineage of the chunk; ``project``, the runner\ndoes not serve the chunk's project; ``binding``, the runner serves the project but not through the claimed\nworkspace now \u2014 the binding is flagged, absent, or for another workspace, or the subscription is unrostered;\n``targets``, the repository targets the runner prepared its environments at are not the chunk's \u2014 stale, or absent\nwhile a project link names its own branch.",
+        "description": "The closed set of reasons an incompatible-claim ``409`` names: ``capability``, the runner can no longer run\nthe chunk's reachable runner-owned lineages; ``project``, it does not serve the chunk's project; ``binding``, it\nserves the project but not through the claimed workspace now; ``targets``, its environments stand at repository\ntargets that are not the chunk's.",
         "enum": [
           "capability",
           "project",
@@ -18228,7 +18228,7 @@
       },
       "ProjectDocument": {
         "additionalProperties": false,
-        "description": "A project as a document entry, named by its slug. A ``name``, ``description`` or ``color`` the entry omits is\nleft as stored; a project the document creates needs a ``name`` and, with no ``color``, takes the tenant's\nleast-used palette color; a ``color`` is a palette name or a ``#rrggbb``. A ``sources`` or ``repositories`` list\nthe entry states is the project's whole set of links of that kind \u2014 a record it leaves out is unlinked; a list it\nomits is left as stored. A source or repository is named by its id or its slug, a slug it left included. A slug a\nproject left is refused: name that project by its current slug. A ``landing_order`` lists the linked repositories\nthe project ranks, first to land first, and leaves every other linked one unranked; it is applied after the\nentry's links, so an entry may link a repository and rank it together, and one it omits leaves the order as it\nstands. Export writes it only for a project that ranks a repository. A ``repository_branches`` map, from a linked\nrepository \u2014 by id or slug \u2014 to a branch name, is the project's whole set of link base branches: each repository it\nnames lands on that branch, and every other repository the project links inherits its repository's\n``base_branch``; it is applied after the entry's links, and naming a repository the project does not link is\nrefused. One the entry omits leaves the branches as they stand. Export writes it only for a project whose link\nnames its own branch.",
+        "description": "A project as a document entry, named by its slug; a field it omits is left as stored, and a slug a project left\nis refused. ``sources``, ``repositories`` and ``repository_branches`` are each the project's whole set of that kind,\nkeyed by record id or slug; ``landing_order`` ranks linked repositories, first to land first. Both apply after the\nlinks, and export writes each only when set (``docs/deployment/config-documents.md``).",
         "properties": {
           "color": {
             "anyOf": [
@@ -20046,7 +20046,7 @@
         "type": "object"
       },
       "RepositoryLinkView": {
-        "description": "A project's link to a repository, by the repository's ``repository_id``, with its current ``slug`` and ``name``.\n``linked`` is false once the link is retired (unlinked). ``position`` is the link's place in the project's landing\norder, lower landing first \u2014 ``null`` when unranked. ``base_branch`` is the link's own integration branch \u2014\n``null`` when it inherits the repository's \u2014 and ``effective_base_branch`` the branch the project's chunks start\nfrom and land into in the repository: its own, else the repository's ``base_branch``.",
+        "description": "A project's link to a repository, with its current ``slug`` and ``name``; ``linked`` is false once unlinked.\n``position`` is its landing-order place, lower first, ``null`` unranked. ``base_branch`` is the link's own branch,\n``null`` when it inherits; ``effective_base_branch`` is the one the project's chunks start from and land into \u2014\nits own, else the repository's ``base_branch``.",
         "properties": {
           "base_branch": {
             "anyOf": [

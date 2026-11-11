@@ -71,11 +71,10 @@ class EntryProjectRequired(ConfigFieldError):
 @domain_model
 @dataclass(frozen=True)
 class ProjectDeclaration:
-    """A project the document names by slug: the sparse edit of the name, description and color it states, and the
-    sources and repositories it links — each an id, a slug or a slug the record left (``None`` leaves the stored
-    links) — the repositories it ranks, in landing order, named the same way (``None`` leaves the stored order), and
-    the base branch of each linked repository that names its own, keyed the same way — every other linked repository
-    inherits (``None`` leaves the stored branches)."""
+    """A project the document names by slug: the sparse edit of its name, description and color; the sources and
+    repositories it links and the repositories it ranks in landing order, each named by id, slug or a slug the record
+    left; and the base branch of each linked repository naming its own, the rest inheriting. ``None`` leaves the
+    stored links, order or branches."""
 
     slug: str
     edit: ProjectEdit

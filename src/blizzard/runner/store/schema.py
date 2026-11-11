@@ -84,8 +84,7 @@ env_bindings = Table(
 )
 
 # --- Binding targets (the repository branches a binding's environment was prepared at) ---
-# Written in the binding's own transaction, one row per repository target the hub named for the chunk, and never
-# updated: a resume, a reclaim and the claim itself read what the environment was prepared at, not a fresh peek.
+# One immutable row per repository target the hub named, written in the binding's own transaction.
 
 binding_targets = Table(
     "binding_targets",

@@ -94,12 +94,10 @@ class Preamble:
         prior_node: str | None = None,
         repository_bases: Sequence[tuple[str, str]] = (),
     ) -> Preamble:
-        """``prior`` is the fingerprint of the standing prose the resumed session was last sent,
-        ``None`` for a spawn resuming nothing: it selects between the full three-layer render and
-        one where an unchanged layer collapses and a changed one is announced. ``node`` names this
-        turn's node-step — required, so no call site can silently suppress the role-change line —
-        and a ``prior_node`` known to differ from it composes that line in. ``repository_bases`` names each targeted
-        repository in the environments, ``owner/repo``, with its integration branch."""
+        """``prior`` fingerprints the standing prose the resumed session was last sent (``None`` resuming nothing),
+        choosing the full render or one collapsing unchanged layers and announcing changed ones. ``node`` — required,
+        so no call site suppresses the role-change line — names this turn's node-step, a differing ``prior_node``
+        composing that line in. ``repository_bases`` pairs each targeted ``owner/repo`` with its integration branch."""
         # No runner id row before the runner's first registration at its hub has named one.
         rows = [("runner id", runner_id)] if runner_id is not None else []
         rows += [

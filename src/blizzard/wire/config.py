@@ -61,20 +61,10 @@ class ConfigChangesPage(WireModel):
 
 
 class ProjectDocument(BaseModel):
-    """A project as a document entry, named by its slug. A ``name``, ``description`` or ``color`` the entry omits is
-    left as stored; a project the document creates needs a ``name`` and, with no ``color``, takes the tenant's
-    least-used palette color; a ``color`` is a palette name or a ``#rrggbb``. A ``sources`` or ``repositories`` list
-    the entry states is the project's whole set of links of that kind — a record it leaves out is unlinked; a list it
-    omits is left as stored. A source or repository is named by its id or its slug, a slug it left included. A slug a
-    project left is refused: name that project by its current slug. A ``landing_order`` lists the linked repositories
-    the project ranks, first to land first, and leaves every other linked one unranked; it is applied after the
-    entry's links, so an entry may link a repository and rank it together, and one it omits leaves the order as it
-    stands. Export writes it only for a project that ranks a repository. A ``repository_branches`` map, from a linked
-    repository — by id or slug — to a branch name, is the project's whole set of link base branches: each repository it
-    names lands on that branch, and every other repository the project links inherits its repository's
-    ``base_branch``; it is applied after the entry's links, and naming a repository the project does not link is
-    refused. One the entry omits leaves the branches as they stand. Export writes it only for a project whose link
-    names its own branch."""
+    """A project as a document entry, named by its slug; a field it omits is left as stored, and a slug a project left
+    is refused. ``sources``, ``repositories`` and ``repository_branches`` are each the project's whole set of that kind,
+    keyed by record id or slug; ``landing_order`` ranks linked repositories, first to land first. Both apply after the
+    links, and export writes each only when set (``docs/deployment/config-documents.md``)."""
 
     model_config = ConfigDict(extra="forbid")
 

@@ -1,8 +1,5 @@
-"""binding targets — the new ``binding_targets`` table, one row per repository target an environment binding was
-prepared at, written in the binding's own transaction.
-
-A binding recorded under the prior release has no rows: it was prepared at its workspace's own branch, and its claim
-names no targets. A rerun skips the table when present. ``downgrade()`` drops the table.
+"""binding targets — ``binding_targets``, one row per repository target a binding was prepared at.
+An earlier binding has no rows: it stands at its workspace's branch. A rerun skips the table; downgrade drops it.
 
 Revision ID: 20261111_1000_binding_targets
 Revises: 20261029_1000_takeover_entries

@@ -347,13 +347,10 @@ class FlowLineReconciler:
             return None
 
     def submit(self, standing: _Standing, artifacts: Sequence[StoredArtifact]) -> Submission | None:
-        """Submit the visit to the flows it holds — at the next generation when its own turn found its resources
-        moved — or refuse it, routing its failure choice, when it cannot name them. The submission is decided from the
-        chunk's facts, record, and the visit's newest submission re-read under the chunk's lock in the unit that writes
-        it (``bzh:write-reestablishes-read``): a chunk no longer standing at the visit, or a visit whose generation is
-        taken, writes nothing. The unit captures the branch of each resolved repository the chunk has not captured
-        yet, the one its resources name; a capture that landed first with another branch submits nothing, and the
-        next pass resolves on it."""
+        """Submit the visit to the flows it holds, or refuse it when it cannot name them — decided on the chunk's
+        state re-read under its lock in the writing unit (``bzh:write-reestablishes-read``), where a chunk no longer at
+        the visit or a taken generation writes nothing. The unit captures each resolved repository's branch the chunk
+        has not captured; one captured first with another branch submits nothing, and the next pass resolves on it."""
         chunk, graph, node, epoch = standing.chunk, standing.graph, standing.node, standing.epoch
         # A visit with no generation left to submit is skipped before it is resolved; the unit decides again.
         if self._generation(chunk.chunk_id, node.node_id, epoch) is None:
