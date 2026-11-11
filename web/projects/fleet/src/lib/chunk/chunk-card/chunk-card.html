@@ -17,7 +17,7 @@
   (click)="open($event)"
 >
   <fleet-kit-select-row class="card-open" bare [ariaLabel]="'Open chunk ' + card().shortId" [selected]="selected()" />
-  <ng-content select="[chunkCardUrgency]" />
+  <div class="urgency-slot"><ng-content select="[chunkCardUrgency]" /></div>
   <!-- Each work item is its work-ref label over its title, the title held by a one-line
        skeleton until it is read. The labels are plain text, not links: the detail panel owns
        the link out to the work source. Past three, the first two show until the fold beneath

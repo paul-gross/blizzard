@@ -60,6 +60,9 @@
 .card > :not(.card-open) {
   position: relative;
 }
+.urgency-slot:not(:has(> *)) {
+  display: none;
+}
 .card:has(.card-open :focus-visible) {
   outline: 1px solid var(--cyan);
   outline-offset: 1px;

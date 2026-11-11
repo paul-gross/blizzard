@@ -1,8 +1,10 @@
-import { provideZonelessChangeDetection } from '@angular/core';
+import { Component, provideZonelessChangeDetection, signal } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
-import { commands, page } from 'vitest/browser';
+import { vi } from 'vitest';
+import { commands, page, userEvent } from 'vitest/browser';
 
-import { ChunkCard } from 'fleet';
+import { ChunkCard, ChunkUrgency, type UrgencyView } from 'fleet';
+import { chunkControlStub } from 'fleet/testing';
 import { type BoardCard, boardCardView } from './board-card-view.model';
 
 /**
@@ -37,6 +39,24 @@ const CARD: BoardCard = {
 
 const WIDTHS = [800, 390, 320];
 
+@Component({
+  imports: [ChunkCard, ChunkUrgency],
+  template: `<fleet-chunk-card [card]="card" (selectChunk)="selections.push($event)">
+    <fleet-chunk-urgency chunkCardUrgency [detail]="detail" [control]="control" />
+  </fleet-chunk-card>`,
+})
+class UrgencyCardHost {
+  readonly card = boardCardView(CARD);
+  readonly detail = { chunk_id: CARD.chunkId, terminal: false, urgency: { urgency_id: 'urgent', slug: 'urgent' } };
+  readonly selections: string[] = [];
+  readonly control = { ...chunkControlStub(), urgency: {
+    values: signal([{ urgency_id: 'urgent', slug: 'urgent', name: 'Urgent', default: false, retired: false, place: 1, color: 'red', emoji: '🔥', icon: null } as UrgencyView]),
+    pending: () => null,
+    set: vi.fn(),
+  } };
+  constructor() { this.control.canControl.set(true); }
+}
+
 /** The design tokens are a global stylesheet the app build loads, never a standalone mount. */
 async function loadDesignTokens(): Promise<void> {
   const css = await commands.readFile('projects/fleet/src/lib/core/design/tokens.css');
@@ -55,6 +75,37 @@ function tokenColor(token: string): string {
 }
 
 describe('board card selected state shell sweep (web:shell-sweep)', () => {
+  it('reaches the projected urgency menu by pointer and keyboard without selecting the card', async () => {
+    await page.viewport(1280, 800);
+    TestBed.resetTestingModule();
+    await TestBed.configureTestingModule({ imports: [UrgencyCardHost], providers: [provideZonelessChangeDetection()] }).compileComponents();
+    const fixture = TestBed.createComponent(UrgencyCardHost);
+    const root = fixture.nativeElement as HTMLElement;
+    root.style.width = '240px';
+    document.body.appendChild(root);
+    await fixture.whenStable();
+    try {
+      const trigger = root.querySelector<HTMLButtonElement>('[data-testid="chunk-urgency-menu"]')!;
+      const rect = trigger.getBoundingClientRect();
+      expect(trigger.contains(document.elementFromPoint(rect.x + rect.width / 2, rect.y + rect.height / 2))).toBe(true);
+      expect(trigger.closest('button button')).toBeNull();
+      await page.getByRole('button', { name: 'Change urgency: Urgent' }).click();
+      expect(document.querySelector('[data-testid="chunk-urgency-options"]')).not.toBeNull();
+      expect(fixture.componentInstance.selections).toEqual([]);
+      await userEvent.keyboard('{Escape}');
+      trigger.focus();
+      await userEvent.keyboard('{Enter}');
+      expect(document.querySelector('[data-testid="chunk-urgency-options"]')).not.toBeNull();
+      expect(fixture.componentInstance.selections).toEqual([]);
+      await userEvent.keyboard('{Escape}');
+      await page.getByTestId('chunk-id').click();
+      expect(fixture.componentInstance.selections).toEqual([CARD.chunkId]);
+      const open = root.querySelector<HTMLButtonElement>('fleet-kit-select-row button')!;
+      open.focus();
+      await userEvent.keyboard('{Enter}');
+      expect(fixture.componentInstance.selections).toEqual([CARD.chunkId, CARD.chunkId]);
+    } finally { root.remove(); }
+  });
   for (const width of WIDTHS) {
     it(`draws only the outer card's selection edge, with the PR links inside it, at width ${width}`, async () => {
       await loadDesignTokens();

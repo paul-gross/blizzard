@@ -20,7 +20,7 @@ test('urgency created and reordered in admin changes ready work and retirement m
   await page.getByTestId('admin-urgencies-create-field-mark').fill('🔥');
   await page.getByTestId('admin-urgencies-create-submit').click();
   await expect(page.getByTestId('admin-urgency-detail')).toContainText('Expedite');
-  const list = async () => (await api.get('/api/urgencies')).body.urgencies as { urgency_id: string; slug: string; default: boolean; emoji: string | null }[];
+  const list = async () => (await api.get('/api/urgencies')).body.urgencies as { urgency_id: string; slug: string; name: string; default: boolean; emoji: string | null }[];
   const created = (await list()).find((u) => u.slug === 'expedite')!;
   const standard = (await list()).find((u) => u.default)!;
   expect(created.emoji).toBe('🔥');
@@ -98,14 +98,14 @@ test('urgency created and reordered in admin changes ready work and retirement m
     (globalThis as unknown as { urgencyStream: { held: string[] } }).urgencyStream.held.length = 0;
   });
   await card.click();
-  await page.getByTestId('chunk-urgency-menu').click();
+  await page.getByTestId('chunk-detail').getByTestId('chunk-urgency-menu').click();
   await page.getByRole('menuitemradio', { name: 'Expedite' }).click();
   await expect.poll(async () => (await api.get(`/api/chunks/${urgent}`)).body.urgency.slug).toBe('expedite');
   const queueAfter = await api.get('/api/queue');
   expect(queueAfter.status).toBe(200);
   expect(queueAfter.body.entries.map((entry: { chunk_id: string }) => entry.chunk_id)).toEqual(rankedIds);
-  await expect(card.locator('app-urgency-pill')).toContainText('🔥');
-  await expect(card.locator('app-urgency-pill')).toContainText('Expedite');
+  await expect(card.getByTestId('chunk-urgency-menu')).toHaveAttribute('aria-label', 'Change urgency: Expedite');
+  await expect(card.locator('fleet-kit-urgency-pill')).toContainText('🔥');
   const next = async () => (await api.get(`/api/runners/${runnerId}/next-claim`)).body.next?.chunk_id;
   await expect.poll(next).toBe(urgent);
   await expect.poll(async () => fleetPage.evaluate((id) => {
@@ -121,12 +121,15 @@ test('urgency created and reordered in admin changes ready work and retirement m
   // eslint-disable-next-line no-restricted-syntax -- The real polling interval must not have elapsed.
   expect(Date.now() - start).toBeLessThan(45000);
   await expect(nextLine.locator('fleet-kit-urgency-pill')).toContainText('🔥');
-  await expect(nextLine.locator('fleet-kit-urgency-pill')).toContainText('Expedite');
+  await expect(nextLine.locator('fleet-kit-urgency-pill [aria-label="Expedite"]')).toBeVisible();
 
   // Retiring through admin transfers the still-ready work to the default urgency.
   await page.goto(`/admin/urgencies/${created.urgency_id}`);
   await page.getByTestId('admin-urgency-retire').click();
-  await page.getByRole('button', { name: 'Retire and move chunks' }).click();
+  const retireDialog = page.getByRole('dialog', { name: 'Retire urgency' });
+  await expect(retireDialog).toContainText('1 open chunk will be affected.');
+  await expect(retireDialog.getByRole('button', { name: `Destination urgency: ${standard.slug}` })).toBeVisible();
+  await retireDialog.getByRole('button', { name: 'Retire', exact: true }).click();
   await expect.poll(async () => (await api.get(`/api/chunks/${urgent}`)).body.urgency.slug).toBe(standard.slug);
   const retired = await api.get(`/api/urgencies/${created.urgency_id}`);
   expect(retired.body.retired).toBe(true);
@@ -143,7 +146,8 @@ test('urgency created and reordered in admin changes ready work and retirement m
   await expect(nextLine.getByTestId('runner-next-link')).toHaveAttribute('title', first);
   await expect(nextLine.locator('fleet-kit-urgency-pill')).toHaveCount(0);
   await page.goto('/board');
-  await expect(page.locator(`[data-col="ready"] [data-chunk="${urgent}"] app-urgency-pill`)).toHaveCount(0);
+  await expect(card.getByTestId('chunk-urgency-menu')).toHaveAttribute('aria-label', `Change urgency: ${standard.name}`);
+  await expect(card.locator('fleet-kit-urgency-pill')).toHaveCount(0);
   // A real stepped host follows the changed next-claim ordering, rather than merely reading the explanation.
   await stepUntil(runnerHost, async () => (await api.get(`/api/chunks/${first}`)).body.status as string, (status) => status === 'running');
   expect((await api.get(`/api/chunks/${urgent}`)).body.status).toBe('ready');
