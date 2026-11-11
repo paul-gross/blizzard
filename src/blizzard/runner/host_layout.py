@@ -75,6 +75,10 @@ class HostLayout:
         return self.root / DATA_DIRNAME
 
     @property
+    def runners_dir(self) -> Path:
+        return self.root / RUNNERS_DIRNAME
+
+    @property
     def store_path(self) -> Path:
         return self.data_dir / HOST_STORE_FILENAME
 

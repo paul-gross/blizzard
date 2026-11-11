@@ -116,6 +116,7 @@ _ENV_WRITER_MODULES: dict[str, set[str]] = {
     "runner/hub/host_bootstrap.py": {"host"},
 }
 _ENV_WRITE_MARKERS = ("write_runner_token(", ".write(issued.token)", "tokens.write(", "HubTokenFile.of(")
+_RUNNER_DIR_MARKERS = ("RUNNERS_DIRNAME / ", "runners_dir / ")
 _RUNNER_DIR_MODULES = {"runner/cli/runners.py": {"add"}, "runner/ingest.py": {"ingest"}}
 
 
@@ -137,6 +138,6 @@ def test_the_env_writers_are_the_modules_that_write_the_env_file() -> None:
 
 
 def test_the_runner_directory_writers_are_the_modules_that_create_it() -> None:
-    found = _modules_containing(("RUNNERS_DIRNAME / ",)) - {"runner/host_layout.py"}
+    found = _modules_containing(_RUNNER_DIR_MARKERS) - {"runner/host_layout.py"}
     assert found == set(_RUNNER_DIR_MODULES)
     assert set().union(*_RUNNER_DIR_MODULES.values()) == set(_row("runners/<name>")["written_by"])

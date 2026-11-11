@@ -40,7 +40,7 @@ from blizzard.foundation.platform_tracing.handle import (
     build_platform_tracing,
 )
 from blizzard.foundation.platform_tracing.tracer import IPlatformTracer
-from blizzard.foundation.roles import collaborator
+from blizzard.foundation.roles import collaborator, domain_model
 from blizzard.foundation.store.engine import create_engine_from_url
 from blizzard.foundation.store.internal.store_status_reader import SqlAlchemyStoreStatusReader
 from blizzard.foundation.store.migrations import MigrationRunner
@@ -48,7 +48,7 @@ from blizzard.foundation.store.readiness import Readiness, ReadinessService
 from blizzard.foundation.trace_export.exporter import ITraceExporter
 from blizzard.foundation.trace_export.internal.otlp import OtlpTraceExporter
 from blizzard.foundation.trace_export.settings import TracingSettings
-from blizzard.runner.config import HostWorkspace, RunnerConfig, SubscriptionDeclaration
+from blizzard.runner.config import HostWorkspace, ProjectBinding, RunnerConfig, SubscriptionDeclaration
 from blizzard.runner.config_table import ConfigError
 from blizzard.runner.environments.factory import WorkspaceLaunch, build_workspace_provider
 from blizzard.runner.environments.workspaces import (
@@ -74,9 +74,29 @@ from blizzard.runner.harness.wiring import (
     declared_telemetry_names,
     select_harness_bindings,
 )
-from blizzard.runner.host_config import BuiltRunner, HaltedRunner, HostConfig, ResolvedToken
-from blizzard.runner.host_file import HostFileEditor
-from blizzard.runner.host_layout import HostLayout, hold_host
+from blizzard.runner.host_config import (
+    GRADUATION_PROCEDURE,
+    RUNNER_PATH_KEYS,
+    UNSUFFIXED_TOKEN_VARIABLE,
+    BuiltRunner,
+    HaltedRunner,
+    HostConfig,
+    ResolvedToken,
+    read_legacy_document,
+)
+from blizzard.runner.host_file import (
+    HostFileEditor,
+    bindings_literal,
+    runner_table,
+    runner_value,
+    string_literal,
+    with_runner_values,
+)
+from blizzard.runner.host_layout import (
+    HOST_CONFIG_FILENAME,
+    HostLayout,
+    hold_host,
+)
 from blizzard.runner.hub.client import HostReport, HostReportedWorkspace, IHostHubClient
 from blizzard.runner.hub.client import SubscriptionDeclaration as HubSubscriptionDeclaration
 from blizzard.runner.hub.flags import FlagsHolder
@@ -102,10 +122,13 @@ from blizzard.runner.process.child_processes import IChildProcesses
 from blizzard.runner.process.internal.linux_process_probe import LinuxProcessProbe
 from blizzard.runner.process.internal.subprocess_child_processes import SubprocessChildProcesses
 from blizzard.runner.runtime import (
+    StoreResetRefused,
     backup_sqlite,
     migration_runner,
     runner_store_migrations,
     set_aside_sqlite,
+    sqlite_store_file,
+    sqlite_url,
 )
 from blizzard.runner.status.invariants import HostInvariantCheck
 from blizzard.runner.store.errors import RunnerStoreErrorFactory
@@ -175,9 +198,21 @@ from blizzard.runner.tracing.receiver_limits import ReceiverBounds, ReceiverCoun
 from blizzard.runner.tracing.receiving import TelemetryReceiver
 from blizzard.runner.tracing.replay import LeaseTraceReplay
 from blizzard.runner.tracing.sweep import LeaseTraceSweep
-from blizzard.runner.transfer.host_files import IHostFiles
+from blizzard.runner.transfer.host_files import IHostFiles, NotAStoreFile
+from blizzard.runner.transfer.hosts import (
+    DeclaredBinding,
+    DeclaredSubscription,
+    DeclaredWorkspace,
+    HostDeclarations,
+    IngestHost,
+    ISourceHosts,
+    RunnerDeclaration,
+    SourceHost,
+)
+from blizzard.runner.transfer.refusals import SourceUnsupported
 from blizzard.runner.transfer.rows import HostIngest, IRunnerRowRemoval, IRunnerTransfer
 from blizzard.runner.transfer.runner_stores import HeldBinding, IRunnerBoundStores, RunnerStoreView
+from blizzard.runner.transfer.source import SQLITE_HEADER, DirectoryState, SourceKind, classify_source
 from blizzard.runner.usage.credential_renewal import CredentialRenewalPass, RenewableSubscription
 from blizzard.runner.usage.external_usage_sample import (
     ExternalUsageAttemptLane,
@@ -1261,6 +1296,15 @@ _COPY_PREFIX = "ingest-copy-"
 class HostFiles:
     """An ingest's file operations on the host's disk."""
 
+    def store_file(self, db_url: str) -> Path:
+        try:
+            return sqlite_store_file(db_url)
+        except StoreResetRefused as exc:
+            raise NotAStoreFile(str(exc)) from exc
+
+    def store_url(self, database: Path) -> str:
+        return sqlite_url(database)
+
     @contextlib.contextmanager
     def copy_of(self, store: Path, beside: Path) -> Generator[Path, None, None]:
         # The caller holds the host's lock, so a copy left here is one a killed run never removed.
@@ -1296,6 +1340,198 @@ class HostFiles:
 _host_files_conforms: type[IHostFiles] = HostFiles
 
 
+def declared_workspace(workspace: HostWorkspace, host_root: Path) -> DeclaredWorkspace:
+    """``workspace`` as the transfer declaration of it, its root resolved against ``host_root``, the host that declared
+    it."""
+    return DeclaredWorkspace(
+        id=workspace.id,
+        root=workspace.root,
+        provider=workspace.provider,
+        envs=workspace.envs,
+        max_environments=workspace.max_environments,
+        repos=workspace.repos,
+        base_branch=workspace.base_branch,
+        prompt=workspace.prompt,
+        prompt_file=workspace.prompt_file,
+        prompt_package=workspace.prompt_package,
+        effective_root=workspace.settings(host_root).effective_workspace_root,
+    )
+
+
+def declared_subscription(subscription: SubscriptionDeclaration) -> DeclaredSubscription:
+    return DeclaredSubscription(
+        slug=subscription.slug,
+        name=subscription.name,
+        provider=subscription.provider,
+        credentials_path=subscription.credentials_path,
+        sample_interval_seconds=subscription.sample_interval_seconds,
+        usage_api_base=subscription.usage_api_base,
+    )
+
+
+def host_declarations(config: HostConfig) -> HostDeclarations:
+    """What ``config``'s host file declares, as transfer values: the one mapping a host's declarations take, for this
+    host and for a source alike."""
+    return HostDeclarations(
+        root=config.root,
+        config_path=config.config_path,
+        runners=tuple(
+            RunnerDeclaration(
+                name=entry.name,
+                id=entry.id,
+                subscription=entry.subscription,
+                bindings=tuple(DeclaredBinding(b.project, b.workspace) for b in entry.bindings),
+                errors=entry.errors,
+            )
+            for entry in config.runners
+        ),
+        workspaces=tuple(declared_workspace(workspace, config.root) for workspace in config.workspaces),
+        subscriptions=tuple(declared_subscription(subscription) for subscription in config.subscriptions),
+    )
+
+
+def ingest_host(config: HostConfig) -> IngestHost:
+    """The host ``config`` loads, as the host an ingest runs into."""
+    return IngestHost(
+        root=config.root,
+        data_dir=config.layout.data_dir,
+        runners_dir=config.layout.runners_dir,
+        db_url=config.db_url,
+        hub_url=config.hub_url,
+        holds_host_token=bool(config.host_token.value),
+        declared=host_declarations(config),
+    )
+
+
+@domain_model
+@dataclass(frozen=True)
+class _OpenSource:
+    """A source's loaded host, and the text of its host file when that is not on disk."""
+
+    config: HostConfig
+    host_text: str | None = None
+
+
+@collaborator
+@dataclass(frozen=True)
+class ConfigSourceHosts:
+    """Source hosts read through the host loader, for the host ``host``. A source it has opened is kept by path, so the
+    runner it resolves and the ``[[runner]]`` it carries are the ones its loaded configuration names."""
+
+    host: HostConfig
+    _opened: dict[Path, _OpenSource] = field(default_factory=dict[Path, _OpenSource])
+
+    def kind(self, source: Path) -> SourceKind:
+        directory = None
+        is_file = False
+        header = b""
+        if source.is_dir():
+            directory = DirectoryState(HostLayout(source).graduation().value)
+        elif source.is_file():
+            is_file = True
+            with source.open("rb") as handle:
+                header = handle.read(len(SQLITE_HEADER))
+        return classify_source(
+            str(source), directory=directory, is_file=is_file, header=header, host_config_filename=HOST_CONFIG_FILENAME
+        )
+
+    def legacy_socket(self, root: Path) -> Path:
+        return HostLayout(root).legacy_socket_path
+
+    def open_host(self, path: Path) -> SourceHost:
+        try:
+            config = HostConfig.load(path, flag_registry=self.host.flag_registry, strict=self.host.strict)
+            store = sqlite_store_file(config.db_url)
+        except (ConfigError, StoreResetRefused) as exc:
+            raise SourceUnsupported(f"cannot read the source host at {path}: {exc}") from exc
+        self._opened[path] = _OpenSource(config)
+        return SourceHost(SourceKind.HOST_DIRECTORY, path, store, host_declarations(config))
+
+    def legacy_store(self, path: Path) -> tuple[Path, str]:
+        layout = HostLayout(path)
+        store = layout.legacy_store_path
+        try:
+            legacy = read_legacy_document(layout)
+        except ConfigError as exc:
+            raise SourceUnsupported(str(exc)) from exc
+        named = legacy.get("db_url")
+        if named is not None and sqlite_url(store) != named and f"sqlite:///{store}" != named:
+            raise SourceUnsupported(
+                f"{layout.legacy_config_path} names its store at {named}, not {store}: graduation reads the "
+                f"directory's own store only, so graduate it by hand ({GRADUATION_PROCEDURE})"
+            )
+        return store, str(legacy.get("token_env", UNSUFFIXED_TOKEN_VARIABLE))
+
+    def graduate(self, path: Path, *, runner_id: str, served: tuple[str, ...]) -> SourceHost:
+        layout = HostLayout(path)
+        store, token_env = self.legacy_store(path)
+        try:
+            config = HostConfig.graduated(
+                path,
+                read_legacy_document(layout),
+                runner_id=runner_id,
+                served=served,
+                flag_registry=self.host.flag_registry,
+                strict=self.host.strict,
+            )
+        except ConfigError as exc:
+            raise SourceUnsupported(f"cannot graduate the runner file {layout.legacy_config_path}: {exc}") from exc
+        self._opened[path] = _OpenSource(config, config.to_toml())
+        return SourceHost(SourceKind.UNGRADUATED, path, store, host_declarations(config), token_env=token_env)
+
+    def runner(self, source: SourceHost | None, name: str) -> RunnerDeclaration:
+        config = self.host if source is None else self._open(source).config
+        entry = config.sole_runner(name)
+        return next(declared for declared in host_declarations(config).runners if declared.name == entry.name)
+
+    def path_keys(self, source: SourceHost, runner: str) -> Mapping[tuple[str, ...], Path]:
+        opened = self._open(source)
+        table = self._table(opened, runner)
+        found: dict[tuple[str, ...], Path] = {}
+        for path_key in RUNNER_PATH_KEYS:
+            value = runner_value(table, path_key.key, strict=self.host.strict)
+            if isinstance(value, str) and value:
+                located = Path(value).expanduser()
+                found[path_key.key] = (located if located.is_absolute() else opened.config.root / located).resolve()
+        return found
+
+    def carried(
+        self,
+        source: SourceHost,
+        runner: str,
+        *,
+        projects: tuple[DeclaredBinding, ...] | None,
+        copies: Mapping[tuple[str, ...], Path],
+    ) -> str:
+        table = self._table(self._open(source), runner)
+        values: dict[tuple[str, ...], str] = {}
+        if projects is not None:
+            values[("projects",)] = bindings_literal(tuple(ProjectBinding(b.project, b.workspace) for b in projects))
+        for key, copied in copies.items():
+            values[key] = string_literal(str(copied))
+        try:
+            return with_runner_values(table, values, strict=self.host.strict)
+        except ConfigError as exc:
+            raise SourceUnsupported(f"runner {runner}'s [[runner]] cannot be carried: {exc}") from exc
+
+    def _open(self, source: SourceHost) -> _OpenSource:
+        try:
+            return self._opened[source.path]
+        except KeyError:
+            raise LookupError(
+                f"{source.path} was not opened by this port; open it with open_host or graduate"
+            ) from None
+
+    def _table(self, opened: _OpenSource, runner: str) -> str:
+        try:
+            return runner_table(opened.config.layout, runner, strict=self.host.strict, text=opened.host_text)
+        except ConfigError as exc:
+            raise SourceUnsupported(str(exc)) from exc
+
+
+_source_hosts_conforms: type[ISourceHosts] = ConfigSourceHosts
+
+
 def build_runner_ingest(
     host: HostConfig,
     hub: IHostHubClient,
@@ -1309,7 +1545,8 @@ def build_runner_ingest(
     migrating each source copy through ``migrations``."""
     resolved = clock or SystemClock()
     return RunnerIngest(
-        host=host,
+        host=ingest_host(host),
+        sources=ConfigSourceHosts(host),
         stores=build_runner_store_files(resolved),
         host_file=HostFileEditor(strict=host.strict),
         tokens=DotenvTokenFiles(),

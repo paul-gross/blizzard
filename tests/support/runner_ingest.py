@@ -178,6 +178,12 @@ class RecordingHostFiles:
         finally:
             self.journal.append(f"{name}:exit")
 
+    def store_file(self, db_url: str) -> Path:
+        return self._real.store_file(db_url)
+
+    def store_url(self, database: Path) -> str:
+        return self._real.store_url(database)
+
     def copy_of(self, store: Path, beside: Path) -> AbstractContextManager[Path]:
         return self._recorded("copy_of", self._real.copy_of(store, beside))
 

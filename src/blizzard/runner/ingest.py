@@ -7,7 +7,6 @@ recorded in ``bzh:crash-exemptions-runner``."""
 
 from __future__ import annotations
 
-import json
 from collections.abc import Callable, Generator, Mapping
 from contextlib import contextmanager, nullcontext
 from dataclasses import dataclass, replace
@@ -15,42 +14,26 @@ from pathlib import Path
 from typing import Protocol
 
 from blizzard.foundation.clock import IClock
-from blizzard.foundation.config_keys import ConfigView
 from blizzard.foundation.crash import crashpoint
 from blizzard.foundation.logging import get_logger
 from blizzard.foundation.roles import domain_model
 from blizzard.foundation.runner_token_names import hub_token_variable
 from blizzard.foundation.store.migrations import MigrationConnectionError, MigrationRefused, MigrationRunner
-from blizzard.runner.config import HostWorkspace, ProjectBinding, SubscriptionDeclaration
-from blizzard.runner.config_keys import HOST_REGISTRY
 from blizzard.runner.config_table import ConfigError
-from blizzard.runner.host_config import (
-    GRADUATION_PROCEDURE,
-    RUNNER_PATH_KEYS,
-    UNSUFFIXED_TOKEN_VARIABLE,
-    HostConfig,
-    RunnerEntry,
-    decode_host_text,
-    read_legacy_document,
-    subscription_toml,
-    workspace_toml,
-)
-from blizzard.runner.host_file import runner_table, with_runner_values
-from blizzard.runner.host_layout import (
-    HOST_CONFIG_FILENAME,
-    RUNNERS_DIRNAME,
-    HostLayout,
-)
 from blizzard.runner.hub.client import HostRecord, HostRefused, HubClientError, IHostRecordReader
 from blizzard.runner.hub.host_identity import HostIdentity, HostIdentityAlreadyRecorded, adopted
 from blizzard.runner.hub.host_registration import standing_of
 from blizzard.runner.hub.identity import HostStanding
-from blizzard.runner.runtime import (
-    StoreResetRefused,
-    sqlite_store_file,
-    sqlite_url,
+from blizzard.runner.transfer.host_files import IHostFiles, NotAStoreFile
+from blizzard.runner.transfer.hosts import (
+    DeclaredBinding,
+    DeclaredSubscription,
+    DeclaredWorkspace,
+    IngestHost,
+    ISourceHosts,
+    RunnerDeclaration,
+    SourceHost,
 )
-from blizzard.runner.transfer.host_files import IHostFiles
 from blizzard.runner.transfer.paths import rebase_path_keys
 from blizzard.runner.transfer.refusals import (
     HostNotHolding,
@@ -79,7 +62,7 @@ from blizzard.runner.transfer.runner_stores import (
     IRunnerBoundStoresFactory,
     RunnerStoreView,
 )
-from blizzard.runner.transfer.source import SQLITE_HEADER, DirectoryState, SourceKind, classify_source
+from blizzard.runner.transfer.source import SourceKind
 
 __all__ = [
     "INGEST_COMMAND",
@@ -89,7 +72,6 @@ __all__ = [
     "IngestOutcome",
     "IngestRequest",
     "RunnerIngest",
-    "source_kind",
 ]
 
 INGEST_COMMAND = "blizzard runner ingest"
@@ -108,22 +90,6 @@ _CP_AFTER_CONFIG = crashpoint(
 _RUNNER_SCOPE_REVISION = "20261015_1000_host_ingests"
 
 _log = get_logger("blizzard.runner.ingest")
-
-
-def source_kind(source: Path) -> SourceKind:
-    """Observe and classify the source before resolving its path."""
-    directory = None
-    is_file = False
-    header = b""
-    if source.is_dir():
-        directory = DirectoryState(HostLayout(source).graduation().value)
-    elif source.is_file():
-        is_file = True
-        with source.open("rb") as handle:
-            header = handle.read(len(SQLITE_HEADER))
-    return classify_source(
-        str(source), directory=directory, is_file=is_file, header=header, host_config_filename=HOST_CONFIG_FILENAME
-    )
 
 
 @domain_model
@@ -166,11 +132,15 @@ class IIngestStores(IRunnerBoundReadsFactory, IRunnerBoundStoresFactory, Protoco
 
 
 class IHostFileEditor(Protocol):
-    """The host-file appends an ingest makes."""
+    """The host-file edits an ingest makes to the host at ``root``, and the re-read that tells whether one is made."""
 
-    def append_workspace(self, layout: HostLayout, table: str) -> None: ...
-    def append_subscription(self, layout: HostLayout, table: str) -> None: ...
-    def append_runner(self, layout: HostLayout, table: str) -> None: ...
+    def declared(self, root: Path, table: str, key: str) -> frozenset[str]:
+        """The ``key`` of every ``[[table]]`` the host file holds now."""
+        ...
+
+    def append_workspace(self, root: Path, workspace: DeclaredWorkspace) -> None: ...
+    def append_subscription(self, root: Path, subscription: DeclaredSubscription) -> None: ...
+    def append_runner(self, root: Path, table: str) -> None: ...
 
 
 class ITokenFiles(Protocol):
@@ -182,24 +152,6 @@ class ITokenFiles(Protocol):
 
     def write(self, root: Path, token_env: str, token: str) -> None: ...
     def remove(self, root: Path, token_env: str) -> None: ...
-
-
-@domain_model
-@dataclass(frozen=True)
-class _Source:
-    """The resolved source: its kind, the path the ingest record names, its store file, and — for a host directory,
-    or a runner directory graduated in memory — its configuration, the text of its host file when that is not on disk,
-    and the variable its ``.env`` holds a runner's token under when that is not the runner's own."""
-
-    kind: SourceKind
-    path: Path
-    store: Path
-    config: HostConfig | None
-    host_text: str | None = None
-    token_env: str | None = None
-
-    def token_variable(self, runner_name: str) -> str:
-        return self.token_env or hub_token_variable(runner_name)
 
 
 @domain_model
@@ -217,9 +169,9 @@ class _SourceCopy:
 class _ConfigPlan:
     """The configuration edits an ingest makes, each skipped when already made."""
 
-    workspaces: tuple[HostWorkspace, ...] = ()
+    workspaces: tuple[DeclaredWorkspace, ...] = ()
     workspace_ids: Mapping[str, str] | None = None
-    subscription: SubscriptionDeclaration | None = None
+    subscription: DeclaredSubscription | None = None
     runner_table: str | None = None
     files: tuple[tuple[Path, Path], ...] = ()
     token: str = ""
@@ -229,7 +181,8 @@ class _ConfigPlan:
 class RunnerIngest:
     """Ingests runners into the host ``host``."""
 
-    host: HostConfig
+    host: IngestHost
+    sources: ISourceHosts
     stores: IIngestStores
     host_file: IHostFileEditor
     tokens: ITokenFiles
@@ -244,23 +197,23 @@ class RunnerIngest:
     def run(self, request: IngestRequest) -> IngestOutcome:
         """Ingest the runner ``request`` names, or complete an ingest of it interrupted part-way. Raises an
         :class:`IngestRefused` naming why it cannot."""
-        kind = source_kind(request.source)
+        kind = self.sources.kind(request.source)
         path = request.source.resolve()
         if path == self.host.root:
             raise SourceUnsupported(f"{path} is this host; name another host directory or an archive store")
         with (
-            self._held(self.host.layout, "this host"),
-            self._held(HostLayout(path), "the source") if kind is SourceKind.HOST_DIRECTORY else nullcontext(),
-            self._answering(HostLayout(path).legacy_socket_path) if kind is SourceKind.UNGRADUATED else nullcontext(),
+            self._held(self.host.root, "this host"),
+            self._held(path, "the source") if kind is SourceKind.HOST_DIRECTORY else nullcontext(),
+            self._answering(self.sources.legacy_socket(path)) if kind is SourceKind.UNGRADUATED else nullcontext(),
         ):
             source = self._source(kind, path)
             return self._ingest(source, request)
 
     @contextmanager
-    def _held(self, layout: HostLayout, which: str) -> Generator[None, None, None]:
-        """``layout``'s directory held for the run: its lock taken, and nothing answering on its sockets."""
+    def _held(self, root: Path, which: str) -> Generator[None, None, None]:
+        """The host directory ``root`` held for the run: its lock taken, and nothing answering on its sockets."""
         with self.files.hold(
-            layout.root,
+            root,
             self.holder,
             lambda held: SourceRunning(f"{which} is running ({held}); stop it, then re-run"),
         ):
@@ -274,37 +227,20 @@ class RunnerIngest:
             raise SourceRunning(f"the source is running ({held}); stop it, then re-run")
         yield
 
-    def _source(self, kind: SourceKind, path: Path) -> _Source:
+    def _source(self, kind: SourceKind, path: Path) -> SourceHost:
         if kind is SourceKind.ARCHIVE:
-            return _Source(kind, path, path, None)
+            return SourceHost(kind, path, path, None)
         if kind is SourceKind.UNGRADUATED:
             return self._ungraduated(path)
-        try:
-            config = HostConfig.load(path, flag_registry=self.host.flag_registry, strict=self.host.strict)
-            store = sqlite_store_file(config.db_url)
-        except (ConfigError, StoreResetRefused) as exc:
-            raise SourceUnsupported(f"cannot read the source host at {path}: {exc}") from exc
-        return _Source(kind, path, store, config)
+        return self.sources.open_host(path)
 
-    def _ungraduated(self, path: Path) -> _Source:
+    def _ungraduated(self, path: Path) -> SourceHost:
         """A runner directory that has not graduated, read as the host of one it graduates to: its store is
         ``data/runner.db``, its runner's id is the one that store records, and its token is under the variable its
         file names. Once its store is moved aside it carries nothing but its path, which an ingest record names."""
-        layout = HostLayout(path)
-        store = layout.legacy_store_path
-        try:
-            legacy = read_legacy_document(layout)
-        except ConfigError as exc:
-            raise SourceUnsupported(str(exc)) from exc
-        named = legacy.get("db_url")
-        if named is not None and sqlite_url(store) != named and f"sqlite:///{store}" != named:
-            raise SourceUnsupported(
-                f"{layout.legacy_config_path} names its store at {named}, not {store}: graduation reads the "
-                f"directory's own store only, so graduate it by hand ({GRADUATION_PROCEDURE})"
-            )
-        token_env = str(legacy.get("token_env", UNSUFFIXED_TOKEN_VARIABLE))
+        store, token_env = self.sources.legacy_store(path)
         if not store.exists():
-            return _Source(SourceKind.UNGRADUATED, path, store, None, token_env=token_env)
+            return SourceHost(SourceKind.UNGRADUATED, path, store, None, token_env=token_env)
         with self._copy_of(store) as copy:
             named_runners = self.stores.named_runners(copy.url)
             if len(named_runners) != 1:
@@ -314,51 +250,40 @@ class RunnerIngest:
                 )
             [runner_id] = named_runners
             view = self.stores.reads_for(runner_id).runner_view(copy.url)
-        try:
-            config = HostConfig.graduated(
-                path,
-                legacy,
-                runner_id=runner_id,
-                served=view.served_projects,
-                flag_registry=self.host.flag_registry,
-                strict=self.host.strict,
-            )
-        except ConfigError as exc:
-            raise SourceUnsupported(f"cannot graduate the runner file {layout.legacy_config_path}: {exc}") from exc
-        return _Source(SourceKind.UNGRADUATED, path, store, config, host_text=config.to_toml(), token_env=token_env)
+        return self.sources.graduate(path, runner_id=runner_id, served=view.served_projects)
 
-    def _entry(self, source: _Source, runner: str) -> RunnerEntry:
+    def _entry(self, source: SourceHost, runner: str) -> RunnerDeclaration:
         """The moving runner's ``[[runner]]``: the source's, or — for an archive, which carries rows only — this
         host's."""
-        config = source.config or self.host
+        declared = source.declared or self.host.declared
         try:
-            entry = config.sole_runner(runner)
+            entry = self.sources.runner(source if source.declared is not None else None, runner)
         except ConfigError as exc:
             if source.kind is SourceKind.UNGRADUATED:
                 raise SourceUnsupported(
                     f"the source holds no store at {source.store}, and this host holds no runner {runner} ingested "
                     f"from it: {exc}"
                 ) from exc
-            if source.config is None:
+            if source.declared is None:
                 raise SourceUnsupported(
                     f"an archive store carries the runner's rows only, so its [[runner]] and token must already be in "
                     f"this host: {exc}"
                 ) from exc
             raise SourceUnsupported(str(exc)) from exc
         if entry.id is None:
-            raise SourceUnsupported(f"runner {entry.name} has no id in {config.config_path}, so the hub holds none")
+            raise SourceUnsupported(f"runner {entry.name} has no id in {declared.config_path}, so the hub holds none")
         if entry.errors:
             raise SourceUnsupported(f"runner {entry.name}'s [[runner]] is refused: {'; '.join(entry.errors)}")
         return entry
 
-    def _ingest(self, source: _Source, request: IngestRequest) -> IngestOutcome:
+    def _ingest(self, source: SourceHost, request: IngestRequest) -> IngestOutcome:
         entry = self._entry(source, request.runner)
         runner_id = entry.id
         assert runner_id is not None
         here = self.host.db_url
         try:
-            sqlite_store_file(here)
-        except StoreResetRefused as exc:
+            self.files.store_file(here)
+        except NotAStoreFile as exc:
             raise SourceUnsupported(f"this host's store cannot take an ingest: {exc}") from exc
         runner = self.stores.for_runner(runner_id)
         record = runner.latest_host_ingest(here)
@@ -412,7 +337,7 @@ class RunnerIngest:
             # Its one runner is the whole store, which stays at the schema it ran: it is moved aside, not edited.
             moved = self.files.set_aside(source.store, now=self.clock.now())
         else:
-            runner.remove_runner_rows(sqlite_url(source.store), keep_counters=False)
+            runner.remove_runner_rows(self.files.store_url(source.store), keep_counters=False)
             moved = self._set_aside_emptied(source)
         _log.info("runner ingested", runner_id=runner_id, source=str(source.path), resumed=resuming)
         return IngestOutcome(runner_id, entry.name, resumed=resuming, set_aside=moved)
@@ -420,8 +345,8 @@ class RunnerIngest:
     @contextmanager
     def _copy_of(self, store: Path) -> Generator[_SourceCopy, None, None]:
         """A backup copy of the source ``store`` beside this host's store, migrated to head, removed on leaving."""
-        with self.files.copy_of(store, self.host.layout.data_dir) as copy:
-            migrations = self.migrations(sqlite_url(copy))
+        with self.files.copy_of(store, self.host.data_dir) as copy:
+            migrations = self.migrations(self.files.store_url(copy))
             current = migrations.current_revision()
             migrations.refuse_below_floor(store=str(store), current=current)
             if current is not None and not migrations.knows_revision(current):
@@ -434,10 +359,10 @@ class RunnerIngest:
                 migrations.upgrade("head")
             except (MigrationConnectionError, MigrationRefused) as exc:
                 raise SourceUnsupported(f"the copy of the source store {store} cannot be migrated: {exc}") from exc
-            yield _SourceCopy(sqlite_url(copy), runner_scoped)
+            yield _SourceCopy(self.files.store_url(copy), runner_scoped)
 
     def _refuse_fresh(
-        self, source: _Source, entry: RunnerEntry, runner_id: str, view: RunnerStoreView, copy: _SourceCopy
+        self, source: SourceHost, entry: RunnerDeclaration, runner_id: str, view: RunnerStoreView, copy: _SourceCopy
     ) -> None:
         """Every refusal a first ingest of the runner earns before anything is written."""
         record = self._hub_record()
@@ -461,17 +386,17 @@ class RunnerIngest:
             scope_revision=_RUNNER_SCOPE_REVISION,
         )
         refuse_busy(view, runner_name=entry.name)
-        if source.config is not None:
+        if source.declared is not None:
             refuse_declared_here(
-                tuple(DeclaredRunner(held.name, held.id) for held in self.host.runners),
+                tuple(DeclaredRunner(held.name, held.id) for held in self.host.declared.runners),
                 runner_name=entry.name,
                 runner_id=runner_id,
-                config_path=str(self.host.config_path),
+                config_path=str(self.host.declared.config_path),
             )
 
     def _hub_record(self) -> HostRecord:
         hub = self.host.hub_url
-        if not self.host.host_token.value:
+        if not self.host.holds_host_token:
             raise HostNotHolding(
                 f"this host holds no host token, so it is not registered at its hub: register it with "
                 f"`blizzard runner init {self.host.root}`, or add it with `blizzard hub runner-host add <name> "
@@ -494,21 +419,21 @@ class RunnerIngest:
         except HostIdentityAlreadyRecorded as exc:
             raise HostNotHolding(exc.refusal()) from exc
 
-    def _plan(self, source: _Source, entry: RunnerEntry, workspace_id: str | None) -> _ConfigPlan:
+    def _plan(self, source: SourceHost, entry: RunnerDeclaration, workspace_id: str | None) -> _ConfigPlan:
         """The configuration edits the runner brings; an archive's are all made already."""
-        if source.config is None:
+        if source.declared is None:
             refuse_archive_rename(workspace_id)
             return _ConfigPlan()
-        config = source.config
-        workspaces, ids = self._workspace_plan(config, entry, workspace_id)
-        declared = {subscription.slug for subscription in self.host.subscriptions}
+        theirs = source.declared
+        workspaces, ids = self._workspace_plan(theirs.workspaces, theirs.root, entry, workspace_id)
+        declared = {subscription.slug for subscription in self.host.declared.subscriptions}
         subscription = (
-            next((s for s in config.subscriptions if s.slug == entry.subscription), None)
+            next((s for s in theirs.subscriptions if s.slug == entry.subscription), None)
             if entry.subscription is not None and entry.subscription not in declared
             else None
         )
-        table, files = self._runner_plan(config, entry, ids, text=source.host_text)
-        token = self.tokens.held(config.root, source.token_variable(entry.name))
+        table, files = self._runner_plan(source, entry, ids)
+        token = self.tokens.held(theirs.root, source.token_variable(entry.name))
         return _ConfigPlan(
             workspaces=workspaces,
             workspace_ids=ids or None,
@@ -519,64 +444,58 @@ class RunnerIngest:
         )
 
     def _workspace_plan(
-        self, config: HostConfig, entry: RunnerEntry, workspace_id: str | None
-    ) -> tuple[tuple[HostWorkspace, ...], dict[str, str]]:
+        self,
+        offered: tuple[DeclaredWorkspace, ...],
+        source_root: Path,
+        entry: RunnerDeclaration,
+        workspace_id: str | None,
+    ) -> tuple[tuple[DeclaredWorkspace, ...], dict[str, str]]:
         """The workspaces to append and the ids the runner's workspaces take here."""
-        theirs = {workspace.id: workspace for workspace in config.workspaces}
+        theirs = {workspace.id: workspace for workspace in offered}
         placements = place_workspaces(
             tuple(dict.fromkeys(binding.workspace for binding in entry.bindings)),
             runner_name=entry.name,
             workspace_id=workspace_id,
-            offered={held_id: _shape(workspace, config.root) for held_id, workspace in theirs.items()},
-            held={workspace.id: _shape(workspace, self.host.root) for workspace in self.host.workspaces},
+            offered={held_id: _shape(workspace) for held_id, workspace in theirs.items()},
+            held={workspace.id: _shape(workspace) for workspace in self.host.declared.workspaces},
         )
-        appended: list[HostWorkspace] = []
+        appended: list[DeclaredWorkspace] = []
         for placement in placements:
             if placement.appended:
-                offered = theirs[placement.name]
+                taken = theirs[placement.name]
                 appended.append(
                     replace(
-                        offered,
+                        taken,
                         id=placement.target,
-                        root=_shape(offered, config.root).root,
-                        prompt_file=_absolute(offered.prompt_file, config.root),
+                        root=taken.effective_root,
+                        prompt_file=_absolute(taken.prompt_file, source_root),
                     )
                 )
         ids = {placement.name: placement.target for placement in placements if placement.target != placement.name}
         return tuple(appended), ids
 
     def _runner_plan(
-        self, config: HostConfig, entry: RunnerEntry, ids: Mapping[str, str], *, text: str | None
+        self, source: SourceHost, entry: RunnerDeclaration, ids: Mapping[str, str]
     ) -> tuple[str, tuple[tuple[Path, Path], ...]]:
         """The source's ``[[runner]]`` text with its bindings renamed and every path key pointing into the source
         rewritten to its copy under this host's ``runners/<name>/``, and the copies to make."""
-        try:
-            table = runner_table(config.layout, entry.name, strict=self.host.strict, text=text)
-        except ConfigError as exc:
-            raise SourceUnsupported(str(exc)) from exc
-        values: dict[tuple[str, ...], str] = {}
-        if ids:
-            values[("projects",)] = bindings_literal(
-                tuple(ProjectBinding(b.project, ids.get(b.workspace, b.workspace)) for b in entry.bindings)
-            )
-        runner_dir = self.host.root / RUNNERS_DIRNAME / entry.name
-        runner = _runner_of(table, strict=self.host.strict)
-        paths: dict[tuple[str, ...], Path] = {}
-        keys = tuple(path_key.key for path_key in RUNNER_PATH_KEYS)
-        for key in keys:
-            value = _lookup(runner, key)
-            if isinstance(value, str) and value:
-                located = Path(value).expanduser()
-                paths[key] = (located if located.is_absolute() else config.root / located).resolve()
-        replacements, files = rebase_path_keys(paths, keys, config.root, Path(RUNNERS_DIRNAME) / entry.name, runner_dir)
-        values.update({key: _string_literal(str(path)) for key, path in replacements.items()})
-        try:
-            return with_runner_values(table, values, strict=self.host.strict), tuple(files)
-        except ConfigError as exc:
-            raise SourceUnsupported(f"runner {entry.name}'s [[runner]] cannot be carried: {exc}") from exc
+        projects = (
+            tuple(DeclaredBinding(b.project, ids.get(b.workspace, b.workspace)) for b in entry.bindings)
+            if ids
+            else None
+        )
+        located = self.sources.path_keys(source, entry.name)
+        copies, files = rebase_path_keys(
+            located,
+            tuple(located),
+            source.declared.root if source.declared is not None else Path(),
+            self.host.runners_dir.relative_to(self.host.root) / entry.name,
+            self.host.runners_dir / entry.name,
+        )
+        return self.sources.carried(source, entry.name, projects=projects, copies=copies), files
 
     def _refuse_conflicts(
-        self, source: _Source, entry: RunnerEntry, runner_id: str, view: RunnerStoreView, plan: _ConfigPlan
+        self, source: SourceHost, entry: RunnerDeclaration, runner_id: str, view: RunnerStoreView, plan: _ConfigPlan
     ) -> None:
         """The refusals that need the configuration plan: a held environment two runners would hold, and a token that
         cannot move."""
@@ -597,41 +516,41 @@ class RunnerIngest:
             runner_id=runner_id,
         )
 
-    def _configure(self, source: _Source, entry: RunnerEntry, plan: _ConfigPlan) -> None:
+    def _configure(self, source: SourceHost, entry: RunnerDeclaration, plan: _ConfigPlan) -> None:
         """Make each configuration edit not yet made, in the order a crash between any two leaves resumable."""
-        layout, strict = self.host.layout, self.host.strict
+        root = self.host.root
         for workspace in plan.workspaces:
-            if workspace.id not in _declared(layout, "workspace", "id", strict=strict):
-                self.host_file.append_workspace(layout, workspace_toml(workspace))
-        if plan.subscription is not None and plan.subscription.slug not in _declared(
-            layout, "subscription", "slug", strict=strict
+            if workspace.id not in self.host_file.declared(root, "workspace", "id"):
+                self.host_file.append_workspace(root, workspace)
+        if plan.subscription is not None and plan.subscription.slug not in self.host_file.declared(
+            root, "subscription", "slug"
         ):
-            self.host_file.append_subscription(layout, subscription_toml(plan.subscription))
+            self.host_file.append_subscription(root, plan.subscription)
         if plan.runner_table is not None:
             for located, copied in plan.files:
                 if located.is_dir():
                     self.files.copy_tree(located, copied)
                 elif located.exists():
                     self.files.copy_file(located, copied)
-            (self.host.root / RUNNERS_DIRNAME / entry.name).mkdir(parents=True, exist_ok=True)
-            if entry.name not in _declared(layout, "runner", "name", strict=strict):
-                self.host_file.append_runner(layout, plan.runner_table)
+            (self.host.runners_dir / entry.name).mkdir(parents=True, exist_ok=True)
+            if entry.name not in self.host_file.declared(root, "runner", "name"):
+                self.host_file.append_runner(root, plan.runner_table)
         variable = hub_token_variable(entry.name)
-        if plan.token and self.tokens.held(self.host.root, variable) != plan.token:
-            self.tokens.write(self.host.root, variable, plan.token)
-        if source.config is not None:
-            self.tokens.remove(source.config.root, source.token_variable(entry.name))
+        if plan.token and self.tokens.held(root, variable) != plan.token:
+            self.tokens.write(root, variable, plan.token)
+        if source.declared is not None:
+            self.tokens.remove(source.declared.root, source.token_variable(entry.name))
 
-    def _set_aside_emptied(self, source: _Source) -> tuple[Path, ...]:
+    def _set_aside_emptied(self, source: SourceHost) -> tuple[Path, ...]:
         """The source store moved aside whole when no runner is left in it."""
-        if not source.store.exists() or self.stores.named_runners(sqlite_url(source.store)):
+        if not source.store.exists() or self.stores.named_runners(self.files.store_url(source.store)):
             return ()
         return self.files.set_aside(source.store, now=self.clock.now())
 
 
-def _shape(workspace: HostWorkspace, root: Path) -> WorkspaceShape:
-    """``workspace``'s shape, its root resolved against ``root``, the host that declared it."""
-    return WorkspaceShape(workspace.settings(root).effective_workspace_root, frozenset(workspace.envs))
+def _shape(workspace: DeclaredWorkspace) -> WorkspaceShape:
+    """``workspace``'s shape, its root resolved against the host that declared it."""
+    return WorkspaceShape(workspace.effective_root, frozenset(workspace.envs))
 
 
 def _absolute(prompt_file: str, root: Path) -> str:
@@ -641,34 +560,3 @@ def _absolute(prompt_file: str, root: Path) -> str:
         return ""
     located = Path(prompt_file)
     return str(located if located.is_absolute() else root / located)
-
-
-def _declared(layout: HostLayout, table: str, key: str, *, strict: bool) -> set[str]:
-    """The ``key`` of every ``[[table]]`` the host file holds now."""
-    document = decode_host_text(layout.config_path.read_text(), what=str(layout.config_path))
-    view = ConfigView.root(HOST_REGISTRY, document, strict=strict)
-    return {str(entry.get(key)) for entry in view.entries(table) if entry.body}
-
-
-def _runner_of(table: str, *, strict: bool) -> ConfigView:
-    """The one ``[[runner]]`` a runner table holds, as a view over the host registry."""
-    view = ConfigView.root(HOST_REGISTRY, decode_host_text(table, what="the [[runner]]"), strict=strict)
-    return next(view.entries("runner"))
-
-
-def _lookup(runner: ConfigView, key: tuple[str, ...]) -> object:
-    node = runner
-    for part in key[:-1]:
-        node = node.table(part)
-    return node.get(key[-1])
-
-
-def _string_literal(value: str) -> str:
-    return json.dumps(value)
-
-
-def bindings_literal(bindings: tuple[ProjectBinding, ...]) -> str:
-    entries = (
-        f"{{ project = {_string_literal(b.project)}, workspace = {_string_literal(b.workspace)} }}" for b in bindings
-    )
-    return "[" + ", ".join(entries) + "]"
