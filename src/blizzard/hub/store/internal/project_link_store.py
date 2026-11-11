@@ -44,23 +44,19 @@ from blizzard.hub.store.scoped import ScopedConnections, ScopedStatements, state
 
 @dataclass(frozen=True)
 class LinkKind:
-    """One link kind: its link and fact tables, the column naming the linked record, its conflict label, and the
-    configured fields its link row carries beside the revision."""
+    """One link kind: its link and fact tables, the column naming the linked record, and its conflict label."""
 
     links: Table
     facts: Table
     column: str
     label: str
-    fields: tuple[str, ...] = ()
 
     def name(self, table: Table) -> Column[Any]:
         return table.c[self.column]
 
 
 _SOURCES = LinkKind(project_source_links, project_source_link_facts, "work_source_id", "source link")
-_REPOSITORIES = LinkKind(
-    project_repository_links, project_repository_link_facts, "repository_id", "repository link", ("base_branch",)
-)
+_REPOSITORIES = LinkKind(project_repository_links, project_repository_link_facts, "repository_id", "repository link")
 
 #: The link tables each link record kind writes to.
 LINK_KINDS: Mapping[RecordKind, LinkKind] = {
@@ -108,30 +104,24 @@ def insert_link(conn: Connection, kind: LinkKind, project_id: str, name: str, ch
 
 
 def record_link(
-    conn: Connection,
-    kind: LinkKind,
-    project_id: str,
-    name: str,
-    *,
-    linked: bool,
-    revision: int,
-    from_revision: int,
-    change: ConfigChange,
-    fields: Mapping[str, object] | None = None,
+    conn: Connection, link: SourceLink | RepositoryLink, *, from_revision: int, change: ConfigChange
 ) -> None:
-    """The edit/unlink/relink body, inside the caller's transaction: compare-and-set the revision, writing the
-    configured ``fields`` the kind's link row carries, append a standing fact when the change moves the link's
-    standing, and append the change — a source link under its project's lock."""
+    """The edit/unlink/relink body, inside the caller's transaction: compare-and-set ``link``'s revision, writing a
+    repository link's own base branch, append a standing fact when the change moves the link's standing, and append
+    the change — a source link under its project's lock."""
+    kind = LINK_KINDS[link.KIND]
+    project_id, name = link.project_id, link.target()
     _lock_source_links(conn, kind, project_id)
     links = kind.links
-    written = {field: value for field, value in (fields or {}).items() if field in kind.fields}
-    moved = conn.execute(
+    update = (
         statements_of(conn)
         .update(links)
         .where(links.c.project_id == project_id, kind.name(links) == name, links.c.revision == from_revision)
-        .values(revision=revision, **written)
-    ).rowcount
-    if moved != 1:
+        .values(revision=link.revision)
+    )
+    if isinstance(link, RepositoryLink):
+        update = update.values(base_branch=link.base_branch)
+    if conn.execute(update).rowcount != 1:
         current = conn.execute(
             statements_of(conn)
             .select(links, links.c.revision)
@@ -139,15 +129,8 @@ def record_link(
         ).scalar_one()
         raise ConfigRevisionConflict(kind.label, f"{project_id}/{name}", current=current)
     if any(moved_field.field == LINKED_FIELD for moved_field in change.diff):
-        _append_fact(conn, kind, project_id, name, linked, change)
+        _append_fact(conn, kind, project_id, name, link.linked, change)
     append_change(conn, change)
-
-
-def link_fields(link: SourceLink | RepositoryLink) -> dict[str, object]:
-    """The configured fields ``link``'s row carries beside its revision."""
-    if isinstance(link, RepositoryLink):
-        return {"base_branch": link.base_branch}
-    return {}
 
 
 def _newest_linked(
@@ -212,10 +195,10 @@ def _standing(
 @adapter_model
 @dataclass(frozen=True)
 class _Row:
-    """A stored link row: its revision and the configured fields its kind carries."""
+    """A stored link row: its revision and, for a repository link, its own base branch."""
 
     revision: int
-    fields: Mapping[str, Any]
+    base_branch: str | None = None
 
 
 def _revisions(
@@ -224,7 +207,7 @@ def _revisions(
     """The stored row of each link of ``pairs``; a pair never linked is dropped. Each batch reads the links of its
     projects by names, kept to the pairs asked for."""
     links = kind.links
-    extra = [links.c[field] for field in kind.fields]
+    extra = [links.c.base_branch] if kind is _REPOSITORIES else []
     found: dict[tuple[str, str], _Row] = {}
     for project_batch in id_batches(sorted({project_id for project_id, _ in pairs})):
         for name_batch in id_batches(sorted({name for _, name in pairs})):
@@ -233,11 +216,7 @@ def _revisions(
                     links.c.project_id.in_(project_batch), kind.name(links).in_(name_batch)
                 )
             ).all()
-            found.update(
-                ((row[0], row[1]), _Row(row[2], dict(zip(kind.fields, row[3:], strict=True))))
-                for row in rows
-                if (row[0], row[1]) in pairs
-            )
+            found.update(((row[0], row[1]), _Row(row[2], *row[3:])) for row in rows if (row[0], row[1]) in pairs)
     return found
 
 
@@ -269,16 +248,7 @@ class ProjectLinkStore:
         return link
 
     def record_source_link(self, link: SourceLink, *, from_revision: int, change: ConfigChange) -> SourceLink:
-        self._record(
-            "record_source_link",
-            _SOURCES,
-            link.project_id,
-            link.work_source_id,
-            link.linked,
-            link.revision,
-            from_revision,
-            change,
-        )
+        self._record("record_source_link", link, from_revision, change)
         return link
 
     def create_repository_link(self, link: RepositoryLink, *, change: ConfigChange) -> RepositoryLink:
@@ -288,17 +258,7 @@ class ProjectLinkStore:
     def record_repository_link(
         self, link: RepositoryLink, *, from_revision: int, change: ConfigChange
     ) -> RepositoryLink:
-        self._record(
-            "record_repository_link",
-            _REPOSITORIES,
-            link.project_id,
-            link.repository_id,
-            link.linked,
-            link.revision,
-            from_revision,
-            change,
-            link_fields(link),
-        )
+        self._record("record_repository_link", link, from_revision, change)
         return link
 
     def _create(self, operation: str, kind: LinkKind, project_id: str, name: str, change: ConfigChange) -> None:
@@ -309,29 +269,10 @@ class ProjectLinkStore:
             raise ConfigRevisionConflict(kind.label, f"{project_id}/{name}", current=1) from exc
 
     def _record(
-        self,
-        operation: str,
-        kind: LinkKind,
-        project_id: str,
-        name: str,
-        linked: bool,
-        revision: int,
-        from_revision: int,
-        change: ConfigChange,
-        fields: Mapping[str, object] | None = None,
+        self, operation: str, link: SourceLink | RepositoryLink, from_revision: int, change: ConfigChange
     ) -> None:
         with self._store.write(operation, expect=(ConfigRevisionConflict,)) as conn:
-            record_link(
-                conn,
-                kind,
-                project_id,
-                name,
-                linked=linked,
-                revision=revision,
-                from_revision=from_revision,
-                change=change,
-                fields=fields,
-            )
+            record_link(conn, link, from_revision=from_revision, change=change)
 
     # --- reads ---
 
@@ -375,7 +316,7 @@ class ProjectLinkStore:
                 revision=row.revision,
                 linked=linked,
                 position=positions.get((project_id, name)),
-                base_branch=row.fields["base_branch"],
+                base_branch=row.base_branch,
             )
             for (project_id, name), (row, linked) in stored.items()
         }
@@ -402,7 +343,7 @@ class ProjectLinkStore:
                     repository_id=RepositoryId(name),
                     revision=row.revision,
                     position=positions.get((project_id, name)),
-                    base_branch=row.fields["base_branch"],
+                    base_branch=row.base_branch,
                 )
                 for name, row in standing
             ]

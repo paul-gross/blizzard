@@ -409,17 +409,7 @@ def _run_link(
     if from_revision is None:
         link_writes.insert_link(conn, kind, record.project_id, record.target(), change)
     else:
-        link_writes.record_link(
-            conn,
-            kind,
-            record.project_id,
-            record.target(),
-            linked=record.linked,
-            revision=record.revision,
-            from_revision=from_revision,
-            change=change,
-            fields=link_writes.link_fields(record),
-        )
+        link_writes.record_link(conn, record, from_revision=from_revision, change=change)
 
 
 _config_apply_store_conforms: type[IConfigApplyWriter] = ConfigApplyStore
