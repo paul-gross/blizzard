@@ -398,8 +398,9 @@ export const listArtifactsRunnersRunnerIdApiLeasesLeaseIdArtifactsGet = <ThrowOn
  * One artifact by name, optionally narrowed by ``scope`` and, for node scope, by ``node``;
  * ``404`` when nothing matches. A supplied ``node`` settles scope to node on its own — neither
  * a graph declaration nor a system artifact has a producing node — so pairing it with
- * ``scope=graph``/``scope=system`` is ``400``. More than one candidate — several upstream
- * nodes, or a name colliding across scopes — is ``409`` naming them.
+ * ``scope=graph``/``scope=system`` is ``400``. A name several nodes produced
+ * reads as the newest entry (``node`` narrows to one node's series); ``409`` is a name colliding
+ * across scopes, naming them.
  */
 export const getArtifactRunnersRunnerIdApiLeasesLeaseIdArtifactsNameGet = <ThrowOnError extends boolean = false>(options: Options<GetArtifactRunnersRunnerIdApiLeasesLeaseIdArtifactsNameGetData, ThrowOnError>): RequestResult<GetArtifactRunnersRunnerIdApiLeasesLeaseIdArtifactsNameGetResponses, GetArtifactRunnersRunnerIdApiLeasesLeaseIdArtifactsNameGetErrors, ThrowOnError> => (options.client ?? client).get<GetArtifactRunnersRunnerIdApiLeasesLeaseIdArtifactsNameGetResponses, GetArtifactRunnersRunnerIdApiLeasesLeaseIdArtifactsNameGetErrors, ThrowOnError>({ url: '/runners/{runner_id}/api/leases/{lease_id}/artifacts/{name}', ...options });
 
