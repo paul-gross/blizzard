@@ -6,9 +6,10 @@ import pytest
 
 from blizzard.foundation.host_registration_state import HostRegistrationState
 from blizzard.foundation.runner_identity_state import IdentityState
+from blizzard.runner.cli.control import echo_identity
 from blizzard.runner.hub.host_identity import HostIdentity, HostIdentityAlreadyRecorded, adopted
 from blizzard.runner.hub.host_registration import HostRegistrationStatus
-from blizzard.runner.hub.identity import IdentityVerdict, judged, served_runner_state
+from blizzard.runner.hub.identity import STANDING_STATES, IdentityVerdict, judged, served_runner_state
 from blizzard.runner.lifecycle.identity_check import (
     ForeignStore,
     ForeignStoreKind,
@@ -16,6 +17,7 @@ from blizzard.runner.lifecycle.identity_check import (
     foreign_store,
     tick_scope,
 )
+from blizzard.wire.runner_status import IdentityVerdictView
 
 _AT = datetime(2026, 10, 1, 12, tzinfo=UTC)
 _RESET = "set BZ_HUB_TOKEN_R1"
@@ -124,3 +126,49 @@ def test_a_served_runner_whose_verdict_refuses_is_halted_naming_why() -> None:
     state, reasons = served_runner_state(_verdict(IdentityState.NOT_HELD, reason="not held at its hub"))
 
     assert (state, reasons) == ("halted", ["not held at its hub"])
+
+
+# --- the status label: standing halts, the rest refuse ----------------------------------------------------------------
+
+_NOT_STANDING = frozenset(
+    {
+        IdentityState.UNCHECKED,
+        IdentityState.MATCHED,
+        IdentityState.MISMATCHED,
+        IdentityState.REFUSED,
+        IdentityState.VERSION_REFUSED,
+    }
+)
+
+
+@pytest.mark.parametrize("state", list(IdentityState))
+def test_every_identity_state_is_placed_as_halted_by_standing_or_not(state: IdentityState) -> None:
+    assert (state in STANDING_STATES) != (state in _NOT_STANDING)
+    assert _verdict(state).halted_by_standing() is (state in STANDING_STATES)
+
+
+def test_the_standing_states_are_the_host_not_holding_the_runner_or_a_foreign_tenant() -> None:
+    assert {IdentityState.NOT_HELD, IdentityState.TENANT_DIFFERS} == STANDING_STATES
+
+
+def _identity_view(state: str, reason: str | None) -> IdentityVerdictView:
+    return IdentityVerdictView.model_validate(
+        {
+            "state": state,
+            "store_runner_id": "rn_1",
+            "token_runner_id": "rn_1",
+            "checked_at": None,
+            "reset_command": _RESET,
+            "reason": reason,
+        }
+    )
+
+
+def test_a_standing_halt_renders_a_halted_line(capsys: pytest.CaptureFixture[str]) -> None:
+    echo_identity(_identity_view("not_held", "the hub holds no runner under this host"))
+    assert capsys.readouterr().out == "  HALTED: the hub holds no runner under this host\n"
+
+
+def test_a_version_refusal_renders_a_refusing_line(capsys: pytest.CaptureFixture[str]) -> None:
+    echo_identity(_identity_view("version_refused", "runner too old"))
+    assert capsys.readouterr().out == "  REFUSING: runner too old\n"

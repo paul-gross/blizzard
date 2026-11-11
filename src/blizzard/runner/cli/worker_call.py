@@ -62,10 +62,17 @@ class WorkerSession:
         return session
 
     @classmethod
-    def begin(cls, ctx: click.Context, collaborators: CliCollaborators) -> WorkerSession:
-        session = cls(collaborators, group_path=ctx.command_path)
+    def begin(
+        cls, ctx: click.Context, collaborators: CliCollaborators, environ: Mapping[str, str] | None = None
+    ) -> WorkerSession:
+        session = cls(collaborators, environ, group_path=ctx.command_path)
         ctx.find_root().meta[_SESSION_META_KEY] = session
         return session
+
+    @property
+    def environ(self) -> Mapping[str, str]:
+        """The environment this command reads its identity and settings from — the one place a worker verb does."""
+        return self._environ
 
     def _traced_parent(self) -> DerivedContext | None:
         """The step's context, only when tracing is on: a parseable, sampled
@@ -165,8 +172,9 @@ class WorkerCall:
     def of(cls, verb: str, *, lease: bool = True) -> WorkerCall:
         """This worker's identity — a hard error rather than the soft skip :meth:`hook` takes,
         so a lost read or write reaches the worker rather than passing silently."""
-        runner_url = os.environ.get(ENV_RUNNER_URL)
-        lease_id = os.environ.get(ENV_LEASE_ID)
+        environ = WorkerSession.current().environ
+        runner_url = environ.get(ENV_RUNNER_URL)
+        lease_id = environ.get(ENV_LEASE_ID)
         if not runner_url or (lease and not lease_id):
             wanted = f"{ENV_LEASE_ID}/{ENV_RUNNER_URL}" if lease else ENV_RUNNER_URL
             raise click.ClickException(f"{verb}: no {wanted} in the environment")
@@ -179,8 +187,9 @@ class WorkerCall:
 
         A hook that fires constantly opts out of tracing with ``traced=False``: it opens no span
         and injects no context."""
-        runner_url = os.environ.get(ENV_RUNNER_URL)
-        lease_id = os.environ.get(ENV_LEASE_ID)
+        environ = WorkerSession.current().environ
+        runner_url = environ.get(ENV_RUNNER_URL)
+        lease_id = environ.get(ENV_LEASE_ID)
         if not lease_id or not runner_url:
             click.echo(f"{verb}: no {ENV_LEASE_ID}/{ENV_RUNNER_URL} in the environment; skipping", err=True)
             return None
@@ -190,7 +199,7 @@ class WorkerCall:
     def _bound(cls, verb: str, runner_url: str, lease_id: str, *, traced: bool) -> WorkerCall:
         session = WorkerSession.current()
         traceparent = session.open_span() if traced else None
-        return cls(verb, runner_url, lease_id, os.environ.get(ENV_LEASE_TOKEN), session, traceparent)
+        return cls(verb, runner_url, lease_id, session.environ.get(ENV_LEASE_TOKEN), session, traceparent)
 
     def leased(self, suffix: str) -> str:
         return f"/api/leases/{self.lease_id}/{suffix}"

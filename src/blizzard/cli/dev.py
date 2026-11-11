@@ -16,7 +16,6 @@ from click.core import ParameterSource
 from blizzard.cli.collaborators import CliCollaborators, ClientFactory, HTTPError
 from blizzard.cli.config_inputs import packaged_flag_registry, strict_config
 from blizzard.cli.operator_trace import OperatorTrace
-from blizzard.cli.param_rank import ParamSource
 from blizzard.cli.refusal import refusal_of
 from blizzard.foundation.invariants import Violation
 from blizzard.foundation.operator_sessions import IReadSessionStore
@@ -26,10 +25,10 @@ from blizzard.hub.cli.context import ENV_HUB_URL, CliContext
 from blizzard.hub.cli.session_service import SessionService
 from blizzard.hub.config import ConfigError, HubConfig
 from blizzard.runner.cli.control import ENV_LOCAL_API_URL
+from blizzard.runner.cli.daemon import Door, RunnerDaemon
 from blizzard.runner.cli.env import ENV_RUNNER_DIR
 from blizzard.runner.config_table import ConfigError as RunnerConfigError
 from blizzard.runner.host_config import HostConfig
-from blizzard.runner.host_layout import HostLayout
 from blizzard.tools.invariants import Invariants
 from blizzard.wire.invariants import INVARIANTS_IN_PROGRESS, InvariantsResponse
 
@@ -166,7 +165,7 @@ def _check_running(ctx: click.Context, hub_url: str | None, directory: str | Non
     if hub_url is not None:
         asks.append(lambda: _ask_hub(ctx, client_factory, hub_url))
     if directory is not None or runner_url is not None:
-        asks.append(lambda: _ask_host(client_factory, directory, runner_url))
+        asks.append(lambda: _ask_host(ctx, directory, runner_url))
     for ask in asks:
         try:
             violations.extend(ask())
@@ -195,27 +194,19 @@ def _ask_hub(ctx: click.Context, client_factory: ClientFactory, hub_url: str) ->
         raise click.ClickException(f"{where}: unreadable answer ({exc})") from exc
 
 
-def _ask_host(client_factory: ClientFactory, directory: str | None, runner_url: str | None) -> list[Violation]:
+def _ask_host(ctx: click.Context, directory: str | None, runner_url: str | None) -> list[Violation]:
     """Reached as the runner verbs reach it: ``--runner-url`` over TCP when it outranks ``--dir``, else the socket."""
-    dir_source = ParamSource.of("directory")
-    url_source = ParamSource.of("runner_url")
-    if dir_source.on_commandline and url_source.on_commandline:
-        raise click.UsageError(
-            "--dir and --runner-url are mutually exclusive: --dir names the socket, --runner-url TCP"
-        )
-    if runner_url is not None and (directory is None or url_source > dir_source):
-        where = f"runner host at {runner_url}"
-        client = client_factory(base_url=runner_url, timeout=CHECK_TIMEOUT)
-    else:
-        assert directory is not None
-        sock = HostLayout(Path(directory)).socket_path
-        where = f"runner host at {sock}"
-        if not sock.exists():
-            raise click.ClickException(f"{where}: no runner daemon is serving there")
-        client = client_factory(base_url="http://runner", timeout=CHECK_TIMEOUT, uds=str(sock))
     try:
-        with client:
-            resp = client.get(_HOST_PATH)
+        daemon = RunnerDaemon.reach("check-invariants", directory, runner_url, Door.of(ctx))
+    except click.UsageError:
+        raise
+    except click.ClickException as exc:
+        raise click.ClickException(f"runner host at {directory}: {exc.message}") from exc
+    where = f"runner host at {daemon.where}"
+    try:
+        with daemon.client:
+            # The raw status is read: a 409 is the check already running, not a failed request.
+            resp = daemon.client.get(_HOST_PATH, timeout=CHECK_TIMEOUT)
         if resp.status_code == HTTPStatus.CONFLICT:
             raise click.ClickException(_RUNNING)
         resp.raise_for_status()

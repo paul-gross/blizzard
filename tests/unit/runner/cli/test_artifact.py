@@ -191,6 +191,7 @@ def test_list_degrades_to_no_staged_entries_when_the_staged_read_fails(monkeypat
     assert {a["name"] for a in body} == {"plan", "build-branch"}
     assert all(a["staged"] is False for a in body)
     assert "omitting staged entries" in result.stderr
+    assert "could not read the staged artifacts (403 forbidden)" in result.stderr
 
 
 def test_list_omits_the_token_header_when_absent(monkeypatch: pytest.MonkeyPatch) -> None:

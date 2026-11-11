@@ -128,6 +128,10 @@ REFUSING_STATES = frozenset(
 )
 
 
+#: The refusing states that come from the host's standing at its hub rather than from the runner's token or version.
+STANDING_STATES = frozenset({IdentityState.NOT_HELD, IdentityState.TENANT_DIFFERS})
+
+
 #: The refusing states whose remedy is to restore the runner's token or correct its configured id.
 _RESET_STATES = frozenset({IdentityState.MISMATCHED, IdentityState.REFUSED})
 
@@ -165,6 +169,10 @@ class IdentityVerdict:
     def refusing(self) -> bool:
         """Whether this verdict halts the runner."""
         return self.state in REFUSING_STATES
+
+    def halted_by_standing(self) -> bool:
+        """Whether this verdict halts the runner because of the host's standing at its hub."""
+        return self.state in STANDING_STATES
 
     def refusal(self) -> str | None:
         """Why this verdict halts the runner, or ``None`` while it does not."""

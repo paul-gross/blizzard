@@ -2,12 +2,10 @@
 
 from __future__ import annotations
 
-import os
-
 import click
 
 from blizzard.runner.cli.artifact import artifact_create
-from blizzard.runner.cli.worker_call import ENV_ELICITATION, WorkerCall
+from blizzard.runner.cli.worker_call import ENV_ELICITATION, WorkerCall, WorkerSession
 
 
 def send_heartbeat() -> None:
@@ -33,7 +31,7 @@ def session_end() -> None:
     "declared done" signal.
 
     Fails **soft**, like the heartbeat."""
-    if os.environ.get(ENV_ELICITATION):
+    if WorkerSession.current().environ.get(ENV_ELICITATION):
         return
     worker = WorkerCall.hook("session-end")
     if worker is not None:
