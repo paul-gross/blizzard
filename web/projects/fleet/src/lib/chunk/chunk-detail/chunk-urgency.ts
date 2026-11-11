@@ -17,7 +17,7 @@ export const CHUNK_URGENCY_ICON = new InjectionToken<(icon: () => { key: string;
   templateUrl: './chunk-urgency.html',
 })
 export class ChunkUrgency {
-  readonly detail = input.required<ChunkDetail>();
+  readonly detail = input.required<Pick<ChunkDetail, 'chunk_id' | 'terminal' | 'urgency'>>();
   readonly control = input<ChunkControl | null>(null);
   protected readonly selectedId = computed(() => this.detail().terminal
     ? this.detail().urgency?.urgency_id ?? null

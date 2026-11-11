@@ -1,6 +1,7 @@
 import { ChangeDetectionStrategy, Component, computed, input, output } from '@angular/core';
 
 import { type UrgencyView, type ChunkCountsView, type ChunkSummary, type WorkItemsView, chunkLane, workLines, compactRef, DONE_LANE, LANES, laneCounts, UNKNOWN_LANE, unknownLane, KitAsyncState, type KitAsyncStateValue, KitPanel, KitPanelHeader, KitTabs, type KitTabOption } from 'fleet';
+import type { ChunkControl } from 'fleet';
 import type { BoardCard } from '../board-card/board-card-view.model';
 import { placeLines } from '../../core/flow-place.model';
 import { boardDonePolicy, type BoardDonePolicy } from '../../core/board-done-policy.model';
@@ -47,6 +48,7 @@ export class BoardShell {
   readonly donePolicy = input<BoardDonePolicy>(boardDonePolicy([]));
 
   readonly urgencies = input<readonly UrgencyView[]>([]);
+  readonly chunkControl = input<ChunkControl | null>(null);
   readonly chunks = input<readonly ChunkSummary[]>([]);
 
   /** The all-time fleet counts each column head shows — `null` while the read is

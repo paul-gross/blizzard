@@ -1,5 +1,5 @@
 import type { UrgencyView } from 'fleet';
-import { liveUrgencies, urgencyOptions, visibleUrgencies } from './urgencies.model';
+import { liveUrgencies, overlayUrgencies, urgencyOptions, visibleUrgencies } from './urgencies.model';
 
 const first = { urgency_id: 'first', retired: false } as UrgencyView;
 const second = { urgency_id: 'second', retired: false } as UrgencyView;
@@ -44,5 +44,17 @@ describe('urgency choices', () => {
       { value: 'second', label: 'Second' }, { value: 'first', label: 'First' },
     ]);
     expect(liveUrgencies([])).toEqual([]);
+  });
+});
+
+describe('pending overlays', () => {
+  it('shows the pending position and default without changing the server records', () => {
+    const a = { ...first, default: true };
+    const b = { ...second, default: false };
+    const rows = overlayUrgencies([a, b, retired], [{ urgency: 'second', after: null }], [{ key: 'second' }]);
+    expect(rows.map((row) => row.urgency_id)).toEqual(['second', 'first', 'retired']);
+    expect(rows.map((row) => row.default)).toEqual([true, false, false]);
+    expect(a.default).toBe(true);
+    expect(b.default).toBe(false);
   });
 });

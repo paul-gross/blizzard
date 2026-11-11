@@ -50,6 +50,19 @@ export function urgencyPosition(rows: readonly UrgencyView[], from: number, to: 
   return { urgency: ordered[to].urgency_id, after: to === 0 ? null : ordered[to - 1].urgency_id };
 }
 
+export function overlayUrgencies(records: readonly UrgencyView[], moves: readonly UrgencyPositionRequest[], defaults: readonly { key: string }[]): readonly UrgencyView[] {
+  let rows = [...records];
+  for (const move of moves) {
+    const item = rows.find((row) => row.urgency_id === move.urgency);
+    if (!item || (move.after && !rows.some((row) => row.urgency_id === move.after))) continue;
+    rows = rows.filter((row) => row.urgency_id !== move.urgency);
+    const index = move.after ? rows.findIndex((row) => row.urgency_id === move.after) + 1 : 0;
+    rows.splice(index, 0, item);
+  }
+  const selected = defaults.at(-1)?.key;
+  return selected ? rows.map((row) => ({ ...row, default: row.urgency_id === selected })) : rows;
+}
+
 export function liveUrgencies(records: readonly UrgencyView[]): readonly UrgencyView[] {
   return records.filter((record) => !record.retired);
 }

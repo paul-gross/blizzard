@@ -1,7 +1,7 @@
 import { provideZonelessChangeDetection } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { provideRouter } from '@angular/router';
-import { type hubApi } from 'fleet';
+import { type hubApi, type UrgencyView } from 'fleet';
 import { IN_APP_LINK, type InAppLink } from 'fleet/shell';
 import { RunnerNextClaimView } from './runner-next-claim-view';
 
@@ -32,6 +32,22 @@ describe('RunnerNextClaimView', () => {
     expect(el.textContent).toContain('21 more passed');
     expect(el.textContent).toContain('If holding per project:');
     expect(el.querySelector('a[href="/p/example/board/chunk/ch_prereq"]')).not.toBeNull();
+  });
+  it('shows each passed, held and alternative urgency, including unresolved slugs', async () => {
+    const fixture = TestBed.createComponent(RunnerNextClaimView);
+    const urgent = { urgency_id: 'u', slug: 'urgent', name: 'Urgent', color: 'red', emoji: '🔥', default: false } as UrgencyView;
+    const standard = { ...urgent, urgency_id: 's', name: 'Standard', default: true } as UrgencyView;
+    fixture.componentRef.setInput('runnerId', 'rn_1');
+    fixture.componentRef.setInput('state', 'ready');
+    fixture.componentRef.setInput('urgencies', [urgent, standard]);
+    fixture.componentRef.setInput('data', { ...data, if_holding: { ...entry, urgency: { urgency_id: 's', slug: 'standard' } }, held_at: [{ ...blocked, urgency: { urgency_id: 'missing', slug: 'unknown' } }] });
+    await fixture.whenStable();
+    const el = fixture.nativeElement as HTMLElement;
+    el.querySelector<HTMLButtonElement>('[data-testid="accordion-section-head"]')!.click();
+    await fixture.whenStable();
+    expect(el.querySelectorAll('fleet-kit-urgency-pill').length).toBe(2);
+    expect(el.textContent).toContain('Standard');
+    expect(el.textContent).toContain('unknown');
   });
   it('does not claim emptiness while loading or on error', async () => {
     const fixture = TestBed.createComponent(RunnerNextClaimView);

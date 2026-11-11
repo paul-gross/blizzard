@@ -22,10 +22,18 @@ describe('KitUrgencyPill', () => {
     await fixture.whenStable();
     const pill = fixture.nativeElement.querySelector('.pill') as HTMLElement;
     expect(pill.textContent?.trim()).toBe('Urgent');
+    expect(getComputedStyle(pill).color).toBe('rgb(0, 0, 0)');
     expect(pill.style.getPropertyValue('--urgency-color')).toContain('--project-red');
     fixture.componentInstance.color.set('#000000');
     await fixture.whenStable();
     expect(pill.style.getPropertyValue('--urgency-color')).toBe(legibleOnDark('#000000'));
+  });
+  it.each(['#000000', '#1a1f4d', '#0000ff', '#3b0764', '#7f1d1d', '#064e3b'])('keeps black text above 4.5:1 on lifted %s', (color) => {
+    const hex = legibleOnDark(color);
+    const channels = [1, 3, 5].map((i) => parseInt(hex.slice(i, i + 2), 16) / 255)
+      .map((c) => c <= 0.04045 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4);
+    const luminance = 0.2126 * channels[0] + 0.7152 * channels[1] + 0.0722 * channels[2];
+    expect((luminance + 0.05) / 0.05).toBeGreaterThanOrEqual(4.5);
   });
   it('renders decorative emoji or image and a keyboard-accessible description', async () => {
     const fixture = TestBed.createComponent(TestHost);
@@ -36,9 +44,11 @@ describe('KitUrgencyPill', () => {
     expect(root.querySelector('[aria-hidden="true"]')?.textContent).toBe('🔥');
     const pill = root.querySelector('.pill') as HTMLElement;
     expect(pill.tabIndex).toBe(0);
+    expect(pill.getAttribute('aria-label')).toBe('Urgent');
+    expect(pill.textContent?.trim()).toBe('🔥');
     pill.dispatchEvent(new FocusEvent('focus'));
     await fixture.whenStable();
-    expect(document.querySelector('[role="tooltip"]')?.textContent?.trim()).toBe('Needs attention');
+    expect(document.querySelector('[role="tooltip"]')?.textContent?.trim()).toBe('Urgent — Needs attention');
     expect(pill.getAttribute('aria-describedby')).toBeTruthy();
     fixture.componentInstance.icon.set('/icon.png');
     await fixture.whenStable();
@@ -47,6 +57,7 @@ describe('KitUrgencyPill', () => {
     fixture.componentInstance.emoji.set(null);
     await fixture.whenStable();
     expect(root.querySelector('img')?.getAttribute('alt')).toBe('');
+    expect(pill.textContent?.trim()).toBe('');
     expect(root.querySelector('[aria-hidden="true"]')).toBeNull();
   });
 });

@@ -1,0 +1,32 @@
+    @if (canEdit()) {
+      <fleet-kit-button testid="admin-urgencies-new" (click)="create.emit()">New urgency</fleet-kit-button>
+      <fleet-kit-select ariaLabel="Default urgency" label="Default" testid="admin-urgencies-default" [options]="defaultOptions()"
+        [selectedValue]="defaultKey()" [disabled]="pending() || !settingsReady()" (choose)="changeDefault.emit($event)" />
+    }
+    @if (mobile()) {
+      <section class="cli-hints" data-testid="admin-urgencies-cli">
+        <p>Create: <code>blizzard hub urgency create &lt;slug&gt;</code></p>
+        <p>Set default: <code>blizzard hub settings edit --default-urgency &lt;slug&gt;</code></p>
+        <p>Move first: <code>blizzard hub urgency position &lt;slug&gt; --first</code></p>
+      </section>
+    }
+    <fleet-kit-error-line [message]="error()" />
+    <fleet-kit-chips [options]="options" [selectedValue]="lifecycle()" (choose)="filter.emit($event)" />
+    <fleet-kit-async-state [state]="state()" placement="inline" loadingText="Loading urgencies…" errorText="Could not load urgencies." emptyText="No urgencies found.">
+    <div cdkDropList [cdkDropListDisabled]="!canEdit() || lifecycle() !== 'active' || pending()" (cdkDropListDropped)="reorder.emit($event)">
+      @for (urgency of rows(); track urgency.urgency_id) {
+        <div cdkDrag [cdkDragDisabled]="!canEdit() || lifecycle() !== 'active' || pending()" class="urgency-item">
+          @if (canEdit() && lifecycle() === 'active') { <span cdkDragHandle class="drag-handle" title="Drag to reorder" aria-hidden="true">⋮⋮</span> }
+          <fleet-kit-select-row class="urgency-row" (picked)="pick.emit(urgency.urgency_id)" [selected]="selected() === urgency.urgency_id">
+            <app-urgency-pill [urgency]="urgency" /> {{ urgency.slug }} · {{ urgency.open_chunks }} open
+            @if (urgency.default) { · default } @if (urgency.retired) { · retired }
+          </fleet-kit-select-row>
+        </div>
+      }
+    </div>
+    </fleet-kit-async-state>
+@if (createOpen() && canEdit()) {
+  <app-config-form-dialog heading="New urgency" mode="create" [fields]="fields" submitLabel="Create"
+    [submitError]="createError()" [submitting]="createPending()" testidPrefix="admin-urgencies-create"
+    (closed)="closeCreate.emit()" (submitted)="submitCreate.emit($event)" />
+}

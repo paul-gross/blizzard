@@ -23,8 +23,10 @@
   />
   <ng-content select="[chunkRowLead]" />
   <div class="work">
-    <span class="id" data-testid="list-row-id">{{ card().shortId }}</span>
-    <ng-content select="[chunkRowUrgency]" />
+    <span class="identity">
+      <span class="id" data-testid="list-row-id">{{ card().shortId }}</span>
+      <ng-content select="[chunkRowUrgency]" />
+    </span>
     @for (line of fold().shown; track $index) {
       <span class="item">
         <!-- Plain text, as on a card: the detail panel owns the link out to the work source. -->

@@ -1,22 +1,21 @@
 import { ChangeDetectionStrategy, Component, computed, inject, signal } from '@angular/core';
 import { toSignal } from '@angular/core/rxjs-interop';
 import { ActivatedRoute } from '@angular/router';
-import { asyncState, errorMessage, KitButton, KitSelect, RecordKind, restingAsyncState, ViewportService } from 'fleet';
+import { asyncState, errorMessage, RecordKind, restingAsyncState, ViewportService } from 'fleet';
 import { map } from 'rxjs';
 import { hasPermission, injectMeQuery } from '../../core/auth/me.query';
 import { injectUrgenciesQuery } from '../../core/urgencies.query';
 import { type ConfigFormValues } from '../config-edit.model';
-import { ConfigFormDialog } from '../config-form-dialog';
 import { lastChange, revisionRows } from '../config-history.model';
 import { injectConfigHistoryQuery } from '../config-history.query';
-import { ConfigRecordPanel } from '../config-record-panel';
-import { urgencyEdit, urgencyOptions, URGENCY_FIELDS } from './urgencies.model';
+import { urgencyEdit, urgencyOptions } from './urgencies.model';
 import { injectEditUrgencyMutation, injectUrgencyLifecycleMutation } from './urgencies.mutations';
 import { urgencyActions, urgencyCliCommand, urgencyDestinations, urgencyFormValues, urgencyRecordVm } from './urgency-detail.model';
 import { injectUrgencyIconData, injectUrgencyQuery } from './urgencies.query';
+import { UrgencyDetailView } from './urgency-detail-view';
 
 @Component({ selector: 'app-urgency-detail', changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [ConfigFormDialog, ConfigRecordPanel, KitButton, KitSelect], templateUrl: './urgency-detail.html', styleUrl: './urgency-detail.css' })
+  imports: [UrgencyDetailView], templateUrl: './urgency-detail.html' })
 export class UrgencyDetail {
   private readonly route = inject(ActivatedRoute);
   private readonly viewport = inject(ViewportService);
@@ -28,11 +27,10 @@ export class UrgencyDetail {
   private readonly history = injectConfigHistoryQuery(RecordKind.URGENCY, () => this.query.data()?.urgency_id ?? null);
   protected readonly editMutation = injectEditUrgencyMutation();
   private readonly lifecycleMutation = injectUrgencyLifecycleMutation();
-  protected readonly fields = URGENCY_FIELDS;
   protected readonly editOpen = signal(false);
   protected readonly editRevision = signal<{ key: string; revision: number; shown: ConfigFormValues } | null>(null);
   protected readonly retireOpen = signal(false);
-  private readonly retireRevision = signal<{ key: string; revision: number } | null>(null);
+  protected readonly retireRevision = signal<{ key: string; revision: number; openChunks: number } | null>(null);
   protected readonly editError = signal<string | null>(null);
   protected readonly actionError = signal<string | null>(null);
   protected readonly destination = signal('');
@@ -68,21 +66,22 @@ export class UrgencyDetail {
   }
   protected onLifecycle(verb: 'retire' | 'enable'): void {
     const record = this.query.data(); const actions = this.actions();
-    if (!record || !actions || (verb === 'retire' && actions.retireBlocked)) return;
-    if (verb === 'retire' && record.open_chunks > 0) {
-      this.retireRevision.set({ key: record.urgency_id, revision: record.revision });
+    if (!record || !actions || this.busy() || (verb === 'retire' && actions.retireBlocked)) return;
+    if (verb === 'retire') {
+      this.retireRevision.set({ key: record.urgency_id, revision: record.revision, openChunks: record.open_chunks });
       this.destination.set(this.destinations().find((u) => u.default)?.urgency_id ?? '');
+      this.actionError.set(null);
       this.retireOpen.set(true);
-    } else this.submitLifecycle(verb === 'retire');
+    } else this.submitLifecycle(false);
   }
   protected submitLifecycle(retired: boolean): void {
     const record = this.query.data(); const actions = this.actions();
-    if (!record || !actions || (retired && actions.retireBlocked)) return;
+    if (!record || !actions || this.busy() || (retired && actions.retireBlocked)) return;
     const snapshot = this.retireOpen() ? this.retireRevision() : null;
     if (snapshot && snapshot.key !== record.urgency_id) return;
-    if (retired && record.open_chunks > 0 && !this.destinations().some((u) => u.urgency_id === this.destination())) return;
+    if (retired && (snapshot?.openChunks ?? record.open_chunks) > 0 && !this.destinations().some((u) => u.urgency_id === this.destination())) return;
     this.actionError.set(null);
-    this.lifecycleMutation.mutate({ key: record.urgency_id, revision: snapshot?.revision ?? record.revision, retired, ...(retired && record.open_chunks > 0 ? { moveTo: this.destination() } : {}) }, {
+    this.lifecycleMutation.mutate({ key: record.urgency_id, revision: snapshot?.revision ?? record.revision, retired, ...(retired && (snapshot?.openChunks ?? record.open_chunks) > 0 ? { moveTo: this.destination() } : {}) }, {
       onSuccess: () => this.retireOpen.set(false), onError: (e) => this.actionError.set(errorMessage(e, 'Lifecycle change failed.')),
     });
   }

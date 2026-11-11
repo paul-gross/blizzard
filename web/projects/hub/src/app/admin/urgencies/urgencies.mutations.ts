@@ -6,6 +6,9 @@ import {
   hubConfigKey, type UrgencyCreateRequest, type UrgencyPatchRequest, type UrgencyPositionRequest,
 } from 'fleet';
 
+export const urgencyPositionMutationKey = ['hub', 'urgencies', 'position'] as const;
+export const urgencyDefaultMutationKey = ['hub', 'urgencies', 'default'] as const;
+
 export function injectCreateUrgencyMutation() {
   const client = inject(QueryClient);
   return injectMutation(() => ({
@@ -43,6 +46,7 @@ export function injectUrgencyLifecycleMutation() {
 export function injectPositionUrgencyMutation() {
   const client = inject(QueryClient);
   return injectMutation(() => ({
+    mutationKey: urgencyPositionMutationKey,
     mutationFn: async (body: UrgencyPositionRequest) => {
       const { error } = await positionUrgencyApiUrgenciesOrderPositionPost({ body, throwOnError: false });
       if (error) throw error;
@@ -53,6 +57,7 @@ export function injectPositionUrgencyMutation() {
 export function injectDefaultUrgencyMutation() {
   const client = inject(QueryClient);
   return injectMutation(() => ({
+    mutationKey: urgencyDefaultMutationKey,
     mutationFn: async (v: { key: string; revision: number }) => {
       const { error } = await patchSettingsApiSettingsPatch({ body: { default_urgency: v.key }, headers: { 'if-match': v.revision }, throwOnError: false });
       if (error) throw error;

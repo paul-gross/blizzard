@@ -21,7 +21,8 @@ export function prerequisiteStatuses(results: readonly { data?: hubApi.ChunkDeta
   return Object.fromEntries(results.filter((result) => result.data && !result.isError).map((result) => [result.data!.chunk_id, result.data!.status]));
 }
 
-export function nextUrgencyIcon(next: hubApi.NextClaimResponse | undefined, urgencies: readonly hubApi.UrgencyView[] | undefined): { key: string; digest: string } | null {
-  const urgency = urgencies?.find((item) => item.urgency_id === next?.next?.urgency?.urgency_id);
-  return urgency && !urgency.emoji && urgency.icon ? { key: urgency.urgency_id, digest: urgency.icon.digest } : null;
+export function claimUrgencyIcons(next: hubApi.NextClaimResponse | undefined, urgencies: readonly hubApi.UrgencyView[] | undefined): { key: string; digest: string }[] {
+  const ids = new Set([next?.next, next?.if_holding, ...(next?.passed ?? []), ...(next?.held_at ?? [])].map((entry) => entry?.urgency?.urgency_id));
+  return (urgencies ?? []).filter((item) => ids.has(item.urgency_id) && !item.default && !item.emoji && item.icon)
+    .map((item) => ({ key: item.urgency_id, digest: item.icon!.digest }));
 }

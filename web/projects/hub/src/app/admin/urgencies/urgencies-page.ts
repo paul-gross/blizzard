@@ -1,22 +1,21 @@
-import { CdkDrag, CdkDragHandle, CdkDropList, type CdkDragDrop } from '@angular/cdk/drag-drop';
+import { type CdkDragDrop } from '@angular/cdk/drag-drop';
 import { ChangeDetectionStrategy, Component, computed, inject, signal } from '@angular/core';
 import { Router, RouterOutlet } from '@angular/router';
-import { asyncState, errorMessage, KitButton, KitChips, KitMasterDetail, KitSelect, KitSelectRow, ViewportService, type UrgencyView } from 'fleet';
+import { asyncState, errorMessage, injectPendingMutationVariables, KitMasterDetail, ViewportService, type UrgencyPositionRequest, type UrgencyView } from 'fleet';
 import { hasPermission, injectMeQuery } from '../../core/auth/me.query';
-import { UrgencyPill } from '../../core/urgency-pill';
 import { injectUrgenciesQuery } from '../../core/urgencies.query';
 import { ProjectLens } from '../../core/project-lens';
 import { injectChildRouteParam, injectQueryFilters } from '../../core/route-state';
 import { type ConfigFormValues } from '../config-edit.model';
-import { ConfigFormDialog } from '../config-form-dialog';
-import { LIFECYCLE_FILTER_OPTIONS, LIFECYCLE_FILTER_PARAM, lifecycleFilterParam, parseLifecycleFilter } from '../config-filter.model';
-import { liveUrgencies, urgencyCreate, urgencyOptions, urgencyPosition, URGENCY_FIELDS, visibleUrgencies } from './urgencies.model';
-import { injectCreateUrgencyMutation, injectDefaultUrgencyMutation, injectPositionUrgencyMutation } from './urgencies.mutations';
+import { LIFECYCLE_FILTER_PARAM, lifecycleFilterParam, parseLifecycleFilter } from '../config-filter.model';
+import { liveUrgencies, overlayUrgencies, urgencyCreate, urgencyOptions, urgencyPosition, visibleUrgencies } from './urgencies.model';
+import { injectCreateUrgencyMutation, injectDefaultUrgencyMutation, injectPositionUrgencyMutation, urgencyDefaultMutationKey, urgencyPositionMutationKey } from './urgencies.mutations';
 import { injectSettingsQuery } from './urgencies.query';
+import { UrgenciesList } from './urgencies-list';
 
 @Component({
   selector: 'app-urgencies-page', changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [CdkDrag, CdkDragHandle, CdkDropList, ConfigFormDialog, KitButton, KitChips, KitMasterDetail, KitSelect, KitSelectRow, RouterOutlet, UrgencyPill],
+  imports: [KitMasterDetail, RouterOutlet, UrgenciesList],
   templateUrl: './urgencies-page.html', styleUrls: ['../config-page-host.css', './urgencies-page.css'],
 })
 export class UrgenciesPage {
@@ -30,7 +29,8 @@ export class UrgenciesPage {
   protected readonly createMutation = injectCreateUrgencyMutation();
   private readonly positionMutation = injectPositionUrgencyMutation();
   private readonly defaultMutation = injectDefaultUrgencyMutation();
-  protected readonly fields = URGENCY_FIELDS;
+  private readonly pendingMoves = injectPendingMutationVariables<UrgencyPositionRequest>(urgencyPositionMutationKey);
+  private readonly pendingDefaults = injectPendingMutationVariables<{ key: string; revision: number }>(urgencyDefaultMutationKey);
   protected readonly createOpen = signal(false);
   protected readonly createError = signal<string | null>(null);
   protected readonly actionError = signal<string | null>(null);
@@ -38,11 +38,12 @@ export class UrgenciesPage {
   protected readonly mobile = computed(() => this.viewport.mode() === 'mobile');
   protected readonly canEdit = computed(() => !this.mobile() && hasPermission(this.me.data(), 'config:edit'));
   protected readonly lifecycle = computed(() => parseLifecycleFilter(this.filters.read(LIFECYCLE_FILTER_PARAM)));
-  protected readonly rows = computed(() => visibleUrgencies(this.query.data() ?? [], this.lifecycle()));
-  protected readonly live = computed(() => liveUrgencies(this.query.data() ?? []));
+  private readonly overlaid = computed(() => overlayUrgencies(this.query.data() ?? [], this.pendingMoves(), this.pendingDefaults()));
+  protected readonly rows = computed(() => visibleUrgencies(this.overlaid(), this.lifecycle()));
+  protected readonly live = computed(() => liveUrgencies(this.overlaid()));
   protected readonly defaultOptions = computed(() => urgencyOptions(this.live()));
+  protected readonly defaultKey = computed(() => this.pendingDefaults().at(-1)?.key ?? this.settings.data()?.default_urgency.urgency_id ?? null);
   protected readonly state = computed(() => asyncState(this.query, this.rows().length === 0));
-  protected readonly options = LIFECYCLE_FILTER_OPTIONS;
   protected readonly pending = computed(() => this.defaultMutation.isPending() || this.positionMutation.isPending());
   protected onFilter(value: string): void { this.filters.patch({ [LIFECYCLE_FILTER_PARAM]: lifecycleFilterParam(value) }); }
   protected onPick(key: string): void { void this.router.navigate(this.lens.link(['/admin', 'urgencies', key]), { queryParamsHandling: 'preserve' }); }

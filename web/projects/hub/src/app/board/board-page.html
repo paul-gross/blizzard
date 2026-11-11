@@ -2,6 +2,7 @@
   <div class="col col-center">
     <app-board-shell
       [urgencies]="urgenciesQuery.data() ?? []"
+      [chunkControl]="chunkControl"
       class="board"
       [donePolicy]="donePolicy()"
       [chunks]="boardChunks()"

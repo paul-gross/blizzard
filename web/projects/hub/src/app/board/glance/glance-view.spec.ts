@@ -77,7 +77,7 @@ describe('GlanceView', () => {
     await fixture.whenStable();
     const cards = [...(fixture.nativeElement as HTMLElement).querySelectorAll('[data-testid="glance-card"]')];
     expect(cards.map((card) => card.getAttribute('data-chunk'))).toEqual(['a', 'b', 'c']);
-    expect(cards.map((card) => card.querySelector('app-urgency-pill')?.textContent?.replace(/\s+/g, ' ').trim() ?? null)).toEqual(['🔥Urgent', null, null]);
+    expect(cards.map((card) => card.querySelector('app-urgency-pill')?.textContent?.replace(/\s+/g, ' ').trim() ?? null)).toEqual(['🔥', null, null]);
   });
 
   it('renders the five vitals', async () => {

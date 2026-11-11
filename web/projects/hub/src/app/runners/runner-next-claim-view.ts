@@ -16,7 +16,7 @@ export class RunnerNextClaimView {
   readonly data = input<hubApi.NextClaimResponse | null>(null);
   readonly state = input.required<KitAsyncStateValue>();
   readonly urgencies = input<readonly UrgencyView[]>([]);
-  readonly urgencyIconUrl = input<string | null>(null);
+  readonly urgencyIconUrls = input<Readonly<Record<string, string | undefined>>>({});
   readonly statuses = input<Readonly<Record<string, string | undefined>>>({});
   protected readonly expanded = signal(false);
   protected readonly compact = compactRef;

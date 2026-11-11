@@ -35,11 +35,27 @@ describe('ChunkUrgency', () => {
     rows[0].click();
     expect(set).toHaveBeenCalledWith('ch_1', 'urgent');
   });
+  it('keeps the urgency menu as the only tab stop with an accessible label', async () => {
+    const fixture = await mount(false, 'urgent');
+    const root = fixture.nativeElement as HTMLElement;
+    const trigger = root.querySelector<HTMLButtonElement>('[data-testid="chunk-urgency-menu"]')!;
+    const pill = trigger.querySelector<HTMLElement>('.pill')!;
+    expect(trigger.getAttribute('aria-label')).toBe('Change urgency: Urgent');
+    expect(pill.hasAttribute('tabindex')).toBe(false);
+    expect(pill.getAttribute('aria-hidden')).toBe('true');
+    trigger.focus();
+    expect(document.activeElement).toBe(trigger);
+    trigger.click();
+    await fixture.whenStable();
+    expect(document.querySelector('[data-testid="chunk-urgency-options"]')).not.toBeNull();
+  });
   it('renders pending urgency immediately and withholds edits without permission or for finished work', async () => {
     const fixture = await mount();
     pending.set('urgent');
     await fixture.whenStable();
-    expect((fixture.nativeElement as HTMLElement).textContent).toContain('Urgent');
+    const pill = (fixture.nativeElement as HTMLElement).querySelector<HTMLElement>('fleet-kit-urgency-pill .pill');
+    expect(pill?.textContent?.trim()).toBe('🔥');
+    expect((fixture.nativeElement as HTMLElement).querySelector('[data-testid="chunk-urgency-menu"]')?.getAttribute('aria-label')).toBe('Change urgency: Urgent');
     expect((fixture.nativeElement as HTMLElement).querySelector<HTMLButtonElement>('[data-testid="chunk-urgency-menu"]')?.disabled).toBe(true);
     control.canControl.set(false);
     await fixture.whenStable();

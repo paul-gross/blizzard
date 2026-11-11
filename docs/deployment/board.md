@@ -54,6 +54,10 @@ chunk and step.
 
 ## Urgency on the board
 
+With `chunk:control`, **New hub item** in the desktop board header, or at the top of the phone board, opens a form for a
+title, body and urgency. Under the All projects lens the form also requires a project; under a project lens it uses that
+project. The urgency starts at the tenant's default.
+
 Cards, list rows and phone rows show a colored urgency pill on unfinished work when its urgency is not the tenant's
 default. The pill shows its emoji, icon, or name. Finished work and work at the default have no pill in the lanes. The
 chunk detail header names the urgency even at the default; with `chunk:control`, its control and the card's actions can

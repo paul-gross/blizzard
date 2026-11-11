@@ -6,7 +6,7 @@ import { CdkDrag, type CdkDragDrop, CdkDropList } from '@angular/cdk/drag-drop';
 
 import { type BoardCard, boardCardView } from '../board-card/board-card-view.model';
 import { BoardCardSkeleton } from '../board-card/board-card-skeleton';
-import { ChunkCard, ChunkCardProgress, type Lane, KitBeacon, type Tone, laneTone, toneColor } from 'fleet';
+import { ChunkCard, ChunkCardProgress, ChunkUrgency, type ChunkControl, type Lane, KitBeacon, type Tone, laneTone, toneColor } from 'fleet';
 import { NodeStrip } from '../node-strip/node-strip';
 import { showsNodeStrip } from '../node-strip/node-strip.model';
 import { ReorderGrip } from '../reorder-grip/reorder-grip';
@@ -67,13 +67,18 @@ export function laneDropId(list: BoardReorderList): string {
 @Component({
   selector: 'app-board-column',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [UrgencyPill, BoardCardSkeleton, ChunkCard, ChunkCardProgress, CdkDrag, CdkDropList, KitBeacon, NodeStrip, ReorderGrip],
+  imports: [UrgencyPill, BoardCardSkeleton, ChunkCard, ChunkCardProgress, ChunkUrgency, CdkDrag, CdkDropList, KitBeacon, NodeStrip, ReorderGrip],
   host: { '[attr.data-col]': 'column().key' },
   templateUrl: './board-column.html',
   styleUrl: './board-column.css',
 })
 export class BoardColumn {
   readonly urgencies = input<readonly UrgencyView[]>([]);
+  readonly chunkControl = input<ChunkControl | null>(null);
+  protected urgencyDetail(chunkId: string) {
+    const card = this.cardsById().get(chunkId)!;
+    return { chunk_id: chunkId, terminal: card.terminal, urgency: card.urgency ?? null };
+  }
   protected urgencyFor(chunkId: string): UrgencyView | null {
     const card = this.cardsById().get(chunkId);
     return card ? urgencyPill({ urgency: card.urgency ?? null, terminal: card.terminal }, this.urgencies()) : null;

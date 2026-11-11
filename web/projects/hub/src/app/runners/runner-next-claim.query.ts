@@ -1,5 +1,9 @@
 import { injectQuery } from '@tanstack/angular-query-experimental';
 import { injectQueries } from '@tanstack/angular-query-experimental/inject-queries-experimental';
+import { effect, inject, signal } from '@angular/core';
+import { TenantContext } from '../core/auth/tenant-context';
+import { readUrgencyIcon } from '../core/urgency-icon.query';
+import { hubUrgencyIconKey } from 'fleet';
 import { prerequisiteStatuses } from './runner-next-claim.model';
 import type { QueryObserverResult } from '@tanstack/angular-query-experimental';
 import { hubApi, hubChunkKey, hubRunnerNextClaimKey, LIVE_COVERED_POLL_BACKSTOP_MS } from 'fleet';
@@ -37,4 +41,27 @@ export function injectPrerequisiteStatuses(ids: () => readonly string[]) {
     })),
     combine: (results) => prerequisiteStatuses(results as unknown as readonly QueryObserverResult<hubApi.ChunkDetail>[]),
   }));
+}
+
+/** Share icon blobs with other surfaces while owning the object URLs for this view. */
+export function injectClaimUrgencyIconUrls(icons: () => readonly { key: string; digest: string }[]) {
+  const tenant = inject(TenantContext);
+  const queries = injectQueries(() => ({
+    queries: icons().map((icon) => ({
+      queryKey: hubUrgencyIconKey(tenant.current(), icon.key, icon.digest),
+      enabled: tenant.current() !== null,
+      queryFn: () => readUrgencyIcon(icon.key),
+      staleTime: Infinity,
+    })),
+  }));
+  const urls = signal<Readonly<Record<string, string>>>({});
+  effect((onCleanup) => {
+    const entries = icons().flatMap((icon, i) => {
+      const blob = queries()[i]?.data();
+      return blob ? [[icon.key, URL.createObjectURL(blob)] as const] : [];
+    });
+    urls.set(Object.fromEntries(entries));
+    onCleanup(() => entries.forEach(([, url]) => URL.revokeObjectURL(url)));
+  });
+  return urls.asReadonly();
 }

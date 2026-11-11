@@ -5,7 +5,7 @@
         @if (urgency.default) {
           {{ urgency.name }}
         } @else {
-          <fleet-kit-urgency-pill [name]="urgency.name" [color]="urgency.color" [emoji]="urgency.emoji" [iconUrl]="iconUrl()" />
+          <fleet-kit-urgency-pill [name]="urgency.name" [color]="urgency.color" [emoji]="urgency.emoji" [iconUrl]="iconUrl()" [focusable]="false" />
         }
       </span>
     </fleet-kit-menu>

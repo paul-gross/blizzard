@@ -6,7 +6,7 @@ import { RunnerNextClaimView } from './runner-next-claim-view';
 const entry: hubApi.NextClaimEntry = { chunk_id: 'ch_01J0000000000000000000NEXT', graph_id: 'gr_1', position: 3, project_id: 'p', project_name: 'Blizzard', project_slug: 'blizzard', urgency: { urgency_id: 'u', slug: 'urgent' } };
 const blocked: hubApi.NextClaimPassedEntry = { ...entry, chunk_id: 'ch_01J0000000000000000000PASS', reason: 'blocked', prerequisite: 'ch_01J0000000000000000000PREQ', prerequisite_count: 3 };
 const urgency = { urgency_id: 'u', slug: 'urgent', name: 'Urgent', color: 'red', emoji: '🔥', default: false } as UrgencyView;
-const data: hubApi.NextClaimResponse = { next: entry, passed: [blocked], passed_total: 24, if_holding: null, held_at: [blocked], unserved: 2 };
+const data: hubApi.NextClaimResponse = { next: entry, passed: [blocked], passed_total: 24, if_holding: { ...entry, chunk_id: 'ch_01J0000000000000000000HELD' }, held_at: [blocked], unserved: 2 };
 const meta: Meta<RunnerNextClaimView> = {
   title: 'Hub fleet/Runner next claim', component: RunnerNextClaimView,
   decorators: [applicationConfig({ providers: [provideRouter([])] })],

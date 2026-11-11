@@ -1,17 +1,9 @@
-@if (description(); as tip) {
-  <span class="pill" [style.--urgency-color]="ink()" [fleetTooltip]="tip" tabindex="0">
-    <ng-container *ngTemplateOutlet="content" />
-  </span>
-} @else {
-  <span class="pill" [style.--urgency-color]="ink()">
-    <ng-container *ngTemplateOutlet="content" />
-  </span>
-}
-<ng-template #content>
+<span class="pill" [style.--urgency-color]="ink()" [fleetTooltip]="tip()" [attr.aria-label]="focusable() ? name() : null" [attr.aria-hidden]="focusable() ? null : true" [attr.tabindex]="focusable() ? 0 : null">
   @if (emoji(); as mark) {
     <span class="mark" aria-hidden="true">{{ mark }}</span>
   } @else if (iconUrl(); as url) {
     <img class="mark" [src]="url" alt="" />
+  } @else {
+    <span>{{ name() }}</span>
   }
-  <span>{{ name() }}</span>
-</ng-template>
+</span>

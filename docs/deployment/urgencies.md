@@ -49,8 +49,9 @@ header line of `chunk get` show its slug.
 **Admin → Urgencies** at `/admin/urgencies` lists the tenant's urgencies in order, with their marks, open-chunk counts
 and default; a filter includes retired records. With `config:edit`, create and edit a name, color and emoji or image
 mark, drag live rows to reorder them, and choose the default. The slug is fixed after creation. The detail offers retire
-or enable; retiring an urgency with open work asks where to move it, and the default must first be changed. Detail also
-shows its change history. On a phone the administration screen is read-only and shows CLI commands for these actions.
+or enable; retiring an urgency with open work asks where to move it and also requires `chunk:control`, and the default
+must first be changed. Detail also shows its change history. On a phone the administration screen is read-only and shows
+CLI commands for these actions.
 
 The [board](./board.md#urgency-on-the-board) shows a pill on unfinished, non-default work and lets a person with
 `chunk:control` change a chunk's urgency. New hub items and accepted garden proposals offer a choice starting at the

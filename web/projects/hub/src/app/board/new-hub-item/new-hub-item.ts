@@ -1,19 +1,19 @@
 import { ChangeDetectionStrategy, Component, computed, inject, output, signal } from '@angular/core';
 import { QueryClient } from '@tanstack/angular-query-experimental';
-import { KitButton, KitDialog, KitErrorLine, KitSelect, KitTextInput, errorMessage, hubBacklogKey, hubChunksKey } from 'fleet';
+import { errorMessage, hubBacklogKey, hubChunksKey } from 'fleet';
 import { hasPermission, injectMeQuery } from '../../core/auth/me.query';
 import { ProjectLens } from '../../core/project-lens';
 import { injectProjectsQuery } from '../../core/projects.query';
 import { injectUrgenciesQuery } from '../../core/urgencies.query';
 import { projectOptions, urgencyOptions } from './new-hub-item.model';
 import { createHubItem } from './new-hub-item.mutations';
+import { NewHubItemView } from './new-hub-item-view';
 
 @Component({
   selector: 'app-new-hub-item',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [KitButton, KitDialog, KitErrorLine, KitSelect, KitTextInput],
-  templateUrl: './new-hub-item.html',
-  styleUrl: './new-hub-item.css',
+  imports: [NewHubItemView],
+  templateUrl: './new-hub-item-container.html',
 })
 export class NewHubItem {
   readonly created = output<string>();
@@ -34,12 +34,17 @@ export class NewHubItem {
   protected readonly error = signal<string | null>(null);
 
   protected start(): void {
+    if (this.pending()) return;
     this.title.set('');
     this.body.set('');
     this.project.set(this.lens.slug());
     this.urgency.set(this.urgencies.data()?.find((u) => u.default && !u.retired)?.urgency_id ?? null);
     this.error.set(null);
     this.open.set(true);
+  }
+
+  protected close(): void {
+    if (!this.pending()) this.open.set(false);
   }
 
   protected async submit(): Promise<void> {

@@ -1,38 +1,10 @@
 <fleet-kit-master-detail paneId="admin-urgencies" listCaption="Urgencies" [drilldown]="mobile()" [hasSelection]="selected() !== null" backLabel="Urgencies" testidPrefix="admin-urgencies" (back)="onBack()">
   <div kit-master-detail-list>
-    @if (canEdit()) {
-      <fleet-kit-button testid="admin-urgencies-new" (click)="createError.set(null); createOpen.set(true)">New urgency</fleet-kit-button>
-      <fleet-kit-select ariaLabel="Default urgency" label="Default" testid="admin-urgencies-default" [options]="defaultOptions()"
-        [selectedValue]="settings.data()?.default_urgency?.urgency_id ?? null" [disabled]="pending() || !settings.data()" (choose)="onDefault($event)" />
-    }
-    @if (mobile()) {
-      <section class="cli-hints" data-testid="admin-urgencies-cli">
-        <p>Create: <code>blizzard hub urgency create &lt;slug&gt;</code></p>
-        <p>Set default: <code>blizzard hub settings edit --default-urgency &lt;slug&gt;</code></p>
-        <p>Move first: <code>blizzard hub urgency position &lt;slug&gt; --first</code></p>
-      </section>
-    }
-    @if (actionError(); as error) { <p role="alert">{{ error }}</p> }
-    <fleet-kit-chips [options]="options" [selectedValue]="lifecycle()" (choose)="onFilter($event)" />
-    @if (state() === 'loading') { <p>Loading urgencies…</p> }
-    @if (state() === 'error') { <p>Could not load urgencies.</p> }
-    @if (state() === 'empty') { <p>No urgencies found.</p> }
-    <div cdkDropList [cdkDropListDisabled]="!canEdit() || lifecycle() !== 'active' || pending()" (cdkDropListDropped)="onDrop($event)">
-      @for (urgency of rows(); track urgency.urgency_id) {
-        <div cdkDrag [cdkDragDisabled]="!canEdit() || lifecycle() !== 'active' || pending()" class="urgency-item">
-          @if (canEdit() && lifecycle() === 'active') { <span cdkDragHandle class="drag-handle" title="Drag to reorder" aria-hidden="true">⋮⋮</span> }
-          <fleet-kit-select-row class="urgency-row" (picked)="onPick(urgency.urgency_id)" [selected]="selected() === urgency.urgency_id">
-            <app-urgency-pill [urgency]="urgency" /> {{ urgency.slug }} · {{ urgency.open_chunks }} open
-            @if (urgency.default) { · default } @if (urgency.retired) { · retired }
-          </fleet-kit-select-row>
-        </div>
-      }
-    </div>
+    <app-urgencies-list [canEdit]="canEdit()" [mobile]="mobile()" [pending]="pending()" [settingsReady]="!!settings.data()"
+      [defaultKey]="defaultKey()" [defaultOptions]="defaultOptions()" [error]="actionError()" [lifecycle]="lifecycle()"
+      [state]="state()" [rows]="rows()" [selected]="selected()" [createOpen]="createOpen()" [createError]="createError()" [createPending]="createMutation.isPending()"
+      (create)="createError.set(null); createOpen.set(true)" (closeCreate)="createOpen.set(false)" (submitCreate)="onCreate($event)"
+      (changeDefault)="onDefault($event)" (filter)="onFilter($event)" (pick)="onPick($event)" (reorder)="onDrop($event)" />
   </div>
   <div kit-master-detail-detail><router-outlet /></div>
 </fleet-kit-master-detail>
-@if (createOpen() && canEdit()) {
-  <app-config-form-dialog heading="New urgency" mode="create" [fields]="fields" submitLabel="Create"
-    [submitError]="createError()" [submitting]="createMutation.isPending()" testidPrefix="admin-urgencies-create"
-    (closed)="createOpen.set(false)" (submitted)="onCreate($event)" />
-}

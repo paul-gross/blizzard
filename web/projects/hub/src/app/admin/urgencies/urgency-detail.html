@@ -1,28 +1,6 @@
-<app-config-record-panel [vm]="vm()" [state]="state()" [lastChange]="lastChange()" [revisions]="changes()"
-  [revisionsState]="changesState()" [cliCommand]="cli()" [actions]="actions()" [busy]="busy()" [actionError]="actionError()"
-  (edit)="onEdit()" (lifecycle)="onLifecycle($event)" emptyText="Pick an urgency." testidPrefix="admin-urgency" />
-@if (mobile() && record(); as urgency) {
-  <section class="urgency-cli-hints" data-testid="admin-urgency-cli-actions">
-    <p>Edit: <code>blizzard hub urgency edit {{ urgency.slug }} --name "New name"</code></p>
-    @if (urgency.retired) {
-      <p>Enable: <code>blizzard hub urgency enable {{ urgency.slug }}</code></p>
-    } @else {
-      <p>Retire: <code>blizzard hub urgency retire {{ urgency.slug }}@if (urgency.open_chunks) { --move-to &lt;slug&gt; }</code></p>
-      <p>Set default: <code>blizzard hub settings edit --default-urgency {{ urgency.slug }}</code></p>
-      <p>Move first: <code>blizzard hub urgency position {{ urgency.slug }} --first</code></p>
-    }
-  </section>
-}
-@if (editOpen() && actions()?.edit && editRevision()?.shown; as initial) {
-  <app-config-form-dialog heading="Edit urgency" mode="edit" [fields]="fields" [initial]="initial" submitLabel="Save"
-    [submitError]="editError()" [submitting]="editMutation.isPending()" testidPrefix="admin-urgency-edit"
-    (closed)="editOpen.set(false)" (submitted)="onSave($event)" />
-}
-@if (retireOpen() && actions()) {
-  <section aria-label="Retire urgency">
-    <p>Move open chunks to:</p>
-    <fleet-kit-select ariaLabel="Destination urgency" [options]="destinationOptions()" [selectedValue]="destination()" (choose)="setDestination($event)" />
-    <fleet-kit-button [disabled]="busy()" (click)="retireOpen.set(false)">Cancel</fleet-kit-button>
-    <fleet-kit-button [disabled]="busy() || !destination()" (click)="submitLifecycle(true)">Retire and move chunks</fleet-kit-button>
-  </section>
-}
+<app-urgency-detail-view [vm]="vm()" [state]="state()" [lastChange]="lastChange()" [changes]="changes()" [changesState]="changesState()"
+  [cli]="cli()" [actions]="actions()" [busy]="busy()" [actionError]="actionError()" [mobile]="mobile()" [record]="record()"
+  [editOpen]="editOpen()" [editInitial]="editRevision()?.shown ?? null" [editError]="editError()" [editPending]="editMutation.isPending()"
+  [retireSnapshot]="retireOpen() ? retireRevision() : null" [destination]="destination()" [destinationOptions]="destinationOptions()"
+  (edit)="onEdit()" (lifecycle)="onLifecycle($event)" (save)="onSave($event)" (closeEdit)="editOpen.set(false)"
+  (closeRetire)="retireOpen.set(false)" (retire)="submitLifecycle(true)" (destinationChange)="setDestination($event)" />

@@ -1,4 +1,5 @@
 import { withPendingUrgencies } from './chunks/urgency.model';
+import { injectHubChunkControl } from './chunks/hub-chunk-control';
 import type { ChunkUrgencyVars } from './chunks/urgency.mutations';
 import { chunkUrgencyMutationKey } from '../core/mutation-keys';
 import { CHUNK_URGENCY_ICON } from 'fleet';
@@ -73,6 +74,10 @@ export class BoardPage {
   /** The board's last operator-action failure — a promote, a demote, or a reorder — or `null`.
    * Reset at the start of every new attempt. */
   protected readonly actionError = signal<string | null>(null);
+  protected readonly chunkControl = injectHubChunkControl({
+    beginAction: () => this.actionError.set(null),
+    fail: (message) => this.actionError.set(message),
+  });
 
   /** The loading skeletons each lane and the list draw — drawn once, so a re-render mid-load
    * never reshuffles them. */
