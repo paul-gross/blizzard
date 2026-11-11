@@ -50,3 +50,13 @@ h2 {
   flex: 1;
   align-self: center;
 }
+
+@media (max-width: 480px) {
+  .footer {
+    flex-wrap: wrap;
+  }
+
+  .submit-error {
+    flex-basis: 100%;
+  }
+}

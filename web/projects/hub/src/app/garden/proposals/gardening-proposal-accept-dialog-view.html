@@ -88,7 +88,9 @@
   </div>
 
   <div fleetKitDialogFooter class="footer">
-    <fleet-kit-error-line class="submit-error" [message]="submitError()" testid="proposal-accept-submit-error" />
+    @if (submitError()) {
+      <fleet-kit-error-line class="submit-error" [message]="submitError()" testid="proposal-accept-submit-error" />
+    }
     <fleet-kit-button size="cta" [disabled]="submitting()" (click)="onClosed()" testid="proposal-accept-dialog-cancel">
       Cancel
     </fleet-kit-button>
