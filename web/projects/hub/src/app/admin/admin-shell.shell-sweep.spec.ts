@@ -19,6 +19,8 @@ import { ProjectLens, lensLink } from '../core/project-lens';
 import { AdminShell } from './admin-shell';
 import { ProjectDetail } from './projects/project-detail';
 import { ProjectsPage } from './projects/projects-page';
+import { UrgenciesPage } from './urgencies/urgencies-page';
+import { UrgencyDetail } from './urgencies/urgency-detail';
 
 /**
  * Admin → Projects' real-render proof (`web:shell-sweep`): the admin shell's strip is the
@@ -173,5 +175,118 @@ describe('Admin → Projects shell sweep', () => {
     expect(root.querySelector('[data-testid="projects-table-row-proj_b"]')).not.toBeNull();
     noHorizontalOverflow(list);
     harness.fixture.destroy();
+  });
+});
+
+describe('Admin → Urgencies shell sweep', () => {
+  let stub: RequestClientStub;
+  const slug = 'a-very-long-urgency-slug-for-testing-phone-layout-without-horizontal-overflow';
+  const urgency = {
+    urgency_id: 'urg_test', slug, name: 'A long urgency name for the phone', color: 'red', emoji: '🔥', icon: null,
+    retired: false, default: false, revision: 3, open_chunks: 4, place: 0,
+    created_at: '2026-01-01T00:00:00Z', created_by: 'operator',
+  };
+  const defaultUrgency = { ...urgency, urgency_id: 'urg_default', slug: 'normal', name: 'Normal', default: true, open_chunks: 0, place: 1 };
+
+  async function openUrgencies(width: number) {
+    await page.viewport(width, 800);
+    await loadDesignTokens();
+    stub = stubHubClient({
+      'GET /api/me': () => ({ ...OPERATOR_ME_RESPONSE, permissions: [...OPERATOR_ME_RESPONSE.permissions, 'config:edit', 'chunk:control'] }),
+      'GET /api/members': () => [],
+      'GET /api/projects': () => ({ projects: [] }),
+      'GET /api/work-sources': () => ({ sources: [] }),
+      'GET /api/repositories': () => ({ repositories: [] }),
+      'GET /api/forges': () => ({ forges: [] }),
+      'GET /api/secrets': () => [],
+      'GET /api/urgencies': () => ({ urgencies: [urgency, defaultUrgency] }),
+      'GET /api/urgencies/{key}': (_request, { key }) => key === 'urg_retired' ? { ...urgency, urgency_id: 'urg_retired', retired: true } : urgency,
+      'GET /api/settings': () => ({ default_urgency: { urgency_id: 'urg_default', slug: 'normal' }, revision: 1, updated_at: '2026-01-01T00:00:00Z', updated_by: 'operator' }),
+      'GET /api/config/changes': () => configChangesPage({ total: 0 }),
+    });
+    TestBed.configureTestingModule({
+      providers: [
+        provideZonelessChangeDetection(),
+        provideTanStackQuery(new QueryClient({ defaultOptions: { queries: { retry: false } } })),
+        provideRouter([{ path: 'admin', component: AdminShell, children: [
+          { path: 'urgencies', component: UrgenciesPage, children: [
+            { path: '', component: UrgencyDetail }, { path: ':key', component: UrgencyDetail },
+          ] },
+        ] }]),
+        { provide: ProjectLens, useValue: lensOnAll() },
+      ],
+    });
+    const harness = await RouterTestingHarness.create();
+    const root = harness.fixture.nativeElement as HTMLElement;
+    root.style.cssText = 'display:flex;flex-direction:column;height:800px;min-width:0';
+    document.body.appendChild(root);
+    await harness.navigateByUrl('/admin/urgencies');
+    await settle(harness.fixture);
+    await settle(harness.fixture);
+    return { harness, root };
+  }
+  afterEach(async () => {
+    stub?.restore();
+    document.querySelectorAll('[ng-version], body > div').forEach((el) => el.remove());
+    await page.viewport(1280, 800);
+  });
+  function fits(el: HTMLElement) {
+    expect(el.scrollWidth, `${el.className} overflows`).toBeLessThanOrEqual(el.clientWidth + 1);
+  }
+  it.each([320, 390])('renders real list and detail read-only without overflow at %ipx', async (width) => {
+    const { harness, root } = await openUrgencies(width);
+    expect(root.querySelector('[data-testid="admin-urgencies-new"]')).toBeNull();
+    expect(root.querySelector('[data-testid="admin-urgencies-default"]')).toBeNull();
+    expect(root.querySelector('.drag-handle')).toBeNull();
+    const listHints = root.querySelector<HTMLElement>('[data-testid="admin-urgencies-cli"]')!;
+    expect(listHints.textContent).toContain('urgency create <slug>');
+    expect(listHints.textContent).toContain('settings edit --default-urgency <slug>');
+    expect(listHints.textContent).toContain('urgency position <slug> --first');
+    fits(listHints);
+    fits(root.querySelector<HTMLElement>('.kmd-list')!);
+    await TestBed.inject(Router).navigateByUrl('/admin/urgencies/urg_test');
+    for (let i = 0; i < 10; i++) {
+      harness.fixture.detectChanges();
+      await new Promise((resolve) => setTimeout(resolve, 10));
+    }
+    expect(root.querySelector('[data-testid="admin-urgency-edit"]')).toBeNull();
+    expect(root.querySelector('[data-testid="admin-urgency-retire"]')).toBeNull();
+    const hints = root.querySelector<HTMLElement>('[data-testid="admin-urgency-cli-actions"]')!;
+    expect(hints.textContent).toContain(`urgency edit ${slug}`);
+    expect(hints.textContent).toContain(`urgency retire ${slug} --move-to <slug>`);
+    expect(hints.textContent).toContain(`settings edit --default-urgency ${slug}`);
+    expect(hints.textContent).toContain(`urgency position ${slug} --first`);
+    fits(hints);
+    fits(root.querySelector<HTMLElement>('.kmd-detail')!);
+  });
+  it.each([320, 390])('offers the enable CLI example for a retired urgency at %ipx', async (width) => {
+    const { harness, root } = await openUrgencies(width);
+    await TestBed.inject(Router).navigateByUrl('/admin/urgencies/urg_retired');
+    for (let i = 0; i < 100 && !root.querySelector('[data-testid="admin-urgency-cli-actions"]')?.textContent?.includes('urgency enable'); i++) {
+      harness.fixture.detectChanges();
+      await new Promise((resolve) => setTimeout(resolve, 20));
+    }
+    const retiredHints = root.querySelector<HTMLElement>('[data-testid="admin-urgency-cli-actions"]')!;
+    expect(retiredHints.textContent).toContain(`urgency enable ${slug}`);
+    expect(root.querySelector('[data-testid="admin-urgency-enable"]')).toBeNull();
+    fits(retiredHints);
+    fits(root.querySelector<HTMLElement>('.kmd-detail')!);
+  });
+  it('shows desktop list, detail and write controls', async () => {
+    const { harness, root } = await openUrgencies(1280);
+    expect(root.querySelector('[data-testid="admin-urgencies-new"]')).not.toBeNull();
+    expect(root.querySelector('[data-testid="admin-urgencies-default"]')).not.toBeNull();
+    expect(root.querySelectorAll('.drag-handle')).toHaveLength(2);
+    expect(root.querySelector('[data-testid="admin-urgencies-cli"]')).toBeNull();
+    await TestBed.inject(Router).navigateByUrl('/admin/urgencies/urg_test');
+    for (let i = 0; i < 10; i++) {
+      harness.fixture.detectChanges();
+      await new Promise((resolve) => setTimeout(resolve, 10));
+    }
+    expect(root.querySelector('[data-testid="admin-urgency-edit"]')).not.toBeNull();
+    expect(root.querySelector('[data-testid="admin-urgency-retire"]')).not.toBeNull();
+    expect(root.querySelector('[data-testid="admin-urgency-cli-actions"]')).toBeNull();
+    fits(root.querySelector<HTMLElement>('.kmd-list')!);
+    fits(root.querySelector<HTMLElement>('.kmd-detail')!);
   });
 });

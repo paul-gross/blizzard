@@ -2,6 +2,7 @@ import { ChangeDetectionStrategy, Component, computed, input, output, signal } f
 import { KitButton, KitCheckbox, KitDialog, KitErrorLine, KitSelect, KitTextInput } from 'fleet';
 
 import { ConfigFieldDiff } from './config-field-diff';
+import { ProjectColorPicker } from './projects/project-color-picker';
 import {
   type ConfigFieldDef,
   type ConfigFormValues,
@@ -10,6 +11,7 @@ import {
   emptyFormValues,
   invalidNumbers,
   missingRequired,
+  markIsImage,
   shownFields,
 } from './config-edit.model';
 
@@ -27,7 +29,7 @@ export type ConfigFormMode = 'create' | 'edit' | 'replace';
 @Component({
   selector: 'app-config-form-dialog',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [ConfigFieldDiff, KitButton, KitCheckbox, KitDialog, KitErrorLine, KitSelect, KitTextInput],
+  imports: [ConfigFieldDiff, KitButton, KitCheckbox, KitDialog, KitErrorLine, KitSelect, KitTextInput, ProjectColorPicker],
   templateUrl: './config-form-dialog.html',
   styleUrl: './config-form-dialog.css',
 })
@@ -54,6 +56,9 @@ export class ConfigFormDialog {
    * refetched `initial` — another writer's change after a failed save — reaches them
    * instead of a snapshot taken at the first keystroke. */
   private readonly typed = signal<ConfigFormValues>({});
+  protected readonly markError = signal<string | null>(null);
+  private readonly readingMark = signal(false);
+  private markRead = 0;
 
   protected readonly shown = computed(() => this.initial() ?? emptyFormValues(this.fields()));
   protected readonly values = computed(() => ({ ...this.shown(), ...this.typed() }));
@@ -63,7 +68,7 @@ export class ConfigFormDialog {
   protected readonly edit = computed(() => configEdit(this.fields(), this.shown(), this.values()));
 
   protected readonly canSubmit = computed(() => {
-    if (this.submitting()) return false;
+    if (this.submitting() || this.readingMark()) return false;
     if (invalidNumbers(this.fields(), this.values()).length > 0) return false;
     if (this.mode() === 'edit') return this.edit().diff.length > 0;
     return missingRequired(this.visibleFields(), this.values()).length === 0;
@@ -78,6 +83,46 @@ export class ConfigFormDialog {
     return this.values()[key] === true;
   }
 
+  protected isImage(key: string): boolean {
+    return markIsImage(this.textOf(key));
+  }
+
+  protected onMarkText(key: string, value: string): void {
+    this.markRead++;
+    this.readingMark.set(false);
+    this.markError.set(null);
+    this.onText(key, value);
+  }
+
+  protected onMarkFile(key: string, event: Event): void {
+    const input = event.target as HTMLInputElement;
+    const file = input.files?.[0];
+    input.value = '';
+    if (!file) return;
+    const read = ++this.markRead;
+    this.readingMark.set(false);
+    if (file.type !== 'image/png' && file.type !== 'image/webp') {
+      this.markError.set('Choose a PNG or WebP image.');
+      return;
+    }
+    this.markError.set(null);
+    this.readingMark.set(true);
+    const reader = new FileReader();
+    reader.onload = () => {
+      if (read === this.markRead && typeof reader.result === 'string') {
+        this.readingMark.set(false);
+        this.onText(key, reader.result);
+      }
+    };
+    reader.onerror = () => {
+      if (read === this.markRead) {
+        this.readingMark.set(false);
+        this.markError.set('Could not read the image.');
+      }
+    };
+    reader.readAsDataURL(file);
+  }
+
   protected onText(key: string, value: string): void {
     this.typed.update((typed) => ({
       ...typed, [key]: value,
@@ -88,6 +133,10 @@ export class ConfigFormDialog {
 
   protected optionsFor(field: ConfigFieldDef): readonly { value: string; label: string; disabled?: boolean }[] {
     return (field.options ?? []).filter((option) => !field.filterBy || option.kind === this.textOf(field.filterBy));
+  }
+
+  protected colorChoices(field: ConfigFieldDef): readonly string[] {
+    return (field.options ?? []).map((option) => option.value);
   }
 
   protected onFlag(key: string, checked: boolean): void {
@@ -103,6 +152,8 @@ export class ConfigFormDialog {
    * flight. Closing drops the typed values, a password with them. */
   protected onClosed(): void {
     if (this.submitting()) return;
+    this.markRead++;
+    this.readingMark.set(false);
     this.typed.set({});
     this.closed.emit();
   }

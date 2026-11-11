@@ -66,3 +66,9 @@ h2 {
   font-size: var(--fs-sm);
   color: var(--label);
 }
+
+.mark-preview {
+  width: 32px;
+  height: 32px;
+  object-fit: contain;
+}

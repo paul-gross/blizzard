@@ -19,6 +19,7 @@ export class ProjectColorPicker {
   readonly colors = input.required<readonly string[]>();
   /** The project's current color. */
   readonly current = input.required<string>();
+  readonly ariaLabel = input('Project color');
   /** Set while an edit is pending, so a second pick cannot race the first. */
   readonly disabled = input(false);
 

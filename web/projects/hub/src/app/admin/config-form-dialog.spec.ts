@@ -76,6 +76,61 @@ describe('ConfigFormDialog', () => {
     expect(input.getAttribute('type')).toBe('password');
   });
 
+  it('offers palette colors and emits the chosen color', async () => {
+    const fixture = await mount('create');
+    fixture.componentRef.setInput('fields', [{ key: 'color', label: 'Color', kind: 'color', options: [
+      { value: 'red', label: 'Red' }, { value: 'blue', label: 'Blue' },
+    ] }]);
+    await fixture.whenStable();
+    const emitted: ConfigFormValues[] = [];
+    fixture.componentInstance.submitted.subscribe((values) => emitted.push(values));
+    (el(fixture, 'project-color-red') as HTMLButtonElement).click();
+    await fixture.whenStable();
+    (el(fixture, 'dlg-submit') as HTMLButtonElement).click();
+    expect(emitted[0]['color']).toBe('red');
+  });
+
+  it('retains an existing image until replaced by emoji or cleared', async () => {
+    const fixture = await mount('edit');
+    fixture.componentRef.setInput('fields', [{ key: 'mark', label: 'Mark', kind: 'mark' }]);
+    fixture.componentRef.setInput('initial', { mark: '/api/icon/1' });
+    await fixture.whenStable();
+    expect(document.querySelector('img[alt="Selected mark"]')).not.toBeNull();
+    expect((el(fixture, 'dlg-submit') as HTMLButtonElement).disabled).toBe(true);
+    await type(fixture, 'dlg-field-mark', '🔥');
+    expect(el(fixture, 'dlg-diff')!.textContent).toContain('Image');
+    const emitted: ConfigFormValues[] = [];
+    fixture.componentInstance.submitted.subscribe((values) => emitted.push(values));
+    (el(fixture, 'dlg-submit') as HTMLButtonElement).click();
+    expect(emitted[0]['mark']).toBe('🔥');
+  });
+
+  it('accepts PNG uploads and rejects other image types without changing the mark', async () => {
+    const fixture = await mount('create');
+    fixture.componentRef.setInput('fields', [{ key: 'mark', label: 'Mark', kind: 'mark' }]);
+    await fixture.whenStable();
+    const fileInput = el(fixture, 'dlg-field-mark-image') as HTMLInputElement;
+    const readAsDataURL = FileReader.prototype.readAsDataURL;
+    let readComplete!: Promise<void>;
+    const readSpy = vi.spyOn(FileReader.prototype, 'readAsDataURL').mockImplementation(function (this: FileReader, file) {
+      readComplete = new Promise((resolve) => this.addEventListener('loadend', () => resolve(), { once: true }));
+      readAsDataURL.call(this, file);
+    });
+    Object.defineProperty(fileInput, 'files', { configurable: true, value: [new File(['png'], 'mark.png', { type: 'image/png' })] });
+    fileInput.dispatchEvent(new Event('change'));
+    await readComplete;
+    readSpy.mockRestore();
+    await fixture.whenStable();
+    const emitted: ConfigFormValues[] = [];
+    fixture.componentInstance.submitted.subscribe((values) => emitted.push(values));
+    (el(fixture, 'dlg-submit') as HTMLButtonElement).click();
+    expect(emitted[0]['mark']).toMatch(/^data:image\/png;base64,/);
+    Object.defineProperty(fileInput, 'files', { configurable: true, value: [new File(['svg'], 'mark.svg', { type: 'image/svg+xml' })] });
+    fileInput.dispatchEvent(new Event('change'));
+    await fixture.whenStable();
+    expect(document.body.textContent).toContain('Choose a PNG or WebP image.');
+  });
+
   it('toggles a flag through the kit checkbox and submits its boolean value', async () => {
     const fixture = await mount('create');
     fixture.componentRef.setInput('fields', [{ key: 'annotate', label: 'Annotates', kind: 'checkbox' }]);

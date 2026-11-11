@@ -1,4 +1,4 @@
-import { changesTotal, tabCount } from './admin-shell.model';
+import { changesTotal, liveUrgencyCount, tabCount } from './admin-shell.model';
 
 describe('tabCount', () => {
   it('counts every record, or only those the lensed project links', () => {
@@ -23,5 +23,13 @@ describe('changesTotal', () => {
   it('shows no count before the first page answers', () => {
     expect(changesTotal(undefined)).toBeNull();
     expect(changesTotal([])).toBeNull();
+  });
+});
+
+describe('liveUrgencyCount', () => {
+  it('counts only live urgencies and waits for the read', () => {
+    expect(liveUrgencyCount(undefined)).toBeNull();
+    expect(liveUrgencyCount([])).toBe(0);
+    expect(liveUrgencyCount([{ retired: true }, { retired: false }, { retired: false }])).toBe(2);
   });
 });
