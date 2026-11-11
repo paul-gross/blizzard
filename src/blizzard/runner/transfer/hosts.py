@@ -130,7 +130,10 @@ class SourceHost:
 
 class ISourceHosts(Protocol):
     """How a source is opened, and how its ``[[runner]]`` is carried to this host. Raises
-    :class:`~blizzard.runner.transfer.refusals.SourceUnsupported` for a source it cannot read."""
+    :class:`~blizzard.runner.transfer.refusals.SourceUnsupported` for a source it cannot read.
+
+    :meth:`runner` (given a source), :meth:`path_keys` and :meth:`carried` act on a :class:`SourceHost` this port
+    returned from :meth:`open_host` or :meth:`graduate`, and raise ``LookupError`` for any other."""
 
     def kind(self, source: Path) -> SourceKind:
         """What ``source`` is: a host directory, a SQLite archive store, or a runner directory that has not

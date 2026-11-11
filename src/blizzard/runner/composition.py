@@ -1515,7 +1515,12 @@ class ConfigSourceHosts:
             raise SourceUnsupported(f"runner {runner}'s [[runner]] cannot be carried: {exc}") from exc
 
     def _open(self, source: SourceHost) -> _OpenSource:
-        return self._opened[source.path]
+        try:
+            return self._opened[source.path]
+        except KeyError:
+            raise LookupError(
+                f"{source.path} was not opened by this port; open it with open_host or graduate"
+            ) from None
 
     def _table(self, opened: _OpenSource, runner: str) -> str:
         try:
