@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import cast
 
-from blizzard.hub.cli.views import Cost, DecliningRow, _declining_reason, pointer_label
+from blizzard.hub.cli.views import Cost, DecliningRow, RunnerLine, RunnerRow, pointer_label
 
 
 def test_neither_marker_renders_a_bare_figure() -> None:
@@ -57,18 +57,20 @@ def test_a_pointer_with_a_null_slug_falls_through_to_the_source() -> None:
     assert pointer_label({"label": None, "slug": None, "source": "github", "ref": "12"}) == "github#12"
 
 
-def _reason(lever_kind: str, **extra: str) -> DecliningRow:
-    return cast(DecliningRow, {"lever": "stale", "lever_kind": lever_kind, "detail": "at 95%", **extra})
+def _declining(lever_kind: str, **extra: str) -> str:
+    reason: DecliningRow = cast(DecliningRow, {"lever": "stale", "lever_kind": lever_kind, "detail": "at 95%", **extra})
+    row = cast(RunnerRow, {"runner_id": "rn_1", "online": True, "declining": [reason]})
+    return RunnerLine(row).declining
 
 
 def test_the_floor_is_worded_with_its_subscription_and_reset() -> None:
-    reason = _reason("floor", subscription="max", until="2026-07-16T13:00:00+00:00")
-    assert _declining_reason(reason) == "floor — max at 95%, resets 13:00Z"
+    line = _declining("floor", subscription="max", until="2026-07-16T13:00:00+00:00")
+    assert line == " [declining: floor — max at 95%, resets 13:00Z]"
 
 
 def test_a_known_non_floor_lever_reads_through_the_generic_branch() -> None:
-    assert _declining_reason(_reason("pace", until="2026-07-16T13:00:00+00:00")) == "pace — at 95%, until 13:00Z"
+    assert _declining("pace", until="2026-07-16T13:00:00+00:00") == " [declining: pace — at 95%, until 13:00Z]"
 
 
 def test_a_lever_outside_the_vocabulary_is_worded_from_lever_kind_verbatim() -> None:
-    assert _declining_reason(_reason("some_future_lever")) == "some_future_lever — at 95%"
+    assert _declining("some_future_lever") == " [declining: some_future_lever — at 95%]"
