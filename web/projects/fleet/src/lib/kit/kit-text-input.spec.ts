@@ -56,6 +56,21 @@ describe('KitTextInput', () => {
     expect(el.querySelector<HTMLInputElement>('[data-testid="fld"]')?.value).toBe('rest');
   });
 
+  it.each([false, true])('omits and removes a null placeholder (multiline: %s)', async (multiline) => {
+    const fixture = TestBed.createComponent(TestHost);
+    fixture.componentInstance.multiline.set(multiline);
+    await fixture.whenStable();
+    const control = (fixture.nativeElement as HTMLElement).querySelector<HTMLElement>('[data-testid="fld"]')!;
+
+    expect(control.hasAttribute('placeholder')).toBe(false);
+    fixture.componentInstance.placeholder.set('Example');
+    await fixture.whenStable();
+    expect(control.getAttribute('placeholder')).toBe('Example');
+    fixture.componentInstance.placeholder.set(null);
+    await fixture.whenStable();
+    expect(control.hasAttribute('placeholder')).toBe(false);
+  });
+
   it('emits valueChange with the typed value on input', async () => {
     const fixture = TestBed.createComponent(TestHost);
     await fixture.whenStable();
