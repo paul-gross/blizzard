@@ -424,6 +424,7 @@ def _service_over(registration: RunnerRegistration | None) -> ClaimService:
         hosts=cast(Any, None),
         retired=cast(Any, None),
         exclusive=cast(Any, _UnenterableExclusiveWrites()),
+        targets=cast(Any, None),
         clock=cast(Any, None),
         label=cast(Any, None),
     )
@@ -452,6 +453,7 @@ def test_a_retired_runner_is_refused_before_the_claim_lock_is_entered() -> None:
         hosts=cast(Any, None),
         retired=cast(Any, None),
         exclusive=cast(Any, _UnenterableExclusiveWrites()),
+        targets=cast(Any, None),
         clock=cast(Any, None),
         label=cast(Any, None),
     )

@@ -676,6 +676,10 @@ export type ChunkDetail = {
      */
     questions: Array<QuestionView>;
     /**
+     * Repository Targets
+     */
+    repository_targets: Array<ChunkRepositoryTargetView>;
+    /**
      * Requeues
      */
     requeues: Array<RequeueView>;
@@ -845,6 +849,37 @@ export type ChunkNoteView = {
      * Recorded At
      */
     recorded_at: string;
+};
+
+/**
+ * ChunkRepositoryTargetView
+ *
+ * One repository's branch for a chunk — the base the chunk starts from and lands into. ``inherited`` when it is
+ * the repository record's own branch rather than the project link's override. ``captured_at`` is when the chunk
+ * captured it, at its claim or its first delivery; ``None`` while it is a live preview that a link edit still
+ * moves.
+ */
+export type ChunkRepositoryTargetView = {
+    /**
+     * Base Branch
+     */
+    base_branch: string;
+    /**
+     * Captured At
+     */
+    captured_at: string | null;
+    /**
+     * Inherited
+     */
+    inherited: boolean;
+    /**
+     * Repository Id
+     */
+    repository_id: string;
+    /**
+     * Repository Slug
+     */
+    repository_slug: string;
 };
 
 /**

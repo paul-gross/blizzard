@@ -416,17 +416,19 @@ def resolve_chunk_repositories(
     *,
     minted_at: datetime,
     linked: frozenset[str] | None,
+    branches: Mapping[str, str],
     project: str = "",
 ) -> RepositoryResolution:
-    """Resolve each commit pointer to its own repository record.
+    """Resolve each commit pointer to its own repository record, landing into the chunk's effective branch.
 
     A pointer matches a record by its bare name, narrowed by the origin's owner and forge host
     when it encodes them — the web or API host of the record's forge, among ``forges``, retired ones
     included. Only records standing for the chunk count: an enabled one, or one retired after the
     chunk was minted — and of those, only the ones ``linked`` names, the chunk's project's links;
     ``None`` narrows nothing. Each pointer narrows on its own, so a name ambiguous across the tenant
-    resolves when its project links one of them. ``project`` is the
-    label a not-linked refusal names. No pointers is not a refusal — there is nothing to land."""
+    resolves when its project links one of them. ``branches`` is the chunk's effective branch of each repository id;
+    a record it does not name — one its project no longer links — lands into its own ``base_branch``. ``project`` is
+    the label a not-linked refusal names. No pointers is not a refusal — there is nothing to land."""
     if not origins:
         return RepositoryResolution(RepositoryOutcome.NOTHING_TO_RESOLVE)
     by_id = forges_by_id(forges)
@@ -444,7 +446,7 @@ def resolve_chunk_repositories(
             ResolvedRepository(
                 row.fields.forge_id,
                 row.fields.owner,
-                row.fields.base_branch,
+                branches.get(row.repository_id, row.fields.base_branch),
                 row.fields.secret_name,
                 row.repository_id,
                 row.slug,

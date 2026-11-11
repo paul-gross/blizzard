@@ -154,6 +154,9 @@ link's `base_branch`, `null` when it inherits, and its `effective_base_branch`. 
 a name sets it, `null` clears it, and a body without it changes nothing. Unlinking a repository keeps the link's branch,
 and linking it again restores it.
 
+An edit reaches the chunks that have not yet captured the repository's branch; a chunk captures it at its claim and
+keeps it through every lease, retry and restart ([repositories.md](./repositories.md#how-delivery-uses-a-record)).
+
 ## A call that names no project
 
 A call that needs a project — creating a scope, routine, operator garden proposal, hub item or link, or looking up a

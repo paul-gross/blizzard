@@ -3469,6 +3469,14 @@
             "title": "Questions",
             "type": "array"
           },
+          "repository_targets": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/ChunkRepositoryTargetView"
+            },
+            "title": "Repository Targets",
+            "type": "array"
+          },
           "requeues": {
             "default": [],
             "items": {
@@ -3590,6 +3598,7 @@
           "open_prs",
           "closed_prs",
           "landed_repos",
+          "repository_targets",
           "cost",
           "usage",
           "pending",
@@ -4711,6 +4720,47 @@
           }
         },
         "title": "ChunkPlacementRequest",
+        "type": "object"
+      },
+      "ChunkRepositoryTargetView": {
+        "description": "One repository's branch for a chunk \u2014 the base the chunk starts from and lands into. ``inherited`` when it is\nthe repository record's own branch rather than the project link's override. ``captured_at`` is when the chunk\ncaptured it, at its claim or its first delivery; ``None`` while it is a live preview that a link edit still\nmoves.",
+        "properties": {
+          "base_branch": {
+            "title": "Base Branch",
+            "type": "string"
+          },
+          "captured_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Captured At"
+          },
+          "inherited": {
+            "title": "Inherited",
+            "type": "boolean"
+          },
+          "repository_id": {
+            "title": "Repository Id",
+            "type": "string"
+          },
+          "repository_slug": {
+            "title": "Repository Slug",
+            "type": "string"
+          }
+        },
+        "required": [
+          "repository_id",
+          "repository_slug",
+          "base_branch",
+          "inherited",
+          "captured_at"
+        ],
+        "title": "ChunkRepositoryTargetView",
         "type": "object"
       },
       "ChunkRequeueRequest": {

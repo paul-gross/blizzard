@@ -74,13 +74,32 @@ def _row(
 
 
 def _resolve(origins: list[CommitOrigin], rows: list[ConfiguredRepository]):
-    return resolve_chunk_repositories(origins, rows, _FORGES, minted_at=_MINTED, linked=None)
+    return resolve_chunk_repositories(origins, rows, _FORGES, minted_at=_MINTED, linked=None, branches={})
 
 
-def _in_project(origins: list[CommitOrigin], rows: list[ConfiguredRepository], *linked: str):
+def _in_project(
+    origins: list[CommitOrigin], rows: list[ConfiguredRepository], *linked: str, branches: dict[str, str] | None = None
+):
     return resolve_chunk_repositories(
-        origins, rows, _FORGES, minted_at=_MINTED, linked=frozenset(_id(n) for n in linked), project="widgets"
+        origins,
+        rows,
+        _FORGES,
+        minted_at=_MINTED,
+        linked=frozenset(_id(n) for n in linked),
+        branches=branches or {},
+        project="widgets",
     )
+
+
+def test_a_resolved_repository_lands_into_the_chunks_effective_branch() -> None:
+    rows = [_row("widget", base="master")]
+    origin = [CommitOrigin.of("https://github.com/acme/widget.git", "widget")]
+
+    overridden = _in_project(origin, rows, "widget", branches={_id("widget"): "rust-rewrite"})
+    inherited = _in_project(origin, rows, "widget")
+
+    assert [t.base_branch for t in overridden.targets] == ["rust-rewrite"]
+    assert [t.base_branch for t in inherited.targets] == ["master"]
 
 
 def test_an_exact_origin_resolves_by_host_owner_and_name() -> None:

@@ -13,6 +13,7 @@ from blizzard.hub.domain.config.repositories import (
     resolve_chunk_repositories,
 )
 from blizzard.hub.domain.projects.links import IReadProjectLinks
+from blizzard.hub.domain.projects.targets import ChunkTargets, TargetChunk, branches
 
 
 def delivery_declarations_for(
@@ -22,7 +23,9 @@ def delivery_declarations_for(
     project_links: IReadProjectLinks,
     repository_records: IReadRepositoryRecordRepository,
     forge_records: IReadForgeRepository,
+    targets: ChunkTargets,
 ) -> dict[str, list[dict[str, str | None]]]:
+    """Each no-code chunk's commit declarations, resolved on its effective branches, read without capturing any."""
     relevant = [
         chunk
         for chunk in chunks
@@ -38,6 +41,7 @@ def delivery_declarations_for(
     forges = forge_records.get_many(
         list({record.fields.forge_id for record in records if record.repository_id in linked_ids})
     )
+    effective = targets.effective_for([TargetChunk(chunk.chunk_id, chunk.project_id) for chunk in relevant])
     result: dict[str, list[dict[str, str | None]]] = {}
     for chunk in relevant:
         try:
@@ -50,7 +54,12 @@ def delivery_declarations_for(
             else frozenset[RepositoryId]()
         )
         resolution = resolve_chunk_repositories(
-            commits.origins(), records, forges.values(), minted_at=chunk.minted_at, linked=linked
+            commits.origins(),
+            records,
+            forges.values(),
+            minted_at=chunk.minted_at,
+            linked=linked,
+            branches=branches(effective[chunk.chunk_id]),
         )
         if resolution.outcome is RepositoryOutcome.RESOLVED:
             result[chunk.chunk_id] = commits.payload(resolution.qualified, resolution)

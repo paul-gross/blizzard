@@ -151,10 +151,10 @@ script can gate on it. The hub's startup log carries the same finding as one war
 ## How delivery uses a record
 
 A `deliver` step resolves each of its chunk's commit pointers to its own repository record before its action takes a
-pass. Each commit's `repo` is qualified to the record's `owner/repo`, and lands against that record's target: its
-`forge`, `owner` and `base_branch`. The `land` action reaches each repository through the landing seam, an adapter for
-the record's forge kind built from the record and its secret, revealed once per distinct secret for that pass and only
-for the repositories the pass needs a handle for, so the secret never leaves the hub.
+pass. Each commit's `repo` is qualified to the record's `owner/repo`, and lands against that record's `forge` and
+`owner`, on the chunk's effective branch for that repository. The `land` action reaches each repository through the
+landing seam, an adapter for the record's forge kind built from the record and its secret, revealed once per distinct
+secret for that pass and only for the repositories the pass needs a handle for, so the secret never leaves the hub.
 
 A pointer matches a record by repo name, narrowed by the origin's owner and forge host when its URL names them; a
 `file://` origin names neither and matches by bare name. A record counts for a chunk when it is enabled, or was retired
@@ -166,6 +166,16 @@ submission and branch against the base to establish that no code remains to land
 
 Only the repositories the chunk's project links are candidates, so a new repository receives nothing until a project
 links it ([projects.md](./projects.md#links)).
+
+A chunk's **effective branch** for a repository is its project's link branch when the link names one
+([projects.md](./projects.md#a-links-base-branch)), else the record's `base_branch`. The chunk captures it once: at its
+claim, for every repository its project links, or at its first `deliver` step for a repository it has not captured yet —
+a chunk claimed before the repository was linked, or by a hub release that captured none. From then on every lease,
+retry, restart and landing of that chunk uses the captured branch, so an edit to the link's or the record's branch
+reaches only chunks that have not yet captured that repository. `blizzard hub chunk get` and `GET /api/chunks/{id}` list
+each repository's branch in `repository_targets`, marked `inherited` or `override`; `captured_at` is `null` while it is
+a preview the next edit still moves. Chunks landing on different branches of one repository take turns on separate
+flows, and chunks of any projects landing on the same branch share one ([flows.md](./flows.md)).
 
 When no commits are declared, delivery completes with "no code to land" without opening a PR. If the base already
 contains a declared commit and the branch head is safe, the repository resolves without opening a PR; the same proof is
@@ -199,6 +209,7 @@ Records that differ on forge, owner, base branch or secret do not refuse the ste
 repository against its own record and records each repository's landing, and the step refuses two commit entries that
 share one `owner/repo`, such as the same name on two forge hosts, because they would share one `merged/<repo>` marker.
 
-The hub reads records on every step, so an edit or a secret replace reaches the next step with no restart. A hub whose
-environment still sets `BZ_FORGE_URL`, `BZ_FORGE_TOKEN`, `BZ_FORGE_OWNER` or `BZ_FORGE_BASE_BRANCH` refuses to start;
+The hub reads records on every step, so an edit or a secret replace reaches the next step with no restart; a branch edit
+reaches only chunks that have not captured that repository's branch. A hub whose environment still sets `BZ_FORGE_URL`,
+`BZ_FORGE_TOKEN`, `BZ_FORGE_OWNER` or `BZ_FORGE_BASE_BRANCH` refuses to start;
 [install.md](./install.md#work-sources-and-forge-settings-are-records) owns carrying them into records.

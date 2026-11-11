@@ -33,6 +33,7 @@ from blizzard.hub.domain.chunk.ports.route import IWriteChunkRouteRepository
 from blizzard.hub.domain.execution.eligibility import EligibilityCheck
 from blizzard.hub.domain.execution.envelope import Envelope
 from blizzard.hub.domain.graph.model import Graph, IReadGraphRepository, Node
+from blizzard.hub.domain.projects.targets import ChunkTargets, TargetChunk
 from blizzard.hub.domain.runners.bindings import WorkEligibility
 from blizzard.hub.domain.runners.host import Host, IReadHostRegistry
 from blizzard.hub.domain.runners.registration import (
@@ -333,6 +334,7 @@ class ClaimService:
         hosts: IReadHostRegistry,
         retired: RetiredRunnerGuard,
         exclusive: IChunkExclusiveWrites,
+        targets: ChunkTargets,
         clock: IClock,
         label: WorkRefLabel,
     ) -> None:
@@ -349,6 +351,8 @@ class ClaimService:
         self._exclusive = exclusive
         # The rekey's refusal; the claim refuses through the registration it already reads.
         self._retired = retired
+        # Captures the chunk's repository targets in the route's own locked unit.
+        self._targets = targets
         self._clock = clock
         self._label = label
 
@@ -433,6 +437,10 @@ class ClaimService:
         # never stored — only its sha256 hash lands, in the same write as record_route.
         route_token = secrets.token_urlsafe(_ROUTE_TOKEN_BYTES)
         route_id = self._route.record_route_locked(handle, route, token_hash=TokenHash(route_token).hex, at=now)
+        # The branch each linked repository starts from and lands into is fixed here, once, for every later lease.
+        self._targets.capture_live(
+            TargetChunk(chunk.chunk_id, chunk.project_id), at=now, transaction=handle.transaction
+        )
         _CP_CLAIM_AFTER_PERSIST_BEFORE_RESPONSE.reached()
 
         # Envelope assembly stays outside the locked transaction's read set — the

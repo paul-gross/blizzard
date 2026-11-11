@@ -189,6 +189,19 @@ class LandedRepoView(WireModel):
     url: str | None = None
 
 
+class ChunkRepositoryTargetView(WireModel):
+    """One repository's branch for a chunk — the base the chunk starts from and lands into. ``inherited`` when it is
+    the repository record's own branch rather than the project link's override. ``captured_at`` is when the chunk
+    captured it, at its claim or its first delivery; ``None`` while it is a live preview that a link edit still
+    moves."""
+
+    repository_id: str
+    repository_slug: str
+    base_branch: str
+    inherited: bool
+    captured_at: str | None = None
+
+
 class GraphProgressNodeView(WireModel):
     """One node of a chunk's graph, read against the chunk's visits there."""
 
@@ -690,6 +703,8 @@ class ChunkDetail(WireModel):
     open_prs: list[PrView] = []
     closed_prs: list[PrView] = []
     landed_repos: list[LandedRepoView] = []
+    #: Each repository the chunk's project links, with the branch the chunk starts from and lands into, by slug.
+    repository_targets: list[ChunkRepositoryTargetView] = []
     # The chunk's derived usage/cost total — see ChunkUsageTotalView.
     cost: ChunkUsageTotalView = Field(default_factory=ChunkUsageTotalView.zero)
     # Per-node-step usage history, oldest first.

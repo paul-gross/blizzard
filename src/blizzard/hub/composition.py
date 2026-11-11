@@ -197,6 +197,7 @@ from blizzard.hub.domain.projects.color import ColorPick
 from blizzard.hub.domain.projects.links import IReadProjectLinks
 from blizzard.hub.domain.projects.model import IReadProjectRepository, ProjectId
 from blizzard.hub.domain.projects.order import IReadProjectPositions
+from blizzard.hub.domain.projects.targets import ChunkTargets
 from blizzard.hub.domain.runners.enrollment import RunnerEnrollmentService
 from blizzard.hub.domain.runners.host import IReadHostRegistry
 from blizzard.hub.domain.runners.host_enrollment import HostEnrollmentService
@@ -242,6 +243,7 @@ from blizzard.hub.store.internal.analytics_event_query_store import AnalyticsEve
 from blizzard.hub.store.internal.analytics_operational_store import AnalyticsOperationalStore
 from blizzard.hub.store.internal.cadence_store import CadenceStore
 from blizzard.hub.store.internal.chunk_store_factory import build_chunk_stores
+from blizzard.hub.store.internal.chunk_targets_store import ChunkTargetsStore
 from blizzard.hub.store.internal.config_apply_store import ConfigApplyStore
 from blizzard.hub.store.internal.config_change_store import ConfigChangeStore
 from blizzard.hub.store.internal.config_import_store import ConfigImportStore
@@ -418,6 +420,8 @@ class TenantServices:
     projects: IReadProjectRepository
     #: Each project's links to the tenant's work sources and repositories (the read half).
     project_links: IReadProjectLinks
+    #: Each chunk's effective repository targets, and their capture.
+    chunk_targets: ChunkTargets
     #: Each project's landing order over the repositories it links (the read half).
     project_positions: IReadProjectPositions
     #: The one writer of projects and their links, each write with its change row.
@@ -639,6 +643,8 @@ class TenantStores:
     projects: ProjectStore
     #: Project links — composition-only write half; ``HubServices`` carries the read half.
     project_links: ProjectLinkStore
+    #: The repository targets chunks captured — composition-only; ``TenantServices`` carries the service over them.
+    chunk_targets: ChunkTargetsStore
     #: Landing positions — composition-only write half; ``HubServices`` carries the read half.
     project_positions: ProjectPositionStore
     config_apply: ConfigApplyStore
@@ -708,6 +714,7 @@ def build_tenant_stores(connections: ScopedConnections, *, clock: IClock) -> Ten
         config_changes=ConfigChangeStore(connections),
         projects=ProjectStore(connections),
         project_links=project_links,
+        chunk_targets=ChunkTargetsStore(connections),
         project_positions=ProjectPositionStore(connections, links=project_links),
         config_apply=ConfigApplyStore(connections),
         config_import=ConfigImportStore(connections),
@@ -1177,6 +1184,9 @@ def build_tenant_services(stores: TenantStores, parts: TenantServiceParts, *, ev
         materialize=ReviewFindingsMaterialize(delivery=review_findings_store, clock=clock),
         formats=garden_formats,
     )
+    chunk_targets = ChunkTargets(
+        targets=stores.chunk_targets, links=stores.project_links, records=stores.repository_records
+    )
     hub_router = HubNodeRouter(
         artifacts=chunk_artifacts,
         hub_exec=chunk_hub_exec,
@@ -1187,6 +1197,7 @@ def build_tenant_services(stores: TenantStores, parts: TenantServiceParts, *, ev
         repositories=stores.repository_records,
         forge_records=stores.forge_records,
         links=stores.project_links,
+        targets=chunk_targets,
         projects=stores.projects,
         work_sources=work_sources,
         movement=chunk_movement,
@@ -1208,6 +1219,7 @@ def build_tenant_services(stores: TenantStores, parts: TenantServiceParts, *, ev
         repositories=stores.repository_records,
         forge_records=stores.forge_records,
         links=stores.project_links,
+        targets=chunk_targets,
         projects=stores.projects,
         actions=parts.actions,
         passes=parts.action_passes,
@@ -1273,6 +1285,7 @@ def build_tenant_services(stores: TenantStores, parts: TenantServiceParts, *, ev
             hosts=host_store,
             retired=retired,
             exclusive=chunk_exclusive,
+            targets=chunk_targets,
             clock=clock,
             label=work_ref_label,
         ),
@@ -1440,6 +1453,7 @@ def build_tenant_services(stores: TenantStores, parts: TenantServiceParts, *, ev
             forge_records=stores.forge_records,
             projects=stores.projects,
             links=stores.project_links,
+            targets=chunk_targets,
             catalogue=parts.actions.catalogue,
             refusals=hub_router,
             exclusive=chunk_exclusive,
@@ -1451,6 +1465,7 @@ def build_tenant_services(stores: TenantStores, parts: TenantServiceParts, *, ev
         config_changes=stores.config_changes,
         projects=stores.projects,
         project_links=stores.project_links,
+        chunk_targets=chunk_targets,
         project_positions=stores.project_positions,
         project_authoring=ProjectAuthoring(
             projects=stores.projects,

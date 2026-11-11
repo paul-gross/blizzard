@@ -338,6 +338,7 @@ def test_a_chunks_commits_resolve_to_the_same_repositories_after_carry_over(tmp_
             forges,
             minted_at=_T0 + timedelta(days=1),
             linked=None,
+            branches={},
         )
 
         assert [target.slug for target in resolution.targets] == list(commits.values())

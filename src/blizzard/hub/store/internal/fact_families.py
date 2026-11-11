@@ -141,6 +141,7 @@ EXCLUDED: dict[str, str] = {
     "answer_deliveries": "delivery bookkeeping for an answer, read by the answer seam",
     "queue_positions": "a derived queue ordering, rebuilt on read",
     "flow_facts": "the flow driver's own facts",
+    "chunk_repository_targets": "the branches a chunk captured to land into; read by the targets seam, never a status",
     "event_log": "the operational log, read by its own feed",
     "transcript_segments": "transcript storage; read by the event derivation",
     "transcript_events": "transcript storage; read by the event derivation",

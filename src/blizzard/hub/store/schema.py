@@ -1542,6 +1542,27 @@ delivery_repo_landed = Table(
 )
 Index("ix_delivery_repo_landed_tenant_chunk_id", delivery_repo_landed.c.tenant_id, delivery_repo_landed.c.chunk_id)
 
+# The branch a chunk captured for one repository its project links — the base it starts from and lands into. One
+# immutable row per (chunk, repository), inserted once under the chunk's lock and never updated.
+chunk_repository_targets = Table(
+    "chunk_repository_targets",
+    metadata,
+    Column("id", Integer, primary_key=True, autoincrement=True),
+    Column("chunk_id", String, ForeignKey("chunks.chunk_id"), nullable=False),
+    Column("repository_id", String, nullable=False),
+    Column("base_branch", String, nullable=False),
+    # True when the branch is the repository record's own, false when the link's override named it.
+    Column("inherited", Boolean, nullable=False),
+    Column("captured_at", UtcDateTime, nullable=False),
+    Column(
+        "tenant_id",
+        String,
+        ForeignKey("tenants.tenant_id", name="fk_chunk_repository_targets_tenant_id"),
+        nullable=False,
+    ),
+    UniqueConstraint("tenant_id", "chunk_id", "repository_id", name="uq_chunk_repository_targets_chunk_repository"),
+)
+
 delivery_landed = Table(
     "delivery_landed",
     metadata,
