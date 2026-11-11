@@ -82,6 +82,7 @@ describe('FleetLiveUpdates', () => {
     const keys = invalidate.mock.calls.map((call) => call[0]?.queryKey);
     expect(keys).toContainEqual(['hub', 'chunks']);
     expect(keys).toContainEqual(['hub', 'queue']);
+    expect(keys).toContainEqual(['hub', 'config', 'urgencies']);
     expect(keys).toContainEqual(['hub', 'chunk', 'ch_live']);
     expect(keys).toContainEqual(['hub', 'fleet-spend']);
     expect(keys).toContainEqual(['hub', 'events']);
@@ -224,11 +225,12 @@ describe('FleetLiveUpdates', () => {
 
     const keys = invalidate.mock.calls.map((call) => call[0]?.queryKey);
     expect(keys).toContainEqual(['hub', 'queue']);
+    expect(keys).toContainEqual(['hub', 'config', 'urgencies']);
     expect(keys).toContainEqual(['hub', 'backlog']);
     expect(keys).toContainEqual(['hub', 'runners']);
     expect(keys).toContainEqual(['hub', 'hosts']);
     expect(keys).toContainEqual(['hub', 'env-timeline', 'live']);
-    expect(keys).toHaveLength(5);
+    expect(keys).toHaveLength(6);
   });
 
   it('flushes a lone event within the coalesce window bound on an otherwise quiet stream (issue #310)', () => {

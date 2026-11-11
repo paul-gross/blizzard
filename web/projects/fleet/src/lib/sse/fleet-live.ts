@@ -31,6 +31,7 @@ import {
   hubQuestionsKey,
   hubDecisionsKey,
   hubQueueKey,
+  hubUrgenciesKey,
   hubHostsKey,
   hubRunnersKey,
 } from '../core/query-keys';
@@ -161,6 +162,7 @@ function chunkChangedKeys(data: HubEventPayload): readonly (readonly unknown[])[
   return [
     hubChunksKey,
     hubQueueKey,
+    hubUrgenciesKey,
     ...chunkDetailKeys(data),
     hubFleetSpendKey,
     hubEventsKey,
@@ -217,7 +219,7 @@ const EVENT_INVALIDATION_REGISTRY = openLookup<HubEventType, (data: HubEventPayl
     [HubEventType.DECISION_RESOLVED]: chunkDecisionKeys,
     // A backlog reorder fires the same event as a ready-queue one (no distinct
     // payload key, `bzh:ranking-is-per-list`), so both cached orders invalidate.
-    [HubEventType.QUEUE_CHANGED]: () => [hubQueueKey, hubBacklogKey],
+    [HubEventType.QUEUE_CHANGED]: () => [hubQueueKey, hubBacklogKey, hubUrgenciesKey],
     // A host's usage samples arrive only as its spenders' frames, so a runner frame re-reads the hosts too.
     [HubEventType.RUNNER_CHANGED]: () => [hubRunnersKey, hubHostsKey, hubEnvTimelineLiveKey],
     // Adopt, release and retire move runners between hosts, so a host frame re-reads both registries.

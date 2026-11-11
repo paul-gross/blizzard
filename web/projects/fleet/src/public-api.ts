@@ -371,3 +371,6 @@ export type {
   ErrandRunView,
   RunCadenceView,
 } from './lib/api/hub';
+export { hubUrgenciesKey, hubUrgencyIconKey } from './lib/core/query-keys';
+export { listUrgenciesApiUrgenciesGet, getUrgencyIconApiUrgenciesKeyIconGet } from './lib/api/hub/sdk.gen';
+export type { UrgencyRef, UrgencyView } from './lib/api/hub/types.gen';

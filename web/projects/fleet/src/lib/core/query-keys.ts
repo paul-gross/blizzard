@@ -77,6 +77,10 @@ export function hubConfigHistoryKey(recordKind: string, recordKey: string | null
 export const hubConfigChangesKey = [...hubConfigKey, 'changes'] as const;
 /** Every project of the tenant — `GET /api/projects`. Under {@link hubConfigKey}: a project is a configured record,
  * so every config write refreshes the list, and a project write invalidates the change log with it. */
+export const hubUrgenciesKey = [...hubConfigKey, 'urgencies'] as const;
+export function hubUrgencyIconKey(tenant: string | null, key: string | null, digest: string | null): readonly unknown[] {
+  return ['hub', 'urgency-icon', tenant, key, digest];
+}
 export const hubProjectsKey = [...hubConfigKey, 'projects'] as const;
 /** One project's record by id — `GET /api/projects/{project}`; under {@link hubProjectsKey}, so a projects write
  * refreshes it. `projectId` is nullable, `hubChunkKey`'s own null-tolerant shape, for the disabled-query rest state. */

@@ -1,0 +1,17 @@
+@if (description(); as tip) {
+  <span class="pill" [style.--urgency-color]="ink()" [fleetTooltip]="tip" tabindex="0">
+    <ng-container *ngTemplateOutlet="content" />
+  </span>
+} @else {
+  <span class="pill" [style.--urgency-color]="ink()">
+    <ng-container *ngTemplateOutlet="content" />
+  </span>
+}
+<ng-template #content>
+  @if (emoji(); as mark) {
+    <span class="mark" aria-hidden="true">{{ mark }}</span>
+  } @else if (iconUrl(); as url) {
+    <img class="mark" [src]="url" alt="" />
+  }
+  <span>{{ name() }}</span>
+</ng-template>

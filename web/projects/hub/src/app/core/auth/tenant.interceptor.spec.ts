@@ -9,6 +9,7 @@ import { vi } from 'vitest';
 import { EVENT_SOURCE_FACTORY, hubClient, meApiMeGet } from 'fleet';
 import { TAB_TENANT_KEY, TENANT_HEADER, TenantContext } from './tenant-context';
 import { provideTenantInterceptor } from './tenant.interceptor';
+import { readUrgencyIcon } from '../urgency-icon.query';
 
 describe('provideTenantInterceptor', () => {
   let seen: (string | null)[];
@@ -50,6 +51,25 @@ describe('provideTenantInterceptor', () => {
     await meApiMeGet({ throwOnError: false });
 
     expect(seen.slice(-2)).toEqual(['ten_a', 'ten_b']);
+  });
+
+  it('reads icon bytes through the tenant-authenticated client', async () => {
+    let request: Request | undefined;
+    hubClient.setConfig({
+      fetch: (async (input: Request) => {
+        request = input;
+        const response = new Response('image bytes', { headers: { 'Content-Type': 'image/png' } });
+        response.blob = async () => new Blob(['image bytes'], { type: 'image/png' });
+        return response;
+      }) as typeof fetch,
+    });
+    TestBed.inject(Injector);
+    TestBed.inject(TenantContext).enter('ten_a');
+    const icon = await readUrgencyIcon('urgent');
+    expect(icon.type).toBe('image/png');
+    expect(icon.size).toBeGreaterThan(0);
+    expect(request?.headers.get(TENANT_HEADER)).toBe('ten_a');
+    expect(new URL(request!.url).pathname).toBe('/api/urgencies/urgent/icon');
   });
 
   it("names this tab's stored tenant from the first call", async () => {
