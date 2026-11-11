@@ -1,6 +1,7 @@
 import {
   blockedLabel,
   cardShowsStatus,
+  type UrgencyRef,
   type ChunkCardView,
   type ChunkStatus,
   finishedWord,
@@ -27,6 +28,7 @@ export interface BoardCard {
   readonly status: ChunkStatus;
   /** The hub's `ChunkSummary.terminal` — the card sits in the DONE lane exactly when set. */
   readonly terminal: boolean;
+  readonly urgency?: UrgencyRef | null;
   /** The hub's `ChunkSummary.promotable` — a promote would write a promotion; gates Promote. */
   readonly promotable: boolean;
   /** The node's human graph name (`build`, `review`); falls back to the raw id. */

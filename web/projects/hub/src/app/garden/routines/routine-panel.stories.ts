@@ -1,3 +1,4 @@
+import type { UrgencyView } from 'fleet';
 import type { Meta, StoryObj } from '@storybook/angular-vite';
 
 import { FleetRoutinePanel, type RoutinePanelVm } from './routine-panel';
@@ -21,3 +22,6 @@ export const RelatedScopesLoaded: Story = {};
 export const RelatedScopesPending: Story = { args: { vm: { ...VM, relatedScopes: null }, relatedScopesState: 'loading' } };
 export const RelatedScopesError: Story = { args: { vm: { ...VM, relatedScopes: null }, relatedScopesState: 'error' } };
 export const RelatedScopesEmpty: Story = { args: { vm: { ...VM, relatedScopes: [] }, relatedScopesState: 'empty' } };
+
+export const DefaultUrgency: Story = { args: { canEdit: true, urgenciesReady: true, defaultUrgency: null,
+  urgencies: [{ urgency_id: 'u', slug: 'normal', name: 'Normal', default: true, retired: false } as UrgencyView] } };

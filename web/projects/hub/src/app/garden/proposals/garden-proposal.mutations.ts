@@ -50,6 +50,7 @@ export interface GardenProposalAcceptVars {
   readonly mintWorkItem: boolean;
   readonly reason?: string;
   readonly body?: string;
+  readonly urgency?: string;
 }
 
 /**
@@ -71,6 +72,7 @@ export function injectAcceptGardenProposalMutation() {
           mint_work_item: vars.mintWorkItem,
           ...(vars.reason !== undefined ? { reason: vars.reason } : {}),
           ...(vars.body !== undefined ? { body: vars.body } : {}),
+          ...(vars.mintWorkItem && vars.urgency !== undefined ? { urgency: vars.urgency } : {}),
         },
         throwOnError: false,
       });

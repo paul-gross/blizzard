@@ -1,3 +1,6 @@
+import { UrgencyPill } from '../../core/urgency-pill';
+import { urgencyPill } from '../../core/urgencies.model';
+import type { UrgencyView } from 'fleet';
 import { ChangeDetectionStrategy, Component, computed, input, signal } from '@angular/core';
 import { NgTemplateOutlet } from '@angular/common';
 import { RouterLink } from '@angular/router';
@@ -67,7 +70,7 @@ export interface Vitals {
 @Component({
   selector: 'app-glance-view',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [FleetSpend, FleetWhen, NodeStrip, KitAsyncState, KitBadge, KitCountStrip, KitPanel, KitSkeleton, LaneIcon, NgTemplateOutlet, RouterLink, LensLink],
+  imports: [UrgencyPill, FleetSpend, FleetWhen, NodeStrip, KitAsyncState, KitBadge, KitCountStrip, KitPanel, KitSkeleton, LaneIcon, NgTemplateOutlet, RouterLink, LensLink],
   templateUrl: './glance-view.html',
   styleUrl: './glance-view.css',
 })
@@ -89,6 +92,8 @@ export class GlanceView {
     return graphStepLabel(row.graphName, row.node);
   }
 
+  readonly urgencies = input<readonly UrgencyView[]>([]);
+  protected readonly urgencyPill = urgencyPill;
   readonly donePolicy = input<BoardDonePolicy>(boardDonePolicy([]));
   readonly vitals = input.required<Vitals>();
   readonly list = input.required<GlanceListGroups>();

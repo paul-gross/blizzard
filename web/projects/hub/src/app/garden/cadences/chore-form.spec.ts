@@ -1,6 +1,7 @@
 import { provideZonelessChangeDetection } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 
+import type { UrgencyView } from 'fleet';
 import { type ChoreDraft, FleetChoreForm } from './chore-form';
 
 const DRAFT: ChoreDraft = { key: 'nightly', routine: 'nightly', scopes: 'all', mode: 'full', promote: true, note: '' };
@@ -43,4 +44,19 @@ describe('FleetChoreForm', () => {
     el.querySelector<HTMLButtonElement>('[data-testid="gardening-chore-form-save"]')!.click();
     expect(saved[0].mode).toBe('sampled');
   });
+  it('starts at the routine default and emits a selected urgency', async () => {
+    const { fixture, el, saved } = await mount(DRAFT);
+    fixture.componentRef.setInput('urgencies', [{ urgency_id: 'u', slug: 'urgent', name: 'Urgent', default: false, retired: false } as UrgencyView]);
+    await fixture.whenStable();
+    const trigger = el.querySelector<HTMLElement>('[data-testid="gardening-chore-form-urgency"]')!;
+    expect(trigger.textContent).toContain('Routine default');
+    trigger.click();
+    await fixture.whenStable();
+    [...document.body.querySelectorAll<HTMLElement>('[role="option"]')].find((o) => o.textContent?.trim() === 'Urgent')!.click();
+    await fixture.whenStable();
+    el.querySelector<HTMLElement>('[data-testid="gardening-chore-form-save"]')!.click();
+    expect(saved[0].urgency).toBe('urgent');
+    fixture.destroy();
+  });
+
 });

@@ -1,3 +1,4 @@
+import type { UrgencyView } from 'fleet';
 import type { Meta, StoryObj } from '@storybook/angular-vite';
 import { fn } from 'storybook/test';
 
@@ -28,3 +29,8 @@ export const UnknownMode: Story = {
   args: { keyEditable: false, initial: { key: 'odd', routine: 'docs', scopes: 'all', mode: 'sampled', promote: true, note: '' } },
 };
 export const Refused: Story = { args: { error: 'promoting a chore needs chunk:control' } };
+
+export const ExplicitUrgency: Story = {
+  args: { initial: { key: 'nightly', routine: 'nightly', scopes: 'all', mode: 'full', promote: true, note: '', urgency: 'urgent' },
+    urgencies: [{ urgency_id: 'u', slug: 'urgent', name: 'Urgent', default: false, retired: false } as UrgencyView] },
+};

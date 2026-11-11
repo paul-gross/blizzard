@@ -33,6 +33,15 @@ describe('injectEditRoutineMutation', () => {
     expect(calls[0].body).toEqual({ graph_name: 'garden-delta' });
   });
 
+  it('sets or clears the routine default without changing the graph', async () => {
+    const mutation = TestBed.runInInjectionContext(() => injectEditRoutineMutation());
+    await mutation.mutateAsync({ routineId: 'rt_1', defaultUrgency: 'urgent' });
+    await mutation.mutateAsync({ routineId: 'rt_1', defaultUrgency: null });
+    const calls = stub.forRoute('/api/routines/rt_1', 'PATCH');
+    expect(calls[0].body).toEqual({ default_urgency: 'urgent' });
+    expect(calls[1].body).toEqual({ default_urgency: null });
+  });
+
   it('invalidates the routine list on a successful edit', async () => {
     const invalidateSpy = vi.spyOn(queryClient, 'invalidateQueries');
     const mutation = TestBed.runInInjectionContext(() => injectEditRoutineMutation());

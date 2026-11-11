@@ -47,6 +47,9 @@
           [canControl]="canControl()"
           (selectChunk)="selectChunk.emit($event)"
         >
+          @if (urgencyFor(card.chunkId); as urgency) {
+            <app-urgency-pill chunkCardUrgency [urgency]="urgency" />
+          }
           @if (strips().get(card.chunkId); as strip) {
             <app-node-strip fleetChunkCardProgress [progress]="strip.graphProgress" />
           }
@@ -64,6 +67,9 @@
         [canControl]="canControl()"
         (selectChunk)="selectChunk.emit($event)"
       >
+        @if (urgencyFor(card.chunkId); as urgency) {
+          <app-urgency-pill chunkCardUrgency [urgency]="urgency" />
+        }
         @if (strips().get(card.chunkId); as strip) {
           <app-node-strip fleetChunkCardProgress [progress]="strip.graphProgress" />
         }

@@ -101,7 +101,7 @@ describe('GardeningCadenceDetail', () => {
     const [call] = stub.forRoute('/api/cadences/cad_evening', 'PATCH');
     expect(call.headers['if-match']).toBe('7');
     expect(call.body).toEqual({
-      chores: [{ key: 'odd', routine: 'docs', scopes: ['web'], mode: 'full', promote: false, note: null }],
+      chores: [{ key: 'odd', routine: 'docs', scopes: ['web'], mode: 'full', promote: false, note: null, urgency: null }],
     });
   });
 

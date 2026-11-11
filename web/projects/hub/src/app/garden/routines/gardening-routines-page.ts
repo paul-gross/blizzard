@@ -1,15 +1,19 @@
-import { ChangeDetectionStrategy, Component, computed, effect, inject } from '@angular/core';
+import { ChangeDetectionStrategy, Component, computed, effect, inject, signal } from '@angular/core';
 import { Router, RouterOutlet } from '@angular/router';
-import { asyncState, KitMasterDetail, KitPanel, type GraphSummaryView, type KitAsyncStateValue, type RoutineView, ViewportService } from 'fleet';
+import { asyncState, errorMessage, KitButton, KitMasterDetail, KitPanel, type GraphSummaryView, type KitAsyncStateValue, type RoutineView, ViewportService } from 'fleet';
 import { FleetRoutineList, type RoutineListRowVm } from './routine-list';
 import { injectHubGraphsQuery } from '../../graphs/graphs.query';
 import { injectHubRoutinesQuery } from '../core/routines.query';
 
 import { injectChildRouteParam } from '../../core/route-state';
-import { presentRoutineSlug, routineListRows } from './gardening-routines-page.model';
+import { createRoutineRequest, presentRoutineSlug, routineListRows } from './gardening-routines-page.model';
 import { ProjectLens } from '../../core/project-lens';
 import { injectLensedProject } from '../../core/lensed-project';
 import { firstRowToOpen } from '../../core/first-row';
+import { hasPermission, injectMeQuery } from '../../core/auth/me.query';
+import { injectUrgenciesQuery } from '../../core/urgencies.query';
+import { RoutineCreateForm, type RoutineCreateDraft } from './routine-create-form';
+import { injectCreateRoutineMutation } from './routine-create.mutations';
 
 /**
  * The `/gardening/routines` sub-tab (`blizzard-product:/delivered/garden/user-interface.md` §Declaring
@@ -29,11 +33,26 @@ import { firstRowToOpen } from '../../core/first-row';
 @Component({
   selector: 'app-gardening-routines-page',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [FleetRoutineList, KitMasterDetail, KitPanel, RouterOutlet],
+  imports: [RoutineCreateForm, KitButton, FleetRoutineList, KitMasterDetail, KitPanel, RouterOutlet],
   templateUrl: './gardening-routines-page.html',
   styleUrl: './gardening-routines-page.css',
 })
 export class GardeningRoutinesPage {
+  protected readonly urgenciesQuery = injectUrgenciesQuery();
+  private readonly meQuery = injectMeQuery();
+  private readonly createMutation = injectCreateRoutineMutation();
+  protected readonly canEdit = computed(() => hasPermission(this.meQuery.data(), 'graph:edit'));
+  protected readonly creating = signal(false);
+  protected readonly createError = signal<string | null>(null);
+  protected readonly createPending = computed(() => this.createMutation.isPending());
+  protected onCreate(draft: RoutineCreateDraft): void {
+    this.createError.set(null);
+    this.createMutation.mutate(createRoutineRequest(draft), {
+      onSuccess: (routine) => { this.creating.set(false); this.selectRoutine(routine.slug); },
+      onError: (error: unknown) => this.createError.set(errorMessage(error, 'Create failed.')),
+    });
+  }
+
   private readonly lens = inject(ProjectLens);
 
   private readonly router = inject(Router);

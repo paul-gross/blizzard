@@ -48,6 +48,8 @@ export class KitMenu {
    * that sits beside buttons and should read as one. */
   readonly bordered = input(false, { transform: booleanAttribute });
 
+  readonly disabled = input(false, { transform: booleanAttribute });
+
   /** Which edge the panel lines up with the trigger on: `start` hangs it from the trigger's left edge, `end` from its
    * right — for a trigger at the right of its row, so the panel opens back across the row rather than past its end. */
   readonly align = input<'start' | 'end'>('start');

@@ -3,6 +3,7 @@ import { ChangeDetectionStrategy, Component, computed, input, output, signal } f
 import { asyncStateOf, errorMessage, type RoutineRunResponse, type ScopeView } from 'fleet';
 import { injectHubRoutineBaselinesQuery } from './routine-baselines.query';
 import { injectHubRoutineScopesQuery } from '../core/routines.query';
+import { injectUrgenciesQuery } from '../../core/urgencies.query';
 import { injectHubScopesQuery } from '../core/scopes.query';
 import { injectRunRoutineMutation } from './routine-run.mutations';
 
@@ -34,6 +35,8 @@ import { liveRelatedScopes, orderScopesBySwept, sweptScopeSlugs } from './garden
   templateUrl: './gardening-run-dialog.html',
 })
 export class GardeningRunDialog {
+  protected readonly urgenciesQuery = injectUrgenciesQuery();
+  readonly routineUrgency = input<string | null>(null);
   readonly routineId = input.required<string>();
   readonly routineName = input.required<string>();
 
@@ -79,7 +82,7 @@ export class GardeningRunDialog {
   protected onSubmit(submission: RunSubmission): void {
     this.submitError.set(null);
     this.runMutation.mutate(
-      { routineId: this.routineId(), scopeSlug: submission.selection, mode: submission.mode, note: submission.note },
+      { routineId: this.routineId(), scopeSlug: submission.selection, mode: submission.mode, note: submission.note, ...(submission.urgency ? { urgency: submission.urgency } : {}) },
       {
         onSuccess: (data) => this.confirmedRun.set(data),
         onError: (error) => this.submitError.set(errorMessage(error, 'Run failed.')),

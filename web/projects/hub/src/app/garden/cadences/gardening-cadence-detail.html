@@ -1,4 +1,5 @@
 <app-cadence-panel
+  [urgencies]="urgenciesQuery.data() ?? []"
   [vm]="panelVm()"
   [state]="panelState()"
   [canEdit]="canEdit()"

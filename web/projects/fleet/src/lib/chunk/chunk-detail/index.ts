@@ -20,3 +20,4 @@ export { deriveWorkItemsState } from './work-items-state';
 export type { WorkItemsState, WorkItemsQuery } from './work-items-state';
 export { ChunkTimeline } from './chunk-timeline';
 export type { TransitionView, ArtifactView, DecisionView, ChunkUsageTotalView } from '../../api/hub';
+export { ChunkUrgency, CHUNK_URGENCY_ICON } from './chunk-urgency';

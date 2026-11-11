@@ -1,3 +1,4 @@
+import type { UrgencyView } from '../../api/hub';
 import type { Signal } from '@angular/core';
 
 /** The chunk-control port behind a chunk header's ⋮ menu ({@link ChunkActionsMenu}) —
@@ -14,6 +15,12 @@ export interface ChunkControl {
   resume(chunkId: string): void;
   detach(chunkId: string): void;
   complete(chunkId: string): void;
+  /** Hub urgency choices, absent on daemons that cannot edit urgency. */
+  readonly urgency?: {
+    readonly values: Signal<readonly UrgencyView[]>;
+    pending(chunkId: string): string | null;
+    set(chunkId: string, urgencyId: string): void;
+  };
   /** Delete the chunk; `onDeleted` runs once the hub confirms it. */
   delete(chunkId: string, onDeleted?: () => void): void;
 }

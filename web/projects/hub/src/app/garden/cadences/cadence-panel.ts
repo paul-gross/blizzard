@@ -125,6 +125,7 @@ const NEW_CHORE: ChoreDraft = { key: '', routine: '', scopes: 'all', mode: 'full
   styleUrl: './cadence-panel.css',
 })
 export class FleetCadencePanel {
+  readonly urgencies = input<readonly import('fleet').UrgencyView[]>([]);
   readonly vm = input<CadencePanelVm | null>(null);
   readonly state = input.required<KitAsyncStateValue>();
 

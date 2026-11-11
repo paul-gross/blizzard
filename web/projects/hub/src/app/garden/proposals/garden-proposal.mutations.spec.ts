@@ -94,6 +94,15 @@ describe('injectAcceptGardenProposalMutation', () => {
     expect(calls[0].body).toEqual({ mint_work_item: false, reason: 'already tracked elsewhere' });
   });
 
+  it('sends an explicit urgency only when minting', async () => {
+    const mutation = TestBed.runInInjectionContext(() => injectAcceptGardenProposalMutation());
+    await mutation.mutateAsync({ proposalId: 'gp_1', mintWorkItem: true, urgency: 'urgent' });
+    await mutation.mutateAsync({ proposalId: 'gp_1', mintWorkItem: false, reason: 'tracked', urgency: 'urgent' });
+    const calls = stub.forRoute('/api/garden-proposals/gp_1/accept', 'POST');
+    expect(calls[0].body).toEqual({ mint_work_item: true, urgency: 'urgent' });
+    expect(calls[1].body).toEqual({ mint_work_item: false, reason: 'tracked' });
+  });
+
   it('carries a body override when supplied', async () => {
     const mutation = TestBed.runInInjectionContext(() => injectAcceptGardenProposalMutation());
 

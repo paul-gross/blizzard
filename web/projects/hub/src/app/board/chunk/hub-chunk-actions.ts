@@ -1,3 +1,5 @@
+import { CHUNK_URGENCY_ICON } from 'fleet';
+import { injectUrgencyIconUrl } from '../../core/urgency-icon.query';
 import { type Provider, computed, inject, signal } from '@angular/core';
 import { type AnswerQuestionEvent, type ChunkPageActions, type DaemonTarget, type ResolveDecisionEvent, FLEET_CLOCK, hubClient, injectPendingMutationVariables, provideChunkPageDaemon } from 'fleet';
 import { injectHubChunkControl } from '../chunks/hub-chunk-control';
@@ -88,6 +90,7 @@ const HUB_TARGET: DaemonTarget = { plane: 'hub', client: hubClient };
 /** The hub's daemon for the shared chunk page — its own target and board, and the
  * operator-action port above. */
 export const HUB_CHUNK_PAGE_PROVIDERS: Provider[] = [
+  { provide: CHUNK_URGENCY_ICON, useValue: injectUrgencyIconUrl },
   provideChunkPageDaemon(() => {
     const projects = injectProjectsQuery();
     const showProjectColors = injectShowProjectColors();

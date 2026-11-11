@@ -15,6 +15,8 @@ import {
   type RoutineRunResponse,
   type ScopeView,
   KitErrorLine,
+  KitSelect,
+  type UrgencyView,
 } from 'fleet';
 
 import { EMPTY_SCOPE_SELECTION, GardeningRunScopeField, type ScopeSelection } from './gardening-run-scope-field';
@@ -25,11 +27,11 @@ export interface RunSubmission {
   readonly selection: ScopeSelection;
   readonly mode: hubApi.RunMode;
   readonly note: string | null;
+  readonly urgency?: string;
 }
 
 /**
- * The gardening run dialog's presentational view — three fields
- * (scope, mode, charge note) and nothing else, the delta baseline display, the run
+ * The gardening run dialog's presentational view — scope, mode, urgency, and charge note, the delta baseline display, the run
  * submission, and the post-run confirmation, all over inputs and outputs only. No query
  * or client dependency: the container injects the scope reads and the run mutation and
  * maps their async state into `state()`/`submitting()`/`submitError()`/`confirmedRun()`
@@ -52,12 +54,15 @@ export interface RunSubmission {
     KitTextInput,
     RouterLink, LensLink,
     KitErrorLine,
+    KitSelect,
   ],
   templateUrl: './gardening-run-dialog-view.html',
   styleUrl: './gardening-run-dialog-view.css',
 })
 export class GardeningRunDialogView {
   readonly routineName = input.required<string>();
+  readonly urgencies = input<readonly UrgencyView[]>([]);
+  readonly routineUrgency = input<string | null>(null);
 
   /** Every non-retired scope, previously-swept-by-this-routine first;
    * rendered in the order given. */
@@ -90,6 +95,15 @@ export class GardeningRunDialogView {
   protected readonly RunMode = hubApi.RunMode;
   protected readonly mode = signal<hubApi.RunMode>(hubApi.RunMode.FULL);
   protected readonly note = signal('');
+  protected readonly urgency = signal('');
+  protected readonly urgencyOptions = computed(() => {
+    const ref = this.routineUrgency();
+    const inherited = ref === null ? this.urgencies().find((u) => u.default) : this.urgencies().find((u) => u.slug === ref || u.urgency_id === ref);
+    return [
+      { value: '', label: `Routine default${inherited ? ` (${inherited.name})` : ref ? ` (${ref})` : ''}` },
+      ...this.urgencies().filter((u) => !u.retired).map((u) => ({ value: u.slug, label: u.name })),
+    ];
+  });
 
   /** The delta baseline for the currently selected scope, or `undefined` for a
    * never-swept pair or no selection yet — it is the one fact both this
@@ -127,7 +141,8 @@ export class GardeningRunDialogView {
 
   protected onSubmitClick(): void {
     if (!this.canSubmit()) return;
-    this.runSubmitted.emit({ selection: this.scopeSelection(), mode: this.mode(), note: this.note().trim() || null });
+    const urgency = this.urgency();
+    this.runSubmitted.emit({ selection: this.scopeSelection(), mode: this.mode(), note: this.note().trim() || null, ...(urgency ? { urgency } : {}) });
   }
 
   /** Escape, a backdrop click, and Cancel all route through `KitDialog`'s one

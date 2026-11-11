@@ -241,3 +241,5 @@ export const hostEnrollMutationKey = [
  * anchors on a card still pending another move runs behind it.
  */
 export const laneMoveScopeId = 'hub-lane-move';
+
+export const chunkUrgencyMutationKey = ['hub', 'mutation', 'chunk-urgency'] as const;

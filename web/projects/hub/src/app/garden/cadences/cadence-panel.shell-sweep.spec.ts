@@ -108,6 +108,11 @@ describe('gardening cadence panel layout shell sweep (web:shell-sweep)', () => {
       for (const wrap of Array.from(root.querySelectorAll<HTMLElement>('.cp-table-wrap'))) {
         expect(wrap.getBoundingClientRect().right).toBeLessThanOrEqual(panel.getBoundingClientRect().right + 1);
       }
+      root.querySelector<HTMLElement>('[data-testid="gardening-cadence-chore-add"]')!.click();
+      await fixture.whenStable();
+      const urgency = root.querySelector<HTMLElement>('[data-testid="gardening-chore-add-urgency"]')!;
+      expect(urgency).not.toBeNull();
+      expect(urgency.getBoundingClientRect().right).toBeLessThanOrEqual(panel.getBoundingClientRect().right + 1);
       const retire = root.querySelector<HTMLElement>('[data-testid="gardening-cadence-panel-retire"]')!;
       expect(retire.getBoundingClientRect().right).toBeLessThanOrEqual(width);
       for (const state of ['loading', 'error', 'empty'] as const) {

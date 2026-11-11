@@ -2,6 +2,7 @@
   type="button"
   class="trigger"
   [class.bordered]="bordered()"
+  [disabled]="disabled()"
   [cdkMenuTriggerFor]="menu()"
   [cdkMenuPosition]="positions()"
   [attr.aria-label]="ariaLabel()"

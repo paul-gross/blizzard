@@ -40,6 +40,7 @@ describe('GardeningProposalAcceptDialogView shell sweep (web:shell-sweep)', () =
     it(`stacks the mode options and sits Cancel/Accept side by side at ${width}px`, async () => {
       const { root } = await mount(width);
       try {
+        expect(root.querySelector('[data-testid="proposal-accept-urgency"]')).not.toBeNull();
         const mint = root.querySelector<HTMLElement>('[data-testid="proposal-accept-mode-mint"]')!;
         const decline = root.querySelector<HTMLElement>('[data-testid="proposal-accept-mode-decline"]')!;
         expect(decline.getBoundingClientRect().top, 'decline option did not land below mint').toBeGreaterThanOrEqual(

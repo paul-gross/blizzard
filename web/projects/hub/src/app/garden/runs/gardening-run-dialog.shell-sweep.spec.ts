@@ -95,7 +95,8 @@ describe('GardeningRunDialogView shell sweep (web:shell-sweep, blizzard#399 D6)'
           expect(cur.top, `scope option ${i} did not land below option ${i - 1}`).toBeGreaterThanOrEqual(prev.bottom);
         }
 
-        const cancel = root.querySelector<HTMLElement>('[data-testid="run-dialog-cancel"]')!;
+        expect(root.querySelector('[data-testid="run-urgency"]')).not.toBeNull();
+      const cancel = root.querySelector<HTMLElement>('[data-testid="run-dialog-cancel"]')!;
         const submit = root.querySelector<HTMLElement>('[data-testid="run-dialog-submit"]')!;
         const cancelRect = cancel.getBoundingClientRect();
         const submitRect = submit.getBoundingClientRect();

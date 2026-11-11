@@ -13,6 +13,9 @@
     <a class="hit" [routerLink]="['/board', 'chunk', row.chunkId] | lensLink" [attr.aria-label]="'Open chunk ' + row.shortId"></a>
     <fleet-lane-icon class="lane" [lane]="row.lane" [status]="row.status" />
     <span class="grow">
+      @if (urgencyPill({ urgency: row.urgency ?? null, terminal: row.terminal }, urgencies()); as urgency) {
+        <app-urgency-pill [urgency]="urgency" />
+      }
       <span class="head">
         @if (row.lines[0]?.label; as label) {
           <span class="iss" data-testid="glance-work-ref">{{ label }}</span>
@@ -69,6 +72,7 @@
 </ng-template>
 
 <div class="glance" data-testid="glance-board">
+  <ng-content select="[glanceActions]" />
   <fleet-kit-count-strip testid="glance-vitals" [cells]="vitalCells()" [selected]="filter()" (cellClick)="toggleFilter($event)" />
 
   <p class="done-policy" data-testid="glance-done-policy">{{ donePolicy().explanation }}</p>

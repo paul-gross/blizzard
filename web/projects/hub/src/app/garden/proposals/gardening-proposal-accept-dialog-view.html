@@ -35,6 +35,11 @@
     </fleet-kit-panel>
 
     @if (mode() === 'mint') {
+      <fleet-kit-panel aria-label="Urgency" label="Urgency">
+        <div class="body">
+          <fleet-kit-select ariaLabel="Urgency" [options]="urgencyOptions()" [selectedValue]="urgency()" (choose)="urgency.set($event)" testid="proposal-accept-urgency" />
+        </div>
+      </fleet-kit-panel>
       <fleet-kit-panel class="body-field" data-testid="proposal-accept-body-field" aria-label="Work item body" label="Work item body">
         <div class="body">
           <fleet-kit-text-input

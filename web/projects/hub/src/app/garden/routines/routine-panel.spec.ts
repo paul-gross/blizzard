@@ -2,6 +2,7 @@ import { provideZonelessChangeDetection } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { provideRouter } from '@angular/router';
 
+import type { UrgencyView } from 'fleet';
 import { FleetRoutinePanel, type RoutinePanelVm } from './routine-panel';
 
 const VM: RoutinePanelVm = {
@@ -541,4 +542,30 @@ describe('FleetRoutinePanel', () => {
     await fixture.whenStable();
     expect(el.querySelector('[data-testid="gardening-routine-panel-graph-input"]')).toBeNull();
   });
+  it('edits the routine default and leaves the draft open on refusal', async () => {
+    const fixture = await mount({ canEdit: true });
+    fixture.componentRef.setInput('urgenciesReady', true);
+    fixture.componentRef.setInput('urgencies', [
+      { urgency_id: 'n', slug: 'normal', name: 'Normal', default: true, retired: false } as UrgencyView,
+      { urgency_id: 'u', slug: 'urgent', name: 'Urgent', default: false, retired: false } as UrgencyView,
+    ]);
+    await fixture.whenStable();
+    const root = fixture.nativeElement as HTMLElement;
+    const values: string[] = [];
+    fixture.componentInstance.editUrgency.subscribe((v) => values.push(v));
+    const trigger = root.querySelector<HTMLElement>('[data-testid="gardening-routine-urgency-select"]')!;
+    expect(trigger.textContent).toContain('Tenant default (Normal)');
+    trigger.click();
+    await fixture.whenStable();
+    [...document.body.querySelectorAll<HTMLElement>('[role="option"]')].find((o) => o.textContent?.trim() === 'Urgent')!.click();
+    await fixture.whenStable();
+    root.querySelector<HTMLElement>('[data-testid="gardening-routine-urgency-save"]')!.click();
+    expect(values).toEqual(['urgent']);
+    expect(root.querySelector('[data-testid="gardening-routine-urgency-save"]')).not.toBeNull();
+    fixture.componentRef.setInput('defaultUrgency', 'urgent');
+    await fixture.whenStable();
+    expect(root.querySelector('[data-testid="gardening-routine-urgency-save"]')).toBeNull();
+    fixture.destroy();
+  });
+
 });

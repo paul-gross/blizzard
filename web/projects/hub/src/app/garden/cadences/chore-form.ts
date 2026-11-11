@@ -1,6 +1,6 @@
 import { ChangeDetectionStrategy, Component, computed, input, linkedSignal, output } from '@angular/core';
 
-import { type KitChipOption, KitButton, KitCheckbox, KitChips, KitErrorLine, KitTextInput } from 'fleet';
+import { type KitChipOption, type UrgencyView, KitButton, KitCheckbox, KitChips, KitErrorLine, KitSelect, KitTextInput } from 'fleet';
 
 import { choreModeLabel } from './cadence-vocabulary';
 
@@ -15,6 +15,7 @@ export interface ChoreDraft {
   readonly mode: string;
   readonly promote: boolean;
   readonly note: string;
+  readonly urgency?: string | null;
 }
 
 /**
@@ -25,12 +26,13 @@ export interface ChoreDraft {
 @Component({
   selector: 'app-chore-form',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [KitButton, KitCheckbox, KitChips, KitErrorLine, KitTextInput],
+  imports: [KitButton, KitCheckbox, KitChips, KitErrorLine, KitSelect, KitTextInput],
   templateUrl: './chore-form.html',
   styleUrl: './chore-form.css',
 })
 export class FleetChoreForm {
   readonly initial = input.required<ChoreDraft>();
+  readonly urgencies = input<readonly UrgencyView[]>([]);
   /** Whether the key may be typed — a chore keeps its key once written, so an edit fixes it. */
   readonly keyEditable = input(true);
   readonly pending = input(false);
@@ -41,6 +43,15 @@ export class FleetChoreForm {
   readonly cancelled = output<void>();
 
   protected readonly draft = linkedSignal(() => this.initial());
+  protected readonly urgencyOptions = computed(() => [
+    { value: '', label: 'Routine default' },
+    ...this.urgencies().filter((u) => !u.retired || u.slug === this.draft().urgency || u.urgency_id === this.draft().urgency).map((u) => ({ value: u.slug, label: u.name })),
+  ]);
+
+  protected readonly urgencyValue = computed(() => {
+    const value = this.draft().urgency ?? '';
+    return this.urgencies().find((u) => u.urgency_id === value)?.slug ?? value;
+  });
 
   /** The known modes, and the draft's own when this build does not know it. */
   protected readonly modeOptions = computed<readonly KitChipOption[]>(() => {
@@ -49,7 +60,7 @@ export class FleetChoreForm {
     return choreModeLabel.has(mode) ? known : [...known, { value: mode, label: mode }];
   });
 
-  protected set(field: 'key' | 'routine' | 'scopes' | 'mode' | 'note', value: string): void {
+  protected set(field: 'key' | 'routine' | 'scopes' | 'mode' | 'note' | 'urgency', value: string): void {
     this.draft.update((draft) => ({ ...draft, [field]: value }));
   }
 

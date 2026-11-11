@@ -8,6 +8,13 @@
   (back)="onBack()"
 >
   <fleet-kit-panel kit-master-detail-list class="gr-left" [label]="'Routines · ' + projectName()">
+    @if (canEdit()) {
+      @if (creating()) {
+        <app-routine-create-form [urgencies]="urgenciesQuery.data() ?? []" [pending]="createPending()" [error]="createError()" (saved)="onCreate($event)" (cancelled)="creating.set(false)" />
+      } @else {
+        <fleet-kit-button testid="gardening-routine-new" (click)="createError.set(null); creating.set(true)">New routine</fleet-kit-button>
+      }
+    }
     <app-routine-list
       [rows]="listRows()"
       [selectedSlug]="selectedRoutineSlug()"

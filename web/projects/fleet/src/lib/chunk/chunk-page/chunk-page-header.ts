@@ -1,6 +1,7 @@
 import { ChangeDetectionStrategy, Component, computed, input } from '@angular/core';
 
 import type { ChunkDetail, RouteView, WorkRefView } from '../../api/hub';
+import { ChunkUrgency } from '../chunk-detail/chunk-urgency';
 import { ChunkActionsMenu } from '../chunk-detail/chunk-actions-menu';
 import type { ChunkControl } from '../chunk-detail/chunk-control';
 import { injectRunnerHostNames, runnerDisplayName, runnerTitle } from '../../core/runner-display-name';
@@ -22,7 +23,7 @@ import { WorkRefLink } from '../work-ref-link/work-ref-link';
 @Component({
   selector: 'fleet-chunk-page-header',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [WorkRefLink, KitSwatch, ChunkActionsMenu],
+  imports: [ChunkUrgency, WorkRefLink, KitSwatch, ChunkActionsMenu],
   templateUrl: './chunk-page-header.html',
   styleUrl: './chunk-page-header.css',
 })

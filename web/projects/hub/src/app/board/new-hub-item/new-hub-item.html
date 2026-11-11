@@ -1,0 +1,21 @@
+@if (allowed()) {
+  <fleet-kit-button testid="new-hub-item" [disabled]="urgencyOptions().length === 0" (click)="start()">New hub item</fleet-kit-button>
+}
+@if (open()) {
+  <fleet-kit-dialog [open]="true" ariaLabel="New hub item" testid="new-hub-item-dialog" (closed)="open.set(false)">
+    <h2 fleetKitDialogHeader>New hub item</h2>
+    <div class="fields">
+      <div class="field">Title <fleet-kit-text-input ariaLabel="Title" testid="new-hub-item-title" [value]="title()" (valueChange)="title.set($event)" /></div>
+      <div class="field">Body <fleet-kit-text-input ariaLabel="Body" testid="new-hub-item-body" [multiline]="true" [value]="body()" (valueChange)="body.set($event)" /></div>
+      @if (!lens.slug()) {
+        <div class="field">Project <fleet-kit-select ariaLabel="Project" testid="new-hub-item-project" [options]="projectOptions()" [selectedValue]="project()" (choose)="project.set($event)" /></div>
+      }
+      <div class="field">Urgency <fleet-kit-select ariaLabel="Urgency" testid="new-hub-item-urgency" [options]="urgencyOptions()" [selectedValue]="urgency()" (choose)="urgency.set($event)" /></div>
+      <fleet-kit-error-line [message]="error()" />
+    </div>
+    <div fleetKitDialogFooter>
+      <fleet-kit-button [disabled]="pending()" (click)="open.set(false)">Cancel</fleet-kit-button>
+      <fleet-kit-button variant="primary" testid="new-hub-item-submit" [disabled]="pending() || !title().trim() || !body().trim() || !project() || !urgency()" (click)="submit()">Create</fleet-kit-button>
+    </div>
+  </fleet-kit-dialog>
+}

@@ -162,7 +162,7 @@ describe('FleetCadencePanel', () => {
     await click('gardening-chore-edit-odd-save');
 
     expect(edits).toEqual([
-      { key: 'odd', draft: { key: 'odd', routine: 'nightly', scopes: 'web, hub', mode: 'sampled', promote: true, note: '' } },
+      { key: 'odd', draft: { key: 'odd', routine: 'nightly', scopes: 'web, hub', mode: 'sampled', promote: true, note: '', urgency: null } },
     ]);
   });
 

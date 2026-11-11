@@ -1,4 +1,6 @@
-import { provideZonelessChangeDetection } from '@angular/core';
+import { QueryClient, provideTanStackQuery } from '@tanstack/angular-query-experimental';
+import { TenantContext } from '../../core/auth/tenant-context';
+import { provideZonelessChangeDetection, signal } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { provideRouter } from '@angular/router';
 import { page } from 'vitest/browser';
@@ -188,4 +190,30 @@ describe('glance board layout shell sweep (web:shell-sweep)', () => {
       root.remove();
     }
   });
+});
+
+it('keeps the urgency mark after the lane at phone width', async () => {
+  TestBed.resetTestingModule();
+  await TestBed.configureTestingModule({
+    imports: [GlanceView],
+    providers: [provideZonelessChangeDetection(), provideRouter([]), provideTanStackQuery(new QueryClient()), { provide: TenantContext, useValue: { current: signal(null) } }],
+  }).compileComponents();
+  const fixture = TestBed.createComponent(GlanceView);
+  fixture.componentRef.setInput('vitals', VITALS);
+  fixture.componentRef.setInput('listState', 'ready');
+  fixture.componentRef.setInput('spendState', 'ready');
+  fixture.componentRef.setInput('urgencies', [{ urgency_id: 'u', name: 'Urgent', slug: 'urgent', default: false, retired: false, color: 'red', emoji: '🔥', icon: null }]);
+  fixture.componentRef.setInput('list', { live: [row('ch_urgent', { urgency: { urgency_id: 'u', slug: 'urgent' } })], ready: [], backlog: [], done: [] });
+  await fixture.whenStable();
+  const root = fixture.nativeElement as HTMLElement;
+  document.body.appendChild(root);
+  await page.viewport(320, 700);
+  try {
+    const card = root.querySelector<HTMLElement>('[data-testid="glance-card"]')!;
+    const lane = card.querySelector<HTMLElement>('fleet-lane-icon')!;
+    const pill = card.querySelector<HTMLElement>('app-urgency-pill')!;
+    expect(pill).not.toBeNull();
+    expect(pill.getBoundingClientRect().left).toBeGreaterThan(lane.getBoundingClientRect().left);
+    expect(card.scrollWidth).toBeLessThanOrEqual(card.clientWidth);
+  } finally { root.remove(); }
 });

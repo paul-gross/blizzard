@@ -376,3 +376,5 @@ export { listUrgenciesApiUrgenciesGet, getUrgencyApiUrgenciesKeyGet, getUrgencyI
 export type { UrgencyRef, UrgencyView } from './lib/api/hub/types.gen';
 export { createUrgencyApiUrgenciesPost, patchUrgencyApiUrgenciesKeyPatch, enableUrgencyApiUrgenciesKeyEnablePost, retireUrgencyApiUrgenciesKeyRetirePost, positionUrgencyApiUrgenciesOrderPositionPost, getSettingsApiSettingsGet, patchSettingsApiSettingsPatch } from './lib/api/hub/sdk.gen';
 export type { UrgencyCreateRequest, UrgencyPatchRequest, UrgencyPositionRequest, SettingsView } from './lib/api/hub/types.gen';
+
+export { createWorkItemApiWorkSourcesSourceItemsPost, type WorkItemCreateResponse } from './lib/api/hub';

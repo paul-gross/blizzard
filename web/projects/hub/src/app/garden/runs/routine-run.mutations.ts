@@ -10,6 +10,7 @@ export interface RoutineRunVars {
   readonly scopeSlug: string;
   readonly mode: hubApi.RunMode;
   readonly note: string | null;
+  readonly urgency?: string;
 }
 
 /**
@@ -27,7 +28,7 @@ export function injectRunRoutineMutation() {
     mutationFn: async (vars: RoutineRunVars): Promise<RoutineRunResponse> => {
       const { data, error } = await runRoutineApiRoutinesRoutineIdRunPost({
         path: { routine_id: vars.routineId },
-        body: { scope_slug: vars.scopeSlug, mode: vars.mode, note: vars.note },
+        body: { scope_slug: vars.scopeSlug, mode: vars.mode, note: vars.note, ...(vars.urgency ? { urgency: vars.urgency } : {}) },
         throwOnError: false,
       });
       if (error) throw error;

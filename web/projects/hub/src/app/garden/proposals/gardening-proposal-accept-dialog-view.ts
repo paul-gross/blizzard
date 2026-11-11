@@ -1,5 +1,5 @@
 import { ChangeDetectionStrategy, Component, computed, effect, input, output, signal } from '@angular/core';
-import { KitButton, KitDialog, KitOption, KitPanel, KitTextInput, KitErrorLine } from 'fleet';
+import { KitButton, KitDialog, KitOption, KitPanel, KitTextInput, KitErrorLine, KitSelect, type UrgencyView } from 'fleet';
 
 /** What the view asks the container to submit — `mintWorkItem` mirrors the CLI's
  * `--no-work-item` (inverted), `body`/`reason` ride only when they carry something,
@@ -8,6 +8,7 @@ export interface AcceptSubmission {
   readonly mintWorkItem: boolean;
   readonly body?: string;
   readonly reason?: string;
+  readonly urgency?: string;
 }
 
 /** The docket's two closing choices for Accept — minting is the default; declining
@@ -33,13 +34,14 @@ type AcceptMode = 'mint' | 'decline';
 @Component({
   selector: 'app-gardening-proposal-accept-dialog-view',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [KitButton, KitDialog, KitOption, KitPanel, KitTextInput, KitErrorLine],
+  imports: [KitButton, KitDialog, KitOption, KitPanel, KitTextInput, KitErrorLine, KitSelect],
   templateUrl: './gardening-proposal-accept-dialog-view.html',
   styleUrl: './gardening-proposal-accept-dialog-view.css',
 })
 export class GardeningProposalAcceptDialogView {
   readonly proposalTitle = input.required<string>();
   readonly proposalBody = input.required<string>();
+  readonly urgencies = input<readonly UrgencyView[]>([]);
 
   readonly submitting = input(false);
   readonly submitError = input<string | null>(null);
@@ -50,6 +52,11 @@ export class GardeningProposalAcceptDialogView {
   protected readonly mode = signal<AcceptMode>('mint');
   protected readonly body = signal('');
   protected readonly reason = signal('');
+  protected readonly urgency = signal('');
+  protected readonly urgencyOptions = computed(() => [
+    { value: '', label: `Tenant default${this.urgencies().find((u) => u.default) ? ` (${this.urgencies().find((u) => u.default)!.name})` : ''}` },
+    ...this.urgencies().filter((u) => !u.retired).map((u) => ({ value: u.slug, label: u.name })),
+  ]);
 
   constructor() {
     // Prefills the editable body with the proposal's own — the container passes an
@@ -72,7 +79,8 @@ export class GardeningProposalAcceptDialogView {
       return;
     }
     const body = this.body().trim();
-    this.submitted.emit({ mintWorkItem: true, ...(body ? { body } : {}), ...(reason ? { reason } : {}) });
+    const urgency = this.urgency();
+    this.submitted.emit({ mintWorkItem: true, ...(body ? { body } : {}), ...(reason ? { reason } : {}), ...(urgency ? { urgency } : {}) });
   }
 
   /** Escape, a backdrop click, and Cancel all route through `KitDialog`'s one

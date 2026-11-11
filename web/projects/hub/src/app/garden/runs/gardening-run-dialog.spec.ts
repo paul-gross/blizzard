@@ -82,13 +82,14 @@ describe('GardeningRunDialog', () => {
   let stub: RequestClientStub;
   afterEach(() => stub?.restore());
 
-  it('offers exactly three fields — scope, mode, and a charge note', async () => {
+  it('offers scope, mode, urgency, and a charge note', async () => {
     const mounted = await mount();
     stub = mounted.stub;
 
     expect(mounted.el.querySelector('[data-testid="run-scope-field"]')).not.toBeNull();
     expect(mounted.el.querySelector('[data-testid="run-mode-field"]')).not.toBeNull();
     expect(mounted.el.querySelector('[data-testid="run-note-field"]')).not.toBeNull();
+    expect(mounted.el.querySelector('[data-testid="run-urgency"]')).not.toBeNull();
   });
 
   it('lists only the routine\'s related, non-retired scopes with their descriptions, previously-swept first', async () => {

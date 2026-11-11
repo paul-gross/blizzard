@@ -1,4 +1,12 @@
-import { ChangeDetectionStrategy, Component, computed } from '@angular/core';
+import { withPendingUrgencies } from '../chunks/urgency.model';
+import type { ChunkUrgencyVars } from '../chunks/urgency.mutations';
+import { chunkUrgencyMutationKey } from '../../core/mutation-keys';
+import { injectPendingMutationVariables } from 'fleet';
+import { Router } from '@angular/router';
+import { IN_APP_LINK } from 'fleet/shell';
+import { NewHubItem } from '../new-hub-item/new-hub-item';
+import { injectUrgenciesQuery } from '../../core/urgencies.query';
+import { ChangeDetectionStrategy, Component, computed, inject } from '@angular/core';
 import { asyncState, injectRunnerHostNames, type ChunkSummary, type KitAsyncStateValue } from 'fleet';
 import { boardDonePolicy } from '../../core/board-done-policy.model';
 import { injectHubBoardChunksQuery } from '../../core/chunks.query';
@@ -24,11 +32,18 @@ import { injectShowProjectColors, projectColorMap } from '../../core/project-len
 @Component({
   selector: 'app-glance-board',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [GlanceView],
+  imports: [GlanceView, NewHubItem],
   templateUrl: './glance-board.html',
   styleUrl: './glance-board.css',
 })
 export class GlanceBoard {
+  protected readonly urgenciesQuery = injectUrgenciesQuery();
+  private readonly router = inject(Router);
+  private readonly inAppLink = inject(IN_APP_LINK);
+  protected openCreated(chunkId: string): void {
+    void this.router.navigate(this.inAppLink(['/board', 'chunk', chunkId]) as readonly unknown[]);
+  }
+  private readonly pendingUrgencies = injectPendingMutationVariables<ChunkUrgencyVars>(chunkUrgencyMutationKey);
   private readonly chunksQuery = injectHubBoardChunksQuery();
   private readonly queueQuery = injectHubQueueQuery();
   private readonly meQuery = injectMeQuery();
@@ -51,7 +66,7 @@ export class GlanceBoard {
   protected readonly spendToday = this.spend.today;
   protected readonly spendYesterday = this.spend.yesterday;
 
-  private readonly chunks = computed<readonly ChunkSummary[]>(() => this.chunksQuery.data()?.chunks ?? []);
+  private readonly chunks = computed<readonly ChunkSummary[]>(() => withPendingUrgencies(this.chunksQuery.data()?.chunks ?? [], this.pendingUrgencies(), this.urgenciesQuery.data() ?? []));
   protected readonly donePolicy = computed(() => boardDonePolicy(this.chunksQuery.data()?.pages ?? []));
   private readonly runners = computed(() => liveRunners(this.runnersQuery.data() ?? []));
 

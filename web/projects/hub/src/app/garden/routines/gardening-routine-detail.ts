@@ -32,6 +32,7 @@ import { isRoutineBlocked } from './gardening-effective-graph';
 import { injectLensedProject } from '../../core/lensed-project';
 import { injectHubRunsQuery } from '../runs/garden-runs.query';
 import { GardeningRunDialog } from '../runs/gardening-run-dialog';
+import { injectUrgenciesQuery } from '../../core/urgencies.query';
 
 /**
  * The selected routine's own detail — the right-hand child of
@@ -63,6 +64,7 @@ import { GardeningRunDialog } from '../runs/gardening-run-dialog';
   styleUrl: '../core/gardening-detail-host.css',
 })
 export class GardeningRoutineDetail {
+  protected readonly urgenciesQuery = injectUrgenciesQuery();
   private readonly route = inject(ActivatedRoute);
 
   private readonly routinesQuery = injectHubRoutinesQuery();
@@ -102,7 +104,7 @@ export class GardeningRoutineDetail {
     { initialValue: null },
   );
 
-  private readonly selectedRoutine = computed<RoutineView | null>(() =>
+  protected readonly selectedRoutine = computed<RoutineView | null>(() =>
     routineBySlug(this.routineSlugParam(), this.routines()),
   );
 
@@ -269,6 +271,15 @@ export class GardeningRoutineDetail {
     this.lifecycleActionError.set(null);
     this.editRoutineMutation.mutate(vars, {
       onError: (error: unknown) => this.lifecycleActionError.set(errorMessage(error, 'Set graph failed.')),
+    });
+  }
+
+  protected onEditUrgency(value: string): void {
+    const routine = this.selectedRoutine();
+    if (routine === null) return;
+    this.lifecycleActionError.set(null);
+    this.editRoutineMutation.mutate({ routineId: routine.routine_id, defaultUrgency: value || null }, {
+      onError: (error: unknown) => this.lifecycleActionError.set(errorMessage(error, 'Set urgency failed.')),
     });
   }
 

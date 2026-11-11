@@ -1,7 +1,9 @@
-import { provideZonelessChangeDetection } from '@angular/core';
+import { signal, provideZonelessChangeDetection } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { provideRouter } from '@angular/router';
-import type { KitAsyncStateValue } from 'fleet';
+import type { KitAsyncStateValue, UrgencyView } from 'fleet';
+import { QueryClient, provideTanStackQuery } from '@tanstack/angular-query-experimental';
+import { TenantContext } from '../../core/auth/tenant-context';
 
 import type { GlanceListGroups, GlanceRow } from './glance-board.model';
 import { GlanceView, type Vitals } from './glance-view';
@@ -47,7 +49,7 @@ describe('GlanceView', () => {
   beforeEach(async () => {
     await TestBed.configureTestingModule({
       imports: [GlanceView],
-      providers: [provideZonelessChangeDetection(), provideRouter([])],
+      providers: [provideZonelessChangeDetection(), provideRouter([]), provideTanStackQuery(new QueryClient()), { provide: TenantContext, useValue: { current: signal(null) } }],
     }).compileComponents();
   });
 
@@ -65,6 +67,18 @@ describe('GlanceView', () => {
     await fixture.whenStable();
     return [...(fixture.nativeElement as HTMLElement).querySelectorAll<HTMLElement>('[data-testid="glance-card"]')];
   }
+
+  it('shows non-default urgency only on unfinished cards without changing row order', async () => {
+    const urgent = { urgency_id: 'u', name: 'Urgent', slug: 'urgent', default: false, emoji: '🔥', color: 'red', icon: null } as UrgencyView;
+    const normal = { ...urgent, urgency_id: 'n', name: 'Normal', default: true } as UrgencyView;
+    const ref = { urgency_id: 'u', slug: 'urgent' };
+    const fixture = render({ live: [row({ chunkId: 'a', urgency: ref }), row({ chunkId: 'b', urgency: { urgency_id: 'n', slug: 'normal' } })], done: [row({ chunkId: 'c', terminal: true, urgency: ref })] });
+    fixture.componentRef.setInput('urgencies', [urgent, normal]);
+    await fixture.whenStable();
+    const cards = [...(fixture.nativeElement as HTMLElement).querySelectorAll('[data-testid="glance-card"]')];
+    expect(cards.map((card) => card.getAttribute('data-chunk'))).toEqual(['a', 'b', 'c']);
+    expect(cards.map((card) => card.querySelector('app-urgency-pill')?.textContent?.replace(/\s+/g, ' ').trim() ?? null)).toEqual(['🔥Urgent', null, null]);
+  });
 
   it('renders the five vitals', async () => {
     const fixture = render();
