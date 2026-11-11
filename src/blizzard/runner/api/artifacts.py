@@ -130,8 +130,9 @@ def get_artifact(
     """One artifact by name, optionally narrowed by ``scope`` and, for node scope, by ``node``;
     ``404`` when nothing matches. A supplied ``node`` settles scope to node on its own — neither
     a graph declaration nor a system artifact has a producing node — so pairing it with
-    ``scope=graph``/``scope=system`` is ``400``. More than one candidate — several upstream
-    nodes, or a name colliding across scopes — is ``409`` naming them."""
+    ``scope=graph``/``scope=system`` is ``400``. A name several nodes produced
+    reads as the newest entry (``node`` narrows to one node's series); ``409`` is a name colliding
+    across scopes, naming them."""
     lease = authorized_lease(lease_id, request)
     read = ArtifactRead(name=name, graph_id=lease.graph_id, node=node, scope=scope)
     try:

@@ -11666,7 +11666,7 @@
     },
     "/runners/{runner_id}/api/leases/{lease_id}/artifacts/{name}": {
       "get": {
-        "description": "One artifact by name, optionally narrowed by ``scope`` and, for node scope, by ``node``;\n``404`` when nothing matches. A supplied ``node`` settles scope to node on its own \u2014 neither\na graph declaration nor a system artifact has a producing node \u2014 so pairing it with\n``scope=graph``/``scope=system`` is ``400``. More than one candidate \u2014 several upstream\nnodes, or a name colliding across scopes \u2014 is ``409`` naming them.",
+        "description": "One artifact by name, optionally narrowed by ``scope`` and, for node scope, by ``node``;\n``404`` when nothing matches. A supplied ``node`` settles scope to node on its own \u2014 neither\na graph declaration nor a system artifact has a producing node \u2014 so pairing it with\n``scope=graph``/``scope=system`` is ``400``. A name several nodes produced\nreads as the newest entry (``node`` narrows to one node's series); ``409`` is a name colliding\nacross scopes, naming them.",
         "operationId": "get_artifact_runners__runner_id__api_leases__lease_id__artifacts__name__get",
         "parameters": [
           {

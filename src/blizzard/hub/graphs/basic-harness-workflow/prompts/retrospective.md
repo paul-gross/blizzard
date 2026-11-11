@@ -5,9 +5,10 @@ workflow and artifacts only: read them, then write the closing reflection.
 
 Read the chunk's own record first — `blizzard runner chunk history` for its transitions and bounces, then its asset
 trail: the work item(s) the chunk wraps, the review findings, and `pre-push`'s own diary —
-`blizzard runner artifact get retrospective --node pre-push --content` (`--node` required: `pre-push` produces one under
-this same name, so an unqualified read is ambiguous) and `blizzard runner artifact get pre-push-summary --content`, the
-only session-local record of the integration leg, since that lineage never saw `build` or `iterate`.
+`blizzard runner artifact get retrospective --node pre-push --content` (`--node` keeps the read to `pre-push`: without
+it, the read returns whichever node's `retrospective` is newest) and
+`blizzard runner artifact get pre-push-summary --content`, the only session-local record of the integration leg, since
+that lineage never saw `build` or `iterate`.
 
 ## Write the retrospective
 

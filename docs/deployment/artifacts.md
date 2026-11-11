@@ -53,12 +53,15 @@ scope — with one difference: a system name colliding with a node's `produces:`
 graph-scope collision is, since blizzard's own global namespace and a deployment's per-graph declarations are authored
 by different parties with no shared mint to reject at. The collision surfaces instead at read: a bare
 `artifact get <name>` matching both a node output and a system artifact is a `409` naming both, resolved by adding
-`--node` (which only a node-scoped candidate has) or `--scope`.
+`--scope`.
 
 ## Declaring produced artifacts
 
 Each `produces:` entry carries a kind: a bare string is an asset, while a `{name, kind: git_commit}` entry is met by
 kind rather than name — any `git_commit` artifact on the node's attempt covers it.
+
+A later node's bare `artifact get <name>` reads the newest entry under that name, whichever node produced it; `--node`
+narrows the read to one node's series.
 
 Workers declare through `blizzard runner artifact`: `create --name` with content on stdin for an asset;
 `commit --repo --branch --commit`, after the push, for a `git_commit` — the origin comes from the environment's repo

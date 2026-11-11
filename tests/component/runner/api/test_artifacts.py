@@ -359,19 +359,18 @@ _ENVELOPE_WITH_DUPLICATE_NAME: dict[str, object] = {
 }
 
 
-def test_get_409_when_a_bare_name_resolves_to_more_than_one_node(tmp_path: Path) -> None:
+def test_get_bare_name_resolves_to_the_newest_entry_across_nodes(tmp_path: Path) -> None:
     app, store = _app_with_store(tmp_path)
     _seed_lease(store)
     _stub_hub(app, _FakeHubResponse(200, _ENVELOPE_WITH_DUPLICATE_NAME))
     with runner_client(app) as client:
         resp = client.get("/api/leases/lease_1/artifacts/retrospective", headers={"X-Blizzard-Lease-Token": _TOKEN})
-    assert resp.status_code == 409, resp.text
-    detail = resp.json()["detail"]
-    assert "retrospective" in detail
-    assert "build" in detail and "plan" in detail
+    assert resp.status_code == 200, resp.text
+    assert resp.json()["node_name"] == "build"
+    assert resp.json()["content"] == "build's take"
 
 
-def test_get_node_query_param_disambiguates(tmp_path: Path) -> None:
+def test_get_node_query_param_narrows_to_one_nodes_series(tmp_path: Path) -> None:
     app, store = _app_with_store(tmp_path)
     _seed_lease(store)
     _stub_hub(app, _FakeHubResponse(200, _ENVELOPE_WITH_DUPLICATE_NAME))
@@ -560,7 +559,7 @@ _ENVELOPE_WITH_A_GRAPH_COLLIDING_NAME: dict[str, object] = {
 
 def test_get_bare_name_ambiguous_across_both_scopes_names_them(tmp_path: Path) -> None:
     """A bare name matching both a node artifact and a graph declaration answers 409,
-    naming both scopes and the ``--scope``/``--node`` narrowing options."""
+    naming both scopes and the ``--scope`` narrowing option."""
     app, store = _app_with_store(tmp_path)
     _seed_lease(store)
     _seed_graph_artifacts(store)
@@ -570,7 +569,7 @@ def test_get_bare_name_ambiguous_across_both_scopes_names_them(tmp_path: Path) -
     assert resp.status_code == 409, resp.text
     detail = resp.json()["detail"]
     assert "graph" in detail and "plan" in detail
-    assert "--scope" in detail and "--node" in detail
+    assert "--scope" in detail and "--node" not in detail
 
 
 def test_get_node_alone_settles_a_cross_scope_collision(tmp_path: Path) -> None:
@@ -613,9 +612,8 @@ def test_get_409_across_graph_and_system_never_advises_node(tmp_path: Path) -> N
     assert "--node" not in detail
 
 
-def test_get_409_names_only_the_levers_the_caller_has_left(tmp_path: Path) -> None:
-    """A caller who already passed ``scope=node`` and still hit several producing nodes has
-    only ``--node`` left; naming ``--scope`` again is advice they cannot act on."""
+def test_get_scope_node_across_nodes_reads_the_newest_entry(tmp_path: Path) -> None:
+    """``scope=node`` over several producing nodes is no refusal: the series collapses to the newest."""
     app, store = _app_with_store(tmp_path)
     _seed_lease(store)
     _stub_hub(app, _FakeHubResponse(200, _ENVELOPE_WITH_DUPLICATE_NAME))
@@ -625,10 +623,8 @@ def test_get_409_names_only_the_levers_the_caller_has_left(tmp_path: Path) -> No
             params={"scope": "node"},
             headers={"X-Blizzard-Lease-Token": _TOKEN},
         )
-    assert resp.status_code == 409, resp.text
-    detail = resp.json()["detail"]
-    assert "--node" in detail
-    assert "--scope" not in detail
+    assert resp.status_code == 200, resp.text
+    assert resp.json()["node_name"] == "build"
 
 
 def test_get_404_after_searching_both_scopes_says_so(tmp_path: Path) -> None:
@@ -761,7 +757,7 @@ def test_get_bare_name_ambiguous_across_node_and_system_names_both(tmp_path: Pat
     assert resp.status_code == 409, resp.text
     detail = resp.json()["detail"]
     assert "system" in detail and "plan" in detail
-    assert "--scope" in detail and "--node" in detail
+    assert "--scope" in detail and "--node" not in detail
 
 
 def test_get_node_alone_settles_a_system_collision(tmp_path: Path) -> None:
