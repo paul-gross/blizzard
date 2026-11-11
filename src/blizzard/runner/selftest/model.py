@@ -10,13 +10,11 @@ from __future__ import annotations
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field, replace
 from datetime import datetime
-from typing import ClassVar, Literal
+from typing import ClassVar
 
 from blizzard.foundation.roles import domain_model
-from blizzard.runner.harness.selftest_result import LatestSelfTestResult, SelfTestTerminalStatus
-
-#: Where a selftest run stands: ``running`` until it concludes ``passed`` or ``failed``.
-type SelfTestStatus = Literal["running", SelfTestTerminalStatus]
+from blizzard.foundation.selftest import SelfTestStatus, SelfTestTerminalStatus
+from blizzard.runner.harness.selftest_result import LatestSelfTestResult
 
 # The seven adapter-drift checks, in the order a run performs them (the last two were added later).
 SPAWN_SESSION_ID = "spawn_session_id"

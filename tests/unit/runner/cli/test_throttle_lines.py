@@ -3,20 +3,23 @@ floor, and a throttle with no levers. Populated levers are pinned with the gate'
 
 from __future__ import annotations
 
-from typing import Any, cast
+from typing import Any
 
-from blizzard.runner.cli.control import Throttle, throttle_lines
+from blizzard.runner.cli.control import throttle_lines
+from blizzard.wire.runner_status import ThrottleStatusView
 
 _TAIL = "    on_decline: release; on_usage_limit: hold"
 
 
-def _throttle(floor: dict[str, Any]) -> Throttle:
-    return cast(
-        Throttle,
+def _throttle(floor: dict[str, Any], *, declining: list[str] | None = None) -> ThrottleStatusView:
+    floor = {"subscription": None, **floor}
+    if hold := floor.get("hold"):
+        floor["hold"] = {"harness_id": None, "window": None, "grace_opens_at": None, **hold}
+    return ThrottleStatusView.model_validate(
         {
             "floor": floor,
             "state": "declining",
-            "declining": ["floor"],
+            "declining": ["floor"] if declining is None else declining,
             "on_decline": "release",
             "on_usage_limit": "hold",
         },
@@ -81,8 +84,7 @@ def test_a_hand_cleared_floor_names_who_cleared_it_and_when() -> None:
 
 
 def test_a_throttle_with_no_levers_renders_the_headline_floor_and_policy_only() -> None:
-    throttle = _throttle({"admits": True})
-    del throttle["declining"]
+    throttle = _throttle({"admits": True}, declining=[])
     assert throttle_lines(throttle) == [
         "  throttle: declining (declining: none)",
         "    floor (runner): admit — open",

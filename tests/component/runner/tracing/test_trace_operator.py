@@ -441,14 +441,18 @@ def test_the_verb_names_each_signals_outcome(tmp_path: Path) -> None:
     runner.status = _reader_with_plan(runner, _PLAN)
     body = _routes(runner, tmp_path).get("/api/traces/status").json()
 
-    assert harness_telemetry_lines(body["harness_telemetry"]) == [
+    from blizzard.wire.runner_traces import HarnessTelemetryStatus
+
+    assert harness_telemetry_lines(HarnessTelemetryStatus.model_validate(body["harness_telemetry"])) == [
         "harness telemetry:",
         "  traces: captured  (3 spans accepted, 1 dropped)",
         "  metrics: operator-configured (not captured)",
         "  logs: no runner destination (not captured)",
     ]
     off = harness_telemetry_lines(
-        {s: {"outcome": "off", "accepted": 0, "dropped": 0} for s in ("traces", "metrics", "logs")}
+        HarnessTelemetryStatus.model_validate(
+            {s: {"outcome": "off", "accepted": 0, "dropped": 0} for s in ("traces", "metrics", "logs")}
+        )
     )
     assert off == ["harness telemetry: off"]
     assert harness_telemetry_lines(None) == []

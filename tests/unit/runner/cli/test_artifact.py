@@ -33,7 +33,7 @@ class _FakeResponse:
         return None
 
     def json(self) -> object:
-        return self._payload
+        return json.loads(self.text) if self._payload is None and self.text else self._payload
 
 
 class _RejectingResponse:
@@ -52,8 +52,9 @@ class _RejectingResponse:
 # list
 
 _ARTIFACTS_PAYLOAD = [
-    {"name": "plan", "kind": "asset", "node_name": "plan", "epoch": 1, "content": "the plan text"},
+    {"scope": "node", "name": "plan", "kind": "asset", "node_name": "plan", "epoch": 1, "content": "the plan text"},
     {
+        "scope": "node",
         "name": "build-branch",
         "kind": "git_commit",
         "node_name": "build",
@@ -152,7 +153,7 @@ def test_list_includes_staged_submissions_marked_as_such() -> None:
 
 
 def test_list_preserves_extra_fields_and_counts_utf8_with_missing_git_content() -> None:
-    published = [{"name": "ref", "kind": "git_commit", "extra": {"x": 1}}]
+    published = [{"scope": "node", "name": "ref", "kind": "git_commit", "extra": {"x": 1}}]
     staged = [{"name": "draft", "content": "é☃", "extra": [1, 2]}]
     bound = bind_stubs(
         get=_fake_get_by_suffix(
@@ -306,7 +307,7 @@ def test_get_gets_the_named_route_and_prints_json(monkeypatch: pytest.MonkeyPatc
         url: str, *, headers: dict[str, object], params: dict[str, object] | None, timeout: float, **_: object
     ) -> _FakeResponse:
         calls.append((url, params))
-        return _FakeResponse(text='{"name": "plan", "kind": "asset", "content": "hi"}')
+        return _FakeResponse(text='{"scope": "node", "name": "plan", "kind": "asset", "content": "hi"}')
 
     bound = bind_stubs(get=fake_get)
     result = bound.runner.invoke(runner_group, ["artifact", "get", "plan"], env=_ENV)
@@ -324,7 +325,7 @@ def test_get_percent_encodes_a_slash_containing_name(monkeypatch: pytest.MonkeyP
         url: str, *, headers: dict[str, object], params: dict[str, object] | None, timeout: float, **_: object
     ) -> _FakeResponse:
         calls.append(url)
-        return _FakeResponse(text='{"name": "merged/blizzard", "kind": "asset", "content": "hi"}')
+        return _FakeResponse(text='{"scope": "node", "name": "merged/blizzard", "kind": "asset", "content": "hi"}')
 
     bound = bind_stubs(get=fake_get)
     result = bound.runner.invoke(runner_group, ["artifact", "get", "merged/blizzard"], env=_ENV)
@@ -340,7 +341,7 @@ def test_get_percent_encodes_other_reserved_characters(monkeypatch: pytest.Monke
         url: str, *, headers: dict[str, object], params: dict[str, object] | None, timeout: float, **_: object
     ) -> _FakeResponse:
         calls.append(url)
-        return _FakeResponse(text='{"name": "a b%c?d", "kind": "asset", "content": "hi"}')
+        return _FakeResponse(text='{"scope": "node", "name": "a b%c?d", "kind": "asset", "content": "hi"}')
 
     bound = bind_stubs(get=fake_get)
     result = bound.runner.invoke(runner_group, ["artifact", "get", "a b%c?d"], env=_ENV)
@@ -356,7 +357,7 @@ def test_get_node_flag_is_passed_as_a_query_param(monkeypatch: pytest.MonkeyPatc
         url: str, *, headers: dict[str, object], params: dict[str, object] | None, timeout: float, **_: object
     ) -> _FakeResponse:
         calls.append(params)
-        return _FakeResponse(text='{"name": "retrospective", "kind": "asset", "content": "hi"}')
+        return _FakeResponse(text='{"scope": "node", "name": "retrospective", "kind": "asset", "content": "hi"}')
 
     bound = bind_stubs(get=fake_get)
     result = bound.runner.invoke(runner_group, ["artifact", "get", "retrospective", "--node", "plan"], env=_ENV)
@@ -425,7 +426,7 @@ def test_get_content_prints_raw_asset_text_without_added_newline(monkeypatch: py
     def fake_get(
         url: str, *, headers: dict[str, object], params: dict[str, object] | None, timeout: float, **_: object
     ) -> _FakeResponse:
-        return _FakeResponse(payload={"name": "plan", "kind": "asset", "content": "the plan text"})
+        return _FakeResponse(payload={"scope": "node", "name": "plan", "kind": "asset", "content": "the plan text"})
 
     bound = bind_stubs(get=fake_get)
     result = bound.runner.invoke(runner_group, ["artifact", "get", "plan", "--content"], env=_ENV)
@@ -439,7 +440,13 @@ def test_get_content_errors_on_a_git_commit_artifact(monkeypatch: pytest.MonkeyP
         url: str, *, headers: dict[str, object], params: dict[str, object] | None, timeout: float, **_: object
     ) -> _FakeResponse:
         return _FakeResponse(
-            payload={"name": "build-branch", "kind": "git_commit", "commit_hash": "abc123", "content": None}
+            payload={
+                "scope": "node",
+                "name": "build-branch",
+                "kind": "git_commit",
+                "commit_hash": "abc123",
+                "content": None,
+            }
         )
 
     bound = bind_stubs(get=fake_get)
@@ -453,7 +460,7 @@ def test_get_content_prints_an_unknown_kind_that_carries_content() -> None:
     def fake_get(
         url: str, *, headers: dict[str, object], params: dict[str, object] | None, timeout: float, **_: object
     ) -> _FakeResponse:
-        return _FakeResponse(payload={"name": "plan", "kind": "gained", "content": "the plan text"})
+        return _FakeResponse(payload={"scope": "node", "name": "plan", "kind": "gained", "content": "the plan text"})
 
     bound = bind_stubs(get=fake_get)
     result = bound.runner.invoke(runner_group, ["artifact", "get", "plan", "--content"], env=_ENV)
@@ -466,7 +473,7 @@ def test_get_content_refuses_an_unknown_kind_without_content_naming_it() -> None
     def fake_get(
         url: str, *, headers: dict[str, object], params: dict[str, object] | None, timeout: float, **_: object
     ) -> _FakeResponse:
-        return _FakeResponse(payload={"name": "plan", "kind": "gained", "content": None})
+        return _FakeResponse(payload={"scope": "node", "name": "plan", "kind": "gained", "content": None})
 
     bound = bind_stubs(get=fake_get)
     result = bound.runner.invoke(runner_group, ["artifact", "get", "plan", "--content"], env=_ENV)
@@ -562,7 +569,7 @@ def test_get_name_option_is_an_alias_for_the_positional_name(monkeypatch: pytest
         url: str, *, headers: dict[str, object], params: dict[str, object] | None, timeout: float, **_: object
     ) -> _FakeResponse:
         calls.append(url)
-        return _FakeResponse(text='{"name": "plan", "kind": "asset", "content": "hi"}')
+        return _FakeResponse(text='{"scope": "node", "name": "plan", "kind": "asset", "content": "hi"}')
 
     bound = bind_stubs(get=fake_get)
     result = bound.runner.invoke(runner_group, ["artifact", "get", "--name", "plan"], env=_ENV)
@@ -859,7 +866,7 @@ def test_show_and_read_behave_as_get(monkeypatch: pytest.MonkeyPatch, alias: str
     def fake_get(
         url: str, *, headers: dict[str, object], params: dict[str, object] | None, timeout: float, **_: object
     ) -> _FakeResponse:
-        return _FakeResponse(text='{"name": "plan", "kind": "asset", "content": "hi"}')
+        return _FakeResponse(text='{"scope": "node", "name": "plan", "kind": "asset", "content": "hi"}')
 
     bound = bind_stubs(get=fake_get)
     canonical = bound.runner.invoke(runner_group, ["artifact", "get", "plan"], env=_ENV)
@@ -896,3 +903,86 @@ def test_create_posts_malformed_review_finding_delta_unvetoed_and_renders_the_ru
     assert result.exit_code != 0
     assert refusal in result.output
     assert "nothing was stored" in result.output
+
+
+def test_list_json_stdout_baseline() -> None:
+    routes = {
+        "artifacts": _FakeResponse(payload=_ARTIFACTS_PAYLOAD),
+        "attachments": _FakeResponse(payload=[{"name": "draft", "content": "é"}]),
+    }
+    bound = bind_stubs(get=_fake_get_by_suffix(routes))
+    result = bound.runner.invoke(runner_group, ["artifact", "list"], env=_ENV)
+    assert result.exit_code == 0, result.output
+    assert result.stdout == (
+        '[{"scope": "node", "name": "plan", "kind": "asset", "node_name": "plan", "epoch": 1, "staged": false, "bytes": 13}, '
+        '{"scope": "node", "name": "build-branch", "kind": "git_commit", "node_name": "build", "epoch": 2, '
+        '"repo": "blizzard", "branch_name": "chunk/ch_1", "commit_hash": "abc123", "staged": false, "bytes": null}, '
+        '{"name": "draft", "staged": true, "bytes": 2}]\n'
+    )
+    result = bound.runner.invoke(runner_group, ["artifact", "list", "--content"], env=_ENV)
+    assert result.exit_code == 0, result.output
+    assert result.stdout == (
+        '[{"scope": "node", "name": "plan", "kind": "asset", "node_name": "plan", "epoch": 1, "content": "the plan text", '
+        '"staged": false}, {"scope": "node", "name": "build-branch", "kind": "git_commit", "node_name": "build", "epoch": 2, '
+        '"repo": "blizzard", "branch_name": "chunk/ch_1", "commit_hash": "abc123", "content": null, '
+        '"staged": false}, {"name": "draft", "content": "\\u00e9", "staged": true}]\n'
+    )
+
+
+@pytest.mark.parametrize(
+    "args,payload",
+    [
+        (["list", "--scope", "graph"], [{"name": "private-content", "kind": "asset"}]),
+        (["get", "plan"], {"name": "private-content", "kind": "asset"}),
+        (["get", "plan", "--content"], {"name": "private-content", "kind": "asset"}),
+        (["staged"], [{"name": "private-content"}]),
+        (["staged", "--content"], [{"name": "private-content"}]),
+    ],
+)
+def test_bad_read_answer_fails_without_leaking_payload(args: list[str], payload: object) -> None:
+    bound = bind_stubs(get=lambda *a, **k: _FakeResponse(payload=payload))
+    result = bound.runner.invoke(runner_group, ["artifact", *args], env=_ENV)
+    assert result.exit_code != 0
+    assert "unreadable answer" in result.stderr
+    assert "runner at http://127.0.0.1:8431" in result.stderr
+    assert "private-content" not in result.output
+    assert result.stdout == ""
+
+
+def test_bad_answer_redacts_runner_url_credentials() -> None:
+    env = {**_ENV, "BLIZZARD_RUNNER_URL": "http://user:secret@127.0.0.1:8431/path?token=secret"}
+    bound = bind_stubs(get=lambda *a, **k: _FakeResponse(payload={"name": "private-content"}))
+    result = bound.runner.invoke(runner_group, ["artifact", "get", "plan"], env=env)
+    assert "artifact get: unreadable answer from the runner at http://127.0.0.1:8431" in result.stderr
+    assert "secret" not in result.output
+    assert "private-content" not in result.output
+
+
+def test_bad_create_answer_does_not_confirm() -> None:
+    bound = bind_stubs(post=lambda *a, **k: _FakeResponse(payload={"name": "private-content"}))
+    result = bound.runner.invoke(runner_group, ["artifact", "create", "--name", "n"], env=_ENV, input="x")
+    assert result.exit_code != 0
+    assert "unreadable answer" in result.stderr
+    assert "private-content" not in result.output
+    assert result.stdout == ""
+
+
+def test_bad_staged_answer_on_list_produces_no_partial_output() -> None:
+    routes = {
+        "artifacts": _FakeResponse(payload=_ARTIFACTS_PAYLOAD),
+        "attachments": _FakeResponse(payload=[{"name": 1}]),
+    }
+    result = bind_stubs(get=_fake_get_by_suffix(routes)).runner.invoke(runner_group, ["artifact", "list"], env=_ENV)
+    assert result.exit_code != 0
+    assert "unreadable answer" in result.stderr
+    assert result.stdout == ""
+
+
+def test_bad_staged_answer_does_not_mask_get_not_found() -> None:
+    def fake_get(url: str, **kwargs: object) -> _FakeResponse | _NotFoundResponse:
+        return _FakeResponse(payload=[{"name": 1}]) if url.endswith("/attachments") else _NotFoundResponse()
+
+    result = bind_stubs(get=fake_get).runner.invoke(runner_group, ["artifact", "get", "ghost"], env=_ENV)
+    assert result.exit_code != 0
+    assert "could not read" in result.stderr
+    assert "unreadable answer" not in result.stderr

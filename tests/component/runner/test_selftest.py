@@ -671,7 +671,9 @@ def test_cli_selftest_refuses_a_daemon_that_never_finishes_once_the_poll_deadlin
             return httpx2.Response(
                 200, json={"items": [{"name": "r1", "runner_id": "rn_1", "state": "serving", "served": True}]}
             )
-        return httpx2.Response(200, json={"id": "st_1", "status": "running", "checks": []})
+        return httpx2.Response(
+            200, json={"id": "st_1", "harness": "claude_code", "status": "running", "settled": False, "checks": []}
+        )
 
     bound = bind_transport(answers_running_forever)
     monotonic = ManualMonotonicClock()

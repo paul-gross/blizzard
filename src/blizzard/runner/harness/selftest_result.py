@@ -9,20 +9,17 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import datetime
-from typing import Literal, Protocol
+from typing import Protocol
 
 from blizzard.foundation.roles import domain_model
+from blizzard.foundation.selftest import SelfTestTerminalStatus
 
 __all__ = [
     "IReadSelfTestResultRepository",
     "IWriteSelfTestResultRepository",
     "LatestSelfTestResult",
-    "SelfTestTerminalStatus",
     "selftest_failed",
 ]
-
-#: A concluded selftest run's status — the only statuses ever recorded; a still-``"running"`` run never is.
-SelfTestTerminalStatus = Literal["passed", "failed"]
 
 
 @domain_model

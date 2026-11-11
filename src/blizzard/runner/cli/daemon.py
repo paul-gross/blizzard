@@ -9,16 +9,19 @@ from types import TracebackType
 from typing import Any, Literal
 
 import click
+from pydantic import TypeAdapter
 
 from blizzard.cli.collaborators import CliCollaborators, Client, ClientFactory, ConnectError, HTTPError, Response
 from blizzard.cli.operator_trace import ITraceHeaders, OperatorTrace
 from blizzard.cli.param_rank import ParamSource
 from blizzard.cli.refusal import refusal_of
 from blizzard.foundation.roles import collaborator
+from blizzard.runner.cli.response import decode_answer
 from blizzard.runner.host_layout import HostLayout
 from blizzard.runner.route_paths import runner_prefix
 from blizzard.wire.flags import FLAG_OFF
 from blizzard.wire.problem_reading import is_kind
+from blizzard.wire.runner_host import HostRunnerListResponse, HostRunnerView
 
 # A machine-local round trip, so a hook-scale budget rather than the hub-client one.
 LOCAL_CLIENT_TIMEOUT = 5.0
@@ -154,10 +157,15 @@ class RunnerDaemon:
             self._runner["id"] = self._resolve_runner_id()
         return self._runner["id"]
 
+    def decode_answer[T](self, response: Response, adapter: TypeAdapter[T]) -> tuple[Any, T]:
+        """Decode an answer naming the host this verb reached."""
+        return decode_answer(response, adapter, verb=self.verb, where=self.where)
+
     def _resolve_runner_id(self) -> str:
-        items: list[dict[str, Any]] = self._call("get", "/api/host/runners").json()["items"]
+        _, answer = self.decode_answer(self._call("get", "/api/host/runners"), TypeAdapter(HostRunnerListResponse))
+        items = answer.items
         if self.selector is not None:
-            matched = [item for item in items if self.selector in (item["name"], item["runner_id"])]
+            matched = [item for item in items if self.selector in (item.name, item.runner_id)]
             if not matched:
                 raise click.ClickException(
                     f"{self.verb}: the host at {self.where} holds no runner {self.selector!r}: {_named(items)}"
@@ -178,14 +186,14 @@ class RunnerDaemon:
         else:
             raise click.ClickException(f"{self.verb}: the host at {self.where} serves no runner: none")
         # A runner its hub halts is still served, and its own views — the status naming why — still read.
-        if chosen["state"] != "serving" and not chosen.get("served", False):
-            serves_none = all(item["state"] != "serving" and not item.get("served", False) for item in items)
+        if not chosen.served:
+            serves_none = all(not item.served for item in items)
             raise click.ClickException(
                 f"{self.verb}: the host at {self.where} {'serves no runner: ' if serves_none else 'holds '}"
-                f"runner {chosen['name']} "
-                f"({chosen['runner_id'] or 'no id'}) is halted: {'; '.join(map(str, chosen['halted_reasons']))}"
+                f"runner {chosen.name} "
+                f"({chosen.runner_id or 'no id'}) is halted: {'; '.join(chosen.halted_reasons)}"
             )
-        return str(chosen["runner_id"])
+        return str(chosen.runner_id)
 
     def unreachable(self, exc: Exception) -> click.ClickException:
         return click.ClickException(f"{self.verb}: could not reach the runner at {self.where} ({exc})")
@@ -214,8 +222,8 @@ def _flag_off(resp: Response) -> str | None:
     return None
 
 
-def _named(items: list[dict[str, Any]]) -> str:
-    return ", ".join(f"{item['name']} ({item['runner_id'] or 'no id'}, {item['state']})" for item in items) or "none"
+def _named(items: list[HostRunnerView]) -> str:
+    return ", ".join(f"{item.name} ({item.runner_id or 'no id'}, {item.state})" for item in items) or "none"
 
 
 def daemon_holding(sock: Path, door: Door) -> str | None:

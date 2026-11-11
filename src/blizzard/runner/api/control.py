@@ -18,6 +18,7 @@ from blizzard.runner.throttle.floor import FloorAnswer
 from blizzard.runner.throttle.levers import LeverAnswer
 from blizzard.runner.throttle.report import FLOOR_LEVER
 from blizzard.wire.runner import UnenforceableGateView, VersionWindowView
+from blizzard.wire.runner_control import RunnerControlView
 from blizzard.wire.runner_status import (
     BindingCapacityView,
     CapacitiesView,
@@ -36,16 +37,6 @@ from blizzard.wire.runner_status import (
 )
 
 router = APIRouter(prefix="/api", tags=["runner"])
-
-
-class RunnerControlView(BaseModel):
-    """The runner singleton's derived pause state."""
-
-    runner_id: str | None  # the hub-minted id of the latest registration; None before the first
-    runner_name: str  # the name the hub recorded then, else the configured one
-    local_paused: bool  # this runner's own brake
-    hub_paused: bool  # the hub's brake, as last mirrored
-    paused: bool  # effective: the OR of the two
 
 
 class RunnerControlPatch(BaseModel):

@@ -3,17 +3,23 @@ from __future__ import annotations
 import json
 from dataclasses import dataclass
 from http import HTTPStatus
-from typing import NotRequired, TypedDict, cast
+from typing import cast
 from urllib.parse import quote
 
 import click
+from pydantic import TypeAdapter
 
 from blizzard.cli.collaborators import HTTPStatusError
 from blizzard.cli.get_group import GetGroup
 from blizzard.foundation.artifacts import ArtifactKind, ArtifactScope
 from blizzard.foundation.roles import dto
+from blizzard.foundation.unrecognized import Unrecognized
+from blizzard.runner.cli.response import decode_answer
 from blizzard.runner.cli.worker_call import WorkerCall
 from blizzard.runner.lifecycle.artifacts import carries_content, read_only_reason
+from blizzard.wire.attachments import AttachmentResponse, StagedAttachment
+from blizzard.wire.envelope import WorkerArtifact
+from blizzard.wire.git_commits import GitCommitDeclarationResponse
 
 
 @click.group("artifact", cls=GetGroup)
@@ -24,30 +30,19 @@ def artifact_group() -> None:
     ``create`` *stages* a submission, published on completion."""
 
 
-class _PublishedArtifact(TypedDict):
-    name: str
-    kind: str
-    content: NotRequired[str | None]
-
-
-class _StagedArtifact(TypedDict):
-    name: str
-    content: str
-
-
 @dto
 @dataclass(frozen=True)
 class ArtifactEntry:
     """One ``list``-view entry — every field but ``content``, which collapses to
     its ``bytes`` length (``None`` when the artifact carries none, i.e. ``git_commit``)."""
 
-    artifact: _PublishedArtifact | _StagedArtifact
+    artifact: dict[str, object]
 
     @property
     def summary(self) -> dict[str, object]:  # ast-grep-ignore: bzh:property-delegates
         content = self.artifact.get("content")
         summary = {k: v for k, v in self.artifact.items() if k != "content"}
-        summary["bytes"] = len(content.encode("utf-8")) if content is not None else None
+        summary["bytes"] = len(content.encode("utf-8")) if isinstance(content, str) else None
         return summary
 
 
@@ -63,7 +58,7 @@ def _refuse_read_only_scope(verb: str, scope: str | None) -> None:
 _SCOPE_CHOICE = click.Choice([s.value for s in ArtifactScope])
 
 
-def _staged_for_scope(worker: WorkerCall, scope: str | None) -> list[_StagedArtifact]:
+def _staged_for_scope(worker: WorkerCall, scope: str | None) -> list[dict[str, object]]:
     """This node-step's own staged (not-yet-published) submissions, or ``[]`` for a SCOPE that
     excludes node — ``graph`` and ``system`` never have one. Also ``[]``, noted on stderr, on a
     failed read."""
@@ -74,7 +69,8 @@ def _staged_for_scope(worker: WorkerCall, scope: str | None) -> list[_StagedArti
     except click.ClickException as exc:
         click.echo(f"artifact list: {exc.message}; omitting staged entries", err=True)
         return []
-    return resp.json()
+    raw, _ = decode_answer(resp, TypeAdapter(list[StagedAttachment]), verb="artifact list", where=worker.runner_url)
+    return cast("list[dict[str, object]]", raw)
 
 
 @artifact_group.command("list")
@@ -106,12 +102,10 @@ def artifact_list(content: bool, scope: str | None) -> None:
         failure="could not read the artifacts",
         params={"scope": scope} if scope else None,
     )
+    raw, _ = decode_answer(resp, TypeAdapter(list[WorkerArtifact]), verb="artifact list", where=worker.runner_url)
+    published = cast("list[dict[str, object]]", raw)
     staged = _staged_for_scope(worker, scope)
-    published: list[_PublishedArtifact] = resp.json()
-    entries: list[_PublishedArtifact | _StagedArtifact] = [
-        *(cast(_PublishedArtifact, {**a, "staged": False}) for a in published),
-        *(cast(_StagedArtifact, {**a, "staged": True}) for a in staged),
-    ]
+    entries = [{**a, "staged": False} for a in published] + [{**a, "staged": True} for a in staged]
     if content:
         click.echo(json.dumps(entries))
         return
@@ -123,10 +117,12 @@ def _staged_names(worker: WorkerCall) -> set[str] | None:
     failed staged-check must never mask the original not-found error."""
     try:
         resp = worker.get(worker.leased("attachments"), failure="could not read the staged artifacts")
+        _, staged = decode_answer(
+            resp, TypeAdapter(list[StagedAttachment]), verb="artifact get", where=worker.runner_url
+        )
     except click.ClickException:
         return None
-    staged: list[_StagedArtifact] = resp.json()
-    return {a["name"] for a in staged}
+    return {a.name for a in staged}
 
 
 def _is_not_found(exc: click.ClickException) -> bool:
@@ -205,25 +201,22 @@ def artifact_get(
                 "this node-step completes)"
             ) from exc
         raise
+    _, artifact = decode_answer(resp, TypeAdapter(WorkerArtifact), verb="artifact get", where=worker.runner_url)
     if not content:
         click.echo(resp.text)
         return
-    artifact: _PublishedArtifact = resp.json()
-    try:
-        kind: ArtifactKind | None = ArtifactKind(artifact["kind"])
-    except ValueError:
-        kind = None  # a kind a newer runner serves: its content, if it carries any, still prints
-    if kind is None and artifact.get("content") is None:
+    kind = artifact.kind
+    if isinstance(kind, Unrecognized) and artifact.content is None:
         raise click.ClickException(
-            f"artifact get: {name!r} is a {artifact['kind']!r} artifact, a kind this CLI does not know, "
+            f"artifact get: {name!r} is a {kind.raw!r} artifact, a kind this CLI does not know, "
             "and carries no content (drop --content to read it whole)"
         )
-    if kind is not None and not carries_content(kind):
+    if isinstance(kind, ArtifactKind) and not carries_content(kind):
         raise click.ClickException(
             f"artifact get: {name!r} is a git-commit artifact — it has no content (drop --content to read its ref)"
         )
     # Raw, un-decorated: the asset text as stored, no added trailing newline.
-    click.echo(artifact.get("content") or "", nl=False)
+    click.echo(artifact.content or "", nl=False)
 
 
 @artifact_group.command("create")
@@ -258,8 +251,8 @@ def artifact_create(name: str, scope: str | None) -> None:
         rejected=f"could not record {name!r}, nothing was stored",
         json_body={"name": name, "content": content},
     )
-    body = resp.json()
-    click.echo(f"recorded {body.get('name', name)!r} ({body.get('bytes', len(content.encode('utf-8')))} bytes)")
+    _, body = decode_answer(resp, TypeAdapter(AttachmentResponse), verb="artifact create", where=worker.runner_url)
+    click.echo(f"recorded {body.name!r} ({body.bytes} bytes)")
 
 
 @artifact_group.command("staged")
@@ -283,11 +276,13 @@ def artifact_staged(content: bool, scope: str | None) -> None:
     _refuse_read_only_scope("staged", scope)
     worker = WorkerCall.of("artifact staged")
     resp = worker.get(worker.leased("attachments"), failure="could not read the staged artifacts")
+    _, staged = decode_answer(
+        resp, TypeAdapter(list[StagedAttachment]), verb="artifact staged", where=worker.runner_url
+    )
     if content:
         click.echo(resp.text)
         return
-    staged: list[_StagedArtifact] = resp.json()
-    click.echo(json.dumps([{"name": a["name"], "bytes": len(a["content"].encode("utf-8"))} for a in staged]))
+    click.echo(json.dumps([{"name": a.name, "bytes": len(a.content.encode("utf-8"))} for a in staged]))
 
 
 @artifact_group.command("commit")
@@ -333,7 +328,10 @@ def artifact_commit(environment_id: str | None, repo: str, branch: str, commit_s
         rejected=f"{repo!r} rejected",
         json_body=body,
     )
+    _, answer = decode_answer(
+        resp, TypeAdapter(GitCommitDeclarationResponse), verb="artifact commit", where=worker.runner_url
+    )
     click.echo(f"recorded {repo!r} at {branch!r} ({commit_sha})")
-    note = resp.json().get("note")
+    note = answer.note
     if note:
         click.echo(note)

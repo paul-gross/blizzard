@@ -45,6 +45,11 @@ affect the other.
 Run the local verbs as the service account: the socket is 0600 and the unit runs as `blizzard`, so any other account —
 root included — fails with EACCES; use the install steps' `sudo -u blizzard <venv>/bin/blizzard-runner` form.
 
+If a CLI verb reports an `unreadable answer from the runner`, it reached a host but could not read its response. The
+diagnostic names the verb and the door it reached, without printing the response. Restart that runner host on the same
+build as the CLI, then try again. For a write, check its effect before retrying: the host may have performed it even
+though the CLI could not read its answer. This is distinct from a connection error against a stale socket.
+
 The board's copyable wrapped takeover command supplies only `--dir` — not the service account, the venv binary path, or
 the host: `--dir` names a path on the runner's host while the board serves from the hub, so on a split deployment a
 pasted command can land on the wrong machine entirely.
