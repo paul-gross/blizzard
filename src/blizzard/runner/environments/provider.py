@@ -9,7 +9,7 @@ from collections.abc import Sequence
 from dataclasses import dataclass
 from typing import Protocol
 
-from blizzard.foundation.repo_ref import repo_identity
+from blizzard.foundation.repo_ref import repo_identity, same_owner
 from blizzard.foundation.roles import domain_model
 
 
@@ -43,8 +43,10 @@ class RepositoryTarget:
         return f"{self.owner}/{self.repo}"
 
     def names(self, origin_url: str, name: str) -> bool:
-        """Whether the worktree ``name`` whose origin is ``origin_url`` is this target's repository."""
-        return repo_identity(origin_url, name) == self.qualified
+        """Whether the worktree ``name`` whose origin is ``origin_url`` is this target's repository — its owner matched
+        as a forge resolves it (:func:`same_owner`)."""
+        owner, _, repo = repo_identity(origin_url, name).rpartition("/")
+        return repo == self.repo and same_owner(owner, self.owner)
 
 
 def target_naming(targets: Sequence[RepositoryTarget], origin_url: str, name: str) -> RepositoryTarget | None:
@@ -135,27 +137,6 @@ def refuse_unmatched_overrides(
             )
 
 
-class TargetsUnsupportedError(EnvironmentPreparationError):
-    """A provider that cannot prepare repositories at their targets was asked for a project link's own branch."""
-
-    def __init__(self, *, environment_id: str, repository: str, branch: str) -> None:
-        super().__init__(
-            f"this workspace cannot prepare repository {repository} at branch {branch!r}",
-            environment_id=environment_id,
-            step="targets",
-        )
-
-
-def refuse_unhonored_targets(targets: Sequence[RepositoryTarget], *, environment_id: str) -> None:
-    """The refusal of a provider that cannot honor targets: any target naming a project link's own branch raises
-    :class:`TargetsUnsupportedError`; an inherited one is the repository's own branch and needs nothing of it."""
-    override = next((target for target in targets if not target.inherited), None)
-    if override is not None:
-        raise TargetsUnsupportedError(
-            environment_id=environment_id, repository=override.qualified, branch=override.base_branch
-        )
-
-
 class IWorkspaceProvider(Protocol):
     """The environment-allocation seam."""
 
@@ -167,8 +148,7 @@ class IWorkspaceProvider(Protocol):
 
         Returns the acquired ``(env id, workdir)`` pairs, or raises
         :class:`WorkspaceAcquisitionError` on refusal — never a partial set. A target branch absent on its origin
-        raises :class:`TargetBranchMissingError`; a provider that does not :meth:`honors_targets` raises
-        :class:`TargetsUnsupportedError` for an override target."""
+        raises :class:`TargetBranchMissingError`."""
         ...
 
     def honors_targets(self) -> bool:

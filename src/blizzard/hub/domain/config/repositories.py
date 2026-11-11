@@ -15,7 +15,7 @@ from urllib.parse import urlparse
 
 from blizzard.foundation.ids import Id, IdPrefix
 from blizzard.foundation.landing_policy import LandingPolicy
-from blizzard.foundation.repo_ref import RepoRef
+from blizzard.foundation.repo_ref import RepoRef, same_owner
 from blizzard.foundation.roles import domain_model
 from blizzard.hub.domain.config import lifecycle
 from blizzard.hub.domain.config.changes import (
@@ -355,7 +355,7 @@ def _candidates(
 ) -> list[ConfiguredRepository]:
     found = [row for row in rows if row.fields.repo == origin.name]
     if origin.owner:
-        found = [row for row in found if row.fields.owner.lower() == origin.owner.lower()]
+        found = [row for row in found if same_owner(row.fields.owner, origin.owner)]
     if origin.host:
         host = origin.host.lower().removeprefix("api.")
         found = [row for row in found if host in _forge_hosts(forges.get(row.fields.forge_id))]
