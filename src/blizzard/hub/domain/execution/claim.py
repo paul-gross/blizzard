@@ -33,6 +33,7 @@ from blizzard.hub.domain.chunk.ports.route import IWriteChunkRouteRepository
 from blizzard.hub.domain.execution.eligibility import EligibilityCheck
 from blizzard.hub.domain.execution.envelope import Envelope
 from blizzard.hub.domain.graph.model import Graph, IReadGraphRepository, Node
+from blizzard.hub.domain.projects.targets import ChunkTargets, TargetChunk
 from blizzard.hub.domain.runners.bindings import WorkEligibility
 from blizzard.hub.domain.runners.host import Host, IReadHostRegistry
 from blizzard.hub.domain.runners.registration import (
@@ -115,12 +116,9 @@ class ClaimDeniedDependency(Exception):
 
 
 class ClaimDeniedIncompatible(Exception):
-    """The claiming runner cannot take the chunk, for ``reason`` — refused outright, mirroring
-    :class:`ClaimDeniedDependency`'s shape. ``capability``: its stored capabilities can no longer run
-    every statically reachable runner-owned lineage from the chunk's current node, a registration
-    reporting no capabilities included. ``project``: its served declaration does not serve the
-    chunk's project, ``project_id``, which a ``project`` and a ``binding`` refusal carry. ``binding``: it serves the
-    project, but not through the claimed workspace now (:class:`WorkEligibility`)."""
+    """The claiming runner cannot take the chunk, for ``reason`` (:class:`ClaimDenialReason`) — refused outright,
+    mirroring :class:`ClaimDeniedDependency`'s shape. A ``project`` and a ``binding`` refusal carry the chunk's
+    ``project_id``; a ``binding`` one is judged by :class:`WorkEligibility`."""
 
     def __init__(
         self,
@@ -134,6 +132,8 @@ class ClaimDeniedIncompatible(Exception):
             message = f"runner {runner_id} does not serve project {project_id} of chunk {chunk_id}"
         elif reason is ClaimDenialReason.BINDING:
             message = f"runner {runner_id} is not admitted to project {project_id} of chunk {chunk_id} here"
+        elif reason is ClaimDenialReason.TARGETS:
+            message = f"runner {runner_id} prepared chunk {chunk_id} at repository targets that are not the chunk's"
         else:
             message = f"runner {runner_id}'s capabilities no longer satisfy chunk {chunk_id}"
         super().__init__(message)
@@ -333,6 +333,7 @@ class ClaimService:
         hosts: IReadHostRegistry,
         retired: RetiredRunnerGuard,
         exclusive: IChunkExclusiveWrites,
+        targets: ChunkTargets,
         clock: IClock,
         label: WorkRefLabel,
     ) -> None:
@@ -349,6 +350,8 @@ class ClaimService:
         self._exclusive = exclusive
         # The rekey's refusal; the claim refuses through the registration it already reads.
         self._retired = retired
+        # Captures the chunk's repository targets in the route's own locked unit.
+        self._targets = targets
         self._clock = clock
         self._label = label
 
@@ -370,13 +373,22 @@ class ClaimService:
         runner_id: str,
         workspace_id: str,
         environment_ids: list[str],
+        repository_targets: Mapping[str, str] | None = None,
     ) -> ClaimResult:
+        """``repository_targets`` are the branches, by repository id, the runner prepared its environments at;
+        ``None`` from a runner that names none."""
         # Checked before the lock: a paused runner is refused regardless of whether it
         # would have won the race, so there is nothing here for the CAS to serialize.
         refuse_paused_runner(self._registry.get_runner(runner_id), runner_id=runner_id)
         with self._exclusive.locked([chunk.chunk_id]) as handle:
             return self._claim_locked(
-                handle, chunk, graph, runner_id=runner_id, workspace_id=workspace_id, environment_ids=environment_ids
+                handle,
+                chunk,
+                graph,
+                runner_id=runner_id,
+                workspace_id=workspace_id,
+                environment_ids=environment_ids,
+                repository_targets=repository_targets,
             )
 
     def _claim_locked(
@@ -388,6 +400,7 @@ class ClaimService:
         runner_id: str,
         workspace_id: str,
         environment_ids: list[str],
+        repository_targets: Mapping[str, str] | None,
     ) -> ClaimResult:
         # Re-read the chunk under the lock: an edit that landed first may have
         # moved `graph_id`/`model` since the edge resolved the handed-in objects.
@@ -421,6 +434,15 @@ class ClaimService:
             workspace_id=workspace_id,
         )
         now = self._clock.now()
+        # The runner prepared before it claimed: its environments must stand at the targets this claim fixes for every
+        # later lease.
+        captured = self._targets.capture_prepared(
+            TargetChunk(chunk.chunk_id, chunk.project_id), repository_targets, at=now, transaction=handle.transaction
+        )
+        if captured is None:
+            raise ClaimDeniedIncompatible(
+                chunk_id=chunk.chunk_id, runner_id=runner_id, reason=ClaimDenialReason.TARGETS
+            )
 
         route = Route(
             chunk_id=chunk.chunk_id,

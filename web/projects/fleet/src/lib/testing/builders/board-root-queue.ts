@@ -10,6 +10,7 @@ export function queuePeekEntry(
     project_id: null,
     project_name: null,
     project_slug: null,
+    repository_targets: null,
     urgency: null,
     work_refs: [],
     ...overrides,

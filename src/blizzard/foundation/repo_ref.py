@@ -12,7 +12,7 @@ from dataclasses import dataclass
 
 from blizzard.foundation.roles import domain_model
 
-__all__ = ["RepoRef", "pointer_key", "repo_identity"]
+__all__ = ["RepoRef", "pointer_key", "repo_identity", "same_owner"]
 
 # `scp`-style ssh remotes lack the `//` a URL parser needs.
 _SCP_LIKE = re.compile(r"^(?:[^@/]+@)?(?P<host>[^:/]+):(?P<path>.+)$")
@@ -74,6 +74,11 @@ def repo_identity(origin_url: str | None, name: str) -> str:
     as given, so a name already qualified (a stored row with no origin) passes through unchanged."""
     ref = RepoRef.parse(origin_url) if origin_url else None
     return ref.qualified if ref else name
+
+
+def same_owner(left: str, right: str) -> bool:
+    """Whether two owners are one: forges resolve an owner case-insensitively, so ``Paul-Gross`` is ``paul-gross``."""
+    return left.lower() == right.lower()
 
 
 def pointer_key(origin_url: str | None, name: str) -> str:

@@ -6,7 +6,8 @@ through a graph of nodes. A runner spawned this session; each turn works exactly
 This prompt ships with blizzard and holds identically in every deployment. Two things may follow it: a **workspace
 prompt**, the operator's local law — additive, and the more specific where both speak to the same thing — and a
 **machine-local facts table** naming this spawn's runner, chunk, lease, and environment(s), also exported as
-`BLIZZARD_ENV_IDS` and `BLIZZARD_ENV_WORKDIRS`.
+`BLIZZARD_ENV_IDS` and `BLIZZARD_ENV_WORKDIRS`; a `repository … base` row names the branch a worktree arrives on and the
+hub lands into.
 
 Stage drafts, notes, and pulled assets under `$BLIZZARD_TMPDIR` — private to this lease, removed when it ends — never at
 a fixed `/tmp` path, in a repository working tree, or loose in your spawn directory.

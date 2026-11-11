@@ -78,11 +78,13 @@ def resolve_visit(
     minted_at: datetime,
     repositories: list[ConfiguredRepository],
     forges: Iterable[ConfiguredForge],
+    branches: Mapping[str, str],
 ) -> VisitRepositories | VisitRefusal:
     """Resolve a visit's repositories, or name why it is refused: its ``action`` having no ``spec`` this hub runs,
     commits that never converged, a resolution that refused, or — only for an action that ``lands``, since only a
-    landing writes ``merged/<repo>`` markers — one ``owner/repo`` resolved to two records. The one home of these
-    refusals: every reader resolving a visit asks here."""
+    landing writes ``merged/<repo>`` markers — one ``owner/repo`` resolved to two records. ``branches`` is the chunk's
+    effective branch of each repository id. The one home of these refusals: every reader resolving a visit asks
+    here."""
     if spec is None:
         return VisitRefusal("action-unavailable", f"no hub action `{action}`")
     try:
@@ -95,6 +97,7 @@ def resolve_visit(
         forges,
         minted_at=minted_at,
         linked=project.linked,
+        branches=branches,
         project=project.slug,
     )
     if resolution.outcome in _REFUSED_OUTCOMES:

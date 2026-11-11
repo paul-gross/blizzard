@@ -153,6 +153,7 @@ export function chunkDetail(overrides: Partial<ChunkDetail> = {}): ChunkDetail {
     pausable: false,
     pause: null,
     pending: null,
+    repository_targets: [],
     project_id: null,
     project_name: null,
     project_slug: null,

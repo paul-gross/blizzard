@@ -16,6 +16,7 @@ import {
   lensedListState,
   listedProjects,
   linkChoices,
+  linkBranch,
   linkedKeys,
   missingWiring,
   pendingUnlinkNames,
@@ -96,6 +97,8 @@ const REPO_LINK = {
   linked: true,
   revision: 1,
   position: null,
+  base_branch: null,
+  effective_base_branch: 'main',
 };
 const GONE_LINK = sourceLink({ name: 'old', linked: false, revision: 2 });
 
@@ -212,12 +215,45 @@ describe('projects model', () => {
     ] as RepositorySummary[];
     expect(
       repositoryLinkRows(
-        [{ project_id: 'proj_b', repository_id: 'repo_b', slug: 'blizzard', name: 'Blizzard', linked: true, revision: 3, position: null }],
+        [{ project_id: 'proj_b', repository_id: 'repo_b', slug: 'blizzard', name: 'Blizzard', linked: true, revision: 3, position: null, base_branch: null, effective_base_branch: 'main' }],
         repositories,
       ),
     ).toEqual([
-      { key: 'repo_b', name: 'blizzard', detail: 'Blizzard · acme/blizzard · main', builtIn: false, revision: 3 },
+      {
+        key: 'repo_b',
+        name: 'blizzard',
+        detail: 'Blizzard · acme/blizzard',
+        builtIn: false,
+        revision: 3,
+        branch: { name: 'main', marker: 'inherited', override: null, inherits: 'main' },
+      },
     ]);
+  });
+
+  it("marks a repository link's own branch as an override over the branch it would inherit", () => {
+    const link: RepositoryLinkView = {
+      project_id: 'proj_b',
+      repository_id: 'repo_b',
+      slug: 'blizzard',
+      name: 'Blizzard',
+      linked: true,
+      revision: 4,
+      position: null,
+      base_branch: 'rust-rewrite',
+      effective_base_branch: 'rust-rewrite',
+    };
+    expect(linkBranch(link, { base_branch: 'main' } as RepositorySummary)).toEqual({
+      name: 'rust-rewrite',
+      marker: 'override',
+      override: 'rust-rewrite',
+      inherits: 'main',
+    });
+    expect(linkBranch({ ...link, base_branch: null, effective_base_branch: 'main' }, undefined)).toEqual({
+      name: 'main',
+      marker: 'inherited',
+      override: null,
+      inherits: null,
+    });
   });
 
   it('keeps the repository links in the landing order the hub lists them in', () => {
@@ -229,6 +265,8 @@ describe('projects model', () => {
       linked: true,
       revision: 1,
       position,
+      base_branch: null,
+      effective_base_branch: 'main',
     });
     const rows = repositoryLinkRows([link('repo_w', 'web', 1), link('repo_a', 'api', 2), link('repo_c', 'cli', null)], []);
     expect(rows.map((row) => row.name)).toEqual(['web', 'api', 'cli']);
@@ -281,7 +319,7 @@ describe('projects model', () => {
     expect(wiringCallout(['repository'], 4)).toBe('This project has no repository yet.');
     const wired = missingWiring(
       [sourceLink({ name: 'jira', linked: true, revision: 1 })],
-      [{ project_id: 'proj_b', repository_id: 'repo_b', slug: 'blizzard', name: 'Blizzard', linked: true, revision: 1, position: null }],
+      [{ project_id: 'proj_b', repository_id: 'repo_b', slug: 'blizzard', name: 'Blizzard', linked: true, revision: 1, position: null, base_branch: null, effective_base_branch: 'main' }],
       true,
     );
     expect(wiringCallout(wired)).toBeNull();

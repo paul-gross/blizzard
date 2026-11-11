@@ -15,7 +15,7 @@ from urllib.parse import urlparse
 
 from blizzard.foundation.ids import Id, IdPrefix
 from blizzard.foundation.landing_policy import LandingPolicy
-from blizzard.foundation.repo_ref import RepoRef
+from blizzard.foundation.repo_ref import RepoRef, same_owner
 from blizzard.foundation.roles import domain_model
 from blizzard.hub.domain.config import lifecycle
 from blizzard.hub.domain.config.changes import (
@@ -355,7 +355,7 @@ def _candidates(
 ) -> list[ConfiguredRepository]:
     found = [row for row in rows if row.fields.repo == origin.name]
     if origin.owner:
-        found = [row for row in found if row.fields.owner.lower() == origin.owner.lower()]
+        found = [row for row in found if same_owner(row.fields.owner, origin.owner)]
     if origin.host:
         host = origin.host.lower().removeprefix("api.")
         found = [row for row in found if host in _forge_hosts(forges.get(row.fields.forge_id))]
@@ -416,17 +416,13 @@ def resolve_chunk_repositories(
     *,
     minted_at: datetime,
     linked: frozenset[str] | None,
+    branches: Mapping[str, str],
     project: str = "",
 ) -> RepositoryResolution:
-    """Resolve each commit pointer to its own repository record.
-
-    A pointer matches a record by its bare name, narrowed by the origin's owner and forge host
-    when it encodes them — the web or API host of the record's forge, among ``forges``, retired ones
-    included. Only records standing for the chunk count: an enabled one, or one retired after the
-    chunk was minted — and of those, only the ones ``linked`` names, the chunk's project's links;
-    ``None`` narrows nothing. Each pointer narrows on its own, so a name ambiguous across the tenant
-    resolves when its project links one of them. ``project`` is the
-    label a not-linked refusal names. No pointers is not a refusal — there is nothing to land."""
+    """Resolve each commit pointer to the repository record standing for the chunk — by name, narrowed by the
+    origin's owner and forge host, then to the records ``linked`` names (``None`` narrows nothing). Each lands into
+    its branch in ``branches``, else its record's own ``base_branch``. ``project`` labels a not-linked refusal; no
+    pointers is nothing to land, not a refusal."""
     if not origins:
         return RepositoryResolution(RepositoryOutcome.NOTHING_TO_RESOLVE)
     by_id = forges_by_id(forges)
@@ -444,7 +440,7 @@ def resolve_chunk_repositories(
             ResolvedRepository(
                 row.fields.forge_id,
                 row.fields.owner,
-                row.fields.base_branch,
+                branches.get(row.repository_id, row.fields.base_branch),
                 row.fields.secret_name,
                 row.repository_id,
                 row.slug,

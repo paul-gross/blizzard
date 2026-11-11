@@ -60,8 +60,11 @@ class VerifiedHubClient:
         *,
         policy: QueueMatchPolicy,
         projects: Sequence[str] | None = None,
+        repository_targets: bool = False,
     ) -> list[QueueEntry]:
-        return self._verified().peek_queue(capabilities, policy=policy, projects=projects)
+        return self._verified().peek_queue(
+            capabilities, policy=policy, projects=projects, repository_targets=repository_targets
+        )
 
     def claim_route(self, claim: ClaimRequest) -> RouteClaimOutcome:
         return self._verified().claim_route(claim)

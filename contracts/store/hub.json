@@ -1,5 +1,5 @@
 {
-  "head_revision": "20261109_0900_urgency_references",
+  "head_revision": "20261111_1000_chunk_repository_targets",
   "store": "hub",
   "tables": {
     "answer_deliveries": {
@@ -1317,6 +1317,88 @@
         "id"
       ],
       "unique": []
+    },
+    "chunk_repository_targets": {
+      "checks": [],
+      "columns": {
+        "base_branch": {
+          "deprecated": null,
+          "nullable": false,
+          "server_default": false,
+          "type": "String"
+        },
+        "captured_at": {
+          "deprecated": null,
+          "nullable": false,
+          "server_default": false,
+          "type": "DateTime"
+        },
+        "chunk_id": {
+          "deprecated": null,
+          "nullable": false,
+          "server_default": false,
+          "type": "String"
+        },
+        "id": {
+          "deprecated": null,
+          "nullable": false,
+          "server_default": false,
+          "type": "Integer"
+        },
+        "inherited": {
+          "deprecated": null,
+          "nullable": false,
+          "server_default": false,
+          "type": "Boolean"
+        },
+        "repository_id": {
+          "deprecated": null,
+          "nullable": false,
+          "server_default": false,
+          "type": "String"
+        },
+        "tenant_id": {
+          "deprecated": null,
+          "nullable": false,
+          "server_default": false,
+          "type": "String"
+        }
+      },
+      "deprecated": null,
+      "foreign_keys": [
+        {
+          "columns": [
+            "chunk_id"
+          ],
+          "references": {
+            "columns": [
+              "chunk_id"
+            ],
+            "table": "chunks"
+          }
+        },
+        {
+          "columns": [
+            "tenant_id"
+          ],
+          "references": {
+            "columns": [
+              "tenant_id"
+            ],
+            "table": "tenants"
+          }
+        }
+      ],
+      "primary_key": [
+        "id"
+      ],
+      "unique": [
+        [
+          "tenant_id",
+          "chunk_id",
+          "repository_id"
+        ]
+      ]
     },
     "chunk_restarts": {
       "checks": [],
@@ -5945,6 +6027,12 @@
     "project_repository_links": {
       "checks": [],
       "columns": {
+        "base_branch": {
+          "deprecated": null,
+          "nullable": true,
+          "server_default": false,
+          "type": "String"
+        },
         "project_id": {
           "deprecated": null,
           "nullable": false,

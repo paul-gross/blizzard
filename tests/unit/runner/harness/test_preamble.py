@@ -110,6 +110,29 @@ def test_multi_env_table_names_every_held_environment() -> None:
     assert out.count("| environment workdir |") == 2
 
 
+def test_the_table_names_each_targeted_repositorys_integration_branch_after_the_environments() -> None:
+    preamble = Preamble.of(
+        runner_prompt="",
+        workspace_prompt="",
+        environments=_ENVS,
+        lease_id="lease_1",
+        runner_id="runner-local",
+        chunk_id="ch_1",
+        node="build",
+        repository_bases=[("acme/api", "rust-rewrite"), ("acme/web", "main")],
+    )
+
+    assert preamble.table == (
+        f"{_TABLE}\n| repository acme/api base | `rust-rewrite` |\n| repository acme/web base | `main` |"
+    )
+
+
+def test_the_baked_preamble_says_what_a_repository_base_row_names() -> None:
+    assert "`repository … base` row names the branch a worktree arrives on and the hub lands into" in " ".join(
+        DEFAULT_BLIZZARD_PREAMBLE.split()
+    )
+
+
 def test_empty_workspace_prompt_omits_that_layer() -> None:
     # Absent/empty workspace prompt omits layer 2 — the blizzard preamble and the
     # table still compose, back to back, with no workspace-prose layer between them.

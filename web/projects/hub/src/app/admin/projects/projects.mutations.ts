@@ -7,11 +7,13 @@ import {
   hubProjectLinksKey,
   linkRepositoryApiProjectsProjectRepositoryLinksRepositoryPut,
   linkSourceApiProjectsProjectSourceLinksSourcePut,
+  patchRepositoryLinkApiProjectsProjectRepositoryLinksRepositoryPatch,
   patchProjectApiProjectsProjectPatch,
   positionRepositoryApiProjectsProjectLandingOrderPositionPost,
   type ProjectCreateRequest,
   type ProjectPatchRequest,
   type ProjectView,
+  type RepositoryLinkView,
   unlinkRepositoryApiProjectsProjectRepositoryLinksRepositoryRetirePost,
   unlinkSourceApiProjectsProjectSourceLinksSourceRetirePost,
 } from 'fleet';
@@ -20,6 +22,7 @@ import {
   editProjectMutationKey,
   landingPositionMutationKey,
   projectLinkMutationKey,
+  repositoryBranchMutationKey,
 } from '../../core/mutation-keys';
 import type { LandingPositionVars } from './project-landing-order.model';
 
@@ -41,6 +44,15 @@ export interface ProjectLinkVars {
   readonly name: string;
   readonly linked: boolean;
   readonly revision: number | null;
+}
+
+/** One repository link's own branch against the link's shown `revision`; `null` clears it, so the link inherits the
+ * repository's `base_branch` again. */
+export interface RepositoryBranchVars {
+  readonly projectId: string;
+  readonly repositoryId: string;
+  readonly revision: number;
+  readonly baseBranch: string | null;
 }
 
 /** `POST /api/projects` — creates a project and answers it. Settles by invalidating every
@@ -88,6 +100,27 @@ export function injectProjectLinkMutation() {
       const headers = vars.revision === null ? undefined : { 'if-match': vars.revision };
       const { error } = await linkCall(vars, headers);
       if (error) throw error;
+    },
+    onSettled: () => queryClient.invalidateQueries({ queryKey: hubConfigKey }),
+  }));
+}
+
+/** `PATCH /api/projects/{project}/repository-links/{repository}` with `If-Match` — sets or clears the link's own branch.
+ * A stale revision is a 409 and a name that is no git branch name a 422, both shown by the caller. Settles by
+ * invalidating every config read: the edit also moves the change log. */
+export function injectRepositoryBranchMutation() {
+  const queryClient = inject(QueryClient);
+  return injectMutation(() => ({
+    mutationKey: repositoryBranchMutationKey,
+    mutationFn: async (vars: RepositoryBranchVars): Promise<RepositoryLinkView> => {
+      const { data, error } = await patchRepositoryLinkApiProjectsProjectRepositoryLinksRepositoryPatch({
+        path: { project: vars.projectId, repository: vars.repositoryId },
+        headers: { 'if-match': vars.revision },
+        body: { base_branch: vars.baseBranch },
+        throwOnError: false,
+      });
+      if (error) throw error;
+      return data!;
     },
     onSettled: () => queryClient.invalidateQueries({ queryKey: hubConfigKey }),
   }));

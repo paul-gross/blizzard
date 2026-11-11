@@ -166,6 +166,28 @@ export interface ProjectLinkRowVm {
   /** Whether the link is the built-in source's, which every project has and none unlinks. */
   readonly builtIn: boolean;
   readonly revision: number | null;
+  /** The branch a repository link lands into; a source link has none. */
+  readonly branch: LinkBranchVm | null;
+}
+
+/** A repository link's effective branch: its own override, else the repository's `base_branch` it inherits. */
+export interface LinkBranchVm {
+  readonly name: string;
+  readonly marker: 'inherited' | 'override';
+  /** The link's own branch, `null` while it inherits — what the edit dialog starts from. */
+  readonly override: string | null;
+  /** The repository's own `base_branch`, which a cleared override inherits; `null` while the catalogue is unread. */
+  readonly inherits: string | null;
+}
+
+/** A repository link's branch as its row shows it, beside the repository record it inherits from. */
+export function linkBranch(link: RepositoryLinkView, repository: RepositorySummary | undefined): LinkBranchVm {
+  return {
+    name: link.effective_base_branch,
+    marker: link.base_branch === null ? 'inherited' : 'override',
+    override: link.base_branch,
+    inherits: repository?.base_branch ?? null,
+  };
 }
 
 /** What a link names its record by: a repository's id, a work source's id (or `hub`). */
@@ -185,10 +207,16 @@ export function sourceDetail(source: WorkSourceSummary | undefined): string {
   return [name, source.provider, source.locator].filter((part) => !!part).join(' · ');
 }
 
-/** A repository as its link row describes it. */
+/** A repository as a link choice describes it, with the branch a new link inherits. */
 export function repositoryDetail(repository: RepositorySummary | undefined): string {
   if (!repository) return '';
-  return `${repository.name} · ${repository.owner}/${repository.repo} · ${repository.base_branch}`;
+  return `${repositoryIdentity(repository)} · ${repository.base_branch}`;
+}
+
+/** A repository as its link row describes it; the row shows the link's own effective branch beside it. */
+export function repositoryIdentity(repository: RepositorySummary | undefined): string {
+  if (!repository) return '';
+  return `${repository.name} · ${repository.owner}/${repository.repo}`;
 }
 
 /** The source links in force, built-in first, then by slug. */
@@ -205,6 +233,7 @@ export function sourceLinkRows(
       detail: link.built_in ? 'built-in · linked to every project' : sourceDetail(byKey.get(link.name)),
       builtIn: link.built_in === true,
       revision: link.revision ?? null,
+      branch: null,
     }))
     .sort((a, b) => Number(b.builtIn) - Number(a.builtIn) || a.name.localeCompare(b.name));
 }
@@ -220,9 +249,10 @@ export function repositoryLinkRows(
     .map((link) => ({
       key: link.repository_id,
       name: link.slug,
-      detail: repositoryDetail(byId.get(link.repository_id)),
+      detail: repositoryIdentity(byId.get(link.repository_id)),
       builtIn: false,
       revision: link.revision,
+      branch: linkBranch(link, byId.get(link.repository_id)),
     }));
 }
 

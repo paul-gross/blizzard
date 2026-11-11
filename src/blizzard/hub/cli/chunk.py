@@ -71,6 +71,8 @@ class ChunkDetail:
         # A done or stopped chunk can still carry a route; no runner holds it.
         if route and body["status"] not in TERMINAL_STATUSES:
             yield f"  runner: {route['runner_id']}  environments: {len(route.get('environment_ids', []))}"
+        for target in cast(list[dict[str, Any]], body.get("repository_targets") or []):
+            yield f"  {_target_line(target)}"
         blocked = body.get("blocked")
         if blocked:
             yield f"  blocked: waiting on {blocked['prerequisite_chunk_id']}"
@@ -85,6 +87,14 @@ class ChunkDetail:
         escalation = body.get("escalation")
         if escalation:
             yield from _escalation_lines(escalation)
+
+
+def _target_line(target: dict[str, Any]) -> str:
+    """One repository's branch for the chunk: whether it is inherited or overridden, and captured or a preview."""
+    origin = "inherited" if target.get("inherited") else "override"
+    captured = target.get("captured_at")
+    held = f"captured {captured}" if captured else "preview"
+    return f"repository {target['repository_slug']}: {target['base_branch']} ({origin}, {held})"
 
 
 def _escalation_lines(escalation: dict[str, Any]) -> Iterator[str]:

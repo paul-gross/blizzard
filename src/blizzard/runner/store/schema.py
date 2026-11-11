@@ -83,6 +83,26 @@ env_bindings = Table(
     info={"scope": "runner"},
 )
 
+# --- Binding targets (the repository branches a binding's environment was prepared at) ---
+# One immutable row per repository target the hub named, written in the binding's own transaction.
+
+binding_targets = Table(
+    "binding_targets",
+    metadata,
+    Column("id", Integer, primary_key=True, autoincrement=True),
+    Column("binding_id", Integer, ForeignKey("env_bindings.id"), nullable=False, info={"refers_to": "env_bindings.id"}),
+    Column("repository_id", String, nullable=False),
+    Column("repository_slug", String, nullable=False),
+    Column("owner", String, nullable=False),
+    Column("repo", String, nullable=False),
+    Column("base_branch", String, nullable=False),
+    Column("inherited", Boolean, nullable=False),
+    Column("runner_id", String, nullable=False),
+    info={"scope": "runner"},
+)
+
+Index("ix_binding_targets_binding_id", binding_targets.c.binding_id)
+
 # --- Fact counters (the last append sequence each runner issued) ---
 # One row per runner, advanced in the transaction that writes a sequenced fact row. The facts a closer is judged against
 # its opener by — bind/release, park/resume, requeue/mint — are ordered by `seq`, never by comparing instants.

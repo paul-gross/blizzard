@@ -346,6 +346,30 @@ def test_an_action_that_does_not_land_holds_nothing() -> None:
     assert held_resources(_resolution(), frozenset(), _spec(lands=False)) == ()
 
 
+def _one_repository_on(branch: str) -> RepositoryResolution:
+    return RepositoryResolution(
+        RepositoryOutcome.RESOLVED,
+        targets=(ResolvedRepository(ForgeId("frg_1"), "acme", branch, "s", record="repo_a"),),
+        qualified=("acme/app",),
+        records=("repo_a",),
+    )
+
+
+def test_two_projects_landing_one_repository_on_different_branches_hold_different_resources() -> None:
+    master = held_resources(_one_repository_on("master"), frozenset(), _spec(lands=True))
+    rewrite = held_resources(_one_repository_on("rust-rewrite"), frozenset(), _spec(lands=True))
+
+    assert master == (FlowResource("repo_a", "master"),)
+    assert rewrite == (FlowResource("repo_a", "rust-rewrite"),)
+
+
+def test_two_projects_landing_one_repository_on_one_branch_share_its_resource() -> None:
+    first = held_resources(_one_repository_on("master"), frozenset(), _spec(lands=True))
+    second = held_resources(_one_repository_on("master"), frozenset(), _spec(lands=True))
+
+    assert first == second == (FlowResource("repo_a", "master"),)
+
+
 def test_a_chunk_with_nothing_to_resolve_holds_nothing() -> None:
     nothing = RepositoryResolution(RepositoryOutcome.NOTHING_TO_RESOLVE)
 

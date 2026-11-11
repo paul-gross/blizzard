@@ -16,12 +16,13 @@ from sqlalchemy import Column, Table, func
 from sqlalchemy.engine import Connection
 from sqlalchemy.exc import IntegrityError
 
+from blizzard.foundation.roles import adapter_model
 from blizzard.foundation.store.batching import id_batches
 from blizzard.hub.domain.config.changes import ConfigChange, RecordKind
 from blizzard.hub.domain.config.errors import ConfigRevisionConflict
 from blizzard.hub.domain.config.repositories import RepositoryId
 from blizzard.hub.domain.config.work_sources import WorkSourceId, is_built_in
-from blizzard.hub.domain.projects.links import IWriteProjectLinks, RepositoryLink, SourceLink
+from blizzard.hub.domain.projects.links import LINKED_FIELD, IWriteProjectLinks, RepositoryLink, SourceLink
 from blizzard.hub.domain.projects.model import ProjectId
 
 # Appends the config audit record on the caller's connection, atomically with the write.
@@ -103,34 +104,32 @@ def insert_link(conn: Connection, kind: LinkKind, project_id: str, name: str, ch
 
 
 def record_link(
-    conn: Connection,
-    kind: LinkKind,
-    project_id: str,
-    name: str,
-    *,
-    linked: bool,
-    revision: int,
-    from_revision: int,
-    change: ConfigChange,
+    conn: Connection, link: SourceLink | RepositoryLink, *, from_revision: int, change: ConfigChange
 ) -> None:
-    """The unlink/relink body, inside the caller's transaction: compare-and-set the revision, append the fact and
+    """The edit/unlink/relink body, inside the caller's transaction: compare-and-set ``link``'s revision, writing a
+    repository link's own base branch, append a standing fact when the change moves the link's standing, and append
     the change — a source link under its project's lock."""
+    kind = LINK_KINDS[link.KIND]
+    project_id, name = link.project_id, link.target()
     _lock_source_links(conn, kind, project_id)
     links = kind.links
-    moved = conn.execute(
+    update = (
         statements_of(conn)
         .update(links)
         .where(links.c.project_id == project_id, kind.name(links) == name, links.c.revision == from_revision)
-        .values(revision=revision)
-    ).rowcount
-    if moved != 1:
+        .values(revision=link.revision)
+    )
+    if isinstance(link, RepositoryLink):
+        update = update.values(base_branch=link.base_branch)
+    if conn.execute(update).rowcount != 1:
         current = conn.execute(
             statements_of(conn)
             .select(links, links.c.revision)
             .where(links.c.project_id == project_id, kind.name(links) == name)
         ).scalar_one()
         raise ConfigRevisionConflict(kind.label, f"{project_id}/{name}", current=current)
-    _append_fact(conn, kind, project_id, name, linked, change)
+    if any(moved_field.field == LINKED_FIELD for moved_field in change.diff):
+        _append_fact(conn, kind, project_id, name, link.linked, change)
     append_change(conn, change)
 
 
@@ -193,21 +192,31 @@ def _standing(
     return set(_newest(stmts, conn, kind, project_ids, names, standing_only=True))
 
 
+@adapter_model
+@dataclass(frozen=True)
+class _Row:
+    """A stored link row: its revision and, for a repository link, its own base branch."""
+
+    revision: int
+    base_branch: str | None = None
+
+
 def _revisions(
     stmts: ScopedStatements, conn: Connection, kind: LinkKind, pairs: set[tuple[str, str]]
-) -> dict[tuple[str, str], int]:
-    """The stored revision of each link of ``pairs``; a pair never linked is dropped. Each batch reads the links of
-    its projects by names, kept to the pairs asked for."""
+) -> dict[tuple[str, str], _Row]:
+    """The stored row of each link of ``pairs``; a pair never linked is dropped. Each batch reads the links of its
+    projects by names, kept to the pairs asked for."""
     links = kind.links
-    found: dict[tuple[str, str], int] = {}
+    extra = [links.c.base_branch] if kind is _REPOSITORIES else []
+    found: dict[tuple[str, str], _Row] = {}
     for project_batch in id_batches(sorted({project_id for project_id, _ in pairs})):
         for name_batch in id_batches(sorted({name for _, name in pairs})):
             rows = conn.execute(
-                stmts.select(links, links.c.project_id, kind.name(links), links.c.revision).where(
+                stmts.select(links, links.c.project_id, kind.name(links), links.c.revision, *extra).where(
                     links.c.project_id.in_(project_batch), kind.name(links).in_(name_batch)
                 )
             ).all()
-            found.update(((row[0], row[1]), row[2]) for row in rows if (row[0], row[1]) in pairs)
+            found.update(((row[0], row[1]), _Row(row[2], *row[3:])) for row in rows if (row[0], row[1]) in pairs)
     return found
 
 
@@ -239,16 +248,7 @@ class ProjectLinkStore:
         return link
 
     def record_source_link(self, link: SourceLink, *, from_revision: int, change: ConfigChange) -> SourceLink:
-        self._record(
-            "record_source_link",
-            _SOURCES,
-            link.project_id,
-            link.work_source_id,
-            link.linked,
-            link.revision,
-            from_revision,
-            change,
-        )
+        self._record("record_source_link", link, from_revision, change)
         return link
 
     def create_repository_link(self, link: RepositoryLink, *, change: ConfigChange) -> RepositoryLink:
@@ -258,16 +258,7 @@ class ProjectLinkStore:
     def record_repository_link(
         self, link: RepositoryLink, *, from_revision: int, change: ConfigChange
     ) -> RepositoryLink:
-        self._record(
-            "record_repository_link",
-            _REPOSITORIES,
-            link.project_id,
-            link.repository_id,
-            link.linked,
-            link.revision,
-            from_revision,
-            change,
-        )
+        self._record("record_repository_link", link, from_revision, change)
         return link
 
     def _create(self, operation: str, kind: LinkKind, project_id: str, name: str, change: ConfigChange) -> None:
@@ -278,27 +269,10 @@ class ProjectLinkStore:
             raise ConfigRevisionConflict(kind.label, f"{project_id}/{name}", current=1) from exc
 
     def _record(
-        self,
-        operation: str,
-        kind: LinkKind,
-        project_id: str,
-        name: str,
-        linked: bool,
-        revision: int,
-        from_revision: int,
-        change: ConfigChange,
+        self, operation: str, link: SourceLink | RepositoryLink, from_revision: int, change: ConfigChange
     ) -> None:
         with self._store.write(operation, expect=(ConfigRevisionConflict,)) as conn:
-            record_link(
-                conn,
-                kind,
-                project_id,
-                name,
-                linked=linked,
-                revision=revision,
-                from_revision=from_revision,
-                change=change,
-            )
+            record_link(conn, link, from_revision=from_revision, change=change)
 
     # --- reads ---
 
@@ -322,9 +296,12 @@ class ProjectLinkStore:
     ) -> dict[tuple[ProjectId, WorkSourceId], SourceLink]:
         return {
             (ProjectId(project_id), WorkSourceId(name)): SourceLink(
-                project_id=ProjectId(project_id), work_source_id=WorkSourceId(name), revision=revision, linked=linked
+                project_id=ProjectId(project_id),
+                work_source_id=WorkSourceId(name),
+                revision=row.revision,
+                linked=linked,
             )
-            for (project_id, name), (revision, linked) in self._stored("source_links_for", _SOURCES, pairs).items()
+            for (project_id, name), (row, linked) in self._stored("source_links_for", _SOURCES, pairs).items()
         }
 
     def repository_links_for(
@@ -336,18 +313,19 @@ class ProjectLinkStore:
             (ProjectId(project_id), RepositoryId(name)): RepositoryLink(
                 project_id=ProjectId(project_id),
                 repository_id=RepositoryId(name),
-                revision=revision,
+                revision=row.revision,
                 linked=linked,
                 position=positions.get((project_id, name)),
+                base_branch=row.base_branch,
             )
-            for (project_id, name), (revision, linked) in stored.items()
+            for (project_id, name), (row, linked) in stored.items()
         }
 
     def sources_of_projects(self, project_ids: Sequence[ProjectId]) -> dict[ProjectId, list[SourceLink]]:
         return {
             ProjectId(project_id): [
-                SourceLink(project_id=ProjectId(project_id), work_source_id=WorkSourceId(name), revision=revision)
-                for name, revision in standing
+                SourceLink(project_id=ProjectId(project_id), work_source_id=WorkSourceId(name), revision=row.revision)
+                for name, row in standing
             ]
             for project_id, standing in self._standing_of("sources_of_projects", _SOURCES, project_ids).items()
         }
@@ -363,10 +341,11 @@ class ProjectLinkStore:
                 RepositoryLink(
                     project_id=ProjectId(project_id),
                     repository_id=RepositoryId(name),
-                    revision=revision,
+                    revision=row.revision,
                     position=positions.get((project_id, name)),
+                    base_branch=row.base_branch,
                 )
-                for name, revision in standing
+                for name, row in standing
             ]
             for project_id, standing in standing_of.items()
         }
@@ -385,8 +364,8 @@ class ProjectLinkStore:
 
     def _stored(
         self, operation: str, kind: LinkKind, pairs: Sequence[tuple[str, str]]
-    ) -> dict[tuple[str, str], tuple[int, bool]]:
-        """Each stored link of ``pairs`` as its revision and whether it stands; a pair never linked is dropped."""
+    ) -> dict[tuple[str, str], tuple[_Row, bool]]:
+        """Each stored link of ``pairs`` as its row and whether it stands; a pair never linked is dropped."""
         if not pairs:
             return {}
         with self._store.read(operation) as conn:
@@ -412,17 +391,17 @@ class ProjectLinkStore:
 
     def _standing_of(
         self, operation: str, kind: LinkKind, project_ids: Sequence[str]
-    ) -> dict[str, list[tuple[str, int]]]:
-        """Each project's standing links as ``(name, revision)``, ordered by name — a project with none dropped: the
-        links its newest facts read linked, then those links' revisions."""
+    ) -> dict[str, list[tuple[str, _Row]]]:
+        """Each project's standing links as ``(name, row)``, ordered by name — a project with none dropped: the links
+        its newest facts read linked, then those links' rows."""
         if not project_ids:
             return {}
-        found: dict[str, list[tuple[str, int]]] = {}
+        found: dict[str, list[tuple[str, _Row]]] = {}
         with self._store.read(operation) as conn:
             standing = _standing(self._store, conn, kind, list(dict.fromkeys(project_ids)))
-            for (project_id, name), revision in _revisions(self._store, conn, kind, standing).items():
-                found.setdefault(project_id, []).append((name, revision))
-        return {project_id: sorted(held) for project_id, held in found.items()}
+            for (project_id, name), row in _revisions(self._store, conn, kind, standing).items():
+                found.setdefault(project_id, []).append((name, row))
+        return {project_id: sorted(held, key=lambda named: named[0]) for project_id, held in found.items()}
 
 
 _link_store_conforms: type[IWriteProjectLinks] = ProjectLinkStore

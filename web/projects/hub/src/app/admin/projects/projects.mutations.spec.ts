@@ -16,6 +16,7 @@ import {
   injectEditProjectMutation,
   injectLandingPositionMutation,
   injectProjectLinkMutation,
+  injectRepositoryBranchMutation,
 } from './projects.mutations';
 
 describe('project mutations', () => {
@@ -32,6 +33,7 @@ describe('project mutations', () => {
       'POST /api/projects/{project}/repository-links/{repository}/retire': () =>
         repositoryLinkView({ linked: false, revision: 6 }),
       'POST /api/projects/{project}/landing-order/position': () => ({ repository_links: [] }),
+      'PATCH /api/projects/{project}/repository-links/{repository}': () => repositoryLinkView({ revision: 7 }),
     });
     queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
     TestBed.configureTestingModule({
@@ -93,5 +95,18 @@ describe('project mutations', () => {
     expect(calls).toHaveLength(1);
     expect(calls[0].body).toEqual({ repository: 'repo_c', after_repository: 'repo_a' });
     expect(invalidatedKeys(spy)).toContainEqual(hubProjectLinksKey('proj_b', 'repository'));
+  });
+
+  it("sets a repository link's branch at its revision, clears it with null, then invalidates every config read", async () => {
+    const spy = vi.spyOn(queryClient, 'invalidateQueries');
+    const mutation = TestBed.runInInjectionContext(() => injectRepositoryBranchMutation());
+
+    await mutation.mutateAsync({ projectId: 'proj_b', repositoryId: 'repo_c', revision: 5, baseBranch: 'rust-rewrite' });
+    await mutation.mutateAsync({ projectId: 'proj_b', repositoryId: 'repo_c', revision: 6, baseBranch: null });
+
+    const calls = stub.forRoute('/api/projects/proj_b/repository-links/repo_c', 'PATCH');
+    expect(calls.map((call) => call.body)).toEqual([{ base_branch: 'rust-rewrite' }, { base_branch: null }]);
+    expect(calls.map((call) => call.headers['if-match'])).toEqual(['5', '6']);
+    expect(invalidatedKeys(spy)).toContainEqual(hubConfigKey);
   });
 });

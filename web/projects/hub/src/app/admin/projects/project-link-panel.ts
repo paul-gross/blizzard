@@ -12,14 +12,15 @@ import {
   type LandingPositionRequest,
 } from 'fleet';
 
-import { builtInTone } from '../../core/lifecycle-tone';
+import { branchMarkerTone, builtInTone } from '../../core/lifecycle-tone';
 import { type LandingSection, type LandingSections, resolveLandingDrop } from './project-landing-order.model';
 import type { ProjectLinkRowVm } from './projects.model';
 
 /**
  * One kind of a project's links — the work sources it draws from, or the repositories it may
  * land in: what linking means, one row per link in force with its Unlink, and Link. The
- * built-in source is linked to every project and offers no Unlink. Given `sections`, the rows render as a landing
+ * built-in source is linked to every project and offers no Unlink. A repository row shows the branch it lands into,
+ * marked inherited or override, and for `canEdit` a Branch control that asks to edit it. Given `sections`, the rows render as a landing
  * order — ranked, then "Unranked" — two connected drop lists armed only for `canEdit`, each drop resolved to the one
  * position it asks for. Presentational.
  */
@@ -32,6 +33,7 @@ import type { ProjectLinkRowVm } from './projects.model';
 })
 export class ProjectLinkPanel {
   protected readonly builtInTone = builtInTone;
+  protected readonly branchMarkerTone = branchMarkerTone;
   readonly heading = input.required<string>();
   readonly explainer = input.required<string>();
   readonly rows = input.required<readonly ProjectLinkRowVm[]>();
@@ -52,6 +54,8 @@ export class ProjectLinkPanel {
 
   readonly link = output<void>();
   readonly unlink = output<ProjectLinkRowVm>();
+  /** The repository row whose branch the viewer asks to edit. */
+  readonly editBranch = output<ProjectLinkRowVm>();
   /** The one landing position a drop asks for. */
   readonly reposition = output<LandingPositionRequest>();
 

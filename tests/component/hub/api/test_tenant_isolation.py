@@ -513,6 +513,7 @@ _PROBES: dict[tuple[str, str], _Probe] = {
     ("POST", "/api/projects/{project}/source-links/{source}/retire"): _f(),
     ("GET", "/api/projects/{project}/repository-links"): _f(),
     ("PUT", "/api/projects/{project}/repository-links/{repository}"): _f(),
+    ("PATCH", "/api/projects/{project}/repository-links/{repository}"): _f({"base_branch": None}),
     ("POST", "/api/projects/{project}/repository-links/{repository}/retire"): _f(),
     ("PUT", "/api/projects/{project}/landing-order"): _f({"repositories": ["{repository}"]}),
     ("POST", "/api/projects/{project}/landing-order/position"): _f({"repository": "{repository}", "unranked": True}),

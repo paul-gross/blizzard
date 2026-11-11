@@ -94,6 +94,7 @@ from blizzard.hub.domain.graph.model import HUB_DEFAULT_FAILURE_CHOICE, Graph, I
 from blizzard.hub.domain.observability.tracing.platform import ACTION_CHOICE, ACTION_NAME, ACTION_PASS_SPAN
 from blizzard.hub.domain.projects.links import IReadProjectLinks
 from blizzard.hub.domain.projects.model import IReadProjectRepository
+from blizzard.hub.domain.projects.targets import ChunkTargets, TargetChunk, branches
 from blizzard.hub.forge.budget import ForgePriority
 from blizzard.hub.forge.landing import RepositoryForge
 from blizzard.hub.forge.registry import ForgeRegistry, TurnCutOff
@@ -207,6 +208,7 @@ class TurnRunner:
         repositories: IReadRepositoryRecordRepository,
         forge_records: IReadForgeRepository,
         links: IReadProjectLinks,
+        targets: ChunkTargets,
         projects: IReadProjectRepository,
         actions: HubActions,
         passes: ActionPassDriver,
@@ -233,6 +235,7 @@ class TurnRunner:
         self._repositories = repositories
         self._forge_records = forge_records
         self._links = links
+        self._targets = targets
         self._projects = projects
         self._actions = actions
         self._passes = passes
@@ -332,6 +335,7 @@ class TurnRunner:
             minted_at=chunk.minted_at,
             repositories=self._repositories.list_all(include_retired=True),
             forges=self._forge_records.list_all(include_retired=True),
+            branches=branches(self._targets.effective(TargetChunk(chunk.chunk_id, chunk.project_id))),
         )
         if isinstance(resolved, VisitRefusal):
             self._router.refuse(

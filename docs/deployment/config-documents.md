@@ -42,6 +42,7 @@ projects:
     sources: [blizzard]
     repositories: [blizzard]
     landing_order: [blizzard]
+    repository_branches: { blizzard: rust-rewrite }
 urgencies:
   - slug: urgent
     name: Urgent
@@ -129,9 +130,14 @@ record left, among the records of that kind the apply leaves — those stored an
 project has left is refused `422`, naming that project: name it by its current slug. A `landing_order` lists the
 repositories the project ranks, first to land first, and leaves every other linked repository unranked
 ([projects.md](./projects.md#landing-order)); it applies after the entry's links, so one entry may link a repository and
-rank it, and an entry that leaves it out keeps the stored order. A scope or routine entry names its project with
-`project`, an id or a slug; an entry without one belongs to the tenant's only project, and is refused `project_required`
-when the tenant holds several.
+rank it, and an entry that leaves it out keeps the stored order. A `repository_branches` map, from a linked repository —
+by id or slug — to a branch name, is the project's whole set of link base branches
+([projects.md](./projects.md#a-links-base-branch)): each repository it names gets that branch, and every other
+repository the project links inherits its repository's `base_branch`. It applies after the entry's links, so one entry
+may link a repository and name its branch; naming a repository the project does not link, or a name that is no git
+branch name, is refused `422` on `repository_branches`, and an entry that leaves the map out keeps the stored branches.
+A scope or routine entry names its project with `project`, an id or a slug; an entry without one belongs to the tenant's
+only project, and is refused `project_required` when the tenant holds several.
 
 An urgency entry is keyed by its `slug` and carries the fields [urgencies.md](./urgencies.md#the-fields) owns, an `icon`
 as its `media_type` and its bytes in base64 `data`. One the tenant does not hold is created at the least urgent end, in
@@ -197,8 +203,9 @@ both its `slug` and `name`), and every active secret name, as a document that ap
 `yaml` (the default) or `json`. Retired records are left out, because applying one would enable it again. Each work
 source and repository is written with its `slug` and `name`, each repository with its `landing_policy` and any
 `park_timeout_hours`, and each project's `color`, `sources` and `repositories` as slugs. A project that ranks a
-repository also gets its `landing_order`; one that ranks nothing gets none. The built-in `hub` work source is never
-exported.
+repository also gets its `landing_order`; one that ranks nothing gets none. A project with a link that names its own
+base branch gets its `repository_branches`; one whose links all inherit gets none. The built-in `hub` work source is
+never exported.
 
 An export is a version-2 document, from the CLI and from `GET /api/config/export` alike; `--version 1`, or `?version=1`,
 is refused `config_version_retired`. `forges` follows `projects`, references use forge slugs, and even an unreferenced

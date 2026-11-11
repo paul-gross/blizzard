@@ -68,12 +68,13 @@ projects and their links takes `fleet:view`.
 | `blizzard hub project unlink <project> --repository <repository>`                                        | `POST /api/projects/{project}/repository-links/{repository}/retire` |
 | `blizzard hub project order <project> <repository>…`                                                     | `PUT /api/projects/{project}/landing-order`                         |
 | `blizzard hub project position <project> <repository> (--after <repository> \| --first \| --unranked)`   | `POST /api/projects/{project}/landing-order/position`               |
+| `blizzard hub project base <project> <repository> (--branch <name> \| --inherit) [--if-match N]`         | `PATCH /api/projects/{project}/repository-links/{repository}`       |
 
 `create` names the project after its slug unless `--name` is given. A slug that is another project's current slug
 answers `409`; a malformed slug, or a blank or padded name, answers `422` naming the field. A project cannot be retired.
-On the board the same lives under Admin → Projects. A configuration document may declare projects and their links too
-([config-documents.md](./config-documents.md)), and every change to a project or a link is recorded in the change log
-([config-changes.md](./config-changes.md)).
+On the board the same lives under Admin → Projects, a link's base branch included. A configuration document may declare
+projects and their links too ([config-documents.md](./config-documents.md)), and every change to a project or a link is
+recorded in the change log ([config-changes.md](./config-changes.md)).
 
 ## Links
 
@@ -127,6 +128,36 @@ Unlinking a repository takes it out of the order; linking it again restores its 
 On the board, Admin → Projects shows a project's repositories in two sections, the ranked order and "Unranked". A user
 with `config:edit` drags a repository to reorder it, and each drop writes one position; a move within "Unranked" writes
 nothing.
+
+### A link's base branch
+
+A repository link may name its own base branch: the branch the project's chunks start from and land into in that
+repository. A link that names none inherits the repository's `base_branch`
+([repositories.md](./repositories.md#fields)), and follows it when the repository's changes. So two projects may link
+one repository and work on different branches of it, while the forge, token, landing policy and identity stay the
+repository's.
+
+```bash
+blizzard hub project base blizzard blizzard --branch rust-rewrite
+blizzard hub project base blizzard blizzard --inherit
+```
+
+`--branch` names the link's branch, and `--inherit` clears it, so the link inherits again; give exactly one. Setting the
+branch the link already has writes nothing. The name must be a valid git branch name — no whitespace or control
+characters, none of `~ ^ : ? * [ \`, no `..` or `@{`, no leading `-`, no leading, trailing or doubled `/`, no trailing
+`.`, no component starting with `.` or ending in `.lock`, and neither `@` nor `HEAD` alone — or the edit is refused
+`422` naming `base_branch`. Whether the branch exists on the forge is not checked when you set it. Each edit moves the
+link's revision and records a change of `base_branch` ([config-changes.md](./config-changes.md)); a stale `--if-match`
+is refused `409`. `get` shows each repository's effective branch, marked `inherited` or `override`, and
+`GET /api/projects/{project}/repository-links` returns each link's `base_branch`, `null` when it inherits, and its
+`effective_base_branch`. The `PATCH` takes `{"base_branch": …}`: a name sets it, `null` clears it, and a body without it
+changes nothing. Unlinking a repository keeps the link's branch, and linking it again restores it.
+
+On the board, Admin → Projects shows each linked repository's effective branch, marked `inherited` or `override`. A user
+with `config:edit` opens its Branch dialog to name the link's branch, or Inherit to clear it.
+
+An edit reaches the chunks that have not yet captured the repository's branch; a chunk captures it at its claim and
+keeps it through every lease, retry and restart ([repositories.md](./repositories.md#how-delivery-uses-a-record)).
 
 ## A call that names no project
 

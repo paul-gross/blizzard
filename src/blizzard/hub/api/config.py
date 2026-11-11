@@ -451,6 +451,7 @@ def _project_declaration(entry: ProjectDocument) -> ProjectDeclaration:
         sources=tuple(entry.sources) if "sources" in stated else None,
         repositories=tuple(entry.repositories) if "repositories" in stated else None,
         landing_order=tuple(entry.landing_order) if entry.landing_order is not None else None,
+        repository_branches=dict(entry.repository_branches) if entry.repository_branches is not None else None,
     )
 
 
@@ -634,6 +635,9 @@ def export_config(
                     repository_slugs[link.repository_id] for link in repository_links.get(project.project_id, [])
                 ),
                 landing_order=_landing_order(repository_links.get(project.project_id, []), repository_slugs),
+                repository_branches=_repository_branches(
+                    repository_links.get(project.project_id, []), repository_slugs
+                ),
             )
             for project in projects
         ],
@@ -699,6 +703,16 @@ def _landing_order(links: list[RepositoryLink], slugs: Mapping[RepositoryId, str
         key=lambda link: landing_sort_key(link.position, slugs[link.repository_id]),
     )
     return [slugs[link.repository_id] for link in ranked] or None
+
+
+def _repository_branches(links: list[RepositoryLink], slugs: Mapping[RepositoryId, str]) -> dict[str, str] | None:
+    """Each repository slug ``links`` name their own base branch for, mapped to that branch; ``None`` when every link
+    inherits."""
+    return {
+        slugs[link.repository_id]: link.base_branch
+        for link in sorted(links, key=lambda link: slugs[link.repository_id])
+        if link.base_branch is not None
+    } or None
 
 
 def _spacing(spacing: Spacing) -> str:

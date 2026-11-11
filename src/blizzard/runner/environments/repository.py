@@ -13,6 +13,7 @@ from posixpath import normpath
 from typing import Protocol
 
 from blizzard.foundation.roles import domain_model
+from blizzard.runner.environments.provider import WorktreeTarget
 
 __all__ = [
     "BindingCompletion",
@@ -230,6 +231,11 @@ class IReadEnvironmentRepository(Protocol):
         none — the input every binding's slot count is derived from."""
         ...
 
+    def held_targets(self, chunk_id: str) -> tuple[WorktreeTarget, ...]:
+        """The repository targets the chunk's newest held binding was prepared at, ordered by repository slug —
+        empty when it holds none, or was bound before targets were recorded."""
+        ...
+
 
 class IWriteEnvironmentRepository(IReadEnvironmentRepository, Protocol):
     """Read-write environment-binding store."""
@@ -243,9 +249,11 @@ class IWriteEnvironmentRepository(IReadEnvironmentRepository, Protocol):
         bound_at: datetime,
         workspace_id: str | None = None,
         project_id: str | None = None,
+        targets: Sequence[WorktreeTarget] = (),
     ) -> None:
         """Persist a chunk→env binding fact (written with the route claim), naming its workspace
-        and its chunk's project where known."""
+        and its chunk's project where known, with the repository ``targets`` its environment was prepared at, in
+        one transaction."""
         ...
 
     def complete_bindings(self, completions: Sequence[BindingCompletion]) -> None:

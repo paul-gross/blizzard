@@ -863,7 +863,9 @@ def test_an_archive_carries_the_prompt_of_the_workspace_its_runner_is_bound_to_t
                 workspace_id="workspace-local", prompt="the standing prompt", updated_at=T0
             )
         )
-        conn.execute(sa.delete(reflect(there).tables["env_bindings"]).where(sa.column("runner_id") == MOVING_ID))
+        shapes = reflect(there)
+        for table in ("binding_targets", "env_bindings"):
+            conn.execute(sa.delete(shapes.tables[table]).where(sa.column("runner_id") == MOVING_ID))
     there.dispose()
 
     assert _ingest(fake_init_hub, hosts, "--workspace-id", _NEW_WORKSPACE).exit_code == 0

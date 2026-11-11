@@ -64,6 +64,7 @@ from blizzard.hub.domain.graph.model import (
 )
 from blizzard.hub.domain.projects.links import IReadProjectLinks
 from blizzard.hub.domain.projects.model import IReadProjectRepository
+from blizzard.hub.domain.projects.targets import ChunkTargets, TargetChunk, branches
 from blizzard.hub.work_sources.source import IWorkSourceRegistry
 
 _HUB_RUNNER_ID = "hub"
@@ -274,6 +275,7 @@ class HubNodeRouter:
         repositories: IReadRepositoryRecordRepository,
         forge_records: IReadForgeRepository,
         links: IReadProjectLinks,
+        targets: ChunkTargets,
         projects: IReadProjectRepository,
         work_sources: IWorkSourceRegistry,
         movement: IWriteChunkMovementRepository,
@@ -291,6 +293,7 @@ class HubNodeRouter:
         self._repositories = repositories
         self._forge_records = forge_records
         self._links = links
+        self._targets = targets
         self._projects = projects
         self._work_sources = work_sources
         self._movement = movement
@@ -766,6 +769,7 @@ class HubNodeRouter:
             self._forge_records.list_all(include_retired=True),
             minted_at=chunk.minted_at,
             linked=project.linked,
+            branches=branches(self._targets.effective(TargetChunk(chunk.chunk_id, chunk.project_id))),
             project=project.slug,
         )
         envelope = BounceEnvelope.of(

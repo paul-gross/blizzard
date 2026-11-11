@@ -684,8 +684,8 @@ def claim_route(
 ) -> object:
     """Claim a chunk; 403 if the runner is unregistered, retired, refused on version, or paused at the hub, 409 if
     already claimed, already terminal ({done, stopped}), not ready, standing on an unmet prerequisite, of a project
-    the runner does not serve, or incompatible with the runner's stored capabilities, else the first node
-    envelope."""
+    the runner does not serve, prepared at repository targets that are not the chunk's, or incompatible with the
+    runner's stored capabilities, else the first node envelope."""
     runner_id = fleet.caller_id()
     instance = request.url.path
     chunk = services.chunks.record.get(claim.chunk_id)
@@ -702,6 +702,11 @@ def claim_route(
             runner_id=runner_id,
             workspace_id=claim.workspace_id,
             environment_ids=claim.environment_ids,
+            repository_targets=(
+                {target.repository_id: target.base_branch for target in claim.repository_targets}
+                if claim.repository_targets is not None
+                else None
+            ),
         )
     except RunnerRetired as exc:
         return problem_response(problems.claim_runner_retired_problem(exc, chunk_id=claim.chunk_id, instance=instance))

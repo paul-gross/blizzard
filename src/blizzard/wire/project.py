@@ -90,9 +90,10 @@ class SourceLinksView(WireModel):
 
 
 class RepositoryLinkView(BaseModel):
-    """A project's link to a repository, by the repository's ``repository_id``, with its current ``slug`` and ``name``.
-    ``linked`` is false once the link is retired (unlinked). ``position`` is the link's place in the project's landing
-    order, lower landing first — ``null`` when unranked."""
+    """A project's link to a repository, with its current ``slug`` and ``name``; ``linked`` is false once unlinked.
+    ``position`` is its landing-order place, lower first, ``null`` unranked. ``base_branch`` is the link's own branch,
+    ``null`` when it inherits; ``effective_base_branch`` is the one the project's chunks start from and land into —
+    its own, else the repository's ``base_branch``."""
 
     project_id: str
     repository_id: str
@@ -101,6 +102,18 @@ class RepositoryLinkView(BaseModel):
     linked: bool
     revision: int
     position: float | None
+    base_branch: str | None
+    effective_base_branch: str
+
+
+class RepositoryLinkPatchRequest(BaseModel):
+    """A sparse edit of a project's link to a repository: an absent field is unchanged. ``base_branch`` names the
+    link's own integration branch — a valid git branch name, never checked against the forge — and an explicit
+    ``null`` clears it, so the link inherits the repository's ``base_branch`` again."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    base_branch: str | None = None
 
 
 class RepositoryLinksView(WireModel):

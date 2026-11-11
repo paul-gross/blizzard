@@ -39,6 +39,15 @@
   overflow-wrap: anywhere;
   min-width: 0;
 }
+.branch {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--text);
+  font-size: var(--fs-sm);
+  overflow-wrap: anywhere;
+  min-width: 0;
+}
 .right {
   display: flex;
   align-items: center;

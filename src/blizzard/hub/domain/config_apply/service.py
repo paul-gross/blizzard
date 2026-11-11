@@ -295,7 +295,11 @@ class ConfigApplication:
         named = {entry.slug for entry in entries.repositories} | {
             reference
             for entry in entries.projects
-            for reference in (*(entry.repositories or ()), *(entry.landing_order or ()))
+            for reference in (
+                *(entry.repositories or ()),
+                *(entry.landing_order or ()),
+                *(entry.repository_branches or {}),
+            )
         }
         former: dict[str, ConfiguredRepository] = {}
         for value in sorted(named - stored.keys()):
@@ -378,7 +382,9 @@ class ConfigApplication:
                 )
             if entry.landing_order is not None:
                 ordering.append(held)
-            if entry.repositories is None and entry.landing_order is not None:
+            if entry.repositories is None and (
+                entry.landing_order is not None or entry.repository_branches is not None
+            ):
                 repository_projects.append(held)
             if entry.repositories is not None:
                 repository_projects.append(held)

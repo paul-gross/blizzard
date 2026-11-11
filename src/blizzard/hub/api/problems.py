@@ -688,6 +688,9 @@ def claim_incompatible_problem(
         reason = ClaimDenialReason.BINDING
         shown = project_name if project_name is not None else exc.project_id
         detail = f"runner is not admitted to the chunk's project {shown} through the claimed workspace"
+    elif exc.reason is ClaimDenialReason.TARGETS:
+        reason = ClaimDenialReason.TARGETS
+        detail = "runner prepared its environments at repository targets that are not the chunk's"
     else:
         reason = ClaimDenialReason.CAPABILITY
         detail = "runner capabilities no longer satisfy the chunk's reachable lineage"

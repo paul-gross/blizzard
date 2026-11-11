@@ -1,5 +1,6 @@
 """``ProjectStore`` and ``ProjectLinkStore`` over a migrated store, driven through ``ProjectAuthoring`` — slugs and
-former slugs, the compare-and-set, link facts and the change row each write commits (component tier)."""
+former slugs, the compare-and-set, link facts, a repository link's own base branch, and the change row each write
+commits (component tier)."""
 
 from __future__ import annotations
 
@@ -29,7 +30,12 @@ from blizzard.hub.store.internal.former_slugs import SlugTables
 from blizzard.hub.store.internal.project_link_store import ProjectLinkStore
 from blizzard.hub.store.internal.project_position_store import ProjectPositionStore
 from blizzard.hub.store.internal.project_store import ProjectStore
-from blizzard.hub.store.schema import config_changes, project_former_slugs, project_source_link_facts
+from blizzard.hub.store.schema import (
+    config_changes,
+    project_former_slugs,
+    project_repository_link_facts,
+    project_source_link_facts,
+)
 from blizzard.hub.store.scoped import ScopedConnections
 from blizzard.hub.tenancy import TenantId
 from tests.support.scaffolding import (
@@ -334,6 +340,63 @@ def test_an_unlink_from_a_moved_revision_is_refused(world: _World) -> None:
             from_revision=1,
             change=world.changes(RecordKind.PROJECT_REPOSITORY_LINK, repository.repository_id)[-1],
         )
+
+
+def _repository_facts(world: _World) -> list[bool]:
+    facts = project_repository_link_facts
+    with world.engine.connect() as conn:
+        return list(conn.execute(world.conns().select(facts, facts.c.linked).order_by(facts.c.id)).scalars())
+
+
+def test_a_link_base_branch_reads_back_on_every_read_and_appends_no_standing_fact(world: _World) -> None:
+    repository = world.repository("winter")
+    project = world.default
+    assert project is not None
+    link = world.authoring().link_repository(project, repository, OP)
+
+    edited = world.authoring().set_base_branch(link, "rust-rewrite", OP, if_match=1)
+
+    assert (edited.base_branch, edited.revision) == ("rust-rewrite", 2)
+    pair = (project.project_id, repository.repository_id)
+    assert world.links().repository_link(*pair) == edited
+    assert world.links().repositories_of(project.project_id) == [edited]
+    assert world.links().repository_links_for([pair]) == {pair: edited}
+    assert world.links().repositories_of_projects([project.project_id]) == {project.project_id: [edited]}
+    assert _repository_facts(world) == [True]
+    [created, change] = world.changes(RecordKind.PROJECT_REPOSITORY_LINK, repository.repository_id)
+    assert created.op is ChangeOp.CREATE
+    assert (change.op, change.revision, change.project_id) == (ChangeOp.EDIT, 2, project.project_id)
+
+
+def test_a_link_base_branch_cleared_reads_null_and_survives_an_unlink_and_relink(world: _World) -> None:
+    repository = world.repository("winter")
+    project = world.default
+    assert project is not None
+    link = world.authoring().set_base_branch(world.authoring().link_repository(project, repository, OP), "dev", OP)
+
+    unlinked = world.authoring().unlink_repository(link, OP)
+    relinked = world.authoring().link_repository(project, repository, OP)
+    assert (unlinked.base_branch, relinked.base_branch, relinked.revision) == ("dev", "dev", 4)
+    cleared = world.authoring().set_base_branch(relinked, None, OP)
+
+    assert world.links().repository_link(project.project_id, repository.repository_id) == cleared
+    assert cleared.base_branch is None
+    assert _repository_facts(world) == [True, False, True]
+
+
+def test_a_link_base_branch_edit_from_a_moved_revision_is_refused_and_writes_nothing(world: _World) -> None:
+    repository = world.repository("winter")
+    project = world.default
+    assert project is not None
+    link = world.authoring().link_repository(project, repository, OP)
+    world.authoring().set_base_branch(link, "dev", OP)
+
+    with pytest.raises(ConfigRevisionConflict):
+        world.authoring().set_base_branch(link, "next", OP)
+
+    stored = world.links().repository_link(project.project_id, repository.repository_id)
+    assert stored is not None
+    assert (stored.base_branch, stored.revision) == ("dev", 2)
 
 
 def test_one_source_and_one_repository_may_be_linked_by_two_projects(world: _World) -> None:

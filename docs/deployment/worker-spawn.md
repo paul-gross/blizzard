@@ -181,7 +181,8 @@ disposable user and project scopes and compare `opencode debug config` against p
 
 A worker's first spawn on a session carries three ordered layers ahead of the node's own envelope prompt: a baked-in
 blizzard preamble, the operator's workspace prompt prose (`prompt`) when set, and a machine-local facts table (runner,
-chunk, and lease identity, plus held environments).
+chunk, and lease identity, plus held environments and each targeted repository's integration branch, as a
+`repository <owner/repo> base` row).
 
 The baked preamble frames the worker as operating inside the fleet, tables its worker-facing `blizzard runner` verbs,
 and states the turn-ending discipline of a headless session — nothing survives the turn that started it. Read the

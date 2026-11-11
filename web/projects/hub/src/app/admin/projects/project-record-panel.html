@@ -99,6 +99,7 @@
           (link)="link.emit('repository')"
           (unlink)="unlink.emit({ kind: 'repository', row: $event })"
           (reposition)="reposition.emit($event)"
+          (editBranch)="editBranch.emit($event)"
         />
       }
       @default {}

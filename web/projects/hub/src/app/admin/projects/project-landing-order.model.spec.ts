@@ -3,7 +3,7 @@ import type { RepositoryLinkView } from 'fleet';
 import { foldLandingPositions, pendingRepositionKeys, landingSections, type LandingSections, resolveLandingDrop } from './project-landing-order.model';
 import type { ProjectLinkRowVm } from './projects.model';
 
-const row = (key: string, name: string): ProjectLinkRowVm => ({ key, name, detail: '', builtIn: false, revision: 1 });
+const row = (key: string, name: string): ProjectLinkRowVm => ({ key, name, detail: '', builtIn: false, revision: 1, branch: null });
 const link = (repository_id: string, slug: string, position: number | null): RepositoryLinkView => ({
   project_id: 'proj_b',
   repository_id,
@@ -12,6 +12,8 @@ const link = (repository_id: string, slug: string, position: number | null): Rep
   linked: true,
   position,
   revision: 1,
+  base_branch: null,
+  effective_base_branch: 'main',
 });
 
 const A = row('repo_a', 'alpha');

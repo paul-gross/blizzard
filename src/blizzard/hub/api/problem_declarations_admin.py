@@ -28,6 +28,7 @@ _PROJECT_PATH_OPERATIONS: tuple[tuple[str, str], ...] = (
     ("POST", "/api/projects/{project}/source-links/{source}/retire"),
     ("GET", "/api/projects/{project}/repository-links"),
     ("PUT", "/api/projects/{project}/repository-links/{repository}"),
+    ("PATCH", "/api/projects/{project}/repository-links/{repository}"),
     ("POST", "/api/projects/{project}/repository-links/{repository}/retire"),
     ("PUT", "/api/projects/{project}/landing-order"),
     ("POST", "/api/projects/{project}/landing-order/position"),
@@ -80,6 +81,7 @@ _REVISION_CONFLICT_OPERATIONS = (
     ("PUT", "/api/projects/{project}/source-links/{source}"),
     ("POST", "/api/projects/{project}/source-links/{source}/retire"),
     ("PUT", "/api/projects/{project}/repository-links/{repository}"),
+    ("PATCH", "/api/projects/{project}/repository-links/{repository}"),
     ("POST", "/api/projects/{project}/repository-links/{repository}/retire"),
     ("PATCH", "/api/repositories/{repository}"),
     ("POST", "/api/repositories/{repository}/retire"),
@@ -97,6 +99,7 @@ _REVISION_CONFLICT_OPERATIONS = (
 _FIELD_INVALID_OPERATIONS = (
     ("POST", "/api/projects"),
     ("PATCH", "/api/projects/{project}"),
+    ("PATCH", "/api/projects/{project}/repository-links/{repository}"),
     ("PUT", "/api/projects/{project}/landing-order"),
     ("POST", "/api/projects/{project}/landing-order/position"),
     ("POST", "/api/forges"),
@@ -160,6 +163,12 @@ ADMIN_FAMILY_DECLARATIONS: tuple[ProblemDeclaration, ...] = (
         project_wire.ProjectLinkNotFoundProblem,
     ),
     ProblemDeclaration(
+        "PATCH",
+        "/api/projects/{project}/repository-links/{repository}",
+        404,
+        project_wire.ProjectLinkNotFoundProblem,
+    ),
+    ProblemDeclaration(
         "PUT", "/api/projects/{project}/source-links/{source}", 404, work_source_wire.WorkSourceNotFoundProblem
     ),
     ProblemDeclaration(
@@ -167,6 +176,9 @@ ADMIN_FAMILY_DECLARATIONS: tuple[ProblemDeclaration, ...] = (
     ),
     ProblemDeclaration(
         "PUT", "/api/projects/{project}/repository-links/{repository}", 404, repository_wire.RepositoryNotFoundProblem
+    ),
+    ProblemDeclaration(
+        "PATCH", "/api/projects/{project}/repository-links/{repository}", 404, repository_wire.RepositoryNotFoundProblem
     ),
     ProblemDeclaration(
         "POST",

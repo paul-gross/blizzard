@@ -44,6 +44,7 @@ from blizzard.hub.domain.operations.complete import is_completion_replay
 from blizzard.hub.domain.operations.edit import is_graph_editable
 from blizzard.hub.domain.operations.promote import is_promotable
 from blizzard.hub.domain.projects.model import Project, ProjectId
+from blizzard.hub.domain.projects.targets import TargetChunk, with_records
 from blizzard.hub.domain.runners.route import Route
 from blizzard.hub.domain.urgency.model import Urgency, UrgencyId
 from blizzard.hub.forge.web import web_links
@@ -55,6 +56,7 @@ from blizzard.wire.chunk import (
     ChunkDetail,
     ChunkEscalationView,
     ChunkNeighborhoodView,
+    ChunkRepositoryTargetView,
     ChunkSummary,
     ChunkUsageTotalView,
     ChunkUsageView,
@@ -291,6 +293,7 @@ class ChunkView:
             project_links=self.services.project_links,
             repository_records=self.services.repository_records,
             forge_records=self.services.forge_records,
+            targets=self.services.chunk_targets,
         )
         commit_links = self.services.commit_links.for_chunks([self.chunk])
         return DeliveryRead.of(
@@ -496,6 +499,7 @@ class ChunkView:
                 for question in questions
             ],
             **self._delivery_fields(self._delivery()),
+            repository_targets=self._repository_targets(),
             cost=self.usage_total(),
             usage=self._usage_history(),
             pending=self._pending(),
@@ -511,6 +515,21 @@ class ChunkView:
             ],
             **project,
         )
+
+    def _repository_targets(self) -> list[ChunkRepositoryTargetView]:
+        """The chunk's effective targets (:func:`with_records`): each captured one, else its live preview."""
+        targets = self.services.chunk_targets.effective(TargetChunk(self.chunk.chunk_id, self.chunk.project_id))
+        records = self.services.repository_records.get_many(sorted(targets)) if targets else {}
+        return [
+            ChunkRepositoryTargetView(
+                repository_id=target.repository_id,
+                repository_slug=record.slug,
+                base_branch=target.base_branch,
+                inherited=target.inherited,
+                captured_at=iso_utc(target.captured_at) if target.captured_at is not None else None,
+            )
+            for target, record in with_records(targets, records)
+        ]
 
     @staticmethod
     def _route(route: Route | None, runner_names: Mapping[str, str]) -> RouteView | None:

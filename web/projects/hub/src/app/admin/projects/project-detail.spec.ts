@@ -3,7 +3,7 @@ import { TestBed } from '@angular/core/testing';
 import { provideRouter, Router } from '@angular/router';
 import { RouterTestingHarness } from '@angular/router/testing';
 import { QueryClient, provideTanStackQuery } from '@tanstack/angular-query-experimental';
-import type { MeResponse, ProjectView, RunnerRegistryView, SourceLinkView } from 'fleet';
+import type { MeResponse, ProjectView, RepositoryLinkView, RunnerRegistryView, SourceLinkView } from 'fleet';
 import type { InAppLink } from 'fleet/shell';
 import {
   chunkCountsView,
@@ -11,6 +11,7 @@ import {
   configChangeView,
   OPERATOR_ME_RESPONSE,
   type RequestClientStub,
+  repositoryLinkView,
   repositorySummary,
   runnerRegistryView,
   settle,
@@ -389,5 +390,121 @@ describe('ProjectDetail', () => {
     await pump(harness.fixture);
     expect(text(el, 'admin-projects-sources-error')).toContain('stale revision');
     expect(unlink('gh').disabled).toBe(true);
+  });
+
+  describe("a repository link's branch", () => {
+    const CORE_LINK = repositoryLinkView({
+      project_id: 'proj_b',
+      repository_id: 'repo_c',
+      slug: 'core',
+      name: 'Core',
+      linked: true,
+      revision: 2,
+      position: null,
+      base_branch: null,
+      effective_base_branch: 'main',
+    });
+
+    /** The links read follows each PATCH, so a saved branch renders on the refetch. */
+    function linkRoutes(): Routes {
+      let link: RepositoryLinkView = CORE_LINK;
+      return {
+        'GET /api/projects/{project}/repository-links': () => ({ repository_links: [link] }),
+        'PATCH /api/projects/{project}/repository-links/{repository}': (request) => {
+          const branch = (request.body as { base_branch: string | null }).base_branch;
+          link = {
+            ...link,
+            base_branch: branch,
+            effective_base_branch: branch ?? 'main',
+            revision: link.revision + 1,
+          };
+          return link;
+        },
+      };
+    }
+
+    async function openBranchDialog(harness: RouterTestingHarness, el: HTMLElement) {
+      await click(harness, el, 'admin-projects-tab-repositories');
+      await click(harness, el, 'admin-projects-repositories-edit-branch-core');
+    }
+
+    function type(value: string) {
+      const input = document.querySelector<HTMLInputElement>('[data-testid="admin-projects-branch-input"]')!;
+      input.value = value;
+      input.dispatchEvent(new Event('input'));
+    }
+
+    it('shows the effective branch, marked inherited, and saves an override that renders on the refresh', async () => {
+      const { harness, el } = await open('/admin/projects/proj_b', [], linkRoutes());
+      await click(harness, el, 'admin-projects-tab-repositories');
+      expect(text(el, 'admin-projects-repositories-branch-core')).toContain('main');
+      expect(text(el, 'admin-projects-repositories-branch-core')).toContain('inherited');
+      expect(text(el, 'admin-projects-repositories-row-core')).toContain('Core · acme/core');
+
+      await click(harness, el, 'admin-projects-repositories-edit-branch-core');
+      expect(document.querySelector('[data-testid="admin-projects-branch-inherit"]')).toBeNull();
+      type('rust-rewrite');
+      await settle(harness.fixture);
+      document.querySelector<HTMLElement>('[data-testid="admin-projects-branch-submit"]')!.click();
+      await settle(harness.fixture);
+
+      const patch = stub.forRoute('/api/projects/proj_b/repository-links/repo_c', 'PATCH');
+      expect(patch).toHaveLength(1);
+      expect(patch[0].body).toEqual({ base_branch: 'rust-rewrite' });
+      expect(patch[0].headers['if-match']).toBe('2');
+      expect(document.querySelector('[data-testid="admin-projects-branch-dialog"]')).toBeNull();
+      expect(text(el, 'admin-projects-repositories-branch-core')).toContain('rust-rewrite');
+      expect(text(el, 'admin-projects-repositories-branch-core')).toContain('override');
+    });
+
+    it('clears an override with Inherit, so the row inherits the repository branch again', async () => {
+      const { harness, el } = await open('/admin/projects/proj_b', [], linkRoutes());
+      await openBranchDialog(harness, el);
+      type('rust-rewrite');
+      await settle(harness.fixture);
+      document.querySelector<HTMLElement>('[data-testid="admin-projects-branch-submit"]')!.click();
+      await settle(harness.fixture);
+
+      await click(harness, el, 'admin-projects-repositories-edit-branch-core');
+      expect(document.querySelector<HTMLInputElement>('[data-testid="admin-projects-branch-input"]')!.value).toBe(
+        'rust-rewrite',
+      );
+      document.querySelector<HTMLElement>('[data-testid="admin-projects-branch-inherit"]')!.click();
+      await settle(harness.fixture);
+
+      const patch = stub.forRoute('/api/projects/proj_b/repository-links/repo_c', 'PATCH');
+      expect(patch.map((call) => call.body)).toEqual([{ base_branch: 'rust-rewrite' }, { base_branch: null }]);
+      expect(patch[1].headers['if-match']).toBe('3');
+      expect(text(el, 'admin-projects-repositories-branch-core')).toContain('main');
+      expect(text(el, 'admin-projects-repositories-branch-core')).toContain('inherited');
+    });
+
+    it("shows the hub's refusal of a branch name in the dialog", async () => {
+      const refusal = stubError(422, {
+        detail: [{ loc: ['body', 'base_branch'], msg: 'is not a valid git branch name', type: 'value_error' }],
+      });
+      const { harness, el } = await open('/admin/projects/proj_b', [], {
+        ...linkRoutes(),
+        'PATCH /api/projects/{project}/repository-links/{repository}': () => refusal,
+      });
+      await openBranchDialog(harness, el);
+      type('bad..name');
+      await settle(harness.fixture);
+      document.querySelector<HTMLElement>('[data-testid="admin-projects-branch-submit"]')!.click();
+      await settle(harness.fixture);
+      expect(document.querySelector('[data-testid="admin-projects-branch-submit-error"]')?.textContent).toContain(
+        'not a valid git branch name',
+      );
+    });
+
+    it('shows a viewer without config:edit the branch but no edit control', async () => {
+      const { harness, el } = await open('/admin/projects/proj_b', [], {
+        ...linkRoutes(),
+        'GET /api/me': () => OPERATOR_ME_RESPONSE,
+      });
+      await click(harness, el, 'admin-projects-tab-repositories');
+      expect(text(el, 'admin-projects-repositories-branch-core')).toContain('inherited');
+      expect(el.querySelector('[data-testid="admin-projects-repositories-edit-branch-core"]')).toBeNull();
+    });
   });
 });

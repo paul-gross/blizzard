@@ -3469,6 +3469,14 @@
             "title": "Questions",
             "type": "array"
           },
+          "repository_targets": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/ChunkRepositoryTargetView"
+            },
+            "title": "Repository Targets",
+            "type": "array"
+          },
           "requeues": {
             "default": [],
             "items": {
@@ -3590,6 +3598,7 @@
           "open_prs",
           "closed_prs",
           "landed_repos",
+          "repository_targets",
           "cost",
           "usage",
           "pending",
@@ -4713,6 +4722,47 @@
         "title": "ChunkPlacementRequest",
         "type": "object"
       },
+      "ChunkRepositoryTargetView": {
+        "description": "One repository's branch for a chunk \u2014 the base the chunk starts from and lands into. ``inherited`` when it is\nthe repository record's own branch rather than the project link's override. ``captured_at`` is when the chunk\ncaptured it, at its claim or its first delivery; ``None`` while it is a live preview that a link edit still\nmoves.",
+        "properties": {
+          "base_branch": {
+            "title": "Base Branch",
+            "type": "string"
+          },
+          "captured_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Captured At"
+          },
+          "inherited": {
+            "title": "Inherited",
+            "type": "boolean"
+          },
+          "repository_id": {
+            "title": "Repository Id",
+            "type": "string"
+          },
+          "repository_slug": {
+            "title": "Repository Slug",
+            "type": "string"
+          }
+        },
+        "required": [
+          "repository_id",
+          "repository_slug",
+          "base_branch",
+          "inherited",
+          "captured_at"
+        ],
+        "title": "ChunkRepositoryTargetView",
+        "type": "object"
+      },
       "ChunkRequeueRequest": {
         "description": "The optional body of ``POST /api/chunks/{id}/requeues`` \u2014 a ``note`` binding every later session on\nthe chunk. No body, or a blank note, is no note.",
         "properties": {
@@ -5493,11 +5543,12 @@
         "type": "object"
       },
       "ClaimDenialReason": {
-        "description": "The closed set of reasons an incompatible-claim ``409`` names: ``capability``, the runner's stored\ncapabilities no longer run every statically reachable runner-owned lineage of the chunk; ``project``, the runner\ndoes not serve the chunk's project; ``binding``, the runner serves the project but not through the claimed\nworkspace now \u2014 the binding is flagged, absent, or for another workspace, or the subscription is unrostered.",
+        "description": "The closed set of reasons an incompatible-claim ``409`` names: ``capability``, the runner can no longer run\nthe chunk's reachable runner-owned lineages; ``project``, it does not serve the chunk's project; ``binding``, it\nserves the project but not through the claimed workspace now; ``targets``, its environments stand at repository\ntargets that are not the chunk's.",
         "enum": [
           "capability",
           "project",
-          "binding"
+          "binding",
+          "targets"
         ],
         "title": "ClaimDenialReason",
         "type": "string"
@@ -5662,6 +5713,25 @@
           "instance"
         ],
         "title": "ClaimRunnerVersionRefusedProblem",
+        "type": "object"
+      },
+      "ClaimedRepositoryTarget": {
+        "description": "One repository's branch a claiming runner prepared its environments at.",
+        "properties": {
+          "base_branch": {
+            "title": "Base Branch",
+            "type": "string"
+          },
+          "repository_id": {
+            "title": "Repository Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "repository_id",
+          "base_branch"
+        ],
+        "title": "ClaimedRepositoryTarget",
         "type": "object"
       },
       "CliPkceRequiredProblem": {
@@ -18158,7 +18228,7 @@
       },
       "ProjectDocument": {
         "additionalProperties": false,
-        "description": "A project as a document entry, named by its slug. A ``name``, ``description`` or ``color`` the entry omits is\nleft as stored; a project the document creates needs a ``name`` and, with no ``color``, takes the tenant's\nleast-used palette color; a ``color`` is a palette name or a ``#rrggbb``. A ``sources`` or ``repositories`` list\nthe entry states is the project's whole set of links of that kind \u2014 a record it leaves out is unlinked; a list it\nomits is left as stored. A source or repository is named by its id or its slug, a slug it left included. A slug a\nproject left is refused: name that project by its current slug. A ``landing_order`` lists the linked repositories\nthe project ranks, first to land first, and leaves every other linked one unranked; it is applied after the\nentry's links, so an entry may link a repository and rank it together, and one it omits leaves the order as it\nstands. Export writes it only for a project that ranks a repository.",
+        "description": "A project as a document entry, named by its slug; a field it omits is left as stored, and a slug a project left\nis refused. ``sources``, ``repositories`` and ``repository_branches`` are each the project's whole set of that kind,\nkeyed by record id or slug; ``landing_order`` ranks linked repositories, first to land first. Both apply after the\nlinks, and export writes each only when set (``docs/deployment/config-documents.md``).",
         "properties": {
           "color": {
             "anyOf": [
@@ -18208,6 +18278,20 @@
             },
             "title": "Repositories",
             "type": "array"
+          },
+          "repository_branches": {
+            "anyOf": [
+              {
+                "additionalProperties": {
+                  "type": "string"
+                },
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Repository Branches"
           },
           "slug": {
             "title": "Slug",
@@ -19233,6 +19317,20 @@
             ],
             "title": "Project Slug"
           },
+          "repository_targets": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/RepositoryTarget"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Repository Targets"
+          },
           "urgency": {
             "anyOf": [
               {
@@ -19261,7 +19359,8 @@
           "project_id",
           "project_slug",
           "project_name",
-          "urgency"
+          "urgency",
+          "repository_targets"
         ],
         "title": "QueuePeekEntry",
         "type": "object"
@@ -19295,6 +19394,11 @@
               }
             ],
             "title": "Projects"
+          },
+          "repository_targets": {
+            "default": false,
+            "title": "Repository Targets",
+            "type": "boolean"
           }
         },
         "title": "QueuePeekRequest",
@@ -19922,9 +20026,43 @@
         "title": "RepositoryEntry",
         "type": "object"
       },
-      "RepositoryLinkView": {
-        "description": "A project's link to a repository, by the repository's ``repository_id``, with its current ``slug`` and ``name``.\n``linked`` is false once the link is retired (unlinked). ``position`` is the link's place in the project's landing\norder, lower landing first \u2014 ``null`` when unranked.",
+      "RepositoryLinkPatchRequest": {
+        "additionalProperties": false,
+        "description": "A sparse edit of a project's link to a repository: an absent field is unchanged. ``base_branch`` names the\nlink's own integration branch \u2014 a valid git branch name, never checked against the forge \u2014 and an explicit\n``null`` clears it, so the link inherits the repository's ``base_branch`` again.",
         "properties": {
+          "base_branch": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Base Branch"
+          }
+        },
+        "title": "RepositoryLinkPatchRequest",
+        "type": "object"
+      },
+      "RepositoryLinkView": {
+        "description": "A project's link to a repository, with its current ``slug`` and ``name``; ``linked`` is false once unlinked.\n``position`` is its landing-order place, lower first, ``null`` unranked. ``base_branch`` is the link's own branch,\n``null`` when it inherits; ``effective_base_branch`` is the one the project's chunks start from and land into \u2014\nits own, else the repository's ``base_branch``.",
+        "properties": {
+          "base_branch": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Base Branch"
+          },
+          "effective_base_branch": {
+            "title": "Effective Base Branch",
+            "type": "string"
+          },
           "linked": {
             "title": "Linked",
             "type": "boolean"
@@ -19968,7 +20106,9 @@
           "name",
           "linked",
           "revision",
-          "position"
+          "position",
+          "base_branch",
+          "effective_base_branch"
         ],
         "title": "RepositoryLinkView",
         "type": "object"
@@ -20292,6 +20432,45 @@
           "warnings"
         ],
         "title": "RepositorySummary",
+        "type": "object"
+      },
+      "RepositoryTarget": {
+        "description": "One repository a chunk's project links, with the branch the chunk starts from and lands into. A runner matches a\nworktree's origin against ``owner`` and ``repo``. ``inherited`` when the branch is the record's, not the link's.",
+        "properties": {
+          "base_branch": {
+            "title": "Base Branch",
+            "type": "string"
+          },
+          "inherited": {
+            "title": "Inherited",
+            "type": "boolean"
+          },
+          "owner": {
+            "title": "Owner",
+            "type": "string"
+          },
+          "repo": {
+            "title": "Repo",
+            "type": "string"
+          },
+          "repository_id": {
+            "title": "Repository Id",
+            "type": "string"
+          },
+          "repository_slug": {
+            "title": "Repository Slug",
+            "type": "string"
+          }
+        },
+        "required": [
+          "repository_id",
+          "repository_slug",
+          "owner",
+          "repo",
+          "base_branch",
+          "inherited"
+        ],
+        "title": "RepositoryTarget",
         "type": "object"
       },
       "RequeueView": {
@@ -20713,7 +20892,7 @@
         "type": "object"
       },
       "RouteClaim": {
-        "description": "A complete route fact posted by the claiming runner. The claimant is the runner its bearer\ntoken names; the body carries no runner id.",
+        "description": "A complete route fact posted by the claiming runner. The claimant is the runner its bearer\ntoken names; the body carries no runner id. ``repository_targets`` are the targets the runner prepared its\nenvironments at, ``None`` from a runner that predates them; the hub refuses a claim whose targets are no longer\nthe chunk's (``reason`` ``targets``).",
         "properties": {
           "chunk_id": {
             "title": "Chunk Id",
@@ -20725,6 +20904,20 @@
             },
             "title": "Environment Ids",
             "type": "array"
+          },
+          "repository_targets": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/ClaimedRepositoryTarget"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Repository Targets"
           },
           "workspace_id": {
             "title": "Workspace Id",
@@ -47413,7 +47606,7 @@
     },
     "/api/fleet/routes": {
       "post": {
-        "description": "Claim a chunk; 403 if the runner is unregistered, retired, refused on version, or paused at the hub, 409 if\nalready claimed, already terminal ({done, stopped}), not ready, standing on an unmet prerequisite, of a project\nthe runner does not serve, or incompatible with the runner's stored capabilities, else the first node\nenvelope.",
+        "description": "Claim a chunk; 403 if the runner is unregistered, retired, refused on version, or paused at the hub, 409 if\nalready claimed, already terminal ({done, stopped}), not ready, standing on an unmet prerequisite, of a project\nthe runner does not serve, prepared at repository targets that are not the chunk's, or incompatible with the\nrunner's stored capabilities, else the first node envelope.",
         "operationId": "claim_route_api_fleet_routes_post",
         "requestBody": {
           "content": {
@@ -54961,6 +55154,183 @@
       }
     },
     "/api/projects/{project}/repository-links/{repository}": {
+      "patch": {
+        "description": "Apply only the fields present: `base_branch` names the link's own integration branch, and an explicit `null`\nclears it so the link inherits the repository's `base_branch` again. A patch that changes nothing writes nothing;\nwhether the branch exists is not checked. 404 for an unknown project or a repository it never linked; 409 for a\nstale `If-Match` (naming the current revision); 422 on `base_branch` for a name that is no git branch name.",
+        "operationId": "patch_repository_link_api_projects__project__repository_links__repository__patch",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "project",
+            "required": true,
+            "schema": {
+              "title": "Project",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "repository",
+            "required": true,
+            "schema": {
+              "title": "Repository",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "if-match",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "If-Match"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-blizzard-door",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Blizzard-Door"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RepositoryLinkPatchRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RepositoryLinkView"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "400": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TenantCredentialMismatchProblem"
+                }
+              }
+            },
+            "description": "Problem"
+          },
+          "401": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AuthenticationRequiredProblem"
+                }
+              }
+            },
+            "description": "Problem"
+          },
+          "403": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PermissionRequiredProblem"
+                }
+              }
+            },
+            "description": "Problem"
+          },
+          "404": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/TenantNotFoundProblem"
+                    },
+                    {
+                      "$ref": "#/components/schemas/ProjectNotFoundProblem"
+                    },
+                    {
+                      "$ref": "#/components/schemas/ProjectLinkNotFoundProblem"
+                    },
+                    {
+                      "$ref": "#/components/schemas/RepositoryNotFoundProblem"
+                    }
+                  ]
+                }
+              }
+            },
+            "description": "Problem"
+          },
+          "409": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/TenantRequiredProblem"
+                    },
+                    {
+                      "$ref": "#/components/schemas/RevisionConflictProblem"
+                    }
+                  ]
+                }
+              }
+            },
+            "description": "Problem"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ConfigFieldInvalidProblem"
+                }
+              }
+            },
+            "description": "Validation Error"
+          },
+          "503": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HubStoreUnavailableProblem"
+                }
+              }
+            },
+            "description": "Problem"
+          }
+        },
+        "summary": "Patch Repository Link",
+        "tags": [
+          "projects"
+        ]
+      },
       "put": {
         "description": "Link the project to a stored repository, retired or not \u2014 a first link, or a relink of one it unlinked; a\nstanding link is left as it is. 404 for an unknown project or repository; 409 for a stale `If-Match` on a stored\nlink.",
         "operationId": "link_repository_api_projects__project__repository_links__repository__put",

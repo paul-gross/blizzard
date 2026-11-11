@@ -28,7 +28,11 @@ from blizzard.hub.domain.chunk.ports.exclusive import IChunkExclusiveWrites
 from blizzard.hub.domain.chunk.ports.facts import IReadChunkFactsRepository
 from blizzard.hub.domain.chunk.ports.record import IReadChunkRecordRepository
 from blizzard.hub.domain.config.forges import IReadForgeRepository
-from blizzard.hub.domain.config.repositories import ConfiguredRepository, IReadRepositoryRecordRepository
+from blizzard.hub.domain.config.repositories import (
+    ConfiguredRepository,
+    IReadRepositoryRecordRepository,
+    RepositoryId,
+)
 from blizzard.hub.domain.delivery.flows import (
     TURN_INTERRUPTED,
     TURN_SUPERSEDED,
@@ -50,6 +54,7 @@ from blizzard.hub.domain.graph.model import Graph, IReadManyGraphs, Node
 from blizzard.hub.domain.kernel.transactions import IHubTransactions, Transaction
 from blizzard.hub.domain.projects.links import IReadProjectLinks
 from blizzard.hub.domain.projects.model import IReadProjectRepository
+from blizzard.hub.domain.projects.targets import ChunkTargets, TargetChunk, branches
 from blizzard.hub.tenancy import TenantClosed
 
 _EVENT_TURN_INTERRUPTED: EventLogKind = "turn-interrupted"
@@ -118,6 +123,7 @@ class FlowLineReconciler:
         forge_records: IReadForgeRepository,
         projects: IReadProjectRepository,
         links: IReadProjectLinks,
+        targets: ChunkTargets,
         catalogue: HubActionCatalogue,
         refusals: IHubStepRefusals,
         exclusive: IChunkExclusiveWrites,
@@ -137,6 +143,7 @@ class FlowLineReconciler:
         self._forge_records = forge_records
         self._projects = projects
         self._links = links
+        self._targets = targets
         self._catalogue = catalogue
         self._clock = clock
         self._lines = lines
@@ -340,15 +347,15 @@ class FlowLineReconciler:
             return None
 
     def submit(self, standing: _Standing, artifacts: Sequence[StoredArtifact]) -> Submission | None:
-        """Submit the visit to the flows it holds — at the next generation when its own turn found its resources
-        moved — or refuse it, routing its failure choice, when it cannot name them. The submission is decided from the
-        chunk's facts, record, and the visit's newest submission re-read under the chunk's lock in the unit that writes
-        it (``bzh:write-reestablishes-read``): a chunk no longer standing at the visit, or a visit whose generation is
-        taken, writes nothing."""
+        """Submit the visit to the flows it holds, or refuse it when it cannot name them — decided on the chunk's
+        state re-read under its lock in the writing unit (``bzh:write-reestablishes-read``), where a chunk no longer at
+        the visit or a taken generation writes nothing. The unit captures each resolved repository's branch the chunk
+        has not captured; one captured first with another branch submits nothing, and the next pass resolves on it."""
         chunk, graph, node, epoch = standing.chunk, standing.graph, standing.node, standing.epoch
         # A visit with no generation left to submit is skipped before it is resolved; the unit decides again.
         if self._generation(chunk.chunk_id, node.node_id, epoch) is None:
             return None
+        effective = self._targets.effective(TargetChunk(chunk.chunk_id, chunk.project_id))
         resolved = resolve_visit(
             artifacts,
             action=node.action,
@@ -357,6 +364,7 @@ class FlowLineReconciler:
             minted_at=chunk.minted_at,
             repositories=self._repositories.list_all(include_retired=True),
             forges=self._forge_records.list_all(include_retired=True),
+            branches=branches(effective),
         )
         if isinstance(resolved, VisitRefusal):
             self._refusals.refuse(
@@ -384,6 +392,14 @@ class FlowLineReconciler:
                 return None
             generation = self._generation(chunk.chunk_id, node.node_id, epoch, transaction=locked)
             if generation is None:
+                return None
+            used = [
+                target
+                for record in sorted(set(resolved.resolution.records))
+                if (target := effective.get(RepositoryId(record))) is not None
+            ]
+            captured = self._targets.capture(chunk.chunk_id, used, at=self._clock.now(), transaction=locked)
+            if any(captured[target.repository_id].base_branch != target.base_branch for target in used):
                 return None
             return self._flows.submit(
                 chunk.chunk_id,

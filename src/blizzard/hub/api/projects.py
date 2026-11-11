@@ -42,6 +42,7 @@ from blizzard.wire.project import (
     ProjectPatchRequest,
     ProjectsListView,
     ProjectView,
+    RepositoryLinkPatchRequest,
     RepositoryLinksView,
     RepositoryLinkView,
     SourceLinksView,
@@ -98,6 +99,8 @@ def _repository_view(link: RepositoryLink, repository: ConfiguredRepository) -> 
         linked=link.linked,
         revision=link.revision,
         position=link.position,
+        base_branch=link.base_branch,
+        effective_base_branch=link.effective_base_branch(repository),
     )
 
 
@@ -288,6 +291,35 @@ def link_repository(
     except ConfigRevisionConflict as exc:
         raise _conflict(exc) from exc
     return _repository_view(link, repository)
+
+
+@router.patch("/projects/{project}/repository-links/{repository}", response_model=RepositoryLinkView)
+def patch_repository_link(
+    identity: Editor,
+    project: PathProject,
+    repository: PathRepository,
+    request: RepositoryLinkPatchRequest,
+    door: RequestDoor,
+    services: Services,
+    if_match: IfMatch = None,
+) -> RepositoryLinkView:
+    """Apply only the fields present: `base_branch` names the link's own integration branch, and an explicit `null`
+    clears it so the link inherits the repository's `base_branch` again. A patch that changes nothing writes nothing;
+    whether the branch exists is not checked. 404 for an unknown project or a repository it never linked; 409 for a
+    stale `If-Match` (naming the current revision); 422 on `base_branch` for a name that is no git branch name."""
+    link = services.project_links.repository_link(project.project_id, repository.repository_id)
+    if link is None:
+        raise _not_found(f"project {project.slug} has no link to repository {repository.slug!r}")
+    base_branch = request.base_branch if "base_branch" in request.model_fields_set else UNSET
+    try:
+        edited = services.project_authoring.set_base_branch(
+            link, base_branch, change_context(identity, door), if_match=if_match
+        )
+    except ConfigFieldError as exc:
+        raise _unprocessable(exc.field, exc.message) from exc
+    except ConfigRevisionConflict as exc:
+        raise _conflict(exc) from exc
+    return _repository_view(edited, repository)
 
 
 @router.post("/projects/{project}/repository-links/{repository}/retire", response_model=RepositoryLinkView)

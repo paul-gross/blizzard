@@ -10,6 +10,7 @@ from __future__ import annotations
 import json
 import os
 import shlex
+from collections.abc import Sequence
 from concurrent.futures import Executor
 from dataclasses import replace
 from datetime import UTC, datetime, timedelta
@@ -31,7 +32,7 @@ from blizzard.foundation.queue_policy import QueueMatchPolicy
 from blizzard.foundation.store.engine import create_engine_from_url
 from blizzard.foundation.tokens import TokenHash
 from blizzard.foundation.trace_ids import step_traceparent
-from blizzard.runner.environments.provider import AcquiredEnvironment
+from blizzard.runner.environments.provider import AcquiredEnvironment, WorktreeTarget
 from blizzard.runner.environments.worktree import IWorktreeGit
 from blizzard.runner.harness.adapter import HarnessSpawnError, HarnessVersionChangedError, WorkerHandle
 from blizzard.runner.harness.capability_snapshot import HarnessCapability, HarnessVersionCache
@@ -1550,8 +1551,10 @@ def test_fill_preparation_failure_skips_without_claiming(tmp_path: Path):
 class _HeldIgnoringProvider(FakeProvider):
     """A provider that breaks its ``held_ids`` contract — hands out its whole pool every time."""
 
-    def acquire(self, chunk_id: str, count: int, held_ids: list[str]) -> list[AcquiredEnvironment]:
-        return super().acquire(chunk_id, count, [])
+    def acquire(
+        self, chunk_id: str, count: int, held_ids: list[str], targets: Sequence[WorktreeTarget] = ()
+    ) -> list[AcquiredEnvironment]:
+        return super().acquire(chunk_id, count, [], targets)
 
 
 def test_fill_refuses_a_held_environment_and_the_tick_still_advances(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):

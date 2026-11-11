@@ -39,7 +39,7 @@ export function sourceLinkView(overrides: Partial<SourceLinkView> = {}): SourceL
   };
 }
 
-/** A project's link to a repository — linked, unranked in the landing order, at its first revision. */
+/** A project's link to a repository — linked, unranked in the landing order, inheriting its branch, at its first revision. */
 export function repositoryLinkView(overrides: Partial<RepositoryLinkView> = {}): RepositoryLinkView {
   return {
     project_id: 'proj_b',
@@ -49,6 +49,8 @@ export function repositoryLinkView(overrides: Partial<RepositoryLinkView> = {}):
     linked: true,
     position: null,
     revision: 1,
+    base_branch: null,
+    effective_base_branch: 'main',
     ...overrides,
   };
 }

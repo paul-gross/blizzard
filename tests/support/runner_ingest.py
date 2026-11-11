@@ -106,6 +106,10 @@ def seed_runner(
         },
     )
     with engine.begin() as conn:
+        # A binding's targets name the runner's own binding, whatever key the store issued it.
+        bindings, targets = shapes.tables["env_bindings"], shapes.tables["binding_targets"]
+        own = sa.select(bindings.c.id).where(bindings.c.runner_id == runner_id).scalar_subquery()
+        conn.execute(sa.update(targets).where(targets.c.runner_id == runner_id).values(binding_id=own))
         for lane in (schema.OUTBOX_LANE_OUTBOUND, schema.OUTBOX_LANE_TRANSCRIPT):
             conn.execute(
                 sa.insert(shapes.tables["outbox_counters"]).values(runner_id=runner_id, lane=lane, last_seq=last_seq)

@@ -70,12 +70,25 @@
 <ng-template #rowBody let-row>
   <span class="name">{{ row.name }}</span>
   <span class="detail">{{ row.detail }}</span>
+  @if (row.branch; as branch) {
+    <span class="branch" [attr.data-testid]="testid() + '-branch-' + row.name">
+      <span class="branch-name">{{ branch.name }}</span>
+      <fleet-kit-badge [tone]="branchMarkerTone(branch.marker)" variant="soft">
+        {{ branch.marker }}
+      </fleet-kit-badge>
+    </span>
+  }
   <span class="right">
     @if (row.builtIn) {
       <fleet-kit-badge [tone]="builtInTone" variant="soft">built-in</fleet-kit-badge>
     } @else {
       @if (row.revision !== null) {
         <span class="rev">r{{ row.revision }}</span>
+      }
+      @if (canEdit() && row.branch) {
+        <fleet-kit-button [testid]="testid() + '-edit-branch-' + row.name" (click)="editBranch.emit(row)">
+          Branch
+        </fleet-kit-button>
       }
       @if (canEdit()) {
         <fleet-kit-button

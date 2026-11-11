@@ -2104,6 +2104,10 @@ export type ChunkDetail = {
      */
     questions: Array<QuestionView>;
     /**
+     * Repository Targets
+     */
+    repository_targets: Array<ChunkRepositoryTargetView>;
+    /**
      * Requeues
      */
     requeues: Array<RequeueView>;
@@ -2845,6 +2849,37 @@ export type ChunkPlacementRequest = {
 };
 
 /**
+ * ChunkRepositoryTargetView
+ *
+ * One repository's branch for a chunk — the base the chunk starts from and lands into. ``inherited`` when it is
+ * the repository record's own branch rather than the project link's override. ``captured_at`` is when the chunk
+ * captured it, at its claim or its first delivery; ``None`` while it is a live preview that a link edit still
+ * moves.
+ */
+export type ChunkRepositoryTargetView = {
+    /**
+     * Base Branch
+     */
+    base_branch: string;
+    /**
+     * Captured At
+     */
+    captured_at: string | null;
+    /**
+     * Inherited
+     */
+    inherited: boolean;
+    /**
+     * Repository Id
+     */
+    repository_id: string;
+    /**
+     * Repository Slug
+     */
+    repository_slug: string;
+};
+
+/**
  * ChunkRequeueRequest
  *
  * The optional body of ``POST /api/chunks/{id}/requeues`` — a ``note`` binding every later session on
@@ -3261,24 +3296,25 @@ export type ChunksPageView = {
 /**
  * ClaimDenialReason
  *
- * The closed set of reasons an incompatible-claim ``409`` names: ``capability``, the runner's stored
- * capabilities no longer run every statically reachable runner-owned lineage of the chunk; ``project``, the runner
- * does not serve the chunk's project; ``binding``, the runner serves the project but not through the claimed
- * workspace now — the binding is flagged, absent, or for another workspace, or the subscription is unrostered.
+ * The closed set of reasons an incompatible-claim ``409`` names: ``capability``, the runner can no longer run
+ * the chunk's reachable runner-owned lineages; ``project``, it does not serve the chunk's project; ``binding``, it
+ * serves the project but not through the claimed workspace now; ``targets``, its environments stand at repository
+ * targets that are not the chunk's.
  */
 export const ClaimDenialReason = {
     CAPABILITY: 'capability',
     PROJECT: 'project',
-    BINDING: 'binding'
+    BINDING: 'binding',
+    TARGETS: 'targets'
 } as const;
 
 /**
  * ClaimDenialReason
  *
- * The closed set of reasons an incompatible-claim ``409`` names: ``capability``, the runner's stored
- * capabilities no longer run every statically reachable runner-owned lineage of the chunk; ``project``, the runner
- * does not serve the chunk's project; ``binding``, the runner serves the project but not through the claimed
- * workspace now — the binding is flagged, absent, or for another workspace, or the subscription is unrostered.
+ * The closed set of reasons an incompatible-claim ``409`` names: ``capability``, the runner can no longer run
+ * the chunk's reachable runner-owned lineages; ``project``, it does not serve the chunk's project; ``binding``, it
+ * serves the project but not through the claimed workspace now; ``targets``, its environments stand at repository
+ * targets that are not the chunk's.
  */
 export type ClaimDenialReason = typeof ClaimDenialReason[keyof typeof ClaimDenialReason];
 
@@ -3417,6 +3453,22 @@ export type ClaimRunnerVersionRefusedProblem = {
      */
     type: 'urn:blizzard:problem:claim-runner-version-refused';
     [key: string]: unknown;
+};
+
+/**
+ * ClaimedRepositoryTarget
+ *
+ * One repository's branch a claiming runner prepared its environments at.
+ */
+export type ClaimedRepositoryTarget = {
+    /**
+     * Base Branch
+     */
+    base_branch: string;
+    /**
+     * Repository Id
+     */
+    repository_id: string;
 };
 
 /**
@@ -11490,15 +11542,10 @@ export type ProjectCreateRequest = {
 /**
  * ProjectDocument
  *
- * A project as a document entry, named by its slug. A ``name``, ``description`` or ``color`` the entry omits is
- * left as stored; a project the document creates needs a ``name`` and, with no ``color``, takes the tenant's
- * least-used palette color; a ``color`` is a palette name or a ``#rrggbb``. A ``sources`` or ``repositories`` list
- * the entry states is the project's whole set of links of that kind — a record it leaves out is unlinked; a list it
- * omits is left as stored. A source or repository is named by its id or its slug, a slug it left included. A slug a
- * project left is refused: name that project by its current slug. A ``landing_order`` lists the linked repositories
- * the project ranks, first to land first, and leaves every other linked one unranked; it is applied after the
- * entry's links, so an entry may link a repository and rank it together, and one it omits leaves the order as it
- * stands. Export writes it only for a project that ranks a repository.
+ * A project as a document entry, named by its slug; a field it omits is left as stored, and a slug a project left
+ * is refused. ``sources``, ``repositories`` and ``repository_branches`` are each the project's whole set of that kind,
+ * keyed by record id or slug; ``landing_order`` ranks linked repositories, first to land first. Both apply after the
+ * links, and export writes each only when set (``docs/deployment/config-documents.md``).
  */
 export type ProjectDocument = {
     /**
@@ -11521,6 +11568,12 @@ export type ProjectDocument = {
      * Repositories
      */
     repositories?: Array<string>;
+    /**
+     * Repository Branches
+     */
+    repository_branches?: {
+        [key: string]: string;
+    } | null;
     /**
      * Slug
      */
@@ -12163,6 +12216,10 @@ export type QueuePeekEntry = {
      * Project Slug
      */
     project_slug: string | null;
+    /**
+     * Repository Targets
+     */
+    repository_targets: Array<RepositoryTarget> | null;
     urgency: UrgencyRef | null;
     /**
      * Work Refs
@@ -12191,6 +12248,10 @@ export type QueuePeekRequest = {
      * Projects
      */
     projects?: Array<string> | null;
+    /**
+     * Repository Targets
+     */
+    repository_targets?: boolean;
 };
 
 /**
@@ -12644,13 +12705,36 @@ export type RepositoryEntry = {
 };
 
 /**
+ * RepositoryLinkPatchRequest
+ *
+ * A sparse edit of a project's link to a repository: an absent field is unchanged. ``base_branch`` names the
+ * link's own integration branch — a valid git branch name, never checked against the forge — and an explicit
+ * ``null`` clears it, so the link inherits the repository's ``base_branch`` again.
+ */
+export type RepositoryLinkPatchRequest = {
+    /**
+     * Base Branch
+     */
+    base_branch?: string | null;
+};
+
+/**
  * RepositoryLinkView
  *
- * A project's link to a repository, by the repository's ``repository_id``, with its current ``slug`` and ``name``.
- * ``linked`` is false once the link is retired (unlinked). ``position`` is the link's place in the project's landing
- * order, lower landing first — ``null`` when unranked.
+ * A project's link to a repository, with its current ``slug`` and ``name``; ``linked`` is false once unlinked.
+ * ``position`` is its landing-order place, lower first, ``null`` unranked. ``base_branch`` is the link's own branch,
+ * ``null`` when it inherits; ``effective_base_branch`` is the one the project's chunks start from and land into —
+ * its own, else the repository's ``base_branch``.
  */
 export type RepositoryLinkView = {
+    /**
+     * Base Branch
+     */
+    base_branch: string | null;
+    /**
+     * Effective Base Branch
+     */
+    effective_base_branch: string;
     /**
      * Linked
      */
@@ -12877,6 +12961,39 @@ export type RepositorySummary = {
      * @deprecated
      */
     warnings: Array<OldFieldWarning>;
+};
+
+/**
+ * RepositoryTarget
+ *
+ * One repository a chunk's project links, with the branch the chunk starts from and lands into. A runner matches a
+ * worktree's origin against ``owner`` and ``repo``. ``inherited`` when the branch is the record's, not the link's.
+ */
+export type RepositoryTarget = {
+    /**
+     * Base Branch
+     */
+    base_branch: string;
+    /**
+     * Inherited
+     */
+    inherited: boolean;
+    /**
+     * Owner
+     */
+    owner: string;
+    /**
+     * Repo
+     */
+    repo: string;
+    /**
+     * Repository Id
+     */
+    repository_id: string;
+    /**
+     * Repository Slug
+     */
+    repository_slug: string;
 };
 
 /**
@@ -13152,7 +13269,9 @@ export type RotatePolicyView = {
  * RouteClaim
  *
  * A complete route fact posted by the claiming runner. The claimant is the runner its bearer
- * token names; the body carries no runner id.
+ * token names; the body carries no runner id. ``repository_targets`` are the targets the runner prepared its
+ * environments at, ``None`` from a runner that predates them; the hub refuses a claim whose targets are no longer
+ * the chunk's (``reason`` ``targets``).
  */
 export type RouteClaim = {
     /**
@@ -13163,6 +13282,10 @@ export type RouteClaim = {
      * Environment Ids
      */
     environment_ids: Array<string>;
+    /**
+     * Repository Targets
+     */
+    repository_targets?: Array<ClaimedRepositoryTarget> | null;
     /**
      * Workspace Id
      */
@@ -29830,6 +29953,74 @@ export type ListRepositoryLinksApiProjectsProjectRepositoryLinksGetResponses = {
 };
 
 export type ListRepositoryLinksApiProjectsProjectRepositoryLinksGetResponse = ListRepositoryLinksApiProjectsProjectRepositoryLinksGetResponses[keyof ListRepositoryLinksApiProjectsProjectRepositoryLinksGetResponses];
+
+export type PatchRepositoryLinkApiProjectsProjectRepositoryLinksRepositoryPatchData = {
+    body: RepositoryLinkPatchRequest;
+    headers?: {
+        /**
+         * If-Match
+         */
+        'if-match'?: number | null;
+        /**
+         * X-Blizzard-Door
+         */
+        'x-blizzard-door'?: string | null;
+    };
+    path: {
+        /**
+         * Project
+         */
+        project: string;
+        /**
+         * Repository
+         */
+        repository: string;
+    };
+    query?: never;
+    url: '/api/projects/{project}/repository-links/{repository}';
+};
+
+export type PatchRepositoryLinkApiProjectsProjectRepositoryLinksRepositoryPatchErrors = {
+    /**
+     * Problem
+     */
+    400: TenantCredentialMismatchProblem;
+    /**
+     * Problem
+     */
+    401: AuthenticationRequiredProblem;
+    /**
+     * Problem
+     */
+    403: PermissionRequiredProblem;
+    /**
+     * Problem
+     */
+    404: TenantNotFoundProblem | ProjectNotFoundProblem | ProjectLinkNotFoundProblem | RepositoryNotFoundProblem;
+    /**
+     * Problem
+     */
+    409: TenantRequiredProblem | RevisionConflictProblem;
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+    /**
+     * Problem
+     */
+    503: HubStoreUnavailableProblem;
+};
+
+export type PatchRepositoryLinkApiProjectsProjectRepositoryLinksRepositoryPatchError = PatchRepositoryLinkApiProjectsProjectRepositoryLinksRepositoryPatchErrors[keyof PatchRepositoryLinkApiProjectsProjectRepositoryLinksRepositoryPatchErrors];
+
+export type PatchRepositoryLinkApiProjectsProjectRepositoryLinksRepositoryPatchResponses = {
+    /**
+     * Successful Response
+     */
+    200: RepositoryLinkView;
+};
+
+export type PatchRepositoryLinkApiProjectsProjectRepositoryLinksRepositoryPatchResponse = PatchRepositoryLinkApiProjectsProjectRepositoryLinksRepositoryPatchResponses[keyof PatchRepositoryLinkApiProjectsProjectRepositoryLinksRepositoryPatchResponses];
 
 export type LinkRepositoryApiProjectsProjectRepositoryLinksRepositoryPutData = {
     body?: never;

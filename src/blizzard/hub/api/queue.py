@@ -54,6 +54,7 @@ from blizzard.hub.domain.operations.queue import (
     select_matched_entry,
 )
 from blizzard.hub.domain.projects.model import Project, ProjectId
+from blizzard.hub.domain.projects.targets import TargetChunk, names_override, with_records
 from blizzard.hub.domain.runners.registration import RunnerCapability
 from blizzard.hub.domain.urgency.model import Urgency, UrgencyId
 from blizzard.wire.chunk import WorkRefModel
@@ -74,6 +75,7 @@ from blizzard.wire.queue import (
     QueuePeekResponse,
     QueuePositionRequest,
     QueueReplaceRequest,
+    RepositoryTarget,
 )
 from blizzard.wire.runner import RunnerCapability as WireRunnerCapability
 
@@ -271,6 +273,7 @@ class MatchedPeek:
     entry: MatchedEntry | None
     project: Project | None
     urgencies: dict[UrgencyId, Urgency]
+    targets: list[RepositoryTarget]
 
     @classmethod
     def of(
@@ -281,8 +284,10 @@ class MatchedPeek:
         *,
         served: Collection[str],
     ) -> MatchedPeek:
-        chunks = services.queue.claim_ordered_ready(statuses=statuses)
+        ordered = services.queue.claim_ordered_ready(statuses=statuses)
+        positions = {chunk.chunk_id: position for position, chunk in enumerate(ordered)}
         policy = queue_match_policy(request.policy)
+        chunks = ordered if request.repository_targets else _without_overrides(services, ordered, served)
         served_chunks = [chunk for chunk in chunks if chunk.project_id in served]
         per_project = request.projects is not None
         if policy is not QueueMatchPolicy.HOLD:
@@ -307,11 +312,14 @@ class MatchedPeek:
             policy=policy,
             hold_per_project=per_project,
         )
-        project_id = entry.chunk.project_id if entry is not None else None
+        if entry is None:
+            return cls(None, None, {}, [])
+        chunk = entry.chunk
         return cls(
-            entry,
-            services.projects.get(project_id) if project_id is not None else None,
-            services.urgency_reading.by_id() if entry is not None else {},
+            MatchedEntry(chunk=chunk, position=positions[chunk.chunk_id]),
+            services.projects.get(chunk.project_id) if chunk.project_id is not None else None,
+            services.urgency_reading.by_id(),
+            _repository_targets(services, chunk),
         )
 
     @property
@@ -331,9 +339,38 @@ class MatchedPeek:
                     blocked=None,
                     **project_label_fields(chunk.project_id, self.project),
                     urgency=urgency_ref(chunk.urgency_id, self.urgencies),
+                    repository_targets=self.targets,
                 )
             ]
         )
+
+
+def _without_overrides(services: TenantServices, chunks: Sequence[Chunk], served: Collection[str]) -> list[Chunk]:
+    """``chunks`` less every served one whose targets include a project link's own branch — what a runner that does
+    not prepare at the peek's targets is never offered, since it would start that work on its workspace's branch.
+    The targets are read over every served chunk at once (``bzh:bulk-reconstitution``)."""
+    targets = services.chunk_targets.effective_for(
+        [TargetChunk(chunk.chunk_id, chunk.project_id) for chunk in chunks if chunk.project_id in served]
+    )
+    return [chunk for chunk in chunks if not names_override(targets.get(chunk.chunk_id, {}))]
+
+
+def _repository_targets(services: TenantServices, chunk: Chunk) -> list[RepositoryTarget]:
+    """The offered chunk's effective targets, each with the ``owner/repo`` a runner matches a worktree's origin
+    against (:func:`with_records`)."""
+    targets = services.chunk_targets.effective(TargetChunk(chunk.chunk_id, chunk.project_id))
+    records = services.repository_records.get_many(sorted(targets)) if targets else {}
+    return [
+        RepositoryTarget(
+            repository_id=target.repository_id,
+            repository_slug=record.slug,
+            owner=record.fields.owner,
+            repo=record.fields.repo,
+            base_branch=target.base_branch,
+            inherited=target.inherited,
+        )
+        for target, record in with_records(targets, records)
+    ]
 
 
 _PASS_REASONS = {PassedReason.BLOCKED: ClaimPassReason.BLOCKED, PassedReason.INELIGIBLE: ClaimPassReason.INELIGIBLE}

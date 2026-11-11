@@ -313,6 +313,7 @@ def list_chunks(
         project_links=services.project_links,
         repository_records=services.repository_records,
         forge_records=services.forge_records,
+        targets=services.chunk_targets,
     )
     commit_links = services.commit_links.for_chunks(page_chunks)
     # A pointer the page renders can be held live by a chunk outside it; the store narrows to live candidates.

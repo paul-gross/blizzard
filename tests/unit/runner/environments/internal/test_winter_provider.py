@@ -11,7 +11,13 @@ from pathlib import Path
 import pytest
 
 from blizzard.runner.environments.internal.winter_provider import WinterWorkspaceProvider
-from blizzard.runner.environments.provider import EnvironmentPreparationError, WorkspaceAcquisitionError
+from blizzard.runner.environments.provider import (
+    EnvironmentPreparationError,
+    TargetBranchMissingError,
+    TargetUnmatchedError,
+    WorkspaceAcquisitionError,
+    WorktreeTarget,
+)
 from tests.support.winter_provider_fakes import FakeGit, FakeWinter
 
 
@@ -229,3 +235,124 @@ def test_repos_is_empty_for_an_env_with_no_worktrees() -> None:
     provider = WinterWorkspaceProvider("/ws", env_pool=["e1"], winter=FakeWinter(), git=FakeGit())
 
     assert provider.repos("e1") == []
+
+
+def _target(repo: str, branch: str, *, inherited: bool = False) -> WorktreeTarget:
+    return WorktreeTarget(
+        repository_id=f"repo_{repo}",
+        repository_slug=repo,
+        owner="acme",
+        repo=repo,
+        base_branch=branch,
+        inherited=inherited,
+    )
+
+
+def _two_repo_env(tmp_path: Path, winter: FakeWinter) -> FakeGit:
+    """An ``e1`` holding worktrees of ``acme/api`` and ``acme/web``; the git fake answering their origins."""
+    winter.worktrees = [
+        {"kind": "worktree", "env": "e1", "repo": repo, "path": str(tmp_path / "e1" / repo)} for repo in ("api", "web")
+    ]
+    return FakeGit({str(tmp_path / "e1" / repo): f"git@github.com:acme/{repo}.git" for repo in ("api", "web")})
+
+
+def test_a_fresh_acquire_moves_only_the_targeted_worktree_onto_its_target(tmp_path: Path) -> None:
+    winter = FakeWinter()
+    git = _two_repo_env(tmp_path, winter)
+    provider = WinterWorkspaceProvider(str(tmp_path), env_pool=["e1"], base_branch="master", winter=winter, git=git)
+
+    provider.acquire("ch_1", 1, held_ids=[], targets=[_target("api", "rust-rewrite")])
+
+    assert winter.runs == [
+        ["ws", "pull", "--standalone"],
+        ["ws", "init", "e1"],
+        ["ws", "fetch", "e1"],  # a fresh env's origin refs are fetched before any worktree moves
+        ["ws", "reset", "e1/api", "origin/rust-rewrite", "--hard", "--force"],
+        ["provision", "e1"],
+    ]
+    assert git.cleans == [str(tmp_path / "e1")]
+
+
+def test_a_reused_acquire_resets_to_the_workspace_base_then_moves_each_target(tmp_path: Path) -> None:
+    (tmp_path / "e1").mkdir()
+    winter = FakeWinter()
+    git = _two_repo_env(tmp_path, winter)
+    provider = WinterWorkspaceProvider(str(tmp_path), env_pool=["e1"], base_branch="master", winter=winter, git=git)
+
+    provider.acquire("ch_1", 1, held_ids=[], targets=[_target("api", "rust-rewrite"), _target("web", "next")])
+
+    assert winter.runs == [
+        ["ws", "pull", "--standalone"],
+        ["ws", "fetch", "e1"],
+        ["ws", "checkout", "e1", "master", "--force"],
+        ["ws", "disconnect", "e1"],
+        ["ws", "init", "e1"],
+        ["ws", "reset", "e1/api", "origin/rust-rewrite", "--hard", "--force"],
+        ["ws", "reset", "e1/web", "origin/next", "--hard", "--force"],
+        ["provision", "e1"],
+    ]
+
+
+def test_an_env_a_targeted_chunk_released_returns_to_the_workspace_base_for_the_next(tmp_path: Path) -> None:
+    (tmp_path / "e1").mkdir()
+    winter = FakeWinter()
+    git = _two_repo_env(tmp_path, winter)
+    provider = WinterWorkspaceProvider(str(tmp_path), env_pool=["e1"], base_branch="master", winter=winter, git=git)
+    provider.acquire("ch_1", 1, held_ids=[], targets=[_target("api", "rust-rewrite")])
+    provider.release("e1")
+    winter.runs.clear()
+
+    provider.acquire("ch_2", 1, held_ids=[], targets=[_target("api", "master", inherited=True)])
+
+    assert ["ws", "checkout", "e1", "master", "--force"] in winter.runs
+    assert [run for run in winter.runs if run[:2] == ["ws", "reset"]] == [
+        ["ws", "reset", "e1/api", "origin/master", "--hard", "--force"]
+    ]
+
+
+def test_an_inherited_target_naming_no_worktree_of_the_env_moves_nothing(tmp_path: Path) -> None:
+    winter = FakeWinter()
+    git = _two_repo_env(tmp_path, winter)
+    provider = WinterWorkspaceProvider(str(tmp_path), env_pool=["e1"], winter=winter, git=git)
+
+    provider.acquire("ch_1", 1, held_ids=[], targets=[_target("other", "master", inherited=True)])
+
+    assert winter.runs == [["ws", "pull", "--standalone"], ["ws", "init", "e1"], ["provision", "e1"]]
+
+
+def test_an_override_target_naming_no_worktree_of_the_env_fails_the_acquire(tmp_path: Path) -> None:
+    winter = FakeWinter()
+    git = _two_repo_env(tmp_path, winter)
+    provider = WinterWorkspaceProvider(str(tmp_path), env_pool=["e1"], winter=winter, git=git)
+
+    with pytest.raises(TargetUnmatchedError) as excinfo:
+        provider.acquire("ch_1", 1, held_ids=[], targets=[_target("api", "next"), _target("other", "rust-rewrite")])
+
+    assert "acme/other" in str(excinfo.value)
+    assert "'rust-rewrite'" in str(excinfo.value)
+    assert excinfo.value.environment_id == "e1"
+    assert [run for run in winter.runs if run[:2] == ["ws", "reset"]] == [], "never starts from the workspace's base"
+    assert ["provision", "e1"] not in winter.runs
+
+
+def test_a_target_branch_absent_on_origin_fails_the_acquire_naming_repository_and_branch(tmp_path: Path) -> None:
+    winter = FakeWinter()
+    _two_repo_env(tmp_path, winter)
+    git = FakeGit(
+        {str(tmp_path / "e1" / repo): f"git@github.com:acme/{repo}.git" for repo in ("api", "web")},
+        missing=frozenset({"gone"}),
+    )
+    provider = WinterWorkspaceProvider(str(tmp_path), env_pool=["e1"], winter=winter, git=git)
+
+    with pytest.raises(TargetBranchMissingError) as excinfo:
+        provider.acquire("ch_1", 1, held_ids=[], targets=[_target("api", "gone")])
+
+    assert "acme/api" in str(excinfo.value)
+    assert "'gone'" in str(excinfo.value)
+    assert excinfo.value.environment_id == "e1"
+    assert [run for run in winter.runs if run[:2] == ["ws", "reset"]] == [], "never falls back to another branch"
+    assert ["provision", "e1"] not in winter.runs
+
+
+def test_the_winter_provider_honors_targets(tmp_path: Path) -> None:
+    assert _provider(str(tmp_path), ["e1"]).honors_targets()

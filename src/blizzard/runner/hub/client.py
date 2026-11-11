@@ -20,6 +20,7 @@ from blizzard.foundation.roles import domain_model
 from blizzard.foundation.runner_tokens import RunnerTokenRefusalReason
 from blizzard.foundation.runner_version import VersionRefusalReason
 from blizzard.foundation.unrecognized import Unrecognized
+from blizzard.runner.environments.provider import WorktreeTarget
 from blizzard.runner.harness.capability_snapshot import HarnessCapability
 from blizzard.runner.hub.served_projects import ServedProject
 from blizzard.runner.node_steps.chunk_state import ChunkState
@@ -264,6 +265,8 @@ class QueueEntry:
     blocked: QueueBlock | None = None
     #: The chunk's project, as the hub names it; ``None`` from a hub that does not say.
     project_id: str | None = None
+    #: The chunk's repository targets, as the hub names them; ``None`` from a hub that does not say.
+    repository_targets: tuple[WorktreeTarget, ...] | None = None
 
 
 @domain_model
@@ -324,12 +327,15 @@ class HubQuestion:
 @domain_model
 @dataclass(frozen=True)
 class ClaimRequest:
-    """A complete route the claiming runner asks the hub for: the chunk, its workspace, and the
-    environments it already bound. The hub knows the claimant from its token."""
+    """A complete route the claiming runner asks the hub for: the chunk, its workspace, the
+    environments it already bound, and the repository targets it prepared them at. The hub knows the claimant from
+    its token."""
 
     chunk_id: str
     workspace_id: str
     environment_ids: list[str]
+    #: ``None`` when it prepared at none — the hub then admits the claim only while no target is a link's own branch.
+    repository_targets: tuple[WorktreeTarget, ...] | None = None
 
 
 @domain_model
@@ -609,10 +615,13 @@ class IHubClient(IChunkStatusReader, ITranscriptPusher, IArtifactChecker, Protoc
         *,
         policy: QueueMatchPolicy,
         projects: Sequence[str] | None = None,
+        repository_targets: bool = False,
     ) -> list[QueueEntry]:
         """``POST /api/fleet/queue/peek`` — at most one queue entry matching ``capabilities``
         under ``policy``, narrowed to the ``projects`` it names, whose per-project hold
-        they also scope, when any are named; a refusal raises ``HubClientError``."""
+        they also scope, when any are named; a refusal raises ``HubClientError``. ``repository_targets`` says this
+        runner prepares at the targets an entry names — without it the hub offers no chunk a project link's own
+        branch targets."""
         ...
 
     def claim_route(self, claim: ClaimRequest) -> RouteClaimOutcome:

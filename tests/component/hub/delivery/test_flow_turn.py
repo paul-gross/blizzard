@@ -528,11 +528,46 @@ def test_a_chunk_stopped_mid_turn_whose_end_fails_closes_stopped_by_the_sweep(
 # --- ground moved under a submission ------------------------------------------------------------------------------
 
 
-def test_a_base_branch_edited_while_waiting_supersedes_the_submission_and_resubmits_on_the_new_branch(
-    world: _World,
-) -> None:
+def _forget_targets(world: _World, chunk_id: str) -> None:
+    """Drop the chunk's captured targets, as for a chunk claimed and submitted before targets were captured."""
+    with world.hub.engine.begin() as conn:
+        conn.execute(
+            hub_scoped(s.chunk_repository_targets.delete().where(s.chunk_repository_targets.c.chunk_id == chunk_id))
+        )
+
+
+def _captured(world: _World, chunk_id: str) -> list[tuple[str, bool]]:
+    with world.hub.engine.connect() as conn:
+        rows = conn.execute(
+            hub_scoped(
+                select(s.chunk_repository_targets.c.base_branch, s.chunk_repository_targets.c.inherited).where(
+                    s.chunk_repository_targets.c.chunk_id == chunk_id
+                )
+            )
+        ).all()
+    return [(row.base_branch, row.inherited) for row in rows]
+
+
+def test_a_base_branch_edited_while_waiting_moves_neither_the_submission_nor_its_branch(world: _World) -> None:
     chunk_id = world.at_step("test.hooked")
     world.tick()  # pending: it waits in the line of `main`
+    record = world.hub.services.repository_records.list_all(include_retired=False)[0]
+    world.hub.services.config_authoring.edit_repository(record, RepositoryEdit(base_branch="trunk"), OP)
+    world.hub.clock.advance(timedelta(seconds=31))
+
+    world.tick()
+
+    assert world.outcomes(chunk_id) == ["pending", "pending"]
+    submission = world.submission(chunk_id)
+    assert submission.generation == 0
+    assert [f.branch for f in submission.flows] == ["main"]
+    assert _captured(world, chunk_id) == [("main", True)]
+
+
+def test_a_chunk_with_no_captured_target_captures_the_live_branch_when_it_resubmits(world: _World) -> None:
+    chunk_id = world.at_step("test.hooked")
+    world.tick()  # pending: it waits in the line of `main`
+    _forget_targets(world, chunk_id)
     record = world.hub.services.repository_records.list_all(include_retired=False)[0]
     world.hub.services.config_authoring.edit_repository(record, RepositoryEdit(base_branch="trunk"), OP)
     world.hub.clock.advance(timedelta(seconds=31))
@@ -543,12 +578,11 @@ def test_a_base_branch_edited_while_waiting_supersedes_the_submission_and_resubm
     world.tick()
 
     assert world.hooked.passes == passes + 1  # no pass on the old submission; one on the new
-    graph = world.hub.services.graphs.get(world.detail(chunk_id)["graph_id"])
-    assert graph is not None
     old = world.hub.services.flows.submission_for_visit(chunk_id, node_id=world.submission(chunk_id).node_id, epoch=1)
     assert old is not None and old.generation == 1
     assert [f.branch for f in old.flows] == ["trunk"]
     assert world.outcomes(chunk_id) == ["pending", "superseded", "pending"]
+    assert _captured(world, chunk_id) == [("trunk", True)]
 
 
 def test_a_resubmitted_visit_keeps_the_moment_its_first_turn_started(world: _World) -> None:
@@ -557,6 +591,7 @@ def test_a_resubmitted_visit_keeps_the_moment_its_first_turn_started(world: _Wor
     chunk_id = world.at_step("test.hooked")
     first_started = world.hub.clock.now()
     world.tick()
+    _forget_targets(world, chunk_id)
     record = world.hub.services.repository_records.list_all(include_retired=False)[0]
     world.hub.services.config_authoring.edit_repository(record, RepositoryEdit(base_branch="trunk"), OP)
     world.hub.clock.advance(timedelta(seconds=31))

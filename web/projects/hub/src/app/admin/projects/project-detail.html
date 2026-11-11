@@ -37,6 +37,7 @@
       (link)="onLinkOpen($event)"
       (unlink)="onUnlink($event)"
       (reposition)="onReposition($event)"
+      (editBranch)="onBranchOpen($event)"
     />
 
     @if (editOpen()) {
@@ -90,7 +91,7 @@
         [heading]="'Link a repository to ' + p.name"
         fieldLabel="Repository"
         [choices]="repositoryChoices()"
-        note="Linking lets this project's chunks land here. Projects that share a repository land on its one branch, taking turns."
+        note="Linking lets this project's chunks land here, on the repository's branch until the link names its own. Projects landing on the same branch of a repository take turns."
         noneText="This project links every repository in the tenant. Add one under Repositories."
         [submitting]="linkMutation.isPending()"
         [submitError]="linkError()"
@@ -98,6 +99,19 @@
         (closed)="linkOpen.set(null)"
         (submitted)="onLink('repository', $event)"
       />
+    }
+    @if (branchRow(); as row) {
+      @if (row.branch; as branch) {
+        <app-project-branch-dialog
+          [heading]="'Branch of ' + row.name + ' in ' + p.name"
+          [branch]="branch"
+          [submitting]="branchMutation.isPending()"
+          [submitError]="branchError()"
+          testidPrefix="admin-projects-branch"
+          (closed)="onBranchClose()"
+          (submitted)="onBranch($event)"
+        />
+      }
     }
   }
 </fleet-kit-async-state>

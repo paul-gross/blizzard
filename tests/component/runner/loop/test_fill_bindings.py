@@ -9,11 +9,12 @@ sqlite) runner store with fakes at the seams."""
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from datetime import UTC, datetime
 from pathlib import Path
 
 from blizzard.foundation.clock import FixedClock
-from blizzard.runner.environments.provider import AcquiredEnvironment, WorkspaceAcquisitionError
+from blizzard.runner.environments.provider import AcquiredEnvironment, WorkspaceAcquisitionError, WorktreeTarget
 from blizzard.runner.environments.workspaces import IWorkspaces, WorkspaceEntry, WorkspaceRegistry
 from blizzard.runner.harness.adapter import WorkerHandle
 from blizzard.runner.harness.claude_code.section import CLAUDE_CODE_HARNESS_ID
@@ -137,7 +138,9 @@ def _peeked_projects(hub: FakeHub) -> list[list[str] | None]:
 class _StaleHintProvider(FakeProvider):
     """Lists a pool the pool-held read shows free, yet refuses every acquisition — the hint run ahead of the truth."""
 
-    def acquire(self, chunk_id: str, count: int, held_ids: list[str]) -> list[AcquiredEnvironment]:
+    def acquire(
+        self, chunk_id: str, count: int, held_ids: list[str], targets: Sequence[WorktreeTarget] = ()
+    ) -> list[AcquiredEnvironment]:
         raise WorkspaceAcquisitionError("no environment free")
 
 

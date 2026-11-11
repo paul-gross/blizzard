@@ -210,6 +210,7 @@ export {
   listRepositoryLinksApiProjectsProjectRepositoryLinksGet,
   listSourceLinksApiProjectsProjectSourceLinksGet,
   patchProjectApiProjectsProjectPatch,
+  patchRepositoryLinkApiProjectsProjectRepositoryLinksRepositoryPatch,
   positionRepositoryApiProjectsProjectLandingOrderPositionPost,
   unlinkRepositoryApiProjectsProjectRepositoryLinksRepositoryRetirePost,
   unlinkSourceApiProjectsProjectSourceLinksSourceRetirePost,

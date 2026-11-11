@@ -1,10 +1,11 @@
 # Flows
 
-A **flow** is one repository branch that work lands on. Every hub step that lands work — `deliver` on the default graph
-— is a **submission** to the flow of each branch it holds, and the hub takes it as a **turn** on those flows, one at a
-time per flow. A flow's **line** is its open submissions in the order they arrived. Landings on different branches run
-side by side; chunks landing on one branch take turns in arrival order. The board, the CLI, and the API below read the
-same line the hub drives.
+A **flow** is one repository branch that work lands on — the chunk's effective branch for the repository
+([repositories.md](./repositories.md#how-delivery-uses-a-record)). Every hub step that lands work — `deliver` on the
+default graph — is a **submission** to the flow of each branch it holds, and the hub takes it as a **turn** on those
+flows, one at a time per flow. A flow's **line** is its open submissions in the order they arrived. Landings on
+different branches run side by side; chunks landing on one branch take turns in arrival order, whichever projects they
+belong to. The board, the CLI, and the API below read the same line the hub drives.
 
 ## Places in the line
 

@@ -47,6 +47,12 @@ class SubprocessEnvGit:
         """
         return self.capture(repo_workdir, "remote", "get-url", "origin").strip()
 
+    def has_remote_branch(self, repo_workdir: Path, branch: str) -> bool:
+        """Whether the worktree at ``repo_workdir`` holds ``origin/<branch>`` — read from the refs already fetched."""
+        ref = f"refs/remotes/origin/{branch}"
+        # A pattern also matches the refs below it, so only an exact line is the branch itself.
+        return ref in self.capture(repo_workdir, "for-each-ref", "--format=%(refname)", ref).splitlines()
+
     def _git(self, cwd: Path, *args: str) -> None:
         self.capture(cwd, *args)
 
