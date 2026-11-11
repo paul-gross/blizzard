@@ -1,5 +1,8 @@
 import { inject } from '@angular/core';
-import { QueryClient, injectMutation } from '@tanstack/angular-query-experimental';
+import {
+  QueryClient,
+  injectMutation,
+} from '@tanstack/angular-query-experimental';
 
 import {
   createRepositoryApiRepositoriesPost,

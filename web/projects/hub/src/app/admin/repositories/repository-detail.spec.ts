@@ -2,7 +2,10 @@ import { provideZonelessChangeDetection } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { provideRouter, Router } from '@angular/router';
 import { RouterTestingHarness } from '@angular/router/testing';
-import { QueryClient, provideTanStackQuery } from '@tanstack/angular-query-experimental';
+import {
+  QueryClient,
+  provideTanStackQuery,
+} from '@tanstack/angular-query-experimental';
 import { type MeResponse, type RepositorySummary } from 'fleet';
 import {
   configChangesPage,
@@ -47,11 +50,22 @@ const HISTORY = configChangesPage({
       record_kind: 'repository',
       recorded_at: '2026-10-02T00:00:00Z',
       revision: 2,
-      diff: [{ field: 'slug', old: 'blizzard', new: 'core', old_label: null, new_label: null }],
+      diff: [
+        {
+          field: 'slug',
+          old: 'blizzard',
+          new: 'core',
+          old_label: null,
+          new_label: null,
+        },
+      ],
     }),
   ],
 });
-const EDITOR: MeResponse = { ...OPERATOR_ME_RESPONSE, permissions: [...OPERATOR_ME_RESPONSE.permissions, 'config:edit'] };
+const EDITOR: MeResponse = {
+  ...OPERATOR_ME_RESPONSE,
+  permissions: [...OPERATOR_ME_RESPONSE.permissions, 'config:edit'],
+};
 
 describe('RepositoryDetail', () => {
   let stub: RequestClientStub;
@@ -66,14 +80,22 @@ describe('RepositoryDetail', () => {
     stub = stubHubClient({
       'GET /api/me': () => EDITOR,
       'GET /api/repositories/{repository}': () => record,
-      'PATCH /api/repositories/{repository}': () => ({ ...record, slug: 'core-2', revision: 4 }),
+      'PATCH /api/repositories/{repository}': () => ({
+        ...record,
+        slug: 'core-2',
+        revision: 4,
+      }),
       'GET /api/config/changes': () => HISTORY,
     });
     TestBed.configureTestingModule({
       providers: [
         provideZonelessChangeDetection(),
-        provideTanStackQuery(new QueryClient({ defaultOptions: { queries: { retry: false } } })),
-        provideRouter([{ path: 'admin/repositories/:key', component: RepositoryDetail }]),
+        provideTanStackQuery(
+          new QueryClient({ defaultOptions: { queries: { retry: false } } }),
+        ),
+        provideRouter([
+          { path: 'admin/repositories/:key', component: RepositoryDetail },
+        ]),
       ],
     });
     const harness = await RouterTestingHarness.create();
@@ -96,13 +118,21 @@ describe('RepositoryDetail', () => {
 
   it('edits by id at the shown revision, sending only the slug it changed', async () => {
     const { harness } = await open('/admin/repositories/repo_c');
-    (harness.routeNativeElement as HTMLElement).querySelector<HTMLElement>('[data-testid="admin-repository-edit"]')!.click();
+    (harness.routeNativeElement as HTMLElement)
+      .querySelector<HTMLElement>('[data-testid="admin-repository-edit"]')!
+      .click();
     await settle(harness.fixture);
-    const input = document.querySelector<HTMLInputElement>('[data-testid="admin-repository-edit-field-slug"]')!;
+    const input = document.querySelector<HTMLInputElement>(
+      '[data-testid="admin-repository-edit-field-slug"]',
+    )!;
     input.value = 'core-2';
     input.dispatchEvent(new Event('input'));
     await settle(harness.fixture);
-    document.querySelector<HTMLElement>('[data-testid="admin-repository-edit-submit"]')!.click();
+    document
+      .querySelector<HTMLElement>(
+        '[data-testid="admin-repository-edit-submit"]',
+      )!
+      .click();
     await settle(harness.fixture);
 
     const patch = stub.forRoute('/api/repositories/repo_c', 'PATCH');
@@ -121,17 +151,29 @@ describe('RepositoryDetail', () => {
   it('sends a blank park timeout as null', async () => {
     record = { ...CORE, landing_policy: 'park', park_timeout_hours: 6 };
     const { harness } = await open('/admin/repositories/repo_c');
-    expect((harness.routeNativeElement as HTMLElement).textContent).toContain('6 h');
-    (harness.routeNativeElement as HTMLElement).querySelector<HTMLElement>('[data-testid="admin-repository-edit"]')!.click();
+    expect((harness.routeNativeElement as HTMLElement).textContent).toContain(
+      '6 h',
+    );
+    (harness.routeNativeElement as HTMLElement)
+      .querySelector<HTMLElement>('[data-testid="admin-repository-edit"]')!
+      .click();
     await settle(harness.fixture);
-    const input = document.querySelector<HTMLInputElement>('[data-testid="admin-repository-edit-field-park_timeout_hours"]')!;
+    const input = document.querySelector<HTMLInputElement>(
+      '[data-testid="admin-repository-edit-field-park_timeout_hours"]',
+    )!;
     input.value = '';
     input.dispatchEvent(new Event('input'));
     await settle(harness.fixture);
-    document.querySelector<HTMLElement>('[data-testid="admin-repository-edit-submit"]')!.click();
+    document
+      .querySelector<HTMLElement>(
+        '[data-testid="admin-repository-edit-submit"]',
+      )!
+      .click();
     await settle(harness.fixture);
 
-    expect(stub.forRoute('/api/repositories/repo_c', 'PATCH')[0].body).toEqual({ park_timeout_hours: null });
+    expect(stub.forRoute('/api/repositories/repo_c', 'PATCH')[0].body).toEqual({
+      park_timeout_hours: null,
+    });
   });
 
   it('keys the history read by the id', async () => {
