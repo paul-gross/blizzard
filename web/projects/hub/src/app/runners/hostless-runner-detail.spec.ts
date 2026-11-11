@@ -9,6 +9,7 @@ import { RunnerConnection, type RunnerRegistryView } from 'fleet';
 import { provideZonelessChangeDetection } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { provideRouter } from '@angular/router';
+import { QueryClient, provideTanStackQuery } from '@tanstack/angular-query-experimental';
 
 import type { RunnerDetailVm } from './fleet-page.model';
 import { HostlessRunnerDetail } from './hostless-runner-detail';
@@ -86,7 +87,10 @@ describe('HostlessRunnerDetail', () => {
   beforeEach(async () => {
     await TestBed.configureTestingModule({
       imports: [HostlessRunnerDetail],
-      providers: [provideZonelessChangeDetection(), provideRouter([])],
+      providers: [
+        provideZonelessChangeDetection(), provideRouter([]),
+        provideTanStackQuery(new QueryClient({ defaultOptions: { queries: { enabled: false, retry: false } } })),
+      ],
     }).overrideComponent(FleetRunnerRow, { remove: { imports: [RunnerNextClaim] }, add: { imports: [StubRunnerNextClaim] } }).compileComponents();
   });
 

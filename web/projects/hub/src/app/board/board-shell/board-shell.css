@@ -35,6 +35,12 @@ fleet-kit-panel.board-panel {
    host then resolves to the panel's height rather than stretching past it,
    so BoardColumn's own .b-col-body (overflow-y: auto) is what scrolls, one
    lane at a time, instead of a single outer scrollbar dragging every column. */
+.board-content {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
+}
 .board {
   display: grid;
   grid-auto-flow: column;
@@ -42,11 +48,8 @@ fleet-kit-panel.board-panel {
   grid-auto-rows: 100%;
   gap: 1px;
   background: var(--line);
-  /* .p-body (bodyScroll false) is a plain block box, not a flex/grid
-     container, so flex: 1 alone never gave this a definite height — an
-     explicit height against .p-body's own (flex-resolved, but definite)
-     height is what grid-auto-rows: 100% needs to measure against. */
-  height: 100%;
+  /* The bounded flex slot gives grid-auto-rows a definite height. */
+  height: 0;
   flex: 1;
   min-height: 0;
 }
@@ -63,6 +66,18 @@ fleet-kit-panel.board-panel {
   justify-content: flex-end;
   gap: 14px;
 }
+.scroll-cue {
+  display: none;
+}
+@media (max-width: 767px) {
+  .scroll-cue {
+    display: block;
+    color: var(--label-dim);
+    font-size: var(--fs-label);
+    padding: 4px 8px;
+  }
+}
 .list {
-  height: 100%;
+  flex: 1;
+  height: 0;
 }

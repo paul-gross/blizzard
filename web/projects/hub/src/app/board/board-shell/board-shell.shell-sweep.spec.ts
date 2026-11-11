@@ -61,10 +61,24 @@ describe('board shell long node name shell sweep (web:shell-sweep)', () => {
       try {
         const board = root.querySelector<HTMLElement>('.board')!;
         expect(board.scrollWidth).toBeGreaterThan(board.clientWidth);
+        const cue = root.querySelector<HTMLElement>('[data-testid="board-scroll-cue"]')!;
+        expect(getComputedStyle(cue).display).not.toBe('none');
+        expect(cue.getBoundingClientRect().right).toBeLessThanOrEqual(width);
+        const tabs = root.querySelectorAll<HTMLElement>('fleet-kit-tabs [role="tab"]');
+        expect(tabs).toHaveLength(3);
+        for (const tab of tabs) {
+          expect(tab.scrollWidth, `${tab.textContent} is clipped`).toBeLessThanOrEqual(tab.clientWidth + 1);
+          expect(tab.getBoundingClientRect().right).toBeLessThanOrEqual(width);
+        }
+        board.focus();
+        expect(document.activeElement).toBe(board);
+        await userEvent.keyboard('{ArrowRight}');
+        await expect.poll(() => board.scrollLeft).toBeGreaterThan(0);
         expect(root.querySelector<HTMLElement>('app-board-column')!.getBoundingClientRect().width).toBeGreaterThanOrEqual(200);
         fixture.componentRef.setInput('layout', 'list');
         await fixture.whenStable();
         const list = root.querySelector<HTMLElement>('app-board-list')!;
+        expect(getComputedStyle(root.querySelector<HTMLElement>('[data-testid="board-scroll-cue"]')!).display).not.toBe('none');
         expect(list.scrollWidth).toBeGreaterThan(list.clientWidth);
         list.scrollLeft = list.scrollWidth;
         expect(list.scrollLeft).toBeGreaterThan(0);
@@ -135,6 +149,7 @@ describe('board shell long node name shell sweep (web:shell-sweep)', () => {
     await new Promise((resolve) => requestAnimationFrame(resolve));
     try {
       const columns = [...root.querySelectorAll<HTMLElement>('app-board-column')];
+      expect(getComputedStyle(root.querySelector<HTMLElement>('[data-testid="board-scroll-cue"]')!).display).toBe('none');
       expect(columns.length, 'fixture defect — lanes did not render').toBeGreaterThan(1);
       for (const column of columns) {
         const rect = column.getBoundingClientRect();
