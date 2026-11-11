@@ -13,7 +13,7 @@ from blizzard.hub.domain.config.repositories import (
     resolve_chunk_repositories,
 )
 from blizzard.hub.domain.projects.links import IReadProjectLinks
-from blizzard.hub.domain.projects.targets import ChunkTargets, TargetChunk, branches
+from blizzard.hub.domain.projects.targets import ChunkTargets, TargetChunk, branches, live_targets
 
 
 def delivery_declarations_for(
@@ -37,11 +37,15 @@ def delivery_declarations_for(
         return {}
     links = project_links.repositories_of_projects(sorted({c.project_id for c in relevant if c.project_id is not None}))
     linked_ids = {link.repository_id for rows in links.values() for link in rows}
-    records = list(repository_records.get_many(sorted(linked_ids)).values()) if linked_ids else []
+    records_by_id = repository_records.get_many(sorted(linked_ids)) if linked_ids else {}
+    records = list(records_by_id.values())
     forges = forge_records.get_many(
         list({record.fields.forge_id for record in records if record.repository_id in linked_ids})
     )
-    effective = targets.effective_for([TargetChunk(chunk.chunk_id, chunk.project_id) for chunk in relevant])
+    effective = targets.effective_over(
+        [TargetChunk(chunk.chunk_id, chunk.project_id) for chunk in relevant],
+        {project_id: live_targets(rows, records_by_id) for project_id, rows in links.items()},
+    )
     result: dict[str, list[dict[str, str | None]]] = {}
     for chunk in relevant:
         try:

@@ -30002,9 +30002,33 @@ export type PatchRepositoryLinkApiProjectsProjectRepositoryLinksRepositoryPatchD
 
 export type PatchRepositoryLinkApiProjectsProjectRepositoryLinksRepositoryPatchErrors = {
     /**
+     * Problem
+     */
+    400: TenantCredentialMismatchProblem;
+    /**
+     * Problem
+     */
+    401: AuthenticationRequiredProblem;
+    /**
+     * Problem
+     */
+    403: PermissionRequiredProblem;
+    /**
+     * Problem
+     */
+    404: TenantNotFoundProblem | ProjectNotFoundProblem | ProjectLinkNotFoundProblem | RepositoryNotFoundProblem;
+    /**
+     * Problem
+     */
+    409: TenantRequiredProblem | RevisionConflictProblem;
+    /**
      * Validation Error
      */
     422: HttpValidationError;
+    /**
+     * Problem
+     */
+    503: HubStoreUnavailableProblem;
 };
 
 export type PatchRepositoryLinkApiProjectsProjectRepositoryLinksRepositoryPatchError = PatchRepositoryLinkApiProjectsProjectRepositoryLinksRepositoryPatchErrors[keyof PatchRepositoryLinkApiProjectsProjectRepositoryLinksRepositoryPatchErrors];

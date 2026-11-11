@@ -138,8 +138,16 @@ class ChunkTargets:
         """Each chunk's effective targets, read without writing, in a bounded number of reads."""
         if not chunks:
             return {}
+        return self.effective_over(chunks, self.live_for(chunk.project_id for chunk in chunks))
+
+    def effective_over(
+        self, chunks: Sequence[TargetChunk], live: Mapping[ProjectId, Targets]
+    ) -> dict[str, dict[RepositoryId, RepositoryTarget]]:
+        """:meth:`effective_for` over ``live`` targets the caller already read for the chunks' projects — a caller
+        that read their links and records for itself reads only the captured targets here."""
+        if not chunks:
+            return {}
         captured = self._targets.captured_for([chunk.chunk_id for chunk in chunks])
-        live = self.live_for(chunk.project_id for chunk in chunks)
         return {
             chunk.chunk_id: effective_targets(
                 captured.get(chunk.chunk_id, {}), live.get(chunk.project_id, {}) if chunk.project_id else {}

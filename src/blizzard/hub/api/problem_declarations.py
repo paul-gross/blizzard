@@ -437,6 +437,7 @@ _OPERATOR_TENANT_OPERATIONS = (
     ("PUT", "/api/projects/{project}/landing-order"),
     ("POST", "/api/projects/{project}/landing-order/position"),
     ("GET", "/api/projects/{project}/repository-links"),
+    ("PATCH", "/api/projects/{project}/repository-links/{repository}"),
     ("PUT", "/api/projects/{project}/repository-links/{repository}"),
     ("POST", "/api/projects/{project}/repository-links/{repository}/retire"),
     ("GET", "/api/projects/{project}/routines"),
