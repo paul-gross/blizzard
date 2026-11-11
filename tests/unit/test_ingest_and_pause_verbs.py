@@ -508,8 +508,10 @@ def _daemon_answering(monkeypatch: pytest.MonkeyPatch, view: dict[str, object]) 
 
     def answer(request: httpx2.Request) -> httpx2.Response:
         if request.url.path == "/api/host/runners":
-            return httpx2.Response(200, json={"items": [{"runner_id": "rn_1", "name": "r", "state": "serving"}]})
-        return httpx2.Response(200, json=view)
+            return httpx2.Response(
+                200, json={"items": [{"runner_id": "rn_1", "name": "r", "state": "serving", "served": True}]}
+            )
+        return httpx2.Response(200, json={"local_paused": False, "paused": True, **view})
 
     def reach(
         _cls: type[RunnerDaemon],

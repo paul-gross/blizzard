@@ -6,10 +6,10 @@ from datetime import datetime
 from typing import cast
 
 from blizzard.foundation.logging import get_logger
+from blizzard.foundation.selftest import SelfTestTerminalStatus
 from blizzard.runner.harness.selftest_result import (
     IWriteSelfTestResultRepository,
     LatestSelfTestResult,
-    SelfTestTerminalStatus,
 )
 from blizzard.runner.store.schema import selftest_results
 from blizzard.runner.store.scoped import RunnerStoreConnections

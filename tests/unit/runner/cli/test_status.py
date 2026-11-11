@@ -8,9 +8,7 @@ from click.testing import CliRunner
 
 from blizzard.runner.cli import runner as runner_group
 from blizzard.runner.cli.control import (
-    _GateDecision,  # pyright: ignore[reportPrivateUsage]  # the decision wire shape has no public name
     _gates_line,  # pyright: ignore[reportPrivateUsage]  # the gates-line renderer has no public surface
-    _UnenforceableGate,  # pyright: ignore[reportPrivateUsage]  # the flag wire shape has no public name
     gate_decision_lines,
 )
 from tests.support.runner_cli_home import (
@@ -27,7 +25,7 @@ def test_status_reports_a_daemon_that_is_not_running(tmp_path: Path) -> None:
 
 
 def test_the_gates_line_annotates_each_gate_the_hub_flagged() -> None:
-    flags: list[_UnenforceableGate] = [{"node": "deliver", "reason": "hub-executed"}]
+    flags: list[dict[str, str]] = [{"node": "deliver", "reason": "hub-executed"}]
 
     assert _gates_line(["build", "deliver"], flags) == "build, deliver (not enforceable: hub-executed)"
 
@@ -38,7 +36,7 @@ def test_the_gates_line_is_plain_until_a_hub_that_flags_has_answered() -> None:
 
 
 def test_the_gate_decisions_section_lists_each_open_decision() -> None:
-    decisions: list[_GateDecision] = [
+    decisions: list[dict[str, str]] = [
         {"chunk_id": "ch_1", "node_name": "build", "submitted_at": "2026-07-16T12:00:00Z"}
     ]
 

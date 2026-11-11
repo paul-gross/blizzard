@@ -119,7 +119,16 @@ def host_of(items: list[dict[str, object]], monkeypatch: pytest.MonkeyPatch, pat
         paths.append(request.url.path)
         if request.url.path == "/api/host/runners":
             return httpx2.Response(200, json={"items": items})
-        return httpx2.Response(200, json={"runner_name": "beta"})
+        return httpx2.Response(
+            200,
+            json={
+                "runner_name": "beta",
+                "runner_id": "rn_b",
+                "local_paused": False,
+                "hub_paused": False,
+                "paused": False,
+            },
+        )
 
     def reach(
         cls: type[RunnerDaemon], verb: str, _dir: str, _url: str | None, _trace: object, runner: str | None = None
@@ -131,6 +140,6 @@ def host_of(items: list[dict[str, object]], monkeypatch: pytest.MonkeyPatch, pat
 
 
 TWO_RUNNERS: list[dict[str, object]] = [
-    {"runner_id": "rn_a", "name": "alpha", "state": "serving", "halted_reasons": []},
-    {"runner_id": "rn_b", "name": "beta", "state": "serving", "halted_reasons": []},
+    {"runner_id": "rn_a", "name": "alpha", "state": "serving", "served": True, "halted_reasons": []},
+    {"runner_id": "rn_b", "name": "beta", "state": "serving", "served": True, "halted_reasons": []},
 ]

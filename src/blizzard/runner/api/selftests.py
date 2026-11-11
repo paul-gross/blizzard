@@ -7,18 +7,14 @@ configured harnesses, exactly as a real misconfiguration would."""
 
 from __future__ import annotations
 
-from typing import Annotated
-
 from fastapi import APIRouter, Request, status
 from fastapi.exceptions import HTTPException
 from pydantic import BaseModel
 
-from blizzard.foundation.unrecognized import Unrecognized
 from blizzard.runner.api.wiring import RunnerWiring
 from blizzard.runner.harness.registry import UnavailableHarnessError, UnknownHarnessError
-from blizzard.runner.selftest.model import SelfTestRun, SelfTestStatus
-from blizzard.wire.base import WireModel
-from blizzard.wire.vocabulary import OPEN
+from blizzard.runner.selftest.model import SelfTestRun
+from blizzard.wire.runner_selftest import SelfTestCheckView, SelfTestView
 
 router = APIRouter(prefix="/api", tags=["runner"])
 
@@ -27,26 +23,6 @@ class SelfTestStartRequest(BaseModel):
     """Which coding harness to run the canary against."""
 
     harness: str
-
-
-class SelfTestCheckView(BaseModel):
-    """One check's pass/fail result."""
-
-    name: str
-    passed: bool
-    detail: str
-
-
-class SelfTestView(WireModel):
-    """A selftest run's current state — ``running`` until every check has resolved, then ``settled``."""
-
-    id: str
-    harness: str
-    status: Annotated[SelfTestStatus | Unrecognized, OPEN]
-    # The run has concluded — no further status move is possible.
-    settled: bool
-    checks: list[SelfTestCheckView]
-    error: str | None = None
 
 
 def _view(run: SelfTestRun) -> SelfTestView:

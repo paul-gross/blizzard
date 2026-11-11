@@ -22,7 +22,13 @@ _ENV = {
 
 class _FakeResponse:
     def __init__(self, payload: dict[str, object] | None = None) -> None:
-        self._payload = payload or {}
+        self._payload = {
+            "recorded": True,
+            "lease_id": "lease_9",
+            "repo": "blizzard",
+            "environment_id": "env_1",
+            **(payload or {}),
+        }
 
     def raise_for_status(self) -> None:
         return None
@@ -270,3 +276,17 @@ def test_commit_verb_refuses_system_scope_without_posting(monkeypatch: pytest.Mo
     assert result.exit_code != 0
     assert "read-only" in result.output and "system" in result.output
     assert posted is False
+
+
+def test_bad_commit_answer_does_not_confirm() -> None:
+    class BadResponse(_FakeResponse):
+        def json(self) -> dict[str, object]:
+            return {"note": "private-content"}
+
+    result = bind_stubs(post=lambda *a, **k: BadResponse()).runner.invoke(
+        runner_group, ["artifact", "commit", "--repo", "r", "--branch", "b", "--commit", "c"], env=_ENV
+    )
+    assert result.exit_code != 0
+    assert "unreadable answer" in result.stderr
+    assert "private-content" not in result.output
+    assert result.stdout == ""

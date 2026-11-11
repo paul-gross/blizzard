@@ -203,8 +203,12 @@ def test_the_status_identity_line_shows_an_unknown_state_raw_with_no_refusal(
 
 
 def test_the_harness_telemetry_line_shows_an_unknown_outcome_raw() -> None:
+    from blizzard.wire.runner_traces import HarnessTelemetryStatus
+
     off = {"outcome": "off", "accepted": 0, "dropped": 0}
     lines = harness_telemetry_lines(
-        {"traces": {"outcome": "gained", "accepted": 0, "dropped": 0}, "metrics": off, "logs": off}
+        HarnessTelemetryStatus.model_validate(
+            {"traces": {"outcome": "gained", "accepted": 0, "dropped": 0}, "metrics": off, "logs": off}
+        )
     )
     assert lines == ["harness telemetry:", "  traces: gained", "  metrics: off", "  logs: off"]

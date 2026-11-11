@@ -674,3 +674,25 @@ def test_status_renders_every_section_with_the_hub_unreachable_and_reports_the_d
     assert result.exit_code == 0, result.output
     assert "gate decisions" in result.output
     assert "open asks (0):" in result.output
+
+
+def test_status_rejects_a_late_unreadable_answer_without_stdout(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    root = init_runner_home(tmp_path)
+    bound = _no_hub()
+    original = RunnerDaemon.get_from_host
+
+    def malformed(self: RunnerDaemon, path: str) -> httpx2.Response:
+        if path == "/api/host/subscriptions":
+            return httpx2.Response(200, json={"items": [{"slug": "secret"}]})
+        return original(self, path)
+
+    monkeypatch.setattr(RunnerDaemon, "get_from_host", malformed)
+    with serve_local_api(root):
+        result = bound.runner.invoke(runner_group, ["status", "--dir", str(root)])
+
+    assert result.exit_code != 0
+    assert result.stdout == ""
+    assert "unreadable answer" in result.stderr
+    assert "secret" not in result.stderr

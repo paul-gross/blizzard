@@ -10,10 +10,10 @@ from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 from blizzard.foundation.clock import FixedClock
+from blizzard.foundation.selftest import SelfTestTerminalStatus
 from blizzard.runner.harness.selftest_result import (
     IWriteSelfTestResultRepository,
     LatestSelfTestResult,
-    SelfTestTerminalStatus,
 )
 from blizzard.runner.lifecycle.judgement.internal.elicitation_files import ElicitationFiles
 from blizzard.runner.selftest.internal.subprocess_scratch_git import SubprocessScratchGit
