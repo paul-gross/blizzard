@@ -45,8 +45,8 @@ _CHOICES = [("pass", "meets criteria"), ("fail", "does not")]
 _REPOS: dict[str, Sequence[tuple[str, str]]] = {
     "a1": [("api", "git@github.com:acme/api.git"), ("web", "git@github.com:acme/web.git")]
 }
-_API = RepositoryTarget("repo_api", "api", "github.com", "acme", "api", "rust-rewrite", inherited=False)
-_ELSEWHERE = RepositoryTarget("repo_lib", "lib", "github.com", "acme", "lib", "main", inherited=True)
+_API = RepositoryTarget("repo_api", "api", "acme", "api", "rust-rewrite", inherited=False)
+_ELSEWHERE = RepositoryTarget("repo_lib", "lib", "acme", "lib", "main", inherited=True)
 
 
 class _Hub(FakeHub):

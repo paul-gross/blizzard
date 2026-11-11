@@ -206,12 +206,6 @@
           "server_default": false,
           "type": "Integer"
         },
-        "forge_host": {
-          "deprecated": null,
-          "nullable": false,
-          "server_default": false,
-          "type": "String"
-        },
         "id": {
           "deprecated": null,
           "nullable": false,

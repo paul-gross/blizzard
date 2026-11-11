@@ -33,7 +33,6 @@ def upgrade() -> None:
         sa.Column("binding_id", sa.Integer(), sa.ForeignKey("env_bindings.id"), nullable=False),
         sa.Column("repository_id", sa.String(), nullable=False),
         sa.Column("repository_slug", sa.String(), nullable=False),
-        sa.Column("forge_host", sa.String(), nullable=False),
         sa.Column("owner", sa.String(), nullable=False),
         sa.Column("repo", sa.String(), nullable=False),
         sa.Column("base_branch", sa.String(), nullable=False),

@@ -31,7 +31,6 @@ class RepositoryTarget:
 
     repository_id: str
     repository_slug: str
-    forge_host: str
     owner: str
     repo: str
     base_branch: str

@@ -241,7 +241,6 @@ def _target(repo: str, branch: str, *, inherited: bool = False) -> RepositoryTar
     return RepositoryTarget(
         repository_id=f"repo_{repo}",
         repository_slug=repo,
-        forge_host="github.com",
         owner="acme",
         repo=repo,
         base_branch=branch,

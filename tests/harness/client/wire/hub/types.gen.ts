@@ -12411,19 +12411,14 @@ export type RepositorySummary = {
 /**
  * RepositoryTarget
  *
- * One repository a chunk's project links, with the branch the chunk starts from and lands into. The forge host,
- * owner and repo name are what a runner matches a worktree's origin against. ``inherited`` when the branch is the
- * repository record's own rather than the project link's override.
+ * One repository a chunk's project links, with the branch the chunk starts from and lands into. A runner matches a
+ * worktree's origin against ``owner`` and ``repo``. ``inherited`` when the branch is the record's, not the link's.
  */
 export type RepositoryTarget = {
     /**
      * Base Branch
      */
     base_branch: string;
-    /**
-     * Forge Host
-     */
-    forge_host: string;
     /**
      * Inherited
      */

@@ -20435,14 +20435,10 @@
         "type": "object"
       },
       "RepositoryTarget": {
-        "description": "One repository a chunk's project links, with the branch the chunk starts from and lands into. The forge host,\nowner and repo name are what a runner matches a worktree's origin against. ``inherited`` when the branch is the\nrepository record's own rather than the project link's override.",
+        "description": "One repository a chunk's project links, with the branch the chunk starts from and lands into. A runner matches a\nworktree's origin against ``owner`` and ``repo``. ``inherited`` when the branch is the record's, not the link's.",
         "properties": {
           "base_branch": {
             "title": "Base Branch",
-            "type": "string"
-          },
-          "forge_host": {
-            "title": "Forge Host",
             "type": "string"
           },
           "inherited": {
@@ -20469,7 +20465,6 @@
         "required": [
           "repository_id",
           "repository_slug",
-          "forge_host",
           "owner",
           "repo",
           "base_branch",

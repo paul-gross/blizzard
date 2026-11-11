@@ -261,7 +261,6 @@ def _target(branch: str, *, repo: str = "toy", inherited: bool = False) -> Repos
     return RepositoryTarget(
         repository_id=f"repo_{repo}",
         repository_slug=repo,
-        forge_host="localhost",
         owner="acme",
         repo=repo,
         base_branch=branch,

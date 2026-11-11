@@ -17,7 +17,7 @@ def _store(tmp_path: Path) -> SqlAlchemyRunnerStore:
 
 
 def _target(repo: str, branch: str, *, inherited: bool = False) -> RepositoryTarget:
-    return RepositoryTarget(f"repo_{repo}", repo, "github.com", "acme", repo, branch, inherited=inherited)
+    return RepositoryTarget(f"repo_{repo}", repo, "acme", repo, branch, inherited=inherited)
 
 
 def _bind(store: SqlAlchemyRunnerStore, environment_id: str, targets: list[RepositoryTarget], *, at: int) -> None:

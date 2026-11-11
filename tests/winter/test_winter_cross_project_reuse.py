@@ -74,7 +74,6 @@ def _target(branch: str, *, inherited: bool) -> RepositoryTarget:
     return RepositoryTarget(
         repository_id="repo_toy",
         repository_slug=_REPO,
-        forge_host="localhost",
         owner=_OWNER,
         repo=_REPO,
         base_branch=branch,

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from blizzard.runner.environments.provider import RepositoryTarget
 
-_TARGET = RepositoryTarget("repo_x", "x", "github.com", "Paul-Gross", "x", "rust-rewrite", inherited=False)
+_TARGET = RepositoryTarget("repo_x", "x", "Paul-Gross", "x", "rust-rewrite", inherited=False)
 
 
 def test_a_target_names_a_worktree_whose_origin_spells_its_owner_in_another_case() -> None:

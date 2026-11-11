@@ -1052,7 +1052,6 @@ def _repository_target(wire: WireRepositoryTarget) -> RepositoryTarget:
     return RepositoryTarget(
         repository_id=wire.repository_id,
         repository_slug=wire.repository_slug,
-        forge_host=wire.forge_host,
         owner=wire.owner,
         repo=wire.repo,
         base_branch=wire.base_branch,

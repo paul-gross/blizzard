@@ -156,7 +156,6 @@ class EnvironmentStore:
                                 "binding_id": binding_id,
                                 "repository_id": target.repository_id,
                                 "repository_slug": target.repository_slug,
-                                "forge_host": target.forge_host,
                                 "owner": target.owner,
                                 "repo": target.repo,
                                 "base_branch": target.base_branch,
@@ -231,7 +230,6 @@ class EnvironmentStore:
             RepositoryTarget(
                 repository_id=str(r.repository_id),
                 repository_slug=str(r.repository_slug),
-                forge_host=str(r.forge_host),
                 owner=str(r.owner),
                 repo=str(r.repo),
                 base_branch=str(r.base_branch),

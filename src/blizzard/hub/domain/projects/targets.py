@@ -83,6 +83,15 @@ def branches(targets: Targets) -> dict[str, str]:
     return {repository_id: target.base_branch for repository_id, target in targets.items()}
 
 
+def with_records(
+    targets: Targets, records: Mapping[RepositoryId, ConfiguredRepository]
+) -> list[tuple[RepositoryTarget, ConfiguredRepository]]:
+    """Each of ``targets`` with its repository record, ordered by slug — what every projection of a chunk's targets
+    renders. A target with no record in ``records`` is left out: nothing names it."""
+    paired = [(target, record) for target in targets.values() if (record := records.get(target.repository_id))]
+    return sorted(paired, key=lambda pair: pair[1].slug)
+
+
 @domain_model
 @dataclass(frozen=True)
 class TargetChunk:

@@ -94,7 +94,6 @@ binding_targets = Table(
     Column("binding_id", Integer, ForeignKey("env_bindings.id"), nullable=False, info={"refers_to": "env_bindings.id"}),
     Column("repository_id", String, nullable=False),
     Column("repository_slug", String, nullable=False),
-    Column("forge_host", String, nullable=False),
     Column("owner", String, nullable=False),
     Column("repo", String, nullable=False),
     Column("base_branch", String, nullable=False),

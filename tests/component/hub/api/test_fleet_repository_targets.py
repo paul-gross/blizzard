@@ -74,7 +74,6 @@ def test_a_peek_that_opts_in_names_the_offered_chunks_targets(tmp_path: Path) ->
     [target] = entry["repository_targets"]
     assert {k: v for k, v in target.items() if k != "repository_id"} == {
         "repository_slug": _REPOSITORY,
-        "forge_host": "forge.fixture",
         "owner": "acme",
         "repo": "widget",
         "base_branch": "rust-rewrite",

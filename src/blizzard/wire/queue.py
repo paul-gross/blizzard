@@ -19,13 +19,11 @@ from blizzard.wire.vocabulary import OPEN, ToleratedRequestVocabulary
 
 
 class RepositoryTarget(WireModel):
-    """One repository a chunk's project links, with the branch the chunk starts from and lands into. The forge host,
-    owner and repo name are what a runner matches a worktree's origin against. ``inherited`` when the branch is the
-    repository record's own rather than the project link's override."""
+    """One repository a chunk's project links, with the branch the chunk starts from and lands into. A runner matches a
+    worktree's origin against ``owner`` and ``repo``. ``inherited`` when the branch is the record's, not the link's."""
 
     repository_id: str
     repository_slug: str
-    forge_host: str
     owner: str
     repo: str
     base_branch: str

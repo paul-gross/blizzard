@@ -11,7 +11,6 @@ from collections.abc import Collection, Iterable, Mapping, Sequence
 from dataclasses import dataclass
 from functools import partial
 from typing import Annotated
-from urllib.parse import urlsplit
 
 from fastapi import APIRouter, Depends, Query
 
@@ -55,7 +54,7 @@ from blizzard.hub.domain.operations.queue import (
     select_matched_entry,
 )
 from blizzard.hub.domain.projects.model import Project, ProjectId
-from blizzard.hub.domain.projects.targets import TargetChunk, names_override
+from blizzard.hub.domain.projects.targets import TargetChunk, names_override, with_records
 from blizzard.hub.domain.runners.registration import RunnerCapability
 from blizzard.hub.domain.urgency.model import Urgency, UrgencyId
 from blizzard.wire.chunk import WorkRefModel
@@ -357,30 +356,21 @@ def _without_overrides(services: TenantServices, chunks: Sequence[Chunk], served
 
 
 def _repository_targets(services: TenantServices, chunk: Chunk) -> list[RepositoryTarget]:
-    """The offered chunk's effective targets, each with the forge coordinate a runner matches a worktree's origin
-    against, ordered by repository slug."""
+    """The offered chunk's effective targets, each with the ``owner/repo`` a runner matches a worktree's origin
+    against (:func:`with_records`)."""
     targets = services.chunk_targets.effective(TargetChunk(chunk.chunk_id, chunk.project_id))
     records = services.repository_records.get_many(sorted(targets)) if targets else {}
-    forge_ids = sorted({record.fields.forge_id for record in records.values()})
-    forges = services.forge_records.get_many(forge_ids) if forge_ids else {}
-    views: list[RepositoryTarget] = []
-    for target in targets.values():
-        record = records.get(target.repository_id)
-        if record is None:  # pragma: no cover - a target is only ever read off a linked record
-            continue
-        forge = forges.get(record.fields.forge_id)
-        views.append(
-            RepositoryTarget(
-                repository_id=target.repository_id,
-                repository_slug=record.slug,
-                forge_host=(urlsplit(forge.web_origin).hostname or "") if forge is not None else "",
-                owner=record.fields.owner,
-                repo=record.fields.repo,
-                base_branch=target.base_branch,
-                inherited=target.inherited,
-            )
+    return [
+        RepositoryTarget(
+            repository_id=target.repository_id,
+            repository_slug=record.slug,
+            owner=record.fields.owner,
+            repo=record.fields.repo,
+            base_branch=target.base_branch,
+            inherited=target.inherited,
         )
-    return sorted(views, key=lambda view: view.repository_slug)
+        for target, record in with_records(targets, records)
+    ]
 
 
 _PASS_REASONS = {PassedReason.BLOCKED: ClaimPassReason.BLOCKED, PassedReason.INELIGIBLE: ClaimPassReason.INELIGIBLE}

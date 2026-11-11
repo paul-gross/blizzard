@@ -30,6 +30,7 @@ from blizzard.hub.domain.projects.targets import (
     live_targets,
     names_override,
     prepared_at,
+    with_records,
 )
 
 _AT = datetime(2026, 11, 11, 9, 0, tzinfo=UTC)
@@ -173,3 +174,19 @@ def test_stale_environments_capture_nothing() -> None:
 
     assert captured is None
     assert store.held == {}
+
+
+def test_targets_pair_with_their_records_by_slug_and_one_without_a_record_is_left_out() -> None:
+    other, missing = RepositoryId("repo_other"), RepositoryId("repo_missing")
+    records = {_REPOSITORY: _repository(), other: replace(_repository(repository_id=other), slug="aardvark")}
+    targets = {
+        repository_id: RepositoryTarget(repository_id, "main", inherited=True)
+        for repository_id in (_REPOSITORY, other, missing)
+    }
+
+    paired = with_records(targets, records)
+
+    assert [(target.repository_id, record.slug) for target, record in paired] == [
+        (other, "aardvark"),
+        (_REPOSITORY, "blizzard"),
+    ]

@@ -435,7 +435,7 @@ def build_runner_world(engine: Engine, runner_id: str = RUNNER_ID) -> RunnerWorl
         environment_id="env-1",
         workdir="/ws/env-1",
         bound_at=_t(6),
-        targets=[RepositoryTarget("repo_1", "widget", "github.com", "acme", "widget", "main", inherited=True)],
+        targets=[RepositoryTarget("repo_1", "widget", "acme", "widget", "main", inherited=True)],
     )
     stores.tokens.set_route_token(chunk_1, token="route-token-1", at=_t(6))
 
