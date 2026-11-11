@@ -9,6 +9,7 @@
   font-family: var(--mono);
   font-size: var(--fs-xs);
   line-height: 1.4;
+  overflow-wrap: anywhere;
   /* The panel never receives the pointer — leaving it wouldn't dismiss the
      tooltip, it would just stop the trigger's own mouseleave from firing. */
   pointer-events: none;

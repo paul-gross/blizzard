@@ -3,6 +3,7 @@ import { TestBed } from '@angular/core/testing';
 import { page, userEvent } from 'vitest/browser';
 
 import { KitTooltip } from './kit-tooltip';
+import { KitUrgencyPill } from './kit-urgency-pill';
 
 /**
  * `KitTooltip`'s own half of `web:shell-sweep`
@@ -22,7 +23,60 @@ import { KitTooltip } from './kit-tooltip';
 })
 class SweepHost {}
 
+const longName = 'SupercalifragilisticexpialidociousSupercalifragilisticexpialidocious';
+
+@Component({
+  imports: [KitUrgencyPill],
+  template: `<fleet-kit-urgency-pill [name]="name" color="#555555" />`,
+})
+class UrgencyHost {
+  readonly name = longName;
+}
+
 describe('KitTooltip shell sweep (web:shell-sweep)', () => {
+  it('wraps an unbroken urgency name within the viewport on hover and focus', async () => {
+    await page.viewport(320, 768);
+    await TestBed.configureTestingModule({
+      imports: [UrgencyHost],
+      providers: [provideZonelessChangeDetection()],
+    }).compileComponents();
+    const fixture = TestBed.createComponent(UrgencyHost);
+    const root = fixture.nativeElement as HTMLElement;
+    document.body.appendChild(root);
+    await fixture.whenStable();
+
+    try {
+      const trigger = root.querySelector<HTMLElement>('.pill')!;
+      await userEvent.unhover(trigger);
+      await fixture.whenStable();
+
+      const assertPanelFits = () => {
+        const panel = document.querySelector<HTMLElement>('[role="tooltip"]')!;
+        expect(panel.textContent?.trim()).toBe(longName);
+        const box = panel.getBoundingClientRect();
+        expect(box.left).toBeGreaterThanOrEqual(0);
+        expect(box.right).toBeLessThanOrEqual(window.innerWidth);
+        expect(box.top).toBeGreaterThanOrEqual(0);
+        expect(box.bottom).toBeLessThanOrEqual(window.innerHeight);
+        expect(panel.scrollWidth).toBeLessThanOrEqual(panel.clientWidth);
+        expect(panel.scrollHeight).toBeLessThanOrEqual(panel.clientHeight);
+      };
+
+      await userEvent.hover(trigger);
+      await fixture.whenStable();
+      assertPanelFits();
+      await userEvent.unhover(trigger);
+      await fixture.whenStable();
+      await userEvent.tab();
+      await fixture.whenStable();
+      expect(document.activeElement).toBe(trigger);
+      assertPanelFits();
+    } finally {
+      fixture.destroy();
+      root.remove();
+    }
+  });
+
   it('opens on real hover and real keyboard focus, and wires aria-describedby to the rendered panel', async () => {
     await page.viewport(1024, 768);
     await TestBed.configureTestingModule({
