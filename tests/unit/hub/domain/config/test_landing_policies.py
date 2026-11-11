@@ -12,6 +12,7 @@ from blizzard.hub.domain.config.landing_policies import (
     POLICY_FACTS,
     ForgeCapabilityMissing,
     landing_sort_key,
+    missing_capabilities,
     parse_policy,
     require_offered,
 )
@@ -84,6 +85,17 @@ def test_fast_forward_requires_ref_advance_and_uses_optional_recovery_capabiliti
         Capability.BRANCHES_MERGE,
         Capability.CHECKS_RERUN,
     }
+
+
+def test_missing_capabilities_is_what_a_policy_requires_and_the_offer_lacks() -> None:
+    offered = frozenset(Capability) - {Capability.CHECKS_READ, Capability.CHANGES_MERGE_MERGE}
+
+    assert missing_capabilities(LandingPolicy.MERGE_ON_CHECKS, offered) == {
+        Capability.CHECKS_READ,
+        Capability.CHANGES_MERGE_MERGE,
+    }
+    assert missing_capabilities(LandingPolicy.PARK, offered) == frozenset()
+    assert missing_capabilities(LandingPolicy.PARK, frozenset()) == POLICY_CAPABILITIES[LandingPolicy.PARK].requires
 
 
 def test_a_forge_offering_every_requirement_passes() -> None:

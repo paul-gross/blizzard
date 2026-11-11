@@ -219,6 +219,9 @@ _PROBES: dict[tuple[str, str], _Probe] = {
     ("POST", "/api/config/apply"): _own(),
     ("GET", "/api/config/changes"): _LIST,
     ("GET", "/api/config/export"): _LIST,
+    ("GET", "/api/config/landing-policies"): _Probe(
+        "global", reason="each landing policy's capability needs, from the code"
+    ),
     ("GET", "/api/config/schema/{kind}"): _Probe("global", reason="a document kind's JSON schema, from the code"),
     # -- decisions, questions --------------------------------------------------------------------------------
     ("GET", "/api/decisions"): _LIST,

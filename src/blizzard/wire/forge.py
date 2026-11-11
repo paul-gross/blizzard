@@ -3,14 +3,17 @@ address fields the forge now carries."""
 
 from __future__ import annotations
 
-from typing import Any, ClassVar, Final, Literal, Self, cast
+from typing import Annotated, Any, ClassVar, Final, Literal, Self, cast
 
 from pydantic import BaseModel, ConfigDict, ModelWrapValidatorHandler, PrivateAttr, model_validator
 from pydantic.config import JsonDict
 
+from blizzard.foundation.landing_policy import LandingPolicy
+from blizzard.foundation.unrecognized import Unrecognized
 from blizzard.wire.base import WireModel
 from blizzard.wire.problem import CommonProblemMembers, ProblemDetails
 from blizzard.wire.record_referrer import RecordReferrer
+from blizzard.wire.vocabulary import OPEN
 
 #: The JSON Schema mark of a field kept on the wire only until a later release removes it.
 DEPRECATED_FIELD: JsonDict = {"deprecated": True}
@@ -105,11 +108,21 @@ class ForgeBudgetView(WireModel):
     reset: str
 
 
+class PolicyHonour(WireModel):
+    """Whether the forge can honour one landing policy: ``missing`` names each required capability it does not offer."""
+
+    policy: Annotated[LandingPolicy | Unrecognized, OPEN]
+    honoured: bool
+    missing: list[str]
+
+
 class ForgeDetail(ForgeSummary):
     repositories: list[ForgeReferenceView]
     work_sources: list[ForgeReferenceView]
     #: The capabilities the forge offers, by name — what a repository's landing policy is checked against.
     offered: list[str] = []
+    #: Whether the forge can honour each landing policy — the same check a repository write is refused by.
+    landing_policies: list[PolicyHonour] = []
     #: Each budget's last reading, held in memory since the hub started; empty until the forge has been heard from.
     budgets: list[ForgeBudgetView]
 

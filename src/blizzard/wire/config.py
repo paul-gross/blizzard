@@ -3,11 +3,12 @@ declarative document (``POST /api/config/apply``, ``GET /api/config/export``).""
 
 from __future__ import annotations
 
-from typing import Final, Literal
+from typing import Annotated, Final, Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
 from blizzard.foundation.landing_policy import LandingPolicy
+from blizzard.foundation.unrecognized import Unrecognized
 from blizzard.wire.base import WireModel
 from blizzard.wire.cadence import CadenceDocument
 from blizzard.wire.forge import DEPRECATED_FIELD, OldFieldWarning
@@ -15,6 +16,7 @@ from blizzard.wire.problem import CommonProblemMembers, ProblemDetails, Validati
 from blizzard.wire.routine import RoutineDocument
 from blizzard.wire.scope import ScopeDocument
 from blizzard.wire.urgency import UrgencyIconDocument
+from blizzard.wire.vocabulary import OPEN
 
 
 class FieldChangeView(WireModel):
@@ -278,3 +280,12 @@ CONFIG_PROBLEM_TYPES: frozenset[str] = frozenset(
         CONFIG_FIELD_INVALID,
     }
 )
+
+
+class LandingPolicyNeedsView(WireModel):
+    """What one landing policy needs of its forge: the capabilities it cannot land without (``requires``) and the ones
+    it uses when the forge offers them (``uses``), each sorted."""
+
+    policy: Annotated[LandingPolicy | Unrecognized, OPEN]
+    requires: list[str]
+    uses: list[str]
