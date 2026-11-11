@@ -25,7 +25,7 @@ from blizzard.foundation.logging import get_logger
 from blizzard.foundation.queue_policy import QueueMatchPolicy
 from blizzard.foundation.roles import adapter_model
 from blizzard.foundation.untyped import as_table
-from blizzard.runner.environments.provider import RepositoryTarget
+from blizzard.runner.environments.provider import WorktreeTarget
 from blizzard.runner.harness.capability_snapshot import HarnessCapability
 from blizzard.runner.hub.client import (
     BindingDeclaration,
@@ -114,8 +114,7 @@ from blizzard.wire.host import (
     HostWorkspace,
 )
 from blizzard.wire.question import QuestionView
-from blizzard.wire.queue import QueuePeekRequest, QueuePeekResponse
-from blizzard.wire.queue import RepositoryTarget as WireRepositoryTarget
+from blizzard.wire.queue import QueuePeekRequest, QueuePeekResponse, RepositoryTarget
 from blizzard.wire.release import ReleaseRequest
 from blizzard.wire.route import (
     ClaimedRepositoryTarget,
@@ -1048,8 +1047,8 @@ def _queue(wire: QueuePeekResponse) -> list[QueueEntry]:
     ]
 
 
-def _repository_target(wire: WireRepositoryTarget) -> RepositoryTarget:
-    return RepositoryTarget(
+def _repository_target(wire: RepositoryTarget) -> WorktreeTarget:
+    return WorktreeTarget(
         repository_id=wire.repository_id,
         repository_slug=wire.repository_slug,
         owner=wire.owner,

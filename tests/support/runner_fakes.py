@@ -38,8 +38,8 @@ from blizzard.runner.environments.provider import (
     EnvironmentPreparationError,
     IWorkspaceProvider,
     RepoBinding,
-    RepositoryTarget,
     WorkspaceAcquisitionError,
+    WorktreeTarget,
 )
 from blizzard.runner.environments.workspaces import IWorkspaces, WorkspaceEntry, WorkspaceRegistry
 from blizzard.runner.environments.worktree import IWorktreeGit
@@ -963,7 +963,7 @@ class FakeProvider:
         self._honors_targets = honors_targets
         self.released: list[str] = []
         #: The targets each acquire named, in call order.
-        self.acquired_targets: list[tuple[RepositoryTarget, ...]] = []
+        self.acquired_targets: list[tuple[WorktreeTarget, ...]] = []
         self._repos = {env: tuple(entries) for env, entries in (repos or {}).items()}
 
     def spawn_root(self) -> str:
@@ -982,7 +982,7 @@ class FakeProvider:
         return self._honors_targets
 
     def acquire(
-        self, chunk_id: str, count: int, held_ids: list[str], targets: Sequence[RepositoryTarget] = ()
+        self, chunk_id: str, count: int, held_ids: list[str], targets: Sequence[WorktreeTarget] = ()
     ) -> list[AcquiredEnvironment]:
         self.acquired_targets.append(tuple(targets))
         if self.refuse:

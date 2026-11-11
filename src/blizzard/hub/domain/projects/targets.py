@@ -1,10 +1,8 @@
 """A chunk's repository targets: the branch each repository its project links is started from and landed into.
 
 A repository's **effective branch** for a chunk is the one the chunk captured, else its link's own branch, else its
-record's ``base_branch``. A chunk captures each repository once, the first time anything needs it — its claim, or a
-delivery that resolves a repository the claim did not — and never again, so a later link edit reaches only chunks that
-have not yet captured that repository. A captured target is an immutable fact; read-only paths fall back to the live
-branch without writing."""
+record's ``base_branch``. A chunk captures each repository once — at its claim, or a delivery resolving one the claim
+did not — so a later link edit reaches only chunks yet to capture it. Read-only paths fall back to the live branch."""
 
 from __future__ import annotations
 
@@ -26,7 +24,7 @@ from blizzard.hub.domain.projects.model import ProjectId
 
 @domain_model
 @dataclass(frozen=True)
-class RepositoryTarget:
+class BranchTarget:
     """One repository's branch for one chunk: ``inherited`` when it is the repository record's own, not the link's
     override. ``captured_at`` is when the chunk captured it, ``None`` while it is a live preview."""
 
@@ -35,31 +33,31 @@ class RepositoryTarget:
     inherited: bool
     captured_at: datetime | None = None
 
-    def captured(self, at: datetime) -> RepositoryTarget:
+    def captured(self, at: datetime) -> BranchTarget:
         """This target as the chunk captures it at ``at``."""
         return replace(self, captured_at=at)
 
 
-type Targets = Mapping[RepositoryId, RepositoryTarget]
+type Targets = Mapping[RepositoryId, BranchTarget]
 
 
 def live_targets(
     links: Iterable[RepositoryLink], records: Mapping[RepositoryId, ConfiguredRepository]
-) -> dict[RepositoryId, RepositoryTarget]:
+) -> dict[RepositoryId, BranchTarget]:
     """Each standing link's live target, for a linked record that is enabled: the link's own branch, else the
     record's."""
-    targets: dict[RepositoryId, RepositoryTarget] = {}
+    targets: dict[RepositoryId, BranchTarget] = {}
     for link in links:
         record = records.get(link.repository_id)
         if record is None or record.retired_at is not None:
             continue
-        targets[link.repository_id] = RepositoryTarget(
+        targets[link.repository_id] = BranchTarget(
             link.repository_id, link.effective_base_branch(record), inherited=link.base_branch is None
         )
     return targets
 
 
-def effective_targets(captured: Targets, live: Targets) -> dict[RepositoryId, RepositoryTarget]:
+def effective_targets(captured: Targets, live: Targets) -> dict[RepositoryId, BranchTarget]:
     """A chunk's effective targets: each captured one, else the live one."""
     return {**live, **captured}
 
@@ -85,7 +83,7 @@ def branches(targets: Targets) -> dict[str, str]:
 
 def with_records(
     targets: Targets, records: Mapping[RepositoryId, ConfiguredRepository]
-) -> list[tuple[RepositoryTarget, ConfiguredRepository]]:
+) -> list[tuple[BranchTarget, ConfiguredRepository]]:
     """Each of ``targets`` with its repository record, ordered by slug — what every projection of a chunk's targets
     renders. A target with no record in ``records`` is left out: nothing names it."""
     paired = [(target, record) for target in targets.values() if (record := records.get(target.repository_id))]
@@ -106,7 +104,7 @@ class IReadChunkTargets(Protocol):
 
     def captured_for(
         self, chunk_ids: Sequence[str], *, transaction: Transaction | None = None
-    ) -> dict[str, dict[RepositoryId, RepositoryTarget]]:
+    ) -> dict[str, dict[RepositoryId, BranchTarget]]:
         """Each chunk's captured targets by repository id; a chunk that captured none is dropped. Read in
         ``transaction`` when given."""
         ...
@@ -114,8 +112,8 @@ class IReadChunkTargets(Protocol):
 
 class IWriteChunkTargets(IReadChunkTargets, Protocol):
     def capture(
-        self, chunk_id: str, targets: Sequence[RepositoryTarget], *, transaction: LockedTransaction
-    ) -> dict[RepositoryId, RepositoryTarget]:
+        self, chunk_id: str, targets: Sequence[BranchTarget], *, transaction: LockedTransaction
+    ) -> dict[RepositoryId, BranchTarget]:
         """Insert each of ``targets`` the chunk has not captured yet, in ``transaction``, which locks the chunk; a
         captured target is never rewritten. Answers every target the chunk holds afterwards."""
         ...
@@ -131,9 +129,7 @@ class ChunkTargets:
         self._links = links
         self._records = records
 
-    def live_for(
-        self, project_ids: Iterable[ProjectId | None]
-    ) -> dict[ProjectId, dict[RepositoryId, RepositoryTarget]]:
+    def live_for(self, project_ids: Iterable[ProjectId | None]) -> dict[ProjectId, dict[RepositoryId, BranchTarget]]:
         """Each project's live targets, in a bounded number of reads (``bzh:bulk-reconstitution``)."""
         ids = sorted({project_id for project_id in project_ids if project_id is not None})
         if not ids:
@@ -143,7 +139,7 @@ class ChunkTargets:
         records = self._records.get_many(linked) if linked else {}
         return {project_id: live_targets(links.get(project_id, []), records) for project_id in ids}
 
-    def effective_for(self, chunks: Sequence[TargetChunk]) -> dict[str, dict[RepositoryId, RepositoryTarget]]:
+    def effective_for(self, chunks: Sequence[TargetChunk]) -> dict[str, dict[RepositoryId, BranchTarget]]:
         """Each chunk's effective targets, read without writing, in a bounded number of reads."""
         if not chunks:
             return {}
@@ -151,7 +147,7 @@ class ChunkTargets:
 
     def effective_over(
         self, chunks: Sequence[TargetChunk], live: Mapping[ProjectId, Targets]
-    ) -> dict[str, dict[RepositoryId, RepositoryTarget]]:
+    ) -> dict[str, dict[RepositoryId, BranchTarget]]:
         """:meth:`effective_for` over ``live`` targets the caller already read for the chunks' projects — a caller
         that read their links and records for itself reads only the captured targets here."""
         if not chunks:
@@ -166,19 +162,19 @@ class ChunkTargets:
 
     def effective_locked(
         self, chunk: TargetChunk, *, transaction: LockedTransaction
-    ) -> dict[RepositoryId, RepositoryTarget]:
+    ) -> dict[RepositoryId, BranchTarget]:
         """:meth:`effective` with the captured targets read in ``transaction``, which locks the chunk."""
         captured = self._targets.captured_for([chunk.chunk_id], transaction=transaction).get(chunk.chunk_id, {})
         live = self.live_for([chunk.project_id]).get(chunk.project_id, {}) if chunk.project_id else {}
         return effective_targets(captured, live)
 
-    def effective(self, chunk: TargetChunk) -> dict[RepositoryId, RepositoryTarget]:
+    def effective(self, chunk: TargetChunk) -> dict[RepositoryId, BranchTarget]:
         """:meth:`effective_for` for one chunk."""
         return self.effective_for([chunk])[chunk.chunk_id]
 
     def capture_prepared(
         self, chunk: TargetChunk, prepared: Mapping[str, str] | None, *, at: datetime, transaction: LockedTransaction
-    ) -> dict[RepositoryId, RepositoryTarget] | None:
+    ) -> dict[RepositoryId, BranchTarget] | None:
         """A claim's capture: read the chunk's effective targets once in ``transaction``, which locks the chunk, and
         capture exactly those when environments ``prepared`` stand at them (:func:`prepared_at`). Answers the targets
         checked and captured; ``None``, capturing nothing, when the environments are stale."""
@@ -190,8 +186,8 @@ class ChunkTargets:
         return {**checked, **{target.repository_id: target for target in fresh}}
 
     def capture(
-        self, chunk_id: str, targets: Iterable[RepositoryTarget], *, at: datetime, transaction: LockedTransaction
-    ) -> dict[RepositoryId, RepositoryTarget]:
+        self, chunk_id: str, targets: Iterable[BranchTarget], *, at: datetime, transaction: LockedTransaction
+    ) -> dict[RepositoryId, BranchTarget]:
         """Capture ``targets`` at ``at`` where the chunk has none yet, in ``transaction``. Answers the chunk's captured
         targets — a repository captured earlier keeps its first value."""
         return self._targets.capture(chunk_id, [target.captured(at) for target in targets], transaction=transaction)

@@ -13,10 +13,10 @@ import pytest
 from blizzard.runner.environments.internal.winter_provider import WinterWorkspaceProvider
 from blizzard.runner.environments.provider import (
     EnvironmentPreparationError,
-    RepositoryTarget,
     TargetBranchMissingError,
     TargetUnmatchedError,
     WorkspaceAcquisitionError,
+    WorktreeTarget,
 )
 from tests.support.winter_provider_fakes import FakeGit, FakeWinter
 
@@ -237,8 +237,8 @@ def test_repos_is_empty_for_an_env_with_no_worktrees() -> None:
     assert provider.repos("e1") == []
 
 
-def _target(repo: str, branch: str, *, inherited: bool = False) -> RepositoryTarget:
-    return RepositoryTarget(
+def _target(repo: str, branch: str, *, inherited: bool = False) -> WorktreeTarget:
+    return WorktreeTarget(
         repository_id=f"repo_{repo}",
         repository_slug=repo,
         owner="acme",

@@ -47,8 +47,7 @@ class QueuePeekEntry(WireModel):
     project_name: str | None = None
     #: The urgency the chunk carries; ``None`` from a hub that predates it.
     urgency: UrgencyRef | None = None
-    #: The chunk's repository targets, which the matched peek names; ``None`` on every other read and from a hub that
-    #: predates them.
+    #: The chunk's repository targets, named by the matched peek alone; ``None`` otherwise and from an older hub.
     repository_targets: list[RepositoryTarget] | None = None
 
 
@@ -75,8 +74,7 @@ class QueuePeekRequest(BaseModel):
     #: resolved to, and — under ``policy="hold"`` — holds per project rather than across them. ``None`` peeks every
     #: project the runner serves; an empty list offers nothing.
     projects: list[str] | None = None
-    #: The runner prepares environments at the repository targets the peek names. A peek without it is never offered a
-    #: chunk whose targets include a project link's own branch.
+    #: The runner prepares at the targets the peek names; without it, no chunk with a link's own branch is offered.
     repository_targets: bool = False
 
 

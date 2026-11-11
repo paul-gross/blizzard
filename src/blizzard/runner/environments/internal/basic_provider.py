@@ -17,11 +17,11 @@ from blizzard.runner.environments.provider import (
     EnvironmentPreparationError,
     IWorkspaceProvider,
     RepoBinding,
-    RepositoryTarget,
     TargetBranchMissingError,
     TargetUnmatchedError,
     WorkspaceAcquisitionError,
     WorkspaceRepo,
+    WorktreeTarget,
     refuse_unmatched_overrides,
     target_naming,
 )
@@ -105,7 +105,7 @@ class BasicWorkspaceProvider:
         return True
 
     def acquire(
-        self, chunk_id: str, count: int, held_ids: list[str], targets: Sequence[RepositoryTarget] = ()
+        self, chunk_id: str, count: int, held_ids: list[str], targets: Sequence[WorktreeTarget] = ()
     ) -> list[AcquiredEnvironment]:
         if not self._repos:
             raise WorkspaceAcquisitionError("basic workspace requires at least one [[workspace_repo]]")
@@ -173,7 +173,7 @@ class BasicWorkspaceProvider:
                 step="git-worktree",
             ) from exc
 
-    def _prepare(self, env: Path, chunk_id: str, targets: Sequence[RepositoryTarget]) -> None:
+    def _prepare(self, env: Path, chunk_id: str, targets: Sequence[WorktreeTarget]) -> None:
         if (env / _MANAGED).exists():
             self._remove(env)
         env.mkdir(exist_ok=True)

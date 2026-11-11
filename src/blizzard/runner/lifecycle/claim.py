@@ -14,8 +14,8 @@ from blizzard.foundation.trace_ids import StepKey, step_root
 from blizzard.runner.environments.provider import (
     AcquiredEnvironment,
     EnvironmentPreparationError,
-    RepositoryTarget,
     WorkspaceAcquisitionError,
+    WorktreeTarget,
 )
 from blizzard.runner.environments.repository import (
     EnvBinding,
@@ -147,7 +147,7 @@ def _honors_targets(ctx: ClaimContext, bindings: tuple[RoutedBinding, ...]) -> b
     return all(provider is not None and provider.honors_targets() for provider in providers)
 
 
-def _prepared_targets(ctx: ClaimContext, chunk_id: str) -> tuple[RepositoryTarget, ...] | None:
+def _prepared_targets(ctx: ClaimContext, chunk_id: str) -> tuple[WorktreeTarget, ...] | None:
     """The targets the chunk's held binding was prepared at, read from the binding rather than a fresh peek, for the
     claim to name; ``None`` when it was prepared at none."""
     return ctx.stores.environments.held_targets(chunk_id) or None

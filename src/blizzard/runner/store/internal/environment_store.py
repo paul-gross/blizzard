@@ -10,7 +10,7 @@ from sqlalchemy import Row, Subquery, bindparam, func, or_
 
 from blizzard.foundation.logging import get_logger
 from blizzard.foundation.store.batching import id_batches
-from blizzard.runner.environments.provider import RepositoryTarget
+from blizzard.runner.environments.provider import WorktreeTarget
 from blizzard.runner.environments.repository import (
     BindingCompletion,
     EnvBinding,
@@ -130,7 +130,7 @@ class EnvironmentStore:
         bound_at: datetime,
         workspace_id: str | None = None,
         project_id: str | None = None,
-        targets: Sequence[RepositoryTarget] = (),
+        targets: Sequence[WorktreeTarget] = (),
     ) -> None:
         with self._store.begin() as conn:
             seq = insert_fact_row(
@@ -214,7 +214,7 @@ class EnvironmentStore:
         holding = {hold.chunk_id for hold in holds}
         return holds + [OpenLeaseHold(chunk_id=c, held=False) for c in chunk_ids if c not in holding]
 
-    def held_targets(self, chunk_id: str) -> tuple[RepositoryTarget, ...]:
+    def held_targets(self, chunk_id: str) -> tuple[WorktreeTarget, ...]:
         newest = (
             self._store.select(env_bindings, func.max(env_bindings.c.id))
             .where(env_bindings.c.chunk_id == chunk_id)
@@ -227,7 +227,7 @@ class EnvironmentStore:
             .order_by(binding_targets.c.repository_slug)
         )
         return tuple(
-            RepositoryTarget(
+            WorktreeTarget(
                 repository_id=str(r.repository_id),
                 repository_slug=str(r.repository_slug),
                 owner=str(r.owner),

@@ -1,10 +1,9 @@
 """The winter workspace-provider binding (``bzh:pluggable-seams``).
 
-Drives the **real** winter CLI against a workspace root. The pool is static config and held-ness
-is passed in, so the provider keeps no allocation state of its own. ``acquire`` performs a full
-reset-to-base, then moves each worktree a chunk's target names onto that target's branch, aborting as an
-:class:`EnvironmentPreparationError` rather than leaving a half-reset env; ``release`` marks nothing, since
-cleaning defers to the next acquire."""
+Drives the **real** winter CLI against a workspace root; the pool is static config and held-ness is passed in, so it
+keeps no allocation state. ``acquire`` resets to base and moves each targeted worktree onto its target's branch, raising
+:class:`EnvironmentPreparationError` rather than leaving a half-reset env; ``release`` defers cleaning to the next
+acquire."""
 
 from __future__ import annotations
 
@@ -21,9 +20,9 @@ from blizzard.runner.environments.provider import (
     EnvironmentPreparationError,
     IWorkspaceProvider,
     RepoBinding,
-    RepositoryTarget,
     TargetBranchMissingError,
     WorkspaceAcquisitionError,
+    WorktreeTarget,
     refuse_unmatched_overrides,
     target_naming,
 )
@@ -96,13 +95,13 @@ class WinterWorkspaceProvider:
         return True
 
     def acquire(
-        self, chunk_id: str, count: int, held_ids: list[str], targets: Sequence[RepositoryTarget] = ()
+        self, chunk_id: str, count: int, held_ids: list[str], targets: Sequence[WorktreeTarget] = ()
     ) -> list[AcquiredEnvironment]:
         with self._lock:
             return self._acquire(chunk_id, count, held_ids, targets)
 
     def _acquire(
-        self, chunk_id: str, count: int, held_ids: list[str], targets: Sequence[RepositoryTarget]
+        self, chunk_id: str, count: int, held_ids: list[str], targets: Sequence[WorktreeTarget]
     ) -> list[AcquiredEnvironment]:
         free = [env for env in self._pool if env not in set(held_ids)]
         if len(free) < count:
@@ -162,7 +161,7 @@ class WinterWorkspaceProvider:
         self._repos[environment_id] = bindings
         return list(bindings)
 
-    def _prepare(self, env: str, targets: Sequence[RepositoryTarget]) -> Path:
+    def _prepare(self, env: str, targets: Sequence[WorktreeTarget]) -> Path:
         """Reset-on-acquire: return the env fully reset to base, its targeted worktrees on their targets, and
         working."""
         # Clear before and after, including on failure: an in-flight reset may
@@ -173,7 +172,7 @@ class WinterWorkspaceProvider:
         finally:
             self._repos.pop(env, None)
 
-    def _reset(self, env: str, targets: Sequence[RepositoryTarget]) -> Path:
+    def _reset(self, env: str, targets: Sequence[WorktreeTarget]) -> Path:
         workdir = self._workspace_root / env
         run = self._winter.run
         root = self._workspace_root
@@ -202,7 +201,7 @@ class WinterWorkspaceProvider:
         self._step(env, "provision", lambda: run(root, ["provision", env]))
         return workdir
 
-    def _move_to_targets(self, env: str, targets: Sequence[RepositoryTarget], *, fetched: bool) -> None:
+    def _move_to_targets(self, env: str, targets: Sequence[WorktreeTarget], *, fetched: bool) -> None:
         """Move each worktree of ``env`` a target names onto ``origin/<branch>``, one worktree at a time, and touch no
         other — the env-wide base checkout already put every worktree on the workspace's branch, so a previous
         tenant's targets never carry over. ``fetched`` when this reset already fetched the env; a fresh one fetches
@@ -211,7 +210,7 @@ class WinterWorkspaceProvider:
         if not targets:
             return
         workdir = self._workspace_root / env
-        matched: list[tuple[RepoBinding, RepositoryTarget]] = []
+        matched: list[tuple[RepoBinding, WorktreeTarget]] = []
         for binding in self._repos_for(env):
             target = target_naming(targets, binding.origin_url, binding.name)
             if target is not None:

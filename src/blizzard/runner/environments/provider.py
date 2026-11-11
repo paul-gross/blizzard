@@ -24,7 +24,7 @@ class WorkspaceRepo:
 
 @domain_model
 @dataclass(frozen=True)
-class RepositoryTarget:
+class WorktreeTarget:
     """One repository a chunk's project links, with the branch the chunk starts from and lands into, as the hub names
     it. A worktree is the target's when its origin's ``owner/name`` is the target's (:meth:`names`). ``inherited`` when
     the branch is the repository's own rather than its project link's."""
@@ -48,7 +48,7 @@ class RepositoryTarget:
         return repo == self.repo and same_owner(owner, self.owner)
 
 
-def target_naming(targets: Sequence[RepositoryTarget], origin_url: str, name: str) -> RepositoryTarget | None:
+def target_naming(targets: Sequence[WorktreeTarget], origin_url: str, name: str) -> WorktreeTarget | None:
     """The first of ``targets`` naming the worktree ``name`` whose origin is ``origin_url``, or ``None``."""
     return next((target for target in targets if target.names(origin_url, name)), None)
 
@@ -125,7 +125,7 @@ class TargetUnmatchedError(EnvironmentPreparationError):
 
 
 def refuse_unmatched_overrides(
-    environment_id: str, targets: Sequence[RepositoryTarget], matched: Sequence[RepositoryTarget]
+    environment_id: str, targets: Sequence[WorktreeTarget], matched: Sequence[WorktreeTarget]
 ) -> None:
     """Raise :class:`TargetUnmatchedError` for the first override target of ``targets`` not in ``matched``; an
     inherited target matching nothing is the workspace's branch already."""
@@ -140,14 +140,11 @@ class IWorkspaceProvider(Protocol):
     """The environment-allocation seam."""
 
     def acquire(
-        self, chunk_id: str, count: int, held_ids: list[str], targets: Sequence[RepositoryTarget] = ()
+        self, chunk_id: str, count: int, held_ids: list[str], targets: Sequence[WorktreeTarget] = ()
     ) -> list[AcquiredEnvironment]:
-        """Acquire ``count`` clean environments, excluding ``held_ids``, each repository worktree a target names on
-        that target's branch and every other on the workspace's own.
-
-        Returns the acquired ``(env id, workdir)`` pairs, or raises
-        :class:`WorkspaceAcquisitionError` on refusal — never a partial set. A target branch absent on its origin
-        raises :class:`TargetBranchMissingError`."""
+        """Acquire ``count`` clean environments, excluding ``held_ids``, each worktree a target names on that target's
+        branch and every other on the workspace's own. Raises :class:`WorkspaceAcquisitionError` on refusal — never a
+        partial set — and :class:`TargetBranchMissingError` for a target branch absent on its origin."""
         ...
 
     def honors_targets(self) -> bool:

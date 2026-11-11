@@ -15,7 +15,7 @@ import pytest
 from blizzard.runner.environments.internal.git import ENV_GIT_TIMEOUT
 from blizzard.runner.environments.internal.winter_cli import SubprocessWinterCli, WinterCliError
 from blizzard.runner.environments.internal.winter_provider import WinterWorkspaceProvider
-from blizzard.runner.environments.provider import RepositoryTarget
+from blizzard.runner.environments.provider import WorktreeTarget
 from tests.support.child_launch import CHILDREN, env_git, tool_env
 from tests.winter.support import require_winter_source, winter_binding_gate
 
@@ -70,8 +70,8 @@ def _workspace(tmp_path: Path, origin: Path) -> Path:
     return workspace
 
 
-def _target(branch: str, *, inherited: bool) -> RepositoryTarget:
-    return RepositoryTarget(
+def _target(branch: str, *, inherited: bool) -> WorktreeTarget:
+    return WorktreeTarget(
         repository_id="repo_toy",
         repository_slug=_REPO,
         owner=_OWNER,

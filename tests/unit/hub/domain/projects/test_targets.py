@@ -21,9 +21,9 @@ from blizzard.hub.domain.kernel.transactions import LockedTransaction, Transacti
 from blizzard.hub.domain.projects.links import IReadProjectLinks, RepositoryLink
 from blizzard.hub.domain.projects.model import Project, ProjectId
 from blizzard.hub.domain.projects.targets import (
+    BranchTarget,
     ChunkTargets,
     IWriteChunkTargets,
-    RepositoryTarget,
     TargetChunk,
     branches,
     effective_targets,
@@ -52,13 +52,13 @@ def _link(base_branch: str | None = None, *, repository_id: RepositoryId = _REPO
 def test_a_link_with_no_branch_of_its_own_targets_the_repository_branch_inherited() -> None:
     targets = live_targets([_link()], {_REPOSITORY: _repository("master")})
 
-    assert targets == {_REPOSITORY: RepositoryTarget(_REPOSITORY, "master", inherited=True)}
+    assert targets == {_REPOSITORY: BranchTarget(_REPOSITORY, "master", inherited=True)}
 
 
 def test_a_link_naming_its_own_branch_targets_it_overridden() -> None:
     targets = live_targets([_link("rust-rewrite")], {_REPOSITORY: _repository("master")})
 
-    assert targets == {_REPOSITORY: RepositoryTarget(_REPOSITORY, "rust-rewrite", inherited=False)}
+    assert targets == {_REPOSITORY: BranchTarget(_REPOSITORY, "rust-rewrite", inherited=False)}
 
 
 def test_a_link_to_a_retired_or_missing_repository_targets_nothing() -> None:
@@ -70,10 +70,10 @@ def test_a_link_to_a_retired_or_missing_repository_targets_nothing() -> None:
 
 def test_a_captured_target_outranks_the_live_one_and_the_rest_stay_live() -> None:
     other = RepositoryId("repo_other")
-    captured = {_REPOSITORY: RepositoryTarget(_REPOSITORY, "master", inherited=True, captured_at=_AT)}
+    captured = {_REPOSITORY: BranchTarget(_REPOSITORY, "master", inherited=True, captured_at=_AT)}
     live = {
-        _REPOSITORY: RepositoryTarget(_REPOSITORY, "rust-rewrite", inherited=False),
-        other: RepositoryTarget(other, "main", inherited=True),
+        _REPOSITORY: BranchTarget(_REPOSITORY, "rust-rewrite", inherited=False),
+        other: BranchTarget(other, "main", inherited=True),
     }
 
     effective = effective_targets(captured, live)
@@ -83,13 +83,13 @@ def test_a_captured_target_outranks_the_live_one_and_the_rest_stay_live() -> Non
 
 
 def test_capturing_a_target_stamps_only_its_moment() -> None:
-    target = RepositoryTarget(_REPOSITORY, "rust-rewrite", inherited=False)
+    target = BranchTarget(_REPOSITORY, "rust-rewrite", inherited=False)
 
-    assert target.captured(_AT) == RepositoryTarget(_REPOSITORY, "rust-rewrite", inherited=False, captured_at=_AT)
+    assert target.captured(_AT) == BranchTarget(_REPOSITORY, "rust-rewrite", inherited=False, captured_at=_AT)
 
 
-_INHERITED = {_REPOSITORY: RepositoryTarget(_REPOSITORY, "master", inherited=True)}
-_OVERRIDDEN = {_REPOSITORY: RepositoryTarget(_REPOSITORY, "rust-rewrite", inherited=False)}
+_INHERITED = {_REPOSITORY: BranchTarget(_REPOSITORY, "master", inherited=True)}
+_OVERRIDDEN = {_REPOSITORY: BranchTarget(_REPOSITORY, "rust-rewrite", inherited=False)}
 
 
 def test_only_a_links_own_branch_is_an_override() -> None:
@@ -127,16 +127,16 @@ class _Records:
 
 class _Captured:
     def __init__(self) -> None:
-        self.held: dict[RepositoryId, RepositoryTarget] = {}
+        self.held: dict[RepositoryId, BranchTarget] = {}
 
     def captured_for(
         self, chunk_ids: Sequence[str], *, transaction: Transaction | None = None
-    ) -> dict[str, dict[RepositoryId, RepositoryTarget]]:
+    ) -> dict[str, dict[RepositoryId, BranchTarget]]:
         return {chunk_id: dict(self.held) for chunk_id in chunk_ids if self.held}
 
     def capture(
-        self, chunk_id: str, targets: Sequence[RepositoryTarget], *, transaction: LockedTransaction
-    ) -> dict[RepositoryId, RepositoryTarget]:
+        self, chunk_id: str, targets: Sequence[BranchTarget], *, transaction: LockedTransaction
+    ) -> dict[RepositoryId, BranchTarget]:
         for target in targets:
             self.held.setdefault(target.repository_id, target)
         return dict(self.held)
@@ -180,7 +180,7 @@ def test_targets_pair_with_their_records_by_slug_and_one_without_a_record_is_lef
     other, missing = RepositoryId("repo_other"), RepositoryId("repo_missing")
     records = {_REPOSITORY: _repository(), other: replace(_repository(repository_id=other), slug="aardvark")}
     targets = {
-        repository_id: RepositoryTarget(repository_id, "main", inherited=True)
+        repository_id: BranchTarget(repository_id, "main", inherited=True)
         for repository_id in (_REPOSITORY, other, missing)
     }
 

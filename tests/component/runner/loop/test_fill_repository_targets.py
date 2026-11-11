@@ -12,7 +12,7 @@ from pathlib import Path
 
 from blizzard.foundation.claim_denials import ClaimDenialReason
 from blizzard.foundation.clock import FixedClock
-from blizzard.runner.environments.provider import RepositoryTarget
+from blizzard.runner.environments.provider import WorktreeTarget
 from blizzard.runner.environments.workspaces import WorkspaceEntry, WorkspaceRegistry
 from blizzard.runner.harness.adapter import WorkerHandle
 from blizzard.runner.hub.client import (
@@ -45,8 +45,8 @@ _CHOICES = [("pass", "meets criteria"), ("fail", "does not")]
 _REPOS: dict[str, Sequence[tuple[str, str]]] = {
     "a1": [("api", "git@github.com:acme/api.git"), ("web", "git@github.com:acme/web.git")]
 }
-_API = RepositoryTarget("repo_api", "api", "acme", "api", "rust-rewrite", inherited=False)
-_ELSEWHERE = RepositoryTarget("repo_lib", "lib", "acme", "lib", "main", inherited=True)
+_API = WorktreeTarget("repo_api", "api", "acme", "api", "rust-rewrite", inherited=False)
+_ELSEWHERE = WorktreeTarget("repo_lib", "lib", "acme", "lib", "main", inherited=True)
 
 
 class _Hub(FakeHub):
@@ -88,7 +88,7 @@ def _provider(*, honors_targets: bool = True) -> FakeProvider:
     return FakeProvider({"a1": "/root-a/a1"}, repos=_REPOS, honors_targets=honors_targets)
 
 
-def _entry(targets: tuple[RepositoryTarget, ...] | None) -> QueueEntry:
+def _entry(targets: tuple[WorktreeTarget, ...] | None) -> QueueEntry:
     return QueueEntry(chunk_id="ch_1", graph_id="gr_1", position=0, project_id="pr_a", repository_targets=targets)
 
 

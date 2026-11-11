@@ -17,7 +17,7 @@ from pathlib import Path
 from blizzard.foundation.clock import FixedClock
 from blizzard.runner.composition import build_host_process
 from blizzard.runner.config import RunnerConfig
-from blizzard.runner.environments.provider import AcquiredEnvironment, RepositoryTarget
+from blizzard.runner.environments.provider import AcquiredEnvironment, WorktreeTarget
 from blizzard.runner.environments.workspaces import WorkspaceEntry, WorkspaceRegistry
 from blizzard.runner.harness.adapter import WorkerHandle
 from blizzard.runner.host_config import BuiltRunner, HaltedRunner, ResolvedToken
@@ -64,7 +64,7 @@ class _BlockingProvider(FakeProvider):
         self._first = True
 
     def acquire(
-        self, chunk_id: str, count: int, held_ids: list[str], targets: Sequence[RepositoryTarget] = ()
+        self, chunk_id: str, count: int, held_ids: list[str], targets: Sequence[WorktreeTarget] = ()
     ) -> list[AcquiredEnvironment]:
         self.acquisitions.append(chunk_id)
         self.entered.release()

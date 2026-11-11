@@ -14,7 +14,7 @@ from sqlalchemy.engine import Connection
 from blizzard.foundation.store.batching import id_batches
 from blizzard.hub.domain.config.repositories import RepositoryId
 from blizzard.hub.domain.kernel.transactions import LockedTransaction, Transaction
-from blizzard.hub.domain.projects.targets import IWriteChunkTargets, RepositoryTarget
+from blizzard.hub.domain.projects.targets import BranchTarget, IWriteChunkTargets
 from blizzard.hub.store import schema as s
 from blizzard.hub.store.scoped import ScopedConnections, statements_of
 from blizzard.hub.store.transactions import connection_for, connection_in
@@ -22,15 +22,15 @@ from blizzard.hub.store.transactions import connection_for, connection_in
 _t = s.chunk_repository_targets
 
 
-def _target(row: Row[Any]) -> RepositoryTarget:
-    return RepositoryTarget(
+def _target(row: Row[Any]) -> BranchTarget:
+    return BranchTarget(
         RepositoryId(row.repository_id), row.base_branch, inherited=row.inherited, captured_at=row.captured_at
     )
 
 
-def _held(conn: Connection, chunk_ids: Sequence[str]) -> dict[str, dict[RepositoryId, RepositoryTarget]]:
+def _held(conn: Connection, chunk_ids: Sequence[str]) -> dict[str, dict[RepositoryId, BranchTarget]]:
     stmts = statements_of(conn)
-    held: dict[str, dict[RepositoryId, RepositoryTarget]] = {}
+    held: dict[str, dict[RepositoryId, BranchTarget]] = {}
     for batch in id_batches(chunk_ids):
         rows = conn.execute(
             stmts.select(
@@ -50,7 +50,7 @@ class ChunkTargetsStore:
 
     def captured_for(
         self, chunk_ids: Sequence[str], *, transaction: Transaction | None = None
-    ) -> dict[str, dict[RepositoryId, RepositoryTarget]]:
+    ) -> dict[str, dict[RepositoryId, BranchTarget]]:
         ids = sorted(set(chunk_ids))
         if not ids:
             return {}
@@ -58,8 +58,8 @@ class ChunkTargetsStore:
             return _held(conn, ids)
 
     def capture(
-        self, chunk_id: str, targets: Sequence[RepositoryTarget], *, transaction: LockedTransaction
-    ) -> dict[RepositoryId, RepositoryTarget]:
+        self, chunk_id: str, targets: Sequence[BranchTarget], *, transaction: LockedTransaction
+    ) -> dict[RepositoryId, BranchTarget]:
         conn = connection_for(self._store, transaction, chunk=chunk_id)
         held = _held(conn, [chunk_id]).get(chunk_id, {})
         fresh = [target for target in targets if target.repository_id not in held]

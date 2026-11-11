@@ -6,7 +6,7 @@ from __future__ import annotations
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
-from blizzard.runner.environments.provider import RepositoryTarget
+from blizzard.runner.environments.provider import WorktreeTarget
 from tests.support.runner_fakes import SqlAlchemyRunnerStore, make_store
 
 _T0 = datetime(2026, 11, 11, 12, 0, 0, tzinfo=UTC)
@@ -16,11 +16,11 @@ def _store(tmp_path: Path) -> SqlAlchemyRunnerStore:
     return make_store(f"sqlite:///{tmp_path / 'runner.db'}")
 
 
-def _target(repo: str, branch: str, *, inherited: bool = False) -> RepositoryTarget:
-    return RepositoryTarget(f"repo_{repo}", repo, "acme", repo, branch, inherited=inherited)
+def _target(repo: str, branch: str, *, inherited: bool = False) -> WorktreeTarget:
+    return WorktreeTarget(f"repo_{repo}", repo, "acme", repo, branch, inherited=inherited)
 
 
-def _bind(store: SqlAlchemyRunnerStore, environment_id: str, targets: list[RepositoryTarget], *, at: int) -> None:
+def _bind(store: SqlAlchemyRunnerStore, environment_id: str, targets: list[WorktreeTarget], *, at: int) -> None:
     store.record_binding(
         chunk_id="ch_1",
         environment_id=environment_id,

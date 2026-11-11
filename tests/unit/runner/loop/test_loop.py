@@ -32,7 +32,7 @@ from blizzard.foundation.queue_policy import QueueMatchPolicy
 from blizzard.foundation.store.engine import create_engine_from_url
 from blizzard.foundation.tokens import TokenHash
 from blizzard.foundation.trace_ids import step_traceparent
-from blizzard.runner.environments.provider import AcquiredEnvironment, RepositoryTarget
+from blizzard.runner.environments.provider import AcquiredEnvironment, WorktreeTarget
 from blizzard.runner.environments.worktree import IWorktreeGit
 from blizzard.runner.harness.adapter import HarnessSpawnError, HarnessVersionChangedError, WorkerHandle
 from blizzard.runner.harness.capability_snapshot import HarnessCapability, HarnessVersionCache
@@ -1552,7 +1552,7 @@ class _HeldIgnoringProvider(FakeProvider):
     """A provider that breaks its ``held_ids`` contract — hands out its whole pool every time."""
 
     def acquire(
-        self, chunk_id: str, count: int, held_ids: list[str], targets: Sequence[RepositoryTarget] = ()
+        self, chunk_id: str, count: int, held_ids: list[str], targets: Sequence[WorktreeTarget] = ()
     ) -> list[AcquiredEnvironment]:
         return super().acquire(chunk_id, count, [], targets)
 

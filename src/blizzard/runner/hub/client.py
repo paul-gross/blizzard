@@ -20,7 +20,7 @@ from blizzard.foundation.roles import domain_model
 from blizzard.foundation.runner_tokens import RunnerTokenRefusalReason
 from blizzard.foundation.runner_version import VersionRefusalReason
 from blizzard.foundation.unrecognized import Unrecognized
-from blizzard.runner.environments.provider import RepositoryTarget
+from blizzard.runner.environments.provider import WorktreeTarget
 from blizzard.runner.harness.capability_snapshot import HarnessCapability
 from blizzard.runner.hub.served_projects import ServedProject
 from blizzard.runner.node_steps.chunk_state import ChunkState
@@ -266,7 +266,7 @@ class QueueEntry:
     #: The chunk's project, as the hub names it; ``None`` from a hub that does not say.
     project_id: str | None = None
     #: The chunk's repository targets, as the hub names them; ``None`` from a hub that does not say.
-    repository_targets: tuple[RepositoryTarget, ...] | None = None
+    repository_targets: tuple[WorktreeTarget, ...] | None = None
 
 
 @domain_model
@@ -335,7 +335,7 @@ class ClaimRequest:
     workspace_id: str
     environment_ids: list[str]
     #: ``None`` when it prepared at none — the hub then admits the claim only while no target is a link's own branch.
-    repository_targets: tuple[RepositoryTarget, ...] | None = None
+    repository_targets: tuple[WorktreeTarget, ...] | None = None
 
 
 @domain_model

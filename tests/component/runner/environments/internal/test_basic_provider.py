@@ -12,11 +12,11 @@ from blizzard.runner.environments.internal.basic_provider import BasicWorkspaceP
 from blizzard.runner.environments.internal.git import EnvGitError
 from blizzard.runner.environments.provider import (
     EnvironmentPreparationError,
-    RepositoryTarget,
     TargetBranchMissingError,
     TargetUnmatchedError,
     WorkspaceAcquisitionError,
     WorkspaceRepo,
+    WorktreeTarget,
 )
 from tests.support.basic_provider import git
 from tests.support.child_launch import env_git, workspace_launch
@@ -257,8 +257,8 @@ def _owned_origin(tmp_path: Path, *, branches: tuple[str, ...]) -> WorkspaceRepo
     return WorkspaceRepo("toy", f"file://localhost{bare}")
 
 
-def _target(branch: str, *, repo: str = "toy", inherited: bool = False) -> RepositoryTarget:
-    return RepositoryTarget(
+def _target(branch: str, *, repo: str = "toy", inherited: bool = False) -> WorktreeTarget:
+    return WorktreeTarget(
         repository_id=f"repo_{repo}",
         repository_slug=repo,
         owner="acme",
