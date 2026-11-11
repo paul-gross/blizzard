@@ -379,6 +379,20 @@ describe('related scopes async layout', () => {
 
 
 describe('routine create form layout', () => {
+  it('keeps fields compact in a tall container', async () => {
+    await TestBed.configureTestingModule({ imports: [RoutineCreateForm], providers: [provideZonelessChangeDetection()] }).compileComponents();
+    const fixture = TestBed.createComponent(RoutineCreateForm);
+    const root = fixture.nativeElement as HTMLElement;
+    root.style.cssText = 'display:block;width:320px;height:700px';
+    document.body.appendChild(root);
+    await fixture.whenStable();
+    try {
+      const fields = [...root.querySelectorAll<HTMLElement>('.chf-field')];
+      expect(fields).toHaveLength(5);
+      expect(Math.max(...fields.map((field) => field.getBoundingClientRect().height))).toBeLessThan(100);
+    } finally { root.remove(); fixture.destroy(); }
+  });
+
   it.each([390, 1024])('keeps the urgency selector inside the form at %ipx', async (width) => {
     await TestBed.configureTestingModule({ imports: [RoutineCreateForm], providers: [provideZonelessChangeDetection()] }).compileComponents();
     const fixture = TestBed.createComponent(RoutineCreateForm);

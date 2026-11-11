@@ -11,9 +11,6 @@
   min-width: 0;
 }
 .chf-field {
-  flex: 1 1 140px;
-}
-.chf-field {
   display: flex;
   flex-direction: column;
   gap: 4px;

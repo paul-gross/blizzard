@@ -18,6 +18,11 @@
 .list {
   font-family: var(--mono);
 }
+@media (max-width: 767px) {
+  .list {
+    min-width: 600px;
+  }
+}
 /* The column header, held at the top while the rows scroll beneath it. Indented by the rows'
    own left accent and inset so its labels sit over their columns. */
 .cols {

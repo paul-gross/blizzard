@@ -50,6 +50,12 @@ fleet-kit-panel.board-panel {
   flex: 1;
   min-height: 0;
 }
+@media (max-width: 767px) {
+  .board {
+    grid-auto-columns: minmax(200px, 1fr);
+    overflow-x: auto;
+  }
+}
 /* The panel header: the Board/List switch. */
 .hdr {
   display: flex;
