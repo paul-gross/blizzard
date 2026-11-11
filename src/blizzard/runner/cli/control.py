@@ -826,6 +826,6 @@ def echo_identity(view: IdentityVerdictView) -> None:
     refusal = verdict.refusal()
     if refusal is None:
         return
-    label = "HALTED" if verdict.state in (IdentityState.NOT_HELD, IdentityState.TENANT_DIFFERS) else "REFUSING"
+    label = "HALTED" if verdict.halted_by_standing() else "REFUSING"
     remedy = verdict.remedy()
     click.echo(f"  {label}: {refusal}" + (f" — {remedy}" if remedy is not None else ""))

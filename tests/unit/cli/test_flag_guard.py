@@ -177,6 +177,8 @@ def test_a_declaration_naming_an_undeclared_flag_or_the_wrong_scope_is_refused()
 
 
 def test_a_flag_off_404_from_the_host_renders_the_same_message() -> None:
+    """The body here has no problem ``type`` — the shape the runner's flag guard answers with, and the one the host
+    path matches by its ``detail.code``."""
     from blizzard.runner.cli.daemon import RunnerDaemon
 
     body = {"detail": FlagOff.of("hub-thing").model_dump()}
@@ -186,3 +188,21 @@ def test_a_flag_off_404_from_the_host_renders_the_same_message() -> None:
     with pytest.raises(click.ClickException) as raised:
         RunnerDaemon("verb", client, "r").get_from_host("/api/held")
     assert raised.value.message == _REFUSAL
+
+
+@pytest.mark.parametrize(
+    "response",
+    [
+        httpx2.Response(404, json={"detail": {"code": "something_else", "message": "nope"}}),
+        httpx2.Response(404, content=b"<html>not found</html>"),
+        httpx2.Response(404, json={"type": "urn:blizzard:problem:other", "title": "Other", "status": 404}),
+    ],
+    ids=["unrelated-legacy-code", "non-json-body", "unrelated-problem-type"],
+)
+def test_a_404_from_the_host_that_is_not_flag_off_raises_the_status_error(response: httpx2.Response) -> None:
+    from blizzard.runner.cli.daemon import RunnerDaemon
+
+    client = httpx2.Client(transport=httpx2.MockTransport(lambda request: response), base_url="http://r")
+    with pytest.raises(httpx2.HTTPStatusError) as raised:
+        RunnerDaemon("verb", client, "r").get_from_host("/api/held")
+    assert raised.value.response.status_code == 404
