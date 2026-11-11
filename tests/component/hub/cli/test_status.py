@@ -267,8 +267,20 @@ def test_status_marks_a_blocked_chunk_naming_the_prerequisite() -> None:
     assert "[blocked on ch_prereq]" in result.output
 
 
-_FLOOR = {"lever": "floor", "detail": "exhausted", "subscription": "anthropic", "until": "2026-10-22T14:00:00Z"}
-_PACE = {"lever": "pace", "detail": "7d 86% spent, 71% elapsed", "subscription": None, "until": None}
+_FLOOR = {
+    "lever": "floor",
+    "lever_kind": "floor",
+    "detail": "exhausted",
+    "subscription": "anthropic",
+    "until": "2026-10-22T14:00:00Z",
+}
+_PACE = {
+    "lever": "pace",
+    "lever_kind": "pace",
+    "detail": "7d 86% spent, 71% elapsed",
+    "subscription": None,
+    "until": None,
+}
 
 
 def _status_output(runner: dict[str, Any]) -> str:
