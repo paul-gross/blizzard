@@ -45,21 +45,81 @@ test('urgency created and reordered in admin changes ready work and retirement m
   await expect(card).toBeVisible();
   // Keep the runner's detail open across the board edit and retirement, to exercise live Next updates.
   const fleetPage = await page.context().newPage();
+  // Hold the real stream's frames at the browser boundary. Releasing only the edited chunk's frame makes the
+  // subsequent Next read attributable to that frame, not another event or a reconnect.
+  await fleetPage.addInitScript(() => {
+    const originalFetch = globalThis.fetch;
+    const held: string[] = [];
+    let controller: ReadableStreamDefaultController<Uint8Array>;
+    const encoder = new TextEncoder();
+    Object.assign(globalThis, { urgencyStream: { held, release: (frame: string) => controller.enqueue(encoder.encode(frame)) } });
+    globalThis.fetch = async (...args) => {
+      const response = await originalFetch(...args);
+      if (!response.url.includes('/api/events/stream') || !response.body) return response;
+      const reader = response.body.getReader();
+      const decoder = new TextDecoder();
+      let buffer = '';
+      const body = new ReadableStream<Uint8Array>({
+        start(stream) {
+          controller = stream;
+          void (async () => {
+            while (true) {
+              const { value, done } = await reader.read();
+              if (done) break;
+              buffer += decoder.decode(value, { stream: true });
+              let end = buffer.indexOf('\n\n');
+              while (end !== -1) {
+                held.push(buffer.slice(0, end + 2));
+                buffer = buffer.slice(end + 2);
+                end = buffer.indexOf('\n\n');
+              }
+            }
+            stream.close();
+          })();
+        },
+        cancel: () => reader.cancel(),
+      });
+      return new Response(body, { status: response.status, headers: response.headers });
+    };
+  });
   await fleetPage.setViewportSize(wideViewport);
+  // eslint-disable-next-line no-restricted-syntax -- This proof bounds real time since the Next query is created.
+  const start = Date.now();
   await fleetPage.goto('/fleet');
   await fleetPage.locator('[data-testid^="fleet-card-hs_"]').first().click();
   const runner = fleetPage.locator(`[data-testid="fleet-runner"][data-runner="${runnerId}"]`);
   const nextLine = runner.getByTestId('runner-next-claim');
   await expect(nextLine.getByTestId('runner-next-link')).toHaveAttribute('title', first);
+  const queueBefore = await api.get('/api/queue');
+  expect(queueBefore.status).toBe(200);
+  const rankedIds = queueBefore.body.entries.map((entry: { chunk_id: string }) => entry.chunk_id);
+  expect(rankedIds).toEqual([first, urgent]);
+  await fleetPage.evaluate(() => {
+    (globalThis as unknown as { urgencyStream: { held: string[] } }).urgencyStream.held.length = 0;
+  });
   await card.click();
   await page.getByTestId('chunk-urgency-menu').click();
   await page.getByRole('menuitemradio', { name: 'Expedite' }).click();
   await expect.poll(async () => (await api.get(`/api/chunks/${urgent}`)).body.urgency.slug).toBe('expedite');
+  const queueAfter = await api.get('/api/queue');
+  expect(queueAfter.status).toBe(200);
+  expect(queueAfter.body.entries.map((entry: { chunk_id: string }) => entry.chunk_id)).toEqual(rankedIds);
   await expect(card.locator('app-urgency-pill')).toContainText('🔥');
   await expect(card.locator('app-urgency-pill')).toContainText('Expedite');
   const next = async () => (await api.get(`/api/runners/${runnerId}/next-claim`)).body.next?.chunk_id;
   await expect.poll(next).toBe(urgent);
-  await expect(nextLine.getByTestId('runner-next-link')).toHaveAttribute('title', urgent);
+  await expect.poll(async () => fleetPage.evaluate((id) => {
+    const stream = (globalThis as unknown as { urgencyStream: { held: string[] } }).urgencyStream;
+    return stream.held.find((item) => item.includes('event: chunk-changed') && item.includes(id)) ?? null;
+  }, urgent)).not.toBeNull();
+  await expect(nextLine.getByTestId('runner-next-link')).toHaveAttribute('title', first);
+  await fleetPage.evaluate((id) => {
+    const stream = (globalThis as unknown as { urgencyStream: { held: string[]; release: (frame: string) => void } }).urgencyStream;
+    stream.release(stream.held.find((item) => item.includes('event: chunk-changed') && item.includes(id))!);
+  }, urgent);
+  await expect(nextLine.getByTestId('runner-next-link')).toHaveAttribute('title', urgent, { timeout: 10000 });
+  // eslint-disable-next-line no-restricted-syntax -- The real polling interval must not have elapsed.
+  expect(Date.now() - start).toBeLessThan(45000);
   await expect(nextLine.locator('fleet-kit-urgency-pill')).toContainText('🔥');
   await expect(nextLine.locator('fleet-kit-urgency-pill')).toContainText('Expedite');
 
@@ -71,6 +131,15 @@ test('urgency created and reordered in admin changes ready work and retirement m
   const retired = await api.get(`/api/urgencies/${created.urgency_id}`);
   expect(retired.body.retired).toBe(true);
   expect(await next()).toBe(first);
+  // Release retirement's chunk frame too; the fleet tab's stream remains held.
+  await expect.poll(async () => fleetPage.evaluate((id) => {
+    const stream = (globalThis as unknown as { urgencyStream: { held: string[] } }).urgencyStream;
+    return stream.held.filter((item) => item.includes('event: chunk-changed') && item.includes(id)).length;
+  }, urgent)).toBeGreaterThan(1);
+  await fleetPage.evaluate((id) => {
+    const stream = (globalThis as unknown as { urgencyStream: { held: string[]; release: (frame: string) => void } }).urgencyStream;
+    stream.release(stream.held.filter((item) => item.includes('event: chunk-changed') && item.includes(id)).at(-1)!);
+  }, urgent);
   await expect(nextLine.getByTestId('runner-next-link')).toHaveAttribute('title', first);
   await expect(nextLine.locator('fleet-kit-urgency-pill')).toHaveCount(0);
   await page.goto('/board');
