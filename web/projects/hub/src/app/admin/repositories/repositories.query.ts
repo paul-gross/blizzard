@@ -10,7 +10,7 @@ import {
   type RepositorySummary,
 } from 'fleet';
 
-import { landingPolicies, type LandingPolicyNeeds } from './repositories.model';
+type LandingPolicyNeedsView = hubApi.LandingPolicyNeedsView;
 
 const NOUN = 'repositories';
 
@@ -52,16 +52,15 @@ export function injectRepositoryQuery(key: () => string | null) {
   });
 }
 
-/** `GET /api/config/schema/repositories` — the landing policies it lists, with the forge
- * capabilities each requires; `null` when the schema lists them malformed. Freshness:
- * `hubConfigKey` (`web/projects/fleet/src/lib/core/query-keys.ts`). */
-export function injectRepositorySchemaQuery() {
+/** `GET /api/config/landing-policies` — every landing policy with the forge capabilities it requires and
+ * uses, in the hub's order. Freshness: `hubConfigKey` (`web/projects/fleet/src/lib/core/query-keys.ts`). */
+export function injectLandingPoliciesQuery() {
   return injectQuery(() => ({
-    queryKey: [...hubConfigKey, 'schema', NOUN],
-    queryFn: async (): Promise<readonly LandingPolicyNeeds[] | null> => {
-      const { data, error } = await hubApi.getSchemaApiConfigSchemaKindGet({ path: { kind: NOUN }, throwOnError: false });
+    queryKey: [...hubConfigKey, 'landing-policies'],
+    queryFn: async (): Promise<LandingPolicyNeedsView[]> => {
+      const { data, error } = await hubApi.listLandingPoliciesApiConfigLandingPoliciesGet({ throwOnError: false });
       if (error) throw error;
-      return landingPolicies(data);
+      return data ?? [];
     },
   }));
 }

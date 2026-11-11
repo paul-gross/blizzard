@@ -21,8 +21,8 @@ import { detailCliCommand } from '../config-cli.model';
 import { lastChange, revisionRows } from '../config-history.model';
 import { injectConfigHistoryQuery } from '../config-history.query';
 import { ConfigRecordPanel } from '../config-record-panel';
-import { chosenForgeOffered, repositoryFields, repositoryRecordVm } from './repositories.model';
-import { injectRepositoryQuery, injectRepositorySchemaQuery } from './repositories.query';
+import { repositoryFields, repositoryRecordVm } from './repositories.model';
+import { injectRepositoryQuery, injectLandingPoliciesQuery } from './repositories.query';
 import { injectForgeQuery, injectForgesQuery } from '../forges/forges.query';
 
 /**
@@ -69,7 +69,7 @@ export class RepositoryDetail {
   private readonly lifecycleMutation = injectRepositoryLifecycleMutation();
 
   private readonly forgesQuery = injectForgesQuery(() => false);
-  private readonly schemaQuery = injectRepositorySchemaQuery();
+  private readonly landingPoliciesQuery = injectLandingPoliciesQuery();
   /** The forge the edit form has picked; until it picks one, the repository's own. */
   private readonly pickedForge = signal<string | null>(null);
   private readonly chosenForge = computed(() => this.pickedForge() ?? this.repositoryQuery.data()?.forge_id ?? null);
@@ -77,8 +77,8 @@ export class RepositoryDetail {
   protected readonly fields = computed(() =>
     repositoryFields(
       this.forgesQuery.data() ?? [],
-      this.schemaQuery.data() ?? null,
-      chosenForgeOffered(this.chosenForge(), this.forgeQuery.data()),
+      this.landingPoliciesQuery.data() ?? null,
+      this.forgeQuery.data()?.landing_policies ?? null,
     ),
   );
   protected readonly editOpen = signal(false);

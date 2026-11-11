@@ -18,8 +18,8 @@ import { ConfigMaster } from '../config-master';
 import { injectLensLinks, withinLens } from '../projects/lens-links';
 import { lensedListState } from '../projects/projects.model';
 import type { ConfigRowVm } from '../config-record-list';
-import { chosenForgeOffered, repositoryCreate, repositoryFields, repositoryRows } from './repositories.model';
-import { injectRepositoriesQuery, injectRepositorySchemaQuery } from './repositories.query';
+import { repositoryCreate, repositoryFields, repositoryRows } from './repositories.model';
+import { injectRepositoriesQuery, injectLandingPoliciesQuery } from './repositories.query';
 import { ProjectLens } from '../../core/project-lens';
 import { injectForgeQuery, injectForgesQuery } from '../forges/forges.query';
 
@@ -86,15 +86,15 @@ export class RepositoriesPage {
   private readonly meQuery = injectMeQuery();
   protected readonly createMutation = injectCreateRepositoryMutation();
   private readonly forgesQuery = injectForgesQuery(() => false);
-  private readonly schemaQuery = injectRepositorySchemaQuery();
+  private readonly landingPoliciesQuery = injectLandingPoliciesQuery();
   /** The forge the create form has picked — its detail says which policies it can honour. */
   private readonly pickedForge = signal<string | null>(null);
   private readonly forgeQuery = injectForgeQuery(() => this.pickedForge());
   protected readonly fields = computed(() =>
     repositoryFields(
       this.forgesQuery.data() ?? [],
-      this.schemaQuery.data() ?? null,
-      chosenForgeOffered(this.pickedForge(), this.forgeQuery.data()),
+      this.landingPoliciesQuery.data() ?? null,
+      this.forgeQuery.data()?.landing_policies ?? null,
     ),
   );
   protected readonly createOpen = signal(false);

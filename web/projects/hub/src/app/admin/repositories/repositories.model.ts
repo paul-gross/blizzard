@@ -1,5 +1,4 @@
 import {
-  type ForgeDetail,
   type ForgeSummary,
   hubApi,
   openLookup,
@@ -17,6 +16,8 @@ import type { ConfigRecordVm } from '../config-record-panel';
 import { forgePickerFields } from '../forges/forges.model';
 
 type LandingPolicyName = hubApi.LandingPolicyName;
+type LandingPolicyNeedsView = hubApi.LandingPolicyNeedsView;
+type PolicyHonour = hubApi.PolicyHonour;
 const { LandingPolicyName } = hubApi;
 
 /** The create a new repository's form sends: a name left empty is omitted, and the hub takes the slug. */
@@ -36,34 +37,6 @@ export function repositoryCreate(body: Readonly<Record<string, string | boolean>
   };
 }
 
-/** A landing policy as the repositories schema lists it — the forge capabilities it
- * requires, and the ones it uses when offered. */
-export interface LandingPolicyNeeds {
-  readonly policy: string;
-  readonly requires: readonly string[];
-  readonly uses: readonly string[];
-}
-
-/** The schema extension that lists every landing policy. */
-export const LANDING_POLICIES_KEY = 'x-blizzard-landing-policies';
-
-const isStrings = (value: unknown): value is readonly string[] =>
-  Array.isArray(value) && value.every((item) => typeof item === 'string');
-
-function isPolicyNeeds(value: unknown): value is LandingPolicyNeeds {
-  if (typeof value !== 'object' || value === null) return false;
-  const entry = value as Record<string, unknown>;
-  return typeof entry['policy'] === 'string' && isStrings(entry['requires']) && isStrings(entry['uses']);
-}
-
-/** The landing policies a repositories schema lists, in its order — `null` when it
- * lists none or lists them malformed. */
-export function landingPolicies(schema: unknown): readonly LandingPolicyNeeds[] | null {
-  if (typeof schema !== 'object' || schema === null) return null;
-  const list = (schema as Record<string, unknown>)[LANDING_POLICIES_KEY];
-  return Array.isArray(list) && list.length > 0 && list.every(isPolicyNeeds) ? list : null;
-}
-
 /** A landing policy's name as the board shows it; an unknown one reads raw. */
 export const landingPolicyLabel = openLookup<LandingPolicyName, string>(
   {
@@ -75,41 +48,33 @@ export const landingPolicyLabel = openLookup<LandingPolicyName, string>(
 );
 
 /**
- * The landing-policy choices. With the schema read, its policies in its order, each
- * disabled when the chosen forge's `offered` lacks one it requires — its label names
- * what is missing. Without the schema, the generated policies, none disabled; the hub
- * answers a policy it refuses.
+ * The landing-policy choices. With the needs read, its policies in its order, each
+ * disabled when the chosen forge's honour entry for it says `honoured: false` — its
+ * label names what is `missing`. Without the needs, the generated policies; without a
+ * chosen forge's honour, none disabled. The hub answers a policy it refuses.
  */
 export function landingPolicyOptions(
-  policies: readonly LandingPolicyNeeds[] | null,
-  offered: readonly string[] | null,
+  needs: readonly LandingPolicyNeedsView[] | null,
+  honour: readonly PolicyHonour[] | null,
 ): readonly ConfigFieldOption[] {
-  if (policies === null) {
-    return Object.values(LandingPolicyName).map((policy) => ({ value: policy, label: landingPolicyLabel(policy) }));
-  }
-  return policies.map(({ policy, requires }) => {
-    const missing = offered === null ? [] : requires.filter((capability) => !offered.includes(capability));
+  const policies: readonly string[] = needs === null ? Object.values(LandingPolicyName) : needs.map(({ policy }) => policy);
+  return policies.map((policy) => {
     const label = landingPolicyLabel(policy);
-    return missing.length === 0
+    const entry = honour?.find((candidate) => candidate.policy === policy);
+    return entry === undefined || entry.honoured
       ? { value: policy, label }
-      : { value: policy, label: `${label} — forge lacks ${missing.join(', ')}`, disabled: true };
+      : { value: policy, label: `${label} — forge lacks ${entry.missing.join(', ')}`, disabled: true };
   });
-}
-
-/** The capabilities of the forge a form has chosen — `null` with none chosen or its
- * detail not yet read. */
-export function chosenForgeOffered(forgeId: string | null, forge: ForgeDetail | undefined): readonly string[] | null {
-  return forgeId === null ? null : (forge?.offered ?? null);
 }
 
 /** The repository form's fields with its forge and landing-policy choices filled in. */
 export function repositoryFields(
   forges: readonly ForgeSummary[],
-  policies: readonly LandingPolicyNeeds[] | null,
-  offered: readonly string[] | null,
+  needs: readonly LandingPolicyNeedsView[] | null,
+  honour: readonly PolicyHonour[] | null,
 ): readonly ConfigFieldDef<keyof RepositoryCreateRequest>[] {
   return forgePickerFields(REPOSITORY_FIELDS, forges).map((field) =>
-    field.key === 'landing_policy' ? { ...field, options: landingPolicyOptions(policies, offered) } : field,
+    field.key === 'landing_policy' ? { ...field, options: landingPolicyOptions(needs, honour) } : field,
   );
 }
 
