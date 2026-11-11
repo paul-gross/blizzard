@@ -6,9 +6,9 @@ them, reflect, and fold the findings docket.
 ## Start from what is actually there
 
 Read `blizzard runner chunk history` for the chunk's transitions and bounces, then its asset trail: each node's
-`retrospective` diary (`blizzard runner artifact get retrospective --node <node> --content` — `--node` required, every
-node in this graph produces one), the `reviewed-plan`, the plan-review and review findings, the verification report, and
-the pre-push summary.
+`retrospective` diary (`blizzard runner artifact get retrospective --node <node> --content` — `--node` keeps the read to
+one node: without it, the read returns whichever node's `retrospective` is newest, and every node in this graph produces
+one), the `reviewed-plan`, the plan-review and review findings, the verification report, and the pre-push summary.
 
 ## Fold the findings docket
 

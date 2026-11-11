@@ -67,8 +67,8 @@ class ArtifactNotFound(Exception):
 
 
 class ArtifactAmbiguous(Exception):
-    """More than one candidate for the name — mapped to ``409``, naming the candidates and
-    only the narrowing flags still open to the caller."""
+    """The name resolves in more than one scope — mapped to ``409``, naming the surviving
+    candidates and only the narrowing flag still open to the caller."""
 
     def __init__(self, name: str, labels: Sequence[str], levers: Sequence[str]) -> None:
         hint = f" (pass {' and/or '.join(levers)} to disambiguate)" if levers else ""
@@ -79,12 +79,14 @@ class ArtifactAmbiguous(Exception):
 
 class ArtifactCandidate(Protocol):
     """What a read's resolution reads off one candidate artifact: its scope, and for a
-    node-scoped one, its producing node."""
+    node-scoped one, its producing node and the epoch it was produced under."""
 
     @property
     def scope(self) -> ArtifactScope | Unrecognized: ...
     @property
     def node_name(self) -> str | None: ...
+    @property
+    def epoch(self) -> int | None: ...
 
 
 def _label(candidate: ArtifactCandidate) -> str:
@@ -126,12 +128,24 @@ class ArtifactRead:
 
     def resolve[C: ArtifactCandidate](self, candidates: Sequence[C]) -> C:
         """The one candidate the searched scopes found, else :class:`ArtifactNotFound`
-        naming what was searched, or :class:`ArtifactAmbiguous` for several."""
+        naming what was searched, or :class:`ArtifactAmbiguous` for a name in several scopes.
+        Node candidates collapse to the newest by epoch first — each lease mints a fresh, rising
+        epoch, so two producing nodes never tie; a tie keeps the first, the envelope's newest-first
+        order."""
         if not candidates:
             raise ArtifactNotFound(self._not_found())
-        if len(candidates) > 1:
-            raise ArtifactAmbiguous(self.name, sorted({_label(c) for c in candidates}), self._levers(candidates))
-        return candidates[0]
+        survivors = self._collapse_node_series(candidates)
+        if len(survivors) > 1:
+            raise ArtifactAmbiguous(self.name, sorted({_label(c) for c in survivors}), self._levers())
+        return survivors[0]
+
+    @staticmethod
+    def _collapse_node_series[C: ArtifactCandidate](candidates: Sequence[C]) -> list[C]:
+        nodes = [c for c in candidates if c.scope is ArtifactScope.NODE]
+        others = [c for c in candidates if c.scope is not ArtifactScope.NODE]
+        if len(nodes) > 1:
+            nodes = [max(nodes, key=lambda c: -1 if c.epoch is None else c.epoch)]
+        return nodes + others
 
     def _not_found(self) -> str:
         if self.scope is ArtifactScope.GRAPH:
@@ -148,18 +162,11 @@ class ArtifactRead:
         )
         return f"no artifact {self.name!r}{qualifier} for this node-step{where}"
 
-    def _levers(self, candidates: Sequence[ArtifactCandidate]) -> tuple[str, ...]:
-        """The narrowing flags that could actually change this result. ``--node`` names a
-        *producing* node, which only a node-scoped candidate has, so it is offered only when
-        the ambiguous set actually holds one — a graph/system-only collision has no producing
-        node for ``--node`` to narrow, and advising it would send the caller toward an
-        unrelated ``404`` instead of a resolution."""
-        if self.node is not None:
-            return ()
-        node_scoped = any(c.scope is ArtifactScope.NODE for c in candidates)
-        if self.scope is None:
-            return ("--scope", "--node") if node_scoped else ("--scope",)
-        return ("--node",) if node_scoped else ()
+    def _levers(self) -> tuple[str, ...]:
+        """The narrowing flag that could change this result. Node candidates have already
+        collapsed to one, so a refusal is a cross-scope collision and only ``--scope`` settles it;
+        a supplied ``--node`` or ``--scope`` leaves at most one candidate, so no lever."""
+        return ("--scope",) if self.node is None and self.scope is None else ()
 
 
 @domain_model

@@ -150,7 +150,8 @@ def _is_not_found(exc: click.ClickException) -> bool:
     "--node",
     "node",
     default=None,
-    help="The producing node's name, to disambiguate a NAME more than one node emits. Neither "
+    help="The producing node's name, to read that one node's series of a NAME several nodes emit "
+    "(a bare read returns the newest). Neither "
     "a graph declaration nor a system artifact has a producing node, so this narrows to node "
     "scope on its own — pairing it with `--scope graph`/`--scope system` is a contradiction "
     "and is refused.",
@@ -161,8 +162,7 @@ def _is_not_found(exc: click.ClickException) -> bool:
     type=_SCOPE_CHOICE,
     default=None,
     help="Resolve NAME from one scope only — `node`, `graph`, or `system`. Omitted searches "
-    "all three, and a NAME present in more than one is ambiguous the same as several "
-    "producing nodes — unless `--node` settles it.",
+    "all three, and a NAME present in more than one scope is ambiguous — unless `--node` narrows to node scope.",
 )
 @click.option(
     "--content",
@@ -176,7 +176,7 @@ def artifact_get(
 ) -> None:
     """Worker: read one published artifact by NAME, passed literally, slashes included — a ``produces:`` name
     (node scope), a baked-in graph declaration (graph scope), or one of blizzard's own published documents
-    (system scope). Refused when NAME is unknown, when more than one candidate matches (naming them), or when
+    (system scope). Refused when NAME is unknown, when NAME resolves in more than one scope (naming them), or when
     this node-step has only staged it (pointing at ``artifact staged``). ``--content`` prints raw asset text,
     refused for a git-commit artifact, which carries none."""
     name = name_opt if name_opt is not None else name_arg

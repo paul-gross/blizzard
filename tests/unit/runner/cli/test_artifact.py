@@ -585,25 +585,20 @@ def test_get_requires_a_name_from_somewhere() -> None:
     assert "NAME is required" in result.output
 
 
-def test_get_surfaces_an_ambiguous_name_rejection_naming_the_candidate_nodes() -> None:
-    detail = (
-        "artifact 'retrospective' is ambiguous — found for: node build, node plan, node review "
-        "(pass --scope and/or --node to disambiguate)"
-    )
+def test_get_surfaces_an_ambiguous_name_rejection_naming_the_candidates() -> None:
+    detail = "artifact 'retrospective' is ambiguous — found for: node build, system (pass --scope to disambiguate)"
     bound = bind_stubs(get=lambda *a, **k: _RejectingResponse({"detail": detail}))
     result = bound.runner.invoke(runner_group, ["artifact", "get", "retrospective"], env=_ENV)
 
     assert result.exit_code != 0
     assert "ambiguous" in result.output
-    assert "node build, node plan, node review" in result.output
+    assert "node build, system" in result.output
 
 
 def test_get_surfaces_a_cross_scope_ambiguity_naming_both_scopes() -> None:
     """A bare ``get`` matching a graph declaration and a node artifact of the same name
     exits non-zero, naming both — the route's own message shape, the CLI just surfaces it."""
-    detail = (
-        "artifact 'docket' is ambiguous — found for: graph, node build (pass --scope and/or --node to disambiguate)"
-    )
+    detail = "artifact 'docket' is ambiguous — found for: graph, node build (pass --scope to disambiguate)"
     bound = bind_stubs(get=lambda *a, **k: _RejectingResponse({"detail": detail}))
     result = bound.runner.invoke(runner_group, ["artifact", "get", "docket"], env=_ENV)
 

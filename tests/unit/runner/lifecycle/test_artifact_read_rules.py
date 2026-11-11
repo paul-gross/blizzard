@@ -21,8 +21,10 @@ from blizzard.runner.lifecycle.artifacts import (
 from blizzard.wire.envelope import WorkerArtifact
 
 
-def _node(node_name: str, name: str = "plan") -> WorkerArtifact:
-    return WorkerArtifact(scope=ArtifactScope.NODE, name=name, kind=ArtifactKind.ASSET, node_name=node_name, epoch=1)
+def _node(node_name: str, name: str = "plan", epoch: int = 1) -> WorkerArtifact:
+    return WorkerArtifact(
+        scope=ArtifactScope.NODE, name=name, kind=ArtifactKind.ASSET, node_name=node_name, epoch=epoch
+    )
 
 
 _GRAPH = WorkerArtifact(scope=ArtifactScope.GRAPH, name="plan", kind=ArtifactKind.ASSET, content="g")
@@ -100,31 +102,33 @@ def test_read_none_not_found(node: str | None, scope: ArtifactScope | None, deta
     assert str(refused.value) == detail
 
 
-def test_read_ambiguous_names_open_levers() -> None:
+@pytest.mark.parametrize("older_first", [True, False])
+def test_read_several_nodes_resolves_to_the_newest_epoch(older_first: bool) -> None:
+    older, newer = _node("a", epoch=3), _node("b", epoch=7)
+    candidates = [older, newer] if older_first else [newer, older]
+    assert ArtifactRead(name="plan", graph_id="gr_1").resolve(candidates) == newer
+
+
+def test_read_with_node_given_resolves_that_nodes_entry() -> None:
+    assert ArtifactRead(name="plan", graph_id="gr_1", node="a").resolve([_node("a", epoch=3)]).node_name == "a"
+
+
+def test_read_node_epoch_tie_keeps_the_first_candidate() -> None:
+    first, second = _node("a", epoch=4), _node("b", epoch=4)
+    assert ArtifactRead(name="plan", graph_id="gr_1").resolve([first, second]) == first
+
+
+def test_read_across_scopes_names_the_newest_producer_and_offers_only_scope() -> None:
     with pytest.raises(ArtifactAmbiguous) as refused:
-        ArtifactRead(name="plan", graph_id="gr_1").resolve([_node("b"), _node("a"), _GRAPH, _SYSTEM])
-    assert refused.value.labels == ("graph", "node a", "node b", "system")
-    assert refused.value.levers == ("--scope", "--node")
+        ArtifactRead(name="plan", graph_id="gr_1").resolve([_node("a", epoch=3), _node("b", epoch=7), _SYSTEM])
+    assert refused.value.labels == ("node b", "system")
+    assert refused.value.levers == ("--scope",)
     assert str(refused.value) == (
-        "artifact 'plan' is ambiguous — found for: graph, node a, node b, system "
-        "(pass --scope and/or --node to disambiguate)"
+        "artifact 'plan' is ambiguous — found for: node b, system (pass --scope to disambiguate)"
     )
 
 
-def test_read_ambiguous_without_a_node_candidate_offers_only_scope() -> None:
+def test_read_graph_and_system_collision_offers_only_scope() -> None:
     with pytest.raises(ArtifactAmbiguous) as refused:
         ArtifactRead(name="plan", graph_id="gr_1").resolve([_GRAPH, _SYSTEM])
     assert refused.value.levers == ("--scope",)
-
-
-def test_read_ambiguous_under_node_scope_offers_only_node() -> None:
-    with pytest.raises(ArtifactAmbiguous) as refused:
-        ArtifactRead(name="plan", graph_id="gr_1", scope=ArtifactScope.NODE).resolve([_node("a"), _node("b")])
-    assert refused.value.levers == ("--node",)
-
-
-def test_read_ambiguous_with_node_given_offers_no_lever() -> None:
-    with pytest.raises(ArtifactAmbiguous) as refused:
-        ArtifactRead(name="plan", graph_id="gr_1", node="a").resolve([_node("a"), _node("a")])
-    assert refused.value.levers == ()
-    assert str(refused.value) == "artifact 'plan' is ambiguous — found for: node a"
