@@ -7,10 +7,17 @@ from __future__ import annotations
 from collections.abc import Callable
 from pathlib import Path
 
+import click
 import httpx2
 import pytest
 
+from blizzard.cli import operator_trace
+from blizzard.cli.dev import check_invariants_cmd
 from blizzard.cli.main import blizzard
+from blizzard.foundation.operator_sessions.internal.session_file import SessionFile
+from blizzard.foundation.trace_ids import parse_traceparent
+from blizzard.hub.cli.collaborators import HubCliCollaborators
+from blizzard.hub.cli.session_service import SessionService
 from blizzard.wire.invariants import INVARIANTS_IN_PROGRESS
 from tests.support.worker_http import bind_transport
 
@@ -82,10 +89,41 @@ def test_each_violation_prints_as_slug_and_detail_and_exits_one() -> None:
     assert "invariants hold" not in result.output
 
 
-def test_the_client_timeout_is_a_minute() -> None:
-    bound = bind_transport(_daemons(hub=_holds, host=_holds))
-    bound.runner.invoke(blizzard, ["dev", "check-invariants", "--hub-url", HUB, "--runner-url", HOST])
-    assert {client.timeout.read for client in bound.built} == {60.0}
+def test_each_check_request_waits_a_minute() -> None:
+    waits: dict[str, float] = {}
+
+    def route(request: httpx2.Request) -> httpx2.Response:
+        waits[request.url.host] = request.extensions["timeout"]["read"]
+        return _holds()
+
+    bind_transport(route).runner.invoke(blizzard, ["dev", "check-invariants", "--hub-url", HUB, "--runner-url", HOST])
+    assert waits == {"hub.example": 60.0, "host.example": 60.0}
+
+
+def test_the_host_request_carries_the_trace_the_command_holds() -> None:
+    seen: list[httpx2.Request] = []
+
+    @click.group(cls=operator_trace.OperatorGroup, lazy={}, trace_root="dev", invoke_without_command=True)
+    @click.pass_context
+    def group(ctx: click.Context) -> None:
+        HubCliCollaborators.resolve(ctx, lambda: SessionService(SessionFile.of()))
+
+    group.add_command(check_invariants_cmd)
+
+    def route(request: httpx2.Request) -> httpx2.Response:
+        if request.url.host == "host.example":
+            seen.append(request)
+            return _holds()
+        return httpx2.Response(200)
+
+    result = bind_transport(route).runner.invoke(
+        group,
+        ["check-invariants", "--runner-url", HOST],
+        env={"OTEL_EXPORTER_OTLP_ENDPOINT": "http://collector.example:4318"},
+    )
+    assert result.exit_code == 0, result.output
+    assert len(seen) == 1
+    assert parse_traceparent(seen[0].headers.get("traceparent", "")) is not None
 
 
 @pytest.mark.parametrize("offline", [["--hub-dir", "x"], ["--runner-dir", "x"], ["--allow-external-db"]])

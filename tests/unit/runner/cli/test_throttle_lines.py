@@ -34,7 +34,12 @@ def test_a_held_floor_names_its_window_and_the_grace_that_opens_it() -> None:
 
 
 def test_a_held_floor_without_grace_runs_until_the_expected_reset_and_names_the_harness() -> None:
-    hold = {"kind": "usage_limit", "harness_id": "claude", "expected_reset": "2026-10-01T14:00:00Z", "awaits_sample": False}
+    hold = {
+        "kind": "usage_limit",
+        "harness_id": "claude",
+        "expected_reset": "2026-10-01T14:00:00Z",
+        "awaits_sample": False,
+    }
     assert throttle_lines(_throttle({"admits": False, "hold": hold})) == [
         "  throttle: declining (declining: floor)",
         "    floor (runner): hold — usage_limit (claude), until 2026-10-01T14:00:00Z",
@@ -65,7 +70,9 @@ def test_a_hold_awaiting_a_sample_says_so_after_its_reset() -> None:
 
 def test_a_hand_cleared_floor_names_who_cleared_it_and_when() -> None:
     floor = {"admits": True, "clear": {"by": "paul", "cleared_at": "2026-10-01T12:00:00Z"}}
-    assert throttle_lines(_throttle(floor))[1] == "    floor (runner): admit — hand clear by paul at 2026-10-01T12:00:00Z"
+    assert (
+        throttle_lines(_throttle(floor))[1] == "    floor (runner): admit — hand clear by paul at 2026-10-01T12:00:00Z"
+    )
 
 
 def test_a_throttle_with_no_levers_renders_the_headline_floor_and_policy_only() -> None:

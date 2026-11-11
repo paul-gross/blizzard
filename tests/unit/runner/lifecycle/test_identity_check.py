@@ -6,11 +6,10 @@ import pytest
 
 from blizzard.foundation.host_registration_state import HostRegistrationState
 from blizzard.foundation.runner_identity_state import IdentityState
+from blizzard.runner.cli.control import echo_identity
 from blizzard.runner.hub.host_identity import HostIdentity, HostIdentityAlreadyRecorded, adopted
 from blizzard.runner.hub.host_registration import HostRegistrationStatus
-from blizzard.runner.cli.control import echo_identity
 from blizzard.runner.hub.identity import STANDING_STATES, IdentityVerdict, judged, served_runner_state
-from blizzard.wire.runner_status import IdentityVerdictView
 from blizzard.runner.lifecycle.identity_check import (
     ForeignStore,
     ForeignStoreKind,
@@ -18,6 +17,7 @@ from blizzard.runner.lifecycle.identity_check import (
     foreign_store,
     tick_scope,
 )
+from blizzard.wire.runner_status import IdentityVerdictView
 
 _AT = datetime(2026, 10, 1, 12, tzinfo=UTC)
 _RESET = "set BZ_HUB_TOKEN_R1"
@@ -148,7 +148,7 @@ def test_every_identity_state_is_placed_as_halted_by_standing_or_not(state: Iden
 
 
 def test_the_standing_states_are_the_host_not_holding_the_runner_or_a_foreign_tenant() -> None:
-    assert STANDING_STATES == {IdentityState.NOT_HELD, IdentityState.TENANT_DIFFERS}
+    assert {IdentityState.NOT_HELD, IdentityState.TENANT_DIFFERS} == STANDING_STATES
 
 
 def _identity_view(state: str, reason: str | None) -> IdentityVerdictView:

@@ -73,13 +73,14 @@ class RunnerDaemon:
     def reach(
         cls,
         verb: str,
-        directory: str,
+        directory: str | None,
         runner_url: str | None,
         door: Door,
         runner: str | None = None,
     ) -> RunnerDaemon:
         """Ranked by where each value came from, see ``src/blizzard/cli/param_rank.py`` —
-        only a tie on the command line between the two is ambiguous."""
+        only a tie on the command line between the two is ambiguous. A ``directory`` of ``None`` means no socket was
+        named, so a given ``runner_url`` wins whatever its rank; naming neither is a caller's bug."""
         dir_source = ParamSource.of("directory")
         url_source = ParamSource.of("runner_url") if runner_url is not None else None
 
@@ -87,12 +88,14 @@ class RunnerDaemon:
             raise click.UsageError(
                 "--dir and --runner-url are mutually exclusive: --dir names the socket, --runner-url TCP"
             )
-        if url_source is not None and url_source > dir_source and runner_url is not None:
+        if runner_url is not None and url_source is not None and (directory is None or url_source > dir_source):
             client = door.client_factory(
                 base_url=runner_url, timeout=LOCAL_CLIENT_TIMEOUT, headers=door.trace.headers()
             )
             return cls(verb, client, runner_url, runner)
 
+        if directory is None:
+            raise ValueError("a runner daemon is reached by a directory or a URL, and neither was named")
         sock = HostLayout(Path(directory)).socket_path
         if not sock.exists():
             # No degraded read path — an absent socket is a daemon-not-running diagnostic,
