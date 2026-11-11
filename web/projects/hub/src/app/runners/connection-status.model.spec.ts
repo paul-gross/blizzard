@@ -125,7 +125,7 @@ describe('runnerStateBadges', () => {
 
     it('words a lever, or one this board has no name for, in the generic form', () => {
       expect(labels(row({ declining: [pace] }))).toEqual(['declining — pace: 7d 86% spent, 71% elapsed']);
-      expect(labels(row({ declining: [{ ...pace, lever: 'from-a-newer-runner', detail: 'd' }] }))).toEqual([
+      expect(labels(row({ declining: [{ ...pace, lever: 'from-a-newer-runner', lever_kind: 'from-a-newer-runner' as RunnerDecliningView['lever_kind'], detail: 'd' }] }))).toEqual([
         'declining — from-a-newer-runner: d',
       ]);
     });

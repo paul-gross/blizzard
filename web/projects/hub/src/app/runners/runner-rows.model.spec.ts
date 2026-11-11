@@ -1,7 +1,7 @@
-import type { RunnerRegistryView } from 'fleet';
+import type { RunnerDecliningView, RunnerRegistryView } from 'fleet';
 import type { ChunkSummary } from 'fleet/shell';
 
-import { foldRunnerRows, lensRunners, versionStandingBadge } from './runner-rows.model';
+import { decliningLabel, foldRunnerRows, lensRunners, versionStandingBadge } from './runner-rows.model';
 
 const NOW = Date.parse('2026-07-16T12:00:00.000Z');
 
@@ -121,5 +121,23 @@ describe('versionStandingBadge', () => {
   it('shows no badge for a runner the hub has not judged', () => {
     expect(versionStandingBadge(judged({ version_standing: null }))).toBeNull();
     expect(versionStandingBadge(judged({}))).toBeNull();
+  });
+});
+
+describe('decliningLabel', () => {
+  const reason = (lever_kind: string, extra: Partial<RunnerDecliningView> = {}): RunnerDecliningView =>
+    ({ lever: lever_kind, lever_kind, detail: 'at 95%', until: null, subscription: null, ...extra }) as unknown as RunnerDecliningView;
+
+  it('words the floor from the subscription it waits on and when it resets', () => {
+    const label = decliningLabel(reason('floor', { subscription: 'max', until: '2026-07-16T13:00:00.000Z' }), NOW);
+    expect(label).toMatch(/^waiting on max — at 95%, resets /);
+  });
+
+  it('words a known non-floor lever through the generic branch', () => {
+    expect(decliningLabel(reason('pace'), NOW)).toBe('declining — pace: at 95%');
+  });
+
+  it('words a lever outside the generated vocabulary from lever_kind verbatim', () => {
+    expect(decliningLabel(reason('some_future_lever', { lever: 'stale' }), NOW)).toBe('declining — some_future_lever: at 95%');
   });
 });
