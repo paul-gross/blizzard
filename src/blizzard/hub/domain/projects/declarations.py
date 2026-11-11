@@ -2,8 +2,8 @@
 (``bzh:config-apply``); the ``projects`` section is planned here for :mod:`blizzard.hub.domain.config.apply`.
 
 Each entry declares a project by slug, its name and description, the sources and repositories it links — a stated
-list is the whole set, an omitted one left as stored — and its ``landing_order``, planned after the links. A slug some
-project left is refused, naming it."""
+list is the whole set, an omitted one left as stored — its ``landing_order``, and its ``repository_branches``, each
+planned after the links. A slug some project left is refused, naming it."""
 
 from __future__ import annotations
 
@@ -53,6 +53,7 @@ from blizzard.hub.domain.projects.resolve import locate
 SOURCES_FIELD = "sources"
 REPOSITORIES_FIELD = "repositories"
 LANDING_ORDER_FIELD = "landing_order"
+REPOSITORY_BRANCHES_FIELD = "repository_branches"
 PROJECT_FIELD = "project"
 
 _Link = TypeVar("_Link", SourceLink, RepositoryLink)
@@ -72,13 +73,16 @@ class EntryProjectRequired(ConfigFieldError):
 class ProjectDeclaration:
     """A project the document names by slug: the sparse edit of the name, description and color it states, and the
     sources and repositories it links — each an id, a slug or a slug the record left (``None`` leaves the stored
-    links) — and the repositories it ranks, in landing order, named the same way (``None`` leaves the stored order)."""
+    links) — the repositories it ranks, in landing order, named the same way (``None`` leaves the stored order), and
+    the base branch of each linked repository that names its own, keyed the same way — every other linked repository
+    inherits (``None`` leaves the stored branches)."""
 
     slug: str
     edit: ProjectEdit
     sources: tuple[str, ...] | None = None
     repositories: tuple[str, ...] | None = None
     landing_order: tuple[str, ...] | None = None
+    repository_branches: Mapping[str, str] | None = None
 
 
 @domain_model
@@ -247,6 +251,15 @@ def plan_projects(
                     ctx,
                     at,
                 )
+            if entry.repository_branches is not None:
+                planned.branches(
+                    record,
+                    _branched(entry.repository_branches, repositories),
+                    stored.repository_links,
+                    ctx,
+                    at,
+                    {ref.repository_id: ref.slug for ref in stored.repositories},
+                )
             if not planned.written:
                 outcomes.append(EntryOutcome(RecordKind.PROJECT, entry.slug, None))
         except ConfigFieldError as exc:
@@ -268,6 +281,8 @@ class _Entry:
     outcomes: list[EntryOutcome]
     positions: list[PlannedPosition]
     written: bool = False
+    #: Each repository link this entry wrote, as the write leaves it, by repository id.
+    repository_links: dict[str, RepositoryLink] = field(default_factory=dict[str, RepositoryLink])
 
     def project(
         self,
@@ -332,6 +347,36 @@ class _Entry:
             if project_id == project.project_id and target not in targets:
                 self._move(project, link, link.unlink(ctx, if_match=None, at=at), slugs.get(target, target))
 
+    def branches(
+        self,
+        project: Project,
+        branches: Mapping[RepositoryId, str],
+        stored: Mapping[tuple[str, str], RepositoryLink],
+        ctx: ChangeContext,
+        at: datetime,
+        slugs: Mapping[str, str],
+    ) -> None:
+        """Give each repository ``branches`` names its branch, and clear the branch of every other repository the
+        project links as the entry leaves its links; a repository the project does not link is refused."""
+        held = {
+            target: link
+            for (project_id, target), link in stored.items()
+            if project_id == project.project_id and target not in self.repository_links
+        }
+        linked = {target: link for target, link in (held | self.repository_links).items() if link.linked}
+        for target in branches:
+            if target not in linked:
+                raise ConfigFieldError(
+                    REPOSITORY_BRANCHES_FIELD,
+                    f"{slugs.get(target, target)!r} is not a repository project {project.slug!r} links",
+                )
+        for target, link in sorted(linked.items()):
+            try:
+                decided = link.set_base_branch(branches.get(RepositoryId(target)), ctx, if_match=None, at=at)
+            except ConfigFieldError as exc:
+                raise ConfigFieldError(REPOSITORY_BRANCHES_FIELD, exc.message) from exc
+            self._move(project, link, decided, slugs.get(target, target))
+
     def order(
         self,
         project: Project,
@@ -384,6 +429,8 @@ class _Entry:
         from_revision: int | None,
         change: ConfigChange,
     ) -> None:
+        if isinstance(record, RepositoryLink):
+            self.repository_links[record.repository_id] = record
         self.writes.append(PlannedWrite(PROJECTS_SECTION, self.index, record, from_revision, change))
         self.outcomes.append(EntryOutcome(kind, key, change.op, change.diff))
         self.written = True
@@ -434,6 +481,22 @@ def _ordered(references: tuple[str, ...], repositories: PlannedRepositories) -> 
             )
         ordered.append((found.repository_id, found.slug))
     return ordered
+
+
+def _branched(branches: Mapping[str, str], repositories: PlannedRepositories) -> dict[RepositoryId, str]:
+    """The base branches a ``repository_branches`` map names — each reference resolved to the repository's id. A
+    reference must name a repository stored or declared in the document, and each repository once."""
+    resolved: dict[RepositoryId, str] = {}
+    for reference, branch in branches.items():
+        found = repositories.resolve(reference)
+        if found is None:
+            raise ConfigFieldError(
+                REPOSITORY_BRANCHES_FIELD, f"{reference!r} is neither stored nor declared in this document"
+            )
+        if found.repository_id in resolved:
+            raise ConfigFieldError(REPOSITORY_BRANCHES_FIELD, f"{found.slug!r} is named twice")
+        resolved[found.repository_id] = branch
+    return resolved
 
 
 def _landing_links(

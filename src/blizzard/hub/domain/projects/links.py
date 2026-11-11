@@ -21,12 +21,53 @@ from blizzard.hub.domain.config.changes import (
     FieldChange,
     RecordKind,
 )
-from blizzard.hub.domain.config.repositories import RepositoryId
+from blizzard.hub.domain.config.errors import ConfigFieldError
+from blizzard.hub.domain.config.repositories import ConfiguredRepository, RepositoryId
 from blizzard.hub.domain.config.work_sources import WorkSourceId, require_configurable
 from blizzard.hub.domain.projects.model import Project, ProjectId
 
 #: The wire name a link's change reports its standing under.
 LINKED_FIELD = "linked"
+
+#: The wire name of a repository link's own integration branch.
+BASE_BRANCH_FIELD = "base_branch"
+
+#: Characters no git branch name holds.
+_REFUSED_BRANCH_CHARACTERS = frozenset("~^:?*[\\")
+
+
+def parse_base_branch(raw: str) -> str:
+    """``raw`` as a link's base branch: a valid git branch name, unpadded. Whether the branch exists on the forge is
+    never checked here. :class:`ConfigFieldError` on ``base_branch`` otherwise."""
+    problem = _branch_problem(raw)
+    if problem is not None:
+        raise ConfigFieldError(BASE_BRANCH_FIELD, f"{problem}, got {raw!r}")
+    return raw
+
+
+def _branch_problem(name: str) -> str | None:
+    """Why ``name`` is no git branch name, or ``None`` when it is one."""
+    if not name.strip():
+        return "must not be blank"
+    if name != name.strip():
+        return "must have no leading or trailing whitespace"
+    if any(c.isspace() or ord(c) < 0x20 or ord(c) == 0x7F for c in name):
+        return "must hold no whitespace or control characters"
+    if any(c in _REFUSED_BRANCH_CHARACTERS for c in name):
+        return "must hold none of ~ ^ : ? * [ \\"
+    if ".." in name or "@{" in name:
+        return "must hold neither '..' nor '@{'"
+    if name.startswith("-"):
+        return "must not start with '-'"
+    if name.startswith("/") or name.endswith("/") or "//" in name:
+        return "must not start or end with '/', or hold '//'"
+    if name.endswith("."):
+        return "must not end with '.'"
+    if any(component.startswith(".") or component.endswith(".lock") for component in name.split("/")):
+        return "must hold no component starting with '.' or ending in '.lock'"
+    if name == "@":
+        return "must not be '@'"
+    return None
 
 
 @domain_model
@@ -104,16 +145,37 @@ class SourceLink(_Link):
 @dataclass(frozen=True, kw_only=True)
 class RepositoryLink(_Link):
     """A project's chunks may land in ``repository_id``; it grants nothing else. ``position`` is the link's place in
-    the project's landing order as a read found it — ``None`` when unranked — and is no field of the link's revision."""
+    the project's landing order as a read found it — ``None`` when unranked — and is no field of the link's revision.
+    ``base_branch`` is the link's own integration branch — ``None`` inherits the repository's — and is a field of the
+    link's revision."""
 
     KIND: ClassVar[RecordKind] = RecordKind.PROJECT_REPOSITORY_LINK
     LABEL: ClassVar[str] = "repository link"
 
     repository_id: RepositoryId
     position: float | None = None
+    base_branch: str | None = None
 
     def target(self) -> str:
         return self.repository_id
+
+    def effective_base_branch(self, repository: ConfiguredRepository) -> str:
+        """The branch the link's chunks start from and land into: its own, else ``repository``'s."""
+        return repository.fields.base_branch if self.base_branch is None else self.base_branch
+
+    def set_base_branch(
+        self, base_branch: str | None, ctx: ChangeContext, *, if_match: int | None, at: datetime
+    ) -> tuple[Self, ConfigChange] | None:
+        """Name the link's own branch, or clear it with ``None`` so the link inherits again; ``None`` back when the
+        link already stands there. The revision check comes first, even for an edit that changes nothing.
+        :class:`ConfigFieldError` on ``base_branch`` for a name that is no git branch name."""
+        self.require_revision(if_match)
+        decided = None if base_branch is None else parse_base_branch(base_branch)
+        changes = lifecycle.field_changes(((BASE_BRANCH_FIELD, self.base_branch, decided),))
+        if not changes:
+            return None
+        moved = replace(self, revision=self.revision + 1, base_branch=decided)
+        return moved, moved._change(ctx, ChangeOp.EDIT, changes, at)
 
     @classmethod
     def new(

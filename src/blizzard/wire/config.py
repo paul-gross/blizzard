@@ -69,7 +69,12 @@ class ProjectDocument(BaseModel):
     project left is refused: name that project by its current slug. A ``landing_order`` lists the linked repositories
     the project ranks, first to land first, and leaves every other linked one unranked; it is applied after the
     entry's links, so an entry may link a repository and rank it together, and one it omits leaves the order as it
-    stands. Export writes it only for a project that ranks a repository."""
+    stands. Export writes it only for a project that ranks a repository. A ``repository_branches`` map, from a linked
+    repository — by id or slug — to a branch name, is the project's whole set of link base branches: each repository it
+    names lands on that branch, and every other repository the project links inherits its repository's
+    ``base_branch``; it is applied after the entry's links, and naming a repository the project does not link is
+    refused. One the entry omits leaves the branches as they stand. Export writes it only for a project whose link
+    names its own branch."""
 
     model_config = ConfigDict(extra="forbid")
 
@@ -80,6 +85,7 @@ class ProjectDocument(BaseModel):
     sources: list[str] = []
     repositories: list[str] = []
     landing_order: list[str] | None = Field(default=None, exclude_if=lambda value: value is None)
+    repository_branches: dict[str, str] | None = Field(default=None, exclude_if=lambda value: value is None)
 
 
 class ScopeEntry(ScopeDocument):

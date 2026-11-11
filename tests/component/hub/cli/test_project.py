@@ -1,6 +1,7 @@
-"""``blizzard hub project create|list|get|edit|link|unlink|order|position`` against a real hub: a project is named by its id, its
+"""``blizzard hub project create|list|get|edit|link|unlink|order|position|base`` against a real hub: a project is named by its id, its
 slug or a slug it left; its work-source and repository links are linked, shown and unlinked, each change carrying the
-CLI's door; its repositories are shown, ordered and moved in its landing order; a call that needs a project and names none, on a tenant holding several, prints the tenant's projects and
+CLI's door; its repositories are shown, ordered and moved in its landing order, each with its base branch, which a link may name
+for itself; a call that needs a project and names none, on a tenant holding several, prints the tenant's projects and
 asks for ``--project``; ``--tenant`` names the tenant a project verb acts in; and ``--project`` is offered optional
 on the command line, its help stating what it does."""
 
@@ -179,7 +180,11 @@ def test_link_and_unlink_a_work_source_and_a_repository_by_slug_and_by_id(hub: H
 
     assert _said(source) == ["project widgets is linked to work source acme"]
     assert _said(repository) == [f"project {project_id} is linked to repository acme-repo"]
-    assert shown[-3:] == ["sources acme, hub (built in)", "repositories, in landing order:", "  acme-repo  unranked"]
+    assert shown[-3:] == [
+        "sources acme, hub (built in)",
+        "repositories, in landing order:",
+        "  acme-repo  unranked  branch main (inherited)",
+    ]
     assert _said(unlinked_source) == [f"project {project_id} is unlinked from work source acme"]
     assert (unlinked_repository["name"], unlinked_repository["linked"]) == ("acme-repo", False)
     assert [row["name"] for row in after["source_links"]] == ["hub"]
@@ -251,6 +256,7 @@ def test_tenant_names_the_tenant_a_project_verb_acts_in(hub: HubHarness, sent: l
         ("unlink", "no longer goes to PROJECT"),
         ("order", "Set PROJECT's whole landing order"),
         ("position", "Move REPOSITORY in PROJECT's landing order"),
+        ("base", "Set the branch PROJECT's chunks start from and land into"),
     ],
 )
 def test_each_project_verbs_help_states_its_effect(verb: str, effect: str) -> None:
@@ -322,10 +328,13 @@ def test_show_lists_the_repositories_unranked_by_slug_until_order_ranks_them(hub
     ordered = _cli("order", "widgets", "acme-repo", "acme-lib")
     shown = _said(_cli("show", "widgets"))[-2:]
 
-    assert unranked == ["  acme-lib  unranked", "  acme-repo  unranked"]
+    assert unranked == [
+        "  acme-lib  unranked  branch main (inherited)",
+        "  acme-repo  unranked  branch main (inherited)",
+    ]
     assert ordered.exit_code == 0, ordered.output
-    assert _said(ordered)[-2:] == ["  acme-repo  1", "  acme-lib  2"]
-    assert shown == ["  acme-repo  1", "  acme-lib  2"]
+    assert _said(ordered)[-2:] == ["  acme-repo  1  branch main (inherited)", "  acme-lib  2  branch main (inherited)"]
+    assert shown == ["  acme-repo  1  branch main (inherited)", "  acme-lib  2  branch main (inherited)"]
 
 
 @pytest.mark.usefixtures("sent")
@@ -340,9 +349,9 @@ def test_position_moves_one_repository_first_after_another_or_out_of_the_ranking
     after = _said(_cli("position", "widgets", "acme-lib", "--after", "acme-repo"))[-2:]
     unranked = _said(_cli("position", "widgets", "acme-lib", "--unranked"))[-2:]
 
-    assert first == ["  acme-lib  0", "  acme-repo  1"]
-    assert after == ["  acme-repo  1", "  acme-lib  2"]
-    assert unranked == ["  acme-repo  1", "  acme-lib  unranked"]
+    assert first == ["  acme-lib  0  branch main (inherited)", "  acme-repo  1  branch main (inherited)"]
+    assert after == ["  acme-repo  1  branch main (inherited)", "  acme-lib  2  branch main (inherited)"]
+    assert unranked == ["  acme-repo  1  branch main (inherited)", "  acme-lib  unranked  branch main (inherited)"]
 
 
 @pytest.mark.usefixtures("sent")
@@ -385,3 +394,60 @@ def test_a_landing_order_write_on_a_repository_the_project_does_not_link_is_refu
 
     assert result.exit_code != 0
     assert said in result.output
+
+
+@pytest.mark.usefixtures("sent")
+def test_base_names_a_link_branch_get_shows_it_and_inherit_clears_it(hub: HubHarness) -> None:
+    _seed_second_repository(hub.client)
+    _cli("create", "widgets")
+    _cli("link", "widgets", "--repository", "acme-repo")
+    _cli("link", "widgets", "--repository", "acme-lib")
+
+    based = _cli("base", "widgets", "acme-repo", "--branch", "rust-rewrite")
+    shown = _said(_cli("get", "widgets"))[-2:]
+    inherited = _cli("base", "widgets", "acme-repo", "--inherit", "--if-match", "2")
+
+    assert based.exit_code == 0, based.output
+    assert _said(based)[-1] == ("project widgets lands in acme-repo on branch rust-rewrite (override), at revision 2")
+    assert shown == [
+        "  acme-lib  unranked  branch main (inherited)",
+        "  acme-repo  unranked  branch rust-rewrite (override)",
+    ]
+    assert inherited.exit_code == 0, inherited.output
+    assert _said(inherited)[-1] == "project widgets lands in acme-repo on branch main (inherited), at revision 3"
+    changes = _changes(hub, "project_repository_link")
+    assert [d["field"] for c in changes[:2] for d in c["diff"]] == ["base_branch", "base_branch"]
+    assert {c["door"] for c in changes[:2]} == {"cli"}
+
+
+@pytest.mark.usefixtures("sent")
+def test_base_json_carries_the_override_and_the_effective_branch() -> None:
+    _cli("create", "widgets")
+    _cli("link", "widgets", "--repository", "acme-repo")
+
+    out = _json(_cli("base", "widgets", "acme-repo", "--branch", "dev", "--json"))
+
+    assert (out["base_branch"], out["effective_base_branch"]) == ("dev", "dev")
+
+
+@pytest.mark.parametrize(
+    "argv",
+    [("base", "widgets", "acme-repo"), ("base", "widgets", "acme-repo", "--branch", "dev", "--inherit")],
+    ids=["neither", "both"],
+)
+def test_base_takes_exactly_one_of_branch_or_inherit(argv: tuple[str, ...]) -> None:
+    result = CliRunner().invoke(hub_group, ["project", *argv, "--hub-url", _HUB_URL])
+
+    assert result.exit_code == 2
+    assert "exactly one of --branch or --inherit" in result.output
+
+
+@pytest.mark.usefixtures("sent")
+def test_base_refuses_a_name_that_is_no_git_branch_name() -> None:
+    _cli("create", "widgets")
+    _cli("link", "widgets", "--repository", "acme-repo")
+
+    refused = _cli("base", "widgets", "acme-repo", "--branch", "a..b")
+
+    assert refused.exit_code != 0
+    assert "base_branch" in refused.output

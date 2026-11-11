@@ -7164,6 +7164,107 @@
         "read"
       ],
       "commands": {
+        "base": {
+          "help": "Set the branch PROJECT's chunks start from and land into in REPOSITORY (--branch), or clear it so the link\ninherits the repository's base branch again (--inherit). Whether the branch exists is not checked. Setting the\nbranch the link already has writes nothing. Refused for a repository PROJECT does not link, or a name that is no\ngit branch name.",
+          "params": [
+            {
+              "hidden": false,
+              "kind": "argument",
+              "name": "project",
+              "opts": [
+                "project"
+              ],
+              "required": true,
+              "secondary_opts": [],
+              "type": "text"
+            },
+            {
+              "hidden": false,
+              "kind": "argument",
+              "name": "repository",
+              "opts": [
+                "repository"
+              ],
+              "required": true,
+              "secondary_opts": [],
+              "type": "text"
+            },
+            {
+              "help": "The link's own integration branch.",
+              "hidden": false,
+              "kind": "option",
+              "name": "branch",
+              "opts": [
+                "--branch"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "text"
+            },
+            {
+              "help": "Clear the link's branch; it inherits the repository's.",
+              "hidden": false,
+              "kind": "option",
+              "name": "inherit",
+              "opts": [
+                "--inherit"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "boolean"
+            },
+            {
+              "help": "Refuse the change unless it is still at this revision.",
+              "hidden": false,
+              "kind": "option",
+              "name": "if_match",
+              "opts": [
+                "--if-match"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "integer"
+            },
+            {
+              "help": "Print the raw response body as JSON.",
+              "hidden": false,
+              "kind": "option",
+              "name": "as_json",
+              "opts": [
+                "--json"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "boolean"
+            },
+            {
+              "help": "The tenant to act in, by id (default $BZ_HUB_TENANT); needed only when you belong to several.",
+              "hidden": false,
+              "kind": "option",
+              "name": "tenant",
+              "opts": [
+                "--tenant"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "text"
+            },
+            {
+              "help": "Hub API base URL (default $BZ_HUB_URL or http://127.0.0.1:8421).",
+              "hidden": false,
+              "kind": "option",
+              "name": "hub_url",
+              "opts": [
+                "--hub-url"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "text"
+            }
+          ],
+          "path": "hub project base",
+          "short_help": "Set the branch PROJECT's chunks start from and land into in REPOSITORY (--branch), or clear it so the link inherits the repository's base branch again (--inherit)."
+        },
         "create": {
           "help": "Create project SLUG at revision 1, named NAME, else its slug. It draws work only from the built-in hub\nsource until a work source or repository is linked to it. Refused when SLUG is another project's current slug.",
           "params": [
@@ -7369,7 +7470,7 @@
           "short_help": "Change only the fields given on PROJECT; every other field keeps its value."
         },
         "get": {
-          "help": "Show PROJECT \u2014 named by its id, its slug, or a slug it has left \u2014 with the work sources linked to it and the\nrepositories linked to it, in landing order, each with its position or \"unranked\".",
+          "help": "Show PROJECT \u2014 named by its id, its slug, or a slug it has left \u2014 with the work sources linked to it and the\nrepositories linked to it, in landing order, each with its position or \"unranked\" and its base branch, inherited\nfrom the repository or the link's own.",
           "params": [
             {
               "hidden": false,
@@ -7420,7 +7521,7 @@
             }
           ],
           "path": "hub project get",
-          "short_help": "Show PROJECT \u2014 named by its id, its slug, or a slug it has left \u2014 with the work sources linked to it and the repositories linked to it, in landing order, each with its position or \"unranked\"."
+          "short_help": "Show PROJECT \u2014 named by its id, its slug, or a slug it has left \u2014 with the work sources linked to it and the repositories linked to it, in landing order, each with its position or \"unranked\" and its base branch, inherited from the repository or the link's own."
         },
         "link": {
           "help": "Link PROJECT to one work source (--source) or one repository (--repository): work ingested from that source\ncan belong to PROJECT, and PROJECT's work can land in that repository. A retired record can be linked; a link\nalready standing, and the built-in hub source, change nothing; a link unlinked earlier is linked again.",

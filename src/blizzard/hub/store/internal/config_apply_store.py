@@ -23,7 +23,6 @@ from blizzard.hub.domain.config.apply import (
 from blizzard.hub.domain.config.changes import ChangeOp, ConfigChange
 from blizzard.hub.domain.config.errors import ConfigFieldError, ConfigRevisionConflict
 from blizzard.hub.domain.config.forges import ConfiguredForge, ForgeOriginTaken, ForgeSlugTaken
-from blizzard.hub.domain.config.records import ConfiguredLink
 from blizzard.hub.domain.config.repositories import (
     ConfiguredRepository,
     RepositoryCoordinateTaken,
@@ -402,8 +401,10 @@ def _run_project(conn: Connection, record: Project, from_revision: int | None, c
         project_writes.update_project(conn, record, from_revision, None, change)
 
 
-def _run_link(conn: Connection, record: ConfiguredLink, from_revision: int | None, change: ConfigChange) -> None:
-    """A link is created, unlinked or relinked."""
+def _run_link(
+    conn: Connection, record: SourceLink | RepositoryLink, from_revision: int | None, change: ConfigChange
+) -> None:
+    """A link is created, unlinked, relinked, or — a repository link — given or cleared its own base branch."""
     kind = link_writes.LINK_KINDS[record.KIND]
     if from_revision is None:
         link_writes.insert_link(conn, kind, record.project_id, record.target(), change)
@@ -417,6 +418,7 @@ def _run_link(conn: Connection, record: ConfiguredLink, from_revision: int | Non
             revision=record.revision,
             from_revision=from_revision,
             change=change,
+            fields=link_writes.link_fields(record),
         )
 
 

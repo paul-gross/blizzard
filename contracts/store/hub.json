@@ -1,5 +1,5 @@
 {
-  "head_revision": "20261109_0900_urgency_references",
+  "head_revision": "20261111_0900_repository_link_base_branch",
   "store": "hub",
   "tables": {
     "answer_deliveries": {
@@ -5945,6 +5945,12 @@
     "project_repository_links": {
       "checks": [],
       "columns": {
+        "base_branch": {
+          "deprecated": null,
+          "nullable": true,
+          "server_default": false,
+          "type": "String"
+        },
         "project_id": {
           "deprecated": null,
           "nullable": false,

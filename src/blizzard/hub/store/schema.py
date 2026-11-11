@@ -614,6 +614,8 @@ project_repository_links = Table(
         ForeignKey("tenants.tenant_id", name="fk_project_repository_links_tenant_id"),
         nullable=False,
     ),
+    # The link's own integration branch; null inherits the repository's ``base_branch``.
+    Column("base_branch", String, nullable=True),
     PrimaryKeyConstraint("project_id", "repository_id", name="pk_project_repository_links"),
     ForeignKeyConstraint(
         ["repository_id"], ["repositories.repository_id"], name="fk_project_repository_links_repositories"

@@ -18158,7 +18158,7 @@
       },
       "ProjectDocument": {
         "additionalProperties": false,
-        "description": "A project as a document entry, named by its slug. A ``name``, ``description`` or ``color`` the entry omits is\nleft as stored; a project the document creates needs a ``name`` and, with no ``color``, takes the tenant's\nleast-used palette color; a ``color`` is a palette name or a ``#rrggbb``. A ``sources`` or ``repositories`` list\nthe entry states is the project's whole set of links of that kind \u2014 a record it leaves out is unlinked; a list it\nomits is left as stored. A source or repository is named by its id or its slug, a slug it left included. A slug a\nproject left is refused: name that project by its current slug. A ``landing_order`` lists the linked repositories\nthe project ranks, first to land first, and leaves every other linked one unranked; it is applied after the\nentry's links, so an entry may link a repository and rank it together, and one it omits leaves the order as it\nstands. Export writes it only for a project that ranks a repository.",
+        "description": "A project as a document entry, named by its slug. A ``name``, ``description`` or ``color`` the entry omits is\nleft as stored; a project the document creates needs a ``name`` and, with no ``color``, takes the tenant's\nleast-used palette color; a ``color`` is a palette name or a ``#rrggbb``. A ``sources`` or ``repositories`` list\nthe entry states is the project's whole set of links of that kind \u2014 a record it leaves out is unlinked; a list it\nomits is left as stored. A source or repository is named by its id or its slug, a slug it left included. A slug a\nproject left is refused: name that project by its current slug. A ``landing_order`` lists the linked repositories\nthe project ranks, first to land first, and leaves every other linked one unranked; it is applied after the\nentry's links, so an entry may link a repository and rank it together, and one it omits leaves the order as it\nstands. Export writes it only for a project that ranks a repository. A ``repository_branches`` map, from a linked\nrepository \u2014 by id or slug \u2014 to a branch name, is the project's whole set of link base branches: each repository it\nnames lands on that branch, and every other repository the project links inherits its repository's\n``base_branch``; it is applied after the entry's links, and naming a repository the project does not link is\nrefused. One the entry omits leaves the branches as they stand. Export writes it only for a project whose link\nnames its own branch.",
         "properties": {
           "color": {
             "anyOf": [
@@ -18208,6 +18208,20 @@
             },
             "title": "Repositories",
             "type": "array"
+          },
+          "repository_branches": {
+            "anyOf": [
+              {
+                "additionalProperties": {
+                  "type": "string"
+                },
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Repository Branches"
           },
           "slug": {
             "title": "Slug",
@@ -19922,9 +19936,43 @@
         "title": "RepositoryEntry",
         "type": "object"
       },
-      "RepositoryLinkView": {
-        "description": "A project's link to a repository, by the repository's ``repository_id``, with its current ``slug`` and ``name``.\n``linked`` is false once the link is retired (unlinked). ``position`` is the link's place in the project's landing\norder, lower landing first \u2014 ``null`` when unranked.",
+      "RepositoryLinkPatchRequest": {
+        "additionalProperties": false,
+        "description": "A sparse edit of a project's link to a repository: an absent field is unchanged. ``base_branch`` names the\nlink's own integration branch \u2014 a valid git branch name, never checked against the forge \u2014 and an explicit\n``null`` clears it, so the link inherits the repository's ``base_branch`` again.",
         "properties": {
+          "base_branch": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Base Branch"
+          }
+        },
+        "title": "RepositoryLinkPatchRequest",
+        "type": "object"
+      },
+      "RepositoryLinkView": {
+        "description": "A project's link to a repository, by the repository's ``repository_id``, with its current ``slug`` and ``name``.\n``linked`` is false once the link is retired (unlinked). ``position`` is the link's place in the project's landing\norder, lower landing first \u2014 ``null`` when unranked. ``base_branch`` is the link's own integration branch \u2014\n``null`` when it inherits the repository's \u2014 and ``effective_base_branch`` the branch the project's chunks start\nfrom and land into in the repository: its own, else the repository's ``base_branch``.",
+        "properties": {
+          "base_branch": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Base Branch"
+          },
+          "effective_base_branch": {
+            "title": "Effective Base Branch",
+            "type": "string"
+          },
           "linked": {
             "title": "Linked",
             "type": "boolean"
@@ -19968,7 +20016,9 @@
           "name",
           "linked",
           "revision",
-          "position"
+          "position",
+          "base_branch",
+          "effective_base_branch"
         ],
         "title": "RepositoryLinkView",
         "type": "object"
@@ -54961,6 +55011,98 @@
       }
     },
     "/api/projects/{project}/repository-links/{repository}": {
+      "patch": {
+        "description": "Apply only the fields present: `base_branch` names the link's own integration branch, and an explicit `null`\nclears it so the link inherits the repository's `base_branch` again. A patch that changes nothing writes nothing;\nwhether the branch exists is not checked. 404 for an unknown project or a repository it never linked; 409 for a\nstale `If-Match` (naming the current revision); 422 on `base_branch` for a name that is no git branch name.",
+        "operationId": "patch_repository_link_api_projects__project__repository_links__repository__patch",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "project",
+            "required": true,
+            "schema": {
+              "title": "Project",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "repository",
+            "required": true,
+            "schema": {
+              "title": "Repository",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "if-match",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "If-Match"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-blizzard-door",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Blizzard-Door"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RepositoryLinkPatchRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RepositoryLinkView"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Patch Repository Link",
+        "tags": [
+          "projects"
+        ]
+      },
       "put": {
         "description": "Link the project to a stored repository, retired or not \u2014 a first link, or a relink of one it unlinked; a\nstanding link is left as it is. 404 for an unknown project or repository; 409 for a stale `If-Match` on a stored\nlink.",
         "operationId": "link_repository_api_projects__project__repository_links__repository__put",

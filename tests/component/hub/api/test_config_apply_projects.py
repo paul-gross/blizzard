@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+from typing import cast
 
 import httpx2
 import pytest
@@ -371,3 +372,89 @@ def test_an_entry_stating_a_null_color_is_refused_whether_the_project_exists_or_
         assert "color" in refused.text
     assert {p["slug"]: p["color"] for p in hub.client.get("/api/projects").json()["projects"]}["web"] == "blue"
     assert "new" not in {p["slug"] for p in hub.client.get("/api/projects").json()["projects"]}
+
+
+# --- Repository branches -----------------------------------------------------------------------------------------
+
+_LIB = {**_REPO, "slug": "lib", "repo": "lib"}
+
+
+def _branches(hub: HubHarness, slug: str) -> dict[str, str | None]:
+    return {
+        _repository_slug(hub, link.repository_id): link.base_branch
+        for link in hub.services.project_links.repositories_of(_project_id(hub, slug))
+    }
+
+
+def test_repository_branches_set_the_link_branches_with_their_change_rows(hub: HubHarness) -> None:
+    web = {
+        **_WEB,
+        "sources": [],
+        "repositories": ["blizzard", "lib"],
+        "repository_branches": {"blizzard": "rust-rewrite"},
+    }
+
+    applied = _apply(hub, {"repositories": [_REPO, _LIB], "projects": [web]})
+
+    assert ("project_repository_link", "web/blizzard", "edit") in _rows(applied)
+    assert _branches(hub, "web") == {"blizzard": "rust-rewrite", "lib": None}
+    (edit,) = [
+        c
+        for c in _changes(hub)
+        if c["record_kind"] == "project_repository_link" and c["op"] == "edit" and c["door"] == "apply"
+    ]
+    assert edit["revision"] == 2
+    diff = cast(list[dict[str, object]], edit["diff"])
+    assert [(d["field"], d["old"], d["new"]) for d in diff] == [("base_branch", None, "rust-rewrite")]
+
+
+def test_stated_repository_branches_are_the_whole_set_and_omitted_ones_are_left(hub: HubHarness) -> None:
+    web = {
+        **_WEB,
+        "sources": [],
+        "repositories": ["blizzard", "lib"],
+        "repository_branches": {"blizzard": "dev", "lib": "next"},
+    }
+    _rows(_apply(hub, {"repositories": [_REPO, _LIB], "projects": [web]}))
+
+    _rows(_apply(hub, {"projects": [{"slug": "web", "name": "Web"}]}))
+    assert _branches(hub, "web") == {"blizzard": "dev", "lib": "next"}
+
+    _rows(_apply(hub, {"projects": [{"slug": "web", "name": "Web", "repository_branches": {"lib": "next"}}]}))
+    assert _branches(hub, "web") == {"blizzard": None, "lib": "next"}
+
+    _rows(_apply(hub, {"projects": [{"slug": "web", "name": "Web", "repository_branches": {}}]}))
+    assert _branches(hub, "web") == {"blizzard": None, "lib": None}
+
+
+@pytest.mark.parametrize(
+    "branches",
+    [{"lib": "dev"}, {"nope": "dev"}, {"blizzard": "a..b"}],
+    ids=["unlinked", "unknown", "invalid"],
+)
+def test_repository_branches_naming_an_unlinked_repository_or_an_invalid_branch_are_refused(
+    hub: HubHarness, branches: dict[str, str]
+) -> None:
+    _rows(_apply(hub, {"repositories": [_REPO, _LIB]}))
+    before = _changes(hub)
+
+    refused = _apply(hub, {"projects": [{**_WEB, "sources": [], "repository_branches": branches}]})
+
+    assert refused.status_code == 422, refused.text
+    assert refused.json()["detail"][0]["loc"] == ["body", "projects", 0, "repository_branches"]
+    assert _changes(hub) == before
+
+
+def test_an_export_carries_repository_branches_only_for_an_override_and_round_trips(hub: HubHarness) -> None:
+    web = {**_WEB, "sources": [], "repositories": ["blizzard", "lib"], "repository_branches": {"lib": "rust-rewrite"}}
+    _rows(_apply(hub, {"work_sources": [_SOURCE], "repositories": [_REPO, _LIB], "projects": [web]}))
+
+    exported = hub.client.get("/api/config/export")
+    projects = {p["slug"]: p for p in exported.json()["projects"]}
+
+    assert projects["web"]["repository_branches"] == {"lib": "rust-rewrite"}
+    assert "repository_branches" not in projects["default"]
+    before = _changes(hub)
+    assert {op for _, _, op in _rows(_apply(hub, exported.json()))} == {"unchanged"}
+    assert _changes(hub) == before
+    assert hub.client.get("/api/config/export").content == exported.content

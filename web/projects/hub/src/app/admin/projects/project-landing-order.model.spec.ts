@@ -12,6 +12,8 @@ const link = (repository_id: string, slug: string, position: number | null): Rep
   linked: true,
   position,
   revision: 1,
+  base_branch: null,
+  effective_base_branch: 'main',
 });
 
 const A = row('repo_a', 'alpha');

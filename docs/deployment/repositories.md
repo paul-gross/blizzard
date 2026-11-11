@@ -45,17 +45,17 @@ Name such a repository by its new slug.
 
 ## Fields
 
-| Field                | Meaning                                                                                                               |
-| -------------------- | --------------------------------------------------------------------------------------------------------------------- |
-| `slug`               | The handle you type. It may be edited; the one it leaves still resolves.                                              |
-| `name`               | The display name, free text. It may be edited.                                                                        |
-| `forge`              | The forge it lives on, by id or slug; reads carry `forge_id`, `forge_slug` and `forge_name`.                          |
-| `owner`              | The repository's owner on the forge.                                                                                  |
-| `repo`               | The repository's name on the forge.                                                                                   |
-| `base_branch`        | The branch work lands on.                                                                                             |
-| `secret_name`        | The stored [secret](./secrets.md) holding the forge token (`--secret`).                                               |
-| `landing_policy`     | How the repository's changes land (`--policy`): `merge-on-checks`, the default.                                       |
-| `park_timeout_hours` | Optional (`--park-timeout`). Only a repository whose policy parks changes takes one, so `merge-on-checks` refuses it. |
+| Field                | Meaning                                                                                                                  |
+| -------------------- | ------------------------------------------------------------------------------------------------------------------------ |
+| `slug`               | The handle you type. It may be edited; the one it leaves still resolves.                                                 |
+| `name`               | The display name, free text. It may be edited.                                                                           |
+| `forge`              | The forge it lives on, by id or slug; reads carry `forge_id`, `forge_slug` and `forge_name`.                             |
+| `owner`              | The repository's owner on the forge.                                                                                     |
+| `repo`               | The repository's name on the forge.                                                                                      |
+| `base_branch`        | The branch work lands on — the default a project's link may override ([projects.md](./projects.md#a-links-base-branch)). |
+| `secret_name`        | The stored [secret](./secrets.md) holding the forge token (`--secret`).                                                  |
+| `landing_policy`     | How the repository's changes land (`--policy`): `merge-on-checks`, the default.                                          |
+| `park_timeout_hours` | Optional (`--park-timeout`). Only a repository whose policy parks changes takes one, so `merge-on-checks` refuses it.    |
 
 Every field but `landing_policy` and `park_timeout_hours` is required; a create without `forge` is refused
 `422 forge_required`. `landing_policy` defaults to `merge-on-checks` and cannot be cleared; `park_timeout_hours` is the

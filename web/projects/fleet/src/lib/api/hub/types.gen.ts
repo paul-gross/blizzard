@@ -11498,7 +11498,12 @@ export type ProjectCreateRequest = {
  * project left is refused: name that project by its current slug. A ``landing_order`` lists the linked repositories
  * the project ranks, first to land first, and leaves every other linked one unranked; it is applied after the
  * entry's links, so an entry may link a repository and rank it together, and one it omits leaves the order as it
- * stands. Export writes it only for a project that ranks a repository.
+ * stands. Export writes it only for a project that ranks a repository. A ``repository_branches`` map, from a linked
+ * repository — by id or slug — to a branch name, is the project's whole set of link base branches: each repository it
+ * names lands on that branch, and every other repository the project links inherits its repository's
+ * ``base_branch``; it is applied after the entry's links, and naming a repository the project does not link is
+ * refused. One the entry omits leaves the branches as they stand. Export writes it only for a project whose link
+ * names its own branch.
  */
 export type ProjectDocument = {
     /**
@@ -11521,6 +11526,12 @@ export type ProjectDocument = {
      * Repositories
      */
     repositories?: Array<string>;
+    /**
+     * Repository Branches
+     */
+    repository_branches?: {
+        [key: string]: string;
+    } | null;
     /**
      * Slug
      */
@@ -12644,13 +12655,37 @@ export type RepositoryEntry = {
 };
 
 /**
+ * RepositoryLinkPatchRequest
+ *
+ * A sparse edit of a project's link to a repository: an absent field is unchanged. ``base_branch`` names the
+ * link's own integration branch — a valid git branch name, never checked against the forge — and an explicit
+ * ``null`` clears it, so the link inherits the repository's ``base_branch`` again.
+ */
+export type RepositoryLinkPatchRequest = {
+    /**
+     * Base Branch
+     */
+    base_branch?: string | null;
+};
+
+/**
  * RepositoryLinkView
  *
  * A project's link to a repository, by the repository's ``repository_id``, with its current ``slug`` and ``name``.
  * ``linked`` is false once the link is retired (unlinked). ``position`` is the link's place in the project's landing
- * order, lower landing first — ``null`` when unranked.
+ * order, lower landing first — ``null`` when unranked. ``base_branch`` is the link's own integration branch —
+ * ``null`` when it inherits the repository's — and ``effective_base_branch`` the branch the project's chunks start
+ * from and land into in the repository: its own, else the repository's ``base_branch``.
  */
 export type RepositoryLinkView = {
+    /**
+     * Base Branch
+     */
+    base_branch: string | null;
+    /**
+     * Effective Base Branch
+     */
+    effective_base_branch: string;
     /**
      * Linked
      */
@@ -29830,6 +29865,50 @@ export type ListRepositoryLinksApiProjectsProjectRepositoryLinksGetResponses = {
 };
 
 export type ListRepositoryLinksApiProjectsProjectRepositoryLinksGetResponse = ListRepositoryLinksApiProjectsProjectRepositoryLinksGetResponses[keyof ListRepositoryLinksApiProjectsProjectRepositoryLinksGetResponses];
+
+export type PatchRepositoryLinkApiProjectsProjectRepositoryLinksRepositoryPatchData = {
+    body: RepositoryLinkPatchRequest;
+    headers?: {
+        /**
+         * If-Match
+         */
+        'if-match'?: number | null;
+        /**
+         * X-Blizzard-Door
+         */
+        'x-blizzard-door'?: string | null;
+    };
+    path: {
+        /**
+         * Project
+         */
+        project: string;
+        /**
+         * Repository
+         */
+        repository: string;
+    };
+    query?: never;
+    url: '/api/projects/{project}/repository-links/{repository}';
+};
+
+export type PatchRepositoryLinkApiProjectsProjectRepositoryLinksRepositoryPatchErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type PatchRepositoryLinkApiProjectsProjectRepositoryLinksRepositoryPatchError = PatchRepositoryLinkApiProjectsProjectRepositoryLinksRepositoryPatchErrors[keyof PatchRepositoryLinkApiProjectsProjectRepositoryLinksRepositoryPatchErrors];
+
+export type PatchRepositoryLinkApiProjectsProjectRepositoryLinksRepositoryPatchResponses = {
+    /**
+     * Successful Response
+     */
+    200: RepositoryLinkView;
+};
+
+export type PatchRepositoryLinkApiProjectsProjectRepositoryLinksRepositoryPatchResponse = PatchRepositoryLinkApiProjectsProjectRepositoryLinksRepositoryPatchResponses[keyof PatchRepositoryLinkApiProjectsProjectRepositoryLinksRepositoryPatchResponses];
 
 export type LinkRepositoryApiProjectsProjectRepositoryLinksRepositoryPutData = {
     body?: never;

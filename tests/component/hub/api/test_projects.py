@@ -330,6 +330,8 @@ def test_a_repository_link_is_linked_listed_unlinked_and_relinked(hub: HubHarnes
         "linked": True,
         "revision": 1,
         "position": None,
+        "base_branch": None,
+        "effective_base_branch": "main",
     }
     assert (unlinked["linked"], unlinked["revision"]) == (False, 2)
     assert after == []
@@ -354,6 +356,106 @@ def test_a_stale_revision_on_a_link_answers_409(hub: HubHarness) -> None:
     assert _ok(hub.client.get("/api/projects/widgets/repository-links"))["repository_links"][0]["linked"] is True
 
 
+# --- A repository link's base branch -------------------------------------------------------------------------------
+
+
+def _link_branch(client: TestClient, base_branch: str | None, *, if_match: int | None = None) -> httpx2.Response:
+    headers = {} if if_match is None else {"If-Match": str(if_match)}
+    return client.patch(
+        "/api/projects/widgets/repository-links/acme-repo", json={"base_branch": base_branch}, headers=headers
+    )
+
+
+def _linked_widgets(client: TestClient) -> str:
+    """The project ``widgets`` linked to ``acme-repo``, whose base branch is ``main``; the project's id."""
+    _seed_records(client)
+    project_id = _create(client, "widgets")["project_id"]
+    _ok(client.put("/api/projects/widgets/repository-links/acme-repo"))
+    return project_id
+
+
+def test_a_link_base_branch_overrides_the_repository_and_clearing_it_inherits_again(hub: HubHarness) -> None:
+    project_id = _linked_widgets(hub.client)
+
+    overridden = _ok(_link_branch(hub.client, "rust-rewrite", if_match=1))
+    listed = _ok(hub.client.get("/api/projects/widgets/repository-links"))["repository_links"]
+    cleared = _ok(_link_branch(hub.client, None, if_match=2))
+
+    assert (overridden["base_branch"], overridden["effective_base_branch"], overridden["revision"]) == (
+        "rust-rewrite",
+        "rust-rewrite",
+        2,
+    )
+    assert listed == [overridden]
+    assert (cleared["base_branch"], cleared["effective_base_branch"], cleared["revision"]) == (None, "main", 3)
+    assert cleared["linked"] is True
+    changes = _changes(hub.client, project=project_id, record_kind="project_repository_link")
+    diffs = [(c["op"], c["revision"], [(d["field"], d["old"], d["new"]) for d in c["diff"]]) for c in changes[:2]]
+    assert diffs == [
+        ("edit", 3, [("base_branch", "rust-rewrite", None)]),
+        ("edit", 2, [("base_branch", None, "rust-rewrite")]),
+    ]
+
+
+def test_a_link_base_branch_follows_the_repository_while_it_inherits(hub: HubHarness) -> None:
+    _linked_widgets(hub.client)
+
+    _ok(hub.client.patch("/api/repositories/acme-repo", json={"base_branch": "trunk"}))
+
+    link = _ok(hub.client.get("/api/projects/widgets/repository-links"))["repository_links"][0]
+    assert (link["base_branch"], link["effective_base_branch"]) == (None, "trunk")
+
+
+def test_a_link_base_branch_edit_that_changes_nothing_writes_nothing(hub: HubHarness) -> None:
+    project_id = _linked_widgets(hub.client)
+    _ok(_link_branch(hub.client, "dev"))
+    before = _changes(hub.client, project=project_id)
+
+    same = _ok(_link_branch(hub.client, "dev"))
+    absent = _ok(hub.client.patch("/api/projects/widgets/repository-links/acme-repo", json={}))
+
+    assert same["revision"] == absent["revision"] == 2
+    assert _changes(hub.client, project=project_id) == before
+
+
+@pytest.mark.parametrize("name", ["", " dev", "a..b", "feat~1", "-x", "a.lock", "x/"])
+def test_a_link_base_branch_that_is_no_git_branch_name_answers_422_on_base_branch(hub: HubHarness, name: str) -> None:
+    _linked_widgets(hub.client)
+
+    refused = _link_branch(hub.client, name)
+
+    assert refused.status_code == 422, refused.text
+    assert "base_branch" in refused.text
+    assert _ok(hub.client.get("/api/projects/widgets/repository-links"))["repository_links"][0]["revision"] == 1
+
+
+def test_a_stale_revision_on_a_link_base_branch_answers_409_and_writes_nothing(hub: HubHarness) -> None:
+    _linked_widgets(hub.client)
+
+    stale = _link_branch(hub.client, "dev", if_match=7)
+
+    assert stale.status_code == 409, stale.text
+    link = _ok(hub.client.get("/api/projects/widgets/repository-links"))["repository_links"][0]
+    assert (link["base_branch"], link["revision"]) == (None, 1)
+
+
+def test_a_link_base_branch_on_a_repository_never_linked_answers_404(hub: HubHarness) -> None:
+    _seed_records(hub.client)
+    _create(hub.client, "widgets")
+
+    assert _link_branch(hub.client, "dev").status_code == 404
+
+
+def test_a_link_base_branch_survives_an_unlink_and_relink(hub: HubHarness) -> None:
+    _linked_widgets(hub.client)
+    _ok(_link_branch(hub.client, "dev"))
+
+    _ok(hub.client.post("/api/projects/widgets/repository-links/acme-repo/retire"))
+    relinked = _ok(hub.client.put("/api/projects/widgets/repository-links/acme-repo"))
+
+    assert (relinked["base_branch"], relinked["effective_base_branch"], relinked["revision"]) == ("dev", "dev", 4)
+
+
 def test_a_link_belongs_to_its_project_alone(hub: HubHarness) -> None:
     _seed_records(hub.client)
     _create(hub.client, "widgets")
@@ -374,6 +476,7 @@ _WRITES: list[tuple[str, str, dict[str, object] | None]] = [
     ("POST", "/api/projects/default/repository-links/nope/retire", None),
     ("PUT", "/api/projects/default/landing-order", {"repositories": []}),
     ("POST", "/api/projects/default/landing-order/position", {"repository": "nope", "unranked": True}),
+    ("PATCH", "/api/projects/default/repository-links/nope", {"base_branch": "dev"}),
 ]
 
 

@@ -52,13 +52,20 @@ def _linked(source_links: list[Any], repository_links: list[Any]) -> list[str]:
 
 
 def _landing_order(repository_links: list[Any]) -> list[str]:
-    """The project's repositories in landing order, as the hub lists them, each with its position or "unranked"."""
+    """The project's repositories in landing order, as the hub lists them, each with its position or "unranked" and
+    its effective base branch, inherited from the repository or the link's own."""
     if not repository_links:
         return ["repositories -"]
     return [
         "repositories, in landing order:",
-        *(f"  {row['slug']}  {_position(row.get('position'))}" for row in repository_links),
+        *(f"  {row['slug']}  {_position(row.get('position'))}  {_branch(row)}" for row in repository_links),
     ]
+
+
+def _branch(row: Any) -> str:
+    """A link's effective base branch, and whether it is inherited from the repository or the link's own."""
+    source = "inherited" if row.get("base_branch") is None else "override"
+    return f"branch {row['effective_base_branch']} ({source})"
 
 
 def _position(position: float | None) -> str:
@@ -109,7 +116,8 @@ def project_list(cli: CliContext) -> None:
 @click.argument("project")
 def project_show(cli: CliContext, project: str) -> None:
     """Show PROJECT — named by its id, its slug, or a slug it has left — with the work sources linked to it and the
-    repositories linked to it, in landing order, each with its position or "unranked"."""
+    repositories linked to it, in landing order, each with its position or "unranked" and its base branch, inherited
+    from the repository or the link's own."""
     body = cli.get(f"/api/projects/{project}", "GET /projects/{project}").json()
     sources = cli.get(f"/api/projects/{project}/source-links", "GET /projects/{project}/source-links").json()[
         "source_links"
@@ -202,6 +210,34 @@ def project_unlink(
         door=True,
     )
     cli.show_lines(resp.json(), f"project {project} is unlinked from {kind} {record}")
+
+
+@project_group.command("base", cls=FleetCommand)
+@click.argument("project")
+@click.argument("repository")
+@click.option("--branch", "branch", default=None, metavar="NAME", help="The link's own integration branch.")
+@click.option(
+    "--inherit", "inherit", is_flag=True, default=False, help="Clear the link's branch; it inherits the repository's."
+)
+@_IF_MATCH
+def project_base(
+    cli: CliContext, project: str, repository: str, branch: str | None, inherit: bool, if_match: int | None
+) -> None:
+    """Set the branch PROJECT's chunks start from and land into in REPOSITORY (--branch), or clear it so the link
+    inherits the repository's base branch again (--inherit). Whether the branch exists is not checked. Setting the
+    branch the link already has writes nothing. Refused for a repository PROJECT does not link, or a name that is no
+    git branch name."""
+    if (branch is None) == (not inherit):
+        raise click.UsageError("give exactly one of --branch or --inherit")
+    resp = cli.patch(
+        f"/api/projects/{project}/repository-links/{repository}",
+        "PATCH /projects/{project}/repository-links/{repository}",
+        json_body={"base_branch": branch},
+        if_match=if_match,
+        door=True,
+    )
+    out = resp.json()
+    cli.show_lines(out, f"project {project} lands in {out['slug']} on {_branch(out)}, at revision {out['revision']}")
 
 
 def _show_order(cli: CliContext, project: str, body: Any) -> None:
