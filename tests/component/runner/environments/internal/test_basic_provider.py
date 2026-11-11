@@ -14,6 +14,7 @@ from blizzard.runner.environments.provider import (
     EnvironmentPreparationError,
     RepositoryTarget,
     TargetBranchMissingError,
+    TargetUnmatchedError,
     WorkspaceAcquisitionError,
     WorkspaceRepo,
 )
@@ -256,15 +257,15 @@ def _owned_origin(tmp_path: Path, *, branches: tuple[str, ...]) -> WorkspaceRepo
     return WorkspaceRepo("toy", f"file://localhost{bare}")
 
 
-def _target(branch: str) -> RepositoryTarget:
+def _target(branch: str, *, repo: str = "toy", inherited: bool = False) -> RepositoryTarget:
     return RepositoryTarget(
-        repository_id="repo_toy",
-        repository_slug="toy",
+        repository_id=f"repo_{repo}",
+        repository_slug=repo,
         forge_host="localhost",
         owner="acme",
-        repo="toy",
+        repo=repo,
         base_branch=branch,
-        inherited=False,
+        inherited=inherited,
     )
 
 
@@ -292,3 +293,25 @@ def test_a_target_branch_absent_on_origin_fails_the_acquire_naming_repository_an
     assert "acme/toy" in str(excinfo.value)
     assert "'gone'" in str(excinfo.value)
     assert not (workspace / "01JFULLCHUNK").exists(), "no partial environment is left behind"
+
+
+def test_an_override_target_matching_no_workspace_repo_fails_the_acquire(tmp_path: Path) -> None:
+    repo = _owned_origin(tmp_path, branches=("rust-rewrite",))
+    workspace = tmp_path / "ordinary"
+    provider = BasicWorkspaceProvider(str(workspace), repos=(repo,), git=env_git())
+
+    with pytest.raises(TargetUnmatchedError) as excinfo:
+        provider.acquire("01JFULLCHUNK", 1, [], targets=[_target("rust-rewrite", repo="other")])
+
+    assert "acme/other" in str(excinfo.value)
+    assert "'rust-rewrite'" in str(excinfo.value)
+    assert not (workspace / "01JFULLCHUNK").exists(), "no partial environment is left behind"
+
+
+def test_an_inherited_target_matching_no_workspace_repo_starts_on_the_base(tmp_path: Path) -> None:
+    repo = _owned_origin(tmp_path, branches=())
+    provider = BasicWorkspaceProvider(str(tmp_path / "ordinary"), repos=(repo,), git=env_git())
+
+    (acquired,) = provider.acquire("01JFULLCHUNK", 1, [], targets=[_target("main", repo="other", inherited=True)])
+
+    assert (Path(acquired.workdir) / "toy" / "BRANCH").read_text() == "main\n"

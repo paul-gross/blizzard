@@ -109,6 +109,32 @@ class TargetBranchMissingError(EnvironmentPreparationError):
         self.branch = branch
 
 
+class TargetUnmatchedError(EnvironmentPreparationError):
+    """A repository whose branch is its project link's own matches no worktree of the environment: the environment is
+    never started from the workspace's branch while delivery lands in the override."""
+
+    def __init__(self, *, environment_id: str, repository: str, branch: str) -> None:
+        super().__init__(
+            f"repository {repository} targets branch {branch!r} but matches no worktree of the environment",
+            environment_id=environment_id,
+            step="target-unmatched",
+        )
+        self.repository = repository
+        self.branch = branch
+
+
+def refuse_unmatched_overrides(
+    environment_id: str, targets: Sequence[RepositoryTarget], matched: Sequence[RepositoryTarget]
+) -> None:
+    """Raise :class:`TargetUnmatchedError` for the first override target of ``targets`` not in ``matched``; an
+    inherited target matching nothing is the workspace's branch already."""
+    for target in targets:
+        if not target.inherited and target not in matched:
+            raise TargetUnmatchedError(
+                environment_id=environment_id, repository=target.qualified, branch=target.base_branch
+            )
+
+
 class TargetsUnsupportedError(EnvironmentPreparationError):
     """A provider that cannot prepare repositories at their targets was asked for a project link's own branch."""
 

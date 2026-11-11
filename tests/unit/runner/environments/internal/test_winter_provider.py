@@ -15,6 +15,7 @@ from blizzard.runner.environments.provider import (
     EnvironmentPreparationError,
     RepositoryTarget,
     TargetBranchMissingError,
+    TargetUnmatchedError,
     WorkspaceAcquisitionError,
 )
 from tests.support.winter_provider_fakes import FakeGit, FakeWinter
@@ -310,14 +311,29 @@ def test_an_env_a_targeted_chunk_released_returns_to_the_workspace_base_for_the_
     ]
 
 
-def test_a_target_naming_no_worktree_of_the_env_moves_nothing(tmp_path: Path) -> None:
+def test_an_inherited_target_naming_no_worktree_of_the_env_moves_nothing(tmp_path: Path) -> None:
     winter = FakeWinter()
     git = _two_repo_env(tmp_path, winter)
     provider = WinterWorkspaceProvider(str(tmp_path), env_pool=["e1"], winter=winter, git=git)
 
-    provider.acquire("ch_1", 1, held_ids=[], targets=[_target("other", "rust-rewrite")])
+    provider.acquire("ch_1", 1, held_ids=[], targets=[_target("other", "master", inherited=True)])
 
     assert winter.runs == [["ws", "pull", "--standalone"], ["ws", "init", "e1"], ["provision", "e1"]]
+
+
+def test_an_override_target_naming_no_worktree_of_the_env_fails_the_acquire(tmp_path: Path) -> None:
+    winter = FakeWinter()
+    git = _two_repo_env(tmp_path, winter)
+    provider = WinterWorkspaceProvider(str(tmp_path), env_pool=["e1"], winter=winter, git=git)
+
+    with pytest.raises(TargetUnmatchedError) as excinfo:
+        provider.acquire("ch_1", 1, held_ids=[], targets=[_target("api", "next"), _target("other", "rust-rewrite")])
+
+    assert "acme/other" in str(excinfo.value)
+    assert "'rust-rewrite'" in str(excinfo.value)
+    assert excinfo.value.environment_id == "e1"
+    assert [run for run in winter.runs if run[:2] == ["ws", "reset"]] == [], "never starts from the workspace's base"
+    assert ["provision", "e1"] not in winter.runs
 
 
 def test_a_target_branch_absent_on_origin_fails_the_acquire_naming_repository_and_branch(tmp_path: Path) -> None:

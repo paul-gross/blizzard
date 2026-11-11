@@ -19,8 +19,10 @@ from blizzard.runner.environments.provider import (
     RepoBinding,
     RepositoryTarget,
     TargetBranchMissingError,
+    TargetUnmatchedError,
     WorkspaceAcquisitionError,
     WorkspaceRepo,
+    refuse_unmatched_overrides,
     target_naming,
 )
 
@@ -162,7 +164,7 @@ class BasicWorkspaceProvider:
                     # Preserve the preparation failure even if cleanup cannot finish.
                     with suppress(OSError, EnvGitError):
                         self._remove(env)
-            if isinstance(exc, TargetBranchMissingError):
+            if isinstance(exc, (TargetBranchMissingError, TargetUnmatchedError)):
                 raise
             failing = selected[len(acquired)] if len(acquired) < len(selected) else self._root
             raise EnvironmentPreparationError(
@@ -177,6 +179,9 @@ class BasicWorkspaceProvider:
         env.mkdir(exist_ok=True)
         (env / _MANAGED).write_text(chunk_id)
         (env / _ACTIVE).unlink(missing_ok=True)
+        refuse_unmatched_overrides(
+            env.name, targets, [t for repo in self._repos if (t := target_naming(targets, repo.url, repo.name))]
+        )
         projects = self._root / "projects"
         projects.mkdir(exist_ok=True)
         for repo in self._repos:

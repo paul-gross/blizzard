@@ -24,6 +24,7 @@ from blizzard.runner.environments.provider import (
     RepositoryTarget,
     TargetBranchMissingError,
     WorkspaceAcquisitionError,
+    refuse_unmatched_overrides,
     target_naming,
 )
 
@@ -205,7 +206,8 @@ class WinterWorkspaceProvider:
         """Move each worktree of ``env`` a target names onto ``origin/<branch>``, one worktree at a time, and touch no
         other — the env-wide base checkout already put every worktree on the workspace's branch, so a previous
         tenant's targets never carry over. ``fetched`` when this reset already fetched the env; a fresh one fetches
-        first. A target branch absent on its origin aborts the acquire, never falling back to the workspace's."""
+        first. A target branch absent on its origin, or an override target matching no worktree, aborts the acquire,
+        never falling back to the workspace's."""
         if not targets:
             return
         workdir = self._workspace_root / env
@@ -214,6 +216,7 @@ class WinterWorkspaceProvider:
             target = target_naming(targets, binding.origin_url, binding.name)
             if target is not None:
                 matched.append((binding, target))
+        refuse_unmatched_overrides(env, targets, [target for _, target in matched])
         if not matched:
             return
         run = self._winter.run
