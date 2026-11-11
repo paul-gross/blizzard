@@ -40,7 +40,6 @@ from blizzard.runner.environments.provider import (
     RepoBinding,
     RepositoryTarget,
     WorkspaceAcquisitionError,
-    refuse_unhonored_targets,
 )
 from blizzard.runner.environments.workspaces import IWorkspaces, WorkspaceEntry, WorkspaceRegistry
 from blizzard.runner.environments.worktree import IWorktreeGit
@@ -986,8 +985,6 @@ class FakeProvider:
         self, chunk_id: str, count: int, held_ids: list[str], targets: Sequence[RepositoryTarget] = ()
     ) -> list[AcquiredEnvironment]:
         self.acquired_targets.append(tuple(targets))
-        if not self._honors_targets:
-            refuse_unhonored_targets(targets, environment_id=next(iter(self._pool), ""))
         if self.refuse:
             raise WorkspaceAcquisitionError("refused (scripted)")
         if self.prepare_fail:

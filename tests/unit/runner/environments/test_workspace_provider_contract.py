@@ -18,8 +18,6 @@ from blizzard.runner.environments.factory import WORKSPACE_PROVIDERS, WorkspaceS
 from blizzard.runner.environments.internal import git as env_git_module
 from blizzard.runner.environments.provider import (
     IWorkspaceProvider,
-    RepositoryTarget,
-    TargetsUnsupportedError,
     WorkspaceRepo,
 )
 from tests.support.child_launch import workspace_launch
@@ -87,7 +85,7 @@ _CASES = {
         capacity=2,
         pool=("e1", "e2"),
     ),
-    # A binding that cannot prepare at targets says so, and refuses an acquire naming a link's own branch.
+    # A binding that cannot prepare at targets says so.
     "fake-without-targets": _Case(
         build=lambda tmp: FakeProvider({"e1": str(tmp / "e1")}, honors_targets=False),
         spawn_root=lambda _tmp: "",
@@ -124,17 +122,6 @@ def test_binding_answers_its_pool(name: str, tmp_path: Path) -> None:
 def test_binding_answers_whether_it_honors_targets(name: str, tmp_path: Path) -> None:
     case = _CASES[name]
     assert case.build(tmp_path).honors_targets() is case.honors_targets
-
-
-def test_a_binding_that_cannot_honor_targets_refuses_an_override_and_takes_an_inherited_one(tmp_path: Path) -> None:
-    provider = FakeProvider({"e1": str(tmp_path / "e1")}, honors_targets=False)
-
-    def target(*, inherited: bool) -> RepositoryTarget:
-        return RepositoryTarget("repo_1", "toy", "github.com", "acme", "toy", "rust-rewrite", inherited=inherited)
-
-    with pytest.raises(TargetsUnsupportedError, match="acme/toy"):
-        provider.acquire("ch_1", 1, [], [target(inherited=False)])
-    assert [env.environment_id for env in provider.acquire("ch_1", 1, [], [target(inherited=True)])] == ["e1"]
 
 
 def test_a_basic_binding_built_by_the_factory_honors_the_passed_held_ids_and_configured_base_branch(
