@@ -1,17 +1,6 @@
-import {
-  formatWhen,
-  RunnerConnection,
-  type RunnerDecliningView,
-  type RunnerRegistryView,
-} from 'fleet';
+import { formatWhen, RunnerConnection, type RunnerDecliningView, type RunnerRegistryView } from 'fleet';
 
-import {
-  connectionState,
-  hostLight,
-  runnerLight,
-  runnerStateBadges,
-  runnerTitleState,
-} from './connection-status.model';
+import { connectionState, hostLight, runnerLight, runnerStateBadges, runnerTitleState } from './connection-status.model';
 import type { RunnerRow } from './runner-rows.model';
 
 const REGISTRY: RunnerRegistryView = {
@@ -48,6 +37,7 @@ const REGISTRY: RunnerRegistryView = {
   workspace_id: null,
 };
 
+
 const NOW = new Date().toISOString();
 
 const row = (over: Partial<RunnerRow> = {}): RunnerRow => ({
@@ -76,92 +66,40 @@ const row = (over: Partial<RunnerRow> = {}): RunnerRow => ({
 
 describe('runnerLight', () => {
   it('reads offline over a pause, a pause over online, and a never-connected runner as unlit', () => {
-    expect(runnerLight(row())).toEqual({
-      kind: 'lit',
-      tone: 'green',
-      blink: 'hold',
-    });
-    expect(runnerLight(row({ locally_paused: true }))).toEqual({
-      kind: 'lit',
-      tone: 'amber',
-      blink: 'hold',
-    });
-    expect(runnerLight(row({ hub_paused: true }))).toEqual({
-      kind: 'lit',
-      tone: 'amber',
-      blink: 'hold',
-    });
-    expect(
-      runnerLight(
-        row({
-          online: false,
-          hub_paused: true,
-          connection: RunnerConnection.OFFLINE,
-        }),
-      ),
-    ).toEqual({
+    expect(runnerLight(row())).toEqual({ kind: 'lit', tone: 'green', blink: 'hold' });
+    expect(runnerLight(row({ locally_paused: true }))).toEqual({ kind: 'lit', tone: 'amber', blink: 'hold' });
+    expect(runnerLight(row({ hub_paused: true }))).toEqual({ kind: 'lit', tone: 'amber', blink: 'hold' });
+    expect(runnerLight(row({ online: false, hub_paused: true, connection: RunnerConnection.OFFLINE }))).toEqual({
       kind: 'lit',
       tone: 'red',
       blink: 'step',
     });
-    expect(
-      runnerLight(
-        row({ online: false, connection: RunnerConnection.NEVER_CONNECTED }),
-      ),
-    ).toEqual({ kind: 'never' });
+    expect(runnerLight(row({ online: false, connection: RunnerConnection.NEVER_CONNECTED }))).toEqual({ kind: 'never' });
   });
 });
 
 describe('hostLight', () => {
   it('reads a host on the runner ladder with no pause', () => {
-    expect(hostLight(true, RunnerConnection.ONLINE)).toEqual({
-      kind: 'lit',
-      tone: 'green',
-      blink: 'hold',
-    });
-    expect(hostLight(false, RunnerConnection.OFFLINE)).toEqual({
-      kind: 'lit',
-      tone: 'red',
-      blink: 'step',
-    });
-    expect(hostLight(false, RunnerConnection.NEVER_CONNECTED)).toEqual({
-      kind: 'never',
-    });
+    expect(hostLight(true, RunnerConnection.ONLINE)).toEqual({ kind: 'lit', tone: 'green', blink: 'hold' });
+    expect(hostLight(false, RunnerConnection.OFFLINE)).toEqual({ kind: 'lit', tone: 'red', blink: 'step' });
+    expect(hostLight(false, RunnerConnection.NEVER_CONNECTED)).toEqual({ kind: 'never' });
   });
 });
 
 describe('connectionState', () => {
   it('reads online, offline and never connected, each in its tone', () => {
-    expect(connectionState(true, RunnerConnection.ONLINE)).toEqual({
-      label: 'ONLINE',
-      tone: 'done',
-    });
-    expect(connectionState(false, RunnerConnection.OFFLINE)).toEqual({
-      label: 'OFFLINE',
-      tone: 'stale',
-    });
-    expect(connectionState(false, RunnerConnection.NEVER_CONNECTED)).toEqual({
-      label: 'NEVER CONNECTED',
-      tone: 'idle',
-    });
+    expect(connectionState(true, RunnerConnection.ONLINE)).toEqual({ label: 'ONLINE', tone: 'done' });
+    expect(connectionState(false, RunnerConnection.OFFLINE)).toEqual({ label: 'OFFLINE', tone: 'stale' });
+    expect(connectionState(false, RunnerConnection.NEVER_CONNECTED)).toEqual({ label: 'NEVER CONNECTED', tone: 'idle' });
   });
 });
 
 describe('runnerStateBadges', () => {
-  const labels = (r: RunnerRow) =>
-    runnerStateBadges(r).map((badge) => badge.label);
+  const labels = (r: RunnerRow) => runnerStateBadges(r).map((badge) => badge.label);
 
   it('reads an online runner as IDLE, or WORKING while it holds a chunk', () => {
     expect(labels(row())).toEqual(['IDLE']);
-    expect(
-      labels(
-        row({
-          claims: [
-            { chunkId: 'c', shortId: 'c', node: 'build', status: 'running' },
-          ],
-        }),
-      ),
-    ).toEqual(['WORKING']);
+    expect(labels(row({ claims: [{ chunkId: 'c', shortId: 'c', node: 'build', status: 'running' }] }))).toEqual(['WORKING']);
   });
 
   describe('when a throttle says no', () => {
@@ -182,85 +120,40 @@ describe('runnerStateBadges', () => {
     const reset = formatWhen(NOW, new Date(NOW));
 
     it('words the floor with its subscription and reset, in place of IDLE', () => {
-      expect(labels(row({ declining: [floor] }))).toEqual([
-        `waiting on anthropic — exhausted, resets ${reset}`,
-      ]);
+      expect(labels(row({ declining: [floor] }))).toEqual([`waiting on anthropic — exhausted, resets ${reset}`]);
     });
 
     it('words a lever, or one this board has no name for, in the generic form', () => {
-      expect(labels(row({ declining: [pace] }))).toEqual([
-        'declining — pace: 7d 86% spent, 71% elapsed',
+      expect(labels(row({ declining: [pace] }))).toEqual(['declining — pace: 7d 86% spent, 71% elapsed']);
+      expect(labels(row({ declining: [{ ...pace, lever: 'from-a-newer-runner', lever_kind: 'from-a-newer-runner' as RunnerDecliningView['lever_kind'], detail: 'd' }] }))).toEqual([
+        'declining — from-a-newer-runner: d',
       ]);
-      expect(
-        labels(
-          row({
-            declining: [
-              {
-                ...pace,
-                lever: 'from-a-newer-runner',
-                lever_kind:
-                  'from-a-newer-runner' as RunnerDecliningView['lever_kind'],
-                detail: 'd',
-              },
-            ],
-          }),
-        ),
-      ).toEqual(['declining — from-a-newer-runner: d']);
     });
 
-    it("shows the first reason, in the gate's order, and lists every one in its title", () => {
+    it('shows the first reason, in the gate\'s order, and lists every one in its title', () => {
       const [badge] = runnerStateBadges(row({ declining: [pace, floor] }));
 
       expect(badge.label).toBe('declining — pace: 7d 86% spent, 71% elapsed');
-      expect(badge.title).toContain(
-        `waiting on anthropic — exhausted, resets ${reset}`,
-      );
+      expect(badge.title).toContain(`waiting on anthropic — exhausted, resets ${reset}`);
       expect(badge.testid).toBe('fleet-runner-declining');
     });
 
     it('is hidden behind either brake, and for a runner that is offline', () => {
-      expect(labels(row({ declining: [floor], hub_paused: true }))).toEqual([
-        'HUB PAUSED',
-      ]);
-      expect(labels(row({ declining: [floor], locally_paused: true }))).toEqual(
-        ['LOCALLY PAUSED'],
-      );
-      expect(
-        labels(
-          row({
-            declining: [floor],
-            online: false,
-            connection: RunnerConnection.OFFLINE,
-          }),
-        ),
-      ).toEqual(['OFFLINE']);
+      expect(labels(row({ declining: [floor], hub_paused: true }))).toEqual(['HUB PAUSED']);
+      expect(labels(row({ declining: [floor], locally_paused: true }))).toEqual(['LOCALLY PAUSED']);
+      expect(labels(row({ declining: [floor], online: false, connection: RunnerConnection.OFFLINE }))).toEqual(['OFFLINE']);
     });
   });
 
   it('names an offline or never-connected runner by its connection', () => {
-    expect(
-      labels(row({ online: false, connection: RunnerConnection.OFFLINE })),
-    ).toEqual(['OFFLINE']);
-    expect(
-      labels(
-        row({ online: false, connection: RunnerConnection.NEVER_CONNECTED }),
-      ),
-    ).toEqual(['NEVER CONNECTED']);
+    expect(labels(row({ online: false, connection: RunnerConnection.OFFLINE }))).toEqual(['OFFLINE']);
+    expect(labels(row({ online: false, connection: RunnerConnection.NEVER_CONNECTED }))).toEqual(['NEVER CONNECTED']);
   });
 
   it('stacks each brake, the local one carrying its hint and the hub one its test hook', () => {
-    const badges = runnerStateBadges(
-      row({
-        locally_paused: true,
-        hub_paused: true,
-        locally_paused_reason: 'spend cap',
-      }),
-    );
+    const badges = runnerStateBadges(row({ locally_paused: true, hub_paused: true, locally_paused_reason: 'spend cap' }));
 
-    expect(badges.map((badge) => badge.label)).toEqual([
-      'LOCALLY PAUSED',
-      'HUB PAUSED',
-    ]);
+    expect(badges.map((badge) => badge.label)).toEqual(['LOCALLY PAUSED', 'HUB PAUSED']);
     expect(badges[0].title).toBe('spend cap');
     expect(badges[1].testid).toBe('fleet-runner-hub-paused');
   });
@@ -269,22 +162,8 @@ describe('runnerStateBadges', () => {
 describe('runnerTitleState', () => {
   it('lets a brake on an online runner outrank ONLINE, as its light does', () => {
     expect(runnerTitleState(row())).toEqual({ label: 'ONLINE', tone: 'done' });
-    expect(runnerTitleState(row({ hub_paused: true }))).toEqual({
-      label: 'HUB PAUSED',
-      tone: 'waiting',
-    });
-    expect(runnerTitleState(row({ locally_paused: true }))).toEqual({
-      label: 'LOCALLY PAUSED',
-      tone: 'idle',
-    });
-    expect(
-      runnerTitleState(
-        row({
-          online: false,
-          hub_paused: true,
-          connection: RunnerConnection.OFFLINE,
-        }),
-      ),
-    ).toEqual({ label: 'OFFLINE', tone: 'stale' });
+    expect(runnerTitleState(row({ hub_paused: true }))).toEqual({ label: 'HUB PAUSED', tone: 'waiting' });
+    expect(runnerTitleState(row({ locally_paused: true }))).toEqual({ label: 'LOCALLY PAUSED', tone: 'idle' });
+    expect(runnerTitleState(row({ online: false, hub_paused: true, connection: RunnerConnection.OFFLINE }))).toEqual({ label: 'OFFLINE', tone: 'stale' });
   });
 });
