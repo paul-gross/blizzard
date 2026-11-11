@@ -103,8 +103,20 @@ describe('runnerStateBadges', () => {
   });
 
   describe('when a throttle says no', () => {
-    const floor: RunnerDecliningView = { lever: 'floor', detail: 'exhausted', subscription: 'anthropic', until: NOW };
-    const pace: RunnerDecliningView = { lever: 'pace', detail: '7d 86% spent, 71% elapsed', subscription: null, until: null };
+    const floor: RunnerDecliningView = {
+      lever: 'floor',
+      lever_kind: 'floor',
+      detail: 'exhausted',
+      subscription: 'anthropic',
+      until: NOW,
+    };
+    const pace: RunnerDecliningView = {
+      lever: 'pace',
+      lever_kind: 'pace',
+      detail: '7d 86% spent, 71% elapsed',
+      subscription: null,
+      until: null,
+    };
     const reset = formatWhen(NOW, new Date(NOW));
 
     it('words the floor with its subscription and reset, in place of IDLE', () => {

@@ -11,6 +11,7 @@ from dataclasses import dataclass
 from datetime import UTC, date, datetime, timedelta, tzinfo
 from enum import StrEnum
 
+from blizzard.foundation.declared_lever import DeclaredLever
 from blizzard.foundation.roles import domain_model
 from blizzard.runner.subscriptions.subscription_sampler import ExternalSubscriptionUsageWindow
 from blizzard.runner.throttle.settings import (
@@ -47,10 +48,10 @@ _DASH = "\N{EN DASH}"
 class LeverName(StrEnum):
     """The levers, in the gate's order."""
 
-    PACE = "pace"
-    UTILIZATION = "utilization"
-    BUDGET = "budget"
-    SCHEDULE = "schedule"
+    PACE = DeclaredLever.PACE.value
+    UTILIZATION = DeclaredLever.UTILIZATION.value
+    BUDGET = DeclaredLever.BUDGET.value
+    SCHEDULE = DeclaredLever.SCHEDULE.value
 
 
 @domain_model

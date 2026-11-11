@@ -9,6 +9,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from datetime import datetime
 
+from blizzard.foundation.declared_lever import DeclaredLever
 from blizzard.foundation.roles import domain_model
 from blizzard.runner.throttle.floor import FloorAnswer
 from blizzard.runner.throttle.gate import ClaimsAnswer
@@ -17,7 +18,7 @@ from blizzard.runner.throttle.levers import LeverAnswer
 __all__ = ["FLOOR_LEVER", "DecliningReason", "declining_report", "floor_reason", "lever_reason"]
 
 #: The lever name the subscription floor reports under.
-FLOOR_LEVER = "floor"
+FLOOR_LEVER = DeclaredLever.FLOOR.value
 
 
 @domain_model

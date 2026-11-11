@@ -7289,6 +7289,17 @@
         "title": "DecisionView",
         "type": "object"
       },
+      "DeclaredLever": {
+        "enum": [
+          "floor",
+          "pace",
+          "utilization",
+          "budget",
+          "schedule"
+        ],
+        "title": "DeclaredLever",
+        "type": "string"
+      },
       "DefaultGraphRetiredProblem": {
         "additionalProperties": true,
         "description": "Every graph named after the packaged default is retired.",
@@ -22736,15 +22747,20 @@
         "type": "object"
       },
       "RunnerDecliningView": {
-        "description": "One throttle a runner reported as saying no, as the hub holds it: the response-side shape of the registration\nrequest's ``declining`` member.",
+        "description": "One throttle a runner reported as saying no, as the hub holds it: the response-side shape of the registration\nrequest's ``declining`` member. ``lever`` is deprecated: it repeats ``lever_kind``'s value, read ``lever_kind``.",
         "properties": {
           "detail": {
             "title": "Detail",
             "type": "string"
           },
           "lever": {
+            "deprecated": true,
             "title": "Lever",
             "type": "string"
+          },
+          "lever_kind": {
+            "$ref": "#/components/schemas/DeclaredLever",
+            "x-blizzard-open": true
           },
           "subscription": {
             "anyOf": [
@@ -22771,6 +22787,7 @@
         },
         "required": [
           "lever",
+          "lever_kind",
           "detail",
           "subscription",
           "until"

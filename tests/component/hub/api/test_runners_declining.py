@@ -10,6 +10,8 @@ from typing import Any
 import pytest
 from pydantic import BaseModel
 
+from blizzard.foundation.declared_lever import DeclaredLever
+from blizzard.foundation.unrecognized import Unrecognized
 from blizzard.hub.api import runners as runners_api
 from blizzard.hub.domain.runners.registration import RunnerDeclining
 from blizzard.wire.runner import RunnerRegistrationRequest
@@ -116,7 +118,7 @@ def test_both_views_serve_the_reasons(tmp_path: Path) -> None:
 
     view = runners_api.declining_views(held)
 
-    assert [(d.lever, d.detail, d.subscription, d.until) for d in view] == [
+    assert [(d.model_dump()["lever"], d.detail, d.subscription, d.until) for d in view] == [
         ("floor", "exhausted", "anthropic", "2026-10-22T14:00:00+00:00"),
         ("pace", "7d 86% spent, 71% elapsed", None, None),
     ]
@@ -129,3 +131,30 @@ def test_a_hub_that_predates_the_field_parses_a_registration_carrying_it() -> No
 
     assert parsed.workspace_id == "w1"
     assert not hasattr(parsed, "declining")
+
+
+def test_both_views_serve_the_lever_kind_beside_the_unchanged_lever(tmp_path: Path) -> None:
+    hub = _hub(tmp_path)
+    _register(hub, (_FLOOR, _PACE))
+    held = hub.services.registry.get_runner(_RUNNER)
+    assert held is not None
+
+    view = runners_api.declining_views(held)
+
+    assert [(d.model_dump()["lever"], d.lever_kind) for d in view] == [
+        ("floor", DeclaredLever.FLOOR),
+        ("pace", DeclaredLever.PACE),
+    ]
+
+
+def test_a_lever_outside_the_vocabulary_is_accepted_and_served_as_its_raw_value(tmp_path: Path) -> None:
+    hub = _hub(tmp_path)
+    _register(hub, (RunnerDeclining("from-a-newer-runner", "d"),))
+    held = hub.services.registry.get_runner(_RUNNER)
+    assert held is not None
+
+    (view,) = runners_api.declining_views(held)
+
+    assert view.model_dump()["lever"] == "from-a-newer-runner"
+    assert view.lever_kind == Unrecognized("from-a-newer-runner")
+    assert view.model_dump(mode="json")["lever_kind"] == "from-a-newer-runner"
