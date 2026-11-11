@@ -167,13 +167,18 @@ class ChunkTargets:
         """:meth:`effective_for` for one chunk."""
         return self.effective_for([chunk])[chunk.chunk_id]
 
-    def capture_live(
-        self, chunk: TargetChunk, *, at: datetime, transaction: LockedTransaction
-    ) -> dict[RepositoryId, RepositoryTarget]:
-        """Capture, in ``transaction``, every live target of the chunk's project it has not captured yet — a claim's
-        capture. Answers the chunk's captured targets."""
-        live = self.live_for([chunk.project_id]).get(chunk.project_id, {}) if chunk.project_id else {}
-        return self.capture(chunk.chunk_id, live.values(), at=at, transaction=transaction)
+    def capture_prepared(
+        self, chunk: TargetChunk, prepared: Mapping[str, str] | None, *, at: datetime, transaction: LockedTransaction
+    ) -> dict[RepositoryId, RepositoryTarget] | None:
+        """A claim's capture: read the chunk's effective targets once in ``transaction``, which locks the chunk, and
+        capture exactly those when environments ``prepared`` stand at them (:func:`prepared_at`). Answers the targets
+        checked and captured; ``None``, capturing nothing, when the environments are stale."""
+        checked = self.effective_locked(chunk, transaction=transaction)
+        if not prepared_at(checked, prepared):
+            return None
+        fresh = [target.captured(at) for target in checked.values() if target.captured_at is None]
+        self._targets.capture(chunk.chunk_id, fresh, transaction=transaction)
+        return {**checked, **{target.repository_id: target for target in fresh}}
 
     def capture(
         self, chunk_id: str, targets: Iterable[RepositoryTarget], *, at: datetime, transaction: LockedTransaction

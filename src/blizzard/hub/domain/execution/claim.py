@@ -33,7 +33,7 @@ from blizzard.hub.domain.chunk.ports.route import IWriteChunkRouteRepository
 from blizzard.hub.domain.execution.eligibility import EligibilityCheck
 from blizzard.hub.domain.execution.envelope import Envelope
 from blizzard.hub.domain.graph.model import Graph, IReadGraphRepository, Node
-from blizzard.hub.domain.projects.targets import ChunkTargets, TargetChunk, Targets, prepared_at
+from blizzard.hub.domain.projects.targets import ChunkTargets, TargetChunk
 from blizzard.hub.domain.runners.bindings import WorkEligibility
 from blizzard.hub.domain.runners.host import Host, IReadHostRegistry
 from blizzard.hub.domain.runners.registration import (
@@ -233,16 +233,6 @@ def refuse_unadmitted_binding(
             reason=ClaimDenialReason.BINDING,
             project_id=project_id,
         )
-
-
-def refuse_stale_targets(
-    targets: Targets, prepared: Mapping[str, str] | None, *, chunk_id: str, runner_id: str
-) -> None:
-    """Refuse a claim whose environments were ``prepared`` at branches other than the chunk's ``targets``
-    (:class:`ClaimDeniedIncompatible`, reason ``targets``) — a runner that names none is refused only while a target
-    is a project link's own branch, which it would start on its workspace's branch instead."""
-    if not prepared_at(targets, prepared):
-        raise ClaimDeniedIncompatible(chunk_id=chunk_id, runner_id=runner_id, reason=ClaimDenialReason.TARGETS)
 
 
 def refuse_rekey(route: Route, facts: ChunkFacts) -> None:
@@ -447,16 +437,17 @@ class ClaimService:
             host=host,
             workspace_id=workspace_id,
         )
-        target_chunk = TargetChunk(chunk.chunk_id, chunk.project_id)
-        # The runner prepared before it claimed, so its environments must stand at what the chunk captured — or, before
-        # any capture, at what this claim is about to capture.
-        refuse_stale_targets(
-            self._targets.effective_locked(target_chunk, transaction=handle.transaction),
-            repository_targets,
-            chunk_id=chunk.chunk_id,
-            runner_id=runner_id,
-        )
         now = self._clock.now()
+        # The runner prepared before it claimed, so its environments must stand at what the chunk captured — or, before
+        # any capture, at what this claim captures now. The branch each linked repository starts from and lands into is
+        # fixed here, once, for every later lease.
+        captured = self._targets.capture_prepared(
+            TargetChunk(chunk.chunk_id, chunk.project_id), repository_targets, at=now, transaction=handle.transaction
+        )
+        if captured is None:
+            raise ClaimDeniedIncompatible(
+                chunk_id=chunk.chunk_id, runner_id=runner_id, reason=ClaimDenialReason.TARGETS
+            )
 
         route = Route(
             chunk_id=chunk.chunk_id,
@@ -469,8 +460,6 @@ class ClaimService:
         # never stored — only its sha256 hash lands, in the same write as record_route.
         route_token = secrets.token_urlsafe(_ROUTE_TOKEN_BYTES)
         route_id = self._route.record_route_locked(handle, route, token_hash=TokenHash(route_token).hex, at=now)
-        # The branch each linked repository starts from and lands into is fixed here, once, for every later lease.
-        self._targets.capture_live(target_chunk, at=now, transaction=handle.transaction)
         _CP_CLAIM_AFTER_PERSIST_BEFORE_RESPONSE.reached()
 
         # Envelope assembly stays outside the locked transaction's read set — the

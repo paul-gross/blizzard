@@ -3,17 +3,28 @@ over it (unit tier)."""
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from dataclasses import replace
 from datetime import UTC, datetime
+from typing import cast
 
 from blizzard.foundation.project_colors import ProjectColor
 from blizzard.hub.domain.config.changes import ChangeContext, Door
 from blizzard.hub.domain.config.forges import ForgeId
-from blizzard.hub.domain.config.repositories import ConfiguredRepository, RepositoryFields, RepositoryId
-from blizzard.hub.domain.projects.links import RepositoryLink
-from blizzard.hub.domain.projects.model import Project
+from blizzard.hub.domain.config.repositories import (
+    ConfiguredRepository,
+    IReadRepositoryRecordRepository,
+    RepositoryFields,
+    RepositoryId,
+)
+from blizzard.hub.domain.kernel.transactions import LockedTransaction, Transaction
+from blizzard.hub.domain.projects.links import IReadProjectLinks, RepositoryLink
+from blizzard.hub.domain.projects.model import Project, ProjectId
 from blizzard.hub.domain.projects.targets import (
+    ChunkTargets,
+    IWriteChunkTargets,
     RepositoryTarget,
+    TargetChunk,
     branches,
     effective_targets,
     live_targets,
@@ -96,3 +107,69 @@ def test_a_runner_naming_no_targets_stands_at_them_only_while_none_is_an_overrid
     assert prepared_at(_INHERITED, None)
     assert prepared_at({}, None)
     assert not prepared_at(_OVERRIDDEN, None)
+
+
+class _LinksEditedBetweenReads:
+    """Project links whose branch moves after every read, as a link edit landing between two reads would."""
+
+    def __init__(self, *branches: str) -> None:
+        self._branches = list(branches)
+
+    def repositories_of_projects(self, project_ids: Sequence[ProjectId]) -> dict[ProjectId, list[RepositoryLink]]:
+        return {project_id: [_link(self._branches.pop(0))] for project_id in project_ids}
+
+
+class _Records:
+    def get_many(self, repository_ids: list[RepositoryId]) -> dict[RepositoryId, ConfiguredRepository]:
+        return {_REPOSITORY: _repository("master")}
+
+
+class _Captured:
+    def __init__(self) -> None:
+        self.held: dict[RepositoryId, RepositoryTarget] = {}
+
+    def captured_for(
+        self, chunk_ids: Sequence[str], *, transaction: Transaction | None = None
+    ) -> dict[str, dict[RepositoryId, RepositoryTarget]]:
+        return {chunk_id: dict(self.held) for chunk_id in chunk_ids if self.held}
+
+    def capture(
+        self, chunk_id: str, targets: Sequence[RepositoryTarget], *, transaction: LockedTransaction
+    ) -> dict[RepositoryId, RepositoryTarget]:
+        for target in targets:
+            self.held.setdefault(target.repository_id, target)
+        return dict(self.held)
+
+
+def _chunk_targets(store: _Captured, *branches: str) -> ChunkTargets:
+    return ChunkTargets(
+        targets=cast(IWriteChunkTargets, store),
+        links=cast(IReadProjectLinks, _LinksEditedBetweenReads(*branches)),
+        records=cast(IReadRepositoryRecordRepository, _Records()),
+    )
+
+
+def test_a_claim_captures_exactly_the_targets_it_checked_the_environments_against() -> None:
+    store = _Captured()
+    chunk = TargetChunk("chk_1", _PROJECT.project_id)
+    transaction = cast(LockedTransaction, object())
+
+    captured = _chunk_targets(store, "rust-rewrite", "edited-later").capture_prepared(
+        chunk, {_REPOSITORY: "rust-rewrite"}, at=_AT, transaction=transaction
+    )
+
+    assert branches(store.held) == {_REPOSITORY: "rust-rewrite"}
+    assert captured == store.held
+
+
+def test_stale_environments_capture_nothing() -> None:
+    store = _Captured()
+    chunk = TargetChunk("chk_1", _PROJECT.project_id)
+    transaction = cast(LockedTransaction, object())
+
+    captured = _chunk_targets(store, "rust-rewrite").capture_prepared(
+        chunk, {_REPOSITORY: "master"}, at=_AT, transaction=transaction
+    )
+
+    assert captured is None
+    assert store.held == {}
