@@ -1,7 +1,12 @@
-import type { RunnerRegistryView } from 'fleet';
+import type { RunnerDecliningView, RunnerRegistryView } from 'fleet';
 import type { ChunkSummary } from 'fleet/shell';
 
-import { foldRunnerRows, lensRunners, versionStandingBadge } from './runner-rows.model';
+import {
+  decliningLabel,
+  foldRunnerRows,
+  lensRunners,
+  versionStandingBadge,
+} from './runner-rows.model';
 
 const NOW = Date.parse('2026-07-16T12:00:00.000Z');
 
@@ -9,7 +14,11 @@ function runner(id: string): RunnerRegistryView {
   return { runner_id: id, subscriptions: [] } as unknown as RunnerRegistryView;
 }
 
-function chunk(id: string, runnerId: string | null, envs: number): ChunkSummary {
+function chunk(
+  id: string,
+  runnerId: string | null,
+  envs: number,
+): ChunkSummary {
   return {
     chunk_id: id,
     runner_id: runnerId,
@@ -20,7 +29,7 @@ function chunk(id: string, runnerId: string | null, envs: number): ChunkSummary 
 }
 
 describe('foldRunnerRows', () => {
-  it('folds each runner\'s claims and summed environment count, ignoring unrouted chunks', () => {
+  it("folds each runner's claims and summed environment count, ignoring unrouted chunks", () => {
     const rows = foldRunnerRows(
       [runner('r1'), runner('r2')],
       [chunk('ch_a', 'r1', 1), chunk('ch_b', 'r1', 3), chunk('ch_c', null, 2)],
@@ -39,7 +48,14 @@ describe('foldRunnerRows', () => {
         {
           slug: 's',
           name: 'S',
-          windows: [{ window: '5h', utilization_pct: 40, resets_at: '2026-07-16T14:30:00.000Z', window_seconds: 18000 }],
+          windows: [
+            {
+              window: '5h',
+              utilization_pct: 40,
+              resets_at: '2026-07-16T14:30:00.000Z',
+              window_seconds: 18000,
+            },
+          ],
           sampled_at: '2026-07-16T11:50:00.000Z',
         },
       ],
@@ -56,14 +72,27 @@ describe('foldRunnerRows', () => {
       runner_id: 'r_serving',
       subscriptions: [],
       projects: [
-        { entry: 'default', project_id: 'proj_d', slug: 'default', name: 'Default' },
+        {
+          entry: 'default',
+          project_id: 'proj_d',
+          slug: 'default',
+          name: 'Default',
+        },
         { entry: 'proj_g', project_id: 'proj_g', slug: 'glacier', name: null },
         { entry: 'celestial', project_id: null, slug: null, name: null },
       ],
     } as unknown as RunnerRegistryView;
-    const unassigned = { runner_id: 'r_none', subscriptions: [], projects: [] } as unknown as RunnerRegistryView;
+    const unassigned = {
+      runner_id: 'r_none',
+      subscriptions: [],
+      projects: [],
+    } as unknown as RunnerRegistryView;
 
-    const [servingRow, unassignedRow] = foldRunnerRows([serving, unassigned], [], NOW);
+    const [servingRow, unassignedRow] = foldRunnerRows(
+      [serving, unassigned],
+      [],
+      NOW,
+    );
 
     expect(servingRow.served).toEqual(['Default', 'glacier']);
     expect(servingRow.unassigned).toBe(false);
@@ -78,7 +107,12 @@ describe('lensRunners', () => {
   const declaring = (id: string, ...slugs: (string | null)[]) =>
     ({
       runner_id: id,
-      projects: slugs.map((slug) => ({ entry: slug ?? 'gone', project_id: slug === null ? null : `proj_${slug}`, slug, name: null })),
+      projects: slugs.map((slug) => ({
+        entry: slug ?? 'gone',
+        project_id: slug === null ? null : `proj_${slug}`,
+        slug,
+        name: null,
+      })),
     }) as unknown as RunnerRegistryView;
 
   const runners = [
@@ -94,32 +128,95 @@ describe('lensRunners', () => {
   });
 
   it('shows the runners serving the lensed project, and the unassigned ones, under a lens', () => {
-    expect(lensRunners(runners, 'alpha').map((r) => r.runner_id)).toEqual(['r_alpha', 'r_both', 'r_none']);
+    expect(lensRunners(runners, 'alpha').map((r) => r.runner_id)).toEqual([
+      'r_alpha',
+      'r_both',
+      'r_none',
+    ]);
   });
 });
 
 describe('versionStandingBadge', () => {
-  const judged = (over: Partial<RunnerRegistryView>): RunnerRegistryView => ({ ...runner('rn_a'), ...over });
+  const judged = (over: Partial<RunnerRegistryView>): RunnerRegistryView => ({
+    ...runner('rn_a'),
+    ...over,
+  });
 
   it('words each standing the hub judges, naming the reason of a refusal', () => {
-    expect(versionStandingBadge(judged({ version_standing: 'in_window' }))).toEqual({ label: 'in window', tone: 'running' });
-    expect(versionStandingBadge(judged({ version_standing: 'unversioned' }))).toEqual({ label: 'unversioned', tone: 'idle' });
-    expect(versionStandingBadge(judged({ version_standing: 'refused', version_refusal: 'too-old' }))).toEqual({
+    expect(
+      versionStandingBadge(judged({ version_standing: 'in_window' })),
+    ).toEqual({ label: 'in window', tone: 'running' });
+    expect(
+      versionStandingBadge(judged({ version_standing: 'unversioned' })),
+    ).toEqual({ label: 'unversioned', tone: 'idle' });
+    expect(
+      versionStandingBadge(
+        judged({ version_standing: 'refused', version_refusal: 'too-old' }),
+      ),
+    ).toEqual({
       label: 'refused (too-old)',
       tone: 'needs',
     });
-    expect(versionStandingBadge(judged({ version_standing: 'refused', version_refusal: 'too-new' }))?.label).toBe('refused (too-new)');
-    expect(versionStandingBadge(judged({ version_standing: 'refused', version_refusal: 'unversioned' }))?.label).toBe(
-      'refused (unversioned)',
-    );
+    expect(
+      versionStandingBadge(
+        judged({ version_standing: 'refused', version_refusal: 'too-new' }),
+      )?.label,
+    ).toBe('refused (too-new)');
+    expect(
+      versionStandingBadge(
+        judged({ version_standing: 'refused', version_refusal: 'unversioned' }),
+      )?.label,
+    ).toBe('refused (unversioned)');
   });
 
   it('words a standing the client does not declare raw, in idle', () => {
-    expect(versionStandingBadge(judged({ version_standing: 'quarantined' as never }))).toEqual({ label: 'quarantined', tone: 'idle' });
+    expect(
+      versionStandingBadge(
+        judged({ version_standing: 'quarantined' as never }),
+      ),
+    ).toEqual({ label: 'quarantined', tone: 'idle' });
   });
 
   it('shows no badge for a runner the hub has not judged', () => {
     expect(versionStandingBadge(judged({ version_standing: null }))).toBeNull();
     expect(versionStandingBadge(judged({}))).toBeNull();
+  });
+});
+
+describe('decliningLabel', () => {
+  const reason = (
+    lever_kind: string,
+    extra: Partial<RunnerDecliningView> = {},
+  ): RunnerDecliningView =>
+    ({
+      lever: lever_kind,
+      lever_kind,
+      detail: 'at 95%',
+      until: null,
+      subscription: null,
+      ...extra,
+    }) as unknown as RunnerDecliningView;
+
+  it('words the floor from the subscription it waits on and when it resets', () => {
+    const label = decliningLabel(
+      reason('floor', {
+        subscription: 'max',
+        until: '2026-07-16T13:00:00.000Z',
+      }),
+      NOW,
+    );
+    expect(label).toMatch(/^waiting on max — at 95%, resets /);
+  });
+
+  it('words a known non-floor lever through the generic branch', () => {
+    expect(decliningLabel(reason('pace'), NOW)).toBe(
+      'declining — pace: at 95%',
+    );
+  });
+
+  it('words a lever outside the generated vocabulary from lever_kind verbatim', () => {
+    expect(
+      decliningLabel(reason('some_future_lever', { lever: 'stale' }), NOW),
+    ).toBe('declining — some_future_lever: at 95%');
   });
 });

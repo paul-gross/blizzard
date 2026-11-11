@@ -7,6 +7,7 @@ from dataclasses import dataclass
 from datetime import datetime
 from typing import Any, ClassVar, NotRequired, TypedDict, cast
 
+from blizzard.foundation.declared_lever import DeclaredLever
 from blizzard.foundation.roles import collaborator, dto
 from blizzard.foundation.runner_connection import RunnerConnection
 from blizzard.foundation.spend import SpendFigure
@@ -44,6 +45,7 @@ class ChunkRow(TypedDict):
 
 class DecliningRow(TypedDict):
     lever: str
+    lever_kind: str
     detail: str
     until: NotRequired[str | None]
     subscription: NotRequired[str | None]
@@ -128,8 +130,8 @@ def _declining_reason(reason: DecliningRow) -> str:
     any other lever, and a lever this CLI has no wording for, as ``<lever> — <detail>`` with its ``until`` after."""
     until = reason.get("until")
     clock = datetime.fromisoformat(until).strftime("%H:%MZ") if until else None
-    lever, detail = reason["lever"], reason["detail"]
-    if lever == "floor":
+    lever, detail = reason["lever_kind"], reason["detail"]
+    if lever == DeclaredLever.FLOOR:
         named = f"{reason.get('subscription')} {detail}" if reason.get("subscription") else detail
         return f"floor — {named}" + (f", resets {clock}" if clock else "")
     return f"{lever} — {detail}" + (f", until {clock}" if clock else "")

@@ -1,5 +1,6 @@
 import {
   type ChunkStatus,
+  DeclaredLever,
   type HostRegistryView,
   RunnerConnection,
   type RunnerDecliningView,
@@ -112,11 +113,11 @@ export function localPauseHint(row: RunnerRow): string {
  * (`bzh:frontend-formatters`). */
 export function decliningLabel(reason: RunnerDecliningView, nowMs: number): string {
   const when = reason.until == null ? null : formatWhen(reason.until, new Date(nowMs));
-  if (reason.lever === 'floor') {
+  if (reason.lever_kind === DeclaredLever.FLOOR) {
     const waiting = reason.subscription == null ? 'waiting' : `waiting on ${reason.subscription}`;
     return `${waiting} — ${reason.detail}${when ? `, resets ${when}` : ''}`;
   }
-  return `declining — ${reason.lever}: ${reason.detail}${when ? `, until ${when}` : ''}`;
+  return `declining — ${reason.lever_kind}: ${reason.detail}${when ? `, until ${when}` : ''}`;
 }
 
 /** The labels of every throttle holding `row` back, in the gate's order — empty unless the runner is online with no brake,

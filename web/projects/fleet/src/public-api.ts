@@ -216,6 +216,7 @@ export {
 } from './lib/api/hub';
 export {
   ChunkDeleteRefusal,
+  DeclaredLever,
   GraphLifecycle,
   ProjectColor,
   RecordKind,
