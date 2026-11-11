@@ -94,12 +94,6 @@
           "symbol": "ingesting-work-items",
           "role": "allowed",
           "reason": "Operator-facing surface description, the same structural cause as this registry's other docs/deployment/ survivor: an operator ingesting work reads this section from outside the workspace and cannot resolve a source path, and the section's next paragraph reasons about `<source>:<ref>` refs it must first introduce. Reducing it is also a public-doc registry copy, which blizzard#274 owns."
-        },
-        {
-          "file": "src/blizzard/hub/cli/chunk.py",
-          "symbol": "chunk_ingest",
-          "role": "allowed",
-          "reason": "This docstring IS the `blizzard hub chunk ingest --help` text \u2014 an operator-facing published surface with no source tree to point at, the same structural cause as this fact's docs/deployment/ survivor below."
         }
       ]
     },

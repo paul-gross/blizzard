@@ -152,7 +152,7 @@ class StepUsage:
     epoch: int | None = None
 
     def cost_partial(self) -> bool:
-        """Whether the invocation carries neither a billed nor an estimated amount."""
+        """Whether this invocation's cost is incomplete; see UsageTotal."""
         return self.cost_usd is None and self.estimated_cost_usd is None
 
 

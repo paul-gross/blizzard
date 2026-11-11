@@ -89,6 +89,33 @@ test.describe('empty checks on the controlled clock', () => {
   test.use({ isolation: 'fresh-hub', clockMode: 'controlled' });
 
   for (const policy of ['fast-forward', 'merge-on-checks'] as const) {
+    test(`checks registered during the grace period land with ${policy}`, async ({ repository, issue, api, clock, forge, runnerHosts, workerCheckpoint }) => {
+      test.setTimeout(180_000);
+      const repo = await repository();
+      const host = await runnerHosts.create({ runnerRepositories: { [repo.name]: repo.origin! } });
+      const before = await host.originHead(repo.name, 'main');
+      expect((await api.patch(`/api/repositories/${repo.name}`, { data: { landing_policy: policy } })).status).toBe(200);
+      expect((await api.post('/api/graphs', { data: { definition_yaml: graph([repo], workerCheckpoint.snippet('pushed'), 3600) } })).status).toBe(201);
+      const { chunk } = await issue('DELAYED-CHECKS.md', { repository: repo });
+      expect((await api.post(`/api/chunks/${chunk.chunk_id}/promote`)).status).toBe(202);
+      let arrived = false;
+      void workerCheckpoint.reached('pushed').then(() => { arrived = true; });
+      await stepUntil(host, async () => arrived, Boolean, { stallPasses: 80 });
+      const candidate = await host.originHead(repo.name, 'feature/diverged');
+      expect(candidate).toBeTruthy();
+      expect((await forge.call('POST', '/_levers/ref_checks', { repo: fullName(repo), ref: candidate, checks: [] })).status).toBe(200);
+      workerCheckpoint.release('pushed');
+      const stepped = async () => { await api.flowStep(); return detail(api, chunk.chunk_id); };
+      const pending = await stepUntil(host, stepped, (row) => row.pending !== null, { stallPasses: 80, progress: chunkProgress });
+      expect(pending.landed).toBe(false);
+      expect(await host.originHead(repo.name, 'main')).toBe(before);
+      await clock.advance(300);
+      expect((await forge.call('POST', '/_levers/ref_checks', { repo: fullName(repo), ref: candidate, checks: [{ name: 'ci', status: 'success' }] })).status).toBe(200);
+      const done = await stepUntil(host, stepped, (row) => row.status === 'done', { stallPasses: 80, progress: chunkProgress });
+      expect(done.landed).toBe(true);
+      expect(await host.originHead(repo.name, 'main')).not.toBe(before);
+    });
+
     for (const allowNoCi of [false, true]) {
       test(`empty checks ${policy} allow_no_ci=${allowNoCi}`, async ({ repository, issue, api, clock, forge, runnerHosts, workerCheckpoint }) => {
         test.setTimeout(180_000);
