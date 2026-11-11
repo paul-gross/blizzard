@@ -3150,9 +3150,11 @@ export type ChunksPageView = {
  * The closed set of reasons an incompatible-claim ``409`` names: ``capability``, the runner's stored
  * capabilities no longer run every statically reachable runner-owned lineage of the chunk; ``project``, the runner
  * does not serve the chunk's project; ``binding``, the runner serves the project but not through the claimed
- * workspace now — the binding is flagged, absent, or for another workspace, or the subscription is unrostered.
+ * workspace now — the binding is flagged, absent, or for another workspace, or the subscription is unrostered;
+ * ``targets``, the repository targets the runner prepared its environments at are not the chunk's — stale, or absent
+ * while a project link names its own branch.
  */
-export type ClaimDenialReason = 'capability' | 'project' | 'binding';
+export type ClaimDenialReason = 'capability' | 'project' | 'binding' | 'targets';
 
 /**
  * ClaimPassReason
@@ -3282,6 +3284,22 @@ export type ClaimRunnerVersionRefusedProblem = {
      */
     type: 'urn:blizzard:problem:claim-runner-version-refused';
     [key: string]: unknown;
+};
+
+/**
+ * ClaimedRepositoryTarget
+ *
+ * One repository's branch a claiming runner prepared its environments at.
+ */
+export type ClaimedRepositoryTarget = {
+    /**
+     * Base Branch
+     */
+    base_branch: string;
+    /**
+     * Repository Id
+     */
+    repository_id: string;
 };
 
 /**
@@ -11671,6 +11689,10 @@ export type QueuePeekEntry = {
      * Project Slug
      */
     project_slug: string | null;
+    /**
+     * Repository Targets
+     */
+    repository_targets: Array<RepositoryTarget> | null;
     urgency: UrgencyRef | null;
     /**
      * Work Refs
@@ -11699,6 +11721,10 @@ export type QueuePeekRequest = {
      * Projects
      */
     projects?: Array<string> | null;
+    /**
+     * Repository Targets
+     */
+    repository_targets?: boolean;
 };
 
 /**
@@ -12383,6 +12409,44 @@ export type RepositorySummary = {
 };
 
 /**
+ * RepositoryTarget
+ *
+ * One repository a chunk's project links, with the branch the chunk starts from and lands into. The forge host,
+ * owner and repo name are what a runner matches a worktree's origin against. ``inherited`` when the branch is the
+ * repository record's own rather than the project link's override.
+ */
+export type RepositoryTarget = {
+    /**
+     * Base Branch
+     */
+    base_branch: string;
+    /**
+     * Forge Host
+     */
+    forge_host: string;
+    /**
+     * Inherited
+     */
+    inherited: boolean;
+    /**
+     * Owner
+     */
+    owner: string;
+    /**
+     * Repo
+     */
+    repo: string;
+    /**
+     * Repository Id
+     */
+    repository_id: string;
+    /**
+     * Repository Slug
+     */
+    repository_slug: string;
+};
+
+/**
  * RequeueView
  *
  * One hub requeue on the chunk. ``requeued_by`` is who requeued it, null when no requeuer is recorded.
@@ -12642,7 +12706,9 @@ export type RotatePolicyView = {
  * RouteClaim
  *
  * A complete route fact posted by the claiming runner. The claimant is the runner its bearer
- * token names; the body carries no runner id.
+ * token names; the body carries no runner id. ``repository_targets`` are the targets the runner prepared its
+ * environments at, ``None`` from a runner that predates them; the hub refuses a claim whose targets are no longer
+ * the chunk's (``reason`` ``targets``).
  */
 export type RouteClaim = {
     /**
@@ -12653,6 +12719,10 @@ export type RouteClaim = {
      * Environment Ids
      */
     environment_ids: Array<string>;
+    /**
+     * Repository Targets
+     */
+    repository_targets?: Array<ClaimedRepositoryTarget> | null;
     /**
      * Workspace Id
      */

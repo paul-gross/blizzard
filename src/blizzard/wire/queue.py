@@ -18,6 +18,20 @@ from blizzard.wire.urgency import UrgencyRef
 from blizzard.wire.vocabulary import OPEN, ToleratedRequestVocabulary
 
 
+class RepositoryTarget(WireModel):
+    """One repository a chunk's project links, with the branch the chunk starts from and lands into. The forge host,
+    owner and repo name are what a runner matches a worktree's origin against. ``inherited`` when the branch is the
+    repository record's own rather than the project link's override."""
+
+    repository_id: str
+    repository_slug: str
+    forge_host: str
+    owner: str
+    repo: str
+    base_branch: str
+    inherited: bool
+
+
 class QueuePeekEntry(WireModel):
     """One ready chunk, in queue order."""
 
@@ -35,6 +49,9 @@ class QueuePeekEntry(WireModel):
     project_name: str | None = None
     #: The urgency the chunk carries; ``None`` from a hub that predates it.
     urgency: UrgencyRef | None = None
+    #: The chunk's repository targets, which the matched peek names; ``None`` on every other read and from a hub that
+    #: predates them.
+    repository_targets: list[RepositoryTarget] | None = None
 
 
 class QueuePeekResponse(WireModel):
@@ -60,6 +77,9 @@ class QueuePeekRequest(BaseModel):
     #: resolved to, and — under ``policy="hold"`` — holds per project rather than across them. ``None`` peeks every
     #: project the runner serves; an empty list offers nothing.
     projects: list[str] | None = None
+    #: The runner prepares environments at the repository targets the peek names. A peek without it is never offered a
+    #: chunk whose targets include a project link's own branch.
+    repository_targets: bool = False
 
 
 class NextClaimEntry(WireModel):

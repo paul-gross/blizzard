@@ -17,13 +17,23 @@ from blizzard.wire.problem import ProblemDetails, ProblemMembers, StatuslessProb
 from blizzard.wire.vocabulary import OPEN
 
 
+class ClaimedRepositoryTarget(BaseModel):
+    """One repository's branch a claiming runner prepared its environments at."""
+
+    repository_id: str
+    base_branch: str
+
+
 class RouteClaim(BaseModel):
     """A complete route fact posted by the claiming runner. The claimant is the runner its bearer
-    token names; the body carries no runner id."""
+    token names; the body carries no runner id. ``repository_targets`` are the targets the runner prepared its
+    environments at, ``None`` from a runner that predates them; the hub refuses a claim whose targets are no longer
+    the chunk's (``reason`` ``targets``)."""
 
     chunk_id: str
     workspace_id: str
     environment_ids: list[str]
+    repository_targets: list[ClaimedRepositoryTarget] | None = None
 
 
 class RouteClaimResponse(BaseModel):

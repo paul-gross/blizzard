@@ -2,14 +2,16 @@
 
 Drives the **real** winter CLI against a workspace root. The pool is static config and held-ness
 is passed in, so the provider keeps no allocation state of its own. ``acquire`` performs a full
-reset-to-base, aborting as an :class:`EnvironmentPreparationError` rather than leaving a
-half-reset env; ``release`` marks nothing, since cleaning defers to the next acquire."""
+reset-to-base, then moves each worktree a chunk's target names onto that target's branch, aborting as an
+:class:`EnvironmentPreparationError` rather than leaving a half-reset env; ``release`` marks nothing, since
+cleaning defers to the next acquire."""
 
 from __future__ import annotations
 
 import json
 import threading
 from collections.abc import Callable, Sequence
+from functools import partial
 from pathlib import Path
 from typing import Protocol
 
@@ -19,7 +21,10 @@ from blizzard.runner.environments.provider import (
     EnvironmentPreparationError,
     IWorkspaceProvider,
     RepoBinding,
+    RepositoryTarget,
+    TargetBranchMissingError,
     WorkspaceAcquisitionError,
+    target_naming,
 )
 
 _log = get_logger("blizzard.runner.env")
@@ -41,6 +46,7 @@ class _EnvGit(Protocol):
 
     def clean_environment(self, env_workdir: Path) -> None: ...
     def origin_url(self, repo_workdir: Path) -> str: ...
+    def has_remote_branch(self, repo_workdir: Path, branch: str) -> bool: ...
 
 
 class WinterWorkspaceProvider:
@@ -85,11 +91,18 @@ class WinterWorkspaceProvider:
     def environment_workdirs(self) -> dict[str, str]:
         return {env: str(self._workspace_root / env) for env in self._pool}
 
-    def acquire(self, chunk_id: str, count: int, held_ids: list[str]) -> list[AcquiredEnvironment]:
-        with self._lock:
-            return self._acquire(chunk_id, count, held_ids)
+    def honors_targets(self) -> bool:
+        return True
 
-    def _acquire(self, chunk_id: str, count: int, held_ids: list[str]) -> list[AcquiredEnvironment]:
+    def acquire(
+        self, chunk_id: str, count: int, held_ids: list[str], targets: Sequence[RepositoryTarget] = ()
+    ) -> list[AcquiredEnvironment]:
+        with self._lock:
+            return self._acquire(chunk_id, count, held_ids, targets)
+
+    def _acquire(
+        self, chunk_id: str, count: int, held_ids: list[str], targets: Sequence[RepositoryTarget]
+    ) -> list[AcquiredEnvironment]:
         free = [env for env in self._pool if env not in set(held_ids)]
         if len(free) < count:
             raise WorkspaceAcquisitionError(
@@ -107,7 +120,7 @@ class WinterWorkspaceProvider:
         )
         acquired: list[AcquiredEnvironment] = []
         for env in free[:count]:
-            workdir = self._prepare(env)
+            workdir = self._prepare(env, targets)
             acquired.append(AcquiredEnvironment(environment_id=env, workdir=str(workdir)))
         _log.info("acquired environments", chunk_id=chunk_id, envs=[a.environment_id for a in acquired])
         return acquired
@@ -148,21 +161,23 @@ class WinterWorkspaceProvider:
         self._repos[environment_id] = bindings
         return list(bindings)
 
-    def _prepare(self, env: str) -> Path:
-        """Reset-on-acquire: return the env fully reset to base and working."""
+    def _prepare(self, env: str, targets: Sequence[RepositoryTarget]) -> Path:
+        """Reset-on-acquire: return the env fully reset to base, its targeted worktrees on their targets, and
+        working."""
         # Clear before and after, including on failure: an in-flight reset may
         # change membership even when a later preparation step raises.
         self._repos.pop(env, None)
         try:
-            return self._reset(env)
+            return self._reset(env, targets)
         finally:
             self._repos.pop(env, None)
 
-    def _reset(self, env: str) -> Path:
+    def _reset(self, env: str, targets: Sequence[RepositoryTarget]) -> Path:
         workdir = self._workspace_root / env
         run = self._winter.run
         root = self._workspace_root
-        if not workdir.is_dir():
+        fresh = not workdir.is_dir()
+        if fresh:
             # First acquire of a pool env: init materializes it fresh off the base —
             # already clean and disconnected, so the reset steps have nothing to undo.
             self._step(env, "init", lambda: run(root, ["ws", "init", env]))
@@ -175,6 +190,7 @@ class WinterWorkspaceProvider:
             # Membership reconcile runs *after* the disconnect, so init's upstream
             # inference has no connected sibling to re-infer a stale branch from.
             self._step(env, "init", lambda: run(root, ["ws", "init", env]))
+        self._move_to_targets(env, targets, fetched=not fresh)
         # Winter's forced checkout hard-resets tracked state but leaves untracked
         # files; the clean is the one remaining raw-git step.
         self._step(env, "clean", lambda: self._git.clean_environment(workdir))
@@ -184,6 +200,39 @@ class WinterWorkspaceProvider:
             self._step(env, "service-down", lambda: run(root, ["service", "down", env]))
         self._step(env, "provision", lambda: run(root, ["provision", env]))
         return workdir
+
+    def _move_to_targets(self, env: str, targets: Sequence[RepositoryTarget], *, fetched: bool) -> None:
+        """Move each worktree of ``env`` a target names onto ``origin/<branch>``, one worktree at a time, and touch no
+        other — the env-wide base checkout already put every worktree on the workspace's branch, so a previous
+        tenant's targets never carry over. ``fetched`` when this reset already fetched the env; a fresh one fetches
+        first. A target branch absent on its origin aborts the acquire, never falling back to the workspace's."""
+        if not targets:
+            return
+        workdir = self._workspace_root / env
+        matched: list[tuple[RepoBinding, RepositoryTarget]] = []
+        for binding in self._repos_for(env):
+            target = target_naming(targets, binding.origin_url, binding.name)
+            if target is not None:
+                matched.append((binding, target))
+        if not matched:
+            return
+        run = self._winter.run
+        root = self._workspace_root
+        if not fetched:
+            self._step(env, "fetch", lambda: run(root, ["ws", "fetch", env]))
+        for binding, target in matched:
+            if not self._git.has_remote_branch(workdir / binding.relpath, target.base_branch):
+                _log.error(
+                    "target branch absent on origin",
+                    environment_id=env,
+                    repository=target.qualified,
+                    branch=target.base_branch,
+                )
+                raise TargetBranchMissingError(
+                    environment_id=env, repository=target.qualified, branch=target.base_branch
+                )
+            args = ["ws", "reset", f"{env}/{binding.name}", f"origin/{target.base_branch}", "--hard", "--force"]
+            self._step(env, "target", partial(run, root, args))
 
     def _service_orchestrator_bound(self) -> bool:
         """Whether the workspace binds a service orchestrator, read once per provider.

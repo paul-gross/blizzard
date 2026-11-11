@@ -17,8 +17,11 @@ from blizzard.runner.environments.provider import (
     EnvironmentPreparationError,
     IWorkspaceProvider,
     RepoBinding,
+    RepositoryTarget,
+    TargetBranchMissingError,
     WorkspaceAcquisitionError,
     WorkspaceRepo,
+    target_naming,
 )
 
 _MANAGED = ".blizzard-basic-env"
@@ -96,7 +99,12 @@ class BasicWorkspaceProvider:
             shutil.rmtree(env)
         self._manifest_path(env).unlink(missing_ok=True)
 
-    def acquire(self, chunk_id: str, count: int, held_ids: list[str]) -> list[AcquiredEnvironment]:
+    def honors_targets(self) -> bool:
+        return True
+
+    def acquire(
+        self, chunk_id: str, count: int, held_ids: list[str], targets: Sequence[RepositoryTarget] = ()
+    ) -> list[AcquiredEnvironment]:
         if not self._repos:
             raise WorkspaceAcquisitionError("basic workspace requires at least one [[workspace_repo]]")
         if not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9_-]*", chunk_id) or chunk_id == "projects":
@@ -143,7 +151,7 @@ class BasicWorkspaceProvider:
             for env in evictable[:surplus]:
                 self._remove(env)
             for env in selected:
-                self._prepare(env, chunk_id)
+                self._prepare(env, chunk_id, targets)
                 acquired.append(AcquiredEnvironment(env.name, str(env)))
             for env in selected:
                 (env / _ACTIVE).touch()
@@ -154,6 +162,8 @@ class BasicWorkspaceProvider:
                     # Preserve the preparation failure even if cleanup cannot finish.
                     with suppress(OSError, EnvGitError):
                         self._remove(env)
+            if isinstance(exc, TargetBranchMissingError):
+                raise
             failing = selected[len(acquired)] if len(acquired) < len(selected) else self._root
             raise EnvironmentPreparationError(
                 f"basic workspace preparation failed for {failing.name}: {exc}",
@@ -161,7 +171,7 @@ class BasicWorkspaceProvider:
                 step="git-worktree",
             ) from exc
 
-    def _prepare(self, env: Path, chunk_id: str) -> None:
+    def _prepare(self, env: Path, chunk_id: str, targets: Sequence[RepositoryTarget]) -> None:
         if (env / _MANAGED).exists():
             self._remove(env)
         env.mkdir(exist_ok=True)
@@ -175,11 +185,22 @@ class BasicWorkspaceProvider:
                 self._git(projects, "clone", "--", repo.url, repo.name)
             elif self._git(clone, "remote", "get-url", "origin") != repo.url:
                 raise WorkspaceAcquisitionError(f"clone origin changed for {repo.name!r}")
-            self._git(clone, "fetch", "origin", self._branch)
+            # A repository a target names starts on the target's branch; every other on the workspace's.
+            target = target_naming(targets, repo.url, repo.name)
+            branch = target.base_branch if target is not None else self._branch
+            if target is not None and not self._remote_has(clone, branch):
+                raise TargetBranchMissingError(environment_id=env.name, repository=target.qualified, branch=branch)
+            self._git(clone, "fetch", "origin", branch)
             self._git(clone, "worktree", "prune")
-            self._git(clone, "worktree", "add", "--detach", str(env / repo.name), f"origin/{self._branch}")
+            self._git(clone, "worktree", "add", "--detach", str(env / repo.name), f"origin/{branch}")
         self._manifest_path(env).parent.mkdir(exist_ok=True)
         self._manifest_path(env).write_text(json.dumps([{"name": repo.name, "url": repo.url} for repo in self._repos]))
+
+    def _remote_has(self, clone: Path, branch: str) -> bool:
+        """Whether ``clone``'s origin holds ``branch`` now."""
+        ref = f"refs/heads/{branch}"
+        # `ls-remote` tail-matches its pattern, so only a line naming exactly the ref is the branch.
+        return any(line.split()[-1:] == [ref] for line in self._git(clone, "ls-remote", "origin", ref).splitlines())
 
     def release(self, environment_id: str) -> None:
         if not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9_-]*", environment_id):

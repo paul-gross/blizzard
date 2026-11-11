@@ -1,5 +1,5 @@
 {
-  "head_revision": "20261029_1000_takeover_entries",
+  "head_revision": "20261111_1000_binding_targets",
   "store": "runner",
   "tables": {
     "asks": {
@@ -186,6 +186,89 @@
       },
       "deprecated": null,
       "foreign_keys": [],
+      "primary_key": [
+        "id"
+      ],
+      "unique": []
+    },
+    "binding_targets": {
+      "checks": [],
+      "columns": {
+        "base_branch": {
+          "deprecated": null,
+          "nullable": false,
+          "server_default": false,
+          "type": "String"
+        },
+        "binding_id": {
+          "deprecated": null,
+          "nullable": false,
+          "server_default": false,
+          "type": "Integer"
+        },
+        "forge_host": {
+          "deprecated": null,
+          "nullable": false,
+          "server_default": false,
+          "type": "String"
+        },
+        "id": {
+          "deprecated": null,
+          "nullable": false,
+          "server_default": false,
+          "type": "Integer"
+        },
+        "inherited": {
+          "deprecated": null,
+          "nullable": false,
+          "server_default": false,
+          "type": "Boolean"
+        },
+        "owner": {
+          "deprecated": null,
+          "nullable": false,
+          "server_default": false,
+          "type": "String"
+        },
+        "repo": {
+          "deprecated": null,
+          "nullable": false,
+          "server_default": false,
+          "type": "String"
+        },
+        "repository_id": {
+          "deprecated": null,
+          "nullable": false,
+          "server_default": false,
+          "type": "String"
+        },
+        "repository_slug": {
+          "deprecated": null,
+          "nullable": false,
+          "server_default": false,
+          "type": "String"
+        },
+        "runner_id": {
+          "deprecated": null,
+          "nullable": false,
+          "server_default": false,
+          "type": "String"
+        }
+      },
+      "deprecated": null,
+      "foreign_keys": [
+        {
+          "columns": [
+            "binding_id"
+          ],
+          "references": {
+            "columns": [
+              "id"
+            ],
+            "table": "env_bindings"
+          }
+        }
+      ],
       "primary_key": [
         "id"
       ],

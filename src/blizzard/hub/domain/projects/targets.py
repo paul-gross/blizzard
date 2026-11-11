@@ -64,6 +64,20 @@ def effective_targets(captured: Targets, live: Targets) -> dict[RepositoryId, Re
     return {**live, **captured}
 
 
+def names_override(targets: Targets) -> bool:
+    """Whether any of ``targets`` is a project link's own branch rather than its repository record's."""
+    return any(not target.inherited for target in targets.values())
+
+
+def prepared_at(targets: Targets, prepared: Mapping[str, str] | None) -> bool:
+    """Whether environments ``prepared`` at these branches, by repository id, stand at ``targets``: the same branch
+    for the same repositories. ``None`` is a runner that names no targets, which stands at them only when none is an
+    override — it prepares every repository at its workspace's own branch."""
+    if prepared is None:
+        return not names_override(targets)
+    return branches(targets) == dict(prepared)
+
+
 def branches(targets: Targets) -> dict[str, str]:
     """``targets`` as the branch of each repository id, the shape delivery's resolution reads."""
     return {repository_id: target.base_branch for repository_id, target in targets.items()}
@@ -132,6 +146,14 @@ class ChunkTargets:
             )
             for chunk in chunks
         }
+
+    def effective_locked(
+        self, chunk: TargetChunk, *, transaction: LockedTransaction
+    ) -> dict[RepositoryId, RepositoryTarget]:
+        """:meth:`effective` with the captured targets read in ``transaction``, which locks the chunk."""
+        captured = self._targets.captured_for([chunk.chunk_id], transaction=transaction).get(chunk.chunk_id, {})
+        live = self.live_for([chunk.project_id]).get(chunk.project_id, {}) if chunk.project_id else {}
+        return effective_targets(captured, live)
 
     def effective(self, chunk: TargetChunk) -> dict[RepositoryId, RepositoryTarget]:
         """:meth:`effective_for` for one chunk."""

@@ -36,10 +36,12 @@ class FakeWinter:
 
 
 class FakeGit:
-    def __init__(self, origins: dict[str, str] | None = None) -> None:
+    def __init__(self, origins: dict[str, str] | None = None, *, missing: frozenset[str] = frozenset()) -> None:
         self.cleans: list[str] = []
         self.origin_reads: list[str] = []
         self._origins = origins or {}
+        #: Branches no origin holds.
+        self._missing = missing
 
     def clean_environment(self, env_workdir: Path) -> None:
         self.cleans.append(str(env_workdir))
@@ -47,3 +49,6 @@ class FakeGit:
     def origin_url(self, repo_workdir: Path) -> str:
         self.origin_reads.append(str(repo_workdir))
         return self._origins.get(str(repo_workdir), f"file:///origins/{Path(repo_workdir).name}.git")
+
+    def has_remote_branch(self, repo_workdir: Path, branch: str) -> bool:
+        return branch not in self._missing

@@ -21,8 +21,15 @@ def _ingest(hub: HubHarness, ref: str) -> str:
 
 
 def _claim(hub: HubHarness, chunk_id: str) -> str:
-    """Claim ``chunk_id`` for ``r1``; its route token."""
-    body = {"chunk_id": chunk_id, "runner_id": "r1", "workspace_id": "w1", "environment_ids": ["env-a"]}
+    """Claim ``chunk_id`` for ``r1``, prepared at the chunk's targets; its route token."""
+    prepared = [{"repository_id": t["repository_id"], "base_branch": t["base_branch"]} for t in _targets(hub, chunk_id)]
+    body = {
+        "chunk_id": chunk_id,
+        "runner_id": "r1",
+        "workspace_id": "w1",
+        "environment_ids": ["env-a"],
+        "repository_targets": prepared,
+    }
     resp = hub.client.post("/api/fleet/routes", json=body)
     assert resp.status_code == 201, resp.text
     return str(resp.json()["route_token"])

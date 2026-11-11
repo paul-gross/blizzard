@@ -168,6 +168,7 @@ from blizzard.hub.domain.observability.transcripts import IReadTranscriptSegment
 from blizzard.hub.domain.projects.links import IReadProjectLinks
 from blizzard.hub.domain.projects.model import IReadProjectRepository, ProjectEdit, ProjectId, ProjectSlug
 from blizzard.hub.domain.projects.order import IReadProjectPositions
+from blizzard.hub.domain.projects.targets import IReadChunkTargets
 from blizzard.hub.domain.runners.host import IReadHostRegistry
 from blizzard.hub.domain.runners.registration import IReadRunnerRegistry
 from blizzard.hub.domain.runners.route import Route
@@ -186,6 +187,7 @@ from blizzard.hub.domain.work_items.ports import IReadWorkItemRepository
 from blizzard.hub.secrets import hub_key_provider, secret_cipher
 from blizzard.hub.store import schema as s
 from blizzard.hub.store.internal.chunk_rows import MARKER_PREFIX
+from blizzard.hub.store.internal.chunk_targets_store import ChunkTargetsStore
 from blizzard.hub.store.internal.config_apply_store import ConfigApplyStore
 from blizzard.hub.store.internal.config_import_store import ConfigImportStore
 from blizzard.hub.store.internal.config_revisions_store import ConfigRevisionsStore
@@ -220,6 +222,7 @@ from blizzard.hub.store.transactions import HubTransactions
 from blizzard.hub.tenancy import TenantId
 from blizzard.runner.auth.tokens import IReadTokenRepository
 from blizzard.runner.composition import build_host_stores, build_stores
+from blizzard.runner.environments.provider import RepositoryTarget
 from blizzard.runner.environments.repository import IReadEnvironmentRepository
 from blizzard.runner.harness.claude_code.section import CLAUDE_CODE_HARNESS_ID
 from blizzard.runner.harness.fingerprint import PreambleFingerprint
@@ -427,7 +430,13 @@ def build_runner_world(engine: Engine, runner_id: str = RUNNER_ID) -> RunnerWorl
         lease_id=lease_1, chunk_id=chunk_1, node_id=node_a, reason="transitioned", closed_at=_t(5)
     )
 
-    stores.environments.record_binding(chunk_id=chunk_1, environment_id="env-1", workdir="/ws/env-1", bound_at=_t(6))
+    stores.environments.record_binding(
+        chunk_id=chunk_1,
+        environment_id="env-1",
+        workdir="/ws/env-1",
+        bound_at=_t(6),
+        targets=[RepositoryTarget("repo_1", "widget", "github.com", "acme", "widget", "main", inherited=True)],
+    )
     stores.tokens.set_route_token(chunk_1, token="route-token-1", at=_t(6))
 
     stores.lease_record.record_mint(
@@ -892,6 +901,7 @@ RUNNER_CENSUS: dict[tuple[type, str], RunnerRecipe] = {
     (IReadEnvironmentRepository, "chunk_project_ids"): lambda w: w.read.environments.chunk_project_ids([w.chunk_1]),
     (IReadEnvironmentRepository, "live_tenure_chunk_ids"): lambda w: w.read.environments.live_tenure_chunk_ids(),
     (IReadEnvironmentRepository, "held_bindings"): lambda w: w.read.environments.held_bindings(),
+    (IReadEnvironmentRepository, "held_targets"): lambda w: w.read.environments.held_targets(w.chunk_1),
     (IReadEnvironmentRepository, "incomplete_held_bindings"): lambda w: w.read.environments.incomplete_held_bindings(),
     (IReadEnvironmentRepository, "open_lease_holds"): lambda w: w.read.environments.open_lease_holds(),
     (IReadTranscriptLedgerRepository, "transcript_segment"): lambda w: w.read.transcript_ledger.transcript_segment(
@@ -3018,6 +3028,9 @@ HUB_CENSUS: dict[tuple[type, str], HubRecipe] = {
     ),
     (IReadProjectLinks, "sources_of_projects"): lambda w: w.hub.services.project_links.sources_of_projects(
         [w.project_id]
+    ),
+    (IReadChunkTargets, "captured_for"): lambda w: ChunkTargetsStore(w.store_connections).captured_for(
+        [w.chunk_route_a]
     ),
     (IReadProjectLinks, "repositories_of_projects"): lambda w: w.hub.services.project_links.repositories_of_projects(
         [w.project_id]

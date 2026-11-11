@@ -25,6 +25,7 @@ from blizzard.foundation.logging import get_logger
 from blizzard.foundation.queue_policy import QueueMatchPolicy
 from blizzard.foundation.roles import adapter_model
 from blizzard.foundation.untyped import as_table
+from blizzard.runner.environments.provider import RepositoryTarget
 from blizzard.runner.harness.capability_snapshot import HarnessCapability
 from blizzard.runner.hub.client import (
     BindingDeclaration,
@@ -114,8 +115,10 @@ from blizzard.wire.host import (
 )
 from blizzard.wire.question import QuestionView
 from blizzard.wire.queue import QueuePeekRequest, QueuePeekResponse
+from blizzard.wire.queue import RepositoryTarget as WireRepositoryTarget
 from blizzard.wire.release import ReleaseRequest
 from blizzard.wire.route import (
+    ClaimedRepositoryTarget,
     RouteClaim,
     RouteClaimConflict,
     RouteClaimDependencyDenial,
@@ -302,11 +305,13 @@ class HttpHubClient:
         *,
         policy: QueueMatchPolicy,
         projects: Sequence[str] | None = None,
+        repository_targets: bool = False,
     ) -> list[QueueEntry]:
         request = QueuePeekRequest(
             capabilities=[_capability(c) for c in capabilities],
             policy=policy,
             projects=None if projects is None else list(projects),
+            repository_targets=repository_targets,
         )
         resp = self._post(f"{_FLEET_API}/queue/peek", request.model_dump(mode="json"))
         return _queue(QueuePeekResponse.model_validate(resp.json()))
@@ -316,6 +321,12 @@ class HttpHubClient:
             chunk_id=claim.chunk_id,
             workspace_id=claim.workspace_id,
             environment_ids=claim.environment_ids,
+            repository_targets=[
+                ClaimedRepositoryTarget(repository_id=target.repository_id, base_branch=target.base_branch)
+                for target in claim.repository_targets
+            ]
+            if claim.repository_targets is not None
+            else None,
         ).model_dump(mode="json")
         try:
             resp = self._client.post(f"{_FLEET_API}/routes", json=body)
@@ -1029,9 +1040,24 @@ def _queue(wire: QueuePeekResponse) -> list[QueueEntry]:
             if e.blocked is not None
             else None,
             project_id=e.project_id,
+            repository_targets=tuple(_repository_target(t) for t in e.repository_targets)
+            if e.repository_targets is not None
+            else None,
         )
         for e in wire.entries
     ]
+
+
+def _repository_target(wire: WireRepositoryTarget) -> RepositoryTarget:
+    return RepositoryTarget(
+        repository_id=wire.repository_id,
+        repository_slug=wire.repository_slug,
+        forge_host=wire.forge_host,
+        owner=wire.owner,
+        repo=wire.repo,
+        base_branch=wire.base_branch,
+        inherited=wire.inherited,
+    )
 
 
 def chunk_state(wire: ChunkStatusView) -> ChunkState:

@@ -14,6 +14,7 @@ from blizzard.foundation.trace_ids import StepKey, step_root
 from blizzard.runner.environments.provider import (
     AcquiredEnvironment,
     EnvironmentPreparationError,
+    RepositoryTarget,
     WorkspaceAcquisitionError,
 )
 from blizzard.runner.environments.repository import (
@@ -139,6 +140,19 @@ def _defers_to_open_decision(ctx: ClaimContext, chunk_id: str, envelope: Envelop
     return False
 
 
+def _honors_targets(ctx: ClaimContext, bindings: tuple[RoutedBinding, ...]) -> bool:
+    """Whether every workspace the routed bindings claim into prepares repositories at the targets a peek names — what
+    the peek tells the hub, which otherwise offers no chunk a project link's own branch targets."""
+    providers = [ctx.workspaces.provider(binding.workspace_id) for binding in bindings]
+    return all(provider is not None and provider.honors_targets() for provider in providers)
+
+
+def _prepared_targets(ctx: ClaimContext, chunk_id: str) -> tuple[RepositoryTarget, ...] | None:
+    """The targets the chunk's held binding was prepared at, read from the binding rather than a fresh peek, for the
+    claim to name; ``None`` when it was prepared at none."""
+    return ctx.stores.environments.held_targets(chunk_id) or None
+
+
 @dataclass
 class ReadyQueue:
     """The hub's ready queue as the runner's routed bindings see it — one peek naming their projects, then for the
@@ -164,6 +178,7 @@ class ReadyQueue:
                 # rather than read hub-side, so both dimensions get the identical policy.
                 policy=QueueMatchPolicy.HOLD if ctx.config.queue_strict else QueueMatchPolicy.PASS_OVER,
                 projects=[binding.project_id for binding in bindings],
+                repository_targets=_honors_targets(ctx, bindings),
             )
         except HubClientError:
             return cls(ctx, bindings, _entries=[])
@@ -254,7 +269,9 @@ class ReadyQueue:
         assert provider is not None  # a binding naming a workspace the host does not declare halts its runner
         _CP_BEFORE_ACQUIRE.reached()
         try:
-            return provider.acquire(entry.chunk_id, self._environments_wanted(entry), held)
+            return provider.acquire(
+                entry.chunk_id, self._environments_wanted(entry), held, entry.repository_targets or ()
+            )
         except EnvironmentPreparationError as exc:
             # Not capacity — a reset-on-acquire step failed. The provider aborted rather than
             # hand over a half-reset env, so the chunk waits for a fixed workspace.
@@ -283,7 +300,8 @@ class ReadyQueue:
     def _bind(self, entry: QueueEntry, acquired: list[AcquiredEnvironment]) -> None:
         """Bind locally BEFORE claiming at the hub: without a local trace, a crash after a won
         claim would strand the chunk with nothing on this side to drive or reap. Each binding
-        names the workspace it was acquired from and the entry's project (``None`` when the hub sent none)."""
+        names the workspace it was acquired from and the entry's project (``None`` when the hub sent none), with the
+        repository targets its environment was prepared at."""
         chunk_id = entry.chunk_id
         _CP_AFTER_ACQUIRE.reached()
         require_unheld(chunk_id, [env.environment_id for env in acquired], self._pool_held())
@@ -296,6 +314,7 @@ class ReadyQueue:
                 bound_at=now,
                 workspace_id=self._workspace_id(),
                 project_id=entry.project_id,
+                targets=entry.repository_targets or (),
             )
             if self.ctx.events is not None:
                 self.ctx.events.publish_environment_changed(chunk_id, env.environment_id, cause="bound")
@@ -329,6 +348,7 @@ class ReadyQueue:
             chunk_id=chunk_id,
             workspace_id=self._workspace_id(),
             environment_ids=[env.environment_id for env in acquired],
+            repository_targets=_prepared_targets(self.ctx, chunk_id),
         )
 
     def _environments_wanted(self, entry: QueueEntry) -> int:
@@ -513,6 +533,7 @@ class InterruptedClaims:
             chunk_id=chunk_id,
             workspace_id=workspace_id,
             environment_ids=[b.environment_id for b in bindings],
+            repository_targets=_prepared_targets(self.ctx, chunk_id),
         )
         try:
             outcome = self.ctx.hub.claim_route(claim)

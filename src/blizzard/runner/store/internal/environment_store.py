@@ -10,6 +10,7 @@ from sqlalchemy import Row, Subquery, bindparam, func, or_
 
 from blizzard.foundation.logging import get_logger
 from blizzard.foundation.store.batching import id_batches
+from blizzard.runner.environments.provider import RepositoryTarget
 from blizzard.runner.environments.repository import (
     BindingCompletion,
     EnvBinding,
@@ -18,7 +19,7 @@ from blizzard.runner.environments.repository import (
     OpenLeaseHold,
 )
 from blizzard.runner.store.internal.base import HELD_BINDING, Unclosed, insert_fact_row
-from blizzard.runner.store.schema import binding_releases, env_bindings, lease_closures, leases
+from blizzard.runner.store.schema import binding_releases, binding_targets, env_bindings, lease_closures, leases
 from blizzard.runner.store.scoped import RunnerStoreConnections
 
 _log = get_logger("blizzard.runner.store")
@@ -129,9 +130,10 @@ class EnvironmentStore:
         bound_at: datetime,
         workspace_id: str | None = None,
         project_id: str | None = None,
+        targets: Sequence[RepositoryTarget] = (),
     ) -> None:
         with self._store.begin() as conn:
-            insert_fact_row(
+            seq = insert_fact_row(
                 self._store,
                 conn,
                 env_bindings,
@@ -142,6 +144,28 @@ class EnvironmentStore:
                 workspace_id=workspace_id,
                 project_id=project_id,
             )
+            if targets:
+                binding_id = conn.execute(
+                    self._store.select(env_bindings, env_bindings.c.id).where(env_bindings.c.seq == seq)
+                ).scalar_one()
+                conn.execute(
+                    self._store.insert_rows(
+                        binding_targets,
+                        [
+                            {
+                                "binding_id": binding_id,
+                                "repository_id": target.repository_id,
+                                "repository_slug": target.repository_slug,
+                                "forge_host": target.forge_host,
+                                "owner": target.owner,
+                                "repo": target.repo,
+                                "base_branch": target.base_branch,
+                                "inherited": target.inherited,
+                            }
+                            for target in targets
+                        ],
+                    )
+                )
         _log.info("env bound", chunk_id=chunk_id, environment_id=environment_id, workdir=workdir)
 
     def incomplete_held_bindings(self) -> list[IncompleteBinding]:
@@ -190,6 +214,31 @@ class EnvironmentStore:
         ]
         holding = {hold.chunk_id for hold in holds}
         return holds + [OpenLeaseHold(chunk_id=c, held=False) for c in chunk_ids if c not in holding]
+
+    def held_targets(self, chunk_id: str) -> tuple[RepositoryTarget, ...]:
+        newest = (
+            self._store.select(env_bindings, func.max(env_bindings.c.id))
+            .where(env_bindings.c.chunk_id == chunk_id)
+            .where(HELD_BINDING.clause(self._store))
+            .scalar_subquery()
+        )
+        stmt = (
+            self._store.select(binding_targets)
+            .where(binding_targets.c.binding_id == newest)
+            .order_by(binding_targets.c.repository_slug)
+        )
+        return tuple(
+            RepositoryTarget(
+                repository_id=str(r.repository_id),
+                repository_slug=str(r.repository_slug),
+                forge_host=str(r.forge_host),
+                owner=str(r.owner),
+                repo=str(r.repo),
+                base_branch=str(r.base_branch),
+                inherited=bool(r.inherited),
+            )
+            for r in self._store.all(stmt)
+        )
 
     def complete_bindings(self, completions: Sequence[BindingCompletion]) -> None:
         if not completions:

@@ -5,9 +5,11 @@ happens on the *next* acquire, not on release; a provider may retain released fo
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from dataclasses import dataclass
 from typing import Protocol
 
+from blizzard.foundation.repo_ref import repo_identity
 from blizzard.foundation.roles import domain_model
 
 
@@ -18,6 +20,36 @@ class WorkspaceRepo:
 
     name: str
     url: str
+
+
+@domain_model
+@dataclass(frozen=True)
+class RepositoryTarget:
+    """One repository a chunk's project links, with the branch the chunk starts from and lands into, as the hub names
+    it. A worktree is the target's when its origin's ``owner/name`` is the target's (:meth:`names`). ``inherited`` when
+    the branch is the repository's own rather than its project link's."""
+
+    repository_id: str
+    repository_slug: str
+    forge_host: str
+    owner: str
+    repo: str
+    base_branch: str
+    inherited: bool
+
+    @property
+    def qualified(self) -> str:
+        """``owner/repo`` — the identity a worktree's origin is matched by."""
+        return f"{self.owner}/{self.repo}"
+
+    def names(self, origin_url: str, name: str) -> bool:
+        """Whether the worktree ``name`` whose origin is ``origin_url`` is this target's repository."""
+        return repo_identity(origin_url, name) == self.qualified
+
+
+def target_naming(targets: Sequence[RepositoryTarget], origin_url: str, name: str) -> RepositoryTarget | None:
+    """The first of ``targets`` naming the worktree ``name`` whose origin is ``origin_url``, or ``None``."""
+    return next((target for target in targets if target.names(origin_url, name)), None)
 
 
 @domain_model
@@ -63,14 +95,58 @@ class EnvironmentPreparationError(WorkspaceAcquisitionError):
         self.step = step
 
 
+class TargetBranchMissingError(EnvironmentPreparationError):
+    """A repository's target branch is absent on its origin: the environment is never started from another branch in
+    its place."""
+
+    def __init__(self, *, environment_id: str, repository: str, branch: str) -> None:
+        super().__init__(
+            f"repository {repository} has no branch {branch!r} on its origin",
+            environment_id=environment_id,
+            step="target-branch",
+        )
+        self.repository = repository
+        self.branch = branch
+
+
+class TargetsUnsupportedError(EnvironmentPreparationError):
+    """A provider that cannot prepare repositories at their targets was asked for a project link's own branch."""
+
+    def __init__(self, *, environment_id: str, repository: str, branch: str) -> None:
+        super().__init__(
+            f"this workspace cannot prepare repository {repository} at branch {branch!r}",
+            environment_id=environment_id,
+            step="targets",
+        )
+
+
+def refuse_unhonored_targets(targets: Sequence[RepositoryTarget], *, environment_id: str) -> None:
+    """The refusal of a provider that cannot honor targets: any target naming a project link's own branch raises
+    :class:`TargetsUnsupportedError`; an inherited one is the repository's own branch and needs nothing of it."""
+    override = next((target for target in targets if not target.inherited), None)
+    if override is not None:
+        raise TargetsUnsupportedError(
+            environment_id=environment_id, repository=override.qualified, branch=override.base_branch
+        )
+
+
 class IWorkspaceProvider(Protocol):
     """The environment-allocation seam."""
 
-    def acquire(self, chunk_id: str, count: int, held_ids: list[str]) -> list[AcquiredEnvironment]:
-        """Acquire ``count`` clean environments, excluding ``held_ids``.
+    def acquire(
+        self, chunk_id: str, count: int, held_ids: list[str], targets: Sequence[RepositoryTarget] = ()
+    ) -> list[AcquiredEnvironment]:
+        """Acquire ``count`` clean environments, excluding ``held_ids``, each repository worktree a target names on
+        that target's branch and every other on the workspace's own.
 
         Returns the acquired ``(env id, workdir)`` pairs, or raises
-        :class:`WorkspaceAcquisitionError` on refusal — never a partial set."""
+        :class:`WorkspaceAcquisitionError` on refusal — never a partial set. A target branch absent on its origin
+        raises :class:`TargetBranchMissingError`; a provider that does not :meth:`honors_targets` raises
+        :class:`TargetsUnsupportedError` for an override target."""
+        ...
+
+    def honors_targets(self) -> bool:
+        """Whether this binding prepares repository worktrees at the targets an acquire names."""
         ...
 
     def release(self, environment_id: str) -> None:

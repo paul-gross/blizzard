@@ -1461,8 +1461,8 @@ export const peekMatchedQueueApiFleetQueuePeekPost = <ThrowOnError extends boole
  *
  * Claim a chunk; 403 if the runner is unregistered, retired, refused on version, or paused at the hub, 409 if
  * already claimed, already terminal ({done, stopped}), not ready, standing on an unmet prerequisite, of a project
- * the runner does not serve, or incompatible with the runner's stored capabilities, else the first node
- * envelope.
+ * the runner does not serve, prepared at repository targets that are not the chunk's, or incompatible with the
+ * runner's stored capabilities, else the first node envelope.
  */
 export const claimRouteApiFleetRoutesPost = <ThrowOnError extends boolean = false>(options: Options<ClaimRouteApiFleetRoutesPostData, ThrowOnError>): RequestResult<ClaimRouteApiFleetRoutesPostResponses, ClaimRouteApiFleetRoutesPostErrors, ThrowOnError> => (options.client ?? client).post<ClaimRouteApiFleetRoutesPostResponses, ClaimRouteApiFleetRoutesPostErrors, ThrowOnError>({
     url: '/api/fleet/routes',

@@ -38,7 +38,9 @@ from blizzard.runner.environments.provider import (
     EnvironmentPreparationError,
     IWorkspaceProvider,
     RepoBinding,
+    RepositoryTarget,
     WorkspaceAcquisitionError,
+    refuse_unhonored_targets,
 )
 from blizzard.runner.environments.workspaces import IWorkspaces, WorkspaceEntry, WorkspaceRegistry
 from blizzard.runner.environments.worktree import IWorktreeGit
@@ -492,6 +494,7 @@ class PeekCall:
     policy: QueueMatchPolicy
     project: str | None = None
     projects: list[str] | None = None
+    repository_targets: bool = False
 
 
 #: The bearer token a :class:`FakeHub` client presents unless a test hands it another.
@@ -688,6 +691,7 @@ class FakeHub:
         policy: QueueMatchPolicy,
         project: str | None = None,
         projects: Sequence[str] | None = None,
+        repository_targets: bool = False,
     ) -> list[QueueEntry]:
         self.peek_queue_calls += 1
         self.peek_queue_requests.append(
@@ -696,6 +700,7 @@ class FakeHub:
                 policy=policy,
                 project=project,
                 projects=None if projects is None else list(projects),
+                repository_targets=repository_targets,
             )
         )
         entries = self.queue_responses.pop(0) if self.queue_responses else list(self.queue)
@@ -950,12 +955,16 @@ class FakeProvider:
         prepare_fail: bool = False,
         repos: dict[str, Sequence[tuple[str, str]]] | None = None,
         spawn_root: str = "",
+        honors_targets: bool = True,
     ) -> None:
         self._pool = pool  # env_id -> workdir
         self._spawn_root = spawn_root
         self.refuse = refuse
         self.prepare_fail = prepare_fail
+        self._honors_targets = honors_targets
         self.released: list[str] = []
+        #: The targets each acquire named, in call order.
+        self.acquired_targets: list[tuple[RepositoryTarget, ...]] = []
         self._repos = {env: tuple(entries) for env, entries in (repos or {}).items()}
 
     def spawn_root(self) -> str:
@@ -970,7 +979,15 @@ class FakeProvider:
     def environment_workdirs(self) -> dict[str, str]:
         return dict(self._pool)
 
-    def acquire(self, chunk_id: str, count: int, held_ids: list[str]) -> list[AcquiredEnvironment]:
+    def honors_targets(self) -> bool:
+        return self._honors_targets
+
+    def acquire(
+        self, chunk_id: str, count: int, held_ids: list[str], targets: Sequence[RepositoryTarget] = ()
+    ) -> list[AcquiredEnvironment]:
+        self.acquired_targets.append(tuple(targets))
+        if not self._honors_targets:
+            refuse_unhonored_targets(targets, environment_id=next(iter(self._pool), ""))
         if self.refuse:
             raise WorkspaceAcquisitionError("refused (scripted)")
         if self.prepare_fail:

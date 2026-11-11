@@ -10,13 +10,14 @@ from __future__ import annotations
 
 import dataclasses
 import threading
+from collections.abc import Sequence
 from datetime import UTC, datetime
 from pathlib import Path
 
 from blizzard.foundation.clock import FixedClock
 from blizzard.runner.composition import build_host_process
 from blizzard.runner.config import RunnerConfig
-from blizzard.runner.environments.provider import AcquiredEnvironment
+from blizzard.runner.environments.provider import AcquiredEnvironment, RepositoryTarget
 from blizzard.runner.environments.workspaces import WorkspaceEntry, WorkspaceRegistry
 from blizzard.runner.harness.adapter import WorkerHandle
 from blizzard.runner.host_config import BuiltRunner, HaltedRunner, ResolvedToken
@@ -62,13 +63,15 @@ class _BlockingProvider(FakeProvider):
         self.acquisitions: list[str] = []
         self._first = True
 
-    def acquire(self, chunk_id: str, count: int, held_ids: list[str]) -> list[AcquiredEnvironment]:
+    def acquire(
+        self, chunk_id: str, count: int, held_ids: list[str], targets: Sequence[RepositoryTarget] = ()
+    ) -> list[AcquiredEnvironment]:
         self.acquisitions.append(chunk_id)
         self.entered.release()
         if self._first:
             self._first = False
             assert self.release_first.wait(_WAIT)
-        return super().acquire(chunk_id, count, held_ids)
+        return super().acquire(chunk_id, count, held_ids, targets)
 
 
 def _runner(store: SqlAlchemyRunnerStore, runner_id: str, workspaces: WorkspaceRegistry, chunk_id: str):

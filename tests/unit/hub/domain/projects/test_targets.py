@@ -12,7 +12,14 @@ from blizzard.hub.domain.config.forges import ForgeId
 from blizzard.hub.domain.config.repositories import ConfiguredRepository, RepositoryFields, RepositoryId
 from blizzard.hub.domain.projects.links import RepositoryLink
 from blizzard.hub.domain.projects.model import Project
-from blizzard.hub.domain.projects.targets import RepositoryTarget, branches, effective_targets, live_targets
+from blizzard.hub.domain.projects.targets import (
+    RepositoryTarget,
+    branches,
+    effective_targets,
+    live_targets,
+    names_override,
+    prepared_at,
+)
 
 _AT = datetime(2026, 11, 11, 9, 0, tzinfo=UTC)
 _CTX = ChangeContext(actor="usr_alice", door=Door.CLI)
@@ -67,3 +74,25 @@ def test_capturing_a_target_stamps_only_its_moment() -> None:
     target = RepositoryTarget(_REPOSITORY, "rust-rewrite", inherited=False)
 
     assert target.captured(_AT) == RepositoryTarget(_REPOSITORY, "rust-rewrite", inherited=False, captured_at=_AT)
+
+
+_INHERITED = {_REPOSITORY: RepositoryTarget(_REPOSITORY, "master", inherited=True)}
+_OVERRIDDEN = {_REPOSITORY: RepositoryTarget(_REPOSITORY, "rust-rewrite", inherited=False)}
+
+
+def test_only_a_links_own_branch_is_an_override() -> None:
+    assert not names_override(_INHERITED)
+    assert names_override(_OVERRIDDEN)
+
+
+def test_environments_stand_at_targets_only_when_every_repository_names_the_same_branch() -> None:
+    assert prepared_at(_OVERRIDDEN, {_REPOSITORY: "rust-rewrite"})
+    assert not prepared_at(_OVERRIDDEN, {_REPOSITORY: "master"})
+    assert not prepared_at(_OVERRIDDEN, {}), "a repository the runner did not prepare is not prepared at its target"
+    assert not prepared_at({}, {_REPOSITORY: "master"}), "a target the chunk no longer has is stale"
+
+
+def test_a_runner_naming_no_targets_stands_at_them_only_while_none_is_an_override() -> None:
+    assert prepared_at(_INHERITED, None)
+    assert prepared_at({}, None)
+    assert not prepared_at(_OVERRIDDEN, None)

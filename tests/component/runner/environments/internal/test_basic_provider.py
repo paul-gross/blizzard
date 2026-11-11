@@ -10,7 +10,13 @@ import pytest
 from blizzard.runner.environments.factory import build_workspace_provider
 from blizzard.runner.environments.internal.basic_provider import BasicWorkspaceProvider
 from blizzard.runner.environments.internal.git import EnvGitError
-from blizzard.runner.environments.provider import EnvironmentPreparationError, WorkspaceAcquisitionError, WorkspaceRepo
+from blizzard.runner.environments.provider import (
+    EnvironmentPreparationError,
+    RepositoryTarget,
+    TargetBranchMissingError,
+    WorkspaceAcquisitionError,
+    WorkspaceRepo,
+)
 from tests.support.basic_provider import git
 from tests.support.child_launch import env_git, workspace_launch
 from tests.support.config_inputs import init_host
@@ -225,3 +231,64 @@ def test_an_injected_git_failure_mid_preparation_leaves_no_partial_environment(t
     assert caught.value.step == "git-worktree"
     assert "injected" in str(caught.value)
     assert not (workspace / "chunk").exists()
+
+
+def _owned_origin(tmp_path: Path, *, branches: tuple[str, ...]) -> WorkspaceRepo:
+    """An origin at ``…/acme/toy.git``, addressed so its URL names ``acme/toy``, with ``main`` and ``branches`` each
+    holding a ``BRANCH`` file naming itself."""
+    bare = tmp_path / "acme" / "toy.git"
+    bare.parent.mkdir()
+    subprocess.run(["git", "init", "--bare", "-b", "main", str(bare)], check=True, capture_output=True)
+    seed = tmp_path / "owned-seed"
+    seed.mkdir()
+    git(seed, "init", "-b", "main")
+    git(seed, "config", "user.name", "Test")
+    git(seed, "config", "user.email", "test@example.com")
+    git(seed, "remote", "add", "origin", str(bare))
+    for branch in ("main", *branches):
+        if branch != "main":
+            git(seed, "checkout", "-b", branch, "main")
+        (seed / "BRANCH").write_text(f"{branch}\n")
+        git(seed, "add", ".")
+        git(seed, "commit", "-m", branch)
+        git(seed, "push", "origin", branch)
+        git(seed, "checkout", "main")
+    return WorkspaceRepo("toy", f"file://localhost{bare}")
+
+
+def _target(branch: str) -> RepositoryTarget:
+    return RepositoryTarget(
+        repository_id="repo_toy",
+        repository_slug="toy",
+        forge_host="localhost",
+        owner="acme",
+        repo="toy",
+        base_branch=branch,
+        inherited=False,
+    )
+
+
+def test_a_targeted_repository_starts_on_its_target_and_the_next_acquire_on_the_base(tmp_path: Path) -> None:
+    repo = _owned_origin(tmp_path, branches=("rust-rewrite",))
+    provider = BasicWorkspaceProvider(str(tmp_path / "ordinary"), repos=(repo,), git=env_git())
+
+    (targeted,) = provider.acquire("01JFULLCHUNK", 1, [], targets=[_target("rust-rewrite")])
+    on_target = (Path(targeted.workdir) / "toy" / "BRANCH").read_text()
+    provider.release(targeted.environment_id)
+    (untargeted,) = provider.acquire("01JFULLCHUNK", 1, [])
+
+    assert on_target == "rust-rewrite\n"
+    assert (Path(untargeted.workdir) / "toy" / "BRANCH").read_text() == "main\n"
+
+
+def test_a_target_branch_absent_on_origin_fails_the_acquire_naming_repository_and_branch(tmp_path: Path) -> None:
+    repo = _owned_origin(tmp_path, branches=())
+    workspace = tmp_path / "ordinary"
+    provider = BasicWorkspaceProvider(str(workspace), repos=(repo,), git=env_git())
+
+    with pytest.raises(TargetBranchMissingError) as excinfo:
+        provider.acquire("01JFULLCHUNK", 1, [], targets=[_target("gone")])
+
+    assert "acme/toy" in str(excinfo.value)
+    assert "'gone'" in str(excinfo.value)
+    assert not (workspace / "01JFULLCHUNK").exists(), "no partial environment is left behind"

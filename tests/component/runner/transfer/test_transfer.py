@@ -301,7 +301,9 @@ def test_a_copy_carries_the_prompt_of_a_workspace_the_runner_is_bound_to_though_
 ) -> None:
     here, source = stores
     with source.begin() as conn:
-        conn.execute(sa.delete(reflect(source).tables["env_bindings"]))
+        shapes = reflect(source)
+        conn.execute(sa.delete(shapes.tables["binding_targets"]))
+        conn.execute(sa.delete(shapes.tables["env_bindings"]))
 
     _transfer(source, here).copy_runner(workspace_ids={_WORKSPACE: "ws-new"}, bound_workspaces=[_WORKSPACE])
 
@@ -314,7 +316,9 @@ def test_a_copy_of_a_runner_with_no_binding_and_no_row_naming_a_workspace_carrie
 ) -> None:
     here, source = stores
     with source.begin() as conn:
-        conn.execute(sa.delete(reflect(source).tables["env_bindings"]))
+        shapes = reflect(source)
+        conn.execute(sa.delete(shapes.tables["binding_targets"]))
+        conn.execute(sa.delete(shapes.tables["env_bindings"]))
     before = _rows(here, "workspace_prompt")
 
     _transfer(source, here).copy_runner(workspace_ids={_WORKSPACE: "ws-new"})

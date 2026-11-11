@@ -14,6 +14,7 @@ from __future__ import annotations
 from concurrent.futures import Executor
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
+from typing import TypedDict
 
 import pytest
 from sqlalchemy import Engine
@@ -286,7 +287,12 @@ def test_backing_off_facts_statement_count_is_flat_across_1_and_10_open_facts(tm
 
 
 #: A binding as FILL writes it — named by workspace and project, so no tick completes it.
-_COMPLETE = {"workspace_id": "ws1", "project_id": "pr_1"}
+class _Complete(TypedDict):
+    workspace_id: str
+    project_id: str
+
+
+_COMPLETE: _Complete = {"workspace_id": "ws1", "project_id": "pr_1"}
 
 
 def _seed_steady_state_lease(store: SqlAlchemyRunnerStore, i: int, *, at: datetime, sampled_at: datetime) -> None:

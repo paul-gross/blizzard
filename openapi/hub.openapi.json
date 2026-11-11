@@ -5543,11 +5543,12 @@
         "type": "object"
       },
       "ClaimDenialReason": {
-        "description": "The closed set of reasons an incompatible-claim ``409`` names: ``capability``, the runner's stored\ncapabilities no longer run every statically reachable runner-owned lineage of the chunk; ``project``, the runner\ndoes not serve the chunk's project; ``binding``, the runner serves the project but not through the claimed\nworkspace now \u2014 the binding is flagged, absent, or for another workspace, or the subscription is unrostered.",
+        "description": "The closed set of reasons an incompatible-claim ``409`` names: ``capability``, the runner's stored\ncapabilities no longer run every statically reachable runner-owned lineage of the chunk; ``project``, the runner\ndoes not serve the chunk's project; ``binding``, the runner serves the project but not through the claimed\nworkspace now \u2014 the binding is flagged, absent, or for another workspace, or the subscription is unrostered;\n``targets``, the repository targets the runner prepared its environments at are not the chunk's \u2014 stale, or absent\nwhile a project link names its own branch.",
         "enum": [
           "capability",
           "project",
-          "binding"
+          "binding",
+          "targets"
         ],
         "title": "ClaimDenialReason",
         "type": "string"
@@ -5712,6 +5713,25 @@
           "instance"
         ],
         "title": "ClaimRunnerVersionRefusedProblem",
+        "type": "object"
+      },
+      "ClaimedRepositoryTarget": {
+        "description": "One repository's branch a claiming runner prepared its environments at.",
+        "properties": {
+          "base_branch": {
+            "title": "Base Branch",
+            "type": "string"
+          },
+          "repository_id": {
+            "title": "Repository Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "repository_id",
+          "base_branch"
+        ],
+        "title": "ClaimedRepositoryTarget",
         "type": "object"
       },
       "CliPkceRequiredProblem": {
@@ -19297,6 +19317,20 @@
             ],
             "title": "Project Slug"
           },
+          "repository_targets": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/RepositoryTarget"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Repository Targets"
+          },
           "urgency": {
             "anyOf": [
               {
@@ -19325,7 +19359,8 @@
           "project_id",
           "project_slug",
           "project_name",
-          "urgency"
+          "urgency",
+          "repository_targets"
         ],
         "title": "QueuePeekEntry",
         "type": "object"
@@ -19359,6 +19394,11 @@
               }
             ],
             "title": "Projects"
+          },
+          "repository_targets": {
+            "default": false,
+            "title": "Repository Targets",
+            "type": "boolean"
           }
         },
         "title": "QueuePeekRequest",
@@ -20394,6 +20434,50 @@
         "title": "RepositorySummary",
         "type": "object"
       },
+      "RepositoryTarget": {
+        "description": "One repository a chunk's project links, with the branch the chunk starts from and lands into. The forge host,\nowner and repo name are what a runner matches a worktree's origin against. ``inherited`` when the branch is the\nrepository record's own rather than the project link's override.",
+        "properties": {
+          "base_branch": {
+            "title": "Base Branch",
+            "type": "string"
+          },
+          "forge_host": {
+            "title": "Forge Host",
+            "type": "string"
+          },
+          "inherited": {
+            "title": "Inherited",
+            "type": "boolean"
+          },
+          "owner": {
+            "title": "Owner",
+            "type": "string"
+          },
+          "repo": {
+            "title": "Repo",
+            "type": "string"
+          },
+          "repository_id": {
+            "title": "Repository Id",
+            "type": "string"
+          },
+          "repository_slug": {
+            "title": "Repository Slug",
+            "type": "string"
+          }
+        },
+        "required": [
+          "repository_id",
+          "repository_slug",
+          "forge_host",
+          "owner",
+          "repo",
+          "base_branch",
+          "inherited"
+        ],
+        "title": "RepositoryTarget",
+        "type": "object"
+      },
       "RequeueView": {
         "description": "One hub requeue on the chunk. ``requeued_by`` is who requeued it, null when no requeuer is recorded.",
         "properties": {
@@ -20813,7 +20897,7 @@
         "type": "object"
       },
       "RouteClaim": {
-        "description": "A complete route fact posted by the claiming runner. The claimant is the runner its bearer\ntoken names; the body carries no runner id.",
+        "description": "A complete route fact posted by the claiming runner. The claimant is the runner its bearer\ntoken names; the body carries no runner id. ``repository_targets`` are the targets the runner prepared its\nenvironments at, ``None`` from a runner that predates them; the hub refuses a claim whose targets are no longer\nthe chunk's (``reason`` ``targets``).",
         "properties": {
           "chunk_id": {
             "title": "Chunk Id",
@@ -20825,6 +20909,20 @@
             },
             "title": "Environment Ids",
             "type": "array"
+          },
+          "repository_targets": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/ClaimedRepositoryTarget"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Repository Targets"
           },
           "workspace_id": {
             "title": "Workspace Id",
@@ -47513,7 +47611,7 @@
     },
     "/api/fleet/routes": {
       "post": {
-        "description": "Claim a chunk; 403 if the runner is unregistered, retired, refused on version, or paused at the hub, 409 if\nalready claimed, already terminal ({done, stopped}), not ready, standing on an unmet prerequisite, of a project\nthe runner does not serve, or incompatible with the runner's stored capabilities, else the first node\nenvelope.",
+        "description": "Claim a chunk; 403 if the runner is unregistered, retired, refused on version, or paused at the hub, 409 if\nalready claimed, already terminal ({done, stopped}), not ready, standing on an unmet prerequisite, of a project\nthe runner does not serve, prepared at repository targets that are not the chunk's, or incompatible with the\nrunner's stored capabilities, else the first node envelope.",
         "operationId": "claim_route_api_fleet_routes_post",
         "requestBody": {
           "content": {

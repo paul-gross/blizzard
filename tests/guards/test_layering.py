@@ -3063,7 +3063,7 @@ _RUNNER_PACKAGE_LAYERS: dict[str, frozenset[str]] = {
     "auth": frozenset(),
     "transfer": frozenset({"config_table", "environments", "hub"}),
     "leases": frozenset({"environments", "events", "harness", "node_steps"}),
-    "hub": frozenset({"auth", "events", "harness", "leases", "node_steps"}),
+    "hub": frozenset({"auth", "environments", "events", "harness", "leases", "node_steps"}),
     "transcripts": frozenset({"environments", "harness", "hub", "leases"}),
     "throttle": frozenset({"events", "harness", "hub", "leases", "subscriptions", "usage"}),
     "usage": frozenset({"environments", "events", "harness", "leases", "subscriptions", "transcripts"}),

@@ -16,9 +16,9 @@ from blizzard.foundation.platform_tracing.tracer import IPlatformTracer
 from blizzard.foundation.roles import domain_model
 from blizzard.foundation.trace_ids import step_traceparent
 from blizzard.runner.auth.tokens import IWriteTokenRepository
-from blizzard.runner.environments.provider import AcquiredEnvironment
+from blizzard.runner.environments.provider import AcquiredEnvironment, target_naming
 from blizzard.runner.environments.repository import EnvBinding
-from blizzard.runner.environments.workspaces import IWorkspaceSpawnSettings
+from blizzard.runner.environments.workspaces import IWorkspaceSessions
 from blizzard.runner.harness.adapter import (
     DEFAULT_IDENTITY_AWAIT_TIMEOUT_SECONDS,
     HarnessSpawnError,
@@ -200,7 +200,7 @@ class SpawnContext(TranscriptPumpContext, GateContext, OrphanContext, Protocol):
     """What a spawn and an attempt read."""
 
     @property
-    def workspaces(self) -> IWorkspaceSpawnSettings: ...
+    def workspaces(self) -> IWorkspaceSessions: ...
     @property
     def process(self) -> IProcessProbe: ...
     @property
@@ -810,7 +810,25 @@ class Spawner:
             prior=self.ctx.stores.session.session_preamble_fingerprint(resume.session) if resume else None,
             node=node_name,
             prior_node=resume.lease.node_name if resume and resume.lease else None,
+            repository_bases=self._repository_bases(chunk_id, environments, workspace_id),
         )
+
+    def _repository_bases(
+        self, chunk_id: str, environments: list[AcquiredEnvironment], workspace_id: str | None
+    ) -> list[tuple[str, str]]:
+        """Each targeted repository with a worktree in ``environments``, as ``owner/repo`` and the branch it was
+        prepared at — read from the chunk's binding, so a resume names what the fresh spawn did."""
+        targets = self.ctx.stores.environments.held_targets(chunk_id)
+        provider = self.ctx.workspaces.provider(workspace_id)
+        if not targets or provider is None:
+            return []
+        bases: dict[str, str] = {}
+        for env in environments:
+            for repo in provider.repos(env.environment_id):
+                target = target_naming(targets, repo.origin_url, repo.name)
+                if target is not None:
+                    bases.setdefault(target.qualified, target.base_branch)
+        return sorted(bases.items())
 
     def _worker_preamble(
         self,

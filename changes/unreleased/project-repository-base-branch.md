@@ -1,6 +1,6 @@
 ---
 kind: added
-surfaces: [http-api, cli, config, store]
+surfaces: [http-api, wire, cli, config, store]
 ---
 
 A project's link to a repository may name its own base branch, so two projects may work on different branches of one
@@ -17,3 +17,11 @@ captured, and starts from and lands into it from then on: a later branch edit re
 it, and no longer supersedes a waiting delivery. Chunks of different projects landing on one branch still take turns,
 while different branches of one repository land side by side. `GET /api/chunks/{id}` carries `repository_targets` — each
 repository's branch, whether it is inherited, and when it was captured — and `blizzard hub chunk get` lists them.
+
+A runner prepares each environment's worktree of a targeted repository on the chunk's branch, leaves every other
+worktree on its `[[workspace]]` `base_branch`, and names each repository's branch in the worker's facts table as a
+`repository <owner/repo> base` row. A target branch its origin lacks fails the environment's preparation, naming the
+repository and branch, and the chunk is not claimed. The fleet peek names each offered chunk's `repository_targets` to a
+runner that sends `repository_targets: true`, and offers a runner that does not no chunk whose project link names its
+own branch; a claim names the targets its environments were prepared at, and the hub refuses one whose targets are no
+longer the chunk's with reason `targets`.

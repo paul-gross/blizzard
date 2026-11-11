@@ -9,6 +9,7 @@ from __future__ import annotations
 
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
+from typing import cast
 
 from sqlalchemy import Engine, insert
 
@@ -208,6 +209,32 @@ def _peek(hub: HubHarness, token: str) -> tuple[dict[str, object], dict[str, obj
     return get.json(), post.json()
 
 
+def _comparable(body: object) -> object:
+    """``body`` less each peek entry's repository ids, which each hub mints afresh for its seeded repository."""
+    if not isinstance(body, dict):
+        return body
+    page = cast(dict[str, object], body)
+    entries = page.get("entries")
+    if not isinstance(entries, list):
+        return page
+    return {**page, "entries": [_without_repository_ids(entry) for entry in cast(list[object], entries)]}
+
+
+def _without_repository_ids(entry: object) -> object:
+    if not isinstance(entry, dict):
+        return entry
+    row = cast(dict[str, object], entry)
+    targets = row.get("repository_targets")
+    if not isinstance(targets, list):
+        return row
+    return {
+        **row,
+        "repository_targets": [
+            {**cast(dict[str, object], target), "repository_id": None} for target in cast(list[object], targets)
+        ],
+    }
+
+
 def _token(hub: HubHarness) -> str:
     register_runner(hub, runner_id="runner-a", workspace_id="ws-a")
     return enroll_runner(hub, "runner-a")
@@ -231,7 +258,9 @@ def test_hot_reads_are_flat_in_statements_rows_and_response_across_terminal_coun
     heavy = _hub(tmp_path / "many", live=6, terminal=15)
     bare_token, heavy_token = _token(bare), _token(heavy)
 
-    assert _peek(bare, bare_token) == _peek(heavy, heavy_token)
+    assert [_comparable(page) for page in _peek(bare, bare_token)] == [
+        _comparable(page) for page in _peek(heavy, heavy_token)
+    ]
     assert _peek(heavy, heavy_token)[0]["entries"]
 
     def post(hub: HubHarness, token: str):
@@ -248,7 +277,7 @@ def test_hot_reads_are_flat_in_statements_rows_and_response_across_terminal_coun
         **{path: ((lambda p=path: bare.client.get(p)), (lambda p=path: heavy.client.get(p))) for path in _READS},
     }
     for name, (on_bare, on_heavy) in reads.items():
-        assert on_bare().json() == on_heavy().json(), name
+        assert _comparable(on_bare().json()) == _comparable(on_heavy().json()), name
         assert count_queries(bare.engine, on_bare) == count_queries(heavy.engine, on_heavy), name
         assert count_rows_read(bare.engine, on_bare) == count_rows_read(heavy.engine, on_heavy), name
 
