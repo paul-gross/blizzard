@@ -12,15 +12,9 @@ from decimal import Decimal
 from pathlib import Path
 from typing import BinaryIO, cast
 
+from blizzard.hub.domain.observability.egress.ports import DatasetSchema, EgressValues, IEgressWriter, rfc3339_utc
 from blizzard.hub.egress.internal.files import DirectoryEgressWriter
-from blizzard.hub.egress.writer import (
-    MONEY_SCALE,
-    DatasetSchema,
-    EgressValues,
-    EgressWriterSettings,
-    IEgressWriter,
-    rfc3339_utc,
-)
+from blizzard.hub.egress.writer import MONEY_SCALE, EgressWriterSettings
 
 
 def _encode_value(value: object) -> object:

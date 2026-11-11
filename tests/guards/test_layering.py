@@ -47,6 +47,27 @@ _KERNEL_DIRS = (_FOUNDATION_DIR, _WIRE_DIR, _AUTH_CORE_DIR)
 _NON_KERNEL_PACKAGES = ("blizzard.hub", "blizzard.runner", "blizzard.cli", "blizzard.tools")
 
 _MOVED_HOMES = {
+    "ColumnSpec": "blizzard.hub.domain.observability.egress.ports",
+    "ColumnType": "blizzard.hub.domain.observability.egress.ports",
+    "DatasetSchema": "blizzard.hub.domain.observability.egress.ports",
+    "EgressBatch": "blizzard.hub.domain.observability.egress.ports",
+    "EgressFailure": "blizzard.hub.domain.observability.egress.ports",
+    "EgressFailureCause": "blizzard.hub.domain.observability.egress.ports",
+    "EgressPass": "blizzard.hub.domain.observability.egress.ports",
+    "EgressValues": "blizzard.hub.domain.observability.egress.ports",
+    "FilesWritten": "blizzard.hub.domain.observability.egress.ports",
+    "IEgressWriter": "blizzard.hub.domain.observability.egress.ports",
+    "ManifestCommitted": "blizzard.hub.domain.observability.egress.ports",
+    "PlacedFile": "blizzard.hub.domain.observability.egress.ports",
+    "rfc3339_utc": "blizzard.hub.domain.observability.egress.ports",
+    "IWorkClosers": "blizzard.hub.domain.chunk.ports.work_sources",
+    "IWorkAnnotators": "blizzard.hub.domain.chunk.ports.work_sources",
+    "IWorkCloser": "blizzard.hub.domain.chunk.ports.work_sources",
+    "IWorkAnnotator": "blizzard.hub.domain.chunk.ports.work_sources",
+    "WorkCloseError": "blizzard.hub.domain.chunk.ports.work_sources",
+    "WorkItemGoneError": "blizzard.hub.domain.chunk.ports.work_sources",
+    "WorkAnnotateError": "blizzard.hub.domain.chunk.ports.work_sources",
+    "WorkStatusMarker": "blizzard.hub.domain.chunk.status_marker",
     "RenewalFailureReason": "blizzard.foundation.credential_renewal",
     "RenewalResult": "blizzard.foundation.credential_renewal",
     "SampleMissReason": "blizzard.foundation.subscription_miss",
@@ -3704,9 +3725,14 @@ def test_only_the_composition_root_builds_an_egress_writer() -> None:
         if not v.startswith(homes)
     ]
     assert not violations, violations
-    seam = (str((_HUB_DIR / "domain" / "observability" / "egress").relative_to(_REPO_ROOT)), *homes)
-    callers = [v for v in _violations(_SRC_DIR, ("blizzard.hub.egress",)) if not v.startswith(seam)]
+    callers = [v for v in _violations(_SRC_DIR, ("blizzard.hub.egress",)) if not v.startswith(homes)]
     assert not callers, callers
+
+
+def test_the_domain_imports_no_outer_hub_package() -> None:
+    """``bzh:dependency-inversion``: an inner concept owns the ports and vocabulary it consumes — nothing under
+    ``hub/domain`` reaches the egress or work-source packages, which implement domain ports instead."""
+    assert not _violations(_HUB_DIR / "domain", ("blizzard.hub.egress", "blizzard.hub.work_sources"))
 
 
 _SECRET_PLAINTEXT_NAMES = frozenset({"SecretValue", "ISecretReader", "ISealedSecretRepository"})

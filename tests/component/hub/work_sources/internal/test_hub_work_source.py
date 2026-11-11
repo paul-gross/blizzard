@@ -22,6 +22,7 @@ from blizzard.hub.auth.internal.user_repository import UserRepository
 from blizzard.hub.auth.models import User
 from blizzard.hub.domain.chunk.model import Chunk, WorkItemAuthor, WorkRef
 from blizzard.hub.domain.chunk.ports.stores import ChunkStores
+from blizzard.hub.domain.chunk.ports.work_sources import WorkItemGoneError
 from blizzard.hub.domain.garden.findings.model import FindingExitService
 from blizzard.hub.domain.garden.proposals.resolution import GardenProposalDeliveryResolution
 from blizzard.hub.domain.graph.model import Graph
@@ -44,7 +45,6 @@ from blizzard.hub.store.internal.tenant_settings_store import TenantSettingsStor
 from blizzard.hub.store.internal.urgency_store import UrgencyStore
 from blizzard.hub.store.internal.work_item_store import WorkItemStore
 from blizzard.hub.store.transactions import HubTransactions
-from blizzard.hub.work_sources.closer import WorkItemGoneError
 from blizzard.hub.work_sources.editor import WorkItemRefUnknownError
 from blizzard.hub.work_sources.internal.hub_work_source import HubWorkSource
 from blizzard.hub.work_sources.source import WorkSourceError

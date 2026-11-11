@@ -17,8 +17,7 @@ from blizzard.foundation.roles import domain_model
 from blizzard.hub.auth.models import User
 from blizzard.hub.auth.users import IReadUserRepository
 from blizzard.hub.domain.chunk.model import WorkItemAuthor, WorkItemAuthorKind, WorkRef
-from blizzard.hub.work_sources.annotator import IWorkAnnotator
-from blizzard.hub.work_sources.closer import IWorkCloser
+from blizzard.hub.domain.chunk.ports.work_sources import IWorkAnnotator, IWorkCloser
 from blizzard.hub.work_sources.editor import IWorkEditor
 
 
@@ -107,8 +106,8 @@ class IWorkSource(Protocol):
 @runtime_checkable
 class IWorkSourceBatchReader(Protocol):
     """A binding's batch read — many pointers in a bounded number of calls to its source, a capability beside
-    :class:`~blizzard.hub.work_sources.annotator.IWorkAnnotator`, not part of :class:`IWorkSource`: a binding with
-    none is read pointer by pointer through :meth:`IWorkSource.fetch`."""
+    :class:`~blizzard.hub.domain.chunk.ports.work_sources.IWorkAnnotator`, not part of :class:`IWorkSource`: a
+    binding with none is read pointer by pointer through :meth:`IWorkSource.fetch`."""
 
     def fetch_many(
         self, pointers: Sequence[WorkRef], *, include_comments: bool

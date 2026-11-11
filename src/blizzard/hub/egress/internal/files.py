@@ -18,8 +18,7 @@ from pathlib import Path
 from typing import BinaryIO, Protocol
 
 from blizzard.foundation.roles import adapter_model
-from blizzard.hub.egress.space import free_bytes
-from blizzard.hub.egress.writer import (
+from blizzard.hub.domain.observability.egress.ports import (
     ColumnSpec,
     ColumnType,
     DatasetSchema,
@@ -28,14 +27,14 @@ from blizzard.hub.egress.writer import (
     EgressFailureCause,
     EgressPass,
     EgressValues,
-    EgressWriterSettings,
     FilesWritten,
     ManifestCommitted,
     PlacedFile,
     rfc3339_utc,
     utc,
-    validate_batch,
 )
+from blizzard.hub.egress.space import free_bytes
+from blizzard.hub.egress.writer import EgressWriterSettings, validate_batch
 
 _STAGING = ".staging"
 _NO_HARD_LINKS = {errno.EPERM, errno.ENOTSUP, errno.EXDEV, errno.ENOSYS}

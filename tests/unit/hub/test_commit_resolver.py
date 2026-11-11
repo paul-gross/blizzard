@@ -33,7 +33,7 @@ from blizzard.hub.domain.config.repositories import (
     RepositorySlug,
 )
 from blizzard.hub.domain.config.work_sources import WorkSourceId
-from blizzard.hub.domain.garden.delivery.validation import CommitResolution, CommitResolver
+from blizzard.hub.domain.garden.delivery.validation import CommitResolution, ICommitResolver
 from blizzard.hub.domain.projects.links import IReadProjectLinks, RepositoryLink, SourceLink
 from blizzard.hub.domain.projects.model import ProjectId
 from blizzard.hub.forge.budget import ForgeBudgetLow, ForgePriority
@@ -235,7 +235,7 @@ def loop() -> Iterator[ActionLoop]:
 
 def _resolver(
     forges: _Forges, loop: ActionLoop, *, linked: set[str] | None = None, timeout: float = 10.0
-) -> CommitResolver:
+) -> ICommitResolver:
     return SeamCommitResolver(
         repositories=_Records([_row("widget")]),
         forge_records=_ForgeRecords(),

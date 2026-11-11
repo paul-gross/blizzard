@@ -85,6 +85,14 @@ from blizzard.hub.domain.chunk.model import (
 )
 from blizzard.hub.domain.chunk.ports.queue import READY_RANKING_LOCK
 from blizzard.hub.domain.chunk.ports.stores import ChunkStores
+from blizzard.hub.domain.chunk.ports.work_sources import (
+    IWorkAnnotator,
+    IWorkCloser,
+    WorkAnnotateError,
+    WorkCloseError,
+    WorkItemGoneError,
+)
+from blizzard.hub.domain.chunk.status_marker import WorkStatusMarker
 from blizzard.hub.domain.config.authoring import ConfigAuthoring
 from blizzard.hub.domain.config.capabilities import IForgeOffers
 from blizzard.hub.domain.config.changes import ChangeContext, Door
@@ -111,6 +119,15 @@ from blizzard.hub.domain.kernel.hub_source import RESERVED_HUB_SOURCE_NAME
 from blizzard.hub.domain.kernel.transactions import LockedTransaction
 from blizzard.hub.domain.observability.analytics.extraction import ITurnEventExtractor, shipped_extractors
 from blizzard.hub.domain.observability.egress.config import EgressConfig
+from blizzard.hub.domain.observability.egress.ports import (
+    EgressBatch,
+    EgressFailure,
+    EgressPass,
+    FilesWritten,
+    IEgressWriter,
+    ManifestCommitted,
+    PlacedFile,
+)
 from blizzard.hub.domain.observability.transcripts import (
     EncodedTurns,
     TranscriptCaps,
@@ -128,16 +145,7 @@ from blizzard.hub.domain.tenancy.administration import DEFAULT_PROJECT_SLUG
 from blizzard.hub.domain.urgency.model import NO_MARK, Urgency, UrgencyId
 from blizzard.hub.domain.urgency.order import FIRST_POSITION
 from blizzard.hub.domain.urgency.settings import TenantSettings
-from blizzard.hub.egress.writer import (
-    EgressBatch,
-    EgressFailure,
-    EgressPass,
-    FilesWritten,
-    IEgressWriter,
-    ManifestCommitted,
-    PlacedFile,
-    validate_batch,
-)
+from blizzard.hub.egress.writer import validate_batch
 from blizzard.hub.events.broker import EventBroker
 from blizzard.hub.forge.budget import ForgeBudgets
 from blizzard.hub.runtime import Migrations
@@ -170,8 +178,6 @@ from blizzard.hub.store.scoped import (
 from blizzard.hub.store.transactions import HubTransactions, work_ref_handle_connection
 from blizzard.hub.system_artifacts import PackagedSystemArtifacts
 from blizzard.hub.tenancy import HUB_SCOPED_OPTION, StoreScope, TenantId
-from blizzard.hub.work_sources.annotator import IWorkAnnotator, WorkAnnotateError, WorkStatusMarker
-from blizzard.hub.work_sources.closer import IWorkCloser, WorkCloseError, WorkItemGoneError
 from blizzard.hub.work_sources.editor import IWorkEditor
 from blizzard.hub.work_sources.internal.hub_work_source import HubWorkSource
 from blizzard.hub.work_sources.source import (

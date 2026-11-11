@@ -1,39 +1,32 @@
-"""The egress writer seam: one dataset's rows for one date partition become immutable files.
+"""The egress writer's settings and the shared row validation every binding applies.
 
-The directory layout, staging, placement, manifests and schemas follow
-``blizzard-product:/delivered/fact-egress/steps/spec/export.md`` §The directory and §Formats; value encodings follow
-``blizzard-product:/delivered/fact-egress/steps/spec/rows.md`` §Shared conventions. This module holds the seam, its
-value types, and the shared row validation (``bzh:pluggable-seams``); it names no filesystem or format library."""
+The seam itself — :class:`IEgressWriter` and the value types its signature names — is the observability domain's, in
+``blizzard.hub.domain.observability.egress.ports`` (``bzh:dependency-inversion``). Value encodings follow
+``blizzard-product:/delivered/fact-egress/steps/spec/rows.md`` §Shared conventions; this module names no filesystem or
+format library."""
 
 from __future__ import annotations
 
 import secrets
 import string
-from collections.abc import Mapping, Sequence
+from collections.abc import Sequence
 from dataclasses import dataclass
-from datetime import UTC, date, datetime, timedelta
+from datetime import datetime, timedelta
 from decimal import Context, Decimal, InvalidOperation
-from enum import StrEnum
-from typing import Protocol, cast
+from typing import cast
 
 from blizzard.foundation.roles import domain_model
+from blizzard.hub.domain.observability.egress.ports import (
+    ColumnSpec,
+    ColumnType,
+    EgressBatch,
+    EgressFailure,
+    EgressFailureCause,
+)
 
 __all__ = [
-    "ColumnSpec",
-    "ColumnType",
-    "DatasetSchema",
-    "EgressBatch",
-    "EgressFailure",
-    "EgressFailureCause",
-    "EgressPass",
-    "EgressValues",
     "EgressWriterSettings",
-    "FilesWritten",
-    "IEgressWriter",
-    "ManifestCommitted",
-    "PlacedFile",
     "mint_process_token",
-    "rfc3339_utc",
     "validate_batch",
 ]
 
@@ -48,139 +41,11 @@ _TOKEN_ALPHABET = string.ascii_lowercase + string.digits
 _TOKEN_LENGTH = 6
 
 
-class ColumnType(StrEnum):
-    STRING = "string"
-    INT64 = "int64"
-    BOOL = "bool"
-    TIMESTAMP = "timestamp"
-    MONEY = "money"
-    STRING_LIST = "list<string>"
-
-
-@domain_model
-@dataclass(frozen=True)
-class ColumnSpec:
-    name: str
-    type: ColumnType
-    nullable: bool
-    meaning: str
-
-
-@domain_model
-@dataclass(frozen=True)
-class DatasetSchema:
-    """A dataset's name, contract major version, and ordered columns."""
-
-    name: str
-    major_version: int
-    columns: tuple[ColumnSpec, ...]
-
-    def widens(self, older: DatasetSchema) -> bool:
-        """Whether this schema is ``older`` with nullable columns added and nothing else changed — the one schema
-        change that keeps a major version, so the export carries on under ``older``'s files."""
-        if (self.name, self.major_version) != (older.name, older.major_version):
-            return False
-        kept = {c.name for c in older.columns}
-        added = [c for c in self.columns if c.name not in kept]
-        return all(c.nullable for c in added) and [c for c in self.columns if c.name in kept] == list(older.columns)
-
-
-@domain_model
-@dataclass(frozen=True)
-class EgressPass:
-    """One export pass's identity: the caller's start instant (UTC), whether it is a backfill, and the hub's extractor
-    version when the pass writes ``events``."""
-
-    started_at: datetime
-    backfill: bool = False
-    extractor_version: str | None = None
-
-
-@domain_model
-@dataclass(frozen=True)
-class EgressValues:
-    """One row's values by column name, with the opaque cursor position it was read at."""
-
-    position: str
-    values: Mapping[str, object]
-
-
-@domain_model
-@dataclass(frozen=True)
-class EgressBatch:
-    """The rows of one dataset that fall in one date partition."""
-
-    schema: DatasetSchema
-    partition: date
-    egress_pass: EgressPass
-    rows: Sequence[EgressValues]
-
-
 @domain_model
 @dataclass(frozen=True)
 class EgressWriterSettings:
     max_rows_per_file: int
     min_free_bytes: int = 1024**3
-
-
-@domain_model
-@dataclass(frozen=True)
-class PlacedFile:
-    """A data file in its final place; ``path`` is relative to the export directory."""
-
-    path: str
-    dataset: str
-    version: int
-    partition: date
-    rows: int
-    first_position: str
-    last_position: str
-    sha256: str
-
-
-class EgressFailureCause(StrEnum):
-    LOW_DISK = "low-disk"
-    NAME_EXISTS = "name-exists"
-    SCHEMA_CONFLICT = "schema-conflict"
-    INVALID_ROW = "invalid-row"
-    IO_ERROR = "io-error"
-    HARD_LINKS_UNSUPPORTED = "hard-links-unsupported"
-
-
-@domain_model
-@dataclass(frozen=True)
-class EgressFailure:
-    """A write that placed nothing further; ``free_bytes``/``required_bytes`` are set for ``LOW_DISK``."""
-
-    cause: EgressFailureCause
-    message: str
-    free_bytes: int | None = None
-    required_bytes: int | None = None
-
-
-@domain_model
-@dataclass(frozen=True)
-class FilesWritten:
-    files: tuple[PlacedFile, ...]
-
-
-@domain_model
-@dataclass(frozen=True)
-class ManifestCommitted:
-    path: str
-
-
-class IEgressWriter(Protocol):
-    """Places a pass's files, then its manifest. Single-caller by contract."""
-
-    def write(self, batch: EgressBatch) -> FilesWritten | EgressFailure:
-        """Place ``batch``'s rows as one file per ``max_rows_per_file`` rows. Never replaces a data file; swaps
-        the dataset's ``_schema/`` document in place when the current schema only adds nullable columns to it."""
-        ...
-
-    def commit_pass(self, egress_pass: EgressPass, placed: Sequence[PlacedFile]) -> ManifestCommitted | EgressFailure:
-        """Write the pass's manifest, listing exactly ``placed``. Called after every file is in place."""
-        ...
 
 
 def mint_process_token() -> str:
@@ -258,12 +123,3 @@ def _money_problem(value: object) -> str | None:
     if quantized != value or abs(quantized) >= _MONEY_BOUND:
         return "does not fit decimal(18, 9) exactly"
     return None
-
-
-def utc(value: datetime) -> datetime:
-    return value.astimezone(UTC)
-
-
-def rfc3339_utc(value: datetime) -> str:
-    """RFC 3339 in UTC, microsecond precision, ``Z`` suffix."""
-    return utc(value).strftime("%Y-%m-%dT%H:%M:%S.%fZ")

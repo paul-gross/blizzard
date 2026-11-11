@@ -19,7 +19,7 @@ from blizzard.hub.domain.config.repositories import (
     RepositoryId,
     resolve_repository,
 )
-from blizzard.hub.domain.garden.delivery.validation import CommitResolution, CommitResolver
+from blizzard.hub.domain.garden.delivery.validation import CommitResolution, ICommitResolver
 from blizzard.hub.domain.projects.links import IReadProjectLinks
 from blizzard.hub.domain.projects.model import ProjectId
 from blizzard.hub.forge.budget import ForgePriority
@@ -55,12 +55,12 @@ class SeamCommitResolver:
         self._loop = loop
         self._timeout = timeout
 
-    def for_project(self, project_id: ProjectId) -> CommitResolver:
+    def for_project(self, project_id: ProjectId) -> ICommitResolver:
         """The resolver of ``project_id``'s deliveries: only the repositories it links."""
         return functools.partial(self._resolve, project_id)
 
     def _resolve(self, project_id: ProjectId, repo: str, commit: str) -> CommitResolution | None:
-        """Never raises (``CommitResolver``'s own contract)."""
+        """Never raises (``ICommitResolver``'s own contract)."""
         try:
             forges = {forge.forge_id: forge for forge in self._forge_records.list_all(include_retired=True)}
             row = resolve_repository(

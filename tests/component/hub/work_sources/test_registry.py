@@ -17,12 +17,12 @@ from fastapi.testclient import TestClient
 
 from blizzard.hub.composition import HubServices
 from blizzard.hub.domain.chunk.model import WorkRef
+from blizzard.hub.domain.chunk.status_marker import WorkStatusMarker
 from blizzard.hub.domain.config.errors import ConfigFieldError
 from blizzard.hub.domain.config.forges import ForgeEdit
 from blizzard.hub.domain.config.work_sources import ConfiguredWorkSource, WorkSourceEdit, WorkSourceId, WorkSourceSlug
 from blizzard.hub.live_config import ConfigObjectCache
 from blizzard.hub.store.internal.config_revisions_store import ConfigRevisionsStore
-from blizzard.hub.work_sources.annotator import WorkStatusMarker
 from blizzard.hub.work_sources.internal.github_work_source import GitHubWorkSource
 from blizzard.hub.work_sources.registry import BuiltWorkSource, StoreWorkSourceRegistry
 from blizzard.hub.work_sources.source import IWorkSourceRegistry, WorkSourceError

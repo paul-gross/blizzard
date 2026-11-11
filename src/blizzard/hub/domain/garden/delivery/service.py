@@ -11,8 +11,8 @@ from blizzard.hub.domain.chunk.model import Chunk
 from blizzard.hub.domain.chunk.ports.artifacts import IReadChunkArtifactsRepository
 from blizzard.hub.domain.garden.delivery.materialize import DeliveryOutcome, GardenDelivery, delivery_replay_outcome
 from blizzard.hub.domain.garden.delivery.validation import (
-    CommitResolver,
     GardenDeliveryRejected,
+    ICommitResolver,
     commits_to_resolve,
     parse_artifacts,
     resolve_commits,
@@ -43,7 +43,7 @@ class GardenDeliveryRecorder:
         buckets: FindingBucketReader,
         materialize: GardenDelivery,
         formats: IGardenFormats,
-        resolve_commit_for: Callable[[ProjectId], CommitResolver] | None,
+        resolve_commit_for: Callable[[ProjectId], ICommitResolver] | None,
     ) -> None:
         self._artifacts = artifacts
         self._buckets = buckets

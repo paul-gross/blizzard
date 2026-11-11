@@ -28,10 +28,10 @@ from blizzard.hub.domain.chunk.ports.work_refs import (
     WorkRefsSignature,
     live_work_ref_statuses,
 )
+from blizzard.hub.domain.chunk.ports.work_sources import IWorkAnnotator, IWorkAnnotators, WorkAnnotateError
+from blizzard.hub.domain.chunk.status_marker import WorkStatusMarker
 from blizzard.hub.domain.kernel.tenant_fault import TenantFault
 from blizzard.hub.tenancy import TenantClosed, TenantId, UnknownTenant
-from blizzard.hub.work_sources.annotator import IWorkAnnotator, WorkAnnotateError, WorkStatusMarker
-from blizzard.hub.work_sources.source import IWorkSourceRegistry
 
 _log = get_logger("blizzard.hub.forge_status")
 
@@ -140,7 +140,7 @@ class TenantAnnotation:
         self,
         *,
         facts: IReadChunkFactsRepository,
-        work_sources: IWorkSourceRegistry,
+        work_sources: IWorkAnnotators,
         memory: IWriteAnnotatedSources,
         events: EventLogService,
         clock: IClock,

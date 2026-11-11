@@ -31,6 +31,15 @@ from blizzard.hub.domain.observability.egress.assembly import (
 from blizzard.hub.domain.observability.egress.config import EgressConfig
 from blizzard.hub.domain.observability.egress.event_rows import FilePathPolicy
 from blizzard.hub.domain.observability.egress.events_window import derivations_by_marker, events_rows, position_of, take
+from blizzard.hub.domain.observability.egress.ports import (
+    DatasetSchema,
+    EgressBatch,
+    EgressFailure,
+    EgressPass,
+    EgressValues,
+    IEgressWriter,
+    PlacedFile,
+)
 from blizzard.hub.domain.observability.egress.repository import (
     EgressCheckpoint,
     IReadEgressEvents,
@@ -44,15 +53,6 @@ from blizzard.hub.domain.observability.egress.schema import (
 from blizzard.hub.domain.observability.hub_events import HubEventKind, HubEventLogService
 from blizzard.hub.domain.observability.tracing.repository import IReadTraceSteps
 from blizzard.hub.domain.observability.tracing.window import read_window
-from blizzard.hub.egress.writer import (
-    DatasetSchema,
-    EgressBatch,
-    EgressFailure,
-    EgressPass,
-    EgressValues,
-    IEgressWriter,
-    PlacedFile,
-)
 
 _log = get_logger("blizzard.hub.egress")
 

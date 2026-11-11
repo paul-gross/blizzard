@@ -7,7 +7,8 @@ from pathlib import Path
 from typing import Literal
 
 from blizzard.foundation.roles import domain_model
-from blizzard.hub.egress.writer import EgressWriterSettings, IEgressWriter
+from blizzard.hub.domain.observability.egress.ports import IEgressWriter
+from blizzard.hub.egress.writer import EgressWriterSettings
 
 __all__ = ["EgressUnavailable", "build_egress_writer"]
 
