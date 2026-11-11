@@ -1563,6 +1563,9 @@ def test_internal_check_admits_the_owner_and_public_imports(tmp_path: Path, impo
 _HARNESS_IDS = tuple(kind.harness_id for kind in HARNESS_SECTION_KINDS)
 #: The binding packages a harness id's binary version selects, beside the package named by that id.
 _VERSION_BINDING_PACKAGES = ("opencode_v2",)
+#: The family each version-selected package belongs to: it may import that family's ``section`` module, and nothing
+#: else of it, since the section holds the family's shared facts (its id).
+_VERSION_BINDING_FAMILY = {"opencode_v2": "opencode"}
 _ADAPTER_PACKAGES = (*_HARNESS_IDS, *_VERSION_BINDING_PACKAGES)
 _PROCESS_PROBE_FILE = _RUNNER_DIR / "process" / "probe.py"
 _LINUX_PROCESS_PROBE_FILE = _RUNNER_DIR / "process" / "internal" / "linux_process_probe.py"
@@ -1587,6 +1590,9 @@ def _adapter_breach(module: str, *, harness: str, in_harness: bool, own: str | N
     if target is None or target == own:
         return None
     if own is not None:
+        section = f"{harness}.{target}.section"
+        if _VERSION_BINDING_FAMILY.get(own) == target and (module == section or module.startswith(f"{section}.")):
+            return None
         return "adapter -> other adapter"
     return None if may_name else "adapter named outside wiring and the composition roots"
 
@@ -1643,6 +1649,8 @@ def _plant_harness(tmp_path: Path, importer: str, statement: str) -> list[str]:
         "runner/harness/opencode/a.py",
         "runner/harness/opencode/paths.py",
         "runner/harness/opencode/compatibility/__init__.py",
+        "runner/harness/opencode/section.py",
+        "runner/harness/opencode_v2/__init__.py",
     ):
         (src / rel).parent.mkdir(parents=True, exist_ok=True)
         (src / rel).write_text("")
@@ -1661,6 +1669,13 @@ def _plant_harness(tmp_path: Path, importer: str, statement: str) -> list[str]:
         ("runner/harness/opencode/a.py", "from ..claude_code import section", "other adapter"),
         ("runner/harness/opencode/compatibility/x.py", "from ...claude_code import section", "other adapter"),
         ("runner/api/x.py", "import blizzard.runner.harness.claude_code.section", "adapter named outside"),
+        ("runner/harness/opencode_v2/a.py", "from blizzard.runner.harness.opencode.paths import X", "other adapter"),
+        (
+            "runner/harness/opencode_v2/a.py",
+            "from blizzard.runner.harness.claude_code.section import X",
+            "other adapter",
+        ),
+        ("runner/harness/opencode/a.py", "from blizzard.runner.harness.opencode_v2.a import X", "other adapter"),
         ("runner/harness/core.py", "from blizzard.runner.loop.steps import X", "harness -> loop"),
         ("runner/harness/opencode/a.py", "from blizzard.runner import loop", "harness -> loop"),
         ("runner/harness/core.py", "from blizzard.runner.loop_wiring import X", "harness -> loop"),
@@ -1684,6 +1699,7 @@ def test_adapter_isolation_catches_every_breach(tmp_path: Path, importer: str, s
         ("runner/composition.py", "from blizzard.runner.harness.claude_code.section import X"),
         ("runner/harness/opencode/compatibility/x.py", "from blizzard.runner.harness.opencode import paths"),
         ("runner/harness/opencode/a.py", "from .compatibility import x"),
+        ("runner/harness/opencode_v2/a.py", "from blizzard.runner.harness.opencode.section import X"),
         ("runner/harness/opencode/a.py", "from blizzard.runner.harness.core import X"),
         ("runner/api/x.py", "from blizzard.runner.harness.core import X"),
         ("runner/api/x.py", "from blizzard.runner.harness.wiring import X"),
@@ -3072,7 +3088,7 @@ _RUNNER_PACKAGE_LAYERS: dict[str, frozenset[str]] = {
     "status": frozenset({"environments", "harness", "hub", "leases", "lifecycle", "throttle"}),
     "harness/claude_code": frozenset({"config_table", "harness", "node_steps", "process", "subscriptions"}),
     "harness/opencode": frozenset({"config_table", "harness", "node_steps", "process"}),
-    "harness/opencode_v2": frozenset({"harness", "node_steps", "process"}),
+    "harness/opencode_v2": frozenset({"harness", "harness/opencode", "node_steps", "process"}),
     "harness/wiring": frozenset({"config_table", "harness", "process", *_HARNESS_BINDING_NODES}),
     "stores": frozenset(
         {

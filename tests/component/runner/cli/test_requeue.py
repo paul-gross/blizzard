@@ -13,7 +13,8 @@ from pathlib import Path
 import pytest
 
 from blizzard.runner.cli import runner as runner_group
-from blizzard.runner.harness.identity import CLAUDE_CODE_HARNESS_ID, SessionReference
+from blizzard.runner.harness.claude_code.section import CLAUDE_CODE_HARNESS_ID
+from blizzard.runner.harness.identity import SessionReference
 from blizzard.runner.leases.model import NewLease
 from tests.support.runner_cli_home import init_runner_home, registered_store, serve_local_api
 from tests.support.runner_fakes import SqlAlchemyRunnerStore

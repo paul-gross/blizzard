@@ -7,8 +7,9 @@ from pathlib import Path
 
 import sqlalchemy as sa
 
+from blizzard.runner.harness.claude_code.section import CLAUDE_CODE_HARNESS_ID
 from blizzard.runner.harness.fingerprint import PreambleFingerprint
-from blizzard.runner.harness.identity import CLAUDE_CODE_HARNESS_ID, SessionReference
+from blizzard.runner.harness.identity import SessionReference
 from blizzard.runner.harness.usage import UsageSample
 from blizzard.runner.leases.model import NewLease
 from tests.support.runner_fakes import make_store, record_usage

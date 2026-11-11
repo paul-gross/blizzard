@@ -22,7 +22,8 @@ from blizzard.runner.environments.worktree import WorktreeGitError
 from blizzard.runner.events.broker import EventBroker
 from blizzard.runner.harness.adapter import HarnessSpawnError, PendingWorkerHandle, WorkerHandle, WorkerPreamble
 from blizzard.runner.harness.capability_snapshot import HarnessVersionCache
-from blizzard.runner.harness.identity import CLAUDE_CODE_HARNESS_ID, SessionReference
+from blizzard.runner.harness.claude_code.section import CLAUDE_CODE_HARNESS_ID
+from blizzard.runner.harness.identity import SessionReference
 from blizzard.runner.hub.chunk_status_cache import IChunkViews
 from blizzard.runner.hub.client import QueueEntry
 from blizzard.runner.hub.held_token import HubTokenHolder

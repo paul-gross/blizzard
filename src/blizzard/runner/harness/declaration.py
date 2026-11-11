@@ -26,6 +26,25 @@ from blizzard.runner.process.child_processes import IChildProcesses
 from blizzard.runner.process.probe import IProcessProbe
 
 
+@domain_model
+@dataclass(frozen=True)
+class RuntimeFile:
+    """One file a binding's ``scaffold_runtime`` writes under the host root: its ``path`` and what it ``holds``."""
+
+    path: str
+    holds: str
+
+
+@domain_model
+@dataclass(frozen=True)
+class RunnerPathKey:
+    """A key of a ``[[runner]]`` that names a file or directory: its path under the runner, such as
+    ``("harness", "config_dir")``, and the parsed field it fills, as ``<class>.<field>``."""
+
+    key: tuple[str, ...]
+    field: str
+
+
 class HarnessSection(Protocol):
     """One binding's parsed config section — the facts a consumer reads off it without
     knowing which binding it is."""
@@ -71,6 +90,16 @@ class IHarnessSectionKind(Protocol):
     @property
     def keys(self) -> tuple[ConfigKey, ...]:
         """Every key the section reads, relative to a ``[[runner]]`` — its own table's and any legacy root keys."""
+        ...
+
+    @property
+    def runtime_files(self) -> tuple[RuntimeFile, ...]:
+        """Every file the binding's ``scaffold_runtime`` writes under the host root, across its family."""
+        ...
+
+    @property
+    def path_keys(self) -> tuple[RunnerPathKey, ...]:
+        """The ``[[runner]]`` keys of the binding's section that name a file or directory."""
         ...
 
     def parse(self, document: ConfigView, *, root: Path, path: Path) -> HarnessSection:

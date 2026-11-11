@@ -3,6 +3,11 @@
 Run from <env>/blizzard with the `winter env <env>` shell exports and BLIZZARD_TMPDIR.
 The standing runner is never unpaused or reconfigured. Pass an explicitly disposable,
 ready chunk; the route is detached on exit and the runtime is removed.
+
+The runner gets a scratch XDG_DATA_HOME so the operator's own OpenCode store never decides its availability: one already
+migrated to OpenCode 2 withdraws the OpenCode 1 binding the probe claims through. While the lease
+is held a changed bundle is published from this process, moving `current`; every worker launch records the
+OPENCODE_CONFIG / OPENCODE_CONFIG_DIR it was given, and each must still name the snapshot the runner started with.
 """
 
 from __future__ import annotations
@@ -25,6 +30,8 @@ from pathlib import Path
 from typing import TypedDict, TypeVar
 from unittest.mock import patch
 
+from blizzard.runner.harness.internal.bundle_publisher import published_snapshot
+from blizzard.runner.harness.wiring import first_bindings, publish_harness_bundle
 from blizzard.runner.host_config import HostConfig
 
 
@@ -162,16 +169,19 @@ def _guarded_hub(hub_url: str, chunk_id: str) -> http.server.ThreadingHTTPServer
     return http.server.ThreadingHTTPServer(("127.0.0.1", 0), Guard)
 
 
-def _worker(path: Path) -> None:
+def _worker(path: Path, record: Path) -> None:
     path.write_text(
         "#!/usr/bin/env python3\n"
-        "import json, sys, time\n"
+        "import json, os, sys, time\n"
         "args = sys.argv[1:]\n"
         'if args == ["--version"]:\n'
         '    print("1.18.25")\n'
         "    raise SystemExit(0)\n"
         'if not args or args[0] != "run":\n'
         "    raise SystemExit(2)\n"
+        f"with open({str(record)!r}, 'a') as record:\n"
+        "    names = ('OPENCODE_CONFIG', 'OPENCODE_CONFIG_DIR')\n"
+        "    record.write(json.dumps({k: os.environ.get(k) for k in names}) + '\\n')\n"
         'session = args[args.index("--session") + 1] if "--session" in args else "ses_bundle_probe"\n'
         'print(json.dumps({"type": "step_start", "sessionID": session, "part": '
         '{"id": "prt_start", "sessionID": session, "messageID": "msg_probe", "type": "step-start"}}), flush=True)\n'
@@ -187,12 +197,27 @@ def _worker(path: Path) -> None:
     path.chmod(0o755)
 
 
+def _data_home() -> Path:
+    return Path(os.environ.get("XDG_DATA_HOME") or Path.home() / ".local" / "share")
+
+
+def _launches(scratch: Path) -> list[dict[str, str | None]]:
+    record = scratch / "worker-launches.jsonl"
+    return [json.loads(line) for line in record.read_text().splitlines()] if record.exists() else []
+
+
 def _runtime(root: Path, scratch: Path, env: dict[str, str], proxy_url: str) -> Path:
     bundle = scratch / "bundle" / "opencode"
     bundle.mkdir(parents=True)
     (bundle / "opencode.json").write_text('{"permission":{"bash":"deny"}}')
     worker = scratch / "mock-opencode-slow"
-    _worker(worker)
+    _worker(worker, scratch / "worker-launches.jsonl")
+    # OpenCode's store lives beside auth.json under XDG_DATA_HOME; HOME stays, since `winter` and `uv` read theirs.
+    data_home = scratch / "xdg-data"
+    data_home.mkdir()
+    # mise keeps its installed tools under XDG_DATA_HOME too; pin it where it already is so `winter` still finds them.
+    env.setdefault("MISE_DATA_DIR", os.environ.get("MISE_DATA_DIR") or str(_data_home() / "mise"))
+    env["XDG_DATA_HOME"] = str(data_home)
     env.update(BZ_RUNNER_DIR=str(root), BZ_RUNNER_TICK_SECONDS="0.75", BLIZZARD_MOCK_HARNESS_FENCE="1")
     env["BZ_HARNESS_BINARY"] = str(Path.cwd().parent / "blizzard-mock/.venv/bin/mock-claude-code")
     # The disposable runner joins the hub as a runner of its own: init adds it under its own token, never the
@@ -222,6 +247,10 @@ def _runtime(root: Path, scratch: Path, env: dict[str, str], proxy_url: str) -> 
     text = text.replace(
         '[runner.harness]\nautonomy = "dangerous"',
         f'[runner.harness]\nautonomy = "dangerous"\nconfig_dir = "{bundle.parent}"',
+    )
+    assert text.count("[runner.worker]\nenv_passthrough = []") == 1
+    text = text.replace(
+        "[runner.worker]\nenv_passthrough = []", '[runner.worker]\nenv_passthrough = ["XDG_DATA_HOME", "MISE_DATA_DIR"]'
     )
     direct_hub = f'hub_url = "{env["BZ_HUB_URL"]}"'
     assert text.count(direct_hub) == 1
@@ -268,7 +297,7 @@ def main() -> None:
             assert exc.code == 409
         else:
             raise AssertionError("probe guard allowed a foreign chunk claim")
-        _runtime(root, scratch, env, proxy_url)
+        bundle_dir = _runtime(root, scratch, env, proxy_url)
         with log.open("wb") as output:
             process = subprocess.Popen(
                 ["uv", "run", "blizzard", "runner", "host", "--dir", str(root), "--port", str(args.port)],
@@ -300,6 +329,7 @@ def main() -> None:
             check=True,
         ).stdout
         assert "opencode: source" in bundle_status and "snapshot:" in bundle_status
+        started_on = Path(next(line for line in bundle_status.splitlines() if line.startswith("snapshot:"))[9:].strip())
         for _ in range(120):
             matches = [
                 item for item in _request(runner + "/api/leases", Leases)["items"] if item["chunk_id"] == args.chunk_id
@@ -328,6 +358,21 @@ def main() -> None:
             time.sleep(0.1)
         else:
             raise RuntimeError("heartbeat did not persist across an active lease's tick")
+        launches = _launches(scratch)
+        assert launches, "the worker recorded no launch"
+        (bundle_dir / "opencode" / "opencode.json").write_text('{"permission":{"bash":"allow"}}')
+        moved = publish_harness_bundle(bundle_dir, root, selection=first_bindings())
+        assert moved.path.resolve() != started_on.resolve(), "publishing a changed bundle did not move current"
+        assert published_snapshot(root) == moved.path.resolve()
+        deadline = time.monotonic() + 20
+        while time.monotonic() < deadline and len(_launches(scratch)) == len(launches):
+            time.sleep(0.25)
+        launches = _launches(scratch)
+        expected = {
+            "OPENCODE_CONFIG": str(started_on / "opencode" / "opencode.json"),
+            "OPENCODE_CONFIG_DIR": str(started_on / "opencode"),
+        }
+        assert all(launch == expected for launch in launches), (expected, launches)
         status = subprocess.run(
             ["uv", "run", "blizzard", "runner", "status", "--runner-url", base],
             env=env,
@@ -348,6 +393,9 @@ def main() -> None:
                     "last_heartbeat_at": current["last_heartbeat_at"],
                     "tick_after_heartbeat": dashboard["runner"]["last_tick_at"],
                     "cli_confirmed_lease": True,
+                    "started_on_snapshot": str(started_on),
+                    "current_moved_to": str(moved.path),
+                    "worker_launches_checked": len(launches),
                 },
                 indent=2,
             )

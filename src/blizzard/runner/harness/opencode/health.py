@@ -23,11 +23,11 @@ from blizzard.runner.harness.opencode.compatibility.probe import (
     ADMITTED_OPENCODE_RANGE,
     ADMITTED_OPENCODE_RANGE_DISPLAY,
 )
+from blizzard.runner.harness.opencode.section import OPENCODE_HARNESS_ID
 from blizzard.runner.harness.opencode.version import normalize_opencode_version
 
 _log = get_logger("blizzard.runner.harness.opencode")
 
-_HARNESS_ID = "opencode"
 #: The ``kv`` key OpenCode 2 writes into a 1.x store it has migrated in place.
 MIGRATION_KV_KEY = "migration.v1-v2"
 
@@ -52,7 +52,7 @@ def _degradations_from_manifest(corpus: ICompatibilityCorpus, version: str) -> t
     """This ``version``'s own declared degradations, read from its committed corpus manifest —
     never a hardcoded Python literal describing only one version. A
     missing or malformed manifest reads as "no declared degradations"."""
-    manifest = corpus.manifest(_HARNESS_ID, version)
+    manifest = corpus.manifest(OPENCODE_HARNESS_ID, version)
     if manifest is None:
         return ()
     declared = manifest.get("declared_degradations")
@@ -96,7 +96,7 @@ class OpenCodeHealthProbe:
         # The admitted range owes at least one committed corpus manifest inside it —
         # checked here, not at import, so a misconfigured corpus only degrades this binding.
         try:
-            assert_admitted_range_has_corpus(corpus, _HARNESS_ID, ADMITTED_OPENCODE_RANGE)
+            assert_admitted_range_has_corpus(corpus, OPENCODE_HARNESS_ID, ADMITTED_OPENCODE_RANGE)
         except CorpusConfigurationError as exc:
             _log.warning("opencode admitted-range corpus is misconfigured", detail=str(exc))
 
@@ -146,7 +146,7 @@ class OpenCodeHealthProbe:
         hardcoded tuple describing only one of them, and never one version's list picked
         arbitrarily, since this seam reports independent of any one observed version."""
         seen: dict[CompatibilityProbe, DeclaredDegradation] = {}
-        for version in admitted_corpus_versions(self._corpus, _HARNESS_ID, ADMITTED_OPENCODE_RANGE):
+        for version in admitted_corpus_versions(self._corpus, OPENCODE_HARNESS_ID, ADMITTED_OPENCODE_RANGE):
             for degradation in _degradations_from_manifest(self._corpus, version):
                 seen.setdefault(degradation.probe, degradation)
         return tuple(seen.values())

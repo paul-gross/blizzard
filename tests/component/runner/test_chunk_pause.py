@@ -29,7 +29,8 @@ from blizzard.foundation.fact_kinds import (
 from blizzard.foundation.node_steps import ApplyOutcome, SessionMode
 from blizzard.foundation.store.engine import create_engine_from_url
 from blizzard.runner.harness.adapter import WorkerHandle
-from blizzard.runner.harness.identity import CLAUDE_CODE_HARNESS_ID, SessionReference
+from blizzard.runner.harness.claude_code.section import CLAUDE_CODE_HARNESS_ID
+from blizzard.runner.harness.identity import SessionReference
 from blizzard.runner.harness.usage import UsageKind, UsageSample
 from blizzard.runner.hub.client import HubQuestion
 from blizzard.runner.leases.activity import HEARTBEAT_STALENESS_THRESHOLD

@@ -11,11 +11,9 @@ from blizzard.foundation.logging import get_logger
 from blizzard.foundation.roles import domain_model
 from blizzard.runner.harness.admission import version_admitted
 from blizzard.runner.harness.autonomy import Autonomy
-from blizzard.runner.harness.bundle import HarnessLayout, HarnessSource
+from blizzard.runner.harness.bundle import BundleSnapshot, HarnessLayout, HarnessSource
 from blizzard.runner.harness.declaration import SharedHarnessInputs
 from blizzard.runner.harness.harness_telemetry_plan import HarnessTelemetryNames, HarnessTelemetryPlan
-from blizzard.runner.harness.identity import OPENCODE_HARNESS_ID
-from blizzard.runner.harness.internal.bundle_publisher import published_snapshot
 from blizzard.runner.harness.internal.version_probe import VersionProbe
 from blizzard.runner.harness.offline_compatibility import ICompatibilityCorpus
 from blizzard.runner.harness.opencode.adapter import OpenCodeAdapter
@@ -31,7 +29,7 @@ from blizzard.runner.harness.opencode.plugin import (
     plugin_reference,
     write_plugin,
 )
-from blizzard.runner.harness.opencode.section import OpenCodeSection
+from blizzard.runner.harness.opencode.section import OPENCODE_HARNESS_ID, OpenCodeSection
 from blizzard.runner.harness.opencode.transcript.export import SubprocessOpenCodeExporter
 from blizzard.runner.harness.opencode.transcript.normalizer import NORMALIZER_VERSION
 from blizzard.runner.harness.opencode.transcript.transcript_source import OpenCodeTranscriptSource
@@ -44,6 +42,14 @@ from blizzard.runner.harness.registry import HarnessAssembly, HarnessBinding
 from blizzard.runner.harness.transcript import TranscriptErrorFactory
 from blizzard.runner.process.child_processes import IChildProcesses
 from blizzard.runner.process.probe import IProcessProbe
+
+
+def _bundled_source(bundle: BundleSnapshot | None) -> HarnessSource | None:
+    """The injected snapshot's ``opencode`` directory, or ``None`` when the bundle supplies none. ``compose`` writes
+    ``opencode.json`` into every published ``opencode/`` directory, whatever entry points the operator supplied."""
+    if bundle is None:
+        return None
+    return next((source for source in bundle.harnesses if source.dirname == OPENCODE_BUNDLE_LAYOUT.dirname), None)
 
 
 @domain_model
@@ -102,8 +108,7 @@ class OpenCodeDeclaration:
         )
         cache_path = resolve_price_cache_path(worker_env.variables)
         price_catalog = FileOpenCodePriceCatalog(cache_path) if cache_path is not None else None
-        snapshot = published_snapshot(shared.root) if shared.config_dir is not None else None
-        bundled = snapshot is not None and (snapshot / "opencode" / "opencode.json").is_file()
+        source = _bundled_source(shared.bundle)
         adapter = OpenCodeAdapter(
             binary=section.binary,
             worker_env=worker_env,
@@ -111,11 +116,9 @@ class OpenCodeDeclaration:
             effort_aliases=section.effort_aliases,
             supported_models=section.supported_models,
             worker_config_path=(
-                str(snapshot / "opencode" / "opencode.json")
-                if bundled and snapshot is not None
-                else section.worker_config_path
+                str(source.effective_dir / "opencode.json") if source is not None else section.worker_config_path
             ),
-            effective_config_dir=str(snapshot / "opencode") if bundled and snapshot is not None else None,
+            effective_config_dir=str(source.effective_dir) if source is not None else None,
             autonomy=shared.autonomy,
             transcript_source=transcript_source,
             price_catalog=price_catalog,

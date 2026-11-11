@@ -20,7 +20,8 @@ from blizzard.runner.composition import build_runner_process
 from blizzard.runner.config import DEFAULT_WORKSPACE_ID, RunnerConfig
 from blizzard.runner.environments.internal.winter_provider import WinterWorkspaceProvider
 from blizzard.runner.environments.workspaces import WorkspaceEntry, WorkspaceRegistry
-from blizzard.runner.harness.identity import CLAUDE_CODE_HARNESS_ID, SessionReference
+from blizzard.runner.harness.claude_code.section import CLAUDE_CODE_HARNESS_ID
+from blizzard.runner.harness.identity import SessionReference
 from blizzard.runner.hub.identity import RunnerIdentity
 from blizzard.runner.leases.model import NewLease
 from blizzard.runner.lifecycle.judgement.git_commit_declaration import (

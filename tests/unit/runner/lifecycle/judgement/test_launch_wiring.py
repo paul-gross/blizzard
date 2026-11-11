@@ -15,7 +15,8 @@ import pytest
 
 from blizzard.foundation.clock import FixedClock
 from blizzard.runner.harness.adapter import WorkerHandle
-from blizzard.runner.harness.identity import CLAUDE_CODE_HARNESS_ID, SessionReference
+from blizzard.runner.harness.claude_code.section import CLAUDE_CODE_HARNESS_ID
+from blizzard.runner.harness.identity import SessionReference
 from blizzard.runner.leases.model import Lease, NewLease
 from blizzard.runner.lifecycle.judgement.judgement import Judgement, KnownElicitation
 from blizzard.runner.loop.context import LoopContext

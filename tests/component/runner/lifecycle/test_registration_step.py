@@ -15,7 +15,8 @@ from blizzard.foundation.clock import FixedClock, SystemClock
 from blizzard.foundation.gate_enforceability import UnenforceableGateReason
 from blizzard.foundation.runner_identity_state import IdentityState
 from blizzard.runner.harness.adapter import WorkerHandle
-from blizzard.runner.harness.identity import CLAUDE_CODE_HARNESS_ID, SessionReference
+from blizzard.runner.harness.claude_code.section import CLAUDE_CODE_HARNESS_ID
+from blizzard.runner.harness.identity import SessionReference
 from blizzard.runner.harness.registry import HarnessRegistry
 from blizzard.runner.hub.client import BindingDeclaration, RegistrationReply, UnenforceableGate
 from blizzard.runner.hub.identity import RunnerIdentityHolder

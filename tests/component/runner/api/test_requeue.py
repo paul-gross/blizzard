@@ -11,7 +11,8 @@ from pathlib import Path
 
 from blizzard.foundation.clock import FixedClock
 from blizzard.runner.config import RunnerConfig
-from blizzard.runner.harness.identity import CLAUDE_CODE_HARNESS_ID, SessionReference
+from blizzard.runner.harness.claude_code.section import CLAUDE_CODE_HARNESS_ID
+from blizzard.runner.harness.identity import SessionReference
 from blizzard.runner.leases.model import NewLease
 from blizzard.runner.operator.requeue import RequeueService
 from tests.support.config_inputs import create_runner_app

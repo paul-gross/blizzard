@@ -102,9 +102,14 @@ def test_registry_binds_published_config_and_generated_config_without_bundle(
     probe = FakeProbe()
     launcher = ProcessLauncher(probe, executor=spawn_executor, children=CHILDREN)
     bundled = replace(config, harness_config_dir=bundle)
+    native.write_text(json.dumps({"permission": {"bash": "allow"}, "plugin": ["moved@1"]}))
+    moved = publish_harness_bundle(bundle, config.root, sections=config.harness_sections, selection=first_bindings())
+    assert moved.path != snapshot.path
+    assert published_snapshot(config.root) == moved.path.resolve()
+    native.write_text(json.dumps({"permission": {"bash": "deny"}, "plugin": ["extra@1"]}))
     binding = OPENCODE_DECLARATION.assemble(
         opencode(bundled),
-        shared_inputs(bundled.harness_settings(NO_TRACING)),
+        shared_inputs(bundled.harness_settings(NO_TRACING), bundle=snapshot),
         process=probe,
         launcher=launcher,
         children=CHILDREN,
@@ -120,7 +125,7 @@ def test_registry_binds_published_config_and_generated_config_without_bundle(
     composed = json.loads(env["OPENCODE_CONFIG_CONTENT"])
     assert composed["permission"] == {"bash": "deny", "question": "deny"}
     assert composed["plugin"] == ["extra@1", *json.loads(worker.read_text())["plugin"]]
-    assert published_snapshot(config.root) == snapshot.path.resolve()
+    assert published_snapshot(config.root) == moved.path.resolve()
     plain = OPENCODE_DECLARATION.assemble(
         opencode(config),
         shared_inputs(config.harness_settings(NO_TRACING)),
@@ -423,3 +428,29 @@ def test_runner_publication_composes_under_the_configured_root_autonomy_and_perm
         publish_runner_bundle(
             with_claude_code(config, permission_mode="bypassPermissions"), _COLLABORATORS, first_bindings()
         )
+
+
+def test_a_plugins_only_bundle_still_yields_the_snapshot_config_dir(tmp_path: Path, spawn_executor: Executor) -> None:
+    config = init_host(tmp_path / "runtime").runner_config()
+    bundle = tmp_path / "bundle"
+    plugin = bundle / "opencode" / "plugins" / "Tool.ts"
+    plugin.parent.mkdir(parents=True)
+    plugin.write_text("export default () => ({})")
+    snapshot = publish_harness_bundle(bundle, config.root, sections=config.harness_sections, selection=first_bindings())
+    probe = FakeProbe()
+    bundled = replace(config, harness_config_dir=bundle)
+    binding = OPENCODE_DECLARATION.assemble(
+        opencode(bundled),
+        shared_inputs(bundled.harness_settings(NO_TRACING), bundle=snapshot),
+        process=probe,
+        launcher=ProcessLauncher(probe, executor=spawn_executor, children=CHILDREN),
+        children=CHILDREN,
+        clock=SystemClock(),
+        monotonic_clock=SystemMonotonicClock(),
+        health_roots=("",),
+        corpus=CommittedCorpus(),
+    ).binding
+    assert isinstance(binding.adapter, OpenCodeAdapter)
+    env = binding.adapter.config_env()
+    assert env["OPENCODE_CONFIG_DIR"] == str(snapshot.path / "opencode")
+    assert env["OPENCODE_CONFIG"] == str(snapshot.path / "opencode" / "opencode.json")

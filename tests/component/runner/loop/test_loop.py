@@ -16,7 +16,8 @@ from blizzard.foundation.clock import FixedClock
 from blizzard.foundation.fact_kinds import ESCALATION_RECORDED
 from blizzard.foundation.node_steps import ApplyOutcome, SessionMode
 from blizzard.runner.harness.adapter import WorkerHandle
-from blizzard.runner.harness.identity import CLAUDE_CODE_HARNESS_ID, SessionReference
+from blizzard.runner.harness.claude_code.section import CLAUDE_CODE_HARNESS_ID
+from blizzard.runner.harness.identity import SessionReference
 from blizzard.runner.harness.preamble import (
     RESUME_BLIZZARD_UNCHANGED,
     RESUME_STANDING_UNCHANGED,

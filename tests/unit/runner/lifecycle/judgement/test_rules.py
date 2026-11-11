@@ -11,7 +11,8 @@ from datetime import UTC, datetime, timedelta
 
 import pytest
 
-from blizzard.runner.harness.identity import CLAUDE_CODE_HARNESS_ID, SessionReference
+from blizzard.runner.harness.claude_code.section import CLAUDE_CODE_HARNESS_ID
+from blizzard.runner.harness.identity import SessionReference
 from blizzard.runner.leases.asks import OpenAsk
 from blizzard.runner.leases.elicitation import ELICITATION_STALENESS_THRESHOLD, PendingElicitation
 from blizzard.runner.leases.model import Lease

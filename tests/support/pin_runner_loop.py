@@ -11,7 +11,8 @@ from datetime import UTC, datetime
 from pathlib import Path
 
 from blizzard.runner.harness.adapter import WorkerHandle
-from blizzard.runner.harness.identity import CLAUDE_CODE_HARNESS_ID, SessionReference
+from blizzard.runner.harness.claude_code.section import CLAUDE_CODE_HARNESS_ID
+from blizzard.runner.harness.identity import SessionReference
 from blizzard.runner.leases.model import NewLease
 from tests.support.runner_fakes import (
     SqlAlchemyRunnerStore,

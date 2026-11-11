@@ -16,7 +16,7 @@ from blizzard.foundation.clock import FixedClock
 from blizzard.runner.environments.provider import AcquiredEnvironment, WorkspaceAcquisitionError
 from blizzard.runner.environments.workspaces import IWorkspaces, WorkspaceEntry, WorkspaceRegistry
 from blizzard.runner.harness.adapter import WorkerHandle
-from blizzard.runner.harness.identity import CLAUDE_CODE_HARNESS_ID
+from blizzard.runner.harness.claude_code.section import CLAUDE_CODE_HARNESS_ID
 from blizzard.runner.harness.registry import HarnessBinding, HarnessRegistry
 from blizzard.runner.hub.client import BindingDeclaration, ClaimRequest, QueueEntry, RouteClaimOutcome
 from blizzard.runner.hub.served_projects import ServedProject

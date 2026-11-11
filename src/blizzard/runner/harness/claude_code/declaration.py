@@ -12,6 +12,7 @@ from blizzard.foundation.roles import domain_model
 from blizzard.runner.harness.autonomy import Autonomy
 from blizzard.runner.harness.bundle import HarnessLayout, HarnessSource
 from blizzard.runner.harness.claude_code.adapter import ClaudeCodeAdapter
+from blizzard.runner.harness.claude_code.ambient import user_config_dir
 from blizzard.runner.harness.claude_code.ambient_conflicts import (
     claude_code_ambient_sources,
     claude_code_config_conflicts,
@@ -24,13 +25,16 @@ from blizzard.runner.harness.claude_code.bundle import (
 )
 from blizzard.runner.harness.claude_code.health import ClaudeCodeHealthProbe
 from blizzard.runner.harness.claude_code.normalizer import NORMALIZER_VERSION
-from blizzard.runner.harness.claude_code.section import WORKER_SETTINGS_FILENAME, ClaudeCodeSection
+from blizzard.runner.harness.claude_code.section import (
+    CLAUDE_CODE_HARNESS_ID,
+    WORKER_SETTINGS_FILENAME,
+    ClaudeCodeSection,
+)
 from blizzard.runner.harness.claude_code.telemetry_plan import CLAUDE_CODE_TELEMETRY_NAMES, plan_harness_telemetry
 from blizzard.runner.harness.claude_code.transcript import ClaudeCodeTranscriptSource
 from blizzard.runner.harness.claude_code.worker_settings import WorkerSettings
 from blizzard.runner.harness.declaration import SharedHarnessInputs
 from blizzard.runner.harness.harness_telemetry_plan import HarnessTelemetryNames, HarnessTelemetryPlan
-from blizzard.runner.harness.identity import CLAUDE_CODE_HARNESS_ID
 from blizzard.runner.harness.internal.version_probe import VersionProbe
 from blizzard.runner.harness.offline_compatibility import ICompatibilityCorpus
 from blizzard.runner.harness.process_launch import IProcessLauncher
@@ -38,6 +42,13 @@ from blizzard.runner.harness.registry import HarnessAssembly, HarnessBinding
 from blizzard.runner.harness.transcript import TranscriptErrorFactory
 from blizzard.runner.process.child_processes import IChildProcesses
 from blizzard.runner.process.probe import IProcessProbe
+
+
+def _default_projects_root(shared: SharedHarnessInputs) -> Path:
+    """Where the worker's Claude Code writes sessions: under the config home the ambient check reads, and under the
+    daemon's own home only when the worker env resolves none."""
+    config_home = user_config_dir(shared.worker_env.variables)
+    return (config_home if config_home is not None else Path.home() / ".claude") / "projects"
 
 
 @domain_model
@@ -85,7 +96,7 @@ class ClaudeCodeDeclaration:
     ) -> HarnessAssembly:
         # Claude Code admits by its own version range, not a committed corpus — `corpus` goes unread.
         del clock, monotonic_clock, corpus
-        projects_root = shared.transcripts_root or str(Path.home() / ".claude" / "projects")
+        projects_root = shared.transcripts_root or str(_default_projects_root(shared))
         transcript_source = ClaudeCodeTranscriptSource(
             projects_root, TranscriptErrorFactory(get_logger("blizzard.runner.harness.transcript"))
         )

@@ -16,7 +16,6 @@ ignores:
   # The bindings' own modules.
   - src/blizzard/runner/harness/claude_code/**
   - src/blizzard/runner/harness/opencode/**
-  - src/blizzard/runner/harness/identity.py
   - src/blizzard/runner/environments/internal/**
   # Migrations record historical data shapes.
   - src/blizzard/**/migrations/**

@@ -221,9 +221,10 @@ from blizzard.hub.tenancy import TenantId
 from blizzard.runner.auth.tokens import IReadTokenRepository
 from blizzard.runner.composition import build_host_stores, build_stores
 from blizzard.runner.environments.repository import IReadEnvironmentRepository
+from blizzard.runner.harness.claude_code.section import CLAUDE_CODE_HARNESS_ID
 from blizzard.runner.harness.fingerprint import PreambleFingerprint
 from blizzard.runner.harness.health_cache import IReadHarnessHealth
-from blizzard.runner.harness.identity import CLAUDE_CODE_HARNESS_ID, SessionReference
+from blizzard.runner.harness.identity import SessionReference
 from blizzard.runner.harness.selftest_result import IReadSelfTestResultRepository
 from blizzard.runner.harness.usage import UsageSample
 from blizzard.runner.harness.workspace_prompts import IReadWorkspacePromptRepository

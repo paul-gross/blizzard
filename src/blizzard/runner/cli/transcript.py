@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import os
 from collections.abc import Generator
 from contextlib import contextmanager
 from http import HTTPStatus
@@ -12,11 +13,16 @@ from blizzard.cli.collaborators import CliCollaborators
 from blizzard.cli.get_group import GetGroup
 from blizzard.cli.transcript_render import SegmentContentLines, SegmentIndexLines
 from blizzard.foundation.clock import IClock
+from blizzard.foundation.trace_export.settings import TracingSettings
+from blizzard.runner.cli.children import command_children
 from blizzard.runner.cli.daemon import Door, RunnerDaemon, runner_option
 from blizzard.runner.cli.directory import load_runner
 from blizzard.runner.cli.env import DEFAULT_DIR, ENV_RUNNER_DIR
 from blizzard.runner.cli.store_guard import configured_ids, store_write_guard
 from blizzard.runner.config import RunnerConfig
+from blizzard.runner.config_table import ConfigError
+from blizzard.runner.harness.bundle import BundleSnapshot
+from blizzard.runner.harness.wiring import load_published_harness_bundle, select_harness_bindings
 from blizzard.runner.loop_wiring import LoopWiring
 from blizzard.runner.transcripts.backfill import TranscriptReshipError
 
@@ -132,6 +138,22 @@ def _transcript_config(
         yield config
 
 
+def _loop_wiring(ctx: click.Context, config: RunnerConfig) -> LoopWiring:
+    """The wiring for a verb that composes the bindings without serving: a configured bundle is the snapshot already
+    published (never published from here, which would move ``current`` under a live daemon), refused when none is."""
+    bundle: BundleSnapshot | None = None
+    if config.harness_config_dir is not None:
+        tracing = TracingSettings.of(os.environ)
+        selection = select_harness_bindings(
+            config.harness_sections, worker_env=config.worker_env(tracing), children=command_children(ctx)
+        )
+        try:
+            bundle = load_published_harness_bundle(config.harness_config_dir, config.root, selection=selection)
+        except ConfigError as exc:
+            raise click.ClickException(str(exc)) from exc
+    return LoopWiring.of(config, bundle=bundle)
+
+
 @transcript_group.command("reship")
 @click.argument("segment_id")
 @click.option(
@@ -158,7 +180,7 @@ def transcript_reship(ctx: click.Context, segment_id: str, directory: str, runne
         clock=CliCollaborators.of(ctx).wall_clock,
     ) as config:
         try:
-            report = LoopWiring.of(config).reship_transcript(segment_id)
+            report = _loop_wiring(ctx, config).reship_transcript(segment_id)
         except TranscriptReshipError as exc:
             raise click.ClickException(str(exc)) from exc
     click.echo(
@@ -216,7 +238,7 @@ def transcript_backfill(
         door=Door.of(ctx),
         clock=CliCollaborators.of(ctx).wall_clock,
     ) as config:
-        report = LoopWiring.of(config).backfill_transcripts(dry_run=dry_run, limit=limit)
+        report = _loop_wiring(ctx, config).backfill_transcripts(dry_run=dry_run, limit=limit)
     prefix = "would import" if dry_run else "imported"
     click.echo(f"{prefix} {report.imported}, already present {report.already_present}, gone {report.gone}")
     if report.deferred:

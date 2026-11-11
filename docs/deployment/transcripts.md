@@ -83,11 +83,13 @@ imports as one merged segment on the lease it began, not split at resume seams.
 
 Run backfill as the runner's own user, with the runner's environment, daemon stopped — all three load-bearing, only the
 last enforced: it writes the single-writer store, refusing while anything holds the socket and failing closed (a wedged
-daemon counts); with no `transcripts_root`, Claude Code sessions read from `$HOME/.claude/projects`, so another user
-reads every session as gone — OpenCode sessions are unaffected, since neither OpenCode source reads `transcripts_root`:
-OpenCode 1 shells `opencode export <session-id>` directly, and OpenCode 2 reads through the service this user
-registered, reading a session no blizzard runner minted, or one the service no longer holds, as gone; and the hub token
-comes from the process environment, without which every flush is refused.
+daemon counts); with no `transcripts_root`, Claude Code sessions read from the worker's Claude config home — a
+passed-through `CLAUDE_CONFIG_DIR`, otherwise `HOME/.claude` — under `projects`, so another user reads every session as
+gone — OpenCode sessions are unaffected, since neither OpenCode source reads `transcripts_root`: OpenCode 1 shells
+`opencode export <session-id>` directly, and OpenCode 2 reads through the service this user registered, reading a
+session no blizzard runner minted, or one the service no longer holds, as gone; a runner with a `[harness] config_dir`
+whose bundle was never published is refused (start the runner once to publish it); and the hub token comes from the
+process environment, without which every flush is refused.
 
 `backfill --limit N` bounds one run — on a long history, content past the hub's per-runner daily rate is rejected rather
 than queued; the verb refuses outright while `ship = false`. `backfill --dry-run` classifies without opening or shipping

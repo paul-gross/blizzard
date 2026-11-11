@@ -10,17 +10,16 @@ from pathlib import Path
 import pytest
 
 from blizzard.runner.config import RunnerConfig
-from blizzard.runner.harness.claude_code.section import ClaudeCodeSection
-from blizzard.runner.harness.opencode.section import OpenCodeSection
-from blizzard.runner.host_config import RUNNER_PATH_KEYS, RunnerPathKey
+from blizzard.runner.harness.declaration import RunnerPathKey
+from blizzard.runner.harness.wiring import HARNESS_SECTION_KINDS
+from blizzard.runner.host_config import RUNNER_PATH_KEYS
 from tests.support.config_inputs import load_host_config
 from tests.support.host_files import write_minimal_host
 
 #: The classes a ``[[runner]]`` is parsed onto, by the name a path key's field is declared under.
 _OWNERS: dict[str, type] = {
     "RunnerConfig": RunnerConfig,
-    "ClaudeCodeSection": ClaudeCodeSection,
-    "OpenCodeSection": OpenCodeSection,
+    **{type(kind.default()).__name__: type(kind.default()) for kind in HARNESS_SECTION_KINDS},
 }
 
 #: Host-owned paths, not ``[[runner]]`` keys: the host directory, store and worker scratch root.
@@ -56,7 +55,9 @@ def test_each_path_key_reaches_the_field_it_declares(tmp_path: Path, path_key: R
     owner, field = path_key.field.split(".")
     parsed: object = {
         "RunnerConfig": entry.own,
-        "ClaudeCodeSection": entry.own.harness_sections.of("claude_code"),
-        "OpenCodeSection": entry.own.harness_sections.of("opencode"),
+        **{
+            type(kind.default()).__name__: entry.own.harness_sections.of(kind.harness_id)
+            for kind in HARNESS_SECTION_KINDS
+        },
     }[owner]
     assert str(getattr(parsed, field)) == marker

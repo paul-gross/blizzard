@@ -21,7 +21,8 @@ from click.testing import CliRunner
 from blizzard.runner.cli import runner as runner_group
 from blizzard.runner.cli.children import RunnerCliCollaborators
 from blizzard.runner.cli.daemon import RunnerDaemon
-from blizzard.runner.harness.identity import CLAUDE_CODE_HARNESS_ID, SessionReference
+from blizzard.runner.harness.claude_code.section import CLAUDE_CODE_HARNESS_ID
+from blizzard.runner.harness.identity import SessionReference
 from blizzard.runner.host_layout import HostLayout
 from blizzard.runner.leases.model import NewLease
 from blizzard.runner.lifecycle.takeover import TakeoverCommand

@@ -23,7 +23,8 @@ from blizzard.foundation.store.utc import iso_utc
 from blizzard.runner.environments.repository import EnvBinding
 from blizzard.runner.harness.adapter import HarnessSpawnError, HarnessVersionChangedError, WorkerHandle
 from blizzard.runner.harness.capability_snapshot import HarnessVersionCache
-from blizzard.runner.harness.identity import CLAUDE_CODE_HARNESS_ID, SessionReference
+from blizzard.runner.harness.claude_code.section import CLAUDE_CODE_HARNESS_ID
+from blizzard.runner.harness.identity import SessionReference
 from blizzard.runner.leases.elicitation import PendingElicitation
 from blizzard.runner.leases.model import Lease, NewLease
 from blizzard.runner.lifecycle import dormant
