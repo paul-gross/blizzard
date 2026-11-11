@@ -39,10 +39,10 @@ from blizzard.runner.hub.host_identity import HostIdentity
 from blizzard.runner.hub.identity import RunnerIdentity
 from blizzard.runner.hub.internal.token_file import HubTokenFile
 from blizzard.runner.hub.token_file import ENV_FILENAME
-from blizzard.runner.ingest import RunnerIngest
 from blizzard.runner.runtime import migration_runner
 from blizzard.runner.store.errors import RunnerStoreErrorFactory
 from blizzard.runner.store.schema import OUTBOX_LANE_OUTBOUND
+from blizzard.runner.transfer.ingest import RunnerIngest
 from tests.support.baseline_floor_trees import make_tree
 from tests.support.config_inputs import STRICT, init_host, load_host_config
 from tests.support.runner_ingest import (

@@ -29,7 +29,7 @@ _INSTRUMENTED_MODULES = (
     "blizzard.runner.lifecycle.judgement.git_commit_declaration",
     "blizzard.runner.tracing.sweep",
     "blizzard.runner.lifecycle.host_lane_drain",
-    "blizzard.runner.ingest",
+    "blizzard.runner.transfer.ingest",
     "blizzard.runner.throttle.release",
     "blizzard.hub.delivery.flow_driver",
     "blizzard.hub.delivery.flow_turn",

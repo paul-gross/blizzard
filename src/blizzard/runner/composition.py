@@ -113,7 +113,6 @@ from blizzard.runner.hub.identity_service import RetiredRunnerWatch, RunnerIdent
 from blizzard.runner.hub.internal.http_hub import HeldTokenAuth, HttpHostHubClient, HttpHubClient
 from blizzard.runner.hub.internal.token_file import HubTokenFile
 from blizzard.runner.hub.served_projects import ServedProjectsAnswer
-from blizzard.runner.ingest import IIngestStores, ITokenFiles, RunnerIngest
 from blizzard.runner.lifecycle.host_lane_drain import HostLaneDrain
 from blizzard.runner.listeners import Listeners
 from blizzard.runner.loop.host_tick import HostTick
@@ -209,6 +208,7 @@ from blizzard.runner.transfer.hosts import (
     RunnerDeclaration,
     SourceHost,
 )
+from blizzard.runner.transfer.ingest import IIngestStores, ITokenFiles, RunnerIngest
 from blizzard.runner.transfer.refusals import SourceUnsupported
 from blizzard.runner.transfer.rows import HostIngest, IRunnerRowRemoval, IRunnerTransfer
 from blizzard.runner.transfer.runner_stores import HeldBinding, IRunnerBoundStores, RunnerStoreView

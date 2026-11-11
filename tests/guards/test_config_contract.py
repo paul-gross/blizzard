@@ -111,13 +111,13 @@ def test_a_fixed_variable_has_no_name_rule_and_the_hub_declares_no_env() -> None
 _ENV_WRITER_MODULES: dict[str, set[str]] = {
     "runner/cli/runners.py": {"add"},
     "runner/cli/runtime.py": {"init", "host"},
-    "runner/ingest.py": {"ingest"},
+    "runner/transfer/ingest.py": {"ingest"},
     "runner/hub/bootstrap.py": {"init"},
     "runner/hub/host_bootstrap.py": {"host"},
 }
 _ENV_WRITE_MARKERS = ("write_runner_token(", ".write(issued.token)", "tokens.write(", "HubTokenFile.of(")
 _RUNNER_DIR_MARKERS = ("RUNNERS_DIRNAME / ", "runners_dir / ")
-_RUNNER_DIR_MODULES = {"runner/cli/runners.py": {"add"}, "runner/ingest.py": {"ingest"}}
+_RUNNER_DIR_MODULES = {"runner/cli/runners.py": {"add"}, "runner/transfer/ingest.py": {"ingest"}}
 
 
 def _modules_containing(markers: tuple[str, ...]) -> set[str]:
