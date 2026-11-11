@@ -84,6 +84,7 @@
       @for (row of detail().rows; track row.runner_id) {
         <app-fleet-runner-row
           [row]="row"
+          [showNext]="true"
           [hosted]="true"
           [canPause]="canPause()"
           [pausePending]="isPausePending(row)"

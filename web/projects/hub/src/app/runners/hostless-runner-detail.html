@@ -42,6 +42,7 @@
   <div role="list">
     <app-fleet-runner-row
       [row]="detail().row"
+      [showNext]="true"
       [canPause]="canPause()"
       [pausePending]="pausePending()"
       (togglePause)="togglePause.emit($event)"

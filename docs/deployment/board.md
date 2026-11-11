@@ -52,6 +52,23 @@ lives there too: `?step=` names it by its session, and `?at=` by the instant it 
 ran. Selecting a different chunk clears both. Switching project lenses keeps the selected layout but clears the open
 chunk and step.
 
+## Urgency on the board
+
+Cards, list rows and phone rows show a colored urgency pill on unfinished work when its urgency is not the tenant's
+default. The pill shows its emoji, icon, or name. Finished work and work at the default have no pill in the lanes. The
+chunk detail header names the urgency even at the default; with `chunk:control`, its control and the card's actions can
+change an unfinished chunk to another live urgency. The board still displays ready work in rank order, not claim order.
+
+The tenant's urgency set and default are managed under **Admin → Urgencies**. The new hub item, garden proposal accept,
+routine run, routine and cadence chore forms also offer urgency choices. Their defaults and how urgency affects a
+runner's next claim are described in [urgencies.md](./urgencies.md#on-the-board).
+
+On the Fleet tab, each runner row in a host's detail, including a hostless runner's detail, has a **Next** line. It
+links the chunk the hub expects that runner to reach for, with its project and urgency, or says `Nothing claimable`.
+Expand **Passed** to see the chunks it steps past and why, and what a per-project hold would reach or stop at. This is a
+snapshot, not a promise; its refresh and the walk behind it are explained in
+[urgencies.md](./urgencies.md#a-runners-next-claim).
+
 ## Work item titles
 
 A card names each work item as its work-ref label over its title. A chunk carrying up to three items lists every pair;

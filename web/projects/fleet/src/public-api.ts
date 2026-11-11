@@ -47,6 +47,7 @@ export {
   hubQueueKey,
   hubBacklogKey,
   hubRunnersKey,
+  hubRunnerNextClaimKey,
   hubHostsKey,
   hubFlowsKey,
   hubQuestionsKey,

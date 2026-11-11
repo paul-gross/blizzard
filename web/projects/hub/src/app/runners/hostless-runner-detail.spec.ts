@@ -1,3 +1,10 @@
+import { Component, input } from '@angular/core';
+import { FleetRunnerRow } from './fleet-runner-row';
+import { RunnerNextClaim } from './runner-next-claim';
+
+@Component({ selector: 'app-runner-next-claim', template: '' })
+class StubRunnerNextClaim { readonly runnerId = input.required<string>(); }
+
 import { RunnerConnection, type RunnerRegistryView } from 'fleet';
 import { provideZonelessChangeDetection } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
@@ -80,7 +87,7 @@ describe('HostlessRunnerDetail', () => {
     await TestBed.configureTestingModule({
       imports: [HostlessRunnerDetail],
       providers: [provideZonelessChangeDetection(), provideRouter([])],
-    }).compileComponents();
+    }).overrideComponent(FleetRunnerRow, { remove: { imports: [RunnerNextClaim] }, add: { imports: [StubRunnerNextClaim] } }).compileComponents();
   });
 
   async function render(r: RunnerRow) {

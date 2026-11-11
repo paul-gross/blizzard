@@ -20,6 +20,8 @@ export const hubQueueKey = ['hub', 'queue'] as const;
  * key rather than sharing {@link hubQueueKey}. */
 export const hubBacklogKey = ['hub', 'backlog'] as const;
 export const hubRunnersKey = ['hub', 'runners'] as const;
+/** Per-runner next-claim projections, invalidated by queue, chunk and runner changes. */
+export const hubRunnerNextClaimKey = ['hub', 'runner-next-claim'] as const;
 /** The host registry read (`GET /api/hosts`) — the hosts the runners view groups its runners under. */
 export const hubHostsKey = ['hub', 'hosts'] as const;
 /** The tenant's flows read (`GET /api/flows`) and every flow's record read nested under it. Tenant-wide, never

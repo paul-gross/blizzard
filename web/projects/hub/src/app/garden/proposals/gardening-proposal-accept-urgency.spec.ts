@@ -15,6 +15,8 @@ describe('proposal accept urgency', () => {
     ]);
     await fixture.whenStable();
     const root = fixture.nativeElement as HTMLElement;
+    expect(root.querySelector('[data-testid="proposal-accept-body-input"]')?.getAttribute('aria-label')).toBe('Work item body');
+    expect(root.querySelector('[data-testid="proposal-accept-reason-input"]')?.getAttribute('aria-label')).toBe('Reason (optional)');
     const values: AcceptSubmission[] = [];
     fixture.componentInstance.submitted.subscribe((value) => values.push(value));
     const trigger = root.querySelector<HTMLElement>('[data-testid="proposal-accept-urgency"]')!;
@@ -31,6 +33,7 @@ describe('proposal accept urgency', () => {
     await fixture.whenStable();
     expect(root.querySelector('[data-testid="proposal-accept-urgency"]')).toBeNull();
     const reason = root.querySelector<HTMLTextAreaElement>('[data-testid="proposal-accept-decline-reason-input"]')!;
+    expect(reason.getAttribute('aria-label')).toBe('Reason — required');
     reason.value = 'Already tracked';
     reason.dispatchEvent(new Event('input'));
     await fixture.whenStable();

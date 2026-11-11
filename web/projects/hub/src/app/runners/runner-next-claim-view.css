@@ -1,0 +1,5 @@
+.next { margin-top: 10px; color: var(--label); font-size: var(--fs-xs); }
+.heading { color: var(--label); font-size: var(--fs-label); letter-spacing: 0.18em; text-transform: uppercase; }
+a { color: var(--amber-hi); }
+ul { margin: 4px 0; padding-left: 18px; }
+.hold { margin-top: 6px; }

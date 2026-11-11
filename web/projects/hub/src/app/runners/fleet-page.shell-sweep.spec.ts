@@ -1,7 +1,8 @@
-import { RunnerConnection, type RunnerRegistryView } from 'fleet';
+import { RunnerConnection, hubChunkKey, hubRunnerNextClaimKey, hubUrgenciesKey, type RunnerRegistryView } from 'fleet';
 import { provideZonelessChangeDetection } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { provideRouter } from '@angular/router';
+import { QueryClient, provideTanStackQuery } from '@tanstack/angular-query-experimental';
 import { commands, page } from 'vitest/browser';
 
 import { firstFleetId, fleetList, resolveSelection } from './fleet-page.model';
@@ -126,12 +127,32 @@ const ROWS = [
   row('rn_01KXKVVF1J3D6H6VYZ3XYNSOLO', 'solo', null),
 ];
 
+function nextClaimClient(): QueryClient {
+  const client = new QueryClient({ defaultOptions: { queries: { staleTime: Infinity, retry: false } } });
+  const entry = {
+    chunk_id: 'ch_01KXKVVF1J3D6H6VYZ3XYNNEXT', graph_id: 'gr_1', position: 1,
+    project_id: 'p', project_slug: 'blizzard', project_name: 'Blizzard', urgency: null,
+  };
+  const blocked = {
+    ...entry, chunk_id: 'ch_01KXKVVF1J3D6H6VYZ3XYNPASS', reason: 'blocked',
+    prerequisite: 'ch_01KXKVVF1J3D6H6VYZ3XYNPREQ', prerequisite_count: 1,
+  };
+  for (const runner of ROWS) {
+    client.setQueryData([...hubRunnerNextClaimKey, runner.runner_id], {
+      next: entry, passed: [blocked], passed_total: 1, if_holding: null, held_at: [blocked], unserved: 0,
+    });
+  }
+  client.setQueryData(hubUrgenciesKey, []);
+  client.setQueryData(hubChunkKey(blocked.prerequisite), { chunk_id: blocked.prerequisite, status: 'running' });
+  return client;
+}
+
 describe('desktop Fleet tab layout shell sweep (web:shell-sweep)', () => {
   it.each([1280, 1024])('lays the split out without horizontal overflow at %ipx', async (width) => {
     await loadDesignTokens();
     await TestBed.configureTestingModule({
       imports: [FleetView],
-      providers: [provideZonelessChangeDetection(), provideRouter([])],
+      providers: [provideZonelessChangeDetection(), provideRouter([]), provideTanStackQuery(nextClaimClient())],
     }).compileComponents();
     const groups = groupHostRows(ROWS, CARDS);
     const list = fleetList(groups);
@@ -170,6 +191,13 @@ describe('desktop Fleet tab layout shell sweep (web:shell-sweep)', () => {
 
       expect(root.querySelectorAll('[data-testid="fleet-runner"]')).toHaveLength(2);
       expect(root.querySelector('[data-testid="fleet-hostless-heading"]')).not.toBeNull();
+      const next = root.querySelectorAll<HTMLElement>('[data-testid="runner-next-claim"]');
+      expect(next).toHaveLength(2);
+      expect(next[0].querySelector('[data-testid="runner-next-link"]')?.textContent).toContain('C-NEXT');
+      next[0].querySelector<HTMLButtonElement>('[data-testid="accordion-section-head"]')!.click();
+      await fixture.whenStable();
+      expect(next[0].textContent).toContain('running');
+      expect(next[0].textContent).toContain('Held at:');
     } finally {
       root.remove();
     }
@@ -179,7 +207,7 @@ describe('desktop Fleet tab layout shell sweep (web:shell-sweep)', () => {
     await loadDesignTokens();
     await TestBed.configureTestingModule({
       imports: [FleetView],
-      providers: [provideZonelessChangeDetection(), provideRouter([])],
+      providers: [provideZonelessChangeDetection(), provideRouter([]), provideTanStackQuery(nextClaimClient())],
     }).compileComponents();
     const pace = (slug: string, freshness: 'aging' | 'stale', label: string, tag: string) => ({
       slug,
@@ -226,6 +254,11 @@ describe('desktop Fleet tab layout shell sweep (web:shell-sweep)', () => {
         expect(b.getBoundingClientRect().right, 'a pace bar is past the detail').toBeLessThanOrEqual(detail.getBoundingClientRect().right + 1);
       }
       expect(detail.scrollWidth, `detail overflows horizontally at ${width}px`).toBeLessThanOrEqual(detail.clientWidth);
+      const next = detail.querySelector<HTMLElement>('[data-testid="runner-next-claim"]');
+      expect(next?.querySelector('[data-testid="runner-next-link"]')?.textContent).toContain('C-NEXT');
+      next!.querySelector<HTMLButtonElement>('[data-testid="accordion-section-head"]')!.click();
+      await fixture.whenStable();
+      expect(next!.textContent).toContain('running');
 
       const aging = root.querySelector<HTMLElement>('[data-subscription-slug="aging"] [data-testid="subscription-pace-group-refreshed"]')!;
       const stale = root.querySelector<HTMLElement>('[data-subscription-slug="stale"] [data-testid="subscription-pace-group-refreshed"]')!;

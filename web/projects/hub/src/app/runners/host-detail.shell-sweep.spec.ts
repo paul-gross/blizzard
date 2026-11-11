@@ -1,4 +1,5 @@
-import { RunnerConnection, type RunnerRegistryView } from 'fleet';
+import { RunnerConnection, hubRunnerNextClaimKey, hubUrgenciesKey, hubChunkKey, type RunnerRegistryView } from 'fleet';
+import { QueryClient, provideTanStackQuery } from '@tanstack/angular-query-experimental';
 import { provideZonelessChangeDetection } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { provideRouter } from '@angular/router';
@@ -126,9 +127,15 @@ function detail(): HostDetailVm {
 }
 
 async function render() {
+  const queryClient = new QueryClient({ defaultOptions: { queries: { staleTime: Infinity, retry: false } } });
+  const entry = { chunk_id: 'ch_01KXKVVF1J3D6H6VYZ3XYNNEXT', graph_id: 'gr_1', position: 2, project_id: 'p', project_name: 'Blizzard', project_slug: 'blizzard', urgency: null };
+  const blocked = { ...entry, chunk_id: 'ch_01KXKVVF1J3D6H6VYZ3XYNPASS', reason: 'blocked', prerequisite: 'ch_01KXKVVF1J3D6H6VYZ3XYNPREQ', prerequisite_count: 2 };
+  queryClient.setQueryData([...hubRunnerNextClaimKey, ROW.runner_id], { next: entry, passed: [blocked], passed_total: 22, held_at: [blocked], if_holding: null, unserved: 2 });
+  queryClient.setQueryData(hubUrgenciesKey, []);
+  queryClient.setQueryData(hubChunkKey(blocked.prerequisite), { chunk_id: blocked.prerequisite, status: 'running' });
   await TestBed.configureTestingModule({
     imports: [HostDetail],
-    providers: [provideZonelessChangeDetection(), provideRouter([])],
+    providers: [provideZonelessChangeDetection(), provideRouter([]), provideTanStackQuery(queryClient)],
   }).compileComponents();
   const fixture = TestBed.createComponent(HostDetail);
   fixture.componentRef.setInput('detail', detail());
@@ -191,6 +198,14 @@ describe('host detail at phone width shell sweep (web:shell-sweep)', () => {
       const facts = runner.querySelector<HTMLElement>('.facts')!.getBoundingClientRect();
       const claims = runner.querySelector<HTMLElement>('.held')!.getBoundingClientRect();
       expect(claims.top, `${width}px: the held chunks sit beside the facts, not under them`).toBeGreaterThanOrEqual(facts.bottom - 1);
+      const next = runner.querySelector<HTMLElement>('[data-testid="runner-next-claim"]')!;
+      expect(next.textContent).toContain('C-NEXT');
+      next.querySelector<HTMLButtonElement>('[data-testid="accordion-section-head"]')!.click();
+      await fixture.whenStable();
+      expect(next.textContent).toContain('running');
+      expect(next.textContent).toContain('21 more passed');
+      expect(next.textContent).toContain('2 ahead from unserved projects');
+      expect(next.scrollWidth).toBeLessThanOrEqual(next.clientWidth);
       const links = runner.querySelectorAll<HTMLElement>('[data-testid="fleet-runner-claim-link"]');
       expect(links).toHaveLength(2);
       for (const link of links) {
