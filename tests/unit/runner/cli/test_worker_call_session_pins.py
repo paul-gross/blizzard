@@ -41,10 +41,10 @@ def _collaborators(client: StubClient | None = None) -> CliCollaborators:
     )
 
 
-def _runner_context() -> click.Context:
+def _runner_context(environ: dict[str, str] | None = None) -> click.Context:
     """A click context the way the ``runner`` group leaves it: a worker session pinned to its root."""
     ctx = click.Context(click.Command("runner"))
-    WorkerSession.begin(ctx, _collaborators())
+    WorkerSession.begin(ctx, _collaborators(), environ)
     return ctx
 
 
@@ -214,7 +214,8 @@ def test_a_hook_missing_either_half_of_its_identity_skips_and_says_so(
     for key, value in present.items():
         monkeypatch.setenv(key, value)
 
-    assert WorkerCall.hook("heartbeat") is None
+    with _runner_context():
+        assert WorkerCall.hook("heartbeat") is None
     assert "heartbeat: no BLIZZARD_LEASE_ID/BLIZZARD_RUNNER_URL in the environment; skipping" in capsys.readouterr().err
 
 
@@ -252,3 +253,23 @@ def test_a_worker_call_outside_a_runner_invocation_fails_rather_than_building_a_
 
     with click.Context(click.Command("probe")), pytest.raises(RuntimeError, match="no worker session"):
         WorkerSession.current()
+
+
+def test_the_identity_comes_from_the_sessions_environ_not_the_process_environment(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    for key in ("BLIZZARD_LEASE_ID", "BLIZZARD_RUNNER_URL", "BLIZZARD_LEASE_TOKEN"):
+        monkeypatch.delenv(key, raising=False)
+    environ = {
+        "BLIZZARD_RUNNER_URL": "http://runner.local:8431",
+        "BLIZZARD_LEASE_ID": "lease_9",
+        "BLIZZARD_LEASE_TOKEN": "tok_9",
+    }
+
+    with _runner_context(environ):
+        built = WorkerCall.of("artifact list")
+        hooked = WorkerCall.hook("heartbeat", traced=False)
+
+    assert hooked is not None
+    for call in (built, hooked):
+        assert (call.runner_url, call.lease_id, call.lease_token) == ("http://runner.local:8431", "lease_9", "tok_9")

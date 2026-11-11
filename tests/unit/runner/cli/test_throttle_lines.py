@@ -3,19 +3,24 @@ floor, and a throttle with no levers. Populated levers are pinned with the gate'
 
 from __future__ import annotations
 
+from typing import Any, cast
+
 from blizzard.runner.cli.control import Throttle, throttle_lines
 
 _TAIL = "    on_decline: release; on_usage_limit: hold"
 
 
-def _throttle(floor: dict[str, object]) -> Throttle:
-    return {  # type: ignore[return-value]
-        "floor": floor,
-        "state": "declining",
-        "declining": ["floor"],
-        "on_decline": "release",
-        "on_usage_limit": "hold",
-    }
+def _throttle(floor: dict[str, Any]) -> Throttle:
+    return cast(
+        Throttle,
+        {
+            "floor": floor,
+            "state": "declining",
+            "declining": ["floor"],
+            "on_decline": "release",
+            "on_usage_limit": "hold",
+        },
+    )
 
 
 def test_a_held_floor_names_its_window_and_the_grace_that_opens_it() -> None:
