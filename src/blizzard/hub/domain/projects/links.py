@@ -24,6 +24,7 @@ from blizzard.hub.domain.config.changes import (
 from blizzard.hub.domain.config.errors import ConfigFieldError
 from blizzard.hub.domain.config.repositories import ConfiguredRepository, RepositoryId
 from blizzard.hub.domain.config.work_sources import WorkSourceId, require_configurable
+from blizzard.hub.domain.kernel.unset import UNSET, UnsetType
 from blizzard.hub.domain.projects.model import Project, ProjectId
 
 #: The wire name a link's change reports its standing under.
@@ -164,12 +165,14 @@ class RepositoryLink(_Link):
         return repository.fields.base_branch if self.base_branch is None else self.base_branch
 
     def set_base_branch(
-        self, base_branch: str | None, ctx: ChangeContext, *, if_match: int | None, at: datetime
+        self, base_branch: str | None | UnsetType, ctx: ChangeContext, *, if_match: int | None, at: datetime
     ) -> tuple[Self, ConfigChange] | None:
-        """Name the link's own branch, or clear it with ``None`` so the link inherits again; ``None`` back when the
-        link already stands there. The revision check comes first, even for an edit that changes nothing.
+        """Name the link's own branch, or clear it with ``None`` so the link inherits again; :data:`UNSET` leaves it.
+        ``None`` back when the link already stands there; the revision is checked first even then.
         :class:`ConfigFieldError` on ``base_branch`` for a name that is no git branch name."""
         self.require_revision(if_match)
+        if base_branch is UNSET:
+            return None
         decided = None if base_branch is None else parse_base_branch(base_branch)
         changes = lifecycle.field_changes(((BASE_BRANCH_FIELD, self.base_branch, decided),))
         if not changes:

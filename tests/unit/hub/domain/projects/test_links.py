@@ -13,6 +13,7 @@ from blizzard.hub.domain.config.errors import ConfigFieldError, ConfigRevisionCo
 from blizzard.hub.domain.config.forges import ForgeId
 from blizzard.hub.domain.config.repositories import ConfiguredRepository, RepositoryFields, RepositoryId
 from blizzard.hub.domain.config.work_sources import BuiltInWorkSource, WorkSourceId
+from blizzard.hub.domain.kernel.unset import UNSET
 from blizzard.hub.domain.projects.links import RepositoryLink, SourceLink, parse_base_branch
 from blizzard.hub.domain.projects.model import Project
 
@@ -212,3 +213,10 @@ def test_a_name_that_is_no_git_branch_name_is_refused_on_base_branch(name: str) 
     with pytest.raises(ConfigFieldError) as refused:
         link.set_base_branch(name, _CTX, if_match=None, at=_AT)
     assert refused.value.field == "base_branch"
+
+
+def test_leaving_the_base_branch_writes_nothing_but_checks_the_revision() -> None:
+    link, _ = RepositoryLink.new(_PROJECT, _REPOSITORY, _CTX, at=_AT)
+    assert link.set_base_branch(UNSET, _CTX, if_match=1, at=_AT) is None
+    with pytest.raises(ConfigRevisionConflict):
+        link.set_base_branch(UNSET, _CTX, if_match=7, at=_AT)

@@ -12,6 +12,7 @@ from blizzard.foundation.clock import IClock
 from blizzard.hub.domain.config.changes import ChangeContext
 from blizzard.hub.domain.config.repositories import ConfiguredRepository
 from blizzard.hub.domain.config.work_sources import ConfiguredWorkSource
+from blizzard.hub.domain.kernel.unset import UnsetType
 from blizzard.hub.domain.projects.color import ColorPick, decide_color
 from blizzard.hub.domain.projects.links import IWriteProjectLinks, RepositoryLink, SourceLink
 from blizzard.hub.domain.projects.model import IWriteProjectRepository, Project, ProjectEdit
@@ -116,11 +117,16 @@ class ProjectAuthoring:
         return self._links.record_repository_link(moved, from_revision=link.revision, change=change)
 
     def set_base_branch(
-        self, link: RepositoryLink, base_branch: str | None, ctx: ChangeContext, *, if_match: int | None = None
+        self,
+        link: RepositoryLink,
+        base_branch: str | None | UnsetType,
+        ctx: ChangeContext,
+        *,
+        if_match: int | None = None,
     ) -> RepositoryLink:
         """Name ``link``'s own integration branch, or clear it with ``None`` so the link inherits its repository's
-        again. An edit that changes nothing writes nothing. :class:`ConfigFieldError` on ``base_branch`` for a name
-        that is no git branch name."""
+        again; :data:`UNSET` leaves it. An edit that changes nothing writes nothing, its revision still checked.
+        :class:`ConfigFieldError` on ``base_branch`` for a name that is no git branch name."""
         decided = link.set_base_branch(base_branch, ctx, if_match=if_match, at=self._clock.now())
         if decided is None:
             return link

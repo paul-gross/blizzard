@@ -310,14 +310,11 @@ def patch_repository_link(
     link = services.project_links.repository_link(project.project_id, repository.repository_id)
     if link is None:
         raise _not_found(f"project {project.slug} has no link to repository {repository.slug!r}")
+    base_branch = request.base_branch if "base_branch" in request.model_fields_set else UNSET
     try:
-        if "base_branch" in request.model_fields_set:
-            edited = services.project_authoring.set_base_branch(
-                link, request.base_branch, change_context(identity, door), if_match=if_match
-            )
-        else:
-            link.require_revision(if_match)
-            edited = link
+        edited = services.project_authoring.set_base_branch(
+            link, base_branch, change_context(identity, door), if_match=if_match
+        )
     except ConfigFieldError as exc:
         raise _unprocessable(exc.field, exc.message) from exc
     except ConfigRevisionConflict as exc:
