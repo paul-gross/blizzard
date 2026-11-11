@@ -8,6 +8,7 @@ node's authored prose only. Node-scope artifacts resolve **latest-by-epoch per
 from __future__ import annotations
 
 from dataclasses import dataclass
+from datetime import UTC, datetime
 
 from blizzard.foundation.artifacts import ArtifactKind
 from blizzard.foundation.node_steps import SessionMode
@@ -48,10 +49,22 @@ class CarriedArtifact:
         return cls(name=row.name, kind=row.kind, node_name=row.node_name, epoch=row.epoch, content=row.data)
 
 
+_NEVER = datetime.min.replace(tzinfo=UTC)
+
+
+def _newest_first_key(row: StoredArtifact) -> tuple[int, datetime, str]:
+    """Ascending age key; the caller reverses it. A row not yet stored (no produced-at) ranks oldest."""
+    produced_at = row.produced_at or _NEVER
+    if produced_at.tzinfo is None:
+        produced_at = produced_at.replace(tzinfo=UTC)
+    return (row.epoch, produced_at, row.artifact_id)
+
+
 @domain_model
 @dataclass(frozen=True)
 class LatestArtifacts:
-    """Artifact rows resolved to one per ``{node_name}.{name}``, newest epoch wins."""
+    """Artifact rows resolved to one per ``{node_name}.{name}``, newest epoch wins, held newest-first
+    (epoch, then produced-at, then artifact id as the final tie-break)."""
 
     rows: list[StoredArtifact]
 
@@ -63,7 +76,7 @@ class LatestArtifacts:
             current = latest.get(key)
             if current is None or row.epoch > current.epoch:
                 latest[key] = row
-        return cls(list(latest.values()))
+        return cls(sorted(latest.values(), key=_newest_first_key, reverse=True))
 
     @property
     def carried(self) -> list[CarriedArtifact]:
