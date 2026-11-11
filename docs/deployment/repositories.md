@@ -181,9 +181,10 @@ A runner starts a chunk on the same branches. Preparing an environment, it puts 
 repository's `owner/repo` on that repository's branch and every other worktree on its `[[workspace]]` `base_branch`,
 which stays the branch for worktrees no chunk target names; the worker's facts table names each targeted repository's
 branch. A branch the repository's origin lacks fails the preparation, naming the repository and branch, and the chunk is
-not claimed; so does a project link's own branch for a repository no worktree of the environment matches. The hub never offers a chunk whose link names its own branch to a runner of a release that cannot prepare
-at it, and refuses a claim whose environments were prepared at branches the chunk no longer targets, so the runner gives
-the environment back and peeks again.
+not claimed; so does a project link's own branch for a repository no worktree of the environment matches. The hub never
+offers a chunk whose link names its own branch to a runner of a release that cannot prepare at it, and refuses a claim
+whose environments were prepared at branches the chunk no longer targets, so the runner gives the environment back and
+peeks again.
 
 When no commits are declared, delivery completes with "no code to land" without opening a PR. If the base already
 contains a declared commit and the branch head is safe, the repository resolves without opening a PR; the same proof is

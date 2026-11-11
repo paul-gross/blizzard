@@ -72,9 +72,9 @@ projects and their links takes `fleet:view`.
 
 `create` names the project after its slug unless `--name` is given. A slug that is another project's current slug
 answers `409`; a malformed slug, or a blank or padded name, answers `422` naming the field. A project cannot be retired.
-On the board the same lives under Admin → Projects, a link's base branch included. A configuration document may declare projects and their links too
-([config-documents.md](./config-documents.md)), and every change to a project or a link is recorded in the change log
-([config-changes.md](./config-changes.md)).
+On the board the same lives under Admin → Projects, a link's base branch included. A configuration document may declare
+projects and their links too ([config-documents.md](./config-documents.md)), and every change to a project or a link is
+recorded in the change log ([config-changes.md](./config-changes.md)).
 
 ## Links
 
