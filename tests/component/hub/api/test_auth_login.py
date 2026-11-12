@@ -375,7 +375,6 @@ def test_disabled_login_throttle_admits_every_call_and_warns_once_at_boot(
     )
 
     assert 429 not in _throttled_statuses(hub, 40)
-    assert hub.hub_services.auth_throttle is None
     captured = capsys.readouterr()
     assert (captured.out + captured.err).count("sign-ins are unthrottled") == 1
 

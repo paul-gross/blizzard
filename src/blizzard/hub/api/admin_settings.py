@@ -175,6 +175,8 @@ def apply_document(
     apply_id = None if dry_run else settings.store.new_apply_id()
     try:
         diff = settings.store.apply_document(change, actor=identity.user_id, apply_id=apply_id, dry_run=dry_run)
+        if not dry_run:
+            settings.authoring.committed(diff)
     except SettingsInvalid as exc:
         _invalid(exc)
     moved = {field.key: field for field in diff}

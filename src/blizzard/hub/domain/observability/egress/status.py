@@ -16,6 +16,7 @@ from blizzard.foundation.egress_state import EgressState
 from blizzard.foundation.roles import domain_model
 from blizzard.hub.domain.observability.analytics.extraction import EXTRACTOR_VERSION
 from blizzard.hub.domain.observability.egress.config import EgressConfig
+from blizzard.hub.domain.observability.egress.event_rows import ExportPaths
 from blizzard.hub.domain.observability.egress.repository import EgressCheckpoint, IReadEgress, IReadEgressEvents
 from blizzard.hub.domain.observability.egress.schema import EVENTS_SCHEMA, INVOCATIONS_SCHEMA, STEPS_SCHEMA
 from blizzard.hub.domain.observability.lane_failure import failure_ongoing
@@ -75,18 +76,20 @@ class EgressStatusReader:
     def __init__(
         self,
         *,
-        config: EgressConfig,
+        config: EgressConfig | Callable[[], EgressConfig],
         rejected: bool,
         missing_path_key: str | None = None,
+        exported_paths: Callable[[], ExportPaths] | None = None,
         egress: IReadEgress,
         event_reads: IReadEgressEvents,
         steps: IReadTraceSteps,
         clock: IClock,
         free_space: FreeSpaceProbe,
     ) -> None:
-        self._config = config
+        self._config = config if callable(config) else lambda: config
         self._rejected = rejected
         self._missing_path_key = missing_path_key
+        self._exported_paths = exported_paths
         self._egress = egress
         self._event_reads = event_reads
         self._steps = steps
@@ -94,12 +97,14 @@ class EgressStatusReader:
         self._free_space = free_space
 
     def read(self) -> EgressStatus:
-        config = self._config
+        exported = self._exported_paths() if self._exported_paths is not None else None
+        config = exported.config if exported is not None else self._config()
+        missing_path_key = exported.missing_key_env if exported is not None else self._missing_path_key
         state = egress_state(directory_configured=config.directory is not None, rejected=self._rejected)
         if state == "off":
-            return self._idle("off", None, None)
+            return self._idle(config, "off", None, None)
         if state == "rejected":
-            return self._idle("rejected", "egress.format", config.format)
+            return self._idle(config, "rejected", "egress.format", config.format)
         cursors = {dataset: self._egress.newest_cursor(dataset) for dataset in config.datasets}
         passes = [cursor for cursor in cursors.values() if cursor is not None]
         last_pass = max(passes, key=lambda cursor: cursor.recorded_at, default=None)
@@ -109,11 +114,11 @@ class EgressStatusReader:
         return EgressStatus(
             state="on",
             # A missing path hash key leaves the export on and names the variable.
-            rejected_setting="egress.path_key_env" if self._missing_path_key is not None else None,
-            rejected_value=self._missing_path_key,
+            rejected_setting="egress.path_key_env" if missing_path_key is not None else None,
+            rejected_value=missing_path_key,
             directory=str(config.directory),
             format=config.format,
-            datasets=tuple(self._dataset(name, cursor) for name, cursor in cursors.items()),
+            datasets=tuple(self._dataset(name, cursor, config) for name, cursor in cursors.items()),
             last_pass_at=last_pass.recorded_at if last_pass else None,
             last_pass_dataset=last_pass.dataset if last_pass else None,
             last_pass_row_count=last_pass.row_count if last_pass else None,
@@ -126,8 +131,7 @@ class EgressStatusReader:
             backfill_max_window_seconds=config.backfill_max_window,
         )
 
-    def _idle(self, state: EgressState, setting: str | None, value: str | None) -> EgressStatus:
-        config = self._config
+    def _idle(self, config: EgressConfig, state: EgressState, setting: str | None, value: str | None) -> EgressStatus:
         return EgressStatus(
             state=state,
             rejected_setting=setting,
@@ -147,7 +151,7 @@ class EgressStatusReader:
             backfill_max_window_seconds=config.backfill_max_window,
         )
 
-    def _dataset(self, name: str, cursor: EgressCheckpoint | None) -> DatasetStatus:
+    def _dataset(self, name: str, cursor: EgressCheckpoint | None, config: EgressConfig) -> DatasetStatus:
         if cursor is None:
             return DatasetStatus(name, None, None)
         now = self._clock.now()
@@ -162,12 +166,12 @@ class EgressStatusReader:
             )
         if name == EVENTS_SCHEMA.name:
             assert cursor.events is not None  # an events cursor always carries its events position
-            return DatasetStatus(name, cursor.events.at, _lag(now, self._oldest_event(cursor, now)))
+            return DatasetStatus(name, cursor.events.at, _lag(now, self._oldest_event(cursor, now, config)))
         raise ValueError(f"no egress status for dataset {name!r}")
 
-    def _oldest_event(self, cursor: EgressCheckpoint, now: datetime) -> datetime | None:
+    def _oldest_event(self, cursor: EgressCheckpoint, now: datetime, config: EgressConfig) -> datetime | None:
         assert cursor.events is not None
-        version = EXTRACTOR_VERSION if self._config.extractor_versions == "current" else None
+        version = EXTRACTOR_VERSION if config.extractor_versions == "current" else None
         markers = self._event_reads.markers_after(cursor.events, now, 1, extractor_version=version)
         drops = self._event_reads.drops_after(cursor.events, now, 1)
         times = [*(m.derived_at for m in markers), *(d.dropped_at for d in drops)]

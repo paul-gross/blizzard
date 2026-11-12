@@ -8,7 +8,7 @@ from __future__ import annotations
 # The export pass lock — debt, blizzard-context:/architecture/system-shape/exclusive-writes.md
 # ast-grep-ignore: bzh:store-exclusive-write
 import threading
-from collections.abc import Sequence
+from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 
@@ -17,7 +17,7 @@ from blizzard.foundation.egress_reset import EgressResetDirection
 from blizzard.foundation.roles import domain_model
 from blizzard.foundation.store.utc import iso_utc
 from blizzard.hub.domain.observability.egress.config import EgressConfig
-from blizzard.hub.domain.observability.egress.event_rows import missing_key_reason
+from blizzard.hub.domain.observability.egress.event_rows import ExportPaths, missing_key_reason
 from blizzard.hub.domain.observability.egress.lifecycle import ExportVerb, export_allows
 from blizzard.hub.domain.observability.egress.repository import (
     EgressCheckpoint,
@@ -57,33 +57,41 @@ class EgressReset:
         egress: IWriteEgressCursor,
         events: HubEventLogService,
         clock: IClock,
-        config: EgressConfig,
+        config: EgressConfig | Callable[[], EgressConfig],
         active: bool,
         missing_path_key: str | None = None,
+        exported_paths: Callable[[], ExportPaths] | None = None,
         pass_lock: threading.Lock,
     ) -> None:
         self._egress = egress
         self._events = events
         self._clock = clock
-        self._datasets = config.datasets
-        self._settle = timedelta(seconds=config.settle_seconds)
+        self._config = config if callable(config) else lambda: config
         self._active = active
         self._missing_path_key = missing_path_key
+        self._exported_paths = exported_paths
         self._lock = pass_lock
 
     def reset(self, dataset: str, to: datetime) -> ResetResult:
+        exported = self._exported_paths() if self._exported_paths is not None else None
+        config = exported.config if exported is not None else self._config()
+        missing_path_key = exported.missing_key_env if exported is not None else self._missing_path_key
         now = self._clock.now()
         require_resettable(
             dataset,
             to,
             active=self._active,
-            datasets=self._datasets,
+            datasets=config.datasets,
             now=now,
-            missing_path_key=self._missing_path_key,
+            missing_path_key=missing_path_key,
         )
         with self._lock:
             checkpoint, result = plan_reset(
-                dataset, self._egress.newest_cursor(dataset), to, now=now, settle=self._settle
+                dataset,
+                self._egress.newest_cursor(dataset),
+                to,
+                now=now,
+                settle=timedelta(seconds=config.settle_seconds),
             )
             self._egress.append_cursor(checkpoint)
         self._events.record(

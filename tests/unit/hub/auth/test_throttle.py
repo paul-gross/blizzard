@@ -69,3 +69,70 @@ def test_bucket_admit_ignores_a_clock_that_ran_backwards() -> None:
     assert bucket.admit(50.0, capacity=2, refill_per_second=1.0) is True
     assert bucket.tokens == 0.0
     assert bucket.last_refill_seconds == 50.0
+
+
+def test_live_throttle_replaces_buckets_on_edits_and_disable() -> None:
+    from blizzard.hub.auth.throttle import LiveIpThrottle
+
+    throttle = LiveIpThrottle(clock=FixedClock(datetime(2026, 1, 1, tzinfo=UTC)))
+
+    def allow(enabled: bool = True, capacity: int = 1, refill: float = 6) -> bool:
+        with throttle.capture(lambda: (None, (enabled, capacity, refill))) as (_, generation):
+            return throttle.allow("ip", generation)
+
+    assert allow()
+    assert not allow()
+    assert allow(refill=7)
+    assert not allow(refill=7)
+    assert allow(enabled=False, refill=7)
+    assert allow(refill=7)
+    assert not allow(refill=7)
+    assert allow(capacity=2, refill=7)
+    assert allow(capacity=2, refill=7)
+    assert not allow(capacity=2, refill=7)
+
+
+@pytest.mark.parametrize("seen_first", [False, True])
+def test_delayed_captured_request_keeps_its_generation_until_release(seen_first: bool) -> None:
+    from blizzard.hub.auth.throttle import LiveIpThrottle
+
+    throttle = LiveIpThrottle(clock=FixedClock(datetime(2026, 1, 1, tzinfo=UTC)))
+    a = (True, 1, 60.0)
+    b = (True, 2, 60.0)
+    with throttle.capture(lambda: (1, a)) as (_, old):
+        if seen_first:
+            assert throttle.allow("ip", old)
+        with throttle.capture(lambda: (2, b)) as (_, middle):
+            assert throttle.allow("ip", middle)
+            with throttle.capture(lambda: (3, a)) as (_, current):
+                assert throttle.allow("ip", current)
+                assert throttle.allow("ip", old) is not seen_first
+                assert not throttle.allow("ip", old)
+                assert not throttle.allow("ip", current)
+                assert len(throttle._retired) == 2  # pyright: ignore[reportPrivateUsage]  # generation retention
+            assert len(throttle._retired) == 2  # pyright: ignore[reportPrivateUsage]  # generation retention
+        assert len(throttle._retired) == 1  # pyright: ignore[reportPrivateUsage]  # generation retention
+    assert not throttle._retired  # pyright: ignore[reportPrivateUsage]  # generation cleanup
+
+
+def test_retired_generations_are_cleaned_up_on_exception() -> None:
+    from blizzard.hub.auth.throttle import LiveIpThrottle
+
+    throttle = LiveIpThrottle(clock=FixedClock(datetime(2026, 1, 1, tzinfo=UTC)))
+    with (
+        pytest.raises(ValueError),
+        throttle.capture(lambda: (None, (True, 1, 60.0))),
+        throttle.capture(lambda: (None, (True, 2, 60.0))),
+    ):
+        raise ValueError("request failed")
+    assert not throttle._retired  # pyright: ignore[reportPrivateUsage]  # generation cleanup
+
+
+def test_unreferenced_generations_do_not_accumulate() -> None:
+    from blizzard.hub.auth.throttle import LiveIpThrottle
+
+    throttle = LiveIpThrottle(clock=FixedClock(datetime(2026, 1, 1, tzinfo=UTC)))
+    for capacity in range(1, 100):
+        with throttle.capture(lambda capacity=capacity: (None, (True, capacity, 60.0))):
+            pass
+    assert not throttle._retired  # pyright: ignore[reportPrivateUsage]  # generation cleanup
