@@ -101,3 +101,34 @@ def test_the_registry_answers_what_it_declares() -> None:
     assert _REGISTRY.is_open("flags")
     assert not _REGISTRY.declares("stray")
     assert not _REGISTRY.is_open("auth")
+
+
+def test_states_and_value_resolve_a_nested_path() -> None:
+    root = _root()
+    assert root.states("auth.superuser")
+    assert root.value("auth.superuser") == "root"
+    absent = ConfigView.root(_REGISTRY, {"auth": {}}, strict=True)
+    assert not absent.states("auth.superuser")
+    assert absent.value("auth.superuser") is None
+
+
+def test_states_and_value_answer_for_an_element_views_own_keys() -> None:
+    element = next(_root().entries("runner"))
+    assert element.states("name")
+    assert element.value("name") == "a"
+
+
+def test_value_returns_the_whole_list_table_or_array() -> None:
+    root = _root()
+    assert root.value("flags") == {"probe": True}
+    assert root.value("runner") == [{"name": "a", "stray": 1}]
+
+
+def test_a_flag_held_key_is_not_stated() -> None:
+    from blizzard.foundation.flags import Flags
+
+    registry = ConfigRegistry("demo", (ConfigKey("held", INTEGER, flag="f"),))
+    flags = Flags(known=frozenset({"f"}), retired=frozenset(), values={"f": False}, published=frozenset())
+    root = ConfigView.root(registry, {"held": 1}, strict=True).holding(flags)
+    assert not root.states("held")
+    assert root.value("held") is None

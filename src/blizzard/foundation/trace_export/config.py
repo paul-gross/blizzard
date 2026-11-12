@@ -4,6 +4,7 @@ from dataclasses import dataclass
 
 from blizzard.foundation.config_keys import BOOLEAN, INTEGER, NUMBER, TABLE, ConfigKey, ConfigView
 from blizzard.foundation.roles import domain_model
+from blizzard.foundation.toml_emit import default_line, toml_literal
 
 
 @domain_model
@@ -89,8 +90,7 @@ class TracingConfig:
         lines: list[str] = []
         for key in keys:
             value = getattr(self, key)
-            literal = toml_literal(value)
-            lines.append(f"# {key} = {literal}\n" if value == getattr(defaults, key) else f"{key} = {literal}\n")
+            lines.append(default_line(key, toml_literal(value), at_default=value == getattr(defaults, key)))
         return lines
 
 
@@ -118,7 +118,3 @@ TRACING_KEYS: tuple[ConfigKey, ...] = (
     ConfigKey("tracing.platform", BOOLEAN, default=_DEFAULTS.platform),
     ConfigKey("tracing.platform_sample_ratio", NUMBER, default=_DEFAULTS.platform_sample_ratio),
 )
-
-
-def toml_literal(value: object) -> str:
-    return str(value).lower() if isinstance(value, bool) else str(value)

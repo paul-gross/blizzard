@@ -209,6 +209,25 @@ class ConfigView:
         self.check(key)
         return key in self.body and not self._held(key)
 
+    def states(self, path: str) -> bool:
+        """Whether the file states the key at ``path``, spelled as :attr:`ConfigKey.path` spells it and resolved
+        from this view's own position. A flag-held key is not stated, as for ``in``."""
+        parent, key = self._locate(path)
+        return key in parent
+
+    def value(self, path: str) -> Any:
+        """The whole value at ``path`` — a scalar, a list, an open table or an array of tables — or ``None`` when
+        the file does not state it."""
+        parent, key = self._locate(path)
+        return parent.get(key)
+
+    def _locate(self, path: str) -> tuple[ConfigView, str]:
+        *parents, key = path.split(".")
+        view = self
+        for segment in parents:
+            view = view.table(segment)
+        return view, key
+
     def table(self, key: str) -> ConfigView:
         """The sub-table at ``key``; empty when absent or not a table."""
         value = self.get(key)
