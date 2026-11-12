@@ -27,6 +27,7 @@ from blizzard.hub.domain.cadence.model import (
     ScopeSelection,
     Spacing,
     attention,
+    chore_urgencies_named_beyond,
     merge_chores,
     parse_chores,
 )
@@ -348,6 +349,14 @@ def test_a_cadence_names_each_chore_override_its_stored_form_names_on_no_chore_b
     cadence = _cadence(_spec("arch", urgency_id=background), _spec("tests", urgency_id=_URGENT))
     assert cadence.urgencies_named_beyond(None) == {"chores[0].urgency": background, "chores[1].urgency": _URGENT}
     assert cadence.urgencies_named_beyond(held) == {"chores[1].urgency": _URGENT}
+
+
+def test_the_urgencies_chores_name_beyond_the_held_ones_are_keyed_by_each_chores_field() -> None:
+    background = UrgencyId("urg_background")
+    named = chore_urgencies_named_beyond([_URGENT, background, None, _URGENT], [background])
+    assert named == {"chores[0].urgency": _URGENT, "chores[3].urgency": _URGENT}
+    assert chore_urgencies_named_beyond([None], []) == {}
+    assert chore_urgencies_named_beyond([background], [background, None]) == {}
 
 
 def test_a_cadence_admits_work_only_while_live_and_keeping_a_promoting_chore() -> None:
