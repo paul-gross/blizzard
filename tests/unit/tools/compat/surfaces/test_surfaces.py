@@ -81,6 +81,12 @@ def test_a_config_key_lacking_a_lifetime_on_either_side_is_not_compared() -> Non
     assert classify_config(_config(_key("a", lifetime="immutable")), _config(_key("a"))) == []
 
 
+def test_a_config_key_with_an_unknown_lifetime_is_a_finding_not_a_crash() -> None:
+    findings = classify_config(_config(_key("a", lifetime="pass")), _config(_key("a", lifetime="forever")))
+    assert _reasons(findings) == [("a", "configuration key lifetime 'forever' is not a known lifetime", False)]
+    assert classify_config(_config(_key("a", lifetime="forever")), _config(_key("a", lifetime="boot"))) == []
+
+
 def test_a_new_required_config_key_is_a_finding() -> None:
     assert _reasons(classify_config(_config(), _config(_key("a", required=True)))) == [
         ("a", "configuration key became required", False)

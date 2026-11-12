@@ -17,8 +17,12 @@ def _keys(document: dict[str, Any]) -> dict[str, dict[str, Any]]:
     return {k["path"]: k for k in document.get("keys", []) if not k["path"].startswith(_OPEN_TABLE_KEYS)}
 
 
-def _rank(lifetime: str) -> int:
-    return LIFETIME_ORDER.index(Lifetime(lifetime))
+def _rank(lifetime: object) -> int | None:
+    """The lifetime's place in the order, or None for a value outside it."""
+    try:
+        return LIFETIME_ORDER.index(Lifetime(lifetime))
+    except ValueError:
+        return None
 
 
 def classify_config(base: dict[str, Any], head: dict[str, Any]) -> list[Violation]:
@@ -39,9 +43,15 @@ def classify_config(base: dict[str, Any], head: dict[str, Any]) -> list[Violatio
         if after.get("required") and not before.get("required"):
             findings.append(Violation(SURFACE, path, "configuration key became required", deprecated))
         was, now = before.get("lifetime"), after.get("lifetime")
-        if was is not None and now is not None and _rank(now) > _rank(was):
-            reason = f"configuration key lifetime moved later from {was} to {now}"
-            findings.append(Violation(SURFACE, path, reason, deprecated))
+        if was is not None and now is not None:
+            was_rank, now_rank = _rank(was), _rank(now)
+            if now_rank is None:
+                findings.append(
+                    Violation(SURFACE, path, f"configuration key lifetime {now!r} is not a known lifetime", deprecated)
+                )
+            elif was_rank is not None and now_rank > was_rank:
+                reason = f"configuration key lifetime moved later from {was} to {now}"
+                findings.append(Violation(SURFACE, path, reason, deprecated))
     for path, after in head_keys.items():
         if path not in base_keys and after.get("required"):
             findings.append(Violation(SURFACE, path, "configuration key became required"))
