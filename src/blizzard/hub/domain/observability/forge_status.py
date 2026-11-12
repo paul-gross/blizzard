@@ -241,7 +241,7 @@ class AnnotationReconciler:
         tenants: Callable[[], Iterable[TenantId]],
         tenant: Callable[[TenantId], TenantAnnotation],
         clock: IClock,
-        full_pass_floor: timedelta,
+        full_pass_floor: timedelta | Callable[[], timedelta],
     ) -> None:
         self._corpus = corpus
         self._tenants = tenants
@@ -261,9 +261,10 @@ class AnnotationReconciler:
         changes = self._corpus.work_source_changes_signature()
         probes = {tenant: _probe(tenant, signatures, changes) for tenant in tenants}
         now = self._clock.now()
+        floor = self._floor()
         self._converged = {tenant: state for tenant, state in self._converged.items() if tenant in probes}
         self._outages = {tenant: names for tenant, names in self._outages.items() if tenant in probes}
-        due = [tenant for tenant in tenants if self._is_due(tenant, probes[tenant], now)]
+        due = [tenant for tenant in tenants if self._is_due(tenant, probes[tenant], now, floor)]
         if not due:
             _log.info("forge-status sweep skipped", reason="probe unchanged", tenants_skipped=len(tenants))
             return
@@ -310,7 +311,7 @@ class AnnotationReconciler:
                 tenant, self._corpus.live_work_refs_signature(), self._corpus.work_source_changes_signature()
             )
             now = self._clock.now()
-            if not self._is_due(tenant, probe, now):
+            if not self._is_due(tenant, probe, now, self._floor()):
                 _log.info("forge-status sweep skipped", reason="probe unchanged", tenants_skipped=1)
                 return None
             half = self._open(tenant)
@@ -364,9 +365,12 @@ class AnnotationReconciler:
             self._converged[tenant] = (probe, now)
         return converged
 
-    def _is_due(self, tenant: TenantId, probe: AnnotationProbe, now: datetime) -> bool:
+    def _floor(self) -> timedelta:
+        return self._full_pass_floor() if callable(self._full_pass_floor) else self._full_pass_floor
+
+    def _is_due(self, tenant: TenantId, probe: AnnotationProbe, now: datetime, floor: timedelta) -> bool:
         last_probe, last_full_pass_at = self._converged.get(tenant, (None, None))
-        return annotation_due(last_probe, probe, last_full_pass_at, now, self._full_pass_floor)
+        return annotation_due(last_probe, probe, last_full_pass_at, now, floor)
 
 
 #: One tenant's opened half and the sources it annotates now.

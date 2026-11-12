@@ -6,6 +6,7 @@ sweep's cursor, latch and backoff as they were."""
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 
@@ -62,19 +63,24 @@ class ReplayResult:
 
 class TraceReplay:
     def __init__(
-        self, *, steps: IReadTraceSteps, exporter: ITraceExporter | None, clock: IClock, config: TracingConfig
+        self,
+        *,
+        steps: IReadTraceSteps,
+        exporter: ITraceExporter | None,
+        clock: IClock,
+        config: TracingConfig | Callable[[], TracingConfig],
     ) -> None:
         self._steps = steps
         self._exporter = exporter
         self._clock = clock
-        self._batch_limit = config.batch_limit
-        self._max_window_seconds = config.replay_max_window
+        self._config = config if callable(config) else lambda: config
 
     def replay(self, since: datetime, until: datetime, *, dry_run: bool) -> ReplayResult:
+        config = self._config()
         require_replayable(
             since,
             until,
-            max_window_seconds=self._max_window_seconds,
+            max_window_seconds=config.replay_max_window,
             now=self._clock.now(),
             dry_run=dry_run,
             exporter_wired=self._exporter is not None,
@@ -83,7 +89,7 @@ class TraceReplay:
         position = CursorKey.opening(since)
         while True:
             # The window is half-open: read_window's own bound is inclusive.
-            window = read_window(self._steps, position, until - timedelta(microseconds=1), self._batch_limit)
+            window = read_window(self._steps, position, until - timedelta(microseconds=1), config.batch_limit)
             if window.items:
                 told = assemble_window(window)
                 if not dry_run and not self._export(told):

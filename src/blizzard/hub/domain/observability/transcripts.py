@@ -402,7 +402,9 @@ class TranscriptIngestService:
         self._clock = clock
         self._caps = caps if caps is not None else TranscriptCaps()
 
-    def ingest(self, runner_id: str, records: list[tuple[int, TranscriptSlice]]) -> TranscriptIngestResult:
+    def ingest(
+        self, runner_id: str, records: list[tuple[int, TranscriptSlice]], *, caps: TranscriptCaps | None = None
+    ) -> TranscriptIngestResult:
         """``records`` pairs each record with its lane ``seq``, kept out of :class:`TranscriptSlice`
         since ``seq`` is a lane concept, not a record's stored identity. A retired runner is refused with
         :class:`RunnerRetired` before anything lands. A record whose lease another holder owns
@@ -412,10 +414,13 @@ class TranscriptIngestService:
         now = self._clock.now()
         breaches: list[tuple[TranscriptSlice, CapBreach]] = []
         ahead: list[tuple[int, TranscriptSlice]] = []
-        prepared = self._prepare(records)
+        caps = caps if caps is not None else self._caps
+        prepared = self._prepare(records, caps=caps)
         with self._transactions.begin() as transaction:
             locked = transaction.lock_set(keys=ingest_locks(runner_id, [record for _, record, _ in prepared]))
-            result = self._decide(runner_id, prepared, at=now, transaction=locked, breaches=breaches, ahead=ahead)
+            result = self._decide(
+                runner_id, prepared, at=now, transaction=locked, breaches=breaches, ahead=ahead, caps=caps
+            )
         for seq, record in ahead:
             _log.warning(
                 "transcript high-water is ahead of the stored record — applying it anyway",
@@ -437,7 +442,7 @@ class TranscriptIngestService:
         return result
 
     def _prepare(
-        self, records: list[tuple[int, TranscriptSlice]]
+        self, records: list[tuple[int, TranscriptSlice]], *, caps: TranscriptCaps
     ) -> list[tuple[int, TranscriptSlice, EncodedTurns | None]]:
         """``records`` in seq order, each beside its encoded turns — ``None`` for a record over the
         record cap, which no decision stores."""
@@ -445,7 +450,7 @@ class TranscriptIngestService:
             (
                 seq,
                 record,
-                self._store.encode_turns(record) if self._caps.record_breach(record.byte_count) is None else None,
+                self._store.encode_turns(record) if caps.record_breach(record.byte_count) is None else None,
             )
             for seq, record in sorted(records, key=lambda pair: pair[0])
         ]
@@ -459,6 +464,7 @@ class TranscriptIngestService:
         transaction: LockedTransaction,
         breaches: list[tuple[TranscriptSlice, CapBreach]],
         ahead: list[tuple[int, TranscriptSlice]],
+        caps: TranscriptCaps,
     ) -> TranscriptIngestResult:
         """Decide and write every record and the mark in ``transaction``, from guards read in it.
         The mark written is the larger of the one read here and the batch's highest decided seq."""
@@ -488,14 +494,14 @@ class TranscriptIngestService:
                     already.append(seq)
                     continue
                 ahead.append((seq, record))
-                if self._apply(record, turns, at=at, transaction=transaction, breaches=breaches):
+                if self._apply(record, turns, at=at, transaction=transaction, breaches=breaches, caps=caps):
                     applied.append(seq)
                 else:
                     capped.append(seq)
                 continue
             # Every reachable outcome advances the mark; every field is wire-validated.
             mark = seq
-            if self._apply(record, turns, at=at, transaction=transaction, breaches=breaches):
+            if self._apply(record, turns, at=at, transaction=transaction, breaches=breaches, caps=caps):
                 applied.append(seq)
             else:
                 capped.append(seq)
@@ -514,6 +520,7 @@ class TranscriptIngestService:
         at: datetime,
         transaction: LockedTransaction,
         breaches: list[tuple[TranscriptSlice, CapBreach]],
+        caps: TranscriptCaps,
     ) -> bool:
         """``True`` stored, ``False`` cap-rejected — both advance the high-water. A breach the
         ladder finds is appended to ``breaches``; ``turns`` is ``None`` only for a record the
@@ -522,7 +529,9 @@ class TranscriptIngestService:
         state = store.natural_key_state(record.segment_id, record.turn_range_start, transaction=transaction)
         byte_count = record.byte_count
         breach = (
-            self._breach(record, byte_count=byte_count, at=at, transaction=transaction) if adjudicates(state) else None
+            self._breach(record, byte_count=byte_count, at=at, transaction=transaction, caps=caps)
+            if adjudicates(state)
+            else None
         )
         if breach is not None:
             breaches.append((record, breach))
@@ -539,10 +548,15 @@ class TranscriptIngestService:
         return write.stored
 
     def _breach(
-        self, record: TranscriptSlice, *, byte_count: int, at: datetime, transaction: LockedTransaction
+        self,
+        record: TranscriptSlice,
+        *,
+        byte_count: int,
+        at: datetime,
+        transaction: LockedTransaction,
+        caps: TranscriptCaps,
     ) -> CapBreach | None:
         """Walk the cap ladder, reading each stored sum only once the earlier steps pass."""
-        caps = self._caps
         breach = caps.record_breach(byte_count)
         if breach is None:
             stored = self._store.chunk_stored_bytes(record.chunk_id, transaction=transaction)

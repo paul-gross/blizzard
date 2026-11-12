@@ -500,3 +500,19 @@ def test_an_open_step_that_closes_later_is_told_once_after_the_cursor_passed_its
         hub.clock.advance(timedelta(seconds=1))
 
     assert _roots(exporter) == [_root(chunk_id)]
+
+
+def test_replay_reads_window_limit_at_each_request(tmp_path: Path) -> None:
+    from dataclasses import replace
+
+    from blizzard.hub.domain.observability.tracing.replay import ReplayWindowRefused, TraceReplay
+
+    hub, exporter = _hub(tmp_path)
+    config = _SETTLED
+    replay = TraceReplay(steps=trace_store(hub), exporter=exporter, clock=hub.clock, config=lambda: config)
+    until = hub.clock.now()
+    since = until - timedelta(seconds=10)
+    replay.replay(since, until, dry_run=True)
+    config = replace(config, replay_max_window=5)
+    with pytest.raises(ReplayWindowRefused):
+        replay.replay(since, until, dry_run=True)

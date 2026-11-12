@@ -33,6 +33,22 @@ def _hub(tmp_path: Path, auth_mode: str = "none") -> HubHarness:
     return hub
 
 
+def test_change_notifications_only_follow_commits(tmp_path: Path) -> None:
+    hub = _hub(tmp_path)
+    notifications: list[frozenset[str]] = []
+    unsubscribe = hub.wired_app.state.hub_settings.authoring.subscribe(notifications.append)
+    client = hub.client
+    path = "/api/admin/settings"
+    assert client.post(path + "/apply?dry_run=true", json={"annotation_interval_seconds": 7}).status_code == 200
+    assert client.post(path + "/apply", json={"annotation_interval_seconds": -1}).status_code == 422
+    assert notifications == []
+    assert client.post(path + "/apply", json={"annotation_interval_seconds": 7}).status_code == 200
+    assert notifications == [frozenset({"annotation_interval_seconds"})]
+    assert client.post(path + "/apply", json={"annotation_interval_seconds": 7}).status_code == 200
+    assert len(notifications) == 1
+    unsubscribe()
+
+
 def test_read_write_history_apply_and_round_trip(tmp_path: Path) -> None:
     hub = _hub(tmp_path)
     client = hub.client

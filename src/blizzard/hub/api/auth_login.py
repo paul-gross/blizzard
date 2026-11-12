@@ -32,12 +32,14 @@ from blizzard.hub.api.auth_session import SESSION_COOKIE_NAME, PresentedSession
 from blizzard.hub.api.hub_level import hub_services
 from blizzard.hub.api.problem_exceptions import ProblemHTTPException
 from blizzard.hub.api.problem_rendering import problem_response
+from blizzard.hub.api.request_config import request_config
 from blizzard.hub.auth.facts import AuthFactsService
 from blizzard.hub.auth.invitations import InvitationToken
 from blizzard.hub.auth.oauth.provider import IOAuthProvider, OAuthExchangeError
 from blizzard.hub.auth.service import ABSOLUTE_MAX_AGE, PROVIDER_LOGIN_STATE_KIND, InvitationAccepted
+from blizzard.hub.auth.throttle import LiveIpThrottle
 from blizzard.hub.composition import HubServices
-from blizzard.hub.config import AUTH_MODE_NONE
+from blizzard.hub.config import AUTH_MODE_NONE, HubConfig
 
 router = APIRouter(prefix="/api/auth", tags=["auth"])
 
@@ -83,10 +85,11 @@ class ProviderLogin:
     request: Request
     services: HubServices
     name: str
+    config: HubConfig
 
     @classmethod
     def of(cls, request: Request, name: str) -> ProviderLogin:
-        return cls(request, hub_services(request), name)
+        return cls(request, hub_services(request), name, request_config(request))
 
     @property
     def origin(self) -> Origin:
@@ -108,7 +111,11 @@ class ProviderLogin:
 
     def assert_not_throttled(self) -> None:
         throttle = self.services.auth_throttle
-        if throttle is not None and not throttle.allow(self.origin.ip):
+        if isinstance(throttle, LiveIpThrottle):
+            allowed = throttle.allow(self.origin.ip, self.request.state.auth_throttle_generation)
+        else:
+            allowed = throttle is None or throttle.allow(self.origin.ip)
+        if not allowed:
             raise ProblemHTTPException(problems.login_throttled_problem)
 
 
@@ -124,9 +131,9 @@ def list_providers(request: Request) -> list[ProviderSummary]:
 
 @router.get("/{name}/authorize")
 def authorize(name: str, request: Request, return_to: str | None = None, invite: str | None = None) -> RedirectResponse:
-    if request.app.state.config.auth.mode == AUTH_MODE_NONE:
-        raise ProblemHTTPException(problems.login_disabled_problem)
     login = ProviderLogin.of(request, name)
+    if login.config.auth.mode == AUTH_MODE_NONE:
+        raise ProblemHTTPException(problems.login_disabled_problem)
     login.assert_not_throttled()
     provider = login.provider
     if provider is None:
@@ -142,9 +149,9 @@ def authorize(name: str, request: Request, return_to: str | None = None, invite:
 
 @router.get("/{name}/callback")
 def callback(name: str, request: Request, code: str | None = None, state: str | None = None) -> Response:
-    if request.app.state.config.auth.mode == AUTH_MODE_NONE:
-        raise ProblemHTTPException(problems.login_disabled_problem)
     login = ProviderLogin.of(request, name)
+    if login.config.auth.mode == AUTH_MODE_NONE:
+        raise ProblemHTTPException(problems.login_disabled_problem)
     login.assert_not_throttled()
     refusal = login.refusal
 

@@ -6,7 +6,7 @@ is one complete, directly-callable pass (``bzh:steppable-loop``)."""
 
 from __future__ import annotations
 
-from collections.abc import Mapping
+from collections.abc import Callable, Mapping
 from datetime import datetime, timedelta
 
 from blizzard.foundation.clock import IClock
@@ -51,18 +51,17 @@ class TraceExportSweep:
         exporter: ITraceExporter,
         events: HubEventLogService,
         clock: IClock,
-        config: TracingConfig,
+        config: TracingConfig | Callable[[], TracingConfig],
     ) -> None:
         self._steps = steps
         self._exporter = exporter
         self._events = events
         self._clock = clock
-        self._settle = timedelta(seconds=config.settle_seconds)
-        self._max_lag = timedelta(seconds=config.max_lag_seconds)
-        self._batch_limit = config.batch_limit
+        self._config = config if callable(config) else lambda: config
+        initial = self._config()
         # A restart mid-outage must not announce the same failure again.
         self._latch = OutageLatch(
-            timedelta(seconds=config.sweep_seconds), lambda: steps.newest_export_latch() == _FAILED
+            timedelta(seconds=initial.sweep_seconds), lambda: steps.newest_export_latch() == _FAILED
         )
         self._cursor_started = False
 
@@ -71,12 +70,16 @@ class TraceExportSweep:
         return self._steps
 
     def sweep(self) -> None:
+        config = self._config()
+        self._latch.set_base(timedelta(seconds=config.sweep_seconds))
         now = self._clock.now()
         if not self._latch.is_due(now):
             return
         newest = self._steps.newest_cursor()
         if not self._cursor_started:
-            jump = first_pass_jump(newest.position if newest else None, now, self._max_lag, key=CursorKey)
+            jump = first_pass_jump(
+                newest.position if newest else None, now, timedelta(seconds=config.max_lag_seconds), key=CursorKey
+            )
             if jump is not None:
                 self._jump(jump, now)
                 self._cursor_started = True
@@ -84,9 +87,9 @@ class TraceExportSweep:
             self._cursor_started = True
         assert newest is not None  # the first pass always leaves a cursor row behind
         cursor = newest.position
-        window = read_window(self._steps, cursor, now - self._settle, self._batch_limit)
+        window = read_window(self._steps, cursor, now - timedelta(seconds=config.settle_seconds), config.batch_limit)
         oldest = window.items[0].key.at if window.items else None
-        lag_jump = lag_cap_jump(cursor, oldest, now, self._max_lag)
+        lag_jump = lag_cap_jump(cursor, oldest, now, timedelta(seconds=config.max_lag_seconds))
         if lag_jump is not None:
             self._jump(lag_jump, now)
             return

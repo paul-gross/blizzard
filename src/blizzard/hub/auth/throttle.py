@@ -6,7 +6,10 @@ control, not a durable invariant, so a restart legitimately resets it."""
 
 from __future__ import annotations
 
+from collections.abc import Callable, Generator
+from contextlib import contextmanager
 from dataclasses import dataclass
+from typing import TypeVar
 
 from blizzard.foundation.clock import IClock
 from blizzard.foundation.roles import domain_model
@@ -60,3 +63,57 @@ class IpThrottle:
             bucket = TokenBucket(tokens=float(self._capacity), last_refill_seconds=now_seconds)
             self._buckets[ip] = bucket
         return bucket.admit(now_seconds, capacity=self._capacity, refill_per_second=self._refill_per_second)
+
+
+T = TypeVar("T")
+
+
+@dataclass(eq=False)
+class _Generation:
+    settings: tuple[bool, int, float]
+    throttle: IpThrottle | None
+    users: int = 0
+
+
+class LiveIpThrottle:
+    """Keep retired buckets only while captured requests can still use them."""
+
+    def __init__(self, *, clock: IClock) -> None:
+        # Protects the process-local token buckets, not a store decision.
+        # ast-grep-ignore: bzh:store-exclusive-write
+        from threading import Lock
+
+        self._clock = clock
+        self._lock = Lock()
+        self._current: _Generation | None = None
+        self._retired: list[_Generation] = []
+
+    @contextmanager
+    def capture(self, read: Callable[[], tuple[T, tuple[bool, int, float]]]) -> Generator[tuple[T, _Generation]]:
+        # Reading and registering are one operation: a request cannot pause between them
+        # while another request retires and discards its generation.
+        with self._lock:
+            value, settings = read()
+            if self._current is None or self._current.settings != settings:
+                if self._current is not None and self._current.users:
+                    self._retired.append(self._current)
+                enabled, capacity, refill_seconds = settings
+                bucket = (
+                    IpThrottle(clock=self._clock, capacity=capacity, refill_per_second=1 / refill_seconds)
+                    if enabled
+                    else None
+                )
+                self._current = _Generation(settings, bucket)
+            generation = self._current
+            generation.users += 1
+        try:
+            yield value, generation
+        finally:
+            with self._lock:
+                generation.users -= 1
+                if generation.users == 0 and generation is not self._current:
+                    self._retired.remove(generation)
+
+    def allow(self, ip: str, generation: _Generation) -> bool:
+        with self._lock:
+            return generation.throttle is None or generation.throttle.allow(ip)

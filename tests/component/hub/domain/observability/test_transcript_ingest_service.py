@@ -611,3 +611,20 @@ def test_an_ingest_encodes_its_records_turns_before_its_unit_takes_a_lock() -> N
     )
 
     assert events == ["encode 1", "lock"]  # the over-cap record is stored without content, so never encoded
+
+
+def test_each_ingest_uses_its_own_caps_without_rebuilding_the_service(tmp_path: Path) -> None:
+    hub = build_hub(tmp_path)
+    _seed_chunk(hub)
+    service = TranscriptIngestService(
+        retired=_NO_RETIREMENTS,
+        store=TranscriptSegmentStore(hub_store_connections(hub.engine)),
+        clock=hub.clock,
+        transactions=_units(hub),
+    )
+    first = service.ingest(
+        "r1", [_record(1, turn_range_start=0, turn_range_end=0)], caps=TranscriptCaps(record_max_bytes=1)
+    )
+    second = service.ingest("r1", [_record(2, turn_range_start=1, turn_range_end=1)], caps=TranscriptCaps())
+    assert first.capped == [1]
+    assert second.applied == [2]

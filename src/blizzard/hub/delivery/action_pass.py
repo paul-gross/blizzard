@@ -98,6 +98,7 @@ class PassRun:
     overran: bool = False
     traceback: str | None = None
     cut_off: bool = False
+    bound: PassBound | None = None
 
 
 def _settle(future: asyncio.Future[EffectResult], result: EffectResult) -> None:
@@ -108,13 +109,16 @@ def _settle(future: asyncio.Future[EffectResult], result: EffectResult) -> None:
 class ActionPassDriver:
     """Takes passes on the shared :class:`ActionLoop`, each driven by its caller's own task."""
 
-    def __init__(self, loop: ActionLoop, bound: PassBound) -> None:
+    def __init__(self, loop: ActionLoop, bound: PassBound | Callable[[], PassBound]) -> None:
         self._loop = loop
         self._bound = bound
 
     @property
     def bound(self) -> PassBound:
-        return self._bound
+        return self._resolve_bound()
+
+    def _resolve_bound(self) -> PassBound:
+        return self._bound() if callable(self._bound) else self._bound
 
     async def drive(
         self,
@@ -131,8 +135,9 @@ class ActionPassDriver:
         caller = asyncio.get_running_loop()
         requests: asyncio.Queue[object] = asyncio.Queue()
         sink = _QueuedEffectSink(requests, caller)
-        deadline = asyncio.timeout(self._bound.deadline_seconds())
-        future = self._loop.submit(self._pass(action, visit, forges, sink))
+        bound = self.bound
+        deadline = asyncio.timeout(bound.deadline_seconds())
+        future = self._loop.submit(self._pass(action, visit, forges, sink, bound))
         writing: asyncio.Future[EffectResult] | None = None
         try:
             async with deadline:
@@ -153,15 +158,17 @@ class ActionPassDriver:
             if writing is not None:
                 await asyncio.wait([writing])
             future.cancel()
-            return PassRun(cut_off=True)
+            return PassRun(cut_off=True, bound=bound)
         finally:
             sink.close()
             future.cancel()
 
-    async def _pass(self, action: IHubAction, visit: Visit, forges: VisitForges, sink: _QueuedEffectSink) -> PassRun:
+    async def _pass(
+        self, action: IHubAction, visit: Visit, forges: VisitForges, sink: _QueuedEffectSink, pass_bound: PassBound
+    ) -> PassRun:
         """On the loop: take the pass under its bound. Each forge's client belongs to its adapter's cache entry,
         never to the pass."""
-        bound = asyncio.timeout(self._bound.seconds)
+        bound = asyncio.timeout(pass_bound.seconds)
         try:
             async with bound:
                 return PassRun(answer=await action.take(visit, forges, sink))

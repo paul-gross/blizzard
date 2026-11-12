@@ -63,7 +63,7 @@ from blizzard.hub.auth.service import AuthService
 from blizzard.hub.auth.sessions import IReadSessionRepository
 from blizzard.hub.auth.sign_in import SignIn
 from blizzard.hub.auth.signing import SigningKeyService
-from blizzard.hub.auth.throttle import IpThrottle
+from blizzard.hub.auth.throttle import LiveIpThrottle
 from blizzard.hub.auth.users import IReadUserRepository
 from blizzard.hub.config import HubConfig, LoginThrottleConfig, OAuthProviderConfig
 from blizzard.hub.config_defaults import DEFAULT_ACTION_PASS_SECONDS
@@ -223,7 +223,7 @@ from blizzard.hub.domain.urgency.services import (
 )
 from blizzard.hub.domain.work_items.closure import CloseDrainSweep, CloseIntentDrainer
 from blizzard.hub.domain.work_items.editing import WorkItemEditService
-from blizzard.hub.egress.factory import EgressUnavailable, build_egress_writer
+from blizzard.hub.egress.factory import ConfiguredWriter, EgressUnavailable, build_egress_writer
 from blizzard.hub.egress.space import free_bytes
 from blizzard.hub.egress.writer import EgressWriterSettings, mint_process_token
 from blizzard.hub.events.broker import EventBroker
@@ -592,7 +592,7 @@ class HubServices:
     #: The configured OAuth provider registry — empty when none is configured.
     oauth_providers: IOAuthProviderRegistry
     #: Per-IP token-bucket login throttle — ``None`` when ``[auth.login_throttle]`` turns the throttle off.
-    auth_throttle: IpThrottle | None
+    auth_throttle: LiveIpThrottle | None
     #: The non-chunk auth/security fact log — ``login_failed``/``sso_refused``.
     auth_facts: AuthFactsService
     #: The hub's IdP signing-key lifecycle — ``None`` when composed without a signing-keys directory.
@@ -1085,6 +1085,7 @@ class TenantServiceParts:
     actions: HubActions
     extractors: Sequence[ITurnEventExtractor]
     action_passes: ActionPassDriver
+    pass_config: Callable[[], HubConfig] | None
     step_wake: StepWake
     #: Publishes a committed cadence mint's frames through the tenant's services — handed in by the hub's app,
     #: which owns the frames.
@@ -1252,6 +1253,7 @@ def build_tenant_services(stores: TenantStores, parts: TenantServiceParts, *, ev
         tracer=parts.platform_tracer,
         public_url=parts.public_url,
         work_sources=work_sources,
+        pass_config=parts.pass_config,
     )
     work_ref_label: WorkRefLabel = work_sources.label
     flow_line_factory = FlowLineFactory(facts=chunk_facts, record=chunk_record, graphs=graph_store)
@@ -1681,6 +1683,8 @@ def build_services(
     action_pass_grace: timedelta = ACTION_PASS_GRACE,
     cadences_on: Callable[[], bool],
     announce_minted: Callable[[TenantServices, MintedErrand], None],
+    live_config: Callable[[], HubConfig] | None = None,
+    pass_config: Callable[[], HubConfig] | None = None,
 ) -> HubServices:
     """Construct and wire the hub-level services over the shared :class:`HubCore`, and have its
     tenant cache serve each tenant's services (:func:`build_tenant_services`). The sweeps and exports
@@ -1702,6 +1706,10 @@ def build_services(
     system_artifacts = system_artifacts or SYSTEM_ARTIFACTS_PACKAGED
     # One process-scoped draw for every project color a create leaves to the hub.
     color_pick = random.Random().choice
+
+    def action_bound(seconds: float) -> PassBound:
+        return PassBound(seconds, action_pass_grace)
+
     parts = TenantServiceParts(
         clock=clock,
         hub_scoped_reads=core.hub_scoped_reads,
@@ -1720,7 +1728,13 @@ def build_services(
         versions=HubVersionWindow(hub_version, version_window),
         actions=actions,
         extractors=extractors,
-        action_passes=ActionPassDriver(action_loop, PassBound(action_pass_seconds, action_pass_grace)),
+        action_passes=ActionPassDriver(
+            action_loop,
+            (lambda: action_bound(live_config().action_pass_seconds))
+            if live_config is not None
+            else action_bound(action_pass_seconds),
+        ),
+        pass_config=pass_config,
         step_wake=step_wake,
         announce_minted=announce_minted,
     )
@@ -1756,28 +1770,43 @@ def build_services(
         tenant_name=open_tenants.name,
     )
     trace_config = tracing or TracingConfig()
+    trace_config_source = (lambda: live_config().tracing) if live_config is not None else trace_config
     trace_export = (
         TraceExportSweep(
             steps=trace_store,
             exporter=trace_exporter,
             events=hub_event_log,
             clock=clock,
-            config=trace_config,
+            config=trace_config_source,
         )
         if trace_exporter is not None
         else None
     )
-    trace_replay = TraceReplay(steps=trace_store, exporter=trace_exporter, clock=clock, config=trace_config)
+    trace_replay = TraceReplay(steps=trace_store, exporter=trace_exporter, clock=clock, config=trace_config_source)
     trace_status = TraceStatusReader(
         settings=tracing_settings or TracingSettings("disabled"),
         status=trace_store,
         steps=trace_store,
         clock=clock,
-        replay_max_window=trace_config.replay_max_window,
+        replay_max_window=(lambda: live_config().tracing.replay_max_window)
+        if live_config is not None
+        else trace_config.replay_max_window,
     )
     exported = export_paths(egress or EgressConfig(), egress_path_key)
     egress_config, egress_paths, egress_missing_key = exported.config, exported.policy, exported.missing_key_env
-    egress_writer_settings = EgressWriterSettings(egress_config.max_rows_per_file, egress_config.min_free_bytes)
+    egress_exported_source = (
+        (lambda: export_paths(live_config().egress, egress_path_key)) if live_config is not None else None
+    )
+    egress_source = (
+        (lambda: export_paths(live_config().egress, egress_path_key).config)
+        if live_config is not None
+        else egress_config
+    )
+
+    def writer_settings(config: EgressConfig) -> EgressWriterSettings:
+        return EgressWriterSettings(config.max_rows_per_file, config.min_free_bytes)
+
+    egress_writer_settings = writer_settings(egress_config)
     egress_writer = (
         build_egress_writer(
             egress_config.format,
@@ -1795,14 +1824,22 @@ def build_services(
     # The missing key matters only to an export that runs; with it off, nothing would have been written anyway.
     egress_missing_path_key = egress_missing_key if egress_writer is not None and egress_unavailable is None else None
     egress_status = EgressStatusReader(
-        config=egress_config,
+        config=egress_source,
         rejected=egress_unavailable is not None,
         missing_path_key=egress_missing_path_key,
+        exported_paths=egress_exported_source,
         egress=egress_store,
         event_reads=egress_event_reads,
         steps=trace_store,
         clock=clock,
         free_space=lambda: free_bytes(egress_config.directory) if egress_config.directory is not None else None,
+    )
+    configured_writer = (
+        ConfiguredWriter(
+            egress_writer, egress_writer_settings, lambda settings: _backfill_writers(egress_config, settings)()
+        )
+        if egress_writer is not None and not isinstance(egress_writer, EgressUnavailable)
+        else None
     )
     egress_export = (
         EgressSweep(
@@ -1813,7 +1850,8 @@ def build_services(
             writer=egress_writer,
             events=hub_event_log,
             clock=clock,
-            config=egress_config,
+            config=egress_source,
+            writer_for=configured_writer.for_config if configured_writer is not None else None,
             pass_lock=egress_pass_lock,
         )
         if egress_writer is not None and not isinstance(egress_writer, EgressUnavailable)
@@ -1823,9 +1861,10 @@ def build_services(
         egress=egress_store,
         events=hub_event_log,
         clock=clock,
-        config=egress_config,
+        config=egress_source,
         active=egress_export is not None,
         missing_path_key=egress_missing_path_key,
+        exported_paths=egress_exported_source,
         pass_lock=egress_pass_lock,
     )
     egress_backfill = EgressBackfill(
@@ -1834,9 +1873,11 @@ def build_services(
         event_reads=egress_event_reads,
         paths=egress_paths,
         clock=clock,
-        config=egress_config,
-        writers=_backfill_writers(egress_config, egress_writer_settings) if egress_export is not None else None,
+        config=egress_source,
+        writers=None,
+        writer_for=(lambda cfg: _backfill_writers(cfg, writer_settings(cfg))()) if egress_export is not None else None,
         missing_path_key=egress_missing_path_key,
+        exported_paths=egress_exported_source,
     )
     # The identity spine — one error factory shared by the SQLAlchemy
     # adapters, so the same instances back both the Write Protocols and the reads.
@@ -1894,12 +1935,8 @@ def build_services(
     oauth_registry = oauth_registry or ProviderEntry.registry(oauth_providers, http_client=oauth_http_client)
     signing = SigningKeyService(signing_keys_dir) if signing_keys_dir is not None else None
     login_throttle = login_throttle or LoginThrottleConfig()
-    auth_throttle = (
-        IpThrottle(clock=clock, capacity=login_throttle.capacity, refill_per_second=1 / login_throttle.refill_seconds)
-        if login_throttle.enabled
-        else None
-    )
-    if auth_throttle is None:
+    auth_throttle = LiveIpThrottle(clock=clock)
+    if not login_throttle.enabled:
         get_logger("blizzard.hub").warning("sign-ins are unthrottled", key="auth.login_throttle.enabled")
     tenant_teardown_sweep = TenantTeardownSweep(teardown=tenant_teardown, teardowns=teardown_store)
     close_drain = CloseDrainSweep(
@@ -1922,7 +1959,11 @@ def build_services(
         tenants=lambda: open_tenants.every().keys(),
         tenant=lambda tenant: sweeps_of(tenant).annotation,
         clock=clock,
-        full_pass_floor=timedelta(seconds=FULL_PASS_FLOOR_INTERVALS * annotation_interval_seconds),
+        full_pass_floor=(
+            lambda: timedelta(seconds=FULL_PASS_FLOOR_INTERVALS * live_config().annotation_interval_seconds)
+        )
+        if live_config is not None
+        else timedelta(seconds=FULL_PASS_FLOOR_INTERVALS * annotation_interval_seconds),
     )
     return HubServices(
         step_wake=step_wake,

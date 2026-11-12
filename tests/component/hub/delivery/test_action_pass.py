@@ -12,12 +12,14 @@ from collections.abc import Sequence
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import TypedDict, Unpack
+from unittest.mock import patch
 
 import pytest
 from sqlalchemy import insert, select
 
 from blizzard.foundation.escalation_causes import EscalationCause
 from blizzard.foundation.ids import Id, IdPrefix
+from blizzard.hub.delivery.action_pass import ActionPassDriver, PassBound
 from blizzard.hub.delivery.action_registry import HubActions
 from blizzard.hub.delivery.actions.base import IHubAction
 from blizzard.hub.domain.actions.effects import ActionEscalation, IEffectSink, Marker, Pass
@@ -389,6 +391,36 @@ def test_a_pass_stuck_in_synchronous_work_is_cut_off_at_the_callers_deadline_rou
     assert _polls(hub, chunk_id) == []
     assert len(_events(hub, chunk_id, "hub-action-overran")) == 1
     assert hub.services.flows.open_turns() == []
+
+
+def test_cut_off_reports_the_bound_captured_before_an_in_flight_edit(tmp_path: Path) -> None:
+    release = threading.Event()
+    entered = threading.Event()
+
+    class BlockAndEdit(_Blocks):
+        async def take(self, visit: Visit, forges: VisitForges, effects: IEffectSink) -> Pass:
+            entered.set()
+            return await super().take(visit, forges, effects)
+
+    hub = _hub(tmp_path, BlockAndEdit(_spec("test.edited", "done", "pending"), release))
+    chunk_id = _at_deliver(hub, _graph("test.edited", ("done",)))
+
+    def bound(_driver: ActionPassDriver) -> PassBound:
+        return PassBound(50 if entered.is_set() else 0.1, timedelta(seconds=0.1))
+
+    try:
+        with patch.object(ActionPassDriver, "bound", property(bound)):
+            assert _visit(hub, chunk_id) == "cut-off"
+    finally:
+        release.set()
+
+    with hub.engine.connect() as conn:
+        details = (
+            conn.execute(hub_scoped(select(s.event_log.c.detail).where(s.event_log.c.chunk_id == chunk_id)))
+            .scalars()
+            .all()
+        )
+    assert any(detail and json.loads(detail).get("bound_seconds") == 0.2 for detail in details)
 
 
 def test_an_exception_escaping_a_pass_answers_failure_with_its_traceback(tmp_path: Path) -> None:

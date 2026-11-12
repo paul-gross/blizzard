@@ -9,7 +9,8 @@ from __future__ import annotations
 
 import asyncio
 import traceback
-from collections.abc import Mapping
+from collections.abc import Callable, Mapping
+from contextlib import nullcontext
 from dataclasses import dataclass
 from datetime import datetime
 from functools import partial
@@ -26,6 +27,7 @@ from blizzard.foundation.platform_tracing.attributes import annotate
 from blizzard.foundation.platform_tracing.tracer import IPlatformTracer, NoopPlatformTracer
 from blizzard.foundation.roles import domain_model
 from blizzard.foundation.trace_ids import DerivedContext, SpanRole, StepKey
+from blizzard.hub.config import HubConfig
 from blizzard.hub.delivery.action_pass import ActionPassDriver, PassRun
 from blizzard.hub.delivery.action_registry import HubActions
 from blizzard.hub.delivery.actions.base import IHubAction
@@ -98,6 +100,7 @@ from blizzard.hub.domain.projects.targets import ChunkTargets, TargetChunk, bran
 from blizzard.hub.forge.budget import ForgePriority
 from blizzard.hub.forge.landing import RepositoryForge
 from blizzard.hub.forge.registry import ForgeRegistry, TurnCutOff
+from blizzard.hub.settings.pass_config import bind_pass_config
 from blizzard.hub.tenancy import TenantClosed, UnknownTenant
 from blizzard.hub.work_sources.source import IWorkSourceRegistry
 
@@ -221,6 +224,7 @@ class TurnRunner:
         work_sources: IWorkSourceRegistry,
         tracer: IPlatformTracer | None = None,
         build_bound_seconds: float = BUILD_BOUND_SECONDS,
+        pass_config: Callable[[], HubConfig] | None = None,
     ) -> None:
         self._flows = flows
         self._facts = facts
@@ -248,6 +252,7 @@ class TurnRunner:
         self._work_sources = work_sources
         self._tracer = tracer or NoopPlatformTracer()
         self._build_bound = build_bound_seconds
+        self._pass_config = pass_config
 
     @property
     def router(self) -> HubNodeRouter:
@@ -256,6 +261,11 @@ class TurnRunner:
     async def take(self, turn: Turn, submission: Submission) -> None:
         """Answer for ``turn`` until it ends — or, cancelled at shutdown, let it go without writing its end. The
         ``turn-ended`` and ``withdrawn`` facts its end wrote are announced once that end's transaction committed."""
+        config = self._pass_config() if self._pass_config is not None else None
+        with bind_pass_config(config) if config is not None else nullcontext():
+            await self._take_bound(turn, submission)
+
+    async def _take_bound(self, turn: Turn, submission: Submission) -> None:
         ending = _TurnEnding(self._flows, turn, submission, self._clock)
         cut_off = TurnCutOff()
         try:
@@ -284,7 +294,8 @@ class TurnRunner:
             return
         run = await self._pass(turn, submission, ready, cut_off)
         if run.cut_off:
-            await asyncio.to_thread(self._end_cut_off, turn, submission, ready)
+            assert run.bound is not None
+            await asyncio.to_thread(self._end_cut_off, turn, submission, ready, run.bound.deadline_seconds())
             return
         await asyncio.to_thread(self._finish, ready, submission, run, ending)
 
@@ -656,11 +667,10 @@ class TurnRunner:
             ending=ending,
         )
 
-    def _end_cut_off(self, turn: Turn, submission: Submission, ready: _Ready) -> None:
+    def _end_cut_off(self, turn: Turn, submission: Submission, ready: _Ready, bound: float) -> None:
         """A pass let go at its deadline ends its turn ``cut-off`` with its ``hub-action-overran`` event, routing
         nothing: the submission keeps its place."""
         node, spec = ready.at.node, ready.action.spec
-        bound = self._passes.bound.deadline_seconds()
         event = TurnEvent(
             kind=_EVENT_ACTION_OVERRAN,
             chunk_id=submission.chunk_id,

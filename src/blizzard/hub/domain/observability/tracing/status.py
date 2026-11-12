@@ -6,6 +6,7 @@ survives a restart and needs no reach into the sweep. The clock is injected; no 
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import datetime
 
@@ -47,10 +48,10 @@ class TraceStatusReader:
         status: IReadTraceStatus,
         steps: IReadTraceSteps,
         clock: IClock,
-        replay_max_window: int,
+        replay_max_window: int | Callable[[], int],
     ) -> None:
         self._settings = settings
-        self._replay_max_window = replay_max_window
+        self._replay_max_window = replay_max_window if callable(replay_max_window) else lambda: replay_max_window
         self._status = status
         self._steps = steps
         self._clock = clock
@@ -72,7 +73,7 @@ class TraceStatusReader:
             last_error_at=failure.at if failure else None,
             last_error_message=failure.message if failure else None,
             last_error_ongoing=ongoing,
-            replay_max_window_seconds=self._replay_max_window,
+            replay_max_window_seconds=self._replay_max_window(),
         )
 
     def _lag(self, position: CursorKey) -> float | None:

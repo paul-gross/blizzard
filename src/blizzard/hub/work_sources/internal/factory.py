@@ -111,7 +111,7 @@ class WorkSourceEntry:
         edits: WorkItemEditService,
         resolution: GardenProposalDeliveryResolution,
         budgets: IWorkSourceRateBudgets,
-        close_forge_writes_enabled: bool = True,
+        close_forge_writes_enabled: bool | Callable[[], bool] = True,
         instrument_client: Callable[[httpx2.Client], None] | None = None,
     ) -> StoreWorkSourceRegistry:
         """Construct a store-backed registry; ``instrument_client`` applies to each
