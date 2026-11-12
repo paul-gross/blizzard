@@ -22,7 +22,7 @@ from blizzard.hub.domain.operations.edit import (
     filled,
     filled_entries,
 )
-from blizzard.hub.domain.urgency.chain import URGENCY_FIELD
+from blizzard.hub.domain.urgency.chain import required_urgency_reference
 from blizzard.hub.domain.urgency.model import Urgency, UrgencyRetired, UrgencyUnknown
 from blizzard.wire.chunk import ChunkPatchRequest
 
@@ -64,9 +64,10 @@ class ChunkPatchBody:
     def _urgency(self) -> Urgency | UnsetType:
         if "urgency" not in self.request.model_fields_set:
             return UNSET
-        reference = self.request.urgency
-        if reference is None:  # a chunk always carries an urgency, so an explicit null is no clear
-            raise urgency_refusal(ConfigFieldError(URGENCY_FIELD, "must not be null"))
+        try:
+            reference = required_urgency_reference(self.request.urgency)
+        except ConfigFieldError as exc:
+            raise urgency_refusal(exc) from exc
         urgency = stated_urgency(reference, self.services)
         assert urgency is not None, "a named reference resolves to an urgency or is refused"
         return urgency

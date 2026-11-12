@@ -60,7 +60,8 @@ def urgency_is_default_problem(message: str, slug: str, *, instance: str) -> urg
     return urgency_wire.UrgencyIsDefaultProblem(
         type=urgency_wire.URGENCY_IS_DEFAULT,
         title="Urgency is the default",
-        detail=urgency_wire.UrgencyIsDefaultDetail(message=message, slug=slug),
+        detail=message,
+        slug=slug,
         instance=instance,
         status=409,
     )
@@ -72,7 +73,9 @@ def urgency_in_use_problem(
     return urgency_wire.UrgencyInUseProblem(
         type=urgency_wire.URGENCY_IN_USE,
         title="Urgency in use",
-        detail=urgency_wire.UrgencyInUseDetail(message=message, slug=slug, open_chunks=open_chunks),
+        detail=message,
+        slug=slug,
+        open_chunks=open_chunks,
         instance=instance,
         status=409,
     )

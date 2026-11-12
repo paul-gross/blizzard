@@ -190,9 +190,10 @@ class IWriteUrgencyChunks(IReadUrgencyChunks, Protocol):
         to: UrgencyId,
         transaction: Transaction | None = None,
     ) -> list[str]:
-        """Set each chunk of ``chunk_ids`` still carrying ``from_id`` and still open to carry ``to``, in one bulk
-        write, its rank untouched; the ids of the chunks it moved, by id. A chunk that finished since it was read
-        keeps its urgency."""
+        """Set each chunk of ``chunk_ids`` still carrying ``from_id`` to carry ``to``, in one bulk write, its rank
+        untouched; the ids of the chunks it moved, by id. The caller holds the chunk rows' lock across the read that
+        found them open and this move — every write that finishes a chunk takes that lock — so a chunk that finished
+        since it was read keeps its urgency."""
         ...
 
 

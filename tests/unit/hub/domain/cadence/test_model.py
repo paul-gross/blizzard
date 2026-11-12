@@ -15,9 +15,11 @@ from blizzard.foundation.cadence_attention import AttentionReason
 from blizzard.foundation.ids import Id, IdPrefix
 from blizzard.foundation.run_mode import RunMode
 from blizzard.hub.domain.cadence.model import (
+    CHORES_FIELD,
     Attention,
     AttentionFacts,
     Cadence,
+    CadenceEdit,
     Chore,
     ChoreShape,
     ChoreSpec,
@@ -25,6 +27,7 @@ from blizzard.hub.domain.cadence.model import (
     ScopeSelection,
     Spacing,
     attention,
+    chore_urgencies_named_beyond,
     merge_chores,
     parse_chores,
 )
@@ -348,6 +351,14 @@ def test_a_cadence_names_each_chore_override_its_stored_form_names_on_no_chore_b
     assert cadence.urgencies_named_beyond(held) == {"chores[1].urgency": _URGENT}
 
 
+def test_the_urgencies_chores_name_beyond_the_held_ones_are_keyed_by_each_chores_field() -> None:
+    background = UrgencyId("urg_background")
+    named = chore_urgencies_named_beyond([_URGENT, background, None, _URGENT], [background])
+    assert named == {"chores[0].urgency": _URGENT, "chores[3].urgency": _URGENT}
+    assert chore_urgencies_named_beyond([None], []) == {}
+    assert chore_urgencies_named_beyond([background], [background, None]) == {}
+
+
 def test_a_cadence_admits_work_only_while_live_and_keeping_a_promoting_chore() -> None:
     assert _cadence(_spec(promote=False), _spec("b")).admits()
     assert not _cadence(_spec(promote=False)).admits()
@@ -357,3 +368,15 @@ def test_a_cadence_admits_work_only_while_live_and_keeping_a_promoting_chore() -
 
 def test_a_cadence_reads_its_attention_against_the_facts_it_is_handed() -> None:
     assert _cadence().attention(_LIVE) == (Attention(AttentionReason.NO_CHORES),)
+
+
+def test_a_stated_chore_list_is_answered_as_stated() -> None:
+    assert CadenceEdit.stated_chores(["a", "b"]) == ["a", "b"]
+    assert CadenceEdit.stated_chores([]) == []
+
+
+def test_a_null_chore_list_is_refused_on_the_chores_field() -> None:
+    with pytest.raises(ConfigFieldError) as refused:
+        CadenceEdit.stated_chores(None)
+
+    assert (refused.value.field, refused.value.message) == (CHORES_FIELD, "must not be null")

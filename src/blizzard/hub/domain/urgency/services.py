@@ -10,19 +10,21 @@ The caller publishes what a write moved once it commits (``bzh:publish-after-com
 
 from __future__ import annotations
 
-from collections.abc import Generator, Mapping, Sequence
+from collections.abc import Callable, Generator, Mapping, Sequence
 from contextlib import contextmanager
 from dataclasses import dataclass, field
 
 from blizzard.foundation.clock import IClock
-from blizzard.foundation.roles import domain_model
+from blizzard.foundation.roles import collaborator, domain_model
 from blizzard.hub.domain.config.changes import ChangeContext
+from blizzard.hub.domain.kernel import id_or_slug
 from blizzard.hub.domain.kernel.transactions import IHubTransactions, Transaction
 from blizzard.hub.domain.kernel.unset import UNSET, UnsetType
 from blizzard.hub.domain.projects.color import ColorPick
 from blizzard.hub.domain.urgency.chain import URGENCY_FIELD, ChainLinks, resolve_chain
 from blizzard.hub.domain.urgency.mark import Icon
 from blizzard.hub.domain.urgency.model import (
+    URGENCY_KIND,
     MoveTo,
     Urgency,
     UrgencyEdit,
@@ -60,12 +62,48 @@ class TenantSettingsMissing(LookupError):
         super().__init__("the tenant's settings are not seeded")
 
 
-def resolve(urgencies: IReadUrgencyRepository, key: str, *, transaction: Transaction | None = None) -> Urgency | None:
-    """The urgency ``key`` names — by id, or by slug — or ``None``. The slug grammar admits no ``_``, so an id never
-    reads as a slug."""
-    if UrgencySlug.of(key) is not None:
-        return urgencies.get_by_slug(key, transaction=transaction)
-    return urgencies.get(UrgencyId(key), transaction=transaction)
+@dataclass(frozen=True)
+class StoredUrgencies:
+    """Resolves an urgency key against the store, one read per key. An urgency's slug never changes, so no slug it
+    left names it."""
+
+    urgencies: IReadUrgencyRepository
+
+    def get(self, urgency_id: UrgencyId) -> Urgency | None:
+        return self.urgencies.get(urgency_id)
+
+    def get_by_slug(self, slug: UrgencySlug) -> Urgency | None:
+        return self.urgencies.get_by_slug(slug.value)
+
+    def get_by_former_slug(self, slug: UrgencySlug) -> Urgency | None:
+        return None
+
+
+@collaborator
+@dataclass(frozen=True)
+class HeldUrgencies:
+    """Resolves urgency keys against one read of the tenant's urgencies. An urgency's slug never changes, so no slug
+    it left names it."""
+
+    by_id: Mapping[UrgencyId, Urgency]
+
+    @classmethod
+    def of(cls, urgencies: Sequence[Urgency]) -> HeldUrgencies:
+        return cls({urgency.urgency_id: urgency for urgency in urgencies})
+
+    def get(self, urgency_id: UrgencyId) -> Urgency | None:
+        return self.by_id.get(urgency_id)
+
+    def get_by_slug(self, slug: UrgencySlug) -> Urgency | None:
+        return next((u for u in self.by_id.values() if u.slug == slug.value), None)
+
+    def get_by_former_slug(self, slug: UrgencySlug) -> Urgency | None:
+        return None
+
+
+def resolve(urgencies: IReadUrgencyRepository, key: str) -> Urgency | None:
+    """The urgency ``key`` names — by id, or by slug — or ``None``."""
+    return id_or_slug.resolve(key, URGENCY_KIND, StoredUrgencies(urgencies))
 
 
 def _settings(settings: IReadTenantSettings, *, transaction: Transaction | None = None) -> TenantSettings:
@@ -122,6 +160,21 @@ class UrgencyReading:
         if found is None:
             raise UrgencyUnknown(field, key)
         return found
+
+    def namer(self) -> Callable[[str, str], Urgency]:
+        """A ``(field, key)`` namer, like :meth:`named`, resolving every key against one read of the tenant's
+        urgencies, taken on the first key — a request naming none reads none."""
+        held: list[HeldUrgencies] = []
+
+        def named(field: str, key: str) -> Urgency:
+            if not held:
+                held.append(HeldUrgencies.of(self._urgencies.list_all()))
+            found = id_or_slug.resolve(key, URGENCY_KIND, held[0])
+            if found is None:
+                raise UrgencyUnknown(field, key)
+            return found
+
+        return named
 
     def live(self, field: str, key: str) -> Urgency:
         """The live urgency ``key`` on ``field`` names — a mint's stated urgency, checked before its unit;
@@ -302,7 +355,7 @@ class UrgencyLifecycle:
             current = self._urgencies.get(urgency.urgency_id, transaction=locked)
             assert current is not None, "an urgency is never deleted"
             current.require_revision(if_match)
-            if current.retired:
+            if not current.retires_to(True):
                 return Retired(current, ())
             default_id = _settings(self._settings, transaction=locked).default_urgency_id
             open_chunks = self._chunks.open_chunks(current.urgency_id, transaction=locked)
@@ -328,7 +381,7 @@ class UrgencyLifecycle:
             for references in self._references:
                 references.clear(current, ctx, at=at, transaction=locked)
             decided = current.set_retired(True, ctx, if_match=None, at=at, extra=moved_diff(destination, len(moved)))
-            assert decided is not None, "a live urgency always retires"
+            assert decided is not None, "the model answered the no-op above"
             retired, change = decided
             stored = self._urgencies.record_lifecycle(
                 retired,
@@ -544,8 +597,9 @@ class UrgencyReferences:
         keys = sorted({urgency_lock(urgency_id) for urgency_id in named.values()})
         with self._transactions.begin() as transaction:
             locked = transaction.lock_set(keys=keys)
+            held = HeldUrgencies.of(self._urgencies.list_all(transaction=locked))
             for field, urgency_id in named.items():
-                require_live(field, urgency_id, reread(self._urgencies, field, urgency_id, transaction=locked))
+                require_live(field, urgency_id, held.get(urgency_id))
             yield locked
 
 

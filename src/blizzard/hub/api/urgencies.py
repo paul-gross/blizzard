@@ -185,7 +185,8 @@ def put_urgency_order(
     `urgency_order_incomplete` when it leaves a live urgency out, names a retired one, or names one twice, and
     `urgency_unknown` for one the tenant does not hold."""
     try:
-        named = [services.urgency_reading.named("urgencies", key) for key in request.urgencies]
+        named_by = services.urgency_reading.namer()
+        named = [named_by("urgencies", key) for key in request.urgencies]
         moved = services.urgency_ordering.set_order(named, change_context(identity, door))
     except ConfigFieldError as exc:
         raise _unprocessable(exc) from exc
@@ -256,10 +257,10 @@ def retire_urgency(
     if_match: Annotated[int | None, Header()] = None,
 ) -> UrgencyRetireView:
     """Retire an urgency, moving the open chunks it carries to `move_to`; finished chunks keep it. Retiring a
-    retired urgency writes nothing. Refused in order: 409 `urgency_is_default` for the tenant's default; 409
-    `urgency_in_use`, counting them, when open chunks carry it and no `move_to` is named; 422 `urgency_unknown`,
-    `urgency_retired` or `urgency_move_to_self` for a `move_to` naming no urgency, a retired one, or this one. A
-    retire moving open work needs `chunk:control` (403). 409 on a stale `If-Match`."""
+    retired urgency writes nothing. Refused in order: 409 problem type `urgency-is-default` for the tenant's
+    default; 409 `urgency-in-use`, counting them in `open_chunks`, when open chunks carry it and no `move_to` is
+    named; 422 `urgency_unknown`, `urgency_retired` or `urgency_move_to_self` for a `move_to` naming no urgency, a
+    retired one, or this one. A retire moving open work needs `chunk:control` (403). 409 on a stale `If-Match`."""
     key = None if request is None else request.move_to
     move_to = None if key is None else MoveTo(key, services.urgency_reading.resolve(key))
     try:

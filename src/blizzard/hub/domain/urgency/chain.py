@@ -10,11 +10,20 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 from blizzard.foundation.roles import domain_model
+from blizzard.hub.domain.config.errors import ConfigFieldError
 from blizzard.hub.domain.urgency.model import Urgency, require_live
 from blizzard.hub.domain.urgency.settings import DEFAULT_URGENCY_FIELD
 
 #: The field a mint request states its urgency under.
 URGENCY_FIELD = "urgency"
+
+
+def required_urgency_reference(reference: str | None) -> str:
+    """``reference`` — the urgency an edit names for a chunk: a chunk always carries one, so a ``null`` is no clear
+    and is refused."""
+    if reference is None:
+        raise ConfigFieldError(URGENCY_FIELD, "must not be null")
+    return reference
 
 
 @domain_model

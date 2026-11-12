@@ -13,7 +13,15 @@ from blizzard.auth_core import Role
 from blizzard.hub.domain.urgency.model import UrgencyId
 from blizzard.hub.store import schema as s
 from blizzard.hub.store.internal.urgency_chunks_store import UrgencyChunksStore
-from tests.support.scaffolding import HubHarness, build_hub, hub_store_connections, ingest, seed_session, seed_user
+from tests.support.scaffolding import (
+    HubHarness,
+    build_hub,
+    count_queries,
+    hub_store_connections,
+    ingest,
+    seed_session,
+    seed_user,
+)
 
 _PNG = b"\x89PNG\r\n\x1a\n" + b"\x00" * 24
 
@@ -140,7 +148,9 @@ def test_a_retire_moves_open_work_and_finished_work_keeps_its_urgency(hub: HubHa
 
     in_use = hub.client.post("/api/urgencies/urgent/retire", json={})
     assert in_use.status_code == 409
-    assert (in_use.json()["detail"]["code"], in_use.json()["detail"]["open_chunks"]) == ("urgency_in_use", 2)
+    body = in_use.json()
+    assert (body["type"], body["slug"], body["open_chunks"]) == ("urn:blizzard:problem:urgency-in-use", "urgent", 2)
+    assert isinstance(body["detail"], str)
     assert _field(hub.client.post("/api/urgencies/urgent/retire", json={"move_to": "urgent"}))[2] == (
         "urgency_move_to_self"
     )
@@ -162,9 +172,10 @@ def test_a_retire_moves_open_work_and_finished_work_keeps_its_urgency(hub: HubHa
     assert (again.status_code, again.json()["revision"]) == (200, retired.json()["revision"])
 
 
-def test_a_retire_leaves_a_chunk_that_finished_after_its_read_and_counts_only_what_moved(
+def test_a_retire_leaves_a_chunk_that_finished_after_its_read_ahead_and_counts_only_what_moved(
     hub: HubHarness, monkeypatch: pytest.MonkeyPatch
 ) -> None:
+    """Only the unlocked read-ahead still sees the finished chunk; the re-read under the chunk rows' lock drops it."""
     urgent = _create(hub, "urgent")
     open_id = ingest(hub, [{"source": "default", "ref": "open"}])
     done_id = ingest(hub, [{"source": "default", "ref": "done"}])
@@ -173,7 +184,8 @@ def test_a_retire_leaves_a_chunk_that_finished_after_its_read_and_counts_only_wh
     assert hub.client.post(f"/api/chunks/{done_id}/complete", json={}).status_code == 202
 
     def read_before_it_finished(self: UrgencyChunksStore, *args: Any, **kwargs: Any) -> list[str]:
-        return sorted([*read(self, *args, **kwargs), done_id])
+        held = read(self, *args, **kwargs)
+        return held if kwargs.get("transaction") is not None else sorted([*held, done_id])
 
     monkeypatch.setattr(UrgencyChunksStore, "open_chunks", read_before_it_finished)
     retired = hub.client.post("/api/urgencies/urgent/retire", json={"move_to": "standard"})
@@ -188,10 +200,27 @@ def test_a_retire_leaves_a_chunk_that_finished_after_its_read_and_counts_only_wh
     assert {d["field"]: d["new"] for d in change["diff"]}["moved_chunks"] == 1
 
 
+def test_a_re_retire_with_a_stale_revision_is_refused_and_writes_nothing(hub: HubHarness) -> None:
+    _create(hub, "urgent")
+    retired = hub.client.post("/api/urgencies/urgent/retire", json={})
+    assert retired.status_code == 200, retired.text
+    changes = len(_changes(hub, "urgency"))
+    stale = hub.client.post("/api/urgencies/urgent/retire", json={}, headers={"If-Match": "1"})
+    assert stale.status_code == 409, stale.text
+    assert _show(hub, "urgent")["revision"] == retired.json()["revision"]
+    assert len(_changes(hub, "urgency")) == changes
+
+
 def test_the_default_is_refused_retire_first(hub: HubHarness) -> None:
     _create(hub, "urgent")
     refused = hub.client.post("/api/urgencies/standard/retire", json={"move_to": "urgent"})
-    assert (refused.status_code, refused.json()["detail"]["code"]) == (409, "urgency_is_default")
+    body = refused.json()
+    assert (refused.status_code, body["type"], body["slug"]) == (
+        409,
+        "urn:blizzard:problem:urgency-is-default",
+        "standard",
+    )
+    assert isinstance(body["detail"], str)
 
 
 def test_enable_returns_to_the_standing_place_and_moves_no_chunk_back(hub: HubHarness) -> None:
@@ -252,6 +281,23 @@ def test_each_reorder_appends_one_order_row_and_one_that_moves_nothing_appends_n
     assert len(_changes(hub, "urgency_order")) == before + 2
     incomplete = hub.client.put("/api/urgencies/order", json={"urgencies": ["standard"]})
     assert _field(incomplete)[2] == "urgency_order_incomplete"
+
+
+def test_a_reorder_resolves_its_keys_in_statements_flat_in_how_many_it_names(tmp_path: Path) -> None:
+    def statements(name: str, created: list[str]) -> int:
+        (tmp_path / name).mkdir()
+        tenant = build_hub(tmp_path / name)
+        for slug in created:
+            _create(tenant, slug)
+        reordered = list(reversed(_slugs(tenant)))
+
+        def put() -> None:
+            response = tenant.client.put("/api/urgencies/order", json={"urgencies": reordered})
+            assert response.status_code == 200, response.text
+
+        return count_queries(tenant.engine, put)
+
+    assert statements("two", ["urgent"]) == statements("five", ["urgent", "high", "low", "background"])
 
 
 def test_reads_need_fleet_view_and_writes_config_edit(tmp_path: Path) -> None:

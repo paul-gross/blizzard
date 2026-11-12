@@ -117,7 +117,8 @@ def cadence_shape(document: CadenceDocument, urgency: UrgencyNamer | None = None
 def _named_urgency(services: TenantServices) -> UrgencyNamer:
     """A request names an urgency by id or slug: each resolves to the id of the urgency the tenant holds, and one
     naming none is refused ``urgency_unknown``."""
-    return lambda field, key: services.urgency_reading.named(field, key).urgency_id
+    named = services.urgency_reading.namer()
+    return lambda field, key: named(field, key).urgency_id
 
 
 def chore_scopes(chore: Chore) -> Literal["all"] | list[str] | None:
@@ -320,16 +321,18 @@ def list_cadence_errands(cadence_id: str, services: Services) -> list[CadenceErr
 
 
 def _cadence_edit(request: CadenceEditRequest, services: TenantServices) -> CadenceEdit:
-    """The sparse edit ``request`` states — only its present fields; ``chores`` may not be cleared."""
+    """The sparse edit ``request`` states — only its present fields."""
     stated = request.model_fields_set
-    if "chores" in stated and request.chores is None:
-        raise ConfigFieldError("chores", "must not be null")
     return CadenceEdit(
         name=request.name if "name" in stated else UNSET,
         schedule=schedule_shape(request.schedule) if "schedule" in stated else UNSET,
         spacing=request.spacing if "spacing" in stated else UNSET,
         anchor=request.anchor if "anchor" in stated else UNSET,
-        chores=UNSET if request.chores is None else chore_shapes(request.chores, _named_urgency(services)),
+        chores=(
+            chore_shapes(CadenceEdit.stated_chores(request.chores), _named_urgency(services))
+            if "chores" in stated
+            else UNSET
+        ),
     )
 
 

@@ -5,7 +5,6 @@ from __future__ import annotations
 from typing import Protocol
 
 from blizzard.hub.composition import TenantServices
-from blizzard.hub.domain.config.errors import ConfigFieldError
 from blizzard.hub.domain.config.forge_resolution import FORGE_FIELD, ForgeChoice, MovedField
 from blizzard.hub.domain.kernel.unset import UNSET, UnsetType
 
@@ -22,12 +21,10 @@ class _NamesForge(Protocol):
 
 
 def forge_choice(request: _NamesForge, services: TenantServices) -> ForgeChoice:
-    """``request``'s ``forge`` — never null — with the forge it resolves to, and every address field it sent."""
+    """``request``'s ``forge`` with the forge it resolves to, and every address field it sent."""
     forge: str | UnsetType = UNSET
     if FORGE_FIELD in request.model_fields_set:
-        if request.forge is None:
-            raise ConfigFieldError(FORGE_FIELD, "must not be null")
-        forge = request.forge
+        forge = ForgeChoice.named_forge(request.forge)
     return ForgeChoice(
         forge=forge,
         named=None if forge is UNSET else services.forge_records.resolve(forge),

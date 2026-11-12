@@ -14,6 +14,8 @@ import pytest
 from blizzard.auth_core import Role
 from blizzard.hub.api import auth_session
 from blizzard.hub.auth.permissions import Permission, permissions_for
+from blizzard.hub.domain.config.apply import UrgencyReferenceGuard
+from blizzard.hub.store.internal.config_apply_store import ConfigApplyStore
 from blizzard.wire.config import CONFIG_DOCUMENT_INVALID
 from tests.support.scaffolding import HubHarness, build_hub
 
@@ -191,3 +193,37 @@ def test_a_promoting_cadence_write_needs_chunk_control_and_an_unchanged_entry_as
     assert [c["slug"] for c in _cadences(hub)] == ["evening"]
     held = {"slug": "late", "spacing": "1d", "chores": [{"key": "a", "routine": "arch", "promote": False}]}
     assert _outcomes(_apply(hub, {"cadences": [held]})) == [("late", "create")]
+
+
+def _recording_guards(monkeypatch: pytest.MonkeyPatch) -> list[list[UrgencyReferenceGuard]]:
+    """Each apply's ``guards``, as the real writer receives them; every call passes through."""
+    seen: list[list[UrgencyReferenceGuard]] = []
+    real = ConfigApplyStore.apply
+
+    def recording(self: ConfigApplyStore, *args: Any, guards: Any = (), **kwargs: Any) -> None:
+        seen.append(list(guards))
+        real(self, *args, guards=guards, **kwargs)
+
+    monkeypatch.setattr(ConfigApplyStore, "apply", recording)
+    return seen
+
+
+def test_an_apply_guards_only_a_stored_urgency_a_chore_newly_names(
+    hub: HubHarness, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    assert hub.client.post("/api/urgencies", json={"slug": "urgent"}).status_code == 201
+    urgent = hub.client.get("/api/urgencies/urgent").json()
+    chores = [{"key": "arch", "routine": "arch", "scopes": "all", "mode": "delta", "urgency": "urgent"}]
+    seen = _recording_guards(monkeypatch)
+
+    def guarded(document: dict[str, Any]) -> list[tuple[str, int, str, str]]:
+        """The guards every writer call of one apply received."""
+        before = len(seen)
+        assert _apply(hub, document).status_code == 200
+        return [(g.section, g.index, g.urgency_id, g.slug) for call in seen[before:] for g in call]
+
+    assert guarded(_declaring(hub, chores=chores)) == [("cadences", 0, urgent["urgency_id"], "urgent")]
+    assert guarded(_declaring(hub, chores=chores)) == []
+    held = [*chores, {"key": "tests", "routine": "arch", "scopes": "all", "mode": "delta", "urgency": "urgent"}]
+    assert guarded(_declaring(hub, chores=held)) == []
+    assert [c["chores"][1]["key"] for c in _cadences(hub)] == ["tests"]

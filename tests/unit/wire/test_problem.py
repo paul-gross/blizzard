@@ -7,7 +7,7 @@ import json
 import pkgutil
 from collections.abc import Iterator
 from types import ModuleType
-from typing import Literal, get_args
+from typing import Final, Literal, get_args, get_origin
 
 import pytest
 from fastapi import FastAPI
@@ -45,11 +45,21 @@ from blizzard.wire.auth import (
     SsoRefusedProblem,
 )
 from blizzard.wire.chunk import CHUNK_NOT_FOUND, ChunkNotFoundProblem
+from blizzard.wire.config import CONFIG_DOCUMENT_INVALID, CONFIG_FIELD_INVALID
+from blizzard.wire.flags import FLAG_OFF
+from blizzard.wire.forge import FORGE_IN_USE, FORGE_ORIGIN_TAKEN, FORGE_REVISION_CONFLICT, FORGE_SLUG_TAKEN
 from blizzard.wire.problem import (
     ProblemDetails,
 )
 from blizzard.wire.problem_registry import ALL_PROBLEM_TYPES
-from blizzard.wire.project import ProjectRef, ProjectRequiredBody, ProjectRequiredProblem
+from blizzard.wire.project import (
+    LANDING_ORDER_CONFLICT,
+    PROJECT_REQUIRED,
+    UNKNOWN_PROJECT,
+    ProjectRef,
+    ProjectRequiredBody,
+    ProjectRequiredProblem,
+)
 from blizzard.wire.release import ReleaseProblem, ReleaseRefusal
 from blizzard.wire.route import (
     CLAIM_CONFLICT,
@@ -72,13 +82,16 @@ from blizzard.wire.runner import (
     RunnerVersionProblem,
     RunnerVersionRefusal,
 )
+from blizzard.wire.secret import SECRET_IN_USE
 from blizzard.wire.tenant import (
+    LAST_TENANT,
     TENANT_NOT_FOUND,
     TENANT_REQUIRED,
     TenantNotFoundProblem,
     TenantRequiredDetail,
     TenantRequiredProblem,
 )
+from blizzard.wire.work_source import UNKNOWN_WORK_SOURCE
 
 
 def _wire_modules() -> Iterator[ModuleType]:
@@ -752,3 +765,42 @@ def test_every_concept_type_is_registered_exactly_once() -> None:
             contributions.extend(local)
     assert len(contributions) == len(set(contributions)), "problem type contributed more than once"
     assert set(contributions) == ALL_PROBLEM_TYPES
+
+
+#: The refusals docs/versioning.md lets keep a non-string `detail`; a new problem type sends a string.
+_STRUCTURED_DETAIL_TYPES: Final = frozenset(
+    {
+        TENANT_REQUIRED,
+        PROJECT_REQUIRED,
+        FLAG_OFF,
+        UNKNOWN_PROJECT,
+        CONFIG_DOCUMENT_INVALID,
+        UNKNOWN_WORK_SOURCE,
+        CONFIG_FIELD_INVALID,
+        LANDING_ORDER_CONFLICT,
+        LAST_TENANT,
+        SECRET_IN_USE,
+        FORGE_IN_USE,
+        FORGE_REVISION_CONFLICT,
+        FORGE_ORIGIN_TAKEN,
+        FORGE_SLUG_TAKEN,
+    }
+)
+
+
+def _is_string_detail(annotation: object) -> bool:
+    """`str`, or a `Literal` of strings only (as `tenant-not-found`'s `Literal['no such tenant']` is)."""
+    if annotation is str:
+        return True
+    return get_origin(annotation) is Literal and all(isinstance(arg, str) for arg in get_args(annotation))
+
+
+def test_only_released_refusals_carry_a_structured_detail() -> None:
+    structured = {
+        value
+        for module in _wire_modules()
+        for model in _local_models(module)
+        if (values := _problem_literal_values(model)) and not _is_string_detail(model.model_fields["detail"].annotation)
+        for value in values
+    }
+    assert structured <= _STRUCTURED_DETAIL_TYPES

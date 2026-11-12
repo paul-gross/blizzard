@@ -7,7 +7,7 @@ from __future__ import annotations
 
 import base64
 from pathlib import Path
-from typing import Any, cast
+from typing import Any
 
 import click
 
@@ -187,8 +187,7 @@ def urgency_retire(cli: CliContext, slug: str, move_to: str | None) -> None:
     )
     refusal = refusal_of(resp)
     if refusal.type == URGENCY_IN_USE:
-        detail = cast(dict[str, object], refusal.detail)
-        count = detail["open_chunks"]
+        count = refusal.members["open_chunks"]
         raise click.ClickException(
             f"urgency {slug} carries {count} open chunks; name where they go:\n  {_move_to_command(cli, slug)}"
         )

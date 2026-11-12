@@ -9,8 +9,9 @@ from typing import cast
 
 import pytest
 
+from blizzard.hub.domain.config.errors import ConfigFieldError
 from blizzard.hub.domain.kernel.transactions import Transaction
-from blizzard.hub.domain.urgency.chain import URGENCY_FIELD, ChainLinks, resolve_chain
+from blizzard.hub.domain.urgency.chain import URGENCY_FIELD, ChainLinks, required_urgency_reference, resolve_chain
 from blizzard.hub.domain.urgency.model import Urgency, UrgencyId, UrgencyRetired
 from blizzard.hub.domain.urgency.ports import (
     IReadTenantSettings,
@@ -109,3 +110,14 @@ def test_a_link_retired_ahead_of_the_unit_is_still_locked_and_honored_once_enabl
 
     assert urgency_lock(_CHORE.urgency_id) in ahead.lock_keys()
     assert default.resolve(ahead, cast(Transaction, object())) == _CHORE
+
+
+def test_a_chunk_urgency_reference_is_answered_as_named() -> None:
+    assert required_urgency_reference("urgent") == "urgent"
+
+
+def test_a_null_chunk_urgency_is_refused_on_the_urgency_field() -> None:
+    with pytest.raises(ConfigFieldError) as refused:
+        required_urgency_reference(None)
+
+    assert (refused.value.field, refused.value.message) == (URGENCY_FIELD, "must not be null")

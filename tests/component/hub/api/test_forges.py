@@ -198,3 +198,35 @@ def test_the_route_and_the_cli_show_each_budgets_last_reading(hub: HubHarness) -
     assert result.exit_code == 0, result.output
     assert f"budget (anonymous)  core  7/60  resets {reset.isoformat()}" in result.output
     assert f"budget gh-token  core  1200/5000  resets {reset.isoformat()}" in result.output
+
+
+def test_a_null_forge_is_422_on_forge_and_changes_nothing(hub: HubHarness) -> None:
+    _create(hub)
+    repository = hub.client.post(
+        "/api/repositories",
+        json={
+            "slug": "demo",
+            "forge": "ghe",
+            "owner": "acme",
+            "repo": "demo",
+            "base_branch": "main",
+            "secret_name": FIXTURE_FORGE_SECRET,
+        },
+    ).json()
+    source = hub.client.post(
+        "/api/work-sources",
+        json={
+            "slug": "issues",
+            "forge": "ghe",
+            "provider": "github",
+            "locator": "acme/issues",
+            "secret": FIXTURE_FORGE_SECRET,
+        },
+    ).json()
+
+    for url, held in (("/api/repositories/demo", repository), ("/api/work-sources/issues", source)):
+        refused = hub.client.patch(url, json={"forge": None})
+
+        assert refused.status_code == 422, refused.text
+        assert [(d["loc"], d["msg"]) for d in refused.json()["detail"]] == [(["body", "forge"], "must not be null")]
+        assert hub.client.get(url).json() == held

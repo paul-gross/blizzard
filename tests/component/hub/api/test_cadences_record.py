@@ -17,7 +17,14 @@ from blizzard.hub.domain.config.changes import ChangeContext, Door
 from blizzard.hub.domain.garden.scopes import ScopeSlug
 from blizzard.wire.cadence import REVISION_CONFLICT, RevisionConflictProblem
 from tests.support.refusal_observation import app_spec, declared_refusal_mismatches
-from tests.support.scaffolding import HubHarness, build_hub, count_queries, default_project, project_record
+from tests.support.scaffolding import (
+    HubHarness,
+    build_hub,
+    capture_statements,
+    count_queries,
+    default_project,
+    project_record,
+)
 
 _CTX = ChangeContext(actor="operator", door=Door.API)
 
@@ -161,6 +168,20 @@ def test_a_patch_edits_only_its_fields_keeps_a_kept_chores_id_and_409s_on_a_stal
     assert stale.json()["type"] == REVISION_CONFLICT
 
 
+def test_a_create_or_edit_whose_chores_name_no_urgency_reads_urgencies_only_for_its_view(hub: HubHarness) -> None:
+    with capture_statements(hub.engine) as statements:
+        created = _create(hub, chores=[{"key": "arch", "routine": "arch"}])
+        edited = hub.client.patch(
+            f"/api/cadences/{created['cadence_id']}",
+            json={"chores": [{"key": "arch", "routine": "arch", "promote": False}]},
+            headers={"If-Match": "1"},
+        )
+        assert edited.status_code == 200, edited.text
+
+    # Each response's view joins the tenant's urgencies once; resolving the chores' urgencies adds no read.
+    assert len([sql for sql, _ in statements if "FROM urgencies" in sql]) == 2
+
+
 def test_a_patch_clears_a_field_with_null_and_refuses_a_null_name(hub: HubHarness) -> None:
     created = _create(hub, schedule={"cron": "0 20 * * *", "zone": "UTC"})
     url = f"/api/cadences/{created['cadence_id']}"
@@ -175,6 +196,18 @@ def test_a_patch_clears_a_field_with_null_and_refuses_a_null_name(hub: HubHarnes
     emptied = hub.client.patch(url, json={"schedule": None})
     assert emptied.status_code == 422, emptied.text
     assert emptied.json()["detail"][0]["loc"] == ["body", "schedule"]
+
+
+def test_a_null_chores_is_422_on_chores_and_changes_nothing(hub: HubHarness) -> None:
+    created = _create(hub, chores=[{"key": "arch", "routine": "arch"}])
+    url = f"/api/cadences/{created['cadence_id']}"
+
+    refused = hub.client.patch(url, json={"chores": None})
+
+    assert refused.status_code == 422, refused.text
+    assert [(d["loc"], d["msg"]) for d in refused.json()["detail"]] == [(["body", "chores"], "must not be null")]
+    reread = hub.client.get(url).json()
+    assert (reread["revision"], reread["chores"]) == (created["revision"], created["chores"])
 
 
 def test_an_unknown_cadence_is_404(hub: HubHarness) -> None:

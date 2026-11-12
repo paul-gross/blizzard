@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from collections.abc import Generator, Sequence
 from contextlib import contextmanager
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from datetime import UTC, datetime
 from typing import Any, cast
 
@@ -58,10 +58,11 @@ class _Chunks:
 
 @dataclass
 class _Urgencies:
+    retiring: Urgency = _RETIRING
     recorded: list[Urgency] = field(default_factory=list[Urgency])
 
     def get(self, urgency_id: UrgencyId, *, transaction: Transaction | None = None) -> Urgency | None:
-        return {u.urgency_id: u for u in (_DEFAULT, _RETIRING, _TARGET)}.get(urgency_id)
+        return {u.urgency_id: u for u in (_DEFAULT, self.retiring, _TARGET)}.get(urgency_id)
 
     def record_lifecycle(self, urgency: Urgency, **_: Any) -> Urgency:
         self.recorded.append(urgency)
@@ -100,4 +101,27 @@ def test_a_chunk_found_open_outside_the_locked_set_widens_the_lock_and_retries_w
     assert chunks.moves == [["chk_a", "chk_b"]]
     assert len(urgencies.recorded) == 1
     assert retired.moved == ("chk_a", "chk_b")
+    assert retired.urgency.retired
+
+
+def test_re_retiring_a_retired_urgency_with_open_chunks_and_a_move_writes_nothing_and_moves_nothing() -> None:
+    chunks = _Chunks(ahead=["chk_a"], late=[])
+    urgencies = _Urgencies(retiring=replace(_RETIRING, retired=True))
+    lifecycle = UrgencyLifecycle(
+        urgencies=cast(IWriteUrgencyRepository, urgencies),
+        settings=cast(IReadTenantSettings, _Settings()),
+        chunks=cast(IWriteUrgencyChunks, chunks),
+        transactions=cast(IHubTransactions, _Transactions()),
+        clock=FixedClock(_AT),
+    )
+
+    retired = lifecycle.retire(
+        _RETIRING,
+        ChangeContext(actor="usr_op", door=Door.CLI),
+        move_to=MoveTo(key=_TARGET.slug, urgency=_TARGET),
+        may_control=True,
+        if_match=None,
+    )
+
+    assert (chunks.moves, urgencies.recorded, retired.moved) == ([], [], ())
     assert retired.urgency.retired

@@ -11,7 +11,7 @@ from blizzard.foundation.clock import IClock
 from blizzard.foundation.ids import Id, IdPrefix
 from blizzard.foundation.roles import domain_model
 from blizzard.hub.domain.cadence.declarations import CadenceDeclaration
-from blizzard.hub.domain.cadence.model import Cadence, ChoreShape
+from blizzard.hub.domain.cadence.model import Cadence, ChoreShape, chore_urgencies_named_beyond
 from blizzard.hub.domain.cadence.ports import IReadCadenceRepository
 from blizzard.hub.domain.config.apply import (
     CADENCES_SECTION,
@@ -653,7 +653,9 @@ def _reference_guards(
         assert isinstance(cadence, CadenceDeclaration)
         held = stored.cadences.get(cadence.key)
         chores = cadence.shape.chores if held is None else cadence.edit.chores
-        named = {c.urgency_id for c in (() if chores is UNSET else chores) if c.urgency_id is not None}
-        before = {c.spec.urgency_id for c in (held.chores if isinstance(held, Cadence) else ())}
-        guards.extend(names.guards(CADENCES_SECTION, index, named - before))
+        named = chore_urgencies_named_beyond(
+            [c.urgency_id for c in (() if chores is UNSET else chores)],
+            (c.spec.urgency_id for c in (held.chores if isinstance(held, Cadence) else ())),
+        )
+        guards.extend(names.guards(CADENCES_SECTION, index, set(named.values())))
     return tuple(guards)

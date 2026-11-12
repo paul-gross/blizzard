@@ -3,8 +3,9 @@
 A chunk carries its urgency in ``chunks.urgency_id``, read through the tenant-led ``ix_chunks_tenant_urgency_id``. Open
 means non-terminal by the status the chunk's facts derive, as the chunk store derives live statuses: the
 :func:`maybe_live` prefilter narrows the candidates, ephemeral chunks drop with it, and the status families' facts
-settle the prefilter's residue. A move rewrites the column in place and touches nothing else of the chunk; it
-re-applies the prefilter in its own write, so a chunk that finished after the read keeps its urgency."""
+settle the prefilter's residue. A move rewrites the column in place and touches nothing else of the chunk, refusing
+only a chunk no longer carrying the urgency it was read under; a finished chunk keeps its urgency because the caller
+holds the chunk rows' lock across its read and the move, and every write that finishes a chunk takes that lock."""
 
 from __future__ import annotations
 
@@ -79,7 +80,7 @@ class UrgencyChunksStore:
                 moved.extend(
                     conn.execute(
                         stmts.update(s.chunks)
-                        .where(s.chunks.c.chunk_id.in_(batch), s.chunks.c.urgency_id == from_id, maybe_live(stmts))
+                        .where(s.chunks.c.chunk_id.in_(batch), s.chunks.c.urgency_id == from_id)
                         .values(urgency_id=to)
                         .returning(s.chunks.c.chunk_id)
                     ).scalars()

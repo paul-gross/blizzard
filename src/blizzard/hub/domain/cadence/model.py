@@ -7,7 +7,7 @@ stand. None reads a clock; each is handed the instant it needs."""
 from __future__ import annotations
 
 import re
-from collections.abc import Collection, Mapping, Sequence
+from collections.abc import Collection, Iterable, Mapping, Sequence
 from dataclasses import dataclass, field, replace
 from datetime import datetime
 from enum import StrEnum
@@ -376,6 +376,14 @@ class CadenceEdit:
     anchor: CadenceAnchor | None | UnsetType = UNSET
     chores: Sequence[ChoreShape] | UnsetType = UNSET
 
+    @staticmethod
+    def stated_chores[T](chores: Sequence[T] | None) -> Sequence[T]:
+        """``chores`` — the whole chore list an edit states: a cadence's chores are never cleared, so a ``null`` is
+        refused."""
+        if chores is None:
+            raise ConfigFieldError(CHORES_FIELD, "must not be null")
+        return chores
+
     def touches_rhythm(self) -> bool:
         return any(value is not UNSET for value in (self.schedule, self.spacing, self.anchor))
 
@@ -556,12 +564,10 @@ class Cadence:
     def urgencies_named_beyond(self, held: Cadence | None) -> dict[str, UrgencyId]:
         """The urgency each chore overriding with one names, by the chore's field ``chores[<index>].urgency``, of
         those ``held`` — the cadence as stored before the write — names on no chore."""
-        before = {chore.spec.urgency_id for chore in (() if held is None else held.chores)}
-        return {
-            f"{CHORES_FIELD}[{index}].urgency": chore.spec.urgency_id
-            for index, chore in enumerate(self.chores)
-            if chore.spec.urgency_id is not None and chore.spec.urgency_id not in before
-        }
+        return chore_urgencies_named_beyond(
+            [chore.spec.urgency_id for chore in self.chores],
+            (chore.spec.urgency_id for chore in (() if held is None else held.chores)),
+        )
 
     def _merged_rhythm(self, edit: CadenceEdit, *, at: datetime) -> Rhythm:
         """The stored rhythm with each stated field of ``edit`` over it, validated whole."""
@@ -596,3 +602,16 @@ class Cadence:
         return ConfigChange.of(
             ctx, RecordKind.CADENCE, self.slug, revision, op, changes, at, project_id=self.project_id
         )
+
+
+def chore_urgencies_named_beyond(
+    named: Sequence[UrgencyId | None], held: Iterable[UrgencyId | None]
+) -> dict[str, UrgencyId]:
+    """The urgency each chore names, in written order and keyed by ``chores[<index>].urgency``, of those no held
+    chore names."""
+    before = set(held)
+    return {
+        f"{CHORES_FIELD}[{index}].urgency": urgency_id
+        for index, urgency_id in enumerate(named)
+        if urgency_id is not None and urgency_id not in before
+    }
