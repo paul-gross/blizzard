@@ -5,6 +5,7 @@ from __future__ import annotations
 from dataclasses import replace
 from datetime import UTC, datetime, timedelta
 
+from blizzard.foundation.usage_kind import UsageKind
 from blizzard.runner.hub.identity import RunnerIdentity
 from blizzard.runner.tracing.facts import (
     BoundaryFact,
@@ -57,7 +58,7 @@ def boundary(
     return BoundaryFact(row_id, generation, kind, at(opened), at(closed) if closed is not None else None)
 
 
-def usage(row_id: int, generation: int, kind: str, seconds: int, **kw: object) -> TokenUsageFact:
+def usage(row_id: int, generation: int, kind: UsageKind, seconds: int, **kw: object) -> TokenUsageFact:
     base = TokenUsageFact(
         id=row_id,
         generation=generation,

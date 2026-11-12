@@ -3208,10 +3208,7 @@ export type ChunkUsageView = {
      * Input Tokens
      */
     input_tokens: number;
-    /**
-     * Kind
-     */
-    kind: string;
+    kind: UsageKind;
     /**
      * Model
      */
@@ -5272,10 +5269,7 @@ export type EnvTimelineInvocationView = {
      * Input Tokens
      */
     input_tokens: number;
-    /**
-     * Kind
-     */
-    kind: string;
+    kind: UsageKind;
     /**
      * Model
      */
@@ -18352,6 +18346,14 @@ export type UrgencyView = {
      */
     urgency_id: string;
 };
+
+export const UsageKind = {
+    SPAWN: 'spawn',
+    RESUME: 'resume',
+    JUDGE: 'judge'
+} as const;
+
+export type UsageKind = typeof UsageKind[keyof typeof UsageKind];
 
 /**
  * UserIdentityView

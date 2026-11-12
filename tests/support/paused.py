@@ -16,10 +16,11 @@ from blizzard.foundation.fact_kinds import (
     RUNNER_LOCALLY_PAUSED,
     RUNNER_LOCALLY_RESUMED,
 )
+from blizzard.foundation.usage_kind import UsageKind
 from blizzard.runner.harness.adapter import WorkerHandle
 from blizzard.runner.harness.claude_code.section import CLAUDE_CODE_HARNESS_ID
 from blizzard.runner.harness.identity import SessionReference
-from blizzard.runner.harness.usage import UsageKind, UsageSample
+from blizzard.runner.harness.usage import UsageSample
 from blizzard.runner.leases.model import NewLease
 from blizzard.runner.loop.context import LoopConfig, LoopContext
 from blizzard.runner.node_steps.chunk_state import ChunkState

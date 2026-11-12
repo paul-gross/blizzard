@@ -63,7 +63,7 @@ const inv = (overrides: Partial<Invocation> = {}): Invocation => ({
   estimated_cost_usd: null,
   harness_id: null,
   input_tokens: 0,
-  kind: 'turn',
+  kind: 'resume',
   model: null,
   output_tokens: 0,
   recorded_at: at('10:00'),

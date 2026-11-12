@@ -31,6 +31,7 @@ from blizzard.foundation.runner_tokens import RunnerTokenRefusalReason
 from blizzard.foundation.store.engine import create_engine_from_url
 from blizzard.foundation.subscription_miss import SampleMissReason
 from blizzard.foundation.trace_export.settings import TracingSettings
+from blizzard.foundation.usage_kind import UsageKind
 from blizzard.runner.composition import RunnerProcess, build_runner_process
 from blizzard.runner.config import RunnerConfig
 from blizzard.runner.environments.provider import (
@@ -59,7 +60,7 @@ from blizzard.runner.harness.health_cache import HarnessHealthCache
 from blizzard.runner.harness.overload import ProviderOverload
 from blizzard.runner.harness.registry import HarnessBinding, HarnessRegistry
 from blizzard.runner.harness.transcript import IHarnessTranscriptSource, TranscriptBatch, TranscriptPosition
-from blizzard.runner.harness.usage import UsageKind, UsageLimit, UsageSample
+from blizzard.runner.harness.usage import UsageLimit, UsageSample
 from blizzard.runner.hub.chunk_status_cache import IChunkViews, ReadThroughChunkViews
 from blizzard.runner.hub.client import (
     BindingDeclaration,

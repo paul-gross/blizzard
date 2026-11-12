@@ -12,6 +12,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, status
 
 from blizzard.foundation.logging import get_logger
 from blizzard.foundation.store.utc import as_utc, iso_utc
+from blizzard.foundation.usage_kind import UsageKind
 from blizzard.hub.api import problems, problems_runners
 from blizzard.hub.api import transcripts as transcripts_api
 from blizzard.hub.api.auth import reject_runner_principal
@@ -43,6 +44,7 @@ from blizzard.wire.env_timeline import (
     EnvTimelineWorkspaceView,
 )
 from blizzard.wire.transcript_segment import LeaseTranscriptView
+from blizzard.wire.vocabulary import open_value
 
 _log = get_logger(__name__)
 
@@ -175,7 +177,7 @@ def step_view(detail: StepDetail) -> EnvTimelineStepView:
         invocations=[
             EnvTimelineInvocationView(
                 recorded_at=iso_utc(u.recorded_at),
-                kind=u.kind,
+                kind=open_value(UsageKind, u.kind),
                 model=u.model,
                 harness_id=u.harness_id,
                 input_tokens=u.input_tokens,

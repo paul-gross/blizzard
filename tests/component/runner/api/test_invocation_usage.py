@@ -5,8 +5,9 @@ from __future__ import annotations
 from datetime import UTC, datetime
 from pathlib import Path
 
+from blizzard.foundation.usage_kind import UsageKind
 from blizzard.runner.config import RunnerConfig
-from blizzard.runner.harness.usage import UsageKind, UsageSample
+from blizzard.runner.harness.usage import UsageSample
 from blizzard.runner.usage.repository import InvocationCost
 from tests.support.config_inputs import create_runner_app
 from tests.support.runner_client import runner_client

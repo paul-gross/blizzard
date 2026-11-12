@@ -5395,8 +5395,8 @@
             "type": "integer"
           },
           "kind": {
-            "title": "Kind",
-            "type": "string"
+            "$ref": "#/components/schemas/UsageKind",
+            "x-blizzard-open": true
           },
           "model": {
             "title": "Model",
@@ -8576,8 +8576,8 @@
             "type": "integer"
           },
           "kind": {
-            "title": "Kind",
-            "type": "string"
+            "$ref": "#/components/schemas/UsageKind",
+            "x-blizzard-open": true
           },
           "model": {
             "anyOf": [
@@ -28781,6 +28781,14 @@
         ],
         "title": "UrgencyView",
         "type": "object"
+      },
+      "UsageKind": {
+        "enum": [
+          "spawn",
+          "resume",
+          "judge"
+        ],
+        "type": "string"
       },
       "UserIdentityView": {
         "description": "One linked provider identity.",

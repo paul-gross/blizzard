@@ -8,6 +8,7 @@ from typing import Protocol
 from blizzard.foundation.clock import IClock
 from blizzard.foundation.fact_kinds import USAGE_RECORDED
 from blizzard.foundation.logging import get_logger
+from blizzard.foundation.usage_kind import UsageKind
 from blizzard.runner.environments.repository import EnvBinding
 from blizzard.runner.environments.workspaces import IWorkspaceSpawnRoots
 from blizzard.runner.events.publisher import IRunnerEventPublisher
@@ -20,7 +21,7 @@ from blizzard.runner.harness.registry import (
 )
 from blizzard.runner.harness.spawn_cwd import SpawnCwd
 from blizzard.runner.harness.transcript import TranscriptPosition
-from blizzard.runner.harness.usage import UsageKind, UsageSample
+from blizzard.runner.harness.usage import UsageSample
 from blizzard.runner.leases.liveness import IReadLeaseLivenessRepository
 from blizzard.runner.leases.model import Lease
 from blizzard.runner.leases.worker_stdout import IWorkerStdoutReader

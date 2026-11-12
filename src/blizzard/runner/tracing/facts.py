@@ -10,6 +10,7 @@ from dataclasses import dataclass
 from datetime import datetime
 
 from blizzard.foundation.roles import domain_model
+from blizzard.foundation.usage_kind import UsageKind
 from blizzard.runner.transcripts.invocation_boundaries import InvocationBoundaryKind
 
 
@@ -94,7 +95,7 @@ class TokenUsageFact:
 
     id: int
     generation: int
-    kind: str
+    kind: UsageKind
     model: str
     input_tokens: int
     output_tokens: int

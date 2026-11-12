@@ -223,7 +223,7 @@ describe('StepDrawerView', () => {
   });
 
   it('shows the model once the step has landed, a skeleton while it is pending', async () => {
-    const invocations = [
+    const invocations: hubApi.EnvTimelineInvocationView[] = [
       { kind: 'spawn', harness_id: 'claude-code', model: 'opus', input_tokens: 1, output_tokens: 1, cache_read_tokens: 0, cache_create_tokens: 0, cost_usd: 1, estimated_cost_usd: null, recorded_at: '2026-07-13T10:00:00Z' },
     ];
     const { el } = await render({ view: stepView(BUILD, { invocations }) });

@@ -17,10 +17,11 @@ import pytest
 import sqlalchemy as sa
 
 from blizzard.foundation.ids import Id, IdPrefix
+from blizzard.foundation.usage_kind import UsageKind
 from blizzard.runner.harness.claude_code.section import CLAUDE_CODE_HARNESS_ID
 from blizzard.runner.harness.fingerprint import PreambleFingerprint
 from blizzard.runner.harness.identity import SessionReference
-from blizzard.runner.harness.usage import UsageKind, UsageSample
+from blizzard.runner.harness.usage import UsageSample
 from blizzard.runner.leases.lease_lock import ILeaseUnit, LeaseUnitMisuse
 from blizzard.runner.leases.operator_requests import IWriteAttachmentRepository
 from blizzard.runner.lifecycle.judgement.git_commit_declaration import IWriteGitCommitDeclarationRepository

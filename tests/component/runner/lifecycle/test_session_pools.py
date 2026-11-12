@@ -22,6 +22,7 @@ from blizzard.foundation.fact_kinds import ESCALATION_RECORDED, EVENT_RECORDED
 from blizzard.foundation.leases import LeaseClosureReason
 from blizzard.foundation.logging import get_logger
 from blizzard.foundation.node_steps import ApplyOutcome, SessionMode
+from blizzard.foundation.usage_kind import UsageKind
 from blizzard.runner.environments.provider import AcquiredEnvironment
 from blizzard.runner.harness.adapter import WorkerHandle
 from blizzard.runner.harness.claude_code.section import CLAUDE_CODE_HARNESS_ID
@@ -31,7 +32,7 @@ from blizzard.runner.harness.opencode.section import OPENCODE_HARNESS_ID
 from blizzard.runner.harness.opencode.transcript.transcript_source import OpenCodeTranscriptSource
 from blizzard.runner.harness.registry import HarnessBinding, HarnessRegistry
 from blizzard.runner.harness.transcript import IHarnessTranscriptSource, TranscriptErrorFactory
-from blizzard.runner.harness.usage import UsageKind, UsageSample
+from blizzard.runner.harness.usage import UsageSample
 from blizzard.runner.hub.client import QueueEntry
 from blizzard.runner.leases.model import NewLease, WorkRefStamp
 from blizzard.runner.lifecycle.attempt import Attempt

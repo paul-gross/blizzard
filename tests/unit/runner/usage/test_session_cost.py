@@ -13,9 +13,10 @@ from pathlib import Path
 import pytest
 import sqlalchemy as sa
 
+from blizzard.foundation.usage_kind import UsageKind
 from blizzard.runner.harness.claude_code.section import CLAUDE_CODE_HARNESS_ID
 from blizzard.runner.harness.identity import SessionReference
-from blizzard.runner.harness.usage import UsageKind, UsageSample
+from blizzard.runner.harness.usage import UsageSample
 from blizzard.runner.leases.model import NewLease
 from blizzard.runner.store.schema import usage_facts
 from tests.support.runner_fakes import FIXTURE_RUNNER_ID, SqlAlchemyRunnerStore, make_store, record_usage

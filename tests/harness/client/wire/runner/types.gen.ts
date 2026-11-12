@@ -1101,10 +1101,7 @@ export type ChunkUsageView = {
      * Input Tokens
      */
     input_tokens: number;
-    /**
-     * Kind
-     */
-    kind: string;
+    kind: UsageKind;
     /**
      * Model
      */
@@ -2626,10 +2623,7 @@ export type InvocationUsageView = {
      * Harness Id
      */
     harness_id: string | null;
-    /**
-     * Kind
-     */
-    kind: string;
+    kind: UsageKind;
     /**
      * Lease Id
      */
@@ -4482,10 +4476,7 @@ export type UsageFactView = {
      * Input Tokens
      */
     input_tokens: number;
-    /**
-     * Kind
-     */
-    kind: string;
+    kind: UsageKind;
     /**
      * Model
      */
@@ -4503,6 +4494,8 @@ export type UsageFactView = {
      */
     recorded_at: string;
 };
+
+export type UsageKind = 'spawn' | 'resume' | 'judge';
 
 /**
  * ValidationEntry
