@@ -27,6 +27,7 @@ from blizzard.hub.domain.chunk.model import (
 )
 from blizzard.hub.domain.chunk.ports.artifacts import IWriteChunkArtifactsRepository
 from blizzard.hub.domain.chunk.ports.fence import EpochAdmission
+from blizzard.hub.domain.chunk.terminal import terminal_under_lock
 from blizzard.hub.domain.graph.actions import ActionSpec
 from blizzard.hub.domain.graph.model import Graph
 from blizzard.hub.forge.landing import VisitForges
@@ -46,6 +47,8 @@ from tests.support.scaffolding import (
     HubHarness,
     build_hub,
     chunk_stores,
+    chunk_unit,
+    hub_store_connections,
     pointer_token,
     report_lease,
 )
@@ -190,6 +193,7 @@ def test_a_stopped_chunk_fences_out_a_still_running_step_transition(tmp_path: Pa
             artifacts=[],
             release_route=True,
             admission=EpochAdmission.ABOVE,
+            terminal=terminal_under_lock(stores.facts, chunk_id, transaction=handle.transaction),
         ).wrote
 
     assert recorded is False
@@ -419,17 +423,20 @@ nodes:
     merge_node = graph.node_by_name("merge")
     assert merge_node is not None
     # The repo already landed — pre-record the marker as an earlier pass would have.
-    cast(IWriteChunkArtifactsRepository, hub.services.chunks.artifacts).record_hub_artifact(
-        chunk_id,
-        node_id=merge_node.node_id,
-        node_name="merge",
-        epoch=1,
-        name="merged/acme/widget",
-        close_decision=decide_close_enqueue([WorkRef(**_POINTER)], lambda _: True),
-        content="c",
-        at=hub.clock.now(),
-        admission=EpochAdmission.AT_OR_ABOVE,
-    )
+    with chunk_unit(hub_store_connections(hub.engine), chunk_id) as unit:
+        cast(IWriteChunkArtifactsRepository, hub.services.chunks.artifacts).record_hub_artifact(
+            chunk_id,
+            node_id=merge_node.node_id,
+            node_name="merge",
+            epoch=1,
+            name="merged/acme/widget",
+            close_decision=decide_close_enqueue([WorkRef(**_POINTER)], lambda _: True),
+            content="c",
+            at=hub.clock.now(),
+            admission=EpochAdmission.AT_OR_ABOVE,
+            terminal=False,
+            transaction=unit,
+        )
 
     apply = _submit_build_pass_with_commit(hub, chunk_id, build_node_id, 1, repo="acme/widget")
     assert apply.json()["outcome"] == "hub_node_taken"

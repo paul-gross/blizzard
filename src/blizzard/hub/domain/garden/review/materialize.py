@@ -14,11 +14,14 @@ from blizzard.foundation.clock import IClock
 from blizzard.foundation.ids import Id, IdPrefix
 from blizzard.foundation.roles import domain_model
 from blizzard.hub.domain.chunk.model import Chunk
+from blizzard.hub.domain.chunk.ports.facts import IReadChunkFactsRepository
 from blizzard.hub.domain.chunk.ports.fence import EpochAdmission
+from blizzard.hub.domain.chunk.terminal import terminal_under_lock
 from blizzard.hub.domain.config.changes import ChangeContext, Door
 from blizzard.hub.domain.garden.review.validation import ValidatedReviewFindings
 from blizzard.hub.domain.garden.scopes import Scope, ScopeMint, ScopeSlug
 from blizzard.hub.domain.graph.model import Node
+from blizzard.hub.domain.kernel.transactions import IHubTransactions, LockedTransaction
 
 
 class ReviewFindingsOutcome(Enum):
@@ -111,7 +114,11 @@ class IWriteReviewFindingsRepository(IReadReviewFindingsRepository, Protocol):
     on ``chunk_id`` alone: a second plan for an already-delivered chunk is dropped. A scope the
     plan names that the project lacks is minted, by :meth:`ReviewFindingsPlan.scope_mint`, with the delivery."""
 
-    def deliver(self, plan: ReviewFindingsPlan, *, admission: EpochAdmission) -> ReviewFindingsOutcome: ...
+    def deliver(
+        self, plan: ReviewFindingsPlan, *, admission: EpochAdmission, terminal: bool, transaction: LockedTransaction
+    ) -> ReviewFindingsOutcome:
+        """Written in ``transaction``, a unit that locks ``plan.chunk_id``."""
+        ...
 
 
 def review_scope_description(chunk: Chunk) -> str:
@@ -167,8 +174,17 @@ class ReviewFindingsMaterialize:
     (:func:`build_review_plan`, at the clock's instant) and hands it to the store, one
     call — every id minted before the store sees it (`bzh:domain-takes-objects`)."""
 
-    def __init__(self, *, delivery: IWriteReviewFindingsRepository, clock: IClock) -> None:
+    def __init__(
+        self,
+        *,
+        delivery: IWriteReviewFindingsRepository,
+        facts: IReadChunkFactsRepository,
+        transactions: IHubTransactions,
+        clock: IClock,
+    ) -> None:
         self._delivery = delivery
+        self._facts = facts
+        self._transactions = transactions
         self._clock = clock
 
     def already_delivered(self, *, chunk: Chunk) -> bool:
@@ -186,4 +202,11 @@ class ReviewFindingsMaterialize:
         node-step, recorded on the marker row for legibility even though the
         idempotence key itself is `chunk_id` alone."""
         plan = build_review_plan(validated, chunk=chunk, node=node, epoch=epoch, at=self._clock.now())
-        return self._delivery.deliver(plan, admission=EpochAdmission.AT_OR_ABOVE)
+        with self._transactions.begin() as unit:
+            locked = unit.lock_chunks([plan.chunk_id])
+            return self._delivery.deliver(
+                plan,
+                admission=EpochAdmission.AT_OR_ABOVE,
+                terminal=terminal_under_lock(self._facts, plan.chunk_id, transaction=locked),
+                transaction=locked,
+            )

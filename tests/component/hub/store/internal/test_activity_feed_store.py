@@ -33,6 +33,7 @@ from tests.support.scaffolding import (
     migrated_hub_at,
     seed_chunk,
     seed_graph,
+    seed_promote,
 )
 
 _T0 = datetime(2026, 1, 1, tzinfo=UTC)
@@ -78,8 +79,8 @@ def test_minted_reads_off_chunks_minted_at(tmp_path: Path) -> None:
 
 
 def test_promoted_reads_off_chunk_promoted(tmp_path: Path) -> None:
-    store, _ = _store(tmp_path)
-    store.queue.record_promote("ch_1", at=_at(1))
+    store, engine = _store(tmp_path)
+    seed_promote(store, engine, "ch_1", at=_at(1))
     row = _row_for(store, "promoted")
     assert row.chunk_id == "ch_1"
     assert row.graph_id == "gr_1"
@@ -127,6 +128,7 @@ def test_node_completed_reads_off_transitions_authored_by_a_runner(tmp_path: Pat
         at=_at(1),
         artifacts=[],
         admission=EpochAdmission.AT_OR_ABOVE,
+        terminal=False,
         close_decision=decide_close_enqueue([], lambda _: True),
     )
     row = _row_for(store, "node-completed")
@@ -149,6 +151,7 @@ def test_hub_advanced_reads_off_transitions_authored_by_the_hub_coordinator(tmp_
         at=_at(1),
         artifacts=[],
         admission=EpochAdmission.AT_OR_ABOVE,
+        terminal=False,
         close_decision=decide_close_enqueue([], lambda _: True),
     )
     row = _row_for(store, "hub-advanced")
@@ -173,6 +176,7 @@ def test_migrated_reads_off_chunk_migrations(tmp_path: Path) -> None:
         artifacts=[],
         source=MigrationSource.AUTHORED_EDGE,
         admission=EpochAdmission.AT_OR_ABOVE,
+        terminal=False,
         close_decision=decide_close_enqueue([], lambda _: True),
     )
     row = _row_for(store, "migrated")
@@ -194,6 +198,7 @@ def test_decision_submitted_reads_off_decisions(tmp_path: Path) -> None:
         at=_at(1),
         artifacts=[],
         admission=EpochAdmission.AT_OR_ABOVE,
+        terminal=False,
         close_decision=decide_close_enqueue([], lambda _: True),
     )
     row = _row_for(store, "decision-submitted")
@@ -215,6 +220,7 @@ def test_decision_resolved_reads_off_decision_resolutions(tmp_path: Path) -> Non
         at=_at(1),
         artifacts=[],
         admission=EpochAdmission.AT_OR_ABOVE,
+        terminal=False,
         close_decision=decide_close_enqueue([], lambda _: True),
     )
     with chunk_unit(hub_store_connections(engine), "ch_1") as unit:
@@ -229,18 +235,21 @@ def test_decision_resolved_reads_off_decision_resolutions(tmp_path: Path) -> Non
 
 def test_question_asked_reads_off_questions(tmp_path: Path) -> None:
     store, _ = _store(tmp_path)
-    store.questions.record_question(
-        question_id="qn_1",
-        chunk_id="ch_1",
-        node_id="nd_a",
-        session_id=None,
-        runner_id="runner-a",
-        epoch=1,
-        question="continue?",
-        options=[],
-        asked_at=_at(1),
-        admission=EpochAdmission.AT_OR_ABOVE,
-    )
+    with store.exclusive.locked(["ch_1"]) as handle:
+        store.questions.record_question(
+            question_id="qn_1",
+            chunk_id="ch_1",
+            node_id="nd_a",
+            session_id=None,
+            runner_id="runner-a",
+            epoch=1,
+            question="continue?",
+            options=[],
+            asked_at=_at(1),
+            admission=EpochAdmission.AT_OR_ABOVE,
+            terminal=False,
+            transaction=handle.transaction,
+        )
     row = _row_for(store, "question-asked")
     assert row.chunk_id == "ch_1"
     assert row.runner_id == "runner-a"
@@ -250,18 +259,21 @@ def test_question_asked_reads_off_questions(tmp_path: Path) -> None:
 
 def test_question_answered_reads_off_question_answers(tmp_path: Path) -> None:
     store, engine = _store(tmp_path)
-    store.questions.record_question(
-        question_id="qn_1",
-        chunk_id="ch_1",
-        node_id="nd_a",
-        session_id=None,
-        runner_id="runner-a",
-        epoch=1,
-        question="continue?",
-        options=[],
-        asked_at=_at(1),
-        admission=EpochAdmission.AT_OR_ABOVE,
-    )
+    with store.exclusive.locked(["ch_1"]) as handle:
+        store.questions.record_question(
+            question_id="qn_1",
+            chunk_id="ch_1",
+            node_id="nd_a",
+            session_id=None,
+            runner_id="runner-a",
+            epoch=1,
+            question="continue?",
+            options=[],
+            asked_at=_at(1),
+            admission=EpochAdmission.AT_OR_ABOVE,
+            terminal=False,
+            transaction=handle.transaction,
+        )
     with chunk_unit(hub_store_connections(engine), "ch_1") as unit:
         store.questions.answer_question("qn_1", answer="yes", answered_by="alice", at=_at(2), transaction=unit)
     row = _row_for(store, "question-answered")
@@ -272,15 +284,18 @@ def test_question_answered_reads_off_question_answers(tmp_path: Path) -> None:
 
 def test_escalated_reads_off_escalations(tmp_path: Path) -> None:
     store, _ = _store(tmp_path)
-    store.escalations.record_escalation(
-        "ch_1",
-        epoch=1,
-        takeover_command="cd x && resume",
-        at=_at(1),
-        admission=EpochAdmission.AT_OR_ABOVE,
-        cause=None,
-        detail=None,
-    )
+    with store.exclusive.locked(["ch_1"]) as handle:
+        store.escalations.record_escalation(
+            "ch_1",
+            epoch=1,
+            takeover_command="cd x && resume",
+            at=_at(1),
+            admission=EpochAdmission.AT_OR_ABOVE,
+            terminal=False,
+            cause=None,
+            detail=None,
+            transaction=handle.transaction,
+        )
     row = _row_for(store, "escalated")
     assert row.chunk_id == "ch_1"
     assert row.graph_id == "gr_1"
@@ -405,7 +420,7 @@ def test_deleted_chunk_shows_only_its_own_deletion_row(tmp_path: Path) -> None:
     """``activity_facts_since`` excludes a deleted chunk's history from every OTHER
     block — only the ``chunk_deleted`` row itself survives the filter."""
     store, engine = _store(tmp_path)
-    store.queue.record_promote("ch_1", at=_at(1))
+    seed_promote(store, engine, "ch_1", at=_at(1))
     with hub_store_connections(engine).write("seed") as conn:
         record_deleted_row(conn, "ch_1", by="alice", at=_at(2))
 
@@ -419,7 +434,7 @@ def test_grouped_chunks_history_is_unaffected_by_the_deleted_exclusion(tmp_path:
     drops away, a *grouped* one's still shows."""
     store, engine = _store(tmp_path)
     _seed_second_chunk(engine, "ch_2")
-    store.queue.record_promote("ch_1", at=_at(1))
+    seed_promote(store, engine, "ch_1", at=_at(1))
     with hub_store_connections(engine).write("seed") as conn:
         record_grouped_row_conn(conn, "ch_1", grouped_into="ch_2", at=_at(2))
 
@@ -451,8 +466,8 @@ def test_the_activity_cause_vocabulary_is_every_chunk_change_cause_but_edited() 
 
 
 def test_since_window_excludes_an_older_fact(tmp_path: Path) -> None:
-    store, _ = _store(tmp_path)
-    store.queue.record_promote("ch_1", at=_at(1))
+    store, engine = _store(tmp_path)
+    seed_promote(store, engine, "ch_1", at=_at(1))
     excluded = [r for r in store.events.activity_facts_since(_at(2), limit=50) if r.cause == "promoted"]
     assert excluded == []
     included = [r for r in store.events.activity_facts_since(_at(1), limit=50) if r.cause == "promoted"]

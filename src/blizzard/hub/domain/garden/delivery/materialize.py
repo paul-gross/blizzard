@@ -16,11 +16,14 @@ from blizzard.foundation.clock import IClock
 from blizzard.foundation.ids import Id, IdPrefix
 from blizzard.foundation.roles import domain_model
 from blizzard.hub.domain.chunk.model import Chunk
+from blizzard.hub.domain.chunk.ports.facts import IReadChunkFactsRepository
 from blizzard.hub.domain.chunk.ports.fence import EpochAdmission
+from blizzard.hub.domain.chunk.terminal import terminal_under_lock
 from blizzard.hub.domain.garden.delivery.validation import ValidatedDelivery, is_finding_id_shaped, single_repo_of
 from blizzard.hub.domain.garden.formats import FindingAddOp, FindingGoneOp, FindingObservedOp
 from blizzard.hub.domain.garden.run_context import RunContext
 from blizzard.hub.domain.graph.model import Node
+from blizzard.hub.domain.kernel.transactions import IHubTransactions, LockedTransaction
 
 
 class DeliveryOutcome(Enum):
@@ -149,10 +152,17 @@ class IWriteGardenDeliveryRepository(IReadGardenDeliveryRepository, Protocol):
     ``DeliveryOutcome.GUARD_LOST`` with nothing written. A proposal citing a finding stored in a
     project other than ``plan.run``'s raises ``GardenDeliveryRejected`` naming it, with nothing written."""
 
-    def deliver(self, plan: DeliveryPlan, *, admission: EpochAdmission) -> DeliveryOutcome:
-        """A delta whose ``artifact_id`` is already materialized is skipped, and a proposal's citation
-        of a ref in it resolves to the id minted then; a proposal already present by
-        ``(source_artifact_id, ref)`` is not re-inserted."""
+    def lock_expected(self, plan: DeliveryPlan, *, transaction: LockedTransaction) -> None:
+        """Lock every finding in ``plan.expect``, sorted, in ``transaction`` — a unit that locks
+        ``plan.chunk_id`` and has taken no other lock or read since, so chunk-then-findings order holds."""
+        ...
+
+    def deliver(
+        self, plan: DeliveryPlan, *, admission: EpochAdmission, terminal: bool, transaction: LockedTransaction
+    ) -> DeliveryOutcome:
+        """Written in ``transaction``, a unit that locks ``plan.chunk_id`` and has run :meth:`lock_expected`. A delta
+        whose ``artifact_id`` is already materialized is skipped, and a proposal's citation of a ref in it resolves to
+        the id minted then; a proposal already present by ``(source_artifact_id, ref)`` is not re-inserted."""
         ...
 
 
@@ -274,8 +284,17 @@ class GardenDelivery:
     (:func:`build_delivery_plan`, at the clock's instant) and hands it to the store, one
     call — every id minted before the store sees it (`bzh:domain-takes-objects`)."""
 
-    def __init__(self, *, delivery: IWriteGardenDeliveryRepository, clock: IClock) -> None:
+    def __init__(
+        self,
+        *,
+        delivery: IWriteGardenDeliveryRepository,
+        facts: IReadChunkFactsRepository,
+        transactions: IHubTransactions,
+        clock: IClock,
+    ) -> None:
         self._delivery = delivery
+        self._facts = facts
+        self._transactions = transactions
         self._clock = clock
 
     def already_delivered(self, *, chunk: Chunk, node: Node, epoch: int) -> bool:
@@ -305,4 +324,12 @@ class GardenDelivery:
             proposal_artifact_ids=proposal_artifact_ids,
             at=self._clock.now(),
         )
-        return self._delivery.deliver(plan, admission=EpochAdmission.AT_OR_ABOVE)
+        with self._transactions.begin() as unit:
+            locked = unit.lock_chunks([plan.chunk_id])
+            self._delivery.lock_expected(plan, transaction=locked)
+            return self._delivery.deliver(
+                plan,
+                admission=EpochAdmission.AT_OR_ABOVE,
+                terminal=terminal_under_lock(self._facts, plan.chunk_id, transaction=locked),
+                transaction=locked,
+            )

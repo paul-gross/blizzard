@@ -22,14 +22,15 @@ from blizzard.hub.domain.garden.review.materialize import (
     ReviewFindingsPlan,
 )
 from blizzard.hub.domain.garden.scopes import ScopeMint
+from blizzard.hub.domain.kernel.transactions import LockedTransaction
 from blizzard.hub.store.internal.chunk_rows import fence, next_artifact_seq
 
 # Resolves or creates scope ids on the caller's connection.
 # ast-grep-ignore: bzh:hub-store-adapter-imports
 from blizzard.hub.store.internal.scope_store import ensure_scope, scope_ids_of
-from blizzard.hub.store.locking import lock_chunk_row
 from blizzard.hub.store.schema import artifacts, chunks, finding_facts, findings
 from blizzard.hub.store.scoped import ScopedConnections, statements_of
+from blizzard.hub.store.transactions import connection_for
 
 #: Keyed on `chunk_id` alone: a chunk owes at most one review-findings delivery.
 _DELIVERED_MARKER_NAME = "review-findings-delivered"
@@ -77,73 +78,74 @@ class ReviewFindingsStore:
         ).scalar_one()
         return project_id
 
-    def deliver(self, plan: ReviewFindingsPlan, *, admission: EpochAdmission) -> ReviewFindingsOutcome:
-        with self._store.write("deliver") as conn:
-            lock_chunk_row(conn, plan.chunk_id)
-            if self._marker(conn, chunk_id=plan.chunk_id) is not None:
-                return ReviewFindingsOutcome.ALREADY_RECORDED
-            if fence(conn, plan.chunk_id, epoch=plan.epoch, admission=admission) is not None:
-                return ReviewFindingsOutcome.FENCED
+    def deliver(
+        self, plan: ReviewFindingsPlan, *, admission: EpochAdmission, terminal: bool, transaction: LockedTransaction
+    ) -> ReviewFindingsOutcome:
+        conn = connection_for(self._store, transaction, chunk=plan.chunk_id)
+        if self._marker(conn, chunk_id=plan.chunk_id) is not None:
+            return ReviewFindingsOutcome.ALREADY_RECORDED
+        if fence(conn, plan.chunk_id, epoch=plan.epoch, admission=admission, terminal=terminal) is not None:
+            return ReviewFindingsOutcome.FENCED
 
-            project_id = self._project_of(conn, plan.chunk_id)
-            for scope_slug in plan.scope_slugs:
-                self._mint_scope_if_unseen(conn, plan.scope_mint(scope_slug, project_id))
+        project_id = self._project_of(conn, plan.chunk_id)
+        for scope_slug in plan.scope_slugs:
+            self._mint_scope_if_unseen(conn, plan.scope_mint(scope_slug, project_id))
 
-            if plan.new_findings:
-                scope_ids = scope_ids_of(conn, [f.scope_slug for f in plan.new_findings], project_id)
-                conn.execute(
-                    self._store.insert(findings).values(project_id=project_id),
-                    [
-                        {
-                            "finding_id": f.finding_id,
-                            "routine_name": None,
-                            "scope_id": scope_ids.get(f.scope_slug),
-                            "scope_slug": f.scope_slug,
-                            "class_": f.class_,
-                            "locus": f.locus,
-                            "summary": f.summary,
-                            "introduced": None,
-                            "introduced_at": None,
-                            "source": "review",
-                            "severity": f.severity,
-                            "raised_by_chunk_id": f.raised_by_chunk_id,
-                        }
-                        for f in plan.new_findings
-                    ],
-                )
-            if plan.facts:
-                conn.execute(
-                    self._store.insert(finding_facts),
-                    [
-                        {
-                            "finding_id": fact.finding_id,
-                            "kind": "add",
-                            "recorded_at": plan.at,
-                            "note": None,
-                            "finding_set_id": None,  # a review delta mints no finding set
-                            "ref": fact.ref,
-                        }
-                        for fact in plan.facts
-                    ],
-                )
-
+        if plan.new_findings:
+            scope_ids = scope_ids_of(conn, [f.scope_slug for f in plan.new_findings], project_id)
             conn.execute(
-                self._store.insert(artifacts).values(
-                    artifact_id=Id.mint_at(IdPrefix.ARTIFACT, plan.at).value,
-                    chunk_id=plan.chunk_id,
-                    node_id=plan.node_id,
-                    node_name=plan.node_name,
-                    epoch=plan.epoch,
-                    name=_DELIVERED_MARKER_NAME,
-                    kind=ArtifactKind.ASSET.value,
-                    data="",
-                    repo=None,
-                    forge=None,
-                    produced_at=plan.at,
-                    seq=next_artifact_seq(conn, plan.chunk_id),
-                )
+                self._store.insert(findings).values(project_id=project_id),
+                [
+                    {
+                        "finding_id": f.finding_id,
+                        "routine_name": None,
+                        "scope_id": scope_ids.get(f.scope_slug),
+                        "scope_slug": f.scope_slug,
+                        "class_": f.class_,
+                        "locus": f.locus,
+                        "summary": f.summary,
+                        "introduced": None,
+                        "introduced_at": None,
+                        "source": "review",
+                        "severity": f.severity,
+                        "raised_by_chunk_id": f.raised_by_chunk_id,
+                    }
+                    for f in plan.new_findings
+                ],
             )
-            return ReviewFindingsOutcome.RECORDED
+        if plan.facts:
+            conn.execute(
+                self._store.insert(finding_facts),
+                [
+                    {
+                        "finding_id": fact.finding_id,
+                        "kind": "add",
+                        "recorded_at": plan.at,
+                        "note": None,
+                        "finding_set_id": None,  # a review delta mints no finding set
+                        "ref": fact.ref,
+                    }
+                    for fact in plan.facts
+                ],
+            )
+
+        conn.execute(
+            self._store.insert(artifacts).values(
+                artifact_id=Id.mint_at(IdPrefix.ARTIFACT, plan.at).value,
+                chunk_id=plan.chunk_id,
+                node_id=plan.node_id,
+                node_name=plan.node_name,
+                epoch=plan.epoch,
+                name=_DELIVERED_MARKER_NAME,
+                kind=ArtifactKind.ASSET.value,
+                data="",
+                repo=None,
+                forge=None,
+                produced_at=plan.at,
+                seq=next_artifact_seq(conn, plan.chunk_id),
+            )
+        )
+        return ReviewFindingsOutcome.RECORDED
 
 
 _review_findings_store_conforms: type[IWriteReviewFindingsRepository] = ReviewFindingsStore

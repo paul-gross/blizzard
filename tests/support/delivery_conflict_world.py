@@ -94,4 +94,5 @@ def seed_at_deliver_with_an_unlanded_commit(
         artifacts=commit_artifacts,
         close_decision=decide_close_enqueue([WorkRef("default", "1")], lambda _: True),
         admission=EpochAdmission.AT_OR_ABOVE,
+        terminal=False,
     )

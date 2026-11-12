@@ -29,11 +29,13 @@ from blizzard.hub.store.transactions import HubTransactions
 from tests.support.scaffolding import (
     build_hub,
     chunk_stores,
+    chunk_unit,
     hub_store_connections,
     migrate_to,
     pointer_token,
     seed_chunk_record,
     seed_graph,
+    seed_promote,
     seed_work_item,
 )
 
@@ -77,17 +79,20 @@ def test_delete_removes_the_chunk_from_every_read(tmp_path: Path) -> None:
     chunks, _, delete, _ = _stores(tmp_path)
     pointer = WorkRef(source="default", ref="1")
     chunk = _mint(chunks, "ch_1", work_refs=[pointer])
-    chunks.artifacts.record_hub_artifact(
-        "ch_1",
-        node_id="nd_deliver",
-        node_name="deliver",
-        epoch=1,
-        name="merged/widget",
-        content="sha",
-        at=_T0,
-        admission=EpochAdmission.AT_OR_ABOVE,
-        close_decision=decide_close_enqueue([pointer], lambda _: True),
-    )
+    with chunks.exclusive.locked(["ch_1"]) as handle:
+        chunks.artifacts.record_hub_artifact(
+            "ch_1",
+            node_id="nd_deliver",
+            node_name="deliver",
+            epoch=1,
+            name="merged/widget",
+            content="sha",
+            at=_T0,
+            admission=EpochAdmission.AT_OR_ABOVE,
+            terminal=False,
+            close_decision=decide_close_enqueue([pointer], lambda _: True),
+            transaction=handle.transaction,
+        )
     # Sanity: landed and carrying a pending intent *before* the delete — proves the
     # post-delete emptiness below is the ephemeral exclusion at work, not a
     # vacuously-empty read.
@@ -108,17 +113,20 @@ def test_a_grouped_chunk_is_excluded_from_pending_close_intents(tmp_path: Path) 
     pointer = WorkRef(source="default", ref="1")
     _mint(chunks, "ch_1")
     _mint(chunks, "ch_2", work_refs=[pointer])
-    chunks.artifacts.record_hub_artifact(
-        "ch_2",
-        node_id="nd_deliver",
-        node_name="deliver",
-        epoch=1,
-        name="merged/widget",
-        content="sha",
-        at=_T0,
-        admission=EpochAdmission.AT_OR_ABOVE,
-        close_decision=decide_close_enqueue([pointer], lambda _: True),
-    )
+    with chunk_unit(hub_store_connections(engine), "ch_2") as unit:
+        chunks.artifacts.record_hub_artifact(
+            "ch_2",
+            node_id="nd_deliver",
+            node_name="deliver",
+            epoch=1,
+            name="merged/widget",
+            content="sha",
+            at=_T0,
+            admission=EpochAdmission.AT_OR_ABOVE,
+            terminal=False,
+            close_decision=decide_close_enqueue([pointer], lambda _: True),
+            transaction=unit,
+        )
     assert chunks.delivery.pending_close_intents() == [PendingCloseIntent(chunk_id="ch_2", ref=pointer)]
 
     with hub_store_connections(engine).write("seed") as conn:
@@ -145,30 +153,36 @@ def _make_paused(chunks: ChunkStores, chunk_id: str) -> None:
 
 
 def _make_needs_human(chunks: ChunkStores, chunk_id: str) -> None:
-    chunks.escalations.record_escalation(
-        chunk_id,
-        epoch=1,
-        takeover_command="cd x && resume",
-        at=_T0,
-        admission=EpochAdmission.AT_OR_ABOVE,
-        cause=None,
-        detail=None,
-    )
+    with chunks.exclusive.locked([chunk_id]) as handle:
+        chunks.escalations.record_escalation(
+            chunk_id,
+            epoch=1,
+            takeover_command="cd x && resume",
+            at=_T0,
+            admission=EpochAdmission.AT_OR_ABOVE,
+            terminal=False,
+            cause=None,
+            detail=None,
+            transaction=handle.transaction,
+        )
 
 
 def _make_waiting_on_human(chunks: ChunkStores, chunk_id: str) -> None:
-    chunks.questions.record_question(
-        question_id="qn_1",
-        chunk_id=chunk_id,
-        node_id="nd_a",
-        session_id=None,
-        runner_id="r1",
-        epoch=1,
-        question="continue?",
-        options=[],
-        asked_at=_T0,
-        admission=EpochAdmission.AT_OR_ABOVE,
-    )
+    with chunks.exclusive.locked([chunk_id]) as handle:
+        chunks.questions.record_question(
+            question_id="qn_1",
+            chunk_id=chunk_id,
+            node_id="nd_a",
+            session_id=None,
+            runner_id="r1",
+            epoch=1,
+            question="continue?",
+            options=[],
+            asked_at=_T0,
+            admission=EpochAdmission.AT_OR_ABOVE,
+            terminal=False,
+            transaction=handle.transaction,
+        )
 
 
 def _make_stopped(chunks: ChunkStores, chunk_id: str) -> None:
@@ -213,10 +227,10 @@ def test_delete_refuses_every_status_outside_groupable(
 
 
 def test_delete_succeeds_at_not_ready_and_ready(tmp_path: Path) -> None:
-    chunks, _, delete, _ = _stores(tmp_path)
+    chunks, _, delete, engine = _stores(tmp_path)
     not_ready = _mint(chunks, "ch_1")
     ready = _mint(chunks, "ch_2")
-    chunks.queue.record_promote("ch_2", at=_T0)
+    seed_promote(chunks, engine, "ch_2", at=_T0)
 
     delete.delete(not_ready, by="operator")
     delete.delete(ready, by="operator")
@@ -229,9 +243,9 @@ def test_delete_succeeds_at_not_ready_and_ready(tmp_path: Path) -> None:
 
 
 def test_activity_feed_shows_the_deletion_with_its_actor_and_no_other_row(tmp_path: Path) -> None:
-    chunks, _, delete, _ = _stores(tmp_path)
+    chunks, _, delete, engine = _stores(tmp_path)
     chunk = _mint(chunks, "ch_1")
-    chunks.queue.record_promote("ch_1", at=_at(1))  # a row that would otherwise show for ch_1
+    seed_promote(chunks, engine, "ch_1", at=_at(1))  # a row that would otherwise show for ch_1
 
     delete.delete(chunk, by="paul")
 

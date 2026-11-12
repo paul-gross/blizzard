@@ -11,6 +11,7 @@ from blizzard.foundation.roles import domain_model
 from blizzard.hub.domain.chunk.close_read import CloseAttempt, CloseClosure, CloseIntent
 from blizzard.hub.domain.chunk.delivery_read import LandingFact
 from blizzard.hub.domain.chunk.model import CloseEnqueueDecision, PendingCloseIntent, WorkItemCloseOutcome, WorkRef
+from blizzard.hub.domain.kernel.transactions import LockedTransaction
 
 
 @domain_model
@@ -68,9 +69,10 @@ class IWriteChunkDeliveryRepository(IReadChunkDeliveryRepository, Protocol):
         transition_id: str,
         at: datetime,
         close_decision: CloseEnqueueDecision,
+        transaction: LockedTransaction,
     ) -> DeliveryWrite:
-        """Land the terminal delivery atomically and idempotently — one transaction, a
-        no-op if already landed (crash recovery). Answers ``wrote`` True iff it wrote."""
+        """Land the terminal delivery atomically and idempotently in ``transaction``, a unit that
+        locks the chunk — a no-op if already landed (crash recovery). Answers ``wrote`` True iff it wrote."""
         ...
 
     def record_work_item_closure(

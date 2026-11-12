@@ -26,6 +26,7 @@ from blizzard.hub.domain.actions.effects import LandingRecord, MissingCapability
 from blizzard.hub.domain.chunk.model import WorkItemAuthor, decide_close_enqueue
 from blizzard.hub.domain.chunk.no_code import no_code_marker
 from blizzard.hub.domain.chunk.ports.fence import EpochAdmission
+from blizzard.hub.domain.chunk.terminal import terminal_under_lock
 from blizzard.hub.domain.config.capabilities import Capability
 from blizzard.hub.domain.config.repositories import (
     RepositoryId,
@@ -76,6 +77,7 @@ from tests.support.scaffolding import (
     HubHarness,
     RepositorySeed,
     build_hub,
+    chunk_unit,
     emitted_events,
     hub_scoped,
     hub_store_connections,
@@ -1274,18 +1276,21 @@ def test_a_landing_record_is_written_past_the_fence_once_and_answers_whether_it_
     close_decision = decide_close_enqueue(chunk.work_refs, lambda _: True)
 
     def record() -> bool:
-        return artifacts.record_landing(
-            chunk_id,
-            node_id="nd_deliver",
-            node_name="deliver",
-            epoch=1,
-            admission=EpochAdmission.AT_OR_ABOVE,
-            repo=_WIDGET,
-            revision="m1",
-            repository_id="re_widget",
-            at=hub.clock.now(),
-            close_decision=close_decision,
-        ).refused
+        with chunk_unit(hub_store_connections(hub.engine), chunk_id) as unit:
+            return artifacts.record_landing(
+                chunk_id,
+                node_id="nd_deliver",
+                node_name="deliver",
+                epoch=1,
+                admission=EpochAdmission.AT_OR_ABOVE,
+                terminal=terminal_under_lock(hub.services.chunks.facts, chunk_id, transaction=unit),
+                repo=_WIDGET,
+                revision="m1",
+                repository_id="re_widget",
+                at=hub.clock.now(),
+                close_decision=close_decision,
+                transaction=unit,
+            ).refused
 
     hub.services.stop.stop(chunk, by="operator")
 

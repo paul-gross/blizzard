@@ -40,14 +40,6 @@ class IReadChunkQueueRepository(Protocol):
 class IWriteChunkQueueRepository(IReadChunkQueueRepository, Protocol):
     """Read-write chunk-queue access."""
 
-    def record_promote(self, chunk_id: str, *, at: datetime) -> int | None:
-        """Record a ``chunk.promoted`` fact — flips ``not_ready`` to ``ready``.
-
-        Idempotent while promoted: a chunk currently promoted keeps its row, so a re-promote
-        writes nothing; one demoted since promotes again. Returns the freshly-written
-        ``chunk_promoted.id``, or ``None`` on that no-op replay — there is no fresh row to name."""
-        ...
-
     def record_promote_with_position(
         self, chunk_id: str, *, position: float, at: datetime, transaction: LockedTransaction
     ) -> int:
@@ -80,7 +72,6 @@ class IWriteChunkQueueRepository(IReadChunkQueueRepository, Protocol):
         self, positions: Sequence[tuple[str, float]], *, at: datetime, transaction: LockedTransaction
     ) -> None:
         """Same shape as :meth:`record_queue_positions`, in a unit locking
-        :data:`BACKLOG_RANKING_LOCK`, except that a pair naming a currently promoted chunk is dropped —
-        a store-side filter kept as recorded debt, read in one bulk query, not one per pair; the
-        ranking decision itself is the caller's."""
+        :data:`BACKLOG_RANKING_LOCK`. The caller judged, in the same unit, which chunks the backlog
+        ranks; every pair is written."""
         ...

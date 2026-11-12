@@ -39,6 +39,7 @@ from tests.support.scaffolding import (
     HubHarness,
     WorkSourceRegistry,
     build_hub,
+    chunk_unit,
     count_queries,
     emitted_events,
     hub_level_connections,
@@ -70,17 +71,20 @@ def _land(hub: HubHarness, chunk_id: str, *, repo: str = "widget") -> None:
     intent as a side effect of the same write."""
     chunk = hub.services.chunks.record.get(chunk_id)
     assert chunk is not None
-    cast(IWriteChunkArtifactsRepository, hub.services.chunks.artifacts).record_hub_artifact(
-        chunk_id,
-        node_id="nd_deliver",
-        node_name="deliver",
-        epoch=1,
-        name=f"merged/{repo}",
-        content="sha",
-        at=hub.clock.now(),
-        admission=EpochAdmission.AT_OR_ABOVE,
-        close_decision=CloseEnqueueDecision(closable=frozenset(chunk.work_refs), skipped=frozenset()),
-    )
+    with chunk_unit(hub_store_connections(hub.engine), chunk_id) as unit:
+        cast(IWriteChunkArtifactsRepository, hub.services.chunks.artifacts).record_hub_artifact(
+            chunk_id,
+            node_id="nd_deliver",
+            node_name="deliver",
+            epoch=1,
+            name=f"merged/{repo}",
+            content="sha",
+            at=hub.clock.now(),
+            admission=EpochAdmission.AT_OR_ABOVE,
+            terminal=False,
+            close_decision=CloseEnqueueDecision(closable=frozenset(chunk.work_refs), skipped=frozenset()),
+            transaction=unit,
+        )
 
 
 def test_record_work_item_closure_retires_the_matching_pending_intent(tmp_path: Path) -> None:
@@ -526,6 +530,7 @@ def test_a_chunk_reaching_the_terminal_with_no_landing_enqueues_its_ref(tmp_path
         at=hub.clock.now(),
         artifacts=[],
         admission=EpochAdmission.AT_OR_ABOVE,
+        terminal=False,
         close_decision=CloseEnqueueDecision(closable=frozenset({WorkRef("default", "1")}), skipped=frozenset()),
     )
 

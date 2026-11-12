@@ -177,49 +177,61 @@ def test_list_open_escalations_applies_supersession_fleet_wide(tmp_path: Path) -
         seed_chunk(conn, "ch_f", graph_id="gr_1", at=T0)
 
     # ch_a: escalation, nothing after it -> OPEN.
-    store.escalations.record_escalation(
-        "ch_a",
-        epoch=1,
-        takeover_command="cd a && resume",
-        at=_at(10),
-        admission=EpochAdmission.AT_OR_ABOVE,
-        cause=None,
-        detail=None,
-    )
+    with store.exclusive.locked(["ch_a"]) as handle:
+        store.escalations.record_escalation(
+            "ch_a",
+            epoch=1,
+            takeover_command="cd a && resume",
+            at=_at(10),
+            admission=EpochAdmission.AT_OR_ABOVE,
+            terminal=False,
+            cause=None,
+            detail=None,
+            transaction=handle.transaction,
+        )
     # ch_b: escalation then a LATER lease mint -> superseded (closed).
-    store.escalations.record_escalation(
-        "ch_b",
-        epoch=1,
-        takeover_command="cd b && resume",
-        at=_at(10),
-        admission=EpochAdmission.AT_OR_ABOVE,
-        cause=None,
-        detail=None,
-    )
+    with store.exclusive.locked(["ch_b"]) as handle:
+        store.escalations.record_escalation(
+            "ch_b",
+            epoch=1,
+            takeover_command="cd b && resume",
+            at=_at(10),
+            admission=EpochAdmission.AT_OR_ABOVE,
+            terminal=False,
+            cause=None,
+            detail=None,
+            transaction=handle.transaction,
+        )
     seed_lease(engine, "ch_b", epoch=2, runner_id="r1", at=_at(20))
     # ch_c: escalation then a LATER requeue -> superseded (closed).
-    store.escalations.record_escalation(
-        "ch_c",
-        epoch=1,
-        takeover_command="cd c && resume",
-        at=_at(10),
-        admission=EpochAdmission.AT_OR_ABOVE,
-        cause=None,
-        detail=None,
-    )
+    with store.exclusive.locked(["ch_c"]) as handle:
+        store.escalations.record_escalation(
+            "ch_c",
+            epoch=1,
+            takeover_command="cd c && resume",
+            at=_at(10),
+            admission=EpochAdmission.AT_OR_ABOVE,
+            terminal=False,
+            cause=None,
+            detail=None,
+            transaction=handle.transaction,
+        )
     with store.exclusive.locked(["ch_c"]) as handle:
         store.movement.record_requeue_locked(handle, "ch_c", at=_at(20))
     # ch_d: escalation then a LATER stop -> superseded (#292). This read feeds the critical
     # `needs-human` row in `GET /api/events`, so a stopped chunk must leave it.
-    store.escalations.record_escalation(
-        "ch_d",
-        epoch=1,
-        takeover_command="cd d && resume",
-        at=_at(10),
-        admission=EpochAdmission.AT_OR_ABOVE,
-        cause=None,
-        detail=None,
-    )
+    with store.exclusive.locked(["ch_d"]) as handle:
+        store.escalations.record_escalation(
+            "ch_d",
+            epoch=1,
+            takeover_command="cd d && resume",
+            at=_at(10),
+            admission=EpochAdmission.AT_OR_ABOVE,
+            terminal=False,
+            cause=None,
+            detail=None,
+            transaction=handle.transaction,
+        )
     clock.instant = _at(20)
     with store.exclusive.locked(["ch_d"]) as handle:
         store.lifecycle.record_stop_locked(handle, "ch_d", by="operator", at=_at(20))
@@ -245,15 +257,18 @@ def test_list_open_escalations_applies_supersession_fleet_wide(tmp_path: Path) -
         )
     # ch_f: escalation then the chunk REACHES DONE elsewhere -> superseded (#293). No later
     # lease is minted here, so completion is the only arm that can close it.
-    store.escalations.record_escalation(
-        "ch_f",
-        epoch=1,
-        takeover_command="cd f && resume",
-        at=_at(10),
-        admission=EpochAdmission.AT_OR_ABOVE,
-        cause=None,
-        detail=None,
-    )
+    with store.exclusive.locked(["ch_f"]) as handle:
+        store.escalations.record_escalation(
+            "ch_f",
+            epoch=1,
+            takeover_command="cd f && resume",
+            at=_at(10),
+            admission=EpochAdmission.AT_OR_ABOVE,
+            terminal=False,
+            cause=None,
+            detail=None,
+            transaction=handle.transaction,
+        )
     store.movement.record_transition(
         transition_id="tr_f1",
         chunk_id="ch_f",
@@ -265,6 +280,7 @@ def test_list_open_escalations_applies_supersession_fleet_wide(tmp_path: Path) -
         at=_at(20),
         artifacts=[],
         admission=EpochAdmission.AT_OR_ABOVE,
+        terminal=False,
         close_decision=decide_close_enqueue([], lambda _: True),
     )
 

@@ -19,9 +19,9 @@ from blizzard.hub.domain.kernel.transactions import LockedTransaction, Transacti
 from blizzard.hub.domain.projects.model import ProjectId
 from blizzard.hub.store import schema as s
 from blizzard.hub.store.internal.chunk_rows import QUESTIONS, fence
-from blizzard.hub.store.internal.chunk_terminal_predicates import chunk_is_terminal
+from blizzard.hub.store.internal.chunk_terminal_predicates import maybe_live
 from blizzard.hub.store.scoped import ScopedConnections
-from blizzard.hub.store.transactions import chunk_locked_connection, connection_for, connection_in
+from blizzard.hub.store.transactions import connection_for, connection_in
 
 
 class ChunkQuestionsStore:
@@ -47,7 +47,7 @@ class ChunkQuestionsStore:
         one project's questions."""
         open_ = s.questions.c.question_id.not_in(
             self._store.select(s.question_answers, s.question_answers.c.question_id)
-        ) & ~chunk_is_terminal(self._store, s.questions.c.chunk_id)
+        ) & maybe_live(self._store, s.questions.c.chunk_id)
         if project is not None:
             open_ &= s.questions.c.project_id == project
         with self._store.read("list_open_questions") as conn:
@@ -73,43 +73,42 @@ class ChunkQuestionsStore:
         runner_id: str,
         epoch: int,
         admission: EpochAdmission,
+        terminal: bool,
         claimant: Claimant | None = None,
         question: str,
         options: list[str],
         asked_at: datetime,
         harness_id: str | None = None,
-        transaction: Transaction | None = None,
+        transaction: LockedTransaction,
     ) -> FenceRefusal | None:
-        with chunk_locked_connection(self._store, chunk_id, transaction, "record_question") as conn:
-            exists = conn.execute(
-                self._store.select(s.questions, s.questions.c.question_id).where(
-                    s.questions.c.question_id == question_id
-                )
-            ).first()
-            if exists is not None:
-                return None
-            refusal = fence(conn, chunk_id, epoch=epoch, admission=admission, claimant=claimant)
-            if refusal is not None:
-                return refusal
-            project_id = conn.execute(
-                self._store.select(s.chunks, s.chunks.c.project_id).where(s.chunks.c.chunk_id == chunk_id)
-            ).scalar_one()
-            conn.execute(
-                self._store.insert(s.questions).values(
-                    question_id=question_id,
-                    chunk_id=chunk_id,
-                    project_id=project_id,
-                    node_id=node_id,
-                    session_id=session_id,
-                    harness_id=harness_id,
-                    runner_id=runner_id,
-                    epoch=epoch,
-                    question=question,
-                    options=json.dumps(options),
-                    asked_at=asked_at,
-                )
-            )
+        conn = connection_for(self._store, transaction, chunk=chunk_id)
+        exists = conn.execute(
+            self._store.select(s.questions, s.questions.c.question_id).where(s.questions.c.question_id == question_id)
+        ).first()
+        if exists is not None:
             return None
+        refusal = fence(conn, chunk_id, epoch=epoch, admission=admission, terminal=terminal, claimant=claimant)
+        if refusal is not None:
+            return refusal
+        project_id = conn.execute(
+            self._store.select(s.chunks, s.chunks.c.project_id).where(s.chunks.c.chunk_id == chunk_id)
+        ).scalar_one()
+        conn.execute(
+            self._store.insert(s.questions).values(
+                question_id=question_id,
+                chunk_id=chunk_id,
+                project_id=project_id,
+                node_id=node_id,
+                session_id=session_id,
+                harness_id=harness_id,
+                runner_id=runner_id,
+                epoch=epoch,
+                question=question,
+                options=json.dumps(options),
+                asked_at=asked_at,
+            )
+        )
+        return None
 
     def answer_question(
         self, question_id: str, *, answer: str, answered_by: str, at: datetime, transaction: LockedTransaction

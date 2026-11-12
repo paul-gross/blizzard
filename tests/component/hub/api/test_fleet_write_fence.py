@@ -11,18 +11,23 @@ from pathlib import Path
 from typing import Any
 
 import pytest
+from structlog.testing import capture_logs
 
 from blizzard.foundation.artifacts import ArtifactKind
 from blizzard.foundation.migration_source import MigrationSource
 from blizzard.hub.domain.artifact.model import StoredArtifact
-from blizzard.hub.domain.chunk.model import WorkRef, decide_close_enqueue
+from blizzard.hub.domain.chunk.model import ChunkFacts, WorkRef, decide_close_enqueue
 from blizzard.hub.domain.chunk.ports.fence import EpochAdmission, FenceRefusal
 from blizzard.hub.domain.chunk.ports.movement import MigrationWrite
+from blizzard.hub.domain.chunk.terminal import terminal_under_lock
 from blizzard.hub.store import schema as s
 from tests.support.scaffolding import (
     FactAck,
     build_hub,
+    chunk_unit,
+    hub_store_connections,
     report_escalation,
+    report_lease,
     report_question,
 )
 from tests.support.write_fence_locks import Chunk, held_by_a_writer, restart_under_lock, stop_under_lock
@@ -218,6 +223,18 @@ def test_a_question_and_an_escalation_on_a_stopped_chunk_are_rejected(tmp_path: 
     assert chunk.rows(s.questions) == 0 and chunk.rows(s.escalations) == 0
 
 
+def test_a_lease_mint_on_a_stopped_chunk_is_rejected_as_terminal(tmp_path: Path) -> None:
+    chunk = Chunk(build_hub(tmp_path))
+    chunk.stop()
+    chunk.seq += 1
+
+    with capture_logs() as logs:
+        ack = report_lease(chunk.hub, chunk.chunk_id, epoch=2, seq=chunk.seq)
+
+    assert ack["rejected"] == [chunk.seq] and ack["applied"] == []
+    assert [log["detail"] for log in logs if log["event"] == "fact fenced"] == [_TERMINAL]
+
+
 def test_a_same_epoch_question_and_escalation_still_land(tmp_path: Path) -> None:
     chunk = Chunk(build_hub(tmp_path))
 
@@ -268,15 +285,18 @@ def test_the_store_returns_the_refusal_and_writes_nothing(tmp_path: Path) -> Non
     chunk = Chunk(hub)
     chunk.lease(2)
 
-    refused = chunk.stores.escalations.record_escalation(
-        chunk.chunk_id,
-        epoch=1,
-        admission=EpochAdmission.AT_OR_ABOVE,
-        takeover_command="x",
-        at=hub.clock.now(),
-        cause=None,
-        detail=None,
-    )
+    with chunk_unit(hub_store_connections(hub.engine), chunk.chunk_id) as unit:
+        refused = chunk.stores.escalations.record_escalation(
+            chunk.chunk_id,
+            epoch=1,
+            admission=EpochAdmission.AT_OR_ABOVE,
+            terminal=False,
+            takeover_command="x",
+            at=hub.clock.now(),
+            cause=None,
+            detail=None,
+            transaction=unit,
+        )
 
     assert refused == FenceRefusal.stale(1, latest=2)
     assert chunk.rows(s.escalations) == 0
@@ -304,6 +324,7 @@ def test_a_stale_or_stopped_migration_is_refused_and_writes_nothing(tmp_path: Pa
     chunk.lease(2)
 
     def migrate(epoch: int) -> MigrationWrite | FenceRefusal | None:
+        terminal = ChunkFacts.terminal_verdict(chunk.stores.facts.load_facts(chunk.chunk_id))
         return chunk.stores.movement.record_migration(
             chunk.chunk_id,
             from_node_id=chunk.nodes["build"],
@@ -314,6 +335,7 @@ def test_a_stale_or_stopped_migration_is_refused_and_writes_nothing(tmp_path: Pa
             model=None,
             epoch=epoch,
             admission=EpochAdmission.CURRENT,
+            terminal=terminal,
             at=hub.clock.now(),
             artifacts=[
                 StoredArtifact(
@@ -340,20 +362,23 @@ def test_a_stale_or_stopped_migration_is_refused_and_writes_nothing(tmp_path: Pa
     assert chunk.rows(s.artifacts) == 0
 
 
-def test_the_store_refuses_a_write_at_the_epoch_a_transition_reached_done_as_terminal(tmp_path: Path) -> None:
+def test_a_write_at_the_epoch_a_transition_reached_done_is_refused_as_terminal(tmp_path: Path) -> None:
     hub = build_hub(tmp_path)
     chunk = Chunk(hub)
     assert chunk.complete("build", epoch=1, choice="finish")["outcome"] == "done"
 
-    refused = chunk.stores.escalations.record_escalation(
-        chunk.chunk_id,
-        epoch=1,
-        admission=EpochAdmission.AT_OR_ABOVE,
-        takeover_command="x",
-        at=hub.clock.now(),
-        cause=None,
-        detail=None,
-    )
+    with chunk_unit(hub_store_connections(hub.engine), chunk.chunk_id) as unit:
+        refused = chunk.stores.escalations.record_escalation(
+            chunk.chunk_id,
+            epoch=1,
+            admission=EpochAdmission.AT_OR_ABOVE,
+            terminal=terminal_under_lock(chunk.stores.facts, chunk.chunk_id, transaction=unit),
+            takeover_command="x",
+            at=hub.clock.now(),
+            cause=None,
+            detail=None,
+            transaction=unit,
+        )
 
     assert refused == FenceRefusal.terminal(1)
     assert chunk.rows(s.escalations) == 0

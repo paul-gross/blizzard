@@ -1,9 +1,8 @@
 """Concurrent allocation of the per-chunk ``artifacts.seq`` counter.
 
-``chunk_rows.next_artifact_seq`` is read-then-insert, not atomic; two concurrent writers
-must not compute the same next value. Proves the allocator locks the chunk row first
-under any dialect (static proof, no live postgres), and sqlite never duplicates.
-"""
+``chunk_rows.next_artifact_seq`` is read-then-insert; the caller holds the chunk's row lock, so the
+allocator takes none. Proves it issues only its read (static proof, no live postgres), and that writers
+taking the lock first on sqlite never duplicate."""
 
 from __future__ import annotations
 
@@ -14,7 +13,6 @@ from datetime import UTC, datetime
 from pathlib import Path
 
 from sqlalchemy import Connection, create_engine, insert
-from sqlalchemy.dialects import postgresql, sqlite
 from sqlalchemy.sql.dml import Update
 from structlog import get_logger
 
@@ -22,6 +20,7 @@ from blizzard.foundation.store.engine import create_engine_from_url
 from blizzard.hub.store import schema as s
 from blizzard.hub.store.errors import HubStoreErrorFactory
 from blizzard.hub.store.internal.chunk_rows import next_artifact_seq
+from blizzard.hub.store.locking import lock_chunk_row
 from blizzard.hub.store.scoped import ScopedConnections
 from blizzard.hub.tenancy import StoreScope, TenantId
 from tests.support.scaffolding import hub_store_connections, migrated_hub_at, stamp
@@ -58,17 +57,14 @@ def _scoped_connection() -> Generator[Connection]:
         yield conn
 
 
-def test_next_artifact_seq_locks_the_chunk_row_before_reading_the_max() -> None:
+def test_next_artifact_seq_takes_no_row_lock_of_its_own() -> None:
     with _scoped_connection() as scoped:
         conn = _CapturingConn(scoped)
 
         assert next_artifact_seq(conn, "ch_1") == 1  # pyright: ignore[reportArgumentType]  # a statement-capturing double; a real Connection would execute against a store with no tables
 
-    assert len(conn.statements) == 2  # the lock, then the max read
-    lock_stmt = conn.statements[0]
-    assert isinstance(lock_stmt, Update)
-    assert str(lock_stmt.compile(dialect=postgresql.dialect())).startswith("UPDATE chunks SET")
-    assert str(lock_stmt.compile(dialect=sqlite.dialect())).startswith("UPDATE chunks SET")
+    assert len(conn.statements) == 1  # the max read, on the caller's already-locked connection
+    assert not isinstance(conn.statements[0], Update)
 
 
 def test_concurrent_artifact_seq_allocation_on_sqlite_never_duplicates(tmp_path: Path) -> None:
@@ -85,6 +81,7 @@ def test_concurrent_artifact_seq_allocation_on_sqlite_never_duplicates(tmp_path:
         try:
             barrier.wait(timeout=5)
             with hub_store_connections(engine).write("seed") as conn:
+                lock_chunk_row(conn, "ch_1")
                 seq = next_artifact_seq(conn, "ch_1")
                 conn.execute(
                     insert(s.artifacts).values(

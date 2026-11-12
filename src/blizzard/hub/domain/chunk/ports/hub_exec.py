@@ -42,6 +42,7 @@ class IWriteChunkHubExecRepository(IReadChunkHubExecRepository, Protocol):
         choice_name: str,
         epoch: int,
         admission: EpochAdmission,
+        terminal: bool,
         runner_id: str,
         transition_id: str,
         at: datetime,

@@ -409,6 +409,7 @@ def test_a_migrated_chunks_post_migration_graph_never_leaks_into_a_pre_migration
         artifacts=[],
         source=MigrationSource.AUTHORED_EDGE,
         admission=EpochAdmission.AT_OR_ABOVE,
+        terminal=False,
         close_decision=decide_close_enqueue([WorkRef("default", "1")], lambda _: True),
     )
     claim_route(hub, chunk_id)  # the migration re-queued the chunk; it is claimed again

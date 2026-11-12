@@ -14,6 +14,7 @@ from pathlib import Path
 
 import pytest
 import sqlalchemy as sa
+from sqlalchemy import Engine
 
 from blizzard.foundation.chunk_status import TERMINAL_STATUSES, ChunkStatus
 from blizzard.foundation.clock import FixedClock
@@ -55,6 +56,7 @@ from tests.support.scaffolding import (
     ingest,
     seed_chunk_record,
     seed_graph,
+    seed_promote,
 )
 
 
@@ -144,12 +146,12 @@ def test_bulk_read_query_count_is_independent_of_fleet_size(tmp_path: Path) -> N
     (tmp_path / "large").mkdir()
     small, small_engine, _small_clock = seeded_chunk_stores(tmp_path / "small")
     seed_chunk_record(small, Chunk(chunk_id="ch_a", graph_id="gr_1", work_refs=[], minted_at=T0))
-    small.queue.record_promote("ch_a", at=T0)
+    seed_promote(small, small_engine, "ch_a", at=T0)
 
     large, large_engine, _large_clock = seeded_chunk_stores(tmp_path / "large")
     for i in range(40):
         seed_chunk_record(large, Chunk(chunk_id=f"ch_{i}", graph_id="gr_1", work_refs=[], minted_at=T0))
-        large.queue.record_promote(f"ch_{i}", at=T0)
+        seed_promote(large, large_engine, f"ch_{i}", at=T0)
 
     small_count = count_queries(small_engine, small.facts.load_all_facts)
     large_count = count_queries(large_engine, large.facts.load_all_facts)
@@ -286,12 +288,12 @@ def test_load_live_statuses_query_count_is_independent_of_fleet_size(tmp_path: P
     (tmp_path / "large").mkdir()
     small, small_engine, _small_clock = seeded_chunk_stores(tmp_path / "small")
     seed_chunk_record(small, Chunk(chunk_id="ch_a", graph_id="gr_1", work_refs=[], minted_at=T0))
-    small.queue.record_promote("ch_a", at=T0)
+    seed_promote(small, small_engine, "ch_a", at=T0)
 
     large, large_engine, _large_clock = seeded_chunk_stores(tmp_path / "large")
     for i in range(40):
         seed_chunk_record(large, Chunk(chunk_id=f"ch_{i}", graph_id="gr_1", work_refs=[], minted_at=T0))
-        large.queue.record_promote(f"ch_{i}", at=T0)
+        seed_promote(large, large_engine, f"ch_{i}", at=T0)
 
     small_count = count_queries(small_engine, small.facts.load_live_statuses)
     large_count = count_queries(large_engine, large.facts.load_live_statuses)
@@ -312,13 +314,13 @@ def test_load_live_statuses_reads_fewer_statements_than_load_all_facts(tmp_path:
     assert statuses_count < all_facts_count
 
 
-def _seed_promoted_with_open_decision(store: ChunkStores, chunk_id: str) -> None:
+def _seed_promoted_with_open_decision(store: ChunkStores, engine: Engine, chunk_id: str) -> None:
     """A promoted chunk carrying one unresolved decision — enough to give every family
     the shared batching helper touches at least one row per seeded id, so a
     per-batch query count stays identical across batches regardless of which id lands
     in which batch."""
     seed_chunk_record(store, Chunk(chunk_id=chunk_id, graph_id="gr_1", work_refs=[], minted_at=T0))
-    store.queue.record_promote(chunk_id, at=T0)
+    seed_promote(store, engine, chunk_id, at=T0)
     store.decisions.record_decision(
         imposed_by_runner_id=None,
         decision_id=f"dec_{chunk_id}",
@@ -330,6 +332,7 @@ def _seed_promoted_with_open_decision(store: ChunkStores, chunk_id: str) -> None
         at=T0,
         artifacts=[],
         admission=EpochAdmission.AT_OR_ABOVE,
+        terminal=False,
         close_decision=decide_close_enqueue([], lambda _: True),
     )
 
@@ -341,10 +344,10 @@ def test_load_all_facts_query_count_is_independent_of_decision_count_above_the_b
     (tmp_path / "small").mkdir()
     (tmp_path / "large").mkdir()
     small, small_engine, _small_clock = seeded_chunk_stores(tmp_path / "small")
-    _seed_promoted_with_open_decision(small, "ch_small")
+    _seed_promoted_with_open_decision(small, small_engine, "ch_small")
     large, large_engine, _large_clock = seeded_chunk_stores(tmp_path / "large")
     for i in range(10):  # more than three batches of decisions under the lowered cap
-        _seed_promoted_with_open_decision(large, f"ch_large_{i}")
+        _seed_promoted_with_open_decision(large, large_engine, f"ch_large_{i}")
 
     small_count = count_queries(small_engine, small.facts.load_all_facts)
     large_count = count_queries(large_engine, large.facts.load_all_facts)
@@ -359,7 +362,7 @@ def test_load_facts_for_query_count_scales_with_batch_count_not_id_count(
     store, engine, _clock = seeded_chunk_stores(tmp_path)
     ids = [f"ch_batch_{i}" for i in range(7)]  # 3 batches of size 3, 3, 1 under the lowered cap
     for chunk_id in ids:
-        _seed_promoted_with_open_decision(store, chunk_id)
+        _seed_promoted_with_open_decision(store, engine, chunk_id)
 
     one_batch_count = count_queries(engine, lambda: store.facts.load_facts_for(ids[:3]))
     two_batch_count = count_queries(engine, lambda: store.facts.load_facts_for(ids[:6]))
@@ -388,7 +391,7 @@ def test_load_facts_for_batches_the_graph_node_read_when_chunks_pin_more_graphs_
             seed_graph(conn, graph_id, at=T0)
             _seed_node(conn, graph_id, f"nd_extra_{i}", executor="hub")
         _mint(store, f"ch_extra_{i}", graph_id=graph_id)
-        store.queue.record_promote(f"ch_extra_{i}", at=T0)
+        seed_promote(store, engine, f"ch_extra_{i}", at=T0)
         ids.append(f"ch_extra_{i}")
 
     with capture_statements(engine) as statements:

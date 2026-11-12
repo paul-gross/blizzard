@@ -1,7 +1,7 @@
 """The ``chunk_demoted`` fact against every reader of "currently promoted" (component tier).
 
-A chunk is currently promoted while its newest promotion is later than its newest demotion. Proves the facts load,
-the promote replay guard, ``promoted_ats``, and the backlog-position guard each read it that way."""
+A chunk is currently promoted while its newest promotion is later than its newest demotion. Proves the facts load
+and ``promoted_ats`` each read it that way."""
 
 from __future__ import annotations
 
@@ -13,10 +13,16 @@ from sqlalchemy import Engine, insert
 from blizzard.foundation.chunk_status import ChunkStatus
 from blizzard.foundation.clock import FixedClock
 from blizzard.hub.domain.chunk.model import Chunk
-from blizzard.hub.domain.chunk.ports.queue import BACKLOG_RANKING_LOCK
 from blizzard.hub.domain.chunk.ports.stores import ChunkStores
 from blizzard.hub.store import schema as s
-from tests.support.scaffolding import chunk_stores, migrate_to, ranking_unit, seed_chunk_record, seed_graph, stamp
+from tests.support.scaffolding import (
+    chunk_stores,
+    migrate_to,
+    seed_chunk_record,
+    seed_graph,
+    seed_promote,
+    stamp,
+)
 
 _T0 = datetime(2026, 1, 1, tzinfo=UTC)
 
@@ -56,7 +62,7 @@ def _status(stores: ChunkStores, chunk_id: str) -> ChunkStatus:
 
 def test_a_demoted_chunk_derives_not_ready(tmp_path: Path) -> None:
     stores, engine = _store(tmp_path)
-    stores.queue.record_promote("ch_a", at=_at(1))
+    seed_promote(stores, engine, "ch_a", at=_at(1))
     assert _status(stores, "ch_a") is ChunkStatus.READY
 
     _demote(engine, "ch_a", at=_at(2))
@@ -67,7 +73,7 @@ def test_a_demoted_chunk_derives_not_ready(tmp_path: Path) -> None:
 
 def test_a_demoted_chunk_with_its_brake_set_derives_paused_and_not_ready_but_for_pause(tmp_path: Path) -> None:
     stores, engine = _store(tmp_path)
-    stores.queue.record_promote("ch_a", at=_at(1))
+    seed_promote(stores, engine, "ch_a", at=_at(1))
     _demote(engine, "ch_a", at=_at(2))
     _pause(engine, "ch_a", at=_at(3))
 
@@ -77,35 +83,12 @@ def test_a_demoted_chunk_with_its_brake_set_derives_paused_and_not_ready_but_for
     assert facts.is_ready_but_for_pause() is False
 
 
-def test_promote_writes_again_after_a_demote(tmp_path: Path) -> None:
-    stores, engine = _store(tmp_path)
-    first = stores.queue.record_promote("ch_a", at=_at(1))
-    assert stores.queue.record_promote("ch_a", at=_at(2)) is None
-    _demote(engine, "ch_a", at=_at(3))
-
-    again = stores.queue.record_promote("ch_a", at=_at(4))
-
-    assert again is not None and again != first
-    assert _status(stores, "ch_a") is ChunkStatus.READY
-
-
 def test_promoted_ats_reads_the_newest_promotion_and_omits_a_demoted_chunk(tmp_path: Path) -> None:
     stores, engine = _store(tmp_path)
-    stores.queue.record_promote("ch_a", at=_at(1))
+    seed_promote(stores, engine, "ch_a", at=_at(1))
     _demote(engine, "ch_a", at=_at(2))
     assert stores.queue.promoted_ats(["ch_a"]) == {}
 
-    stores.queue.record_promote("ch_a", at=_at(3))
+    seed_promote(stores, engine, "ch_a", at=_at(3))
 
     assert stores.queue.promoted_ats(["ch_a"]) == {"ch_a": _at(3)}
-
-
-def test_a_backlog_position_stamp_on_a_demoted_chunk_is_kept(tmp_path: Path) -> None:
-    stores, engine = _store(tmp_path)
-    stores.queue.record_promote("ch_a", at=_at(1))
-    _demote(engine, "ch_a", at=_at(2))
-
-    with ranking_unit(engine, lock=BACKLOG_RANKING_LOCK) as unit:
-        stores.queue.record_backlog_positions([("ch_a", 7.0)], at=_at(3), transaction=unit)
-
-    assert stores.queue.queue_positions(["ch_a"]) == {"ch_a": 7.0}

@@ -19,7 +19,7 @@ from dataclasses import dataclass
 from datetime import datetime, timedelta
 from typing import Any
 
-from sqlalchemy import Column, CompoundSelect, Connection, CursorResult, Row, Select, Table, func, literal, select
+from sqlalchemy import Column, CompoundSelect, Connection, CursorResult, Row, Select, Table, func
 
 from blizzard.foundation.artifacts import ArtifactKind
 from blizzard.foundation.chunk_migration import MigrationMode
@@ -41,10 +41,8 @@ from blizzard.hub.domain.runners.route import Route
 from blizzard.hub.domain.work_items.closure import NO_CLOSER_REASON, TERMINAL_CLOSE_OUTCOMES
 from blizzard.hub.store import schema as s
 from blizzard.hub.store.errors import HubStoreError
-from blizzard.hub.store.internal.chunk_terminal_predicates import chunk_is_terminal
 from blizzard.hub.store.internal.fact_families import ephemeral_tables
 from blizzard.hub.store.internal.newest_fact import newer_row_exists
-from blizzard.hub.store.locking import lock_chunk_row
 from blizzard.hub.store.scoped import ScopedStatements, statements_of
 
 
@@ -406,10 +404,9 @@ def routes_of_conn(conn: Connection, chunk_ids: Sequence[str] | None) -> dict[st
 def next_route_seq(conn: Connection, chunk_id: str) -> int:
     """One past the current max ``seq`` across ``route_created``, ``route_released``
     and ``route_token_minted`` for this chunk, so the triple is totally ordered even
-    when timestamps tie. Read-then-insert, so concurrent callers are serialized by
-    :func:`lock_chunk_row` (``bzh:sql-portable``;
+    when timestamps tie. Read-then-insert, so ``conn`` must already hold the chunk's row lock, which
+    serializes concurrent callers (``bzh:sql-portable``;
     ``tests/unit/hub/store/internal/test_chunk_rows_route_seq_concurrency.py``)."""
-    lock_chunk_row(conn, chunk_id)
     stmts = statements_of(conn)
     created_max, released_max, token_max = (
         conn.execute(stmts.select(table, func.max(table.c.seq)).where(table.c.chunk_id == chunk_id)).scalar()
@@ -421,10 +418,9 @@ def next_route_seq(conn: Connection, chunk_id: str) -> int:
 def next_artifact_seq(conn: Connection, chunk_id: str) -> int:
     """One past the current max ``artifacts.seq`` for this chunk — the artifacts' durable
     write order, which a same-millisecond pair of ids cannot settle. Read-then-insert, so
-    concurrent callers are serialized by :func:`lock_chunk_row` (``bzh:sql-portable``;
-    ``tests/unit/hub/store/internal/test_chunk_rows_artifact_seq_concurrency.py``).
+    ``conn`` must already hold the chunk's row lock, which serializes concurrent callers
+    (``bzh:sql-portable``; ``tests/unit/hub/store/internal/test_chunk_rows_artifact_seq_concurrency.py``).
     Call it in the inserting transaction."""
-    lock_chunk_row(conn, chunk_id)
     current = conn.execute(
         statements_of(conn).select(s.artifacts, func.max(s.artifacts.c.seq)).where(s.artifacts.c.chunk_id == chunk_id)
     ).scalar()
@@ -483,7 +479,7 @@ def owning_lease_id(conn: Connection, chunk_id: str, epoch: int) -> str | None:
 
 def record_epoch_owner(conn: Connection, chunk_id: str, epoch: int, owner: EpochOwner, *, at: datetime) -> None:
     """Record ``owner`` for the epoch unless it already has one — first owner wins. Call it
-    after :func:`lock_chunk_row`, on the write's own connection, in the transaction of the
+    on a connection that already holds the chunk's row lock, in the transaction of the
     fact that takes the epoch (``bzh:store-exclusive-write``); the unique constraint backs it."""
     if epoch_owner(conn, chunk_id, epoch) is not None:
         return
@@ -515,14 +511,16 @@ def fence(
     *,
     epoch: int,
     admission: EpochAdmission,
+    terminal: bool,
     claimant: Claimant | None = None,
 ) -> FenceRefusal | None:
     """The in-transaction write fence (``bzh:epoch-fencing``).
 
-    After :func:`lock_chunk_row` and the replay probe, refuse terminal chunks,
-    then stale epochs, then displaced claimants. ``None`` admits the write."""
+    On a connection that already holds the chunk's row lock, after the replay probe, apply the caller's
+    ``terminal`` verdict — derived in the domain from facts read under that lock — then refuse stale epochs,
+    then displaced claimants. ``None`` admits the write."""
     newest = latest_epoch(conn, chunk_id)
-    if is_terminal(conn, chunk_id):
+    if terminal:
         return FenceRefusal.terminal(epoch)
     if not admission.admits(epoch, newest=newest):
         return FenceRefusal.stale(epoch, latest=newest)
@@ -535,23 +533,16 @@ def fence(
 
 def mint_admission(conn: Connection, chunk_id: str, *, epoch: int, runner_id: str) -> MintAdmission:
     """The chunk's state a runner's ``lease.minted`` at ``epoch`` is admitted against, read on
-    the minting write's own connection after :func:`lock_chunk_row`."""
+    the minting write's connection, which already holds the chunk's row lock."""
     newest = latest_epoch(conn, chunk_id)
     route = route_of_conn(conn, chunk_id)
     return MintAdmission(
         epoch=epoch,
         newest=newest,
-        terminal=is_terminal(conn, chunk_id),
         owner=epoch_owner(conn, chunk_id, epoch),
         owning_lease_id=owning_lease_id(conn, chunk_id, epoch),
         holds_route=route is not None and route.runner_id == runner_id,
     )
-
-
-def is_terminal(conn: Connection, chunk_id: str) -> bool:
-    """Whether the chunk is stopped or done, read on the caller's connection so this sits inside the same
-    transaction as the write it fences."""
-    return bool(conn.execute(select(chunk_is_terminal(statements_of(conn), literal(chunk_id)))).scalar())
 
 
 def enqueue_close_intents(
@@ -678,6 +669,7 @@ def write_landing_rows(
     node_name: str,
     epoch: int,
     admission: EpochAdmission,
+    terminal: bool,
     repo: str,
     revision: str,
     repository_id: str,
@@ -687,11 +679,11 @@ def write_landing_rows(
 ) -> tuple[bool, bool, tuple[int, ...]]:
     """One merge's ``merged/<repo>`` marker, its ``delivery_repo_landed`` row and the chunk's close intents, admitted
     past the fence. Answers whether the fence would have refused, whether this wrote — a replay finds the marker
-    and writes nothing — and the ids of the close-skip event rows it wrote."""
-    lock_chunk_row(conn, chunk_id)
+    and writes nothing — and the ids of the close-skip event rows it wrote. ``conn`` must already hold the chunk's
+    row lock."""
     stmts = statements_of(conn)
     name = f"{MARKER_PREFIX}{repo}"
-    refused = fence(conn, chunk_id, epoch=epoch, admission=admission) is not None
+    refused = fence(conn, chunk_id, epoch=epoch, admission=admission, terminal=terminal) is not None
     already = conn.execute(
         stmts.select(s.artifacts, s.artifacts.c.artifact_id).where(
             (s.artifacts.c.chunk_id == chunk_id)

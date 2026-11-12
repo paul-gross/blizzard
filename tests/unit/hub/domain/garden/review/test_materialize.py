@@ -9,10 +9,12 @@ from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from typing import Any, cast
 
+import pytest
+
 from blizzard.foundation.clock import FixedClock
 from blizzard.foundation.ids import IdPrefix
 from blizzard.foundation.node_steps import Executor, JudgedBy, SessionMode
-from blizzard.hub.domain.chunk.model import Chunk, WorkRef
+from blizzard.hub.domain.chunk.model import Chunk, ChunkFacts, WorkRef
 from blizzard.hub.domain.chunk.ports.fence import EpochAdmission
 from blizzard.hub.domain.garden.formats import DeferredReviewEntry
 from blizzard.hub.domain.garden.review.materialize import (
@@ -23,6 +25,9 @@ from blizzard.hub.domain.garden.review.materialize import (
 )
 from blizzard.hub.domain.garden.review.validation import ValidatedReviewFindings
 from blizzard.hub.domain.graph.model import Node
+from blizzard.hub.domain.kernel.transactions import LockedTransaction
+from tests.support.fake_chunk_facts import FakeStatusFacts
+from tests.support.fake_transactions import FakeTransactions
 from tests.support.garden_artifacts import deferred_entry
 
 _T0 = datetime(2026, 1, 1, tzinfo=UTC)
@@ -48,8 +53,15 @@ class _FakeReviewFindingsRepo:
     delivered: list[ReviewFindingsPlan] = field(default_factory=list[ReviewFindingsPlan])
     outcome: ReviewFindingsOutcome = ReviewFindingsOutcome.RECORDED
 
-    def deliver(self, plan: ReviewFindingsPlan, *, admission: EpochAdmission) -> ReviewFindingsOutcome:
+    terminals: list[bool] = field(default_factory=list[bool])
+    written_in: list[LockedTransaction] = field(default_factory=list[LockedTransaction])
+
+    def deliver(
+        self, plan: ReviewFindingsPlan, *, admission: EpochAdmission, terminal: bool, transaction: LockedTransaction
+    ) -> ReviewFindingsOutcome:
         self.delivered.append(plan)
+        self.terminals.append(terminal)
+        self.written_in.append(transaction)
         return self.outcome
 
     def __getattr__(self, name: str) -> Any:
@@ -76,7 +88,12 @@ def _deferred(ref: str = "F1", *, scope: str = "blizzard", severity: str = "shou
 
 def test_deliver_builds_a_finding_and_its_add_fact_from_a_deferred_entry() -> None:
     repo = _FakeReviewFindingsRepo()
-    service = ReviewFindingsMaterialize(delivery=_as_write_repo(repo), clock=FixedClock(instant=_T0))
+    service = ReviewFindingsMaterialize(
+        delivery=_as_write_repo(repo),
+        facts=FakeStatusFacts().as_port(),
+        transactions=FakeTransactions(),
+        clock=FixedClock(instant=_T0),
+    )
     validated = ValidatedReviewFindings(deferred=[_deferred()])
 
     outcome = service.deliver(validated, chunk=_CHUNK, node=_NODE, epoch=1)
@@ -110,7 +127,12 @@ def test_deliver_builds_a_finding_and_its_add_fact_from_a_deferred_entry() -> No
 
 def test_deliver_on_an_empty_delta_yields_an_empty_plan() -> None:
     repo = _FakeReviewFindingsRepo()
-    service = ReviewFindingsMaterialize(delivery=_as_write_repo(repo), clock=FixedClock(instant=_T0))
+    service = ReviewFindingsMaterialize(
+        delivery=_as_write_repo(repo),
+        facts=FakeStatusFacts().as_port(),
+        transactions=FakeTransactions(),
+        clock=FixedClock(instant=_T0),
+    )
     validated = ValidatedReviewFindings(deferred=[])
 
     service.deliver(validated, chunk=_CHUNK, node=_NODE, epoch=1)
@@ -123,7 +145,12 @@ def test_deliver_on_an_empty_delta_yields_an_empty_plan() -> None:
 
 def test_deliver_over_two_entries_mints_two_distinct_findings() -> None:
     repo = _FakeReviewFindingsRepo()
-    service = ReviewFindingsMaterialize(delivery=_as_write_repo(repo), clock=FixedClock(instant=_T0))
+    service = ReviewFindingsMaterialize(
+        delivery=_as_write_repo(repo),
+        facts=FakeStatusFacts().as_port(),
+        transactions=FakeTransactions(),
+        clock=FixedClock(instant=_T0),
+    )
     validated = ValidatedReviewFindings(deferred=[_deferred(ref="F1"), _deferred(ref="F2", scope="other")])
 
     service.deliver(validated, chunk=_CHUNK, node=_NODE, epoch=1)
@@ -137,9 +164,56 @@ def test_deliver_over_two_entries_mints_two_distinct_findings() -> None:
 
 def test_deliver_returns_the_repository_outcome() -> None:
     repo = _FakeReviewFindingsRepo(outcome=ReviewFindingsOutcome.ALREADY_RECORDED)
-    service = ReviewFindingsMaterialize(delivery=_as_write_repo(repo), clock=FixedClock(instant=_T0))
+    service = ReviewFindingsMaterialize(
+        delivery=_as_write_repo(repo),
+        facts=FakeStatusFacts().as_port(),
+        transactions=FakeTransactions(),
+        clock=FixedClock(instant=_T0),
+    )
     validated = ValidatedReviewFindings(deferred=[])
 
     outcome = service.deliver(validated, chunk=_CHUNK, node=_NODE, epoch=1)
 
     assert outcome is ReviewFindingsOutcome.ALREADY_RECORDED
+
+
+def test_deliver_writes_in_a_unit_of_its_own_that_locks_the_chunk() -> None:
+    repo = _FakeReviewFindingsRepo()
+    transactions = FakeTransactions()
+    service = ReviewFindingsMaterialize(
+        delivery=_as_write_repo(repo),
+        facts=FakeStatusFacts().as_port(),
+        transactions=transactions,
+        clock=FixedClock(_T0),
+    )
+
+    service.deliver(ValidatedReviewFindings(deferred=[]), chunk=_CHUNK, node=_NODE, epoch=1)
+
+    assert transactions.locked_chunks == [[_CHUNK.chunk_id]]
+
+
+@pytest.mark.parametrize(
+    ("facts", "terminal"),
+    [
+        ({}, False),
+        ({_CHUNK.chunk_id: ChunkFacts(minted=True)}, False),
+        ({_CHUNK.chunk_id: ChunkFacts(minted=True, operator_completed=True, operator_completed_at=_T0)}, True),
+    ],
+    ids=["unknown", "live", "done"],
+)
+def test_deliver_hands_the_write_the_terminal_verdict_read_under_its_lock(
+    facts: dict[str, ChunkFacts], terminal: bool
+) -> None:
+    repo = _FakeReviewFindingsRepo()
+    status_facts = FakeStatusFacts(facts)
+    service = ReviewFindingsMaterialize(
+        delivery=_as_write_repo(repo),
+        facts=status_facts.as_port(),
+        transactions=FakeTransactions(),
+        clock=FixedClock(_T0),
+    )
+
+    service.deliver(ValidatedReviewFindings(deferred=[]), chunk=_CHUNK, node=_NODE, epoch=1)
+
+    assert repo.terminals == [terminal]
+    assert status_facts.transactions == repo.written_in

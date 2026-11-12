@@ -7,11 +7,13 @@ from __future__ import annotations
 
 from pathlib import Path
 
+from sqlalchemy import Engine
+
 from blizzard.hub.domain.chunk.model import Chunk
 from blizzard.hub.domain.chunk.ports.stores import ChunkStores
 from blizzard.hub.domain.runners.route import Route
 from tests.support.load_all_facts_seed import LIVE_CHUNK_IDS, T0, seed_fixture, seeded_chunk_stores
-from tests.support.scaffolding import count_queries, seed_chunk_record
+from tests.support.scaffolding import count_queries, seed_chunk_record, seed_promote
 
 
 def test_bulk_read_matches_per_chunk_route_of_across_the_fixture(tmp_path: Path) -> None:
@@ -49,11 +51,11 @@ def test_bulk_read_query_count_is_independent_of_fleet_size(tmp_path: Path) -> N
     (tmp_path / "small").mkdir()
     (tmp_path / "large").mkdir()
     small, small_engine, _ = seeded_chunk_stores(tmp_path / "small")
-    _seed_route(small, "ch_a")
+    _seed_route(small, small_engine, "ch_a")
 
     large, large_engine, _ = seeded_chunk_stores(tmp_path / "large")
     for i in range(40):
-        _seed_route(large, f"ch_{i}")
+        _seed_route(large, large_engine, f"ch_{i}")
 
     small_count = count_queries(small_engine, small.route.load_all_routes)
     large_count = count_queries(large_engine, large.route.load_all_routes)
@@ -62,9 +64,9 @@ def test_bulk_read_query_count_is_independent_of_fleet_size(tmp_path: Path) -> N
     assert large_count < 40  # bounded by table count, not chunk count
 
 
-def _seed_route(store: ChunkStores, chunk_id: str) -> None:
+def _seed_route(store: ChunkStores, engine: Engine, chunk_id: str) -> None:
     seed_chunk_record(store, Chunk(chunk_id=chunk_id, graph_id="gr_1", work_refs=[], minted_at=T0))
-    store.queue.record_promote(chunk_id, at=T0)
+    seed_promote(store, engine, chunk_id, at=T0)
     with store.exclusive.locked([chunk_id]) as handle:
         store.route.record_route_locked(
             handle,

@@ -407,6 +407,7 @@ class ApplyService:
                     choice_name=submission.choice,
                     epoch=submission.epoch,
                     admission=EpochAdmission.CURRENT,
+                    terminal=ChunkFacts.terminal_verdict(locked),
                     claimant=self._exit_claimant(locked, chunk.chunk_id, submission),
                     runner_id=submission.runner_id,
                     at=self._clock.now(),
@@ -418,6 +419,7 @@ class ApplyService:
                     return ApplyResult.failure(transitioned.detail)
                 close_skipped = transitioned.close_skipped + open_graph_gate_on_arrival(
                     self._decisions,
+                    self._facts,
                     handle,
                     self._clock,
                     chunk_id=chunk.chunk_id,
@@ -535,6 +537,7 @@ class ApplyService:
                         chunk.chunk_id,
                         epoch=submission.epoch,
                         admission=EpochAdmission.CURRENT,
+                        terminal=ChunkFacts.terminal_verdict(facts),
                         claimant=self._exit_claimant(facts, chunk.chunk_id, submission, transaction=locked),
                         takeover_command=draft.takeover_command,
                         at=self._clock.now(),
@@ -591,6 +594,7 @@ class ApplyService:
                     source=landing.source,
                     epoch=submission.epoch,
                     admission=EpochAdmission.CURRENT,
+                    terminal=ChunkFacts.terminal_verdict(locked),
                     claimant=self._exit_claimant(locked, chunk.chunk_id, submission),
                     at=self._clock.now(),
                     artifacts=artifact_rows,
@@ -604,6 +608,7 @@ class ApplyService:
                 landed = outcome.migration_id if outcome is not None else None
                 close_skipped = (outcome.close_skipped if outcome is not None else ()) + open_graph_gate_on_arrival(
                     self._decisions,
+                    self._facts,
                     handle,
                     self._clock,
                     chunk_id=chunk.chunk_id,

@@ -54,6 +54,7 @@ def _record_decision(store: ChunkStores, chunk_id: str, decision_id: str, *, at:
         at=at,
         artifacts=[],
         admission=EpochAdmission.AT_OR_ABOVE,
+        terminal=False,
         close_decision=decide_close_enqueue([], lambda _: True),
     )
 
@@ -80,6 +81,7 @@ def _transition(store: ChunkStores, chunk_id: str, decision_id: str, *, transiti
         artifacts=[],
         decision_id=decision_id,
         admission=EpochAdmission.AT_OR_ABOVE,
+        terminal=False,
         close_decision=decide_close_enqueue([], lambda _: True),
     )
 

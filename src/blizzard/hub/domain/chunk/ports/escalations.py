@@ -14,7 +14,7 @@ from blizzard.hub.domain.artifact.model import StoredArtifact
 from blizzard.hub.domain.chunk.model import CloseEnqueueDecision, EscalationOpen
 from blizzard.hub.domain.chunk.ports.exclusive import ILockedChunkRead
 from blizzard.hub.domain.chunk.ports.fence import Claimant, EpochAdmission, FenceRefusal
-from blizzard.hub.domain.kernel.transactions import Transaction
+from blizzard.hub.domain.kernel.transactions import LockedTransaction
 from blizzard.hub.domain.projects.model import ProjectId
 
 
@@ -58,6 +58,7 @@ class IWriteChunkEscalationsRepository(IReadChunkEscalationsRepository, Protocol
         *,
         epoch: int,
         admission: EpochAdmission,
+        terminal: bool,
         claimant: Claimant | None = None,
         takeover_command: str,
         at: datetime,
@@ -67,17 +68,13 @@ class IWriteChunkEscalationsRepository(IReadChunkEscalationsRepository, Protocol
         detail: str | None,
         artifacts: Sequence[StoredArtifact] = (),
         close_decision: CloseEnqueueDecision | None = None,
-        transaction: Transaction | None = None,
+        transaction: LockedTransaction,
     ) -> EscalationWrite | FenceRefusal:
-        """Record an ``escalation.recorded`` fact — the chunk derives ``needs_human``
-        until something supersedes it — behind the write fence (``bzh:epoch-fencing``); a
-        refusal writes nothing and is returned in place of the write. The takeover command rides along so the
-        parked session is resumable (`blizzard-context:/domain/humans/escalation.md`). ``decision_id``,
-        when set, closes a gate decision no transition or migration will. ``artifacts`` land behind the same fence, on
-        the same connection, as the escalation row, so the two commit or roll back together; a landing-marker row among
-        them owes close intents by ``close_decision``. Joins ``transaction`` when given —
-        a unit that locks ``chunk_id`` — and otherwise locks the chunk in a write of its own
-        (``bzh:transaction-participation``)."""
+        """Record an ``escalation.recorded`` fact (the chunk derives ``needs_human``) behind the write fence
+        (``bzh:epoch-fencing``); a refusal writes nothing and is returned. ``decision_id``, when set, closes a gate
+        decision no transition or migration will. ``artifacts`` commit or roll back with the escalation row; a
+        landing-marker among them owes close intents by ``close_decision``. Joins ``transaction``, a unit that
+        locks ``chunk_id`` (``bzh:transaction-participation``)."""
         ...
 
     def record_bounce_locked(
@@ -87,6 +84,7 @@ class IWriteChunkEscalationsRepository(IReadChunkEscalationsRepository, Protocol
         *,
         epoch: int,
         admission: EpochAdmission,
+        terminal: bool,
         cause: str,
         envelope: str,
         at: datetime,
@@ -105,6 +103,7 @@ class IWriteChunkEscalationsRepository(IReadChunkEscalationsRepository, Protocol
         *,
         epoch: int,
         admission: EpochAdmission,
+        terminal: bool,
         runner_id: str,
         takeover_command: str,
         at: datetime,

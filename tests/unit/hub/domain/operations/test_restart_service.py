@@ -13,6 +13,7 @@ from blizzard.hub.domain.chunk.event_log import EventLogService
 from blizzard.hub.domain.chunk.model import Chunk, ChunkFacts
 from blizzard.hub.domain.chunk.ports.decisions import IWriteChunkDecisionsRepository
 from blizzard.hub.domain.chunk.ports.exclusive import IChunkExclusiveWrites, ILockedChunkRead
+from blizzard.hub.domain.chunk.ports.facts import IReadChunkFactsRepository
 from blizzard.hub.domain.chunk.ports.movement import IWriteChunkMovementRepository
 from blizzard.hub.domain.graph.model import Graph, IReadGraphRepository
 from blizzard.hub.domain.operations.restart import RestartService
@@ -41,6 +42,7 @@ def test_restart_refuses_a_chunk_gone_under_the_lock_and_writes_nothing() -> Non
     service = RestartService(
         movement=cast(IWriteChunkMovementRepository, _Untouchable()),
         decisions=cast(IWriteChunkDecisionsRepository, _Untouchable()),
+        facts=cast(IReadChunkFactsRepository, _Untouchable()),
         graphs=cast(IReadGraphRepository, _Untouchable()),
         clock=FixedClock(_T0),
         exclusive=cast(IChunkExclusiveWrites, _FakeExclusiveWrites()),

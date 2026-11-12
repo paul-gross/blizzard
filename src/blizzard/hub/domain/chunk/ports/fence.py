@@ -102,18 +102,15 @@ class MintAdmission:
 
     epoch: int
     newest: int
-    terminal: bool
     owner: EpochOwner | None
     owning_lease_id: str | None
     holds_route: bool
 
     def refusal(self, claimant: Claimant) -> FenceRefusal | None:
-        """``None`` when the mint lands. A mint on a terminal chunk or below the newest
-        epoch is refused; an owned epoch lands only for its own attempt; an unowned one
-        lands only above the newest epoch, and only for the live route's holder — which
-        then takes it (:meth:`takes_ownership`)."""
-        if self.terminal:
-            return FenceRefusal.terminal(self.epoch)
+        """``None`` when the mint lands. A mint below the newest epoch is refused; an owned epoch
+        lands only for its own attempt; an unowned one lands only above the newest epoch, and only
+        for the live route's holder — which then takes it (:meth:`takes_ownership`). A mint on a
+        terminal chunk never reaches this: its domain caller refuses it first."""
         if not EpochAdmission.AT_OR_ABOVE.admits(self.epoch, newest=self.newest):
             return FenceRefusal.stale(self.epoch, latest=self.newest)
         if self.owner is not None:

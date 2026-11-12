@@ -2,9 +2,8 @@
 
 ``record_queue_positions``/``record_backlog_positions`` each write a whole batch of
 ``(chunk_id, position)`` pairs in the caller's unit — proves the statement count
-stays flat as the batch grows, that the backlog variant's promoted-chunk guard still
-skips a currently promoted chunk, as one bulk ``.in_()`` read, and that each refuses a unit
-not holding its list's ranking lock."""
+stays flat as the batch grows, and that each refuses a unit not holding its list's ranking
+lock."""
 
 from __future__ import annotations
 
@@ -86,20 +85,7 @@ def test_record_queue_positions_statement_count_does_not_grow_with_batch_size(tm
     assert small_count == large_count
 
 
-def test_record_backlog_positions_skips_a_currently_promoted_chunk(tmp_path: Path) -> None:
-    store, engine = _store(tmp_path)
-    _mint(store, "ch_a")
-    _mint(store, "ch_promoted")
-    store.queue.record_promote("ch_promoted", at=_T0)
-
-    _backlog(store, engine, [("ch_a", 0.0), ("ch_promoted", 1.0)])
-
-    positions = store.queue.queue_positions(["ch_a", "ch_promoted"])
-    assert positions.get("ch_a") == 0.0
-    assert "ch_promoted" not in positions
-
-
-def test_record_backlog_positions_guard_is_one_bulk_read_not_one_per_pair(tmp_path: Path) -> None:
+def test_record_backlog_positions_statement_count_is_independent_of_batch_size(tmp_path: Path) -> None:
     store, engine = _store(tmp_path)
     small_ids = [f"ch_small_{i}" for i in range(3)]
     large_ids = [f"ch_large_{i}" for i in range(9)]

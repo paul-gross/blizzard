@@ -13,7 +13,7 @@ from blizzard.hub.domain.chunk.model import WorkRef, decide_close_enqueue
 from blizzard.hub.domain.chunk.ports.artifacts import IWriteChunkArtifactsRepository
 from blizzard.hub.domain.chunk.ports.fence import EpochAdmission
 from blizzard.hub.store.schema import artifacts
-from tests.support.scaffolding import HubHarness, build_hub, ingest, stamp
+from tests.support.scaffolding import HubHarness, build_hub, chunk_unit, hub_store_connections, ingest, stamp
 
 
 def _writable(hub: HubHarness) -> IWriteChunkArtifactsRepository:
@@ -27,28 +27,34 @@ def test_an_exact_epoch_and_produced_at_tie_resolves_to_the_same_artifact_every_
 
     # Distinct node_id, so both land: record_hub_artifact keys idempotency on
     # (chunk_id, node_id, epoch, name), and each mints its own id at the same instant.
-    _writable(hub).record_hub_artifact(
-        chunk_id,
-        node_id="nd_a",
-        node_name="survey",
-        epoch=1,
-        name="tied",
-        content="one",
-        at=at,
-        admission=EpochAdmission.AT_OR_ABOVE,
-        close_decision=decide_close_enqueue([WorkRef(source="default", ref="1")], lambda _: True),
-    )
-    _writable(hub).record_hub_artifact(
-        chunk_id,
-        node_id="nd_b",
-        node_name="survey",
-        epoch=1,
-        name="tied",
-        content="two",
-        at=at,
-        admission=EpochAdmission.AT_OR_ABOVE,
-        close_decision=decide_close_enqueue([WorkRef(source="default", ref="1")], lambda _: True),
-    )
+    with chunk_unit(hub_store_connections(hub.engine), chunk_id) as unit:
+        _writable(hub).record_hub_artifact(
+            chunk_id,
+            node_id="nd_a",
+            node_name="survey",
+            epoch=1,
+            name="tied",
+            content="one",
+            at=at,
+            admission=EpochAdmission.AT_OR_ABOVE,
+            terminal=False,
+            close_decision=decide_close_enqueue([WorkRef(source="default", ref="1")], lambda _: True),
+            transaction=unit,
+        )
+    with chunk_unit(hub_store_connections(hub.engine), chunk_id) as unit:
+        _writable(hub).record_hub_artifact(
+            chunk_id,
+            node_id="nd_b",
+            node_name="survey",
+            epoch=1,
+            name="tied",
+            content="two",
+            at=at,
+            admission=EpochAdmission.AT_OR_ABOVE,
+            terminal=False,
+            close_decision=decide_close_enqueue([WorkRef(source="default", ref="1")], lambda _: True),
+            transaction=unit,
+        )
 
     winner = hub.services.chunks.artifacts.latest_artifact(chunk_id, "tied")
     assert winner is not None

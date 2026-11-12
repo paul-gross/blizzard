@@ -30,6 +30,7 @@ from blizzard.hub.store.internal.garden_proposal_store import GardenProposalStor
 from tests.support.scaffolding import (
     HubHarness,
     build_hub,
+    chunk_unit,
     default_project,
     hub_scoped,
     hub_store_connections,
@@ -202,8 +203,14 @@ def test_a_delivery_citing_another_projects_finding_is_rejected_naming_it(tmp_pa
         ],
     )
 
-    with pytest.raises(GardenDeliveryRejected, match=_FOREIGN) as exc:
-        GardenDeliveryStore(hub_store_connections(hub.engine)).deliver(plan, admission=EpochAdmission.AT_OR_ABOVE)
+    connections = hub_store_connections(hub.engine)
+    with (
+        pytest.raises(GardenDeliveryRejected, match=_FOREIGN) as exc,
+        chunk_unit(connections, plan.chunk_id) as unit,
+    ):
+        GardenDeliveryStore(connections).deliver(
+            plan, admission=EpochAdmission.AT_OR_ABOVE, terminal=False, transaction=unit
+        )
     assert exc.value.fault is GardenDeliveryFault.PROPOSALS
 
     assert _proposal_rows(hub) == []

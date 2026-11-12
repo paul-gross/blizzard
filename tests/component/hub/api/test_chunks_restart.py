@@ -28,7 +28,9 @@ from tests.support.scaffolding import (
     assert_all_timestamps_utc,
     build_hub,
     chunk_stores,
+    chunk_unit,
     emitted_events,
+    hub_store_connections,
     ingest,
     report_lease,
 )
@@ -430,16 +432,19 @@ def test_restart_closes_a_resolved_decision_the_runner_has_not_acted_on(tmp_path
 def test_restart_supersedes_an_open_escalation(tmp_path: Path) -> None:
     hub = build_hub(tmp_path)
     chunk_id = _mint(hub)
-    cast(IWriteChunkEscalationsRepository, hub.services.chunks.escalations).record_escalation(
-        chunk_id,
-        epoch=1,
-        takeover_command="resume it",
-        at=hub.clock.now(),
-        wrapped_takeover_command="",
-        admission=EpochAdmission.AT_OR_ABOVE,
-        cause=None,
-        detail=None,
-    )
+    with chunk_unit(hub_store_connections(hub.engine), chunk_id) as unit:
+        cast(IWriteChunkEscalationsRepository, hub.services.chunks.escalations).record_escalation(
+            chunk_id,
+            epoch=1,
+            takeover_command="resume it",
+            at=hub.clock.now(),
+            wrapped_takeover_command="",
+            admission=EpochAdmission.AT_OR_ABOVE,
+            terminal=False,
+            cause=None,
+            detail=None,
+            transaction=unit,
+        )
     assert _detail(hub, chunk_id)["status"] == "needs_human"
 
     hub.clock.advance(timedelta(seconds=1))
@@ -594,6 +599,7 @@ def test_a_restart_mid_hub_node_run_fences_out_that_nodes_exit_transition(tmp_pa
             artifacts=[],
             release_route=False,
             admission=EpochAdmission.ABOVE,
+            terminal=False,
             close_decision=decide_close_enqueue([WorkRef(**_POINTER)], lambda _: True),
         ).wrote
 
@@ -623,6 +629,7 @@ def test_an_uncontested_hub_node_exit_still_records(tmp_path: Path) -> None:
             artifacts=[],
             release_route=True,
             admission=EpochAdmission.ABOVE,
+            terminal=False,
             close_decision=decide_close_enqueue([WorkRef(**_POINTER)], lambda _: True),
         ).wrote
 

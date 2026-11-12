@@ -15,6 +15,7 @@ from blizzard.hub.store.transactions import HubTransactions
 from blizzard.hub.tenancy import StoreScope, TenantId
 from tests.support.scaffolding import (
     HubHarness,
+    chunk_unit,
     hub_level_connections,
     make_graph,
     seed_chunk_record,
@@ -40,17 +41,20 @@ def landed_hub_ref(hub: HubHarness, tenant: TenantId, chunk_id: str) -> ChunkSto
     seed_chunk_record(
         stores, Chunk(chunk_id=chunk_id, graph_id=graph_id, work_refs=[WorkRef("hub", "1")], minted_at=_NOW)
     )
-    stores.artifacts.record_hub_artifact(
-        chunk_id,
-        node_id="nd_deliver",
-        node_name="deliver",
-        epoch=1,
-        name="merged/widget",
-        content="sha",
-        at=hub.clock.now(),
-        admission=EpochAdmission.AT_OR_ABOVE,
-        close_decision=CloseEnqueueDecision(closable=frozenset({WorkRef("hub", "1")}), skipped=frozenset()),
-    )
+    with chunk_unit(connections, chunk_id) as unit:
+        stores.artifacts.record_hub_artifact(
+            chunk_id,
+            node_id="nd_deliver",
+            node_name="deliver",
+            epoch=1,
+            name="merged/widget",
+            content="sha",
+            at=hub.clock.now(),
+            admission=EpochAdmission.AT_OR_ABOVE,
+            terminal=False,
+            close_decision=CloseEnqueueDecision(closable=frozenset({WorkRef("hub", "1")}), skipped=frozenset()),
+            transaction=unit,
+        )
     return stores
 
 

@@ -9,7 +9,15 @@ from pathlib import Path
 from blizzard.foundation.clock import FixedClock
 from blizzard.hub.domain.chunk.model import Chunk
 from blizzard.hub.domain.chunk.ports.fence import EpochAdmission
-from tests.support.scaffolding import chunk_stores, migrate_to, seed_chunk_record, seed_graph
+from tests.support.scaffolding import (
+    chunk_stores,
+    chunk_unit,
+    hub_store_connections,
+    migrate_to,
+    seed_chunk_record,
+    seed_graph,
+    seed_promote,
+)
 
 _T0 = datetime(2026, 1, 1, tzinfo=UTC)
 
@@ -20,19 +28,22 @@ def test_a_loaded_question_carries_the_epoch_it_was_asked_at(tmp_path: Path) -> 
         seed_graph(conn, "gr_1", at=_T0)
     store = chunk_stores(engine, FixedClock(_T0))
     seed_chunk_record(store, Chunk(chunk_id="ch_1", graph_id="gr_1", work_refs=[], minted_at=_T0))
-    store.queue.record_promote("ch_1", at=_T0)
-    store.questions.record_question(
-        question_id="qn_1",
-        chunk_id="ch_1",
-        node_id=None,
-        session_id=None,
-        runner_id="r",
-        epoch=3,
-        question="which branch?",
-        options=[],
-        asked_at=_T0,
-        admission=EpochAdmission.AT_OR_ABOVE,
-    )
+    seed_promote(store, engine, "ch_1", at=_T0)
+    with chunk_unit(hub_store_connections(engine), "ch_1") as unit:
+        store.questions.record_question(
+            question_id="qn_1",
+            chunk_id="ch_1",
+            node_id=None,
+            session_id=None,
+            runner_id="r",
+            epoch=3,
+            question="which branch?",
+            options=[],
+            asked_at=_T0,
+            admission=EpochAdmission.AT_OR_ABOVE,
+            terminal=False,
+            transaction=unit,
+        )
 
     facts = store.facts.load_facts("ch_1")
 

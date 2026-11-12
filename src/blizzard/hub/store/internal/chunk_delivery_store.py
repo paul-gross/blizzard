@@ -18,6 +18,7 @@ from blizzard.hub.domain.chunk.close_read import CloseAttempt, CloseClosure, Clo
 from blizzard.hub.domain.chunk.delivery_read import LandingFact
 from blizzard.hub.domain.chunk.model import CloseEnqueueDecision, PendingCloseIntent, WorkItemCloseOutcome, WorkRef
 from blizzard.hub.domain.chunk.ports.delivery import DeliveryWrite, IWriteChunkDeliveryRepository
+from blizzard.hub.domain.kernel.transactions import LockedTransaction
 from blizzard.hub.domain.work_items.closure import TERMINAL_CLOSE_OUTCOMES
 from blizzard.hub.store import schema as s
 from blizzard.hub.store.internal.chunk_rows import (
@@ -27,8 +28,8 @@ from blizzard.hub.store.internal.chunk_rows import (
     next_route_seq,
     record_hub_lease,
 )
-from blizzard.hub.store.locking import lock_chunk_row
 from blizzard.hub.store.scoped import ScopedConnections
+from blizzard.hub.store.transactions import connection_for
 
 #: The attempt outcome a rate-budget refusal writes: it holds the intent to its ``resume_at`` and spends no backoff.
 DEFERRED_ATTEMPT = "deferred"
@@ -186,44 +187,44 @@ class ChunkDeliveryStore:
         transition_id: str,
         at: datetime,
         close_decision: CloseEnqueueDecision,
+        transaction: LockedTransaction,
     ) -> DeliveryWrite:
         """`src/blizzard/hub/domain/chunk/ports/delivery.py`'s `IWriteChunkDeliveryRepository.finalize_delivery`.
 
         The hub lease, ``delivery.landed``, the terminal transition and the route release
         share one write; an existing ``delivery_landed`` row is the replay guard."""
-        with self._store.write("finalize_delivery") as conn:
-            lock_chunk_row(conn, chunk_id)
-            already = conn.execute(
-                self._store.select(s.delivery_landed, s.delivery_landed.c.id).where(
-                    s.delivery_landed.c.chunk_id == chunk_id
-                )
-            ).first()
-            if already is not None:
-                return DeliveryWrite(wrote=False)
-            record_hub_lease(conn, chunk_id, epoch=epoch, runner_id=runner_id, at=at)
-            conn.execute(self._store.insert(s.delivery_landed).values(chunk_id=chunk_id, landed_at=at))
-            conn.execute(
-                self._store.insert(s.transitions).values(
-                    transition_id=transition_id,
-                    chunk_id=chunk_id,
-                    graph_id=graph_id_of(conn, chunk_id),
-                    from_node_id=from_node_id,
-                    to_node_id=to_node_id,
-                    choice_name=choice_name,
-                    decision_id=None,
-                    epoch=epoch,
-                    runner_id=runner_id,
-                    recorded_at=at,
-                )
+        conn = connection_for(self._store, transaction, chunk=chunk_id)
+        already = conn.execute(
+            self._store.select(s.delivery_landed, s.delivery_landed.c.id).where(
+                s.delivery_landed.c.chunk_id == chunk_id
             )
-            conn.execute(
-                self._store.insert(s.route_released).values(
-                    chunk_id=chunk_id, released_at=at, seq=next_route_seq(conn, chunk_id)
-                )
+        ).first()
+        if already is not None:
+            return DeliveryWrite(wrote=False)
+        record_hub_lease(conn, chunk_id, epoch=epoch, runner_id=runner_id, at=at)
+        conn.execute(self._store.insert(s.delivery_landed).values(chunk_id=chunk_id, landed_at=at))
+        conn.execute(
+            self._store.insert(s.transitions).values(
+                transition_id=transition_id,
+                chunk_id=chunk_id,
+                graph_id=graph_id_of(conn, chunk_id),
+                from_node_id=from_node_id,
+                to_node_id=to_node_id,
+                choice_name=choice_name,
+                decision_id=None,
+                epoch=epoch,
+                runner_id=runner_id,
+                recorded_at=at,
             )
-            return DeliveryWrite(
-                wrote=True, close_skipped=enqueue_close_intents(conn, chunk_id, at=at, close_decision=close_decision)
+        )
+        conn.execute(
+            self._store.insert(s.route_released).values(
+                chunk_id=chunk_id, released_at=at, seq=next_route_seq(conn, chunk_id)
             )
+        )
+        return DeliveryWrite(
+            wrote=True, close_skipped=enqueue_close_intents(conn, chunk_id, at=at, close_decision=close_decision)
+        )
 
     def record_work_item_closure(
         self, chunk_id: str, *, pointer: WorkRef, outcome: WorkItemCloseOutcome, reason: str | None, at: datetime

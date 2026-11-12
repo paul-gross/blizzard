@@ -31,6 +31,7 @@ from blizzard.hub.store.internal.finding_store import FindingStore
 from blizzard.hub.store.internal.garden_delivery_store import GardenDeliveryStore
 from blizzard.hub.store.schema import artifacts, finding_facts
 from tests.support.scaffolding import (
+    chunk_unit,
     default_project,
     default_tenant,
     hub_store_connections,
@@ -131,7 +132,9 @@ def test_deliver_loses_the_guard_when_an_exit_landed_after_validation(tmp_path: 
     )
     findings.record_fact("fin_1", kind="wont-fix", at=_LATER, note="n", actor="u1")
 
-    outcome = deliveries.deliver(plan, admission=EpochAdmission.AT_OR_ABOVE)
+    with chunk_unit(hub_store_connections(engine), plan.chunk_id) as unit:
+        deliveries.lock_expected(plan, transaction=unit)
+        outcome = deliveries.deliver(plan, admission=EpochAdmission.AT_OR_ABOVE, terminal=False, transaction=unit)
 
     assert outcome is DeliveryOutcome.GUARD_LOST
     assert _kinds(engine, "fin_1") == ["add", "wont-fix"]
@@ -146,7 +149,9 @@ def test_deliver_records_when_the_guarded_finding_has_not_moved(tmp_path: Path) 
         project, NewFindingFact(finding_id="fin_1", kind="observed", finding_set_id="fins_1"), expect={"fin_1": "live"}
     )
 
-    outcome = deliveries.deliver(plan, admission=EpochAdmission.AT_OR_ABOVE)
+    with chunk_unit(hub_store_connections(engine), plan.chunk_id) as unit:
+        deliveries.lock_expected(plan, transaction=unit)
+        outcome = deliveries.deliver(plan, admission=EpochAdmission.AT_OR_ABOVE, terminal=False, transaction=unit)
 
     assert outcome is DeliveryOutcome.RECORDED
     assert _kinds(engine, "fin_1") == ["add", "observed"]
@@ -167,13 +172,23 @@ def test_a_reopened_delivered_finding_lands_the_runs_gone_as_gone(tmp_path: Path
     )
     findings.record_fact("fin_1", kind="reopened", at=_LATER, note="n", actor="u2")
 
-    assert deliveries.deliver(stale, admission=EpochAdmission.AT_OR_ABOVE) is DeliveryOutcome.GUARD_LOST
+    with chunk_unit(hub_store_connections(engine), stale.chunk_id) as unit:
+        deliveries.lock_expected(stale, transaction=unit)
+        assert (
+            deliveries.deliver(stale, admission=EpochAdmission.AT_OR_ABOVE, terminal=False, transaction=unit)
+            is DeliveryOutcome.GUARD_LOST
+        )
     fresh = _plan(
         project,
         NewFindingFact(finding_id="fin_1", kind="gone", finding_set_id="fins_1", note="gone"),
         expect={"fin_1": "live"},
     )
-    assert deliveries.deliver(fresh, admission=EpochAdmission.AT_OR_ABOVE) is DeliveryOutcome.RECORDED
+    with chunk_unit(hub_store_connections(engine), fresh.chunk_id) as unit:
+        deliveries.lock_expected(fresh, transaction=unit)
+        assert (
+            deliveries.deliver(fresh, admission=EpochAdmission.AT_OR_ABOVE, terminal=False, transaction=unit)
+            is DeliveryOutcome.RECORDED
+        )
     assert _kinds(engine, "fin_1")[-1] == "gone"
 
 
@@ -186,11 +201,18 @@ def test_deliver_ignores_a_moved_finding_whose_facts_are_not_inserted(tmp_path: 
     plan = _plan(
         project, NewFindingFact(finding_id="fin_1", kind="observed", finding_set_id="fins_1"), expect={"fin_1": "live"}
     )
-    assert deliveries.deliver(plan, admission=EpochAdmission.AT_OR_ABOVE) is DeliveryOutcome.RECORDED
+    with chunk_unit(hub_store_connections(engine), plan.chunk_id) as unit:
+        deliveries.lock_expected(plan, transaction=unit)
+        assert (
+            deliveries.deliver(plan, admission=EpochAdmission.AT_OR_ABOVE, terminal=False, transaction=unit)
+            is DeliveryOutcome.RECORDED
+        )
     findings.record_fact("fin_1", kind="wont-fix", at=_LATER, note="n", actor="u1")
     revisit = replace(plan, node_id="nd_2", epoch=2)
 
-    outcome = deliveries.deliver(revisit, admission=EpochAdmission.AT_OR_ABOVE)
+    with chunk_unit(hub_store_connections(engine), revisit.chunk_id) as unit:
+        deliveries.lock_expected(revisit, transaction=unit)
+        outcome = deliveries.deliver(revisit, admission=EpochAdmission.AT_OR_ABOVE, terminal=False, transaction=unit)
 
     assert outcome is DeliveryOutcome.ALREADY_RECORDED
     assert _kinds(engine, "fin_1") == ["add", "observed", "wont-fix"]

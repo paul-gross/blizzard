@@ -37,9 +37,11 @@ from blizzard.hub.domain.chunk.ports.artifacts import IWriteChunkArtifactsReposi
 from blizzard.hub.domain.chunk.ports.decisions import IWriteChunkDecisionsRepository
 from blizzard.hub.domain.chunk.ports.escalations import BounceEscalationOutcome, IWriteChunkEscalationsRepository
 from blizzard.hub.domain.chunk.ports.exclusive import IChunkExclusiveWrites, ILockedChunkRead
+from blizzard.hub.domain.chunk.ports.facts import IReadChunkFactsRepository
 from blizzard.hub.domain.chunk.ports.fence import EpochAdmission
 from blizzard.hub.domain.chunk.ports.hub_exec import IWriteChunkHubExecRepository
 from blizzard.hub.domain.chunk.ports.movement import IWriteChunkMovementRepository, MigrationWrite
+from blizzard.hub.domain.chunk.terminal import terminal_under_lock
 from blizzard.hub.domain.config.forges import ConfiguredForge, IReadForgeRepository
 from blizzard.hub.domain.config.repositories import (
     IReadRepositoryRecordRepository,
@@ -62,6 +64,7 @@ from blizzard.hub.domain.graph.model import (
     IReadGraphRepository,
     Node,
 )
+from blizzard.hub.domain.kernel.transactions import IHubTransactions
 from blizzard.hub.domain.projects.links import IReadProjectLinks
 from blizzard.hub.domain.projects.model import IReadProjectRepository
 from blizzard.hub.domain.projects.targets import ChunkTargets, TargetChunk, branches
@@ -270,6 +273,7 @@ class HubNodeRouter:
         hub_exec: IWriteChunkHubExecRepository,
         escalations: IWriteChunkEscalationsRepository,
         exclusive: IChunkExclusiveWrites,
+        transactions: IHubTransactions,
         events: EventLogService,
         clock: IClock,
         repositories: IReadRepositoryRecordRepository,
@@ -281,13 +285,16 @@ class HubNodeRouter:
         movement: IWriteChunkMovementRepository,
         decisions: IWriteChunkDecisionsRepository,
         graphs: IReadGraphRepository,
+        facts: IReadChunkFactsRepository,
         follow_latest_default: bool,
     ) -> None:
+        self._facts = facts
         self._follow_latest_default = follow_latest_default
         self._artifacts = artifacts
         self._hub_exec = hub_exec
         self._escalations = escalations
         self._exclusive = exclusive
+        self._transactions = transactions
         self._events = events
         self._clock = clock
         self._repositories = repositories
@@ -492,6 +499,7 @@ class HubNodeRouter:
                     node_name=node.name,
                     epoch=hub_epoch,
                     admission=EpochAdmission.AT_OR_ABOVE,
+                    terminal=terminal_under_lock(self._facts, chunk.chunk_id, transaction=handle.transaction),
                     name="bounce-envelope",
                     content=envelope,
                     at=self._clock.now(),
@@ -521,6 +529,7 @@ class HubNodeRouter:
             choice_name=choice,
             epoch=hub_epoch,
             admission=EpochAdmission.ABOVE,
+            terminal=terminal_under_lock(self._facts, chunk.chunk_id, transaction=handle.transaction),
             runner_id=_HUB_RUNNER_ID,
             transition_id=Id.mint(IdPrefix.TRANSITION, self._clock).value,
             at=self._clock.now(),
@@ -532,6 +541,7 @@ class HubNodeRouter:
         if written.wrote:
             close_skipped += open_graph_gate_on_arrival(
                 self._decisions,
+                self._facts,
                 handle,
                 self._clock,
                 chunk_id=chunk.chunk_id,
@@ -571,6 +581,7 @@ class HubNodeRouter:
             model=landing.model,
             epoch=epoch,
             admission=EpochAdmission.CURRENT,
+            terminal=terminal_under_lock(self._facts, chunk.chunk_id, transaction=handle.transaction),
             claimant=None,
             at=self._clock.now(),
             artifacts=artifacts or [],
@@ -585,6 +596,7 @@ class HubNodeRouter:
         if isinstance(outcome, MigrationWrite):
             close_skipped = outcome.close_skipped + open_graph_gate_on_arrival(
                 self._decisions,
+                self._facts,
                 handle,
                 self._clock,
                 chunk_id=chunk.chunk_id,
@@ -631,6 +643,7 @@ class HubNodeRouter:
                 node_name=node.name,
                 epoch=epoch,
                 admission=EpochAdmission.AT_OR_ABOVE,
+                terminal=terminal_under_lock(self._facts, chunk.chunk_id, transaction=handle.transaction),
                 name=name,
                 content=f"[{step.replace('-', ' ')}]\n{detail}\n",
                 at=now,
@@ -833,17 +846,22 @@ class HubNodeRouter:
         can change what a forge offers or what an action asks of it. ``explanation`` is the caller's human account.
         Its ``hub-log`` artifact is written first, once per visit; its event only when the escalation takes."""
         detail = explanation
-        written = self._artifacts.record_hub_artifact(
-            chunk.chunk_id,
-            node_id=node.node_id,
-            node_name=node.name,
-            epoch=epoch,
-            admission=EpochAdmission.AT_OR_ABOVE,
-            name=f"{HUB_LOG_PREFIX}{_CAPABILITY_MISSING_STEP}",
-            content=f"[{_CAPABILITY_MISSING_STEP.replace('-', ' ')}]\n{detail}\n",
-            at=self._clock.now(),
-            close_decision=self._close_decision(chunk),
-        )
+        close_decision = self._close_decision(chunk)
+        with self._transactions.begin() as unit:
+            locked = unit.lock_chunks([chunk.chunk_id])
+            written = self._artifacts.record_hub_artifact(
+                chunk.chunk_id,
+                node_id=node.node_id,
+                node_name=node.name,
+                epoch=epoch,
+                admission=EpochAdmission.AT_OR_ABOVE,
+                terminal=terminal_under_lock(self._facts, chunk.chunk_id, transaction=locked),
+                name=f"{HUB_LOG_PREFIX}{_CAPABILITY_MISSING_STEP}",
+                content=f"[{_CAPABILITY_MISSING_STEP.replace('-', ' ')}]\n{detail}\n",
+                at=self._clock.now(),
+                close_decision=close_decision,
+                transaction=locked,
+            )
         self._events.publish(*close_skipped_events(written.close_skipped, chunk=chunk))
         escalation = ActionEscalation(EscalationCause.FORGE_CAPABILITY_MISSING, detail, missing)
         outcome = self._escalated(chunk, escalation, epoch=epoch, ending=ending)
@@ -887,6 +905,7 @@ class HubNodeRouter:
             chunk.chunk_id,
             epoch=epoch,
             admission=EpochAdmission.ABOVE,
+            terminal=terminal_under_lock(self._facts, chunk.chunk_id, transaction=handle.transaction),
             runner_id=_HUB_RUNNER_ID,
             takeover_command="",
             at=self._clock.now(),
@@ -903,6 +922,7 @@ class HubNodeRouter:
             chunk.chunk_id,
             epoch=hub_epoch,
             admission=EpochAdmission.ABOVE,
+            terminal=terminal_under_lock(self._facts, chunk.chunk_id, transaction=handle.transaction),
             cause=cause,
             envelope=envelope,
             at=self._clock.now(),
@@ -979,6 +999,7 @@ class HubNodeRouter:
             node_name=node.name,
             epoch=epoch,
             admission=EpochAdmission.AT_OR_ABOVE,
+            terminal=terminal_under_lock(self._facts, chunk.chunk_id, transaction=handle.transaction),
             name=_UNROUTABLE_ARTIFACT_NAME,
             content=(
                 f"{detail}\n\n"

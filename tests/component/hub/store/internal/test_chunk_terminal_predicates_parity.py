@@ -1,9 +1,8 @@
 """Every SQL form of "the chunk is terminal" agrees with :meth:`ChunkFacts.status` (component tier).
 
-The open-question list, the open-decision list, the write fence and the live prefilter each ask the one
-``chunk_is_terminal`` builder, so over a world seeded across every terminal branch they all read the
-chunk the way the derivation does. The prefilter may only keep extra residue — never drop a chunk the
-derivation calls live."""
+Over a world seeded across every terminal branch, the open-question list, open-decision list and live prefilter
+read each chunk as the derivation does, and ``chunk_is_terminal`` agrees with
+:meth:`ChunkFacts.terminal_verdict`. The prefilter may keep extra residue, never drop a live chunk."""
 
 from __future__ import annotations
 
@@ -26,17 +25,25 @@ from sqlalchemy import (
     Table,
     create_engine,
     insert,
+    literal,
+    select,
 )
 from structlog import get_logger
 
 from blizzard.foundation.chunk_status import TERMINAL_STATUSES, ChunkStatus
+from blizzard.hub.domain.chunk.model import ChunkFacts
 from blizzard.hub.domain.chunk.ports.fence import EpochAdmission
 from blizzard.hub.domain.graph.model import RESERVED_TERMINAL
 from blizzard.hub.store import schema as s
 from blizzard.hub.store.errors import HubStoreErrorFactory
 from blizzard.hub.store.internal import chunk_rows
 from blizzard.hub.store.internal.chunk_rows import QUESTIONS, ephemeral_ids_select, fence
-from blizzard.hub.store.internal.chunk_terminal_predicates import maybe_live, settled_done, settled_stopped
+from blizzard.hub.store.internal.chunk_terminal_predicates import (
+    chunk_is_terminal,
+    maybe_live,
+    settled_done,
+    settled_stopped,
+)
 from blizzard.hub.store.locking import lock_chunk_row
 from blizzard.hub.store.scoped import ScopedConnections
 from blizzard.hub.tenancy import StoreScope, TenantId
@@ -81,10 +88,15 @@ def _park_a_question_and_a_decision_on_every_chunk(hub: HubHarness, chunk_ids: l
             )
 
 
-def _fence_refuses_as_terminal(hub: HubHarness, chunk_id: str) -> bool:
+def _sql_terminal(connections: ScopedConnections, chunk_id: str) -> bool:
+    with connections.read("chunk_is_terminal") as conn:
+        return bool(conn.execute(select(chunk_is_terminal(connections, literal(chunk_id)))).scalar())
+
+
+def _fence_refuses_as_terminal(hub: HubHarness, chunk_id: str, *, terminal: bool) -> bool:
     with hub_store_connections(hub.engine).write("seed") as conn:
         lock_chunk_row(conn, chunk_id)
-        refusal = fence(conn, chunk_id, epoch=_EPOCH, admission=EpochAdmission.AT_OR_ABOVE)
+        refusal = fence(conn, chunk_id, epoch=_EPOCH, admission=EpochAdmission.AT_OR_ABOVE, terminal=terminal)
     return refusal is not None and refusal.latest is None
 
 
@@ -114,7 +126,10 @@ def test_every_terminal_form_agrees_with_the_derived_status(tmp_path: Path) -> N
     assert open_decision_chunks == live_ids
     assert live_ids | residue <= kept
     for chunk_id in sorted(decided):
-        assert _fence_refuses_as_terminal(hub, chunk_id) is (chunk_id in terminal_ids), chunk_id
+        verdict = ChunkFacts.terminal_verdict(facts[chunk_id])
+        assert verdict is (chunk_id in terminal_ids), chunk_id
+        assert _sql_terminal(connections, chunk_id) is verdict, chunk_id
+        assert _fence_refuses_as_terminal(hub, chunk_id, terminal=verdict) is verdict, chunk_id
 
 
 def test_newest_done_ranks_by_the_derived_completion_instant(tmp_path: Path) -> None:
@@ -276,14 +291,13 @@ def test_each_terminal_predicate_reads_only_its_scope_facts(
     assert _chunk_ids(connections, settled_done(connections, finished_before=_T2 + timedelta(days=1))) == done
 
 
-def test_the_fence_terminal_read_without_a_from_reads_only_its_scope(stand_in_engine: Engine) -> None:
-    with _scoped(stand_in_engine, TEN_A).read("test") as conn:
-        assert chunk_rows.is_terminal(conn, "ch_stopped") is True
-        assert chunk_rows.is_terminal(conn, "ch_live") is False
-    with _scoped(stand_in_engine, TEN_B).read("test") as conn:
-        assert chunk_rows.is_terminal(conn, "ch_live") is True
-        assert chunk_rows.is_terminal(conn, "ch_done") is False
-        assert chunk_rows.is_terminal(conn, "ch_fresh") is False
+def test_the_bound_terminal_read_without_a_from_reads_only_its_scope(stand_in_engine: Engine) -> None:
+    tenant_a, tenant_b = _scoped(stand_in_engine, TEN_A), _scoped(stand_in_engine, TEN_B)
+    assert _sql_terminal(tenant_a, "ch_stopped") is True
+    assert _sql_terminal(tenant_a, "ch_live") is False
+    assert _sql_terminal(tenant_b, "ch_live") is True
+    assert _sql_terminal(tenant_b, "ch_done") is False
+    assert _sql_terminal(tenant_b, "ch_fresh") is False
 
 
 def test_each_ephemeral_union_arm_is_scoped(stand_in_engine: Engine) -> None:

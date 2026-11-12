@@ -25,6 +25,7 @@ from tests.support.scaffolding import (
     migrate_to,
     seed_chunk_record,
     seed_graph,
+    seed_promote,
 )
 
 _T0 = datetime(2026, 1, 1, tzinfo=UTC)
@@ -135,9 +136,9 @@ def test_list_page_excludes_ephemeral_ids_across_a_batch_boundary(
 
 
 def test_list_ready_and_list_not_ready_filter_by_the_given_statuses(tmp_path: Path) -> None:
-    store, _ = _store(tmp_path)
+    store, engine = _store(tmp_path)
     _mint(store, "ch_ready")
-    store.queue.record_promote("ch_ready", at=_T0)
+    seed_promote(store, engine, "ch_ready", at=_T0)
     _mint(store, "ch_not_ready")
 
     statuses = store.facts.load_live_statuses()
@@ -149,7 +150,7 @@ def test_list_ready_and_list_not_ready_filter_by_the_given_statuses(tmp_path: Pa
 def test_list_ready_with_statuses_issues_no_statement_against_the_facts_seam(tmp_path: Path) -> None:
     store, engine = _store(tmp_path)
     _mint(store, "ch_ready")
-    store.queue.record_promote("ch_ready", at=_T0)
+    seed_promote(store, engine, "ch_ready", at=_T0)
     _mint(store, "ch_not_ready")
     statuses = store.facts.load_live_statuses()
 

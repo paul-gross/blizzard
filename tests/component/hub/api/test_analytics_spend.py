@@ -163,6 +163,7 @@ def test_spend_by_graph_attributes_usage_from_before_a_migration_to_the_current_
         artifacts=[],
         source=MigrationSource.AUTHORED_EDGE,
         admission=EpochAdmission.AT_OR_ABOVE,
+        terminal=False,
         close_decision=decide_close_enqueue([WorkRef("default", "1")], lambda _: True),
     )
 

@@ -79,6 +79,7 @@ def test_the_flow_driver_re_drives_a_chunk_waiting_at_an_action_node_once_its_hi
         at=hub.clock.now(),
         artifacts=[],
         admission=EpochAdmission.AT_OR_ABOVE,
+        terminal=False,
     )
     hint = hub.clock.now() + timedelta(minutes=5)
     with hub.engine.begin() as conn:

@@ -10,7 +10,7 @@ from typing import Protocol
 from blizzard.hub.domain.chunk.model import RouteReleaseCause
 from blizzard.hub.domain.chunk.ports.exclusive import ILockedChunkRead
 from blizzard.hub.domain.chunk.ports.fence import Claimant, FenceRefusal
-from blizzard.hub.domain.kernel.transactions import Transaction
+from blizzard.hub.domain.kernel.transactions import LockedTransaction, Transaction
 from blizzard.hub.domain.runners.lifecycle_version import RunnerLifecycleVersion
 from blizzard.hub.domain.runners.route import Route
 
@@ -85,13 +85,13 @@ class IWriteChunkRouteRepository(IReadChunkRouteRepository, Protocol):
         ...
 
     def record_lease_minted(
-        self, chunk_id: str, *, epoch: int, claimant: Claimant, at: datetime, transaction: Transaction | None = None
+        self, chunk_id: str, *, epoch: int, claimant: Claimant, at: datetime, transaction: LockedTransaction
     ) -> FenceRefusal | None:
         """Land a runner's ``lease.minted`` under the chunk's row lock, admitted by
         :class:`~blizzard.hub.domain.chunk.ports.fence.MintAdmission` — ``None`` when it landed (the first mint at
         an unowned epoch taking it for ``claimant``'s runner), else the refusal, which lands nothing. Written in
-        ``transaction`` when given, a unit that locks the chunk, else in a write of its own that locks it first
-        (``bzh:transaction-participation``)."""
+        ``transaction``, a unit that locks the chunk (``bzh:transaction-participation``). It never reads the
+        terminal verdict: the caller refuses a terminal chunk, read under that lock, before calling."""
         ...
 
     def set_runner_high_water(

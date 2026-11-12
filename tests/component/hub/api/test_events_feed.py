@@ -18,7 +18,9 @@ from tests.support.scaffolding import (
     HubHarness,
     build_hub,
     chunk_stores,
+    chunk_unit,
     count_rows_read,
+    hub_store_connections,
     seed_chunk,
     seed_graph,
     seed_lease,
@@ -91,25 +93,31 @@ def test_events_feed_unifies_open_escalations_filtered_and_ordered(tmp_path: Pat
     )
 
     # ch_c: an OPEN escalation (projects into the feed as needs-human/critical).
-    store.escalations.record_escalation(
-        "ch_c",
-        epoch=1,
-        takeover_command="cd c && resume",
-        at=at(4),
-        admission=EpochAdmission.AT_OR_ABOVE,
-        cause="retries-exhausted",
-        detail="retries 2/2 used; last failure: verdict missing",
-    )
+    with chunk_unit(hub_store_connections(hub.engine), "ch_c") as unit:
+        store.escalations.record_escalation(
+            "ch_c",
+            epoch=1,
+            takeover_command="cd c && resume",
+            at=at(4),
+            admission=EpochAdmission.AT_OR_ABOVE,
+            terminal=False,
+            cause="retries-exhausted",
+            detail="retries 2/2 used; last failure: verdict missing",
+            transaction=unit,
+        )
     # ch_a: an escalation SUPERSEDED by a later lease mint -> excluded from the feed.
-    store.escalations.record_escalation(
-        "ch_a",
-        epoch=1,
-        takeover_command="cd a && resume",
-        at=at(1),
-        admission=EpochAdmission.AT_OR_ABOVE,
-        cause=None,
-        detail=None,
-    )
+    with chunk_unit(hub_store_connections(hub.engine), "ch_a") as unit:
+        store.escalations.record_escalation(
+            "ch_a",
+            epoch=1,
+            takeover_command="cd a && resume",
+            at=at(1),
+            admission=EpochAdmission.AT_OR_ABOVE,
+            terminal=False,
+            cause=None,
+            detail=None,
+            transaction=unit,
+        )
     seed_lease(hub.engine, "ch_a", epoch=2, runner_id="r1", at=at(5))
 
     feed = _events(hub)
@@ -258,15 +266,18 @@ def test_naive_since_with_open_escalation_does_not_500(tmp_path: Path) -> None:
     with hub.engine.begin() as conn:
         seed_graph(conn, "gr_1", at=t0)
         seed_chunk(conn, "ch_c", graph_id="gr_1", at=t0)
-    store.escalations.record_escalation(
-        "ch_c",
-        epoch=1,
-        takeover_command="cd c && resume",
-        at=t0,
-        admission=EpochAdmission.AT_OR_ABOVE,
-        cause=None,
-        detail=None,
-    )
+    with chunk_unit(hub_store_connections(hub.engine), "ch_c") as unit:
+        store.escalations.record_escalation(
+            "ch_c",
+            epoch=1,
+            takeover_command="cd c && resume",
+            at=t0,
+            admission=EpochAdmission.AT_OR_ABOVE,
+            terminal=False,
+            cause=None,
+            detail=None,
+            transaction=unit,
+        )
     # `2020-01-01T00:00:00` — valid ISO-8601, no timezone offset, well before the escalation.
     feed = _events(hub, since="2020-01-01T00:00:00")
     assert [e["kind"] for e in feed] == ["needs-human"]
@@ -279,15 +290,18 @@ def test_chunk_filtered_escalations_do_not_read_other_open_chunks(tmp_path: Path
     with hub.engine.begin() as conn:
         seed_graph(conn, "gr_escalation", at=at)
         seed_chunk(conn, "ch_target", graph_id="gr_escalation", at=at)
-    store.escalations.record_escalation(
-        "ch_target",
-        epoch=1,
-        takeover_command="resume",
-        at=at,
-        admission=EpochAdmission.AT_OR_ABOVE,
-        cause=None,
-        detail=None,
-    )
+    with chunk_unit(hub_store_connections(hub.engine), "ch_target") as unit:
+        store.escalations.record_escalation(
+            "ch_target",
+            epoch=1,
+            takeover_command="resume",
+            at=at,
+            admission=EpochAdmission.AT_OR_ABOVE,
+            terminal=False,
+            cause=None,
+            detail=None,
+            transaction=unit,
+        )
 
     def filtered() -> None:
         assert [row["chunk_id"] for row in _events(hub, chunk_id="ch_target")] == ["ch_target"]
@@ -297,15 +311,18 @@ def test_chunk_filtered_escalations_do_not_read_other_open_chunks(tmp_path: Path
         chunk_id = f"ch_other_{i}"
         with hub.engine.begin() as conn:
             seed_chunk(conn, chunk_id, graph_id="gr_escalation", at=at)
-        store.escalations.record_escalation(
-            chunk_id,
-            epoch=1,
-            takeover_command="resume",
-            at=at,
-            admission=EpochAdmission.AT_OR_ABOVE,
-            cause=None,
-            detail=None,
-        )
+        with chunk_unit(hub_store_connections(hub.engine), chunk_id) as unit:
+            store.escalations.record_escalation(
+                chunk_id,
+                epoch=1,
+                takeover_command="resume",
+                at=at,
+                admission=EpochAdmission.AT_OR_ABOVE,
+                terminal=False,
+                cause=None,
+                detail=None,
+                transaction=unit,
+            )
     assert count_rows_read(hub.engine, filtered) == baseline
     assert len(_events(hub, severity="critical", limit=2)) == 2
 

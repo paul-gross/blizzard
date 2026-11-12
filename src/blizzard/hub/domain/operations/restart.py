@@ -19,6 +19,7 @@ from blizzard.hub.domain.chunk.flow_writes import LeverWrite
 from blizzard.hub.domain.chunk.model import Chunk, ChunkFacts, ChunkVerb, decide_close_enqueue, person_note
 from blizzard.hub.domain.chunk.ports.decisions import IWriteChunkDecisionsRepository
 from blizzard.hub.domain.chunk.ports.exclusive import IChunkExclusiveWrites
+from blizzard.hub.domain.chunk.ports.facts import IReadChunkFactsRepository
 from blizzard.hub.domain.chunk.ports.movement import IWriteChunkMovementRepository
 from blizzard.hub.domain.execution.gate_arrival import open_graph_gate_on_arrival
 from blizzard.hub.domain.graph.model import Graph, GraphStanding, IReadGraphRepository, Node
@@ -174,6 +175,7 @@ class RestartService:
         *,
         movement: IWriteChunkMovementRepository,
         decisions: IWriteChunkDecisionsRepository,
+        facts: IReadChunkFactsRepository,
         graphs: IReadGraphRepository,
         clock: IClock,
         exclusive: IChunkExclusiveWrites,
@@ -183,6 +185,8 @@ class RestartService:
         self._movement = movement
         self._events = events
         self._decisions = decisions
+        # Read for the gate decision's terminal verdict, under the unit's lock.
+        self._facts = facts
         # Read for one thing only — whether a cross-graph target is retired. The
         # graphs themselves arrive resolved (``bzh:domain-takes-objects``).
         self._graphs = graphs
@@ -242,6 +246,7 @@ class RestartService:
             assert landed is not None
             close_skipped = open_graph_gate_on_arrival(
                 self._decisions,
+                self._facts,
                 handle,
                 self._clock,
                 chunk_id=chunk.chunk_id,

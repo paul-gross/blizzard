@@ -55,6 +55,7 @@ def _seed_at_deliver_with_two_branches_for_one_repo(hub: HubHarness, chunk_id: s
         at=hub.clock.now(),
         artifacts=rows,
         admission=EpochAdmission.AT_OR_ABOVE,
+        terminal=False,
     )
 
 

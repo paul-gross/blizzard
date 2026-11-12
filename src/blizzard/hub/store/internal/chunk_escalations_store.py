@@ -23,7 +23,7 @@ from blizzard.hub.domain.chunk.ports.escalations import (
 from blizzard.hub.domain.chunk.ports.exclusive import ILockedChunkRead
 from blizzard.hub.domain.chunk.ports.facts import IReadChunkFactsRepository
 from blizzard.hub.domain.chunk.ports.fence import Claimant, EpochAdmission, FenceRefusal
-from blizzard.hub.domain.kernel.transactions import Transaction
+from blizzard.hub.domain.kernel.transactions import LockedTransaction
 from blizzard.hub.domain.projects.model import ProjectId
 from blizzard.hub.store import schema as s
 from blizzard.hub.store.internal.chunk_rows import (
@@ -36,9 +36,8 @@ from blizzard.hub.store.internal.chunk_rows import (
 )
 from blizzard.hub.store.internal.chunk_terminal_predicates import maybe_live
 from blizzard.hub.store.internal.newest_fact import newer_row_exists
-from blizzard.hub.store.locking import lock_chunk_row
 from blizzard.hub.store.scoped import ScopedConnections
-from blizzard.hub.store.transactions import chunk_handle_connection, chunk_locked_connection
+from blizzard.hub.store.transactions import chunk_handle_connection, connection_for
 
 
 class ChunkEscalationsStore:
@@ -74,6 +73,7 @@ class ChunkEscalationsStore:
         *,
         epoch: int,
         admission: EpochAdmission,
+        terminal: bool,
         claimant: Claimant | None = None,
         takeover_command: str,
         at: datetime,
@@ -83,48 +83,48 @@ class ChunkEscalationsStore:
         detail: str | None,
         artifacts: Sequence[StoredArtifact] = (),
         close_decision: CloseEnqueueDecision | None = None,
-        transaction: Transaction | None = None,
+        transaction: LockedTransaction,
     ) -> EscalationWrite | FenceRefusal:
-        with chunk_locked_connection(self._store, chunk_id, transaction, "record_escalation") as conn:
-            refusal = fence(conn, chunk_id, epoch=epoch, admission=admission, claimant=claimant)
-            if refusal is not None:
-                return refusal
-            result = conn.execute(
-                self._store.insert(s.escalations).values(
-                    chunk_id=chunk_id,
-                    epoch=epoch,
-                    takeover_command=takeover_command,
-                    wrapped_takeover_command=wrapped_takeover_command,
-                    decision_id=decision_id,
-                    cause=cause,
-                    detail=detail,
-                    recorded_at=at,
+        conn = connection_for(self._store, transaction, chunk=chunk_id)
+        refusal = fence(conn, chunk_id, epoch=epoch, admission=admission, terminal=terminal, claimant=claimant)
+        if refusal is not None:
+            return refusal
+        result = conn.execute(
+            self._store.insert(s.escalations).values(
+                chunk_id=chunk_id,
+                epoch=epoch,
+                takeover_command=takeover_command,
+                wrapped_takeover_command=wrapped_takeover_command,
+                decision_id=decision_id,
+                cause=cause,
+                detail=detail,
+                recorded_at=at,
+            )
+        )
+        key = result.inserted_primary_key
+        for row in artifacts:
+            conn.execute(
+                self._store.insert(s.artifacts).values(
+                    artifact_id=row.artifact_id,
+                    chunk_id=row.chunk_id,
+                    node_id=row.node_id,
+                    node_name=row.node_name,
+                    epoch=row.epoch,
+                    name=row.name,
+                    kind=row.kind.value,
+                    data=row.data,
+                    repo=row.repo,
+                    forge=row.forge,
+                    produced_at=at,
+                    seq=next_artifact_seq(conn, row.chunk_id),
                 )
             )
-            key = result.inserted_primary_key
-            for row in artifacts:
-                conn.execute(
-                    self._store.insert(s.artifacts).values(
-                        artifact_id=row.artifact_id,
-                        chunk_id=row.chunk_id,
-                        node_id=row.node_id,
-                        node_name=row.node_name,
-                        epoch=row.epoch,
-                        name=row.name,
-                        kind=row.kind.value,
-                        data=row.data,
-                        repo=row.repo,
-                        forge=row.forge,
-                        produced_at=at,
-                        seq=next_artifact_seq(conn, row.chunk_id),
-                    )
-                )
-            escalation_id = int(key[0]) if key is not None else 0
-            if close_decision is not None and any(is_landing_marker(row.name, row.data) for row in artifacts):
-                return EscalationWrite(
-                    escalation_id, enqueue_close_intents(conn, chunk_id, at=at, close_decision=close_decision)
-                )
-            return EscalationWrite(escalation_id)
+        escalation_id = int(key[0]) if key is not None else 0
+        if close_decision is not None and any(is_landing_marker(row.name, row.data) for row in artifacts):
+            return EscalationWrite(
+                escalation_id, enqueue_close_intents(conn, chunk_id, at=at, close_decision=close_decision)
+            )
+        return EscalationWrite(escalation_id)
 
     def record_bounce_locked(
         self,
@@ -133,6 +133,7 @@ class ChunkEscalationsStore:
         *,
         epoch: int,
         admission: EpochAdmission,
+        terminal: bool,
         cause: str,
         envelope: str,
         at: datetime,
@@ -143,6 +144,7 @@ class ChunkEscalationsStore:
             chunk_id,
             epoch=epoch,
             admission=admission,
+            terminal=terminal,
             cause=cause,
             envelope=envelope,
             at=at,
@@ -156,6 +158,7 @@ class ChunkEscalationsStore:
         *,
         epoch: int,
         admission: EpochAdmission,
+        terminal: bool,
         cause: str,
         envelope: str,
         at: datetime,
@@ -181,7 +184,7 @@ class ChunkEscalationsStore:
             ).first()
         if already is not None:
             return False
-        if fence(conn, chunk_id, epoch=epoch, admission=admission) is not None:
+        if fence(conn, chunk_id, epoch=epoch, admission=admission, terminal=terminal) is not None:
             return False
         conn.execute(
             self._store.insert(s.chunk_bounces).values(
@@ -197,6 +200,7 @@ class ChunkEscalationsStore:
         *,
         epoch: int,
         admission: EpochAdmission,
+        terminal: bool,
         runner_id: str,
         takeover_command: str,
         at: datetime,
@@ -208,6 +212,7 @@ class ChunkEscalationsStore:
             chunk_id,
             epoch=epoch,
             admission=admission,
+            terminal=terminal,
             runner_id=runner_id,
             takeover_command=takeover_command,
             at=at,
@@ -222,13 +227,14 @@ class ChunkEscalationsStore:
         *,
         epoch: int,
         admission: EpochAdmission,
+        terminal: bool,
         runner_id: str,
         takeover_command: str,
         at: datetime,
         cause: str,
         detail: str,
     ) -> BounceEscalationOutcome:
-        lock_chunk_row(conn, chunk_id)
+        """``conn`` already holds ``chunk_id``'s row lock."""
         already = conn.execute(
             self._store.select(s.escalations, s.escalations.c.id).where(
                 (s.escalations.c.chunk_id == chunk_id) & (s.escalations.c.epoch == epoch)
@@ -236,7 +242,7 @@ class ChunkEscalationsStore:
         ).first()
         if already is not None:
             return BounceEscalationOutcome.ALREADY_RECORDED
-        if fence(conn, chunk_id, epoch=epoch, admission=admission) is not None:
+        if fence(conn, chunk_id, epoch=epoch, admission=admission, terminal=terminal) is not None:
             return BounceEscalationOutcome.REFUSED
         record_hub_lease(conn, chunk_id, epoch=epoch, runner_id=runner_id, at=at)
         conn.execute(

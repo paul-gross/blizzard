@@ -226,6 +226,7 @@ class _HubStepToDone:
                 choice_name="pass",
                 epoch=2,
                 admission=EpochAdmission.ABOVE,
+                terminal=False,
                 runner_id="hub",
                 transition_id="tr_hub_done",
                 at=self._hub.clock.now(),

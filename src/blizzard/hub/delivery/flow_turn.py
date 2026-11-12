@@ -49,12 +49,13 @@ from blizzard.hub.domain.chunk.event_log import EventLogService, close_skipped_e
 from blizzard.hub.domain.chunk.flow_writes import FlowFactWritten
 from blizzard.hub.domain.chunk.model import Chunk, ChunkFacts, decide_close_enqueue
 from blizzard.hub.domain.chunk.no_code import finished_repos
-from blizzard.hub.domain.chunk.ports.artifacts import IWriteChunkArtifactsRepository
+from blizzard.hub.domain.chunk.ports.artifacts import HubArtifactWrite, IWriteChunkArtifactsRepository
 from blizzard.hub.domain.chunk.ports.events import IEventLogPublisher
 from blizzard.hub.domain.chunk.ports.exclusive import IChunkExclusiveWrites, ILockedChunkRead
 from blizzard.hub.domain.chunk.ports.facts import IReadChunkFactsRepository
 from blizzard.hub.domain.chunk.ports.fence import EpochAdmission
 from blizzard.hub.domain.chunk.ports.record import IReadChunkRecordRepository
+from blizzard.hub.domain.chunk.terminal import terminal_under_lock
 from blizzard.hub.domain.config.capabilities import Capability
 from blizzard.hub.domain.config.forges import IReadForgeRepository
 from blizzard.hub.domain.config.repositories import (
@@ -91,6 +92,7 @@ from blizzard.hub.domain.garden.review.validation import ReviewFindingsRejected
 from blizzard.hub.domain.garden.run_context import IReadRunContextRepository
 from blizzard.hub.domain.graph.actions import ActionSpec
 from blizzard.hub.domain.graph.model import HUB_DEFAULT_FAILURE_CHOICE, Graph, IReadManyGraphs, Node
+from blizzard.hub.domain.kernel.transactions import IHubTransactions
 from blizzard.hub.domain.observability.tracing.platform import ACTION_CHOICE, ACTION_NAME, ACTION_PASS_SPAN
 from blizzard.hub.domain.projects.links import IReadProjectLinks
 from blizzard.hub.domain.projects.model import IReadProjectRepository
@@ -201,6 +203,7 @@ class TurnRunner:
         graphs: IReadManyGraphs,
         artifacts: IWriteChunkArtifactsRepository,
         exclusive: IChunkExclusiveWrites,
+        transactions: IHubTransactions,
         router: HubNodeRouter,
         events: EventLogService,
         publisher: ITurnPublisher,
@@ -228,6 +231,7 @@ class TurnRunner:
         self._graphs = graphs
         self._artifacts = artifacts
         self._exclusive = exclusive
+        self._transactions = transactions
         self._router = router
         self._events = events
         self._publisher = publisher
@@ -462,18 +466,8 @@ class TurnRunner:
         if at is None:
             self._end(submission, ending, outcome=TURN_SUPERSEDED)
             return
-        written = self._artifacts.record_hub_artifact(
-            at.chunk.chunk_id,
-            node_id=at.node.node_id,
-            node_name=at.node.name,
-            epoch=at.epoch,
-            admission=EpochAdmission.AT_OR_ABOVE,
-            name=f"{HUB_LOG_PREFIX}{at.node.action or 'build'}",
-            content=log,
-            at=self._clock.now(),
-            close_decision=decide_close_enqueue(
-                at.chunk.work_refs, lambda source: self._work_sources.closer(source) is not None
-            ),
+        written = self._record_hub_artifact(
+            at.chunk, at.node, at.epoch, name=f"{HUB_LOG_PREFIX}{at.node.action or 'build'}", content=log
         )
         self._events.publish(*close_skipped_events(written.close_skipped, chunk=at.chunk))
         self._router.route(
@@ -497,19 +491,7 @@ class TurnRunner:
         """Make one effect a pass recorded durable, answering how the hub took it."""
         match effect:
             case Marker(name=name, content=content):
-                written = self._artifacts.record_hub_artifact(
-                    chunk.chunk_id,
-                    node_id=node.node_id,
-                    node_name=node.name,
-                    epoch=epoch,
-                    admission=EpochAdmission.AT_OR_ABOVE,
-                    name=name,
-                    content=content,
-                    at=self._clock.now(),
-                    close_decision=decide_close_enqueue(
-                        chunk.work_refs, lambda source: self._work_sources.closer(source) is not None
-                    ),
-                )
+                written = self._record_hub_artifact(chunk, node, epoch, name=name, content=content)
                 self._events.publish(*close_skipped_events(written.close_skipped, chunk=chunk))
                 if written.wrote or self._artifacts.has_hub_artifact(
                     chunk.chunk_id, node_id=node.node_id, epoch=epoch, name=name
@@ -560,37 +542,44 @@ class TurnRunner:
         once committed — or, for a repository the submission holds no flow of, on the chunk alone."""
         flow = next((f for f in submission.flows if f.repository_id == repository), None)
         at = self._clock.now()
+        close_decision = decide_close_enqueue(
+            chunk.work_refs, lambda source: self._work_sources.closer(source) is not None
+        )
         if flow is None:
-            landed = self._artifacts.record_landing(
-                chunk.chunk_id,
+            with self._transactions.begin() as unit:
+                locked = unit.lock_chunks([chunk.chunk_id])
+                landed = self._artifacts.record_landing(
+                    chunk.chunk_id,
+                    node_id=node.node_id,
+                    node_name=node.name,
+                    epoch=epoch,
+                    admission=EpochAdmission.AT_OR_ABOVE,
+                    terminal=terminal_under_lock(self._facts, chunk.chunk_id, transaction=locked),
+                    repo=repo,
+                    revision=revision,
+                    repository_id=repository,
+                    at=at,
+                    close_decision=close_decision,
+                    transaction=locked,
+                )
+            self._events.publish(*close_skipped_events(landed.close_skipped, chunk=chunk))
+            return landed.refused
+        landing = FlowLanding.of(flow, submission, project_id=chunk.project_id, node_name=node.name, revision=revision)
+        with self._transactions.begin() as unit:
+            locked = unit.lock_chunks([landing.chunk_id])
+            written = self._flows.record_landing(
+                landing,
                 node_id=node.node_id,
                 node_name=node.name,
                 epoch=epoch,
                 admission=EpochAdmission.AT_OR_ABOVE,
+                terminal=terminal_under_lock(self._facts, landing.chunk_id, transaction=locked),
                 repo=repo,
                 revision=revision,
-                repository_id=repository,
                 at=at,
-                close_decision=decide_close_enqueue(
-                    chunk.work_refs, lambda source: self._work_sources.closer(source) is not None
-                ),
+                close_decision=close_decision,
+                transaction=locked,
             )
-            self._events.publish(*close_skipped_events(landed.close_skipped, chunk=chunk))
-            return landed.refused
-        landing = FlowLanding.of(flow, submission, project_id=chunk.project_id, node_name=node.name, revision=revision)
-        written = self._flows.record_landing(
-            landing,
-            node_id=node.node_id,
-            node_name=node.name,
-            epoch=epoch,
-            admission=EpochAdmission.AT_OR_ABOVE,
-            repo=repo,
-            revision=revision,
-            at=at,
-            close_decision=decide_close_enqueue(
-                chunk.work_refs, lambda source: self._work_sources.closer(source) is not None
-            ),
-        )
         self._events.publish(*close_skipped_events(written.close_skipped, chunk=chunk))
         publish_flow_facts(self._publisher, written.written)
         if written.event_id is not None:
@@ -721,21 +710,33 @@ class TurnRunner:
         if not answer.log:
             return None
         name = f"{HUB_LOG_PREFIX}{action_name}"
-        written = self._artifacts.record_hub_artifact(
-            chunk.chunk_id,
-            node_id=node.node_id,
-            node_name=node.name,
-            epoch=epoch,
-            admission=EpochAdmission.AT_OR_ABOVE,
-            name=name,
-            content="\n".join(answer.log) + "\n",
-            at=self._clock.now(),
-            close_decision=decide_close_enqueue(
-                chunk.work_refs, lambda source: self._work_sources.closer(source) is not None
-            ),
-        )
+        written = self._record_hub_artifact(chunk, node, epoch, name=name, content="\n".join(answer.log) + "\n")
         self._events.publish(*close_skipped_events(written.close_skipped, chunk=chunk))
         return name
+
+    def _record_hub_artifact(
+        self, chunk: Chunk, node: Node, epoch: int, *, name: str, content: str
+    ) -> HubArtifactWrite:
+        """One hub artifact for ``(chunk, node, epoch)``, in a short unit of its own that locks the chunk
+        (``bzh:short-locked-unit``)."""
+        close_decision = decide_close_enqueue(
+            chunk.work_refs, lambda source: self._work_sources.closer(source) is not None
+        )
+        with self._transactions.begin() as unit:
+            locked = unit.lock_chunks([chunk.chunk_id])
+            return self._artifacts.record_hub_artifact(
+                chunk.chunk_id,
+                node_id=node.node_id,
+                node_name=node.name,
+                epoch=epoch,
+                admission=EpochAdmission.AT_OR_ABOVE,
+                terminal=terminal_under_lock(self._facts, chunk.chunk_id, transaction=locked),
+                name=name,
+                content=content,
+                at=self._clock.now(),
+                close_decision=close_decision,
+                transaction=locked,
+            )
 
     def _resolve_feature_title(self, chunk: Chunk) -> str | None:
         """The chunk's prose feature title — the FIRST ``work_ref``'s work item title, best-effort. A read failure or

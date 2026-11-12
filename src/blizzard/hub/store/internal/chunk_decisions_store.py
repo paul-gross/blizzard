@@ -30,7 +30,7 @@ from blizzard.hub.domain.kernel.transactions import LockedTransaction, Transacti
 from blizzard.hub.domain.projects.model import ProjectId
 from blizzard.hub.store import schema as s
 from blizzard.hub.store.internal.chunk_rows import enqueue_close_intents, fence, is_landing_marker, next_artifact_seq
-from blizzard.hub.store.internal.chunk_terminal_predicates import chunk_is_terminal
+from blizzard.hub.store.internal.chunk_terminal_predicates import maybe_live
 from blizzard.hub.store.internal.newest_fact import newer_row_exists
 from blizzard.hub.store.locking import lock_chunk_row
 from blizzard.hub.store.scoped import ScopedConnections, ScopedStatements, statements_of
@@ -212,7 +212,7 @@ class ChunkDecisionsStore:
                 .where(
                     not_resolved,
                     not_closed_clause(self._store, s.decisions.c.decision_id),
-                    ~chunk_is_terminal(self._store, s.decisions.c.chunk_id),
+                    maybe_live(self._store, s.decisions.c.chunk_id),
                 )
                 .order_by(s.decisions.c.submitted_at, s.decisions.c.decision_id)
             ).all()
@@ -227,6 +227,7 @@ class ChunkDecisionsStore:
         node_name: str,
         epoch: int,
         admission: EpochAdmission,
+        terminal: bool,
         claimant: Claimant | None = None,
         choices: list[DecisionChoice],
         check_results: Sequence[DecisionCheck] = (),
@@ -245,6 +246,7 @@ class ChunkDecisionsStore:
                 node_name=node_name,
                 epoch=epoch,
                 admission=admission,
+                terminal=terminal,
                 claimant=claimant,
                 choices=choices,
                 check_results=check_results,
@@ -264,6 +266,7 @@ class ChunkDecisionsStore:
         node_name: str,
         epoch: int,
         admission: EpochAdmission,
+        terminal: bool,
         claimant: Claimant | None = None,
         choices: list[DecisionChoice],
         check_results: Sequence[DecisionCheck] = (),
@@ -286,6 +289,7 @@ class ChunkDecisionsStore:
             node_name=node_name,
             epoch=epoch,
             admission=admission,
+            terminal=terminal,
             claimant=claimant,
             choices=choices,
             check_results=check_results,
@@ -305,6 +309,7 @@ class ChunkDecisionsStore:
         node_name: str,
         epoch: int,
         admission: EpochAdmission,
+        terminal: bool,
         claimant: Claimant | None = None,
         choices: list[DecisionChoice],
         check_results: Sequence[DecisionCheck] = (),
@@ -317,7 +322,7 @@ class ChunkDecisionsStore:
             [{"name": c.name, "description": c.description, "requires_checks": c.requires_checks} for c in choices]
         )
         checks_payload = json.dumps([{"command": c.command, "passed": c.passed} for c in check_results])
-        refusal = fence(conn, chunk_id, epoch=epoch, admission=admission, claimant=claimant)
+        refusal = fence(conn, chunk_id, epoch=epoch, admission=admission, terminal=terminal, claimant=claimant)
         if refusal is not None:
             return refusal
         project_id = conn.execute(
