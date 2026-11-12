@@ -20,6 +20,7 @@ from sqlalchemy import Engine
 from sqlalchemy.exc import IntegrityError
 
 from blizzard.foundation.clock import FixedClock
+from blizzard.foundation.secrets.factories import secret_cipher
 from blizzard.foundation.store.engine import create_engine_from_url
 from blizzard.foundation.store.utc import UtcDateTime
 from blizzard.hub.domain.chunk.model import AnswerOutcome, WorkRef
@@ -30,7 +31,7 @@ from blizzard.hub.domain.config.forges import GITHUB_API_BASE, ForgeFields, Forg
 from blizzard.hub.domain.config.repositories import RepositoryCoordinateTaken, RepositoryDraft, RepositorySlugTaken
 from blizzard.hub.domain.config.secrets import SecretAlreadyExists, SecretName
 from blizzard.hub.domain.config.work_sources import WorkSourceDraft, WorkSourceLocatorTaken, WorkSourceSlugTaken
-from blizzard.hub.secrets import hub_key_provider, secret_cipher
+from blizzard.hub.secrets import hub_key_provider
 from blizzard.hub.store import schema
 from blizzard.hub.store.internal.chunk_questions_store import ChunkQuestionsStore
 from blizzard.hub.store.internal.chunk_store_factory import build_chunk_stores

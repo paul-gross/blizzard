@@ -34,6 +34,8 @@ from blizzard.foundation.forwarded import TrustedProxies
 from blizzard.foundation.logging import get_logger
 from blizzard.foundation.platform_tracing.tracer import IPlatformTracer
 from blizzard.foundation.roles import collaborator
+from blizzard.foundation.secrets.factories import secret_cipher
+from blizzard.foundation.secrets.sealing import IKeyProvider, ISecretCipher
 from blizzard.foundation.trace_export.config import TracingConfig
 from blizzard.foundation.trace_export.exporter import ITraceExporter
 from blizzard.foundation.trace_export.settings import TracingSettings
@@ -94,7 +96,7 @@ from blizzard.hub.domain.config.capabilities import IForgeOffers
 from blizzard.hub.domain.config.changes import IReadConfigChanges, ISecretReferences
 from blizzard.hub.domain.config.forges import IReadForgeRepository
 from blizzard.hub.domain.config.repositories import IReadRepositoryRecordRepository
-from blizzard.hub.domain.config.secrets import IHubKeyProvider, ISecretCatalog, ISecretCipher, ISecretReader
+from blizzard.hub.domain.config.secrets import ISecretCatalog, ISecretReader
 from blizzard.hub.domain.config.work_sources import IReadWorkSourceRepository
 from blizzard.hub.domain.config_apply.service import ConfigApplication
 from blizzard.hub.domain.delivery.lines import FlowLineFactory
@@ -237,7 +239,7 @@ from blizzard.hub.graph_sync import packaged_minter
 from blizzard.hub.graphs import PACKAGED
 from blizzard.hub.live_config import ConfigObjectCache
 from blizzard.hub.open_tenants import OpenTenants
-from blizzard.hub.secrets import StoreSecretReader, secret_cipher
+from blizzard.hub.secrets import StoreSecretReader
 from blizzard.hub.store.errors import HubStoreConnections, HubStoreErrorFactory
 from blizzard.hub.store.internal.analytics_event_query_store import AnalyticsEventQueryStore
 from blizzard.hub.store.internal.analytics_operational_store import AnalyticsOperationalStore
@@ -1632,7 +1634,7 @@ def build_services(
     *,
     work_sources: WorkSourceRegistryFactory,
     forges: ForgeRegistryFactory = default_forge_registry,
-    secret_keys: IHubKeyProvider,
+    secret_keys: IKeyProvider,
     brokers: TenantBrokers | None = None,
     public_url: str | None = None,
     follow_latest_default: bool,

@@ -13,9 +13,10 @@ from dataclasses import dataclass
 import httpx2
 
 from blizzard.foundation.roles import collaborator
+from blizzard.foundation.secrets.value import SecretValue
 from blizzard.hub.auth.users import IReadUserRepository
 from blizzard.hub.domain.config.forges import ConfiguredForge, IReadForgeRepository
-from blizzard.hub.domain.config.secrets import ISecretReader, SecretName, SecretNotFound, SecretRetired, SecretValue
+from blizzard.hub.domain.config.secrets import ISecretReader, SecretName, SecretNotFound, SecretRetired
 from blizzard.hub.domain.config.work_sources import ConfiguredWorkSource, IReadWorkSourceRepository
 from blizzard.hub.domain.garden.proposals.resolution import GardenProposalDeliveryResolution
 from blizzard.hub.domain.work_items.editing import WorkItemEditService

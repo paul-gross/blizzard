@@ -89,9 +89,9 @@ def secret_rotate_key(directory: str) -> None:
     Directory mode mints a new generation and promotes it once every tenant is re-sealed; env mode
     re-seals under $BZ_HUB_SECRET_KEY, opening older rows through $BZ_HUB_SECRET_KEY_PREVIOUS. A race
     with a replace leaves the old key current and exits non-zero — re-run it."""
+    from blizzard.foundation.secrets.sealing import SecretRotationConflict
     from blizzard.hub.app import rotate_secret_keys
     from blizzard.hub.config import ConfigError, HubConfig
-    from blizzard.hub.domain.config.secrets import SecretRotationConflict
 
     try:
         result = rotate_secret_keys(

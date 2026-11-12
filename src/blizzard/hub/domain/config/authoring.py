@@ -18,6 +18,8 @@ from collections.abc import Mapping, Sequence
 from dataclasses import replace
 
 from blizzard.foundation.clock import IClock
+from blizzard.foundation.secrets.sealing import ISecretCipher
+from blizzard.foundation.secrets.value import SecretValue
 from blizzard.hub.domain.config import secret_lifecycle
 from blizzard.hub.domain.config.apply import (
     ApplyEntryRefused,
@@ -60,13 +62,7 @@ from blizzard.hub.domain.config.repositories import (
     RepositoryEdit,
     RepositoryFields,
 )
-from blizzard.hub.domain.config.secrets import (
-    ISecretCipher,
-    IWriteSecretRepository,
-    SecretMetadata,
-    SecretName,
-    SecretValue,
-)
+from blizzard.hub.domain.config.secrets import IWriteSecretRepository, SecretMetadata, SecretName
 from blizzard.hub.domain.config.work_sources import (
     ConfiguredWorkSource,
     IWriteWorkSourceRepository,

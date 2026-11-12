@@ -10,23 +10,19 @@ from datetime import UTC, datetime
 
 import pytest
 
+from blizzard.foundation.secrets.sealing import SealedSecret, SealedValue, stale_seals, uncovered_key_ids
+from blizzard.foundation.secrets.value import SecretValue, SecretValueBlank
 from blizzard.hub.domain.config.changes import RecordKind, RecordRef
 from blizzard.hub.domain.config.secrets import (
     KeysUncovered,
-    SealedSecret,
-    SealedValue,
     SecretMetadata,
     SecretReferenced,
     SecretRetired,
-    SecretValue,
-    SecretValueBlank,
     listed,
     require_keys_covered,
     require_revealable,
     require_unreferenced,
     retirable,
-    stale_seals,
-    uncovered_key_ids,
 )
 
 _T0 = datetime(2026, 1, 1, tzinfo=UTC)

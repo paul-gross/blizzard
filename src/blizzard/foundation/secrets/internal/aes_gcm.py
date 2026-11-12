@@ -8,14 +8,8 @@ import secrets
 from cryptography.exceptions import InvalidTag
 from cryptography.hazmat.primitives.ciphers.aead import AESGCM
 
-from blizzard.hub.domain.config.secrets import (
-    IHubKeyProvider,
-    ISecretCipher,
-    SealedSecret,
-    SealedValue,
-    SecretUnreadable,
-    SecretValue,
-)
+from blizzard.foundation.secrets.sealing import IKeyProvider, ISecretCipher, SealedSecret, SealedValue, SecretUnreadable
+from blizzard.foundation.secrets.value import SecretValue
 
 _NONCE_BYTES = 12
 _AD_VERSION = 1
@@ -32,7 +26,7 @@ def associated_data(*, name: str, revision: int) -> bytes:
 class AesGcmSecretCipher:
     """Seals under the provider's current generation; opens under the row's own ``key_id``."""
 
-    def __init__(self, keys: IHubKeyProvider) -> None:
+    def __init__(self, keys: IKeyProvider) -> None:
         self._keys = keys
 
     def seal(self, value: SecretValue, *, name: str, revision: int) -> SealedValue:

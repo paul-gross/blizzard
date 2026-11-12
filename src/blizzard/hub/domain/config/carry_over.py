@@ -20,6 +20,7 @@ from pathlib import Path
 from typing import Protocol
 
 from blizzard.foundation.roles import domain_model
+from blizzard.foundation.secrets.sealing import SealedValue
 from blizzard.hub.domain.config import secret_lifecycle
 from blizzard.hub.domain.config.apply import REPOSITORIES_SECTION, WORK_SOURCES_SECTION
 from blizzard.hub.domain.config.changes import ChangeContext, ConfigChange, Door, RecordKind
@@ -46,7 +47,7 @@ from blizzard.hub.domain.config.repositories import (
     RepositoryId,
     RepositoryName,
 )
-from blizzard.hub.domain.config.secrets import SealedValue, SecretName, SecretNameError
+from blizzard.hub.domain.config.secrets import SecretName, SecretNameError
 from blizzard.hub.domain.config.work_sources import ConfiguredWorkSource, WorkSourceDraft, WorkSourceId, WorkSourceName
 from blizzard.hub.domain.kernel.slugs import derive_slug
 

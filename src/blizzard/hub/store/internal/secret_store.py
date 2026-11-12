@@ -16,19 +16,21 @@ from sqlalchemy import Row
 from sqlalchemy.engine import Connection
 from sqlalchemy.exc import IntegrityError
 
-from blizzard.foundation.store.batching import id_batches
-from blizzard.hub.domain.config.changes import ConfigChange
-from blizzard.hub.domain.config.secrets import (
+from blizzard.foundation.secrets.sealing import (
     IResealSecretRepository,
     ISealedSecretRepository,
-    IWriteSecretRepository,
     Reseal,
     SealedSecret,
     SealedValue,
+    SecretRotationConflict,
+)
+from blizzard.foundation.store.batching import id_batches
+from blizzard.hub.domain.config.changes import ConfigChange
+from blizzard.hub.domain.config.secrets import (
+    IWriteSecretRepository,
     SecretAlreadyExists,
     SecretMetadata,
     SecretRevisionConflict,
-    SecretRotationConflict,
     require_unreferenced,
 )
 
