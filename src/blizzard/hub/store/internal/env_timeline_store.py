@@ -1,16 +1,19 @@
 """SQLAlchemy adapter for the environment timeline's reads (package-private).
 
-Read-only, over the route, transition, migration, lease, epoch-owner, escalation, usage, requeue, restart, terminal
-and roster facts; every read is tenant-scoped through the store's statement builders, and per-chunk reads go one id
-batch at a time (``bzh:bulk-reconstitution``)."""
+Read-only. Every fact table it reads is an entry of :data:`TIMELINE_READERS`, tied to the registry's timeline
+projection (``bzh:fact-families-declared``); the roster reads the runner and host tables outside it. Every read is
+tenant-scoped through the store's statement builders, and per-chunk reads go one id batch at a time
+(``bzh:bulk-reconstitution``)."""
 
 from __future__ import annotations
 
 from collections import defaultdict
-from collections.abc import Sequence
+from collections.abc import Callable, Iterator, Sequence
+from dataclasses import dataclass
 from datetime import datetime
+from typing import Any
 
-from sqlalchemy import ColumnElement
+from sqlalchemy import ColumnElement, Connection, Table
 
 from blizzard.foundation.store.batching import id_batches
 from blizzard.hub.domain.graph.model import RESERVED_TERMINAL
@@ -29,6 +32,285 @@ from blizzard.hub.domain.observability.env_timeline import (
 from blizzard.hub.store import schema as s
 from blizzard.hub.store.scoped import ScopedConnections
 
+# --- The timeline's readers: one entry per fact table, each saying which read consumes it ------------------------
+
+#: One chunk's fact rows from a table, id-batched: ``(chunk_id, item)`` pairs.
+type _Rows = Iterator[tuple[str, Any]]
+#: A predicate over the ``route_created`` row that holds when the chunk's fact ended the route by ``since``.
+type _EndsRoute = Callable[[ScopedConnections, Table, datetime], ColumnElement[bool]]
+
+
+#: The filters a window applies to the ``route_created`` row.
+type _Narrow = Callable[[Table], list[ColumnElement[bool]]]
+
+
+@dataclass(frozen=True)
+class _ChunkFactsReader:
+    """A table ``chunk_facts`` reads, id-batched by chunk, into the facts' ``field``."""
+
+    field: str
+    read: Callable[[ScopedConnections, Connection, Sequence[str]], _Rows]
+    ends_route: _EndsRoute | None = None
+
+
+@dataclass(frozen=True)
+class _RouteWindowReader:
+    """The table anchoring ``routes()``' window: reads the routes ``narrow`` leaves."""
+
+    read: Callable[[ScopedConnections, Connection, _Narrow], list[RouteCreated]]
+
+
+@dataclass(frozen=True)
+class _RouteBatchReader:
+    """A table ``routes()`` reads for the window's chunks, id-batched."""
+
+    read: Callable[[ScopedConnections, Connection, Sequence[str]], list[RouteReleased]]
+    ends_route: _EndsRoute | None = None
+
+
+def _batched(
+    table: Table, columns: Sequence[Any], item: Callable[[Any], Any], *, order_by: Any = None
+) -> Callable[[ScopedConnections, Connection, Sequence[str]], _Rows]:
+    """A reader of ``columns`` of ``table`` where its ``chunk_id`` is in the batch, each row mapped by ``item``."""
+
+    def read(store: ScopedConnections, conn: Connection, batch: Sequence[str]) -> _Rows:
+        statement = store.select(table, table.c.chunk_id, *columns).where(table.c.chunk_id.in_(batch))
+        if order_by is not None:
+            statement = statement.order_by(order_by)
+        for row in conn.execute(statement):
+            yield row.chunk_id, item(row)
+
+    return read
+
+
+def _ended_by(table: Table, column: str) -> _EndsRoute:
+    """A chunk-ending fact (completed, stopped) recorded between the route's creation and ``since``."""
+
+    def ends(store: ScopedConnections, created: Table, since: datetime) -> ColumnElement[bool]:
+        return ~store.exists(
+            table,
+            table.c.chunk_id == created.c.chunk_id,
+            table.c[column] >= created.c.created_at,
+            table.c[column] <= since,
+        )
+
+    return ends
+
+
+def _reached_terminal(store: ScopedConnections, created: Table, since: datetime) -> ColumnElement[bool]:
+    tr = s.transitions
+    return ~store.exists(
+        tr,
+        tr.c.chunk_id == created.c.chunk_id,
+        tr.c.to_node_id == RESERVED_TERMINAL,
+        tr.c.recorded_at >= created.c.created_at,
+        tr.c.recorded_at <= since,
+    )
+
+
+def _released_by(store: ScopedConnections, created: Table, since: datetime) -> ColumnElement[bool]:
+    # A route a later release of its chunk ended by ``since`` never reaches the window: the first release after a
+    # route is no later than any after it.
+    released = s.route_released
+    return ~store.exists(
+        released,
+        released.c.chunk_id == created.c.chunk_id,
+        released.c.seq > created.c.seq,
+        released.c.released_at <= since,
+    )
+
+
+def _transitions() -> _ChunkFactsReader:
+    tr = s.transitions
+    return _ChunkFactsReader(
+        "transitions",
+        _batched(
+            tr,
+            (tr.c.recorded_at, tr.c.graph_id, tr.c.from_node_id, tr.c.to_node_id, tr.c.choice_name, tr.c.epoch),
+            lambda row: StepTransition(
+                row.recorded_at,
+                row.graph_id,
+                row.to_node_id,
+                row.choice_name,
+                row.epoch,
+                from_node_id=row.from_node_id,
+            ),
+        ),
+        ends_route=_reached_terminal,
+    )
+
+
+def _migrations() -> _ChunkFactsReader:
+    mg = s.chunk_migrations
+    return _ChunkFactsReader(
+        "migrations",
+        _batched(
+            mg,
+            (
+                mg.c.recorded_at,
+                mg.c.from_graph_id,
+                mg.c.to_graph_id,
+                mg.c.from_node_id,
+                mg.c.landed_node_id,
+                mg.c.choice_name,
+                mg.c.epoch,
+            ),
+            lambda row: StepMigration(
+                row.recorded_at,
+                row.from_graph_id,
+                row.to_graph_id,
+                row.from_node_id,
+                row.landed_node_id,
+                row.choice_name,
+                row.epoch,
+            ),
+        ),
+    )
+
+
+def _usage() -> _ChunkFactsReader:
+    def read(store: ScopedConnections, conn: Connection, batch: Sequence[str]) -> _Rows:
+        use = s.usage_facts
+        for row in conn.execute(store.select(use).where(use.c.chunk_id.in_(batch))):
+            yield (
+                row.chunk_id,
+                StepUsage(
+                    row.node_id,
+                    row.recorded_at,
+                    row.cost_usd,
+                    row.estimated_cost_usd,
+                    model=row.model,
+                    harness_id=row.harness_id,
+                    input_tokens=row.input_tokens or 0,
+                    output_tokens=row.output_tokens or 0,
+                    cache_read_tokens=row.cache_read_tokens or 0,
+                    cache_create_tokens=row.cache_create_tokens or 0,
+                    kind=row.kind,
+                    epoch=row.epoch,
+                ),
+            )
+
+    return _ChunkFactsReader("usage", read)
+
+
+def _titles() -> _ChunkFactsReader:
+    def read(store: ScopedConnections, conn: Connection, batch: Sequence[str]) -> _Rows:
+        refs, items = s.chunk_work_refs, s.work_items
+        joined = store.scope_join(refs, items, (refs.c.source == items.c.source) & (refs.c.ref == items.c.ref))
+        for row in conn.execute(
+            store.select(joined, refs.c.chunk_id, items.c.title).where(refs.c.chunk_id.in_(batch)).order_by(refs.c.id)
+        ):
+            yield row.chunk_id, row.title
+
+    return _ChunkFactsReader("titles", read)
+
+
+def _routes_created(
+    store: ScopedConnections,
+    conn: Connection,
+    narrow: _Narrow,
+) -> list[RouteCreated]:
+    created, envs = s.route_created, s.route_environments
+    rows = list(
+        conn.execute(
+            store.select(
+                created,
+                created.c.route_id,
+                created.c.chunk_id,
+                created.c.runner_id,
+                created.c.workspace_id,
+                created.c.created_at,
+                created.c.seq,
+            ).where(*narrow(created))
+        )
+    )
+    env_ids: dict[str, list[str]] = defaultdict(list)
+    for batch in id_batches(sorted({row.route_id for row in rows})):
+        for row in conn.execute(
+            store.select(envs, envs.c.route_id, envs.c.environment_id)
+            .where(envs.c.route_id.in_(batch))
+            .order_by(envs.c.route_id, envs.c.id)
+        ):
+            env_ids[row.route_id].append(row.environment_id)
+    return [
+        RouteCreated(
+            chunk_id=row.chunk_id,
+            runner_id=row.runner_id,
+            workspace_id=row.workspace_id,
+            environment_ids=tuple(env_ids.get(row.route_id, ())),
+            created_at=row.created_at,
+            seq=row.seq,
+        )
+        for row in rows
+    ]
+
+
+def _routes_released(store: ScopedConnections, conn: Connection, batch: Sequence[str]) -> list[RouteReleased]:
+    released = s.route_released
+    return [
+        RouteReleased(chunk_id=row.chunk_id, released_at=row.released_at, seq=row.seq)
+        for row in conn.execute(
+            store.select(released, released.c.chunk_id, released.c.released_at, released.c.seq).where(
+                released.c.chunk_id.in_(batch)
+            )
+        )
+    ]
+
+
+#: Every fact table the timeline reads, with the read that consumes it; the registry's timeline projection names
+#: the same tables (``tests/unit/hub/store/internal/test_fact_families.py``). A table a reader joins that is not
+#: chunk-keyed (``work_items``, ``route_environments``) stays inside its fact table's reader.
+TIMELINE_READERS: dict[Table, _ChunkFactsReader | _RouteWindowReader | _RouteBatchReader] = {
+    s.transitions: _transitions(),
+    s.chunk_migrations: _migrations(),
+    s.lease_facts: _ChunkFactsReader(
+        "leases",
+        _batched(
+            s.lease_facts,
+            (s.lease_facts.c.epoch, s.lease_facts.c.lease_id, s.lease_facts.c.minted_at),
+            lambda row: (row.epoch, row.lease_id, row.minted_at),
+        ),
+    ),
+    s.epoch_owners: _ChunkFactsReader(
+        "owners",
+        _batched(
+            s.epoch_owners, (s.epoch_owners.c.epoch, s.epoch_owners.c.runner_id), lambda row: (row.epoch, row.runner_id)
+        ),
+    ),
+    s.escalations: _ChunkFactsReader(
+        "escalations",
+        _batched(
+            s.escalations,
+            (s.escalations.c.recorded_at, s.escalations.c.cause, s.escalations.c.detail, s.escalations.c.epoch),
+            lambda row: StepEscalation(row.recorded_at, row.cause, row.detail, epoch=row.epoch),
+        ),
+    ),
+    s.requeues: _ChunkFactsReader(
+        "requeues", _batched(s.requeues, (s.requeues.c.requeued_at,), lambda row: row.requeued_at)
+    ),
+    s.chunk_restarts: _ChunkFactsReader(
+        "restarts", _batched(s.chunk_restarts, (s.chunk_restarts.c.recorded_at,), lambda row: row.recorded_at)
+    ),
+    s.usage_facts: _usage(),
+    s.chunk_completed: _ChunkFactsReader(
+        "endings",
+        _batched(s.chunk_completed, (s.chunk_completed.c.completed_at,), lambda row: row.completed_at),
+        ends_route=_ended_by(s.chunk_completed, "completed_at"),
+    ),
+    s.chunk_stopped: _ChunkFactsReader(
+        "endings",
+        _batched(s.chunk_stopped, (s.chunk_stopped.c.stopped_at,), lambda row: row.stopped_at),
+        ends_route=_ended_by(s.chunk_stopped, "stopped_at"),
+    ),
+    s.chunk_work_refs: _titles(),
+    s.route_created: _RouteWindowReader(_routes_created),
+    s.route_released: _RouteBatchReader(_routes_released, ends_route=_released_by),
+}
+
+
+def _ends_route() -> list[_EndsRoute]:
+    return [r.ends_route for r in TIMELINE_READERS.values() if not isinstance(r, _RouteWindowReader) and r.ends_route]
+
 
 class EnvTimelineStore:
     """Read-only environment-timeline adapter over the hub store engine."""
@@ -44,213 +326,42 @@ class EnvTimelineStore:
         chunk_id: str | None = None,
         project: str | None = None,
     ) -> tuple[list[RouteCreated], list[RouteReleased]]:
-        created, envs, released_t = s.route_created, s.route_environments, s.route_released
-        where: list[ColumnElement[bool]] = [] if until is None else [created.c.created_at < until]
-        if chunk_id is not None:
-            where.append(created.c.chunk_id == chunk_id)
-        if project is not None:
-            where.append(
-                self._store.exists(
-                    s.chunks, s.chunks.c.chunk_id == created.c.chunk_id, s.chunks.c.project_id == project
-                )
-            )
-        if since is not None:
-            # A route a later release of its chunk ended by ``since`` never reaches the window: the first release
-            # after a route is no later than any after it. Nor does one its chunk ended, or reached its terminal node,
-            # between the route's creation and ``since``.
-            where.append(
-                ~self._store.exists(
-                    released_t,
-                    released_t.c.chunk_id == created.c.chunk_id,
-                    released_t.c.seq > created.c.seq,
-                    released_t.c.released_at <= since,
-                )
-            )
-            for table, col in ((s.chunk_completed, "completed_at"), (s.chunk_stopped, "stopped_at")):
-                where.append(
-                    ~self._store.exists(
-                        table,
-                        table.c.chunk_id == created.c.chunk_id,
-                        table.c[col] >= created.c.created_at,
-                        table.c[col] <= since,
+        window = next(r for r in TIMELINE_READERS.values() if isinstance(r, _RouteWindowReader))
+        batch_reader = next(r for r in TIMELINE_READERS.values() if isinstance(r, _RouteBatchReader))
+
+        def narrow(created: Table) -> list[ColumnElement[bool]]:
+            narrowed = [] if until is None else [created.c.created_at < until]
+            if chunk_id is not None:
+                narrowed.append(created.c.chunk_id == chunk_id)
+            if project is not None:
+                narrowed.append(
+                    self._store.exists(
+                        s.chunks, s.chunks.c.chunk_id == created.c.chunk_id, s.chunks.c.project_id == project
                     )
                 )
-            tr = s.transitions
-            where.append(
-                ~self._store.exists(
-                    tr,
-                    tr.c.chunk_id == created.c.chunk_id,
-                    tr.c.to_node_id == RESERVED_TERMINAL,
-                    tr.c.recorded_at >= created.c.created_at,
-                    tr.c.recorded_at <= since,
-                )
-            )
+            if since is not None:
+                # A route its chunk's release, ending, or terminal transition ended by ``since`` never reaches the
+                # window.
+                narrowed.extend(ends(self._store, created, since) for ends in _ends_route())
+            return narrowed
+
         with self._store.read("env_timeline.routes") as conn:
-            rows = list(
-                conn.execute(
-                    self._store.select(
-                        created,
-                        created.c.route_id,
-                        created.c.chunk_id,
-                        created.c.runner_id,
-                        created.c.workspace_id,
-                        created.c.created_at,
-                        created.c.seq,
-                    ).where(*where)
-                )
-            )
-            env_ids: dict[str, list[str]] = defaultdict(list)
-            for batch in id_batches(sorted({row.route_id for row in rows})):
-                for row in conn.execute(
-                    self._store.select(envs, envs.c.route_id, envs.c.environment_id)
-                    .where(envs.c.route_id.in_(batch))
-                    .order_by(envs.c.route_id, envs.c.id)
-                ):
-                    env_ids[row.route_id].append(row.environment_id)
+            routes = window.read(self._store, conn, narrow)
             released: list[RouteReleased] = []
-            for batch in id_batches(sorted({row.chunk_id for row in rows})):
-                released.extend(
-                    RouteReleased(chunk_id=row.chunk_id, released_at=row.released_at, seq=row.seq)
-                    for row in conn.execute(
-                        self._store.select(
-                            released_t, released_t.c.chunk_id, released_t.c.released_at, released_t.c.seq
-                        ).where(released_t.c.chunk_id.in_(batch))
-                    )
-                )
-        routes = [
-            RouteCreated(
-                chunk_id=row.chunk_id,
-                runner_id=row.runner_id,
-                workspace_id=row.workspace_id,
-                environment_ids=tuple(env_ids.get(row.route_id, ())),
-                created_at=row.created_at,
-                seq=row.seq,
-            )
-            for row in rows
-        ]
+            for batch in id_batches(sorted({route.chunk_id for route in routes})):
+                released.extend(batch_reader.read(self._store, conn, batch))
         return routes, released
 
     def chunk_facts(self, chunk_ids: Sequence[str]) -> dict[str, ChunkTimelineFacts]:
-        transitions: dict[str, list[StepTransition]] = defaultdict(list)
-        migrations: dict[str, list[StepMigration]] = defaultdict(list)
-        escalations: dict[str, list[StepEscalation]] = defaultdict(list)
-        usage: dict[str, list[StepUsage]] = defaultdict(list)
-        leases: dict[str, list[StepLease]] = defaultdict(list)
-        endings: dict[str, list[datetime]] = defaultdict(list)
-        requeues: dict[str, list[datetime]] = defaultdict(list)
-        restarts: dict[str, list[datetime]] = defaultdict(list)
-        titles: dict[str, str] = {}
+        read: dict[str, dict[str, list[Any]]] = defaultdict(lambda: defaultdict(list))
         projects: dict[str, str] = {}
         graphs: dict[str, str] = {}
-        tr, esc, use = s.transitions, s.escalations, s.usage_facts
-        refs, items = s.chunk_work_refs, s.work_items
+        readers = [r for r in TIMELINE_READERS.values() if isinstance(r, _ChunkFactsReader)]
         with self._store.read("env_timeline.chunk_facts") as conn:
             for batch in id_batches(list(chunk_ids)):
-                for row in conn.execute(
-                    self._store.select(
-                        tr,
-                        tr.c.chunk_id,
-                        tr.c.recorded_at,
-                        tr.c.graph_id,
-                        tr.c.from_node_id,
-                        tr.c.to_node_id,
-                        tr.c.choice_name,
-                        tr.c.epoch,
-                    ).where(tr.c.chunk_id.in_(batch))
-                ):
-                    transitions[row.chunk_id].append(
-                        StepTransition(
-                            row.recorded_at,
-                            row.graph_id,
-                            row.to_node_id,
-                            row.choice_name,
-                            row.epoch,
-                            from_node_id=row.from_node_id,
-                        )
-                    )
-                mg = s.chunk_migrations
-                for row in conn.execute(
-                    self._store.select(
-                        mg,
-                        mg.c.chunk_id,
-                        mg.c.recorded_at,
-                        mg.c.from_graph_id,
-                        mg.c.to_graph_id,
-                        mg.c.from_node_id,
-                        mg.c.landed_node_id,
-                        mg.c.choice_name,
-                        mg.c.epoch,
-                    ).where(mg.c.chunk_id.in_(batch))
-                ):
-                    migrations[row.chunk_id].append(
-                        StepMigration(
-                            row.recorded_at,
-                            row.from_graph_id,
-                            row.to_graph_id,
-                            row.from_node_id,
-                            row.landed_node_id,
-                            row.choice_name,
-                            row.epoch,
-                        )
-                    )
-                # A mint is the hub's own when the hub owns its epoch: a runner's — a session's lease, or a forced
-                # entry's takeover, which names none — is owned by its runner.
-                lf, eo = s.lease_facts, s.epoch_owners
-                owned = self._store.scope_join(
-                    lf, eo, (eo.c.chunk_id == lf.c.chunk_id) & (eo.c.epoch == lf.c.epoch), isouter=True
-                )
-                for row in conn.execute(
-                    self._store.select(
-                        owned,
-                        lf.c.chunk_id,
-                        lf.c.epoch,
-                        lf.c.lease_id,
-                        lf.c.minted_at,
-                        eo.c.id.label("owner_row"),
-                        eo.c.runner_id.label("owner"),
-                    ).where(lf.c.chunk_id.in_(batch))
-                ):
-                    hub = row.owner_row is not None and row.owner is None
-                    leases[row.chunk_id].append(StepLease(row.epoch, row.lease_id, row.minted_at, hub=hub))
-                for row in conn.execute(
-                    self._store.select(
-                        esc, esc.c.chunk_id, esc.c.recorded_at, esc.c.cause, esc.c.detail, esc.c.epoch
-                    ).where(esc.c.chunk_id.in_(batch))
-                ):
-                    escalations[row.chunk_id].append(
-                        StepEscalation(row.recorded_at, row.cause, row.detail, epoch=row.epoch)
-                    )
-                rq, rs = s.requeues, s.chunk_restarts
-                for row in conn.execute(
-                    self._store.select(rq, rq.c.chunk_id, rq.c.requeued_at).where(rq.c.chunk_id.in_(batch))
-                ):
-                    requeues[row.chunk_id].append(row.requeued_at)
-                for row in conn.execute(
-                    self._store.select(rs, rs.c.chunk_id, rs.c.recorded_at).where(rs.c.chunk_id.in_(batch))
-                ):
-                    restarts[row.chunk_id].append(row.recorded_at)
-                for row in conn.execute(self._store.select(use).where(use.c.chunk_id.in_(batch))):
-                    usage[row.chunk_id].append(
-                        StepUsage(
-                            row.node_id,
-                            row.recorded_at,
-                            row.cost_usd,
-                            row.estimated_cost_usd,
-                            model=row.model,
-                            harness_id=row.harness_id,
-                            input_tokens=row.input_tokens or 0,
-                            output_tokens=row.output_tokens or 0,
-                            cache_read_tokens=row.cache_read_tokens or 0,
-                            cache_create_tokens=row.cache_create_tokens or 0,
-                            kind=row.kind,
-                            epoch=row.epoch,
-                        )
-                    )
-                for table, col in ((s.chunk_completed, "completed_at"), (s.chunk_stopped, "stopped_at")):
-                    for row in conn.execute(
-                        self._store.select(table, table.c.chunk_id, table.c[col]).where(table.c.chunk_id.in_(batch))
-                    ):
-                        endings[row.chunk_id].append(getattr(row, col))
+                for reader in readers:
+                    for cid, item in reader.read(self._store, conn, batch):
+                        read[reader.field][cid].append(item)
                 for row in conn.execute(
                     self._store.select(s.chunks, s.chunks.c.chunk_id, s.chunks.c.project_id, s.chunks.c.graph_id).where(
                         s.chunks.c.chunk_id.in_(batch)
@@ -258,29 +369,26 @@ class EnvTimelineStore:
                 ):
                     projects[row.chunk_id] = row.project_id
                     graphs[row.chunk_id] = row.graph_id
-                joined = self._store.scope_join(
-                    refs, items, (refs.c.source == items.c.source) & (refs.c.ref == items.c.ref)
-                )
-                for row in conn.execute(
-                    self._store.select(joined, refs.c.chunk_id, items.c.title)
-                    .where(refs.c.chunk_id.in_(batch))
-                    .order_by(refs.c.id)
-                ):
-                    titles.setdefault(row.chunk_id, row.title)
+        # A mint is the hub's own when the hub owns its epoch: a runner's — a session's lease, or a forced entry's
+        # takeover, which names none — is owned by its runner. ``epoch_owners`` is unique on (chunk, epoch).
+        owners = {(cid, epoch): runner for cid, rows in read["owners"].items() for epoch, runner in rows}
         return {
             cid: ChunkTimelineFacts(
                 chunk_id=cid,
-                title=titles.get(cid),
+                title=next(iter(read["titles"][cid]), None),
                 project_id=projects.get(cid),
                 graph_id=graphs.get(cid),
-                endings=tuple(sorted(endings[cid])),
-                transitions=tuple(transitions[cid]),
-                migrations=tuple(migrations[cid]),
-                escalations=tuple(escalations[cid]),
-                usage=tuple(usage[cid]),
-                leases=tuple(leases[cid]),
-                requeues=tuple(sorted(requeues[cid])),
-                restarts=tuple(sorted(restarts[cid])),
+                endings=tuple(sorted(read["endings"][cid])),
+                transitions=tuple(read["transitions"][cid]),
+                migrations=tuple(read["migrations"][cid]),
+                escalations=tuple(read["escalations"][cid]),
+                usage=tuple(read["usage"][cid]),
+                leases=tuple(
+                    StepLease(epoch, lease_id, minted_at, hub=owners.get((cid, epoch), "") is None)
+                    for epoch, lease_id, minted_at in read["leases"][cid]
+                ),
+                requeues=tuple(sorted(read["requeues"][cid])),
+                restarts=tuple(sorted(read["restarts"][cid])),
             )
             for cid in chunk_ids
             if cid in projects
