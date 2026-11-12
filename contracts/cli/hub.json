@@ -12149,16 +12149,135 @@
         "read"
       ],
       "commands": {
-        "edit": {
-          "help": "Change the tenant's default urgency. No chunk moves; it decides only what is minted from then on.",
+        "changes": {
+          "help": "List the tenant settings' changes newest first \u2014 the rows `config changes --kind tenant_settings` prints.",
           "params": [
             {
-              "help": "The live urgency new chunks take.",
+              "help": "Print every change rather than the newest page.",
               "hidden": false,
               "kind": "option",
-              "name": "default_urgency",
+              "name": "everything",
               "opts": [
-                "--default-urgency"
+                "--all"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "boolean"
+            },
+            {
+              "help": "Print the raw response body as JSON.",
+              "hidden": false,
+              "kind": "option",
+              "name": "as_json",
+              "opts": [
+                "--json"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "boolean"
+            },
+            {
+              "help": "The tenant to act in, by id (default $BZ_HUB_TENANT); needed only when you belong to several.",
+              "hidden": false,
+              "kind": "option",
+              "name": "tenant",
+              "opts": [
+                "--tenant"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "text"
+            },
+            {
+              "help": "Hub API base URL (default $BZ_HUB_URL or http://127.0.0.1:8421).",
+              "hidden": false,
+              "kind": "option",
+              "name": "hub_url",
+              "opts": [
+                "--hub-url"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "text"
+            }
+          ],
+          "path": "hub settings changes",
+          "short_help": "List the tenant settings' changes newest first \u2014 the rows `config changes --kind tenant_settings` prints."
+        },
+        "get": {
+          "help": "Print every tenant setting, or the row of KEY. `default_urgency` is what every new chunk takes when nothing\nnames another.",
+          "params": [
+            {
+              "hidden": false,
+              "kind": "argument",
+              "name": "key",
+              "opts": [
+                "key"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "text"
+            },
+            {
+              "help": "Print the raw response body as JSON.",
+              "hidden": false,
+              "kind": "option",
+              "name": "as_json",
+              "opts": [
+                "--json"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "boolean"
+            },
+            {
+              "help": "The tenant to act in, by id (default $BZ_HUB_TENANT); needed only when you belong to several.",
+              "hidden": false,
+              "kind": "option",
+              "name": "tenant",
+              "opts": [
+                "--tenant"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "text"
+            },
+            {
+              "help": "Hub API base URL (default $BZ_HUB_URL or http://127.0.0.1:8421).",
+              "hidden": false,
+              "kind": "option",
+              "name": "hub_url",
+              "opts": [
+                "--hub-url"
+              ],
+              "required": false,
+              "secondary_opts": [],
+              "type": "text"
+            }
+          ],
+          "path": "hub settings get",
+          "short_help": "Print every tenant setting, or the row of KEY."
+        },
+        "set": {
+          "help": "Set KEY to VALUE. No chunk moves; a new default decides only what is minted from then on.",
+          "params": [
+            {
+              "hidden": false,
+              "kind": "argument",
+              "name": "key",
+              "opts": [
+                "key"
+              ],
+              "required": true,
+              "secondary_opts": [],
+              "type": "text"
+            },
+            {
+              "hidden": false,
+              "kind": "argument",
+              "name": "value",
+              "opts": [
+                "value"
               ],
               "required": true,
               "secondary_opts": [],
@@ -12201,12 +12320,23 @@
               "type": "text"
             }
           ],
-          "path": "hub settings edit",
-          "short_help": "Change the tenant's default urgency."
+          "path": "hub settings set",
+          "short_help": "Set KEY to VALUE."
         },
-        "get": {
-          "help": "Show the tenant's settings \u2014 its default urgency, what every new chunk takes when nothing names another.",
+        "unset": {
+          "help": "Refused: no setting has a default to return to.",
           "params": [
+            {
+              "hidden": false,
+              "kind": "argument",
+              "name": "key",
+              "opts": [
+                "key"
+              ],
+              "required": true,
+              "secondary_opts": [],
+              "type": "text"
+            },
             {
               "help": "Print the raw response body as JSON.",
               "hidden": false,
@@ -12244,14 +12374,14 @@
               "type": "text"
             }
           ],
-          "path": "hub settings get",
-          "short_help": "Show the tenant's settings \u2014 its default urgency, what every new chunk takes when nothing names another."
+          "path": "hub settings unset",
+          "short_help": "Refused: no setting has a default to return to."
         }
       },
-      "help": "Show or edit the tenant's settings.",
+      "help": "Read or change the tenant's settings, a key at a time.",
       "params": [],
       "path": "hub settings",
-      "short_help": "Show or edit the tenant's settings."
+      "short_help": "Read or change the tenant's settings, a key at a time."
     },
     "source": {
       "aliases": [

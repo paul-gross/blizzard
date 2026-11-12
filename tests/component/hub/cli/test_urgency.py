@@ -57,7 +57,7 @@ def test_list_shows_standard_alone_as_the_default_and_settings_names_it(hub: Hub
     assert len(listed) == 1
     assert listed[0].startswith("1.  standard  name=standard")
     assert listed[0].endswith("default")
-    assert _said(_cli("settings", "get"))[0] == "default urgency standard"
+    assert _said(_cli("settings", "get"))[0] == "default_urgency standard"
 
 
 def test_create_places_it_at_the_end_first_or_after_another(hub: HubHarness) -> None:
@@ -80,10 +80,10 @@ def test_create_refuses_a_bad_emoji_naming_the_field(hub: HubHarness) -> None:
 
 def test_retire_without_move_to_prints_the_count_and_the_command_then_moves_the_work(hub: HubHarness) -> None:
     assert _cli("urgency", "create", "urgent").exit_code == 0
-    assert _cli("settings", "edit", "--default-urgency", "urgent").exit_code == 0
+    assert _cli("settings", "set", "default_urgency", "urgent").exit_code == 0
     ingest_chunk(hub, pointer_token="default:1")
     ingest_chunk(hub, pointer_token="default:2")
-    assert _cli("settings", "edit", "--default-urgency", "standard").exit_code == 0
+    assert _cli("settings", "set", "default_urgency", "standard").exit_code == 0
 
     refused = _cli("urgency", "retire", "urgent")
 
@@ -126,11 +126,83 @@ def test_enable_order_and_position_reorder_the_set(hub: HubHarness) -> None:
     assert _cli("urgency", "position", "urgent").exit_code != 0
 
 
-def test_settings_edit_changes_the_default(hub: HubHarness) -> None:
+def test_settings_set_changes_the_default(hub: HubHarness) -> None:
     assert _cli("urgency", "create", "urgent").exit_code == 0
 
-    edited = _cli("settings", "edit", "--default-urgency", "urgent")
+    edited = _cli("settings", "set", "default_urgency", "urgent")
 
     assert edited.exit_code == 0, edited.output
-    assert _said(edited)[0] == "default urgency urgent"
+    assert _said(edited)[0] == "default_urgency urgent"
     assert _said(_cli("urgency", "list"))[1].endswith("default")
+
+
+def test_settings_get_prints_every_key_or_one_and_refuses_an_unknown_key(hub: HubHarness) -> None:
+    every = _said(_cli("settings", "get"))
+    assert every[0] == "default_urgency standard"
+    assert every[1] == "revision 1" or every[1].startswith("revision ")
+    assert _said(_cli("settings", "get", "default_urgency")) == ["default_urgency standard"]
+    assert _said(_cli("settings", "show", "default_urgency")) == ["default_urgency standard"]
+    refused = _cli("settings", "get", "nope")
+    assert refused.exit_code != 0
+    assert "nope" in refused.output
+
+
+def test_settings_set_refuses_a_retired_urgency_and_an_unknown_key(hub: HubHarness) -> None:
+    assert _cli("urgency", "create", "urgent").exit_code == 0
+    assert _cli("urgency", "retire", "urgent").exit_code == 0
+
+    retired = _cli("settings", "set", "default_urgency", "urgent")
+    assert retired.exit_code != 0
+    assert _said(_cli("settings", "get", "default_urgency")) == ["default_urgency standard"]
+    assert _cli("settings", "set", "nope", "x").exit_code != 0
+
+
+def test_settings_set_against_a_stale_revision_is_a_conflict(hub: HubHarness) -> None:
+    assert _cli("urgency", "create", "urgent").exit_code == 0
+    assert _cli("urgency", "create", "soon").exit_code == 0
+    forward_to = hub.client
+
+    def racing(method: str, url: str, *, timeout: float, headers: dict[str, str] | None = None, **kwargs: Any) -> Any:
+        if method.lower() == "patch":
+            forward_to.request(
+                method,
+                url,
+                headers={k: v for k, v in (headers or {}).items() if k.lower() != "if-match"},
+                json={"default_urgency": "soon"},
+            )
+        return forward_to.request(method, url, headers=headers, **kwargs)
+
+    _bound["hub"] = bind_stubs(request=racing)
+    conflicted = _cli("settings", "set", "default_urgency", "urgent")
+
+    assert conflicted.exit_code != 0
+    assert "409" in conflicted.output or "revision" in conflicted.output.lower()
+
+
+def test_settings_unset_is_refused_with_the_reason(hub: HubHarness) -> None:
+    refused = _cli("settings", "unset", "default_urgency")
+
+    assert refused.exit_code != 0
+    assert "no default to return to" in refused.output
+    assert _said(_cli("settings", "get", "default_urgency")) == ["default_urgency standard"]
+
+
+def test_settings_changes_prints_the_rows_config_changes_prints(hub: HubHarness) -> None:
+    assert _cli("urgency", "create", "urgent").exit_code == 0
+    assert _cli("settings", "set", "default_urgency", "urgent").exit_code == 0
+
+    mine = _said(_cli("settings", "changes"))
+    theirs = _said(_cli("config", "changes", "--kind", "tenant_settings"))
+
+    assert mine == theirs
+    assert mine and all("tenant_settings" in line for line in mine)
+
+
+def test_settings_help_lists_the_key_verbs_and_not_edit_or_the_aliases(hub: HubHarness) -> None:
+    helped = _bound["hub"].runner.invoke(hub_group, ["settings", "--help"]).output
+
+    for verb in ("get", "set", "unset", "changes"):
+        assert f"\n  {verb} " in helped
+    assert "\n  edit " not in helped
+    assert "\n  show " not in helped
+    assert "\n  read " not in helped
