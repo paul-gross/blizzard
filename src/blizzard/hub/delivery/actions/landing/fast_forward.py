@@ -2,6 +2,9 @@
 
 from __future__ import annotations
 
+from functools import partial
+
+
 from blizzard.foundation.crash import crashpoint
 from blizzard.foundation.escalation_causes import EscalationCause
 from blizzard.hub.delivery.actions.landing.base_merge import contributes_only_base_change
@@ -127,7 +130,7 @@ class FastForward:
                 if recovered is None:
                     return Waiting(f"{repo.repo}: candidate recovery comparison not readable")
                 if recovered:
-                    return Landed(marker.data)
+                    return Landed(marker.data, partial(cleanup, repo, marker.data))
         comparison = await repo.compare(base, head)
         if comparison is None:
             return Waiting(f"{repo.repo}: cannot compare base and work")
@@ -194,7 +197,7 @@ class FastForward:
             try:
                 await repo.ask(repo.forge.refs.advance_ref(repo.base_branch, base, candidate))
                 _ADVANCED.reached()
-                return Landed(candidate)
+                return Landed(candidate, lambda: cleanup(repo, candidate))
             except ForgeEscalation as exc:
                 return NeedsPerson(exc.escalation)
             except ForgeRejected as exc:
