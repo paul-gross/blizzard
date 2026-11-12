@@ -6,6 +6,7 @@ import { page } from 'vitest/browser';
 import type { ConfigActionsVm } from './config-actions.model';
 import { ConfigMaster } from './config-master';
 import { ConfigFormDialog } from './config-form-dialog';
+import type { RevisionRowVm } from './config-history.model';
 import { ConfigRecordPanel, type ConfigRecordVm } from './config-record-panel';
 
 /**
@@ -40,6 +41,15 @@ const VM: ConfigRecordVm = {
 const ACTIONS: ConfigActionsVm = { edit: false, replace: true, lifecycle: 'retire', retireBlocked: null };
 const CLI = `blizzard hub secret set ${LONG_NAME}`;
 const WRITE_IDS = ['sec-edit', 'sec-replace', 'sec-retire', 'sec-enable'];
+const REVISIONS: readonly RevisionRowVm[] = ['create', 'retire', 'enable'].map((op, index) => ({
+  id: index + 1,
+  revision: index + 1,
+  op,
+  fields: op === 'create' ? 'description: A long urgency description for a newly created record' : '',
+  at: '2026-01-01T12:00:00Z',
+  actor: 'a-very-long-actor-name-that-must-wrap-without-squeezing-the-description',
+  door: 'cli',
+}));
 
 async function mountPanel(write: boolean) {
   await TestBed.configureTestingModule({
@@ -47,7 +57,8 @@ async function mountPanel(write: boolean) {
     providers: [provideZonelessChangeDetection(), provideRouter([])],
   }).compileComponents();
   const fixture = TestBed.createComponent(ConfigRecordPanel);
-  fixture.componentRef.setInput('vm', VM);
+  fixture.componentRef.setInput('vm', { ...VM, hasHistory: true });
+  fixture.componentRef.setInput('revisions', REVISIONS);
   fixture.componentRef.setInput('state', 'ready');
   fixture.componentRef.setInput('revisionsState', 'ready');
   fixture.componentRef.setInput('emptyText', 'Pick a secret.');
@@ -183,6 +194,26 @@ describe('admin config surfaces shell sweep (web:shell-sweep)', () => {
       },
       () => mountPanel(false),
     );
+  });
+
+  it.each([390, 320])('phone at %ipx: revisions stay readable and detail links remain usable', async (width) => {
+    await sweep(width, (root) => {
+      const rows = root.querySelectorAll<HTMLElement>('.rev-row');
+      expect(rows.length).toBe(3);
+      rows.forEach((row, index) => {
+        const description = row.querySelector<HTMLElement>('.what')!;
+        const actor = row.querySelector<HTMLElement>('.who')!;
+        expect(description.textContent).toContain(REVISIONS[index].op);
+        expect(description.getBoundingClientRect().width).toBeGreaterThan(150);
+        expect(actor.getBoundingClientRect().top).toBeGreaterThan(description.getBoundingClientRect().top);
+        expect(row.scrollWidth).toBeLessThanOrEqual(row.clientWidth);
+      });
+      expectNoOverflow(root, 'sec-detail', width);
+      expectNoOverflow(root, 'sec-revisions', width);
+      const link = root.querySelector<HTMLAnchorElement>('[data-testid="sec-links"] a')!;
+      expect(link.getAttribute('href')).toContain('/admin/repositories/');
+      expect(link.getBoundingClientRect().width).toBeGreaterThan(0);
+    }, () => mountPanel(false));
   });
 
   it.each([390, 320])('phone at %ipx: the list has no New and does not overflow', async (width) => {
