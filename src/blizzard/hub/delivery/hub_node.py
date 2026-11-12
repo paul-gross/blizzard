@@ -37,9 +37,11 @@ from blizzard.hub.domain.chunk.ports.artifacts import IWriteChunkArtifactsReposi
 from blizzard.hub.domain.chunk.ports.decisions import IWriteChunkDecisionsRepository
 from blizzard.hub.domain.chunk.ports.escalations import BounceEscalationOutcome, IWriteChunkEscalationsRepository
 from blizzard.hub.domain.chunk.ports.exclusive import IChunkExclusiveWrites, ILockedChunkRead
+from blizzard.hub.domain.chunk.ports.facts import IReadChunkFactsRepository
 from blizzard.hub.domain.chunk.ports.fence import EpochAdmission
 from blizzard.hub.domain.chunk.ports.hub_exec import IWriteChunkHubExecRepository
 from blizzard.hub.domain.chunk.ports.movement import IWriteChunkMovementRepository, MigrationWrite
+from blizzard.hub.domain.chunk.terminal import terminal_under_lock
 from blizzard.hub.domain.config.forges import ConfiguredForge, IReadForgeRepository
 from blizzard.hub.domain.config.repositories import (
     IReadRepositoryRecordRepository,
@@ -283,8 +285,10 @@ class HubNodeRouter:
         movement: IWriteChunkMovementRepository,
         decisions: IWriteChunkDecisionsRepository,
         graphs: IReadGraphRepository,
+        facts: IReadChunkFactsRepository,
         follow_latest_default: bool,
     ) -> None:
+        self._facts = facts
         self._follow_latest_default = follow_latest_default
         self._artifacts = artifacts
         self._hub_exec = hub_exec
@@ -495,6 +499,7 @@ class HubNodeRouter:
                     node_name=node.name,
                     epoch=hub_epoch,
                     admission=EpochAdmission.AT_OR_ABOVE,
+                    terminal=terminal_under_lock(self._facts, chunk.chunk_id, transaction=handle.transaction),
                     name="bounce-envelope",
                     content=envelope,
                     at=self._clock.now(),
@@ -524,6 +529,7 @@ class HubNodeRouter:
             choice_name=choice,
             epoch=hub_epoch,
             admission=EpochAdmission.ABOVE,
+            terminal=terminal_under_lock(self._facts, chunk.chunk_id, transaction=handle.transaction),
             runner_id=_HUB_RUNNER_ID,
             transition_id=Id.mint(IdPrefix.TRANSITION, self._clock).value,
             at=self._clock.now(),
@@ -574,6 +580,7 @@ class HubNodeRouter:
             model=landing.model,
             epoch=epoch,
             admission=EpochAdmission.CURRENT,
+            terminal=terminal_under_lock(self._facts, chunk.chunk_id, transaction=handle.transaction),
             claimant=None,
             at=self._clock.now(),
             artifacts=artifacts or [],
@@ -634,6 +641,7 @@ class HubNodeRouter:
                 node_name=node.name,
                 epoch=epoch,
                 admission=EpochAdmission.AT_OR_ABOVE,
+                terminal=terminal_under_lock(self._facts, chunk.chunk_id, transaction=handle.transaction),
                 name=name,
                 content=f"[{step.replace('-', ' ')}]\n{detail}\n",
                 at=now,
@@ -838,17 +846,19 @@ class HubNodeRouter:
         detail = explanation
         close_decision = self._close_decision(chunk)
         with self._transactions.begin() as unit:
+            locked = unit.lock_chunks([chunk.chunk_id])
             written = self._artifacts.record_hub_artifact(
                 chunk.chunk_id,
                 node_id=node.node_id,
                 node_name=node.name,
                 epoch=epoch,
                 admission=EpochAdmission.AT_OR_ABOVE,
+                terminal=terminal_under_lock(self._facts, chunk.chunk_id, transaction=locked),
                 name=f"{HUB_LOG_PREFIX}{_CAPABILITY_MISSING_STEP}",
                 content=f"[{_CAPABILITY_MISSING_STEP.replace('-', ' ')}]\n{detail}\n",
                 at=self._clock.now(),
                 close_decision=close_decision,
-                transaction=unit.lock_chunks([chunk.chunk_id]),
+                transaction=locked,
             )
         self._events.publish(*close_skipped_events(written.close_skipped, chunk=chunk))
         escalation = ActionEscalation(EscalationCause.FORGE_CAPABILITY_MISSING, detail, missing)
@@ -893,6 +903,7 @@ class HubNodeRouter:
             chunk.chunk_id,
             epoch=epoch,
             admission=EpochAdmission.ABOVE,
+            terminal=terminal_under_lock(self._facts, chunk.chunk_id, transaction=handle.transaction),
             runner_id=_HUB_RUNNER_ID,
             takeover_command="",
             at=self._clock.now(),
@@ -909,6 +920,7 @@ class HubNodeRouter:
             chunk.chunk_id,
             epoch=hub_epoch,
             admission=EpochAdmission.ABOVE,
+            terminal=terminal_under_lock(self._facts, chunk.chunk_id, transaction=handle.transaction),
             cause=cause,
             envelope=envelope,
             at=self._clock.now(),
@@ -985,6 +997,7 @@ class HubNodeRouter:
             node_name=node.name,
             epoch=epoch,
             admission=EpochAdmission.AT_OR_ABOVE,
+            terminal=terminal_under_lock(self._facts, chunk.chunk_id, transaction=handle.transaction),
             name=_UNROUTABLE_ARTIFACT_NAME,
             content=(
                 f"{detail}\n\n"

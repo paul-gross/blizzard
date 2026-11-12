@@ -120,6 +120,7 @@ class _Fixture:
             at=_NOW,
             artifacts=[],
             admission=EpochAdmission.AT_OR_ABOVE,
+            terminal=False,
         )
         self.service = EventDerivationService(
             extractors=shipped_extractors(),
@@ -154,6 +155,7 @@ class _Fixture:
             at=_NOW,
             artifacts=[],
             admission=EpochAdmission.AT_OR_ABOVE,
+            terminal=False,
         )
 
     def drop_chunk_row(self, chunk_id: str) -> None:

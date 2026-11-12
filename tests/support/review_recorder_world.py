@@ -97,7 +97,10 @@ def deliver(hub: HubHarness, chunk_id: str, *, epoch: int = EPOCH) -> Delivered:
     recorder = ReviewFindingsRecorder(
         artifacts=chunk_stores(hub.engine, hub.clock).artifacts,
         materialize=ReviewFindingsMaterialize(
-            delivery=ReviewFindingsStore(connections), transactions=HubTransactions(connections), clock=hub.clock
+            delivery=ReviewFindingsStore(connections),
+            facts=chunk_stores(hub.engine, hub.clock).facts,
+            transactions=HubTransactions(connections),
+            clock=hub.clock,
         ),
         formats=GardenFormats(),
     )

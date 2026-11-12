@@ -332,6 +332,7 @@ def _seed_promoted_with_open_decision(store: ChunkStores, engine: Engine, chunk_
         at=T0,
         artifacts=[],
         admission=EpochAdmission.AT_OR_ABOVE,
+        terminal=False,
         close_decision=decide_close_enqueue([], lambda _: True),
     )
 

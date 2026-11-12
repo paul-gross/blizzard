@@ -142,6 +142,7 @@ def _deliver(
         at=hub.clock.now(),
         artifacts=rows,
         admission=EpochAdmission.AT_OR_ABOVE,
+        terminal=False,
         close_decision=decide_close_enqueue([WorkRef("default", "1")], lambda _: True),
     )
     report_lease(hub, chunk_id, epoch=1, seq=1)

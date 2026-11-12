@@ -18,6 +18,7 @@ from blizzard.hub.domain.chunk.ports.artifacts import HubArtifactWrite, IWriteCh
 from blizzard.hub.domain.chunk.ports.delivery import IWriteChunkDeliveryRepository
 from blizzard.hub.domain.chunk.ports.fence import EpochAdmission
 from blizzard.hub.domain.chunk.ports.movement import TransitionWrite
+from blizzard.hub.domain.chunk.terminal import terminal_under_lock
 from blizzard.hub.store import schema as s
 from tests.support.scaffolding import (
     HubHarness,
@@ -43,6 +44,7 @@ def _land(hub: HubHarness, chunk_id: str, *, repo: str = "widget") -> HubArtifac
             content="sha",
             at=hub.clock.now(),
             admission=EpochAdmission.AT_OR_ABOVE,
+            terminal=False,
             close_decision=CloseEnqueueDecision(closable=frozenset({WorkRef("default", "1")}), skipped=frozenset()),
             transaction=unit,
         )
@@ -110,6 +112,7 @@ def test_a_replayed_landing_marker_enqueues_nothing_new(tmp_path: Path) -> None:
             content="sha",
             at=hub.clock.now(),
             admission=EpochAdmission.AT_OR_ABOVE,
+            terminal=False,
             close_decision=CloseEnqueueDecision(closable=frozenset({WorkRef("default", "1")}), skipped=frozenset()),
             transaction=unit,
         )  # the same (node_id, epoch, name) — record_hub_artifact's own idempotency guard no-ops it
@@ -191,6 +194,7 @@ def test_mixed_landing_enqueues_closable_and_terminally_skips_other_refs_on_repl
                 content="sha",
                 at=hub.clock.now(),
                 admission=EpochAdmission.AT_OR_ABOVE,
+                terminal=False,
                 close_decision=decision,
                 transaction=unit,
             )
@@ -221,6 +225,7 @@ def test_a_fenced_landing_still_returns_the_skip_rows_it_wrote(tmp_path: Path) -
             node_name="deliver",
             epoch=1,
             admission=EpochAdmission.AT_OR_ABOVE,
+            terminal=terminal_under_lock(hub.services.chunks.facts, chunk_id, transaction=unit),
             repo="widget",
             revision="m1",
             repository_id="re_widget",
@@ -317,6 +322,7 @@ def test_terminal_transition_enqueues_atomically_and_nonterminal_does_not(
                     choice_name="success",
                     epoch=1,
                     admission=EpochAdmission.AT_OR_ABOVE,
+                    terminal=False,
                     runner_id="r1",
                     transition_id=transition_id,
                     at=hub.clock.now(),
@@ -335,6 +341,7 @@ def test_terminal_transition_enqueues_atomically_and_nonterminal_does_not(
                 choice_name="success",
                 epoch=1,
                 admission=EpochAdmission.AT_OR_ABOVE,
+                terminal=False,
                 runner_id="r1",
                 at=hub.clock.now(),
                 artifacts=[],
@@ -369,6 +376,7 @@ def test_terminal_transition_rolls_back_with_intent(tmp_path: Path, hub_step: bo
                 choice_name="success",
                 epoch=1,
                 admission=EpochAdmission.AT_OR_ABOVE,
+                terminal=False,
                 runner_id="r1",
                 transition_id="tr_abort",
                 at=hub.clock.now(),
@@ -387,6 +395,7 @@ def test_terminal_transition_rolls_back_with_intent(tmp_path: Path, hub_step: bo
                     choice_name="success",
                     epoch=1,
                     admission=EpochAdmission.AT_OR_ABOVE,
+                    terminal=False,
                     runner_id="r1",
                     at=hub.clock.now(),
                     artifacts=[],

@@ -27,6 +27,7 @@ from blizzard.hub.domain.chunk.model import (
 )
 from blizzard.hub.domain.chunk.ports.artifacts import IWriteChunkArtifactsRepository
 from blizzard.hub.domain.chunk.ports.fence import EpochAdmission
+from blizzard.hub.domain.chunk.terminal import terminal_under_lock
 from blizzard.hub.domain.graph.actions import ActionSpec
 from blizzard.hub.domain.graph.model import Graph
 from blizzard.hub.forge.landing import VisitForges
@@ -192,6 +193,7 @@ def test_a_stopped_chunk_fences_out_a_still_running_step_transition(tmp_path: Pa
             artifacts=[],
             release_route=True,
             admission=EpochAdmission.ABOVE,
+            terminal=terminal_under_lock(stores.facts, chunk_id, transaction=handle.transaction),
         ).wrote
 
     assert recorded is False
@@ -432,6 +434,7 @@ nodes:
             content="c",
             at=hub.clock.now(),
             admission=EpochAdmission.AT_OR_ABOVE,
+            terminal=False,
             transaction=unit,
         )
 

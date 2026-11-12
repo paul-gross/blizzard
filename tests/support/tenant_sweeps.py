@@ -51,6 +51,7 @@ def landed_hub_ref(hub: HubHarness, tenant: TenantId, chunk_id: str) -> ChunkSto
             content="sha",
             at=hub.clock.now(),
             admission=EpochAdmission.AT_OR_ABOVE,
+            terminal=False,
             close_decision=CloseEnqueueDecision(closable=frozenset({WorkRef("hub", "1")}), skipped=frozenset()),
             transaction=unit,
         )

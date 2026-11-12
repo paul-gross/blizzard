@@ -19,7 +19,7 @@ from blizzard.hub.domain.kernel.transactions import LockedTransaction, Transacti
 from blizzard.hub.domain.projects.model import ProjectId
 from blizzard.hub.store import schema as s
 from blizzard.hub.store.internal.chunk_rows import QUESTIONS, fence
-from blizzard.hub.store.internal.chunk_terminal_predicates import chunk_is_terminal
+from blizzard.hub.store.internal.chunk_terminal_predicates import maybe_live
 from blizzard.hub.store.scoped import ScopedConnections
 from blizzard.hub.store.transactions import connection_for, connection_in
 
@@ -47,7 +47,7 @@ class ChunkQuestionsStore:
         one project's questions."""
         open_ = s.questions.c.question_id.not_in(
             self._store.select(s.question_answers, s.question_answers.c.question_id)
-        ) & ~chunk_is_terminal(self._store, s.questions.c.chunk_id)
+        ) & maybe_live(self._store, s.questions.c.chunk_id)
         if project is not None:
             open_ &= s.questions.c.project_id == project
         with self._store.read("list_open_questions") as conn:
@@ -73,6 +73,7 @@ class ChunkQuestionsStore:
         runner_id: str,
         epoch: int,
         admission: EpochAdmission,
+        terminal: bool,
         claimant: Claimant | None = None,
         question: str,
         options: list[str],
@@ -86,7 +87,7 @@ class ChunkQuestionsStore:
         ).first()
         if exists is not None:
             return None
-        refusal = fence(conn, chunk_id, epoch=epoch, admission=admission, claimant=claimant)
+        refusal = fence(conn, chunk_id, epoch=epoch, admission=admission, terminal=terminal, claimant=claimant)
         if refusal is not None:
             return refusal
         project_id = conn.execute(

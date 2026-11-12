@@ -81,6 +81,7 @@ def _land(hub: HubHarness, chunk_id: str, *, repo: str = "widget") -> None:
             content="sha",
             at=hub.clock.now(),
             admission=EpochAdmission.AT_OR_ABOVE,
+            terminal=False,
             close_decision=CloseEnqueueDecision(closable=frozenset(chunk.work_refs), skipped=frozenset()),
             transaction=unit,
         )
@@ -529,6 +530,7 @@ def test_a_chunk_reaching_the_terminal_with_no_landing_enqueues_its_ref(tmp_path
         at=hub.clock.now(),
         artifacts=[],
         admission=EpochAdmission.AT_OR_ABOVE,
+        terminal=False,
         close_decision=CloseEnqueueDecision(closable=frozenset({WorkRef("default", "1")}), skipped=frozenset()),
     )
 

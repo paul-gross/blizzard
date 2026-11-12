@@ -77,6 +77,7 @@ def _seed(hub: HubHarness) -> tuple[str, str]:
             at=_T0,
             artifacts=[],
             admission=EpochAdmission.AT_OR_ABOVE,
+            terminal=False,
         )
         with chunk_unit(hub_store_connections(hub.engine), chunk_id) as unit:
             stores.questions.record_question(
@@ -87,6 +88,7 @@ def _seed(hub: HubHarness) -> tuple[str, str]:
                 runner_id="r1",
                 epoch=1,
                 admission=EpochAdmission.AT_OR_ABOVE,
+                terminal=False,
                 question="which?",
                 options=[],
                 asked_at=_T0,

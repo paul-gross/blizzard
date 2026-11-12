@@ -17,7 +17,7 @@ from sqlalchemy import Table, func, select
 
 from blizzard.foundation.hub_event_types import FlowChangeKind
 from blizzard.hub.domain.chunk.flow_writes import FlowFactWritten
-from blizzard.hub.domain.chunk.model import WorkRef, decide_close_enqueue
+from blizzard.hub.domain.chunk.model import ChunkFacts, WorkRef, decide_close_enqueue
 from blizzard.hub.domain.chunk.ports.escalations import BounceEscalationOutcome
 from blizzard.hub.domain.chunk.ports.exclusive import ILockedChunkRead
 from blizzard.hub.domain.chunk.ports.fence import EpochAdmission
@@ -175,6 +175,11 @@ def test_a_visit_holding_nothing_takes_a_turn_whenever_it_has_none_open(world: _
 # --- ending a turn ----------------------------------------------------------------------------------------------------
 
 
+def _terminal(handle: ILockedChunkRead, chunk_id: str) -> bool:
+    """The domain's terminal verdict, read under ``handle``'s lock, which a hub caller hands the fenced write."""
+    return ChunkFacts.terminal_verdict(handle.facts(chunk_id))
+
+
 def _transition(world: _World, handle: ILockedChunkRead, chunk_id: str, *, epoch: int = 0) -> bool:
     return world.chunks.hub_exec.record_hub_step_transition_locked(
         handle,
@@ -184,6 +189,7 @@ def _transition(world: _World, handle: ILockedChunkRead, chunk_id: str, *, epoch
         choice_name="landed",
         epoch=epoch,
         admission=EpochAdmission.AT_OR_ABOVE,
+        terminal=_terminal(handle, chunk_id),
         runner_id=_HUB_RUNNER,
         transition_id=f"tr_{chunk_id}",
         close_decision=decide_close_enqueue([WorkRef("default", "12")], lambda _: True),
@@ -246,6 +252,7 @@ def test_an_escalation_commits_its_bounce_and_hub_lease_with_the_turns_end_or_no
                 submission.chunk_id,
                 epoch=1,
                 admission=EpochAdmission.ABOVE,
+                terminal=False,
                 cause="poll-timeout",
                 envelope="{}",
                 at=world.hub.clock.now(),
@@ -255,6 +262,7 @@ def test_an_escalation_commits_its_bounce_and_hub_lease_with_the_turns_end_or_no
                 submission.chunk_id,
                 epoch=1,
                 admission=EpochAdmission.ABOVE,
+                terminal=False,
                 runner_id=_HUB_RUNNER,
                 takeover_command="",
                 at=world.hub.clock.now(),
@@ -385,6 +393,7 @@ def test_an_escalation_at_the_visits_epoch_plus_one_writes_and_at_its_own_is_ref
                 chunk_id,
                 epoch=epoch,
                 admission=EpochAdmission.ABOVE,
+                terminal=False,
                 runner_id=_HUB_RUNNER,
                 takeover_command="",
                 at=world.hub.clock.now(),
@@ -411,6 +420,7 @@ def test_the_locked_bounce_is_fenced(world: _World) -> None:
             chunk_id,
             epoch=1,
             admission=EpochAdmission.ABOVE,
+            terminal=_terminal(handle, chunk_id),
             cause="poll-timeout",
             envelope="{}",
             at=world.hub.clock.now(),
@@ -439,6 +449,7 @@ def test_a_landing_on_a_flow_writes_its_five_rows_once(world: _World) -> None:
                 node_name="deliver",
                 epoch=0,
                 admission=EpochAdmission.AT_OR_ABOVE,
+                terminal=False,
                 repo="acme/widget",
                 revision="m1",
                 at=world.hub.clock.now(),
@@ -578,6 +589,7 @@ def test_a_visit_resubmitted_after_a_partial_landing_reads_one_verdict_per_flow_
             node_name="deliver",
             epoch=0,
             admission=EpochAdmission.AT_OR_ABOVE,
+            terminal=False,
             repo="acme/widget",
             revision="m1",
             at=world.hub.clock.now(),
@@ -599,6 +611,7 @@ def test_a_visit_resubmitted_after_a_partial_landing_reads_one_verdict_per_flow_
             node_name="deliver",
             epoch=0,
             admission=EpochAdmission.AT_OR_ABOVE,
+            terminal=False,
             repo="acme/other",
             revision="o1",
             at=world.hub.clock.now(),

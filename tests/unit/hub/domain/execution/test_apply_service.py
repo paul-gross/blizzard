@@ -274,6 +274,23 @@ def _migrated_from_build(executor: Executor = Executor.RUNNER) -> ChunkFacts:
 # --- _land_migration: a fresh migration ---------------------------------------------------------
 
 
+@pytest.mark.parametrize(
+    ("under_lock", "terminal"),
+    [
+        (replace(AT_BUILD, promoted=False), False),
+        (replace(AT_BUILD, stopped=True, stopped_at=_LATER), True),
+        (replace(AT_BUILD, operator_completed=True, operator_completed_at=_LATER), True),
+    ],
+    ids=["live", "stopped", "done"],
+)
+def test_a_migration_is_handed_the_terminal_verdict_its_locked_facts_derive(
+    under_lock: ChunkFacts, terminal: bool
+) -> None:
+    _result, ports, _clock = _hand_off(under_lock)
+
+    assert [m["terminal"] for m in ports.migrations] == [terminal]
+
+
 def test_a_fresh_cross_graph_migration_records_once_with_the_landing_and_the_claimant() -> None:
     # The lock sees an unrelated later lease — no movement at (nd_build, 1).
     result, ports, clock = _hand_off(replace(AT_BUILD, promoted=False))
@@ -291,6 +308,7 @@ def test_a_fresh_cross_graph_migration_records_once_with_the_landing_and_the_cla
             "source": MigrationSource.AUTHORED_EDGE,
             "epoch": 1,
             "admission": EpochAdmission.CURRENT,
+            "terminal": False,
             "claimant": Claimant("runner-a", "lease_1"),
             "at": clock.now(),
             "artifacts": [],

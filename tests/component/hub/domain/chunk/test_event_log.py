@@ -49,6 +49,7 @@ def test_list_open_escalations_query_count_is_independent_of_fleet_size(tmp_path
                     takeover_command="cd a && resume",
                     at=_at(10),
                     admission=EpochAdmission.AT_OR_ABOVE,
+                    terminal=False,
                     cause=None,
                     detail=None,
                     transaction=unit,

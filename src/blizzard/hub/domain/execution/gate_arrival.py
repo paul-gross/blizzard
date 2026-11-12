@@ -2,7 +2,7 @@
 
 from blizzard.foundation.clock import IClock
 from blizzard.foundation.ids import Id, IdPrefix
-from blizzard.hub.domain.chunk.model import CloseEnqueueDecision
+from blizzard.hub.domain.chunk.model import ChunkFacts, CloseEnqueueDecision
 from blizzard.hub.domain.chunk.ports.decisions import IWriteChunkDecisionsRepository
 from blizzard.hub.domain.chunk.ports.exclusive import ILockedChunkRead
 from blizzard.hub.domain.chunk.ports.fence import Claimant, EpochAdmission, FenceRefusal
@@ -23,7 +23,9 @@ def open_graph_gate_on_arrival(
     claimant: Claimant | None = None,
 ) -> tuple[int, ...]:
     """Join the landing write's lock and transaction; hub-owned restarts have no claimant. Answers the ids of the
-    ``work-item-close-skipped`` event rows the decision wrote, for the unit's owner to publish once it commits."""
+    ``work-item-close-skipped`` event rows the decision wrote, for the unit's owner to publish once it commits.
+    The decision's terminal verdict is read fresh on ``handle``, after the movement this unit already wrote
+    (``bzh:write-reestablishes-read``)."""
     step = NextStep.of(graph, node_id)
     if step.kind is not NextStepKind.GATE or step.node is None:
         return ()
@@ -35,6 +37,7 @@ def open_graph_gate_on_arrival(
         node_name=step.node.name,
         epoch=epoch,
         admission=EpochAdmission.CURRENT,
+        terminal=ChunkFacts.terminal_verdict(handle.facts(chunk_id)),
         claimant=claimant,
         choices=decision_choices(step.node),
         at=clock.now(),

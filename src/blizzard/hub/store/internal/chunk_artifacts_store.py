@@ -263,6 +263,7 @@ class ChunkArtifactsStore:
         node_name: str,
         epoch: int,
         admission: EpochAdmission,
+        terminal: bool,
         name: str,
         content: str,
         at: datetime,
@@ -282,7 +283,7 @@ class ChunkArtifactsStore:
         ).first()
         if already is not None:
             return HubArtifactWrite(wrote=False)
-        if fence(conn, chunk_id, epoch=epoch, admission=admission) is not None:
+        if fence(conn, chunk_id, epoch=epoch, admission=admission, terminal=terminal) is not None:
             return HubArtifactWrite(wrote=False)
         conn.execute(
             self._store.insert(s.artifacts).values(
@@ -315,6 +316,7 @@ class ChunkArtifactsStore:
         node_name: str,
         epoch: int,
         admission: EpochAdmission,
+        terminal: bool,
         repo: str,
         revision: str,
         repository_id: str,
@@ -332,6 +334,7 @@ class ChunkArtifactsStore:
             node_name=node_name,
             epoch=epoch,
             admission=admission,
+            terminal=terminal,
             repo=repo,
             revision=revision,
             repository_id=repository_id,

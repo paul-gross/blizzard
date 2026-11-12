@@ -56,6 +56,7 @@ def _gate(tmp_path: Path, chunk_id: str, *, imposed_by_runner_id: str | None) ->
         artifacts=[],
         close_decision=decide_close_enqueue([], lambda _: True),
         admission=EpochAdmission.AT_OR_ABOVE,
+        terminal=False,
     )
     return store, engine
 
@@ -74,6 +75,7 @@ def _transition(store: ChunkStores, *, to_node_id: str, decision_id: str | None)
         close_decision=decide_close_enqueue([], lambda _: True),
         decision_id=decision_id,
         admission=EpochAdmission.AT_OR_ABOVE,
+        terminal=False,
     )
 
 

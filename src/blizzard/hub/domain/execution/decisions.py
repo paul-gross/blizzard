@@ -200,6 +200,7 @@ class DecisionService:
                 node_name=node.name,
                 epoch=submission.epoch,
                 admission=EpochAdmission.CURRENT,
+                terminal=ChunkFacts.terminal_verdict(locked),
                 claimant=Claimant(submission.runner_id, submission.lease_id),
                 choices=decision_choices(node),
                 check_results=[DecisionCheck(command=c.command, passed=c.passed) for c in submission.check_results],

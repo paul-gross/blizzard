@@ -77,10 +77,12 @@ def chunk_is_terminal(stmts: ScopedStatements, chunk_id: ColumnElement[str]) -> 
     )
 
 
-def maybe_live(stmts: ScopedStatements) -> ColumnElement[bool]:
-    """Drops every chunk :func:`chunk_is_terminal` settles, and never one
-    :meth:`~blizzard.hub.domain.chunk.model.ChunkFacts.status` would derive non-terminal."""
-    return ~chunk_is_terminal(stmts, s.chunks.c.chunk_id)
+def maybe_live(stmts: ScopedStatements, chunk_id: ColumnElement[str] | None = None) -> ColumnElement[bool]:
+    """The projections' live prefilter: drops every chunk :func:`chunk_is_terminal` settles, and never one
+    :meth:`~blizzard.hub.domain.chunk.model.ChunkFacts.status` would derive non-terminal. ``chunk_id`` names the
+    correlated column a read filters on, ``chunks.chunk_id`` by default. No write decides from it: a fenced write
+    is handed its terminal verdict by the domain."""
+    return ~chunk_is_terminal(stmts, s.chunks.c.chunk_id if chunk_id is None else chunk_id)
 
 
 def settled_stopped(stmts: ScopedStatements) -> ColumnElement[bool]:

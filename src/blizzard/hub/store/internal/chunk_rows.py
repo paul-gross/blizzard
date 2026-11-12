@@ -19,7 +19,7 @@ from dataclasses import dataclass
 from datetime import datetime, timedelta
 from typing import Any
 
-from sqlalchemy import Column, CompoundSelect, Connection, CursorResult, Row, Select, Table, func, literal, select
+from sqlalchemy import Column, CompoundSelect, Connection, CursorResult, Row, Select, Table, func
 
 from blizzard.foundation.artifacts import ArtifactKind
 from blizzard.foundation.chunk_migration import MigrationMode
@@ -41,7 +41,6 @@ from blizzard.hub.domain.runners.route import Route
 from blizzard.hub.domain.work_items.closure import NO_CLOSER_REASON, TERMINAL_CLOSE_OUTCOMES
 from blizzard.hub.store import schema as s
 from blizzard.hub.store.errors import HubStoreError
-from blizzard.hub.store.internal.chunk_terminal_predicates import chunk_is_terminal
 from blizzard.hub.store.internal.fact_families import ephemeral_tables
 from blizzard.hub.store.internal.newest_fact import newer_row_exists
 from blizzard.hub.store.scoped import ScopedStatements, statements_of
@@ -512,14 +511,16 @@ def fence(
     *,
     epoch: int,
     admission: EpochAdmission,
+    terminal: bool,
     claimant: Claimant | None = None,
 ) -> FenceRefusal | None:
     """The in-transaction write fence (``bzh:epoch-fencing``).
 
-    On a connection that already holds the chunk's row lock, after the replay probe, refuse terminal chunks,
-    then stale epochs, then displaced claimants. ``None`` admits the write."""
+    On a connection that already holds the chunk's row lock, after the replay probe, apply the caller's
+    ``terminal`` verdict — derived in the domain from facts read under that lock — then refuse stale epochs,
+    then displaced claimants. ``None`` admits the write."""
     newest = latest_epoch(conn, chunk_id)
-    if is_terminal(conn, chunk_id):
+    if terminal:
         return FenceRefusal.terminal(epoch)
     if not admission.admits(epoch, newest=newest):
         return FenceRefusal.stale(epoch, latest=newest)
@@ -538,17 +539,10 @@ def mint_admission(conn: Connection, chunk_id: str, *, epoch: int, runner_id: st
     return MintAdmission(
         epoch=epoch,
         newest=newest,
-        terminal=is_terminal(conn, chunk_id),
         owner=epoch_owner(conn, chunk_id, epoch),
         owning_lease_id=owning_lease_id(conn, chunk_id, epoch),
         holds_route=route is not None and route.runner_id == runner_id,
     )
-
-
-def is_terminal(conn: Connection, chunk_id: str) -> bool:
-    """Whether the chunk is stopped or done, read on the caller's connection so this sits inside the same
-    transaction as the write it fences."""
-    return bool(conn.execute(select(chunk_is_terminal(statements_of(conn), literal(chunk_id)))).scalar())
 
 
 def enqueue_close_intents(
@@ -675,6 +669,7 @@ def write_landing_rows(
     node_name: str,
     epoch: int,
     admission: EpochAdmission,
+    terminal: bool,
     repo: str,
     revision: str,
     repository_id: str,
@@ -688,7 +683,7 @@ def write_landing_rows(
     row lock."""
     stmts = statements_of(conn)
     name = f"{MARKER_PREFIX}{repo}"
-    refused = fence(conn, chunk_id, epoch=epoch, admission=admission) is not None
+    refused = fence(conn, chunk_id, epoch=epoch, admission=admission, terminal=terminal) is not None
     already = conn.execute(
         stmts.select(s.artifacts, s.artifacts.c.artifact_id).where(
             (s.artifacts.c.chunk_id == chunk_id)

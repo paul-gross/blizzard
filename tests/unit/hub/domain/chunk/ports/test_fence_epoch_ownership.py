@@ -36,13 +36,11 @@ def _mint(
     newest: int,
     owner: EpochOwner | None = None,
     holds_route: bool = True,
-    terminal: bool = False,
     owning_lease_id: str | None = None,
 ) -> MintAdmission:
     return MintAdmission(
         epoch=epoch,
         newest=newest,
-        terminal=terminal,
         owner=owner,
         owning_lease_id=owning_lease_id,
         holds_route=holds_route,
@@ -65,8 +63,6 @@ def _mint(
         (_mint(epoch=4, newest=4, owner=_B_OWNS), False, False),
         # Below the newest epoch, even one the runner itself owns.
         (_mint(epoch=2, newest=3, owner=_A_OWNS), False, False),
-        # A terminal chunk refuses every mint.
-        (_mint(epoch=4, newest=3, terminal=True), False, True),
         # The runner's own epoch whose owning lease is another of its leases.
         (_mint(epoch=3, newest=3, owner=_A_OWNS, owning_lease_id="ls_other"), True, False),
     ],
@@ -85,7 +81,6 @@ def test_a_mint_naming_another_lease_of_the_owning_runner_is_displaced() -> None
 @pytest.mark.parametrize(
     ("admission", "expected"),
     [
-        (_mint(epoch=4, newest=3, terminal=True), FenceRefusal.terminal(4)),
         (_mint(epoch=2, newest=3, owner=_A_OWNS), FenceRefusal.stale(2, latest=3)),
         (_mint(epoch=3, newest=3, owner=EpochOwner.hub()), FenceRefusal.displaced(3, latest=3)),
         (_mint(epoch=4, newest=3, holds_route=False), FenceRefusal.displaced(4, latest=3)),

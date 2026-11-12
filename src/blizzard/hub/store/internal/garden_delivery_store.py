@@ -74,7 +74,7 @@ class GardenDeliveryStore:
         ).first()
 
     def deliver(
-        self, plan: DeliveryPlan, *, admission: EpochAdmission, transaction: LockedTransaction
+        self, plan: DeliveryPlan, *, admission: EpochAdmission, terminal: bool, transaction: LockedTransaction
     ) -> DeliveryOutcome:
         conn = connection_for(self._store, transaction, chunk=plan.chunk_id)
         # Every finding an `observed`/`gone` op names, locked before any read below so the guard
@@ -85,7 +85,7 @@ class GardenDeliveryStore:
         already = self._marker(conn, chunk_id=plan.chunk_id, node_id=plan.node_id, epoch=plan.epoch)
         if already is not None:
             return DeliveryOutcome.ALREADY_RECORDED
-        if fence(conn, plan.chunk_id, epoch=plan.epoch, admission=admission) is not None:
+        if fence(conn, plan.chunk_id, epoch=plan.epoch, admission=admission, terminal=terminal) is not None:
             return DeliveryOutcome.FENCED
 
         # Broader than the marker above: a fresh (node, epoch) can still resolve an

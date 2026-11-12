@@ -175,6 +175,7 @@ def test_detail_artifact_production_time_is_the_stored_marker_clock(tmp_path: Pa
             node_name="approve-gate",
             epoch=1,
             admission=EpochAdmission.AT_OR_ABOVE,
+            terminal=False,
             name="delivery-pr/acme/widget/1",
             content='{"repo":"acme/widget","number":1,"url":"http://forge/acme/widget/pull/1"}',
             at=produced_at,
@@ -543,6 +544,7 @@ def test_detail_lists_every_epoch_of_a_series_that_spans_node_ids(tmp_path: Path
                 content=f"v{epoch}",
                 at=hub.clock.now(),
                 admission=EpochAdmission.AT_OR_ABOVE,
+                terminal=False,
                 close_decision=decide_close_enqueue([WorkRef("default", "1")], lambda _: True),
                 transaction=unit,
             )

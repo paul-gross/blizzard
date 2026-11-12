@@ -73,6 +73,7 @@ class ChunkEscalationsStore:
         *,
         epoch: int,
         admission: EpochAdmission,
+        terminal: bool,
         claimant: Claimant | None = None,
         takeover_command: str,
         at: datetime,
@@ -85,7 +86,7 @@ class ChunkEscalationsStore:
         transaction: LockedTransaction,
     ) -> EscalationWrite | FenceRefusal:
         conn = connection_for(self._store, transaction, chunk=chunk_id)
-        refusal = fence(conn, chunk_id, epoch=epoch, admission=admission, claimant=claimant)
+        refusal = fence(conn, chunk_id, epoch=epoch, admission=admission, terminal=terminal, claimant=claimant)
         if refusal is not None:
             return refusal
         result = conn.execute(
@@ -132,6 +133,7 @@ class ChunkEscalationsStore:
         *,
         epoch: int,
         admission: EpochAdmission,
+        terminal: bool,
         cause: str,
         envelope: str,
         at: datetime,
@@ -142,6 +144,7 @@ class ChunkEscalationsStore:
             chunk_id,
             epoch=epoch,
             admission=admission,
+            terminal=terminal,
             cause=cause,
             envelope=envelope,
             at=at,
@@ -155,6 +158,7 @@ class ChunkEscalationsStore:
         *,
         epoch: int,
         admission: EpochAdmission,
+        terminal: bool,
         cause: str,
         envelope: str,
         at: datetime,
@@ -180,7 +184,7 @@ class ChunkEscalationsStore:
             ).first()
         if already is not None:
             return False
-        if fence(conn, chunk_id, epoch=epoch, admission=admission) is not None:
+        if fence(conn, chunk_id, epoch=epoch, admission=admission, terminal=terminal) is not None:
             return False
         conn.execute(
             self._store.insert(s.chunk_bounces).values(
@@ -196,6 +200,7 @@ class ChunkEscalationsStore:
         *,
         epoch: int,
         admission: EpochAdmission,
+        terminal: bool,
         runner_id: str,
         takeover_command: str,
         at: datetime,
@@ -207,6 +212,7 @@ class ChunkEscalationsStore:
             chunk_id,
             epoch=epoch,
             admission=admission,
+            terminal=terminal,
             runner_id=runner_id,
             takeover_command=takeover_command,
             at=at,
@@ -221,6 +227,7 @@ class ChunkEscalationsStore:
         *,
         epoch: int,
         admission: EpochAdmission,
+        terminal: bool,
         runner_id: str,
         takeover_command: str,
         at: datetime,
@@ -235,7 +242,7 @@ class ChunkEscalationsStore:
         ).first()
         if already is not None:
             return BounceEscalationOutcome.ALREADY_RECORDED
-        if fence(conn, chunk_id, epoch=epoch, admission=admission) is not None:
+        if fence(conn, chunk_id, epoch=epoch, admission=admission, terminal=terminal) is not None:
             return BounceEscalationOutcome.REFUSED
         record_hub_lease(conn, chunk_id, epoch=epoch, runner_id=runner_id, at=at)
         conn.execute(

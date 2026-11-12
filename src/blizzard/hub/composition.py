@@ -1177,14 +1177,16 @@ def build_tenant_services(stores: TenantStores, parts: TenantServiceParts, *, ev
     garden_delivery = GardenDeliveryRecorder(
         artifacts=chunk_artifacts,
         buckets=finding_bucket,
-        materialize=GardenDelivery(delivery=garden_delivery_store, transactions=stores.transactions, clock=clock),
+        materialize=GardenDelivery(
+            delivery=garden_delivery_store, facts=chunk_facts, transactions=stores.transactions, clock=clock
+        ),
         formats=garden_formats,
         resolve_commit_for=commit_resolver_for,
     )
     review_findings = ReviewFindingsRecorder(
         artifacts=chunk_artifacts,
         materialize=ReviewFindingsMaterialize(
-            delivery=review_findings_store, transactions=stores.transactions, clock=clock
+            delivery=review_findings_store, facts=chunk_facts, transactions=stores.transactions, clock=clock
         ),
         formats=garden_formats,
     )
@@ -1208,6 +1210,7 @@ def build_tenant_services(stores: TenantStores, parts: TenantServiceParts, *, ev
         movement=chunk_movement,
         decisions=chunk_decisions,
         graphs=graph_store,
+        facts=chunk_facts,
         follow_latest_default=parts.follow_latest_default,
     )
     turns = TurnRunner(

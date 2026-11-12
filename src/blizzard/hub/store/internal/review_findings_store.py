@@ -79,12 +79,12 @@ class ReviewFindingsStore:
         return project_id
 
     def deliver(
-        self, plan: ReviewFindingsPlan, *, admission: EpochAdmission, transaction: LockedTransaction
+        self, plan: ReviewFindingsPlan, *, admission: EpochAdmission, terminal: bool, transaction: LockedTransaction
     ) -> ReviewFindingsOutcome:
         conn = connection_for(self._store, transaction, chunk=plan.chunk_id)
         if self._marker(conn, chunk_id=plan.chunk_id) is not None:
             return ReviewFindingsOutcome.ALREADY_RECORDED
-        if fence(conn, plan.chunk_id, epoch=plan.epoch, admission=admission) is not None:
+        if fence(conn, plan.chunk_id, epoch=plan.epoch, admission=admission, terminal=terminal) is not None:
             return ReviewFindingsOutcome.FENCED
 
         project_id = self._project_of(conn, plan.chunk_id)

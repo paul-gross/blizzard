@@ -717,6 +717,7 @@ def test_a_chunk_at_an_actionless_node_is_escalated_by_the_reconcile_one_epoch_u
         at=world.hub.clock.now(),
         artifacts=[],
         admission=EpochAdmission.AT_OR_ABOVE,
+        terminal=False,
     )
 
     world.tick()
@@ -790,6 +791,7 @@ def test_a_chunk_a_person_takes_after_its_turn_is_taken_gets_no_pass(world: Worl
             chunk_id,
             epoch=2,
             admission=EpochAdmission.ABOVE,
+            terminal=False,
             runner_id="hub",
             takeover_command="",
             at=world.hub.clock.now(),

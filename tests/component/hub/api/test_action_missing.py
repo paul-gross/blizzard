@@ -116,6 +116,7 @@ def _park_at_merge(hub: HubHarness, chunk_id: str, build_node_id: str, graph_id:
         at=hub.clock.now(),
         artifacts=[],
         admission=EpochAdmission.AT_OR_ABOVE,
+        terminal=False,
     )
 
 

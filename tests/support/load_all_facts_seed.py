@@ -105,6 +105,7 @@ def seed_fixture(store: ChunkStores, engine: Engine, clock: FixedClock) -> None:
         at=T0,
         artifacts=[],
         admission=EpochAdmission.AT_OR_ABOVE,
+        terminal=False,
         close_decision=decide_close_enqueue([], lambda _: True),
     )
 
@@ -122,6 +123,7 @@ def seed_fixture(store: ChunkStores, engine: Engine, clock: FixedClock) -> None:
             options=[],
             asked_at=T0,
             admission=EpochAdmission.AT_OR_ABOVE,
+            terminal=False,
             transaction=unit,
         )
 
@@ -134,6 +136,7 @@ def seed_fixture(store: ChunkStores, engine: Engine, clock: FixedClock) -> None:
             takeover_command="cmd",
             at=T0,
             admission=EpochAdmission.AT_OR_ABOVE,
+            terminal=False,
             cause=None,
             detail=None,
             transaction=unit,
@@ -181,6 +184,7 @@ def seed_fixture(store: ChunkStores, engine: Engine, clock: FixedClock) -> None:
         at=T0,
         artifacts=[],
         admission=EpochAdmission.AT_OR_ABOVE,
+        terminal=False,
         close_decision=decide_close_enqueue([], lambda _: True),
     )
 
@@ -200,6 +204,7 @@ def seed_fixture(store: ChunkStores, engine: Engine, clock: FixedClock) -> None:
         at=T0,
         artifacts=[],
         admission=EpochAdmission.AT_OR_ABOVE,
+        terminal=False,
         close_decision=decide_close_enqueue([], lambda _: True),
     )
     store.movement.record_migration(
@@ -215,6 +220,7 @@ def seed_fixture(store: ChunkStores, engine: Engine, clock: FixedClock) -> None:
         artifacts=[],
         source=MigrationSource.AUTHORED_EDGE,
         admission=EpochAdmission.AT_OR_ABOVE,
+        terminal=False,
         close_decision=decide_close_enqueue([], lambda _: True),
     )
 
@@ -265,6 +271,7 @@ def seed_fixture(store: ChunkStores, engine: Engine, clock: FixedClock) -> None:
             "ch_kitchen_sink",
             epoch=1,
             admission=EpochAdmission.AT_OR_ABOVE,
+            terminal=False,
             cause="conflict",
             envelope="{}",
             at=T0,
@@ -283,6 +290,7 @@ def seed_fixture(store: ChunkStores, engine: Engine, clock: FixedClock) -> None:
         at=T0,
         artifacts=[],
         admission=EpochAdmission.AT_OR_ABOVE,
+        terminal=False,
         close_decision=decide_close_enqueue([], lambda _: True),
     )
     with chunk_unit(hub_store_connections(engine), "ch_kitchen_sink") as unit:

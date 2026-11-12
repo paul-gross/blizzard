@@ -37,6 +37,7 @@ from blizzard.hub.domain.chunk.ports.questions import IWriteChunkQuestionsReposi
 from blizzard.hub.domain.chunk.ports.record import IReadChunkRecordRepository
 from blizzard.hub.domain.chunk.ports.route import IWriteChunkRouteRepository
 from blizzard.hub.domain.chunk.ports.usage import IWriteChunkUsageRepository
+from blizzard.hub.domain.chunk.terminal import terminal_under_lock
 from blizzard.hub.domain.execution.auth.route import ROUTE_TOKEN_WARN, RouteToken
 from blizzard.hub.domain.execution.fleet import FleetService
 from blizzard.hub.domain.execution.payload import Payload
@@ -444,8 +445,8 @@ class FactIngestService:
         if kind == LEASE_MINTED:
             return _LockedLanding(
                 locks=chunk_id,
-                write=lambda transaction: self._route.record_lease_minted(
-                    chunk_id, epoch=fact.require_number("epoch"), claimant=claimant, at=now, transaction=transaction
+                write=lambda transaction: self._mint_lease(
+                    chunk_id, fact, claimant=claimant, now=now, transaction=transaction
                 ),
             )
         if kind == ESCALATION_RECORDED:
@@ -455,6 +456,7 @@ class FactIngestService:
                     chunk_id,
                     epoch=fact.require_number("epoch"),
                     admission=EpochAdmission.AT_OR_ABOVE,
+                    terminal=terminal_under_lock(self._facts, chunk_id, transaction=transaction),
                     claimant=claimant,
                     takeover_command=fact.string("takeover_command"),
                     wrapped_takeover_command=fact.string("wrapped_takeover_command"),
@@ -477,12 +479,25 @@ class FactIngestService:
                 runner_id=runner_id,
                 epoch=fact.require_number("epoch"),
                 admission=EpochAdmission.AT_OR_ABOVE,
+                terminal=terminal_under_lock(self._facts, chunk_id, transaction=transaction),
                 claimant=claimant,
                 question=fact.require_text("question"),
                 options=fact.strings("options"),
                 asked_at=fact.instant("asked_at", now),
                 transaction=transaction,
             ),
+        )
+
+    def _mint_lease(
+        self, chunk_id: str, fact: Payload, *, claimant: Claimant, now: datetime, transaction: LockedTransaction
+    ) -> FenceRefusal | None:
+        """A ``lease.minted``'s write, refused first when its chunk has ended — the verdict read under the unit's
+        chunk lock, ahead of the mint's own epoch and ownership admission."""
+        epoch = fact.require_number("epoch")
+        if terminal_under_lock(self._facts, chunk_id, transaction=transaction):
+            return FenceRefusal.terminal(epoch)
+        return self._route.record_lease_minted(
+            chunk_id, epoch=epoch, claimant=claimant, at=now, transaction=transaction
         )
 
     def _publish_close_skipped(self, chunk_id: str, written: _Written) -> None:

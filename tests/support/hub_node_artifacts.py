@@ -8,6 +8,7 @@ from datetime import datetime
 from blizzard.hub.domain.chunk.model import CloseEnqueueDecision, decide_close_enqueue
 from blizzard.hub.domain.chunk.ports.artifacts import IWriteChunkArtifactsRepository
 from blizzard.hub.domain.chunk.ports.fence import EpochAdmission
+from blizzard.hub.domain.chunk.terminal import terminal_under_lock
 from blizzard.hub.domain.kernel.transactions import LockedTransaction
 from tests.support.scaffolding import HubHarness, chunk_stores, chunk_unit, hub_store_connections
 
@@ -22,26 +23,24 @@ def _close_decision(hub: HubHarness, chunk_id: str) -> CloseEnqueueDecision:
 def record_hub_asset(
     hub: HubHarness, chunk_id: str, *, node_id: str, node_name: str, epoch: int, name: str, content: str
 ) -> bool:
-    """Record ``name`` on the visit ``(chunk_id, node_id, epoch)``, idempotently per that visit and name; answers
-    whether it wrote."""
+    """Record ``name`` on the visit ``(chunk_id, node_id, epoch)``, idempotently per that visit and name, handed the
+    terminal verdict a hub caller reads under the unit's lock; answers whether it wrote."""
     close_decision = _close_decision(hub, chunk_id)
+    stores = chunk_stores(hub.engine, hub.clock)
     with chunk_unit(hub_store_connections(hub.engine), chunk_id) as unit:
-        return (
-            chunk_stores(hub.engine, hub.clock)
-            .artifacts.record_hub_artifact(
-                chunk_id,
-                node_id=node_id,
-                node_name=node_name,
-                epoch=epoch,
-                admission=EpochAdmission.AT_OR_ABOVE,
-                name=name,
-                content=content,
-                at=hub.clock.now(),
-                close_decision=close_decision,
-                transaction=unit,
-            )
-            .wrote
-        )
+        return stores.artifacts.record_hub_artifact(
+            chunk_id,
+            node_id=node_id,
+            node_name=node_name,
+            epoch=epoch,
+            admission=EpochAdmission.AT_OR_ABOVE,
+            terminal=terminal_under_lock(stores.facts, chunk_id, transaction=unit),
+            name=name,
+            content=content,
+            at=hub.clock.now(),
+            close_decision=close_decision,
+            transaction=unit,
+        ).wrote
 
 
 def record_landing(
@@ -67,6 +66,7 @@ def record_landing(
         node_name=node_name,
         epoch=epoch,
         admission=EpochAdmission.AT_OR_ABOVE,
+        terminal=False,
         repo=repo,
         revision=commit_hash,
         repository_id=repository_id,

@@ -133,7 +133,7 @@ def test_deliver_loses_the_guard_when_an_exit_landed_after_validation(tmp_path: 
     findings.record_fact("fin_1", kind="wont-fix", at=_LATER, note="n", actor="u1")
 
     with chunk_unit(hub_store_connections(engine), plan.chunk_id) as unit:
-        outcome = deliveries.deliver(plan, admission=EpochAdmission.AT_OR_ABOVE, transaction=unit)
+        outcome = deliveries.deliver(plan, admission=EpochAdmission.AT_OR_ABOVE, terminal=False, transaction=unit)
 
     assert outcome is DeliveryOutcome.GUARD_LOST
     assert _kinds(engine, "fin_1") == ["add", "wont-fix"]
@@ -149,7 +149,7 @@ def test_deliver_records_when_the_guarded_finding_has_not_moved(tmp_path: Path) 
     )
 
     with chunk_unit(hub_store_connections(engine), plan.chunk_id) as unit:
-        outcome = deliveries.deliver(plan, admission=EpochAdmission.AT_OR_ABOVE, transaction=unit)
+        outcome = deliveries.deliver(plan, admission=EpochAdmission.AT_OR_ABOVE, terminal=False, transaction=unit)
 
     assert outcome is DeliveryOutcome.RECORDED
     assert _kinds(engine, "fin_1") == ["add", "observed"]
@@ -172,7 +172,7 @@ def test_a_reopened_delivered_finding_lands_the_runs_gone_as_gone(tmp_path: Path
 
     with chunk_unit(hub_store_connections(engine), stale.chunk_id) as unit:
         assert (
-            deliveries.deliver(stale, admission=EpochAdmission.AT_OR_ABOVE, transaction=unit)
+            deliveries.deliver(stale, admission=EpochAdmission.AT_OR_ABOVE, terminal=False, transaction=unit)
             is DeliveryOutcome.GUARD_LOST
         )
     fresh = _plan(
@@ -182,7 +182,7 @@ def test_a_reopened_delivered_finding_lands_the_runs_gone_as_gone(tmp_path: Path
     )
     with chunk_unit(hub_store_connections(engine), fresh.chunk_id) as unit:
         assert (
-            deliveries.deliver(fresh, admission=EpochAdmission.AT_OR_ABOVE, transaction=unit)
+            deliveries.deliver(fresh, admission=EpochAdmission.AT_OR_ABOVE, terminal=False, transaction=unit)
             is DeliveryOutcome.RECORDED
         )
     assert _kinds(engine, "fin_1")[-1] == "gone"
@@ -199,13 +199,14 @@ def test_deliver_ignores_a_moved_finding_whose_facts_are_not_inserted(tmp_path: 
     )
     with chunk_unit(hub_store_connections(engine), plan.chunk_id) as unit:
         assert (
-            deliveries.deliver(plan, admission=EpochAdmission.AT_OR_ABOVE, transaction=unit) is DeliveryOutcome.RECORDED
+            deliveries.deliver(plan, admission=EpochAdmission.AT_OR_ABOVE, terminal=False, transaction=unit)
+            is DeliveryOutcome.RECORDED
         )
     findings.record_fact("fin_1", kind="wont-fix", at=_LATER, note="n", actor="u1")
     revisit = replace(plan, node_id="nd_2", epoch=2)
 
     with chunk_unit(hub_store_connections(engine), revisit.chunk_id) as unit:
-        outcome = deliveries.deliver(revisit, admission=EpochAdmission.AT_OR_ABOVE, transaction=unit)
+        outcome = deliveries.deliver(revisit, admission=EpochAdmission.AT_OR_ABOVE, terminal=False, transaction=unit)
 
     assert outcome is DeliveryOutcome.ALREADY_RECORDED
     assert _kinds(engine, "fin_1") == ["add", "observed", "wont-fix"]

@@ -39,6 +39,7 @@ def _question(hub: HubHarness, chunk_id: str, transaction: LockedTransaction) ->
         runner_id="r1",
         epoch=1,
         admission=_AT,
+        terminal=False,
         question="q",
         options=[],
         asked_at=hub.clock.now(),
@@ -51,6 +52,7 @@ def _escalation(hub: HubHarness, chunk_id: str, transaction: LockedTransaction) 
         chunk_id,
         epoch=1,
         admission=_AT,
+        terminal=False,
         takeover_command="cmd",
         at=hub.clock.now(),
         cause=None,
@@ -72,6 +74,7 @@ def _hub_artifact(hub: HubHarness, chunk_id: str, transaction: LockedTransaction
         node_name="deliver",
         epoch=1,
         admission=_AT,
+        terminal=False,
         name="progress/one",
         content="x",
         at=hub.clock.now(),
@@ -87,6 +90,7 @@ def _chunk_landing(hub: HubHarness, chunk_id: str, transaction: LockedTransactio
         node_name="deliver",
         epoch=1,
         admission=_AT,
+        terminal=False,
         repo="acme/widget",
         revision="m1",
         repository_id="rp_widget",
@@ -105,6 +109,7 @@ def _flow_landing(hub: HubHarness, chunk_id: str, transaction: LockedTransaction
         node_name="deliver",
         epoch=1,
         admission=_AT,
+        terminal=False,
         repo="acme/widget",
         revision="m1",
         at=hub.clock.now(),
@@ -139,12 +144,16 @@ def _garden(hub: HubHarness, chunk_id: str, transaction: LockedTransaction) -> o
         deltas=[],
         proposals=[],
     )
-    return GardenDeliveryStore(hub_store_connections(hub.engine)).deliver(plan, admission=_AT, transaction=transaction)
+    return GardenDeliveryStore(hub_store_connections(hub.engine)).deliver(
+        plan, admission=_AT, terminal=False, transaction=transaction
+    )
 
 
 def _review(hub: HubHarness, chunk_id: str, transaction: LockedTransaction) -> object:
     plan = ReviewFindingsPlan(chunk_id=chunk_id, node_id="nd_review", node_name="review", epoch=1, at=hub.clock.now())
-    return ReviewFindingsStore(hub_store_connections(hub.engine)).deliver(plan, admission=_AT, transaction=transaction)
+    return ReviewFindingsStore(hub_store_connections(hub.engine)).deliver(
+        plan, admission=_AT, terminal=False, transaction=transaction
+    )
 
 
 _WRITES: dict[str, _Write] = {

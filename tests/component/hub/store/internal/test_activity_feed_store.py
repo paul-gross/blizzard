@@ -128,6 +128,7 @@ def test_node_completed_reads_off_transitions_authored_by_a_runner(tmp_path: Pat
         at=_at(1),
         artifacts=[],
         admission=EpochAdmission.AT_OR_ABOVE,
+        terminal=False,
         close_decision=decide_close_enqueue([], lambda _: True),
     )
     row = _row_for(store, "node-completed")
@@ -150,6 +151,7 @@ def test_hub_advanced_reads_off_transitions_authored_by_the_hub_coordinator(tmp_
         at=_at(1),
         artifacts=[],
         admission=EpochAdmission.AT_OR_ABOVE,
+        terminal=False,
         close_decision=decide_close_enqueue([], lambda _: True),
     )
     row = _row_for(store, "hub-advanced")
@@ -174,6 +176,7 @@ def test_migrated_reads_off_chunk_migrations(tmp_path: Path) -> None:
         artifacts=[],
         source=MigrationSource.AUTHORED_EDGE,
         admission=EpochAdmission.AT_OR_ABOVE,
+        terminal=False,
         close_decision=decide_close_enqueue([], lambda _: True),
     )
     row = _row_for(store, "migrated")
@@ -195,6 +198,7 @@ def test_decision_submitted_reads_off_decisions(tmp_path: Path) -> None:
         at=_at(1),
         artifacts=[],
         admission=EpochAdmission.AT_OR_ABOVE,
+        terminal=False,
         close_decision=decide_close_enqueue([], lambda _: True),
     )
     row = _row_for(store, "decision-submitted")
@@ -216,6 +220,7 @@ def test_decision_resolved_reads_off_decision_resolutions(tmp_path: Path) -> Non
         at=_at(1),
         artifacts=[],
         admission=EpochAdmission.AT_OR_ABOVE,
+        terminal=False,
         close_decision=decide_close_enqueue([], lambda _: True),
     )
     with chunk_unit(hub_store_connections(engine), "ch_1") as unit:
@@ -242,6 +247,7 @@ def test_question_asked_reads_off_questions(tmp_path: Path) -> None:
             options=[],
             asked_at=_at(1),
             admission=EpochAdmission.AT_OR_ABOVE,
+            terminal=False,
             transaction=handle.transaction,
         )
     row = _row_for(store, "question-asked")
@@ -265,6 +271,7 @@ def test_question_answered_reads_off_question_answers(tmp_path: Path) -> None:
             options=[],
             asked_at=_at(1),
             admission=EpochAdmission.AT_OR_ABOVE,
+            terminal=False,
             transaction=handle.transaction,
         )
     with chunk_unit(hub_store_connections(engine), "ch_1") as unit:
@@ -284,6 +291,7 @@ def test_escalated_reads_off_escalations(tmp_path: Path) -> None:
             takeover_command="cd x && resume",
             at=_at(1),
             admission=EpochAdmission.AT_OR_ABOVE,
+            terminal=False,
             cause=None,
             detail=None,
             transaction=handle.transaction,

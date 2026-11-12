@@ -105,6 +105,7 @@ def _seed_at_deliver(
         admission=__import__(
             "blizzard.hub.domain.chunk.ports.fence", fromlist=["EpochAdmission"]
         ).EpochAdmission.AT_OR_ABOVE,
+        terminal=False,
     )
     report_lease(hub, chunk_id, epoch=1, seq=1)
 

@@ -43,6 +43,7 @@ class IWriteChunkQuestionsRepository(IReadChunkQuestionsRepository, Protocol):
         runner_id: str,
         epoch: int,
         admission: EpochAdmission,
+        terminal: bool,
         claimant: Claimant | None = None,
         question: str,
         options: list[str],

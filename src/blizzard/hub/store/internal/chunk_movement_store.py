@@ -78,6 +78,7 @@ class ChunkMovementStore:
         choice_name: str | None,
         epoch: int,
         admission: EpochAdmission,
+        terminal: bool,
         claimant: Claimant | None = None,
         runner_id: str,
         at: datetime,
@@ -96,6 +97,7 @@ class ChunkMovementStore:
                 choice_name=choice_name,
                 epoch=epoch,
                 admission=admission,
+                terminal=terminal,
                 claimant=claimant,
                 runner_id=runner_id,
                 at=at,
@@ -115,6 +117,7 @@ class ChunkMovementStore:
         choice_name: str | None,
         epoch: int,
         admission: EpochAdmission,
+        terminal: bool,
         claimant: Claimant | None = None,
         runner_id: str,
         at: datetime,
@@ -133,6 +136,7 @@ class ChunkMovementStore:
             choice_name=choice_name,
             epoch=epoch,
             admission=admission,
+            terminal=terminal,
             claimant=claimant,
             runner_id=runner_id,
             at=at,
@@ -152,6 +156,7 @@ class ChunkMovementStore:
         choice_name: str | None,
         epoch: int,
         admission: EpochAdmission,
+        terminal: bool,
         claimant: Claimant | None = None,
         runner_id: str,
         at: datetime,
@@ -159,7 +164,7 @@ class ChunkMovementStore:
         close_decision: CloseEnqueueDecision,
         decision_id: str | None = None,
     ) -> TransitionWrite | FenceRefusal:
-        refusal = fence(conn, chunk_id, epoch=epoch, admission=admission, claimant=claimant)
+        refusal = fence(conn, chunk_id, epoch=epoch, admission=admission, terminal=terminal, claimant=claimant)
         if refusal is not None:
             return refusal
         conn.execute(
@@ -210,6 +215,7 @@ class ChunkMovementStore:
         model: str | None,
         epoch: int,
         admission: EpochAdmission,
+        terminal: bool,
         claimant: Claimant | None = None,
         at: datetime,
         artifacts: list[StoredArtifact],
@@ -235,6 +241,7 @@ class ChunkMovementStore:
                 model=model,
                 epoch=epoch,
                 admission=admission,
+                terminal=terminal,
                 claimant=claimant,
                 at=at,
                 artifacts=artifacts,
@@ -259,6 +266,7 @@ class ChunkMovementStore:
         model: str | None,
         epoch: int,
         admission: EpochAdmission,
+        terminal: bool,
         claimant: Claimant | None = None,
         at: datetime,
         artifacts: list[StoredArtifact],
@@ -282,6 +290,7 @@ class ChunkMovementStore:
             model=model,
             epoch=epoch,
             admission=admission,
+            terminal=terminal,
             claimant=claimant,
             at=at,
             artifacts=artifacts,
@@ -306,6 +315,7 @@ class ChunkMovementStore:
         model: str | None,
         epoch: int,
         admission: EpochAdmission,
+        terminal: bool,
         claimant: Claimant | None = None,
         at: datetime,
         artifacts: list[StoredArtifact],
@@ -317,7 +327,7 @@ class ChunkMovementStore:
     ) -> MigrationWrite | FenceRefusal | None:
         if self._migration_exists(conn, chunk_id, from_node_id=from_node_id, epoch=epoch):
             return None
-        refusal = fence(conn, chunk_id, epoch=epoch, admission=admission, claimant=claimant)
+        refusal = fence(conn, chunk_id, epoch=epoch, admission=admission, terminal=terminal, claimant=claimant)
         if refusal is not None:
             return refusal
         resolved_migration_id = (

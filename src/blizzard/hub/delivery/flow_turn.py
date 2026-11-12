@@ -55,6 +55,7 @@ from blizzard.hub.domain.chunk.ports.exclusive import IChunkExclusiveWrites, ILo
 from blizzard.hub.domain.chunk.ports.facts import IReadChunkFactsRepository
 from blizzard.hub.domain.chunk.ports.fence import EpochAdmission
 from blizzard.hub.domain.chunk.ports.record import IReadChunkRecordRepository
+from blizzard.hub.domain.chunk.terminal import terminal_under_lock
 from blizzard.hub.domain.config.capabilities import Capability
 from blizzard.hub.domain.config.forges import IReadForgeRepository
 from blizzard.hub.domain.config.repositories import (
@@ -546,34 +547,38 @@ class TurnRunner:
         )
         if flow is None:
             with self._transactions.begin() as unit:
+                locked = unit.lock_chunks([chunk.chunk_id])
                 landed = self._artifacts.record_landing(
                     chunk.chunk_id,
                     node_id=node.node_id,
                     node_name=node.name,
                     epoch=epoch,
                     admission=EpochAdmission.AT_OR_ABOVE,
+                    terminal=terminal_under_lock(self._facts, chunk.chunk_id, transaction=locked),
                     repo=repo,
                     revision=revision,
                     repository_id=repository,
                     at=at,
                     close_decision=close_decision,
-                    transaction=unit.lock_chunks([chunk.chunk_id]),
+                    transaction=locked,
                 )
             self._events.publish(*close_skipped_events(landed.close_skipped, chunk=chunk))
             return landed.refused
         landing = FlowLanding.of(flow, submission, project_id=chunk.project_id, node_name=node.name, revision=revision)
         with self._transactions.begin() as unit:
+            locked = unit.lock_chunks([landing.chunk_id])
             written = self._flows.record_landing(
                 landing,
                 node_id=node.node_id,
                 node_name=node.name,
                 epoch=epoch,
                 admission=EpochAdmission.AT_OR_ABOVE,
+                terminal=terminal_under_lock(self._facts, landing.chunk_id, transaction=locked),
                 repo=repo,
                 revision=revision,
                 at=at,
                 close_decision=close_decision,
-                transaction=unit.lock_chunks([landing.chunk_id]),
+                transaction=locked,
             )
         self._events.publish(*close_skipped_events(written.close_skipped, chunk=chunk))
         publish_flow_facts(self._publisher, written.written)
@@ -718,17 +723,19 @@ class TurnRunner:
             chunk.work_refs, lambda source: self._work_sources.closer(source) is not None
         )
         with self._transactions.begin() as unit:
+            locked = unit.lock_chunks([chunk.chunk_id])
             return self._artifacts.record_hub_artifact(
                 chunk.chunk_id,
                 node_id=node.node_id,
                 node_name=node.name,
                 epoch=epoch,
                 admission=EpochAdmission.AT_OR_ABOVE,
+                terminal=terminal_under_lock(self._facts, chunk.chunk_id, transaction=locked),
                 name=name,
                 content=content,
                 at=self._clock.now(),
                 close_decision=close_decision,
-                transaction=unit.lock_chunks([chunk.chunk_id]),
+                transaction=locked,
             )
 
     def _resolve_feature_title(self, chunk: Chunk) -> str | None:

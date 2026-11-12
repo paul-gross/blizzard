@@ -53,6 +53,7 @@ class ChunkHubExecStore:
         choice_name: str,
         epoch: int,
         admission: EpochAdmission,
+        terminal: bool,
         runner_id: str,
         transition_id: str,
         at: datetime,
@@ -68,6 +69,7 @@ class ChunkHubExecStore:
             choice_name=choice_name,
             epoch=epoch,
             admission=admission,
+            terminal=terminal,
             runner_id=runner_id,
             transition_id=transition_id,
             at=at,
@@ -86,6 +88,7 @@ class ChunkHubExecStore:
         choice_name: str,
         epoch: int,
         admission: EpochAdmission,
+        terminal: bool,
         runner_id: str,
         transition_id: str,
         at: datetime,
@@ -103,7 +106,7 @@ class ChunkHubExecStore:
         ).first()
         if already is not None:
             return HubStepTransitionWrite(wrote=False)
-        if fence(conn, chunk_id, epoch=epoch, admission=admission) is not None:
+        if fence(conn, chunk_id, epoch=epoch, admission=admission, terminal=terminal) is not None:
             return HubStepTransitionWrite(wrote=False)
         record_hub_lease(conn, chunk_id, epoch=epoch, runner_id=runner_id, at=at)
         conn.execute(

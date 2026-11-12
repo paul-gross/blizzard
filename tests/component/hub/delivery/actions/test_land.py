@@ -26,6 +26,7 @@ from blizzard.hub.domain.actions.effects import LandingRecord, MissingCapability
 from blizzard.hub.domain.chunk.model import WorkItemAuthor, decide_close_enqueue
 from blizzard.hub.domain.chunk.no_code import no_code_marker
 from blizzard.hub.domain.chunk.ports.fence import EpochAdmission
+from blizzard.hub.domain.chunk.terminal import terminal_under_lock
 from blizzard.hub.domain.config.capabilities import Capability
 from blizzard.hub.domain.config.repositories import (
     RepositoryId,
@@ -1282,6 +1283,7 @@ def test_a_landing_record_is_written_past_the_fence_once_and_answers_whether_it_
                 node_name="deliver",
                 epoch=1,
                 admission=EpochAdmission.AT_OR_ABOVE,
+                terminal=terminal_under_lock(hub.services.chunks.facts, chunk_id, transaction=unit),
                 repo=_WIDGET,
                 revision="m1",
                 repository_id="re_widget",

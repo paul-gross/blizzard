@@ -208,7 +208,9 @@ def test_a_delivery_citing_another_projects_finding_is_rejected_naming_it(tmp_pa
         pytest.raises(GardenDeliveryRejected, match=_FOREIGN) as exc,
         chunk_unit(connections, plan.chunk_id) as unit,
     ):
-        GardenDeliveryStore(connections).deliver(plan, admission=EpochAdmission.AT_OR_ABOVE, transaction=unit)
+        GardenDeliveryStore(connections).deliver(
+            plan, admission=EpochAdmission.AT_OR_ABOVE, terminal=False, transaction=unit
+        )
     assert exc.value.fault is GardenDeliveryFault.PROPOSALS
 
     assert _proposal_rows(hub) == []

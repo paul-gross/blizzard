@@ -212,6 +212,7 @@ class IWriteFlows(IReadFlows, Protocol):
         node_name: str,
         epoch: int,
         admission: EpochAdmission,
+        terminal: bool,
         repo: str,
         revision: str,
         at: datetime,

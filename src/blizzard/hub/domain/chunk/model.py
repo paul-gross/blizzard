@@ -1465,6 +1465,13 @@ class ChunkFacts:
         assert self.stopped_at is not None  # invariant: set iff stopped
         return self.operator_completed_at >= self.stopped_at
 
+    @staticmethod
+    def terminal_verdict(facts: ChunkFacts | None) -> bool:
+        """The terminal verdict a fenced chunk write is handed (``bzh:store-refuses-stale``): whether
+        ``facts``, read under the chunk's lock, derive a terminal status. Absent facts — an unknown or
+        ephemeral chunk — are not terminal."""
+        return facts is not None and facts.status() in TERMINAL_STATUSES
+
     def status(self) -> ChunkStatus:
         """Derive a chunk's single status from its facts, first match wins. ``done`` is the
         **only** terminal: reached via the terminal transition, an operator's manual

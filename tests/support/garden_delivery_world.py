@@ -127,7 +127,10 @@ def garden_delivery_recorder(hub: HubHarness) -> GardenDeliveryRecorder:
         artifacts=chunk_stores(hub.engine, hub.clock).artifacts,
         buckets=FindingBucketReader(FindingStore(connections)),
         materialize=GardenDelivery(
-            delivery=GardenDeliveryStore(connections), transactions=HubTransactions(connections), clock=hub.clock
+            delivery=GardenDeliveryStore(connections),
+            facts=chunk_stores(hub.engine, hub.clock).facts,
+            transactions=HubTransactions(connections),
+            clock=hub.clock,
         ),
         formats=GardenFormats(),
         resolve_commit_for=None,

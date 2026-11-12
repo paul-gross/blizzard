@@ -203,6 +203,7 @@ def test_a_bounce_counts_as_neither(tmp_path: Path) -> None:
             chunk_id,
             epoch=1,
             admission=EpochAdmission.AT_OR_ABOVE,
+            terminal=False,
             cause="conflict",
             envelope="{}",
             at=hub.clock.now(),
@@ -289,6 +290,7 @@ def test_a_failed_attempt_after_a_migration_resolves_via_the_migrations_landed_n
         artifacts=[],
         source=MigrationSource.AUTHORED_EDGE,
         admission=EpochAdmission.AT_OR_ABOVE,
+        terminal=False,
         close_decision=decide_close_enqueue([WorkRef("default", "1")], lambda _: True),
     )
     claim_route(hub, chunk_id)  # the migration re-queued the chunk; it is claimed again
@@ -322,6 +324,7 @@ def test_a_null_landed_node_migration_resolves_via_the_target_graphs_entry_node(
         artifacts=[],
         source=MigrationSource.AUTHORED_EDGE,
         admission=EpochAdmission.AT_OR_ABOVE,
+        terminal=False,
         close_decision=decide_close_enqueue([WorkRef("default", "1")], lambda _: True),
     )
     claim_route(hub, chunk_id)  # the migration re-queued the chunk; it is claimed again
@@ -356,6 +359,7 @@ def test_a_pre_migration_no_movement_failure_resolves_via_the_graph_it_ran_in(tm
         artifacts=[],
         source=MigrationSource.AUTHORED_EDGE,
         admission=EpochAdmission.AT_OR_ABOVE,
+        terminal=False,
         close_decision=decide_close_enqueue([WorkRef("default", "1")], lambda _: True),
     )
 

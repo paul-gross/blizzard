@@ -89,6 +89,7 @@ def test_delete_removes_the_chunk_from_every_read(tmp_path: Path) -> None:
             content="sha",
             at=_T0,
             admission=EpochAdmission.AT_OR_ABOVE,
+            terminal=False,
             close_decision=decide_close_enqueue([pointer], lambda _: True),
             transaction=handle.transaction,
         )
@@ -122,6 +123,7 @@ def test_a_grouped_chunk_is_excluded_from_pending_close_intents(tmp_path: Path) 
             content="sha",
             at=_T0,
             admission=EpochAdmission.AT_OR_ABOVE,
+            terminal=False,
             close_decision=decide_close_enqueue([pointer], lambda _: True),
             transaction=unit,
         )
@@ -158,6 +160,7 @@ def _make_needs_human(chunks: ChunkStores, chunk_id: str) -> None:
             takeover_command="cd x && resume",
             at=_T0,
             admission=EpochAdmission.AT_OR_ABOVE,
+            terminal=False,
             cause=None,
             detail=None,
             transaction=handle.transaction,
@@ -177,6 +180,7 @@ def _make_waiting_on_human(chunks: ChunkStores, chunk_id: str) -> None:
             options=[],
             asked_at=_T0,
             admission=EpochAdmission.AT_OR_ABOVE,
+            terminal=False,
             transaction=handle.transaction,
         )
 

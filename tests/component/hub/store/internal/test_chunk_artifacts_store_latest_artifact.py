@@ -37,6 +37,7 @@ def test_an_exact_epoch_and_produced_at_tie_resolves_to_the_same_artifact_every_
             content="one",
             at=at,
             admission=EpochAdmission.AT_OR_ABOVE,
+            terminal=False,
             close_decision=decide_close_enqueue([WorkRef(source="default", ref="1")], lambda _: True),
             transaction=unit,
         )
@@ -50,6 +51,7 @@ def test_an_exact_epoch_and_produced_at_tie_resolves_to_the_same_artifact_every_
             content="two",
             at=at,
             admission=EpochAdmission.AT_OR_ABOVE,
+            terminal=False,
             close_decision=decide_close_enqueue([WorkRef(source="default", ref="1")], lambda _: True),
             transaction=unit,
         )

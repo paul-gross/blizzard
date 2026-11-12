@@ -38,6 +38,7 @@ def test_same_millisecond_marker_writes_read_back_in_write_order(
             content="not json",
             at=at,
             admission=EpochAdmission.AT_OR_ABOVE,
+            terminal=False,
             close_decision=decide_close_enqueue([WorkRef(source="default", ref="1")], lambda _: True),
             transaction=unit,
         ).wrote
@@ -58,6 +59,7 @@ def test_same_millisecond_marker_writes_read_back_in_write_order(
                 content=f'{{"repo":"acme/one","number":{number},"url":"http://forge/acme/one/pull/{number}"}}',
                 at=at,
                 admission=EpochAdmission.AT_OR_ABOVE,
+                terminal=False,
                 close_decision=decide_close_enqueue([WorkRef(source="default", ref="1")], lambda _: True),
                 transaction=unit,
             ).wrote

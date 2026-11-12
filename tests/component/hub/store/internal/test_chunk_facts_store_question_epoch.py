@@ -41,6 +41,7 @@ def test_a_loaded_question_carries_the_epoch_it_was_asked_at(tmp_path: Path) -> 
             options=[],
             asked_at=_T0,
             admission=EpochAdmission.AT_OR_ABOVE,
+            terminal=False,
             transaction=unit,
         )
 

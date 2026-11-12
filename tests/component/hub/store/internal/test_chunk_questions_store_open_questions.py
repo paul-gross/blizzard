@@ -50,6 +50,7 @@ def _seeded(tmp_path: Path, chunk_id: str = "ch_1") -> tuple[ChunkStores, Engine
             options=[],
             asked_at=_T0,
             admission=EpochAdmission.AT_OR_ABOVE,
+            terminal=False,
             transaction=unit,
         )
     return store, engine
@@ -78,6 +79,7 @@ def _finish(store: ChunkStores) -> None:
         close_decision=decide_close_enqueue([], lambda _: True),
         decision_id=None,
         admission=EpochAdmission.AT_OR_ABOVE,
+        terminal=False,
     )
 
 

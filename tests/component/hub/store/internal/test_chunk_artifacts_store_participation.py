@@ -32,6 +32,7 @@ def _record(hub: HubHarness, chunk_id: str, transaction: LockedTransaction) -> b
             content="x",
             at=hub.clock.now(),
             admission=EpochAdmission.AT_OR_ABOVE,
+            terminal=False,
             close_decision=CloseEnqueueDecision(closable=frozenset(), skipped=frozenset()),
             transaction=transaction,
         )

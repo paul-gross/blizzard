@@ -1684,6 +1684,7 @@ def build_hub_world(tmp_path: Path) -> HubWorld:
             ),
             at=_ht(20),
             admission=EpochAdmission.AT_OR_ABOVE,
+            terminal=False,
             close_decision=_close_decision(run_chunk_1),
             transaction=unit,
         )
@@ -1709,6 +1710,7 @@ def build_hub_world(tmp_path: Path) -> HubWorld:
             content=json.dumps({"scope": "runner-scope", "revisions": {}, "measurement": None, "findings": []}),
             at=_ht(21),
             admission=EpochAdmission.AT_OR_ABOVE,
+            terminal=False,
             close_decision=_close_decision(run_chunk_1),
             transaction=unit,
         )
@@ -1782,6 +1784,7 @@ def build_hub_world(tmp_path: Path) -> HubWorld:
         at=_ht(36),
         artifacts=[],
         admission=EpochAdmission.AT_OR_ABOVE,
+        terminal=False,
         close_decision=_close_decision(chunk_transition),
     )
     write.movement.record_transition(
@@ -1795,6 +1798,7 @@ def build_hub_world(tmp_path: Path) -> HubWorld:
         at=_ht(37),
         artifacts=[],
         admission=EpochAdmission.AT_OR_ABOVE,
+        terminal=False,
         close_decision=_close_decision(chunk_transition),
     )
 
@@ -1828,6 +1832,7 @@ def build_hub_world(tmp_path: Path) -> HubWorld:
                 proposals=[],
             ),
             admission=EpochAdmission.AT_OR_ABOVE,
+            terminal=False,
             transaction=unit,
         )
     with chunk_unit(store_connections, delivery_chunk) as unit:
@@ -1852,6 +1857,7 @@ def build_hub_world(tmp_path: Path) -> HubWorld:
                 facts=[NewReviewFindingFact(finding_id="fin_hub_review", ref="F1")],
             ),
             admission=EpochAdmission.AT_OR_ABOVE,
+            terminal=False,
             transaction=unit,
         )
 
@@ -1871,6 +1877,7 @@ def build_hub_world(tmp_path: Path) -> HubWorld:
         artifacts=[],
         source=MigrationSource.AUTHORED_EDGE,
         admission=EpochAdmission.AT_OR_ABOVE,
+        terminal=False,
         close_decision=_close_decision(chunk_migration),
     )
 
@@ -1893,6 +1900,7 @@ def build_hub_world(tmp_path: Path) -> HubWorld:
         at=_ht(44),
         artifacts=[],
         admission=EpochAdmission.AT_OR_ABOVE,
+        terminal=False,
         close_decision=_close_decision(chunk_decision_1),
     )
     write.decisions.record_decision(
@@ -1906,6 +1914,7 @@ def build_hub_world(tmp_path: Path) -> HubWorld:
         at=_ht(45),
         artifacts=[],
         admission=EpochAdmission.AT_OR_ABOVE,
+        terminal=False,
         close_decision=_close_decision(chunk_decision_2),
     )
 
@@ -1922,6 +1931,7 @@ def build_hub_world(tmp_path: Path) -> HubWorld:
             at=_ht(48),
             wrapped_takeover_command="wrapped-resume",
             admission=EpochAdmission.AT_OR_ABOVE,
+            terminal=False,
             cause=None,
             detail=None,
             transaction=unit,
@@ -1934,6 +1944,7 @@ def build_hub_world(tmp_path: Path) -> HubWorld:
             at=_ht(49),
             wrapped_takeover_command="wrapped-resume",
             admission=EpochAdmission.AT_OR_ABOVE,
+            terminal=False,
             cause=None,
             detail=None,
             transaction=unit,
@@ -1956,6 +1967,7 @@ def build_hub_world(tmp_path: Path) -> HubWorld:
             options=["yes", "no"],
             asked_at=_ht(51),
             admission=EpochAdmission.AT_OR_ABOVE,
+            terminal=False,
             transaction=unit,
         )
     with chunk_unit(store_connections, chunk_question) as unit:
@@ -1970,6 +1982,7 @@ def build_hub_world(tmp_path: Path) -> HubWorld:
             options=[],
             asked_at=_ht(52),
             admission=EpochAdmission.AT_OR_ABOVE,
+            terminal=False,
             transaction=unit,
         )
     with chunk_unit(store_connections, chunk_question) as unit:
@@ -2060,6 +2073,7 @@ def build_hub_world(tmp_path: Path) -> HubWorld:
             artifacts=[],
             release_route=True,
             admission=EpochAdmission.ABOVE,
+            terminal=False,
             close_decision=hub_exec_close_decision,
         )
     with write.exclusive.locked([chunk_hub_exec_live]) as handle:
@@ -2115,6 +2129,7 @@ def build_hub_world(tmp_path: Path) -> HubWorld:
             content="merged",
             at=_ht(75),
             admission=EpochAdmission.AT_OR_ABOVE,
+            terminal=False,
             close_decision=_close_decision(chunk_delivery_a),
             transaction=unit,
         )
@@ -2128,6 +2143,7 @@ def build_hub_world(tmp_path: Path) -> HubWorld:
             content="merged",
             at=_ht(76),
             admission=EpochAdmission.AT_OR_ABOVE,
+            terminal=False,
             close_decision=_close_decision(chunk_delivery_b),
             transaction=unit,
         )
@@ -2216,6 +2232,7 @@ def build_hub_world(tmp_path: Path) -> HubWorld:
             content="c1",
             at=_ht(94),
             admission=EpochAdmission.AT_OR_ABOVE,
+            terminal=False,
             close_decision=_close_decision(chunk_artifacts),
             transaction=unit,
         )
@@ -2229,6 +2246,7 @@ def build_hub_world(tmp_path: Path) -> HubWorld:
             content="c2",
             at=_ht(95),
             admission=EpochAdmission.AT_OR_ABOVE,
+            terminal=False,
             close_decision=_close_decision(chunk_artifacts),
             transaction=unit,
         )

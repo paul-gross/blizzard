@@ -14,7 +14,9 @@ from blizzard.foundation.clock import IClock
 from blizzard.foundation.ids import Id, IdPrefix
 from blizzard.foundation.roles import domain_model
 from blizzard.hub.domain.chunk.model import Chunk
+from blizzard.hub.domain.chunk.ports.facts import IReadChunkFactsRepository
 from blizzard.hub.domain.chunk.ports.fence import EpochAdmission
+from blizzard.hub.domain.chunk.terminal import terminal_under_lock
 from blizzard.hub.domain.config.changes import ChangeContext, Door
 from blizzard.hub.domain.garden.review.validation import ValidatedReviewFindings
 from blizzard.hub.domain.garden.scopes import Scope, ScopeMint, ScopeSlug
@@ -113,7 +115,7 @@ class IWriteReviewFindingsRepository(IReadReviewFindingsRepository, Protocol):
     plan names that the project lacks is minted, by :meth:`ReviewFindingsPlan.scope_mint`, with the delivery."""
 
     def deliver(
-        self, plan: ReviewFindingsPlan, *, admission: EpochAdmission, transaction: LockedTransaction
+        self, plan: ReviewFindingsPlan, *, admission: EpochAdmission, terminal: bool, transaction: LockedTransaction
     ) -> ReviewFindingsOutcome:
         """Written in ``transaction``, a unit that locks ``plan.chunk_id``."""
         ...
@@ -173,9 +175,15 @@ class ReviewFindingsMaterialize:
     call — every id minted before the store sees it (`bzh:domain-takes-objects`)."""
 
     def __init__(
-        self, *, delivery: IWriteReviewFindingsRepository, transactions: IHubTransactions, clock: IClock
+        self,
+        *,
+        delivery: IWriteReviewFindingsRepository,
+        facts: IReadChunkFactsRepository,
+        transactions: IHubTransactions,
+        clock: IClock,
     ) -> None:
         self._delivery = delivery
+        self._facts = facts
         self._transactions = transactions
         self._clock = clock
 
@@ -196,4 +204,9 @@ class ReviewFindingsMaterialize:
         plan = build_review_plan(validated, chunk=chunk, node=node, epoch=epoch, at=self._clock.now())
         with self._transactions.begin() as unit:
             locked = unit.lock_chunks([plan.chunk_id])
-            return self._delivery.deliver(plan, admission=EpochAdmission.AT_OR_ABOVE, transaction=locked)
+            return self._delivery.deliver(
+                plan,
+                admission=EpochAdmission.AT_OR_ABOVE,
+                terminal=terminal_under_lock(self._facts, plan.chunk_id, transaction=locked),
+                transaction=locked,
+            )
