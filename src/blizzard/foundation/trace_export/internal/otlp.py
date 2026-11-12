@@ -12,7 +12,7 @@ from datetime import datetime
 from opentelemetry.exporter.otlp.proto.http.trace_exporter import OTLPSpanExporter
 from opentelemetry.sdk.resources import SERVICE_NAME, Resource
 from opentelemetry.sdk.trace import Event, ReadableSpan
-from opentelemetry.sdk.trace.export import SpanExportResult
+from opentelemetry.sdk.trace.export import SpanExporter, SpanExportResult
 from opentelemetry.sdk.util.instrumentation import InstrumentationScope
 from opentelemetry.trace import Link, SpanContext, SpanKind, Status, StatusCode
 
@@ -36,11 +36,13 @@ def _attributes(attributes: Attributes) -> dict[str, str | int | float | bool | 
 class OtlpTraceExporter:
     """Maps each :class:`FinishedSpan` to a finished ``ReadableSpan`` and hands the batch to ``OTLPSpanExporter``."""
 
-    def __init__(self, *, resource: Mapping[str, str], scope: str, scope_version: str) -> None:
+    def __init__(
+        self, *, resource: Mapping[str, str], scope: str, scope_version: str, exporter: SpanExporter | None = None
+    ) -> None:
         self._resource = Resource.create(dict(resource))
         self._named: dict[str, Resource] = {}
         self._scope = InstrumentationScope(scope, scope_version)
-        self._exporter = OTLPSpanExporter()
+        self._exporter = exporter or OTLPSpanExporter()
 
     def export(self, spans: Sequence[FinishedSpan]) -> bool:
         return self._exporter.export([self._readable(span) for span in spans]) is SpanExportResult.SUCCESS
