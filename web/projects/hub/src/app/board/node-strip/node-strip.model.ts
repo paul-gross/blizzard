@@ -1,4 +1,4 @@
-import { type ChunkStatus, hubApi, STATUS_LANE } from 'fleet';
+import { type ChunkStatus, hubApi, STATUS_LANE, type Tone, toneColor, toneDimColor } from 'fleet';
 
 /** One drawn block: a node of the chunk's graph and how the chunk's visits left it — the hub's
  * `ChunkSummary.graph_progress` entry. */
@@ -12,6 +12,28 @@ const KNOWN_STATES: ReadonlySet<string> = new Set(Object.values(hubApi.GraphProg
 /** A wire state folded for drawing: a known state passes through, anything else is `unknown`, so it never reads as `unvisited`. */
 export function blockState(state: string): BlockState {
   return KNOWN_STATES.has(state) ? (state as hubApi.GraphProgressState) : 'unknown';
+}
+
+/** The tone each block state draws in; `unvisited` has none and keeps the strip's dark resting block. The
+ * `spawning` and `needs` mappings are colour matches, not meaning matches: retuning either tone retunes the strip. */
+export const BLOCK_TONE: Record<BlockState, Tone | null> = {
+  passed: 'done',
+  failed: 'needs',
+  current: 'spawning',
+  unvisited: null,
+  unknown: 'idle',
+};
+
+/** A block's fill colour: its tone's, or null for the resting block. */
+export function blockFill(state: BlockState): string | null {
+  const tone = BLOCK_TONE[state];
+  return tone === null ? null : toneColor(tone);
+}
+
+/** A block's border colour: its tone's dim companion, or null for the resting block. */
+export function blockEdge(state: BlockState): string | null {
+  const tone = BLOCK_TONE[state];
+  return tone === null ? null : toneDimColor(tone);
 }
 
 /** Blocks per group — the strip breaks into tens, as a subscription's window blocks do. */

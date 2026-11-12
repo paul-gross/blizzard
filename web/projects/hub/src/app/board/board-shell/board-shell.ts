@@ -252,11 +252,14 @@ export class BoardShell {
     return (totals.get(columnKey) ?? 0) + (columnKey === 'needs' ? (totals.get('waiting') ?? 0) : 0);
   }
 
+  /** The all-time Done total, or null while the lane totals are unknown. */
+  protected readonly doneTotal = computed(() => this.laneTotals()?.get(DONE_LANE) ?? null);
+
   /** A column head's explanation — DONE's says what its window keeps, and its all-time total. */
   protected headTitleFor(columnKey: string): string | null {
     if (columnKey !== DONE_LANE) return null;
-    const total = this.laneTotals()?.get(DONE_LANE);
-    return this.donePolicy().explanation + (total === undefined ? '' : ` · ${total} all time`);
+    const total = this.doneTotal();
+    return this.donePolicy().explanation + (total === null ? '' : ` · ${total} all time`);
   }
 
   protected cardsFor(columnKey: string): readonly BoardCard[] {

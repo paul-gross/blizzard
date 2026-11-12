@@ -27,26 +27,11 @@
   min-width: 2px;
   height: 9px;
   box-sizing: border-box;
-  border: 1px solid var(--line);
-  background: #000;
-}
-.block[data-state='passed'] {
-  background: var(--green);
-  border-color: var(--green-dim);
-}
-.block[data-state='failed'] {
-  background: var(--red);
-  border-color: var(--red-dim);
-}
-/* A wire state this build does not know: idle grey, never the dark of a node never visited. */
-.block[data-state='unknown'] {
-  background: var(--label-dim);
-  border-color: var(--label-dim);
+  border: 1px solid var(--block-edge, var(--line));
+  background: var(--block-fill, #000);
 }
 /* The node the chunk stands on: the registry's overload cyan, on its pulse. */
 .block[data-state='current'] {
-  background: var(--cyan);
-  border-color: var(--cyan-dim);
   animation: node-strip-current 2s ease-in-out infinite;
 }
 @keyframes node-strip-current {
