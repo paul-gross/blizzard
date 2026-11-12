@@ -57,6 +57,7 @@ from blizzard.wire.egress import EgressBackfillFailure
 from blizzard.wire.flags import FlagOffProblem
 from blizzard.wire.graph import GraphValidationReport
 from blizzard.wire.host import HostNameTakenProblem, HostRetiredProblem
+from blizzard.wire.hub_settings import HubSettingsInvalidProblem
 from blizzard.wire.invariants import InvariantsInProgressProblem
 from blizzard.wire.problem import (
     HubStoreUnavailableProblem,
@@ -541,6 +542,11 @@ _OPERATOR_HUB_OPERATIONS = (
     ("DELETE", "/api/admin/hub-admins/{user_id}"),
     ("PUT", "/api/admin/hub-admins/{user_id}"),
     ("GET", "/api/admin/invariants"),
+    ("GET", "/api/admin/settings"),
+    ("PATCH", "/api/admin/settings"),
+    ("GET", "/api/admin/settings/changes"),
+    ("POST", "/api/admin/settings/apply"),
+    ("GET", "/api/admin/settings/export"),
     ("POST", "/api/admin/sweeps/{name}/passes"),
     ("GET", "/api/admin/tenants"),
     ("POST", "/api/admin/tenants"),
@@ -728,6 +734,17 @@ FEDERATION_DECLARATIONS = (
 # The hub administrator's invariant check, which the operator CLI calls.
 ADMIN_DECLARATIONS = (ProblemDeclaration("GET", "/api/admin/invariants", 409, InvariantsInProgressProblem),)
 
+HUB_SETTINGS_DECLARATIONS = (
+    ProblemDeclaration("PATCH", "/api/admin/settings", 409, RevisionConflictProblem),
+    ProblemDeclaration("PATCH", "/api/admin/settings", 422, HubSettingsInvalidProblem),
+    ProblemDeclaration("POST", "/api/admin/settings/apply", 422, HubSettingsInvalidProblem),
+    *(
+        ProblemDeclaration(method, path, 403, RunnerCredentialForbiddenProblem)
+        for method, path in _OPERATOR_HUB_OPERATIONS
+        if path.startswith("/api/admin/settings")
+    ),
+)
+
 # Operator refusals the hub CLI tells apart by type.
 OPERATOR_DECLARATIONS = (
     ProblemDeclaration("POST", "/api/secrets", 409, SecretAlreadyExistsProblem),
@@ -776,6 +793,7 @@ OPERATOR_DECLARATIONS = (
 )
 
 HUB_PROBLEM_DECLARATIONS = (
+    *HUB_SETTINGS_DECLARATIONS,
     *PROXY_RESOURCE_DECLARATIONS,
     *ROUTINE_RESOURCE_DECLARATIONS,
     *FLEET_DEPENDENCY_DECLARATIONS,

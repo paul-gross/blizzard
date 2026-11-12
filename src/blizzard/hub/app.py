@@ -50,6 +50,8 @@ from blizzard.foundation.web import Frontend, install_schema_components
 from blizzard.hub.api import problems
 from blizzard.hub.api.admin_events import router as admin_events_router
 from blizzard.hub.api.admin_invariants import router as admin_invariants_router
+from blizzard.hub.api.admin_settings import router as admin_settings_router
+from blizzard.hub.api.admin_settings import validation_problem as hub_settings_validation_problem
 from blizzard.hub.api.admin_tenants import router as admin_tenants_router
 from blizzard.hub.api.analytics import router as analytics_router
 from blizzard.hub.api.auth_login import router as auth_login_router
@@ -445,6 +447,13 @@ def _legacy_import_tenant(open_tenants: Mapping[TenantId, str], *, named: Tenant
 async def _validation_error(request: Request, exc: Exception) -> JSONResponse:
     """The framework's 422, unless :func:`sanitized_validation_response` answers instead."""
     assert isinstance(exc, RequestValidationError)
+    if (request.method, request.url.path) in {
+        ("PATCH", "/api/admin/settings"),
+        ("POST", "/api/admin/settings/apply"),
+    }:
+        response = declared_problem_response(request, hub_settings_validation_problem(instance=request.url.path))
+        assert response is not None
+        return response
     if request.url.path == "/api/admin/clock":
         detail = [{"loc": list(e["loc"]), "msg": e["msg"], "type": e["type"]} for e in exc.errors()]
         return JSONResponse(status_code=422, content={"detail": detail})
@@ -579,6 +588,7 @@ def create_app(
     app.include_router(egress_router)
     app.include_router(admin_tenants_router)
     app.include_router(admin_events_router)
+    app.include_router(admin_settings_router)
     app.include_router(admin_invariants_router)
     app.include_router(sweeps_router)
     app.include_router(admin_sweeps_router)

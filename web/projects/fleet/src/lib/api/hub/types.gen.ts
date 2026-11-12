@@ -9357,6 +9357,163 @@ export type HubEventView = {
 };
 
 /**
+ * HubSettingRow
+ */
+export type HubSettingRow = {
+    /**
+     * Key
+     */
+    key: string;
+    /**
+     * Lifetime
+     */
+    lifetime: string;
+    /**
+     * Revision
+     */
+    revision: number | null;
+    /**
+     * Source
+     */
+    source: string;
+    /**
+     * Value
+     */
+    value: unknown;
+    /**
+     * Written At
+     */
+    written_at: string | null;
+    /**
+     * Written By
+     */
+    written_by: string | null;
+};
+
+/**
+ * HubSettingsChange
+ */
+export type HubSettingsChange = {
+    /**
+     * Actor
+     */
+    actor: string;
+    /**
+     * Apply Id
+     */
+    apply_id: string | null;
+    /**
+     * Diff
+     */
+    diff: Array<{
+        [key: string]: unknown;
+    }>;
+    /**
+     * Door
+     */
+    door: string;
+    /**
+     * Id
+     */
+    id: number;
+    /**
+     * Op
+     */
+    op: string;
+    /**
+     * Recorded At
+     */
+    recorded_at: string;
+    /**
+     * Revision
+     */
+    revision: number;
+};
+
+/**
+ * HubSettingsChanges
+ */
+export type HubSettingsChanges = {
+    /**
+     * Changes
+     */
+    changes: Array<HubSettingsChange>;
+    /**
+     * Next Before
+     */
+    next_before: number | null;
+};
+
+/**
+ * HubSettingsInvalidProblem
+ *
+ * An unrecognized, non-live, contradictory or invalid settings write.
+ */
+export type HubSettingsInvalidProblem = {
+    /**
+     * Code
+     */
+    code: string;
+    /**
+     * Detail
+     */
+    detail: string;
+    /**
+     * Errors
+     */
+    errors: {
+        [key: string]: string;
+    };
+    /**
+     * Instance
+     */
+    instance: string;
+    /**
+     * Status
+     */
+    status?: number;
+    /**
+     * Title
+     */
+    title: string;
+    /**
+     * Type
+     */
+    type: string;
+    [key: string]: unknown;
+};
+
+/**
+ * HubSettingsView
+ */
+export type HubSettingsView = {
+    /**
+     * Revision
+     */
+    revision: number;
+    /**
+     * Settings
+     */
+    settings: Array<HubSettingRow>;
+};
+
+/**
+ * HubSettingsWrite
+ */
+export type HubSettingsWrite = {
+    /**
+     * Set
+     */
+    set?: {
+        [key: string]: unknown;
+    };
+    /**
+     * Unset
+     */
+    unset?: Array<string>;
+};
+
+/**
  * HubStoreUnavailableProblem
  *
  * The hub has no wired store available to service the request.
@@ -11302,7 +11459,8 @@ export const Permission = {
     TENANT_ADMIN: 'tenant:admin',
     MEMBERSHIP_GRANT_ANY: 'membership:grant-any',
     HUB_ADMIN_GRANT: 'hub-admin:grant',
-    EXPORT_ADMIN: 'export:admin'
+    EXPORT_ADMIN: 'export:admin',
+    SETTINGS_ADMIN: 'settings:admin'
 } as const;
 
 /**
@@ -19670,6 +19828,220 @@ export type HubInvariantsApiAdminInvariantsGetResponses = {
 };
 
 export type HubInvariantsApiAdminInvariantsGetResponse = HubInvariantsApiAdminInvariantsGetResponses[keyof HubInvariantsApiAdminInvariantsGetResponses];
+
+export type GetSettingsApiAdminSettingsGetData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/admin/settings';
+};
+
+export type GetSettingsApiAdminSettingsGetErrors = {
+    /**
+     * Problem
+     */
+    401: AuthenticationRequiredProblem;
+    /**
+     * Problem
+     */
+    403: RunnerCredentialForbiddenProblem | PermissionRequiredProblem;
+    /**
+     * Problem
+     */
+    503: HubStoreUnavailableProblem;
+};
+
+export type GetSettingsApiAdminSettingsGetError = GetSettingsApiAdminSettingsGetErrors[keyof GetSettingsApiAdminSettingsGetErrors];
+
+export type GetSettingsApiAdminSettingsGetResponses = {
+    /**
+     * Successful Response
+     */
+    200: HubSettingsView;
+};
+
+export type GetSettingsApiAdminSettingsGetResponse = GetSettingsApiAdminSettingsGetResponses[keyof GetSettingsApiAdminSettingsGetResponses];
+
+export type PatchSettingsApiAdminSettingsPatchData = {
+    body: HubSettingsWrite;
+    headers?: {
+        /**
+         * If-Match
+         */
+        'if-match'?: number | null;
+        /**
+         * X-Blizzard-Door
+         */
+        'x-blizzard-door'?: string | null;
+    };
+    path?: never;
+    query?: never;
+    url: '/api/admin/settings';
+};
+
+export type PatchSettingsApiAdminSettingsPatchErrors = {
+    /**
+     * Problem
+     */
+    401: AuthenticationRequiredProblem;
+    /**
+     * Problem
+     */
+    403: RunnerCredentialForbiddenProblem | PermissionRequiredProblem;
+    /**
+     * Problem
+     */
+    409: RevisionConflictProblem;
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+    /**
+     * Problem
+     */
+    503: HubStoreUnavailableProblem;
+};
+
+export type PatchSettingsApiAdminSettingsPatchError = PatchSettingsApiAdminSettingsPatchErrors[keyof PatchSettingsApiAdminSettingsPatchErrors];
+
+export type PatchSettingsApiAdminSettingsPatchResponses = {
+    /**
+     * Successful Response
+     */
+    200: HubSettingsView;
+};
+
+export type PatchSettingsApiAdminSettingsPatchResponse = PatchSettingsApiAdminSettingsPatchResponses[keyof PatchSettingsApiAdminSettingsPatchResponses];
+
+export type ApplyDocumentApiAdminSettingsApplyPostData = {
+    /**
+     * Document
+     */
+    body: {
+        [key: string]: unknown;
+    };
+    path?: never;
+    query?: {
+        /**
+         * Dry Run
+         */
+        dry_run?: boolean;
+    };
+    url: '/api/admin/settings/apply';
+};
+
+export type ApplyDocumentApiAdminSettingsApplyPostErrors = {
+    /**
+     * Problem
+     */
+    401: AuthenticationRequiredProblem;
+    /**
+     * Problem
+     */
+    403: RunnerCredentialForbiddenProblem | PermissionRequiredProblem;
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+    /**
+     * Problem
+     */
+    503: HubStoreUnavailableProblem;
+};
+
+export type ApplyDocumentApiAdminSettingsApplyPostError = ApplyDocumentApiAdminSettingsApplyPostErrors[keyof ApplyDocumentApiAdminSettingsApplyPostErrors];
+
+export type ApplyDocumentApiAdminSettingsApplyPostResponses = {
+    /**
+     * Successful Response
+     */
+    200: ConfigApplyResponse;
+};
+
+export type ApplyDocumentApiAdminSettingsApplyPostResponse = ApplyDocumentApiAdminSettingsApplyPostResponses[keyof ApplyDocumentApiAdminSettingsApplyPostResponses];
+
+export type ChangesApiAdminSettingsChangesGetData = {
+    body?: never;
+    path?: never;
+    query?: {
+        /**
+         * Limit
+         */
+        limit?: number;
+        /**
+         * Before
+         */
+        before?: number | null;
+    };
+    url: '/api/admin/settings/changes';
+};
+
+export type ChangesApiAdminSettingsChangesGetErrors = {
+    /**
+     * Problem
+     */
+    401: AuthenticationRequiredProblem;
+    /**
+     * Problem
+     */
+    403: RunnerCredentialForbiddenProblem | PermissionRequiredProblem;
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+    /**
+     * Problem
+     */
+    503: HubStoreUnavailableProblem;
+};
+
+export type ChangesApiAdminSettingsChangesGetError = ChangesApiAdminSettingsChangesGetErrors[keyof ChangesApiAdminSettingsChangesGetErrors];
+
+export type ChangesApiAdminSettingsChangesGetResponses = {
+    /**
+     * Successful Response
+     */
+    200: HubSettingsChanges;
+};
+
+export type ChangesApiAdminSettingsChangesGetResponse = ChangesApiAdminSettingsChangesGetResponses[keyof ChangesApiAdminSettingsChangesGetResponses];
+
+export type ExportDocumentApiAdminSettingsExportGetData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/admin/settings/export';
+};
+
+export type ExportDocumentApiAdminSettingsExportGetErrors = {
+    /**
+     * Problem
+     */
+    401: AuthenticationRequiredProblem;
+    /**
+     * Problem
+     */
+    403: RunnerCredentialForbiddenProblem | PermissionRequiredProblem;
+    /**
+     * Problem
+     */
+    503: HubStoreUnavailableProblem;
+};
+
+export type ExportDocumentApiAdminSettingsExportGetError = ExportDocumentApiAdminSettingsExportGetErrors[keyof ExportDocumentApiAdminSettingsExportGetErrors];
+
+export type ExportDocumentApiAdminSettingsExportGetResponses = {
+    /**
+     * Response Export Document Api Admin Settings Export Get
+     *
+     * Successful Response
+     */
+    200: {
+        [key: string]: unknown;
+    };
+};
+
+export type ExportDocumentApiAdminSettingsExportGetResponse = ExportDocumentApiAdminSettingsExportGetResponses[keyof ExportDocumentApiAdminSettingsExportGetResponses];
 
 export type RunEveryTenantPassApiAdminSweepsNamePassesPostData = {
     body?: never;

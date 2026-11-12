@@ -12,6 +12,9 @@ export interface HubOperations {
   'GET /api/admin/events': { path: T.HubEventsApiAdminEventsGetData['path']; responses: T.HubEventsApiAdminEventsGetResponses; errors: T.HubEventsApiAdminEventsGetErrors };
   'GET /api/admin/hub-admins': { path: T.ListHubAdminsApiAdminHubAdminsGetData['path']; responses: T.ListHubAdminsApiAdminHubAdminsGetResponses; errors: T.ListHubAdminsApiAdminHubAdminsGetErrors };
   'GET /api/admin/invariants': { path: T.HubInvariantsApiAdminInvariantsGetData['path']; responses: T.HubInvariantsApiAdminInvariantsGetResponses; errors: T.HubInvariantsApiAdminInvariantsGetErrors };
+  'GET /api/admin/settings': { path: T.GetSettingsApiAdminSettingsGetData['path']; responses: T.GetSettingsApiAdminSettingsGetResponses; errors: T.GetSettingsApiAdminSettingsGetErrors };
+  'GET /api/admin/settings/changes': { path: T.ChangesApiAdminSettingsChangesGetData['path']; responses: T.ChangesApiAdminSettingsChangesGetResponses; errors: T.ChangesApiAdminSettingsChangesGetErrors };
+  'GET /api/admin/settings/export': { path: T.ExportDocumentApiAdminSettingsExportGetData['path']; responses: T.ExportDocumentApiAdminSettingsExportGetResponses; errors: T.ExportDocumentApiAdminSettingsExportGetErrors };
   'GET /api/admin/tenants': { path: T.ListTenantsApiAdminTenantsGetData['path']; responses: T.ListTenantsApiAdminTenantsGetResponses; errors: T.ListTenantsApiAdminTenantsGetErrors };
   'GET /api/analytics/counts/agent-types': { path: T.CountsByAgentTypeApiAnalyticsCountsAgentTypesGetData['path']; responses: T.CountsByAgentTypeApiAnalyticsCountsAgentTypesGetResponses; errors: T.CountsByAgentTypeApiAnalyticsCountsAgentTypesGetErrors };
   'GET /api/analytics/counts/files': { path: T.CountsByFileApiAnalyticsCountsFilesGetData['path']; responses: T.CountsByFileApiAnalyticsCountsFilesGetResponses; errors: T.CountsByFileApiAnalyticsCountsFilesGetErrors };
@@ -151,6 +154,7 @@ export interface HubOperations {
   'GET /api/work-sources/{source}': { path: T.GetWorkSourceApiWorkSourcesSourceGetData['path']; responses: T.GetWorkSourceApiWorkSourcesSourceGetResponses; errors: T.GetWorkSourceApiWorkSourcesSourceGetErrors };
   'GET /api/work-sources/{source}/items': { path: T.ListWorkItemsApiWorkSourcesSourceItemsGetData['path']; responses: T.ListWorkItemsApiWorkSourcesSourceItemsGetResponses; errors: T.ListWorkItemsApiWorkSourcesSourceItemsGetErrors };
   'GET /api/work-sources/{source}/items/{ref}': { path: T.GetWorkItemApiWorkSourcesSourceItemsRefGetData['path']; responses: T.GetWorkItemApiWorkSourcesSourceItemsRefGetResponses; errors: T.GetWorkItemApiWorkSourcesSourceItemsRefGetErrors };
+  'PATCH /api/admin/settings': { path: T.PatchSettingsApiAdminSettingsPatchData['path']; responses: T.PatchSettingsApiAdminSettingsPatchResponses; errors: T.PatchSettingsApiAdminSettingsPatchErrors };
   'PATCH /api/admin/tenants/{tenant_id}': { path: T.RenameTenantApiAdminTenantsTenantIdPatchData['path']; responses: T.RenameTenantApiAdminTenantsTenantIdPatchResponses; errors: T.RenameTenantApiAdminTenantsTenantIdPatchErrors };
   'PATCH /api/cadences/{cadence_id}': { path: T.EditCadenceApiCadencesCadenceIdPatchData['path']; responses: T.EditCadenceApiCadencesCadenceIdPatchResponses; errors: T.EditCadenceApiCadencesCadenceIdPatchErrors };
   'PATCH /api/chunks/{chunk_id}': { path: T.PatchChunkApiChunksChunkIdPatchData['path']; responses: T.PatchChunkApiChunksChunkIdPatchResponses; errors: T.PatchChunkApiChunksChunkIdPatchErrors };
@@ -168,6 +172,7 @@ export interface HubOperations {
   'PATCH /api/work-sources/{source}': { path: T.PatchWorkSourceApiWorkSourcesSourcePatchData['path']; responses: T.PatchWorkSourceApiWorkSourcesSourcePatchResponses; errors: T.PatchWorkSourceApiWorkSourcesSourcePatchErrors };
   'PATCH /api/work-sources/{source}/items/{ref}': { path: T.PatchWorkItemApiWorkSourcesSourceItemsRefPatchData['path']; responses: T.PatchWorkItemApiWorkSourcesSourceItemsRefPatchResponses; errors: T.PatchWorkItemApiWorkSourcesSourceItemsRefPatchErrors };
   'POST /api/admin/graphs/sync': { path: T.SyncEveryTenantApiAdminGraphsSyncPostData['path']; responses: T.SyncEveryTenantApiAdminGraphsSyncPostResponses; errors: T.SyncEveryTenantApiAdminGraphsSyncPostErrors };
+  'POST /api/admin/settings/apply': { path: T.ApplyDocumentApiAdminSettingsApplyPostData['path']; responses: T.ApplyDocumentApiAdminSettingsApplyPostResponses; errors: T.ApplyDocumentApiAdminSettingsApplyPostErrors };
   'POST /api/admin/sweeps/{name}/passes': { path: T.RunEveryTenantPassApiAdminSweepsNamePassesPostData['path']; responses: T.RunEveryTenantPassApiAdminSweepsNamePassesPostResponses; errors: T.RunEveryTenantPassApiAdminSweepsNamePassesPostErrors };
   'POST /api/admin/tenants': { path: T.CreateTenantApiAdminTenantsPostData['path']; responses: T.CreateTenantApiAdminTenantsPostResponses; errors: T.CreateTenantApiAdminTenantsPostErrors };
   'POST /api/analytics/re-derive': { path: T.ReDeriveApiAnalyticsReDerivePostData['path']; responses: T.ReDeriveApiAnalyticsReDerivePostResponses; errors: T.ReDeriveApiAnalyticsReDerivePostErrors };

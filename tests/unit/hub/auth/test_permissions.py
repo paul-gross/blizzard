@@ -145,12 +145,13 @@ def test_config_edit_is_admin_and_above() -> None:
         assert Permission.CONFIG_EDIT not in expand(role)
 
 
-def test_hub_permissions_are_the_four_hub_level_grants() -> None:
+def test_hub_permissions_are_the_hub_level_grants() -> None:
     assert {
         Permission.TENANT_ADMIN,
         Permission.MEMBERSHIP_GRANT_ANY,
         Permission.HUB_ADMIN_GRANT,
         Permission.EXPORT_ADMIN,
+        Permission.SETTINGS_ADMIN,
     } == HUB_PERMISSIONS
 
 

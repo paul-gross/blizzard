@@ -643,13 +643,21 @@ class HubConfig:
         return f"sqlite:///{(root / DATA_DIRNAME / STORE_FILENAME).resolve()}"
 
     @staticmethod
+    def decode_text(text: str, *, what: str) -> dict[str, object]:
+        """Decode hub TOML, naming the document or value when it is malformed."""
+        try:
+            return tomllib.loads(text)
+        except tomllib.TOMLDecodeError as exc:
+            raise ConfigError(f"{what} is not valid TOML: {exc}") from exc
+
+    @staticmethod
     def read_document(root: Path) -> dict[str, object]:
         """Decode the runtime file once, refusing an uninitialized root."""
         root = root.resolve()
         path = root / CONFIG_FILENAME
         if not path.exists():
             raise ConfigError(f"{root} is not an initialized hub runtime (run `blizzard hub init {root}`)")
-        return tomllib.loads(path.read_text())
+        return HubConfig.decode_text(path.read_text(), what=str(path))
 
     @classmethod
     def scaffold(cls, root: Path) -> HubConfig:

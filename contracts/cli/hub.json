@@ -116,6 +116,283 @@
           ],
           "path": "hub admin revoke",
           "short_help": "Revoke USER_ID's hub administrator role; the hub's last one keeps theirs."
+        },
+        "settings": {
+          "aliases": [
+            "show",
+            "read"
+          ],
+          "commands": {
+            "apply": {
+              "help": "Apply a TOML settings document FILE.",
+              "params": [
+                {
+                  "hidden": false,
+                  "kind": "argument",
+                  "name": "file",
+                  "opts": [
+                    "file"
+                  ],
+                  "required": true,
+                  "secondary_opts": [],
+                  "type": "file"
+                },
+                {
+                  "help": "Show what would change and write nothing.",
+                  "hidden": false,
+                  "kind": "option",
+                  "name": "dry_run",
+                  "opts": [
+                    "--dry-run"
+                  ],
+                  "required": false,
+                  "secondary_opts": [],
+                  "type": "boolean"
+                },
+                {
+                  "help": "Print the raw response body as JSON.",
+                  "hidden": false,
+                  "kind": "option",
+                  "name": "as_json",
+                  "opts": [
+                    "--json"
+                  ],
+                  "required": false,
+                  "secondary_opts": [],
+                  "type": "boolean"
+                },
+                {
+                  "help": "Hub API base URL (default $BZ_HUB_URL or http://127.0.0.1:8421).",
+                  "hidden": false,
+                  "kind": "option",
+                  "name": "hub_url",
+                  "opts": [
+                    "--hub-url"
+                  ],
+                  "required": false,
+                  "secondary_opts": [],
+                  "type": "text"
+                }
+              ],
+              "path": "hub admin settings apply",
+              "short_help": "Apply a TOML settings document FILE."
+            },
+            "changes": {
+              "help": "List settings changes, newest first.",
+              "params": [
+                {
+                  "help": "Print every change rather than the newest page.",
+                  "hidden": false,
+                  "kind": "option",
+                  "name": "everything",
+                  "opts": [
+                    "--all"
+                  ],
+                  "required": false,
+                  "secondary_opts": [],
+                  "type": "boolean"
+                },
+                {
+                  "help": "Print the raw response body as JSON.",
+                  "hidden": false,
+                  "kind": "option",
+                  "name": "as_json",
+                  "opts": [
+                    "--json"
+                  ],
+                  "required": false,
+                  "secondary_opts": [],
+                  "type": "boolean"
+                },
+                {
+                  "help": "Hub API base URL (default $BZ_HUB_URL or http://127.0.0.1:8421).",
+                  "hidden": false,
+                  "kind": "option",
+                  "name": "hub_url",
+                  "opts": [
+                    "--hub-url"
+                  ],
+                  "required": false,
+                  "secondary_opts": [],
+                  "type": "text"
+                }
+              ],
+              "path": "hub admin settings changes",
+              "short_help": "List settings changes, newest first."
+            },
+            "export": {
+              "help": "Export the settings document as TOML (or JSON with --json).",
+              "params": [
+                {
+                  "help": "Print the raw response body as JSON.",
+                  "hidden": false,
+                  "kind": "option",
+                  "name": "as_json",
+                  "opts": [
+                    "--json"
+                  ],
+                  "required": false,
+                  "secondary_opts": [],
+                  "type": "boolean"
+                },
+                {
+                  "help": "Hub API base URL (default $BZ_HUB_URL or http://127.0.0.1:8421).",
+                  "hidden": false,
+                  "kind": "option",
+                  "name": "hub_url",
+                  "opts": [
+                    "--hub-url"
+                  ],
+                  "required": false,
+                  "secondary_opts": [],
+                  "type": "text"
+                }
+              ],
+              "path": "hub admin settings export",
+              "short_help": "Export the settings document as TOML (or JSON with --json)."
+            },
+            "get": {
+              "help": "Show all settings, or the row for KEY.",
+              "params": [
+                {
+                  "hidden": false,
+                  "kind": "argument",
+                  "name": "key",
+                  "opts": [
+                    "key"
+                  ],
+                  "required": false,
+                  "secondary_opts": [],
+                  "type": "text"
+                },
+                {
+                  "help": "Print the raw response body as JSON.",
+                  "hidden": false,
+                  "kind": "option",
+                  "name": "as_json",
+                  "opts": [
+                    "--json"
+                  ],
+                  "required": false,
+                  "secondary_opts": [],
+                  "type": "boolean"
+                },
+                {
+                  "help": "Hub API base URL (default $BZ_HUB_URL or http://127.0.0.1:8421).",
+                  "hidden": false,
+                  "kind": "option",
+                  "name": "hub_url",
+                  "opts": [
+                    "--hub-url"
+                  ],
+                  "required": false,
+                  "secondary_opts": [],
+                  "type": "text"
+                }
+              ],
+              "path": "hub admin settings get",
+              "short_help": "Show all settings, or the row for KEY."
+            },
+            "set": {
+              "help": "Set KEY to VALUE, a TOML value.",
+              "params": [
+                {
+                  "hidden": false,
+                  "kind": "argument",
+                  "name": "key",
+                  "opts": [
+                    "key"
+                  ],
+                  "required": true,
+                  "secondary_opts": [],
+                  "type": "text"
+                },
+                {
+                  "hidden": false,
+                  "kind": "argument",
+                  "name": "value",
+                  "opts": [
+                    "value"
+                  ],
+                  "required": true,
+                  "secondary_opts": [],
+                  "type": "text"
+                },
+                {
+                  "help": "Print the raw response body as JSON.",
+                  "hidden": false,
+                  "kind": "option",
+                  "name": "as_json",
+                  "opts": [
+                    "--json"
+                  ],
+                  "required": false,
+                  "secondary_opts": [],
+                  "type": "boolean"
+                },
+                {
+                  "help": "Hub API base URL (default $BZ_HUB_URL or http://127.0.0.1:8421).",
+                  "hidden": false,
+                  "kind": "option",
+                  "name": "hub_url",
+                  "opts": [
+                    "--hub-url"
+                  ],
+                  "required": false,
+                  "secondary_opts": [],
+                  "type": "text"
+                }
+              ],
+              "path": "hub admin settings set",
+              "short_help": "Set KEY to VALUE, a TOML value."
+            },
+            "unset": {
+              "help": "Return KEY to its default.",
+              "params": [
+                {
+                  "hidden": false,
+                  "kind": "argument",
+                  "name": "key",
+                  "opts": [
+                    "key"
+                  ],
+                  "required": true,
+                  "secondary_opts": [],
+                  "type": "text"
+                },
+                {
+                  "help": "Print the raw response body as JSON.",
+                  "hidden": false,
+                  "kind": "option",
+                  "name": "as_json",
+                  "opts": [
+                    "--json"
+                  ],
+                  "required": false,
+                  "secondary_opts": [],
+                  "type": "boolean"
+                },
+                {
+                  "help": "Hub API base URL (default $BZ_HUB_URL or http://127.0.0.1:8421).",
+                  "hidden": false,
+                  "kind": "option",
+                  "name": "hub_url",
+                  "opts": [
+                    "--hub-url"
+                  ],
+                  "required": false,
+                  "secondary_opts": [],
+                  "type": "text"
+                }
+              ],
+              "path": "hub admin settings unset",
+              "short_help": "Return KEY to its default."
+            }
+          },
+          "help": "Show or edit the hub's operational settings.",
+          "params": [],
+          "path": "hub admin settings",
+          "short_help": "Show or edit the hub's operational settings."
         }
       },
       "help": "Manage the hub's administrators, who create and delete tenants and can grant anyone into one.",
