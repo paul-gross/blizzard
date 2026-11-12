@@ -128,10 +128,10 @@ function detail(): HostDetailVm {
 
 async function render() {
   const queryClient = new QueryClient({ defaultOptions: { queries: { staleTime: Infinity, retry: false } } });
-  const entry = { chunk_id: 'ch_01KXKVVF1J3D6H6VYZ3XYNNEXT', graph_id: 'gr_1', position: 2, project_id: 'p', project_name: 'Blizzard', project_slug: 'blizzard', urgency: null };
+  const entry = { chunk_id: 'ch_01KXKVVF1J3D6H6VYZ3XYNNEXT', graph_id: 'gr_1', position: 2, project_id: 'p', project_name: 'Blizzard', project_slug: 'blizzard', urgency: { urgency_id: 'urgent', slug: 'urgent' } };
   const blocked = { ...entry, chunk_id: 'ch_01KXKVVF1J3D6H6VYZ3XYNPASS', reason: 'blocked', prerequisite: 'ch_01KXKVVF1J3D6H6VYZ3XYNPREQ', prerequisite_count: 2 };
   queryClient.setQueryData([...hubRunnerNextClaimKey, ROW.runner_id], { next: entry, passed: [blocked], passed_total: 22, held_at: [blocked], if_holding: null, unserved: 2 });
-  queryClient.setQueryData(hubUrgenciesKey, []);
+  queryClient.setQueryData(hubUrgenciesKey, [{ urgency_id: 'urgent', slug: 'urgent', name: 'Urgent', color: 'red', emoji: '🔥', default: false }]);
   queryClient.setQueryData(hubChunkKey(blocked.prerequisite), { chunk_id: blocked.prerequisite, status: 'running' });
   await TestBed.configureTestingModule({
     imports: [HostDetail],
@@ -145,6 +145,33 @@ async function render() {
 }
 
 describe('host detail at phone width shell sweep (web:shell-sweep)', () => {
+  it.each([1280, 390, 320])('separates the Next project and urgency without overflow at %ipx', async (width) => {
+    await page.viewport(width, 900);
+    await loadDesignTokens();
+    const fixture = await render();
+    const root = fixture.nativeElement as HTMLElement;
+    document.body.appendChild(root);
+    try {
+      await fixture.whenStable();
+      const next = root.querySelector<HTMLElement>('[data-testid="runner-next-claim"]')!;
+      const project = next.querySelector<HTMLElement>('[data-testid="runner-next-project"]')!;
+      const pill = next.querySelector<HTMLElement>('fleet-kit-urgency-pill .pill')!;
+      expect(project.textContent).toContain('Blizzard');
+      expect(pill.getAttribute('aria-label')).toBe('Urgent');
+      const projectBox = project.getBoundingClientRect();
+      const pillBox = pill.getBoundingClientRect();
+      if (pillBox.top < projectBox.bottom) {
+        expect(pillBox.left - projectBox.right).toBeGreaterThanOrEqual(4);
+      } else {
+        expect(pillBox.top).toBeGreaterThanOrEqual(projectBox.bottom);
+      }
+      expect(next.scrollWidth).toBeLessThanOrEqual(next.clientWidth);
+      expect(root.scrollWidth).toBeLessThanOrEqual(root.clientWidth);
+    } finally {
+      root.remove();
+      fixture.destroy();
+    }
+  });
   it.each([390, 320])('stacks every section inside the column with no horizontal overflow at %ipx', async (width) => {
     await loadDesignTokens();
     const fixture = await render();

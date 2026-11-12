@@ -4,7 +4,7 @@
     @if (data(); as result) {
       @if (result.next; as entry) {
         <a data-testid="runner-next-link" [routerLink]="['/board', 'chunk', entry.chunk_id] | lensLink" [title]="entry.chunk_id">{{ compact(entry.chunk_id) }}</a>
-        @if (entry.project_name) { <span> · {{ entry.project_name }}</span> }
+        @if (entry.project_name) { <span data-testid="runner-next-project"> · {{ entry.project_name }}</span> }
         <ng-container [ngTemplateOutlet]="urgencyDisplay" [ngTemplateOutletContext]="{ $implicit: entry.urgency }" />
       } @else { <span data-testid="runner-next-none">Nothing claimable</span> }
       @if (result.unserved > 0) { <div>{{ result.unserved }} ahead from unserved projects</div> }
