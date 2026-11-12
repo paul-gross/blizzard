@@ -57,7 +57,9 @@ def _ctx(
     return ctx, source, store
 
 
-def _open_segment(ctx: LoopContext, chunk_id: str, session: str, *, held: bool, bind: bool = True) -> str:
+def _open_segment(
+    ctx: LoopContext, chunk_id: str, session: str, *, held: bool, bind: bool = True, spawn_cwd: str | None = None
+) -> str:
     n = chunk_id.removeprefix("ch_")
     if bind:
         ctx.stores.environments.record_binding(
@@ -83,7 +85,7 @@ def _open_segment(ctx: LoopContext, chunk_id: str, session: str, *, held: bool, 
         process_start_time="1",
         session=SessionReference(CLAUDE_CODE_HARNESS_ID, session),
         spawned_at=_NOW,
-        spawn_cwd="/ws",
+        spawn_cwd=spawn_cwd,
     )
     if bind and not held:
         ctx.stores.environments.record_release(chunk_id=chunk_id, environment_id=f"env-{n}", released_at=_NOW)
@@ -170,7 +172,7 @@ def test_run_rows_read_from_bindings_are_flat_as_unrelated_held_bindings_grow() 
     assert measured[0] == measured[1]
 
 
-def test_each_chunk_reads_in_the_directory_its_binding_names() -> None:
+def test_a_segment_without_a_frozen_cwd_reads_in_the_directory_its_binding_names() -> None:
     ctx, source, _store = _ctx(["sess-held", "sess-released", "sess-unbound"])
     _open_segment(ctx, "ch_1", "sess-held", held=True)
     _open_segment(ctx, "ch_2", "sess-released", held=False)
@@ -180,3 +182,14 @@ def test_each_chunk_reads_in_the_directory_its_binding_names() -> None:
     assert cwds["sess-held"] == "/ws/1"
     assert cwds["sess-released"] != "/ws/2"  # a released chunk never reads in its released workdir
     assert len(cwds) == 3
+
+
+def test_a_segment_with_a_frozen_spawn_cwd_reads_in_that_directory() -> None:
+    ctx, source, _store = _ctx(["sess-held", "sess-released"])
+    _open_segment(ctx, "ch_1", "sess-held", held=True, spawn_cwd="/frozen/1")
+    _open_segment(ctx, "ch_2", "sess-released", held=False, spawn_cwd="/frozen/2")
+    TranscriptPump(ctx).run()
+    assert {session: cwd for session, cwd, _ in source.turns_since_calls} == {
+        "sess-held": "/frozen/1",
+        "sess-released": "/frozen/2",
+    }

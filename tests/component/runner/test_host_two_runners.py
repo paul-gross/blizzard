@@ -20,8 +20,10 @@ from blizzard.foundation.platform_tracing.handle import build_platform_tracing
 from blizzard.foundation.tokens import TokenHash
 from blizzard.foundation.trace_ids import StepKey, trace_id
 from blizzard.runner.app import build_hosted_app
-from blizzard.runner.cli.runtime import _reconcile_host_scratch  # pyright: ignore[reportPrivateUsage]
-from blizzard.runner.cli.scratch_binding import reconcile_scratch_roots
+from blizzard.runner.cli.runtime import (
+    _reconcile_host_scratch,  # pyright: ignore[reportPrivateUsage]
+    reconcile_scratch_roots,
+)
 from blizzard.runner.composition import HostProcess, RunnerProcess, build_host_process
 from blizzard.runner.config import RunnerConfig
 from blizzard.runner.host_config import BuiltRunner, ResolvedToken

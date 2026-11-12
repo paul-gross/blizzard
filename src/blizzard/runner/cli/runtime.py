@@ -7,7 +7,7 @@ import os
 import signal
 import socket
 import types
-from collections.abc import Callable, Generator, Sequence
+from collections.abc import Callable, Generator, Mapping, Sequence
 from contextlib import AbstractContextManager, contextmanager
 from dataclasses import dataclass, replace
 from functools import partial
@@ -49,7 +49,6 @@ from blizzard.runner.app import HostedApp, build_hosted_app
 from blizzard.runner.cli.daemon import Door, RunnerDaemon, daemon_holding, runner_option
 from blizzard.runner.cli.directory import load_host
 from blizzard.runner.cli.env import DEFAULT_DIR, ENV_RUNNER_DIR
-from blizzard.runner.cli.scratch_binding import reconcile_scratch_roots
 from blizzard.runner.cli.store import runtime_of
 from blizzard.runner.cli.store_guard import named_runners, store_write_guard
 from blizzard.runner.composition import (
@@ -78,7 +77,13 @@ from blizzard.runner.host_config import (
     TokenSource,
 )
 from blizzard.runner.host_file import write_runner_id
-from blizzard.runner.host_layout import HOST_CONFIG_FILENAME, WORKER_SCRATCH_DIRNAME, HostLayout
+from blizzard.runner.host_layout import (
+    DATA_DIRNAME,
+    HOST_CONFIG_FILENAME,
+    LEGACY_WORKER_SCRATCH_DIRNAME,
+    WORKER_SCRATCH_DIRNAME,
+    HostLayout,
+)
 from blizzard.runner.hub.bootstrap import (
     BootstrapStop,
     BootstrapStopped,
@@ -117,6 +122,7 @@ from blizzard.runner.hub.host_bootstrap import (
 from blizzard.runner.hub.identity import judged
 from blizzard.runner.hub.internal.http_hub import HttpHostHubClient, HttpHubClient, HttpHubRunnerAdmin
 from blizzard.runner.hub.internal.token_file import HubTokenFile
+from blizzard.runner.leases.record import IReadLeaseRecordRepository
 from blizzard.runner.lifecycle.identity_check import (
     ForeignStoreKind,
     foreign_store,
@@ -128,8 +134,11 @@ from blizzard.runner.loop.mode import LoopMode
 from blizzard.runner.loop.periodic_pass_driver import PeriodicPassDriver
 from blizzard.runner.loop.step_passes import HostPassStepper
 from blizzard.runner.loop_wiring import LoopWiring, PeriodicDriver, RunnerStepper, host_pass_stepper
+from blizzard.runner.process.internal.scratch_binding_files import ScratchBindingFiles
 from blizzard.runner.process.internal.subprocess_child_processes import SubprocessChildProcesses
 from blizzard.runner.process.internal.worker_scratch_dirs import WorkerScratchDirs
+from blizzard.runner.process.scratch_binding import RunnerScratchLeases, ScratchSweeperFactory, bind_scratch_root
+from blizzard.runner.process.scratch_cleanup import ClosedLeaseLookup
 from blizzard.runner.runtime import (
     StoreResetRefused,
     ensure_current_revision,
@@ -1277,6 +1286,36 @@ def _pass_drivers(runner: RunnerProcess, stepper: RunnerStepper) -> list[Periodi
             )
         )
     return drivers
+
+
+class ScratchLeaseRepository(IReadLeaseRecordRepository, ClosedLeaseLookup, Protocol):
+    pass
+
+
+def reconcile_scratch_roots(
+    host_root: Path,
+    root: Path,
+    runners: Mapping[str, ScratchLeaseRepository],
+    *,
+    scratch_factory: ScratchSweeperFactory,
+) -> None:
+    """Bind and reconcile once, before any runner on this host can spawn.
+
+    Each repository is already bound to its runner, including runners that could
+    not be built. The caller holds the host lock, so reading the active leases
+    before the root is prepared is safe.
+    """
+    leases = {
+        runner_id: RunnerScratchLeases({lease.lease_id for lease in repo.list_active_leases()}, repo)
+        for runner_id, repo in runners.items()
+    }
+    bind_scratch_root(
+        ScratchBindingFiles(host_root / DATA_DIRNAME),
+        root.resolve(),
+        host_root / LEGACY_WORKER_SCRATCH_DIRNAME,
+        leases,
+        scratch_factory,
+    )
 
 
 def _reconcile_host_scratch(config: RunnerConfig, host: HostProcess, runner_ids: list[str]) -> None:

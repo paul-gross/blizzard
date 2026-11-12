@@ -1030,6 +1030,7 @@ class FakeTranscriptSource:
         self.read_raw_lines_calls: list[tuple[str, TranscriptPosition | None, TranscriptPosition | None]] = []
         self.read_raw_lines_cwds: list[str | None] = []
         self.size_bytes_calls: list[str] = []
+        self.size_bytes_cwds: list[str | None] = []
         self.context_tokens_calls: list[str] = []
 
     def script_batch(self, session_id: str, batch: TranscriptBatch) -> None:
@@ -1077,6 +1078,7 @@ class FakeTranscriptSource:
 
     def size_bytes(self, session_id: str, *, spawn_cwd: str | None) -> int | None:
         self.size_bytes_calls.append(session_id)
+        self.size_bytes_cwds.append(spawn_cwd)
         return self._sizes.get(session_id)
 
     def context_tokens(self, session_id: str, *, spawn_cwd: str | None) -> int | None:

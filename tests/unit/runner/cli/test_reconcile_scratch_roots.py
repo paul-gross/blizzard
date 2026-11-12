@@ -5,52 +5,28 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-import blizzard.runner.cli.scratch_binding as scratch_binding
-from blizzard.runner.cli.scratch_binding import bind_scratch_root
+import blizzard.runner.cli.runtime as runtime
+import blizzard.runner.process.internal.scratch_binding_files as scratch_binding_files
 from blizzard.runner.process.internal.worker_scratch_dirs import WorkerScratchDirs
 
-reconcile_scratch_roots = partial(scratch_binding.reconcile_scratch_roots, scratch_factory=WorkerScratchDirs)
-
-
-def test_root_change_requires_drain_and_reconciles_before_switch(tmp_path: Path) -> None:
-    old, new = tmp_path / "old", tmp_path / "new"
-    reconciled: list[Path] = []
-    bind_scratch_root(tmp_path, old, active=True, reconcile=reconciled.append)
-    bind_scratch_root(tmp_path, old, active=True, reconcile=reconciled.append)
-    with pytest.raises(RuntimeError, match="drain leases"):
-        bind_scratch_root(tmp_path, new, active=True, reconcile=reconciled.append)
-    assert reconciled == []
-    bind_scratch_root(tmp_path, new, active=False, reconcile=reconciled.append)
-    assert reconciled == [old]
-    bind_scratch_root(tmp_path, new, active=True, reconcile=reconciled.append)
-
-
-def test_failed_reconciliation_does_not_switch_binding(tmp_path: Path) -> None:
-    old, new = tmp_path / "old", tmp_path / "new"
-    bind_scratch_root(tmp_path, old, active=False, reconcile=lambda _: None)
-
-    def fail(_: Path) -> None:
-        raise OSError("interrupted")
-
-    with pytest.raises(OSError, match="interrupted"):
-        bind_scratch_root(tmp_path, new, active=False, reconcile=fail)
-    with pytest.raises(RuntimeError, match="drain leases"):
-        bind_scratch_root(tmp_path, new, active=True, reconcile=lambda _: None)
+reconcile_scratch_roots = partial(runtime.reconcile_scratch_roots, scratch_factory=WorkerScratchDirs)
 
 
 def test_root_sync_failure_never_publishes_binding_and_retry_syncs_existing_path(tmp_path: Path) -> None:
     root = tmp_path / "parent" / "scratch"
     binding = tmp_path / "data" / "worker-scratch-root"
     with (
-        patch("blizzard.runner.cli.scratch_binding._sync_root_path", side_effect=OSError("interrupted")),
+        patch(
+            "blizzard.runner.process.internal.scratch_binding_files._sync_root_path", side_effect=OSError("interrupted")
+        ),
         pytest.raises(OSError, match="interrupted"),
     ):
         reconcile_scratch_roots(tmp_path, root, {})
     assert root.is_dir()
     assert not binding.exists()
     with patch(
-        "blizzard.runner.cli.scratch_binding._sync_root_path",
-        wraps=scratch_binding._sync_root_path,  # pyright: ignore[reportPrivateUsage]
+        "blizzard.runner.process.internal.scratch_binding_files._sync_root_path",
+        wraps=scratch_binding_files._sync_root_path,  # pyright: ignore[reportPrivateUsage]
     ) as sync:
         reconcile_scratch_roots(tmp_path, root, {})
     sync.assert_called_once_with(root)
@@ -129,7 +105,7 @@ def test_host_reconciliation_aggregates_runners_before_changing_root(
         adapters.append((root, runner_id, instance))
         return instance
 
-    reconcile_scratch_roots = partial(scratch_binding.reconcile_scratch_roots, scratch_factory=adapter)
+    reconcile_scratch_roots = partial(runtime.reconcile_scratch_roots, scratch_factory=adapter)
     first, second = MagicMock(), MagicMock()
     first.list_active_leases.return_value = []
     second.list_active_leases.return_value = [SimpleNamespace(lease_id="active")]

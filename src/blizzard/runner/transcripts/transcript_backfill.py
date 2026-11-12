@@ -209,15 +209,12 @@ class TranscriptBackfill:
                 f"session {source.session_id}'s recorded owner {source.harness_id!r} is not "
                 f"resolvable by this runner right now: {exc}"
             ) from exc
-        if (
-            readable.size_bytes(
-                source.session_id,
-                spawn_cwd=self._spawn_cwd(
-                    source.chunk_id, self.pump.bindings_for_chunks({source.chunk_id}, all_newest=True)
-                ),
+        spawn_cwd = source.spawn_cwd
+        if spawn_cwd is None:
+            spawn_cwd = self._spawn_cwd(
+                source.chunk_id, self.pump.bindings_for_chunks({source.chunk_id}, all_newest=True)
             )
-            is None
-        ):
+        if readable.size_bytes(source.session_id, spawn_cwd=spawn_cwd) is None:
             # Nothing is written on this path, so a rerun retries once the root is right.
             raise TranscriptReshipError(
                 f"session {source.session_id} is not readable by this runner — "
