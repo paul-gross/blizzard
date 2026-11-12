@@ -13,7 +13,7 @@ from concurrent.futures import Executor
 from datetime import UTC, datetime
 from pathlib import Path
 
-from blizzard.foundation.clock import FixedClock
+from blizzard.foundation.clock import FixedClock, SystemMonotonicClock
 from blizzard.runner.config import RunnerConfig
 from blizzard.runner.harness.claude_code.adapter import ClaudeCodeAdapter
 from blizzard.runner.harness.claude_code.health import (
@@ -157,6 +157,7 @@ def test_a_misconfigured_opencode_corpus_degrades_only_opencode(tmp_path: Path, 
         worker_env=AllowlistedEnv.of(()),
         binary=opencode(config).binary,
         process=process,
+        monotonic_clock=SystemMonotonicClock(),
         launcher=launcher,
         versions=version_probe(),
     )
@@ -212,6 +213,7 @@ def test_admitted_range_surfaces_per_binding(tmp_path: Path, spawn_executor: Exe
         worker_env=AllowlistedEnv.of(()),
         binary=opencode(config).binary,
         process=process,
+        monotonic_clock=SystemMonotonicClock(),
         launcher=launcher,
         versions=version_probe(),
     )

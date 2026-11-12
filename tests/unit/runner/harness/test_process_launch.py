@@ -100,9 +100,12 @@ import os, time
 from blizzard.runner.process.child_env import ChildEnv
 from blizzard.runner.process.child_processes import Stream
 from blizzard.runner.process.internal.subprocess_child_processes import SubprocessChildProcesses
+from blizzard.foundation.clock import SystemMonotonicClock
 
 launcher = ProcessLauncher(
-    LinuxProcessProbe(), executor=ThreadPoolExecutor(max_workers=1), children=SubprocessChildProcesses()
+    LinuxProcessProbe(),
+    executor=ThreadPoolExecutor(max_workers=1),
+    children=SubprocessChildProcesses(SystemMonotonicClock()),
 )
 launched = launcher.launch(
     ["sleep", "30"],

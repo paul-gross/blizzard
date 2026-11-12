@@ -12,6 +12,7 @@ import pytest
 import structlog
 from structlog.testing import capture_logs
 
+from blizzard.foundation.clock import SystemMonotonicClock
 from blizzard.runner.harness.internal.process_launcher import ProcessLauncher
 from blizzard.runner.harness.opencode.adapter import OpenCodeAdapter
 from blizzard.runner.harness.opencode.shapes import OpenCodePart, parse_session_export
@@ -59,6 +60,7 @@ def _adapter(spawn_executor: Executor, exporter: FakeExporter | None = None, **k
     return OpenCodeAdapter(
         worker_env=AllowlistedEnv.of(()),
         process=probe,
+        monotonic_clock=SystemMonotonicClock(),
         launcher=ProcessLauncher(probe, executor=spawn_executor, children=CHILDREN),
         descendant_usage=OpenCodeDescendantUsage(exporter) if exporter is not None else None,
         **kwargs,

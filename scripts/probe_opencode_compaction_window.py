@@ -18,6 +18,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from typing import ClassVar, NotRequired, TypedDict
 
+from blizzard.foundation.clock import SystemMonotonicClock
 from blizzard.foundation.node_steps import Executor, JudgedBy
 from blizzard.runner.environments.provider import AcquiredEnvironment
 from blizzard.runner.harness.adapter import WorkerPreamble
@@ -136,7 +137,7 @@ def _cell(root: Path, binary: str, window: str | None, executor: ThreadPoolExecu
         )
         env = AllowlistedEnv.of(("HOME", "XDG_CONFIG_HOME", "XDG_DATA_HOME", "XDG_CACHE_HOME"))
         process = LinuxProcessProbe()
-        children = SubprocessChildProcesses()
+        children = SubprocessChildProcesses(SystemMonotonicClock())
         adapter = OpenCodeAdapter(
             binary=binary,
             worker_env=env,
@@ -144,6 +145,7 @@ def _cell(root: Path, binary: str, window: str | None, executor: ThreadPoolExecu
             limits_catalog=FileOpenCodeModelLimitsCatalog(catalog),
             permission_resolver=SubprocessOpenCodePermissionResolver(binary, children=children),
             process=process,
+            monotonic_clock=SystemMonotonicClock(),
             launcher=ProcessLauncher(process, executor=executor, children=children),
             versions=VersionProbe(children, env.tool()),
         )

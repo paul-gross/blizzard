@@ -42,7 +42,7 @@ from opentelemetry.sdk.trace import ReadableSpan
 from opentelemetry.sdk.trace.export.in_memory_span_exporter import InMemorySpanExporter
 
 from blizzard.foundation.chunk_status import ChunkStatus
-from blizzard.foundation.clock import FixedClock, SystemClock
+from blizzard.foundation.clock import FixedClock, SystemClock, SystemMonotonicClock
 from blizzard.foundation.harness_telemetry_outcome import HarnessTelemetryOutcome
 from blizzard.foundation.node_steps import ApplyOutcome
 from blizzard.foundation.platform_tracing.handle import IPlatformTracing, build_platform_tracing
@@ -1009,6 +1009,7 @@ class _Telemetry:
             RunnerTracingConfig(platform=True, harness_telemetry=harness_telemetry),
             _ENDPOINT,
             resource={"service.name": "blizzard-runner"},
+            monotonic_clock=SystemMonotonicClock(),
             metric_exporter=self.metrics,
             log_exporter=self.logs,
         )
@@ -1479,6 +1480,7 @@ def test_a_slow_destination_does_not_hold_the_receivers_response(tmp_path: Path)
         RunnerTracingConfig(platform=True, harness_telemetry=True),
         _ENDPOINT,
         resource={"service.name": "blizzard-runner"},
+        monotonic_clock=SystemMonotonicClock(),
         metric_exporter=metrics,
         log_exporter=logs,
     )

@@ -13,6 +13,7 @@ from typing import Any
 
 import pytest
 
+from blizzard.foundation.clock import SystemMonotonicClock
 from blizzard.runner.config import ConfigError, RunnerConfig
 from blizzard.runner.environments.provider import AcquiredEnvironment
 from blizzard.runner.harness.adapter import HarnessSpawnError, WorkerPreamble
@@ -120,6 +121,7 @@ def _opencode(launcher: _RecordingLauncher, **kwargs: Any) -> OpenCodeAdapter:
         "opencode",
         worker_env=AllowlistedEnv.of(()),
         process=FakeProbe(),
+        monotonic_clock=SystemMonotonicClock(),
         launcher=launcher,
         **kwargs,
         versions=version_probe(),
@@ -320,6 +322,7 @@ def test_opencode_normal_refuses_to_launch_what_it_cannot_prove(tmp_path: Path, 
         "opencode",
         worker_env=AllowlistedEnv.of(()),
         process=FakeProbe(),
+        monotonic_clock=SystemMonotonicClock(),
         launcher=launcher,
         autonomy=Autonomy.Normal,
         permission_resolver=resolver,
@@ -528,6 +531,7 @@ def test_opencode_checks_ambient_plugins_on_every_unattended_kind(tmp_path: Path
         "opencode",
         worker_env=AllowlistedEnv.of(("HOME",)),
         process=FakeProbe(),
+        monotonic_clock=SystemMonotonicClock(),
         launcher=launcher,
         effective_config_dir=str(effective),
         worker_config_path=str(worker),

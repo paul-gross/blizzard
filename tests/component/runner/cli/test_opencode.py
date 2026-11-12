@@ -15,7 +15,7 @@ from urllib.parse import urlsplit
 import pytest
 from click.testing import CliRunner
 
-from blizzard.foundation.clock import ManualMonotonicClock
+from blizzard.foundation.clock import ManualMonotonicClock, SystemMonotonicClock
 from blizzard.runner.cli import runner as runner_group
 from blizzard.runner.cli.children import RunnerCliCollaborators
 from blizzard.runner.harness.autonomy import Autonomy
@@ -142,7 +142,9 @@ def test_the_opencode_two_compatibility_proof_talks_to_the_carriers_service(
         "--allow-live-provider",
     ]
 
-    answer = CliRunner().invoke(runner_group, list(argv), obj=_carrier(fake, children=_VersionOnly()))
+    answer = CliRunner().invoke(
+        runner_group, list(argv), obj=_carrier(fake, children=_VersionOnly(SystemMonotonicClock()))
+    )
 
     assert fake.requests, answer.output
     assert answer.exit_code == 1, answer.output
@@ -285,7 +287,9 @@ def test_the_opencode_two_compatibility_proofs_core_reads_the_carriers_clock(
     answer = CliRunner().invoke(
         runner_group,
         list(argv),
-        obj=_carrier(_RemovingTransport(service), children=_VersionOnly(), monotonic_clock=_TrippingClock()),
+        obj=_carrier(
+            _RemovingTransport(service), children=_VersionOnly(SystemMonotonicClock()), monotonic_clock=_TrippingClock()
+        ),
     )
 
     assert isinstance(answer.exception, _Reached), answer.output

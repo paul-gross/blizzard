@@ -21,6 +21,7 @@ from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from typing import NotRequired, TypedDict
 
+from blizzard.foundation.clock import SystemMonotonicClock
 from blizzard.foundation.node_steps import Executor, JudgedBy
 from blizzard.runner.environments.provider import AcquiredEnvironment
 from blizzard.runner.harness.adapter import WorkerPreamble
@@ -341,7 +342,7 @@ def main() -> None:
             [args.binary, "--version"], env=worker_env.tool().variables, text=True, capture_output=True, check=True
         ).stdout.strip()
         process = LinuxProcessProbe()
-        children = SubprocessChildProcesses()
+        children = SubprocessChildProcesses(SystemMonotonicClock())
         with ThreadPoolExecutor(max_workers=2) as executor:
             launcher = _InspectingLauncher(
                 process, executor=executor, children=children, binary=args.binary, model=args.model
@@ -352,6 +353,7 @@ def main() -> None:
                 worker_config_path=str(effective / "opencode.json"),
                 effective_config_dir=str(effective),
                 process=process,
+                monotonic_clock=SystemMonotonicClock(),
                 launcher=launcher,
                 limits_catalog=_ProbeCatalog(),
                 permission_resolver=SubprocessOpenCodePermissionResolver(args.binary, children=children),

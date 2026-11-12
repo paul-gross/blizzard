@@ -12,6 +12,7 @@ from typing import Any
 import pytest
 from structlog.testing import capture_logs
 
+from blizzard.foundation.clock import SystemMonotonicClock
 from blizzard.runner.harness.internal.committed_corpus import CommittedCorpus
 from blizzard.runner.harness.internal.process_launcher import ProcessLauncher
 from blizzard.runner.harness.offline_compatibility import admitted_corpus_versions
@@ -461,6 +462,7 @@ def test_read_raw_lines_returns_the_range_and_round_trips_through_the_adapter(sp
         worker_env=AllowlistedEnv.of(()),
         binary="opencode",
         process=process,
+        monotonic_clock=SystemMonotonicClock(),
         launcher=ProcessLauncher(process, executor=spawn_executor, children=CHILDREN),
         versions=version_probe(),
     )

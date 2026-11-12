@@ -29,7 +29,7 @@ from blizzard.cli.runtime import (
     run_init,
     run_migrate,
 )
-from blizzard.foundation.clock import IClock
+from blizzard.foundation.clock import IClock, SystemMonotonicClock
 from blizzard.foundation.logging import get_logger
 from blizzard.foundation.operator_sessions import IReadSessionStore
 from blizzard.foundation.operator_sessions.internal.session_file import SessionFile
@@ -1109,7 +1109,11 @@ def _resolve_token(collaborators: InitCollaborators, hub_url: str, built: BuiltR
 def select_runner_bindings(config: RunnerConfig) -> BindingSelection:
     """The bindings ``config``'s binaries choose, each version-chosen one's ``--version`` run once."""
     worker_env = config.worker_env(TracingSettings.of(os.environ))
-    return select_harness_bindings(config.harness_sections, worker_env=worker_env, children=SubprocessChildProcesses())
+    return select_harness_bindings(
+        config.harness_sections,
+        worker_env=worker_env,
+        children=SubprocessChildProcesses(SystemMonotonicClock()),
+    )
 
 
 def publish_runner_bundle(

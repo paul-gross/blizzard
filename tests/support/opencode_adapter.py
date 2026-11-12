@@ -9,6 +9,7 @@ from __future__ import annotations
 from concurrent.futures import Executor
 from typing import Any
 
+from blizzard.foundation.clock import SystemMonotonicClock
 from blizzard.runner.environments.provider import AcquiredEnvironment
 from blizzard.runner.harness.adapter import WorkerPreamble
 from blizzard.runner.harness.internal.process_launcher import ProcessLauncher
@@ -24,6 +25,7 @@ def adapter(spawn_executor: Executor, **kwargs: Any) -> OpenCodeAdapter:
     process = kwargs.setdefault("process", FakeProbe())
     kwargs.setdefault("launcher", ProcessLauncher(process, executor=spawn_executor, children=CHILDREN))
     kwargs.setdefault("worker_env", AllowlistedEnv.of(()))
+    kwargs.setdefault("monotonic_clock", SystemMonotonicClock())
     return OpenCodeAdapter(**kwargs, versions=version_probe())
 
 

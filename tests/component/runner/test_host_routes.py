@@ -15,7 +15,7 @@ import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
-from blizzard.foundation.clock import FixedClock
+from blizzard.foundation.clock import FixedClock, SystemMonotonicClock
 from blizzard.foundation.host_registration_state import HostRegistrationState
 from blizzard.foundation.runner_identity_state import IdentityState
 from blizzard.foundation.web import Frontend
@@ -110,6 +110,7 @@ def _two_runner_app(
             config,
             clock=clock,
             process=LinuxProcessProbe(),
+            monotonic_clock=SystemMonotonicClock(),
             children=CHILDREN,
             runner_stores=stores,
             runner_status=_status(store, config),
@@ -468,6 +469,7 @@ def test_the_selftest_canary_env_withholds_otel_passthrough_under_the_graphs_tra
         config,
         clock=FixedClock(_NOW),
         process=LinuxProcessProbe(),
+        monotonic_clock=SystemMonotonicClock(),
         children=CHILDREN,
         runner_stores=stores,
         tracing=TracingSettings.of({"OTEL_EXPORTER_OTLP_ENDPOINT": "http://127.0.0.1:4318"}),

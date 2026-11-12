@@ -8,7 +8,6 @@ SDK has no batch processor for points already aggregated, and its periodic reade
 from __future__ import annotations
 
 import threading
-import time
 from collections import defaultdict, deque
 from collections.abc import Mapping, Sequence
 from typing import cast
@@ -40,6 +39,7 @@ from opentelemetry.sdk.util.instrumentation import InstrumentationScope
 from opentelemetry.trace import TraceFlags
 from opentelemetry.util.types import Attributes
 
+from blizzard.foundation.clock import IMonotonicClock
 from blizzard.foundation.logging import get_logger
 from blizzard.foundation.platform_tracing.received import ReceivedDataPoint, ReceivedLogRecord
 from blizzard.foundation.platform_tracing.redaction import redacted
@@ -165,8 +165,11 @@ class MetricQueue:
     """Batches of data points waiting for the metric exporter, drained in order by one daemon thread. Full, it
     drops its oldest batch, as the SDK batch processors do; a failed export is dropped with a warning."""
 
-    def __init__(self, exporter: MetricExporter, max_points: int = MAX_QUEUED_POINTS) -> None:
+    def __init__(
+        self, exporter: MetricExporter, monotonic_clock: IMonotonicClock, max_points: int = MAX_QUEUED_POINTS
+    ) -> None:
         self._exporter = exporter
+        self._monotonic_clock = monotonic_clock
         self._max_points = max_points
         self._batches: deque[tuple[MetricsData, int]] = deque()
         self._queued = 0
@@ -216,7 +219,7 @@ class MetricQueue:
     def shutdown(self, timeout: float) -> None:
         """Wait at most ``timeout`` seconds for what is queued to leave. Past it, what is still queued is
         discarded with a logged count so the thread exits; the exporter is shut down only once the thread has."""
-        deadline = time.monotonic() + timeout
+        deadline = self._monotonic_clock.monotonic() + timeout
         with self._condition:
             self._condition.wait_for(lambda: not self._batches and not self._exporting, timeout)
             if self._batches:
@@ -225,7 +228,7 @@ class MetricQueue:
                 self._queued = 0
             self._stopped = True
             self._condition.notify_all()
-        self._thread.join(max(0.0, deadline - time.monotonic()))
+        self._thread.join(max(0.0, deadline - self._monotonic_clock.monotonic()))
         if self._thread.is_alive():
             _log.warning("received metrics export still in flight at shutdown, exporter left open")
             return
@@ -238,9 +241,11 @@ class EnabledReceivedTelemetryExport:
         resource: Resource,
         metric_exporter: MetricExporter | None,
         log_exporter: LogRecordExporter | None,
+        monotonic_clock: IMonotonicClock,
     ) -> None:
         self._resource = resource
-        self._metrics = MetricQueue(metric_exporter) if metric_exporter is not None else None
+        self._monotonic_clock = monotonic_clock
+        self._metrics = MetricQueue(metric_exporter, monotonic_clock) if metric_exporter is not None else None
         self._logs = BatchLogRecordProcessor(log_exporter) if log_exporter is not None else None
 
     @classmethod
@@ -252,11 +257,13 @@ class EnabledReceivedTelemetryExport:
         log_exporter: LogRecordExporter | None,
         metrics: bool,
         logs: bool,
+        monotonic_clock: IMonotonicClock,
     ) -> EnabledReceivedTelemetryExport:
         return cls(
             Resource.create(dict(resource)),
             (metric_exporter or OTLPMetricExporter()) if metrics else None,
             (log_exporter or OTLPLogExporter()) if logs else None,
+            monotonic_clock,
         )
 
     def forward_metrics(self, points: Sequence[ReceivedDataPoint], resource_service_name: str) -> None:
@@ -273,9 +280,9 @@ class EnabledReceivedTelemetryExport:
             self._logs.on_emit(_emitted(record, resource))
 
     def shutdown(self, timeout: float) -> None:
-        deadline = time.monotonic() + timeout
+        deadline = self._monotonic_clock.monotonic() + timeout
         if self._logs is not None:
             self._logs.force_flush(int(timeout * 1000))
             self._logs.shutdown()
         if self._metrics is not None:
-            self._metrics.shutdown(max(0.0, deadline - time.monotonic()))
+            self._metrics.shutdown(max(0.0, deadline - self._monotonic_clock.monotonic()))
