@@ -6,6 +6,7 @@ from __future__ import annotations
 
 from typing import Any
 
+from blizzard.foundation.config_keys import LIFETIME_ORDER, Lifetime
 from blizzard.tools.compat.violation import Violation
 
 SURFACE = "config"
@@ -16,8 +17,14 @@ def _keys(document: dict[str, Any]) -> dict[str, dict[str, Any]]:
     return {k["path"]: k for k in document.get("keys", []) if not k["path"].startswith(_OPEN_TABLE_KEYS)}
 
 
+def _rank(lifetime: str) -> int:
+    return LIFETIME_ORDER.index(Lifetime(lifetime))
+
+
 def classify_config(base: dict[str, Any], head: dict[str, Any]) -> list[Violation]:
-    """A key or path removed, a key whose type changed, and a key that became required."""
+    """A key or path removed, a key whose type changed, a key that became required, and a key whose lifetime moved
+    later — a later lifetime narrows what an operator changes without a restart; a key lacking one on either side is
+    not compared."""
     findings: list[Violation] = []
     base_keys, head_keys = _keys(base), _keys(head)
     for path, before in base_keys.items():
@@ -31,6 +38,10 @@ def classify_config(base: dict[str, Any], head: dict[str, Any]) -> list[Violatio
             findings.append(Violation(SURFACE, path, reason, deprecated))
         if after.get("required") and not before.get("required"):
             findings.append(Violation(SURFACE, path, "configuration key became required", deprecated))
+        was, now = before.get("lifetime"), after.get("lifetime")
+        if was is not None and now is not None and _rank(now) > _rank(was):
+            reason = f"configuration key lifetime moved later from {was} to {now}"
+            findings.append(Violation(SURFACE, path, reason, deprecated))
     for path, after in head_keys.items():
         if path not in base_keys and after.get("required"):
             findings.append(Violation(SURFACE, path, "configuration key became required"))

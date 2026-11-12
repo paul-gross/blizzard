@@ -286,6 +286,20 @@ def test_a_release_missing_a_document_has_no_baseline_for_it_and_the_rest_is_sti
     assert "BREAK" in result.output
 
 
+def test_a_config_key_moved_from_pass_to_boot_breaks(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    def hub_config(lifetime: str) -> dict[str, object]:
+        key = {"path": "a", "type": "string", "required": False, "default": None, "lifetime": lifetime}
+        return {"daemon": "hub", "keys": [key], "paths": []}
+
+    repo = _Repo(tmp_path / "r")
+    repo.commit("chore: cut", files={"contracts/config/hub.json": hub_config("pass")})
+    repo.git("tag", "v0.2.0")
+    repo.commit("feat: hold the key for the boot", files={"contracts/config/hub.json": hub_config("boot")})
+    result = _run(repo, monkeypatch)
+    assert result.exit_code == 1
+    assert "configuration key lifetime moved later from pass to boot" in result.output
+
+
 def test_head_missing_a_document_is_an_error(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     repo = _Repo(tmp_path / "r")
     repo.commit("chore: cut", drop=("contracts/store/hub.json",))

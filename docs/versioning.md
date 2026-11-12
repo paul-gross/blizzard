@@ -63,7 +63,7 @@ only by being republished later with its reason, and never earlier.
 | --------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
 | HTTP API        | removes a route, adds a required field to a request, removes a response field or changes its meaning, or adds a response enum value a release's clients read closed                                          |
 | hub↔runner wire | is not wire-compatible with a runner inside the [skew window](#the-hubrunner-skew-window) — an `/api/fleet/...` route, or a field the runner's `IHubClient` (`src/blizzard/runner/hub/client.py`) depends on |
-| Configuration   | renames or removes a `blizzard-hub.toml` or `blizzard-host.toml` key, or moves or removes a durable path under the runtime root                                                                              |
+| Configuration   | renames or removes a `blizzard-hub.toml` or `blizzard-host.toml` key, moves a key's lifetime later, or moves or removes a durable path under the runtime root                                                |
 | Store schema    | ships a revision that cannot be walked back — breaking regardless of what else the release changed                                                                                                           |
 | Trace contract  | renames or removes a span name, event name or attribute, changes an attribute's type or meaning, or changes how trace and span ids are derived                                                               |
 | Egress contract | removes, renames or retypes a column of an exported dataset, or changes a column's meaning                                                                                                                   |
@@ -85,7 +85,7 @@ member all stay breaking against every release.
 Adding an optional config key, a new route, a new event type, a new trace attribute or span, a new nullable egress
 column, a new value of an enumerated egress column, a new value of a response enum every supported release reads open, a
 new event-stream frame kind or payload field, a new CLI command or optional option, or a migration that walks back
-cleanly is not breaking.
+cleanly is not breaking; nor is moving a config key's lifetime earlier.
 
 A consumer of the event stream ignores a frame kind and a payload field it does not know, which is what makes an added
 kind or field additive. A surface's deprecation mark is how a removal becomes one the window admits: a config key's
