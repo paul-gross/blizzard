@@ -1,8 +1,10 @@
 """Concurrent allocation of the route-event ``seq`` counter.
 
 ``chunk_rows.next_route_seq`` is read-then-insert, not atomic; two concurrent writers
-must not compute the same next value. Proves the allocator's statement locks the chunk
-row under any dialect (static proof, no live postgres), and sqlite never duplicates.
+must not compute the same next value. The caller's connection holds the chunk's row lock,
+so the allocator itself takes none: proves it issues only its reads, that the lock primitive
+compiles to the same row-scoped statement under any dialect (static proof, no live postgres),
+and that writers taking the lock first on sqlite never duplicate.
 """
 
 from __future__ import annotations
@@ -60,25 +62,19 @@ def _scoped_connection() -> Generator[Connection]:
         yield conn
 
 
-def test_next_route_seq_locks_the_chunk_row_for_update() -> None:
+def test_next_route_seq_takes_no_row_lock_of_its_own() -> None:
     with _scoped_connection() as scoped:
         conn = _CapturingConn(scoped)
 
         next_route_seq(conn, "ch_1")  # pyright: ignore[reportArgumentType]  # a recording stand-in for the concrete Connection, which has no protocol to satisfy
 
-    assert len(conn.statements) == 4  # the lock, then the three per-table max reads
-    lock_stmt = conn.statements[0]
-    assert isinstance(lock_stmt, Update)  # a write, not a SELECT — see the allocator's own docstring for why
-    pg_sql = str(lock_stmt.compile(dialect=postgresql.dialect()))
-    sqlite_sql = str(lock_stmt.compile(dialect=sqlite.dialect()))
-    assert pg_sql.startswith("UPDATE chunks SET")
-    assert sqlite_sql.startswith("UPDATE chunks SET")
+    assert len(conn.statements) == 3  # the three per-table max reads, on the caller's already-locked connection
+    assert not any(isinstance(stmt, Update) for stmt in conn.statements)
 
 
 def test_lock_chunk_row_compiles_to_the_same_row_scoped_statement_on_both_dialects() -> None:
-    """``bzh:store-exclusive-write``'s shared primitive — every locked writer besides
-    ``next_route_seq`` calls this directly, so its own compiled shape is pinned here
-    too, not only by way of the allocator's own statement-count assertion above."""
+    """``bzh:store-exclusive-write``'s shared primitive — the lock a caller of ``next_route_seq``
+    holds before allocating — pinned to its compiled shape on both dialects."""
     with _scoped_connection() as scoped:
         conn = _CapturingConn(scoped)
 
@@ -107,6 +103,7 @@ def test_concurrent_seq_allocation_on_sqlite_never_duplicates(tmp_path: Path) ->
         try:
             barrier.wait(timeout=5)
             with hub_store_connections(engine).write("seed") as conn:
+                lock_chunk_row(conn, "ch_1")
                 seq = next_route_seq(conn, "ch_1")
                 conn.execute(
                     insert(s.route_created).values(

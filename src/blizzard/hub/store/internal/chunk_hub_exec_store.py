@@ -32,7 +32,6 @@ from blizzard.hub.store.internal.chunk_rows import (
     next_route_seq,
     record_hub_lease,
 )
-from blizzard.hub.store.locking import lock_chunk_row
 from blizzard.hub.store.scoped import ScopedConnections
 from blizzard.hub.store.transactions import chunk_handle_connection
 
@@ -94,7 +93,7 @@ class ChunkHubExecStore:
         release_route: bool,
         close_decision: CloseEnqueueDecision,
     ) -> HubStepTransitionWrite:
-        lock_chunk_row(conn, chunk_id)
+        """``conn`` already holds ``chunk_id``'s row lock."""
         already = conn.execute(
             self._store.select(s.transitions, s.transitions.c.transition_id).where(
                 (s.transitions.c.chunk_id == chunk_id)

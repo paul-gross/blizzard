@@ -36,7 +36,6 @@ from blizzard.hub.store.internal.chunk_rows import (
 )
 from blizzard.hub.store.internal.chunk_terminal_predicates import maybe_live
 from blizzard.hub.store.internal.newest_fact import newer_row_exists
-from blizzard.hub.store.locking import lock_chunk_row
 from blizzard.hub.store.scoped import ScopedConnections
 from blizzard.hub.store.transactions import chunk_handle_connection, connection_for
 
@@ -228,7 +227,7 @@ class ChunkEscalationsStore:
         cause: str,
         detail: str,
     ) -> BounceEscalationOutcome:
-        lock_chunk_row(conn, chunk_id)
+        """``conn`` already holds ``chunk_id``'s row lock."""
         already = conn.execute(
             self._store.select(s.escalations, s.escalations.c.id).where(
                 (s.escalations.c.chunk_id == chunk_id) & (s.escalations.c.epoch == epoch)
