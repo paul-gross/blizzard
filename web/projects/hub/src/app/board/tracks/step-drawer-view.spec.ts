@@ -362,6 +362,32 @@ describe('StepDrawerView', () => {
       expect(heading(el)).toBe('Transcript');
     });
 
+    it('labels a null executor as unknown and still reads its transcript', async () => {
+      const unknown = placed({ executor: null, epoch: 2 });
+      const turns = [turnSegmentView({ index: 0 })];
+      const { el } = await render({ view: stepView(unknown, { journey: [unknown] }), transcriptState: 'ready', transcript: TRANSCRIPT(turns) });
+
+      expect(section(el)).toContain('executor unknown');
+      expect(el.querySelector('fleet-transcript-viewer')).not.toBeNull();
+    });
+
+    it('does not label a known executor as unknown', async () => {
+      const { el } = await render({ transcriptState: 'ready', transcript: TRANSCRIPT([]) });
+
+      expect(section(el)).not.toContain('executor unknown');
+    });
+
+    it('draws the loading, empty and error states through the kit, with the loading testid on the projected skeleton', async () => {
+      for (const state of ['loading', 'empty', 'error'] as const) {
+        const { el } = await render({ transcriptState: state });
+        expect(el.querySelector('.sd-transcript fleet-kit-async-state'), state).not.toBeNull();
+      }
+      const { el } = await render({ transcriptState: 'error' });
+      expect(el.querySelector('.sd-transcript .status.error')?.textContent).toContain('could not read the transcript');
+      const loading = await render({ transcriptState: 'loading' });
+      expect(q(loading.el, 'step-drawer-transcript-loading')?.closest('fleet-kit-async-state')).not.toBeNull();
+    });
+
     it('renders the viewer with the turns, counts them, and notes a truncation', async () => {
       const turns = [turnSegmentView({ index: 0 }), turnSegmentView({ index: 1, text: 'second' })];
       const { el } = await render({ transcriptState: 'ready', transcript: TRANSCRIPT(turns, true) });

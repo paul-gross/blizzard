@@ -22,6 +22,7 @@ import {
   compactRef,
   formatAbsolute,
   hasDelivery,
+  hubApi,
 } from 'fleet';
 import { LensLink } from 'fleet/shell';
 
@@ -128,6 +129,8 @@ export class StepDrawerView {
   );
 
   protected readonly transcriptSkeleton = TRANSCRIPT_SKELETON;
+  /** The generated executor constant, for the template to compare a step's executor against. */
+  protected readonly Executor = hubApi.Executor;
   protected readonly ref = compactRef;
   protected readonly absolute = formatAbsolute;
   protected readonly host = hostLabel;

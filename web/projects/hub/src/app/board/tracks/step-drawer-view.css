@@ -239,8 +239,11 @@
 .sd-transcript {
   padding: 6px 0 0;
 }
-.sd-transcript > .d-h,
-.sd-transcript > .dim {
+.sd-transcript {
+  --kit-section-head-pad: 0 8px;
+}
+.sd-transcript > .dim,
+.sd-transcript fleet-kit-async-state > .dim {
   padding: 0 8px;
 }
 

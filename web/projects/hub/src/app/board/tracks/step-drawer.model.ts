@@ -1,4 +1,4 @@
-import { type ChunkDetail, type ProjectView, formatWhenParts } from 'fleet';
+import { type ChunkDetail, type ProjectView, formatWhenParts, hubApi } from 'fleet';
 import { projectColorOf } from '../../core/project-lens-colors';
 
 import type { LeaseTranscriptRef } from './lease-transcript.query';
@@ -161,7 +161,7 @@ export function stepArtifactsOf(chunk: ChunkDetail | null, keys: readonly string
 
 /** The transcript to read for a step — its session's, fenced by its epoch — or `null` for a step the hub ran itself. */
 export function transcriptRefOf(segment: EnvTimelineSegment | undefined): LeaseTranscriptRef | null {
-  return segment !== undefined && segment.executor !== 'hub' && segment.epoch !== null
+  return segment !== undefined && segment.executor !== hubApi.Executor.HUB && segment.epoch !== null
     ? { chunkId: segment.chunk_id, nodeId: segment.node_id, epoch: segment.epoch, live: segment.ended_at === null }
     : null;
 }
@@ -177,7 +177,7 @@ export interface StepIdentity {
 /** A runner step with no session id is either one whose session start the hub never heard — no fence either — or a
  * session that took the chunk over on a forced entry, fenced and with a transcript, but minted with no id. */
 export function stepIdentity(segment: EnvTimelineSegment): StepIdentity {
-  const hub = segment.executor === 'hub';
+  const hub = segment.executor === hubApi.Executor.HUB;
   if (segment.lease_id !== null) return { label: segment.lease_id, title: segment.lease_id, hub };
   return { label: segment.node_name, title: unnamedSessionTitle(segment, hub), hub };
 }
