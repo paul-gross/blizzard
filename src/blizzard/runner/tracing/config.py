@@ -9,7 +9,7 @@ from dataclasses import dataclass, field, fields
 
 from blizzard.foundation.cli_spans import SCOPE_NAME
 from blizzard.foundation.cli_spans import SERVICE_NAME as CLI_SERVICE_NAME
-from blizzard.foundation.config_keys import BOOLEAN, OPEN_TABLE, ConfigKey, ConfigView
+from blizzard.foundation.config_keys import BOOLEAN, OPEN_TABLE, ConfigKey, ConfigView, Lifetime
 from blizzard.foundation.roles import domain_model
 from blizzard.foundation.trace_export.config import SHARED_KEYS, TracingConfig
 from blizzard.foundation.untyped import as_table
@@ -90,7 +90,7 @@ _DEFAULTS = RunnerTracingConfig()
 
 #: The ``[tracing]`` keys only the runner reads, declared here beside the parser that reads them.
 RUNNER_TRACING_KEYS: tuple[ConfigKey, ...] = (
-    ConfigKey("tracing.worker_programs", BOOLEAN, default=_DEFAULTS.worker_programs),
-    ConfigKey("tracing.worker_program_services", OPEN_TABLE),
-    ConfigKey("tracing.harness_telemetry", BOOLEAN, default=_DEFAULTS.harness_telemetry),
+    ConfigKey("tracing.worker_programs", BOOLEAN, default=_DEFAULTS.worker_programs, lifetime=Lifetime.SESSION),
+    ConfigKey("tracing.worker_program_services", OPEN_TABLE, lifetime=Lifetime.SESSION),
+    ConfigKey("tracing.harness_telemetry", BOOLEAN, default=_DEFAULTS.harness_telemetry, lifetime=Lifetime.SESSION),
 )

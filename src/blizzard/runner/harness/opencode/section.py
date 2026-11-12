@@ -9,7 +9,16 @@ from collections.abc import Mapping
 from dataclasses import dataclass
 from pathlib import Path
 
-from blizzard.foundation.config_keys import BOOLEAN, OPEN_TABLE, STRING, STRING_LIST, TABLE, ConfigKey, ConfigView
+from blizzard.foundation.config_keys import (
+    BOOLEAN,
+    OPEN_TABLE,
+    STRING,
+    STRING_LIST,
+    TABLE,
+    ConfigKey,
+    ConfigView,
+    Lifetime,
+)
 from blizzard.foundation.roles import domain_model
 from blizzard.runner.config_table import ConfigError, Table
 from blizzard.runner.harness.declaration import RunnerPathKey, RuntimeFile
@@ -127,15 +136,15 @@ class OpenCodeSectionKind:
     def keys(self) -> tuple[ConfigKey, ...]:
         return (
             ConfigKey("opencode", TABLE),
-            ConfigKey("opencode.enabled", BOOLEAN, default=OpenCodeSection.enabled),
-            ConfigKey("opencode.binary", STRING, default=DEFAULT_OPENCODE_BINARY),
-            ConfigKey("opencode.auth_path", STRING),
-            ConfigKey("opencode.worker_config_path", STRING),
+            ConfigKey("opencode.enabled", BOOLEAN, default=OpenCodeSection.enabled, lifetime=Lifetime.PASS),
+            ConfigKey("opencode.binary", STRING, default=DEFAULT_OPENCODE_BINARY, lifetime=Lifetime.SESSION),
+            ConfigKey("opencode.auth_path", STRING, lifetime=Lifetime.SESSION),
+            ConfigKey("opencode.worker_config_path", STRING, lifetime=Lifetime.SESSION),
             ConfigKey("opencode.models", TABLE),
-            ConfigKey("opencode.models.supported", STRING_LIST),
-            ConfigKey("opencode.models.aliases", OPEN_TABLE),
+            ConfigKey("opencode.models.supported", STRING_LIST, lifetime=Lifetime.SESSION),
+            ConfigKey("opencode.models.aliases", OPEN_TABLE, lifetime=Lifetime.SESSION),
             ConfigKey("opencode.effort", TABLE),
-            ConfigKey("opencode.effort.aliases", OPEN_TABLE),
+            ConfigKey("opencode.effort.aliases", OPEN_TABLE, lifetime=Lifetime.SESSION),
         )
 
     def parse(self, document: ConfigView, *, root: Path, path: Path) -> OpenCodeSection:

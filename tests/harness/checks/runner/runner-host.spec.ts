@@ -202,7 +202,7 @@ test.describe('an unstarted host', () => {
 });
 
 test.describe('a timed host', () => {
-  test.use({ runnerLoop: 'timed', runnerEnv: { BZ_RUNNER_TICK_SECONDS: '1' } });
+  test.use({ runnerLoop: 'timed', runnerConfig: { tick_seconds: 1 } });
 
   test('completes a pass without a step', async ({ runnerHost }) => {
     const runner = runnerHost.runners['runner-local'];

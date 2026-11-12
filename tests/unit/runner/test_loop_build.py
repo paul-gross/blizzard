@@ -464,7 +464,7 @@ def test_periodic_driver_threads_the_graph_broker_into_its_own_loop_wiring(tmp_p
     broker = EventBroker()
 
     with loop_graph(config, events=broker) as graph:
-        driver = PeriodicDriver(config, interval_seconds=30.0, process_graph=graph)
+        driver = PeriodicDriver(config, interval=lambda: 30.0, process_graph=graph)
 
     assert driver.wiring.events is broker
 
@@ -478,7 +478,7 @@ def test_periodic_driver_defaults_to_no_broker(tmp_path: Path) -> None:
     )
 
     with loop_graph(config) as graph:
-        driver = PeriodicDriver(config, interval_seconds=30.0, process_graph=graph)
+        driver = PeriodicDriver(config, interval=lambda: 30.0, process_graph=graph)
 
     assert driver.wiring.events is None
 
@@ -569,7 +569,7 @@ def test_periodic_driver_instruments_its_own_hub_client_before_ticking(
     monkeypatch.setattr(loop_wiring, "tick", signalling_tick)
     monkeypatch.setattr(graph.platform_tracing, "instrument_client", instrumented.append)
     try:
-        driver = PeriodicDriver(config, interval_seconds=30.0, process_graph=graph)
+        driver = PeriodicDriver(config, interval=lambda: 30.0, process_graph=graph)
         driver.start()
         assert ticked.wait(10)
         driver.stop()
@@ -776,7 +776,7 @@ def test_periodic_driver_resolves_prompts_eagerly_at_construction(tmp_path: Path
     )
 
     with loop_graph(config) as graph, pytest.raises(ConfigError):
-        PeriodicDriver(config, interval_seconds=30.0, process_graph=graph)
+        PeriodicDriver(config, interval=lambda: 30.0, process_graph=graph)
 
 
 def test_resume_marking_on_shutdown_marks_via_its_injected_clock(tmp_path: Path) -> None:

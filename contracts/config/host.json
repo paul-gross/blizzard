@@ -26,6 +26,8 @@
     {
       "default": null,
       "deprecated": false,
+      "env": null,
+      "lifetime": null,
       "path": "auth",
       "replaced_by": null,
       "required": false,
@@ -34,6 +36,8 @@
     {
       "default": "mirror",
       "deprecated": false,
+      "env": null,
+      "lifetime": "boot",
       "path": "auth.hub_role_default",
       "replaced_by": null,
       "required": false,
@@ -42,6 +46,8 @@
     {
       "default": null,
       "deprecated": false,
+      "env": null,
+      "lifetime": "boot",
       "path": "auth.superuser",
       "replaced_by": null,
       "required": false,
@@ -50,6 +56,8 @@
     {
       "default": null,
       "deprecated": false,
+      "env": null,
+      "lifetime": "boot",
       "path": "auth.users",
       "replaced_by": null,
       "required": false,
@@ -58,6 +66,8 @@
     {
       "default": null,
       "deprecated": true,
+      "env": null,
+      "lifetime": "pass",
       "path": "base_branch",
       "replaced_by": "workspace[].base_branch",
       "required": false,
@@ -66,6 +76,8 @@
     {
       "default": null,
       "deprecated": true,
+      "env": null,
+      "lifetime": null,
       "path": "claude_code",
       "replaced_by": "runner[].claude_code",
       "required": false,
@@ -74,6 +86,8 @@
     {
       "default": null,
       "deprecated": true,
+      "env": null,
+      "lifetime": "boot",
       "path": "claude_code_credentials_path",
       "replaced_by": "runner[].claude_code_credentials_path",
       "required": false,
@@ -82,6 +96,8 @@
     {
       "default": null,
       "deprecated": true,
+      "env": null,
+      "lifetime": null,
       "path": "context",
       "replaced_by": "runner[].context",
       "required": false,
@@ -90,6 +106,8 @@
     {
       "default": null,
       "deprecated": true,
+      "env": null,
+      "lifetime": null,
       "path": "cost",
       "replaced_by": "runner[].cost",
       "required": false,
@@ -98,6 +116,8 @@
     {
       "default": null,
       "deprecated": false,
+      "env": null,
+      "lifetime": "boot",
       "path": "db_url",
       "replaced_by": null,
       "required": false,
@@ -106,6 +126,8 @@
     {
       "default": null,
       "deprecated": true,
+      "env": null,
+      "lifetime": null,
       "path": "effort",
       "replaced_by": "runner[].effort",
       "required": false,
@@ -114,6 +136,8 @@
     {
       "default": null,
       "deprecated": true,
+      "env": null,
+      "lifetime": "pass",
       "path": "envs",
       "replaced_by": "workspace[].envs",
       "required": false,
@@ -122,6 +146,8 @@
     {
       "default": null,
       "deprecated": true,
+      "env": null,
+      "lifetime": null,
       "path": "external_subscription_usage",
       "replaced_by": "subscription",
       "required": false,
@@ -130,6 +156,8 @@
     {
       "default": null,
       "deprecated": false,
+      "env": null,
+      "lifetime": "boot",
       "path": "flags",
       "replaced_by": null,
       "required": false,
@@ -138,6 +166,8 @@
     {
       "default": null,
       "deprecated": true,
+      "env": null,
+      "lifetime": "pass",
       "path": "gates",
       "replaced_by": "runner[].gates",
       "required": false,
@@ -146,6 +176,8 @@
     {
       "default": null,
       "deprecated": true,
+      "env": null,
+      "lifetime": null,
       "path": "harness",
       "replaced_by": "runner[].harness",
       "required": false,
@@ -154,6 +186,8 @@
     {
       "default": null,
       "deprecated": true,
+      "env": null,
+      "lifetime": "session",
       "path": "harness_binary",
       "replaced_by": "runner[].harness_binary",
       "required": false,
@@ -162,6 +196,8 @@
     {
       "default": null,
       "deprecated": true,
+      "env": null,
+      "lifetime": "session",
       "path": "harness_permission_mode",
       "replaced_by": "runner[].harness_permission_mode",
       "required": false,
@@ -170,6 +206,8 @@
     {
       "default": "127.0.0.1",
       "deprecated": false,
+      "env": null,
+      "lifetime": "boot",
       "path": "host",
       "replaced_by": null,
       "required": false,
@@ -178,6 +216,8 @@
     {
       "default": null,
       "deprecated": false,
+      "env": "BZ_HOST_TOKEN",
+      "lifetime": "boot",
       "path": "host_token",
       "replaced_by": null,
       "required": false,
@@ -186,6 +226,8 @@
     {
       "default": null,
       "deprecated": false,
+      "env": null,
+      "lifetime": "boot",
       "path": "hub_tokens",
       "replaced_by": null,
       "required": false,
@@ -194,6 +236,8 @@
     {
       "default": "http://127.0.0.1:8421",
       "deprecated": false,
+      "env": null,
+      "lifetime": "boot",
       "path": "hub_url",
       "replaced_by": null,
       "required": false,
@@ -202,6 +246,8 @@
     {
       "default": "timed",
       "deprecated": false,
+      "env": null,
+      "lifetime": "boot",
       "path": "loop",
       "replaced_by": null,
       "required": false,
@@ -210,6 +256,8 @@
     {
       "default": null,
       "deprecated": true,
+      "env": null,
+      "lifetime": "pass",
       "path": "max_agents",
       "replaced_by": "runner[].agents",
       "required": false,
@@ -218,6 +266,8 @@
     {
       "default": null,
       "deprecated": true,
+      "env": null,
+      "lifetime": "pass",
       "path": "max_environments",
       "replaced_by": "workspace[].max_environments",
       "required": false,
@@ -226,6 +276,8 @@
     {
       "default": null,
       "deprecated": true,
+      "env": null,
+      "lifetime": null,
       "path": "models",
       "replaced_by": "runner[].models",
       "required": false,
@@ -234,6 +286,8 @@
     {
       "default": null,
       "deprecated": true,
+      "env": null,
+      "lifetime": "pass",
       "path": "name",
       "replaced_by": "runner[].name",
       "required": false,
@@ -242,6 +296,8 @@
     {
       "default": null,
       "deprecated": true,
+      "env": null,
+      "lifetime": null,
       "path": "opencode",
       "replaced_by": "runner[].opencode",
       "required": false,
@@ -250,6 +306,8 @@
     {
       "default": 8431,
       "deprecated": false,
+      "env": null,
+      "lifetime": "boot",
       "path": "port",
       "replaced_by": null,
       "required": false,
@@ -258,6 +316,8 @@
     {
       "default": null,
       "deprecated": true,
+      "env": null,
+      "lifetime": null,
       "path": "projects",
       "replaced_by": "runner[].projects",
       "required": false,
@@ -266,6 +326,8 @@
     {
       "default": null,
       "deprecated": true,
+      "env": null,
+      "lifetime": "session",
       "path": "prompt",
       "replaced_by": "workspace[].prompt",
       "required": false,
@@ -274,6 +336,8 @@
     {
       "default": null,
       "deprecated": true,
+      "env": null,
+      "lifetime": "session",
       "path": "prompt_file",
       "replaced_by": "workspace[].prompt_file",
       "required": false,
@@ -282,6 +346,8 @@
     {
       "default": null,
       "deprecated": true,
+      "env": null,
+      "lifetime": "session",
       "path": "prompt_package",
       "replaced_by": "workspace[].prompt_package",
       "required": false,
@@ -290,6 +356,8 @@
     {
       "default": null,
       "deprecated": true,
+      "env": null,
+      "lifetime": "pass",
       "path": "provider",
       "replaced_by": "workspace[].provider",
       "required": false,
@@ -298,6 +366,8 @@
     {
       "default": null,
       "deprecated": false,
+      "env": null,
+      "lifetime": "boot",
       "path": "public_url",
       "replaced_by": null,
       "required": false,
@@ -306,6 +376,8 @@
     {
       "default": null,
       "deprecated": true,
+      "env": null,
+      "lifetime": null,
       "path": "queue",
       "replaced_by": "runner[].queue",
       "required": false,
@@ -314,6 +386,8 @@
     {
       "default": null,
       "deprecated": true,
+      "env": null,
+      "lifetime": null,
       "path": "repo",
       "replaced_by": "workspace[].repo",
       "required": false,
@@ -322,6 +396,8 @@
     {
       "default": null,
       "deprecated": true,
+      "env": null,
+      "lifetime": "pass",
       "path": "root",
       "replaced_by": "workspace[].root",
       "required": false,
@@ -330,6 +406,8 @@
     {
       "default": null,
       "deprecated": false,
+      "env": null,
+      "lifetime": null,
       "path": "runner",
       "replaced_by": null,
       "required": false,
@@ -338,6 +416,8 @@
     {
       "default": null,
       "deprecated": false,
+      "env": null,
+      "lifetime": "pass",
       "path": "runner[].agents",
       "replaced_by": null,
       "required": false,
@@ -346,6 +426,8 @@
     {
       "default": null,
       "deprecated": false,
+      "env": null,
+      "lifetime": null,
       "path": "runner[].claude_code",
       "replaced_by": null,
       "required": false,
@@ -354,6 +436,8 @@
     {
       "default": "claude",
       "deprecated": false,
+      "env": null,
+      "lifetime": "session",
       "path": "runner[].claude_code.binary",
       "replaced_by": null,
       "required": false,
@@ -362,6 +446,8 @@
     {
       "default": true,
       "deprecated": false,
+      "env": null,
+      "lifetime": "pass",
       "path": "runner[].claude_code.enabled",
       "replaced_by": null,
       "required": false,
@@ -370,6 +456,8 @@
     {
       "default": null,
       "deprecated": true,
+      "env": null,
+      "lifetime": "boot",
       "path": "runner[].claude_code_credentials_path",
       "replaced_by": null,
       "required": false,
@@ -378,6 +466,8 @@
     {
       "default": null,
       "deprecated": false,
+      "env": null,
+      "lifetime": null,
       "path": "runner[].context",
       "replaced_by": null,
       "required": false,
@@ -386,6 +476,8 @@
     {
       "default": 60,
       "deprecated": false,
+      "env": null,
+      "lifetime": "pass",
       "path": "runner[].context.sample_interval_seconds",
       "replaced_by": null,
       "required": false,
@@ -394,6 +486,8 @@
     {
       "default": null,
       "deprecated": false,
+      "env": null,
+      "lifetime": "pass",
       "path": "runner[].context.warn_tokens",
       "replaced_by": null,
       "required": false,
@@ -402,6 +496,8 @@
     {
       "default": null,
       "deprecated": false,
+      "env": null,
+      "lifetime": null,
       "path": "runner[].cost",
       "replaced_by": null,
       "required": false,
@@ -410,6 +506,8 @@
     {
       "default": null,
       "deprecated": false,
+      "env": null,
+      "lifetime": "pass",
       "path": "runner[].cost.chunk_cap_usd",
       "replaced_by": null,
       "required": false,
@@ -418,6 +516,8 @@
     {
       "default": null,
       "deprecated": false,
+      "env": null,
+      "lifetime": "pass",
       "path": "runner[].cost.runner_ceiling_usd",
       "replaced_by": null,
       "required": false,
@@ -426,6 +526,8 @@
     {
       "default": 24.0,
       "deprecated": false,
+      "env": null,
+      "lifetime": "pass",
       "path": "runner[].cost.window_hours",
       "replaced_by": null,
       "required": false,
@@ -434,6 +536,8 @@
     {
       "default": null,
       "deprecated": false,
+      "env": null,
+      "lifetime": null,
       "path": "runner[].effort",
       "replaced_by": null,
       "required": false,
@@ -442,6 +546,8 @@
     {
       "default": null,
       "deprecated": false,
+      "env": null,
+      "lifetime": "session",
       "path": "runner[].effort.aliases",
       "replaced_by": null,
       "required": false,
@@ -450,6 +556,8 @@
     {
       "default": null,
       "deprecated": true,
+      "env": null,
+      "lifetime": null,
       "path": "runner[].external_subscription_usage",
       "replaced_by": "subscription",
       "required": false,
@@ -458,6 +566,8 @@
     {
       "default": [],
       "deprecated": false,
+      "env": null,
+      "lifetime": "pass",
       "path": "runner[].gates",
       "replaced_by": null,
       "required": false,
@@ -466,6 +576,8 @@
     {
       "default": null,
       "deprecated": false,
+      "env": null,
+      "lifetime": null,
       "path": "runner[].harness",
       "replaced_by": null,
       "required": false,
@@ -474,6 +586,8 @@
     {
       "default": null,
       "deprecated": false,
+      "env": null,
+      "lifetime": "session",
       "path": "runner[].harness.autonomy",
       "replaced_by": null,
       "required": false,
@@ -482,6 +596,8 @@
     {
       "default": null,
       "deprecated": false,
+      "env": null,
+      "lifetime": "session",
       "path": "runner[].harness.config_dir",
       "replaced_by": null,
       "required": false,
@@ -490,6 +606,8 @@
     {
       "default": null,
       "deprecated": true,
+      "env": null,
+      "lifetime": "session",
       "path": "runner[].harness_binary",
       "replaced_by": "runner[].claude_code.binary",
       "required": false,
@@ -498,6 +616,8 @@
     {
       "default": null,
       "deprecated": true,
+      "env": null,
+      "lifetime": "session",
       "path": "runner[].harness_permission_mode",
       "replaced_by": "runner[].harness.autonomy",
       "required": false,
@@ -506,6 +626,8 @@
     {
       "default": null,
       "deprecated": false,
+      "env": null,
+      "lifetime": "immutable",
       "path": "runner[].id",
       "replaced_by": null,
       "required": false,
@@ -514,6 +636,8 @@
     {
       "default": null,
       "deprecated": true,
+      "env": null,
+      "lifetime": "pass",
       "path": "runner[].max_agents",
       "replaced_by": "runner[].agents",
       "required": false,
@@ -522,6 +646,8 @@
     {
       "default": null,
       "deprecated": false,
+      "env": null,
+      "lifetime": null,
       "path": "runner[].models",
       "replaced_by": null,
       "required": false,
@@ -530,6 +656,8 @@
     {
       "default": null,
       "deprecated": false,
+      "env": null,
+      "lifetime": "session",
       "path": "runner[].models.aliases",
       "replaced_by": null,
       "required": false,
@@ -538,6 +666,8 @@
     {
       "default": null,
       "deprecated": false,
+      "env": null,
+      "lifetime": "session",
       "path": "runner[].models.supported",
       "replaced_by": null,
       "required": false,
@@ -546,6 +676,8 @@
     {
       "default": null,
       "deprecated": false,
+      "env": null,
+      "lifetime": "pass",
       "path": "runner[].name",
       "replaced_by": null,
       "required": true,
@@ -554,6 +686,8 @@
     {
       "default": null,
       "deprecated": false,
+      "env": null,
+      "lifetime": null,
       "path": "runner[].opencode",
       "replaced_by": null,
       "required": false,
@@ -562,6 +696,8 @@
     {
       "default": null,
       "deprecated": false,
+      "env": null,
+      "lifetime": "session",
       "path": "runner[].opencode.auth_path",
       "replaced_by": null,
       "required": false,
@@ -570,6 +706,8 @@
     {
       "default": "opencode",
       "deprecated": false,
+      "env": null,
+      "lifetime": "session",
       "path": "runner[].opencode.binary",
       "replaced_by": null,
       "required": false,
@@ -578,6 +716,8 @@
     {
       "default": null,
       "deprecated": false,
+      "env": null,
+      "lifetime": null,
       "path": "runner[].opencode.effort",
       "replaced_by": null,
       "required": false,
@@ -586,6 +726,8 @@
     {
       "default": null,
       "deprecated": false,
+      "env": null,
+      "lifetime": "session",
       "path": "runner[].opencode.effort.aliases",
       "replaced_by": null,
       "required": false,
@@ -594,6 +736,8 @@
     {
       "default": true,
       "deprecated": false,
+      "env": null,
+      "lifetime": "pass",
       "path": "runner[].opencode.enabled",
       "replaced_by": null,
       "required": false,
@@ -602,6 +746,8 @@
     {
       "default": null,
       "deprecated": false,
+      "env": null,
+      "lifetime": null,
       "path": "runner[].opencode.models",
       "replaced_by": null,
       "required": false,
@@ -610,6 +756,8 @@
     {
       "default": null,
       "deprecated": false,
+      "env": null,
+      "lifetime": "session",
       "path": "runner[].opencode.models.aliases",
       "replaced_by": null,
       "required": false,
@@ -618,6 +766,8 @@
     {
       "default": null,
       "deprecated": false,
+      "env": null,
+      "lifetime": "session",
       "path": "runner[].opencode.models.supported",
       "replaced_by": null,
       "required": false,
@@ -626,6 +776,8 @@
     {
       "default": null,
       "deprecated": false,
+      "env": null,
+      "lifetime": "session",
       "path": "runner[].opencode.worker_config_path",
       "replaced_by": null,
       "required": false,
@@ -634,6 +786,8 @@
     {
       "default": null,
       "deprecated": false,
+      "env": null,
+      "lifetime": null,
       "path": "runner[].projects",
       "replaced_by": null,
       "required": true,
@@ -642,6 +796,8 @@
     {
       "default": null,
       "deprecated": true,
+      "env": null,
+      "lifetime": "pass",
       "path": "runner[].projects[].agents",
       "replaced_by": "runner[].agents",
       "required": false,
@@ -650,6 +806,8 @@
     {
       "default": null,
       "deprecated": false,
+      "env": null,
+      "lifetime": "pass",
       "path": "runner[].projects[].project",
       "replaced_by": null,
       "required": true,
@@ -658,6 +816,8 @@
     {
       "default": null,
       "deprecated": false,
+      "env": null,
+      "lifetime": "pass",
       "path": "runner[].projects[].workspace",
       "replaced_by": null,
       "required": true,
@@ -666,6 +826,8 @@
     {
       "default": null,
       "deprecated": false,
+      "env": null,
+      "lifetime": null,
       "path": "runner[].queue",
       "replaced_by": null,
       "required": false,
@@ -674,6 +836,8 @@
     {
       "default": false,
       "deprecated": false,
+      "env": null,
+      "lifetime": "pass",
       "path": "runner[].queue.strict",
       "replaced_by": null,
       "required": false,
@@ -682,6 +846,8 @@
     {
       "default": null,
       "deprecated": true,
+      "env": null,
+      "lifetime": "immutable",
       "path": "runner[].runner_id",
       "replaced_by": "runner[].id",
       "required": false,
@@ -690,6 +856,8 @@
     {
       "default": "",
       "deprecated": false,
+      "env": null,
+      "lifetime": "session",
       "path": "runner[].runner_prompt",
       "replaced_by": null,
       "required": false,
@@ -698,6 +866,8 @@
     {
       "default": "",
       "deprecated": false,
+      "env": null,
+      "lifetime": "session",
       "path": "runner[].runner_prompt_file",
       "replaced_by": null,
       "required": false,
@@ -706,6 +876,8 @@
     {
       "default": null,
       "deprecated": false,
+      "env": null,
+      "lifetime": "pass",
       "path": "runner[].subscription",
       "replaced_by": null,
       "required": false,
@@ -714,6 +886,8 @@
     {
       "default": null,
       "deprecated": false,
+      "env": null,
+      "lifetime": null,
       "path": "runner[].throttle",
       "replaced_by": null,
       "required": false,
@@ -722,6 +896,8 @@
     {
       "default": null,
       "deprecated": false,
+      "env": null,
+      "lifetime": null,
       "path": "runner[].throttle.budget",
       "replaced_by": null,
       "required": false,
@@ -730,6 +906,8 @@
     {
       "default": null,
       "deprecated": false,
+      "env": null,
+      "lifetime": "pass",
       "path": "runner[].throttle.budget.usd",
       "replaced_by": null,
       "required": false,
@@ -738,6 +916,8 @@
     {
       "default": 24.0,
       "deprecated": false,
+      "env": null,
+      "lifetime": "pass",
       "path": "runner[].throttle.budget.window_hours",
       "replaced_by": null,
       "required": false,
@@ -746,6 +926,8 @@
     {
       "default": "hold",
       "deprecated": false,
+      "env": null,
+      "lifetime": "pass",
       "path": "runner[].throttle.on_decline",
       "replaced_by": null,
       "required": false,
@@ -754,6 +936,8 @@
     {
       "default": "hold",
       "deprecated": false,
+      "env": null,
+      "lifetime": "pass",
       "path": "runner[].throttle.on_usage_limit",
       "replaced_by": null,
       "required": false,
@@ -762,6 +946,8 @@
     {
       "default": null,
       "deprecated": false,
+      "env": null,
+      "lifetime": null,
       "path": "runner[].throttle.pace",
       "replaced_by": null,
       "required": false,
@@ -770,6 +956,8 @@
     {
       "default": 5.0,
       "deprecated": false,
+      "env": null,
+      "lifetime": "pass",
       "path": "runner[].throttle.pace.lead_pct",
       "replaced_by": null,
       "required": false,
@@ -778,6 +966,8 @@
     {
       "default": null,
       "deprecated": false,
+      "env": null,
+      "lifetime": null,
       "path": "runner[].throttle.pace.taper",
       "replaced_by": null,
       "required": false,
@@ -786,6 +976,8 @@
     {
       "default": null,
       "deprecated": false,
+      "env": null,
+      "lifetime": "pass",
       "path": "runner[].throttle.pace.taper[].from_pct",
       "replaced_by": null,
       "required": false,
@@ -794,6 +986,8 @@
     {
       "default": null,
       "deprecated": false,
+      "env": null,
+      "lifetime": "pass",
       "path": "runner[].throttle.pace.taper[].lead_pct",
       "replaced_by": null,
       "required": false,
@@ -802,6 +996,8 @@
     {
       "default": null,
       "deprecated": false,
+      "env": null,
+      "lifetime": "pass",
       "path": "runner[].throttle.pace.window",
       "replaced_by": null,
       "required": false,
@@ -810,6 +1006,8 @@
     {
       "default": null,
       "deprecated": false,
+      "env": null,
+      "lifetime": null,
       "path": "runner[].throttle.schedule",
       "replaced_by": null,
       "required": false,
@@ -818,6 +1016,8 @@
     {
       "default": null,
       "deprecated": false,
+      "env": null,
+      "lifetime": "pass",
       "path": "runner[].throttle.schedule.days",
       "replaced_by": null,
       "required": false,
@@ -826,6 +1026,8 @@
     {
       "default": null,
       "deprecated": false,
+      "env": null,
+      "lifetime": "pass",
       "path": "runner[].throttle.schedule.hours",
       "replaced_by": null,
       "required": false,
@@ -834,6 +1036,8 @@
     {
       "default": null,
       "deprecated": false,
+      "env": null,
+      "lifetime": null,
       "path": "runner[].throttle.utilization",
       "replaced_by": null,
       "required": false,
@@ -842,6 +1046,8 @@
     {
       "default": null,
       "deprecated": false,
+      "env": null,
+      "lifetime": "pass",
       "path": "runner[].throttle.utilization.below_pct",
       "replaced_by": null,
       "required": false,
@@ -850,6 +1056,8 @@
     {
       "default": null,
       "deprecated": false,
+      "env": null,
+      "lifetime": "pass",
       "path": "runner[].throttle.utilization.windows",
       "replaced_by": null,
       "required": false,
@@ -858,6 +1066,8 @@
     {
       "default": null,
       "deprecated": true,
+      "env": null,
+      "lifetime": "boot",
       "path": "runner[].token_env",
       "replaced_by": null,
       "required": false,
@@ -866,6 +1076,8 @@
     {
       "default": "",
       "deprecated": false,
+      "env": null,
+      "lifetime": "session",
       "path": "runner[].transcripts_root",
       "replaced_by": null,
       "required": false,
@@ -874,6 +1086,8 @@
     {
       "default": null,
       "deprecated": false,
+      "env": null,
+      "lifetime": null,
       "path": "runner[].worker",
       "replaced_by": null,
       "required": false,
@@ -882,6 +1096,8 @@
     {
       "default": [],
       "deprecated": false,
+      "env": null,
+      "lifetime": "session",
       "path": "runner[].worker.env_passthrough",
       "replaced_by": null,
       "required": false,
@@ -890,6 +1106,8 @@
     {
       "default": [],
       "deprecated": false,
+      "env": null,
+      "lifetime": "session",
       "path": "runner[].worker.path_prepend",
       "replaced_by": null,
       "required": false,
@@ -898,6 +1116,8 @@
     {
       "default": "/bin/bash",
       "deprecated": false,
+      "env": null,
+      "lifetime": "session",
       "path": "runner[].worker.shell",
       "replaced_by": null,
       "required": false,
@@ -906,6 +1126,8 @@
     {
       "default": null,
       "deprecated": true,
+      "env": null,
+      "lifetime": "boot",
       "path": "runner[].worker_settings_path",
       "replaced_by": null,
       "required": false,
@@ -914,6 +1136,8 @@
     {
       "default": null,
       "deprecated": true,
+      "env": null,
+      "lifetime": "pass",
       "path": "runner[].workspace_envs",
       "replaced_by": "workspace[].envs",
       "required": false,
@@ -922,6 +1146,8 @@
     {
       "default": null,
       "deprecated": true,
+      "env": null,
+      "lifetime": "immutable",
       "path": "runner[].workspace_id",
       "replaced_by": "workspace[].id",
       "required": false,
@@ -930,6 +1156,8 @@
     {
       "default": null,
       "deprecated": true,
+      "env": null,
+      "lifetime": "session",
       "path": "runner[].workspace_prompt",
       "replaced_by": "workspace[].prompt",
       "required": false,
@@ -938,6 +1166,8 @@
     {
       "default": null,
       "deprecated": true,
+      "env": null,
+      "lifetime": "session",
       "path": "runner[].workspace_prompt_file",
       "replaced_by": "workspace[].prompt_file",
       "required": false,
@@ -946,6 +1176,8 @@
     {
       "default": null,
       "deprecated": true,
+      "env": null,
+      "lifetime": "session",
       "path": "runner[].workspace_prompt_package",
       "replaced_by": "workspace[].prompt_package",
       "required": false,
@@ -954,6 +1186,8 @@
     {
       "default": null,
       "deprecated": true,
+      "env": null,
+      "lifetime": "pass",
       "path": "runner[].workspace_provider",
       "replaced_by": "workspace[].provider",
       "required": false,
@@ -962,6 +1196,8 @@
     {
       "default": null,
       "deprecated": true,
+      "env": null,
+      "lifetime": null,
       "path": "runner[].workspace_repo",
       "replaced_by": "workspace[].repo",
       "required": false,
@@ -970,6 +1206,8 @@
     {
       "default": null,
       "deprecated": true,
+      "env": null,
+      "lifetime": "pass",
       "path": "runner[].workspace_root",
       "replaced_by": "workspace[].root",
       "required": false,
@@ -978,6 +1216,8 @@
     {
       "default": null,
       "deprecated": true,
+      "env": null,
+      "lifetime": "immutable",
       "path": "runner_id",
       "replaced_by": "runner[].id",
       "required": false,
@@ -986,6 +1226,8 @@
     {
       "default": null,
       "deprecated": true,
+      "env": null,
+      "lifetime": "session",
       "path": "runner_prompt",
       "replaced_by": "runner[].runner_prompt",
       "required": false,
@@ -994,6 +1236,8 @@
     {
       "default": null,
       "deprecated": true,
+      "env": null,
+      "lifetime": "session",
       "path": "runner_prompt_file",
       "replaced_by": "runner[].runner_prompt_file",
       "required": false,
@@ -1002,6 +1246,8 @@
     {
       "default": "BZ_RUNNER_SESSION_SECRET",
       "deprecated": false,
+      "env": null,
+      "lifetime": "boot",
       "path": "session_secret_env",
       "replaced_by": null,
       "required": false,
@@ -1010,6 +1256,8 @@
     {
       "default": null,
       "deprecated": false,
+      "env": null,
+      "lifetime": null,
       "path": "subscription",
       "replaced_by": null,
       "required": false,
@@ -1018,6 +1266,8 @@
     {
       "default": null,
       "deprecated": false,
+      "env": null,
+      "lifetime": "pass",
       "path": "subscription[].credentials_path",
       "replaced_by": null,
       "required": false,
@@ -1026,6 +1276,8 @@
     {
       "default": null,
       "deprecated": false,
+      "env": null,
+      "lifetime": "pass",
       "path": "subscription[].name",
       "replaced_by": null,
       "required": true,
@@ -1034,6 +1286,8 @@
     {
       "default": null,
       "deprecated": false,
+      "env": null,
+      "lifetime": "immutable",
       "path": "subscription[].provider",
       "replaced_by": null,
       "required": true,
@@ -1042,6 +1296,8 @@
     {
       "default": 300,
       "deprecated": false,
+      "env": null,
+      "lifetime": "pass",
       "path": "subscription[].sample_interval_seconds",
       "replaced_by": null,
       "required": false,
@@ -1050,6 +1306,8 @@
     {
       "default": null,
       "deprecated": false,
+      "env": null,
+      "lifetime": "immutable",
       "path": "subscription[].slug",
       "replaced_by": null,
       "required": true,
@@ -1058,14 +1316,28 @@
     {
       "default": null,
       "deprecated": false,
+      "env": null,
+      "lifetime": "pass",
       "path": "subscription[].usage_api_base",
       "replaced_by": null,
       "required": false,
       "type": "string"
     },
     {
+      "default": 30.0,
+      "deprecated": false,
+      "env": null,
+      "lifetime": "pass",
+      "path": "tick_seconds",
+      "replaced_by": null,
+      "required": false,
+      "type": "number"
+    },
+    {
       "default": null,
       "deprecated": true,
+      "env": null,
+      "lifetime": "boot",
       "path": "token_env",
       "replaced_by": null,
       "required": false,
@@ -1074,6 +1346,8 @@
     {
       "default": null,
       "deprecated": false,
+      "env": null,
+      "lifetime": null,
       "path": "tools",
       "replaced_by": null,
       "required": false,
@@ -1082,6 +1356,8 @@
     {
       "default": [],
       "deprecated": false,
+      "env": null,
+      "lifetime": "session",
       "path": "tools.env_passthrough",
       "replaced_by": null,
       "required": false,
@@ -1090,6 +1366,8 @@
     {
       "default": [],
       "deprecated": false,
+      "env": null,
+      "lifetime": "session",
       "path": "tools.path_prepend",
       "replaced_by": null,
       "required": false,
@@ -1098,6 +1376,8 @@
     {
       "default": null,
       "deprecated": false,
+      "env": null,
+      "lifetime": null,
       "path": "tracing",
       "replaced_by": null,
       "required": false,
@@ -1106,6 +1386,8 @@
     {
       "default": 200,
       "deprecated": false,
+      "env": null,
+      "lifetime": "pass",
       "path": "tracing.batch_limit",
       "replaced_by": null,
       "required": false,
@@ -1114,6 +1396,8 @@
     {
       "default": false,
       "deprecated": false,
+      "env": null,
+      "lifetime": "session",
       "path": "tracing.harness_telemetry",
       "replaced_by": null,
       "required": false,
@@ -1122,6 +1406,8 @@
     {
       "default": 86400,
       "deprecated": false,
+      "env": null,
+      "lifetime": "pass",
       "path": "tracing.max_lag_seconds",
       "replaced_by": null,
       "required": false,
@@ -1130,6 +1416,8 @@
     {
       "default": false,
       "deprecated": false,
+      "env": null,
+      "lifetime": "boot",
       "path": "tracing.platform",
       "replaced_by": null,
       "required": false,
@@ -1138,6 +1426,8 @@
     {
       "default": 0.01,
       "deprecated": false,
+      "env": null,
+      "lifetime": "boot",
       "path": "tracing.platform_sample_ratio",
       "replaced_by": null,
       "required": false,
@@ -1146,6 +1436,8 @@
     {
       "default": 604800,
       "deprecated": false,
+      "env": null,
+      "lifetime": "pass",
       "path": "tracing.replay_max_window",
       "replaced_by": null,
       "required": false,
@@ -1154,6 +1446,8 @@
     {
       "default": 300,
       "deprecated": false,
+      "env": null,
+      "lifetime": "pass",
       "path": "tracing.settle_seconds",
       "replaced_by": null,
       "required": false,
@@ -1162,6 +1456,8 @@
     {
       "default": 60,
       "deprecated": false,
+      "env": null,
+      "lifetime": "pass",
       "path": "tracing.sweep_seconds",
       "replaced_by": null,
       "required": false,
@@ -1170,6 +1466,8 @@
     {
       "default": null,
       "deprecated": false,
+      "env": null,
+      "lifetime": "session",
       "path": "tracing.worker_program_services",
       "replaced_by": null,
       "required": false,
@@ -1178,6 +1476,8 @@
     {
       "default": false,
       "deprecated": false,
+      "env": null,
+      "lifetime": "session",
       "path": "tracing.worker_programs",
       "replaced_by": null,
       "required": false,
@@ -1186,6 +1486,8 @@
     {
       "default": null,
       "deprecated": false,
+      "env": null,
+      "lifetime": null,
       "path": "transcripts",
       "replaced_by": null,
       "required": false,
@@ -1194,6 +1496,8 @@
     {
       "default": null,
       "deprecated": false,
+      "env": null,
+      "lifetime": "pass",
       "path": "transcripts.chunk_max_bytes",
       "replaced_by": null,
       "required": false,
@@ -1202,6 +1506,8 @@
     {
       "default": null,
       "deprecated": false,
+      "env": null,
+      "lifetime": "pass",
       "path": "transcripts.record_max_bytes",
       "replaced_by": null,
       "required": false,
@@ -1210,6 +1516,8 @@
     {
       "default": false,
       "deprecated": false,
+      "env": null,
+      "lifetime": "pass",
       "path": "transcripts.ship",
       "replaced_by": null,
       "required": false,
@@ -1218,6 +1526,8 @@
     {
       "default": null,
       "deprecated": true,
+      "env": null,
+      "lifetime": "session",
       "path": "transcripts_root",
       "replaced_by": "runner[].transcripts_root",
       "required": false,
@@ -1226,6 +1536,8 @@
     {
       "default": null,
       "deprecated": false,
+      "env": null,
+      "lifetime": "boot",
       "path": "trusted_proxies",
       "replaced_by": null,
       "required": false,
@@ -1234,6 +1546,8 @@
     {
       "default": null,
       "deprecated": true,
+      "env": null,
+      "lifetime": null,
       "path": "worker",
       "replaced_by": "runner[].worker",
       "required": false,
@@ -1242,6 +1556,8 @@
     {
       "default": null,
       "deprecated": false,
+      "env": null,
+      "lifetime": null,
       "path": "worker_scratch",
       "replaced_by": null,
       "required": false,
@@ -1250,6 +1566,8 @@
     {
       "default": null,
       "deprecated": false,
+      "env": null,
+      "lifetime": "boot",
       "path": "worker_scratch.root",
       "replaced_by": null,
       "required": false,
@@ -1258,6 +1576,8 @@
     {
       "default": null,
       "deprecated": true,
+      "env": null,
+      "lifetime": "boot",
       "path": "worker_settings_path",
       "replaced_by": "runner[].worker_settings_path",
       "required": false,
@@ -1266,6 +1586,8 @@
     {
       "default": null,
       "deprecated": false,
+      "env": null,
+      "lifetime": null,
       "path": "worker_stdout",
       "replaced_by": null,
       "required": false,
@@ -1274,6 +1596,8 @@
     {
       "default": 14,
       "deprecated": false,
+      "env": null,
+      "lifetime": "pass",
       "path": "worker_stdout.retention_days",
       "replaced_by": null,
       "required": false,
@@ -1282,6 +1606,8 @@
     {
       "default": null,
       "deprecated": false,
+      "env": null,
+      "lifetime": null,
       "path": "workspace",
       "replaced_by": null,
       "required": false,
@@ -1290,6 +1616,8 @@
     {
       "default": "main",
       "deprecated": false,
+      "env": null,
+      "lifetime": "pass",
       "path": "workspace[].base_branch",
       "replaced_by": null,
       "required": false,
@@ -1300,6 +1628,8 @@
         "e1"
       ],
       "deprecated": false,
+      "env": null,
+      "lifetime": "pass",
       "path": "workspace[].envs",
       "replaced_by": null,
       "required": false,
@@ -1308,6 +1638,8 @@
     {
       "default": null,
       "deprecated": false,
+      "env": null,
+      "lifetime": "immutable",
       "path": "workspace[].id",
       "replaced_by": null,
       "required": true,
@@ -1316,6 +1648,8 @@
     {
       "default": 10,
       "deprecated": false,
+      "env": null,
+      "lifetime": "pass",
       "path": "workspace[].max_environments",
       "replaced_by": null,
       "required": false,
@@ -1324,6 +1658,8 @@
     {
       "default": "",
       "deprecated": false,
+      "env": null,
+      "lifetime": "session",
       "path": "workspace[].prompt",
       "replaced_by": null,
       "required": false,
@@ -1332,6 +1668,8 @@
     {
       "default": "",
       "deprecated": false,
+      "env": null,
+      "lifetime": "session",
       "path": "workspace[].prompt_file",
       "replaced_by": null,
       "required": false,
@@ -1340,6 +1678,8 @@
     {
       "default": "",
       "deprecated": false,
+      "env": null,
+      "lifetime": "session",
       "path": "workspace[].prompt_package",
       "replaced_by": null,
       "required": false,
@@ -1348,6 +1688,8 @@
     {
       "default": "winter",
       "deprecated": false,
+      "env": null,
+      "lifetime": "pass",
       "path": "workspace[].provider",
       "replaced_by": null,
       "required": false,
@@ -1356,6 +1698,8 @@
     {
       "default": null,
       "deprecated": false,
+      "env": null,
+      "lifetime": null,
       "path": "workspace[].repo",
       "replaced_by": null,
       "required": false,
@@ -1364,6 +1708,8 @@
     {
       "default": null,
       "deprecated": false,
+      "env": null,
+      "lifetime": "pass",
       "path": "workspace[].repo[].name",
       "replaced_by": null,
       "required": true,
@@ -1372,6 +1718,8 @@
     {
       "default": null,
       "deprecated": false,
+      "env": null,
+      "lifetime": "pass",
       "path": "workspace[].repo[].url",
       "replaced_by": null,
       "required": true,
@@ -1380,6 +1728,8 @@
     {
       "default": "",
       "deprecated": false,
+      "env": null,
+      "lifetime": "pass",
       "path": "workspace[].root",
       "replaced_by": null,
       "required": false,
@@ -1388,6 +1738,8 @@
     {
       "default": null,
       "deprecated": true,
+      "env": null,
+      "lifetime": "pass",
       "path": "workspace_envs",
       "replaced_by": "workspace[].envs",
       "required": false,
@@ -1396,6 +1748,8 @@
     {
       "default": null,
       "deprecated": true,
+      "env": null,
+      "lifetime": "immutable",
       "path": "workspace_id",
       "replaced_by": "workspace[].id",
       "required": false,
@@ -1404,6 +1758,8 @@
     {
       "default": null,
       "deprecated": true,
+      "env": null,
+      "lifetime": "session",
       "path": "workspace_prompt",
       "replaced_by": "workspace[].prompt",
       "required": false,
@@ -1412,6 +1768,8 @@
     {
       "default": null,
       "deprecated": true,
+      "env": null,
+      "lifetime": "session",
       "path": "workspace_prompt_file",
       "replaced_by": "workspace[].prompt_file",
       "required": false,
@@ -1420,6 +1778,8 @@
     {
       "default": null,
       "deprecated": true,
+      "env": null,
+      "lifetime": "session",
       "path": "workspace_prompt_package",
       "replaced_by": "workspace[].prompt_package",
       "required": false,
@@ -1428,6 +1788,8 @@
     {
       "default": null,
       "deprecated": true,
+      "env": null,
+      "lifetime": "pass",
       "path": "workspace_provider",
       "replaced_by": "workspace[].provider",
       "required": false,
@@ -1436,6 +1798,8 @@
     {
       "default": null,
       "deprecated": true,
+      "env": null,
+      "lifetime": null,
       "path": "workspace_repo",
       "replaced_by": "workspace[].repo",
       "required": false,
@@ -1444,6 +1808,8 @@
     {
       "default": null,
       "deprecated": true,
+      "env": null,
+      "lifetime": "pass",
       "path": "workspace_root",
       "replaced_by": "workspace[].root",
       "required": false,

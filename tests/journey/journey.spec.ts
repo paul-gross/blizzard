@@ -207,9 +207,9 @@ test.use({
   runnerLoop: 'timed',
   // The night begins when the queue is arranged, so the host is initialized and left unstarted.
   runnerStarted: false,
-  runnerEnv: { BZ_RUNNER_TICK_SECONDS: '1' },
   runnerOnForge: [API_REPO, WEB_REPO],
   runnerConfig: {
+    tick_seconds: 1,
     workspace: [{ id: WORKSPACE, max_environments: MAX_ENVIRONMENTS, repo: [{ name: API_REPO, url: repoUrl(API_REPO) }, { name: WEB_REPO, url: repoUrl(WEB_REPO) }] }],
     runner: [{ name: RUNNER, agents: MAX_AGENTS }],
   },

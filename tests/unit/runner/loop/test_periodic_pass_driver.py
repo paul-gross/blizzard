@@ -24,13 +24,20 @@ class _Counting:
             raise RuntimeError("bad pass")
 
 
-def _driver(run_pass: _Counting | None = None, **kwargs: float) -> PeriodicPassDriver:
-    return PeriodicPassDriver((run_pass or _Counting()).run, name="test-pass", label="test pass", log=_LOG, **kwargs)
+def _driver(run_pass: _Counting | None = None, *, interval: float, jitter_seconds: float) -> PeriodicPassDriver:
+    return PeriodicPassDriver(
+        (run_pass or _Counting()).run,
+        name="test-pass",
+        label="test pass",
+        log=_LOG,
+        interval=lambda: interval,
+        jitter_seconds=jitter_seconds,
+    )
 
 
 def test_the_driver_passes_after_its_jitter_and_survives_a_raising_pass() -> None:
     counting = _Counting(raises=True)
-    driver = _driver(counting, interval_seconds=0.01, jitter_seconds=0)
+    driver = _driver(counting, interval=0.01, jitter_seconds=0)
     driver.start()
     try:
         deadline = time.monotonic() + 5
@@ -52,7 +59,7 @@ def test_the_driver_stop_is_bounded_by_a_hung_pass() -> None:
         name="test-pass",
         label="test pass",
         log=_LOG,
-        interval_seconds=60,
+        interval=lambda: 60,
         jitter_seconds=0,
         stop_timeout_seconds=0.2,
     )
@@ -66,7 +73,7 @@ def test_the_driver_stop_is_bounded_by_a_hung_pass() -> None:
 
 def test_the_driver_never_passes_before_its_jitter() -> None:
     counting = _Counting()
-    driver = _driver(counting, interval_seconds=60, jitter_seconds=60)
+    driver = _driver(counting, interval=60, jitter_seconds=60)
     driver.start()
     time.sleep(0.05)
     driver.stop()

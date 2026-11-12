@@ -11,7 +11,16 @@ from collections.abc import Mapping
 from dataclasses import dataclass
 from pathlib import Path
 
-from blizzard.foundation.config_keys import BOOLEAN, OPEN_TABLE, STRING, STRING_LIST, TABLE, ConfigKey, ConfigView
+from blizzard.foundation.config_keys import (
+    BOOLEAN,
+    OPEN_TABLE,
+    STRING,
+    STRING_LIST,
+    TABLE,
+    ConfigKey,
+    ConfigView,
+    Lifetime,
+)
 from blizzard.foundation.roles import domain_model
 from blizzard.runner.config_table import ConfigError, Table
 from blizzard.runner.harness.declaration import RunnerPathKey, RuntimeFile
@@ -122,17 +131,25 @@ class ClaudeCodeSectionKind:
     def keys(self) -> tuple[ConfigKey, ...]:
         return (
             ConfigKey("claude_code", TABLE),
-            ConfigKey("claude_code.enabled", BOOLEAN, default=ClaudeCodeSection.enabled),
-            ConfigKey("claude_code.binary", STRING, default=DEFAULT_HARNESS_BINARY),
+            ConfigKey("claude_code.enabled", BOOLEAN, default=ClaudeCodeSection.enabled, lifetime=Lifetime.PASS),
+            ConfigKey("claude_code.binary", STRING, default=DEFAULT_HARNESS_BINARY, lifetime=Lifetime.SESSION),
             ConfigKey("models", TABLE),
-            ConfigKey("models.supported", STRING_LIST),
-            ConfigKey("models.aliases", OPEN_TABLE),
+            ConfigKey("models.supported", STRING_LIST, lifetime=Lifetime.SESSION),
+            ConfigKey("models.aliases", OPEN_TABLE, lifetime=Lifetime.SESSION),
             ConfigKey("effort", TABLE),
-            ConfigKey("effort.aliases", OPEN_TABLE),
-            ConfigKey("harness_binary", STRING, deprecated=True, replaced_by="claude_code.binary"),
-            ConfigKey("harness_permission_mode", STRING, deprecated=True, replaced_by="harness.autonomy"),
-            ConfigKey("worker_settings_path", STRING, deprecated=True),
-            ConfigKey("claude_code_credentials_path", STRING, deprecated=True),
+            ConfigKey("effort.aliases", OPEN_TABLE, lifetime=Lifetime.SESSION),
+            ConfigKey(
+                "harness_binary", STRING, deprecated=True, replaced_by="claude_code.binary", lifetime=Lifetime.SESSION
+            ),
+            ConfigKey(
+                "harness_permission_mode",
+                STRING,
+                deprecated=True,
+                replaced_by="harness.autonomy",
+                lifetime=Lifetime.SESSION,
+            ),
+            ConfigKey("worker_settings_path", STRING, deprecated=True, lifetime=Lifetime.BOOT),
+            ConfigKey("claude_code_credentials_path", STRING, deprecated=True, lifetime=Lifetime.BOOT),
         )
 
     def parse(self, document: ConfigView, *, root: Path, path: Path) -> ClaudeCodeSection:

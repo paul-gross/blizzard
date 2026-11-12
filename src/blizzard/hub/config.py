@@ -42,6 +42,9 @@ from blizzard.hub.config_defaults import (
     DEFAULT_FOLLOW_LATEST,
     DEFAULT_HOST,
     DEFAULT_PORT,
+    ENV_DB_URL,
+    ENV_HOST,
+    ENV_PORT,
 )
 from blizzard.hub.config_keys import HUB_REGISTRY
 from blizzard.hub.domain.config.legacy_keys import (
@@ -57,12 +60,6 @@ from blizzard.hub.domain.observability.egress.config import EGRESS_DATASETS, Egr
 from blizzard.hub.domain.observability.transcripts import TranscriptCaps
 from blizzard.hub.domain.sweeps.names import SweepMode, SweepModes, SweepName
 from blizzard.hub.layout import CONFIG_FILENAME, DATA_DIRNAME, STORE_FILENAME
-
-ENV_HOST = "BZ_HUB_HOST"
-ENV_PORT = "BZ_HUB_PORT"
-# Varies the store URL by environment rather than baking one per image; honored
-# identically by every verb, which all resolve through `load` (`bzh:sql-portable`).
-ENV_DB_URL = "BZ_HUB_DB_URL"
 
 # The modes the route-capability-token brake accepts; the modes themselves live beside the check.
 _KNOWN_ROUTE_TOKEN_MODES = {ROUTE_TOKEN_WARN, ROUTE_TOKEN_ENFORCE}

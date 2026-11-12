@@ -218,7 +218,7 @@ def _runtime(root: Path, scratch: Path, env: dict[str, str], proxy_url: str) -> 
     # mise keeps its installed tools under XDG_DATA_HOME too; pin it where it already is so `winter` still finds them.
     env.setdefault("MISE_DATA_DIR", os.environ.get("MISE_DATA_DIR") or str(_data_home() / "mise"))
     env["XDG_DATA_HOME"] = str(data_home)
-    env.update(BZ_RUNNER_DIR=str(root), BZ_RUNNER_TICK_SECONDS="0.75", BLIZZARD_MOCK_HARNESS_FENCE="1")
+    env.update(BZ_RUNNER_DIR=str(root), BLIZZARD_MOCK_HARNESS_FENCE="1")
     env["BZ_HARNESS_BINARY"] = str(Path.cwd().parent / "blizzard-mock/.venv/bin/mock-claude-code")
     # The disposable runner joins the hub as a runner of its own: init adds it under its own token, never the
     # standing runner's from the shell exports.
@@ -227,7 +227,7 @@ def _runtime(root: Path, scratch: Path, env: dict[str, str], proxy_url: str) -> 
     with patch.dict(os.environ, env, clear=True):
         scaffold = HostConfig.scaffold(root, hub_url=env["BZ_HUB_URL"])
     (runner,) = scaffold.runners
-    scaffold = replace(scaffold, runners=(replace(runner, name=f"bundle-probe-{uuid.uuid4().hex}"),))
+    scaffold = replace(scaffold, tick_seconds=0.75, runners=(replace(runner, name=f"bundle-probe-{uuid.uuid4().hex}"),))
     config = root / "blizzard-host.toml"
     config.write_text(scaffold.to_toml())
     subprocess.run(

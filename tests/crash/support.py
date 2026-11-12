@@ -32,6 +32,7 @@ from tests.support.host_files import (
     init_runner_environment,
     load_runner_config,
     sampler_without_credentials,
+    state_tick_seconds,
     write_host_file,
 )
 from tests.support.runner_fakes import (
@@ -57,7 +58,7 @@ OWNER = "blizzard"
 REPO = f"{OWNER}/{REPO_NAME}"
 
 # A brisk tick so a scenario converges in seconds, not the daemon's 30s production cadence.
-TICK_SECONDS = "0.3"
+TICK_SECONDS = 0.3
 
 
 def default_work_sources(forge: str) -> tuple[RecordBody, ...]:
@@ -853,10 +854,8 @@ def start_runner(
     binds a kernel-picked port; a restart pins the port the former start published, so the hub and any
     client already holding the URL reach it again. Returns at once — :func:`await_host` waits for it."""
     runner_bin = str(Path(sys.executable).parent / "blizzard-runner")
-    env = runner_spawn_env(
-        load_runner_config(runner_dir).hub_url,
-        {"BZ_RUNNER_TICK_SECONDS": TICK_SECONDS, ENV_HARNESS_FENCE: "1", **(extra_env or {})},
-    )
+    state_tick_seconds(runner_dir, TICK_SECONDS)
+    env = runner_spawn_env(load_runner_config(runner_dir).hub_url, {ENV_HARNESS_FENCE: "1", **(extra_env or {})})
     _apply_crash_env(env, crash_point)
     listening = runner_dir / LISTENING_FILE
     return spawn_daemon(

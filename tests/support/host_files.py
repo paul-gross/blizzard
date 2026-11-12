@@ -156,6 +156,14 @@ def write_host_file(config: RunnerConfig) -> None:
     HostLayout(config.root).config_path.write_text(host_config_of(config).to_toml())
 
 
+def state_tick_seconds(root: Path | str, seconds: float) -> None:
+    """State ``tick_seconds`` in ``root``'s host file, at the top where a host key belongs, unless it states one."""
+    path = HostLayout(Path(root)).config_path
+    text = path.read_text()
+    if not any(line.startswith("tick_seconds") for line in text.splitlines()):
+        path.write_text(f"tick_seconds = {seconds}\n{text}")
+
+
 def with_runner(config: RunnerConfig, **changes: object) -> RunnerConfig:
     """``config`` with ``changes`` laid over it, written to its host file; answers the changed config."""
     changed = dataclasses.replace(config, **changes)

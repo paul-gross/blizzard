@@ -8,6 +8,7 @@ from __future__ import annotations
 
 from collections.abc import Callable, Iterator, Mapping
 from dataclasses import dataclass, field, replace
+from enum import StrEnum
 from typing import TYPE_CHECKING, Any, Final
 
 from blizzard.foundation.roles import domain_model
@@ -46,6 +47,23 @@ class InvalidConfigValue(ValueError):
     """A guarded key carries a value of the wrong type for its declaration; the message names the key."""
 
 
+class Lifetime(StrEnum):
+    """When a change to a key's value reaches the daemon reading it."""
+
+    #: Read once at the start of each pass of the loop that uses it, and held until the pass ends.
+    PASS = "pass"
+    #: Handed to a worker when its session launches; a running session keeps what it launched with.
+    SESSION = "session"
+    #: Read from the file when the daemon starts and held until it stops; the one lifetime a variable may supply.
+    BOOT = "boot"
+    #: Written once, when the thing it belongs to is created; every later write is refused.
+    IMMUTABLE = "immutable"
+
+
+#: Every lifetime from the earliest to the latest: a key moved later narrows what changes without a restart.
+LIFETIME_ORDER: Final[tuple[Lifetime, ...]] = (Lifetime.PASS, Lifetime.SESSION, Lifetime.BOOT, Lifetime.IMMUTABLE)
+
+
 @domain_model
 @dataclass(frozen=True)
 class ConfigKey:
@@ -61,6 +79,11 @@ class ConfigKey:
     replaced_by: str | None = None
     #: The flag holding this key: off, it reads as absent once its value passed ``type``; not in the contract.
     flag: str | None = None
+    #: When a change to the value takes effect; declared on every key holding a value, an open table included, and
+    #: on no key that only groups children. A deprecated key keeps its replacement's.
+    lifetime: Lifetime | None = None
+    #: The environment variable that supplies the value and overrides the file; legal only on a boot key.
+    env: str | None = None
 
 
 @domain_model
@@ -125,6 +148,14 @@ class ConfigRegistry:
     _by_path: Mapping[str, ConfigKey] = field(init=False, repr=False, compare=False)
 
     def __post_init__(self) -> None:
+        for key in self.keys:
+            groups = key.type in (TABLE, ARRAY_OF_TABLES)
+            if groups and key.lifetime is not None:
+                raise ValueError(f"{key.path}: a grouping key carries no lifetime")
+            if not groups and key.lifetime is None:
+                raise ValueError(f"{key.path}: a value key declares its lifetime")
+            if key.env is not None and key.lifetime is not Lifetime.BOOT:
+                raise ValueError(f"{key.path}: only a boot key is supplied by an environment variable")
         object.__setattr__(self, "_by_path", {key.path: key for key in self.keys})
         object.__setattr__(self, "_declared", frozenset(key.path for key in self.keys))
         object.__setattr__(self, "_open", frozenset(key.path for key in self.keys if key.type == OPEN_TABLE))

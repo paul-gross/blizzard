@@ -287,6 +287,8 @@ class HostConfig:
     host: str = DEFAULT_HOST
     port: int = DEFAULT_PORT
     loop: LoopMode = LoopMode.TIMED
+    #: Seconds a timed host waits between passes, as the file states it; ``None`` when it states none.
+    tick_seconds: float | None = None
     hub_url: str = DEFAULT_HUB_URL
     public_urls: tuple[str, ...] = ()
     trusted_proxies: tuple[str, ...] = ()
@@ -736,6 +738,8 @@ class HostConfig:
             f"host = {json.dumps(self.host)}\n",
             f"port = {self.port}\n",
         ]
+        if self.tick_seconds is not None:
+            lines.append(f"tick_seconds = {self.tick_seconds}\n")
         if self.db_url != self.default_db_url:
             lines.append(f"db_url = {json.dumps(self.db_url)}\n")
         if self.public_urls:
@@ -854,6 +858,12 @@ def _parse_loop(value: object) -> LoopMode:
     raise ConfigError(f"loop must be one of {[str(mode) for mode in LoopMode]}, got {value!r}")
 
 
+def _parse_tick_seconds(value: object) -> float:
+    if isinstance(value, bool) or not isinstance(value, int | float) or value <= 0:
+        raise ConfigError(f"tick_seconds must be a positive number of seconds, got {value!r}")
+    return float(value)
+
+
 def parse(
     raw: dict[str, Any],
     *,
@@ -908,6 +918,11 @@ def parse(
         lambda: loop if loop is not None else _parse_loop(document.get("loop", LoopMode.TIMED.value)),
         LoopMode.TIMED,
     )
+    tick_seconds = errors.attempt(
+        "tick_seconds",
+        lambda: _parse_tick_seconds(document.get("tick_seconds")) if "tick_seconds" in document else None,
+        None,
+    )
     public_urls = errors.attempt(
         "public_url", lambda: PublicOrigins.entries(document.get("public_url"), ConfigError), ()
     )
@@ -942,6 +957,7 @@ def parse(
         host=host or str(document.get("host", DEFAULT_HOST)),
         port=resolved_port,
         loop=resolved_loop,
+        tick_seconds=tick_seconds,
         hub_url=str(document.get("hub_url", DEFAULT_HUB_URL)),
         public_urls=public_urls,
         trusted_proxies=trusted_proxies,

@@ -18,7 +18,6 @@ from blizzard.foundation.logging import get_logger
 from blizzard.foundation.sweep_passes import SweepPassOutcome
 from blizzard.runner.app import build_hosted_app
 from blizzard.runner.cli import runtime
-from blizzard.runner.cli.runtime import ENV_TICK_SECONDS
 from blizzard.runner.composition import build_host_process
 from blizzard.runner.config import RunnerConfig
 from blizzard.runner.host_config import BuiltRunner, ResolvedToken
@@ -377,7 +376,6 @@ def test_a_stepped_host_starts_no_timer_yet_reconciles_reports_once_and_marks_at
         return None
 
     monkeypatch.setattr(signal, "signal", install_no_handler)
-    monkeypatch.setenv(ENV_TICK_SECONDS, "3600")
     config = _config(tmp_path)
     built = [BuiltRunner(FIXTURE_RUNNER_ID, config, ResolvedToken())]
     host = build_host_process(host_config_of(config), built)
@@ -404,7 +402,7 @@ def test_a_stepped_host_starts_no_timer_yet_reconciles_reports_once_and_marks_at
     monkeypatch.setattr(runtime, "build_early_shutdown_server", build_server)
     hosted = dataclasses.replace(build_hosted_app(config, host), resumes=(resume,))
     try:
-        cast(Any, runtime)._serve_host(config, host, hosted, loop=loop)
+        cast(Any, runtime)._serve_host(config, host, hosted, loop=loop, tick_seconds=3600.0)
     finally:
         hosted.close()
         host.close()

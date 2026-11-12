@@ -5,6 +5,8 @@
     {
       "default": 300,
       "deprecated": false,
+      "env": null,
+      "lifetime": "pass",
       "path": "action_pass_seconds",
       "replaced_by": null,
       "required": false,
@@ -13,6 +15,8 @@
     {
       "default": 120,
       "deprecated": false,
+      "env": null,
+      "lifetime": "pass",
       "path": "annotation_interval_seconds",
       "replaced_by": null,
       "required": false,
@@ -21,6 +25,8 @@
     {
       "default": null,
       "deprecated": false,
+      "env": null,
+      "lifetime": null,
       "path": "auth",
       "replaced_by": null,
       "required": false,
@@ -29,6 +35,8 @@
     {
       "default": null,
       "deprecated": false,
+      "env": null,
+      "lifetime": null,
       "path": "auth.login_throttle",
       "replaced_by": null,
       "required": false,
@@ -37,6 +45,8 @@
     {
       "default": 10,
       "deprecated": false,
+      "env": null,
+      "lifetime": "pass",
       "path": "auth.login_throttle.capacity",
       "replaced_by": null,
       "required": false,
@@ -45,6 +55,8 @@
     {
       "default": true,
       "deprecated": false,
+      "env": null,
+      "lifetime": "pass",
       "path": "auth.login_throttle.enabled",
       "replaced_by": null,
       "required": false,
@@ -53,6 +65,8 @@
     {
       "default": 6,
       "deprecated": false,
+      "env": null,
+      "lifetime": "pass",
       "path": "auth.login_throttle.refill_seconds",
       "replaced_by": null,
       "required": false,
@@ -61,6 +75,8 @@
     {
       "default": "none",
       "deprecated": false,
+      "env": null,
+      "lifetime": "boot",
       "path": "auth.mode",
       "replaced_by": null,
       "required": false,
@@ -69,6 +85,8 @@
     {
       "default": null,
       "deprecated": false,
+      "env": null,
+      "lifetime": null,
       "path": "auth.oauth",
       "replaced_by": null,
       "required": false,
@@ -77,6 +95,8 @@
     {
       "default": null,
       "deprecated": false,
+      "env": null,
+      "lifetime": null,
       "path": "auth.oauth.provider",
       "replaced_by": null,
       "required": false,
@@ -85,6 +105,8 @@
     {
       "default": null,
       "deprecated": false,
+      "env": null,
+      "lifetime": "boot",
       "path": "auth.oauth.provider[].api_base",
       "replaced_by": null,
       "required": false,
@@ -93,6 +115,8 @@
     {
       "default": null,
       "deprecated": false,
+      "env": null,
+      "lifetime": "boot",
       "path": "auth.oauth.provider[].client_id",
       "replaced_by": null,
       "required": true,
@@ -101,6 +125,8 @@
     {
       "default": null,
       "deprecated": false,
+      "env": null,
+      "lifetime": "boot",
       "path": "auth.oauth.provider[].client_secret_env",
       "replaced_by": null,
       "required": true,
@@ -109,6 +135,8 @@
     {
       "default": null,
       "deprecated": false,
+      "env": null,
+      "lifetime": "boot",
       "path": "auth.oauth.provider[].display_name",
       "replaced_by": null,
       "required": true,
@@ -117,6 +145,8 @@
     {
       "default": false,
       "deprecated": false,
+      "env": null,
+      "lifetime": "boot",
       "path": "auth.oauth.provider[].emails_authoritative",
       "replaced_by": null,
       "required": false,
@@ -125,6 +155,8 @@
     {
       "default": null,
       "deprecated": false,
+      "env": null,
+      "lifetime": "boot",
       "path": "auth.oauth.provider[].issuer",
       "replaced_by": null,
       "required": false,
@@ -133,6 +165,8 @@
     {
       "default": null,
       "deprecated": false,
+      "env": null,
+      "lifetime": "boot",
       "path": "auth.oauth.provider[].name",
       "replaced_by": null,
       "required": true,
@@ -141,6 +175,8 @@
     {
       "default": null,
       "deprecated": false,
+      "env": null,
+      "lifetime": "boot",
       "path": "auth.oauth.provider[].type",
       "replaced_by": null,
       "required": true,
@@ -149,6 +185,8 @@
     {
       "default": null,
       "deprecated": false,
+      "env": null,
+      "lifetime": "boot",
       "path": "auth.superuser",
       "replaced_by": null,
       "required": false,
@@ -157,6 +195,8 @@
     {
       "default": true,
       "deprecated": false,
+      "env": null,
+      "lifetime": "pass",
       "path": "close_forge_writes_enabled",
       "replaced_by": null,
       "required": false,
@@ -165,6 +205,8 @@
     {
       "default": null,
       "deprecated": false,
+      "env": "BZ_HUB_DB_URL",
+      "lifetime": "boot",
       "path": "db_url",
       "replaced_by": null,
       "required": false,
@@ -173,6 +215,8 @@
     {
       "default": null,
       "deprecated": false,
+      "env": null,
+      "lifetime": null,
       "path": "egress",
       "replaced_by": null,
       "required": false,
@@ -181,6 +225,8 @@
     {
       "default": 604800,
       "deprecated": false,
+      "env": null,
+      "lifetime": "pass",
       "path": "egress.backfill_max_window",
       "replaced_by": null,
       "required": false,
@@ -189,6 +235,8 @@
     {
       "default": 5000,
       "deprecated": false,
+      "env": null,
+      "lifetime": "pass",
       "path": "egress.batch_limit",
       "replaced_by": null,
       "required": false,
@@ -201,6 +249,8 @@
         "events"
       ],
       "deprecated": false,
+      "env": null,
+      "lifetime": "pass",
       "path": "egress.datasets",
       "replaced_by": null,
       "required": false,
@@ -209,6 +259,8 @@
     {
       "default": null,
       "deprecated": false,
+      "env": null,
+      "lifetime": "boot",
       "path": "egress.directory",
       "replaced_by": null,
       "required": false,
@@ -217,6 +269,8 @@
     {
       "default": "current",
       "deprecated": false,
+      "env": null,
+      "lifetime": "pass",
       "path": "egress.extractor_versions",
       "replaced_by": null,
       "required": false,
@@ -225,6 +279,8 @@
     {
       "default": "relative",
       "deprecated": false,
+      "env": null,
+      "lifetime": "boot",
       "path": "egress.file_paths",
       "replaced_by": null,
       "required": false,
@@ -233,6 +289,8 @@
     {
       "default": "ndjson",
       "deprecated": false,
+      "env": null,
+      "lifetime": "boot",
       "path": "egress.format",
       "replaced_by": null,
       "required": false,
@@ -241,6 +299,8 @@
     {
       "default": 100000,
       "deprecated": false,
+      "env": null,
+      "lifetime": "pass",
       "path": "egress.max_rows_per_file",
       "replaced_by": null,
       "required": false,
@@ -249,6 +309,8 @@
     {
       "default": 1073741824,
       "deprecated": false,
+      "env": null,
+      "lifetime": "pass",
       "path": "egress.min_free_bytes",
       "replaced_by": null,
       "required": false,
@@ -257,6 +319,8 @@
     {
       "default": "BZ_EGRESS_PATH_KEY",
       "deprecated": false,
+      "env": null,
+      "lifetime": "boot",
       "path": "egress.path_key_env",
       "replaced_by": null,
       "required": false,
@@ -265,6 +329,8 @@
     {
       "default": 300,
       "deprecated": false,
+      "env": null,
+      "lifetime": "pass",
       "path": "egress.settle_seconds",
       "replaced_by": null,
       "required": false,
@@ -273,6 +339,8 @@
     {
       "default": 60,
       "deprecated": false,
+      "env": null,
+      "lifetime": "pass",
       "path": "egress.sweep_seconds",
       "replaced_by": null,
       "required": false,
@@ -281,6 +349,8 @@
     {
       "default": null,
       "deprecated": false,
+      "env": null,
+      "lifetime": "boot",
       "path": "flags",
       "replaced_by": null,
       "required": false,
@@ -289,6 +359,8 @@
     {
       "default": false,
       "deprecated": false,
+      "env": null,
+      "lifetime": "boot",
       "path": "follow_latest",
       "replaced_by": null,
       "required": false,
@@ -297,6 +369,8 @@
     {
       "default": "127.0.0.1",
       "deprecated": false,
+      "env": "BZ_HUB_HOST",
+      "lifetime": "boot",
       "path": "host",
       "replaced_by": null,
       "required": false,
@@ -305,6 +379,8 @@
     {
       "default": null,
       "deprecated": true,
+      "env": null,
+      "lifetime": null,
       "path": "pm_source",
       "replaced_by": "work_source",
       "required": false,
@@ -313,6 +389,8 @@
     {
       "default": 8421,
       "deprecated": false,
+      "env": "BZ_HUB_PORT",
+      "lifetime": "boot",
       "path": "port",
       "replaced_by": null,
       "required": false,
@@ -321,6 +399,8 @@
     {
       "default": "warn",
       "deprecated": false,
+      "env": null,
+      "lifetime": "pass",
       "path": "produces_mode",
       "replaced_by": null,
       "required": false,
@@ -329,6 +409,8 @@
     {
       "default": null,
       "deprecated": false,
+      "env": null,
+      "lifetime": "boot",
       "path": "public_url",
       "replaced_by": null,
       "required": false,
@@ -337,6 +419,8 @@
     {
       "default": "warn",
       "deprecated": false,
+      "env": null,
+      "lifetime": "pass",
       "path": "route_token_mode",
       "replaced_by": null,
       "required": false,
@@ -345,6 +429,8 @@
     {
       "default": null,
       "deprecated": false,
+      "env": null,
+      "lifetime": null,
       "path": "sweeps",
       "replaced_by": null,
       "required": false,
@@ -353,6 +439,8 @@
     {
       "default": null,
       "deprecated": false,
+      "env": null,
+      "lifetime": null,
       "path": "sweeps.cadence",
       "replaced_by": null,
       "required": false,
@@ -361,6 +449,8 @@
     {
       "default": "timed",
       "deprecated": false,
+      "env": null,
+      "lifetime": "boot",
       "path": "sweeps.cadence.mode",
       "replaced_by": null,
       "required": false,
@@ -369,6 +459,8 @@
     {
       "default": null,
       "deprecated": false,
+      "env": null,
+      "lifetime": null,
       "path": "sweeps.close_drain",
       "replaced_by": null,
       "required": false,
@@ -377,6 +469,8 @@
     {
       "default": "timed",
       "deprecated": false,
+      "env": null,
+      "lifetime": "boot",
       "path": "sweeps.close_drain.mode",
       "replaced_by": null,
       "required": false,
@@ -385,6 +479,8 @@
     {
       "default": null,
       "deprecated": false,
+      "env": null,
+      "lifetime": null,
       "path": "sweeps.egress",
       "replaced_by": null,
       "required": false,
@@ -393,6 +489,8 @@
     {
       "default": "timed",
       "deprecated": false,
+      "env": null,
+      "lifetime": "boot",
       "path": "sweeps.egress.mode",
       "replaced_by": null,
       "required": false,
@@ -401,6 +499,8 @@
     {
       "default": null,
       "deprecated": false,
+      "env": null,
+      "lifetime": null,
       "path": "sweeps.event_derivation",
       "replaced_by": null,
       "required": false,
@@ -409,6 +509,8 @@
     {
       "default": "timed",
       "deprecated": false,
+      "env": null,
+      "lifetime": "boot",
       "path": "sweeps.event_derivation.mode",
       "replaced_by": null,
       "required": false,
@@ -417,6 +519,8 @@
     {
       "default": null,
       "deprecated": false,
+      "env": null,
+      "lifetime": null,
       "path": "sweeps.forge_status",
       "replaced_by": null,
       "required": false,
@@ -425,6 +529,8 @@
     {
       "default": "timed",
       "deprecated": false,
+      "env": null,
+      "lifetime": "boot",
       "path": "sweeps.forge_status.mode",
       "replaced_by": null,
       "required": false,
@@ -433,6 +539,8 @@
     {
       "default": null,
       "deprecated": false,
+      "env": null,
+      "lifetime": null,
       "path": "sweeps.tenant_teardown",
       "replaced_by": null,
       "required": false,
@@ -441,6 +549,8 @@
     {
       "default": "timed",
       "deprecated": false,
+      "env": null,
+      "lifetime": "boot",
       "path": "sweeps.tenant_teardown.mode",
       "replaced_by": null,
       "required": false,
@@ -449,6 +559,8 @@
     {
       "default": null,
       "deprecated": false,
+      "env": null,
+      "lifetime": null,
       "path": "sweeps.trace_export",
       "replaced_by": null,
       "required": false,
@@ -457,6 +569,8 @@
     {
       "default": "timed",
       "deprecated": false,
+      "env": null,
+      "lifetime": "boot",
       "path": "sweeps.trace_export.mode",
       "replaced_by": null,
       "required": false,
@@ -465,6 +579,8 @@
     {
       "default": null,
       "deprecated": false,
+      "env": null,
+      "lifetime": null,
       "path": "tracing",
       "replaced_by": null,
       "required": false,
@@ -473,6 +589,8 @@
     {
       "default": 200,
       "deprecated": false,
+      "env": null,
+      "lifetime": "pass",
       "path": "tracing.batch_limit",
       "replaced_by": null,
       "required": false,
@@ -481,6 +599,8 @@
     {
       "default": false,
       "deprecated": true,
+      "env": null,
+      "lifetime": "session",
       "path": "tracing.harness_telemetry",
       "replaced_by": "tracing.harness_telemetry in blizzard-host.toml",
       "required": false,
@@ -489,6 +609,8 @@
     {
       "default": 86400,
       "deprecated": false,
+      "env": null,
+      "lifetime": "pass",
       "path": "tracing.max_lag_seconds",
       "replaced_by": null,
       "required": false,
@@ -497,6 +619,8 @@
     {
       "default": false,
       "deprecated": false,
+      "env": null,
+      "lifetime": "boot",
       "path": "tracing.platform",
       "replaced_by": null,
       "required": false,
@@ -505,6 +629,8 @@
     {
       "default": 0.01,
       "deprecated": false,
+      "env": null,
+      "lifetime": "boot",
       "path": "tracing.platform_sample_ratio",
       "replaced_by": null,
       "required": false,
@@ -513,6 +639,8 @@
     {
       "default": 604800,
       "deprecated": false,
+      "env": null,
+      "lifetime": "pass",
       "path": "tracing.replay_max_window",
       "replaced_by": null,
       "required": false,
@@ -521,6 +649,8 @@
     {
       "default": 300,
       "deprecated": false,
+      "env": null,
+      "lifetime": "pass",
       "path": "tracing.settle_seconds",
       "replaced_by": null,
       "required": false,
@@ -529,6 +659,8 @@
     {
       "default": 60,
       "deprecated": false,
+      "env": null,
+      "lifetime": "pass",
       "path": "tracing.sweep_seconds",
       "replaced_by": null,
       "required": false,
@@ -537,6 +669,8 @@
     {
       "default": null,
       "deprecated": true,
+      "env": null,
+      "lifetime": "session",
       "path": "tracing.worker_program_services",
       "replaced_by": "tracing.worker_program_services in blizzard-host.toml",
       "required": false,
@@ -545,6 +679,8 @@
     {
       "default": false,
       "deprecated": true,
+      "env": null,
+      "lifetime": "session",
       "path": "tracing.worker_programs",
       "replaced_by": "tracing.worker_programs in blizzard-host.toml",
       "required": false,
@@ -553,6 +689,8 @@
     {
       "default": null,
       "deprecated": false,
+      "env": null,
+      "lifetime": null,
       "path": "transcripts",
       "replaced_by": null,
       "required": false,
@@ -561,6 +699,8 @@
     {
       "default": null,
       "deprecated": false,
+      "env": null,
+      "lifetime": "pass",
       "path": "transcripts.chunk_budget_max_bytes",
       "replaced_by": null,
       "required": false,
@@ -569,6 +709,8 @@
     {
       "default": null,
       "deprecated": false,
+      "env": null,
+      "lifetime": "pass",
       "path": "transcripts.record_max_bytes",
       "replaced_by": null,
       "required": false,
@@ -577,6 +719,8 @@
     {
       "default": null,
       "deprecated": false,
+      "env": null,
+      "lifetime": "pass",
       "path": "transcripts.runner_daily_rate_max_bytes",
       "replaced_by": null,
       "required": false,
@@ -585,6 +729,8 @@
     {
       "default": null,
       "deprecated": false,
+      "env": null,
+      "lifetime": "boot",
       "path": "trusted_proxies",
       "replaced_by": null,
       "required": false,
@@ -592,15 +738,19 @@
     },
     {
       "default": null,
-      "deprecated": false,
+      "deprecated": true,
+      "env": null,
+      "lifetime": null,
       "path": "work_source",
-      "replaced_by": null,
+      "replaced_by": "work source records",
       "required": false,
       "type": "array of tables"
     },
     {
       "default": false,
       "deprecated": false,
+      "env": null,
+      "lifetime": "boot",
       "path": "work_source[].annotate",
       "replaced_by": null,
       "required": false,
@@ -609,6 +759,8 @@
     {
       "default": null,
       "deprecated": false,
+      "env": null,
+      "lifetime": "boot",
       "path": "work_source[].api_base",
       "replaced_by": null,
       "required": false,
@@ -617,6 +769,8 @@
     {
       "default": null,
       "deprecated": true,
+      "env": null,
+      "lifetime": "boot",
       "path": "work_source[].close",
       "replaced_by": null,
       "required": false,
@@ -625,6 +779,8 @@
     {
       "default": null,
       "deprecated": false,
+      "env": null,
+      "lifetime": "boot",
       "path": "work_source[].name",
       "replaced_by": null,
       "required": true,
@@ -633,6 +789,8 @@
     {
       "default": null,
       "deprecated": false,
+      "env": null,
+      "lifetime": "boot",
       "path": "work_source[].provider",
       "replaced_by": null,
       "required": true,
@@ -641,6 +799,8 @@
     {
       "default": null,
       "deprecated": false,
+      "env": null,
+      "lifetime": "boot",
       "path": "work_source[].repo",
       "replaced_by": null,
       "required": true,
@@ -649,6 +809,8 @@
     {
       "default": null,
       "deprecated": false,
+      "env": null,
+      "lifetime": "boot",
       "path": "work_source[].token_env",
       "replaced_by": null,
       "required": true,
@@ -657,6 +819,8 @@
     {
       "default": null,
       "deprecated": false,
+      "env": null,
+      "lifetime": "boot",
       "path": "work_source[].web_base",
       "replaced_by": null,
       "required": false,

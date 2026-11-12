@@ -1,9 +1,9 @@
 """Build a daemon's config contract document from its registry.
 
-The document lists every key the daemon reads from its toml file — path, type, whether it is required, its default, and
-whether it is deprecated and what replaces it — and every durable path under its runtime root, each sorted by path so a
-drift check over the committed output is stable. A path lists its writer verbs and enforced octal mode; ``env`` renders
-the token env file, or ``None`` when the daemon declares none."""
+The document lists every key the daemon reads from its toml file — path, type, whether it is required, its default,
+whether it is deprecated and what replaces it, its lifetime, and the variable that supplies it — and every durable path
+under its runtime root, each sorted by path so a drift check over the committed output is stable. A path lists its
+writer verbs and enforced octal mode; ``env`` renders the token env file, or ``None`` when the daemon declares none."""
 
 from __future__ import annotations
 
@@ -23,6 +23,8 @@ def document_from_registry(registry: ConfigRegistry) -> dict[str, Any]:
                 "default": key.default,
                 "deprecated": key.deprecated,
                 "replaced_by": key.replaced_by,
+                "lifetime": None if key.lifetime is None else key.lifetime.value,
+                "env": key.env,
             }
             for key in sorted(registry.keys, key=lambda key: key.path)
         ],

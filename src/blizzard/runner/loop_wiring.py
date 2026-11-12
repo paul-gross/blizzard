@@ -449,13 +449,14 @@ def host_pass_stepper(host: HostProcess) -> HostPassStepper:
 
 
 class PeriodicDriver:
-    """A background thread that ticks the loop on an interval (~30s) through a ``RunnerStepper``."""
+    """A background thread that ticks the loop through a ``RunnerStepper``, waiting ``interval()`` seconds from the
+    end of each tick to the start of the next."""
 
     def __init__(
         self,
         config: RunnerConfig,
         *,
-        interval_seconds: float,
+        interval: Callable[[], float],
         process_graph: RunnerProcess,
         stepper: RunnerStepper | None = None,
     ) -> None:
@@ -464,7 +465,7 @@ class PeriodicDriver:
         self._owned = stepper is None
         self._stepper = stepper or RunnerStepper(config, process_graph=process_graph)
         self._wiring = self._stepper.wiring
-        self._interval = interval_seconds
+        self._interval = interval
         self._stop = threading.Event()
         self._thread = threading.Thread(target=self._run, name="blizzard-runner-loop", daemon=True)
 
@@ -494,8 +495,8 @@ class PeriodicDriver:
 
     def _run(self) -> None:
         name = self._wiring.config.name
-        _log.info("reconciliation loop started", runner_name=name, interval=self._interval)
+        _log.info("reconciliation loop started", runner_name=name, interval=self._interval())
         while not self._stop.is_set():
             self._stepper.timed_tick()
-            self._stop.wait(self._interval)
+            self._stop.wait(self._interval())
         _log.info("reconciliation loop stopped", runner_name=name)

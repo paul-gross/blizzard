@@ -11,18 +11,19 @@ from blizzard.foundation.config_keys import (
     ConfigKey,
     ConfigRegistry,
     ConfigView,
+    Lifetime,
     UndeclaredConfigKey,
 )
 
 _REGISTRY = ConfigRegistry(
     "demo",
     (
-        ConfigKey("port", INTEGER, default=80),
-        ConfigKey("flags", OPEN_TABLE),
+        ConfigKey("port", INTEGER, default=80, lifetime=Lifetime.BOOT),
+        ConfigKey("flags", OPEN_TABLE, lifetime=Lifetime.BOOT),
         ConfigKey("auth", TABLE),
-        ConfigKey("auth.superuser", STRING),
+        ConfigKey("auth.superuser", STRING, lifetime=Lifetime.BOOT),
         ConfigKey("runner", ARRAY_OF_TABLES),
-        ConfigKey("runner[].name", STRING, required=True),
+        ConfigKey("runner[].name", STRING, required=True, lifetime=Lifetime.PASS),
     ),
 )
 _DOCUMENT = {
@@ -127,8 +128,35 @@ def test_value_returns_the_whole_list_table_or_array() -> None:
 def test_a_flag_held_key_is_not_stated() -> None:
     from blizzard.foundation.flags import Flags
 
-    registry = ConfigRegistry("demo", (ConfigKey("held", INTEGER, flag="f"),))
+    registry = ConfigRegistry("demo", (ConfigKey("held", INTEGER, lifetime=Lifetime.BOOT, flag="f"),))
     flags = Flags(known=frozenset({"f"}), retired=frozenset(), values={"f": False}, published=frozenset())
     root = ConfigView.root(registry, {"held": 1}, strict=True).holding(flags)
     assert not root.states("held")
     assert root.value("held") is None
+
+
+def test_a_value_key_with_no_lifetime_is_refused_naming_it() -> None:
+    with pytest.raises(ValueError, match=r"^port: a value key declares its lifetime$"):
+        ConfigRegistry("demo", (ConfigKey("port", INTEGER),))
+
+
+def test_an_open_table_holds_a_value_and_so_declares_a_lifetime() -> None:
+    with pytest.raises(ValueError, match="flags: a value key declares its lifetime"):
+        ConfigRegistry("demo", (ConfigKey("flags", OPEN_TABLE),))
+
+
+@pytest.mark.parametrize("kind", [TABLE, ARRAY_OF_TABLES])
+def test_a_grouping_key_with_a_lifetime_is_refused_naming_it(kind: str) -> None:
+    with pytest.raises(ValueError, match=r"^auth: a grouping key carries no lifetime$"):
+        ConfigRegistry("demo", (ConfigKey("auth", kind, lifetime=Lifetime.BOOT),))
+
+
+@pytest.mark.parametrize("lifetime", [Lifetime.PASS, Lifetime.SESSION, Lifetime.IMMUTABLE])
+def test_a_variable_on_a_key_that_is_not_boot_is_refused_naming_it(lifetime: Lifetime) -> None:
+    with pytest.raises(ValueError, match=r"^port: only a boot key is supplied by an environment variable$"):
+        ConfigRegistry("demo", (ConfigKey("port", INTEGER, lifetime=lifetime, env="BZ_PORT"),))
+
+
+def test_a_boot_key_may_name_its_variable() -> None:
+    registry = ConfigRegistry("demo", (ConfigKey("port", INTEGER, lifetime=Lifetime.BOOT, env="BZ_PORT"),))
+    assert registry.key("port") == ConfigKey("port", INTEGER, lifetime=Lifetime.BOOT, env="BZ_PORT")
