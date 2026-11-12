@@ -13,7 +13,7 @@ export { KitPanel, KitPanelHeader } from './kit-panel';
 export { KitAsyncState, type KitAsyncStateValue } from './kit-async-state';
 export { KitAvatar } from './kit-avatar';
 export { KitBackBar } from './kit-back-bar';
-export { KitBadge, toneColor } from './kit-badge';
+export { KitBadge, toneColor, toneDimColor } from './kit-badge';
 export { KitBeacon, type BeaconBlink, type BeaconTone } from './kit-beacon';
 export { KitSwatch } from './kit-swatch';
 export { projectTint } from './kit-swatch-color';

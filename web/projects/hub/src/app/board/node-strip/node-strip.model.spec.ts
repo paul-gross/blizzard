@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { blockState, groupBlocks, isDenseStrip, type NodeBlock, showsNodeStrip } from './node-strip.model';
+import { BLOCK_TONE, blockEdge, blockFill, blockState, groupBlocks, isDenseStrip, type NodeBlock, showsNodeStrip } from './node-strip.model';
 
 describe('groupBlocks', () => {
   const blocks = (n: number): NodeBlock[] => Array.from({ length: n }, (_, i) => ({ node_id: `nd_${i}`, name: `n${i}`, state: 'unvisited' }));
@@ -39,5 +39,17 @@ describe('blockState', () => {
   it('passes known states through and folds anything else to unknown', () => {
     expect(['current', 'passed', 'failed', 'unvisited'].map(blockState)).toEqual(['current', 'passed', 'failed', 'unvisited']);
     expect(blockState('newer-state')).toBe('unknown');
+  });
+});
+
+describe('block tones', () => {
+  it('maps passed, failed, current and unknown to a tone and leaves unvisited without one', () => {
+    expect(BLOCK_TONE).toEqual({ passed: 'done', failed: 'needs', current: 'spawning', unvisited: null, unknown: 'idle' });
+    expect(blockFill('passed')).toBe('var(--green)');
+    expect(blockEdge('failed')).toBe('var(--red-dim)');
+    expect(blockFill('current')).toBe('var(--cyan)');
+    expect(blockFill('unknown')).toBe('var(--label-dim)');
+    expect(blockFill('unvisited')).toBeNull();
+    expect(blockEdge('unvisited')).toBeNull();
   });
 });

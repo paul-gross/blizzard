@@ -14,6 +14,8 @@
         [skeletonRows]="state() === 'loading' ? listSkeletons() : 0"
         [canControl]="canControl()"
         [canReorder]="canReorder()"
+        [donePolicy]="donePolicy()"
+        [doneTotal]="doneTotal()"
         (selectChunk)="selectChunk.emit($event)"
         (reposition)="reposition.emit($event)"
         (laneMove)="laneMove.emit($event)"

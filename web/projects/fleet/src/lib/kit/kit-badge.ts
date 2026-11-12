@@ -38,6 +38,12 @@ const TONE_DIM: Record<Tone, string> = {
   idle: 'var(--label-dim)',
 };
 
+/** The dimmed border color a given {@link Tone} resolves to — the `soft` badge's border, exposed for chrome that
+ * outlines by tone (e.g. a node-strip block). */
+export function toneDimColor(tone: Tone): string {
+  return TONE_DIM[tone];
+}
+
 /**
  * The tone badge — a projected label colored by {@link Tone},
  * in one of three variants: plain uppercase text (`variant: 'text'`, matching
@@ -69,7 +75,7 @@ export class KitBadge {
   protected readonly color = computed(() => toneColor(this.tone()));
 
   /** The `'soft'` variant's dimmed border color. */
-  protected readonly dim = computed(() => TONE_DIM[this.tone()]);
+  protected readonly dim = computed(() => toneDimColor(this.tone()));
 
   /** The `'soft'` variant's tinted fill — a 12% mix of the tone's own bright
    * color over transparent, matching the mock's `rgba(tone, 0.12)` pills

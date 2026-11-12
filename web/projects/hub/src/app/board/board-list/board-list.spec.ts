@@ -83,6 +83,20 @@ describe('BoardList', () => {
     expect(divider.compareDocumentPosition(backlogRows) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
   });
 
+  it('puts a Done divider with the policy as visible text before the Done rows', async () => {
+    const el = await render(LISTED);
+
+    expect(el.querySelector('[data-testid="list-done-divider"]')).toBeTruthy();
+    expect(el.querySelector('[data-testid="list-done-policy"]')?.textContent).toContain(fixture.componentInstance.donePolicy().explanation);
+  });
+
+  it('draws no Done divider or policy when there are no Done rows', async () => {
+    const el = await render(running(card('r')));
+
+    expect(el.querySelector('[data-testid="list-done-divider"]')).toBeNull();
+    expect(el.querySelector('[data-testid="list-done-policy"]')).toBeNull();
+  });
+
   it("leads each row with its lane's icon", async () => {
     const el = await render(groups({ live: [entry('needs', card('a', { status: 'needs_human' }))], done: [entry('done', card('b', { status: 'stopped', terminal: true }))] }));
 

@@ -76,6 +76,17 @@
       *ngTemplateOutlet="ranked; context: { entries: groups().backlog, list: 'notready', dropId: backlogDropId, testid: 'list-backlog' }"
     />
   }
+  @if (groups().done.length) {
+    <!-- Why only some Done chunks are listed: the hub's Done policy, as Board mode and Glance say it. -->
+    <div class="divider" data-testid="list-done-divider" role="separator" aria-label="Backlog above, done below">
+      <span class="divider-label">▲ Backlog</span>
+      <span class="divider-rule"></span>
+      <span class="divider-label">{{ donePolicy().heading }} ▼</span>
+    </div>
+    <p class="done-policy" data-testid="list-done-policy">
+      {{ donePolicy().explanation }}@if (doneTotal() !== null) { · {{ doneTotal() }} all time }
+    </p>
+  }
   @for (entry of groups().done; track entry.card.chunkId) {
     <ng-container *ngTemplateOutlet="row; context: { $implicit: entry }" />
   }

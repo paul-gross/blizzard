@@ -4,6 +4,7 @@ import { NgTemplateOutlet } from '@angular/common';
 
 import { ChunkListRow, LaneIcon } from 'fleet';
 
+import { type BoardDonePolicy, boardDonePolicy } from '../../core/board-done-policy.model';
 import { type BoardCard, boardCardView } from '../board-card/board-card-view.model';
 import type { BoardLaneMove, BoardReorderList, BoardReposition } from '../board-shell/board-column';
 import { resolveDrop } from '../board-shell/board-drop.model';
@@ -27,7 +28,12 @@ export interface BoardListGroups {
   readonly done: readonly BoardListEntry[];
 }
 
-const NO_GROUPS: BoardListGroups = { live: [], ready: [], backlog: [], done: [] };
+const NO_GROUPS: BoardListGroups = {
+  live: [],
+  ready: [],
+  backlog: [],
+  done: [],
+};
 
 /** The DOM id of a ranked list's drop target in the list layout — what the other one connects to. */
 export function listDropId(list: BoardReorderList): string {
@@ -65,6 +71,12 @@ export class BoardList {
   /** Whether the current identity may promote or demote (`chunk:control`) — with
    * {@link canReorder}, lets a row cross the line between READY and BACKLOG. */
   readonly canControl = input(false);
+
+  /** The hub's Done policy: the heading and the explanation of which completed chunks the list keeps. */
+  readonly donePolicy = input<BoardDonePolicy>(boardDonePolicy([]));
+
+  /** How many chunks are Done all time, or null while unknown. */
+  readonly doneTotal = input<number | null>(null);
 
   readonly selectChunk = output<string>();
 

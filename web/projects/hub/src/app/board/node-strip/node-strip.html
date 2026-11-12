@@ -3,7 +3,11 @@
     @for (group of groups(); track $index) {
       <span class="group" [style.--blocks]="group.length">
         @for (block of group; track block.node_id) {
-          <span class="block" [attr.data-state]="blockState(block.state)" [title]="block.name + ' · ' + block.state"></span>
+          <span class="block" [attr.data-state]="blockState(block.state)"
+            [style.--block-fill]="blockFill(blockState(block.state))"
+            [style.--block-edge]="blockEdge(blockState(block.state))"
+            [title]="block.name + ' · ' + block.state"
+          ></span>
         }
       </span>
     }

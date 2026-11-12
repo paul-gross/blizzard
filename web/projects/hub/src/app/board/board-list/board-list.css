@@ -91,3 +91,11 @@
 .finished-icon {
   --lane-icon-size: 12px;
 }
+/* The Done policy's explanation, as visible text under its divider so keyboard and touch reach it. */
+.done-policy {
+  margin: 0;
+  padding: 6px 10px 6px 21px;
+  border-bottom: 1px solid var(--line);
+  color: var(--label-dim);
+  font-size: 0.75rem;
+}
