@@ -14,12 +14,12 @@ from pathlib import Path
 import httpx2
 
 from blizzard.foundation.clock import IClock
-from blizzard.foundation.instants import reset_instant
 from blizzard.foundation.logging import get_logger
 from blizzard.foundation.store.utc import iso_utc
 from blizzard.foundation.subscription_miss import SampleMissReason
 from blizzard.foundation.untyped import as_table
 from blizzard.runner.subscriptions.internal.jwt_expiry import parse_jwt_expiry
+from blizzard.runner.subscriptions.internal.reset_instants import reset_instant
 from blizzard.runner.subscriptions.subscription_sampler import (
     ExternalSubscriptionUsageSnapshot,
     ExternalSubscriptionUsageWindow,

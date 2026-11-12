@@ -6,7 +6,7 @@ from datetime import UTC, datetime
 
 import pytest
 
-from blizzard.foundation.instants import epoch_millis_instant, epoch_seconds_instant, iso_instant, reset_instant
+from blizzard.foundation.instants import epoch_millis_instant, epoch_seconds_instant, iso_instant
 
 _T = datetime(2026, 8, 1, 18, 0, 0, tzinfo=UTC)
 _BAD_NUMBERS: list[object] = [
@@ -54,12 +54,3 @@ def test_iso_reads_zoned_and_naive_strings_as_the_same_utc_instant(value: str) -
 @pytest.mark.parametrize("value", ["soon", "", "9999-12-31T23:59:59-23:00", 5, True, None])
 def test_iso_refuses_what_is_no_instant(value: object) -> None:
     assert iso_instant(value) is None
-
-
-def test_reset_instant_takes_seconds_or_iso() -> None:
-    assert reset_instant(_T.timestamp()) == reset_instant("2026-08-01T18:00:00Z") == _T
-
-
-@pytest.mark.parametrize("value", [*_BAD_NUMBERS, "soon"])
-def test_reset_instant_refuses_what_is_no_instant(value: object) -> None:
-    assert reset_instant(value) is None
