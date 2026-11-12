@@ -37,13 +37,13 @@ from blizzard.hub.domain.execution.auth.produces import PRODUCES_WARN, Produces
 from blizzard.hub.domain.execution.auth.route import ROUTE_TOKEN_WARN, RouteToken
 from blizzard.hub.domain.execution.completion import (
     CompletionRefused,
+    competing_gate,
     decision_choices,
     gate_refusal,
     refuse_hub_executed,
     refuse_incoherent_attempt,
     refuse_unconsumed_gate,
     stored_artifacts,
-    visit_gate,
 )
 from blizzard.hub.domain.execution.submissions import CompletionArtifact, GateSubmission
 from blizzard.hub.domain.graph.model import Graph, Node
@@ -221,10 +221,8 @@ class DecisionService:
         (:func:`visit_gate`), read in ``transaction`` when given — whichever claim or lease opened it.
         One at this very ``epoch`` is a racing duplicate of this submission, left for the record's own
         replay answer."""
-        visit = visit_gate(facts, node)
-        if visit is None or visit.epoch == epoch:
-            return
-        refuse_unconsumed_gate(node, self._decisions.get_decision(visit.decision_id, transaction=transaction))
+        if (gate := competing_gate(facts, node, epoch=epoch)) is not None:
+            refuse_unconsumed_gate(node, self._decisions.get_decision(gate.decision_id, transaction=transaction))
 
     @staticmethod
     def _artifact_rows(
