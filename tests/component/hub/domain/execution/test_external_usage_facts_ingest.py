@@ -488,8 +488,8 @@ def test_a_historical_malformed_window_cannot_break_runner_reads(tmp_path: Path)
 
 @pytest.mark.parametrize(
     "invalid_pct",
-    [float("nan"), float("inf"), float("-inf"), -0.1, 100.1, True, "42"],
-    ids=["nan", "inf", "-inf", "below", "above", "bool", "numeric-string"],
+    [float("nan"), float("inf"), float("-inf"), -0.1, 100.1, True, "42", 10**400],
+    ids=["nan", "inf", "-inf", "below", "above", "bool", "numeric-string", "huge-int"],
 )
 def test_non_finite_or_out_of_range_utilization_windows_are_omitted_at_ingest(
     tmp_path: Path, invalid_pct: object

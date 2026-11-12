@@ -2,12 +2,11 @@
 
 from __future__ import annotations
 
-import math
 from dataclasses import dataclass
 from datetime import datetime
 from typing import TypeGuard
 
-from blizzard.foundation.instants import epoch_millis_instant, epoch_seconds_instant
+from blizzard.foundation.instants import epoch_millis_instant, epoch_seconds_instant, iso_instant
 from blizzard.foundation.roles import domain_model
 from blizzard.foundation.store.utc import as_utc, iso_utc
 from blizzard.foundation.untyped import as_mapping
@@ -48,7 +47,7 @@ def admit_usage_window(entry: object) -> AdmittedUsageWindow | str:
     window, pct, seconds = fields.get("window"), fields.get("utilization_pct"), fields.get("window_seconds")
     if not isinstance(window, str):
         return "window"
-    if not _is_number(pct) or not math.isfinite(pct) or not 0 <= pct <= 100:
+    if not _is_number(pct) or not 0 <= pct <= 100:
         return "utilization_pct"
     if not isinstance(seconds, int) or isinstance(seconds, bool) or seconds <= 0:
         return "window_seconds"
@@ -69,10 +68,7 @@ def _instant(value: object) -> datetime | None:
         try:
             value = float(value)
         except ValueError:
-            try:
-                return as_utc(datetime.fromisoformat(value))
-            except (OverflowError, ValueError):
-                return None
+            return iso_instant(value)
     if not _is_number(value):
         return None
     return epoch_millis_instant(value) if abs(value) > _MILLISECONDS_ABOVE else epoch_seconds_instant(value)
