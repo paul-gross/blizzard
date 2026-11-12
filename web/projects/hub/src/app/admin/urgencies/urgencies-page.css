@@ -1,0 +1,21 @@
+.urgency-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+  width: 100%;
+  padding: 0.75rem;
+  border: 0;
+  border-bottom: 1px solid var(--border);
+  background: transparent;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+  overflow-wrap: anywhere;
+}
+.urgency-row[aria-current='true'] { background: var(--surface-2); }
+
+.urgency-item { display: flex; align-items: center; min-width: 0; }
+.drag-handle { cursor: grab; padding: 0.5rem; }
+.cli-hints { padding: 0.5rem; min-width: 0; overflow-wrap: anywhere; }
+.cli-hints p { margin: 0.25rem 0; }

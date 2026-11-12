@@ -7,8 +7,12 @@
   [actionError]="lifecycleActionError()"
   [lifecyclePending]="lifecyclePending()"
   [editPending]="editPending()"
+  [urgencies]="urgenciesQuery.data() ?? []"
+  [urgenciesReady]="urgenciesQuery.isSuccess()"
+  [defaultUrgency]="selectedRoutine()?.default_urgency ?? null"
   (run)="run()"
   (editGraph)="onEditGraph($event)"
+  (editUrgency)="onEditUrgency($event)"
   (retire)="onRetireRoutine($event)"
   (enable)="onEnableRoutine($event)"
 />
@@ -21,6 +25,7 @@
   <app-gardening-run-dialog
     [routineId]="routine.routine_id"
     [routineName]="routine.name"
+    [routineUrgency]="routine.default_urgency"
     (closed)="closeDialog()"
   />
 }

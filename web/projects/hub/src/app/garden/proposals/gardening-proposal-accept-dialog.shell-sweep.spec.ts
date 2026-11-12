@@ -36,10 +36,11 @@ async function mount(width: number) {
 }
 
 describe('GardeningProposalAcceptDialogView shell sweep (web:shell-sweep)', () => {
-  for (const width of [390, 1024]) {
+  for (const width of [320, 390, 1024]) {
     it(`stacks the mode options and sits Cancel/Accept side by side at ${width}px`, async () => {
       const { root } = await mount(width);
       try {
+        expect(root.querySelector('[data-testid="proposal-accept-urgency"]')).not.toBeNull();
         const mint = root.querySelector<HTMLElement>('[data-testid="proposal-accept-mode-mint"]')!;
         const decline = root.querySelector<HTMLElement>('[data-testid="proposal-accept-mode-decline"]')!;
         expect(decline.getBoundingClientRect().top, 'decline option did not land below mint').toBeGreaterThanOrEqual(
@@ -61,6 +62,35 @@ describe('GardeningProposalAcceptDialogView shell sweep (web:shell-sweep)', () =
         expect(submitRect.right, 'Accept must not overflow the dialog panel').toBeLessThanOrEqual(
           panelRect.right + 1,
         );
+      } finally {
+        root.remove();
+      }
+    });
+  }
+
+  for (const width of [320, 390]) {
+    it(`keeps the submit error readable and actions inside the dialog at ${width}px`, async () => {
+      const { root, fixture } = await mount(width);
+      try {
+        fixture.componentRef.setInput('submitError', 'The proposal could not be accepted. Please try again.');
+        await fixture.whenStable();
+
+        const error = root.querySelector<HTMLElement>('[data-testid="proposal-accept-submit-error"]')!;
+        const cancel = root.querySelector<HTMLElement>('[data-testid="proposal-accept-dialog-cancel"]')!;
+        const submit = root.querySelector<HTMLElement>('[data-testid="proposal-accept-dialog-submit"]')!;
+        const panel = root.querySelector<HTMLElement>('[data-testid="gardening-proposal-accept-dialog"]')!;
+        const errorRect = error.getBoundingClientRect();
+        const cancelRect = cancel.getBoundingClientRect();
+        const submitRect = submit.getBoundingClientRect();
+        const panelRect = panel.getBoundingClientRect();
+
+        expect(error.textContent).toContain('The proposal could not be accepted. Please try again.');
+        expect(errorRect.width, 'error text needs room to wrap readably').toBeGreaterThan(200);
+        expect(errorRect.bottom).toBeLessThanOrEqual(cancelRect.top);
+        expect(Math.abs(cancelRect.top - submitRect.top)).toBeLessThan(2);
+        expect(submitRect.left).toBeGreaterThanOrEqual(cancelRect.right);
+        expect(cancelRect.left).toBeGreaterThanOrEqual(panelRect.left);
+        expect(submitRect.right).toBeLessThanOrEqual(panelRect.right + 1);
       } finally {
         root.remove();
       }

@@ -1,4 +1,4 @@
-<div class="colors" role="group" aria-label="Project color" data-testid="project-color-picker">
+<div class="colors" role="group" [attr.aria-label]="ariaLabel()" data-testid="project-color-picker">
   @for (color of colors(); track color) {
     <fleet-kit-chip
       [selected]="color === current()"

@@ -1,4 +1,4 @@
-import { ChangeDetectionStrategy, Component, type TemplateRef, input, output, signal } from '@angular/core';
+import { ChangeDetectionStrategy, Component, computed, type TemplateRef, input, output, signal } from '@angular/core';
 import { RouterLink } from '@angular/router';
 
 import {
@@ -15,6 +15,8 @@ import {
   KitProseBlock,
   KitTextInput,
   KitErrorLine,
+  KitSelect,
+  type UrgencyView,
 } from 'fleet';
 import { LensLink } from 'fleet/shell';
 
@@ -165,11 +167,36 @@ export interface RoutinePanelVm {
 @Component({
   selector: 'app-routine-panel',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [KitAsyncState, FleetWhen, KitBadge, KitButton, KitConfirmDialog, KitFactList, KitPanel, KitProseBlock, KitTextInput, KitErrorLine, LensLink, RouterLink],
+  imports: [KitAsyncState, FleetWhen, KitBadge, KitButton, KitConfirmDialog, KitFactList, KitPanel, KitProseBlock, KitTextInput, KitErrorLine, KitSelect, LensLink, RouterLink],
   templateUrl: './routine-panel.html',
   styleUrl: './routine-panel.css',
 })
 export class FleetRoutinePanel {
+  readonly urgencies = input<readonly UrgencyView[]>([]);
+  readonly urgenciesReady = input(false);
+  readonly defaultUrgency = input<string | null>(null);
+  readonly editUrgency = output<string>();
+  protected readonly urgencyDraft = signal<{ slug: string; original: string | null; value: string } | null>(null);
+  protected readonly urgencyOptions = computed(() => [
+    { value: '', label: `Tenant default${this.urgencies().find((u) => u.default) ? ` (${this.urgencies().find((u) => u.default)!.name})` : ''}` },
+    ...this.urgencies().filter((u) => !u.retired || u.slug === this.defaultUrgency() || u.urgency_id === this.defaultUrgency()).map((u) => ({ value: u.slug, label: u.name })),
+  ]);
+  protected urgencyEditing(): boolean {
+    const draft = this.urgencyDraft();
+    return draft !== null && draft.slug === this.vm()?.record.slug && draft.original === this.defaultUrgency();
+  }
+  protected chooseUrgency(value: string): void {
+    const panel = this.vm();
+    if (panel) this.urgencyDraft.set({ slug: panel.record.slug, original: this.defaultUrgency(), value });
+  }
+  protected urgencyLabel(): string {
+    return this.urgencyOptions().find((o) => o.value === this.urgencyValue())?.label ?? this.urgencyValue();
+  }
+  protected urgencyValue(): string {
+    const value = (this.urgencyEditing() ? this.urgencyDraft()?.value : this.defaultUrgency()) ?? '';
+    return this.urgencies().find((u) => u.urgency_id === value)?.slug ?? value;
+  }
+
   readonly vm = input<RoutinePanelVm | null>(null);
   readonly state = input.required<KitAsyncStateValue>();
   readonly relatedScopesState = input<KitAsyncStateValue>('ready');

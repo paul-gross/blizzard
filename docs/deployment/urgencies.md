@@ -44,6 +44,25 @@ A chunk's urgency is changed afterwards through `chunk set --urgency`
 Every chunk view carries `urgency`, the chunk's urgency as `{urgency_id, slug}`; `chunk list`, `queue get`, and the
 header line of `chunk get` show its slug.
 
+## On the board
+
+**Admin → Urgencies** at `/admin/urgencies` lists the tenant's urgencies in order, with their marks, open-chunk counts
+and default; a filter includes retired records. With `config:edit`, create and edit a name, color and emoji or image
+mark, drag live rows to reorder them, and choose the default. The slug is fixed after creation. The detail offers retire
+or enable; retiring an urgency with open work asks where to move it and also requires `chunk:control`, and the default
+must first be changed. Detail also shows its change history. On a phone the administration screen is read-only and shows
+CLI commands for these actions.
+
+The [board](./board.md#urgency-on-the-board) shows a pill on unfinished, non-default work and lets a person with
+`chunk:control` change a chunk's urgency. New hub items and accepted garden proposals offer a choice starting at the
+tenant default. A routine run can choose an urgency or follow the routine default; a routine can follow the tenant
+default, and a cadence chore can follow the routine default. These choices use the [chain](#the-chain).
+
+The board polls its urgency configuration every 15 seconds while active, and refreshes on focus and reconnect, so a
+change made elsewhere normally appears within that interval. Its lists remain in rank order; the runner's
+[next-claim explanation](#a-runners-next-claim) is a snapshot of the hub's current knowledge, not a promise of the next
+claim.
+
 ## The fields
 
 | Field   | Meaning                                                                                                                                                                                                                              |
@@ -131,7 +150,18 @@ project until D finishes. To get C worked sooner, give D the urgency too.
 `GET /api/runners/{runner_id}/next-claim` explains, for one runner, what its walk reaches for next. It walks claim order
 from what the hub holds of the runner: the projects it serves, its bindings, and its latest capability snapshot. It is
 the hub's best account, not a promise: the runner peeks with what it holds at that moment, and the queue can change
-before it does. A retired or paused runner is answered like any other. Each field answers one question:
+before it does. A retired or paused runner is answered like any other.
+
+On the Fleet tab, runner rows in host detail and hostless runner detail show **Next**: a link to that chunk with its
+project and urgency, or `Nothing claimable`. Expanding **Passed** lists the chunks the walk passed, with links and
+reasons. A blocked entry links its first prerequisite and shows its status when available and how many more there are;
+an ineligible entry names the possible missing harness, model, or graph. The section counts passed entries omitted from
+the bounded list, reports work ahead from unserved projects, and shows what a per-project hold would reach and where it
+would stop. Loading and read failures are shown separately from `Nothing claimable`.
+
+The board refreshes this explanation on chunk, queue and runner changes, with a 45-second polling backstop; urgency
+configuration is polled every 15 seconds as described [above](#on-the-board). Each field of the API answers one
+question:
 
 | Field          | Answers                                                                                                                      |
 | -------------- | ---------------------------------------------------------------------------------------------------------------------------- |

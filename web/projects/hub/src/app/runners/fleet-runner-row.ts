@@ -19,6 +19,7 @@ import { GateBadgeGroup } from './gate-badge-group';
 import { runnerLight, runnerStateBadges } from './connection-status.model';
 import { busyAgents, declaredAgents } from './host-rows.model';
 import { decliningLabels, runnerSeenLabel, runnerSeenTag, runnerToggleHint, type RunnerRow, versionStandingBadge } from './runner-rows.model';
+import { RunnerNextClaim } from './runner-next-claim';
 import { RunnerSubscription } from './runner-subscription';
 import { ServedProjectGroup } from './served-project-group';
 import { StatusLight } from './status-light';
@@ -44,6 +45,7 @@ import { StatusLight } from './status-light';
     LensLink,
     RouterLink,
     RunnerSubscription,
+    RunnerNextClaim,
     ServedProjectGroup,
     StatusLight,
   ],
@@ -55,6 +57,8 @@ export class FleetRunnerRow {
 
   /** Whether the runner sits under a host — switching its served line to bindings mode. */
   readonly hosted = input(false);
+
+  readonly showNext = input(false);
 
   /** Whether to render the hub brake — the identity's `runner:pause`. */
   readonly canPause = input(false);

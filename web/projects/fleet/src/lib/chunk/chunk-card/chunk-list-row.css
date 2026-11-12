@@ -61,6 +61,12 @@
   gap: 6px;
   min-width: 0;
 }
+.identity {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
 /* The chunk's id heads the work, ahead of the items it carries. */
 .id {
   color: var(--edge);

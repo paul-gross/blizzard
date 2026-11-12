@@ -1,7 +1,8 @@
-import { provideZonelessChangeDetection } from '@angular/core';
+import { provideZonelessChangeDetection, signal } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { provideRouter } from '@angular/router';
 import { page } from 'vitest/browser';
+import { vi } from 'vitest';
 
 import { type ChunkDetail, runnerDisplayName } from 'fleet';
 import { chunkControlStub, chunkDetail } from 'fleet/testing';
@@ -26,6 +27,7 @@ const DETAIL: ChunkDetail = chunkDetail({
   chunk_id: 'ch_01dockwidth0000000000000000',
   graph_id: 'gr_1',
   status: 'ready',
+  urgency: { urgency_id: 'normal', slug: 'normal' },
   pausable: true,
   completable: true,
   deletable: true,
@@ -52,7 +54,7 @@ const WIDTHS = [800, 390, 320];
 
 /** Every in-flow control the fixture above makes live at once — Pause, Detach,
  * Complete, and Delete live in the `⋯` trigger's own menu. */
-const SWEPT = ['chunk-actions-menu', 'detail-close'] as const;
+const SWEPT = ['chunk-urgency-menu', 'chunk-actions-menu', 'detail-close'] as const;
 
 /** The menu panel's own items, once opened — a routed, pausable, deletable chunk
  * (`blocking` gate open) makes all four live at once. */
@@ -79,7 +81,13 @@ async function renderHeader(
   const fixture = TestBed.createComponent(ChunkDetailHeader);
   fixture.componentRef.setInput('detail', detail);
   fixture.componentRef.setInput('renderedStatus', detail.status);
-  fixture.componentRef.setInput('control', chunkControlStub());
+  fixture.componentRef.setInput('control', {
+    ...chunkControlStub(),
+    urgency: { values: signal([
+      { urgency_id: 'normal', slug: 'normal', name: 'Normal', default: true, retired: false, place: 1, color: 'blue', emoji: null, icon: null },
+      { urgency_id: 'urgent', slug: 'urgent', name: 'Urgent', default: false, retired: false, place: 2, color: 'red', emoji: '🔥', icon: null },
+    ]), pending: () => null, set: vi.fn() },
+  });
   fixture.componentRef.setInput('runnerHosts', runnerHosts);
   await fixture.whenStable();
   const root = fixture.nativeElement as HTMLElement;
@@ -154,6 +162,21 @@ describe('chunk detail header action row shell sweep (web:shell-sweep)', () => {
       } finally {
         root.remove();
       }
+    });
+
+    it(`keeps the opened urgency menu on-viewport at width ${width}`, async () => {
+      const { root, fixture } = await renderHeader(width);
+      try {
+        root.querySelector<HTMLElement>('[data-testid="chunk-urgency-menu"]')!.click();
+        await fixture.whenStable();
+        const items = document.body.querySelectorAll<HTMLElement>('[data-testid="chunk-urgency-options"] [role="menuitemradio"]');
+        expect(items.length).toBe(2);
+        for (const item of items) {
+          const rect = item.getBoundingClientRect();
+          expect(rect.left).toBeGreaterThanOrEqual(-0.5);
+          expect(rect.right).toBeLessThanOrEqual(width + 0.5);
+        }
+      } finally { fixture.destroy(); root.remove(); }
     });
 
     it(`keeps the claim line's compact runner id readable at width ${width}`, async () => {

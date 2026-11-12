@@ -1,0 +1,9 @@
+<form class="chf" data-testid="gardening-routine-create" (submit)="$event.preventDefault(); saved.emit(draft())">
+  <div class="chf-field"><span class="chf-label">Slug</span><fleet-kit-text-input ariaLabel="Routine slug" [value]="draft().slug" (valueChange)="set('slug', $event)" testid="routine-create-slug" /></div>
+  <div class="chf-field"><span class="chf-label">Name</span><fleet-kit-text-input ariaLabel="Routine name" [value]="draft().name" (valueChange)="set('name', $event)" testid="routine-create-name" /></div>
+  <div class="chf-field"><span class="chf-label">Graph</span><fleet-kit-text-input ariaLabel="Graph name" [value]="draft().graph" (valueChange)="set('graph', $event)" testid="routine-create-graph" /></div>
+  <div class="chf-field"><span class="chf-label">Default scope</span><fleet-kit-text-input ariaLabel="Default scope" [value]="draft().scope" (valueChange)="set('scope', $event)" testid="routine-create-scope" /></div>
+  <div class="chf-field"><span class="chf-label">Default urgency</span><fleet-kit-select ariaLabel="Default urgency" [options]="options()" [selectedValue]="draft().urgency" (choose)="set('urgency', $event)" testid="routine-create-urgency" /></div>
+  <fleet-kit-error-line [message]="error()" testid="routine-create-error" />
+  <div class="chf-actions"><fleet-kit-button variant="primary" [disabled]="pending()" (click)="saved.emit(draft())" testid="routine-create-save">Create</fleet-kit-button><fleet-kit-button (click)="cancelled.emit()" testid="routine-create-cancel">Cancel</fleet-kit-button></div>
+</form>

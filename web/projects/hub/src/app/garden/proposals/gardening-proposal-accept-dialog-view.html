@@ -35,10 +35,16 @@
     </fleet-kit-panel>
 
     @if (mode() === 'mint') {
+      <fleet-kit-panel aria-label="Urgency" label="Urgency">
+        <div class="body">
+          <fleet-kit-select ariaLabel="Urgency" [options]="urgencyOptions()" [selectedValue]="urgency()" (choose)="urgency.set($event)" testid="proposal-accept-urgency" />
+        </div>
+      </fleet-kit-panel>
       <fleet-kit-panel class="body-field" data-testid="proposal-accept-body-field" aria-label="Work item body" label="Work item body">
         <div class="body">
           <fleet-kit-text-input
             multiline
+            ariaLabel="Work item body"
             [rows]="16"
             [value]="body()"
             (valueChange)="body.set($event)"
@@ -50,6 +56,7 @@
         <div class="body">
           <fleet-kit-text-input
             multiline
+            ariaLabel="Reason (optional)"
             [rows]="4"
             placeholder="optional — why the proposal is accepted"
             [value]="reason()"
@@ -68,6 +75,7 @@
         <div class="body">
           <fleet-kit-text-input
             multiline
+            ariaLabel="Reason — required"
             [rows]="6"
             placeholder="Why no work item is minted — required"
             [value]="reason()"
@@ -80,7 +88,9 @@
   </div>
 
   <div fleetKitDialogFooter class="footer">
-    <fleet-kit-error-line class="submit-error" [message]="submitError()" testid="proposal-accept-submit-error" />
+    @if (submitError()) {
+      <fleet-kit-error-line class="submit-error" [message]="submitError()" testid="proposal-accept-submit-error" />
+    }
     <fleet-kit-button size="cta" [disabled]="submitting()" (click)="onClosed()" testid="proposal-accept-dialog-cancel">
       Cancel
     </fleet-kit-button>

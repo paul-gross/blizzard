@@ -1,3 +1,4 @@
+import { CdkMenuTrigger } from '@angular/cdk/menu';
 import { ChangeDetectionStrategy, Component, computed, input, signal } from '@angular/core';
 
 import { ChunkDeleteRefusal, type ChunkDetail, type PauseView } from '../../api/hub';
@@ -5,7 +6,7 @@ import { compactRef } from '../../core/compact-ref';
 import { unlisted } from '../../core/open-lookup';
 import { KitConfirmDialog, type KitConfirmDialogPrompt } from '../../kit/kit-confirm-dialog';
 import { KitMenu, KitMenuPanel } from '../../kit/kit-menu';
-import { KitMenuItem, KitMenuItemSubtitle } from '../../kit/kit-menu-item';
+import { KitMenuItem, KitMenuItemRadio, KitMenuItemSubtitle } from '../../kit/kit-menu-item';
 import { completeCopy, deleteCopy, detachCopy, pauseCopy, resumeCopy } from './chunk-action-copy';
 import type { ChunkControl } from './chunk-control';
 
@@ -21,7 +22,7 @@ import type { ChunkControl } from './chunk-control';
 @Component({
   selector: 'fleet-chunk-actions-menu',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [KitConfirmDialog, KitMenu, KitMenuItem, KitMenuItemSubtitle, KitMenuPanel],
+  imports: [CdkMenuTrigger, KitMenuItemRadio, KitConfirmDialog, KitMenu, KitMenuItem, KitMenuItemSubtitle, KitMenuPanel],
   templateUrl: './chunk-actions-menu.html',
   styleUrl: './chunk-actions-menu.css',
 })
@@ -59,6 +60,14 @@ export class ChunkActionsMenu {
   /** The open operator pause — the Pause/Resume switch: non-null renders Resume, null
    * renders Pause (subject to {@link pausable}). `status` never gates Resume: a chunk both
    * paused and parked on a question derives `waiting_on_human`. */
+  protected readonly urgencyOptions = computed(() => (this.control().urgency?.values() ?? []).filter((u) => !u.retired).sort((a, b) => (a.place ?? Infinity) - (b.place ?? Infinity)));
+  protected readonly urgencyId = computed(() => this.control().urgency?.pending(this.chunkId()) ?? this.detail().urgency?.urgency_id ?? null);
+  protected setUrgency(id: string): void {
+    if (!this.detail().terminal && this.canControl() && !this.control().urgency?.pending(this.chunkId()) && id !== this.urgencyId()) {
+      this.control().urgency?.set(this.chunkId(), id);
+    }
+  }
+
   protected readonly pause = computed<PauseView | null>(() => this.detail().pause ?? null);
   protected readonly pausable = computed<boolean>(() => this.detail().pausable ?? false);
   protected readonly completable = computed<boolean>(() => this.detail().completable ?? false);

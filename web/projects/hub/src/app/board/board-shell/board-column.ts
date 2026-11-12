@@ -1,9 +1,12 @@
+import { UrgencyPill } from '../../core/urgency-pill';
+import { urgencyPill } from '../../core/urgencies.model';
+import type { UrgencyView } from 'fleet';
 import { ChangeDetectionStrategy, Component, computed, input, output, signal } from '@angular/core';
 import { CdkDrag, type CdkDragDrop, CdkDropList } from '@angular/cdk/drag-drop';
 
 import { type BoardCard, boardCardView } from '../board-card/board-card-view.model';
 import { BoardCardSkeleton } from '../board-card/board-card-skeleton';
-import { ChunkCard, ChunkCardProgress, type Lane, KitBeacon, type Tone, laneTone, toneColor } from 'fleet';
+import { ChunkCard, ChunkCardProgress, ChunkUrgency, type ChunkControl, type Lane, KitBeacon, type Tone, laneTone, toneColor } from 'fleet';
 import { NodeStrip } from '../node-strip/node-strip';
 import { showsNodeStrip } from '../node-strip/node-strip.model';
 import { ReorderGrip } from '../reorder-grip/reorder-grip';
@@ -64,12 +67,22 @@ export function laneDropId(list: BoardReorderList): string {
 @Component({
   selector: 'app-board-column',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [BoardCardSkeleton, ChunkCard, ChunkCardProgress, CdkDrag, CdkDropList, KitBeacon, NodeStrip, ReorderGrip],
+  imports: [UrgencyPill, BoardCardSkeleton, ChunkCard, ChunkCardProgress, ChunkUrgency, CdkDrag, CdkDropList, KitBeacon, NodeStrip, ReorderGrip],
   host: { '[attr.data-col]': 'column().key' },
   templateUrl: './board-column.html',
   styleUrl: './board-column.css',
 })
 export class BoardColumn {
+  readonly urgencies = input<readonly UrgencyView[]>([]);
+  readonly chunkControl = input<ChunkControl | null>(null);
+  protected urgencyDetail(chunkId: string) {
+    const card = this.cardsById().get(chunkId)!;
+    return { chunk_id: chunkId, terminal: card.terminal, urgency: card.urgency ?? null };
+  }
+  protected urgencyFor(chunkId: string): UrgencyView | null {
+    const card = this.cardsById().get(chunkId);
+    return card ? urgencyPill({ urgency: card.urgency ?? null, terminal: card.terminal }, this.urgencies()) : null;
+  }
   protected readonly policyOpen = signal(false);
 
   /** The lane this column renders — its key, engraved label, and stat label. */
@@ -84,6 +97,8 @@ export class BoardColumn {
 
   /** Each card as the fleet card draws it. */
   protected readonly views = computed(() => this.cards().map((card) => boardCardView(card)));
+
+  protected readonly cardsById = computed(() => new Map(this.cards().map((card) => [card.chunkId, card])));
 
   /** The cards mid-graph, by chunk id — each carries the graph-progress strip in its cost row. */
   protected readonly strips = computed(() => new Map(this.cards().filter(showsNodeStrip).map((card) => [card.chunkId, card])));

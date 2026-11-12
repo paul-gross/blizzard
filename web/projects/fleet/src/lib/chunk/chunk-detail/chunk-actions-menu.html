@@ -36,6 +36,10 @@
     @if (pause() || pausable() || claimant()) {
       <hr class="menu-divider" />
     }
+    @if (!detail().terminal && control().urgency) {
+      <fleet-kit-menu-item testid="urgency-actions" [submenu]="true" [cdkMenuTriggerFor]="urgencyMenu">Urgency</fleet-kit-menu-item>
+      <hr class="menu-divider" />
+    }
     @let complete = completeCopy();
     <fleet-kit-menu-item class="danger" testid="complete-chunk" [disabled]="!completable() || completePending()" (triggered)="onComplete()">
       <span fleetKitMenuItemSubtitle>{{ complete.subtitle }}</span>
@@ -61,3 +65,11 @@
     (cancelled)="onCancelled()"
   />
 }
+
+<ng-template #urgencyMenu>
+  <fleet-kit-menu-panel testid="chunk-actions-urgencies">
+    @for (option of urgencyOptions(); track option.urgency_id) {
+      <fleet-kit-menu-item-radio [checked]="option.urgency_id === urgencyId()" [disabled]="!!control().urgency?.pending(detail().chunk_id)" (triggered)="setUrgency(option.urgency_id)">{{ option.name }}</fleet-kit-menu-item-radio>
+    }
+  </fleet-kit-menu-panel>
+</ng-template>

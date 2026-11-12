@@ -87,6 +87,12 @@
         </div>
       </fleet-kit-panel>
 
+      <fleet-kit-panel aria-label="Urgency" label="Urgency">
+        <div class="body">
+          <fleet-kit-select ariaLabel="Urgency" [options]="urgencyOptions()" [selectedValue]="urgency()" (choose)="urgency.set($event)" testid="run-urgency" />
+        </div>
+      </fleet-kit-panel>
+
       <fleet-kit-panel class="note-field" data-testid="run-note-field" aria-label="Charge note" label="Charge note">
         <div class="body">
           <fleet-kit-text-input
@@ -106,7 +112,9 @@
     @if (confirmedRun()) {
       <fleet-kit-button size="cta" variant="primary" (click)="closed.emit()" testid="run-dialog-done">Done</fleet-kit-button>
     } @else {
-      <fleet-kit-error-line class="submit-error" [message]="submitError()" testid="run-submit-error" />
+      @if (submitError()) {
+        <fleet-kit-error-line class="submit-error" [message]="submitError()" testid="run-submit-error" />
+      }
       <fleet-kit-button size="cta" [disabled]="submitting()" (click)="onClosed()" testid="run-dialog-cancel">Cancel</fleet-kit-button>
       <fleet-kit-button
       size="cta"

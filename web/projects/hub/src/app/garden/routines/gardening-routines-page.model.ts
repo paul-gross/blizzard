@@ -28,3 +28,8 @@ export function routineListRows(
     kept: (r.kept_by ?? []).length > 0,
   }));
 }
+
+/** The create form's explicit default, or null to inherit from the tenant. */
+export function createRoutineRequest(draft: import('./routine-create-form').RoutineCreateDraft): import('fleet').hubApi.RoutineCreateRequest {
+  return { slug: draft.slug.trim(), name: draft.name.trim() || null, graph_name: draft.graph.trim(), default_scope_slug: draft.scope.trim(), default_urgency: draft.urgency || null };
+}

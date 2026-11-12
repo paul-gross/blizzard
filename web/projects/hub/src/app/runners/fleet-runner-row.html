@@ -59,6 +59,7 @@
           }
         </ul>
       </fleet-kit-async-state>
+      @if (showNext()) { <app-runner-next-claim [runnerId]="row().runner_id" /> }
     </div>
   </div>
 </article>

@@ -1,0 +1,26 @@
+@if (selected(); as urgency) {
+  @if (!detail().terminal && control()?.canControl() && control()?.urgency) {
+    <fleet-kit-menu [ariaLabel]="'Change urgency: ' + urgency.name" testid="chunk-urgency-menu" [disabled]="!!control()?.urgency?.pending(detail().chunk_id)" [menu]="optionsMenu">
+      <span trigger>
+        @if (urgency.default) {
+          {{ urgency.name }}
+        } @else {
+          <fleet-kit-urgency-pill [name]="urgency.name" [color]="urgency.color" [emoji]="urgency.emoji" [iconUrl]="iconUrl()" [focusable]="false" />
+        }
+      </span>
+    </fleet-kit-menu>
+  } @else if (detail().terminal || urgency.default) {
+    <span data-testid="chunk-urgency">{{ urgency.name }}@if (urgency.retired) { (retired) }</span>
+  } @else {
+    <fleet-kit-urgency-pill [name]="urgency.name" [color]="urgency.color" [emoji]="urgency.emoji" [iconUrl]="iconUrl()" />
+  }
+} @else if (detail().terminal && detail().urgency; as historical) {
+  <span data-testid="chunk-urgency">{{ historical.slug }}</span>
+}
+<ng-template #optionsMenu>
+  <fleet-kit-menu-panel testid="chunk-urgency-options">
+    @for (option of options(); track option.urgency_id) {
+      <fleet-kit-menu-item-radio [checked]="option.urgency_id === selectedId()" [disabled]="!!control()?.urgency?.pending(detail().chunk_id)" (triggered)="choose(option.urgency_id)">{{ option.name }}</fleet-kit-menu-item-radio>
+    }
+  </fleet-kit-menu-panel>
+</ng-template>

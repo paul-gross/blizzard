@@ -82,6 +82,8 @@ describe('FleetLiveUpdates', () => {
     const keys = invalidate.mock.calls.map((call) => call[0]?.queryKey);
     expect(keys).toContainEqual(['hub', 'chunks']);
     expect(keys).toContainEqual(['hub', 'queue']);
+    expect(keys).toContainEqual(['hub', 'runner-next-claim']);
+    expect(keys).toContainEqual(['hub', 'config', 'urgencies']);
     expect(keys).toContainEqual(['hub', 'chunk', 'ch_live']);
     expect(keys).toContainEqual(['hub', 'fleet-spend']);
     expect(keys).toContainEqual(['hub', 'events']);
@@ -224,11 +226,13 @@ describe('FleetLiveUpdates', () => {
 
     const keys = invalidate.mock.calls.map((call) => call[0]?.queryKey);
     expect(keys).toContainEqual(['hub', 'queue']);
+    expect(keys).toContainEqual(['hub', 'config', 'urgencies']);
     expect(keys).toContainEqual(['hub', 'backlog']);
     expect(keys).toContainEqual(['hub', 'runners']);
     expect(keys).toContainEqual(['hub', 'hosts']);
     expect(keys).toContainEqual(['hub', 'env-timeline', 'live']);
-    expect(keys).toHaveLength(5);
+    expect(keys).toContainEqual(['hub', 'runner-next-claim']);
+    expect(keys).toHaveLength(7);
   });
 
   it('flushes a lone event within the coalesce window bound on an otherwise quiet stream (issue #310)', () => {
@@ -361,6 +365,16 @@ describe('FleetLiveUpdates', () => {
     expect(keys).toContainEqual(['hub', 'runners']);
     expect(keys).toContainEqual(['hub', 'queue']);
     expect(keys).toContainEqual(['hub', 'backlog']);
+  });
+
+  it.each(['queue-changed', 'runner-changed'])('invalidates Next on %s', (event) => {
+    const invalidate = vi.spyOn(queryClient, 'invalidateQueries');
+    TestBed.runInInjectionContext(() => TestBed.inject(FleetLiveUpdates).start());
+    const source = FakeEventSource.instances[0];
+    source.open();
+    source.emitNamed(event, JSON.stringify({ runner_id: 'rn_1', kind: 'heartbeat' }));
+    vi.advanceTimersByTime(INVALIDATION_COALESCE_WINDOW_MS);
+    expect(invalidate.mock.calls.map((call) => call[0]?.queryKey)).toContainEqual(['hub', 'runner-next-claim']);
   });
 
   it('re-reads the registry on every runner-changed kind, including the muted ones', () => {

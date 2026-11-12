@@ -23,7 +23,7 @@ const summary: ChunkSummary = chunkSummary({
 
 describe('delivery links real Chromium shell sweep', () => {
   for (const width of [1280, 390]) {
-    it(`mounts the board card, dock and routed General tab without clipping links at ${width}px`, async () => {
+    it(`keeps standalone board and detail links reachable at ${width}px`, async () => {
       await page.viewport(width, 800);
       TestBed.resetTestingModule();
       await TestBed.configureTestingModule({
@@ -59,10 +59,17 @@ describe('delivery links real Chromium shell sweep', () => {
           expect(link.href).toContain('forge.example');
           expect(link.target).toBe('_blank');
           expect(link.rel).toContain('noopener');
+          // The phone uses the glance board; this standalone desktop board scrolls its lanes at phone widths.
+          link.scrollIntoView({ block: 'nearest', inline: 'nearest' });
           const rect = link.getBoundingClientRect();
           expect(rect.width, `${link.textContent} invisible at ${width}px`).toBeGreaterThan(0);
           expect(rect.right, `${link.textContent} overflows ${width}px`).toBeLessThanOrEqual(width + 1);
           expect(rect.left).toBeGreaterThanOrEqual(-1);
+          if (card.contains(link)) {
+            const bounds = host.querySelector<HTMLElement>('[data-testid="board"]')!.getBoundingClientRect();
+            expect(rect.left).toBeGreaterThanOrEqual(bounds.left - 1);
+            expect(rect.right).toBeLessThanOrEqual(bounds.right + 1);
+          }
         }
         const closedOnly: ChunkDetail = {
           ...detail, open_prs: [], closed_prs: [pr], landed_repos: [], awaiting_external_merge: false,

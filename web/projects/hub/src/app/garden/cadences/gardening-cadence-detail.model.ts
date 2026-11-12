@@ -137,6 +137,7 @@ export function choreDocument(chore: ChoreView): ChoreDocument {
     mode: chore.mode,
     promote: chore.promote,
     note: chore.note,
+    urgency: chore.urgency,
   };
 }
 
@@ -149,6 +150,7 @@ export function choreDraftOf(chore: ChoreView): ChoreDraft {
     mode: chore.mode,
     promote: chore.promote,
     note: chore.note ?? '',
+    urgency: chore.urgency,
   };
 }
 
@@ -164,6 +166,7 @@ export function draftDocument(draft: ChoreDraft): ChoreDocument {
     mode: draft.mode as ChoreDocument['mode'],
     promote: draft.promote,
     note: draft.note.trim() || null,
+    urgency: draft.urgency || null,
   };
 }
 

@@ -20,6 +20,7 @@ import {
   KitCloseButton,
   KitSwatch,
   ChunkActionsMenu,
+  ChunkUrgency,
 } from 'fleet';
 import { LensLink } from 'fleet/shell';
 
@@ -39,6 +40,7 @@ import { LensLink } from 'fleet/shell';
     KitCloseButton,
     KitSwatch,
     ChunkActionsMenu,
+    ChunkUrgency,
     RouterLink,
     LensLink,
   ],

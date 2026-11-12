@@ -78,6 +78,7 @@ const ROUTINES = [
     default_scope_slug: 'blizzard',
     default_model: ['claude-sonnet-5'],
     default_effort: 'medium',
+    kept_by: [{ cadence_slug: 'evening', cadence_name: 'Evening sweep', chore_key: 'nightly', next_moment: null }],
     created_at: '2026-01-01T00:00:00Z',
   }),
 ];

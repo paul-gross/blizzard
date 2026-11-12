@@ -25,6 +25,33 @@
             [testid]="testidPrefix() + '-field-' + field.key"
             (choose)="onText(field.key, $event)"
           />
+        } @else if (field.kind === 'color') {
+          <app-project-color-picker
+            [colors]="colorChoices(field)"
+            [current]="textOf(field.key)"
+            [ariaLabel]="field.label"
+            [disabled]="submitting()"
+            (choose)="onText(field.key, $event)"
+          />
+        } @else if (field.kind === 'mark') {
+          @if (isImage(field.key)) {
+            <img class="mark-preview" [src]="textOf(field.key)" alt="Selected mark" />
+          }
+          <fleet-kit-text-input
+            [ariaLabel]="field.label + ' emoji'"
+            [value]="isImage(field.key) ? '' : textOf(field.key)"
+            [testid]="testidPrefix() + '-field-' + field.key"
+            (valueChange)="onMarkText(field.key, $event)"
+          />
+          <label>
+            Image (PNG or WebP)
+            <!-- eslint-disable-next-line no-restricted-syntax -- File selection needs the native file input; the kit has no file control. -->
+            <input type="file" accept="image/png,image/webp" [attr.data-testid]="testidPrefix() + '-field-' + field.key + '-image'" (change)="onMarkFile(field.key, $event)" />
+          </label>
+          @if (textOf(field.key)) {
+            <fleet-kit-button [testid]="testidPrefix() + '-field-' + field.key + '-clear'" (click)="onMarkText(field.key, '')">Clear mark</fleet-kit-button>
+          }
+          <fleet-kit-error-line [message]="markError()" />
         } @else {
           <fleet-kit-text-input
             [type]="field.kind === 'password' ? 'password' : 'text'"

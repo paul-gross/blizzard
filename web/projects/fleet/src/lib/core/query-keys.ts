@@ -20,6 +20,8 @@ export const hubQueueKey = ['hub', 'queue'] as const;
  * key rather than sharing {@link hubQueueKey}. */
 export const hubBacklogKey = ['hub', 'backlog'] as const;
 export const hubRunnersKey = ['hub', 'runners'] as const;
+/** Per-runner next-claim projections, invalidated by queue, chunk and runner changes. */
+export const hubRunnerNextClaimKey = ['hub', 'runner-next-claim'] as const;
 /** The host registry read (`GET /api/hosts`) — the hosts the runners view groups its runners under. */
 export const hubHostsKey = ['hub', 'hosts'] as const;
 /** The tenant's flows read (`GET /api/flows`) and every flow's record read nested under it. Tenant-wide, never
@@ -77,6 +79,10 @@ export function hubConfigHistoryKey(recordKind: string, recordKey: string | null
 export const hubConfigChangesKey = [...hubConfigKey, 'changes'] as const;
 /** Every project of the tenant — `GET /api/projects`. Under {@link hubConfigKey}: a project is a configured record,
  * so every config write refreshes the list, and a project write invalidates the change log with it. */
+export const hubUrgenciesKey = [...hubConfigKey, 'urgencies'] as const;
+export function hubUrgencyIconKey(tenant: string | null, key: string | null, digest: string | null): readonly unknown[] {
+  return ['hub', 'urgency-icon', tenant, key, digest];
+}
 export const hubProjectsKey = [...hubConfigKey, 'projects'] as const;
 /** One project's record by id — `GET /api/projects/{project}`; under {@link hubProjectsKey}, so a projects write
  * refreshes it. `projectId` is nullable, `hubChunkKey`'s own null-tolerant shape, for the disabled-query rest state. */

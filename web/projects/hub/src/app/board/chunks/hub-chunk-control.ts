@@ -1,3 +1,6 @@
+import { injectUrgenciesQuery } from '../../core/urgencies.query';
+import { chunkUrgencyMutationKey } from '../../core/mutation-keys';
+import { injectChunkUrgencyMutation, type ChunkUrgencyVars } from './urgency.mutations';
 import { computed } from '@angular/core';
 import { type ChunkControl, errorMessage, injectPendingMutationVariables, isPendingFor } from 'fleet';
 
@@ -28,6 +31,9 @@ export interface HubChunkControlReporting {
  */
 export function injectHubChunkControl(reporting: HubChunkControlReporting): ChunkControl {
   const meQuery = injectMeQuery();
+  const urgencies = injectUrgenciesQuery();
+  const urgencyMutation = injectChunkUrgencyMutation();
+  const pendingUrgencies = injectPendingMutationVariables<ChunkUrgencyVars>(chunkUrgencyMutationKey);
   const detachMutation = injectDetachChunkMutation();
   const pauseMutation = injectChunkPauseMutation();
   const completeMutation = injectCompleteChunkMutation();
@@ -38,6 +44,14 @@ export function injectHubChunkControl(reporting: HubChunkControlReporting): Chun
   const pendingDeletes = injectPendingMutationVariables<DeleteVars>(chunkDeleteMutationKey);
   const onError = (fallback: string) => ({ onError: (error: unknown) => reporting.fail(errorMessage(error, fallback)) });
   return {
+    urgency: {
+      values: computed(() => urgencies.data() ?? []),
+      pending: (chunkId) => pendingUrgencies().filter((v) => v.chunkId === chunkId).at(-1)?.urgencyId ?? null,
+      set(chunkId, urgencyId) {
+        reporting.beginAction();
+        urgencyMutation.mutate({ chunkId, urgencyId }, onError('Urgency change failed.'));
+      },
+    },
     // `null`/pending identity resolves to `false` — the menu stays hidden until confirmed.
     canControl: computed(() => hasPermission(meQuery.data(), 'chunk:control')),
     pausePending: (chunkId) => isPendingFor(pendingPauses(), (v) => v.chunkId === chunkId),

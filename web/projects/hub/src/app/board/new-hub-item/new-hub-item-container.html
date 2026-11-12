@@ -1,0 +1,16 @@
+<app-new-hub-item-view
+  [allowed]="allowed()"
+  [lensSlug]="lens.slug()"
+  [projectOptions]="projectOptions()"
+  [urgencyOptions]="urgencyOptions()"
+  [open]="open()"
+  [pending]="pending()"
+  [error]="error()"
+  [(title)]="title"
+  [(body)]="body"
+  [(project)]="project"
+  [(urgency)]="urgency"
+  (startRequested)="start()"
+  (closeRequested)="close()"
+  (submitRequested)="submit()"
+/>

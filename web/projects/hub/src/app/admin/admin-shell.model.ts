@@ -11,3 +11,8 @@ export function tabCount(records: readonly unknown[] | undefined, narrowedTo: Re
 export function changesTotal(pages: readonly ConfigChangesPage[] | undefined): number | null {
   return pages?.[0]?.total ?? null;
 }
+
+/** Count live urgencies once the shared read answers. */
+export function liveUrgencyCount(records: readonly { readonly retired: boolean }[] | undefined): number | null {
+  return tabCount(records?.filter((record) => !record.retired));
+}

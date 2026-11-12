@@ -133,6 +133,7 @@
             }
             @if (isOpen(panel, chore.key)) {
               <app-chore-form
+                [urgencies]="urgencies()"
                 [testid]="'gardening-chore-edit-' + chore.key"
                 [initial]="chore.draft"
                 [keyEditable]="false"
@@ -208,6 +209,7 @@
         @if (canEdit()) {
           @if (isOpen(panel, 'add-chore')) {
             <app-chore-form
+              [urgencies]="urgencies()"
               testid="gardening-chore-add"
               [initial]="newChore"
               [pending]="editPending()"

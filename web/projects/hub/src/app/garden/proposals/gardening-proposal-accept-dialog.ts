@@ -1,6 +1,7 @@
 import { ChangeDetectionStrategy, Component, computed, input, output, signal } from '@angular/core';
 import { errorMessage } from 'fleet';
 import { injectAcceptGardenProposalMutation } from './garden-proposal.mutations';
+import { injectUrgenciesQuery } from '../../core/urgencies.query';
 
 import { GardeningProposalAcceptDialogView, type AcceptSubmission } from './gardening-proposal-accept-dialog-view';
 
@@ -23,6 +24,7 @@ import { GardeningProposalAcceptDialogView, type AcceptSubmission } from './gard
   templateUrl: './gardening-proposal-accept-dialog.html',
 })
 export class GardeningProposalAcceptDialog {
+  protected readonly urgenciesQuery = injectUrgenciesQuery();
   readonly proposalId = input.required<string>();
   readonly proposalTitle = input.required<string>();
   readonly proposalBody = input.required<string>();

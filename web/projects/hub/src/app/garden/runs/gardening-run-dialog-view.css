@@ -44,21 +44,26 @@ h2 {
   margin: 0 0 12px;
 }
 
-/* `stretch`, not `center`: at the narrow widths the dialog is still reachable at, a
-   `cta`-sized button's label wraps to a second line rather than overflowing the
-   panel, and centering two buttons of unequal height leaves their tops offset by
-   half the difference. Stretching gives both the row's height, so the action row
-   reads as one row however either label wraps. */
 .footer {
   display: flex;
-  align-items: stretch;
+  align-items: center;
   justify-content: flex-end;
   gap: 8px;
 }
 
 .submit-error {
   flex: 1;
-  align-self: center;
+  min-width: 0;
+}
+
+@media (max-width: 480px) {
+  .footer {
+    flex-wrap: wrap;
+  }
+
+  .submit-error {
+    flex-basis: 100%;
+  }
 }
 
 /* Gold, not the user-agent blue this anchor inherited by carrying no class of its

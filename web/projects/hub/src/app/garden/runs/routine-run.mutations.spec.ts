@@ -47,4 +47,13 @@ describe('injectRunRoutineMutation', () => {
       mutation.mutateAsync({ routineId: 'rtn_1', scopeSlug: 'cold', mode: 'full', note: null }),
     ).rejects.toBeTruthy();
   });
+
+  it('sends an explicitly chosen urgency', async () => {
+    stub = stubHubClient({
+      'POST /api/routines/{routine_id}/run': () => routineRunResponse({ chunk_id: 'ch_1', created_at: '2026-01-01T00:00:00Z' }),
+    });
+    const mutation = TestBed.runInInjectionContext(() => injectRunRoutineMutation());
+    await mutation.mutateAsync({ routineId: 'rtn_1', scopeSlug: 'blizzard', mode: 'full', note: null, urgency: 'urgent' });
+    expect(stub.forRoute('/api/routines/rtn_1/run', 'POST')[0].body).toEqual({ scope_slug: 'blizzard', mode: 'full', note: null, urgency: 'urgent' });
+  });
 });

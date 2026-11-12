@@ -1,8 +1,17 @@
+import { Component, input } from '@angular/core';
+import { FleetRunnerRow } from './fleet-runner-row';
+import { RunnerNextClaim } from './runner-next-claim';
+
+@Component({ selector: 'app-runner-next-claim', template: '' })
+class StubRunnerNextClaim { readonly runnerId = input.required<string>(); }
+
 import { provideZonelessChangeDetection } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { provideRouter } from '@angular/router';
+import { QueryClient, provideTanStackQuery } from '@tanstack/angular-query-experimental';
 
 import { RunnerConnection, type WorkspaceRow } from 'fleet';
+import { stubHubClient, type RequestClientStub } from 'fleet/testing';
 import { type HostDetailVm, resolveSelection } from './fleet-page.model';
 import { HostDetail } from './host-detail';
 import type { HostCard } from './host-rows.model';
@@ -67,12 +76,17 @@ const text = (el: HTMLElement, testid: string) =>
   el.querySelector(`[data-testid="${testid}"]`)?.textContent?.replace(/\s+/g, ' ').trim();
 
 describe('HostDetail', () => {
+  let client: RequestClientStub;
+
   beforeEach(async () => {
+    client = stubHubClient({});
     await TestBed.configureTestingModule({
       imports: [HostDetail],
-      providers: [provideZonelessChangeDetection(), provideRouter([])],
-    }).compileComponents();
+      providers: [provideZonelessChangeDetection(), provideRouter([]), provideTanStackQuery(new QueryClient({ defaultOptions: { queries: { retry: false } } }))],
+    }).overrideComponent(FleetRunnerRow, { remove: { imports: [RunnerNextClaim] }, add: { imports: [StubRunnerNextClaim] } }).compileComponents();
   });
+
+  afterEach(() => client.restore());
 
   async function render(detail: HostDetailVm): Promise<HTMLElement> {
     const fixture = TestBed.createComponent(HostDetail);

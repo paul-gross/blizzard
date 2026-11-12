@@ -1,6 +1,7 @@
 <app-gardening-proposal-accept-dialog-view
   [proposalTitle]="proposalTitle()"
   [proposalBody]="proposalBody()"
+  [urgencies]="urgenciesQuery.data() ?? []"
   [submitting]="submitting()"
   [submitError]="submitError()"
   (closed)="closed.emit()"

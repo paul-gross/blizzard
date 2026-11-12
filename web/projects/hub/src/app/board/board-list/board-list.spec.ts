@@ -1,5 +1,8 @@
+import { QueryClient, provideTanStackQuery } from '@tanstack/angular-query-experimental';
+import { TenantContext } from '../../core/auth/tenant-context';
+import type { UrgencyView } from 'fleet';
 import { CdkDropList, type CdkDragDrop } from '@angular/cdk/drag-drop';
-import { provideZonelessChangeDetection } from '@angular/core';
+import { provideZonelessChangeDetection, signal } from '@angular/core';
 import { type ComponentFixture, TestBed } from '@angular/core/testing';
 import { By } from '@angular/platform-browser';
 
@@ -49,7 +52,7 @@ describe('BoardList', () => {
   const render = async (rendered: BoardListGroups, permissions: { canReorder?: boolean; canControl?: boolean; doneTotal?: number } = {}) => {
     await TestBed.configureTestingModule({
       imports: [BoardList],
-      providers: [provideZonelessChangeDetection()],
+      providers: [provideZonelessChangeDetection(), provideTanStackQuery(new QueryClient()), { provide: TenantContext, useValue: { current: signal(null) } }],
     }).compileComponents();
     fixture = TestBed.createComponent(BoardList);
     fixture.componentRef.setInput('groups', rendered);
@@ -71,6 +74,17 @@ describe('BoardList', () => {
     ready: [ready('q1'), ready('q2')],
     backlog: [backlog('b1'), backlog('b2')],
     done: [entry('done', card('d', { status: 'done', terminal: true }))],
+  });
+
+  it('places the non-default urgency after the id, omitting it on finished rows', async () => {
+    const urgent = { urgency_id: 'u', slug: 'urgent', name: 'Urgent', default: false, retired: false, emoji: '🔥', icon: null, color: 'red' } as UrgencyView;
+    const ref = { urgency_id: 'u', slug: 'urgent' };
+    const el = await render(groups({ live: [entry('running', card('live', { urgency: ref }))], done: [entry('done', card('done', { urgency: ref, terminal: true }))] }));
+    fixture.componentRef.setInput('urgencies', [urgent]);
+    await fixture.whenStable();
+    const rows = [...el.querySelectorAll('[data-testid="list-row"]')];
+    expect(rows[0].querySelector('[data-testid="list-row-id"]')?.nextElementSibling?.tagName.toLowerCase()).toBe('app-urgency-pill');
+    expect(rows[1].querySelector('app-urgency-pill')).toBeNull();
   });
 
   it('renders the live lanes, then READY over a marked line over BACKLOG, then DONE', async () => {

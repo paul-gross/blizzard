@@ -1,3 +1,11 @@
+import { withPendingUrgencies } from './chunks/urgency.model';
+import { injectHubChunkControl } from './chunks/hub-chunk-control';
+import type { ChunkUrgencyVars } from './chunks/urgency.mutations';
+import { chunkUrgencyMutationKey } from '../core/mutation-keys';
+import { CHUNK_URGENCY_ICON } from 'fleet';
+import { injectUrgencyIconUrl } from '../core/urgency-icon.query';
+import { NewHubItem } from './new-hub-item/new-hub-item';
+import { injectUrgenciesQuery } from '../core/urgencies.query';
 import { boardDonePolicy } from '../core/board-done-policy.model';
 import { ChangeDetectionStrategy, Component, computed, inject, InjectionToken, signal } from '@angular/core';
 import { toSignal } from '@angular/core/rxjs-interop';
@@ -55,9 +63,10 @@ export const BOARD_SKELETON_RANDOM = new InjectionToken<() => number>('BOARD_SKE
  */
 @Component({
   selector: 'app-board-page',
+  providers: [{ provide: CHUNK_URGENCY_ICON, useValue: injectUrgencyIconUrl }],
   changeDetection: ChangeDetectionStrategy.OnPush,
   host: { '(document:keydown.escape)': 'onEscape($event)' },
-  imports: [BoardShell, TracksPanel, ChunkDetail, ActivityPanel, QuestionsPanel, GatesPanel, RunnerPanel, FleetSpendPanel, KitErrorLine, StepDrawer],
+  imports: [NewHubItem, BoardShell, TracksPanel, ChunkDetail, ActivityPanel, QuestionsPanel, GatesPanel, RunnerPanel, FleetSpendPanel, KitErrorLine, StepDrawer],
   templateUrl: './board-page.html',
   styleUrl: './board-page.css',
 })
@@ -65,6 +74,10 @@ export class BoardPage {
   /** The board's last operator-action failure — a promote, a demote, or a reorder — or `null`.
    * Reset at the start of every new attempt. */
   protected readonly actionError = signal<string | null>(null);
+  protected readonly chunkControl = injectHubChunkControl({
+    beginAction: () => this.actionError.set(null),
+    fail: (message) => this.actionError.set(message),
+  });
 
   /** The loading skeletons each lane and the list draw — drawn once, so a re-render mid-load
    * never reshuffles them. */
@@ -72,6 +85,8 @@ export class BoardPage {
   protected readonly laneSkeletons = laneSkeletonCounts(this.skeletonRandom);
   protected readonly listSkeletons = listSkeletonCount(this.skeletonRandom);
 
+  protected readonly urgenciesQuery = injectUrgenciesQuery();
+  private readonly pendingUrgencies = injectPendingMutationVariables<ChunkUrgencyVars>(chunkUrgencyMutationKey);
   private readonly chunksQuery = injectHubBoardChunksQuery();
   private readonly countsQuery = injectHubChunkCountsQuery();
   private readonly queueQuery = injectHubQueueQuery();
@@ -158,7 +173,7 @@ export class BoardPage {
   /** {@link chunks} with pending board changes applied (`withPendingBoardChanges`);
    * {@link boardState} and {@link selected} stay off the real list. */
   protected readonly boardChunks = computed<readonly ChunkSummary[]>(() =>
-    withPendingBoardChanges(this.chunks(), this.pendingPromotes(), this.pendingDeletes(), this.pendingDemotes()),
+    withPendingUrgencies(withPendingBoardChanges(this.chunks(), this.pendingPromotes(), this.pendingDeletes(), this.pendingDemotes()), this.pendingUrgencies(), this.urgenciesQuery.data() ?? []),
   );
 
   /** {@link readyOrder} with pending ready-queue repositions and anchored promotes folded in (`foldRepositions`). */

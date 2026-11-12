@@ -1,6 +1,7 @@
 import { ChangeDetectionStrategy, Component, computed, input, output } from '@angular/core';
 
-import { type ChunkCountsView, type ChunkSummary, type WorkItemsView, chunkLane, workLines, compactRef, DONE_LANE, LANES, laneCounts, UNKNOWN_LANE, unknownLane, KitAsyncState, type KitAsyncStateValue, KitPanel, KitPanelHeader, KitTabs, type KitTabOption } from 'fleet';
+import { type UrgencyView, type ChunkCountsView, type ChunkSummary, type WorkItemsView, chunkLane, workLines, compactRef, DONE_LANE, LANES, laneCounts, UNKNOWN_LANE, unknownLane, KitAsyncState, type KitAsyncStateValue, KitPanel, KitPanelHeader, KitTabs, type KitTabOption } from 'fleet';
+import type { ChunkControl } from 'fleet';
 import type { BoardCard } from '../board-card/board-card-view.model';
 import { placeLines } from '../../core/flow-place.model';
 import { boardDonePolicy, type BoardDonePolicy } from '../../core/board-done-policy.model';
@@ -46,6 +47,8 @@ export class BoardShell {
   /** The fleet chunk list (derived status + current node); empty when the fleet is idle. */
   readonly donePolicy = input<BoardDonePolicy>(boardDonePolicy([]));
 
+  readonly urgencies = input<readonly UrgencyView[]>([]);
+  readonly chunkControl = input<ChunkControl | null>(null);
   readonly chunks = input<readonly ChunkSummary[]>([]);
 
   /** The all-time fleet counts each column head shows — `null` while the read is
@@ -169,6 +172,7 @@ export class BoardShell {
         shortId: compactRef(chunk.chunk_id),
         status: chunk.status,
         terminal: chunk.terminal ?? false,
+        urgency: chunk.urgency,
         promotable: chunk.promotable ?? false,
         node: chunk.current_node_name ?? chunk.current_node_id ?? '—',
         nodeId: chunk.current_node_id ?? '',

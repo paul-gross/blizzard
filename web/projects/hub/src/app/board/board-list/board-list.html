@@ -13,6 +13,9 @@
         [gated]="gatedChunkIds().has(entry.card.chunkId)"
         (selectChunk)="selectChunk.emit($event)"
       >
+        @if (urgencyPill({ urgency: entry.card.urgency ?? null, terminal: entry.card.terminal }, urgencies()); as urgency) {
+          <app-urgency-pill chunkRowUrgency [urgency]="urgency" />
+        }
         <!-- The icon takes the pointer for its tooltip, so a click on it opens the chunk itself, as the
              row's select row beneath would. -->
         <fleet-lane-icon

@@ -56,6 +56,14 @@ export const ADMIN_ROUTES: Routes = [
         ],
       },
       {
+        path: 'urgencies',
+        loadComponent: () => import('./urgencies/urgencies-page').then((m) => m.UrgenciesPage),
+        children: [
+          { path: '', loadComponent: () => import('./urgencies/urgency-detail').then((m) => m.UrgencyDetail) },
+          { path: ':key', loadComponent: () => import('./urgencies/urgency-detail').then((m) => m.UrgencyDetail) },
+        ],
+      },
+      {
         path: 'changes',
         loadComponent: () => import('./changes/changes-page').then((m) => m.ChangesPage),
         children: [

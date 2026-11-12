@@ -1,4 +1,7 @@
-import { provideZonelessChangeDetection } from '@angular/core';
+import { QueryClient, provideTanStackQuery } from '@tanstack/angular-query-experimental';
+import { TenantContext } from '../../core/auth/tenant-context';
+import type { UrgencyView } from 'fleet';
+import { provideZonelessChangeDetection, signal } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { commands, page } from 'vitest/browser';
 
@@ -39,15 +42,16 @@ async function loadDesignTokens(): Promise<void> {
   document.head.appendChild(style);
 }
 
-async function render(column: Lane, reorderControls: boolean, canReorder: boolean, count: number | null = null): Promise<HTMLElement> {
+async function render(column: Lane, reorderControls: boolean, canReorder: boolean, count: number | null = null, urgency = false): Promise<HTMLElement> {
   TestBed.resetTestingModule();
   await TestBed.configureTestingModule({
     imports: [BoardColumn],
-    providers: [provideZonelessChangeDetection()],
+    providers: [provideZonelessChangeDetection(), provideTanStackQuery(new QueryClient()), { provide: TenantContext, useValue: { current: signal(null) } }],
   }).compileComponents();
   const fixture = TestBed.createComponent(BoardColumn);
   fixture.componentRef.setInput('column', column);
-  fixture.componentRef.setInput('cards', [CARD]);
+  fixture.componentRef.setInput('cards', [urgency ? { ...CARD, urgency: { urgency_id: 'u', slug: 'urgent' }, workLines: [{ label: 'hub:1', title: 'Urgent work' }] } : CARD]);
+  fixture.componentRef.setInput('urgencies', urgency ? [{ urgency_id: 'u', slug: 'urgent', name: 'Urgent', default: false, retired: false, emoji: '🔥', color: 'red', icon: null } as UrgencyView] : []);
   fixture.componentRef.setInput('reorderControls', reorderControls);
   fixture.componentRef.setInput('canReorder', canReorder);
   fixture.componentRef.setInput('count', count);
@@ -123,6 +127,20 @@ function resolvedColor(value: string): string {
     probe.remove();
   }
 }
+
+describe('board urgency layout shell sweep', () => {
+  it.each([false, true])('places the pill above the work without overflow, drag=%s', async (drag) => {
+    await loadDesignTokens();
+    const root = await render(READY, drag, drag, null, true);
+    try {
+      const pill = root.querySelector<HTMLElement>('app-urgency-pill')!;
+      const work = root.querySelector<HTMLElement>('[data-testid="work-ref-chip"]')!;
+      expect(pill).not.toBeNull();
+      expect(pill.getBoundingClientRect().bottom).toBeLessThanOrEqual(work.getBoundingClientRect().top);
+      expect(root.scrollWidth).toBeLessThanOrEqual(root.clientWidth);
+    } finally { root.remove(); }
+  });
+});
 
 describe('board-column count tone shell sweep (web:shell-sweep)', () => {
   it("draws each lane's count, and the beacon of each live lane, in its lane tone's token", async () => {

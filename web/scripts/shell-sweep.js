@@ -359,6 +359,7 @@ const SWEEPS = [
   { project: 'hub', spec: 'projects/hub/src/app/events/events-scroll.shell-sweep.spec.ts' },
   { project: 'hub', spec: 'projects/hub/src/app/board/hover-tint.shell-sweep.spec.ts' },
   { project: 'hub', spec: 'projects/hub/src/app/board/board-dock.shell-sweep.spec.ts' },
+  { project: 'hub', spec: 'projects/hub/src/app/board/new-hub-item/new-hub-item.shell-sweep.spec.ts' },
   { project: 'hub', spec: 'projects/hub/src/app/graphs/graph-detail.shell-sweep.spec.ts' },
   { project: 'hub', spec: 'projects/hub/src/app/graphs/graph-diagram.shell-sweep.spec.ts' },
   { project: 'hub', spec: 'projects/hub/src/app/garden/routines/routine-panel.shell-sweep.spec.ts' },

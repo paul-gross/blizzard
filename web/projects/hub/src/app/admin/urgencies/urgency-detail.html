@@ -1,0 +1,6 @@
+<app-urgency-detail-view [vm]="vm()" [state]="state()" [lastChange]="lastChange()" [changes]="changes()" [changesState]="changesState()"
+  [cli]="cli()" [actions]="actions()" [busy]="busy()" [actionError]="actionError()" [mobile]="mobile()" [record]="record()"
+  [editOpen]="editOpen()" [editInitial]="editRevision()?.shown ?? null" [editError]="editError()" [editPending]="editMutation.isPending()"
+  [retireSnapshot]="retireOpen() ? retireRevision() : null" [destination]="destination()" [destinationOptions]="destinationOptions()"
+  (edit)="onEdit()" (lifecycle)="onLifecycle($event)" (save)="onSave($event)" (closeEdit)="editOpen.set(false)"
+  (closeRetire)="retireOpen.set(false)" (retire)="submitLifecycle(true)" (destinationChange)="setDestination($event)" />

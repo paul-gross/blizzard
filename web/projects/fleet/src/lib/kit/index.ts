@@ -40,3 +40,5 @@ export { KitTab, KitTabStrip } from './kit-tab';
 export { KitTabs, type KitTabOption } from './kit-tabs';
 export { KitTextInput } from './kit-text-input';
 export type { Tone } from './tone';
+
+export { KitUrgencyPill } from './kit-urgency-pill';

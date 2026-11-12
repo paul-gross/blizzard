@@ -31,8 +31,10 @@ import {
   hubQuestionsKey,
   hubDecisionsKey,
   hubQueueKey,
+  hubUrgenciesKey,
   hubHostsKey,
   hubRunnersKey,
+  hubRunnerNextClaimKey,
 } from '../core/query-keys';
 import { FLEET_CLOCK } from '../core/now-signal';
 import { openLookup } from '../core/open-lookup';
@@ -161,6 +163,8 @@ function chunkChangedKeys(data: HubEventPayload): readonly (readonly unknown[])[
   return [
     hubChunksKey,
     hubQueueKey,
+    hubRunnerNextClaimKey,
+    hubUrgenciesKey,
     ...chunkDetailKeys(data),
     hubFleetSpendKey,
     hubEventsKey,
@@ -217,9 +221,9 @@ const EVENT_INVALIDATION_REGISTRY = openLookup<HubEventType, (data: HubEventPayl
     [HubEventType.DECISION_RESOLVED]: chunkDecisionKeys,
     // A backlog reorder fires the same event as a ready-queue one (no distinct
     // payload key, `bzh:ranking-is-per-list`), so both cached orders invalidate.
-    [HubEventType.QUEUE_CHANGED]: () => [hubQueueKey, hubBacklogKey],
+    [HubEventType.QUEUE_CHANGED]: () => [hubQueueKey, hubBacklogKey, hubUrgenciesKey, hubRunnerNextClaimKey],
     // A host's usage samples arrive only as its spenders' frames, so a runner frame re-reads the hosts too.
-    [HubEventType.RUNNER_CHANGED]: () => [hubRunnersKey, hubHostsKey, hubEnvTimelineLiveKey],
+    [HubEventType.RUNNER_CHANGED]: () => [hubRunnersKey, hubHostsKey, hubEnvTimelineLiveKey, hubRunnerNextClaimKey],
     // Adopt, release and retire move runners between hosts, so a host frame re-reads both registries.
     [HubEventType.HOST_CHANGED]: () => [hubHostsKey, hubRunnersKey],
     // A flow fact moves the line every flow read and every card's place shows, and the named chunk's record.

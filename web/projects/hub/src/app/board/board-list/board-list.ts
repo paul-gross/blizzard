@@ -1,3 +1,6 @@
+import { UrgencyPill } from '../../core/urgency-pill';
+import { urgencyPill } from '../../core/urgencies.model';
+import type { UrgencyView } from 'fleet';
 import { ChangeDetectionStrategy, Component, computed, input, output } from '@angular/core';
 import { CdkDrag, type CdkDragDrop, CdkDropList } from '@angular/cdk/drag-drop';
 import { NgTemplateOutlet } from '@angular/common';
@@ -47,11 +50,13 @@ export function listDropId(list: BoardReorderList): string {
 @Component({
   selector: 'app-board-list',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [BoardListRowSkeleton, CdkDrag, ChunkListRow, CdkDropList, LaneIcon, NgTemplateOutlet, NodeStrip, ReorderGrip],
+  imports: [UrgencyPill, BoardListRowSkeleton, CdkDrag, ChunkListRow, CdkDropList, LaneIcon, NgTemplateOutlet, NodeStrip, ReorderGrip],
   templateUrl: './board-list.html',
   styleUrl: './board-list.css',
 })
 export class BoardList {
+  readonly urgencies = input<readonly UrgencyView[]>([]);
+  protected readonly urgencyPill = urgencyPill;
   readonly groups = input<BoardListGroups>(NO_GROUPS);
   readonly selectedChunkId = input<string | null>(null);
   readonly gatedChunkIds = input<ReadonlySet<string>>(new Set());

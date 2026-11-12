@@ -3,6 +3,7 @@ import { TestBed } from '@angular/core/testing';
 import { commands, page, userEvent } from 'vitest/browser';
 
 import { KitSelectRow } from './kit-select-row';
+import { KitUrgencyPill } from './kit-urgency-pill';
 
 /**
  * `KitSelectRow`'s default chrome and its `bare` opt-out, rendered — computed padding,
@@ -33,6 +34,44 @@ import { KitSelectRow } from './kit-select-row';
   `,
 })
 class Host {}
+
+const longName = 'UnbrokenUrgencyName'.repeat(8);
+
+@Component({
+  imports: [KitUrgencyPill],
+  template: `<fleet-kit-urgency-pill [name]="name" color="cyan" description="Details" />`,
+  styles: `:host { display: block; width: 100%; }`,
+})
+class UrgencyHost {
+  readonly name = longName;
+}
+
+describe('KitUrgencyPill narrow layout', () => {
+  it('clamps an unbroken name while retaining its accessible name and tooltip', async () => {
+    await page.viewport(320, 800);
+    await TestBed.configureTestingModule({
+      imports: [UrgencyHost],
+      providers: [provideZonelessChangeDetection()],
+    }).compileComponents();
+    const fixture = TestBed.createComponent(UrgencyHost);
+    const root = fixture.nativeElement as HTMLElement;
+    document.body.appendChild(root);
+    await fixture.whenStable();
+    try {
+      const pill = root.querySelector<HTMLElement>('.pill')!;
+      const name = root.querySelector<HTMLElement>('.name')!;
+      expect(pill.getBoundingClientRect().right).toBeLessThanOrEqual(document.documentElement.clientWidth);
+      expect(document.documentElement.scrollWidth).toBeLessThanOrEqual(document.documentElement.clientWidth);
+      expect(name.scrollWidth).toBeGreaterThan(name.clientWidth);
+      expect(getComputedStyle(name).textOverflow).toBe('ellipsis');
+      expect(pill.getAttribute('aria-label')).toBe(longName);
+      await userEvent.hover(pill);
+      await expect.poll(() => document.body.textContent).toContain(`${longName} — Details`);
+    } finally {
+      root.remove();
+    }
+  });
+});
 
 /** The design tokens are a global stylesheet the app build loads, never a standalone mount. */
 async function loadDesignTokens(): Promise<void> {

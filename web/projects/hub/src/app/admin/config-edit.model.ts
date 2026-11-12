@@ -2,7 +2,7 @@ import type { FieldChangeView } from 'fleet';
 
 /** How a config form field is entered. `password` is a write-only value the board
  * never reads back; `number` is a whole number, entered as text and sent as a number. */
-export type ConfigFieldKind = 'text' | 'password' | 'checkbox' | 'select' | 'number';
+export type ConfigFieldKind = 'text' | 'password' | 'checkbox' | 'select' | 'number' | 'color' | 'mark';
 
 /** One choice of a select field. A disabled choice is shown but cannot be picked. */
 export interface ConfigFieldOption {
@@ -29,6 +29,11 @@ export interface ConfigFieldDef<K extends string = string> {
   /** The field is shown only while another field holds a given value. A hidden field is
    * neither required nor sent. */
   readonly shownWhen?: { readonly key: string; readonly value: string };
+}
+
+/** A mark is empty, emoji text, an existing image URL, or an uploaded image data URL. */
+export function markIsImage(value: string): boolean {
+  return value.startsWith('data:image/') || value.startsWith('/') || /^https?:\/\//.test(value);
 }
 
 /** A form's values by field key: text for `text`/`password`, a flag for `checkbox`. */
@@ -111,8 +116,8 @@ export function configEdit(
       field: field.label,
       old: before === '' ? null : before,
       new: next,
-      old_label: optionLabel(field, before),
-      new_label: optionLabel(field, next),
+      old_label: field.kind === 'mark' && typeof before === 'string' && markIsImage(before) ? 'Image' : optionLabel(field, before),
+      new_label: field.kind === 'mark' && typeof next === 'string' && markIsImage(next) ? 'Image' : optionLabel(field, next),
     });
   }
   return { body, diff };

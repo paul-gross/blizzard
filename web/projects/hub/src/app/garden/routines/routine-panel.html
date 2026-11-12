@@ -60,6 +60,22 @@
 
         <fleet-kit-error-line [message]="actionError()" testid="gardening-routine-panel-error" />
 
+        @if (canEdit()) {
+        <div class="rp-edit" data-testid="gardening-routine-urgency">
+          <span>Default urgency</span>
+          <fleet-kit-select ariaLabel="Default urgency" [options]="urgencyOptions()" [selectedValue]="urgencyValue()" [disabled]="!canEdit() || !urgenciesReady() || editPending()" (choose)="chooseUrgency($event)" testid="gardening-routine-urgency-select" />
+          @if (urgencyEditing()) {
+            <fleet-kit-button variant="primary" [disabled]="editPending()" (click)="editUrgency.emit(urgencyValue())" testid="gardening-routine-urgency-save">Set</fleet-kit-button>
+            <fleet-kit-button (click)="urgencyDraft.set(null)" testid="gardening-routine-urgency-cancel">Cancel</fleet-kit-button>
+          }
+        </div>
+        } @else {
+          <dl class="rp-urgency" data-testid="gardening-routine-urgency">
+            <dt>Default urgency</dt>
+            <dd>{{ urgencyLabel() }}</dd>
+          </dl>
+        }
+
         @if (panel.blockedReason !== null) {
           <p class="rp-blocked" data-testid="gardening-routine-blocked">
             Blocked — {{ panel.blockedReason }}. No run is offered.

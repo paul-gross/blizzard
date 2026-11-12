@@ -187,13 +187,13 @@ describe('the cadence edit form', () => {
 
 describe('the whole chore list', () => {
   const served = [NIGHTLY, ODD];
-  const nightlyDoc = { key: 'nightly', routine: 'nightly', scopes: 'all', mode: 'full', promote: true, note: null };
-  const oddDoc = { key: 'odd', routine: 'docs', scopes: ['web', 'hub'], mode: 'sampled', promote: false, note: 'keep' };
+  const nightlyDoc = { key: 'nightly', routine: 'nightly', scopes: 'all', mode: 'full', promote: true, note: null, urgency: null };
+  const oddDoc = { key: 'odd', routine: 'docs', scopes: ['web', 'hub'], mode: 'sampled', promote: false, note: 'keep', urgency: null };
 
   it('adds a chore at the end, carrying the others verbatim, an unknown mode included', () => {
     expect(
       choresAdding(served, { key: 'weekly', routine: 'deep', scopes: 'a, b c', mode: 'delta', promote: false, note: '' }),
-    ).toEqual([nightlyDoc, oddDoc, { key: 'weekly', routine: 'deep', scopes: ['a', 'b', 'c'], mode: 'delta', promote: false, note: null }]);
+    ).toEqual([nightlyDoc, oddDoc, { key: 'weekly', routine: 'deep', scopes: ['a', 'b', 'c'], mode: 'delta', promote: false, note: null, urgency: null }]);
   });
 
   it('replaces one chore in place', () => {
@@ -210,5 +210,12 @@ describe('the whole chore list', () => {
   it('round-trips a served chore through its draft unchanged', () => {
     expect(draftDocument(choreDraftOf(ODD))).toEqual(oddDoc);
     expect(draftDocument(choreDraftOf(gardenChoreView({ scopes: null })))).toEqual({ ...nightlyDoc, scopes: null });
+  });
+
+  it('preserves urgency both for the edited chore and untouched chores', () => {
+    const urgent = gardenChoreView({ urgency: 'critical' });
+    expect(draftDocument(choreDraftOf(urgent)).urgency).toBe('critical');
+    expect(choresAdding([urgent], choreDraftOf(NIGHTLY))[0].urgency).toBe('critical');
+    expect(draftDocument({ ...choreDraftOf(urgent), urgency: '' }).urgency).toBeNull();
   });
 });

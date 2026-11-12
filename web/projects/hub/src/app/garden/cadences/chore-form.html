@@ -52,6 +52,10 @@
     </div>
   </div>
   <div class="chf-field">
+    <span class="chf-label">Urgency</span>
+    <fleet-kit-select ariaLabel="Urgency" [options]="urgencyOptions()" [selectedValue]="urgencyValue()" [testid]="testid() + '-urgency'" (choose)="set('urgency', $event)" />
+  </div>
+  <div class="chf-field">
     <span class="chf-label">Note</span>
     <fleet-kit-text-input [value]="d.note" ariaLabel="Note" [testid]="testid() + '-note'" (valueChange)="set('note', $event)" />
   </div>

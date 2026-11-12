@@ -3,8 +3,9 @@ import { RouterLink, RouterLinkActive, RouterOutlet } from '@angular/router';
 import { KitTab, KitTabStrip } from 'fleet';
 
 import { hasPermission, injectMeQuery } from '../core/auth/me.query';
+import { injectUrgenciesQuery } from '../core/urgencies.query';
 import { injectProjectsQuery } from '../core/projects.query';
-import { changesTotal, tabCount } from './admin-shell.model';
+import { changesTotal, liveUrgencyCount, tabCount } from './admin-shell.model';
 import { injectConfigChangesQuery } from './changes/changes.query';
 import { injectForgesQuery } from './forges/forges.query';
 import { injectMembersQuery } from './members/members.query';
@@ -34,6 +35,7 @@ export class AdminShell {
   private readonly meQuery = injectMeQuery();
   private readonly membersQuery = injectMembersQuery(() => hasPermission(this.meQuery.data(), 'user:manage'));
   private readonly projectsQuery = injectProjectsQuery();
+  private readonly urgenciesQuery = injectUrgenciesQuery();
   private readonly sourcesQuery = injectWorkSourcesQuery(() => false);
   private readonly repositoriesQuery = injectRepositoriesQuery(() => false);
   private readonly forgesQuery = injectForgesQuery(() => false);
@@ -45,6 +47,7 @@ export class AdminShell {
   protected readonly counts = computed(() => ({
     members: tabCount(this.membersQuery.data()),
     projects: tabCount(this.projectsQuery.data()),
+    urgencies: liveUrgencyCount(this.urgenciesQuery.data()),
     sources: tabCount(this.sourcesQuery.data(), this.sourceLinks.names()),
     repositories: tabCount(this.repositoriesQuery.data(), this.repositoryLinks.names()),
     forges: tabCount(this.forgesQuery.data()),

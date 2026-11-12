@@ -1,0 +1,54 @@
+<section class="next" data-testid="runner-next-claim">
+  <div class="heading">Next</div>
+  <fleet-kit-async-state [state]="state()" placement="inline" errorText="Next unavailable" loadingText="Loading next…">
+    @if (data(); as result) {
+      @if (result.next; as entry) {
+        <a data-testid="runner-next-link" [routerLink]="['/board', 'chunk', entry.chunk_id] | lensLink" [title]="entry.chunk_id">{{ compact(entry.chunk_id) }}</a>
+        @if (entry.project_name) { <span data-testid="runner-next-project"> · {{ entry.project_name }}</span> }
+        <ng-container [ngTemplateOutlet]="urgencyDisplay" [ngTemplateOutletContext]="{ $implicit: entry.urgency }" />
+      } @else { <span data-testid="runner-next-none">Nothing claimable</span> }
+      @if (result.unserved > 0) { <div>{{ result.unserved }} ahead from unserved projects</div> }
+      <fleet-kit-accordion-section [sectionId]="'next-' + runnerId()" [expanded]="expanded()" (expandedChange)="expanded.set($event)">
+          <span accordionHeader>Passed · {{ result.passed_total }}</span>
+          <ul>
+            @for (entry of result.passed; track entry.chunk_id) {
+              <li><ng-container [ngTemplateOutlet]="passed" [ngTemplateOutletContext]="{ $implicit: entry }" /></li>
+            }
+          </ul>
+          @if (summary(result).omitted > 0) { <div>{{ summary(result).omitted }} more passed, not shown</div> }
+          <div class="hold">If holding per project:
+            @if (result.if_holding; as held) {
+              <a [routerLink]="['/board', 'chunk', held.chunk_id] | lensLink" [title]="held.chunk_id">{{ compact(held.chunk_id) }}</a>
+              <ng-container [ngTemplateOutlet]="urgencyDisplay" [ngTemplateOutletContext]="{ $implicit: held.urgency }" />
+            } @else { nothing claimable }
+          </div>
+          @if (result.held_at.length > 0) {
+            <div>Held at:</div><ul>
+              @for (entry of result.held_at; track entry.chunk_id) {
+                <li><ng-container [ngTemplateOutlet]="passed" [ngTemplateOutletContext]="{ $implicit: entry }" /></li>
+              }
+            </ul>
+          }
+      </fleet-kit-accordion-section>
+    }
+  </fleet-kit-async-state>
+</section>
+<ng-template #passed let-entry>
+  <a [routerLink]="['/board', 'chunk', entry.chunk_id] | lensLink" [title]="entry.chunk_id">{{ compact(entry.chunk_id) }}</a>
+  @if (entry.project_name) { · {{ entry.project_name }} }
+  <ng-container [ngTemplateOutlet]="urgencyDisplay" [ngTemplateOutletContext]="{ $implicit: entry.urgency }" />
+  @if (entry.reason === 'blocked') {
+    · blocked by
+    @if (entry.prerequisite; as prereq) {
+      <a [routerLink]="['/board', 'chunk', prereq] | lensLink" [title]="prereq">{{ compact(prereq) }}</a>
+      ({{ statuses()[prereq] ?? 'status unavailable' }})
+    }
+    @if (entry.prerequisite_count > 1) { and {{ entry.prerequisite_count - 1 }} more }
+  } @else if (entry.reason === 'ineligible') { · ineligible (missing harness or model, or graph unavailable) } @else { · {{ entry.reason }} }
+</ng-template>
+
+<ng-template #urgencyDisplay let-ref>
+  @if (urgency(ref); as item) {
+    @if (item.default) { <span> · {{ item.name }}</span> } @else { <fleet-kit-urgency-pill [name]="item.name" [color]="item.color" [emoji]="item.emoji" [iconUrl]="urgencyIconUrls()[item.urgency_id] ?? null" /> }
+  } @else if (ref) { <span> · {{ ref.slug }}</span> }
+</ng-template>

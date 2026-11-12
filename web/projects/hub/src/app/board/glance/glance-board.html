@@ -1,4 +1,5 @@
 <app-glance-view
+  [urgencies]="urgenciesQuery.data() ?? []"
   [donePolicy]="donePolicy()"
   [vitals]="vitals()"
   [list]="list()"
@@ -6,4 +7,6 @@
   [spend]="spendToday.data() ?? null"
   [spendYesterday]="spendYesterday.data() ?? null"
   [spendState]="spendState()"
-/>
+>
+  <app-new-hub-item glanceActions (created)="openCreated($event)" />
+</app-glance-view>

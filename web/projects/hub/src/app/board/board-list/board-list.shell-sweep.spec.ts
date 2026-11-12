@@ -1,6 +1,8 @@
-import { provideZonelessChangeDetection } from '@angular/core';
+import { provideZonelessChangeDetection, signal } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
+import { QueryClient, provideTanStackQuery } from '@tanstack/angular-query-experimental';
 import { commands, page } from 'vitest/browser';
+import { TenantContext } from '../../core/auth/tenant-context';
 
 import type { BoardCard } from '../board-card/board-card-view.model';
 import { BoardList, type BoardListEntry, type BoardListGroups } from './board-list';
@@ -64,7 +66,7 @@ async function render(width: number, groups: BoardListGroups = GROUPS, selectedC
   TestBed.resetTestingModule();
   await TestBed.configureTestingModule({
     imports: [BoardList],
-    providers: [provideZonelessChangeDetection()],
+    providers: [provideZonelessChangeDetection(), provideTanStackQuery(new QueryClient()), { provide: TenantContext, useValue: { current: signal(null) } }],
   }).compileComponents();
   const fixture = TestBed.createComponent(BoardList);
   fixture.componentRef.setInput('groups', groups);
@@ -84,6 +86,24 @@ describe('board list shell sweep (web:shell-sweep)', () => {
   beforeAll(loadDesignTokens);
 
   for (const width of WIDTHS) {
+    it(`places urgency alongside the id at width ${width}`, async () => {
+      TestBed.resetTestingModule();
+      TestBed.configureTestingModule({ providers: [provideZonelessChangeDetection(), provideTanStackQuery(new QueryClient()), { provide: TenantContext, useValue: { current: signal(null) } }] });
+      const fixture = TestBed.createComponent(BoardList);
+      fixture.componentRef.setInput('groups', { ...GROUPS, live: [entry('running', 'RUN1', { urgency: { urgency_id: 'u', slug: 'urgent' } })] });
+      fixture.componentRef.setInput('urgencies', [{ urgency_id: 'u', slug: 'urgent', name: 'Urgent', default: false, retired: false, emoji: '🔥', icon: null, color: 'red' }]);
+      await fixture.whenStable();
+      const root = fixture.nativeElement as HTMLElement;
+      root.style.width = `${width}px`;
+      document.body.appendChild(root);
+      try {
+        const id = root.querySelector<HTMLElement>('[data-testid="list-row-id"]')!.getBoundingClientRect();
+        const pill = root.querySelector<HTMLElement>('app-urgency-pill')!.getBoundingClientRect();
+        expect(pill.left).toBeGreaterThanOrEqual(id.right);
+        expect(pill.top).toBeLessThan(id.bottom);
+        expect(pill.bottom).toBeGreaterThan(id.top);
+      } finally { fixture.destroy(); root.remove(); }
+    });
     it(`keeps every row inside the list, the grip clear of the lane icon, and the line between READY and BACKLOG at width ${width}`, async () => {
       const root = await render(width);
       try {

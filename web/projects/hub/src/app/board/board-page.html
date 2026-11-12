@@ -1,6 +1,8 @@
 <main class="main">
   <div class="col col-center">
     <app-board-shell
+      [urgencies]="urgenciesQuery.data() ?? []"
+      [chunkControl]="chunkControl"
       class="board"
       [donePolicy]="donePolicy()"
       [chunks]="boardChunks()"
@@ -23,6 +25,7 @@
       (reposition)="reposition($event)"
       (laneMove)="moveAcrossLanes($event)"
     >
+      <app-new-hub-item boardActions (created)="select($event)" />
       @if (layout() === 'tracks') {
         <app-tracks-panel boardTracks class="tracks" />
       }

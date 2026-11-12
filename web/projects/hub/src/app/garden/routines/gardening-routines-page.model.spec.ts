@@ -85,3 +85,13 @@ describe('routineListRows', () => {
     expect(routineListRows([], [EFFECTIVE_GRAPH], query('success'))).toEqual([]);
   });
 });
+
+
+describe('createRoutineRequest', () => {
+  it('trims the definition and states null for inherited or a chosen urgency', async () => {
+    const { createRoutineRequest } = await import('./gardening-routines-page.model');
+    const draft = { slug: ' nightly ', name: ' ', graph: ' garden ', scope: ' web ', urgency: '' };
+    expect(createRoutineRequest(draft)).toEqual({ slug: 'nightly', name: null, graph_name: 'garden', default_scope_slug: 'web', default_urgency: null });
+    expect(createRoutineRequest({ ...draft, urgency: 'urgent' }).default_urgency).toBe('urgent');
+  });
+});

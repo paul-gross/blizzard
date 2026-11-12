@@ -243,6 +243,11 @@ describe('runner mobile board shell sweep (web:shell-sweep)', () => {
 
       try {
         await page.viewport(width, 800);
+        // Angular stability does not include the asynchronous runner → dashboard query fanout.
+        // Wait for this fixture's actual ask before measuring its laid-out text.
+        await vi.waitFor(() => {
+          expect(root.querySelector('[data-testid="ask-row"] .q')?.textContent).toContain(LONG_ASK.items[0].question);
+        }, { timeout: 5000 });
         await new Promise((resolve) => requestAnimationFrame(resolve));
 
         const ask = root.querySelector<HTMLElement>('[data-testid="ask-row"] .q');

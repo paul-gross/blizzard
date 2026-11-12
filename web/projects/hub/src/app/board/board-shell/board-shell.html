@@ -1,43 +1,52 @@
 <div class="mc" data-testid="board-shell">
   <fleet-kit-panel class="board-panel" aria-label="Chunk board" [bodyScroll]="false">
     <div fleetKitPanelHeader class="hdr">
+      <ng-content select="[boardActions]" />
       <fleet-kit-tabs variant="sub" [options]="layoutTabs" [activeValue]="layout()" (choose)="chooseLayout($event)" />
     </div>
     @if (layout() === 'tracks') {
       <ng-content select="[boardTracks]" />
-    } @else if (layout() === 'list') {
-      <app-board-list
-        class="list"
-        [groups]="listGroups()"
-        [selectedChunkId]="selectedChunkId()"
-        [gatedChunkIds]="gatedChunkIds()"
-        [skeletonRows]="state() === 'loading' ? listSkeletons() : 0"
-        [canControl]="canControl()"
-        [canReorder]="canReorder()"
-        [donePolicy]="donePolicy()"
-        [doneTotal]="doneTotal()"
-        (selectChunk)="selectChunk.emit($event)"
-        (reposition)="reposition.emit($event)"
-        (laneMove)="laneMove.emit($event)"
-      />
     } @else {
-      <div class="board" data-testid="board">
-        @for (col of columns(); track col.key) {
-          <app-board-column
-            [column]="col"
-            [cards]="boardCardsFor(col.key)"
-            [count]="countFor(col.key)"
-            [headTitle]="headTitleFor(col.key)"
-            [skeletons]="skeletonsFor(col.key)"
+      <div class="board-content">
+        <span class="scroll-cue" data-testid="board-scroll-cue">Scroll sideways ↔</span>
+        @if (layout() === 'list') {
+          <app-board-list
+            [urgencies]="urgencies()"
+            class="list"
+            [groups]="listGroups()"
             [selectedChunkId]="selectedChunkId()"
             [gatedChunkIds]="gatedChunkIds()"
-            [reorderControls]="col.key === 'ready' || col.key === 'notready'"
+            [skeletonRows]="state() === 'loading' ? listSkeletons() : 0"
             [canControl]="canControl()"
             [canReorder]="canReorder()"
+            [donePolicy]="donePolicy()"
+            [doneTotal]="doneTotal()"
             (selectChunk)="selectChunk.emit($event)"
             (reposition)="reposition.emit($event)"
             (laneMove)="laneMove.emit($event)"
           />
+        } @else {
+          <div class="board" data-testid="board" tabindex="0" role="region" aria-label="Chunk lanes">
+            @for (col of columns(); track col.key) {
+              <app-board-column
+                [urgencies]="urgencies()"
+                [chunkControl]="chunkControl()"
+                [column]="col"
+                [cards]="boardCardsFor(col.key)"
+                [count]="countFor(col.key)"
+                [headTitle]="headTitleFor(col.key)"
+                [skeletons]="skeletonsFor(col.key)"
+                [selectedChunkId]="selectedChunkId()"
+                [gatedChunkIds]="gatedChunkIds()"
+                [reorderControls]="col.key === 'ready' || col.key === 'notready'"
+                [canControl]="canControl()"
+                [canReorder]="canReorder()"
+                (selectChunk)="selectChunk.emit($event)"
+                (reposition)="reposition.emit($event)"
+                (laneMove)="laneMove.emit($event)"
+              />
+            }
+          </div>
         }
       </div>
     }

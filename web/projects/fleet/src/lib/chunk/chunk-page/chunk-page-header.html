@@ -36,6 +36,7 @@
       <span class="runner" data-testid="mobile-chunk-runner" [attr.title]="claimantTitle()">{{ runner }}</span>
       <span class="sep" aria-hidden="true">·</span>
     }
+    @if (detail(); as d) { <fleet-chunk-urgency [detail]="d" [control]="control()" /> }
     <span class="st" data-testid="mobile-chunk-status" [style.color]="statusColor()">{{ status() }}</span>
   </span>
 </header>

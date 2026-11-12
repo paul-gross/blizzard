@@ -22,6 +22,14 @@
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+@media (max-width: 600px) {
+  .d-sub {
+    flex-wrap: wrap;
+  }
+  .d-sub .runner {
+    min-width: 8ch;
+  }
+}
 .d-meta {
   display: flex;
   flex-wrap: wrap;

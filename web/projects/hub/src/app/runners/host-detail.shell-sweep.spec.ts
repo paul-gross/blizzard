@@ -1,4 +1,5 @@
-import { RunnerConnection, type RunnerRegistryView } from 'fleet';
+import { RunnerConnection, hubRunnerNextClaimKey, hubUrgenciesKey, hubChunkKey, type RunnerRegistryView } from 'fleet';
+import { QueryClient, provideTanStackQuery } from '@tanstack/angular-query-experimental';
 import { provideZonelessChangeDetection } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { provideRouter } from '@angular/router';
@@ -126,9 +127,15 @@ function detail(): HostDetailVm {
 }
 
 async function render() {
+  const queryClient = new QueryClient({ defaultOptions: { queries: { staleTime: Infinity, retry: false } } });
+  const entry = { chunk_id: 'ch_01KXKVVF1J3D6H6VYZ3XYNNEXT', graph_id: 'gr_1', position: 2, project_id: 'p', project_name: 'Blizzard', project_slug: 'blizzard', urgency: { urgency_id: 'urgent', slug: 'urgent' } };
+  const blocked = { ...entry, chunk_id: 'ch_01KXKVVF1J3D6H6VYZ3XYNPASS', reason: 'blocked', prerequisite: 'ch_01KXKVVF1J3D6H6VYZ3XYNPREQ', prerequisite_count: 2 };
+  queryClient.setQueryData([...hubRunnerNextClaimKey, ROW.runner_id], { next: entry, passed: [blocked], passed_total: 22, held_at: [blocked], if_holding: null, unserved: 2 });
+  queryClient.setQueryData(hubUrgenciesKey, [{ urgency_id: 'urgent', slug: 'urgent', name: 'Urgent', color: 'red', emoji: '🔥', default: false }]);
+  queryClient.setQueryData(hubChunkKey(blocked.prerequisite), { chunk_id: blocked.prerequisite, status: 'running' });
   await TestBed.configureTestingModule({
     imports: [HostDetail],
-    providers: [provideZonelessChangeDetection(), provideRouter([])],
+    providers: [provideZonelessChangeDetection(), provideRouter([]), provideTanStackQuery(queryClient)],
   }).compileComponents();
   const fixture = TestBed.createComponent(HostDetail);
   fixture.componentRef.setInput('detail', detail());
@@ -138,6 +145,33 @@ async function render() {
 }
 
 describe('host detail at phone width shell sweep (web:shell-sweep)', () => {
+  it.each([1280, 390, 320])('separates the Next project and urgency without overflow at %ipx', async (width) => {
+    await page.viewport(width, 900);
+    await loadDesignTokens();
+    const fixture = await render();
+    const root = fixture.nativeElement as HTMLElement;
+    document.body.appendChild(root);
+    try {
+      await fixture.whenStable();
+      const next = root.querySelector<HTMLElement>('[data-testid="runner-next-claim"]')!;
+      const project = next.querySelector<HTMLElement>('[data-testid="runner-next-project"]')!;
+      const pill = next.querySelector<HTMLElement>('fleet-kit-urgency-pill .pill')!;
+      expect(project.textContent).toContain('Blizzard');
+      expect(pill.getAttribute('aria-label')).toBe('Urgent');
+      const projectBox = project.getBoundingClientRect();
+      const pillBox = pill.getBoundingClientRect();
+      if (pillBox.top < projectBox.bottom) {
+        expect(pillBox.left - projectBox.right).toBeGreaterThanOrEqual(4);
+      } else {
+        expect(pillBox.top).toBeGreaterThanOrEqual(projectBox.bottom);
+      }
+      expect(next.scrollWidth).toBeLessThanOrEqual(next.clientWidth);
+      expect(root.scrollWidth).toBeLessThanOrEqual(root.clientWidth);
+    } finally {
+      root.remove();
+      fixture.destroy();
+    }
+  });
   it.each([390, 320])('stacks every section inside the column with no horizontal overflow at %ipx', async (width) => {
     await loadDesignTokens();
     const fixture = await render();
@@ -191,6 +225,14 @@ describe('host detail at phone width shell sweep (web:shell-sweep)', () => {
       const facts = runner.querySelector<HTMLElement>('.facts')!.getBoundingClientRect();
       const claims = runner.querySelector<HTMLElement>('.held')!.getBoundingClientRect();
       expect(claims.top, `${width}px: the held chunks sit beside the facts, not under them`).toBeGreaterThanOrEqual(facts.bottom - 1);
+      const next = runner.querySelector<HTMLElement>('[data-testid="runner-next-claim"]')!;
+      expect(next.textContent).toContain('C-NEXT');
+      next.querySelector<HTMLButtonElement>('[data-testid="accordion-section-head"]')!.click();
+      await fixture.whenStable();
+      expect(next.textContent).toContain('running');
+      expect(next.textContent).toContain('21 more passed');
+      expect(next.textContent).toContain('2 ahead from unserved projects');
+      expect(next.scrollWidth).toBeLessThanOrEqual(next.clientWidth);
       const links = runner.querySelectorAll<HTMLElement>('[data-testid="fleet-runner-claim-link"]');
       expect(links).toHaveLength(2);
       for (const link of links) {
