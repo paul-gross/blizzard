@@ -1,5 +1,5 @@
 {
-  "head_revision": "20261111_0900_allow_no_ci",
+  "head_revision": "20261112_0900_repair_repository_targets",
   "store": "hub",
   "tables": {
     "answer_deliveries": {
