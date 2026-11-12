@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 import signal
 import types
 from dataclasses import replace
@@ -23,12 +24,18 @@ from blizzard.cli.runtime import (
     run_init,
     run_migrate,
 )
+from blizzard.foundation.logging import get_logger
+from blizzard.foundation.settings_record.refusals import SettingsInvalid
 from blizzard.foundation.store.migrations import RevisionMismatchError, StoreBelowFloorError
-from blizzard.hub.app import PLATFORM_TRACING_SHUTDOWN_SECONDS, build_hosted_app
-from blizzard.hub.config import ConfigError, HubConfig
+from blizzard.hub.app import PLATFORM_TRACING_SHUTDOWN_SECONDS, build_hosted_app, open_hub_engine
+from blizzard.hub.composition import HubSettingsGraph, build_hub_settings, build_system_clock
+from blizzard.hub.config import ConfigError, HubConfig, bootstrap_document
+from blizzard.hub.config_keys import HUB_REGISTRY
 from blizzard.hub.domain.runners.version_window import VersionWindow, VersionWindowError, check_own_floor
 from blizzard.hub.runtime import ensure_current_revision, init_environment, migrate, migration_runner
+from blizzard.hub.settings.footing import HubSettingsFooting, setting_keys
 from blizzard.hub.store import MIGRATIONS_DIR
+from blizzard.hub.store.errors import HubStoreConnections, HubStoreErrorFactory
 
 # The runtime root the dir-taking verbs resolve, highest to lowest: explicit ``--dir``,
 # then ``BZ_HUB_DIR``, then the cwd. Selectable, not shareable: the store is single-writer.
@@ -124,22 +131,56 @@ def host(
     with click_exception_on(VersionWindowError):
         window = packaged_version_window()
         check_own_floor(__version__, window)
+    environ = dict(os.environ)
+    flag_registry = packaged_flag_registry()
+    strict = strict_config()
     with click_exception_on(ConfigError):
+        document = HubConfig.read_document(Path(directory))
         config = HubConfig.load(
             Path(directory),
             host=host_,
             port=port,
             allow_external_db=allow_external_db,
-            flag_registry=packaged_flag_registry(),
-            strict=strict_config(),
+            flag_registry=flag_registry,
+            strict=strict,
+            document=bootstrap_document(document),
+            environ=environ,
         )
     with click_exception_on(RevisionMismatchError, StoreBelowFloorError):
         ensure_current_revision(config)
+    footing = HubSettingsFooting(
+        config.root,
+        host_,
+        port,
+        allow_external_db,
+        flag_registry,
+        strict,
+        HUB_REGISTRY,
+        environ,
+        config.db_url,
+        document,
+    )
+    settings_engine = open_hub_engine(config.db_url)
+    settings = build_hub_settings(
+        HubStoreConnections(settings_engine, HubStoreErrorFactory(get_logger("blizzard.hub.store"))),
+        build_system_clock(),
+        footing,
+    )
+    try:
+        with click_exception_on(ConfigError, SettingsInvalid):
+            settings.store.seed(setting_keys(HUB_REGISTRY), footing.file_view(document))
+            config = footing.resolve(settings.reader.snapshot().entries)
+        _serve(config, window, listening_file, settings)
+    finally:
+        settings_engine.dispose()
+
+
+def _serve(config: HubConfig, window: VersionWindow, listening_file: Path | None, settings: HubSettingsGraph) -> None:
     # Bound before anything is built, so every derivation of the port sees the one actually bound.
     with bound_tcp(config.host, config.port) as sock:
         config = replace(config, port=bound_port(sock))
         with click_exception_on(ConfigError):
-            app = build_hosted_app(config, version_window=window)
+            app = build_hosted_app(config, version_window=window, settings=settings)
         try:
             click.echo(f"serving blizzard-hub on {config.host}:{config.port}")
             server = build_early_shutdown_server(

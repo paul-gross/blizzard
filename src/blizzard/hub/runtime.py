@@ -12,20 +12,25 @@ from __future__ import annotations
 import os
 from collections.abc import Callable
 from contextlib import AbstractContextManager
+from copy import deepcopy
 from dataclasses import dataclass, field
 from pathlib import Path
+from typing import cast
 
+from sqlalchemy import inspect, select
 from sqlalchemy.exc import OperationalError
 
 from blizzard.foundation.clock import IClock, SystemClock
 from blizzard.foundation.flags import FlagRegistry
 from blizzard.foundation.logging import get_logger
+from blizzard.foundation.store.engine import create_engine_from_url
 from blizzard.foundation.store.migrations import MigrationConnectionError, MigrationRunner
-from blizzard.hub.config import CONFIG_FILENAME, ConfigError, HubConfig
+from blizzard.hub.config import CONFIG_FILENAME, ConfigError, HubConfig, bootstrap_document
 from blizzard.hub.domain.observability.hub_events import HubEventLogService
 from blizzard.hub.event_log_opener import system_event_log_opener
 from blizzard.hub.secrets import hub_key_provider
 from blizzard.hub.store import MIGRATIONS_DIR, STORE_NAME
+from blizzard.hub.store.schema import hub_setting_entries
 
 MIGRATE_COMMAND = "blizzard hub migrate"
 
@@ -80,9 +85,52 @@ class Runtime:
     strict: bool = field(kw_only=True)
 
     def loaded(self, root: Path) -> HubConfig:
-        return HubConfig.load(
-            root, allow_external_db=self.allow_external_db, flag_registry=self.flag_registry, strict=self.strict
-        )
+        path = root.resolve() / CONFIG_FILENAME
+        if not path.exists():
+            return HubConfig.load(
+                root, allow_external_db=self.allow_external_db, flag_registry=self.flag_registry, strict=self.strict
+            )
+        document = HubConfig.read_document(root)
+        environ = dict(os.environ)
+
+        def load(document: dict[str, object]) -> HubConfig:
+            return HubConfig.load(
+                root,
+                document=document,
+                allow_external_db=self.allow_external_db,
+                flag_registry=self.flag_registry,
+                strict=self.strict,
+                environ=environ,
+            )
+
+        bootstrap = load(bootstrap_document(document))
+        engine = create_engine_from_url(bootstrap.db_url)
+        try:
+            with engine.connect() as conn:
+                keys = (
+                    tuple(conn.execute(select(hub_setting_entries.c.key)).scalars())
+                    if inspect(conn).has_table(hub_setting_entries.name)
+                    else ()
+                )
+        except OperationalError:
+            # Let the migration runner report an unavailable store through its normal error seam.
+            return load(document)
+        finally:
+            engine.dispose()
+        remaining: dict[str, object] = deepcopy(document)
+        for key in keys:
+            if key in {"db_url", "host", "port"}:
+                continue
+            parts = key.split(".")
+            section: dict[str, object] = remaining
+            for part in parts[:-1]:
+                child = section.get(part)
+                if not isinstance(child, dict):
+                    break
+                section = cast(dict[str, object], child)
+            else:
+                section.pop(parts[-1], None)
+        return load(remaining)
 
     def init(self) -> HubConfig:
         """Scaffold config + data dir + a migrated store + the secret key. Idempotent.
