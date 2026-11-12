@@ -148,7 +148,9 @@ def test_a_retire_moves_open_work_and_finished_work_keeps_its_urgency(hub: HubHa
 
     in_use = hub.client.post("/api/urgencies/urgent/retire", json={})
     assert in_use.status_code == 409
-    assert (in_use.json()["detail"]["code"], in_use.json()["detail"]["open_chunks"]) == ("urgency_in_use", 2)
+    body = in_use.json()
+    assert (body["type"], body["slug"], body["open_chunks"]) == ("urn:blizzard:problem:urgency-in-use", "urgent", 2)
+    assert isinstance(body["detail"], str)
     assert _field(hub.client.post("/api/urgencies/urgent/retire", json={"move_to": "urgent"}))[2] == (
         "urgency_move_to_self"
     )
@@ -212,7 +214,13 @@ def test_a_re_retire_with_a_stale_revision_is_refused_and_writes_nothing(hub: Hu
 def test_the_default_is_refused_retire_first(hub: HubHarness) -> None:
     _create(hub, "urgent")
     refused = hub.client.post("/api/urgencies/standard/retire", json={"move_to": "urgent"})
-    assert (refused.status_code, refused.json()["detail"]["code"]) == (409, "urgency_is_default")
+    body = refused.json()
+    assert (refused.status_code, body["type"], body["slug"]) == (
+        409,
+        "urn:blizzard:problem:urgency-is-default",
+        "standard",
+    )
+    assert isinstance(body["detail"], str)
 
 
 def test_enable_returns_to_the_standing_place_and_moves_no_chunk_back(hub: HubHarness) -> None:

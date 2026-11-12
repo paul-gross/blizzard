@@ -17316,17 +17316,19 @@ export type UrgencyIconView = {
 };
 
 /**
- * UrgencyInUseDetail
+ * UrgencyInUseProblem
+ *
+ * A retire names an urgency open chunks carry, and no urgency to move them to.
  */
-export type UrgencyInUseDetail = {
+export type UrgencyInUseProblem = {
     /**
-     * Code
+     * Detail
      */
-    code: 'urgency_in_use';
+    detail: string;
     /**
-     * Message
+     * Instance
      */
-    message: string;
+    instance: string;
     /**
      * Open Chunks
      */
@@ -17335,19 +17337,6 @@ export type UrgencyInUseDetail = {
      * Slug
      */
     slug: string;
-};
-
-/**
- * UrgencyInUseProblem
- *
- * A retire names an urgency open chunks carry, and no urgency to move them to.
- */
-export type UrgencyInUseProblem = {
-    detail: UrgencyInUseDetail;
-    /**
-     * Instance
-     */
-    instance: string;
     /**
      * Status
      */
@@ -17364,34 +17353,23 @@ export type UrgencyInUseProblem = {
 };
 
 /**
- * UrgencyIsDefaultDetail
- */
-export type UrgencyIsDefaultDetail = {
-    /**
-     * Code
-     */
-    code: 'urgency_is_default';
-    /**
-     * Message
-     */
-    message: string;
-    /**
-     * Slug
-     */
-    slug: string;
-};
-
-/**
  * UrgencyIsDefaultProblem
  *
  * A retire names the tenant's default urgency; the default must point elsewhere first.
  */
 export type UrgencyIsDefaultProblem = {
-    detail: UrgencyIsDefaultDetail;
+    /**
+     * Detail
+     */
+    detail: string;
     /**
      * Instance
      */
     instance: string;
+    /**
+     * Slug
+     */
+    slug: string;
     /**
      * Status
      */

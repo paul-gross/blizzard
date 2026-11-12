@@ -88,8 +88,9 @@ write; finished chunks keep the urgency they carried. In the same write, every r
 chore's override naming it is cleared, each with its own change row, so their runs fall through to the next link of the
 chain. A retire is refused, in this order:
 
-1. `409 urgency_is_default` for the tenant's default. Change the default first.
-2. `409 urgency_in_use` when open chunks carry it and no `move_to` is named; the refusal counts them.
+1. `409` of problem type `urn:blizzard:problem:urgency-is-default` for the tenant's default. Change the default first.
+2. `409` of problem type `urn:blizzard:problem:urgency-in-use` when open chunks carry it and no `move_to` is named; the
+   refusal counts them in its `open_chunks` member.
 3. `422 urgency_unknown`, `urgency_retired`, or `urgency_move_to_self` for a `move_to` naming no urgency, a retired one,
    or the urgency being retired.
 

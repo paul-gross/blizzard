@@ -3179,10 +3179,10 @@ export const getUrgencyIconApiUrgenciesKeyIconGet = <ThrowOnError extends boolea
  * Retire Urgency
  *
  * Retire an urgency, moving the open chunks it carries to `move_to`; finished chunks keep it. Retiring a
- * retired urgency writes nothing. Refused in order: 409 `urgency_is_default` for the tenant's default; 409
- * `urgency_in_use`, counting them, when open chunks carry it and no `move_to` is named; 422 `urgency_unknown`,
- * `urgency_retired` or `urgency_move_to_self` for a `move_to` naming no urgency, a retired one, or this one. A
- * retire moving open work needs `chunk:control` (403). 409 on a stale `If-Match`.
+ * retired urgency writes nothing. Refused in order: 409 problem type `urgency-is-default` for the tenant's
+ * default; 409 `urgency-in-use`, counting them in `open_chunks`, when open chunks carry it and no `move_to` is
+ * named; 422 `urgency_unknown`, `urgency_retired` or `urgency_move_to_self` for a `move_to` naming no urgency, a
+ * retired one, or this one. A retire moving open work needs `chunk:control` (403). 409 on a stale `If-Match`.
  */
 export const retireUrgencyApiUrgenciesKeyRetirePost = <ThrowOnError extends boolean = false>(options: Options<RetireUrgencyApiUrgenciesKeyRetirePostData, ThrowOnError>): RequestResult<RetireUrgencyApiUrgenciesKeyRetirePostResponses, RetireUrgencyApiUrgenciesKeyRetirePostErrors, ThrowOnError> => (options.client ?? client).post<RetireUrgencyApiUrgenciesKeyRetirePostResponses, RetireUrgencyApiUrgenciesKeyRetirePostErrors, ThrowOnError>({
     url: '/api/urgencies/{key}/retire',

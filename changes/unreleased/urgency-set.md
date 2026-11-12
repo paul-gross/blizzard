@@ -10,7 +10,8 @@ icon mark. Urgencies are created, listed, edited, reordered, retired with their 
 enabled over `/api/urgencies`; the default is shown and changed over `/api/settings`. The same verbs are
 `blizzard hub urgency` and `blizzard hub settings`, and a configuration document's `urgencies`, `urgency_order`, and
 `settings` sections declare them. The change log records the `urgency`, `urgency_order`, and `tenant_settings` kinds,
-which `blizzard hub config changes --kind` now accepts.
+which `blizzard hub config changes --kind` now accepts. A retire's `urgency-is-default` and `urgency-in-use` refusals
+carry a string `detail`, with `slug` as a member on both and `open_chunks` on `urgency-in-use`.
 
 ## Upgrade
 

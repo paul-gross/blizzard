@@ -11,7 +11,7 @@ from typing import Final, Literal
 from pydantic import BaseModel, ConfigDict
 
 from blizzard.wire.base import WireModel
-from blizzard.wire.problem import CommonProblemMembers, ProblemDetails
+from blizzard.wire.problem import ProblemDetails
 
 
 class UrgencyIconDocument(BaseModel):
@@ -155,29 +155,15 @@ class UrgencyIconNotFoundProblem(ProblemDetails[Literal["urn:blizzard:problem:ur
     """The urgency carries no icon."""
 
 
-class UrgencyIsDefaultDetail(WireModel):
-    code: Literal["urgency_is_default"] = "urgency_is_default"
-    message: str
+class UrgencyIsDefaultProblem(ProblemDetails[Literal["urn:blizzard:problem:urgency-is-default"]]):
+    """A retire names the tenant's default urgency; the default must point elsewhere first."""
+
     slug: str
 
 
-class UrgencyInUseDetail(WireModel):
-    code: Literal["urgency_in_use"] = "urgency_in_use"
-    message: str
+class UrgencyInUseProblem(ProblemDetails[Literal["urn:blizzard:problem:urgency-in-use"]]):
+    """A retire names an urgency open chunks carry, and no urgency to move them to."""
+
     slug: str
     #: How many open chunks carry the urgency, so a client can ask where they go.
     open_chunks: int
-
-
-class UrgencyIsDefaultProblem(
-    CommonProblemMembers[Literal["urn:blizzard:problem:urgency-is-default"], UrgencyIsDefaultDetail]
-):
-    """A retire names the tenant's default urgency; the default must point elsewhere first."""
-
-    status: int | None = None
-
-
-class UrgencyInUseProblem(CommonProblemMembers[Literal["urn:blizzard:problem:urgency-in-use"], UrgencyInUseDetail]):
-    """A retire names an urgency open chunks carry, and no urgency to move them to."""
-
-    status: int | None = None

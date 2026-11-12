@@ -28275,16 +28275,16 @@
         "title": "UrgencyIconView",
         "type": "object"
       },
-      "UrgencyInUseDetail": {
+      "UrgencyInUseProblem": {
+        "additionalProperties": true,
+        "description": "A retire names an urgency open chunks carry, and no urgency to move them to.",
         "properties": {
-          "code": {
-            "const": "urgency_in_use",
-            "default": "urgency_in_use",
-            "title": "Code",
+          "detail": {
+            "title": "Detail",
             "type": "string"
           },
-          "message": {
-            "title": "Message",
+          "instance": {
+            "title": "Instance",
             "type": "string"
           },
           "open_chunks": {
@@ -28293,27 +28293,6 @@
           },
           "slug": {
             "title": "Slug",
-            "type": "string"
-          }
-        },
-        "required": [
-          "code",
-          "message",
-          "slug",
-          "open_chunks"
-        ],
-        "title": "UrgencyInUseDetail",
-        "type": "object"
-      },
-      "UrgencyInUseProblem": {
-        "additionalProperties": true,
-        "description": "A retire names an urgency open chunks carry, and no urgency to move them to.",
-        "properties": {
-          "detail": {
-            "$ref": "#/components/schemas/UrgencyInUseDetail"
-          },
-          "instance": {
-            "title": "Instance",
             "type": "string"
           },
           "status": {
@@ -28338,34 +28317,11 @@
           "type",
           "title",
           "detail",
-          "instance"
+          "instance",
+          "slug",
+          "open_chunks"
         ],
         "title": "UrgencyInUseProblem",
-        "type": "object"
-      },
-      "UrgencyIsDefaultDetail": {
-        "properties": {
-          "code": {
-            "const": "urgency_is_default",
-            "default": "urgency_is_default",
-            "title": "Code",
-            "type": "string"
-          },
-          "message": {
-            "title": "Message",
-            "type": "string"
-          },
-          "slug": {
-            "title": "Slug",
-            "type": "string"
-          }
-        },
-        "required": [
-          "code",
-          "message",
-          "slug"
-        ],
-        "title": "UrgencyIsDefaultDetail",
         "type": "object"
       },
       "UrgencyIsDefaultProblem": {
@@ -28373,10 +28329,15 @@
         "description": "A retire names the tenant's default urgency; the default must point elsewhere first.",
         "properties": {
           "detail": {
-            "$ref": "#/components/schemas/UrgencyIsDefaultDetail"
+            "title": "Detail",
+            "type": "string"
           },
           "instance": {
             "title": "Instance",
+            "type": "string"
+          },
+          "slug": {
+            "title": "Slug",
             "type": "string"
           },
           "status": {
@@ -28401,7 +28362,8 @@
           "type",
           "title",
           "detail",
-          "instance"
+          "instance",
+          "slug"
         ],
         "title": "UrgencyIsDefaultProblem",
         "type": "object"
@@ -65848,7 +65810,7 @@
     },
     "/api/urgencies/{key}/retire": {
       "post": {
-        "description": "Retire an urgency, moving the open chunks it carries to `move_to`; finished chunks keep it. Retiring a\nretired urgency writes nothing. Refused in order: 409 `urgency_is_default` for the tenant's default; 409\n`urgency_in_use`, counting them, when open chunks carry it and no `move_to` is named; 422 `urgency_unknown`,\n`urgency_retired` or `urgency_move_to_self` for a `move_to` naming no urgency, a retired one, or this one. A\nretire moving open work needs `chunk:control` (403). 409 on a stale `If-Match`.",
+        "description": "Retire an urgency, moving the open chunks it carries to `move_to`; finished chunks keep it. Retiring a\nretired urgency writes nothing. Refused in order: 409 problem type `urgency-is-default` for the tenant's\ndefault; 409 `urgency-in-use`, counting them in `open_chunks`, when open chunks carry it and no `move_to` is\nnamed; 422 `urgency_unknown`, `urgency_retired` or `urgency_move_to_self` for a `move_to` naming no urgency, a\nretired one, or this one. A retire moving open work needs `chunk:control` (403). 409 on a stale `If-Match`.",
         "operationId": "retire_urgency_api_urgencies__key__retire_post",
         "parameters": [
           {
