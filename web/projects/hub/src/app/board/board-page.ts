@@ -24,12 +24,12 @@ import { injectHubChunkCountsQuery } from './chunks/chunk-counts.query';
 import { injectDemoteChunkMutation, type DemoteVars } from './chunks/demote.mutations';
 import { injectPromoteChunkMutation, type PromoteVars } from './chunks/promote.mutations';
 import { injectRepositionBacklogMutation, injectRepositionQueueMutation, type RepositionVars } from './queue/queue.mutations';
-import { foldRepositions, gatedChunkIds, projectColorsById, orderedChunkIds, placedMoves, resolveSelectedChunk, withPendingBoardChanges } from './board-page.model';
+import { foldRepositions, gatedChunkIds, orderedChunkIds, placedMoves, resolveSelectedChunk, withPendingBoardChanges } from './board-page.model';
 import { laneSkeletonCounts, listSkeletonCount } from './board-shell/board-skeletons.model';
 import { injectProjectsQuery } from '../core/projects.query';
 import { injectBoardWorkItemsQuery } from '../core/work-items/board-work-items.query';
 import { injectScrollSelectionIntoView } from '../core/scroll-selection-into-view';
-import { injectShowProjectColors } from '../core/project-lens-colors';
+import { injectShowProjectColors, projectColorMap } from '../core/project-lens-colors';
 
 /** The random source the board's loading skeletons draw their counts from — `Math.random`, unless
  * a spec pins it. */
@@ -234,7 +234,7 @@ export class BoardPage {
 
   /** The cards' project colours — none unless they tell projects apart ({@link injectShowProjectColors}). */
   protected readonly projectColors = computed(() =>
-    projectColorsById((this.showProjectColors() && this.projectsQuery.data()) || []),
+    projectColorMap(this.showProjectColors(), this.projectsQuery.data()),
   );
 
   /** Each runner's host name, which a list row names its runner by. */

@@ -86,7 +86,7 @@ function inputs(chunks: readonly ChunkSummary[], fields: Partial<Omit<DeliveryIn
     flows: FLOWS,
     repositories: REPOSITORIES,
     workItems: new Map(),
-    projects: [],
+    projectColors: null,
     runnerHosts: new Map(),
     now: FIXTURE_NOW,
     ...fields,

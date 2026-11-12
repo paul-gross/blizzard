@@ -69,7 +69,7 @@ export class BoardShell {
   readonly backlogOrder = input<readonly string[]>([]);
 
   /** Each project's palette color by project id, joined onto the cards — a project the map omits shows no swatch. */
-  readonly projectColors = input<ReadonlyMap<string, string>>(new Map());
+  readonly projectColors = input<ReadonlyMap<string, string> | null>(null);
 
   /** Each runner's host name by runner id, joined onto the cards — a runner the map omits shows no host. */
   readonly runnerHosts = input<ReadonlyMap<string, string>>(new Map());
@@ -185,7 +185,7 @@ export class BoardShell {
         awaitingExternalMerge: chunk.awaiting_external_merge ?? false,
         flowPlaces: placeLines(chunk.flow_places),
         projectName: chunk.project_name ?? null,
-        projectColor: this.projectColors().get(chunk.project_id ?? '') ?? null,
+        projectColor: this.projectColors()?.get(chunk.project_id ?? '') ?? null,
         runnerId: chunk.runner_id ?? null,
         runnerName: chunk.runner_name ?? null,
         hostName: this.runnerHosts().get(chunk.runner_id ?? '') ?? null,

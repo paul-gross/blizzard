@@ -10,6 +10,7 @@ import {
   restingAsyncState,
 } from 'fleet';
 
+import { injectShowProjectColors } from '../../core/project-lens-colors';
 import { injectProjectsQuery } from '../../core/projects.query';
 import { injectHubClock } from './hub-clock';
 import { openWorkItems } from '../chunk-dock/chunk-detail.model';
@@ -65,7 +66,8 @@ export class StepDrawer {
   protected readonly stepPending = computed(() => this.query.isPlaceholderData());
 
   private readonly projects = injectProjectsQuery();
-  protected readonly project = computed(() => projectOf(this.projects.data(), this.placed()?.segment.project_id));
+  private readonly showProjectColors = injectShowProjectColors();
+  protected readonly project = computed(() => projectOf(this.showProjectColors(), this.projects.data(), this.placed()?.segment.project_id));
 
   /** The step's chunk, read as the chunk drawer reads it — the reference column, and the artifacts' source. */
   private readonly chunkId = computed(() => this.key()?.chunkId ?? null);

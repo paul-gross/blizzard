@@ -1,4 +1,5 @@
-import { type ChunkDetail, type ProjectView, formatWhenParts, projectTint } from 'fleet';
+import { type ChunkDetail, type ProjectView, formatWhenParts } from 'fleet';
+import { projectColorOf } from '../../core/project-lens-colors';
 
 import type { LeaseTranscriptRef } from './lease-transcript.query';
 import {
@@ -187,15 +188,20 @@ function unnamedSessionTitle(segment: EnvTimelineSegment, hub: boolean): string 
   return 'a session that took the chunk over on a forced entry';
 }
 
-/** A step's chunk's project: its name, and its colour as the board tints with it. */
+/** A step's chunk's project: its name, and its raw colour (a palette name or hex) — `null` where project colours are
+ * not shown. The swatch converts it. */
 export interface StepProject {
   readonly name: string;
   readonly color: string | null;
 }
 
-export function projectOf(projects: readonly ProjectView[] | undefined, projectId: string | null | undefined): StepProject | null {
+export function projectOf(
+  shown: boolean,
+  projects: readonly ProjectView[] | undefined,
+  projectId: string | null | undefined,
+): StepProject | null {
   const p = projects?.find((x) => x.project_id === projectId);
-  return p ? { name: p.name, color: projectTint(p.color) } : null;
+  return p ? { name: p.name, color: projectColorOf(shown, projects, projectId) } : null;
 }
 
 /**

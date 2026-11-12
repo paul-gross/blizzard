@@ -6,7 +6,7 @@ import { injectFleetSpendDays } from '../fleet-spend/fleet-spend-days';
 import { injectHubBacklogQuery, injectHubQueueQuery } from '../queue/queue.query';
 import { hasPermission, injectMeQuery } from '../../core/auth/me.query';
 import { injectProjectsQuery } from '../../core/projects.query';
-import { orderedChunkIds, projectColorsById } from '../board-page.model';
+import { orderedChunkIds } from '../board-page.model';
 import { injectHubQuestionsQuery } from '../questions/questions.query';
 import { injectHubDecisionsQuery } from '../gates/gates.query';
 import { injectHubRunnersQuery } from '../../core/runners.query';
@@ -14,7 +14,7 @@ import { injectBoardWorkItemsQuery } from '../../core/work-items/board-work-item
 
 import { glanceListGroups, glanceVitals, liveRunners, type GlanceListGroups } from './glance-board.model';
 import { GlanceView, type Vitals } from './glance-view';
-import { injectShowProjectColors } from '../../core/project-lens-colors';
+import { injectShowProjectColors, projectColorMap } from '../../core/project-lens-colors';
 
 /**
  * The mobile glance board — a container (`bzh:frontend-container-presentational`): it
@@ -42,7 +42,7 @@ export class GlanceBoard {
   private readonly projectsQuery = injectProjectsQuery();
   private readonly showProjectColors = injectShowProjectColors();
   private readonly projectColors = computed(() =>
-    projectColorsById((this.showProjectColors() && this.projectsQuery.data()) || []),
+    projectColorMap(this.showProjectColors(), this.projectsQuery.data()),
   );
 
 

@@ -331,7 +331,7 @@ describe('progressByChunk', () => {
 });
 
 describe('projectHuesOf', () => {
-  const project = (project_id: string, color: string | null): ProjectView => ({ project_id, color }) as unknown as ProjectView;
+  const project = (project_id: string, color: string): ProjectView => ({ project_id, color }) as ProjectView;
 
   it('is null while blocks wear their runners colour', () => {
     expect(projectHuesOf(false, [project('proj_1', 'blue')])).toBeNull();
@@ -341,8 +341,8 @@ describe('projectHuesOf', () => {
     expect(projectHuesOf(true, undefined)).toEqual(new Map());
   });
 
-  it('tints each coloured project, skipping uncoloured ones', () => {
-    const hues = projectHuesOf(true, [project('proj_1', '#ABCDEF'), project('proj_2', null), project('proj_3', 'green')]);
+  it('tints each project', () => {
+    const hues = projectHuesOf(true, [project('proj_1', '#ABCDEF'), project('proj_3', 'green')]);
     expect([...hues!.entries()]).toEqual([
       ['proj_1', '#abcdef'],
       ['proj_3', 'var(--project-green, var(--label-dim))'],

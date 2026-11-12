@@ -351,22 +351,26 @@ describe('stepIdentity', () => {
 });
 
 describe('projectOf', () => {
-  const project = (project_id: string, name: string, color: string | null): ProjectView => ({ project_id, name, color }) as unknown as ProjectView;
-  const projects = [project('proj_1', 'Blizzard', '#ABCDEF'), project('proj_2', 'Plain', null)];
+  const project = (project_id: string, name: string, color: string): ProjectView => ({ project_id, name, color }) as ProjectView;
+  const projects = [project('proj_1', 'Blizzard', '#abcdef'), project('proj_2', 'Teal', 'teal')];
 
-  it('names the project with its tint', () => {
-    expect(projectOf(projects, 'proj_1')).toEqual({ name: 'Blizzard', color: '#abcdef' });
+  it('names the project with its raw colour', () => {
+    expect(projectOf(true, projects, 'proj_1')).toEqual({ name: 'Blizzard', color: '#abcdef' });
   });
 
-  it('has no colour for an uncoloured project', () => {
-    expect(projectOf(projects, 'proj_2')).toEqual({ name: 'Plain', color: null });
+  it('hands a palette-named colour to the swatch raw, for it to convert once', () => {
+    expect(projectOf(true, projects, 'proj_2')).toEqual({ name: 'Teal', color: 'teal' });
+  });
+
+  it('keeps the name and drops the colour under the gate', () => {
+    expect(projectOf(false, projects, 'proj_2')).toEqual({ name: 'Teal', color: null });
   });
 
   it('is null for an unknown, missing or unread project', () => {
-    expect(projectOf(projects, 'proj_9')).toBeNull();
-    expect(projectOf(projects, null)).toBeNull();
-    expect(projectOf(projects, undefined)).toBeNull();
-    expect(projectOf(undefined, 'proj_1')).toBeNull();
+    expect(projectOf(true, projects, 'proj_9')).toBeNull();
+    expect(projectOf(true, projects, null)).toBeNull();
+    expect(projectOf(true, projects, undefined)).toBeNull();
+    expect(projectOf(true, undefined, 'proj_1')).toBeNull();
   });
 });
 

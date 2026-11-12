@@ -8,7 +8,7 @@ import { injectHubBoardChunksQuery } from '../core/chunks.query';
 import { injectProjectsQuery } from '../core/projects.query';
 import { deliveryChunkIds, deliveryList, type DeliveryList, deliveryState, flowIds } from './delivery.model';
 import { injectFlowFactsQuery } from './delivery.query';
-import { injectShowProjectColors } from '../core/project-lens-colors';
+import { injectShowProjectColors, projectColorMap } from '../core/project-lens-colors';
 
 /** The list's clock: the reading clock floored to the minute, so the join reruns once a minute rather than every
  * tick — only a bounce's day-long window reads it. */
@@ -50,7 +50,7 @@ export function injectDeliveryData(): DeliveryData {
         chunks: chunks(),
         facts: flowFacts().facts,
         workItems: workItems(),
-        projects: showProjectColors() ? (projectsQuery.data() ?? []) : [],
+        projectColors: projectColorMap(showProjectColors(), projectsQuery.data()),
         runnerHosts: runnerHosts(),
         now: listClock(),
       }),

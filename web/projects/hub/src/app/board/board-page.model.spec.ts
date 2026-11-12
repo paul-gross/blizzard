@@ -7,7 +7,6 @@ import {
   gatedChunkIds,
   orderedChunkIds,
   placedMoves,
-  projectColorsById,
   resolveSelectedChunk,
   withPendingBoardChanges,
 } from './board-page.model';
@@ -146,14 +145,3 @@ describe('placedMoves', () => {
   });
 });
 
-describe('projectColorsById', () => {
-  it('maps each project id to its palette color', () => {
-    const colors = projectColorsById([
-      { project_id: 'proj_a', color: 'teal' },
-      { project_id: 'proj_b', color: 'pink' },
-    ]);
-    expect(colors.get('proj_a')).toBe('teal');
-    expect(colors.get('proj_b')).toBe('pink');
-    expect(colors.get('proj_c')).toBeUndefined();
-  });
-});

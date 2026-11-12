@@ -57,7 +57,7 @@ export interface DeliveryInputs {
   /** Each flow's newest record facts, newest first, by flow id. */
   readonly facts: ReadonlyMap<string, readonly FlowFactView[]>;
   readonly workItems: ReadonlyMap<string, WorkItemsView>;
-  readonly projects: readonly { readonly project_id: string; readonly color: string }[];
+  readonly projectColors: ReadonlyMap<string, string> | null;
   /** Each runner's host name by runner id. */
   readonly runnerHosts: ReadonlyMap<string, string>;
   /** The clock the list is judged against — a coarse one, since only the bounce window reads it. */
@@ -179,7 +179,7 @@ export function deliveryChunkIds(chunks: readonly ChunkSummary[], facts: Deliver
 
 function chunkRef(chunk: ChunkSummary, inputs: DeliveryInputs): DeliveryChunkRef {
   const view = inputs.workItems.get(chunk.chunk_id);
-  const color = inputs.projects.find((project) => project.project_id === chunk.project_id)?.color;
+  const color = inputs.projectColors?.get(chunk.project_id ?? '');
   return {
     chunkId: chunk.chunk_id,
     shortId: compactRef(chunk.chunk_id),
