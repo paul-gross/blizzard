@@ -1,8 +1,7 @@
 # Desktop mockups — the original dashboard sheets
 
-Static HTML mockup sheets for the desktop hub/runner web dashboards, copied here from the discovery corpus
-(`blizzard-discovery/discovery/mockups`) so the desktop and [mobile](../mobile/README.md) designs live side by side.
-Open any file directly in a browser.
+Static HTML mockup sheets for the desktop hub/runner web dashboards, kept beside the [mobile](../mobile/README.md)
+designs. Open any file directly in a browser.
 
 | Sheet                                                | Surface                        |
 | ---------------------------------------------------- | ------------------------------ |
