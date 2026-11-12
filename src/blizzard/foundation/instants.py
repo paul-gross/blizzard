@@ -42,10 +42,3 @@ def iso_instant(value: object) -> datetime | None:
         return parsed.astimezone(UTC) if parsed.tzinfo is not None else parsed.replace(tzinfo=UTC)
     except (OverflowError, ValueError):
         return None
-
-
-def reset_instant(value: object) -> datetime | None:
-    """A reset instant given as epoch seconds or an ISO-8601 string."""
-    if isinstance(value, str):
-        return iso_instant(value)
-    return epoch_seconds_instant(value)

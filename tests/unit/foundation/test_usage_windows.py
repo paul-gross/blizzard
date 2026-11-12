@@ -35,3 +35,18 @@ def test_a_non_dict_mapping_is_admitted() -> None:
     entry = _entry("2026-08-01T18:00:00Z")
     assert admit_usage_window(MappingProxyType(entry)) == admit_usage_window(entry)
     assert isinstance(admit_usage_window(MappingProxyType(entry)), AdmittedUsageWindow)
+
+
+@pytest.mark.parametrize(
+    "pct", [10**400, -(10**400), float("nan"), float("inf"), float("-inf"), -1, 100.5, True], ids=str
+)
+def test_a_utilization_that_is_no_percentage_is_refused_by_name(pct: object) -> None:
+    entry = {**_entry(1_785_607_200), "utilization_pct": pct}
+    assert admit_usage_window(entry) == "utilization_pct"
+
+
+def test_an_offset_reset_is_admitted_as_its_utc_instant() -> None:
+    admitted = admit_usage_window(_entry("2026-08-01T20:00:00+02:00"))
+    assert isinstance(admitted, AdmittedUsageWindow)
+    assert admitted.resets_at == datetime(2026, 8, 1, 18, 0, tzinfo=UTC)
+    assert admitted.stored["resets_at"] == "2026-08-01T18:00:00+00:00"
