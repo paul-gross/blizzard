@@ -319,13 +319,16 @@ class TranscriptPump:
             assert gate.outcome is not None
             return gate.outcome
 
-        held = bindings_by_chunk.held.get(segment.chunk_id, [])
-        # A segment outliving its lease's release still reads in the workspace its newest binding named.
-        binding = held[0] if held else bindings_by_chunk.newest.get(segment.chunk_id)
-        spawn_cwd = SpawnCwd(
-            self.ctx.workspaces.spawn_root(binding.workspace_id if binding else None),
-            held[0].workdir if held else None,
-        ).path
+        spawn_cwd = segment.spawn_cwd
+        if spawn_cwd is None:
+            # A segment opened before the cwd was frozen: derive it. One outliving its lease's
+            # release still reads in the workspace its newest binding named.
+            held = bindings_by_chunk.held.get(segment.chunk_id, [])
+            binding = held[0] if held else bindings_by_chunk.newest.get(segment.chunk_id)
+            spawn_cwd = SpawnCwd(
+                self.ctx.workspaces.spawn_root(binding.workspace_id if binding else None),
+                held[0].workdir if held else None,
+            ).path
         try:
             source = self.ctx.transcript_source_for(segment.session)
         except (UnknownHarnessError, UnavailableHarnessError) as exc:

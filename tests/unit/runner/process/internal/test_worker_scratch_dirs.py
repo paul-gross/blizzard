@@ -73,8 +73,20 @@ def test_remove_is_a_noop_when_disabled() -> None:
     dirs.remove("lease_1")  # must not raise
 
 
-def test_sweep_orphans_removes_everything_not_in_the_active_set(tmp_path: Path) -> None:
+def test_sweep_orphans_without_a_runner_id_deletes_nothing(tmp_path: Path) -> None:
     dirs = WorkerScratchDirs(str(tmp_path))
+    dirs.ensure("lease_active")
+    dirs.ensure("lease_orphan")
+
+    removed = dirs.sweep_orphans({"lease_active"})
+
+    assert removed == 0
+    assert os.path.isdir(dirs.path("lease_active"))
+    assert os.path.isdir(dirs.path("lease_orphan"))
+
+
+def test_sweep_orphans_removes_every_owned_entry_not_in_the_active_set(tmp_path: Path) -> None:
+    dirs = WorkerScratchDirs(str(tmp_path), runner_id="rn_01M3MY1NGQR8WE1ZBRKNREFNE4")
     dirs.ensure("lease_active")
     dirs.ensure("lease_orphan")
 

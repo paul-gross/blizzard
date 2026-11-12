@@ -41,9 +41,11 @@ class FakeTranscriptRepository:
     def __init__(self, by_session_id: dict[str, Transcript] | None = None) -> None:
         self._by_session_id = by_session_id or {}
         self.calls: list[tuple[str, str | None]] = []
+        self.cwds: list[str | None] = []
 
     def read_turns(self, session_id: str, *, spawn_cwd: str | None, since: str | None = None) -> Transcript:
         self.calls.append((session_id, since))
+        self.cwds.append(spawn_cwd)
         if session_id not in self._by_session_id:
             return Transcript(session_id=session_id, available=False, reason="not_found", turns=[], truncated=False)
         full = self._by_session_id[session_id]
@@ -479,6 +481,39 @@ def test_segment_content_reads_the_session_file_local_only_never_the_hub(tmp_pat
     assert content.truncated is False
     assert [t.text for t in content.turns] == ["hi"]
     assert archived.calls == []
+
+
+def _spawned_segment_content(store: SqlAlchemyRunnerStore, spawn_cwd: str | None) -> FakeTranscriptRepository:
+    _seed_lease(store)
+    store.record_spawn(
+        "lease_1",
+        pid=100,
+        process_start_time="start-100",
+        session=SessionReference(CLAUDE_CODE_HARNESS_ID, "sess-a"),
+        spawned_at=_NOW,
+        spawn_cwd=spawn_cwd,
+    )
+    store.record_binding(chunk_id="ch_1", environment_id="env-1", workdir="/ws/bound", bound_at=_NOW, workspace_id=None)
+    [segment] = store.transcript_segments_for_chunk("ch_1")
+    local = FakeTranscriptRepository()
+    _service(store, local=local).segment_content("ch_1", segment.segment_id)
+    return local
+
+
+def test_segment_content_reads_the_segments_frozen_spawn_cwd(tmp_path: Path) -> None:
+    store = make_store(f"sqlite:///{tmp_path / 'runner.db'}")
+
+    local = _spawned_segment_content(store, "/frozen")
+
+    assert local.cwds == ["/frozen"]
+
+
+def test_segment_content_derives_the_spawn_cwd_when_the_segment_froze_none(tmp_path: Path) -> None:
+    store = make_store(f"sqlite:///{tmp_path / 'runner.db'}")
+
+    local = _spawned_segment_content(store, None)
+
+    assert len(local.cwds) == 1 and local.cwds[0] is not None and local.cwds[0].endswith("/ws/bound")
 
 
 def test_segment_content_windows_a_same_session_resume_to_each_segments_own_turns(tmp_path: Path) -> None:

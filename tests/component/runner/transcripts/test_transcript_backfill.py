@@ -808,3 +808,34 @@ def test_unfinished_and_new_import_use_their_own_workspace_bindings(monkeypatch:
     assert {(session, cwd) for session, cwd, _ in source.turns_since_calls} == {("unfinished", "/old"), ("new", "/new")}
     new_segments = ctx.stores.transcript_ledger.transcript_segments_for_chunk("new_chunk")
     assert len(new_segments) == 1 and new_segments[0].spawn_cwd == "/new"
+
+
+def _bind(ctx: LoopContext, *, workdir: str, at: datetime) -> None:
+    ctx.stores.environments.record_binding(
+        chunk_id="ch_1", environment_id=f"env-{workdir}", workdir=workdir, bound_at=at, workspace_id=None
+    )
+
+
+def test_reship_reads_the_sources_frozen_spawn_cwd_not_a_newer_binding() -> None:
+    ctx, source = _ctx(sessions={"sess-a": [_turn(0, "hello")]})
+    _bind(ctx, workdir="/ws/first", at=_NOW)
+    first = _import_one(ctx)
+    frozen = ctx.stores.transcript_ledger.transcript_segment(first)
+    assert frozen is not None and frozen.spawn_cwd is not None
+    _bind(ctx, workdir="/ws/second", at=_NOW + timedelta(hours=1))
+
+    _backfill(ctx).reship(first)
+
+    assert source.size_bytes_cwds[-1] == frozen.spawn_cwd
+
+
+def test_reship_derives_the_spawn_cwd_when_the_source_froze_none() -> None:
+    ctx, source = _ctx(sessions={"sess-a": [_turn(0, "hello")]})
+    first = _import_one(ctx)
+    segment = ctx.stores.transcript_ledger.transcript_segment(first)
+    assert segment is not None and segment.spawn_cwd is None
+    _bind(ctx, workdir="/ws/late", at=_NOW + timedelta(hours=1))
+
+    _backfill(ctx).reship(first)
+
+    assert source.size_bytes_cwds[-1] is not None and source.size_bytes_cwds[-1].endswith("/ws/late")

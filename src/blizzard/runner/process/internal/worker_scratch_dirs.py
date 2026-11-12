@@ -332,21 +332,13 @@ class WorkerScratchDirs:
                     self._remove(root, lease_id)
 
     def sweep_orphans(self, active_lease_ids: Iterable[str], *, strict: bool = False) -> int:
-        if not self.root:
-            return 0
+        if not self.root or not self.runner_id:
+            return 0  # no runner id, no ownership evidence: delete nothing
         if not _directory(Path(self.root)):
             if strict and os.path.lexists(self.root):
                 raise OSError(f"Scratch root is not a directory: {self.root}")
             return 0
         active = set(active_lease_ids)
-        if not self.runner_id:
-            removed = 0
-            for entry in os.scandir(self.root):
-                if entry.name not in active and entry.is_dir(follow_symlinks=False):
-                    with contextlib.suppress(OSError):
-                        shutil.rmtree(entry.path)
-                        removed += 1
-            return removed
         removed = 0
         with self._locked() as root:
             runner = self._runner(root, False)

@@ -55,7 +55,6 @@ from blizzard.runner.loop.step_passes import HostPassStepper, PassResult, StepLo
 from blizzard.runner.loop.tick import tick
 from blizzard.runner.process.internal.worker_scratch_dirs import WorkerScratchDirs
 from blizzard.runner.process.probe import IProcessProbe
-from blizzard.runner.process.scratch_cleanup import sweep_closed_legacy
 from blizzard.runner.stores import HostStores, RunnerStores
 from blizzard.runner.transcripts.transcript_backfill import (
     TranscriptBackfill,
@@ -100,14 +99,12 @@ class LoopWiring:
         hub: IVerifiableHubClient,
         graph: RunnerProcess,
         *,
-        sweep_worker_scratch: bool = False,
         tracer: IPlatformTracer | None = None,
     ) -> LoopContext:
         """Wire a :class:`LoopContext` over ``graph``, the process's one composition-root graph;
         the caller owns the ``httpx2.Client`` behind ``hub``.
 
-        ``sweep_worker_scratch`` runs the per-lease scratch directory's one-shot orphan sweep — safe
-        only when no spawn can race it, so off by default. ``tracer`` is the tick's span seam, absent by default."""
+        ``tracer`` is the tick's span seam, absent by default."""
         config = self.config
         stores, workspaces, harnesses, clock = graph.stores, graph.workspaces, graph.harnesses, graph.clock
         # A startup guard: this composition's transcripts lane requires the default
@@ -135,16 +132,12 @@ class LoopWiring:
         elicitation_output_dir.mkdir(parents=True, exist_ok=True)
         # Reuse active legacy payloads; new leases reserve compact paths in the effective root.
         worker_scratch_root = config.worker_scratch_root or config.root / WORKER_SCRATCH_DIRNAME
-        active = {lease.lease_id for lease in stores.lease_record.list_active_leases()}
         _worker_scratch = WorkerScratchDirs(
             str(worker_scratch_root),
             runner_id=graph.runner_id,
             legacy_root=str(config.root / LEGACY_WORKER_SCRATCH_DIRNAME),
             legacy_owned=lambda lease_id: stores.lease_record.lease(lease_id) is not None,
         )
-        if sweep_worker_scratch:
-            _worker_scratch.sweep_orphans(active)
-            sweep_closed_legacy(_worker_scratch, stores.lease_record)
         # The tool profile the runner's own `git` and check commands launch under: no lease identity.
         tool_env = config.tool_env(graph.trace_settings)
         loop_config = LoopConfig(
