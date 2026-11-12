@@ -15,6 +15,7 @@ from typing import Any
 
 from sqlalchemy import ColumnElement, Connection, Table
 
+from blizzard.foundation.roles import adapter_model
 from blizzard.foundation.store.batching import id_batches
 from blizzard.hub.domain.graph.model import RESERVED_TERMINAL
 from blizzard.hub.domain.observability.env_timeline import (
@@ -44,6 +45,7 @@ type _EndsRoute = Callable[[ScopedConnections, Table, datetime], ColumnElement[b
 type _Narrow = Callable[[Table], list[ColumnElement[bool]]]
 
 
+@adapter_model
 @dataclass(frozen=True)
 class _ChunkFactsReader:
     """A table ``chunk_facts`` reads, id-batched by chunk, into the facts' ``field``."""
@@ -53,6 +55,7 @@ class _ChunkFactsReader:
     ends_route: _EndsRoute | None = None
 
 
+@adapter_model
 @dataclass(frozen=True)
 class _RouteWindowReader:
     """The table anchoring ``routes()``' window: reads the routes ``narrow`` leaves."""
@@ -60,6 +63,7 @@ class _RouteWindowReader:
     read: Callable[[ScopedConnections, Connection, _Narrow], list[RouteCreated]]
 
 
+@adapter_model
 @dataclass(frozen=True)
 class _RouteBatchReader:
     """A table ``routes()`` reads for the window's chunks, id-batched."""
