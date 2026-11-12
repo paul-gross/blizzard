@@ -77,6 +77,10 @@ def test_the_upgrade_reshapes_the_store_as_the_schema_declares(tmp_path: Path) -
     try:
         s.metadata.create_all(declared)
         migrated, schema = _reshaped(engine), _reshaped(declared)
+        # The CI opt-in was added to captured terms after this revision.
+        terms = cast("tuple[frozenset[tuple[object, ...]], ...]", schema["flow_submission_terms"])
+        assert any(c[0] == "allow_no_ci" for c in terms[0])
+        schema["flow_submission_terms"] = (frozenset(c for c in terms[0] if c[0] != "allow_no_ci"), *terms[1:])
         # A later revision rekeys `repositories` on its forge, so only the two columns this one adds are compared there.
         assert {t: v for t, v in migrated.items() if t != "repositories"} == {
             t: v for t, v in schema.items() if t != "repositories"
