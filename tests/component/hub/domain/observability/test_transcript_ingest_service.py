@@ -13,6 +13,7 @@ from typing import cast
 from sqlalchemy import insert, text
 
 from blizzard.hub.domain.chunk.ports.fence import EpochOwner
+from blizzard.hub.domain.kernel.locks import HubLock
 from blizzard.hub.domain.kernel.transactions import LockedTransaction, Transaction
 from blizzard.hub.domain.observability import transcripts as transcripts_domain
 from blizzard.hub.domain.observability.transcripts import (
@@ -512,7 +513,9 @@ class _FakeUnits:
     def begin(self) -> Generator[Transaction]:
         yield cast(Transaction, self)
 
-    def lock_set(self, *, chunks: Sequence[str] = (), keys: Sequence[tuple[str, str]] = ()) -> LockedTransaction:
+    def lock_set(
+        self, *, chunks: Sequence[str] = (), keys: Sequence[tuple[str, str]] = (), hub: Sequence[HubLock] = ()
+    ) -> LockedTransaction:
         self.locks.append((list(chunks), list(keys)))
         return cast(LockedTransaction, self)
 
@@ -593,7 +596,9 @@ def test_an_ingest_encodes_its_records_turns_before_its_unit_takes_a_lock() -> N
             return super().encode_turns(record)
 
     class _LockingUnits(_FakeUnits):
-        def lock_set(self, *, chunks: Sequence[str] = (), keys: Sequence[tuple[str, str]] = ()) -> LockedTransaction:
+        def lock_set(
+            self, *, chunks: Sequence[str] = (), keys: Sequence[tuple[str, str]] = (), hub: Sequence[HubLock] = ()
+        ) -> LockedTransaction:
             events.append("lock")
             return super().lock_set(chunks=chunks, keys=keys)
 

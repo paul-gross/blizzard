@@ -55,6 +55,7 @@ GLOBAL_TABLES: frozenset[str] = frozenset(
         "hub_event_log",  # occurrences of the hub's own machinery, which concern no tenant
         "trace_cursor",  # trace export is hub configuration with one destination
         "egress_cursor",  # fact egress is hub configuration with one destination
+        "hub_locks",  # lock-only rows for concepts no tenant owns
     }
 )
 
@@ -1034,6 +1035,14 @@ keyed_locks = Table(
     Column("key", String, nullable=False),
     Column("tenant_id", String, ForeignKey("tenants.tenant_id", name="fk_keyed_locks_tenant_id"), nullable=False),
     PrimaryKeyConstraint("tenant_id", "namespace", "key", name="pk_keyed_locks"),
+)
+
+# Lock-only rows for concepts no tenant owns (``bzh:store-exclusive-write``): one seeded row per ``HubLock``, taken by a
+# no-op ``UPDATE`` and never read as a fact. The revision seeds them; nothing inserts or deletes them.
+hub_locks = Table(
+    "hub_locks",
+    metadata,
+    Column("name", String, primary_key=True),
 )
 
 # --- Movement record (transition.recorded) ------------------------------------

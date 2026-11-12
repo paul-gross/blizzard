@@ -40,6 +40,7 @@ from blizzard.hub.domain.garden.runs.run import (
 )
 from blizzard.hub.domain.garden.scopes import IReadScopeRepository, Scope
 from blizzard.hub.domain.graph.model import Graph, IReadGraphRepository
+from blizzard.hub.domain.kernel.locks import HubLock
 from blizzard.hub.domain.kernel.transactions import IHubTransactions
 from blizzard.hub.domain.urgency.model import UrgencyId
 from blizzard.hub.domain.urgency.services import MintAhead, TenantDefault
@@ -200,7 +201,9 @@ class _FakeUnit:
     def __init__(self) -> None:
         self.keys: list[tuple[str, str]] = []
 
-    def lock_set(self, *, chunks: Sequence[str] = (), keys: Sequence[tuple[str, str]] = ()) -> _FakeUnit:
+    def lock_set(
+        self, *, chunks: Sequence[str] = (), keys: Sequence[tuple[str, str]] = (), hub: Sequence[HubLock] = ()
+    ) -> _FakeUnit:
         self.keys.extend(keys)
         return self
 

@@ -7,19 +7,17 @@ makes follows the lock. A tenant-owned write joins the same transaction through 
 handed out as ``IdentityWrites.tenant_connections`` — whose connections are that tenant's builders over the one
 connection, opened under the tenant's lock as any scoped write is.
 
-The identity lock is a no-op ``UPDATE`` of the store's revision row (``bzh:sql-portable``): the one hub-level row every
-store the hub serves holds, where no identity table is guaranteed a row
-(``tests/component/hub/auth/test_identity_transaction.py::test_the_identity_lock_is_the_units_first_statement``).
-On SQLite the ``UPDATE`` takes the single writer lock before any read; on Postgres it queues every other unit of work
-behind this one's commit, and each later statement reads what that commit wrote."""
+The identity lock is the ``IDENTITY`` row of ``hub_locks``, taken by :func:`~blizzard.hub.store.locking.lock_hub`
+(``bzh:store-exclusive-write``): a seeded row, where no identity table is guaranteed one
+(``tests/component/hub/auth/test_identity_transaction.py::test_the_identity_lock_is_the_units_first_statement``). A unit
+that also writes a tenant's lifecycle names ``hub=[HubLock.TENANT_LIFECYCLE]``; that lock follows ``IDENTITY`` before
+any other statement. On SQLite the ``UPDATE`` takes the single writer lock before any read; on Postgres it queues every
+other unit of work behind this one's commit, and each later statement reads what that commit wrote."""
 
 from __future__ import annotations
 
-from collections.abc import Generator
+from collections.abc import Generator, Sequence
 from contextlib import contextmanager
-
-import sqlalchemy as sa
-from sqlalchemy import Connection
 
 from blizzard.hub.auth.errors import RepoErrorFactory
 from blizzard.hub.auth.identity_transaction import IdentityWrites, IIdentityTransactions
@@ -30,26 +28,11 @@ from blizzard.hub.auth.internal.membership_repository import MembershipRepositor
 from blizzard.hub.auth.internal.session_repository import SessionRepository
 from blizzard.hub.auth.internal.superuser_bootstrap_repository import SuperuserBootstrapRepository
 from blizzard.hub.auth.internal.user_repository import UserRepository
+from blizzard.hub.domain.kernel.locks import HubLock
+from blizzard.hub.domain.kernel.transactions import TransactionMisuse
 from blizzard.hub.store.borrowed import PinnedConnections
 from blizzard.hub.store.errors import HubStoreConnections, HubStoreErrorFactory
-
-#: The store's revision table, named only as the identity lock's target; nothing reads it here.
-_REVISION_TABLE = sa.table("alembic_version", sa.column("version_num"))
-
-
-class IdentityLockMissing(RuntimeError):
-    """Raised when the store holds no revision row to lock: it was never migrated, so no unit of work may run on it."""
-
-    def __init__(self) -> None:
-        super().__init__("the hub store holds no revision row to lock; migrate it before writing identities")
-
-
-def _lock_identities(conn: Connection) -> None:
-    """Take the identity lock as the transaction's first statement; every unit of work takes the same one row, so
-    two units never interleave and none waits on another in a different order."""
-    locked = conn.execute(sa.update(_REVISION_TABLE).values(version_num=_REVISION_TABLE.c.version_num))
-    if locked.rowcount == 0:
-        raise IdentityLockMissing
+from blizzard.hub.store.locking import lock_hub
 
 
 class IdentityTransactions:
@@ -63,9 +46,14 @@ class IdentityTransactions:
         self._store_errors = store_errors
 
     @contextmanager
-    def begin(self) -> Generator[IdentityWrites, None, None]:
+    def begin(self, *, hub: Sequence[HubLock] = ()) -> Generator[IdentityWrites, None, None]:
+        named = sorted(set(hub))
+        if any(lock is not HubLock.TENANT_LIFECYCLE for lock in named):
+            raise TransactionMisuse("an identity unit may name only the tenant lifecycle lock")
         with self._store.write("identity_transaction") as conn:
-            _lock_identities(conn)
+            lock_hub(conn, HubLock.IDENTITY)
+            for lock in named:
+                lock_hub(conn, lock)
             yield self._writes(PinnedConnections(conn, self._store_errors))
 
     def _writes(self, connections: PinnedConnections) -> IdentityWrites:

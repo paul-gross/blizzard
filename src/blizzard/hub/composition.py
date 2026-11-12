@@ -1868,6 +1868,7 @@ def build_services(
     )
     tenant_admin = TenantAdministration(
         tenants=TenantAdministrationStore(store_connections, identity_transactions),
+        units=lambda tenant: HubTransactions(store_connections.scoped(StoreScope(tenant))),
         mint_packaged=packaged_minter(clock, YAML_CODEC, actions.catalogue),
         changed=open_tenants.refresh,
         pick=color_pick,
@@ -1881,7 +1882,13 @@ def build_services(
         open_tenants.refresh()
 
     teardown_store = TenantTeardownStore(store_connections)
-    tenant_teardown = TenantTeardown(teardowns=teardown_store, closed=forget_closed, events=hub_event_log, clock=clock)
+    tenant_teardown = TenantTeardown(
+        teardowns=teardown_store,
+        units=lambda tenant: HubTransactions(store_connections.scoped(StoreScope(tenant))),
+        closed=forget_closed,
+        events=hub_event_log,
+        clock=clock,
+    )
     oauth_registry = oauth_registry or ProviderEntry.registry(oauth_providers, http_client=oauth_http_client)
     signing = SigningKeyService(signing_keys_dir) if signing_keys_dir is not None else None
     login_throttle = login_throttle or LoginThrottleConfig()

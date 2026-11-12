@@ -6,6 +6,7 @@ A tenant holding what a service test creates deletes in well under a second, mea
 
 from __future__ import annotations
 
+import threading
 import time
 from collections.abc import Mapping
 from datetime import UTC, datetime
@@ -34,7 +35,8 @@ from blizzard.hub.domain.tenancy.teardown import (
 from blizzard.hub.store import schema
 from blizzard.hub.store.internal.tenant_teardown_store import DRAIN_ORDER, TenantTeardownStore
 from blizzard.hub.store.scoped import is_tenant_owned
-from blizzard.hub.tenancy import HUB_SCOPED_OPTION, TenantClosed, TenantId, UnknownTenant
+from blizzard.hub.store.transactions import HubTransactions
+from blizzard.hub.tenancy import HUB_SCOPED_OPTION, StoreScope, TenantClosed, TenantId, UnknownTenant
 from blizzard.wire.tenant import TENANT_NOT_FOUND
 from tests.support.scaffolding import (
     HubHarness,
@@ -100,6 +102,7 @@ def _small_teardown(hub: HubHarness, *, batch_rows: int) -> tuple[TenantTeardown
     services = hub.hub_services
     torn = TenantTeardown(
         teardowns=store,
+        units=lambda tenant: HubTransactions(hub_level_connections(hub.engine).scoped(StoreScope(tenant))),
         closed=lambda _tenant: services.tenants.open_tenants.refresh(),
         events=services.hub_event_log,
         clock=services.clock,
@@ -452,8 +455,8 @@ def test_a_budget_cut_short_leaves_the_deletion_underway_for_the_sweep_to_finish
 
 def test_each_drain_transaction_removes_at_most_its_batch(hub: HubHarness) -> None:
     tenant = _created(hub)
-    _, store = _small_teardown(hub, batch_rows=5)
-    store.close(tenant, by="usr_closer", at=hub.hub_services.clock.now())
+    torn, store = _small_teardown(hub, batch_rows=5)
+    torn.close(tenant, by="usr_closer")
 
     removed = [store.drain_batch(tenant, 5) for _ in range(3)]
 
@@ -495,18 +498,40 @@ def test_the_only_open_tenant_and_an_unknown_one_are_refused_and_nothing_is_writ
     assert _hub_events(hub) == []
 
 
-def test_a_close_locks_every_tenant_row_in_id_order_before_its_last_tenant_check(hub: HubHarness) -> None:
+def test_a_close_holds_no_tenant_row_but_its_own(hub: HubHarness) -> None:
     tenants = sorted([default_tenant(hub.engine), _created(hub, "acme"), _created(hub, "bravo")])
-    store = TenantTeardownStore(hub_level_connections(hub.engine))
+    torn, _ = _small_teardown(hub, batch_rows=5)
 
     with capture_statements(hub.engine) as statements:
-        store.close(tenants[1], by="usr_closer", at=hub.hub_services.clock.now())
+        torn.close(tenants[1], by="usr_closer")
 
     texts = [" ".join(sql.split()) for sql, _ in statements]
-    locks = [i for i, sql in enumerate(texts) if sql.startswith("UPDATE tenants ")]
-    check = next(i for i, sql in enumerate(texts) if sql.startswith("SELECT EXISTS") and "tenant_deletions" in sql)
-    assert [tuple(statements[i][1]) for i in locks] == [(tenant,) for tenant in tenants]
-    assert max(locks) < check
+    row_locks = [i for i, sql in enumerate(texts) if sql.startswith("UPDATE tenants ")]
+    lifecycle = [i for i, sql in enumerate(texts) if sql.startswith("UPDATE hub_locks ")]
+    assert len(row_locks) == 1
+    assert set(statements[row_locks[0]][1]) == {tenants[1]}
+    assert lifecycle and min(row_locks) < min(lifecycle)
+
+
+def test_two_closes_of_the_last_two_open_tenants_leave_one_refused(hub: HubHarness) -> None:
+    tenants = [default_tenant(hub.engine), _created(hub, "acme")]
+    torn = hub.hub_services.tenant_teardown
+    outcomes: list[object] = []
+
+    def close(tenant: TenantId) -> None:
+        try:
+            outcomes.append(torn.close(tenant, by="usr_closer"))
+        except LastTenant as refused:
+            outcomes.append(refused)
+
+    threads = [threading.Thread(target=close, args=(tenant,)) for tenant in tenants]
+    for thread in threads:
+        thread.start()
+    for thread in threads:
+        thread.join()
+
+    assert sorted(type(outcome).__name__ for outcome in outcomes) == ["CloseOutcome", "LastTenant"]
+    assert len(_deletions(hub)) == 1
 
 
 def test_the_last_open_tenant_stays_refused_while_another_deletion_is_underway(

@@ -8,6 +8,7 @@ from __future__ import annotations
 
 from collections.abc import Callable
 from pathlib import Path
+from typing import Any
 
 import pytest
 import sqlalchemy as sa
@@ -204,10 +205,10 @@ def _before_the_next_unit(monkeypatch: pytest.MonkeyPatch, step: Callable[[], No
     """Run ``step`` once, just before the next identity unit of work takes the identity lock."""
     begin = IdentityTransactions.begin
 
-    def begin_after_step(self: IdentityTransactions):
+    def begin_after_step(self: IdentityTransactions, **named: Any):
         monkeypatch.setattr(IdentityTransactions, "begin", begin)
         step()
-        return begin(self)
+        return begin(self, **named)
 
     monkeypatch.setattr(IdentityTransactions, "begin", begin_after_step)
 

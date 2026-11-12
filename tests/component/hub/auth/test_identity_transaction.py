@@ -22,7 +22,6 @@ from blizzard.hub.auth.errors import RepoErrorFactory
 from blizzard.hub.auth.hub_admins import SET_BY_BOOTSTRAP, HubAdminFact
 from blizzard.hub.auth.identity_transaction import IdentityWrites
 from blizzard.hub.auth.internal.identity_transaction import (
-    IdentityLockMissing,
     IdentityTransactions,
 )
 from blizzard.hub.auth.internal.membership_repository import MembershipRepository
@@ -30,6 +29,7 @@ from blizzard.hub.auth.memberships import MembershipFact
 from blizzard.hub.auth.models import AuthFact, Identity, Session, SuperuserBootstrap, User
 from blizzard.hub.store import schema as s
 from blizzard.hub.store.errors import HubStoreErrorFactory
+from blizzard.hub.store.locking import HubLockMissing
 from blizzard.hub.store.scoped import statements_of
 from blizzard.hub.tenancy import StoreScope, TenantId, UnknownTenant
 from tests.support.scaffolding import default_tenant, hub_level_connections, hub_migration_prototype, seed_invitation
@@ -183,16 +183,17 @@ def test_the_identity_lock_is_the_units_first_statement(engine: sa.Engine) -> No
         writes.hub_admins.holders()
     event.remove(engine, "before_cursor_execute", record)
 
-    assert statements[0].startswith("UPDATE alembic_version SET version_num=")
+    assert statements[0].startswith("UPDATE hub_locks SET name=")
+    assert "identity" in statements[0] or "?" in statements[0]
     assert [statement.split()[0] for statement in statements] == ["UPDATE", "SELECT"]
 
 
-def test_a_store_with_no_revision_row_writes_no_identity(engine: sa.Engine) -> None:
+def test_a_store_with_no_identity_lock_row_writes_no_identity(engine: sa.Engine) -> None:
     with engine.begin() as conn:
-        conn.execute(sa.delete(sa.table("alembic_version")))
+        conn.execute(sa.delete(s.hub_locks).where(s.hub_locks.c.name == "identity"))
     before = _counts(engine)
 
-    with pytest.raises(IdentityLockMissing), _transactions(engine).begin() as writes:
+    with pytest.raises(HubLockMissing, match="identity"), _transactions(engine).begin() as writes:
         _claim(writes, default_tenant(engine))
 
     assert _counts(engine) == before

@@ -1,11 +1,10 @@
 """SQLAlchemy adapter for tenant deletion (package-private).
 
-The close is a hub-level write over the global ``tenants`` and ``tenant_deletions``: it locks every tenant's row first
-and only then checks that another tenant stays open and records the deletion fact, so a write in flight either
-committed before the close or is refused after it, and two closes of different tenants never both pass the
-last-open-tenant check. The drain and the completion are the tenant's teardown writes
-(``src/blizzard/hub/store/scoped.py``'s
-``ScopedConnections.teardown``).
+The close runs on the tenant's own unit, opened by the domain: the unit holds the tenant's row and ``TENANT_LIFECYCLE``,
+so a write in flight either committed before the close or is refused after it, and two closes of different tenants
+never both read the open tenants at once. The store judges nothing there — it reads the open tenants and records the
+deletion fact; the domain refuses the last tenant and answers a closed one. The drain and the completion are the
+tenant's teardown writes (``src/blizzard/hub/store/scoped.py``'s ``ScopedConnections.teardown``).
 
 The drain walks :data:`DRAIN_ORDER` — the reverse of ``schema.metadata.sorted_tables`` restricted to tenant-owned
 tables, children before parents — from the top on every batch, deleting each table's rows by primary key. Nothing
@@ -18,11 +17,14 @@ from typing import Any
 
 from sqlalchemy import Connection, Table, delete, exists, func, insert, literal, select, tuple_, update
 
-from blizzard.hub.domain.tenancy.teardown import CloseOutcome, IWriteTenantTeardowns, LastTenant, TenantDeletion
+from blizzard.hub.domain.kernel.locks import HubLock
+from blizzard.hub.domain.kernel.transactions import LockedTransaction
+from blizzard.hub.domain.tenancy.teardown import IWriteTenantTeardowns, TenantDeletion
 from blizzard.hub.store import schema as s
 from blizzard.hub.store.errors import HubStoreConnections
 from blizzard.hub.store.scoped import ScopedConnections, TeardownNotUnderway, is_tenant_owned
-from blizzard.hub.tenancy import StoreScope, TenantId, UnknownTenant
+from blizzard.hub.store.transactions import connection_for
+from blizzard.hub.tenancy import StoreScope, TenantId
 
 #: Every tenant-owned table, children before parents — derived from the schema, so a table added later drains too.
 DRAIN_ORDER: tuple[Table, ...] = tuple(t for t in reversed(s.metadata.sorted_tables) if is_tenant_owned(t))
@@ -40,18 +42,6 @@ def _deletion(row: Any) -> TenantDeletion:
         rows_removed=row.rows_removed or 0,
         deleted_at=row.deleted_at,
     )
-
-
-def _lock_every_tenant(conn: Connection) -> set[str]:
-    """Take every ``tenants`` row's write lock — one no-op ``UPDATE`` each, in ``tenant_id`` order — and name the rows
-    locked
-    (``tests/component/hub/domain/tenancy/test_teardown.py::test_a_close_locks_every_tenant_row_in_id_order_before_its_last_tenant_check``)."""
-    tenants = conn.execute(select(_t.tenant_id).order_by(_t.tenant_id)).scalars().all()
-    return {
-        each
-        for each in tenants
-        if conn.execute(update(s.tenants).where(_t.tenant_id == each).values(name=_t.name)).rowcount
-    }
 
 
 def _delete_some(connections: ScopedConnections, conn: Any, table: Table, limit: int) -> int:
@@ -78,30 +68,31 @@ class TenantTeardownStore:
             row = conn.execute(select(s.tenant_deletions).where(_d.tenant_id == tenant)).one_or_none()
         return None if row is None else _deletion(row)
 
-    def close(self, tenant: TenantId, *, by: str, at: datetime) -> CloseOutcome:
-        with self._store.write("close_tenant") as conn:
-            locked = _lock_every_tenant(conn)
-            done = conn.execute(select(_d.deleted_at).where(_d.tenant_id == tenant)).one_or_none()
-            if done is not None:
-                return CloseOutcome.UNDERWAY if done.deleted_at is None else CloseOutcome.DELETED
-            if tenant not in locked:
-                raise UnknownTenant(tenant)
-            closed = exists().where(_d.tenant_id == _t.tenant_id)
-            if not conn.execute(select(exists().where(_t.tenant_id != tenant, ~closed))).scalar_one():
-                raise LastTenant(tenant)
-            conn.execute(
-                insert(s.tenant_deletions).from_select(
-                    ["tenant_id", "name", "closed_at", "deleted_by", "rows_removed"],
-                    select(
-                        _t.tenant_id,
-                        _t.name,
-                        literal(at, type_=_d.closed_at.type),
-                        literal(by),
-                        literal(0),
-                    ).where(_t.tenant_id == tenant),
-                )
+    def open_tenants(self, transaction: LockedTransaction, tenant: TenantId) -> list[TenantId]:
+        conn = self._unit_connection(transaction, tenant)
+        closed = exists().where(_d.tenant_id == _t.tenant_id)
+        return [
+            TenantId(each)
+            for each in conn.execute(select(_t.tenant_id).where(~closed).order_by(_t.tenant_id)).scalars()
+        ]
+
+    def close(self, transaction: LockedTransaction, tenant: TenantId, *, by: str, at: datetime) -> None:
+        conn = self._unit_connection(transaction, tenant)
+        conn.execute(
+            insert(s.tenant_deletions).from_select(
+                ["tenant_id", "name", "closed_at", "deleted_by", "rows_removed"],
+                select(
+                    _t.tenant_id,
+                    _t.name,
+                    literal(at, type_=_d.closed_at.type),
+                    literal(by),
+                    literal(0),
+                ).where(_t.tenant_id == tenant),
             )
-        return CloseOutcome.CLOSED
+        )
+
+    def _unit_connection(self, transaction: LockedTransaction, tenant: TenantId) -> Connection:
+        return connection_for(self._store.scoped(StoreScope(tenant)), transaction, hub=HubLock.TENANT_LIFECYCLE)
 
     def drain_batch(self, tenant: TenantId, limit: int) -> int | None:
         connections = self._store.scoped(StoreScope(tenant))

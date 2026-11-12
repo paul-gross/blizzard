@@ -23,13 +23,14 @@ from blizzard.foundation.roles import domain_model
 from blizzard.foundation.tenants import TENANT_NAME_MAX_LENGTH, TenantState, is_tenant_name
 from blizzard.hub.domain.config.changes import ChangeContext, Door
 from blizzard.hub.domain.graph.model import IWriteGraphRepository
+from blizzard.hub.domain.kernel.transactions import IHubTransactions, Transaction
 from blizzard.hub.domain.projects.color import ColorPick, least_used
 from blizzard.hub.domain.projects.model import IWriteProjectRepository, Project
 from blizzard.hub.domain.urgency.model import NO_MARK, Urgency
 from blizzard.hub.domain.urgency.order import FIRST_POSITION
 from blizzard.hub.domain.urgency.ports import IWriteTenantSettings, IWriteUrgencyRepository
 from blizzard.hub.domain.urgency.settings import TenantSettings
-from blizzard.hub.tenancy import TenantId, UnknownTenant
+from blizzard.hub.tenancy import TenantClosed, TenantId, UnknownTenant
 
 
 @domain_model
@@ -119,12 +120,14 @@ class IWriteTenantDirectory(IReadTenantDirectory, Protocol):
     """Adds the tenant writes."""
 
     def create(self, tenant: TenantId, *, name: str, at: datetime, by: str) -> AbstractContextManager[ITenantCreation]:
-        """One transaction that inserts ``tenant``'s row and hands out the rest of its creation: committed when the
-        block exits, rolled back — the row included — when it raises."""
+        """One transaction that takes the identity lock and then the tenant-lifecycle lock, inserts ``tenant``'s row
+        and hands out the rest of its creation: committed when the block exits, rolled back — the row included — when
+        it raises."""
         ...
 
-    def rename(self, tenant: TenantId, name: str) -> Tenant | None:
-        """Rename an open tenant and answer it renamed; ``None`` when no open tenant has the id."""
+    def rename(self, transaction: Transaction, tenant: TenantId, name: str) -> Tenant:
+        """Rename ``tenant`` on its ordinary unit — which the unit's opener already confirmed open and locked — and
+        answer it renamed, writing unconditionally."""
         ...
 
 
@@ -137,13 +140,15 @@ DEFAULT_PROJECT_NAME = "Default"
 class TenantAdministration:
     """Creates, renames and lists the hub's tenants.
 
-    ``mint_packaged`` reconciles the packaged graph set into the graphs it is handed. ``changed`` is told after
-    every committed change to the tenant set or a tenant's name."""
+    ``mint_packaged`` reconciles the packaged graph set into the graphs it is handed. ``units`` opens a tenant's
+    ordinary unit of work, which refuses a tenant that is closed or unknown. ``changed`` is told after every committed
+    change to the tenant set or a tenant's name."""
 
     def __init__(
         self,
         *,
         tenants: IWriteTenantDirectory,
+        units: Callable[[TenantId], IHubTransactions],
         mint_packaged: Callable[[IWriteGraphRepository], object],
         changed: Callable[[], object],
         pick: ColorPick,
@@ -151,6 +156,7 @@ class TenantAdministration:
     ) -> None:
         self._pick = pick
         self._tenants = tenants
+        self._units = units
         self._mint_packaged = mint_packaged
         self._changed = changed
         self._clock = clock
@@ -187,9 +193,12 @@ class TenantAdministration:
     def rename(self, tenant: TenantId, name: str) -> Tenant:
         """Rename an open tenant; :class:`UnknownTenant` when no open tenant has the id, :class:`TenantNameRefused` when
         ``name`` is not a tenant name's shape — nothing is renamed."""
-        renamed = self._tenants.rename(tenant, tenant_name(name))
-        if renamed is None:
-            raise UnknownTenant(tenant)
+        name = tenant_name(name)
+        try:
+            with self._units(tenant).begin() as transaction:
+                renamed = self._tenants.rename(transaction, tenant, name)
+        except TenantClosed:
+            raise UnknownTenant(tenant) from None
         self._changed()
         return renamed
 

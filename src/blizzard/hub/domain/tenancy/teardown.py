@@ -26,8 +26,10 @@ from blizzard.foundation.crash import crashpoint
 from blizzard.foundation.logging import get_logger
 from blizzard.foundation.roles import domain_model
 from blizzard.foundation.tenants import TenantDeletionState
+from blizzard.hub.domain.kernel.locks import HubLock
+from blizzard.hub.domain.kernel.transactions import IHubTransactions, LockedTransaction
 from blizzard.hub.domain.observability.hub_events import HubEventKind
-from blizzard.hub.tenancy import TenantId
+from blizzard.hub.tenancy import TenantClosed, TenantId, UnknownTenant
 
 #: The most rows one drain transaction removes.
 DRAIN_BATCH_ROWS = 5_000
@@ -103,10 +105,13 @@ class IReadTenantTeardowns(Protocol):
 class IWriteTenantTeardowns(IReadTenantTeardowns, Protocol):
     """Adds the three phases' writes, each its own transaction."""
 
-    def close(self, tenant: TenantId, *, by: str, at: datetime) -> CloseOutcome:
-        """Lock ``tenant``'s row, then — unless a deletion fact already names it — record one with ``closed_at``.
-        :class:`~blizzard.hub.tenancy.UnknownTenant` when no tenant has the id; :class:`LastTenant` when no other
-        open tenant would remain."""
+    def open_tenants(self, transaction: LockedTransaction, tenant: TenantId) -> list[TenantId]:
+        """Every tenant with no deletion fact, read on the transaction of ``tenant``'s unit."""
+        ...
+
+    def close(self, transaction: LockedTransaction, tenant: TenantId, *, by: str, at: datetime) -> None:
+        """Record ``tenant``'s deletion fact with ``closed_at`` on the unit's transaction, which must lock
+        ``TENANT_LIFECYCLE``; it judges nothing."""
         ...
 
     def drain_batch(self, tenant: TenantId, limit: int) -> int | None:
@@ -147,12 +152,14 @@ class TenantTeardown:
         self,
         *,
         teardowns: IWriteTenantTeardowns,
+        units: Callable[[TenantId], IHubTransactions],
         closed: Callable[[TenantId], object],
         events: IRecordHubEvents,
         clock: IClock,
         batch_rows: int = DRAIN_BATCH_ROWS,
     ) -> None:
         self._teardowns = teardowns
+        self._units = units
         self._closed = closed
         self._events = events
         self._clock = clock
@@ -176,13 +183,30 @@ class TenantTeardown:
         """Close ``tenant``: record its deletion fact, then drop what the hub holds in memory for it and record
         ``tenant-closed``. A tenant already closed is left as it is."""
         at = self._clock.now()
-        outcome = self._teardowns.close(tenant, by=by, at=at)
+        outcome = self._record_close(tenant, by=by, at=at)
         if outcome is CloseOutcome.CLOSED:
             self._closed(tenant)
             self._events.record(
                 kind="tenant-closed", message=f"tenant {tenant} closed", detail={"tenant_id": tenant, "by": by}, at=at
             )
         return outcome
+
+    def _record_close(self, tenant: TenantId, *, by: str, at: datetime) -> CloseOutcome:
+        """Close on the tenant's own unit under ``TENANT_LIFECYCLE``, which a concurrent close of another tenant
+        waits on, so two closes never both pass the last-open-tenant check. A tenant the unit refuses as closed or
+        unknown answers from its deletion fact; no fact is an unknown tenant."""
+        try:
+            with self._units(tenant).begin() as transaction:
+                locked = transaction.lock_set(hub=[HubLock.TENANT_LIFECYCLE])
+                if all(each == tenant for each in self._teardowns.open_tenants(locked, tenant)):
+                    raise LastTenant(tenant)
+                self._teardowns.close(locked, tenant, by=by, at=at)
+        except (TenantClosed, UnknownTenant):
+            deletion = self._teardowns.deletion(tenant)
+            if deletion is None:
+                raise UnknownTenant(tenant) from None
+            return CloseOutcome.UNDERWAY if deletion.deleted_at is None else CloseOutcome.DELETED
+        return CloseOutcome.CLOSED
 
     def drain(self, tenant: TenantId, *, budget: int) -> tuple[int, bool]:
         """Drain ``tenant`` under ``budget`` rows, one batch per transaction; the rows removed, and whether the
