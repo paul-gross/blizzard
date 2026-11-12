@@ -5,6 +5,10 @@ import yaml
 from tests.support.repo_files import repo_root
 
 _WORKFLOW = yaml.safe_load((repo_root() / ".github" / "workflows" / "pr.yml").read_text())
+_HOTFIX_LANE = (
+    "${{ github.base_ref == 'master' && startsWith(github.head_ref, 'hotfix/')"
+    " && github.event.pull_request.head.repo.full_name == github.repository }}"
+)
 
 
 def test_pull_requests_into_master_and_release_lines_run() -> None:
@@ -14,7 +18,17 @@ def test_pull_requests_into_master_and_release_lines_run() -> None:
 def test_the_pull_request_runs_the_whole_suite_with_the_full_crash_sweep() -> None:
     job = _WORKFLOW["jobs"]["upper-tiers"]
     assert job["uses"] == "./.github/workflows/upper-tiers.yml"
-    assert job["with"] == {"full_suite": True, "crash_sweep_ci": ""}
+    assert job["with"] == {"full_suite": True, "crash_sweep_ci": "", "lint_only": _HOTFIX_LANE}
+
+
+def test_only_a_same_repo_hotfix_pull_request_into_master_runs_the_gate_and_tiers_lint_only() -> None:
+    for name in ("gate", "upper-tiers"):
+        assert _WORKFLOW["jobs"][name]["with"]["lint_only"] == _HOTFIX_LANE
+
+
+def test_the_store_baseline_and_rehearsal_never_take_the_hotfix_lane() -> None:
+    for name in ("store-baseline", "store-baseline-result", "cut-wheel", "rehearsal", "rehearsal-result"):
+        assert "lint_only" not in str(_WORKFLOW["jobs"][name])
 
 
 def test_the_gate_and_upper_tiers_run_for_every_base() -> None:

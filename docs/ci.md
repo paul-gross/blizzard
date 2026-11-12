@@ -101,15 +101,15 @@ and `flip-without-note` (`pr` mode only) fails a flag turned from `off` to `on` 
 
 [`.github/workflows/upper-tiers.yml`](../.github/workflows/upper-tiers.yml) is reusable (`workflow_call`) and runs the
 service tier (`blizzard:service-test`) and the kill-9 crash sweep (`blizzard:crash-sweep`) over a two-repo checkout of
-`blizzard` + `blizzard-mock`; `pr.yml`, `push.yml` and `release.yml` all call it. Two inputs choose the shape. With
+`blizzard` + `blizzard-mock`; `pr.yml`, `push.yml` and `release.yml` all call it. Three inputs choose the shape. With
 `full_suite: true` it also runs the UI tier (`blizzard:ui`), the acceptance journey (`blizzard:journey`), and the hub
 image and reference compose smokes (`blizzard:image-smoke`, `blizzard:compose-smoke`) as parallel jobs;
 `crash_sweep_ci: "1"` runs the sweep's bounded profile and an empty value the full one. `pr.yml` and `release.yml` pass
 `full_suite: true` and the full sweep; `push.yml` keeps the service tier and the bounded sweep, since the `edge` channel
-is not held behind the full suite and an admin's direct push is ungated by design. The two smokes build their own wheel
-and need only docker, compose v2, node and uv, not the mock. A leading `mock-ref` job resolves the mock once, and every
-tier checks out that commit. The resolution — which mock tag or branch a tag run, a release-line pull request, and a
-`master` run each prove against, and when it fails — is owned by
+is not held behind the full suite. `lint_only: true`, which only `pr.yml` sets, on the hotfix lane below, skips every
+tier. The two smokes build their own wheel and need only docker, compose v2, node and uv, not the mock. A leading
+`mock-ref` job resolves the mock once, and every tier checks out that commit. The resolution — which mock tag or branch
+a tag run, a release-line pull request, and a `master` run each prove against, and when it fails — is owned by
 [`.github/actions/resolve-mock-ref/`](../.github/actions/resolve-mock-ref/action.yml) and its script, which
 `release.yml`'s tier jobs resolve through too. The tiers are winter-free: their runners use the built-in `basic`
 provider over a fixture of bare `file://` origins, minted with no winter source. Every checkout in a job that runs tests
@@ -264,12 +264,21 @@ wheel.
 ## Trigger workflows
 
 [`.github/workflows/pr.yml`](../.github/workflows/pr.yml) (PR to `master` or `release/**`) runs the gate plus the whole
-suite as parallel real gate jobs: the service tier, the full crash sweep, ui, the journey and the two smokes, and on a
-release cut the upgrade rehearsal. A pull request into a release branch also runs `line-provenance`, which has
-[`scripts/check-line-provenance.sh`](../scripts/check-line-provenance.sh) fail any commit the pull request adds that is
-not a cherry-pick of a commit on `master`, a `Line-only:` commit, or a `Release-Cut:` commit. A push to a release branch
-runs nothing: `push.yml` is `master`'s alone. A pull request that changes a store's `versions/` directory also runs the
-store baseline proof.
+suite as parallel real gate jobs, except on the hotfix lane below: the service tier, the full crash sweep, ui, the
+journey and the two smokes, and on a release cut the upgrade rehearsal. A pull request into a release branch also runs
+`line-provenance`, which has [`scripts/check-line-provenance.sh`](../scripts/check-line-provenance.sh) fail any commit
+the pull request adds that is not a cherry-pick of a commit on `master`, a `Line-only:` commit, or a `Release-Cut:`
+commit. A push to a release branch runs nothing: `push.yml` is `master`'s alone. A pull request that changes a store's
+`versions/` directory also runs the store baseline proof.
+
+A pull request into `master` from a `hotfix/` branch of this repository — never a fork — is the operator's fast lane.
+`pr.yml` sets `gate.yml` and `upper-tiers.yml`'s `lint_only` input, so of their jobs only
+`gate / ruff + pyright + structural gate`, `gate / spec drift + change notes + flag lifecycle + dprint` and
+`gate / process-reference and change-history lint` run. Every other gate and upper-tier job is skipped by condition and
+still reports its check name, which passes its required check, so one required set on `master` merges both lanes. The
+`pr.yml` jobs outside those workflows keep their own conditions: a hotfix that changes a store revision still runs the
+store baseline, and one that cuts a release still runs the rehearsal. `push.yml` runs its gate and tiers on the landed
+commit either way.
 
 [`.github/workflows/push.yml`](../.github/workflows/push.yml) (push to `master`) runs the gate, the service tier and the
 bounded crash sweep, and alongside them uploads a dev-build wheel versioned `X.(Y+1).0.dev<run>+<9-char-sha>` from the

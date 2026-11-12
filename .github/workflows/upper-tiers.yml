@@ -3,10 +3,10 @@
 #
 # `pr.yml`, `push.yml` and `release.yml` all call this exactly as they call `gate.yml`, so each tier
 # is defined once and never drifts between triggers — the same reasoning `gate.yml`'s header states
-# for the merge gate itself. Callers differ only in the two inputs below: `pr.yml` and `release.yml`
+# for the merge gate itself. Callers differ only in the three inputs below: `pr.yml` and `release.yml`
 # run the whole suite (`full_suite: true`, the full sweep), while `push.yml` runs the service tier and
-# the bounded sweep, since an `edge` publish is not held behind the full suite and an admin's direct push is
-# ungated by design.
+# the bounded sweep, since an `edge` publish is not held behind the full suite. `pr.yml` alone sets
+# `lint_only`, on a `hotfix/` pull request into `master`, which skips every tier.
 #
 # The mock-backed tiers need what a single-repo checkout does not carry: the sibling
 # `blizzard-mock` worktree (the mock fleet + fixture scaffold), which the `mock-ref` job
@@ -45,6 +45,12 @@ on:
           service tier and the crash sweep.
         type: boolean
         default: false
+      lint_only:
+        description: >-
+          Skip every tier by condition, as `pr.yml` asks for a `hotfix/` pull request into
+          `master`; each job still reports its check name, skipped.
+        type: boolean
+        default: false
     outputs:
       mock_sha:
         description: The blizzard-mock commit every tier of this run proved against.
@@ -54,8 +60,10 @@ jobs:
   # Resolves the mock once so every tier, and the `proven-against` record `push.yml`
   # uploads, name one commit even if the mock lands mid-run. The resolution rules are
   # owned by the action, .github/actions/resolve-mock-ref.
+  # Every mock-backed tier needs this job, so skipping it skips them.
   mock-ref:
     name: resolve blizzard-mock ref
+    if: ${{ !inputs.lint_only }}
     runs-on: ubuntu-latest
     outputs:
       sha: ${{ steps.mock.outputs.sha }}
@@ -223,7 +231,7 @@ jobs:
   service-tier-result:
     name: service tier (blizzard:service-test)
     needs: [service-tier, service-playwright]
-    if: ${{ !cancelled() }}
+    if: ${{ !cancelled() && !inputs.lint_only }}
     runs-on: ubuntu-latest
     steps:
       - name: every shard of each half passed
@@ -427,7 +435,7 @@ jobs:
           if-no-files-found: ignore
 
   image-smoke:
-    if: ${{ inputs.full_suite }}
+    if: ${{ inputs.full_suite && !inputs.lint_only }}
     name: hub image smoke (blizzard:image-smoke)
     runs-on: ubuntu-latest
     steps:
@@ -448,7 +456,7 @@ jobs:
         run: ./scripts/image-smoke.sh
 
   compose-smoke:
-    if: ${{ inputs.full_suite }}
+    if: ${{ inputs.full_suite && !inputs.lint_only }}
     name: reference compose smoke (blizzard:compose-smoke)
     runs-on: ubuntu-latest
     steps:

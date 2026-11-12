@@ -11,6 +11,14 @@ name: gate
 
 on:
   workflow_call:
+    inputs:
+      lint_only:
+        description: >-
+          Run only the lint-class jobs and skip the rest by condition, as `pr.yml` asks for a
+          `hotfix/` pull request into `master`. A skipped job still reports its check name, so
+          the required set on `master` passes on both paths.
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -111,6 +119,7 @@ jobs:
   # `python-tests-result` reports them under the single check name a required-check list names.
   python-tests:
     name: pytest (unit + component) — shard ${{ matrix.shard }}/${{ matrix.shards }}
+    if: ${{ !inputs.lint_only }}
     runs-on: ubuntu-latest
     strategy:
       # Every shard runs to the end, so one CI cycle reports every failure, not the first.
@@ -138,7 +147,7 @@ jobs:
   python-tests-result:
     name: pytest (unit + component)
     needs: [python-tests]
-    if: ${{ !cancelled() }}
+    if: ${{ !cancelled() && !inputs.lint_only }}
     runs-on: ubuntu-latest
     steps:
       - name: every shard passed
@@ -161,6 +170,7 @@ jobs:
   # checks out no blizzard-mock.
   playwright-static:
     name: playwright static
+    if: ${{ !inputs.lint_only }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -190,7 +200,7 @@ jobs:
     name: compatibility against supported releases
     # Holds HEAD's committed surface documents to every supported release, and attributes a break to the
     # change that makes it. A tag runs the same check in release.yml, over each release's own range.
-    if: github.ref_type != 'tag'
+    if: ${{ github.ref_type != 'tag' && !inputs.lint_only }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -219,6 +229,7 @@ jobs:
 
   frontend:
     name: eslint + vitest + client drift
+    if: ${{ !inputs.lint_only }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -276,6 +287,7 @@ jobs:
   # this half needs node, and the Python env as well to export the exemplar router's spec.
   exemplars:
     name: exemplar check (web)
+    if: ${{ !inputs.lint_only }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
