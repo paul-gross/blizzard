@@ -8,7 +8,7 @@ from typing import Any, cast
 import pytest
 from sqlalchemy import Connection
 
-from blizzard.foundation.config_keys import INTEGER, ConfigKey, ConfigRegistry, ConfigView
+from blizzard.foundation.config_keys import INTEGER, ConfigKey, ConfigRegistry, ConfigView, Lifetime
 from blizzard.foundation.settings_record.refusals import SettingsInvalid, SettingsRevisionConflict
 from blizzard.foundation.settings_record.vocabulary import Change, Door, Entry, FieldChange, Op
 from blizzard.foundation.settings_record.write import Validate, seed_entry, write
@@ -127,7 +127,9 @@ def test_a_key_both_set_and_unset_is_refused_at_construction() -> None:
         Change("edit", sets={"a": 1}, unsets=frozenset({"a"}))
 
 
-_REGISTRY = ConfigRegistry("demo", (ConfigKey("a", INTEGER), ConfigKey("b", INTEGER)))
+_REGISTRY = ConfigRegistry(
+    "demo", (ConfigKey("a", INTEGER, lifetime=Lifetime.BOOT), ConfigKey("b", INTEGER, lifetime=Lifetime.BOOT))
+)
 
 
 def _file(document: Mapping[str, object]) -> ConfigView:

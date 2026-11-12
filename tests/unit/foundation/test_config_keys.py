@@ -128,7 +128,7 @@ def test_value_returns_the_whole_list_table_or_array() -> None:
 def test_a_flag_held_key_is_not_stated() -> None:
     from blizzard.foundation.flags import Flags
 
-    registry = ConfigRegistry("demo", (ConfigKey("held", INTEGER, flag="f"),))
+    registry = ConfigRegistry("demo", (ConfigKey("held", INTEGER, lifetime=Lifetime.BOOT, flag="f"),))
     flags = Flags(known=frozenset({"f"}), retired=frozenset(), values={"f": False}, published=frozenset())
     root = ConfigView.root(registry, {"held": 1}, strict=True).holding(flags)
     assert not root.states("held")
