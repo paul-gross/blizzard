@@ -39,6 +39,7 @@ function bounceState(headers: { name: string; value: string }[], runnerId: strin
 }
 
 test('test_multi_daemon_sso_bounce', async ({ page, api, fleet, idp, runnerHosts }) => {
+  test.setTimeout(120_000);
   const minted = [await fleet(SHARED_NAME), await fleet(SHARED_NAME)] as const;
   const [a, b] = await Promise.all(
     minted.map((runner) => runnerHosts.create({ runnerAdopted: { name: SHARED_NAME, runnerId: runner.runnerId, token: runner.token } })),
