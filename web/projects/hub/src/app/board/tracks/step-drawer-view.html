@@ -28,11 +28,11 @@
             @let who = identity(s);
             <span class="id" data-testid="step-drawer-lease" [title]="who.title">{{ who.label }}</span>
             @if (who.hub) {
-              <span class="st st-hub">hub step</span>
+              <fleet-kit-badge tone="idle">hub step</fleet-kit-badge>
             }
             <!-- Only an escalation still open badges the step; a superseded one stays in the step's escalation list. -->
             @if (s.escalation_open && s.escalation) {
-              <span class="st st-esc">escalated · {{ s.escalation }}</span>
+              <fleet-kit-badge tone="needs">escalated · {{ s.escalation }}</fleet-kit-badge>
             }
           </span>
           <span class="d-sub">
@@ -66,7 +66,7 @@
             }
             @if (s.ended_at === null) {
               <span class="sep" aria-hidden="true">·</span>
-              <span class="st st-live">running</span>
+              <fleet-kit-badge tone="running">running</fleet-kit-badge>
             }
           </span>
         </div>
@@ -153,7 +153,7 @@
         </section>
 
         <section class="d-sec sd-transcript" aria-label="Transcript">
-          <div class="d-h">Transcript{{ transcript()?.turns?.length ? ' · ' + transcript()?.turns?.length + ' turns' : '' }}</div>
+          <fleet-kit-section-head label="Transcript" [count]="transcript()?.turns?.length || null" />
           @if (s.executor === 'hub') {
             <div class="dim">a hub-side step — no session, so no transcript</div>
           } @else if (transcriptState() === 'empty') {

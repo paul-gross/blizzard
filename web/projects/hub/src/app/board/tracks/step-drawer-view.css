@@ -59,21 +59,9 @@
   color: var(--snow);
   font-weight: normal;
 }
-.d-line .st,
-.d-sub .st {
+.d-line fleet-kit-badge,
+.d-sub fleet-kit-badge {
   flex: none;
-  font-size: var(--fs-label);
-  letter-spacing: 0.14em;
-  text-transform: uppercase;
-}
-.st-live {
-  color: var(--green);
-}
-.st-esc {
-  color: var(--red);
-}
-.st-hub {
-  color: var(--label-dim);
 }
 .d-sub {
   font-size: var(--fs-xs);
@@ -98,13 +86,6 @@
 .d-wide {
   grid-column: 1 / -1;
   overflow: visible;
-}
-.d-h {
-  color: var(--label);
-  font-size: var(--fs-label);
-  letter-spacing: 0.14em;
-  text-transform: uppercase;
-  margin-bottom: 6px;
 }
 .dim {
   color: var(--label-dim);
