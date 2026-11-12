@@ -28,12 +28,7 @@ export interface BoardListGroups {
   readonly done: readonly BoardListEntry[];
 }
 
-const NO_GROUPS: BoardListGroups = {
-  live: [],
-  ready: [],
-  backlog: [],
-  done: [],
-};
+const NO_GROUPS: BoardListGroups = { live: [], ready: [], backlog: [], done: [] };
 
 /** The DOM id of a ranked list's drop target in the list layout — what the other one connects to. */
 export function listDropId(list: BoardReorderList): string {

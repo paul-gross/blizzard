@@ -46,7 +46,7 @@ describe('BoardList', () => {
   let fixture: ComponentFixture<BoardList>;
   let selected: string[];
 
-  const render = async (rendered: BoardListGroups, permissions: { canReorder?: boolean; canControl?: boolean } = {}) => {
+  const render = async (rendered: BoardListGroups, permissions: { canReorder?: boolean; canControl?: boolean; doneTotal?: number } = {}) => {
     await TestBed.configureTestingModule({
       imports: [BoardList],
       providers: [provideZonelessChangeDetection()],
@@ -55,6 +55,7 @@ describe('BoardList', () => {
     fixture.componentRef.setInput('groups', rendered);
     fixture.componentRef.setInput('canReorder', permissions.canReorder ?? false);
     fixture.componentRef.setInput('canControl', permissions.canControl ?? false);
+    if (permissions.doneTotal !== undefined) fixture.componentRef.setInput('doneTotal', permissions.doneTotal);
     selected = [];
     fixture.componentInstance.selectChunk.subscribe((id) => selected.push(id));
     await fixture.whenStable();
@@ -84,10 +85,17 @@ describe('BoardList', () => {
   });
 
   it('puts a Done divider with the policy as visible text before the Done rows', async () => {
-    const el = await render(LISTED);
+    const el = await render(LISTED, { doneTotal: 42 });
 
     expect(el.querySelector('[data-testid="list-done-divider"]')).toBeTruthy();
+    expect(el.querySelector('[data-testid="list-done-policy"]')?.textContent).toContain('· 42 all time');
     expect(el.querySelector('[data-testid="list-done-policy"]')?.textContent).toContain(fixture.componentInstance.donePolicy().explanation);
+  });
+
+  it('says no all-time total while it is unknown', async () => {
+    const el = await render(LISTED);
+
+    expect(el.querySelector('[data-testid="list-done-policy"]')?.textContent).not.toContain('all time');
   });
 
   it('draws no Done divider or policy when there are no Done rows', async () => {
