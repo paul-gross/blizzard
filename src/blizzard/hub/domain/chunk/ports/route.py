@@ -90,7 +90,8 @@ class IWriteChunkRouteRepository(IReadChunkRouteRepository, Protocol):
         """Land a runner's ``lease.minted`` under the chunk's row lock, admitted by
         :class:`~blizzard.hub.domain.chunk.ports.fence.MintAdmission` — ``None`` when it landed (the first mint at
         an unowned epoch taking it for ``claimant``'s runner), else the refusal, which lands nothing. Written in
-        ``transaction``, a unit that locks the chunk (``bzh:transaction-participation``)."""
+        ``transaction``, a unit that locks the chunk (``bzh:transaction-participation``). It never reads the
+        terminal verdict: the caller refuses a terminal chunk, read under that lock, before calling."""
         ...
 
     def set_runner_high_water(

@@ -73,15 +73,17 @@ class GardenDeliveryStore:
             )
         ).first()
 
+    def lock_expected(self, plan: DeliveryPlan, *, transaction: LockedTransaction) -> None:
+        conn = connection_for(self._store, transaction, chunk=plan.chunk_id)
+        # Chunk row first, then findings sorted, so no path locks a finding and then a chunk; `deliver`'s
+        # guard then judges a state no verb can move until this transaction ends.
+        for batch in id_batches(sorted(plan.expect)):
+            lock_findings(conn, batch)
+
     def deliver(
         self, plan: DeliveryPlan, *, admission: EpochAdmission, terminal: bool, transaction: LockedTransaction
     ) -> DeliveryOutcome:
         conn = connection_for(self._store, transaction, chunk=plan.chunk_id)
-        # Every finding an `observed`/`gone` op names, locked before any read below so the guard
-        # further down judges a state no verb can move until this transaction ends. Chunk row
-        # first, then findings sorted: no path locks a finding and then a chunk.
-        for batch in id_batches(sorted(plan.expect)):
-            lock_findings(conn, batch)
         already = self._marker(conn, chunk_id=plan.chunk_id, node_id=plan.node_id, epoch=plan.epoch)
         if already is not None:
             return DeliveryOutcome.ALREADY_RECORDED

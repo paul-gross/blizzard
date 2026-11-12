@@ -1,10 +1,8 @@
 """A replay on a chunk that has since ended keeps its recorded outcome, and a first write on it is refused as
 terminal (component tier).
 
-The domain hands each fenced write its terminal verdict, read under the chunk's lock; the store applies it after its
-replay probe, so a write already recorded answers as the replay it is whatever the chunk has become since. The hub's
-own writes are driven here as its callers drive them — the verdict read through ``terminal_under_lock`` on the unit
-that writes."""
+The store applies the terminal verdict, read under the chunk's lock, after its replay probe. The hub's own writes
+are driven as its callers drive them — the verdict read through ``terminal_under_lock`` on the writing unit."""
 
 from __future__ import annotations
 

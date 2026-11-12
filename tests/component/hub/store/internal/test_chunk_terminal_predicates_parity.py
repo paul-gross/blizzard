@@ -1,10 +1,8 @@
 """Every SQL form of "the chunk is terminal" agrees with :meth:`ChunkFacts.status` (component tier).
 
-The open-question list, the open-decision list and the live prefilter each ask the one ``chunk_is_terminal``
-builder, so over a world seeded across every terminal branch they all read the chunk the way the derivation
-does, and ``chunk_is_terminal`` itself agrees with the domain's terminal verdict
-(:meth:`ChunkFacts.terminal_verdict`) a fenced write is handed. The prefilter may only keep extra residue — never
-drop a chunk the derivation calls live."""
+Over a world seeded across every terminal branch, the open-question list, open-decision list and live prefilter
+read each chunk as the derivation does, and ``chunk_is_terminal`` agrees with
+:meth:`ChunkFacts.terminal_verdict`. The prefilter may keep extra residue, never drop a live chunk."""
 
 from __future__ import annotations
 

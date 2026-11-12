@@ -90,13 +90,10 @@ class IWriteChunkArtifactsRepository(IReadChunkArtifactsRepository, Protocol):
         close_decision: CloseEnqueueDecision,
         transaction: LockedTransaction,
     ) -> HubArtifactWrite:
-        """Append one hub-node progress artifact OUTSIDE a transition.
-
-        Idempotent per ``(chunk, node, name, epoch)`` natural key: a re-run that already
-        recorded this artifact writes nothing a second time. Also behind the write fence
-        (``bzh:epoch-fencing``): a refused write writes nothing either. Ordinary artifact rows, durable exactly like a
-        worker-produced one. Written in ``transaction``, a unit that locks the chunk
-        (``bzh:transaction-participation``). Answers ``wrote`` True iff it wrote."""
+        """Append one hub-node progress artifact OUTSIDE a transition, idempotent per ``(chunk, node, name, epoch)``
+        and behind the write fence (``bzh:epoch-fencing``): a replay or a refusal writes nothing. Written in
+        ``transaction``, a unit that locks the chunk (``bzh:transaction-participation``). Answers ``wrote`` True iff
+        it wrote."""
         ...
 
     def record_landing(
@@ -116,10 +113,7 @@ class IWriteChunkArtifactsRepository(IReadChunkArtifactsRepository, Protocol):
         transaction: LockedTransaction,
     ) -> ArtifactLandingWrite:
         """Record a merge that has happened in ``transaction``, a unit that locks the chunk: the ``merged/<repo>``
-        marker at ``revision``, its ``delivery_repo_landed`` row stamped with ``repository_id``, and the chunk's close
-        intents.
-
-        Admitted past the write fence (``bzh:epoch-fencing``) — a terminal chunk or a stale epoch does not
-        refuse it, because it records what the forge already did. Idempotent per ``(chunk, node, name,
-        epoch)``: a replay writes nothing a second time. Answers whether the fence would have refused it."""
+        marker at ``revision``, its ``delivery_repo_landed`` row stamped with ``repository_id``, and close intents.
+        Admitted past the write fence (``bzh:epoch-fencing``) — it records what the forge already did. Idempotent
+        per ``(chunk, node, name, epoch)``. Answers whether the fence would have refused it."""
         ...

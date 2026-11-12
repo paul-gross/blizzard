@@ -419,6 +419,7 @@ class ApplyService:
                     return ApplyResult.failure(transitioned.detail)
                 close_skipped = transitioned.close_skipped + open_graph_gate_on_arrival(
                     self._decisions,
+                    self._facts,
                     handle,
                     self._clock,
                     chunk_id=chunk.chunk_id,
@@ -607,6 +608,7 @@ class ApplyService:
                 landed = outcome.migration_id if outcome is not None else None
                 close_skipped = (outcome.close_skipped if outcome is not None else ()) + open_graph_gate_on_arrival(
                     self._decisions,
+                    self._facts,
                     handle,
                     self._clock,
                     chunk_id=chunk.chunk_id,

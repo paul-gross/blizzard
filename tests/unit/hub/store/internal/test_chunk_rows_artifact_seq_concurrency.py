@@ -1,10 +1,8 @@
 """Concurrent allocation of the per-chunk ``artifacts.seq`` counter.
 
-``chunk_rows.next_artifact_seq`` is read-then-insert, not atomic; two concurrent writers
-must not compute the same next value. The caller's connection holds the chunk's row lock,
-so the allocator itself takes none: proves it issues only its read (static proof, no live
-postgres), and that writers taking the lock first on sqlite never duplicate.
-"""
+``chunk_rows.next_artifact_seq`` is read-then-insert; the caller holds the chunk's row lock, so the
+allocator takes none. Proves it issues only its read (static proof, no live postgres), and that writers
+taking the lock first on sqlite never duplicate."""
 
 from __future__ import annotations
 

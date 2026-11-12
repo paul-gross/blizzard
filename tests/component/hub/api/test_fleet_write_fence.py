@@ -11,6 +11,7 @@ from pathlib import Path
 from typing import Any
 
 import pytest
+from structlog.testing import capture_logs
 
 from blizzard.foundation.artifacts import ArtifactKind
 from blizzard.foundation.migration_source import MigrationSource
@@ -26,6 +27,7 @@ from tests.support.scaffolding import (
     chunk_unit,
     hub_store_connections,
     report_escalation,
+    report_lease,
     report_question,
 )
 from tests.support.write_fence_locks import Chunk, held_by_a_writer, restart_under_lock, stop_under_lock
@@ -219,6 +221,18 @@ def test_a_question_and_an_escalation_on_a_stopped_chunk_are_rejected(tmp_path: 
     assert _ask(chunk, epoch=1)["rejected"] == [chunk.seq]
     assert _escalate(chunk, epoch=1)["rejected"] == [chunk.seq]
     assert chunk.rows(s.questions) == 0 and chunk.rows(s.escalations) == 0
+
+
+def test_a_lease_mint_on_a_stopped_chunk_is_rejected_as_terminal(tmp_path: Path) -> None:
+    chunk = Chunk(build_hub(tmp_path))
+    chunk.stop()
+    chunk.seq += 1
+
+    with capture_logs() as logs:
+        ack = report_lease(chunk.hub, chunk.chunk_id, epoch=2, seq=chunk.seq)
+
+    assert ack["rejected"] == [chunk.seq] and ack["applied"] == []
+    assert [log["detail"] for log in logs if log["event"] == "fact fenced"] == [_TERMINAL]
 
 
 def test_a_same_epoch_question_and_escalation_still_land(tmp_path: Path) -> None:

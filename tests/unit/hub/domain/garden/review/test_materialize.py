@@ -54,12 +54,14 @@ class _FakeReviewFindingsRepo:
     outcome: ReviewFindingsOutcome = ReviewFindingsOutcome.RECORDED
 
     terminals: list[bool] = field(default_factory=list[bool])
+    written_in: list[LockedTransaction] = field(default_factory=list[LockedTransaction])
 
     def deliver(
         self, plan: ReviewFindingsPlan, *, admission: EpochAdmission, terminal: bool, transaction: LockedTransaction
     ) -> ReviewFindingsOutcome:
         self.delivered.append(plan)
         self.terminals.append(terminal)
+        self.written_in.append(transaction)
         return self.outcome
 
     def __getattr__(self, name: str) -> Any:
@@ -203,9 +205,10 @@ def test_deliver_hands_the_write_the_terminal_verdict_read_under_its_lock(
     facts: dict[str, ChunkFacts], terminal: bool
 ) -> None:
     repo = _FakeReviewFindingsRepo()
+    status_facts = FakeStatusFacts(facts)
     service = ReviewFindingsMaterialize(
         delivery=_as_write_repo(repo),
-        facts=FakeStatusFacts(facts).as_port(),
+        facts=status_facts.as_port(),
         transactions=FakeTransactions(),
         clock=FixedClock(_T0),
     )
@@ -213,3 +216,4 @@ def test_deliver_hands_the_write_the_terminal_verdict_read_under_its_lock(
     service.deliver(ValidatedReviewFindings(deferred=[]), chunk=_CHUNK, node=_NODE, epoch=1)
 
     assert repo.terminals == [terminal]
+    assert status_facts.transactions == repo.written_in

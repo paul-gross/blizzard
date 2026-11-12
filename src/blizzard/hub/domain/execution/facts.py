@@ -133,20 +133,20 @@ class _DeliveryRefusal:
 @domain_model
 @dataclass(frozen=True)
 class _Landing:
-    """An admitted fact's write. ``write`` runs in the unit that advances the mark and answers the row id the ack
-    carries, or the event it logged (whose row id the ack carries), or the write fence's refusal; ``committed`` runs
-    on what ``write`` answered once the unit commits — a frame published, a line logged — and never when it rolls
-    back (``bzh:publish-after-commit``)."""
+    """An admitted fact's unfenced write. ``write`` runs in the unit that advances the mark and answers the row id
+    the ack carries, or the event it logged (whose row id the ack carries); ``committed`` runs on what ``write``
+    answered once the unit commits — a frame published, a line logged — and never when it rolls back
+    (``bzh:publish-after-commit``)."""
 
-    write: Callable[[Transaction], _Written | FenceRefusal]
+    write: Callable[[Transaction], _Written]
     committed: Callable[[_Written], object] | None = None
 
 
 @domain_model
 @dataclass(frozen=True)
 class _LockedLanding:
-    """A :class:`_Landing` whose unit declares ``locks``, the chunk whose row lock it takes: ``write`` runs on the
-    token that unit locked, and may also answer a delivery refusal decided from reads taken on it."""
+    """A fenced :class:`_Landing` whose unit declares ``locks``, the chunk whose row lock it takes: ``write`` runs on
+    the token that unit locked, and may answer the fence's refusal or a delivery refusal decided from reads on it."""
 
     locks: str
     write: Callable[[LockedTransaction], _Written | FenceRefusal | _DeliveryRefusal]

@@ -1329,6 +1329,7 @@ def build_tenant_services(stores: TenantStores, parts: TenantServiceParts, *, ev
         restart=RestartService(
             movement=chunk_movement,
             decisions=chunk_decisions,
+            facts=chunk_facts,
             graphs=graph_store,
             clock=clock,
             exclusive=chunk_exclusive,

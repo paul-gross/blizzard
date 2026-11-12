@@ -567,7 +567,7 @@ def write_positions(
     transaction: LockedTransaction,
 ) -> None:
     """Write ``positions`` for ``list_`` in ``transaction`` — the one place that picks which store
-    write routes a batch: ``not_ready`` through the promoted-guarded
+    write routes a batch: ``not_ready`` through
     :meth:`~blizzard.hub.domain.chunk.ports.queue.IWriteChunkQueueRepository.record_backlog_positions`,
     ``ready`` through
     :meth:`~blizzard.hub.domain.chunk.ports.queue.IWriteChunkQueueRepository.record_queue_positions`."""

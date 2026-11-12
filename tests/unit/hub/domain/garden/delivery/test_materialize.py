@@ -66,12 +66,18 @@ class _FakeGardenDeliveryRepo:
     outcome: DeliveryOutcome = DeliveryOutcome.RECORDED
 
     terminals: list[bool] = field(default_factory=list[bool])
+    written_in: list[LockedTransaction] = field(default_factory=list[LockedTransaction])
+    locked_in: list[LockedTransaction] = field(default_factory=list[LockedTransaction])
+
+    def lock_expected(self, plan: DeliveryPlan, *, transaction: LockedTransaction) -> None:
+        self.locked_in.append(transaction)
 
     def deliver(
         self, plan: DeliveryPlan, *, admission: EpochAdmission, terminal: bool, transaction: LockedTransaction
     ) -> DeliveryOutcome:
         self.delivered.append(plan)
         self.terminals.append(terminal)
+        self.written_in.append(transaction)
         return self.outcome
 
     def __getattr__(self, name: str) -> Any:
@@ -508,9 +514,10 @@ def test_deliver_hands_the_write_the_terminal_verdict_read_under_its_lock(
     facts: dict[str, ChunkFacts], terminal: bool
 ) -> None:
     repo = _FakeGardenDeliveryRepo()
+    status_facts = FakeStatusFacts(facts)
     service = GardenDelivery(
         delivery=_as_write_repo(repo),
-        facts=FakeStatusFacts(facts).as_port(),
+        facts=status_facts.as_port(),
         transactions=FakeTransactions(),
         clock=FixedClock(instant=_T0),
     )
@@ -525,3 +532,5 @@ def test_deliver_hands_the_write_the_terminal_verdict_read_under_its_lock(
     )
 
     assert repo.terminals == [terminal]
+    assert status_facts.transactions == repo.written_in
+    assert repo.locked_in == repo.written_in

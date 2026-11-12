@@ -2,16 +2,19 @@
 
 from blizzard.foundation.clock import IClock
 from blizzard.foundation.ids import Id, IdPrefix
-from blizzard.hub.domain.chunk.model import ChunkFacts, CloseEnqueueDecision
+from blizzard.hub.domain.chunk.model import CloseEnqueueDecision
 from blizzard.hub.domain.chunk.ports.decisions import IWriteChunkDecisionsRepository
 from blizzard.hub.domain.chunk.ports.exclusive import ILockedChunkRead
+from blizzard.hub.domain.chunk.ports.facts import IReadChunkFactsRepository
 from blizzard.hub.domain.chunk.ports.fence import Claimant, EpochAdmission, FenceRefusal
+from blizzard.hub.domain.chunk.terminal import terminal_under_lock
 from blizzard.hub.domain.execution.completion import NextStep, NextStepKind, decision_choices
 from blizzard.hub.domain.graph.model import Graph
 
 
 def open_graph_gate_on_arrival(
     decisions: IWriteChunkDecisionsRepository,
+    facts: IReadChunkFactsRepository,
     handle: ILockedChunkRead,
     clock: IClock,
     *,
@@ -37,7 +40,7 @@ def open_graph_gate_on_arrival(
         node_name=step.node.name,
         epoch=epoch,
         admission=EpochAdmission.CURRENT,
-        terminal=ChunkFacts.terminal_verdict(handle.facts(chunk_id)),
+        terminal=terminal_under_lock(facts, chunk_id, transaction=handle.transaction),
         claimant=claimant,
         choices=decision_choices(step.node),
         at=clock.now(),

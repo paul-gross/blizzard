@@ -541,6 +541,7 @@ class HubNodeRouter:
         if written.wrote:
             close_skipped += open_graph_gate_on_arrival(
                 self._decisions,
+                self._facts,
                 handle,
                 self._clock,
                 chunk_id=chunk.chunk_id,
@@ -595,6 +596,7 @@ class HubNodeRouter:
         if isinstance(outcome, MigrationWrite):
             close_skipped = outcome.close_skipped + open_graph_gate_on_arrival(
                 self._decisions,
+                self._facts,
                 handle,
                 self._clock,
                 chunk_id=chunk.chunk_id,

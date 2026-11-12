@@ -51,12 +51,10 @@ class IWriteChunkQuestionsRepository(IReadChunkQuestionsRepository, Protocol):
         harness_id: str | None = None,
         transaction: LockedTransaction,
     ) -> FenceRefusal | None:
-        """Land a ``question.asked`` row — the chunk derives ``waiting_on_human`` — behind the
-        write fence (``bzh:epoch-fencing``); a refusal writes nothing and is returned. Written in
-        ``transaction``, a unit that locks the chunk (``bzh:transaction-participation``).
-
-        Runner-authored, the durable rendezvous the answer keys off. Idempotent by
-        ``question_id`` (a store-and-forward replay re-lands the same id harmlessly)."""
+        """Land a ``question.asked`` row — the chunk derives ``waiting_on_human`` — behind the write fence
+        (``bzh:epoch-fencing``); a refusal writes nothing and is returned. Written in ``transaction``, a unit that
+        locks the chunk (``bzh:transaction-participation``). The runner-authored rendezvous the answer keys off,
+        idempotent by ``question_id``."""
         ...
 
     def answer_question(

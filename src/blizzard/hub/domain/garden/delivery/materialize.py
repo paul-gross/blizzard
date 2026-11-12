@@ -152,12 +152,17 @@ class IWriteGardenDeliveryRepository(IReadGardenDeliveryRepository, Protocol):
     ``DeliveryOutcome.GUARD_LOST`` with nothing written. A proposal citing a finding stored in a
     project other than ``plan.run``'s raises ``GardenDeliveryRejected`` naming it, with nothing written."""
 
+    def lock_expected(self, plan: DeliveryPlan, *, transaction: LockedTransaction) -> None:
+        """Lock every finding in ``plan.expect``, sorted, in ``transaction`` — a unit that locks
+        ``plan.chunk_id`` and has taken no other lock or read since, so chunk-then-findings order holds."""
+        ...
+
     def deliver(
         self, plan: DeliveryPlan, *, admission: EpochAdmission, terminal: bool, transaction: LockedTransaction
     ) -> DeliveryOutcome:
-        """Written in ``transaction``, a unit that locks ``plan.chunk_id``. A delta whose ``artifact_id`` is already
-        materialized is skipped, and a proposal's citation of a ref in it resolves to the id minted then; a proposal
-        already present by ``(source_artifact_id, ref)`` is not re-inserted."""
+        """Written in ``transaction``, a unit that locks ``plan.chunk_id`` and has run :meth:`lock_expected`. A delta
+        whose ``artifact_id`` is already materialized is skipped, and a proposal's citation of a ref in it resolves to
+        the id minted then; a proposal already present by ``(source_artifact_id, ref)`` is not re-inserted."""
         ...
 
 
@@ -321,6 +326,7 @@ class GardenDelivery:
         )
         with self._transactions.begin() as unit:
             locked = unit.lock_chunks([plan.chunk_id])
+            self._delivery.lock_expected(plan, transaction=locked)
             return self._delivery.deliver(
                 plan,
                 admission=EpochAdmission.AT_OR_ABOVE,
