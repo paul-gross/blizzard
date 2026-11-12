@@ -23,25 +23,29 @@ from tests.support.scaffolding import (
     HubHarness,
     build_hub,
     chunk_stores,
+    chunk_unit,
     emitted_events,
     hub_scoped,
+    hub_store_connections,
     ingest,
 )
 
 
 def _land(hub: HubHarness, chunk_id: str, *, repo: str = "widget") -> HubArtifactWrite:
     """Simulate a generic hub command node's mid-run ``merged/<repo>`` marker."""
-    return cast(IWriteChunkArtifactsRepository, hub.services.chunks.artifacts).record_hub_artifact(
-        chunk_id,
-        node_id="nd_deliver",
-        node_name="deliver",
-        epoch=1,
-        name=f"merged/{repo}",
-        content="sha",
-        at=hub.clock.now(),
-        admission=EpochAdmission.AT_OR_ABOVE,
-        close_decision=CloseEnqueueDecision(closable=frozenset({WorkRef("default", "1")}), skipped=frozenset()),
-    )
+    with chunk_unit(hub_store_connections(hub.engine), chunk_id) as unit:
+        return cast(IWriteChunkArtifactsRepository, hub.services.chunks.artifacts).record_hub_artifact(
+            chunk_id,
+            node_id="nd_deliver",
+            node_name="deliver",
+            epoch=1,
+            name=f"merged/{repo}",
+            content="sha",
+            at=hub.clock.now(),
+            admission=EpochAdmission.AT_OR_ABOVE,
+            close_decision=CloseEnqueueDecision(closable=frozenset({WorkRef("default", "1")}), skipped=frozenset()),
+            transaction=unit,
+        )
 
 
 def _skip_rows(hub: HubHarness) -> list[Any]:
@@ -96,17 +100,19 @@ def test_a_replayed_landing_marker_enqueues_nothing_new(tmp_path: Path) -> None:
     chunk_id = ingest(hub, [{"source": "default", "ref": "1"}], promote=True)
 
     _land(hub, chunk_id)
-    replayed = cast(IWriteChunkArtifactsRepository, hub.services.chunks.artifacts).record_hub_artifact(
-        chunk_id,
-        node_id="nd_deliver",
-        node_name="deliver",
-        epoch=1,
-        name="merged/widget",
-        content="sha",
-        at=hub.clock.now(),
-        admission=EpochAdmission.AT_OR_ABOVE,
-        close_decision=CloseEnqueueDecision(closable=frozenset({WorkRef("default", "1")}), skipped=frozenset()),
-    )  # the same (node_id, epoch, name) — record_hub_artifact's own idempotency guard no-ops it
+    with chunk_unit(hub_store_connections(hub.engine), chunk_id) as unit:
+        replayed = cast(IWriteChunkArtifactsRepository, hub.services.chunks.artifacts).record_hub_artifact(
+            chunk_id,
+            node_id="nd_deliver",
+            node_name="deliver",
+            epoch=1,
+            name="merged/widget",
+            content="sha",
+            at=hub.clock.now(),
+            admission=EpochAdmission.AT_OR_ABOVE,
+            close_decision=CloseEnqueueDecision(closable=frozenset({WorkRef("default", "1")}), skipped=frozenset()),
+            transaction=unit,
+        )  # the same (node_id, epoch, name) — record_hub_artifact's own idempotency guard no-ops it
 
     with hub.engine.connect() as conn:
         rows = conn.execute(
@@ -174,20 +180,22 @@ def test_mixed_landing_enqueues_closable_and_terminally_skips_other_refs_on_repl
     )
     artifacts = cast(IWriteChunkArtifactsRepository, hub.services.chunks.artifacts)
     since = hub.events.latest_id()
-    written = [
-        artifacts.record_hub_artifact(
-            chunk_id,
-            node_id="nd_deliver",
-            node_name="deliver",
-            epoch=1,
-            name=f"merged/{repo}",
-            content="sha",
-            at=hub.clock.now(),
-            admission=EpochAdmission.AT_OR_ABOVE,
-            close_decision=decision,
-        )
-        for repo in ("widget", "gadget")
-    ]
+    with chunk_unit(hub_store_connections(hub.engine), chunk_id) as unit:
+        written = [
+            artifacts.record_hub_artifact(
+                chunk_id,
+                node_id="nd_deliver",
+                node_name="deliver",
+                epoch=1,
+                name=f"merged/{repo}",
+                content="sha",
+                at=hub.clock.now(),
+                admission=EpochAdmission.AT_OR_ABOVE,
+                close_decision=decision,
+                transaction=unit,
+            )
+            for repo in ("widget", "gadget")
+        ]
 
     assert _pending_intents(hub) == {(chunk_id, "default", "1")}
     with hub.engine.connect() as conn:
@@ -206,18 +214,20 @@ def test_a_fenced_landing_still_returns_the_skip_rows_it_wrote(tmp_path: Path) -
     assert chunk is not None
     hub.services.stop.stop(chunk, by="operator")
 
-    landed = cast(IWriteChunkArtifactsRepository, hub.services.chunks.artifacts).record_landing(
-        chunk_id,
-        node_id="nd_deliver",
-        node_name="deliver",
-        epoch=1,
-        admission=EpochAdmission.AT_OR_ABOVE,
-        repo="widget",
-        revision="m1",
-        repository_id="re_widget",
-        at=hub.clock.now(),
-        close_decision=CloseEnqueueDecision(closable=frozenset(), skipped=frozenset({WorkRef("default", "1")})),
-    )
+    with chunk_unit(hub_store_connections(hub.engine), chunk_id) as unit:
+        landed = cast(IWriteChunkArtifactsRepository, hub.services.chunks.artifacts).record_landing(
+            chunk_id,
+            node_id="nd_deliver",
+            node_name="deliver",
+            epoch=1,
+            admission=EpochAdmission.AT_OR_ABOVE,
+            repo="widget",
+            revision="m1",
+            repository_id="re_widget",
+            at=hub.clock.now(),
+            close_decision=CloseEnqueueDecision(closable=frozenset(), skipped=frozenset({WorkRef("default", "1")})),
+            transaction=unit,
+        )
 
     assert landed.refused is True
     assert landed.close_skipped == tuple(row.id for row in _skip_rows(hub))

@@ -88,21 +88,25 @@ class QuestionService:
 
     def record_asked(self, fact: AskedQuestion) -> FenceRefusal | None:
         """Land a ``question.asked`` row — the chunk derives ``waiting_on_human`` — unless the
-        write fence refuses it (``bzh:epoch-fencing``), which lands nothing."""
-        refusal = self._questions.record_question(
-            question_id=fact.question_id,
-            chunk_id=fact.chunk_id,
-            node_id=fact.node_id,
-            session_id=fact.session_id,
-            harness_id=fact.harness_id,
-            runner_id=fact.runner_id,
-            epoch=fact.epoch,
-            admission=EpochAdmission.AT_OR_ABOVE,
-            claimant=Claimant(fact.runner_id, fact.lease_id),
-            question=fact.question,
-            options=list(fact.options),
-            asked_at=parse_instant(fact.asked_at, self._clock.now()),
-        )
+        write fence refuses it (``bzh:epoch-fencing``), which lands nothing. Written in a short unit of its own
+        that locks the chunk (``bzh:short-locked-unit``)."""
+        asked_at = parse_instant(fact.asked_at, self._clock.now())
+        with self._transactions.begin() as unit:
+            refusal = self._questions.record_question(
+                question_id=fact.question_id,
+                chunk_id=fact.chunk_id,
+                node_id=fact.node_id,
+                session_id=fact.session_id,
+                harness_id=fact.harness_id,
+                runner_id=fact.runner_id,
+                epoch=fact.epoch,
+                admission=EpochAdmission.AT_OR_ABOVE,
+                claimant=Claimant(fact.runner_id, fact.lease_id),
+                question=fact.question,
+                options=list(fact.options),
+                asked_at=asked_at,
+                transaction=unit.lock_chunks([fact.chunk_id]),
+            )
         if refusal is None:
             _log.info("question landed", question_id=fact.question_id, chunk_id=fact.chunk_id)
         return refusal

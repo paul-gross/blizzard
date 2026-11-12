@@ -479,26 +479,27 @@ class FlowStore:
         revision: str,
         at: datetime,
         close_decision: CloseEnqueueDecision,
+        transaction: LockedTransaction,
     ) -> LandingWrite:
-        with self._store.write("record_flow_landing") as conn:
-            refused, wrote, close_skipped = write_landing_rows(
-                conn,
-                landing.chunk_id,
-                node_id=node_id,
-                node_name=node_name,
-                epoch=epoch,
-                admission=admission,
-                repo=repo,
-                revision=revision,
-                repository_id=landing.flow.repository_id,
-                close_decision=close_decision,
-                artifact_id=Id.mint(IdPrefix.ARTIFACT, self._clock).value,
-                at=at,
-            )
-            if not wrote:
-                return LandingWrite(refused=refused, event_id=None)
-            event_id, written = write_landing(conn, landing, revision=revision, at=at)
-            return LandingWrite(refused=refused, event_id=event_id, written=written, close_skipped=close_skipped)
+        conn = connection_for(self._store, transaction, chunk=landing.chunk_id)
+        refused, wrote, close_skipped = write_landing_rows(
+            conn,
+            landing.chunk_id,
+            node_id=node_id,
+            node_name=node_name,
+            epoch=epoch,
+            admission=admission,
+            repo=repo,
+            revision=revision,
+            repository_id=landing.flow.repository_id,
+            close_decision=close_decision,
+            artifact_id=Id.mint(IdPrefix.ARTIFACT, self._clock).value,
+            at=at,
+        )
+        if not wrote:
+            return LandingWrite(refused=refused, event_id=None)
+        event_id, written = write_landing(conn, landing, revision=revision, at=at)
+        return LandingWrite(refused=refused, event_id=event_id, written=written, close_skipped=close_skipped)
 
     def end_turn_interrupted(
         self, turn_id: str, *, withdrawal: Withdrawal | None, event: TurnEvent, at: datetime

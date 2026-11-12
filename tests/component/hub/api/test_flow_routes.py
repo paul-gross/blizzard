@@ -27,6 +27,7 @@ from tests.support.flow_route_lines import Line
 from tests.support.hub_node_artifacts import record_landing
 from tests.support.scaffolding import (
     chunk_stores,
+    chunk_unit,
     count_rows_read,
     hub_scoped,
     hub_store_connections,
@@ -44,16 +45,18 @@ def line(tmp_path: Path) -> Line:
 def test_chunk_landing_fact_pages(line: Line) -> None:
     artifacts = chunk_stores(line.world.hub.engine, line.world.hub.clock).artifacts
     for repo in ("z", "a"):
-        record_landing(
-            artifacts,
-            line.first,
-            repo=repo,
-            commit_hash=repo,
-            at=line.world.hub.clock.now(),
-            close_decision=CloseEnqueueDecision(
-                closable=frozenset({WorkRef(source="default", ref="1")}), skipped=frozenset()
-            ),
-        )
+        with chunk_unit(hub_store_connections(line.world.hub.engine), line.first) as unit:
+            record_landing(
+                artifacts,
+                line.first,
+                repo=repo,
+                commit_hash=repo,
+                at=line.world.hub.clock.now(),
+                close_decision=CloseEnqueueDecision(
+                    closable=frozenset({WorkRef(source="default", ref="1")}), skipped=frozenset()
+                ),
+                transaction=unit,
+            )
     url = f"/api/chunks/{line.first}/landing-facts"
     first = line.client.get(url, params={"limit": 1}).json()
     second = line.client.get(url, params={"limit": 1, "cursor": first["next_cursor"]}).json()

@@ -30,6 +30,8 @@ from tests.support.scaffolding import (
     build_hub,
     chunk_facts_of,
     chunk_stores,
+    chunk_unit,
+    hub_store_connections,
     report_lease,
 )
 
@@ -174,14 +176,16 @@ def test_a_blank_landing_marker_leaves_its_repo_unlanded_in_the_envelope(tmp_pat
 
 
 def _record(hub: HubHarness, chunk_id: str, nodes: dict[str, str], name: str, content: str) -> None:
-    cast(IWriteChunkArtifactsRepository, hub.services.chunks.artifacts).record_hub_artifact(
-        chunk_id,
-        node_id=nodes["deliver"],
-        node_name="deliver",
-        epoch=1,
-        admission=EpochAdmission.AT_OR_ABOVE,
-        name=name,
-        content=content,
-        close_decision=decide_close_enqueue([WorkRef("default", "1")], lambda _: True),
-        at=hub.clock.now(),
-    )
+    with chunk_unit(hub_store_connections(hub.engine), chunk_id) as unit:
+        cast(IWriteChunkArtifactsRepository, hub.services.chunks.artifacts).record_hub_artifact(
+            chunk_id,
+            node_id=nodes["deliver"],
+            node_name="deliver",
+            epoch=1,
+            admission=EpochAdmission.AT_OR_ABOVE,
+            name=name,
+            content=content,
+            close_decision=decide_close_enqueue([WorkRef("default", "1")], lambda _: True),
+            at=hub.clock.now(),
+            transaction=unit,
+        )

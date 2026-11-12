@@ -19,6 +19,7 @@ from blizzard.hub.domain.graph.model import Graph, Node
 from blizzard.hub.store import schema as s
 from blizzard.hub.store.internal.graph_store import GraphStore
 from blizzard.hub.store.internal.review_findings_store import ReviewFindingsStore
+from blizzard.hub.store.transactions import HubTransactions
 from tests.support.hub_node_artifacts import record_hub_asset
 from tests.support.scaffolding import (
     HubHarness,
@@ -92,10 +93,11 @@ def deliver(hub: HubHarness, chunk_id: str, *, epoch: int = EPOCH) -> Delivered:
     graph = hub.services.graphs.get(chunk.graph_id)
     node = graph.node_by_id(NODE_ID) if graph is not None else None
     assert node is not None
+    connections = hub_store_connections(hub.engine)
     recorder = ReviewFindingsRecorder(
         artifacts=chunk_stores(hub.engine, hub.clock).artifacts,
         materialize=ReviewFindingsMaterialize(
-            delivery=ReviewFindingsStore(hub_store_connections(hub.engine)), clock=hub.clock
+            delivery=ReviewFindingsStore(connections), transactions=HubTransactions(connections), clock=hub.clock
         ),
         formats=GardenFormats(),
     )

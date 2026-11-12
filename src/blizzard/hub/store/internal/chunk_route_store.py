@@ -18,7 +18,7 @@ from blizzard.hub.domain.chunk.model import RouteReleaseCause
 from blizzard.hub.domain.chunk.ports.exclusive import ILockedChunkRead
 from blizzard.hub.domain.chunk.ports.fence import Claimant, EpochOwner, FenceRefusal
 from blizzard.hub.domain.chunk.ports.route import IWriteChunkRouteRepository
-from blizzard.hub.domain.kernel.transactions import Transaction
+from blizzard.hub.domain.kernel.transactions import LockedTransaction, Transaction
 from blizzard.hub.domain.runners.lifecycle_version import RunnerLifecycleVersion
 from blizzard.hub.domain.runners.route import Route
 from blizzard.hub.store import schema as s
@@ -35,7 +35,6 @@ from blizzard.hub.store.internal.lifecycle_versions import require_runner_lifecy
 from blizzard.hub.store.scoped import ScopedConnections
 from blizzard.hub.store.transactions import (
     chunk_handle_connection,
-    chunk_locked_connection,
     connection_for,
     connection_in,
 )
@@ -200,25 +199,25 @@ class ChunkRouteStore:
         )
 
     def record_lease_minted(
-        self, chunk_id: str, *, epoch: int, claimant: Claimant, at: datetime, transaction: Transaction | None = None
+        self, chunk_id: str, *, epoch: int, claimant: Claimant, at: datetime, transaction: LockedTransaction
     ) -> FenceRefusal | None:
-        with chunk_locked_connection(self._store, chunk_id, transaction, "record_lease_minted") as conn:
-            admission = mint_admission(conn, chunk_id, epoch=epoch, runner_id=claimant.runner_id)
-            refusal = admission.refusal(claimant)
-            if refusal is not None:
-                return refusal
-            if admission.takes_ownership():
-                record_epoch_owner(conn, chunk_id, epoch, EpochOwner.runner(claimant.runner_id), at=at)
-            conn.execute(
-                self._store.insert(s.lease_facts).values(
-                    chunk_id=chunk_id,
-                    epoch=epoch,
-                    runner_id=claimant.runner_id,
-                    minted_at=at,
-                    lease_id=claimant.lease_id,
-                )
+        conn = connection_for(self._store, transaction, chunk=chunk_id)
+        admission = mint_admission(conn, chunk_id, epoch=epoch, runner_id=claimant.runner_id)
+        refusal = admission.refusal(claimant)
+        if refusal is not None:
+            return refusal
+        if admission.takes_ownership():
+            record_epoch_owner(conn, chunk_id, epoch, EpochOwner.runner(claimant.runner_id), at=at)
+        conn.execute(
+            self._store.insert(s.lease_facts).values(
+                chunk_id=chunk_id,
+                epoch=epoch,
+                runner_id=claimant.runner_id,
+                minted_at=at,
+                lease_id=claimant.lease_id,
             )
-            return None
+        )
+        return None
 
     def set_runner_high_water(
         self, runner_id: str, *, seq: int, expected: int, at: datetime, transaction: Transaction

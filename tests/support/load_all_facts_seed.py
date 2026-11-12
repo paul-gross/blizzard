@@ -110,30 +110,34 @@ def seed_fixture(store: ChunkStores, engine: Engine, clock: FixedClock) -> None:
 
     _mint(store, "ch_waiting")
     seed_promote(store, engine, "ch_waiting", at=T0)
-    store.questions.record_question(
-        question_id="qn_1",
-        chunk_id="ch_waiting",
-        node_id=None,
-        session_id=None,
-        runner_id="r",
-        epoch=1,
-        question="which branch?",
-        options=[],
-        asked_at=T0,
-        admission=EpochAdmission.AT_OR_ABOVE,
-    )
+    with chunk_unit(hub_store_connections(engine), "ch_waiting") as unit:
+        store.questions.record_question(
+            question_id="qn_1",
+            chunk_id="ch_waiting",
+            node_id=None,
+            session_id=None,
+            runner_id="r",
+            epoch=1,
+            question="which branch?",
+            options=[],
+            asked_at=T0,
+            admission=EpochAdmission.AT_OR_ABOVE,
+            transaction=unit,
+        )
 
     _mint(store, "ch_needs")
     seed_promote(store, engine, "ch_needs", at=T0)
-    store.escalations.record_escalation(
-        "ch_needs",
-        epoch=1,
-        takeover_command="cmd",
-        at=T0,
-        admission=EpochAdmission.AT_OR_ABOVE,
-        cause=None,
-        detail=None,
-    )
+    with chunk_unit(hub_store_connections(engine), "ch_needs") as unit:
+        store.escalations.record_escalation(
+            "ch_needs",
+            epoch=1,
+            takeover_command="cmd",
+            at=T0,
+            admission=EpochAdmission.AT_OR_ABOVE,
+            cause=None,
+            detail=None,
+            transaction=unit,
+        )
 
     _mint(store, "ch_paused")
     seed_promote(store, engine, "ch_paused", at=T0)
@@ -283,14 +287,16 @@ def seed_fixture(store: ChunkStores, engine: Engine, clock: FixedClock) -> None:
     )
     with chunk_unit(hub_store_connections(engine), "ch_kitchen_sink") as unit:
         store.decisions.record_decision_resolution("dec_1", choice="ok", resolved_by="op", at=_at(1), transaction=unit)
-    record_landing(
-        store.artifacts,
-        "ch_kitchen_sink",
-        repo="r1",
-        commit_hash="c1",
-        at=T0,
-        close_decision=decide_close_enqueue([], lambda _: True),
-    )
+    with chunk_unit(hub_store_connections(engine), "ch_kitchen_sink") as unit:
+        record_landing(
+            store.artifacts,
+            "ch_kitchen_sink",
+            repo="r1",
+            commit_hash="c1",
+            at=T0,
+            close_decision=decide_close_enqueue([], lambda _: True),
+            transaction=unit,
+        )
     store.delivery.record_delivery_landed(
         "ch_kitchen_sink", at=T0, close_decision=decide_close_enqueue([], lambda _: True)
     )

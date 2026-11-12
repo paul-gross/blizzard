@@ -16,7 +16,9 @@ from blizzard.hub.domain.chunk.ports.stores import ChunkStores
 from tests.support.migrations.event_log import T0
 from tests.support.scaffolding import (
     chunk_stores,
+    chunk_unit,
     count_queries,
+    hub_store_connections,
     migrate_to,
     seed_chunk,
     seed_graph,
@@ -40,15 +42,17 @@ def test_list_open_escalations_query_count_is_independent_of_fleet_size(tmp_path
                 seed_chunk(conn, f"ch_{i}", graph_id="gr_1", at=T0)
         store = chunk_stores(engine, FixedClock(T0))
         for i in range(n):
-            store.escalations.record_escalation(
-                f"ch_{i}",
-                epoch=1,
-                takeover_command="cd a && resume",
-                at=_at(10),
-                admission=EpochAdmission.AT_OR_ABOVE,
-                cause=None,
-                detail=None,
-            )
+            with chunk_unit(hub_store_connections(engine), f"ch_{i}") as unit:
+                store.escalations.record_escalation(
+                    f"ch_{i}",
+                    epoch=1,
+                    takeover_command="cd a && resume",
+                    at=_at(10),
+                    admission=EpochAdmission.AT_OR_ABOVE,
+                    cause=None,
+                    detail=None,
+                    transaction=unit,
+                )
         return store, engine
 
     small, small_engine = _fleet(tmp_path / "small", 3)

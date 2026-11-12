@@ -25,6 +25,7 @@ from blizzard.hub.store.internal.finding_store import FindingStore
 from blizzard.hub.store.internal.garden_delivery_store import GardenDeliveryStore
 from blizzard.hub.store.internal.graph_store import GraphStore
 from blizzard.hub.store.internal.run_context_store import RunContextStore
+from blizzard.hub.store.transactions import HubTransactions
 from tests.support.hub_node_artifacts import record_hub_asset
 from tests.support.scaffolding import (
     HubHarness,
@@ -125,7 +126,9 @@ def garden_delivery_recorder(hub: HubHarness) -> GardenDeliveryRecorder:
     return GardenDeliveryRecorder(
         artifacts=chunk_stores(hub.engine, hub.clock).artifacts,
         buckets=FindingBucketReader(FindingStore(connections)),
-        materialize=GardenDelivery(delivery=GardenDeliveryStore(connections), clock=hub.clock),
+        materialize=GardenDelivery(
+            delivery=GardenDeliveryStore(connections), transactions=HubTransactions(connections), clock=hub.clock
+        ),
         formats=GardenFormats(),
         resolve_commit_for=None,
     )

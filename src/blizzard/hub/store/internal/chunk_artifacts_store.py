@@ -27,7 +27,7 @@ from blizzard.hub.domain.chunk.ports.artifacts import (
 )
 from blizzard.hub.domain.chunk.ports.fence import EpochAdmission
 from blizzard.hub.domain.chunk.pr_markers import PR_MARKER_PREFIX, PrMarker, decode_pr_marker
-from blizzard.hub.domain.kernel.transactions import Transaction
+from blizzard.hub.domain.kernel.transactions import LockedTransaction, Transaction
 from blizzard.hub.store import schema as s
 from blizzard.hub.store.internal.chunk_rows import (
     enqueue_close_intents,
@@ -38,7 +38,7 @@ from blizzard.hub.store.internal.chunk_rows import (
 )
 from blizzard.hub.store.internal.newest_fact import newer_row_exists
 from blizzard.hub.store.scoped import ScopedConnections
-from blizzard.hub.store.transactions import chunk_locked_connection, connection_in
+from blizzard.hub.store.transactions import connection_for, connection_in
 
 
 def _stored_artifact(a: Row[Any]) -> StoredArtifact:
@@ -267,45 +267,45 @@ class ChunkArtifactsStore:
         content: str,
         at: datetime,
         close_decision: CloseEnqueueDecision,
-        transaction: Transaction | None = None,
+        transaction: LockedTransaction,
     ) -> HubArtifactWrite:
         """See ``src/blizzard/hub/domain/chunk/ports/artifacts.py``'s
         ``IWriteChunkArtifactsRepository.record_hub_artifact``."""
-        with chunk_locked_connection(self._store, chunk_id, transaction, "record_hub_artifact") as conn:
-            already = conn.execute(
-                self._store.select(s.artifacts, s.artifacts.c.artifact_id).where(
-                    (s.artifacts.c.chunk_id == chunk_id)
-                    & (s.artifacts.c.node_id == node_id)
-                    & (s.artifacts.c.epoch == epoch)
-                    & (s.artifacts.c.name == name)
-                )
-            ).first()
-            if already is not None:
-                return HubArtifactWrite(wrote=False)
-            if fence(conn, chunk_id, epoch=epoch, admission=admission) is not None:
-                return HubArtifactWrite(wrote=False)
-            conn.execute(
-                self._store.insert(s.artifacts).values(
-                    artifact_id=Id.mint(IdPrefix.ARTIFACT, self._clock).value,
-                    chunk_id=chunk_id,
-                    node_id=node_id,
-                    node_name=node_name,
-                    epoch=epoch,
-                    name=name,
-                    kind=ArtifactKind.ASSET.value,
-                    data=content,
-                    repo=None,
-                    forge=None,
-                    produced_at=at,
-                    seq=next_artifact_seq(conn, chunk_id),
-                )
+        conn = connection_for(self._store, transaction, chunk=chunk_id)
+        already = conn.execute(
+            self._store.select(s.artifacts, s.artifacts.c.artifact_id).where(
+                (s.artifacts.c.chunk_id == chunk_id)
+                & (s.artifacts.c.node_id == node_id)
+                & (s.artifacts.c.epoch == epoch)
+                & (s.artifacts.c.name == name)
             )
-            if is_landing_marker(name, content):
-                return HubArtifactWrite(
-                    wrote=True,
-                    close_skipped=enqueue_close_intents(conn, chunk_id, at=at, close_decision=close_decision),
-                )
-            return HubArtifactWrite(wrote=True)
+        ).first()
+        if already is not None:
+            return HubArtifactWrite(wrote=False)
+        if fence(conn, chunk_id, epoch=epoch, admission=admission) is not None:
+            return HubArtifactWrite(wrote=False)
+        conn.execute(
+            self._store.insert(s.artifacts).values(
+                artifact_id=Id.mint(IdPrefix.ARTIFACT, self._clock).value,
+                chunk_id=chunk_id,
+                node_id=node_id,
+                node_name=node_name,
+                epoch=epoch,
+                name=name,
+                kind=ArtifactKind.ASSET.value,
+                data=content,
+                repo=None,
+                forge=None,
+                produced_at=at,
+                seq=next_artifact_seq(conn, chunk_id),
+            )
+        )
+        if is_landing_marker(name, content):
+            return HubArtifactWrite(
+                wrote=True,
+                close_skipped=enqueue_close_intents(conn, chunk_id, at=at, close_decision=close_decision),
+            )
+        return HubArtifactWrite(wrote=True)
 
     def record_landing(
         self,
@@ -320,25 +320,26 @@ class ChunkArtifactsStore:
         repository_id: str,
         at: datetime,
         close_decision: CloseEnqueueDecision,
+        transaction: LockedTransaction,
     ) -> ArtifactLandingWrite:
         """See ``src/blizzard/hub/domain/chunk/ports/artifacts.py``'s
         ``IWriteChunkArtifactsRepository.record_landing``."""
-        with self._store.write("record_landing") as conn:
-            refused, _wrote, close_skipped = write_landing_rows(
-                conn,
-                chunk_id,
-                node_id=node_id,
-                node_name=node_name,
-                epoch=epoch,
-                admission=admission,
-                repo=repo,
-                revision=revision,
-                repository_id=repository_id,
-                close_decision=close_decision,
-                artifact_id=Id.mint(IdPrefix.ARTIFACT, self._clock).value,
-                at=at,
-            )
-            return ArtifactLandingWrite(refused=refused, close_skipped=close_skipped)
+        conn = connection_for(self._store, transaction, chunk=chunk_id)
+        refused, _wrote, close_skipped = write_landing_rows(
+            conn,
+            chunk_id,
+            node_id=node_id,
+            node_name=node_name,
+            epoch=epoch,
+            admission=admission,
+            repo=repo,
+            revision=revision,
+            repository_id=repository_id,
+            close_decision=close_decision,
+            artifact_id=Id.mint(IdPrefix.ARTIFACT, self._clock).value,
+            at=at,
+        )
+        return ArtifactLandingWrite(refused=refused, close_skipped=close_skipped)
 
 
 _artifacts_conforms: type[IWriteChunkArtifactsRepository] = ChunkArtifactsStore

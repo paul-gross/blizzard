@@ -1,4 +1,4 @@
-"""``record_hub_artifact`` runs standalone or joins a caller's unit that locks the chunk —
+"""``record_hub_artifact`` joins a caller's unit that locks the chunk, and refuses any other token —
 real adapters, real migrations."""
 
 from __future__ import annotations
@@ -12,7 +12,7 @@ from sqlalchemy import func, select
 from blizzard.hub.domain.chunk.model import CloseEnqueueDecision
 from blizzard.hub.domain.chunk.ports.artifacts import IWriteChunkArtifactsRepository
 from blizzard.hub.domain.chunk.ports.fence import EpochAdmission
-from blizzard.hub.domain.kernel.transactions import Transaction, TransactionMisuse
+from blizzard.hub.domain.kernel.transactions import LockedTransaction, TransactionMisuse
 from blizzard.hub.store import schema as s
 from blizzard.hub.store.transactions import HubTransactions
 from tests.support.scaffolding import HubHarness, build_hub, hub_scoped, hub_store_connections, ingest
@@ -20,7 +20,7 @@ from tests.support.scaffolding import HubHarness, build_hub, hub_scoped, hub_sto
 _NAME = "progress/one"
 
 
-def _record(hub: HubHarness, chunk_id: str, transaction: Transaction | None = None) -> bool:
+def _record(hub: HubHarness, chunk_id: str, transaction: LockedTransaction) -> bool:
     return (
         cast(IWriteChunkArtifactsRepository, hub.services.chunks.artifacts)
         .record_hub_artifact(
@@ -50,15 +50,6 @@ def _count(hub: HubHarness, chunk_id: str) -> int:
         ).scalar_one()
 
 
-def test_standalone_write_commits_one_artifact(tmp_path: Path) -> None:
-    hub = build_hub(tmp_path)
-    chunk_id = ingest(hub, [{"source": "default", "ref": "1"}], promote=True)
-
-    assert _record(hub, chunk_id) is True
-
-    assert _count(hub, chunk_id) == 1
-
-
 def test_joined_write_lands_on_the_unit_and_rolls_back_with_it(tmp_path: Path) -> None:
     hub = build_hub(tmp_path)
     chunk_id = ingest(hub, [{"source": "default", "ref": "1"}], promote=True)
@@ -72,6 +63,16 @@ def test_joined_write_lands_on_the_unit_and_rolls_back_with_it(tmp_path: Path) -
     with transactions.begin() as unit:
         assert _record(hub, chunk_id, unit.lock_chunks([chunk_id])) is True
     assert _count(hub, chunk_id) == 1
+
+
+def test_an_unlocked_token_is_refused(tmp_path: Path) -> None:
+    hub = build_hub(tmp_path)
+    chunk_id = ingest(hub, [{"source": "default", "ref": "1"}], promote=True)
+
+    with HubTransactions(hub_store_connections(hub.engine)).begin() as unit, pytest.raises(TransactionMisuse):
+        _record(hub, chunk_id, cast(LockedTransaction, unit))
+
+    assert _count(hub, chunk_id) == 0
 
 
 def test_a_joined_token_that_does_not_cover_the_chunk_is_refused(tmp_path: Path) -> None:

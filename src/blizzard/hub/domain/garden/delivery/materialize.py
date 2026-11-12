@@ -21,6 +21,7 @@ from blizzard.hub.domain.garden.delivery.validation import ValidatedDelivery, is
 from blizzard.hub.domain.garden.formats import FindingAddOp, FindingGoneOp, FindingObservedOp
 from blizzard.hub.domain.garden.run_context import RunContext
 from blizzard.hub.domain.graph.model import Node
+from blizzard.hub.domain.kernel.transactions import IHubTransactions, LockedTransaction
 
 
 class DeliveryOutcome(Enum):
@@ -149,10 +150,12 @@ class IWriteGardenDeliveryRepository(IReadGardenDeliveryRepository, Protocol):
     ``DeliveryOutcome.GUARD_LOST`` with nothing written. A proposal citing a finding stored in a
     project other than ``plan.run``'s raises ``GardenDeliveryRejected`` naming it, with nothing written."""
 
-    def deliver(self, plan: DeliveryPlan, *, admission: EpochAdmission) -> DeliveryOutcome:
-        """A delta whose ``artifact_id`` is already materialized is skipped, and a proposal's citation
-        of a ref in it resolves to the id minted then; a proposal already present by
-        ``(source_artifact_id, ref)`` is not re-inserted."""
+    def deliver(
+        self, plan: DeliveryPlan, *, admission: EpochAdmission, transaction: LockedTransaction
+    ) -> DeliveryOutcome:
+        """Written in ``transaction``, a unit that locks ``plan.chunk_id``. A delta whose ``artifact_id`` is already
+        materialized is skipped, and a proposal's citation of a ref in it resolves to the id minted then; a proposal
+        already present by ``(source_artifact_id, ref)`` is not re-inserted."""
         ...
 
 
@@ -274,8 +277,11 @@ class GardenDelivery:
     (:func:`build_delivery_plan`, at the clock's instant) and hands it to the store, one
     call — every id minted before the store sees it (`bzh:domain-takes-objects`)."""
 
-    def __init__(self, *, delivery: IWriteGardenDeliveryRepository, clock: IClock) -> None:
+    def __init__(
+        self, *, delivery: IWriteGardenDeliveryRepository, transactions: IHubTransactions, clock: IClock
+    ) -> None:
         self._delivery = delivery
+        self._transactions = transactions
         self._clock = clock
 
     def already_delivered(self, *, chunk: Chunk, node: Node, epoch: int) -> bool:
@@ -305,4 +311,6 @@ class GardenDelivery:
             proposal_artifact_ids=proposal_artifact_ids,
             at=self._clock.now(),
         )
-        return self._delivery.deliver(plan, admission=EpochAdmission.AT_OR_ABOVE)
+        with self._transactions.begin() as unit:
+            locked = unit.lock_chunks([plan.chunk_id])
+            return self._delivery.deliver(plan, admission=EpochAdmission.AT_OR_ABOVE, transaction=locked)

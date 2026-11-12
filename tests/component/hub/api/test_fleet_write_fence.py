@@ -22,6 +22,8 @@ from blizzard.hub.store import schema as s
 from tests.support.scaffolding import (
     FactAck,
     build_hub,
+    chunk_unit,
+    hub_store_connections,
     report_escalation,
     report_question,
 )
@@ -268,15 +270,17 @@ def test_the_store_returns_the_refusal_and_writes_nothing(tmp_path: Path) -> Non
     chunk = Chunk(hub)
     chunk.lease(2)
 
-    refused = chunk.stores.escalations.record_escalation(
-        chunk.chunk_id,
-        epoch=1,
-        admission=EpochAdmission.AT_OR_ABOVE,
-        takeover_command="x",
-        at=hub.clock.now(),
-        cause=None,
-        detail=None,
-    )
+    with chunk_unit(hub_store_connections(hub.engine), chunk.chunk_id) as unit:
+        refused = chunk.stores.escalations.record_escalation(
+            chunk.chunk_id,
+            epoch=1,
+            admission=EpochAdmission.AT_OR_ABOVE,
+            takeover_command="x",
+            at=hub.clock.now(),
+            cause=None,
+            detail=None,
+            transaction=unit,
+        )
 
     assert refused == FenceRefusal.stale(1, latest=2)
     assert chunk.rows(s.escalations) == 0
@@ -345,15 +349,17 @@ def test_the_store_refuses_a_write_at_the_epoch_a_transition_reached_done_as_ter
     chunk = Chunk(hub)
     assert chunk.complete("build", epoch=1, choice="finish")["outcome"] == "done"
 
-    refused = chunk.stores.escalations.record_escalation(
-        chunk.chunk_id,
-        epoch=1,
-        admission=EpochAdmission.AT_OR_ABOVE,
-        takeover_command="x",
-        at=hub.clock.now(),
-        cause=None,
-        detail=None,
-    )
+    with chunk_unit(hub_store_connections(hub.engine), chunk.chunk_id) as unit:
+        refused = chunk.stores.escalations.record_escalation(
+            chunk.chunk_id,
+            epoch=1,
+            admission=EpochAdmission.AT_OR_ABOVE,
+            takeover_command="x",
+            at=hub.clock.now(),
+            cause=None,
+            detail=None,
+            transaction=unit,
+        )
 
     assert refused == FenceRefusal.terminal(1)
     assert chunk.rows(s.escalations) == 0

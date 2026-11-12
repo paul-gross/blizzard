@@ -13,9 +13,11 @@ from tests.support.scaffolding import (
     add_tenant,
     build_hub,
     chunk_stores,
+    chunk_unit,
     count_queries,
     count_rows_read,
     default_tenant,
+    hub_store_connections,
     seed_session,
     seed_user,
 )
@@ -29,14 +31,16 @@ def test_page_cost_stays_flat_as_chunk_history_grows(tmp_path: Path) -> None:
 
     def add_facts(start: int, end: int) -> None:
         for i in range(start, end):
-            record_landing(
-                artifacts,
-                chunk,
-                repo=f"repo-{i}",
-                commit_hash=f"sha-{i}",
-                at=hub.clock.now(),
-                close_decision=decision,
-            )
+            with chunk_unit(hub_store_connections(hub.engine), chunk) as unit:
+                record_landing(
+                    artifacts,
+                    chunk,
+                    repo=f"repo-{i}",
+                    commit_hash=f"sha-{i}",
+                    at=hub.clock.now(),
+                    close_decision=decision,
+                    transaction=unit,
+                )
 
     def page() -> None:
         response = hub.client.get(f"/api/chunks/{chunk}/landing-facts", params={"limit": 2})

@@ -216,11 +216,12 @@ class IWriteFlows(IReadFlows, Protocol):
         revision: str,
         at: datetime,
         close_decision: CloseEnqueueDecision,
+        transaction: LockedTransaction,
     ) -> LandingWrite:
-        """A turn's merge in one transaction admitted past the fence: the ``merged/<repo>`` marker, its
-        ``delivery_repo_landed`` row, the close intents, the ``landed`` fact on the landing's flow and its
-        ``flow-landed`` event row. A replay that finds the marker writes nothing. Answers whether the fence would have
-        refused, and the event row it wrote."""
+        """A turn's merge in ``transaction`` — a unit that locks the landing's chunk — admitted past the fence: the
+        ``merged/<repo>`` marker, its ``delivery_repo_landed`` row, the close intents, the ``landed`` fact on the
+        landing's flow and its ``flow-landed`` event row. A replay that finds the marker writes nothing. Answers
+        whether the fence would have refused, and the event row it wrote."""
         ...
 
     def end_turn_interrupted(

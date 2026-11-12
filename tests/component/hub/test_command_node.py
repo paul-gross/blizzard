@@ -46,6 +46,8 @@ from tests.support.scaffolding import (
     HubHarness,
     build_hub,
     chunk_stores,
+    chunk_unit,
+    hub_store_connections,
     pointer_token,
     report_lease,
 )
@@ -419,17 +421,19 @@ nodes:
     merge_node = graph.node_by_name("merge")
     assert merge_node is not None
     # The repo already landed — pre-record the marker as an earlier pass would have.
-    cast(IWriteChunkArtifactsRepository, hub.services.chunks.artifacts).record_hub_artifact(
-        chunk_id,
-        node_id=merge_node.node_id,
-        node_name="merge",
-        epoch=1,
-        name="merged/acme/widget",
-        close_decision=decide_close_enqueue([WorkRef(**_POINTER)], lambda _: True),
-        content="c",
-        at=hub.clock.now(),
-        admission=EpochAdmission.AT_OR_ABOVE,
-    )
+    with chunk_unit(hub_store_connections(hub.engine), chunk_id) as unit:
+        cast(IWriteChunkArtifactsRepository, hub.services.chunks.artifacts).record_hub_artifact(
+            chunk_id,
+            node_id=merge_node.node_id,
+            node_name="merge",
+            epoch=1,
+            name="merged/acme/widget",
+            close_decision=decide_close_enqueue([WorkRef(**_POINTER)], lambda _: True),
+            content="c",
+            at=hub.clock.now(),
+            admission=EpochAdmission.AT_OR_ABOVE,
+            transaction=unit,
+        )
 
     apply = _submit_build_pass_with_commit(hub, chunk_id, build_node_id, 1, repo="acme/widget")
     assert apply.json()["outcome"] == "hub_node_taken"

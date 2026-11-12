@@ -230,18 +230,20 @@ def test_decision_resolved_reads_off_decision_resolutions(tmp_path: Path) -> Non
 
 def test_question_asked_reads_off_questions(tmp_path: Path) -> None:
     store, _ = _store(tmp_path)
-    store.questions.record_question(
-        question_id="qn_1",
-        chunk_id="ch_1",
-        node_id="nd_a",
-        session_id=None,
-        runner_id="runner-a",
-        epoch=1,
-        question="continue?",
-        options=[],
-        asked_at=_at(1),
-        admission=EpochAdmission.AT_OR_ABOVE,
-    )
+    with store.exclusive.locked(["ch_1"]) as handle:
+        store.questions.record_question(
+            question_id="qn_1",
+            chunk_id="ch_1",
+            node_id="nd_a",
+            session_id=None,
+            runner_id="runner-a",
+            epoch=1,
+            question="continue?",
+            options=[],
+            asked_at=_at(1),
+            admission=EpochAdmission.AT_OR_ABOVE,
+            transaction=handle.transaction,
+        )
     row = _row_for(store, "question-asked")
     assert row.chunk_id == "ch_1"
     assert row.runner_id == "runner-a"
@@ -251,18 +253,20 @@ def test_question_asked_reads_off_questions(tmp_path: Path) -> None:
 
 def test_question_answered_reads_off_question_answers(tmp_path: Path) -> None:
     store, engine = _store(tmp_path)
-    store.questions.record_question(
-        question_id="qn_1",
-        chunk_id="ch_1",
-        node_id="nd_a",
-        session_id=None,
-        runner_id="runner-a",
-        epoch=1,
-        question="continue?",
-        options=[],
-        asked_at=_at(1),
-        admission=EpochAdmission.AT_OR_ABOVE,
-    )
+    with store.exclusive.locked(["ch_1"]) as handle:
+        store.questions.record_question(
+            question_id="qn_1",
+            chunk_id="ch_1",
+            node_id="nd_a",
+            session_id=None,
+            runner_id="runner-a",
+            epoch=1,
+            question="continue?",
+            options=[],
+            asked_at=_at(1),
+            admission=EpochAdmission.AT_OR_ABOVE,
+            transaction=handle.transaction,
+        )
     with chunk_unit(hub_store_connections(engine), "ch_1") as unit:
         store.questions.answer_question("qn_1", answer="yes", answered_by="alice", at=_at(2), transaction=unit)
     row = _row_for(store, "question-answered")
@@ -273,15 +277,17 @@ def test_question_answered_reads_off_question_answers(tmp_path: Path) -> None:
 
 def test_escalated_reads_off_escalations(tmp_path: Path) -> None:
     store, _ = _store(tmp_path)
-    store.escalations.record_escalation(
-        "ch_1",
-        epoch=1,
-        takeover_command="cd x && resume",
-        at=_at(1),
-        admission=EpochAdmission.AT_OR_ABOVE,
-        cause=None,
-        detail=None,
-    )
+    with store.exclusive.locked(["ch_1"]) as handle:
+        store.escalations.record_escalation(
+            "ch_1",
+            epoch=1,
+            takeover_command="cd x && resume",
+            at=_at(1),
+            admission=EpochAdmission.AT_OR_ABOVE,
+            cause=None,
+            detail=None,
+            transaction=handle.transaction,
+        )
     row = _row_for(store, "escalated")
     assert row.chunk_id == "ch_1"
     assert row.graph_id == "gr_1"

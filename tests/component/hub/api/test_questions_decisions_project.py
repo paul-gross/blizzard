@@ -16,7 +16,9 @@ from tests.support.scaffolding import (
     HubHarness,
     build_hub,
     chunk_stores,
+    chunk_unit,
     default_project,
+    hub_store_connections,
     ingest,
     link_project,
     report_lease,
@@ -76,18 +78,20 @@ def _seed(hub: HubHarness) -> tuple[str, str]:
             artifacts=[],
             admission=EpochAdmission.AT_OR_ABOVE,
         )
-        stores.questions.record_question(
-            question_id=f"qn_{chunk_id}",
-            chunk_id=chunk_id,
-            node_id="nd_1",
-            session_id=None,
-            runner_id="r1",
-            epoch=1,
-            admission=EpochAdmission.AT_OR_ABOVE,
-            question="which?",
-            options=[],
-            asked_at=_T0,
-        )
+        with chunk_unit(hub_store_connections(hub.engine), chunk_id) as unit:
+            stores.questions.record_question(
+                question_id=f"qn_{chunk_id}",
+                chunk_id=chunk_id,
+                node_id="nd_1",
+                session_id=None,
+                runner_id="r1",
+                epoch=1,
+                admission=EpochAdmission.AT_OR_ABOVE,
+                question="which?",
+                options=[],
+                asked_at=_T0,
+                transaction=unit,
+            )
     return default, gears
 
 

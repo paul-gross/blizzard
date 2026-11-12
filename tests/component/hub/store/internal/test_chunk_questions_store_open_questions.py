@@ -38,18 +38,20 @@ def _seeded(tmp_path: Path, chunk_id: str = "ch_1") -> tuple[ChunkStores, Engine
         seed_graph(conn, "gr_1", at=_T0)
     store = chunk_stores(engine, FixedClock(_T0))
     seed_chunk_record(store, Chunk(chunk_id=chunk_id, graph_id="gr_1", work_refs=[], minted_at=_T0))
-    store.questions.record_question(
-        question_id="qn_1",
-        chunk_id=chunk_id,
-        node_id="nd_1",
-        session_id=None,
-        runner_id="r1",
-        epoch=1,
-        question="continue?",
-        options=[],
-        asked_at=_T0,
-        admission=EpochAdmission.AT_OR_ABOVE,
-    )
+    with chunk_unit(hub_store_connections(engine), chunk_id) as unit:
+        store.questions.record_question(
+            question_id="qn_1",
+            chunk_id=chunk_id,
+            node_id="nd_1",
+            session_id=None,
+            runner_id="r1",
+            epoch=1,
+            question="continue?",
+            options=[],
+            asked_at=_T0,
+            admission=EpochAdmission.AT_OR_ABOVE,
+            transaction=unit,
+        )
     return store, engine
 
 

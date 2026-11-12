@@ -20,6 +20,7 @@ from blizzard.hub.store.internal.finding_store import FindingSetStore
 from tests.support.hub_node_artifacts import record_landing
 from tests.support.scaffolding import (
     chunk_stores,
+    chunk_unit,
     default_project,
     hub_store_connections,
     migrate_to,
@@ -85,22 +86,26 @@ def test_landed_since_joins_the_finding_sets_repo_names_against_delivery(tmp_pat
     )
     stores = chunk_stores(engine, FixedClock(instant=_NOW))
     delivery = stores.delivery
-    record_landing(
-        stores.artifacts,
-        "ch_2",
-        repo="blizzard",
-        commit_hash="e4f5",
-        at=baseline_at + timedelta(hours=1),
-        close_decision=decide_close_enqueue([], lambda _: True),
-    )
-    record_landing(
-        stores.artifacts,
-        "ch_2",
-        repo="other-repo",
-        commit_hash="9988",
-        at=baseline_at + timedelta(hours=1),
-        close_decision=decide_close_enqueue([], lambda _: True),
-    )
+    with chunk_unit(hub_store_connections(engine), "ch_2") as unit:
+        record_landing(
+            stores.artifacts,
+            "ch_2",
+            repo="blizzard",
+            commit_hash="e4f5",
+            at=baseline_at + timedelta(hours=1),
+            close_decision=decide_close_enqueue([], lambda _: True),
+            transaction=unit,
+        )
+    with chunk_unit(hub_store_connections(engine), "ch_2") as unit:
+        record_landing(
+            stores.artifacts,
+            "ch_2",
+            repo="other-repo",
+            commit_hash="9988",
+            at=baseline_at + timedelta(hours=1),
+            close_decision=decide_close_enqueue([], lambda _: True),
+            transaction=unit,
+        )
 
     service = RoutineBaselineService(finding_sets=FindingSetStore(hub_store_connections(engine)), delivery=delivery)
     baselines = service.baselines_for(replace(_ROUTINE, project_id=project))

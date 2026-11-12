@@ -23,9 +23,11 @@ from tests.support.scaffolding import (
     HubHarness,
     RepositorySeed,
     build_hub,
+    chunk_unit,
     create_repositories,
     ensure_fixture_forge,
     fixture_repository,
+    hub_store_connections,
     ingest,
     make_ready,
     pointer_token,
@@ -166,17 +168,19 @@ def test_detail_artifact_production_time_is_the_stored_marker_clock(tmp_path: Pa
     chunk_id, nodes = _pass_build(hub, [_BUILD_ARTIFACT])
     produced_at = hub.clock.now() - timedelta(hours=2)
     writer = cast(IWriteChunkArtifactsRepository, hub.services.chunks.artifacts)
-    assert writer.record_hub_artifact(
-        chunk_id,
-        node_id=nodes["approve-gate"],
-        node_name="approve-gate",
-        epoch=1,
-        admission=EpochAdmission.AT_OR_ABOVE,
-        name="delivery-pr/acme/widget/1",
-        content='{"repo":"acme/widget","number":1,"url":"http://forge/acme/widget/pull/1"}',
-        at=produced_at,
-        close_decision=decide_close_enqueue([WorkRef(source="default", ref="7")], lambda _: True),
-    ).wrote
+    with chunk_unit(hub_store_connections(hub.engine), chunk_id) as unit:
+        assert writer.record_hub_artifact(
+            chunk_id,
+            node_id=nodes["approve-gate"],
+            node_name="approve-gate",
+            epoch=1,
+            admission=EpochAdmission.AT_OR_ABOVE,
+            name="delivery-pr/acme/widget/1",
+            content='{"repo":"acme/widget","number":1,"url":"http://forge/acme/widget/pull/1"}',
+            at=produced_at,
+            close_decision=decide_close_enqueue([WorkRef(source="default", ref="7")], lambda _: True),
+            transaction=unit,
+        ).wrote
 
     response = hub.client.get(f"/api/chunks/{chunk_id}")
     assert response.status_code == 200, response.text
@@ -529,17 +533,19 @@ def test_detail_lists_every_epoch_of_a_series_that_spans_node_ids(tmp_path: Path
     chunk_id = ingest(hub, [{"source": "default", "ref": "1"}], promote=True)
     writer = cast(IWriteChunkArtifactsRepository, hub.services.chunks.artifacts)
     for node_id, epoch in (("nd_build_a", 1), ("nd_build_c", 3), ("nd_build_b", 2)):
-        writer.record_hub_artifact(
-            chunk_id,
-            node_id=node_id,
-            node_name="build",
-            epoch=epoch,
-            name="findings",
-            content=f"v{epoch}",
-            at=hub.clock.now(),
-            admission=EpochAdmission.AT_OR_ABOVE,
-            close_decision=decide_close_enqueue([WorkRef("default", "1")], lambda _: True),
-        )
+        with chunk_unit(hub_store_connections(hub.engine), chunk_id) as unit:
+            writer.record_hub_artifact(
+                chunk_id,
+                node_id=node_id,
+                node_name="build",
+                epoch=epoch,
+                name="findings",
+                content=f"v{epoch}",
+                at=hub.clock.now(),
+                admission=EpochAdmission.AT_OR_ABOVE,
+                close_decision=decide_close_enqueue([WorkRef("default", "1")], lambda _: True),
+                transaction=unit,
+            )
 
     detail = hub.client.get(f"/api/chunks/{chunk_id}").json()
     assert [(a["key"], a["node_id"]) for a in detail["artifacts"]] == [

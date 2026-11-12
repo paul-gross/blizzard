@@ -46,7 +46,7 @@ from blizzard.hub.domain.execution.usage_facts import (
     usage_miss_reason,
 )
 from blizzard.hub.domain.kernel.high_water import HighWaterConflict
-from blizzard.hub.domain.kernel.transactions import IHubTransactions, Transaction
+from blizzard.hub.domain.kernel.transactions import IHubTransactions, LockedTransaction, Transaction
 from blizzard.hub.domain.runners.registration import RetiredRunnerGuard
 
 _log = get_logger("blizzard.hub.facts")
@@ -132,14 +132,23 @@ class _DeliveryRefusal:
 @domain_model
 @dataclass(frozen=True)
 class _Landing:
-    """An admitted fact's write. ``write`` runs in the unit that advances the mark — on the token that unit locked —
-    and answers the row id the ack carries, or the event it logged (whose row id the ack carries), or the write
-    fence's refusal, or a delivery refusal decided from reads taken on that token; ``locks`` names the chunk whose
-    row lock that unit declares; ``committed`` runs on what ``write`` answered once the unit commits — a frame
-    published, a line logged — and never when it rolls back (``bzh:publish-after-commit``)."""
+    """An admitted fact's write. ``write`` runs in the unit that advances the mark and answers the row id the ack
+    carries, or the event it logged (whose row id the ack carries), or the write fence's refusal; ``committed`` runs
+    on what ``write`` answered once the unit commits — a frame published, a line logged — and never when it rolls
+    back (``bzh:publish-after-commit``)."""
 
-    write: Callable[[Transaction], _Written | FenceRefusal | _DeliveryRefusal]
-    locks: str | None = None
+    write: Callable[[Transaction], _Written | FenceRefusal]
+    committed: Callable[[_Written], object] | None = None
+
+
+@domain_model
+@dataclass(frozen=True)
+class _LockedLanding:
+    """A :class:`_Landing` whose unit declares ``locks``, the chunk whose row lock it takes: ``write`` runs on the
+    token that unit locked, and may also answer a delivery refusal decided from reads taken on it."""
+
+    locks: str
+    write: Callable[[LockedTransaction], _Written | FenceRefusal | _DeliveryRefusal]
     committed: Callable[[_Written], object] | None = None
 
 
@@ -331,8 +340,13 @@ class FactIngestService:
         if landing is None:
             return False, None
         with self._transactions.begin() as unit:
-            transaction = unit.lock_chunks([landing.locks]) if landing.locks is not None else unit
-            written = landing.write(transaction)
+            transaction: Transaction
+            written: _Written | FenceRefusal | _DeliveryRefusal
+            if isinstance(landing, _LockedLanding):
+                locked = unit.lock_chunks([landing.locks])
+                transaction, written = locked, landing.write(locked)
+            else:
+                transaction, written = unit, landing.write(unit)
             if isinstance(written, FenceRefusal):
                 return self._fenced(fact.kind, payload, written)
             if isinstance(written, _DeliveryRefusal):
@@ -359,7 +373,7 @@ class FactIngestService:
         chunks: Mapping[str, Chunk],
         runner_name: str | None,
         now: datetime,
-    ) -> _Landing | None:
+    ) -> _Landing | _LockedLanding | None:
         """The write that lands one fact — the route-token gate decided before its unit opens, on its own
         connection, the answer delivery decided inside its unit — or ``None`` on an unknown kind or a refusal."""
         gated = requires_route_token(kind, fact.text("chunk_id"))
@@ -423,19 +437,19 @@ class FactIngestService:
         _log.warning("unknown runner fact kind", kind=kind)
         return None
 
-    def _chunk_locked_landing(self, runner_id: str, kind: str, fact: Payload, *, now: datetime) -> _Landing:
+    def _chunk_locked_landing(self, runner_id: str, kind: str, fact: Payload, *, now: datetime) -> _LockedLanding:
         """A fence-advancing fact's write, under its chunk's row lock, which its unit declares."""
         chunk_id = fact.require_text("chunk_id")
         claimant = Claimant(runner_id, fact.text("lease_id"))
         if kind == LEASE_MINTED:
-            return _Landing(
+            return _LockedLanding(
                 locks=chunk_id,
                 write=lambda transaction: self._route.record_lease_minted(
                     chunk_id, epoch=fact.require_number("epoch"), claimant=claimant, at=now, transaction=transaction
                 ),
             )
         if kind == ESCALATION_RECORDED:
-            return _Landing(
+            return _LockedLanding(
                 locks=chunk_id,
                 write=lambda transaction: self._escalations.record_escalation(
                     chunk_id,
@@ -452,7 +466,7 @@ class FactIngestService:
                 committed=lambda written: self._publish_close_skipped(chunk_id, written),
             )
         # question.asked — the runner authors the question_id so it can poll the answer back.
-        return _Landing(
+        return _LockedLanding(
             locks=chunk_id,
             write=lambda transaction: self._questions.record_question(
                 question_id=fact.require_text("question_id"),
@@ -552,7 +566,7 @@ class FactIngestService:
             ),
         )
 
-    def _answer_landing(self, question_id: str, chunk_id: str, *, now: datetime) -> _Landing:
+    def _answer_landing(self, question_id: str, chunk_id: str, *, now: datetime) -> _LockedLanding:
         """An ``answer.delivered`` as :meth:`NodeQuestion.delivery` decides, inside the unit that locks the reported
         chunk (``bzh:write-reestablishes-read``) so a restart cannot interleave: written, a replay that writes
         nothing but still advances the mark, or a :class:`_DeliveryRefusal` — rejected in the ack (an unknown
@@ -574,7 +588,7 @@ class FactIngestService:
                 )
             return None
 
-        return _Landing(write=write, locks=chunk_id)
+        return _LockedLanding(locks=chunk_id, write=write)
 
     def _route_token_ok(self, chunk_id: str, runner_id: str, fact: Payload, *, mode: str) -> bool:
         """Route-token authorization for a chunk-scoped, fence-advancing fact — the

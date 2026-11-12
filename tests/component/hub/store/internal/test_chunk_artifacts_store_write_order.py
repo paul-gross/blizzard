@@ -15,7 +15,7 @@ from blizzard.hub.domain.chunk.delivery_read import DeliveryRead
 from blizzard.hub.domain.chunk.model import ChunkFacts, WorkRef, decide_close_enqueue
 from blizzard.hub.domain.chunk.ports.artifacts import IWriteChunkArtifactsRepository
 from blizzard.hub.domain.chunk.ports.fence import EpochAdmission
-from tests.support.scaffolding import build_hub, ingest
+from tests.support.scaffolding import build_hub, chunk_unit, hub_store_connections, ingest
 
 # Same millisecond prefix; the later write gets the lexically smaller id.
 _INVERTED_IDS = ("01K6DZZZZZZZZZZZZZZZZZZZZZ", "01K6DZZZZZ0000000000000000")
@@ -28,17 +28,19 @@ def test_same_millisecond_marker_writes_read_back_in_write_order(
     chunk_id = ingest(hub, [{"source": "default", "ref": "1"}], promote=True)
     at = hub.clock.now()
     writer = cast(IWriteChunkArtifactsRepository, hub.services.chunks.artifacts)
-    assert writer.record_hub_artifact(
-        chunk_id,
-        node_id="nd_deliver",
-        node_name="deliver",
-        epoch=1,
-        name="delivery-pr/acme/one/2",
-        content="not json",
-        at=at,
-        admission=EpochAdmission.AT_OR_ABOVE,
-        close_decision=decide_close_enqueue([WorkRef(source="default", ref="1")], lambda _: True),
-    ).wrote
+    with chunk_unit(hub_store_connections(hub.engine), chunk_id) as unit:
+        assert writer.record_hub_artifact(
+            chunk_id,
+            node_id="nd_deliver",
+            node_name="deliver",
+            epoch=1,
+            name="delivery-pr/acme/one/2",
+            content="not json",
+            at=at,
+            admission=EpochAdmission.AT_OR_ABOVE,
+            close_decision=decide_close_enqueue([WorkRef(source="default", ref="1")], lambda _: True),
+            transaction=unit,
+        ).wrote
     minted: Iterator[str] = iter(_INVERTED_IDS)
 
     def inverted_mint(cls: type[Id], prefix: str, clock: IClock) -> Id:
@@ -46,17 +48,19 @@ def test_same_millisecond_marker_writes_read_back_in_write_order(
 
     monkeypatch.setattr(Id, "mint", classmethod(inverted_mint))
     for number in (3, 4):
-        assert writer.record_hub_artifact(
-            chunk_id,
-            node_id="nd_deliver",
-            node_name="deliver",
-            epoch=1,
-            name=f"delivery-pr/acme/one/{number}",
-            content=f'{{"repo":"acme/one","number":{number},"url":"http://forge/acme/one/pull/{number}"}}',
-            at=at,
-            admission=EpochAdmission.AT_OR_ABOVE,
-            close_decision=decide_close_enqueue([WorkRef(source="default", ref="1")], lambda _: True),
-        ).wrote
+        with chunk_unit(hub_store_connections(hub.engine), chunk_id) as unit:
+            assert writer.record_hub_artifact(
+                chunk_id,
+                node_id="nd_deliver",
+                node_name="deliver",
+                epoch=1,
+                name=f"delivery-pr/acme/one/{number}",
+                content=f'{{"repo":"acme/one","number":{number},"url":"http://forge/acme/one/pull/{number}"}}',
+                at=at,
+                admission=EpochAdmission.AT_OR_ABOVE,
+                close_decision=decide_close_enqueue([WorkRef(source="default", ref="1")], lambda _: True),
+                transaction=unit,
+            ).wrote
 
     sources = hub.services.chunks.artifacts.delivery_sources_for([chunk_id])[chunk_id]
 

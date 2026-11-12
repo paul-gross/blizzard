@@ -1672,19 +1672,21 @@ def build_hub_world(tmp_path: Path) -> HubWorld:
     materialized_ref = accepted.closure.ref
 
     # --- delivered finding sets over run_chunk_1's own artifacts ----------------------------
-    write.artifacts.record_hub_artifact(
-        run_chunk_1,
-        node_id="nd_survey",
-        node_name="survey",
-        epoch=1,
-        name="findings",
-        content=json.dumps(
-            {"scope": "blizzard", "revisions": {"blizzard": "aaa"}, "measurement": None, "findings": []}
-        ),
-        at=_ht(20),
-        admission=EpochAdmission.AT_OR_ABOVE,
-        close_decision=_close_decision(run_chunk_1),
-    )
+    with chunk_unit(store_connections, run_chunk_1) as unit:
+        write.artifacts.record_hub_artifact(
+            run_chunk_1,
+            node_id="nd_survey",
+            node_name="survey",
+            epoch=1,
+            name="findings",
+            content=json.dumps(
+                {"scope": "blizzard", "revisions": {"blizzard": "aaa"}, "measurement": None, "findings": []}
+            ),
+            at=_ht(20),
+            admission=EpochAdmission.AT_OR_ABOVE,
+            close_decision=_close_decision(run_chunk_1),
+            transaction=unit,
+        )
     artifact_1 = write.artifacts.latest_artifact(run_chunk_1, "findings")
     assert artifact_1 is not None
     finding_set_store.create(
@@ -1697,17 +1699,19 @@ def build_hub_world(tmp_path: Path) -> HubWorld:
         revisions={"blizzard": "aaa"},
         measurement=None,
     )
-    write.artifacts.record_hub_artifact(
-        run_chunk_1,
-        node_id="nd_survey",
-        node_name="survey",
-        epoch=1,
-        name="findings-runner",
-        content=json.dumps({"scope": "runner-scope", "revisions": {}, "measurement": None, "findings": []}),
-        at=_ht(21),
-        admission=EpochAdmission.AT_OR_ABOVE,
-        close_decision=_close_decision(run_chunk_1),
-    )
+    with chunk_unit(store_connections, run_chunk_1) as unit:
+        write.artifacts.record_hub_artifact(
+            run_chunk_1,
+            node_id="nd_survey",
+            node_name="survey",
+            epoch=1,
+            name="findings-runner",
+            content=json.dumps({"scope": "runner-scope", "revisions": {}, "measurement": None, "findings": []}),
+            at=_ht(21),
+            admission=EpochAdmission.AT_OR_ABOVE,
+            close_decision=_close_decision(run_chunk_1),
+            transaction=unit,
+        )
     artifact_2 = write.artifacts.latest_artifact(run_chunk_1, "findings-runner")
     assert artifact_2 is not None
     finding_set_store.create(
@@ -1801,51 +1805,55 @@ def build_hub_world(tmp_path: Path) -> HubWorld:
     delivery_run = RunContext(
         project_id=garden_project, routine_name="gardening", scope_slug=scope_a.slug, mode="dry_run"
     )
-    garden_delivery_store.deliver(
-        DeliveryPlan(
-            chunk_id=delivery_chunk,
-            node_id=deliver_node.node_id,
-            node_name=deliver_node.name,
-            epoch=delivery_epoch,
-            at=_ht(38),
-            run=delivery_run,
-            deltas=[
-                DeltaMaterialization(
-                    finding_set=NewFindingSet(
-                        finding_set_id="fins_hub_delivery",
-                        artifact_id="art_hub_delivery",
-                        scope_slug=scope_a.slug,
-                        revisions={},
-                        measurement=None,
+    with chunk_unit(store_connections, delivery_chunk) as unit:
+        garden_delivery_store.deliver(
+            DeliveryPlan(
+                chunk_id=delivery_chunk,
+                node_id=deliver_node.node_id,
+                node_name=deliver_node.name,
+                epoch=delivery_epoch,
+                at=_ht(38),
+                run=delivery_run,
+                deltas=[
+                    DeltaMaterialization(
+                        finding_set=NewFindingSet(
+                            finding_set_id="fins_hub_delivery",
+                            artifact_id="art_hub_delivery",
+                            scope_slug=scope_a.slug,
+                            revisions={},
+                            measurement=None,
+                        )
                     )
-                )
-            ],
-            proposals=[],
-        ),
-        admission=EpochAdmission.AT_OR_ABOVE,
-    )
-    review_findings_store.deliver(
-        ReviewFindingsPlan(
-            chunk_id=delivery_chunk,
-            node_id=deliver_node.node_id,
-            node_name=deliver_node.name,
-            epoch=delivery_epoch,
-            at=_ht(39),
-            new_findings=[
-                NewReviewFinding(
-                    finding_id="fin_hub_review",
-                    scope_slug=scope_a.slug,
-                    class_="correctness",
-                    locus="a.py:1",
-                    summary="s",
-                    severity="should-fix",
-                    raised_by_chunk_id=delivery_chunk,
-                )
-            ],
-            facts=[NewReviewFindingFact(finding_id="fin_hub_review", ref="F1")],
-        ),
-        admission=EpochAdmission.AT_OR_ABOVE,
-    )
+                ],
+                proposals=[],
+            ),
+            admission=EpochAdmission.AT_OR_ABOVE,
+            transaction=unit,
+        )
+    with chunk_unit(store_connections, delivery_chunk) as unit:
+        review_findings_store.deliver(
+            ReviewFindingsPlan(
+                chunk_id=delivery_chunk,
+                node_id=deliver_node.node_id,
+                node_name=deliver_node.name,
+                epoch=delivery_epoch,
+                at=_ht(39),
+                new_findings=[
+                    NewReviewFinding(
+                        finding_id="fin_hub_review",
+                        scope_slug=scope_a.slug,
+                        class_="correctness",
+                        locus="a.py:1",
+                        summary="s",
+                        severity="should-fix",
+                        raised_by_chunk_id=delivery_chunk,
+                    )
+                ],
+                facts=[NewReviewFindingFact(finding_id="fin_hub_review", ref="F1")],
+            ),
+            admission=EpochAdmission.AT_OR_ABOVE,
+            transaction=unit,
+        )
 
     chunk_migration = "ch_hub_migration"
     _mint(chunk_migration, "1005", at=_ht(40))
@@ -1906,56 +1914,64 @@ def build_hub_world(tmp_path: Path) -> HubWorld:
     chunk_escalation_2 = "ch_hub_escalation_2"
     _mint(chunk_escalation_1, "1008", at=_ht(46))
     _mint(chunk_escalation_2, "1009", at=_ht(47))
-    write.escalations.record_escalation(
-        chunk_escalation_1,
-        epoch=1,
-        takeover_command="resume",
-        at=_ht(48),
-        wrapped_takeover_command="wrapped-resume",
-        admission=EpochAdmission.AT_OR_ABOVE,
-        cause=None,
-        detail=None,
-    )
-    write.escalations.record_escalation(
-        chunk_escalation_2,
-        epoch=1,
-        takeover_command="resume",
-        at=_ht(49),
-        wrapped_takeover_command="wrapped-resume",
-        admission=EpochAdmission.AT_OR_ABOVE,
-        cause=None,
-        detail=None,
-    )
+    with chunk_unit(store_connections, chunk_escalation_1) as unit:
+        write.escalations.record_escalation(
+            chunk_escalation_1,
+            epoch=1,
+            takeover_command="resume",
+            at=_ht(48),
+            wrapped_takeover_command="wrapped-resume",
+            admission=EpochAdmission.AT_OR_ABOVE,
+            cause=None,
+            detail=None,
+            transaction=unit,
+        )
+    with chunk_unit(store_connections, chunk_escalation_2) as unit:
+        write.escalations.record_escalation(
+            chunk_escalation_2,
+            epoch=1,
+            takeover_command="resume",
+            at=_ht(49),
+            wrapped_takeover_command="wrapped-resume",
+            admission=EpochAdmission.AT_OR_ABOVE,
+            cause=None,
+            detail=None,
+            transaction=unit,
+        )
 
     # --- questions -----------------------------------------------------------------------------
     chunk_question = "ch_hub_question"
     _mint(chunk_question, "1010", at=_ht(50))
     question_1 = "qn_hub_1"
     question_2 = "qn_hub_2"
-    write.questions.record_question(
-        question_id=question_1,
-        chunk_id=chunk_question,
-        node_id=build_node.node_id,
-        session_id="sess-hub-1",
-        runner_id=HUB_RUNNER_ID,
-        epoch=1,
-        question="proceed?",
-        options=["yes", "no"],
-        asked_at=_ht(51),
-        admission=EpochAdmission.AT_OR_ABOVE,
-    )
-    write.questions.record_question(
-        question_id=question_2,
-        chunk_id=chunk_question,
-        node_id=build_node.node_id,
-        session_id="sess-hub-1",
-        runner_id=HUB_RUNNER_ID,
-        epoch=1,
-        question="also?",
-        options=[],
-        asked_at=_ht(52),
-        admission=EpochAdmission.AT_OR_ABOVE,
-    )
+    with chunk_unit(store_connections, chunk_question) as unit:
+        write.questions.record_question(
+            question_id=question_1,
+            chunk_id=chunk_question,
+            node_id=build_node.node_id,
+            session_id="sess-hub-1",
+            runner_id=HUB_RUNNER_ID,
+            epoch=1,
+            question="proceed?",
+            options=["yes", "no"],
+            asked_at=_ht(51),
+            admission=EpochAdmission.AT_OR_ABOVE,
+            transaction=unit,
+        )
+    with chunk_unit(store_connections, chunk_question) as unit:
+        write.questions.record_question(
+            question_id=question_2,
+            chunk_id=chunk_question,
+            node_id=build_node.node_id,
+            session_id="sess-hub-1",
+            runner_id=HUB_RUNNER_ID,
+            epoch=1,
+            question="also?",
+            options=[],
+            asked_at=_ht(52),
+            admission=EpochAdmission.AT_OR_ABOVE,
+            transaction=unit,
+        )
     with chunk_unit(store_connections, chunk_question) as unit:
         write.questions.answer_question(
             question_1, answer="yes", answered_by=user_1.user_id, at=_ht(53), transaction=unit
@@ -2056,55 +2072,65 @@ def build_hub_world(tmp_path: Path) -> HubWorld:
     chunk_delivery_b = "ch_hub_delivery_b"
     _mint(chunk_delivery_a, "1015", at=_ht(69))
     _mint(chunk_delivery_b, "1016", at=_ht(70))
-    record_landing(
-        write.artifacts,
-        chunk_delivery_a,
-        repo="acme/widget",
-        commit_hash="c1",
-        at=_ht(71),
-        close_decision=_close_decision(chunk_delivery_a),
-    )
-    record_landing(
-        write.artifacts,
-        chunk_delivery_a,
-        repo="acme/other",
-        commit_hash="c2",
-        at=_ht(72),
-        close_decision=_close_decision(chunk_delivery_a),
-    )
-    record_landing(
-        write.artifacts,
-        chunk_delivery_b,
-        repo="acme/widget",
-        commit_hash="c3",
-        at=_ht(73),
-        close_decision=_close_decision(chunk_delivery_b),
-    )
+    with chunk_unit(store_connections, chunk_delivery_a) as unit:
+        record_landing(
+            write.artifacts,
+            chunk_delivery_a,
+            repo="acme/widget",
+            commit_hash="c1",
+            at=_ht(71),
+            close_decision=_close_decision(chunk_delivery_a),
+            transaction=unit,
+        )
+    with chunk_unit(store_connections, chunk_delivery_a) as unit:
+        record_landing(
+            write.artifacts,
+            chunk_delivery_a,
+            repo="acme/other",
+            commit_hash="c2",
+            at=_ht(72),
+            close_decision=_close_decision(chunk_delivery_a),
+            transaction=unit,
+        )
+    with chunk_unit(store_connections, chunk_delivery_b) as unit:
+        record_landing(
+            write.artifacts,
+            chunk_delivery_b,
+            repo="acme/widget",
+            commit_hash="c3",
+            at=_ht(73),
+            close_decision=_close_decision(chunk_delivery_b),
+            transaction=unit,
+        )
     write.delivery.record_delivery_landed(
         chunk_delivery_a, at=_ht(74), close_decision=_close_decision(chunk_delivery_a)
     )
-    write.artifacts.record_hub_artifact(
-        chunk_delivery_a,
-        node_id=deliver_node.node_id,
-        node_name="deliver",
-        epoch=1,
-        name=f"{MARKER_PREFIX}acme/widget",
-        content="merged",
-        at=_ht(75),
-        admission=EpochAdmission.AT_OR_ABOVE,
-        close_decision=_close_decision(chunk_delivery_a),
-    )
-    write.artifacts.record_hub_artifact(
-        chunk_delivery_b,
-        node_id=deliver_node.node_id,
-        node_name="deliver",
-        epoch=1,
-        name=f"{MARKER_PREFIX}acme/widget",
-        content="merged",
-        at=_ht(76),
-        admission=EpochAdmission.AT_OR_ABOVE,
-        close_decision=_close_decision(chunk_delivery_b),
-    )
+    with chunk_unit(store_connections, chunk_delivery_a) as unit:
+        write.artifacts.record_hub_artifact(
+            chunk_delivery_a,
+            node_id=deliver_node.node_id,
+            node_name="deliver",
+            epoch=1,
+            name=f"{MARKER_PREFIX}acme/widget",
+            content="merged",
+            at=_ht(75),
+            admission=EpochAdmission.AT_OR_ABOVE,
+            close_decision=_close_decision(chunk_delivery_a),
+            transaction=unit,
+        )
+    with chunk_unit(store_connections, chunk_delivery_b) as unit:
+        write.artifacts.record_hub_artifact(
+            chunk_delivery_b,
+            node_id=deliver_node.node_id,
+            node_name="deliver",
+            epoch=1,
+            name=f"{MARKER_PREFIX}acme/widget",
+            content="merged",
+            at=_ht(76),
+            admission=EpochAdmission.AT_OR_ABOVE,
+            close_decision=_close_decision(chunk_delivery_b),
+            transaction=unit,
+        )
 
     # --- dependencies --------------------------------------------------------------------------
     chunk_dependency_dependent = "ch_hub_dep_dependent"
@@ -2155,7 +2181,10 @@ def build_hub_world(tmp_path: Path) -> HubWorld:
             token_hash="route-hash-a",
             at=_ht(88),
         )
-    write.route.record_lease_minted(chunk_route_a, epoch=1, claimant=Claimant(HUB_RUNNER_ID), at=_ht(89))
+    with chunk_unit(store_connections, chunk_route_a) as unit:
+        write.route.record_lease_minted(
+            chunk_route_a, epoch=1, claimant=Claimant(HUB_RUNNER_ID), at=_ht(89), transaction=unit
+        )
     with transactions.begin() as unit:
         write.route.set_runner_high_water(HUB_RUNNER_ID, seq=7, expected=0, at=_ht(90), transaction=unit)
     with write.exclusive.locked([chunk_route_a]) as handle:
@@ -2177,28 +2206,32 @@ def build_hub_world(tmp_path: Path) -> HubWorld:
     # --- artifacts -------------------------------------------------------------------------------
     chunk_artifacts = "ch_hub_artifacts"
     _mint(chunk_artifacts, "1025", at=_ht(93))
-    write.artifacts.record_hub_artifact(
-        chunk_artifacts,
-        node_id=deliver_node.node_id,
-        node_name="deliver",
-        epoch=1,
-        name="asset-1",
-        content="c1",
-        at=_ht(94),
-        admission=EpochAdmission.AT_OR_ABOVE,
-        close_decision=_close_decision(chunk_artifacts),
-    )
-    write.artifacts.record_hub_artifact(
-        chunk_artifacts,
-        node_id=deliver_node.node_id,
-        node_name="deliver",
-        epoch=1,
-        name="asset-2",
-        content="c2",
-        at=_ht(95),
-        admission=EpochAdmission.AT_OR_ABOVE,
-        close_decision=_close_decision(chunk_artifacts),
-    )
+    with chunk_unit(store_connections, chunk_artifacts) as unit:
+        write.artifacts.record_hub_artifact(
+            chunk_artifacts,
+            node_id=deliver_node.node_id,
+            node_name="deliver",
+            epoch=1,
+            name="asset-1",
+            content="c1",
+            at=_ht(94),
+            admission=EpochAdmission.AT_OR_ABOVE,
+            close_decision=_close_decision(chunk_artifacts),
+            transaction=unit,
+        )
+    with chunk_unit(store_connections, chunk_artifacts) as unit:
+        write.artifacts.record_hub_artifact(
+            chunk_artifacts,
+            node_id=deliver_node.node_id,
+            node_name="deliver",
+            epoch=1,
+            name="asset-2",
+            content="c2",
+            at=_ht(95),
+            admission=EpochAdmission.AT_OR_ABOVE,
+            close_decision=_close_decision(chunk_artifacts),
+            transaction=unit,
+        )
 
     # --- extra work ref -----------------------------------------------------------------------
     chunk_work_refs_extra = "ch_hub_work_refs_extra"
