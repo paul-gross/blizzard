@@ -18,11 +18,13 @@ from blizzard.hub.delivery.actions.landing.repo import (
     Waiting,
 )
 from blizzard.hub.domain.actions.check_observations import (
-    GRACE,
+    Eligibility,
     marker_content,
     marker_name,
     missing_checks,
-    observation,
+)
+from blizzard.hub.domain.actions.check_observations import (
+    eligibility as decide_eligibility,
 )
 from blizzard.hub.domain.config.capabilities import Capability
 from blizzard.hub.forge.landing import (
@@ -162,21 +164,28 @@ async def read_verdict(repo: RepoLanding, ref: str) -> Verdict:
 
 async def eligibility(repo: RepoLanding, sha: str, verdict: Verdict) -> bool | Waiting | NeedsPerson:
     """Apply the same empty-check policy to each landing candidate."""
-    if verdict.green:
-        return True
-    if verdict.checks != ():
-        return False
-    if repo.record.allow_no_ci:
-        return True
     visit = repo.run.visit
-    first = observation(visit.markers, visit.epoch, repo.record.record, sha)
-    if first is None:
+    decision = decide_eligibility(
+        green=verdict.green,
+        empty=verdict.checks == (),
+        allow_no_ci=repo.record.allow_no_ci,
+        markers=visit.markers,
+        epoch=visit.epoch,
+        repository=repo.record.record,
+        sha=sha,
+        now=visit.now,
+    )
+    if decision.outcome is Eligibility.ELIGIBLE:
+        return True
+    if decision.outcome is Eligibility.INELIGIBLE:
+        return False
+    if decision.outcome is Eligibility.RECORD:
         await repo.run.post(
             marker_name(repo.record.record, sha), marker_content(repo.repo, repo.record.landing_policy, sha, visit.now)
         )
-        return Waiting(f"{repo.repo}: waiting for checks on {sha}")
-    if visit.now - first >= GRACE:
-        return NeedsPerson(missing_checks(repo.repo, repo.record.landing_policy, sha, first))
+    if decision.outcome is Eligibility.ESCALATE:
+        assert decision.first is not None
+        return NeedsPerson(missing_checks(repo.repo, repo.record.landing_policy, sha, decision.first))
     return Waiting(f"{repo.repo}: waiting for checks on {sha}")
 
 

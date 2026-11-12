@@ -1488,6 +1488,8 @@ def test_empty_checks_grace_is_durable_and_opt_in_is_explicit(policy: LandingPol
     assert answer.escalation is not None
     assert answer.escalation.cause == EscalationCause.MISSING_CHECKS
     assert _SUBMITTED in answer.escalation.detail
+    assert "strict (allow_no_ci=false)" in answer.escalation.detail
+    assert "requeue to capture the new terms" in answer.escalation.detail
     assert not double.named("merge") and not double.named("advance_ref")
 
     opted = replace(target, allow_no_ci=True)
@@ -1528,3 +1530,15 @@ def test_empty_grace_only_escalates_on_a_current_empty_read(policy: LandingPolic
     double.repos[_WIDGET].checks[_SUBMITTED] = ()
     escalation = _land(double, expired)[0].escalation
     assert escalation is not None and escalation.cause == EscalationCause.MISSING_CHECKS
+
+
+@pytest.mark.parametrize("policy", [LandingPolicy.MERGE_ON_CHECKS, LandingPolicy.FAST_FORWARD])
+def test_degraded_checks_do_not_land_even_with_no_ci_opt_in(policy: LandingPolicy) -> None:
+    double = _forge(checks={_SUBMITTED: None}, compares={("base-tip", _SUBMITTED): comparison()})
+    visit = _visit()
+    target = replace(visit.resolution.targets[0], landing_policy=policy, allow_no_ci=True)
+    visit = replace(visit, resolution=replace(visit.resolution, targets=(target,)))
+    answer, sink = _land(double, visit)
+    assert answer.choice == "pending"
+    assert not any(name.startswith("empty-checks/") for name in sink.markers())
+    assert not double.named("merge") and not double.named("advance_ref")
