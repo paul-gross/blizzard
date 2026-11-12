@@ -8,7 +8,6 @@ from datetime import datetime
 from typing import Protocol
 
 from blizzard.hub.domain.chunk.model import RouteReleaseCause
-from blizzard.hub.domain.chunk.ports.exclusive import ILockedChunkRead
 from blizzard.hub.domain.chunk.ports.fence import Claimant, FenceRefusal
 from blizzard.hub.domain.kernel.transactions import LockedTransaction, Transaction
 from blizzard.hub.domain.runners.lifecycle_version import RunnerLifecycleVersion
@@ -49,38 +48,40 @@ class IReadChunkRouteRepository(Protocol):
 class IWriteChunkRouteRepository(IReadChunkRouteRepository, Protocol):
     """Read-write chunk-route access."""
 
-    def record_route_locked(self, handle: ILockedChunkRead, route: Route, *, token_hash: str, at: datetime) -> str:
-        """Record the route **and** mint its capability token's fact, atomically, on
-        ``handle``'s already-locked connection (``bzh:store-exclusive-write``).
+    def record_route(self, route: Route, *, token_hash: str, at: datetime, transaction: LockedTransaction) -> str:
+        """Record the route **and** mint its capability token's fact, atomically, in ``transaction``, a unit that
+        locks the chunk (``bzh:transaction-participation``). It also reserves the chunk's next epoch for the
+        claiming runner — itself a fencing write: the prior holder's writes at or below it are refused from this
+        commit on.
 
         ``token_hash`` is the sha256 digest of the plaintext token, already hashed by the
         caller (``bzh:domain-takes-objects``); the token fact lands in the same write,
         never as a column on the route fact. Returns the minted ``route_id``."""
         ...
 
-    def record_route_released_locked(
+    def record_route_released(
         self,
-        handle: ILockedChunkRead,
         chunk_id: str,
         *,
         at: datetime,
         cause: RouteReleaseCause | None = None,
         reason: str | None = None,
         expected_runner: RunnerLifecycleVersion | None = None,
+        transaction: LockedTransaction,
     ) -> int:
-        """Append the ``route.released`` fact, on ``handle``'s already-locked connection
-        (``bzh:store-exclusive-write``), recording which write gave tenure back and, on a
+        """Append the ``route.released`` fact in ``transaction``, a unit that locks the chunk
+        (``bzh:transaction-participation``), recording which write gave tenure back and, on a
         release, the caller's reason. With ``expected_runner`` it lands only while that runner
         stands at that lifecycle version — :class:`~blizzard.hub.domain.runners.registration.RunnerLifecycleConflict`
         otherwise, appending nothing. Returns the freshly-written ``route_released.id``."""
         ...
 
-    def record_route_token_locked(
-        self, handle: ILockedChunkRead, chunk_id: str, *, token_hash: str, at: datetime
+    def record_route_token(
+        self, chunk_id: str, *, token_hash: str, at: datetime, transaction: LockedTransaction
     ) -> None:
         """Append a fresh :class:`RouteTokenMintedFact` for the chunk's route — the re-key
-        path — on ``handle``'s already-locked connection (``bzh:store-exclusive-write``). Never mutates the prior
-        token fact (``bzh:facts-not-status``):
+        path — in ``transaction``, a unit that locks the chunk (``bzh:transaction-participation``). Never mutates
+        the prior token fact (``bzh:facts-not-status``):
         :attr:`RouteHistory.newest_token` supersedes it with no separate revocation step."""
         ...
 

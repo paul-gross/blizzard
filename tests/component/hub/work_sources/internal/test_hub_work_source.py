@@ -503,8 +503,7 @@ def test_withdraw_is_refused_while_an_acquired_chunk_holds_the_ref(tmp_path: Pat
     )
     pointer = WorkRef(source="hub", ref=created.item.ref)
     with chunks.exclusive.locked([created.chunk_id]) as handle:
-        chunks.route.record_route_locked(
-            handle,
+        chunks.route.record_route(
             Route(
                 chunk_id=created.chunk_id,
                 runner_id="r1",
@@ -514,6 +513,7 @@ def test_withdraw_is_refused_while_an_acquired_chunk_holds_the_ref(tmp_path: Pat
             ),
             token_hash="deadbeef",
             at=clock.instant,
+            transaction=handle.transaction,
         )
 
     with pytest.raises(WorkItemHeldByLiveChunk) as excinfo:

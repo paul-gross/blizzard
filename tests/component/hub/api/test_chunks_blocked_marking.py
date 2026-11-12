@@ -218,9 +218,11 @@ class _CountingFactsStore(ChunkFactsStore):
         self.load_facts_calls += 1
         return super().load_facts(chunk_id, transaction=transaction)
 
-    def load_facts_for(self, chunk_ids: Sequence[str]) -> dict[str, ChunkFacts]:
+    def load_facts_for(
+        self, chunk_ids: Sequence[str], *, transaction: Transaction | None = None
+    ) -> dict[str, ChunkFacts]:
         self.load_facts_for_calls += 1
-        return super().load_facts_for(chunk_ids)
+        return super().load_facts_for(chunk_ids, transaction=transaction)
 
 
 def test_detail_routes_blocked_derivation_never_reaches_load_all_facts(tmp_path: Path) -> None:

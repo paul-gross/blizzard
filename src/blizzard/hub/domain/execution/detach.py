@@ -12,8 +12,9 @@ from collections.abc import Mapping, Sequence
 from blizzard.foundation.chunk_status import TERMINAL_STATUSES, ChunkStatus
 from blizzard.foundation.clock import IClock
 from blizzard.hub.domain.chunk.model import Chunk, ChunkFacts, RouteReleaseCause, holds_claim
-from blizzard.hub.domain.chunk.ports.exclusive import IChunkExclusiveWrites
+from blizzard.hub.domain.chunk.ports.facts import IReadChunkFactsRepository
 from blizzard.hub.domain.chunk.ports.route import IWriteChunkRouteRepository
+from blizzard.hub.domain.kernel.transactions import IHubTransactions
 from blizzard.hub.domain.runners.lifecycle_version import RunnerLifecycleVersion
 from blizzard.hub.domain.runners.route import Route
 
@@ -55,10 +56,17 @@ def releasable_by(route: Route | None, status: ChunkStatus | None, *, runner_id:
 class DetachService:
     """Release a chunk from its runner without touching any escalation — ``blizzard hub detach``."""
 
-    def __init__(self, *, route: IWriteChunkRouteRepository, exclusive: IChunkExclusiveWrites, clock: IClock) -> None:
+    def __init__(
+        self,
+        *,
+        route: IWriteChunkRouteRepository,
+        facts: IReadChunkFactsRepository,
+        transactions: IHubTransactions,
+        clock: IClock,
+    ) -> None:
         self._route = route
-        # ``bzh:store-exclusive-write``.
-        self._exclusive = exclusive
+        self._facts = facts
+        self._transactions = transactions
         self._clock = clock
 
     def detach(self, chunk: Chunk) -> int:
@@ -67,12 +75,15 @@ class DetachService:
         Raises :class:`NotRouted` if the chunk has no live route, or its route is left on a
         terminal chunk — there is nothing to release. Returns the freshly-written
         ``route_released.id``."""
-        with self._exclusive.locked([chunk.chunk_id]) as handle:
-            route = handle.route_of(chunk.chunk_id)
-            status = _status(handle.facts(chunk.chunk_id)) if route is not None else None
+        with self._transactions.begin() as unit:
+            transaction = unit.lock_chunks([chunk.chunk_id])
+            route = self._route.route_of(chunk.chunk_id, transaction=transaction)
+            status = (
+                _status(self._facts.load_facts(chunk.chunk_id, transaction=transaction)) if route is not None else None
+            )
             refuse_detach(chunk.chunk_id, route, status)
-            return self._route.record_route_released_locked(
-                handle, chunk.chunk_id, at=self._clock.now(), cause=RouteReleaseCause.DETACH
+            return self._route.record_route_released(
+                chunk.chunk_id, at=self._clock.now(), cause=RouteReleaseCause.DETACH, transaction=transaction
             )
 
     def release_held(self, chunk: Chunk, *, runner: RunnerLifecycleVersion) -> int | None:
@@ -82,17 +93,20 @@ class DetachService:
         release. A runner whose lifecycle has moved past that version since raises
         :class:`~blizzard.hub.domain.runners.registration.RunnerLifecycleConflict`, releasing
         nothing: a route it holds may be one it claimed after it was reinstated."""
-        with self._exclusive.locked([chunk.chunk_id]) as handle:
-            route = handle.route_of(chunk.chunk_id)
-            status = _status(handle.facts(chunk.chunk_id)) if route is not None else None
+        with self._transactions.begin() as unit:
+            transaction = unit.lock_chunks([chunk.chunk_id])
+            route = self._route.route_of(chunk.chunk_id, transaction=transaction)
+            status = (
+                _status(self._facts.load_facts(chunk.chunk_id, transaction=transaction)) if route is not None else None
+            )
             if not releasable_by(route, status, runner_id=runner.runner_id):
                 return None
-            return self._route.record_route_released_locked(
-                handle,
+            return self._route.record_route_released(
                 chunk.chunk_id,
                 at=self._clock.now(),
                 cause=RouteReleaseCause.RETIREMENT,
                 expected_runner=runner,
+                transaction=transaction,
             )
 
 

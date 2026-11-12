@@ -15,7 +15,6 @@ from blizzard.foundation.clock import IClock
 from blizzard.foundation.ids import Id
 from blizzard.foundation.store.batching import id_batches
 from blizzard.hub.domain.chunk.model import RouteReleaseCause
-from blizzard.hub.domain.chunk.ports.exclusive import ILockedChunkRead
 from blizzard.hub.domain.chunk.ports.fence import Claimant, EpochOwner, FenceRefusal
 from blizzard.hub.domain.chunk.ports.route import IWriteChunkRouteRepository
 from blizzard.hub.domain.kernel.transactions import LockedTransaction, Transaction
@@ -34,7 +33,6 @@ from blizzard.hub.store.internal.high_water import advance_high_water
 from blizzard.hub.store.internal.lifecycle_versions import require_runner_lifecycles
 from blizzard.hub.store.scoped import ScopedConnections
 from blizzard.hub.store.transactions import (
-    chunk_handle_connection,
     connection_for,
     connection_in,
 )
@@ -115,17 +113,8 @@ class ChunkRouteStore:
             ).one_or_none()
             return int(row.seq) if row is not None else 0
 
-    def record_route_locked(self, handle: ILockedChunkRead, route: Route, *, token_hash: str, at: datetime) -> str:
-        """The claim's own route-and-token write
-        (``bzh:store-exclusive-write``), on the connection its row lock was already taken
-        on, rather than a fresh transaction. It also reserves the chunk's next epoch for the
-        claiming runner — itself a fencing write: the prior holder's writes at or below it
-        are refused from this commit on."""
-        return self._record_route_conn(
-            chunk_handle_connection(handle, self._store, route.chunk_id), route, token_hash=token_hash, at=at
-        )
-
-    def _record_route_conn(self, conn: Connection, route: Route, *, token_hash: str, at: datetime) -> str:
+    def record_route(self, route: Route, *, token_hash: str, at: datetime, transaction: LockedTransaction) -> str:
+        conn = connection_for(self._store, transaction, chunk=route.chunk_id)
         route_id = Id.mint(_ROUTE_PREFIX, self._clock).value
         conn.execute(
             self._store.insert(s.route_created).values(
@@ -151,24 +140,19 @@ class ChunkRouteStore:
         record_epoch_owner(conn, route.chunk_id, reserved, EpochOwner.runner(route.runner_id), at=at)
         return route_id
 
-    def record_route_released_locked(
+    def record_route_released(
         self,
-        handle: ILockedChunkRead,
         chunk_id: str,
         *,
         at: datetime,
         cause: RouteReleaseCause | None = None,
         reason: str | None = None,
         expected_runner: RunnerLifecycleVersion | None = None,
+        transaction: LockedTransaction,
     ) -> int:
-        conn = chunk_handle_connection(handle, self._store, chunk_id)
+        conn = connection_for(self._store, transaction, chunk=chunk_id)
         if expected_runner is not None:
             require_runner_lifecycles(conn, {expected_runner.runner_id: expected_runner.version})
-        return self._record_route_released_conn(conn, chunk_id, at=at, cause=cause, reason=reason)
-
-    def _record_route_released_conn(
-        self, conn: Connection, chunk_id: str, *, at: datetime, cause: RouteReleaseCause | None, reason: str | None
-    ) -> int:
         result = conn.execute(
             self._store.insert(s.route_released).values(
                 chunk_id=chunk_id,
@@ -181,14 +165,12 @@ class ChunkRouteStore:
         key = result.inserted_primary_key
         return int(key[0]) if key is not None else 0
 
-    def record_route_token_locked(
-        self, handle: ILockedChunkRead, chunk_id: str, *, token_hash: str, at: datetime
+    def record_route_token(
+        self, chunk_id: str, *, token_hash: str, at: datetime, transaction: LockedTransaction
     ) -> None:
-        """Append a fresh ``route_token_minted`` fact — the re-key path — on ``handle``'s already-locked
-        connection (``bzh:store-exclusive-write``). Same allocator as :meth:`record_route_locked`'s own token
-        fact, its own call rather than a fixed +1, so it stays correctly ordered against a concurrent
-        create/release/re-key on this chunk."""
-        conn = chunk_handle_connection(handle, self._store, chunk_id)
+        """Same allocator as :meth:`record_route`'s own token fact, its own call rather than a fixed +1, so it stays
+        correctly ordered against a concurrent create/release/re-key on this chunk."""
+        conn = connection_for(self._store, transaction, chunk=chunk_id)
         conn.execute(
             self._store.insert(s.route_token_minted).values(
                 chunk_id=chunk_id,

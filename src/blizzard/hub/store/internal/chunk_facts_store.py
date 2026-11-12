@@ -79,12 +79,14 @@ class ChunkFactsStore:
         with self._store.read("load_all_facts") as conn:
             return load_chunk_facts(conn, None)
 
-    def load_facts_for(self, chunk_ids: Sequence[str]) -> dict[str, ChunkFacts]:
+    def load_facts_for(
+        self, chunk_ids: Sequence[str], *, transaction: Transaction | None = None
+    ) -> dict[str, ChunkFacts]:
         """`load_facts`'s batched sibling — every id's
         :class:`ChunkFacts` (`bzh:bulk-reconstitution`)."""
         if not chunk_ids:
             return {}
-        with self._store.read("load_facts_for") as conn:
+        with connection_in(self._store, transaction, "load_facts_for") as conn:
             return load_chunk_facts(conn, chunk_ids)
 
     def movement_facts_for(self, chunk_ids: Sequence[str]) -> dict[str, ChunkFacts]:

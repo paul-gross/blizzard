@@ -68,9 +68,9 @@ def _seed_route(store: ChunkStores, engine: Engine, chunk_id: str) -> None:
     seed_chunk_record(store, Chunk(chunk_id=chunk_id, graph_id="gr_1", work_refs=[], minted_at=T0))
     seed_promote(store, engine, chunk_id, at=T0)
     with store.exclusive.locked([chunk_id]) as handle:
-        store.route.record_route_locked(
-            handle,
+        store.route.record_route(
             Route(chunk_id=chunk_id, runner_id="r1", workspace_id="w1", environment_ids=["e1"], created_at=T0),
             token_hash=f"th_{chunk_id}",
             at=T0,
+            transaction=handle.transaction,
         )

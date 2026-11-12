@@ -140,11 +140,11 @@ def test_a_grouped_chunk_is_excluded_from_pending_close_intents(tmp_path: Path) 
 
 def _make_running(chunks: ChunkStores, chunk_id: str) -> None:
     with chunks.exclusive.locked([chunk_id]) as handle:
-        chunks.route.record_route_locked(
-            handle,
+        chunks.route.record_route(
             Route(chunk_id=chunk_id, runner_id="r1", workspace_id="w1", environment_ids=[], created_at=_T0),
             token_hash="deadbeef",
             at=_T0,
+            transaction=handle.transaction,
         )
 
 

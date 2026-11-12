@@ -735,7 +735,7 @@ class PerSubscriptionUsageView:
 class IReadRunnerRegistry(Protocol):
     """Read-only registry access."""
 
-    def get_runner(self, runner_id: str) -> RunnerRegistration | None: ...
+    def get_runner(self, runner_id: str, *, transaction: Transaction | None = None) -> RunnerRegistration | None: ...
     def get_runners(self, runner_ids: Iterable[str]) -> dict[str, RunnerRegistration]:
         """Each named runner's registration, retired ones included, keyed by its id; an id with no registration is
         absent. One read per id batch, none for no ids."""

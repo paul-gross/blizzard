@@ -29,7 +29,9 @@ class IReadChunkFactsRepository(Protocol):
         would return for that chunk id."""
         ...
 
-    def load_facts_for(self, chunk_ids: Sequence[str]) -> dict[str, ChunkFacts]:
+    def load_facts_for(
+        self, chunk_ids: Sequence[str], *, transaction: Transaction | None = None
+    ) -> dict[str, ChunkFacts]:
         """`load_facts`'s batched sibling (`bzh:bulk-reconstitution`) — every id's
         :class:`ChunkFacts`, keyed by chunk id. An id that doesn't exist or is ephemeral
         is silently dropped, the same as `load_facts` returning ``None`` for it."""

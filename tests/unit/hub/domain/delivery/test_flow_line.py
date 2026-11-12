@@ -534,7 +534,9 @@ class _Flows:
 class _Facts:
     by_id: dict[str, ChunkFacts]
 
-    def load_facts_for(self, chunk_ids: Sequence[str]) -> dict[str, ChunkFacts]:
+    def load_facts_for(
+        self, chunk_ids: Sequence[str], *, transaction: Transaction | None = None
+    ) -> dict[str, ChunkFacts]:
         return {chunk_id: self.by_id[chunk_id] for chunk_id in chunk_ids if chunk_id in self.by_id}
 
     def load_facts(self, chunk_id: str, *, transaction: Transaction | None = None) -> ChunkFacts | None:

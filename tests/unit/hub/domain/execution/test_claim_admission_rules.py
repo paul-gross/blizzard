@@ -404,13 +404,13 @@ class _RegistryOf:
     def __init__(self, registration: RunnerRegistration | None) -> None:
         self._registration = registration
 
-    def get_runner(self, runner_id: str) -> RunnerRegistration | None:
+    def get_runner(self, runner_id: str, *, transaction: object = None) -> RunnerRegistration | None:
         return self._registration
 
 
-class _UnenterableExclusiveWrites:
+class _UnenterableTransactions:
     @contextmanager
-    def locked(self, chunk_ids: object) -> Generator[object]:
+    def begin(self) -> Generator[object]:
         raise AssertionError("the claim entered the lock for a runner refused on its own standing")
         yield
 
@@ -423,7 +423,10 @@ def _service_over(registration: RunnerRegistration | None) -> ClaimService:
         registry=cast(Any, _RegistryOf(registration)),
         hosts=cast(Any, None),
         retired=cast(Any, None),
-        exclusive=cast(Any, _UnenterableExclusiveWrites()),
+        transactions=cast(Any, _UnenterableTransactions()),
+        records=cast(Any, None),
+        facts=cast(Any, None),
+        dependencies=cast(Any, None),
         targets=cast(Any, None),
         clock=cast(Any, None),
         label=cast(Any, None),
@@ -452,7 +455,10 @@ def test_a_retired_runner_is_refused_before_the_claim_lock_is_entered() -> None:
         registry=cast(Any, _RegistryOf(retired)),
         hosts=cast(Any, None),
         retired=cast(Any, None),
-        exclusive=cast(Any, _UnenterableExclusiveWrites()),
+        transactions=cast(Any, _UnenterableTransactions()),
+        records=cast(Any, None),
+        facts=cast(Any, None),
+        dependencies=cast(Any, None),
         targets=cast(Any, None),
         clock=cast(Any, None),
         label=cast(Any, None),

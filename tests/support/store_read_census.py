@@ -2185,8 +2185,7 @@ def build_hub_world(tmp_path: Path) -> HubWorld:
     _mint(chunk_route_a, "1023", at=_ht(86))
     _mint(chunk_route_b, "1024", at=_ht(87))
     with write.exclusive.locked([chunk_route_a]) as handle:
-        write.route.record_route_locked(
-            handle,
+        write.route.record_route(
             Route(
                 chunk_id=chunk_route_a,
                 runner_id=HUB_RUNNER_ID,
@@ -2196,6 +2195,7 @@ def build_hub_world(tmp_path: Path) -> HubWorld:
             ),
             token_hash="route-hash-a",
             at=_ht(88),
+            transaction=handle.transaction,
         )
     with chunk_unit(store_connections, chunk_route_a) as unit:
         write.route.record_lease_minted(
@@ -2204,10 +2204,11 @@ def build_hub_world(tmp_path: Path) -> HubWorld:
     with transactions.begin() as unit:
         write.route.set_runner_high_water(HUB_RUNNER_ID, seq=7, expected=0, at=_ht(90), transaction=unit)
     with write.exclusive.locked([chunk_route_a]) as handle:
-        write.route.record_route_token_locked(handle, chunk_route_a, token_hash="route-hash-a2", at=_ht(91))
+        write.route.record_route_token(
+            chunk_route_a, token_hash="route-hash-a2", at=_ht(91), transaction=handle.transaction
+        )
     with write.exclusive.locked([chunk_route_b]) as handle:
-        write.route.record_route_locked(
-            handle,
+        write.route.record_route(
             Route(
                 chunk_id=chunk_route_b,
                 runner_id=HUB_RUNNER_ID_2,
@@ -2217,6 +2218,7 @@ def build_hub_world(tmp_path: Path) -> HubWorld:
             ),
             token_hash="route-hash-b",
             at=_ht(92),
+            transaction=handle.transaction,
         )
 
     # --- artifacts -------------------------------------------------------------------------------

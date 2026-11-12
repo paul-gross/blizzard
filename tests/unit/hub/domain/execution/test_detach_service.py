@@ -1,6 +1,6 @@
 """DetachService (unit tier) — the operator-release write, facts only.
 
-A fake stands in for the store — only ``route_of``/``record_route_released_locked`` are
+A fake stands in for the store — only ``route_of``/``record_route_released`` are
 meaningfully implemented; every other seam raises loudly if called (``bzh:domain-core``).
 """
 
@@ -16,9 +16,10 @@ import pytest
 
 from blizzard.foundation.clock import FixedClock
 from blizzard.hub.domain.chunk.model import Chunk, RouteReleaseCause
-from blizzard.hub.domain.chunk.ports.exclusive import IChunkExclusiveWrites, ILockedChunkRead
+from blizzard.hub.domain.chunk.ports.facts import IReadChunkFactsRepository
 from blizzard.hub.domain.chunk.ports.route import IWriteChunkRouteRepository
 from blizzard.hub.domain.execution.detach import DetachService, NotRouted
+from blizzard.hub.domain.kernel.transactions import IHubTransactions, LockedTransaction, Transaction
 from blizzard.hub.domain.runners.lifecycle_version import RunnerLifecycleVersion
 from blizzard.hub.domain.runners.route import Route
 
@@ -26,54 +27,50 @@ _T0 = datetime(2026, 1, 1, tzinfo=UTC)
 _CHUNK = Chunk(chunk_id="chk_1", graph_id="gr_1", work_refs=[], minted_at=_T0)
 
 
-@dataclass
-class _FakeLockedChunkRead:
-    """Only ``route_of`` and ``facts`` are live — see module docstring. A chunk with no status
-    facts counts as held, so ``facts`` answers ``None``."""
+class _FakeUnit:
+    def lock_chunks(self, chunk_ids: Sequence[str]) -> LockedTransaction:
+        return cast(LockedTransaction, object())
 
-    route: Route | None
 
-    def route_of(self, chunk_id: str) -> Route | None:
-        return self.route
+class _FakeTransactions:
+    @contextmanager
+    def begin(self) -> Generator[Transaction]:
+        yield cast(Transaction, _FakeUnit())
 
-    def facts(self, chunk_id: str) -> None:
+
+class _FakeFacts:
+    """A chunk with no status facts counts as held, so ``load_facts`` answers ``None``."""
+
+    def load_facts(self, chunk_id: str, *, transaction: Transaction | None = None) -> None:
         return None
 
     def __getattr__(self, name: str) -> Any:
-        raise NotImplementedError(f"DetachService should not touch handle.{name!r}")
-
-
-@dataclass
-class _FakeExclusiveWrites:
-    """``locked`` yields a :class:`_FakeLockedChunkRead` over the same route the fake
-    previously exposed as a direct repository read."""
-
-    route: Route | None
-
-    @contextmanager
-    def locked(self, chunk_ids: Sequence[str]) -> Generator[ILockedChunkRead]:
-        yield cast(ILockedChunkRead, _FakeLockedChunkRead(self.route))
+        raise NotImplementedError(f"DetachService should not touch facts.{name!r}")
 
 
 @dataclass
 class _FakeChunkRepo:
-    """Only ``record_route_released_locked`` is live; anything else is a bug.
+    """Only ``route_of`` and ``record_route_released`` are live; anything else is a bug.
 
     Callers wrap an instance in :func:`_as_route` for pyright's structural check."""
 
+    route: Route | None = None
     released: list[tuple[str, datetime]] = field(default_factory=list[tuple[str, datetime]])
     causes: list[RouteReleaseCause | None] = field(default_factory=list[RouteReleaseCause | None])
     expected: list[RunnerLifecycleVersion | None] = field(default_factory=list[RunnerLifecycleVersion | None])
 
-    def record_route_released_locked(
+    def route_of(self, chunk_id: str, *, transaction: Transaction | None = None) -> Route | None:
+        return self.route
+
+    def record_route_released(
         self,
-        handle: ILockedChunkRead,
         chunk_id: str,
         *,
         at: datetime,
         cause: RouteReleaseCause | None = None,
         reason: str | None = None,
         expected_runner: RunnerLifecycleVersion | None = None,
+        transaction: LockedTransaction,
     ) -> None:
         self.released.append((chunk_id, at))
         self.causes.append(cause)
@@ -93,9 +90,13 @@ def _route(chunk_id: str = "chk_1") -> Route:
 
 
 def _service(route: Route | None, *, clock: FixedClock | None = None) -> tuple[DetachService, _FakeChunkRepo]:
-    repo = _FakeChunkRepo()
-    exclusive = cast(IChunkExclusiveWrites, _FakeExclusiveWrites(route))
-    service = DetachService(route=_as_route(repo), exclusive=exclusive, clock=clock or FixedClock(instant=_T0))
+    repo = _FakeChunkRepo(route)
+    service = DetachService(
+        route=_as_route(repo),
+        facts=cast(IReadChunkFactsRepository, _FakeFacts()),
+        transactions=cast(IHubTransactions, _FakeTransactions()),
+        clock=clock or FixedClock(instant=_T0),
+    )
     return service, repo
 
 
