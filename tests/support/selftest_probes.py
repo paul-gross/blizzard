@@ -6,10 +6,11 @@ import json
 from collections.abc import Sequence
 from datetime import datetime
 
+from blizzard.foundation.usage_kind import UsageKind
 from blizzard.runner.harness.adapter import ResumeHandle, WorkerHandle, WorkerPreamble
 from blizzard.runner.harness.overload import ProviderOverload
 from blizzard.runner.harness.transcript import IHarnessTranscriptSource, NullTranscriptSource
-from blizzard.runner.harness.usage import UsageKind, UsageLimit, UsageSample
+from blizzard.runner.harness.usage import UsageLimit, UsageSample
 
 
 class FixedPidAdapter:

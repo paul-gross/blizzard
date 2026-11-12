@@ -7,6 +7,7 @@ from typing import Annotated
 
 from blizzard.foundation.node_steps import Executor
 from blizzard.foundation.unrecognized import Unrecognized
+from blizzard.foundation.usage_kind import UsageKind
 from blizzard.wire.base import WireModel
 from blizzard.wire.chunk import ChunkUsageTotalView
 from blizzard.wire.vocabulary import OPEN
@@ -132,7 +133,7 @@ class EnvTimelineInvocationView(WireModel):
     session picked back up) or ``judge`` (the call that chose the step's exit)."""
 
     recorded_at: str
-    kind: str
+    kind: Annotated[UsageKind | Unrecognized, OPEN]
     model: str | None = None
     harness_id: str | None = None
     input_tokens: int

@@ -16,10 +16,11 @@ from structlog.testing import capture_logs
 
 from blizzard.foundation.clock import FixedClock
 from blizzard.foundation.fact_kinds import USAGE_RECORDED
+from blizzard.foundation.usage_kind import UsageKind
 from blizzard.runner.events.broker import EventBroker, RunnerEventPublisher
 from blizzard.runner.harness.claude_code.section import CLAUDE_CODE_HARNESS_ID
 from blizzard.runner.harness.identity import SessionReference
-from blizzard.runner.harness.usage import UsageKind, UsageSample
+from blizzard.runner.harness.usage import UsageSample
 from blizzard.runner.leases.model import Lease, NewLease
 from blizzard.runner.store.schema import usage_facts
 from blizzard.runner.usage.recorder import UsageRecorder

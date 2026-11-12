@@ -12,8 +12,9 @@ from blizzard.foundation.fact_kinds import EXTERNAL_SUBSCRIPTION_USAGE_MISSED, E
 from blizzard.foundation.roles import domain_model
 from blizzard.foundation.spend import SpendFigure
 from blizzard.foundation.subscription_miss import SampleMissReason
+from blizzard.foundation.usage_kind import UsageKind
 from blizzard.runner.harness.identity import SessionReference
-from blizzard.runner.harness.usage import SessionCostBasis, UsageKind, UsageSample, invocation_cost
+from blizzard.runner.harness.usage import SessionCostBasis, UsageSample, invocation_cost
 from blizzard.runner.subscriptions.credential_renewer import RenewalOutcome
 from blizzard.runner.subscriptions.subscription_sampler import (
     ExternalSubscriptionUsageSnapshot,
@@ -197,7 +198,7 @@ def charge_range(start: _RangeStart | None, end: _RangeStart | None) -> ChargeRa
 class UsageFactRecord:
     """One recorded usage fact as the runner stored it — an invocation's own figures, never a sum."""
 
-    kind: str
+    kind: UsageKind
     generation: int
     node_id: str
     epoch: int
@@ -251,7 +252,7 @@ class InvocationUsage:
     node_id: str
     epoch: int
     generation: int
-    kind: str
+    kind: UsageKind
     harness_id: str | None
     model: str | None
     recorded_at: datetime

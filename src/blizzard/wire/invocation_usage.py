@@ -2,7 +2,13 @@
 
 from __future__ import annotations
 
+from typing import Annotated
+
 from pydantic import BaseModel
+
+from blizzard.foundation.unrecognized import Unrecognized
+from blizzard.foundation.usage_kind import UsageKind
+from blizzard.wire.vocabulary import OPEN
 
 
 class InvocationUsageView(BaseModel):
@@ -11,7 +17,7 @@ class InvocationUsageView(BaseModel):
     node_id: str
     epoch: int
     generation: int
-    kind: str
+    kind: Annotated[UsageKind | Unrecognized, OPEN]
     harness_id: str | None
     model: str | None
     recorded_at: str

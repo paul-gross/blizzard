@@ -12,6 +12,7 @@ from blizzard.foundation.credential_renewal import RenewalFailureReason, Renewal
 from blizzard.foundation.runner_identity_state import IdentityState
 from blizzard.foundation.subscription_miss import SampleMissReason
 from blizzard.foundation.unrecognized import Unrecognized
+from blizzard.foundation.usage_kind import UsageKind
 from blizzard.wire.base import WireModel
 from blizzard.wire.fleet import FleetSummaryView
 from blizzard.wire.runner import UnenforceableGateView, VersionWindowView
@@ -310,7 +311,7 @@ class UsageFactView(WireModel):
     ``kind`` is the invocation (``spawn``, ``resume``, ``judge``) and ``generation`` the lease's spawn
     ordinal. A null ``cost_usd`` is an unknown cost; ``estimated_cost_usd`` is the zero-cost steps' estimate."""
 
-    kind: str
+    kind: Annotated[UsageKind | Unrecognized, OPEN]
     generation: int
     node_id: str
     epoch: int

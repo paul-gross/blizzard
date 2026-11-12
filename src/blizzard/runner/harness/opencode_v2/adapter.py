@@ -14,6 +14,7 @@ from blizzard.foundation.ids import Id
 from blizzard.foundation.logging import get_logger
 from blizzard.foundation.model_support import model_supported
 from blizzard.foundation.node_steps import TIER_PREFIX
+from blizzard.foundation.usage_kind import UsageKind
 from blizzard.runner.harness import harness_shared
 from blizzard.runner.harness.adapter import (
     HarnessSpawnError,
@@ -48,7 +49,7 @@ from blizzard.runner.harness.overload import ProviderOverload
 from blizzard.runner.harness.process_launch import IProcessLauncher, LaunchedProcess
 from blizzard.runner.harness.spawn_cwd import SpawnCwd
 from blizzard.runner.harness.transcript import IHarnessTranscriptSource
-from blizzard.runner.harness.usage import UsageKind, UsageLimit, UsageSample
+from blizzard.runner.harness.usage import UsageLimit, UsageSample
 from blizzard.runner.node_steps.envelope import Envelope
 from blizzard.runner.process.child_env import AllowlistedEnv
 from blizzard.runner.process.child_processes import Stream

@@ -321,6 +321,33 @@ def test_the_step_carries_its_spend_and_the_keys_of_its_own_artifacts(tmp_path: 
     assert (newest["spend"], newest["artifact_keys"]) == (None, [])
 
 
+def test_a_usage_kind_outside_the_vocabulary_is_served_raw_on_the_step(tmp_path: Path) -> None:
+    hub = _routed_hub(tmp_path)
+    t0 = hub.clock.now() - timedelta(minutes=10)
+    for i, kind in enumerate(("spawn", "nudge")):
+        _insert(
+            hub,
+            s.usage_facts,
+            chunk_id="ch_1",
+            node_id="nd_build",
+            epoch=1,
+            runner_id="rn_1",
+            kind=kind,
+            model="opus",
+            input_tokens=10,
+            output_tokens=5,
+            cache_read_tokens=0,
+            cache_create_tokens=0,
+            cost_usd=1.0,
+            estimated_cost_usd=None,
+            recorded_at=t0 + timedelta(minutes=1 + i),
+        )
+
+    body = hub.client.get("/api/env-timeline/step", params={"chunk_id": "ch_1", "lease_id": "ls_1"}).json()
+
+    assert [i["kind"] for i in body["invocations"]] == ["spawn", "nudge"]
+
+
 def test_under_project_only_that_projects_chunks_are_laid_on_the_environments(tmp_path: Path) -> None:
     hub = _routed_hub(tmp_path)
     t0 = hub.clock.now() - timedelta(minutes=10)

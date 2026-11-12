@@ -1992,8 +1992,8 @@
             "type": "integer"
           },
           "kind": {
-            "title": "Kind",
-            "type": "string"
+            "$ref": "#/components/schemas/UsageKind",
+            "x-blizzard-open": true
           },
           "model": {
             "title": "Model",
@@ -4806,8 +4806,8 @@
             "title": "Harness Id"
           },
           "kind": {
-            "title": "Kind",
-            "type": "string"
+            "$ref": "#/components/schemas/UsageKind",
+            "x-blizzard-open": true
           },
           "lease_id": {
             "title": "Lease Id",
@@ -8028,8 +8028,8 @@
             "type": "integer"
           },
           "kind": {
-            "title": "Kind",
-            "type": "string"
+            "$ref": "#/components/schemas/UsageKind",
+            "x-blizzard-open": true
           },
           "model": {
             "title": "Model",
@@ -8065,6 +8065,14 @@
         ],
         "title": "UsageFactView",
         "type": "object"
+      },
+      "UsageKind": {
+        "enum": [
+          "spawn",
+          "resume",
+          "judge"
+        ],
+        "type": "string"
       },
       "ValidationEntry": {
         "description": "One entry of a FastAPI request-validation ``detail`` list.",

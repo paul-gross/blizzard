@@ -46,13 +46,13 @@ def _claim(hub: HubHarness) -> tuple[str, str]:
 
 
 def _usage_payload(
-    node_id: str, *, epoch: int, cost_usd: float | None, estimated_cost_usd: float | None = None
+    node_id: str, *, epoch: int, cost_usd: float | None, estimated_cost_usd: float | None = None, kind: str = "spawn"
 ) -> dict[str, object]:
     payload: dict[str, object] = {
         "chunk_id": "",  # filled by the caller
         "node_id": node_id,
         "epoch": epoch,
-        "kind": "spawn",
+        "kind": kind,
         "model": "claude-opus-4-8",
         "input_tokens": 100,
         "output_tokens": 50,
@@ -74,8 +74,9 @@ def _push_usage(
     seq: int,
     cost_usd: float | None = 0.1,
     estimated_cost_usd: float | None = None,
+    kind: str = "spawn",
 ) -> dict[str, object]:
-    payload = _usage_payload(node_id, epoch=epoch, cost_usd=cost_usd, estimated_cost_usd=estimated_cost_usd)
+    payload = _usage_payload(node_id, epoch=epoch, cost_usd=cost_usd, estimated_cost_usd=estimated_cost_usd, kind=kind)
     payload["chunk_id"] = chunk_id
     resp = hub.client.post(
         "/api/fleet/events",
@@ -296,6 +297,17 @@ def test_usage_fact_lands_per_step_and_derives_the_chunk_total(tmp_path: Path) -
     row = next(c for c in listing if c["chunk_id"] == chunk_id)
     assert row["cost"]["cost_usd"] == pytest.approx(0.10)
     assert row["cost"]["cost_partial"] is False
+
+
+def test_a_usage_kind_outside_the_vocabulary_is_served_raw(tmp_path: Path) -> None:
+    hub = build_hub(tmp_path)
+    chunk_id, node_id = _claim(hub)
+    report_lease(hub, chunk_id, epoch=1, seq=1)
+
+    _push_usage(hub, chunk_id=chunk_id, node_id=node_id, epoch=1, seq=2, kind="nudge")
+
+    detail = hub.client.get(f"/api/chunks/{chunk_id}").json()
+    assert [u["kind"] for u in detail["usage"]] == ["nudge"]
 
 
 def test_usage_ingest_is_idempotent_by_seq_high_water(tmp_path: Path) -> None:

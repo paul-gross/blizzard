@@ -9,15 +9,11 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import datetime
-from typing import Literal
 
 from blizzard.foundation.roles import domain_model
+from blizzard.foundation.usage_kind import UsageKind
 
-#: The point in a node's lifecycle an invocation is attributed to. Supplied by the
-#: caller, which knows the operation it just ran, never inferred by the adapter.
-UsageKind = Literal["spawn", "resume", "judge"]
-
-__all__ = ["SessionCostBasis", "UsageKind", "UsageLimit", "UsageSample", "invocation_cost"]
+__all__ = ["SessionCostBasis", "UsageLimit", "UsageSample", "invocation_cost"]
 
 
 @domain_model
@@ -29,6 +25,7 @@ class UsageSample:
     this invocation's own. ``model`` is the binding's attribution for this invocation;
     ``unknown`` marks a model it could not observe or infer."""
 
+    #: Supplied by the caller, which knows the operation it just ran, never inferred by the adapter.
     kind: UsageKind
     model: str
     input_tokens: int

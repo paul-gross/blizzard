@@ -14,6 +14,7 @@ from blizzard.foundation.chunk_status import ChunkDeleteRefusal, ChunkStatus
 from blizzard.foundation.graph_progress_state import GraphProgressState
 from blizzard.foundation.migration_source import MigrationSource
 from blizzard.foundation.unrecognized import Unrecognized
+from blizzard.foundation.usage_kind import UsageKind
 from blizzard.foundation.wait_kinds import WaitKind
 from blizzard.foundation.work_items import WorkItemPriority
 from blizzard.wire.base import WireModel
@@ -155,7 +156,7 @@ class ChunkUsageView(WireModel):
 
     node_id: str
     epoch: int
-    kind: str
+    kind: Annotated[UsageKind | Unrecognized, OPEN]
     model: str
     input_tokens: int
     output_tokens: int
