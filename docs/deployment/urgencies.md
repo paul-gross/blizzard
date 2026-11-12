@@ -190,8 +190,10 @@ blizzard hub urgency enable SLUG
 blizzard hub urgency order SLUG...
 blizzard hub urgency position SLUG (--after SLUG | --first)
 
-blizzard hub settings get
-blizzard hub settings edit --default-urgency SLUG
+blizzard hub settings get [KEY]
+blizzard hub settings set KEY VALUE
+blizzard hub settings unset KEY
+blizzard hub settings changes
 
 blizzard hub runner next RUNNER
 ```
@@ -217,6 +219,11 @@ next  3  ch_next  urgency=standard
   passed  1  ch_gpu  urgency=-  ineligible
 ```
 
+`settings` reads and writes a key as the configuration document spells it under `settings`; `default_urgency` is the
+only key. `set default_urgency SLUG` sends the revision it read as `If-Match`, so a concurrent edit gets `409`.
+`unset default_urgency` is refused: every new chunk needs a live default urgency. `changes` prints the same rows as
+`blizzard hub config changes --kind tenant_settings`.
+
 Each verb takes `--tenant` and `--json`. Reading takes `fleet:view`; every write takes `config:edit`.
 
 | Verb               | Route                                |
@@ -230,5 +237,6 @@ Each verb takes `--tenant` and `--json`. Reading takes `fleet:view`; every write
 | `urgency order`    | `PUT /api/urgencies/order`           |
 | `urgency position` | `POST /api/urgencies/order/position` |
 | `settings get`     | `GET /api/settings`                  |
-| `settings edit`    | `PATCH /api/settings`                |
+| `settings set`     | `PATCH /api/settings`                |
+| `settings changes` | `GET /api/config/changes`            |
 | `runner next`      | `GET /api/runners/{id}/next-claim`   |
