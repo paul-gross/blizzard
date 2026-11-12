@@ -45,6 +45,8 @@ from blizzard.foundation.landing_policy import LandingPolicy
 from blizzard.foundation.logging import get_logger
 from blizzard.foundation.node_steps import Executor, JudgedBy, SessionMode
 from blizzard.foundation.project_colors import ProjectColor
+from blizzard.foundation.secrets.factories import secret_cipher
+from blizzard.foundation.secrets.sealing import IKeyProvider
 from blizzard.foundation.store.engine import create_engine_from_url
 from blizzard.foundation.store.migrations import MigrationRunner
 from blizzard.foundation.tokens import TokenHash
@@ -108,7 +110,7 @@ from blizzard.hub.domain.config.forges import (
 )
 from blizzard.hub.domain.config.landing_policies import DEFAULT_LANDING_POLICY
 from blizzard.hub.domain.config.repositories import RepositoryDraft
-from blizzard.hub.domain.config.secrets import IHubKeyProvider, SecretAlreadyExists, SecretName
+from blizzard.hub.domain.config.secrets import SecretAlreadyExists, SecretName
 from blizzard.hub.domain.config.work_sources import ConfiguredWorkSource, WorkSourceFields, WorkSourceId
 from blizzard.hub.domain.execution.auth.produces import PRODUCES_WARN
 from blizzard.hub.domain.execution.auth.route import ROUTE_TOKEN_WARN
@@ -149,7 +151,7 @@ from blizzard.hub.egress.writer import validate_batch
 from blizzard.hub.events.broker import EventBroker
 from blizzard.hub.forge.budget import ForgeBudgets
 from blizzard.hub.runtime import Migrations
-from blizzard.hub.secrets import hub_key_provider, secret_cipher
+from blizzard.hub.secrets import hub_key_provider
 from blizzard.hub.store import schema
 from blizzard.hub.store.errors import HubStoreConnections, HubStoreErrorFactory
 from blizzard.hub.store.internal.chunk_store_factory import build_chunk_stores
@@ -590,7 +592,7 @@ MIGRATION_CLOCK = FixedClock(datetime(2026, 7, 12, tzinfo=UTC))
 def config_authoring(
     engine: Engine,
     *,
-    keys: IHubKeyProvider,
+    keys: IKeyProvider,
     clock: IClock,
     offers: IForgeOffers | None = None,
 ) -> ConfigAuthoring:

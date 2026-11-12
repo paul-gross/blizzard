@@ -177,6 +177,26 @@ _MOVED_HOMES = {
     "CursorJump": "blizzard.foundation.trace_export.cursor",
     "first_pass_jump": "blizzard.foundation.trace_export.cursor",
     "lag_cap_jump": "blizzard.foundation.trace_export.cursor",
+    "SecretValue": "blizzard.foundation.secrets.value",
+    "SecretValueBlank": "blizzard.foundation.secrets.value",
+    "KeyGeneration": "blizzard.foundation.secrets.sealing",
+    "SealedValue": "blizzard.foundation.secrets.sealing",
+    "SealedSecret": "blizzard.foundation.secrets.sealing",
+    "Reseal": "blizzard.foundation.secrets.sealing",
+    "SecretUnreadable": "blizzard.foundation.secrets.sealing",
+    "SecretRotationConflict": "blizzard.foundation.secrets.sealing",
+    "ISecretCipher": "blizzard.foundation.secrets.sealing",
+    "ISealedSecretRepository": "blizzard.foundation.secrets.sealing",
+    "IResealSecretRepository": "blizzard.foundation.secrets.sealing",
+    "IKeyProvider": "blizzard.foundation.secrets.sealing",
+    "IRotatableKeyProvider": "blizzard.foundation.secrets.sealing",
+    "stale_seals": "blizzard.foundation.secrets.sealing",
+    "uncovered_key_ids": "blizzard.foundation.secrets.sealing",
+    "AesGcmSecretCipher": "blizzard.foundation.secrets.internal.aes_gcm",
+    "EnvKeyProvider": "blizzard.foundation.secrets.internal.env_keys",
+    "DirectoryKeyProvider": "blizzard.foundation.secrets.internal.directory_keys",
+    "KeyVariables": "blizzard.foundation.secrets.key_variables",
+    "RotationResult": "blizzard.foundation.secrets.rotation",
     "BACKOFF_CAP": "blizzard.foundation.lane_retry",
     "OutageLatch": "blizzard.foundation.lane_retry",
     "WorkItemPriority": "blizzard.foundation.work_items",
@@ -247,7 +267,13 @@ def test_kernel_imports_no_non_kernel_blizzard_package() -> None:
 
 #: Kernel modules that stay shared despite one side reaching them, each with the reason — an entry the check no longer
 #: needs fails it (``bzh:shared-kernel``).
-_SINGLE_SIDE_KERNEL_ALLOWLIST: dict[str, str] = {}
+_HUB_ONLY_UNTIL_HOST_SEALS = (
+    "only the hub reaches it until the host seals its runners' tokens with it (`product:runners-come-and-go`)"
+)
+_SINGLE_SIDE_KERNEL_ALLOWLIST: dict[str, str] = {
+    f"blizzard.foundation.secrets.{module}": _HUB_ONLY_UNTIL_HOST_SEALS
+    for module in ("factories", "key_variables", "rotation", "sealing", "value")
+}
 
 
 def _defines_nothing(tree: ast.Module) -> bool:

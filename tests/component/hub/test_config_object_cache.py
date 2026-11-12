@@ -13,13 +13,14 @@ import pytest
 from sqlalchemy import Engine
 
 from blizzard.foundation.clock import FixedClock
+from blizzard.foundation.secrets.factories import secret_cipher
 from blizzard.foundation.store.engine import create_engine_from_url
 from blizzard.hub.composition import LiveConfig, build_hub_core, build_live_config
 from blizzard.hub.domain.config.changes import RecordKind
 from blizzard.hub.domain.config.forge_resolution import ForgeChoice
 from blizzard.hub.domain.config.secrets import SecretName
 from blizzard.hub.domain.config.work_sources import WorkSourceDraft, WorkSourceEdit
-from blizzard.hub.secrets import hub_key_provider, secret_cipher
+from blizzard.hub.secrets import hub_key_provider
 from blizzard.hub.store.internal.forge_record_store import ForgeRecordStore
 from blizzard.hub.tenancy import StoreScope
 from tests.support.scaffolding import (

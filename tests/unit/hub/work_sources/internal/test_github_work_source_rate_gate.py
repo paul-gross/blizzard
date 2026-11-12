@@ -9,11 +9,11 @@ import httpx2
 import pytest
 
 from blizzard.foundation.clock import FixedClock
+from blizzard.foundation.secrets.value import SecretValue
 from blizzard.hub.domain.chunk.model import WorkRef
 from blizzard.hub.domain.chunk.ports.work_sources import WorkAnnotateError, WorkCloseError, WorkItemGoneError
 from blizzard.hub.domain.chunk.status_marker import WorkStatusMarker
 from blizzard.hub.domain.config.forges import ConfiguredForge, ForgeFields, ForgeId
-from blizzard.hub.domain.config.secrets import SecretValue
 from blizzard.hub.domain.config.work_sources import ConfiguredWorkSource, WorkSourceFields, WorkSourceId
 from blizzard.hub.forge.budget import BudgetKey, BudgetReading, ForgeBudgetLow, ForgeBudgets, ForgePriority
 from blizzard.hub.forge.rates import rate_dialect

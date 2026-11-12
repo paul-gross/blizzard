@@ -4,9 +4,10 @@ from __future__ import annotations
 
 import pytest
 
-from blizzard.hub.domain.config.secrets import KeyGeneration, SealedSecret, SecretUnreadable, SecretValue
-from blizzard.hub.secrets.internal.aes_gcm import AesGcmSecretCipher, associated_data
-from blizzard.hub.secrets.internal.key_material import generation_of
+from blizzard.foundation.secrets.internal.aes_gcm import AesGcmSecretCipher, associated_data
+from blizzard.foundation.secrets.internal.key_material import generation_of
+from blizzard.foundation.secrets.sealing import KeyGeneration, SealedSecret, SecretUnreadable
+from blizzard.foundation.secrets.value import SecretValue
 
 
 class _Keys:

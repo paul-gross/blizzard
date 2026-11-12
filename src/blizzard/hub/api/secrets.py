@@ -15,6 +15,7 @@ from fastapi import APIRouter, Depends, Header, Request, status
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 
+from blizzard.foundation.secrets.value import SecretValueBlank
 from blizzard.foundation.store.utc import iso_utc
 from blizzard.hub.api import problems, problems_admin
 from blizzard.hub.api.auth import reject_runner_principal
@@ -35,7 +36,6 @@ from blizzard.hub.domain.config.secrets import (
     SecretReferenced,
     SecretRetired,
     SecretRevisionConflict,
-    SecretValueBlank,
     listed,
     retirable,
 )

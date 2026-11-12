@@ -20,6 +20,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 from blizzard.foundation.clock import FixedClock
+from blizzard.foundation.secrets.factories import secret_cipher
 from blizzard.foundation.store.engine import create_engine_from_url
 from blizzard.hub.composition import LiveConfig, TenantStores, build_hub_core, build_live_config
 from blizzard.hub.delivery.action_loop import ActionLoop
@@ -38,7 +39,7 @@ from blizzard.hub.forge.internal.github_landing import GitHubLanding
 from blizzard.hub.forge.landing import ForgeCapabilityMissing, ForgeRateLimited, MergeMethod
 from blizzard.hub.forge.rates import rate_dialect
 from blizzard.hub.forge.registry import ForgeBinding, ForgeRegistry, TurnCutOff, WriteLocks
-from blizzard.hub.secrets import hub_key_provider, secret_cipher
+from blizzard.hub.secrets import hub_key_provider
 from blizzard.hub.store.internal.repository_record_store import RepositoryRecordStore
 from blizzard.hub.tenancy import StoreScope
 from tests.support.scaffolding import (

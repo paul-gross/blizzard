@@ -24,6 +24,7 @@ from blizzard.foundation.garden_proposals import GardenProposalOrigin
 from blizzard.foundation.logging import get_logger
 from blizzard.foundation.migration_source import MigrationSource
 from blizzard.foundation.run_mode import RunMode
+from blizzard.foundation.secrets.factories import secret_cipher
 from blizzard.foundation.tokens import TokenHash
 from blizzard.hub.auth.auth_state import IReadAuthStateRepository
 from blizzard.hub.auth.errors import RepoErrorFactory
@@ -184,7 +185,7 @@ from blizzard.hub.domain.urgency.ports import (
 )
 from blizzard.hub.domain.work_items.closure import IReadCloseIntentCorpus
 from blizzard.hub.domain.work_items.ports import IReadWorkItemRepository
-from blizzard.hub.secrets import hub_key_provider, secret_cipher
+from blizzard.hub.secrets import hub_key_provider
 from blizzard.hub.store import schema as s
 from blizzard.hub.store.internal.chunk_rows import MARKER_PREFIX
 from blizzard.hub.store.internal.chunk_targets_store import ChunkTargetsStore

@@ -12,6 +12,8 @@ import pytest
 from sqlalchemy import Engine
 
 from blizzard.foundation.clock import FixedClock
+from blizzard.foundation.secrets.factories import secret_cipher
+from blizzard.foundation.secrets.sealing import SecretUnreadable
 from blizzard.foundation.store import batching as batching_module
 from blizzard.foundation.store.engine import create_engine_from_url
 from blizzard.hub.domain.config.changes import ChangeContext, Door
@@ -21,9 +23,8 @@ from blizzard.hub.domain.config.secrets import (
     SecretNotFound,
     SecretRetired,
     SecretRevisionConflict,
-    SecretUnreadable,
 )
-from blizzard.hub.secrets import StoreSecretReader, hub_key_provider, secret_cipher
+from blizzard.hub.secrets import StoreSecretReader, hub_key_provider
 from blizzard.hub.store.internal.secret_store import SecretStore
 from blizzard.hub.store.schema import secrets
 from tests.support.scaffolding import OP, config_authoring, hub_store_connections, migrated_hub_at

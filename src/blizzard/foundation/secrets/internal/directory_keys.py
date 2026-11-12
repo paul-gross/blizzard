@@ -1,4 +1,4 @@
-"""The ``data/auth/secret-keys/`` key provider — laid out as ``signing-keys/`` is.
+"""The directory key provider — laid out as ``signing-keys/`` is.
 
 The directory is ``0700`` and every file ``0600``; ``meta.json`` names the ``current``
 and ``previous`` generation ids, and each generation is ``<key_id>.key``. Generations
@@ -13,9 +13,8 @@ import secrets
 import tempfile
 from pathlib import Path
 
-from blizzard.hub.config import ConfigError
-from blizzard.hub.domain.config.secrets import IHubKeyProvider, KeyGeneration
-from blizzard.hub.secrets.internal.key_material import KEY_BYTES, generation_of
+from blizzard.foundation.secrets.internal.key_material import KEY_BYTES, generation_of
+from blizzard.foundation.secrets.sealing import IRotatableKeyProvider, KeyGeneration
 
 _META_FILENAME = "meta.json"
 _KEY_SUFFIX = ".key"
@@ -26,7 +25,8 @@ _FILE_MODE = 0o600
 class DirectoryKeyProvider:
     """Mints the first generation on construction when ``meta.json`` is absent."""
 
-    def __init__(self, keys_dir: Path) -> None:
+    def __init__(self, keys_dir: Path, *, config_error: type[Exception]) -> None:
+        self._config_error = config_error
         self._dir = keys_dir
         self._dir.mkdir(parents=True, exist_ok=True)
         self._dir.chmod(_DIR_MODE)
@@ -43,7 +43,7 @@ class DirectoryKeyProvider:
         key_id = str(self._read_meta()["current"])
         generation = self.generation(key_id)
         if generation is None:
-            raise ConfigError(f"the current secret key generation {key_id} is missing from {self._dir}")
+            raise self._config_error(f"the current secret key generation {key_id} is missing from {self._dir}")
         return generation
 
     def generation(self, key_id: str) -> KeyGeneration | None:
@@ -103,4 +103,4 @@ class DirectoryKeyProvider:
             raise
 
 
-_directory_key_provider_conforms: type[IHubKeyProvider] = DirectoryKeyProvider
+_directory_key_provider_conforms: type[IRotatableKeyProvider] = DirectoryKeyProvider
